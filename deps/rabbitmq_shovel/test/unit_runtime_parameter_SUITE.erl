@@ -34,7 +34,15 @@ groups() ->
           parse_amqp10,
           parse_amqp10_minimal,
           validate_amqp10,
-          validate_amqp10_with_a_map
+          validate_amqp10_with_a_map,
+          test_src_protocol_defaults,
+          test_src_protocol_explicit,
+          test_dest_protocol_defaults,
+          test_dest_protocol_explicit,
+          test_protocols_defaults,
+          test_protocols_explicit,
+          test_protocols_mixed,
+          test_protocols_with_maps
         ]}
     ].
 
@@ -389,3 +397,169 @@ validate_ok([[_|_] = L | T]) ->
 validate_ok([]) -> [];
 validate_ok(X) ->
     exit({not_ok, X}).
+
+%% -------------------------------------------------------------------
+%% Protocol detection tests
+%% -------------------------------------------------------------------
+
+test_src_protocol_defaults(_Config) ->
+    DefProplist = [{<<"src-uri">>, <<"amqp://localhost">>},
+                   {<<"dest-uri">>, <<"amqp://remote">>}],
+    ?assertEqual(amqp091, rabbit_shovel_parameters:src_protocol(DefProplist)),
+
+    DefMap = #{<<"src-uri">> => <<"amqp://localhost">>,
+               <<"dest-uri">> => <<"amqp://remote">>},
+    ?assertEqual(amqp091, rabbit_shovel_parameters:src_protocol(DefMap)),
+    ok.
+
+test_src_protocol_explicit(_Config) ->
+    Def091 = [{<<"src-protocol">>, <<"amqp091">>}],
+    ?assertEqual(amqp091, rabbit_shovel_parameters:src_protocol(Def091)),
+
+    Def10 = [{<<"src-protocol">>, <<"amqp10">>}],
+    ?assertEqual(amqp10, rabbit_shovel_parameters:src_protocol(Def10)),
+
+    DefLocal = [{<<"src-protocol">>, <<"local">>}],
+    ?assertEqual(local, rabbit_shovel_parameters:src_protocol(DefLocal)),
+
+    DefMap091 = #{<<"src-protocol">> => <<"amqp091">>},
+    ?assertEqual(amqp091, rabbit_shovel_parameters:src_protocol(DefMap091)),
+
+    DefMap10 = #{<<"src-protocol">> => <<"amqp10">>},
+    ?assertEqual(amqp10, rabbit_shovel_parameters:src_protocol(DefMap10)),
+
+    DefMapLocal = #{<<"src-protocol">> => <<"local">>},
+    ?assertEqual(local, rabbit_shovel_parameters:src_protocol(DefMapLocal)),
+    ok.
+
+test_dest_protocol_defaults(_Config) ->
+    DefProplist = [{<<"src-uri">>, <<"amqp://localhost">>},
+                   {<<"dest-uri">>, <<"amqp://remote">>}],
+    ?assertEqual(amqp091, rabbit_shovel_parameters:dest_protocol(DefProplist)),
+
+    DefMap = #{<<"src-uri">> => <<"amqp://localhost">>,
+               <<"dest-uri">> => <<"amqp://remote">>},
+    ?assertEqual(amqp091, rabbit_shovel_parameters:dest_protocol(DefMap)),
+    ok.
+
+test_dest_protocol_explicit(_Config) ->
+    Def091 = [{<<"dest-protocol">>, <<"amqp091">>}],
+    ?assertEqual(amqp091, rabbit_shovel_parameters:dest_protocol(Def091)),
+
+    Def10 = [{<<"dest-protocol">>, <<"amqp10">>}],
+    ?assertEqual(amqp10, rabbit_shovel_parameters:dest_protocol(Def10)),
+
+    DefLocal = [{<<"dest-protocol">>, <<"local">>}],
+    ?assertEqual(local, rabbit_shovel_parameters:dest_protocol(DefLocal)),
+
+    DefMap091 = #{<<"dest-protocol">> => <<"amqp091">>},
+    ?assertEqual(amqp091, rabbit_shovel_parameters:dest_protocol(DefMap091)),
+
+    DefMap10 = #{<<"dest-protocol">> => <<"amqp10">>},
+    ?assertEqual(amqp10, rabbit_shovel_parameters:dest_protocol(DefMap10)),
+
+    DefMapLocal = #{<<"dest-protocol">> => <<"local">>},
+    ?assertEqual(local, rabbit_shovel_parameters:dest_protocol(DefMapLocal)),
+    ok.
+
+test_protocols_defaults(_Config) ->
+    DefProplist = [{<<"src-uri">>, <<"amqp://localhost">>},
+                   {<<"dest-uri">>, <<"amqp://remote">>}],
+    ?assertEqual({amqp091, amqp091}, rabbit_shovel_parameters:protocols(DefProplist)),
+
+    DefMap = #{<<"src-uri">> => <<"amqp://localhost">>,
+               <<"dest-uri">> => <<"amqp://remote">>},
+    ?assertEqual({amqp091, amqp091}, rabbit_shovel_parameters:protocols(DefMap)),
+    ok.
+
+test_protocols_explicit(_Config) ->
+    Def091 = [{<<"src-protocol">>, <<"amqp091">>},
+              {<<"dest-protocol">>, <<"amqp091">>}],
+    ?assertEqual({amqp091, amqp091}, rabbit_shovel_parameters:protocols(Def091)),
+
+    Def10 = [{<<"src-protocol">>, <<"amqp10">>},
+             {<<"dest-protocol">>, <<"amqp10">>}],
+    ?assertEqual({amqp10, amqp10}, rabbit_shovel_parameters:protocols(Def10)),
+
+    DefLocal = [{<<"src-protocol">>, <<"local">>},
+                {<<"dest-protocol">>, <<"local">>}],
+    ?assertEqual({local, local}, rabbit_shovel_parameters:protocols(DefLocal)),
+
+    DefMap091 = #{<<"src-protocol">> => <<"amqp091">>,
+                  <<"dest-protocol">> => <<"amqp091">>},
+    ?assertEqual({amqp091, amqp091}, rabbit_shovel_parameters:protocols(DefMap091)),
+
+    DefMap10 = #{<<"src-protocol">> => <<"amqp10">>,
+                 <<"dest-protocol">> => <<"amqp10">>},
+    ?assertEqual({amqp10, amqp10}, rabbit_shovel_parameters:protocols(DefMap10)),
+
+    DefMapLocal = #{<<"src-protocol">> => <<"local">>,
+                    <<"dest-protocol">> => <<"local">>},
+    ?assertEqual({local, local}, rabbit_shovel_parameters:protocols(DefMapLocal)),
+    ok.
+
+test_protocols_mixed(_Config) ->
+    Def091to10 = [{<<"src-protocol">>, <<"amqp091">>},
+                  {<<"dest-protocol">>, <<"amqp10">>}],
+    ?assertEqual({amqp091, amqp10}, rabbit_shovel_parameters:protocols(Def091to10)),
+
+    Def10to091 = [{<<"src-protocol">>, <<"amqp10">>},
+                  {<<"dest-protocol">>, <<"amqp091">>}],
+    ?assertEqual({amqp10, amqp091}, rabbit_shovel_parameters:protocols(Def10to091)),
+
+    DefLocalTo091 = [{<<"src-protocol">>, <<"local">>},
+                     {<<"dest-protocol">>, <<"amqp091">>}],
+    ?assertEqual({local, amqp091}, rabbit_shovel_parameters:protocols(DefLocalTo091)),
+
+    Def091ToLocal = [{<<"src-protocol">>, <<"amqp091">>},
+                     {<<"dest-protocol">>, <<"local">>}],
+    ?assertEqual({amqp091, local}, rabbit_shovel_parameters:protocols(Def091ToLocal)),
+
+    Def10ToLocal = [{<<"src-protocol">>, <<"amqp10">>},
+                    {<<"dest-protocol">>, <<"local">>}],
+    ?assertEqual({amqp10, local}, rabbit_shovel_parameters:protocols(Def10ToLocal)),
+
+    DefLocalTo10 = [{<<"src-protocol">>, <<"local">>},
+                    {<<"dest-protocol">>, <<"amqp10">>}],
+    ?assertEqual({local, amqp10}, rabbit_shovel_parameters:protocols(DefLocalTo10)),
+
+    DefMap091to10 = #{<<"src-protocol">> => <<"amqp091">>,
+                      <<"dest-protocol">> => <<"amqp10">>},
+    ?assertEqual({amqp091, amqp10}, rabbit_shovel_parameters:protocols(DefMap091to10)),
+
+    DefMap10to091 = #{<<"src-protocol">> => <<"amqp10">>,
+                      <<"dest-protocol">> => <<"amqp091">>},
+    ?assertEqual({amqp10, amqp091}, rabbit_shovel_parameters:protocols(DefMap10to091)),
+
+    DefMapLocalTo091 = #{<<"src-protocol">> => <<"local">>,
+                         <<"dest-protocol">> => <<"amqp091">>},
+    ?assertEqual({local, amqp091}, rabbit_shovel_parameters:protocols(DefMapLocalTo091)),
+
+    DefMap091ToLocal = #{<<"src-protocol">> => <<"amqp091">>,
+                         <<"dest-protocol">> => <<"local">>},
+    ?assertEqual({amqp091, local}, rabbit_shovel_parameters:protocols(DefMap091ToLocal)),
+
+    DefMap10ToLocal = #{<<"src-protocol">> => <<"amqp10">>,
+                        <<"dest-protocol">> => <<"local">>},
+    ?assertEqual({amqp10, local}, rabbit_shovel_parameters:protocols(DefMap10ToLocal)),
+
+    DefMapLocalTo10 = #{<<"src-protocol">> => <<"local">>,
+                        <<"dest-protocol">> => <<"amqp10">>},
+    ?assertEqual({local, amqp10}, rabbit_shovel_parameters:protocols(DefMapLocalTo10)),
+    ok.
+
+test_protocols_with_maps(_Config) ->
+    DefMap1 = #{<<"src-protocol">> => <<"amqp091">>,
+                <<"dest-protocol">> => <<"amqp10">>},
+    ?assertEqual({amqp091, amqp10}, rabbit_shovel_parameters:protocols(DefMap1)),
+
+    DefMap2 = #{<<"src-protocol">> => <<"local">>,
+                <<"dest-protocol">> => <<"local">>},
+    ?assertEqual({local, local}, rabbit_shovel_parameters:protocols(DefMap2)),
+
+    DefMap3 = #{<<"src-protocol">> => <<"amqp10">>},
+    ?assertEqual({amqp10, amqp091}, rabbit_shovel_parameters:protocols(DefMap3)),
+
+    DefMap4 = #{<<"dest-protocol">> => <<"local">>},
+    ?assertEqual({amqp091, local}, rabbit_shovel_parameters:protocols(DefMap4)),
+    ok.

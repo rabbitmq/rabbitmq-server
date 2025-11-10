@@ -15,7 +15,7 @@
 -export([validate/5, notify/5, notify_clear/4]).
 -export([register/0, unregister/0, parse/3]).
 -export([obfuscate_uris_in_definition/1]).
-
+-export([src_protocol/1, dest_protocol/1, protocols/1]).
 -export([is_internal/1, internal_owner/1]).
 
 -import(rabbit_misc, [pget/2, pget/3, pset/3]).
@@ -143,6 +143,31 @@ validate_internal_owner(Name, Term0) ->
                                                               ['exchange', 'queue'])},
                                                 {<<"virtual_host">>, fun rabbit_parameter_validation:binary/2}], Term).
 
+src_protocol(Def) when is_map(Def) ->
+    src_protocol(rabbit_data_coercion:to_proplist(Def));
+src_protocol(Def) when is_list(Def) ->
+    case lists:keyfind(<<"src-protocol">>, 1, Def) of
+        {_, SrcProtocol} ->
+            rabbit_data_coercion:to_atom(SrcProtocol);
+        false -> amqp091
+    end.
+
+dest_protocol(Def) when is_map(Def) ->
+    dest_protocol(rabbit_data_coercion:to_proplist(Def));
+dest_protocol(Def) when is_list(Def) ->
+    case lists:keyfind(<<"dest-protocol">>, 1, Def) of
+        {_, DstProtocol} ->
+            rabbit_data_coercion:to_atom(DstProtocol);
+        false -> amqp091
+    end.
+
+protocols(Def) when is_map(Def) ->
+    protocols(rabbit_data_coercion:to_proplist(Def));
+protocols(Def) ->
+    Src = src_protocol(Def),
+    Dst = dest_protocol(Def),
+    {Src, Dst}.
+
 %%----------------------------------------------------------------------------
 
 parse({VHost, Name}, ClusterName, Def) ->
@@ -176,21 +201,6 @@ get_uris(Key, Def) ->
 translate_ack_mode(<<"on-confirm">>) -> on_confirm;
 translate_ack_mode(<<"on-publish">>) -> on_publish;
 translate_ack_mode(<<"no-ack">>)     -> no_ack.
-
-protocols(Def) when is_map(Def) ->
-    protocols(rabbit_data_coercion:to_proplist(Def));
-protocols(Def) ->
-    Src = case lists:keyfind(<<"src-protocol">>, 1, Def) of
-              {_, SrcProtocol} ->
-                  rabbit_data_coercion:to_atom(SrcProtocol);
-              false -> amqp091
-          end,
-    Dst = case lists:keyfind(<<"dest-protocol">>, 1, Def) of
-              {_, DstProtocol} ->
-                  rabbit_data_coercion:to_atom(DstProtocol);
-              false -> amqp091
-          end,
-    {Src, Dst}.
 
 list_all_protocols() ->
     [P || {P, _} <- rabbit_registry:lookup_all(shovel_protocol)].
