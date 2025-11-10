@@ -1625,6 +1625,8 @@ force_vhost_failure(Config, Node, VHost, Attempts) ->
 set_alarm(Config, Node, memory = Resource) ->
     rpc(Config, Node, rabbit_alarm, set_alarm, [{{resource_limit, Resource, Node}, []}]);
 set_alarm(Config, Node, disk = Resource) ->
+    rpc(Config, Node, rabbit_alarm, set_alarm, [{{resource_limit, Resource, Node}, []}]);
+set_alarm(Config, Node, {disk, QueueType} = Resource) when is_atom(QueueType) ->
     rpc(Config, Node, rabbit_alarm, set_alarm, [{{resource_limit, Resource, Node}, []}]).
 
 get_alarms(Config, Node) ->
@@ -1636,6 +1638,8 @@ get_local_alarms(Config, Node) ->
 clear_alarm(Config, Node, memory = Resource) ->
     rpc(Config, Node, rabbit_alarm, clear_alarm, [{resource_limit, Resource, Node}]);
 clear_alarm(Config, Node, disk = Resource) ->
+    rpc(Config, Node, rabbit_alarm, clear_alarm, [{resource_limit, Resource, Node}]);
+clear_alarm(Config, Node, {disk, QueueType} = Resource) when is_atom(QueueType) ->
     rpc(Config, Node, rabbit_alarm, clear_alarm, [{resource_limit, Resource, Node}]).
 
 clear_all_alarms(Config, Node) ->
