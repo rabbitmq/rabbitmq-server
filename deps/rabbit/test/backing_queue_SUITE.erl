@@ -1185,14 +1185,14 @@ variable_queue_partial_segments_q_tail_thing2(VQ0, _QName) ->
             %% We only have one message in memory because the amount in memory
             %% depends on the consume rate, which is nil in this test.
             [{q_head, 1},
-             {q_tail, {q_tail, 1, OneAndAHalfSegment - 1, 0, OneAndAHalfSegment}},
+             {q_tail, {q_tail, 1, OneAndAHalfSegment - 1, OneAndAHalfSegment}},
              {len, OneAndAHalfSegment}]),
     VQ5 = check_variable_queue_status(
             variable_queue_publish(true, 1, VQ3),
             %% one alpha, but it's in the same segment as the q_tail
             %% @todo That's wrong now! v1/v2
             [{q_head, 1},
-             {q_tail, {q_tail, 1, OneAndAHalfSegment, 0, OneAndAHalfSegment + 1}},
+             {q_tail, {q_tail, 1, OneAndAHalfSegment, OneAndAHalfSegment + 1}},
              {len, OneAndAHalfSegment + 1}]),
     {VQ6, AckTags} = variable_queue_fetch(SegmentSize, true, false,
                                           SegmentSize + HalfSegment + 1, VQ5),
@@ -1202,7 +1202,7 @@ variable_queue_partial_segments_q_tail_thing2(VQ0, _QName) ->
             %% after fetching exactly one segment, we should have no
             %% messages in memory.
             [{q_head, 0},
-             {q_tail, {q_tail, SegmentSize, HalfSegment + 1, 0, OneAndAHalfSegment + 1}},
+             {q_tail, {q_tail, SegmentSize, HalfSegment + 1, OneAndAHalfSegment + 1}},
              {len, HalfSegment + 1}]),
     {VQ8, AckTags1} = variable_queue_fetch(HalfSegment + 1, true, false,
                                            HalfSegment + 1, VQ7),
@@ -1769,7 +1769,7 @@ with_fresh_variable_queue(Fun, Mode) ->
                        VQ = variable_queue_init(test_amqqueue(QName, true), false),
                        S0 = variable_queue_status(VQ),
                        assert_props(S0, [{q_head, 0},
-                                         {q_tail, {q_tail, undefined, 0, 0, undefined}},
+                                         {q_tail, {q_tail, undefined, 0, undefined}},
                                          {len, 0}]),
                        VQ1 = set_queue_mode(Mode, VQ),
                        try
@@ -1914,9 +1914,9 @@ variable_queue_with_holes(VQ0) ->
 vq_with_holes_assertions(VQ) ->
     [false =
          case V of
-             {q_tail, _, 0, _, _} -> true;
-             0                    -> true;
-             _                    -> false
+             {q_tail, _, 0, _} -> true;
+             0                 -> true;
+             _                 -> false
          end || {K, V} <- variable_queue_status(VQ),
                 lists:member(K, [q_head, q_tail])].
 
