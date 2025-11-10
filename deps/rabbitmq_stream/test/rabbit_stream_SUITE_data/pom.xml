@@ -34,7 +34,7 @@
         <maven.compiler.plugin.version>3.14.1</maven.compiler.plugin.version>
         <maven-surefire-plugin.version>3.5.4</maven-surefire-plugin.version>
         <spotless.version>3.0.0</spotless.version>
-        <google-java-format.version>1.31.0</google-java-format.version>
+        <google-java-format.version>1.32.0</google-java-format.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
