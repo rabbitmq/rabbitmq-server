@@ -39,7 +39,7 @@
 -define(BACKING_QUEUE_TESTCASES, [
     bq_queue_index,
     bq_queue_index_props,
-    {variable_queue_default, [parallel], ?VARIABLE_QUEUE_TESTCASES},
+    {variable_queue, [parallel], ?VARIABLE_QUEUE_TESTCASES},
     bq_variable_queue_delete_msg_store_files_callback,
     bq_queue_recover
   ]).
@@ -127,8 +127,6 @@ init_per_group1(backing_queue_embed_limit_1024, Config) ->
     ok = rabbit_ct_broker_helpers:rpc(Config, 0,
       application, set_env, [rabbit, queue_index_embed_msgs_below, 1024]),
     Config;
-init_per_group1(variable_queue_default, Config) ->
-    rabbit_ct_helpers:set_config(Config, {variable_queue_type, default});
 %% @todo These groups are no longer used?
 init_per_group1(from_cluster_node1, Config) ->
     rabbit_ct_helpers:set_config(Config, {test_direction, {0, 1}});
@@ -1169,9 +1167,7 @@ variable_queue_partial_segments_q_tail_thing(Config) ->
       ?MODULE, variable_queue_partial_segments_q_tail_thing1, [Config]).
 
 variable_queue_partial_segments_q_tail_thing1(Config) ->
-    with_fresh_variable_queue(
-      fun variable_queue_partial_segments_q_tail_thing2/2,
-      ?config(variable_queue_type, Config)).
+    with_fresh_variable_queue(fun variable_queue_partial_segments_q_tail_thing2/2).
 
 variable_queue_partial_segments_q_tail_thing2(VQ0, _QName) ->
     IndexMod = index_mod(),
@@ -1216,9 +1212,7 @@ variable_queue_all_the_bits_not_covered_elsewhere_A(Config) ->
       ?MODULE, variable_queue_all_the_bits_not_covered_elsewhere_A1, [Config]).
 
 variable_queue_all_the_bits_not_covered_elsewhere_A1(Config) ->
-    with_fresh_variable_queue(
-      fun variable_queue_all_the_bits_not_covered_elsewhere_A2/2,
-      ?config(variable_queue_type, Config)).
+    with_fresh_variable_queue(fun variable_queue_all_the_bits_not_covered_elsewhere_A2/2).
 
 variable_queue_all_the_bits_not_covered_elsewhere_A2(VQ0, QName) ->
     IndexMod = index_mod(),
@@ -1243,9 +1237,7 @@ variable_queue_all_the_bits_not_covered_elsewhere_B(Config) ->
       ?MODULE, variable_queue_all_the_bits_not_covered_elsewhere_B1, [Config]).
 
 variable_queue_all_the_bits_not_covered_elsewhere_B1(Config) ->
-    with_fresh_variable_queue(
-      fun variable_queue_all_the_bits_not_covered_elsewhere_B2/2,
-      ?config(variable_queue_type, Config)).
+    with_fresh_variable_queue(fun variable_queue_all_the_bits_not_covered_elsewhere_B2/2).
 
 variable_queue_all_the_bits_not_covered_elsewhere_B2(VQ1, QName) ->
     VQ2 = variable_queue_publish(false, 4, VQ1),
@@ -1263,9 +1255,7 @@ variable_queue_drop(Config) ->
       ?MODULE, variable_queue_drop1, [Config]).
 
 variable_queue_drop1(Config) ->
-    with_fresh_variable_queue(
-      fun variable_queue_drop2/2,
-      ?config(variable_queue_type, Config)).
+    with_fresh_variable_queue(fun variable_queue_drop2/2).
 
 variable_queue_drop2(VQ0, _QName) ->
     %% start by sending a messages
@@ -1288,9 +1278,7 @@ variable_queue_fold_msg_on_disk(Config) ->
       ?MODULE, variable_queue_fold_msg_on_disk1, [Config]).
 
 variable_queue_fold_msg_on_disk1(Config) ->
-    with_fresh_variable_queue(
-      fun variable_queue_fold_msg_on_disk2/2,
-      ?config(variable_queue_type, Config)).
+    with_fresh_variable_queue(fun variable_queue_fold_msg_on_disk2/2).
 
 variable_queue_fold_msg_on_disk2(VQ0, _QName) ->
     VQ1 = variable_queue_publish(true, 1, VQ0),
@@ -1304,9 +1292,7 @@ variable_queue_dropfetchwhile(Config) ->
       ?MODULE, variable_queue_dropfetchwhile1, [Config]).
 
 variable_queue_dropfetchwhile1(Config) ->
-    with_fresh_variable_queue(
-      fun variable_queue_dropfetchwhile2/2,
-      ?config(variable_queue_type, Config)).
+    with_fresh_variable_queue(fun variable_queue_dropfetchwhile2/2).
 
 variable_queue_dropfetchwhile2(VQ0, _QName) ->
     Count = 10,
@@ -1352,9 +1338,7 @@ variable_queue_dropwhile_restart(Config) ->
       ?MODULE, variable_queue_dropwhile_restart1, [Config]).
 
 variable_queue_dropwhile_restart1(Config) ->
-    with_fresh_variable_queue(
-      fun variable_queue_dropwhile_restart2/2,
-      ?config(variable_queue_type, Config)).
+    with_fresh_variable_queue(fun variable_queue_dropwhile_restart2/2).
 
 variable_queue_dropwhile_restart2(VQ0, QName) ->
     Count = 10000,
@@ -1391,9 +1375,7 @@ variable_queue_dropwhile_sync_restart(Config) ->
       ?MODULE, variable_queue_dropwhile_sync_restart1, [Config]).
 
 variable_queue_dropwhile_sync_restart1(Config) ->
-    with_fresh_variable_queue(
-      fun variable_queue_dropwhile_sync_restart2/2,
-      ?config(variable_queue_type, Config)).
+    with_fresh_variable_queue(fun variable_queue_dropwhile_sync_restart2/2).
 
 variable_queue_dropwhile_sync_restart2(VQ0, QName) ->
     Count = 10000,
@@ -1433,9 +1415,7 @@ variable_queue_restart_large_seq_id(Config) ->
       ?MODULE, variable_queue_restart_large_seq_id1, [Config]).
 
 variable_queue_restart_large_seq_id1(Config) ->
-    with_fresh_variable_queue(
-      fun variable_queue_restart_large_seq_id2/2,
-      ?config(variable_queue_type, Config)).
+    with_fresh_variable_queue(fun variable_queue_restart_large_seq_id2/2).
 
 variable_queue_restart_large_seq_id2(VQ0, QName) ->
     Count = 1,
@@ -1472,9 +1452,7 @@ variable_queue_ack_limiting(Config) ->
       ?MODULE, variable_queue_ack_limiting1, [Config]).
 
 variable_queue_ack_limiting1(Config) ->
-    with_fresh_variable_queue(
-      fun variable_queue_ack_limiting2/2,
-      ?config(variable_queue_type, Config)).
+    with_fresh_variable_queue(fun variable_queue_ack_limiting2/2).
 
 variable_queue_ack_limiting2(VQ0, _Config) ->
     %% start by sending in a bunch of messages
@@ -1502,9 +1480,7 @@ variable_queue_purge(Config) ->
       ?MODULE, variable_queue_purge1, [Config]).
 
 variable_queue_purge1(Config) ->
-    with_fresh_variable_queue(
-      fun variable_queue_purge2/2,
-      ?config(variable_queue_type, Config)).
+    with_fresh_variable_queue(fun variable_queue_purge2/2).
 
 variable_queue_purge2(VQ0, _Config) ->
     LenDepth = fun (VQ) ->
@@ -1526,9 +1502,7 @@ variable_queue_requeue(Config) ->
       ?MODULE, variable_queue_requeue1, [Config]).
 
 variable_queue_requeue1(Config) ->
-    with_fresh_variable_queue(
-      fun variable_queue_requeue2/2,
-      ?config(variable_queue_type, Config)).
+    with_fresh_variable_queue(fun variable_queue_requeue2/2).
 
 variable_queue_requeue2(VQ0, _Config) ->
     {_PendingMsgs, RequeuedMsgs, FreshMsgs, VQ1} =
@@ -1554,9 +1528,7 @@ variable_queue_requeue_ram_beta(Config) ->
       ?MODULE, variable_queue_requeue_ram_beta1, [Config]).
 
 variable_queue_requeue_ram_beta1(Config) ->
-    with_fresh_variable_queue(
-      fun variable_queue_requeue_ram_beta2/2,
-      ?config(variable_queue_type, Config)).
+    with_fresh_variable_queue(fun variable_queue_requeue_ram_beta2/2).
 
 variable_queue_requeue_ram_beta2(VQ0, _Config) ->
     IndexMod = index_mod(),
@@ -1570,46 +1542,6 @@ variable_queue_requeue_ram_beta2(VQ0, _Config) ->
     {VQ7, AcksAll} = variable_queue_fetch(Count, false, true, Count, VQ6),
     {_, VQ8} = rabbit_variable_queue:ack(AcksAll, VQ7),
     VQ8.
-
-%% same as test_variable_queue_requeue_ram_beta but randomly changing
-%% the queue mode after every step.
-variable_queue_mode_change(Config) ->
-    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, variable_queue_mode_change1, [Config]).
-
-variable_queue_mode_change1(Config) ->
-    with_fresh_variable_queue(
-      fun variable_queue_mode_change2/2,
-      ?config(variable_queue_type, Config)).
-
-variable_queue_mode_change2(VQ0, _Config) ->
-    IndexMod = index_mod(),
-    Count = IndexMod:next_segment_boundary(0)*2 + 2,
-    VQ1 = variable_queue_publish(false, Count, VQ0),
-    VQ2 = maybe_switch_queue_mode(VQ1),
-    {VQ3, AcksR} = variable_queue_fetch(Count, false, false, Count, VQ2),
-    VQ4 = maybe_switch_queue_mode(VQ3),
-    {Back, Front} = lists:split(Count div 2, AcksR),
-    {_, VQ5} = rabbit_variable_queue:requeue(erlang:tl(Back), VQ4),
-    VQ6 = maybe_switch_queue_mode(VQ5),
-    VQ8 = maybe_switch_queue_mode(VQ6),
-    {_, VQ9} = rabbit_variable_queue:requeue([erlang:hd(Back)], VQ8),
-    VQ10 = maybe_switch_queue_mode(VQ9),
-    VQ11 = requeue_one_by_one(Front, VQ10),
-    VQ12 = maybe_switch_queue_mode(VQ11),
-    {VQ13, AcksAll} = variable_queue_fetch(Count, false, true, Count, VQ12),
-    VQ14 = maybe_switch_queue_mode(VQ13),
-    {_, VQ15} = rabbit_variable_queue:ack(AcksAll, VQ14),
-    VQ16 = maybe_switch_queue_mode(VQ15),
-    VQ16.
-
-maybe_switch_queue_mode(VQ) ->
-    Mode = random_queue_mode(),
-    set_queue_mode(Mode, VQ).
-
-random_queue_mode() ->
-    Modes = [lazy, default],
-    lists:nth(rand:uniform(length(Modes)), Modes).
 
 pub_res({_, VQS}) ->
     VQS;
@@ -1758,7 +1690,7 @@ wait_for_confirms(Unconfirmed) ->
             end
     end.
 
-with_fresh_variable_queue(Fun, Mode) ->
+with_fresh_variable_queue(Fun) ->
     Ref = make_ref(),
     Me = self(),
     %% Run in a separate process since rabbit_msg_store will send
@@ -1771,10 +1703,9 @@ with_fresh_variable_queue(Fun, Mode) ->
                        assert_props(S0, [{q_head, 0},
                                          {q_tail, {q_tail, undefined, 0, undefined}},
                                          {len, 0}]),
-                       VQ1 = set_queue_mode(Mode, VQ),
                        try
                            _ = rabbit_variable_queue:delete_and_terminate(
-                                 shutdown, Fun(VQ1, QName)),
+                                 shutdown, Fun(VQ, QName)),
                            Me ! Ref
                        catch
                            Type:Error:Stacktrace ->
@@ -1786,9 +1717,6 @@ with_fresh_variable_queue(Fun, Mode) ->
         {Ref, Type, Error, ST} -> exit({Type, Error, ST})
     end,
     passed.
-
-set_queue_mode(Mode, VQ) ->
-    rabbit_variable_queue:set_queue_mode(Mode, VQ).
 
 variable_queue_publish(IsPersistent, Count, VQ) ->
     variable_queue_publish(IsPersistent, Count, fun (_N, P) -> P end, VQ).

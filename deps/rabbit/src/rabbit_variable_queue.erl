@@ -15,8 +15,8 @@
          ackfold/4, len/1, is_empty/1, depth/1,
          update_rates/1, needs_timeout/1, timeout/1,
          handle_pre_hibernate/1, resume/1, msg_rates/1,
-         info/2, invoke/3, is_duplicate/2, set_queue_mode/2,
-         set_queue_version/2, zip_msgs_and_acks/4,
+         info/2, invoke/3, is_duplicate/2,
+         zip_msgs_and_acks/4,
          format_state/1]).
 
 -export([start/2, stop/1]).
@@ -746,19 +746,11 @@ invoke(      _,   _, State) -> State.
 
 is_duplicate(_Msg, State) -> {false, State}.
 
-%% Queue mode has been unified.
-set_queue_mode(_, State) ->
-    State.
-
 zip_msgs_and_acks(Msgs, AckTags, Accumulator, _State) ->
     lists:foldl(fun ({{Msg, _Props}, AckTag}, Acc) ->
                         Id = mc:get_annotation(id, Msg),
                         [{Id, AckTag} | Acc]
                 end, Accumulator, lists:zip(Msgs, AckTags)).
-
-%% Queue version now ignored; only v2 is available.
-set_queue_version(_, State) ->
-    State.
 
 %% Get the Timestamp property of the first msg, if present. This is
 %% the one with the oldest timestamp among the heads of the pending
@@ -1872,6 +1864,7 @@ read_from_q_tail(DelsAndAcksFun,
     %% For v2 we want to limit the number of messages read at once to lower
     %% the memory footprint. We use the consume rate to determine how many
     %% messages we read.
+    %% @todo Simply ask for N messages instead of low/high bounds.
     QTailSeqLimit = QTailSeqId + MemoryLimit,
     QTailSeqId1 =
         lists:min([rabbit_classic_queue_index_v2:next_segment_boundary(QTailSeqId),

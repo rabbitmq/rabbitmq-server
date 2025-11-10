@@ -36,9 +36,6 @@
 -type msg_fun(A) :: fun ((mc:state(), ack(), A) -> A).
 -type msg_pred() :: fun ((rabbit_types:message_properties()) -> boolean()).
 
--type queue_mode() :: atom().
--type queue_version() :: pos_integer().
-
 %% Called on startup with a vhost and a list of durable queue names on this vhost.
 %% The queues aren't being started at this point, but this call allows the
 %% backing queue to perform any checking necessary for the consistency
@@ -214,10 +211,6 @@
 %% to signal that it's already seen this message, (e.g. it was published
 %% or discarded previously).
 -callback is_duplicate(mc:state(), state()) -> {boolean(), state()}.
-
--callback set_queue_mode(queue_mode(), state()) -> state().
-
--callback set_queue_version(queue_version(), state()) -> state().
 
 -callback zip_msgs_and_acks([delivered_publish()],
                             [ack()], Acc, state())
