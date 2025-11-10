@@ -609,7 +609,7 @@ mkplugin(Name, Props, Type, Location) ->
     BrokerVersions = proplists:get_value(broker_version_requirements, Props, []),
     DepsVersions = proplists:get_value(dependency_version_requirements, Props, []),
     %% Plugins that bundle their dependencies (into the same .ez file)
-    %% will have this field set to `true`. MK.
+    %% are supposed to set this field to `true`. MK.
     BundlesDependencies = proplists:get_value(ez_bundles_dependencies, Props, false),
 
     #plugin{
