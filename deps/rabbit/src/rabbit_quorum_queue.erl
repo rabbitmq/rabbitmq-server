@@ -739,10 +739,22 @@ repair_amqqueue_nodes(Q0) ->
                                    false ->
                                        TS0#{nodes => RaNodes};
                                    true ->
-                                       RaUids = maps:from_list([{N, erpc:call(N, ra_directory, uid_of,
-                                                                              [?RA_SYSTEM, Name],
-                                                                              ?RPC_TIMEOUT)}
-                                                                || N <- RaNodes]),
+                                       RaUidsList = [begin
+                                                         Uid = erpc:call(N, ra_directory, uid_of,
+                                                                         [?RA_SYSTEM, Name],
+                                                                         ?RPC_TIMEOUT),
+                                                         case Uid of
+                                                             undefined ->
+                                                                 ?LOG_WARNING("Unexpected undefined uuid from node ~p for quorum queue ~ts during repair_amqqueue_nodes",
+                                                                              [N, rabbit_misc:rs(QName)]);
+                                                             _ ->
+                                                                 ok
+                                                         end,
+                                                         {N, Uid}
+                                                     end
+                                                     || N <- RaNodes],
+
+                                       RaUids = maps:from_list(RaUidsList),
                                        TS0#{nodes => RaUids}
                                end,
                           amqqueue:set_type_state(Q, TS)
@@ -809,6 +821,13 @@ recover(_Vhost, Queues) ->
          QName = amqqueue:get_name(Q),
          MutConf = make_mutable_config(Q),
          RaUId = ra_directory:uid_of(?RA_SYSTEM, Name),
+         case RaUId of
+             undefined ->
+                 ?LOG_WARNING("Unexpected undefined uuid for current node for quorum queue ~ts during recover",
+                              [rabbit_misc:rs(QName)]);
+             _ ->
+                 ok
+         end,
          #{nodes := Nodes} = amqqueue:get_type_state(Q),
          case Nodes of
              List when is_list(List) ->
