@@ -167,6 +167,7 @@ all_tests() ->
      subscribe_redelivery_count,
      message_bytes_metrics,
      queue_length_limit_drop_head,
+     queue_length_bytes_limit_drop_head,
      queue_length_limit_reject_publish,
      queue_length_limit_policy_cleared,
      subscribe_redelivery_limit,
@@ -3668,6 +3669,50 @@ queue_length_limit_drop_head(Config) ->
     ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"msg2">>}},
                  amqp_channel:call(Ch, #'basic.get'{queue = QQ,
                                                     no_ack = true})).
+
+queue_length_bytes_limit_drop_head(Config) ->
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    DLQ = <<"dead letter queue">>,
+
+    ?assertEqual({'queue.declare_ok', DLQ, 0, 0},
+                 declare(Ch, DLQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                  {<<"x-overflow">>, longstr, <<"drop-head">>},
+                                  {<<"x-max-length-bytes">>, long, 1000},
+                                  {<<"x-dead-letter-exchange">>, longstr, <<>>},
+                                  {<<"x-dead-letter-routing-key">>, longstr, DLQ}])),
+
+    LargePayload = binary:copy(<<"x">>, 1500),
+    ok = amqp_channel:cast(Ch,
+                           #'basic.publish'{routing_key = QQ},
+                           #amqp_msg{payload = <<"m1">>}),
+    ok = amqp_channel:cast(Ch,
+                           #'basic.publish'{routing_key = QQ},
+                           #amqp_msg{payload = <<"m2">>}),
+    ok = amqp_channel:cast(Ch,
+                           #'basic.publish'{routing_key = QQ},
+                           #amqp_msg{payload = LargePayload}),
+    wait_for_consensus(QQ, Config),
+    wait_for_consensus(DLQ, Config),
+    RaName = ra_name(DLQ),
+    wait_for_messages_ready(Servers, RaName, 3),
+    ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"m1">>}},
+                 amqp_channel:call(Ch, #'basic.get'{queue = DLQ,
+                                                    no_ack = true})),
+    ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"m2">>}},
+                 amqp_channel:call(Ch, #'basic.get'{queue = DLQ,
+                                                    no_ack = true})),
+    ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = LargePayload}},
+                 amqp_channel:call(Ch, #'basic.get'{queue = DLQ,
+                                                    no_ack = true})),
+
+    [?assertEqual(#'queue.delete_ok'{message_count = 0},
+                  amqp_channel:call(Ch, #'queue.delete'{queue = Q}))
+     || Q <- [QQ, DLQ]].
 
 queue_length_limit_reject_publish(Config) ->
     [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
