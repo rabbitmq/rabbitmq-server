@@ -519,10 +519,16 @@ stat(Leader) ->
 stat(Leader, Timeout) ->
     %% short timeout as we don't want to spend too long if it is going to
     %% fail anyway
-    case ra:local_query(Leader, fun rabbit_fifo:query_stat/1, Timeout) of
-      {ok, {_, {R, C}}, _} -> {ok, R, C};
-      {error, _} = Error   -> Error;
-      {timeout, _} = Error -> Error
+    %% TODO: the overview is too large to be super efficient
+    %% but we use it for backwards compatibilty
+    case ra:member_overview(Leader, Timeout) of
+      {ok, #{machine := #{num_ready_messages := R,
+                          num_checked_out := C}}, _} ->
+            {ok, R, C};
+      {error, _} = Error ->
+            Error;
+      {timeout, _} = Error ->
+            Error
     end.
 
 update_machine_state(Server, Conf) ->
