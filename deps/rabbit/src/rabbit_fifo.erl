@@ -411,16 +411,16 @@ apply(#{index := Index,
                     Effects2 = [reply_log_effect(RaftIdx, MsgId, Header,
                                                  messages_ready(State4), From)
                                 | Effects1],
-                    {State, _DroppedMsg, Effects} =
-                        evaluate_limit(Index, false, State0, State4, Effects2),
+                    {State, Effects} = evaluate_limit(Index, State0,
+                                                      State4, Effects2),
                     {State,  '$ra_no_reply', Effects};
                 {nochange, _ExpiredMsg = true, State2, Effects0} ->
                     %% All ready messages expired.
                     State3 = State2#?STATE{consumers =
                                            maps:remove(ConsumerId,
                                                        State2#?STATE.consumers)},
-                    {State, _, Effects} = evaluate_limit(Index, false, State0,
-                                                         State3, Effects0),
+                    {State, Effects} = evaluate_limit(Index, State0,
+                                                      State3, Effects0),
                     {State, {dequeue, empty}, Effects}
             end
     end;
@@ -515,8 +515,7 @@ apply(#{index := Index}, #purge{},
                           },
     Effects0 = [{aux, force_checkpoint}, garbage_collection],
     Reply = {purge, NumReady},
-    {State, _, Effects} = evaluate_limit(Index, false, State0,
-                                         State1, Effects0),
+    {State, Effects} = evaluate_limit(Index, State0, State1, Effects0),
     {State, Reply, Effects};
 apply(#{index := _Idx}, #garbage_collection{}, State) ->
     {State, ok, [{aux, garbage_collection}]};
@@ -1993,10 +1992,8 @@ checkout(#{index := Index} = Meta,
     State2 = State1#?STATE{msg_cache = undefined,
                            dlx = DlxState},
     Effects2 = DlxDeliveryEffects ++ Effects1,
-    case evaluate_limit(Index, false, OldState, State2, Effects2) of
-        {State, _, Effects} ->
-            {State, Reply, Effects}
-    end.
+    {State, Effects} = evaluate_limit(Index, OldState, State2, Effects2),
+    {State, Reply, Effects}.
 
 checkout0(Meta, {success, ConsumerKey, MsgId,
                  ?MSG(_, _) = Msg, ExpiredMsg, State, Effects},
@@ -2013,37 +2010,37 @@ checkout0(_Meta, {_Activity, ExpiredMsg, State0, Effects0}, SendAcc) ->
     Effects = add_delivery_effects(Effects0, SendAcc, State0),
     {State0, ExpiredMsg, lists:reverse(Effects)}.
 
-evaluate_limit(_Index, Result,
-               #?STATE{cfg = #cfg{max_length = undefined,
-                                  max_bytes = undefined}},
-               #?STATE{cfg = #cfg{max_length = undefined,
-                                  max_bytes = undefined}} = State,
-               Effects) ->
-    {State, Result, Effects};
-evaluate_limit(_Index, Result, _BeforeState,
-               #?STATE{cfg = #cfg{max_length = undefined,
-                                  max_bytes = undefined},
-                       enqueuers = Enqs0} = State0,
-               Effects0) ->
+evaluate_limit(Idx, State1, State2, OuterEffects) ->
+    case evaluate_limit0(Idx, State1, State2, []) of
+        {State, []} ->
+            {State, OuterEffects};
+        {State, Effects} ->
+            {State, OuterEffects ++ lists:reverse(Effects)}
+    end.
+
+evaluate_limit0(_Index,
+                #?STATE{cfg = #cfg{max_length = undefined,
+                                   max_bytes = undefined}},
+                #?STATE{cfg = #cfg{max_length = undefined,
+                                   max_bytes = undefined}} = State,
+                Effects) ->
+    {State, Effects};
+evaluate_limit0(_Index, _BeforeState,
+                #?STATE{cfg = #cfg{max_length = undefined,
+                                   max_bytes = undefined},
+                        enqueuers = Enqs0} = State0,
+                Effects0) ->
     %% max_length and/or max_bytes policies have just been deleted
     {Enqs, Effects} = unblock_enqueuers(Enqs0, Effects0),
-    {State0#?STATE{enqueuers = Enqs}, Result, Effects};
-evaluate_limit(Index, Result, BeforeState,
-               #?STATE{cfg = #cfg{overflow_strategy = Strategy,
-                                  dead_letter_handler = DLH},
-                       enqueuers = Enqs0} = State0,
-               Effects0) ->
+    {State0#?STATE{enqueuers = Enqs}, Effects};
+evaluate_limit0(Index, BeforeState,
+                #?STATE{cfg = #cfg{overflow_strategy = Strategy},
+                        enqueuers = Enqs0} = State0,
+                Effects0) ->
     case is_over_limit(State0) of
         true when Strategy == drop_head ->
             {State, Effects} = drop_head(State0, Effects0),
-            evaluate_limit(Index, true, BeforeState, State, Effects);
-        false when Strategy == drop_head andalso
-                   Result =:= true andalso
-                   element(1, DLH) =:= at_most_once ->
-            %% At most once dead letter in the correct order.
-            Dropped = BeforeState#?STATE.messages_total - State0#?STATE.messages_total,
-            {LogEffects, Effects} = lists:split(Dropped, Effects0),
-            {State0, Result, Effects ++ lists:reverse(LogEffects)};
+            evaluate_limit0(Index, BeforeState, State, Effects);
         true when Strategy == reject_publish ->
             %% generate send_msg effect for each enqueuer to let them know
             %% they need to block
@@ -2057,7 +2054,7 @@ evaluate_limit(Index, Result, BeforeState,
                       (_P, _E, Acc) ->
                           Acc
                   end, {Enqs0, Effects0}, Enqs0),
-            {State0#?STATE{enqueuers = Enqs}, Result, Effects};
+            {State0#?STATE{enqueuers = Enqs}, Effects};
         false when Strategy == reject_publish ->
             %% TODO: optimise as this case gets called for every command
             %% pretty much
@@ -2066,12 +2063,12 @@ evaluate_limit(Index, Result, BeforeState,
                 {false, true} ->
                     %% we have moved below the lower limit
                     {Enqs, Effects} = unblock_enqueuers(Enqs0, Effects0),
-                    {State0#?STATE{enqueuers = Enqs}, Result, Effects};
+                    {State0#?STATE{enqueuers = Enqs}, Effects};
                 _ ->
-                    {State0, Result, Effects0}
+                    {State0, Effects0}
             end;
         false ->
-            {State0, Result, Effects0}
+            {State0, Effects0}
     end.
 
 unblock_enqueuers(Enqs0, Effects0) ->
