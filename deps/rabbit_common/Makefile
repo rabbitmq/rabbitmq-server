@@ -48,11 +48,4 @@ PLT_APPS += mnesia crypto ssl
 include ../../rabbitmq-components.mk
 include ../../erlang.mk
 
-HEX_TARBALL_FILES += ../../rabbitmq-components.mk \
-		     git-revisions.txt \
-		     mk/rabbitmq-build.mk \
-		     mk/rabbitmq-dist.mk \
-		     mk/rabbitmq-early-plugin.mk \
-		     mk/rabbitmq-hexpm.mk
-
 -include development.post.mk
