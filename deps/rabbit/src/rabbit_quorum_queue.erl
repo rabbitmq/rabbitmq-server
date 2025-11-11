@@ -1168,9 +1168,12 @@ stat(Q, Timeout) when ?is_amqqueue(Q) ->
     Leader = amqqueue:get_pid(Q),
     try
         case rabbit_fifo_client:stat(Leader, Timeout) of
-          {ok, _, _} = Success -> Success;
-          {error, _}           -> {ok, 0, 0};
-          {timeout, _}         -> {ok, 0, 0}
+          {ok, _, _} = Success ->
+                Success;
+          {error, _} ->
+                {ok, 0, 0};
+          {timeout, _} ->
+                {ok, 0, 0}
         end
     catch
         _:_ ->
