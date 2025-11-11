@@ -753,29 +753,32 @@ eldap_open(Servers, Opts) ->
             Error
     end.
 
+%% We must make sure not to add SSL options unless:
+%% a) we have at least R16A
+%% b) we have SSL turned on (or it breaks StartTLS...)
 ssl_conf() ->
-    %% We must make sure not to add SSL options unless a) we have at least R16A
-    %% b) we have SSL turned on (or it breaks StartTLS...)
-    case env(use_ssl, false) of
-        false -> [{ssl, false}];
-        true  -> %% Only the unfixed version can be []
-                 case env(ssl_options) of
-                     []        -> [{ssl, true}];
-                     undefined -> [{ssl, true}];
-                     _         -> [{ssl, true}, {sslopts, ssl_options()}]
-                 end
-    end.
+    ssl_conf(env(use_ssl, false)).
+
+ssl_conf(true) ->
+    [{ssl, true}, {sslopts, ssl_options()}];
+ssl_conf(false) ->
+    [{ssl, false}].
 
 ssl_options() ->
-    Opts0 = rabbit_ssl_options:fix_client(env(ssl_options)),
+    ssl_options(env(ssl_options)).
+
+ssl_options(undefined) ->
+    ssl_options([{verify, verify_peer}]);
+ssl_options(Opts0) ->
+    Opts1 = rabbit_ssl_options:fix_client(Opts0),
     case env(ssl_hostname_verification, undefined) of
         wildcard ->
             ?LOG_DEBUG("Enabling wildcard-aware hostname verification for LDAP client connections"),
             %% Needed for non-HTTPS connections that connect to servers that use wildcard certificates.
             %% See https://erlang.org/doc/man/public_key.html#pkix_verify_hostname_match_fun-1.
-            [{customize_hostname_check, [{match_fun, public_key:pkix_verify_hostname_match_fun(https)}]} | Opts0];
+            [{customize_hostname_check, [{match_fun, public_key:pkix_verify_hostname_match_fun(https)}]} | Opts1];
         _ ->
-            Opts0
+            Opts1
     end.
 
 at_least(Ver) ->
@@ -797,7 +800,7 @@ get_expected_env_str(Key, Default) ->
 
 env(Key) ->
     case application:get_env(rabbitmq_auth_backend_ldap, Key) of
-       {ok, V} -> V;
+        {ok, V} -> V;
         undefined -> undefined
     end.
 
