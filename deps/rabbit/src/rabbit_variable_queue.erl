@@ -1864,11 +1864,8 @@ read_from_q_tail(DelsAndAcksFun,
     %% For v2 we want to limit the number of messages read at once to lower
     %% the memory footprint. We use the consume rate to determine how many
     %% messages we read.
-    %% @todo Simply ask for N messages instead of low/high bounds.
     QTailSeqLimit = QTailSeqId + MemoryLimit,
-    QTailSeqId1 =
-        lists:min([rabbit_classic_queue_index_v2:next_segment_boundary(QTailSeqId),
-                   QTailSeqLimit, QTailSeqIdEnd]),
+    QTailSeqId1 = min(QTailSeqLimit, QTailSeqIdEnd),
     {List0, IndexState1} = rabbit_classic_queue_index_v2:read(QTailSeqId, QTailSeqId1, IndexState),
     {List, StoreState3, MCStateP3, MCStateT3} = case WhatToRead of
         messages ->

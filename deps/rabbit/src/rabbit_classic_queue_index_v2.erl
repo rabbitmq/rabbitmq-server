@@ -20,7 +20,7 @@
 %% queue implementation itself.
 %% @todo TODO
 -export([sync/1, needs_sync/1,
-         bounds/2, next_segment_boundary/1]).
+         bounds/2]).
 
 %% Called by rabbit_vhost.
 -export([all_queue_directory_names/1]).
@@ -762,11 +762,6 @@ ack_delete_fold_fun(SeqId, Write, {Buffer, Updates, Deletes, SegmentEntryCount})
              Deletes, SegmentEntryCount}
     end.
 
-%% A better interface for read/3 would be to request a maximum
-%% of N messages, rather than first call next_segment_boundary/3
-%% and then read from S1 to S2. This function could then return
-%% either N messages or less depending on the current state.
-
 -spec read(rabbit_variable_queue:seq_id(),
            rabbit_variable_queue:seq_id(),
            State) ->
@@ -1069,16 +1064,6 @@ bounds(State = #qi{ segments = Segments }, NextSeqIdHint) ->
              State}
     end.
 
-%% The next_segment_boundary/1 function is used internally when
-%% reading. It should not be called from rabbit_variable_queue.
-
--spec next_segment_boundary(SeqId) -> SeqId when SeqId::rabbit_variable_queue:seq_id().
-
-next_segment_boundary(SeqId) ->
-    ?DEBUG("~0p", [SeqId]),
-    SegmentEntryCount = segment_entry_count(),
-    (1 + (SeqId div SegmentEntryCount)) * SegmentEntryCount.
-
 %% ----
 %%
 %% Internal.
@@ -1088,6 +1073,10 @@ segment_entry_count() ->
     %% to be written to disk as long as the consumer consumes as fast as the
     %% producer produces.
     persistent_term:get(classic_queue_index_v2_segment_entry_count, 4096).
+
+next_segment_boundary(SeqId) ->
+    SegmentEntryCount = segment_entry_count(),
+    (1 + (SeqId div SegmentEntryCount)) * SegmentEntryCount.
 
 %% Note that store files will also be removed if there are any in this directory.
 %% Currently the v2 per-queue store expects this function to remove its own files.
