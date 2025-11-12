@@ -65,6 +65,11 @@ basics(_Config) ->
 
     ?assertEqual([1,2,3,4,5], lists:sort(rabbit_fifo_pq:indexes(Q1))),
     ?assertMatch(#{len := 5,
+                   detail := #{1 := 1,
+                               2 := 1,
+                               3 := 1,
+                               4 := 1,
+                               5 := 1},
                    num_active_priorities := 5,
                    lowest_index := 1}, rabbit_fifo_pq:overview(Q1)),
     {?MSG(5), Q2} = rabbit_fifo_pq:out(Q1),
@@ -112,14 +117,16 @@ get_lowest_index(_Config) ->
     ?assertEqual(1, rabbit_fifo_q:get_lowest_index(Q3)),
     ?assertEqual(2, rabbit_fifo_q:get_lowest_index(Q4)),
     ?assertEqual(3, rabbit_fifo_q:get_lowest_index(Q5)),
-    ?assertEqual(undefined, rabbit_fifo_q:get_lowest_index(Q6)).
+    ?assertEqual(undefined, rabbit_fifo_q:get_lowest_index(Q6)),
+    ok.
+
 
 property(_Config) ->
     run_proper(
       fun () ->
               ?FORALL(Ops, op_gen(256),
                       queue_prop(Ops))
-      end, [], 25),
+      end, [], 100),
     ok.
 
 queue_prop(Ops) ->
@@ -130,11 +137,15 @@ queue_prop(Ops) ->
 
     Sut0 = rabbit_fifo_pq:from_list(Ops),
     Out = rabbit_fifo_pq:to_list(Sut0),
+    #{detail := Detail,
+      len := Len} = rabbit_fifo_pq:overview(Sut0),
+    DetailSum = maps:fold(fun (_, C, Acc) -> Acc + C end, 0, Detail),
+    DetailSum == Len andalso
     [element(2, O) || O <- SortedOps] == Out.
 
 %%% helpers
 
--type item() :: {rabbit_fifo_pq:priority(), integer()}.
+-type item() :: {rabbit_fifo_pq:priority(), non_neg_integer()}.
 op_gen(Size) ->
     ?LET(Ops, resize(Size, list(item())), Ops).
 
