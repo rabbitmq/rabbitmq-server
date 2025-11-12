@@ -240,6 +240,13 @@ join(RemoteNode, NodeType)
                 ok = rabbit_db:reset(),
                 rabbit_feature_flags:copy_feature_states_after_reset(
                   RemoteNode)
+            catch
+                Class:Reason:Stacktrace ->
+                    ?LOG_ERROR(
+                       "DB: failed to reset node before adding it to a "
+                       "cluster: ~p:~p:~p", [Class, Reason, Stacktrace],
+                       #{domain => ?RMQLOG_DOMAIN_DB}),
+                    erlang:raise(Class, Reason, Stacktrace)
             after
                 rabbit_ff_registry_factory:release_state_change_lock()
             end,
