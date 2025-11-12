@@ -449,7 +449,7 @@ apply_(#{index := Idx} = Meta,
                {Life, _Credit, credited} ->
                    {Life, credited}
            end,
-    Priority = get_priority(ConsumerMeta),
+    Priority = get_consumer_priority(ConsumerMeta),
     ConsumerKey = case consumer_key_from_id(ConsumerId, State0) of
                       {ok, K} ->
                           K;
@@ -1747,10 +1747,10 @@ maybe_enqueue(RaftIdx, Ts, undefined, undefined, RawMsg,
     Header0 = maybe_set_msg_ttl(RawMsg, Ts, Size, State0),
     Header = maybe_set_msg_delivery_count(RawMsg, Header0),
     Msg = make_msg(RaftIdx, Header),
-    PTag = priority_tag(RawMsg),
+    Priority = msg_priority(RawMsg),
     State = State0#?STATE{msg_bytes_enqueue = Enqueue + Size,
                           messages_total = Total + 1,
-                          messages = rabbit_fifo_pq:in(PTag, Msg, Messages)
+                          messages = rabbit_fifo_pq:in(Priority, Msg, Messages)
                          },
     {ok, State, Effects};
 maybe_enqueue(RaftIdx, Ts, From, MsgSeqNo, RawMsg,
@@ -1780,10 +1780,10 @@ maybe_enqueue(RaftIdx, Ts, From, MsgSeqNo, RawMsg,
                            false ->
                                undefined
                        end,
-            PTag = priority_tag(RawMsg),
+            Priority = msg_priority(RawMsg),
             State = State0#?STATE{msg_bytes_enqueue = BytesEnqueued + Size,
                                   messages_total = Total + 1,
-                                  messages = rabbit_fifo_pq:in(PTag, Msg, Messages),
+                                  messages = rabbit_fifo_pq:in(Priority, Msg, Messages),
                                   enqueuers = Enqueuers0#{From => Enq},
                                   msg_cache = MsgCache
                                  },
@@ -2835,9 +2835,9 @@ is_expired(Ts, #?STATE{cfg = #cfg{expires = Expires},
 is_expired(_Ts, _State) ->
     false.
 
-get_priority(#{priority := Priority}) ->
+get_consumer_priority(#{priority := Priority}) ->
     Priority;
-get_priority(#{args := Args}) ->
+get_consumer_priority(#{args := Args}) ->
     %% fallback, v3 option
     case rabbit_misc:table_lookup(Args, <<"x-priority">>) of
         {_Type, Value} ->
@@ -2845,7 +2845,7 @@ get_priority(#{args := Args}) ->
         _ ->
             0
     end;
-get_priority(_) ->
+get_consumer_priority(_) ->
     0.
 
 notify_decorators_effect(QName, MaxActivePriority, IsEmpty) ->
@@ -3037,21 +3037,23 @@ maps_search(Pred, {K, V, I}) ->
 maps_search(Pred, Map) when is_map(Map) ->
     maps_search(Pred, maps:next(maps:iterator(Map))).
 
-priority_tag(Msg) ->
+-define(DEFAULT_PRIORITY, 4).
+-define(MAX_PRIORITY, 31).
+
+msg_priority(Msg) ->
     case mc:is(Msg) of
         true ->
             case mc:priority(Msg) of
                 P when is_integer(P) ->
-                    min(P, 31);
+                    min(P, ?MAX_PRIORITY);
                 _ ->
-                    4
+                    ?DEFAULT_PRIORITY
             end;
         false ->
-            4
+            ?DEFAULT_PRIORITY
     end.
 
-do_snapshot(MacVer, Ts, Ch,
-               RaAux, DiscardedBytes, Force)
+do_snapshot(MacVer, Ts, Ch, RaAux, DiscardedBytes, Force)
   when element(1, Ch) == checkpoint andalso
        is_integer(MacVer)  andalso
        MacVer >= 8 ->

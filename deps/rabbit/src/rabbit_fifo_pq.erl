@@ -8,6 +8,7 @@
 -module(rabbit_fifo_pq).
 
 -include("rabbit_fifo.hrl").
+
 -export([
          new/0,
          in/3,
@@ -22,30 +23,32 @@
          overview/1
         ]).
 
-% -define(NON_EMPTY, {_, [_|_]}).
--define(EMPTY, {[], []}).
+-define(STATE, pq).
+-define(EMPTY, {0, [], []}).
 
-%% a weighted priority queue with only two priorities
+%% supports 32 priorities, needs to be a power of 2 to support the De Bruijn
+%% lookup method. 64 would push the bitmap into an erlang big number so we
+%% have to settle for 32
 -type priority() :: 0..31.
--type queue() :: {list(msg()), list(msg())}.
+-type queue() :: {non_neg_integer(), list(msg()), list(msg())}.
 
--record(?MODULE, {buckets = #{} :: #{priority() => queue()},
-                  len = 0 :: non_neg_integer(),
-                  bitmap = 0 :: integer()}).
+-record(?STATE, {buckets = #{} :: #{priority() => queue()},
+                 len = 0 :: non_neg_integer(),
+                 bitmap = 0 :: integer()}).
 
--opaque state() :: #?MODULE{}.
+-opaque state() :: #?STATE{}.
 
 -export_type([state/0,
               priority/0]).
 
 -spec new() -> state().
 new() ->
-    #?MODULE{}.
+    #?STATE{}.
 
 -spec in(priority(), msg(), state()) -> state().
-in(Priority0, Item, #?MODULE{buckets = Buckets0,
-                             bitmap = Bitmap0,
-                             len = Len} = State)
+in(Priority0, Item, #?STATE{buckets = Buckets0,
+                            bitmap = Bitmap0,
+                            len = Len} = State)
   when Priority0 >= 0 andalso
        Priority0 =< 31 ->
     %% invert priority
@@ -53,37 +56,23 @@ in(Priority0, Item, #?MODULE{buckets = Buckets0,
     case Buckets0 of
         #{Priority := Queue0} ->
             %% there are messages for the priority already
-            State#?MODULE{buckets = Buckets0#{Priority => in(Item, Queue0)},
-                          len = Len + 1};
+            State#?STATE{buckets = Buckets0#{Priority => in(Item, Queue0)},
+                         len = Len + 1};
         _ ->
             Bitmap = Bitmap0 bor (1 bsl Priority),
             %% there are no messages for the priority
-            State#?MODULE{buckets = Buckets0#{Priority => in(Item, ?EMPTY)},
-                          bitmap = Bitmap,
-                          len = Len + 1}
+            State#?STATE{buckets = Buckets0#{Priority => in(Item, ?EMPTY)},
+                         bitmap = Bitmap,
+                         len = Len + 1}
     end.
-
-first_set_bit(0) ->
-    32;
-first_set_bit(Bitmap) ->
-    count_trailing(Bitmap band -Bitmap).
-
--define(DEBRUIJN_SEQ, 16#077CB531).
--define(DEBRUIJN_LOOKUP,
-        {0, 1, 28, 2, 29, 14, 24, 3, 30, 22, 20, 15, 25, 17, 4, 8,
-         31, 27, 13, 23, 21, 19, 16, 7, 26, 12, 18, 6, 11, 5, 10, 9}).
-
-count_trailing(N) ->
-    Lookup = ((N * ?DEBRUIJN_SEQ) bsr 27) band 31,
-    element(Lookup + 1, ?DEBRUIJN_LOOKUP).
 
 -spec out(state()) ->
     empty | {msg(), state()}.
-out(#?MODULE{len = 0}) ->
+out(#?STATE{len = 0}) ->
     empty;
-out(#?MODULE{buckets = Buckets,
-             len = Len,
-             bitmap = Bitmap0} = State) ->
+out(#?STATE{buckets = Buckets,
+            len = Len,
+            bitmap = Bitmap0} = State) ->
     Priority = first_set_bit(Bitmap0),
     #{Priority := Q0} = Buckets,
     Msg = peek(Q0),
@@ -93,25 +82,25 @@ out(#?MODULE{buckets = Buckets,
             %% as we know the bit is set we just need to xor rather than
             %% create a mask then xor
             Bitmap = Bitmap0 bxor (1 bsl Priority),
-            {Msg, State#?MODULE{buckets = maps:remove(Priority, Buckets),
-                                len = Len - 1,
-                                bitmap = Bitmap}};
+            {Msg, State#?STATE{buckets = maps:remove(Priority, Buckets),
+                               len = Len - 1,
+                               bitmap = Bitmap}};
         Q ->
-            {Msg, State#?MODULE{buckets = maps:put(Priority, Q, Buckets),
-                                len = Len - 1}}
+            {Msg, State#?STATE{buckets = maps:put(Priority, Q, Buckets),
+                               len = Len - 1}}
     end.
 
 -spec get(state()) -> empty | msg().
-get(#?MODULE{len = 0}) ->
+get(#?STATE{len = 0}) ->
     empty;
-get(#?MODULE{buckets = Buckets,
-             bitmap = Bitmap}) ->
+get(#?STATE{buckets = Buckets,
+            bitmap = Bitmap}) ->
     Priority = first_set_bit(Bitmap),
     #{Priority := Q0} = Buckets,
     peek(Q0).
 
 -spec len(state()) -> non_neg_integer().
-len(#?MODULE{len = Len}) ->
+len(#?STATE{len = Len}) ->
     Len.
 
 -spec from_list([{priority(), term()}]) -> state().
@@ -131,17 +120,17 @@ from_lqueue(LQ) ->
                 end, new(), LQ).
 
 -spec indexes(state()) -> [ra:index()].
-indexes(#?MODULE{buckets = Buckets}) ->
+indexes(#?STATE{buckets = Buckets}) ->
     maps:fold(
-      fun (_P, {L1, L2}, Acc0) ->
+      fun (_P, {_, L1, L2}, Acc0) ->
               Acc = lists:foldl(fun msg_idx_fld/2, Acc0, L1),
               lists:foldl(fun msg_idx_fld/2, Acc, L2)
       end, [], Buckets).
 
 -spec get_lowest_index(state()) -> undefined | ra:index().
-get_lowest_index(#?MODULE{len = 0}) ->
+get_lowest_index(#?STATE{len = 0}) ->
     undefined;
-get_lowest_index(#?MODULE{buckets = Buckets}) ->
+get_lowest_index(#?STATE{buckets = Buckets}) ->
     lists:min(
       maps:fold(fun (_, Q, Acc) ->
                         case peek(Q) of
@@ -154,32 +143,38 @@ get_lowest_index(#?MODULE{buckets = Buckets}) ->
 
 -spec overview(state()) ->
     #{len := non_neg_integer(),
+      detail := #{priority() => pos_integer()},
       num_active_priorities := 0..32,
       lowest_index := ra:index()}.
-overview(#?MODULE{len = Len,
-                  buckets = Buckets} = State) ->
+overview(#?STATE{len = Len,
+                 buckets = Buckets} = State) ->
+    Detail  = maps:fold(fun (P0, {C, _, _}, Acc) ->
+                                P = 31-P0,
+                                Acc#{P => C}
+                        end, #{}, Buckets),
     #{len => Len,
+      detail => Detail,
       num_active_priorities => map_size(Buckets),
       lowest_index => get_lowest_index(State)}.
 
-%% internals
+%% INTERNAL
 
 %% invariant, if the queue is non empty so is the Out (right) list.
 in(X, ?EMPTY) ->
-    {[], [X]};
-in(X, {In, Out}) ->
-    {[X | In], Out}.
+    {1, [], [X]};
+in(X, {C, In, Out}) ->
+    {C+1, [X | In], Out}.
 
 peek(?EMPTY) ->
     empty;
-peek({_, [H | _]}) ->
+peek({_, _, [H | _]}) ->
     H.
 
-drop({In, [_]}) ->
+drop({C, In, [_]}) ->
     %% the last Out one
-    {[], lists:reverse(In)};
-drop({In, [_ | Out]}) ->
-    {In, Out}.
+    {C-1, [], lists:reverse(In)};
+drop({C, In, [_ | Out]}) ->
+    {C-1, In, Out}.
 
 msg_idx_fld(Msg, Acc) when is_list(Acc) ->
     [msg_idx(Msg) | Acc].
@@ -193,4 +188,18 @@ to_list(empty, Acc) ->
     lists:reverse(Acc);
 to_list({Item, State}, Acc) ->
     to_list(out(State), [Item | Acc]).
+
+first_set_bit(0) ->
+    32;
+first_set_bit(Bitmap) ->
+    count_trailing(Bitmap band -Bitmap).
+
+-define(DEBRUIJN_SEQ, 16#077CB531).
+-define(DEBRUIJN_LOOKUP,
+        {0, 1, 28, 2, 29, 14, 24, 3, 30, 22, 20, 15, 25, 17, 4, 8,
+         31, 27, 13, 23, 21, 19, 16, 7, 26, 12, 18, 6, 11, 5, 10, 9}).
+
+count_trailing(N) ->
+    Lookup = ((N * ?DEBRUIJN_SEQ) bsr 27) band 31,
+    element(Lookup + 1, ?DEBRUIJN_LOOKUP).
 
