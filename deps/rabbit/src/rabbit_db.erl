@@ -197,9 +197,8 @@ force_load_on_next_boot_using_mnesia() ->
     rabbit_mnesia:force_load_next_boot().
 
 post_reset() ->
-    rabbit_feature_flags:reset(),
-
     wipe_data_dir(),
+    rabbit_feature_flags:reset(),
 
     %% The cluster status files that RabbitMQ uses when Mnesia is the database
     %% are initially created from rabbit_prelaunch_cluster. However, it will
