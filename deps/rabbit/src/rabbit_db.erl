@@ -129,7 +129,12 @@ clear_init_finished() ->
 %% @doc Resets the database and the node.
 
 reset() ->
-    ok = rabbit:stop(),
+    case rabbit:is_running() of
+        true ->
+            ok = rabbit:stop();
+        false ->
+            ok
+    end,
     ok = case rabbit_khepri:is_enabled() of
              true  -> reset_using_khepri();
              false -> reset_using_mnesia()
