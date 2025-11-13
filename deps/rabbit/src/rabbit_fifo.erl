@@ -744,14 +744,13 @@ snapshot_installed(_Meta, #?MODULE{cfg = #cfg{},
                      Acc) ->
                         case node(Pid) == node() of
                             true ->
-                                Iter = maps:iterator(Checked, ordered),
+                                Iter = maps:iterator(Checked, reversed),
                                 Acc#{{Tag, Pid} => maps:to_list(Iter)};
                             false ->
                                 Acc
                         end
                 end, #{}, Consumers),
-    Effs = add_delivery_effects([], SendAcc, State),
-    Effs.
+    delivery_effects(SendAcc, State).
 
 convert_v7_to_v8(#{} = _Meta, StateV7) ->
     %% the structure is intact for now
@@ -2063,9 +2062,8 @@ checkout0(Meta, {success, ConsumerKey, MsgId,
                       SendAcc0#{ConsumerKey => [DelMsg | LogMsgs]}
               end,
     checkout0(Meta, checkout_one(Meta, ExpiredMsg, State, Effects), SendAcc);
-checkout0(_Meta, {_Activity, ExpiredMsg, State0, Effects0}, SendAcc) ->
-    Effects = add_delivery_effects([], SendAcc, State0),
-    {State0, ExpiredMsg, Effects0 ++ lists:reverse(Effects)}.
+checkout0(_Meta, {_Activity, ExpiredMsg, State, Effects}, SendAcc) ->
+    {State, ExpiredMsg, Effects ++ delivery_effects(SendAcc, State)}.
 
 evaluate_limit(Idx, State1, State2, OuterEffects) ->
     case evaluate_limit0(Idx, State1, State2, []) of
@@ -2154,18 +2152,19 @@ chunk_disk_msgs([{_MsgId, Msg} = ConsumerMsg | Rem], Bytes,
     Size = get_header(size, get_msg_header(Msg)),
     chunk_disk_msgs(Rem, Bytes + Size, [[ConsumerMsg | CurChunk] | Chunks]).
 
-add_delivery_effects(Effects0, AccMap, _State)
-  when map_size(AccMap) == 0 ->
+delivery_effects(AccMap, _State)
+  when map_size(AccMap) =:= 0 ->
     %% does this ever happen?
-    Effects0;
-add_delivery_effects(Effects0, AccMap, State) ->
-     maps:fold(fun (C, DiskMsgs, Efs)
-                     when is_list(DiskMsgs) ->
-                       lists:foldl(
-                         fun (Msgs, E) ->
-                                 [delivery_effect(C, Msgs, State) | E]
-                         end, Efs, chunk_disk_msgs(DiskMsgs, 0, [[]]))
-               end, Effects0, AccMap).
+    [];
+delivery_effects(AccMap, State) ->
+    Effs = maps:fold(fun(C, DiskMsgs, Efs)
+                           when is_list(DiskMsgs) ->
+                             lists:foldl(
+                               fun (Msgs, E) ->
+                                       [delivery_effect(C, Msgs, State) | E]
+                               end, Efs, chunk_disk_msgs(DiskMsgs, 0, [[]]))
+                     end, [], AccMap),
+    lists:reverse(Effs).
 
 take_next_msg(#?STATE{returns = Returns0,
                       messages = Messages0} = State) ->
