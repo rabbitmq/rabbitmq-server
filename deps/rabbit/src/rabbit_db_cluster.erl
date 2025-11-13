@@ -196,34 +196,24 @@ join(RemoteNode, NodeType)
             %% RabbitMQ and Mnesia must be stopped to modify the cluster. In
             %% particular, we stop Mnesia regardless of the remotely selected
             %% database because we might change it during the join.
-            RestartMnesia = rabbit_mnesia:is_running(),
-            RestartFFCtl = rabbit_ff_controller:is_running(),
-            RestartRaSystems = rabbit_ra_systems:are_running(),
+            % RestartMnesia = rabbit_mnesia:is_running(),
+            % RestartFFCtl = rabbit_ff_controller:is_running(),
             RestartRabbit = rabbit:is_running(),
             case RestartRabbit of
                 true ->
                     rabbit:stop();
                 false ->
-                    %% The Ra systems were started before we initialize the
-                    %% database (because Khepri depends on one of them).
-                    %% Therefore, there are files in the data directory. They
-                    %% will go away with the reset and we will need to restart
-                    %% Ra systems afterwards.
-                    case RestartRaSystems of
-                        true  -> ok = rabbit_ra_systems:ensure_stopped();
-                        false -> ok
-                    end,
-
-                    case RestartFFCtl of
-                        true ->
-                            ok = rabbit_ff_controller:wait_for_task_and_stop();
-                        false ->
-                            ok
-                    end,
-                    case RestartMnesia of
-                        true  -> rabbit_mnesia:stop_mnesia();
-                        false -> ok
-                    end
+                    % case RestartFFCtl of
+                    %     true ->
+                    %         ok = rabbit_ff_controller:wait_for_task_and_stop();
+                    %     false ->
+                    %         ok
+                    % end,
+                    % case RestartMnesia of
+                    %     true  -> rabbit_mnesia:stop_mnesia();
+                    %     false -> ok
+                    % end,
+                    ok
             end,
 
             %% We acquire the feature flags registry reload lock because
@@ -255,27 +245,16 @@ join(RemoteNode, NodeType)
             %% it is meant to be used. That's because we may switch back from
             %% Khepri to Mnesia. To be safe, remove possibly stale files from
             %% a previous instance where Mnesia was used.
-            case rabbit_khepri:is_enabled(RemoteNode) of
-                true  -> ok;
-                false -> ok = rabbit_mnesia:reset_gracefully()
-            end,
+            % case rabbit_khepri:is_enabled(RemoteNode) of
+            %     true  -> ok;
+            %     false -> ok = rabbit_mnesia:reset_gracefully()
+            % end,
 
-            ok = rabbit_node_monitor:notify_left_cluster(node()),
+            % ok = rabbit_node_monitor:notify_left_cluster(node()),
 
             %% Now that the files are all gone after the reset above, restart
             %% the Ra systems. They will recreate their folder in the process.
-            case RestartRabbit of
-                true ->
-                    ok;
-                false ->
-                    case RestartRaSystems of
-                        true ->
-                            ok = rabbit_ra_systems:ensure_started(),
-                            ok = rabbit_khepri:setup();
-                        false ->
-                            ok
-                    end
-            end,
+            % ok = rabbit_khepri:setup(),
 
             ?LOG_INFO(
                "DB: joining cluster using remote nodes:~n~tp", [ClusterNodes],
@@ -301,17 +280,18 @@ join(RemoteNode, NodeType)
                 true ->
                     rabbit:start();
                 false ->
-                    case RestartFFCtl of
-                        true ->
-                            ok = rabbit_sup:start_child(rabbit_ff_controller);
-                        false ->
-                            ok
-                    end,
-                    NeedMnesia = not rabbit_khepri:is_enabled(),
-                    case RestartMnesia andalso NeedMnesia of
-                        true  -> rabbit_mnesia:start_mnesia(false);
-                        false -> ok
-                    end
+                    % case RestartFFCtl of
+                    %     true ->
+                    %         ok = rabbit_sup:start_child(rabbit_ff_controller);
+                    %     false ->
+                    %         ok
+                    % end,
+                    % NeedMnesia = not rabbit_khepri:is_enabled(),
+                    % case RestartMnesia andalso NeedMnesia of
+                    %     true  -> rabbit_mnesia:start_mnesia(false);
+                    %     false -> ok
+                    % end,
+                    ok
             end,
 
             case Ret of
