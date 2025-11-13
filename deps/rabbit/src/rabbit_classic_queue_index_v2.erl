@@ -8,19 +8,14 @@
 -module(rabbit_classic_queue_index_v2).
 
 -export([erase/1, init/1, reset_state/1, recover/4,
+         bounds/2, next_segment_boundary/1, info/1,
          terminate/3, delete_and_terminate/1,
-         info/1, publish/7, ack/2, read/3]).
+         publish/7, ack/2, read/3,
+         sync/1, needs_sync/1]).
 
 %% Recovery. Unlike other functions in this module, these
 %% apply to all queues all at once.
 -export([start/2, stop/1]).
-
-%% rabbit_queue_index/rabbit_variable_queue-specific functions.
-%% Implementation details from the queue index leaking into the
-%% queue implementation itself.
-%% @todo TODO
--export([sync/1, needs_sync/1,
-         bounds/2, next_segment_boundary/1]).
 
 %% Called by rabbit_vhost.
 -export([all_queue_directory_names/1]).
