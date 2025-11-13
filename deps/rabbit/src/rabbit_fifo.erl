@@ -744,7 +744,8 @@ snapshot_installed(_Meta, #?MODULE{cfg = #cfg{},
                      Acc) ->
                         case node(Pid) == node() of
                             true ->
-                                Acc#{{Tag, Pid} => maps:to_list(Checked)};
+                                Iter = maps:iterator(Checked, ordered),
+                                Acc#{{Tag, Pid} => maps:to_list(Iter)};
                             false ->
                                 Acc
                         end
