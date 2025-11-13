@@ -94,6 +94,7 @@ jobs:
       elixir_version: ${{ matrix.elixir_version }}
       metadata_store: ${{ matrix.metadata_store }}
       mixed_clusters: true
+      previous_version: 'tags/v4.0.9'
 
   type-check:
     name: Type check
