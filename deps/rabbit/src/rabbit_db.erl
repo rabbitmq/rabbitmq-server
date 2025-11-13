@@ -224,6 +224,7 @@ wipe_data_dir() ->
        [DataDir, FilesToRemove],
        #{domain => ?RMQLOG_DOMAIN_DB}),
     ok = rabbit_file:recursive_delete(FilesToRemove),
+    _ = file:delete(rabbit_guid:filename()),
     ok.
 
 %% -------------------------------------------------------------------
