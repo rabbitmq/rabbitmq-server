@@ -113,7 +113,7 @@
 
 -export([ensure_feature_flags_are_in_sync/2,
          join/2,
-         forget_member/2]).
+         forget_member/2, forget_member_locked/2]).
 -export([change_node_type/1]).
 -export([is_clustered/0,
          members/0,
