@@ -20,7 +20,6 @@
          is_authorized_vhost_visible_for_monitoring/3,
          is_authorized_global_parameters/3]).
 
--export([list_visible_vhosts/1, list_visible_vhosts_names/1, list_login_vhosts/2]).
 -export([id/2]).
 -export([not_authorised/3, halt_response/5]).
 
@@ -255,23 +254,34 @@ user_matches_vhost(ReqData, User) ->
         not_found -> true;
         none      -> true;
         V         ->
-            AuthzData = get_authz_data(ReqData),
-            lists:member(V, list_login_vhosts_names(User, AuthzData))
+            check_vhost_access(ReqData, User, V)
     end.
 
-user_matches_vhost_visible(ReqData, User) ->
+user_matches_vhost_visible(ReqData, User = #user{tags = Tags}) ->
     case vhost(ReqData) of
         not_found -> true;
         none      -> true;
         V         ->
-            AuthzData = get_authz_data(ReqData),
-            lists:member(V, list_visible_vhosts_names(User, AuthzData))
+            case is_monitor(Tags) of
+                true  ->
+                    rabbit_vhost:exists(V);
+                false ->
+                    check_vhost_access(ReqData, User, V)
+            end
     end.
 
 get_authz_data(ReqData) ->
     {PeerAddress, _PeerPort} = cowboy_req:peer(ReqData),
     {ip, PeerAddress}.
 
+check_vhost_access(ReqData, User, VHost) ->
+    AuthzData = get_authz_data(ReqData),
+    case catch rabbit_access_control:check_vhost_access(User, VHost, AuthzData, #{}) of
+        ok -> true;
+        NotOK ->
+            log_access_control_result(NotOK),
+            false
+    end.
 
 not_authorised(Reason, ReqData, Context) ->
     %% TODO: consider changing to 403 in 4.0
@@ -327,40 +337,6 @@ id0(Key, ReqData) ->
         undefined -> none;
         Id        -> Id
     end.
-
-
-list_visible_vhosts_names(User) ->
-    list_visible_vhosts(User, undefined).
-
-list_visible_vhosts_names(User, AuthzData) ->
-    list_visible_vhosts(User, AuthzData).
-
-list_visible_vhosts(User) ->
-    list_visible_vhosts(User, undefined).
-
-list_visible_vhosts(User = #user{tags = Tags}, AuthzData) ->
-    case is_monitor(Tags) of
-        true  -> rabbit_vhost:list_names();
-        false -> list_login_vhosts_names(User, AuthzData)
-    end.
-
-list_login_vhosts_names(User, AuthzData) ->
-    [V || V <- rabbit_vhost:list_names(),
-          case catch rabbit_access_control:check_vhost_access(User, V, AuthzData, #{}) of
-              ok -> true;
-              NotOK ->
-                  log_access_control_result(NotOK),
-                  false
-          end].
-
-list_login_vhosts(User, AuthzData) ->
-    [V || V <- rabbit_vhost:all(),
-          case catch rabbit_access_control:check_vhost_access(User, vhost:get_name(V), AuthzData, #{}) of
-              ok -> true;
-              NotOK ->
-                  log_access_control_result(NotOK),
-                  false
-          end].
 
 % rabbitmq/rabbitmq-auth-backend-http#100
 log_access_control_result(NotOK) ->
