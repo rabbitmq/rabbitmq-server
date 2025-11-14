@@ -17,7 +17,6 @@ on:
         type: boolean
       previous_version:
         required: false
-        default: 'tags/v4.0.9'
         type: string
       make_target:
         required: true
