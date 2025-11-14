@@ -129,6 +129,10 @@ clear_init_finished() ->
 %% @doc Resets the database and the node.
 
 reset() ->
+    case rabbit:is_running() of
+        true  -> ok = rabbit:stop();
+        false -> ok
+    end,
     ok = case rabbit_khepri:is_enabled() of
              true  -> reset_using_khepri();
              false -> reset_using_mnesia()
@@ -196,6 +200,7 @@ force_load_on_next_boot_using_mnesia() ->
     rabbit_mnesia:force_load_next_boot().
 
 post_reset() ->
+    wipe_data_dir(),
     rabbit_feature_flags:reset(),
 
     %% The cluster status files that RabbitMQ uses when Mnesia is the database
@@ -208,6 +213,18 @@ post_reset() ->
     ThisNode = node(),
     rabbit_node_monitor:write_cluster_status({[ThisNode], [ThisNode], []}),
 
+    ok.
+
+wipe_data_dir() ->
+    DataDir = dir(),
+    Glob = filename:join(DataDir, "*"),
+    FilesToRemove = filelib:wildcard(Glob),
+    ?LOG_DEBUG(
+       "DB: wipe files in data directory `~ts`:~p",
+       [DataDir, FilesToRemove],
+       #{domain => ?RMQLOG_DOMAIN_DB}),
+    ok = rabbit_file:recursive_delete(FilesToRemove),
+    _ = file:delete(rabbit_guid:filename()),
     ok.
 
 %% -------------------------------------------------------------------

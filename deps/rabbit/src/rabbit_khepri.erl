@@ -302,6 +302,9 @@ ensure_ra_system_started() ->
     {ok, _} = application:ensure_all_started(khepri),
     ok = rabbit_ra_systems:ensure_ra_system_started(?RA_SYSTEM).
 
+ensure_ra_system_stopped() ->
+    ok = rabbit_ra_systems:ensure_ra_system_stopped(?RA_SYSTEM).
+
 retry_timeout() ->
     case application:get_env(rabbit, khepri_leader_wait_retry_timeout) of
         {ok, T} when is_integer(T) andalso T >= 0 -> T;
@@ -372,19 +375,14 @@ await_replication() ->
 %% @private
 
 reset() ->
-    case rabbit:is_running() of
-        false ->
-            %% Rabbit should be stopped, but Khepri needs to be running.
-            %% Restart it.
-            ok = setup(),
-            ok = khepri_cluster:reset(?RA_CLUSTER_NAME),
-            ok = khepri:stop(?RA_CLUSTER_NAME),
+    ?assertNot(rabbit:is_running()),
 
-            _ = file:delete(rabbit_guid:filename()),
-            ok;
-        true ->
-            throw({error, rabbitmq_unexpectedly_running})
-    end.
+    ok = setup(),
+    ThisNode = node(),
+    rabbit_db_cluster:forget_member(ThisNode, false),
+    ok = khepri:stop(?RA_CLUSTER_NAME),
+    ok = ensure_ra_system_stopped(),
+    ok.
 
 -spec dir() -> Dir when
       Dir :: file:filename_all().
