@@ -160,6 +160,8 @@ protected_virtual_host_is_marked_as_such_in_definition_export(Config) ->
     Metadata = maps:get(metadata, VHost),
     ?assertEqual(Name, maps:get(name, VHost)),
     ?assertEqual(Metadata, #{
+        description             => <<>>,
+        tags                    => [],
         protected_from_deletion => true,
         default_queue_type      => <<"classic">>
     }),
