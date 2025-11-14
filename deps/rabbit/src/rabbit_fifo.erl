@@ -948,6 +948,8 @@ overview(#?STATE{consumers = Cons,
     #{
       % num_hi := MsgsHi,
       % num_no := MsgsNo
+      num_active_priorities := NumActivePriorities,
+      detail := Detail
      } = rabbit_fifo_pq:overview(Messages),
 
     Overview = #{type => ?STATE,
@@ -964,7 +966,9 @@ overview(#?STATE{consumers = Cons,
                  enqueue_message_bytes => EnqueueBytes,
                  checkout_message_bytes => CheckoutBytes,
                  discarded_bytes => DiscardedBytes,
-                 smallest_raft_index => smallest_raft_index(State)
+                 smallest_raft_index => smallest_raft_index(State),
+                 num_active_priorities => NumActivePriorities,
+                 messages_by_priority => Detail
                  },
     DlxOverview = dlx_overview(DlxState),
     maps:merge(maps:merge(Overview, DlxOverview), SacOverview).
