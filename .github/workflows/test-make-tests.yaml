@@ -16,6 +16,7 @@ on:
         type: boolean
       previous_version:
         required: false
+        default: 'tags/v4.0.9'
         type: string
       # in almost all cases this should not be set and the ref that triggered
       # the workflow will be used. however, mixed version tests for skip-version
