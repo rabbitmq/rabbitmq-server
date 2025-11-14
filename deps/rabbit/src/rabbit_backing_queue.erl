@@ -14,8 +14,7 @@
                     message_bytes, message_bytes_ready,
                     message_bytes_unacknowledged, message_bytes_ram,
                     message_bytes_persistent, head_message_timestamp,
-                    disk_reads, disk_writes, backing_queue_status,
-                    messages_paged_out, message_bytes_paged_out]).
+                    disk_reads, disk_writes, backing_queue_status]).
 
 %% We can't specify a per-queue ack/state with callback signatures
 -type ack()   :: any().
@@ -36,9 +35,6 @@
 
 -type msg_fun(A) :: fun ((mc:state(), ack(), A) -> A).
 -type msg_pred() :: fun ((rabbit_types:message_properties()) -> boolean()).
-
--type queue_mode() :: atom().
--type queue_version() :: pos_integer().
 
 %% Called on startup with a vhost and a list of durable queue names on this vhost.
 %% The queues aren't being started at this point, but this call allows the
@@ -173,13 +169,6 @@
 %% each message, its ack tag, and an accumulator.
 -callback ackfold(msg_fun(A), A, state(), [ack()]) -> {A, state()}.
 
-%% Fold over all the messages in a queue and return the accumulated
-%% results, leaving the queue undisturbed.
--callback fold(fun((mc:state(),
-                    rabbit_types:message_properties(),
-                    boolean(), A) -> {('stop' | 'cont'), A}),
-               A, state()) -> {A, state()}.
-
 %% How long is my queue?
 -callback len(state()) -> non_neg_integer().
 
@@ -222,10 +211,6 @@
 %% to signal that it's already seen this message, (e.g. it was published
 %% or discarded previously).
 -callback is_duplicate(mc:state(), state()) -> {boolean(), state()}.
-
--callback set_queue_mode(queue_mode(), state()) -> state().
-
--callback set_queue_version(queue_version(), state()) -> state().
 
 -callback zip_msgs_and_acks([delivered_publish()],
                             [ack()], Acc, state())

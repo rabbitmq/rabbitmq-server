@@ -490,9 +490,7 @@ process_args_policy(State = #q{q                   = Q,
          {<<"message-ttl">>,             fun res_min/2, fun init_ttl/2},
          {<<"max-length">>,              fun res_min/2, fun init_max_length/2},
          {<<"max-length-bytes">>,        fun res_min/2, fun init_max_bytes/2},
-         {<<"overflow">>,                fun res_arg/2, fun init_overflow/2},
-         {<<"queue-mode">>,              fun res_arg/2, fun init_queue_mode/2},
-         {<<"queue-version">>,           fun res_arg/2, fun init_queue_version/2}],
+         {<<"overflow">>,                fun res_arg/2, fun init_overflow/2}],
       drop_expired_msgs(
          lists:foldl(fun({Name, Resolve, Fun}, StateN) ->
                              Fun(rabbit_queue_type_util:args_policy_lookup(Name, Resolve, Q), StateN)
@@ -542,22 +540,6 @@ init_overflow(Overflow, State) ->
         _ ->
             State#q{overflow = OverflowVal}
     end.
-
-init_queue_mode(undefined, State) ->
-    State;
-init_queue_mode(Mode, State = #q {backing_queue = BQ,
-                                  backing_queue_state = BQS}) ->
-    BQS1 = BQ:set_queue_mode(binary_to_existing_atom(Mode, utf8), BQS),
-    State#q{backing_queue_state = BQS1}.
-
-init_queue_version(Version0, State = #q {backing_queue = BQ,
-                                         backing_queue_state = BQS}) ->
-    Version = case Version0 of
-        undefined -> 2;
-        _ -> Version0
-    end,
-    BQS1 = BQ:set_queue_version(Version, BQS),
-    State#q{backing_queue_state = BQS1}.
 
 reply(Reply, NewState) ->
     {NewState1, Timeout} = next_state(NewState),

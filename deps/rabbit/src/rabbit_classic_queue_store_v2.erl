@@ -147,8 +147,8 @@ info(#qs{ write_buffer = WriteBuffer }) ->
 
 %% @todo I think we can disable the old message store at the same
 %%       place where we create MsgId. If many queues receive the
-%%       message, then we create an MsgId. If not, we don't. But
-%%       we can only do this after removing support for v1.
+%%       message, then we create an MsgId. If not, we don't until
+%%       strictly necessary (large messages).
 write(SeqId, Msg, Props, State0 = #qs{ write_buffer = WriteBuffer0,
                                        write_buffer_size = WriteBufferSize }) ->
     ?DEBUG("~0p ~0p ~0p ~0p", [SeqId, Msg, Props, State0]),

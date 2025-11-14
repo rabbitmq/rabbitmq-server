@@ -13,12 +13,14 @@
          publish/5, publish_delivered/4,
          discard/3, drain_confirmed/1,
          dropwhile/2, fetchwhile/4, fetch/2, drop/2, ack/2, requeue/2,
-         ackfold/4, fold/3, len/1, is_empty/1, depth/1,
+         ackfold/4, len/1, is_empty/1, depth/1,
          update_rates/1, needs_timeout/1, timeout/1,
          handle_pre_hibernate/1, resume/1, msg_rates/1,
-         info/2, invoke/3, is_duplicate/2, set_queue_mode/2,
-         set_queue_version/2,
+         info/2, invoke/3, is_duplicate/2,
          start/2, stop/1, zip_msgs_and_acks/4, handle_info/2]).
+
+%% Removed in 4.3. @todo Remove in next LTS.
+-export([set_queue_mode/2, set_queue_version/2]).
 
 %%----------------------------------------------------------------------------
 %% This test backing queue follows the variable queue implementation, with
@@ -31,19 +33,14 @@
 -behaviour(rabbit_backing_queue).
 
 -record(vqstate,
-        { q1,
-          q2,
-          delta,
-          q3,
-          q4,
+        { q_head,
+          q_tail,
           next_seq_id,
           %% seq_id() of first undelivered message
           %% everything before this seq_id() was delivered at least once
           next_deliver_seq_id,
-          ram_pending_ack,    %% msgs using store, still in RAM
+          ram_pending_ack,    %% msgs still in RAM
           disk_pending_ack,   %% msgs in store, paged out
-          qi_pending_ack,     %% msgs using qi, *can't* be paged out
-          index_mod,
           index_state,
           store_state,
           msg_store_clients,
@@ -51,14 +48,11 @@
           transient_threshold,
           qi_embed_msgs_below,
 
-          len,                %% w/o unacked
           bytes,              %% w/o unacked
           unacked_bytes,
           persistent_count,   %% w   unacked
           persistent_bytes,   %% w   unacked
-          delta_transient_bytes,        %%
 
-          target_ram_count,
           ram_msg_count,      %% w/o unacked
           ram_msg_count_prev,
           ram_ack_count_prev,
@@ -66,6 +60,11 @@
           out_counter,
           in_counter,
           rates,
+          %% There are two confirms paths: either store/index produce confirms
+          %% separately (v2 with per-vhost message store) or the confirms
+          %% are produced all at once while syncing/flushing (v2 with per-queue
+          %% message store). The latter is more efficient as it avoids many
+          %% sets operations.
           msgs_on_disk,
           msg_indices_on_disk,
           unconfirmed,
@@ -77,11 +76,6 @@
           disk_read_count,
           disk_write_count,
 
-          io_batch_size,
-
-          %% default queue (or lazy queue from 3.6 to 3.11)
-          mode,
-          version = 1,
           %% Fast path for confirms handling. Instead of having
           %% index/store keep track of confirms separately and
           %% doing intersect/subtract/union we just put the messages
@@ -109,10 +103,9 @@
           msg_props
         }).
 
--record(delta,
+-record(q_tail,
         { start_seq_id, %% start_seq_id is inclusive
           count,
-          transient,
           end_seq_id    %% end_seq_id is exclusive
         }).
 
@@ -131,9 +124,9 @@
                           ack_out   :: float(),
                           timestamp :: rabbit_types:timestamp()}.
 
--type delta() :: #delta { start_seq_id :: non_neg_integer(),
-                          count        :: non_neg_integer(),
-                          end_seq_id   :: non_neg_integer() }.
+-type q_tail() :: #q_tail { start_seq_id :: non_neg_integer(),
+                            count        :: non_neg_integer(),
+                            end_seq_id   :: non_neg_integer() }.
 
 %% The compiler (rightfully) complains that ack() and state() are
 %% unused. For this reason we duplicate a -spec from
@@ -143,30 +136,25 @@
 %% these here for documentation purposes.
 -type ack() :: seq_id().
 -type state() :: #vqstate {
-             q1                    :: ?QUEUE:?QUEUE(),
-             q2                    :: ?QUEUE:?QUEUE(),
-             delta                 :: delta(),
-             q3                    :: ?QUEUE:?QUEUE(),
-             q4                    :: ?QUEUE:?QUEUE(),
+             q_head                :: ?QUEUE:?QUEUE(),
+             q_tail                :: q_tail(),
              next_seq_id           :: seq_id(),
+             next_deliver_seq_id   :: seq_id(),
              ram_pending_ack       :: map(),
              disk_pending_ack      :: map(),
-             qi_pending_ack        :: map(),
              index_state           :: any(),
+             store_state           :: any(),
              msg_store_clients     :: 'undefined' | {{any(), binary()},
                                                     {any(), binary()}},
              durable               :: boolean(),
              transient_threshold   :: non_neg_integer(),
              qi_embed_msgs_below   :: non_neg_integer(),
 
-             len                   :: non_neg_integer(),
              bytes                 :: non_neg_integer(),
              unacked_bytes         :: non_neg_integer(),
-
              persistent_count      :: non_neg_integer(),
              persistent_bytes      :: non_neg_integer(),
 
-             target_ram_count      :: non_neg_integer() | 'infinity',
              ram_msg_count         :: non_neg_integer(),
              ram_msg_count_prev    :: non_neg_integer(),
              ram_ack_count_prev    :: non_neg_integer(),
@@ -183,9 +171,8 @@
              disk_read_count       :: non_neg_integer(),
              disk_write_count      :: non_neg_integer(),
 
-             io_batch_size         :: pos_integer(),
-             mode                  :: 'default' | 'lazy',
-             virtual_host          :: rabbit_types:vhost() }.
+             unconfirmed_simple    :: sets:set()}.
+
 %% Duplicated from rabbit_backing_queue
 -spec ack([ack()], state()) -> {[rabbit_guid:guid()], state()}.
 
@@ -214,9 +201,9 @@ delete_crashed(Q) ->
 purge(State = #vqstate { ram_pending_ack= QPA }) ->
     maybe_delay(QPA),
     rabbit_variable_queue:purge(State);
-%% For v3.9.x and below because the state has changed.
+%% For v4.2.x because the state has changed.
 purge(State) ->
-    QPA = element(10, State),
+    QPA = element(9, State),
     maybe_delay(QPA),
     rabbit_variable_queue:purge(State).
 
@@ -252,24 +239,21 @@ ack(List, State) ->
 requeue(AckTags, #vqstate { ram_pending_ack = QPA } = State) ->
     maybe_delay(QPA),
     rabbit_variable_queue:requeue(AckTags, State);
-%% For v3.9.x and below because the state has changed.
+%% For v4.2.x because the state has changed.
 requeue(AckTags, State) ->
-    QPA = element(10, State),
+    QPA = element(9, State),
     maybe_delay(QPA),
     rabbit_variable_queue:requeue(AckTags, State).
 
 ackfold(MsgFun, Acc, State, AckTags) ->
     rabbit_variable_queue:ackfold(MsgFun, Acc, State, AckTags).
 
-fold(Fun, Acc, State) ->
-    rabbit_variable_queue:fold(Fun, Acc, State).
-
 len(#vqstate { ram_pending_ack = QPA } = State) ->
     maybe_delay(QPA),
     rabbit_variable_queue:len(State);
-%% For v3.9.x and below because the state has changed.
+%% For v4.2.x because the state has changed.
 len(State) ->
-    QPA = element(10, State),
+    QPA = element(9, State),
     maybe_delay(QPA),
     rabbit_variable_queue:len(State).
 
@@ -305,14 +289,14 @@ invoke(Module, Fun, State) -> rabbit_variable_queue:invoke(Module, Fun, State).
 
 is_duplicate(Msg, State) -> rabbit_variable_queue:is_duplicate(Msg, State).
 
-set_queue_mode(Mode, State) ->
-    rabbit_variable_queue:set_queue_mode(Mode, State).
-
-set_queue_version(Version, State) ->
-    rabbit_variable_queue:set_queue_version(Version, State).
-
 zip_msgs_and_acks(Msgs, AckTags, Accumulator, State) ->
     rabbit_variable_queue:zip_msgs_and_acks(Msgs, AckTags, Accumulator, State).
+
+set_queue_mode(_, State) ->
+    State.
+
+set_queue_version(_, State) ->
+    State.
 
 %% Delay
 maybe_delay(QPA) ->
