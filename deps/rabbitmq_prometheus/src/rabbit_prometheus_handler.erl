@@ -14,7 +14,6 @@
 
 -define(SCRAPE_DURATION, telemetry_scrape_duration_seconds).
 -define(SCRAPE_SIZE, telemetry_scrape_size_bytes).
--define(SCRAPE_ENCODED_SIZE, telemetry_scrape_encoded_size_bytes).
 
 -define(AUTH_REALM, "Basic realm=\"RabbitMQ Prometheus\"").
 
@@ -58,14 +57,9 @@ setup_metrics(Registry) ->
                   {help, "Scrape size, not encoded"},
                   {labels, ["registry", "content_type"]},
                   {registry, Registry}],
-    ScrapeEncodedSize = [{name, ?SCRAPE_ENCODED_SIZE},
-                         {help, "Scrape size, encoded"},
-                         {labels, ["registry", "content_type", "encoding"]},
-                         {registry, Registry}],
 
     prometheus_summary:declare(ScrapeDuration),
-    prometheus_summary:declare(ScrapeSize),
-    prometheus_summary:declare(ScrapeEncodedSize).
+    prometheus_summary:declare(ScrapeSize).
 
 %% ===================================================================
 %% Private functions
@@ -100,47 +94,23 @@ format_metrics(Request, Registry) ->
     %% Formatting registries produces large binaries. Fullsweep eagerly to
     %% evict the large binaries faster and make GC cheaper.
     process_flag(fullsweep_after, 0),
-    AcceptEncoding = cowboy_req:header(<<"accept-encoding">>, Request, undefined),
     ContentType = prometheus_text_format:content_type(),
-    Encoding = accept_encoding_header:negotiate(AcceptEncoding, [<<"identity">>,
-                                                                 <<"gzip">>]),
-    Headers = #{<<"content-type">> => ContentType,
-                <<"content-encoding">> => Encoding},
-    case Encoding of
-        <<"gzip">> ->
-            Scrape = prometheus_summary:observe_duration(
-                       Registry,
-                       ?SCRAPE_DURATION,
-                       [Registry, ContentType],
-                       fun () -> prometheus_text_format:format(Registry) end),
-            prometheus_summary:observe(Registry,
-                                       ?SCRAPE_SIZE,
-                                       [Registry, ContentType],
-                                       iolist_size(Scrape)),
-            Encoded = zlib:gzip(Scrape),
-            prometheus_summary:observe(telemetry_registry(),
-                                       ?SCRAPE_ENCODED_SIZE,
-                                       [Registry, ContentType, Encoding],
-                                       iolist_size(Encoded)),
-            cowboy_req:reply(200, Headers, Encoded, Request);
-        <<"identity">> ->
-            Req = cowboy_req:stream_reply(200, Headers, Request),
-            Fmt = fun(Size, Data) ->
-                cowboy_req:stream_body(Data, nofin, Req),
-                Size + byte_size(Data)
-            end,
-            Size = prometheus_summary:observe_duration(
-                     Registry,
-                     ?SCRAPE_DURATION,
-                     [Registry, ContentType],
-                     fun () -> prometheus_text_format:format_into(Registry, Fmt, 0) end),
-            cowboy_req:stream_body(<<>>, fin, Req),
-            prometheus_summary:observe(Registry,
-                                       ?SCRAPE_SIZE,
-                                       [Registry, ContentType],
-                                       Size),
-            Req
-    end.
+    Req = cowboy_req:stream_reply(200, #{<<"content-type">> => ContentType}, Request),
+    Fmt = fun(Size, Data) ->
+        cowboy_req:stream_body(Data, nofin, Req),
+        Size + byte_size(Data)
+    end,
+    Size = prometheus_summary:observe_duration(
+             Registry,
+             ?SCRAPE_DURATION,
+             [Registry, ContentType],
+             fun () -> prometheus_text_format:format_into(Registry, Fmt, 0) end),
+    cowboy_req:stream_body(<<>>, fin, Req),
+    prometheus_summary:observe(Registry,
+                               ?SCRAPE_SIZE,
+                               [Registry, ContentType],
+                               Size),
+    Req.
 
 validate_registry(undefined, auto) ->
     {true, default};

@@ -39,9 +39,14 @@ endif
 # We do that in this file, which is included by all projects, to ensure
 # all projects use the same versions. It avoids conflicts.
 
+<<<<<<< HEAD
 dep_accept = hex 0.3.5
 dep_cowboy = hex 2.13.0
 dep_cowlib = hex 2.14.0
+=======
+dep_cowboy = hex 2.14.1
+dep_cowlib = hex 2.16.0
+>>>>>>> d6dd60e8b (rabbit_prometheus_handler: Delete manual gzip handling)
 dep_credentials_obfuscation = hex 3.5.0
 dep_cuttlefish = hex 3.5.0
 dep_gen_batch_server = hex 0.8.8
