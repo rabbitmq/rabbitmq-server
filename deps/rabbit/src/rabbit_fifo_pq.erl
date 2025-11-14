@@ -131,15 +131,14 @@ indexes(#?STATE{buckets = Buckets}) ->
 get_lowest_index(#?STATE{len = 0}) ->
     undefined;
 get_lowest_index(#?STATE{buckets = Buckets}) ->
-    lists:min(
-      maps:fold(fun (_, Q, Acc) ->
-                        case peek(Q) of
-                            empty ->
-                                Acc;
-                            Msg ->
-                                [msg_idx(Msg) | Acc]
-                        end
-                end, [], Buckets)).
+    maps:fold(fun (_, Q, Acc) ->
+                      case peek(Q) of
+                          empty ->
+                              Acc;
+                          Msg ->
+                              min(msg_idx(Msg), Acc)
+                      end
+              end, undefined, Buckets).
 
 -spec overview(state()) ->
     #{len := non_neg_integer(),
