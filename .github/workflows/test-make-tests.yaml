@@ -16,7 +16,7 @@ on:
         type: boolean
       previous_version:
         required: false
-        default: 'tags/v4.0.9'
+        default: 'tags/v4.1.5'
         type: string
 jobs:
   test-rabbit:
