@@ -1154,7 +1154,7 @@ handle_aux(_, _, {get_checked_out, ConsumerKey, MsgIds}, Aux0, RaAux0) ->
                 maps:fold(
                   fun (MsgId, Msg, {S0, Acc}) ->
                           Idx = get_msg_idx(Msg),
-                          Header = get_msg_idx(Msg),
+                          Header = get_msg_header(Msg),
                           %% it is possible this is not found if the consumer
                           %% crashed and the message got removed
                           case ra_aux:log_fetch(Idx, S0) of
