@@ -2883,25 +2883,30 @@ convert(Meta, 7, To, State) ->
     convert(Meta, 8, To, convert_v7_to_v8(Meta, State)).
 
 smallest_raft_index(#?STATE{messages = Messages,
-                            dlx = #?DLX{discards = Discards}} = State) ->
-    SmallestDlxRaIdx = lqueue:fold(fun (?TUPLE(_, Msg), Acc) ->
-                                           min(get_msg_idx(Msg), Acc)
-                                   end, undefined, Discards),
-    SmallestMsgsRaIdx = rabbit_fifo_pq:get_lowest_index(Messages),
-    %% scan consumers and returns queue here instead
-    smallest_checked_out(State, min(SmallestDlxRaIdx, SmallestMsgsRaIdx)).
-
-smallest_checked_out(#?STATE{returns = Returns,
-                             consumers = Consumers}, Min) ->
-    SmallestSoFar = lqueue:fold(fun (Msg, Acc) ->
-                                        min(get_msg_idx(Msg), Acc)
-                                end, Min, Returns),
-    maps:fold(fun (_Cid, #consumer{checked_out = Ch}, Acc0) ->
-                      maps:fold(
-                        fun (_MsgId, Msg, Acc) ->
-                                min(get_msg_idx(Msg), Acc)
-                        end, Acc0, Ch)
-              end, SmallestSoFar, Consumers).
+                            returns = Returns,
+                            consumers = Consumers,
+                            dlx = #?DLX{consumer = DlxConsumer,
+                                        discards = Discards}}) ->
+    Min0 = rabbit_fifo_pq:get_lowest_index(Messages),
+    Min1 = lqueue:fold(fun (Msg, Acc) ->
+                               min(get_msg_idx(Msg), Acc)
+                       end, Min0, Returns),
+    Min2 = maps:fold(fun (_Cid, #consumer{checked_out = Ch}, Acc0) ->
+                             maps:fold(fun (_MsgId, Msg, Acc) ->
+                                               min(get_msg_idx(Msg), Acc)
+                                       end, Acc0, Ch)
+                     end, Min1, Consumers),
+    Min = lqueue:fold(fun (?TUPLE(_Reason, Msg), Acc) ->
+                              min(get_msg_idx(Msg), Acc)
+                      end, Min2, Discards),
+    case DlxConsumer of
+        undefined ->
+            Min;
+        #dlx_consumer{checked_out = Checked} ->
+            maps:fold(fun(_MsgId, ?TUPLE(_Reason, Msg), Acc) ->
+                              min(get_msg_idx(Msg), Acc)
+                      end, Min, Checked)
+    end.
 
 make_requeue(ConsumerKey, Notify, [{MsgId, Idx, Header, Msg}], Acc) ->
     lists:reverse([{append,
