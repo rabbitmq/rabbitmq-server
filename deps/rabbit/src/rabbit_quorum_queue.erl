@@ -621,6 +621,10 @@ handle_tick(QName,
                                      [{messages_ready_normal, V} | Acc];
                                 (num_ready_messages_return, V, Acc) ->
                                      [{messages_ready_returned, V} | Acc];
+                                (messages_by_priority, V, Acc) ->
+                                     [{messages_by_priority, V} | Acc];
+                                (num_active_priorities, V, Acc) ->
+                                     [{messages_active_priorities, V} | Acc];
                                 (_, _, Acc) ->
                                      Acc
                              end, info(Q, Keys), Overview),
