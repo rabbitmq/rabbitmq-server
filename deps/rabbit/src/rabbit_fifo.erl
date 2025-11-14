@@ -2032,10 +2032,10 @@ return_one(Meta, MsgId, Msg0, DeliveryFailed, Anns,
 return_all(Meta, #?STATE{consumers = Cons} = State0, Effects0, ConsumerKey,
            #consumer{checked_out = Checked} = Con, DeliveryFailed) ->
     State = State0#?STATE{consumers = Cons#{ConsumerKey => Con}},
-    lists:foldl(fun ({MsgId, Msg}, {S, E}) ->
-                        return_one(Meta, MsgId, Msg, DeliveryFailed, #{},
-                                   S, E, ConsumerKey)
-                end, {State, Effects0}, lists:sort(maps:to_list(Checked))).
+    maps:fold(fun (MsgId, Msg, {S, E}) ->
+                      return_one(Meta, MsgId, Msg, DeliveryFailed, #{},
+                                 S, E, ConsumerKey)
+              end, {State, Effects0}, maps:iterator(Checked, ordered)).
 
 checkout(Meta, OldState, State0, Effects0) ->
     checkout(Meta, OldState, State0, Effects0, ok).
@@ -2059,11 +2059,11 @@ checkout0(Meta, {success, ConsumerKey, MsgId,
                  Msg, ExpiredMsg, State, Effects},
           SendAcc0) ->
     DelMsg = {MsgId, Msg},
-    SendAcc = case maps:get(ConsumerKey, SendAcc0, undefined) of
-                  undefined ->
-                      SendAcc0#{ConsumerKey => [DelMsg]};
-                  LogMsgs ->
-                      SendAcc0#{ConsumerKey => [DelMsg | LogMsgs]}
+    SendAcc = case SendAcc0 of
+                  #{ConsumerKey := LogMsgs} ->
+                      SendAcc0#{ConsumerKey := [DelMsg | LogMsgs]};
+                  #{} ->
+                      SendAcc0#{ConsumerKey => [DelMsg]}
               end,
     checkout0(Meta, checkout_one(Meta, ExpiredMsg, State, Effects), SendAcc);
 checkout0(_Meta, {_Activity, ExpiredMsg, State, Effects}, SendAcc) ->
@@ -3240,7 +3240,7 @@ dlx_apply(_, {dlx, {checkout, Pid, Prefetch}},
 dlx_apply(_, {dlx, {checkout, ConsumerPid, Prefetch}},
           at_least_once,
           #?DLX{consumer = #dlx_consumer{pid = OldConsumerPid,
-                                         checked_out = CheckedOutOldConsumer},
+                                         checked_out = CheckedOldConsumer},
                 discards = Discards0,
                 msg_bytes = Bytes,
                 msg_bytes_checkout = BytesCheckout} = State0) ->
@@ -3258,13 +3258,13 @@ dlx_apply(_, {dlx, {checkout, ConsumerPid, Prefetch}},
     %% such that these messages will be re-delivered to the new consumer.
     %% When inserting back into the discards queue, we respect the original order in which messages
     %% were discarded.
-    Checked0 = maps:to_list(CheckedOutOldConsumer),
-    Checked1 = lists:keysort(1, Checked0),
-    {Discards, BytesMoved} = lists:foldr(
-                               fun({_Id, ?TUPLE(_, Msg) = RsnMsg}, {D, B}) ->
+    {Discards, BytesMoved} = maps:fold(
+                               fun(_Id, ?TUPLE(_, Msg) = RsnMsg, {D, B}) ->
                                        Size = get_header(size, get_msg_header(Msg)),
                                        {lqueue:in_r(RsnMsg, D), B + Size}
-                               end, {Discards0, 0}, Checked1),
+                               end,
+                               {Discards0, 0},
+                               maps:iterator(CheckedOldConsumer, reversed)),
     State = State0#?DLX{consumer = #dlx_consumer{pid = ConsumerPid,
                                                  prefetch = Prefetch},
                         discards = Discards,
