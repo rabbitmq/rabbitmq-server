@@ -49,40 +49,37 @@ fixup_query(false, Query) ->
     Query ++ ".".
 
 parse_query_handle_erl_scan({ok, Tokens, _EndLine}) ->
-    parse_query_handle_exprs(erl_parse:parse_exprs(Tokens));
+    parse_query_handle_parse_term(erl_parse:parse_term(Tokens));
 parse_query_handle_erl_scan(Error) ->
     cuttlefish:invalid(fmt("invalid query: ~tp", [Error])).
 
-parse_query_handle_exprs({ok, AbsForm}) ->
-    parse_query_handle_eval(erl_eval:exprs(AbsForm, erl_eval:new_bindings()));
-parse_query_handle_exprs(Error) ->
-    cuttlefish:invalid(fmt("invalid query: ~tp", [Error])).
-
-parse_query_handle_eval({value, {constant, true}=T, _}) ->
+parse_query_handle_parse_term({ok, {constant, true}=T}) ->
     T;
-parse_query_handle_eval({value, {constant, false}=T, _}) ->
+parse_query_handle_parse_term({ok, {constant, false}=T}) ->
     T;
-parse_query_handle_eval({value, {in_group, _}=T, _}) ->
+parse_query_handle_parse_term({ok, {in_group, _}=T}) ->
     T;
-parse_query_handle_eval({value, {in_group_nested, _, _}=T, _}) ->
+parse_query_handle_parse_term({ok, {in_group_nested, _, _}=T}) ->
     T;
-parse_query_handle_eval({value, {for, Q}=T, _}) when is_list(Q) ->
+parse_query_handle_parse_term({ok, {for, Q}=T}) when is_list(Q) ->
     T;
-parse_query_handle_eval({value, {'not', _}=T, _}) ->
+parse_query_handle_parse_term({ok, {'not', _}=T}) ->
     T;
-parse_query_handle_eval({value, {'and', Q}=T, _}) when is_list(Q) ->
+parse_query_handle_parse_term({ok, {'and', Q}=T}) when is_list(Q) ->
     T;
-parse_query_handle_eval({value, {'or', Q}=T, _}) when is_list(Q) ->
+parse_query_handle_parse_term({ok, {'or', Q}=T}) when is_list(Q) ->
     T;
-parse_query_handle_eval({value, {equals, _, _}=T, _}) ->
+parse_query_handle_parse_term({ok, {equals, _, _}=T}) ->
     T;
-parse_query_handle_eval({value, {match, _, _}=T, _}) ->
+parse_query_handle_parse_term({ok, {match, _, _}=T}) ->
     T;
-parse_query_handle_eval({value, T, _}) when is_list(T) ->
+parse_query_handle_parse_term({ok, T}) when is_list(T) ->
     %% NB: tag_queries uses this form
     T;
-parse_query_handle_eval({value, Unexpected, _}) ->
-    cuttlefish:invalid(fmt("invalid query: ~tp", [Unexpected])).
+parse_query_handle_parse_term({ok, {value, Unexpected, _}}) ->
+    cuttlefish:invalid(fmt("invalid query: ~tp", [Unexpected]));
+parse_query_handle_parse_term({error, ErrorInfo}) ->
+    cuttlefish:invalid(fmt("invalid query: ~tp", [ErrorInfo])).
 
 fmt(Fmt, Args) ->
     rabbit_data_coercion:to_unicode_charlist(io_lib:format(Fmt, Args)).
