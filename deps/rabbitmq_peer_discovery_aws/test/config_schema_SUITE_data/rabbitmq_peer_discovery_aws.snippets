@@ -103,5 +103,35 @@
                 ]}
             ]}
         ], [rabbitmq_peer_discovery_aws]
+    },
+    {aws_hostname_paths_multiple,
+        "cluster_formation.aws.hostname_path.1 = networkInterfaceSet,2,privateIpAddressesSet,1,privateDnsName
+         cluster_formation.aws.hostname_path.2 = privateDnsName
+         cluster_formation.aws.hostname_path.3 = privateIpAddress",
+        [
+            {rabbit, [
+                {cluster_formation, [
+                    {peer_discovery_aws, [
+                        {aws_hostname_paths, [
+                            ["networkInterfaceSet", 2, "privateIpAddressesSet", 1, "privateDnsName"],
+                            ["privateDnsName"],
+                            ["privateIpAddress"]
+                        ]}
+                    ]}
+                ]}
+            ]}
+        ], [rabbitmq_peer_discovery_aws]
+    },
+    {aws_hostname_paths_single_numbered,
+        "cluster_formation.aws.hostname_path.1 = privateDnsName",
+        [
+            {rabbit, [
+                {cluster_formation, [
+                    {peer_discovery_aws, [
+                        {aws_hostname_paths, [["privateDnsName"]]}
+                    ]}
+                ]}
+            ]}
+        ], [rabbitmq_peer_discovery_aws]
     }
 ].
