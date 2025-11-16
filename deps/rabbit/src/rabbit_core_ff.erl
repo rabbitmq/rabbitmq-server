@@ -218,3 +218,10 @@
       depends_on    => ['rabbitmq_4.1.0'],
       callbacks     => #{enable => {rabbit_khepri, enable_feature_flag}}
      }}).
+
+-rabbit_feature_flag(
+   {'track_qq_members_uids',
+    #{desc          => "Track queue members UIDs in the metadata store",
+      stability     => stable,
+      depends_on    => []
+     }}).
