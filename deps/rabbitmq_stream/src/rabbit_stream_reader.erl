@@ -3706,7 +3706,6 @@ send_chunks(DeliverVersion,
             setopts(Transport, Socket, [{nopush, false}]),
             case Retry of
                 true ->
-                    timer:sleep(1),
                     send_chunks(DeliverVersion,
                                 Transport,
                                 Consumer,
