@@ -197,18 +197,18 @@ join(RemoteNode, NodeType)
             %% particular, we stop Mnesia regardless of the remotely selected
             %% database because we might change it during the join.
             % RestartMnesia = rabbit_mnesia:is_running(),
-            % RestartFFCtl = rabbit_ff_controller:is_running(),
+            RestartFFCtl = rabbit_ff_controller:is_running(),
             RestartRabbit = rabbit:is_running(),
             case RestartRabbit of
                 true ->
                     rabbit:stop();
                 false ->
-                    % case RestartFFCtl of
-                    %     true ->
-                    %         ok = rabbit_ff_controller:wait_for_task_and_stop();
-                    %     false ->
-                    %         ok
-                    % end,
+                    case RestartFFCtl of
+                        true ->
+                            ok = rabbit_ff_controller:wait_for_task_and_stop();
+                        false ->
+                            ok
+                    end,
                     % case RestartMnesia of
                     %     true  -> rabbit_mnesia:stop_mnesia();
                     %     false -> ok
@@ -280,12 +280,12 @@ join(RemoteNode, NodeType)
                 true ->
                     rabbit:start();
                 false ->
-                    % case RestartFFCtl of
-                    %     true ->
-                    %         ok = rabbit_sup:start_child(rabbit_ff_controller);
-                    %     false ->
-                    %         ok
-                    % end,
+                    case RestartFFCtl of
+                        true ->
+                            ok = rabbit_sup:start_child(rabbit_ff_controller);
+                        false ->
+                            ok
+                    end,
                     % NeedMnesia = not rabbit_khepri:is_enabled(),
                     % case RestartMnesia andalso NeedMnesia of
                     %     true  -> rabbit_mnesia:start_mnesia(false);
