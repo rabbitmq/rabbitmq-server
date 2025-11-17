@@ -1866,9 +1866,7 @@ read_from_q_tail(DelsAndAcksFun,
     %% messages we read.
     %% @todo Simply ask for N messages instead of low/high bounds.
     QTailSeqLimit = QTailSeqId + MemoryLimit,
-    QTailSeqId1 =
-        lists:min([rabbit_classic_queue_index_v2:next_segment_boundary(QTailSeqId),
-                   QTailSeqLimit, QTailSeqIdEnd]),
+    QTailSeqId1 = rabbit_classic_queue_index_v2:tune_read(QTailSeqId, min(QTailSeqLimit, QTailSeqIdEnd)),
     {List0, IndexState1} = rabbit_classic_queue_index_v2:read(QTailSeqId, QTailSeqId1, IndexState),
     {List, StoreState3, MCStateP3, MCStateT3} = case WhatToRead of
         messages ->

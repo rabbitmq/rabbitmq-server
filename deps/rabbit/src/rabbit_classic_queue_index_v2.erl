@@ -8,7 +8,7 @@
 -module(rabbit_classic_queue_index_v2).
 
 -export([erase/1, init/1, reset_state/1, recover/4,
-         bounds/2, next_segment_boundary/1, info/1,
+         bounds/2, tune_read/2, info/1,
          terminate/3, delete_and_terminate/1,
          publish/7, ack/2, read/3,
          sync/1, needs_sync/1]).
@@ -757,10 +757,11 @@ ack_delete_fold_fun(SeqId, Write, {Buffer, Updates, Deletes, SegmentEntryCount})
              Deletes, SegmentEntryCount}
     end.
 
-%% A better interface for read/3 would be to request a maximum
-%% of N messages, rather than first call next_segment_boundary/3
-%% and then read from S1 to S2. This function could then return
-%% either N messages or less depending on the current state.
+%% Before calling read/3 it is recommended to call tune_read/2
+%% so that the index can inform the queue how to most efficiently
+%% read messages, as the index has knowledge of segment boundaries
+%% and can decide whether it is worth it to read from one or two
+%% segments at a time.
 
 -spec read(rabbit_variable_queue:seq_id(),
            rabbit_variable_queue:seq_id(),
@@ -1064,13 +1065,62 @@ bounds(State = #qi{ segments = Segments }, NextSeqIdHint) ->
              State}
     end.
 
+%% We tune the read request so that we only cross over segment
+%% boundaries when it makes sense. We compute a threshold
+%% based on the number of messages requested, and look whether
+%% the number of messages to be read from the next segment is
+%% higher than the threshold, otherwise we stop at the segment
+%% boundary. Similarly, if the number of messages requested
+%% almost reaches the segment boundary, we read a few more
+%% messages up to the segment boundary.
+%%
+%% This is meant to reduce the number of file reads when the
+%% outgoing message rate is moderate, while still sticking to
+%% segment file boundaries when the message rate is maxed.
+
+-spec tune_read(rabbit_variable_queue:seq_id(), rabbit_variable_queue:seq_id())
+    -> rabbit_variable_queue:seq_id().
+
+tune_read(FromSeqId, ToSeqId)
+        when FromSeqId =:= ToSeqId ->
+    %% Nothing will be read as From is inclusive but To is exclusive.
+    ToSeqId;
+tune_read(FromSeqId, ToSeqId) ->
+    %% How much we are reading.
+    ReqCount = ToSeqId - FromSeqId,
+    %% How much remains in the current segment.
+    NextSeqId = next_segment_boundary(FromSeqId),
+    RemCount = NextSeqId - FromSeqId,
+    %% How much we are willing to accept as extra messages to read.
+    Threshold = max(1, ReqCount div 7),
+    if
+        %% There are messages remaining in the segment, and the number
+        %% of messages remaining is less than the threshold: read up
+        %% to the end of the segment (To is exclusive).
+        (RemCount >= ReqCount) andalso (RemCount - ReqCount =< Threshold) ->
+            NextSeqId;
+        %% There are messages remaining in the segment but the number
+        %% of messages remaining is more than we are willing to read:
+        %% only read what was originally requested.
+        (RemCount >= ReqCount) ->
+            ToSeqId;
+        %% We are requested to read past the end of the current segment.
+        %% This would require us to read from two different segments,
+        %% which we only want to do if this involves a good number of
+        %% messages. If this number is below the threshold, we reduce
+        %% the number of messages to read.
+        (ReqCount - RemCount =< Threshold) ->
+            NextSeqId;
+        %% Otherwise we cross over into the next segment, meaning we
+        %% only read what was originally requested.
+        true ->
+            ToSeqId
+    end.
+
 %% The next_segment_boundary/1 function is used internally when
 %% reading. It should not be called from rabbit_variable_queue.
 
--spec next_segment_boundary(SeqId) -> SeqId when SeqId::rabbit_variable_queue:seq_id().
-
 next_segment_boundary(SeqId) ->
-    ?DEBUG("~0p", [SeqId]),
     SegmentEntryCount = segment_entry_count(),
     (1 + (SeqId div SegmentEntryCount)) * SegmentEntryCount.
 
