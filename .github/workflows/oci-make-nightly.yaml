@@ -15,13 +15,13 @@ concurrency:
 jobs:
   build-package-generic-unix:
     strategy:
+      fail-fast: false
       matrix:
         otp_version:
           - '27'
         branch:
           - main
           - v4.1.x
-          - v4.0.x
         include:
           - branch: main
             project_version: 4.2.0
