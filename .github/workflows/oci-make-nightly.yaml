@@ -81,7 +81,6 @@ jobs:
           - main
           - v4.2.x
           - v4.1.x
-          - v4.0.x
 
     needs: build-package-generic-unix
     runs-on: ubuntu-latest
