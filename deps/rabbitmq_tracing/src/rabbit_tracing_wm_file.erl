@@ -37,7 +37,10 @@ serve(ReqData, Context) ->
     Content = rabbit_tracing_util:apply_on_node(ReqData, Context,
                                                 rabbit_tracing_wm_file,
                                                 serve, [Name]),
-    {Content, ReqData, Context}.
+    ReqWithCharset = cowboy_req:set_resp_header(<<"content-type">>,
+                                                 <<"text/plain; charset=utf-8">>,
+                                                 ReqData),
+    {Content, ReqWithCharset, Context}.
 
 serve(Name) ->
     Path = rabbit_tracing_files:full_path(Name),
