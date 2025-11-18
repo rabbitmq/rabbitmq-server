@@ -9,6 +9,7 @@
 
 -include_lib("rabbit_common/include/logging.hrl").
 -include_lib("kernel/include/logger.hrl").
+-include_lib("stdlib/include/assert.hrl").
 
 -export([%% Main interface
          init/0,
@@ -214,6 +215,8 @@ join_cluster(DiscoveryNode, NodeType) when is_atom(DiscoveryNode) ->
 -spec reset() -> 'ok'.
 
 reset() ->
+    ?assertNot(rabbit:is_running()),
+    stop_mnesia(),
     ensure_mnesia_not_running(),
     reset_gracefully().
 
