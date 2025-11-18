@@ -635,10 +635,7 @@ msg_body_decoded([#'v1_0.footer'{content = FC} | Rem], Msg) ->
     msg_body_decoded(Rem, Msg#msg_body_decoded{footer = FC}).
 
 msg_body_encoded([], _Payload, Msg) ->
-    %% handle empty body
-    Msg;
-msg_body_encoded(undefined, _Payload, Msg) ->
-    %% treat undefined body the same as [].
+    %% handle empty or undefined body
     Msg;
 msg_body_encoded([#'v1_0.header'{} = H | Rem], Payload, Msg) ->
     msg_body_encoded(Rem, Payload, Msg#msg_body_encoded{header = H});
