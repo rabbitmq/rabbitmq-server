@@ -347,6 +347,31 @@ prepare(read, Msg) ->
 prepare(store, Msg = #v1{}) ->
     Msg;
 prepare(store, #msg_body_encoded{
+                      message_annotations = MA,
+                      properties = Props,
+                      bare_and_footer = BF,
+                      bare_and_footer_application_properties_pos = AppPropsPos,
+                      bare_and_footer_body_pos = uninit,
+                      body_code = uninit}) ->
+        %% Message has no body section. We still convert to #v1{} so that
+        %% classic/quorum queues can store it on disk. We mark the body
+        %% position at the end of the bare_and_footer binary; since there
+        %% is no actual body, decoding will only see properties and
+        %% application-properties.
+        PropsPos = case Props of
+                       undefined -> ?OMITTED_SECTION;
+                       #'v1_0.properties'{} -> 0
+                   end,
+        #v1{message_annotations = MA,
+            bare_and_footer = BF,
+            bare_and_footer_properties_pos = PropsPos,
+            bare_and_footer_application_properties_pos = AppPropsPos,
+            bare_and_footer_body_pos = byte_size(BF),
+            %% body_code is unused when there is no body, but must be a valid
+            %% descriptor code; DATA is the most neutral choice.
+            body_code = ?DESCRIPTOR_CODE_DATA
+           };
+prepare(store, #msg_body_encoded{
                   message_annotations = MA,
                   properties = Props,
                   bare_and_footer = BF,
@@ -609,6 +634,12 @@ msg_body_decoded([#'v1_0.amqp_value'{} = B | Rem], #msg_body_decoded{} = Msg) ->
 msg_body_decoded([#'v1_0.footer'{content = FC} | Rem], Msg) ->
     msg_body_decoded(Rem, Msg#msg_body_decoded{footer = FC}).
 
+msg_body_encoded([], Payload, Msg) ->
+    %% handle empty body
+    Msg;
+msg_body_encoded(undefined, Payload, Msg) ->
+    %% treat undefined body the same as [].
+    Msg;
 msg_body_encoded([#'v1_0.header'{} = H | Rem], Payload, Msg) ->
     msg_body_encoded(Rem, Payload, Msg#msg_body_encoded{header = H});
 msg_body_encoded([_Ignore = #'v1_0.delivery_annotations'{} | Rem], Payload, Msg) ->
