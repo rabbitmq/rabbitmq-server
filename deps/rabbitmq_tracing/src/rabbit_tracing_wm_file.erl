@@ -7,7 +7,7 @@
 -module(rabbit_tracing_wm_file).
 
 -export([init/2, resource_exists/2, serve/2, content_types_provided/2,
-         is_authorized/2, allowed_methods/2, delete_resource/2]).
+         charsets_provided/2, is_authorized/2, allowed_methods/2, delete_resource/2]).
 -export([serve/1]).
 
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
@@ -19,6 +19,9 @@ init(Req, _State) ->
 
 content_types_provided(ReqData, Context) ->
    {[{<<"text/plain">>, serve}], ReqData, Context}.
+
+charsets_provided(ReqData, Context) ->
+    {[<<"utf-8">>], ReqData, Context}.
 
 allowed_methods(ReqData, Context) ->
     {[<<"HEAD">>, <<"GET">>, <<"DELETE">>], ReqData, Context}.
@@ -34,10 +37,7 @@ serve(ReqData, Context) ->
     Content = rabbit_tracing_util:apply_on_node(ReqData, Context,
                                                 rabbit_tracing_wm_file,
                                                 serve, [Name]),
-    ReqWithCharset = cowboy_req:set_resp_header(<<"content-type">>,
-                                                 <<"text/plain; charset=utf-8">>,
-                                                 ReqData),
-    {Content, ReqWithCharset, Context}.
+    {Content, ReqData, Context}.
 
 serve(Name) ->
     Path = rabbit_tracing_files:full_path(Name),
