@@ -196,23 +196,29 @@ join(RemoteNode, NodeType)
             %% RabbitMQ and Mnesia must be stopped to modify the cluster. In
             %% particular, we stop Mnesia regardless of the remotely selected
             %% database because we might change it during the join.
-            % RestartMnesia = rabbit_mnesia:is_running(),
-            RestartFFCtl = rabbit_ff_controller:is_running(),
             RestartRabbit = rabbit:is_running(),
+            RestartMnesia = rabbit_mnesia:is_running(),
+            RestartFFCtl = rabbit_ff_controller:is_running(),
             case RestartRabbit of
                 true ->
                     rabbit:stop();
                 false ->
+                    %% When the join happens as part of peer discovery, i.e.
+                    %% when RabbitMQ boots for the first time, `rabbit' is not
+                    %% yet started but the Feature flags controller is already
+                    %% running. We need to stop it to proceed with the reset.
                     case RestartFFCtl of
                         true ->
                             ok = rabbit_ff_controller:wait_for_task_and_stop();
                         false ->
                             ok
                     end,
-                    % case RestartMnesia of
-                    %     true  -> rabbit_mnesia:stop_mnesia();
-                    %     false -> ok
-                    % end,
+
+                    %% Likewise with Mnesia during peer discovery.
+                    case RestartMnesia of
+                        true  -> rabbit_mnesia:stop_mnesia();
+                        false -> ok
+                    end,
                     ok
             end,
 
@@ -280,17 +286,21 @@ join(RemoteNode, NodeType)
                 true ->
                     rabbit:start();
                 false ->
+                    %% If we stopped the Feature flags controller and Mnesia
+                    %% before the reset+join, we need to restart them. Though
+                    %% for Mnesia, we only do it if is is useful (i.e. Khepri
+                    %% is not enabled).
                     case RestartFFCtl of
                         true ->
                             ok = rabbit_sup:start_child(rabbit_ff_controller);
                         false ->
                             ok
                     end,
-                    % NeedMnesia = not rabbit_khepri:is_enabled(),
-                    % case RestartMnesia andalso NeedMnesia of
-                    %     true  -> rabbit_mnesia:start_mnesia(false);
-                    %     false -> ok
-                    % end,
+                    NeedMnesia = not rabbit_khepri:is_enabled(),
+                    case RestartMnesia andalso NeedMnesia of
+                        true  -> rabbit_mnesia:start_mnesia(false);
+                        false -> ok
+                    end,
                     ok
             end,
 
