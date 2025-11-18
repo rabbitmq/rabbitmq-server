@@ -634,10 +634,10 @@ msg_body_decoded([#'v1_0.amqp_value'{} = B | Rem], #msg_body_decoded{} = Msg) ->
 msg_body_decoded([#'v1_0.footer'{content = FC} | Rem], Msg) ->
     msg_body_decoded(Rem, Msg#msg_body_decoded{footer = FC}).
 
-msg_body_encoded([], Payload, Msg) ->
+msg_body_encoded([], _Payload, Msg) ->
     %% handle empty body
     Msg;
-msg_body_encoded(undefined, Payload, Msg) ->
+msg_body_encoded(undefined, _Payload, Msg) ->
     %% treat undefined body the same as [].
     Msg;
 msg_body_encoded([#'v1_0.header'{} = H | Rem], Payload, Msg) ->
