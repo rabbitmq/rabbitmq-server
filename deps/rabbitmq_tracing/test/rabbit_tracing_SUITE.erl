@@ -24,7 +24,8 @@ groups() ->
     [
       {non_parallel_tests, [], [
                                 tracing_test,
-                                tracing_validation_test
+                                tracing_validation_test,
+                                trace_file_content_type_test
                                ]}
     ].
 
@@ -126,6 +127,35 @@ tracing_validation_test(Config) ->
                              pattern           => <<"#">>,
                              max_payload_bytes => 1000},       ?CREATED),
     http_delete(Config, Path, ?NO_CONTENT),
+    ok.
+
+trace_file_content_type_test(Config) ->
+    case filelib:is_dir(?LOG_DIR) of
+        true -> {ok, Files} = file:list_dir(?LOG_DIR),
+                [ok = file:delete(?LOG_DIR ++ F) || F <- Files];
+        _    -> ok
+    end,
+
+    Args = #{format  => <<"text">>,
+             pattern => <<"#">>},
+    http_put(Config, "/traces/%2f/test-charset", Args, ?CREATED),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config),
+    amqp_channel:cast(Ch, #'basic.publish'{ exchange    = <<"amq.topic">>,
+                                            routing_key = <<"key">> },
+                      #amqp_msg{props   = #'P_basic'{},
+                                payload = <<"Test message">>}),
+    rabbit_ct_client_helpers:close_channel(Ch),
+
+    timer:sleep(100),
+
+    http_delete(Config, "/traces/%2f/test-charset", ?NO_CONTENT),
+    {ok, {{_HTTP, 200, _}, Headers, _Body}} =
+        req(Config, get, "/trace-files/test-charset.log", [auth_header("guest", "guest")]),
+    ContentType = proplists:get_value("content-type", Headers),
+    ?assertEqual(match, re:run(ContentType, "text/plain", [{capture, none}])),
+    ?assertEqual(match, re:run(ContentType, "charset=utf-8", [{capture, none}])),
+    http_delete(Config, "/trace-files/test-charset.log", ?NO_CONTENT),
     ok.
 
 %%---------------------------------------------------------------------------
