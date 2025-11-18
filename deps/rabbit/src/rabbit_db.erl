@@ -133,6 +133,7 @@ reset() ->
         true  -> ok = rabbit:stop();
         false -> ok
     end,
+    ?assertEqual(undefined, erlang:whereis(rabbit_ff_controller)),
     ok = case rabbit_khepri:is_enabled() of
              true  -> reset_using_khepri();
              false -> reset_using_mnesia()
