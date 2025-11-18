@@ -2212,18 +2212,23 @@ test_init_v(Conf, Version) ->
     test_init(rabbit_fifo:which_module(Version), Conf).
 
 meta(Idx) ->
-    meta(Idx, 3).
+    meta(Idx, rabbit_fifo:version()).
 
 meta(Idx, Vsn) ->
-    #{machine_version => Vsn, index => Idx, term => 1, system_time => 0}.
+    #{machine_version => Vsn,
+      index => Idx,
+      term => 1,
+      reply_mode => {notify, Idx, self()},
+      system_time => 0}.
 
 make_checkout(Cid, Spec) ->
     make_checkout(Cid, Spec, #{}).
+
 make_checkout(Cid, Spec, Meta) ->
     rabbit_fifo:make_checkout(Cid, Spec, Meta).
 
 make_enqueue(Pid, Seq, Msg) ->
-    rabbit_fifo:make_enqueue(Pid, Seq, Msg).
+    rabbit_fifo:make_enqueue_old(Pid, Seq, Msg).
 
 make_settle(Cid, MsgIds) ->
     rabbit_fifo:make_settle(Cid, MsgIds).
