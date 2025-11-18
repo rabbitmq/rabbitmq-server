@@ -1948,7 +1948,7 @@ session_flow_control_received_transfer(
         true ->
             protocol_error(
               ?V_1_0_SESSION_ERROR_WINDOW_VIOLATION,
-              "incoming window violation (tolerated excess tranfers: ~b)",
+              "incoming window violation (tolerated excess transfers: ~b)",
               [Margin]);
         false ->
             ok
