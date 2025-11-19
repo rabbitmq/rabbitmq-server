@@ -175,7 +175,6 @@
 
 -record(enqueuer,
         {next_seqno = 1 :: msg_seqno(),
-         % out of order enqueues - sorted list
          unused = ?NIL,
          status = up :: up | suspected_down,
          %% it is useful to have a record of when this was blocked
@@ -250,7 +249,7 @@
          % rabbit_fifo_index can be slow when calculating the smallest
          % index when there are large gaps but should be faster than gb_trees
          % for normal appending operations as it's backed by a map
-         unused_0 = ?NIL,
+         last_command_time = 0,
          unused_1 = ?NIL,
          % consumers need to reflect consumer state at time of snapshot
          consumers = #{} :: #{consumer_key() => consumer()},
