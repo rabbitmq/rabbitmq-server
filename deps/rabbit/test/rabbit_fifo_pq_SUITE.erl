@@ -17,6 +17,8 @@ all() ->
 all_tests() ->
     [
      basics,
+     take_while,
+     any_priority_next,
      property
     ].
 
@@ -78,6 +80,73 @@ basics(_Config) ->
     {?MSG(2), Q5} = rabbit_fifo_pq:out(Q4),
     {?MSG(1), Q6} = rabbit_fifo_pq:out(Q5),
     empty = rabbit_fifo_pq:out(Q6),
+    ok.
+
+take_while(_Config) ->
+    Q1 = lists:foldl(
+           fun ({P, I}, Q) ->
+                   rabbit_fifo_pq:in(P, I, Q)
+           end, rabbit_fifo_pq:new(),
+           [
+            {1, ?MSG(1)}, {1, ?MSG(2)}, {1, ?MSG(3)},
+            {2, ?MSG(1)}, {2, ?MSG(2)}, {2, ?MSG(3)},
+            {3, ?MSG(1)}, {3, ?MSG(2)}, {3, ?MSG(3)},
+            {4, ?MSG(1)}, {4, ?MSG(2)}, {4, ?MSG(3)},
+            {5, ?MSG(1, 10)}, {5, ?MSG(2, 20)}, {5, ?MSG(3, 30)}
+           ]),
+
+    {Taken, Q2} = rabbit_fifo_pq:take_while(fun (?MSG(I, _)) ->
+                                                    I < 3
+                                            end, Q1),
+    ?assertMatch([
+                  ?MSG(1, 10), ?MSG(2, 20),
+                  ?MSG(1, 1), ?MSG(2, 2),
+                  ?MSG(1, 1), ?MSG(2, 2),
+                  ?MSG(1, 1), ?MSG(2, 2),
+                  ?MSG(1, 1), ?MSG(2, 2)
+                 ], Taken),
+
+
+    ?assertEqual(5, rabbit_fifo_pq:len(Q2)),
+    ?assertEqual(10, length(Taken)),
+    {?MSG(3, 30), Q3} = rabbit_fifo_pq:out(Q2),
+    {?MSG(3), Q4} = rabbit_fifo_pq:out(Q3),
+    {?MSG(3), Q5} = rabbit_fifo_pq:out(Q4),
+    {?MSG(3), Q6} = rabbit_fifo_pq:out(Q5),
+    {?MSG(3), _Q7} = rabbit_fifo_pq:out(Q6),
+
+
+    {_Taken2, Q} = rabbit_fifo_pq:take_while(fun (?MSG(_, _)) ->
+                                                    true
+                                            end, Q2),
+
+    ct:pal("Q ~p", [Q]),
+
+    ok.
+
+any_priority_next(_Config) ->
+    Q0 = rabbit_fifo_pq:new(),
+
+    ?assertNot(rabbit_fifo_pq:any_priority_next(fun (_) -> true end, Q0)),
+
+    Q1 = lists:foldl(fun ({P, I}, Q) ->
+                             rabbit_fifo_pq:in(P, I, Q)
+                     end, Q0,
+                     [
+                      {1, ?MSG(1)}, {1, ?MSG(2)}, {1, ?MSG(3)},
+                      {2, ?MSG(1)}, {2, ?MSG(2)}, {2, ?MSG(3)},
+                      {3, ?MSG(2)}, {3, ?MSG(3)},
+                      {4, ?MSG(1)}, {4, ?MSG(2)}, {4, ?MSG(3)},
+                      {5, ?MSG(1)}, {5, ?MSG(2)}, {5, ?MSG(3)}
+                     ]),
+
+    ?assert(rabbit_fifo_pq:any_priority_next(fun (?MSG(I, _)) ->
+                                                     I > 1
+                                             end, Q1)),
+    ?assertNot(rabbit_fifo_pq:any_priority_next(fun (?MSG(I, _)) ->
+                                                        I > 6
+                                                end, Q1)),
+
     ok.
 
 hi_is_prioritised(_Config) ->
