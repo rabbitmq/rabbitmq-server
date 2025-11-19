@@ -114,7 +114,8 @@
                     [queue, <<"quorum">>, ?MODULE]}},
      {cleanup,  {rabbit_registry, unregister,
                  [queue, <<"quorum">>]}},
-     {requires, rabbit_registry}]}).
+     {requires, rabbit_registry},
+     {enables, rabbit_policy}]}).
 
 -type msg_id() :: non_neg_integer().
 -type qmsg() :: {rabbit_types:r('queue'), pid(), msg_id(), boolean(),
