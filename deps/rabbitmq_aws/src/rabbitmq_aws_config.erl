@@ -419,13 +419,22 @@ instance_availability_zone_url() ->
 instance_credentials_url(Role) ->
     instance_metadata_url(string:join([?INSTANCE_METADATA_BASE, ?INSTANCE_CREDENTIALS, Role], "/")).
 
+-spec instance_metadata_host() -> string().
+%% @doc Return the appropriate instance metadata host based on IP family configuration
+%% @end
+instance_metadata_host() ->
+    case proplists:get_value(inet6, inet:get_rc(), false) of
+        true -> ?INSTANCE_HOST_6;
+        false -> ?INSTANCE_HOST
+    end.
+
 -spec instance_metadata_url(string()) -> string().
 %% @doc Build the Instance Metadata service URL for the specified path
 %% @end
 instance_metadata_url(Path) ->
     rabbitmq_aws_urilib:build(#uri{
         scheme = http,
-        authority = {undefined, ?INSTANCE_HOST, undefined},
+        authority = {undefined, instance_metadata_host(), undefined},
         path = Path,
         query = []
     }).
