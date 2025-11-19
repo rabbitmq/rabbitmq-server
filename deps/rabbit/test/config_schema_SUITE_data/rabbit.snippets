@@ -199,7 +199,8 @@ ssl_options.fail_if_no_peer_cert = true",
 
  ",
   [{rabbit, [{default_policies, [{operator, [
-      {<<"a">>, [{<<"expires">>, 3600000},
+      {<<"a">>, [{<<"apply_to">>,<<"quorum_queues">>},
+                 {<<"expires">>, 3600000},
                  {<<"ha_mode">>, <<"exactly">>},
                  {<<"ha_params">>, 2},
                  {<<"ha_sync_mode">>, <<"automatic">>},
