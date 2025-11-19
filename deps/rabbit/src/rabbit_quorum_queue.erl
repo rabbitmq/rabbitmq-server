@@ -101,6 +101,19 @@
 -include("amqqueue.hrl").
 -include_lib("kernel/include/logger.hrl").
 
+<<<<<<< HEAD
+=======
+-rabbit_boot_step(
+   {rabbit_quorum_queue_type,
+    [{description, "Quorum queue: queue type"},
+     {mfa,      {rabbit_registry, register,
+                    [queue, <<"quorum">>, ?MODULE]}},
+     {cleanup,  {rabbit_registry, unregister,
+                 [queue, <<"quorum">>]}},
+     {requires, rabbit_registry},
+     {enables, rabbit_policy}]}).
+
+>>>>>>> accb38351 (Add apply_to to default oper policy, and fix boot steps)
 -type msg_id() :: non_neg_integer().
 -type qmsg() :: {rabbit_types:r('queue'), pid(), msg_id(), boolean(),
                  mc:state()}.

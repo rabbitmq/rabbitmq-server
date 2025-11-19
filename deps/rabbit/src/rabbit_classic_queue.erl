@@ -81,6 +81,19 @@
 -export([validate_policy/1]).
 
 -rabbit_boot_step(
+<<<<<<< HEAD
+=======
+   {rabbit_classic_queue_type,
+    [{description, "Classic queue: queue type"},
+     {mfa,      {rabbit_registry, register,
+                    [queue, <<"classic">>, ?MODULE]}},
+     {cleanup,  {rabbit_registry, unregister,
+                 [queue, <<"classic">>]}},
+     {requires, rabbit_registry},
+     {enables, [?MODULE, rabbit_policy]}]}).
+
+-rabbit_boot_step(
+>>>>>>> accb38351 (Add apply_to to default oper policy, and fix boot steps)
    {?MODULE,
     [{description, "Deprecated queue-master-locator support."
       "Use queue-leader-locator instead."},

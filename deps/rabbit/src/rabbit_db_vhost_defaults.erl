@@ -18,7 +18,8 @@
 -record(seeding_policy, {
     name                     :: binary(),
     queue_pattern = <<".*">> :: binary(),
-    definition    = []       :: definitions()
+    definition    = []       :: definitions(),
+    apply_to      = <<"all">>
 }).
 
 -type seeded_user_properties() :: #{
@@ -43,9 +44,9 @@ apply(VHost, ActingUser) ->
     end,
     lists:foreach(
         fun(P) ->
-            ok = rabbit_policy:set_op(VHost, P#seeding_policy.name, P#seeding_policy.queue_pattern, P#seeding_policy.definition,
-                                      undefined, undefined, ActingUser),
-            ?LOG_INFO("Applied default operator policy to vhost '~tp': ~tp", [VHost, P])
+                ok = rabbit_policy:set_op(VHost, P#seeding_policy.name, P#seeding_policy.queue_pattern, P#seeding_policy.definition,
+                                          undefined, P#seeding_policy.apply_to, ActingUser),
+                ?LOG_INFO("Applied default operator policy to vhost '~tp': ~tp", [VHost, P])
         end,
         list_operator_policies(VHost)
     ),
@@ -93,12 +94,15 @@ list_operator_policies(VHost) ->
             case re:run(VHost, RE, [{capture, none}]) of
                 match ->
                     QPattern = proplists:get_value(<<"queue_pattern">>, Ss, <<".*">>),
+                    ApplyTo = proplists:get_value(<<"apply_to">>, Ss, <<"all">>),
                     Ss1 = proplists:delete(<<"queue_pattern">>, Ss),
                     Ss2 = proplists:delete(<<"vhost_pattern">>, Ss1),
+                    Ss3 = proplists:delete(<<"apply_to">>, Ss2),
                     {true, #seeding_policy{
                         name = PolicyName,
                         queue_pattern = QPattern,
-                        definition = underscore_to_dash(Ss2)
+                        apply_to = ApplyTo,
+                        definition = underscore_to_dash(Ss3)
                     }};
                 _ ->
                     false

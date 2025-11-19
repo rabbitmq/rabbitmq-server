@@ -104,6 +104,20 @@
 -import(rabbit_queue_type_util, [args_policy_lookup/3]).
 -import(rabbit_misc, [queue_resource/2]).
 
+<<<<<<< HEAD
+=======
+-rabbit_boot_step(
+   {?MODULE,
+    [{description, "Stream queue: queue type"},
+     {mfa,      {rabbit_registry, register,
+                    [queue, <<"stream">>, ?MODULE]}},
+     {cleanup,  {rabbit_registry, unregister,
+                 [queue, <<"stream">>]}},
+     {requires, rabbit_registry},
+     {enables, rabbit_policy}
+    ]}).
+
+>>>>>>> accb38351 (Add apply_to to default oper policy, and fix boot steps)
 -type client() :: #stream_client{}.
 
 -spec is_enabled() -> boolean().

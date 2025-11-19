@@ -191,6 +191,7 @@ ssl_options.fail_if_no_peer_cert = true",
   default_policies.operator.a.expires = 1h
   default_policies.operator.a.queue_pattern = apple
   default_policies.operator.a.vhost_pattern = banana
+  default_policies.operator.a.apply_to = quorum_queues
   default_policies.operator.a.classic_queues.ha_mode = exactly
   default_policies.operator.a.classic_queues.ha_params = 2
   default_policies.operator.a.classic_queues.ha_sync_mode = automatic
