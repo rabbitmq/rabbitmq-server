@@ -1619,8 +1619,11 @@ single_active_consumer_state_enter_leader_include_waiting_consumers_test(Config)
               ],
     {State1, _} = run_log(Config, State0, Entries),
     Effects = rabbit_fifo:state_enter(leader, State1),
-    %% 2 effects for each consumer process (channel process), 1 effect for the node,
-    ?assertEqual(2 * 3 + 1 + 1 + 1, length(Effects)).
+    ct:pal("Efx ~p", [Effects]),
+    %% 2 effects for each consumer process (channel process),
+    %% 1 effect for the node,
+    %% 1 for decorators
+    ?assertEqual(2 * 3 + 1 + 1, length(Effects)).
 
 single_active_consumer_state_enter_eol_include_waiting_consumers_test(Config) ->
     Resource = rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
@@ -3222,6 +3225,39 @@ modify_test(Config) ->
 
     ok.
 
+priorities_expire_test(Config) ->
+    State0 = init(#{name => ?FUNCTION_NAME,
+                    queue_resource => rabbit_misc:r("/", queue,
+                                                    ?FUNCTION_NAME_B)}),
+    Pid1 = spawn(fun() -> ok end),
+
+    Entries =
+    [
+     {?LINE, make_enqueue(Pid1, 1,
+                          mk_mc(<<"p1">>, #'P_basic'{priority = 9,
+                                                     expiration = <<"100">>}))},
+     {?LINE, make_enqueue(Pid1, 2,
+                          mk_mc(<<"p1">>, #'P_basic'{priority = 9,
+                                                     expiration = <<"100000">>}))},
+     {?LINE, make_enqueue(Pid1, 3,
+                          mk_mc(<<"p7">>, #'P_basic'{priority = 7,
+                                                     expiration = <<"100">>}))},
+     {?LINE, make_enqueue(Pid1, 4,
+                          mk_mc(<<"p7">>, #'P_basic'{priority = 7,
+                                                     expiration = <<"100000">>}))},
+     {?LINE, make_enqueue(Pid1, 5,
+                          mk_mc(<<"p7b">>, #'P_basic'{priority = 3}))},
+
+     {?LINE + 101, {timeout, {expire_msgs, shallow}}},
+
+     ?ASSERT(_, fun(State) ->
+                        ?assertMatch(#{num_messages := 3},
+                                     rabbit_fifo:overview(State))
+                end)
+    ],
+    {_State2, _} = run_log(Config, State0, Entries),
+    ok.
+
 %% Utility
 %%
 
@@ -3231,6 +3267,7 @@ apply(Meta, Entry, State) -> rabbit_fifo:apply(Meta, Entry, State).
 init_aux(Conf) -> rabbit_fifo:init_aux(Conf).
 handle_aux(S, T, C, A, A2) -> rabbit_fifo:handle_aux(S, T, C, A, A2).
 make_checkout(C, S, M) -> rabbit_fifo:make_checkout(C, S, M).
+make_enqueue(P, S, M) -> rabbit_fifo:make_enqueue(P, S, M).
 
 cid(A) when is_atom(A) ->
     atom_to_binary(A, utf8).
@@ -3241,10 +3278,13 @@ single_active_invariant( #rabbit_fifo{consumers = Cons}) ->
                               end, Cons)).
 
 mk_mc(Body) ->
+    mk_mc(Body, #'P_basic'{}).
+
+mk_mc(Body, BasicProps) ->
     mc_amqpl:from_basic_message(
       #basic_message{routing_keys = [<<"">>],
                      exchange_name = #resource{name = <<"x">>,
                                                kind = exchange,
                                                virtual_host = <<"v">>},
-                     content = #content{properties = #'P_basic'{},
+                     content = #content{properties = BasicProps,
                                         payload_fragments_rev = [Body]}}).

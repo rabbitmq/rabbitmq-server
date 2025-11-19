@@ -38,6 +38,7 @@
             false ->
                 {0, erts_debug:size(Msg)}
         end).
+
 -else.
 -define(SIZE(Msg), mc:size(Msg)).
 -endif.
@@ -83,6 +84,7 @@
 
          %% protocol helpers
          make_enqueue/3,
+         make_enqueue_old/3,
          make_register_enqueuer/1,
          make_checkout/3,
          make_settle/2,
@@ -238,14 +240,16 @@ apply(Meta, {machine_version, FromVersion, ToVersion}, VXState) ->
     State = convert(Meta, FromVersion, ToVersion, VXState),
     %% TODO: force snapshot now?
     {State, ok, [{aux, {dlx, setup}}]};
-apply(Meta, Cmd, #?STATE{discarded_bytes = DiscBytes} = State) ->
+apply(#{system_time := Ts} = Meta, Cmd,
+      #?STATE{discarded_bytes = DiscBytes} = State) ->
     %% add estimated discared_bytes
     %% TODO: optimise!
     %% this is the simplest way to record the discarded bytes for most
     %% commands but it is a bit mory garby as almost always creates a new
     %% state copy before even processing the command
     Bytes = estimate_discarded_size(Cmd),
-    apply_(Meta, Cmd, State#?STATE{discarded_bytes = DiscBytes + Bytes}).
+    apply_(Meta, Cmd, State#?STATE{discarded_bytes = DiscBytes + Bytes,
+                                   last_command_time = Ts}).
 
 apply_(Meta, #enqueue{pid = From, seq = Seq,
                       msg = RawMsg}, State00) ->
@@ -430,6 +434,7 @@ apply_(Meta, #checkout{spec = Spec,
                                                    Spec)),
             Reply = {ok, consumer_cancel_info(ConsumerKey, State1)},
             {State, _, Effects} = checkout(Meta, State0, State1, Effects1),
+
             {State, Reply, Effects};
         error ->
             {State0, {error, consumer_not_found}, []}
@@ -483,57 +488,11 @@ apply_(#{index := Index}, #purge{},
 apply_(#{index := _Idx}, #garbage_collection{}, State) ->
     {State, ok, [{aux, garbage_collection}]};
 apply_(Meta, {timeout, expire_msgs}, State) ->
-    checkout(Meta, State, State, []);
-% apply_(#{system_time := Ts} = Meta,
-%        {down, Pid, noconnection},
-%        #?STATE{consumers = Cons0,
-%                cfg = #cfg{consumer_strategy = single_active},
-%                waiting_consumers = Waiting0,
-%                enqueuers = Enqs0} = State0) ->
-%     Node = node(Pid),
-%     %% if the pid refers to an active or cancelled consumer,
-%     %% mark it as suspected and return it to the waiting queue
-%     {State1, Effects0} =
-%         maps:fold(
-%           fun(CKey, ?CONSUMER_PID(P) = #consumer{status = Status} = C0, {S0, E0})
-%                 when is_atom(Status) andalso node(P) =:= Node ->
-%                   %% the consumer should be returned to waiting
-%                   %% and checked out messages should be returned
-%                   Effs = consumer_update_active_effects(
-%                            S0, C0, false, {suspected_down, Status} , E0),
-%                   %% TODO: set a timer instead of reaturn all here to allow
-%                   %% a disconnected node a configurable bit of time to be
-%                   %% reconnected
-%                   {St, Effs1} = return_all(Meta, S0, Effs, CKey, C0, false),
-%                   %% if the consumer was cancelled there is a chance it got
-%                   %% removed when returning hence we need to be defensive here
-%                   Waiting = case St#?STATE.consumers of
-%                                 #{CKey := C} ->
-%                                     Waiting0 ++ [{CKey, C}];
-%                                 _ ->
-%                                     Waiting0
-%                             end,
-%                   {St#?STATE{consumers = maps:remove(CKey, St#?STATE.consumers),
-%                              waiting_consumers = Waiting,
-%                              last_active = Ts},
-%                    Effs1};
-%              (_, _, S) ->
-%                   S
-%           end, {State0, []}, maps:iterator(Cons0, ordered)),
-%     WaitingConsumers = update_waiting_consumer_status(Node, State1,
-%                                                       {suspected_down, up}),
-
-%     %% select a new consumer from the waiting queue and run a checkout
-%     State2 = State1#?STATE{waiting_consumers = WaitingConsumers},
-%     {State, Effects1} = activate_next_consumer(State2, Effects0),
-
-%     %% mark any enquers as suspected
-%     Enqs = maps:map(fun(P, E) when node(P) =:= Node ->
-%                             E#enqueuer{status = suspected_down};
-%                        (_, E) -> E
-%                     end, Enqs0),
-%     Effects = [{monitor, node, Node} | Effects1],
-%     checkout(Meta, State0, State#?STATE{enqueuers = Enqs}, Effects);
+    apply_(Meta, {timeout, {expire_msgs, shallow}}, State);
+apply_(#{system_time := Ts} = Meta,
+       {timeout, {expire_msgs, shallow}}, State0) ->
+    {State, Effects} = expire_shallow(Ts, State0),
+    checkout(Meta, State0, State, Effects);
 apply_(#{system_time := Ts} = Meta,
        {down, Pid, noconnection},
        #?STATE{consumers = Cons0,
@@ -594,6 +553,7 @@ apply_(Meta, {timeout, {consumer_down_timeout, CKey}},
             %% return all messages
             {State1, Effects0} = return_all(Meta, State0, [], CKey,
                                             Consumer, false),
+
             checkout(Meta, State0, State1, Effects0);
         _ ->
             {State0, []}
@@ -752,7 +712,7 @@ snapshot_installed(_Meta, #?MODULE{cfg = #cfg{},
                 end, #{}, Consumers),
     delivery_effects(SendAcc, State).
 
-convert_v7_to_v8(#{} = _Meta, StateV7) ->
+convert_v7_to_v8(#{system_time := Ts} = _Meta, StateV7) ->
     %% the structure is intact for now
     Cons0 = element(#?STATE.consumers, StateV7),
     Cons = maps:map(fun (_CKey, #consumer{status = suspected_down} = C) ->
@@ -772,7 +732,7 @@ convert_v7_to_v8(#{} = _Meta, StateV7) ->
     StateV8#?STATE{discarded_bytes = 0,
                    messages = Pq,
                    consumers = Cons,
-                   unused_0 = ?NIL}.
+                   last_command_time = Ts}.
 
 purge_node(Meta, Node, State, Effects) ->
     lists:foldl(fun(Pid, {S0, E0}) ->
@@ -859,7 +819,7 @@ state_enter(leader,
                     cfg = #cfg{resource = QRes,
                                dead_letter_handler = DLH},
                     dlx = DlxState} = State) ->
-    TimerEffs = timer_effect(erlang:system_time(millisecond), State, []),
+    TimerEffs = timer_effect(State, []),
     % return effects to monitor all current consumers and enqueuers
     Pids = lists:usort(maps:keys(Enqs)
                        ++ [P || ?CONSUMER_PID(P) <- maps:values(Cons)]
@@ -1047,10 +1007,9 @@ handle_aux(RaftState, Tag, Cmd, AuxV3, RaAux)
     handle_aux(RaftState, Tag, Cmd, AuxV4, RaAux);
 handle_aux(leader, cast, eval,
            #?AUX{last_decorators_state = LastDec,
-                 % bytes_in = BytesIn,
-                 % bytes_out = BytesOut,
                  last_checkpoint = Check0} = Aux0,
            RaAux) ->
+
     #?STATE{cfg = #cfg{resource = QName},
             discarded_bytes = DiscardedBytes} = MacState =
         ra_aux:machine_state(RaAux),
@@ -1069,7 +1028,7 @@ handle_aux(leader, cast, eval,
     %% this is called after each batch of commands have been applied
     %% set timer for message expire
     %% should really be the last applied index ts but this will have to do
-    Effects1 = timer_effect(Ts, MacState, Effects0),
+    Effects1 = timer_effect(MacState, Effects0),
     case query_notify_decorators_info(MacState) of
         LastDec ->
             {no_reply, Aux0#?AUX{last_checkpoint = Check}, RaAux, Effects1};
@@ -1081,11 +1040,13 @@ handle_aux(leader, cast, eval,
     end;
 handle_aux(_RaftState, cast, eval,
            #?AUX{last_checkpoint = Check0} = Aux0, RaAux) ->
+
     Ts = erlang:system_time(millisecond),
+
     EffMacVer = ra_aux:effective_machine_version(RaAux),
     #?STATE{discarded_bytes = DiscardedBytes} = ra_aux:machine_state(RaAux),
     {Check, Effects} = do_snapshot(EffMacVer, Ts, Check0, RaAux,
-                                      DiscardedBytes, false),
+                                   DiscardedBytes, false),
     {no_reply, Aux0#?AUX{last_checkpoint = Check}, RaAux, Effects};
 handle_aux(_RaftState, cast, {bytes_in, {MetaSize, BodySize}},
            #?AUX{bytes_in = Bytes} = Aux0,
@@ -1237,7 +1198,11 @@ handle_aux(leader, _, {dlx, setup}, Aux, RaAux) ->
         _ ->
             ok
     end,
+    {no_reply, Aux, RaAux};
+handle_aux(_, _, {dlx, teardown, Pid}, Aux, RaAux) ->
+    terminate_dlx_worker(Pid),
     {no_reply, Aux, RaAux}.
+
 
 eval_gc(RaAux, MacState,
         #?AUX{gc = #aux_gc{last_raft_idx = LastGcIdx} = Gc} = AuxState) ->
@@ -1513,6 +1478,7 @@ cancel_consumer0(Meta, ConsumerKey,
             {S, Effects2} = maybe_return_all(Meta, ConsumerKey, Consumer,
                                              S0, Effects0, Reason),
 
+
             %% The effects are emitted before the consumer is actually removed
             %% if the consumer has unacked messages. This is a bit weird but
             %% in line with what classic queues do (from an external point of
@@ -1774,6 +1740,9 @@ maybe_enqueue(RaftIdx, Ts, From, MsgSeqNo, RawMsg,
             {Res, State, [{monitor, process, From} | Effects]};
         #enqueuer{next_seqno = MsgSeqNo} = Enq0 ->
             % it is the next expected seqno
+            % TODO: it is not good to query the `mc' container inside the
+            % statemachine as it may be modified to behave differently without
+            % concern for the state machine
             Header0 = maybe_set_msg_ttl(RawMsg, Ts, Size, State0),
             Header = maybe_set_msg_delivery_count(RawMsg, Header0),
             Msg = make_msg(RaftIdx, Header),
@@ -1963,16 +1932,20 @@ get_header(_Key, Size)
   when is_integer(Size) ->
     undefined;
 get_header(size, ?TUPLE(Size, Expiry))
-  when is_integer(Size), is_integer(Expiry) ->
+  when is_integer(Size) andalso
+       is_integer(Expiry) ->
     Size;
 get_header(expiry, ?TUPLE(Size, Expiry))
-  when is_integer(Size), is_integer(Expiry) ->
+  when is_integer(Size) andalso
+       is_integer(Expiry) ->
     Expiry;
 get_header(_Key, ?TUPLE(Size, Expiry))
-  when is_integer(Size), is_integer(Expiry) ->
+  when is_integer(Size) andalso
+       is_integer(Expiry) ->
     undefined;
 get_header(Key, Header)
-  when is_map(Header) andalso is_map_key(size, Header) ->
+  when is_map(Header) andalso
+       is_map_key(size, Header) ->
     maps:get(Key, Header, undefined).
 
 annotate_msg(Header, Msg0) ->
@@ -2017,7 +1990,7 @@ return_one(Meta, MsgId, Msg0, DeliveryFailed, Anns,
                                    discarded_bytes = DiscardedBytes0 - RetainedBytes},
             {State, Effects} = complete(Meta, ConsumerKey, [MsgId],
                                         Con0, State1, Effects0),
-            {State, DlxEffects ++ Effects};
+            {State, Effects ++ DlxEffects};
         _ ->
             Checked = maps:remove(MsgId, Checked0),
             Con = Con0#consumer{checked_out = Checked,
@@ -2184,7 +2157,7 @@ take_next_msg(#?STATE{returns = Returns0,
             end
     end.
 
-get_next_msg(#?STATE{returns = Returns0,
+peek_next_msg(#?STATE{returns = Returns0,
                      messages = Messages0}) ->
     case lqueue:get(Returns0, empty) of
         empty ->
@@ -2235,12 +2208,13 @@ reply_log_effect(RaftIdx, MsgId, Header, Ready, From) ->
      fun ([]) ->
              [];
          ([Cmd]) ->
-             [{reply, From, {wrap_reply,
-                             {dequeue, {MsgId, {Header, get_msg_from_cmd(Cmd)}}, Ready}}}]
+             [{reply, From,
+               {wrap_reply,
+                {dequeue, {MsgId, {Header, get_msg_from_cmd(Cmd)}}, Ready}}}]
      end}.
 
 checkout_one(#{system_time := Ts} = Meta, ExpiredMsg0, InitState0, Effects0) ->
-    %% Before checking out any messsage to any consumer,
+    %% Before checking out any message to any consumer,
     %% first remove all expired messages from the head of the queue.
     {ExpiredMsg, #?STATE{service_queue = SQ0,
                          messages = Messages0,
@@ -2309,22 +2283,74 @@ checkout_one(#{system_time := Ts} = Meta, ExpiredMsg0, InitState0, Effects0) ->
             end
     end.
 
+msg_is_expired(Ts, ?MSG(_, _) = Msg) ->
+    Header = get_msg_header(Msg),
+    case get_header(expiry, Header) of
+        undefined ->
+            false;
+        Expiry ->
+            Ts >= Expiry
+    end;
+msg_is_expired(_Ts, _) ->
+    false.
+
 %% dequeue all expired messages
 expire_msgs(RaCmdTs, Result, State, Effects) ->
     %% In the normal case, there are no expired messages.
     %% Therefore, first lqueue:get/2 to check whether we need to lqueue:out/1
     %% because the latter can be much slower than the former.
-    case get_next_msg(State) of
-        ?MSG(_, ?TUPLE(Size, Expiry))
-          when is_integer(Size), is_integer(Expiry), RaCmdTs >= Expiry ->
+    case msg_is_expired(RaCmdTs, peek_next_msg(State)) of
+        true ->
             expire(RaCmdTs, State, Effects);
-        ?MSG(_, #{expiry := Expiry})
-          when is_integer(Expiry), RaCmdTs >= Expiry ->
-            expire(RaCmdTs, State, Effects);
-        _ ->
-            %% packed messages never have an expiry
+        false ->
             {Result, State, Effects}
     end.
+
+expire_shallow(Ts, #?STATE{cfg = #cfg{dead_letter_handler = DLH},
+                           returns = Returns0,
+                           messages = Messages0,
+                           dlx = DlxState0,
+                           discarded_bytes = DiscardedBytes0,
+                           messages_total = Tot,
+                           msg_bytes_enqueue = MsgBytesEnqueue} = State0) ->
+
+    {Expired0, Returns} = case lqueue:peek(Returns0) of
+                              empty ->
+                                  {[], Returns0};
+                              {value, Returned} ->
+                                  case msg_is_expired(Ts, Returned) of
+                                      true ->
+                                          {[Returned], lqueue:drop(Returns0)};
+                                      false ->
+                                          {[], Returns0}
+                                  end
+                          end,
+
+    {Expired, Messages} = rabbit_fifo_pq:take_while(
+                            fun (Msg) -> msg_is_expired(Ts, Msg) end,
+                            Messages0),
+
+    ExpMsgs = Expired0 ++ Expired,
+
+    {DlxState, _RetainedBytes, DlxEffects} =
+        discard_or_dead_letter(ExpMsgs, expired, DLH, DlxState0),
+
+    NumExpired = length(ExpMsgs),
+
+    %% calculate total sizes
+    Size = lists:foldl(fun (Msg, Acc) ->
+                               Header = get_msg_header(Msg),
+                               Acc + get_header(size, Header)
+                       end, 0, ExpMsgs),
+
+    DiscardedSize = Size + (NumExpired * ?ENQ_OVERHEAD),
+    State = State0#?STATE{dlx = DlxState,
+                          returns = Returns,
+                          messages = Messages,
+                          messages_total = Tot - NumExpired,
+                          discarded_bytes = DiscardedBytes0 + DiscardedSize,
+                          msg_bytes_enqueue = MsgBytesEnqueue - Size},
+    {State, DlxEffects}.
 
 expire(RaCmdTs, State0, Effects) ->
     {Msg,
@@ -2332,7 +2358,8 @@ expire(RaCmdTs, State0, Effects) ->
              dlx = DlxState0,
              messages_total = Tot,
              discarded_bytes = DiscardedBytes0,
-             msg_bytes_enqueue = MsgBytesEnqueue} = State1} =
+             msg_bytes_enqueue = MsgBytesEnqueue
+            } = State1} =
         take_next_msg(State0),
     {DlxState, _RetainedBytes, DlxEffects} =
         discard_or_dead_letter([Msg], expired, DLH, DlxState0),
@@ -2343,26 +2370,50 @@ expire(RaCmdTs, State0, Effects) ->
                           messages_total = Tot - 1,
                           discarded_bytes = DiscardedBytes0 + DiscardedSize,
                           msg_bytes_enqueue = MsgBytesEnqueue - Size},
-    expire_msgs(RaCmdTs, true, State, DlxEffects ++ Effects).
+    expire_msgs(RaCmdTs, true, State, Effects ++ DlxEffects).
 
-timer_effect(RaCmdTs, State, Effects) ->
-    T = case get_next_msg(State) of
-            ?MSG(_, ?TUPLE(Size, Expiry))
-              when is_integer(Size) andalso
-                   is_integer(Expiry) ->
-                %% Next message contains 'expiry' header.
-                %% (Re)set timer so that message will be dropped or
-                %% dead-lettered on time.
-                max(0, Expiry - RaCmdTs);
-            ?MSG(_, #{expiry := Expiry})
-              when is_integer(Expiry) ->
-                max(0, Expiry - RaCmdTs);
-            _ ->
-                %% Next message does not contain 'expiry' header.
-                %% Therefore, do not set timer or cancel timer if it was set.
-                infinity
-        end,
-    [{timer, expire_msgs, T} | Effects].
+timer_effect(#?STATE{messages_total = 0}, Effects) ->
+    Effects;
+timer_effect(#?STATE{returns = Returns,
+                     last_command_time = Ts,
+                     messages = Messages}, Effects) ->
+    %% TODO: most queues don't use message ttls, to avoid doing this frequently
+    %% when not required we could keep a flag in the machine state to indicate
+    %% if a ttl has ever been seen in the queue and avoid this code path based
+    %% on the value of that flag.
+    ReturnedExpiry = case lqueue:peek(Returns) of
+                         empty ->
+                             undefined;
+                         {value, Returned} ->
+                             get_header(expiry, get_msg_header(Returned))
+                     end,
+
+    %% this checks the next messages of all priorities and returnes the smallest
+    %% expiry time or undefined
+    NextExpiry = rabbit_fifo_pq:fold_priorities_next(
+                   fun (Msg, Acc) ->
+                           Header = get_msg_header(Msg),
+                           case get_header(expiry, Header) of
+                               undefined ->
+                                   Acc;
+                               Expiry when Acc == undefined ->
+                                   max(0, Expiry - Ts);
+                               Expiry ->
+                                   CalcExpiry = max(0, Expiry - Ts),
+                                   case CalcExpiry < Acc of
+                                       true ->
+                                           CalcExpiry;
+                                       false ->
+                                           Acc
+                                   end
+                           end
+                   end, ReturnedExpiry, Messages),
+    case NextExpiry of
+        undefined ->
+            Effects;
+        Timeout ->
+            [{timer, expire_msgs, Timeout} | Effects]
+    end.
 
 update_or_remove_con(Meta, ConsumerKey,
                      #consumer{cfg = #consumer_cfg{lifetime = once},
@@ -2676,6 +2727,13 @@ make_enqueue(Pid, Seq, Msg)
     #?ENQ_V2{seq = Seq,
              msg = Msg,
              size = ?SIZE(Msg)}.
+
+make_enqueue_old(Pid, Seq, Msg) ->
+    %% we just use this version of the prop test,
+    %% TODO: refactor prop test
+    #enqueue{msg = Msg,
+             seq = Seq,
+             pid = Pid}.
 
 -spec make_register_enqueuer(pid()) -> protocol().
 make_register_enqueuer(Pid) ->
@@ -3086,6 +3144,7 @@ do_snapshot(MacVer, Ts, #snapshot{index = _ChIdx,
     %% message: 32 bytes
     %% enqueuer: 96 bytes
     %% consumer: 256 bytes
+    %% TODO: refine this
     NumEnqueuers = map_size(Enqueuers),
     NumConsumers = map_size(Consumers),
     ApproxSnapSize = 4096 +
@@ -3307,6 +3366,9 @@ start_worker(QRef) ->
 ensure_worker_terminated(#?DLX{consumer = undefined}) ->
     ok;
 ensure_worker_terminated(#?DLX{consumer = #dlx_consumer{pid = Pid}}) ->
+    terminate_dlx_worker(Pid).
+
+terminate_dlx_worker(Pid) ->
     case is_local_and_alive(Pid) of
         true ->
             %% Note that we can't return a mod_call effect here
@@ -3349,15 +3411,20 @@ update_config(OldDLH, NewDLH, QRes, State0) ->
                     [OldDLH, NewDLH, rabbit_misc:rs(QRes)]]},
     {State1, Effects0} = switch_from(OldDLH, QRes, State0),
     {State, Effects} = switch_to(NewDLH, State1, Effects0),
-    {State, [LogOnLeader|Effects]}.
+    {State, [LogOnLeader | Effects]}.
 
-switch_from(at_least_once, QRes, State) ->
+switch_from(at_least_once, QRes, DlxState) ->
     %% Switch from at-least-once to some other strategy.
     %% TODO: do worker teardown in aux handler
-    ensure_worker_terminated(State),
-    {Num, Bytes} = dlx_stat(State),
+    {Num, Bytes} = dlx_stat(DlxState),
+    Pid = case DlxState of
+              #?DLX{consumer = #dlx_consumer{pid = P}} ->
+                  P;
+              _ -> undefined
+          end,
     %% Log only on leader.
-    {#?DLX{}, [{mod_call, logger, info,
+    {#?DLX{}, [{aux, {dlx, teardown, Pid}},
+               {mod_call, logger, info,
                ["Deleted ~b dead-lettered messages (with total messages size of ~b bytes) in ~ts",
                 [Num, Bytes, rabbit_misc:rs(QRes)]]}]};
 switch_from(_, _, State) ->
@@ -3367,7 +3434,7 @@ switch_to(at_least_once, _, Effects) ->
     %% Switch from some other strategy to at-least-once.
     %% Dlx worker needs to be started on the leader.
     %% The cleanest way to determine the Ra state of this node is delegation to handle_aux.
-    {#?DLX{}, [{aux, {dlx, setup}} | Effects]};
+    {#?DLX{}, Effects ++ [{aux, {dlx, setup}}]};
 switch_to(_, State, Effects) ->
     {State, Effects}.
 

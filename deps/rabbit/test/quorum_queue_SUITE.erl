@@ -2331,6 +2331,8 @@ dead_letter_policy(Config) ->
 %% Test that messages are at most once dead letter in the correct order
 %% for reason 'maxlen'.
 at_most_once_dead_letter_order_maxlen(Config) ->
+    check_quorum_queues_v8_compat(Config),
+
     [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
@@ -2445,16 +2447,18 @@ at_most_once_dead_letter_order_delivery_limit(Config) ->
                            #'basic.publish'{routing_key = QQ},
                            #amqp_msg{payload = <<"m2">>}),
 
-    ok = subscribe(Ch, QQ, false),
+    Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server),
+    ok = subscribe(Ch2, QQ, false),
     receive {_, #amqp_msg{payload = P1}} ->
                 ?assertEqual(<<"m1">>, P1)
     end,
     receive {_, #amqp_msg{payload = P2}} ->
                 ?assertEqual(<<"m2">>, P2)
     end,
-    ok = amqp_channel:call(Ch, #'basic.nack'{delivery_tag = 0,
-                                             multiple = true,
-                                             requeue = true}),
+    amqp_channel:close(Ch2),
+    % ok = amqp_channel:call(Ch, #'basic.nack'{delivery_tag = 0,
+    %                                          multiple = true,
+    %                                          requeue = true}),
 
     wait_for_consensus(DLQ, Config),
     wait_for_messages_ready(Servers,  ra_name(DLQ), 2),
@@ -5548,7 +5552,7 @@ check_quorum_queues_v8_compat(Config) ->
         true ->
             ok;
         false ->
-            throw({skip, "test will only work on QQ machine version > 8"})
+            throw({skip, "test will only work on QQ machine version >= 8"})
     end.
 
 lists_interleave([], _List) ->
