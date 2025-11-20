@@ -74,7 +74,7 @@ init() ->
     case Ret of
         ok ->
             ?LOG_DEBUG(
-               "DB: initialization successeful",
+               "DB: initialization successful",
                #{domain => ?RMQLOG_DOMAIN_DB}),
 
             init_finished(),
