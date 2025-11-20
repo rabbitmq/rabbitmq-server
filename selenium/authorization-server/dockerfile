@@ -3,10 +3,8 @@ WORKDIR /home/app/authorization-server
 COPY ./ .
 RUN mvn -Dmaven.test.skip=true clean package
 
-FROM openjdk:24-jdk
+FROM amazoncorretto:24-jdk
 EXPOSE 8080
 ENTRYPOINT ["java","-jar","/authorization-server.jar"]
 ARG JAR_FILE=target/*.jar
 COPY --from=builder /home/app/authorization-server/target/*.jar authorization-server.jar
-
-
