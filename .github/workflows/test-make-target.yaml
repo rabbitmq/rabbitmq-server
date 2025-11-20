@@ -39,7 +39,7 @@ jobs:
     timeout-minutes: 60
     steps:
     - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v5
+      uses: actions/checkout@v6
       with:
         ref: ${{ inputs.ref }}
 
@@ -65,7 +65,7 @@ jobs:
 
     # We install Erlang problem matchers from ci.erlang.mk.
     - name: CHECKOUT ERLANG PROBLEM MATCHERS
-      uses: actions/checkout@v5
+      uses: actions/checkout@v6
       with:
         repository: ninenines/ci.erlang.mk
         path: ci.erlang.mk
