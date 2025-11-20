@@ -145,8 +145,6 @@
           persistent_bytes,   %% w   unacked
 
           ram_msg_count,      %% w/o unacked
-          ram_msg_count_prev,
-          ram_ack_count_prev,
           ram_bytes,          %% w   unacked
           out_counter,
           in_counter,
@@ -171,13 +169,10 @@
           %% index/store keep track of confirms separately and
           %% doing intersect/subtract/union we just put the messages
           %% here and on sync move them to 'confirmed'.
-          %%
-          %% Note: This field used to be 'memory_reduction_run_count'.
           unconfirmed_simple,
           %% Queue data is grouped by VHost. We need to store it
           %% to work with queue index.
-          virtual_host,
-          waiting_bump = false
+          virtual_host
         }).
 
 -record(rates, { in, out, ack_in, ack_out, timestamp }).
@@ -261,8 +256,6 @@
              persistent_bytes      :: non_neg_integer(),
 
              ram_msg_count         :: non_neg_integer(),
-             ram_msg_count_prev    :: non_neg_integer(),
-             ram_ack_count_prev    :: non_neg_integer(),
              ram_bytes             :: non_neg_integer(),
              out_counter           :: non_neg_integer(),
              in_counter            :: non_neg_integer(),
@@ -1022,8 +1015,6 @@ init(IsDurable, IndexState, StoreState, DiskCount, DiskBytes, Terms,
       persistent_bytes    = DiskBytes1,
 
       ram_msg_count       = 0,
-      ram_msg_count_prev  = 0,
-      ram_ack_count_prev  = 0,
       ram_bytes           = 0,
       unacked_bytes       = 0,
       out_counter         = 0,
