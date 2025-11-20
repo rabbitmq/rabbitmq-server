@@ -34,7 +34,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Checkout ibm-mqadvanced-server-dev
-        uses: actions/checkout@v6
+        uses: actions/checkout@v5
         with:
           repository: ${{ env.IBM_MQ_REPOSITORY }}
           ref: ${{ env.IBM_MQ_BRANCH_NAME }}
