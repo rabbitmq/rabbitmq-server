@@ -22,7 +22,7 @@
 -export([start/2, stop/1]).
 
 %% exported for testing only
--export([start_msg_store/3, stop_msg_store/1]).
+-export([start_msg_store/3, stop_msg_store/1, ram_pending_acks/1]).
 
 -include("mc.hrl").
 -include_lib("stdlib/include/qlc.hrl").
@@ -1583,6 +1583,9 @@ prepare_to_store(Msg) ->
 %%----------------------------------------------------------------------------
 %% Internal gubbins for acks
 %%----------------------------------------------------------------------------
+
+ram_pending_acks(#vqstate{ ram_pending_ack = RPA }) ->
+    RPA.
 
 record_pending_ack(#msg_status { seq_id = SeqId } = MsgStatus,
                    State = #vqstate { ram_pending_ack  = RPA,
