@@ -53,7 +53,7 @@ jobs:
           fi
       - name: Checkout
         if: steps.authorized.outputs.authorized == 'true'
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
       - name: Configure Erlang
         if: steps.authorized.outputs.authorized == 'true'
         uses: erlef/setup-beam@v1
@@ -82,7 +82,7 @@ jobs:
     if: ${{ needs.build-package-generic-unix.outputs.authorized }} == 'true'
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
       - name: Download package-generic-unix
         uses: actions/download-artifact@v6
         with:

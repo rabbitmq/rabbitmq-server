@@ -28,7 +28,7 @@ jobs:
     timeout-minutes: 60
     steps:
     - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v5
+      uses: actions/checkout@v6
 
     - name: FETCH TAGS
       run: git fetch --tags
