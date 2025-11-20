@@ -14,7 +14,7 @@ env:
   REGISTRY_IMAGE: pivotalrabbitmq/ibm-mqadvanced-server-dev
   IBM_MQ_REPOSITORY: ibm-messaging/mq-container
   IBM_MQ_BRANCH_NAME: 9.4.0
-  IMAGE_TAG: 9.4.0.12-amd64
+  IMAGE_TAG: 9.4.0.16-amd64
 jobs:
   docker:
     runs-on: ubuntu-latest
@@ -34,7 +34,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Checkout ibm-mqadvanced-server-dev
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           repository: ${{ env.IBM_MQ_REPOSITORY }}
           ref: ${{ env.IBM_MQ_BRANCH_NAME }}
