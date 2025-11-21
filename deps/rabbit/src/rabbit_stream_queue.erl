@@ -129,7 +129,8 @@
                     [queue, <<"stream">>, ?MODULE]}},
      {cleanup,  {rabbit_registry, unregister,
                  [queue, <<"stream">>]}},
-     {requires, rabbit_registry}
+     {requires, rabbit_registry},
+     {enables, rabbit_policy}
     ]}).
 
 -type client() :: #stream_client{}.
