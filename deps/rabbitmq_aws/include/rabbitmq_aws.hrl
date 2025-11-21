@@ -15,7 +15,10 @@
 -define(DEFAULT_PROFILE, "default").
 
 -define(INSTANCE_AZ, "placement/availability-zone").
+
+% https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instancedata-data-retrieval.html
 -define(INSTANCE_HOST, "169.254.169.254").
+-define(INSTANCE_HOST_6, "fd00:ec2::254").
 
 % rabbitmq/rabbitmq-peer-discovery-aws#25
 
