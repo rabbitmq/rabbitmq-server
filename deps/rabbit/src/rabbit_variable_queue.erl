@@ -611,17 +611,13 @@ ack(AckTags, State) ->
                          ack_out_counter  = AckOutCount + length(AckTags) })}.
 
 requeue(AckTags, #vqstate { q_head     = QHead0,
-                            q_tail     = QTail,
-                            in_counter = InCounter } = State) ->
-    {SeqIds, QHead, MsgIds, State1} = requeue_merge(lists:sort(AckTags), QHead0, [],
-                                                    q_tail_limit(QTail), State),
-    {QTail1, MsgIds1, State2}     = q_tail_merge(SeqIds, QTail, MsgIds, State1),
-    MsgCount = length(MsgIds1),
-    {MsgIds1, a(
-                  maybe_update_rates(
-                    State2 #vqstate { q_head     = QHead,
-                                      q_tail     = QTail1,
-                                      in_counter = InCounter + MsgCount }))}.
+                            in_counter = InCounter } = State0) ->
+    {QHead, MsgIds, State} = requeue_merge(lists:sort(AckTags), QHead0, [], State0),
+    MsgCount = length(MsgIds),
+    {MsgIds, a(maybe_update_rates(State#vqstate{
+        q_head     = QHead,
+        in_counter = InCounter + MsgCount
+    }))}.
 
 ackfold(MsgFun, Acc, State, AckTags) ->
     {AccN, StateN} =
@@ -1206,16 +1202,14 @@ stats_acked_pending(MS = #msg_status{is_persistent = false}, St) ->
     St#vqstate{?UP(unacked_bytes, ram_bytes, -msg_size(MS))}.
 
 %% Notice that this is the reverse of stats_pending_acks.
+%% Note that messages are always requeued to memory in the current
+%% implementation because they are necessarily at the front of the
+%% queue which is in memory.
 stats_requeued_memory(MS = #msg_status{msg = undefined}, St) ->
     St#vqstate{?UP(bytes, +msg_size(MS)), ?UP(unacked_bytes, -msg_size(MS))};
 stats_requeued_memory(MS, St) ->
     St#vqstate{?UP(ram_msg_count, +1),
                ?UP(bytes, +msg_size(MS)), ?UP(unacked_bytes, -msg_size(MS))}.
-
-stats_requeued_disk(MS = #msg_status{is_persistent = true}, St) ->
-    St#vqstate{?UP(bytes, +msg_size(MS)), ?UP(unacked_bytes, -msg_size(MS))};
-stats_requeued_disk(MS = #msg_status{is_persistent = false}, St) ->
-    St#vqstate{?UP(unacked_bytes, -msg_size(MS))}.
 
 msg_size(#msg_status{msg_props = #message_properties{size = Size}}) -> Size.
 
@@ -1807,46 +1801,27 @@ msgs_written_to_disk(Callback, MsgIdSet, written) ->
 %%----------------------------------------------------------------------------
 
 %% Rebuild queue, inserting sequence ids to maintain ordering
-requeue_merge(SeqIds, Q, MsgIds, Limit, State) ->
-    requeue_merge(SeqIds, Q, ?QUEUE:new(), MsgIds,
-                Limit, State).
+requeue_merge(SeqIds, Q, MsgIds, State) ->
+    requeue_merge(SeqIds, Q, ?QUEUE:new(), MsgIds, State).
 
-requeue_merge([SeqId | Rest] = SeqIds, Q, Front, MsgIds,
-            Limit, State)
-  when Limit == undefined orelse SeqId < Limit ->
+requeue_merge([SeqId | Rest] = SeqIds, Q, Front, MsgIds, State) ->
     case ?QUEUE:out(Q) of
         {{value, #msg_status { seq_id = SeqIdQ } = MsgStatus}, Q1}
           when SeqIdQ < SeqId ->
             %% enqueue from the remaining queue
-            requeue_merge(SeqIds, Q1, ?QUEUE:in(MsgStatus, Front), MsgIds,
-                        Limit, State);
+            requeue_merge(SeqIds, Q1, ?QUEUE:in(MsgStatus, Front), MsgIds, State);
         {_, _Q1} ->
             %% enqueue from the remaining list of sequence ids
             case msg_from_pending_ack(SeqId, State) of
                 {none, _} ->
-                    requeue_merge(Rest, Q, Front, MsgIds, Limit, State);
+                    requeue_merge(Rest, Q, Front, MsgIds, State);
                 {#msg_status { msg_id = MsgId } = MsgStatus, State1} ->
                     State2 = stats_requeued_memory(MsgStatus, State1),
-                    requeue_merge(Rest, Q, ?QUEUE:in(MsgStatus, Front), [MsgId | MsgIds],
-                                Limit, State2)
+                    requeue_merge(Rest, Q, ?QUEUE:in(MsgStatus, Front), [MsgId | MsgIds], State2)
             end
     end;
-requeue_merge(SeqIds, Q, Front, MsgIds,
-            _Limit, State) ->
-    {SeqIds, ?QUEUE:join(Front, Q), MsgIds, State}.
-
-q_tail_merge([], QTail, MsgIds, State) ->
-    {QTail, MsgIds, State};
-q_tail_merge(SeqIds, QTail, MsgIds, State) ->
-    lists:foldl(fun (SeqId, {QTail0, MsgIds0, State0} = Acc) ->
-                        case msg_from_pending_ack(SeqId, State0) of
-                            {none, _} ->
-                                Acc;
-                        {#msg_status { msg_id = MsgId } = MsgStatus, State1} ->
-                                {expand_q_tail(SeqId, QTail0), [MsgId | MsgIds0],
-                                 stats_requeued_disk(MsgStatus, State1)}
-                        end
-                end, {QTail, MsgIds, State}, SeqIds).
+requeue_merge([], Q, Front, MsgIds, State) ->
+    {?QUEUE:join(Front, Q), MsgIds, State}.
 
 %% Mostly opposite of record_pending_ack/2
 msg_from_pending_ack(SeqId, State) ->
@@ -1858,9 +1833,6 @@ msg_from_pending_ack(SeqId, State) ->
                msg_props = MsgProps #message_properties { needs_confirming = false } },
              State1}
     end.
-
-q_tail_limit(?BLANK_Q_TAIL_PATTERN(_))             -> undefined;
-q_tail_limit(#q_tail{ start_seq_id = StartSeqId }) -> StartSeqId.
 
 %%----------------------------------------------------------------------------
 %% Phase changes
