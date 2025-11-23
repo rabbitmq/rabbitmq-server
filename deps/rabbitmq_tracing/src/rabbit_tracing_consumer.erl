@@ -72,7 +72,7 @@ init(Args0) ->
     Filename = Dir ++ "/" ++ binary_to_list(Name) ++ ".log",
     case filelib:ensure_dir(Filename) of
         ok ->
-            case prim_file:open(Filename, [append]) of
+            case prim_file:open(Filename, [append], {encoding, utf8}) of
                 {ok, F} ->
                     rabbit_tracing_traces:announce(VHost, Name, self()),
                     Format = list_to_atom(binary_to_list(pget(format, Args))),
