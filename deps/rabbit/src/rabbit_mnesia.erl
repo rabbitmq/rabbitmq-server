@@ -235,6 +235,7 @@ reset_gracefully() ->
     %% node which is down.
     init_db_with_mnesia(AllNodes, node_type(), false, false, _Retry = false),
     check_reset_gracefully(),
+    rabbit_db_cluster:forget_member(node(), false),
     leave_cluster(),
     rabbit_misc:ensure_ok(mnesia:delete_schema([node()]), cannot_delete_schema),
     wipe().

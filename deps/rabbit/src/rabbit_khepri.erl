@@ -380,6 +380,7 @@ reset() ->
     ok = setup(),
     ThisNode = node(),
     rabbit_db_cluster:forget_member(ThisNode, false),
+    khepri_cluster:reset(?RA_CLUSTER_NAME),
     ok = khepri:stop(?RA_CLUSTER_NAME),
     ok = ensure_ra_system_stopped(),
     ok.
