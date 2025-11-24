@@ -92,6 +92,7 @@ groups() ->
                                             leader_locator_balanced_random_maintenance,
                                             leader_locator_policy,
                                             status,
+                                            status_noproc,
                                             format,
                                             add_member_2,
                                             single_active_consumer_priority_take_over,
@@ -4014,9 +4015,9 @@ oldest_entry_timestamp(Config) ->
 
     ok.
 
--define(STATUS_MATCH(N, T),
+-define(STATUS_MATCH(N, RS, T),
         [{<<"Node Name">>, N},
-         {<<"Raft State">>, _},
+         {<<"Raft State">>, RS},
          {<<"Membership">>, _},
          {<<"Last Log Index">>, _},
          {<<"Last Written">>, _},
@@ -4047,9 +4048,9 @@ status(Config) ->
 
     %% check that nodes are returned and that at least the term isn't
     %% defaulted (i.e. there was an error)
-    ?assertMatch([?STATUS_MATCH(N1, T1),
-                  ?STATUS_MATCH(N2, T2),
-                  ?STATUS_MATCH(N3, T3)
+    ?assertMatch([?STATUS_MATCH(N1, _, T1),
+                  ?STATUS_MATCH(N2, _, T2),
+                  ?STATUS_MATCH(N3, _, T3)
                  ] when T1 /= <<>> andalso
                         T2 /= <<>> andalso
                         T3 /= <<>>,
@@ -4058,6 +4059,34 @@ status(Config) ->
     wait_for_messages(Config, [[QQ, <<"2">>, <<"2">>, <<"0">>]]),
     ok.
 
+status_noproc(Config) ->
+    Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [N1, N2, N3] = lists:sort(Nodes),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, N1),
+
+    QQ = ?config(queue_name, Config),
+    RaName = ra_name(QQ),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    ensure_qq_proc_dead(Config, N1, RaName),
+    %% simulate that the queue member terminated so early that it
+    %% hasn't recorded any counters yet
+    rabbit_ct_broker_helpers:rpc(Config, N1, ra_counters, delete, [{RaName, N1}]),
+
+    %% check that some status is returned for each node
+    ?assertMatch([?STATUS_MATCH(N1, noproc, T1),
+                  ?STATUS_MATCH(N2, RS2, T2),
+                  ?STATUS_MATCH(N3, RS3, T3)
+                 ] when T1 == <<>> andalso
+                        T2 /= <<>> andalso
+                        T3 /= <<>> andalso
+                        (RS2 == leader orelse RS2 == follower) andalso
+                        (RS3 == leader orelse RS3 == follower),
+                 rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
+                                              status, [<<"/">>, QQ])),
+    ok.
 format(Config) ->
     %% tests rabbit_quorum_queue:format/2
     Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
