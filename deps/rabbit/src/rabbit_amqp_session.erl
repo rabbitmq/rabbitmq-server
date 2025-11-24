@@ -1145,7 +1145,9 @@ handle_frame(#'v1_0.attach'{name = {utf8, NameBin} = Name,
                             handle = Handle,
                             role = Role,
                             source = Source,
-                            target = Target} = Attach,
+                            target = Target,
+                            snd_settle_mode = SndSettleMode,
+                            rcv_settle_mode = RcvSettleMode} = Attach,
              State) ->
     try
         ok = validate_attach(Attach),
@@ -1161,7 +1163,9 @@ handle_frame(#'v1_0.attach'{name = {utf8, NameBin} = Name,
                                      handle = Handle,
                                      role = ?AMQP_ROLE_RECEIVER,
                                      source = Source,
-                                     target = null};
+                                     target = null,
+                                     snd_settle_mode = SndSettleMode,
+                                     rcv_settle_mode = RcvSettleMode};
                               ?AMQP_ROLE_RECEIVER ->
                                   #'v1_0.attach'{
                                      name = Name,
@@ -1169,7 +1173,9 @@ handle_frame(#'v1_0.attach'{name = {utf8, NameBin} = Name,
                                      role = ?AMQP_ROLE_SENDER,
                                      source = null,
                                      target = Target,
-                                     initial_delivery_count = ?UINT(?INITIAL_DELIVERY_COUNT)}
+                                     initial_delivery_count = ?UINT(?INITIAL_DELIVERY_COUNT),
+                                     snd_settle_mode = SndSettleMode,
+                                     rcv_settle_mode = RcvSettleMode}
                           end,
             Detach = #'v1_0.detach'{handle = Handle,
                                     closed = true,
