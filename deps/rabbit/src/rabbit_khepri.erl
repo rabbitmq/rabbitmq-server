@@ -381,7 +381,7 @@ prepare_for_reset() ->
 %% @private
 
 reset() ->
-    khepri_cluster:reset(?RA_CLUSTER_NAME),
+    ok = khepri_cluster:reset(?RA_CLUSTER_NAME),
     ok = khepri:stop(?RA_CLUSTER_NAME),
     ok = ensure_ra_system_stopped(),
     ok.
