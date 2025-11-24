@@ -15,6 +15,7 @@
          init/0,
          can_join_cluster/1,
          join_cluster/2,
+         prepare_for_reset/0,
          reset/0,
          force_reset/0,
          change_cluster_node_type/1,
@@ -212,12 +213,15 @@ join_cluster(DiscoveryNode, NodeType) when is_atom(DiscoveryNode) ->
 %% cluster, has no cluster configuration, no local database, and no
 %% persisted messages
 
--spec reset() -> 'ok'.
-
-reset() ->
+prepare_for_reset() ->
     ?assertNot(rabbit:is_running()),
     stop_mnesia(),
     ensure_mnesia_not_running(),
+    ok.
+
+-spec reset() -> 'ok'.
+
+reset() ->
     reset_gracefully().
 
 -spec force_reset() -> 'ok'.

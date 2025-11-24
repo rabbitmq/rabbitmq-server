@@ -103,6 +103,7 @@
 -export([setup/0,
          setup/1,
          init/1,
+         prepare_for_reset/0,
          reset/0,
 
          dir/0,
@@ -357,6 +358,11 @@ await_replication() ->
        #{domain => ?RMQLOG_DOMAIN_DB}),
     fence(Timeout).
 
+prepare_for_reset() ->
+    ?assertNot(rabbit:is_running()),
+    ok = setup(),
+    ok.
+
 -spec reset() -> ok | no_return().
 %% @doc Reset and stops the local Khepri store.
 %%
@@ -375,11 +381,6 @@ await_replication() ->
 %% @private
 
 reset() ->
-    ?assertNot(rabbit:is_running()),
-
-    ok = setup(),
-    ThisNode = node(),
-    rabbit_db_cluster:forget_member(ThisNode, false),
     khepri_cluster:reset(?RA_CLUSTER_NAME),
     ok = khepri:stop(?RA_CLUSTER_NAME),
     ok = ensure_ra_system_stopped(),

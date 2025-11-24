@@ -133,18 +133,37 @@ reset() ->
         true  -> ok = rabbit:stop();
         false -> ok
     end,
+    UseKhepri = rabbit_khepri:is_enabled(),
     ?assertEqual(undefined, erlang:whereis(rabbit_ff_controller)),
-    ok = case rabbit_khepri:is_enabled() of
+    ok = case UseKhepri of
+             true  -> prepare_for_reset_using_khepri();
+             false -> prepare_for_reset_using_mnesia()
+         end,
+    ThisNode = node(),
+    ok = rabbit_db_cluster:forget_member(ThisNode, false),
+    ok = case UseKhepri of
              true  -> reset_using_khepri();
              false -> reset_using_mnesia()
          end,
     post_reset().
+
+prepare_for_reset_using_mnesia() ->
+    ?LOG_INFO(
+      "DB: preparing for reset node (using Mnesia)",
+      #{domain => ?RMQLOG_DOMAIN_DB}),
+    rabbit_mnesia:prepare_for_reset().
 
 reset_using_mnesia() ->
     ?LOG_INFO(
       "DB: resetting node (using Mnesia)",
       #{domain => ?RMQLOG_DOMAIN_DB}),
     rabbit_mnesia:reset().
+
+prepare_for_reset_using_khepri() ->
+    ?LOG_DEBUG(
+      "DB: preparing for reset node (using Khepri)",
+      #{domain => ?RMQLOG_DOMAIN_DB}),
+    rabbit_khepri:prepare_for_reset().
 
 reset_using_khepri() ->
     ?LOG_DEBUG(
