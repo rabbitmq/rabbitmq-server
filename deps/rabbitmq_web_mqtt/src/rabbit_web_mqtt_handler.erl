@@ -75,11 +75,11 @@ init(Req, Opts) ->
         undefined ->
             no_supported_sub_protocol(undefined, Req);
         Protocol ->
-            case lists:member(<<"mqtt">>, Protocol) of
+            case lists:search(fun(P) -> P =:= <<"mqtt">> orelse P =:= <<"mqttv3.1">> end, Protocol) of
                 false ->
                     no_supported_sub_protocol(Protocol, Req);
-                true ->
-                    Req1 = cowboy_req:set_resp_header(<<"sec-websocket-protocol">>, <<"mqtt">>, Req),
+                {value, MatchedProtocol} ->
+                    Req1 = cowboy_req:set_resp_header(<<"sec-websocket-protocol">>, MatchedProtocol, Req),
                     State = #state{socket = maps:get(proxy_header, Req, undefined),
                                    stats_timer = rabbit_event:init_stats_timer()},
                     WsOpts0 = proplists:get_value(ws_opts, Opts, #{}),
