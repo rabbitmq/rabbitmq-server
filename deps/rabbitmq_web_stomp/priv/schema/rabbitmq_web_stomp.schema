@@ -191,7 +191,7 @@ end}.
     [{datatype, {enum, [true, false]}}]}.
 
 %%
-%% File Handle Cache
+%% File Handle Cache (no-op, kept for compatibility).
 %%
 
 {mapping, "web_stomp.use_file_handle_cache", "rabbitmq_web_stomp.use_file_handle_cache",

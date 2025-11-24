@@ -32,7 +32,6 @@ defmodule JSONFormattingTest do
     {:ok, doc} = JSON.decode(output)
 
     assert Map.has_key?(doc, "memory")
-    assert Map.has_key?(doc, "file_descriptors")
     assert Map.has_key?(doc, "listeners")
     assert Map.has_key?(doc, "processes")
     assert Map.has_key?(doc, "os")

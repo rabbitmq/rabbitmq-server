@@ -344,7 +344,7 @@ format_mochiweb_option(_K, V) ->
 
 init([]) ->
     {ok, Interval}   = application:get_env(rabbit, collect_statistics_interval),
-    State = #state{fd_total    = file_handle_cache:ulimit(),
+    State = #state{fd_total    = rabbit_runtime:ulimit(),
                    fhc_stats   = get_fhc_stats(),
                    node_owners = sets:new(),
                    interval    = Interval},
@@ -370,8 +370,7 @@ code_change(_, State, _) -> {ok, State}.
 
 %%--------------------------------------------------------------------
 
-emit_update(State0) ->
-    State1 = update_state(State0),
+emit_update(State1) ->
     {State2, MStats} = infos(?METRICS_KEYS, [], State1),
     {State3, PStats} = infos(?PERSISTER_KEYS, [], State2),
     {State4, OStats} = infos(?OTHER_KEYS, [], State3),
@@ -398,12 +397,6 @@ emit_node_node_stats(State = #state{node_owners = Owners}) ->
            node_node_stats, [{route, {node(), Node}} | Stats])
      end || {Node, _Owner, Stats} <- Links],
     State#state{node_owners = NewOwners}.
-
-update_state(State0) ->
-    %% Store raw data, the average operation time is calculated during querying
-    %% from the accumulated total
-    FHC = get_fhc_stats(),
-    State0#state{fhc_stats = FHC}.
 
 %% @todo All these stats are zeroes. Remove eventually.
 get_fhc_stats() ->

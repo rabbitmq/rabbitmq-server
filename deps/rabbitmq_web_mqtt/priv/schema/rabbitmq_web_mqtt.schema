@@ -183,7 +183,7 @@ end}.
     [{datatype, {enum, [true, false]}}]}.
 
 %%
-%% File Handle Cache
+%% File Handle Cache (no-op, kept for compatibility).
 %%
 
 {mapping, "web_mqtt.use_file_handle_cache", "rabbitmq_web_mqtt.use_file_handle_cache",

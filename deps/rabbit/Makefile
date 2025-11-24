@@ -28,9 +28,6 @@ define PROJECT_ENV
 	    {heartbeat, 60},
 	    {msg_store_file_size_limit, 16777216},
 	    {msg_store_shutdown_timeout, 600000},
-	    {fhc_write_buffering, true},
-	    {fhc_read_buffering, false},
-	    {queue_index_max_journal_entries, 32768},
 	    {queue_index_embed_msgs_below, 4096},
 	    {default_user, <<"guest">>},
 	    {default_pass, <<"guest">>},
@@ -269,7 +266,7 @@ PARALLEL_CT_SET_1_D = amqqueue_backward_compatibility channel_interceptor channe
 
 PARALLEL_CT_SET_2_A = cluster confirms_rejects consumer_timeout rabbit_access_control rabbit_confirms rabbit_core_metrics_gc rabbit_cuttlefish rabbit_db_binding rabbit_db_exchange
 PARALLEL_CT_SET_2_B = crashing_queues deprecated_features direct_exchange_routing_v2 disconnect_detected_during_alarm exchanges unit_gen_server2
-PARALLEL_CT_SET_2_C = disk_monitor dynamic_qq unit_disk_monitor unit_file_handle_cache unit_log_management unit_operator_policy prevent_startup_if_node_was_reset
+PARALLEL_CT_SET_2_C = disk_monitor dynamic_qq unit_disk_monitor unit_log_management unit_operator_policy prevent_startup_if_node_was_reset
 PARALLEL_CT_SET_2_D = queue_length_limits queue_parallel quorum_queue_member_reconciliation rabbit_fifo rabbit_fifo_dlx rabbit_stream_coordinator
 
 PARALLEL_CT_SET_3_A = definition_import per_user_connection_channel_limit_partitions per_vhost_connection_limit_partitions policy priority_queue_recovery rabbit_fifo_v0 rabbit_stream_sac_coordinator_v4 rabbit_stream_sac_coordinator unit_credit_flow unit_queue_consumers unit_queue_location unit_quorum_queue
