@@ -44,7 +44,7 @@ DOCKER_COMPOSE_FILES := $(wildcard docker/docker-compose-*.yml)
 .PHONY: $(DOCKER_COMPOSE_FILES)
 $(DOCKER_COMPOSE_FILES):
 	@cd docker && \
-	docker-compose --file $(@F) $(RUN) ; \
+	docker compose --file $(@F) $(RUN) ; \
 	true
 .PHONY: down
 down: RUN = down
@@ -53,7 +53,7 @@ down: $(DOCKER_COMPOSE_FILES) # Stop all containers
 # Defined as explicit, individual targets so that autocompletion works
 define DOCKER_COMPOSE_UP
 cd docker && \
-docker-compose --file docker-compose-$(@F).yml up --detach
+docker compose --file docker-compose-$(@F).yml up --detach
 endef
 .PHONY: metrics
 metrics: # Run all metrics containers: Grafana, Prometheus & friends

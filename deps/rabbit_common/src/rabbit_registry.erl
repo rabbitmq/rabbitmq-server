@@ -189,8 +189,18 @@ class_module(queue_decorator)     -> rabbit_queue_decorator;
 class_module(policy_validator)    -> rabbit_policy_validator;
 class_module(operator_policy_validator) -> rabbit_policy_validator;
 class_module(policy_merge_strategy)     -> rabbit_policy_merge_strategy;
-class_module(ha_mode)                   -> rabbit_mirror_queue_mode;
-class_module(channel_interceptor)       -> rabbit_channel_interceptor.
+class_module(channel_interceptor)       -> rabbit_channel_interceptor;
+class_module(Other) ->
+    AttrsPerApp = rabbit_misc:rabbitmq_related_module_attributes(rabbit_registry_class),
+    find_class_module(Other, AttrsPerApp).
+
+find_class_module(Class, [{_, Module, List} | Rest]) ->
+    case lists:member(Class, List) of
+        true -> Module;
+        false -> find_class_module(Class, Rest)
+    end;
+find_class_module(Class, []) ->
+    throw({invalid_class, Class}).
 
 %%---------------------------------------------------------------------------
 

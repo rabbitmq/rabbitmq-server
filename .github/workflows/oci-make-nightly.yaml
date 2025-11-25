@@ -17,6 +17,7 @@ concurrency:
 jobs:
   build-package-generic-unix:
     strategy:
+      fail-fast: false
       matrix:
         otp_version:
           - '27'
@@ -24,7 +25,6 @@ jobs:
           - main
           - v4.2.x
           - v4.1.x
-          - v4.0.x
         include:
           - branch: main
             project_version: 4.3.0
@@ -32,7 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           ref: ${{ matrix.branch }}
           fetch-tags: true
@@ -66,7 +66,7 @@ jobs:
           make package-generic-unix PROJECT_VERSION=${{ matrix.project_version || steps.tag.outputs.project_version }}+${{ steps.sha.outputs.current_sha }}
 
       - name: Upload package-generic-unix
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: package-generic-unix-otp${{ matrix.otp_version }}-${{ matrix.branch }}
           path: PACKAGES/rabbitmq-server-*.tar.xz
@@ -81,13 +81,12 @@ jobs:
           - main
           - v4.2.x
           - v4.1.x
-          - v4.0.x
 
     needs: build-package-generic-unix
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           ref: ${{ matrix.branch }}
 
@@ -99,7 +98,7 @@ jobs:
           printf "current_sha=%s\n" "$sha" | tee -a "$GITHUB_OUTPUT"
 
       - name: Download package-generic-unix
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v6
         with:
           name: package-generic-unix-otp${{ matrix.otp_version }}-${{ matrix.branch }}
           path: PACKAGES

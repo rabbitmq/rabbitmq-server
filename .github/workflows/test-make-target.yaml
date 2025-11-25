@@ -17,7 +17,6 @@ on:
         type: boolean
       previous_version:
         required: false
-        default: 'tags/v4.0.9'
         type: string
       make_target:
         required: true
@@ -40,7 +39,7 @@ jobs:
     timeout-minutes: 60
     steps:
     - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v5
+      uses: actions/checkout@v6
       with:
         ref: ${{ inputs.ref }}
 
@@ -66,7 +65,7 @@ jobs:
 
     # We install Erlang problem matchers from ci.erlang.mk.
     - name: CHECKOUT ERLANG PROBLEM MATCHERS
-      uses: actions/checkout@v5
+      uses: actions/checkout@v6
       with:
         repository: ninenines/ci.erlang.mk
         path: ci.erlang.mk
@@ -159,7 +158,7 @@ jobs:
 
     - name: UPLOAD TEST LOGS
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: CT logs (${{ inputs.plugin }} ${{ inputs.make_target }} OTP-${{ inputs.erlang_version }} ${{ inputs.metadata_store }}${{ inputs.mixed_clusters && ' mixed' || '' }})
         path: |

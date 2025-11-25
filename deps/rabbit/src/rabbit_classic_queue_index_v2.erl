@@ -7,25 +7,18 @@
 
 -module(rabbit_classic_queue_index_v2).
 
--export([erase/1, init/3, reset_state/1, recover/7,
+-export([erase/1, init/1, reset_state/1, recover/4,
+         bounds/2, tune_read/2, info/1,
          terminate/3, delete_and_terminate/1,
-         info/1, publish/7, publish/8, ack/2, read/3]).
+         publish/7, ack/2, read/3,
+         sync/1, needs_sync/1]).
 
 %% Recovery. Unlike other functions in this module, these
 %% apply to all queues all at once.
 -export([start/2, stop/1]).
 
-%% rabbit_queue_index/rabbit_variable_queue-specific functions.
-%% Implementation details from the queue index leaking into the
-%% queue implementation itself.
--export([pre_publish/7, flush_pre_publish_cache/2,
-         sync/1, needs_sync/1, flush/1,
-         bounds/2, next_segment_boundary/1]).
-
-%% Used to upgrade/downgrade from/to the v1 index.
--export([init_for_conversion/3]).
--export([init_args/1]).
--export([delete_segment_file_for_seq_id/2]).
+%% Called by rabbit_vhost.
+-export([all_queue_directory_names/1]).
 
 %% Shared with rabbit_classic_queue_store_v2.
 -export([queue_dir/2]).
@@ -146,23 +139,11 @@
 
     %% File descriptors. We will keep up to 4 FDs
     %% at a time. See comments in reduce_fd_usage/2.
-    fds = #{} :: #{non_neg_integer() => file:fd()},
-
-    %% This fun must be called when messages that expect
-    %% confirms have either an ack or their entry
-    %% written to disk and file:sync/1 has been called.
-    on_sync :: on_sync_fun(),
-
-    %% This fun is never called. It is kept so that we
-    %% can downgrade the queue back to v1.
-    on_sync_msg :: fun()
+    fds = #{} :: #{non_neg_integer() => file:fd()}
 }).
 
 -type state() :: #qi{}.
 
-%% Types copied from rabbit_queue_index.
-
--type on_sync_fun() :: fun ((sets:set()) -> ok).
 -type contains_predicate() :: fun ((rabbit_types:msg_id()) -> boolean()).
 -type shutdown_terms() :: list() | 'non_clean_shutdown'.
 
@@ -176,37 +157,21 @@ erase(#resource{ virtual_host = VHost } = Name) ->
     Dir = queue_dir(VHostDir, Name),
     erase_index_dir(Dir).
 
--spec init(rabbit_amqqueue:name(),
-                 on_sync_fun(), on_sync_fun()) -> state().
+-spec init(rabbit_amqqueue:name()) -> state().
 
-%% We do not embed messages and as a result never need the OnSyncMsgFun.
-
-init(#resource{ virtual_host = VHost } = Name, OnSyncFun, OnSyncMsgFun) ->
-    ?DEBUG("~0p ~0p ~0p", [Name, OnSyncFun, OnSyncMsgFun]),
+init(#resource{ virtual_host = VHost } = Name) ->
+    ?DEBUG("~0p", [Name]),
     VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
     Dir = queue_dir(VHostDir, Name),
     false = rabbit_file:is_file(Dir), %% is_file == is file or dir
-    init1(Name, Dir, OnSyncFun, OnSyncMsgFun).
+    init1(Name, Dir).
 
-init_args(#qi{ queue_name  = QueueName,
-               on_sync     = OnSyncFun,
-               on_sync_msg = OnSyncMsgFun }) ->
-    {QueueName, OnSyncFun, OnSyncMsgFun}.
-
-init_for_conversion(#resource{ virtual_host = VHost } = Name, OnSyncFun, OnSyncMsgFun) ->
-    ?DEBUG("~0p ~0p ~0p", [Name, OnSyncFun, OnSyncMsgFun]),
-    VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
-    Dir = queue_dir(VHostDir, Name),
-    init1(Name, Dir, OnSyncFun, OnSyncMsgFun).
-
-init1(Name, Dir, OnSyncFun, OnSyncMsgFun) ->
+init1(Name, Dir) ->
     ensure_queue_name_stub_file(Name, Dir),
     DirBin = rabbit_file:filename_to_binary(Dir),
     #qi{
         queue_name = Name,
-        dir = << DirBin/binary, "/" >>,
-        on_sync = OnSyncFun,
-        on_sync_msg = OnSyncMsgFun
+        dir = << DirBin/binary, "/" >>
     }.
 
 ensure_queue_name_stub_file(#resource{virtual_host = VHost, name = QName}, Dir) ->
@@ -218,17 +183,13 @@ ensure_queue_name_stub_file(#resource{virtual_host = VHost, name = QName}, Dir) 
 -spec reset_state(State) -> State when State::state().
 
 reset_state(State = #qi{ queue_name     = Name,
-                         dir            = Dir,
-                         on_sync        = OnSyncFun,
-                         on_sync_msg    = OnSyncMsgFun }) ->
+                         dir            = Dir }) ->
     ?DEBUG("~0p", [State]),
     _ = delete_and_terminate(State),
-    init1(Name, rabbit_file:binary_to_filename(Dir), OnSyncFun, OnSyncMsgFun).
+    init1(Name, rabbit_file:binary_to_filename(Dir)).
 
 -spec recover(rabbit_amqqueue:name(), shutdown_terms(), boolean(),
-                    contains_predicate(),
-                    on_sync_fun(), on_sync_fun(),
-                    main | convert) ->
+                    contains_predicate()) ->
                         {'undefined' | non_neg_integer(),
                          'undefined' | non_neg_integer(), state()}.
 
@@ -241,12 +202,11 @@ reset_state(State = #qi{ queue_name     = Name,
 -define(RECOVER_COUNTER_SIZE, 6).
 
 recover(#resource{ virtual_host = VHost, name = QueueName } = Name, Terms,
-        IsMsgStoreClean, ContainsCheckFun, OnSyncFun, OnSyncMsgFun, Context) ->
-    ?DEBUG("~0p ~0p ~0p ~0p ~0p ~0p", [Name, Terms, IsMsgStoreClean,
-                                       ContainsCheckFun, OnSyncFun, OnSyncMsgFun]),
+        IsMsgStoreClean, ContainsCheckFun) ->
+    ?DEBUG("~0p ~0p ~0p ~0p", [Name, Terms, IsMsgStoreClean, ContainsCheckFun]),
     VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
     Dir = queue_dir(VHostDir, Name),
-    State0 = init1(Name, Dir, OnSyncFun, OnSyncMsgFun),
+    State0 = init1(Name, Dir),
     %% We go over all segments if either the index or the
     %% message store has/had to recover. Otherwise we just
     %% take our state from Terms.
@@ -254,10 +214,6 @@ recover(#resource{ virtual_host = VHost, name = QueueName } = Name, Terms,
     case IsIndexClean andalso IsMsgStoreClean of
         true ->
             State = case proplists:get_value(v2_index_state, Terms, undefined) of
-                %% We are recovering a queue that was using the v1 index.
-                undefined when Context =:= main ->
-                    recover_index_v1_clean(State0, Terms, IsMsgStoreClean,
-                                           ContainsCheckFun, OnSyncFun, OnSyncMsgFun);
                 {?VERSION, Segments} ->
                     State0#qi{ segments = Segments }
             end,
@@ -268,9 +224,7 @@ recover(#resource{ virtual_host = VHost, name = QueueName } = Name, Terms,
              State};
         false ->
             CountersRef = counters:new(?RECOVER_COUNTER_SIZE, []),
-            State = recover_segments(State0, Terms, IsMsgStoreClean,
-                                     ContainsCheckFun, OnSyncFun, OnSyncMsgFun,
-                                     CountersRef, Context),
+            State = recover_segments(State0, ContainsCheckFun, CountersRef),
             ?LOG_WARNING("Queue ~ts in vhost ~ts dropped ~b/~b/~b persistent messages "
                                "and ~b transient messages after unclean shutdown",
                                [QueueName, VHost,
@@ -283,11 +237,11 @@ recover(#resource{ virtual_host = VHost, name = QueueName } = Name, Terms,
              State}
     end.
 
-recover_segments(State0 = #qi { queue_name = Name, dir = DirBin }, Terms, IsMsgStoreClean,
-                 ContainsCheckFun, OnSyncFun, OnSyncMsgFun, CountersRef, Context) ->
+recover_segments(State0 = #qi { queue_name = Name, dir = DirBin },
+                 ContainsCheckFun, CountersRef) ->
     Dir = rabbit_file:binary_to_filename(DirBin),
     SegmentFiles = rabbit_file:wildcard(".*\\" ++ ?SEGMENT_EXTENSION, Dir),
-    State = case SegmentFiles of
+    case SegmentFiles of
         %% No segments found.
         [] ->
             State0;
@@ -298,26 +252,9 @@ recover_segments(State0 = #qi { queue_name = Name, dir = DirBin }, Terms, IsMsgS
             || F <- SegmentFiles]),
             %% We use a temporary store state to check that messages do exist.
             StoreState0 = rabbit_classic_queue_store_v2:init(Name),
-            {State1, StoreState} = recover_segments(State0, ContainsCheckFun, StoreState0, CountersRef, Segments),
+            {State, StoreState} = recover_segments(State0, ContainsCheckFun, StoreState0, CountersRef, Segments),
             _ = rabbit_classic_queue_store_v2:terminate(StoreState),
-            State1
-    end,
-    case Context of
-        convert ->
-            State;
-        main ->
-            %% We try to see if there are segment files from the v1 index.
-            case rabbit_file:wildcard(".*\\.idx", Dir) of
-                %% We are recovering a dirty queue that was using the v1 index or in
-                %% the process of converting from v1 to v2.
-                [_|_] ->
-                    recover_index_v1_dirty(State, Terms, IsMsgStoreClean,
-                                           ContainsCheckFun, OnSyncFun, OnSyncMsgFun,
-                                           CountersRef);
-                %% Otherwise keep default values.
-                [] ->
-                    State
-            end
+            State
     end.
 
 recover_segments(State, _, StoreState, _, []) ->
@@ -449,89 +386,6 @@ recover_segment(State, ContainsCheckFun, StoreState0, CountersRef, Fd,
                             Unacked - (SegmentEntryCount - ThisEntry), LocBytes0)
     end.
 
-recover_index_v1_clean(State0 = #qi{ queue_name = Name }, Terms, IsMsgStoreClean,
-                       ContainsCheckFun, OnSyncFun, OnSyncMsgFun) ->
-    #resource{virtual_host = VHost, name = QName} = Name,
-    ?LOG_INFO("Converting queue ~ts in vhost ~ts from v1 to v2 after clean shutdown", [QName, VHost]),
-    {_, _, V1State} = rabbit_queue_index:recover(Name, Terms, IsMsgStoreClean,
-                                                 ContainsCheckFun, OnSyncFun, OnSyncMsgFun,
-                                                 convert),
-    %% We will ignore the counter results because on clean shutdown
-    %% we do not need to calculate the values again. This lets us
-    %% share code with dirty recovery.
-    CountersRef = counters:new(?RECOVER_COUNTER_SIZE, []),
-    State = recover_index_v1_common(State0, V1State, CountersRef),
-    ?LOG_INFO("Queue ~ts in vhost ~ts converted ~b total messages from v1 to v2",
-              [QName, VHost, counters:get(CountersRef, ?RECOVER_COUNT)]),
-    State.
-
-recover_index_v1_dirty(State0 = #qi{ queue_name = Name }, Terms, IsMsgStoreClean,
-                       ContainsCheckFun, OnSyncFun, OnSyncMsgFun,
-                       CountersRef) ->
-    #resource{virtual_host = VHost, name = QName} = Name,
-    ?LOG_INFO("Converting queue ~ts in vhost ~ts from v1 to v2 after unclean shutdown", [QName, VHost]),
-    %% We ignore the count and bytes returned here because we cannot trust
-    %% rabbit_queue_index: it has a bug that may lead to more bytes being
-    %% returned than it really has.
-    %%
-    %% On top of that some messages may also be in both the v1 and v2 indexes
-    %% after a crash.
-    {_, _, V1State} = rabbit_queue_index:recover(Name, Terms, IsMsgStoreClean,
-                                                 ContainsCheckFun, OnSyncFun, OnSyncMsgFun,
-                                                 convert),
-    State = recover_index_v1_common(State0, V1State, CountersRef),
-    ?LOG_INFO("Queue ~ts in vhost ~ts converted ~b total messages from v1 to v2",
-              [QName, VHost, counters:get(CountersRef, ?RECOVER_COUNT)]),
-    State.
-
-%% At this point all messages are persistent because transient messages
-%% were dropped during the v1 index recovery.
-recover_index_v1_common(State0 = #qi{ queue_name = Name, dir = DirBin },
-                        V1State, CountersRef) ->
-    Dir = rabbit_file:binary_to_filename(DirBin),
-    %% Use a temporary per-queue store state to store embedded messages.
-    StoreState0 = rabbit_classic_queue_store_v2:init(Name),
-    %% Go through the v1 index and publish messages to the v2 index.
-    {LoSeqId, HiSeqId, _} = rabbit_queue_index:bounds(V1State),
-    %% When resuming after a crash we need to double check the messages that are both
-    %% in the v1 and v2 index (effectively the messages below the upper bound of the
-    %% v2 index that are about to be written to it).
-    {_, V2HiSeqId, _} = bounds(State0, undefined),
-    SkipFun = fun
-        (SeqId, FunState0) when SeqId < V2HiSeqId ->
-            case read(SeqId, SeqId + 1, FunState0) of
-                %% Message already exists, skip.
-                {[_], FunState} ->
-                    {skip, FunState};
-                %% Message doesn't exist, write.
-                {[], FunState} ->
-                    {write, FunState}
-            end;
-        %% Message is out of bounds of the v1 index.
-        (_, FunState) ->
-            {write, FunState}
-    end,
-    %% We use a common function also used with conversion on policy change.
-    {State1, StoreState} = rabbit_variable_queue:convert_from_v1_to_v2_loop(Name, V1State, State0, StoreState0,
-                                                                            {CountersRef, ?RECOVER_COUNT, ?RECOVER_BYTES},
-                                                                            LoSeqId, HiSeqId, SkipFun),
-    %% Terminate the v2 store client.
-    _ = rabbit_classic_queue_store_v2:terminate(StoreState),
-    %% Close the v1 index journal handle if any.
-    JournalHdl = element(4, V1State),
-    ok = case JournalHdl of
-        undefined -> ok;
-        _         -> file_handle_cache:close(JournalHdl)
-    end,
-    %% Delete the v1 index files.
-    OldFiles = ["journal.jif"|rabbit_file:wildcard(".*\\.idx", Dir)],
-    _ = [rabbit_file:delete(filename:join(Dir, F)) || F <- OldFiles],
-    %% Ensure that everything in the v2 index is written to disk.
-    State = flush(State1),
-    %% Clean up all the garbage that we have surely been creating.
-    garbage_collect(),
-    State.
-
 -spec terminate(rabbit_types:vhost(), [any()], State) -> State when State::state().
 
 terminate(VHost, Terms, State0 = #qi { dir = Dir,
@@ -577,17 +431,14 @@ info(#qi{ write_buffer = WriteBuffer, write_buffer_updates = NumUpdates }) ->
 -spec publish(rabbit_types:msg_id(), rabbit_variable_queue:seq_id(),
               rabbit_variable_queue:msg_location(),
               rabbit_types:message_properties(), boolean(),
-              non_neg_integer() | infinity, State) -> State when State::state().
-
-publish(MsgId, SeqId, Location, Props, IsPersistent, TargetRamCount, State) ->
-    publish(MsgId, SeqId, Location, Props, IsPersistent, true, TargetRamCount, State).
+              boolean(), State) -> State when State::state().
 
 %% Because we always persist to the msg_store, the Msg(Or)Id argument
 %% here is always a binary, never a record.
-publish(MsgId, SeqId, Location, Props, IsPersistent, ShouldConfirm, TargetRamCount,
+publish(MsgId, SeqId, Location, Props, IsPersistent, ShouldConfirm,
         State0 = #qi { write_buffer = WriteBuffer0,
                        segments = Segments }) ->
-    ?DEBUG("~0p ~0p ~0p ~0p ~0p ~0p ~0p", [MsgId, SeqId, Location, Props, IsPersistent, TargetRamCount, State0]),
+    ?DEBUG("~0p ~0p ~0p ~0p ~0p ~0p", [MsgId, SeqId, Location, Props, IsPersistent, State0]),
     %% Add the entry to the write buffer.
     WriteBuffer = WriteBuffer0#{SeqId => {MsgId, SeqId, Location, Props, IsPersistent}},
     State1 = State0#qi{ write_buffer = WriteBuffer },
@@ -906,10 +757,11 @@ ack_delete_fold_fun(SeqId, Write, {Buffer, Updates, Deletes, SegmentEntryCount})
              Deletes, SegmentEntryCount}
     end.
 
-%% A better interface for read/3 would be to request a maximum
-%% of N messages, rather than first call next_segment_boundary/3
-%% and then read from S1 to S2. This function could then return
-%% either N messages or less depending on the current state.
+%% Before calling read/3 it is recommended to call tune_read/2
+%% so that the index can inform the queue how to most efficiently
+%% read messages, as the index has knowledge of segment boundaries
+%% and can decide whether it is worth it to read from one or two
+%% segments at a time.
 
 -spec read(rabbit_variable_queue:seq_id(),
            rabbit_variable_queue:seq_id(),
@@ -1054,22 +906,14 @@ parse_entries(<< Status:8,
 
 %% ----
 %%
-%% Syncing and flushing to disk requested by the queue.
-%% Note: the v2 no longer calls fsync, it only flushes.
+%% Flushing to disk requested by the queue.
 
--spec sync(State) -> State when State::state().
+-spec sync(State) -> {sets:set(), State} when State::state().
 
-sync(State0 = #qi{ confirms = Confirms,
-                   on_sync = OnSyncFun }) ->
+sync(State0 = #qi{ confirms = Confirms }) ->
     ?DEBUG("~0p", [State0]),
     State = flush_buffer(State0, full, segment_entry_count()),
-    _ = case sets:is_empty(Confirms) of
-        true ->
-            ok;
-        false ->
-            OnSyncFun(Confirms)
-    end,
-    State#qi{ confirms = sets:new([{version,2}]) }.
+    {Confirms, State#qi{ confirms = sets:new([{version,2}]) }}.
 
 -spec needs_sync(state()) -> 'false' | 'confirms'.
 
@@ -1080,26 +924,48 @@ needs_sync(State = #qi{ confirms = Confirms }) ->
         false -> confirms
     end.
 
--spec flush(State) -> State when State::state().
-
-flush(State) ->
-    ?DEBUG("~0p", [State]),
-    %% Flushing to disk is the same operation as sync
-    %% except it is called before hibernating or when
-    %% reducing memory use.
-    sync(State).
-
 %% ----
-%%
-%% Defer to rabbit_queue_index for recovery for the time being.
-%% We can move the functions here when the v1 index is removed.
+
+-type walker(A) :: fun ((A) -> 'finished' |
+                               {rabbit_types:msg_id(), non_neg_integer(), A}).
+
+-spec start(rabbit_types:vhost(), [rabbit_amqqueue:name()]) -> {[[any()]], {walker(A), A}}.
 
 start(VHost, DurableQueueNames) ->
     ?DEBUG("~0p ~0p", [VHost, DurableQueueNames]),
-    %% We replace the queue_index_walker function with our own.
-    %% Everything else remains the same.
-    {OrderedTerms, {_QueueIndexWalkerFun, FunState}} = rabbit_queue_index:start(VHost, DurableQueueNames),
-    {OrderedTerms, {fun queue_index_walker/1, FunState}}.
+    {ok, RecoveryTermsPid} = rabbit_recovery_terms:start(VHost),
+    rabbit_vhost_sup_sup:save_vhost_recovery_terms(VHost, RecoveryTermsPid),
+    {DurableTerms, DurableDirectories} =
+        lists:foldl(
+          fun(QName, {RecoveryTerms, ValidDirectories}) ->
+                  DirName = queue_name_to_dir_name(QName),
+                  RecoveryInfo = case rabbit_recovery_terms:read(VHost, DirName) of
+                                     {error, _}  -> non_clean_shutdown;
+                                     {ok, Terms} -> Terms
+                                 end,
+                  {[RecoveryInfo | RecoveryTerms],
+                   sets:add_element(DirName, ValidDirectories)}
+          end, {[], sets:new()}, DurableQueueNames),
+    %% Any queue directory we've not been asked to recover is considered garbage
+    ToDelete = [filename:join([rabbit_vhost:msg_store_dir_path(VHost), "queues", Dir])
+                || Dir <- lists:subtract(all_queue_directory_names(VHost),
+                                         sets:to_list(DurableDirectories))],
+    ?LOG_DEBUG("Deleting unknown files/folders: ~p", [ToDelete]),
+    _ = rabbit_file:recursive_delete(ToDelete),
+    rabbit_recovery_terms:clear(VHost),
+    %% The backing queue interface requires that the queue recovery terms
+    %% which come back from start/1 are in the same order as DurableQueueNames
+    OrderedTerms = lists:reverse(DurableTerms),
+    {OrderedTerms, {fun queue_index_walker/1, {start, DurableQueueNames}}}.
+
+all_queue_directory_names(VHost) ->
+    VHostQueuesPath = filename:join([rabbit_vhost:msg_store_dir_path(VHost), "queues"]),
+    case filelib:is_dir(VHostQueuesPath) of
+        true  ->
+                    {ok, Dirs} = file:list_dir(VHostQueuesPath),
+                    Dirs;
+        false -> []
+    end.
 
 queue_index_walker({start, DurableQueues}) when is_list(DurableQueues) ->
     ?DEBUG("~0p", [{start, DurableQueues}]),
@@ -1120,9 +986,6 @@ queue_index_walker({next, Gatherer}) when is_pid(Gatherer) ->
         empty ->
             ok = gatherer:stop(Gatherer),
             finished;
-        %% From v1 index walker. @todo Remove when no longer possible to convert from v1.
-        {value, {MsgId, Count}} ->
-            {MsgId, Count, {next, Gatherer}};
         {value, MsgIds} ->
             {MsgIds, {next, Gatherer}}
     end.
@@ -1133,16 +996,7 @@ queue_index_walker_reader(#resource{ virtual_host = VHost } = Name, Gatherer) ->
     Dir = queue_dir(VHostDir, Name),
     SegmentFiles = rabbit_file:wildcard(".*\\" ++ ?SEGMENT_EXTENSION, Dir),
     _ = [queue_index_walker_segment(filename:join(Dir, F), Gatherer) || F <- SegmentFiles],
-    %% When there are files belonging to the v1 index, we go through
-    %% the v1 index walker function as well.
-    case rabbit_file:wildcard(".*\\.(idx|jif)", Dir) of
-        [_|_] ->
-            %% This function will call gatherer:finish/1, we do not
-            %% need to call it here.
-            rabbit_queue_index:queue_index_walker_reader(Name, Gatherer);
-        [] ->
-            ok = gatherer:finish(Gatherer)
-    end.
+    ok = gatherer:finish(Gatherer).
 
 queue_index_walker_segment(F, Gatherer) ->
     ?DEBUG("~0p ~0p", [F, Gatherer]),
@@ -1180,27 +1034,11 @@ queue_index_walker_segment(Fd, Gatherer, N, Total, Acc) ->
 
 stop(VHost) ->
     ?DEBUG("~0p", [VHost]),
-    rabbit_queue_index:stop(VHost).
+    rabbit_recovery_terms:stop(VHost).
 
 %% ----
 %%
-%% These functions either call the normal functions or are no-ops.
-%% They relate to specific optimizations of rabbit_queue_index and
-%% rabbit_variable_queue.
-%%
-%% @todo The way pre_publish works is still fairly puzzling.
-%%       When the v1 index gets removed we can just drop
-%%       these functions.
-
-pre_publish(MsgOrId, SeqId, Location, Props, IsPersistent, TargetRamCount, State) ->
-    ?DEBUG("~0p ~0p ~0p ~0p ~0p ~0p ~0p", [MsgOrId, SeqId, Location, Props, IsPersistent, TargetRamCount, State]),
-    publish(MsgOrId, SeqId, Location, Props, IsPersistent, false, TargetRamCount, State).
-
-flush_pre_publish_cache(TargetRamCount, State) ->
-    ?DEBUG("~0p ~0p", [TargetRamCount, State]),
-    State.
-
-%% See comment in rabbit_queue_index:bounds/1. We do not need to be
+%% Technical leftover from CQv1. We do not need to be
 %% accurate about these values because they are simply used as lowest
 %% and highest possible bounds. In fact we HAVE to be inaccurate for
 %% the test suite to pass. This can probably be made more accurate
@@ -1227,24 +1065,64 @@ bounds(State = #qi{ segments = Segments }, NextSeqIdHint) ->
              State}
     end.
 
+%% We tune the read request so that we only cross over segment
+%% boundaries when it makes sense. We compute a threshold
+%% based on the number of messages requested, and look whether
+%% the number of messages to be read from the next segment is
+%% higher than the threshold, otherwise we stop at the segment
+%% boundary. Similarly, if the number of messages requested
+%% almost reaches the segment boundary, we read a few more
+%% messages up to the segment boundary.
+%%
+%% This is meant to reduce the number of file reads when the
+%% outgoing message rate is moderate, while still sticking to
+%% segment file boundaries when the message rate is maxed.
+
+-spec tune_read(rabbit_variable_queue:seq_id(), rabbit_variable_queue:seq_id())
+    -> rabbit_variable_queue:seq_id().
+
+tune_read(FromSeqId, ToSeqId)
+        when FromSeqId =:= ToSeqId ->
+    %% Nothing will be read as From is inclusive but To is exclusive.
+    ToSeqId;
+tune_read(FromSeqId, ToSeqId) ->
+    %% How much we are reading.
+    ReqCount = ToSeqId - FromSeqId,
+    %% How much remains in the current segment.
+    NextSeqId = next_segment_boundary(FromSeqId),
+    RemCount = NextSeqId - FromSeqId,
+    %% How much we are willing to accept as extra messages to read.
+    Threshold = max(1, ReqCount div 7),
+    if
+        %% There are messages remaining in the segment, and the number
+        %% of messages remaining is less than the threshold: read up
+        %% to the end of the segment (To is exclusive).
+        (RemCount >= ReqCount) andalso (RemCount - ReqCount =< Threshold) ->
+            NextSeqId;
+        %% There are messages remaining in the segment but the number
+        %% of messages remaining is more than we are willing to read:
+        %% only read what was originally requested.
+        (RemCount >= ReqCount) ->
+            ToSeqId;
+        %% We are requested to read past the end of the current segment.
+        %% This would require us to read from two different segments,
+        %% which we only want to do if this involves a good number of
+        %% messages. If this number is below the threshold, we reduce
+        %% the number of messages to read.
+        (ReqCount - RemCount =< Threshold) ->
+            NextSeqId;
+        %% Otherwise we cross over into the next segment, meaning we
+        %% only read what was originally requested.
+        true ->
+            ToSeqId
+    end.
+
 %% The next_segment_boundary/1 function is used internally when
 %% reading. It should not be called from rabbit_variable_queue.
 
--spec next_segment_boundary(SeqId) -> SeqId when SeqId::rabbit_variable_queue:seq_id().
-
 next_segment_boundary(SeqId) ->
-    ?DEBUG("~0p", [SeqId]),
     SegmentEntryCount = segment_entry_count(),
     (1 + (SeqId div SegmentEntryCount)) * SegmentEntryCount.
-
-%% This function is only used when downgrading to the v1 index.
-%% We potentially close the relevant fd and then delete the
-%% segment file.
-delete_segment_file_for_seq_id(SeqId, State0) ->
-    SegmentEntryCount = segment_entry_count(),
-    Segment = SeqId div SegmentEntryCount,
-    State = delete_segment(Segment, State0),
-    {[Segment], State}.
 
 %% ----
 %%

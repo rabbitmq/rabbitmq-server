@@ -277,7 +277,8 @@ setup(_Context) ->
                       {default_ra_system, ?RA_SYSTEM}]}],
            [{persistent, true}]),
     RaServerConfig = #{cluster_name => ?RA_CLUSTER_NAME,
-                       metrics_labels => #{ra_system => ?RA_SYSTEM, module => ?MODULE},
+                       metrics_labels => #{ra_system => ?RA_SYSTEM,
+                                           module => ?MODULE},
                        friendly_name => ?RA_FRIENDLY_NAME},
     case khepri:start(?RA_SYSTEM, RaServerConfig) of
         {ok, ?STORE_ID} ->
@@ -1486,12 +1487,14 @@ register_rabbit_route_by_source_projection() ->
     %% So we exclude such bindings for two reasons:
     %% 1. Lower overall ETS memory usage
     %% 2. "Avoid inserting an extensive amount of objects with the same key.
-    %%    It will hurt insert and lookup performance as well as real time characteristics
-    %%    of the runtime environment (hash bucket linear search do not yield)."
-    %%    Example: same source direct exchange with 100k different binding keys.
-    %% In future, rather than exchange types exclusion as done here, a nicer approach
-    %% would be that each exchange requiring routing lookup by only source exchange
-    %% advertises this access pattern, e.g. as a boolean flag in the #exchange.options field.
+    %%    It will hurt insert and lookup performance as well as real time
+    %%    characteristics of the runtime environment (hash bucket linear
+    %%    search do not yield)." Example: same source direct exchange with
+    %%    100k different binding keys.
+    %% In future, rather than exchange types exclusion as done here, a nicer
+    %% approach would be that each exchange requiring routing lookup by only
+    %% source exchange advertises this access pattern, e.g. as a boolean flag
+    %% in the #exchange.options field.
     Exchange = #if_data_matches{
                   pattern = #exchange{type = '$1', _ = '_'},
                   conditions = [{'andalso',
@@ -1938,8 +1941,10 @@ unload_disabled_plugins(Plugins) ->
                  fun() ->
                          lists:foreach(
                            fun
-                               ({Plugin, true})   -> _ = application:unload(Plugin);
-                               ({_Plugin, false}) -> ok
+                               ({Plugin, true}) ->
+                                   _ = application:unload(Plugin);
+                               ({_Plugin, false}) ->
+                                   ok
                            end, Plugins),
                          Parent ! plugins_unloading
                  end),

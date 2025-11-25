@@ -7,7 +7,9 @@
 
 -module(shovel_test_utils).
 
+-include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("common_test/include/ct.hrl").
+
 -export([set_param/3, set_param/4, set_param/5, set_param_nowait/3,
          await_shovel/2, await_shovel/3, await_shovel/4, await_shovel1/3,
          shovels_from_status/0, shovels_from_status/1,
@@ -24,9 +26,13 @@
          amqp10_expect_count/3, amqp10_expect/3,
          amqp10_publish_expect/5, amqp10_declare_queue/3,
          amqp10_subscribe/2, amqp10_expect/2,
+         amqp10_publish_msg/4,
          await_autodelete/2, await_autodelete1/2,
          invalid_param/2, invalid_param/3,
-         valid_param/2, valid_param/3, valid_param1/3]).
+         valid_param/2, valid_param/3, valid_param1/3,
+         with_amqp091_ch/2, amqp091_publish_expect/5,
+         amqp091_publish/4, amqp091_expect_empty/2,
+         amqp091_expect/3]).
 
 make_uri(Config, Node) ->
     Hostname = ?config(rmq_hostname, Config),
@@ -111,7 +117,7 @@ await_credit(Sender) ->
   receive
     {amqp10_event, {link, Sender, credited}} ->
       ok
-  after 5_000 ->
+  after 15_000 ->
       flush("await_credit timed out"),
       ct:fail(credited_timeout)
   end.
@@ -119,7 +125,7 @@ await_credit(Sender) ->
 await_amqp10_event(On, Ref, Evt) ->
     receive
         {amqp10_event, {On, Ref, Evt}} -> ok
-    after 5_000 ->
+    after 15_000 ->
         exit({amqp10_event_timeout, On, Ref, Evt})
     end.
 
@@ -209,10 +215,13 @@ amqp10_publish(Sender, Tag, Payload) when is_binary(Payload) ->
     Headers = #{durable => true},
     Msg = amqp10_msg:set_headers(Headers,
                                  amqp10_msg:new(Tag, Payload, false)),
+    amqp10_publish_msg(Sender, Tag, Msg).
+
+amqp10_publish_msg(Sender, Tag, Msg) ->
     ok = amqp10_client:send_msg(Sender, Msg),
     receive
         {amqp10_disposition, {accepted, Tag}} -> ok
-    after 3000 ->
+    after 15000 ->
               exit(publish_disposition_not_received)
     end.
 
@@ -229,6 +238,15 @@ amqp10_expect_empty(Session, Dest) ->
             ok
     end,
     amqp10_client:detach_link(Receiver).
+
+amqp10_publish_msg(Session, Address, Tag, Msg) ->
+    LinkName = <<"dynamic-sender-", Address/binary>>,
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, LinkName, Address,
+                                                    unsettled, unsettled_state),
+    ok = await_amqp10_event(link, Sender, attached),
+    ok = await_credit(Sender),
+    amqp10_publish_msg(Sender, Tag, Msg),
+    amqp10_client:detach_link(Sender).
 
 amqp10_publish(Session, Address, Payload, Count) ->
     LinkName = <<"dynamic-sender-", Address/binary>>,
@@ -265,7 +283,7 @@ amqp10_expect(Receiver, N, Acc) ->
     receive
         {amqp10_msg, Receiver, InMsg} ->
             amqp10_expect(Receiver, N - 1, [InMsg | Acc])
-    after 4000 ->
+    after 15000 ->
             throw({timeout_in_expect_waiting_for_delivery, N, Acc})
     end.
 
@@ -273,7 +291,7 @@ amqp10_expect(Receiver) ->
     receive
         {amqp10_msg, Receiver, InMsg} ->
             InMsg
-    after 4000 ->
+    after 15000 ->
             throw(timeout_in_expect_waiting_for_delivery)
     end.
 
@@ -339,3 +357,38 @@ valid_param1(_Config, Value, User) ->
 
 invalid_param(Config, Value) -> invalid_param(Config, Value, none).
 valid_param(Config, Value) -> valid_param(Config, Value, none).
+
+with_amqp091_ch(Config, Fun) ->
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    Fun(Ch),
+    rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch),
+    ok.
+
+amqp091_publish(Ch, X, Key, Payload) when is_binary(Payload) ->
+    amqp091_publish(Ch, X, Key, #amqp_msg{payload = Payload});
+
+amqp091_publish(Ch, X, Key, Msg = #amqp_msg{}) ->
+    amqp_channel:cast(Ch, #'basic.publish'{exchange    = X,
+                                           routing_key = Key}, Msg).
+
+amqp091_publish_expect(Ch, X, Key, Q, Payload) ->
+    amqp091_publish(Ch, X, Key, Payload),
+    amqp091_expect(Ch, Q, Payload).
+
+amqp091_expect(Ch, Q, Payload) ->
+    amqp_channel:subscribe(Ch, #'basic.consume'{queue  = Q,
+                                                no_ack = true}, self()),
+    CTag = receive
+        #'basic.consume_ok'{consumer_tag = CT} -> CT
+    end,
+    Msg = receive
+              {#'basic.deliver'{}, #amqp_msg{payload = Payload} = M} ->
+                  M
+          after 15000 ->
+                  exit({not_received, Payload})
+          end,
+    amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = CTag}),
+    Msg.
+
+amqp091_expect_empty(Ch, Q) ->
+    #'basic.get_empty'{} = amqp_channel:call(Ch, #'basic.get'{ queue = Q }).

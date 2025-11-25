@@ -69,13 +69,13 @@ amqp091_pending_count_empty_queue(_Config) ->
 
 amqp091_pending_count_with_messages(_Config) ->
     %% Test that pending_count returns correct count when messages are pending
-    PendingQueue = queue:from_list([{1, msg1}, {2, msg2}, {3, msg3}]),
+    PendingQueue = lqueue:from_list([{1, msg1}, {2, msg2}, {3, msg3}]),
     State = #{dest => #{pending => PendingQueue}},
     ?assertEqual(3, rabbit_amqp091_shovel:pending_count(State)).
 
 amqp091_pending_count_after_drain(_Config) ->
     %% Test that pending_count returns 0 after messages are drained
-    EmptyQueue = queue:new(),
+    EmptyQueue = lqueue:new(),
     State = #{dest => #{pending => EmptyQueue}},
     ?assertEqual(0, rabbit_amqp091_shovel:pending_count(State)).
 

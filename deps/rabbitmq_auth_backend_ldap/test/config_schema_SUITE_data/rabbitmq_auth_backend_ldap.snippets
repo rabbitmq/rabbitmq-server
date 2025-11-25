@@ -1,3 +1,6 @@
+%% vim:ft=erlang:
+%% -*- mode: erlang; -*-
+
 [{ldap_servers,
   "auth_ldap.servers.1 = DC1.domain.com
    auth_ldap.servers.2 = DC1.eng.domain.com",
@@ -334,5 +337,125 @@
              {versions,['tlsv1.2','tlsv1.1']}
              ]},
         {use_ssl, true}]}],
-  []}
+  []},
+
+ {vhost_access_query,
+  "auth_ldap.queries.vhost_access = '''
+       {in_group,\"ou=${vhost}-users,ou=vhosts,dc=example,dc=com\"}
+   '''",
+  [
+    {rabbitmq_auth_backend_ldap, [
+       {vhost_access_query, {in_group,"ou=${vhost}-users,ou=vhosts,dc=example,dc=com"}}
+    ]}
+  ],
+  [rabbitmq_auth_backend_ldap]},
+
+ {vhost_access_query_period_ending,
+  "auth_ldap.queries.vhost_access = '''
+       {in_group,\"ou=${vhost}-users,ou=vhosts,dc=example,dc=com\"}.
+   '''",
+  [
+    {rabbitmq_auth_backend_ldap, [
+       {vhost_access_query, {in_group,"ou=${vhost}-users,ou=vhosts,dc=example,dc=com"}}
+    ]}
+  ],
+  [rabbitmq_auth_backend_ldap]},
+
+ {vhost_access_query_single_line,
+  "auth_ldap.queries.vhost_access = {in_group,\"ou=${vhost}-users,ou=vhosts,dc=example,dc=com\"}",
+  [
+    {rabbitmq_auth_backend_ldap, [
+       {vhost_access_query, {in_group,"ou=${vhost}-users,ou=vhosts,dc=example,dc=com"}}
+    ]}
+  ],
+  [rabbitmq_auth_backend_ldap]},
+
+ {resource_access_query,
+  "auth_ldap.queries.resource_access = '''
+       {for, [
+           {permission, configure, {in_group, \"cn=admin,dc=example,dc=com\"}},
+           {permission, write, {for, [
+               {resource, queue, {in_group, \"cn=admin,dc=example,dc=com\"}},
+               {resource, exchange, {constant, true}}
+           ]}},
+           {permission, read, {for, [
+               {resource, exchange, {in_group, \"cn=admin,dc=example,dc=com\"}},
+               {resource, queue,    {constant, true}}
+           ]}}
+       ]}
+   '''",
+  [
+    {rabbitmq_auth_backend_ldap, [
+       {resource_access_query,
+           {for, [
+               {permission, configure, {in_group, "cn=admin,dc=example,dc=com"}},
+               {permission, write, {for, [
+                   {resource, queue, {in_group, "cn=admin,dc=example,dc=com"}},
+                   {resource, exchange, {constant, true}}
+               ]}},
+               {permission, read, {for, [
+                   {resource, exchange, {in_group, "cn=admin,dc=example,dc=com"}},
+                   {resource, queue,    {constant, true}}
+               ]}}
+           ]}
+       }
+    ]}
+  ],
+  [rabbitmq_auth_backend_ldap]},
+
+ {resource_access_query_single_line,
+  "auth_ldap.queries.resource_access = {for, [{permission, configure, {constant, true}}]}",
+  [
+    {rabbitmq_auth_backend_ldap, [
+       {resource_access_query,
+           {for, [{permission, configure, {constant, true}}]}
+       }
+    ]}
+  ],
+  [rabbitmq_auth_backend_ldap]},
+
+ {topic_access_query,
+  "auth_ldap.queries.topic_access = '''
+       {for, [
+           {permission, write, {match, {string, \"${routing_key}\"}, {string, \"^a\"}}},
+           {permission, read,  {constant, true}}
+       ]}
+   '''",
+  [
+    {rabbitmq_auth_backend_ldap, [
+       {topic_access_query,
+           {for, [
+               {permission, write, {match, {string, "${routing_key}"}, {string, "^a"}}},
+               {permission, read,  {constant, true}}
+           ]}
+       }
+    ]}
+  ],
+  [rabbitmq_auth_backend_ldap]},
+
+ {topic_access_query_single_line,
+  "auth_ldap.queries.topic_access = {for, [{permission, write, {constant, true}}, {permission, read, {constant, true}}]}",
+  [
+    {rabbitmq_auth_backend_ldap, [
+       {topic_access_query,
+           {for, [{permission, write, {constant, true}}, {permission, read, {constant, true}}]}
+       }
+    ]}
+  ],
+  [rabbitmq_auth_backend_ldap]},
+
+ {tag_queries,
+  "auth_ldap.queries.tags = '''
+       [{administrator, {constant, false}},
+        {management,    {constant, true}}]
+   '''",
+  [
+    {rabbitmq_auth_backend_ldap, [
+       {tag_queries, [
+           {administrator, {constant, false}},
+           {management,    {constant, true}}
+       ]}
+    ]}
+  ],
+  [rabbitmq_auth_backend_ldap]}
 ].

@@ -112,7 +112,8 @@
                     [queue, <<"quorum">>, ?MODULE]}},
      {cleanup,  {rabbit_registry, unregister,
                  [queue, <<"quorum">>]}},
-     {requires, rabbit_registry}]}).
+     {requires, rabbit_registry},
+     {enables, rabbit_policy}]}).
 
 -type msg_id() :: non_neg_integer().
 -type qmsg() :: {rabbit_types:r('queue'), pid(), msg_id(), boolean(),
@@ -1275,6 +1276,20 @@ status(Vhost, QueueName) ->
                           {<<"Term">>, Term},
                           {<<"Machine Version">>, MacVer}
                          ];
+                     #{state := noproc,
+                       membership := unknown,
+                       machine_version := MacVer} ->
+                         [{<<"Node Name">>, N},
+                          {<<"Raft State">>, noproc},
+                          {<<"Membership">>, <<>>},
+                          {<<"Last Log Index">>, <<>>},
+                          {<<"Last Written">>, <<>>},
+                          {<<"Last Applied">>, <<>>},
+                          {<<"Commit Index">>, <<>>},
+                          {<<"Snapshot Index">>, <<>>},
+                          {<<"Term">>, <<>>},
+                          {<<"Machine Version">>, MacVer}
+                         ];
                      {error, _} ->
                          %% try the old method
                          case get_sys_status(ServerId) of
@@ -1303,7 +1318,7 @@ status(Vhost, QueueName) ->
                                  [{<<"Node Name">>, N},
                                   {<<"Raft State">>, Err},
                                   {<<"Membership">>, <<>>},
-                                  {<<"LastLog Index">>, <<>>},
+                                  {<<"Last Log Index">>, <<>>},
                                   {<<"Last Written">>, <<>>},
                                   {<<"Last Applied">>, <<>>},
                                   {<<"Commit Index">>, <<>>},

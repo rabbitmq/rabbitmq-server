@@ -39,7 +39,6 @@ wrap_password_opt(Opts0) ->
     end.
 
 -spec fix(rabbit_types:infos()) -> rabbit_types:infos().
-
 fix(Config) ->
     fix_verify_fun(
       fix_ssl_protocol_versions(

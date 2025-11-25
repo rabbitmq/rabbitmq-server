@@ -27,7 +27,8 @@ groups() ->
     [
       {tests, [parallel], [
           parse_amqp091,
-          parse_amqp10_mixed
+          parse_amqp10_mixed,
+          parse_local
         ]}
     ].
 
@@ -53,7 +54,7 @@ end_per_testcase(_Testcase, Config) -> Config.
 
 
 %% -------------------------------------------------------------------
-%% Testcases.
+%% Test cases
 %% -------------------------------------------------------------------
 
 parse_amqp091(_Config) ->
@@ -126,5 +127,48 @@ parse_amqp10_mixed(_Config) ->
                         application_properties := #{app_prop_key := <<"app_prop_value">>},
                         message_annotations := #{soma_ann := <<"some-info">>},
                         add_forward_headers := true}}},
+        rabbit_shovel_config:parse(my_shovel, In)),
+    ok.
+
+parse_local(_Config) ->
+    Amqp091Src = {source, [
+        {protocol, local},
+        {uris, ["ampq://myhost:5672/vhost"]},
+        {declarations, []},
+        {queue, <<"the-queue">>},
+        {delete_after, never},
+        {prefetch_count, 10}]},
+    Amqp091Dst = {destination, [
+        {protocol, local},
+        {uris, ["ampq://myhost:5672"]},
+        {declarations, []},
+        {publish_properties, [{delivery_mode, 1}]},
+        {publish_fields, []},
+        {add_forward_headers, true}]},
+    In = [Amqp091Src,
+        Amqp091Dst,
+        {ack_mode, on_confirm},
+        {reconnect_delay, 2}],
+
+    ?assertMatch(
+        {ok, #{name := my_shovel,
+            ack_mode := on_confirm,
+            reconnect_delay := 2,
+            shovel_type := static,
+            dest := #{
+                module := rabbit_local_shovel,
+                uris := ["ampq://myhost:5672"],
+                exchange := none,
+                routing_key := none,
+                resource_decl := _DDecl,
+                add_timestamp_header := false,
+                add_forward_headers := true},
+            source := #{
+                module := rabbit_local_shovel,
+                uris := ["ampq://myhost:5672/vhost"],
+                queue := <<"the-queue">>,
+                consumer_args := [],
+                delete_after := never,
+                resource_decl := _SDecl}}},
         rabbit_shovel_config:parse(my_shovel, In)),
     ok.

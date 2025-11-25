@@ -188,8 +188,6 @@ These metrics are specific to the stream protocol.
 | rabbitmq_queue_disk_writes_total         | Total number of times queue wrote messages to disk           |
 | rabbitmq_queue_messages                  | Sum of ready and unacknowledged messages - total queue depth |
 | rabbitmq_queue_messages_bytes            | Size in bytes of ready and unacknowledged messages           |
-| rabbitmq_queue_messages_paged_out        | Messages paged out to disk                                   |
-| rabbitmq_queue_messages_paged_out_bytes  | Size in bytes of messages paged out to disk                  |
 | rabbitmq_queue_messages_persistent       | Persistent messages                                          |
 | rabbitmq_queue_messages_persistent_bytes | Size in bytes of persistent messages                         |
 | rabbitmq_queue_messages_published_total  | Total number of messages published to queues                 |

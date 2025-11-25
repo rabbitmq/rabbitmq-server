@@ -199,17 +199,13 @@ ssl_options.fail_if_no_peer_cert = true",
   default_policies.operator.a.expires = 1h
   default_policies.operator.a.queue_pattern = apple
   default_policies.operator.a.vhost_pattern = banana
-  default_policies.operator.a.classic_queues.ha_mode = exactly
-  default_policies.operator.a.classic_queues.ha_params = 2
-  default_policies.operator.a.classic_queues.ha_sync_mode = automatic
+  default_policies.operator.a.apply_to = quorum_queues
   default_policies.operator.a.classic_queues.queue_version = 2
 
  ",
   [{rabbit, [{default_policies, [{operator, [
-      {<<"a">>, [{<<"expires">>, 3600000},
-                 {<<"ha_mode">>, <<"exactly">>},
-                 {<<"ha_params">>, 2},
-                 {<<"ha_sync_mode">>, <<"automatic">>},
+      {<<"a">>, [{<<"apply_to">>,<<"quorum_queues">>},
+                 {<<"expires">>, 3600000},
                  {<<"queue_pattern">>, <<"apple">>},
                  {<<"queue_version">>, 2},
                  {<<"vhost_pattern">>, "banana"}]}]}]}]}],
@@ -1234,7 +1230,7 @@ credential_validator.regexp = ^abc\\d+",
    []},
 
   %%
-  %% Stream read ahead on/off
+  %% Stream read ahead on/off/limit
   %%
 
   {stream_read_ahead,
@@ -1254,15 +1250,31 @@ credential_validator.regexp = ^abc\\d+",
       {stream_read_ahead, false}
      ]}],
    []},
+  {stream_read_ahead_limit_bytes,
+   "
+    stream.read_ahead = 8192
+   ",
+   [{rabbit, [
+      {stream_read_ahead, 8192}
+     ]}],
+   []},
+  {stream_read_ahead_limit_information_unit,
+   "
+    stream.read_ahead = 8KiB
+   ",
+   [{rabbit, [
+      {stream_read_ahead, "8KiB"}
+     ]}],
+   []},
 
   %%
   %% Stream data dir
   %%
+
   {stream_data_dir,
    "stream.data_dir = /data/rabbitmq/stream",
    [{osiris, [
       {data_dir, "/data/rabbitmq/stream"}
      ]}],
    []}
-
 ].

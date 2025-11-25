@@ -313,7 +313,6 @@ get_sort_reverse(ReqData) ->
         V -> list_to_atom(V)
     end.
 
-
 -spec is_pagination_requested(#pagination{} | undefined) -> boolean().
 is_pagination_requested(undefined) ->
     false;
@@ -981,9 +980,28 @@ all_or_one_vhost(ReqData, Fun) ->
         VHost     -> Fun(VHost)
     end.
 
-filter_vhost(List, ReqData, Context) ->
-    User = #user{tags = Tags} = Context#context.user,
-    Fn   = case rabbit_web_dispatch_access_control:is_admin(Tags) of
+filter_vhost(List, ReqData, Context = #context{user = #user{tags = Tags}}) ->
+    IsAdmin = rabbit_web_dispatch_access_control:is_admin(Tags),
+    filter_vhost({vhost, vhost(ReqData)}, IsAdmin, List, ReqData, Context).
+
+filter_vhost({vhost, not_found}, IsAdmin, List, ReqData, Context) ->
+    filter_none_or_not_found_vhost(IsAdmin, List, ReqData, Context);
+filter_vhost({vhost, none}, IsAdmin, List, ReqData, Context) ->
+    filter_none_or_not_found_vhost(IsAdmin, List, ReqData, Context);
+filter_vhost({vhost, _VHost}, _IsAdmin=true, List, _ReqData, _Context) ->
+    [I || I <- List, lists:member(pget(vhost, I), rabbit_vhost:list())];
+filter_vhost({vhost, VHost}, _IsAdmin=false, List, ReqData, #context{user = User}) ->
+    AuthzData = get_authz_data(ReqData),
+    case catch rabbit_access_control:check_vhost_access(User, VHost, AuthzData, #{}) of
+        ok ->
+            [I || I <- List, pget(vhost, I) =:= VHost];
+        NotOK ->
+            log_access_control_result(NotOK),
+            []
+    end.
+
+filter_none_or_not_found_vhost(IsAdmin, List, ReqData, #context{user = User}) ->
+    Fn   = case IsAdmin of
                true  -> fun list_visible_vhosts_names/2;
                false -> fun list_login_vhosts_names/2
            end,
@@ -1090,6 +1108,8 @@ list_login_vhosts(User, AuthzData) ->
           end].
 
 % rabbitmq/rabbitmq-auth-backend-http#100
+log_access_control_result({'EXIT', #amqp_error{name = Name, explanation = Msg}}) ->
+    ?LOG_DEBUG("rabbit_access_control:check_vhost_access result: '~tp', ~ts", [Name, Msg]);
 log_access_control_result(NotOK) ->
     ?LOG_DEBUG("rabbit_access_control:check_vhost_access result: ~tp", [NotOK]).
 

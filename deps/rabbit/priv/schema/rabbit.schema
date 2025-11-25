@@ -749,6 +749,10 @@ end}.
     {datatype, string}
 ]}.
 
+{mapping, "default_policies.operator.$id.apply_to", "rabbit.default_policies.operator", [
+    {datatype, string}
+]}.
+
 {mapping, "default_policies.operator.$id.expires", "rabbit.default_policies.operator", [
     {datatype, {duration, ms}}
 ]}.
@@ -815,7 +819,9 @@ end}.
                           end,
                     {["default_policies","operator",ID|T], NewV};
                    ({["default_policies","operator",ID, "queue_pattern"], V}) ->
-                    {["default_policies","operator",ID,"queue_pattern"], list_to_binary(V)};
+                    {["default_policies","operator",ID, "queue_pattern"], list_to_binary(V)};
+                   ({["default_policies","operator",ID, "apply_to"], V}) ->
+                    {["default_policies","operator",ID, "apply_to"], list_to_binary(V)};
                    (E) -> E
                 end),
     case Props of
@@ -2790,7 +2796,7 @@ end}.
 }.
 
 {mapping, "stream.read_ahead", "rabbit.stream_read_ahead",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, [{enum, [true, false]}, integer, string]}]}.
 
 {mapping, "cluster_tags.$tag", "rabbit.cluster_tags", [
     {datatype, [binary]}

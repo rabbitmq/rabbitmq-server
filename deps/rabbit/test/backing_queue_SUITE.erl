@@ -21,7 +21,7 @@
 -define(VHOST, <<"/">>).
 
 -define(VARIABLE_QUEUE_TESTCASES, [
-    variable_queue_partial_segments_delta_thing,
+    variable_queue_partial_segments_q_tail_thing,
     variable_queue_all_the_bits_not_covered_elsewhere_A,
     variable_queue_all_the_bits_not_covered_elsewhere_B,
     variable_queue_drop,
@@ -33,14 +33,13 @@
     variable_queue_ack_limiting,
     variable_queue_purge,
     variable_queue_requeue,
-    variable_queue_requeue_ram_beta,
-    variable_queue_fold
+    variable_queue_requeue_ram_beta
   ]).
 
 -define(BACKING_QUEUE_TESTCASES, [
     bq_queue_index,
     bq_queue_index_props,
-    {variable_queue_default, [parallel], ?VARIABLE_QUEUE_TESTCASES},
+    {variable_queue, [parallel], ?VARIABLE_QUEUE_TESTCASES},
     bq_variable_queue_delete_msg_store_files_callback,
     bq_queue_recover
   ]).
@@ -128,8 +127,6 @@ init_per_group1(backing_queue_embed_limit_1024, Config) ->
     ok = rabbit_ct_broker_helpers:rpc(Config, 0,
       application, set_env, [rabbit, queue_index_embed_msgs_below, 1024]),
     Config;
-init_per_group1(variable_queue_default, Config) ->
-    rabbit_ct_helpers:set_config(Config, {variable_queue_type, default});
 %% @todo These groups are no longer used?
 init_per_group1(from_cluster_node1, Config) ->
     rabbit_ct_helpers:set_config(Config, {test_direction, {0, 1}});
@@ -162,15 +159,9 @@ orelse Group =:= backing_queue_embed_limit_1024 ->
 end_per_group1(_, Config) ->
     Config.
 
-init_per_testcase(Testcase, Config) when Testcase == variable_queue_requeue;
-                                         Testcase == variable_queue_fold ->
-    rabbit_ct_helpers:testcase_started(Config, Testcase);
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
-end_per_testcase(Testcase, Config) when Testcase == variable_queue_requeue;
-                                        Testcase == variable_queue_fold ->
-    rabbit_ct_helpers:testcase_finished(Config, Testcase);
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
@@ -805,10 +796,12 @@ bq_queue_index(Config) ->
 index_mod() ->
     rabbit_classic_queue_index_v2.
 
+segment_entry_count() ->
+    persistent_term:get(classic_queue_index_v2_segment_entry_count, 4096).
+
 bq_queue_index1(_Config) ->
-    init_queue_index(),
     IndexMod = index_mod(),
-    SegmentSize = IndexMod:next_segment_boundary(0),
+    SegmentSize = segment_entry_count(),
     TwoSegs = SegmentSize + SegmentSize,
     MostOfASegment = trunc(SegmentSize*0.75),
     SeqIdsA = lists:seq(0, MostOfASegment-1),
@@ -852,7 +845,7 @@ bq_queue_index1(_Config) ->
                       Qi13
               end,
               {_DeletedSegments, Qi16} = IndexMod:ack(SeqIdsB, Qi15),
-              Qi17 = IndexMod:flush(Qi16),
+              {_Confirms, Qi17} = IndexMod:sync(Qi16),
               %% Everything will have gone now because #pubs == #acks
               {NextSeqIdB, NextSeqIdB, Qi18} = IndexMod:bounds(Qi17, NextSeqIdB),
               %% should get length back as 0 because all persistent
@@ -873,7 +866,7 @@ bq_queue_index1(_Config) ->
                   _ -> Qi1
               end,
               {_DeletedSegments, Qi3} = IndexMod:ack(SeqIdsC, Qi2),
-              Qi4 = IndexMod:flush(Qi3),
+              {_Confirms, Qi4} = IndexMod:sync(Qi3),
               {Qi5, _SeqIdsMsgIdsC1} = queue_index_publish([SegmentSize],
                                                            false, Qi4),
               Qi5
@@ -891,7 +884,8 @@ bq_queue_index1(_Config) ->
               {Qi3, _SeqIdsMsgIdsC3} = queue_index_publish([SegmentSize],
                                                            false, Qi2),
               {_DeletedSegments, Qi4} = IndexMod:ack(SeqIdsC, Qi3),
-              IndexMod:flush(Qi4)
+              {_Confirms, Qi5} = IndexMod:sync(Qi4),
+              Qi5
       end),
 
     %% c) just fill up several segments of all pubs, then +acks
@@ -904,7 +898,8 @@ bq_queue_index1(_Config) ->
                   _ -> Qi1
               end,
               {_DeletedSegments, Qi3} = IndexMod:ack(SeqIdsD, Qi2),
-              IndexMod:flush(Qi3)
+              {_Confirms, Qi4} = IndexMod:sync(Qi3),
+              Qi4
       end),
 
     %% d) get messages in all states to a segment, then flush, then do
@@ -918,7 +913,7 @@ bq_queue_index1(_Config) ->
                   _ -> Qi1
               end,
               {_DeletedSegments3, Qi3} = IndexMod:ack([0], Qi2),
-              Qi4 = IndexMod:flush(Qi3),
+              {_Confirms, Qi4} = IndexMod:sync(Qi3),
               {Qi5, [Eight,Six|_]} = queue_index_publish([3,6,8], false, Qi4),
               Qi6 = case IndexMod of
                   rabbit_queue_index -> IndexMod:deliver([2,3,5,6], Qi5);
@@ -984,7 +979,7 @@ bq_queue_index_props1(_Config) ->
               MsgId = rabbit_guid:gen(),
               Props = #message_properties{expiry=12345, size = 10},
               Qi1 = IndexMod:publish(
-                      MsgId, 0, memory, Props, true, infinity, Qi0),
+                      MsgId, 0, memory, Props, true, true, Qi0),
               {[{MsgId, 0, _, Props, _}], Qi2} =
                   IndexMod:read(0, 1, Qi1),
               Qi2
@@ -1001,7 +996,7 @@ v2_delete_segment_file_completely_acked(Config) ->
 
 v2_delete_segment_file_completely_acked1(_Config) ->
     IndexMod = rabbit_classic_queue_index_v2,
-    SegmentSize = IndexMod:next_segment_boundary(0),
+    SegmentSize = segment_entry_count(),
     SeqIds = lists:seq(0, SegmentSize - 1),
 
     with_empty_test_queue(
@@ -1028,7 +1023,7 @@ v2_delete_segment_file_partially_acked(Config) ->
 
 v2_delete_segment_file_partially_acked1(_Config) ->
     IndexMod = rabbit_classic_queue_index_v2,
-    SegmentSize = IndexMod:next_segment_boundary(0),
+    SegmentSize = segment_entry_count(),
     SeqIds = lists:seq(0, SegmentSize div 2),
     SeqIdsLen = length(SeqIds),
 
@@ -1056,7 +1051,7 @@ v2_delete_segment_file_partially_acked_with_holes(Config) ->
 
 v2_delete_segment_file_partially_acked_with_holes1(_Config) ->
     IndexMod = rabbit_classic_queue_index_v2,
-    SegmentSize = IndexMod:next_segment_boundary(0),
+    SegmentSize = segment_entry_count(),
     SeqIdsA = lists:seq(0, SegmentSize div 2),
     SeqIdsB = lists:seq(11 + SegmentSize div 2, SegmentSize - 1),
     SeqIdsLen = length(SeqIdsA) + length(SeqIdsB),
@@ -1115,9 +1110,7 @@ bq_queue_recover(Config) ->
       ?MODULE, bq_queue_recover1, [Config]).
 
 bq_queue_recover1(Config) ->
-    init_queue_index(),
-    IndexMod = index_mod(),
-    Count = 2 * IndexMod:next_segment_boundary(0),
+    Count = 2 * segment_entry_count(),
     QName0 = queue_name(Config, <<"bq_queue_recover-q">>),
     {new, Q} = rabbit_amqqueue:declare(QName0, true, false, [], none, <<"acting-user">>),
     QName = amqqueue:get_name(Q),
@@ -1171,18 +1164,15 @@ get_queue_sup_pid([{_, SupPid, _, _} | Rest], QueuePid) ->
 get_queue_sup_pid([], _QueuePid) ->
     undefined.
 
-variable_queue_partial_segments_delta_thing(Config) ->
+variable_queue_partial_segments_q_tail_thing(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, variable_queue_partial_segments_delta_thing1, [Config]).
+      ?MODULE, variable_queue_partial_segments_q_tail_thing1, []).
 
-variable_queue_partial_segments_delta_thing1(Config) ->
-    with_fresh_variable_queue(
-      fun variable_queue_partial_segments_delta_thing2/2,
-      ?config(variable_queue_type, Config)).
+variable_queue_partial_segments_q_tail_thing1() ->
+    with_fresh_variable_queue(fun variable_queue_partial_segments_q_tail_thing2/2).
 
-variable_queue_partial_segments_delta_thing2(VQ0, _QName) ->
-    IndexMod = index_mod(),
-    SegmentSize = IndexMod:next_segment_boundary(0),
+variable_queue_partial_segments_q_tail_thing2(VQ0, _QName) ->
+    SegmentSize = segment_entry_count(),
     HalfSegment = SegmentSize div 2,
     OneAndAHalfSegment = SegmentSize + HalfSegment,
     VQ1 = variable_queue_publish(true, OneAndAHalfSegment, VQ0),
@@ -1191,26 +1181,23 @@ variable_queue_partial_segments_delta_thing2(VQ0, _QName) ->
             VQ2,
             %% We only have one message in memory because the amount in memory
             %% depends on the consume rate, which is nil in this test.
-            [{delta, {delta, 1, OneAndAHalfSegment - 1, 0, OneAndAHalfSegment}},
-             {q3, 1},
+            [{q_head, 1},
+             {q_tail, {q_tail, 1, OneAndAHalfSegment - 1, OneAndAHalfSegment}},
              {len, OneAndAHalfSegment}]),
     VQ5 = check_variable_queue_status(
             variable_queue_publish(true, 1, VQ3),
-            %% one alpha, but it's in the same segment as the deltas
+            %% one alpha, but it's in the same segment as the q_tail
             %% @todo That's wrong now! v1/v2
-            [{delta, {delta, 1, OneAndAHalfSegment, 0, OneAndAHalfSegment + 1}},
-             {q3, 1},
+            [{q_head, 1},
+             {q_tail, {q_tail, 1, OneAndAHalfSegment, OneAndAHalfSegment + 1}},
              {len, OneAndAHalfSegment + 1}]),
     {VQ6, AckTags} = variable_queue_fetch(SegmentSize, true, false,
                                           SegmentSize + HalfSegment + 1, VQ5),
     VQ7 = check_variable_queue_status(
             VQ6,
-            %% We only read from delta up to the end of the segment, so
-            %% after fetching exactly one segment, we should have no
-            %% messages in memory.
-            [{delta, {delta, SegmentSize, HalfSegment + 1, 0, OneAndAHalfSegment + 1}},
-             {q3, 0},
-             {len, HalfSegment + 1}]),
+            %% The length is the only predictible stat we have since
+            %% the contents of q_head and q_tail depend on the rate.
+            [{len, HalfSegment + 1}]),
     {VQ8, AckTags1} = variable_queue_fetch(HalfSegment + 1, true, false,
                                            HalfSegment + 1, VQ7),
     {_Guids, VQ9} = rabbit_variable_queue:ack(AckTags ++ AckTags1, VQ8),
@@ -1220,16 +1207,13 @@ variable_queue_partial_segments_delta_thing2(VQ0, _QName) ->
 
 variable_queue_all_the_bits_not_covered_elsewhere_A(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, variable_queue_all_the_bits_not_covered_elsewhere_A1, [Config]).
+      ?MODULE, variable_queue_all_the_bits_not_covered_elsewhere_A1, []).
 
-variable_queue_all_the_bits_not_covered_elsewhere_A1(Config) ->
-    with_fresh_variable_queue(
-      fun variable_queue_all_the_bits_not_covered_elsewhere_A2/2,
-      ?config(variable_queue_type, Config)).
+variable_queue_all_the_bits_not_covered_elsewhere_A1() ->
+    with_fresh_variable_queue(fun variable_queue_all_the_bits_not_covered_elsewhere_A2/2).
 
 variable_queue_all_the_bits_not_covered_elsewhere_A2(VQ0, QName) ->
-    IndexMod = index_mod(),
-    Count = 2 * IndexMod:next_segment_boundary(0),
+    Count = 2 * segment_entry_count(),
     VQ1 = variable_queue_publish(true, Count, VQ0),
     VQ2 = variable_queue_publish(false, Count, VQ1),
     {VQ4, _AckTags}  = variable_queue_fetch(Count, true, false,
@@ -1247,12 +1231,10 @@ variable_queue_all_the_bits_not_covered_elsewhere_A2(VQ0, QName) ->
 
 variable_queue_all_the_bits_not_covered_elsewhere_B(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, variable_queue_all_the_bits_not_covered_elsewhere_B1, [Config]).
+      ?MODULE, variable_queue_all_the_bits_not_covered_elsewhere_B1, []).
 
-variable_queue_all_the_bits_not_covered_elsewhere_B1(Config) ->
-    with_fresh_variable_queue(
-      fun variable_queue_all_the_bits_not_covered_elsewhere_B2/2,
-      ?config(variable_queue_type, Config)).
+variable_queue_all_the_bits_not_covered_elsewhere_B1() ->
+    with_fresh_variable_queue(fun variable_queue_all_the_bits_not_covered_elsewhere_B2/2).
 
 variable_queue_all_the_bits_not_covered_elsewhere_B2(VQ1, QName) ->
     VQ2 = variable_queue_publish(false, 4, VQ1),
@@ -1267,12 +1249,10 @@ variable_queue_all_the_bits_not_covered_elsewhere_B2(VQ1, QName) ->
 
 variable_queue_drop(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, variable_queue_drop1, [Config]).
+      ?MODULE, variable_queue_drop1, []).
 
-variable_queue_drop1(Config) ->
-    with_fresh_variable_queue(
-      fun variable_queue_drop2/2,
-      ?config(variable_queue_type, Config)).
+variable_queue_drop1() ->
+    with_fresh_variable_queue(fun variable_queue_drop2/2).
 
 variable_queue_drop2(VQ0, _QName) ->
     %% start by sending a messages
@@ -1292,12 +1272,10 @@ variable_queue_drop2(VQ0, _QName) ->
 
 variable_queue_fold_msg_on_disk(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, variable_queue_fold_msg_on_disk1, [Config]).
+      ?MODULE, variable_queue_fold_msg_on_disk1, []).
 
-variable_queue_fold_msg_on_disk1(Config) ->
-    with_fresh_variable_queue(
-      fun variable_queue_fold_msg_on_disk2/2,
-      ?config(variable_queue_type, Config)).
+variable_queue_fold_msg_on_disk1() ->
+    with_fresh_variable_queue(fun variable_queue_fold_msg_on_disk2/2).
 
 variable_queue_fold_msg_on_disk2(VQ0, _QName) ->
     VQ1 = variable_queue_publish(true, 1, VQ0),
@@ -1308,12 +1286,10 @@ variable_queue_fold_msg_on_disk2(VQ0, _QName) ->
 
 variable_queue_dropfetchwhile(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, variable_queue_dropfetchwhile1, [Config]).
+      ?MODULE, variable_queue_dropfetchwhile1, []).
 
-variable_queue_dropfetchwhile1(Config) ->
-    with_fresh_variable_queue(
-      fun variable_queue_dropfetchwhile2/2,
-      ?config(variable_queue_type, Config)).
+variable_queue_dropfetchwhile1() ->
+    with_fresh_variable_queue(fun variable_queue_dropfetchwhile2/2).
 
 variable_queue_dropfetchwhile2(VQ0, _QName) ->
     Count = 10,
@@ -1356,12 +1332,10 @@ variable_queue_dropfetchwhile2(VQ0, _QName) ->
 
 variable_queue_dropwhile_restart(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, variable_queue_dropwhile_restart1, [Config]).
+      ?MODULE, variable_queue_dropwhile_restart1, []).
 
-variable_queue_dropwhile_restart1(Config) ->
-    with_fresh_variable_queue(
-      fun variable_queue_dropwhile_restart2/2,
-      ?config(variable_queue_type, Config)).
+variable_queue_dropwhile_restart1() ->
+    with_fresh_variable_queue(fun variable_queue_dropwhile_restart2/2).
 
 variable_queue_dropwhile_restart2(VQ0, QName) ->
     Count = 10000,
@@ -1395,12 +1369,10 @@ variable_queue_dropwhile_restart2(VQ0, QName) ->
 
 variable_queue_dropwhile_sync_restart(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, variable_queue_dropwhile_sync_restart1, [Config]).
+      ?MODULE, variable_queue_dropwhile_sync_restart1, []).
 
-variable_queue_dropwhile_sync_restart1(Config) ->
-    with_fresh_variable_queue(
-      fun variable_queue_dropwhile_sync_restart2/2,
-      ?config(variable_queue_type, Config)).
+variable_queue_dropwhile_sync_restart1() ->
+    with_fresh_variable_queue(fun variable_queue_dropwhile_sync_restart2/2).
 
 variable_queue_dropwhile_sync_restart2(VQ0, QName) ->
     Count = 10000,
@@ -1437,12 +1409,10 @@ variable_queue_dropwhile_sync_restart2(VQ0, QName) ->
 
 variable_queue_restart_large_seq_id(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, variable_queue_restart_large_seq_id1, [Config]).
+      ?MODULE, variable_queue_restart_large_seq_id1, []).
 
-variable_queue_restart_large_seq_id1(Config) ->
-    with_fresh_variable_queue(
-      fun variable_queue_restart_large_seq_id2/2,
-      ?config(variable_queue_type, Config)).
+variable_queue_restart_large_seq_id1() ->
+    with_fresh_variable_queue(fun variable_queue_restart_large_seq_id2/2).
 
 variable_queue_restart_large_seq_id2(VQ0, QName) ->
     Count = 1,
@@ -1476,12 +1446,10 @@ variable_queue_restart_large_seq_id2(VQ0, QName) ->
 
 variable_queue_ack_limiting(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, variable_queue_ack_limiting1, [Config]).
+      ?MODULE, variable_queue_ack_limiting1, []).
 
-variable_queue_ack_limiting1(Config) ->
-    with_fresh_variable_queue(
-      fun variable_queue_ack_limiting2/2,
-      ?config(variable_queue_type, Config)).
+variable_queue_ack_limiting1() ->
+    with_fresh_variable_queue(fun variable_queue_ack_limiting2/2).
 
 variable_queue_ack_limiting2(VQ0, _Config) ->
     %% start by sending in a bunch of messages
@@ -1506,12 +1474,10 @@ variable_queue_ack_limiting2(VQ0, _Config) ->
 
 variable_queue_purge(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, variable_queue_purge1, [Config]).
+      ?MODULE, variable_queue_purge1, []).
 
-variable_queue_purge1(Config) ->
-    with_fresh_variable_queue(
-      fun variable_queue_purge2/2,
-      ?config(variable_queue_type, Config)).
+variable_queue_purge1() ->
+    with_fresh_variable_queue(fun variable_queue_purge2/2).
 
 variable_queue_purge2(VQ0, _Config) ->
     LenDepth = fun (VQ) ->
@@ -1530,12 +1496,10 @@ variable_queue_purge2(VQ0, _Config) ->
 
 variable_queue_requeue(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, variable_queue_requeue1, [Config]).
+      ?MODULE, variable_queue_requeue1, []).
 
-variable_queue_requeue1(Config) ->
-    with_fresh_variable_queue(
-      fun variable_queue_requeue2/2,
-      ?config(variable_queue_type, Config)).
+variable_queue_requeue1() ->
+    with_fresh_variable_queue(fun variable_queue_requeue2/2).
 
 variable_queue_requeue2(VQ0, _Config) ->
     {_PendingMsgs, RequeuedMsgs, FreshMsgs, VQ1} =
@@ -1555,19 +1519,16 @@ variable_queue_requeue2(VQ0, _Config) ->
     {empty, VQ3} = rabbit_variable_queue:fetch(true, VQ2),
     VQ3.
 
-%% requeue from ram_pending_ack into q3, move to delta and then empty queue
+%% requeue from ram_pending_ack into q_head, move to q_tail and then empty queue
 variable_queue_requeue_ram_beta(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, variable_queue_requeue_ram_beta1, [Config]).
+      ?MODULE, variable_queue_requeue_ram_beta1, []).
 
-variable_queue_requeue_ram_beta1(Config) ->
-    with_fresh_variable_queue(
-      fun variable_queue_requeue_ram_beta2/2,
-      ?config(variable_queue_type, Config)).
+variable_queue_requeue_ram_beta1() ->
+    with_fresh_variable_queue(fun variable_queue_requeue_ram_beta2/2).
 
 variable_queue_requeue_ram_beta2(VQ0, _Config) ->
-    IndexMod = index_mod(),
-    Count = IndexMod:next_segment_boundary(0)*2 + 2,
+    Count = 2 + 2 * segment_entry_count(),
     VQ1 = variable_queue_publish(false, Count, VQ0),
     {VQ2, AcksR} = variable_queue_fetch(Count, false, false, Count, VQ1),
     {Back, Front} = lists:split(Count div 2, AcksR),
@@ -1577,79 +1538,6 @@ variable_queue_requeue_ram_beta2(VQ0, _Config) ->
     {VQ7, AcksAll} = variable_queue_fetch(Count, false, true, Count, VQ6),
     {_, VQ8} = rabbit_variable_queue:ack(AcksAll, VQ7),
     VQ8.
-
-variable_queue_fold(Config) ->
-    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, variable_queue_fold1, [Config]).
-
-variable_queue_fold1(Config) ->
-    with_fresh_variable_queue(
-      fun variable_queue_fold2/2,
-      ?config(variable_queue_type, Config)).
-
-variable_queue_fold2(VQ0, _Config) ->
-    {PendingMsgs, RequeuedMsgs, FreshMsgs, VQ1} =
-        variable_queue_with_holes(VQ0),
-    Count = rabbit_variable_queue:depth(VQ1),
-    Msgs = lists:sort(PendingMsgs ++ RequeuedMsgs ++ FreshMsgs),
-    lists:foldl(fun (Cut, VQ2) ->
-                        test_variable_queue_fold(Cut, Msgs, PendingMsgs, VQ2)
-                end, VQ1, [0, 1, 2, Count div 2,
-                           Count - 1, Count, Count + 1, Count * 2]).
-
-test_variable_queue_fold(Cut, Msgs, PendingMsgs, VQ0) ->
-    {Acc, VQ1} = rabbit_variable_queue:fold(
-                   fun (M, _, Pending, A) ->
-                           MInt = msg2int(M),
-                           Pending = lists:member(MInt, PendingMsgs), %% assert
-                           case MInt =< Cut of
-                               true  -> {cont, [MInt | A]};
-                               false -> {stop, A}
-                           end
-                   end, [], VQ0),
-    Expected = lists:takewhile(fun (I) -> I =< Cut end, Msgs),
-    Expected = lists:reverse(Acc), %% assertion
-    VQ1.
-
-%% same as test_variable_queue_requeue_ram_beta but randomly changing
-%% the queue mode after every step.
-variable_queue_mode_change(Config) ->
-    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, variable_queue_mode_change1, [Config]).
-
-variable_queue_mode_change1(Config) ->
-    with_fresh_variable_queue(
-      fun variable_queue_mode_change2/2,
-      ?config(variable_queue_type, Config)).
-
-variable_queue_mode_change2(VQ0, _Config) ->
-    IndexMod = index_mod(),
-    Count = IndexMod:next_segment_boundary(0)*2 + 2,
-    VQ1 = variable_queue_publish(false, Count, VQ0),
-    VQ2 = maybe_switch_queue_mode(VQ1),
-    {VQ3, AcksR} = variable_queue_fetch(Count, false, false, Count, VQ2),
-    VQ4 = maybe_switch_queue_mode(VQ3),
-    {Back, Front} = lists:split(Count div 2, AcksR),
-    {_, VQ5} = rabbit_variable_queue:requeue(erlang:tl(Back), VQ4),
-    VQ6 = maybe_switch_queue_mode(VQ5),
-    VQ8 = maybe_switch_queue_mode(VQ6),
-    {_, VQ9} = rabbit_variable_queue:requeue([erlang:hd(Back)], VQ8),
-    VQ10 = maybe_switch_queue_mode(VQ9),
-    VQ11 = requeue_one_by_one(Front, VQ10),
-    VQ12 = maybe_switch_queue_mode(VQ11),
-    {VQ13, AcksAll} = variable_queue_fetch(Count, false, true, Count, VQ12),
-    VQ14 = maybe_switch_queue_mode(VQ13),
-    {_, VQ15} = rabbit_variable_queue:ack(AcksAll, VQ14),
-    VQ16 = maybe_switch_queue_mode(VQ15),
-    VQ16.
-
-maybe_switch_queue_mode(VQ) ->
-    Mode = random_queue_mode(),
-    set_queue_mode(Mode, VQ).
-
-random_queue_mode() ->
-    Modes = [lazy, default],
-    lists:nth(rand:uniform(length(Modes)), Modes).
 
 pub_res({_, VQS}) ->
     VQS;
@@ -1683,9 +1571,7 @@ init_test_queue(QName) ->
             QName, [], false,
             fun (MsgId) ->
                     rabbit_msg_store:contains(MsgId, PersistentClient)
-            end,
-            fun nop/1, fun nop/1,
-            main),
+            end),
     ok = rabbit_msg_store:client_delete_and_terminate(PersistentClient),
     Res.
 
@@ -1717,13 +1603,6 @@ with_empty_test_queue(Fun) ->
     IndexMod = index_mod(),
     IndexMod:delete_and_terminate(Fun(Qi, QName)).
 
-init_queue_index() ->
-    %% We must set the segment entry count in the process dictionary
-    %% for tests that call the v1 queue index directly to have a correct
-    %% value.
-    put(segment_entry_count, 2048),
-    ok.
-
 restart_app() ->
     rabbit:stop(),
     rabbit:start().
@@ -1743,7 +1622,7 @@ queue_index_publish(SeqIds, Persistent, Qi) ->
                   QiM = IndexMod:publish(
                           MsgId, SeqId, rabbit_msg_store,
                           #message_properties{size = 10},
-                          Persistent, infinity, QiN),
+                          Persistent, true, QiN),
                   ok = rabbit_msg_store:write(SeqId, MsgId, MsgId, MSCState),
                   {QiM, [{SeqId, MsgId} | SeqIdsMsgIdsAcc]}
           end, {Qi, []}, SeqIds),
@@ -1751,9 +1630,6 @@ queue_index_publish(SeqIds, Persistent, Qi) ->
     true = rabbit_msg_store:contains(LastMsgIdWritten, MSCState),
     ok = rabbit_msg_store:client_delete_and_terminate(MSCState),
     {A, B}.
-
-nop(_) -> ok.
-nop(_, _) -> ok.
 
 msg_store_client_init(MsgStore, Ref) ->
     rabbit_vhost_msg_store:client_init(?VHOST, MsgStore, Ref,  undefined).
@@ -1764,7 +1640,7 @@ variable_queue_init(Q, Recover) ->
              true  -> non_clean_shutdown;
              false -> new;
              Terms -> Terms
-         end, fun nop/2, fun nop/1, fun nop/1).
+         end, fun(_, _) -> ok end).
 
 variable_queue_read_terms(QName) ->
     #resource { kind = queue,
@@ -1810,7 +1686,7 @@ wait_for_confirms(Unconfirmed) ->
             end
     end.
 
-with_fresh_variable_queue(Fun, Mode) ->
+with_fresh_variable_queue(Fun) ->
     Ref = make_ref(),
     Me = self(),
     %% Run in a separate process since rabbit_msg_store will send
@@ -1820,15 +1696,12 @@ with_fresh_variable_queue(Fun, Mode) ->
                        ok = unin_empty_test_queue(QName),
                        VQ = variable_queue_init(test_amqqueue(QName, true), false),
                        S0 = variable_queue_status(VQ),
-                       assert_props(S0, [{q1, 0}, {q2, 0},
-                                         {delta,
-                                          {delta, undefined, 0, 0, undefined}},
-                                         {q3, 0}, {q4, 0},
+                       assert_props(S0, [{q_head, 0},
+                                         {q_tail, {q_tail, undefined, 0, undefined}},
                                          {len, 0}]),
-                       VQ1 = set_queue_mode(Mode, VQ),
                        try
                            _ = rabbit_variable_queue:delete_and_terminate(
-                                 shutdown, Fun(VQ1, QName)),
+                                 shutdown, Fun(VQ, QName)),
                            Me ! Ref
                        catch
                            Type:Error:Stacktrace ->
@@ -1840,9 +1713,6 @@ with_fresh_variable_queue(Fun, Mode) ->
         {Ref, Type, Error, ST} -> exit({Type, Error, ST})
     end,
     passed.
-
-set_queue_mode(Mode, VQ) ->
-    rabbit_variable_queue:set_queue_mode(Mode, VQ).
 
 variable_queue_publish(IsPersistent, Count, VQ) ->
     variable_queue_publish(IsPersistent, Count, fun (_N, P) -> P end, VQ).
@@ -1930,12 +1800,11 @@ requeue_one_by_one(Acks, VQ) ->
                         VQM
                 end, VQ, Acks).
 
-%% Create a vq with messages in q1, delta, and q3, and holes (in the
-%% form of pending acks) in the latter two.
+%% Historical test case that exercised the many different
+%% internal queues. Kept for completeness.
 variable_queue_with_holes(VQ0) ->
     Interval = 2048, %% should match vq:IO_BATCH_SIZE
-    IndexMod = index_mod(),
-    Count = IndexMod:next_segment_boundary(0)*2 + 2 * Interval,
+    Count = 2 * Interval + 2 * segment_entry_count(),
     Seq = lists:seq(1, Count),
     VQ1 = variable_queue_publish(
             false, 1, Count,
@@ -1950,7 +1819,7 @@ variable_queue_with_holes(VQ0) ->
     {_MsgIds, VQ4} = rabbit_variable_queue:requeue(
                        Acks -- (Subset1 ++ Subset2 ++ Subset3), VQ3),
     VQ5 = requeue_one_by_one(Subset1, VQ4),
-    %% by now we have some messages (and holes) in delta
+    %% by now we have some messages (and holes) in q_tail
     VQ6 = requeue_one_by_one(Subset2, VQ5),
     %% add the q1 tail
     VQ8 = variable_queue_publish(
@@ -1968,11 +1837,11 @@ variable_queue_with_holes(VQ0) ->
 vq_with_holes_assertions(VQ) ->
     [false =
          case V of
-             {delta, _, 0, _, _} -> true;
-             0                   -> true;
-             _                   -> false
+             {q_tail, _, 0, _} -> true;
+             0                 -> true;
+             _                 -> false
          end || {K, V} <- variable_queue_status(VQ),
-                lists:member(K, [delta, q3])].
+                lists:member(K, [q_head, q_tail])].
 
 check_variable_queue_status(VQ0, Props) ->
     VQ1 = variable_queue_wait_for_shuffling_end(VQ0),
