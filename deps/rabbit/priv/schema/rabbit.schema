@@ -2799,8 +2799,19 @@ fun(Conf) ->
     end
 end}.
 
-%% See github.com/rabbitmq/osiris#192 and https://github.com/rabbitmq/rabbitmq-server/commit/9f162dfd01c1516d168e7d1fad39d33a929756e5
-%% Enables read-head
+{mapping, "stream.data_dir", "osiris.data_dir", [
+  {datatype, string}
+]}.
+
+{translation, "osiris.data_dir",
+    fun(Conf) ->
+        case cuttlefish:conf_get("stream.data_dir", Conf, undefined) of
+            undefined -> cuttlefish:unset();
+            Val       -> Val
+        end
+    end
+}.
+
 {mapping, "stream.read_ahead", "rabbit.stream_read_ahead",
     [{datatype, [{enum, [true, false]}, integer, string]}]}.
 
