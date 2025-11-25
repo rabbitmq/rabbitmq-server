@@ -2799,10 +2799,6 @@ fun(Conf) ->
     end
 end}.
 
-<<<<<<< HEAD
-%% See github.com/rabbitmq/osiris#192 and https://github.com/rabbitmq/rabbitmq-server/commit/9f162dfd01c1516d168e7d1fad39d33a929756e5
-%% Enables read-head
-=======
 {mapping, "stream.data_dir", "osiris.data_dir", [
   {datatype, string}
 ]}.
@@ -2816,7 +2812,6 @@ end}.
     end
 }.
 
->>>>>>> c81fbc5dc (Allow configuring osiris data_dir in Cuttlefish config)
 {mapping, "stream.read_ahead", "rabbit.stream_read_ahead",
     [{datatype, [{enum, [true, false]}, integer, string]}]}.
 
