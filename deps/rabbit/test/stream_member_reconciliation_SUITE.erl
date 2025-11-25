@@ -1,0 +1,287 @@
+%% This Source Code Form is subject to the terms of the Mozilla Public
+%% License, v. 2.0. If a copy of the MPL was not distributed with this
+%% file, You can obtain one at https://mozilla.org/MPL/2.0/.
+%%
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term "Broadcom" refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+
+
+-module(stream_member_reconciliation_SUITE).
+
+-include_lib("common_test/include/ct.hrl").
+-include_lib("eunit/include/eunit.hrl").
+-include_lib("amqp_client/include/amqp_client.hrl").
+-compile([nowarn_export_all, export_all]).
+
+%% The reconciler has two modes of triggering itself
+%% - timer based
+%% - event based
+%% The default config of this test has Interval very short - 5 second which is lower than
+%% wait_until timeout. Meaning that even if all domain triggers (node_up/down, policy_set, etc)
+%% are disconnected tests would be still green.
+%% So to test triggers it is essential to set Interval high enough (the very default value of 60 minutes is perfect)
+%%
+%% TODO: test `policy_set` trigger
+
+all() ->
+    [
+     {group, unclustered},
+     {group, unclustered_triggers}
+    ].
+
+groups() ->
+    [
+     {unclustered, [], %% low interval, even if triggers do not work all tests should pass
+      [
+       {stream_3, [], [auto_grow, auto_grow_drained_node, auto_shrink]}
+      ]},
+     %% uses an interval longer than `wait_until` (30s by default)
+     {unclustered_triggers, [],
+      [
+       %% see also `auto_grow_drained_node`
+       {stream_3, [], [auto_grow, auto_shrink]}
+      ]}
+    ].
+
+%% -------------------------------------------------------------------
+%% Testsuite setup/teardown.
+%% -------------------------------------------------------------------
+
+init_per_suite(Config) ->
+    rabbit_ct_helpers:log_environment(),
+    rabbit_ct_helpers:run_setup_steps(Config, []).
+
+end_per_suite(Config) ->
+    rabbit_ct_helpers:run_teardown_steps(Config).
+
+init_per_group(unclustered, Config0) ->
+    Config1 = rabbit_ct_helpers:merge_app_env(
+                Config0, {rabbit, [{stream_tick_interval, 1000},
+                                   {stream_membership_reconciliation_enabled, true},
+                                   {stream_membership_reconciliation_auto_remove, true},
+                                   {stream_membership_reconciliation_interval, 5000},
+                                   {stream_membership_reconciliation_trigger_interval, 2000},
+                                   {stream_membership_reconciliation_target_group_size, 3}]}),
+    rabbit_ct_helpers:set_config(Config1, [{rmq_nodes_clustered, false}]);
+init_per_group(unclustered_triggers, Config0) ->
+    Config1 = rabbit_ct_helpers:merge_app_env(
+                Config0, {rabbit, [{stream_tick_interval, 1000},
+                                   {stream_membership_reconciliation_enabled, true},
+                                   {stream_membership_reconciliation_auto_remove, true},
+                                   {stream_membership_reconciliation_interval, 50000},
+                                   {stream_membership_reconciliation_trigger_interval, 2000},
+                                   {stream_membership_reconciliation_target_group_size, 3}]}),
+    %% shrink timeout is set here because without it, when a node stopped right after a queue was created,
+    %% the test will pass without any triggers because cluster change will likely happen before the trigger_interval,
+    %% scheduled in response to queue_created event.
+    %% See also a comment in `auto_shrink/1`.
+    rabbit_ct_helpers:set_config(Config1, [{rmq_nodes_clustered, false},
+                                           {stream_membership_reconciliation_interval, 50000},
+                                           {shrink_timeout, 2000}]);
+init_per_group(Group, Config) ->
+    ClusterSize = 3,
+    Config1 = rabbit_ct_helpers:set_config(Config,
+                                           [{rmq_nodes_count, ClusterSize},
+                                            {rmq_nodename_suffix, Group},
+                                            {tcp_ports_base}]),
+    rabbit_ct_helpers:run_steps(Config1,
+                                [fun merge_app_env/1 ] ++
+                                    rabbit_ct_broker_helpers:setup_steps()).
+
+end_per_group(unclustered, Config) ->
+    Config;
+end_per_group(unclustered_triggers, Config) ->
+    Config;
+end_per_group(_, Config) ->
+    rabbit_ct_helpers:run_steps(Config,
+                                rabbit_ct_broker_helpers:teardown_steps()).
+
+init_per_testcase(Testcase, Config) ->
+    Config1 = rabbit_ct_helpers:testcase_started(Config, Testcase),
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_queues, []),
+    Q = rabbit_data_coercion:to_binary(Testcase),
+    Config2 = rabbit_ct_helpers:set_config(Config1,
+                                           [{queue_name, Q},
+                                            {alt_queue_name, <<Q/binary, "_alt">>},
+                                            {alt_2_queue_name, <<Q/binary, "_alt_2">>}
+                                           ]),
+    rabbit_ct_helpers:run_steps(Config2, rabbit_ct_client_helpers:setup_steps()).
+
+end_per_testcase(Testcase, Config) ->
+    [Server0, Server1, Server2] =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    amqp_channel:call(Ch, #'queue.delete'{queue = rabbit_data_coercion:to_binary(Testcase)}),
+    reset_nodes([Server2, Server0], Server1),
+    Config1 = rabbit_ct_helpers:run_steps(
+                Config,
+                rabbit_ct_client_helpers:teardown_steps()),
+    rabbit_ct_helpers:testcase_finished(Config1, Testcase).
+
+%% -------------------------------------------------------------------
+%% Testcases.
+%% -------------------------------------------------------------------
+
+auto_grow(Config) ->
+    [Server0, Server1, Server2] =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
+
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+
+    %% There is only one node in the cluster at the moment
+    MemberSize = rabbit_ct_broker_helpers:rpc(Config, Server1, ?MODULE, get_member_size, [QQ]),
+    ?assertEqual(1, MemberSize),
+
+    add_server_to_cluster(Server0, Server1),
+    %% With 2 nodes in the cluster, we wont grow as it its an even number and not our target group size
+    %% new members should be available. We sleep a while so the periodic check
+    %% runs
+    timer:sleep(4000),
+    MemberSize1 = rabbit_ct_broker_helpers:rpc(Config, Server1, ?MODULE, get_member_size, [QQ]),
+    ?assertEqual(1, MemberSize1),
+
+    add_server_to_cluster(Server2, Server1),
+    %% With 3 nodes in the cluster, target size is met so eventually it should
+    %% be 3 members
+    wait_until(fun() ->
+                       3 =:= rabbit_ct_broker_helpers:rpc(Config, Server1, ?MODULE, get_member_size, [QQ])
+               end).
+
+auto_grow_drained_node(Config) ->
+    %% NOTE: with large Interval (larger than wait_until) test will fail.
+    %% the reason is that entering/exiting drain state does not emit events
+    %% and even if they did via gen_event, they going to be only local to that node.
+    %% so reconciliator has no choice but to wait full Interval
+    [Server0, Server1, Server2] =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
+
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+
+    %% There is only one node in the cluster at the moment
+    MemberSize = rabbit_ct_broker_helpers:rpc(Config, Server1, ?MODULE, get_member_size, [QQ]),
+    ?assertEqual(1, MemberSize),
+
+    add_server_to_cluster(Server0, Server1),
+    %% mark Server0 as drained, which should mean the node is not a candidate
+    %% for stream membership
+    rabbit_ct_broker_helpers:mark_as_being_drained(Config, Server0),
+    rabbit_ct_helpers:await_condition(
+        fun () -> rabbit_ct_broker_helpers:is_being_drained_local_read(Config, Server0) end,
+        10000),
+    add_server_to_cluster(Server2, Server1),
+    timer:sleep(5000),
+    %% We have 3 nodes, but one is drained, so it will not be considered.
+    MemberSize1 = rabbit_ct_broker_helpers:rpc(Config, Server1, ?MODULE, get_member_size, [QQ]),
+    ?assertEqual(1, MemberSize1),
+
+    rabbit_ct_broker_helpers:unmark_as_being_drained(Config, Server0),
+    rabbit_ct_helpers:await_condition(
+        fun () -> not rabbit_ct_broker_helpers:is_being_drained_local_read(Config, Server0) end,
+        10000),
+    %% We have 3 nodes, none is being drained, so we should grow membership to 3
+    wait_until(fun() ->
+                       3 =:= rabbit_ct_broker_helpers:rpc(Config, Server1, ?MODULE, get_member_size, [QQ])
+               end).
+
+auto_shrink(Config) ->
+    [Server0, Server1, Server2] =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    add_server_to_cluster(Server0, Server1),
+    add_server_to_cluster(Server2, Server1),
+
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+
+    wait_until(fun() ->
+                       3 =:= rabbit_ct_broker_helpers:rpc(Config, Server1, ?MODULE, get_member_size, [QQ])
+               end),
+
+    %% Stream member reconciliation does not act immediately but rather after a scheduled delay.
+    %% So if this test wants to test that the reconciliator reacts to, say, node_down or a similar event,
+    %% it has to wait at least a trigger_interval ms to pass before removing node. Otherwise
+    %% the shrink effect would come from the previous trigger.
+    %%
+    %% When a `queue_created` trigger set up a timer to fire after a trigger_interval, the queue has 3 members
+    %% and stop_app executes much quicker than the trigger_interval. Therefore the number of members
+    %% will be updated even without a node_down event.
+
+    timer:sleep(rabbit_ct_helpers:get_config(Config, shrink_timeout, 0)),
+
+    ok = rabbit_control_helper:command(stop_app, Server2),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_db_cluster, forget_member,
+                                      [Server2, false]),
+    %% with one node 'forgotten', eventually the membership will shrink to 2
+    wait_until(fun() ->
+                       2 =:= rabbit_ct_broker_helpers:rpc(Config, Server1, ?MODULE, get_member_size, [QQ])
+               end).
+
+%% -------------------------------------------------------------------
+%% Helpers.
+%% -------------------------------------------------------------------
+
+merge_app_env(Config) ->
+    rabbit_ct_helpers:merge_app_env(
+      rabbit_ct_helpers:merge_app_env(Config,
+                                      {rabbit, [{core_metrics_gc_interval, 100}]}),
+      {ra, [{min_wal_roll_over_interval, 30000}]}).
+
+reset_nodes([], _Leader) ->
+    ok;
+reset_nodes([Node| Nodes], Leader) ->
+    ok = rabbit_control_helper:command(stop_app, Node),
+    case rabbit_control_helper:command(forget_cluster_node, Leader, [atom_to_list(Node)]) of
+        ok -> ok;
+        {error, _, <<"Error:\n{:not_a_cluster_node, ~c\"The node selected is not in the cluster.\"}">>} -> ok
+    end,
+    ok = rabbit_control_helper:command(reset, Node),
+    ok = rabbit_control_helper:command(start_app, Node),
+    reset_nodes(Nodes, Leader).
+
+add_server_to_cluster(Server, Leader) ->
+    ok = rabbit_control_helper:command(stop_app, Server),
+    ok = rabbit_control_helper:command(join_cluster, Server, [atom_to_list(Leader)], []),
+    rabbit_control_helper:command(start_app, Server).
+
+declare(Ch, Q) ->
+    declare(Ch, Q, []).
+
+declare(Ch, Q, Args) ->
+    amqp_channel:call(Ch, #'queue.declare'{queue     = Q,
+                                           durable   = true,
+                                           auto_delete = false,
+                                           arguments = Args}).
+
+wait_until(Condition) ->
+    wait_until(Condition, 180).
+
+wait_until(Condition, 0) ->
+    ?assertEqual(true, Condition());
+wait_until(Condition, N) ->
+    case Condition() of
+        true ->
+            ok;
+        _ ->
+            timer:sleep(500),
+            wait_until(Condition, N - 1)
+    end.
+
+get_member_size(QueueName) ->
+    {ok, Q} = rabbit_amqqueue:lookup(rabbit_misc:r(<<"/">>, queue, QueueName)),
+    #{name := StreamId} = amqqueue:get_type_state(Q),
+    {ok, Members} = rabbit_stream_coordinator:members(StreamId),
+    map_size(Members).
+
+
+stream_id(_) ->
+    ok.
+
+delete_queues() ->
+    [rabbit_amqqueue:delete(Q, false, false, <<"dummy">>)
+     || Q <- rabbit_amqqueue:list()].

@@ -2686,6 +2686,29 @@ end}.
 
 
 %%
+%% Stream membership reconciliation
+%%
+
+{mapping, "stream.continuous_membership_reconciliation.enabled", "rabbit.stream_membership_reconciliation_enabled", [
+    {datatype, {enum, [true, false]}}]}.
+
+{mapping, "stream.continuous_membership_reconciliation.auto_remove", "rabbit.stream_membership_reconciliation_auto_remove", [
+    {datatype, {enum, [true, false]}}]}.
+
+{mapping, "stream.continuous_membership_reconciliation.interval", "rabbit.stream_membership_reconciliation_interval", [
+    {datatype, integer}, {validators, ["non_negative_integer"]}
+]}.
+
+{mapping, "stream.continuous_membership_reconciliation.trigger_interval", "rabbit.stream_membership_reconciliation_trigger_interval", [
+    {datatype, integer}, {validators, ["non_negative_integer"]}
+]}.
+
+{mapping, "stream.continuous_membership_reconciliation.target_group_size", "rabbit.stream_membership_reconciliation_target_group_size", [
+    {datatype, integer}, {validators, ["non_negative_integer"]}
+]}.
+
+
+%%
 %% Runtime parameters
 %%
 
