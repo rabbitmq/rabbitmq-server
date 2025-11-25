@@ -81,7 +81,7 @@
 
 -rabbit_boot_step({database,
                    [{mfa,         {rabbit_db, init, []}},
-                    {requires,    code_server_cache},
+                    {requires,    rabbit_registry},
                     {enables,     external_infrastructure}]}).
 
 -rabbit_boot_step({networking_metadata_store,
@@ -95,12 +95,6 @@
                     {mfa,         {rabbit_sup, start_child, [rabbit_tracking_store]}},
                     {requires,    database},
                     {enables,     external_infrastructure}]}).
-
--rabbit_boot_step({code_server_cache,
-                   [{description, "code_server cache server"},
-                    {mfa,         {rabbit_sup, start_child, [code_server_cache]}},
-                    {requires,    rabbit_alarm},
-                    {enables,     worker_pool}]}).
 
 -rabbit_boot_step({worker_pool,
                    [{description, "default worker pool"},
