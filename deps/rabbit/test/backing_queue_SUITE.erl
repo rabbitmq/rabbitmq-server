@@ -769,20 +769,13 @@ gen_result([{msg, MsgId, Msg}|Tail], Offset, Acc) ->
 %% -------------------------------------------------------------------
 
 setup_backing_queue_test_group(Config) ->
-    {ok, MaxJournal} =
-        application:get_env(rabbit, queue_index_max_journal_entries),
-    application:set_env(rabbit, queue_index_max_journal_entries, 128),
     {ok, Bytes} =
         application:get_env(rabbit, queue_index_embed_msgs_below),
     rabbit_ct_helpers:set_config(Config, [
-        {rmq_queue_index_max_journal_entries, MaxJournal},
         {rmq_queue_index_embed_msgs_below, Bytes}
       ]).
 
 teardown_backing_queue_test_group(Config) ->
-    %% FIXME: Undo all the setup function did.
-    application:set_env(rabbit, queue_index_max_journal_entries,
-                        ?config(rmq_queue_index_max_journal_entries, Config)),
     %% We will have restarted the message store, and thus changed
     %% the order of the children of rabbit_sup. This will cause
     %% problems if there are subsequent failures - see bug 24262.

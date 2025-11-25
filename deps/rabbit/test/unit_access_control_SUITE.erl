@@ -30,8 +30,7 @@ groups() ->
           login_of_passwordless_user,
           set_tags_for_passwordless_user,
           change_password,
-          auth_backend_internal_expand_topic_permission,
-          rabbit_direct_extract_extra_auth_props
+          auth_backend_internal_expand_topic_permission
       ]}
     ].
 
@@ -220,28 +219,6 @@ set_tags_for_passwordless_user1(_Config) ->
 
     passed.
 
-
-rabbit_direct_extract_extra_auth_props(_Config) ->
-    {ok, CSC} = code_server_cache:start_link(),
-    % no protocol to extract
-    [] = rabbit_direct:extract_extra_auth_props(
-        {<<"guest">>, <<"guest">>}, <<"/">>, 1,
-        [{name,<<"127.0.0.1:52366 -> 127.0.0.1:1883">>}]),
-    % protocol to extract, but no module to call
-    [] = rabbit_direct:extract_extra_auth_props(
-        {<<"guest">>, <<"guest">>}, <<"/">>, 1,
-        [{protocol, {'PROTOCOL_WITHOUT_MODULE', "1.0"}}]),
-    % see rabbit_dummy_protocol_connection_info module
-    % protocol to extract, module that returns a client ID
-    [{client_id, <<"DummyClientId">>}] = rabbit_direct:extract_extra_auth_props(
-        {<<"guest">>, <<"guest">>}, <<"/">>, 1,
-        [{protocol, {'DUMMY_PROTOCOL', "1.0"}}]),
-    % protocol to extract, but error thrown in module
-    [] = rabbit_direct:extract_extra_auth_props(
-        {<<"guest">>, <<"guest">>}, <<"/">>, -1,
-        [{protocol, {'DUMMY_PROTOCOL', "1.0"}}]),
-    gen_server:stop(CSC),
-    ok.
 
 auth_backend_internal_expand_topic_permission(_Config) ->
     ExpandMap = #{<<"username">> => <<"guest">>, <<"vhost">> => <<"default">>},

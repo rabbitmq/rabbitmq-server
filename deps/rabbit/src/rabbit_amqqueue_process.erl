@@ -1466,11 +1466,7 @@ handle_call(purge, _From, State = #q{backing_queue       = BQ,
                                      backing_queue_state = BQS}) ->
     {Count, BQS1} = BQ:purge(BQS),
     State1 = State#q{backing_queue_state = BQS1},
-    reply({ok, Count}, notify_decorators_if_became_empty(Count =:= 0, State1));
-
-handle_call({requeue, AckTags, ChPid}, From, State) ->
-    gen_server2:reply(From, ok),
-    noreply(requeue(AckTags, ChPid, State)).
+    reply({ok, Count}, notify_decorators_if_became_empty(Count =:= 0, State1)).
 
 new_single_active_consumer_after_basic_cancel(ChPid, ConsumerTag, CurrentSingleActiveConsumer,
             _SingleActiveConsumerIsOn = true, Consumers) ->

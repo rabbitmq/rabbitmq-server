@@ -22,7 +22,7 @@
 -export([start/2, stop/1]).
 
 %% exported for testing only
--export([start_msg_store/3, stop_msg_store/1]).
+-export([start_msg_store/3, stop_msg_store/1, ram_pending_acks/1]).
 
 -include("mc.hrl").
 -include_lib("stdlib/include/qlc.hrl").
@@ -123,62 +123,113 @@
 
 -behaviour(rabbit_backing_queue).
 
--record(vqstate,
-        { q_head,
-          q_tail,
-          next_seq_id,
-          %% seq_id() of first undelivered message
-          %% everything before this seq_id() was delivered at least once
-          next_deliver_seq_id,
-          ram_pending_ack,    %% msgs still in RAM
-          disk_pending_ack,   %% msgs in store, paged out
-          index_state,
-          store_state,
-          msg_store_clients,
-          durable,
-          transient_threshold,
-          qi_embed_msgs_below,
+-record(vqstate, {
+    %% Head of the queue. Index information has been loaded into
+    %% memory, and message body may have been depending on size.
+    q_head,
+    %% Tail of the queue, fully on disk.
+    q_tail,
 
-          bytes,              %% w/o unacked
-          unacked_bytes,
-          persistent_count,   %% w   unacked
-          persistent_bytes,   %% w   unacked
+    %% SeqId of the next message published.
+    next_seq_id,
+    %% Everything before this SeqId was delivered at least once.
+    %% @todo Do we really need this if we add delivery_count?
+    %%       No we don't, we will just check delivery_count to know if was already delivered (delivery_count > 1).
+    %%       NO!! We can also remove the is_delivered in the msg_status since that value --doesn't-- DOES!! survive restarts.
+    %%       Actually we are using next_deliver_seq_id to know whether a message was already delivered and that survives restarts.
+    %%       But we could very well do the same with a delivery_count map. So making the delivery_count map survive restarts
+    %%       (and properly clean up on restart by removing transients) is the key to getting rid of these things.
+    next_deliver_seq_id,
 
-          ram_msg_count,      %% w/o unacked
-          ram_msg_count_prev,
-          ram_ack_count_prev,
-          ram_bytes,          %% w   unacked
-          out_counter,
-          in_counter,
-          rates,
-          %% There are two confirms paths: either store/index produce confirms
-          %% separately (v2 with per-vhost message store) or the confirms
-          %% are produced all at once while syncing/flushing (v2 with per-queue
-          %% message store). The latter is more efficient as it avoids many
-          %% sets operations.
-          msgs_on_disk,
-          msg_indices_on_disk,
-          unconfirmed,
-          confirmed,
-          ack_out_counter,
-          ack_in_counter,
-          %% Unlike the other counters these two do not feed into
-          %% #rates{} and get reset
-          disk_read_count,
-          disk_write_count,
+    %% Messages pending acks. These messages have been delivered to the channel
+    %% and we are expecting an ack (or requeue) back. Messages are in ram or disk
+    %% depending on whether the #msg_status{} record contains the message body.
+    %% Typically only smaller message bodies are kept in memory, larger ones are
+    %% read only when needed.
+    ram_pending_ack,
+    disk_pending_ack,
 
-          %% Fast path for confirms handling. Instead of having
-          %% index/store keep track of confirms separately and
-          %% doing intersect/subtract/union we just put the messages
-          %% here and on sync move them to 'confirmed'.
-          %%
-          %% Note: This field used to be 'memory_reduction_run_count'.
-          unconfirmed_simple,
-          %% Queue data is grouped by VHost. We need to store it
-          %% to work with queue index.
-          virtual_host,
-          waiting_bump = false
-        }).
+    %% Index, queue store and shared message store states. In the latter's case
+    %% since the shared message store is separate processes, the state only
+    %% contains information to access it.
+    index_state,
+    store_state,
+    msg_store_clients,
+
+    %% Whether the queue is durable. Used to determine whether messages are
+    %% truly persistent (both messages and queue must be durable).
+    durable,
+
+    %% We must keep the virtual host information around in order to write
+    %% terms when terminating as the terms file is per-vhost.
+    virtual_host,
+
+    %% SeqId of the first persistent message. Determined during recovery and
+    %% used to identify which transient messages belong to a previous
+    %% incarnation of the node. We don't remove transient messages during
+    %% recovery to keep recovery fast (otherwise we'd have to go over the
+    %% entire queue contents), instead we mark where we left off and drop
+    %% the messages when they would have been consumed.
+    transient_threshold,
+
+    %% Maximum size of messages written to the queue store. The queue
+    %% store is meant to contain smaller messages, while larger messages
+    %% go to the shared message store. The shared message store benefits
+    %% from mechanisms like compaction and deduplication.
+    qi_embed_msgs_below,
+
+    %% There are two confirms paths: either store/index produce confirms
+    %% separately (per-vhost message store) or the confirms
+    %% are produced all at once while syncing/flushing (per-queue
+    %% message store). The latter is more efficient as it avoids many
+    %% sets operations.
+    msgs_on_disk,
+    msg_indices_on_disk,
+    unconfirmed,
+    confirmed,
+    %% Fast path for confirms handling. Instead of having
+    %% index/store keep track of confirms separately and
+    %% doing intersect/subtract/union we just put the messages
+    %% here and on sync move them to 'confirmed'.
+    unconfirmed_simple,
+
+    %% Metrics that are also used for sanity checking.
+    %%
+    %% They measure (with "unacked" meaning "messages pending acks"):
+    %% * the number of bytes in the queue (excluding unacked)
+    %% * the number of bytes in messages pending acks
+    %% * the number of persistent messages (including unacked)
+    %% * the number of bytes for persistent messages (including unacked)
+    %% * the number of messages currently in memory
+    %%   (excluding unacked because we can get those via `map_size(RPA)`)
+    %% * the number of bytes of messages currently in memory (including unacked)
+    %%
+    %% The total number of bytes of messages in the queue (including unacked)
+    %% is bytes + unacked_bytes.
+    %%
+    %% Messages can be both persistent and in memory at the same time,
+    %% for example when they are close to being delivered.
+    bytes,
+    unacked_bytes,
+    persistent_count,
+    persistent_bytes,
+    ram_msg_count,
+    ram_bytes,
+
+    %% Metrics for outgoing and ingoing messages rates.
+    %%
+    %% Counters get incremented per event and then an average is calculated
+    %% periodically into the #rates{} record.
+    out_counter,
+    in_counter,
+    ack_out_counter,
+    ack_in_counter,
+    rates,
+
+    %% Metrics totalling message reads and writes from/to disk.
+    disk_read_count,
+    disk_write_count
+}).
 
 -record(rates, { in, out, ack_in, ack_out, timestamp }).
 
@@ -261,8 +312,6 @@
              persistent_bytes      :: non_neg_integer(),
 
              ram_msg_count         :: non_neg_integer(),
-             ram_msg_count_prev    :: non_neg_integer(),
-             ram_ack_count_prev    :: non_neg_integer(),
              ram_bytes             :: non_neg_integer(),
              out_counter           :: non_neg_integer(),
              in_counter            :: non_neg_integer(),
@@ -562,17 +611,13 @@ ack(AckTags, State) ->
                          ack_out_counter  = AckOutCount + length(AckTags) })}.
 
 requeue(AckTags, #vqstate { q_head     = QHead0,
-                            q_tail     = QTail,
-                            in_counter = InCounter } = State) ->
-    {SeqIds, QHead, MsgIds, State1} = requeue_merge(lists:sort(AckTags), QHead0, [],
-                                                    q_tail_limit(QTail), State),
-    {QTail1, MsgIds1, State2}     = q_tail_merge(SeqIds, QTail, MsgIds, State1),
-    MsgCount = length(MsgIds1),
-    {MsgIds1, a(
-                  maybe_update_rates(
-                    State2 #vqstate { q_head     = QHead,
-                                      q_tail     = QTail1,
-                                      in_counter = InCounter + MsgCount }))}.
+                            in_counter = InCounter } = State0) ->
+    {QHead, MsgIds, State} = requeue_merge(lists:sort(AckTags), QHead0, [], State0),
+    MsgCount = length(MsgIds),
+    {MsgIds, a(maybe_update_rates(State#vqstate{
+        q_head     = QHead,
+        in_counter = InCounter + MsgCount
+    }))}.
 
 ackfold(MsgFun, Acc, State, AckTags) ->
     {AccN, StateN} =
@@ -1022,8 +1067,6 @@ init(IsDurable, IndexState, StoreState, DiskCount, DiskBytes, Terms,
       persistent_bytes    = DiskBytes1,
 
       ram_msg_count       = 0,
-      ram_msg_count_prev  = 0,
-      ram_ack_count_prev  = 0,
       ram_bytes           = 0,
       unacked_bytes       = 0,
       out_counter         = 0,
@@ -1159,16 +1202,14 @@ stats_acked_pending(MS = #msg_status{is_persistent = false}, St) ->
     St#vqstate{?UP(unacked_bytes, ram_bytes, -msg_size(MS))}.
 
 %% Notice that this is the reverse of stats_pending_acks.
+%% Note that messages are always requeued to memory in the current
+%% implementation because they are necessarily at the front of the
+%% queue which is in memory.
 stats_requeued_memory(MS = #msg_status{msg = undefined}, St) ->
     St#vqstate{?UP(bytes, +msg_size(MS)), ?UP(unacked_bytes, -msg_size(MS))};
 stats_requeued_memory(MS, St) ->
     St#vqstate{?UP(ram_msg_count, +1),
                ?UP(bytes, +msg_size(MS)), ?UP(unacked_bytes, -msg_size(MS))}.
-
-stats_requeued_disk(MS = #msg_status{is_persistent = true}, St) ->
-    St#vqstate{?UP(bytes, +msg_size(MS)), ?UP(unacked_bytes, -msg_size(MS))};
-stats_requeued_disk(MS = #msg_status{is_persistent = false}, St) ->
-    St#vqstate{?UP(unacked_bytes, -msg_size(MS))}.
 
 msg_size(#msg_status{msg_props = #message_properties{size = Size}}) -> Size.
 
@@ -1593,6 +1634,9 @@ prepare_to_store(Msg) ->
 %% Internal gubbins for acks
 %%----------------------------------------------------------------------------
 
+ram_pending_acks(#vqstate{ ram_pending_ack = RPA }) ->
+    RPA.
+
 record_pending_ack(#msg_status { seq_id = SeqId } = MsgStatus,
                    State = #vqstate { ram_pending_ack  = RPA,
                                       disk_pending_ack = DPA,
@@ -1757,46 +1801,27 @@ msgs_written_to_disk(Callback, MsgIdSet, written) ->
 %%----------------------------------------------------------------------------
 
 %% Rebuild queue, inserting sequence ids to maintain ordering
-requeue_merge(SeqIds, Q, MsgIds, Limit, State) ->
-    requeue_merge(SeqIds, Q, ?QUEUE:new(), MsgIds,
-                Limit, State).
+requeue_merge(SeqIds, Q, MsgIds, State) ->
+    requeue_merge(SeqIds, Q, ?QUEUE:new(), MsgIds, State).
 
-requeue_merge([SeqId | Rest] = SeqIds, Q, Front, MsgIds,
-            Limit, State)
-  when Limit == undefined orelse SeqId < Limit ->
+requeue_merge([SeqId | Rest] = SeqIds, Q, Front, MsgIds, State) ->
     case ?QUEUE:out(Q) of
         {{value, #msg_status { seq_id = SeqIdQ } = MsgStatus}, Q1}
           when SeqIdQ < SeqId ->
             %% enqueue from the remaining queue
-            requeue_merge(SeqIds, Q1, ?QUEUE:in(MsgStatus, Front), MsgIds,
-                        Limit, State);
+            requeue_merge(SeqIds, Q1, ?QUEUE:in(MsgStatus, Front), MsgIds, State);
         {_, _Q1} ->
             %% enqueue from the remaining list of sequence ids
             case msg_from_pending_ack(SeqId, State) of
                 {none, _} ->
-                    requeue_merge(Rest, Q, Front, MsgIds, Limit, State);
+                    requeue_merge(Rest, Q, Front, MsgIds, State);
                 {#msg_status { msg_id = MsgId } = MsgStatus, State1} ->
                     State2 = stats_requeued_memory(MsgStatus, State1),
-                    requeue_merge(Rest, Q, ?QUEUE:in(MsgStatus, Front), [MsgId | MsgIds],
-                                Limit, State2)
+                    requeue_merge(Rest, Q, ?QUEUE:in(MsgStatus, Front), [MsgId | MsgIds], State2)
             end
     end;
-requeue_merge(SeqIds, Q, Front, MsgIds,
-            _Limit, State) ->
-    {SeqIds, ?QUEUE:join(Front, Q), MsgIds, State}.
-
-q_tail_merge([], QTail, MsgIds, State) ->
-    {QTail, MsgIds, State};
-q_tail_merge(SeqIds, QTail, MsgIds, State) ->
-    lists:foldl(fun (SeqId, {QTail0, MsgIds0, State0} = Acc) ->
-                        case msg_from_pending_ack(SeqId, State0) of
-                            {none, _} ->
-                                Acc;
-                        {#msg_status { msg_id = MsgId } = MsgStatus, State1} ->
-                                {expand_q_tail(SeqId, QTail0), [MsgId | MsgIds0],
-                                 stats_requeued_disk(MsgStatus, State1)}
-                        end
-                end, {QTail, MsgIds, State}, SeqIds).
+requeue_merge([], Q, Front, MsgIds, State) ->
+    {?QUEUE:join(Front, Q), MsgIds, State}.
 
 %% Mostly opposite of record_pending_ack/2
 msg_from_pending_ack(SeqId, State) ->
@@ -1808,9 +1833,6 @@ msg_from_pending_ack(SeqId, State) ->
                msg_props = MsgProps #message_properties { needs_confirming = false } },
              State1}
     end.
-
-q_tail_limit(?BLANK_Q_TAIL_PATTERN(_))             -> undefined;
-q_tail_limit(#q_tail{ start_seq_id = StartSeqId }) -> StartSeqId.
 
 %%----------------------------------------------------------------------------
 %% Phase changes
