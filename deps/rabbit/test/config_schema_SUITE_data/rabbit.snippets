@@ -1198,10 +1198,38 @@ credential_validator.regexp = ^abc\\d+",
    []},
 
   %%
-  %% Stream replication port range
+  %% Stream replication
   %%
 
-  {stream_replication_port_range,
+  {stream_replication_address_family_ipv4_case1,
+   "stream.replication.address_family = inet",
+   [{osiris, [
+      {replica_ip_address_family, inet}
+     ]}],
+   []},
+
+  {stream_replication_address_family_ipv4_case2,
+   "stream.replication.address_family = ipv4",
+   [{osiris, [
+      {replica_ip_address_family, inet}
+     ]}],
+   []},
+
+  {stream_replication_address_family_ipv6_case1,
+   "stream.replication.address_family = inet6",
+   [{osiris, [
+      {replica_ip_address_family, inet6}
+     ]}],
+   []},
+
+  {stream_replication_address_family_ipv6_case2,
+   "stream.replication.address_family = ipv6",
+   [{osiris, [
+      {replica_ip_address_family, inet6}
+     ]}],
+   []},
+
+  {stream_replication_port_range_min_max,
    "
     stream.replication.port_range.min = 4000
     stream.replication.port_range.max = 4600
@@ -1211,7 +1239,7 @@ credential_validator.regexp = ^abc\\d+",
      ]}],
    []},
 
-  {stream_replication_port_range,
+  {stream_replication_port_range_min_only,
    "
     stream.replication.port_range.min = 4000
    ",
@@ -1220,7 +1248,7 @@ credential_validator.regexp = ^abc\\d+",
      ]}],
    []},
 
-  {stream_replication_port_range,
+  {stream_replication_port_range_max,
    "
     stream.replication.port_range.max = 4600
    ",
