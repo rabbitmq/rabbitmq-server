@@ -105,6 +105,10 @@ groups() ->
                                             force_checkpoint_on_queue,
                                             force_checkpoint,
                                             policy_repair,
+                                            repair_metadata_nodes_list_to_map,
+                                            repair_metadata_nodes_added_member,
+                                            repair_metadata_nodes_removed_member,
+                                            repair_metadata_nodes_added_removed_member,
                                             gh_12635,
                                             replica_states,
                                             restart_after_queue_reincarnation,
@@ -1606,6 +1610,66 @@ force_checkpoint(Config) ->
 
     % Result should only have quorum queue
     ?assertEqual(ExpectedRes, ForceCheckpointRes).
+
+repair_metadata_nodes_list_to_map(Config) ->
+    %% After feature flag `track_qq_members_uids` is enabled, quorum
+    %% queues will convert their type state in metadata store
+    %% from nodes list to node=>uid mappings
+    UpdateFun =
+        fun(QueueRec) ->
+                #{nodes := NodesMap} = TypeState = amqqueue:get_type_state(QueueRec),
+                amqqueue:set_type_state(QueueRec, TypeState#{nodes => maps:keys(NodesMap)})
+        end,
+    repair_metadata_nodes(Config, UpdateFun).
+
+repair_metadata_nodes_added_member(Config) ->
+    Server1 = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    UpdateFun =
+        fun(QueueRec) ->
+                #{nodes := NodesMap} = TypeState = amqqueue:get_type_state(QueueRec),
+                amqqueue:set_type_state(QueueRec, TypeState#{nodes => maps:remove(Server1, NodesMap)})
+        end,
+    repair_metadata_nodes(Config, UpdateFun).
+
+repair_metadata_nodes_removed_member(Config) ->
+    UpdateFun =
+        fun(QueueRec) ->
+                #{nodes := NodesMap} = TypeState = amqqueue:get_type_state(QueueRec),
+                amqqueue:set_type_state(QueueRec, TypeState#{nodes => NodesMap#{'rabbit@foo' => <<"dummy_uid">>}})
+        end,
+    repair_metadata_nodes(Config, UpdateFun).
+
+repair_metadata_nodes_added_removed_member(Config) ->
+    Server1 = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    UpdateFun =
+        fun(QueueRec) ->
+                #{nodes := NodesMap} = TypeState = amqqueue:get_type_state(QueueRec),
+                NewNodeMap = maps:remove(Server1, NodesMap#{'rabbit@foo' => <<"dummy_uid">>}),
+                amqqueue:set_type_state(QueueRec, TypeState#{nodes => NewNodeMap})
+        end,
+    repair_metadata_nodes(Config, UpdateFun).
+
+repair_metadata_nodes(Config, UpdateFun) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    QQName = rabbit_misc:r(<<"/">>, queue, QQ),
+
+    declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}]),
+
+
+    QueueRecBefore = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, lookup, [QQName]),
+
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, update, [QQName, UpdateFun]),
+
+    ?assertEqual(repaired, rpc:call(Server, rabbit_quorum_queue, repair_amqqueue_nodes,
+                                    [QQName])),
+
+    QueueRecAfter = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, lookup, [QQName]),
+
+    ?assertEqual(QueueRecBefore, QueueRecAfter),
+    ok.
 
 % Tests that, if the process of a QQ is dead in the moment of declaring a policy
 % that affects such queue, when the process is made available again, the policy

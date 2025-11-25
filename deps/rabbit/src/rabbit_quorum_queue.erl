@@ -726,42 +726,99 @@ repair_amqqueue_nodes(Q0) ->
     {Name, _} = amqqueue:get_pid(Q0),
     Members = ra_leaderboard:lookup_members(Name),
     RaNodes = [N || {_, N} <- Members],
-    Nodes = get_nodes(Q0),
-    case lists:sort(RaNodes) =:= lists:sort(Nodes) of
+    case rabbit_feature_flags:is_enabled(track_qq_members_uids) of
+        false ->
+            Nodes = get_nodes(Q0),
+            case lists:sort(RaNodes) =:= lists:sort(Nodes) of
+                true ->
+                    %% up to date
+                    ok;
+                false ->
+                    %% update amqqueue record
+                    Fun = fun (Q) ->
+                                  TS0 = amqqueue:get_type_state(Q),
+                                  TS = TS0#{nodes => RaNodes},
+                                  amqqueue:set_type_state(Q, TS)
+                          end,
+                    _ = rabbit_amqqueue:update(QName, Fun),
+                    repaired
+            end;
         true ->
-            %% up to date
+            {ok, Q0} = rabbit_amqqueue:lookup(QName),
+            OldTypeState = amqqueue:get_type_state(Q0),
+            case OldTypeState of
+                #{nodes := List} when is_list(List) ->
+                    repair_with_list_nodes(QName, Name, RaNodes, OldTypeState);
+                #{nodes := Map} when is_map(Map) ->
+                    repair_with_map_nodes(QName, Name, RaNodes, Map)
+            end
+    end.
+
+%% @doc Repair logic when OldTypeState has a list as nodes value.
+%% Only updates the queue state if ALL nodes return valid UIDs.
+repair_with_list_nodes(QName, Name, RaNodes, _OldTypeState) ->
+    case gather_node_uids(QName, Name, RaNodes) of
+        {NewNodesUids, _ErrorList = []} ->
+            %% All nodes returned valid UIDs, proceed with update
+            Fun = fun (Q) ->
+                          Ts0 = amqqueue:get_type_state(Q),
+                          Ts = Ts0#{nodes => NewNodesUids},
+                          amqqueue:set_type_state(Q, Ts)
+                  end,
+            _ = rabbit_amqqueue:update(QName, Fun),
+            repaired;
+        _ ->
+            %% Fetching UID for at least some nodes failed
+            %% Do not update the queue state
+            ok
+    end.
+
+%% @doc Repair logic when OldTypeState has a map as nodes value.
+%% Only adds new nodes that return valid UIDs.
+repair_with_map_nodes(QName, Name, RaNodes, PreviousUidsMap) ->
+    PrevNodes = maps:keys(PreviousUidsMap),
+    case lists:sort(PrevNodes) == lists:sort(RaNodes) of
+        true ->
             ok;
         false ->
-            %% update amqqueue record
+            NodesToAdd = RaNodes -- PrevNodes,
+            {AddedNodesUids, _ErrorList} = gather_node_uids(QName, Name, NodesToAdd),
+            RemainingNodesUids = maps:with(RaNodes, PreviousUidsMap),
+            NewNodes = maps:merge(RemainingNodesUids, AddedNodesUids),
             Fun = fun (Q) ->
-                          TS0 = amqqueue:get_type_state(Q),
-                          TS = case rabbit_feature_flags:is_enabled(track_qq_members_uids) of
-                                   false ->
-                                       TS0#{nodes => RaNodes};
-                                   true ->
-                                       RaUidsList = [begin
-                                                         Uid = erpc:call(N, ra_directory, uid_of,
-                                                                         [?RA_SYSTEM, Name],
-                                                                         ?RPC_TIMEOUT),
-                                                         case Uid of
-                                                             undefined ->
-                                                                 ?LOG_WARNING("Unexpected undefined uuid from node ~p for quorum queue ~ts during repair_amqqueue_nodes",
-                                                                              [N, rabbit_misc:rs(QName)]);
-                                                             _ ->
-                                                                 ok
-                                                         end,
-                                                         {N, Uid}
-                                                     end
-                                                     || N <- RaNodes],
-
-                                       RaUids = maps:from_list(RaUidsList),
-                                       TS0#{nodes => RaUids}
-                               end,
-                          amqqueue:set_type_state(Q, TS)
+                          Ts0 = amqqueue:get_type_state(Q),
+                          Ts = Ts0#{nodes => NewNodes},
+                          amqqueue:set_type_state(Q, Ts)
                   end,
             _ = rabbit_amqqueue:update(QName, Fun),
             repaired
     end.
+
+gather_node_uids(QName, Name, RaNodes) ->
+    RPCRes = erpc:multicall(RaNodes, ra_directory, uid_of, [?RA_SYSTEM, Name], ?RPC_TIMEOUT),
+    NewNodesUidsList0 = lists:zip(RaNodes, RPCRes),
+
+    %% Check if all nodes returned valid UIDs
+    {ValidList, ErrorList} =
+        lists:partition(
+          fun({_Node, {ok, UId}}) when UId =/= undefined ->
+                  true;
+             (_) ->
+                  false
+          end, NewNodesUidsList0),
+    NewNodesUidsList = [{Node, UId} || {Node, {ok, UId}} <- ValidList],
+
+    lists:foreach(fun({Node, {ok, undefined}}) ->
+                          ?LOG_WARNING("Unexpected undefined uuid from node ~p "
+                                       "for quorum ~ts during repair_amqqueue_nodes",
+                                       [Node, rabbit_misc:rs(QName)]);
+                     ({Node, CaughtCallException}) ->
+                          ?LOG_WARNING("Call exception while retrieving uuid from node ~p "
+                                       "for quorum ~ts during repair_amqqueue_nodes: ~p",
+                                       [Node, rabbit_misc:rs(QName), CaughtCallException])
+                  end, ErrorList),
+
+    {maps:from_list(NewNodesUidsList), ErrorList}.
 
 reductions(Name) ->
     try
@@ -823,7 +880,7 @@ recover(_Vhost, Queues) ->
          RaUId = ra_directory:uid_of(?RA_SYSTEM, Name),
          case RaUId of
              undefined ->
-                 ?LOG_WARNING("Unexpected undefined uuid for current node for quorum queue ~ts during recover",
+                 ?LOG_WARNING("Unexpected undefined uuid for current node for quorum ~ts during recover",
                               [rabbit_misc:rs(QName)]);
              _ ->
                  ok
@@ -840,7 +897,7 @@ recover(_Vhost, Queues) ->
              #{node() := _NewRaUId} ->
                  %% Queue is aware but it does not match the one returned by
                  %% ra_directory
-                 rabbit_log:info("Quorum queue ~ts: detected node uuid change, "
+                 rabbit_log:info("Quorum ~ts: detected node uuid change, "
                                  "deleting old data directory", [rabbit_misc:rs(QName)]),
                  maybe_delete_data_dir(RaUId)
          end,
