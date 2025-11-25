@@ -2799,6 +2799,19 @@ fun(Conf) ->
     end
 end}.
 
+{mapping, "stream.data_dir", "osiris.data_dir", [
+  {datatype, string}
+]}.
+
+{translation, "osiris.data_dir",
+    fun(Conf) ->
+        case cuttlefish:conf_get("stream.data_dir", Conf, undefined) of
+            undefined -> cuttlefish:unset();
+            Val       -> Val
+        end
+    end
+}.
+
 {mapping, "stream.read_ahead", "rabbit.stream_read_ahead",
     [{datatype, [{enum, [true, false]}, integer, string]}]}.
 
