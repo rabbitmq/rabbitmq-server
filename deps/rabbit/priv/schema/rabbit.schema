@@ -2756,6 +2756,23 @@ end}.
  end
 }.
 
+{mapping, "stream.replication.address_family", "osiris.replica_ip_address_family", [
+    {datatype, [{enum, [inet6, inet, ipv6, ipv4]}]}
+]}.
+
+{translation, "osiris.replica_ip_address_family",
+    fun(Conf) ->
+        case cuttlefish:conf_get("stream.replication.address_family", Conf, undefined) of
+            undefined -> cuttlefish:unset();
+            inet      -> inet;
+            inet6     -> inet6;
+            ipv4      -> inet;
+            ipv6      -> inet6;
+            Other     -> cuttlefish:invalid(io_lib:format("~p is not a supported address family", [Other]))
+        end
+    end
+}.
+
 {mapping, "stream.replication.port_range.min", "osiris.port_range", [
     {datatype, [integer]},
     {validators, ["non_zero_positive_integer"]}
