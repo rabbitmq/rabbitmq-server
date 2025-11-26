@@ -373,7 +373,7 @@ content_type_test(Config) ->
 
 encoding_test(Config) ->
     {Headers, Body} = http_get(Config, [{"accept-encoding", "deflate"}], 200),
-    ?assertMatch("identity", proplists:get_value("content-encoding", Headers)),
+    ?assertMatch(undefined, proplists:get_value("content-encoding", Headers)),
     ?assertEqual(match, re:run(Body, "^# TYPE", [{capture, none}, multiline])).
 
 gzip_encoding_test(Config) ->
