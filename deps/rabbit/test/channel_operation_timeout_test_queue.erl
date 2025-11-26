@@ -12,8 +12,13 @@
          purge/1, purge_acks/1,
          publish/5, publish_delivered/4,
          discard/3, drain_confirmed/1,
+<<<<<<< HEAD
          dropwhile/2, fetchwhile/4, fetch/2, drop/2, ack/2, requeue/2,
          ackfold/4, fold/3, len/1, is_empty/1, depth/1,
+=======
+         dropwhile/2, fetchwhile/4, fetch/2, drop/2, ack/2, requeue/3,
+         ackfold/4, len/1, is_empty/1, depth/1,
+>>>>>>> 6664d1bfb (CQ: Implement AMQP-1.0 delivery-count and first-acquirer)
          update_rates/1, needs_timeout/1, timeout/1,
          handle_pre_hibernate/1, resume/1, msg_rates/1,
          info/2, invoke/3, is_duplicate/2, set_queue_mode/2,
@@ -249,14 +254,19 @@ drop(AckRequired, State) ->
 ack(List, State) ->
     rabbit_variable_queue:ack(List, State).
 
+<<<<<<< HEAD
 requeue(AckTags, #vqstate { ram_pending_ack = QPA } = State) ->
     maybe_delay(QPA),
     rabbit_variable_queue:requeue(AckTags, State);
 %% For v3.9.x and below because the state has changed.
 requeue(AckTags, State) ->
     QPA = element(10, State),
+=======
+requeue(AckTags, DelFailed, State) ->
+    QPA = ram_pending_acks(State),
+>>>>>>> 6664d1bfb (CQ: Implement AMQP-1.0 delivery-count and first-acquirer)
     maybe_delay(QPA),
-    rabbit_variable_queue:requeue(AckTags, State).
+    rabbit_variable_queue:requeue(AckTags, DelFailed, State).
 
 ackfold(MsgFun, Acc, State, AckTags) ->
     rabbit_variable_queue:ackfold(MsgFun, Acc, State, AckTags).

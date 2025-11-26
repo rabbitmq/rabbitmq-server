@@ -167,7 +167,7 @@
 
 %% Reinsert messages into the queue which have already been delivered
 %% and were pending acknowledgement.
--callback requeue([ack()], state()) -> {msg_ids(), state()}.
+-callback requeue([ack()], boolean(), state()) -> {msg_ids(), state()}.
 
 %% Fold over messages by ack tag. The supplied function is called with
 %% each message, its ack tag, and an accumulator.

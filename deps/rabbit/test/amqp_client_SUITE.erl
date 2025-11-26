@@ -454,9 +454,10 @@ reliable_send_receive(QType, Outcome, Config) ->
     ok = close_connection_sync(Connection2).
 
 %% We test the modified outcome with classic queues.
-%% We expect that classic queues implement field undeliverable-here incorrectly
-%% by discarding (if true) or requeueing (if false).
-%% Fields delivery-failed and message-annotations are not implemented.
+%% We expect that classic queues implement field
+%% * delivery-failed correctly
+%% * undeliverable-here incorrectly by discarding (if true) or requeueing (if false)
+%% * message-annotations incorrectly (not implemented)
 modified_classic_queue(Config) ->
     QName = atom_to_binary(?FUNCTION_NAME),
     {_, Session, LinkPair} = Init = init(Config),
@@ -477,20 +478,32 @@ modified_classic_queue(Config) ->
 
     {ok, M1} = amqp10_client:get_msg(Receiver),
     ?assertEqual([<<"m1">>], amqp10_msg:body(M1)),
+    ?assertMatch(#{delivery_count := 0,
+                   first_acquirer := true},
+                 amqp10_msg:headers(M1)),
     ok = amqp10_client:settle_msg(Receiver, M1, {modified, false, true, #{}}),
 
     {ok, M2a} = amqp10_client:get_msg(Receiver),
     ?assertEqual([<<"m2">>], amqp10_msg:body(M2a)),
+    ?assertMatch(#{delivery_count := 0,
+                   first_acquirer := true},
+                 amqp10_msg:headers(M2a)),
     ok = amqp10_client:settle_msg(Receiver, M2a,
                                   {modified, false, false, #{}}),
 
     {ok, M2b} = amqp10_client:get_msg(Receiver),
     ?assertEqual([<<"m2">>], amqp10_msg:body(M2b)),
+    ?assertMatch(#{delivery_count := 0,
+                   first_acquirer := false},
+                 amqp10_msg:headers(M2b)),
     ok = amqp10_client:settle_msg(Receiver, M2b,
                                   {modified, true, false, #{<<"x-opt-key">> => <<"val">>}}),
 
     {ok, M2c} = amqp10_client:get_msg(Receiver),
     ?assertEqual([<<"m2">>], amqp10_msg:body(M2c)),
+    ?assertMatch(#{delivery_count := 1,
+                   first_acquirer := false},
+                 amqp10_msg:headers(M2c)),
     ok = amqp10_client:settle_msg(Receiver, M2c, modified),
 
     ok = amqp10_client:detach_link(Receiver),

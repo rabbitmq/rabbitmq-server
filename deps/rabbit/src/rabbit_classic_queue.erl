@@ -362,7 +362,22 @@ cancel(Q, Spec, State) ->
 -spec settle(rabbit_amqqueue:name(), rabbit_queue_type:settle_op(),
              rabbit_types:ctag(), [non_neg_integer()], state()) ->
     {state(), rabbit_queue_type:actions()}.
-settle(QName, {modify, _DelFailed, Undel, _Anns}, CTag, MsgIds, State) ->
+settle(QName, Op, CTag, MsgIds, State) ->
+    case rabbit_feature_flags:is_enabled('rabbitmq_4.3.0') of
+        true -> settle_43(QName, Op, CTag, MsgIds, State);
+        false -> settle_compat(QName, Op, CTag, MsgIds, State)
+    end.
+
+settle_43(_QName, {modify, DelFailed, Undel, Anns}, _CTag, MsgIds, State = #?STATE{pid = Pid}) ->
+    Arg = {modify, MsgIds, DelFailed, Undel, Anns, self()},
+    delegate:invoke_no_result(Pid, {gen_server2, cast, [Arg]}),
+    {State, []};
+settle_43(_QName, Op, _CTag, MsgIds, State = #?STATE{pid = Pid}) ->
+    Arg = {Op, MsgIds, self()},
+    delegate:invoke_no_result(Pid, {gen_server2, cast, [Arg]}),
+    {State, []}.
+
+settle_compat(QName, {modify, _DelFailed, Undel, _Anns}, CTag, MsgIds, State) ->
     %% translate modify into other op
     Op = case Undel of
              true ->
@@ -370,8 +385,8 @@ settle(QName, {modify, _DelFailed, Undel, _Anns}, CTag, MsgIds, State) ->
              false ->
                  requeue
          end,
-    settle(QName, Op, CTag, MsgIds, State);
-settle(_QName, Op, _CTag, MsgIds, State = #?STATE{pid = Pid}) ->
+    settle_compat(QName, Op, CTag, MsgIds, State);
+settle_compat(_QName, Op, _CTag, MsgIds, State = #?STATE{pid = Pid}) ->
     Arg = case Op of
               complete ->
                   {ack, MsgIds, self()};
