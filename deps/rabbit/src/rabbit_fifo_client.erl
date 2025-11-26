@@ -143,13 +143,13 @@ enqueue(QName, Correlation, Msg,
             {reject_publish, State0};
         {error, {shutdown, delete}} ->
             ?LOG_DEBUG("~ts: QQ ~ts tried to register enqueuer during delete shutdown",
-                             [?MODULE, rabbit_misc:rs(QName)]),
+                       [?MODULE, rabbit_misc:rs(QName)]),
             {reject_publish, State0};
         {timeout, _} ->
             {reject_publish, State0};
         Err ->
             ?LOG_DEBUG("~ts: QQ ~ts error when registering enqueuer ~p",
-                             [?MODULE, rabbit_misc:rs(QName), Err]),
+                       [?MODULE, rabbit_misc:rs(QName), Err]),
             exit(Err)
     end;
 enqueue(_QName, _Correlation, _Msg,
@@ -373,24 +373,12 @@ checkout(ConsumerTag, CreditMode, #{} = Meta,
        is_tuple(CreditMode) ->
     Servers = sorted_servers(State0),
     ConsumerId = consumer_id(ConsumerTag),
-    Spec = case rabbit_fifo:is_v4() of
-               true ->
-                   case CreditMode of
-                       {simple_prefetch, 0} ->
-                           {auto, {simple_prefetch,
-                                   ?UNLIMITED_PREFETCH_COUNT}};
-                       _ ->
-                           {auto, CreditMode}
-                   end;
-               false ->
-                   case CreditMode of
-                       {credited, _} ->
-                           {auto, 0, credited};
-                       {simple_prefetch, 0} ->
-                           {auto, ?UNLIMITED_PREFETCH_COUNT, simple_prefetch};
-                       {simple_prefetch, Num} ->
-                           {auto, Num, simple_prefetch}
-                   end
+    Spec = case CreditMode of
+               {simple_prefetch, 0} ->
+                   {auto, {simple_prefetch,
+                           ?UNLIMITED_PREFETCH_COUNT}};
+               _ ->
+                   {auto, CreditMode}
            end,
     Cmd = rabbit_fifo:make_checkout(ConsumerId, Spec, Meta),
     %% ???
@@ -415,13 +403,12 @@ checkout(ConsumerTag, CreditMode, #{} = Meta,
                                 end
                         end,
             ConsumerKey = maps:get(key, Reply, ConsumerId),
-            SDels = maps:update_with(
-                      ConsumerTag,
-                      fun (C) -> C#consumer{ack = Ack} end,
-                      #consumer{key = ConsumerKey,
-                                last_msg_id = LastMsgId,
-                                ack = Ack},
-                      CDels0),
+            SDels = maps:update_with(ConsumerTag,
+                                     fun (C) -> C#consumer{ack = Ack} end,
+                                     #consumer{key = ConsumerKey,
+                                               last_msg_id = LastMsgId,
+                                               ack = Ack},
+                                     CDels0),
             {ok, Reply, State0#state{leader = Leader,
                                      consumers = SDels}};
         Err ->
@@ -534,10 +521,16 @@ stat(Leader) ->
 stat(Leader, Timeout) ->
     %% short timeout as we don't want to spend too long if it is going to
     %% fail anyway
-    case ra:local_query(Leader, fun rabbit_fifo:query_stat/1, Timeout) of
-      {ok, {_, {R, C}}, _} -> {ok, R, C};
-      {error, _} = Error   -> Error;
-      {timeout, _} = Error -> Error
+    %% TODO: the overview is too large to be super efficient
+    %% but we use it for backwards compatibilty
+    case ra:member_overview(Leader, Timeout) of
+      {ok, #{machine := #{num_ready_messages := R,
+                          num_checked_out := C}}, _} ->
+            {ok, R, C};
+      {error, _} = Error ->
+            Error;
+      {timeout, _} = Error ->
+            Error
     end.
 
 update_machine_state(Server, Conf) ->
@@ -994,13 +987,14 @@ send_command(Server, Correlation, Command, Priority,
              #state{pending = Pending,
                     next_seq = Seq,
                     cfg = #cfg{soft_limit = SftLmt}} = State) ->
-    ok = case rabbit_fifo:is_return(Command) of
-             true ->
-                 %% returns are sent to the aux machine for pre-evaluation
-                 ra:cast_aux_command(Server, {Command, Seq, self()});
-             _ ->
-                 ra:pipeline_command(Server, Command, Seq, Priority)
-         end,
+    % ok = case rabbit_fifo:is_return(Command) of
+    %          true ->
+    %              %% returns are sent to the aux machine for pre-evaluation
+    %              ra:cast_aux_command(Server, {Command, Seq, self()});
+    %          _ ->
+    %              ra:pipeline_command(Server, Command, Seq, Priority)
+    %      end,
+    ok = ra:pipeline_command(Server, Command, Seq, Priority),
     State#state{pending = Pending#{Seq => {Correlation, Command}},
                 next_seq = Seq + 1,
                 slow = map_size(Pending) >= SftLmt}.

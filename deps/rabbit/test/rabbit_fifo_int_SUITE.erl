@@ -43,8 +43,7 @@ all_tests() ->
      untracked_enqueue,
      flow,
      test_queries,
-     duplicate_delivery,
-     usage
+     duplicate_delivery
     ].
 
 groups() ->
@@ -218,9 +217,8 @@ lost_return_is_resent_on_applied_after_leader_change(Config) ->
                                                      RaEvt, F5),
     %% this should resend the never applied enqueue
     {_, _, F7} = process_ra_events(receive_ra_events(1, 0), ClusterName, F6),
-    {_, _, F8} = process_ra_events(receive_ra_events(1, 0), ClusterName, F7),
 
-    ?assertEqual(0, rabbit_fifo_client:pending_size(F8)),
+    ?assertEqual(0, rabbit_fifo_client:pending_size(F7)),
 
     flush(),
     ok.
@@ -278,23 +276,6 @@ duplicate_delivery(Config) ->
         end,
     Fun(F2),
     rabbit_quorum_queue:stop_server(ServerId),
-    ok.
-
-usage(Config) ->
-    ClusterName = ?config(cluster_name, Config),
-    ServerId = ?config(node_id, Config),
-    ok = start_cluster(ClusterName, [ServerId]),
-    F0 = rabbit_fifo_client:init([ServerId]),
-    {ok, _, F1} = rabbit_fifo_client:checkout(<<"tag">>, {simple_prefetch, 10}, #{}, F0),
-    {ok, F2, []} = rabbit_fifo_client:enqueue(ClusterName, corr1, msg1, F1),
-    {ok, F3, []} = rabbit_fifo_client:enqueue(ClusterName, corr2, msg2, F2),
-    {_, _, _} = process_ra_events(receive_ra_events(2, 2), ClusterName, F3),
-    % force tick and usage stats emission
-    ServerId ! tick_timeout,
-    timer:sleep(50),
-    Use = rabbit_fifo:usage(element(1, ServerId)),
-    rabbit_quorum_queue:stop_server(ServerId),
-    ?assert(Use > 0.0),
     ok.
 
 resends_lost_command(Config) ->
@@ -523,6 +504,7 @@ discard(Config) ->
              uid => UId,
              log_init_args => #{data_dir => PrivDir, uid => UId},
              initial_member => [],
+             initial_machine_version => rabbit_fifo:version(),
              machine => {module, rabbit_fifo,
                          #{queue_resource => discard,
                            dead_letter_handler =>

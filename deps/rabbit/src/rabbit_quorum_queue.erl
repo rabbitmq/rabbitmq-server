@@ -374,13 +374,11 @@ ra_machine_config(Q) when ?is_amqqueue(Q) ->
     PolicyConfig = gather_policy_config(Q, true),
     QName = amqqueue:get_name(Q),
     {Name, _} = amqqueue:get_pid(Q),
-    PolicyConfig#{
-      name => Name,
-      queue_resource => QName,
-      become_leader_handler => {?MODULE, become_leader, [QName]},
-      single_active_consumer_on => single_active_consumer_on(Q),
-      created => erlang:system_time(millisecond)
-     }.
+    PolicyConfig#{name => Name,
+                  queue_resource => QName,
+                  single_active_consumer_on => single_active_consumer_on(Q),
+                  created => erlang:system_time(millisecond)
+                 }.
 
 resolve_delivery_limit(PolVal, ArgVal)
   when PolVal < 0 orelse ArgVal < 0 ->
@@ -588,8 +586,7 @@ handle_tick(QName,
               num_discarded := NumDiscarded,
               num_discard_checked_out  :=  NumDiscardedCheckedOut,
               discard_message_bytes := DiscardBytes,
-              discard_checkout_message_bytes := DiscardCheckoutBytes,
-              smallest_raft_index := _} = Overview,
+              discard_checkout_message_bytes := DiscardCheckoutBytes} = Overview,
             Nodes) ->
     %% this makes calls to remote processes so cannot be run inside the
     %% ra server
@@ -623,6 +620,10 @@ handle_tick(QName,
                                      [{messages_ready_normal, V} | Acc];
                                 (num_ready_messages_return, V, Acc) ->
                                      [{messages_ready_returned, V} | Acc];
+                                (messages_by_priority, V, Acc) ->
+                                     [{messages_by_priority, V} | Acc];
+                                (num_active_priorities, V, Acc) ->
+                                     [{messages_active_priorities, V} | Acc];
                                 (_, _, Acc) ->
                                      Acc
                              end, info(Q, Keys), Overview),
@@ -680,13 +681,13 @@ handle_tick(QName,
               catch
                   _:Err ->
                       ?LOG_DEBUG("~ts: handle tick failed with ~p",
-                                       [rabbit_misc:rs(QName), Err]),
+                                 [rabbit_misc:rs(QName), Err]),
                       ok
               end
       end);
 handle_tick(QName, Config, _Nodes) ->
     ?LOG_DEBUG("~ts: handle tick received unexpected config format ~tp",
-                     [rabbit_misc:rs(QName), Config]).
+               [rabbit_misc:rs(QName), Config]).
 
 repair_leader_record(Q, Name) ->
     Node = node(),
@@ -697,7 +698,7 @@ repair_leader_record(Q, Name) ->
         _ ->
             QName = amqqueue:get_name(Q),
             ?LOG_DEBUG("~ts: updating leader record to current node ~ts",
-                             [rabbit_misc:rs(QName), Node]),
+                       [rabbit_misc:rs(QName), Node]),
             ok = become_leader0(QName, Name),
             ok
     end,
@@ -1170,9 +1171,12 @@ stat(Q, Timeout) when ?is_amqqueue(Q) ->
     Leader = amqqueue:get_pid(Q),
     try
         case rabbit_fifo_client:stat(Leader, Timeout) of
-          {ok, _, _} = Success -> Success;
-          {error, _}           -> {ok, 0, 0};
-          {timeout, _}         -> {ok, 0, 0}
+          {ok, _, _} = Success ->
+                Success;
+          {error, _} ->
+                {ok, 0, 0};
+          {timeout, _} ->
+                {ok, 0, 0}
         end
     catch
         _:_ ->
@@ -1997,7 +2001,7 @@ make_ra_conf(Q, ServerId, Membership, MacVersion)
                  Membership, MacVersion).
 
 make_ra_conf(Q, ServerId, TickTimeout,
-             SnapshotInterval, CheckpointInterval,
+             _SnapshotInterval, _CheckpointInterval,
              Membership, MacVersion) ->
     QName = amqqueue:get_name(Q),
     #resource{name = QNameBin} = QName,
@@ -2007,9 +2011,10 @@ make_ra_conf(Q, ServerId, TickTimeout,
     FName = rabbit_misc:rs(QName),
     Formatter = {?MODULE, format_ra_event, [QName]},
     LogCfg = #{uid => UId,
-               snapshot_interval => SnapshotInterval,
-               min_checkpoint_interval => CheckpointInterval,
-               max_checkpoints => 3},
+               min_snapshot_interval => 0,
+               % min_checkpoint_interval => CheckpointInterval,
+               % max_checkpoints => 3,
+               major_compaction_strategy => {num_minors, 32}},
     rabbit_misc:maps_put_truthy(membership, Membership,
                                 #{cluster_name => ClusterName,
                                   id => ServerId,
