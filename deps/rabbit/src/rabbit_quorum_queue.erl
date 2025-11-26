@@ -2112,7 +2112,7 @@ force_vhost_queues_shrink_member_to_current_member(VHost) when is_binary(VHost) 
 
 force_vhost_queues_shrink_member_to_current_member(VHost, QueueSpec)
   when is_binary(VHost), is_binary(QueueSpec) ->
-    rabbit_log:warning("Shrinking all quorum queues matching '~ts' in vhost '~ts' to a single node: ~ts",
+    ?LOG_WARNING("Shrinking all quorum queues matching '~ts' in vhost '~ts' to a single node: ~ts",
         [QueueSpec, VHost, node()]),
     ListQQs = fun() -> rabbit_amqqueue:list(VHost) end,
     force_all_queues_shrink_member_to_current_member(ListQQs, QueueSpec).
@@ -2121,7 +2121,7 @@ force_all_queues_shrink_member_to_current_member() ->
     force_all_queues_shrink_member_to_current_member(<<".*">>).
 
 force_all_queues_shrink_member_to_current_member(QueueSpec) when is_binary(QueueSpec) ->
-    rabbit_log:warning("Shrinking all quorum queues matching '~ts' to a single node: ~ts",
+    ?LOG_WARNING("Shrinking all quorum queues matching '~ts' to a single node: ~ts",
         [QueueSpec, node()]),
     ListQQs = fun() -> rabbit_amqqueue:list() end,
     force_all_queues_shrink_member_to_current_member(ListQQs, QueueSpec).
@@ -2132,7 +2132,7 @@ force_all_queues_shrink_member_to_current_member(ListQQFun, QueueSpec) when is_f
              QName = amqqueue:get_name(Q),
              {RaName, _} = amqqueue:get_pid(Q),
              OtherNodes = lists:delete(Node, get_nodes(Q)),
-             rabbit_log:warning("Shrinking queue '~ts' to a single node: ~ts", [rabbit_misc:rs(QName), Node]),
+             ?LOG_WARNING("Shrinking queue '~ts' to a single node: ~ts", [rabbit_misc:rs(QName), Node]),
              ok = ra_server_proc:force_shrink_members_to_current_member({RaName, Node}),
              Fun = fun (QQ) ->
                            TS0 = amqqueue:get_type_state(QQ),
@@ -2144,7 +2144,7 @@ force_all_queues_shrink_member_to_current_member(ListQQFun, QueueSpec) when is_f
          end || Q <- ListQQFun(),
                 amqqueue:get_type(Q) == ?MODULE,
                 is_match(get_resource_name(amqqueue:get_name(Q)), QueueSpec)],
-    rabbit_log:warning("Shrinking finished"),
+    ?LOG_WARNING("Shrinking finished"),
     ok.
 
 force_checkpoint_on_queue(QName) ->
