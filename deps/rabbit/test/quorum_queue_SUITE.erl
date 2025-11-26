@@ -1342,6 +1342,21 @@ force_all_queues_shrink_member_to_current_member(Config) ->
                    Config, Server0, <<"/">>, Q, 3)
              end || Q <- QQs],
 
+            %% match QQ only in shrink
+            QQSpec = <<QQ/binary, "$">>,
+            rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
+                                         force_all_queues_shrink_member_to_current_member, [QQSpec]),
+
+            wait_for_messages_ready([Server0], ra_name(QQ), 3),
+            queue_utils:assert_number_of_replicas(
+                Config, Server0, <<"/">>, QQ, 1),
+
+            wait_for_messages_ready([Server0], ra_name(AQ), 3),
+            queue_utils:assert_number_of_replicas(
+                Config, Server0, <<"/">>, AQ, 3),
+
+            %% match all queues on shrink
+
             rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
                                          force_all_queues_shrink_member_to_current_member, []),
 
@@ -1405,6 +1420,34 @@ force_vhost_queues_shrink_member_to_current_member(Config) ->
                    Config, Server0, VHost, Q, 3)
             end || Q <- QQs, VHost <- VHosts],
 
+            % match QQ only in VHost2 on shrink
+            QQSpec = <<QQ/binary, "$">>,
+            rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
+                force_vhost_queues_shrink_member_to_current_member, [VHost2, QQSpec]),
+
+            [begin
+                QQRes = rabbit_misc:r(VHost2, queue, Q),
+                {ok, RaName} = rpc:call(Server0, rabbit_queue_type_util, qname_to_internal_name, [QQRes]),
+                wait_for_messages_ready([Server0], RaName, 3),
+                case Q of
+                    QQ ->
+                        queue_utils:assert_number_of_replicas(
+                          Config, Server0, VHost2, Q, 1);
+                    AQ ->
+                        queue_utils:assert_number_of_replicas(
+                          Config, Server0, VHost2, Q, 3)
+                end
+            end || Q <- QQs],
+
+            [begin
+                QQRes = rabbit_misc:r(VHost1, queue, Q),
+                {ok, RaName} = rpc:call(Server0, rabbit_queue_type_util, qname_to_internal_name, [QQRes]),
+                wait_for_messages_ready([Server0], RaName, 3),
+                 queue_utils:assert_number_of_replicas(
+                   Config, Server0, VHost1, Q, 3)
+            end || Q <- QQs],
+
+            % match all queues in VHost2 on shrink
             rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
                 force_vhost_queues_shrink_member_to_current_member, [VHost2]),
 
