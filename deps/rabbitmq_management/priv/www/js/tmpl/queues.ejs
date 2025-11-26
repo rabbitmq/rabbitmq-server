@@ -227,20 +227,6 @@
   <div class="hider">
     <form action="#/queues" method="put">
       <table class="form">
-<% if (display.vhosts) { %>
-        <tr>
-          <th><label>Virtual host:</label></th>
-          <td>
-            <select name="vhost">
-              <% for (var i = 0; i < vhosts.length; i++) { %>
-              <option value="<%= fmt_string(vhosts[i].name) %>" <%= (vhosts[i].name === current_vhost) ? 'selected="selected"' : '' %>><%= fmt_string(vhosts[i].name) %></option>
-              <% } %>
-            </select>
-          </td>
-        </tr>
-<% } else { %>
-        <tr><td><input type="hidden" name="vhost" value="<%= fmt_string(vhosts[0].name) %>"/></td></tr>
-<% } %>
         <tr>
           <th><label>Type:</label></th>
           <td>
@@ -258,6 +244,20 @@
             </select>
           </td>
         </tr>
+<% if (display.vhosts) { %>
+        <tr>
+          <th><label>Virtual host:</label></th>
+          <td>
+            <select name="vhost">
+              <% for (var i = 0; i < vhosts.length; i++) { %>
+              <option value="<%= fmt_string(vhosts[i].name) %>" <%= (vhosts[i].name === current_vhost) ? 'selected="selected"' : '' %>><%= fmt_string(vhosts[i].name) %></option>
+              <% } %>
+            </select>
+          </td>
+        </tr>
+<% } else { %>
+        <tr><td><input type="hidden" name="vhost" value="<%= fmt_string(vhosts[0].name) %>"/></td></tr>
+<% } %>
         <tr>
           <th><label>Name:</label></th>
           <td><input type="text" name="name"/><span class="mand">*</span></td>
