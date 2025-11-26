@@ -12,6 +12,8 @@
 %% Raw message data is always stored on disk.
 -define(MSG(Index, Header), ?TUPLE(Index, Header)).
 
+-define(C_MSG(Timeout, Msg), {Timeout, Msg}).
+-define(C_MSG(Msg), {_, Msg}).
 -define(NIL, []).
 
 -define(IS_HEADER(H),
@@ -82,6 +84,9 @@
 
 -type msg() :: packed_msg() | optimised_tuple(ra:index(), msg_header()).
 
+%% a consumer message
+-type c_msg() :: {LockExpiration :: milliseconds(), msg()}.
+
 -type delivery_msg() :: {msg_id(), {msg_header(), raw_msg()}}.
 %% A tuple consisting of the message id, and the headered message.
 
@@ -115,7 +120,8 @@
                            username => binary(),
                            prefetch => non_neg_integer(),
                            args => list(),
-                           priority => non_neg_integer()
+                           priority => 0..255,
+                           timeout => milliseconds()
                           }.
 %% static meta data associated with a consumer
 
@@ -139,7 +145,9 @@
 -define(LOW_LIMIT, 0.8).
 -define(DELIVERY_CHUNK_LIMIT_B, 128_000).
 
+-type seconds() :: non_neg_integer().
 -type milliseconds() :: non_neg_integer().
+
 -record(consumer_cfg,
         {meta = #{} :: consumer_meta(),
          pid :: pid(),
@@ -151,20 +159,26 @@
          %% command: `{credit, ReceiverDeliveryCount, Credit}'
          credit_mode :: credited | credit_mode(),
          lifetime = once :: once | auto,
-         priority = 0 :: integer()}).
+         priority = 0 :: integer(),
+         timeout = 1800 :: seconds()}).
 
 -type consumer_status() :: up | cancelled | quiescing.
 
 -record(consumer,
         {cfg = #consumer_cfg{},
-         status = up :: consumer_status() | {suspected_down, consumer_status()},
+         status = up :: consumer_status() |
+                        {suspected_down, consumer_status()} |
+                        %% a message has been pending for longer than the
+                        %% consumer timeout
+                        {timeout, consumer_status()},
          next_msg_id = 0 :: msg_id(),
-         checked_out = #{} :: #{msg_id() => msg()},
+         checked_out = #{} :: #{msg_id() => c_msg()},
          %% max number of messages that can be sent
          %% decremented for each delivery
          credit = 0 :: non_neg_integer(),
          %% AMQP 1.0 §2.6.7
-         delivery_count :: rabbit_queue_type:delivery_count()
+         delivery_count :: rabbit_queue_type:delivery_count(),
+         timed_out_msg_ids = [] :: [msg_id()]
         }).
 
 -type consumer() :: #consumer{}.
@@ -200,7 +214,7 @@
          delivery_limit :: option(non_neg_integer()),
          expires :: option(milliseconds()),
          msg_ttl :: option(milliseconds()),
-         unused_2 = ?NIL,
+         default_consumer_timeout = 1_800_000 :: milliseconds(),
          unused_3 = ?NIL
         }).
 
@@ -250,7 +264,7 @@
          % index when there are large gaps but should be faster than gb_trees
          % for normal appending operations as it's backed by a map
          last_command_time = 0,
-         unused_1 = ?NIL,
+         next_consumer_timeout = infinity :: infinity | milliseconds(),
          % consumers need to reflect consumer state at time of snapshot
          consumers = #{} :: #{consumer_key() => consumer()},
          % consumers that require further service are queued here
@@ -273,8 +287,8 @@
                     queue_resource := rabbit_types:r('queue'),
                     dead_letter_handler => dead_letter_handler(),
                     become_leader_handler => applied_mfa(),
-                    checkpoint_min_indexes => non_neg_integer(),
-                    checkpoint_max_indexes => non_neg_integer(),
+                    % checkpoint_min_indexes => non_neg_integer(),
+                    % checkpoint_max_indexes => non_neg_integer(),
                     max_length => non_neg_integer(),
                     max_bytes => non_neg_integer(),
                     overflow_strategy => drop_head | reject_publish,
@@ -282,5 +296,6 @@
                     delivery_limit => non_neg_integer() | -1,
                     expires => non_neg_integer(),
                     msg_ttl => non_neg_integer(),
-                    created => non_neg_integer()
+                    created => non_neg_integer(),
+                    consumer_timeout => seconds()
                    }.

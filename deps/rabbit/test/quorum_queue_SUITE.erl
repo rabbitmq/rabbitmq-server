@@ -208,7 +208,8 @@ all_tests() ->
      requeue_multiple_false,
      subscribe_from_each,
      dont_leak_file_handles,
-     leader_health_check
+     leader_health_check,
+     consumer_timeout
     ].
 
 memory_tests() ->
@@ -1964,7 +1965,8 @@ consumer_message_is_delevered_after_snapshot(Config) ->
     %% then purge
     #'queue.purge_ok'{} = amqp_channel:call(Ch0, #'queue.purge'{queue = QQ}),
 
-    MacVer = lists:min([V || {ok, V} <- erpc:multicall(Nodes, rabbit_fifo, version, [])]),
+    MacVer = lists:min([V || {ok, V} <-
+                             erpc:multicall(Nodes, rabbit_fifo, version, [])]),
     ct:pal("machine version is ~b", [MacVer]),
 
     %% only await snapshot if all members have at least machine version 8
@@ -5351,6 +5353,56 @@ replica_states(Config) ->
                     ?assert(maps:is_key(Q3_ClusterName, ReplicaStates))
                 end
              end, Result2).
+
+consumer_timeout(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+
+    % rabbit_ct_client_helpers:open_unmanaged_connection(_),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    qos(Ch, 2, false),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ,
+                         [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    %% consumer with default priority
+    Tag1 = <<"ctag1">>,
+    amqp_channel:subscribe(Ch,
+                           #'basic.consume'{queue = QQ,
+                                            arguments = [{"x-consumer-timeout",
+                                                          long, 1000}],
+                                            no_ack = false,
+                                            consumer_tag = Tag1},
+                           self()),
+    receive
+        #'basic.consume_ok'{consumer_tag = Tag1} ->
+             ok
+    end,
+
+    publish(Ch, QQ),
+    %% Tag2 should receive the message but we don't ack it
+    _DT1 = receive
+               {#'basic.deliver'{delivery_tag = D1,
+                                 consumer_tag = Tag1}, _} ->
+                   D1
+           after ?TIMEOUT ->
+                     flush(100),
+                     ct:fail("basic.deliver timeout")
+           end,
+    receive
+        #'basic.cancel'{consumer_tag = Tag1} ->
+            amqp_channel:cast(Ch, #'basic.cancel_ok'{consumer_tag = Tag1})
+    after ?TIMEOUT ->
+              flush(100),
+              ct:fail("basic.cancel timeout")
+    end,
+    %% Asset consumer is gone from the queue
+    RaName = ra_name(QQ),
+    ?awaitMatch({ok, #{machine := #{num_consumers := 0}}, _},
+                ra:member_overview({RaName, Server}),
+                ?DEFAULT_AWAIT),
+    flush(1),
+    ok.
 
 %%----------------------------------------------------------------------------
 

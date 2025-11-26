@@ -133,7 +133,8 @@
                           args => rabbit_framing:amqp_table(),
                           filter => rabbit_amqp_filter:expression(),
                           ok_msg := term(),
-                          acting_user := rabbit_types:username()}.
+                          acting_user := rabbit_types:username(),
+                          timeout => non_neg_integer()}.
 -type cancel_reason() :: cancel | remove.
 -type cancel_spec() :: #{consumer_tag := rabbit_types:ctag(),
                          reason => cancel_reason(),
@@ -243,7 +244,9 @@
     {queue_state(), actions()}.
 
 -callback dequeue(amqqueue:amqqueue(), NoAck :: boolean(), LimiterPid :: pid(),
-                  rabbit_types:ctag(), queue_state()) ->
+                  rabbit_types:ctag(),
+                  Timeout :: non_neg_integer() | infinity | undefined,
+                  queue_state()) ->
     {ok, Count :: non_neg_integer(), rabbit_amqqueue:qmsg(), queue_state()} |
     {empty, queue_state()} |
     {error, term()} |
@@ -503,9 +506,11 @@ new(Q, State) when ?is_amqqueue(Q) ->
 -spec consume(amqqueue:amqqueue(), consume_spec(), state()) ->
     {ok, state()} |
     {error, Type :: atom(), Format :: string(), FormatArgs :: [term()]}.
-consume(Q, Spec, State) ->
+consume(Q, Spec0, State) ->
     #ctx{state = CtxState0} = Ctx = get_ctx(Q, State),
     Mod = amqqueue:get_type(Q),
+    %% TODO: check if value is passed in already?
+    Spec = Spec0#{timeout => get_consumer_timeout(Q)},
     case Mod:consume(Q, Spec, CtxState0) of
         {ok, CtxState} ->
             {ok, set_ctx(Q, Ctx#ctx{state = CtxState}, State)};
@@ -729,10 +734,12 @@ credit(QName, CTag, DeliveryCount, Credit, Drain, Ctxs) ->
     {empty, state()} |
     rabbit_types:error(term()) |
     {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
-dequeue(Q, NoAck, LimiterPid, CTag, Ctxs) ->
+dequeue(Q, NoAck, LimiterPid, CTag, Ctxs)
+  when ?is_amqqueue(Q) ->
     #ctx{state = State0} = Ctx = get_ctx(Q, Ctxs),
     Mod = amqqueue:get_type(Q),
-    case Mod:dequeue(Q, NoAck, LimiterPid, CTag, State0) of
+    Timeout = get_consumer_timeout(Q),
+    case Mod:dequeue(Q, NoAck, LimiterPid, CTag, Timeout, State0) of
         {ok, Num, Msg, State} ->
             {ok, Num, Msg, set_ctx(Q, Ctx#ctx{state = State}, Ctxs)};
         {empty, State} ->
@@ -863,6 +870,21 @@ check_vhost_queue_limit(Q) ->
             queue_limit_error("cannot declare queue '~ts': "
                               "queue limit in vhost '~ts' (~tp) is reached",
                               [QueueName, VHost, Limit])
+    end.
+
+get_consumer_timeout(Q) ->
+    % case rabbit_policy:get(<<"consumer-timeout">>, Q) of
+    case rabbit_queue_type_util:args_policy_lookup(
+           <<"consumer-timeout">>, fun (X, Y) -> erlang:min(X, Y) end, Q) of
+        undefined ->
+            case application:get_env(rabbit, consumer_timeout) of
+                {ok, MS} when is_integer(MS) ->
+                    MS;
+                _ ->
+                    infinity
+            end;
+        Val when is_integer(Val) ->
+            Val
     end.
 
 check_cluster_queue_limit(Q) ->

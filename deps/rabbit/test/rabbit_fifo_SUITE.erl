@@ -311,7 +311,7 @@ enq_enq_checkout_test(Config, Spec) ->
                  rabbit_fifo:overview(State4)),
     ok.
 
-credit_enq_enq_checkout_settled_credit_v2_test(Config) ->
+credit_enq_enq_checkout_settled_credit_test(Config) ->
     InitDelCnt = 16#ff_ff_ff_ff,
     Ctag = ?FUNCTION_NAME,
     Cid = {Ctag, self()},
@@ -343,30 +343,8 @@ credit_enq_enq_checkout_settled_credit_v2_test(Config) ->
                                       (_) -> false
                                   end, FinalEffects)).
 
-credit_with_drained_v1_test(Config) ->
-    Ctag = ?FUNCTION_NAME_B,
-    Cid = {Ctag, self()},
-    State0 = test_init(test),
-    %% checkout with a single credit
-    {State1, #{key := CKey}, _} = checkout(Config, ?LINE, Cid, {auto, 0, credited}, State0),
-    ?assertMatch(#rabbit_fifo{consumers = #{CKey := #consumer{credit = 0,
-                                                             delivery_count = 0}}},
-                 State1),
-    {State2, _Effects2} = credit(Config, CKey, ?LINE, 1, 0, false, State1),
-    ?assertMatch(#rabbit_fifo{consumers = #{CKey := #consumer{credit = 1,
-                                                             delivery_count = 0}}},
-                 State2),
-    {State, Result, _} =
-        apply(meta(Config, ?LINE), rabbit_fifo:make_credit(Cid, 5, 0, true), State2),
-    ?assertMatch(#rabbit_fifo{consumers = #{CKey := #consumer{credit = 0,
-                                                             delivery_count = 5}}},
-                 State),
-    ?assertEqual({multi, [{send_credit_reply, 0},
-                          {send_drained, {Ctag, 5}}]},
-                 Result),
-    ok.
 
-credit_with_drained_v2_test(Config) ->
+credit_with_drained_test(Config) ->
     Ctag = ?FUNCTION_NAME,
     Cid = {Ctag, self()},
     State0 = test_init(test),
@@ -390,30 +368,8 @@ credit_with_drained_v2_test(Config) ->
                    ?DELIVERY_SEND_MSG_OPTS}],
                  Effects).
 
-credit_and_drain_v1_test(Config) ->
-    Ctag = ?FUNCTION_NAME,
-    Cid = {Ctag, self()},
-    {State1, _} = enq(Config, 1, 1, first, test_init(test)),
-    {State2, _} = enq(Config, 2, 2, second, State1),
-    %% checkout without any initial credit (like AMQP 1.0 would)
-    {State3, _, CheckEffs} =
-        apply(meta(Config, 3), make_checkout(Cid, {auto, 0, credited}, #{}),
-              State2),
 
-    ?ASSERT_NO_EFF({log_ext, _, _, _}, CheckEffs),
-    {State4, {multi, [{send_credit_reply, 0},
-                      {send_drained, {Ctag, 2}}]},
-    Effects} = apply(meta(Config, 4), rabbit_fifo:make_credit(Cid, 4, 0, true), State3),
-    ?assertMatch(#rabbit_fifo{consumers = #{Cid := #consumer{credit = 0,
-                                                             delivery_count = 4}}},
-                 State4),
-
-    ?ASSERT_EFF({log_ext, [1, 2], _, _}, Effects),
-    {_State5, EnqEffs} = enq(Config, 5, 2, third, State4),
-    ?ASSERT_NO_EFF({log_ext, _, _, _}, EnqEffs),
-    ok.
-
-credit_and_drain_v2_test(Config) ->
+credit_and_drain_test(Config) ->
     Ctag = ?FUNCTION_NAME_B,
     Cid = {Ctag, self()},
     {State1, _} = enq(Config, 1, 1, first, test_init(test)),
@@ -431,7 +387,7 @@ credit_and_drain_v2_test(Config) ->
     ?ASSERT_EFF({log_ext, [1, 2], _, _}, Effects),
     %% The credit_reply should be sent **after** the deliveries.
     ?assertEqual({send_msg, self(),
-                  {credit_reply, Ctag, _DeliveryCount = 2, _Credit = 0,
+                  {credit_reply, Ctag, _DeliveryCount = 1, _Credit = 0,
                    _Available = 0, _Drain = true},
                   ?DELIVERY_SEND_MSG_OPTS},
                  lists:last(Effects)),
@@ -440,7 +396,7 @@ credit_and_drain_v2_test(Config) ->
     ?ASSERT_NO_EFF({log_ext, _, _, _}, EnqEffs),
     ok.
 
-credit_and_drain_single_active_consumer_v2_test(Config) ->
+credit_and_drain_single_active_consumer_test(Config) ->
     State0 = init(#{name => ?FUNCTION_NAME,
                     queue_resource => rabbit_misc:r(
                                         "/", queue, atom_to_binary(?FUNCTION_NAME)),
@@ -483,7 +439,7 @@ credit_and_drain_single_active_consumer_v2_test(Config) ->
 
     % Drain the active consumer.
     {_State4, Effects1} = credit(Config, CK1, ?LINE, 1000, 16#ff_ff_ff_ff, true, State3),
-    ?assertMatch([
+    ?assertMatch([{timer, _, _, _},
                   {log_ext, [1], _Fun, _Local},
                   {send_msg, Self,
                    {credit_reply, Ctag1, _DeliveryCount = 999, _Credit = 0,
@@ -499,7 +455,8 @@ enq_enq_deq_test(C) ->
     % get returns a reply value
     {_State3, _,
      [{log, [1], _Fun},
-      {monitor, _, _}]} =
+      {monitor, _, _},
+      _Timer]} =
         apply(meta(C, 3), make_checkout(Cid, {dequeue, unsettled}, #{}),
               State2),
     ok.
@@ -511,7 +468,8 @@ enq_enq_deq_deq_settle_test(Config) ->
     % get returns a reply value
     {State3, '$ra_no_reply',
      [{log, [1], _},
-      {monitor, _, _}]} =
+      {monitor, _, _},
+      {timer, _, _, _}]} =
         apply(meta(Config, 3), make_checkout(Cid, {dequeue, unsettled}, #{}),
               State2),
     {State4, {dequeue, empty}} =
@@ -612,11 +570,11 @@ enq_expire_deq_enq_enq_deq_deq_test(Config) ->
     {S4, _} = enq(Config, 4, 3, msg3, S3),
     {S5, '$ra_no_reply',
      [{log, [3], _},
-      {monitor, _, _}]} =
+      {monitor, _, _} | _]} =
         apply(meta(Config, 5), make_checkout({c2, self()}, {dequeue, unsettled}, #{}), S4),
     {_S6, '$ra_no_reply',
      [{log, [4], _},
-      {monitor, _, _}]} =
+      {monitor, _, _} | _]} =
         apply(meta(Config, 6), make_checkout({c3, self()}, {dequeue, unsettled}, #{}), S5),
     ok.
 
@@ -658,24 +616,35 @@ return_test(Config) ->
 
 return_multiple_test(Config) ->
     Cid = {<<"cid">>, self()},
-    {State0, _} = enq(Config, 1, 1, first, test_init(?FUNCTION_NAME)),
-    {State1, _} = enq(Config, 2, 2, second, State0),
-    {State2, _} = enq(Config, 3, 3, third, State1),
+    I1 = ?LINE,
+    I2 = ?LINE,
+    I3 = ?LINE,
+    {State0, _} = enq(Config, I1, 1, first, test_init(?FUNCTION_NAME)),
+    {State1, _} = enq(Config, I2, 2, second, State0),
+    {State2, _} = enq(Config, I3, 3, third, State1),
 
     {State3,
      #{key := CKey,
        next_msg_id := NextMsgId},
      Effects0} = checkout(Config, ?LINE, Cid, 3, State2),
-    ?ASSERT_EFF({log_ext, [1, 2, 3], _Fun, _Local}, Effects0),
+    % ct:pal("Effects0 ~p", [Effects0]),
+    ?ASSERT_EFF({log_ext, [Idx1, Idx2, Idx3], _Fun, _Local},
+                Idx1 == I1 andalso
+                Idx2 == I2 andalso
+                Idx3 == I3, Effects0),
 
-    {_, _, Effects1} = apply(meta(Config, ?LINE),
-                             rabbit_fifo:make_return(
-                               CKey,
-                               %% Return messages in following order: 3, 1, 2
-                               [NextMsgId + 2, NextMsgId, NextMsgId + 1]),
-                             State3),
+    {_State, _, Effects1} = apply(meta(Config, ?LINE),
+                                  rabbit_fifo:make_return(
+                                    CKey,
+                                    %% Return messages in following order: 3, 1, 2
+                                    [NextMsgId + 2, NextMsgId, NextMsgId + 1]),
+                                  State3),
     %% We expect messages to be re-delivered in the same order in which we previously returned.
-    ?ASSERT_EFF({log_ext, [3, 1, 2], _Fun, _Local}, Effects1),
+    ?ASSERT_EFF({log_ext, [Idx3, Idx1, Idx2], _Fun, _Local},
+                Idx1 == I1 andalso
+                Idx2 == I2 andalso
+                Idx3 == I3,
+                Effects1),
     ok.
 
 return_dequeue_delivery_limit_test(C) ->
@@ -788,7 +757,9 @@ return_auto_checked_out_test(Config) ->
     % any more
     {State1, #{key := CKey,
                next_msg_id := MsgId},
-     [_Monitor, {log_ext, [1], _Fun1, _} ]} = checkout(Config, ?LINE, Cid, 1, State0),
+     [_Timer,
+      _Monitor,
+      {log_ext, [1], _Fun1, _} ]} = checkout(Config, ?LINE, Cid, 1, State0),
     % return should include another delivery
     {State2, _, Effects} = apply(meta(Config, 3),
                                   rabbit_fifo:make_return(CKey, [MsgId]), State1),
@@ -818,7 +789,8 @@ requeue_test(Config) ->
     % any more
     {State1, #{key := CKey,
                next_msg_id := MsgId},
-     [_Monitor, {log_ext, [1], _Fun, _}]} = checkout(Config, ?LINE, Cid, 1, State0),
+     [_Timer, _Monitor,
+      {log_ext, [1], _Fun, _}]} = checkout(Config, ?LINE, Cid, 1, State0),
 
     [{MsgId, {H1, _}}] = rabbit_fifo:get_checked_out(CKey, MsgId, MsgId, State1),
 
@@ -874,7 +846,8 @@ down_with_noproc_consumer_returns_unsettled_test(Config) ->
     Cid = {?FUNCTION_NAME_B, self()},
     {State0, _} = enq(Config, 1, 1, second, test_init(test)),
     {State1, #{key := CKey},
-     [{monitor, process, Pid} | _]} = checkout(Config, ?LINE, Cid, 1, State0),
+     [_Timer,
+      {monitor, process, Pid} | _]} = checkout(Config, ?LINE, Cid, 1, State0),
     {State2, _, _} = apply(meta(Config, 3), {down, Pid, noproc}, State1),
     {_State, #{key := CKey2}, Effects} = checkout(Config, ?LINE, Cid, 1, State2),
     ?assertNotEqual(CKey, CKey2),
@@ -885,7 +858,9 @@ removed_consumer_returns_unsettled_test(Config) ->
     Cid = {?FUNCTION_NAME_B, self()},
     {State0, _} = enq(Config, 1, 1, second, test_init(test)),
     {State1, #{key := CKey},
-     [{monitor, process, _Pid} | _]} = checkout(Config, ?LINE, Cid, 1, State0),
+     [_Timer,
+      {monitor, process, _Pid} | _]} =
+        checkout(Config, ?LINE, Cid, 1, State0),
     Remove = rabbit_fifo:make_checkout(Cid, remove, #{}),
     {State2, _, _} = apply(meta(Config, 3), Remove, State1),
     {_State, #{key := CKey2}, Effects} = checkout(Config, ?LINE, Cid, 1, State2),
@@ -1112,7 +1087,7 @@ tick_test(Config) ->
                num_messages := 2,
                enqueue_message_bytes := 3,
                checkout_message_bytes := 3,
-               num_discarded := _Discards},
+               num_discarded := 0},
              [_Node]
             ]}}] = rabbit_fifo:tick(1, S4),
     ok.
@@ -1873,34 +1848,8 @@ single_active_cancelled_with_unacked_test(Config) ->
     ?assertMatch([], rabbit_fifo:query_waiting_consumers(State6)),
     ok.
 
-single_active_with_credited_v1_test(Config) ->
-    State0 = init(#{name => ?FUNCTION_NAME,
-                    queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
-                    release_cursor_interval => 0,
-                    single_active_consumer_on => true}),
 
-    % % adding some consumers
-    {CK1, C1} = {?LINE, {?LINE_B, self()}},
-    {CK2, C2} = {?LINE, {?LINE_B, self()}},
-    Entries = [
-               {CK1, make_checkout(C1, {auto, {simple_prefetch, 1}}, #{})},
-               {CK2, make_checkout(C2, {auto, {simple_prefetch, 1}}, #{})}
-              ],
-    {State1, _} = run_log(Config, State0, Entries),
-
-    %% add some credit
-    C1Cred = rabbit_fifo:make_credit(CK1, 5, 0, false),
-    {State2, _, _Effects2} = apply(meta(Config, ?LINE), C1Cred, State1),
-    C2Cred = rabbit_fifo:make_credit(CK2, 4, 0, false),
-    {State3, _} = apply(meta(Config, ?LINE), C2Cred, State2),
-    %% both consumers should have credit
-    ?assertMatch(#{CK1 := #consumer{credit = 5}},
-                 State3#rabbit_fifo.consumers),
-    ?assertMatch([{CK2, #consumer{credit = 4}}],
-                 rabbit_fifo:query_waiting_consumers(State3)),
-    ok.
-
-single_active_with_credited_v2_test(Config) ->
+single_active_with_credited_test(Config) ->
     State0 = init(#{name => ?FUNCTION_NAME,
                     queue_resource => rabbit_misc:r("/", queue,
                                                     ?FUNCTION_NAME_B),
@@ -2852,53 +2801,58 @@ aux_test(_) ->
 
 %% machine version conversion test
 
-machine_version_test(C) ->
-    V0 = rabbit_fifo_v0,
-    S0 = V0:init(#{name => ?FUNCTION_NAME,
-                   queue_resource => rabbit_misc:r(<<"/">>, queue, <<"test">>)}),
+machine_version_test(Config) ->
+    ModV7 = rabbit_fifo_v7,
+    S0 = ModV7:init(#{name => ?FUNCTION_NAME,
+                      queue_resource => rabbit_misc:r(<<"/">>, queue, <<"test">>)}),
     Idx = 1,
-    {#rabbit_fifo{}, ok, _} = apply(meta(C, Idx), {machine_version, 0, 2}, S0),
 
     Cid = {atom_to_binary(?FUNCTION_NAME, utf8), self()},
     Entries = [
-               {1, rabbit_fifo_v0:make_enqueue(self(), 1, banana)},
-               {2, rabbit_fifo_v0:make_enqueue(self(), 2, apple)},
-               {3, rabbit_fifo_v0:make_checkout(Cid, {auto, 1, unsettled}, #{})}
+               {1, rabbit_fifo_v7:make_enqueue(self(), 1, banana)},
+               {2, rabbit_fifo_v7:make_enqueue(self(), 2, apple)},
+               {3, rabbit_fifo_v7:make_checkout(Cid,
+                                                {auto, {simple_prefetch, 1}},
+                                                #{})}
               ],
-    {S1, _Effects} = rabbit_fifo_v0_SUITE:run_log(S0, Entries),
+    {S1, _Effects} = run_log(rabbit_fifo_v7, Config, S0, Entries,
+                             fun (_) -> true end),
     Self = self(),
     {#rabbit_fifo{enqueuers = #{Self := #enqueuer{}},
-                  consumers = #{Cid := #consumer{cfg = #consumer_cfg{priority = 0}}},
+                  consumers = #{3 := #consumer{cfg = #consumer_cfg{priority = 0}}},
                   service_queue = S,
                   messages = Msgs}, ok,
-     [_|_]} = apply(meta(C, Idx), {machine_version, 0, 2}, S1),
-    %% validate message conversion to lqueue
-    ?assertEqual(1, lqueue:len(Msgs)),
+     [_|_]} = apply(meta(Config, Idx), {machine_version, 7, 8}, S1),
+
+    ?assertEqual(1, rabbit_fifo_pq:len(Msgs)),
     ?assert(priority_queue:is_queue(S)),
     ok.
 
-machine_version_waiting_consumer_test(C) ->
-    V0 = rabbit_fifo_v0,
+machine_version_waiting_consumer_test(Config) ->
+    V0 = rabbit_fifo_v7,
     S0 = V0:init(#{name => ?FUNCTION_NAME,
                    queue_resource => rabbit_misc:r(<<"/">>, queue, <<"test">>)}),
     Idx = 1,
-    {#rabbit_fifo{}, ok, _} = apply(meta(C, Idx), {machine_version, 0, 2}, S0),
 
     Cid = {atom_to_binary(?FUNCTION_NAME, utf8), self()},
     Entries = [
-               {1, rabbit_fifo_v0:make_enqueue(self(), 1, banana)},
-               {2, rabbit_fifo_v0:make_enqueue(self(), 2, apple)},
-               {3, rabbit_fifo_v0:make_checkout(Cid, {auto, 5, unsettled}, #{})}
+               {1, rabbit_fifo_v7:make_enqueue(self(), 1, banana)},
+               {2, rabbit_fifo_v7:make_enqueue(self(), 2, apple)},
+               {3, rabbit_fifo_v7:make_checkout(Cid,
+                                                {auto, {simple_prefetch, 5}},
+                                                #{})}
               ],
-    {S1, _Effects} = rabbit_fifo_v0_SUITE:run_log(S0, Entries),
+    {S1, _Effects} = run_log(rabbit_fifo_v7, Config, S0, Entries,
+                             fun (_) -> true end),
     Self = self(),
     {#rabbit_fifo{enqueuers = #{Self := #enqueuer{}},
-                  consumers = #{Cid := #consumer{cfg = #consumer_cfg{priority = 0}}},
+                  consumers = #{3 := #consumer{cfg =
+                                                 #consumer_cfg{priority = 0}}},
                   service_queue = S,
-                  messages = Msgs}, ok, _} = apply(meta(C, Idx),
-                                                    {machine_version, 0, 2}, S1),
+                  messages = Msgs}, ok, _} = apply(meta(Config, Idx),
+                                                    {machine_version, 7, 8}, S1),
     %% validate message conversion to lqueue
-    ?assertEqual(0, lqueue:len(Msgs)),
+    ?assertEqual(0, rabbit_fifo_pq:len(Msgs)),
     ?assert(priority_queue:is_queue(S)),
     ?assertEqual(1, priority_queue:len(S)),
     ok.
@@ -2919,7 +2873,8 @@ convert_v7_to_v8_test(Config) ->
                {4, make_checkout(Cid1, {auto, 10, credited}, #{})},
                {5, make_checkout(Cid2, {auto, MaxCredits, simple_prefetch},
                                  #{prefetch => MaxCredits})},
-               {6, {down, Pid1, noconnection}}],
+               {6, {down, Pid1, noconnection}}
+              ],
 
     %% run log in v3
     Name = ?FUNCTION_NAME,
@@ -3188,10 +3143,10 @@ modify_test(Config) ->
                fun (#rabbit_fifo{consumers =
                                  #{CK1 := #consumer{checked_out = Ch}}}) ->
                        ?assertMatch(
-                          ?MSG(_, #{acquired_count := 1,
-                                    anns := #{<<"x-opt-blah">> := <<"blah1">>}} = H)
+                          ?C_MSG(?MSG(_, #{acquired_count := 1,
+                                           anns := #{<<"x-opt-blah">> := <<"blah1">>}} = H))
                             when not is_map_key(delivery_count, H),
-                          maps:get(1, Ch))
+                                 maps:get(1, Ch))
                end),
      %% delivery_failed = true does increment delivery_count
      {?LINE, rabbit_fifo:make_modify(CK1, [1], true, false,
@@ -3202,9 +3157,9 @@ modify_test(Config) ->
                fun (#rabbit_fifo{consumers =
                                  #{CK1 := #consumer{checked_out = Ch}}}) ->
                        ?assertMatch(
-                          ?MSG(_, #{delivery_count := 1,
-                                    acquired_count := 2,
-                                    anns := #{<<"x-opt-blah">> := <<"blah2">>}}),
+                          ?C_MSG(?MSG(_, #{delivery_count := 1,
+                                           acquired_count := 2,
+                                           anns := #{<<"x-opt-blah">> := <<"blah2">>}})),
                           maps:get(2, Ch))
                end),
      %% delivery_failed = true and undeliverable_here = true is the same as discard
@@ -3213,13 +3168,13 @@ modify_test(Config) ->
      ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{next_msg_id = 3,
                                                          checked_out = Ch}}}
                when map_size(Ch) == 0,
-               fun (#rabbit_fifo{dlx = #rabbit_fifo_dlx{discards = Discards}}) ->
-                       ?assertMatch([[_|
-                                      ?MSG(_, #{delivery_count := 2,
-                                                acquired_count := 3,
-                                                anns := #{<<"x-opt-blah">> := <<"blah3">>}})]],
-                                    lqueue:to_list(Discards))
-               end)
+                    fun (#rabbit_fifo{dlx = #rabbit_fifo_dlx{discards = Discards}}) ->
+                            ?assertMatch([[_|
+                                           ?MSG(_, #{delivery_count := 2,
+                                                     acquired_count := 3,
+                                                     anns := #{<<"x-opt-blah">> := <<"blah3">>}})]],
+                                         lqueue:to_list(Discards))
+                    end)
     ],
     {_S1, _} = run_log(Config, S0, Entries, fun single_active_invariant/1),
 
@@ -3258,8 +3213,397 @@ priorities_expire_test(Config) ->
     {_State2, _} = run_log(Config, State0, Entries),
     ok.
 
+consumer_timeout_test(Config) ->
+    R = rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+    State0 = init(#{name => ?FUNCTION_NAME,
+                    queue_resource => R}),
+
+    {CK1, {_, _C1Pid} = C1} = {0, {?LINE_B, test_util:fake_pid(n1)}},
+    Enq1Idx = 1,
+    Enq2Idx = 100,
+    Timeout = Enq1Idx + 1000,
+    Timeout2 = Enq2Idx + 1000,
+
+    % debugger:start(),
+    % int:i(rabbit_fifo),
+    % int:break(rabbit_fifo, 680),
+    Entries =
+    [
+     {CK1, make_checkout(C1, {auto, {simple_prefetch, 2}},
+                         #{timeout => 1000})},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{cfg = Cfg,
+                                                         status = up,
+                                                         credit = 2}},
+                          next_consumer_timeout = infinity}
+               when Cfg#consumer_cfg.timeout == 1000),
+     {Enq1Idx, rabbit_fifo:make_enqueue(self(), 1, one)},
+     {assert_effs,
+      fun (Effs) ->
+              ?ASSERT_EFF({timer, evaluate_consumer_timeout, _, {abs, true}},
+                          Effs),
+              ok
+      end},
+     drop_effects,
+     {Enq2Idx, rabbit_fifo:make_enqueue(self(), 2, two)},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{status = up,
+                                                         credit = 0}},
+                          next_consumer_timeout = Timeout}),
+     {Timeout + 1, {timeout, evaluate_consumer_timeout}},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{status = {timeout, up},
+                                                         checked_out = Ch,
+                                                         credit = 1}},
+                          next_consumer_timeout = Timeout2}
+               when map_size(Ch) == 1),
+     {assert_effs,
+      fun (Effs) ->
+              ?ASSERT_EFF({timer, evaluate_consumer_timeout, _, {abs, true}},
+                          Effs),
+              ok
+      end},
+     {Timeout2 + 1, {timeout, evaluate_consumer_timeout}},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{status = {timeout, up},
+                                                         checked_out = Ch,
+                                                         credit = 2}},
+                          next_consumer_timeout = infinity}
+               when map_size(Ch) == 0),
+     %% to revive a consumer all timed out messages need to be settled somehow
+     %% typically a consumer would be cancelled, link removed etc but if this
+     %% for srme reason does not happen we need to re-enable the consumer if
+     %% it returns any activity, even if it is for a different message????
+     {Timeout2 + 2, rabbit_fifo:make_settle(CK1, [0])},
+     %% TODO: check delivery count is incremented, timeouts should do this
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{status = {timeout, up},
+                                                         checked_out = Ch,
+                                                         credit = 2}},
+                          next_consumer_timeout = infinity}
+               when map_size(Ch) == 0),
+     drop_effects,
+     {Timeout2 + 3, rabbit_fifo:make_settle(CK1, [1])},
+     {assert_effs,
+      fun (Effs) ->
+              ?ASSERT_EFF({timer, evaluate_consumer_timeout, _, {abs, true}},
+                          Effs),
+              ok
+      end},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{status = up,
+                                                         checked_out = Ch,
+                                                         credit = 0}},
+                          next_consumer_timeout = T}
+               when is_integer(T) andalso
+                    map_size(Ch) == 2 andalso
+                    is_map_key(2, Ch) andalso
+                    is_map_key(3, Ch))
+    ],
+    {_State1, _} = run_log(Config, State0, Entries),
+    ok.
+
+consumer_timeout_disconnected_test(Config) ->
+    R = rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+    State0 = init(#{name => ?FUNCTION_NAME,
+                    queue_resource => R}),
+
+    {CK1, {_, C1Pid} = C1} = {0, {?LINE_B, test_util:fake_pid(n1)}},
+    Enq1Idx = 1,
+    Enq2Idx = 100,
+    Timeout = Enq1Idx + 1000,
+
+    Entries =
+    [
+     {CK1, make_checkout(C1, {auto, {simple_prefetch, 2}},
+                         #{timeout => 1000})},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{cfg = Cfg,
+                                                         status = up,
+                                                         credit = 2}},
+                          next_consumer_timeout = infinity}
+               when Cfg#consumer_cfg.timeout == 1000),
+     {Enq1Idx, rabbit_fifo:make_enqueue(self(), 1, one)},
+     {assert_effs,
+      fun (Effs) ->
+              ?ASSERT_EFF({timer, evaluate_consumer_timeout, _, {abs, true}},
+                          Effs),
+              ok
+      end},
+     drop_effects,
+     {Timeout + 1, {timeout, evaluate_consumer_timeout}},
+     %% message has timed out
+     ?ASSERT(#rabbit_fifo{consumers =
+                          #{CK1 := #consumer{status = {timeout, up},
+                                             timed_out_msg_ids = [_],
+                                             checked_out = Ch}},
+                          next_consumer_timeout = _Timeout2}
+               when map_size(Ch) == 0),
+     %% then we got disconnected
+     {Enq2Idx, {down, C1Pid, noconnection}},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 :=
+                                        #consumer{status = {suspected_down, up}}},
+                          next_consumer_timeout = _Timeout}),
+
+     %% node comes back but we have timed out messages so we move to timeout
+     %% stage
+     {Timeout + 2, {nodeup, node(C1Pid)}},
+     ?ASSERT(#rabbit_fifo{consumers =
+                          #{CK1 := #consumer{status = {timeout, up},
+                                             timed_out_msg_ids = [_],
+                                             checked_out = Ch}},
+                          next_consumer_timeout = _Timeout2}
+               when map_size(Ch) == 0)
+    ],
+    {_State1, _} = run_log(Config, State0, Entries),
+    ok.
+
+consumer_disconnected_timeout_test(Config) ->
+    R = rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+    State0 = init(#{name => ?FUNCTION_NAME,
+                    queue_resource => R}),
+
+    {CK1, {_, C1Pid} = C1} = {0, {?LINE_B, test_util:fake_pid(n1)}},
+    Enq1Idx = 1,
+    Enq2Idx = 100,
+    Timeout = Enq1Idx + 1000,
+
+    Entries =
+    [
+     {CK1, make_checkout(C1, {auto, {simple_prefetch, 2}},
+                         #{timeout => 1000})},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{cfg = Cfg,
+                                                         status = up,
+                                                         credit = 2}},
+                          next_consumer_timeout = infinity}
+               when Cfg#consumer_cfg.timeout == 1000),
+     {Enq1Idx, rabbit_fifo:make_enqueue(self(), 1, one)},
+     {assert_effs,
+      fun (Effs) ->
+              ?ASSERT_EFF({timer, evaluate_consumer_timeout, _, {abs, true}},
+                          Effs),
+              ok
+      end},
+     drop_effects,
+     {Enq2Idx, {down, C1Pid, noconnection}},
+     % {Enq2Idx, rabbit_fifo:make_enqueue(self(), 2, two)},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 :=
+                                        #consumer{status = {suspected_down, up}}},
+                          next_consumer_timeout = _Timeout}),
+     {Timeout + 1, {timeout, evaluate_consumer_timeout}},
+     %% message has timed out whilst disconnected
+     ?ASSERT(#rabbit_fifo{consumers =
+                          #{CK1 := #consumer{status = {suspected_down, up},
+                                             timed_out_msg_ids = [_],
+                                             checked_out = Ch}},
+                          next_consumer_timeout = _Timeout2}
+               when map_size(Ch) == 0),
+
+     %% node comes back but we have timed out messages so we move to timeout
+     %% stage
+     {Timeout + 2, {nodeup, node(C1Pid)}},
+     ?ASSERT(#rabbit_fifo{consumers =
+                          #{CK1 := #consumer{status = {timeout, up},
+                                             timed_out_msg_ids = [_],
+                                             checked_out = Ch}},
+                          next_consumer_timeout = _Timeout2}
+               when map_size(Ch) == 0)
+    ],
+    {_State1, _} = run_log(Config, State0, Entries),
+    ok.
+consumer_timeout_cancelled_test(Config) ->
+    R = rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+    State0 = init(#{name => ?FUNCTION_NAME,
+                    queue_resource => R}),
+
+    {CK1, {_, _C1Pid} = C1} = {0, {?LINE_B, test_util:fake_pid(n1)}},
+    Enq1Idx = 1,
+    Enq2Idx = 100,
+    Timeout = Enq1Idx + 1000,
+
+    Entries =
+    [
+     {CK1, make_checkout(C1, {auto, {simple_prefetch, 2}},
+                         #{timeout => 1000})},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{cfg = Cfg,
+                                                         status = up,
+                                                         credit = 2}},
+                          next_consumer_timeout = infinity}
+               when Cfg#consumer_cfg.timeout == 1000),
+     {Enq1Idx, rabbit_fifo:make_enqueue(self(), 1, one)},
+     {assert_effs,
+      fun (Effs) ->
+              ?ASSERT_EFF({timer, evaluate_consumer_timeout, _, {abs, true}},
+                          Effs),
+              ok
+      end},
+     drop_effects,
+     {Enq2Idx, rabbit_fifo:make_checkout(C1, cancel, #{})},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 :=
+                                        #consumer{status = cancelled}},
+                          next_consumer_timeout = _Timeout}),
+     {Timeout + 1, {timeout, evaluate_consumer_timeout}},
+     %% message has timed out whilst disconnected
+     %% as the consumer was cancelled it got completely removed at this point
+     ?ASSERT(#rabbit_fifo{consumers = Con}
+               when map_size(Con) == 0),
+     ?ASSERT(_)
+    ],
+    {_State1, _} = run_log(Config, State0, Entries),
+    ok.
+
+sac_consumer_timeout_test(Config) ->
+    R = rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+    State0 = init(#{name => ?FUNCTION_NAME,
+                    queue_resource => R,
+                    single_active_consumer_on => true}),
+
+    {CK1, {_, _C1Pid} = C1} = {0, {?LINE_B, test_util:fake_pid(n1)}},
+    {CK2, {_, _C2Pid} = C2} = {1, {?LINE_B, test_util:fake_pid(n1)}},
+    Enq1Idx = 3,
+    Enq2Idx = 100,
+    Timeout = Enq1Idx + 1000,
+    Timeout2 = Enq2Idx + 1000,
+
+    Entries =
+    [
+     {CK1, make_checkout(C1, {auto, {simple_prefetch, 2}}, #{timeout => 1000})},
+     {CK2, make_checkout(C2, {auto, {simple_prefetch, 2}}, #{timeout => 1000})},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{cfg = Cfg,
+                                                         status = up,
+                                                         credit = 2}},
+                          next_consumer_timeout = infinity,
+                          waiting_consumers = [_]}
+               when Cfg#consumer_cfg.timeout == 1000),
+     {Enq1Idx, rabbit_fifo:make_enqueue(self(), 1, one)},
+     {Enq2Idx, rabbit_fifo:make_enqueue(self(), 2, two)},
+     {assert_effs,
+      fun (Effs) ->
+              ?ASSERT_EFF({timer, evaluate_consumer_timeout, _, {abs, true}}, Effs)
+      end},
+     drop_effects,
+     {Timeout + 1, {timeout, evaluate_consumer_timeout}},
+     %% message has timed out whilst disconnected
+     ?ASSERT(#rabbit_fifo{consumers =
+                          #{CK1 := #consumer{status = {timeout, up},
+                                             timed_out_msg_ids = [_],
+                                             checked_out = Ch}},
+                          next_consumer_timeout = _Timeout2}
+               when map_size(Ch) == 1),
+     {Timeout2 + 1, {timeout, evaluate_consumer_timeout}},
+     ?ASSERT(#rabbit_fifo{consumers = Con,
+                          waiting_consumers =
+                              [{CK1, #consumer{status = {timeout, up},
+                                               timed_out_msg_ids = [0, 1]}}]}
+               when map_size(Con) == 1),
+     {Timeout + 3, rabbit_fifo:make_settle(CK1, [1])},
+     ?ASSERT(#rabbit_fifo{consumers = Con,
+                          waiting_consumers =
+                              [{_, #consumer{status = {timeout, up},
+                                             timed_out_msg_ids = [0]}}]}
+               when map_size(Con) == 1),
+     ?ASSERT(_)
+    ],
+    {State1, _} = run_log(Config, State0, Entries),
+
+    run_log(Config, State1,
+            [{Timeout + 4, rabbit_fifo:make_settle(CK1, [0])},
+             ?ASSERT(#rabbit_fifo{consumers =
+                                  #{CK2 := #consumer{status = up}},
+                                  waiting_consumers =
+                                  [{CK1, #consumer{status = up,
+                                                   timed_out_msg_ids = []}}]})]),
+
+    run_log(Config, State1,
+            [{Timeout + 4, rabbit_fifo:make_return(CK1, [0])},
+             ?ASSERT(#rabbit_fifo{consumers =
+                                  #{CK2 := #consumer{status = up}},
+                                  waiting_consumers =
+                                  [{CK1, #consumer{status = up,
+                                                   timed_out_msg_ids = []}}]})]),
+
+    run_log(Config, State1,
+            [{Timeout + 4, rabbit_fifo:make_discard(CK1, [0])},
+             ?ASSERT(#rabbit_fifo{consumers =
+                                  #{CK2 := #consumer{status = up}},
+                                  waiting_consumers =
+                                  [{CK1, #consumer{status = up,
+                                                   timed_out_msg_ids = []}}]})]),
+
+    run_log(Config, State1,
+            [{Timeout + 4, rabbit_fifo:make_modify(CK1, [0], true, true, #{})},
+             ?ASSERT(#rabbit_fifo{consumers =
+                                  #{CK2 := #consumer{status = up}},
+                                  waiting_consumers =
+                                  [{CK1, #consumer{status = up,
+                                                   timed_out_msg_ids = []}}]})]),
+    ok.
+
+sac_consumer_timeout_noconnection_test(Config) ->
+    R = rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+    State0 = init(#{name => ?FUNCTION_NAME,
+                    queue_resource => R,
+                    single_active_consumer_on => true}),
+
+    {CK1, {_, C1Pid} = C1} = {0, {?LINE_B, test_util:fake_pid(n1)}},
+    {CK2, {_, _C2Pid} = C2} = {1, {?LINE_B, test_util:fake_pid(n1)}},
+    Enq1Idx = 3,
+    Enq2Idx = 100,
+    Timeout = Enq1Idx + 1000,
+    Timeout2 = Enq2Idx + 1000,
+
+    Entries =
+    [
+     {CK1, make_checkout(C1, {auto, {simple_prefetch, 2}},
+                         #{timeout => 1000})},
+     {CK2, make_checkout(C2, {auto, {simple_prefetch, 2}},
+                         #{timeout => 1000})},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{cfg = Cfg,
+                                                         status = up,
+                                                         credit = 2}},
+                          next_consumer_timeout = infinity}
+               when Cfg#consumer_cfg.timeout == 1000),
+     {Enq1Idx, rabbit_fifo:make_enqueue(self(), 1, one)},
+     {Enq2Idx, rabbit_fifo:make_enqueue(self(), 2, two)},
+     {assert_effs,
+      fun (Effs) ->
+              ?ASSERT_EFF({timer, evaluate_consumer_timeout, _, {abs, true}}, Effs)
+      end},
+     drop_effects,
+     {Enq2Idx, {down, C1Pid, noconnection}},
+     % {Enq2Idx, rabbit_fifo:make_enqueue(self(), 2, two)},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 :=
+                                        #consumer{status = {suspected_down, up}}},
+                          next_consumer_timeout = _Timeout,
+                          waiting_consumers = [_]}),
+     {Timeout + 1, {timeout, evaluate_consumer_timeout}},
+     %% message has timed out whilst disconnected
+     ?ASSERT(#rabbit_fifo{consumers =
+                          #{CK1 := #consumer{status = {suspected_down, up},
+                                             timed_out_msg_ids = [_],
+                                             checked_out = Ch}},
+                          next_consumer_timeout = _Timeout2}
+               when map_size(Ch) == 1),
+     {Timeout2 + 2, {timeout, evaluate_consumer_timeout}},
+     ?ASSERT(#rabbit_fifo{consumers =
+                          #{CK2 := #consumer{status = up,
+                                             timed_out_msg_ids = [],
+                                             checked_out = Ch}},
+                          waiting_consumers =
+                          [{CK1, #consumer{status = {suspected_down, up},
+                                           timed_out_msg_ids = [0, 1]}}]}
+       when map_size(Ch) == 2),
+     {Timeout2 + 3, {nodeup, node(C1Pid)}},
+     ?ASSERT(#rabbit_fifo{consumers =
+                          #{CK2 := #consumer{status = up,
+                                             timed_out_msg_ids = [],
+                                             checked_out = Ch}},
+                          waiting_consumers =
+                          [{CK1, #consumer{status = {timeout, up},
+                                           timed_out_msg_ids = [0, 1]}}]}
+       when map_size(Ch) == 2),
+     ?ASSERT(_)
+    ],
+    % debugger:start(),
+    % int:i(rabbit_fifo),
+    % int:break(rabbit_fifo, 616),
+    {_State1, _} = run_log(Config, State0, Entries),
+    ok.
+
 %% Utility
-%%
 
 init(Conf) -> rabbit_fifo:init(Conf).
 make_register_enqueuer(Pid) -> rabbit_fifo:make_register_enqueuer(Pid).
