@@ -559,9 +559,18 @@ fetch(AckRequired, State) ->
         {{value, MsgStatus}, State1} ->
             %% it is possible that the message wasn't read from disk
             %% at this point, so read it in.
-            {Msg, State2} = read_msg(MsgStatus, State1),
+            {Msg0, State2} = read_msg(MsgStatus, State1),
+            Msg = add_delivery_count(MsgStatus#msg_status.seq_id, Msg0, State2),
             {AckTag, State3} = remove(AckRequired, MsgStatus, State2),
             {{Msg, MsgStatus#msg_status.is_delivered, AckTag}, a(State3)}
+    end.
+
+add_delivery_count(SeqId, Msg, #vqstate{delivery_count=DeliveryCount}) ->
+    case DeliveryCount of
+        #{SeqId := Count} ->
+            mc:set_annotation(delivery_count, Count, Msg);
+        _ ->
+            Msg
     end.
 
 %% @todo It may seem like we would benefit from avoiding reading the
