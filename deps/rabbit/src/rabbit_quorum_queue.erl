@@ -26,7 +26,7 @@
          delete/4,
          delete_immediately/1]).
 -export([state_info/1, info/2, stat/1, infos/1, infos/2]).
--export([credit/6, settle/5, dequeue/5, consume/3, cancel/3]).
+-export([credit/6, settle/5, dequeue/6, consume/3, cancel/3]).
 -export([purge/1]).
 -export([supports_stateful_delivery/0,
          deliver/3]).
@@ -395,10 +395,7 @@ queue_arg_has_precedence(_Policy, QueueArg) ->
 
 single_active_consumer_on(Q) ->
     QArguments = amqqueue:get_arguments(Q),
-    case rabbit_misc:table_lookup(QArguments, <<"x-single-active-consumer">>) of
-        {bool, true} -> true;
-        _            -> false
-    end.
+    table_lookup(QArguments, <<"x-single-active-consumer">>, false).
 
 update_consumer_handler(QName, {ConsumerTag, ChPid}, Exclusive, AckRequired,
                         Prefetch, Active, ActivityStatus, Args) ->
@@ -536,20 +533,35 @@ filter_quorum_critical(Queues, ReplicaStates, Self) ->
 
 capabilities() ->
     #{unsupported_policies => [%% Classic policies
-                               <<"max-priority">>, <<"queue-mode">>,
-                               <<"ha-mode">>, <<"ha-params">>,
-                               <<"ha-sync-mode">>, <<"ha-promote-on-shutdown">>, <<"ha-promote-on-failure">>,
+                               <<"max-priority">>,
+                               <<"queue-mode">>,
+                               <<"ha-mode">>,
+                               <<"ha-params">>,
+                               <<"ha-sync-mode">>,
+                               <<"ha-promote-on-shutdown">>, <<"ha-promote-on-failure">>,
                                <<"queue-master-locator">>,
                                %% Stream policies
-                               <<"max-age">>, <<"stream-max-segment-size-bytes">>, <<"initial-cluster-size">>],
-      queue_arguments => [<<"x-dead-letter-exchange">>, <<"x-dead-letter-routing-key">>,
-                          <<"x-dead-letter-strategy">>, <<"x-expires">>, <<"x-max-length">>,
-                          <<"x-max-length-bytes">>, <<"x-max-in-memory-length">>,
-                          <<"x-max-in-memory-bytes">>, <<"x-overflow">>,
-                          <<"x-single-active-consumer">>, <<"x-queue-type">>,
-                          <<"x-quorum-initial-group-size">>, <<"x-delivery-limit">>,
-                          <<"x-message-ttl">>, <<"x-queue-leader-locator">>],
-      consumer_arguments => [<<"x-priority">>],
+                               <<"max-age">>,
+                               <<"stream-max-segment-size-bytes">>,
+                               <<"initial-cluster-size">>],
+      queue_arguments => [<<"x-dead-letter-exchange">>,
+                          <<"x-dead-letter-routing-key">>,
+                          <<"x-dead-letter-strategy">>,
+                          <<"x-expires">>,
+                          <<"x-max-length">>,
+                          <<"x-max-length-bytes">>,
+                          %% in-memory argumetns are not used anymore
+                          <<"x-max-in-memory-length">>,
+                          <<"x-max-in-memory-bytes">>,
+                          <<"x-overflow">>,
+                          <<"x-single-active-consumer">>,
+                          <<"x-queue-type">>,
+                          <<"x-quorum-initial-group-size">>,
+                          <<"x-delivery-limit">>,
+                          <<"x-message-ttl">>,
+                          <<"x-queue-leader-locator">>],
+      consumer_arguments => [<<"x-priority">>,
+                             <<"x-consumer-timeout">>],
       server_named => false,
       rebalance_module => ?MODULE,
       can_redeliver => true,
@@ -968,11 +980,13 @@ credit(_QName, CTag, DeliveryCount, Credit, Drain, QState) ->
     rabbit_fifo_client:credit(quorum_ctag(CTag), DeliveryCount, Credit, Drain, QState).
 
 -spec dequeue(amqqueue:amqqueue(), NoAck :: boolean(), pid(),
-              rabbit_types:ctag(), rabbit_fifo_client:state()) ->
+              rabbit_types:ctag(),
+              Timeout :: non_neg_integer() | infinity | undefined,
+              rabbit_fifo_client:state()) ->
     {empty, rabbit_fifo_client:state()} |
     {ok, QLen :: non_neg_integer(), qmsg(), rabbit_fifo_client:state()} |
     {error, term()}.
-dequeue(Q, NoAck, _LimiterPid, CTag0, QState0) ->
+dequeue(Q, NoAck, _LimiterPid, CTag0, Timeout, QState0) ->
     QName = amqqueue:get_name(Q),
     CTag = quorum_ctag(CTag0),
     Settlement = case NoAck of
@@ -981,7 +995,7 @@ dequeue(Q, NoAck, _LimiterPid, CTag0, QState0) ->
                      false ->
                          unsettled
                  end,
-    rabbit_fifo_client:dequeue(QName, CTag, Settlement, QState0).
+    rabbit_fifo_client:dequeue(QName, CTag, Settlement, Timeout, QState0).
 
 -spec consume(amqqueue:amqqueue(),
               rabbit_queue_type:consume_spec(),
@@ -1015,17 +1029,16 @@ consume(Q, Spec, QState0) when ?amqqueue_is_quorum(Q) ->
                    _ ->
                        0
                end,
-    Priority = case rabbit_misc:table_lookup(Args, <<"x-priority">>) of
-                   {_Key, Value} ->
-                       Value;
-                   _ ->
-                       0
-               end,
-    ConsumerMeta = #{ack => AckRequired,
-                     prefetch => Prefetch,
-                     args => Args,
-                     username => ActingUser,
-                     priority => Priority},
+    Priority = table_lookup(Args, <<"x-priority">>, 0),
+    Timeout = table_lookup(Args, <<"x-consumer-timeout">>,
+                           maps:get(timeout, Spec, undefined)),
+
+    ConsumerMeta0 = #{ack => AckRequired,
+                      prefetch => Prefetch,
+                      args => Args,
+                      username => ActingUser,
+                      priority => Priority},
+    ConsumerMeta = rabbit_misc:maps_put_truthy(timeout, Timeout, ConsumerMeta0),
     case rabbit_fifo_client:checkout(ConsumerTag, Mode, ConsumerMeta, QState0) of
         {ok, _Infos, QState} ->
             case single_active_consumer_on(Q) of
@@ -2522,3 +2535,13 @@ queue_vm_ets() ->
 
 tick_interval() ->
     application:get_env(rabbit, quorum_tick_interval, ?TICK_INTERVAL).
+
+table_lookup(Tbl, Key, Default) 
+  when is_list(Tbl) andalso
+       is_binary(Key) ->
+    case rabbit_misc:table_lookup(Tbl, Key) of
+        {_Type, Value} ->
+            Value;
+        _ ->
+            Default
+    end.

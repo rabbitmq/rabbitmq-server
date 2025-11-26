@@ -22,7 +22,7 @@
          cancel_checkout/3,
          enqueue/3,
          enqueue/4,
-         dequeue/4,
+         dequeue/5,
          settle/3,
          return/3,
          discard/3,
@@ -205,19 +205,25 @@ enqueue(QName, Msg, State) ->
 %%
 %% @returns `{ok, IdMsg, State}' or `{error | timeout, term()}'
 -spec dequeue(rabbit_amqqueue:name(), rabbit_types:ctag(),
-              Settlement :: settled | unsettled, state()) ->
+              Settlement :: settled | unsettled,
+              ConsumerTimeout :: non_neg_integer() | infinity | undefined,
+              state()) ->
     {ok, non_neg_integer(), term(), non_neg_integer()}
      | {empty, state()} | {error | timeout, term()}.
-dequeue(QueueName, ConsumerTag, Settlement,
+dequeue(QueueName, ConsumerTag, Settlement, ConsumerTimeout,
         #state{cfg = #cfg{timeout = Timeout}} = State0) ->
     ServerId = pick_server(State0),
     %% dequeue never really needs to assign a consumer key so we just use
     %% the old ConsumerId format here
     ConsumerId = consumer_id(ConsumerTag),
+    Meta = case ConsumerTimeout of
+               undefined -> #{};
+               _ -> #{timeout => ConsumerTimeout}
+           end,
     case ra:process_command(ServerId,
                             rabbit_fifo:make_checkout(ConsumerId,
                                                       {dequeue, Settlement},
-                                                      #{}),
+                                                      Meta),
                             Timeout) of
         {ok, {dequeue, empty}, Leader} ->
             {empty, State0#state{leader = Leader}};
@@ -716,6 +722,9 @@ handle_ra_event(QName, Leader, close_cached_segments,
                      State#state{cached_segments = {Ref, Last, Cache}}
              end
      end, []};
+handle_ra_event(_QName, _Leader, {machine,
+                                  {released, _, _, _, _} = Action}, State) ->
+            {ok, State, [Action]};
 handle_ra_event(_QName, _Leader, {machine, eol}, State) ->
     {eol, [{unblock, cluster_name(State)}]};
 handle_ra_event(_QName, _Leader, {machine, Action}, State) ->
