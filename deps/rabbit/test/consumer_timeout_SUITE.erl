@@ -39,13 +39,14 @@ all() ->
     ].
 
 groups() ->
-    AllTests = [consumer_timeout,
+    %% Consumer timeouts are only supported for quorum queues.
+    %% Classic queues and stream queues do not support consumer timeouts.
+    AllTests = [consumer_timeout_with_basic_cancel_capability,
                 consumer_timeout_no_basic_cancel_capability,
                 consumer_timeout_basic_get],
 
     AllTestsParallel = [
-       {classic_queue, [parallel], AllTests},
-       {quorum_queue, [parallel], AllTests}
+       {quorum_queue, [], AllTests}
       ],
     [
      {global_consumer_timeout, [], AllTestsParallel},
@@ -62,43 +63,49 @@ suite() ->
 %% Testsuite setup/teardown.
 %% -------------------------------------------------------------------
 
-init_per_suite(Config) ->
+init_per_suite(Config0) ->
     rabbit_ct_helpers:log_environment(),
-    rabbit_ct_helpers:run_setup_steps(Config).
+    Config1 = rabbit_ct_helpers:run_setup_steps(Config0),
+    ClusterSize = 3,
+    Config2 = rabbit_ct_helpers:set_config(
+                Config1, [{rmq_nodename_suffix, consumer_timeout},
+                          {rmq_nodes_count, ClusterSize}]),
+    Config3 = rabbit_ct_helpers:merge_app_env(
+                Config2, {rabbit, [{channel_tick_interval, 256},
+                                   {quorum_tick_interval, 256}]}),
+    rabbit_ct_helpers:run_steps(Config3,
+                                rabbit_ct_broker_helpers:setup_steps() ++
+                                rabbit_ct_client_helpers:setup_steps()).
 
 end_per_suite(Config) ->
-    rabbit_ct_helpers:run_teardown_steps(Config).
+    rabbit_ct_helpers:run_steps(Config,
+      rabbit_ct_client_helpers:teardown_steps() ++
+      rabbit_ct_broker_helpers:teardown_steps()).
 
-init_per_group(classic_queue, Config) ->
-    rabbit_ct_helpers:set_config(
-      Config,
-      [{policy_type, <<"classic_queues">>},
-       {queue_args, [{<<"x-queue-type">>, longstr, <<"classic">>}]},
-       {queue_durable, true}]);
 init_per_group(quorum_queue, Config) ->
     rabbit_ct_helpers:set_config(
       Config,
       [{policy_type, <<"quorum_queues">>},
        {queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>}]},
        {queue_durable, true}]);
-init_per_group(Group, Config0) ->
+init_per_group(Group, Config) ->
     case lists:member({group, Group}, all()) of
         true ->
             GroupConfig = maps:get(Group, ?GROUP_CONFIG),
-            ClusterSize = 3,
-            Config = rabbit_ct_helpers:merge_app_env(
-                       Config0, {rabbit, [{channel_tick_interval, 256},
-                                          {quorum_tick_interval, 256}] ++
-                                 ?config(rabbit, GroupConfig)}),
-            Config1 = rabbit_ct_helpers:set_config(
-                        Config, [ {rmq_nodename_suffix, Group},
-                                  {rmq_nodes_count, ClusterSize}
-                                ] ++ GroupConfig),
-            rabbit_ct_helpers:run_steps(Config1,
-                                        rabbit_ct_broker_helpers:setup_steps() ++
-                                        rabbit_ct_client_helpers:setup_steps());
+            %% Set the global consumer_timeout if specified
+            case ?config(rabbit, GroupConfig) of
+                [{consumer_timeout, Timeout}] ->
+                    ok = rabbit_ct_broker_helpers:rpc(
+                           Config, 0, application, set_env,
+                           [rabbit, consumer_timeout, Timeout]);
+                [] ->
+                    ok = rabbit_ct_broker_helpers:rpc(
+                           Config, 0, application, unset_env,
+                           [rabbit, consumer_timeout])
+            end,
+            rabbit_ct_helpers:set_config(Config, GroupConfig);
         false ->
-            rabbit_ct_helpers:run_steps(Config0, [])
+            Config
     end.
 
 end_per_group(Group, Config) ->
@@ -109,9 +116,7 @@ end_per_group(Group, Config) ->
                 _Policy ->
                     rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"consumer_timeout_queue_test_policy">>)
             end,
-            rabbit_ct_helpers:run_steps(Config,
-              rabbit_ct_client_helpers:teardown_steps() ++
-              rabbit_ct_broker_helpers:teardown_steps());
+            Config;
         false ->
             Config
     end.
@@ -130,51 +135,83 @@ end_per_testcase(Testcase, Config) ->
     amqp_channel:call(Ch, #'queue.delete'{queue = ?config(queue_name_2, Config)}),
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
-consumer_timeout(Config) ->
+%% Test consumer timeout with consumer_cancel_notify capability enabled (default).
+%% When the consumer times out, the server should send a basic.cancel to the consumer
+%% instead of closing the channel.
+consumer_timeout_with_basic_cancel_capability(Config) ->
     {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     QName = ?config(queue_name, Config),
     declare_queue(Ch, Config, QName),
     publish(Ch, QName, [<<"msg1">>]),
     wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
-    subscribe(Ch, QName, false),
+    Ctag = <<"ctag">>,
+    subscribe(Ch, QName, false, Ctag),
     erlang:monitor(process, Conn),
     erlang:monitor(process, Ch),
+    %% Receive the delivery but don't acknowledge it
     receive
-        {'DOWN', _, process, Ch, _} -> ok
+        {#'basic.deliver'{delivery_tag = _,
+                          consumer_tag = Ctag,
+                          redelivered  = false}, _} ->
+            %% do nothing with the delivery, should trigger timeout
+            ok
     after ?RECEIVE_TIMEOUT ->
               flush(1),
-              exit(channel_exit_expected)
+              exit(deliver_timeout)
+    end,
+    %% Should receive basic.cancel from server due to consumer timeout
+    receive
+        #'basic.cancel'{consumer_tag = Ctag, nowait = true} ->
+            ok
+    after ?RECEIVE_TIMEOUT ->
+              flush(1),
+              exit(basic_cancel_expected)
+    end,
+    %% Channel and connection should remain open
+    receive
+        {'DOWN', _, process, Ch, Reason} ->
+              flush(1),
+              exit({unexpected_channel_exit, Reason})
+    after 1000 ->
+              ok
     end,
     receive
-        {'DOWN', _, process, Conn, _} ->
+        {'DOWN', _, process, Conn, Reason2} ->
               flush(1),
-              exit(unexpected_connection_exit)
-    after ?RECEIVE_TIMEOUT ->
+              exit({unexpected_connection_exit, Reason2})
+    after 1000 ->
               ok
     end,
     rabbit_ct_client_helpers:close_channel(Ch),
+    rabbit_ct_client_helpers:close_connection(Conn),
     ok.
 
+%% Test consumer timeout with basic.get (manual acknowledgement mode).
+%% When a message is fetched via basic.get and not acknowledged within the timeout,
+%% the channel should be closed (since basic.get doesn't have a consumer tag to cancel).
 consumer_timeout_basic_get(Config) ->
     {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     QName = ?config(queue_name, Config),
     declare_queue(Ch, Config, QName),
     publish(Ch, QName, [<<"msg1">>]),
     wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
+    %% Fetch message via basic.get without acknowledging
     [_DelTag] = consume(Ch, QName, [<<"msg1">>]),
     erlang:monitor(process, Conn),
     erlang:monitor(process, Ch),
+    %% Channel should close due to timeout
     receive
         {'DOWN', _, process, Ch, _} -> ok
     after ?RECEIVE_TIMEOUT ->
               flush(1),
               exit(channel_exit_expected)
     end,
+    %% Connection should remain open
     receive
         {'DOWN', _, process, Conn, _} ->
               flush(1),
               exit(unexpected_connection_exit)
-    after ?RECEIVE_TIMEOUT ->
+    after 1000 ->
               ok
     end,
     ok.
@@ -188,6 +225,9 @@ consumer_timeout_basic_get(Config) ->
      {<<"connection.blocked">>,           bool, true},
      {<<"authentication_failure_close">>, bool, true}]).
 
+%% Test consumer timeout without consumer_cancel_notify capability.
+%% When the consumer times out and the client doesn't support consumer_cancel_notify,
+%% the server should close the channel instead of sending basic.cancel.
 consumer_timeout_no_basic_cancel_capability(Config) ->
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
     Props = [{<<"capabilities">>, table, ?CLIENT_CAPABILITIES}],
@@ -219,14 +259,15 @@ consumer_timeout_no_basic_cancel_capability(Config) ->
               flush(1),
               exit(channel_exit_expected)
     end,
+    %% Connection should remain open
     receive
         {'DOWN', _, process, Conn, _} ->
               flush(1),
               exit(unexpected_connection_exit)
-    after ?RECEIVE_TIMEOUT ->
+    after 1000 ->
               ok
-    end,
-    ok.
+    end.
+
 %%%%%%%%%%%%%%%%%%%%%%%%
 %% Test helpers
 %%%%%%%%%%%%%%%%%%%%%%%%

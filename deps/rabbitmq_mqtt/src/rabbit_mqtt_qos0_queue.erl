@@ -63,7 +63,7 @@
          handle_event/3,
          settle/5,
          credit/6,
-         dequeue/5,
+         dequeue/6,
          state_info/1
         ]).
 -export(?STATEFUL_CALLBACKS).
@@ -304,8 +304,8 @@ settle(A1,A2,A3,A4,A5) ->
 credit(A1,A2,A3,A4,A5,A6) ->
     ?UNSUPPORTED([A1,A2,A3,A4,A5,A6]).
 
-dequeue(A1,A2,A3,A4,A5) ->
-    ?UNSUPPORTED([A1,A2,A3,A4,A5]).
+dequeue(A1,A2,A3,A4,A5,A6) ->
+    ?UNSUPPORTED([A1,A2,A3,A4,A5,A6]).
 
 state_info(A1) ->
     ?UNSUPPORTED([A1]).
