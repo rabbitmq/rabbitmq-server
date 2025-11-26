@@ -3189,10 +3189,10 @@ modify_test(Config) ->
                fun (#rabbit_fifo{consumers =
                                  #{CK1 := #consumer{checked_out = Ch}}}) ->
                        ?assertMatch(
-                          ?MSG(_, #{acquired_count := 1,
-                                    anns := #{<<"x-opt-blah">> := <<"blah1">>}} = H)
+                          ?C_MSG(?MSG(_, #{acquired_count := 1,
+                                           anns := #{<<"x-opt-blah">> := <<"blah1">>}} = H))
                             when not is_map_key(delivery_count, H),
-                          maps:get(1, Ch))
+                                 maps:get(1, Ch))
                end),
      %% delivery_failed = true does increment delivery_count
      {?LINE, rabbit_fifo:make_modify(CK1, [1], true, false,
@@ -3203,9 +3203,9 @@ modify_test(Config) ->
                fun (#rabbit_fifo{consumers =
                                  #{CK1 := #consumer{checked_out = Ch}}}) ->
                        ?assertMatch(
-                          ?MSG(_, #{delivery_count := 1,
-                                    acquired_count := 2,
-                                    anns := #{<<"x-opt-blah">> := <<"blah2">>}}),
+                          ?C_MSG(?MSG(_, #{delivery_count := 1,
+                                           acquired_count := 2,
+                                           anns := #{<<"x-opt-blah">> := <<"blah2">>}})),
                           maps:get(2, Ch))
                end),
      %% delivery_failed = true and undeliverable_here = true is the same as discard
@@ -3214,13 +3214,13 @@ modify_test(Config) ->
      ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{next_msg_id = 3,
                                                          checked_out = Ch}}}
                when map_size(Ch) == 0,
-               fun (#rabbit_fifo{dlx = #rabbit_fifo_dlx{discards = Discards}}) ->
-                       ?assertMatch([[_|
-                                      ?MSG(_, #{delivery_count := 2,
-                                                acquired_count := 3,
-                                                anns := #{<<"x-opt-blah">> := <<"blah3">>}})]],
-                                    lqueue:to_list(Discards))
-               end)
+                    fun (#rabbit_fifo{dlx = #rabbit_fifo_dlx{discards = Discards}}) ->
+                            ?assertMatch([[_|
+                                           ?MSG(_, #{delivery_count := 2,
+                                                     acquired_count := 3,
+                                                     anns := #{<<"x-opt-blah">> := <<"blah3">>}})]],
+                                         lqueue:to_list(Discards))
+                    end)
     ],
     {_S1, _} = run_log(Config, S0, Entries, fun single_active_invariant/1),
 

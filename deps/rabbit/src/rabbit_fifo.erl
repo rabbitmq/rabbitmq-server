@@ -219,6 +219,7 @@ update_config(Conf, State) ->
                                competing
                        end,
     Cfg = State#?STATE.cfg,
+    DefConsumerTimeout = maps:get(consumer_timeout, Conf, 1800),
 
     LastActive = maps:get(created, Conf, undefined),
     State#?STATE{cfg = Cfg#cfg{dead_letter_handler = DLH,
@@ -228,7 +229,8 @@ update_config(Conf, State) ->
                                consumer_strategy = ConsumerStrategy,
                                delivery_limit = DeliveryLimit,
                                expires = Expires,
-                               msg_ttl = MsgTTL},
+                               msg_ttl = MsgTTL,
+                               default_consumer_timeout_s = DefConsumerTimeout},
                  last_active = LastActive}.
 
 % msg_ids are scoped per consumer
@@ -677,7 +679,7 @@ live_indexes(#?STATE{cfg = #cfg{},
                              DlxIndexes, Returns),
     maps:fold(fun (_Cid, #consumer{checked_out = Ch}, Acc0) ->
                       maps:fold(
-                        fun (_MsgId, Msg, Acc) ->
+                        fun (_MsgId, ?C_MSG(Msg), Acc) ->
                                 [get_msg_idx(Msg) | Acc]
                         end, Acc0, Ch)
               end, RtnIndexes, Consumers).
@@ -704,8 +706,11 @@ snapshot_installed(_Meta, #?MODULE{cfg = #cfg{},
                      Acc) ->
                         case node(Pid) == node() of
                             true ->
-                                Iter = maps:iterator(Checked, reversed),
-                                Acc#{{Tag, Pid} => maps:to_list(Iter)};
+                                Iter = maps:iterator(Checked, ordered),
+                                Msgs = maps:fold(fun (K, ?C_MSG(M), Ac0) ->
+                                                         [{K, M} | Ac0]
+                                                 end, [], Iter),
+                                Acc#{{Tag, Pid} => Msgs};
                             false ->
                                 Acc
                         end
@@ -715,8 +720,14 @@ snapshot_installed(_Meta, #?MODULE{cfg = #cfg{},
 convert_v7_to_v8(#{system_time := Ts} = _Meta, StateV7) ->
     %% the structure is intact for now
     Cons0 = element(#?STATE.consumers, StateV7),
-    Cons = maps:map(fun (_CKey, #consumer{status = suspected_down} = C) ->
-                            C#consumer{status = {suspected_down, up}};
+    %% TODO: use default for now
+    Timeout = Ts + 1_800_000,
+    Cons = maps:map(fun (_CKey, #consumer{status = suspected_down,
+                                          checked_out = Ch0} = C) ->
+                            Ch = maps:map(fun (_, M) -> ?C_MSG(Timeout, M) end,
+                                          Ch0),
+                            C#consumer{status = {suspected_down, up},
+                                       checked_out = Ch};
                         (_CKey, C) ->
                             C
                     end, Cons0),
@@ -732,6 +743,7 @@ convert_v7_to_v8(#{system_time := Ts} = _Meta, StateV7) ->
     StateV8#?STATE{discarded_bytes = 0,
                    messages = Pq,
                    consumers = Cons,
+                   next_consumer_timeout = Timeout,
                    last_command_time = Ts}.
 
 purge_node(Meta, Node, State, Effects) ->
@@ -939,7 +951,7 @@ get_checked_out(CKey, From, To, #?STATE{consumers = Consumers}) ->
     case find_consumer(CKey, Consumers) of
         {_CKey, #consumer{checked_out = Checked}} ->
             [begin
-                 Msg = maps:get(K, Checked),
+                 ?C_MSG(Msg) = maps:get(K, Checked),
                  I = get_msg_idx(Msg),
                  H = get_msg_header(Msg),
                  {K, {I, H}}
@@ -974,9 +986,10 @@ which_module(8) -> ?MODULE.
                gc = #aux_gc{} :: #aux_gc{},
                tick_pid :: undefined | pid(),
                cache = #{} :: map(),
-               last_checkpoint :: tuple() | #snapshot{},
-               bytes_in = 0 :: non_neg_integer(),
-               bytes_out = 0 :: non_neg_integer()}).
+               last_checkpoint :: tuple() | #snapshot{}
+               % bytes_in = 0 :: non_neg_integer(),
+               % bytes_out = 0 :: non_neg_integer()
+              }).
 
 init_aux(Name) when is_atom(Name) ->
     %% TODO: catch specific exception throw if table already exists
@@ -1001,9 +1014,10 @@ handle_aux(RaftState, Tag, Cmd, AuxV3, RaAux)
                   gc = element(5, AuxV3),
                   tick_pid  = element(6, AuxV3),
                   cache = element(7, AuxV3),
-                  last_checkpoint = element(8, AuxV3),
-                  bytes_in = element(9, AuxV3),
-                  bytes_out = 0},
+                  last_checkpoint = element(8, AuxV3)
+                  % bytes_in = element(9, AuxV3),
+                  % bytes_out = 0
+                 },
     handle_aux(RaftState, Tag, Cmd, AuxV4, RaAux);
 handle_aux(leader, cast, eval,
            #?AUX{last_decorators_state = LastDec,
@@ -1048,14 +1062,14 @@ handle_aux(_RaftState, cast, eval,
     {Check, Effects} = do_snapshot(EffMacVer, Ts, Check0, RaAux,
                                    DiscardedBytes, false),
     {no_reply, Aux0#?AUX{last_checkpoint = Check}, RaAux, Effects};
-handle_aux(_RaftState, cast, {bytes_in, {MetaSize, BodySize}},
-           #?AUX{bytes_in = Bytes} = Aux0,
-           RaAux) ->
-    {no_reply, Aux0#?AUX{bytes_in = Bytes + MetaSize + BodySize}, RaAux, []};
-handle_aux(_RaftState, cast, {bytes_out, BodySize},
-           #?AUX{bytes_out = Bytes} = Aux0,
-           RaAux) ->
-    {no_reply, Aux0#?AUX{bytes_out = Bytes + BodySize}, RaAux, []};
+% handle_aux(_RaftState, cast, {bytes_in, {MetaSize, BodySize}},
+%            #?AUX{bytes_in = Bytes} = Aux0,
+%            RaAux) ->
+%     {no_reply, Aux0#?AUX{bytes_in = Bytes + MetaSize + BodySize}, RaAux, []};
+% handle_aux(_RaftState, cast, {bytes_out, BodySize},
+%            #?AUX{bytes_out = Bytes} = Aux0,
+%            RaAux) ->
+%     {no_reply, Aux0#?AUX{bytes_out = Bytes + BodySize}, RaAux, []};
 handle_aux(_RaftState, cast, {#return{msg_ids = MsgIds,
                                       consumer_key = Key} = Ret, Corr, Pid},
            Aux0, RaAux0) ->
@@ -1066,7 +1080,7 @@ handle_aux(_RaftState, cast, {#return{msg_ids = MsgIds,
                 {ConsumerKey, #consumer{checked_out = Checked}} ->
                     {RaAux, ToReturn} =
                         maps:fold(
-                          fun (MsgId, Msg, {RA0, Acc}) ->
+                          fun (MsgId, ?C_MSG(Msg), {RA0, Acc}) ->
                                   Idx = get_msg_idx(Msg),
                                   Header = get_msg_header(Msg),
                                   %% it is possible this is not found if the consumer
@@ -1113,7 +1127,7 @@ handle_aux(_, _, {get_checked_out, ConsumerKey, MsgIds}, Aux0, RaAux0) ->
         #{ConsumerKey := #consumer{checked_out = Checked}} ->
             {RaState, IdMsgs} =
                 maps:fold(
-                  fun (MsgId, Msg, {S0, Acc}) ->
+                  fun (MsgId, ?C_MSG(Msg), {S0, Acc}) ->
                           Idx = get_msg_idx(Msg),
                           Header = get_msg_header(Msg),
                           %% it is possible this is not found if the consumer
@@ -1201,6 +1215,11 @@ handle_aux(leader, _, {dlx, setup}, Aux, RaAux) ->
     {no_reply, Aux, RaAux};
 handle_aux(_, _, {dlx, teardown, Pid}, Aux, RaAux) ->
     terminate_dlx_worker(Pid),
+    {no_reply, Aux, RaAux};
+handle_aux(_, _, Unhandled, Aux, RaAux) ->
+    #?STATE{cfg = #cfg{resource = QR}} = ra_aux:machine_state(RaAux),
+    ?LOG_DEBUG("~ts: rabbit_fifo: unhandled aux command ~P",
+               [rabbit_misc:rs(QR), Unhandled, 10]),
     {no_reply, Aux, RaAux}.
 
 
@@ -1782,8 +1801,8 @@ return(Meta, ConsumerKey,
         lists:foldl(
           fun(MsgId, Acc = {S0, E0}) ->
                   case Checked of
-                      #{MsgId := Msg} ->
-                          return_one(Meta, MsgId, Msg, IncrDelCount, Anns,
+                      #{MsgId := CMsg} ->
+                          return_one(Meta, MsgId, CMsg, IncrDelCount, Anns,
                                      S0, E0, ConsumerKey);
                       #{} ->
                           Acc
@@ -1806,7 +1825,7 @@ complete(Meta, ConsumerKey, [MsgId],
                  messages_total = Tot} = State0,
         Effects) ->
     case maps:take(MsgId, Checked0) of
-        {Msg, Checked} ->
+        {?C_MSG(Msg), Checked} ->
             Hdr = get_msg_header(Msg),
             SettledSize = get_header(size, Hdr),
             Con = Con0#consumer{checked_out = Checked,
@@ -1828,7 +1847,7 @@ complete(Meta, ConsumerKey, MsgIds,
         = lists:foldl(
             fun (MsgId, {S0, Ch0}) ->
                     case maps:take(MsgId, Ch0) of
-                        {Msg, Ch} ->
+                        {?C_MSG(Msg), Ch} ->
                             Hdr = get_msg_header(Msg),
                             S = get_header(size, Hdr) + S0,
                             {S, Ch};
@@ -1964,7 +1983,7 @@ annotate_msg(Header, Msg0) ->
             Msg0
     end.
 
-return_one(Meta, MsgId, Msg0, DeliveryFailed, Anns,
+return_one(Meta, MsgId, ?C_MSG(Msg0), DeliveryFailed, Anns,
            #?STATE{returns = Returns,
                    consumers = Consumers,
                    dlx = DlxState0,
@@ -2005,8 +2024,8 @@ return_one(Meta, MsgId, Msg0, DeliveryFailed, Anns,
 return_all(Meta, #?STATE{consumers = Cons} = State0, Effects0, ConsumerKey,
            #consumer{checked_out = Checked} = Con, DeliveryFailed) ->
     State = State0#?STATE{consumers = Cons#{ConsumerKey => Con}},
-    maps:fold(fun (MsgId, Msg, {S, E}) ->
-                      return_one(Meta, MsgId, Msg, DeliveryFailed, #{},
+    maps:fold(fun (MsgId, CMsg, {S, E}) ->
+                      return_one(Meta, MsgId, CMsg, DeliveryFailed, #{},
                                  S, E, ConsumerKey)
               end, {State, Effects0}, maps:iterator(Checked, ordered)).
 
@@ -2248,7 +2267,10 @@ checkout_one(#{system_time := Ts} = Meta, ExpiredMsg0, InitState0, Effects0) ->
                                   credit = Credit,
                                   delivery_count = DelCnt0,
                                   cfg = Cfg} = Con0 ->
-                            Checked = maps:put(Next, Msg, Checked0),
+                            Timeout = (Ts div 1000) + State0#?STATE.cfg#cfg.default_consumer_timeout_s,
+                            Checked = maps:put(Next,
+                                               ?C_MSG(Timeout * 1000, Msg),
+                                               Checked0),
                             DelCnt = case credit_api_v2(Cfg) of
                                          true -> add(DelCnt0, 1);
                                          false -> DelCnt0 + 1
@@ -2950,7 +2972,7 @@ smallest_raft_index(#?STATE{messages = Messages,
                                min(get_msg_idx(Msg), Acc)
                        end, Min0, Returns),
     Min2 = maps:fold(fun (_Cid, #consumer{checked_out = Ch}, Acc0) ->
-                             maps:fold(fun (_MsgId, Msg, Acc) ->
+                             maps:fold(fun (_MsgId, ?C_MSG(Msg), Acc) ->
                                                min(get_msg_idx(Msg), Acc)
                                        end, Acc0, Ch)
                      end, Min1, Consumers),
@@ -3185,7 +3207,7 @@ discard(Meta, MsgIds, ConsumerKey,
                             case maps:get(Id, Checked, undefined) of
                                 undefined ->
                                     false;
-                                Msg0 ->
+                                ?C_MSG(Msg0) ->
                                     {true, incr_msg_headers(Msg0, DelFailed, Anns)}
                             end
                     end, MsgIds),

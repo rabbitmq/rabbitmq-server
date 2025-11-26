@@ -1787,7 +1787,8 @@ consumer_message_is_delevered_after_snapshot(Config) ->
     %% then purge
     #'queue.purge_ok'{} = amqp_channel:call(Ch0, #'queue.purge'{queue = QQ}),
 
-    MacVer = lists:min([V || {ok, V} <- erpc:multicall(Nodes, rabbit_fifo, version, [])]),
+    MacVer = lists:min([V || {ok, V} <-
+                             erpc:multicall(Nodes, rabbit_fifo, version, [])]),
     ct:pal("machine version is ~b", [MacVer]),
 
     %% only await snapshot if all members have at least machine version 8
