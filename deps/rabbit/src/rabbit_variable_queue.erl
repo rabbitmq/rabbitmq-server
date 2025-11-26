@@ -139,6 +139,9 @@
     %%       Actually we are using next_deliver_seq_id to know whether a message was already delivered and that survives restarts.
     %%       But we could very well do the same with a delivery_count map. So making the delivery_count map survive restarts
     %%       (and properly clean up on restart by removing transients) is the key to getting rid of these things.
+    %% @todo This value is still useful in case of crashes where delivery_count map is lost.
+    %%       It is not saved after shutting down though, only the info in delivery_count is.
+    %%       So a crash followed by shutdown may lose some redelivery information if they happen close enough.
     next_deliver_seq_id,
 
     %% SeqId of messages that were requeued at least once, regardless
@@ -464,7 +467,6 @@ process_recovery_terms(Terms) ->
 terminate(_Reason, State) ->
     State1 = #vqstate { virtual_host        = VHost,
                         next_seq_id         = NextSeqId,
-                        next_deliver_seq_id = NextDeliverSeqId,
                         delivery_count      = DeliveryCount,
                         persistent_count    = PCount,
                         persistent_bytes    = PBytes,
@@ -479,7 +481,6 @@ terminate(_Reason, State) ->
            end,
     ok = rabbit_msg_store:client_delete_and_terminate(MSCStateT),
     Terms = [{next_seq_id,         NextSeqId},
-             {next_deliver_seq_id, NextDeliverSeqId},
              {delivery_count,      DeliveryCount},
              {persistent_ref,      PRef},
              {persistent_count,    PCount},
@@ -797,6 +798,7 @@ info(backing_queue_status, State = #vqstate {
           q_tail           = QTail,
           next_seq_id      = NextSeqId,
           next_deliver_seq_id = NextDeliverSeqId,
+          delivery_count   = DeliveryCount,
           ram_pending_ack  = RPA,
           disk_pending_ack = DPA,
           unconfirmed      = UC,
@@ -813,6 +815,7 @@ info(backing_queue_status, State = #vqstate {
       {len                 , len(State)},
       {next_seq_id         , NextSeqId},
       {next_deliver_seq_id , NextDeliverSeqId},
+      {delivery_count      , DeliveryCount},
       {num_pending_acks    , map_size(RPA) + map_size(DPA)},
       {num_unconfirmed     , sets:size(UC) + sets:size(UCS)},
       {avg_ingress_rate    , AvgIngressRate},
@@ -1023,16 +1026,6 @@ msg_store_remove(MSCState, IsPersistent, MsgIds) ->
               rabbit_msg_store:remove(MsgIds, MCSState1)
       end).
 
-%% We increase the next_deliver_seq_id only when the next
-%% message (next seq_id) was delivered.
-%% @todo We no longer increase next_deliver_seq_id, we keep
-%%       it only for the purpose of moving to delivery_count.
-%next_deliver_seq_id(SeqId, NextDeliverSeqId)
-%        when SeqId =:= NextDeliverSeqId ->
-%    NextDeliverSeqId + 1;
-next_deliver_seq_id(_, NextDeliverSeqId) ->
-    NextDeliverSeqId.
-
 is_msg_in_pending_acks(SeqId, #vqstate { ram_pending_ack  = RPA,
                                          disk_pending_ack = DPA }) ->
     maps:is_key(SeqId, RPA) orelse
@@ -1071,8 +1064,15 @@ init(IsDurable, IndexState, StoreState, DiskCount, DiskBytes, Terms,
             _                  -> NextSeqId0 = proplists:get_value(next_seq_id,
                                                                    Terms, HiSeqId),
                                   {NextSeqId0,
-                                   proplists:get_value(next_deliver_seq_id,
-                                                       Terms, NextSeqId0),
+                                   %% If we have moved to delivery_count, use only that;
+                                   %% otherwise fall back to next_deliver_seq_id.
+                                   case proplists:is_defined(delivery_count, Terms) of
+                                       true ->
+                                           0;
+                                       false ->
+                                           proplists:get_value(next_deliver_seq_id,
+                                                               Terms, NextSeqId0)
+                                   end,
                                    proplists:get_value(persistent_count,
                                                        Terms, DiskCount),
                                    proplists:get_value(persistent_bytes,
@@ -1264,8 +1264,7 @@ msg_in_ram(#msg_status{msg = Msg}) -> Msg =/= undefined.
 %% first param: AckRequired
 remove(true, MsgStatus = #msg_status {
                seq_id        = SeqId },
-       State = #vqstate {next_deliver_seq_id = NextDeliverSeqId,
-                         out_counter         = OutCount,
+       State = #vqstate {out_counter         = OutCount,
                          index_state         = IndexState1 }) ->
 
     State1 = record_pending_ack(
@@ -1275,23 +1274,20 @@ remove(true, MsgStatus = #msg_status {
     State2 = stats_pending_acks(MsgStatus, State1),
 
     {SeqId, maybe_update_rates(
-              State2 #vqstate {next_deliver_seq_id = next_deliver_seq_id(SeqId, NextDeliverSeqId),
-                               out_counter         = OutCount + 1,
+              State2 #vqstate {out_counter         = OutCount + 1,
                                index_state         = IndexState1})};
 
 %% This function body has the same behaviour as remove_queue_entries/3
 %% but instead of removing messages based on a ?QUEUE, this removes
 %% just one message, the one referenced by the MsgStatus provided.
-remove(false, MsgStatus = #msg_status{ seq_id = SeqId },
-              State = #vqstate{ next_deliver_seq_id = NextDeliverSeqId,
-                                out_counter = OutCount }) ->
+remove(false, MsgStatus,
+              State = #vqstate{ out_counter = OutCount }) ->
     State1 = remove_from_disk(MsgStatus, State),
 
     State2 = stats_removed(MsgStatus, State1),
 
     {undefined, maybe_update_rates(
-                  State2 #vqstate {next_deliver_seq_id = next_deliver_seq_id(SeqId, NextDeliverSeqId),
-                                   out_counter         = OutCount + 1 })}.
+                  State2 #vqstate {out_counter         = OutCount + 1 })}.
 
 remove_from_disk(#msg_status {
                 seq_id        = SeqId,
@@ -1381,12 +1377,11 @@ fetch_by_predicate(Pred, Fun, FetchAcc,
     {MsgProps, QAcc, State1} =
         collect_by_predicate(Pred, ?QUEUE:new(), State),
 
-    {NextDeliverSeqId, FetchAcc1, State2} =
+    {FetchAcc1, State2} =
         process_queue_entries(QAcc, Fun, FetchAcc, State1),
 
     {MsgProps, FetchAcc1, maybe_update_rates(
                             State2 #vqstate {
-                              next_deliver_seq_id = NextDeliverSeqId,
                               out_counter         = OutCount + ?QUEUE:len(QAcc)})}.
 
 %% We try to do here the same as what remove(true, State) does but
@@ -1398,22 +1393,21 @@ fetch_by_predicate(Pred, Fun, FetchAcc,
 %%
 %% For the meaning of Fun and FetchAcc arguments see
 %% fetch_by_predicate/4 above.
-process_queue_entries(Q, Fun, FetchAcc, State = #vqstate{ next_deliver_seq_id = NextDeliverSeqId }) ->
+process_queue_entries(Q, Fun, FetchAcc, State) ->
     ?QUEUE:fold(fun (MsgStatus, Acc) ->
                         process_queue_entries1(MsgStatus, Fun, Acc)
                 end,
-                {NextDeliverSeqId, FetchAcc, State}, Q).
+                {FetchAcc, State}, Q).
 
 process_queue_entries1(
   #msg_status { seq_id = SeqId } = MsgStatus,
   Fun,
-  {NextDeliverSeqId, FetchAcc, State}) ->
+  {FetchAcc, State}) ->
     {Msg, State1} = read_msg(MsgStatus, State),
     State2 = record_pending_ack(
                MsgStatus #msg_status {
                  is_delivered = true }, State1),
-    {next_deliver_seq_id(SeqId, NextDeliverSeqId),
-     Fun(Msg, SeqId, FetchAcc),
+    {Fun(Msg, SeqId, FetchAcc),
      stats_pending_acks(MsgStatus, State2)}.
 
 collect_by_predicate(Pred, QAcc, State) ->
@@ -1482,46 +1476,40 @@ purge1(DelsAndAcksFun, State) ->
                  purge1(DelsAndAcksFun, State1#vqstate{q_head = ?QUEUE:new()})
     end.
 
-remove_queue_entries(Q, DelsAndAcksFun,
-                     State = #vqstate{next_deliver_seq_id = NextDeliverSeqId0}) ->
-    {MsgIdsByStore, NextDeliverSeqId, Acks, State1} =
+remove_queue_entries(Q, DelsAndAcksFun, State) ->
+    {MsgIdsByStore, Acks, State1} =
         ?QUEUE:fold(fun remove_queue_entries1/2,
-                    {maps:new(), NextDeliverSeqId0, [], State}, Q),
+                    {maps:new(), [], State}, Q),
     State2 = remove_vhost_msgs_by_id(MsgIdsByStore, State1),
-    DelsAndAcksFun(NextDeliverSeqId, Acks, State2).
+    DelsAndAcksFun(Acks, State2).
 
 remove_queue_entries1(
   #msg_status { msg_id = MsgId, seq_id = SeqId,
                 msg_location = MsgLocation, index_on_disk = IndexOnDisk,
                 is_persistent = IsPersistent} = MsgStatus,
-  {MsgIdsByStore, NextDeliverSeqId, Acks, State}) ->
+  {MsgIdsByStore, Acks, State}) ->
     {case MsgLocation of
          ?IN_SHARED_STORE -> rabbit_misc:maps_cons(IsPersistent, {SeqId, MsgId}, MsgIdsByStore);
          _ -> MsgIdsByStore
      end,
-     next_deliver_seq_id(SeqId, NextDeliverSeqId),
      cons_if(IndexOnDisk, SeqId, Acks),
      %% @todo Probably don't do this on a per-message basis...
      stats_removed(MsgStatus, State)}.
 
 process_delivers_and_acks_fun(deliver_and_ack) ->
     %% @todo Make a clause for empty Acks list?
-    fun (NextDeliverSeqId, Acks, State = #vqstate { index_state = IndexState,
-                                                    store_state = StoreState0}) ->
+    fun (Acks, State = #vqstate { index_state = IndexState,
+                                  store_state = StoreState0}) ->
             {DeletedSegments, IndexState1} = rabbit_classic_queue_index_v2:ack(Acks, IndexState),
 
             StoreState = rabbit_classic_queue_store_v2:delete_segments(DeletedSegments, StoreState0),
 
             State #vqstate { index_state         = IndexState1,
-                             store_state         = StoreState,
-                             %% We indiscriminately update because we already took care
-                             %% of calling next_deliver_seq_id/2 in the functions that
-                             %% end up calling this fun.
-                             next_deliver_seq_id = NextDeliverSeqId }
+                             store_state         = StoreState }
     end;
 process_delivers_and_acks_fun(_) ->
-    fun (NextDeliverSeqId, _, State) ->
-            State #vqstate { next_deliver_seq_id = NextDeliverSeqId }
+    fun (_, State) ->
+            State
     end.
 
 %%----------------------------------------------------------------------------
@@ -1535,7 +1523,6 @@ publish1(Msg,
                             q_tail = QTail = #q_tail { count = QTailCount },
                             qi_embed_msgs_below = IndexMaxSize,
                             next_seq_id         = SeqId,
-                            next_deliver_seq_id = NextDeliverSeqId,
                             in_counter          = InCount,
                             durable             = IsDurable,
                             unconfirmed         = UC,
@@ -1564,16 +1551,9 @@ publish1(Msg,
     {UC1, UCS1} = maybe_needs_confirming(NeedsConfirming, persist_to(MsgStatus),
                                          MsgId, UC, UCS),
     State3#vqstate{ next_seq_id         = SeqId + 1,
-                    next_deliver_seq_id = maybe_next_deliver_seq_id(SeqId, NextDeliverSeqId, IsDelivered),
                     in_counter          = InCount + 1,
                     unconfirmed         = UC1,
                     unconfirmed_simple  = UCS1 }.
-
-%% Only attempt to increase the next_deliver_seq_id for delivered messages.
-maybe_next_deliver_seq_id(SeqId, NextDeliverSeqId, true) ->
-    next_deliver_seq_id(SeqId, NextDeliverSeqId);
-maybe_next_deliver_seq_id(_, NextDeliverSeqId, false) ->
-    NextDeliverSeqId.
 
 publish_delivered1(Msg,
                    MsgProps = #message_properties {
@@ -1581,7 +1561,6 @@ publish_delivered1(Msg,
                    _ChPid, PersistFun,
                    State = #vqstate { qi_embed_msgs_below = IndexMaxSize,
                                       next_seq_id         = SeqId,
-                                      next_deliver_seq_id = NextDeliverSeqId,
                                       in_counter          = InCount,
                                       out_counter         = OutCount,
                                       durable             = IsDurable,
@@ -1598,7 +1577,6 @@ publish_delivered1(Msg,
     {SeqId,
      stats_published_pending_acks(MsgStatus1,
            State2#vqstate{ next_seq_id         = SeqId + 1,
-                           next_deliver_seq_id = next_deliver_seq_id(SeqId, NextDeliverSeqId),
                            out_counter         = OutCount + 1,
                            in_counter          = InCount + 1,
                            unconfirmed         = UC1,
@@ -2058,28 +2036,27 @@ merge_sh_read_msgs([M = {MsgId, _, _, _, _}|MTail], Reads) ->
 merge_sh_read_msgs(MTail, _Reads) ->
     MTail.
 
-become_q_head(List, TransientThreshold, DelsAndAcksFun, State = #vqstate{ next_deliver_seq_id = NextDeliverSeqId0 }) ->
-    {Filtered, NextDeliverSeqId, Acks, RamReadyCount, RamBytes} =
+become_q_head(List, TransientThreshold, DelsAndAcksFun, State) ->
+    {Filtered, Acks, RamReadyCount, RamBytes} =
         lists:foldr(
           fun ({_MsgOrId, SeqId, _MsgLocation, _MsgProps, IsPersistent} = M,
-               {Filtered1, NextDeliverSeqId1, Acks1, RRC, RB} = Acc) ->
+               {Filtered1, Acks1, RRC, RB} = Acc) ->
                   case SeqId < TransientThreshold andalso not IsPersistent of
                       true  -> {Filtered1,
-                                next_deliver_seq_id(SeqId, NextDeliverSeqId1),
                                 [SeqId | Acks1], RRC, RB};
                       false -> MsgStatus = m(msg_status(M)),
                                HaveMsg = msg_in_ram(MsgStatus),
                                Size = msg_size(MsgStatus),
                                case is_msg_in_pending_acks(SeqId, State) of
                                    false -> {?QUEUE:in_r(MsgStatus, Filtered1),
-                                             NextDeliverSeqId1, Acks1,
+                                             Acks1,
                                              RRC + one_if(HaveMsg),
                                              RB + one_if(HaveMsg) * Size};
                                    true  -> Acc %% [0]
                                end
                   end
-          end, {?QUEUE:new(), NextDeliverSeqId0, [], 0, 0}, List),
-    {Filtered, RamReadyCount, RamBytes, DelsAndAcksFun(NextDeliverSeqId, Acks, State)}.
+          end, {?QUEUE:new(), [], 0, 0}, List),
+    {Filtered, RamReadyCount, RamBytes, DelsAndAcksFun(Acks, State)}.
 %% [0] We don't increase RamBytes here, even though it pertains to
 %% unacked messages too, since if HaveMsg then the message must have
 %% been stored in the QI, thus the message must have been in
