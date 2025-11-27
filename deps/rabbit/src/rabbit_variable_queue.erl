@@ -110,14 +110,16 @@
 %% messages that were written to disk.
 %%
 %% The queue is keeping track of delivers via the
-%% next_deliver_seq_id variable. This variable gets increased
-%% with every (first-time) delivery. When delivering messages
-%% the seq_id of the message is checked against this variable
-%% to determine whether the message is a redelivery. The variable
-%% is stored in the queue terms on graceful shutdown. On dirty
-%% recovery the variable becomes the seq_id of the most recent
-%% message in the queue (effectively marking all messages as
-%% delivered, like the v1 index was doing).
+%% redeliver_seq_id and deliver_count variables. The former is
+%% to keep track of potential redelivers following crashes. The
+%% latter keeps exact number of requeues per message in a map
+%% and is meant to populate the AMQP 1.0 delivery-count header.
+%% When delivering messages the seq_id of the message is checked
+%% against these variables to determine whether the message is
+%% a redelivery. They are stored in queue terms on graceful
+%% shutdown. On dirty recovery the redeliver_seq_id variable
+%% becomes the seq_id of the most recent message in the queue
+%% (effectively marking all messages as previously delivered).
 %%
 %%----------------------------------------------------------------------------
 
@@ -132,20 +134,17 @@
 
     %% SeqId of the next message published.
     next_seq_id,
-    %% Everything before this SeqId was delivered at least once.
-    %% @todo Do we really need this if we add delivery_count?
-    %%       No we don't, we will just check delivery_count to know if was already delivered (delivery_count > 1).
-    %%       NO!! We can also remove the is_delivered in the msg_status since that value --doesn't-- DOES!! survive restarts.
-    %%       Actually we are using next_deliver_seq_id to know whether a message was already delivered and that survives restarts.
-    %%       But we could very well do the same with a delivery_count map. So making the delivery_count map survive restarts
-    %%       (and properly clean up on restart by removing transients) is the key to getting rid of these things.
-    %% @todo This value is still useful in case of crashes where delivery_count map is lost.
-    %%       It is not saved after shutting down though, only the info in delivery_count is.
-    %%       So a crash followed by shutdown may lose some redelivery information if they happen close enough.
-    next_deliver_seq_id,
 
-    %% SeqId of messages that were requeued at least once, regardless
-    %% of the reason for requeueing. Used to produce the AMQP-1.0
+    %% Everything before this SeqId is considered delivered at least once.
+    %% This is meant to guarantee that messages that do not have the
+    %% 'redelivered' flag set have never been delivered. This value is
+    %% set after crashes and refer to all messages existing before the
+    %% crash, since we have no way of knowing.
+    redeliver_seq_id,
+
+    %% Map of SeqId of messages that were requeued at least once, with
+    %% the number of requeues for each message. This is regardless of
+    %% the reason for requeueing. Used to produce the AMQP 1.0
     %% delivery-count header.
     delivery_count,
 
@@ -303,7 +302,7 @@
              q_head                :: ?QUEUE:?QUEUE(),
              q_tail                :: q_tail(),
              next_seq_id           :: seq_id(),
-             next_deliver_seq_id   :: seq_id(),
+             redeliver_seq_id      :: seq_id(),
              delivery_count        :: #{seq_id() => pos_integer()},
              ram_pending_ack       :: map(),
              disk_pending_ack      :: map(),
@@ -467,6 +466,7 @@ process_recovery_terms(Terms) ->
 terminate(_Reason, State) ->
     State1 = #vqstate { virtual_host        = VHost,
                         next_seq_id         = NextSeqId,
+                        redeliver_seq_id    = ReDeliverSeqId,
                         delivery_count      = DeliveryCount,
                         persistent_count    = PCount,
                         persistent_bytes    = PBytes,
@@ -481,6 +481,7 @@ terminate(_Reason, State) ->
            end,
     ok = rabbit_msg_store:client_delete_and_terminate(MSCStateT),
     Terms = [{next_seq_id,         NextSeqId},
+             {redeliver_seq_id,    ReDeliverSeqId},
              {delivery_count,      DeliveryCount},
              {persistent_ref,      PRef},
              {persistent_count,    PCount},
@@ -797,7 +798,7 @@ info(backing_queue_status, State = #vqstate {
           q_head           = QHead,
           q_tail           = QTail,
           next_seq_id      = NextSeqId,
-          next_deliver_seq_id = NextDeliverSeqId,
+          redeliver_seq_id = ReDeliverSeqId,
           delivery_count   = DeliveryCount,
           ram_pending_ack  = RPA,
           disk_pending_ack = DPA,
@@ -814,7 +815,7 @@ info(backing_queue_status, State = #vqstate {
       {q_tail              , QTail},
       {len                 , len(State)},
       {next_seq_id         , NextSeqId},
-      {next_deliver_seq_id , NextDeliverSeqId},
+      {redeliver_seq_id    , ReDeliverSeqId},
       {delivery_count      , DeliveryCount},
       {num_pending_acks    , map_size(RPA) + map_size(DPA)},
       {num_unconfirmed     , sets:size(UC) + sets:size(UCS)},
@@ -1058,21 +1059,17 @@ init(IsDurable, IndexState, StoreState, DiskCount, DiskBytes, Terms,
 
     {LowSeqId, HiSeqId, IndexState1} = rabbit_classic_queue_index_v2:bounds(IndexState, NextSeqIdHint),
 
-    {NextSeqId, NextDeliverSeqId, DiskCount1, DiskBytes1} =
+    {NextSeqId, ReDeliverSeqId, DeliveryCount, DiskCount1, DiskBytes1} =
         case Terms of
-            non_clean_shutdown -> {HiSeqId, HiSeqId, DiskCount, DiskBytes};
+            non_clean_shutdown -> {HiSeqId, HiSeqId, #{}, DiskCount, DiskBytes};
             _                  -> NextSeqId0 = proplists:get_value(next_seq_id,
                                                                    Terms, HiSeqId),
                                   {NextSeqId0,
-                                   %% If we have moved to delivery_count, use only that;
-                                   %% otherwise fall back to next_deliver_seq_id.
-                                   case proplists:is_defined(delivery_count, Terms) of
-                                       true ->
-                                           0;
-                                       false ->
-                                           proplists:get_value(next_deliver_seq_id,
-                                                               Terms, NextSeqId0)
-                                   end,
+                                   %% @todo Remove next_deliver_seq_id handling after post-4.3 LTS.
+                                   %%       It is kept for compatibility with pre-4.3 queue data.
+                                   proplists:get_value(next_deliver_seq_id, Terms,
+                                       proplists:get_value(redeliver_seq_id, Terms, NextSeqId0)),
+                                   proplists:get_value(delivery_count, Terms, #{}),
                                    proplists:get_value(persistent_count,
                                                        Terms, DiskCount),
                                    proplists:get_value(persistent_bytes,
@@ -1092,8 +1089,8 @@ init(IsDurable, IndexState, StoreState, DiskCount, DiskBytes, Terms,
       q_head              = ?QUEUE:new(),
       q_tail              = QTail,
       next_seq_id         = NextSeqId,
-      next_deliver_seq_id = NextDeliverSeqId,
-      delivery_count      = #{},
+      redeliver_seq_id    = ReDeliverSeqId,
+      delivery_count      = DeliveryCount,
       ram_pending_ack     = #{},
       disk_pending_ack    = #{},
       index_state         = IndexState1,
@@ -1142,13 +1139,13 @@ queue_out(State) ->
         {loaded, {MsgStatus, State1}} -> {{value, set_deliver_flag(State, MsgStatus)}, State1}
     end.
 
-set_deliver_flag(#vqstate{ next_deliver_seq_id = NextDeliverSeqId, delivery_count=DeliveryCount },
+set_deliver_flag(#vqstate{ redeliver_seq_id = ReDeliverSeqId, delivery_count=DeliveryCount },
                  MsgStatus = #msg_status{ seq_id = SeqId }) ->
     case DeliveryCount of
         #{SeqId := _Count} ->
             MsgStatus#msg_status{ is_delivered = true };
         _ ->
-            MsgStatus#msg_status{ is_delivered = SeqId < NextDeliverSeqId }
+            MsgStatus#msg_status{ is_delivered = SeqId < ReDeliverSeqId }
     end.
 
 read_msg(#msg_status{seq_id        = SeqId,
