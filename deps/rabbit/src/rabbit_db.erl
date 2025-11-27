@@ -237,7 +237,7 @@ post_reset() ->
     ok.
 
 wipe_data_dir() ->
-    DataDir = dir(),
+    DataDir = rabbit:data_dir(),
     Glob = filename:join(DataDir, "*"),
     FilesToRemove = filelib:wildcard(Glob),
     ?LOG_DEBUG(
