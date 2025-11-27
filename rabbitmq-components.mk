@@ -57,7 +57,7 @@ dep_redbug = hex 2.1.0
 dep_systemd = hex 0.6.1
 dep_thoas = hex 1.2.1
 dep_observer_cli = hex 1.8.2
-dep_seshat = hex 1.0.0
+dep_seshat = hex 1.0.1
 dep_stdout_formatter = hex 0.2.4
 dep_sysmon_handler = hex 1.3.0
 
