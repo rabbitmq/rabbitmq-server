@@ -1660,7 +1660,9 @@ follow_down_update(Table, Exchange, FromNodeId, [To | Rest], UpdateFn) ->
     case follow_down_update(Table, Exchange, ToNodeId, Rest, UpdateFn) of
         delete ->
             OutEdgePattern = #topic_trie_edge{trie_edge =
-                                              TrieEdge#trie_edge{word = '_'},
+                                              TrieEdge#trie_edge{
+                                                node_id = ToNodeId,
+                                                word = '_'},
                                               node_id = '_'},
             case ets:match(Table, OutEdgePattern, 1) of
                 '$end_of_table' ->
