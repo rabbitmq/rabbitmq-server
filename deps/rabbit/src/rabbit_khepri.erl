@@ -381,7 +381,10 @@ prepare_for_reset() ->
 %% @private
 
 reset() ->
-    ok = khepri_cluster:reset(?RA_CLUSTER_NAME),
+    case khepri_cluster:reset(?RA_CLUSTER_NAME) of
+        ok                                            -> ok;
+        {error, ?khepri_error(not_a_khepri_store, _)} -> ok
+    end,
     ok = khepri:stop(?RA_CLUSTER_NAME),
     ok = ensure_ra_system_stopped(),
     ok.
