@@ -17,12 +17,14 @@
 
 all() ->
     [
-     {group, mnesia_store}
+     {group, mnesia_store},
+     {group, khepri_store}
     ].
 
 groups() ->
     [
      {mnesia_store, [], mnesia_tests()},
+     {khepri_store, [], khepri_tests()},
      {benchmarks, [], benchmarks()}
     ].
 
@@ -40,6 +42,11 @@ mnesia_tests() ->
      build_multiple_key_from_deletion_events
     ].
 
+khepri_tests() ->
+    [
+     topic_trie_cleanup
+    ].
+
 benchmarks() ->
     [
      match_benchmark
@@ -54,6 +61,9 @@ end_per_suite(Config) ->
 
 init_per_group(mnesia_store = Group, Config0) ->
     Config = rabbit_ct_helpers:set_config(Config0, [{metadata_store, mnesia}]),
+    init_per_group_common(Group, Config);
+init_per_group(khepri_store = Group, Config0) ->
+    Config = rabbit_ct_helpers:set_config(Config0, [{metadata_store, khepri}]),
     init_per_group_common(Group, Config);
 init_per_group(Group, Config) ->
     init_per_group_common(Group, Config).
@@ -373,6 +383,135 @@ build_multiple_key_from_deletion_events1(Config) ->
     ?assertMatch(
        RKs,
        lists:sort([RK || {_, RK} <- rabbit_db_topic_exchange:trie_records_to_key(Records)])),
+    passed.
+
+%% ---------------------------------------------------------------------------
+%% Khepri-specific Tests
+%% ---------------------------------------------------------------------------
+
+% https://github.com/rabbitmq/rabbitmq-server/issues/15024
+topic_trie_cleanup(Config) ->
+    case rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_khepri, is_enabled, []) of
+        true ->
+            passed = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, topic_trie_cleanup1, []);
+        false ->
+            {skip, "Khepri is not enabled"}
+    end.
+
+topic_trie_cleanup1() ->
+    %% this test has to be isolated to avoid flakes
+    VHost = <<"test-vhost-topic-trie">>,
+    ok = rabbit_vhost:add(VHost, <<"test-user">>),
+
+    %% Create an exchange in the vhost
+    ExchangeName = rabbit_misc:r(VHost, exchange, <<"test-topic-exchange">>),
+    {ok, _Exchange} = rabbit_exchange:declare(
+                        ExchangeName, topic, _Durable = true, _AutoDelete = false,
+                        _Internal = false, _Args = [], <<"test-user">>),
+
+    %% List of routing keys that exercise topic exchange functionality
+    RoutingKeys = [
+                   %% Exact patterns with common prefixes
+                   <<"a.b.c">>,
+                   <<"a.b.d">>,
+                   <<"a.b.e">>,
+                   <<"a.c.d">>,
+                   <<"a.c.e">>,
+                   <<"b.c.d">>,
+                   %% Patterns with a single wildcard
+                   <<"a.*.c">>,
+                   <<"a.*.d">>,
+                   <<"*.b.c">>,
+                   <<"*.b.d">>,
+                   <<"a.b.*">>,
+                   <<"a.c.*">>,
+                   <<"*.*">>,
+                   <<"a.*">>,
+                   <<"*.b">>,
+                   <<"*">>,
+                   %% Patterns with multiple wildcards
+                   <<"a.#">>,
+                   <<"a.b.#">>,
+                   <<"a.c.#">>,
+                   <<"#.c">>,
+                   <<"#.b.c">>,
+                   <<"#.b.d">>,
+                   <<"#">>,
+                   <<"#.#">>,
+                   %% Mixed patterns
+                   <<"a.*.#">>,
+                   <<"*.b.#">>,
+                   <<"*.#">>,
+                   <<"#.*">>,
+                   <<"#.*.#">>,
+                   %% More complex patterns with common prefixes
+                   <<"orders.created.#">>,
+                   <<"orders.updated.#">>,
+                   <<"orders.*.confirmed">>,
+                   <<"orders.#">>,
+                   <<"events.user.#">>,
+                   <<"events.system.#">>,
+                   <<"events.#">>
+                  ],
+
+    %% Shuffle the routing keys to test in random order
+    ShuffledRoutingKeys = [RK || {_, RK} <- lists:sort([{rand:uniform(), RK} || RK <- RoutingKeys])],
+
+    %% Create bindings for all routing keys
+    Bindings = [begin
+                    QueueName = rabbit_misc:r(VHost, queue,
+                                              list_to_binary("queue-" ++ integer_to_list(Idx))),
+                    case rabbit_amqqueue:declare(QueueName, true, false, [], self(), <<"test-user">>) of
+                        {new, _Q} -> ok;
+                        {existing, _Q} -> ok
+                    end,
+                    #binding{source = ExchangeName,
+                             key = RoutingKey,
+                             destination = QueueName,
+                             args = []}
+                end || {Idx, RoutingKey} <- lists:enumerate(ShuffledRoutingKeys)],
+
+    %% Add all bindings
+    [ok = rabbit_binding:add(B, <<"test-user">>) || B <- Bindings],
+
+    %% Check that entries were added to the ETS table
+    AllEntriesAfterAdd = ets:tab2list(rabbit_khepri_topic_trie),
+    VHostEntriesAfterAdd = [Entry || #topic_trie_edge{trie_edge = TrieEdge} = Entry <- AllEntriesAfterAdd,
+                                     case TrieEdge of
+                                         #trie_edge{exchange_name = #resource{virtual_host = V}} ->
+                                             V =:= VHost;
+                                         _ ->
+                                             false
+                                     end],
+
+    ct:pal("Bindings added: ~p, ETS entries after add: ~p~n",
+           [length(Bindings), length(VHostEntriesAfterAdd)]),
+
+    %% Shuffle bindings again for deletion in random order
+    ShuffledBindings = [B || {_, B} <- lists:sort([{rand:uniform(), B} || B <- Bindings])],
+
+    %% Delete all bindings in random order
+    [ok = rabbit_binding:remove(B, <<"test-user">>) || B <- ShuffledBindings],
+
+    %% Verify that the rabbit_khepri_topic_trie ETS table doesn't contain
+    %% any entries related to this vhost
+    AllEntriesAfterDelete = ets:tab2list(rabbit_khepri_topic_trie),
+    VHostEntriesAfterDelete = [Entry || #topic_trie_edge{trie_edge = TrieEdge} = Entry <- AllEntriesAfterDelete,
+                                        case TrieEdge of
+                                            #trie_edge{exchange_name = #resource{virtual_host = V}} ->
+                                                V =:= VHost;
+                                            _ ->
+                                                false
+                                        end],
+
+    ct:pal("ETS entries after delete: ~p~n", [length(VHostEntriesAfterDelete)]),
+
+    %% Clean up the vhost
+    ok = rabbit_vhost:delete(VHost, <<"test-user">>),
+
+    %% Assert that no entries were found for this vhost after deletion
+    ?assertEqual([], VHostEntriesAfterDelete),
+
     passed.
 
 %% ---------------------------------------------------------------------------
