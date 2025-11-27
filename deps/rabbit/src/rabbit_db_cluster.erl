@@ -368,15 +368,14 @@ forget_member_locked(Node, RemoveWhenOffline)
        "DB: removing cluster member `~ts`", [Node],
        #{domain => ?RMQLOG_DOMAIN_DB}),
     ?assertNot(rabbit:is_running(Node)),
-    Ret = case rabbit_khepri:is_enabled() of
-              true  -> forget_member_using_khepri(Node, RemoveWhenOffline);
-              false -> forget_member_using_mnesia(Node, RemoveWhenOffline)
-          end,
-    case Ret of
-        ok -> post_forget_member_locked(Node, RemoveWhenOffline);
-        _  -> ok
-    end,
-    Ret;
+    try
+        case rabbit_khepri:is_enabled() of
+            true  -> forget_member_using_khepri(Node, RemoveWhenOffline);
+            false -> forget_member_using_mnesia(Node, RemoveWhenOffline)
+        end
+    after
+        post_forget_member_locked(Node, RemoveWhenOffline)
+    end;
 forget_member_locked(Node, RemoveWhenOffline)
   when is_atom(Node) andalso Node =:= node() ->
     OtherNodes = members() -- [Node],
