@@ -1055,9 +1055,10 @@ do_run_postlaunch_phase(Plugins) ->
         %% * Collectors: the `rabbitmq_prometheus' plugin explicitly registers
         %%   all collectors.
         %% * Instrumenters: no instrumenters are used.
-        _ = application:load(prometheus),
-        ok = application:set_env(prometheus, collectors, [default]),
-        ok = application:set_env(prometheus, instrumenters, []),
+        ok = application:set_env(prometheus, collectors, [default],
+                                 [{persistent, true}]),
+        ok = application:set_env(prometheus, instrumenters, [],
+                                 [{persistent, true}]),
 
         %% However, we want to run their boot steps and actually start
         %% them one by one, to ensure a dependency is fully started
