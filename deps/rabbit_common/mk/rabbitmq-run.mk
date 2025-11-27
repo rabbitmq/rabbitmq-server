@@ -33,6 +33,8 @@ RABBITMQCTL ?= $(RABBITMQ_SCRIPTS_DIR)/rabbitmqctl
 RABBITMQ_UPGRADE ?= $(RABBITMQ_SCRIPTS_DIR)/rabbitmq-upgrade
 endif
 
+RESTART_DELAY ?= 0
+
 export RABBITMQ_SCRIPTS_DIR RABBITMQCTL RABBITMQ_PLUGINS RABBITMQ_SERVER RABBITMQ_UPGRADE
 
 # We export MAKE to be sure scripts and tests use the proper command.
@@ -415,6 +417,8 @@ restart-cluster:
 			$(RABBITMQ_UPGRADE) -n "$$nodename" drain; \
 		$(MAKE) stop-node \
 		  RABBITMQ_NODENAME="$$nodename"; \
+		echo "Sleeping for $(RESTART_DELAY) seconds..."; \
+		sleep $(RESTART_DELAY); \
 		$(MAKE) start-background-broker \
 		  NOBUILD=1 \
 		  RABBITMQ_NODENAME="$$nodename" \
