@@ -48,8 +48,8 @@ describe('Virtual Hosts in Admin tab', function () {
     }
     assert.equal("/", await vhostTab.getName())
   })
-    
-  _it('vhost selectable columns', async function () {  
+/*    
+  it('vhost selectable columns', async function () {  
     //await overview.clickOnOverviewTab()
     await overview.clickOnAdminTab()
     await adminTab.isLoaded()
@@ -102,7 +102,7 @@ describe('Virtual Hosts in Admin tab', function () {
     assert.equal(JSON.stringify(table[3]), JSON.stringify(messageRatesGroup))
   
   })
-  
+*/  
   describe('given there is a new virtualhost with a tag', async function() {
     let vhost = "test_" + Math.floor(Math.random() * 1000)
     before(async function() {
