@@ -39,6 +39,7 @@
           sigwinch => ignore
          }).
 
+%% https://www.erlang.org/doc/apps/kernel/kernel_app.html#os-signal-event-handler
 -define(SIGNAL_HANDLED_BY_ERLANG(Signal),
         Signal =:= sigusr1 orelse
         Signal =:= sigquit orelse
