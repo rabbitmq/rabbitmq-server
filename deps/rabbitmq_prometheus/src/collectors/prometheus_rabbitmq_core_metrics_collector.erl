@@ -525,11 +525,30 @@ has_value_p(_) ->
     true.
 
 collect_metrics(_, {Type, Fun, Items}) ->
+    erlang:process_flag(min_heap_size, 46422 * 32),
+    erlang:process_flag(min_bin_vheap_size, 46422 * 32),
     [metric(Type, labels(Item), V) || {Item, V} <- [{Item, Fun(Item)} || Item <- Items], has_value_p(V)].
 
 labels(Item) ->
     label(element(1, Item)).
 
+label(channel_exchange_metrics) -> <<>>;
+label(channel_metrics) -> <<>>;
+label(channel_process_metrics) -> <<>>;
+label(channel_queue_exchange_metrics) -> <<>>;
+label(channel_queue_metrics) -> <<>>;
+label(connection_coarse_metrics) -> <<>>;
+label(connection_metrics) -> <<>>;
+label(exchange_metrics) -> <<>>;
+label(queue_coarse_metrics) -> <<>>;
+label(queue_delivery_metrics) -> <<>>;
+label(queue_exchange_metrics) -> <<>>;
+label(queue_metrics) -> <<>>;
+label(stream_consumer_metrics) -> <<>>;
+label(amqp091) -> <<"protocol=\"amqp091\"">>;
+label(amqp10) -> <<"protocol=\"amqp10\"">>;
+label(mqtt) -> <<"protocol=\"mqtt\"">>;
+label(http) -> <<"protocol=\"http\"">>;
 label(L) when is_binary(L) ->
     L;
 label(M) when is_map(M) ->
@@ -575,14 +594,7 @@ label({I1, I2}) ->
     end;
 label(P) when is_pid(P) ->
     <<"channel=\"", (iolist_to_binary(pid_to_list(P)))/binary, "\"">>;
-label(A) when is_atom(A) ->
-    case is_protocol(A) of
-        true -> <<"protocol=\"", (atom_to_binary(A, utf8))/binary, "\"">>;
-        false -> <<>>
-    end.
-
-is_protocol(P) ->
-    lists:member(P, [amqp091, amqp10, mqtt, http]).
+label(_) -> <<>>.
 
 metric(counter, Labels, Value) ->
     emit_counter_metric_if_defined(Labels, Value);
