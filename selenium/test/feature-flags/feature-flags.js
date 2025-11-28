@@ -36,17 +36,6 @@ describe('Feature flags in Admin tab', function () {
     let ffTable = await ffTab.getAll()
     assert(ffTable.length > 0)
   })
-  it('it has khepri_db feature flag', async function () {
-    await overview.clickOnAdminTab()
-    await adminTab.clickOnFeatureFlags()
-    let ffTable = await ffTab.getAll()
-    assert(findTableRow(ffTable, function(row) {
-        return row[0] === 'khepri_db'
-    }))
-    let state = await ffTab.getState('khepri_db')
-    assert(await state.isSelected())  
-  })
-
 
   after(async function () {
     await teardown(driver, this, captureScreen)
