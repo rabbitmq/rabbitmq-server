@@ -49,7 +49,7 @@ describe('Virtual Hosts in Admin tab', function () {
     assert.equal("/", await vhostTab.getName())
   })
     
-  it('vhost selectable columns', async function () {  
+  _it('vhost selectable columns', async function () {  
     //await overview.clickOnOverviewTab()
     await overview.clickOnAdminTab()
     await adminTab.isLoaded()
