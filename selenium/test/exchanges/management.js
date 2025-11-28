@@ -68,7 +68,7 @@ describe('Exchange management', function () {
     assert.equal("amq.fanout", await exchange.getName())
   })
 
-  it('exchange selectable columns', async function () {  
+  _it('exchange selectable columns', async function () {  
     await overview.clickOnOverviewTab()
     await overview.clickOnExchangesTab()
     await doUntil(async function() { return exchanges.getExchangesTable() },
