@@ -16,6 +16,12 @@ SCRIPTS_DIR=$(dirname "$0")
 
 [ "$NOTIFY_SOCKET" ] && RUNNING_UNDER_SYSTEMD=true
 
+for opt in "$@"; do
+    if [ "$opt" = "-detached" ]; then
+        detached="true"
+    fi
+done
+
 RABBITMQ_DEFAULT_ALLOC_ARGS="+MBas ageffcbf +MHas ageffcbf +MBlmbcs 512 +MHlmbcs 512 +MMmcs 30"
 
 check_start_params() {
@@ -94,13 +100,12 @@ stop_rabbitmq_server() {
     fi
 }
 
-if [ "$RABBITMQ_ALLOW_INPUT" -o "$RUNNING_UNDER_SYSTEMD" -o "$detached" ]; then
-    # Run erlang VM directly, completely replacing current shell
-    # process - so the pid file written in the code above will be
-    # valid (unless detached, which is also handled in the code
-    # above).
+# Note: the docker-library/rabbitmq#778 change exports "RUNNING_UNDER_SYSTEMD=true" to start
+# the erl process using exec via the start_rabbitmq_server.
+if [ "$RABBITMQ_ALLOW_INPUT" ] || [ "$RUNNING_UNDER_SYSTEMD" ] || [ "$detached" ]; then
+    # Run erlang VM directly, completely replacing current shell process
     #
-    # And also this is the correct mode to run the broker under
+    # This is also the correct mode to run the broker under
     # systemd - there is no need in a proxy process that converts
     # signals to graceful shutdown command, the unit file should already
     # contain instructions for graceful shutdown. Also by removing
