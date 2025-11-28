@@ -1531,6 +1531,14 @@ handle_cast({deliver,
     State1 = State#q{senders = Senders1},
     noreply(maybe_deliver_or_enqueue(Delivery, Delivered, State1));
 
+%% Compat for RabbitMQ 4.2. @todo Remove next LTS.
+handle_cast({ack, AckTags, ChPid}, State) ->
+    handle_cast({complete, AckTags, ChPid}, State);
+handle_cast({reject, true, AckTags, ChPid}, State) ->
+    handle_cast({requeue, AckTags, ChPid}, State);
+handle_cast({reject, false, AckTags, ChPid}, State) ->
+    handle_cast({discard, AckTags, ChPid}, State);
+
 handle_cast({complete, AckTags, ChPid}, State) ->
     noreply(ack(AckTags, ChPid, State));
 
