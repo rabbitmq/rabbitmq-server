@@ -1233,7 +1233,7 @@ variable_queue_all_the_bits_not_covered_elsewhere_B2(VQ1, QName) ->
     VQ2 = variable_queue_publish(false, 4, VQ1),
     {VQ3, AckTags} = variable_queue_fetch(2, false, false, 4, VQ2),
     {_Guids, VQ4} =
-        rabbit_variable_queue:requeue(AckTags, VQ3),
+        rabbit_variable_queue:requeue(AckTags, true, VQ3),
     VQ5 = rabbit_variable_queue:timeout(VQ4),
     _VQ6 = rabbit_variable_queue:terminate(shutdown, VQ5),
     VQ7 = variable_queue_init(test_amqqueue(QName, true), true),
@@ -1257,7 +1257,7 @@ variable_queue_drop2(VQ0, _QName) ->
     %% drop again -> empty
     {empty, VQ3} = rabbit_variable_queue:drop(false, VQ2),
     %% requeue
-    {[MsgId], VQ4} = rabbit_variable_queue:requeue([AckTag], VQ3),
+    {[MsgId], VQ4} = rabbit_variable_queue:requeue([AckTag], true, VQ3),
     %% drop message with AckRequired = false
     {{MsgId, undefined}, VQ5} = rabbit_variable_queue:drop(false, VQ4),
     true = rabbit_variable_queue:is_empty(VQ5),
@@ -1303,7 +1303,7 @@ variable_queue_dropfetchwhile2(VQ0, _QName) ->
     true = lists:seq(1, 5) == [msg2int(M) || M <- lists:reverse(Msgs)],
 
     %% requeue them
-    {_MsgIds, VQ3} = rabbit_variable_queue:requeue(AckTags, VQ2),
+    {_MsgIds, VQ3} = rabbit_variable_queue:requeue(AckTags, true, VQ2),
 
     %% drop the first 5 messages
     {#message_properties{expiry = 6}, VQ4} =
@@ -1481,7 +1481,7 @@ variable_queue_purge2(VQ0, _Config) ->
     {VQ2, Acks} = variable_queue_fetch(6, false, false, 10, VQ1),
     {4, VQ3}    = rabbit_variable_queue:purge(VQ2),
     {0, 6}      = LenDepth(VQ3),
-    {_, VQ4}    = rabbit_variable_queue:requeue(lists:sublist(Acks, 2), VQ3),
+    {_, VQ4}    = rabbit_variable_queue:requeue(lists:sublist(Acks, 2), true, VQ3),
     {2, 6}      = LenDepth(VQ4),
     VQ5         = rabbit_variable_queue:purge_acks(VQ4),
     {2, 2}      = LenDepth(VQ5),
@@ -1525,8 +1525,8 @@ variable_queue_requeue_ram_beta2(VQ0, _Config) ->
     VQ1 = variable_queue_publish(false, Count, VQ0),
     {VQ2, AcksR} = variable_queue_fetch(Count, false, false, Count, VQ1),
     {Back, Front} = lists:split(Count div 2, AcksR),
-    {_, VQ3} = rabbit_variable_queue:requeue(erlang:tl(Back), VQ2),
-    {_, VQ5} = rabbit_variable_queue:requeue([erlang:hd(Back)], VQ3),
+    {_, VQ3} = rabbit_variable_queue:requeue(erlang:tl(Back), true, VQ2),
+    {_, VQ5} = rabbit_variable_queue:requeue([erlang:hd(Back)], true, VQ3),
     VQ6 = requeue_one_by_one(Front, VQ5),
     {VQ7, AcksAll} = variable_queue_fetch(Count, false, true, Count, VQ6),
     {_, VQ8} = rabbit_variable_queue:ack(AcksAll, VQ7),
@@ -1789,7 +1789,7 @@ ack_subset(AckSeqs, Interval, Rem) ->
 requeue_one_by_one(Acks, VQ) ->
     lists:foldl(fun (AckTag, VQN) ->
                         {_MsgId, VQM} = rabbit_variable_queue:requeue(
-                                          [AckTag], VQN),
+                                          [AckTag], true, VQN),
                         VQM
                 end, VQ, Acks).
 
@@ -1810,7 +1810,7 @@ variable_queue_with_holes(VQ0) ->
     %% we requeue in three phases in order to exercise requeuing logic
     %% in various vq states
     {_MsgIds, VQ4} = rabbit_variable_queue:requeue(
-                       Acks -- (Subset1 ++ Subset2 ++ Subset3), VQ3),
+                       Acks -- (Subset1 ++ Subset2 ++ Subset3), true, VQ3),
     VQ5 = requeue_one_by_one(Subset1, VQ4),
     %% by now we have some messages (and holes) in q_tail
     VQ6 = requeue_one_by_one(Subset2, VQ5),

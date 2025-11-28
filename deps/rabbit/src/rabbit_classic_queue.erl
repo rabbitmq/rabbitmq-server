@@ -333,22 +333,12 @@ cancel(Q, Spec, State) ->
 -spec settle(rabbit_amqqueue:name(), rabbit_queue_type:settle_op(),
              rabbit_types:ctag(), [non_neg_integer()], state()) ->
     {state(), rabbit_queue_type:actions()}.
-settle(QName, {modify, _DelFailed, Undel, _Anns}, CTag, MsgIds, State) ->
-    %% translate modify into other op
-    Op = case Undel of
-             true ->
-                 discard;
-             false ->
-                 requeue
-         end,
-    settle(QName, Op, CTag, MsgIds, State);
+settle(_QName, {modify, DelFailed, Undel, Anns}, _CTag, MsgIds, State = #?STATE{pid = Pid}) ->
+    Arg = {modify, MsgIds, DelFailed, Undel, Anns, self()},
+    delegate:invoke_no_result(Pid, {gen_server2, cast, [Arg]}),
+    {State, []};
 settle(_QName, Op, _CTag, MsgIds, State = #?STATE{pid = Pid}) ->
-    Arg = case Op of
-              complete ->
-                  {ack, MsgIds, self()};
-              _ ->
-                  {reject, Op == requeue, MsgIds, self()}
-          end,
+    Arg = {Op, MsgIds, self()},
     delegate:invoke_no_result(Pid, {gen_server2, cast, [Arg]}),
     {State, []}.
 

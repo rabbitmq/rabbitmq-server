@@ -11,7 +11,7 @@
          purge/1, purge_acks/1,
          publish/5, publish_delivered/4,
          discard/3, drain_confirmed/1,
-         dropwhile/2, fetchwhile/4, fetch/2, drop/2, ack/2, requeue/2,
+         dropwhile/2, fetchwhile/4, fetch/2, drop/2, ack/2, requeue/3,
          ackfold/4, len/1, is_empty/1, depth/1,
          update_rates/1, needs_timeout/1, timeout/1,
          handle_pre_hibernate/1, resume/1, msg_rates/1,
@@ -567,6 +567,7 @@ fetch(AckRequired, State) ->
             {{Msg, MsgStatus#msg_status.is_delivered, AckTag}, a(State3)}
     end.
 
+%% @todo Might want to check redeliver_seq_id if not found in delivery_count.
 add_delivery_count(SeqId, Msg, #vqstate{delivery_count=DeliveryCount}) ->
     case DeliveryCount of
         #{SeqId := Count} ->
@@ -631,9 +632,9 @@ ack(AckTags, State) ->
                          store_state      = StoreState,
                          ack_out_counter  = AckOutCount + length(AckTags) })}.
 
-requeue(AckTags, #vqstate { q_head     = QHead0,
-                            in_counter = InCounter } = State0) ->
-    {QHead, MsgIds, State} = requeue_merge(lists:sort(AckTags), QHead0, [], State0),
+requeue(AckTags, DelFailed, #vqstate { q_head     = QHead0,
+                                       in_counter = InCounter } = State0) ->
+    {QHead, MsgIds, State} = requeue_merge(lists:sort(AckTags), DelFailed, QHead0, [], State0),
     MsgCount = length(MsgIds),
     %% @todo There's likely an optimisation case where all messages to be
     %%       requeued must be requeued to the head of q_head.
@@ -1822,28 +1823,31 @@ msgs_written_to_disk(Callback, MsgIdSet, written) ->
 %%----------------------------------------------------------------------------
 
 %% Rebuild queue, inserting sequence ids to maintain ordering
-requeue_merge(SeqIds, Q, MsgIds, State) ->
-    requeue_merge(SeqIds, Q, ?QUEUE:new(), MsgIds, State).
+requeue_merge(SeqIds, DelFailed, Q, MsgIds, State) ->
+    requeue_merge(SeqIds, DelFailed, Q, ?QUEUE:new(), MsgIds, State).
 
-requeue_merge([SeqId | Rest] = SeqIds, Q, Front, MsgIds, State) ->
+requeue_merge([SeqId | Rest] = SeqIds, DelFailed, Q, Front, MsgIds, State) ->
     case ?QUEUE:out(Q) of
         {{value, #msg_status { seq_id = SeqIdQ } = MsgStatus}, Q1}
           when SeqIdQ < SeqId ->
             %% enqueue from the remaining queue
-            requeue_merge(SeqIds, Q1, ?QUEUE:in(MsgStatus, Front), MsgIds, State);
+            requeue_merge(SeqIds, DelFailed, Q1, ?QUEUE:in(MsgStatus, Front), MsgIds, State);
         {_, _Q1} ->
             %% enqueue from the remaining list of sequence ids
             case msg_from_pending_ack(SeqId, State) of
                 {none, _} ->
-                    requeue_merge(Rest, Q, Front, MsgIds, State);
+                    requeue_merge(Rest, DelFailed, Q, Front, MsgIds, State);
                 {#msg_status { msg_id = MsgId } = MsgStatus, State1=#vqstate{delivery_count=DeliveryCount0}} ->
                     %% Increment delivery_count.
-                    DeliveryCount = maps:update_with(SeqId, fun(V) -> V + 1 end, 1, DeliveryCount0),
+                    DeliveryCount = case DelFailed of
+                        true -> maps:update_with(SeqId, fun(V) -> V + 1 end, 1, DeliveryCount0);
+                        false -> DeliveryCount0
+                    end,
                     State2 = stats_requeued_memory(MsgStatus, State1#vqstate{delivery_count=DeliveryCount}),
-                    requeue_merge(Rest, Q, ?QUEUE:in(MsgStatus, Front), [MsgId | MsgIds], State2)
+                    requeue_merge(Rest, DelFailed, Q, ?QUEUE:in(MsgStatus, Front), [MsgId | MsgIds], State2)
             end
     end;
-requeue_merge([], Q, Front, MsgIds, State) ->
+requeue_merge([], _, Q, Front, MsgIds, State) ->
     {?QUEUE:join(Front, Q), MsgIds, State}.
 
 %% Mostly opposite of record_pending_ack/2
