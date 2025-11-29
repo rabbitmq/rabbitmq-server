@@ -9,11 +9,13 @@
 
 -include_lib("rabbit_common/include/logging.hrl").
 -include_lib("kernel/include/logger.hrl").
+-include_lib("stdlib/include/assert.hrl").
 
 -export([%% Main interface
          init/0,
          can_join_cluster/1,
          join_cluster/2,
+         prepare_for_reset/0,
          reset/0,
          force_reset/0,
          change_cluster_node_type/1,
@@ -26,9 +28,6 @@
          status/0,
          is_running/0,
          is_clustered/0,
-         on_running_node/1,
-         is_process_alive/1,
-         is_registered_process_alive/1,
          cluster_nodes/1,
          node_type/0,
          is_virgin_node/0,
@@ -80,13 +79,6 @@
 -export([mnesia_and_msg_store_files/0]).
 
 -export([check_reset_gracefully/0]).
-
--deprecated({on_running_node, 1,
-             "Use rabbit_process:on_running_node/1 instead"}).
--deprecated({is_process_alive, 1,
-             "Use rabbit_process:is_process_alive/1 instead"}).
--deprecated({is_registered_process_alive, 1,
-             "Use rabbit_process:is_registered_process_alive/1 instead"}).
 
 -ifdef(TEST).
 -compile(export_all).
@@ -221,10 +213,15 @@ join_cluster(DiscoveryNode, NodeType) when is_atom(DiscoveryNode) ->
 %% cluster, has no cluster configuration, no local database, and no
 %% persisted messages
 
+prepare_for_reset() ->
+    ?assertNot(rabbit:is_running()),
+    stop_mnesia(),
+    ensure_mnesia_not_running(),
+    ok.
+
 -spec reset() -> 'ok'.
 
 reset() ->
-    ensure_mnesia_not_running(),
     reset_gracefully().
 
 -spec force_reset() -> 'ok'.
@@ -242,6 +239,7 @@ reset_gracefully() ->
     %% node which is down.
     init_db_with_mnesia(AllNodes, node_type(), false, false, _Retry = false),
     check_reset_gracefully(),
+    rabbit_db_cluster:forget_member(node(), false),
     leave_cluster(),
     rabbit_misc:ensure_ok(mnesia:delete_schema([node()]), cannot_delete_schema),
     wipe().
@@ -368,29 +366,6 @@ is_running() -> mnesia:system_info(is_running) =:= yes.
 
 is_clustered() -> AllNodes = cluster_nodes(all),
                   AllNodes =/= [] andalso AllNodes =/= [node()].
-
--spec on_running_node(pid()) -> boolean().
-
-on_running_node(Pid) -> lists:member(node(Pid), cluster_nodes(running)).
-
-%% This requires the process be in the same running cluster as us
-%% (i.e. not partitioned or some random node).
-%%
-%% See also rabbit_misc:is_process_alive/1 which does not.
-
--spec is_process_alive(pid() | {atom(), node()}) -> boolean().
-
-is_process_alive(Pid) when is_pid(Pid) ->
-    on_running_node(Pid) andalso
-        rpc:call(node(Pid), erlang, is_process_alive, [Pid]) =:= true;
-is_process_alive({Name, Node}) ->
-    lists:member(Node, cluster_nodes(running)) andalso
-        rpc:call(Node, rabbit_mnesia, is_registered_process_alive, [Name]) =:= true.
-
--spec is_registered_process_alive(atom()) -> boolean().
-
-is_registered_process_alive(Name) ->
-    is_pid(whereis(Name)).
 
 -spec cluster_nodes('all' | 'disc' | 'ram' | 'running') -> [node()];
                    ('status') -> {[node()], [node()], [node()]}.

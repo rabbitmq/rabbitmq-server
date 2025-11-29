@@ -425,7 +425,7 @@ join_khepri_while_in_minority(Config) ->
             %% minority. In other words, we stop two followers, then the
             %% leader.
             %%
-            %% Using `lists:reverse/1', we keep the last running followe only
+            %% Using `lists:reverse/1', we keep the last running follower only
             %% to see how clustering works if the first nodes in the cluster
             %% are down.
             Followers = ClusteredNodes -- [LeaderNode],

@@ -84,8 +84,19 @@ start_link() ->
 
 wait_for_task_and_stop() ->
     case erlang:whereis(rabbit_sup) of
-        undefined -> gen_statem:stop(?LOCAL_NAME);
-        _         -> rabbit_sup:stop_child(?LOCAL_NAME)
+        undefined ->
+            try
+                gen_statem:stop(?LOCAL_NAME)
+            catch
+                exit:noproc ->
+                    ok
+            end;
+        _ ->
+            case rabbit_sup:stop_child(?LOCAL_NAME) of
+                ok                 -> ok;
+                {error, not_found} -> ok;
+                Ret                -> Ret
+            end
     end.
 
 is_running() ->

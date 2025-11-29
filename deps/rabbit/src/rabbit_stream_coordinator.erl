@@ -131,6 +131,14 @@ recover() ->
                 {error, Reason} when Reason == not_started;
                                      Reason == name_not_registered ->
                     %% First boot, do nothing and wait until the first `declare`
+                    ThisNode = node(),
+                    ExpectedMembers = expected_coord_members() -- [{?MODULE, ThisNode}],
+                    case ExpectedMembers of
+                        [] ->
+                            ok;
+                        _ ->
+                            add_member(ExpectedMembers, ThisNode)
+                    end,
                     ok;
                 _ ->
                     ok
