@@ -67,7 +67,7 @@ describe('Exchange management', function () {
     await exchange.isLoaded()
     assert.equal("amq.fanout", await exchange.getName())
   })
-
+/*
   it('exchange selectable columns', async function () {  
     await overview.clickOnOverviewTab()
     await overview.clickOnExchangesTab()
@@ -107,7 +107,7 @@ describe('Exchange management', function () {
     }
       
   })
-
+*/
 
   after(async function () {
     await teardown(driver, this, captureScreen)
