@@ -1,6 +1,6 @@
-[![Test](https://github.com/rabbitmq/rabbitmq-server/actions/workflows/test.yaml/badge.svg)](https://github.com/rabbitmq/rabbitmq-server/actions/workflows/test.yaml)
-
 # RabbitMQ Server
+
+[![CI](https://github.com/rabbitmq/rabbitmq-server/actions/workflows/test-make.yaml/badge.svg)](https://github.com/rabbitmq/rabbitmq-server/actions/workflows/test-make.yaml)
 
 [RabbitMQ](https://rabbitmq.com) is a [feature rich](https://www.rabbitmq.com/docs),
 multi-protocol messaging and streaming broker. It supports:
