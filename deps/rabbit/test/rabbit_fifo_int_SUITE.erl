@@ -44,7 +44,9 @@ all_tests() ->
      flow,
      test_queries,
      duplicate_delivery,
-     usage
+     usage,
+
+     missing_messages_order
     ].
 
 groups() ->
@@ -296,6 +298,48 @@ usage(Config) ->
     rabbit_quorum_queue:stop_server(ServerId),
     ?assert(Use > 0.0),
     ok.
+
+missing_messages_order(Config) ->
+    ClusterName = ?config(cluster_name, Config),
+    ServerId = ?config(node_id, Config),
+    UId = ?config(uid, Config),
+    Tag = UId,
+    ok = start_cluster(ClusterName, [ServerId]),
+    F1 = rabbit_fifo_client:init([ServerId]),
+    {empty, F3} = rabbit_fifo_client:dequeue(ClusterName, Tag, settled, F1),
+
+    {ok, F4, []} = rabbit_fifo_client:enqueue(ClusterName, msg1, F3),
+    {_, _, F5} = process_ra_events(receive_ra_events(1, 0), ClusterName, F4),
+
+    {ok, F6, []} = rabbit_fifo_client:enqueue(ClusterName, msg2, F5),
+    {_, _, F7} = process_ra_events(receive_ra_events(1, 0), ClusterName, F6),
+
+    {ok, F8, []} = rabbit_fifo_client:enqueue(ClusterName, msg3, F7),
+    {_, _, F9} = process_ra_events(receive_ra_events(1, 0), ClusterName, F8),
+
+    FC = rabbit_fifo_client:init([ServerId]),
+    {ok, _, FC3} = rabbit_fifo_client:checkout(Tag, {simple_prefetch, 10}, #{}, FC),
+
+    {ok, F10, []} = rabbit_fifo_client:enqueue(ClusterName, msg4, F9),
+    {_, E, F11}= process_ra_events(receive_ra_events(1, 0), ClusterName, F10),
+
+        receive
+            {ra_event, Qname, Evt1} = Msg ->
+                {ok, FC3b, Actions1} =
+                    rabbit_fifo_client:handle_ra_event(Qname, Qname, Evt1, FC3),
+                [{deliver, _, true,
+                 [{_,
+                   missing_messages_order,0,false,msg1},
+                  {_,
+                   missing_messages_order,1,false,msg2},
+                  {_,
+                   missing_messages_order,2,false,msg3},
+                  {_,
+                   missing_messages_order,3,false,msg4}]}] = Actions1
+        after ?TIMEOUT ->
+                flush(),
+                exit(await_delivery_timeout)
+        end.
 
 resends_lost_command(Config) ->
     ClusterName = ?config(cluster_name, Config),
