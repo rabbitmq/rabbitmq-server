@@ -369,6 +369,8 @@ run_prelaunch_second_phase() ->
     %% 3. Logging.
     ok = rabbit_prelaunch_logging:setup(Context),
 
+    rabbit_boot_state:set(prelaunch_done),
+
     %% The clustering steps requires Khepri to be started to check for
     %% consistency. This is the opposite compared to Mnesia which must be
     %% stopped. That's why we setup Khepri and the coordination Ra system it
