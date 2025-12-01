@@ -19,7 +19,8 @@ all() ->
         test_invalid_endpoint_params,
         test_translate_endpoint_params,
         test_with_one_resource_server,
-        test_with_many_resource_servers
+        test_with_many_resource_servers,
+        test_preserve_order_when_using_many_resource_servers
     ].
 
 
@@ -67,6 +68,26 @@ test_with_many_resource_servers(_) ->
         ]
     } = translate_oauth_resource_servers(Conf).
 
+test_preserve_order_when_using_many_resource_servers(_) ->
+    Conf = [
+        {["management","oauth_resource_servers","uaa","label"],"Uaa"},
+        {["management","oauth_resource_servers","spring","label"],"Spring"},
+        {["management","oauth_resource_servers","keycloak","label"],"Keycloak"}        
+    ],
+    #{
+        <<"uaa">> := [
+            {label, <<"Uaa">>},
+            {id, <<"uaa">>}
+        ],
+         <<"spring">> := [
+            {label, <<"Spring">>},
+            {id, <<"spring">>}
+        ],
+            <<"keycloak">> := [
+            {label, <<"Keycloak">>},
+            {id, <<"keycloak">>}
+        ]
+    } = translate_oauth_resource_servers(Conf).
 
 cert_filename(Conf) ->
     string:concat(?config(data_dir, Conf), "certs/cert.pem").
