@@ -4228,7 +4228,9 @@ list_deprecated_features_test(Config) ->
     ?assertEqual(<<"permitted_by_default">>, maps:get(deprecation_phase, Feature)),
     ?assertEqual(atom_to_binary(?MODULE), maps:get(provided_by, Feature)),
     ?assertEqual(list_to_binary(Desc), maps:get(desc, Feature)),
-    ?assertEqual(list_to_binary(DocUrl), maps:get(doc_url, Feature)).
+    ?assertEqual(list_to_binary(DocUrl), maps:get(doc_url, Feature)),
+    ?assert(maps:is_key(state, Feature)),
+    ?assert(lists:member(maps:get(state, Feature), [<<"permitted">>, <<"denied">>])).
 
 list_used_deprecated_features_test(Config) ->
     Desc = "This is a deprecated feature in use",
@@ -4249,7 +4251,8 @@ list_used_deprecated_features_test(Config) ->
     ?assertEqual(<<"removed">>, maps:get(deprecation_phase, Feature)),
     ?assertEqual(atom_to_binary(?MODULE), maps:get(provided_by, Feature)),
     ?assertEqual(list_to_binary(Desc), maps:get(desc, Feature)),
-    ?assertEqual(list_to_binary(DocUrl), maps:get(doc_url, Feature)).
+    ?assertEqual(list_to_binary(DocUrl), maps:get(doc_url, Feature)),
+    ?assertNot(maps:is_key(state, Feature)).
 
 cluster_and_node_tags_test(Config) ->
     Overview = http_get(Config, "/overview"),
