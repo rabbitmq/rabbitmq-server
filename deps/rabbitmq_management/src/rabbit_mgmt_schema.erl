@@ -7,6 +7,7 @@
 
 -module(rabbit_mgmt_schema).
 
+-include_lib("kernel/include/logger.hrl").
 
 -export([
     translate_oauth_resource_servers/1,
@@ -54,6 +55,7 @@ extract_resource_server_properties(Settings) ->
 
     OAuthResourceServers = [{Name, {list_to_atom(Key), convert_list_to_binary(V)}}
         || {["management","oauth_resource_servers", Name, Key], V} <- Settings ],
+    ?LOG_DEBUG("OAuthResourceServers: ~p", [OAuthResourceServers]),
     maps:groups_from_list(KeyFun, ValueFun, OAuthResourceServers).
 
 
