@@ -14,6 +14,8 @@
 -include_lib("rabbit_common/include/logging.hrl").
 
 -export([ensure_feature_flags_are_in_sync/2,
+         pre_cluster_changes/0,
+         post_cluster_changes/1,
          join/2,
          forget_member/2]).
 -export([change_node_type/1]).
@@ -308,7 +310,7 @@ join_v2(RemoteNode, NodeType) ->
 
             rabbit_ff_registry_factory:acquire_state_change_lock(),
             try
-                ok = rabbit_db:reset(),
+                ok = rabbit_db:do_reset_v2(),
                 ok = rabbit_node_monitor:notify_left_cluster(node()),
                 rabbit_feature_flags:copy_feature_states_after_reset(
                   RemoteNode)
