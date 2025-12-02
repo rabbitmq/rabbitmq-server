@@ -219,3 +219,10 @@
       depends_on    => ['rabbitmq_4.1.0'],
       callbacks     => #{enable => {rabbit_khepri, enable_feature_flag}}
      }}).
+
+-rabbit_feature_flag(
+   {'rabbitmq_4.3.0',
+    #{desc          => "Allows rolling upgrades to 4.3.x",
+      stability     => stable,
+      depends_on    => ['rabbitmq_4.2.0']
+     }}).
