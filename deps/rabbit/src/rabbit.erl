@@ -483,6 +483,10 @@ stop_boot_marker(Marker) ->
 -spec stop() -> 'ok'.
 
 stop() ->
+    case 1 =:= 1 of
+        true ->
+            ok;
+        false ->
     case wait_for_ready_or_stopped() of
         ok ->
             case rabbit_boot_state:get() of
@@ -501,7 +505,7 @@ stop() ->
             end;
         _ ->
             ok
-    end.
+    end end.
 
 do_stop() ->
     Apps0 = ?APPS ++ rabbit_plugins:active(),
