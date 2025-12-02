@@ -2406,7 +2406,11 @@ incoming_link_transfer(
     validate_message_size(PayloadSize, MaxMessageSize),
     rabbit_msg_size_metrics:observe(?PROTOCOL, PayloadSize),
     messages_received(Settled),
-    Mc0 = mc:init(mc_amqp, PayloadBin, #{}),
+    Mc0 = try mc:init(mc_amqp, PayloadBin, #{})
+          catch missing_amqp_message_body ->
+                    link_error(?V_1_0_AMQP_ERROR_DECODE_ERROR,
+                               "message has no body", [])
+          end,
     case lookup_target(LinkExchange, LinkRKey, Mc0, Vhost, User, PermCache0) of
         {ok, X, RoutingKeys, Mc1, PermCache} ->
             check_user_id(Mc1, User),
