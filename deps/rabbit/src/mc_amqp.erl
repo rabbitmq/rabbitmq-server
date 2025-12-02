@@ -636,7 +636,7 @@ msg_body_encoded([{{pos, Pos}, #'v1_0.application_properties'{content = APC}} | 
                                      application_properties = APC,
                                      bare_and_footer_application_properties_pos = Pos - BarePos
                                     });
-%% Base case: we assert the last part contains the mandatory body:
+%% Base case: The last part must contain the mandatory body:
 msg_body_encoded([{{pos, Pos}, {body, Code}}], Payload, Msg)
   when is_binary(Payload) ->
     %% AMQP sender omitted properties and application-properties sections.
@@ -648,7 +648,9 @@ msg_body_encoded([{{pos, Pos}, {body, Code}}], Payload, Msg)
 msg_body_encoded([{{pos, Pos}, {body, Code}}], BarePos, Msg)
   when is_integer(BarePos) ->
     Msg#msg_body_encoded{bare_and_footer_body_pos = Pos - BarePos,
-                         body_code = Code}.
+                         body_code = Code};
+msg_body_encoded([], _, #msg_body_encoded{body_code = uninit}) ->
+    throw(missing_amqp_message_body).
 
 %% We extract the binary part of the payload exactly once when the bare message starts.
 binary_part_bare_and_footer(Payload, Start) ->
