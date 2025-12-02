@@ -191,7 +191,8 @@ mapify([Key, Value | Rest]) ->
 %% We re-use the match context avoiding creation of sub binaries.
 -spec parse_many(binary(), opts()) ->
     [amqp10_binary_generator:amqp10_type() |
-     {{pos, non_neg_integer()}, amqp10_binary_generator:amqp10_type() | body}].
+     {{pos, non_neg_integer()},
+      amqp10_binary_generator:amqp10_type() | {body, pos_integer()}}].
 parse_many(Binary, Opts) ->
     OptionServerMode = lists:member(server_mode, Opts),
     pm(Binary, OptionServerMode, 0).

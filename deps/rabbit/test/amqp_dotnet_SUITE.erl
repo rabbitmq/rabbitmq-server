@@ -42,7 +42,8 @@ groups() ->
        auth_failure,
        access_failure_not_allowed,
        access_failure_send,
-       streams
+       streams,
+       message_without_body
       ]
      }].
 
@@ -213,6 +214,9 @@ access_failure_send(Config) ->
 
 streams(Config) ->
     declare_queue(Config, ?FUNCTION_NAME, "stream"),
+    run(?FUNCTION_NAME, Config).
+
+message_without_body(Config) ->
     run(?FUNCTION_NAME, Config).
 
 %% -------------------------------------------------------------------

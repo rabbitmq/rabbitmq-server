@@ -574,6 +574,37 @@ module Test =
             printfn "Exception %A" ex
             ()
 
+    // Test sending a message without a body section.
+    // Although supported by this lib and Azure Service Bus, we expect RabbitMQ
+    // to return a descriptive error since a body is mandatory according to the AMQP spec.
+    let messageWithoutBody uri =
+        use ac = connectAnon uri
+        let sender = SenderLink(ac.Session, "sender", "/exchange/amq.fanout")
+
+        use detachEvent = new AutoResetEvent(false)
+        let mutable linkError : Error = null
+
+        sender.add_Closed(new ClosedCallback(fun _ err ->
+            linkError <- err
+            detachEvent.Set() |> ignore))
+
+        // Create a message with Properties but no body section
+        let message = new Message(Properties = new Properties())
+
+        try
+            sender.Send(message, TimeSpan.FromSeconds 5.)
+            failwith "Expected exception not received"
+        with
+        | :? Amqp.AmqpException as ex ->
+            printfn "Got expected exception: %A" ex
+
+        assertTrue (detachEvent.WaitOne(9000))
+        assertNotNull linkError
+        assertEqual (Symbol "amqp:decode-error") linkError.Condition
+        assertNotNull linkError.Description
+        assertTrue (linkError.Description.Contains("message has no body"))
+        assertTrue (not ac.Session.IsClosed)
+
 let (|AsLower|) (s: string) =
     match s with
     | null -> null
@@ -644,6 +675,9 @@ let main argv =
         0
     | [AsLower "no_routes_is_released"; uri] ->
         no_routes_is_released uri
+        0
+    | [AsLower "message_without_body"; uri] ->
+        messageWithoutBody uri
         0
     | _ ->
         printfn "test %A not found. usage: <test> <uri>" argv
