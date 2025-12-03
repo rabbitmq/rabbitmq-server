@@ -48,6 +48,7 @@ test_with_one_resource_server(_) ->
     ],
     #{
         <<"rabbitmq1">> := [
+            {index, 1},
             {id, <<"rabbitmq1">>}
         ]
     } = translate_oauth_resource_servers(Conf).
@@ -59,10 +60,12 @@ test_with_many_resource_servers(_) ->
     ],
     #{
         <<"keycloak">> := [
+            {index, 1},
             {label, <<"Keycloak">>},
             {id, <<"keycloak">>}
         ],
         <<"uaa">> := [
+            {index, 2},
             {label, <<"Uaa">>},
             {id, <<"uaa">>}
         ]
@@ -71,23 +74,35 @@ test_with_many_resource_servers(_) ->
 test_preserve_order_when_using_many_resource_servers(_) ->
     Conf = [
         {["management","oauth_resource_servers","uaa","label"],"Uaa"},
+        {["management","oauth_resource_servers","uaa","oauth_client_id"],"uaa-client"},
         {["management","oauth_resource_servers","spring","label"],"Spring"},
-        {["management","oauth_resource_servers","keycloak","label"],"Keycloak"}        
+        {["management","oauth_resource_servers","spring","oauth_client_id"],"spring-client"},
+        {["management","oauth_resource_servers","keycloak","label"],"Keycloak"},
+        {["management","oauth_resource_servers","keycloak","oauth_client_id"],"keycloak-client"}
     ],
-    #{
-        <<"uaa">> := [
+    SortByIndex = fun({_, A}, {_, B}) -> 
+        proplists:get_value(index, A) =< proplists:get_value(index, B) end,
+
+    [
+        {<<"uaa">>, [
+            {index, 1},
             {label, <<"Uaa">>},
+            {oauth_client_id, <<"uaa-client">>},
             {id, <<"uaa">>}
-        ],
-         <<"spring">> := [
+        ]},
+        {<<"spring">>, [
+            {index, 2},
             {label, <<"Spring">>},
-            {id, <<"spring">>}
-        ],
-            <<"keycloak">> := [
+            {oauth_client_id, <<"spring-client">>},
+            {id, <<"spring">>}            
+        ]},
+        {<<"keycloak">>, [
+            {index, 3},
             {label, <<"Keycloak">>},
-            {id, <<"keycloak">>}
-        ]
-    } = translate_oauth_resource_servers(Conf).
+            {oauth_client_id, <<"keycloak-client">>},
+            {id, <<"keycloak">>}            
+        ]}
+     ] = lists:sort(SortByIndex, maps:to_list(translate_oauth_resource_servers(Conf))).
 
 cert_filename(Conf) ->
     string:concat(?config(data_dir, Conf), "certs/cert.pem").

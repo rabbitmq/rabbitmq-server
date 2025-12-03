@@ -236,3 +236,44 @@ following command:
 MOCHA_DOCKER_FILE=\location\of\my\Dockerfile ./run-suites.sh
 ```
 
+## How to solve : NPM packages are blocked by network firewalls 
+
+This network issue manifests in two stages. One stage is when you run the tests
+interactively, i.e. using `npm` directly in the host machine. The steps below configures
+npm, in the host machine, so that it is not blocked by network firewalls.
+
+1. Make sure you are connected to the VPN in Full Tunnel mode. Artifactory returns an HTTP 403 forbidden error from anywhere outside the full corporate network.
+2. `cd selenium`
+3. `npm config set registry https://usw1.packages.broadcom.com/artifactory/api/npm/tds-rabbitmq-npm-virtual/ -L project`
+4. `npm login --auth-type=web`
+5. After you run the last command you should see the folowing sentence
+`Login at:
+https://usw1.packages.broadcom.com/ui/auth-provider/npm?uuid=JEGSj5dC8X4S8TGKPL2CbSPR3CSnVgvz5r3hMZAbioQy9o98Y7hKvQ7NjA7pxZ21upVkiP1pWkRjpb4CDUDRur4UFwdGhndcas5JexreDXpykBtGsy6
+Press ENTER to open in the browser...
+`
+6. Press enter so that it opens on a browser
+7. JFrog loads and it prompts you if you are loging in. You accept you are logging. 
+8. You should get the message `Login performed successfully. Redirecting to home page.` 
+
+For further information, checkout https://github.gwd.broadcom.net/TNZ/rabbitmq-private-docs/wiki/Artifactory-NPM.
+
+If you need to build a `mocha-test` image because you want to run the tests in 
+silent mode, i.e. in the background, you need to configure NPM in docker. 
+Follow these steps:
+
+1. Navigate to https://usw1.packages.broadcom.com/
+2. Log in with your Broadcom credentials
+3. Click on your username in the top-right corner
+4. Select "Edit Profile"
+5. In the left sidebar, click "Generate an Identity Token"
+6. Copy the generated token
+7. Edit file selenium/.npmrc and make sure it has this format. 
+```
+registry=https://usw1.packages.broadcom.com/artifactory/api/npm/tds-rabbitmq-npm-virtual/
+//usw1.packages.broadcom.com/artifactory/api/npm/tds-rabbitmq-npm-virtual/:_authToken=<paste_here_the_token>
+```
+Note: The `Dockerfile` copies the .npmrc into the image. 
+
+For further information, check out https://github.gwd.broadcom.net/TNZ/rabbitmq-private-docs/wiki/Artifactory-Docker#step-1-generate-artifactory-token. 
+
+Note: You will notice that building the mocha-image takes far longer now.

@@ -15,17 +15,22 @@
 ]).
 
 extract_key_as_binary({Name,_}) -> list_to_binary(Name).
-extract_value({_Name,V}) -> V.
 
 -spec translate_oauth_resource_servers([{list(), binary()}]) -> map().
 translate_oauth_resource_servers(Conf) ->
+    %% Note: Conf must be reversed because cuttlefish_generator:transform_datatypes 
+    %% reverse the order of the configuration from rabbitmq.conf. 
+    %% Exactly on this line: `{[{Variable, NewValue}|Acc], ErrorAcc};`
+     
     Settings = cuttlefish_variable:filter_by_prefix(
-        "management.oauth_resource_servers", Conf),
+        "management.oauth_resource_servers", lists:reverse(Conf)),
+    
     Map = merge_list_of_maps([
         extract_resource_server_properties(Settings),
         extract_resource_server_endpoint_params(oauth_authorization_endpoint_params, Settings),
         extract_resource_server_endpoint_params(oauth_token_endpoint_params, Settings)
     ]),
+    ?LOG_DEBUG("translate_oauth_resource_servers: ~p", [Map]),
     Map0 = maps:map(fun(K,V) ->
         case proplists:get_value(id, V) of
             undefined -> V ++ [{id, K}];
@@ -49,15 +54,18 @@ convert_list_to_binary(V) when is_list(V) ->
 convert_list_to_binary(V) ->
     V.
 
-extract_resource_server_properties(Settings) ->
-    KeyFun = fun extract_key_as_binary/1,
-    ValueFun = fun extract_value/1,
-
+extract_resource_server_properties(Settings) ->    
     OAuthResourceServers = [{Name, {list_to_atom(Key), convert_list_to_binary(V)}}
         || {["management","oauth_resource_servers", Name, Key], V} <- Settings ],
-    ?LOG_DEBUG("OAuthResourceServers: ~p", [OAuthResourceServers]),
-    maps:groups_from_list(KeyFun, ValueFun, OAuthResourceServers).
-
+    OAuthResourceServers1 = lists:foldl(fun ({K, Value}, Acc) ->
+        Key = list_to_binary(K),
+        Attrs = case maps:get(Key, Acc, []) of 
+            [] -> [] ++ [{index, maps:size(Acc)+1}, Value];
+            List -> List ++ [Value]
+        end,
+        maps:put(Key, Attrs, Acc) end, #{}, OAuthResourceServers),
+    ct:log("OAuthResourceServers1: ~p", [OAuthResourceServers1]),
+    OAuthResourceServers1.
 
 extract_resource_server_endpoint_params(Variable, Settings) ->
     KeyFun = fun extract_key_as_binary/1,
