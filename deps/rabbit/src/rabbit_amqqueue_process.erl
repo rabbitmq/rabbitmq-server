@@ -909,6 +909,18 @@ requeue(AckTags, DelFailed, ChPid, State) ->
     subtract_acks(ChPid, AckTags, State,
                   fun (State1) -> requeue_and_run(AckTags, DelFailed, false, State1) end).
 
+discard(AckTags, DelFailed, ChPid, State) ->
+    with_dlx(
+      State#q.dlx,
+      fun (X) -> subtract_acks(ChPid, AckTags, State,
+                               fun (State1) ->
+                                       dead_letter_rejected_msgs(
+                                         AckTags, DelFailed, X, State1)
+                               end) end,
+      fun () -> rabbit_global_counters:messages_dead_lettered(rejected, rabbit_classic_queue,
+                                                              disabled, length(AckTags)),
+                ack(AckTags, ChPid, State) end).
+
 requeue_and_run(AckTags, ActiveConsumersChanged, State) ->
     requeue_and_run(AckTags, true, ActiveConsumersChanged, State).
 
@@ -1083,11 +1095,11 @@ dead_letter_expired_msgs(ExpirePred, X, State = #q{backing_queue = BQ}) ->
                              BQ:fetchwhile(ExpirePred, DLFun, Acc, BQS1)
                      end, expired, X, State).
 
-dead_letter_rejected_msgs(AckTags, X,  State = #q{backing_queue = BQ}) ->
+dead_letter_rejected_msgs(AckTags, DelFailed, X,  State = #q{backing_queue = BQ}) ->
     {ok, State1} =
         dead_letter_msgs(
           fun (DLFun, Acc, BQS) ->
-                  {Acc1, BQS1} = BQ:ackfold(DLFun, Acc, BQS, AckTags),
+                  {Acc1, BQS1} = BQ:ackfold(DLFun, Acc, BQS, AckTags, DelFailed),
                   {ok, Acc1, BQS1}
           end, rejected, X, State),
     State1.
@@ -1544,25 +1556,16 @@ handle_cast({complete, AckTags, ChPid}, State) ->
     noreply(ack(AckTags, ChPid, State));
 
 handle_cast({requeue, AckTags, ChPid}, State) ->
-    noreply(requeue(AckTags, true, ChPid, State));
+    noreply(requeue(AckTags, false, ChPid, State));
 
 handle_cast({discard, AckTags, ChPid}, State) ->
-    noreply(with_dlx(
-              State#q.dlx,
-              fun (X) -> subtract_acks(ChPid, AckTags, State,
-                                       fun (State1) ->
-                                               dead_letter_rejected_msgs(
-                                                 AckTags, X, State1)
-                                       end) end,
-              fun () -> rabbit_global_counters:messages_dead_lettered(rejected, rabbit_classic_queue,
-                                                                      disabled, length(AckTags)),
-                        ack(AckTags, ChPid, State) end));
+    noreply(discard(AckTags, true, ChPid, State));
 
 handle_cast({modify, AckTags, DelFailed, false, _Anns, ChPid}, State) ->
     noreply(requeue(AckTags, DelFailed, ChPid, State));
 
-handle_cast({modify, AckTags, _DelFailed, true, _Anns, ChPid}, State) ->
-    handle_cast({discard, AckTags, ChPid}, State);
+handle_cast({modify, AckTags, DelFailed, true, _Anns, ChPid}, State) ->
+    noreply(discard(AckTags, DelFailed, ChPid, State));
 
 handle_cast({delete_exclusive, ConnPid}, State) ->
     log_delete_exclusive(ConnPid, State),

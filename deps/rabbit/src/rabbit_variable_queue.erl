@@ -12,7 +12,7 @@
          publish/5, publish_delivered/4,
          discard/3, drain_confirmed/1,
          dropwhile/2, fetchwhile/4, fetch/2, drop/2, ack/2, requeue/3,
-         ackfold/4, len/1, is_empty/1, depth/1,
+         ackfold/5, len/1, is_empty/1, depth/1,
          update_rates/1, needs_timeout/1, timeout/1,
          handle_pre_hibernate/1, resume/1, msg_rates/1,
          info/2, invoke/3, is_duplicate/2,
@@ -562,12 +562,12 @@ fetch(AckRequired, State) ->
             %% it is possible that the message wasn't read from disk
             %% at this point, so read it in.
             {Msg0, State2} = read_msg(MsgStatus, State1),
-            Msg = add_delivery_count(MsgStatus#msg_status.seq_id, Msg0, State2),
+            Msg = annotate_delivery_count(MsgStatus#msg_status.seq_id, Msg0, State2),
             {AckTag, State3} = remove(AckRequired, MsgStatus, State2),
             {{Msg, MsgStatus#msg_status.is_delivered, AckTag}, a(State3)}
     end.
 
-add_delivery_count(SeqId, Msg, #vqstate{
+annotate_delivery_count(SeqId, Msg, #vqstate{
         redeliver_seq_id=RedeliverSeqId,
         delivery_count=DeliveryCount}) ->
     case DeliveryCount of
@@ -589,6 +589,7 @@ drop(AckRequired, State) ->
             {empty, a(State1)};
         {{value, MsgStatus}, State1} ->
             {AckTag, State2} = remove(AckRequired, MsgStatus, State1),
+            %% @todo I think the first element is not needed, only need to return state.
             {{MsgStatus#msg_status.msg_id, AckTag}, a(State2)}
     end.
 
@@ -647,12 +648,17 @@ requeue(AckTags, DelFailed, #vqstate { q_head     = QHead0,
         in_counter = InCounter + MsgCount
     }))}.
 
-ackfold(MsgFun, Acc, State, AckTags) ->
+%% This function is called when messages get discarded (rejected AMQP 1.0 outcome)
+%% and delivered to a dead letter queue. We must therefore increase the delivery_count
+%% for these messages the same as if they were requeued.
+ackfold(MsgFun, Acc, State, AckTags, DelFailed) ->
     {AccN, StateN} =
         lists:foldl(fun(SeqId, {Acc0, State0}) ->
                             MsgStatus = lookup_pending_ack(SeqId, State0),
-                            {Msg, State1} = read_msg(MsgStatus, State0),
-                            {MsgFun(Msg, SeqId, Acc0), State1}
+                            {Msg0, State1} = read_msg(MsgStatus, State0),
+                            State2 = maybe_inc_delivery_count(SeqId, DelFailed, State1),
+                            Msg = annotate_delivery_count(MsgStatus#msg_status.seq_id, Msg0, State2),
+                            {MsgFun(Msg, SeqId, Acc0), State2}
                     end, {Acc, State}, AckTags),
     {AccN, a(StateN)}.
 
@@ -1391,7 +1397,8 @@ process_queue_entries1(
   #msg_status { seq_id = SeqId } = MsgStatus,
   Fun,
   {FetchAcc, State}) ->
-    {Msg, State1} = read_msg(MsgStatus, State),
+    {Msg0, State1} = read_msg(MsgStatus, State),
+    Msg = annotate_delivery_count(MsgStatus#msg_status.seq_id, Msg0, State1),
     State2 = record_pending_ack(
                MsgStatus #msg_status {
                  is_delivered = true }, State1),
@@ -1511,6 +1518,7 @@ publish1(Msg,
                             q_tail = QTail = #q_tail { count = QTailCount },
                             qi_embed_msgs_below = IndexMaxSize,
                             next_seq_id         = SeqId,
+                            delivery_count      = DeliveryCount0,
                             in_counter          = InCount,
                             durable             = IsDurable,
                             unconfirmed         = UC,
@@ -1538,7 +1546,9 @@ publish1(Msg,
              end,
     {UC1, UCS1} = maybe_needs_confirming(NeedsConfirming, persist_to(MsgStatus),
                                          MsgId, UC, UCS),
+    DeliveryCount = update_delivery_count(SeqId, Msg, DeliveryCount0),
     State3#vqstate{ next_seq_id         = SeqId + 1,
+                    delivery_count      = DeliveryCount,
                     in_counter          = InCount + 1,
                     unconfirmed         = UC1,
                     unconfirmed_simple  = UCS1 }.
@@ -1549,6 +1559,7 @@ publish_delivered1(Msg,
                    _ChPid, PersistFun,
                    State = #vqstate { qi_embed_msgs_below = IndexMaxSize,
                                       next_seq_id         = SeqId,
+                                      delivery_count      = DeliveryCount0,
                                       in_counter          = InCount,
                                       out_counter         = OutCount,
                                       durable             = IsDurable,
@@ -1562,9 +1573,11 @@ publish_delivered1(Msg,
     State2 = record_pending_ack(m(MsgStatus1), State1),
     {UC1, UCS1} = maybe_needs_confirming(NeedsConfirming, persist_to(MsgStatus),
                                          MsgId, UC, UCS),
+    DeliveryCount = update_delivery_count(SeqId, Msg, DeliveryCount0),
     {SeqId,
      stats_published_pending_acks(MsgStatus1,
            State2#vqstate{ next_seq_id         = SeqId + 1,
+                           delivery_count      = DeliveryCount,
                            out_counter         = OutCount + 1,
                            in_counter          = InCount + 1,
                            unconfirmed         = UC1,
@@ -1579,6 +1592,12 @@ maybe_needs_confirming(true, queue_store, MsgId, UC, UCS) ->
 %% Otherwise we keep tracking as it used to be.
 maybe_needs_confirming(true, _, MsgId, UC, UCS) ->
     {sets:add_element(MsgId, UC), UCS}.
+
+update_delivery_count(SeqId, Msg, DeliveryCount) ->
+    case mc:get_annotation(delivery_count, Msg) of
+        undefined -> DeliveryCount;
+        Count -> DeliveryCount#{SeqId => Count}
+    end.
 
 maybe_write_msg_to_disk(Force, MsgStatus = #msg_status {
                                  seq_id = SeqId,
@@ -1827,25 +1846,28 @@ requeue_merge([SeqId | Rest] = SeqIds, DelFailed, Q, Front, MsgIds, State) ->
             case msg_from_pending_ack(SeqId, State) of
                 {none, _} ->
                     requeue_merge(Rest, DelFailed, Q, Front, MsgIds, State);
-                {#msg_status { msg_id = MsgId } = MsgStatus, State1=#vqstate{redeliver_seq_id=RedeliverSeqId, delivery_count=DeliveryCount0}} ->
+                {#msg_status { msg_id = MsgId } = MsgStatus, State1} ->
                     %% Increment delivery_count.
-                    DeliveryCount = case DelFailed of
-                        true -> maps:update_with(SeqId,
-                            fun(V) -> V + 1 end,
-                            %% Message was possibly delivered at least once.
-                            case SeqId < RedeliverSeqId of
-                                true -> 2;
-                                false -> 1
-                            end,
-                            DeliveryCount0);
-                        false -> DeliveryCount0
-                    end,
-                    State2 = stats_requeued_memory(MsgStatus, State1#vqstate{delivery_count=DeliveryCount}),
-                    requeue_merge(Rest, DelFailed, Q, ?QUEUE:in(MsgStatus, Front), [MsgId | MsgIds], State2)
+                    State2 = maybe_inc_delivery_count(SeqId, DelFailed, State1),
+                    State3 = stats_requeued_memory(MsgStatus, State2),
+                    requeue_merge(Rest, DelFailed, Q, ?QUEUE:in(MsgStatus, Front), [MsgId | MsgIds], State3)
             end
     end;
 requeue_merge([], _, Q, Front, MsgIds, State) ->
     {?QUEUE:join(Front, Q), MsgIds, State}.
+
+maybe_inc_delivery_count(_, false, State) ->
+    State;
+maybe_inc_delivery_count(SeqId, true, State=#vqstate{redeliver_seq_id=RedeliverSeqId, delivery_count=DeliveryCount0}) ->
+    DeliveryCount = maps:update_with(SeqId,
+        fun(V) -> V + 1 end,
+        %% Message was possibly delivered at least once.
+        case SeqId < RedeliverSeqId of
+            true -> 2;
+            false -> 1
+        end,
+        DeliveryCount0),
+    State#vqstate{delivery_count=DeliveryCount}.
 
 %% Mostly opposite of record_pending_ack/2
 msg_from_pending_ack(SeqId, State) ->

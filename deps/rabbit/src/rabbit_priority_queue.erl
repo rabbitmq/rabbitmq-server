@@ -29,7 +29,7 @@
          purge/1, purge_acks/1,
          publish/5, publish_delivered/4, discard/3, drain_confirmed/1,
          dropwhile/2, fetchwhile/4, fetch/2, drop/2, ack/2, requeue/3,
-         ackfold/4, len/1, is_empty/1, depth/1,
+         ackfold/5, len/1, is_empty/1, depth/1,
          update_rates/1, needs_timeout/1, timeout/1,
          handle_pre_hibernate/1, resume/1, msg_rates/1,
          info/2, invoke/3, is_duplicate/2,
@@ -287,19 +287,19 @@ requeue(AckTags, DelFailed, State = #passthrough{bq = BQ, bqs = BQS}) ->
     ?passthrough2(requeue(AckTags, DelFailed, BQS)).
 
 %% Similar problem to fetchwhile/4
-ackfold(MsgFun, Acc, State = #state{bq = BQ}, AckTags) ->
+ackfold(MsgFun, Acc, State = #state{bq = BQ}, AckTags, DelFailed) ->
     AckTagsByPriority = partition_acktags(AckTags),
     fold2(
       fun (P, BQSN, AccN) ->
               case maps:find(P, AckTagsByPriority) of
                   {ok, ATagsN} -> {AccN1, BQSN1} =
-                                      BQ:ackfold(MsgFun, AccN, BQSN, ATagsN),
+                                      BQ:ackfold(MsgFun, AccN, BQSN, ATagsN, DelFailed),
                                   {priority_on_acktags(P, AccN1), BQSN1};
                   error        -> {AccN, BQSN}
               end
       end, Acc, State);
-ackfold(MsgFun, Acc, State = #passthrough{bq = BQ, bqs = BQS}, AckTags) ->
-    ?passthrough2(ackfold(MsgFun, Acc, BQS, AckTags)).
+ackfold(MsgFun, Acc, State = #passthrough{bq = BQ, bqs = BQS}, AckTags, DelFailed) ->
+    ?passthrough2(ackfold(MsgFun, Acc, BQS, AckTags, DelFailed)).
 
 len(#state{bq = BQ, bqss = BQSs}) ->
     add0(fun (_P, BQSN) -> BQ:len(BQSN) end, BQSs);
