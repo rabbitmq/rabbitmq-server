@@ -707,7 +707,7 @@ function DisplayControl() {
   this.vhosts = false
   this.rabbitmqVersions = false
 
-  this.update = function(overview, ui_data_model) {    
+  this.update = function(overview, ui_data_model) {
     this.nodes = ac.canListNodes() && ui_data_model.nodes.length > 1
     this.vhosts = ac.canAccessVhosts()
     this.rabbitmqVersions = false
@@ -740,7 +740,7 @@ function setup_global_vars(overview) {
       '<li>Cluster ' + (user_administrator ?  '<a href="#/cluster-name">' + cluster_name + '</a>' : cluster_name) + '</li>'
     );
 
-    user_name = fmt_escape_html(user.name); 
+    user_name = fmt_escape_html(user.name);
     $('#header #logout').prepend(
       'User ' + (user_administrator && user.is_internal_user ?  '<a href="#/users/' + user_name + '">' + user_name + '</a>' : user_name)
     );
@@ -918,7 +918,7 @@ var QUEUE_TYPE = function (queue) {
 QUEUE_TYPE["default"] = {
     label: "Default",
     params: {},
-    policy_apply_to: "classic_queue",
+    policy_apply_to: "classic_queues",
     actions: {
         get_message: true,
         purge: true
@@ -938,7 +938,7 @@ QUEUE_TYPE["default"] = {
 QUEUE_TYPE["classic"] = {
     label: "Classic",
     params: {},
-    policy_apply_to: "classic_queue",
+    policy_apply_to: "classic_queues",
     actions: {
         get_message: true,
         purge: true
