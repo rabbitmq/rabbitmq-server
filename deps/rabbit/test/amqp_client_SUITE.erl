@@ -139,6 +139,8 @@ groups() ->
        dynamic_target_long_link_name,
        dynamic_source_rpc,
        dynamic_terminus_delete,
+       delivery_count_classic_queue,
+       delivery_count_quorum_queue,
        modified_classic_queue,
        modified_quorum_queue,
        modified_dead_letter_headers_exchange,
@@ -452,6 +454,82 @@ reliable_send_receive(QType, Outcome, Config) ->
     ok = delete_queue(Session2, QName),
     ok = end_session_sync(Session2),
     ok = close_connection_sync(Connection2).
+
+delivery_count_classic_queue(Config) ->
+    delivery_count(<<"classic">>, Config).
+
+delivery_count_quorum_queue(Config) ->
+    delivery_count(<<"quorum">>, Config).
+
+delivery_count(QType, Config) ->
+    QName = <<"source queue">>,
+    QAddress = rabbitmq_amqp_address:queue(QName),
+    DLQName = <<"dead letter queue">>,
+    DLQAddress = rabbitmq_amqp_address:queue(DLQName),
+
+    {_, Session, LinkPair} = Init = init(Config),
+    QProps = #{arguments => #{<<"x-queue-type">> => {utf8, QType},
+                              <<"x-dead-letter-exchange">> => {utf8, <<>>},
+                              <<"x-dead-letter-routing-key">> => {utf8, DLQName}}},
+    {ok, #{type := QType}} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, QProps),
+
+    DLQProps = #{arguments => #{<<"x-queue-type">> => {utf8, QType},
+                                <<"x-dead-letter-exchange">> => {utf8, <<>>},
+                                <<"x-dead-letter-routing-key">> => {utf8, QName}}},
+    {ok, #{type := QType}} = rabbitmq_amqp_client:declare_queue(LinkPair, DLQName, DLQProps),
+
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender source queue">>, QAddress),
+    ok = wait_for_credit(Sender),
+    M1 = amqp10_msg:new(<<"tag">>, <<"msg">>, true),
+    ok = amqp10_client:send_msg(Sender, M1),
+    ok = detach_link_sync(Sender),
+
+    {ok, QReceiver} = amqp10_client:attach_receiver_link(
+                        Session, <<"receiver source queue">>, QAddress, unsettled),
+    {ok, DLQReceiver} = amqp10_client:attach_receiver_link(
+                          Session, <<"receiver dead letter queue">>, DLQAddress, unsettled),
+
+    {ok, M2} = amqp10_client:get_msg(QReceiver),
+    ?assertMatch(#{delivery_count := 0,
+                   first_acquirer := true},
+                 amqp10_msg:headers(M2)),
+
+    %% released coutcome must not increment the delivery-count
+    ok = amqp10_client:settle_msg(QReceiver, M2, released),
+    {ok, M3} = amqp10_client:get_msg(QReceiver),
+    ?assertMatch(#{delivery_count := 0,
+                   first_acquirer := false},
+                 amqp10_msg:headers(M3)),
+
+    %% delivery-failed=true in modified coutcome must increment the delivery-count
+    ok = amqp10_client:settle_msg(QReceiver, M3, {modified, true, false, #{}}),
+    {ok, M4} = amqp10_client:get_msg(QReceiver),
+    ?assertMatch(#{delivery_count := 1,
+                   first_acquirer := false},
+                 amqp10_msg:headers(M4)),
+
+    %% delivery-failed=false in modified coutcome must not increment the delivery-count
+    ok = amqp10_client:settle_msg(QReceiver, M4, {modified, false, true, #{}}),
+    {ok, M5} = amqp10_client:get_msg(DLQReceiver),
+    ?assertMatch(#{delivery_count := 1,
+                   first_acquirer := false},
+                 amqp10_msg:headers(M5)),
+
+    %% rejected coutcome must increment the delivery-count
+    ok = amqp10_client:settle_msg(DLQReceiver, M5, rejected),
+    {ok, M6} = amqp10_client:get_msg(QReceiver),
+    ?assertMatch(#{delivery_count := 2,
+                   first_acquirer := false},
+                 amqp10_msg:headers(M6)),
+
+    ok = amqp10_client:settle_msg(QReceiver, M6, accepted),
+    ok = detach_link_sync(QReceiver),
+    ok = detach_link_sync(DLQReceiver),
+    ?assertMatch({ok, #{message_count := 0}},
+                 rabbitmq_amqp_client:delete_queue(LinkPair, QName)),
+    ?assertMatch({ok, #{message_count := 0}},
+                 rabbitmq_amqp_client:delete_queue(LinkPair, DLQName)),
+    ok = close(Init).
 
 %% We test the modified outcome with classic queues.
 %% We expect that classic queues implement field
