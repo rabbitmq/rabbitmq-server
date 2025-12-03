@@ -392,11 +392,12 @@ export function hasAnyResourceServerReady(oauth, onReadyCallback) {
             warnings.push(warningMessageOAuthResources(url, notCompliantResources, " not compliant"))
           }
         }
-        oauth.declared_resource_servers_count = oauth.resource_servers.length
+        oauth.declared_resource_servers_count = oauth.resource_servers.length;
         oauth.resource_servers = oauth.resource_servers.filter((resource) =>
-          !notReadyServers.includes(resource.oauth_provider_url) && !notCompliantServers.includes(resource.oauth_provider_url))
+          !notReadyServers.includes(resource.oauth_provider_url) && !notCompliantServers.includes(resource.oauth_provider_url));
+        oauth.resource_servers.sort((a, b) => a.index - b.index);
 
-          onReadyCallback(oauth, warnings)
+        onReadyCallback(oauth, warnings)
 
       })
   }else {

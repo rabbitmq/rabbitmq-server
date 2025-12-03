@@ -27,15 +27,20 @@ describe('Given three oauth resources but only two enabled, an unauthenticated u
     resources = await homePage.getOAuthResourceOptions()
     if (hasProfile("with-resource-label")) {
       assertAllOptions([
-        { value : "rabbit_dev", text : "RabbitMQ Development" },
-        { value : "rabbit_prod", text : "RabbitMQ Production" }
-        ], resources)
+        { value : "rabbit_prod", text : "RabbitMQ Production" },
+        { value : "rabbit_dev", text : "RabbitMQ Development" }
+        ], resources);
+        // assert resources are rendered in the same order they are configured : prod and then dev
+        assert.equal("RabbitMQ Production", resources[0].text);
+        assert.equal("RabbitMQ Development", resources[1].text);
     }else {
       assertAllOptions([
-        { value : "rabbit_dev", text : "rabbit_dev" },
-        { value : "rabbit_prod", text : "rabbit_prod" }
-        ], resources)
-    }
+        { value : "rabbit_prod", text : "rabbit_prod" },
+        { value : "rabbit_dev", text : "rabbit_dev" }
+        ], resources);
+        assert.equal("rabbit_prod", resources[0].text);
+        assert.equal("rabbit_dev", resources[1].text);
+    }    
   })
 
   it('should not be presented with a login button to log in using Basic Auth', async function () {
