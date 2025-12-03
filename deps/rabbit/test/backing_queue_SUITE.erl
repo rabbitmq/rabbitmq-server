@@ -1303,7 +1303,7 @@ variable_queue_fold_msg_on_disk2(VQ0, _QName) ->
     VQ1 = variable_queue_publish(true, 1, VQ0),
     {VQ2, AckTags} = variable_queue_fetch(1, true, false, 1, VQ1),
     {ok, VQ3} = rabbit_variable_queue:ackfold(fun (_M, _A, ok) -> ok end,
-                                              ok, VQ2, AckTags),
+                                              ok, VQ2, AckTags, true),
     VQ3.
 
 variable_queue_dropfetchwhile(Config) ->

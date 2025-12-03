@@ -111,7 +111,7 @@ end_per_testcase(Testcase, Config) ->
 %% * discard/3              - publish without acks straight through
 %% * dropwhile/2            - expire messages without DLX
 %% * fetchwhile/4           - expire messages with DLX
-%% * ackfold/4              - reject messages with DLX
+%% * ackfold/5              - reject messages with DLX
 %% * requeue/2              - reject messages without DLX
 %% * drop/2                 - maxlen messages without DLX
 %% * purge/1                - issue AMQP queue.purge

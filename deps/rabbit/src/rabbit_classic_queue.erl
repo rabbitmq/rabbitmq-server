@@ -484,6 +484,8 @@ supports_stateful_delivery() -> true.
 deliver(Qs0, Msg0, Options) ->
     %% add guid to content here instead of in rabbit_basic:message/3,
     %% as classic queues are the only ones that need it
+    %% @todo Do we need to regenerate it for every time it gets dead lettered?
+    %%       We can likely do better and avoid rewriting to the shared message store.
     Msg = mc:prepare(store, mc:set_annotation(id, rabbit_guid:gen(), Msg0)),
     Mandatory = maps:get(mandatory, Options, false),
     MsgSeqNo = maps:get(correlation, Options, undefined),

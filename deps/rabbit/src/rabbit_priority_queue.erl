@@ -33,8 +33,12 @@
          ackfold/4, fold/3, len/1, is_empty/1, depth/1,
 =======
          dropwhile/2, fetchwhile/4, fetch/2, drop/2, ack/2, requeue/3,
+<<<<<<< HEAD
          ackfold/4, len/1, is_empty/1, depth/1,
 >>>>>>> 6664d1bfb (CQ: Implement AMQP-1.0 delivery-count and first-acquirer)
+=======
+         ackfold/5, len/1, is_empty/1, depth/1,
+>>>>>>> dbeaac4e2 (CQ: Propagate delivery-count to DLQs)
          update_rates/1, needs_timeout/1, timeout/1,
          handle_pre_hibernate/1, resume/1, msg_rates/1,
          info/2, invoke/3, is_duplicate/2, set_queue_mode/2,
@@ -293,19 +297,19 @@ requeue(AckTags, DelFailed, State = #passthrough{bq = BQ, bqs = BQS}) ->
     ?passthrough2(requeue(AckTags, DelFailed, BQS)).
 
 %% Similar problem to fetchwhile/4
-ackfold(MsgFun, Acc, State = #state{bq = BQ}, AckTags) ->
+ackfold(MsgFun, Acc, State = #state{bq = BQ}, AckTags, DelFailed) ->
     AckTagsByPriority = partition_acktags(AckTags),
     fold2(
       fun (P, BQSN, AccN) ->
               case maps:find(P, AckTagsByPriority) of
                   {ok, ATagsN} -> {AccN1, BQSN1} =
-                                      BQ:ackfold(MsgFun, AccN, BQSN, ATagsN),
+                                      BQ:ackfold(MsgFun, AccN, BQSN, ATagsN, DelFailed),
                                   {priority_on_acktags(P, AccN1), BQSN1};
                   error        -> {AccN, BQSN}
               end
       end, Acc, State);
-ackfold(MsgFun, Acc, State = #passthrough{bq = BQ, bqs = BQS}, AckTags) ->
-    ?passthrough2(ackfold(MsgFun, Acc, BQS, AckTags)).
+ackfold(MsgFun, Acc, State = #passthrough{bq = BQ, bqs = BQS}, AckTags, DelFailed) ->
+    ?passthrough2(ackfold(MsgFun, Acc, BQS, AckTags, DelFailed)).
 
 fold(Fun, Acc, State = #state{bq = BQ}) ->
     fold2(fun (_P, BQSN, AccN) -> BQ:fold(Fun, AccN, BQSN) end, Acc, State);

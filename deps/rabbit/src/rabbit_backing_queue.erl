@@ -171,7 +171,7 @@
 
 %% Fold over messages by ack tag. The supplied function is called with
 %% each message, its ack tag, and an accumulator.
--callback ackfold(msg_fun(A), A, state(), [ack()]) -> {A, state()}.
+-callback ackfold(msg_fun(A), A, state(), [ack()], boolean()) -> {A, state()}.
 
 %% Fold over all the messages in a queue and return the accumulated
 %% results, leaving the queue undisturbed.
