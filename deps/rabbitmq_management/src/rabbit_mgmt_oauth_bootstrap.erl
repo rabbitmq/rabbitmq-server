@@ -17,7 +17,7 @@ init(Req0, State) ->
         rabbit_mgmt_headers:set_common_permission_headers(Req0, ?MODULE), ?MODULE), State).
 
 bootstrap_oauth(Req0, State) ->
-    AuthSettings = rabbit_mgmt_wm_auth:authSettings(),
+    AuthSettings = enrich_oauth_settings(Req0, rabbit_mgmt_wm_auth:authSettings()),
     Dependencies = oauth_dependencies(),
     {Req1, SetTokenAuth} = set_token_auth(AuthSettings, Req0),
     JSContent = import_dependencies(Dependencies) ++
@@ -27,6 +27,26 @@ bootstrap_oauth(Req0, State) ->
     
     {ok, cowboy_req:reply(200, #{<<"content-type">> => <<"text/javascript; charset=utf-8">>},
         JSContent, Req1), State}.
+
+enrich_oauth_settings(Req0, AuthSettings) ->
+    case get_auth_mechanism(Req0) of
+        undefined -> AuthSettings;
+        {_, _} = Auth -> [Auth | AuthSettings]
+    end.
+get_auth_mechanism(Req) ->
+    case get_param_or_header(<<"strict-auth-mechanism">>, <<"x-strict-auth-mechanism">>, Req) of
+        undefined ->
+            case get_param_or_header(<<"preferred-auth-mechanism">>, <<"x-preferred-auth-mechanism">>, Req) of
+                undefined -> undefined;
+                Val -> {preferred_auth_mechanism, Val}
+            end;
+        Val -> {strict_auth_mechanism, Val}
+    end.
+get_param_or_header(ParamName, HeaderName, Req) ->
+    case rabbit_mgmt_util:qs_val(ParamName, Req) of
+        undefined -> cowboy_req:parse_header(HeaderName, Req);
+        Val -> Val
+    end.
 
 set_oauth_settings(AuthSettings) ->
     JsonAuthSettings = rabbit_json:encode(rabbit_mgmt_format:format_nulls(AuthSettings)),
