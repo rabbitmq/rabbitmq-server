@@ -13,6 +13,7 @@
 
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("oauth2_client/include/oauth2_client.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 %%--------------------------------------------------------------------
 
@@ -119,6 +120,7 @@ buildRootResourceServerIfAny(Id, Props) ->
 
 authSettings() ->
     ManagementProps = application:get_all_env(rabbitmq_management),
+    ?LOG_DEBUG("ManagementProps: ~p", [ManagementProps]),
     OAuth2BackendProps = application:get_all_env(rabbitmq_auth_backend_oauth2),
     EnableOAUTH = proplists:get_value(oauth_enabled, ManagementProps, false),
     case EnableOAUTH of
