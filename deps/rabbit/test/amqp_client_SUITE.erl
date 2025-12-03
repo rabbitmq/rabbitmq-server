@@ -139,6 +139,8 @@ groups() ->
        dynamic_target_long_link_name,
        dynamic_source_rpc,
        dynamic_terminus_delete,
+       delivery_count_classic_queue,
+       delivery_count_quorum_queue,
        modified_classic_queue,
        modified_quorum_queue,
        modified_dead_letter_headers_exchange,
@@ -344,10 +346,119 @@ reliable_send_receive(QType, Outcome, Config) ->
     ok = end_session_sync(Session2),
     ok = close_connection_sync(Connection2).
 
+delivery_count_classic_queue(Config) ->
+    delivery_count(<<"classic">>, Config).
+
+delivery_count_quorum_queue(Config) ->
+    delivery_count(<<"quorum">>, Config).
+
+%% Test that the AMQP delivery-count is incremented correctly.
+%% "The number of unsuccessful previous attempts to deliver this message."
+delivery_count(QType, Config) ->
+    QName = <<"source queue">>,
+    QAddress = rabbitmq_amqp_address:queue(QName),
+    DLQName = <<"dead letter queue">>,
+    DLQAddress = rabbitmq_amqp_address:queue(DLQName),
+
+    {_, Session, LinkPair} = Init = init(Config),
+    QProps = #{arguments => #{<<"x-queue-type">> => {utf8, QType},
+                              <<"x-message-ttl">> => {ulong, 5000},
+                              <<"x-max-length">> => {ulong, 1},
+                              <<"x-overflow">> => {utf8, <<"drop-head">>},
+                              <<"x-dead-letter-exchange">> => {utf8, <<>>},
+                              <<"x-dead-letter-routing-key">> => {utf8, DLQName}}},
+    {ok, #{type := QType}} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, QProps),
+
+    DLQProps = #{arguments => #{<<"x-queue-type">> => {utf8, QType},
+                                <<"x-dead-letter-exchange">> => {utf8, <<>>},
+                                <<"x-dead-letter-routing-key">> => {utf8, QName}}},
+    {ok, #{type := QType}} = rabbitmq_amqp_client:declare_queue(LinkPair, DLQName, DLQProps),
+
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender source queue">>, QAddress),
+    ok = wait_for_credit(Sender),
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"t1">>, <<"first message">>, true)),
+
+    {ok, QReceiver} = amqp10_client:attach_receiver_link(
+                        Session, <<"receiver source queue">>, QAddress, unsettled),
+    {ok, DLQReceiver} = amqp10_client:attach_receiver_link(
+                          Session, <<"receiver dead letter queue">>, DLQAddress, unsettled),
+
+    {ok, Msg1} = amqp10_client:get_msg(QReceiver),
+    ?assertMatch(#{delivery_count := 0,
+                   first_acquirer := true},
+                 amqp10_msg:headers(Msg1)),
+
+    %% delivery-failed=false in modified coutcome must not increment the delivery-count
+    ok = amqp10_client:settle_msg(QReceiver, Msg1, {modified, false, false, #{}}),
+    {ok, Msg2} = amqp10_client:get_msg(QReceiver),
+    ?assertMatch(#{delivery_count := 0,
+                   first_acquirer := false},
+                 amqp10_msg:headers(Msg2)),
+
+    %% delivery-failed=true in modified coutcome must increment the delivery-count
+    ok = amqp10_client:settle_msg(QReceiver, Msg2, {modified, true, false, #{}}),
+    {ok, Msg3} = amqp10_client:get_msg(QReceiver),
+    ?assertMatch(#{delivery_count := 1,
+                   first_acquirer := false},
+                 amqp10_msg:headers(Msg3)),
+
+    ok = amqp10_client:settle_msg(QReceiver, Msg3, {modified, true, true, #{}}),
+    {ok, Msg4} = amqp10_client:get_msg(DLQReceiver),
+    ?assertMatch(#{delivery_count := 2,
+                   first_acquirer := false},
+                 amqp10_msg:headers(Msg4)),
+
+    ok = amqp10_client:settle_msg(DLQReceiver, Msg4, {modified, false, true, #{}}),
+    {ok, Msg5} = amqp10_client:get_msg(QReceiver),
+    ?assertMatch(#{delivery_count := 2,
+                   first_acquirer := false},
+                 amqp10_msg:headers(Msg5)),
+
+    %% released coutcome must not increment the delivery-count
+    ok = amqp10_client:settle_msg(QReceiver, Msg5, released),
+
+    %% Let the message expire.
+    %% Since there wasn't a delivery attempt, the delivery-count must not be incremented.
+    {ok, Msg6} = amqp10_client:get_msg(DLQReceiver, 15_000),
+    ?assertMatch(#{<<"x-last-death-reason">> := <<"expired">>},
+                 amqp10_msg:message_annotations(Msg6)),
+    ?assertMatch(#{delivery_count := 2,
+                   first_acquirer := false},
+                 amqp10_msg:headers(Msg6)),
+
+    %% rejected coutcome must increment the delivery-count
+    ok = amqp10_client:settle_msg(DLQReceiver, Msg6, rejected),
+    {ok, Msg7} = amqp10_client:get_msg(QReceiver),
+    ?assertMatch(#{delivery_count := 3,
+                   first_acquirer := false},
+                 amqp10_msg:headers(Msg7)),
+
+    ok = amqp10_client:settle_msg(QReceiver, Msg7, released),
+    %% Dead letter the message due to x-max-length.
+    %% Since there wasn't a delivery attempt, the delivery-count must not be incremented.
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"t2">>, <<"second message">>, true)),
+    {ok, Msg8} = amqp10_client:get_msg(DLQReceiver),
+    ?assertEqual(<<"first message">>, amqp10_msg:body_bin(Msg8)),
+    ?assertMatch(#{<<"x-last-death-reason">> := <<"maxlen">>},
+                 amqp10_msg:message_annotations(Msg8)),
+    ?assertMatch(#{delivery_count := 3,
+                   first_acquirer := false},
+                 amqp10_msg:headers(Msg8)),
+
+    ok = amqp10_client:settle_msg(DLQReceiver, Msg8, accepted),
+
+    ok = detach_link_sync(Sender),
+    ok = detach_link_sync(QReceiver),
+    ok = detach_link_sync(DLQReceiver),
+    {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
+    {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair, DLQName),
+    ok = close(Init).
+
 %% We test the modified outcome with classic queues.
-%% We expect that classic queues implement field undeliverable-here incorrectly
-%% by discarding (if true) or requeueing (if false).
-%% Fields delivery-failed and message-annotations are not implemented.
+%% We expect that classic queues implement field
+%% * delivery-failed correctly
+%% * undeliverable-here incorrectly by discarding (if true) or requeueing (if false)
+%% * message-annotations incorrectly (not implemented)
 modified_classic_queue(Config) ->
     QName = atom_to_binary(?FUNCTION_NAME),
     {_, Session, LinkPair} = Init = init(Config),
@@ -368,20 +479,32 @@ modified_classic_queue(Config) ->
 
     {ok, M1} = amqp10_client:get_msg(Receiver),
     ?assertEqual([<<"m1">>], amqp10_msg:body(M1)),
+    ?assertMatch(#{delivery_count := 0,
+                   first_acquirer := true},
+                 amqp10_msg:headers(M1)),
     ok = amqp10_client:settle_msg(Receiver, M1, {modified, false, true, #{}}),
 
     {ok, M2a} = amqp10_client:get_msg(Receiver),
     ?assertEqual([<<"m2">>], amqp10_msg:body(M2a)),
+    ?assertMatch(#{delivery_count := 0,
+                   first_acquirer := true},
+                 amqp10_msg:headers(M2a)),
     ok = amqp10_client:settle_msg(Receiver, M2a,
                                   {modified, false, false, #{}}),
 
     {ok, M2b} = amqp10_client:get_msg(Receiver),
     ?assertEqual([<<"m2">>], amqp10_msg:body(M2b)),
+    ?assertMatch(#{delivery_count := 0,
+                   first_acquirer := false},
+                 amqp10_msg:headers(M2b)),
     ok = amqp10_client:settle_msg(Receiver, M2b,
                                   {modified, true, false, #{<<"x-opt-key">> => <<"val">>}}),
 
     {ok, M2c} = amqp10_client:get_msg(Receiver),
     ?assertEqual([<<"m2">>], amqp10_msg:body(M2c)),
+    ?assertMatch(#{delivery_count := 1,
+                   first_acquirer := false},
+                 amqp10_msg:headers(M2c)),
     ok = amqp10_client:settle_msg(Receiver, M2c, modified),
 
     ok = amqp10_client:detach_link(Receiver),
