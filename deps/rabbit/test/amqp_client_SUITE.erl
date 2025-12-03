@@ -497,23 +497,26 @@ delivery_count(QType, Config) ->
                    first_acquirer := true},
                  amqp10_msg:headers(Msg1)),
 
-    %% delivery-failed=true in modified coutcome must increment the delivery-count
     %% delivery-failed=false in modified coutcome must not increment the delivery-count
     ok = amqp10_client:settle_msg(QReceiver, Msg1, {modified, false, false, #{}}),
     {ok, Msg2} = amqp10_client:get_msg(QReceiver),
     ?assertMatch(#{delivery_count := 0,
                    first_acquirer := false},
                  amqp10_msg:headers(Msg2)),
+
+    %% delivery-failed=true in modified coutcome must increment the delivery-count
     ok = amqp10_client:settle_msg(QReceiver, Msg2, {modified, true, false, #{}}),
     {ok, Msg3} = amqp10_client:get_msg(QReceiver),
     ?assertMatch(#{delivery_count := 1,
                    first_acquirer := false},
                  amqp10_msg:headers(Msg3)),
-    ok = amqp10_client:settle_msg(DLQReceiver, Msg3, {modified, true, true, #{}}),
+
+    ok = amqp10_client:settle_msg(QReceiver, Msg3, {modified, true, true, #{}}),
     {ok, Msg4} = amqp10_client:get_msg(DLQReceiver),
     ?assertMatch(#{delivery_count := 2,
                    first_acquirer := false},
                  amqp10_msg:headers(Msg4)),
+
     ok = amqp10_client:settle_msg(DLQReceiver, Msg4, {modified, false, true, #{}}),
     {ok, Msg5} = amqp10_client:get_msg(QReceiver),
     ?assertMatch(#{delivery_count := 2,
