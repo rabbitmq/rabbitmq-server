@@ -183,10 +183,10 @@ end}.
     {datatype, {enum, [verify_peer, verify_none]}}]}.
 
 {mapping, "cluster_formation.etcd.ssl_options.cacertfile", "rabbit.cluster_formation.peer_discovery_etcd.ssl_options.cacertfile",
-    [{datatype, string}, {validators, ["file_accessible"]}]}.
+    [{datatype, string}, {validators, ["pem_file"]}]}.
 
 {mapping, "cluster_formation.etcd.ssl_options.certfile", "rabbit.cluster_formation.peer_discovery_etcd.ssl_options.certfile",
-    [{datatype, string}, {validators, ["file_accessible"]}]}.
+    [{datatype, string}, {validators, ["pem_file"]}]}.
 
 {mapping, "cluster_formation.etcd.ssl_options.cert", "rabbit.cluster_formation.peer_discovery_etcd.ssl_options.cert",
     [{datatype, string}]}.
@@ -220,7 +220,7 @@ fun(Conf) ->
 end}.
 
 {mapping, "cluster_formation.etcd.ssl_options.keyfile", "rabbit.cluster_formation.peer_discovery_etcd.ssl_options.keyfile",
-    [{datatype, string}, {validators, ["file_accessible"]}]}.
+    [{datatype, string}, {validators, ["pem_file"]}]}.
 
 {mapping, "cluster_formation.etcd.ssl_options.log_alert", "rabbit.cluster_formation.peer_discovery_etcd.ssl_options.log_alert",
     [{datatype, {enum, [true, false]}}]}.

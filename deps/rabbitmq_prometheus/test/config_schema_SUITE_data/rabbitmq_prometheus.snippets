@@ -151,9 +151,9 @@
    {tls_listener,
     "prometheus.ssl.ip   = 192.168.1.2
      prometheus.ssl.port = 15691
-     prometheus.ssl.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
-     prometheus.ssl.certfile = test/config_schema_SUITE_data/certs/cert.pem
-     prometheus.ssl.keyfile = test/config_schema_SUITE_data/certs/key.pem
+     prometheus.ssl.cacertfile = test/config_schema_SUITE_data/certs/ca_certificate.pem
+     prometheus.ssl.certfile = test/config_schema_SUITE_data/certs/server_certificate.pem
+     prometheus.ssl.keyfile = test/config_schema_SUITE_data/certs/server_key.pem
      prometheus.ssl.verify   = verify_none
      prometheus.ssl.fail_if_no_peer_cert = false",
     [{rabbitmq_prometheus,[
@@ -161,9 +161,9 @@
                                         {ip, "192.168.1.2"},
                                         {port,15691},
                                         {ssl_opts, [
-                                          {cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
-                                          {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
-                                          {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+                                          {cacertfile,"test/config_schema_SUITE_data/certs/ca_certificate.pem"},
+                                          {certfile,"test/config_schema_SUITE_data/certs/server_certificate.pem"},
+                                          {keyfile,"test/config_schema_SUITE_data/certs/server_key.pem"},
                                           {verify, verify_none},
                                           {fail_if_no_peer_cert, false}
                                         ]}
@@ -174,9 +174,9 @@
    {tls_listener_cipher_suites,
     "prometheus.ssl.ip   = 192.168.1.2
      prometheus.ssl.port = 15691
-     prometheus.ssl.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
-     prometheus.ssl.certfile = test/config_schema_SUITE_data/certs/cert.pem
-     prometheus.ssl.keyfile = test/config_schema_SUITE_data/certs/key.pem
+     prometheus.ssl.cacertfile = test/config_schema_SUITE_data/certs/ca_certificate.pem
+     prometheus.ssl.certfile = test/config_schema_SUITE_data/certs/server_certificate.pem
+     prometheus.ssl.keyfile = test/config_schema_SUITE_data/certs/server_key.pem
 
      prometheus.ssl.honor_cipher_order   = true
      prometheus.ssl.honor_ecc_order      = true
@@ -203,9 +203,9 @@
                                         {ip, "192.168.1.2"},
                                         {port,15691},
                                         {ssl_opts, [
-                                          {cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
-                                          {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
-                                          {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+                                          {cacertfile,"test/config_schema_SUITE_data/certs/ca_certificate.pem"},
+                                          {certfile,"test/config_schema_SUITE_data/certs/server_certificate.pem"},
+                                          {keyfile,"test/config_schema_SUITE_data/certs/server_key.pem"},
 
                                           {verify, verify_peer},
                                           {fail_if_no_peer_cert, false},
