@@ -178,6 +178,9 @@
 -export([collect_payloads/1,
          collect_payloads/2]).
 
+%% Called remotely to handle unregistration of old projections.
+-export([supports_rabbit_khepri_topic_trie_v2/0]).
+
 -ifdef(TEST).
 -export([force_metadata_store/1,
          clear_forced_metadata_store/0]).
@@ -1309,7 +1312,7 @@ projection_fun_for_sets(MapFun) ->
     end.
 
 register_rabbit_topic_graph_projection() ->
-    Name = rabbit_khepri_topic_trie,
+    Name = rabbit_khepri_topic_trie_v2,
     %% This projection calls some external functions which are disallowed by
     %% Horus because they interact with global or random state. We explicitly
     %% allow them here for performance reasons.
@@ -1379,7 +1382,37 @@ register_rabbit_topic_graph_projection() ->
                     _Kind = ?KHEPRI_WILDCARD_STAR,
                     _DstName = ?KHEPRI_WILDCARD_STAR,
                     _RoutingKey = ?KHEPRI_WILDCARD_STAR),
+    _ = unregister_rabbit_topic_trie_v1_projection(),
     khepri:register_projection(?STORE_ID, PathPattern, Projection).
+
+supports_rabbit_khepri_topic_trie_v2() ->
+    true.
+
+unregister_rabbit_topic_trie_v1_projection() ->
+    Nodes = rabbit_nodes:list_members(),
+    Rets = erpc:multicall(
+             Nodes,
+             ?MODULE, supports_rabbit_khepri_topic_trie_v2, []),
+    SupportedEverywhere = lists:all(
+                            fun(Ret) ->
+                                    Ret =:= {ok, true}
+                            end, Rets),
+    case SupportedEverywhere of
+        true ->
+            ?LOG_DEBUG(
+               "DB: unregister old `rabbit_khepri_topic_trie` Khepri "
+               "projection",
+               #{domain => ?RMQLOG_DOMAIN_DB}),
+            khepri:unregister_projections(
+              ?STORE_ID, [rabbit_khepri_topic_trie]);
+        false ->
+            ?LOG_DEBUG(
+               "DB: skipping unregistration of old "
+               "`rabbit_khepri_topic_trie` Khepri because some RabbitMQ "
+               "nodes still use it",
+               #{domain => ?RMQLOG_DOMAIN_DB}),
+            ok
+    end.
 
 -spec follow_down_update(Table, Exchange, Words, UpdateFn) -> Ret when
       Table :: ets:tid(),
@@ -1427,7 +1460,9 @@ follow_down_update(Table, Exchange, FromNodeId, [To | Rest], UpdateFn) ->
     case follow_down_update(Table, Exchange, ToNodeId, Rest, UpdateFn) of
         delete ->
             OutEdgePattern = #topic_trie_edge{trie_edge =
-                                              TrieEdge#trie_edge{word = '_'},
+                                              TrieEdge#trie_edge{
+                                                node_id = ToNodeId,
+                                                word = '_'},
                                               node_id = '_'},
             case ets:match(Table, OutEdgePattern, 1) of
                 '$end_of_table' ->

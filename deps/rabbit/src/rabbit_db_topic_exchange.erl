@@ -26,7 +26,7 @@
 -define(MNESIA_NODE_TABLE, rabbit_topic_trie_node).
 -define(MNESIA_EDGE_TABLE, rabbit_topic_trie_edge).
 -define(MNESIA_BINDING_TABLE, rabbit_topic_trie_binding).
--define(KHEPRI_PROJECTION, rabbit_khepri_topic_trie).
+-define(KHEPRI_PROJECTION, rabbit_khepri_topic_trie_v2).
 
 -type match_result() :: [rabbit_types:binding_destination() |
                          {rabbit_amqqueue:name(), rabbit_types:binding_key()}].
