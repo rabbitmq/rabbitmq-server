@@ -280,3 +280,12 @@
 .theme-switcher[x-scheme="light"]:after {
     filter: invert(1);
 }
+
+.specificities_icons svg {
+    filter: invert(1);
+}
+
+div.section-invisible h2,
+div.section-visible h2 {
+    background-blend-mode: difference;
+}
