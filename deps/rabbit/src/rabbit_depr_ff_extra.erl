@@ -58,14 +58,17 @@ cli_info0(DeprecatedFeature) ->
 
               App = maps:get(provided_by, FeatureProps),
               DeprecationPhase = maps:get(deprecation_phase, FeatureProps, ""),
-              State = maps:get(state, FeatureProps, ""),
               Desc = maps:get(desc, FeatureProps, ""),
               DocUrl = maps:get(doc_url, FeatureProps, ""),
-              Info = #{name => FeatureName,
-                       desc => unicode:characters_to_binary(Desc),
-                       deprecation_phase => DeprecationPhase,
-                       state => State,
-                       doc_url => unicode:characters_to_binary(DocUrl),
-                       provided_by => App},
+              BaseInfo = #{name => FeatureName,
+                          desc => unicode:characters_to_binary(Desc),
+                          deprecation_phase => DeprecationPhase,
+                          doc_url => unicode:characters_to_binary(DocUrl),
+                          provided_by => App},
+              Info = maps:merge(BaseInfo,
+                               case maps:find(state, FeatureProps) of
+                                   {ok, State} -> #{state => State};
+                                   error        -> #{}
+                               end),
               [Info | Acc]
       end, [], lists:sort(maps:keys(DeprecatedFeature))).
