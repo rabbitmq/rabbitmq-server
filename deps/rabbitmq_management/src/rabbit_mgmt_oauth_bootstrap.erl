@@ -9,6 +9,7 @@
 
 -export([init/2]).
 -include("rabbit_mgmt.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 %%--------------------------------------------------------------------
 
@@ -18,6 +19,7 @@ init(Req0, State) ->
 
 bootstrap_oauth(Req0, State) ->
     AuthSettings = enrich_oauth_settings(Req0, rabbit_mgmt_wm_auth:authSettings()),
+    ?LOG_DEBUG("AuthSettings: ~p", [AuthSettings]),
     Dependencies = oauth_dependencies(),
     {Req1, SetTokenAuth} = set_token_auth(AuthSettings, Req0),
     JSContent = import_dependencies(Dependencies) ++
@@ -29,7 +31,10 @@ bootstrap_oauth(Req0, State) ->
         JSContent, Req1), State}.
 
 enrich_oauth_settings(Req0, AuthSettings) ->
-    case get_auth_mechanism(Req0) of
+    Auth = get_auth_mechanism(Req0),
+    ValidAuth = validate_auth_mechanism(Auth, AuthSettings),
+    ?LOG_DEBUG("validate_auth_mechanism ~p -> ~p", [Auth, ValidAuth]),
+    case ValidAuth of
         undefined -> AuthSettings;
         {_, _} = Auth -> [Auth | AuthSettings]
     end.
@@ -42,9 +47,31 @@ get_auth_mechanism(Req) ->
             end;
         Val -> {strict_auth_mechanism, Val}
     end.
+validate_auth_mechanism({_, <<"oauth2:", Id/binary>>} = Auth, AuthSettings) ->    
+    case maps:is_key(Id, proplists:get_value(oauth_resource_servers, AuthSettings)) of 
+        true -> Auth;
+        _ -> undefined
+    end;
+validate_auth_mechanism({_, <<"basic">>} = Auth, _AuthSettings) -> Auth;
+validate_auth_mechanism({_, _}, _AuthSettings) -> undefined;
+validate_auth_mechanism(_, _) -> undefined.
+
+extract_referer_params(Req) ->
+    case cowboy_req:header(<<"referer">>, Req) of
+        undefined -> [];
+        Referer ->
+            case uri_string:parse(Referer) of
+                #{query := Query} when Query =/= undefined ->
+                    uri_string:dissect_query(Query);
+                _ ->
+                    []
+            end
+    end.
 get_param_or_header(ParamName, HeaderName, Req) ->
-    case rabbit_mgmt_util:qs_val(ParamName, Req) of
-        undefined -> cowboy_req:parse_header(HeaderName, Req);
+    ReqParams = maps:from_list(extract_referer_params(Req)),
+    ?LOG_DEBUG("ReqParams: ~p", [ReqParams]),
+    case maps:get(ParamName, ReqParams, undefined) of
+        undefined -> cowboy_req:header(HeaderName, Req);
         Val -> Val
     end.
 

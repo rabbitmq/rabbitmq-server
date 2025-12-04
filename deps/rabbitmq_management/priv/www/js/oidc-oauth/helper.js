@@ -193,6 +193,25 @@ function oauth_initialize_user_manager(resource_server) {
     });
 
 }
+function parseAuthMechanism(oauth, name, auth_mechanism) {
+    if (!auth_mechanism) {
+        return oauth;
+    }
+    
+    if (auth_mechanism.includes(':')) {
+        // OAuth2 case: "oauth2:prod"
+        const [authMethod, resourceId] = auth_mechanism.split(':');        
+        if (authMethod === 'oauth2' && resourceId) {
+            if (oauth.resource_servers.some(resource => resource.id === resourceId)) {
+              oauth[name] = {type: "oauth2", resource_id: resourceId};            
+            }            
+        }
+    } else if (auth_mechanism === 'basic' && oauth.oauth_disable_basic_auth === false) {
+       oauth[name] = {type: "basic"};
+    }
+    return oauth;
+}
+
 export function oauth_initialize(authSettings) {
     authSettings = auth_settings_apply_defaults(authSettings);
     let oauth = {
@@ -202,7 +221,14 @@ export function oauth_initialize(authSettings) {
       "oauth_disable_basic_auth" : authSettings.oauth_disable_basic_auth
     }
     if (!oauth.enabled) return oauth;
-
+    if (authSettings.resource_servers.length > 1 || !authSettings.oauth_disable_basic_auth) {
+      if (authSettings.strict_auth_mechanism) {
+        oauth = parseAuthMechanism(oauth, "strict_auth_mechanism", authSettings.strict_auth_mechanism);
+      }else if (authSettings.preferred_auth_mechanism) {
+        oauth = parseAuthMechanism(oauth, "preferred_auth_mechanism", authSettings.preferred_auth_mechanism);
+      }
+    }
+     
     let resource_server = null;
 
     if (oauth.resource_servers.length == 1) {
