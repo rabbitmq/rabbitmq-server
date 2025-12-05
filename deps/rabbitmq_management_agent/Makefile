@@ -25,6 +25,7 @@ PLT_APPS += rabbitmq_cli
 
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
+ELIXIR = system
 
 include ../../rabbitmq-components.mk
 TEST_DEPS := $(filter-out rabbitmq_test,$(TEST_DEPS))

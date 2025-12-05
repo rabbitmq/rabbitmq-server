@@ -18,6 +18,7 @@ dep_inet_tcp_proxy = git https://github.com/rabbitmq/inet_tcp_proxy master
 
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
+ELIXIR = system
 
 include ../../rabbitmq-components.mk
 include ../../erlang.mk
