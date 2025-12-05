@@ -72,6 +72,8 @@ endif
 #     gmake start-cluster NODES=3 ENABLED_PLUGINS="rabbitmq_management rabbitmq_stream rabbitmq_stream_management"
 ENABLED_PLUGINS ?= rabbitmq_management
 RABBITMQ_ENABLED_PLUGINS ?= $(call comma_list,$(ENABLED_PLUGINS))
+# This is necessary for the recursively called targets
+# used by `gmake start-cluster`.
 export RABBITMQ_ENABLED_PLUGINS
 
 include erlang.mk
