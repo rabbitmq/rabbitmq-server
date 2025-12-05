@@ -176,6 +176,7 @@ dispatcher() ->
      {"/users/:user",                                          rabbit_mgmt_wm_user, []},
      {"/users/:user/permissions",                              rabbit_mgmt_wm_permissions_user, []},
      {"/users/:user/topic-permissions",                        rabbit_mgmt_wm_topic_permissions_user, []},
+     {"/users/:user/queues",                                   rabbit_mgmt_wm_user_queues, []},
      {"/user-limits/:user/:name",                              rabbit_mgmt_wm_user_limit, []},
      {"/user-limits",                                          rabbit_mgmt_wm_user_limits, []},
      {"/user-limits/:user",                                    rabbit_mgmt_wm_user_limits, []},
