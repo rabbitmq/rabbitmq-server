@@ -66,15 +66,16 @@ ifdef COMMUNITY_PLUGINS
 DEPS += $(RABBITMQ_COMMUNITY)
 endif
 
+# Plugins to enable for `gmake run-broker`, `gmake start-cluster`, etc.
+# To override:
+#     gmake run-broker ENABLED_PLUGINS="rabbitmq_management rabbitmq_stream"
+#     gmake start-cluster NODES=3 ENABLED_PLUGINS="rabbitmq_management rabbitmq_stream rabbitmq_stream_management"
+ENABLED_PLUGINS ?= rabbitmq_management
+RABBITMQ_ENABLED_PLUGINS ?= $(call comma_list,$(ENABLED_PLUGINS))
+export RABBITMQ_ENABLED_PLUGINS
+
 include erlang.mk
 include mk/github-actions.mk
-
-# If PLUGINS was set when we use run-broker we want to
-# fill in the enabled plugins list. PLUGINS is a more
-# natural space-separated list.
-ifdef PLUGINS
-RABBITMQ_ENABLED_PLUGINS ?= $(call comma_list,$(PLUGINS))
-endif
 
 # --------------------------------------------------------------------
 # Distribution - common variables and generic functions.
