@@ -81,6 +81,7 @@
 
 -type queue_name() :: rabbit_amqqueue:name().
 -type queue_state() :: term().
+-type reject_reason() :: maxlen | down.
 %% sequence number typically
 -type correlation() :: term().
 -type arguments() :: queue_arguments | consumer_arguments.
@@ -101,6 +102,7 @@
     %% indicate to the queue type module that a message has been delivered
     %% fully to the queue
     {settled, queue_name(), [correlation()]} |
+    {rejected, queue_name(), reject_reason(), [correlation()]} |
     {deliver, rabbit_types:ctag(), boolean(), [rabbit_amqqueue:qmsg()]} |
     {block | unblock, QueueName :: term()} |
     credit_reply_action().
@@ -158,6 +160,7 @@
               credit_reply_action/0,
               action/0,
               actions/0,
+              reject_reason/0,
               settle_op/0,
               queue_type/0,
               credit/0,
