@@ -384,11 +384,13 @@ quorum_queue_rejects(Config) ->
     %% The queue will reject m3.
     V = ?config(mqtt_version, Config),
     if V =:= v3 orelse V =:= v4 ->
-           %% v3 and v4 do not support NACKs. Therefore, the server should drop the message.
+           %% v3 and v4 do not support NACKs.
+           %% Therefore, the server should drop the message.
            ?assertEqual(puback_timeout, util:publish_qos1_timeout(C, Name, <<"m3">>, 700));
        V =:= v5 ->
-           %% v5 supports NACKs. Therefore, the server should send us a NACK.
-           ?assertMatch({ok, #{reason_code_name := implementation_specific_error}},
+           %% v5 supports NACKs.
+           %% Therefore, the server should send us a NACK with the correct reason.
+           ?assertMatch({ok, #{reason_code_name := quota_exceeded}},
                         emqtt:publish(C, Name, <<"m3">>, qos1))
     end,
 

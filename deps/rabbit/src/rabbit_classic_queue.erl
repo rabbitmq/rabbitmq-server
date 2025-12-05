@@ -390,7 +390,7 @@ handle_event(QName, {reject_publish, SeqNo, _QPid},
     %% It does not matter which queue rejected the message,
     %% if any queue did, it should not be confirmed.
     {U, Rejected} = reject_seq_no(SeqNo, U0),
-    Actions = [{rejected, QName, Rejected}],
+    Actions = [{rejected, QName, maxlen, Rejected}],
     {ok, State#?STATE{unconfirmed = U}, Actions};
 handle_event(QName, {down, Pid, Info}, #?STATE{monitored = Monitored,
                                                unconfirmed = U0} = State0) ->
@@ -405,11 +405,19 @@ handle_event(QName, {down, Pid, Info}, #?STATE{monitored = Monitored,
                           maps:filter(fun (_, #msg_status{pending = Pids}) ->
                                               lists:member(Pid, Pids)
                                       end, U0)),
-            {Unconfirmed, Settled, Rejected} =
-                settle_seq_nos(MsgSeqNos, Pid, U0, down),
-            Actions = settlement_action(
-                        settled, QName, Settled,
-                        settlement_action(rejected, QName, Rejected, Actions0)),
+            {Unconfirmed, Settled, Rejected} = settle_seq_nos(MsgSeqNos, Pid, U0, down),
+            Actions1 = case Rejected of
+                           [] ->
+                               Actions0;
+                           _ ->
+                               [{rejected, QName, down, Rejected} | Actions0]
+                       end,
+            Actions = case Settled of
+                          [] ->
+                              Actions1;
+                          _ ->
+                              [{settled, QName, Settled} | Actions1]
+                      end,
             {ok, State#?STATE{unconfirmed = Unconfirmed}, Actions};
         true ->
             %% any abnormal exit should be considered a full reject of the
@@ -425,16 +433,11 @@ handle_event(QName, {down, Pid, Info}, #?STATE{monitored = Monitored,
                           end, [], U0),
             U = maps:without(MsgIds, U0),
             {ok, State#?STATE{unconfirmed = U},
-             [{rejected, QName, MsgIds} | Actions0]}
+             [{rejected, QName, down, MsgIds} | Actions0]}
     end;
 handle_event(_QName, Action, State)
   when element(1, Action) =:= credit_reply ->
     {ok, State, [Action]}.
-
-settlement_action(_Type, _QRef, [], Acc) ->
-    Acc;
-settlement_action(Type, QRef, MsgSeqs, Acc) ->
-    [{Type, QRef, MsgSeqs} | Acc].
 
 supports_stateful_delivery() -> true.
 

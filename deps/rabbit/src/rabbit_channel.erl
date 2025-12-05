@@ -2787,7 +2787,7 @@ handle_queue_actions(Actions, State) ->
     lists:foldl(
       fun({settled, QRef, MsgSeqNos}, S0) ->
               confirm(MsgSeqNos, QRef, S0);
-         ({rejected, _QRef, MsgSeqNos}, S0) ->
+         ({rejected, _QRef, _Reason, MsgSeqNos}, S0) ->
               {U, Rej} =
               lists:foldr(
                 fun(SeqNo, {U1, Acc}) ->

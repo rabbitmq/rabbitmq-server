@@ -1053,7 +1053,7 @@ invalid_transfer_settled_flag(Config) ->
 
 quorum_queue_rejects(Config) ->
     {_, Session, LinkPair} = Init = init(Config),
-    QName = atom_to_binary(?FUNCTION_NAME),
+    QName = <<"🎄"/utf8>>,
     QProps = #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>},
                               <<"x-max-length">> => {ulong, 1},
                               <<"x-overflow">> => {utf8, <<"reject-publish">>}}},
@@ -1068,12 +1068,11 @@ quorum_queue_rejects(Config) ->
     %% Therefore, we expect the first 2 messages to be accepted.
     ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"tag a">>, <<>>, false)),
     ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"tag b">>, <<>>, false)),
-    [receive {amqp10_disposition, {accepted, DTag}} -> ok
-     after 30000 -> ct:fail({missing_accepted, DTag})
-     end || DTag <- [<<"tag a">>, <<"tag b">>]],
+    ok = wait_for_accepted(<<"tag a">>),
+    ok = wait_for_accepted(<<"tag b">>),
 
     %% From now on the quorum queue should reject our publishes.
-    %% Send many messages aync.
+    %% Send many messages async.
     NumMsgs = 20,
     DTags = [begin
                  DTag = integer_to_binary(N),
@@ -1086,8 +1085,13 @@ quorum_queue_rejects(Config) ->
     %% and the final one as unsettled again
     ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"tag d">>, <<>>, false)),
 
-    [receive {amqp10_disposition, {rejected, DTag}} -> ok
-     after 30000 -> ct:fail({missing_rejected, DTag})
+    [receive {amqp10_disposition, {{rejected, Error}, DTag}} ->
+                 ?assertMatch(
+                    #'v1_0.error'{
+                       info = {map, [{{symbol, <<"queue">>}, {utf8, QName}},
+                                     {{symbol, <<"reason">>}, {symbol, <<"maxlen">>}}]}},
+                    Error)
+     after 9000 -> ct:fail({missing_rejected, DTag})
      end || DTag <- DTags ++ [<<"tag d">>]],
 
     ok = amqp10_client:detach_link(Sender),
@@ -3659,7 +3663,11 @@ target_classic_queue_down(Config) ->
     %% Instead, the server should reject messages that are sent to classic queues that are down.
     DTag2 = <<"t2">>,
     ok = amqp10_client:send_msg(Sender, amqp10_msg:new(DTag2, <<"m2">>, false)),
-    ok = wait_for_settlement(DTag2, rejected),
+    ExpectedErr = #'v1_0.error'{
+                     condition = ?V_1_0_AMQP_ERROR_PRECONDITION_FAILED,
+                     info = {map, [{{symbol, <<"queue">>}, {utf8, QName}},
+                                   {{symbol, <<"reason">>}, {symbol, <<"unavailable">>}}]}},
+    ok = wait_for_settlement(DTag2, {rejected, ExpectedErr}),
 
     ok = rabbit_ct_broker_helpers:start_node(Config, ClassicQueueNode),
     %% Now that the classic queue is up again, we should be able to attach a new receiver
