@@ -174,6 +174,7 @@ all_tests() -> [
     queue_pagination_test,
     queue_pagination_columns_test,
     queues_pagination_permissions_test,
+    user_queues_test,
     samples_range_test,
     sorting_test,
     format_output_test,
@@ -2946,6 +2947,39 @@ queues_pagination_permissions_test(Config) ->
     http_delete(Config, "/queues/vh1/test1","admin","admin", {group, '2xx'}),
     http_delete(Config, "/users/admin", {group, '2xx'}),
     http_delete(Config, "/users/non-admin", {group, '2xx'}),
+    passed.
+
+user_queues_test(Config) ->
+    %% "alice" has no access, "bob" and "carlos" have access.
+    http_put(Config, "/users/alice", [{password, <<"alice">>},
+                                      {tags, <<>>}], {group, '2xx'}),
+    http_put(Config, "/users/bob", [{password, <<"bob">>},
+                                    {tags, <<"management">>}], {group, '2xx'}),
+    http_put(Config, "/users/carlos", [{password, <<"carlos">>},
+                                       {tags, <<"management">>}], {group, '2xx'}),
+
+    Perms = [{configure, <<".*">>},
+             {write,     <<".*">>},
+             {read,      <<".*">>}],
+    http_put(Config, "/permissions/%2F/bob", Perms, {group, '2xx'}),
+    http_put(Config, "/permissions/%2F/carlos", Perms, {group, '2xx'}),
+
+    QArgs = #{},
+    http_put(Config, "/queues/%2F/bobq", QArgs, "bob","bob", {group, '2xx'}),
+    http_put(Config, "/queues/%2F/carlosq", QArgs, "carlos","carlos", {group, '2xx'}),
+
+    http_get(Config, "/users/bob/queues", "alice", "alice", ?NOT_AUTHORISED),
+    http_get(Config, "/users/carlos/queues", "alice", "alice", ?NOT_AUTHORISED),
+    [#{name := <<"bobq">>}] = http_get(Config, "/users/bob/queues", "bob", "bob", ?OK),
+    [#{name := <<"carlosq">>}] = http_get(Config, "/users/carlos/queues", "bob", "bob", ?OK),
+    [#{name := <<"bobq">>}] = http_get(Config, "/users/bob/queues", "carlos", "carlos", ?OK),
+    [#{name := <<"carlosq">>}] = http_get(Config, "/users/carlos/queues", "carlos", "carlos", ?OK),
+
+    http_delete(Config, "/queues/%2F/bobq","bob","bob", {group, '2xx'}),
+    http_delete(Config, "/queues/%2F/carlosq","carlos","carlos", {group, '2xx'}),
+    http_delete(Config, "/users/alice", {group, '2xx'}),
+    http_delete(Config, "/users/bob", {group, '2xx'}),
+    http_delete(Config, "/users/carlos", {group, '2xx'}),
     passed.
 
 samples_range_test(Config) ->
