@@ -105,8 +105,8 @@ will run the older version.
 
 ``` shell
 # Run from repository root.
-# Starts a node with the management plugin enabled
-gmake run-broker RABBITMQ_PLUGINS=rabbitmq_management
+# Starts a node with management and two stream plugins enabled
+gmake run-broker ENABLED_PLUGINS="rabbitmq_management rabbitmq_stream rabbitmq_stream_management"
 ```
 
 The nodes will be started in the background. They will use `rabbit@{hostname}` for its name, so CLI will be able to contact
@@ -121,8 +121,8 @@ it without an explicit `-n` (`--node`) argument:
 
 ``` shell
 # Run from repository root.
-# Starts a three node cluster with the management plugin enabled
-gmake start-cluster NODES=3 RABBITMQ_PLUGINS=rabbitmq_management
+# Starts a three node cluster with management and two stream plugins enabled
+gmake start-cluster NODES=3 ENABLED_PLUGINS="rabbitmq_management rabbitmq_stream rabbitmq_stream_management"
 ```
 
 The node will use `rabbit-{n}@{hostname}` for names, so CLI must
@@ -163,8 +163,8 @@ gmake stop-cluster NODES=3
 When working on management UI code, besides starting the node with
 
 ``` shell
-# starts a node with the management plugin enabled
-gmake run-broker RABBITMQ_PLUGINS=rabbitmq_management
+# starts a node with management and two stream plugins enabled
+gmake run-broker ENABLED_PLUGINS="rabbitmq_management rabbitmq_stream rabbitmq_stream_management"
 ```
 
 (or any other set of plugins), it is highly recommended to use [BrowserSync](https://browsersync.io/#install)
