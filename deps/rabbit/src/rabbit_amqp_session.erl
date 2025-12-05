@@ -2613,6 +2613,7 @@ rejected(QNameBin, down) ->
                           [{{symbol, <<"queue">>}, {utf8, QNameBin}},
                            {{symbol, <<"reason">>}, {symbol, <<"unavailable">>}}]}}}.
 
+
 maybe_grant_link_credit(Credit, MaxLinkCredit, DeliveryCount, NumUnconfirmed, Handle) ->
     case grant_link_credit(Credit, MaxLinkCredit, NumUnconfirmed) of
         true ->
