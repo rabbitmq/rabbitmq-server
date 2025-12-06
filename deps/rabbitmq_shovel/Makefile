@@ -29,6 +29,7 @@ PLT_APPS += rabbitmq_cli
 
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk elvis_mk
+ELIXIR = system
 dep_elvis_mk = git https://github.com/inaka/elvis.mk.git master
 
 include ../../rabbitmq-components.mk

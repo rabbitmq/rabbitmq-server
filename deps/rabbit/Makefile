@@ -151,6 +151,7 @@ MD_MANPAGES  = $(patsubst %,%.md,$(MANPAGES))
 CT_HOOKS = rabbit_ct_hook
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
+ELIXIR = system
 
 include ../../rabbitmq-components.mk
 include ../../erlang.mk
