@@ -9,6 +9,7 @@
 
 -export([init/2]).
 -include("rabbit_mgmt.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 %%--------------------------------------------------------------------
 
@@ -17,7 +18,8 @@ init(Req0, State) ->
         rabbit_mgmt_headers:set_common_permission_headers(Req0, ?MODULE), ?MODULE), State).
 
 bootstrap_oauth(Req0, State) ->
-    AuthSettings = rabbit_mgmt_wm_auth:authSettings(),
+    AuthSettings = enrich_oauth_settings(Req0, rabbit_mgmt_wm_auth:authSettings()),
+    ?LOG_DEBUG("AuthSettings: ~p", [AuthSettings]),
     Dependencies = oauth_dependencies(),
     {Req1, SetTokenAuth} = set_token_auth(AuthSettings, Req0),
     JSContent = import_dependencies(Dependencies) ++
@@ -27,6 +29,51 @@ bootstrap_oauth(Req0, State) ->
     
     {ok, cowboy_req:reply(200, #{<<"content-type">> => <<"text/javascript; charset=utf-8">>},
         JSContent, Req1), State}.
+
+enrich_oauth_settings(Req0, AuthSettings) ->
+    Auth = get_auth_mechanism(Req0),
+    ValidAuth = validate_auth_mechanism(Auth, AuthSettings),
+    ?LOG_DEBUG("validate_auth_mechanism ~p -> ~p", [Auth, ValidAuth]),
+    case ValidAuth of
+        undefined -> AuthSettings;
+        {_, _} = Auth -> [Auth | AuthSettings]
+    end.
+get_auth_mechanism(Req) ->
+    case get_param_or_header(<<"strict-auth-mechanism">>, <<"x-strict-auth-mechanism">>, Req) of
+        undefined ->
+            case get_param_or_header(<<"preferred-auth-mechanism">>, <<"x-preferred-auth-mechanism">>, Req) of
+                undefined -> undefined;
+                Val -> {preferred_auth_mechanism, Val}
+            end;
+        Val -> {strict_auth_mechanism, Val}
+    end.
+validate_auth_mechanism({_, <<"oauth2:", Id/binary>>} = Auth, AuthSettings) ->    
+    case maps:is_key(Id, proplists:get_value(oauth_resource_servers, AuthSettings)) of 
+        true -> Auth;
+        _ -> undefined
+    end;
+validate_auth_mechanism({_, <<"basic">>} = Auth, _AuthSettings) -> Auth;
+validate_auth_mechanism({_, _}, _AuthSettings) -> undefined;
+validate_auth_mechanism(_, _) -> undefined.
+
+extract_referer_params(Req) ->
+    case cowboy_req:header(<<"referer">>, Req) of
+        undefined -> [];
+        Referer ->
+            case uri_string:parse(Referer) of
+                #{query := Query} when Query =/= undefined ->
+                    uri_string:dissect_query(Query);
+                _ ->
+                    []
+            end
+    end.
+get_param_or_header(ParamName, HeaderName, Req) ->
+    ReqParams = maps:from_list(extract_referer_params(Req)),
+    ?LOG_DEBUG("ReqParams: ~p", [ReqParams]),
+    case maps:get(ParamName, ReqParams, undefined) of
+        undefined -> cowboy_req:header(HeaderName, Req);
+        Val -> Val
+    end.
 
 set_oauth_settings(AuthSettings) ->
     JsonAuthSettings = rabbit_json:encode(rabbit_mgmt_format:format_nulls(AuthSettings)),
