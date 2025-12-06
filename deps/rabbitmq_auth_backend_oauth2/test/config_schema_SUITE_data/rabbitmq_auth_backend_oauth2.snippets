@@ -9,12 +9,12 @@
         auth_oauth2.preferred_username_claims.3 = email
         auth_oauth2.verify_aud = true
         auth_oauth2.default_key = id1
-        auth_oauth2.signing_keys.id1 = test/config_schema_SUITE_data/certs/key.pem
-        auth_oauth2.signing_keys.id2 = test/config_schema_SUITE_data/certs/cert.pem
+        auth_oauth2.signing_keys.id1 = test/config_schema_SUITE_data/certs/server_key.pem
+        auth_oauth2.signing_keys.id2 = test/config_schema_SUITE_data/certs/server_key.pem
         auth_oauth2.jwks_uri = https://my-jwt-issuer/jwks.json
         auth_oauth2.jwks_url = https://my-jwt-issuer/jwks.json
         auth_oauth2.issuer = https://my-jwt-issuer
-        auth_oauth2.https.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
+        auth_oauth2.https.cacertfile = test/config_schema_SUITE_data/certs/ca_certificate.pem
         auth_oauth2.https.peer_verification = verify_none
         auth_oauth2.https.depth = 5
         auth_oauth2.https.fail_if_no_peer_cert = false
@@ -42,12 +42,12 @@
               {default_key, <<"id1">>},
               {signing_keys,
                   #{
-                      <<"id1">> => {pem, <<"I'm not a certificate">>},
-                      <<"id2">> => {pem, <<"I'm not a certificate">>}
+                      <<"id1">> => {pem, <<"-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQClzAFmpTOQFJy+\nR1mybjlE6K3O7YPpL7W1kFYN4fXOt6QgDGXsJ+eHQBcNd2O4t+24syiEc+HQgM83\nXYNLatRmedYLWHL+AmMDRndFrNRKag6W0+xlAuy95q4wwWLcU5KkrHZu2DKvfzmT\nAcuNC+VgDDdk1W1CipjZInQn0VmHuTeUmePLw13kXoiV+k9MjWi9zU8GBOHn19RN\n13+Np5wA3oTaJ4K+2/f/mru2bTCbDEAiHmXZ6M4BW3dg3NyERT1mhLNkijPpGRmg\nULggXwG240vJ1YV6QH3voTxbQ2uGoJBOZ2pjjCv7ORsuyyt+TwYJnrs0qcSwWh2b\nWvEd/cv1AgMBAAECggEAAisLsYBoDxuvnKFCc2ul8W820BbU/fUPqIOlA+A/MyF0\ncq5qQPGGyowbQ1rIqJlrcRoS+BsG2A+lc8kmPZOiUTl3KG7AyMnxs5oVskkY6y4P\n8tnHICichpg5bSTeRf1n8A+2mA/ZFPrNnzGQNX2qFaE2smBo2NWrhGRDIYgHJnNh\nwnkPDA3Mn0qqZKxY7tyIhJw/y4s1spcvZCiK7qV3x4PxRPPFx+8owjXYa5pedvY/\nqcGfT2Jma9YNYEgnSMnkuU+bLn6iQrQCfFTDJn9UBMwvZSu6bK+1F+JdhC/XBBIy\nZuFfTp2HJYEKOk1IT149T5ONx39GsRi8DLzDv1Dq4QKBgQDYAUBNWXpyC6dwCYz7\nfQKiogPD61fTOJSuKARUJyCJ/W0qK1Zb0RXySa7831lGljeAOw8M85lwT2ap81QB\n8Wah8i/R61X5lVaZERVFJbT+DCoPEjL54Qqn+NbQzJDGTkVvG7k5WYpHBT95zrjI\nT6IxiyPrNe34a+L7u35StW19VQKBgQDEft5H7aRjshivUyn9wOpn43c8ajRZ/FS5\ngkhntthGqj7R+M7y5H0n1XeTGG3LC/1TSkh51GvHlEO0Hp1Tx4xinkaLkODKtsNw\nGokbZxQn9urkeNPbN8sasSFfaY1Xw9nn1ZsHeDbmbyPRLCiFqLPGWZZpOcOwa1cY\nY2k3iL4UIQKBgQDAN9zQ+F9OPbCyss0SvxwpPaO8JSHyhNdKY7H2cRszsKIEdKxU\n6KtvAMMHpHn9po+dPPEXxW810nK5qh+H2xpJ4wtK8vF/OLXnYJxc/EEkEg8bekaC\ntxCUiYwgIupyjhSb2z/pGRVEPhdOffdRygu7quY72bH674b+HMs9LtZQQQKBgEHG\nfj3xrN+6lEzMN/g7hbv1BsrweknND8dxdy9Qo6E0CAddlFj2Z3bYHEjfGpGnl8sz\nyIMPumx6kxdOUDflSncQqGi7vKPe/hkeqNrFbJfcLdEBKVnumUx8EsHPoYLJir3y\nYQzlDuugNIsmjwH+8P7qqlDbB0idBfCiBmySl55BAoGBAL+WzTUS6JaRszpTHh2M\nMQpRYNGBxvJTafPBwy+uOxKUZph5aGt8yuniC4530QdxrAovi++ek8+NJeMOSTCo\nMc+xkBuxCy505l8gKrnj97jtLxbzOiFp2ArFRqMm/9x70ZkO5HIX16AAgUABuP56\nIXyt2dPxMIunzSDmAdcLGhFd\n-----END PRIVATE KEY-----">>},
+                      <<"id2">> => {pem, <<"-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQClzAFmpTOQFJy+\nR1mybjlE6K3O7YPpL7W1kFYN4fXOt6QgDGXsJ+eHQBcNd2O4t+24syiEc+HQgM83\nXYNLatRmedYLWHL+AmMDRndFrNRKag6W0+xlAuy95q4wwWLcU5KkrHZu2DKvfzmT\nAcuNC+VgDDdk1W1CipjZInQn0VmHuTeUmePLw13kXoiV+k9MjWi9zU8GBOHn19RN\n13+Np5wA3oTaJ4K+2/f/mru2bTCbDEAiHmXZ6M4BW3dg3NyERT1mhLNkijPpGRmg\nULggXwG240vJ1YV6QH3voTxbQ2uGoJBOZ2pjjCv7ORsuyyt+TwYJnrs0qcSwWh2b\nWvEd/cv1AgMBAAECggEAAisLsYBoDxuvnKFCc2ul8W820BbU/fUPqIOlA+A/MyF0\ncq5qQPGGyowbQ1rIqJlrcRoS+BsG2A+lc8kmPZOiUTl3KG7AyMnxs5oVskkY6y4P\n8tnHICichpg5bSTeRf1n8A+2mA/ZFPrNnzGQNX2qFaE2smBo2NWrhGRDIYgHJnNh\nwnkPDA3Mn0qqZKxY7tyIhJw/y4s1spcvZCiK7qV3x4PxRPPFx+8owjXYa5pedvY/\nqcGfT2Jma9YNYEgnSMnkuU+bLn6iQrQCfFTDJn9UBMwvZSu6bK+1F+JdhC/XBBIy\nZuFfTp2HJYEKOk1IT149T5ONx39GsRi8DLzDv1Dq4QKBgQDYAUBNWXpyC6dwCYz7\nfQKiogPD61fTOJSuKARUJyCJ/W0qK1Zb0RXySa7831lGljeAOw8M85lwT2ap81QB\n8Wah8i/R61X5lVaZERVFJbT+DCoPEjL54Qqn+NbQzJDGTkVvG7k5WYpHBT95zrjI\nT6IxiyPrNe34a+L7u35StW19VQKBgQDEft5H7aRjshivUyn9wOpn43c8ajRZ/FS5\ngkhntthGqj7R+M7y5H0n1XeTGG3LC/1TSkh51GvHlEO0Hp1Tx4xinkaLkODKtsNw\nGokbZxQn9urkeNPbN8sasSFfaY1Xw9nn1ZsHeDbmbyPRLCiFqLPGWZZpOcOwa1cY\nY2k3iL4UIQKBgQDAN9zQ+F9OPbCyss0SvxwpPaO8JSHyhNdKY7H2cRszsKIEdKxU\n6KtvAMMHpHn9po+dPPEXxW810nK5qh+H2xpJ4wtK8vF/OLXnYJxc/EEkEg8bekaC\ntxCUiYwgIupyjhSb2z/pGRVEPhdOffdRygu7quY72bH674b+HMs9LtZQQQKBgEHG\nfj3xrN+6lEzMN/g7hbv1BsrweknND8dxdy9Qo6E0CAddlFj2Z3bYHEjfGpGnl8sz\nyIMPumx6kxdOUDflSncQqGi7vKPe/hkeqNrFbJfcLdEBKVnumUx8EsHPoYLJir3y\nYQzlDuugNIsmjwH+8P7qqlDbB0idBfCiBmySl55BAoGBAL+WzTUS6JaRszpTHh2M\nMQpRYNGBxvJTafPBwy+uOxKUZph5aGt8yuniC4530QdxrAovi++ek8+NJeMOSTCo\nMc+xkBuxCy505l8gKrnj97jtLxbzOiFp2ArFRqMm/9x70ZkO5HIX16AAgUABuP56\nIXyt2dPxMIunzSDmAdcLGhFd\n-----END PRIVATE KEY-----">>}
                   }
               },
               {jwks_url, "https://my-jwt-issuer/jwks.json"},
-              {cacertfile, "test/config_schema_SUITE_data/certs/cacert.pem"},
+              {cacertfile, "test/config_schema_SUITE_data/certs/ca_certificate.pem"},
               {peer_verification, verify_none},
               {depth, 5},
               {fail_if_no_peer_cert, false},
@@ -69,11 +69,11 @@
         auth_oauth2.preferred_username_claims.3 = email
         auth_oauth2.verify_aud = true
         auth_oauth2.default_key = id1
-        auth_oauth2.signing_keys.id1 = test/config_schema_SUITE_data/certs/key.pem
-        auth_oauth2.signing_keys.id2 = test/config_schema_SUITE_data/certs/cert.pem
+        auth_oauth2.signing_keys.id1 = test/config_schema_SUITE_data/certs/server_key.pem
+        auth_oauth2.signing_keys.id2 = test/config_schema_SUITE_data/certs/server_key.pem
         auth_oauth2.jwks_uri = https://my-jwt-issuer/jwks.json
         auth_oauth2.jwks_url = https://my-jwt-issuer/jwks.json
-        auth_oauth2.https.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
+        auth_oauth2.https.cacertfile = test/config_schema_SUITE_data/certs/ca_certificate.pem
         auth_oauth2.https.peer_verification = verify_none
         auth_oauth2.https.depth = 5
         auth_oauth2.https.fail_if_no_peer_cert = false
@@ -110,12 +110,12 @@
             {default_key, <<"id1">>},
             {signing_keys,
                 #{
-                    <<"id1">> => {pem, <<"I'm not a certificate">>},
-                    <<"id2">> => {pem, <<"I'm not a certificate">>}
+                    <<"id1">> => {pem, <<"-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQClzAFmpTOQFJy+\nR1mybjlE6K3O7YPpL7W1kFYN4fXOt6QgDGXsJ+eHQBcNd2O4t+24syiEc+HQgM83\nXYNLatRmedYLWHL+AmMDRndFrNRKag6W0+xlAuy95q4wwWLcU5KkrHZu2DKvfzmT\nAcuNC+VgDDdk1W1CipjZInQn0VmHuTeUmePLw13kXoiV+k9MjWi9zU8GBOHn19RN\n13+Np5wA3oTaJ4K+2/f/mru2bTCbDEAiHmXZ6M4BW3dg3NyERT1mhLNkijPpGRmg\nULggXwG240vJ1YV6QH3voTxbQ2uGoJBOZ2pjjCv7ORsuyyt+TwYJnrs0qcSwWh2b\nWvEd/cv1AgMBAAECggEAAisLsYBoDxuvnKFCc2ul8W820BbU/fUPqIOlA+A/MyF0\ncq5qQPGGyowbQ1rIqJlrcRoS+BsG2A+lc8kmPZOiUTl3KG7AyMnxs5oVskkY6y4P\n8tnHICichpg5bSTeRf1n8A+2mA/ZFPrNnzGQNX2qFaE2smBo2NWrhGRDIYgHJnNh\nwnkPDA3Mn0qqZKxY7tyIhJw/y4s1spcvZCiK7qV3x4PxRPPFx+8owjXYa5pedvY/\nqcGfT2Jma9YNYEgnSMnkuU+bLn6iQrQCfFTDJn9UBMwvZSu6bK+1F+JdhC/XBBIy\nZuFfTp2HJYEKOk1IT149T5ONx39GsRi8DLzDv1Dq4QKBgQDYAUBNWXpyC6dwCYz7\nfQKiogPD61fTOJSuKARUJyCJ/W0qK1Zb0RXySa7831lGljeAOw8M85lwT2ap81QB\n8Wah8i/R61X5lVaZERVFJbT+DCoPEjL54Qqn+NbQzJDGTkVvG7k5WYpHBT95zrjI\nT6IxiyPrNe34a+L7u35StW19VQKBgQDEft5H7aRjshivUyn9wOpn43c8ajRZ/FS5\ngkhntthGqj7R+M7y5H0n1XeTGG3LC/1TSkh51GvHlEO0Hp1Tx4xinkaLkODKtsNw\nGokbZxQn9urkeNPbN8sasSFfaY1Xw9nn1ZsHeDbmbyPRLCiFqLPGWZZpOcOwa1cY\nY2k3iL4UIQKBgQDAN9zQ+F9OPbCyss0SvxwpPaO8JSHyhNdKY7H2cRszsKIEdKxU\n6KtvAMMHpHn9po+dPPEXxW810nK5qh+H2xpJ4wtK8vF/OLXnYJxc/EEkEg8bekaC\ntxCUiYwgIupyjhSb2z/pGRVEPhdOffdRygu7quY72bH674b+HMs9LtZQQQKBgEHG\nfj3xrN+6lEzMN/g7hbv1BsrweknND8dxdy9Qo6E0CAddlFj2Z3bYHEjfGpGnl8sz\nyIMPumx6kxdOUDflSncQqGi7vKPe/hkeqNrFbJfcLdEBKVnumUx8EsHPoYLJir3y\nYQzlDuugNIsmjwH+8P7qqlDbB0idBfCiBmySl55BAoGBAL+WzTUS6JaRszpTHh2M\nMQpRYNGBxvJTafPBwy+uOxKUZph5aGt8yuniC4530QdxrAovi++ek8+NJeMOSTCo\nMc+xkBuxCy505l8gKrnj97jtLxbzOiFp2ArFRqMm/9x70ZkO5HIX16AAgUABuP56\nIXyt2dPxMIunzSDmAdcLGhFd\n-----END PRIVATE KEY-----">>},
+                    <<"id2">> => {pem, <<"-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQClzAFmpTOQFJy+\nR1mybjlE6K3O7YPpL7W1kFYN4fXOt6QgDGXsJ+eHQBcNd2O4t+24syiEc+HQgM83\nXYNLatRmedYLWHL+AmMDRndFrNRKag6W0+xlAuy95q4wwWLcU5KkrHZu2DKvfzmT\nAcuNC+VgDDdk1W1CipjZInQn0VmHuTeUmePLw13kXoiV+k9MjWi9zU8GBOHn19RN\n13+Np5wA3oTaJ4K+2/f/mru2bTCbDEAiHmXZ6M4BW3dg3NyERT1mhLNkijPpGRmg\nULggXwG240vJ1YV6QH3voTxbQ2uGoJBOZ2pjjCv7ORsuyyt+TwYJnrs0qcSwWh2b\nWvEd/cv1AgMBAAECggEAAisLsYBoDxuvnKFCc2ul8W820BbU/fUPqIOlA+A/MyF0\ncq5qQPGGyowbQ1rIqJlrcRoS+BsG2A+lc8kmPZOiUTl3KG7AyMnxs5oVskkY6y4P\n8tnHICichpg5bSTeRf1n8A+2mA/ZFPrNnzGQNX2qFaE2smBo2NWrhGRDIYgHJnNh\nwnkPDA3Mn0qqZKxY7tyIhJw/y4s1spcvZCiK7qV3x4PxRPPFx+8owjXYa5pedvY/\nqcGfT2Jma9YNYEgnSMnkuU+bLn6iQrQCfFTDJn9UBMwvZSu6bK+1F+JdhC/XBBIy\nZuFfTp2HJYEKOk1IT149T5ONx39GsRi8DLzDv1Dq4QKBgQDYAUBNWXpyC6dwCYz7\nfQKiogPD61fTOJSuKARUJyCJ/W0qK1Zb0RXySa7831lGljeAOw8M85lwT2ap81QB\n8Wah8i/R61X5lVaZERVFJbT+DCoPEjL54Qqn+NbQzJDGTkVvG7k5WYpHBT95zrjI\nT6IxiyPrNe34a+L7u35StW19VQKBgQDEft5H7aRjshivUyn9wOpn43c8ajRZ/FS5\ngkhntthGqj7R+M7y5H0n1XeTGG3LC/1TSkh51GvHlEO0Hp1Tx4xinkaLkODKtsNw\nGokbZxQn9urkeNPbN8sasSFfaY1Xw9nn1ZsHeDbmbyPRLCiFqLPGWZZpOcOwa1cY\nY2k3iL4UIQKBgQDAN9zQ+F9OPbCyss0SvxwpPaO8JSHyhNdKY7H2cRszsKIEdKxU\n6KtvAMMHpHn9po+dPPEXxW810nK5qh+H2xpJ4wtK8vF/OLXnYJxc/EEkEg8bekaC\ntxCUiYwgIupyjhSb2z/pGRVEPhdOffdRygu7quY72bH674b+HMs9LtZQQQKBgEHG\nfj3xrN+6lEzMN/g7hbv1BsrweknND8dxdy9Qo6E0CAddlFj2Z3bYHEjfGpGnl8sz\nyIMPumx6kxdOUDflSncQqGi7vKPe/hkeqNrFbJfcLdEBKVnumUx8EsHPoYLJir3y\nYQzlDuugNIsmjwH+8P7qqlDbB0idBfCiBmySl55BAoGBAL+WzTUS6JaRszpTHh2M\nMQpRYNGBxvJTafPBwy+uOxKUZph5aGt8yuniC4530QdxrAovi++ek8+NJeMOSTCo\nMc+xkBuxCy505l8gKrnj97jtLxbzOiFp2ArFRqMm/9x70ZkO5HIX16AAgUABuP56\nIXyt2dPxMIunzSDmAdcLGhFd\n-----END PRIVATE KEY-----">>}
                 }
             },
             {jwks_url, "https://my-jwt-issuer/jwks.json"},
-            {cacertfile, "test/config_schema_SUITE_data/certs/cacert.pem"},
+            {cacertfile, "test/config_schema_SUITE_data/certs/ca_certificate.pem"},
             {peer_verification, verify_none},
             {depth, 5},
             {fail_if_no_peer_cert, false},
@@ -141,11 +141,11 @@
         auth_oauth2.oauth_providers.keycloak.jwks_uri = https://keycloak/keys
         auth_oauth2.oauth_providers.keycloak.authorization_endpoint = https://keycloak/authorize
         auth_oauth2.oauth_providers.keycloak.end_session_endpoint = https://keycloak/logout
-        auth_oauth2.oauth_providers.keycloak.https.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
+        auth_oauth2.oauth_providers.keycloak.https.cacertfile = test/config_schema_SUITE_data/certs/ca_certificate.pem
         auth_oauth2.oauth_providers.keycloak.https.verify = verify_none
         auth_oauth2.oauth_providers.keycloak.https.depth = 2
         auth_oauth2.oauth_providers.keycloak.default_key = token-key
-        auth_oauth2.oauth_providers.keycloak.signing_keys.id1 = test/config_schema_SUITE_data/certs/key.pem
+        auth_oauth2.oauth_providers.keycloak.signing_keys.id1 = test/config_schema_SUITE_data/certs/server_key.pem
         auth_oauth2.oauth_providers.keycloak.discovery_endpoint_path = /.well-known/openid-configuration
         auth_oauth2.oauth_providers.keycloak.discovery_endpoint_params.param1 = value1
         auth_oauth2.oauth_providers.keycloak.algorithms.1 = HS256
@@ -163,13 +163,13 @@
                 <<"keycloak">> => [
                   {signing_keys,
                     #{
-                        <<"id1">> => {pem, <<"I'm not a certificate">>}
+                        <<"id1">> => {pem, <<"-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQClzAFmpTOQFJy+\nR1mybjlE6K3O7YPpL7W1kFYN4fXOt6QgDGXsJ+eHQBcNd2O4t+24syiEc+HQgM83\nXYNLatRmedYLWHL+AmMDRndFrNRKag6W0+xlAuy95q4wwWLcU5KkrHZu2DKvfzmT\nAcuNC+VgDDdk1W1CipjZInQn0VmHuTeUmePLw13kXoiV+k9MjWi9zU8GBOHn19RN\n13+Np5wA3oTaJ4K+2/f/mru2bTCbDEAiHmXZ6M4BW3dg3NyERT1mhLNkijPpGRmg\nULggXwG240vJ1YV6QH3voTxbQ2uGoJBOZ2pjjCv7ORsuyyt+TwYJnrs0qcSwWh2b\nWvEd/cv1AgMBAAECggEAAisLsYBoDxuvnKFCc2ul8W820BbU/fUPqIOlA+A/MyF0\ncq5qQPGGyowbQ1rIqJlrcRoS+BsG2A+lc8kmPZOiUTl3KG7AyMnxs5oVskkY6y4P\n8tnHICichpg5bSTeRf1n8A+2mA/ZFPrNnzGQNX2qFaE2smBo2NWrhGRDIYgHJnNh\nwnkPDA3Mn0qqZKxY7tyIhJw/y4s1spcvZCiK7qV3x4PxRPPFx+8owjXYa5pedvY/\nqcGfT2Jma9YNYEgnSMnkuU+bLn6iQrQCfFTDJn9UBMwvZSu6bK+1F+JdhC/XBBIy\nZuFfTp2HJYEKOk1IT149T5ONx39GsRi8DLzDv1Dq4QKBgQDYAUBNWXpyC6dwCYz7\nfQKiogPD61fTOJSuKARUJyCJ/W0qK1Zb0RXySa7831lGljeAOw8M85lwT2ap81QB\n8Wah8i/R61X5lVaZERVFJbT+DCoPEjL54Qqn+NbQzJDGTkVvG7k5WYpHBT95zrjI\nT6IxiyPrNe34a+L7u35StW19VQKBgQDEft5H7aRjshivUyn9wOpn43c8ajRZ/FS5\ngkhntthGqj7R+M7y5H0n1XeTGG3LC/1TSkh51GvHlEO0Hp1Tx4xinkaLkODKtsNw\nGokbZxQn9urkeNPbN8sasSFfaY1Xw9nn1ZsHeDbmbyPRLCiFqLPGWZZpOcOwa1cY\nY2k3iL4UIQKBgQDAN9zQ+F9OPbCyss0SvxwpPaO8JSHyhNdKY7H2cRszsKIEdKxU\n6KtvAMMHpHn9po+dPPEXxW810nK5qh+H2xpJ4wtK8vF/OLXnYJxc/EEkEg8bekaC\ntxCUiYwgIupyjhSb2z/pGRVEPhdOffdRygu7quY72bH674b+HMs9LtZQQQKBgEHG\nfj3xrN+6lEzMN/g7hbv1BsrweknND8dxdy9Qo6E0CAddlFj2Z3bYHEjfGpGnl8sz\nyIMPumx6kxdOUDflSncQqGi7vKPe/hkeqNrFbJfcLdEBKVnumUx8EsHPoYLJir3y\nYQzlDuugNIsmjwH+8P7qqlDbB0idBfCiBmySl55BAoGBAL+WzTUS6JaRszpTHh2M\nMQpRYNGBxvJTafPBwy+uOxKUZph5aGt8yuniC4530QdxrAovi++ek8+NJeMOSTCo\nMc+xkBuxCy505l8gKrnj97jtLxbzOiFp2ArFRqMm/9x70ZkO5HIX16AAgUABuP56\nIXyt2dPxMIunzSDmAdcLGhFd\n-----END PRIVATE KEY-----">>}
                     }
                   },
                   {https, [
                     {depth, 2},
                     {verify, verify_none},
-                    {cacertfile, "test/config_schema_SUITE_data/certs/cacert.pem"}
+                    {cacertfile, "test/config_schema_SUITE_data/certs/ca_certificate.pem"}
                   ]},
                   {algorithms, [<<"HS256">>, <<"RS256">>]},
                   {discovery_endpoint_params, [

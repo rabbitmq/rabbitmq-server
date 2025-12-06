@@ -101,7 +101,7 @@ end}.
 %% deprecated
 
 {mapping, "cluster_formation.k8s.cert_path", "rabbit.cluster_formation.peer_discovery_k8s.k8s_cert_path", [
-    {datatype, string}, {validators, ["file_accessible"]}
+    {datatype, string}, {validators, ["pem_file"]}
 ]}.
 
 {translation, "rabbit.cluster_formation.peer_discovery_k8s.k8s_cert_path",
@@ -115,7 +115,7 @@ end}.
 %% modern keys
 
 {mapping, "cluster_formation.k8s.tls.cacertfile", "rabbit.cluster_formation.peer_discovery_k8s.ssl_options.cacertfile",
-    [{datatype, string}, {validators, ["file_accessible"]}
+    [{datatype, string}, {validators, ["pem_file"]}
 ]}.
 
 {translation, "rabbit.cluster_formation.peer_discovery_k8s.ssl_options.cacertfile",
@@ -127,7 +127,7 @@ fun(Conf) ->
 end}.
 
 {mapping, "cluster_formation.k8s.tls.certfile", "rabbit.cluster_formation.peer_discovery_k8s.ssl_options.certfile",
-    [{datatype, string}, {validators, ["file_accessible"]}
+    [{datatype, string}, {validators, ["pem_file"]}
 ]}.
 
 {translation, "rabbit.cluster_formation.peer_discovery_k8s.ssl_options.certfile",
@@ -139,7 +139,7 @@ fun(Conf) ->
 end}.
 
 {mapping, "cluster_formation.k8s.tls.keyfile", "rabbit.cluster_formation.peer_discovery_k8s.ssl_options.keyfile",
-    [{datatype, string}, {validators, ["file_accessible"]}
+    [{datatype, string}, {validators, ["pem_file"]}
 ]}.
 
 {translation, "rabbit.cluster_formation.peer_discovery_k8s.ssl_options.keyfile",

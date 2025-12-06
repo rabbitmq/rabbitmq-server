@@ -127,18 +127,18 @@
  {tls_listener,
   "management.ssl.ip   = 192.168.1.2
    management.ssl.port = 15671
-   management.ssl.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
-   management.ssl.certfile = test/config_schema_SUITE_data/certs/cert.pem
-   management.ssl.keyfile = test/config_schema_SUITE_data/certs/key.pem
+   management.ssl.cacertfile = test/config_schema_SUITE_data/certs/ca_certificate.pem
+   management.ssl.certfile = test/config_schema_SUITE_data/certs/server_certificate.pem
+   management.ssl.keyfile = test/config_schema_SUITE_data/certs/server_key.pem
    management.ssl.verify   = verify_none
    management.ssl.fail_if_no_peer_cert = false",
   [{rabbitmq_management,[
                          {ssl_config,[
                                       {ip, "192.168.1.2"},
                                       {port,15671},
-                                      {cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
-                                      {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
-                                      {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+                                      {cacertfile,"test/config_schema_SUITE_data/certs/ca_certificate.pem"},
+                                      {certfile,"test/config_schema_SUITE_data/certs/server_certificate.pem"},
+                                      {keyfile,"test/config_schema_SUITE_data/certs/server_key.pem"},
                                       {verify, verify_none},
                                       {fail_if_no_peer_cert, false}
                                      ]}
@@ -148,9 +148,9 @@
  {tls_listener_cipher_suites,
   "management.ssl.ip   = 192.168.1.2
    management.ssl.port = 15671
-   management.ssl.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
-   management.ssl.certfile = test/config_schema_SUITE_data/certs/cert.pem
-   management.ssl.keyfile = test/config_schema_SUITE_data/certs/key.pem
+   management.ssl.cacertfile = test/config_schema_SUITE_data/certs/ca_certificate.pem
+   management.ssl.certfile = test/config_schema_SUITE_data/certs/server_certificate.pem
+   management.ssl.keyfile = test/config_schema_SUITE_data/certs/server_key.pem
 
    management.ssl.honor_cipher_order   = true
    management.ssl.honor_ecc_order      = true
@@ -176,9 +176,9 @@
                          {ssl_config,[
                                       {ip, "192.168.1.2"},
                                       {port,15671},
-                                      {cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
-                                      {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
-                                      {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+                                      {cacertfile,"test/config_schema_SUITE_data/certs/ca_certificate.pem"},
+                                      {certfile,"test/config_schema_SUITE_data/certs/server_certificate.pem"},
+                                      {keyfile,"test/config_schema_SUITE_data/certs/server_key.pem"},
 
                                       {verify, verify_peer},
                                       {fail_if_no_peer_cert, false},
@@ -552,19 +552,19 @@
  {legacy_ssl_listener,
   "management.listener.port = 15671
    management.listener.ssl = true
-   management.listener.ssl_opts.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
-   management.listener.ssl_opts.certfile = test/config_schema_SUITE_data/certs/cert.pem
-   management.listener.ssl_opts.keyfile = test/config_schema_SUITE_data/certs/key.pem",
+   management.listener.ssl_opts.cacertfile = test/config_schema_SUITE_data/certs/ca_certificate.pem
+   management.listener.ssl_opts.certfile = test/config_schema_SUITE_data/certs/server_certificate.pem
+   management.listener.ssl_opts.keyfile = test/config_schema_SUITE_data/certs/server_key.pem",
   [{rabbitmq_management,
        [{listener,
             [{port,15671},
              {ssl,true},
              {ssl_opts,
                  [{cacertfile,
-                      "test/config_schema_SUITE_data/certs/cacert.pem"},
-                  {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
+                      "test/config_schema_SUITE_data/certs/ca_certificate.pem"},
+                  {certfile,"test/config_schema_SUITE_data/certs/server_certificate.pem"},
                   {keyfile,
-                      "test/config_schema_SUITE_data/certs/key.pem"}]}]}]}],
+                      "test/config_schema_SUITE_data/certs/server_key.pem"}]}]}]}],
   [rabbitmq_management]},
 
  {legacy_tcp_listener_ip,
@@ -576,19 +576,19 @@
   "management.listener.port = 15672
    management.listener.ssl  = true
 
-   management.listener.ssl_opts.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
-   management.listener.ssl_opts.certfile   = test/config_schema_SUITE_data/certs/cert.pem
-   management.listener.ssl_opts.keyfile    = test/config_schema_SUITE_data/certs/key.pem",
+   management.listener.ssl_opts.cacertfile = test/config_schema_SUITE_data/certs/ca_certificate.pem
+   management.listener.ssl_opts.certfile   = test/config_schema_SUITE_data/certs/server_certificate.pem
+   management.listener.ssl_opts.keyfile    = test/config_schema_SUITE_data/certs/server_key.pem",
   [{rabbitmq_management,
        [{listener,
             [{port,15672},
              {ssl,true},
              {ssl_opts,
                  [{cacertfile,
-                      "test/config_schema_SUITE_data/certs/cacert.pem"},
-                  {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
+                      "test/config_schema_SUITE_data/certs/ca_certificate.pem"},
+                  {certfile,"test/config_schema_SUITE_data/certs/server_certificate.pem"},
                   {keyfile,
-                      "test/config_schema_SUITE_data/certs/key.pem"}]}]}]}],
+                      "test/config_schema_SUITE_data/certs/server_key.pem"}]}]}]}],
   [rabbitmq_management]},
 
  {legacy_server_opts_compress,

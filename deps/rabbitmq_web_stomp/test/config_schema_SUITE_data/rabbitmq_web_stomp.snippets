@@ -67,27 +67,27 @@
  {ssl_with_listener,
   "web_stomp.ssl.listener   = 127.0.0.2:15671
    web_stomp.ssl.backlog    = 1024
-   web_stomp.ssl.certfile   = test/config_schema_SUITE_data/certs/cert.pem
-   web_stomp.ssl.keyfile    = test/config_schema_SUITE_data/certs/key.pem
-   web_stomp.ssl.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
+   web_stomp.ssl.certfile   = test/config_schema_SUITE_data/certs/server_certificate.pem
+   web_stomp.ssl.keyfile    = test/config_schema_SUITE_data/certs/server_key.pem
+   web_stomp.ssl.cacertfile = test/config_schema_SUITE_data/certs/ca_certificate.pem
    web_stomp.ssl.password   = changeme",
   [{rabbitmq_web_stomp,
        [{ssl_config,
             [{ip,"127.0.0.2"},
              {port,15671},
              {backlog,1024},
-             {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
-             {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
-             {cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
+             {certfile,"test/config_schema_SUITE_data/certs/server_certificate.pem"},
+             {keyfile,"test/config_schema_SUITE_data/certs/server_key.pem"},
+             {cacertfile,"test/config_schema_SUITE_data/certs/ca_certificate.pem"},
              {password,<<"changeme">>}]}]}],
   [rabbitmq_web_stomp]},
 
  {ssl,
   "web_stomp.ssl.port       = 15671
    web_stomp.ssl.backlog    = 1024
-   web_stomp.ssl.certfile   = test/config_schema_SUITE_data/certs/cert.pem
-   web_stomp.ssl.keyfile    = test/config_schema_SUITE_data/certs/key.pem
-   web_stomp.ssl.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
+   web_stomp.ssl.certfile   = test/config_schema_SUITE_data/certs/server_certificate.pem
+   web_stomp.ssl.keyfile    = test/config_schema_SUITE_data/certs/server_key.pem
+   web_stomp.ssl.cacertfile = test/config_schema_SUITE_data/certs/ca_certificate.pem
    web_stomp.ssl.password   = changeme
 
    web_stomp.ssl.versions.tls1_2 = tlsv1.2
@@ -96,9 +96,9 @@
        [{ssl_config,
             [{port,15671},
              {backlog,1024},
-             {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
-             {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
-             {cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
+             {certfile,"test/config_schema_SUITE_data/certs/server_certificate.pem"},
+             {keyfile,"test/config_schema_SUITE_data/certs/server_key.pem"},
+             {cacertfile,"test/config_schema_SUITE_data/certs/ca_certificate.pem"},
              {password,<<"changeme">>},
 
              {versions,['tlsv1.2','tlsv1.1']}
@@ -108,9 +108,9 @@
  {ssl_ciphers,
   "web_stomp.ssl.port       = 15671
    web_stomp.ssl.backlog    = 1024
-   web_stomp.ssl.certfile   = test/config_schema_SUITE_data/certs/cert.pem
-   web_stomp.ssl.keyfile    = test/config_schema_SUITE_data/certs/key.pem
-   web_stomp.ssl.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
+   web_stomp.ssl.certfile   = test/config_schema_SUITE_data/certs/server_certificate.pem
+   web_stomp.ssl.keyfile    = test/config_schema_SUITE_data/certs/server_key.pem
+   web_stomp.ssl.cacertfile = test/config_schema_SUITE_data/certs/ca_certificate.pem
    web_stomp.ssl.password   = changeme
 
    web_stomp.ssl.honor_cipher_order   = true
@@ -133,9 +133,9 @@
        [{ssl_config,
             [{port,15671},
              {backlog,1024},
-             {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
-             {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
-             {cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
+             {certfile,"test/config_schema_SUITE_data/certs/server_certificate.pem"},
+             {keyfile,"test/config_schema_SUITE_data/certs/server_key.pem"},
+             {cacertfile,"test/config_schema_SUITE_data/certs/ca_certificate.pem"},
              {password,<<"changeme">>},
 
              {honor_cipher_order,   true},

@@ -145,7 +145,7 @@
 {mapping,
  "auth_oauth2.signing_keys.$name",
  "rabbitmq_auth_backend_oauth2.key_config.signing_keys",
- [{datatype, file}, {validators, ["file_accessible"]}]}.
+ [{datatype, file}, {validators, ["pem_file"]}]}.
 
 {translation,
  "rabbitmq_auth_backend_oauth2.key_config.signing_keys",
@@ -234,7 +234,7 @@
 {mapping,
  "auth_oauth2.https.cacertfile",
  "rabbitmq_auth_backend_oauth2.key_config.cacertfile",
- [{datatype, file}, {validators, ["file_accessible"]}]}.
+ [{datatype, file}, {validators, ["pem_file"]}]}.
 
 {mapping,
  "auth_oauth2.https.depth",
@@ -315,7 +315,7 @@
 {mapping,
  "auth_oauth2.oauth_providers.$name.https.cacertfile",
  "rabbitmq_auth_backend_oauth2.oauth_providers",
- [{datatype, file}, {validators, ["file_accessible"]}]}.
+ [{datatype, file}, {validators, ["pem_file"]}]}.
 
 {mapping,
  "auth_oauth2.oauth_providers.$name.https.depth",
@@ -345,7 +345,7 @@
 {mapping,
  "auth_oauth2.oauth_providers.$name.signing_keys.$id",
  "rabbitmq_auth_backend_oauth2.oauth_providers",
- [{datatype, file}, {validators, ["file_accessible"]}]}.
+ [{datatype, file}, {validators, ["pem_file"]}]}.
 
 {mapping,
  "auth_oauth2.oauth_providers.$name.algorithms.$algorithm",

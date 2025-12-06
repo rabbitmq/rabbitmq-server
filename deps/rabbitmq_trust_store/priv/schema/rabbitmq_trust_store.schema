@@ -55,10 +55,10 @@ end}.
     {datatype, {enum, [true, false]}}]}.
 
 {mapping, "trust_store.ssl_options.cacertfile", "rabbitmq_trust_store.ssl_options.cacertfile",
-    [{datatype, string}, {validators, ["file_accessible"]}]}.
+    [{datatype, string}, {validators, ["pem_file"]}]}.
 
 {mapping, "trust_store.ssl_options.certfile", "rabbitmq_trust_store.ssl_options.certfile",
-    [{datatype, string}, {validators, ["file_accessible"]}]}.
+    [{datatype, string}, {validators, ["pem_file"]}]}.
 
 {mapping, "trust_store.ssl_options.cert", "rabbitmq_trust_store.ssl_options.cert",
     [{datatype, string}]}.
@@ -109,7 +109,7 @@ fun(Conf) ->
 end}.
 
 {mapping, "trust_store.ssl_options.keyfile", "rabbitmq_trust_store.ssl_options.keyfile",
-    [{datatype, string}, {validators, ["file_accessible"]}]}.
+    [{datatype, string}, {validators, ["pem_file"]}]}.
 
 {mapping, "trust_store.ssl_options.log_alert", "rabbitmq_trust_store.ssl_options.log_alert",
     [{datatype, {enum, [true, false]}}]}.

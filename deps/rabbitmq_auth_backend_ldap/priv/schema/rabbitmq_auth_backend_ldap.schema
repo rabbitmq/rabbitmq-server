@@ -227,10 +227,10 @@ end}.
     {datatype, {enum, [true, false]}}]}.
 
 {mapping, "auth_ldap.ssl_options.cacertfile", "rabbitmq_auth_backend_ldap.ssl_options.cacertfile",
-    [{datatype, string}, {validators, ["file_accessible"]}]}.
+    [{datatype, string}, {validators, ["pem_file"]}]}.
 
 {mapping, "auth_ldap.ssl_options.certfile", "rabbitmq_auth_backend_ldap.ssl_options.certfile",
-    [{datatype, string}, {validators, ["file_accessible"]}]}.
+    [{datatype, string}, {validators, ["pem_file"]}]}.
 
 {mapping, "auth_ldap.ssl_options.cert", "rabbitmq_auth_backend_ldap.ssl_options.cert",
     [{datatype, string}]}.
@@ -284,7 +284,7 @@ fun(Conf) ->
 end}.
 
 {mapping, "auth_ldap.ssl_options.keyfile", "rabbitmq_auth_backend_ldap.ssl_options.keyfile",
-    [{datatype, string}, {validators, ["file_accessible"]}]}.
+    [{datatype, string}, {validators, ["pem_file"]}]}.
 
 {mapping, "auth_ldap.ssl_options.log_alert", "rabbitmq_auth_backend_ldap.ssl_options.log_alert",
     [{datatype, {enum, [true, false]}}]}.

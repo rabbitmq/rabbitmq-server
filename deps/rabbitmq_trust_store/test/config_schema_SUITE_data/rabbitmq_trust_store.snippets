@@ -17,12 +17,12 @@
  {trust_store_http,
      "trust_store.providers.1 = http
   trust_store.url = https://example.com
-  trust_store.ssl_options.certfile = test/config_schema_SUITE_data/certs/cert.pem
+  trust_store.ssl_options.certfile = test/config_schema_SUITE_data/certs/server_certificate.pem
   trust_store.ssl_options.password = i_am_password",
      [{rabbitmq_trust_store,
           [{providers,[rabbit_trust_store_http_provider]},
            {url,"https://example.com"},
            {ssl_options,
-               [{certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
+               [{certfile,"test/config_schema_SUITE_data/certs/server_certificate.pem"},
                 {password,<<"i_am_password">>}]}]}],
      [rabbitmq_trust_store]}].

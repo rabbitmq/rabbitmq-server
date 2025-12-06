@@ -280,8 +280,8 @@ test_oauth_providers_signing_keys(Conf) ->
                          ]
     } = sort_settings(translate_oauth_providers(CuttlefishConf)),
     ct:log("SigningKey: ~p", [SigningKeys]),
-    #{<<"1">> := {pem, <<"I'm not a certificate">>},
-      <<"2">> := {pem, <<"I'm not a certificate">>}
+    #{<<"1">> := {pem, <<"-----BEGIN CERTIFICATE-----\nMIIDwTCCAqmgAwIBAgIBATANBgkqhkiG9w0BAQsFADBLMTowOAYDVQQDDDFUTFNH\nZW5TZWxmU2lnbmVkUm9vdENBIDIwMjUtMTItMDRUMTU6MDU6MjAuMTIyMDY4MQ0w\nCwYDVQQHDAQkJCQkMB4XDTI1MTIwNDIzMDUyMFoXDTM1MTIwMjIzMDUyMFowJTES\nMBAGA1UEAwwJbG9jYWxob3N0MQ8wDQYDVQQKDAZzZXJ2ZXIwggEiMA0GCSqGSIb3\nDQEBAQUAA4IBDwAwggEKAoIBAQClzAFmpTOQFJy+R1mybjlE6K3O7YPpL7W1kFYN\n4fXOt6QgDGXsJ+eHQBcNd2O4t+24syiEc+HQgM83XYNLatRmedYLWHL+AmMDRndF\nrNRKag6W0+xlAuy95q4wwWLcU5KkrHZu2DKvfzmTAcuNC+VgDDdk1W1CipjZInQn\n0VmHuTeUmePLw13kXoiV+k9MjWi9zU8GBOHn19RN13+Np5wA3oTaJ4K+2/f/mru2\nbTCbDEAiHmXZ6M4BW3dg3NyERT1mhLNkijPpGRmgULggXwG240vJ1YV6QH3voTxb\nQ2uGoJBOZ2pjjCv7ORsuyyt+TwYJnrs0qcSwWh2bWvEd/cv1AgMBAAGjgdUwgdIw\nCQYDVR0TBAIwADALBgNVHQ8EBAMCBaAwEwYDVR0lBAwwCgYIKwYBBQUHAwEwMAYD\nVR0RBCkwJ4IJbG9jYWxob3N0gg9TRUEtM0xHNUhWSlVXSkuCCWxvY2FsaG9zdDAd\nBgNVHQ4EFgQU2zObX89sXUACpKmBqwI7Ri1Qx/kwHwYDVR0jBBgwFoAUxl0Fkdcp\nyXd1uTnVyW8emJBC8xswMQYDVR0fBCowKDAmoCSgIoYgaHR0cDovL2NybC1zZXJ2\nZXI6ODAwMC9iYXNpYy5jcmwwDQYJKoZIhvcNAQELBQADggEBAA38RwebMkjnebaG\nkHMqH3Skayr/gmD9futx9zGDBx2h848j8y5+RuQj0e4v1U6MM07qniqj5oaNbHHM\n7rbv96NPoYrP7aiDJRtr28yCKZ4NWwoEOJnRq/FlUcx3ybthhYK8VXisJj/BYr1l\nI2jWi86/mUFmfC+f38eeot0t7nPJ+BG4gpQ76mb2t14QHBzr0n4edpHteqX3zrAk\n8nBExGDBfjauYYRKKmxVogRck+KXZsI/9xbseZ1WmbDpBmQgkpt9hrlgqkvA83pT\nmwP8vA/OYnN2RNfQ4pLnuMs7musauU7ef/ZRD0CB9kRLyvnFJ8udCipO/Q3AKn2R\nOc6FM20=\n-----END CERTIFICATE-----">>},
+      <<"2">> := {pem, <<"-----BEGIN CERTIFICATE-----\nMIIDwTCCAqmgAwIBAgIBATANBgkqhkiG9w0BAQsFADBLMTowOAYDVQQDDDFUTFNH\nZW5TZWxmU2lnbmVkUm9vdENBIDIwMjUtMTItMDRUMTU6MDU6MjAuMTIyMDY4MQ0w\nCwYDVQQHDAQkJCQkMB4XDTI1MTIwNDIzMDUyMFoXDTM1MTIwMjIzMDUyMFowJTES\nMBAGA1UEAwwJbG9jYWxob3N0MQ8wDQYDVQQKDAZzZXJ2ZXIwggEiMA0GCSqGSIb3\nDQEBAQUAA4IBDwAwggEKAoIBAQClzAFmpTOQFJy+R1mybjlE6K3O7YPpL7W1kFYN\n4fXOt6QgDGXsJ+eHQBcNd2O4t+24syiEc+HQgM83XYNLatRmedYLWHL+AmMDRndF\nrNRKag6W0+xlAuy95q4wwWLcU5KkrHZu2DKvfzmTAcuNC+VgDDdk1W1CipjZInQn\n0VmHuTeUmePLw13kXoiV+k9MjWi9zU8GBOHn19RN13+Np5wA3oTaJ4K+2/f/mru2\nbTCbDEAiHmXZ6M4BW3dg3NyERT1mhLNkijPpGRmgULggXwG240vJ1YV6QH3voTxb\nQ2uGoJBOZ2pjjCv7ORsuyyt+TwYJnrs0qcSwWh2bWvEd/cv1AgMBAAGjgdUwgdIw\nCQYDVR0TBAIwADALBgNVHQ8EBAMCBaAwEwYDVR0lBAwwCgYIKwYBBQUHAwEwMAYD\nVR0RBCkwJ4IJbG9jYWxob3N0gg9TRUEtM0xHNUhWSlVXSkuCCWxvY2FsaG9zdDAd\nBgNVHQ4EFgQU2zObX89sXUACpKmBqwI7Ri1Qx/kwHwYDVR0jBBgwFoAUxl0Fkdcp\nyXd1uTnVyW8emJBC8xswMQYDVR0fBCowKDAmoCSgIoYgaHR0cDovL2NybC1zZXJ2\nZXI6ODAwMC9iYXNpYy5jcmwwDQYJKoZIhvcNAQELBQADggEBAA38RwebMkjnebaG\nkHMqH3Skayr/gmD9futx9zGDBx2h848j8y5+RuQj0e4v1U6MM07qniqj5oaNbHHM\n7rbv96NPoYrP7aiDJRtr28yCKZ4NWwoEOJnRq/FlUcx3ybthhYK8VXisJj/BYr1l\nI2jWi86/mUFmfC+f38eeot0t7nPJ+BG4gpQ76mb2t14QHBzr0n4edpHteqX3zrAk\n8nBExGDBfjauYYRKKmxVogRck+KXZsI/9xbseZ1WmbDpBmQgkpt9hrlgqkvA83pT\nmwP8vA/OYnN2RNfQ4pLnuMs7musauU7ef/ZRD0CB9kRLyvnFJ8udCipO/Q3AKn2R\nOc6FM20=\n-----END CERTIFICATE-----">>}
     } = SigningKeys.
 
 test_scope_aliases_configured_as_list_of_properties(_) ->
@@ -328,7 +328,7 @@ test_scope_aliases_configured_as_map(_) ->
 
 
 cert_filename(Conf) ->
-    string:concat(?config(data_dir, Conf), "certs/cert.pem").
+    string:concat(?config(data_dir, Conf), "certs/server_certificate.pem").
 
 sort_settings(MapOfListOfSettings) ->
     maps:map(fun(_K,List) ->
