@@ -656,7 +656,8 @@ handle_dest_queue_actions(Actions, State) ->
     lists:foldl(
       fun({settled, QName, MsgSeqNos}, S0) ->
               confirm(MsgSeqNos, QName, S0);
-         ({rejected, _QName, MsgSeqNos}, #{dest := Dst = #{unconfirmed := U0}} = S0) ->
+         ({rejected, _QName, _Reason, MsgSeqNos},
+          #{dest := Dst = #{unconfirmed := U0}} = S0) ->
               {U, Rej} =
               lists:foldr(
                 fun(SeqNo, {U1, Acc}) ->

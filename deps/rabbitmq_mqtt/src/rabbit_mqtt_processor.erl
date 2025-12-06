@@ -2053,15 +2053,20 @@ handle_queue_actions(Actions, #state{} = State0) ->
               {ConfirmPktIds, U} = rabbit_mqtt_confirms:confirm(PktIds, QName, U0),
               send_puback(ConfirmPktIds, ?RC_SUCCESS, S),
               S#state{unacked_client_pubs = U};
-          ({rejected, _QName, PktIds}, S0 = #state{unacked_client_pubs = U0,
-                                                   cfg = #cfg{proto_ver = ProtoVer}}) ->
+          ({rejected, _QName, Reason, PktIds},
+           #state{unacked_client_pubs = U0,
+                  cfg = #cfg{proto_ver = ProtoVer}} = S0) ->
               {RejectPktIds, U} = rabbit_mqtt_confirms:reject(PktIds, U0),
               S = S0#state{unacked_client_pubs = U},
               %% Negative acks are supported only in MQTT v5. In MQTT v3 and v4 we ignore
               %% rejected messages since we can only (but must not) send a positive ack.
               case ProtoVer of
                   ?MQTT_PROTO_V5 ->
-                      send_puback(RejectPktIds, ?RC_IMPLEMENTATION_SPECIFIC_ERROR, S);
+                      RC = case Reason of
+                               maxlen -> ?RC_QUOTA_EXCEEDED;
+                               _ -> ?RC_IMPLEMENTATION_SPECIFIC_ERROR
+                           end,
+                      send_puback(RejectPktIds, RC, S);
                   _ ->
                       ok
               end,
