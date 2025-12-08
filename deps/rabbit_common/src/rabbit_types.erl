@@ -175,7 +175,7 @@
 %% old AMQP 0-9-1-centric type, avoid when possible
 -type(protocol() :: rabbit_framing:protocol()).
 
--type(protocol_name() :: 'amqp0_8' | 'amqp0_9_1' | 'amqp1_0' | 'mqtt' | 'stomp' | any()).
+-type(protocol_name() :: 'amqp0_9_1' | 'amqp1_0' | 'mqtt' | 'stomp' | any()).
 
 -type(node_type() :: 'disc' | 'ram').
 
