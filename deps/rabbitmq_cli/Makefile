@@ -30,10 +30,6 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk
 VERBOSE_TEST ?= true
 MAX_CASES ?= 1
 
-# Force enable Elixir in this project since
-# this is an Elixir application.
-ELIXIR = system
-
 # We are still using Mix for testing.
 MIX_TEST_OPTS ?= ""
 MIX_TEST = ERL_COMPILER_OPTIONS=deterministic MIX_ENV=test mix do compile --warnings-as-errors, test --max-cases=$(MAX_CASES) --warnings-as-errors

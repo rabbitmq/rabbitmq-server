@@ -11,8 +11,5 @@ PLT_APPS = rabbit
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
-# Required to properly autopatch jose.
-ELIXIR = system
-
 include rabbitmq-components.mk
 include erlang.mk
