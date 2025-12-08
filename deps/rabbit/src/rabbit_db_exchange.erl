@@ -414,7 +414,24 @@ create_or_get_in_khepri(#exchange{name = XName} = X) ->
               Path0, [#if_any{conditions =
                               [#if_node_exists{exists = false},
                                #if_has_payload{has_payload = false}]}]),
-    case rabbit_khepri:put(Path1, X) of
+    Options = case X of
+                  #exchange{name = #resource{virtual_host = VHost,
+                                             name = Name},
+                            auto_delete = true} ->
+                      Path = rabbit_db_binding:khepri_route_path(
+                               VHost,
+                               Name,
+                               _Kind = ?KHEPRI_WILDCARD_STAR,
+                               _DstName = ?KHEPRI_WILDCARD_STAR,
+                               _RoutingKey = ?KHEPRI_WILDCARD_STAR),
+                      KeepWhile = #{Path => #if_all{conditions =
+                                                    [#if_node_exists{},
+                                                     #if_has_data{}]}},
+                      #{keep_while => KeepWhile};
+                  _ ->
+                      #{}
+              end,
+    case rabbit_khepri:put(Path1, X, Options) of
         ok ->
             {new, X};
         {error, {khepri, mismatching_node, #{node_props := #{data := ExistingX}}}} ->
