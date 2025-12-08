@@ -119,7 +119,7 @@ Example:
 .Sp
 .Dl rabbitmq-streams stream_status --vhost Qo a-vhost Qc Qo a-stream Qc
 .\" ------------------------------------
-.It Cm restart_stream Ar stream Fl -vhost Ar virtual-host Fl --preferred-leader-node Ar node
+.It Cm restart_stream Ar stream Fl -vhost Ar virtual-host Fl -preferred-leader-node Ar node
 .Pp
 Restarts a stream including all of it's replicas. The optional preferred
 node flag instructs the command to try to place the leader on a specific node during the restart.
