@@ -1,3 +1,7 @@
+# Force enable Elixir in all projects since
+# running dialyzer on any of them requires it
+ELIXIR = system
+
 ifeq ($(.DEFAULT_GOAL),)
 # Define default goal to `all` because this file defines some targets
 # before the inclusion of erlang.mk leading to the wrong target becoming
