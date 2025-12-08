@@ -1791,11 +1791,6 @@ to 16:
 This command clears the maximum number of connections limit for user
 .Qq limited_user :
 .sp
-.Dl rabbitmqctl clear_user_limits limited_user 'max-connections'
-.Pp
-This command disables client connections for user
-.Qq limited_user :
-.sp
 .Dl rabbitmqctl set_user_limits limited_user '{"max-connections": 0}'
 .\" ------------------------------------------------------------------
 .It Cm clear_user_limits Oc Ar username Oc Ar limit
