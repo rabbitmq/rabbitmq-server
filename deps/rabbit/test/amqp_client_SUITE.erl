@@ -3607,8 +3607,10 @@ target_quorum_queue_rejects(Config) ->
     ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"tag d">>, <<>>, false)),
 
     [receive {amqp10_disposition, {{rejected, Error}, DTag}} ->
-                 ?assertMatch(
+                 ?assertEqual(
                     #'v1_0.error'{
+                       condition = ?V_1_0_AMQP_ERROR_PRECONDITION_FAILED,
+                       description = {utf8, <<"queue '🎄' exceeded maximum length"/utf8>>},
                        info = {map, [{{symbol, <<"queue">>}, {utf8, QName}},
                                      {{symbol, <<"reason">>}, {symbol, <<"maxlen">>}}]}},
                     Error)
@@ -3667,6 +3669,7 @@ target_classic_queue_rejects(Config) ->
     ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"t2">>, <<"m2">>)),
     ExpectedErr1 = #'v1_0.error'{
                       condition = ?V_1_0_AMQP_ERROR_PRECONDITION_FAILED,
+                      description = {utf8, <<"queue '", QName1/binary, "' exceeded maximum length">>},
                       info = {map, [{{symbol, <<"queue">>}, {utf8, QName1}},
                                     {{symbol, <<"reason">>}, {symbol, <<"maxlen">>}}]}},
     ok = wait_for_settlement(<<"t2">>, {rejected, ExpectedErr1}),
@@ -3693,6 +3696,7 @@ target_classic_queue_rejects(Config) ->
     ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"t3">>, <<"m3">>)),
     ExpectedErr3 = #'v1_0.error'{
                       condition = ?V_1_0_AMQP_ERROR_PRECONDITION_FAILED,
+                      description = {utf8, <<"queue '", QName2/binary, "' is unavailable">>},
                       info = {map, [{{symbol, <<"queue">>}, {utf8, QName2}},
                                     {{symbol, <<"reason">>}, {symbol, <<"unavailable">>}}]}},
     ok = wait_for_settlement(<<"t3">>, {rejected, ExpectedErr3}),
