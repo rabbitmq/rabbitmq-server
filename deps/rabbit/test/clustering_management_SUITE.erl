@@ -1218,7 +1218,7 @@ forget_cluster_node(Config, Node, Removee) ->
 
 stop_join_start(Config, Node, ClusterTo) ->
     ok = stop_app(Config, Node),
-    ok = join_cluster(Config, Node, ClusterTo, Ram),
+    ok = join_cluster(Config, Node, ClusterTo),
     ok = start_app(Config, Node).
 
 stop_reset_start(Config, Node) ->
