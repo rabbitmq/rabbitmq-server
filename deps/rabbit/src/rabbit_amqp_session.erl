@@ -697,12 +697,14 @@ send_delivery_state_changes(State0 = #state{cfg = #cfg{writer_pid = Writer,
     {RejectedIds, GrantCredits0, State1} = handle_stashed_rejected(State0),
     maps:foreach(
       fun({QNameBin, Reason}, Ids) ->
+              Description = reject_description(QNameBin, Reason),
               Info = {map,
                       [{{symbol, <<"queue">>}, {utf8, QNameBin}},
                        {{symbol, <<"reason">>}, {symbol, reject_reason_to_binary(Reason)}}]},
               Rej = #'v1_0.rejected'{
                        error = #'v1_0.error'{
                                   condition = ?V_1_0_AMQP_ERROR_PRECONDITION_FAILED,
+                                  description = {utf8, Description},
                                   info = Info}},
               send_dispositions(Ids, Rej, Writer, ChannelNum)
       end, RejectedIds),
@@ -2602,6 +2604,11 @@ rejected(DeliveryId, Error) ->
                         first = ?UINT(DeliveryId),
                         settled = true,
                         state = #'v1_0.rejected'{error = Error}}.
+
+reject_description(QNameBin, maxlen) ->
+    <<"queue '", QNameBin/binary, "' exceeded maximum length">>;
+reject_description(QNameBin, down) ->
+    <<"queue '", QNameBin/binary, "' is unavailable">>.
 
 reject_reason_to_binary(maxlen) ->
     <<"maxlen">>;
