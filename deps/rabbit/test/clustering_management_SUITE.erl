@@ -286,7 +286,7 @@ join_and_part_cluster(Config) ->
 
     stop_reset_start(Config, Rabbit),
     assert_not_clustered(Rabbit),
-    assert_clustered([Hare, Rabbit]),
+    assert_clustered([Bunny, Hare]),
 
     stop_reset_start(Config, Hare),
     assert_not_clustered(Hare),
