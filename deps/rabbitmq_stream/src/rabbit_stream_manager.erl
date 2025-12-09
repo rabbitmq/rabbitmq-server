@@ -27,7 +27,7 @@
 %% API
 -export([create/4,
          delete/3,
-         create_super_stream/6,
+         create_super_stream/1,
          delete_super_stream/3,
          lookup_leader/2,
          lookup_local_member/2,
@@ -37,6 +37,23 @@
          partitions/2,
          partition_index/3,
          reset_offset/3]).
+
+-record(state, {configuration}).
+
+-type super_stream_spec() ::
+    #{name := binary(),
+      vhost := binary(),
+      username := binary(),
+      partitions_source :=
+          {partition_count, pos_integer()} | {routing_keys, [binary()]},
+      arguments => map(),
+      exchange_type => binary()}.
+
+start_link(Conf) ->
+    gen_server:start_link({local, ?MODULE}, ?MODULE, [Conf], []).
+
+init([Conf]) ->
+    {ok, #state{configuration = Conf}}.
 
 -spec create(binary(), binary(), #{binary() => binary()}, binary()) ->
     {ok, map()} |
@@ -89,80 +106,41 @@ delete(VirtualHost, Reference, Username) ->
             {error, reference_not_found}
     end.
 
--spec create_super_stream(binary(),
-                          binary(),
-                          [binary()],
-                          #{binary() => binary()},
-                          [binary()],
-                          binary()) ->
-    ok | {error, term()}.
-create_super_stream(VirtualHost,
-                    Name,
-                    Partitions,
-                    Arguments,
-                    BindingKeys,
-                    Username) ->
-    case validate_super_stream_creation(VirtualHost, Name, Partitions, BindingKeys) of
-        {error, Reason} ->
-            {error, Reason};
-        ok ->
-            case declare_super_stream_exchange(VirtualHost, Name, Username) of
-                ok ->
-                    RollbackOperations =
-                    [fun() ->
-                             delete_super_stream_exchange(VirtualHost, Name,
-                                                          Username)
-                     end],
-                    QueueCreationsResult =
-                    lists:foldl(fun (Partition, {ok, RollbackOps}) ->
-                                        Args =
-                                        default_super_stream_arguments(Arguments),
-                                        case create(VirtualHost,
-                                                    Partition,
-                                                    Args,
-                                                    Username)
-                                        of
-                                            {ok, _} ->
-                                                {ok,
-                                                 [fun() ->
-                                                          delete(VirtualHost,
-                                                                 Partition,
-                                                                 Username)
-                                                  end]
-                                                 ++ RollbackOps};
-                                            {error, Reason} ->
-                                                {{error, Reason},
-                                                 RollbackOps}
-                                        end;
-                                    (_,
-                                     {{error, _Reason}, _RollbackOps} =
-                                     Acc) ->
-                                        Acc
-                                end,
-                                {ok, RollbackOperations}, Partitions),
-                    case QueueCreationsResult of
-                        {ok, RollbackOps} ->
-                            BindingsResult =
-                            add_super_stream_bindings(VirtualHost,
-                                                      Name,
-                                                      Partitions,
-                                                      BindingKeys,
-                                                      Username),
-                            case BindingsResult of
-                                ok ->
-                                    ok;
-                                Error ->
-                                    _ = [Fun() || Fun <- RollbackOps],
-                                    Error
-                            end;
-                        {{error, Reason}, RollbackOps} ->
-                            _ = [Fun() || Fun <- RollbackOps],
-                            {error, Reason}
-                    end;
-                {error, Msg} ->
-                    {error, Msg}
-            end
-    end.
+-spec create_super_stream(super_stream_spec()) ->
+                             ok | {error, term()}.
+create_super_stream(#{exchange_type := <<"x-super-stream">>,
+                      partitions_source := {routing_keys, _}}) ->
+    {error, unsupported_specification};
+create_super_stream(#{name := Name,
+                      vhost := VHost,
+                      username := Username,
+                      partitions_source := PartitionSource} =
+                        Spec) ->
+    Type = maps:get(exchange_type, Spec, <<"direct">>),
+    Arguments = maps:get(arguments, Spec, #{}),
+    {Partitions, RoutingKeys} =
+        case PartitionSource of
+            {partition_count, Count} ->
+                Streams =
+                    [rabbit_stream_utils:partition_name(Name, K)
+                     || K <- lists:seq(0, Count - 1)],
+                Keys = [integer_to_binary(K) || K <- lists:seq(0, Count - 1)],
+                {Streams, Keys};
+            {routing_keys, Keys} ->
+                Streams =
+                    [rabbit_stream_utils:partition_name(Name, K) || K <- Keys],
+                {Streams, Keys}
+        end,
+
+    gen_server:call(?MODULE,
+                    {create_super_stream,
+                     VHost,
+                     Name,
+                     Type,
+                     Partitions,
+                     Arguments,
+                     RoutingKeys,
+                     Username}).
 
 -spec delete_super_stream(binary(), binary(), binary()) ->
     ok | {error, term()}.
@@ -355,14 +333,14 @@ partition_index(VirtualHost, SuperStream, Stream) ->
                      "super stream ~tp (virtual host ~tp)",
                      [Stream, SuperStream, VirtualHost]),
     try
-        _ = rabbit_exchange:lookup_or_die(ExchangeName),
+        Exchange = rabbit_exchange:lookup_or_die(ExchangeName),
         UnorderedBindings =
         _ = [Binding
              || Binding = #binding{destination = #resource{name = Q} = D}
                 <- rabbit_binding:list_for_source(ExchangeName),
                 is_resource_stream_queue(D), Q == Stream],
         OrderedBindings =
-        rabbit_stream_utils:sort_partitions(UnorderedBindings),
+        rabbit_stream_utils:sort_partitions(Exchange, UnorderedBindings),
         ?LOG_DEBUG("Bindings: ~tp", [OrderedBindings]),
         case OrderedBindings of
             [] ->
@@ -588,14 +566,14 @@ do_create_stream(VirtualHost, Reference, StreamQueueArguments, Username) ->
 super_stream_partitions(VirtualHost, SuperStream) ->
     ExchangeName = rabbit_misc:r(VirtualHost, exchange, SuperStream),
     try
-        _ = rabbit_exchange:lookup_or_die(ExchangeName),
+        Exchange = rabbit_exchange:lookup_or_die(ExchangeName),
         UnorderedBindings =
         [Binding
          || Binding = #binding{destination = D}
             <- rabbit_binding:list_for_source(ExchangeName),
             is_resource_stream_queue(D)],
         OrderedBindings =
-        rabbit_stream_utils:sort_partitions(UnorderedBindings),
+            rabbit_stream_utils:sort_partitions(Exchange, UnorderedBindings),
         {ok,
          lists:foldl(fun (#binding{destination =
                                    #resource{kind = queue, name = Q}},
@@ -701,15 +679,16 @@ check_already_existing_queue0(VirtualHost, [Q | T], _Error) ->
               rabbit_misc:format("~ts is not a correct name for a queue", [Q])}}
     end.
 
-declare_super_stream_exchange(VirtualHost, Name, Username) ->
+declare_super_stream_exchange(VirtualHost, Name, Type, Username) ->
     case rabbit_stream_utils:enforce_correct_name(Name) of
         {ok, CorrectName} ->
             Args =
-            rabbit_misc:set_table_value([],
-                                        <<"x-super-stream">>,
-                                        bool,
-                                        true),
-            CheckedType = rabbit_exchange:check_type(<<"direct">>),
+                rabbit_misc:set_table_value([],
+                                            <<"x-super-stream">>,
+                                            bool,
+                                            true),
+            CheckedType = rabbit_exchange:check_type(Type),
+            ?LOG_DEBUG("CheckedType ~p", [CheckedType]),
             ExchangeName = rabbit_misc:r(VirtualHost, exchange, CorrectName),
             XResult = case rabbit_exchange:lookup(ExchangeName) of
                           {ok, FoundX} ->
@@ -750,28 +729,30 @@ declare_super_stream_exchange(VirtualHost, Name, Username) ->
 
 add_super_stream_bindings(VirtualHost,
                           Name,
+                          Type,
                           Partitions,
                           BindingKeys,
                           Username) ->
     PartitionsBindingKeys = lists:zip(Partitions, BindingKeys),
     BindingsResult =
-    lists:foldl(fun ({Partition, BindingKey}, {ok, Order}) ->
-                        case add_super_stream_binding(VirtualHost,
-                                                      Name,
-                                                      Partition,
-                                                      BindingKey,
-                                                      Order,
-                                                      Username)
-                        of
-                            ok ->
-                                {ok, Order + 1};
-                            {error, Reason} ->
-                                {{error, Reason}, 0}
-                        end;
-                    (_, {{error, _Reason}, _Order} = Acc) ->
-                        Acc
-                end,
-                {ok, 0}, PartitionsBindingKeys),
+        lists:foldl(fun ({Partition, RoutingKey}, {ok, Order}) ->
+                            case add_super_stream_binding(VirtualHost,
+                                                          Name,
+                                                          Type,
+                                                          Partition,
+                                                          RoutingKey,
+                                                          Order,
+                                                          Username)
+                            of
+                                ok ->
+                                    {ok, Order + 1};
+                                {error, Reason} ->
+                                    {{error, Reason}, 0}
+                            end;
+                        (_, {{error, _Reason}, _Order} = Acc) ->
+                            Acc
+                    end,
+                    {ok, 0}, PartitionsBindingKeys),
     case BindingsResult of
         {ok, _} ->
             ok;
@@ -781,6 +762,7 @@ add_super_stream_bindings(VirtualHost,
 
 add_super_stream_binding(VirtualHost,
                          SuperStream,
+                         ExchangeType,
                          Partition,
                          BindingKey,
                          Order,
@@ -793,10 +775,15 @@ add_super_stream_binding(VirtualHost,
     QueueName = rabbit_misc:r(VirtualHost, queue, QueueNameBin),
     Pid = self(),
     Arguments =
-    rabbit_misc:set_table_value([],
-                                <<"x-stream-partition-order">>,
-                                long,
-                                Order),
+        case ExchangeType of
+            <<"direct">> ->
+                rabbit_misc:set_table_value([],
+                                            <<"x-stream-partition-order">>,
+                                            long,
+                                            Order);
+            _ ->
+                []
+        end,
     case rabbit_binding:add(#binding{source = ExchangeName,
                                      destination = QueueName,
                                      key = BindingKey,
