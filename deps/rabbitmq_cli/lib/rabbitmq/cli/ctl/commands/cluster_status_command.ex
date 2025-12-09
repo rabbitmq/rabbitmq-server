@@ -147,17 +147,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
         "\n#{bright("Disk Nodes")}\n"
       ] ++ node_lines(m[:disk_nodes])
 
-    ram_nodes_section =
-      case m[:ram_nodes] do
-        [] ->
-          []
-
-        xs ->
-          [
-            "\n#{bright("RAM Nodes")}\n"
-          ] ++ node_lines(xs)
-      end
-
     running_nodes_section =
       [
         "\n#{bright("Running Nodes")}\n"
@@ -223,7 +212,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
       cluster_name_section ++
         cluster_tag_section ++
         disk_nodes_section ++
-        ram_nodes_section ++
         running_nodes_section ++
         versions_section ++
         cpu_cores_section ++
@@ -262,7 +250,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
   #
 
   defp result_map(result) do
-    # [{nodes,[{disc,[hare@warp10,rabbit@warp10]},{ram,[flopsy@warp10]}]},
+    # [{nodes,[{disc,[hare@warp10,rabbit@warp10]}]},
     #  {running_nodes,[flopsy@warp10,hare@warp10,rabbit@warp10]},
     #  {cluster_name,<<"rabbit@localhost">>},
     #  {partitions,[{flopsy@warp10,[rabbit@vagrant]},
@@ -274,7 +262,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
       cluster_name: Keyword.get(result, :cluster_name),
       cluster_tags: result |> Keyword.get(:cluster_tags, []),
       disk_nodes: result |> Keyword.get(:nodes, []) |> Keyword.get(:disc, []),
-      ram_nodes: result |> Keyword.get(:nodes, []) |> Keyword.get(:ram, []),
       running_nodes: result |> Keyword.get(:running_nodes, []),
       alarms: Keyword.get(result, :alarms) |> Keyword.values() |> Enum.concat() |> Enum.uniq(),
       maintenance_status: Keyword.get(result, :maintenance_status, []) |> Enum.into(%{}),

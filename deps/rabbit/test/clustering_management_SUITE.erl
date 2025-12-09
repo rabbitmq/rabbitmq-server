@@ -41,7 +41,6 @@ groups() ->
                                                  join_cluster_bad_operations,
                                                  join_to_start_interval,
                                                  forget_cluster_node,
-                                                 change_cluster_node_type,
                                                  change_cluster_when_node_offline
                                                 ]}
                           ]},
@@ -57,8 +56,7 @@ groups() ->
                                                  pid_file_and_await_node_startup,
                                                  await_running_count,
                                                  start_with_invalid_schema_in_path,
-                                                 persistent_cluster_id,
-                                                 reset_last_disc_node
+                                                 persistent_cluster_id
                                                 ]}
                           ]}
                         ]},
@@ -66,7 +64,6 @@ groups() ->
                          {clustered_2_nodes, [],
                           [
                            {cluster_size_2, [], [
-                                                 change_cluster_node_type_in_khepri,
                                                  forget_node_in_khepri,
                                                  forget_removes_things_in_khepri,
                                                  reset_in_khepri,
@@ -277,20 +274,19 @@ join_and_part_cluster(Config) ->
     stop_join_start(Config, Rabbit, Bunny),
     assert_clustered([Rabbit, Bunny]),
 
-    stop_join_start(Config, Hare, Bunny, true),
-    assert_cluster_status(
-      {[Bunny, Hare, Rabbit], [Bunny, Rabbit], [Bunny, Hare, Rabbit]},
-      [Rabbit, Hare, Bunny]),
+    stop_join_start(Config, Hare, Bunny),
+    assert_clustered([Rabbit, Bunny, Hare]),
 
     %% Allow clustering with already clustered node
     ok = stop_app(Config, Rabbit),
     ok = join_cluster(Config, Rabbit, Hare),
     ok = start_app(Config, Rabbit),
 
+    assert_clustered([Rabbit, Bunny, Hare]),
+
     stop_reset_start(Config, Rabbit),
     assert_not_clustered(Rabbit),
-    assert_cluster_status({[Bunny, Hare], [Bunny], [Bunny, Hare]},
-                          [Hare, Bunny]),
+    assert_clustered([Bunny, Hare]),
 
     stop_reset_start(Config, Hare),
     assert_not_clustered(Hare),
@@ -385,12 +381,7 @@ join_and_part_cluster_in_khepri(Config) ->
     assert_clustered([Rabbit, Bunny, Hare]).
 
 join_cluster_bad_operations(Config) ->
-    [Rabbit, Hare, Bunny] = cluster_members(Config),
-
-    UsePrelaunch = rabbit_ct_broker_helpers:rpc(
-                     Config, Hare,
-                     erlang, function_exported,
-                     [rabbit_prelaunch, get_context, 0]),
+    [Rabbit, _Hare, _Bunny] = cluster_members(Config),
 
     %% Nonexistent node
     ok = stop_app(Config, Rabbit),
@@ -404,30 +395,6 @@ join_cluster_bad_operations(Config) ->
     ok = start_app(Config, Rabbit),
     assert_not_clustered(Rabbit),
 
-    %% Do not let the node leave the cluster or reset if it's the only
-    %% ram node
-    stop_join_start(Config, Hare, Rabbit, true),
-    assert_cluster_status({[Rabbit, Hare], [Rabbit], [Rabbit, Hare]},
-                          [Rabbit, Hare]),
-    ok = stop_app(Config, Hare),
-    assert_failure(fun () -> join_cluster(Config, Rabbit, Bunny) end),
-    assert_failure(fun () -> reset(Config, Rabbit) end),
-    ok = start_app(Config, Hare),
-    assert_cluster_status({[Rabbit, Hare], [Rabbit], [Rabbit, Hare]},
-                          [Rabbit, Hare]),
-
-    %% Cannot start RAM-only node first
-    ok = stop_app(Config, Rabbit),
-    ok = stop_app(Config, Hare),
-    assert_failure(fun () -> start_app(Config, Hare) end),
-    ok = start_app(Config, Rabbit),
-    case UsePrelaunch of
-        true ->
-            ok = start_app(Config, Hare);
-        false ->
-            %% The Erlang VM has stopped after previous rabbit app failure
-            ok = rabbit_ct_broker_helpers:start_node(Config, Hare)
-    end,
     ok.
 
 join_cluster_bad_operations_in_khepri(Config) ->
@@ -470,10 +437,10 @@ join_cluster_in_minority(Config) ->
     ok = rabbit_ct_broker_helpers:stop_node(Config, Rabbit),
 
     ok = stop_app(Config, Hare),
-    ?assertEqual(ok, join_cluster(Config, Hare, Bunny, false)),
+    ?assertEqual(ok, join_cluster(Config, Hare, Bunny)),
 
     ok = rabbit_ct_broker_helpers:start_node(Config, Rabbit),
-    ?assertEqual(ok, join_cluster(Config, Hare, Rabbit, false)),
+    ?assertEqual(ok, join_cluster(Config, Hare, Rabbit)),
     ?assertEqual(ok, start_app(Config, Hare)),
 
     assert_clustered([Rabbit, Bunny, Hare]).
@@ -489,10 +456,10 @@ join_cluster_with_rabbit_stopped(Config) ->
     ok = stop_app(Config, Rabbit),
 
     ok = stop_app(Config, Hare),
-    ?assertEqual(ok, join_cluster(Config, Hare, Bunny, false)),
+    ?assertEqual(ok, join_cluster(Config, Hare, Bunny)),
 
     ok = start_app(Config, Rabbit),
-    ?assertEqual(ok, join_cluster(Config, Hare, Rabbit, false)),
+    ?assertEqual(ok, join_cluster(Config, Hare, Rabbit)),
     ?assertEqual(ok, start_app(Config, Hare)),
 
     assert_clustered([Rabbit, Bunny, Hare]).
@@ -758,27 +725,6 @@ is_in_minority(Ret) ->
     {error, _, Msg} = Ret,
     ?assertMatch(match, re:run(Msg, ".*timed out.*minority.*", [{capture, none}])).
 
-reset_last_disc_node(Config) ->
-    [Rabbit, Hare | _] = cluster_members(Config),
-
-    stop_app(Config, Hare),
-    ?assertEqual(ok, change_cluster_node_type(Config, Hare, ram)),
-    start_app(Config, Hare),
-
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config, [Rabbit], khepri_db) of
-        ok ->
-            %% The reset works after the switch to Khepri because the RAM node was
-            %% implicitly converted to a disc one as Khepri always writes data on disc.
-            stop_app(Config, Rabbit),
-            ?assertEqual(ok, reset(Config, Rabbit)),
-            start_app(Config, Rabbit),
-            assert_not_clustered(Rabbit),
-            assert_not_clustered(Hare),
-            ok;
-        {skip, _} = Skip ->
-            Skip
-    end.
-
 forget_offline_removes_things(Config) ->
     [Rabbit, Hare] = rabbit_ct_broker_helpers:get_node_configs(Config,
       nodename),
@@ -832,54 +778,6 @@ force_boot_in_khepri(Config) ->
     %% It executes force boot for mnesia, currently Khepri does nothing
     ?assertMatch({ok, []}, rabbit_ct_broker_helpers:rabbitmqctl(Config, Rabbit, ["force_boot"])),
     ok.
-
-change_cluster_node_type(Config) ->
-    [Rabbit, Hare, _Bunny] = cluster_members(Config),
-
-    %% Trying to change the node to the ram type when not clustered should always fail
-    ok = stop_app(Config, Rabbit),
-    assert_failure(fun () -> change_cluster_node_type(Config, Rabbit, ram) end),
-    ok = start_app(Config, Rabbit),
-
-    ok = stop_app(Config, Rabbit),
-    join_cluster(Config, Rabbit, Hare),
-    assert_cluster_status({[Rabbit, Hare], [Rabbit, Hare], [Hare]},
-                          [Rabbit, Hare]),
-    change_cluster_node_type(Config, Rabbit, ram),
-    assert_cluster_status({[Rabbit, Hare], [Hare], [Rabbit, Hare], [Hare], [Hare]},
-                          [Rabbit, Hare]),
-    change_cluster_node_type(Config, Rabbit, disc),
-
-    assert_cluster_status({[Rabbit, Hare], [Rabbit, Hare], [Hare]},
-                          [Rabbit, Hare]),
-    change_cluster_node_type(Config, Rabbit, ram),
-    ok = start_app(Config, Rabbit),
-    assert_cluster_status({[Rabbit, Hare], [Hare], [Hare, Rabbit]},
-                          [Rabbit, Hare]),
-
-    %% Changing to ram when you're the only ram node should fail
-    ok = stop_app(Config, Hare),
-    assert_failure(fun () -> change_cluster_node_type(Config, Hare, ram) end),
-    ok = start_app(Config, Hare).
-
-change_cluster_node_type_in_khepri(Config) ->
-    [Rabbit, Hare] = cluster_members(Config),
-
-    assert_cluster_status({[Rabbit, Hare], [Rabbit, Hare], [Rabbit, Hare]},
-                          [Rabbit, Hare]),
-
-    ok = stop_app(Config, Rabbit),
-    {error, 69, Msg} = change_cluster_node_type(Config, Rabbit, ram),
-    ?assertEqual(
-       match,
-       re:run(
-         Msg, "Feature `ram_node_type` is deprecated",
-         [{capture, none}])),
-
-    ok = change_cluster_node_type(Config, Rabbit, disc),
-    ok = start_app(Config, Rabbit),
-    assert_cluster_status({[Rabbit, Hare], [Rabbit, Hare], [Rabbit, Hare]},
-                          [Rabbit, Hare]).
 
 change_cluster_when_node_offline(Config) ->
     [Rabbit, Hare, Bunny] = cluster_members(Config),
@@ -936,14 +834,6 @@ classic_config_discovery_node_list(Config) ->
                   [rabbit, cluster_nodes, {[Rabbit], disc}]),
     ok = start_app(Config, Hare),
     assert_clustered([Rabbit, Hare]),
-
-    ok = stop_app(Config, Hare),
-    ok = reset(Config, Hare),
-    ok = rpc:call(Hare, application, set_env,
-                  [rabbit, cluster_nodes, {[Rabbit], ram}]),
-    ok = start_app(Config, Hare),
-    assert_cluster_status({[Rabbit, Hare], [Rabbit], [Rabbit, Hare]},
-                          [Rabbit, Hare]),
 
     %% List of nodes [node()] is equivalent to {[node()], disk}
     ok = stop_app(Config, Hare),
@@ -1281,15 +1171,7 @@ start_app(Config, Node) ->
     end.
 
 join_cluster(Config, Node, To) ->
-    join_cluster(Config, Node, To, false).
-
-join_cluster(Config, Node, To, Ram) ->
-    Cmd = case Ram of
-              true ->
-                  ["join_cluster", "--ram", atom_to_list(To)];
-              false ->
-                  ["join_cluster", atom_to_list(To)]
-          end,
+    Cmd = ["join_cluster", atom_to_list(To)],
     case rabbit_ct_broker_helpers:rabbitmqctl(Config, Node, Cmd) of
         {ok, _} -> ok;
         Error   -> Error
@@ -1326,21 +1208,10 @@ forget_cluster_node(Config, Node, Removee, RemoveWhenOffline) ->
 forget_cluster_node(Config, Node, Removee) ->
     forget_cluster_node(Config, Node, Removee, false).
 
-change_cluster_node_type(Config, Node, Type) ->
-    Ret = rabbit_ct_broker_helpers:rabbitmqctl(
-            Config, Node, ["change_cluster_node_type", atom_to_list(Type)]),
-    case Ret of
-        {ok, _} -> ok;
-        Error   -> Error
-    end.
-
-stop_join_start(Config, Node, ClusterTo, Ram) ->
-    ok = stop_app(Config, Node),
-    ok = join_cluster(Config, Node, ClusterTo, Ram),
-    ok = start_app(Config, Node).
-
 stop_join_start(Config, Node, ClusterTo) ->
-    stop_join_start(Config, Node, ClusterTo, false).
+    ok = stop_app(Config, Node),
+    ok = join_cluster(Config, Node, ClusterTo),
+    ok = start_app(Config, Node).
 
 stop_reset_start(Config, Node) ->
     ok = stop_app(Config, Node),

@@ -1397,7 +1397,7 @@ end}.
 %%
 
 {mapping, "cluster_formation.node_type", "rabbit.cluster_formation.node_type", [
-    {datatype, {enum, [disc, disk, ram]}}
+    {datatype, {enum, [disc, disk]}}
 ]}.
 
 {translation, "rabbit.cluster_formation.node_type",
@@ -1411,7 +1411,6 @@ fun(Conf) ->
                 disc      -> disc;
                 %% always cast to `disc`
                 disk      -> disc;
-                ram       -> ram;
                 _Other    -> disc
             end
     end
@@ -1501,8 +1500,7 @@ fun(Conf) ->
             case cuttlefish:conf_get("cluster_formation.node_type", Conf, disc) of
                 disc -> {Other, disc};
                 %% Always cast to `disc`
-                disk -> {Other, disc};
-                ram  -> {Other, ram}
+                disk -> {Other, disc}
             end
     end
 end}.

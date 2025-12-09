@@ -26,16 +26,8 @@ defmodule JoinClusterCommandTest do
     {:ok,
      opts: %{
        node: get_rabbit_hostname(),
-       disc: true,
-       ram: false
+       disc: true
      }}
-  end
-
-  test "validate: specifying both --disc and --ram is reported as invalid", context do
-    assert match?(
-             {:validation_failure, {:bad_argument, _}},
-             @command.validate(["a"], Map.merge(context[:opts], %{disc: true, ram: true}))
-           )
   end
 
   test "validate: specifying no target node is reported as an error", context do
@@ -50,10 +42,6 @@ defmodule JoinClusterCommandTest do
 
   # TODO
   # test "run: successful join as a disc node", context do
-  # end
-
-  # TODO
-  # test "run: successful join as a RAM node", context do
   # end
 
   test "run: joining self is invalid", context do
@@ -71,7 +59,6 @@ defmodule JoinClusterCommandTest do
     opts = %{
       node: :jake@thedog,
       disc: true,
-      ram: false,
       timeout: 200
     }
 
