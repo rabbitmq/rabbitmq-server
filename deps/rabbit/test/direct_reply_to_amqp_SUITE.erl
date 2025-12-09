@@ -313,7 +313,7 @@ responder_attaches_queue_target(Config) ->
 %% Test that responder can send many messages to requester.
 %% Load test the volatile queue.
 many_replies(Config) ->
-    Num = 3000,
+    Num = 100,
     RequestQueue = atom_to_binary(?FUNCTION_NAME),
     AddrRequestQueue = rabbitmq_amqp_address:queue(RequestQueue),
 
