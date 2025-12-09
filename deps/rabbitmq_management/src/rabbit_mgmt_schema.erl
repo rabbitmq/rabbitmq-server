@@ -30,7 +30,6 @@ translate_oauth_resource_servers(Conf) ->
         extract_resource_server_endpoint_params(oauth_authorization_endpoint_params, Settings),
         extract_resource_server_endpoint_params(oauth_token_endpoint_params, Settings)
     ]),
-    ?LOG_DEBUG("translate_oauth_resource_servers: ~p", [Map]),
     Map0 = maps:map(fun(K,V) ->
         case proplists:get_value(id, V) of
             undefined -> V ++ [{id, K}];
@@ -57,15 +56,13 @@ convert_list_to_binary(V) ->
 extract_resource_server_properties(Settings) ->    
     OAuthResourceServers = [{Name, {list_to_atom(Key), convert_list_to_binary(V)}}
         || {["management","oauth_resource_servers", Name, Key], V} <- Settings ],
-    OAuthResourceServers1 = lists:foldl(fun ({K, Value}, Acc) ->
+    lists:foldl(fun ({K, Value}, Acc) ->
         Key = list_to_binary(K),
         Attrs = case maps:get(Key, Acc, []) of 
             [] -> [] ++ [{index, maps:size(Acc)+1}, Value];
             List -> List ++ [Value]
         end,
-        maps:put(Key, Attrs, Acc) end, #{}, OAuthResourceServers),
-    ct:log("OAuthResourceServers1: ~p", [OAuthResourceServers1]),
-    OAuthResourceServers1.
+        maps:put(Key, Attrs, Acc) end, #{}, OAuthResourceServers).
 
 extract_resource_server_endpoint_params(Variable, Settings) ->
     KeyFun = fun extract_key_as_binary/1,

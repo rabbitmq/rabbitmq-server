@@ -703,27 +703,30 @@
                           {oauth_resource_servers,
                             #{
                              <<"3">> => [
-                               {oauth_provider_url, <<"http://three">>},
+                               {index,3},
                                {oauth_initiated_logon_type, idp_initiated},
+                               {oauth_provider_url, <<"http://three">>},
                                {id, <<"3">>}
                              ],
                              <<"resource-one">> => [
                                 {oauth_token_endpoint_params, [
                                    {<<"param2">>, <<"value2">>}
                                 ]},
-                                {oauth_scopes, <<"openid profile rabbitmq.*">>},
-                                {oauth_client_id, <<"one">>},
-                                {label, <<"One">>},
+                                {index,1},
+                                {oauth_provider_url, <<"http://one:8080">>},
                                 {id, <<"resource-one">>},
-                                {oauth_provider_url, <<"http://one:8080">>}
+                                {label, <<"One">>},                                
+                                {oauth_client_id, <<"one">>},
+                                {oauth_scopes, <<"openid profile rabbitmq.*">>}                                
                               ],
                               <<"resource-two">> => [
                                 {oauth_authorization_endpoint_params, [
                                    {<<"param1">>, <<"value1">>}
                                 ]},
-                                {oauth_client_id, <<"two">>},
+                                {index,2},
+                                {oauth_provider_url, <<"http://two">>},
                                 {id, <<"resource-two">>},
-                                {oauth_provider_url, <<"http://two">>}
+                                {oauth_client_id, <<"two">>}
                               ]
                             }
                           }

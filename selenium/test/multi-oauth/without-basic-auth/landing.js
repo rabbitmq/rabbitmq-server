@@ -29,15 +29,22 @@ describe('Given three oauth resources but only two enabled, an unauthenticated u
       assertAllOptions([
         { value : "rabbit_prod", text : "RabbitMQ Production" },
         { value : "rabbit_dev", text : "RabbitMQ Development" }
-        ], resources);
-        // assert resources are rendered in the same order they are configured : prod and then dev
-        assert.equal("RabbitMQ Production", resources[0].text);
-        assert.equal("RabbitMQ Development", resources[1].text);
+        ], resources);       
     }else {
       assertAllOptions([
         { value : "rabbit_prod", text : "rabbit_prod" },
         { value : "rabbit_dev", text : "rabbit_dev" }
-        ], resources);
+        ], resources);       
+    }    
+  })
+
+  it('there should preserve the same order as they were configured (prod then dev)', async function () {
+    resources = await homePage.getOAuthResourceOptions()
+    if (hasProfile("with-resource-label")) {
+        // assert resources are rendered in the same order they are configured : prod and then dev
+        assert.equal("RabbitMQ Production", resources[0].text);
+        assert.equal("RabbitMQ Development", resources[1].text);
+    }else {
         assert.equal("rabbit_prod", resources[0].text);
         assert.equal("rabbit_dev", resources[1].text);
     }    

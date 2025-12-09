@@ -54,10 +54,10 @@ test_with_one_resource_server(_) ->
     } = translate_oauth_resource_servers(Conf).
 
 test_with_many_resource_servers(_) ->
-    Conf = [
+    Conf = lists:reverse([  %% cuttlefish reverse the order. So calling lists:reverse simulates cuttlefish
         {["management","oauth_resource_servers","keycloak","label"],"Keycloak"},
         {["management","oauth_resource_servers","uaa","label"],"Uaa"}
-    ],
+    ]),
     #{
         <<"keycloak">> := [
             {index, 1},
@@ -72,14 +72,14 @@ test_with_many_resource_servers(_) ->
     } = translate_oauth_resource_servers(Conf).
 
 test_preserve_order_when_using_many_resource_servers(_) ->
-    Conf = [
+    Conf = lists:reverse([
         {["management","oauth_resource_servers","uaa","label"],"Uaa"},
         {["management","oauth_resource_servers","uaa","oauth_client_id"],"uaa-client"},
         {["management","oauth_resource_servers","spring","label"],"Spring"},
         {["management","oauth_resource_servers","spring","oauth_client_id"],"spring-client"},
         {["management","oauth_resource_servers","keycloak","label"],"Keycloak"},
         {["management","oauth_resource_servers","keycloak","oauth_client_id"],"keycloak-client"}
-    ],
+    ]),
     SortByIndex = fun({_, A}, {_, B}) -> 
         proplists:get_value(index, A) =< proplists:get_value(index, B) end,
 
