@@ -42,6 +42,7 @@ switches() ->
     [{partitions, integer},
      {binding_keys, string},
      {routing_keys, string},
+     {exchange_type, string},
      {max_length_bytes, string},
      {max_age, string},
      {stream_max_segment_size_bytes, string},
@@ -61,7 +62,11 @@ validate([_Name], #{partitions := _, binding_keys := _}) ->
      "Specify --partitions or --binding-keys, not both."};
 validate([_Name], #{partitions := _, routing_keys := _}) ->
     {validation_failure,
-     "Specify --partitions or --binding-keys, not both."};
+     "Specify --partitions or routing-keys, not both."};
+validate([_Name],
+         #{exchange_type := <<"x-super-stream">>, routing_keys := _}) ->
+    {validation_failure,
+     "Exchange type x-super-stream cannot be used with routing-keys."};
 validate([_Name], #{partitions := Partitions}) when Partitions < 1 ->
     {validation_failure, "The partition number must be greater than 0"};
 validate([_Name], Opts) ->
@@ -132,6 +137,17 @@ validate_stream_arguments(#{initial_cluster_size := Value} = Opts) ->
              "Invalid value for --initial-cluster-size, the "
              "value must be a positive integer."}
     end;
+validate_stream_arguments(#{exchange_type := Type} = Opts) ->
+    case Type of
+        <<"direct">> ->
+            validate_stream_arguments(maps:remove(exchange_type, Opts));
+        <<"x-super-stream">> ->
+            validate_stream_arguments(maps:remove(exchange_type, Opts));
+        _ ->
+            {validation_failure,
+             "Invalid value for --exchange_type, must be one of:"
+             "'direct' or 'x-super-stream'"}
+    end;
 validate_stream_arguments(_) ->
     ok.
 
@@ -176,44 +192,27 @@ run([SuperStream],
       timeout := Timeout,
       partitions := Partitions} =
         Opts) ->
-    Streams =
-        [list_to_binary(binary_to_list(SuperStream)
-                        ++ "-"
-                        ++ integer_to_list(K))
-         || K <- lists:seq(0, Partitions - 1)],
-    RoutingKeys =
-        [integer_to_binary(K) || K <- lists:seq(0, Partitions - 1)],
-    create_super_stream(NodeName,
-                        Timeout,
-                        VHost,
-                        SuperStream,
-                        Streams,
-                        stream_arguments(Opts),
-                        RoutingKeys);
+    Spec0 = maps:with([vhost, exchange_type], Opts),
+    Spec =
+        Spec0#{username => cli_acting_user(),
+               name => SuperStream,
+               partitions_source => {partition_count, Partitions},
+               arguments => stream_arguments(Opts)},
+    create_super_stream(NodeName, Timeout, Spec);
 run([SuperStream],
     #{node := NodeName,
       vhost := VHost,
       timeout := Timeout,
       binding_keys := BindingKeysStr} =
         Opts) ->
-    BindingKeys =
-        [rabbit_data_coercion:to_binary(
-             string:strip(K))
-         || K
-                <- string:tokens(
-                       rabbit_data_coercion:to_list(BindingKeysStr), ",")],
-    Streams =
-        [list_to_binary(binary_to_list(SuperStream)
-                        ++ "-"
-                        ++ binary_to_list(K))
-         || K <- BindingKeys],
-    create_super_stream(NodeName,
-                        Timeout,
-                        VHost,
-                        SuperStream,
-                        Streams,
-                        stream_arguments(Opts),
-                        BindingKeys).
+    Spec0 = maps:with([vhost, exchange_type], Opts),
+    RoutingKeys = [string:trim(K) || K <- string:lexemes(BindingKeysStr, ",")],
+    Spec =
+        Spec0#{username => cli_acting_user(),
+               name => SuperStream,
+               partitions_source => {routing_keys, RoutingKeys},
+               arguments => stream_arguments(Opts)},
+    create_super_stream(NodeName, Timeout, Spec).
 
 stream_arguments(Opts) ->
     stream_arguments(#{}, Opts).
@@ -258,28 +257,17 @@ duration_to_seconds([{sign, _},
                      {seconds, S}]) ->
     Y * 365 * 86400 + M * 30 * 86400 + D * 86400 + H * 3600 + Mn * 60 + S.
 
-create_super_stream(NodeName,
-                    Timeout,
-                    VHost,
-                    SuperStream,
-                    Streams,
-                    Arguments,
-                    RoutingKeys) ->
+create_super_stream(NodeName, Timeout, Spec) ->
     case rabbit_misc:rpc_call(NodeName,
                               rabbit_stream_manager,
                               create_super_stream,
-                              [VHost,
-                               SuperStream,
-                               Streams,
-                               Arguments,
-                               RoutingKeys,
-                               cli_acting_user()],
+                              [Spec],
                               Timeout)
     of
         ok ->
             {ok,
              rabbit_misc:format("Super stream ~ts has been created",
-                                [SuperStream])};
+                                [maps:get(name, Spec)])};
         Error ->
             Error
     end.
