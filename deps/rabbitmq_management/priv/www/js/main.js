@@ -41,12 +41,14 @@ function startWithOAuthLogin (oauth) {
   }
 }
 function render_login_oauth(oauth, messages) {
-  let formatData = {}
-  formatData.warnings = []
-  formatData.notAuthorized = false
-  formatData.resource_servers = oauth.resource_servers
-  formatData.declared_resource_servers_count = oauth.declared_resource_servers_count
-  formatData.oauth_disable_basic_auth = oauth.oauth_disable_basic_auth
+  let formatData = {};
+  formatData.warnings = [];
+  formatData.notAuthorized = false;
+  formatData.resource_servers = oauth.resource_servers;
+  formatData.declared_resource_servers_count = oauth.declared_resource_servers_count;
+  formatData.oauth_disable_basic_auth = oauth.oauth_disable_basic_auth;
+  formatData.strict_auth_mechanism = oauth.strict_auth_mechanism;
+  formatData.preferred_auth_mechanism = oauth.preferred_auth_mechanism;
 
   if (Array.isArray(messages)) {
     formatData.warnings = messages
@@ -1133,6 +1135,9 @@ function update_truncate() {
 
 function setup_visibility() {
     $('div.section,div.section-hidden').each(function(_index) {
+        if ($(this).hasClass("disable-pref")) {
+            return;
+        }
         var pref = section_pref(current_template,
                                 $(this).children('h2').text());
         var show = get_pref(pref);
