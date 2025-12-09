@@ -232,7 +232,8 @@ wait_for_queue_deleted(QRef, N) ->
     end.
 
 -spec lookup_topology(state()) -> state().
-lookup_topology(#state{queue_ref = {resource, Vhost, queue, _} = QRef} = State) ->
+lookup_topology(#state{queue_ref = #resource{virtual_host = Vhost,
+                                             kind = queue} = QRef} = State) ->
     {ok, Q} = rabbit_amqqueue:lookup(QRef),
     DLRKey = rabbit_queue_type_util:args_policy_lookup(<<"dead-letter-routing-key">>,
                                                        fun(_Pol, QArg) -> QArg end, Q),
@@ -253,7 +254,7 @@ handle_queue_actions(Actions, State0) ->
               S1 = handle_settled(QRef, MsgSeqs, S0),
               S2 = ack(S1),
               maybe_cancel_timer(S2);
-          ({rejected, QRef, MsgSeqs}, S0) ->
+          ({rejected, QRef, _Reason, MsgSeqs}, S0) ->
               handle_rejected(QRef, MsgSeqs, S0);
           ({queue_down, _QRef}, S0) ->
               %% target classic queue is down, but not deleted
@@ -291,8 +292,8 @@ rejected(SeqNo, Qs, Pendings)
                              Pendings);
         false ->
             ?LOG_DEBUG("Ignoring rejection for unknown sequence number ~b "
-                             "from target dead letter queues ~tp",
-                             [SeqNo, Qs]),
+                       "from target dead letter queues ~tp",
+                       [SeqNo, Qs]),
             Pendings
     end.
 

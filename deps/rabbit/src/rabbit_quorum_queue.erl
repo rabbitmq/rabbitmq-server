@@ -1125,7 +1125,7 @@ deliver(QSs, Msg0, Options) ->
               case deliver0(QName, Correlation, Msg, S0) of
                   {reject_publish, S} ->
                       {[{Q, S} | Qs],
-                       [{rejected, QName, [Correlation]} | Actions]};
+                       [{rejected, QName, maxlen, [Correlation]} | Actions]};
                   {ok, S, As} ->
                       {[{Q, S} | Qs], As ++ Actions}
               end
