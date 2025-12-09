@@ -375,6 +375,14 @@ await_replication() ->
 %% @private
 
 reset() ->
+    case 1 =:= 1 of
+        false ->
+            reset_v1();
+        true ->
+            reset_v2()
+    end.
+
+reset_v1() ->
     case rabbit:is_running() of
         false ->
             %% Rabbit should be stopped, but Khepri needs to be running.
@@ -388,6 +396,12 @@ reset() ->
         true ->
             throw({error, rabbitmq_unexpectedly_running})
     end.
+
+reset_v2() ->
+    ok = khepri_cluster:reset(?RA_CLUSTER_NAME),
+
+    _ = file:delete(rabbit_guid:filename()),
+    ok.
 
 -spec dir() -> Dir when
       Dir :: file:filename_all().

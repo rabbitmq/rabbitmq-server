@@ -17,6 +17,7 @@
 
 -export([init/0,
          reset/0,
+         do_reset_v2/0,
          force_reset/0,
          force_load_on_next_boot/0,
          is_virgin_node/0, is_virgin_node/1,
@@ -129,11 +130,31 @@ clear_init_finished() ->
 %% @doc Resets the database and the node.
 
 reset() ->
+    case 1 =:= 1 of
+        true ->
+            reset_v2();
+        false ->
+            reset_v1()
+    end.
+
+reset_v1() ->
     ok = case rabbit_khepri:is_enabled() of
              true  -> reset_using_khepri();
              false -> reset_using_mnesia()
          end,
     post_reset().
+
+reset_v2() ->
+    {ok, _BootState} = rabbit_db_cluster:pre_cluster_changes(),
+    try
+        do_reset_v2()
+    after
+        application:stop(rabbit)
+    end.
+
+do_reset_v2() ->
+    ?assertEqual(prelaunch_done, rabbit_boot_state:get()),
+    reset_v1().
 
 reset_using_mnesia() ->
     ?LOG_INFO(
@@ -152,11 +173,31 @@ reset_using_khepri() ->
 %% @doc Resets the database and the node.
 
 force_reset() ->
+    case 1 =:= 1 of
+        true ->
+            force_reset_v2();
+        false ->
+            force_reset_v1()
+    end.
+
+force_reset_v1() ->
     ok = case rabbit_khepri:is_enabled() of
              true  -> force_reset_using_khepri();
              false -> force_reset_using_mnesia()
          end,
     post_reset().
+
+force_reset_v2() ->
+    {ok, _BootState} = rabbit_db_cluster:pre_cluster_changes(),
+    try
+        do_force_reset_v2()
+    after
+        application:stop(rabbit)
+    end.
+
+do_force_reset_v2() ->
+    ?assertEqual(prelaunch_done, rabbit_boot_state:get()),
+    force_reset_v1().
 
 force_reset_using_mnesia() ->
     ?LOG_DEBUG(
