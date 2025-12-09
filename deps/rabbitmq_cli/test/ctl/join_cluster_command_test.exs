@@ -31,10 +31,10 @@ defmodule JoinClusterCommandTest do
      }}
   end
 
-  test "validate: specifying both --disc and --ram is reported as invalid", context do
+  test "validate: specifying --ram is reported as invalid", context do
     assert match?(
              {:validation_failure, {:bad_argument, _}},
-             @command.validate(["a"], Map.merge(context[:opts], %{disc: true, ram: true}))
+             @command.validate(["a"], Map.merge(context[:opts], %{ram: true}))
            )
   end
 

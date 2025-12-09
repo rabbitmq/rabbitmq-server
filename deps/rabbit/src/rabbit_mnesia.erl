@@ -104,7 +104,7 @@
 
 -rabbit_deprecated_feature(
    {ram_node_type,
-    #{deprecation_phase => permitted_by_default,
+    #{deprecation_phase => removed,
       doc_url => "https://blog.rabbitmq.com/posts/2021/08/4.0-deprecation-announcements/#removal-of-ram-nodes"
      }}).
 
