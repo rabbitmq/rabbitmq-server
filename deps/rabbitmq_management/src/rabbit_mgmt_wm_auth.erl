@@ -120,7 +120,6 @@ buildRootResourceServerIfAny(Id, Props) ->
 
 authSettings() ->
     ManagementProps = application:get_all_env(rabbitmq_management),
-    ?LOG_DEBUG("ManagementProps: ~p", [ManagementProps]),
     OAuth2BackendProps = application:get_all_env(rabbitmq_auth_backend_oauth2),
     EnableOAUTH = proplists:get_value(oauth_enabled, ManagementProps, false),
     case EnableOAUTH of
