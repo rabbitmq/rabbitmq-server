@@ -131,7 +131,8 @@ module.exports = class BasePage {
     for (const index in optionList) {
       const t = await optionList[index].getText()
       const v = await optionList[index].getAttribute('value')
-      table_model.push({"text":t, "value": v})
+      const s = await optionList[index].getAttribute('selected')
+      table_model.push({"text": t, "value": v, "selected" : s !== undefined})
     }
 
     return table_model
@@ -300,13 +301,14 @@ module.exports = class BasePage {
 
   async isDisplayed(locator) {
       try {
-        let element = await driver.findElement(locator)
+        let element = await this.driver.findElement(locator)
 
         return this.driver.wait(until.elementIsVisible(element), this.timeout,
           'Timed out after [timeout=' + this.timeout + ';polling=' + this.polling + '] awaiting till visible ' + element,
           this.polling / 2)
       }catch(error) {
-          return Promise.resolve(false)
+          console.log("isDisplayed failed due to " + error);
+          return Promise.resolve(false);
       }
   }
 
