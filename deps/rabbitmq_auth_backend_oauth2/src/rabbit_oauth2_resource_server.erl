@@ -58,7 +58,7 @@ resolve_resource_server_from_audience(Audience) ->
 
 -spec get_root_resource_server_id() -> resource_server_id().
 get_root_resource_server_id() ->
-    get_env(resource_server_id, <<>>).
+    rabbit_data_coercion:to_binary(get_env(resource_server_id, <<>>)).
 
 -spec get_root_resource_server() -> resource_server().
 get_root_resource_server() ->
