@@ -7,7 +7,7 @@
 
 -module(rabbit_data_coercion).
 
--export([to_binary/1, to_list/1, to_atom/1, to_integer/1, to_proplist/1, to_map/1, to_map_recursive/1]).
+-export([to_binary/1, to_list/1, to_atom/1, to_integer/1, to_boolean/1, to_proplist/1, to_map/1, to_map_recursive/1]).
 -export([to_atom/2, atomize_keys/1, to_list_of_binaries/1]).
 -export([to_utf8_binary/1, to_unicode_charlist/1]).
 -export([as_list/1]).
@@ -55,6 +55,11 @@ to_atom(Val, Encoding)  when is_binary(Val) -> binary_to_atom(Val, Encoding).
 to_integer(Val) when is_integer(Val) -> Val;
 to_integer(Val) when is_list(Val)    -> list_to_integer(Val);
 to_integer(Val) when is_binary(Val)  -> binary_to_integer(Val).
+
+-spec to_boolean(Val :: boolean() | list() | binary()) -> boolean().
+to_boolean(Val) when is_boolean(Val) -> Val;
+to_boolean(Val) when is_list(Val)    -> list_to_boolean(string:lowercase(Val));
+to_boolean(Val) when is_binary(Val)  -> list_to_boolean(string:lowercase(binary_to_list(Val))).
 
 -spec to_proplist(Val :: map() | list()) -> list().
 to_proplist(Val) when is_list(Val) -> Val;
@@ -160,3 +165,6 @@ is_proplist_element(Atom) when is_atom(Atom) ->
     true;
 is_proplist_element(_) ->
     false.
+
+list_to_boolean("true")  -> true;
+list_to_boolean("false") -> false.

@@ -50,6 +50,7 @@ groups() ->
             data_coercion_to_map_recursive_property,
             data_coercion_atomize_keys_proplist,
             data_coercion_atomize_keys_map,
+            data_coercion_to_boolean,
             pget,
             deep_pget,
             encrypt_decrypt,
@@ -286,6 +287,25 @@ data_coercion_atomize_keys_proplist(_Config) ->
     A = [{a, 1}, {b, 2}, {c, 3}],
     B = rabbit_data_coercion:atomize_keys([{a, 1}, {"b", 2}, {<<"c">>, 3}]),
     ?assertEqual(lists:usort(A), lists:usort(B)).
+
+data_coercion_to_boolean(_Config) ->
+    %% For booleans, this is an identity function
+    ?assertEqual(true, rabbit_data_coercion:to_boolean(true)),
+    ?assertEqual(false, rabbit_data_coercion:to_boolean(false)),
+    %% Strings (lists) are converted regardless of their case
+    ?assertEqual(true, rabbit_data_coercion:to_boolean("true")),
+    ?assertEqual(true, rabbit_data_coercion:to_boolean("TRUE")),
+    ?assertEqual(true, rabbit_data_coercion:to_boolean("True")),
+    ?assertEqual(false, rabbit_data_coercion:to_boolean("false")),
+    ?assertEqual(false, rabbit_data_coercion:to_boolean("FALSE")),
+    ?assertEqual(false, rabbit_data_coercion:to_boolean("False")),
+    %% Binaries are also converted regardless of their case
+    ?assertEqual(true, rabbit_data_coercion:to_boolean(<<"true">>)),
+    ?assertEqual(true, rabbit_data_coercion:to_boolean(<<"TRUE">>)),
+    ?assertEqual(true, rabbit_data_coercion:to_boolean(<<"True">>)),
+    ?assertEqual(false, rabbit_data_coercion:to_boolean(<<"false">>)),
+    ?assertEqual(false, rabbit_data_coercion:to_boolean(<<"FALSE">>)),
+    ?assertEqual(false, rabbit_data_coercion:to_boolean(<<"False">>)).
 
 data_coercion_to_list(_Config) ->
     ?assertEqual([{a, 1}], rabbit_data_coercion:to_list([{a, 1}])),
