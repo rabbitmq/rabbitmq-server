@@ -3609,7 +3609,7 @@ target_quorum_queue_rejects(Config) ->
     [receive {amqp10_disposition, {{rejected, Error}, DTag}} ->
                  ?assertEqual(
                     #'v1_0.error'{
-                       condition = ?V_1_0_AMQP_ERROR_PRECONDITION_FAILED,
+                       condition = ?V_1_0_AMQP_ERROR_RESOURCE_LIMIT_EXCEEDED,
                        description = {utf8, <<"queue '🎄' exceeded maximum length"/utf8>>},
                        info = {map, [{{symbol, <<"queue">>}, {utf8, QName}},
                                      {{symbol, <<"reason">>}, {symbol, <<"maxlen">>}}]}},
@@ -3668,7 +3668,7 @@ target_classic_queue_rejects(Config) ->
     %% This message should make it to only the 2nd queue.
     ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"t2">>, <<"m2">>)),
     ExpectedErr1 = #'v1_0.error'{
-                      condition = ?V_1_0_AMQP_ERROR_PRECONDITION_FAILED,
+                      condition = ?V_1_0_AMQP_ERROR_RESOURCE_LIMIT_EXCEEDED,
                       description = {utf8, <<"queue '", QName1/binary, "' exceeded maximum length">>},
                       info = {map, [{{symbol, <<"queue">>}, {utf8, QName1}},
                                     {{symbol, <<"reason">>}, {symbol, <<"maxlen">>}}]}},
