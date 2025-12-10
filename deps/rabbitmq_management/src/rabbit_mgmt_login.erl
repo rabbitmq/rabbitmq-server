@@ -52,7 +52,7 @@ login(<<"POST">>, Req0, State) ->
         AccessToken -> handleAccessToken(Req0, AccessToken, State)
     end;
 
-login(<<"GET">>, Req, State) ->    
+login(<<"GET">>, Req, State) ->
     Auth = case rabbit_mgmt_util:qs_val(?MANAGEMENT_LOGIN_STRICT_AUTH_MECHANISM, Req) of 
         undefined ->
             case rabbit_mgmt_util:qs_val(?MANAGEMENT_LOGIN_PREFERRED_AUTH_MECHANISM, Req) of 
@@ -61,6 +61,7 @@ login(<<"GET">>, Req, State) ->
             end;
         Val -> validate_auth_mechanism({?MANAGEMENT_LOGIN_STRICT_AUTH_MECHANISM, Val})
     end,
+    ?LOG_DEBUG("/login GET with auth: ~p", [Auth]),
     case Auth of 
         undefined -> 
             case rabbit_mgmt_util:qs_val(?OAUTH2_ACCESS_TOKEN, Req) of

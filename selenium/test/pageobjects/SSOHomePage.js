@@ -74,6 +74,7 @@ module.exports = class SSOHomePage extends BasePage {
   async isOAuth2SectionVisible() {
     return this.isDisplayed(SECTION_LOGIN_WITH_OAUTH)
   }
+  
   async getOAuth2Section() {
     return this.waitForDisplayed(SECTION_LOGIN_WITH_OAUTH)
   }

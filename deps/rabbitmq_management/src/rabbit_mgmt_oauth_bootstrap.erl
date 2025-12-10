@@ -82,6 +82,7 @@ get_auth_mechanism(Req) ->
 
 get_auth_mechanism_from_cookies(Req) ->
     Cookies = cowboy_req:parse_cookies(Req),
+    ?LOG_DEBUG("get_auth_mechanism_from_cookies: ~p", [Cookies]),
     case proplists:get_value(?MANAGEMENT_LOGIN_STRICT_AUTH_MECHANISM, Cookies) of 
         undefined -> 
             case proplists:get_value(?MANAGEMENT_LOGIN_PREFERRED_AUTH_MECHANISM, Cookies) of 
@@ -114,9 +115,14 @@ set_token_auth(AuthSettings, Req0) ->
                         ["set_token_auth('", Token, "');"]
                     };
                 _ -> 
-                    Cookies = cowboy_req:parse_cookies(Req0),                    
-                    case lists:keyfind(?OAUTH2_ACCESS_TOKEN, 1, Cookies) of 
-                        {_, Token} -> 
+                    Cookies = cowboy_req:parse_cookies(Req0),
+                    ?LOG_DEBUG("set_token_auth: ~p", [Cookies]),
+                    case proplists:get_value(?OAUTH2_ACCESS_TOKEN, Cookies) of 
+                         undefined -> {
+                                Req0, 
+                                []
+                            };
+                        Token -> 
                             {
                                 cowboy_req:set_resp_cookie(
                                     ?OAUTH2_ACCESS_TOKEN, <<"">>, Req0, #{
@@ -126,11 +132,7 @@ set_token_auth(AuthSettings, Req0) ->
                                         same_site => strict
                                     }), 
                                 ["set_token_auth('", Token, "');"]
-                            };
-                        false -> {
-                                Req0, 
-                                []
-                            }
+                            }                       
                     end
             end;
         false -> {
