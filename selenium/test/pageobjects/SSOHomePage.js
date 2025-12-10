@@ -37,6 +37,10 @@ module.exports = class SSOHomePage extends BasePage {
   async getLoginButton () {
     return this.getText(OAUTH2_LOGIN_BUTTON)
   }
+  async getLoginButtonOnClick () {
+    const element = await this.waitForDisplayed(OAUTH2_LOGIN_BUTTON);
+    return element.getAttribute('onClick');    
+  }
   async getLogoutButton () {
     return this.getText(LOGOUT_BUTTON)
   }
@@ -73,6 +77,9 @@ module.exports = class SSOHomePage extends BasePage {
 
   async isOAuth2SectionVisible() {
     return this.isDisplayed(SECTION_LOGIN_WITH_OAUTH)
+  }
+  async isOAuth2SectionNotVisible() {
+    return this.isElementNotVisible(SECTION_LOGIN_WITH_OAUTH)
   }
   
   async getOAuth2Section() {
