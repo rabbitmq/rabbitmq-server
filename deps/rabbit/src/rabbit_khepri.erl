@@ -312,12 +312,7 @@ init(IsVirgin) ->
                    "local Khepri-based " ?RA_FRIENDLY_NAME " member is caught "
                    "up to the Raft cluster leader", [],
                    #{domain => ?RMQLOG_DOMAIN_DB}),
-                ok ?= case IsVirgin of
-                          true ->
-                              register_projections();
-                          false ->
-                              ok
-                      end,
+                ok ?= register_projections(),
                 %% Delete transient queues on init.
                 %% Note that we also do this in the
                 %% `rabbit_amqqueue:on_node_down/1' callback. We must try this
