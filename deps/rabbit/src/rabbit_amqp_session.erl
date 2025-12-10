@@ -695,19 +695,10 @@ send_delivery_state_changes(State0 = #state{cfg = #cfg{writer_pid = Writer,
     %% Order is important:
     %% 1. Process queue rejections.
     {RejectedIds, GrantCredits0, State1} = handle_stashed_rejected(State0),
-    maps:foreach(
-      fun({QNameBin, Reason}, Ids) ->
-              Description = reject_description(QNameBin, Reason),
-              Info = {map,
-                      [{{symbol, <<"queue">>}, {utf8, QNameBin}},
-                       {{symbol, <<"reason">>}, {symbol, reject_reason_to_binary(Reason)}}]},
-              Rej = #'v1_0.rejected'{
-                       error = #'v1_0.error'{
-                                  condition = ?V_1_0_AMQP_ERROR_PRECONDITION_FAILED,
-                                  description = {utf8, Description},
-                                  info = Info}},
-              send_dispositions(Ids, Rej, Writer, ChannelNum)
-      end, RejectedIds),
+    maps:foreach(fun({QNameBin, Reason}, Ids) ->
+                         Rejected = rejected(QNameBin, Reason),
+                         send_dispositions(Ids, Rejected, Writer, ChannelNum)
+                 end, RejectedIds),
     %% 2. Process queue confirmations.
     {AcceptedIds0, GrantCredits1, State2} = handle_stashed_settled(GrantCredits0, State1),
     %% 3. Process unavailable classic queues.
@@ -2487,7 +2478,7 @@ incoming_link_transfer(
                     Detach = detach(HandleInt, Link0, Err1),
                     {error, [Detach]};
                 false ->
-                    Disposition = rejected(DeliveryId, Err),
+                    Disposition = disposition_rejected(DeliveryId, Err),
                     DeliveryCount = add(DeliveryCount0, 1),
                     Credit1 = Credit0 - 1,
                     {Credit, Reply0} = maybe_grant_link_credit(
@@ -2599,21 +2590,28 @@ released(DeliveryId) ->
                         settled = true,
                         state = #'v1_0.released'{}}.
 
-rejected(DeliveryId, Error) ->
+disposition_rejected(DeliveryId, Error) ->
     #'v1_0.disposition'{role = ?AMQP_ROLE_RECEIVER,
                         first = ?UINT(DeliveryId),
                         settled = true,
                         state = #'v1_0.rejected'{error = Error}}.
 
-reject_description(QNameBin, maxlen) ->
-    <<"queue '", QNameBin/binary, "' exceeded maximum length">>;
-reject_description(QNameBin, down) ->
-    <<"queue '", QNameBin/binary, "' is unavailable">>.
-
-reject_reason_to_binary(maxlen) ->
-    <<"maxlen">>;
-reject_reason_to_binary(down) ->
-    <<"unavailable">>.
+rejected(QNameBin, maxlen) ->
+    #'v1_0.rejected'{
+       error = #'v1_0.error'{
+                  condition = ?V_1_0_AMQP_ERROR_RESOURCE_LIMIT_EXCEEDED,
+                  description = {utf8, <<"queue '", QNameBin/binary, "' exceeded maximum length">>},
+                  info = {map,
+                          [{{symbol, <<"queue">>}, {utf8, QNameBin}},
+                           {{symbol, <<"reason">>}, {symbol, <<"maxlen">>}}]}}};
+rejected(QNameBin, down) ->
+    #'v1_0.rejected'{
+       error = #'v1_0.error'{
+                  condition = ?V_1_0_AMQP_ERROR_PRECONDITION_FAILED,
+                  description = {utf8, <<"queue '", QNameBin/binary, "' is unavailable">>},
+                  info = {map,
+                          [{{symbol, <<"queue">>}, {utf8, QNameBin}},
+                           {{symbol, <<"reason">>}, {symbol, <<"unavailable">>}}]}}}.
 
 maybe_grant_link_credit(Credit, MaxLinkCredit, DeliveryCount, NumUnconfirmed, Handle) ->
     case grant_link_credit(Credit, MaxLinkCredit, NumUnconfirmed) of
