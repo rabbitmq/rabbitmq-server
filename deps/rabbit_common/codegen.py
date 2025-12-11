@@ -307,8 +307,6 @@ def genErl(spec):
     module = "rabbit_framing_amqp_%d_%d" % (spec.major, spec.minor)
     if spec.revision != 0:
         module = "%s_%d" % (module, spec.revision)
-    if module == "rabbit_framing_amqp_8_0":
-        module = "rabbit_framing_amqp_0_8"
     print("-module(%s)." % module)
     print("""-include("rabbit_framing.hrl").
 -include_lib("kernel/include/logger.hrl").
