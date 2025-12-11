@@ -840,8 +840,14 @@ classic_config_discovery_node_list(Config) ->
     ok = rpc:call(Hare, application, set_env,
                   [rabbit, cluster_nodes, {[Rabbit], ram}]),
     ok = start_app(Config, Hare),
-    assert_cluster_status({[Rabbit, Hare], [Rabbit], [Rabbit, Hare]},
-                          [Rabbit, Hare]),
+    %% 4.2 nodes can still be RAM. 4.3+ nodes can't.
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            assert_cluster_status({[Rabbit, Hare], [Rabbit], [Rabbit, Hare]},
+                                  [Rabbit, Hare]);
+        false ->
+            assert_clustered([Rabbit, Hare])
+    end,
 
     %% List of nodes [node()] is equivalent to {[node()], disk}
     ok = stop_app(Config, Hare),
