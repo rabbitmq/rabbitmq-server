@@ -49,7 +49,7 @@ DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk \
 	      rabbit_common/mk/rabbitmq-hexpm.mk
 
-PLT_APPS = ssl public_key
+PLT_APPS = crypto ssl public_key
 
 include ../../rabbitmq-components.mk
 include ../../erlang.mk
