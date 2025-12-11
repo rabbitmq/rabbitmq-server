@@ -1295,60 +1295,28 @@ status(Vhost, QueueName) ->
                           {<<"Term">>, <<>>},
                           {<<"Machine Version">>, MacVer}
                          ];
-                     {error, _} ->
-                         %% try the old method
-                         case get_sys_status(ServerId) of
-                             {ok, Sys} ->
-                                 {_, M} = lists:keyfind(ra_server_state, 1, Sys),
-                                 {_, RaftState} = lists:keyfind(raft_state, 1, Sys),
-                                 #{commit_index := Commit,
-                                   machine_version := MacVer,
-                                   current_term := Term,
-                                   last_applied := LastApplied,
-                                   log := #{last_index := Last,
-                                            last_written_index_term := {LastWritten, _},
-                                            snapshot_index := SnapIdx}} = M,
-                                 [{<<"Node Name">>, N},
-                                  {<<"Raft State">>, RaftState},
-                                  {<<"Membership">>, voter},
-                                  {<<"Last Log Index">>, Last},
-                                  {<<"Last Written">>, LastWritten},
-                                  {<<"Last Applied">>, LastApplied},
-                                  {<<"Commit Index">>, Commit},
-                                  {<<"Snapshot Index">>, SnapIdx},
-                                  {<<"Term">>, Term},
-                                  {<<"Machine Version">>, MacVer}
-                                 ];
-                             {error, Err} ->
-                                 [{<<"Node Name">>, N},
-                                  {<<"Raft State">>, Err},
-                                  {<<"Membership">>, <<>>},
-                                  {<<"Last Log Index">>, <<>>},
-                                  {<<"Last Written">>, <<>>},
-                                  {<<"Last Applied">>, <<>>},
-                                  {<<"Commit Index">>, <<>>},
-                                  {<<"Snapshot Index">>, <<>>},
-                                  {<<"Term">>, <<>>},
-                                  {<<"Machine Version">>, <<>>}
-                                 ]
-                         end
+                     {error, Reason} ->
+                         State = case is_atom(Reason) of
+                                     true -> Reason;
+                                     false -> unknown
+                                 end,
+                         [{<<"Node Name">>, N},
+                          {<<"Raft State">>, State},
+                          {<<"Membership">>, <<>>},
+                          {<<"Last Log Index">>, <<>>},
+                          {<<"Last Written">>, <<>>},
+                          {<<"Last Applied">>, <<>>},
+                          {<<"Commit Index">>, <<>>},
+                          {<<"Snapshot Index">>, <<>>},
+                          {<<"Term">>, <<>>},
+                          {<<"Machine Version">>, <<>>}
+                         ]
                  end
              end || N <- Nodes];
         {ok, _Q} ->
             {error, not_quorum_queue};
         {error, not_found} = E ->
             E
-    end.
-
-get_sys_status(Proc) ->
-    try lists:nth(5, element(4, sys:get_status(Proc))) of
-        Sys -> {ok, Sys}
-    catch
-        _:Err when is_tuple(Err) ->
-            {error, element(1, Err)};
-        _:_ ->
-            {error, other}
-
     end.
 
 add_member(VHost, Name, Node, Membership, Timeout)
