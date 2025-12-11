@@ -70,9 +70,9 @@
 
 
  {ssl,
-  "ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
-   ssl_options.certfile   = test/config_schema_SUITE_data/certs/cert.pem
-   ssl_options.keyfile    = test/config_schema_SUITE_data/certs/key.pem
+  "ssl_options.cacertfile = test/config_schema_SUITE_data/certs/ca_certificate.pem
+   ssl_options.certfile   = test/config_schema_SUITE_data/certs/server_certificate.pem
+   ssl_options.keyfile    = test/config_schema_SUITE_data/certs/server_key.pem
    ssl_options.verify     = verify_peer
    ssl_options.fail_if_no_peer_cert  = true
 
@@ -80,9 +80,9 @@
    mqtt.listeners.tcp.default = 1883",
   [{rabbit,
        [{ssl_options,
-            [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
-             {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
-             {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+            [{cacertfile,"test/config_schema_SUITE_data/certs/ca_certificate.pem"},
+             {certfile,"test/config_schema_SUITE_data/certs/server_certificate.pem"},
+             {keyfile,"test/config_schema_SUITE_data/certs/server_key.pem"},
              {verify,verify_peer},
              {fail_if_no_peer_cert,true}]}]},
    {rabbitmq_mqtt,[{ssl_listeners,[8883]},{tcp_listeners,[1883]}]}],

@@ -176,23 +176,23 @@
     ], [rabbitmq_peer_discovery_k8s]
   }
 
-, {k8s_ca_certificate_legacy_cert_path, "cluster_formation.k8s.cert_path = test/config_schema_SUITE_data/certs/cacert.pem", [
+, {k8s_ca_certificate_legacy_cert_path, "cluster_formation.k8s.cert_path = test/config_schema_SUITE_data/certs/ca_certificate.pem", [
         {rabbit, [
             {cluster_formation, [
                 {peer_discovery_k8s, [
-                    {k8s_cert_path, "test/config_schema_SUITE_data/certs/cacert.pem"}
+                    {k8s_cert_path, "test/config_schema_SUITE_data/certs/ca_certificate.pem"}
                 ]}
             ]}
         ]}
     ], [rabbitmq_peer_discovery_k8s]
   }
 
-, {k8s_ca_certificate_modern_path, "cluster_formation.k8s.tls.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem", [
+, {k8s_ca_certificate_modern_path, "cluster_formation.k8s.tls.cacertfile = test/config_schema_SUITE_data/certs/ca_certificate.pem", [
         {rabbit, [
             {cluster_formation, [
                 {peer_discovery_k8s, [
                     {ssl_options, [
-                        {cacertfile, "test/config_schema_SUITE_data/certs/cacert.pem"}
+                        {cacertfile, "test/config_schema_SUITE_data/certs/ca_certificate.pem"}
                     ]}
                 ]}
             ]}
@@ -200,12 +200,12 @@
     ], [rabbitmq_peer_discovery_k8s]
   }
 
-, {k8s_client_certificate_modern_path, "cluster_formation.k8s.tls.certfile = test/config_schema_SUITE_data/certs/cert.pem", [
+, {k8s_client_certificate_modern_path, "cluster_formation.k8s.tls.certfile = test/config_schema_SUITE_data/certs/server_certificate.pem", [
         {rabbit, [
             {cluster_formation, [
                 {peer_discovery_k8s, [
                     {ssl_options, [
-                        {certfile, "test/config_schema_SUITE_data/certs/cert.pem"}
+                        {certfile, "test/config_schema_SUITE_data/certs/server_certificate.pem"}
                     ]}
                 ]}
             ]}
@@ -213,12 +213,12 @@
     ], [rabbitmq_peer_discovery_k8s]
   }
 
-, {k8s_client_key_modern_path, "cluster_formation.k8s.tls.keyfile = test/config_schema_SUITE_data/certs/key.pem", [
+, {k8s_client_key_modern_path, "cluster_formation.k8s.tls.keyfile = test/config_schema_SUITE_data/certs/server_key.pem", [
         {rabbit, [
             {cluster_formation, [
                 {peer_discovery_k8s, [
                     {ssl_options, [
-                        {keyfile, "test/config_schema_SUITE_data/certs/key.pem"}
+                        {keyfile, "test/config_schema_SUITE_data/certs/server_key.pem"}
                     ]}
                 ]}
             ]}

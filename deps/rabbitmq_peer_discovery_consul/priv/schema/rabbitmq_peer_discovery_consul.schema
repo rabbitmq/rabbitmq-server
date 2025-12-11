@@ -362,10 +362,10 @@ end}.
 {datatype, {enum, [true, false]}}]}.
 
 {mapping, "cluster_formation.consul.ssl_options.cacertfile", "rabbit.cluster_formation.peer_discovery_consul.ssl_options.cacertfile",
-[{datatype, string}, {validators, ["file_accessible"]}]}.
+[{datatype, string}, {validators, ["pem_file"]}]}.
 
 {mapping, "cluster_formation.consul.ssl_options.certfile", "rabbit.cluster_formation.peer_discovery_consul.ssl_options.certfile",
-[{datatype, string}, {validators, ["file_accessible"]}]}.
+[{datatype, string}, {validators, ["pem_file"]}]}.
 
 {mapping, "cluster_formation.consul.ssl_options.cert", "rabbit.cluster_formation.peer_discovery_consul.ssl_options.cert",
 [{datatype, string}]}.
@@ -410,7 +410,7 @@ end
 end}.
 
 {mapping, "cluster_formation.consul.ssl_options.keyfile", "rabbit.cluster_formation.peer_discovery_consul.ssl_options.keyfile",
-[{datatype, string}, {validators, ["file_accessible"]}]}.
+[{datatype, string}, {validators, ["pem_file"]}]}.
 
 {mapping, "cluster_formation.consul.ssl_options.log_alert", "rabbit.cluster_formation.peer_discovery_consul.ssl_options.log_alert",
 [{datatype, {enum, [true, false]}}]}.

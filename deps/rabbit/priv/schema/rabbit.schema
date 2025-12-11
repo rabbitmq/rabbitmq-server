@@ -175,10 +175,10 @@ end}.
     {datatype, {enum, [true, false]}}]}.
 
 {mapping, "definitions.tls.cacertfile", "rabbit.definitions.ssl_options.cacertfile",
-    [{datatype, string}, {validators, ["file_accessible"]}]}.
+    [{datatype, string}, {validators, ["pem_file"]}]}.
 
 {mapping, "definitions.tls.certfile", "rabbit.definitions.ssl_options.certfile",
-    [{datatype, string}, {validators, ["file_accessible"]}]}.
+    [{datatype, string}, {validators, ["pem_file"]}]}.
 
 {mapping, "definitions.tls.cert", "rabbit.definitions.ssl_options.cert",
     [{datatype, string}]}.
@@ -214,7 +214,7 @@ fun(Conf) ->
 end}.
 
 {mapping, "definitions.tls.keyfile", "rabbit.definitions.ssl_options.keyfile",
-    [{datatype, string}, {validators, ["file_accessible"]}]}.
+    [{datatype, string}, {validators, ["pem_file"]}]}.
 
 {mapping, "definitions.tls.log_alert", "rabbit.definitions.ssl_options.log_alert",
     [{datatype, {enum, [true, false]}}]}.
@@ -316,10 +316,10 @@ end}.
     {datatype, {enum, [true, false]}}]}.
 
 {mapping, "ssl_options.cacertfile", "rabbit.ssl_options.cacertfile",
-    [{datatype, string}, {validators, ["file_accessible"]}]}.
+    [{datatype, string}, {validators, ["pem_file"]}]}.
 
 {mapping, "ssl_options.certfile", "rabbit.ssl_options.certfile",
-    [{datatype, string}, {validators, ["file_accessible"]}]}.
+    [{datatype, string}, {validators, ["pem_file"]}]}.
 
 {mapping, "ssl_options.cert", "rabbit.ssl_options.cert",
     [{datatype, string}]}.
@@ -373,7 +373,7 @@ fun(Conf) ->
 end}.
 
 {mapping, "ssl_options.keyfile", "rabbit.ssl_options.keyfile",
-    [{datatype, string}, {validators, ["file_accessible"]}]}.
+    [{datatype, string}, {validators, ["pem_file"]}]}.
 
 {mapping, "ssl_options.log_level", "rabbit.ssl_options.log_level",
     [{datatype, {enum, [emergency, alert, critical, error, warning, notice, info, debug]}}]}.
@@ -1915,10 +1915,10 @@ end}.
     {datatype, {enum, [true, false]}}]}.
 
 {mapping, "log.syslog.ssl_options.cacertfile", "syslog.protocol",
-    [{datatype, string}, {validators, ["file_accessible"]}]}.
+    [{datatype, string}, {validators, ["pem_file"]}]}.
 
 {mapping, "log.syslog.ssl_options.certfile", "syslog.protocol",
-    [{datatype, string}, {validators, ["file_accessible"]}]}.
+    [{datatype, string}, {validators, ["pem_file"]}]}.
 
 {mapping, "log.syslog.ssl_options.cert", "syslog.protocol",
     [{datatype, string}]}.
@@ -1954,7 +1954,7 @@ end}.
     [{datatype, string}]}.
 
 {mapping, "log.syslog.ssl_options.keyfile", "syslog.protocol",
-    [{datatype, string}, {validators, ["file_accessible"]}]}.
+    [{datatype, string}, {validators, ["pem_file"]}]}.
 
 {mapping, "log.syslog.ssl_options.log_alert", "syslog.protocol",
     [{datatype, {enum, [true, false]}}]}.
@@ -2885,6 +2885,14 @@ end}.
 fun(File) ->
     case file:read_file_info(File) of
         {ok, FileInfo} -> (element(4, FileInfo) == read) or (element(4, FileInfo) == read_write);
+        _ -> false
+    end
+end}.
+
+{validator, "pem_file", "PEM file does not exist, cannot be read, or does not contain valid PEM-encoded X.509 certificate or private key data",
+fun(File) ->
+    case file:read_file(File) of
+        {ok, Bin} -> public_key:pem_decode(Bin) =/= [];
         _ -> false
     end
 end}.

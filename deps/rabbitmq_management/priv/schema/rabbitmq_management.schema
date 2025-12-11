@@ -90,11 +90,11 @@ end}.
 {mapping, "management.ssl.ip", "rabbitmq_management.ssl_config.ip",
     [{datatype, string}, {validators, ["is_ip"]}]}.
 {mapping, "management.ssl.certfile", "rabbitmq_management.ssl_config.certfile",
-    [{datatype, string}, {validators, ["file_accessible"]}]}.
+    [{datatype, string}, {validators, ["pem_file"]}]}.
 {mapping, "management.ssl.keyfile", "rabbitmq_management.ssl_config.keyfile",
-    [{datatype, string}, {validators, ["file_accessible"]}]}.
+    [{datatype, string}, {validators, ["pem_file"]}]}.
 {mapping, "management.ssl.cacertfile", "rabbitmq_management.ssl_config.cacertfile",
-    [{datatype, string}, {validators, ["file_accessible"]}]}.
+    [{datatype, string}, {validators, ["pem_file"]}]}.
 {mapping, "management.ssl.password", "rabbitmq_management.ssl_config.password",
     [{datatype, [tagged_binary, binary]}]}.
 
@@ -215,10 +215,10 @@ end}.
     {datatype, {enum, [true, false]}}]}.
 
 {mapping, "management.listener.ssl_opts.cacertfile", "rabbitmq_management.listener.ssl_opts.cacertfile",
-    [{datatype, string}, {validators, ["file_accessible"]}]}.
+    [{datatype, string}, {validators, ["pem_file"]}]}.
 
 {mapping, "management.listener.ssl_opts.certfile", "rabbitmq_management.listener.ssl_opts.certfile",
-    [{datatype, string}, {validators, ["file_accessible"]}]}.
+    [{datatype, string}, {validators, ["pem_file"]}]}.
 
 {mapping, "management.listener.ssl_opts.honor_cipher_order", "rabbitmq_management.listener.ssl_opts.honor_cipher_order",
     [{datatype, {enum, [true, false]}}]}.
@@ -289,7 +289,7 @@ fun(Conf) ->
 end}.
 
 {mapping, "management.listener.ssl_opts.keyfile", "rabbitmq_management.listener.ssl_opts.keyfile",
-    [{datatype, string}, {validators, ["file_accessible"]}]}.
+    [{datatype, string}, {validators, ["pem_file"]}]}.
 
 {mapping, "management.listener.ssl_opts.log_alert", "rabbitmq_management.listener.ssl_opts.log_alert",
     [{datatype, {enum, [true, false]}}]}.
