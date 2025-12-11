@@ -13,6 +13,7 @@
 -include("oauth2.hrl").
 
 -define(RABBITMQ,<<"rabbitmq">>).
+-define(RABBITMQ_ATOM,rabbitmq).
 -define(RABBITMQ_RESOURCE_ONE,<<"rabbitmq1">>).
 -define(RABBITMQ_RESOURCE_TWO,<<"rabbitmq2">>).
 -define(OAUTH_PROVIDER_A,<<"A">>).
@@ -30,7 +31,8 @@ all() -> [
 ].
 groups() -> [
     {with_rabbitmq_as_resource_server_id, [], [
-        resolve_resource_server_for_rabbitmq_audience,
+        resolve_resource_server_for_rabbitmq_audience_with_binary_config_id,
+        resolve_resource_server_for_rabbitmq_audience_with_atom_config_id,
         resolve_resource_server_for_rabbitmq_plus_unknown_audience,
         resolve_resource_server_for_none_audience_returns_no_aud_found,
         resolve_resource_server_for_unknown_audience_returns_no_matching_aud_found,
@@ -62,7 +64,8 @@ groups() -> [
         {verify_configuration_inheritance_with_rabbitmq2, [],
             verify_configuration_inheritance_with_rabbitmq2()},
         {with_rabbitmq_as_resource_server_id, [], [
-            resolve_resource_server_for_rabbitmq_audience,
+            resolve_resource_server_for_rabbitmq_audience_with_binary_config_id,
+            resolve_resource_server_for_rabbitmq_audience_with_atom_config_id,
             resolve_resource_server_id_for_rabbitmq1,
             resolve_resource_server_id_for_rabbitmq2
         ]}
@@ -259,10 +262,30 @@ end_per_group(with_scope_aliases, Config) ->
 end_per_group(_any, Config) ->
     Config.
 
+init_per_testcase(resolve_resource_server_for_rabbitmq_audience_with_atom_config_id, Config) ->
+    set_env(resource_server_id, ?RABBITMQ_ATOM),
+    Config;
+
+init_per_testcase(_any, Config) ->
+    Config.
+
+end_per_testcase(resolve_resource_server_for_rabbitmq_audience_with_atom_config_id, Config) ->
+    set_env(resource_server_id, ?RABBITMQ),
+    Config;
+
+end_per_testcase(_any, Config) ->
+    Config.
 
 %% --- Test cases
 
-resolve_resource_server_for_rabbitmq_audience(_) ->
+resolve_resource_server_for_rabbitmq_audience_with_binary_config_id(_) ->
+    {ok, RSI} = get_env(resource_server_id),
+    ?assert(erlang:is_binary(RSI)),
+    assert_resource_server_id(?RABBITMQ, ?RABBITMQ).
+
+resolve_resource_server_for_rabbitmq_audience_with_atom_config_id(_) ->
+    {ok, RSI} = get_env(resource_server_id),
+    ?assert(erlang:is_atom(RSI)),
     assert_resource_server_id(?RABBITMQ, ?RABBITMQ).
 
 resolve_resource_server_for_rabbitmq_plus_unknown_audience(_) ->
