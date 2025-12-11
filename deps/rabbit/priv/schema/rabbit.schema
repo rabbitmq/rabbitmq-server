@@ -2889,7 +2889,7 @@ fun(File) ->
     end
 end}.
 
-{validator, "pem_file", "PEM file does not exist, cannot be read, or does not contain valid X509 certificate data",
+{validator, "pem_file", "PEM file does not exist, cannot be read, or does not contain valid PEM-encoded X.509 certificate or private key data",
 fun(File) ->
     case file:read_file(File) of
         {ok, Bin} -> public_key:pem_decode(Bin) =/= [];
