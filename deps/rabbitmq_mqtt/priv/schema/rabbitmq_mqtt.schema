@@ -15,6 +15,14 @@
 {mapping, "mqtt.allow_anonymous", "rabbitmq_mqtt.allow_anonymous",
     [{datatype, {enum, [true, false]}}]}.
 
+%  {rabbitmq_mqtt,
+%   [%% Setting whether disconnect when client publish,subscribe to unauthorized topic.
+%%
+%% {ignore_unauthorized, false},
+
+{mapping, "mqtt.ignore_unauthorized", "rabbitmq_mqtt.ignore_unauthorized",
+    [{datatype, {enum, [true, false]}}]}.
+
 %% If you have multiple chosts, specify the one to which the
 %% adapter connects.
 %%
