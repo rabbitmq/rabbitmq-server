@@ -242,7 +242,7 @@ join(RemoteNode, NodeType)
 
 join_using_mnesia(ClusterNodes, disc) when is_list(ClusterNodes) ->
     rabbit_mnesia:join_cluster(ClusterNodes, disc);
-join_using_khepri(_ClusterNodes, ram = NodeType) ->
+join_using_mnesia(_ClusterNodes, ram = NodeType) ->
     {error, {node_type_unsupported, mnesia, NodeType}}.
 
 join_using_khepri(ClusterNodes, disc) ->
