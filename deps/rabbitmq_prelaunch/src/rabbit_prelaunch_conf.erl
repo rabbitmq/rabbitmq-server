@@ -350,7 +350,7 @@ list_apps1([Dir | Rest], Apps) ->
         {ok, Filenames} ->
             NewApps = [list_to_atom(
                          hd(
-                           string:split(filename:basename(F, ".ex"), "-")))
+                           string:split(filename:basename(F, ".ez"), "-")))
                        || F <- Filenames],
             Apps1 = lists:umerge(Apps, lists:sort(NewApps)),
             list_apps1(Rest, Apps1);
