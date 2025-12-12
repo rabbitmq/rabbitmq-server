@@ -33,7 +33,7 @@ fetch_rabbitmq_versions() {
         --exclude-drafts \
         --exclude-pre-releases \
         --json tagName \
-        --jq '.[].tagName | select(startswith("v4.")) | ltrimstr("v")')
+        --jq '.[].tagName | select(startswith("v4.")) | ltrimstr("v")' | sort -V -r)
 
     if (( ${#all_versions[@]} == 0 ))
     then
