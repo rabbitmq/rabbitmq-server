@@ -11,31 +11,20 @@ defmodule RabbitMQ.CLI.Ctl.Commands.JoinClusterCommand do
 
   def switches() do
     [
-      disc: :boolean,
-      ram: :boolean
+      disc: :boolean
     ]
   end
 
   def merge_defaults(args, opts) do
-    {args, Map.merge(%{disc: false, ram: false}, opts)}
-  end
-
-  def validate(_, %{disc: true, ram: true}) do
-    {:validation_failure, {:bad_argument, "The node type must be either disc or ram."}}
+    {args, Map.merge(%{disc: false}, opts)}
   end
 
   def validate([], _), do: {:validation_failure, :not_enough_args}
   def validate([_], _), do: :ok
   def validate(_, _), do: {:validation_failure, :too_many_args}
 
-  def run([target_node], %{node: node_name, ram: ram, disc: disc} = opts) do
-    node_type =
-      case {ram, disc} do
-        {true, false} -> :ram
-        {false, true} -> :disc
-        ## disc is default
-        {false, false} -> :disc
-      end
+  def run([target_node], %{node: node_name} = opts) do
+    node_type = :disc
 
     long_or_short_names = Config.get_option(:longnames, opts)
     target_node_normalised = Helpers.normalise_node(target_node, long_or_short_names)
