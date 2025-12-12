@@ -19,6 +19,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.JoinClusterCommand do
     {args, Map.merge(%{disc: false}, opts)}
   end
 
+  def validate(_, %{disc: true}) do
+    {:validation_failure, {:bad_argument, "The node type must be disc."}}
+  end
+
   def validate([], _), do: {:validation_failure, :not_enough_args}
   def validate([_], _), do: :ok
   def validate(_, _), do: {:validation_failure, :too_many_args}
