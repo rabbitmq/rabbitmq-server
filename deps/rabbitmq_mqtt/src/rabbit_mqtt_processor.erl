@@ -451,10 +451,12 @@ process_request(?SUBSCRIBE,
                 State0 = #state{cfg = #cfg{proto_ver = ProtoVer,
                                            binding_args_v2 = BindingArgsV2}}) ->
     ?LOG_DEBUG("Received a SUBSCRIBE with subscription(s) ~p", [Subscriptions]),
+    {ok, DisconnectOnUnauthorized} = application:get_env(?APP_NAME, disconnect_on_unauthorized),
     {ResultRev, RetainedRev, State1} =
     lists:foldl(
-      fun(_Subscription, {[{error, _} = E | _] = L, R, S}) ->
-              %% Once a subscription failed, mark all following subscriptions
+      fun(_Subscription, {[{error, _} = E | _] = L, R, S}) when DisconnectOnUnauthorized =:= true ->
+              %% If disconnect_on_unauthorized is true,
+              %% once a subscription failed, mark all following subscriptions
               %% as failed instead of creating bindings because we are going
               %% to close the client connection anyway.
               {[E | L], R, S};
@@ -509,6 +511,17 @@ process_request(?SUBSCRIBE,
                                        reason_codes = lists:reverse(ReasonCodesRev)}},
     _ = send(Reply, State1),
     case hd(ResultRev) of
+        {error, access_refused} ->
+            %% If disconnect_on_unauthorized is false, do not disconnect the client,
+            %% send retained messages for the topics to which the client could successfully subscribe.
+            %% Otherwise, disconnect the client, treat the subscription failure.
+            case DisconnectOnUnauthorized of
+              false ->
+                State = send_retained_messages(lists:reverse(RetainedRev), State1),
+                {ok, State};
+              true ->
+                {error, subscribe_error, State1}
+            end;
         {error, _} ->
             {error, subscribe_error, State1};
         _ ->
@@ -2266,7 +2279,28 @@ publish_to_queues_with_checks(
                     Error
             end;
         {error, access_refused} ->
-            {error, access_refused, State}
+            %%  If disconnect_on_unauthorized is false,
+            %%  QoS1 reply with PUBACK and keep connection,
+            %%  QoS0,WILL_MSG drop silently and keep connection.
+            %%  Otherwise, disconnect.
+            {ok, DisconnectOnUnauthorized} = application:get_env(?APP_NAME, disconnect_on_unauthorized),
+            case DisconnectOnUnauthorized of
+                false ->
+                    case Msg#mqtt_msg.qos of
+                        ?QOS_1 ->
+                            case Msg#mqtt_msg.packet_id of
+                                ?WILL_MSG_QOS_1_CORRELATION ->
+                                    ok;
+                                _ ->
+                                    send_puback(Msg#mqtt_msg.packet_id, ?RC_NOT_AUTHORIZED, State)
+                            end;
+                        _ ->
+                            ok
+                    end,
+                    {ok, State};
+                true ->
+                    {error, access_refused, State}
+            end
     end.
 
 -spec check_publish_permitted(rabbit_exchange:name(), topic(), state()) ->
