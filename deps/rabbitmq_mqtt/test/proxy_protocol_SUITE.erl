@@ -37,13 +37,17 @@ init_per_suite(Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, [
         {rmq_nodename_suffix, Suffix},
         {rmq_certspwd, "bunnychow"},
-        {rabbitmq_ct_tls_verify, verify_none}
+        {rabbitmq_ct_tls_verify, verify_none},
+        {start_rmq_with_plugins_disabled, true}
     ]),
     MqttConfig = mqtt_config(),
-    rabbit_ct_helpers:run_setup_steps(Config1,
-        [ fun(Conf) -> merge_app_env(MqttConfig, Conf) end ] ++
-            rabbit_ct_broker_helpers:setup_steps() ++
-            rabbit_ct_client_helpers:setup_steps()).
+    Config2 = rabbit_ct_helpers:run_setup_steps(
+                Config1,
+                [ fun(Conf) -> merge_app_env(MqttConfig, Conf) end ] ++
+                    rabbit_ct_broker_helpers:setup_steps() ++
+                    rabbit_ct_client_helpers:setup_steps()),
+    util:enable_plugin(Config2, rabbitmq_mqtt),
+    Config2.
 
 mqtt_config() ->
     {rabbitmq_mqtt, [

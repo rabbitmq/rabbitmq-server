@@ -67,7 +67,8 @@ end_per_suite(Config) ->
 init_per_group(Group, Config) ->
     rabbit_ct_helpers:set_config(
       Config, [{rmq_nodes_count, 5},
-               {mqtt_version, Group}]).
+               {mqtt_version, Group},
+               {start_rmq_with_plugins_disabled, true}]).
 
 end_per_group(_, Config) ->
     Config.
@@ -79,11 +80,13 @@ init_per_testcase(Testcase, Config) ->
         {rmq_nodename_suffix, Testcase},
         {rmq_nodes_clustered, true}
       ]),
-    rabbit_ct_helpers:run_setup_steps(
+    Config2 = rabbit_ct_helpers:run_setup_steps(
       Config1,
       [fun merge_app_env/1] ++
       setup_steps() ++
-      rabbit_ct_client_helpers:setup_steps()).
+                    rabbit_ct_client_helpers:setup_steps()),
+    util:enable_plugin(Config2, rabbitmq_mqtt),
+    Config2.
 
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:run_steps(Config,
