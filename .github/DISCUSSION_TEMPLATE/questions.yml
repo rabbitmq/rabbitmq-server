@@ -29,7 +29,15 @@ body:
   attributes:
     label: RabbitMQ version used
     options:
-    - null
+    - 4.2.1
+    - 4.2.0
+    - 4.1.6
+    - 4.1.5
+    - 4.1.4
+    - 4.1.3
+    - 4.1.2
+    - 4.1.1
+    - 4.1.0
     - other (please specify)
   validations:
     required: true
@@ -38,7 +46,17 @@ body:
   attributes:
     label: Erlang version used
     options:
-    - null
+    - 28.3.x
+    - 28.2.x
+    - 28.1.x
+    - 28.0.x
+    - 27.3.x
+    - 27.2.x
+    - 27.1.x
+    - 27.0.x
+    - 26.2.x
+    - 26.1.x
+    - 26.0.x
     - other (please specify)
   validations:
     required: true
