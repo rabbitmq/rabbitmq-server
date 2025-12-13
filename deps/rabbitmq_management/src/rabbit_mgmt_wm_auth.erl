@@ -13,6 +13,7 @@
 
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("oauth2_client/include/oauth2_client.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 %%--------------------------------------------------------------------
 

@@ -12,14 +12,22 @@
     <% } %>
   </div>
 <% if (!notAuthorized) { %>
-    <% if ((typeof resource_servers == 'object' && resource_servers.length == 1) && oauth_disable_basic_auth) { %>
+    <% if (strict_auth_mechanism !== undefined && strict_auth_mechanism.type === "oauth2") { %>
+        <button id="login" onclick="oauth_initiateLogin('<%=strict_auth_mechanism.resource_id%>')">Click here to log in</button>
+    <% } else if ((typeof resource_servers == 'object' && resource_servers.length == 1) && oauth_disable_basic_auth) { %>
         <button id="login" onclick="oauth_initiateLogin('<%=resource_servers[0].id%>')">Click here to log in</button>
-    <% } else if (typeof resource_servers == 'object' && resource_servers.length >= 1) { %>
+    <% } else if (typeof resource_servers == 'object' && resource_servers.length >= 1 && strict_auth_mechanism == undefined) { %>
 
     <b>Login with :</b>
     <p/>
+    <% const OAuth2Visible = (strict_auth_mechanism === undefined || strict_auth_mechanism.type === "oauth2") || 
+      (preferred_auth_mechanism === undefined || preferred_auth_mechanism === "oauth2"); %>  
+    <% const OAuth2Invisible = (preferred_auth_mechanism !== undefined && preferred_auth_mechanism.type !== "oauth2"); %>  
+    <% const OAuth2Hidden = (strict_auth_mechanism !== undefined && strict_auth_mechanism.type !== "oauth2"); %>  
+    <% const preferredResourceId = preferred_auth_mechanism !== undefined && preferred_auth_mechanism.type === "oauth2" ? preferred_auth_mechanism.resource_id : null; %>
     <!-- begin login with oauth2  -->
-    <div class="section" id="login-with-oauth2">
+    <% if (!OAuth2Hidden) { %>
+    <div class="section disable-pref <%= OAuth2Visible ? 'section-visible' : '' %>  <%= OAuth2Invisible ? 'section-invisible' : '' %> " id="login-with-oauth2">
       <h2>OAuth 2.0</h2>
       <div class="hider">
         <div class="updatable">
@@ -27,10 +35,10 @@
           <button id="login" onclick="oauth_initiateLogin('<%=resource_servers[0].id%>')">Click here to log in</button>
           <% } else { %>
           <form onsubmit="oauth_initiateLogin(document.getElementById('oauth2-resource').value)">
-            <label for="oauth2-resource">Resource:</label>
+            <label for="oauth2-resource">Resource: </label>
             <select id="oauth2-resource">
               <% for (var i = 0; i < resource_servers.length; i++) { %>
-               <option value="<%= fmt_string(resource_servers[i].id) %>">
+               <option value="<%= fmt_string(resource_servers[i].id) %>" <%= (preferredResourceId === resource_servers[i].id) ? 'selected="selected"' : '' %>>
                  <%= fmt_string(resource_servers[i].label != null ? resource_servers[i].label : resource_servers[i].id) %>
                </option>
               <% } %>
@@ -42,12 +50,17 @@
         </div>
       </div>
     </div>
+    <% } %>    
     <!-- end login with oauth2  -->
 <% } %>
 
-  <!-- begin login with basic auth   -->
-  <% if (!oauth_disable_basic_auth) { %>
-  <div class="section-hidden" id="login-with-basic-auth">
+  <!-- begin login with basic auth   -->  
+  <% const basicAuthVisible = (strict_auth_mechanism !== undefined && strict_auth_mechanism.type === "basic") || 
+    (preferred_auth_mechanism !== undefined && preferred_auth_mechanism.type === "basic"); %> 
+  <% const basicAuthInvisible = (strict_auth_mechanism === undefined && preferred_auth_mechanism === undefined || (preferred_auth_mechanism !== undefined && preferred_auth_mechanism.type !== "basic"));%> 
+  <% const basicAuthHidden = (strict_auth_mechanism !== undefined && strict_auth_mechanism.type !== "basic"); %>
+  <% if (!oauth_disable_basic_auth && !basicAuthHidden) { %>
+  <div class="section disable-pref <%= basicAuthInvisible ? 'section-invisible' : ''%>  <%= basicAuthVisible ? 'section-visible' : ''%> " id="login-with-basic-auth">
     <h2>Basic Authentication</h2>
     <div class="hider">
       <div class="updatable">
