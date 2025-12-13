@@ -15,6 +15,13 @@
 {mapping, "mqtt.allow_anonymous", "rabbitmq_mqtt.allow_anonymous",
     [{datatype, {enum, [true, false]}}]}.
 
+%% Whether maintain connection when publish or subscribe non-authorized topic.
+%%
+%% {maintain_connection_on_authorization_failures, false},
+
+{mapping, "mqtt.maintain_connection_on_authorization_failures", "rabbitmq_mqtt.maintain_connection_on_authorization_failures",
+    [{datatype, {enum, [true, false]}}]}.
+
 %% If you have multiple chosts, specify the one to which the
 %% adapter connects.
 %%
