@@ -240,8 +240,10 @@ join(RemoteNode, NodeType)
             Error
     end.
 
-join_using_mnesia(ClusterNodes, NodeType) when is_list(ClusterNodes) ->
-    rabbit_mnesia:join_cluster(ClusterNodes, NodeType).
+join_using_mnesia(ClusterNodes, disc) when is_list(ClusterNodes) ->
+    rabbit_mnesia:join_cluster(ClusterNodes, disc);
+join_using_mnesia(_ClusterNodes, ram = NodeType) ->
+    {error, {node_type_unsupported, mnesia, NodeType}}.
 
 join_using_khepri(ClusterNodes, disc) ->
     rabbit_khepri:add_member(node(), ClusterNodes);
