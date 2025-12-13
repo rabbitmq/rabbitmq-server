@@ -882,8 +882,8 @@ add_exchange_int(Exchange, Name, ActingUser) ->
                        end,
             case rabbit_exchange:declare(Name,
                                          rabbit_exchange:check_type(maps:get(type, Exchange, undefined)),
-                                         maps:get(durable,                         Exchange, undefined),
-                                         maps:get(auto_delete,                     Exchange, undefined),
+                                         maps:get(durable,                         Exchange, true),
+                                         maps:get(auto_delete,                     Exchange, false),
                                          Internal,
                                          args(maps:get(arguments, Exchange, undefined)),
                                          ActingUser) of
