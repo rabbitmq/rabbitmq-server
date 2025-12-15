@@ -433,7 +433,7 @@ get_read_fd(Segment, State = #qs{ read_segment = Segment,
     {ok, Fd, State};
 get_read_fd(Segment, State = #qs{ read_fd = OldFd }) ->
     maybe_close_fd(OldFd),
-    case file:open(segment_file(Segment, State), [read, raw, binary]) of
+    case rabbit_file:open_eventually(segment_file(Segment, State), [read, raw, binary]) of
         {ok, Fd} ->
             case file:read(Fd, ?HEADER_SIZE) of
                 {ok, <<?MAGIC:32,?VERSION:8,
