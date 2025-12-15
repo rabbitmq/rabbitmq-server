@@ -66,7 +66,7 @@ jobs:
           make package-generic-unix PROJECT_VERSION=${{ matrix.project_version || steps.tag.outputs.project_version }}+${{ steps.sha.outputs.current_sha }}
 
       - name: Upload package-generic-unix
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: package-generic-unix-otp${{ matrix.otp_version }}-${{ matrix.branch }}
           path: PACKAGES/rabbitmq-server-*.tar.xz
