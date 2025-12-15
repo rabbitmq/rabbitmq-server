@@ -286,7 +286,7 @@ start_cluster(Q) ->
                                                ?RPC_TIMEOUT)],
     MinVersion = lists:min([rabbit_fifo:version() | Versions]),
 
-    ?LOG_DEBUG("Will start up to ~w replicas for quorum queue ~ts with "
+    ?LOG_DEBUG("Will start up to ~w replicas for quorum ~ts with "
                      "leader on node '~ts', initial machine version ~b",
                      [QuorumSize, rabbit_misc:rs(QName), LeaderNode, MinVersion]),
     case rabbit_amqqueue:internal_declare(NewQ1, false) of
@@ -663,7 +663,7 @@ handle_tick(QName,
                       ok ->
                           ok;
                       repaired ->
-                          ?LOG_DEBUG("Repaired quorum queue ~ts amqqueue record",
+                          ?LOG_DEBUG("Repaired quorum ~ts amqqueue record",
                                      [rabbit_misc:rs(QName)])
                   end,
                   ExpectedNodes = rabbit_nodes:list_members(),
@@ -1376,7 +1376,7 @@ add_member(VHost, Name, Node, Membership, Timeout)
        is_binary(Name) andalso
        is_atom(Node) ->
     QName = #resource{virtual_host = VHost, name = Name, kind = queue},
-    ?LOG_DEBUG("Asked to add a replica for queue ~ts on node ~ts",
+    ?LOG_DEBUG("Asked to add a replica for ~ts on node ~ts",
                      [rabbit_misc:rs(QName), Node]),
     case rabbit_amqqueue:lookup(QName) of
         {ok, Q} when ?amqqueue_is_classic(Q) ->
@@ -2178,7 +2178,7 @@ force_all_queues_shrink_member_to_current_member(ListQQFun) when is_function(Lis
              QName = amqqueue:get_name(Q),
              {RaName, _} = amqqueue:get_pid(Q),
              OtherNodes = lists:delete(Node, get_nodes(Q)),
-             ?LOG_WARNING("Shrinking queue ~ts to a single node: ~ts", [rabbit_misc:rs(QName), Node]),
+             ?LOG_WARNING("Shrinking ~ts to a single node: ~ts", [rabbit_misc:rs(QName), Node]),
              ok = ra_server_proc:force_shrink_members_to_current_member({RaName, Node}),
              Fun = fun (QQ) ->
                            TS0 = amqqueue:get_type_state(QQ),
