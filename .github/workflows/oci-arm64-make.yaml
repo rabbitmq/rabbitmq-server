@@ -72,7 +72,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Download package-generic-unix
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: package-generic-unix
           path: PACKAGES
@@ -135,7 +135,7 @@ jobs:
     if: ${{ needs.build-package-generic-unix.outputs.authorized }} == 'true'
     steps:
       - name: Download digests
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           path: /tmp/digests
           pattern: digests-*
