@@ -58,7 +58,7 @@ extract_resource_server_properties(Settings) ->
     lists:foldl(fun ({K, Value}, Acc) ->
         Key = list_to_binary(K),
         Attrs = case maps:get(Key, Acc, []) of
-            [] -> [] ++ [{index, maps:size(Acc)+1}, Value];
+            []   -> [{index, maps:size(Acc) + 1}, Value];
             List -> List ++ [Value]
         end,
         maps:put(Key, Attrs, Acc) end, #{}, OAuthResourceServers).
