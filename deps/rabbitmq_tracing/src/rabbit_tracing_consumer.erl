@@ -72,7 +72,7 @@ init(Args0) ->
     Filename = Dir ++ "/" ++ binary_to_list(Name) ++ ".log",
     case filelib:ensure_dir(Filename) of
         ok ->
-            case prim_file:open(Filename, [append], {encoding, utf8}) of
+            case prim_file:open(Filename, [append]) of
                 {ok, F} ->
                     rabbit_tracing_traces:announce(VHost, Name, self()),
                     Format = list_to_atom(binary_to_list(pget(format, Args))),
@@ -194,7 +194,7 @@ log(text, Record, State) ->
             RQs  -> [RQs]
         end ++
         [Record#log_record.properties, Record#log_record.payload],
-    print_log(io_lib:format(Fmt, Args), State);
+    print_log(io_lib:bformat(Fmt, Args), State);
 
 log(json, Record, State) ->
     _ = print_log([rabbit_json:encode(
