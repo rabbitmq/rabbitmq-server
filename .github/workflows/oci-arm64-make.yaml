@@ -50,7 +50,7 @@ jobs:
           make package-generic-unix PROJECT_VERSION=4.0.0
       - name: Upload package-generic-unix
         if: steps.authorized.outputs.authorized == 'true'
-        uses: actions/upload-artifact@v4.3.1
+        uses: actions/upload-artifact@v6
         with:
           name: package-generic-unix
           path: PACKAGES/rabbitmq-server-*.tar.xz
@@ -121,7 +121,7 @@ jobs:
           digest="${{ steps.build.outputs.digest }}"
           touch "/tmp/digests/${digest#sha256:}"
       - name: Upload digest
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: digests-${{ env.PLATFORM_PAIR }}
           path: /tmp/digests/*
