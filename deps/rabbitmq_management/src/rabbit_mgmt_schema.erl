@@ -7,6 +7,7 @@
 
 -module(rabbit_mgmt_schema).
 
+-include_lib("kernel/include/logger.hrl").
 
 -export([
     translate_oauth_resource_servers/1,
@@ -14,12 +15,15 @@
 ]).
 
 extract_key_as_binary({Name,_}) -> list_to_binary(Name).
-extract_value({_Name,V}) -> V.
 
 -spec translate_oauth_resource_servers([{list(), binary()}]) -> map().
 translate_oauth_resource_servers(Conf) ->
+    %% `lists:reverse/1` must be reversed because cuttlefish_generator:transform_datatypes
+    %% prepends new values as it translates rabbitmq.conf, like so:
+    %% {[{Variable, NewValue}|Acc], ErrorAcc};
     Settings = cuttlefish_variable:filter_by_prefix(
-        "management.oauth_resource_servers", Conf),
+        "management.oauth_resource_servers", lists:reverse(Conf)),
+
     Map = merge_list_of_maps([
         extract_resource_server_properties(Settings),
         extract_resource_server_endpoint_params(oauth_authorization_endpoint_params, Settings),
@@ -49,13 +53,15 @@ convert_list_to_binary(V) ->
     V.
 
 extract_resource_server_properties(Settings) ->
-    KeyFun = fun extract_key_as_binary/1,
-    ValueFun = fun extract_value/1,
-
     OAuthResourceServers = [{Name, {list_to_atom(Key), convert_list_to_binary(V)}}
         || {["management","oauth_resource_servers", Name, Key], V} <- Settings ],
-    maps:groups_from_list(KeyFun, ValueFun, OAuthResourceServers).
-
+    lists:foldl(fun ({K, Value}, Acc) ->
+        Key = list_to_binary(K),
+        Attrs = case maps:get(Key, Acc, []) of
+            []   -> [{index, maps:size(Acc) + 1}, Value];
+            List -> List ++ [Value]
+        end,
+        maps:put(Key, Attrs, Acc) end, #{}, OAuthResourceServers).
 
 extract_resource_server_endpoint_params(Variable, Settings) ->
     KeyFun = fun extract_key_as_binary/1,
