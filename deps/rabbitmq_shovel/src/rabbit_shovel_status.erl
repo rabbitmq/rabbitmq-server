@@ -14,7 +14,7 @@
 
 -export([start_link/0]).
 
--export([report/3,
+-export([report/3, report/4,
          report_blocked_status/2,
          remove/1,
          status/0,
@@ -77,6 +77,12 @@ start_link() ->
 -spec report(name(), type(), info()) -> ok.
 report(Name, Type, Info) ->
     gen_server:cast(?SERVER, {report, Name, Type, Info, calendar:local_time()}).
+
+-spec report(name(), type(), info(), metrics()) -> ok.
+report(Name, Type, Info, Metrics) ->
+    %% Initialise metrics for protocols that don't immediately generate a
+    %% blocked status report. This happens with AMQP 1.0
+    gen_server:cast(?SERVER, {report, Name, Type, Info, Metrics, calendar:local_time()}).
 
 -spec report_blocked_status(name(), {blocked_status(), metrics()} | blocked_status()) -> ok.
 report_blocked_status(Name, Status) ->
@@ -157,6 +163,19 @@ handle_cast({report, Name, Type, Info, Timestamp}, State) ->
         name = Name,
         type = Type,
         info = Info,
+        timestamp = Timestamp
+    },
+    true = ets:insert(?ETS_NAME, Entry),
+    rabbit_event:notify(shovel_worker_status,
+                        split_name(Name) ++ split_status(Info)),
+    {noreply, State};
+
+handle_cast({report, Name, Type, Info, Metrics, Timestamp}, State) ->
+    Entry = #entry{
+        name = Name,
+        type = Type,
+        info = Info,
+        metrics = Metrics,
         timestamp = Timestamp
     },
     true = ets:insert(?ETS_NAME, Entry),

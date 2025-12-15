@@ -28,9 +28,6 @@ define PROJECT_ENV
 	    {heartbeat, 60},
 	    {msg_store_file_size_limit, 16777216},
 	    {msg_store_shutdown_timeout, 600000},
-	    {fhc_write_buffering, true},
-	    {fhc_read_buffering, false},
-	    {queue_index_max_journal_entries, 32768},
 	    {queue_index_embed_msgs_below, 4096},
 	    {default_user, <<"guest">>},
 	    {default_pass, <<"guest">>},
@@ -126,7 +123,7 @@ define PROJECT_ENV
 	  ]
 endef
 
-LOCAL_DEPS = sasl os_mon inets compiler public_key crypto ssl syntax_tools xmerl
+LOCAL_DEPS = sasl os_mon inets compiler public_key crypto ssl syntax_tools
 
 BUILD_DEPS = rabbitmq_cli
 DEPS = ranch cowlib rabbit_common amqp10_common rabbitmq_prelaunch ra sysmon_handler stdout_formatter recon redbug observer_cli osiris syslog systemd seshat horus khepri khepri_mnesia_migration cuttlefish gen_batch_server
@@ -269,12 +266,12 @@ PARALLEL_CT_SET_1_D = amqqueue_backward_compatibility channel_interceptor channe
 
 PARALLEL_CT_SET_2_A = cluster confirms_rejects consumer_timeout rabbit_access_control rabbit_confirms rabbit_core_metrics_gc rabbit_cuttlefish rabbit_db_binding rabbit_db_exchange
 PARALLEL_CT_SET_2_B = crashing_queues deprecated_features direct_exchange_routing_v2 disconnect_detected_during_alarm exchanges unit_gen_server2
-PARALLEL_CT_SET_2_C = disk_monitor dynamic_qq unit_disk_monitor unit_file_handle_cache unit_log_management unit_operator_policy prevent_startup_if_node_was_reset
+PARALLEL_CT_SET_2_C = disk_monitor dynamic_qq unit_disk_monitor unit_log_management unit_operator_policy prevent_startup_if_node_was_reset
 PARALLEL_CT_SET_2_D = queue_length_limits queue_parallel quorum_queue_member_reconciliation rabbit_fifo rabbit_fifo_dlx rabbit_stream_coordinator
 
 PARALLEL_CT_SET_3_A = definition_import per_user_connection_channel_limit_partitions per_vhost_connection_limit_partitions policy priority_queue_recovery rabbit_fifo_v0 rabbit_stream_sac_coordinator_v4 rabbit_stream_sac_coordinator unit_credit_flow unit_queue_consumers unit_queue_location unit_quorum_queue
 PARALLEL_CT_SET_3_B = cluster_upgrade list_consumers_sanity_check list_queues_online_and_offline logging lqueue maintenance_mode rabbit_fifo_q
-PARALLEL_CT_SET_3_C = cli_forget_cluster_node feature_flags_v2 mc_unit message_containers_deaths_v2 message_size_limit metadata_store_migration
+PARALLEL_CT_SET_3_C = cli_forget_cluster_node feature_flags_v2 mc_unit message_size_limit metadata_store_migration
 PARALLEL_CT_SET_3_D = metadata_store_phase1 metrics mirrored_supervisor peer_discovery_classic_config proxy_protocol runtime_parameters unit_stats_and_metrics unit_supervisor2 unit_vm_memory_monitor
 
 PARALLEL_CT_SET_4_A = clustering_events rabbit_local_random_exchange rabbit_msg_interceptor rabbitmq_4_0_deprecations unit_pg_local unit_plugin_directories unit_plugin_versioning unit_policy_validators unit_priority_queue

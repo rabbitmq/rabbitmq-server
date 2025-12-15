@@ -25,7 +25,7 @@ define HEX_TARBALL_EXTRA_METADATA
 }
 endef
 
-LOCAL_DEPS = compiler crypto public_key sasl ssl syntax_tools tools xmerl runtime_tools
+LOCAL_DEPS = compiler crypto public_key sasl ssl syntax_tools tools runtime_tools
 DEPS = thoas ranch recon credentials_obfuscation
 
 # Variables and recipes in development.*.mk are meant to be used from
@@ -43,16 +43,9 @@ DEP_EARLY_PLUGINS = $(PROJECT)/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = $(PROJECT)/mk/rabbitmq-build.mk \
 	      $(PROJECT)/mk/rabbitmq-hexpm.mk
 
-PLT_APPS += mnesia crypto ssl xmerl
+PLT_APPS += mnesia crypto ssl
 
 include ../../rabbitmq-components.mk
 include ../../erlang.mk
-
-HEX_TARBALL_FILES += ../../rabbitmq-components.mk \
-		     git-revisions.txt \
-		     mk/rabbitmq-build.mk \
-		     mk/rabbitmq-dist.mk \
-		     mk/rabbitmq-early-plugin.mk \
-		     mk/rabbitmq-hexpm.mk
 
 -include development.post.mk

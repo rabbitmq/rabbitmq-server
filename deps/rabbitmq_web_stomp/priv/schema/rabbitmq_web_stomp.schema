@@ -59,11 +59,11 @@
 {mapping, "web_stomp.ssl.ip", "rabbitmq_web_stomp.ssl_config.ip",
     [{datatype, string}, {validators, ["is_ip"]}]}.
 {mapping, "web_stomp.ssl.certfile", "rabbitmq_web_stomp.ssl_config.certfile",
-    [{datatype, string}, {validators, ["file_accessible"]}]}.
+    [{datatype, string}, {validators, ["pem_file"]}]}.
 {mapping, "web_stomp.ssl.keyfile", "rabbitmq_web_stomp.ssl_config.keyfile",
-    [{datatype, string}, {validators, ["file_accessible"]}]}.
+    [{datatype, string}, {validators, ["pem_file"]}]}.
 {mapping, "web_stomp.ssl.cacertfile", "rabbitmq_web_stomp.ssl_config.cacertfile",
-    [{datatype, string}, {validators, ["file_accessible"]}]}.
+    [{datatype, string}, {validators, ["pem_file"]}]}.
 {mapping, "web_stomp.ssl.password", "rabbitmq_web_stomp.ssl_config.password",
     [{datatype, [tagged_binary, binary]}]}.
 
@@ -191,7 +191,7 @@ end}.
     [{datatype, {enum, [true, false]}}]}.
 
 %%
-%% File Handle Cache
+%% File Handle Cache (no-op, kept for compatibility).
 %%
 
 {mapping, "web_stomp.use_file_handle_cache", "rabbitmq_web_stomp.use_file_handle_cache",

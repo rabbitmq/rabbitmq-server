@@ -176,18 +176,7 @@ end_per_group(Group, Config) ->
             Config
     end.
 
-init_per_testcase(T, Config)
-  when T =:= dead_letter_reject_expire_expire orelse
-       T =:= stream ->
-    %% With feature flag message_containers_deaths_v2 disabled, test case:
-    %% * dead_letter_reject_expire_expire is known to fail due to https://github.com/rabbitmq/rabbitmq-server/issues/11159
-    %% * stream is known to fail due to https://github.com/rabbitmq/rabbitmq-server/issues/11173
-    ok = rabbit_ct_broker_helpers:enable_feature_flag(Config, message_containers_deaths_v2),
-    init_per_testcase0(T, Config);
 init_per_testcase(Testcase, Config) ->
-    init_per_testcase0(Testcase, Config).
-
-init_per_testcase0(Testcase, Config) ->
     Group = proplists:get_value(name, ?config(tc_group_properties, Config)),
     Q = rabbit_data_coercion:to_binary(io_lib:format("~p_~p", [Group, Testcase])),
     Q2 = rabbit_data_coercion:to_binary(io_lib:format("~p_~p_2", [Group, Testcase])),

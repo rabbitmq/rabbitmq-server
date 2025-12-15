@@ -352,6 +352,9 @@ close_sent(_EvtType, heartbeat, _Data) ->
 close_sent(_EvtType, {'EXIT', _Pid, shutdown}, _Data) ->
     %% monitored processes may exit during closure
     keep_state_and_data;
+close_sent(_EvtType, {'EXIT', _Pid, {shutdown, _}}, _Data) ->
+    %% monitored processes may exit during closure
+    keep_state_and_data;
 close_sent(_EvtType, {'DOWN', _Ref, process, ReaderPid, _Reason},
            #state{reader = ReaderPid}) ->
     %% if the reader exits we probably won't receive a close frame

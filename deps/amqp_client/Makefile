@@ -39,7 +39,7 @@ endef
 # Release artifacts are put in $(PACKAGES_DIR).
 PACKAGES_DIR ?= $(abspath PACKAGES)
 
-LOCAL_DEPS = xmerl ssl public_key
+LOCAL_DEPS = ssl public_key
 DEPS = rabbit_common credentials_obfuscation
 TEST_DEPS = rabbitmq_ct_helpers rabbit meck
 
@@ -49,10 +49,7 @@ DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk \
 	      rabbit_common/mk/rabbitmq-hexpm.mk
 
-PLT_APPS = ssl public_key
+PLT_APPS = crypto ssl public_key
 
 include ../../rabbitmq-components.mk
 include ../../erlang.mk
-
-HEX_TARBALL_FILES += ../../rabbitmq-components.mk \
-		     git-revisions.txt

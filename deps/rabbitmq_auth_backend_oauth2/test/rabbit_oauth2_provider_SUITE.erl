@@ -479,7 +479,7 @@ start_https_oauth_server(Port, CertsDir, Expectations) when is_list(Expectations
         {'_', [{Path, oauth2_http_mock, Expected} ||
             #{request := #{path := Path}} = Expected <- Expectations ]}
         ]),
-    {ok, Pid} = cowboy:start_tls(
+    {ok, _Pid} = cowboy:start_tls(
         mock_http_auth_listener,
         [{port, Port},
          {certfile, filename:join([CertsDir, "server", "cert.pem"])},

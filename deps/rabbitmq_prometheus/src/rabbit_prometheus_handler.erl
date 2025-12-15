@@ -14,7 +14,6 @@
 
 -define(SCRAPE_DURATION, telemetry_scrape_duration_seconds).
 -define(SCRAPE_SIZE, telemetry_scrape_size_bytes).
--define(SCRAPE_ENCODED_SIZE, telemetry_scrape_encoded_size_bytes).
 
 -define(AUTH_REALM, "Basic realm=\"RabbitMQ Prometheus\"").
 
@@ -58,14 +57,9 @@ setup_metrics(Registry) ->
                   {help, "Scrape size, not encoded"},
                   {labels, ["registry", "content_type"]},
                   {registry, Registry}],
-    ScrapeEncodedSize = [{name, ?SCRAPE_ENCODED_SIZE},
-                         {help, "Scrape size, encoded"},
-                         {labels, ["registry", "content_type", "encoding"]},
-                         {registry, Registry}],
 
     prometheus_summary:declare(ScrapeDuration),
-    prometheus_summary:declare(ScrapeSize),
-    prometheus_summary:declare(ScrapeEncodedSize).
+    prometheus_summary:declare(ScrapeSize).
 
 %% ===================================================================
 %% Private functions
@@ -89,47 +83,34 @@ gen_response(_, Request) ->
     Request.
 
 gen_metrics_response(Registry, Request) ->
-    {Code, RespHeaders, Body} = reply(Registry, Request),
-
-    Headers = to_cowboy_headers(RespHeaders),
-    cowboy_req:reply(Code, maps:from_list(Headers), Body, Request).
-
-to_cowboy_headers(RespHeaders) ->
-    lists:map(fun to_cowboy_headers_/1, RespHeaders).
-
-to_cowboy_headers_({Name, Value}) ->
-    {to_cowboy_name(Name), Value}.
-
-to_cowboy_name(Name) ->
-    binary:replace(atom_to_binary(Name, utf8), <<"_">>, <<"-">>).
-
-reply(Registry, Request) ->
     case validate_registry(Registry, registry()) of
         {true, RealRegistry} ->
             format_metrics(Request, RealRegistry);
         {registry_conflict, _ReqR, _ConfR} ->
-            {409, [], <<>>}
+            cowboy_req:reply(409, #{}, <<>>, Request)
     end.
 
 format_metrics(Request, Registry) ->
-    AcceptEncoding = cowboy_req:header(<<"accept-encoding">>, Request, undefined),
+    %% Formatting registries produces large binaries. Fullsweep eagerly to
+    %% evict the large binaries faster and make GC cheaper.
+    process_flag(fullsweep_after, 0),
     ContentType = prometheus_text_format:content_type(),
-    Scrape = render_format(ContentType, Registry),
-    Encoding = accept_encoding_header:negotiate(AcceptEncoding, [<<"identity">>,
-                                                                 <<"gzip">>]),
-    encode_format(ContentType, binary_to_list(Encoding), Scrape, Registry).
-
-render_format(ContentType, Registry) ->
-    Scrape = prometheus_summary:observe_duration(
-               Registry,
-               ?SCRAPE_DURATION,
-               [Registry, ContentType],
-               fun () -> prometheus_text_format:format(Registry) end),
+    Req = cowboy_req:stream_reply(200, #{<<"content-type">> => ContentType}, Request),
+    Fmt = fun(Size, Data) ->
+        cowboy_req:stream_body(Data, nofin, Req),
+        Size + byte_size(Data)
+    end,
+    Size = prometheus_summary:observe_duration(
+             Registry,
+             ?SCRAPE_DURATION,
+             [Registry, ContentType],
+             fun () -> prometheus_text_format:format_into(Registry, Fmt, 0) end),
+    cowboy_req:stream_body(<<>>, fin, Req),
     prometheus_summary:observe(Registry,
                                ?SCRAPE_SIZE,
                                [Registry, ContentType],
-                               iolist_size(Scrape)),
-    Scrape.
+                               Size),
+    Req.
 
 validate_registry(undefined, auto) ->
     {true, default};
@@ -145,20 +126,6 @@ telemetry_registry() ->
 
 registry() ->
     application:get_env(rabbitmq_prometheus, registry, auto).
-
-encode_format(ContentType, Encoding, Scrape, Registry) ->
-    Encoded = encode_format_(Encoding, Scrape),
-    prometheus_summary:observe(telemetry_registry(),
-                               ?SCRAPE_ENCODED_SIZE,
-                               [Registry, ContentType, Encoding],
-                               iolist_size(Encoded)),
-    {200, [{content_type, binary_to_list(ContentType)},
-           {content_encoding, Encoding}], Encoded}.
-
-encode_format_("gzip", Scrape) ->
-    zlib:gzip(Scrape);
-encode_format_("identity", Scrape) ->
-     Scrape.
 
 %% It's not easy to pass this information in a pure way (it'll require changing prometheus.erl)
 put_filtering_options_into_process_dictionary(Request) ->

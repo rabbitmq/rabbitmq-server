@@ -35,7 +35,7 @@ define PROJECT_APP_EXTRA_KEYS
 endef
 
 LOCAL_DEPS = eldap public_key
-DEPS = rabbit_common rabbit
+DEPS = rabbit_common rabbit cuttlefish
 TEST_DEPS = ct_helper rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client
 dep_ct_helper = git https://github.com/extend/ct_helper.git master
 

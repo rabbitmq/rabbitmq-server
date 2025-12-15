@@ -370,6 +370,7 @@
 ##
 # default_policies.operator.limits.vhost_pattern = ^prod-.*
 # default_policies.operator.limits.queue_pattern = .*
+# default_policies.operator.limits.apply_to = queues
 # default_policies.operator.limits.max_length = 10000
 # default_policies.operator.limits.message_ttl = 86400000
 
@@ -413,10 +414,32 @@
 ##
 # initial_frame_max = 4096
 
-## Set the max permissible number of channels per connection.
+## Set the max permissible number of channels per AMQP 0-9-1 connection.
 ## 0 means "no limit".
 ##
 # channel_max = 128
+
+## Set the max permissible number of channels across all AMQP 0-9-1 connections on the node.
+##
+# channel_max_per_node = 2000
+
+## Set the max allowed number of consumers per AMQP 0-9-1 channel.
+##
+# consumer_max_per_channel = 100
+
+## Set the max permissible number of client connections on the node.
+##
+# connection_max = 5000
+
+## Sets the maximum number of AMQP 1.0 sessions that can be simultaneously
+## active on an AMQP 1.0 connection.
+##
+# session_max_per_connection = 32
+
+## Sets the maximum number of AMQP 1.0 links that can be simultaneously
+## active on an AMQP 1.0 session.
+##
+# link_max_per_session = 32
 
 ## Customising TCP Listener (Socket) Configuration.
 ##
@@ -441,6 +464,12 @@
 ## Queues
 ##
 
+## Configures a node-wide fallback for the default queue type.
+##
+## Relevant doc guide: https://www.rabbitmq.com/docs/vhosts#default-queue-type
+##
+# default_queue_type = quorum
+
 ## If set, the 'x-queue-type' header will be ignored (not compared for equivalence)
 ## for queue redeclaration. This can simplify upgrades of applications that explicitly
 ## set 'x-queue-type' to 'classic' for historical reasons but do not set any other
@@ -459,7 +488,7 @@
 # quorum_queue.commands_soft_limit = 32
 
 ## Changes classic queue storage implementation version.
-## In 4.0.x, version 2 is the default and this is a forward compatibility setting,
+## As of 4.0.0, version 2 is the default and this is a forward compatibility setting,
 ## that is, it will be useful when a new version is developed.
 ##
 # classic_queue.default_version = 2
@@ -512,6 +541,11 @@
 # stream.replication.port_range.min = 5000
 # stream.replication.port_range.max = 10000
 
+## IP address family used by stream replication listeners.
+## Supported values are: inet (IPv4), inet6 (IPv6), ipv4, ipv6.
+##
+# stream.replication.address_family = inet6
+
 ## Advertised hostname and port for stream clients. Use when RabbitMQ
 ## is behind a load balancer or in a container environment.
 ##
@@ -524,6 +558,11 @@
 # stream.advertised_port = 5552
 # stream.advertised_tls_host = localhost
 # stream.advertised_tls_port = 5553
+
+## Allows for using a custom data directory for streams, for example,
+## a dedicated volume with particularly fast storage.
+##
+# stream.data_dir = /data/rabbitmq/streams
 
 ##
 ## Resource Limits & Flow Control
@@ -581,6 +620,26 @@
 ##
 ## Values lower than 1.0 can be dangerous and should be used carefully.
 # disk_free_limit.relative = 2.0
+
+## Maximum number of virtual hosts in the cluster.
+##
+# vhost_max = 100
+
+## Maximum number of queues and streams in the cluster.
+##
+# cluster_queue_limit = 10000
+
+## Maximum number of exchanges in the cluster.
+##
+# cluster_exchange_limit = 5000
+
+## Maximum message size in bytes. Messages larger than this
+## will be rejected.
+##
+## Default is 16 MiB.
+##
+## Sets maximum message size to 16 MiB
+# max_message_size = 16777216
 
 ##
 ## Clustering

@@ -53,7 +53,7 @@ jobs:
           fi
       - name: Checkout
         if: steps.authorized.outputs.authorized == 'true'
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
       - name: Configure Erlang
         if: steps.authorized.outputs.authorized == 'true'
         uses: erlef/setup-beam@v1
@@ -66,7 +66,7 @@ jobs:
           make package-generic-unix PROJECT_VERSION=${{ env.VERSION }}
       - name: Upload package-generic-unix
         if: steps.authorized.outputs.authorized == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: package-generic-unix-otp${{ matrix.otp_version }}
           path: PACKAGES/rabbitmq-server-*.tar.xz
@@ -82,9 +82,9 @@ jobs:
     if: ${{ needs.build-package-generic-unix.outputs.authorized == 'true' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
       - name: Download package-generic-unix
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v6
         with:
           name: package-generic-unix-otp${{ matrix.otp_version }}
           path: PACKAGES

@@ -56,10 +56,25 @@ edit(Options) ->
                                "It will be overwritten by the plugin.", [Val]),
             ok
     end,
+    CaCerts =
+        case lists:keymember(cacerts, 1, Options) orelse
+             lists:keymember(cacertfile, 1, Options) of
+            true ->
+                [];
+            false ->
+                %% if verify_peer is enabled, then the ssl app
+                %% requires a cacerts option to be set even if it is
+                %% not used, as we rely on verify_fun instead.
+                [{cacerts, []}]
+        end,
     %% Only enter those options neccessary for this application.
-    lists:keymerge(1, required_options(),
-        [{verify_fun, {delegate(), continue}},
-         {partial_chain, fun partial_chain/1} | Options]).
+    lists:ukeymerge(
+      1,
+      lists:sort(CaCerts ++
+                     [{verify_fun, {delegate(), continue}},
+                      {partial_chain, fun partial_chain/1}
+                     |required_options()]),
+      lists:sort(Options)).
 
 delegate() -> fun rabbit_trust_store:whitelisted/3.
 

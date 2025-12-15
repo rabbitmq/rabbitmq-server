@@ -53,8 +53,8 @@ collect_mf(_Registry, Callback) ->
 %% INTERNAL
 
 collect_aggregate_metrics(Prefix, Callback) ->
-    collect_max_values(Prefix, Callback),
-    collect_key_component_metrics(Prefix, Callback).
+    collect_key_component_metrics(Prefix, Callback),
+    collect_max_values(Prefix, Callback).
 
 collect_per_object_metrics(Prefix, Callback) ->
     collect_key_component_metrics(Prefix, Callback),
@@ -71,8 +71,6 @@ collect_detailed_metrics(Prefix, Callback) ->
                                      false
                              end
                      end,
-
-    collect_key_component_metrics(Prefix, Callback),
     collect_all_matching_metrics(Prefix, Callback, VHostFilterFun).
 
 collect_key_per_object_metrics(Prefix, Callback) ->
@@ -91,7 +89,10 @@ collect_key_per_object_metrics(Prefix, Callback) ->
                           Type,
                           Values))
       end,
-      seshat:format(ra, #{labels => as_binary, metrics => QQMetrics})).
+      seshat:format(ra,
+                    #{labels => as_binary,
+                      metrics => QQMetrics,
+                      filter_fun => fun onlyQueues/1})).
 
 collect_all_matching_metrics(Prefix, Callback, VHostFilterFun) ->
     maps:foreach(
@@ -106,7 +107,10 @@ collect_all_matching_metrics(Prefix, Callback, VHostFilterFun) ->
                           Type,
                           Values))
       end,
-      seshat:format(ra, #{labels => as_binary, metrics => all, filter_fun => VHostFilterFun})).
+      seshat:format(ra,
+                    #{labels => as_binary,
+                      metrics => all,
+                      filter_fun => VHostFilterFun})).
 
 collect_max_values(Prefix, Callback) ->
     %% max values for QQ metrics
@@ -115,7 +119,7 @@ collect_max_values(Prefix, Callback) ->
     %% rabbitmq_raft_num_segments{queue="q2",vhost="/"} 10.0
     %% becomes
     %% rabbitmq_raft_max_num_segments 10.0
-    QQMetrics = [num_segments],
+    QQMetrics = [num_segments, commit_latency],
     maps:foreach(
       fun(Name, #{type := Type, help := Help, values := Values}) ->
               Max = lists:max(maps:values(Values)),
@@ -123,12 +127,18 @@ collect_max_values(Prefix, Callback) ->
                 create_mf(<<Prefix/binary, "max_", (prometheus_model_helpers:metric_name(Name))/binary>>,
                           Help,
                           Type,
-                          #{#{} => Max}))
+                          %% TODO: this should not be hardcoded, we should
+                          %% something more like 'max() GROUP BY ra_system'
+                          #{#{ra_system => quorum_queues} => Max}))
 
       end,
-      seshat:format(ra, #{labels => as_binary, metrics => QQMetrics})).
+      seshat:format(ra,
+                    #{labels => as_binary,
+                      metrics => QQMetrics,
+                      filter_fun => fun onlyQueues/1})).
 
 collect_key_component_metrics(Prefix, Callback) ->
+    %% quorum queue metrics
     WALMetrics = [wal_files, bytes_written, mem_tables],
     SegmentWriterMetrics = [entries, segments],
     maps:foreach(
@@ -139,4 +149,25 @@ collect_key_component_metrics(Prefix, Callback) ->
                           Type,
                           Values))
       end,
-      seshat:format(ra, #{labels => as_binary, metrics => WALMetrics ++ SegmentWriterMetrics})).
+      seshat:format(ra,
+                    #{labels => as_binary,
+                      metrics => WALMetrics ++ SegmentWriterMetrics,
+                      filter_fun => fun onlyQueues/1})),
+    %% Khepri and other coordination metrics
+    maps:foreach(
+      fun(Name, #{type := Type, help := Help, values := Values}) ->
+              Callback(
+                create_mf(<<Prefix/binary, (prometheus_model_helpers:metric_name(Name))/binary>>,
+                          Help,
+                          Type,
+                          Values))
+      end,
+      seshat:format(ra,
+                    #{labels => as_binary,
+                      filter_fun => fun onlyCoordinationSystem/1})).
+
+onlyCoordinationSystem(#{ra_system := coordination}) -> true;
+onlyCoordinationSystem(_) -> false.
+
+onlyQueues(#{queue := _}) -> true;
+onlyQueues(_) -> false.

@@ -7,7 +7,7 @@
 
 -module(rabbit_data_coercion).
 
--export([to_binary/1, to_list/1, to_atom/1, to_integer/1, to_proplist/1, to_map/1]).
+-export([to_binary/1, to_list/1, to_atom/1, to_integer/1, to_boolean/1, to_proplist/1, to_map/1, to_map_recursive/1]).
 -export([to_atom/2, atomize_keys/1, to_list_of_binaries/1]).
 -export([to_utf8_binary/1, to_unicode_charlist/1]).
 -export([as_list/1]).
@@ -55,6 +55,11 @@ to_atom(Val, Encoding)  when is_binary(Val) -> binary_to_atom(Val, Encoding).
 to_integer(Val) when is_integer(Val) -> Val;
 to_integer(Val) when is_list(Val)    -> list_to_integer(Val);
 to_integer(Val) when is_binary(Val)  -> binary_to_integer(Val).
+
+-spec to_boolean(Val :: boolean() | list() | binary()) -> boolean().
+to_boolean(Val) when is_boolean(Val) -> Val;
+to_boolean(Val) when is_list(Val)    -> list_to_boolean(string:lowercase(Val));
+to_boolean(Val) when is_binary(Val)  -> list_to_boolean(string:lowercase(binary_to_list(Val))).
 
 -spec to_proplist(Val :: map() | list()) -> list().
 to_proplist(Val) when is_list(Val) -> Val;
@@ -116,3 +121,50 @@ as_list(Nodes) when is_list(Nodes) ->
     Nodes;
 as_list(Other) ->
     [Other].
+
+-spec to_map_recursive(Val :: map() | list() | any()) -> map() | list() | any().
+%% Recursively convert proplists to maps.
+to_map_recursive([]) ->
+    [];
+to_map_recursive(Value) when is_list(Value) ->
+    case is_proplist(Value) of
+        true ->
+            %% Normalize proplist by expanding bare atoms to {Atom, true}
+            Normalized = normalize_proplist(Value),
+            M = to_map(Normalized),
+            maps:map(fun(_K, V) -> to_map_recursive(V) end, M);
+        false ->
+            %% The input is a regular list (e.g., federation-upstream-set)
+            [to_map_recursive(V) || V <- Value]
+    end;
+to_map_recursive(Value) when is_map(Value) ->
+    %% Recursively process map values
+    maps:map(fun(_K, V) -> to_map_recursive(V) end, Value);
+to_map_recursive(Value) ->
+    %% Base case: atomic values (binary, integer, atom, etc.)
+    Value.
+
+-spec normalize_proplist(list()) -> [{atom() | binary() | list(), any()}].
+normalize_proplist([]) ->
+    [];
+normalize_proplist([{K, V} | Rest]) ->
+    [{K, V} | normalize_proplist(Rest)];
+normalize_proplist([Atom | Rest]) when is_atom(Atom) ->
+    [{Atom, true} | normalize_proplist(Rest)].
+
+-spec is_proplist(any()) -> boolean().
+is_proplist(List) when is_list(List) ->
+    lists:all(fun is_proplist_element/1, List);
+is_proplist(_) ->
+    false.
+
+-spec is_proplist_element(any()) -> boolean().
+is_proplist_element({Key, _Value}) when is_atom(Key); is_binary(Key); is_list(Key) ->
+    true;
+is_proplist_element(Atom) when is_atom(Atom) ->
+    true;
+is_proplist_element(_) ->
+    false.
+
+list_to_boolean("true")  -> true;
+list_to_boolean("false") -> false.

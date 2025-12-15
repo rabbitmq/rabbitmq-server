@@ -177,9 +177,8 @@
 
 -rabbit_feature_flag(
    {quorum_queue_non_voters,
-    #{desc =>
-          "Allows new quorum queue members to be added as non voters initially.",
-      stability => stable,
+    #{desc => "Allows new quorum queue members to be added as non voters initially.",
+      stability => required,
       depends_on => [quorum_queue]
      }}).
 
@@ -187,7 +186,7 @@
    {message_containers_deaths_v2,
     #{desc          => "Bug fix for dead letter cycle detection",
       doc_url       => "https://github.com/rabbitmq/rabbitmq-server/issues/11159",
-      stability     => stable,
+      stability     => required,
       depends_on    => [message_containers]
      }}).
 
@@ -218,4 +217,11 @@
       stability     => stable,
       depends_on    => ['rabbitmq_4.1.0'],
       callbacks     => #{enable => {rabbit_khepri, enable_feature_flag}}
+     }}).
+
+-rabbit_feature_flag(
+   {'rabbitmq_4.3.0',
+    #{desc          => "Allows rolling upgrades to 4.3.x",
+      stability     => stable,
+      depends_on    => ['rabbitmq_4.2.0']
      }}).

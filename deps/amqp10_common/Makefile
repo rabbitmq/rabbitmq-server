@@ -48,7 +48,4 @@ PLT_APPS = eunit
 include ../../rabbitmq-components.mk
 include ../../erlang.mk
 
-HEX_TARBALL_FILES += ../../rabbitmq-components.mk \
-		     git-revisions.txt
-
 -include development.post.mk

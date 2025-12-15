@@ -10,9 +10,11 @@ ensure_mock-auth-backend-http() {
 init_mock-auth-backend-http() {
   AUTH_BACKEND_HTTP_BASEURL=${AUTH_BACKEND_HTTP_BASEURL:-http://localhost:8888}
   AUTH_BACKEND_HTTP_DIR=${TEST_CASES_DIR}/mock-auth-backend-http
+  MOCKSERVER_DOCKER_IMAGE=${MOCKSERVER_DOCKER_IMAGE:-mockserver/mockserver}
 
   print "> AUTH_BACKEND_HTTP_BASEURL: ${AUTH_BACKEND_HTTP_BASEURL}"
   print "> AUTH_BACKEND_HTTP_DIR: ${AUTH_BACKEND_HTTP_DIR}"
+  print "> MOCKSERVER_DOCKER_IMAGE: ${MOCKSERVER_DOCKER_IMAGE}"
 
 }
 start_mock-auth-backend-http() {
@@ -28,7 +30,7 @@ start_mock-auth-backend-http() {
     --publish 8888:1080 \
     --env MOCKSERVER_INITIALIZATION_JSON_PATH="/config/defaultExpectations.json" \
     -v ${AUTH_BACKEND_HTTP_DIR}:/config \
-    mockserver/mockserver
+    ${MOCKSERVER_DOCKER_IMAGE}
 
   wait_for_url $AUTH_BACKEND_HTTP_BASEURL/ready
   end "mock-auth-backend-http is ready"

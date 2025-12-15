@@ -30,10 +30,6 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk
 VERBOSE_TEST ?= true
 MAX_CASES ?= 1
 
-# Force enable Elixir in this project since
-# this is an Elixir application.
-ELIXIR = system
-
 # We are still using Mix for testing.
 MIX_TEST_OPTS ?= ""
 MIX_TEST = ERL_COMPILER_OPTIONS=deterministic MIX_ENV=test mix do compile --warnings-as-errors, test --max-cases=$(MAX_CASES) --warnings-as-errors
@@ -122,7 +118,7 @@ $(LINKED_ESCRIPTS): $(ESCRIPT_FILE)
 tests:: escript test-deps
 	$(verbose) $(MAKE) -C ../../ install-cli
 	$(verbose) $(MAKE) -C ../../ start-background-broker \
-		PLUGINS="rabbitmq_federation rabbitmq_stomp rabbitmq_stream_management amqp_client" \
+		ENABLED_PLUGINS="rabbitmq_federation rabbitmq_stomp rabbitmq_stream_management amqp_client" \
 		$(if $(filter khepri,$(RABBITMQ_METADATA_STORE)),,RABBITMQ_FEATURE_FLAGS="-khepri_db"); \
 		rm -f logs; \
 		log_dir=$$(../../sbin/rabbitmqctl eval 'io:format("~s~n", [maps:get(log_base_dir,rabbit_prelaunch:get_context())]).'); \

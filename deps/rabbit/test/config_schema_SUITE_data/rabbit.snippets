@@ -17,6 +17,14 @@
   "auth_backends.1 = oauth2",
   [{rabbit,[{auth_backends,[rabbit_auth_backend_oauth2]}]}],
   []},
+ {internal_auth_backend,
+  "auth_backends.1 = internal",
+  [{rabbit,[{auth_backends,[rabbit_auth_backend_internal]}]}],
+  []},
+ {internal_loopback_auth_backend,
+  "auth_backends.1 = internal_loopback",
+  [{rabbit,[{auth_backends,[rabbit_auth_backend_internal_loopback]}]}],
+  []},
  {multiple_auth_backends,
  "auth_backends.1 = ldap
 auth_backends.2 = internal",
@@ -62,16 +70,16 @@ auth_backends.2       = internal",
             [{rabbit_auth_backend_ldap,rabbit_auth_backend_ldap}]}]}],
   []},
  {ssl_options,
-  "ssl_options.cacertfile          = test/config_schema_SUITE_data/certs/cacert.pem
-ssl_options.certfile             = test/config_schema_SUITE_data/certs/cert.pem
-ssl_options.keyfile              = test/config_schema_SUITE_data/certs/key.pem
+  "ssl_options.cacertfile          = test/config_schema_SUITE_data/certs/ca_certificate.pem
+ssl_options.certfile             = test/config_schema_SUITE_data/certs/server_certificate.pem
+ssl_options.keyfile              = test/config_schema_SUITE_data/certs/server_key.pem
 ssl_options.verify               = verify_peer
 ssl_options.fail_if_no_peer_cert = true",
   [{rabbit,
        [{ssl_options,
-            [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
-             {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
-             {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+            [{cacertfile,"test/config_schema_SUITE_data/certs/ca_certificate.pem"},
+             {certfile,"test/config_schema_SUITE_data/certs/server_certificate.pem"},
+             {keyfile,"test/config_schema_SUITE_data/certs/server_key.pem"},
              {verify,verify_peer},
              {fail_if_no_peer_cert,true}]}]}],
   []},
@@ -191,17 +199,13 @@ ssl_options.fail_if_no_peer_cert = true",
   default_policies.operator.a.expires = 1h
   default_policies.operator.a.queue_pattern = apple
   default_policies.operator.a.vhost_pattern = banana
-  default_policies.operator.a.classic_queues.ha_mode = exactly
-  default_policies.operator.a.classic_queues.ha_params = 2
-  default_policies.operator.a.classic_queues.ha_sync_mode = automatic
+  default_policies.operator.a.apply_to = quorum_queues
   default_policies.operator.a.classic_queues.queue_version = 2
 
  ",
   [{rabbit, [{default_policies, [{operator, [
-      {<<"a">>, [{<<"expires">>, 3600000},
-                 {<<"ha_mode">>, <<"exactly">>},
-                 {<<"ha_params">>, 2},
-                 {<<"ha_sync_mode">>, <<"automatic">>},
+      {<<"a">>, [{<<"apply_to">>,<<"quorum_queues">>},
+                 {<<"expires">>, 3600000},
                  {<<"queue_pattern">>, <<"apple">>},
                  {<<"queue_version">>, 2},
                  {<<"vhost_pattern">>, "banana"}]}]}]}]}],
@@ -575,55 +579,55 @@ tcp_listen_options.exit_on_close = false",
   []},
  {ssl_options_verify_peer,
   "listeners.ssl.1 = 5671
-   ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
-   ssl_options.certfile = test/config_schema_SUITE_data/certs/cert.pem
-   ssl_options.keyfile = test/config_schema_SUITE_data/certs/key.pem
+   ssl_options.cacertfile = test/config_schema_SUITE_data/certs/ca_certificate.pem
+   ssl_options.certfile = test/config_schema_SUITE_data/certs/server_certificate.pem
+   ssl_options.keyfile = test/config_schema_SUITE_data/certs/server_key.pem
    ssl_options.verify = verify_peer
    ssl_options.fail_if_no_peer_cert = false",
   [{rabbit,
        [{ssl_listeners,[5671]},
         {ssl_options,
-            [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
-             {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
-             {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+            [{cacertfile,"test/config_schema_SUITE_data/certs/ca_certificate.pem"},
+             {certfile,"test/config_schema_SUITE_data/certs/server_certificate.pem"},
+             {keyfile,"test/config_schema_SUITE_data/certs/server_key.pem"},
              {verify,verify_peer},
              {fail_if_no_peer_cert,false}]}]}],
   []},
  {ssl_options_password,
   "listeners.ssl.1 = 5671
-   ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
-   ssl_options.certfile   = test/config_schema_SUITE_data/certs/cert.pem
-   ssl_options.keyfile    = test/config_schema_SUITE_data/certs/key.pem
+   ssl_options.cacertfile = test/config_schema_SUITE_data/certs/ca_certificate.pem
+   ssl_options.certfile   = test/config_schema_SUITE_data/certs/server_certificate.pem
+   ssl_options.keyfile    = test/config_schema_SUITE_data/certs/server_key.pem
    ssl_options.password   = t0p$3kRe7",
   [{rabbit,
        [{ssl_listeners,[5671]},
         {ssl_options,
-            [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
-             {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
-             {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+            [{cacertfile,"test/config_schema_SUITE_data/certs/ca_certificate.pem"},
+             {certfile,"test/config_schema_SUITE_data/certs/server_certificate.pem"},
+             {keyfile,"test/config_schema_SUITE_data/certs/server_key.pem"},
              {password,<<"t0p$3kRe7">>}]}]}],
   []},
 
  {ssl_options_encrypted_password,
   "listeners.ssl.1 = 5671
-   ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
-   ssl_options.certfile   = test/config_schema_SUITE_data/certs/cert.pem
-   ssl_options.keyfile    = test/config_schema_SUITE_data/certs/key.pem
+   ssl_options.cacertfile = test/config_schema_SUITE_data/certs/ca_certificate.pem
+   ssl_options.certfile   = test/config_schema_SUITE_data/certs/server_certificate.pem
+   ssl_options.keyfile    = test/config_schema_SUITE_data/certs/server_key.pem
    ssl_options.password   = encrypted:GhC4J5lh2DUkbdyKO0aMI8aYJ54mwe4eEWzou4yRFAHMF82IbD6cRiYAiBa8UIzR",
   [{rabbit,
        [{ssl_listeners,[5671]},
         {ssl_options,
-            [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
-             {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
-             {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+            [{cacertfile,"test/config_schema_SUITE_data/certs/ca_certificate.pem"},
+             {certfile,"test/config_schema_SUITE_data/certs/server_certificate.pem"},
+             {keyfile,"test/config_schema_SUITE_data/certs/server_key.pem"},
              {password, {encrypted, <<"GhC4J5lh2DUkbdyKO0aMI8aYJ54mwe4eEWzou4yRFAHMF82IbD6cRiYAiBa8UIzR">>}}]}]}],
   []},
 
  {ssl_options_tls_ver_old,
   "listeners.ssl.1 = 5671
-   ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
-   ssl_options.certfile   = test/config_schema_SUITE_data/certs/cert.pem
-   ssl_options.keyfile    = test/config_schema_SUITE_data/certs/key.pem
+   ssl_options.cacertfile = test/config_schema_SUITE_data/certs/ca_certificate.pem
+   ssl_options.certfile   = test/config_schema_SUITE_data/certs/server_certificate.pem
+   ssl_options.keyfile    = test/config_schema_SUITE_data/certs/server_key.pem
    ssl_options.versions.tls1_2 = tlsv1.2
    ssl_options.versions.tls1_1 = tlsv1.1
    ssl_options.versions.tls1   = tlsv1",
@@ -632,16 +636,16 @@ tcp_listen_options.exit_on_close = false",
    {rabbit,
        [{ssl_listeners,[5671]},
         {ssl_options,
-            [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
-             {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
-             {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+            [{cacertfile,"test/config_schema_SUITE_data/certs/ca_certificate.pem"},
+             {certfile,"test/config_schema_SUITE_data/certs/server_certificate.pem"},
+             {keyfile,"test/config_schema_SUITE_data/certs/server_key.pem"},
              {versions,['tlsv1.2','tlsv1.1',tlsv1]}]}]}],
   []},
  {ssl_options_tls_ver_new,
   "listeners.ssl.1 = 5671
-   ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
-   ssl_options.certfile   = test/config_schema_SUITE_data/certs/cert.pem
-   ssl_options.keyfile    = test/config_schema_SUITE_data/certs/key.pem
+   ssl_options.cacertfile = test/config_schema_SUITE_data/certs/ca_certificate.pem
+   ssl_options.certfile   = test/config_schema_SUITE_data/certs/server_certificate.pem
+   ssl_options.keyfile    = test/config_schema_SUITE_data/certs/server_key.pem
    ssl_options.versions.tls1_2 = tlsv1.2
    ssl_options.versions.tls1_1 = tlsv1.1",
   [{ssl,[{versions,['tlsv1.2','tlsv1.1']}]}],
@@ -649,17 +653,17 @@ tcp_listen_options.exit_on_close = false",
    {rabbit,
        [{ssl_listeners,[5671]},
         {ssl_options,
-            [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
-             {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
-             {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+            [{cacertfile,"test/config_schema_SUITE_data/certs/ca_certificate.pem"},
+             {certfile,"test/config_schema_SUITE_data/certs/server_certificate.pem"},
+             {keyfile,"test/config_schema_SUITE_data/certs/server_key.pem"},
              {versions,['tlsv1.2','tlsv1.1']}]}]}],
   []},
 
  {ssl_options_ciphers,
   "listeners.ssl.1 = 5671
-   ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
-   ssl_options.certfile   = test/config_schema_SUITE_data/certs/cert.pem
-   ssl_options.keyfile    = test/config_schema_SUITE_data/certs/key.pem
+   ssl_options.cacertfile = test/config_schema_SUITE_data/certs/ca_certificate.pem
+   ssl_options.certfile   = test/config_schema_SUITE_data/certs/server_certificate.pem
+   ssl_options.keyfile    = test/config_schema_SUITE_data/certs/server_key.pem
    ssl_options.versions.1 = tlsv1.2
    ssl_options.versions.2 = tlsv1.1
    ssl_options.ciphers.1 = ECDHE-ECDSA-AES256-GCM-SHA384
@@ -676,7 +680,7 @@ tcp_listen_options.exit_on_close = false",
    {rabbit,
        [{ssl_listeners,[5671]},
         {ssl_options,
-            [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
+            [{cacertfile,"test/config_schema_SUITE_data/certs/ca_certificate.pem"},
              {ciphers, [
                "ECDHE-ECDSA-AES256-GCM-SHA384",
                "ECDHE-RSA-AES256-GCM-SHA384",
@@ -688,88 +692,88 @@ tcp_listen_options.exit_on_close = false",
                "ECDH-RSA-AES256-SHA384",
                "DHE-RSA-AES256-GCM-SHA384"
              ]},
-             {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
-             {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+             {certfile,"test/config_schema_SUITE_data/certs/server_certificate.pem"},
+             {keyfile,"test/config_schema_SUITE_data/certs/server_key.pem"},
              {versions,['tlsv1.2','tlsv1.1']}]}]}],
   []},
 
  {ssl_options_allow_poodle,
   "listeners.ssl.1 = 5671
    ssl_allow_poodle_attack = true
-   ssl_options.cacertfile  = test/config_schema_SUITE_data/certs/cacert.pem
-   ssl_options.certfile    = test/config_schema_SUITE_data/certs/cert.pem
-   ssl_options.keyfile     = test/config_schema_SUITE_data/certs/key.pem
+   ssl_options.cacertfile  = test/config_schema_SUITE_data/certs/ca_certificate.pem
+   ssl_options.certfile    = test/config_schema_SUITE_data/certs/server_certificate.pem
+   ssl_options.keyfile     = test/config_schema_SUITE_data/certs/server_key.pem
    ssl_options.verify      = verify_peer
    ssl_options.fail_if_no_peer_cert = false",
   [{rabbit,
        [{ssl_listeners,[5671]},
         {ssl_allow_poodle_attack,true},
         {ssl_options,
-            [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
-             {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
-             {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+            [{cacertfile,"test/config_schema_SUITE_data/certs/ca_certificate.pem"},
+             {certfile,"test/config_schema_SUITE_data/certs/server_certificate.pem"},
+             {keyfile,"test/config_schema_SUITE_data/certs/server_key.pem"},
              {verify,verify_peer},
              {fail_if_no_peer_cert,false}]}]}],
   []},
  {ssl_options_depth,
   "listeners.ssl.1 = 5671
-   ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
-   ssl_options.certfile   = test/config_schema_SUITE_data/certs/cert.pem
-   ssl_options.keyfile    = test/config_schema_SUITE_data/certs/key.pem
+   ssl_options.cacertfile = test/config_schema_SUITE_data/certs/ca_certificate.pem
+   ssl_options.certfile   = test/config_schema_SUITE_data/certs/server_certificate.pem
+   ssl_options.keyfile    = test/config_schema_SUITE_data/certs/server_key.pem
    ssl_options.depth      = 2
    ssl_options.verify     = verify_peer
    ssl_options.fail_if_no_peer_cert = false",
   [{rabbit,
        [{ssl_listeners,[5671]},
         {ssl_options,
-            [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
-             {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
-             {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+            [{cacertfile,"test/config_schema_SUITE_data/certs/ca_certificate.pem"},
+             {certfile,"test/config_schema_SUITE_data/certs/server_certificate.pem"},
+             {keyfile,"test/config_schema_SUITE_data/certs/server_key.pem"},
              {depth,2},
              {verify,verify_peer},
              {fail_if_no_peer_cert,false}]}]}],
   []},
  {ssl_options_depth_0,
   "listeners.ssl.1 = 5671
-   ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
-   ssl_options.certfile   = test/config_schema_SUITE_data/certs/cert.pem
-   ssl_options.keyfile    = test/config_schema_SUITE_data/certs/key.pem
+   ssl_options.cacertfile = test/config_schema_SUITE_data/certs/ca_certificate.pem
+   ssl_options.certfile   = test/config_schema_SUITE_data/certs/server_certificate.pem
+   ssl_options.keyfile    = test/config_schema_SUITE_data/certs/server_key.pem
    ssl_options.depth      = 0
    ssl_options.verify     = verify_peer
    ssl_options.fail_if_no_peer_cert = false",
   [{rabbit,
        [{ssl_listeners,[5671]},
         {ssl_options,
-            [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
-             {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
-             {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+            [{cacertfile,"test/config_schema_SUITE_data/certs/ca_certificate.pem"},
+             {certfile,"test/config_schema_SUITE_data/certs/server_certificate.pem"},
+             {keyfile,"test/config_schema_SUITE_data/certs/server_key.pem"},
              {depth,0},
              {verify,verify_peer},
              {fail_if_no_peer_cert,false}]}]}],
   []},
  {ssl_options_depth_255,
   "listeners.ssl.1 = 5671
-   ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
-   ssl_options.certfile   = test/config_schema_SUITE_data/certs/cert.pem
-   ssl_options.keyfile    = test/config_schema_SUITE_data/certs/key.pem
+   ssl_options.cacertfile = test/config_schema_SUITE_data/certs/ca_certificate.pem
+   ssl_options.certfile   = test/config_schema_SUITE_data/certs/server_certificate.pem
+   ssl_options.keyfile    = test/config_schema_SUITE_data/certs/server_key.pem
    ssl_options.depth      = 255
    ssl_options.verify     = verify_peer
    ssl_options.fail_if_no_peer_cert = false",
   [{rabbit,
        [{ssl_listeners,[5671]},
         {ssl_options,
-            [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
-             {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
-             {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+            [{cacertfile,"test/config_schema_SUITE_data/certs/ca_certificate.pem"},
+             {certfile,"test/config_schema_SUITE_data/certs/server_certificate.pem"},
+             {keyfile,"test/config_schema_SUITE_data/certs/server_key.pem"},
              {depth,255},
              {verify,verify_peer},
              {fail_if_no_peer_cert,false}]}]}],
   []},
  {ssl_options_honor_cipher_order,
   "listeners.ssl.1 = 5671
-   ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
-   ssl_options.certfile   = test/config_schema_SUITE_data/certs/cert.pem
-   ssl_options.keyfile    = test/config_schema_SUITE_data/certs/key.pem
+   ssl_options.cacertfile = test/config_schema_SUITE_data/certs/ca_certificate.pem
+   ssl_options.certfile   = test/config_schema_SUITE_data/certs/server_certificate.pem
+   ssl_options.keyfile    = test/config_schema_SUITE_data/certs/server_key.pem
    ssl_options.depth      = 2
    ssl_options.verify     = verify_peer
    ssl_options.fail_if_no_peer_cert = false
@@ -777,9 +781,9 @@ tcp_listen_options.exit_on_close = false",
   [{rabbit,
        [{ssl_listeners,[5671]},
         {ssl_options,
-            [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
-             {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
-             {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+            [{cacertfile,"test/config_schema_SUITE_data/certs/ca_certificate.pem"},
+             {certfile,"test/config_schema_SUITE_data/certs/server_certificate.pem"},
+             {keyfile,"test/config_schema_SUITE_data/certs/server_key.pem"},
              {depth,2},
              {verify,verify_peer},
              {fail_if_no_peer_cert, false},
@@ -787,9 +791,9 @@ tcp_listen_options.exit_on_close = false",
   []},
  {ssl_options_honor_ecc_order,
   "listeners.ssl.1 = 5671
-   ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
-   ssl_options.certfile   = test/config_schema_SUITE_data/certs/cert.pem
-   ssl_options.keyfile    = test/config_schema_SUITE_data/certs/key.pem
+   ssl_options.cacertfile = test/config_schema_SUITE_data/certs/ca_certificate.pem
+   ssl_options.certfile   = test/config_schema_SUITE_data/certs/server_certificate.pem
+   ssl_options.keyfile    = test/config_schema_SUITE_data/certs/server_key.pem
    ssl_options.depth      = 2
    ssl_options.verify     = verify_peer
    ssl_options.fail_if_no_peer_cert = false
@@ -797,9 +801,9 @@ tcp_listen_options.exit_on_close = false",
   [{rabbit,
        [{ssl_listeners,[5671]},
         {ssl_options,
-            [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
-             {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
-             {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+            [{cacertfile,"test/config_schema_SUITE_data/certs/ca_certificate.pem"},
+             {certfile,"test/config_schema_SUITE_data/certs/server_certificate.pem"},
+             {keyfile,"test/config_schema_SUITE_data/certs/server_key.pem"},
              {depth,2},
              {verify,verify_peer},
              {fail_if_no_peer_cert, false},
@@ -1194,10 +1198,38 @@ credential_validator.regexp = ^abc\\d+",
    []},
 
   %%
-  %% Stream replication port range
+  %% Stream replication
   %%
 
-  {stream_replication_port_range,
+  {stream_replication_address_family_ipv4_case1,
+   "stream.replication.address_family = inet",
+   [{osiris, [
+      {replica_ip_address_family, inet}
+     ]}],
+   []},
+
+  {stream_replication_address_family_ipv4_case2,
+   "stream.replication.address_family = ipv4",
+   [{osiris, [
+      {replica_ip_address_family, inet}
+     ]}],
+   []},
+
+  {stream_replication_address_family_ipv6_case1,
+   "stream.replication.address_family = inet6",
+   [{osiris, [
+      {replica_ip_address_family, inet6}
+     ]}],
+   []},
+
+  {stream_replication_address_family_ipv6_case2,
+   "stream.replication.address_family = ipv6",
+   [{osiris, [
+      {replica_ip_address_family, inet6}
+     ]}],
+   []},
+
+  {stream_replication_port_range_min_max,
    "
     stream.replication.port_range.min = 4000
     stream.replication.port_range.max = 4600
@@ -1207,7 +1239,7 @@ credential_validator.regexp = ^abc\\d+",
      ]}],
    []},
 
-  {stream_replication_port_range,
+  {stream_replication_port_range_min_only,
    "
     stream.replication.port_range.min = 4000
    ",
@@ -1216,7 +1248,7 @@ credential_validator.regexp = ^abc\\d+",
      ]}],
    []},
 
-  {stream_replication_port_range,
+  {stream_replication_port_range_max,
    "
     stream.replication.port_range.max = 4600
    ",
@@ -1226,7 +1258,7 @@ credential_validator.regexp = ^abc\\d+",
    []},
 
   %%
-  %% Stream read ahead on/off
+  %% Stream read ahead on/off/limit
   %%
 
   {stream_read_ahead,
@@ -1245,6 +1277,32 @@ credential_validator.regexp = ^abc\\d+",
    [{rabbit, [
       {stream_read_ahead, false}
      ]}],
-   []}
+   []},
+  {stream_read_ahead_limit_bytes,
+   "
+    stream.read_ahead = 8192
+   ",
+   [{rabbit, [
+      {stream_read_ahead, 8192}
+     ]}],
+   []},
+  {stream_read_ahead_limit_information_unit,
+   "
+    stream.read_ahead = 8KiB
+   ",
+   [{rabbit, [
+      {stream_read_ahead, "8KiB"}
+     ]}],
+   []},
 
+  %%
+  %% Stream data dir
+  %%
+
+  {stream_data_dir,
+   "stream.data_dir = /data/rabbitmq/stream",
+   [{osiris, [
+      {data_dir, "/data/rabbitmq/stream"}
+     ]}],
+   []}
 ].

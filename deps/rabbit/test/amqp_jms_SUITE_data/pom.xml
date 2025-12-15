@@ -8,13 +8,13 @@
   <name>rabbitmq-amqp-jms-tests</name>
   <url>https://www.rabbitmq.com</url>
   <properties>
-    <junit.jupiter.version>5.14.0</junit.jupiter.version>
+    <junit.jupiter.version>5.14.1</junit.jupiter.version>
     <assertj.version>3.27.6</assertj.version>
     <qpid-jms-client.version>2.9.0</qpid-jms-client.version>
     <amqp-client.version>[0.6.0-SNAPSHOT,)</amqp-client.version>
     <logback.version>1.5.18</logback.version>
-    <spotless.version>3.0.0</spotless.version>
-    <google-java-format.version>1.29.0</google-java-format.version>
+    <spotless.version>3.1.0</spotless.version>
+    <google-java-format.version>1.33.0</google-java-format.version>
     <maven-compiler-plugin.version>3.14.1</maven-compiler-plugin.version>
     <maven-surefire-plugin.version>3.5.4</maven-surefire-plugin.version>
   </properties>

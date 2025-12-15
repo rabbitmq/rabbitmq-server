@@ -63,7 +63,6 @@ groups() ->
        durable_field_quorum_queue,
        durable_field_stream,
        invalid_transfer_settled_flag,
-       quorum_queue_rejects,
        receiver_settle_mode_first,
        publishing_to_non_existing_queue_should_settle_with_released,
        attach_link_to_non_existing_destination,
@@ -139,6 +138,8 @@ groups() ->
        dynamic_target_long_link_name,
        dynamic_source_rpc,
        dynamic_terminus_delete,
+       delivery_count_classic_queue,
+       delivery_count_quorum_queue,
        modified_classic_queue,
        modified_quorum_queue,
        modified_dead_letter_headers_exchange,
@@ -185,7 +186,8 @@ groups() ->
        dead_letter_into_stream,
        last_queue_confirms,
        target_queue_deleted,
-       target_classic_queue_down,
+       target_quorum_queue_rejects,
+       target_classic_queue_rejects,
        async_notify_settled_classic_queue,
        async_notify_settled_quorum_queue,
        async_notify_settled_stream,
@@ -246,18 +248,11 @@ init_per_group(Group, Config) ->
       rabbit_ct_client_helpers:setup_steps()).
 
 end_per_group(_, Config) ->
-    rabbit_ct_helpers:run_teardown_steps(Config,
+    rabbit_ct_helpers:run_teardown_steps(
+      Config,
       rabbit_ct_client_helpers:teardown_steps() ++
       rabbit_ct_broker_helpers:teardown_steps()).
 
-init_per_testcase(T = dead_letter_reject, Config) ->
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config, message_containers_deaths_v2) of
-        ok ->
-            rabbit_ct_helpers:testcase_started(Config, T);
-        _ ->
-            {skip, "This test is known to fail with feature flag message_containers_deaths_v2 disabled "
-             "due bug https://github.com/rabbitmq/rabbitmq-server/issues/11159"}
-    end;
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
@@ -351,10 +346,119 @@ reliable_send_receive(QType, Outcome, Config) ->
     ok = end_session_sync(Session2),
     ok = close_connection_sync(Connection2).
 
+delivery_count_classic_queue(Config) ->
+    delivery_count(<<"classic">>, Config).
+
+delivery_count_quorum_queue(Config) ->
+    delivery_count(<<"quorum">>, Config).
+
+%% Test that the AMQP delivery-count is incremented correctly.
+%% "The number of unsuccessful previous attempts to deliver this message."
+delivery_count(QType, Config) ->
+    QName = <<"source queue">>,
+    QAddress = rabbitmq_amqp_address:queue(QName),
+    DLQName = <<"dead letter queue">>,
+    DLQAddress = rabbitmq_amqp_address:queue(DLQName),
+
+    {_, Session, LinkPair} = Init = init(Config),
+    QProps = #{arguments => #{<<"x-queue-type">> => {utf8, QType},
+                              <<"x-message-ttl">> => {ulong, 5000},
+                              <<"x-max-length">> => {ulong, 1},
+                              <<"x-overflow">> => {utf8, <<"drop-head">>},
+                              <<"x-dead-letter-exchange">> => {utf8, <<>>},
+                              <<"x-dead-letter-routing-key">> => {utf8, DLQName}}},
+    {ok, #{type := QType}} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, QProps),
+
+    DLQProps = #{arguments => #{<<"x-queue-type">> => {utf8, QType},
+                                <<"x-dead-letter-exchange">> => {utf8, <<>>},
+                                <<"x-dead-letter-routing-key">> => {utf8, QName}}},
+    {ok, #{type := QType}} = rabbitmq_amqp_client:declare_queue(LinkPair, DLQName, DLQProps),
+
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender source queue">>, QAddress),
+    ok = wait_for_credit(Sender),
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"t1">>, <<"first message">>, true)),
+
+    {ok, QReceiver} = amqp10_client:attach_receiver_link(
+                        Session, <<"receiver source queue">>, QAddress, unsettled),
+    {ok, DLQReceiver} = amqp10_client:attach_receiver_link(
+                          Session, <<"receiver dead letter queue">>, DLQAddress, unsettled),
+
+    {ok, Msg1} = amqp10_client:get_msg(QReceiver),
+    ?assertMatch(#{delivery_count := 0,
+                   first_acquirer := true},
+                 amqp10_msg:headers(Msg1)),
+
+    %% delivery-failed=false in modified coutcome must not increment the delivery-count
+    ok = amqp10_client:settle_msg(QReceiver, Msg1, {modified, false, false, #{}}),
+    {ok, Msg2} = amqp10_client:get_msg(QReceiver),
+    ?assertMatch(#{delivery_count := 0,
+                   first_acquirer := false},
+                 amqp10_msg:headers(Msg2)),
+
+    %% delivery-failed=true in modified coutcome must increment the delivery-count
+    ok = amqp10_client:settle_msg(QReceiver, Msg2, {modified, true, false, #{}}),
+    {ok, Msg3} = amqp10_client:get_msg(QReceiver),
+    ?assertMatch(#{delivery_count := 1,
+                   first_acquirer := false},
+                 amqp10_msg:headers(Msg3)),
+
+    ok = amqp10_client:settle_msg(QReceiver, Msg3, {modified, true, true, #{}}),
+    {ok, Msg4} = amqp10_client:get_msg(DLQReceiver),
+    ?assertMatch(#{delivery_count := 2,
+                   first_acquirer := false},
+                 amqp10_msg:headers(Msg4)),
+
+    ok = amqp10_client:settle_msg(DLQReceiver, Msg4, {modified, false, true, #{}}),
+    {ok, Msg5} = amqp10_client:get_msg(QReceiver),
+    ?assertMatch(#{delivery_count := 2,
+                   first_acquirer := false},
+                 amqp10_msg:headers(Msg5)),
+
+    %% released coutcome must not increment the delivery-count
+    ok = amqp10_client:settle_msg(QReceiver, Msg5, released),
+
+    %% Let the message expire.
+    %% Since there wasn't a delivery attempt, the delivery-count must not be incremented.
+    {ok, Msg6} = amqp10_client:get_msg(DLQReceiver, 15_000),
+    ?assertMatch(#{<<"x-last-death-reason">> := <<"expired">>},
+                 amqp10_msg:message_annotations(Msg6)),
+    ?assertMatch(#{delivery_count := 2,
+                   first_acquirer := false},
+                 amqp10_msg:headers(Msg6)),
+
+    %% rejected coutcome must increment the delivery-count
+    ok = amqp10_client:settle_msg(DLQReceiver, Msg6, rejected),
+    {ok, Msg7} = amqp10_client:get_msg(QReceiver),
+    ?assertMatch(#{delivery_count := 3,
+                   first_acquirer := false},
+                 amqp10_msg:headers(Msg7)),
+
+    ok = amqp10_client:settle_msg(QReceiver, Msg7, released),
+    %% Dead letter the message due to x-max-length.
+    %% Since there wasn't a delivery attempt, the delivery-count must not be incremented.
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"t2">>, <<"second message">>, true)),
+    {ok, Msg8} = amqp10_client:get_msg(DLQReceiver),
+    ?assertEqual(<<"first message">>, amqp10_msg:body_bin(Msg8)),
+    ?assertMatch(#{<<"x-last-death-reason">> := <<"maxlen">>},
+                 amqp10_msg:message_annotations(Msg8)),
+    ?assertMatch(#{delivery_count := 3,
+                   first_acquirer := false},
+                 amqp10_msg:headers(Msg8)),
+
+    ok = amqp10_client:settle_msg(DLQReceiver, Msg8, accepted),
+
+    ok = detach_link_sync(Sender),
+    ok = detach_link_sync(QReceiver),
+    ok = detach_link_sync(DLQReceiver),
+    {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
+    {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair, DLQName),
+    ok = close(Init).
+
 %% We test the modified outcome with classic queues.
-%% We expect that classic queues implement field undeliverable-here incorrectly
-%% by discarding (if true) or requeueing (if false).
-%% Fields delivery-failed and message-annotations are not implemented.
+%% We expect that classic queues implement field
+%% * delivery-failed correctly
+%% * undeliverable-here incorrectly by discarding (if true) or requeueing (if false)
+%% * message-annotations incorrectly (not implemented)
 modified_classic_queue(Config) ->
     QName = atom_to_binary(?FUNCTION_NAME),
     {_, Session, LinkPair} = Init = init(Config),
@@ -375,20 +479,32 @@ modified_classic_queue(Config) ->
 
     {ok, M1} = amqp10_client:get_msg(Receiver),
     ?assertEqual([<<"m1">>], amqp10_msg:body(M1)),
+    ?assertMatch(#{delivery_count := 0,
+                   first_acquirer := true},
+                 amqp10_msg:headers(M1)),
     ok = amqp10_client:settle_msg(Receiver, M1, {modified, false, true, #{}}),
 
     {ok, M2a} = amqp10_client:get_msg(Receiver),
     ?assertEqual([<<"m2">>], amqp10_msg:body(M2a)),
+    ?assertMatch(#{delivery_count := 0,
+                   first_acquirer := true},
+                 amqp10_msg:headers(M2a)),
     ok = amqp10_client:settle_msg(Receiver, M2a,
                                   {modified, false, false, #{}}),
 
     {ok, M2b} = amqp10_client:get_msg(Receiver),
     ?assertEqual([<<"m2">>], amqp10_msg:body(M2b)),
+    ?assertMatch(#{delivery_count := 0,
+                   first_acquirer := false},
+                 amqp10_msg:headers(M2b)),
     ok = amqp10_client:settle_msg(Receiver, M2b,
                                   {modified, true, false, #{<<"x-opt-key">> => <<"val">>}}),
 
     {ok, M2c} = amqp10_client:get_msg(Receiver),
     ?assertEqual([<<"m2">>], amqp10_msg:body(M2c)),
+    ?assertMatch(#{delivery_count := 1,
+                   first_acquirer := false},
+                 amqp10_msg:headers(M2c)),
     ok = amqp10_client:settle_msg(Receiver, M2c, modified),
 
     ok = amqp10_client:detach_link(Receiver),
@@ -934,50 +1050,6 @@ invalid_transfer_settled_flag(Config) ->
 
     ok = end_session_sync(Session),
     ok = close_connection_sync(Connection).
-
-quorum_queue_rejects(Config) ->
-    {_, Session, LinkPair} = Init = init(Config),
-    QName = atom_to_binary(?FUNCTION_NAME),
-    QProps = #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>},
-                              <<"x-max-length">> => {ulong, 1},
-                              <<"x-overflow">> => {utf8, <<"reject-publish">>}}},
-    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, QProps),
-
-    Address = rabbitmq_amqp_address:queue(QName),
-    {ok, Sender} = amqp10_client:attach_sender_link(
-                     Session, <<"test-sender">>, Address, mixed),
-    ok = wait_for_credit(Sender),
-
-    %% Quorum queue's x-max-length limit is known to be off by 1.
-    %% Therefore, we expect the first 2 messages to be accepted.
-    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"tag a">>, <<>>, false)),
-    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"tag b">>, <<>>, false)),
-    [receive {amqp10_disposition, {accepted, DTag}} -> ok
-     after 30000 -> ct:fail({missing_accepted, DTag})
-     end || DTag <- [<<"tag a">>, <<"tag b">>]],
-
-    %% From now on the quorum queue should reject our publishes.
-    %% Send many messages aync.
-    NumMsgs = 20,
-    DTags = [begin
-                 DTag = integer_to_binary(N),
-                 Msg = amqp10_msg:new(DTag, <<"body">>, false),
-                 ok = amqp10_client:send_msg(Sender, Msg),
-                 DTag
-             end  || N <- lists:seq(1, NumMsgs)],
-    %% Since our sender settle mode is mixed, let's also test sending one as settled.
-    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"tag c">>, <<>>, true)),
-    %% and the final one as unsettled again
-    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"tag d">>, <<>>, false)),
-
-    [receive {amqp10_disposition, {rejected, DTag}} -> ok
-     after 30000 -> ct:fail({missing_rejected, DTag})
-     end || DTag <- DTags ++ [<<"tag d">>]],
-
-    ok = amqp10_client:detach_link(Sender),
-    ?assertMatch({ok, #{message_count := 2}},
-                 rabbitmq_amqp_client:delete_queue(LinkPair, QName)),
-    ok = close(Init).
 
 receiver_settle_mode_first(Config) ->
     QName = atom_to_binary(?FUNCTION_NAME),
@@ -3500,69 +3572,158 @@ target_queue_deleted(Config) ->
                  amqp_channel:call(Ch, #'queue.delete'{queue = QuorumQ})),
     ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch).
 
-target_classic_queue_down(Config) ->
-    ClassicQueueNode = 2,
-    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(
-                   Config, ClassicQueueNode),
-    QName = atom_to_binary(?FUNCTION_NAME),
-    Address = rabbitmq_amqp_address:queue(QName),
-    #'queue.declare_ok'{} = amqp_channel:call(
-                              Ch, #'queue.declare'{
-                                     queue = QName,
-                                     durable = true,
-                                     arguments = [{<<"x-queue-type">>, longstr, <<"classic">>}]}),
-    ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch),
+target_quorum_queue_rejects(Config) ->
+    {_, Session, LinkPair} = Init = init(Config),
+    QName = <<"🎄"/utf8>>,
+    QProps = #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>},
+                              <<"x-max-length">> => {ulong, 1},
+                              <<"x-overflow">> => {utf8, <<"reject-publish">>}}},
+    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, QProps),
 
-    OpnConf = connection_config(Config),
-    {ok, Connection} = amqp10_client:open_connection(OpnConf),
-    {ok, Session} = amqp10_client:begin_session_sync(Connection),
-    {ok, Receiver1} = amqp10_client:attach_receiver_link(Session, <<"receiver 1">>, Address),
-    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address, unsettled),
+    Address = rabbitmq_amqp_address:queue(QName),
+    {ok, Sender} = amqp10_client:attach_sender_link(
+                     Session, <<"test-sender">>, Address, mixed),
     ok = wait_for_credit(Sender),
 
-    DTag1 = <<"t1">>,
-    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(DTag1, <<"m1">>, false)),
-    ok = wait_for_accepted(DTag1),
+    %% Quorum queue's x-max-length limit is known to be off by 1.
+    %% Therefore, we expect the first 2 messages to be accepted.
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"tag a">>, <<>>, false)),
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"tag b">>, <<>>, false)),
+    ok = wait_for_accepted(<<"tag a">>),
+    ok = wait_for_accepted(<<"tag b">>),
 
-    {ok, Msg1} = amqp10_client:get_msg(Receiver1),
-    ?assertEqual([<<"m1">>], amqp10_msg:body(Msg1)),
+    %% From now on the quorum queue should reject our publishes.
+    %% Send many messages async.
+    NumMsgs = 20,
+    DTags = [begin
+                 DTag = integer_to_binary(N),
+                 Msg = amqp10_msg:new(DTag, <<"body">>, false),
+                 ok = amqp10_client:send_msg(Sender, Msg),
+                 DTag
+             end  || N <- lists:seq(1, NumMsgs)],
+    %% Since our sender settle mode is mixed, let's also test sending one as settled.
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"tag c">>, <<>>, true)),
+    %% and the final one as unsettled again
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"tag d">>, <<>>, false)),
 
-    %% Make classic queue down.
+    [receive {amqp10_disposition, {{rejected, Error}, DTag}} ->
+                 ?assertEqual(
+                    #'v1_0.error'{
+                       condition = ?V_1_0_AMQP_ERROR_RESOURCE_LIMIT_EXCEEDED,
+                       description = {utf8, <<"queue '🎄' exceeded maximum length"/utf8>>},
+                       info = {map, [{{symbol, <<"queue">>}, {utf8, QName}},
+                                     {{symbol, <<"reason">>}, {symbol, <<"maxlen">>}}]}},
+                    Error)
+     after 9000 -> ct:fail({missing_rejected, DTag})
+     end || DTag <- DTags ++ [<<"tag d">>]],
+
+    ok = amqp10_client:detach_link(Sender),
+    ?assertMatch({ok, #{message_count := 2}},
+                 rabbitmq_amqp_client:delete_queue(LinkPair, QName)),
+    ok = close(Init).
+
+%% Bind two classic queues to the fanout exchange.
+%% 1st queue rejects due to `maxlen`.
+%% 2nd queue rejects due to `unavailable`.
+target_classic_queue_rejects(Config) ->
+    QType = <<"classic">>,
+    QName1 = <<"classic queue 1">>,
+    QName2 = <<"classic queue 2">>,
+    Address1 = rabbitmq_amqp_address:queue(QName1),
+    Address2 = rabbitmq_amqp_address:queue(QName2),
+
+    %% Declare 2nd queue on the node-1.
+    {_, _, LinkPair2} = Init2 = init(1, Config),
+    {ok, _} = rabbitmq_amqp_client:declare_queue(
+                LinkPair2, QName2,
+                #{arguments => #{<<"x-queue-type">> => {utf8, QType},
+                                 <<"x-queue-leader-locator">> => {utf8, <<"client-local">>}}}),
+    ok = close(Init2),
+    ok = rabbit_ct_broker_helpers:await_metadata_store_consistent(Config, 0),
+    %% Declare 1st queue on the node-0.
+    {_, Session, LinkPair1} = Init1 = init(0, Config),
+    {ok, _} = rabbitmq_amqp_client:declare_queue(
+                LinkPair1, QName1,
+                #{arguments => #{<<"x-queue-type">> => {utf8, QType},
+                                 <<"x-queue-leader-locator">> => {utf8, <<"client-local">>},
+                                 <<"x-max-length">> => {ulong, 1},
+                                 <<"x-overflow">> => {utf8, <<"reject-publish">>}}}),
+    ok = rabbitmq_amqp_client:bind_queue(LinkPair1, QName1, <<"amq.fanout">>, <<>>, #{}),
+    ok = rabbitmq_amqp_client:bind_queue(LinkPair1, QName2, <<"amq.fanout">>, <<>>, #{}),
+
+    {ok, Sender} = amqp10_client:attach_sender_link(Session,
+                                                    <<"sender">>,
+                                                    rabbitmq_amqp_address:exchange(<<"amq.fanout">>),
+                                                    unsettled),
+    ok = wait_for_credit(Sender),
+    {ok, Receiver1} = amqp10_client:attach_receiver_link(Session, <<"receiver 1">>, Address1, settled),
+    {ok, Receiver2a} = amqp10_client:attach_receiver_link(Session, <<"receiver 2a">>, Address2, settled),
+
+    %% This message should make it to both queues.
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"t1">>, <<"m1">>)),
+    ok = wait_for_accepted(<<"t1">>),
+    {ok, R2Msg1} = amqp10_client:get_msg(Receiver2a),
+    ?assertEqual([<<"m1">>], amqp10_msg:body(R2Msg1)),
+
+    %% This message should make it to only the 2nd queue.
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"t2">>, <<"m2">>)),
+    ExpectedErr1 = #'v1_0.error'{
+                      condition = ?V_1_0_AMQP_ERROR_RESOURCE_LIMIT_EXCEEDED,
+                      description = {utf8, <<"queue '", QName1/binary, "' exceeded maximum length">>},
+                      info = {map, [{{symbol, <<"queue">>}, {utf8, QName1}},
+                                    {{symbol, <<"reason">>}, {symbol, <<"maxlen">>}}]}},
+    ok = wait_for_settlement(<<"t2">>, {rejected, ExpectedErr1}),
+    {ok, R1Msg1} = amqp10_client:get_msg(Receiver1),
+    ?assertEqual([<<"m1">>], amqp10_msg:body(R1Msg1)),
+    {ok, RMsg2} = amqp10_client:get_msg(Receiver2a),
+    ?assertEqual([<<"m2">>], amqp10_msg:body(RMsg2)),
+
+    %% Make 2nd classic queue down.
     flush("stopping node"),
-    ok = rabbit_ct_broker_helpers:stop_node(Config, ClassicQueueNode),
+    ok = rabbit_ct_broker_helpers:stop_node(Config, 1),
 
     %% We expect that the server closes links that receive from classic queues that are down.
-    ExpectedError = #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_ILLEGAL_STATE},
-    receive {amqp10_event, {link, Receiver1, {detached, ExpectedError}}} -> ok
-    after 30_000 -> ct:fail({missing_event, ?LINE})
+    ExpectedErr2 = #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_ILLEGAL_STATE},
+    receive {amqp10_event, {link, Receiver2a, {detached, ExpectedErr2}}} -> ok
+    after 9000 -> ct:fail({missing_event, ?LINE})
     end,
     %% However the server should not close links that send to classic queues that are down.
     receive Unexpected -> ct:fail({unexpected, Unexpected})
     after 20 -> ok
     end,
     %% Instead, the server should reject messages that are sent to classic queues that are down.
-    DTag2 = <<"t2">>,
-    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(DTag2, <<"m2">>, false)),
-    ok = wait_for_settlement(DTag2, rejected),
+    %% This message should make it to only the 1st queue.
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"t3">>, <<"m3">>)),
+    ExpectedErr3 = #'v1_0.error'{
+                      condition = ?V_1_0_AMQP_ERROR_PRECONDITION_FAILED,
+                      description = {utf8, <<"queue '", QName2/binary, "' is unavailable">>},
+                      info = {map, [{{symbol, <<"queue">>}, {utf8, QName2}},
+                                    {{symbol, <<"reason">>}, {symbol, <<"unavailable">>}}]}},
+    ok = wait_for_settlement(<<"t3">>, {rejected, ExpectedErr3}),
+    {ok, R1Msg3} = amqp10_client:get_msg(Receiver1),
+    ?assertEqual([<<"m3">>], amqp10_msg:body(R1Msg3)),
 
-    ok = rabbit_ct_broker_helpers:start_node(Config, ClassicQueueNode),
-    %% Now that the classic queue is up again, we should be able to attach a new receiver
-    %% and be able to send to and receive from the classic queue.
-    {ok, Receiver2} = amqp10_client:attach_receiver_link(Session, <<"receiver 2">>, Address),
-    receive {amqp10_event, {link, Receiver2, attached}} -> ok
-    after 30000 -> ct:fail({missing_event, ?LINE})
+    ok = rabbit_ct_broker_helpers:start_node(Config, 1),
+    %% Now that the 2nd classic queue is up again, we should be able to attach a new receiver
+    %% and be able to send to and receive again.
+    {ok, Receiver2b} = amqp10_client:attach_receiver_link(Session, <<"receiver 2b">>, Address2, settled),
+    receive {amqp10_event, {link, Receiver2b, attached}} -> ok
+    after 9000 -> ct:fail({missing_event, ?LINE})
     end,
-    DTag3 = <<"t3">>,
-    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(DTag3, <<"m3">>, false)),
-    ok = wait_for_accepted(DTag3),
-    {ok, Msg3} = amqp10_client:get_msg(Receiver2),
-    ?assertEqual([<<"m3">>], amqp10_msg:body(Msg3)),
+
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"t4">>, <<"m4">>)),
+    ok = wait_for_accepted(<<"t4">>),
+    {ok, R1Msg4} = amqp10_client:get_msg(Receiver1),
+    {ok, R2Msg4} = amqp10_client:get_msg(Receiver2b),
+    ?assertEqual([<<"m4">>], amqp10_msg:body(R1Msg4)),
+    ?assertEqual([<<"m4">>], amqp10_msg:body(R2Msg4)),
 
     ok = amqp10_client:detach_link(Sender),
-    ok = amqp10_client:detach_link(Receiver2),
-    ok = delete_queue(Session, QName),
-    ok = end_session_sync(Session),
-    ok = close_connection_sync(Connection).
+    ok = amqp10_client:detach_link(Receiver1),
+    ok = amqp10_client:detach_link(Receiver2b),
+    {ok, #{message_count := 0}} = rabbitmq_amqp_client:delete_queue(LinkPair1, QName1),
+    {ok, #{message_count := 0}} = rabbitmq_amqp_client:delete_queue(LinkPair1, QName2),
+    ok = close(Init1).
 
 async_notify_settled_classic_queue(Config) ->
     async_notify(settled, <<"classic">>, Config).
@@ -5116,34 +5277,29 @@ dead_letter_headers_exchange(Config) ->
     ?assertEqual(<<"m2">>, amqp10_msg:body_bin(Msg2)),
     ?assertEqual(#{message_id => <<"my ID">>}, amqp10_msg:properties(Msg1)),
     ?assertEqual(0, maps:size(amqp10_msg:properties(Msg2))),
-    case rpc(Config, rabbit_feature_flags, is_enabled, [message_containers_deaths_v2]) of
-        true ->
-            ?assertMatch(
-               #{<<"x-first-death-queue">> := QName1,
-                 <<"x-first-death-exchange">> := <<>>,
-                 <<"x-first-death-reason">> := <<"expired">>,
-                 <<"x-last-death-queue">> := QName1,
-                 <<"x-last-death-exchange">> := <<>>,
-                 <<"x-last-death-reason">> := <<"expired">>,
-                 <<"x-opt-deaths">> := {array,
-                                        map,
-                                        [{map,
-                                          [
-                                           {{symbol, <<"queue">>}, {utf8, QName1}},
-                                           {{symbol, <<"reason">>}, {symbol, <<"expired">>}},
-                                           {{symbol, <<"count">>}, {ulong, 1}},
-                                           {{symbol, <<"first-time">>}, {timestamp, Timestamp}},
-                                           {{symbol, <<"last-time">>}, {timestamp, Timestamp}},
-                                           {{symbol, <<"exchange">>},{utf8, <<>>}},
-                                           {{symbol, <<"routing-keys">>}, {array, utf8, [{utf8, QName1}]}}
-                                          ]}]}
-                } when is_integer(Timestamp) andalso
-                       Timestamp > Now - 5000 andalso
-                       Timestamp < Now + 5000,
-                       amqp10_msg:message_annotations(Msg1));
-        false ->
-            ok
-    end,
+    ?assertMatch(
+       #{<<"x-first-death-queue">> := QName1,
+         <<"x-first-death-exchange">> := <<>>,
+         <<"x-first-death-reason">> := <<"expired">>,
+         <<"x-last-death-queue">> := QName1,
+         <<"x-last-death-exchange">> := <<>>,
+         <<"x-last-death-reason">> := <<"expired">>,
+         <<"x-opt-deaths">> := {array,
+                                map,
+                                [{map,
+                                  [
+                                   {{symbol, <<"queue">>}, {utf8, QName1}},
+                                   {{symbol, <<"reason">>}, {symbol, <<"expired">>}},
+                                   {{symbol, <<"count">>}, {ulong, 1}},
+                                   {{symbol, <<"first-time">>}, {timestamp, Timestamp}},
+                                   {{symbol, <<"last-time">>}, {timestamp, Timestamp}},
+                                   {{symbol, <<"exchange">>},{utf8, <<>>}},
+                                   {{symbol, <<"routing-keys">>}, {array, utf8, [{utf8, QName1}]}}
+                                  ]}]}
+        } when is_integer(Timestamp) andalso
+               Timestamp > Now - 5000 andalso
+               Timestamp < Now + 5000,
+               amqp10_msg:message_annotations(Msg1)),
 
     %% We expect M3 and M4 to get dropped.
     receive Unexp -> ct:fail({unexpected, Unexp})

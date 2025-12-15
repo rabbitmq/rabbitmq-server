@@ -2814,7 +2814,7 @@ init_reader(ConnectionTransport,
     CounterSpec = {{?MODULE, QueueResource, SubscriptionId, self()}, []},
     Options0 = #{transport => ConnectionTransport,
                  chunk_selector => get_chunk_selector(Properties),
-                 read_ahead => rabbit_stream_queue:read_ahead_on()},
+                 read_ahead => rabbit_stream_queue:read_ahead()},
 
     Options1 = maps:merge(Options0,
                           rabbit_stream_utils:filter_spec(Properties)),
@@ -3706,7 +3706,6 @@ send_chunks(DeliverVersion,
             setopts(Transport, Socket, [{nopush, false}]),
             case Retry of
                 true ->
-                    timer:sleep(1),
                     send_chunks(DeliverVersion,
                                 Transport,
                                 Consumer,

@@ -16,9 +16,6 @@
 -export([list_local/0,
          conserve_resources/3]).
 
-%% For testing only
--export([extract_extra_auth_props/4]).
-
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_misc.hrl").
 -include_lib("kernel/include/logger.hrl").
@@ -85,7 +82,7 @@ auth_fun({Username, Password}, VHost, ExtraAuthProps) ->
 %% during the first authentication. However, we do have the outcome from such successful authentication.
 
 connect(Creds, VHost, Protocol, Pid, Infos) ->
-    ExtraAuthProps = append_authz_backends(extract_extra_auth_props(Creds, VHost, Pid, Infos), Infos),
+    ExtraAuthProps = get_authz_backends(Infos),
 
     AuthFun = auth_fun(Creds, VHost, ExtraAuthProps),
     case rabbit_boot_state:has_reached_and_is_active(core_started) of
@@ -119,37 +116,8 @@ connect(Creds, VHost, Protocol, Pid, Infos) ->
         false -> {error, broker_not_found_on_node}
     end.
 
-extract_extra_auth_props(Creds, VHost, Pid, Infos) ->
-    case extract_protocol(Infos) of
-        undefined ->
-            [];
-        Protocol ->
-            maybe_call_connection_info_module(Protocol, Creds, VHost, Pid, Infos)
-    end.
-
-
-append_authz_backends(AuthProps, Infos) ->
-    case proplists:get_value(authz_backends, Infos, undefined) of
-        undefined -> AuthProps;
-        AuthzBackends -> AuthProps ++ AuthzBackends
-    end.
-
-extract_protocol(Infos) ->
-    case proplists:get_value(protocol, Infos, undefined) of
-        {Protocol, _Version} ->
-            Protocol;
-        _ ->
-            undefined
-    end.
-
-maybe_call_connection_info_module(Protocol, Creds, VHost, Pid, Infos) ->
-    Module = rabbit_data_coercion:to_atom(string:to_lower(
-        "rabbit_" ++
-        lists:flatten(string:replace(rabbit_data_coercion:to_list(Protocol), " ", "_", all)) ++
-        "_connection_info")
-    ),
-    Args = [Creds, VHost, Pid, Infos],
-    code_server_cache:maybe_call_mfa(Module, additional_authn_params, Args, []).
+get_authz_backends(Infos) ->
+    proplists:get_value(authz_backends, Infos, []).
 
 is_vhost_alive(VHost, {Username, _Password}, Pid) ->
     PrintedUsername = case Username of

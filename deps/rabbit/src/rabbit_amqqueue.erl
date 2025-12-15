@@ -80,7 +80,6 @@
 -export([are_transient_nonexcl_used/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
--include_lib("stdlib/include/qlc.hrl").
 -include("amqqueue.hrl").
 -include_lib("kernel/include/logger.hrl").
 
@@ -951,7 +950,6 @@ declare_args() ->
      {<<"x-max-in-memory-bytes">>, fun check_non_neg_int_arg/2},
      {<<"x-max-priority">>, fun check_max_priority_arg/2},
      {<<"x-overflow">>, fun check_overflow/2},
-     {<<"x-queue-mode">>, fun check_queue_mode/2},
      {<<"x-queue-version">>, fun check_queue_version/2},
      {<<"x-single-active-consumer">>, fun check_single_active_consumer_arg/2},
      {<<"x-queue-type">>, fun check_queue_type/2},
@@ -1168,32 +1166,14 @@ check_stream_offset_arg(Val, _Args) ->
             {error, {invalid_stream_offset_arg, Val}}
     end.
 
--define(KNOWN_QUEUE_MODES, [<<"default">>, <<"lazy">>]).
-check_queue_mode({longstr, Val}, _Args) ->
-    case lists:member(Val, ?KNOWN_QUEUE_MODES) of
-        true  -> ok;
-        false -> {error, rabbit_misc:format("unsupported queue mode '~ts'", [Val])}
-    end;
-check_queue_mode({Type,    _}, _Args) ->
-    {error, {unacceptable_type, Type}};
-check_queue_mode(Val, _Args) when is_binary(Val) ->
-    case lists:member(Val, ?KNOWN_QUEUE_MODES) of
-        true  -> ok;
-        false -> {error, rabbit_misc:format("unsupported queue mode '~ts'", [Val])}
-    end;
-check_queue_mode(_Val, _Args) ->
-    {error, invalid_queue_mode}.
-
 check_queue_version({Type, Val}, Args) ->
     case check_non_neg_int_arg({Type, Val}, Args) of
-        ok when Val == 1 -> ok;
         ok when Val == 2 -> ok;
         ok               -> {error, rabbit_misc:format("unsupported queue version '~b'", [Val])};
         Error            -> Error
     end;
 check_queue_version(Val, Args) ->
     case check_non_neg_int_arg(Val, Args) of
-        ok when Val == 1 -> ok;
         ok when Val == 2 -> ok;
         ok               -> {error, rabbit_misc:format("unsupported queue version '~b'", [Val])};
         Error            -> Error

@@ -106,6 +106,9 @@ do_run() ->
     rabbit_env:context_to_code_path(Context),
     rabbit_env:context_to_app_env_vars(Context),
 
+    %% 0. Ulimit check.
+    ok = rabbit_prelaunch_ulimit:check(Context),
+
     %% 1. Erlang/OTP compatibility check.
     ok = rabbit_prelaunch_erlang_compat:check(Context),
 

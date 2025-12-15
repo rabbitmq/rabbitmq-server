@@ -193,14 +193,26 @@ translate_endpoint_params(Variable, Conf) ->
     [{list_to_binary(Param), list_to_binary(V)} || {["auth_oauth2", _, Param], V}
          <- Params0].
 
-validator_file_exists(Attr, Filename) ->
+-spec invalid_pem_file(Attr :: any(), Filename :: file:name_all()) -> no_return().
+invalid_pem_file(Attr, Filename) ->
+    cuttlefish:invalid(io_lib:format(
+                         "Invalid attribute (~tp) value: file ~tp does " ++
+                         "not exist, cannot be read by the node, or is " ++
+                         "not a valid X509 certificate",
+        [Attr, Filename])).
+
+-spec validator_pem_file(Attr :: any(), Filename :: file:name_all()) -> file:name_all() | no_return().
+validator_pem_file(Attr, Filename) ->
     case file:read_file(Filename) of
-        {ok, _} ->
-            Filename;
+        {ok, PemBin} ->
+            case public_key:pem_decode(PemBin) of
+                PemDecoded when PemDecoded =/= [] ->
+                    Filename;
+                _ ->
+                    invalid_pem_file(Attr, Filename)
+            end;
         _Error ->
-            cuttlefish:invalid(io_lib:format(
-                "Invalid attribute (~p) value: file ~p does not exist or " ++
-                "cannot be read by the node", [Attr, Filename]))
+            invalid_pem_file(Attr, Filename)
     end.
 
 validator_uri(Attr, Uri) when is_binary(Uri) ->
@@ -276,7 +288,7 @@ extract_oauth_providers_https(Settings) ->
 
 mapHttpProperty({Key, Value}) ->
     {Key, case Key of
-        cacertfile -> validator_file_exists(Key, Value);
+        cacertfile -> validator_pem_file(Key, Value);
         _ -> Value
     end}.
 

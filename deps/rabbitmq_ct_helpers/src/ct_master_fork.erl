@@ -723,13 +723,27 @@ master_print_summary_for(Title,List) ->
     _ = case List of
         [] -> ok;
         _ ->
-            Chars = [
+            Chars = [[
+                master_format_gh_anno(Reason),
                 io_lib:format("Node: ~w~nCase: ~w:~w~nReason: ~p~n~n",
                     [Node, Suite, FuncOrGroup, Reason])
-            || {Node, Suite, FuncOrGroup, Reason} <- List],
+            ] || {Node, Suite, FuncOrGroup, Reason} <- List],
             log(all,Title,Chars,[])
     end,
     ok.
+
+master_format_gh_anno({error, {{exception, Reason, [{Mod, Fun, Arity, Loc}|_]}, _}}) ->
+    %% We use .github because that file exists in our repository
+    %% so GH will still put annotations in pull requests even
+    %% if we don't have the real file name.
+    File = proplists:get_value(file, Loc, ".github"),
+    Line = proplists:get_value(line, Loc, 0),
+    io_lib:format("::error file=~s,line=~b::~w:~tw/~b: ~w~n",
+        [File, Line, Mod, Fun, Arity, Reason]);
+master_format_gh_anno(Reason) ->
+    %% Do the bare minimum if we don't know the error reason.
+    io_lib:format("::error file=.github,line=0::~w~n",
+        [Reason]).
 
 update_queue(take,Node,From,Lock={Op,Resource},Locks,Blocked) ->
     %% Locks: [{{Operation,Resource},Node},...]

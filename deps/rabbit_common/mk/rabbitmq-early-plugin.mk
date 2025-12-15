@@ -4,9 +4,6 @@
 
 DIALYZER_OPTS ?= -Werror_handling -Wunmatched_returns -Wunknown
 
-dialyze: ELIXIR_LIBS = $(dir $(shell readlink -f `which elixir`))/../lib
-dialyze: ERL_LIBS = $(APPS_DIR):$(DEPS_DIR):$(ELIXIR_LIBS)
-
 # --------------------------------------------------------------------
 # Common Test flags.
 # --------------------------------------------------------------------
@@ -36,9 +33,11 @@ CT_OPTS += -kernel net_ticktime 5
 #
 # cth_styledout
 #   This hook will change the output of common_test to something more
-#   concise and colored.
+#   concise and colored. Not used on GitHub Actions except in parallel CT.
 
+ifndef GITHUB_ACTIONS
 CT_HOOKS += cth_styledout
+endif
 TEST_DEPS += cth_styledout
 
 ifdef CONCOURSE

@@ -110,7 +110,7 @@ ensure_config_file(VHost) ->
         %% The config file does not exist.
         %% Check if there are queues in this vhost.
         false ->
-            QueueDirs = rabbit_queue_index:all_queue_directory_names(VHost),
+            QueueDirs = rabbit_classic_queue_index_v2:all_queue_directory_names(VHost),
             SegmentEntryCount = case QueueDirs of
                 %% There are no queues. Write the configured value for
                 %% the segment entry count, or the new RabbitMQ default
@@ -173,7 +173,7 @@ parse_tags(Val) when is_list(Val) ->
 -spec add(vhost:name(), rabbit_types:username()) ->
     rabbit_types:ok_or_error(any()).
 add(VHost, ActingUser) ->
-    add(VHost, #{}, ActingUser).
+    add(VHost, <<>>, [], ActingUser).
 
 -spec add(vhost:name(), binary(), [atom()], rabbit_types:username()) ->
     rabbit_types:ok_or_error(any()).

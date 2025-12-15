@@ -373,7 +373,7 @@ content_type_test(Config) ->
 
 encoding_test(Config) ->
     {Headers, Body} = http_get(Config, [{"accept-encoding", "deflate"}], 200),
-    ?assertMatch("identity", proplists:get_value("content-encoding", Headers)),
+    ?assertMatch(undefined, proplists:get_value("content-encoding", Headers)),
     ?assertEqual(match, re:run(Body, "^# TYPE", [{capture, none}, multiline])).
 
 gzip_encoding_test(Config) ->
@@ -411,7 +411,8 @@ aggregated_metrics_test(Config) ->
     ?assertEqual(match, re:run(Body, "^rabbitmq_io_read_time_seconds_total ", [{capture, none}, multiline])),
     %% Check the first TOTALS metric value
     ?assertEqual(match, re:run(Body, "^rabbitmq_connections ", [{capture, none}, multiline])),
-    ?assertEqual(nomatch, re:run(Body, "^rabbitmq_raft_commit_latency_seconds", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_raft_commit_latency_seconds", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_raft_max_commit_latency_seconds", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_raft_bytes_written.*ra_log_segment_writer", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_raft_bytes_written.*ra_log_wal", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_raft_entries{", [{capture, none}, multiline])),
@@ -805,11 +806,13 @@ stream_pub_sub_metrics(Config) ->
     ct:pal("Initial metrics: ~p", [Metrics]),
 
     Stream1 = atom_to_list(?FUNCTION_NAME) ++ "1",
-    MsgPerBatch1 = 2,
-    {ok, S1, C1} = publish_via_stream_protocol(list_to_binary(Stream1), MsgPerBatch1, Config),
+    MsgPerBatch1 = 2, %% we'll publish 2 batches
+    {ok, S1, C1, CmttdChkId1} = publish_via_stream_protocol(list_to_binary(Stream1),
+                                                            MsgPerBatch1, Config),
     Stream2 = atom_to_list(?FUNCTION_NAME) ++ "2",
-    MsgPerBatch2 = 3,
-    {ok, S2, C2} = publish_via_stream_protocol(list_to_binary(Stream2), MsgPerBatch2, Config),
+    MsgPerBatch2 = 3, %% we'll publish 2 batches
+    {ok, S2, C2, CmttdChkId2} = publish_via_stream_protocol(list_to_binary(Stream2),
+                                                            MsgPerBatch2, Config),
 
     %% aggregated metrics
 
@@ -825,12 +828,14 @@ stream_pub_sub_metrics(Config) ->
 
     %% per-object metrics
      {_, Body2} = http_get_with_pal(Config, "/metrics/detailed?family=stream_consumer_metrics",
-                                   [], 200),
+                                    [], 200),
     ParsedBody2 = parse_response(Body2),
     #{rabbitmq_detailed_stream_consumer_max_offset_lag := MaxOffsetLag} = ParsedBody2,
 
-    ?assertEqual([{#{vhost => "/", queue => Stream1}, [2]},
-                  {#{vhost => "/", queue => Stream2}, [3]}],
+    %% we published 2 batches and received a first chunk (consumer offset = 0)
+    %% so the offset lag is the last committed chunk ID
+    ?assertEqual([{#{vhost => "/", queue => Stream1}, [CmttdChkId1]},
+                  {#{vhost => "/", queue => Stream2}, [CmttdChkId2]}],
                  lists:sort(maps:to_list(MaxOffsetLag))),
     dispose_stream_connection(S1, C1, list_to_binary(Stream1)),
     dispose_stream_connection(S2, C2, list_to_binary(Stream2)),
@@ -870,16 +875,10 @@ detailed_raft_metrics_test(Config) ->
     QQMetrics = #{#{queue => "a_quorum_queue", vhost => "/"} => ["1.0"]},
 
     {_, Body1} = http_get_with_pal(Config, "/metrics/detailed?family=ra_metrics&vhost=foo", [], 200),
-    %% no queues in vhost foo, so no QQ metrics
-    ?assertEqual(ComponentMetrics,
-                 map_get(rabbitmq_detailed_raft_wal_files, parse_response(Body1))),
     ?assertEqual(undefined,
                  maps:get(rabbitmq_detailed_raft_term, parse_response(Body1), undefined)),
 
     {_, Body2} = http_get_with_pal(Config, "/metrics/detailed?family=ra_metrics&vhost=/", [], 200),
-    %% there's a queue in vhost /
-    ?assertEqual(ComponentMetrics,
-                 map_get(rabbitmq_detailed_raft_wal_files, parse_response(Body2))),
     ?assertEqual(QQMetrics,
                  map_get(rabbitmq_detailed_raft_term, parse_response(Body2))),
 
@@ -926,8 +925,9 @@ publish_via_stream_protocol(Stream, MsgPerBatch, Config) ->
     {ok, C6} = stream_test_utils:subscribe(S, C5, Stream, SubscriptionId, _InitialCredit = 0),
     ok = stream_test_utils:credit(S, SubscriptionId, 1),
     %% delivery of first batch of messages
-    {{deliver, SubscriptionId, _Bin1}, C7} = stream_test_utils:receive_stream_commands(S, C6),
-    {ok, S, C7}.
+    {{deliver_v2, SubscriptionId, CommittedChunkId, _Bin1}, C7} =
+        stream_test_utils:receive_stream_commands(S, C6),
+    {ok, S, C7, CommittedChunkId}.
 
 dispose_stream_connection(Sock, C0, Stream) ->
     {ok, C1} = stream_test_utils:delete_stream(Sock, C0, Stream),

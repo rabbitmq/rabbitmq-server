@@ -882,8 +882,8 @@ add_exchange_int(Exchange, Name, ActingUser) ->
                        end,
             case rabbit_exchange:declare(Name,
                                          rabbit_exchange:check_type(maps:get(type, Exchange, undefined)),
-                                         maps:get(durable,                         Exchange, undefined),
-                                         maps:get(auto_delete,                     Exchange, undefined),
+                                         maps:get(durable,                         Exchange, true),
+                                         maps:get(auto_delete,                     Exchange, false),
                                          Internal,
                                          args(maps:get(arguments, Exchange, undefined)),
                                          ActingUser) of
@@ -1049,10 +1049,11 @@ list_queues() ->
 queue_definition(Q) ->
     #resource{virtual_host = VHost, name = Name} = amqqueue:get_name(Q),
     TypeModule =  amqqueue:get_type(Q),
+    {ok, Type} = rabbit_registry:lookup_type_name(queue, TypeModule),
     #{
         <<"vhost">> => VHost,
         <<"name">> => Name,
-        <<"type">> => rabbit_registry:lookup_type_name(queue, TypeModule),
+        <<"type">> => Type,
         <<"durable">> => amqqueue:is_durable(Q),
         <<"auto_delete">> => amqqueue:is_auto_delete(Q),
         <<"arguments">> => rabbit_misc:amqp_table(amqqueue:get_arguments(Q))
@@ -1109,10 +1110,10 @@ runtime_parameter_definition(Param) ->
 
 maybe_map(Value) ->
     %% Not all definitions are maps. `federation-upstream-set` is
-    %% a list of maps, and it should be exported as it has been
-    %% imported
+    %% a list of maps. We also need to recursively convert nested
+    %% proplists to maps (e.g. policy and operator policy definitions).
     try
-        rabbit_data_coercion:to_map(Value)
+        rabbit_data_coercion:to_map_recursive(Value)
     catch
         error:badarg ->
             Value

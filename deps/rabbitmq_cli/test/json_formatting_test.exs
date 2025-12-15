@@ -32,7 +32,6 @@ defmodule JSONFormattingTest do
     {:ok, doc} = JSON.decode(output)
 
     assert Map.has_key?(doc, "memory")
-    assert Map.has_key?(doc, "file_descriptors")
     assert Map.has_key?(doc, "listeners")
     assert Map.has_key?(doc, "processes")
     assert Map.has_key?(doc, "os")
@@ -100,5 +99,9 @@ defmodule JSONFormattingTest do
     assert Map.has_key?(rabbit, "data_dir")
     data_dir = rabbit["data_dir"]
     assert is_binary(data_dir)
+
+    assert Map.has_key?(rabbit, "tcp_listeners")
+    tcp_listeners = rabbit["tcp_listeners"]
+    assert is_list(tcp_listeners)
   end
 end

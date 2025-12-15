@@ -24,7 +24,8 @@ groups() ->
     [
       {non_parallel_tests, [], [
                                 tracing_test,
-                                tracing_validation_test
+                                tracing_validation_test,
+                                trace_file_content_type_test
                                ]}
     ].
 
@@ -92,9 +93,10 @@ tracing_test(Config) ->
                       #amqp_msg{props   = #'P_basic'{},
                                 payload = <<"Hello world">>}),
 
-    rabbit_ct_client_helpers:close_channel(Ch),
-
-    timer:sleep(100),
+    rabbit_ct_helpers:await_condition(fun() ->
+        TraceFiles = http_get(Config, "/trace-files/"),
+        lists:any(fun(#{name := Name}) -> Name =:= <<"test.log">> end, TraceFiles)
+    end),
 
     http_delete(Config, "/traces/%2f/test", ?NO_CONTENT),
     [] = http_get(Config, "/traces/%2f/"),
@@ -128,6 +130,36 @@ tracing_validation_test(Config) ->
     http_delete(Config, Path, ?NO_CONTENT),
     ok.
 
+trace_file_content_type_test(Config) ->
+    case filelib:is_dir(?LOG_DIR) of
+        true -> {ok, Files} = file:list_dir(?LOG_DIR),
+                [ok = file:delete(?LOG_DIR ++ F) || F <- Files];
+        _    -> ok
+    end,
+
+    Args = #{format  => <<"text">>,
+             pattern => <<"#">>},
+    http_put(Config, "/traces/%2f/test-charset", Args, ?CREATED),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config),
+    amqp_channel:cast(Ch, #'basic.publish'{ exchange    = <<"amq.topic">>,
+                                            routing_key = <<"key">> },
+                      #amqp_msg{props   = #'P_basic'{},
+                                payload = <<"Test message">>}),
+
+    rabbit_ct_helpers:await_condition(fun() ->
+        TraceFiles = http_get(Config, "/trace-files/"),
+        lists:any(fun(#{name := Name}) -> Name =:= <<"test-charset.log">> end, TraceFiles)
+    end),
+
+    http_delete(Config, "/traces/%2f/test-charset", ?NO_CONTENT),
+    Headers = http_get_headers(Config, "/trace-files/test-charset.log"),
+    ContentType = proplists:get_value("content-type", Headers),
+    ?assertEqual(match, re:run(ContentType, "text/plain", [{capture, none}])),
+    ?assertEqual(match, re:run(ContentType, "charset=utf-8", [{capture, none}])),
+    http_delete(Config, "/trace-files/test-charset.log", ?NO_CONTENT),
+    ok.
+
 %%---------------------------------------------------------------------------
 %% TODO: Below is copied from rabbit_mgmt_test_http,
 %%       should be moved to use rabbit_mgmt_test_util once rabbitmq_management
@@ -153,6 +185,15 @@ http_get_raw(Config, Path, User, Pass, CodeExp) ->
         req(Config, get, Path, [auth_header(User, Pass)]),
     assert_code(CodeExp, CodeAct, "GET", Path, ResBody),
     ResBody.
+
+http_get_headers(Config, Path) ->
+    http_get_headers(Config, Path, "guest", "guest", ?OK).
+
+http_get_headers(Config, Path, User, Pass, CodeExp) ->
+    {ok, {{_HTTP, CodeAct, _}, Headers, ResBody}} =
+        req(Config, get, Path, [auth_header(User, Pass)]),
+    assert_code(CodeExp, CodeAct, "GET", Path, ResBody),
+    Headers.
 
 http_put(Config, Path, List, CodeExp) ->
     http_put_raw(Config, Path, format_for_upload(List), CodeExp).

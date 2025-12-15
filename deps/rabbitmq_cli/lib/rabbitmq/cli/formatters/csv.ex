@@ -93,39 +93,3 @@ defmodule RabbitMQ.CLI.Formatters.Csv do
     other
   end
 end
-
-# Elixir 1.15 compiler optimizations require that we explicitly
-# add the csv code path
-true = Code.append_path(Path.join(["..", "csv", "ebin"]))
-
-defimpl CSV.Encode, for: PID do
-  def encode(pid, env \\ []) do
-    FormatterHelpers.format_info_item(pid)
-    |> to_string
-    |> CSV.Encode.encode(env)
-  end
-end
-
-defimpl CSV.Encode, for: List do
-  def encode(list, env \\ []) do
-    FormatterHelpers.format_info_item(list)
-    |> to_string
-    |> CSV.Encode.encode(env)
-  end
-end
-
-defimpl CSV.Encode, for: Tuple do
-  def encode(tuple, env \\ []) do
-    FormatterHelpers.format_info_item(tuple)
-    |> to_string
-    |> CSV.Encode.encode(env)
-  end
-end
-
-defimpl CSV.Encode, for: Map do
-  def encode(map, env \\ []) do
-    FormatterHelpers.format_info_item(map)
-    |> to_string
-    |> CSV.Encode.encode(env)
-  end
-end

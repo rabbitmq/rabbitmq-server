@@ -158,8 +158,12 @@ end_per_testcase(Testcase, Config) ->
     delete_queue(Ch, ?config(target_queue_6, Config)),
     #'exchange.delete_ok'{} = amqp_channel:call(Ch, #'exchange.delete'{exchange = ?config(dead_letter_exchange, Config)}),
 
-    DlxWorkers = rabbit_ct_broker_helpers:rpc_all(Config, supervisor, which_children, [rabbit_fifo_dlx_sup]),
-    ?assert(lists:all(fun(L) -> L =:= [] end, DlxWorkers)),
+    ?awaitMatch(
+       true,
+       begin
+           DlxWorkers = rabbit_ct_broker_helpers:rpc_all(Config, supervisor, which_children, [rabbit_fifo_dlx_sup]),
+           lists:all(fun(L) -> L =:= [] end, DlxWorkers)
+       end, 60000),
 
     Config1 = rabbit_ct_helpers:run_steps(
                 Config,
@@ -960,7 +964,7 @@ single_dlx_worker(Config) ->
     assert_active_dlx_workers(1, Config, Leader1).
 
 assert_active_dlx_workers(N, Config, Server) ->
-    ?assertEqual(N, length(rpc(Config, Server, supervisor, which_children, [rabbit_fifo_dlx_sup], 2000))).
+    ?awaitMatch(N, length(rpc(Config, Server, supervisor, which_children, [rabbit_fifo_dlx_sup], 2000)), 60000).
 
 declare_queue(Channel, Queue, Args) ->
     #'queue.declare_ok'{} = amqp_channel:call(Channel, #'queue.declare'{

@@ -9,7 +9,7 @@ endef
 PROJECT := rabbitmq_prometheus
 PROJECT_DESCRIPTION = Prometheus metrics for RabbitMQ
 PROJECT_MOD := rabbit_prometheus_app
-DEPS = accept cowboy rabbit rabbitmq_management_agent prometheus rabbitmq_web_dispatch
+DEPS = cowboy rabbit rabbitmq_management_agent prometheus rabbitmq_web_dispatch
 BUILD_DEPS = amqp_client rabbit_common rabbitmq_management
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers rabbitmq_stream
 
@@ -44,7 +44,7 @@ DOCKER_COMPOSE_FILES := $(wildcard docker/docker-compose-*.yml)
 .PHONY: $(DOCKER_COMPOSE_FILES)
 $(DOCKER_COMPOSE_FILES):
 	@cd docker && \
-	docker-compose --file $(@F) $(RUN) ; \
+	docker compose --file $(@F) $(RUN) ; \
 	true
 .PHONY: down
 down: RUN = down
@@ -53,7 +53,7 @@ down: $(DOCKER_COMPOSE_FILES) # Stop all containers
 # Defined as explicit, individual targets so that autocompletion works
 define DOCKER_COMPOSE_UP
 cd docker && \
-docker-compose --file docker-compose-$(@F).yml up --detach
+docker compose --file docker-compose-$(@F).yml up --detach
 endef
 .PHONY: metrics
 metrics: # Run all metrics containers: Grafana, Prometheus & friends

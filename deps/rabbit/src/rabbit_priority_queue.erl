@@ -28,12 +28,11 @@
 -export([init/3, terminate/2, delete_and_terminate/2, delete_crashed/1,
          purge/1, purge_acks/1,
          publish/5, publish_delivered/4, discard/3, drain_confirmed/1,
-         dropwhile/2, fetchwhile/4, fetch/2, drop/2, ack/2, requeue/2,
-         ackfold/4, fold/3, len/1, is_empty/1, depth/1,
+         dropwhile/2, fetchwhile/4, fetch/2, drop/2, ack/2, requeue/3,
+         ackfold/5, len/1, is_empty/1, depth/1,
          update_rates/1, needs_timeout/1, timeout/1,
          handle_pre_hibernate/1, resume/1, msg_rates/1,
-         info/2, invoke/3, is_duplicate/2, set_queue_mode/2,
-         set_queue_version/2,
+         info/2, invoke/3, is_duplicate/2,
          zip_msgs_and_acks/4,
          format_state/1]).
 
@@ -280,32 +279,27 @@ ack(AckTags, State = #state{bq = BQ}) ->
 ack(AckTags, State = #passthrough{bq = BQ, bqs = BQS}) ->
     ?passthrough2(ack(AckTags, BQS)).
 
-requeue(AckTags, State = #state{bq = BQ}) ->
+requeue(AckTags, DelFailed, State = #state{bq = BQ}) ->
     fold_by_acktags2(fun (AckTagsN, BQSN) ->
-                             BQ:requeue(AckTagsN, BQSN)
+                             BQ:requeue(AckTagsN, DelFailed, BQSN)
                      end, AckTags, State);
-requeue(AckTags, State = #passthrough{bq = BQ, bqs = BQS}) ->
-    ?passthrough2(requeue(AckTags, BQS)).
+requeue(AckTags, DelFailed, State = #passthrough{bq = BQ, bqs = BQS}) ->
+    ?passthrough2(requeue(AckTags, DelFailed, BQS)).
 
 %% Similar problem to fetchwhile/4
-ackfold(MsgFun, Acc, State = #state{bq = BQ}, AckTags) ->
+ackfold(MsgFun, Acc, State = #state{bq = BQ}, AckTags, DelFailed) ->
     AckTagsByPriority = partition_acktags(AckTags),
     fold2(
       fun (P, BQSN, AccN) ->
               case maps:find(P, AckTagsByPriority) of
                   {ok, ATagsN} -> {AccN1, BQSN1} =
-                                      BQ:ackfold(MsgFun, AccN, BQSN, ATagsN),
+                                      BQ:ackfold(MsgFun, AccN, BQSN, ATagsN, DelFailed),
                                   {priority_on_acktags(P, AccN1), BQSN1};
                   error        -> {AccN, BQSN}
               end
       end, Acc, State);
-ackfold(MsgFun, Acc, State = #passthrough{bq = BQ, bqs = BQS}, AckTags) ->
-    ?passthrough2(ackfold(MsgFun, Acc, BQS, AckTags)).
-
-fold(Fun, Acc, State = #state{bq = BQ}) ->
-    fold2(fun (_P, BQSN, AccN) -> BQ:fold(Fun, AccN, BQSN) end, Acc, State);
-fold(Fun, Acc, State = #passthrough{bq = BQ, bqs = BQS}) ->
-    ?passthrough2(fold(Fun, Acc, BQS)).
+ackfold(MsgFun, Acc, State = #passthrough{bq = BQ, bqs = BQS}, AckTags, DelFailed) ->
+    ?passthrough2(ackfold(MsgFun, Acc, BQS, AckTags, DelFailed)).
 
 len(#state{bq = BQ, bqss = BQSs}) ->
     add0(fun (_P, BQSN) -> BQ:len(BQSN) end, BQSs);
@@ -394,16 +388,6 @@ is_duplicate(Msg, State = #state{bq = BQ}) ->
     pick2(fun (_P, BQSN) -> BQ:is_duplicate(Msg, BQSN) end, Msg, State);
 is_duplicate(Msg, State = #passthrough{bq = BQ, bqs = BQS}) ->
     ?passthrough2(is_duplicate(Msg, BQS)).
-
-set_queue_mode(Mode, State = #state{bq = BQ}) ->
-    foreach1(fun (_P, BQSN) -> BQ:set_queue_mode(Mode, BQSN) end, State);
-set_queue_mode(Mode, State = #passthrough{bq = BQ, bqs = BQS}) ->
-    ?passthrough1(set_queue_mode(Mode, BQS)).
-
-set_queue_version(Version, State = #state{bq = BQ}) ->
-    foreach1(fun (_P, BQSN) -> BQ:set_queue_version(Version, BQSN) end, State);
-set_queue_version(Version, State = #passthrough{bq = BQ, bqs = BQS}) ->
-    ?passthrough1(set_queue_version(Version, BQS)).
 
 zip_msgs_and_acks(Msgs, AckTags, Accumulator, #state{bqss = [{MaxP, _} |_]}) ->
     MsgsByPriority = partition_publish_delivered_batch(Msgs, MaxP),

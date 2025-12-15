@@ -91,7 +91,7 @@
      {cleanup,  {rabbit_registry, unregister,
                  [queue, <<"classic">>]}},
      {requires, rabbit_registry},
-     {enables,     ?MODULE}]}).
+     {enables, [?MODULE, rabbit_policy]}]}).
 
 -rabbit_boot_step(
    {?MODULE,
@@ -333,7 +333,22 @@ cancel(Q, Spec, State) ->
 -spec settle(rabbit_amqqueue:name(), rabbit_queue_type:settle_op(),
              rabbit_types:ctag(), [non_neg_integer()], state()) ->
     {state(), rabbit_queue_type:actions()}.
-settle(QName, {modify, _DelFailed, Undel, _Anns}, CTag, MsgIds, State) ->
+settle(QName, Op, CTag, MsgIds, State) ->
+    case rabbit_feature_flags:is_enabled('rabbitmq_4.3.0') of
+        true -> settle_43(QName, Op, CTag, MsgIds, State);
+        false -> settle_compat(QName, Op, CTag, MsgIds, State)
+    end.
+
+settle_43(_QName, {modify, DelFailed, Undel, Anns}, _CTag, MsgIds, State = #?STATE{pid = Pid}) ->
+    Arg = {modify, MsgIds, DelFailed, Undel, Anns, self()},
+    delegate:invoke_no_result(Pid, {gen_server2, cast, [Arg]}),
+    {State, []};
+settle_43(_QName, Op, _CTag, MsgIds, State = #?STATE{pid = Pid}) ->
+    Arg = {Op, MsgIds, self()},
+    delegate:invoke_no_result(Pid, {gen_server2, cast, [Arg]}),
+    {State, []}.
+
+settle_compat(QName, {modify, _DelFailed, Undel, _Anns}, CTag, MsgIds, State) ->
     %% translate modify into other op
     Op = case Undel of
              true ->
@@ -341,8 +356,8 @@ settle(QName, {modify, _DelFailed, Undel, _Anns}, CTag, MsgIds, State) ->
              false ->
                  requeue
          end,
-    settle(QName, Op, CTag, MsgIds, State);
-settle(_QName, Op, _CTag, MsgIds, State = #?STATE{pid = Pid}) ->
+    settle_compat(QName, Op, CTag, MsgIds, State);
+settle_compat(_QName, Op, _CTag, MsgIds, State = #?STATE{pid = Pid}) ->
     Arg = case Op of
               complete ->
                   {ack, MsgIds, self()};
@@ -375,7 +390,7 @@ handle_event(QName, {reject_publish, SeqNo, _QPid},
     %% It does not matter which queue rejected the message,
     %% if any queue did, it should not be confirmed.
     {U, Rejected} = reject_seq_no(SeqNo, U0),
-    Actions = [{rejected, QName, Rejected}],
+    Actions = [{rejected, QName, maxlen, Rejected}],
     {ok, State#?STATE{unconfirmed = U}, Actions};
 handle_event(QName, {down, Pid, Info}, #?STATE{monitored = Monitored,
                                                unconfirmed = U0} = State0) ->
@@ -390,11 +405,19 @@ handle_event(QName, {down, Pid, Info}, #?STATE{monitored = Monitored,
                           maps:filter(fun (_, #msg_status{pending = Pids}) ->
                                               lists:member(Pid, Pids)
                                       end, U0)),
-            {Unconfirmed, Settled, Rejected} =
-                settle_seq_nos(MsgSeqNos, Pid, U0, down),
-            Actions = settlement_action(
-                        settled, QName, Settled,
-                        settlement_action(rejected, QName, Rejected, Actions0)),
+            {Unconfirmed, Settled, Rejected} = settle_seq_nos(MsgSeqNos, Pid, U0, down),
+            Actions1 = case Rejected of
+                           [] ->
+                               Actions0;
+                           _ ->
+                               [{rejected, QName, down, Rejected} | Actions0]
+                       end,
+            Actions = case Settled of
+                          [] ->
+                              Actions1;
+                          _ ->
+                              [{settled, QName, Settled} | Actions1]
+                      end,
             {ok, State#?STATE{unconfirmed = Unconfirmed}, Actions};
         true ->
             %% any abnormal exit should be considered a full reject of the
@@ -410,16 +433,11 @@ handle_event(QName, {down, Pid, Info}, #?STATE{monitored = Monitored,
                           end, [], U0),
             U = maps:without(MsgIds, U0),
             {ok, State#?STATE{unconfirmed = U},
-             [{rejected, QName, MsgIds} | Actions0]}
+             [{rejected, QName, down, MsgIds} | Actions0]}
     end;
 handle_event(_QName, Action, State)
   when element(1, Action) =:= credit_reply ->
     {ok, State, [Action]}.
-
-settlement_action(_Type, _QRef, [], Acc) ->
-    Acc;
-settlement_action(Type, QRef, MsgSeqs, Acc) ->
-    [{Type, QRef, MsgSeqs} | Acc].
 
 supports_stateful_delivery() -> true.
 
@@ -430,6 +448,8 @@ supports_stateful_delivery() -> true.
 deliver(Qs0, Msg0, Options) ->
     %% add guid to content here instead of in rabbit_basic:message/3,
     %% as classic queues are the only ones that need it
+    %% @todo Do we need to regenerate it for every time it gets dead lettered?
+    %%       We can likely do better and avoid rewriting to the shared message store.
     Msg = mc:prepare(store, mc:set_annotation(id, rabbit_guid:gen(), Msg0)),
     Mandatory = maps:get(mandatory, Options, false),
     MsgSeqNo = maps:get(correlation, Options, undefined),

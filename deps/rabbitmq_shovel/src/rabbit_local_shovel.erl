@@ -22,9 +22,25 @@
                     {requires,    rabbit_global_counters},
                     {enables,     external_infrastructure}]}).
 
+-rabbit_boot_step(
+   {rabbit_local_shovel_protocol,
+    [{description, "Local shovel protocol"},
+     {mfa,      {rabbit_registry, register,
+                 [shovel_protocol, <<"local">>, ?MODULE]}},
+     {cleanup,  {rabbit_registry, unregister,
+                 [shovel_protocol, <<"local">>]}},
+     {requires, rabbit_registry}]}).
+
 -export([
          boot_step/0,
+         conserve_resources/3,
          parse/2,
+         parse_source/1,
+         parse_dest/4,
+         validate_src/1,
+         validate_dest/1,
+         validate_src_funs/2,
+         validate_dest_funs/2,
          connect_source/1,
          connect_dest/1,
          init_source/1,
@@ -56,6 +72,12 @@
          check_fun/3
         ]).
 
+-import(rabbit_misc, [pget/2, pget/3]).
+-import(rabbit_shovel_util, [pget2count/3,
+                             deobfuscated_uris/2,
+                             validate_uri_fun/1]).
+
+-define(APP, rabbitmq_shovel).
 -define(QUEUE, lqueue).
 %% "Note that, despite its name, the delivery-count is not a count but a
 %% sequence number initialized at an arbitrary point by the sender."
@@ -75,6 +97,12 @@ boot_step() ->
     rabbit_global_counters:init(Labels#{queue_type => rabbit_classic_queue}),
     rabbit_global_counters:init(Labels#{queue_type => rabbit_quorum_queue}),
     rabbit_global_counters:init(Labels#{queue_type => rabbit_stream_queue}).
+
+-spec conserve_resources(pid(),
+                         rabbit_alarm:resource_alarm_source(),
+                         rabbit_alarm:resource_alert()) -> ok.
+conserve_resources(Pid, Source, {_, Conserve, _}) ->
+    gen_server:cast(Pid, {conserve_resources, Source, Conserve}).
 
 parse(_Name, {source, Source}) ->
     Queue = parse_parameter(queue, fun parse_binary/1,
@@ -98,6 +126,118 @@ parse(_Name, {destination, Dest}) ->
       routing_key => RK,
       add_forward_headers => proplists:get_value(add_forward_headers, Dest, false),
       add_timestamp_header => proplists:get_value(add_timestamp_header, Dest, false)}.
+
+parse_source(Def) ->
+    %% TODO add exchange source back
+    Mod      = rabbit_local_shovel,
+    SrcURIs  = deobfuscated_uris(<<"src-uri">>, Def),
+    SrcX     = pget(<<"src-exchange">>,Def, none),
+    SrcXKey  = pget(<<"src-exchange-key">>, Def, <<>>),
+    SrcQ     = pget(<<"src-queue">>, Def, none),
+    SrcQArgs = pget(<<"src-queue-args">>,   Def, #{}),
+    SrcCArgs = rabbit_misc:to_amqp_table(pget(<<"src-consumer-args">>, Def, [])),
+    GlobalPredeclared = proplists:get_value(predeclared, application:get_env(?APP, topology, []), false),
+    Predeclared = pget(<<"src-predeclared">>, Def, GlobalPredeclared),
+    {SrcDeclFun, Queue, DestHeaders} =
+    case SrcQ of
+        none -> {{Mod, src_decl_exchange, [SrcX, SrcXKey]}, <<>>,
+                 [{<<"src-exchange">>,     SrcX},
+                  {<<"src-exchange-key">>, SrcXKey}]};
+        _ -> case Predeclared of
+                false ->
+                    {{Mod, decl_queue, [SrcQ, SrcQArgs]},
+                        SrcQ, [{<<"src-queue">>, SrcQ}]};
+                true ->
+                    {{Mod, check_queue, [SrcQ, SrcQArgs]},
+                        SrcQ, [{<<"src-queue">>, SrcQ}]}
+            end
+    end,
+    DeleteAfter = pget(<<"src-delete-after">>, Def,
+                       pget(<<"delete-after">>, Def, <<"never">>)),
+    %% Details are only used for status report in rabbitmqctl, as vhost is not
+    %% available to query the runtime parameters.
+    Details = maps:from_list([{K, V} || {K, V} <- [{exchange, SrcX},
+                                                   {routing_key, SrcXKey}],
+                                        V =/= none]),
+    {maps:merge(#{module => Mod,
+                  uris => SrcURIs,
+                  resource_decl => SrcDeclFun,
+                  queue => Queue,
+                  delete_after => opt_b2a(DeleteAfter),
+                  consumer_args => SrcCArgs
+                 }, Details), DestHeaders}.
+
+parse_dest({_VHost, _Name}, _ClusterName, Def, _SourceHeaders) ->
+    Mod       = rabbit_local_shovel,
+    DestURIs  = deobfuscated_uris(<<"dest-uri">>,      Def),
+    DestX     = pget(<<"dest-exchange">>,     Def, none),
+    DestXKey  = pget(<<"dest-exchange-key">>, Def, none),
+    DestQ     = pget(<<"dest-queue">>,        Def, none),
+    DestQArgs = pget(<<"dest-queue-args">>,   Def, #{}),
+    GlobalPredeclared = proplists:get_value(predeclared, application:get_env(?APP, topology, []), false),
+    Predeclared = pget(<<"dest-predeclared">>, Def, GlobalPredeclared),
+    DestDeclFun = case Predeclared of
+        true -> {Mod, dest_check_queue, [DestQ, DestQArgs]};
+        false -> {Mod, dest_decl_queue, [DestQ, DestQArgs]}
+    end,
+
+    AddHeaders = pget(<<"dest-add-forward-headers">>, Def, false),
+    AddTimestampHeader = pget(<<"dest-add-timestamp-header">>, Def, false),
+    %% Details are only used for status report in rabbitmqctl, as vhost is not
+    %% available to query the runtime parameters.
+    Details = maps:from_list([{K, V} || {K, V} <- [{exchange, DestX},
+                                                   {routing_key, DestXKey},
+                                                   {queue, DestQ}],
+                                        V =/= none]),
+    maps:merge(#{module => rabbit_local_shovel,
+                 uris => DestURIs,
+                 resource_decl => DestDeclFun,
+                 add_forward_headers => AddHeaders,
+                 add_timestamp_header => AddTimestampHeader
+                }, Details).
+
+validate_src(Def) ->
+    [case pget2count(<<"src-exchange">>, <<"src-queue">>, Def) of
+         zero -> {error, "Must specify 'src-exchange' or 'src-queue'", []};
+         one  -> ok;
+         both -> {error, "Cannot specify 'src-exchange' and 'src-queue'", []}
+     end,
+     case {pget(<<"src-delete-after">>, Def, pget(<<"delete-after">>, Def)), pget(<<"ack-mode">>, Def)} of
+         {N, <<"no-ack">>} when is_integer(N) ->
+             {error, "Cannot specify 'no-ack' and numerical 'delete-after'", []};
+         _ ->
+             ok
+     end].
+
+validate_dest(Def) ->
+    [case pget2count(<<"dest-exchange">>, <<"dest-queue">>, Def) of
+         zero -> ok;
+         one  -> ok;
+         both -> {error, "Cannot specify 'dest-exchange' and 'dest-queue'", []}
+     end].
+
+validate_src_funs(_Def, User) ->
+    [
+     {<<"src-uri">>, validate_uri_fun(User), mandatory},
+     {<<"src-exchange">>,     fun rabbit_parameter_validation:binary/2, optional},
+     {<<"src-exchange-key">>, fun rabbit_parameter_validation:binary/2, optional},
+     {<<"src-queue">>, fun rabbit_parameter_validation:binary/2, optional},
+     {<<"src-queue-args">>,   fun rabbit_shovel_util:validate_queue_args/2, optional},
+     {<<"src-consumer-args">>, fun rabbit_shovel_util:validate_consumer_args/2, optional},
+     {<<"src-delete-after">>, fun rabbit_shovel_util:validate_delete_after/2, optional},
+     {<<"src-predeclared">>,  fun rabbit_parameter_validation:boolean/2, optional}
+    ].
+
+validate_dest_funs(_Def, User) ->
+    [{<<"dest-uri">>,        validate_uri_fun(User), mandatory},
+     {<<"dest-exchange">>,   fun rabbit_parameter_validation:binary/2,optional},
+     {<<"dest-exchange-key">>,fun rabbit_parameter_validation:binary/2,optional},
+     {<<"dest-queue">>,      fun rabbit_parameter_validation:amqp091_queue_name/2,optional},
+     {<<"dest-queue-args">>, fun rabbit_shovel_util:validate_queue_args/2, optional},
+     {<<"dest-add-forward-headers">>, fun rabbit_parameter_validation:boolean/2,optional},
+     {<<"dest-add-timestamp-header">>, fun rabbit_parameter_validation:boolean/2,optional},
+     {<<"dest-predeclared">>,  fun rabbit_parameter_validation:boolean/2, optional}
+    ].
 
 connect_source(State = #{source := Src = #{resource_decl := {M, F, MFArgs},
                                            queue := QName0,
@@ -222,14 +362,17 @@ init_dest(#{name := Name,
             dest := #{add_forward_headers := AFH} = Dst} = State) ->
     rabbit_global_counters:publisher_created(?PROTOCOL),
     _TRef = erlang:send_after(1000, self(), send_confirms_and_nacks),
+    Alarms0 = rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
+    Alarms = sets:from_list(Alarms0),
     case AFH of
         true ->
             Props = #{<<"x-opt-shovelled-by">> => rabbit_nodes:cluster_name(),
                       <<"x-opt-shovel-type">> => rabbit_data_coercion:to_binary(Type),
                       <<"x-opt-shovel-name">> => rabbit_data_coercion:to_binary(Name)},
-            State#{dest => Dst#{cached_forward_headers => Props}};
+            State#{dest => Dst#{cached_forward_headers => Props,
+                                alarms => Alarms}};
         false ->
-            State
+            State#{dest => Dst#{alarms => Alarms}}
     end.
 
 source_uri(_State) ->
@@ -244,12 +387,10 @@ source_protocol(_State) ->
 dest_protocol(_State) ->
     local.
 
-source_endpoint(#{source := #{queue := Queue,
-                              exchange := SrcX,
+source_endpoint(#{source := #{exchange := SrcX,
                               routing_key := SrcXKey}}) ->
     [{src_exchange, SrcX},
-     {src_exchange_key, SrcXKey},
-     {src_queue, Queue}];
+     {src_exchange_key, SrcXKey}];
 source_endpoint(#{source := #{queue := Queue}}) ->
     [{src_queue, Queue}];
 source_endpoint(_Config) ->
@@ -349,6 +490,19 @@ handle_dest({{'DOWN', #resource{kind = queue,
         {eol, QState1, _QRef} ->
             State0#{dest => Dest#{current => Current#{queue_states => QState1}}}
     end;
+handle_dest({conserve_resources, Alarm, Conserve}, #{dest := #{alarms := Alarms0} = Dest} = State0) ->
+    Alarms = case Conserve of
+                 true -> sets:add_element(Alarm, Alarms0);
+                 false -> sets:del_element(Alarm, Alarms0)
+             end,
+    State = State0#{dest => Dest#{alarms => Alarms}},
+    case {sets:is_empty(Alarms0), sets:is_empty(Alarms)} of
+        {false, true} ->
+            %% All alarms cleared
+            forward_pending_delivery(State);
+        {_, _} ->
+            State
+    end;
 handle_dest(_Msg, State) ->
     State.
 
@@ -364,7 +518,16 @@ forward(_, _, #{source := #{remaining_unacked := 0}} = State) ->
     %% come back. So drop subsequent messages on the floor to be
     %% requeued later
     State;
-forward(Tag, Msg0, #{dest := #{current := #{queue_states := QState} = Current} = Dest,
+forward(Tag, Msg, State) ->
+    case is_blocked(State) of
+        true ->
+            PendingEntry = {Tag, Msg},
+            add_pending_delivery(PendingEntry, State);
+        false ->
+            do_forward(Tag, Msg, State)
+    end.
+
+do_forward(Tag, Msg0, #{dest := #{current := #{queue_states := QState} = Current} = Dest,
                      ack_mode := AckMode} = State0) ->
     {Options, #{dest := #{current := Current1} = Dest1} = State} =
         case AckMode of
@@ -388,9 +551,7 @@ forward(Tag, Msg0, #{dest := #{current := #{queue_states := QState} = Current} =
                            on_confirm when length(Queues) > 0 ->
                                State2;
                            on_publish ->
-                               decr_remaining(
-                                 1,
-                                 record_confirms([{Tag, Tag}], State2));
+                               record_confirms([{Tag, Tag}], State2);
                            _ ->
                                decr_remaining(1, State2)
                        end),
@@ -429,10 +590,15 @@ add_routing(Msg0, Dest) ->
         RK -> mc:set_annotation(?ANN_ROUTING_KEYS, [RK], Msg)
     end.
 
-status(_) ->
-    running.
+status(State) ->
+    case is_blocked(State) of
+        true -> blocked;
+        false -> running
+    end.
 
-pending_count(_State) ->
+pending_count(#{dest := #{pending_delivery := Pending}}) ->
+    lqueue:len(Pending);
+pending_count(_) ->
     0.
 
 %% Internal
@@ -490,7 +656,8 @@ handle_dest_queue_actions(Actions, State) ->
     lists:foldl(
       fun({settled, QName, MsgSeqNos}, S0) ->
               confirm(MsgSeqNos, QName, S0);
-         ({rejected, _QName, MsgSeqNos}, #{dest := Dst = #{unconfirmed := U0}} = S0) ->
+         ({rejected, _QName, _Reason, MsgSeqNos},
+          #{dest := Dst = #{unconfirmed := U0}} = S0) ->
               {U, Rej} =
               lists:foldr(
                 fun(SeqNo, {U1, Acc}) ->
@@ -895,3 +1062,38 @@ messages_delivered(QName, S0) ->
         _ ->
             ok
     end.
+
+is_blocked(#{dest := #{alarms := Alarms}}) ->
+    not sets:is_empty(Alarms);
+is_blocked(_) ->
+    false.
+
+add_pending_delivery(Elem, State = #{dest := Dest}) ->
+    Pending = maps:get(pending_delivery, Dest, lqueue:new()),
+    State#{dest => Dest#{pending_delivery => lqueue:in(Elem, Pending)}}.
+
+pop_pending_delivery(State = #{dest := Dest}) ->
+    Pending = maps:get(pending_delivery, Dest, lqueue:new()),
+    case lqueue:out(Pending) of
+        {empty, _} ->
+            empty;
+        {{value, Elem}, Pending2} ->
+            {Elem, State#{dest => Dest#{pending_delivery => Pending2}}}
+    end.
+
+forward_pending_delivery(State) ->
+    case pop_pending_delivery(State) of
+        empty ->
+            State;
+        {{Tag, Mc}, S} ->
+            S2 = do_forward(Tag, Mc, S),
+            case is_blocked(S2) of
+                true ->
+                    S2;
+                false ->
+                    forward_pending_delivery(S2)
+            end
+    end.
+
+opt_b2a(B) when is_binary(B) -> list_to_atom(binary_to_list(B));
+opt_b2a(N)                   -> N.

@@ -6,8 +6,7 @@
 BUILD_DEPS = rabbitmq_codegen
 TEST_DEPS = proper
 
-EXTRA_SOURCES += include/rabbit_framing.hrl				\
-		 src/rabbit_framing_amqp_0_8.erl			\
+EXTRA_SOURCES += include/rabbit_framing.hrl \
 		 src/rabbit_framing_amqp_0_9_1.erl
 
 .DEFAULT_GOAL = all

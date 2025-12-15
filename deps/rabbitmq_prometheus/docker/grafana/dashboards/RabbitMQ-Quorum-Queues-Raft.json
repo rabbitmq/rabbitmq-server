@@ -15,7 +15,7 @@
       "type": "grafana",
       "id": "grafana",
       "name": "Grafana",
-      "version": "11.2.2"
+      "version": "12.2.0"
     },
     {
       "type": "panel",
@@ -74,7 +74,6 @@
       "url": "https://www.rabbitmq.com/quorum-queues.html"
     }
   ],
-  "liveNow": false,
   "panels": [
     {
       "datasource": {
@@ -111,6 +110,7 @@
               "type": "linear"
             },
             "showPoints": "never",
+            "showValues": false,
             "spanNulls": true,
             "stacking": {
               "group": "A",
@@ -128,7 +128,7 @@
             "steps": [
               {
                 "color": "green",
-                "value": null
+                "value": 0
               },
               {
                 "color": "red",
@@ -300,17 +300,22 @@
       "id": 64,
       "options": {
         "legend": {
-          "calcs": ["lastNotNull", "max", "sum"],
+          "calcs": [
+            "lastNotNull",
+            "max",
+            "sum"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
         "tooltip": {
+          "hideZeros": false,
           "mode": "multi",
           "sort": "none"
         }
       },
-      "pluginVersion": "8.3.4",
+      "pluginVersion": "12.2.0",
       "targets": [
         {
           "datasource": {
@@ -323,21 +328,25 @@
           "intervalFactor": 1,
           "legendFormat": "{{rabbitmq_node}}",
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(rabbitmq_raft_commit_index[60s]) * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\",rabbitmq_endpoint=\"$endpoint\"}) by(rabbitmq_node)",
+          "hide": false,
+          "instant": false,
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "RabbitMQ 4.2+"
         }
       ],
       "title": "Log entries committed / s",
       "type": "timeseries"
     },
     {
-      "cards": {},
-      "color": {
-        "cardColor": "rgb(255, 255, 255)",
-        "colorScale": "sqrt",
-        "colorScheme": "interpolateCool",
-        "exponent": 0.4,
-        "mode": "opacity"
-      },
-      "dataFormat": "timeseries",
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -364,13 +373,7 @@
         "x": 12,
         "y": 0
       },
-      "heatmap": {},
-      "hideZeroBuckets": false,
-      "highlightCards": true,
       "id": 65,
-      "legend": {
-        "show": true
-      },
       "options": {
         "calculate": true,
         "calculation": {},
@@ -389,7 +392,7 @@
           "color": "rgba(255,0,255,0.7)"
         },
         "filterValues": {
-          "le": 1e-9
+          "le": 1E-9
         },
         "legend": {
           "show": true
@@ -410,8 +413,7 @@
           "unit": "s"
         }
       },
-      "pluginVersion": "11.2.2",
-      "reverseYBuckets": false,
+      "pluginVersion": "12.2.0",
       "targets": [
         {
           "datasource": {
@@ -427,21 +429,7 @@
         }
       ],
       "title": "Log entry commit latency",
-      "tooltip": {
-        "show": true,
-        "showHistogram": true
-      },
-      "type": "heatmap",
-      "xAxis": {
-        "show": true
-      },
-      "yAxis": {
-        "format": "s",
-        "logBase": 1,
-        "min": "0",
-        "show": true
-      },
-      "yBucketBound": "lower"
+      "type": "heatmap"
     },
     {
       "datasource": {
@@ -478,6 +466,7 @@
               "type": "linear"
             },
             "showPoints": "never",
+            "showValues": false,
             "spanNulls": true,
             "stacking": {
               "group": "A",
@@ -494,7 +483,7 @@
             "steps": [
               {
                 "color": "green",
-                "value": null
+                "value": 0
               },
               {
                 "color": "red",
@@ -666,17 +655,22 @@
       "id": 62,
       "options": {
         "legend": {
-          "calcs": ["lastNotNull", "max", "sum"],
+          "calcs": [
+            "lastNotNull",
+            "max",
+            "sum"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
         "tooltip": {
+          "hideZeros": false,
           "mode": "multi",
           "sort": "none"
         }
       },
-      "pluginVersion": "8.3.4",
+      "pluginVersion": "12.2.0",
       "targets": [
         {
           "datasource": {
@@ -689,6 +683,19 @@
           "intervalFactor": 1,
           "legendFormat": "{{rabbitmq_node}}",
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum(\n  (rabbitmq_raft_last_written_index * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\",rabbitmq_endpoint=\"$endpoint\"}) -\n  (rabbitmq_raft_commit_index * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\",rabbitmq_endpoint=\"$endpoint\"})\n) by(rabbitmq_node)",
+          "hide": false,
+          "instant": false,
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "RabbitMQ 4.2+"
         }
       ],
       "title": "Uncommitted log entries",
@@ -729,6 +736,7 @@
               "type": "linear"
             },
             "showPoints": "never",
+            "showValues": false,
             "spanNulls": true,
             "stacking": {
               "group": "A",
@@ -746,7 +754,7 @@
             "steps": [
               {
                 "color": "transparent",
-                "value": null
+                "value": 0
               },
               {
                 "color": "orange",
@@ -918,17 +926,22 @@
       "id": 63,
       "options": {
         "legend": {
-          "calcs": ["lastNotNull", "max", "sum"],
+          "calcs": [
+            "lastNotNull",
+            "max",
+            "sum"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
         "tooltip": {
+          "hideZeros": false,
           "mode": "multi",
           "sort": "none"
         }
       },
-      "pluginVersion": "8.3.4",
+      "pluginVersion": "12.2.0",
       "targets": [
         {
           "datasource": {
@@ -984,6 +997,7 @@
               "type": "linear"
             },
             "showPoints": "auto",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -1001,7 +1015,7 @@
             "steps": [
               {
                 "color": "green",
-                "value": null
+                "value": 0
               },
               {
                 "color": "orange",
@@ -1173,27 +1187,47 @@
       "id": 18,
       "options": {
         "legend": {
-          "calcs": ["lastNotNull", "max", "sum"],
+          "calcs": [
+            "lastNotNull",
+            "max",
+            "sum"
+          ],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
         "tooltip": {
+          "hideZeros": false,
           "mode": "multi",
           "sort": "none"
         }
       },
-      "pluginVersion": "8.3.4",
+      "pluginVersion": "12.2.0",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
+          "editorMode": "code",
           "expr": "sum(\n  (rabbitmq_raft_log_last_written_index * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\",rabbitmq_endpoint=\"$endpoint\"}) - \n  (rabbitmq_raft_log_snapshot_index * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\",rabbitmq_endpoint=\"$endpoint\"})\n) by(queue, rabbitmq_node)",
           "hide": false,
           "legendFormat": "{{rabbitmq_node}} {{queue}}",
+          "range": true,
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum(\n  (rabbitmq_raft_last_written_index * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\",rabbitmq_endpoint=\"$endpoint\"}) - \n  (rabbitmq_raft_snapshot_index * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\",rabbitmq_endpoint=\"$endpoint\"})\n) by(queue, rabbitmq_node)",
+          "hide": false,
+          "instant": false,
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "RabbitMQ 4.2+"
         }
       ],
       "title": "Raft members with >5k entries in the log",
@@ -1201,23 +1235,22 @@
     }
   ],
   "refresh": "15s",
-  "schemaVersion": 39,
-  "tags": ["rabbitmq-prometheus"],
+  "schemaVersion": 42,
+  "tags": [
+    "rabbitmq-prometheus"
+  ],
   "templating": {
     "list": [
       {
         "current": {},
-        "datasource": "PBFA97CFB590B2093",
         "hide": 2,
         "includeAll": false,
         "label": "datasource",
-        "multi": false,
         "name": "DS_PROMETHEUS",
         "options": [],
         "query": "prometheus",
         "refresh": 1,
         "regex": "",
-        "skipUrlSync": false,
         "type": "datasource"
       },
       {
@@ -1227,10 +1260,8 @@
           "uid": "${DS_PROMETHEUS}"
         },
         "definition": "label_values(rabbitmq_identity_info, namespace)",
-        "hide": 0,
         "includeAll": false,
         "label": "Namespace",
-        "multi": false,
         "name": "namespace",
         "options": [],
         "query": {
@@ -1239,12 +1270,8 @@
         },
         "refresh": 2,
         "regex": "",
-        "skipUrlSync": false,
         "sort": 1,
-        "tagValuesQuery": "",
-        "tagsQuery": "",
-        "type": "query",
-        "useTags": false
+        "type": "query"
       },
       {
         "allowCustomValue": false,
@@ -1277,10 +1304,8 @@
           "uid": "${DS_PROMETHEUS}"
         },
         "definition": "label_values(rabbitmq_identity_info{namespace=\"$namespace\"}, rabbitmq_cluster)",
-        "hide": 0,
         "includeAll": false,
         "label": "RabbitMQ Cluster",
-        "multi": false,
         "name": "rabbitmq_cluster",
         "options": [],
         "query": {
@@ -1289,12 +1314,7 @@
         },
         "refresh": 2,
         "regex": "",
-        "skipUrlSync": false,
-        "sort": 0,
-        "tagValuesQuery": "",
-        "tagsQuery": "",
-        "type": "query",
-        "useTags": false
+        "type": "query"
       }
     ]
   },
@@ -1303,12 +1323,17 @@
     "to": "now"
   },
   "timepicker": {
-    "refresh_intervals": ["15s", "30s", "1m", "5m", "10m"],
-    "time_options": ["5m", "15m", "1h", "6h", "12h", "24h", "2d", "7d", "30d"]
+    "refresh_intervals": [
+      "15s",
+      "30s",
+      "1m",
+      "5m",
+      "10m"
+    ]
   },
   "timezone": "",
   "title": "RabbitMQ-Quorum-Queues-Raft",
   "uid": "f1Mee9nZz",
-  "version": 1,
+  "version": 2,
   "weekStart": ""
 }

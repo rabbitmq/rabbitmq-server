@@ -38,7 +38,7 @@
           proc_state = connect_packet_unprocessed :: connect_packet_unprocessed |
                                                      rabbit_mqtt_processor:state(),
           connection_state = running :: running | blocked,
-          conserve = false :: boolean(),
+          blocked_by = sets:new([{version, 2}]) :: sets:set(rabbit_alarm:resource_alarm_source()),
           stats_timer :: option(rabbit_event:state()),
           keepalive = rabbit_mqtt_keepalive:init() :: rabbit_mqtt_keepalive:state(),
           conn_name :: option(binary())
@@ -106,11 +106,11 @@ init(Req, Opts) ->
         undefined ->
             no_supported_sub_protocol(undefined, Req);
         Protocol ->
-            case lists:member(<<"mqtt">>, Protocol) of
+            case lists:search(fun(P) -> P =:= <<"mqtt">> orelse P =:= <<"mqttv3.1">> end, Protocol) of
                 false ->
                     no_supported_sub_protocol(Protocol, Req);
-                true ->
-                    Req1 = cowboy_req:set_resp_header(<<"sec-websocket-protocol">>, <<"mqtt">>, Req),
+                {value, MatchedProtocol} ->
+                    Req1 = cowboy_req:set_resp_header(<<"sec-websocket-protocol">>, MatchedProtocol, Req),
                     State = #state{socket = maps:get(proxy_header, Req, undefined),
                                    stats_timer = rabbit_event:init_stats_timer()},
                     WsOpts0 = proplists:get_value(ws_opts, Opts, #{}),
@@ -141,8 +141,9 @@ websocket_init(State0 = #state{socket = Sock}) ->
         {ok, ConnStr} ->
             ConnName = rabbit_data_coercion:to_binary(ConnStr),
             ?LOG_INFO("Accepting Web MQTT connection ~s", [ConnName]),
-            _ = rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
-            State = State0#state{conn_name = ConnName},
+            Alarms = rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
+            State = State0#state{conn_name = ConnName,
+                                 blocked_by = sets:from_list(Alarms, [{version, 2}])},
             process_flag(trap_exit, true),
             {[], State, hibernate};
         {error, Reason} ->
@@ -152,8 +153,8 @@ websocket_init(State0 = #state{socket = Sock}) ->
 -spec conserve_resources(pid(),
                          rabbit_alarm:resource_alarm_source(),
                          rabbit_alarm:resource_alert()) -> ok.
-conserve_resources(Pid, _, {_, Conserve, _}) ->
-    Pid ! {conserve_resources, Conserve},
+conserve_resources(Pid, Source, {_, Conserve, _}) ->
+    Pid ! {conserve_resources, Source, Conserve},
     ok.
 
 -spec websocket_handle(ping | pong | {text | binary | ping | pong, binary()}, State) ->
@@ -176,8 +177,15 @@ websocket_handle(Frame, State) ->
 -spec websocket_info(any(), State) ->
     {cowboy_websocket:commands(), State} |
     {cowboy_websocket:commands(), State, hibernate}.
-websocket_info({conserve_resources, Conserve}, State) ->
-    handle_credits(State#state{conserve = Conserve});
+websocket_info({conserve_resources, Source, Conserve},
+               #state{blocked_by = BlockedBy0} = State) ->
+    BlockedBy = case Conserve of
+                    true ->
+                        sets:add_element(Source, BlockedBy0);
+                    false ->
+                        sets:del_element(Source, BlockedBy0)
+                end,
+    handle_credits(State#state{blocked_by = BlockedBy});
 websocket_info({bump_credit, Msg}, State) ->
     credit_flow:handle_bump_msg(Msg),
     handle_credits(State);
@@ -402,10 +410,11 @@ handle_credits(State0) ->
     {[{active, Active}], State, hibernate}.
 
 control_throttle(State = #state{connection_state = ConnState,
-                                conserve = Conserve,
+                                blocked_by = BlockedBy,
                                 proc_state = PState,
                                 keepalive = KState
                                }) ->
+    Conserve = not sets:is_empty(BlockedBy),
     Throttle = case PState of
                    connect_packet_unprocessed -> Conserve;
                    _ -> rabbit_mqtt_processor:throttle(Conserve, PState)

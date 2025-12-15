@@ -1699,9 +1699,12 @@ permissions_vhost_test(Config) ->
                                         {tags, <<"administrator">>}], {group, '2xx'}),
     http_put(Config, "/users/myuser", [{password, <<"myuser">>},
                                        {tags, <<"management">>}], {group, '2xx'}),
+    http_put(Config, "/users/mymonitor", [{password, <<"mymonitor">>},
+                                          {tags, [<<"monitor">>, <<"management">>]}], {group, '2xx'}),
     http_put(Config, "/vhosts/myvhost1", none, {group, '2xx'}),
     http_put(Config, "/vhosts/myvhost2", none, {group, '2xx'}),
     http_put(Config, "/permissions/myvhost1/myuser", PermArgs, {group, '2xx'}),
+    http_put(Config, "/permissions/myvhost1/mymonitor", PermArgs, {group, '2xx'}),
     http_put(Config, "/permissions/myvhost1/guest", PermArgs, {group, '2xx'}),
     http_put(Config, "/permissions/myvhost2/guest", PermArgs, {group, '2xx'}),
     assert_list([#{name => <<"/">>},
@@ -1709,23 +1712,34 @@ permissions_vhost_test(Config) ->
                  #{name => <<"myvhost2">>}], http_get(Config, "/vhosts", ?OK)),
     assert_list([#{name => <<"myvhost1">>}],
                 http_get(Config, "/vhosts", "myuser", "myuser", ?OK)),
+    assert_list([#{name => <<"myvhost1">>}],
+                http_get(Config, "/vhosts", "mymonitor", "mymonitor", ?OK)),
     http_put(Config, "/queues/myvhost1/myqueue", QArgs, {group, '2xx'}),
     http_put(Config, "/queues/myvhost2/myqueue", QArgs, {group, '2xx'}),
+    CheckResult = fun (Path, Result) ->
+                          case maps:get(vhost, Result) of
+                              <<"myvhost2">> ->
+                                  throw({got_result_from_vhost2_in, Path, Result});
+                              _ ->
+                                  ok
+                          end
+                  end,
     Test1 =
         fun(Path) ->
-                Results = http_get(Config, Path, "myuser", "myuser", ?OK),
-                [case maps:get(vhost, Result) of
-                     <<"myvhost2">> ->
-                         throw({got_result_from_vhost2_in, Path, Result});
-                     _ ->
-                         ok
-                 end || Result <- Results]
+                Results0 = http_get(Config, Path, "myuser", "myuser", ?OK),
+                [CheckResult(Path, Result0) || Result0 <- Results0],
+                Results1 = http_get(Config, Path, "mymonitor", "mymonitor", ?OK),
+                [CheckResult(Path, Result1) || Result1 <- Results1]
         end,
     Test2 =
         fun(Path1, Path2) ->
                 http_get(Config, Path1 ++ "/myvhost1/" ++ Path2, "myuser", "myuser",
                          ?OK),
                 http_get(Config, Path1 ++ "/myvhost2/" ++ Path2, "myuser", "myuser",
+                         ?NOT_AUTHORISED),
+                http_get(Config, Path1 ++ "/myvhost1/" ++ Path2, "mymonitor", "mymonitor",
+                         ?OK),
+                http_get(Config, Path1 ++ "/myvhost2/" ++ Path2, "mymonitor", "mymonitor",
                          ?NOT_AUTHORISED)
         end,
     Test3 =
@@ -4204,7 +4218,9 @@ list_deprecated_features_test(Config) ->
     ?assertEqual(<<"permitted_by_default">>, maps:get(deprecation_phase, Feature)),
     ?assertEqual(atom_to_binary(?MODULE), maps:get(provided_by, Feature)),
     ?assertEqual(list_to_binary(Desc), maps:get(desc, Feature)),
-    ?assertEqual(list_to_binary(DocUrl), maps:get(doc_url, Feature)).
+    ?assertEqual(list_to_binary(DocUrl), maps:get(doc_url, Feature)),
+    ?assert(maps:is_key(state, Feature)),
+    ?assert(lists:member(maps:get(state, Feature), [<<"permitted">>, <<"denied">>])).
 
 list_used_deprecated_features_test(Config) ->
     Desc = "This is a deprecated feature in use",
@@ -4225,7 +4241,8 @@ list_used_deprecated_features_test(Config) ->
     ?assertEqual(<<"removed">>, maps:get(deprecation_phase, Feature)),
     ?assertEqual(atom_to_binary(?MODULE), maps:get(provided_by, Feature)),
     ?assertEqual(list_to_binary(Desc), maps:get(desc, Feature)),
-    ?assertEqual(list_to_binary(DocUrl), maps:get(doc_url, Feature)).
+    ?assertEqual(list_to_binary(DocUrl), maps:get(doc_url, Feature)),
+    ?assertNot(maps:is_key(state, Feature)).
 
 cluster_and_node_tags_test(Config) ->
     Overview = http_get(Config, "/overview"),

@@ -101,7 +101,6 @@
                                  qname_to_internal_name/1,
                                  erpc_call/5]).
 
--include_lib("stdlib/include/qlc.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include("amqqueue.hrl").
 -include_lib("kernel/include/logger.hrl").
@@ -113,7 +112,8 @@
                     [queue, <<"quorum">>, ?MODULE]}},
      {cleanup,  {rabbit_registry, unregister,
                  [queue, <<"quorum">>]}},
-     {requires, rabbit_registry}]}).
+     {requires, rabbit_registry},
+     {enables, rabbit_policy}]}).
 
 -type msg_id() :: non_neg_integer().
 -type qmsg() :: {rabbit_types:r('queue'), pid(), msg_id(), boolean(),
@@ -254,8 +254,8 @@ declare(Q, _Node) when ?amqqueue_is_quorum(Q) ->
 
 start_cluster(Q) ->
     QName = amqqueue:get_name(Q),
-    Durable = amqqueue:is_durable(Q),
-    AutoDelete = amqqueue:is_auto_delete(Q),
+    Durable = true = amqqueue:is_durable(Q),
+    AutoDelete = false = amqqueue:is_auto_delete(Q),
     Arguments = amqqueue:get_arguments(Q),
     Opts = amqqueue:get_options(Q),
     ActingUser = maps:get(user, Opts, ?UNKNOWN_USER),
@@ -403,7 +403,7 @@ single_active_consumer_on(Q) ->
 
 update_consumer_handler(QName, {ConsumerTag, ChPid}, Exclusive, AckRequired,
                         Prefetch, Active, ActivityStatus, Args) ->
-    catch local_or_remote_handler(ChPid, rabbit_quorum_queue, update_consumer,
+    catch local_or_remote_handler(ChPid, ?MODULE, update_consumer,
                                   [QName, ChPid, ConsumerTag, Exclusive,
                                    AckRequired, Prefetch, Active,
                                    ActivityStatus, Args]).
@@ -416,7 +416,7 @@ update_consumer(QName, ChPid, ConsumerTag, Exclusive, AckRequired, Prefetch,
                                                ActivityStatus, Args).
 
 cancel_consumer_handler(QName, {ConsumerTag, ChPid}) ->
-    catch local_or_remote_handler(ChPid, rabbit_quorum_queue, cancel_consumer,
+    catch local_or_remote_handler(ChPid, ?MODULE, cancel_consumer,
                                   [QName, ChPid, ConsumerTag]).
 
 cancel_consumer(QName, ChPid, ConsumerTag) ->
@@ -1125,7 +1125,7 @@ deliver(QSs, Msg0, Options) ->
               case deliver0(QName, Correlation, Msg, S0) of
                   {reject_publish, S} ->
                       {[{Q, S} | Qs],
-                       [{rejected, QName, [Correlation]} | Actions]};
+                       [{rejected, QName, maxlen, [Correlation]} | Actions]};
                   {ok, S, As} ->
                       {[{Q, S} | Qs], As ++ Actions}
               end
@@ -1276,60 +1276,42 @@ status(Vhost, QueueName) ->
                           {<<"Term">>, Term},
                           {<<"Machine Version">>, MacVer}
                          ];
-                     {error, _} ->
-                         %% try the old method
-                         case get_sys_status(ServerId) of
-                             {ok, Sys} ->
-                                 {_, M} = lists:keyfind(ra_server_state, 1, Sys),
-                                 {_, RaftState} = lists:keyfind(raft_state, 1, Sys),
-                                 #{commit_index := Commit,
-                                   machine_version := MacVer,
-                                   current_term := Term,
-                                   last_applied := LastApplied,
-                                   log := #{last_index := Last,
-                                            last_written_index_term := {LastWritten, _},
-                                            snapshot_index := SnapIdx}} = M,
-                                 [{<<"Node Name">>, N},
-                                  {<<"Raft State">>, RaftState},
-                                  {<<"Membership">>, voter},
-                                  {<<"Last Log Index">>, Last},
-                                  {<<"Last Written">>, LastWritten},
-                                  {<<"Last Applied">>, LastApplied},
-                                  {<<"Commit Index">>, Commit},
-                                  {<<"Snapshot Index">>, SnapIdx},
-                                  {<<"Term">>, Term},
-                                  {<<"Machine Version">>, MacVer}
-                                 ];
-                             {error, Err} ->
-                                 [{<<"Node Name">>, N},
-                                  {<<"Raft State">>, Err},
-                                  {<<"Membership">>, <<>>},
-                                  {<<"LastLog Index">>, <<>>},
-                                  {<<"Last Written">>, <<>>},
-                                  {<<"Last Applied">>, <<>>},
-                                  {<<"Commit Index">>, <<>>},
-                                  {<<"Snapshot Index">>, <<>>},
-                                  {<<"Term">>, <<>>},
-                                  {<<"Machine Version">>, <<>>}
-                                 ]
-                         end
+                     #{state := noproc,
+                       membership := unknown,
+                       machine_version := MacVer} ->
+                         [{<<"Node Name">>, N},
+                          {<<"Raft State">>, noproc},
+                          {<<"Membership">>, <<>>},
+                          {<<"Last Log Index">>, <<>>},
+                          {<<"Last Written">>, <<>>},
+                          {<<"Last Applied">>, <<>>},
+                          {<<"Commit Index">>, <<>>},
+                          {<<"Snapshot Index">>, <<>>},
+                          {<<"Term">>, <<>>},
+                          {<<"Machine Version">>, MacVer}
+                         ];
+                     {error, Reason} ->
+                         State = case is_atom(Reason) of
+                                     true -> Reason;
+                                     false -> unknown
+                                 end,
+                         [{<<"Node Name">>, N},
+                          {<<"Raft State">>, State},
+                          {<<"Membership">>, <<>>},
+                          {<<"Last Log Index">>, <<>>},
+                          {<<"Last Written">>, <<>>},
+                          {<<"Last Applied">>, <<>>},
+                          {<<"Commit Index">>, <<>>},
+                          {<<"Snapshot Index">>, <<>>},
+                          {<<"Term">>, <<>>},
+                          {<<"Machine Version">>, <<>>}
+                         ]
                  end
              end || N <- Nodes];
         {ok, _Q} ->
             {error, not_quorum_queue};
         {error, not_found} = E ->
             E
-    end.
-
-get_sys_status(Proc) ->
-    try lists:nth(5, element(4, sys:get_status(Proc))) of
-        Sys -> {ok, Sys}
-    catch
-        _:Err when is_tuple(Err) ->
-            {error, element(1, Err)};
-        _:_ ->
-            {error, other}
-
     end.
 
 add_member(VHost, Name, Node, Membership, Timeout)
@@ -1389,13 +1371,7 @@ do_add_member(Q, Node, Membership, Timeout)
     Conf = make_ra_conf(Q, ServerId, Membership, MachineVersion),
     case ra:start_server(?RA_SYSTEM, Conf) of
         ok ->
-            ServerIdSpec  =
-            case rabbit_feature_flags:is_enabled(quorum_queue_non_voters) of
-                true ->
-                    maps:with([id, uid, membership], Conf);
-                false ->
-                    maps:get(id, Conf)
-            end,
+            ServerIdSpec = maps:with([id, uid, membership], Conf),
             case ra:add_member(Members, ServerIdSpec, Timeout) of
                 {ok, {RaIndex, RaTerm}, Leader} ->
                     Fun = fun(Q1) ->
@@ -1687,7 +1663,7 @@ dead_letter_publish(X, RK, QName, Reason, Msgs) ->
 
 find_quorum_queues(VHost) ->
     Node = node(),
-    rabbit_db_queue:get_all_by_type_and_node(VHost, rabbit_quorum_queue, Node).
+    rabbit_db_queue:get_all_by_type_and_node(VHost, ?MODULE, Node).
 
 i_totals(Q) when ?is_amqqueue(Q) ->
     QName = amqqueue:get_name(Q),
@@ -2318,7 +2294,7 @@ transfer_leadership(_CandidateNodes) ->
               %% by simply shutting its local QQ replica (Ra server)
               RaLeader = amqqueue:get_pid(Q),
               ?LOG_DEBUG("Will stop Ra leader ~tp", [RaLeader]),
-              case rabbit_quorum_queue:stop_server(RaLeader) of
+              case stop_server(RaLeader) of
                   ok ->
                       ?LOG_DEBUG("Successfully stopped Ra server ~tp", [RaLeader]);
                   {error, nodedown} ->
@@ -2365,7 +2341,7 @@ stop_local_quorum_queue_followers() ->
         {RegisteredName, _LeaderNode} = amqqueue:get_pid(Q),
         RaNode = {RegisteredName, node()},
         ?LOG_DEBUG("Will stop Ra server ~tp", [RaNode]),
-        case rabbit_quorum_queue:stop_server(RaNode) of
+        case stop_server(RaNode) of
             ok     ->
                 ?LOG_DEBUG("Successfully stopped Ra server ~tp", [RaNode]);
             {error, nodedown} ->
@@ -2381,7 +2357,7 @@ revive_local_queue_members() ->
     Queues = rabbit_amqqueue:list_local_followers(),
     %% NB: this function ignores the first argument so we can just pass the
     %% empty binary as the vhost name.
-    {Recovered, Failed} = rabbit_quorum_queue:recover(<<>>, Queues),
+    {Recovered, Failed} = recover(<<>>, Queues),
     ?LOG_DEBUG("Successfully revived ~b quorum queue replicas",
                      [length(Recovered)]),
     case length(Failed) of

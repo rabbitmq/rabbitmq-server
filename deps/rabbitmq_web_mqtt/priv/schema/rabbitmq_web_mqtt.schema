@@ -50,11 +50,11 @@
 {mapping, "web_mqtt.ssl.port", "rabbitmq_web_mqtt.ssl_config.port",
     [{datatype, integer}]}.
 {mapping, "web_mqtt.ssl.certfile", "rabbitmq_web_mqtt.ssl_config.certfile",
-    [{datatype, string}, {validators, ["file_accessible"]}]}.
+    [{datatype, string}, {validators, ["pem_file"]}]}.
 {mapping, "web_mqtt.ssl.keyfile", "rabbitmq_web_mqtt.ssl_config.keyfile",
-    [{datatype, string}, {validators, ["file_accessible"]}]}.
+    [{datatype, string}, {validators, ["pem_file"]}]}.
 {mapping, "web_mqtt.ssl.cacertfile", "rabbitmq_web_mqtt.ssl_config.cacertfile",
-    [{datatype, string}, {validators, ["file_accessible"]}]}.
+    [{datatype, string}, {validators, ["pem_file"]}]}.
 {mapping, "web_mqtt.ssl.password", "rabbitmq_web_mqtt.ssl_config.password",
     [{datatype, [tagged_binary, binary]}]}.
 
@@ -183,7 +183,7 @@ end}.
     [{datatype, {enum, [true, false]}}]}.
 
 %%
-%% File Handle Cache
+%% File Handle Cache (no-op, kept for compatibility).
 %%
 
 {mapping, "web_mqtt.use_file_handle_cache", "rabbitmq_web_mqtt.use_file_handle_cache",

@@ -49,10 +49,9 @@ to_json(ReqData, Context) ->
 check() ->
     case rabbit:is_serving() of
         true ->
-            RanchRefs0 = [
-                rabbit_networking:ranch_ref_of_protocol(amqp),
-                rabbit_networking:ranch_ref_of_protocol('amqp/ssl')
-            ],
+            RanchRefs0 = (
+              rabbit_networking:ranch_refs_of_protocol(amqp) ++
+              rabbit_networking:ranch_refs_of_protocol('amqp/ssl')),
             RanchRefs = [R || R <- RanchRefs0, R =/= undefined],
             case RanchRefs of
                 [_ | _] ->

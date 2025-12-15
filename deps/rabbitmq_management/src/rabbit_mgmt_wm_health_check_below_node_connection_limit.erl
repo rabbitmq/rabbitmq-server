@@ -55,10 +55,9 @@ to_json(ReqData, Context) ->
     end.
 
 protocol_connection_count(Protocol) ->
-    case rabbit_networking:ranch_ref_of_protocol(Protocol) of
-        undefined ->
-            0;
-        RanchRef ->
-            #{active_connections := Count} = ranch:info(RanchRef),
-            Count
-    end.
+    Refs = rabbit_networking:ranch_refs_of_protocol(Protocol),
+    lists:foldl(
+      fun(Ref, Acc) ->
+              #{active_connections := Count} = ranch:info(Ref),
+              Acc + Count
+      end, 0, Refs).

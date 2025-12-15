@@ -31,7 +31,8 @@
 all() ->
     [
       {group, http_provider_tests},
-      {group, file_provider_tests}
+      {group, file_provider_tests},
+      {group, required_options}
     ].
 
 groups() ->
@@ -58,7 +59,10 @@ groups() ->
                                  enabled_provider_adds_cerificates |
                                  CommonTests
                                ]},
-      {http_provider_tests, [], CommonTests}
+      {http_provider_tests, [], CommonTests},
+      {required_options, [], [invasive_SSL_option_change,
+                              whitelisted_certificate_accepted_from_AMQP_client_without_server_side_cacerts
+                             ]}
     ].
 
 suite() ->
@@ -68,13 +72,14 @@ suite() ->
 %% Testsuite setup/teardown.
 %% -------------------------------------------------------------------
 
-set_up_node(Config) ->
+set_up_node(Config, ExtraSteps) ->
     rabbit_ct_helpers:log_environment(),
     Config1 = rabbit_ct_helpers:set_config(Config, [
         {rmq_nodename_suffix, ?MODULE},
         {rmq_extra_tcp_ports, [tcp_port_amqp_tls_extra]}
       ]),
     rabbit_ct_helpers:run_setup_steps(Config1,
+      ExtraSteps ++
       rabbit_ct_broker_helpers:setup_steps() ++
       rabbit_ct_client_helpers:setup_steps()).
 
@@ -84,7 +89,7 @@ tear_down_node(Config) ->
       rabbit_ct_broker_helpers:teardown_steps()).
 
 init_per_group(file_provider_tests, Config) ->
-    case set_up_node(Config) of
+    case set_up_node(Config, []) of
         {skip, _} = Error -> Error;
         Config1           ->
             WhitelistDir = filename:join([?config(rmq_certsdir, Config1),
@@ -99,7 +104,7 @@ init_per_group(file_provider_tests, Config) ->
     end;
 
 init_per_group(http_provider_tests, Config) ->
-    case set_up_node(Config) of
+    case set_up_node(Config, []) of
         {skip, _} = Error -> Error;
         Config1           ->
             WhitelistDir = filename:join([?config(rmq_certsdir, Config1),
@@ -114,7 +119,27 @@ init_per_group(http_provider_tests, Config) ->
                                                                       {refresh_interval, interval()},
                                                                       {providers, [rabbit_trust_store_http_provider]}]]),
             Config3
+    end;
+
+init_per_group(required_options, Config) ->
+    case set_up_node(Config, [fun modify_ssl_options/1]) of
+        {skip, _} = Error -> Error;
+        Config1           ->
+            WhitelistDir = filename:join([?config(rmq_certsdir, Config1),
+                                          "trust_store", "file_provider_tests"]),
+            Config2 = init_whitelist_dir(Config1, WhitelistDir),
+            ok = rabbit_ct_broker_helpers:rpc(Config2, 0,
+                                              ?MODULE,  change_configuration,
+                                              [rabbitmq_trust_store, [{directory, WhitelistDir},
+                                                                      {refresh_interval, interval()},
+                                                                      {providers, [rabbit_trust_store_file_provider]}]]),
+            Config2
     end.
+
+
+modify_ssl_options(Config) ->
+    SslOptions = [{verify, verify_none}, {fail_if_no_peer_cert, false}],
+    rabbit_ct_helpers:merge_app_env(Config, {rabbit, [{ssl_options, SslOptions}]}).
 
 init_provider_server(Config, WhitelistDir) ->
     %% Assume we don't have more than 100 ports allocated for tests
@@ -184,9 +209,10 @@ invasive_SSL_option_change1() ->
     {ok, Options} = application:get_env(rabbit, ssl_options),
 
     %% Then: all necessary settings are correct.
-    verify_peer             = proplists:get_value(verify, Options),
-    true                    = proplists:get_value(fail_if_no_peer_cert, Options),
-    {Verifyfun, _UserState} = proplists:get_value(verify_fun, Options),
+    OptionsMap = proplists:to_map(lists:reverse(Options)),
+    verify_peer             = maps:get(verify, OptionsMap),
+    true                    = maps:get(fail_if_no_peer_cert, OptionsMap),
+    {Verifyfun, _UserState} = maps:get(verify_fun, OptionsMap),
 
     {module, rabbit_trust_store} = erlang:fun_info(Verifyfun, module),
     ok.
@@ -491,9 +517,15 @@ validate_chain_without_whitelisted1(Config) ->
 
 whitelisted_certificate_accepted_from_AMQP_client_regardless_of_validation_to_root(Config) ->
     ok = rabbit_ct_broker_helpers:rpc(Config, 0,
-           ?MODULE, whitelisted_certificate_accepted_from_AMQP_client_regardless_of_validation_to_root1, [Config]).
+           ?MODULE, whitelisted_certificate_accepted_from_AMQP_client,
+                                      [Config, _ServerCA = true]).
 
-whitelisted_certificate_accepted_from_AMQP_client_regardless_of_validation_to_root1(Config) ->
+whitelisted_certificate_accepted_from_AMQP_client_without_server_side_cacerts(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+           ?MODULE, whitelisted_certificate_accepted_from_AMQP_client,
+                                      [Config, _ServerCA = false]).
+
+whitelisted_certificate_accepted_from_AMQP_client(Config, ServerCA) ->
     %% Given: a certificate `CertTrusted` AND that it is whitelisted.
     {RootCerts, Cert, Key}       = ct_helper:make_certs(),
     {_, CertTrusted, KeyTrusted} = ct_helper:make_certs(),
@@ -504,12 +536,21 @@ whitelisted_certificate_accepted_from_AMQP_client_regardless_of_validation_to_ro
     ok = whitelist(Config, "alice", CertTrusted),
     rabbit_trust_store:refresh(),
 
-    %% When: Rabbit validates paths with a different root `R` than
-    %% that of the certificate `CertTrusted`.
+    ServerSslOpts0 = [{cert, Cert},
+                      {key, Key}
+                     |lists:keydelete(cacertfile, 1, cfg())],
+    ServerSslOpts =
+        case ServerCA of
+            true ->
+                %% When: Rabbit validates paths with a different root `R` than
+                %% that of the certificate `CertTrusted`.
+                [{cacerts, RootCerts} | ServerSslOpts0];
+            false ->
+                %% When: Rabbit has no root CA configured
+                ServerSslOpts0
+        end,
     catch rabbit_networking:stop_tcp_listener(Port),
-    ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, RootCerts},
-                                                     {cert, Cert},
-                                                     {key, Key} | cfg()], 1, 1),
+    ok = rabbit_networking:start_ssl_listener(Port, ServerSslOpts, 1, 1),
 
     %% Then: a client presenting the whitelisted certificate `C`
     %% is allowed.

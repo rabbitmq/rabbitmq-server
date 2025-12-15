@@ -251,7 +251,8 @@ auth_config(T) when T == client_id_propagation;
                     T == ssl_user_with_client_id_in_cert_san_email;
                     T == ssl_user_with_client_id_in_cert_dn ->
     {rabbit, [
-            {auth_backends, [rabbit_auth_backend_mqtt_mock]}
+            {auth_backends, [rabbit_auth_backend_mqtt_mock]},
+            {test_auth_backends, [rabbit_auth_backend_mqtt_mock]}
           ]
     };
 

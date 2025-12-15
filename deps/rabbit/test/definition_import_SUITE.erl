@@ -71,7 +71,12 @@ groups() ->
 
         {roundtrip, [], [
             export_import_round_trip_case1,
-            export_import_round_trip_case2
+            export_import_round_trip_case2,
+            export_import_round_trip_operator_policy,
+            export_import_round_trip_vhost_limits,
+            export_import_round_trip_operator_policy_all_keys,
+            export_import_round_trip_multiple_operator_policies,
+            export_import_round_trip_mixed_parameters
         ]},
 
         {skip_if_unchanged, [], [
@@ -357,6 +362,105 @@ export_import_round_trip_case2(Config) ->
         %% skip the test in mixed version mode
         {skip, "Should not run in mixed version environments"}
     end.
+
+run_if_not_mixed_versions(Fun) ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        false -> Fun();
+        _ -> {skip, "Should not run in mixed version environments"}
+    end.
+
+export_import_round_trip_operator_policy(Config) ->
+    run_if_not_mixed_versions(fun() ->
+        import_file_case(Config, "case23"),
+        Defs = export(Config),
+        Parameters = maps:get(parameters, Defs, []),
+        [OpPol] = [P || P <- Parameters,
+                        maps:get(<<"component">>, P) =:= <<"operator_policy">>,
+                        maps:get(<<"name">>, P) =:= <<"transient-queue-ttl">>],
+        Value = maps:get(<<"value">>, OpPol),
+        Definition = maps:get(<<"definition">>, Value),
+        ?assert(is_map(Definition)),
+        ?assertEqual(1800000, maps:get(<<"expires">>, Definition)),
+        ?assertEqual(60000, maps:get(<<"message-ttl">>, Definition)),
+        ?assertEqual(1000, maps:get(<<"max-length">>, Definition)),
+        import_parsed(Config, Defs)
+    end).
+
+export_import_round_trip_vhost_limits(Config) ->
+    run_if_not_mixed_versions(fun() ->
+        import_file_case(Config, "case6"),
+        Defs = export(Config),
+        Parameters = maps:get(parameters, Defs, []),
+        VHostLimits = lists:filter(
+            fun(P) ->
+                maps:get(<<"component">>, P, undefined) =:= <<"vhost-limits">>
+            end,
+            Parameters
+        ),
+        ?assertEqual(1, length(VHostLimits)),
+        [Limits] = VHostLimits,
+        Value = maps:get(<<"value">>, Limits),
+        ?assert(is_map(Value)),
+        ?assertEqual(456, maps:get(<<"max-queues">>, Value)),
+        ?assertEqual(123, maps:get(<<"max-connections">>, Value)),
+        import_parsed(Config, Defs)
+    end).
+
+export_import_round_trip_operator_policy_all_keys(Config) ->
+    run_if_not_mixed_versions(fun() ->
+        import_file_case(Config, "case24"),
+        Defs = export(Config),
+        Parameters = maps:get(parameters, Defs, []),
+        [OpPol] = [P || P <- Parameters,
+                        maps:get(<<"component">>, P) =:= <<"operator_policy">>,
+                        maps:get(<<"name">>, P) =:= <<"regulated-queues">>],
+        Value = maps:get(<<"value">>, OpPol),
+        Definition = maps:get(<<"definition">>, Value),
+        ?assert(is_map(Definition)),
+        ?assertEqual(4, maps:size(Definition)),
+        ?assertEqual(3600000, maps:get(<<"expires">>, Definition)),
+        ?assertEqual(300000, maps:get(<<"message-ttl">>, Definition)),
+        ?assertEqual(10000, maps:get(<<"max-length">>, Definition)),
+        ?assertEqual(104857600, maps:get(<<"max-length-bytes">>, Definition)),
+        import_parsed(Config, Defs)
+    end).
+
+export_import_round_trip_multiple_operator_policies(Config) ->
+    run_if_not_mixed_versions(fun() ->
+        import_file_case(Config, "case25"),
+        Defs = export(Config),
+        Parameters = maps:get(parameters, Defs, []),
+        ExpectedPolicies = [<<"transient-queues">>, <<"limited-queues">>, <<"archive-queues">>],
+        lists:foreach(fun(PolicyName) ->
+            [OpPol] = [P || P <- Parameters,
+                            maps:get(<<"component">>, P) =:= <<"operator_policy">>,
+                            maps:get(<<"name">>, P) =:= PolicyName],
+            Value = maps:get(<<"value">>, OpPol),
+            Definition = maps:get(<<"definition">>, Value),
+            ?assert(is_map(Definition)),
+            ?assert(maps:size(Definition) >= 2)
+        end, ExpectedPolicies),
+        import_parsed(Config, Defs)
+    end).
+
+export_import_round_trip_mixed_parameters(Config) ->
+    run_if_not_mixed_versions(fun() ->
+        import_file_case(Config, "case26"),
+        Defs = export(Config),
+        Parameters = maps:get(parameters, Defs, []),
+        [Limits] = [P || P <- Parameters,
+                         maps:get(<<"component">>, P) =:= <<"vhost-limits">>,
+                         maps:get(<<"name">>, P) =:= <<"limits">>],
+        LimitsValue = maps:get(<<"value">>, Limits),
+        ?assert(is_map(LimitsValue)),
+        [OpPol] = [P || P <- Parameters,
+                        maps:get(<<"component">>, P) =:= <<"operator_policy">>,
+                        maps:get(<<"name">>, P) =:= <<"temp-queues">>],
+        OpPolValue = maps:get(<<"value">>, OpPol),
+        OpPolDefinition = maps:get(<<"definition">>, OpPolValue),
+        ?assert(is_map(OpPolDefinition)),
+        import_parsed(Config, Defs)
+    end).
 
 import_on_a_booting_node_using_classic_local_source(Config) ->
     %% see case5.json

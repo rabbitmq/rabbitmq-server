@@ -111,7 +111,7 @@ end_per_testcase(Testcase, Config) ->
 %% * discard/3              - publish without acks straight through
 %% * dropwhile/2            - expire messages without DLX
 %% * fetchwhile/4           - expire messages with DLX
-%% * ackfold/4              - reject messages with DLX
+%% * ackfold/5              - reject messages with DLX
 %% * requeue/2              - reject messages without DLX
 %% * drop/2                 - maxlen messages without DLX
 %% * purge/1                - issue AMQP queue.purge
@@ -391,23 +391,16 @@ info_head_message_timestamp1(_Config) ->
     PQ:delete_and_terminate(a_whim, BQS6),
     passed.
 
-%% Because queue version is now ignored, this test is expected
-%% to always get a queue version 2.
+%% Only queue version 2 can be declared.
 info_backing_queue_version(Config) ->
     {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
-    Q1 = <<"info-priority-queue-v1">>,
     Q2 = <<"info-priority-queue-v2">>,
-    declare(Ch, Q1, [{<<"x-max-priority">>, byte, 3},
-                    {<<"x-queue-version">>, byte, 1}]),
     declare(Ch, Q2, [{<<"x-max-priority">>, byte, 3},
                     {<<"x-queue-version">>, byte, 2}]),
     try
-        {ok, [{backing_queue_status, BQS1}]} = info(Config, Q1, [backing_queue_status]),
-        2 = proplists:get_value(version, BQS1),
         {ok, [{backing_queue_status, BQS2}]} = info(Config, Q2, [backing_queue_status]),
         2 = proplists:get_value(version, BQS2)
     after
-        delete(Ch, Q1),
         delete(Ch, Q2),
         rabbit_ct_client_helpers:close_channel(Ch),
         rabbit_ct_client_helpers:close_connection(Conn),

@@ -203,7 +203,7 @@ set_connection_name(ConnName,
 %% application controller is in the process of shutting down the very
 %% application which is making this call.
 ensure_started() ->
-    [ensure_started(App) || App <- [syntax_tools, compiler, xmerl,
+    [ensure_started(App) || App <- [syntax_tools, compiler,
                                     rabbit_common, amqp_client, credentials_obfuscation]],
     ok.
 

@@ -17,8 +17,7 @@
          stop_and_halt/0, await_startup/0, await_startup/1, await_startup/3,
          status/0, is_running/0, is_serving/0, alarms/0,
          is_running/1, is_serving/1, environment/0, rotate_logs/0,
-         force_event_refresh/1,
-         start_fhc/0]).
+         force_event_refresh/1]).
 
 -export([start/2, stop/1, prep_stop/1]).
 -export([start_apps/1, start_apps/2, stop_apps/1]).
@@ -82,7 +81,7 @@
 
 -rabbit_boot_step({database,
                    [{mfa,         {rabbit_db, init, []}},
-                    {requires,    file_handle_cache},
+                    {requires,    rabbit_registry},
                     {enables,     external_infrastructure}]}).
 
 -rabbit_boot_step({networking_metadata_store,
@@ -96,19 +95,6 @@
                     {mfa,         {rabbit_sup, start_child, [rabbit_tracking_store]}},
                     {requires,    database},
                     {enables,     external_infrastructure}]}).
-
--rabbit_boot_step({code_server_cache,
-                   [{description, "code_server cache server"},
-                    {mfa,         {rabbit_sup, start_child, [code_server_cache]}},
-                    {requires,    rabbit_alarm},
-                    {enables,     file_handle_cache}]}).
-
--rabbit_boot_step({file_handle_cache,
-                   [{description, "file handle cache server"},
-                    {mfa,         {rabbit, start_fhc, []}},
-                    %% FHC needs memory monitor to be running
-                    {requires,    code_server_cache},
-                    {enables,     worker_pool}]}).
 
 -rabbit_boot_step({worker_pool,
                    [{description, "default worker pool"},
@@ -765,9 +751,6 @@ status() ->
                                         get_disk_free_limit, []}},
             {disk_free,                {rabbit_disk_monitor,
                                         get_disk_free, []}}]),
-    S3 = rabbit_misc:with_exit_handler(
-           fun () -> [] end,
-           fun () -> [{file_descriptors, file_handle_cache:info()}] end),
     S4 = [{processes,        [{limit, erlang:system_info(process_limit)},
                               {used, erlang:system_info(process_count)}]},
           {run_queue,        erlang:statistics(run_queue)},
@@ -802,7 +785,7 @@ status() ->
                (_) -> false
            end,
            maps:to_list(product_info())),
-    S1 ++ S2 ++ S3 ++ S4 ++ S5 ++ S6 ++ S7 ++ S8.
+    S1 ++ S2 ++ S4 ++ S5 ++ S6 ++ S7 ++ S8.
 
 alarms() ->
     Alarms = rabbit_misc:with_exit_handler(rabbit_misc:const([]),
@@ -1055,9 +1038,10 @@ do_run_postlaunch_phase(Plugins) ->
         %% * Collectors: the `rabbitmq_prometheus' plugin explicitly registers
         %%   all collectors.
         %% * Instrumenters: no instrumenters are used.
-        _ = application:load(prometheus),
-        ok = application:set_env(prometheus, collectors, [default]),
-        ok = application:set_env(prometheus, instrumenters, []),
+        ok = application:set_env(prometheus, collectors, [default],
+                                 [{persistent, true}]),
+        ok = application:set_env(prometheus, instrumenters, [],
+                                 [{persistent, true}]),
 
         %% However, we want to run their boot steps and actually start
         %% them one by one, to ensure a dependency is fully started
@@ -1641,63 +1625,6 @@ home_dir() ->
 
 config_files() ->
     rabbit_config:config_files().
-
-%% We don't want this in fhc since it references rabbit stuff. And we can't put
-%% this in the bootstep directly.
-start_fhc() ->
-    ok = rabbit_sup:start_restartable_child(
-      file_handle_cache,
-      [fun(_) -> ok end, fun(_) -> ok end]),
-    ensure_working_fhc(),
-    maybe_warn_low_fd_limit().
-
-ensure_working_fhc() ->
-    %% To test the file handle cache, we simply read a file we know it
-    %% exists (Erlang kernel's .app file).
-    %%
-    %% To avoid any pollution of the application process' dictionary by
-    %% file_handle_cache, we spawn a separate process.
-    Parent = self(),
-    TestFun = fun() ->
-        ReadBuf = case application:get_env(rabbit, fhc_read_buffering) of
-            {ok, true}  -> "ON";
-            {ok, false} -> "OFF"
-        end,
-        WriteBuf = case application:get_env(rabbit, fhc_write_buffering) of
-            {ok, true}  -> "ON";
-            {ok, false} -> "OFF"
-        end,
-        ?LOG_INFO("FHC read buffering: ~ts", [ReadBuf],
-                  #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
-        ?LOG_INFO("FHC write buffering: ~ts", [WriteBuf],
-                  #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
-        Filename = filename:join(code:lib_dir(kernel), "ebin/kernel.app"),
-        {ok, Fd} = file_handle_cache:open(Filename, [raw, binary, read], []),
-        {ok, _} = file_handle_cache:read(Fd, 1),
-        ok = file_handle_cache:close(Fd),
-        Parent ! fhc_ok
-    end,
-    TestPid = spawn_link(TestFun),
-    %% Because we are waiting for the test fun, abuse the
-    %% 'mnesia_table_loading_retry_timeout' parameter to find a sane timeout
-    %% value.
-    Timeout = rabbit_table:retry_timeout(),
-    receive
-        fhc_ok                       -> ok;
-        {'EXIT', TestPid, Exception} -> throw({ensure_working_fhc, Exception})
-    after Timeout ->
-            throw({ensure_working_fhc, {timeout, TestPid}})
-    end.
-
-maybe_warn_low_fd_limit() ->
-    case file_handle_cache:ulimit() of
-        %% unknown is included as atom() > integer().
-        L when L > 1024 ->
-            ok;
-        L ->
-            ?LOG_WARNING("Available file handles: ~tp. "
-                "Please consider increasing system limits", [L])
-    end.
 
 %% Any configuration that
 %% 1. is not allowed to change while RabbitMQ is running, and

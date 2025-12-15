@@ -92,6 +92,7 @@ groups() ->
                                             leader_locator_balanced_random_maintenance,
                                             leader_locator_policy,
                                             status,
+                                            status_noproc,
                                             format,
                                             add_member_2,
                                             single_active_consumer_priority_take_over,
@@ -153,6 +154,10 @@ all_tests() ->
      dead_letter_to_quorum_queue,
      dead_letter_from_classic_to_quorum_queue,
      dead_letter_policy,
+     at_most_once_dead_letter_order_maxlen,
+     at_most_once_dead_letter_order_rejected,
+     at_most_once_dead_letter_order_delivery_limit,
+     at_most_once_dead_letter_order_expired,
      cleanup_queue_state_on_channel_after_publish,
      cleanup_queue_state_on_channel_after_subscribe,
      sync_queue,
@@ -2091,6 +2096,196 @@ dead_letter_policy(Config) ->
     ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"dlx">>),
     test_dead_lettering(false, Config, Ch, Servers, RaName, QQ, CQ).
 
+%% Test that messages are at most once dead letter in the correct order
+%% for reason 'maxlen'.
+at_most_once_dead_letter_order_maxlen(Config) ->
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    DLQ = <<"dead letter queue">>,
+
+    ?assertEqual({'queue.declare_ok', DLQ, 0, 0},
+                 declare(Ch, DLQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                  {<<"x-overflow">>, longstr, <<"drop-head">>},
+                                  {<<"x-max-length-bytes">>, long, 1000},
+                                  {<<"x-dead-letter-exchange">>, longstr, <<>>},
+                                  {<<"x-dead-letter-routing-key">>, longstr, DLQ}])),
+
+    LargePayload = binary:copy(<<"x">>, 1500),
+    ok = amqp_channel:cast(Ch,
+                           #'basic.publish'{routing_key = QQ},
+                           #amqp_msg{payload = <<"m1">>}),
+    ok = amqp_channel:cast(Ch,
+                           #'basic.publish'{routing_key = QQ},
+                           #amqp_msg{payload = <<"m2">>}),
+    ok = amqp_channel:cast(Ch,
+                           #'basic.publish'{routing_key = QQ},
+                           #amqp_msg{payload = LargePayload}),
+    wait_for_consensus(QQ, Config),
+    wait_for_consensus(DLQ, Config),
+    RaName = ra_name(DLQ),
+    wait_for_messages_ready(Servers, RaName, 3),
+    ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"m1">>}},
+                 amqp_channel:call(Ch, #'basic.get'{queue = DLQ,
+                                                    no_ack = true})),
+    ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"m2">>}},
+                 amqp_channel:call(Ch, #'basic.get'{queue = DLQ,
+                                                    no_ack = true})),
+    ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = LargePayload}},
+                 amqp_channel:call(Ch, #'basic.get'{queue = DLQ,
+                                                    no_ack = true})),
+
+    [?assertEqual(#'queue.delete_ok'{message_count = 0},
+                  amqp_channel:call(Ch, #'queue.delete'{queue = Q}))
+     || Q <- [QQ, DLQ]].
+
+%% Test that messages are at most once dead letter in the correct order
+%% for reason 'rejected'.
+at_most_once_dead_letter_order_rejected(Config) ->
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    DLQ = <<"dead letter queue">>,
+
+    ?assertEqual({'queue.declare_ok', DLQ, 0, 0},
+                 declare(Ch, DLQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                  {<<"x-dead-letter-exchange">>, longstr, <<>>},
+                                  {<<"x-dead-letter-routing-key">>, longstr, DLQ}])),
+
+    ok = amqp_channel:cast(Ch,
+                           #'basic.publish'{routing_key = QQ},
+                           #amqp_msg{payload = <<"m1">>}),
+    ok = amqp_channel:cast(Ch,
+                           #'basic.publish'{routing_key = QQ},
+                           #amqp_msg{payload = <<"m2">>}),
+
+    ok = subscribe(Ch, QQ, false),
+    receive {_, #amqp_msg{payload = P1}} ->
+                ?assertEqual(<<"m1">>, P1)
+    end,
+    receive {_, #amqp_msg{payload = P2}} ->
+                ?assertEqual(<<"m2">>, P2)
+    end,
+    ok = amqp_channel:call(Ch, #'basic.nack'{delivery_tag = 0,
+                                             multiple = true,
+                                             requeue = false}),
+
+    wait_for_consensus(DLQ, Config),
+    wait_for_messages_ready(Servers,  ra_name(DLQ), 2),
+    ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"m1">>}},
+                 amqp_channel:call(Ch, #'basic.get'{queue = DLQ,
+                                                    no_ack = true})),
+    ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"m2">>}},
+                 amqp_channel:call(Ch, #'basic.get'{queue = DLQ,
+                                                    no_ack = true})),
+
+    [?assertEqual(#'queue.delete_ok'{message_count = 0},
+                  amqp_channel:call(Ch, #'queue.delete'{queue = Q}))
+     || Q <- [QQ, DLQ]].
+
+%% Test that messages are at most once dead letter in the correct order
+%% for reason 'delivery_limit'.
+at_most_once_dead_letter_order_delivery_limit(Config) ->
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    DLQ = <<"dead letter queue">>,
+
+    ?assertEqual({'queue.declare_ok', DLQ, 0, 0},
+                 declare(Ch, DLQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                  {<<"x-delivery-limit">>, long, 0},
+                                  {<<"x-dead-letter-exchange">>, longstr, <<>>},
+                                  {<<"x-dead-letter-routing-key">>, longstr, DLQ}])),
+
+    ok = amqp_channel:cast(Ch,
+                           #'basic.publish'{routing_key = QQ},
+                           #amqp_msg{payload = <<"m1">>}),
+    ok = amqp_channel:cast(Ch,
+                           #'basic.publish'{routing_key = QQ},
+                           #amqp_msg{payload = <<"m2">>}),
+
+    ok = subscribe(Ch, QQ, false),
+    receive {_, #amqp_msg{payload = P1}} ->
+                ?assertEqual(<<"m1">>, P1)
+    end,
+    receive {_, #amqp_msg{payload = P2}} ->
+                ?assertEqual(<<"m2">>, P2)
+    end,
+    ok = amqp_channel:call(Ch, #'basic.nack'{delivery_tag = 0,
+                                             multiple = true,
+                                             requeue = true}),
+
+    wait_for_consensus(DLQ, Config),
+    wait_for_messages_ready(Servers,  ra_name(DLQ), 2),
+    ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"m1">>}},
+                 amqp_channel:call(Ch, #'basic.get'{queue = DLQ,
+                                                    no_ack = true})),
+    ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"m2">>}},
+                 amqp_channel:call(Ch, #'basic.get'{queue = DLQ,
+                                                    no_ack = true})),
+
+    [?assertEqual(#'queue.delete_ok'{message_count = 0},
+                  amqp_channel:call(Ch, #'queue.delete'{queue = Q}))
+     || Q <- [QQ, DLQ]].
+
+%% Test that messages are at most once dead letter in the correct order
+%% for reason 'expired'.
+at_most_once_dead_letter_order_expired(Config) ->
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    DLQ = <<"dead letter queue">>,
+
+    ?assertEqual({'queue.declare_ok', DLQ, 0, 0},
+                 declare(Ch, DLQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                  {<<"x-dead-letter-exchange">>, longstr, <<>>},
+                                  {<<"x-dead-letter-routing-key">>, longstr, DLQ}])),
+
+    ok = amqp_channel:cast(Ch,
+                           #'basic.publish'{routing_key = QQ},
+                           #amqp_msg{payload = <<"m1">>}),
+    ok = amqp_channel:cast(Ch,
+                           #'basic.publish'{routing_key = QQ},
+                           #amqp_msg{props = #'P_basic'{expiration = <<"1">>},
+                                     payload = <<"m2">>}),
+    ok = amqp_channel:cast(Ch,
+                           #'basic.publish'{routing_key = QQ},
+                           #amqp_msg{props = #'P_basic'{expiration = <<"1">>},
+                                     payload = <<"m3">>}),
+    wait_for_consensus(QQ, Config),
+    wait_for_messages_ready(Servers, ra_name(QQ), 3),
+
+    %% Let m2 and m3 expire before consuming m1.
+    timer:sleep(10),
+    ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"m1">>}},
+                 amqp_channel:call(Ch, #'basic.get'{queue = QQ,
+                                                    no_ack = true})),
+
+    wait_for_consensus(DLQ, Config),
+    wait_for_messages_ready(Servers,  ra_name(DLQ), 2),
+    ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"m2">>}},
+                 amqp_channel:call(Ch, #'basic.get'{queue = DLQ,
+                                                    no_ack = true})),
+    ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"m3">>}},
+                 amqp_channel:call(Ch, #'basic.get'{queue = DLQ,
+                                                    no_ack = true})),
+
+    [?assertEqual(#'queue.delete_ok'{message_count = 0},
+                  amqp_channel:call(Ch, #'queue.delete'{queue = Q}))
+     || Q <- [QQ, DLQ]].
+
 invalid_policy(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
@@ -2810,10 +3005,8 @@ add_member(Config) ->
 
 add_member_2(Config) ->
     %% this tests a scenario where an older node version is running a QQ
-    %% and a member is added on a newer node version (for mixe testing)
+    %% and a member is added on a newer node version (for mixed testing)
 
-    %% we dont validate the ff was enabled as this test should pass either way
-    _ = rabbit_ct_broker_helpers:enable_feature_flag(Config, quorum_queue_non_voters),
     [Server0, Server1 | _] = _Servers0 =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
@@ -3822,9 +4015,9 @@ oldest_entry_timestamp(Config) ->
 
     ok.
 
--define(STATUS_MATCH(N, T),
+-define(STATUS_MATCH(N, RS, T),
         [{<<"Node Name">>, N},
-         {<<"Raft State">>, _},
+         {<<"Raft State">>, RS},
          {<<"Membership">>, _},
          {<<"Last Log Index">>, _},
          {<<"Last Written">>, _},
@@ -3855,9 +4048,9 @@ status(Config) ->
 
     %% check that nodes are returned and that at least the term isn't
     %% defaulted (i.e. there was an error)
-    ?assertMatch([?STATUS_MATCH(N1, T1),
-                  ?STATUS_MATCH(N2, T2),
-                  ?STATUS_MATCH(N3, T3)
+    ?assertMatch([?STATUS_MATCH(N1, _, T1),
+                  ?STATUS_MATCH(N2, _, T2),
+                  ?STATUS_MATCH(N3, _, T3)
                  ] when T1 /= <<>> andalso
                         T2 /= <<>> andalso
                         T3 /= <<>>,
@@ -3866,6 +4059,34 @@ status(Config) ->
     wait_for_messages(Config, [[QQ, <<"2">>, <<"2">>, <<"0">>]]),
     ok.
 
+status_noproc(Config) ->
+    Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [N1, N2, N3] = lists:sort(Nodes),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, N1),
+
+    QQ = ?config(queue_name, Config),
+    RaName = ra_name(QQ),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    ensure_qq_proc_dead(Config, N1, RaName),
+    %% simulate that the queue member terminated so early that it
+    %% hasn't recorded any counters yet
+    rabbit_ct_broker_helpers:rpc(Config, N1, ra_counters, delete, [{RaName, N1}]),
+
+    %% check that some status is returned for each node
+    ?assertMatch([?STATUS_MATCH(N1, noproc, T1),
+                  ?STATUS_MATCH(N2, RS2, T2),
+                  ?STATUS_MATCH(N3, RS3, T3)
+                 ] when T1 == <<>> andalso
+                        T2 /= <<>> andalso
+                        T3 /= <<>> andalso
+                        (RS2 == leader orelse RS2 == follower) andalso
+                        (RS3 == leader orelse RS3 == follower),
+                 rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
+                                              status, [<<"/">>, QQ])),
+    ok.
 format(Config) ->
     %% tests rabbit_quorum_queue:format/2
     Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),

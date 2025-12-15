@@ -746,7 +746,7 @@ handle_ra_event(QName, Leader, close_cached_segments,
 handle_ra_event(_QName, _Leader, {machine, eol}, State) ->
     {eol, [{unblock, cluster_name(State)}]}.
 
--spec close(rabbit_fifo_client:state()) -> ok.
+-spec close(state()) -> ok.
 close(#state{cached_segments = undefined}) ->
     ok;
 close(#state{cached_segments = {_, _, Flru}}) ->

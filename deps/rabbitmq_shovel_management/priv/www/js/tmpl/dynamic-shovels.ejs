@@ -247,11 +247,16 @@
                     </label>
                   </td>
                   <td>
-                    <select name="local-src-delete-after">
+                    <select name="local-src-delete-after-selector" class="controls-appearance">
                       <option value="never">Never</option>
                       <option value="queue-length">After initial length transferred</option>
-                      <option value="number">After num messages</option>
+                      <option value="local-number">After num messages</option>
                     </select>
+                  </td>
+		  <td>
+                    <div id="local-number-div" style="display: none;">
+                      <input type="text" name="local-src-delete-after"/>
+                    </div>
                   </td>
                 </tr>
                </table>

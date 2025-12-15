@@ -21,7 +21,12 @@ all() ->
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
     Config1 = rabbit_ct_helpers:run_setup_steps(Config),
-    rabbit_ct_config_schema:init_schemas(rabbitmq_mqtt, Config1).
+    case Config1 of
+        _ when is_list(Config1) ->
+            rabbit_ct_config_schema:init_schemas(rabbitmq_mqtt, Config1);
+        {skip, _} ->
+            Config1
+    end.
 
 
 end_per_suite(Config) ->
@@ -37,8 +42,13 @@ init_per_testcase(Testcase, Config) ->
                 Config1,
                 rabbit_ct_broker_helpers:setup_steps() ++
                     rabbit_ct_client_helpers:setup_steps()),
-    util:enable_plugin(Config2, rabbitmq_mqtt),
-    Config2.
+    case Config2 of
+        _ when is_list(Config2) ->
+            util:enable_plugin(Config2, rabbitmq_mqtt),
+            Config2;
+        {skip, _} ->
+            Config2
+    end.
 
 end_per_testcase(Testcase, Config) ->
     Config1 = rabbit_ct_helpers:run_steps(Config,

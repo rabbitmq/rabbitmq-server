@@ -19,7 +19,7 @@ endef
 
 DEPS = rabbit_common rabbit rabbitmq_web_dispatch
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers
-LOCAL_DEPS += xmerl ranch ssl crypto public_key
+LOCAL_DEPS += ranch ssl crypto public_key
 
 PLT_APPS += rabbitmq_cli
 

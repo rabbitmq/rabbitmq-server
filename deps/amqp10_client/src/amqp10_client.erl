@@ -449,6 +449,7 @@ parse_result(Map) ->
     Query  = maps:from_list(uri_string:dissect_query(Query0)),
     Sasl = case Query of
                #{"sasl" := "anon"} -> anon;
+               #{"sasl" := "external"} -> external;
                #{"sasl" := "plain"} when UserInfo =:= undefined orelse length(UserInfo) =:= 0 ->
                    throw(plain_sasl_missing_userinfo);
                _ ->
@@ -618,6 +619,24 @@ parse_uri_test_() ->
                   "keyfile=/etc/keyfile.key&fail_if_no_peer_cert=banana")),
      ?_assertEqual({error, plain_sasl_missing_userinfo},
                    parse_uri("amqp://my_host:9876?sasl=plain")),
+     ?_assertEqual(
+        {ok, #{address => "my_host",
+               port => 5671,
+               hostname => <<"my_host">>,
+               tls_opts => {secure_port, [{cacertfile, "/etc/cacert.pem"},
+                                           {certfile, "/etc/client.crt"},
+                                           {keyfile, "/etc/client.key"}]},
+               sasl => external}},
+        parse_uri("amqps://my_host?sasl=external&"
+                  "cacertfile=/etc/cacert.pem&"
+                  "certfile=/etc/client.crt&"
+                  "keyfile=/etc/client.key")),
+     ?_assertEqual(
+        {ok, #{address => "my_proxy",
+               port => 9876,
+               hostname => <<"my_proxy">>,
+               sasl => external}},
+        parse_uri("amqp://my_proxy:9876?sasl=external")),
      ?_assertEqual({error, path_segment_not_supported},
                    parse_uri("amqp://my_host/my_path_segment:9876"))
     ].

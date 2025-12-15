@@ -1,3 +1,7 @@
+# Force enable Elixir in all projects since
+# running dialyzer on any of them requires it
+ELIXIR = system
+
 ifeq ($(.DEFAULT_GOAL),)
 # Define default goal to `all` because this file defines some targets
 # before the inclusion of erlang.mk leading to the wrong target becoming
@@ -39,18 +43,17 @@ endif
 # We do that in this file, which is included by all projects, to ensure
 # all projects use the same versions. It avoids conflicts.
 
-dep_accept = hex 0.3.5
 dep_cowboy = hex 2.14.1
 dep_cowlib = hex 2.16.0
 dep_credentials_obfuscation = hex 3.5.0
-dep_cuttlefish = hex 3.5.0
+dep_cuttlefish = hex 3.6.0
 dep_gen_batch_server = hex 0.8.8
 dep_jose = hex 1.11.10
-dep_khepri = hex 0.17.2
+dep_khepri = hex 0.17.3
 dep_khepri_mnesia_migration = hex 0.8.0
 dep_meck = hex 1.0.0
-dep_osiris = git https://github.com/rabbitmq/osiris v1.10.0
-dep_prometheus = hex 5.1.1
+dep_osiris = git https://github.com/rabbitmq/osiris v1.10.2
+dep_prometheus = hex 6.1.1
 dep_ra = hex 2.17.1
 dep_ranch = hex 2.2.0
 dep_recon = hex 2.5.6
@@ -58,7 +61,7 @@ dep_redbug = hex 2.1.0
 dep_systemd = hex 0.6.1
 dep_thoas = hex 1.2.1
 dep_observer_cli = hex 1.8.2
-dep_seshat = hex 1.0.0
+dep_seshat = hex 1.0.1
 dep_stdout_formatter = hex 0.2.4
 dep_sysmon_handler = hex 1.3.0
 

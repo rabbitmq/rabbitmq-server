@@ -35,7 +35,6 @@ if function_exported?(Mix, :ensure_application!, 1) do
   Mix.ensure_application!(:public_key)
   Mix.ensure_application!(:runtime_tools)
   Mix.ensure_application!(:sasl)
-  Mix.ensure_application!(:xmerl)
 end
 
 defmodule TestHelper do

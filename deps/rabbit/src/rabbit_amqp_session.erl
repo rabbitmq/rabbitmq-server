@@ -373,7 +373,10 @@
 
           %% Queue actions that we will process later such that we can confirm and reject
           %% delivery IDs in ranges to reduce the number of DISPOSITION frames sent to the client.
-          stashed_rejected = [] :: [{rejected, rabbit_amqqueue:name(), [delivery_number(),...]}],
+          stashed_rejected = [] :: [{rejected,
+                                     rabbit_amqqueue:name(),
+                                     rabbit_queue_type:reject_reason(),
+                                     [delivery_number(),...]}],
           stashed_settled = [] :: [{settled, rabbit_amqqueue:name(), [delivery_number(),...]}],
           %% Classic queues that are down.
           stashed_down = []:: [rabbit_amqqueue:name()],
@@ -692,7 +695,10 @@ send_delivery_state_changes(State0 = #state{cfg = #cfg{writer_pid = Writer,
     %% Order is important:
     %% 1. Process queue rejections.
     {RejectedIds, GrantCredits0, State1} = handle_stashed_rejected(State0),
-    send_dispositions(RejectedIds, #'v1_0.rejected'{}, Writer, ChannelNum),
+    maps:foreach(fun({QNameBin, Reason}, Ids) ->
+                         Rejected = rejected(QNameBin, Reason),
+                         send_dispositions(Ids, Rejected, Writer, ChannelNum)
+                 end, RejectedIds),
     %% 2. Process queue confirmations.
     {AcceptedIds0, GrantCredits1, State2} = handle_stashed_settled(GrantCredits0, State1),
     %% 3. Process unavailable classic queues.
@@ -716,13 +722,13 @@ send_delivery_state_changes(State0 = #state{cfg = #cfg{writer_pid = Writer,
     State.
 
 handle_stashed_rejected(#state{stashed_rejected = []} = State) ->
-    {[], #{}, State};
+    {#{}, #{}, State};
 handle_stashed_rejected(#state{cfg = #cfg{max_link_credit = MaxLinkCredit},
                                stashed_rejected = Actions,
                                incoming_links = Links} = State0) ->
     {Ids, GrantCredits, Ls} =
     lists:foldl(
-      fun({rejected, _QName, Correlations}, Accum) ->
+      fun({rejected, #resource{name = QNameBin}, Reason, Correlations}, Accum) ->
               lists:foldl(
                 fun({HandleInt, DeliveryId}, {Ids0, GrantCreds0, Links0} = Acc) ->
                         case Links0 of
@@ -730,8 +736,14 @@ handle_stashed_rejected(#state{cfg = #cfg{max_link_credit = MaxLinkCredit},
                                 case maps:take(DeliveryId, U0) of
                                     {{_, Settled, _}, U} ->
                                         Ids1 = case Settled of
-                                                   true -> Ids0;
-                                                   false -> [DeliveryId | Ids0]
+                                                   true ->
+                                                       Ids0;
+                                                   false ->
+                                                       maps:update_with(
+                                                         {QNameBin, Reason},
+                                                         fun(L) -> [DeliveryId | L] end,
+                                                         [DeliveryId],
+                                                         Ids0)
                                                end,
                                         Link1 = Link0#incoming_link{incoming_unconfirmed_map = U},
                                         {Link, GrantCreds} = maybe_grant_link_credit(
@@ -745,7 +757,7 @@ handle_stashed_rejected(#state{cfg = #cfg{max_link_credit = MaxLinkCredit},
                                 Acc
                         end
                 end, Accum, Correlations)
-      end, {[], #{}, Links}, Actions),
+      end, {#{}, #{}, Links}, Actions),
 
     State = State0#state{stashed_rejected = [],
                          incoming_links = Ls},
@@ -1136,7 +1148,9 @@ handle_frame(#'v1_0.attach'{name = {utf8, NameBin} = Name,
                             handle = Handle,
                             role = Role,
                             source = Source,
-                            target = Target} = Attach,
+                            target = Target,
+                            snd_settle_mode = SndSettleMode,
+                            rcv_settle_mode = RcvSettleMode} = Attach,
              State) ->
     try
         ok = validate_attach(Attach),
@@ -1152,7 +1166,9 @@ handle_frame(#'v1_0.attach'{name = {utf8, NameBin} = Name,
                                      handle = Handle,
                                      role = ?AMQP_ROLE_RECEIVER,
                                      source = Source,
-                                     target = null};
+                                     target = null,
+                                     snd_settle_mode = SndSettleMode,
+                                     rcv_settle_mode = RcvSettleMode};
                               ?AMQP_ROLE_RECEIVER ->
                                   #'v1_0.attach'{
                                      name = Name,
@@ -1160,7 +1176,9 @@ handle_frame(#'v1_0.attach'{name = {utf8, NameBin} = Name,
                                      role = ?AMQP_ROLE_SENDER,
                                      source = null,
                                      target = Target,
-                                     initial_delivery_count = ?UINT(?INITIAL_DELIVERY_COUNT)}
+                                     initial_delivery_count = ?UINT(?INITIAL_DELIVERY_COUNT),
+                                     snd_settle_mode = SndSettleMode,
+                                     rcv_settle_mode = RcvSettleMode}
                           end,
             Detach = #'v1_0.detach'{handle = Handle,
                                     closed = true,
@@ -2110,7 +2128,7 @@ handle_queue_actions(Actions, State) ->
     lists:foldl(
       fun ({settled, _QName, _DelIds} = Action, #state{stashed_settled = As} = S) ->
               S#state{stashed_settled = [Action | As]};
-          ({rejected, _QName, _DelIds} = Action, #state{stashed_rejected = As} = S) ->
+          ({rejected, _QName, _Reason, _DelIds} = Action, #state{stashed_rejected = As} = S) ->
               S#state{stashed_rejected = [Action | As]};
           ({deliver, CTag, AckRequired, Msgs}, S0) ->
               lists:foldl(fun(Msg, S) ->
@@ -2400,7 +2418,11 @@ incoming_link_transfer(
     validate_message_size(PayloadSize, MaxMessageSize),
     rabbit_msg_size_metrics:observe(?PROTOCOL, PayloadSize),
     messages_received(Settled),
-    Mc0 = mc:init(mc_amqp, PayloadBin, #{}),
+    Mc0 = try mc:init(mc_amqp, PayloadBin, #{})
+          catch missing_amqp_message_body ->
+                    link_error(?V_1_0_AMQP_ERROR_DECODE_ERROR,
+                               "message has no body", [])
+          end,
     case lookup_target(LinkExchange, LinkRKey, Mc0, Vhost, User, PermCache0) of
         {ok, X, RoutingKeys, Mc1, PermCache} ->
             check_user_id(Mc1, User),
@@ -2456,7 +2478,7 @@ incoming_link_transfer(
                     Detach = detach(HandleInt, Link0, Err1),
                     {error, [Detach]};
                 false ->
-                    Disposition = rejected(DeliveryId, Err),
+                    Disposition = disposition_rejected(DeliveryId, Err),
                     DeliveryCount = add(DeliveryCount0, 1),
                     Credit1 = Credit0 - 1,
                     {Credit, Reply0} = maybe_grant_link_credit(
@@ -2568,11 +2590,28 @@ released(DeliveryId) ->
                         settled = true,
                         state = #'v1_0.released'{}}.
 
-rejected(DeliveryId, Error) ->
+disposition_rejected(DeliveryId, Error) ->
     #'v1_0.disposition'{role = ?AMQP_ROLE_RECEIVER,
                         first = ?UINT(DeliveryId),
                         settled = true,
                         state = #'v1_0.rejected'{error = Error}}.
+
+rejected(QNameBin, maxlen) ->
+    #'v1_0.rejected'{
+       error = #'v1_0.error'{
+                  condition = ?V_1_0_AMQP_ERROR_RESOURCE_LIMIT_EXCEEDED,
+                  description = {utf8, <<"queue '", QNameBin/binary, "' exceeded maximum length">>},
+                  info = {map,
+                          [{{symbol, <<"queue">>}, {utf8, QNameBin}},
+                           {{symbol, <<"reason">>}, {symbol, <<"maxlen">>}}]}}};
+rejected(QNameBin, down) ->
+    #'v1_0.rejected'{
+       error = #'v1_0.error'{
+                  condition = ?V_1_0_AMQP_ERROR_PRECONDITION_FAILED,
+                  description = {utf8, <<"queue '", QNameBin/binary, "' is unavailable">>},
+                  info = {map,
+                          [{{symbol, <<"queue">>}, {utf8, QNameBin}},
+                           {{symbol, <<"reason">>}, {symbol, <<"unavailable">>}}]}}}.
 
 maybe_grant_link_credit(Credit, MaxLinkCredit, DeliveryCount, NumUnconfirmed, Handle) ->
     case grant_link_credit(Credit, MaxLinkCredit, NumUnconfirmed) of

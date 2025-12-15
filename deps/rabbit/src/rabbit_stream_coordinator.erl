@@ -585,7 +585,7 @@ apply(#{index := _Idx, machine_version := MachineVersion} = Meta0,
                            State0#?MODULE{streams = Streams0#{StreamId => Stream},
                                           monitors = Monitors}, Reply, Effects)
             end;
-        Reply ->
+        {reply, Reply} ->
             return(Meta, State0, Reply, [])
     end;
 apply(Meta, {sac, SacCommand}, #?MODULE{single_active_consumer = SacState0,
@@ -1372,10 +1372,14 @@ filter_command(_Meta, {delete_replica, _, #{node := Node}}, #stream{id = StreamI
             ?LOG_WARNING(
               "~ts failed to delete replica on node ~ts for stream ~ts: refusing to delete the only replica",
               [?MODULE, Node, StreamId]),
-            {error, last_stream_member};
+            {reply, {error, last_stream_member}};
         false ->
             ok
     end;
+filter_command(_Meta, {delete_stream, _StreamId, #{}}, undefined) ->
+    %% Attempting to delete a stream which does not exist. Reply 'ok' to the
+    %% caller so that this action is idempotent.
+    {reply, ok};
 filter_command(_, _, _) ->
     ok.
 

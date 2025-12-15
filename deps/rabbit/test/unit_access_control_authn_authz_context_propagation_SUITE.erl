@@ -43,7 +43,8 @@ end_per_group(_, Config) ->
 
 init_per_testcase(Testcase, Config) ->
     AuthConfig = {rabbit, [
-      {auth_backends, [rabbit_auth_backend_context_propagation_mock]}
+      {auth_backends, [rabbit_auth_backend_context_propagation_mock]},
+      {test_auth_backends, [rabbit_auth_backend_context_propagation_mock]}
     ]
     },
     rabbit_ct_helpers:testcase_started(Config, Testcase),
@@ -82,16 +83,10 @@ propagate_context_to_auth_backend1() ->
     password = <<"guest">>,
     adapter_info = #amqp_adapter_info{additional_info = [
         {variable_map, #{<<"key1">> => <<"value1">>}}
-      ],
-      protocol = {'FOO_PROTOCOL', '1.0'} %% this will trigger a call to rabbit_foo_protocol_connection_info
+      ]
     }
   },
   {ok, Conn} = amqp_connection:start(AmqpParams),
-
-  %% rabbit_direct will call the rabbit_foo_protocol_connection_info module to extract information
-  %% this information will be propagated to the authentication backend
-  [{authentication, AuthProps}] = rabbit_auth_backend_context_propagation_mock:get(authentication),
-  ?assertEqual(<<"value1">>, proplists:get_value(key1, AuthProps)),
 
   %% variable_map is propagated from rabbit_direct to the authorization backend
   [{vhost_access, AuthzData}] = rabbit_auth_backend_context_propagation_mock:get(vhost_access),

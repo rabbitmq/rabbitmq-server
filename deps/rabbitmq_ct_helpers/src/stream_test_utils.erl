@@ -48,7 +48,13 @@ do_connect(StreamPort, PeerProperties) ->
     ok = gen_tcp:send(Sock, rabbit_stream_core:frame({response, 0, {tune, DefaultFrameMax, 0}})),
     ok = gen_tcp:send(Sock, rabbit_stream_core:frame({request, 3, {open, <<"/">>}})),
     {{response, 3, {open, _, _ConnectionProperties}}, C5} = receive_stream_commands(Sock, C4),
-    {ok, Sock, C5}.
+
+    CmdVsns = [{deliver, 1, 2}],
+    ExchCmdVsnsCmd = {exchange_command_versions, CmdVsns},
+    ok = gen_tcp:send(Sock, rabbit_stream_core:frame({request, 4, ExchCmdVsnsCmd})),
+    {{response, 4, {exchange_command_versions, 1, _Cmds}}, C6} = receive_stream_commands(Sock, C5),
+
+    {ok, Sock, C6}.
 
 close(Sock, C0) ->
     CloseReason = <<"OK">>,

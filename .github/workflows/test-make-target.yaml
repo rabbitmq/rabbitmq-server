@@ -17,7 +17,6 @@ on:
         type: boolean
       previous_version:
         required: false
-        default: 'tags/v4.0.9'
         type: string
       make_target:
         required: true
@@ -40,7 +39,7 @@ jobs:
     timeout-minutes: 60
     steps:
     - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v5
+      uses: actions/checkout@v6
       with:
         ref: ${{ inputs.ref }}
 
@@ -63,6 +62,16 @@ jobs:
         # This currently only applies to Elixir; and can be safely
         # restricted to the build jobs to avoid duplication in output.
         disable_problem_matchers: true
+
+    # We install Erlang problem matchers from ci.erlang.mk.
+    - name: CHECKOUT ERLANG PROBLEM MATCHERS
+      uses: actions/checkout@v6
+      with:
+        repository: ninenines/ci.erlang.mk
+        path: ci.erlang.mk
+
+    - name: INSTALL ERLANG PROBLEM MATCHERS
+      run: echo "::add-matcher::ci.erlang.mk/.github/matchers/erlang-matchers.json"
 
     - name: MIXED CLUSTERS - FETCH SIGNING KEYS
       uses: dsaltares/fetch-gh-release-asset@master
@@ -120,7 +129,7 @@ jobs:
 
     - name: RESTORE ACTIVEMQ FROM CACHE
       if: inputs.plugin == 'amqp10_client'
-      uses: actions/cache/restore@v4
+      uses: actions/cache/restore@v5
       id: cache-activemq-restore
       with:
         path: deps/amqp10_client/test/system_SUITE_data/apache-activemq-${{ env.ACTIVEMQ_VERSION }}-bin.tar.gz
@@ -130,10 +139,11 @@ jobs:
       if: inputs.plugin != 'rabbitmq_cli'
       run: |
         sudo netstat -ntp
-        make -C deps/${{ inputs.plugin }} ${{ inputs.make_target }} RABBITMQ_METADATA_STORE=${{ inputs.metadata_store }}
+        set -o pipefail
+        make -C deps/${{ inputs.plugin }} ${{ inputs.make_target }} RABBITMQ_METADATA_STORE=${{ inputs.metadata_store }} NON_DETERMINISTIC=1 2>&1 | sed "s/src\//deps\/${{ inputs.plugin }}\/src\//" | sed "s/test\//deps\/${{ inputs.plugin }}\/test\//" | sed "s/src\/enough\.erl:22:2:/IGNORED src\/enough.erl:22:2:/"
 
     - name: CACHE ACTIVEMQ
-      uses: actions/cache/save@v4
+      uses: actions/cache/save@v5
       if: inputs.plugin == 'amqp10_client' && steps.cache-activemq-restore.outputs.cache-hit != 'true'
       with:
         path: deps/amqp10_client/test/system_SUITE_data/apache-activemq-${{ env.ACTIVEMQ_VERSION }}-bin.tar.gz
@@ -148,7 +158,7 @@ jobs:
 
     - name: UPLOAD TEST LOGS
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: CT logs (${{ inputs.plugin }} ${{ inputs.make_target }} OTP-${{ inputs.erlang_version }} ${{ inputs.metadata_store }}${{ inputs.mixed_clusters && ' mixed' || '' }})
         path: |

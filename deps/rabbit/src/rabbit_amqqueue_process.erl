@@ -490,9 +490,7 @@ process_args_policy(State = #q{q                   = Q,
          {<<"message-ttl">>,             fun res_min/2, fun init_ttl/2},
          {<<"max-length">>,              fun res_min/2, fun init_max_length/2},
          {<<"max-length-bytes">>,        fun res_min/2, fun init_max_bytes/2},
-         {<<"overflow">>,                fun res_arg/2, fun init_overflow/2},
-         {<<"queue-mode">>,              fun res_arg/2, fun init_queue_mode/2},
-         {<<"queue-version">>,           fun res_arg/2, fun init_queue_version/2}],
+         {<<"overflow">>,                fun res_arg/2, fun init_overflow/2}],
       drop_expired_msgs(
          lists:foldl(fun({Name, Resolve, Fun}, StateN) ->
                              Fun(rabbit_queue_type_util:args_policy_lookup(Name, Resolve, Q), StateN)
@@ -542,22 +540,6 @@ init_overflow(Overflow, State) ->
         _ ->
             State#q{overflow = OverflowVal}
     end.
-
-init_queue_mode(undefined, State) ->
-    State;
-init_queue_mode(Mode, State = #q {backing_queue = BQ,
-                                  backing_queue_state = BQS}) ->
-    BQS1 = BQ:set_queue_mode(binary_to_existing_atom(Mode, utf8), BQS),
-    State#q{backing_queue_state = BQS1}.
-
-init_queue_version(Version0, State = #q {backing_queue = BQ,
-                                         backing_queue_state = BQS}) ->
-    Version = case Version0 of
-        undefined -> 2;
-        _ -> Version0
-    end,
-    BQS1 = BQ:set_queue_version(Version, BQS),
-    State#q{backing_queue_state = BQS1}.
 
 reply(Reply, NewState) ->
     {NewState1, Timeout} = next_state(NewState),
@@ -923,16 +905,32 @@ ack(AckTags, ChPid, State) ->
                           State1#q{backing_queue_state = BQS1}
                   end).
 
-requeue(AckTags, ChPid, State) ->
+requeue(AckTags, DelFailed, ChPid, State) ->
     subtract_acks(ChPid, AckTags, State,
-                  fun (State1) -> requeue_and_run(AckTags, false, State1) end).
+                  fun (State1) -> requeue_and_run(AckTags, DelFailed, false, State1) end).
+
+discard(AckTags, DelFailed, ChPid, State) ->
+    with_dlx(
+      State#q.dlx,
+      fun (X) -> subtract_acks(ChPid, AckTags, State,
+                               fun (State1) ->
+                                       dead_letter_rejected_msgs(
+                                         AckTags, DelFailed, X, State1)
+                               end) end,
+      fun () -> rabbit_global_counters:messages_dead_lettered(rejected, rabbit_classic_queue,
+                                                              disabled, length(AckTags)),
+                ack(AckTags, ChPid, State) end).
+
+requeue_and_run(AckTags, ActiveConsumersChanged, State) ->
+    requeue_and_run(AckTags, true, ActiveConsumersChanged, State).
 
 requeue_and_run(AckTags,
+                DelFailed,
                 ActiveConsumersChanged,
                 #q{backing_queue = BQ,
                    backing_queue_state = BQS0} = State0) ->
     WasEmpty = BQ:is_empty(BQS0),
-    {_MsgIds, BQS} = BQ:requeue(AckTags, BQS0),
+    {_MsgIds, BQS} = BQ:requeue(AckTags, DelFailed, BQS0),
     State1 = State0#q{backing_queue_state = BQS},
     {_Dropped, State2} = maybe_drop_head(State1),
     State3 = drop_expired_msgs(State2),
@@ -1097,11 +1095,11 @@ dead_letter_expired_msgs(ExpirePred, X, State = #q{backing_queue = BQ}) ->
                              BQ:fetchwhile(ExpirePred, DLFun, Acc, BQS1)
                      end, expired, X, State).
 
-dead_letter_rejected_msgs(AckTags, X,  State = #q{backing_queue = BQ}) ->
+dead_letter_rejected_msgs(AckTags, DelFailed, X,  State = #q{backing_queue = BQ}) ->
     {ok, State1} =
         dead_letter_msgs(
           fun (DLFun, Acc, BQS) ->
-                  {Acc1, BQS1} = BQ:ackfold(DLFun, Acc, BQS, AckTags),
+                  {Acc1, BQS1} = BQ:ackfold(DLFun, Acc, BQS, AckTags, DelFailed),
                   {ok, Acc1, BQS1}
           end, rejected, X, State),
     State1.
@@ -1276,7 +1274,8 @@ prioritise_cast(Msg, _Len, State) ->
         delete_immediately                   -> 8;
         {delete_exclusive, _Pid}             -> 8;
         {run_backing_queue, _Mod, _Fun}      -> 6;
-        {ack, _AckTags, _ChPid}              -> 4; %% [1]
+        {ack, _AckTags, _ChPid}              -> 4; %% [1] %% @todo Remove when 'rabbitmq_4.3.0' FF is required.
+        {complete, _AckTags, _ChPid}         -> 4; %% [1]
         {resume, _ChPid}                     -> 3;
         {notify_sent, _ChPid, _Credit}       -> consumer_bias(State, 0, 2);
         _                                    -> 0
@@ -1484,11 +1483,7 @@ handle_call(purge, _From, State = #q{backing_queue       = BQ,
                                      backing_queue_state = BQS}) ->
     {Count, BQS1} = BQ:purge(BQS),
     State1 = State#q{backing_queue_state = BQS1},
-    reply({ok, Count}, notify_decorators_if_became_empty(Count =:= 0, State1));
-
-handle_call({requeue, AckTags, ChPid}, From, State) ->
-    gen_server2:reply(From, ok),
-    noreply(requeue(AckTags, ChPid, State)).
+    reply({ok, Count}, notify_decorators_if_became_empty(Count =:= 0, State1)).
 
 new_single_active_consumer_after_basic_cancel(ChPid, ConsumerTag, CurrentSingleActiveConsumer,
             _SingleActiveConsumerIsOn = true, Consumers) ->
@@ -1549,23 +1544,28 @@ handle_cast({deliver,
     State1 = State#q{senders = Senders1},
     noreply(maybe_deliver_or_enqueue(Delivery, Delivered, State1));
 
+%% Compat for RabbitMQ 4.2. @todo Remove when 'rabbitmq_4.3.0' FF is required.
 handle_cast({ack, AckTags, ChPid}, State) ->
+    handle_cast({complete, AckTags, ChPid}, State);
+handle_cast({reject, true, AckTags, ChPid}, State) ->
+    handle_cast({requeue, AckTags, ChPid}, State);
+handle_cast({reject, false, AckTags, ChPid}, State) ->
+    handle_cast({discard, AckTags, ChPid}, State);
+
+handle_cast({complete, AckTags, ChPid}, State) ->
     noreply(ack(AckTags, ChPid, State));
 
-handle_cast({reject, true,  AckTags, ChPid}, State) ->
-    noreply(requeue(AckTags, ChPid, State));
+handle_cast({requeue, AckTags, ChPid}, State) ->
+    noreply(requeue(AckTags, false, ChPid, State));
 
-handle_cast({reject, false, AckTags, ChPid}, State) ->
-    noreply(with_dlx(
-              State#q.dlx,
-              fun (X) -> subtract_acks(ChPid, AckTags, State,
-                                       fun (State1) ->
-                                               dead_letter_rejected_msgs(
-                                                 AckTags, X, State1)
-                                       end) end,
-              fun () -> rabbit_global_counters:messages_dead_lettered(rejected, rabbit_classic_queue,
-                                                                      disabled, length(AckTags)),
-                        ack(AckTags, ChPid, State) end));
+handle_cast({discard, AckTags, ChPid}, State) ->
+    noreply(discard(AckTags, true, ChPid, State));
+
+handle_cast({modify, AckTags, DelFailed, false, _Anns, ChPid}, State) ->
+    noreply(requeue(AckTags, DelFailed, ChPid, State));
+
+handle_cast({modify, AckTags, DelFailed, true, _Anns, ChPid}, State) ->
+    noreply(discard(AckTags, DelFailed, ChPid, State));
 
 handle_cast({delete_exclusive, ConnPid}, State) ->
     log_delete_exclusive(ConnPid, State),

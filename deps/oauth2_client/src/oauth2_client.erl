@@ -403,15 +403,23 @@ lookup_root_oauth_provider() ->
 extract_ssl_options_as_list(Map) ->
     {Verify, CaCerts, CaCertFile} = case get_verify_or_peer_verification(Map, verify_peer) of
         verify_peer ->
-            case maps:get(cacertfile, Map, undefined) of
-                undefined ->
-                    case public_key:cacerts_get() of
-                        [] -> {verify_none, undefined, undefined};
-                        Certs -> {verify_peer, Certs, undefined}
+            case {maps:get(cacerts, Map, undefined), maps:get(cacertfile, Map, undefined)} of
+                {undefined, undefined} ->
+                    try public_key:cacerts_get() of
+                        [] ->
+                            {verify_none, undefined, undefined};
+                        Certs ->
+                            {verify_peer, Certs, undefined}
+                    catch _ ->
+                        {verify_none, undefined, undefined}
                     end;
-                CaCert -> {verify_peer, undefined, CaCert}
+                {CaCerts0, undefined} ->
+                    {verify_peer, CaCerts0, undefined};
+                {undefined, CaCertFile0} ->
+                    {verify_peer, undefined, CaCertFile0}
             end;
-        verify_none -> {verify_none, undefined, undefined}
+        verify_none ->
+            {verify_none, undefined, undefined}
     end,
     [ {verify, Verify} ]
     ++

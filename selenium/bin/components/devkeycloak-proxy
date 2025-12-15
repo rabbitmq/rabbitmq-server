@@ -1,5 +1,6 @@
+#!/usr/bin/env bash
 
-HTTPD_DOCKER_IMAGE=httpd:latest
+HTTPD_DOCKER_IMAGE=${HTTPD_DOCKER_IMAGE:-httpd:latest}
 
 ensure_devkeycloak-proxy() {
   if docker ps | grep devkeycloak-proxy &> /dev/null; then

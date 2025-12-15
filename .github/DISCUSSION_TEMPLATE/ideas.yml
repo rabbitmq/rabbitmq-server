@@ -16,8 +16,8 @@ body:
     attributes:
       label: RabbitMQ series
       options:
-        - 4.0.x
         - 4.1.x
+        - 4.2.x
     validations:
       required: true
   - type: input

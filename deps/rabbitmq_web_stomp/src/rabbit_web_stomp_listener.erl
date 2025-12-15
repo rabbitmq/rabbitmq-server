@@ -54,8 +54,8 @@ init() ->
     ok.
 
 stop(State) ->
-    _ = rabbit_networking:stop_ranch_listener_of_protocol(?TCP_PROTOCOL),
-    _ = rabbit_networking:stop_ranch_listener_of_protocol(?TLS_PROTOCOL),
+    rabbit_networking:stop_ranch_listeners_of_protocol(?TCP_PROTOCOL),
+    rabbit_networking:stop_ranch_listeners_of_protocol(?TLS_PROTOCOL),
     State.
 
 -spec list_connections() -> [pid()].
@@ -77,11 +77,12 @@ close_all_client_connections(Reason) ->
 %%
 
 connection_pids_of_protocol(Protocol) ->
-    case rabbit_networking:ranch_ref_of_protocol(Protocol) of
-        undefined   -> [];
-        AcceptorRef ->
-            lists:map(fun cowboy_ws_connection_pid/1, ranch:procs(AcceptorRef, connections))
-    end.
+    Refs = rabbit_networking:ranch_refs_of_protocol(Protocol),
+    lists:foldl(
+      fun(Ref, Acc) ->
+              Procs = lists:map(fun cowboy_ws_connection_pid/1, ranch:procs(Ref, connections)),
+              Acc ++ Procs
+      end, [], Refs).
 
 -spec cowboy_ws_connection_pid(pid()) -> pid().
 cowboy_ws_connection_pid(RanchConnPid) ->
