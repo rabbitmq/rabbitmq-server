@@ -10,3 +10,4 @@ mgt/limits.sh
 mgt/amqp10-connections.sh
 mgt/mqtt-connections.sh
 mgt/feature-flags.sh
+authnz-mgt/multi-oauth-with-basic-auth.sh

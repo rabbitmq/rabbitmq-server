@@ -39,8 +39,9 @@ class CaptureScreenshot {
     const screenshotsSubDir = path.join(screenshotsDir, this.test)
     if (!fs.existsSync(screenshotsSubDir)) {
       await fsp.mkdir(screenshotsSubDir)
-    }
+    }    
     const dest = path.join(screenshotsSubDir, name + '.png')
+    console.log("screenshot saved to " + dest)
     await fsp.writeFile(dest, image, 'base64')
   }
 }
@@ -122,8 +123,31 @@ module.exports = {
     return d.driver.get(d.baseUrl)
   },
 
-  goToLogin: (d, token) => {
-    return d.driver.get(d.baseUrl + '#/login?access_token=' + token)
+  /**
+   * For instance, 
+   * goToLogin(d, access_token, myAccessToken)
+   * or 
+   * goToLogin(d, preferred_auth_mechanism, "oauth2:my-resource")
+   */
+  goToLogin: (d, ...keyValuePairs) => {
+    const params = [];
+    for (let i = 0; i < keyValuePairs.length; i += 2) {
+        const key = keyValuePairs[i];
+        const value = keyValuePairs[i + 1];
+        
+        if (key !== undefined) {
+            // URL-encode both key and value
+            const encodedKey = encodeURIComponent(key);
+            const encodedValue = encodeURIComponent(value || '');
+            params.push(`${encodedKey}=${encodedValue}`);
+        }
+    }    
+    // Build query string: "key1=value1&key2=value2"
+    const queryString = params.join('&');
+    
+    const url = d.baseUrl + '/login?' + queryString;
+    console.log("Navigating to " + url);
+    return d.driver.get(url);
   },
 
   goToConnections: (d) => {
@@ -263,8 +287,15 @@ module.exports = {
           && actualOption.text == expectedOptions[i].text))
     }
   },
+  findOption: (value, options) => {
+    for (let i = 0; i < options.length; i++) {
+      if (options[i].value === value) return options[i];
+    }
+    return undefined;
+  },
 
   teardown: async (d, test, captureScreen = null) => {
+    
     driver = d.driver
     driver.manage().logs().get(logging.Type.BROWSER).then(function(entries) {
         entries.forEach(function(entry) {
@@ -274,8 +305,11 @@ module.exports = {
     if (test.currentTest) {
       if (test.currentTest.isPassed()) {
         driver.executeScript('lambda-status=passed')
-      } else {
-        if (captureScreen != null) await captureScreen.shot('after-failed')
+      } else {        
+        if (captureScreen != null) {
+          console.log("Teardown failed . capture...");
+          await captureScreen.shot('after-failed');
+        }
         driver.executeScript('lambda-status=failed')
       }
     }
