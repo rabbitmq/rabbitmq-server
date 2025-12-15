@@ -14,5 +14,7 @@
 
 -define(MANAGEMENT_DEFAULT_HTTP_MAX_BODY_SIZE, 20000000).
 
--define(OAUTH2_ACCESS_TOKEN_COOKIE_NAME, <<"access_token">>).
--define(OAUTH2_ACCESS_TOKEN_COOKIE_PATH, <<"js/oidc-oauth/bootstrap.js">>).
+-define(OAUTH2_ACCESS_TOKEN,                        <<"access_token">>).
+-define(OAUTH2_BOOTSTRAP_PATH,                      <<"js/oidc-oauth/bootstrap.js">>).
+-define(MANAGEMENT_LOGIN_STRICT_AUTH_MECHANISM,     <<"strict_auth_mechanism">>).
+-define(MANAGEMENT_LOGIN_PREFERRED_AUTH_MECHANISM,  <<"preferred_auth_mechanism">>).

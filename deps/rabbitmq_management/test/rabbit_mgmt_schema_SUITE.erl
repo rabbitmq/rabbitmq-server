@@ -19,7 +19,8 @@ all() ->
         test_invalid_endpoint_params,
         test_translate_endpoint_params,
         test_with_one_resource_server,
-        test_with_many_resource_servers
+        test_with_many_resource_servers,
+        test_preserve_order_when_using_many_resource_servers
     ].
 
 
@@ -47,26 +48,61 @@ test_with_one_resource_server(_) ->
     ],
     #{
         <<"rabbitmq1">> := [
+            {index, 1},
             {id, <<"rabbitmq1">>}
         ]
     } = translate_oauth_resource_servers(Conf).
 
 test_with_many_resource_servers(_) ->
-    Conf = [
+    Conf = lists:reverse([  %% cuttlefish reverse the order. So calling lists:reverse simulates cuttlefish
         {["management","oauth_resource_servers","keycloak","label"],"Keycloak"},
         {["management","oauth_resource_servers","uaa","label"],"Uaa"}
-    ],
+    ]),
     #{
         <<"keycloak">> := [
+            {index, 1},
             {label, <<"Keycloak">>},
             {id, <<"keycloak">>}
         ],
         <<"uaa">> := [
+            {index, 2},
             {label, <<"Uaa">>},
             {id, <<"uaa">>}
         ]
     } = translate_oauth_resource_servers(Conf).
 
+test_preserve_order_when_using_many_resource_servers(_) ->
+    Conf = lists:reverse([
+        {["management","oauth_resource_servers","uaa","label"],"Uaa"},
+        {["management","oauth_resource_servers","uaa","oauth_client_id"],"uaa-client"},
+        {["management","oauth_resource_servers","spring","label"],"Spring"},
+        {["management","oauth_resource_servers","spring","oauth_client_id"],"spring-client"},
+        {["management","oauth_resource_servers","keycloak","label"],"Keycloak"},
+        {["management","oauth_resource_servers","keycloak","oauth_client_id"],"keycloak-client"}
+    ]),
+    SortByIndex = fun({_, A}, {_, B}) -> 
+        proplists:get_value(index, A) =< proplists:get_value(index, B) end,
+
+    [
+        {<<"uaa">>, [
+            {index, 1},
+            {label, <<"Uaa">>},
+            {oauth_client_id, <<"uaa-client">>},
+            {id, <<"uaa">>}
+        ]},
+        {<<"spring">>, [
+            {index, 2},
+            {label, <<"Spring">>},
+            {oauth_client_id, <<"spring-client">>},
+            {id, <<"spring">>}            
+        ]},
+        {<<"keycloak">>, [
+            {index, 3},
+            {label, <<"Keycloak">>},
+            {oauth_client_id, <<"keycloak-client">>},
+            {id, <<"keycloak">>}            
+        ]}
+     ] = lists:sort(SortByIndex, maps:to_list(translate_oauth_resource_servers(Conf))).
 
 cert_filename(Conf) ->
     string:concat(?config(data_dir, Conf), "certs/cert.pem").

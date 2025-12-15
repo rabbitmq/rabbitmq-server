@@ -193,16 +193,24 @@ function oauth_initialize_user_manager(resource_server) {
     });
 
 }
+
 export function oauth_initialize(authSettings) {
     authSettings = auth_settings_apply_defaults(authSettings);
     let oauth = {
       "logged_in": false,
       "enabled" : authSettings.oauth_enabled,
       "resource_servers" : authSettings.resource_servers,
-      "oauth_disable_basic_auth" : authSettings.oauth_disable_basic_auth
+      "oauth_disable_basic_auth" : authSettings.oauth_disable_basic_auth,
     }
     if (!oauth.enabled) return oauth;
-
+    
+    if (authSettings.resource_servers.length > 1 || !authSettings.oauth_disable_basic_auth) {
+      if (authSettings.strict_auth_mechanism) {
+        oauth["strict_auth_mechanism"] = authSettings.strict_auth_mechanism;
+      }else if (authSettings.preferred_auth_mechanism) {
+        oauth["preferred_auth_mechanism"] = authSettings.preferred_auth_mechanism;
+      }
+    }
     let resource_server = null;
 
     if (oauth.resource_servers.length == 1) {
@@ -392,11 +400,12 @@ export function hasAnyResourceServerReady(oauth, onReadyCallback) {
             warnings.push(warningMessageOAuthResources(url, notCompliantResources, " not compliant"))
           }
         }
-        oauth.declared_resource_servers_count = oauth.resource_servers.length
+        oauth.declared_resource_servers_count = oauth.resource_servers.length;
         oauth.resource_servers = oauth.resource_servers.filter((resource) =>
-          !notReadyServers.includes(resource.oauth_provider_url) && !notCompliantServers.includes(resource.oauth_provider_url))
+          !notReadyServers.includes(resource.oauth_provider_url) && !notCompliantServers.includes(resource.oauth_provider_url));
+        oauth.resource_servers.sort((a, b) => a.index - b.index);
 
-          onReadyCallback(oauth, warnings)
+        onReadyCallback(oauth, warnings)
 
       })
   }else {
