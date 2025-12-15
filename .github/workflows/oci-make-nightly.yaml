@@ -81,7 +81,7 @@ jobs:
           ref: ${{ matrix.branch }}
 
       - name: Download package-generic-unix
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: package-generic-unix-otp${{ matrix.otp_version }}-${{ matrix.branch }}
           path: PACKAGES
