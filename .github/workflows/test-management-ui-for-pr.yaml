@@ -69,7 +69,7 @@ jobs:
         
     - name: Upload Test Artifacts
       if: ${{ failure() && steps.tests.outcome == 'failed' }}
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       env: 
           SELENIUM_ARTIFACTS: ${{ steps.tests.outputs.SELENIUM_ARTIFACTS }}
       with:
