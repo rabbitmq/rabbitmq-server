@@ -639,8 +639,7 @@ amqp_amqpl(_Config) ->
 
     %% validate content is serialisable
     _ = rabbit_binary_generator:build_simple_content_frames(1, Content,
-                                                            1000000,
-                                                            rabbit_framing_amqp_0_9_1),
+                                                            1000000),
 
     ok.
 
