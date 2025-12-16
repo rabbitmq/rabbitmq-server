@@ -44,6 +44,7 @@
 
 -spec start_link(start_link_args()) -> {'ok', pid(), {pid(), any()}}.
 
+%% @todo Don't need this Protocol anymore.
 start_link({tcp, Sock, Channel, FrameMax, ReaderPid, ConnName, Protocol, User,
             VHost, Capabilities, Collector}) ->
     {ok, SupPid} = supervisor:start_link(
@@ -63,7 +64,7 @@ start_link({tcp, Sock, Channel, FrameMax, ReaderPid, ConnName, Protocol, User,
                   type => worker,
                   modules => [rabbit_channel]},
     {ok, ChannelPid} = supervisor:start_child(SupPid, ChildSpec),
-    {ok, AState} = rabbit_command_assembler:init(Protocol),
+    {ok, AState} = rabbit_command_assembler:init(),
     {ok, SupPid, {ChannelPid, AState}};
 start_link({direct, Channel, ClientChannelPid, ConnPid, ConnName, Protocol,
             User, VHost, Capabilities, Collector, AmqpParams}) ->

@@ -858,8 +858,7 @@ send(Command, #ch{cfg = #conf{writer_pid = WriterPid}}) ->
 format_soft_error(#amqp_error{name = N, explanation = E, method = M}) ->
     io_lib:format("operation ~ts caused a channel exception ~ts: ~ts", [M, N, E]).
 
-handle_exception(Reason, State = #ch{cfg = #conf{protocol = Protocol,
-                                                 channel = Channel,
+handle_exception(Reason, State = #ch{cfg = #conf{channel = Channel,
                                                  writer_pid = WriterPid,
                                                  reader_pid = ReaderPid,
                                                  conn_pid = ConnPid,
@@ -869,7 +868,7 @@ handle_exception(Reason, State = #ch{cfg = #conf{protocol = Protocol,
                                                 }}) ->
     %% something bad's happened: notify_queues may not be 'ok'
     {_Result, State1} = notify_queues(State),
-    case rabbit_binary_generator:map_exception(Channel, Reason, Protocol) of
+    case rabbit_binary_generator:map_exception(Channel, Reason) of
         {Channel, CloseMethod} ->
             ?LOG_ERROR(
                 "Channel error on connection ~tp (~ts, vhost: '~ts',"

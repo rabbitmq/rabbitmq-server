@@ -1566,7 +1566,7 @@ auth_fail(Username, Msg, Args, AuthName,
                         "logfile.", [AuthName]),
             AmqpError1 = AmqpError#amqp_error{explanation = SafeMsg},
             {0, CloseMethod} = rabbit_binary_generator:map_exception(
-                                 0, AmqpError1, Protocol),
+                                 0, AmqpError1),
             ok = send_on_channel0(State#v1.sock, CloseMethod, Protocol);
         _ -> ok
     end,
@@ -1713,9 +1713,10 @@ respond_and_close(State, Channel, Protocol, Reason, LogErr) ->
     log_hard_error(State, Channel, LogErr),
     send_error_on_channel0_and_close(Channel, Protocol, Reason, State).
 
+%% @todo Don't need Protocol.
 send_error_on_channel0_and_close(Channel, Protocol, Reason, State) ->
     {0, CloseMethod} =
-        rabbit_binary_generator:map_exception(Channel, Reason, Protocol),
+        rabbit_binary_generator:map_exception(Channel, Reason),
     State1 = close_connection(terminate_channels(State)),
     ok = send_on_channel0(State#v1.sock, CloseMethod, Protocol),
     State1.

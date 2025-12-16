@@ -324,17 +324,18 @@ call(Pid, Msg) ->
 
 %%---------------------------------------------------------------------------
 
-assemble_frame(Channel, MethodRecord, Protocol) ->
+%% @todo Don't need Protocol probably (problem of being an amqp_client dep, careful).
+assemble_frame(Channel, MethodRecord, _Protocol) ->
     rabbit_binary_generator:build_simple_method_frame(
-      Channel, MethodRecord, Protocol).
+      Channel, MethodRecord).
 
-assemble_frames(Channel, MethodRecord, Content, FrameMax, Protocol) ->
+assemble_frames(Channel, MethodRecord, Content, FrameMax, _Protocol) ->
     MethodName = rabbit_misc:method_record_type(MethodRecord),
     true = Protocol:method_has_content(MethodName), % assertion
     MethodFrame = rabbit_binary_generator:build_simple_method_frame(
-                    Channel, MethodRecord, Protocol),
+                    Channel, MethodRecord),
     ContentFrames = rabbit_binary_generator:build_simple_content_frames(
-                      Channel, Content, FrameMax, Protocol),
+                      Channel, Content, FrameMax),
     [MethodFrame | ContentFrames].
 
 tcp_send(Sock, Data) ->
