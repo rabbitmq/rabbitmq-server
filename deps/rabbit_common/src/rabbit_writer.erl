@@ -331,7 +331,7 @@ assemble_frame(Channel, MethodRecord, _Protocol) ->
 
 assemble_frames(Channel, MethodRecord, Content, FrameMax, _Protocol) ->
     MethodName = rabbit_misc:method_record_type(MethodRecord),
-    true = Protocol:method_has_content(MethodName), % assertion
+    true = rabbit_framing_amqp_0_9_1:method_has_content(MethodName), % assertion
     MethodFrame = rabbit_binary_generator:build_simple_method_frame(
                     Channel, MethodRecord),
     ContentFrames = rabbit_binary_generator:build_simple_content_frames(
