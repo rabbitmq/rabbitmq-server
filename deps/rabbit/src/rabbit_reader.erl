@@ -1028,16 +1028,16 @@ clean_up_all_channels(State) ->
 %%--------------------------------------------------------------------------
 
 handle_frame(Type, 0, Payload,
-             State = #v1{connection = #connection{protocol = Protocol}})
+             State = #v1{connection = #connection{}})
   when ?IS_STOPPING(State) ->
-    case rabbit_command_assembler:analyze_frame(Type, Payload, Protocol) of
+    case rabbit_command_assembler:analyze_frame(Type, Payload) of
         {method, MethodName, FieldsBin} ->
             handle_method0(MethodName, FieldsBin, State);
         _Other -> State
     end;
 handle_frame(Type, 0, Payload,
-             State = #v1{connection = #connection{protocol = Protocol}}) ->
-    case rabbit_command_assembler:analyze_frame(Type, Payload, Protocol) of
+             State = #v1{connection = #connection{}}) ->
+    case rabbit_command_assembler:analyze_frame(Type, Payload) of
         error     -> frame_error(unknown_frame, Type, 0, Payload, State);
         heartbeat -> State;
         {method, MethodName, FieldsBin} ->
@@ -1045,9 +1045,9 @@ handle_frame(Type, 0, Payload,
         _Other    -> unexpected_frame(Type, 0, Payload, State)
     end;
 handle_frame(Type, Channel, Payload,
-             State = #v1{connection = #connection{protocol = Protocol}})
+             State = #v1{connection = #connection{}})
   when ?IS_RUNNING(State) ->
-    case rabbit_command_assembler:analyze_frame(Type, Payload, Protocol) of
+    case rabbit_command_assembler:analyze_frame(Type, Payload) of
         error     -> frame_error(unknown_frame, Type, Channel, Payload, State);
         heartbeat -> unexpected_frame(Type, Channel, Payload, State);
         Frame     -> process_frame(Frame, Channel, State)
@@ -1202,9 +1202,9 @@ ensure_stats_timer(State) ->
 %%--------------------------------------------------------------------------
 
 handle_method0(MethodName, FieldsBin,
-               State = #v1{connection = #connection{protocol = Protocol}}) ->
+               State = #v1{connection = #connection{}}) ->
     try
-        handle_method0(Protocol:decode_method_fields(MethodName, FieldsBin),
+        handle_method0(rabbit_framing_amqp_0_9_1:decode_method_fields(MethodName, FieldsBin),
                        State)
     catch throw:{inet_error, E} when E =:= closed; E =:= enotconn ->
             maybe_emit_stats(State),

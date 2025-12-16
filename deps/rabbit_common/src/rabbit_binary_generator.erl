@@ -10,54 +10,52 @@
 -include("rabbit.hrl").
 -include_lib("kernel/include/logger.hrl").
 
--export([build_simple_method_frame/3,
-         build_simple_content_frames/4,
+-export([build_simple_method_frame/2,
+         build_simple_content_frames/3,
          build_heartbeat_frame/0]).
 -export([generate_table/1]).
 -export([check_empty_frame_size/0]).
--export([ensure_content_encoded/2, clear_encoded_content/1]).
--export([map_exception/3]).
+-export([ensure_content_encoded/1, clear_encoded_content/1]).
+-export([map_exception/2]).
 
 %%----------------------------------------------------------------------------
 
 -type frame() :: [binary()].
 
 -spec build_simple_method_frame
-        (rabbit_types:channel_number(), rabbit_framing:amqp_method_record(),
-         rabbit_types:protocol()) ->
+        (rabbit_types:channel_number(), rabbit_framing:amqp_method_record()) ->
             frame().
 -spec build_simple_content_frames
         (rabbit_types:channel_number(), rabbit_types:content(),
-         non_neg_integer(), rabbit_types:protocol()) ->
+         non_neg_integer()) ->
             [frame()].
 -spec build_heartbeat_frame() -> frame().
 -spec generate_table(rabbit_framing:amqp_table()) -> binary().
 -spec check_empty_frame_size() -> 'ok'.
 -spec ensure_content_encoded
-        (rabbit_types:content(), rabbit_types:protocol()) ->
+        (rabbit_types:content()) ->
             rabbit_types:encoded_content().
 -spec clear_encoded_content
         (rabbit_types:content()) ->
             rabbit_types:unencoded_content().
 -spec map_exception
-        (rabbit_types:channel_number(), rabbit_types:amqp_error() | any(),
-         rabbit_types:protocol()) ->
+        (rabbit_types:channel_number(), rabbit_types:amqp_error() | any()) ->
             {rabbit_types:channel_number(),
              rabbit_framing:amqp_method_record()}.
 
 %%----------------------------------------------------------------------------
 
-build_simple_method_frame(ChannelInt, MethodRecord, Protocol) ->
-    MethodFields = Protocol:encode_method_fields(MethodRecord),
+build_simple_method_frame(ChannelInt, MethodRecord) ->
+    MethodFields = rabbit_framing_amqp_0_9_1:encode_method_fields(MethodRecord),
     MethodName = rabbit_misc:method_record_type(MethodRecord),
-    {ClassId, MethodId} = Protocol:method_id(MethodName),
+    {ClassId, MethodId} = rabbit_framing_amqp_0_9_1:method_id(MethodName),
     create_frame(1, ChannelInt, [<<ClassId:16, MethodId:16>>, MethodFields]).
 
-build_simple_content_frames(ChannelInt, Content, FrameMax, Protocol) ->
+build_simple_content_frames(ChannelInt, Content, FrameMax) ->
     #content{class_id = ClassId,
              properties_bin = ContentPropertiesBin,
              payload_fragments_rev = PayloadFragmentsRev} =
-        ensure_content_encoded(Content, Protocol),
+        ensure_content_encoded(Content),
     {BodySize, ContentFrames} =
         build_content_frames(PayloadFragmentsRev, FrameMax, ChannelInt),
     HeaderFrame = create_frame(2, ChannelInt,
@@ -168,25 +166,14 @@ check_empty_frame_size() ->
                                    ComputedSize, ?EMPTY_FRAME_SIZE})
     end.
 
-ensure_content_encoded(Content = #content{properties_bin = PropBin,
-                                          protocol = Protocol}, Protocol)
+ensure_content_encoded(Content = #content{properties_bin = PropBin})
   when PropBin =/= none ->
     Content;
-ensure_content_encoded(Content = #content{properties = none,
-                                          properties_bin = PropBin,
-                                          protocol = Protocol}, Protocol1)
-  when PropBin =/= none ->
-    Props = Protocol:decode_properties(Content#content.class_id, PropBin),
-    Content#content{properties = Props,
-                    properties_bin = Protocol1:encode_properties(Props),
-                    protocol = Protocol1};
-ensure_content_encoded(Content = #content{properties = Props}, Protocol)
+ensure_content_encoded(Content = #content{properties = Props})
   when Props =/= none ->
-    Content#content{properties_bin = Protocol:encode_properties(Props),
-                    protocol = Protocol}.
+    Content#content{properties_bin = rabbit_framing_amqp_0_9_1:encode_properties(Props)}.
 
-clear_encoded_content(Content = #content{properties_bin = none,
-                                         protocol = none}) ->
+clear_encoded_content(Content = #content{properties_bin = none}) ->
     Content;
 clear_encoded_content(Content = #content{properties = none}) ->
     %% Only clear when we can rebuild the properties_bin later in
@@ -194,16 +181,16 @@ clear_encoded_content(Content = #content{properties = none}) ->
     %% one of properties and properties_bin can be 'none'
     Content;
 clear_encoded_content(Content = #content{}) ->
-    Content#content{properties_bin = none, protocol = none}.
+    Content#content{properties_bin = none}.
 
 %% NB: this function is also used by the Erlang client
-map_exception(Channel, Reason, Protocol) ->
+map_exception(Channel, Reason) ->
     {SuggestedClose, ReplyCode, ReplyText, FailedMethod} =
-        lookup_amqp_exception(Reason, Protocol),
+        lookup_amqp_exception(Reason),
     {ClassId, MethodId} = case FailedMethod of
                               {_, _} -> FailedMethod;
                               none   -> {0, 0};
-                              _      -> Protocol:method_id(FailedMethod)
+                              _      -> rabbit_framing_amqp_0_9_1:method_id(FailedMethod)
                           end,
     case SuggestedClose orelse (Channel == 0) of
         true  -> {0, #'connection.close'{reply_code = ReplyCode,
@@ -218,14 +205,13 @@ map_exception(Channel, Reason, Protocol) ->
 
 lookup_amqp_exception(#amqp_error{name        = Name,
                                   explanation = Expl,
-                                  method      = Method},
-                      Protocol) ->
-    {ShouldClose, Code, Text} = Protocol:lookup_amqp_exception(Name),
+                                  method      = Method}) ->
+    {ShouldClose, Code, Text} = rabbit_framing_amqp_0_9_1:lookup_amqp_exception(Name),
     ExplBin = amqp_exception_explanation(Text, Expl),
     {ShouldClose, Code, ExplBin, Method};
-lookup_amqp_exception(Other, Protocol) ->
+lookup_amqp_exception(Other) ->
     ?LOG_WARNING("Non-AMQP exit reason '~tp'", [Other]),
-    {ShouldClose, Code, Text} = Protocol:lookup_amqp_exception(internal_error),
+    {ShouldClose, Code, Text} = rabbit_framing_amqp_0_9_1:lookup_amqp_exception(internal_error),
     {ShouldClose, Code, Text, none}.
 
 amqp_exception_explanation(Text, Expl) ->

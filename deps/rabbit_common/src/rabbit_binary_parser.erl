@@ -140,10 +140,9 @@ parse_array(<<$V, Rest/binary>>) ->
 ensure_content_decoded(Content = #content{properties = Props})
   when Props =/= none ->
     Content;
-ensure_content_decoded(Content = #content{properties_bin = PropBin,
-                                          protocol = Protocol})
+ensure_content_decoded(Content = #content{properties_bin = PropBin})
   when PropBin =/= none ->
-    Content#content{properties = Protocol:decode_properties(
+    Content#content{properties = rabbit_framing_amqp_0_9_1:decode_properties(
                                    Content#content.class_id, PropBin)}.
 
 clear_decoded_content(Content = #content{properties = none}) ->

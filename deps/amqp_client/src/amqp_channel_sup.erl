@@ -75,7 +75,7 @@ start_writer(Sup, network, [Sock, FrameMax], ConnName, ChNumber, ChPid) ->
     supervisor:start_child(Sup, ChildSpec).
 
 init_command_assembler(direct)  -> {ok, none};
-init_command_assembler(network) -> rabbit_command_assembler:init(?PROTOCOL).
+init_command_assembler(network) -> rabbit_command_assembler:init().
 
 %%---------------------------------------------------------------------------
 %% supervisor callbacks
