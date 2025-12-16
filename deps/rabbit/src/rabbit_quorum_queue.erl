@@ -2087,25 +2087,34 @@ force_shrink_member_to_current_member(VHost, Name) ->
     end.
 
 force_vhost_queues_shrink_member_to_current_member(VHost) when is_binary(VHost) ->
-    force_vhost_queues_shrink_member_to_current_member(VHost, <<".*">>).
+    ?LOG_WARNING("Shrinking all quorum queues in vhost '~ts' to a single node: ~ts",
+        [VHost, node()]),
+    ListQQFun = fun() -> rabbit_amqqueue:list(VHost) end,
+    force_all_queues_shrink_member_to_current_member(ListQQFun, _MatchFun = fun(_) -> true end).
 
 force_vhost_queues_shrink_member_to_current_member(VHost, QueueSpec)
   when is_binary(VHost), is_binary(QueueSpec) ->
     ?LOG_WARNING("Shrinking all quorum queues matching '~ts' in vhost '~ts' to a single node: ~ts",
         [QueueSpec, VHost, node()]),
-    ListQQs = fun() -> rabbit_amqqueue:list(VHost) end,
-    force_all_queues_shrink_member_to_current_member(ListQQs, QueueSpec).
+    ListQQFun = fun() -> rabbit_amqqueue:list(VHost) end,
+    MatchFun = fun(Q) -> is_match(get_resource_name(amqqueue:get_name(Q)), QueueSpec) end,
+    force_all_queues_shrink_member_to_current_member(ListQQFun, MatchFun).
 
 force_all_queues_shrink_member_to_current_member() ->
-    force_all_queues_shrink_member_to_current_member(<<".*">>).
+    ?LOG_WARNING("Shrinking all quorum queues matching to a single node: ~ts",
+        [node()]),
+    ListQQFun = fun() -> rabbit_amqqueue:list() end,
+    force_all_queues_shrink_member_to_current_member(ListQQFun, _MatchFun = fun(_) -> true end).
 
 force_all_queues_shrink_member_to_current_member(QueueSpec) when is_binary(QueueSpec) ->
     ?LOG_WARNING("Shrinking all quorum queues matching '~ts' to a single node: ~ts",
         [QueueSpec, node()]),
-    ListQQs = fun() -> rabbit_amqqueue:list() end,
-    force_all_queues_shrink_member_to_current_member(ListQQs, QueueSpec).
+    ListQQFun = fun() -> rabbit_amqqueue:list() end,
+    MatchFun = fun(Q) -> is_match(get_resource_name(amqqueue:get_name(Q)), QueueSpec) end,
+    force_all_queues_shrink_member_to_current_member(ListQQFun, MatchFun).
 
-force_all_queues_shrink_member_to_current_member(ListQQFun, QueueSpec) when is_function(ListQQFun) ->
+force_all_queues_shrink_member_to_current_member(ListQQFun, MatchFun)
+  when is_function(ListQQFun), is_function(MatchFun) ->
     Node = node(),
     _ = [begin
              QName = amqqueue:get_name(Q),
@@ -2122,7 +2131,7 @@ force_all_queues_shrink_member_to_current_member(ListQQFun, QueueSpec) when is_f
              _ = [ra:force_delete_server(?RA_SYSTEM, {RaName, N}) || N <- OtherNodes]
          end || Q <- ListQQFun(),
                 amqqueue:get_type(Q) == ?MODULE,
-                is_match(get_resource_name(amqqueue:get_name(Q)), QueueSpec)],
+                MatchFun(Q)],
     ?LOG_WARNING("Shrinking finished"),
     ok.
 
