@@ -28,7 +28,7 @@
 
 -include("rabbit.hrl").
 -include_lib("kernel/include/logger.hrl").
--export([start/6, start_link/6, start/7, start_link/7, start/8, start_link/8]).
+-export([start_link/6, start_link/7]).
 
 -export([init/1,
          handle_call/3,
@@ -42,7 +42,7 @@
          send_command_and_notify/4, send_command_and_notify/5,
          send_command_flow/2, send_command_flow/3,
          flush/1]).
--export([internal_send_command/4, internal_send_command/6]).
+-export([internal_send_command/3]).
 -export([msg_size/1, maybe_gc_large_msg/1, maybe_gc_large_msg/2]).
 
 -record(wstate, {
@@ -52,8 +52,6 @@
     channel,
     %% connection-negotiated frame_max setting
     frame_max,
-    %% see #connection.protocol in rabbit_reader
-    protocol,
     %% connection (rabbit_reader) process
     reader,
     %% statistics emission timer
@@ -71,34 +69,14 @@
 
 %%---------------------------------------------------------------------------
 
--spec start
-        (rabbit_net:socket(), rabbit_types:channel_number(),
-         non_neg_integer(), rabbit_types:protocol(), pid(),
-         rabbit_types:proc_name()) ->
-            rabbit_types:ok(pid()).
 -spec start_link
         (rabbit_net:socket(), rabbit_types:channel_number(),
-         non_neg_integer(), rabbit_types:protocol(), pid(),
-         rabbit_types:proc_name()) ->
-            rabbit_types:ok(pid()).
--spec start
-        (rabbit_net:socket(), rabbit_types:channel_number(),
-         non_neg_integer(), rabbit_types:protocol(), pid(),
+         non_neg_integer(), pid(),
          rabbit_types:proc_name(), boolean()) ->
             rabbit_types:ok(pid()).
 -spec start_link
         (rabbit_net:socket(), rabbit_types:channel_number(),
-         non_neg_integer(), rabbit_types:protocol(), pid(),
-         rabbit_types:proc_name(), boolean()) ->
-            rabbit_types:ok(pid()).
--spec start
-        (rabbit_net:socket(), rabbit_types:channel_number(),
-         non_neg_integer(), rabbit_types:protocol(), pid(),
-         rabbit_types:proc_name(), boolean(), undefined|non_neg_integer()) ->
-            rabbit_types:ok(pid()).
--spec start_link
-        (rabbit_net:socket(), rabbit_types:channel_number(),
-         non_neg_integer(), rabbit_types:protocol(), pid(),
+         non_neg_integer(), pid(),
          rabbit_types:proc_name(), boolean(), undefined|non_neg_integer()) ->
             rabbit_types:ok(pid()).
 
@@ -123,12 +101,7 @@
 -spec flush(pid()) -> 'ok'.
 -spec internal_send_command
         (rabbit_net:socket(), rabbit_types:channel_number(),
-         rabbit_framing:amqp_method_record(), rabbit_types:protocol()) ->
-            'ok'.
--spec internal_send_command
-        (rabbit_net:socket(), rabbit_types:channel_number(),
-         rabbit_framing:amqp_method_record(), rabbit_types:content(),
-         non_neg_integer(), rabbit_types:protocol()) ->
+         rabbit_framing:amqp_method_record()) ->
             'ok'.
 
 -spec msg_size
@@ -142,44 +115,25 @@
 
 %%---------------------------------------------------------------------------
 
-start(Sock, Channel, FrameMax, Protocol, ReaderPid, Identity) ->
-    start(Sock, Channel, FrameMax, Protocol, ReaderPid, Identity, false).
-
-start_link(Sock, Channel, FrameMax, Protocol, ReaderPid, Identity) ->
-    start_link(Sock, Channel, FrameMax, Protocol, ReaderPid, Identity, false).
-
-start(Sock, Channel, FrameMax, Protocol, ReaderPid, Identity,
-      ReaderWantsStats) ->
-    start(Sock, Channel, FrameMax, Protocol, ReaderPid, Identity,
-          ReaderWantsStats, ?DEFAULT_GC_THRESHOLD).
-
-start_link(Sock, Channel, FrameMax, Protocol, ReaderPid, Identity,
+start_link(Sock, Channel, FrameMax, ReaderPid, Identity,
            ReaderWantsStats) ->
-    start_link(Sock, Channel, FrameMax, Protocol, ReaderPid, Identity,
+    start_link(Sock, Channel, FrameMax, ReaderPid, Identity,
                ReaderWantsStats, ?DEFAULT_GC_THRESHOLD).
 
-start(Sock, Channel, FrameMax, Protocol, ReaderPid, Identity,
-      ReaderWantsStats, GCThreshold) ->
-    State = initial_state(Sock, Channel, FrameMax, Protocol, ReaderPid,
-                          ReaderWantsStats, GCThreshold),
-    Options = [{hibernate_after, ?HIBERNATE_AFTER}],
-    gen_server:start(?MODULE, [Identity, State], Options).
-
-start_link(Sock, Channel, FrameMax, Protocol, ReaderPid, Identity,
+start_link(Sock, Channel, FrameMax, ReaderPid, Identity,
            ReaderWantsStats, GCThreshold) ->
-    State = initial_state(Sock, Channel, FrameMax, Protocol, ReaderPid,
+    State = initial_state(Sock, Channel, FrameMax, ReaderPid,
                           ReaderWantsStats, GCThreshold),
     Options = [{hibernate_after, ?HIBERNATE_AFTER}],
     gen_server:start_link(?MODULE, [Identity, State], Options).
 
-initial_state(Sock, Channel, FrameMax, Protocol, ReaderPid, ReaderWantsStats, GCThreshold) ->
+initial_state(Sock, Channel, FrameMax, ReaderPid, ReaderWantsStats, GCThreshold) ->
     (case ReaderWantsStats of
          true  -> fun rabbit_event:init_stats_timer/2;
          false -> fun rabbit_event:init_disabled_stats_timer/2
      end)(#wstate{sock         = Sock,
                   channel      = Channel,
                   frame_max    = FrameMax,
-                  protocol     = Protocol,
                   reader       = ReaderPid,
                   pending      = [],
                   writer_gc_threshold = GCThreshold},
@@ -324,48 +278,38 @@ call(Pid, Msg) ->
 
 %%---------------------------------------------------------------------------
 
-assemble_frame(Channel, MethodRecord, Protocol) ->
+assemble_frame(Channel, MethodRecord) ->
     rabbit_binary_generator:build_simple_method_frame(
-      Channel, MethodRecord, Protocol).
+      Channel, MethodRecord).
 
-assemble_frames(Channel, MethodRecord, Content, FrameMax, Protocol) ->
+assemble_frames(Channel, MethodRecord, Content, FrameMax) ->
     MethodName = rabbit_misc:method_record_type(MethodRecord),
-    true = Protocol:method_has_content(MethodName), % assertion
+    true = rabbit_framing_amqp_0_9_1:method_has_content(MethodName), % assertion
     MethodFrame = rabbit_binary_generator:build_simple_method_frame(
-                    Channel, MethodRecord, Protocol),
+                    Channel, MethodRecord),
     ContentFrames = rabbit_binary_generator:build_simple_content_frames(
-                      Channel, Content, FrameMax, Protocol),
+                      Channel, Content, FrameMax),
     [MethodFrame | ContentFrames].
 
 tcp_send(Sock, Data) ->
     rabbit_misc:throw_on_error(inet_error,
                                fun () -> rabbit_net:send(Sock, Data) end).
 
-internal_send_command(Sock, Channel, MethodRecord, Protocol) ->
-    ok = tcp_send(Sock, assemble_frame(Channel, MethodRecord, Protocol)).
-
-internal_send_command(Sock, Channel, MethodRecord, Content, FrameMax,
-                      Protocol) ->
-    ok = lists:foldl(fun (Frame,     ok) -> tcp_send(Sock, Frame);
-                         (_Frame, Other) -> Other
-                     end, ok, assemble_frames(Channel, MethodRecord,
-                                              Content, FrameMax, Protocol)).
+internal_send_command(Sock, Channel, MethodRecord) ->
+    ok = tcp_send(Sock, assemble_frame(Channel, MethodRecord)).
 
 internal_send_command_async(MethodRecord,
                             State = #wstate{channel   = Channel,
-                                            protocol  = Protocol,
                                             pending   = Pending}) ->
-    Frame = assemble_frame(Channel, MethodRecord, Protocol),
+    Frame = assemble_frame(Channel, MethodRecord),
     maybe_flush(State#wstate{pending = [Frame | Pending]}).
 
 internal_send_command_async(MethodRecord, Content,
                             State = #wstate{channel      = Channel,
                                             frame_max    = FrameMax,
-                                            protocol     = Protocol,
                                             pending      = Pending,
                                             writer_gc_threshold = GCThreshold}) ->
-    Frames = assemble_frames(Channel, MethodRecord, Content, FrameMax,
-                             Protocol),
+    Frames = assemble_frames(Channel, MethodRecord, Content, FrameMax),
     _ = maybe_gc_large_msg(Content, GCThreshold),
     maybe_flush(State#wstate{pending = [Frames | Pending]}).
 

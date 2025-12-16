@@ -182,6 +182,9 @@
     do_restart_broker/0
   ]).
 
+%% @todo Remove release after LTS after 4.3.
+-dialyzer({nowarn_function, [test_channel/0]}).
+
 -define(DEFAULT_USER, "guest").
 -define(NODE_START_ATTEMPTS, 3).
 
@@ -2456,9 +2459,17 @@ test_channel() ->
     Me = self(),
     Writer = spawn(fun () -> test_writer(Me) end),
     {ok, Limiter} = rabbit_limiter:start_link(no_id),
-    {ok, Ch} = rabbit_channel:start_link(
-                 1, Me, Writer, Me, "", rabbit_framing_amqp_0_9_1,
-                 user(<<"guest">>), <<"/">>, [], Me, Limiter),
+    {ok, Ch} = case erlang:function_exported(rabbit_channel, start_link, 12) of
+        %% @todo Remove release after LTS after 4.3.
+        true ->
+            rabbit_channel:start_link(
+                         1, Me, Writer, Me, "", rabbit_framing_amqp_0_9_1,
+                         user(<<"guest">>), <<"/">>, [], Me, Limiter);
+        false ->
+            rabbit_channel:start_link(
+                         1, Me, Writer, Me, "",
+                         user(<<"guest">>), <<"/">>, [], Me, Limiter)
+    end,
     {Writer, Limiter, Ch}.
 
 test_writer(Pid) ->

@@ -927,7 +927,7 @@ is_connection_method(Method) ->
     ?PROTOCOL:lookup_class_name(ClassId) == connection.
 
 server_misbehaved(#amqp_error{} = AmqpError, State = #state{number = Number}) ->
-    case rabbit_binary_generator:map_exception(Number, AmqpError, ?PROTOCOL) of
+    case rabbit_binary_generator:map_exception(Number, AmqpError) of
         {0, _} ->
             handle_shutdown({server_misbehaved, AmqpError}, State);
         {_, Close} ->

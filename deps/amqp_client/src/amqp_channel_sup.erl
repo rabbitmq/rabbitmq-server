@@ -51,6 +51,10 @@ start_link(Type, Connection, ConnName, InfraArgs, ChNumber,
 
 start_writer(_Sup, direct, [ConnPid, Node, User, VHost, Collector, AmqpParams],
              ConnName, ChNumber, ChPid) ->
+    %% @todo We must use rabbit_direct:start_channel/10 for compatibility.
+    %%       But the protocol argument is ignored on new nodes.
+    %%       At some point it can be removed as all nodes 4.3+ have
+    %%       rabbit_direct:start_channel/9 as well.
     case rpc:call(Node, rabbit_direct, start_channel,
                [ChNumber, ChPid, ConnPid, ConnName, ?PROTOCOL, User,
                 VHost, ?CLIENT_CAPABILITIES, Collector, AmqpParams], ?DIRECT_OPERATION_TIMEOUT) of
@@ -64,7 +68,7 @@ start_writer(_Sup, direct, [ConnPid, Node, User, VHost, Collector, AmqpParams],
 start_writer(Sup, network, [Sock, FrameMax], ConnName, ChNumber, ChPid) ->
     GCThreshold = application:get_env(amqp_client, writer_gc_threshold, ?DEFAULT_GC_THRESHOLD),
     StartMFA = {rabbit_writer, start_link,
-                [Sock, ChNumber, FrameMax, ?PROTOCOL, ChPid,
+                [Sock, ChNumber, FrameMax, ChPid,
                  {ConnName, ChNumber}, false, GCThreshold]},
     ChildSpec = #{id => writer,
                   start => StartMFA,
@@ -75,7 +79,7 @@ start_writer(Sup, network, [Sock, FrameMax], ConnName, ChNumber, ChPid) ->
     supervisor:start_child(Sup, ChildSpec).
 
 init_command_assembler(direct)  -> {ok, none};
-init_command_assembler(network) -> rabbit_command_assembler:init(?PROTOCOL).
+init_command_assembler(network) -> rabbit_command_assembler:init().
 
 %%---------------------------------------------------------------------------
 %% supervisor callbacks

@@ -482,10 +482,10 @@ encrypt_decrypt_term(_Config) ->
 frame_encoding_does_not_fail_with_empty_binary_payload(_Config) ->
     [begin
          Content = #content{
-             class_id = 60, properties = none, properties_bin = <<0,0>>, protocol = rabbit_framing_amqp_0_9_1,
+             class_id = 60, properties = none, properties_bin = <<0,0>>,
              payload_fragments_rev = P
          },
-         ExpectedFrames = rabbit_binary_generator:build_simple_content_frames(1, Content, 0, rabbit_framing_amqp_0_9_1)
+         ExpectedFrames = rabbit_binary_generator:build_simple_content_frames(1, Content, 0)
      end || {P, ExpectedFrames} <- [
                     {[], [[<<2,0,1,0,0,0,14>>,[<<0,60,0,0,0,0,0,0,0,0,0,0>>,<<0,0>>],206]]},
                     {[<<>>], [[<<2,0,1,0,0,0,14>>,[<<0,60,0,0,0,0,0,0,0,0,0,0>>,<<0,0>>],206]]},
@@ -497,15 +497,13 @@ frame_encoding_does_not_fail_with_empty_binary_payload(_Config) ->
 map_exception_does_not_fail_with_unicode_explaination_case1(_Config) ->
     NonAsciiExplaination = "no queue 'non_ascii_name_😍_你好' in vhost '/'",
     rabbit_binary_generator:map_exception(0,
-        #amqp_error{name = not_found, explanation = NonAsciiExplaination, method = 'queue.declare'},
-        rabbit_framing_amqp_0_9_1),
+        #amqp_error{name = not_found, explanation = NonAsciiExplaination, method = 'queue.declare'}),
     ok.
 
 map_exception_does_not_fail_with_unicode_explaination_case2(_Config) ->
     NonAsciiExplaination = "no queue 'кролик 🐰' in vhost '/'",
     rabbit_binary_generator:map_exception(0,
-        #amqp_error{name = not_found, explanation = NonAsciiExplaination, method = 'queue.declare'},
-        rabbit_framing_amqp_0_9_1),
+        #amqp_error{name = not_found, explanation = NonAsciiExplaination, method = 'queue.declare'}),
     ok.
 
 amqp_table_conversion(_Config) ->
