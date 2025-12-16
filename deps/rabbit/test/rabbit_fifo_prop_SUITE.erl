@@ -1952,11 +1952,13 @@ msg_gen() ->
                                    routing_keys = [<<>>],
                                    content =
                                    #content{payload_fragments_rev = [Bin],
-                                            properties = #'P_basic'{}}}))).
+                                            properties = #'P_basic'{},
+                                            properties_bin = none}}))).
 
 msg(Bin) when is_binary(Bin) ->
     #basic_message{content = #content{payload_fragments_rev = [Bin],
-                                      properties = #'P_basic'{}}}.
+                                      properties = #'P_basic'{},
+                                      properties_bin = none}}.
 
 checkout_cancel_gen(Pid) ->
     {checkout, Pid, cancel}.
