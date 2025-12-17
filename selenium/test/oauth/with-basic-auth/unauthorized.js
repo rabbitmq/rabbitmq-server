@@ -7,6 +7,7 @@ const SSOHomePage = require('../../pageobjects/SSOHomePage')
 const OverviewPage = require('../../pageobjects/OverviewPage')
 
 describe('An user without management tag', function () {
+  let driver
   let homePage
   let idpLogin
   let overview

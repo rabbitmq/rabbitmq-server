@@ -11,6 +11,7 @@ const VhostsAdminTab = require('../pageobjects/VhostsAdminTab')
 const VhostAdminTab = require('../pageobjects/VhostAdminTab')
 
 describe('Virtual Hosts in Admin tab', function () {
+  let driver
   let login
   let overview
   let captureScreen

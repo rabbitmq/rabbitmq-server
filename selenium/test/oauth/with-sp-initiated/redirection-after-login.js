@@ -8,6 +8,7 @@ const UAALoginPage = require('../../pageobjects/UAALoginPage')
 const ExchangesPage = require('../../pageobjects/ExchangesPage')
 
 describe('A user which accesses a protected URL without a session', function () {
+  let driver 
   let homePage
   let idpLogin
   let exchanges

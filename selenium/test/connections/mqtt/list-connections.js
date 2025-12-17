@@ -10,6 +10,7 @@ const ConnectionsPage = require('../../pageobjects/ConnectionsPage');
 
 
 describe('List MQTT connections', function () {
+  let driver
   let login
   let overview
   let captureScreen

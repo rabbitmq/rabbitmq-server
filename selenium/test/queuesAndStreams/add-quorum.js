@@ -10,10 +10,10 @@ const QueuePage = require('../pageobjects/QueuePage')
 const StreamPage = require('../pageobjects/StreamPage')
 
 describe('Quorum queues', function () {
+  let driver
   let login
   let queuesAndStreams
-  let queue
-  let stream
+  let queuePage
   let overview
   let captureScreen
 
@@ -23,8 +23,7 @@ describe('Quorum queues', function () {
     login = new LoginPage(driver)
     overview = new OverviewPage(driver)
     queuesAndStreams = new QueuesAndStreamsPage(driver)
-    queue = new QueuePage(driver)
-    stream = new StreamPage(driver)
+    queuePage = new QueuePage(driver)
     captureScreen = captureScreensFor(driver, __filename)
 
     await login.login('management', 'guest')
@@ -50,14 +49,14 @@ describe('Quorum queues', function () {
     assert.equal(table[0][4], 'running')
 
     await queuesAndStreams.clickOnQueue("%2F", queueName)
-    await queue.isLoaded()
-    assert.equal(queueName, await queue.getName())
+    await queuePage.isLoaded()
+    assert.equal(queueName, await queuePage.getName())
      
   })
 
   after(async function () {
-    await queue.ensureDeleteQueueSectionIsVisible()
-    await queue.deleteQueue()
+    await queuePage.ensureDeleteQueueSectionIsVisible()
+    await queuePage.deleteQueue()
 
     await teardown(driver, this, captureScreen)
   })

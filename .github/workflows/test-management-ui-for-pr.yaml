@@ -74,5 +74,10 @@ jobs:
           SELENIUM_ARTIFACTS: ${{ steps.tests.outputs.SELENIUM_ARTIFACTS }}
       with:
         name: test-artifacts-${{ matrix.browser }}-${{ matrix.erlang_version }}
+<<<<<<< HEAD
         path: |
           $SELENIUM_ARTIFACTS/*
+=======
+        path: ${{ env.SELENIUM_ARTIFACTS }}/*
+ 
+>>>>>>> d189b51a4 (Explicitily declare driver in the describe context)

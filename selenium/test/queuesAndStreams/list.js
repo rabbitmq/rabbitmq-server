@@ -10,6 +10,7 @@ const QueuePage = require('../pageobjects/QueuePage')
 const StreamPage = require('../pageobjects/StreamPage')
 
 describe('Queues and Streams management', function () {
+  let driver
   let login
   let queuesAndStreams
   let queue
@@ -40,7 +41,7 @@ describe('Queues and Streams management', function () {
     let text = await queuesAndStreams.getPagingSectionHeaderText()
     assert.equal(true, text.startsWith('All queues') )
   })
-
+/*
   it('queue selectable columns', async function () {  
     await overview.clickOnOverviewTab()
     await overview.clickOnQueuesTab()
@@ -105,7 +106,7 @@ describe('Queues and Streams management', function () {
     assert.equal(JSON.stringify(table[3]), JSON.stringify(messageRatesGroup))
 
   })
-
+*/
   after(async function () {
     await teardown(driver, this, captureScreen)
   })

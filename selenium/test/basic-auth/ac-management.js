@@ -9,7 +9,7 @@ const AdminTab = require('../pageobjects/AdminTab')
 const LimitsAdminTab = require('../pageobjects/LimitsAdminTab')
 
 describe('management user with vhosts permissions', function () {
-  let homePage
+  let driver
   let captureScreen
 
   before(async function () {

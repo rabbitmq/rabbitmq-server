@@ -1,7 +1,11 @@
 const { By, Key, until, Builder } = require('selenium-webdriver')
 require('chromedriver')
 const assert = require('assert')
+<<<<<<< HEAD
 const { buildDriver, goToHome, captureScreensFor, teardown, findTableRow, doUntil } = require('../utils')
+=======
+const { buildDriver, goToHome, captureScreensFor, teardown } = require('../utils')
+>>>>>>> d189b51a4 (Explicitily declare driver in the describe context)
 
 const LoginPage = require('../pageobjects/LoginPage')
 const OverviewPage = require('../pageobjects/OverviewPage')
@@ -9,6 +13,7 @@ const AdminTab = require('../pageobjects/AdminTab')
 const FeatureFlagsAdminTab = require('../pageobjects/FeatureFlagsAdminTab')
 
 describe('Feature flags in Admin tab', function () {
+  let driver
   let login
   let overview
   let ffTab

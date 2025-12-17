@@ -13,8 +13,12 @@ const ConnectionsPage = require('../pageobjects/ConnectionsPage');
 
 
 describe('Given a mqtt 5.0 connection with a qos 0 subscription with zero sessionExpiryInterval', function () {
+  let driver
   let login
+<<<<<<< HEAD:selenium/test/queuesAndStreams/view-mqtt-qos.js
   let queuesAndStreamsPage
+=======
+>>>>>>> d189b51a4 (Explicitily declare driver in the describe context):selenium/test/queuesAndStreams/view-mqtt-qos0.js
   let queuePage
   let overview
   let captureScreen
