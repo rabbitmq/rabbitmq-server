@@ -11,6 +11,9 @@ on:
       - 'scripts/**'
       - 'selenium/**'
       - .github/workflows/test-management-ui.yaml
+  pull_request:
+    paths:  # Run full suite on demand on a PR by touching .github/workflows/test-management-ui-for-pr.yaml 
+      - .github/workflows/test-management-ui-for-pr.yaml
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}

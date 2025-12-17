@@ -7,6 +7,7 @@ const SSOHomePage = require('../../pageobjects/SSOHomePage')
 const OverviewPage = require('../../pageobjects/OverviewPage')
 
 describe('When basic authentication is enabled but UAA is down', function () {
+  let driver
   let homePage
   let overview
   let captureScreen

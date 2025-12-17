@@ -7,8 +7,7 @@ const LoginPage = require('../pageobjects/LoginPage')
 const OverviewPage = require('../pageobjects/OverviewPage')
 
 describe('An user without management tag', function () {
-  let homePage
-  let idpLogin
+  let driver
   let overview
   let captureScreen
 

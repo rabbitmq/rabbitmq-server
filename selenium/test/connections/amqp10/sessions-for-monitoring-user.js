@@ -24,7 +24,8 @@ onceAmqp('sendable', function (context) {
 })
 
 
-describe('Given an amqp10 connection opened, listed and clicked on it', function () {  
+describe('Given an amqp10 connection opened, listed and clicked on it', function () {
+  let driver
   let captureScreen
   let connectionsPage
   let connectionPage

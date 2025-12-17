@@ -1,16 +1,15 @@
 const { By, Key, until, Builder } = require('selenium-webdriver')
 require('chromedriver')
 const assert = require('assert')
-const { buildDriver, goToLogin, goToHome, captureScreensFor, teardown } = require('../../utils')
+const { buildDriver, goToHome, captureScreensFor, teardown } = require('../../utils')
 
 const OverviewPage = require('../../pageobjects/OverviewPage')
 
 describe('A user with a JWT token', function () {
+  let driver
   let overview
   let captureScreen
-  let token
-  let fakePortal
-
+  
   before(async function () {
     driver = buildDriver()
     overview = new OverviewPage(driver)

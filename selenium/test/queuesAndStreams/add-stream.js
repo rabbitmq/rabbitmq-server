@@ -10,10 +10,11 @@ const QueuePage = require('../pageobjects/QueuePage')
 const StreamPage = require('../pageobjects/StreamPage')
 
 describe('Streams', function () {
+  let driver
   let login
   let queuesAndStreams
   let queue
-  let stream
+  let streamPage
   let overview
   let captureScreen
 
@@ -23,8 +24,7 @@ describe('Streams', function () {
     login = new LoginPage(driver)
     overview = new OverviewPage(driver)
     queuesAndStreams = new QueuesAndStreamsPage(driver)
-    queue = new QueuePage(driver)
-    stream = new StreamPage(driver)
+    streamPage = new StreamPage(driver)
     captureScreen = captureScreensFor(driver, __filename)
 
     await login.login('management', 'guest')
@@ -50,15 +50,15 @@ describe('Streams', function () {
      assert.equal(table[0][4], 'running')
  
      await queuesAndStreams.clickOnQueue("%2F", queueName)
-     await stream.isLoaded()
-     assert.equal(queueName, await stream.getName())
+     await streamPage.isLoaded()
+     assert.equal(queueName, await streamPage.getName())
       
    })
  
 
   after(async function () {
-    await stream.ensureDeleteQueueSectionIsVisible()
-    await stream.deleteStream()
+    await streamPage.ensureDeleteQueueSectionIsVisible()
+    await streamPage.deleteStream()
 
     await teardown(driver, this, captureScreen)
   })

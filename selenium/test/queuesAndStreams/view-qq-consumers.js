@@ -14,6 +14,7 @@ const StreamPage = require('../pageobjects/StreamPage')
 
 
 describe('Given a quorum queue configured with SAC', function () {
+  let driver
   let login
   let queuesAndStreams
   let queuePage

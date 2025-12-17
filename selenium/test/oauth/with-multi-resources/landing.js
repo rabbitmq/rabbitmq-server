@@ -6,6 +6,7 @@ const { buildDriver, goToHome, captureScreensFor, teardown } = require('../../ut
 const SSOHomePage = require('../../pageobjects/SSOHomePage')
 
 describe('A user which accesses any protected URL without a session', function () {
+  let driver
   let homePage
   let captureScreen
 
