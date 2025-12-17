@@ -7,6 +7,7 @@ const FakePortalPage = require('../../pageobjects/FakePortalPage')
 const SSOHomePage = require('../../pageobjects/SSOHomePage')
 
 describe('A user which accesses any protected URL without a session', function () {
+  let driver
   let homePage
   let fakePortal
   let captureScreen

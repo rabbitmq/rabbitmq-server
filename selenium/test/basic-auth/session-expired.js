@@ -7,8 +7,7 @@ const LoginPage = require('../pageobjects/LoginPage')
 const OverviewPage = require('../pageobjects/OverviewPage')
 
 describe('Once user is logged in', function () {
-  let homePage
-  let idpLogin
+  let driver
   let overview
   let captureScreen
   this.timeout(65000) // hard-coded to 25secs because this test requires 35sec to run

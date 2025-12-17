@@ -9,11 +9,12 @@ const KeycloakLoginPage = require('../../pageobjects/KeycloakLoginPage')
 const OverviewPage = require('../../pageobjects/OverviewPage')
 
 describe('Once user is logged in', function () {
+  let driver
   let homePage
   let idpLogin
   let overview
   let captureScreen
-  let driver
+  
   this.timeout(45000) // hard-coded to 25secs because this test requires 35sec to run
 
   before(async function () {

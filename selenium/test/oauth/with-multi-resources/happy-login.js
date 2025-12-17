@@ -8,6 +8,7 @@ const OverviewPage = require('../../pageobjects/OverviewPage')
 const FakePortalPage = require('../../pageobjects/FakePortalPage')
 
 describe('When there two OAuth resources', function () {
+  let driver
   let homePage
   let idpLogin
   let overview

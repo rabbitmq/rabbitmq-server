@@ -7,12 +7,12 @@ const SSOHomePage = require('../../pageobjects/SSOHomePage')
 const OverviewPage = require('../../pageobjects/OverviewPage')
 
 describe('When a logged in user', function () {
+  let driver 
   let overview
   let homePage
   let captureScreen
   let idpLogin
-  let driver 
-
+  
   before(async function () {
     driver = buildDriver()
     await goToHome(driver)
