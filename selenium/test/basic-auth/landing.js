@@ -6,7 +6,7 @@ const { buildDriver, goToHome, captureScreensFor, teardown } = require('../utils
 const LoginPage = require('../pageobjects/LoginPage')
 
 describe('A management user without vhost permissions', function () {
-  let homePage
+  let driver
   let captureScreen
 
   before(async function () {

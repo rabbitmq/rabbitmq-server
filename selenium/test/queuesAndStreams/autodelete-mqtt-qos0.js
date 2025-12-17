@@ -13,6 +13,7 @@ const ConnectionsPage = require('../pageobjects/ConnectionsPage');
 
 
 describe('Given an MQTT 5.0 connection with a qos 0 subscription with zero sessionExpiryInterval', function () {
+  let driver
   let login
   let queuesAndStreamsPage
   let queuePage

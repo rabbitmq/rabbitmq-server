@@ -1,13 +1,14 @@
 const { By, Key, until, Builder } = require('selenium-webdriver')
 require('chromedriver')
 const assert = require('assert')
-const { buildDriver, goToLogin, tokenFor, captureScreensFor, teardown, delay } = require('../../utils')
+const { buildDriver, captureScreensFor, teardown, delay } = require('../../utils')
 
 const OverviewPage = require('../../pageobjects/OverviewPage')
 const SSOHomePage = require('../../pageobjects/SSOHomePage')
 const FakePortalPage = require('../../pageobjects/FakePortalPage')
 
 describe('Once user logs in with its own token', function () {
+  let driver
   let overview
   let homePage
   let fakePortal
