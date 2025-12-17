@@ -17,9 +17,9 @@
 %% in the client-side of the management ui.
 %% This endpoint only accepts GET method.
 %%
-%% It can work in conjunction with the /api/login endpoint. If the users are
+%% It can work in conjunction with the /login endpoint. If the users are
 %% redirected to the home page of the management ui, and eventually to this endpoint,
-%% via the /api/login endpoint is very likely that the request carries a cookie.
+%% via the /login endpoint is very likely that the request carries a cookie.
 %% It can be the <<"access_token">> cookie or the cookies <<"strict_auth_mechanism">>
 %% or <<"preferred_auth_mechanism">>.
 %% These cookies are consumed by this endpoint and removed afterwards.
@@ -29,7 +29,7 @@
 %% But not via request parameters. If this endpoint would have accepted request parameters,
 %% it would have to use the "Referer" header to extract the original request parameters.
 %% It is possible that in some environments, these headers may be dropped before they reach this endpoint.
-%% Therefore, users who can only use request parameters, they have to use the /api/login
+%% Therefore, users who can only use request parameters, they have to use the /login
 %% endpoint instead.
 
 init(Req0, State) ->
@@ -51,12 +51,15 @@ bootstrap_oauth(Req0, State) ->
 
 enrich_oauth_settings(Req0, AuthSettings) ->
     {Req1, Auth} = get_auth_mechanism(Req0),
-    ValidAuth = validate_auth_mechanism(Auth, AuthSettings),
-    case ValidAuth of
-        {preferred_auth_mechanism, Args} -> {Req1, [{preferred_auth_mechanism, Args} | AuthSettings]};
-        {strict_auth_mechanism, Args} -> {Req1, [{strict_auth_mechanism, Args} | AuthSettings]};
-        {error, Reason} -> ?LOG_DEBUG("~p", [Reason]),
-                           {Req1, AuthSettings}
+    case Auth of 
+        undefined -> {Req0, AuthSettings};
+        _ ->
+            ValidAuth = validate_auth_mechanism(Auth, AuthSettings),
+            case ValidAuth of
+                {preferred_auth_mechanism, Args} -> {Req1, [{preferred_auth_mechanism, Args} | AuthSettings]};
+                {strict_auth_mechanism, Args} -> {Req1, [{strict_auth_mechanism, Args} | AuthSettings]};
+                {error, _Reason} -> {Req1, AuthSettings}
+            end
     end.
 get_auth_mechanism(Req) ->
     case get_auth_mechanism_from_cookies(Req) of
@@ -97,8 +100,7 @@ validate_auth_mechanism({Type, <<"oauth2:", Id/binary>>}, AuthSettings) ->
     end;
 validate_auth_mechanism({Type, <<"basic">>}, _AuthSettings) ->
     {Type, [{type, <<"basic">>}]};
-validate_auth_mechanism({_, _}, _AuthSettings) -> {error, unknown_auth_mechanism};
-validate_auth_mechanism(_, _) -> {error, unknown_auth_mechanism}.
+validate_auth_mechanism({_, _}, _AuthSettings) -> {error, unknown_auth_mechanism}.
 
 set_oauth_settings(AuthSettings) ->
     JsonAuthSettings = rabbit_json:encode(rabbit_mgmt_format:format_nulls(AuthSettings)),
