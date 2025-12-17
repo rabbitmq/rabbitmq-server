@@ -949,7 +949,6 @@ create_channel(Channel,
                    channel_count       = ChannelCount,
                    connection =
                        #connection{name         = Name,
-                                   protocol     = Protocol,
                                    frame_max    = FrameMax,
                                    vhost        = VHost,
                                    capabilities = Capabilities,
@@ -960,7 +959,7 @@ create_channel(Channel,
             {ok, _ChSupPid, {ChPid, AState}} =
                 rabbit_channel_sup_sup:start_channel(
                   ChanSupSup, {tcp, Sock, Channel, FrameMax, self(), Name,
-                               Protocol, User, VHost, Capabilities,
+                               User, VHost, Capabilities,
                                Collector}),
             MRef = erlang:monitor(process, ChPid),
             put({ch_pid, ChPid}, {Channel, MRef}),
