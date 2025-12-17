@@ -245,9 +245,9 @@
          pid(), pid()) ->
             rabbit_types:ok_pid_or_error().
 
-start_link(Channel, ReaderPid, WriterPid, ConnPid, ConnName, _Protocol, User,
+start_link(Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User,
            VHost, Capabilities, CollectorPid, Limiter) ->
-    start_link(Channel, ReaderPid, WriterPid, ConnPid, ConnName, User,
+    start_link(Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User,
            VHost, Capabilities, CollectorPid, Limiter, undefined).
 
 -spec start_link
