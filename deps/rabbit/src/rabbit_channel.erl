@@ -78,9 +78,6 @@
 -record(conf, {
           %% starting | running | flow | closing
           state,
-          %% same as reader's protocol. Used when instantiating
-          %% (protocol) exceptions.
-          protocol,
           %% channel number
           channel,
           %% reader process
@@ -248,9 +245,9 @@
          pid(), pid()) ->
             rabbit_types:ok_pid_or_error().
 
-start_link(Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User,
+start_link(Channel, ReaderPid, WriterPid, ConnPid, ConnName, _Protocol, User,
            VHost, Capabilities, CollectorPid, Limiter) ->
-    start_link(Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User,
+    start_link(Channel, ReaderPid, WriterPid, ConnPid, ConnName, User,
            VHost, Capabilities, CollectorPid, Limiter, undefined).
 
 -spec start_link
@@ -259,10 +256,10 @@ start_link(Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User,
          pid(), pid(), any()) ->
             rabbit_types:ok_pid_or_error().
 
-start_link(Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User,
+start_link(Channel, ReaderPid, WriterPid, ConnPid, ConnName, _Protocol, User,
            VHost, Capabilities, CollectorPid, Limiter, AmqpParams) ->
     gen_server2:start_link(
-      ?MODULE, [Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol,
+      ?MODULE, [Channel, ReaderPid, WriterPid, ConnPid, ConnName,
                 User, VHost, Capabilities, CollectorPid, Limiter, AmqpParams], []).
 
 -spec do(pid(), rabbit_framing:amqp_method_record()) -> 'ok'.
@@ -436,7 +433,7 @@ update_user_state(Pid, UserState) when is_pid(Pid) ->
 
 %%---------------------------------------------------------------------------
 
-init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
+init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, User, VHost,
       Capabilities, CollectorPid, LimiterPid, AmqpParams]) ->
     process_flag(trap_exit, true),
     rabbit_process_flag:adjust_for_message_handling_proc(),
@@ -471,7 +468,6 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
                    username => User#user.username,
                    connection_name => ConnName},
     State = #ch{cfg = #conf{state = starting,
-                            protocol = Protocol,
                             channel = Channel,
                             reader_pid = ReaderPid,
                             writer_pid = WriterPid,
@@ -1837,10 +1833,9 @@ binding_action(Action, Binding, Username, ConnPid) ->
     end.
 
 basic_return(Content, RoutingKey, XNameBin,
-             #ch{cfg = #conf{protocol = Protocol,
-                             writer_pid = WriterPid}},
+             #ch{cfg = #conf{writer_pid = WriterPid}},
              Reason) ->
-    {_Close, ReplyCode, ReplyText} = Protocol:lookup_amqp_exception(Reason),
+    {_Close, ReplyCode, ReplyText} = rabbit_framing_amqp_0_9_1:lookup_amqp_exception(Reason),
     ok = rabbit_writer:send_command(WriterPid,
                                     #'basic.return'{reply_code = ReplyCode,
                                                     reply_text = ReplyText,

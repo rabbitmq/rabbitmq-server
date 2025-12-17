@@ -44,7 +44,7 @@
 
 -spec start_link(start_link_args()) -> {'ok', pid(), {pid(), any()}}.
 
-%% @todo Don't need this Protocol anymore.
+%% @todo Don't need this Protocol anymore?
 start_link({tcp, Sock, Channel, FrameMax, ReaderPid, ConnName, Protocol, User,
             VHost, Capabilities, Collector}) ->
     {ok, SupPid} = supervisor:start_link(
