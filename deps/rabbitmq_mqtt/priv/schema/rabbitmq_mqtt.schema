@@ -15,11 +15,11 @@
 {mapping, "mqtt.allow_anonymous", "rabbitmq_mqtt.allow_anonymous",
     [{datatype, {enum, [true, false]}}]}.
 
-%% Whether maintain connection when publish or subscribe non-authorized topic.
+%% Whether disconnect when publish or subscribe non-authorized topic.
 %%
-%% {maintain_connection_on_authorization_failures, false},
+%% {disconnect_on_unauthorized, true},
 
-{mapping, "mqtt.maintain_connection_on_authorization_failures", "rabbitmq_mqtt.maintain_connection_on_authorization_failures",
+{mapping, "mqtt.disconnect_on_unauthorized", "rabbitmq_mqtt.disconnect_on_unauthorized",
     [{datatype, {enum, [true, false]}}]}.
 
 %% If you have multiple chosts, specify the one to which the
