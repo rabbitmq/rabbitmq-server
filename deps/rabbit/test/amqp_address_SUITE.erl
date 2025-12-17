@@ -66,7 +66,7 @@ common_tests() ->
      target_per_message_exchange_absent_unsettled,
      target_bad_address,
      source_bad_address,
-     receiver_address_undefined
+     source_undefined_address
     ].
 
 init_per_suite(Config) ->
@@ -421,39 +421,6 @@ target_per_message_unset_to_address(Config) ->
     ok = amqp10_client:end_session(Session),
     ok = amqp10_client:close_connection(Connection).
 
-%% Test v2 target address
-%% receiver address undefined
-receiver_address_undefined(Config) ->
-    QName = atom_to_binary(?FUNCTION_NAME),
-    Addr = rabbitmq_amqp_address:queue(QName),
-    Init = {_, LinkPair = #link_pair{session = Session}} = init(Config),
-    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, #{}),
-
-    AttachArgs = #{name => <<"receiver">>,
-                   role => {receiver, #{address => undefined,
-                                        durable => none}, self()},
-                   snd_settle_mode => settled,
-                   rcv_settle_mode => first,
-                   filter => #{},
-                   properties => #{},
-                   raw_mode => false},
-    {ok, Receiver} = amqp10_client:attach_link(Session, AttachArgs),
-
-    Expected = {amqp10_event, {link, Receiver, {detached, #'v1_0.error'{
-                                                             condition = ?V_1_0_AMQP_ERROR_INVALID_FIELD,
-                                                             description = {utf8, <<"Attach refused: {bad_address,undefined}">>}}}}},
-    Got = receive
-              {amqp10_event, {link, _, {detached, _}}}=Event ->
-                  Event
-          after ?TIMEOUT ->
-                    Reason = {missing_event, ?LINE},
-                    flush(Reason),
-                    ct:fail(Reason)
-          end,
-    ?assertMatch(Got, Expected),
-    {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
-    ok = cleanup(Init).
-
 bad_v2_addresses() ->
     [
      %% valid v1, but bad v2 target addresses
@@ -674,6 +641,34 @@ source_bad_address0(SourceAddress, Config) ->
          {link, Receiver,
           {detached,
            #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_INVALID_FIELD}}}} -> ok
+    after ?TIMEOUT ->
+              Reason = {missing_event, ?LINE},
+              flush(Reason),
+              ct:fail(Reason)
+    end,
+    ok = amqp10_client:end_session(Session),
+    ok = amqp10_client:close_connection(Connection).
+
+source_undefined_address(Config) ->
+    OpnConf = connection_config(Config),
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    {ok, Session} = amqp10_client:begin_session_sync(Connection),
+
+    AttachArgs = #{name => <<"receiver">>,
+                   role => {receiver, #{address => undefined,
+                                        durable => none}, self()},
+                   snd_settle_mode => settled,
+                   rcv_settle_mode => first,
+                   properties => #{}},
+    {ok, Receiver} = amqp10_client:attach_link(Session, AttachArgs),
+    receive
+        {amqp10_event,
+         {link, Receiver,
+          {detached,
+           #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_INVALID_FIELD,
+                         description = {utf8, Description}}}}} ->
+            ?assertEqual(<<"Attach refused: {bad_address,undefined}">>,
+                         Description)
     after ?TIMEOUT ->
               Reason = {missing_event, ?LINE},
               flush(Reason),
