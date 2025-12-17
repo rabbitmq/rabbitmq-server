@@ -145,7 +145,7 @@ connect(Params = #amqp_params_direct{username     = Username,
                            os:system_time(milli_seconds)},
     DecryptedPassword = credentials_obfuscation:decrypt(Password),
     case rpc:call(Node, rabbit_direct, connect,
-                  [{Username, DecryptedPassword}, VHost, ?PROTOCOL, self(),
+                  [{Username, DecryptedPassword}, VHost, self(),
                    connection_info(State1)], ?DIRECT_OPERATION_TIMEOUT) of
         {ok, {User, ServerProperties}} ->
             {ok, ChMgr, Collector} = SIF(i(name, State1)),

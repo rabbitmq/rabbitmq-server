@@ -52,7 +52,7 @@ start_link(Type, Connection, ConnName, InfraArgs, ChNumber,
 start_writer(_Sup, direct, [ConnPid, Node, User, VHost, Collector, AmqpParams],
              ConnName, ChNumber, ChPid) ->
     case rpc:call(Node, rabbit_direct, start_channel,
-               [ChNumber, ChPid, ConnPid, ConnName, ?PROTOCOL, User,
+               [ChNumber, ChPid, ConnPid, ConnName, User,
                 VHost, ?CLIENT_CAPABILITIES, Collector, AmqpParams], ?DIRECT_OPERATION_TIMEOUT) of
         {ok, _Writer} = Reply ->
             Reply;
