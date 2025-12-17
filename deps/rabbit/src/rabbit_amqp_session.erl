@@ -2719,6 +2719,8 @@ ensure_source(#'v1_0.source'{
         _ ->
             exit_not_implemented("Dynamic source not supported: ~tp", [Source0])
     end;
+ensure_source(undefined, _, _, _, _, _, _, _, _) ->
+    {error, source_required};
 ensure_source(Source = #'v1_0.source'{dynamic = true}, _, _, _, _, _, _, _, _) ->
     exit_not_implemented("Dynamic source not supported: ~tp", [Source]);
 ensure_source(Source0 = #'v1_0.source'{address = Address,
