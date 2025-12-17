@@ -1470,8 +1470,8 @@ get_env(Key) ->
     {ok, Value} = application:get_env(rabbit, Key),
     Value.
 
-send_on_channel0(Sock, Method, Protocol) ->
-    ok = rabbit_writer:internal_send_command(Sock, 0, Method, Protocol).
+send_on_channel0(Sock, Method, _Protocol) ->
+    ok = rabbit_writer:internal_send_command(Sock, 0, Method).
 
 auth_mechanism_to_module(TypeBin, Sock) ->
     case rabbit_registry:binary_to_type(TypeBin) of
