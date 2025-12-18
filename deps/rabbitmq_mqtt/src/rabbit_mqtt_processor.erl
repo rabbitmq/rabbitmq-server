@@ -2093,7 +2093,7 @@ handle_queue_actions(Actions, #state{} = State0) ->
           ({queue_down, QName}, S) ->
               handle_queue_down(QName, S);
           ({released, QName, _CTag, _MsgSeqNos, timeout}, _S) ->
-              ?LOG_INFO("Terminating MQTT connection because consumer on ~s timed out",
+              ?LOG_INFO("Terminating MQTT connection because consumer on ~ts timed out",
                         [rabbit_misc:rs(QName)]),
               throw(consumer_timeout);
           (_Action, S) ->
@@ -2107,7 +2107,7 @@ handle_queue_down(QName, State0 = #state{cfg = #cfg{client_id = ClientId}}) ->
             State0;
         _QoS ->
             %% Consuming classic queue is down.
-            ?LOG_INFO("Terminating MQTT connection because consuming ~s is down.",
+            ?LOG_INFO("Terminating MQTT connection because consuming ~ts is down.",
                       [rabbit_misc:rs(QName)]),
             throw(consuming_queue_down)
     end.

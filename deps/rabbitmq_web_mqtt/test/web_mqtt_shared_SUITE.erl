@@ -103,5 +103,6 @@ maintenance(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).
 notify_consumer_classic_queue_deleted(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).
 notify_consumer_quorum_queue_deleted(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).
 notify_consumer_qos0_queue_deleted(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).
+consumer_timeout_quorum_queue(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).
 zero_session_expiry_interval_disconnect_client(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).
 zero_session_expiry_disconnect_autodeletes_qos0_queue(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).
