@@ -131,7 +131,8 @@ handle_cast(QueueEvent = {queue_event, _, _},
     try rabbit_mqtt_processor:handle_queue_event(QueueEvent, PState0) of
         {ok, PState} ->
             maybe_process_deferred_recv(control_throttle(pstate(State, PState)));
-        {error, consuming_queue_down = Reason, PState} ->
+        {error, Reason, PState} when Reason =:= consuming_queue_down;
+                                     Reason =:= consumer_timeout ->
             {stop, {shutdown, Reason}, pstate(State, PState)};
         {error, Reason0, PState} ->
             {stop, Reason0, pstate(State, PState)}
