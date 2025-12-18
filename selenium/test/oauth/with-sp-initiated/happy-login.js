@@ -7,12 +7,12 @@ const SSOHomePage = require('../../pageobjects/SSOHomePage')
 const OverviewPage = require('../../pageobjects/OverviewPage')
 
 describe('An user with administrator tag', function () {
+  let driver
   let homePage
   let idpLogin
   let overview
   let captureScreen
-  var driver
-
+  
   before(async function () {
     driver = buildDriver()
     await goToHome(driver)

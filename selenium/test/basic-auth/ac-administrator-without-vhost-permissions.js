@@ -8,7 +8,7 @@ const OverviewPage = require('../pageobjects/OverviewPage')
 const AdminTab = require('../pageobjects/AdminTab')
 
 describe('administrator user without any vhosts permissions', function () {
-  let homePage
+  let driver
   let captureScreen
 
   before(async function () {

@@ -1,7 +1,7 @@
 const { By, Key, until, Builder } = require('selenium-webdriver')
 require('chromedriver')
 const assert = require('assert')
-const { buildDriver, goToHome, captureScreensFor, teardown, doUntil, log } = require('../utils')
+const { buildDriver, goToHome, captureScreensFor, teardown } = require('../utils')
 
 const LoginPage = require('../pageobjects/LoginPage')
 const OverviewPage = require('../pageobjects/OverviewPage')
@@ -11,6 +11,7 @@ const ExchangePage = require('../pageobjects/ExchangePage')
 const DISABLE_METRICS = process.env.DISABLE_METRICS || false
 
 describe('Exchange management', function () {
+  let driver
   let login
   let exchanges
   let exchange

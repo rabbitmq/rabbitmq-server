@@ -7,6 +7,7 @@ const LoginPage = require('../pageobjects/LoginPage')
 const OverviewPage = require('../pageobjects/OverviewPage')
 
 describe('When a logged in user', function () {
+  let driver
   let overview
   let loginPage
   let captureScreen

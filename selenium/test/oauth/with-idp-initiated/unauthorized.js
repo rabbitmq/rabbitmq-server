@@ -1,16 +1,15 @@
 const { By, Key, until, Builder } = require('selenium-webdriver')
 require('chromedriver')
 const assert = require('assert')
-const { buildDriver, goToLogin, tokenFor, captureScreensFor, teardown } = require('../../utils')
+const { buildDriver, captureScreensFor, teardown } = require('../../utils')
 
 const SSOHomePage = require('../../pageobjects/SSOHomePage')
 const FakePortalPage = require('../../pageobjects/FakePortalPage')
 
 describe('A user who accesses the /login URL with a token without scopes for the management UI', function () {
-  let overview
+  let driver
   let captureScreen
-  let token
-
+  
   before(async function () {
     driver = buildDriver()
     captureScreen = captureScreensFor(driver, __filename)
