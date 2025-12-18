@@ -205,9 +205,9 @@ connect_dest(State = #{name := Name,
     State#{dest => Dst#{current => #{conn => Conn,
                                      session => Sess,
                                      link_state => attached,
-                                     pending => [],
                                      link => LinkRef,
-                                     uri => Uri}}}.
+                                     uri => Uri},
+                        pending => []}}.
 
 connect(Name, SndSettleMode, Uri, Postfix, Addr, Map, AttachFun) ->
     {ok, Config0} = amqp10_client:parse_uri(Uri),
@@ -355,11 +355,11 @@ handle_dest({amqp10_event, {link, Link, {detached, Why}}},
             #{dest := #{current := #{link := Link}}}) ->
     {stop, {outbound_link_detached, Why}};
 handle_dest({amqp10_event, {link, Link, credited}},
-            State0 = #{dest := #{current := #{link := Link},
+            State0 = #{dest := #{current := #{link := Link} = Current,
                                  pending := Pend} = Dst}) ->
 
     %% we have credit so can begin to forward
-    State = State0#{dest => Dst#{link_state => credited,
+    State = State0#{dest => Dst#{current => Current#{link_state => credited},
                                  pending => []}},
     lists:foldl(fun ({A, B}, S) ->
                         forward(A, B, S)
@@ -433,7 +433,7 @@ forward(Tag, Mc,
                     pending := Pend0} = Dst} = State) ->
     %% simply cache the forward oo
     Pend = [{Tag, Mc} | Pend0],
-    State#{dest => Dst#{pending => {Pend}}};
+    State#{dest => Dst#{pending => Pend}};
 forward(Tag, Msg0,
         #{dest := #{current := #{link := Link},
                     unacked := Unacked},
