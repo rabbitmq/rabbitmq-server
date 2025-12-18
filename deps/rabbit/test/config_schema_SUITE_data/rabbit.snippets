@@ -83,6 +83,35 @@ ssl_options.fail_if_no_peer_cert = true",
              {verify,verify_peer},
              {fail_if_no_peer_cert,true}]}]}],
   []},
+ {ssl_options_crl_cache_http,
+  "ssl_options.crl_check = true
+ssl_options.crl_sources.0 = http
+ssl_options.crl_sources.0.timeout = 5000",
+  [{rabbit,
+       [{ssl_options,
+            [{crl_check,true},
+             {crl_cache,{ssl_crl_cache,{internal,[{http,5000}]}}}]}]}],
+  []},
+ {ssl_options_crl_cache_dir,
+  "ssl_options.crl_check = true
+ssl_options.crl_sources.0 = dir
+ssl_options.crl_sources.0.path = /var/lib/rabbitmq/crls",
+  [{rabbit,
+       [{ssl_options,
+            [{crl_check,true},
+             {crl_cache,{ssl_crl_cache,{internal,[{dir,"/var/lib/rabbitmq/crls"}]}}}]}]}],
+  []},
+ {ssl_options_crl_cache_both,
+  "ssl_options.crl_check = true
+ssl_options.crl_sources.0 = http
+ssl_options.crl_sources.0.timeout = 5000
+ssl_options.crl_sources.1 = dir
+ssl_options.crl_sources.1.path = /var/lib/rabbitmq/crls",
+  [{rabbit,
+       [{ssl_options,
+            [{crl_check,true},
+             {crl_cache,{ssl_crl_cache,{internal,[{http,5000},{dir,"/var/lib/rabbitmq/crls"}]}}}]}]}],
+  []},
  {tcp_listener,
   "listeners.tcp.default = 5673",
     [{rabbit,[{tcp_listeners,[5673]}]}],[]},

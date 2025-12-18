@@ -335,6 +335,50 @@ end}.
 {mapping, "ssl_options.crl_check", "rabbit.ssl_options.crl_check",
     [{datatype, [{enum, [true, false, peer, best_effort]}]}]}.
 
+{mapping, "ssl_options.crl_sources.$index", "rabbit.ssl_options.crl_cache",
+    [{datatype, {enum, [http, dir]}}]}.
+
+{mapping, "ssl_options.crl_sources.$index.timeout", "rabbit.ssl_options.crl_cache",
+    [{datatype, integer}]}.
+
+{mapping, "ssl_options.crl_sources.$index.path", "rabbit.ssl_options.crl_cache",
+    [{datatype, string}]}.
+
+{translation, "rabbit.ssl_options.crl_cache",
+fun(Conf) ->
+    Entries = cuttlefish_variable:filter_by_prefix("ssl_options.crl_sources", Conf),
+    case Entries of
+        [] -> cuttlefish:unset();
+        _ ->
+            Sources = lists:foldl(
+                fun({[_, _, Index, Opt], Val}, Acc) ->
+                    K = list_to_atom(Index),
+                    [{K, {list_to_existing_atom(Opt), Val}} | Acc];
+                   ({[_, _, Index], Val}, Acc) ->
+                    K = list_to_atom(Index),
+                    [{K, {type, Val}} | Acc]
+                end, [], Entries),
+            Grouped = maps:to_list(maps:groups_from_list(fun({K, _}) -> K end, fun({_, V}) -> V end, Sources)),
+            CrlOpts = lists:map(
+                fun({_, Props}) ->
+                    Type = proplists:get_value(type, Props),
+                    case Type of
+                        http ->
+                            case proplists:get_keys(Props) -- [type, timeout] of
+                                [] -> {http, proplists:get_value(timeout, Props, 5000)};
+                                _ -> cuttlefish:invalid("http source only supports 'timeout' option")
+                            end;
+                        dir ->
+                            case proplists:get_keys(Props) -- [type, path] of
+                                [] -> {dir, proplists:get_value(path, Props)};
+                                _ -> cuttlefish:invalid("dir source only supports 'path' option")
+                            end
+                    end
+                end, Grouped),
+            {ssl_crl_cache, {internal, CrlOpts}}
+    end
+end}.
+
 {mapping, "ssl_options.depth", "rabbit.ssl_options.depth",
     [{datatype, integer}, {validators, ["byte"]}]}.
 
