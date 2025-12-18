@@ -51,8 +51,12 @@ start_link(Type, Connection, ConnName, InfraArgs, ChNumber,
 
 start_writer(_Sup, direct, [ConnPid, Node, User, VHost, Collector, AmqpParams],
              ConnName, ChNumber, ChPid) ->
+    %% @todo We must use rabbit_direct:start_channel/10 for compatibility.
+    %%       But the protocol argument is ignored on new nodes.
+    %%       At some point it can be ignored as all nodes 4.3+ have
+    %%       rabbit_direct:connect/4 as well.
     case rpc:call(Node, rabbit_direct, start_channel,
-               [ChNumber, ChPid, ConnPid, ConnName, User,
+               [ChNumber, ChPid, ConnPid, ConnName, ?PROTOCOL, User,
                 VHost, ?CLIENT_CAPABILITIES, Collector, AmqpParams], ?DIRECT_OPERATION_TIMEOUT) of
         {ok, _Writer} = Reply ->
             Reply;
