@@ -236,3 +236,8 @@ following command:
 MOCHA_DOCKER_FILE=\location\of\my\Dockerfile ./run-suites.sh
 ```
 
+## Issues deploying UAA 
+
+If you are not able to successfully run any test case that depends on UAA 
+because UAA fails to start, make sure you are using VZ emulation in your docker 
+engine. Without VZ emulation, the uaa docker container cannot start.
