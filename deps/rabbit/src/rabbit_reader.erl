@@ -313,7 +313,6 @@ start_connection(Parent, HelperSups, RanchRef, Deb, Sock) ->
                   peer_host          = PeerHost,
                   port               = Port,
                   peer_port          = PeerPort,
-                  protocol           = none,
                   user               = none,
                   timeout_sec        = (HandshakeTimeout / 1000),
                   frame_max          = InitialFrameMax,
@@ -1167,9 +1166,7 @@ start_091_connection({ProtocolMajor, ProtocolMinor, _ProtocolRevision},
                mechanisms = auth_mechanisms_binary(Sock),
                locales = <<"en_US">> },
     ok = send_on_channel0(Sock, Start),
-    State = State0#v1{connection = Connection#connection{
-                                     timeout_sec = ?NORMAL_TIMEOUT,
-                                     protocol = rabbit_framing_amqp_0_9_1},
+    State = State0#v1{connection = Connection#connection{timeout_sec = ?NORMAL_TIMEOUT},
                       connection_state = starting,
                       helper_sup = HelperSup091},
     switch_callback(State, frame_header, 7).
@@ -1624,6 +1621,11 @@ i(garbage_collection, _State) ->
 i(reductions = Item, _State) ->
     {Item, Reductions} = erlang:process_info(self(), Item),
     Reductions;
+%% There can be only one protocol: AMQP 0.9.1. AMQP 1.0 is
+%% handled by a different module. Before the handshake completes
+%% we don't have an active protocol in use so we return 'none'.
+i(protocol, #v1{callback = handshake}) -> none;
+i(protocol, _State)                    -> rabbit_framing_amqp_0_9_1:version();
 i(Item,               #v1{connection = Conn}) -> ic(Item, Conn).
 
 ic(name,              #connection{name        = Name})     -> Name;
@@ -1631,11 +1633,6 @@ ic(host,              #connection{host        = Host})     -> Host;
 ic(peer_host,         #connection{peer_host   = PeerHost}) -> PeerHost;
 ic(port,              #connection{port        = Port})     -> Port;
 ic(peer_port,         #connection{peer_port   = PeerPort}) -> PeerPort;
-%% @todo We can use #v1.callback=handshake to return 'none' and return P:version() otherwise.
-%%       We don't need to keep 'protocol' in the record for this.
-%%       1.0 is handled elsewhere.
-ic(protocol,          #connection{protocol    = none})     -> none;
-ic(protocol,          #connection{protocol    = P})        -> P:version();
 ic(user,              #connection{user        = none})     -> '';
 ic(user,              #connection{user        = U})        -> U#user.username;
 ic(user_who_performed_action, C) -> ic(user, C);
