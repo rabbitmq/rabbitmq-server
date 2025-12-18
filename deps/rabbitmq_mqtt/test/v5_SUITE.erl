@@ -126,7 +126,8 @@ cluster_size_1_tests() ->
      topic_alias_disallowed_retained_message,
      extended_auth,
      headers_exchange,
-     consistent_hash_exchange
+     consistent_hash_exchange,
+     consumer_timeout_quorum_queue
     ].
 
 cluster_size_3_tests() ->
@@ -2157,6 +2158,58 @@ consistent_hash_exchange(Config) ->
     ok = emqtt:disconnect(C),
     [#'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = Q}) || Q <- Qs],
     ok = rabbit_ct_client_helpers:close_channels_and_connection(Config, 0).
+
+%% Test that consumer timeout on a quorum queue terminates the MQTT connection.
+%% Consumer timeouts are only supported for quorum queues.
+%%
+%% We use {auto_ack, never} to prevent emqtt from automatically sending PUBACK,
+%% which allows the consumer timeout to trigger.
+consumer_timeout_quorum_queue(Config) ->
+    Topic = atom_to_binary(?FUNCTION_NAME),
+    PolicyName = <<"consumer-timeout-policy">>,
+
+    ok = rpc(Config, application, set_env, [?APP, durable_queue_type, quorum]),
+    %% Set a short consumer timeout policy for quorum queues
+    ok = rabbit_ct_broker_helpers:set_policy(
+           Config, 0, PolicyName, <<".*">>, <<"quorum_queues">>,
+           [{<<"consumer-timeout">>, 1000}]),
+
+    %% Use two clients: one for publishing (normal auto_ack), one for subscribing (auto_ack=never)
+    Pub = connect(<<"publisher">>, Config),
+    Sub = connect(?FUNCTION_NAME, Config,
+                  non_clean_sess_opts() ++ [{auto_ack, never}]),
+    {ok, _, [1]} = emqtt:subscribe(Sub, Topic, qos1),
+
+    %% Publish a message from the publisher client
+    {ok, _} = emqtt:publish(Pub, Topic, <<"test message">>, [{qos, 1}]),
+
+    %% Receive the message on subscriber but do NOT acknowledge it (auto_ack=never)
+    receive
+        {publish, #{client_pid := Sub,
+                    topic := Topic,
+                    payload := <<"test message">>}} ->
+            ok
+    after 5000 ->
+              ct:fail("did not receive message")
+    end,
+
+    ok = rpc(Config, application, unset_env, [?APP, durable_queue_type]),
+
+    %% Trap exits so we receive EXIT message instead of crashing when Sub exits
+    process_flag(trap_exit, true),
+
+    %% The subscriber connection should be terminated due to consumer timeout
+    %% Wait for the consumer timeout (1s) plus some margin
+    util:await_exit(Sub),
+
+    process_flag(trap_exit, false),
+
+    %% Cleanup
+    ok = emqtt:disconnect(Pub),
+    ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, PolicyName),
+    %% Clean up the session by connecting with clean_start
+    C2 = connect(?FUNCTION_NAME, Config, [{clean_start, true}]),
+    ok = emqtt:disconnect(C2).
 
 %% -------------------------------------------------------------------
 %% Helpers
