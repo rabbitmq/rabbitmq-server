@@ -382,6 +382,9 @@
           stashed_down = []:: [rabbit_amqqueue:name()],
           %% Queues that got deleted.
           stashed_eol = [] :: [rabbit_amqqueue:name()],
+          %% Consumer timeouts - the queue spontaneously released messages and we need
+          %% to detach the link with an error.
+          stashed_consumer_timeout = [] :: [rabbit_types:ctag()],
 
           queue_states = rabbit_queue_type:init() :: rabbit_queue_type:state(),
           permission_cache = [] :: permission_cache(),
@@ -687,7 +690,8 @@ send_buffered(State0) ->
 send_delivery_state_changes(#state{stashed_rejected = [],
                                    stashed_settled = [],
                                    stashed_down = [],
-                                   stashed_eol = []} = State) ->
+                                   stashed_eol = [],
+                                   stashed_consumer_timeout = []} = State) ->
     State;
 send_delivery_state_changes(State0 = #state{cfg = #cfg{writer_pid = Writer,
                                                        channel_num = ChannelNum,
@@ -704,16 +708,19 @@ send_delivery_state_changes(State0 = #state{cfg = #cfg{writer_pid = Writer,
     %% 3. Process unavailable classic queues.
     {DetachFrames0, State3} = handle_stashed_down(State2),
     %% 4. Process queue deletions.
-    {ReleasedIds, AcceptedIds1, DetachFrames, GrantCredits, State} = handle_stashed_eol(DetachFrames0, GrantCredits1, State3),
+    {ReleasedIds, AcceptedIds1, DetachFrames, GrantCredits, State4} = handle_stashed_eol(DetachFrames0, GrantCredits1, State3),
     send_dispositions(ReleasedIds, #'v1_0.released'{}, Writer, ChannelNum),
     AcceptedIds = AcceptedIds1 ++ AcceptedIds0,
     send_dispositions(AcceptedIds, #'v1_0.accepted'{}, Writer, ChannelNum),
     rabbit_global_counters:messages_confirmed(?PROTOCOL, length(AcceptedIds)),
+    %% 5. Process consumer timeouts - detach links with error.
+    {TimeoutDetachFrames, State5} = handle_stashed_consumer_timeout(State4),
+    State = State5,
     %% Send DETACH frames after DISPOSITION frames such that
     %% clients can handle DISPOSITIONs before closing their links.
     lists:foreach(fun(Frame) ->
                           rabbit_amqp_writer:send_command(Writer, ChannelNum, Frame)
-                  end, DetachFrames),
+                  end, DetachFrames ++ TimeoutDetachFrames),
     maps:foreach(fun(HandleInt, DeliveryCount) ->
                          F0 = flow(?UINT(HandleInt), DeliveryCount, MaxLinkCredit),
                          F = session_flow_fields(F0, State),
@@ -984,6 +991,39 @@ disposition(DeliveryState, First, Last) ->
        state = DeliveryState,
        first = ?UINT(First),
        last = Last1}.
+
+%% Handle consumer timeout - detach the link with an error.
+%% When a consumer times out, the queue releases the messages and notifies us.
+%% We detach the link with an error condition to inform the client.
+handle_stashed_consumer_timeout(#state{stashed_consumer_timeout = []} = State) ->
+    {[], State};
+handle_stashed_consumer_timeout(#state{stashed_consumer_timeout = CTags,
+                                       outgoing_links = OutgoingLinks0,
+                                       outgoing_unsettled_map = Unsettled0,
+                                       outgoing_pending = Pending0} = State0) ->
+    %% For each timed-out consumer, detach the link with an error.
+    {DetachFrames, OutgoingLinks, Unsettled, Pending} =
+        lists:foldl(
+          fun(CTag, {Frames0, Links0, Unsettled1, Pending1}) ->
+                  Handle = ctag_to_handle(CTag),
+                  case maps:take(Handle, Links0) of
+                      {Link, Links1} ->
+                          {Unsettled2, Pending2} = remove_outgoing_link(Handle, Unsettled1, Pending1),
+                          Error = #'v1_0.error'{
+                                     condition = ?V_1_0_AMQP_ERROR_RESOURCE_LIMIT_EXCEEDED,
+                                     description = {utf8, <<"consumer timeout">>}},
+                          Detach = detach(Handle, Link, Error),
+                          {[Detach | Frames0], Links1, Unsettled2, Pending2};
+                      error ->
+                          %% Link no longer exists, ignore
+                          {Frames0, Links0, Unsettled1, Pending1}
+                  end
+          end, {[], OutgoingLinks0, Unsettled0, Pending0}, CTags),
+    State = State0#state{stashed_consumer_timeout = [],
+                         outgoing_links = OutgoingLinks,
+                         outgoing_unsettled_map = Unsettled,
+                         outgoing_pending = Pending},
+    {DetachFrames, State}.
 
 handle_frame({Performative = #'v1_0.transfer'{handle = ?UINT(Handle)}, Paylaod},
              State0 = #state{incoming_links = IncomingLinks}) ->
@@ -2130,6 +2170,13 @@ handle_queue_actions(Actions, State) ->
               S#state{stashed_settled = [Action | As]};
           ({rejected, _QName, _Reason, _DelIds} = Action, #state{stashed_rejected = As} = S) ->
               S#state{stashed_rejected = [Action | As]};
+          ({released, _QName, CTag, _MsgIds, timeout}, #state{stashed_consumer_timeout = L} = S) ->
+              %% Consumer timeout - the queue spontaneously released these messages.
+              %% We need to detach the link with an error.
+              case lists:member(CTag, L) of
+                  true -> S;
+                  false -> S#state{stashed_consumer_timeout = [CTag | L]}
+              end;
           ({deliver, CTag, AckRequired, Msgs}, S0) ->
               lists:foldl(fun(Msg, S) ->
                                   handle_deliver(CTag, AckRequired, Msg, S)
