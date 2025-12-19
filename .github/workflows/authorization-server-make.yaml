@@ -11,7 +11,7 @@ on:
     paths:
       - .github/workflows/authorization-server-make.yaml
       - selenium/authorization-server
-  
+
 env:
   REGISTRY_IMAGE: pivotalrabbitmq/spring-authorization-server
   IMAGE_TAG: 0.0.11
@@ -19,7 +19,7 @@ jobs:
   docker:
     runs-on: ubuntu-latest
     steps:
-      
+
       - name: CHECKOUT REPOSITORY
         uses: actions/checkout@v6
 
@@ -28,10 +28,10 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
-      
+
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
-          context: selenium/authorization-server        
+          context: selenium/authorization-server
           push: true
           tags: ${{ env.REGISTRY_IMAGE }}:${{ env.IMAGE_TAG }}

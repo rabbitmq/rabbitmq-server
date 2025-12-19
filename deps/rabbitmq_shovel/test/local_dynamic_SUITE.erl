@@ -69,6 +69,9 @@ end_per_suite(Config) ->
       rabbit_ct_broker_helpers:teardown_steps()).
 
 init_per_group(_, Config) ->
+    [Node] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    ok = rabbit_ct_broker_helpers:enable_feature_flag(
+           Config, [Node], 'rabbitmq_4.0.0'),
     Config.
 
 end_per_group(_, Config) ->

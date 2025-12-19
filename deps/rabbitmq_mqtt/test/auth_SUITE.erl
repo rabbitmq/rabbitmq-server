@@ -1268,6 +1268,7 @@ count_connections_per_vhost(Config)  ->
       rabbit_connection_tracking, count_local_tracked_items_in_vhost,
       [<<"/">>]).
 
+
 vhost_queue_limit(Config) ->
     ok = rabbit_ct_broker_helpers:set_vhost_limit(Config, 0, <<"/">>, max_queues, 1),
     {ok, C} = connect_anonymous(Config),

@@ -78,4 +78,4 @@ jobs:
       with:
         name: test-artifacts-${{ matrix.browser }}-${{ matrix.erlang_version }}
         path: ${{ env.SELENIUM_ARTIFACTS }}/*
- 
+

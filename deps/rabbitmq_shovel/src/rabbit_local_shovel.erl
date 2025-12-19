@@ -598,6 +598,8 @@ status(State) ->
 
 pending_count(#{dest := #{pending_delivery := Pending}}) ->
     lqueue:len(Pending);
+pending_count(#{source := #{current := #{unacked_message_q := UAMQ}}}) ->
+    ?QUEUE:len(UAMQ);
 pending_count(_) ->
     0.
 
