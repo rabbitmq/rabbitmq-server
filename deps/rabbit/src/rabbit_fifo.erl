@@ -1658,9 +1658,6 @@ add_drop_head_effects([{mod_call,
       rabbit_global_counters,
       messages_dead_lettered,
       [Reason, rabbit_quorum_queue, Type, PrevLen + NewLen]} | Rem];
-add_drop_head_effects([{log, _, _}] = DlxEffs, Effs) ->
-    %% dead letter in the correct order
-    Effs ++ DlxEffs;
 add_drop_head_effects(New, Old) ->
     New ++ Old.
 
