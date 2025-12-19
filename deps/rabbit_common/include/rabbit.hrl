@@ -277,3 +277,5 @@
 %% Max value for stream max segment size
 -define(MAX_STREAM_MAX_SEGMENT_SIZE, 3_000_000_000).
 
+%% Preferred value instead of `infinity`
+-define(GEN_SERVER_CALL_TIMEOUT, 60000).
