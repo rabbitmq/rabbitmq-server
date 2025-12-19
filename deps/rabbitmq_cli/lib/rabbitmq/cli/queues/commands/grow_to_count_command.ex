@@ -21,6 +21,10 @@ defmodule RabbitMQ.CLI.Queues.Commands.GrowToCountCommand do
       errors_only: :boolean
     ]
 
+  def merge_defaults([], opts) do
+    {[], Map.merge(default_opts(), opts)}
+  end
+
   def merge_defaults([node_count | rem], opts) do
     args = [String.to_integer(node_count) | rem]
     {args, Map.merge(default_opts(), opts)}
