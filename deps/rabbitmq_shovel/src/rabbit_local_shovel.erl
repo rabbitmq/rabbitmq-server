@@ -601,9 +601,6 @@ pending_count(#{dest := #{pending_delivery := Pending}}) ->
 pending_count(_) ->
     0.
 
-pending_count(_State) ->
-    0.
-
 %% Internal
 
 parse_parameter(_, _, none) ->
