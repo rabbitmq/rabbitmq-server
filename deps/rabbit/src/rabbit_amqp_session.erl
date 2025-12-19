@@ -1004,7 +1004,7 @@ handle_stashed_consumer_timeout(#state{stashed_consumer_timeout = CTags,
     %% For each timed-out consumer, detach the link with an error.
     {DetachFrames, OutgoingLinks, Unsettled, Pending} =
         lists:foldl(
-          fun(CTag, {Frames0, Links0, Unsettled1, Pending1}) ->
+          fun(CTag, {Frames0, Links0, Unsettled1, Pending1} = Acc) ->
                   Handle = ctag_to_handle(CTag),
                   case maps:take(Handle, Links0) of
                       {Link, Links1} ->
@@ -1016,7 +1016,7 @@ handle_stashed_consumer_timeout(#state{stashed_consumer_timeout = CTags,
                           {[Detach | Frames0], Links1, Unsettled2, Pending2};
                       error ->
                           %% Link no longer exists, ignore
-                          {Frames0, Links0, Unsettled1, Pending1}
+                          Acc
                   end
           end, {[], OutgoingLinks0, Unsettled0, Pending0}, CTags),
     State = State0#state{stashed_consumer_timeout = [],
