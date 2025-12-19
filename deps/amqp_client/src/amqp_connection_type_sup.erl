@@ -55,7 +55,7 @@ start_infrastructure_fun(Sup, Conn, network) ->
             {ok, GCThreshold} = application:get_env(amqp_client, writer_gc_threshold),
 
             WriterStartMFA = {rabbit_writer, start_link,
-                              [Sock, 0, ?FRAME_MIN_SIZE, ?PROTOCOL, Conn,
+                              [Sock, 0, ?FRAME_MIN_SIZE, Conn,
                                ConnName, false, GCThreshold]},
             WriterChildSpec = #{id => writer,
                                 start => WriterStartMFA,

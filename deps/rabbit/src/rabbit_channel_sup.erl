@@ -96,7 +96,7 @@ init(Type) ->
 
 child_specs({tcp, Sock, Channel, FrameMax, ReaderPid, Identity}) ->
     StartMFA = {rabbit_writer, start_link,
-                [Sock, Channel, FrameMax, rabbit_framing_amqp_0_9_1, ReaderPid, Identity, true]},
+                [Sock, Channel, FrameMax, ReaderPid, Identity, true]},
     [
         #{
             id => writer,

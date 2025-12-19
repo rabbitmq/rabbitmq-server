@@ -28,7 +28,7 @@
 
 -include("rabbit.hrl").
 -include_lib("kernel/include/logger.hrl").
--export([start/6, start_link/6, start/7, start_link/7, start/8, start_link/8]).
+-export([start_link/6, start_link/7]).
 
 -export([init/1,
          handle_call/3,
@@ -69,34 +69,14 @@
 
 %%---------------------------------------------------------------------------
 
--spec start
-        (rabbit_net:socket(), rabbit_types:channel_number(),
-         non_neg_integer(), rabbit_types:protocol(), pid(),
-         rabbit_types:proc_name()) ->
-            rabbit_types:ok(pid()).
 -spec start_link
         (rabbit_net:socket(), rabbit_types:channel_number(),
-         non_neg_integer(), rabbit_types:protocol(), pid(),
-         rabbit_types:proc_name()) ->
-            rabbit_types:ok(pid()).
--spec start
-        (rabbit_net:socket(), rabbit_types:channel_number(),
-         non_neg_integer(), rabbit_types:protocol(), pid(),
+         non_neg_integer(), pid(),
          rabbit_types:proc_name(), boolean()) ->
             rabbit_types:ok(pid()).
 -spec start_link
         (rabbit_net:socket(), rabbit_types:channel_number(),
-         non_neg_integer(), rabbit_types:protocol(), pid(),
-         rabbit_types:proc_name(), boolean()) ->
-            rabbit_types:ok(pid()).
--spec start
-        (rabbit_net:socket(), rabbit_types:channel_number(),
-         non_neg_integer(), rabbit_types:protocol(), pid(),
-         rabbit_types:proc_name(), boolean(), undefined|non_neg_integer()) ->
-            rabbit_types:ok(pid()).
--spec start_link
-        (rabbit_net:socket(), rabbit_types:channel_number(),
-         non_neg_integer(), rabbit_types:protocol(), pid(),
+         non_neg_integer(), pid(),
          rabbit_types:proc_name(), boolean(), undefined|non_neg_integer()) ->
             rabbit_types:ok(pid()).
 
@@ -135,30 +115,12 @@
 
 %%---------------------------------------------------------------------------
 
-start(Sock, Channel, FrameMax, Protocol, ReaderPid, Identity) ->
-    start(Sock, Channel, FrameMax, Protocol, ReaderPid, Identity, false).
-
-start_link(Sock, Channel, FrameMax, Protocol, ReaderPid, Identity) ->
-    start_link(Sock, Channel, FrameMax, Protocol, ReaderPid, Identity, false).
-
-start(Sock, Channel, FrameMax, Protocol, ReaderPid, Identity,
-      ReaderWantsStats) ->
-    start(Sock, Channel, FrameMax, Protocol, ReaderPid, Identity,
-          ReaderWantsStats, ?DEFAULT_GC_THRESHOLD).
-
-start_link(Sock, Channel, FrameMax, Protocol, ReaderPid, Identity,
+start_link(Sock, Channel, FrameMax, ReaderPid, Identity,
            ReaderWantsStats) ->
-    start_link(Sock, Channel, FrameMax, Protocol, ReaderPid, Identity,
+    start_link(Sock, Channel, FrameMax, ReaderPid, Identity,
                ReaderWantsStats, ?DEFAULT_GC_THRESHOLD).
 
-start(Sock, Channel, FrameMax, _Protocol, ReaderPid, Identity,
-      ReaderWantsStats, GCThreshold) ->
-    State = initial_state(Sock, Channel, FrameMax, ReaderPid,
-                          ReaderWantsStats, GCThreshold),
-    Options = [{hibernate_after, ?HIBERNATE_AFTER}],
-    gen_server:start(?MODULE, [Identity, State], Options).
-
-start_link(Sock, Channel, FrameMax, _Protocol, ReaderPid, Identity,
+start_link(Sock, Channel, FrameMax, ReaderPid, Identity,
            ReaderWantsStats, GCThreshold) ->
     State = initial_state(Sock, Channel, FrameMax, ReaderPid,
                           ReaderWantsStats, GCThreshold),

@@ -68,7 +68,7 @@ start_writer(_Sup, direct, [ConnPid, Node, User, VHost, Collector, AmqpParams],
 start_writer(Sup, network, [Sock, FrameMax], ConnName, ChNumber, ChPid) ->
     GCThreshold = application:get_env(amqp_client, writer_gc_threshold, ?DEFAULT_GC_THRESHOLD),
     StartMFA = {rabbit_writer, start_link,
-                [Sock, ChNumber, FrameMax, ?PROTOCOL, ChPid,
+                [Sock, ChNumber, FrameMax, ChPid,
                  {ConnName, ChNumber}, false, GCThreshold]},
     ChildSpec = #{id => writer,
                   start => StartMFA,

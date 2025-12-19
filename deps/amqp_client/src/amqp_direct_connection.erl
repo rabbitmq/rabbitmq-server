@@ -149,7 +149,7 @@ connect(Params = #amqp_params_direct{username     = Username,
     %%       At some point it can be ignored as all nodes 4.3+ have
     %%       rabbit_direct:connect/4 as well.
     case rpc:call(Node, rabbit_direct, connect,
-                  [{Username, DecryptedPassword}, VHost, rabbit_framing_amqp_0_9_1, self(),
+                  [{Username, DecryptedPassword}, VHost, ?PROTOCOL, self(),
                    connection_info(State1)], ?DIRECT_OPERATION_TIMEOUT) of
         {ok, {User, ServerProperties}} ->
             {ok, ChMgr, Collector} = SIF(i(name, State1)),
