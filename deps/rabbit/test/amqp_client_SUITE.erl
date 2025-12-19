@@ -180,7 +180,8 @@ groups() ->
        x_cc_annotation_queue,
        x_cc_annotation_null,
        bad_x_cc_annotation_exchange,
-       decimal_types
+       decimal_types,
+       consumer_timeout_quorum_queue
       ]},
 
      {cluster_size_3, [shuffle],
@@ -6950,6 +6951,72 @@ decimal_types(Config) ->
 
     {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
     ok = close(Init).
+
+%% Test that consumer timeout on quorum queues results in the server
+%% detaching the link with an error.
+consumer_timeout_quorum_queue(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    Address = rabbitmq_amqp_address:queue(QName),
+    PolicyName = <<"consumer-timeout-policy">>,
+
+    %% Set a short consumer timeout policy
+    ok = rabbit_ct_broker_helpers:set_policy(
+           Config, 0, PolicyName, QName, <<"quorum_queues">>,
+           [{<<"consumer-timeout">>, 1000}]),
+
+    OpnConf = connection_config(Config),
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    {ok, Session} = amqp10_client:begin_session_sync(Connection),
+    {ok, LinkPair} = rabbitmq_amqp_client:attach_management_link_pair_sync(
+                       Session, <<"mgmt link pair">>),
+
+    %% Declare quorum queue
+    {ok, #{type := <<"quorum">>}} = rabbitmq_amqp_client:declare_queue(
+                                       LinkPair, QName,
+                                       #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>}}}),
+
+    %% Create sender and receiver
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address),
+    wait_for_credit(Sender),
+
+    %% Attach receiver in unsettled mode
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session,
+                       <<"receiver">>,
+                       Address,
+                       unsettled),
+
+    flush("After attach receiver link"),
+    %% Send a message
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"tag1">>, <<"test message">>, false)),
+    ok = wait_for_accepts(1),
+
+    %% Grant credit and receive the message but DON'T settle it
+    ok = amqp10_client:flow_link_credit(Receiver, 1, never),
+    Msg = receive
+              {amqp10_msg, Receiver, M} -> M
+          after 5000 -> ct:fail("did not receive message")
+          end,
+    ?assertEqual([<<"test message">>], amqp10_msg:body(Msg)),
+
+    %% Now wait for consumer timeout - the server should detach the link with an error
+    receive
+        {amqp10_event, {link, Receiver, {detached, Error}}} ->
+            ct:pal("Received expected link detach due to consumer timeout: ~p", [Error]),
+            ?assertMatch(
+               #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_RESOURCE_LIMIT_EXCEEDED},
+               Error)
+    after 5000 ->
+              ct:fail(consumer_timeout_not_triggered)
+    end,
+
+    %% Cleanup
+    ok = amqp10_client:detach_link(Sender),
+    {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
+    ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
+    ok = end_session_sync(Session),
+    ok = close_connection_sync(Connection),
+    ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, PolicyName).
 
 %% Attach a receiver to an unavailable quorum queue.
 attach_to_down_quorum_queue(Config) ->
