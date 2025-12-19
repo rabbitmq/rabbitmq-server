@@ -39,6 +39,7 @@
           port,
           %% client port
           peer_port,
+          protocol = rabbit_framing_amqp_0_9_1,
           user,
           %% heartbeat timeout value used, 0 means
           %% heartbeats are disabled
