@@ -39,7 +39,10 @@ groups() ->
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
     Config1 = rabbit_ct_helpers:set_config(Config, [
-        {rmq_nodename_suffix, ?MODULE}
+        {rmq_nodename_suffix, ?MODULE},
+        {ignored_crashes, [
+            "stopping because dependent process"
+        ]}
       ]),
     Config2 = rabbit_ct_helpers:run_setup_steps(Config1,
       rabbit_ct_broker_helpers:setup_steps() ++
