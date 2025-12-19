@@ -71,6 +71,10 @@
          properties_bin, %% either 'none', or an encoded properties binary
          %% Note: at most one of properties and properties_bin can be
          %% 'none' at once.
+         %% @todo The protocol field can be safely removed entirely in the
+         %%       RabbitMQ version that follows the LTS that is after
+         %%       RabbitMQ 4.3 (so if LTS is 4.5, remove in 4.6).
+         %%       Only compat code for reading from disk will be necessary.
          protocol, %% The protocol under which properties_bin was encoded
          payload_fragments_rev %% list of binaries, in reverse order (!)
          }).

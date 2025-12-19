@@ -482,7 +482,7 @@ encrypt_decrypt_term(_Config) ->
 frame_encoding_does_not_fail_with_empty_binary_payload(_Config) ->
     [begin
          Content = #content{
-             class_id = 60, properties = none, properties_bin = <<0,0>>, protocol = rabbit_framing_amqp_0_9_1,
+             class_id = 60, properties = none, properties_bin = <<0,0>>,
              payload_fragments_rev = P
          },
          ExpectedFrames = rabbit_binary_generator:build_simple_content_frames(1, Content, 0)
