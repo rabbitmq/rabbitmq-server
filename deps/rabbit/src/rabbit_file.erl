@@ -368,5 +368,8 @@ open_eventually(File, Modes, N) ->
         %% try again up to 3 times.
         {error, eacces} ->
             timer:sleep(10),
-            open_eventually(File, Modes, N - 1)
+            open_eventually(File, Modes, N - 1);
+        %% Other errors we return immediately.
+        Error ->
+            Error
     end.
