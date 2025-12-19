@@ -325,7 +325,8 @@ recover_segments(State, _, StoreState, _, []) ->
 recover_segments(State0, ContainsCheckFun, StoreState0, CountersRef, [Segment|Tail]) ->
     SegmentEntryCount = segment_entry_count(),
     SegmentFile = segment_file(Segment, State0),
-    {ok, Fd} = file:open(SegmentFile, [read, read_ahead, write, raw, binary]),
+    {ok, Fd} = rabbit_file:open_eventually(SegmentFile,
+        [read, read_ahead, write, raw, binary]),
     case file:read(Fd, ?HEADER_SIZE) of
         {ok, <<?MAGIC:32,?VERSION:8,
                _FromSeqId:64/unsigned,_ToSeqId:64/unsigned,
