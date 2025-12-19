@@ -9,13 +9,18 @@ const FakePortalPage = require('../../pageobjects/FakePortalPage')
 describe('A user who accesses the /login URL with a token without scopes for the management UI', function () {
   let driver
   let captureScreen
-  
+  let username
+  let password
+
   before(async function () {
     driver = buildDriver()
+    username = process.env.MGT_UNAUTHORIZED_CLIENT_ID_FOR_IDP_INITIATED || 'producer'
+    password = process.env.MGT_UNAUTHORIZED_CLIENT_SECRET_FOR_IDP_INITIATED || 'producer_secret'
+    
     captureScreen = captureScreensFor(driver, __filename)
     fakePortal = new FakePortalPage(driver)
     homePage = new SSOHomePage(driver)
-    await fakePortal.goToHome('producer', 'producer_secret')
+    await fakePortal.goToHome(username, password)
     if (!await fakePortal.isLoaded()) {
       throw new Error('Failed to load fakePortal')
     }
