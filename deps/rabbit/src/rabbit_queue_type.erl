@@ -822,17 +822,19 @@ inject_dqt(VHost) when ?is_vhost(VHost) ->
     inject_dqt(vhost:to_map(VHost));
 inject_dqt(VHost) when is_list(VHost) ->
     inject_dqt(rabbit_data_coercion:to_map(VHost));
-inject_dqt(M = #{default_queue_type := undefined}) ->
-    NQT = short_alias_of(default()),
-    Meta0 = maps:get(metadata, M, #{}),
-    Meta = Meta0#{default_queue_type => NQT},
-
-    M#{default_queue_type => NQT, metadata => Meta};
-inject_dqt(M = #{default_queue_type := DQT}) ->
+inject_dqt(M) when is_map(M) ->
+    RawDQT = maps:get(default_queue_type, M, undefined),
+    %% Handle undefined, <<"undefined">> (rabbitmq-server#10469),
+    %% "undefined", or a missing key by falling back to the node default
+    DQT = case RawDQT of
+        undefined -> default();
+        <<"undefined">> -> default();
+        "undefined" -> default();
+        Valid -> Valid
+    end,
     NQT = short_alias_of(DQT),
     Meta0 = maps:get(metadata, M, #{}),
     Meta = Meta0#{default_queue_type => NQT},
-
     M#{default_queue_type => NQT, metadata => Meta}.
 
 -spec vhosts_with_dqt([any()]) -> [map()].
