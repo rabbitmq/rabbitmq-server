@@ -38,7 +38,8 @@ all() ->
     [
      {group, all_tests_with_prefix},
      {group, all_tests_without_prefix},
-     {group, stats_disabled_on_request}
+     {group, stats_disabled_on_request},
+     {group, stats_disabled_via_config}
     ].
 
 groups() ->
@@ -46,6 +47,10 @@ groups() ->
      {all_tests_with_prefix, [], some_tests() ++ all_tests()},
      {all_tests_without_prefix, [], some_tests()},
      {stats_disabled_on_request, [], [disable_with_disable_stats_parameter_test]},
+     {stats_disabled_via_config, [], [
+         classic_queue_with_stats_disabled_test,
+         quorum_queue_with_stats_disabled_test
+     ]},
      {invalid_config, [], [invalid_config_test]}
     ].
 
@@ -130,6 +135,17 @@ init_per_group(all_tests_with_prefix = Group, Config0) ->
     Config1 = rabbit_ct_helpers:merge_app_env(Config0, PathConfig),
     Config2 = finish_init(Group, Config1),
     start_broker(Config2);
+init_per_group(stats_disabled_via_config = Group, Config0) ->
+    Config1 = rabbit_ct_helpers:merge_app_env(Config0,
+        {rabbitmq_management_agent, [
+            {disable_metrics_collector, true}
+        ]}),
+    Config2 = rabbit_ct_helpers:merge_app_env(Config1,
+        {rabbitmq_management, [
+            {disable_management_stats, true}
+        ]}),
+    Config3 = finish_init(Group, Config2, false),
+    start_broker(Config3);
 init_per_group(Group, Config0) ->
     Config1 = finish_init(Group, Config0),
     start_broker(Config1).
@@ -1442,6 +1458,77 @@ disable_with_disable_stats_parameter_test(Config) ->
 
     passed.
 
+classic_queue_with_stats_disabled_test(Config) ->
+    QArgs = #{arguments => #{'x-max-length' => 100}},
+    PolicyArgs = #{pattern => <<".*">>,
+                   definition => #{'max-length' => 1024},
+                   priority => 0,
+                   'apply-to' => <<"queues">>},
+    OpPolicyArgs = #{pattern => <<".*">>,
+                     definition => #{'max-length' => 2048},
+                     priority => 0,
+                     'apply-to' => <<"queues">>},
+
+    http_put(Config, "/queues/%2F/test-classic-queue", QArgs, {group, '2xx'}),
+    http_put(Config, "/policies/%2F/test-policy", PolicyArgs, {group, '2xx'}),
+    http_put(Config, "/operator-policies/%2F/test-op-policy", OpPolicyArgs, {group, '2xx'}),
+
+    await_condition(fun() ->
+        Queue = http_get(Config, "/queues/%2F/test-classic-queue", ?OK),
+        maps:get(policy, Queue, undefined) =:= <<"test-policy">>
+    end),
+
+    Queue = http_get(Config, "/queues/%2F/test-classic-queue", ?OK),
+
+    ?assertEqual(<<"test-policy">>, maps:get(policy, Queue)),
+    ?assertEqual(<<"test-op-policy">>, maps:get(operator_policy, Queue)),
+    ?assert(maps:is_key(effective_policy_definition, Queue)),
+    EffectiveDef = maps:get(effective_policy_definition, Queue),
+    ?assertEqual(1024, maps:get('max-length', EffectiveDef)),
+
+    http_delete(Config, "/queues/%2F/test-classic-queue", {group, '2xx'}),
+    http_delete(Config, "/policies/%2F/test-policy", {group, '2xx'}),
+    http_delete(Config, "/operator-policies/%2F/test-op-policy", {group, '2xx'}),
+
+    passed.
+
+quorum_queue_with_stats_disabled_test(Config) ->
+    QArgs = #{durable => true,
+              arguments => #{'x-queue-type' => 'quorum',
+                             'x-delivery-limit' => 40}},
+    PolicyArgs = #{pattern => <<".*">>,
+                   definition => #{'queue-leader-locator' => <<"balanced">>},
+                   priority => 0,
+                   'apply-to' => <<"queues">>},
+    OpPolicyArgs = #{pattern => <<".*">>,
+                     definition => #{'max-length' => 1024},
+                     priority => 0,
+                     'apply-to' => <<"queues">>},
+
+    http_put(Config, "/queues/%2F/test-quorum-queue", QArgs, {group, '2xx'}),
+    http_put(Config, "/policies/%2F/test-policy", PolicyArgs, {group, '2xx'}),
+    http_put(Config, "/operator-policies/%2F/test-op-policy", OpPolicyArgs, {group, '2xx'}),
+
+    await_condition(fun() ->
+        Queue = http_get(Config, "/queues/%2F/test-quorum-queue", ?OK),
+        maps:get(policy, Queue, undefined) =:= <<"test-policy">>
+    end),
+
+    Queue = http_get(Config, "/queues/%2F/test-quorum-queue", ?OK),
+
+    ?assertEqual(<<"test-policy">>, maps:get(policy, Queue)),
+    ?assertEqual(<<"test-op-policy">>, maps:get(operator_policy, Queue)),
+    ?assert(maps:is_key(effective_policy_definition, Queue)),
+    EffectiveDef = maps:get(effective_policy_definition, Queue),
+    ?assertEqual(1024, maps:get('max-length', EffectiveDef)),
+    ?assertEqual(40, maps:get(delivery_limit, Queue)),
+
+    http_delete(Config, "/queues/%2F/test-quorum-queue", {group, '2xx'}),
+    http_delete(Config, "/policies/%2F/test-policy", {group, '2xx'}),
+    http_delete(Config, "/operator-policies/%2F/test-op-policy", {group, '2xx'}),
+
+    passed.
+
 sorting_test(Config) ->
     QArgs = #{},
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
@@ -1599,37 +1686,6 @@ local_port(Conn) ->
     [{sock, Sock}] = amqp_connection:info(Conn, [sock]),
     {ok, Port} = inet:port(Sock),
     Port.
-
-spawn_invalid(_Config, 0) ->
-    ok;
-spawn_invalid(Config, N) ->
-    Self = self(),
-    spawn(fun() ->
-                  timer:sleep(rand:uniform(250)),
-                  {ok, Sock} = gen_tcp:connect("localhost", amqp_port(Config), [list]),
-                  ok = gen_tcp:send(Sock, "Some Data"),
-                  receive_msg(Self)
-          end),
-    spawn_invalid(Config, N-1).
-
-receive_msg(Self) ->
-    receive
-        {tcp, _, [$A, $M, $Q, $P | _]} ->
-            Self ! done
-    after
-        60000 ->
-            Self ! no_reply
-    end.
-
-wait_for_answers(0) ->
-    ok;
-wait_for_answers(N) ->
-    receive
-        done ->
-            wait_for_answers(N-1);
-        no_reply ->
-            throw(no_reply)
-    end.
 
 publish(Ch) ->
     amqp_channel:call(Ch, #'basic.publish'{exchange = <<"">>,

@@ -280,7 +280,10 @@ format(Q, _Ctx) when ?is_amqqueue(Q) ->
             end,
     [{type, rabbit_queue_type:short_alias_of(?MODULE)},
      {state, State},
-     {node, node(amqqueue:get_pid(Q))}].
+     {node, node(amqqueue:get_pid(Q))},
+     {policy, i(policy, Q)},
+     {operator_policy, i(operator_policy, Q)},
+     {effective_policy_definition, i(effective_policy_definition, Q)}].
 
 -spec init(amqqueue:amqqueue()) -> {ok, state()}.
 init(Q) when ?amqqueue_is_classic(Q) ->
