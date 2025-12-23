@@ -713,6 +713,8 @@ i(metadata, VHost) ->
             #{default_queue_type => DQT};
         M = #{default_queue_type := undefined} ->
             M#{default_queue_type => DQT};
+        M = #{default_queue_type := <<"undefined">>} ->
+            M#{default_queue_type => DQT};
         M = #{default_queue_type := QT} ->
             M#{default_queue_type => rabbit_queue_type:short_alias_of(QT)};
         M when is_map(M) ->
