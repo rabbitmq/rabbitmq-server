@@ -824,10 +824,11 @@ inject_dqt(VHost) when is_list(VHost) ->
     inject_dqt(rabbit_data_coercion:to_map(VHost));
 inject_dqt(M) when is_map(M) ->
     RawDQT = maps:get(default_queue_type, M, undefined),
-    %% Handle undefined, <<"undefined">> (rabbitmq-server#10469),
-    %% "undefined", or a missing key by falling back to the node default
+    %% See rabbitmq/rabbitmq-server#10469
     DQT = case RawDQT of
         undefined -> default();
+        null -> default();
+        nil -> default();
         <<"undefined">> -> default();
         "undefined" -> default();
         Valid -> Valid
