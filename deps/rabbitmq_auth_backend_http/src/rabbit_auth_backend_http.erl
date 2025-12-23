@@ -212,17 +212,25 @@ do_http_req(Path0, Query) ->
     end.
 
 ssl_options() ->
+<<<<<<< HEAD
     case application:get_env(rabbitmq_auth_backend_http, ssl_options) of
         {ok, Opts0} when is_list(Opts0) ->
             Opts1 = [{ssl, rabbit_ssl_options:fix_client(Opts0)}],
             case application:get_env(rabbitmq_auth_backend_http, ssl_hostname_verification) of
+=======
+    case application:get_env(?APP, ssl_options) of
+        {ok, SslOpts0} when is_list(SslOpts0) ->
+            SslOpts1 = rabbit_ssl_options:fix_client(SslOpts0),
+            case application:get_env(?APP, ssl_hostname_verification) of
+>>>>>>> 4360e05df (Correctly add `customize_hostname_check` to `ssl` options)
                 {ok, wildcard} ->
                     ?LOG_DEBUG("Enabling wildcard-aware hostname verification for HTTP client connections"),
                     %% Needed for HTTPS connections that connect to servers that use wildcard certificates.
                     %% See https://erlang.org/doc/man/public_key.html#pkix_verify_hostname_match_fun-1.
-                    [{customize_hostname_check, [{match_fun, public_key:pkix_verify_hostname_match_fun(https)}]} | Opts1];
+                    SslOpts2 = [{customize_hostname_check, [{match_fun, public_key:pkix_verify_hostname_match_fun(https)}]} | SslOpts1],
+                    [{ssl, SslOpts2}];
                 _ ->
-                    Opts1
+                    [{ssl, SslOpts1}]
             end;
         _ -> []
     end.
