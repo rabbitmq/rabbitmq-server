@@ -62,6 +62,8 @@ end_per_testcase(Testcase, Config) ->
 %% Test Cases
 %% -------------------------------------------------------------------
 
+%% When default_queue_type is the binary <<"undefined">> (exported from older versions),
+%% inject the default. See rabbitmq/rabbitmq-server#10469
 inject_dqt_undefined_binary(Config) ->
     Expected = rpc(Config, 0, rabbit_queue_type, default_alias, []),
     Input = #{default_queue_type => <<"undefined">>, name => <<"/">>},
@@ -86,6 +88,7 @@ inject_dqt_nil(Config) ->
         rpc(Config, 0, rabbit_queue_type, inject_dqt, [Input]),
     ok.
 
+%% Existing metadata keys should be preserved when injecting DQT
 inject_dqt_preserves_existing_metadata(Config) ->
     Expected = rpc(Config, 0, rabbit_queue_type, default_alias, []),
     Input = #{
