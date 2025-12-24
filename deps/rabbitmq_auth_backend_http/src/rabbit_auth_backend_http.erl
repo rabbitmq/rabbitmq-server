@@ -25,6 +25,8 @@
 
 -define(SUCCESSFUL_RESPONSE_CODES, [200, 201]).
 
+-define(APP, rabbitmq_auth_backend_http).
+
 %%--------------------------------------------------------------------
 
 description() ->
@@ -177,7 +179,7 @@ do_http_req(Path0, Query) ->
     {host, Host} = lists:keyfind(host, 1, URI),
     {port, Port} = lists:keyfind(port, 1, URI),
     HostHdr = rabbit_misc:format("~ts:~b", [Host, Port]),
-    {ok, Method} = application:get_env(rabbitmq_auth_backend_http, http_method),
+    {ok, Method} = application:get_env(?APP, http_method),
     Request = case rabbit_data_coercion:to_atom(Method) of
         get  ->
             Path = Path0 ++ "?" ++ Query,
@@ -188,12 +190,12 @@ do_http_req(Path0, Query) ->
             {Path0, [{"Host", HostHdr}], "application/x-www-form-urlencoded", Query}
     end,
     RequestTimeout =
-        case application:get_env(rabbitmq_auth_backend_http, request_timeout) of
+        case application:get_env(?APP, request_timeout) of
             {ok, Val1} -> Val1;
             _ -> infinity
         end,
     ConnectionTimeout =
-        case application:get_env(rabbitmq_auth_backend_http, connection_timeout) of
+        case application:get_env(?APP, connection_timeout) of
             {ok, Val2} -> Val2;
             _ -> RequestTimeout
         end,
@@ -212,23 +214,24 @@ do_http_req(Path0, Query) ->
     end.
 
 ssl_options() ->
-    case application:get_env(rabbitmq_auth_backend_http, ssl_options) of
-        {ok, Opts0} when is_list(Opts0) ->
-            Opts1 = [{ssl, rabbit_ssl_options:fix_client(Opts0)}],
-            case application:get_env(rabbitmq_auth_backend_http, ssl_hostname_verification) of
+    case application:get_env(?APP, ssl_options) of
+        {ok, SslOpts0} when is_list(SslOpts0) ->
+            SslOpts1 = rabbit_ssl_options:fix_client(SslOpts0),
+            case application:get_env(?APP, ssl_hostname_verification) of
                 {ok, wildcard} ->
                     ?LOG_DEBUG("Enabling wildcard-aware hostname verification for HTTP client connections"),
                     %% Needed for HTTPS connections that connect to servers that use wildcard certificates.
                     %% See https://erlang.org/doc/man/public_key.html#pkix_verify_hostname_match_fun-1.
-                    [{customize_hostname_check, [{match_fun, public_key:pkix_verify_hostname_match_fun(https)}]} | Opts1];
+                    SslOpts2 = [{customize_hostname_check, [{match_fun, public_key:pkix_verify_hostname_match_fun(https)}]} | SslOpts1],
+                    [{ssl, SslOpts2}];
                 _ ->
-                    Opts1
+                    [{ssl, SslOpts1}]
             end;
         _ -> []
     end.
 
 p(PathName) ->
-    {ok, Path} = application:get_env(rabbitmq_auth_backend_http, PathName),
+    {ok, Path} = application:get_env(?APP, PathName),
     Path.
 
 q(Args) ->
