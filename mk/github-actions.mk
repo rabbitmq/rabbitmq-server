@@ -7,6 +7,7 @@ VENDORED_COMPONENTS = rabbit_common \
 	rabbitmq_auth_backend_cache \
 	rabbitmq_auth_backend_http \
 	rabbitmq_auth_backend_ldap \
+	rabbitmq_auth_backend_ldap_management \
 	rabbitmq_auth_backend_oauth2 \
 	rabbitmq_auth_mechanism_ssl \
 	rabbitmq_aws \
