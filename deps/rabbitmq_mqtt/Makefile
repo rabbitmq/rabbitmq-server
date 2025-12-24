@@ -6,6 +6,7 @@ define PROJECT_ENV
 [
 	    {ssl_cert_login,false},
 	    {allow_anonymous, true},
+	    {disconnect_on_unauthorized, true},
 	    {vhost, <<"/">>},
 	    {exchange, <<"amq.topic">>},
 	    {max_session_expiry_interval_seconds, 86400}, %% 1 day
