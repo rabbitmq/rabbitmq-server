@@ -403,7 +403,6 @@ enq_expire_enq_deq_test(Config) ->
     {S1, ok, _} = apply(meta(Config, Idx1, 100, {notify, 1, self()}), Enq1, S0),
     Msg2 = #basic_message{content = #content{properties = #'P_basic'{},
                                              % class_id = 60,
-                                             % protocol = ?PROTOMOD,
                                              payload_fragments_rev = [<<"msg2">>]}},
     Enq2 = rabbit_fifo:make_enqueue(self(), 2, Msg2),
     Idx2 = ?LINE,

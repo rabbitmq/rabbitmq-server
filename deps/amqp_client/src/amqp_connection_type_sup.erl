@@ -51,11 +51,11 @@ start_channels_manager(Sup, Conn, ConnName, Type) ->
 start_infrastructure_fun(Sup, Conn, network) ->
     fun (Sock, ConnName) ->
             {ok, ChMgr} = start_channels_manager(Sup, Conn, ConnName, network),
-            {ok, AState} = rabbit_command_assembler:init(?PROTOCOL),
+            {ok, AState} = rabbit_command_assembler:init(),
             {ok, GCThreshold} = application:get_env(amqp_client, writer_gc_threshold),
 
             WriterStartMFA = {rabbit_writer, start_link,
-                              [Sock, 0, ?FRAME_MIN_SIZE, ?PROTOCOL, Conn,
+                              [Sock, 0, ?FRAME_MIN_SIZE, Conn,
                                ConnName, false, GCThreshold]},
             WriterChildSpec = #{id => writer,
                                 start => WriterStartMFA,

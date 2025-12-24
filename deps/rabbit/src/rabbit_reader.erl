@@ -313,7 +313,6 @@ start_connection(Parent, HelperSups, RanchRef, Deb, Sock) ->
                   peer_host          = PeerHost,
                   port               = Port,
                   peer_port          = PeerPort,
-                  protocol           = none,
                   user               = none,
                   timeout_sec        = (HandshakeTimeout / 1000),
                   frame_max          = InitialFrameMax,
@@ -700,24 +699,21 @@ terminate(Explanation, State) when ?IS_RUNNING(State) ->
 terminate(_Explanation, State) ->
     {force, State}.
 
-send_blocked(#v1{connection = #connection{protocol     = Protocol,
-                                          capabilities = Capabilities},
+send_blocked(#v1{connection = #connection{capabilities = Capabilities},
                  sock       = Sock}, Reason) ->
     case rabbit_misc:table_lookup(Capabilities, <<"connection.blocked">>) of
         {bool, true} ->
 
-            ok = send_on_channel0(Sock, #'connection.blocked'{reason = Reason},
-                                  Protocol);
+            ok = send_on_channel0(Sock, #'connection.blocked'{reason = Reason});
         _ ->
             ok
     end.
 
-send_unblocked(#v1{connection = #connection{protocol     = Protocol,
-                                            capabilities = Capabilities},
+send_unblocked(#v1{connection = #connection{capabilities = Capabilities},
                    sock       = Sock}) ->
     case rabbit_misc:table_lookup(Capabilities, <<"connection.blocked">>) of
         {bool, true} ->
-            ok = send_on_channel0(Sock, #'connection.unblocked'{}, Protocol);
+            ok = send_on_channel0(Sock, #'connection.unblocked'{});
         _ ->
             ok
     end.
@@ -813,10 +809,9 @@ wait_for_channel_termination(N, TimerRef,
 
 maybe_close(State = #v1{connection_state = closing,
                         channel_count    = 0,
-                        connection       = #connection{protocol = Protocol},
                         sock             = Sock}) ->
     NewState = close_connection(State),
-    ok = send_on_channel0(Sock, #'connection.close_ok'{}, Protocol),
+    ok = send_on_channel0(Sock, #'connection.close_ok'{}),
     NewState;
 maybe_close(State) ->
     State.
@@ -845,14 +840,12 @@ log_hard_error(#v1{connection_state = CS,
 handle_exception(State = #v1{connection_state = closed}, Channel, Reason) ->
     log_hard_error(State, Channel, Reason),
     State;
-handle_exception(State = #v1{connection = #connection{protocol = Protocol},
-                             connection_state = CS},
+handle_exception(State = #v1{connection_state = CS},
                  Channel, Reason)
   when ?IS_RUNNING(State) orelse CS =:= closing ->
-    respond_and_close(State, Channel, Protocol, Reason, Reason);
+    respond_and_close(State, Channel, Reason, Reason);
 %% authentication failure
-handle_exception(State = #v1{connection = #connection{protocol = Protocol,
-                                                      log_name = ConnName,
+handle_exception(State = #v1{connection = #connection{log_name = ConnName,
                                                       capabilities = Capabilities},
                              connection_state = starting},
                  Channel, Reason = #amqp_error{name = access_refused,
@@ -864,14 +857,13 @@ handle_exception(State = #v1{connection = #connection{protocol = Protocol,
     case rabbit_misc:table_lookup(Capabilities,
                                   <<"authentication_failure_close">>) of
         {bool, true} ->
-            send_error_on_channel0_and_close(Channel, Protocol, Reason, State);
+            send_error_on_channel0_and_close(Channel, Reason, State);
         _ ->
             close_connection(terminate_channels(State))
     end;
 %% when loopback-only user tries to connect from a non-local host
 %% when user tries to access a vhost it has no permissions for
-handle_exception(State = #v1{connection = #connection{protocol = Protocol,
-                                                      log_name = ConnName,
+handle_exception(State = #v1{connection = #connection{log_name = ConnName,
                                                       user = User},
                              connection_state = opening},
                  Channel, Reason = #amqp_error{name = not_allowed,
@@ -879,16 +871,14 @@ handle_exception(State = #v1{connection = #connection{protocol = Protocol,
     ?LOG_ERROR(
         "Error on AMQP connection ~tp (~ts, user: '~ts', state: ~tp):~n~ts",
         [self(), ConnName, User#user.username, opening, ErrMsg]),
-    send_error_on_channel0_and_close(Channel, Protocol, Reason, State);
-handle_exception(State = #v1{connection = #connection{protocol = Protocol},
-                             connection_state = CS = opening},
+    send_error_on_channel0_and_close(Channel, Reason, State);
+handle_exception(State = #v1{connection_state = CS = opening},
                  Channel, Reason = #amqp_error{}) ->
-    respond_and_close(State, Channel, Protocol, Reason,
+    respond_and_close(State, Channel, Reason,
                       {handshake_error, CS, Reason});
 %% when negotiation fails, e.g. due to channel_max being higher than the
 %% maximum allowed limit
-handle_exception(State = #v1{connection = #connection{protocol = Protocol,
-                                                      log_name = ConnName,
+handle_exception(State = #v1{connection = #connection{log_name = ConnName,
                                                       user = User},
                              connection_state = tuning},
                  Channel, Reason = #amqp_error{name = not_allowed,
@@ -897,7 +887,7 @@ handle_exception(State = #v1{connection = #connection{protocol = Protocol,
         "Error on AMQP connection ~tp (~ts,"
         " user: '~ts', state: ~tp):~n~ts",
         [self(), ConnName, User#user.username, tuning, ErrMsg]),
-    send_error_on_channel0_and_close(Channel, Protocol, Reason, State);
+    send_error_on_channel0_and_close(Channel, Reason, State);
 handle_exception(State, _Channel, Reason) ->
     %% We don't trust the client at this point - force them to wait
     %% for a bit so they can't DOS us with repeated failed logins etc.
@@ -949,7 +939,6 @@ create_channel(Channel,
                    channel_count       = ChannelCount,
                    connection =
                        #connection{name         = Name,
-                                   protocol     = Protocol,
                                    frame_max    = FrameMax,
                                    vhost        = VHost,
                                    capabilities = Capabilities,
@@ -960,7 +949,7 @@ create_channel(Channel,
             {ok, _ChSupPid, {ChPid, AState}} =
                 rabbit_channel_sup_sup:start_channel(
                   ChanSupSup, {tcp, Sock, Channel, FrameMax, self(), Name,
-                               Protocol, User, VHost, Capabilities,
+                               User, VHost, Capabilities,
                                Collector}),
             MRef = erlang:monitor(process, ChPid),
             put({ch_pid, ChPid}, {Channel, MRef}),
@@ -1028,16 +1017,16 @@ clean_up_all_channels(State) ->
 %%--------------------------------------------------------------------------
 
 handle_frame(Type, 0, Payload,
-             State = #v1{connection = #connection{protocol = Protocol}})
+             State = #v1{connection = #connection{}})
   when ?IS_STOPPING(State) ->
-    case rabbit_command_assembler:analyze_frame(Type, Payload, Protocol) of
+    case rabbit_command_assembler:analyze_frame(Type, Payload) of
         {method, MethodName, FieldsBin} ->
             handle_method0(MethodName, FieldsBin, State);
         _Other -> State
     end;
 handle_frame(Type, 0, Payload,
-             State = #v1{connection = #connection{protocol = Protocol}}) ->
-    case rabbit_command_assembler:analyze_frame(Type, Payload, Protocol) of
+             State = #v1{connection = #connection{}}) ->
+    case rabbit_command_assembler:analyze_frame(Type, Payload) of
         error     -> frame_error(unknown_frame, Type, 0, Payload, State);
         heartbeat -> State;
         {method, MethodName, FieldsBin} ->
@@ -1045,9 +1034,9 @@ handle_frame(Type, 0, Payload,
         _Other    -> unexpected_frame(Type, 0, Payload, State)
     end;
 handle_frame(Type, Channel, Payload,
-             State = #v1{connection = #connection{protocol = Protocol}})
+             State = #v1{connection = #connection{}})
   when ?IS_RUNNING(State) ->
-    case rabbit_command_assembler:analyze_frame(Type, Payload, Protocol) of
+    case rabbit_command_assembler:analyze_frame(Type, Payload) of
         error     -> frame_error(unknown_frame, Type, Channel, Payload, State);
         heartbeat -> unexpected_frame(Type, Channel, Payload, State);
         Frame     -> process_frame(Frame, Channel, State)
@@ -1150,10 +1139,10 @@ version_negotiation({ProtocolId, 1, 0, 0}, #v1{sock = Sock}) ->
     %% AMQP 1.0 figure 2.13: We require SASL security layer.
     refuse_connection(Sock, {sasl_required, ProtocolId});
 version_negotiation({0, 0, 9, 1}, State) ->
-    start_091_connection({0, 9, 1}, rabbit_framing_amqp_0_9_1, State);
+    start_091_connection({0, 9, 1}, State);
 version_negotiation({1, 1, 0, 9}, State) ->
     %% This is the protocol header for 0-9, which we can safely treat as though it were 0-9-1.
-    start_091_connection({0, 9, 0}, rabbit_framing_amqp_0_9_1, State);
+    start_091_connection({0, 9, 0}, State);
 version_negotiation(Vsn = {0, 0, Minor, _}, #v1{sock = Sock})
   when Minor >= 9 ->
     refuse_connection(Sock, {bad_version, Vsn}, {0, 0, 9, 1});
@@ -1164,7 +1153,6 @@ version_negotiation(Vsn, #v1{sock = Sock}) ->
 %% includes a major and minor version number, Luckily 0-9 and 0-9-1
 %% are similar enough that clients will be happy with either.
 start_091_connection({ProtocolMajor, ProtocolMinor, _ProtocolRevision},
-                     Protocol,
                      #v1{parent = Parent,
                          sock = Sock,
                          helper_sup = {HelperSup091, _HelperSup10},
@@ -1174,13 +1162,11 @@ start_091_connection({ProtocolMajor, ProtocolMinor, _ProtocolRevision},
     Start = #'connection.start'{
                version_major = ProtocolMajor,
                version_minor = ProtocolMinor,
-               server_properties = server_properties(Protocol),
+               server_properties = server_properties(rabbit_framing_amqp_0_9_1),
                mechanisms = auth_mechanisms_binary(Sock),
                locales = <<"en_US">> },
-    ok = send_on_channel0(Sock, Start, Protocol),
-    State = State0#v1{connection = Connection#connection{
-                                     timeout_sec = ?NORMAL_TIMEOUT,
-                                     protocol = Protocol},
+    ok = send_on_channel0(Sock, Start),
+    State = State0#v1{connection = Connection#connection{timeout_sec = ?NORMAL_TIMEOUT},
                       connection_state = starting,
                       helper_sup = HelperSup091},
     switch_callback(State, frame_header, 7).
@@ -1202,9 +1188,9 @@ ensure_stats_timer(State) ->
 %%--------------------------------------------------------------------------
 
 handle_method0(MethodName, FieldsBin,
-               State = #v1{connection = #connection{protocol = Protocol}}) ->
+               State = #v1{connection = #connection{}}) ->
     try
-        handle_method0(Protocol:decode_method_fields(MethodName, FieldsBin),
+        handle_method0(rabbit_framing_amqp_0_9_1:decode_method_fields(MethodName, FieldsBin),
                        State)
     catch throw:{inet_error, E} when E =:= closed; E =:= enotconn ->
             maybe_emit_stats(State),
@@ -1296,8 +1282,7 @@ handle_method0(#'connection.open'{virtual_host = VHost},
                            connection_state = opening,
                            connection       = Connection = #connection{
                                                 log_name = ConnName,
-                                                user = User = #user{username = Username},
-                                                protocol = Protocol},
+                                                user = User = #user{username = Username}},
                            helper_sup       = SupPid,
                            sock             = Sock,
                            throttle         = Throttle}) ->
@@ -1307,7 +1292,7 @@ handle_method0(#'connection.open'{virtual_host = VHost},
     ok = rabbit_access_control:check_vhost_access(User, VHost, {socket, Sock}, #{}),
     ok = is_vhost_alive(VHost, User),
     NewConnection = Connection#connection{vhost = VHost},
-    ok = send_on_channel0(Sock, #'connection.open_ok'{}, Protocol),
+    ok = send_on_channel0(Sock, #'connection.open_ok'{}),
 
     Alarms = rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
     BlockedBy = sets:from_list([{resource, Alarm} || Alarm <- Alarms], [{version, 2}]),
@@ -1336,12 +1321,11 @@ handle_method0(#'connection.close'{}, State) when ?IS_RUNNING(State) ->
     lists:foreach(fun rabbit_channel:shutdown/1, all_channels()),
     maybe_close(State#v1{connection_state = closing});
 handle_method0(#'connection.close'{},
-               State = #v1{connection = #connection{protocol = Protocol},
-                           sock = Sock})
+               State = #v1{sock = Sock})
   when ?IS_STOPPING(State) ->
     %% We're already closed or closing, so we don't need to cleanup
     %% anything.
-    ok = send_on_channel0(Sock, #'connection.close_ok'{}, Protocol),
+    ok = send_on_channel0(Sock, #'connection.close_ok'{}),
     State;
 handle_method0(#'connection.close_ok'{},
                State = #v1{connection_state = closed}) ->
@@ -1349,8 +1333,7 @@ handle_method0(#'connection.close_ok'{},
     State;
 handle_method0(#'connection.update_secret'{new_secret = NewSecret, reason = Reason},
                State = #v1{connection =
-                               #connection{protocol   = Protocol,
-                                           user       = User = #user{username = Username},
+                               #connection{user       = User = #user{username = Username},
                                            log_name   = ConnName} = Conn,
                            sock       = Sock}) when ?IS_RUNNING(State) ->
     ?LOG_DEBUG(
@@ -1369,7 +1352,7 @@ handle_method0(#'connection.update_secret'{new_secret = NewSecret, reason = Reas
           ?LOG_DEBUG("Updating user/auth backend state for channel ~tp", [Ch]),
           _ = rabbit_channel:update_user_state(Ch, User1)
         end, all_channels()),
-        ok = send_on_channel0(Sock, #'connection.update_secret_ok'{}, Protocol),
+        ok = send_on_channel0(Sock, #'connection.update_secret_ok'{}),
         ?LOG_INFO(
           "connection ~ts: user '~ts' updated secret, reason: ~ts",
           [dynamic_connection_name(ConnName), Username, Reason]),
@@ -1471,8 +1454,8 @@ get_env(Key) ->
     {ok, Value} = application:get_env(rabbit, Key),
     Value.
 
-send_on_channel0(Sock, Method, Protocol) ->
-    ok = rabbit_writer:internal_send_command(Sock, 0, Method, Protocol).
+send_on_channel0(Sock, Method) ->
+    ok = rabbit_writer:internal_send_command(Sock, 0, Method).
 
 auth_mechanism_to_module(TypeBin, Sock) ->
     case rabbit_registry:binary_to_type(TypeBin) of
@@ -1503,8 +1486,7 @@ auth_mechanisms_binary(Sock) ->
 
 auth_phase(Response,
            State = #v1{connection = Connection =
-                           #connection{protocol       = Protocol,
-                                       auth_mechanism = {Name, AuthMechanism},
+                           #connection{auth_mechanism = {Name, AuthMechanism},
                                        auth_state     = AuthState,
                                        host           = RemoteAddress},
                        sock = Sock}) ->
@@ -1522,7 +1504,7 @@ auth_phase(Response,
         {challenge, Challenge, AuthState1} ->
             rabbit_core_metrics:auth_attempt_succeeded(RemoteAddress, <<>>, amqp091),
             Secure = #'connection.secure'{challenge = Challenge},
-            ok = send_on_channel0(Sock, Secure, Protocol),
+            ok = send_on_channel0(Sock, Secure),
             State#v1{connection = Connection#connection{
                                     auth_state = AuthState1}};
         {ok, User = #user{username = Username}} ->
@@ -1539,7 +1521,7 @@ auth_phase(Response,
             Tune = #'connection.tune'{frame_max   = get_env(frame_max),
                                       channel_max = get_env(channel_max),
                                       heartbeat   = get_env(heartbeat)},
-            ok = send_on_channel0(Sock, Tune, Protocol),
+            ok = send_on_channel0(Sock, Tune),
             State#v1{connection_state = tuning,
                      connection = Connection#connection{user       = User,
                                                         auth_state = none}}
@@ -1550,8 +1532,7 @@ auth_phase(Response,
             no_return().
 
 auth_fail(Username, Msg, Args, AuthName,
-          State = #v1{connection = #connection{protocol     = Protocol,
-                                               capabilities = Capabilities}}) ->
+          State = #v1{connection = #connection{capabilities = Capabilities}}) ->
     notify_auth_result(Username, user_authentication_failure,
       [{error, rabbit_misc:format(Msg, Args)}], State),
     AmqpError = rabbit_misc:amqp_error(
@@ -1566,8 +1547,8 @@ auth_fail(Username, Msg, Args, AuthName,
                         "logfile.", [AuthName]),
             AmqpError1 = AmqpError#amqp_error{explanation = SafeMsg},
             {0, CloseMethod} = rabbit_binary_generator:map_exception(
-                                 0, AmqpError1, Protocol),
-            ok = send_on_channel0(State#v1.sock, CloseMethod, Protocol);
+                                 0, AmqpError1),
+            ok = send_on_channel0(State#v1.sock, CloseMethod);
         _ -> ok
     end,
     rabbit_misc:protocol_error(AmqpError).
@@ -1640,6 +1621,11 @@ i(garbage_collection, _State) ->
 i(reductions = Item, _State) ->
     {Item, Reductions} = erlang:process_info(self(), Item),
     Reductions;
+%% There can be only one protocol: AMQP 0.9.1. AMQP 1.0 is
+%% handled by a different module. Before the handshake completes
+%% we don't have an active protocol in use so we return 'none'.
+i(protocol, #v1{callback = handshake}) -> none;
+i(protocol, _State)                    -> rabbit_framing_amqp_0_9_1:version();
 i(Item,               #v1{connection = Conn}) -> ic(Item, Conn).
 
 ic(name,              #connection{name        = Name})     -> Name;
@@ -1647,8 +1633,6 @@ ic(host,              #connection{host        = Host})     -> Host;
 ic(peer_host,         #connection{peer_host   = PeerHost}) -> PeerHost;
 ic(port,              #connection{port        = Port})     -> Port;
 ic(peer_port,         #connection{peer_port   = PeerPort}) -> PeerPort;
-ic(protocol,          #connection{protocol    = none})     -> none;
-ic(protocol,          #connection{protocol    = P})        -> P:version();
 ic(user,              #connection{user        = none})     -> '';
 ic(user,              #connection{user        = U})        -> U#user.username;
 ic(user_who_performed_action, C) -> ic(user, C);
@@ -1709,15 +1693,15 @@ pack_for_1_0(Buf, BufLen, #v1{sock         = Sock,
     {Sock, PendingRecv, HelperSup10, Buf, BufLen, ProxySocket,
      Name, Host, PeerHost, Port, PeerPort, ConnectedAt, StatsTimer}.
 
-respond_and_close(State, Channel, Protocol, Reason, LogErr) ->
+respond_and_close(State, Channel, Reason, LogErr) ->
     log_hard_error(State, Channel, LogErr),
-    send_error_on_channel0_and_close(Channel, Protocol, Reason, State).
+    send_error_on_channel0_and_close(Channel, Reason, State).
 
-send_error_on_channel0_and_close(Channel, Protocol, Reason, State) ->
+send_error_on_channel0_and_close(Channel, Reason, State) ->
     {0, CloseMethod} =
-        rabbit_binary_generator:map_exception(Channel, Reason, Protocol),
+        rabbit_binary_generator:map_exception(Channel, Reason),
     State1 = close_connection(terminate_channels(State)),
-    ok = send_on_channel0(State#v1.sock, CloseMethod, Protocol),
+    ok = send_on_channel0(State#v1.sock, CloseMethod),
     State1.
 
 %%
