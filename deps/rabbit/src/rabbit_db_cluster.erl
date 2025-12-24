@@ -9,10 +9,13 @@
 -module(rabbit_db_cluster).
 
 -include_lib("kernel/include/logger.hrl").
+-include_lib("stdlib/include/assert.hrl").
 
 -include_lib("rabbit_common/include/logging.hrl").
 
 -export([ensure_feature_flags_are_in_sync/2,
+         pre_cluster_changes/0,
+         post_cluster_changes/1,
          join/2,
          forget_member/2]).
 -export([change_node_type/1]).
@@ -38,6 +41,58 @@
 %% -------------------------------------------------------------------
 %% Cluster formation.
 %% -------------------------------------------------------------------
+
+pre_cluster_changes() ->
+    case rabbit_boot_state:has_reached(prelaunch_done) of
+        true ->
+            ?LOG_NOTICE(
+               "DB: prerare for cluster changes; stopping service",
+               #{domain => ?RMQLOG_DOMAIN_DB}),
+            BootState = rabbit_boot_state:get(),
+            case rabbit_boot_state:has_reached(ready) of
+                true ->
+                    rabbit_boot_state:set(prelaunch_done),
+                    ?assertNot(rabbit:is_running()),
+
+                    %% The maintenance mode stops network listeners, closes
+                    %% all client connections and transfer Ra leaders to other
+                    %% nodes.
+                    ok = rabbit_maintenance:drain();
+                false ->
+                    ?assertNot(rabbit:is_running()),
+                    ok
+            end,
+
+            %% We also need to stop the Feature flags controller to make sure
+            %% no feature flags are modified while the cluster membership is
+            %% being worked on.
+            ok = rabbit_ff_controller:wait_for_task_and_stop(),
+            {ok, BootState};
+        false ->
+            erlang:throw({error, rabbit_not_running})
+    end.
+
+post_cluster_changes(FormerBootState) ->
+    ?assertEqual(prelaunch_done, rabbit_boot_state:get()),
+
+    %% Restart the Feature flags controller and exit from maintenance mode.
+    ok = rabbit_sup:start_child(rabbit_ff_controller),
+
+    case FormerBootState of
+        ready ->
+            rabbit_maintenance:revive(),
+
+            %% We can now mark the node as ready again.
+            rabbit_boot_state:set(ready),
+            ?assert(rabbit:is_running());
+        _ ->
+            ok
+    end,
+
+    ?LOG_NOTICE(
+       "DB: cluster changes finished; service resumed",
+       #{domain => ?RMQLOG_DOMAIN_DB}),
+    ok.
 
 ensure_feature_flags_are_in_sync(Nodes, NodeIsVirgin) ->
     Ret = rabbit_feature_flags:sync_feature_flags_with_cluster(
@@ -92,6 +147,14 @@ join(ThisNode, _NodeType) when ThisNode =:= node() ->
     {error, cannot_cluster_node_with_itself};
 join(RemoteNode, NodeType)
   when is_atom(RemoteNode) andalso ?IS_NODE_TYPE(NodeType) ->
+    case 1 =:= 1 of
+        true ->
+            join_v2(RemoteNode, NodeType);
+        false ->
+            join_v1(RemoteNode, NodeType)
+    end.
+
+join_v1(RemoteNode, NodeType) ->
     case can_join(RemoteNode) of
         {ok, ClusterNodes} when is_list(ClusterNodes) ->
             %% RabbitMQ and Mnesia must be stopped to modify the cluster. In
@@ -236,6 +299,43 @@ join(RemoteNode, NodeType)
                            RemoteNode),
                     join(RemoteNode, NodeType)
             end;
+        {error, _} = Error ->
+            Error
+    end.
+
+join_v2(RemoteNode, NodeType) ->
+    case can_join(RemoteNode) of
+        {ok, ClusterNodes} when is_list(ClusterNodes) ->
+            {ok, BootState} = pre_cluster_changes(),
+
+            rabbit_ff_registry_factory:acquire_state_change_lock(),
+            try
+                ok = rabbit_db:do_reset_v2(),
+                ok = rabbit_node_monitor:notify_left_cluster(node()),
+                rabbit_feature_flags:copy_feature_states_after_reset(
+                  RemoteNode)
+            after
+                rabbit_ff_registry_factory:release_state_change_lock()
+            end,
+
+            ?LOG_INFO(
+               "DB: joining cluster using remote nodes:~n~tp", [ClusterNodes],
+               #{domain => ?RMQLOG_DOMAIN_DB}),
+            Ret = case rabbit_khepri:is_enabled(RemoteNode) of
+                      true  -> join_using_khepri(ClusterNodes, NodeType);
+                      false -> join_using_mnesia(ClusterNodes, NodeType)
+                  end,
+
+            case Ret of
+                ok ->
+                    ok;
+                {error, _} ->
+                    %% We reset feature flags states again and make sure the
+                    %% recorded states on disk are deleted.
+                    rabbit_feature_flags:reset()
+            end,
+
+            post_cluster_changes(BootState);
         {error, _} = Error ->
             Error
     end.

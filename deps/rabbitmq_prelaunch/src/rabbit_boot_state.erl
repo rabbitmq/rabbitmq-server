@@ -26,6 +26,7 @@
 
 -type boot_state() :: stopped |
                       booting |
+                      prelaunch_done |
                       core_started |
                       ready |
                       stopping.
@@ -66,11 +67,12 @@ wait_for(BootState, Timeout)
 wait_for(_, _) ->
     {error, timeout}.
 
-boot_state_idx(stopped)      -> 0;
-boot_state_idx(booting)      -> 1;
-boot_state_idx(core_started) -> 2;
-boot_state_idx(ready)        -> 3;
-boot_state_idx(stopping)     -> 4.
+boot_state_idx(stopped)        -> 0;
+boot_state_idx(booting)        -> 1;
+boot_state_idx(prelaunch_done) -> 2;
+boot_state_idx(core_started)   -> 3;
+boot_state_idx(ready)          -> 4;
+boot_state_idx(stopping)       -> 5.
 
 is_valid(BootState) ->
     is_integer(boot_state_idx(BootState)).

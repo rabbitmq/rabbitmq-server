@@ -11,7 +11,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForceResetCommand do
 
   use RabbitMQ.CLI.Core.MergesNoDefaults
   use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
-  use RabbitMQ.CLI.Core.RequiresRabbitAppStopped
 
   def run([], %{node: node_name}) do
     case :rabbit_misc.rpc_call(node_name, :rabbit_db, :force_reset, []) do
