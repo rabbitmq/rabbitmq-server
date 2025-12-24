@@ -753,6 +753,7 @@ augment_declare_args(VHost, Durable, Exclusive, AutoDelete, Args0) ->
     case vhost:get_metadata(V) of
         #{default_queue_type := DefaultQueueType}
           when is_binary(DefaultQueueType) andalso
+               DefaultQueueType =/= <<"undefined">> andalso
                not HasQTypeArg ->
             update_args_table_with_queue_type(DefaultQueueType, Durable, Exclusive, AutoDelete, Args0);
         _ ->
