@@ -225,3 +225,10 @@
       stability     => stable,
       depends_on    => ['rabbitmq_4.2.0']
      }}).
+
+-rabbit_feature_flag(
+   {'track_qq_members_uids',
+    #{desc          => "Track queue members UIDs in the metadata store",
+      stability     => stable,
+      depends_on    => []
+     }}).
