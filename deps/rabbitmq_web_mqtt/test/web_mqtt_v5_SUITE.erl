@@ -18,8 +18,10 @@ groups() ->
 suite() ->
     v5_SUITE:suite().
 
-init_per_suite(Config) ->
-    v5_SUITE:init_per_suite(Config).
+init_per_suite(Config0) ->
+    Config = v5_SUITE:init_per_suite(Config0),
+    rabbit_ct_helpers:set_config(Config, {test_plugins, [rabbitmq_mqtt,
+                                                         rabbitmq_web_mqtt]}).
 
 end_per_suite(Config) ->
     v5_SUITE:end_per_suite(Config).
@@ -27,8 +29,8 @@ end_per_suite(Config) ->
 init_per_group(mqtt, Config) ->
     %% This is the main difference with rabbitmq_mqtt.
     rabbit_ct_helpers:set_config(Config, {websocket, true});
-init_per_group(Group, Config) ->
-    v5_SUITE:init_per_group(Group, Config).
+init_per_group(Group, Config0) ->
+    v5_SUITE:init_per_group(Group, Config0).
 
 end_per_group(Group, Config) ->
     v5_SUITE:end_per_group(Group, Config).

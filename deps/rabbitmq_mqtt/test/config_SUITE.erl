@@ -34,8 +34,11 @@ suite() ->
 %% Testsuite setup/teardown.
 %% -------------------------------------------------------------------
 
-init_per_suite(Config) ->
+init_per_suite(Config0) ->
     rabbit_ct_helpers:log_environment(),
+    Config = rabbit_ct_helpers:set_config(
+               Config0,
+               [{start_rmq_with_plugins_disabled, true}]),
     rabbit_ct_helpers:run_setup_steps(Config).
 
 end_per_suite(Config) ->
