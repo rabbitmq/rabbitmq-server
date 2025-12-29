@@ -144,6 +144,10 @@ connect(Params = #amqp_params_direct{username     = Username,
                          connected_at =
                            os:system_time(milli_seconds)},
     DecryptedPassword = credentials_obfuscation:decrypt(Password),
+    %% @todo We must use rabbit_direct:connect/5 for compatibility.
+    %%       But the protocol argument is ignored on new nodes.
+    %%       At some point it can be removed as all nodes 4.3+ have
+    %%       rabbit_direct:connect/4 as well.
     case rpc:call(Node, rabbit_direct, connect,
                   [{Username, DecryptedPassword}, VHost, ?PROTOCOL, self(),
                    connection_info(State1)], ?DIRECT_OPERATION_TIMEOUT) of

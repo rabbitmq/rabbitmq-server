@@ -172,7 +172,10 @@
                           username    :: username(),
                           connection  :: connection()}).
 
-%% old AMQP 0-9-1-centric type, avoid when possible
+%% Old AMQP 0-9-1-centric type, DO NOT USE.
+%% @todo This can be removed in a future release when
+%%       we no longer need to worry about amqp_client
+%%       direct connection compatibility.
 -type(protocol() :: rabbit_framing:protocol()).
 
 -type(protocol_name() :: 'amqp0_9_1' | 'amqp1_0' | 'mqtt' | 'stomp' | any()).

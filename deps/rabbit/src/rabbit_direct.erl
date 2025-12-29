@@ -7,8 +7,8 @@
 
 -module(rabbit_direct).
 
--export([boot/0, force_event_refresh/1, list/0, connect/5,
-         start_channel/10, disconnect/2]).
+-export([boot/0, force_event_refresh/1, list/0, connect/4, connect/5,
+         start_channel/9, start_channel/10, disconnect/2]).
 
 -deprecated([{force_event_refresh, 1, eventually}]).
 
@@ -71,6 +71,20 @@ auth_fun({Username, Password}, VHost, ExtraAuthProps) ->
               'broker_not_found_on_node' |
               {'auth_failure', string()} | 'access_refused').
 
+%% Kept for compatibility with older amqp_client versions (rpc:call).
+connect(Creds, VHost, _Protocol, Pid, Infos) ->
+    connect(Creds, VHost, Pid, Infos).
+
+-spec connect
+        (({'none', 'none'} | {rabbit_types:username(), 'none'} |
+          {rabbit_types:username(), rabbit_types:password()}),
+         rabbit_types:vhost(), pid(),
+         rabbit_event:event_props()) ->
+            rabbit_types:ok_or_error2(
+              {rabbit_types:user(), rabbit_framing:amqp_table()},
+              'broker_not_found_on_node' |
+              {'auth_failure', string()} | 'access_refused').
+
 %% Infos is a PropList which contains the content of the Proplist #amqp_adapter_info.additional_info
 %% among other credentials such as protocol, ssl information, etc.
 %% #amqp_adapter_info.additional_info may carry a credential called `authz_bakends` which has the
@@ -81,7 +95,7 @@ auth_fun({Username, Password}, VHost, ExtraAuthProps) ->
 %% on a different context. In other words, we do not have anymore the initial credentials presented
 %% during the first authentication. However, we do have the outcome from such successful authentication.
 
-connect(Creds, VHost, Protocol, Pid, Infos) ->
+connect(Creds, VHost, Pid, Infos) ->
     ExtraAuthProps = get_authz_backends(Infos),
 
     AuthFun = auth_fun(Creds, VHost, ExtraAuthProps),
@@ -103,7 +117,7 @@ connect(Creds, VHost, Protocol, Pid, Infos) ->
                                         {ok, User = #user{username = Username}} ->
                                             notify_auth_result(Username,
                                                                user_authentication_success, []),
-                                            connect1(User, VHost, Protocol, Pid, Infos);
+                                            connect1(User, VHost, Pid, Infos);
                                         {refused, Username, Msg, Args} ->
                                             notify_auth_result(Username,
                                                                user_authentication_failure,
@@ -163,7 +177,7 @@ notify_auth_result(Username, AuthResult, ExtraProps) ->
                  ExtraProps,
     rabbit_event:notify(AuthResult, [P || {_, V} = P <- EventProps, V =/= '']).
 
-connect1(User = #user{username = Username}, VHost, Protocol, Pid, Infos) ->
+connect1(User = #user{username = Username}, VHost, Pid, Infos) ->
     case rabbit_auth_backend_internal:is_over_connection_limit(Username) of
         false ->
             % Note: peer_host can be either a tuple or
@@ -177,7 +191,7 @@ connect1(User = #user{username = Username}, VHost, Protocol, Pid, Infos) ->
                       rabbit_event:notify(connection_created, Infos),
                       _ = rabbit_alarm:register(
                             Pid, {?MODULE, conserve_resources, []}),
-                      {ok, {User, rabbit_reader:server_properties(Protocol)}}
+                      {ok, {User, rabbit_reader:server_properties(rabbit_framing_amqp_0_9_1)}}
             catch
                 exit:#amqp_error{name = Reason = not_allowed} ->
                     {error, Reason}
@@ -197,7 +211,19 @@ connect1(User = #user{username = Username}, VHost, Protocol, Pid, Infos) ->
          rabbit_framing:amqp_table(), pid(), any()) ->
             {'ok', pid()}.
 
-start_channel(Number, ClientChannelPid, ConnPid, ConnName, Protocol,
+%% Kept for compatibility with older amqp_client versions (rpc:call).
+start_channel(Number, ClientChannelPid, ConnPid, ConnName, _Protocol,
+              User, VHost, Capabilities, Collector, AmqpParams) ->
+    start_channel(Number, ClientChannelPid, ConnPid, ConnName,
+                  User, VHost, Capabilities, Collector, AmqpParams).
+
+-spec start_channel
+        (rabbit_channel:channel_number(), pid(), pid(), string(),
+         rabbit_types:user(), rabbit_types:vhost(),
+         rabbit_framing:amqp_table(), pid(), any()) ->
+            {'ok', pid()}.
+
+start_channel(Number, ClientChannelPid, ConnPid, ConnName,
               User = #user{username = Username}, VHost, Capabilities,
               Collector, AmqpParams) ->
     case rabbit_auth_backend_internal:is_over_channel_limit(Username) of
@@ -205,7 +231,7 @@ start_channel(Number, ClientChannelPid, ConnPid, ConnName, Protocol,
             {ok, _, {ChannelPid, _}} =
                 supervisor:start_child(
                   rabbit_direct_client_sup,
-                  [{direct, Number, ClientChannelPid, ConnPid, ConnName, Protocol,
+                  [{direct, Number, ClientChannelPid, ConnPid, ConnName,
                     User, VHost, Capabilities, Collector, AmqpParams}]),
             {ok, ChannelPid};
         {true, Limit} ->

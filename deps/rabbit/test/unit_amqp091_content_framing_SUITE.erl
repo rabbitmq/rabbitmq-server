@@ -117,10 +117,8 @@ test_content_framing(FrameMax, BodyBin) ->
         rabbit_binary_generator:build_simple_content_frames(
           1,
           rabbit_binary_generator:ensure_content_encoded(
-            rabbit_basic:build_content(#'P_basic'{}, BodyBin),
-            rabbit_framing_amqp_0_9_1),
-          FrameMax,
-          rabbit_framing_amqp_0_9_1),
+            rabbit_basic:build_content(#'P_basic'{}, BodyBin)),
+          FrameMax),
     %% header is formatted correctly and the size is the total of the
     %% fragments
     <<_FrameHeader:7/binary, _ClassAndWeight:4/binary,
@@ -148,13 +146,11 @@ content_transcoding(_Config) ->
                 C1
         end,
     EnsureEncoded =
-        fun (Protocol) ->
-                fun (C0) ->
-                        C1 = rabbit_binary_generator:ensure_content_encoded(
-                               C0, Protocol),
-                        true = C1#content.properties_bin =/= none,
-                        C1
-                end
+        fun (C0) ->
+                C1 = rabbit_binary_generator:ensure_content_encoded(
+                       C0),
+                true = C1#content.properties_bin =/= none,
+                C1
         end,
     %% Beyond the assertions in Ensure*, the only testable guarantee
     %% is that the operations should never fail.
@@ -171,14 +167,13 @@ content_transcoding(_Config) ->
          sequence_with_content([ClearEncoded, Op]),
          sequence_with_content([ClearDecoded, Op])
      end || Op <- [ClearDecoded, ClearEncoded, EnsureDecoded,
-                   EnsureEncoded(rabbit_framing_amqp_0_9_1)]],
+                   EnsureEncoded]],
     passed.
 
 sequence_with_content(Sequence) ->
     lists:foldl(fun (F, V) -> F(F(V)) end,
                 rabbit_binary_generator:ensure_content_encoded(
-                  rabbit_basic:build_content(#'P_basic'{}, <<>>),
-                  rabbit_framing_amqp_0_9_1),
+                  rabbit_basic:build_content(#'P_basic'{}, <<>>)),
                 Sequence).
 
 table_codec(_Config) ->

@@ -41,7 +41,6 @@
 -define(AMQP10_APP_PROPERTIES_HEADER, <<"x-amqp-1.0-app-properties">>).
 -define(AMQP10_MESSAGE_ANNOTATIONS_HEADER, <<"x-amqp-1.0-message-annotations">>).
 -define(AMQP10_FOOTER, <<"x-amqp-1.0-footer">>).
--define(PROTOMOD, rabbit_framing_amqp_0_9_1).
 -define(CLASS_ID, 60).
 
 -opaque state() :: #content{}.
@@ -310,7 +309,7 @@ prepare(read, Content) ->
     rabbit_binary_parser:ensure_content_decoded(Content);
 prepare(store, Content) ->
     rabbit_binary_parser:clear_decoded_content(
-      rabbit_binary_generator:ensure_content_encoded(Content, ?PROTOMOD)).
+      rabbit_binary_generator:ensure_content_encoded(Content)).
 
 convert_to(?MODULE, Content, _Env) ->
     Content;

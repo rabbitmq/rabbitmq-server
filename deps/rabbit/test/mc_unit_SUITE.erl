@@ -200,6 +200,7 @@ amqpl_table_x_header_array_of_tbls(_Config) ->
 amqpl_death_records(_Config) ->
     Content = #content{class_id = 60,
                        properties = #'P_basic'{headers = []},
+                       properties_bin = none,
                        payload_fragments_rev = [<<"data">>]},
     Msg0 = mc:prepare(store, mc:init(mc_amqpl, Content, annotations())),
 
@@ -235,6 +236,7 @@ amqpl_death_records(_Config) ->
 is_death_cycle(_Config) ->
     Content = #content{class_id = 60,
                        properties = #'P_basic'{headers = []},
+                       properties_bin = none,
                        payload_fragments_rev = [<<"data">>]},
     Msg0 = mc:prepare(store, mc:init(mc_amqpl, Content, annotations())),
 
@@ -639,8 +641,7 @@ amqp_amqpl(_Config) ->
 
     %% validate content is serialisable
     _ = rabbit_binary_generator:build_simple_content_frames(1, Content,
-                                                            1000000,
-                                                            rabbit_framing_amqp_0_9_1),
+                                                            1000000),
 
     ok.
 
