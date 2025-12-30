@@ -480,10 +480,6 @@ assert_full_cluster(Config) ->
 %%
 %% Helpers
 %%
-
-start_client(Endpoints) ->
-    start_client(Endpoints, undefined, undefined).
-
 start_client(Endpoints, Username, Password) ->
     Settings = case Username of
                    undefined ->
