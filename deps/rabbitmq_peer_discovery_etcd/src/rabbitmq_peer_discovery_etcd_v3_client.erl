@@ -361,7 +361,7 @@ obfuscate(Password) ->
 
 deobfuscate(undefined) -> undefined;
 deobfuscate(Password) ->
-    credentials_obfuscation:decrypt({encrypted, to_binary(Password)}).
+    credentials_obfuscation:decrypt(Password).
 
 disconnect(ConnName, #statem_data{connection_monitor = Ref}) ->
     maybe_demonitor(Ref),
