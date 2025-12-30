@@ -199,6 +199,7 @@ compile_etcd(Config) ->
 start_etcd(Config) ->
     ct:pal("Starting etcd daemon"),
     EtcdBin = ?config(etcd_bin, Config),
+    EtcdctlBin = filename:join(filename:dirname(EtcdBin), "etcdctl"),
     PrivDir = ?config(priv_dir, Config),
     EtcdDataDir = filename:join(PrivDir, "data.etcd"),
     EtcdName = ?MODULE_STRING,
@@ -223,15 +224,21 @@ start_etcd(Config) ->
     EtcdPid = spawn(fun() -> do_start_etcd(Cmd) end),
 
     EtcdEndpoints = [rabbit_misc:format("~s:~b", [EtcdHost, EtcdClientPort])],
+    EtcdUsername = "rabbitmq",
+    EtcdPassword = "s3kR37",
     Config1 = rabbit_ct_helpers:set_config(
                 Config,
                 [{etcd_pid, EtcdPid},
-                 {etcd_endpoints, EtcdEndpoints}]),
+                 {etcd_endpoints, EtcdEndpoints},
+                 {etcd_username, EtcdUsername},
+                 {etcd_password, EtcdPassword},
+                 {etcdctl_bin, EtcdctlBin}]),
 
     #{level := Level} = logger:get_primary_config(),
     logger:set_primary_config(level, critical),
     try
         wait_for_etcd(EtcdEndpoints),
+        enable_etcd_auth(Config1),
         Config1
     catch
         exit:{test_case_failed, _} ->
@@ -274,6 +281,46 @@ wait_for_etcd(EtcdEndpoints) ->
     Condition2 = fun() -> 0 =:= length(eetcd_conn_sup:info()) end,
     rabbit_ct_helpers:await_condition(Condition2, Timeout).
 
+enable_etcd_auth(Config) ->
+    EtcdctlBin = ?config(etcdctl_bin, Config),
+    EtcdEndpoints = ?config(etcd_endpoints, Config),
+    Username = ?config(etcd_username, Config),
+    Password = ?config(etcd_password, Config),
+    Endpoint = hd(EtcdEndpoints),
+
+    ct:pal("Enabling etcd authentication with user ~s", [Username]),
+
+    %% Create root user first (required before enabling auth)
+    RootCmd = [EtcdctlBin,
+               "--endpoints", Endpoint,
+               "user", "add", "root",
+               "--interactive=false",
+               "--new-user-password", "rootpass"],
+    {ok, _} = rabbit_ct_helpers:exec(RootCmd),
+
+    %% Create rabbitmq user
+    UserCmd = [EtcdctlBin,
+               "--endpoints", Endpoint,
+               "user", "add", Username,
+               "--interactive=false",
+               "--new-user-password", Password],
+    {ok, _} = rabbit_ct_helpers:exec(UserCmd),
+
+    %% Grant root role to rabbitmq user (full access)
+    GrantCmd = [EtcdctlBin,
+                "--endpoints", Endpoint,
+                "user", "grant-role", Username, "root"],
+    {ok, _} = rabbit_ct_helpers:exec(GrantCmd),
+
+    %% Enable authentication
+    AuthCmd = [EtcdctlBin,
+               "--endpoints", Endpoint,
+               "auth", "enable"],
+    {ok, _} = rabbit_ct_helpers:exec(AuthCmd),
+
+    ct:pal("etcd authentication enabled successfully"),
+    ok.
+
 stop_etcd(Config) ->
     case rabbit_ct_helpers:get_config(Config, etcd_pid) of
         EtcdPid when is_pid(EtcdPid) ->
@@ -292,7 +339,9 @@ stop_etcd(Config) ->
 
 init_opens_a_connection_test(Config) ->
     Endpoints = ?config(etcd_endpoints, Config),
-    {ok, Pid} = start_client(Endpoints),
+    Username = ?config(etcd_username, Config),
+    Password = ?config(etcd_password, Config),
+    {ok, Pid} = start_client(Endpoints, Username, Password),
     Condition = fun() ->
                     1 =:= length(eetcd_conn_sup:info())
                 end,
@@ -306,7 +355,9 @@ init_opens_a_connection_test(Config) ->
 
 registration_with_locking_test(Config) ->
     Endpoints = ?config(etcd_endpoints, Config),
-    {ok, Pid} = start_client(Endpoints),
+    Username = ?config(etcd_username, Config),
+    Password = ?config(etcd_password, Config),
+    {ok, Pid} = start_client(Endpoints, Username, Password),
     Condition1 = fun() ->
                     1 =:= length(eetcd_conn_sup:info())
                  end,
@@ -392,6 +443,8 @@ configure_peer_discovery(Config) ->
       end, Nodes),
 
     Endpoints = ?config(etcd_endpoints, Config),
+    Username = ?config(etcd_username, Config),
+    Password = ?config(etcd_password, Config),
     Config1 = rabbit_ct_helpers:merge_app_env(
                 Config,
                 {rabbit,
@@ -400,7 +453,9 @@ configure_peer_discovery(Config) ->
                     {peer_discovery_etcd,
                      [{endpoints, Endpoints},
                       {etcd_prefix, "rabbitmq"},
-                      {cluster_name, atom_to_list(?FUNCTION_NAME)}]}]}]}),
+                      {cluster_name, atom_to_list(?FUNCTION_NAME)},
+                      {etcd_username, Username},
+                      {etcd_password, Password}]}]}]}),
     lists:foreach(
       fun(Node) ->
               ?assertEqual(
@@ -427,7 +482,18 @@ assert_full_cluster(Config) ->
 %%
 
 start_client(Endpoints) ->
-    case rabbitmq_peer_discovery_etcd_v3_client:start(#{endpoints => Endpoints}) of
+    start_client(Endpoints, undefined, undefined).
+
+start_client(Endpoints, Username, Password) ->
+    Settings = case Username of
+                   undefined ->
+                       #{endpoints => Endpoints};
+                   _ ->
+                       #{endpoints => Endpoints,
+                         etcd_username => Username,
+                         etcd_password => Password}
+               end,
+    case rabbitmq_peer_discovery_etcd_v3_client:start(Settings) of
         {ok, Pid} ->
             {ok, Pid};
         {error, {already_started, Pid}} ->
