@@ -43,6 +43,9 @@
 -define(SIZE(Msg), mc:size(Msg)).
 -endif.
 
+-define(DEFAULT_PRIORITY, 4).
+-define(MAX_PRIORITY, 31).
+
 -export([
          %% ra_machine callbacks
          init/1,
@@ -346,7 +349,7 @@ apply_(#{index := Idx} = Meta,
             State0 = add_bytes_return(Header, State00),
             Con = Con0#consumer{checked_out = maps:remove(MsgId, Checked0),
                                 credit = increase_credit(Con0, 1)},
-            State1 = State0#?STATE{messages = rabbit_fifo_pq:in(4,
+            State1 = State0#?STATE{messages = rabbit_fifo_pq:in(?DEFAULT_PRIORITY,
                                                                 ?MSG(Idx, Header),
                                                                 Messages)},
             State2 = update_or_remove_con(Meta, ConsumerKey, Con, State1),
@@ -829,7 +832,7 @@ convert_v7_to_v8(#{system_time := Ts} = _Meta, StateV7) ->
                              rabbit_fifo_pq:in(9, I, Acc)
                      end, rabbit_fifo_pq:new(), Hi),
     Pq = queue:fold(fun (I, Acc) ->
-                            rabbit_fifo_pq:in(4, I, Acc)
+                            rabbit_fifo_pq:in(?DEFAULT_PRIORITY, I, Acc)
                     end, Pq0, No),
     StateV8 = StateV7,
     StateV8#?STATE{discarded_bytes = 0,
@@ -3206,9 +3209,6 @@ maps_search(Pred, {K, V, I}) ->
     end;
 maps_search(Pred, Map) when is_map(Map) ->
     maps_search(Pred, maps:next(maps:iterator(Map))).
-
--define(DEFAULT_PRIORITY, 4).
--define(MAX_PRIORITY, 31).
 
 msg_priority(Msg) ->
     case mc:is(Msg) of
