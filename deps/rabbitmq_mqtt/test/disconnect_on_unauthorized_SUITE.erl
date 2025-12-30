@@ -33,7 +33,8 @@ groups() ->
 test_cases() ->
     [
         publish_unauthorized_no_disconnect,
-        subscribe_unauthorized_no_disconnect
+        subscribe_unauthorized_no_disconnect,
+        unsubscribe_unauthorized_no_disconnect
     ].
 
 init_per_suite(Config0) ->
@@ -57,7 +58,7 @@ init_per_suite(Config0) ->
 
     Config2 = rabbit_ct_helpers:set_config(Config1, [{mqtt_user, User}, {mqtt_pass, Password}]),
 
-    rabbit_ct_broker_helpers:set_permissions(Config2, User, <<"/">>, <<".*">>, <<"">>, <<".*">>),
+    rabbit_ct_broker_helpers:set_permissions(Config2, User, <<"/">>, <<".*">>, <<".*">>, <<".*">>),
     ok = rabbit_ct_broker_helpers:rpc(Config2, 0,
         rabbit_auth_backend_internal, set_topic_permissions,
         [?config(mqtt_user, Config2), <<"/">>,
@@ -132,6 +133,52 @@ subscribe_unauthorized_no_disconnect(Config) ->
             ?assertEqual(?RC_NOT_AUTHORIZED, ReasonCode);
         v4 ->
             ?assertEqual(?RC_Failure, ReasonCode)
+    end,
+
+    timer:sleep(300),
+    %% Client still connected
+    ?assert(is_process_alive(C)),
+
+    ok = emqtt:disconnect(C).
+
+unsubscribe_unauthorized_no_disconnect(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+        rabbit_auth_backend_internal, set_topic_permissions,
+        [?config(mqtt_user, Config), <<"/">>,
+            <<"amq.topic">>, <<"^(topic1|topic3)$">>, <<"^(topic1|topic3)$">>, <<"acting-user">>]),
+
+    C = util:connect(
+        <<"sub_client">>,
+        Config,
+        [{username, ?config(mqtt_user, Config)},
+            {password, ?config(mqtt_pass, Config)}]),
+
+    {ok, _, _} =
+        emqtt:subscribe(
+            C,
+            {<<"topic3">>, qos0}
+        ),
+
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+        rabbit_auth_backend_internal, set_topic_permissions,
+        [?config(mqtt_user, Config), <<"/">>,
+            <<"amq.topic">>, <<"^topic1$">>, <<"^topic1$">>, <<"acting-user">>]),
+
+    timer:sleep(1000),
+
+    case ?config(mqtt_version, Config) of
+        v5 ->
+            {ok, _, [?RC_NOT_AUTHORIZED]} =
+                emqtt:unsubscribe(
+                    C,
+                    <<"topic3">>
+                );
+        v4 ->
+            {ok, _, _} =
+                emqtt:unsubscribe(
+                    C,
+                    <<"topic3">>
+                )
     end,
 
     timer:sleep(300),

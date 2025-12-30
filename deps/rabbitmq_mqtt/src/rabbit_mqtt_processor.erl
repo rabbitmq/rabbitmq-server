@@ -451,7 +451,7 @@ process_request(?SUBSCRIBE,
                 State0 = #state{cfg = #cfg{proto_ver = ProtoVer,
                                            binding_args_v2 = BindingArgsV2}}) ->
     ?LOG_DEBUG("Received a SUBSCRIBE with subscription(s) ~p", [Subscriptions]),
-    DisconnectOnUnauthorized = application:get_env(rabbitmq_mqtt, disconnect_on_unauthorized, true),
+    {ok, DisconnectOnUnauthorized} = application:get_env(?APP_NAME, disconnect_on_unauthorized),
     {ResultRev, RetainedRev, State1} =
     lists:foldl(
       fun(_Subscription, {[{error, _} = E | _] = L, R, S}) when DisconnectOnUnauthorized =:= true ->
@@ -515,7 +515,7 @@ process_request(?SUBSCRIBE,
             %% If disconnect_on_unauthorized is false, do not disconnect the client,
             %% send retained messages for the topics to which the client could successfully subscribe.
             %% Otherwise, disconnect the client, treat the subscription failure.
-            case application:get_env(rabbitmq_mqtt, disconnect_on_unauthorized, true) of
+            case DisconnectOnUnauthorized of
               false ->
                 State = send_retained_messages(lists:reverse(RetainedRev), State1),
                 {ok, State};
@@ -2280,32 +2280,19 @@ publish_to_queues_with_checks(
             end;
         {error, access_refused} ->
             %%  If disconnect_on_unauthorized is false,
-            %%  MQTT v5 and QoS1 reply with PUBACK including an error reason code and keep connection,
-            %%  MQTT v3 and QoS1 reply with PUBACK no error reason code and keep connection,
-            %%  QoS0 drop silently and keep connection.
+            %%  QoS1 reply with PUBACK and keep connection,
+            %%  QoS0,WILL_MSG drop silently and keep connection.
             %%  Otherwise, disconnect.
-            case application:get_env(rabbitmq_mqtt, disconnect_on_unauthorized, true) of
+            {ok, DisconnectOnUnauthorized} = application:get_env(?APP_NAME, disconnect_on_unauthorized),
+            case DisconnectOnUnauthorized of
                 false ->
                     case Msg#mqtt_msg.qos of
                         ?QOS_1 ->
-                            case State#state.cfg#cfg.proto_ver of
-                                ?MQTT_PROTO_V5 ->
-                                    Reply = #mqtt_packet{
-                                        fixed = #mqtt_packet_fixed{type = ?PUBACK},
-                                        variable = #mqtt_packet_puback{
-                                            packet_id = Msg#mqtt_msg.packet_id,
-                                            reason_code = ?RC_NOT_AUTHORIZED
-                                        }
-                                    },
-                                    _ = send(Reply, State);
+                            case Msg#mqtt_msg.packet_id of
+                                ?WILL_MSG_QOS_1_CORRELATION ->
+                                    ok;
                                 _ ->
-                                    Reply = #mqtt_packet{
-                                        fixed = #mqtt_packet_fixed{type = ?PUBACK},
-                                        variable = #mqtt_packet_puback{
-                                            packet_id = Msg#mqtt_msg.packet_id
-                                        }
-                                    },
-                                    _ = send(Reply, State)
+                                    send_puback(Msg#mqtt_msg.packet_id, ?RC_NOT_AUTHORIZED, State)
                             end;
                         _ ->
                             ok
