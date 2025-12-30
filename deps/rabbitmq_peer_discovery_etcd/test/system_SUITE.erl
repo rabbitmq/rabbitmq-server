@@ -425,9 +425,22 @@ assert_full_cluster(Config) ->
 %%
 %% Helpers
 %%
+<<<<<<< HEAD
 
 start_client(Endpoints) ->
     case rabbitmq_peer_discovery_etcd_v3_client:start(#{endpoints => Endpoints}) of
+=======
+start_client(Endpoints, Username, Password) ->
+    Settings = case Username of
+                   undefined ->
+                       #{endpoints => Endpoints};
+                   _ ->
+                       #{endpoints => Endpoints,
+                         etcd_username => Username,
+                         etcd_password => Password}
+               end,
+    case rabbitmq_peer_discovery_etcd_v3_client:start(Settings) of
+>>>>>>> b27de42d4 (Fix double-wrapping of encrypted password in etcd client)
         {ok, Pid} ->
             {ok, Pid};
         {error, {already_started, Pid}} ->
