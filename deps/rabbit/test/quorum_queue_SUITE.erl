@@ -12,6 +12,13 @@
 -include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 -include_lib("rabbit/src/rabbit_fifo.hrl").
 
+-import(amqp_utils,
+        [init/1,
+         close/1,
+         wait_for_credit/1,
+         wait_for_accepts/1,
+         detach_link_sync/1]).
+
 -import(queue_utils, [wait_for_messages_ready/3,
                       wait_for_messages_pending_ack/3,
                       wait_for_messages_total/3,
@@ -158,7 +165,8 @@ all_tests() ->
      dead_letter_policy,
      at_most_once_dead_letter_order_maxlen,
      at_most_once_dead_letter_order_rejected,
-     at_most_once_dead_letter_order_delivery_limit,
+     at_most_once_dead_letter_order_delivery_limit_channel_closed,
+     at_most_once_dead_letter_order_delivery_limit_modified_outcome,
      at_most_once_dead_letter_order_expired,
      cleanup_queue_state_on_channel_after_publish,
      cleanup_queue_state_on_channel_after_subscribe,
@@ -224,6 +232,7 @@ memory_tests() ->
 %% -------------------------------------------------------------------
 
 init_per_suite(Config0) ->
+    {ok, _} = application:ensure_all_started(amqp10_client),
     rabbit_ct_helpers:log_environment(),
     Config1 = rabbit_ct_helpers:merge_app_env(
                 Config0, {rabbit, [{quorum_tick_interval, 256}]}),
@@ -2330,7 +2339,7 @@ dead_letter_policy(Config) ->
     ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"dlx">>),
     test_dead_lettering(false, Config, Ch, Servers, RaName, QQ, CQ).
 
-%% Test that messages are at most once dead letter in the correct order
+%% Test that messages are at most once dead lettered in the correct order
 %% for reason 'maxlen'.
 at_most_once_dead_letter_order_maxlen(Config) ->
     check_quorum_queues_v8_compat(Config),
@@ -2378,7 +2387,7 @@ at_most_once_dead_letter_order_maxlen(Config) ->
                   amqp_channel:call(Ch, #'queue.delete'{queue = Q}))
      || Q <- [QQ, DLQ]].
 
-%% Test that messages are at most once dead letter in the correct order
+%% Test that messages are at most once dead lettered in the correct order
 %% for reason 'rejected'.
 at_most_once_dead_letter_order_rejected(Config) ->
     [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -2425,9 +2434,9 @@ at_most_once_dead_letter_order_rejected(Config) ->
                   amqp_channel:call(Ch, #'queue.delete'{queue = Q}))
      || Q <- [QQ, DLQ]].
 
-%% Test that messages are at most once dead letter in the correct order
-%% for reason 'delivery_limit'.
-at_most_once_dead_letter_order_delivery_limit(Config) ->
+%% Test that messages are at most once dead lettered in the correct order
+%% for reason 'delivery_limit' if an AMQP legacy channel gets closed.
+at_most_once_dead_letter_order_delivery_limit_channel_closed(Config) ->
     [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
@@ -2457,10 +2466,9 @@ at_most_once_dead_letter_order_delivery_limit(Config) ->
     receive {_, #amqp_msg{payload = P2}} ->
                 ?assertEqual(<<"m2">>, P2)
     end,
+    %% Closing the channel without first settling acquired messages counts as
+    %% failed delivery.
     amqp_channel:close(Ch2),
-    % ok = amqp_channel:call(Ch, #'basic.nack'{delivery_tag = 0,
-    %                                          multiple = true,
-    %                                          requeue = true}),
 
     wait_for_consensus(DLQ, Config),
     wait_for_messages_ready(Servers,  ra_name(DLQ), 2),
@@ -2474,6 +2482,72 @@ at_most_once_dead_letter_order_delivery_limit(Config) ->
     [?assertEqual(#'queue.delete_ok'{message_count = 0},
                   amqp_channel:call(Ch, #'queue.delete'{queue = Q}))
      || Q <- [QQ, DLQ]].
+
+%% Test that messages are at most once dead lettered in the correct order
+%% for reason 'delivery_limit' if an AMQP client settles with
+%% delivery-failed=true in the modified outcome.
+at_most_once_dead_letter_order_delivery_limit_modified_outcome(Config) ->
+    {_, Session, LinkPair} = Init = init(Config),
+    QName1 = <<"source quorum queue">>,
+    QName2 = <<"target dead letter quorum queue">>,
+    Addr1 = rabbitmq_amqp_address:queue(QName1),
+    Addr2 = rabbitmq_amqp_address:queue(QName2),
+    {ok, _} = rabbitmq_amqp_client:declare_queue(
+                LinkPair, QName1,
+                #{arguments => #{<<"x-queue-type">> => {symbol, <<"quorum">>},
+                                 <<"x-dead-letter-exchange">> => {utf8, <<>>},
+                                 <<"x-dead-letter-routing-key">> => {utf8, QName2},
+                                 <<"x-delivery-limit">> => {ulong, 0}}}),
+    {ok, #{}} = rabbitmq_amqp_client:declare_queue(
+                  LinkPair, QName2,
+                  #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>}}}),
+
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Addr1),
+    wait_for_credit(Sender),
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"t1">>, <<"m1">>)),
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"t2">>, <<"m2">>)),
+    ok = wait_for_accepts(2),
+    ok = detach_link_sync(Sender),
+
+    {ok, Receiver1} = amqp10_client:attach_receiver_link(
+                        Session, <<"receiver 1">>, Addr1, unsettled),
+    ok = amqp10_client:flow_link_credit(Receiver1, 2, never, false),
+    M1 = receive {amqp10_msg, Receiver1, Msg1} -> Msg1
+         after 9000 -> ct:fail({missing_msg, ?LINE})
+         end,
+    M2 = receive {amqp10_msg, Receiver1, Msg2} -> Msg2
+         after 9000 -> ct:fail({missing_msg, ?LINE})
+         end,
+    ?assertEqual(<<"m1">>, amqp10_msg:body_bin(M1)),
+    ?assertEqual(<<"m2">>, amqp10_msg:body_bin(M2)),
+    %% Settle both messages with delivery-failed=true in the modified outcome.
+    DeliveryFailed = true,
+    ok = amqp10_client_session:disposition(Receiver1,
+                                           amqp10_msg:delivery_id(M1),
+                                           amqp10_msg:delivery_id(M2),
+                                           true,
+                                           {modified, DeliveryFailed, false, #{}}),
+    ok = detach_link_sync(Receiver1),
+
+    {ok, Receiver2} = amqp10_client:attach_receiver_link(
+                        Session, <<"receiver 2">>, Addr2, settled),
+
+    ok = amqp10_client:flow_link_credit(Receiver2, 2, never, false),
+    receive {amqp10_msg, Receiver2, D1} ->
+                ?assertEqual(<<"m1">>, amqp10_msg:body_bin(D1))
+    after 9000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    receive {amqp10_msg, Receiver2, D2} ->
+                ?assertEqual(<<"m2">>, amqp10_msg:body_bin(D2))
+    after 9000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    ok = detach_link_sync(Receiver2),
+
+    ?assertMatch({ok, #{message_count := 0}},
+                 rabbitmq_amqp_client:delete_queue(LinkPair, QName1)),
+    ?assertMatch({ok, #{message_count := 0}},
+                 rabbitmq_amqp_client:delete_queue(LinkPair, QName2)),
+    ok = close(Init).
 
 %% Test that messages are at most once dead letter in the correct order
 %% for reason 'expired'.
