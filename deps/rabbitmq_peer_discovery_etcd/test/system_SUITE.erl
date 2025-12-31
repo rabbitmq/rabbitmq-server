@@ -33,8 +33,13 @@
 
 all() ->
     [
-     {group, v3_client},
-     {group, clustering}
+     %% Run clustering tests first (without auth) to ensure backwards
+     %% compatibility with mixed cluster mode where older nodes don't
+     %% have the deobfuscate/1 fix.
+     {group, clustering},
+     %% Then run v3_client tests which enable auth and verify the fix.
+     %% Once auth is enabled on etcd, it stays enabled.
+     {group, v3_client}
     ].
 
 groups() ->
@@ -58,11 +63,24 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config, [fun stop_etcd/1]).
 
+init_per_group(v3_client, Config) ->
+    %% Enable etcd authentication for v3_client tests only.
+    %% These tests run the client directly (no RabbitMQ nodes), so they
+    %% can test with authentication enabled. This verifies the fix for
+    %% the double-wrapping bug in deobfuscate/1.
+    enable_etcd_auth(Config),
+    Config;
 init_per_group(clustering, Config) ->
+    %% Don't use authentication for clustering tests. In mixed cluster mode,
+    %% older nodes may not have the fix for the double-wrapping bug and would
+    %% fail to authenticate. The clustering tests verify that peer discovery
+    %% works correctly; authentication is tested by the v3_client group.
     Config1 = rabbit_ct_helpers:set_config(
                 Config,
                 [{rmq_nodes_count, 3},
-                 {rmq_nodes_clustered, false}]),
+                 {rmq_nodes_clustered, false},
+                 {etcd_username, undefined},
+                 {etcd_password, undefined}]),
     rabbit_ct_helpers:merge_app_env(
       Config1, {rabbit, [{forced_feature_flags_on_init, []}]});
 init_per_group(_Group, Config) ->
@@ -238,7 +256,6 @@ start_etcd(Config) ->
     logger:set_primary_config(level, critical),
     try
         wait_for_etcd(EtcdEndpoints),
-        enable_etcd_auth(Config1),
         Config1
     catch
         exit:{test_case_failed, _} ->
@@ -445,17 +462,22 @@ configure_peer_discovery(Config) ->
     Endpoints = ?config(etcd_endpoints, Config),
     Username = ?config(etcd_username, Config),
     Password = ?config(etcd_password, Config),
+    EtcdConfig0 = [{endpoints, Endpoints},
+                   {etcd_prefix, "rabbitmq"},
+                   {cluster_name, atom_to_list(?FUNCTION_NAME)}],
+    %% Only include credentials when they're defined (not for clustering tests
+    %% in mixed cluster mode where older nodes don't have the deobfuscate fix)
+    EtcdConfig = case Username of
+                     undefined -> EtcdConfig0;
+                     _ -> EtcdConfig0 ++ [{etcd_username, Username},
+                                          {etcd_password, Password}]
+                 end,
     Config1 = rabbit_ct_helpers:merge_app_env(
                 Config,
                 {rabbit,
                  [{cluster_formation,
                    [{peer_discovery_backend, rabbit_peer_discovery_etcd},
-                    {peer_discovery_etcd,
-                     [{endpoints, Endpoints},
-                      {etcd_prefix, "rabbitmq"},
-                      {cluster_name, atom_to_list(?FUNCTION_NAME)},
-                      {etcd_username, Username},
-                      {etcd_password, Password}]}]}]}),
+                    {peer_discovery_etcd, EtcdConfig}]}]}),
     lists:foreach(
       fun(Node) ->
               ?assertEqual(
