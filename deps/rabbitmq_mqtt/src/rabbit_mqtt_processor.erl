@@ -451,12 +451,13 @@ process_request(?SUBSCRIBE,
                 State0 = #state{cfg = #cfg{proto_ver = ProtoVer,
                                            binding_args_v2 = BindingArgsV2}}) ->
     ?LOG_DEBUG("Received a SUBSCRIBE with subscription(s) ~p", [Subscriptions]),
-    {ok, DisconnectOnUnauthorized} = application:get_env(?APP_NAME, disconnect_on_unauthorized),
+    DisconnectOnUnauthorized = rabbit_mqtt_util:env(disconnect_on_unauthorized),
     {ResultRev, RetainedRev, State1} =
     lists:foldl(
-      fun(_Subscription, {[{error, _} = E | _] = L, R, S}) when DisconnectOnUnauthorized =:= true ->
-              %% If disconnect_on_unauthorized is true,
-              %% once a subscription failed, mark all following subscriptions
+      fun(_Subscription, {[{error, Reason} = E | _] = L, R, S})
+            when Reason =/= access_refused orelse
+                 Reason =:= access_refused andalso DisconnectOnUnauthorized ->
+              %% Once a subscription failed, mark all following subscriptions
               %% as failed instead of creating bindings because we are going
               %% to close the client connection anyway.
               {[E | L], R, S};
@@ -479,7 +480,8 @@ process_request(?SUBSCRIBE,
                       maybe
                           {ok, Q} ?= ensure_queue(QoS, S0),
                           QName = amqqueue:get_name(Q),
-                          BindingArgs = binding_args_for_proto_ver(ProtoVer, TopicFilter, Opts, BindingArgsV2),
+                          BindingArgs = binding_args_for_proto_ver(ProtoVer, TopicFilter,
+                                                                   Opts, BindingArgsV2),
                           ok ?= add_subscription(TopicFilter, BindingArgs, QName, S0),
                           ok ?= maybe_delete_old_subscription(TopicFilter, Opts, S0),
                           Subs = maps:put(TopicFilter, Opts, S0#state.subscriptions),
@@ -511,18 +513,8 @@ process_request(?SUBSCRIBE,
                                        reason_codes = lists:reverse(ReasonCodesRev)}},
     _ = send(Reply, State1),
     case hd(ResultRev) of
-        {error, access_refused} ->
-            %% If disconnect_on_unauthorized is false, do not disconnect the client,
-            %% send retained messages for the topics to which the client could successfully subscribe.
-            %% Otherwise, disconnect the client, treat the subscription failure.
-            case DisconnectOnUnauthorized of
-              false ->
-                State = send_retained_messages(lists:reverse(RetainedRev), State1),
-                {ok, State};
-              true ->
-                {error, subscribe_error, State1}
-            end;
-        {error, _} ->
+        {error, Reason} when Reason =/= access_refused orelse
+                             Reason =:= access_refused andalso DisconnectOnUnauthorized ->
             {error, subscribe_error, State1};
         _ ->
             State = send_retained_messages(lists:reverse(RetainedRev), State1),
@@ -2259,11 +2251,12 @@ trace_tap_out(Msg0 = {?QUEUE_TYPE_QOS_0, _, _, _, _},
 
 -spec publish_to_queues_with_checks(mqtt_msg(), state()) ->
     {ok, state()} | {error, any(), state()}.
-publish_to_queues_with_checks(
-  Msg = #mqtt_msg{topic = Topic,
-                  retain = Retain},
-  State = #state{cfg = #cfg{exchange = Exchange,
-                            retainer_pid = RPid}}) ->
+publish_to_queues_with_checks(#mqtt_msg{qos = QoS,
+                                        topic = Topic,
+                                        packet_id = PacketId,
+                                        retain = Retain} = Msg,
+                              #state{cfg = #cfg{exchange = Exchange,
+                                                retainer_pid = RPid}} = State) ->
     case check_publish_permitted(Exchange, Topic, State) of
         ok ->
             case publish_to_queues(Msg, State) of
@@ -2279,27 +2272,20 @@ publish_to_queues_with_checks(
                     Error
             end;
         {error, access_refused} ->
-            %%  If disconnect_on_unauthorized is false,
-            %%  QoS1 reply with PUBACK and keep connection,
-            %%  QoS0,WILL_MSG drop silently and keep connection.
-            %%  Otherwise, disconnect.
-            {ok, DisconnectOnUnauthorized} = application:get_env(?APP_NAME, disconnect_on_unauthorized),
-            case DisconnectOnUnauthorized of
+            case rabbit_mqtt_util:env(disconnect_on_unauthorized) of
+                true ->
+                    {error, access_refused, State};
                 false ->
-                    case Msg#mqtt_msg.qos of
-                        ?QOS_1 ->
-                            case Msg#mqtt_msg.packet_id of
-                                ?WILL_MSG_QOS_1_CORRELATION ->
-                                    ok;
-                                _ ->
-                                    send_puback(Msg#mqtt_msg.packet_id, ?RC_NOT_AUTHORIZED, State)
-                            end;
-                        _ ->
+                    %% Keep the connection open.
+                    case QoS =:= ?QOS_1 andalso
+                         PacketId =/= ?WILL_MSG_QOS_1_CORRELATION of
+                        true ->
+                            send_puback(PacketId, ?RC_NOT_AUTHORIZED, State);
+                        false ->
+                            %% Silently drop QoS 0 message.
                             ok
                     end,
-                    {ok, State};
-                true ->
-                    {error, access_refused, State}
+                    {ok, State}
             end
     end.
 
