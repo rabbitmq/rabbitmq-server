@@ -30,7 +30,8 @@ init_per_suite(Config) ->
     case rabbit_ct_helpers:is_mixed_versions() of
         false ->
             rabbit_ct_helpers:log_environment(),
-            rabbit_ct_helpers:run_setup_steps(Config);
+            Config1 = rabbit_ct_helpers:run_setup_steps(Config),
+            rabbit_ct_helpers:ensure_rabbitmq_queues_cmd(Config1);
         _ ->
             {skip, "growing and shrinking cannot be done in mixed mode"}
     end.
@@ -53,8 +54,7 @@ end_per_group(tests, Config) ->
                                     rabbit_ct_broker_helpers:teardown_steps()).
 
 init_per_testcase(Testcase, Config0) ->
-    rabbit_ct_helpers:ensure_rabbitmq_queues_cmd(
-      rabbit_ct_helpers:testcase_started(Config0, Testcase)).
+    rabbit_ct_helpers:testcase_started(Config0, Testcase).
 
 end_per_testcase(Testcase, Config0) ->
     rabbit_ct_helpers:testcase_finished(Config0, Testcase).
