@@ -92,4 +92,4 @@ document explains the open source RabbitMQ support policy adopted by the RabbitM
 
 ## Copyright
 
-(c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.
+(c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.

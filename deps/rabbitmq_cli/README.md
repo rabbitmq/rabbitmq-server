@@ -123,5 +123,5 @@ but not entirely trivial examples.
 The project is [licensed under the MPL](LICENSE-MPL-RabbitMQ), the same license
 as RabbitMQ.
 
-(c) 2007-2024 Broadcom. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+(c) 2007-2026 Broadcom. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 

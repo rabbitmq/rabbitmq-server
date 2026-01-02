@@ -122,6 +122,6 @@ backends if so configured.
 
 ## Copyright & License
 
-(c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.
+(c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.
 
 Released under the same license as RabbitMQ.

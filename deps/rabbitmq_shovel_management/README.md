@@ -93,4 +93,4 @@ curl -u guest:guest -v -X DELETE http://localhost:15672/api/parameters/shovel/%2
 
 Released under [the same license as RabbitMQ](https://www.rabbitmq.com/mpl.html).
 
-2007-2018 (c) 2007-2024 Broadcom. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+2007-2018 (c) 2007-2026 Broadcom. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
