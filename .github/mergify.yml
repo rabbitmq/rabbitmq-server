@@ -7,20 +7,39 @@ pull_request_rules:
         add:
           - make
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
   - name: Automatically backport to v4.2.x based on label
+=======
+  - name: Automatically backport to v4.2.x (with cascade to v4.1.x)
+>>>>>>> 828b16669 (Rework cascading Mergify backports one more time)
     conditions:
       - base=main
       - label=backport-v4.2.x
+      - label=backport-v4.1.x
     actions:
       backport:
         branches:
           - v4.2.x
         assignees:
           - "{{ author }}"
-        labels_from_original:
+        labels:
           - backport-v4.1.x
+<<<<<<< HEAD
 >>>>>>> 350e30a7f (Sync .github/mergify.yml with main)
+=======
+  - name: Automatically backport to v4.2.x (without cascade)
+    conditions:
+      - base=main
+      - label=backport-v4.2.x
+      - label!=backport-v4.1.x
+    actions:
+      backport:
+        branches:
+          - v4.2.x
+        assignees:
+          - "{{ author }}"
+>>>>>>> 828b16669 (Rework cascading Mergify backports one more time)
   - name: Automatically backport to v4.1.x based on label
     conditions:
       - base=main
