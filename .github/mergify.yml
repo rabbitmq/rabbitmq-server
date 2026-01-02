@@ -6,6 +6,21 @@ pull_request_rules:
       label:
         add:
           - make
+<<<<<<< HEAD
+=======
+  - name: Automatically backport to v4.2.x based on label
+    conditions:
+      - base=main
+      - label=backport-v4.2.x
+    actions:
+      backport:
+        branches:
+          - v4.2.x
+        assignees:
+          - "{{ author }}"
+        labels_from_original:
+          - backport-v4.1.x
+>>>>>>> 350e30a7f (Sync .github/mergify.yml with main)
   - name: Automatically backport to v4.1.x based on label
     conditions:
       - base=main
@@ -19,6 +34,7 @@ pull_request_rules:
           - v4.1.x
         assignees:
           - "{{ author }}"
+<<<<<<< HEAD
   - name: Automatically backport to v4.0.x based on label
     conditions:
       - base=v4.1.x
@@ -56,3 +72,5 @@ pull_request_rules:
           - v3.13.x
         assignees:
           - "{{ author }}"
+=======
+>>>>>>> 350e30a7f (Sync .github/mergify.yml with main)
