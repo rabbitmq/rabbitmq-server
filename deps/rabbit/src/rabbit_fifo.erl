@@ -681,15 +681,15 @@ apply_(#{system_time := Ts} = Meta,
                           Acc;
                       TimedOut ->
                           MsgIds = maps:keys(TimedOut),
+                          MsgIdsSorted = lists:sort(MsgIds),
                           %% TODO if SAC move to quiescing??
-
                           TimedOutMsgIds = lists:sort(TimedOutMsgIds0 ++ MsgIds),
                           Con = update_consumer_status(
                                   timeout, Con0#consumer{timed_out_msg_ids = TimedOutMsgIds}),
                           ?CONSUMER_TAG_PID(Tag, Pid) = Con,
                           E = [{send_msg, Pid,
-                                {released, QName, Tag, MsgIds, timeout}, ra_event} | E0],
-                          return_multiple(Meta, CKey, Con, MsgIds, false,
+                                {released, QName, Tag, MsgIdsSorted, timeout}, ra_event} | E0],
+                          return_multiple(Meta, CKey, Con, MsgIdsSorted, false,
                                           #{}, E, S0)
                   end
           end, {State0, []}, maps:iterator(Cons0, ordered)),
