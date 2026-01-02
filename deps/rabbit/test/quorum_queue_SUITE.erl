@@ -5314,22 +5314,21 @@ queue_names(Records) ->
          Name
      end || Q <- Records].
 
-
 validate_queue(Ch, Queue, ExpectedMsgs) ->
     qos(Ch, length(ExpectedMsgs), false),
     subscribe(Ch, Queue, false),
-    [begin
-         receive
-             {#'basic.deliver'{delivery_tag = DeliveryTag1,
-                               redelivered = false},
-              #amqp_msg{payload = M}} ->
-                 amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag1,
-                                                    multiple = false})
-         after ?TIMEOUT ->
-                   flush(10),
-                   exit({validate_queue_timeout, M})
-         end
-     end || M <- ExpectedMsgs],
+    [receive
+         {#'basic.deliver'{delivery_tag = DeliveryTag1,
+                           redelivered = false},
+          #amqp_msg{payload = ActualMsg}} ->
+             ?assertEqual(Msg, ActualMsg),
+             amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag1,
+                                                multiple = false})
+     after ?TIMEOUT ->
+               flush(10),
+               exit({validate_queue_timeout, Msg})
+     end
+     || Msg <- ExpectedMsgs],
     ok.
 
 basic_get(_, _, _, 0) ->
