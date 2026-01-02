@@ -45,7 +45,8 @@
 -export([restart_stream/3,
          add_replica/3,
          delete_replica/3,
-         delete_all_replicas/1]).
+         delete_all_replicas/1,
+         grow/4]).
 -export([format_osiris_event/2]).
 -export([update_stream_conf/2]).
 -export([readers/1]).
@@ -1083,24 +1084,100 @@ delete_replica(VHost, Name, Node) ->
             E
     end.
 
+-spec delete_all_replicas(node()) ->
+    [{rabbit_amqqueue:name(),
+      {ok, pos_integer()} | {error, pos_integer(), term()}}].
 delete_all_replicas(Node) ->
     ?LOG_INFO("Asked to remove all stream replicas from node ~ts", [Node]),
     Streams = rabbit_amqqueue:list_stream_queues_on(Node),
-    lists:map(fun(Q) ->
-                      QName = amqqueue:get_name(Q),
-                      ?LOG_INFO("~ts: removing replica on node ~w",
-                                      [rabbit_misc:rs(QName), Node]),
-                      #{name := StreamId} = amqqueue:get_type_state(Q),
-                      {ok, Reply, _} = rabbit_stream_coordinator:delete_replica(StreamId, Node),
-                      case Reply of
-                          ok ->
-                              {QName, ok};
-                          Err ->
-                              ?LOG_WARNING("~ts: failed to remove replica on node ~w, error: ~w",
-                                                 [rabbit_misc:rs(QName), Node, Err]),
-                              {QName, {error, Err}}
-                      end
-              end, Streams).
+    [delete_replica_with_retry(Q, Node) || Q <- Streams].
+
+delete_replica_with_retry(Q, Node) ->
+    QName = amqqueue:get_name(Q),
+    #{name := StreamId} = amqqueue:get_type_state(Q),
+    Size = length(get_nodes(Q)),
+    ?LOG_INFO("~ts: removing replica on node ~w", [rabbit_misc:rs(QName), Node]),
+    case rabbit_stream_coordinator:delete_replica(StreamId, Node) of
+        {ok, ok, _} ->
+            {QName, {ok, Size - 1}};
+        {ok, cluster_change_not_permitted, _} ->
+            ?LOG_INFO("~ts: cluster change not permitted, retrying in 500ms",
+                      [rabbit_misc:rs(QName)]),
+            timer:sleep(500),
+            case rabbit_stream_coordinator:delete_replica(StreamId, Node) of
+                {ok, ok, _} ->
+                    {QName, {ok, Size - 1}};
+                {ok, Err, _} ->
+                    ?LOG_WARNING("~ts: failed to remove replica on ~w: ~w",
+                                 [rabbit_misc:rs(QName), Node, Err]),
+                    {QName, {error, Size, Err}};
+                {error, Err} ->
+                    ?LOG_WARNING("~ts: failed to remove replica on ~w: ~w",
+                                 [rabbit_misc:rs(QName), Node, Err]),
+                    {QName, {error, Size, Err}}
+            end;
+        {ok, Err, _} ->
+            ?LOG_WARNING("~ts: failed to remove replica on ~w: ~w",
+                         [rabbit_misc:rs(QName), Node, Err]),
+            {QName, {error, Size, Err}};
+        {error, Err} ->
+            ?LOG_WARNING("~ts: failed to remove replica on ~w: ~w",
+                         [rabbit_misc:rs(QName), Node, Err]),
+            {QName, {error, Size, Err}}
+    end.
+
+-spec grow(node(), binary(), binary(), all | even) ->
+    [{rabbit_amqqueue:name(),
+      {ok, pos_integer()} | {error, pos_integer(), term()}}].
+grow(Node, VhostSpec, QueueSpec, Strategy) ->
+    ?LOG_INFO("Adding stream replicas on node ~ts", [Node]),
+    Running = rabbit_nodes:list_running(),
+    Streams = [Q || Q <- rabbit_amqqueue:list(),
+                    amqqueue:get_type(Q) == ?MODULE,
+                    begin
+                        Nodes = get_nodes(Q),
+                        not lists:member(Node, Nodes) andalso
+                        matches_strategy(Strategy, Nodes)
+                    end,
+                    lists:member(Node, Running),
+                    is_match(amqqueue:get_vhost(Q), VhostSpec),
+                    is_match(get_resource_name(amqqueue:get_name(Q)), QueueSpec)],
+    [add_replica_with_retry(Q, Node) || Q <- Streams].
+
+add_replica_with_retry(Q, Node) ->
+    QName = amqqueue:get_name(Q),
+    Size = length(get_nodes(Q)),
+    ?LOG_INFO("~ts: adding replica on node ~w", [rabbit_misc:rs(QName), Node]),
+    case rabbit_stream_coordinator:add_replica(Q, Node) of
+        ok ->
+            {QName, {ok, Size + 1}};
+        {error, cluster_change_not_permitted} ->
+            ?LOG_INFO("~ts: cluster change not permitted (another member is being added), retrying in 500ms",
+                      [rabbit_misc:rs(QName)]),
+            timer:sleep(500),
+            case rabbit_stream_coordinator:add_replica(Q, Node) of
+                ok ->
+                    {QName, {ok, Size + 1}};
+                {error, Err} ->
+                    ?LOG_WARNING("~ts: failed to add replica on ~w: ~w",
+                                 [rabbit_misc:rs(QName), Node, Err]),
+                    {QName, {error, Size, Err}}
+            end;
+        {error, Err} ->
+            ?LOG_WARNING("~ts: failed to add replica on ~w: ~w",
+                         [rabbit_misc:rs(QName), Node, Err]),
+            {QName, {error, Size, Err}}
+    end.
+
+matches_strategy(all, _) -> true;
+matches_strategy(even, Members) ->
+    length(Members) rem 2 == 0.
+
+is_match(Subj, E) ->
+    nomatch /= re:run(Subj, E).
+
+get_resource_name(#resource{name = Name}) ->
+    Name.
 
 make_stream_conf(Q) ->
     QName = amqqueue:get_name(Q),
