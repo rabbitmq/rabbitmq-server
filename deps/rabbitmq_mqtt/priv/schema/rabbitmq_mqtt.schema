@@ -15,6 +15,14 @@
 {mapping, "mqtt.allow_anonymous", "rabbitmq_mqtt.allow_anonymous",
     [{datatype, {enum, [true, false]}}]}.
 
+%% Whether the MQTT client will be disconnected when it publishes or subscribes
+%% to a topic without permissions.
+%%
+%% {disconnect_on_unauthorized, true},
+
+{mapping, "mqtt.disconnect_on_unauthorized", "rabbitmq_mqtt.disconnect_on_unauthorized",
+    [{datatype, {enum, [true, false]}}]}.
+
 %% If you have multiple chosts, specify the one to which the
 %% adapter connects.
 %%
