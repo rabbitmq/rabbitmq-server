@@ -99,6 +99,8 @@ web_ui()     -> [{javascript, <<"dispatcher.js">>}].
 
 dispatcher() ->
     [{"/overview",                                             rabbit_mgmt_wm_overview, []},
+     {"/resource-counts",                                      rabbit_mgmt_wm_resource_counts, []},
+     {"/resource-counts/:vhost",                               rabbit_mgmt_wm_resource_counts, []},
      {"/cluster-name",                                         rabbit_mgmt_wm_cluster_name, []},
      {"/nodes",                                                rabbit_mgmt_wm_nodes, []},
      {"/nodes/:node",                                          rabbit_mgmt_wm_node, []},
