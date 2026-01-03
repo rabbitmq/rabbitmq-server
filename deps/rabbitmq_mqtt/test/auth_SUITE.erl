@@ -153,6 +153,7 @@ init_per_group(authz, Config0) ->
                Config1,
                rabbit_ct_broker_helpers:setup_steps() ++
                rabbit_ct_client_helpers:setup_steps()),
+    util:enable_plugin(Config, rabbitmq_mqtt),
     rabbit_ct_broker_helpers:add_user(Config, User, Password),
     rabbit_ct_broker_helpers:add_vhost(Config, VHost),
     [Log|_] = rpc(Config, 0, rabbit, log_locations, []),
@@ -168,7 +169,7 @@ init_per_group(Group, Config) ->
     ]),
     MqttConfig = mqtt_config(Group),
     AuthConfig = auth_config(Group),
-    rabbit_ct_helpers:run_setup_steps(
+    Config2 = rabbit_ct_helpers:run_setup_steps(
       Config1,
       [fun(Conf) -> case MqttConfig of
                         undefined  -> Conf;
@@ -181,7 +182,14 @@ init_per_group(Group, Config) ->
                     end
        end] ++
       rabbit_ct_broker_helpers:setup_steps() ++
-      rabbit_ct_client_helpers:setup_steps()).
+      rabbit_ct_client_helpers:setup_steps()),
+    case Config2 of
+        _ when is_list(Config2) ->
+            util:enable_plugin(Config2, rabbitmq_mqtt),
+            Config2;
+        {skip, _} ->
+            Config2
+    end.
 
 end_per_group(G, Config)
   when G =:= v4;
@@ -241,7 +249,8 @@ auth_config(T) when T == client_id_propagation;
                     T == ssl_user_with_client_id_in_cert_san_email;
                     T == ssl_user_with_client_id_in_cert_dn ->
     {rabbit, [
-            {auth_backends, [rabbit_auth_backend_mqtt_mock]}
+            {auth_backends, [rabbit_auth_backend_mqtt_mock]},
+            {test_auth_backends, [rabbit_auth_backend_mqtt_mock]}
           ]
     };
 
