@@ -2395,7 +2395,8 @@ transfer_leadership(_CandidateNodes) ->
                   ok ->
                       ?LOG_DEBUG("Successfully stopped Ra server ~tp", [RaLeader]);
                   {error, nodedown} ->
-                      ?LOG_ERROR("Failed to stop Ra server ~tp: target node was reported as down")
+                      ?LOG_ERROR("Failed to stop Ra server ~tp: target node was reported as down",
+                                 [RaLeader])
               end,
               ok
           end || Q <- Queues],
@@ -2442,7 +2443,8 @@ stop_local_quorum_queue_followers() ->
             ok     ->
                 ?LOG_DEBUG("Successfully stopped Ra server ~tp", [RaNode]);
             {error, nodedown} ->
-                ?LOG_ERROR("Failed to stop Ra server ~tp: target node was reported as down")
+                ?LOG_ERROR("Failed to stop Ra server ~tp: target node was reported as down",
+                           [RaNode])
         end
      end || Q <- Queues],
     ?LOG_INFO("Stopped all local replicas of quorum queues hosted on this node").
