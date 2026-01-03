@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_amqqueue).
@@ -764,6 +764,7 @@ augment_declare_args(VHost, Durable, Exclusive, AutoDelete, Args0) ->
     case vhost:get_metadata(V) of
         #{default_queue_type := DefaultQueueType}
           when is_binary(DefaultQueueType) andalso
+               DefaultQueueType =/= <<"undefined">> andalso
                not HasQTypeArg ->
             update_args_table_with_queue_type(DefaultQueueType, Durable, Exclusive, AutoDelete, Args0);
         _ ->

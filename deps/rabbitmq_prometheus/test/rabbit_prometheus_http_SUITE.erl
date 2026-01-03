@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_prometheus_http_SUITE).
@@ -883,6 +883,7 @@ detailed_raft_metrics_test(Config) ->
                  map_get(rabbitmq_detailed_raft_term, parse_response(Body2))),
 
     ok.
+
 
 basic_auth(Config) ->
     http_get(Config, [{"accept-encoding", "deflate"}], 401),

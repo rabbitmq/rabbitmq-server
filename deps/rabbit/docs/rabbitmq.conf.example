@@ -1114,6 +1114,19 @@
 ##
 # mqtt.proxy_protocol = false
 
+## The MQTTv5 spec is not crystal clear on what exactly should happen when a client
+## attempts to perform an operation it is not authorized to perform.
+## For example, if a client tries to SUBSCRIBE to a topic it has no permissions for.
+##
+## Therefore, this behavior in the MQTT plugin is configurable:
+##  * if this setting is true, the connection will be closed
+##  * if this setting is false, the connection is maintained and the server will try to respond reasonably
+      (e.g. using the Not Authorized reason of the PUBACK frame)
+##
+## The default value is true, reflecting the behavior the MQTT plugin has had
+## since its inception.
+# mqtt.disconnect_on_unauthorized = false
+
 ## Enable anonymous connections. If this is set to false, clients MUST provide
 ## credentials in order to connect. See also the anonymous_login_user/anonymous_login_pass
 ## keys. Anonymous connections are highly discouraged!

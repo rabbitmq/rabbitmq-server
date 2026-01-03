@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 %% @private
@@ -147,7 +147,7 @@ process_frame(Type, ChNumber, Payload,
               State = #state{connection       = Connection,
                              channels_manager = ChMgr,
                              astate           = AState}) ->
-    case rabbit_command_assembler:analyze_frame(Type, Payload, ?PROTOCOL) of
+    case rabbit_command_assembler:analyze_frame(Type, Payload) of
         heartbeat when ChNumber /= 0 ->
             amqp_gen_connection:server_misbehaved(
                 Connection,

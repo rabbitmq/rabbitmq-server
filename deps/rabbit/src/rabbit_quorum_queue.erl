@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_quorum_queue).
@@ -74,7 +74,9 @@
 
 -export([force_shrink_member_to_current_member/2,
          force_vhost_queues_shrink_member_to_current_member/1,
-         force_all_queues_shrink_member_to_current_member/0]).
+         force_vhost_queues_shrink_member_to_current_member/2,
+         force_all_queues_shrink_member_to_current_member/0,
+         force_all_queues_shrink_member_to_current_member/1]).
 
 -export([policy_apply_to_name/0,
          drain/1,
@@ -1515,29 +1517,20 @@ shrink_all(Node) ->
             amqqueue:get_type(Q) == ?MODULE,
             lists:member(Node, get_nodes(Q))].
 
-
+-spec grow(node() | integer(), binary(), binary(), all | even) ->
+    [{rabbit_amqqueue:name(),
+      {ok, pos_integer()} | {error, pos_integer(), term()}}].
 grow(Node, VhostSpec, QueueSpec, Strategy) ->
     grow(Node, VhostSpec, QueueSpec, Strategy, promotable).
 
--spec grow(node(), binary(), binary(), all | even, membership()) ->
+-spec grow(node() | integer(), binary(), binary(), all | even, membership()) ->
     [{rabbit_amqqueue:name(),
       {ok, pos_integer()} | {error, pos_integer(), term()}}].
-grow(Node, VhostSpec, QueueSpec, Strategy, Membership) ->
+grow(Node, VhostSpec, QueueSpec, Strategy, Membership) when is_atom(Node) ->
     Running = rabbit_nodes:list_running(),
     [begin
          Size = length(get_nodes(Q)),
-         QName = amqqueue:get_name(Q),
-         ?LOG_INFO("~ts: adding a new member (replica) on node ~w",
-                         [rabbit_misc:rs(QName), Node]),
-         case add_member(Q, Node, Membership) of
-             ok ->
-                 {QName, {ok, Size + 1}};
-             {error, Err} ->
-                 ?LOG_WARNING(
-                   "~ts: failed to add member (replica) on node ~w, error: ~w",
-                   [rabbit_misc:rs(QName), Node, Err]),
-                 {QName, {error, Size, Err}}
-         end
+         maybe_grow(Q, Node, Membership, Size)
      end
      || Q <- rabbit_amqqueue:list(),
         amqqueue:get_type(Q) == ?MODULE,
@@ -1547,7 +1540,91 @@ grow(Node, VhostSpec, QueueSpec, Strategy, Membership) ->
         lists:member(Node, Running),
         matches_strategy(Strategy, get_nodes(Q)),
         is_match(amqqueue:get_vhost(Q), VhostSpec) andalso
-        is_match(get_resource_name(amqqueue:get_name(Q)), QueueSpec) ].
+        is_match(get_resource_name(amqqueue:get_name(Q)), QueueSpec) ];
+
+grow(QuorumClusterSize, VhostSpec, QueueSpec, Strategy, Membership)
+  when is_integer(QuorumClusterSize), QuorumClusterSize > 0 ->
+    Running = rabbit_nodes:list_running(),
+    TotalRunning = length(Running),
+
+    TargetQuorumClusterSize =
+        if QuorumClusterSize > TotalRunning ->
+            %% we can't grow beyond total running nodes
+            TotalRunning;
+        true ->
+            QuorumClusterSize
+        end,
+
+    lists:flatten(
+        [begin
+            QNodes = get_nodes(Q),
+            case length(QNodes) of
+                Size when Size < TargetQuorumClusterSize ->
+                    TargetAvailableNodes = Running -- QNodes,
+                    N = length(TargetAvailableNodes),
+                    Node = lists:nth(rand:uniform(N), TargetAvailableNodes),
+                    maybe_grow(Q, Node, Membership, Size);
+                _ ->
+                    []
+            end
+        end
+        ||  _ <- lists:seq(1, TargetQuorumClusterSize),
+            Q <- rabbit_amqqueue:list(),
+            amqqueue:get_type(Q) == ?MODULE,
+            matches_strategy(Strategy, get_nodes(Q)),
+            is_match(amqqueue:get_vhost(Q), VhostSpec) andalso
+            is_match(get_resource_name(amqqueue:get_name(Q)), QueueSpec)]);
+
+grow(QuorumClusterSize, _VhostSpec, _QueueSpec, _Strategy, _Membership)
+  when is_integer(QuorumClusterSize) ->
+    rabbit_log:warning(
+            "cannot grow queues to a quorum cluster size less than zero (~tp)",
+            [QuorumClusterSize]),
+    {error, bad_quorum_cluster_size}.
+
+maybe_grow(Q, Node, Membership, Size) ->
+    QNodes = get_nodes(Q),
+    maybe_grow(Q, Node, Membership, Size, QNodes).
+
+maybe_grow(Q, Node, Membership, Size, QNodes) ->
+    QName = amqqueue:get_name(Q),
+    {ok, RaName} = qname_to_internal_name(QName),
+    case check_all_memberships(RaName, QNodes, voter) of
+        true ->
+            ?LOG_INFO("~ts: adding a new member (replica) on node ~w",
+                            [rabbit_misc:rs(QName), Node]),
+            case add_member(Q, Node, Membership) of
+                ok ->
+                    {QName, {ok, Size + 1}};
+                {error, Err} ->
+                    ?LOG_WARNING(
+                    "~ts: failed to add member (replica) on node ~w, error: ~w",
+                    [rabbit_misc:rs(QName), Node, Err]),
+                    {QName, {error, Size, Err}}
+            end;
+        false ->
+            Err = {error, non_voters_found},
+            ?LOG_WARNING(
+                    "~ts: failed to add member (replica) on node ~w, error: ~w",
+                    [rabbit_misc:rs(QName), Node, Err]),
+            {QName, {error, Size, Err}}
+    end.
+
+%% Compare local membership states of all nodes in parallel.
+%%
+%% Note a few things:
+%% 1. This function intentionally queries local member state and not the leader
+%% 2. ra:key_metrics/1 is sequential and not parallel
+%% 3. ra:key_metrics/1 is not multicall-friendly because it relies on erlang:node/0
+check_all_memberships(RaName, QNodes, CompareMembership) ->
+    case rpc:multicall(QNodes, ets, lookup, [ra_state, RaName]) of
+        {Result, []} ->
+            lists:all(
+                fun(M) -> M == CompareMembership end,
+                [Membership || [{_RaName, _RaState, Membership}] <- Result]);
+        _ ->
+            false
+    end.
 
 -spec transfer_leadership(amqqueue:amqqueue(), node()) ->
     {migrated, node()} | {not_migrated, atom()}.
@@ -2074,22 +2151,40 @@ force_shrink_member_to_current_member(VHost, Name) ->
     end.
 
 force_vhost_queues_shrink_member_to_current_member(VHost) when is_binary(VHost) ->
-    ?LOG_WARNING("Shrinking all quorum queues in vhost '~ts' to a single node: ~ts", [VHost, node()]),
-    ListQQs = fun() -> rabbit_amqqueue:list(VHost) end,
-    force_all_queues_shrink_member_to_current_member(ListQQs).
+    ?LOG_WARNING("Shrinking all quorum queues in vhost '~ts' to a single node: ~ts",
+        [VHost, node()]),
+    ListQQFun = fun() -> rabbit_amqqueue:list(VHost) end,
+    force_all_queues_shrink_member_to_current_member(ListQQFun, _MatchFun = fun(_) -> true end).
+
+force_vhost_queues_shrink_member_to_current_member(VHost, QueueSpec)
+  when is_binary(VHost), is_binary(QueueSpec) ->
+    ?LOG_WARNING("Shrinking all quorum queues matching '~ts' in vhost '~ts' to a single node: ~ts",
+        [QueueSpec, VHost, node()]),
+    ListQQFun = fun() -> rabbit_amqqueue:list(VHost) end,
+    MatchFun = fun(Q) -> is_match(get_resource_name(amqqueue:get_name(Q)), QueueSpec) end,
+    force_all_queues_shrink_member_to_current_member(ListQQFun, MatchFun).
 
 force_all_queues_shrink_member_to_current_member() ->
-    ?LOG_WARNING("Shrinking all quorum queues to a single node: ~ts", [node()]),
-    ListQQs = fun() -> rabbit_amqqueue:list() end,
-    force_all_queues_shrink_member_to_current_member(ListQQs).
+    ?LOG_WARNING("Shrinking all quorum queues matching to a single node: ~ts",
+        [node()]),
+    ListQQFun = fun() -> rabbit_amqqueue:list() end,
+    force_all_queues_shrink_member_to_current_member(ListQQFun, _MatchFun = fun(_) -> true end).
 
-force_all_queues_shrink_member_to_current_member(ListQQFun) when is_function(ListQQFun) ->
+force_all_queues_shrink_member_to_current_member(QueueSpec) when is_binary(QueueSpec) ->
+    ?LOG_WARNING("Shrinking all quorum queues matching '~ts' to a single node: ~ts",
+        [QueueSpec, node()]),
+    ListQQFun = fun() -> rabbit_amqqueue:list() end,
+    MatchFun = fun(Q) -> is_match(get_resource_name(amqqueue:get_name(Q)), QueueSpec) end,
+    force_all_queues_shrink_member_to_current_member(ListQQFun, MatchFun).
+
+force_all_queues_shrink_member_to_current_member(ListQQFun, MatchFun)
+  when is_function(ListQQFun), is_function(MatchFun) ->
     Node = node(),
     _ = [begin
              QName = amqqueue:get_name(Q),
              {RaName, _} = amqqueue:get_pid(Q),
              OtherNodes = lists:delete(Node, get_nodes(Q)),
-             ?LOG_WARNING("Shrinking queue ~ts to a single node: ~ts", [rabbit_misc:rs(QName), Node]),
+             ?LOG_WARNING("Shrinking queue '~ts' to a single node: ~ts", [rabbit_misc:rs(QName), Node]),
              ok = ra_server_proc:force_shrink_members_to_current_member({RaName, Node}),
              Fun = fun (QQ) ->
                            TS0 = amqqueue:get_type_state(QQ),
@@ -2098,7 +2193,9 @@ force_all_queues_shrink_member_to_current_member(ListQQFun) when is_function(Lis
                    end,
              _ = rabbit_amqqueue:update(QName, Fun),
              _ = [ra:force_delete_server(?RA_SYSTEM, {RaName, N}) || N <- OtherNodes]
-         end || Q <- ListQQFun(), amqqueue:get_type(Q) == ?MODULE],
+         end || Q <- ListQQFun(),
+                amqqueue:get_type(Q) == ?MODULE,
+                MatchFun(Q)],
     ?LOG_WARNING("Shrinking finished"),
     ok.
 

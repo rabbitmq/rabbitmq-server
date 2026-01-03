@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 
 -module(quorum_queue_SUITE).
 
@@ -116,7 +116,8 @@ groups() ->
                                             node_removal_is_not_quorum_critical,
                                             select_nodes_with_least_replicas,
                                             select_nodes_with_least_replicas_node_down,
-                                            subscribe_from_each
+                                            subscribe_from_each,
+                                            grow_queue
 
 
                                            ]},
@@ -1342,6 +1343,21 @@ force_all_queues_shrink_member_to_current_member(Config) ->
                    Config, Server0, <<"/">>, Q, 3)
              end || Q <- QQs],
 
+            %% match QQ only in shrink
+            QQSpec = <<QQ/binary, "$">>,
+            rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
+                                         force_all_queues_shrink_member_to_current_member, [QQSpec]),
+
+            wait_for_messages_ready([Server0], ra_name(QQ), 3),
+            queue_utils:assert_number_of_replicas(
+                Config, Server0, <<"/">>, QQ, 1),
+
+            wait_for_messages_ready([Server0], ra_name(AQ), 3),
+            queue_utils:assert_number_of_replicas(
+                Config, Server0, <<"/">>, AQ, 3),
+
+            %% match all queues on shrink
+
             rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
                                          force_all_queues_shrink_member_to_current_member, []),
 
@@ -1405,6 +1421,34 @@ force_vhost_queues_shrink_member_to_current_member(Config) ->
                    Config, Server0, VHost, Q, 3)
             end || Q <- QQs, VHost <- VHosts],
 
+            % match QQ only in VHost2 on shrink
+            QQSpec = <<QQ/binary, "$">>,
+            rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
+                force_vhost_queues_shrink_member_to_current_member, [VHost2, QQSpec]),
+
+            [begin
+                QQRes = rabbit_misc:r(VHost2, queue, Q),
+                {ok, RaName} = rpc:call(Server0, rabbit_queue_type_util, qname_to_internal_name, [QQRes]),
+                wait_for_messages_ready([Server0], RaName, 3),
+                case Q of
+                    QQ ->
+                        queue_utils:assert_number_of_replicas(
+                          Config, Server0, VHost2, Q, 1);
+                    AQ ->
+                        queue_utils:assert_number_of_replicas(
+                          Config, Server0, VHost2, Q, 3)
+                end
+            end || Q <- QQs],
+
+            [begin
+                QQRes = rabbit_misc:r(VHost1, queue, Q),
+                {ok, RaName} = rpc:call(Server0, rabbit_queue_type_util, qname_to_internal_name, [QQRes]),
+                wait_for_messages_ready([Server0], RaName, 3),
+                 queue_utils:assert_number_of_replicas(
+                   Config, Server0, VHost1, Q, 3)
+            end || Q <- QQs],
+
+            % match all queues in VHost2 on shrink
             rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
                 force_vhost_queues_shrink_member_to_current_member, [VHost2]),
 
@@ -1767,6 +1811,116 @@ dont_leak_file_handles(Config) ->
 
     rabbit_ct_client_helpers:close_channel(C),
     ok.
+
+grow_queue(Config) ->
+    [Server0, Server1, Server2, _Server3, _Server4] =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
+    QQ = ?config(queue_name, Config),
+    AQ = ?config(alt_queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                  {<<"x-quorum-initial-group-size">>, long, 5}])),
+    ?assertEqual({'queue.declare_ok', AQ, 0, 0},
+                 declare(Ch, AQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                  {<<"x-quorum-initial-group-size">>, long, 5}])),
+
+    QQs = [QQ, AQ],
+    MsgCount = 3,
+
+    [begin
+        RaName = ra_name(Q),
+        rabbit_ct_client_helpers:publish(Ch, Q, MsgCount),
+        wait_for_messages_ready([Server0], RaName, MsgCount),
+        {ok, Q0} = rpc:call(Server0, rabbit_amqqueue, lookup, [Q, <<"/">>]),
+        #{nodes := Nodes0} = amqqueue:get_type_state(Q0),
+        ?assertEqual(5, length(Nodes0))
+    end || Q <- QQs],
+
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
+        force_all_queues_shrink_member_to_current_member, []),
+
+    TargetClusterSize_1 = 1,
+    assert_grown_queues(QQs, Server0, TargetClusterSize_1, MsgCount),
+
+    %% grow queues to node 'Server1'
+    TargetClusterSize_2 = 2,
+    Result1 = rpc:call(Server0, rabbit_quorum_queue, grow, [Server1, <<"/">>, <<".*">>, all]),
+    %% [{{resource,<<"/">>,queue,<<"grow_queue">>},{ok,2}},
+    %%  {{resource,<<"/">>,queue,<<"grow_queue_alt">>},{ok,2}},...]
+    ?assert(lists:all(fun({_, {R, _}}) -> R =:= ok end, Result1)),
+    assert_grown_queues(QQs, Server0, TargetClusterSize_2, MsgCount),
+
+    %% grow queues to quorum cluster size '2' has no effect
+    Result2 = rpc:call(Server0, rabbit_quorum_queue, grow, [TargetClusterSize_2, <<"/">>, <<".*">>, all]),
+    ?assertEqual([], Result2),
+    assert_grown_queues(QQs, Server0, TargetClusterSize_2, MsgCount),
+
+    %% grow queues to quorum cluster size '3'
+    TargetClusterSize_3 = 3,
+    Result3 = rpc:call(Server0, rabbit_quorum_queue, grow, [TargetClusterSize_3, <<"/">>, <<".*">>, all, voter]),
+    ?assert(lists:all(fun({_, {R, _}}) -> R =:= ok end, Result3)),
+    assert_grown_queues(QQs, Server0, TargetClusterSize_3, MsgCount),
+
+    %% grow queues to quorum cluster size '5'
+    TargetClusterSize_5 = 5,
+    Result4 = rpc:call(Server0, rabbit_quorum_queue, grow, [TargetClusterSize_5, <<"/">>, <<".*">>, all, voter]),
+    ?assert(lists:all(fun({_, {R, _}}) -> R =:= ok end, Result4)),
+    assert_grown_queues(QQs, Server0, TargetClusterSize_5, MsgCount),
+
+    %% shrink all queues again down to 1 member
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
+        force_all_queues_shrink_member_to_current_member, []),
+    assert_grown_queues(QQs, Server0, TargetClusterSize_1, MsgCount),
+
+    %% grow queues to quorum cluster size > '5' (limit = 5).
+    TargetClusterSize_10 = 10,
+    Result5 = rpc:call(Server0, rabbit_quorum_queue, grow, [TargetClusterSize_10, <<"/">>, <<".*">>, all]),
+    ?assert(lists:all(fun({_, {R, _}}) -> R =:= ok end, Result5)),
+    assert_grown_queues(QQs, Server0, TargetClusterSize_5, MsgCount),
+
+    %% shrink all queues again down to 1 member
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
+        force_all_queues_shrink_member_to_current_member, []),
+    assert_grown_queues(QQs, Server0, TargetClusterSize_1, MsgCount),
+
+    %% attempt to grow queues to quorum cluster size < '0'.
+    BadTargetClusterSize = -5,
+    ?assertEqual({error, bad_quorum_cluster_size},
+        rpc:call(Server0, rabbit_quorum_queue, grow, [BadTargetClusterSize, <<"/">>, <<".*">>, all])),
+
+    %% shrink all queues again down to 1 member
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
+        force_all_queues_shrink_member_to_current_member, []),
+    assert_grown_queues(QQs, Server0, TargetClusterSize_1, MsgCount),
+
+    %% grow queues to node 'Server1': non_voter
+    rpc:call(Server0, rabbit_quorum_queue, grow, [Server1, <<"/">>, <<".*">>, all, non_voter]),
+    assert_grown_queues(QQs, Server0, TargetClusterSize_2, MsgCount),
+
+    %% grow queues to node 'Server2': fail, non_voters found
+    Result6 = rpc:call(Server0, rabbit_quorum_queue, grow, [Server2, <<"/">>, <<".*">>, all, voter]),
+    %% [{{resource,<<"/">>,queue,<<"grow_queue">>},{error, 2, {error, non_voters_found}},
+    %%  {{resource,<<"/">>,queue,<<"grow_queue_alt">>},{error, 2, {error, non_voters_found}},...]
+    ?assert(lists:all(
+        fun({_, Err}) -> Err =:= {error, TargetClusterSize_2, {error, non_voters_found}} end, Result6)),
+    assert_grown_queues(QQs, Server0, TargetClusterSize_2, MsgCount),
+
+    %% grow queues to target quorum cluster size '5': fail, non_voters found
+    Result7 = rpc:call(Server0, rabbit_quorum_queue, grow, [TargetClusterSize_5, <<"/">>, <<".*">>, all]),
+    ?assert(lists:all(
+        fun({_, Err}) -> Err =:= {error, TargetClusterSize_2, {error, non_voters_found}} end, Result7)),
+    assert_grown_queues(QQs, Server0, TargetClusterSize_2, MsgCount).
+
+assert_grown_queues(Qs, Node, TargetClusterSize, MsgCount) ->
+    [begin
+        RaName = ra_name(Q),
+        wait_for_messages_ready([Node], RaName, MsgCount),
+        {ok, Q0} = rpc:call(Node, rabbit_amqqueue, lookup, [Q, <<"/">>]),
+        #{nodes := Nodes0} = amqqueue:get_type_state(Q0),
+        ?assertEqual(TargetClusterSize, length(Nodes0))
+    end || Q <- Qs].
 
 gh_12635(Config) ->
     % https://github.com/rabbitmq/rabbitmq-server/issues/12635
@@ -5274,22 +5428,21 @@ queue_names(Records) ->
          Name
      end || Q <- Records].
 
-
 validate_queue(Ch, Queue, ExpectedMsgs) ->
     qos(Ch, length(ExpectedMsgs), false),
     subscribe(Ch, Queue, false),
-    [begin
-         receive
-             {#'basic.deliver'{delivery_tag = DeliveryTag1,
-                               redelivered = false},
-              #amqp_msg{payload = M}} ->
-                 amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag1,
-                                                    multiple = false})
-         after ?TIMEOUT ->
-                   flush(10),
-                   exit({validate_queue_timeout, M})
-         end
-     end || M <- ExpectedMsgs],
+    [receive
+         {#'basic.deliver'{delivery_tag = DeliveryTag1,
+                           redelivered = false},
+          #amqp_msg{payload = ActualMsg}} ->
+             ?assertEqual(Msg, ActualMsg),
+             amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag1,
+                                                multiple = false})
+     after ?TIMEOUT ->
+               flush(10),
+               exit({validate_queue_timeout, Msg})
+     end
+     || Msg <- ExpectedMsgs],
     ok.
 
 basic_get(_, _, _, 0) ->

@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_node_monitor).
@@ -564,7 +564,7 @@ handle_cast({partial_partition_disconnect, Other}, State) ->
 %% Note: when updating the status file, we can't simply write the
 %% mnesia information since the message can (and will) overtake the
 %% mnesia propagation.
-handle_cast({node_up, Node, NodeType},
+handle_cast({node_up, Node, _NodeType},
             State = #state{monitors = Monitors}) ->
     ?LOG_INFO("rabbit on node ~tp up", [Node]),
     case rabbit_khepri:is_enabled() of
@@ -573,10 +573,7 @@ handle_cast({node_up, Node, NodeType},
         false ->
             {AllNodes, DiscNodes, RunningNodes} = read_cluster_status(),
             write_cluster_status({add_node(Node, AllNodes),
-                                  case NodeType of
-                                      disc -> add_node(Node, DiscNodes);
-                                      ram  -> DiscNodes
-                                  end,
+                                  add_node(Node, DiscNodes),
                                   add_node(Node, RunningNodes)})
     end,
     ok = handle_live_rabbit(Node),
@@ -588,17 +585,14 @@ handle_cast({node_up, Node, NodeType},
                 end,
     {noreply, maybe_autoheal(State#state{monitors = Monitors1})};
 
-handle_cast({joined_cluster, Node, NodeType}, State) ->
+handle_cast({joined_cluster, Node, _NodeType}, State) ->
     case rabbit_khepri:is_enabled() of
         true ->
             ok;
         false ->
             {AllNodes, DiscNodes, RunningNodes} = read_cluster_status(),
             write_cluster_status({add_node(Node, AllNodes),
-                                  case NodeType of
-                                      disc -> add_node(Node, DiscNodes);
-                                      ram  -> DiscNodes
-                                  end,
+                                  add_node(Node, DiscNodes),
                                   RunningNodes})
     end,
     ?LOG_DEBUG("Node '~tp' has joined the cluster", [Node]),
@@ -857,13 +851,9 @@ do_notify_node_up(#state{guid = GUID}) ->
     gen_server:abcast(Nodes, ?SERVER,
                       {node_up, node(), rabbit_db_cluster:node_type(), GUID}),
     %% register other active rabbits with this rabbit
-    DiskNodes = rabbit_db_cluster:disc_members(),
     _ = [gen_server:cast(
            ?SERVER,
-           {node_up, N, case lists:member(N, DiskNodes) of
-                            true  -> disc;
-                            false -> ram
-                        end}) || N <- Nodes],
+           {node_up, N, disc}) || N <- Nodes],
     ok.
 
 handle_dead_rabbit(Node, State) ->

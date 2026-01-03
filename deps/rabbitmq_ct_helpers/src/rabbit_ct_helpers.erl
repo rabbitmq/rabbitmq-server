@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_ct_helpers).
@@ -27,6 +27,7 @@
     load_rabbitmqctl_app/1,
     ensure_rabbitmq_plugins_cmd/1,
     ensure_rabbitmq_queues_cmd/1,
+    ensure_rabbitmq_streams_cmd/1,
     ensure_rabbitmq_diagnostics_cmd/1,
     redirect_logger_to_ct_logs/1,
     init_skip_as_error_flag/1,
@@ -585,6 +586,41 @@ ensure_rabbitmq_queues_cmd(Config) ->
                     set_config(Config,
                                {rabbitmq_queues_cmd,
                                 RabbitmqQueues});
+                {error, Code, Reason} ->
+                    ct:pal("Exec failed with exit code ~tp: ~tp", [Code, Reason]),
+                    Error;
+                _ ->
+                    Error
+            end
+    end.
+
+ensure_rabbitmq_streams_cmd(Config) ->
+    RabbitmqStreams = case get_config(Config, rabbitmq_streams_cmd) of
+        undefined ->
+            case os:getenv("RABBITMQ_STREAMS") of
+                false -> find_script(Config, "rabbitmq-streams");
+                R -> R
+            end;
+        R ->
+            ct:log(?LOW_IMPORTANCE,
+              "Using rabbitmq-streams from rabbitmq_streams_cmd: ~tp~n", [R]),
+            R
+    end,
+    Error = {skip, "rabbitmq-streams required, " ++
+             "please set 'rabbitmq_streams_cmd' in ct config"},
+    case RabbitmqStreams of
+        false ->
+            Error;
+        _ ->
+            Cmd = [RabbitmqStreams],
+            Env = [
+                   {"RABBITMQ_SCRIPTS_DIR", filename:dirname(RabbitmqStreams)}
+                  ],
+            case exec(Cmd, [drop_stdout, {env, Env}]) of
+                {error, 64, _} ->
+                    set_config(Config,
+                               {rabbitmq_streams_cmd,
+                                RabbitmqStreams});
                 {error, Code, Reason} ->
                     ct:pal("Exec failed with exit code ~tp: ~tp", [Code, Reason]),
                     Error;

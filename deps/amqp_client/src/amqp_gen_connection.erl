@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 %% @private
@@ -353,7 +353,7 @@ server_initiated_close(Close, State) ->
 server_misbehaved_close(AmqpError, State) ->
     ?LOG_WARNING("Connection (~tp) closing: server misbehaved: ~tp",
                  [self(), AmqpError]),
-    {0, Close} = rabbit_binary_generator:map_exception(0, AmqpError, ?PROTOCOL),
+    {0, Close} = rabbit_binary_generator:map_exception(0, AmqpError),
     set_closing_state(abrupt, #closing{reason = server_misbehaved,
                                        close = Close}, State).
 

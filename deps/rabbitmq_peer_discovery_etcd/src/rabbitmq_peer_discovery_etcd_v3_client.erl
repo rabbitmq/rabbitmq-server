@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbitmq_peer_discovery_etcd_v3_client).
@@ -59,6 +59,7 @@ stop() ->
     gen_statem:stop(?MODULE).
 
 init(Args) ->
+    ok = application:ensure_started(credentials_obfuscation),
     ok = application:ensure_started(eetcd),
     Settings = normalize_settings(Args),
     Endpoints = maps:get(endpoints, Settings),
@@ -360,7 +361,7 @@ obfuscate(Password) ->
 
 deobfuscate(undefined) -> undefined;
 deobfuscate(Password) ->
-    credentials_obfuscation:decrypt({encrypted, to_binary(Password)}).
+    credentials_obfuscation:decrypt(Password).
 
 disconnect(ConnName, #statem_data{connection_monitor = Ref}) ->
     maybe_demonitor(Ref),

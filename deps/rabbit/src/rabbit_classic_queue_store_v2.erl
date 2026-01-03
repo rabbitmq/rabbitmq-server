@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 %% The classic queue store works as follow:
@@ -435,7 +435,7 @@ get_read_fd(Segment, State = #qs{ read_segment = Segment,
     {ok, Fd, State};
 get_read_fd(Segment, State = #qs{ read_fd = OldFd }) ->
     maybe_close_fd(OldFd),
-    case file:open(segment_file(Segment, State), [read, raw, binary]) of
+    case rabbit_file:open_eventually(segment_file(Segment, State), [read, raw, binary]) of
         {ok, Fd} ->
             case file:read(Fd, ?HEADER_SIZE) of
                 {ok, <<?MAGIC:32,?VERSION:8,

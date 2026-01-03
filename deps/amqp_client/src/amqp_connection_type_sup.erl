@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 %% @private
@@ -51,11 +51,11 @@ start_channels_manager(Sup, Conn, ConnName, Type) ->
 start_infrastructure_fun(Sup, Conn, network) ->
     fun (Sock, ConnName) ->
             {ok, ChMgr} = start_channels_manager(Sup, Conn, ConnName, network),
-            {ok, AState} = rabbit_command_assembler:init(?PROTOCOL),
+            {ok, AState} = rabbit_command_assembler:init(),
             {ok, GCThreshold} = application:get_env(amqp_client, writer_gc_threshold),
 
             WriterStartMFA = {rabbit_writer, start_link,
-                              [Sock, 0, ?FRAME_MIN_SIZE, ?PROTOCOL, Conn,
+                              [Sock, 0, ?FRAME_MIN_SIZE, Conn,
                                ConnName, false, GCThreshold]},
             WriterChildSpec = #{id => writer,
                                 start => WriterStartMFA,

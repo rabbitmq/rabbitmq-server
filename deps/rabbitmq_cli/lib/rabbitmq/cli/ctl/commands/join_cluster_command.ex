@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+## Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.JoinClusterCommand do
   alias RabbitMQ.CLI.Core.{Config, DocGuide, Helpers}
@@ -11,31 +11,20 @@ defmodule RabbitMQ.CLI.Ctl.Commands.JoinClusterCommand do
 
   def switches() do
     [
-      disc: :boolean,
-      ram: :boolean
+      disc: :boolean
     ]
   end
 
   def merge_defaults(args, opts) do
-    {args, Map.merge(%{disc: false, ram: false}, opts)}
-  end
-
-  def validate(_, %{disc: true, ram: true}) do
-    {:validation_failure, {:bad_argument, "The node type must be either disc or ram."}}
+    {args, Map.merge(%{disc: false}, opts)}
   end
 
   def validate([], _), do: {:validation_failure, :not_enough_args}
   def validate([_], _), do: :ok
   def validate(_, _), do: {:validation_failure, :too_many_args}
 
-  def run([target_node], %{node: node_name, ram: ram, disc: disc} = opts) do
-    node_type =
-      case {ram, disc} do
-        {true, false} -> :ram
-        {false, true} -> :disc
-        ## disc is default
-        {false, false} -> :disc
-      end
+  def run([target_node], %{node: node_name} = opts) do
+    node_type = :disc
 
     long_or_short_names = Config.get_option(:longnames, opts)
     target_node_normalised = Helpers.normalise_node(target_node, long_or_short_names)
@@ -98,7 +87,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.JoinClusterCommand do
   end
 
   def usage() do
-    "join_cluster [--disc|--ram] <existing_cluster_member>"
+    "join_cluster [--disc] <existing_cluster_member>"
   end
 
   def usage_additional() do
@@ -106,11 +95,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.JoinClusterCommand do
       ["<existing_cluster_member>", "Existing cluster member (node) to join"],
       [
         "--disc",
-        "new node should be a disk one (stores its schema on disk). Highly recommended, used by default."
-      ],
-      [
-        "--ram",
-        "new node should be a RAM one (stores schema in RAM). Not recommended. Consult clustering doc guides first."
+        "new node will be a disk one (stores its schema on disk). This is the default."
       ]
     ]
   end

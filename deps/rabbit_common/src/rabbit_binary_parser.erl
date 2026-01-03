@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_binary_parser).
@@ -140,10 +140,9 @@ parse_array(<<$V, Rest/binary>>) ->
 ensure_content_decoded(Content = #content{properties = Props})
   when Props =/= none ->
     Content;
-ensure_content_decoded(Content = #content{properties_bin = PropBin,
-                                          protocol = Protocol})
+ensure_content_decoded(Content = #content{properties_bin = PropBin})
   when PropBin =/= none ->
-    Content#content{properties = Protocol:decode_properties(
+    Content#content{properties = rabbit_framing_amqp_0_9_1:decode_properties(
                                    Content#content.class_id, PropBin)}.
 
 clear_decoded_content(Content = #content{properties = none}) ->

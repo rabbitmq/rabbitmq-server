@@ -6,10 +6,24 @@ pull_request_rules:
       label:
         add:
           - make
-  - name: Automatically backport to v4.2.x based on label
+  - name: Automatically backport to v4.2.x (with cascade to v4.1.x)
     conditions:
       - base=main
       - label=backport-v4.2.x
+      - label=backport-v4.1.x
+    actions:
+      backport:
+        branches:
+          - v4.2.x
+        assignees:
+          - "{{ author }}"
+        labels:
+          - backport-v4.1.x
+  - name: Automatically backport to v4.2.x (without cascade)
+    conditions:
+      - base=main
+      - label=backport-v4.2.x
+      - label!=backport-v4.1.x
     actions:
       backport:
         branches:
@@ -24,15 +38,5 @@ pull_request_rules:
       backport:
         branches:
           - v4.1.x
-        assignees:
-          - "{{ author }}"
-  - name: Automatically backport to v4.0.x based on label
-    conditions:
-      - base=v4.1.x
-      - label=backport-v4.0.x
-    actions:
-      backport:
-        branches:
-          - v4.0.x
         assignees:
           - "{{ author }}"

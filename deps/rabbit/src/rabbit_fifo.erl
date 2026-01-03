@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 
 -module(rabbit_fifo).
 
@@ -1638,27 +1638,27 @@ drop_head(#?STATE{ra_indexes = Indexes0} = State0, Effects) ->
             #?STATE{cfg = #cfg{dead_letter_handler = DLH},
                     dlx = DlxState} = State = State3,
             {_, DlxEffects} = rabbit_fifo_dlx:discard([Msg], maxlen, DLH, DlxState),
-            {State, combine_effects(DlxEffects, Effects)};
+            {State, add_drop_head_effects(DlxEffects, Effects)};
         empty ->
             {State0, Effects}
     end.
 
-%% combine global counter update effects to avoid bulding a huge list of
-%% effects if many messages are dropped at the same time as could happen
-%% when the `max_length' is changed via a configuration update.
-combine_effects([{mod_call,
-                  rabbit_global_counters,
-                  messages_dead_lettered,
-                  [Reason, rabbit_quorum_queue, Type, NewLen]}],
-                [{mod_call,
-                  rabbit_global_counters,
-                  messages_dead_lettered,
-                  [Reason, rabbit_quorum_queue, Type, PrevLen]} | Rem]) ->
+add_drop_head_effects([{mod_call,
+                        rabbit_global_counters,
+                        messages_dead_lettered,
+                        [Reason, rabbit_quorum_queue, Type, NewLen]}],
+                      [{mod_call,
+                        rabbit_global_counters,
+                        messages_dead_lettered,
+                        [Reason, rabbit_quorum_queue, Type, PrevLen]} | Rem]) ->
+    %% combine global counter update effects to avoid bulding a huge list of
+    %% effects if many messages are dropped at the same time as could happen
+    %% when the `max_length' is changed via a configuration update.
     [{mod_call,
       rabbit_global_counters,
       messages_dead_lettered,
       [Reason, rabbit_quorum_queue, Type, PrevLen + NewLen]} | Rem];
-combine_effects(New, Old) ->
+add_drop_head_effects(New, Old) ->
     New ++ Old.
 
 maybe_set_msg_ttl(Msg, RaCmdTs, Header,

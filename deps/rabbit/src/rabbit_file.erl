@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_file).
@@ -368,5 +368,8 @@ open_eventually(File, Modes, N) ->
         %% try again up to 3 times.
         {error, eacces} ->
             timer:sleep(10),
-            open_eventually(File, Modes, N - 1)
+            open_eventually(File, Modes, N - 1);
+        %% Other errors we return immediately.
+        Error ->
+            Error
     end.

@@ -49,6 +49,6 @@ and filtering implied by the topic name.
     
 ## Copyright and License
 
-(c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.
+(c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.
 
 See [LICENSE](./LICENSE) for license information.

@@ -6,6 +6,7 @@ define PROJECT_ENV
 [
 	    {ssl_cert_login,false},
 	    {allow_anonymous, true},
+	    {disconnect_on_unauthorized, true},
 	    {vhost, <<"/">>},
 	    {exchange, <<"amq.topic">>},
 	    {max_session_expiry_interval_seconds, 86400}, %% 1 day
@@ -95,7 +96,7 @@ define ct_master.erl
 	halt(0)
 endef
 
-PARALLEL_CT_SET_1_A = auth retainer federation feature_flag
+PARALLEL_CT_SET_1_A = auth retainer federation feature_flag disconnect_on_unauthorized
 PARALLEL_CT_SET_1_B = cluster command config config_schema mc_mqtt packet_prop \
     processor protocol_interop proxy_protocol rabbit_mqtt_confirms reader util
 PARALLEL_CT_SET_1_C = java v5

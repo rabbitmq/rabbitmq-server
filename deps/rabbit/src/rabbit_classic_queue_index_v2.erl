@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_classic_queue_index_v2).
@@ -262,7 +262,8 @@ recover_segments(State, _, StoreState, _, []) ->
 recover_segments(State0, ContainsCheckFun, StoreState0, CountersRef, [Segment|Tail]) ->
     SegmentEntryCount = segment_entry_count(),
     SegmentFile = segment_file(Segment, State0),
-    {ok, Fd} = file:open(SegmentFile, [read, read_ahead, write, raw, binary]),
+    {ok, Fd} = rabbit_file:open_eventually(SegmentFile,
+        [read, read_ahead, write, raw, binary]),
     case file:read(Fd, ?HEADER_SIZE) of
         {ok, <<?MAGIC:32,?VERSION:8,
                _FromSeqId:64/unsigned,_ToSeqId:64/unsigned,

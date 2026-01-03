@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(vhost).
@@ -217,6 +217,15 @@ new_metadata(Description, Tags, undefined) ->
     #{description => Description,
         default_queue_type => rabbit_queue_type:default_alias(),
         tags => Tags};
+new_metadata(Description, Tags, <<"undefined">>) ->
+    %% See rabbitmq/rabbitmq-server#10469
+    new_metadata(Description, Tags, undefined);
+new_metadata(Description, Tags, null) ->
+    %% JSON null (thoas), see rabbitmq/rabbitmq-server#10469
+    new_metadata(Description, Tags, undefined);
+new_metadata(Description, Tags, nil) ->
+    %% JSON null (Elixir JSON), see rabbitmq/rabbitmq-server#10469
+    new_metadata(Description, Tags, undefined);
 new_metadata(Description, Tags, DefaultQueueType) ->
     #{description => Description,
       tags => Tags,

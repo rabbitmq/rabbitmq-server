@@ -3,7 +3,7 @@
 .\" License, v. 2.0. If a copy of the MPL was not distributed with this
 .\" file, You can obtain one at https://mozilla.org/MPL/2.0/.
 .\"
-.\" Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+.\" Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 .\"
 .Dd June 22, 2023
 .Dt RABBITMQCTL 8
@@ -286,28 +286,6 @@ For example, to wait for two RabbitMQ nodes to start:
 .sp
 .Dl rabbitmqctl await_online_nodes 2
 .\" ------------------------------------------------------------------
-.It Cm change_cluster_node_type Ar type
-.Pp
-Changes the type of the cluster node.
-.Pp
-The
-.Ar type
-must be one of the following:
-.Bl -bullet -compact
-.It
-.Cm disc
-.It
-.Cm ram
-.El
-.Pp
-The node must be stopped for this operation to succeed, and when turning
-a node into a RAM node the node must not be the only disc node in the
-cluster.
-.Pp
-For example, this command will turn a RAM node into a disc node:
-.sp
-.Dl rabbitmqctl change_cluster_node_type disc
-.\" ------------------------------------------------------------------
 .It Cm cluster_status
 .Pp
 Displays all the nodes in the cluster grouped by node type, together
@@ -413,14 +391,10 @@ from the node
 .sp
 .Dl rabbitmqctl -n hare@mcnulty forget_cluster_node rabbit@stringer
 .\" ------------------------------------------------------------------
-.It Cm join_cluster Ar seed-node Op Fl -ram
+.It Cm join_cluster Ar seed-node
 .Bl -tag -width Ds
 .It Ar seed-node
 Existing cluster member (seed node) to cluster with.
-.It Fl -ram
-If provided, the node will join the cluster as a RAM node.
-RAM node use is discouraged. Use only if you understand why
-exactly you need to use them.
 .El
 .Pp
 Instructs the node to become a member of the cluster that the specified
@@ -430,23 +404,6 @@ command.
 For this command to succeed the RabbitMQ application must have been
 stopped, e.g. with
 .Cm stop_app .
-.Pp
-Cluster nodes can be of two types: disc or RAM.
-Disc nodes replicate data in RAM and on disk, thus providing redundancy
-in the event of node failure and recovery from global events such as
-power failure across all nodes.
-RAM nodes replicate data in RAM only (except for queue contents, which
-can reside on disk if the queue is persistent or too big to fit in
-memory) and are mainly used for scalability.
-RAM nodes are more performant only when managing resources (e.g.\&
-adding/removing queues, exchanges, or bindings).
-A cluster must always have at least one disc node and usually should
-have more than one.
-.Pp
-The node will be a disc node by default.
-If you wish to create a RAM node, provide the
-.Fl -ram
-flag.
 .Pp
 After executing the
 .Cm join_cluster
@@ -460,12 +417,6 @@ the node.
 You can also remove nodes remotely with the
 .Cm forget_cluster_node
 command.
-.Pp
-For example, this command instructs the RabbitMQ node to join the cluster that
-.Qq hare@elena
-is part of, as a ram node:
-.sp
-.Dl rabbitmqctl join_cluster hare@elena --ram
 .Pp
 To learn more, see the
 .Lk https://www.rabbitmq.com/docs/clustering "RabbitMQ Clustering guide".
@@ -2452,8 +2403,7 @@ Reset the stats database for all nodes in the cluster.
 .Xr rabbitmq-streams 8 ,
 .Xr rabbitmq-upgrade 8 ,
 .Xr rabbitmq-service 8 ,
-.Xr rabbitmq-env.conf 5 ,
-.Xr rabbitmq-echopid 8
+.Xr rabbitmq-env.conf 5
 .\" ------------------------------------------------------------------------------------------------
 .Sh AUTHOR
 .\" ------------------------------------------------------------------------------------------------

@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_queue_type).
@@ -822,17 +822,20 @@ inject_dqt(VHost) when ?is_vhost(VHost) ->
     inject_dqt(vhost:to_map(VHost));
 inject_dqt(VHost) when is_list(VHost) ->
     inject_dqt(rabbit_data_coercion:to_map(VHost));
-inject_dqt(M = #{default_queue_type := undefined}) ->
-    NQT = short_alias_of(default()),
-    Meta0 = maps:get(metadata, M, #{}),
-    Meta = Meta0#{default_queue_type => NQT},
-
-    M#{default_queue_type => NQT, metadata => Meta};
-inject_dqt(M = #{default_queue_type := DQT}) ->
+inject_dqt(M) when is_map(M) ->
+    RawDQT = maps:get(default_queue_type, M, undefined),
+    %% See rabbitmq/rabbitmq-server#10469
+    DQT = case RawDQT of
+        undefined -> default();
+        null -> default();
+        nil -> default();
+        <<"undefined">> -> default();
+        "undefined" -> default();
+        Valid -> Valid
+    end,
     NQT = short_alias_of(DQT),
     Meta0 = maps:get(metadata, M, #{}),
     Meta = Meta0#{default_queue_type => NQT},
-
     M#{default_queue_type => NQT, metadata => Meta}.
 
 -spec vhosts_with_dqt([any()]) -> [map()].

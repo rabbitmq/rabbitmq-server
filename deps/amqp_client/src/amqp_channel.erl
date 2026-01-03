@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 %% @type close_reason(Type) = {shutdown, amqp_reason(Type)}.
@@ -927,7 +927,7 @@ is_connection_method(Method) ->
     ?PROTOCOL:lookup_class_name(ClassId) == connection.
 
 server_misbehaved(#amqp_error{} = AmqpError, State = #state{number = Number}) ->
-    case rabbit_binary_generator:map_exception(Number, AmqpError, ?PROTOCOL) of
+    case rabbit_binary_generator:map_exception(Number, AmqpError) of
         {0, _} ->
             handle_shutdown({server_misbehaved, AmqpError}, State);
         {_, Close} ->

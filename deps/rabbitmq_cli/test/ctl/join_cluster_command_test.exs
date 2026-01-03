@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+## Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 
 defmodule JoinClusterCommandTest do
   use ExUnit.Case, async: false
@@ -26,16 +26,8 @@ defmodule JoinClusterCommandTest do
     {:ok,
      opts: %{
        node: get_rabbit_hostname(),
-       disc: true,
-       ram: false
+       disc: true
      }}
-  end
-
-  test "validate: specifying both --disc and --ram is reported as invalid", context do
-    assert match?(
-             {:validation_failure, {:bad_argument, _}},
-             @command.validate(["a"], Map.merge(context[:opts], %{disc: true, ram: true}))
-           )
   end
 
   test "validate: specifying no target node is reported as an error", context do
@@ -50,10 +42,6 @@ defmodule JoinClusterCommandTest do
 
   # TODO
   # test "run: successful join as a disc node", context do
-  # end
-
-  # TODO
-  # test "run: successful join as a RAM node", context do
   # end
 
   test "run: joining self is invalid", context do
@@ -71,7 +59,6 @@ defmodule JoinClusterCommandTest do
     opts = %{
       node: :jake@thedog,
       disc: true,
-      ram: false,
       timeout: 200
     }
 

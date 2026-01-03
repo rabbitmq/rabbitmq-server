@@ -395,7 +395,6 @@ SCRIPTS = rabbitmq-defaults \
 AUTOCOMPLETE_SCRIPTS = bash_autocomplete.sh zsh_autocomplete.sh
 
 WINDOWS_SCRIPTS = rabbitmq-defaults.bat \
-		  rabbitmq-echopid.bat \
 		  rabbitmq-env.bat \
 		  rabbitmq-plugins.bat \
 		  rabbitmq-diagnostics.bat \

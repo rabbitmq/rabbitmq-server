@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_ct_broker_helpers).
@@ -35,7 +35,7 @@
 
     control_action/2, control_action/3, control_action/4,
     rabbitmqctl/3, rabbitmqctl/4, rabbitmqctl_list/3,
-    rabbitmq_queues/3, rabbitmq_diagnostics/3,
+    rabbitmq_queues/3, rabbitmq_streams/3, rabbitmq_diagnostics/3,
 
     add_code_path_to_node/2,
     add_code_path_to_all_nodes/2,
@@ -181,6 +181,9 @@
 -export([
     do_restart_broker/0
   ]).
+
+%% @todo Remove release after LTS after 4.3.
+-dialyzer({nowarn_function, [test_channel/0]}).
 
 -define(DEFAULT_USER, "guest").
 -define(NODE_START_ATTEMPTS, 3).
@@ -1586,6 +1589,30 @@ rabbitmq_queues(Config, Node, Args) ->
     Cmd = [RabbitmqQueues, "-n", Nodename | Args],
     rabbit_ct_helpers:exec(Cmd, [{env, Env}]).
 
+rabbitmq_streams(Config, Node, Args) ->
+    RabbitmqStreams = ?config(rabbitmq_streams_cmd, Config),
+    NodeConfig = get_node_config(Config, Node),
+    Nodename = ?config(nodename, NodeConfig),
+    Env0 = [
+      {"RABBITMQ_SCRIPTS_DIR", filename:dirname(RabbitmqStreams)},
+      {"RABBITMQ_PID_FILE", ?config(pid_file, NodeConfig)},
+      {"RABBITMQ_MNESIA_DIR", ?config(data_dir, NodeConfig)},
+      {"RABBITMQ_PLUGINS_DIR", ?config(plugins_dir, NodeConfig)},
+      {"RABBITMQ_ENABLED_PLUGINS_FILE",
+        ?config(enabled_plugins_file, NodeConfig)}
+    ],
+    Ret = rabbit_ct_helpers:get_config(
+            NodeConfig, enabled_feature_flags_list_file),
+    Env = case Ret of
+              undefined ->
+                  Env0;
+              EnabledFeatureFlagsFile ->
+                  Env0 ++
+                  [{"RABBITMQ_FEATURE_FLAGS_FILE", EnabledFeatureFlagsFile}]
+          end,
+    Cmd = [RabbitmqStreams, "-n", Nodename | Args],
+    rabbit_ct_helpers:exec(Cmd, [{env, Env}]).
+
 rabbitmq_diagnostics(Config, Node, Args) ->
     Rabbitmqdiagnostics = ?config(rabbitmq_diagnostics_cmd, Config),
     NodeConfig = get_node_config(Config, Node),
@@ -2456,9 +2483,17 @@ test_channel() ->
     Me = self(),
     Writer = spawn(fun () -> test_writer(Me) end),
     {ok, Limiter} = rabbit_limiter:start_link(no_id),
-    {ok, Ch} = rabbit_channel:start_link(
-                 1, Me, Writer, Me, "", rabbit_framing_amqp_0_9_1,
-                 user(<<"guest">>), <<"/">>, [], Me, Limiter),
+    {ok, Ch} = case erlang:function_exported(rabbit_channel, start_link, 12) of
+        %% @todo Remove release after LTS after 4.3.
+        true ->
+            rabbit_channel:start_link(
+                         1, Me, Writer, Me, "", rabbit_framing_amqp_0_9_1,
+                         user(<<"guest">>), <<"/">>, [], Me, Limiter);
+        false ->
+            rabbit_channel:start_link(
+                         1, Me, Writer, Me, "",
+                         user(<<"guest">>), <<"/">>, [], Me, Limiter)
+    end,
     {Writer, Limiter, Ch}.
 
 test_writer(Pid) ->

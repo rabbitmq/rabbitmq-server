@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_vhost).
@@ -309,7 +309,18 @@ update_metadata(Name, Metadata0, _ActingUser) when is_map(Metadata0) andalso map
     end;
 update_metadata(Name, Metadata0, ActingUser) ->
     KnownKeys = [description, tags, default_queue_type, protected_from_deletion],
-    Metadata = maps:with(KnownKeys, Metadata0),
+    Metadata1 = maps:with(KnownKeys, Metadata0),
+    %% See rabbitmq/rabbitmq-server#10469
+    Metadata = case Metadata1 of
+        #{default_queue_type := <<"undefined">>} ->
+            maps:remove(default_queue_type, Metadata1);
+        #{default_queue_type := null} ->
+            maps:remove(default_queue_type, Metadata1);
+        #{default_queue_type := nil} ->
+            maps:remove(default_queue_type, Metadata1);
+        _ ->
+            Metadata1
+    end,
 
     case rabbit_db_vhost:merge_metadata(Name, Metadata) of
         {ok, VHost} ->
@@ -712,6 +723,12 @@ i(metadata, VHost) ->
         undefined ->
             #{default_queue_type => DQT};
         M = #{default_queue_type := undefined} ->
+            M#{default_queue_type => DQT};
+        M = #{default_queue_type := <<"undefined">>} ->
+            M#{default_queue_type => DQT};
+        M = #{default_queue_type := null} ->
+            M#{default_queue_type => DQT};
+        M = #{default_queue_type := nil} ->
             M#{default_queue_type => DQT};
         M = #{default_queue_type := QT} ->
             M#{default_queue_type => rabbit_queue_type:short_alias_of(QT)};

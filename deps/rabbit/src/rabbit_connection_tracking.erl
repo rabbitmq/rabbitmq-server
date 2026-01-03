@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_connection_tracking).
@@ -34,7 +34,6 @@
          delete_tracked_connection_vhost_entry/1,
          list/0, list/1, list_on_node/1, list_on_node/2, list_of_user/1,
          tracked_connection_from_connection_created/1,
-         tracked_connection_from_connection_state/1,
          lookup/1, lookup/2, count/0]).
 
 -export([count_local_tracked_items_in_vhost/1,
@@ -381,26 +380,6 @@ tracked_connection_from_connection_created(EventDetails) ->
                         type         = pget(type, EventDetails),
                         peer_host    = pget(peer_host, EventDetails),
                         peer_port    = pget(peer_port, EventDetails)}.
-
-tracked_connection_from_connection_state(#connection{
-                                            vhost = VHost,
-                                            connected_at = Ts,
-                                            peer_host = PeerHost,
-                                            peer_port = PeerPort,
-                                            user = Username,
-                                            name = Name
-                                           }) ->
-    tracked_connection_from_connection_created(
-      [{name, Name},
-       {node, node()},
-       {vhost, VHost},
-       {user, Username},
-       {user_who_performed_action, Username},
-       {connected_at, Ts},
-       {pid, self()},
-       {type, network},
-       {peer_port, PeerPort},
-       {peer_host, PeerHost}]).
 
 close_connections(Tracked, Message) ->
     close_connections(Tracked, Message, 0).

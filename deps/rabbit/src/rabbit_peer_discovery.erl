@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_peer_discovery).
@@ -343,7 +343,7 @@ discover_cluster_nodes(Backend) ->
 
 check_discovered_nodes_list_validity(DiscoveredNodes, NodeType)
   when is_list(DiscoveredNodes) andalso
-       NodeType =:= disc orelse NodeType =:= disk orelse NodeType =:= ram ->
+       NodeType =:= disc orelse NodeType =:= disk ->
     BadNodenames = lists:filter(
                      fun(Nodename) -> not is_atom(Nodename) end,
                      DiscoveredNodes),
@@ -352,7 +352,7 @@ check_discovered_nodes_list_validity(DiscoveredNodes, NodeType)
         _  -> e({invalid_cluster_node_names, BadNodenames})
     end;
 check_discovered_nodes_list_validity(SelectedNode, NodeType)
-  when NodeType =:= disc orelse NodeType =:= disk orelse NodeType =:= ram ->
+  when NodeType =:= disc orelse NodeType =:= disk ->
     case is_atom(SelectedNode) of
         true  -> ok;
         false -> e({invalid_cluster_node_names, SelectedNode})
@@ -998,7 +998,7 @@ error_description({invalid_cluster_node_names, BadNames}) ->
         "are invalid: " ++ lists:flatten(io_lib:format("~tp", [BadNames]));
 error_description({invalid_cluster_node_type, BadType}) ->
     "In the 'cluster_nodes' configuration key, the node type is invalid "
-        "(expected 'disc' or 'ram'): " ++
+        "(expected 'disc'): " ++
         lists:flatten(io_lib:format("~tp", [BadType])).
 
 -spec maybe_register() -> ok.

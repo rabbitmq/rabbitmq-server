@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -include("resource.hrl").
@@ -39,9 +39,6 @@
           port,
           %% client port
           peer_port,
-          %% protocol implementation module,
-          %% e.g. rabbit_framing_amqp_0_9_1
-          protocol,
           user,
           %% heartbeat timeout value used, 0 means
           %% heartbeats are disabled
@@ -74,6 +71,10 @@
          properties_bin, %% either 'none', or an encoded properties binary
          %% Note: at most one of properties and properties_bin can be
          %% 'none' at once.
+         %% @todo The protocol field can be safely removed entirely in the
+         %%       RabbitMQ version that follows the LTS that is after
+         %%       RabbitMQ 4.3 (so if LTS is 4.5, remove in 4.6).
+         %%       Only compat code for reading from disk will be necessary.
          protocol, %% The protocol under which properties_bin was encoded
          payload_fragments_rev %% list of binaries, in reverse order (!)
          }).
@@ -211,7 +212,7 @@
         }).
 %%----------------------------------------------------------------------------
 
--define(COPYRIGHT_MESSAGE, "Copyright (c) 2007-2025 Broadcom Inc and/or its subsidiaries").
+-define(COPYRIGHT_MESSAGE, "Copyright (c) 2007-2026 Broadcom Inc and/or its subsidiaries").
 -define(INFORMATION_MESSAGE, "Licensed under the MPL 2.0. Website: https://rabbitmq.com").
 
 %% EMPTY_FRAME_SIZE, 8 = 1 + 2 + 4 + 1
@@ -277,3 +278,5 @@
 %% Max value for stream max segment size
 -define(MAX_STREAM_MAX_SEGMENT_SIZE, 3_000_000_000).
 
+%% Preferred value instead of `infinity`
+-define(GEN_SERVER_CALL_TIMEOUT, 60000).
