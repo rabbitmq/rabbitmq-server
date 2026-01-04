@@ -72,7 +72,7 @@ The recommended community forums are
 See [CONTRIBUTING.md](./CONTRIBUTING.md) and our [development process overview](https://www.rabbitmq.com/github).
 
 Questions about contributing, internals and so on are very welcome in [GitHub Discussions](https://github.com/rabbitmq/rabbitmq-server/discussions)
-or [community Discord server](https://www.rabbitmq.com/discord/) in the `core-and-plugin-dev` channel.
+or [community Discord server](https://www.rabbitmq.com/discord/) in the `contributors` channel.
 
 
 ## Licensing
