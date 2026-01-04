@@ -124,6 +124,7 @@ all_tests() -> [
     api_redirect_test,
     stats_redirect_test,
     overview_test,
+    resource_counts_test,
     auth_test,
     cluster_name_test,
     nodes_test,
@@ -402,6 +403,114 @@ overview_test(Config) ->
     http_delete(Config, "/users/myuser", {group, '2xx'}),
     passed.
 
+resource_counts_test(Config) ->
+    Counts = http_get(Config, "/resource-counts"),
+    assert_keys([exchanges, queues, connections, channels, policies,
+                 operator_policies, nodes, vhosts, bindings], Counts),
+    
+    CountsVHost = http_get(Config, "/resource-counts/%2F"),
+    assert_keys([exchanges, queues, connections, channels, policies,
+                 operator_policies, nodes, vhosts, bindings], CountsVHost),
+    
+    http_put(Config, "/vhosts/vhost_a", none, {group, '2xx'}),
+    http_put(Config, "/vhosts/vhost_b", none, {group, '2xx'}),
+    http_put(Config, "/vhosts/vhost_c", none, {group, '2xx'}),
+    
+    http_put(Config, "/exchanges/vhost_a/ex_a",
+             [{type, <<"direct">>}, {durable, true}], {group, '2xx'}),
+    http_put(Config, "/queues/vhost_a/q_a1", [], {group, '2xx'}),
+    http_put(Config, "/queues/vhost_a/q_a2", [], {group, '2xx'}),
+    http_put(Config, "/policies/vhost_a/policy_a",
+             [{pattern, <<".*">>}, {'apply-to', <<"all">>},
+              {definition, [{<<"max-length">>, 1000}]}], {group, '2xx'}),
+    
+    http_put(Config, "/exchanges/vhost_b/ex_b1",
+             [{type, <<"fanout">>}, {durable, true}], {group, '2xx'}),
+    http_put(Config, "/exchanges/vhost_b/ex_b2",
+             [{type, <<"topic">>}, {durable, true}], {group, '2xx'}),
+    http_put(Config, "/queues/vhost_b/q_b1", [], {group, '2xx'}),
+    http_put(Config, "/queues/vhost_b/q_b2", [], {group, '2xx'}),
+    http_put(Config, "/queues/vhost_b/q_b3", [], {group, '2xx'}),
+    
+    http_put(Config, "/users/admin_user", [{password, <<"admin">>},
+                                           {tags, <<"administrator">>}], {group, '2xx'}),
+    http_put(Config, "/users/monitor_user", [{password, <<"monitor">>},
+                                             {tags, <<"monitoring">>}], {group, '2xx'}),
+    http_put(Config, "/users/user_a", [{password, <<"user_a">>},
+                                       {tags, <<"management">>}], {group, '2xx'}),
+    http_put(Config, "/users/user_ab", [{password, <<"user_ab">>},
+                                        {tags, <<"management">>}], {group, '2xx'}),
+    http_put(Config, "/users/user_none", [{password, <<"user_none">>},
+                                          {tags, <<"management">>}], {group, '2xx'}),
+    
+    PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
+    http_put(Config, "/permissions/vhost_a/user_a", PermArgs, {group, '2xx'}),
+    http_put(Config, "/permissions/vhost_a/user_ab", PermArgs, {group, '2xx'}),
+    http_put(Config, "/permissions/vhost_b/user_ab", PermArgs, {group, '2xx'}),
+    
+    AdminCounts = http_get(Config, "/resource-counts", "admin_user", "admin", ?OK),
+    assert_keys([exchanges, queues, vhosts], AdminCounts),
+    4 = maps:get(vhosts, AdminCounts),
+    
+    MonitorCounts = http_get(Config, "/resource-counts", "monitor_user", "monitor", ?OK),
+    assert_keys([exchanges, queues, vhosts], MonitorCounts),
+    4 = maps:get(vhosts, MonitorCounts),
+    
+    UserACounts = http_get(Config, "/resource-counts", "user_a", "user_a", ?OK),
+    assert_keys([exchanges, queues, vhosts, policies], UserACounts),
+    1 = maps:get(vhosts, UserACounts),
+    8 = maps:get(exchanges, UserACounts),
+    2 = maps:get(queues, UserACounts),
+    1 = maps:get(policies, UserACounts),
+    
+    UserABCounts = http_get(Config, "/resource-counts", "user_ab", "user_ab", ?OK),
+    assert_keys([exchanges, queues, vhosts, policies], UserABCounts),
+    2 = maps:get(vhosts, UserABCounts),
+    17 = maps:get(exchanges, UserABCounts),
+    5 = maps:get(queues, UserABCounts),
+    1 = maps:get(policies, UserABCounts),
+    
+    UserNoneCounts = http_get(Config, "/resource-counts", "user_none", "user_none", ?OK),
+    assert_keys([vhosts], UserNoneCounts),
+    1 = maps:get(vhosts, UserNoneCounts),
+    
+    UserAVHostA = http_get(Config, "/resource-counts/vhost_a", "user_a", "user_a", ?OK),
+    8 = maps:get(exchanges, UserAVHostA),
+    2 = maps:get(queues, UserAVHostA),
+    
+    UserAVHostB = http_get(Config, "/resource-counts/vhost_b", "user_a", "user_a", ?OK),
+    true = maps:size(UserAVHostB) == 0,
+    
+    UserABVHostB = http_get(Config, "/resource-counts/vhost_b", "user_ab", "user_ab", ?OK),
+    9 = maps:get(exchanges, UserABVHostB),
+    3 = maps:get(queues, UserABVHostB),
+    
+    AdminVHostA = http_get(Config, "/resource-counts/vhost_a", "admin_user", "admin", ?OK),
+    8 = maps:get(exchanges, AdminVHostA),
+    2 = maps:get(queues, AdminVHostA),
+    
+    http_get(Config, "/resource-counts/nonexistent", ?NOT_FOUND),
+    
+    http_delete(Config, "/policies/vhost_a/policy_a", {group, '2xx'}),
+    http_delete(Config, "/queues/vhost_a/q_a1", {group, '2xx'}),
+    http_delete(Config, "/queues/vhost_a/q_a2", {group, '2xx'}),
+    http_delete(Config, "/exchanges/vhost_a/ex_a", {group, '2xx'}),
+    http_delete(Config, "/queues/vhost_b/q_b1", {group, '2xx'}),
+    http_delete(Config, "/queues/vhost_b/q_b2", {group, '2xx'}),
+    http_delete(Config, "/queues/vhost_b/q_b3", {group, '2xx'}),
+    http_delete(Config, "/exchanges/vhost_b/ex_b1", {group, '2xx'}),
+    http_delete(Config, "/exchanges/vhost_b/ex_b2", {group, '2xx'}),
+    http_delete(Config, "/vhosts/vhost_a", {group, '2xx'}),
+    http_delete(Config, "/vhosts/vhost_b", {group, '2xx'}),
+    http_delete(Config, "/vhosts/vhost_c", {group, '2xx'}),
+    http_delete(Config, "/users/admin_user", {group, '2xx'}),
+    http_delete(Config, "/users/monitor_user", {group, '2xx'}),
+    http_delete(Config, "/users/user_a", {group, '2xx'}),
+    http_delete(Config, "/users/user_ab", {group, '2xx'}),
+    http_delete(Config, "/users/user_none", {group, '2xx'}),
+    
+    passed.
+    
 cluster_name_test(Config) ->
     http_put(Config, "/users/myuser", [{password, <<"myuser">>},
                                        {tags,     <<"management">>}], {group, '2xx'}),
