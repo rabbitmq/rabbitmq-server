@@ -41,7 +41,6 @@
          ]).
 
 -define(SOFT_LIMIT, 32).
--define(TIMER_TIME, 10000).
 -define(COMMAND_TIMEOUT, 30000).
 -define(UNLIMITED_PREFETCH_COUNT, 2000). %% something large for ra
 %% controls the timer for closing cached segments
@@ -74,7 +73,6 @@
                 pending = #{} :: #{seq() =>
                                    {term(), rabbit_fifo:command()}},
                 consumers = #{} :: #{rabbit_types:ctag() => #consumer{}},
-                timer_state :: term(),
                 cached_segments :: undefined |
                                   {undefined | reference(),
                                    LastSeenMs :: milliseconds(),
@@ -647,8 +645,8 @@ handle_ra_event(QName, Leader, {applied, Seqs},
             % channel is interacting with)
             % but the fact the queue has just applied suggests
             % it's ok to cancel here anyway
-            State3 = cancel_timer(State2#state{slow = false,
-                                               unsent_commands = #{}}),
+            State3 = State2#state{slow = false,
+                                  unsent_commands = #{}},
             % build up a list of commands to issue
             Commands = maps:fold(
                          fun (Cid, {Settled, Returns, Discards}, Acc) ->
@@ -699,26 +697,11 @@ handle_ra_event(QName, _From, {rejected, {not_leader, Leader, _Seq}},
                [rabbit_misc:rs(QName), ?MODULE, OldLeader,
                 Leader, maps:size(Pending)]),
     State = resend_all_pending(State0#state{leader = Leader}),
-    {ok, cancel_timer(State), []};
+    {ok, State, []};
 handle_ra_event(_QName, _From,
                 {rejected, {not_leader, _UndefinedMaybe, _Seq}}, State0) ->
     % TODO: how should these be handled? re-sent on timer or try random
     {ok, State0, []};
-handle_ra_event(QName, _, timeout, #state{cfg = #cfg{servers = Servers},
-                                          leader = OldLeader,
-                                          pending = Pending} = State0) ->
-    case find_leader(Servers) of
-        undefined ->
-            %% still no leader, set the timer again
-            {ok, set_timer(QName, State0), []};
-        Leader ->
-            ?LOG_DEBUG("~ts: ~s Pending applied Timeout ~w to ~w, "
-                       "resending ~b pending commands",
-                       [rabbit_misc:rs(QName), ?MODULE, OldLeader,
-                        Leader, maps:size(Pending)]),
-            State = resend_all_pending(State0#state{leader = Leader}),
-            {ok, State, []}
-    end;
 handle_ra_event(QName, Leader, close_cached_segments,
                 #state{cached_segments = CachedSegments} = State) ->
     {ok,
@@ -1021,24 +1004,6 @@ add_command(Cid, return, MsgIds, Acc) ->
 add_command(Cid, discard, MsgIds, Acc) ->
     [rabbit_fifo:make_discard(Cid, MsgIds) | Acc].
 
-set_timer(QName, #state{leader = Leader0,
-                        cfg = #cfg{servers = [Server | _]}} = State) ->
-    Leader = case Leader0 of
-                 undefined -> Server;
-                 _ ->
-                     Leader0
-             end,
-    Ref = erlang:send_after(?TIMER_TIME, self(),
-                            {'$gen_cast',
-                             {queue_event, QName, {Leader, timeout}}}),
-    State#state{timer_state = Ref}.
-
-cancel_timer(#state{timer_state = undefined} = State) ->
-    State;
-cancel_timer(#state{timer_state = Ref} = State) ->
-    _ = erlang:cancel_timer(Ref, [{async, true}, {info, false}]),
-    State#state{timer_state = undefined}.
-
 find_local_or_leader(#state{leader = Leader,
                             cfg = #cfg{servers = Servers}}) ->
     case find_local(Servers) of
@@ -1054,16 +1019,6 @@ find_local([_ | Rem]) ->
     find_local(Rem);
 find_local([]) ->
     undefined.
-
-
-find_leader([]) ->
-    undefined;
-find_leader([Server | Servers]) ->
-    case ra:members(Server, 500) of
-        {ok, _, Leader} -> Leader;
-        _ ->
-            find_leader(Servers)
-    end.
 
 qref({Ref, _}) -> Ref;
 qref(Ref) -> Ref.
