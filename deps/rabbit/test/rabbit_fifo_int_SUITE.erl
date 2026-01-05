@@ -57,12 +57,11 @@ init_per_group(_, Config) ->
     PrivDir = ?config(priv_dir, Config),
     _ = application:load(ra),
     ok = application:set_env(ra, data_dir, PrivDir),
-    application:ensure_all_started(logger),
-    application:ensure_all_started(ra),
-    application:ensure_all_started(lg),
+    {ok, _} = application:ensure_all_started(logger),
+    {ok, _} = application:ensure_all_started(ra),
     SysCfg = ra_system:default_config(),
     ra_env:configure_logger(logger),
-    ra_system:start(SysCfg#{name => ?RA_SYSTEM}),
+    {ok, _} = ra_system:start(SysCfg#{name => ?RA_SYSTEM}),
     Config.
 
 end_per_group(_, Config) ->
