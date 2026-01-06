@@ -1121,7 +1121,7 @@
 ## Therefore, this behavior in the MQTT plugin is configurable:
 ##  * if this setting is true, the connection will be closed
 ##  * if this setting is false, the connection is maintained and the server will try to respond reasonably
-      (e.g. using the Not Authorized reason of the PUBACK frame)
+##    (e.g. using the Not Authorized reason of the PUBACK frame)
 ##
 ## The default value is true, reflecting the behavior the MQTT plugin has had
 ## since its inception.
