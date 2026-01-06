@@ -83,6 +83,11 @@ RabbitMQ server is [licensed under the MPL 2.0](LICENSE-MPL-RabbitMQ).
 document explains the open source RabbitMQ support policy adopted by the RabbitMQ Core Team.
 
 
+## AI Agent Instructions
+
+See `AGENTS.md`.
+
+
 ## Building From Source and Packaging
 
  * [Contributor resources](https://github.com/rabbitmq/contribute)
