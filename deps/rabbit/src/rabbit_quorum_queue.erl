@@ -2108,7 +2108,7 @@ force_shrink_member_to_current_member(VHost, Name) ->
             Fun = fun (Q0) ->
                           TS0 = amqqueue:get_type_state(Q0),
                           TS = TS0#{nodes => [Node]},
-                          amqqueue:set_type_state(Q, TS)
+                          amqqueue:set_type_state(Q0, TS)
                   end,
             _ = rabbit_amqqueue:update(QName, Fun),
             _ = [ra:force_delete_server(?RA_SYSTEM, {RaName, N}) || N <- OtherNodes],
