@@ -45,7 +45,6 @@
          add_member/4,
          add_member/5]).
 -export([delete_member/3, delete_member/2]).
--export([requeue/3]).
 -export([policy_changed/1]).
 -export([format_ra_event/3]).
 -export([cleanup_data_dir/0]).
@@ -1192,9 +1191,6 @@ stat(Q, Timeout) when ?is_amqqueue(Q) ->
 purge(Q) when ?is_amqqueue(Q) ->
     Server = amqqueue:get_pid(Q),
     rabbit_fifo_client:purge(Server).
-
-requeue(ConsumerTag, MsgIds, QState) ->
-    rabbit_fifo_client:return(quorum_ctag(ConsumerTag), MsgIds, QState).
 
 cleanup_data_dir() ->
     Names = [begin
