@@ -26,7 +26,7 @@
 -define(MNESIA_NODE_TABLE, rabbit_topic_trie_node).
 -define(MNESIA_EDGE_TABLE, rabbit_topic_trie_edge).
 -define(MNESIA_BINDING_TABLE, rabbit_topic_trie_binding).
--define(KHEPRI_PROJECTION, rabbit_khepri_topic_trie_v2).
+-define(KHEPRI_PROJECTION, rabbit_khepri_topic_trie_v3).
 
 -type match_result() :: [rabbit_types:binding_destination() |
                          {rabbit_amqqueue:name(), rabbit_types:binding_key()}].
@@ -533,8 +533,8 @@ trie_child_in_khepri(X, Node, Word) ->
            #trie_edge{exchange_name = X,
                       node_id       = Node,
                       word          = Word}) of
-        [#topic_trie_edge{node_id = NextNode}] -> {ok, NextNode};
-        []                                     -> error
+        [#topic_trie_edge_v2{node_id = NextNode}] -> {ok, NextNode};
+        []                                        -> error
     end.
 
 trie_bindings_in_khepri(X, Node, BKeys) ->
@@ -543,7 +543,7 @@ trie_bindings_in_khepri(X, Node, BKeys) ->
            #trie_edge{exchange_name = X,
                       node_id       = Node,
                       word          = bindings}) of
-        [#topic_trie_edge{node_id = {bindings, Bindings}}] ->
+        [#topic_trie_edge_v2{node_id = {bindings, Bindings}}] ->
             [case BKeys of
                  true ->
                      {Dest, Args};

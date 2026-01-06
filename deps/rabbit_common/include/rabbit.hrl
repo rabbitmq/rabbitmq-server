@@ -101,6 +101,7 @@
 
 -record(topic_trie_node, {trie_node, edge_count, binding_count}).
 -record(topic_trie_edge, {trie_edge, node_id}).
+-record(topic_trie_edge_v2, {trie_edge, node_id, child_count}).
 -record(topic_trie_binding, {trie_binding, value = const}).
 
 -record(trie_node, {exchange_name, node_id}).
