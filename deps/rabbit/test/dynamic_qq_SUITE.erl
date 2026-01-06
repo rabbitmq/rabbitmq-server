@@ -206,9 +206,9 @@ quorum_unaffected_after_vhost_failure(Config) ->
 
     %% Crash vhost on both nodes
     {ok, SupA} = rabbit_ct_broker_helpers:rpc(Config, A, rabbit_vhost_sup_sup, get_vhost_sup, [<<"/">>]),
-    exit(SupA, foo),
     {ok, SupB} = rabbit_ct_broker_helpers:rpc(Config, B, rabbit_vhost_sup_sup, get_vhost_sup, [<<"/">>]),
-    exit(SupB, foo),
+    exit(SupA, kill),
+    exit(SupB, kill),
 
     ?awaitMatch(
        Servers,
