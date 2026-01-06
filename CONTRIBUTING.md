@@ -3,6 +3,10 @@
 RabbitMQ projects use pull requests to discuss, collaborate on and accept code contributions.
 Pull requests is the primary place of discussing code changes.
 
+## Repository Layout
+
+See `AGENTS.md`.
+
 ## How to Contribute
 
 The process is fairly standard:
