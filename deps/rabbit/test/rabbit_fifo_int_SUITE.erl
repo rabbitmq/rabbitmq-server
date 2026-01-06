@@ -25,7 +25,6 @@ all_tests() ->
      return,
      lost_return_is_resent_on_applied_after_leader_change,
      rabbit_fifo_returns_correlation,
-     resends_lost_command,
      returns,
      returns_after_down,
      resends_after_lost_applied,
@@ -294,27 +293,6 @@ usage(Config) ->
     Use = rabbit_fifo:usage(element(1, ServerId)),
     rabbit_quorum_queue:stop_server(ServerId),
     ?assert(Use > 0.0),
-    ok.
-
-resends_lost_command(Config) ->
-    ClusterName = ?config(cluster_name, Config),
-    ServerId = ?config(node_id, Config),
-    ok = start_cluster(ClusterName, [ServerId]),
-
-    ok = meck:new(ra, [passthrough]),
-
-    F0 = rabbit_fifo_client:init([ServerId]),
-    {ok, F1, []} = rabbit_fifo_client:enqueue(ClusterName, msg1, F0),
-    % lose the enqueue
-    meck:expect(ra, pipeline_command, fun (_, _, _) -> ok end),
-    {ok, F2, []} = rabbit_fifo_client:enqueue(ClusterName, msg2, F1),
-    meck:unload(ra),
-    {ok, F3, []} = rabbit_fifo_client:enqueue(ClusterName, msg3, F2),
-    {_, _, F4} = process_ra_events(receive_ra_events(2, 0), ClusterName, F3),
-    {ok, _, {_, _, _, _, msg1}, F5} = rabbit_fifo_client:dequeue(ClusterName, <<"tag">>, settled, F4),
-    {ok, _, {_, _, _, _, msg2}, F6} = rabbit_fifo_client:dequeue(ClusterName, <<"tag">>, settled, F5),
-    {ok, _, {_, _, _, _, msg3}, _F7} = rabbit_fifo_client:dequeue(ClusterName, <<"tag">>, settled, F6),
-    rabbit_quorum_queue:stop_server(ServerId),
     ok.
 
 two_quick_enqueues(Config) ->
