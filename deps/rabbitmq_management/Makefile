@@ -38,13 +38,3 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 include ../../rabbitmq-components.mk
 include ../../erlang.mk
 
-# --------------------------------------------------------------------
-# Distribution.
-# --------------------------------------------------------------------
-
-list-dist-deps::
-	@echo bin/rabbitmqadmin
-
-prepare-dist::
-	$(verbose) sed 's/%%VSN%%/$(PROJECT_VERSION)/' bin/rabbitmqadmin \
-		> $(EZ_DIR)/priv/www/cli/rabbitmqadmin
