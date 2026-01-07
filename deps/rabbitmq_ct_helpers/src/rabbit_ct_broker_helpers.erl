@@ -880,7 +880,7 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
                     longnames => true,
                     host => HostName1,
                     connection => standard_io,
-                    exec => "/usr/bin/erl",
+                    exec => os:find_executable(erl),
                     args => PeerArgs,
                     env => PeerEnv}) of
                 {ok, Pid, Nodename} ->
