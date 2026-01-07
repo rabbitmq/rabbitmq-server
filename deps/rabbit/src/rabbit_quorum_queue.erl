@@ -878,26 +878,23 @@ recover(_Vhost, Queues) ->
          QName = amqqueue:get_name(Q),
          MutConf = make_mutable_config(Q),
          RaUId = ra_directory:uid_of(?RA_SYSTEM, Name),
-         case RaUId of
-             undefined ->
-                 ?LOG_WARNING("Unexpected undefined uuid for current node for quorum ~ts during recover",
-                              [rabbit_misc:rs(QName)]);
-             _ ->
-                 ok
-         end,
          #{nodes := Nodes} = amqqueue:get_type_state(Q),
          case Nodes of
+             _ when RaUId == undefined ->
+                 %% Queue member was not found in ra_directory
+                 ok;
              List when is_list(List) ->
-                 %% Queue is not aware of node to uid mapping, do nothing
+                 %% Node to UID mapping is not tracked in metadata store (legacy format)
                  ok;
              #{node() := RaUId} ->
-                 %% Queue is aware and uid for current node is correct, do
-                 %% nothing
+                 %% Queue member UID in metadata store matches the one in ra_directory
                  ok;
              #{node() := _NewRaUId} ->
-                 %% Queue is aware but it does not match the one returned by
-                 %% ra_directory
-                 rabbit_log:info("Quorum ~ts: detected node uuid change, "
+                 %% Queue member UID in metadata store does not match the one tracked by
+                 %% ra_directory. Delete old data directory.
+                 %% (Later a new ra server will be started from scratch
+                 %% with the UID in metadata store)
+                 rabbit_log:info("Quorum ~ts: detected node UID change, "
                                  "deleting old data directory", [rabbit_misc:rs(QName)]),
                  maybe_delete_data_dir(RaUId)
          end,
