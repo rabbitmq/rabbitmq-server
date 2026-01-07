@@ -690,12 +690,8 @@ write_config_file(Config, NodeConfig, _I) ->
 ]).
 
 do_start_rabbitmq_node(Config, NodeConfig, I) ->
-    WithPlugins0 = rabbit_ct_helpers:get_config(Config,
-      broker_with_plugins), %% @todo This is probably not used.
-    WithPlugins = case is_list(WithPlugins0) of
-        true  -> lists:nth(I + 1, WithPlugins0);
-        false -> WithPlugins0
-    end,
+    %% @todo Review all instances of secondary_dist and secondary_umbrella and ensure it works for both.
+    %% @todo A SECONDARY_DIST_TAG= could be useful, fetching automatically the dist.
     ForceUseSecondary = rabbit_ct_helpers:get_config(
                           Config, force_secondary, undefined),
     CanUseSecondary = case ForceUseSecondary of
@@ -712,178 +708,172 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
                                false -> false;
                                _     -> CanUseSecondary
                            end,
-    SrcDir = case WithPlugins of
-        false when UseSecondaryUmbrella -> ?config(secondary_rabbit_srcdir,
-                                                   Config);
-        false                           -> ?config(rabbit_srcdir, Config);
-        _ when UseSecondaryUmbrella     -> ?config(secondary_current_srcdir,
-                                                   Config);
-        _                               -> ?config(current_srcdir, Config)
+    SrcDir = case UseSecondaryUmbrella of
+        true  -> ?config(secondary_current_srcdir, Config);
+        false -> ?config(current_srcdir, Config)
     end,
     PrivDir = ?config(priv_dir, Config),
     Nodename = ?config(nodename, NodeConfig),
     InitialNodename = ?config(initial_nodename, NodeConfig),
     DistPort = ?config(tcp_port_erlang_dist, NodeConfig),
     ConfigFile = ?config(erlang_node_config_filename, NodeConfig),
-    AdditionalErlArgs = rabbit_ct_helpers:get_config(Config, additional_erl_args, []),
     %% Use inet_proxy_dist to handle distribution. This is used by the
     %% partitions testsuite.
     DistMod = rabbit_ct_helpers:get_config(Config, erlang_dist_module),
-    StartArgs0 = case DistMod of
+    %% Peer arguments.
+    PeerArgs0 = case DistMod of
         undefined ->
-            "";
+            [];
         _ ->
             DistModS = atom_to_list(DistMod),
             DistModPath = filename:absname(
               filename:dirname(code:where_is_file(DistModS ++ ".beam"))),
             DistArg = re:replace(DistModS, "_dist$", "", [{return, list}]),
-            "-pa \"" ++ DistModPath ++ "\" -proto_dist " ++ DistArg
+            [
+                "-pa", DistModPath,
+                "-proto_dist", DistArg
+            ]
     end,
-    %% Set the net_ticktime to 5s for all nodes (including CT via CT_OPTS).
-    %% A lower tick time helps trigger distribution failures faster.
-    StartArgs1 = StartArgs0 ++ " -kernel net_ticktime 5",
-    ExtraArgs0 = [],
-    ExtraArgs1 = case rabbit_ct_helpers:get_config(Config, rmq_plugins_dir) of
+    PeerArgs1 = [
+%        "-init_debug",
+        "-boot", "start_sasl",
+        "+W", "w",
+        "+MBas", "ageffcbf",
+        "+MHas", "ageffcbf",
+        "+MBlmbcs", "512",
+        "+MHlmbcs", "512",
+        "+MMmcs", "30",
+        "+S", "2",
+        "+sbwt", "very_short", %% @todo Used twice in server start script?
+        "+A", "24", %% @todo Remove this from server start script?
+        %% $SERVER_ERL_ARGS
+        "+pc", "unicode",
+        "+P", "1048576",
+        "+t", "5000000",
+        "+stbt", "db",
+        "+zdbbl", "128000",
+        "+sbwt", "none",
+        "+sbwtdcpu", "none",
+        "+sbwtdio", "none",
+        %% Set the net_ticktime to 5s for all nodes (including CT via CT_OPTS).
+        %% A lower tick time helps trigger distribution failures faster.
+        "-kernel", "net_ticktime", "5", %% @todo Update parallel-test stuff to set it properly.
+        "-kernel", "prevent_overlapping_partitions", "false",
+        "-syslog", "logger", "[]",
+        "-syslog", "syslog_error_logger", "false"
+    |PeerArgs0],
+    AdditionalErlArgs = rabbit_ct_helpers:get_config(Config, additional_erl_args, []),
+    PeerArgs = PeerArgs1 ++ case AdditionalErlArgs of [] -> []; _ -> string:split(AdditionalErlArgs, " ", all) end,
+    %% Peer environment.
+    NodeDir = filename:join(PrivDir, atom_to_list(InitialNodename)),
+    [Nodename1, HostName1] = string:split(atom_to_list(Nodename), "@"),
+    PeerEnv0 = [
+        {"RABBITMQ_NODENAME", atom_to_list(Nodename)},
+        {"RABBITMQ_BASE", NodeDir},
+        {"RABBITMQ_PID_FILE", filename:join(NodeDir, atom_to_list(InitialNodename) ++ ".pid")},
+        {"RABBITMQ_LOG_BASE", filename:join(NodeDir, "log")},
+        {"RABBITMQ_MNESIA_BASE", filename:join(NodeDir, "mnesia")},
+        {"RABBITMQ_MNESIA_DIR", filename:join(filename:join(NodeDir, "mnesia"), atom_to_list(InitialNodename))},
+        {"RABBITMQ_QUORUM_DIR", filename:join(NodeDir, "mnesia/quorum")},
+        {"RABBITMQ_STREAM_DIR", filename:join(NodeDir, "mnesia/stream")},
+        {"RABBITMQ_FEATURE_FLAGS_FILE", filename:join(NodeDir, "feature_flags")},
+        {"RABBITMQ_PLUGINS_EXPAND_DIR", filename:join(NodeDir, "plugins")},
+        {"RABBITMQ_ENABLED_PLUGINS_FILE", filename:join(NodeDir, "enabled_plugins")},
+        {"RABBITMQ_DIST_PORT", integer_to_list(DistPort)},
+        {"RABBITMQ_CONFIG_FILE", ConfigFile},
+        {"RABBITMQ_LOG", "debug"}
+    ],
+    PluginsDir = case UseSecondaryDist of
+        true -> filename:join(?config(secondary_dist, Config), "plugins");
+        false -> filename:join(SrcDir, "plugins")
+    end,
+    PeerEnv1 = case rabbit_ct_helpers:get_config(Config, rmq_plugins_dir) of
                      undefined ->
-                         ExtraArgs0;
-                     ExtraPluginsDir ->
-                         [{"EXTRA_PLUGINS_DIR=~ts", [ExtraPluginsDir]}
-                          | ExtraArgs0]
+                         [{"RABBITMQ_PLUGINS_DIR", PluginsDir}|PeerEnv0];
+                     ExtraPluginsDir1 ->
+                         [{"RABBITMQ_PLUGINS_DIR", ExtraPluginsDir1 ++ ":" ++ PluginsDir}|PeerEnv0]
                  end,
     StartWithPluginsDisabled = rabbit_ct_helpers:get_config(
                                  Config, start_rmq_with_plugins_disabled),
-    ExtraArgs2 = case StartWithPluginsDisabled of
-                     true ->
-                        ["LEAVE_PLUGINS_DISABLED=1" | ExtraArgs1];
-                     _ ->
-                        ExtraArgs1
-                 end,
+    PeerEnv2 = if
+        StartWithPluginsDisabled ->
+            PeerEnv1;
+        UseSecondaryDist ->
+           case ?config(secondary_enabled_plugins, Config) of
+               undefined ->
+                   case filename:basename(SrcDir) of
+                       "rabbit" -> PeerEnv1;
+                       SrcPlugin ->
+                           [{"RABBITMQ_ENABLED_PLUGINS", SrcPlugin}|PeerEnv1]
+                   end;
+               SecondaryEnabledPlugins ->
+                   [{"RABBITMQ_ENABLED_PLUGINS", SecondaryEnabledPlugins}|PeerEnv1]
+           end;
+        true ->
+           [{"RABBITMQ_ENABLED_PLUGINS", "ALL"}|PeerEnv1]
+    end,
+    %% @todo Seems like this variable is set twice? Seen in rabbit logs.
     KeepPidFile = rabbit_ct_helpers:get_config(
                     Config, keep_pid_file_on_exit),
-    ExtraArgs3 = case KeepPidFile of
-                     true -> ["RABBITMQ_KEEP_PID_FILE_ON_EXIT=yes" | ExtraArgs2];
-                     _    -> ExtraArgs2
+    PeerEnv3 = case KeepPidFile of
+                     true -> [{"RABBITMQ_KEEP_PID_FILE_ON_EXIT", "yes"}|PeerEnv2];
+                     _    -> PeerEnv2
                  end,
-    ExtraArgs4 = case WithPlugins of
-                     false -> ExtraArgs3;
-                     _     -> ["NOBUILD=1" | ExtraArgs3]
-                 end,
-    ExtraArgs = case UseSecondaryUmbrella of
-                    true ->
-                        DepsDir = ?config(erlang_mk_depsdir, Config),
-                        ErlLibs = os:getenv("ERL_LIBS"),
-                        SecDepsDir = ?config(secondary_erlang_mk_depsdir,
-                                             Config),
-                        SecErlLibs = lists:flatten(
-                                       string:replace(ErlLibs,
-                                                      DepsDir,
-                                                      SecDepsDir,
-                                                      all)),
-                        SecNewScriptsDir = filename:join([SecDepsDir,
-                                                          SrcDir,
-                                                          "sbin"]),
-                        SecOldScriptsDir = filename:join([SecDepsDir,
-                                                          "rabbit",
-                                                          "scripts"]),
-                        SecNewScriptsDirExists = filelib:is_dir(
-                                                   SecNewScriptsDir),
-                        SecScriptsDir = case SecNewScriptsDirExists of
-                                            true  -> SecNewScriptsDir;
-                                            false -> SecOldScriptsDir
-                                        end,
-                        [{"DEPS_DIR=~ts", [SecDepsDir]},
-                         {"REBAR_DEPS_DIR=~ts", [SecDepsDir]},
-                         {"ERL_LIBS=~ts", [SecErlLibs]},
-                         {"RABBITMQ_SCRIPTS_DIR=~ts", [SecScriptsDir]},
-                         {"RABBITMQ_SERVER=~ts/rabbitmq-server", [SecScriptsDir]},
-                         {"RABBITMQCTL=~ts/rabbitmqctl", [SecScriptsDir]},
-                         {"RABBITMQ_PLUGINS=~ts/rabbitmq-plugins", [SecScriptsDir]}
-                         | ExtraArgs4];
-                    false ->
-                        case UseSecondaryDist of
-                            true ->
-                                SecondaryDist = ?config(secondary_dist, Config),
-                                SecondaryEnabledPlugins = case {
-                                    StartWithPluginsDisabled,
-                                    ?config(secondary_enabled_plugins, Config),
-                                    filename:basename(SrcDir)
-                                } of
-                                    {true, _, _} -> "";
-                                    {_, undefined, "rabbit"} -> "";
-                                    {_, undefined, SrcPlugin} -> SrcPlugin;
-                                    {_, SecondaryEnabledPlugins0, _} -> SecondaryEnabledPlugins0
-                                end,
-                                [{"DIST_DIR=~ts/plugins", [SecondaryDist]},
-                                 {"CLI_SCRIPTS_DIR=~ts/sbin", [SecondaryDist]},
-                                 {"CLI_ESCRIPTS_DIR=~ts/escript", [SecondaryDist]},
-                                 {"RABBITMQ_SCRIPTS_DIR=~ts/sbin", [SecondaryDist]},
-                                 {"RABBITMQ_SERVER=~ts/sbin/rabbitmq-server", [SecondaryDist]},
-                                 {"RABBITMQ_ENABLED_PLUGINS=~ts", [SecondaryEnabledPlugins]}
-                                | ExtraArgs4];
-                            false ->
-                                ExtraArgs4
-                        end
-                end,
-    MakeVars = [
-      {"RABBITMQ_NODENAME=~ts", [Nodename]},
-      {"RABBITMQ_NODENAME_FOR_PATHS=~ts", [InitialNodename]},
-      {"RABBITMQ_DIST_PORT=~b", [DistPort]},
-      {"RABBITMQ_CONFIG_FILE=~ts", [ConfigFile]},
-      {"RABBITMQ_SERVER_START_ARGS=~ts", [StartArgs1]},
-      {"RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=+S 2 +sbwt very_short +A 24 ~ts", [AdditionalErlArgs]},
-      "RABBITMQ_LOG=debug",
-      {"TEST_TMPDIR=~ts", [PrivDir]}
-      | ExtraArgs],
-    Cmd = ["start-background-broker" | MakeVars],
-    case rabbit_ct_helpers:get_config(Config, rabbitmq_run_cmd) of
-        undefined ->
-            case rabbit_ct_helpers:make(Config, SrcDir, Cmd) of
-                {ok, _} ->
+    PeerEnv = if
+        UseSecondaryDist ->
+            [{"ERL_LIBS", filename:join(?config(secondary_dist, Config), "plugins")}|PeerEnv3];
+        UseSecondaryUmbrella ->
+            [{"ERL_LIBS", ?config(secondary_erlang_mk_depsdir, Config)}|PeerEnv3];
+        true ->
+            PeerEnv3
+    end,
+    %% Start the peer node.
+    case peer:start(#{
+            name => Nodename1,
+            longnames => false,
+            host => HostName1,
+            connection => standard_io,
+            exec => os:find_executable("erl"),
+            args => PeerArgs,
+            env => PeerEnv}) of
+        {ok, PeerPid, Nodename} ->
+            %% Redirect the PeerPid's standard output to a file.
+            %% The standard output of the peer process is a redirect
+            %% from the peer node. We tie the file's process to PeerPid
+            %% so that it stays open until PeerPid exits.
+            %%
+            %% Both stdio and stderr are redirected to this file,
+            %% unlike when using make run-broker and friends.
+            _ = sys:replace_state(PeerPid, fun(St) ->
+                StdoutPath = filename:join(NodeDir, "log/startup_log"),
+                ok = filelib:ensure_dir(StdoutPath),
+                {ok, StdoutFd} = file:open(StdoutPath, [write, {encoding, utf8}]),
+                group_leader(StdoutFd, self()),
+                St
+            end),
+            %% Make sure the node runs in the right directory.
+            SetCwdPath = case UseSecondaryDist of
+                true -> ?config(secondary_dist, Config);
+                false -> SrcDir
+            end,
+            ok = peer:call(PeerPid, file, set_cwd, [SetCwdPath]),
+            %% Boot RabbitMQ.
+            try peer:call(PeerPid, rabbit, boot, [], 60_000) of
+                ok ->
+                    store_peer_pid(Nodename, PeerPid),
                     NodeConfig1 = rabbit_ct_helpers:set_config(
                                     NodeConfig,
-                                    [{use_secondary_umbrella,
-                                      UseSecondaryUmbrella orelse
-                                      UseSecondaryDist},
-                                     {effective_srcdir, SrcDir},
-                                     {make_vars_for_node_startup, MakeVars}]),
-                    query_node(Config, NodeConfig1);
-                _ ->
-                    AbortCmd = ["stop-node" | MakeVars],
-                    _ = rabbit_ct_helpers:make(Config, SrcDir, AbortCmd),
-                    %% @todo Need to stop all nodes in the cluster, not just the one node.
-                    {skip, "Failed to initialize RabbitMQ"}
+                                    [
+                                     {use_secondary_umbrella, UseSecondaryUmbrella orelse UseSecondaryDist}
+                                    ]),
+                    query_node(Config, NodeConfig1)
+            catch Class:Error ->
+                %% @todo Get rid of {skip,_} returns.
+                peer:stop(PeerPid),
+                {skip, {Class, Error}}
             end;
-        RunCmd ->
-            UseSecondary = CanUseSecondary andalso
-                rabbit_ct_helpers:get_config(Config, rabbitmq_run_secondary_cmd) =/= undefined,
-            PluginsMakeVars = case {UseSecondary, WithPlugins} of
-                                  {_, false} ->
-                                      ["LEAVE_PLUGINS_DISABLED=1"];
-                                  {true, _} ->
-                                      case filename:basename(SrcDir) of
-                                          "rabbit" ->
-                                              ["LEAVE_PLUGINS_DISABLED=1"];
-                                          Plugin ->
-                                              [{"RABBITMQ_ENABLED_PLUGINS=~ts", [Plugin]}]
-                                      end;
-                                  _ ->
-                                      []
-                              end,
-            RmqRun = case CanUseSecondary of
-                         false -> RunCmd;
-                         _ -> rabbit_ct_helpers:get_config(Config, rabbitmq_run_secondary_cmd, RunCmd)
-                     end,
-            case rabbit_ct_helpers:exec([RmqRun, "-C", SrcDir] ++ PluginsMakeVars ++ Cmd) of
-                {ok, _} ->
-                    NodeConfig1 = rabbit_ct_helpers:set_config(
-                                    NodeConfig,
-                                    [{make_vars_for_node_startup, MakeVars}]),
-                    query_node(Config, NodeConfig1);
-                _ ->
-                    AbortCmd = ["stop-node" | MakeVars],
-                    _ = rabbit_ct_helpers:exec([RunCmd | AbortCmd]),
-                    {skip, "Failed to initialize RabbitMQ"}
-            end
+        Errrrr ->
+            error({error, Errrrr})
     end.
 
 query_node(Config, NodeConfig) ->
@@ -1319,24 +1309,31 @@ stop_rabbitmq_nodes(Config) ->
     end,
     proplists:delete(rmq_nodes, Config).
 
-stop_rabbitmq_node(Config, NodeConfig) ->
+stop_rabbitmq_node(_Config, NodeConfig) ->
     Nodename = ?config(nodename, NodeConfig),
-    cover_remove_node(Nodename),
-    SrcDir = ?config(effective_srcdir, NodeConfig),
-    InitialMakeVars = ?config(make_vars_for_node_startup, NodeConfig),
-    InitialNodename = ?config(initial_nodename, NodeConfig),
-    MakeVars = InitialMakeVars ++ [
-      {"RABBITMQ_NODENAME=~ts", [Nodename]},
-      {"RABBITMQ_NODENAME_FOR_PATHS=~ts", [InitialNodename]}
-    ],
-    Cmd = ["stop-node" | MakeVars],
-    _ = case rabbit_ct_helpers:get_config(Config, rabbitmq_run_cmd) of
-        undefined ->
-            rabbit_ct_helpers:make(Config, SrcDir, Cmd);
-        RunCmd ->
-            rabbit_ct_helpers:exec([RunCmd | Cmd])
+    try query_peer_pid(Nodename) of
+        PeerPid ->
+            cover_remove_node(Nodename),
+            try
+                peer:call(PeerPid, rabbit, stop, []),
+                peer:stop(PeerPid)
+            catch exit:{noproc, _} ->
+                ct:pal("Node ~p was previously killed.", [Nodename])
+            end
+    catch error:badarg ->
+        ct:pal("Node ~p is already stopped.", [Nodename])
     end,
+    erase_peer_pid(Nodename),
     NodeConfig.
+
+store_peer_pid(Nodename, PeerPid) ->
+    persistent_term:put({peer_pid, Nodename}, PeerPid).
+
+query_peer_pid(Nodename) ->
+    persistent_term:get({peer_pid, Nodename}).
+
+erase_peer_pid(Nodename) ->
+    persistent_term:erase({peer_pid, Nodename}).
 
 find_crashes_in_logs(NodeConfigs, IgnoredCrashes) ->
     ct:log(
@@ -1494,26 +1491,13 @@ rabbitmqctl(Config, Node, Args, Timeout) ->
                                _ ->
                                    CanUseSecondary
                            end,
-    WithPlugins0 = rabbit_ct_helpers:get_config(Config,
-      broker_with_plugins),
-    WithPlugins = case is_list(WithPlugins0) of
-        true  -> lists:nth(I + 1, WithPlugins0);
-        false -> WithPlugins0
-    end,
     Rabbitmqctl = case UseSecondaryUmbrella of
                       true ->
                           case BazelRunSecCmd of
                               undefined ->
-                                  SrcDir = case WithPlugins of
-                                               false ->
-                                                   ?config(
-                                                      secondary_rabbit_srcdir,
-                                                      Config);
-                                               _ ->
-                                                   ?config(
-                                                      secondary_current_srcdir,
-                                                      Config)
-                                           end,
+                                  SrcDir = ?config(
+                                              secondary_current_srcdir,
+                                              Config),
                                   SecScriptsDir = filename:join(
                                                     [SrcDir, "sbin"]),
                                   rabbit_misc:format(
@@ -2426,12 +2410,6 @@ plugin_action(Config, Node, Args) ->
     %% umbrella being configured.
     I = get_node_index(Config, Node),
     CanUseSecondary = (I + 1) rem 2 =:= 0,
-    WithPlugins0 = rabbit_ct_helpers:get_config(Config,
-      broker_with_plugins),
-    WithPlugins = case is_list(WithPlugins0) of
-        true  -> lists:nth(I + 1, WithPlugins0);
-        false -> WithPlugins0
-    end,
     UseSecondaryDist = case ?config(secondary_dist, Config) of
                                false -> false;
                                _     -> CanUseSecondary
@@ -2444,16 +2422,9 @@ plugin_action(Config, Node, Args) ->
                            end,
     Rabbitmqplugins = case UseSecondaryUmbrella of
                           true ->
-                              SrcDir = case WithPlugins of
-                                           false ->
-                                               ?config(
-                                                  secondary_rabbit_srcdir,
-                                                  Config);
-                                           _ ->
-                                               ?config(
-                                                  secondary_current_srcdir,
-                                                  Config)
-                                       end,
+                              SrcDir = ?config(
+                                         secondary_current_srcdir,
+                                         Config),
                               SecScriptsDir = filename:join(
                                                 [SrcDir, "sbin"]),
                               rabbit_misc:format(
