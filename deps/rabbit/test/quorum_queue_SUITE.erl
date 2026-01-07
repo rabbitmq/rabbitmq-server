@@ -5394,7 +5394,7 @@ delete_queues() ->
      || Q <- rabbit_amqqueue:list()].
 
 stop_node(Config, Server) ->
-    rabbit_ct_broker_helpers:rabbitmqctl(Config, Server, ["stop"]).
+    rabbit_ct_broker_helpers:stop_node(Config, Server).
 
 get_message_bytes(Leader, QRes) ->
     case rpc:call(Leader, ets, lookup, [queue_metrics, QRes]) of

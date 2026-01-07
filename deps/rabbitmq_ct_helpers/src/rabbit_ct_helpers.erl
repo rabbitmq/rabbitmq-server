@@ -366,6 +366,7 @@ ensure_application_srcdir(Config, App, _Lang, Module) ->
         P ->
             P
     end,
+    %% @todo Doesn't account for SECONDARY_DIST.
     SecondaryPath = case ?config(secondary_umbrella, Config) of
                         false ->
                             Path;
