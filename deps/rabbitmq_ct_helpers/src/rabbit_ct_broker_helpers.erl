@@ -834,24 +834,86 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
       {"TEST_TMPDIR=~ts", [PrivDir]}
       | ExtraArgs],
     Cmd = ["start-background-broker" | MakeVars],
+
+
+    %% Build Erlang VM arguments matching rabbitmq-server script
+    PeerArgs = [
+        "-pa", SrcDir, "/ebin ",  % Code path (simplified)
+        "-boot start_sasl ",      % Boot file
+%        "+W w ",                 % Warning level
+%        "+MBas ageffcbf ",
+%        "+MHas ageffcbf ",
+%        "+MBlmbcs 512 ",
+%        "+MHlmbcs 512 ",
+%        "+MMmcs 30 ",  % Memory allocation
+%        "+S 2 ",
+%        "+sbwt very_short ",
+%        "+A 24 ",  % Scheduler and async thread settings
+        AdditionalErlArgs,
+%        "-kernel net_ticktime 5 ",  % Distribution settings
+        "-syslog logger [] ",
+        "-syslog syslog_error_logger false ",
+        "-kernel prevent_overlapping_partitions false"
+    ],
+    NodeDir = filename:join(PrivDir, atom_to_list(InitialNodename)),
+            [Nodename1, HostName1] = string:split(atom_to_list(Nodename), "@"),
+    PeerEnv = [
+        {"RABBITMQ_NODENAME", atom_to_list(Nodename)},
+        {"RABBITMQ_BASE", NodeDir},
+        {"RABBITMQ_LOG_BASE", filename:join(NodeDir, "log")},
+        {"RABBITMQ_MNESIA_DIR", filename:join(NodeDir, "mnesia")},
+        {"RABBITMQ_FEATURE_FLAGS_FILE", filename:join(NodeDir, "feature_flags")},
+        {"RABBITMQ_PLUGINS_EXPAND_DIR", filename:join(NodeDir, "plugins")},
+        %% RABBITMQ_KEEP_PID_FILE_ON_EXIT
+        {"RABBITMQ_DIST_PORT", integer_to_list(DistPort)},
+        {"RABBITMQ_CONFIG_FILE", ConfigFile}
+        %% RABBITMQ_LOG
+        %% TEST_TMPDIR ??
+    ],
+
+
+
     case rabbit_ct_helpers:get_config(Config, rabbitmq_run_cmd) of
         undefined ->
-            case rabbit_ct_helpers:make(Config, SrcDir, Cmd) of
-                {ok, _} ->
+            case peer:start(#{
+                    name => Nodename1,
+                    longnames => true,
+                    host => HostName1,
+                    connection => standard_io,
+                    exec => "/usr/bin/erl",
+                    args => PeerArgs,
+                    env => PeerEnv}) of
+                {ok, Pid, Nodename} ->
+                    %% @todo Figure out why it doesn't work in args.
+                    _ = peer:call(Pid, net_kernel, set_net_ticktime, [5]),
+                    ok = peer:call(Pid, rabbit, boot, []),
                     NodeConfig1 = rabbit_ct_helpers:set_config(
                                     NodeConfig,
-                                    [{use_secondary_umbrella,
-                                      UseSecondaryUmbrella orelse
-                                      UseSecondaryDist},
-                                     {effective_srcdir, SrcDir},
-                                     {make_vars_for_node_startup, MakeVars}]),
+                                    [{peer_pid, Pid},
+                                     {use_secondary_umbrella, false} %% @todo
+                                    ]),
                     query_node(Config, NodeConfig1);
-                _ ->
-                    AbortCmd = ["stop-node" | MakeVars],
-                    _ = rabbit_ct_helpers:make(Config, SrcDir, AbortCmd),
-                    %% @todo Need to stop all nodes in the cluster, not just the one node.
-                    {skip, "Failed to initialize RabbitMQ"}
+                Errrrr ->
+                    error({error, Errrrr})
             end;
+
+
+%            case rabbit_ct_helpers:make(Config, SrcDir, Cmd) of
+%                {ok, _} ->
+%                    NodeConfig1 = rabbit_ct_helpers:set_config(
+%                                    NodeConfig,
+%                                    [{use_secondary_umbrella,
+%                                      UseSecondaryUmbrella orelse
+%                                      UseSecondaryDist},
+%                                     {effective_srcdir, SrcDir},
+%                                     {make_vars_for_node_startup, MakeVars}]),
+%                    query_node(Config, NodeConfig1);
+%                _ ->
+%                    AbortCmd = ["stop-node" | MakeVars],
+%                    _ = rabbit_ct_helpers:make(Config, SrcDir, AbortCmd),
+%                    %% @todo Need to stop all nodes in the cluster, not just the one node.
+%                    {skip, "Failed to initialize RabbitMQ"}
+%            end;
         RunCmd ->
             UseSecondary = CanUseSecondary andalso
                 rabbit_ct_helpers:get_config(Config, rabbitmq_run_secondary_cmd) =/= undefined,
