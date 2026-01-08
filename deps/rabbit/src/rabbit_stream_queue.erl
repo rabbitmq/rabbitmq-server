@@ -75,7 +75,7 @@
 -define(INFO_KEYS, [name, durable, auto_delete, arguments, leader, members, online, state,
                     messages, messages_ready, messages_unacknowledged, committed_offset,
                     policy, operator_policy, effective_policy_definition, type, memory,
-                    consumers, segments]).
+                    consumers, segments, committed_chunk_id]).
 
 -define(UNMATCHED_THRESHOLD, 200).
 
@@ -807,6 +807,14 @@ i(committed_offset, Q) ->
         Data ->
             maps:get(committed_offset, Data, '')
     end;
+i(committed_chunk_id, Q) ->
+    Key = {osiris_writer, amqqueue:get_name(Q)},
+    case osiris_counters:overview(Key) of
+        undefined ->
+            '';
+        Data ->
+            maps:get(committed_chunk_id, Data, '')
+    end;
 i(segments, Q) ->
     Key = {osiris_writer, amqqueue:get_name(Q)},
     case osiris_counters:overview(Key) of
@@ -872,6 +880,7 @@ status(Vhost, QueueName) ->
                   get_key(epoch, C),
                   get_key(offset, C),
                   get_key(committed_offset, C),
+                  get_key(committed_chunk_id, C),
                   get_key(first_offset, C),
                   get_key(readers, C),
                   get_key(segments, C)]
