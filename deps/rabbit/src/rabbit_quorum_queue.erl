@@ -2270,7 +2270,14 @@ force_shrink_member_to_current_member(VHost, Name) ->
             ok = ra_server_proc:force_shrink_members_to_current_member({RaName, Node}),
             Fun = fun (Q0) ->
                           TS0 = amqqueue:get_type_state(Q0),
-                          TS = TS0#{nodes => [Node]},
+                          #{nodes := Nodes0} = TS0,
+                          Nodes = case Nodes0 of
+                                      L when is_list(L) ->
+                                          [Node];
+                                      #{Node := UId} ->
+                                          #{Node => UId}
+                                  end,
+                          TS = TS0#{nodes => Nodes},
                           amqqueue:set_type_state(Q0, TS)
                   end,
             _ = rabbit_amqqueue:update(QName, Fun),
@@ -2319,7 +2326,14 @@ force_all_queues_shrink_member_to_current_member(ListQQFun, MatchFun)
              ok = ra_server_proc:force_shrink_members_to_current_member({RaName, Node}),
              Fun = fun (QQ) ->
                            TS0 = amqqueue:get_type_state(QQ),
-                           TS = TS0#{nodes => [Node]},
+                           #{nodes := Nodes0} = TS0,
+                           Nodes = case Nodes0 of
+                                       L when is_list(L) ->
+                                           [Node];
+                                       #{Node := UId} ->
+                                           #{Node => UId}
+                                   end,
+                           TS = TS0#{nodes => Nodes},
                            amqqueue:set_type_state(QQ, TS)
                    end,
              _ = rabbit_amqqueue:update(QName, Fun),
