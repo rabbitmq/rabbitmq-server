@@ -225,9 +225,11 @@ fold(FunAtom, Sup, AggFun) ->
                     D <- [delegate(M)]]).
 
 child(Sup, Id) ->
-    [Pid] = [Pid || {Id1, Pid, _, _} <- ?SUPERVISOR:which_children(Sup),
-                    Id1 =:= Id],
-    Pid.
+    case [Pid || {Id1, Pid, _, _} <- ?SUPERVISOR:which_children(Sup),
+                 Id1 =:= Id] of
+        [Pid] -> Pid;
+        [] -> undefined
+    end.
 
 delegate(Sup) -> child(Sup, delegate).
 mirroring(Sup) -> child(Sup, mirroring).
