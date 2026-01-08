@@ -18,16 +18,13 @@ defmodule RabbitMQ.CLI.Queues.Commands.DeleteMemberCommand do
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([name, node] = _args, %{vhost: vhost, node: node_name}) do
-    case :rabbit_misc.rpc_call(node_name, :rabbit_quorum_queue, :delete_member, [
-           vhost,
-           name,
-           to_atom(node)
-         ]) do
-      {:error, :classic_queue_not_supported} ->
-        {:error, "Cannot delete members from a classic queue"}
-
+    args = [vhost, name, to_atom(node)]
+    case :rabbit_misc.rpc_call(node_name, :rabbit_queue_type, :delete_member, args) do
       {:error, :not_found} ->
         {:error, {:not_found, :queue, vhost, name}}
+
+      {:badrpc, {:EXIT, {:undef, _}}} ->
+        :rabbit_misc.rpc_call(node_name, :rabbit_quorum_queue, :delete_member, args)
 
       other ->
         other
@@ -40,7 +37,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.DeleteMemberCommand do
 
   def usage_additional do
     [
-      ["<queue>", "quorum queue name"],
+      ["<queue>", "queue name"],
       ["<node>", "node to remove a new replica on"]
     ]
   end
@@ -53,7 +50,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.DeleteMemberCommand do
 
   def help_section, do: :replication
 
-  def description, do: "Removes a quorum queue member (replica) on the given node."
+  def description, do: "Removes a queue member (replica) on the given node."
 
   def banner([name, node], _) do
     "Removing a replica of queue #{name} on node #{node}..."

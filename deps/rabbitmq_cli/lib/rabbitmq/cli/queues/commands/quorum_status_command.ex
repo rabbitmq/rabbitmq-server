@@ -16,9 +16,13 @@ defmodule RabbitMQ.CLI.Queues.Commands.QuorumStatusCommand do
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([name] = _args, %{node: node_name, vhost: vhost}) do
-    case :rabbit_misc.rpc_call(node_name, :rabbit_quorum_queue, :status, [vhost, name]) do
-      {:error, :classic_queue_not_supported} ->
-        {:error, "Cannot get quorum status of a classic queue"}
+    args = [vhost, name]
+    case :rabbit_misc.rpc_call(node_name, :rabbit_queue_type, :status, args) do
+      {:error, :not_found} ->
+        {:error, {:not_found, :queue, vhost, name}}
+
+      {:badrpc, {:EXIT, {:undef, _}}} ->
+        :rabbit_misc.rpc_call(node_name, :rabbit_quorum_queue, :status, args)
 
       other ->
         other
@@ -47,8 +51,8 @@ defmodule RabbitMQ.CLI.Queues.Commands.QuorumStatusCommand do
 
   def help_section(), do: :observability_and_health_checks
 
-  def description(), do: "Displays quorum status of a quorum queue"
+  def description(), do: "Displays the quorum status of a queue"
 
   def banner([name], %{node: node_name}),
-    do: "Status of quorum queue #{name} on node #{node_name} ..."
+    do: "Status of queue #{name} on node #{node_name} ..."
 end
