@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+## Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.
 
 defmodule RabbitMQ.CLI.Queues.Commands.AddMemberCommand do
   alias RabbitMQ.CLI.Core.{DocGuide, Validators}
@@ -73,20 +73,13 @@ defmodule RabbitMQ.CLI.Queues.Commands.AddMemberCommand do
         [name, node] = _args,
         %{vhost: vhost, node: node_name, timeout: timeout, membership: membership}
       ) do
-    args = [vhost, name, to_atom(node)]
-
-    args =
-      case to_atom(membership) do
-        :promotable -> args ++ [timeout]
-        other -> args ++ [other, timeout]
-      end
-
-    case :rabbit_misc.rpc_call(node_name, :rabbit_quorum_queue, :add_member, args) do
-      {:error, :classic_queue_not_supported} ->
-        {:error, "Cannot add members to a classic queue"}
-
+    args = [vhost, name, to_atom(node), to_atom(membership), timeout]
+    case :rabbit_misc.rpc_call(node_name, :rabbit_queue_type, :add_member, args) do
       {:error, :not_found} ->
         {:error, {:not_found, :queue, vhost, name}}
+
+      {:badrpc, {:EXIT, {:undef, _}}} ->
+        :rabbit_misc.rpc_call(node_name, :rabbit_quorum_queue, :add_member, args)
 
       other ->
         other
@@ -99,8 +92,8 @@ defmodule RabbitMQ.CLI.Queues.Commands.AddMemberCommand do
 
   def usage_additional do
     [
-      ["<queue>", "quorum queue name"],
-      ["<node>", "node to add a new replica on"],
+      ["<queue>", "queue name"],
+      ["<node>", "node to add a new member on"],
       ["--membership <promotable|voter>", "add a promotable non-voter (default) or full voter"]
     ]
   end
@@ -113,11 +106,11 @@ defmodule RabbitMQ.CLI.Queues.Commands.AddMemberCommand do
 
   def help_section, do: :replication
 
-  def description, do: "Adds a quorum queue member (replica) on the given node."
+  def description, do: "Adds a queue member/replica on the given node."
 
   def banner([name, node], _) do
     [
-      "Adding a replica for queue #{name} on node #{node}..."
+      "Adding a member for queue #{name} on node #{node}..."
     ]
   end
 end
