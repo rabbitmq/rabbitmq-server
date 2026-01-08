@@ -728,16 +728,16 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
     %% Use inet_proxy_dist to handle distribution. This is used by the
     %% partitions testsuite.
     DistMod = rabbit_ct_helpers:get_config(Config, erlang_dist_module),
-    StartArgs0 = case DistMod of
-        undefined ->
-            "";
-        _ ->
-            DistModS = atom_to_list(DistMod),
-            DistModPath = filename:absname(
-              filename:dirname(code:where_is_file(DistModS ++ ".beam"))),
-            DistArg = re:replace(DistModS, "_dist$", "", [{return, list}]),
-            "-pa \"" ++ DistModPath ++ "\" -proto_dist " ++ DistArg
-    end,
+    StartArgs0 = "",%case DistMod of
+%        undefined ->
+%            "";
+%        _ ->
+%            DistModS = atom_to_list(DistMod),
+%            DistModPath = filename:absname(
+%              filename:dirname(code:where_is_file(DistModS ++ ".beam"))),
+%            DistArg = re:replace(DistModS, "_dist$", "", [{return, list}]),
+%            "-pa \"" ++ DistModPath ++ "\" -proto_dist " ++ DistArg
+%    end,
     %% Set the net_ticktime to 5s for all nodes (including CT via CT_OPTS).
     %% A lower tick time helps trigger distribution failures faster.
     StartArgs1 = StartArgs0 ++ " -kernel net_ticktime 5",
@@ -836,6 +836,20 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
     Cmd = ["start-background-broker" | MakeVars],
 
 
+    PeerArgs0 = case DistMod of
+        undefined ->
+            [];
+        _ ->
+            DistModS = atom_to_list(DistMod),
+            DistModPath = filename:absname(
+              filename:dirname(code:where_is_file(DistModS ++ ".beam"))),
+            DistArg = re:replace(DistModS, "_dist$", "", [{return, list}]),
+            [
+                "-pa", DistModPath,
+                "-proto_dist", DistArg
+            ]
+    end,
+
     %% Build Erlang VM arguments matching rabbitmq-server script
     PeerArgs = [
 %        "-init_debug",
@@ -855,7 +869,9 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
         "-kernel", "prevent_overlapping_partitions", "false",
         "-syslog", "logger", "[]",
         "-syslog", "syslog_error_logger", "false"
-    ],
+    |PeerArgs0],
+
+
     NodeDir = filename:join(PrivDir, atom_to_list(InitialNodename)),
             [Nodename1, HostName1] = string:split(atom_to_list(Nodename), "@"),
     PeerEnv = [
@@ -867,10 +883,10 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
         {"RABBITMQ_PLUGINS_EXPAND_DIR", filename:join(NodeDir, "plugins")},
         %% RABBITMQ_KEEP_PID_FILE_ON_EXIT
         {"RABBITMQ_DIST_PORT", integer_to_list(DistPort)},
-        {"RABBITMQ_CONFIG_FILE", ConfigFile}
-        %% RABBITMQ_LOG
-        %% TEST_TMPDIR ??
+        {"RABBITMQ_CONFIG_FILE", ConfigFile},
+        {"RABBITMQ_LOG", "debug"}
     ],
+    %% @todo ExtraArgs.
 
 
 
@@ -894,7 +910,7 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
                     NodeConfig1 = rabbit_ct_helpers:set_config(
                                     NodeConfig,
                                     [{peer_pid, Pid},
-                                     {use_secondary_umbrella, false} %% @todo
+                                     {use_secondary_umbrella, UseSecondaryUmbrella orelse UseSecondaryDist}
                                     ]),
                     query_node(Config, NodeConfig1);
                 Errrrr ->
