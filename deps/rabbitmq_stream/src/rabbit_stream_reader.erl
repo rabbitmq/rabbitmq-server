@@ -588,7 +588,7 @@ messages_confirmed(Counters) ->
 messages_errored(Counters) ->
     atomics:get(Counters, 3).
 
-stream_stored_offset(Log) ->
+last_offset_in_stream(Log) ->
     osiris_log:committed_offset(Log).
 
 augment_infos_with_user_provided_connection_name(Infos,
@@ -3590,7 +3590,7 @@ send_file_callback(?VERSION_1,
              SubId:8/unsigned>>,
        atomics:add(Counter, 1, Size),
        increase_messages_consumed(Counters, NumEntries),
-       set_consumer_offset(Counters, FirstOffsetInChunk),
+       set_consumer_offset(Counters, FirstOffsetInChunk + NumEntries - 1),
        FrameBeginning
     end;
 send_file_callback(?VERSION_2,
@@ -3602,7 +3602,7 @@ send_file_callback(?VERSION_2,
     fun(#{chunk_id := FirstOffsetInChunk, num_entries := NumEntries},
         Size) ->
        FrameSize = 2 + 2 + 1 + 8 + Size,
-       CommittedChunkId = osiris_log:committed_offset(Log),
+       CommittedChunkId = osiris_log:committed_chunk_id(Log),
        FrameBeginning =
            <<FrameSize:32,
              ?REQUEST:1,
@@ -3612,7 +3612,7 @@ send_file_callback(?VERSION_2,
              CommittedChunkId:64>>,
        atomics:add(Counter, 1, Size),
        increase_messages_consumed(Counters, NumEntries),
-       set_consumer_offset(Counters, FirstOffsetInChunk),
+       set_consumer_offset(Counters, FirstOffsetInChunk + NumEntries - 1),
        FrameBeginning
     end.
 
@@ -3834,7 +3834,7 @@ consumer_i(offset_lag,
            #consumer{configuration = #consumer_configuration{counters = Counters},
                      last_listener_offset = LLO,
                      log = Log}) ->
-    rabbit_stream_utils:offset_lag(stream_stored_offset(Log),
+    rabbit_stream_utils:offset_lag(last_offset_in_stream(Log),
                                    consumer_offset(Counters),
                                    messages_consumed(Counters),
                                    LLO);

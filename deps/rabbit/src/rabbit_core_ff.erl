@@ -190,6 +190,14 @@
       depends_on    => [message_containers]
      }}).
 
+-rabbit_feature_flag(
+   {stream_committed_offset,
+    #{desc          => "Make stream committed offset counter available",
+      doc_url       => "https://github.com/rabbitmq/rabbitmq-server/pull/15225",
+      stability     => stable,
+      depends_on    => [stream_queue]
+     }}).
+
 %% We bundle the following separate concerns (which could have been separate feature flags)
 %% into a single feature flag for better user experience:
 %% 1. credit API v2 between classic / quorum queue client and classic / quorum queue server
