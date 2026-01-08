@@ -838,22 +838,23 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
 
     %% Build Erlang VM arguments matching rabbitmq-server script
     PeerArgs = [
-        "-pa", SrcDir, "/ebin ",  % Code path (simplified)
-        "-boot start_sasl ",      % Boot file
-%        "+W w ",                 % Warning level
-%        "+MBas ageffcbf ",
-%        "+MHas ageffcbf ",
-%        "+MBlmbcs 512 ",
-%        "+MHlmbcs 512 ",
-%        "+MMmcs 30 ",  % Memory allocation
-%        "+S 2 ",
-%        "+sbwt very_short ",
-%        "+A 24 ",  % Scheduler and async thread settings
-        AdditionalErlArgs,
-%        "-kernel net_ticktime 5 ",  % Distribution settings
-        "-syslog logger [] ",
-        "-syslog syslog_error_logger false ",
-        "-kernel prevent_overlapping_partitions false"
+%        "-init_debug",
+        "-pa", filename:join(SrcDir, "ebin"),  % Code path (simplified)
+        "-boot", "start_sasl",      % Boot file
+        "+W", "w",                 % Warning level
+        "+MBas", "ageffcbf",
+        "+MHas", "ageffcbf",
+        "+MBlmbcs", "512",
+        "+MHlmbcs", "512",
+        "+MMmcs", "30",  % Memory allocation
+        "+S", "2",
+        "+sbwt", "very_short",
+        "+A", "24",  % Scheduler and async thread settings
+%        AdditionalErlArgs, must be a list and |AdditionalErlArgs at the end.
+        "-kernel", "net_ticktime", "5",  % Distribution settings
+        "-kernel", "prevent_overlapping_partitions", "false",
+        "-syslog", "logger", "[]",
+        "-syslog", "syslog_error_logger", "false"
     ],
     NodeDir = filename:join(PrivDir, atom_to_list(InitialNodename)),
             [Nodename1, HostName1] = string:split(atom_to_list(Nodename), "@"),
@@ -884,8 +885,11 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
                     args => PeerArgs,
                     env => PeerEnv}) of
                 {ok, Pid, Nodename} ->
+%error(peer:call(Pid, init, get_arguments, [])),
+%                    error(peer:call(Pid, application, get_all_env, [syslog])),
+%                    error(peer:call(Pid, application, get_all_env, [kernel])),
                     %% @todo Figure out why it doesn't work in args.
-                    _ = peer:call(Pid, net_kernel, set_net_ticktime, [5]),
+%                    _ = peer:call(Pid, net_kernel, set_net_ticktime, [5]),
                     ok = peer:call(Pid, rabbit, boot, []),
                     NodeConfig1 = rabbit_ct_helpers:set_config(
                                     NodeConfig,
@@ -1380,23 +1384,25 @@ stop_rabbitmq_nodes(Config) ->
     end,
     proplists:delete(rmq_nodes, Config).
 
-stop_rabbitmq_node(Config, NodeConfig) ->
+stop_rabbitmq_node(_Config, NodeConfig) ->
     Nodename = ?config(nodename, NodeConfig),
     cover_remove_node(Nodename),
-    SrcDir = ?config(effective_srcdir, NodeConfig),
-    InitialMakeVars = ?config(make_vars_for_node_startup, NodeConfig),
-    InitialNodename = ?config(initial_nodename, NodeConfig),
-    MakeVars = InitialMakeVars ++ [
-      {"RABBITMQ_NODENAME=~ts", [Nodename]},
-      {"RABBITMQ_NODENAME_FOR_PATHS=~ts", [InitialNodename]}
-    ],
-    Cmd = ["stop-node" | MakeVars],
-    _ = case rabbit_ct_helpers:get_config(Config, rabbitmq_run_cmd) of
-        undefined ->
-            rabbit_ct_helpers:make(Config, SrcDir, Cmd);
-        RunCmd ->
-            rabbit_ct_helpers:exec([RunCmd | Cmd])
-    end,
+    PeerPid = ?config(peer_pid, NodeConfig),
+    peer:stop(PeerPid),
+%    SrcDir = ?config(effective_srcdir, NodeConfig),
+%    InitialMakeVars = ?config(make_vars_for_node_startup, NodeConfig),
+%    InitialNodename = ?config(initial_nodename, NodeConfig),
+%    MakeVars = InitialMakeVars ++ [
+%      {"RABBITMQ_NODENAME=~ts", [Nodename]},
+%      {"RABBITMQ_NODENAME_FOR_PATHS=~ts", [InitialNodename]}
+%    ],
+%    Cmd = ["stop-node" | MakeVars],
+%    _ = case rabbit_ct_helpers:get_config(Config, rabbitmq_run_cmd) of
+%        undefined ->
+%            rabbit_ct_helpers:make(Config, SrcDir, Cmd);
+%        RunCmd ->
+%            rabbit_ct_helpers:exec([RunCmd | Cmd])
+%    end,
     NodeConfig.
 
 find_crashes_in_logs(NodeConfigs, IgnoredCrashes) ->
