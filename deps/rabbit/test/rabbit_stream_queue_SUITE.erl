@@ -1598,14 +1598,16 @@ consume_from_last(Config) ->
 
     rabbit_ct_helpers:await_condition(
       fun () ->
-              Info = find_queue_info(Config, [committed_offset]),
-              %% We'll receive data from the last committed offset, let's check that is not the
+              %% We'll receive data from the committed chunk ID, let's check that is not the
               %% first offset
-              proplists:get_value(committed_offset, Info) > 0
+              committed_chunk_id(Config) > 0
       end),
 
-    CommittedOffset = proplists:get_value(committed_offset,
-                                          find_queue_info(Config, [committed_offset])),
+    %% committed_offset value changed between versions in queue_info
+    %% we use the osiris stats that stayed consistent
+    %% this works better for mixed-version testing
+    {ok, {_LeaderNode, LeaderPid}} = leader_info(Config),
+    #{committed_chunk_id := CommittedChunkId} = osiris:get_stats(LeaderPid),
 
     %% If the offset is not provided, we're subscribing to the tail of the stream
     amqp_channel:subscribe(
@@ -1622,7 +1624,7 @@ consume_from_last(Config) ->
     %% Check that the first received offset is greater than or equal than the committed
     %% offset. It could have moved since we checked it out - it flakes sometimes!
     %% Usually when the CommittedOffset detected is 1
-    receive_batch_min_offset(Ch1, CommittedOffset, 99),
+    receive_batch_min_offset(Ch1, CommittedChunkId, 99),
 
     %% Publish a few more
     [publish(Ch, Q, <<"msg2">>) || _ <- lists:seq(1, 100)],
@@ -1653,13 +1655,9 @@ consume_from_next(Config, Args) ->
     qos(Ch1, 10, false),
 
 
-    rabbit_ct_helpers:await_condition(
-      fun () ->
-              Info = find_queue_info(Config, [committed_offset]),
-              %% We'll receive data from the last committed offset, let's check that is not the
-              %% first offset
-              proplists:get_value(committed_offset, Info) > 0
-      end),
+    rabbit_ct_helpers:await_condition(fun () ->
+                                              committed_chunk_id(Config) > 0
+                                      end),
 
     %% If the offset is not provided, we're subscribing to the tail of the stream
     amqp_channel:subscribe(
@@ -2965,3 +2963,11 @@ rebalance(Config) ->
                               end, Summary)
                 end, 10000),
     ok.
+
+committed_chunk_id(Config) ->
+    %% committed_offset value changed between versions in queue_info
+    %% we use the osiris stats that stayed consistent
+    %% this works better for mixed-version testing
+    {ok, {_LeaderNode, LeaderPid}} = leader_info(Config),
+    #{committed_chunk_id := CommittedChunkId} = osiris:get_stats(LeaderPid),
+    CommittedChunkId.
