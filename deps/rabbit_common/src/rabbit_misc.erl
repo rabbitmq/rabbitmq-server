@@ -1160,7 +1160,11 @@ get_channel_operation_timeout() ->
     %% Default channel_operation_timeout set to net_ticktime + 10s to
     %% give allowance for any down messages to be received first,
     %% whenever it is used for cross-node calls with timeouts.
-    Default = (net_kernel:get_net_ticktime() + 10) * 1000,
+    Tick = case net_kernel:get_net_ticktime() of
+        {ongoing_change_to, Tick0} -> Tick0;
+        Tick0 -> Tick0
+    end,
+    Default = (Tick + 10) * 1000,
     application:get_env(rabbit, channel_operation_timeout, Default).
 
 moving_average(_Time, _HalfLife, Next, undefined) ->
