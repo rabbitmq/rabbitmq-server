@@ -1937,7 +1937,7 @@ grow_queue(Config) ->
         wait_for_messages_ready([Server0], RaName, MsgCount),
         {ok, Q0} = rpc:call(Server0, rabbit_amqqueue, lookup, [Q, <<"/">>]),
         #{nodes := Nodes0} = amqqueue:get_type_state(Q0),
-        ?assertEqual(5, length(Nodes0))
+        ?assertEqual(5, maps:size(Nodes0))
     end || Q <- QQs],
 
     rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
@@ -2007,7 +2007,7 @@ assert_grown_queues(Qs, Node, TargetClusterSize, MsgCount) ->
         wait_for_messages_ready([Node], RaName, MsgCount),
         {ok, Q0} = rpc:call(Node, rabbit_amqqueue, lookup, [Q, <<"/">>]),
         #{nodes := Nodes0} = amqqueue:get_type_state(Q0),
-        ?assertEqual(TargetClusterSize, length(Nodes0))
+        ?assertEqual(TargetClusterSize, maps:size(Nodes0))
     end || Q <- Qs].
 
 gh_12635(Config) ->
