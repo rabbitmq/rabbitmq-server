@@ -890,13 +890,14 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
         {"RABBITMQ_MNESIA_DIR", filename:join(NodeDir, "mnesia")},
         {"RABBITMQ_FEATURE_FLAGS_FILE", filename:join(NodeDir, "feature_flags")},
         {"RABBITMQ_PLUGINS_EXPAND_DIR", filename:join(NodeDir, "plugins")},
+        {"RABBITMQ_ENABLED_PLUGINS_FILE", filename:join(NodeDir, "enabled_plugins")},
         %% RABBITMQ_KEEP_PID_FILE_ON_EXIT
         {"RABBITMQ_DIST_PORT", integer_to_list(DistPort)},
         {"RABBITMQ_CONFIG_FILE", ConfigFile},
-        {"RABBITMQ_LOG", "debug"}
+        {"RABBITMQ_LOG", "debug"},
+        {"RABBITMQ_ENABLED_PLUGINS", "ALL"}
     ],
     %% @todo ExtraArgs.
-
 
 
     case rabbit_ct_helpers:get_config(Config, rabbitmq_run_cmd) of
@@ -916,6 +917,7 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
                     %% @todo Figure out why it doesn't work in args.
 %                    _ = peer:call(Pid, net_kernel, set_net_ticktime, [5]),
                     ok = peer:call(Pid, rabbit, boot, []),
+%                    error(peer:call(Pid, application, get_all_env, [rabbitmq_prometheus])),
                     NodeConfig1 = rabbit_ct_helpers:set_config(
                                     NodeConfig,
                                     [{peer_pid, Pid},
