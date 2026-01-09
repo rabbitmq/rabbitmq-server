@@ -97,7 +97,7 @@ rabbitmqctl_srcs := mix.exs \
 # we do to create the source archive, and we must do the same here,
 # otherwise mix(1) complains about missing dependencies (the non-prod
 # ones).
-$(ACTUAL_ESCRIPTS): $(rabbitmqctl_srcs)
+$(ACTUAL_ESCRIPTS): $(rabbitmqctl_srcs) deps
 	$(gen_verbose) if test -d ../.hex; then \
 		echo y | ERL_COMPILER_OPTIONS=deterministic mix make_all_in_src_archive; \
 	else \
