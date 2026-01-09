@@ -37,7 +37,8 @@ groups() ->
             prefixed_version_normalize_test
         ]},
         {formatting, [parallel], [
-            version_format_test
+            version_format_test,
+            normalize_then_format_test
         ]},
         {prefixed_versions, [parallel], [
             prefixed_version_compare_test
@@ -281,6 +282,26 @@ version_format_test(_Config) ->
                  iolist_to_binary(rabbit_semver:format({{1,99,2,44}, {[<<"alpha">>, 1], [<<"build">>, 1, <<"a36">>]}}))),
     ?assertEqual(<<"a-pre+build">>,
                  iolist_to_binary(rabbit_semver:format({<<"a">>, {[<<"pre">>], [<<"build">>]}}))).
+
+normalize_then_format_test(_Config) ->
+    %% Standard versions
+    ?assertEqual(<<"1.0.0.0">>, rabbit_semver:normalize_then_format("1.0.0")),
+    ?assertEqual(<<"1.2.3.0">>, rabbit_semver:normalize_then_format("1.2.3")),
+    ?assertEqual(<<"1.2.3.4">>, rabbit_semver:normalize_then_format("1.2.3.4")),
+    ?assertEqual(<<"1.0.0.0">>, rabbit_semver:normalize_then_format("1")),
+    ?assertEqual(<<"1.2.0.0">>, rabbit_semver:normalize_then_format("1.2")),
+    %% Pre-release and build metadata stripped
+    ?assertEqual(<<"1.0.0.0">>, rabbit_semver:normalize_then_format("1.0.0-alpha")),
+    ?assertEqual(<<"1.0.0.0">>, rabbit_semver:normalize_then_format("1.0.0+build")),
+    ?assertEqual(<<"1.0.0.0">>, rabbit_semver:normalize_then_format("1.0.0-alpha+build")),
+    %% Prefixed versions extract embedded version
+    ?assertEqual(<<"3.13.12.0">>, rabbit_semver:normalize_then_format("tanzu+rabbitmq.v3.13.12.dev")),
+    ?assertEqual(<<"3.13.12.0">>, rabbit_semver:normalize_then_format("tanzu+rabbitmq.v3.13.12.dev.1.8.g37372ff")),
+    ?assertEqual(<<"4.0.0.0">>, rabbit_semver:normalize_then_format("tanzu+rabbitmq.v4.0.0.dev")),
+    ?assertEqual(<<"3.13.12.5">>, rabbit_semver:normalize_then_format("tanzu+rabbitmq.v3.13.12.5.dev")),
+    %% Binary input
+    ?assertEqual(<<"1.2.3.0">>, rabbit_semver:normalize_then_format(<<"1.2.3">>)),
+    ?assertEqual(<<"3.13.12.0">>, rabbit_semver:normalize_then_format(<<"tanzu+rabbitmq.v3.13.12.dev">>)).
 
 prefixed_version_parse_test(_Config) ->
     ?assertMatch({<<"tanzu">>,
