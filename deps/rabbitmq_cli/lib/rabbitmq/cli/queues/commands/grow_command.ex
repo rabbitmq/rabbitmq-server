@@ -69,11 +69,12 @@ defmodule RabbitMQ.CLI.Queues.Commands.GrowCommand do
       }) do
 
     args = [vhost_pat, queue_pat, to_atom(node), to_atom(strategy), to_atom(membership)]
-    case :rabbit_misc.rpc_call(node_name, :rabbit_queue_type, :add_members, args) do
+    case :rabbit_misc.rpc_call(node_name, :rabbit_queue_type_ra, :add_members, args) do
       {:error, _} = error ->
         error
 
       {:badrpc, {:EXIT, {:undef, _}}} ->
+        # Fallback for mixed version clusters with older nodes
         :rabbit_misc.rpc_call(node_name, :rabbit_quorum_queue, :grow, [
           to_atom(node),
           vhost_pat,

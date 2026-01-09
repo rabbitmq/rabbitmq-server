@@ -9,6 +9,7 @@
 -feature(maybe_expr, enable).
 
 -behaviour(rabbit_queue_type).
+-behaviour(rabbit_queue_type_ra).
 -behaviour(rabbit_policy_validator).
 -behaviour(rabbit_policy_merge_strategy).
 
@@ -1526,7 +1527,7 @@ shrink_all(Node) ->
 grow(Node, VhostSpec, QueueSpec, Strategy) ->
     grow(Node, VhostSpec, QueueSpec, Strategy, promotable).
 
--spec grow(node() | integer(), binary(), binary(), all | even, rabbit_queue_type:ra_membership()) ->
+-spec grow(node() | integer(), binary(), binary(), all | even, rabbit_queue_type_ra:ra_membership()) ->
     [{rabbit_amqqueue:name(),
       {ok, pos_integer()} | {error, pos_integer(), term()}}].
 grow(Node, VhostSpec, QueueSpec, Strategy, Membership) when is_atom(Node) ->
@@ -1592,7 +1593,7 @@ maybe_grow(Q, Node, Membership, Size) ->
 maybe_grow(Q, Node, Membership, Size, QNodes) ->
     QName = amqqueue:get_name(Q),
     {ok, RaName} = qname_to_internal_name(QName),
-    case rabbit_queue_type:all_ra_members_stable(RaName, QNodes) of
+    case rabbit_queue_type_ra:all_members_stable(RaName, QNodes) of
         true ->
             ?LOG_INFO("~ts: adding a new member (replica) on node ~w",
                             [rabbit_misc:rs(QName), Node]),

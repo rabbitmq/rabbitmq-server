@@ -17,11 +17,12 @@ defmodule RabbitMQ.CLI.Queues.Commands.QuorumStatusCommand do
 
   def run([name] = _args, %{node: node_name, vhost: vhost}) do
     args = [vhost, name]
-    case :rabbit_misc.rpc_call(node_name, :rabbit_queue_type, :status, args) do
+    case :rabbit_misc.rpc_call(node_name, :rabbit_queue_type_ra, :status, args) do
       {:error, :not_found} ->
         {:error, {:not_found, :queue, vhost, name}}
 
       {:badrpc, {:EXIT, {:undef, _}}} ->
+        # Fallback for mixed version clusters with older nodes
         :rabbit_misc.rpc_call(node_name, :rabbit_quorum_queue, :status, args)
 
       other ->
