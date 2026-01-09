@@ -16,6 +16,7 @@
 
 -export([parse/1,
          format/1,
+         normalize_then_format/1,
          eql/2,
          gt/2,
          gte/2,
@@ -103,6 +104,11 @@ format({{Maj, Min, Patch, MinPatch}, {AlphaPart, BuildPart}}) ->
      format_version_part(MinPatch),
      format_vsn_rest(<<"-">>, AlphaPart),
      format_vsn_rest(<<"+">>, BuildPart)].
+
+-spec normalize_then_format(any_version()) -> binary().
+normalize_then_format(Version) ->
+    {{Maj, Min, Patch, MinPatch}, _} = normalize(parse(Version)),
+    iolist_to_binary(format({{Maj, Min, Patch, MinPatch}, {[], []}})).
 
 -spec format_version_part(integer() | binary()) -> iolist().
 format_version_part(Vsn) when is_integer(Vsn) ->
