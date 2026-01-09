@@ -911,6 +911,7 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
                     args => PeerArgs,
                     env => PeerEnv}) of
                 {ok, Pid, Nodename} ->
+                    ok = peer:call(Pid, file, set_cwd, [SrcDir]),
 %error(peer:call(Pid, init, get_arguments, [])),
 %                    error(peer:call(Pid, application, get_all_env, [syslog])),
 %                    error(peer:call(Pid, application, get_all_env, [kernel])),
@@ -918,6 +919,7 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
 %                    _ = peer:call(Pid, net_kernel, set_net_ticktime, [5]),
                     ok = peer:call(Pid, rabbit, boot, []),
 %                    error(peer:call(Pid, application, get_all_env, [rabbitmq_prometheus])),
+%                    error(peer:call(Pid, os, cmd, ["pwd"])),
                     NodeConfig1 = rabbit_ct_helpers:set_config(
                                     NodeConfig,
                                     [{peer_pid, Pid},
