@@ -728,16 +728,16 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
     %% Use inet_proxy_dist to handle distribution. This is used by the
     %% partitions testsuite.
     DistMod = rabbit_ct_helpers:get_config(Config, erlang_dist_module),
-    StartArgs0 = case DistMod of
-        undefined ->
-            "";
-        _ ->
-            DistModS = atom_to_list(DistMod),
-            DistModPath = filename:absname(
-              filename:dirname(code:where_is_file(DistModS ++ ".beam"))),
-            DistArg = re:replace(DistModS, "_dist$", "", [{return, list}]),
-            "-pa \"" ++ DistModPath ++ "\" -proto_dist " ++ DistArg
-    end,
+    StartArgs0 = "",%case DistMod of
+%        undefined ->
+%            "";
+%        _ ->
+%            DistModS = atom_to_list(DistMod),
+%            DistModPath = filename:absname(
+%              filename:dirname(code:where_is_file(DistModS ++ ".beam"))),
+%            DistArg = re:replace(DistModS, "_dist$", "", [{return, list}]),
+%            "-pa \"" ++ DistModPath ++ "\" -proto_dist " ++ DistArg
+%    end,
     %% Set the net_ticktime to 5s for all nodes (including CT via CT_OPTS).
     %% A lower tick time helps trigger distribution failures faster.
     StartArgs1 = StartArgs0 ++ " -kernel net_ticktime 5",
@@ -834,24 +834,119 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
       {"TEST_TMPDIR=~ts", [PrivDir]}
       | ExtraArgs],
     Cmd = ["start-background-broker" | MakeVars],
+
+
+    PeerArgs0 = case DistMod of
+        undefined ->
+            [];
+        _ ->
+            DistModS = atom_to_list(DistMod),
+            DistModPath = filename:absname(
+              filename:dirname(code:where_is_file(DistModS ++ ".beam"))),
+            DistArg = re:replace(DistModS, "_dist$", "", [{return, list}]),
+            [
+                "-pa", DistModPath,
+                "-proto_dist", DistArg
+            ]
+    end,
+
+    %% Build Erlang VM arguments matching rabbitmq-server script
+    PeerArgs = [
+%        "-init_debug",
+        "-pa", filename:join(SrcDir, "ebin"),  % Code path (simplified)
+        "-boot", "start_sasl",      % Boot file
+        "+W", "w",                 % Warning level
+        "+MBas", "ageffcbf",
+        "+MHas", "ageffcbf",
+        "+MBlmbcs", "512",
+        "+MHlmbcs", "512",
+        "+MMmcs", "30",  % Memory allocation
+        "+S", "2",
+        "+sbwt", "very_short", %% @todo Used twice in server start script?
+        "+A", "24",  % Scheduler and async thread settings
+        %% $SERVER_ERL_ARGS
+        "+pc", "unicode",
+%        "+P", "1048576",
+%        "+t", "5000000",
+%        "+stbt", "db",
+%        "+zdbbl", "128000",
+%        "+sbwt", "none",
+%        "+sbwtdcpu", "none",
+%        "+sbwtdio", "none",
+%        AdditionalErlArgs, must be a list and |AdditionalErlArgs at the end.
+        "-kernel", "net_ticktime", "5",  % Distribution settings
+        "-kernel", "prevent_overlapping_partitions", "false",
+        "-syslog", "logger", "[]",
+        "-syslog", "syslog_error_logger", "false"
+    |PeerArgs0],
+
+
+    NodeDir = filename:join(PrivDir, atom_to_list(InitialNodename)),
+            [Nodename1, HostName1] = string:split(atom_to_list(Nodename), "@"),
+    PeerEnv = [
+        {"RABBITMQ_NODENAME", atom_to_list(Nodename)},
+        {"RABBITMQ_BASE", NodeDir},
+        {"RABBITMQ_LOG_BASE", filename:join(NodeDir, "log")},
+        {"RABBITMQ_MNESIA_DIR", filename:join(NodeDir, "mnesia")},
+        {"RABBITMQ_FEATURE_FLAGS_FILE", filename:join(NodeDir, "feature_flags")},
+        {"RABBITMQ_PLUGINS_EXPAND_DIR", filename:join(NodeDir, "plugins")},
+        {"RABBITMQ_ENABLED_PLUGINS_FILE", filename:join(NodeDir, "enabled_plugins")},
+        %% RABBITMQ_KEEP_PID_FILE_ON_EXIT
+        {"RABBITMQ_DIST_PORT", integer_to_list(DistPort)},
+        {"RABBITMQ_CONFIG_FILE", ConfigFile},
+        {"RABBITMQ_LOG", "debug"},
+        {"RABBITMQ_ENABLED_PLUGINS", "ALL"}
+    ],
+    %% @todo ExtraArgs.
+
+
     case rabbit_ct_helpers:get_config(Config, rabbitmq_run_cmd) of
         undefined ->
-            case rabbit_ct_helpers:make(Config, SrcDir, Cmd) of
-                {ok, _} ->
+            case peer:start(#{
+                    name => Nodename1,
+                    longnames => true,
+                    host => HostName1,
+                    connection => standard_io,
+                    exec => os:find_executable(erl),
+                    args => PeerArgs,
+                    env => PeerEnv}) of
+                {ok, Pid, Nodename} ->
+                    ok = peer:call(Pid, file, set_cwd, [SrcDir]),
+%error(peer:call(Pid, init, get_arguments, [])),
+%                    error(peer:call(Pid, application, get_all_env, [syslog])),
+%                    error(peer:call(Pid, application, get_all_env, [kernel])),
+                    %% @todo Figure out why it doesn't work in args.
+%                    _ = peer:call(Pid, net_kernel, set_net_ticktime, [5]),
+                    ok = peer:call(Pid, rabbit, boot, []),
+%                    error(peer:call(Pid, application, get_all_env, [rabbitmq_prometheus])),
+%                    error(peer:call(Pid, os, cmd, ["pwd"])),
                     NodeConfig1 = rabbit_ct_helpers:set_config(
                                     NodeConfig,
-                                    [{use_secondary_umbrella,
-                                      UseSecondaryUmbrella orelse
-                                      UseSecondaryDist},
-                                     {effective_srcdir, SrcDir},
-                                     {make_vars_for_node_startup, MakeVars}]),
+                                    [{peer_pid, Pid},
+                                     {use_secondary_umbrella, UseSecondaryUmbrella orelse UseSecondaryDist}
+                                    ]),
                     query_node(Config, NodeConfig1);
-                _ ->
-                    AbortCmd = ["stop-node" | MakeVars],
-                    _ = rabbit_ct_helpers:make(Config, SrcDir, AbortCmd),
-                    %% @todo Need to stop all nodes in the cluster, not just the one node.
-                    {skip, "Failed to initialize RabbitMQ"}
+                Errrrr ->
+                    error({error, Errrrr})
             end;
+
+
+%            case rabbit_ct_helpers:make(Config, SrcDir, Cmd) of
+%                {ok, _} ->
+%                    NodeConfig1 = rabbit_ct_helpers:set_config(
+%                                    NodeConfig,
+%                                    [{use_secondary_umbrella,
+%                                      UseSecondaryUmbrella orelse
+%                                      UseSecondaryDist},
+%                                     {effective_srcdir, SrcDir},
+%                                     {make_vars_for_node_startup, MakeVars}]),
+%                    query_node(Config, NodeConfig1);
+%                _ ->
+%                    AbortCmd = ["stop-node" | MakeVars],
+%                    _ = rabbit_ct_helpers:make(Config, SrcDir, AbortCmd),
+%                    %% @todo Need to stop all nodes in the cluster, not just the one node.
+%                    {skip, "Failed to initialize RabbitMQ"}
+%            end;
         RunCmd ->
             UseSecondary = CanUseSecondary andalso
                 rabbit_ct_helpers:get_config(Config, rabbitmq_run_secondary_cmd) =/= undefined,
@@ -1318,23 +1413,25 @@ stop_rabbitmq_nodes(Config) ->
     end,
     proplists:delete(rmq_nodes, Config).
 
-stop_rabbitmq_node(Config, NodeConfig) ->
+stop_rabbitmq_node(_Config, NodeConfig) ->
     Nodename = ?config(nodename, NodeConfig),
     cover_remove_node(Nodename),
-    SrcDir = ?config(effective_srcdir, NodeConfig),
-    InitialMakeVars = ?config(make_vars_for_node_startup, NodeConfig),
-    InitialNodename = ?config(initial_nodename, NodeConfig),
-    MakeVars = InitialMakeVars ++ [
-      {"RABBITMQ_NODENAME=~ts", [Nodename]},
-      {"RABBITMQ_NODENAME_FOR_PATHS=~ts", [InitialNodename]}
-    ],
-    Cmd = ["stop-node" | MakeVars],
-    _ = case rabbit_ct_helpers:get_config(Config, rabbitmq_run_cmd) of
-        undefined ->
-            rabbit_ct_helpers:make(Config, SrcDir, Cmd);
-        RunCmd ->
-            rabbit_ct_helpers:exec([RunCmd | Cmd])
-    end,
+    PeerPid = ?config(peer_pid, NodeConfig),
+    peer:stop(PeerPid),
+%    SrcDir = ?config(effective_srcdir, NodeConfig),
+%    InitialMakeVars = ?config(make_vars_for_node_startup, NodeConfig),
+%    InitialNodename = ?config(initial_nodename, NodeConfig),
+%    MakeVars = InitialMakeVars ++ [
+%      {"RABBITMQ_NODENAME=~ts", [Nodename]},
+%      {"RABBITMQ_NODENAME_FOR_PATHS=~ts", [InitialNodename]}
+%    ],
+%    Cmd = ["stop-node" | MakeVars],
+%    _ = case rabbit_ct_helpers:get_config(Config, rabbitmq_run_cmd) of
+%        undefined ->
+%            rabbit_ct_helpers:make(Config, SrcDir, Cmd);
+%        RunCmd ->
+%            rabbit_ct_helpers:exec([RunCmd | Cmd])
+%    end,
     NodeConfig.
 
 find_crashes_in_logs(NodeConfigs, IgnoredCrashes) ->
