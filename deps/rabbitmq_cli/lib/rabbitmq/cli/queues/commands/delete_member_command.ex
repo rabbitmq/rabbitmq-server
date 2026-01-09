@@ -19,11 +19,12 @@ defmodule RabbitMQ.CLI.Queues.Commands.DeleteMemberCommand do
 
   def run([name, node] = _args, %{vhost: vhost, node: node_name}) do
     args = [vhost, name, to_atom(node)]
-    case :rabbit_misc.rpc_call(node_name, :rabbit_queue_type, :delete_member, args) do
+    case :rabbit_misc.rpc_call(node_name, :rabbit_queue_type_ra, :delete_member, args) do
       {:error, :not_found} ->
         {:error, {:not_found, :queue, vhost, name}}
 
       {:badrpc, {:EXIT, {:undef, _}}} ->
+        # Fallback for mixed version clusters with older nodes
         :rabbit_misc.rpc_call(node_name, :rabbit_quorum_queue, :delete_member, args)
 
       other ->

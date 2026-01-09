@@ -74,11 +74,12 @@ defmodule RabbitMQ.CLI.Queues.Commands.AddMemberCommand do
         %{vhost: vhost, node: node_name, timeout: timeout, membership: membership}
       ) do
     args = [vhost, name, to_atom(node), to_atom(membership), timeout]
-    case :rabbit_misc.rpc_call(node_name, :rabbit_queue_type, :add_member, args) do
+    case :rabbit_misc.rpc_call(node_name, :rabbit_queue_type_ra, :add_member, args) do
       {:error, :not_found} ->
         {:error, {:not_found, :queue, vhost, name}}
 
       {:badrpc, {:EXIT, {:undef, _}}} ->
+        # Fallback for mixed version clusters with older nodes
         :rabbit_misc.rpc_call(node_name, :rabbit_quorum_queue, :add_member, args)
 
       other ->
