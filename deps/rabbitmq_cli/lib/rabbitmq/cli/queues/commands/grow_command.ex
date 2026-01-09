@@ -67,17 +67,21 @@ defmodule RabbitMQ.CLI.Queues.Commands.GrowCommand do
         membership: membership,
         errors_only: errors_only
       }) do
-    args = [to_atom(node), vhost_pat, queue_pat, to_atom(strategy)]
 
-    args =
-      case to_atom(membership) do
-        :promotable -> args
-        other -> args ++ [other]
-      end
-
-    case :rabbit_misc.rpc_call(node_name, :rabbit_quorum_queue, :grow, args) do
+    args = [vhost_pat, queue_pat, to_atom(node), to_atom(strategy), to_atom(membership)]
+    case :rabbit_misc.rpc_call(node_name, :rabbit_queue_type_ra, :add_members, args) do
       {:error, _} = error ->
         error
+
+      {:badrpc, {:EXIT, {:undef, _}}} ->
+        # Fallback for mixed version clusters with older nodes
+        :rabbit_misc.rpc_call(node_name, :rabbit_quorum_queue, :grow, [
+          to_atom(node),
+          vhost_pat,
+          queue_pat,
+          to_atom(strategy),
+          to_atom(membership)
+        ])
 
       {:badrpc, _} = error ->
         error
@@ -134,10 +138,10 @@ defmodule RabbitMQ.CLI.Queues.Commands.GrowCommand do
 
   def description,
     do:
-      "Grows quorum queue clusters by adding a member (replica) on the specified node for all matching queues"
+      "Grows all matching queues by adding a member (replica) on the specified node"
 
   def banner([node, strategy], _) do
-    "Growing #{strategy} quorum queues on #{node}..."
+    "Growing #{strategy} queues on #{node}..."
   end
 
   #

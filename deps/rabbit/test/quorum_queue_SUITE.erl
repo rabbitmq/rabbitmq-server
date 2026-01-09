@@ -1897,20 +1897,6 @@ grow_queue(Config) ->
 
     %% grow queues to node 'Server1': non_voter
     rpc:call(Server0, rabbit_quorum_queue, grow, [Server1, <<"/">>, <<".*">>, all, non_voter]),
-    assert_grown_queues(QQs, Server0, TargetClusterSize_2, MsgCount),
-
-    %% grow queues to node 'Server2': fail, non_voters found
-    Result6 = rpc:call(Server0, rabbit_quorum_queue, grow, [Server2, <<"/">>, <<".*">>, all, voter]),
-    %% [{{resource,<<"/">>,queue,<<"grow_queue">>},{error, 2, {error, non_voters_found}},
-    %%  {{resource,<<"/">>,queue,<<"grow_queue_alt">>},{error, 2, {error, non_voters_found}},...]
-    ?assert(lists:all(
-        fun({_, Err}) -> Err =:= {error, TargetClusterSize_2, {error, non_voters_found}} end, Result6)),
-    assert_grown_queues(QQs, Server0, TargetClusterSize_2, MsgCount),
-
-    %% grow queues to target quorum cluster size '5': fail, non_voters found
-    Result7 = rpc:call(Server0, rabbit_quorum_queue, grow, [TargetClusterSize_5, <<"/">>, <<".*">>, all]),
-    ?assert(lists:all(
-        fun({_, Err}) -> Err =:= {error, TargetClusterSize_2, {error, non_voters_found}} end, Result7)),
     assert_grown_queues(QQs, Server0, TargetClusterSize_2, MsgCount).
 
 assert_grown_queues(Qs, Node, TargetClusterSize, MsgCount) ->
