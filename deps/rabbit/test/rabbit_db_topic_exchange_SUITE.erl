@@ -485,7 +485,7 @@ topic_trie_cleanup(Config) ->
     %% Log entries that were added to the ETS table
     lists:foreach(
       fun(Node) ->
-              VHostEntriesAfterAdd = read_topic_trie_table(Config, Node, VHost, rabbit_khepri_topic_trie_v2),
+              VHostEntriesAfterAdd = read_topic_trie_table(Config, Node, VHost, rabbit_khepri_topic_trie_v3),
               ct:pal("Bindings added on node ~s: ~p, ETS entries after add: ~p~n",
                      [Node, length(Bindings), length(VHostEntriesAfterAdd)])
       end, Nodes),
@@ -507,11 +507,37 @@ topic_trie_cleanup(Config) ->
                   %% old projection table might be there in case of
                   %% mixed-version testing. This part will be tested in the
                   %% second part of the testcase.
-                  VHostEntriesAfterDelete = read_topic_trie_table(Config, Node, VHost, rabbit_khepri_topic_trie_v2),
+                  VHostEntriesAfterDelete = read_topic_trie_table(Config, Node, VHost, rabbit_khepri_topic_trie_v3),
                   ct:pal("ETS entries after delete on node ~s: ~p~n", [Node, length(VHostEntriesAfterDelete)]),
 
-                  %% Assert that no entries were found for this vhost after deletion
-                  ?assertEqual([], VHostEntriesAfterDelete)
+                  % %% Assert that no entries were found for this vhost after deletion
+                  % ?assertEqual([], VHostEntriesAfterDelete)
+                  {ok, KhepriVersion0} = rabbit_ct_broker_helpers:rpc(
+                                           Config, Node,
+                                           application, get_key,
+                                           [khepri, vsn]),
+                  KhepriVersion1 = rabbit_misc:format(
+                                     "~2..0s~2..0s~2..0s",
+                                     string:split(KhepriVersion0, ".", all)),
+                  KhepriVersion2 = list_to_integer(KhepriVersion1),
+                  ct:pal("Khepri version: ~b / ~s", [KhepriVersion2, KhepriVersion1]),
+                  if
+                      KhepriVersion2 >= 1704 ->
+                          %% Assert that no entries were found for this vhost
+                          %% after deletion.
+                          ?assertEqual([], VHostEntriesAfterDelete);
+                      true ->
+                          %% Assert that no entries were found for this vhost
+                          %% after deletion. This node does not have the fixed
+                          %% version of Khepri, so it won't delete the new
+                          %% `#topic_trie_edge_v2{}' correctly, that's why we
+                          %% filter them out.
+                          ct:pal("Consider #topic_trie_edge{} records only"),
+                          ?assertEqual(
+                             [],
+                             [E || #topic_trie_edge{} = E
+                                   <- VHostEntriesAfterDelete])
+                  end
           end, Nodes),
 
         %% If we reach this point, we know the new projection works as expected
@@ -554,13 +580,17 @@ topic_trie_cleanup(Config) ->
                 ct:pal("Wait for projections to be restored"),
                 ?awaitMatch(
                    Entries when is_list(Entries),
-                   catch read_topic_trie_table(Config, NewNode, VHost, rabbit_khepri_topic_trie_v2),
+                   catch read_topic_trie_table(Config, NewNode, VHost, rabbit_khepri_topic_trie_v3),
                    60000),
 
-                ct:pal("Check that the old projection is gone"),
-                ?assertError(
-                   {exception, badarg, _},
-                   read_topic_trie_table(Config, NewNode, VHost, rabbit_khepri_topic_trie));
+                ct:pal("Check that the old projections are gone"),
+                lists:foreach(
+                  fun(ProjectionName) ->
+                          ?assertError(
+                             {exception, badarg, _},
+                             read_topic_trie_table(Config, NewNode, VHost, ProjectionName))
+                  end, [rabbit_khepri_topic_trie,
+                        rabbit_khepri_topic_trie_v2]);
             false ->
                 ok
         end
@@ -573,12 +603,22 @@ topic_trie_cleanup(Config) ->
 
 read_topic_trie_table(Config, Node, VHost, Table) ->
     Entries = rabbit_ct_broker_helpers:rpc(Config, Node, ets, tab2list, [Table]),
-    [Entry || #topic_trie_edge{trie_edge = TrieEdge} = Entry <- Entries,
-              case TrieEdge of
-                  #trie_edge{exchange_name = #resource{virtual_host = V}} ->
-                      V =:= VHost;
-                  _ ->
-                      false
+    [Entry || Entry <- Entries,
+              case Entry of
+                  #topic_trie_edge{trie_edge = TrieEdge} ->
+                      case TrieEdge of
+                          #trie_edge{exchange_name = #resource{virtual_host = V}} ->
+                              V =:= VHost;
+                          _ ->
+                              false
+                      end;
+                  #topic_trie_edge_v2{trie_edge = TrieEdge} ->
+                      case TrieEdge of
+                          #trie_edge{exchange_name = #resource{virtual_host = V}} ->
+                              V =:= VHost;
+                          _ ->
+                              false
+                      end
               end].
 
 %% ---------------------------------------------------------------------------
