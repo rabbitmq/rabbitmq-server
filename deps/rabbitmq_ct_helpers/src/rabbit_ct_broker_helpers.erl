@@ -862,8 +862,17 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
         "+MHlmbcs", "512",
         "+MMmcs", "30",  % Memory allocation
         "+S", "2",
-        "+sbwt", "very_short",
+        "+sbwt", "very_short", %% @todo Used twice in server start script?
         "+A", "24",  % Scheduler and async thread settings
+        %% $SERVER_ERL_ARGS
+        "+pc", "unicode",
+%        "+P", "1048576",
+%        "+t", "5000000",
+%        "+stbt", "db",
+%        "+zdbbl", "128000",
+%        "+sbwt", "none",
+%        "+sbwtdcpu", "none",
+%        "+sbwtdio", "none",
 %        AdditionalErlArgs, must be a list and |AdditionalErlArgs at the end.
         "-kernel", "net_ticktime", "5",  % Distribution settings
         "-kernel", "prevent_overlapping_partitions", "false",
