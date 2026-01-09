@@ -1612,42 +1612,70 @@ force_checkpoint(Config) ->
     ?assertEqual(ExpectedRes, ForceCheckpointRes).
 
 repair_metadata_nodes_list_to_map(Config) ->
-    %% After feature flag `track_qq_members_uids` is enabled, quorum
-    %% queues will convert their type state in metadata store
-    %% from nodes list to node=>uid mappings
-    UpdateFun =
-        fun(QueueRec) ->
-                #{nodes := NodesMap} = TypeState = amqqueue:get_type_state(QueueRec),
-                amqqueue:set_type_state(QueueRec, TypeState#{nodes => maps:keys(NodesMap)})
-        end,
-    repair_metadata_nodes(Config, UpdateFun).
+    IsEnabled = rabbit_ct_broker_helpers:is_feature_flag_enabled(
+                  Config, track_qq_members_uids),
+    case IsEnabled of
+        false ->
+            {skip, "nodes metadata reparation requires track_qq_members_uids ff"};
+        true ->
+            %% After feature flag `track_qq_members_uids` is enabled, quorum
+            %% queues will convert their type state in metadata store
+            %% from nodes list to node=>uid mappings
+            UpdateFun =
+                fun(QueueRec) ->
+                        #{nodes := NodesMap} = TypeState = amqqueue:get_type_state(QueueRec),
+                        amqqueue:set_type_state(QueueRec, TypeState#{nodes => maps:keys(NodesMap)})
+                end,
+            repair_metadata_nodes(Config, UpdateFun)
+    end.
 
 repair_metadata_nodes_added_member(Config) ->
-    Server1 = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-    UpdateFun =
-        fun(QueueRec) ->
-                #{nodes := NodesMap} = TypeState = amqqueue:get_type_state(QueueRec),
-                amqqueue:set_type_state(QueueRec, TypeState#{nodes => maps:remove(Server1, NodesMap)})
-        end,
-    repair_metadata_nodes(Config, UpdateFun).
+    IsEnabled = rabbit_ct_broker_helpers:is_feature_flag_enabled(
+                  Config, track_qq_members_uids),
+    case IsEnabled of
+        false ->
+            {skip, "nodes metadata reparation requires track_qq_members_uids ff"};
+        true ->
+            Server1 = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+            UpdateFun =
+                fun(QueueRec) ->
+                        #{nodes := NodesMap} = TypeState = amqqueue:get_type_state(QueueRec),
+                        amqqueue:set_type_state(QueueRec, TypeState#{nodes => maps:remove(Server1, NodesMap)})
+                end,
+            repair_metadata_nodes(Config, UpdateFun)
+    end.
 
 repair_metadata_nodes_removed_member(Config) ->
-    UpdateFun =
-        fun(QueueRec) ->
-                #{nodes := NodesMap} = TypeState = amqqueue:get_type_state(QueueRec),
-                amqqueue:set_type_state(QueueRec, TypeState#{nodes => NodesMap#{'rabbit@foo' => <<"dummy_uid">>}})
-        end,
-    repair_metadata_nodes(Config, UpdateFun).
+    IsEnabled = rabbit_ct_broker_helpers:is_feature_flag_enabled(
+                  Config, track_qq_members_uids),
+    case IsEnabled of
+        false ->
+            {skip, "nodes metadata reparation requires track_qq_members_uids ff"};
+        true ->
+            UpdateFun =
+                fun(QueueRec) ->
+                        #{nodes := NodesMap} = TypeState = amqqueue:get_type_state(QueueRec),
+                        amqqueue:set_type_state(QueueRec, TypeState#{nodes => NodesMap#{'rabbit@foo' => <<"dummy_uid">>}})
+                end,
+            repair_metadata_nodes(Config, UpdateFun)
+    end.
 
 repair_metadata_nodes_added_removed_member(Config) ->
-    Server1 = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-    UpdateFun =
-        fun(QueueRec) ->
-                #{nodes := NodesMap} = TypeState = amqqueue:get_type_state(QueueRec),
-                NewNodeMap = maps:remove(Server1, NodesMap#{'rabbit@foo' => <<"dummy_uid">>}),
-                amqqueue:set_type_state(QueueRec, TypeState#{nodes => NewNodeMap})
-        end,
-    repair_metadata_nodes(Config, UpdateFun).
+    IsEnabled = rabbit_ct_broker_helpers:is_feature_flag_enabled(
+                  Config, track_qq_members_uids),
+    case IsEnabled of
+        false ->
+            {skip, "nodes metadata reparation requires track_qq_members_uids ff"};
+        true ->
+            Server1 = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+            UpdateFun =
+                fun(QueueRec) ->
+                        #{nodes := NodesMap} = TypeState = amqqueue:get_type_state(QueueRec),
+                        NewNodeMap = maps:remove(Server1, NodesMap#{'rabbit@foo' => <<"dummy_uid">>}),
+                        amqqueue:set_type_state(QueueRec, TypeState#{nodes => NewNodeMap})
+                end,
+            repair_metadata_nodes(Config, UpdateFun)
+    end.
 
 repair_metadata_nodes(Config, UpdateFun) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
