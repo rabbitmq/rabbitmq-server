@@ -249,6 +249,9 @@ var HELP = {
     'queue-initial-cluster-size':
        'Set the queue initial cluster size.',
 
+    'quorum-queue-target-group-size':
+       'The target number of replicas for the quorum queue. When set and the periodic membership reconciliation is enabled, RabbitMQ will automatically adjust the number of queue replicas to match this target size.<br/>(Sets the "<a target="_blank" href="https://www.rabbitmq.com/docs/quorum-queues#member-reconciliation">x-quorum-target-group-size</a>" argument.)',
+
     'queue-type':
        'Set the queue type, determining the type of queue to use: raft-based high availability or classic queue. Valid values are <code>quorum</code> or <code>classic</code>. It defaults to <code>classic</code>. <br/>',
 
