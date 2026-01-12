@@ -249,6 +249,9 @@ var HELP = {
     'queue-initial-cluster-size':
        'Set the queue initial cluster size.',
 
+    'quorum-queue-target-group-size':
+       'The target number of replicas. Used by the <a target="_blank" href="https://www.rabbitmq.com/docs/quorum-queues#member-reconciliation">periodic membership reconciliation</a> mechanism.<br/>',
+
     'queue-type':
        'Set the queue type, determining the type of queue to use: raft-based high availability or classic queue. Valid values are <code>quorum</code> or <code>classic</code>. It defaults to <code>classic</code>. <br/>',
 
