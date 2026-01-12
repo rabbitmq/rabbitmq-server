@@ -478,9 +478,11 @@ is_version_supported("", _)        -> true;
 is_version_supported("0.0.0", _)   -> true;
 is_version_supported(_Version, []) -> true;
 is_version_supported(VersionFull, ExpectedVersions) ->
-    %% Pre-release version should be supported in plugins,
-    %% therefore preview part should be removed
-    Version = remove_version_preview_part(VersionFull),
+    %% Development and pre-release versions can be fairly complex,
+    %% such as "tanzu+rabbitmq.v3.13.12.dev".
+    %% Use rabbit_semver to extract the "base" X.Y.Z version
+    %% before doing any comparisons.
+    Version = rabbit_semver:normalize_then_format(VersionFull),
     case lists:any(fun(ExpectedVersion) ->
                        rabbit_misc:strict_version_minor_equivalent(ExpectedVersion,
                                                                    Version)
@@ -491,10 +493,6 @@ is_version_supported(VersionFull, ExpectedVersions) ->
         true  -> true;
         false -> false
     end.
-
-remove_version_preview_part(Version) ->
-    {Ver, _Preview} = rabbit_semver:parse(Version),
-    iolist_to_binary(rabbit_semver:format({Ver, {[], []}})).
 
 clean_plugins(Plugins) ->
     ExpandDir = plugins_expand_dir(),
