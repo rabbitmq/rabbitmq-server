@@ -17,6 +17,13 @@
 
 -export([start_link/2, adjust/4, restart/2]).
 -export([init/1]).
+-export([start_link/1]).
+
+%% For backwards compatibility
+start_link(X = #exchange{}) ->
+    start_link(rabbit_federation_exchange_link, X);
+start_link(Q) when ?is_amqqueue(Q) ->
+    start_link(rabbit_federation_queue_link, Q).
 
 start_link(LinkMod, Q) ->
     supervisor2:start_link(?MODULE, [LinkMod, Q]).
