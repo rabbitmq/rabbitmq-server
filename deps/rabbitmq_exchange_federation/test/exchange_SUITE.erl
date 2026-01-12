@@ -604,8 +604,7 @@ child_id_format(Config) ->
           Config1 = rabbit_ct_broker_helpers:cluster_nodes(
                       Config, [OldNodeA, OldNodeC]),
 
-          %% The old nodes get the "rabbitmq_exchange_federation" plugin enabled but that is not found
-          %% Let's switch to the old plugin name
+          %% Use the original plugin name that exists specifically for backwards compatibility
           [rabbit_ct_broker_helpers:set_plugins(Config, Node, ["rabbitmq_federation"])
            || Node <- [OldNodeA, OldNodeC]],
 
