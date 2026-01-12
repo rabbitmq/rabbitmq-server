@@ -167,6 +167,7 @@
 
     enable_plugin/3,
     disable_plugin/3,
+    set_plugins/3,
 
     test_channel/0,
     test_writer/1,
@@ -2414,6 +2415,9 @@ enable_plugin(Config, Node, Plugin) ->
 
 disable_plugin(Config, Node, Plugin) ->
     plugin_action(Config, Node, [disable, Plugin]).
+
+set_plugins(Config, Node, PluginList) ->
+    plugin_action(Config, Node, [set | PluginList]).
 
 plugin_action(Config, Node, Args) ->
     NodeConfig = get_node_config(Config, Node),
