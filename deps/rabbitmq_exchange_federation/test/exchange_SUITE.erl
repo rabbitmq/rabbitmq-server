@@ -580,14 +580,14 @@ lookup_exchange_status(Config) ->
 
 child_id_format(Config) ->
   case rabbit_ct_helpers:is_mixed_versions() of
-    false ->
+    true ->
           [UpstreamNode,
            OldNodeA,
            NewNodeB,
            OldNodeC,
            NewNodeD] = rabbit_ct_broker_helpers:get_node_configs(
                          Config, nodename),
-          
+
           %% Create a cluster with the nodes running the old version of RabbitMQ in
           %% mixed-version testing.
           %%
@@ -603,7 +603,11 @@ child_id_format(Config) ->
           %% secondary umbrella, `NewNodeB' the primary copy, and so on.
           Config1 = rabbit_ct_broker_helpers:cluster_nodes(
                       Config, [OldNodeA, OldNodeC]),
-          
+
+          %% Use the original plugin name that exists specifically for backwards compatibility
+          [rabbit_ct_broker_helpers:set_plugins(Config, Node, ["rabbitmq_federation"])
+           || Node <- [OldNodeA, OldNodeC]],
+
           %% Prepare the whole federated exchange on that old cluster.
           UpstreamName = <<"fed_on_upgrade">>,
           rabbit_ct_broker_helpers:set_parameter(
@@ -691,9 +695,8 @@ child_id_format(Config) ->
                 when is_list(List) ->
                   {skip, "Testcase skipped with the transiently changed ID format"}
           end;
-      true ->
-          %% skip the test in mixed version mode
-          {skip, "Should not run in mixed version environments"}
+      false ->
+          {skip, "Should only run in mixed version environments"}
   end.
 
 %%
