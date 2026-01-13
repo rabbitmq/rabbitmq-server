@@ -24,6 +24,7 @@
 
 -export([start_link/0, start/0, stop/0, register/2, set_alarm/1,
          clear_alarm/1, get_alarms/0, get_alarms/1, get_local_alarms/0, get_local_alarms/1, on_node_up/1, on_node_down/1,
+         format_resource_alarm_source/1,
          format_as_map/1, format_as_maps/1, is_local/1]).
 
 -export([init/1, handle_call/2, handle_event/2, handle_info/2,
@@ -42,13 +43,16 @@
 
 %%----------------------------------------------------------------------------
 
--record(alarms, {alertees :: dict:dict(pid(), rabbit_types:mfargs()),
-                 alarmed_nodes :: dict:dict(node(), [resource_alarm_source()]),
-                 alarms :: [alarm()]}).
+-record(alarms, {alertees = #{} :: #{pid() => rabbit_types:mfargs()},
+                 alarmed_nodes = #{} :: #{node() => [resource_alarm_source()]},
+                 alarms = [] :: [alarm()]}).
 
 -export_type([alarm/0]).
 -type local_alarm() :: 'file_descriptor_limit'.
--type resource_alarm_source() :: 'disk' | 'memory'.
+-type resource_alarm_source() ::
+    memory
+    | disk
+    | {disk, rabbit_queue_type:queue_type()}.
 -type resource_alarm() :: {resource_limit, resource_alarm_source(), node()}.
 -type alarm() :: local_alarm() | resource_alarm().
 -type resource_alert() :: {WasAlarmSetForNode :: boolean(),
@@ -90,7 +94,7 @@ stop() -> ok.
 %% called like this: `apply(M, F, A ++ [Pid, Source, Alert])', where `Source'
 %% has the type of resource_alarm_source() and `Alert' has the type of resource_alert().
 
--spec register(pid(), rabbit_types:mfargs()) -> [atom()].
+-spec register(pid(), rabbit_types:mfargs()) -> [resource_alarm_source()].
 
 register(Pid, AlertMFA) ->
     gen_event:call(?SERVER, ?MODULE, {register, Pid, AlertMFA}, infinity).
@@ -124,25 +128,25 @@ is_local({file_descriptor_limit, _}) -> true;
 is_local({{resource_limit, _Resource, Node}, _}) when Node =:= node() -> true;
 is_local({{resource_limit, _Resource, Node}, _}) when Node =/= node() -> false.
 
+-spec format_resource_alarm_source(resource_alarm_source()) -> iodata().
+format_resource_alarm_source(disk) ->
+    ?DISK_SPACE_RESOURCE;
+format_resource_alarm_source({disk, QueueType}) ->
+    io_lib:format("disk for queue type '~ts'", [QueueType]);
+format_resource_alarm_source(memory) ->
+    ?MEMORY_RESOURCE;
+format_resource_alarm_source(Unknown) ->
+    io_lib:format("~w", [Unknown]).
+
 -spec format_as_map(alarm()) -> #{binary() => term()}.
 format_as_map(file_descriptor_limit) ->
     #{
         <<"resource">> => ?FILE_DESCRIPTOR_RESOURCE,
         <<"node">> => node()
     };
-format_as_map({resource_limit, disk, Node}) ->
-    #{
-        <<"resource">> => ?DISK_SPACE_RESOURCE,
-        <<"node">> => Node
-    };
-format_as_map({resource_limit, memory, Node}) ->
-    #{
-        <<"resource">> => ?MEMORY_RESOURCE,
-        <<"node">> => Node
-    };
 format_as_map({resource_limit, Limit, Node}) ->
     #{
-        <<"resource">> => rabbit_data_coercion:to_binary(Limit),
+        <<"resource">> => iolist_to_binary(format_resource_alarm_source(Limit)),
         <<"node">> => Node
     }.
 
@@ -177,12 +181,10 @@ remote_conserve_resources(Pid, Source, {false, _, _}) ->
 %%----------------------------------------------------------------------------
 
 init([]) ->
-    {ok, #alarms{alertees      = dict:new(),
-                 alarmed_nodes = dict:new(),
-                 alarms        = []}}.
+    {ok, #alarms{}}.
 
 handle_call({register, Pid, AlertMFA}, State = #alarms{alarmed_nodes = AN}) ->
-    {ok, lists:usort(lists:append([V || {_, V} <- dict:to_list(AN)])),
+    {ok, lists:usort(lists:append(maps:values(AN))),
      internal_register(Pid, AlertMFA, State)};
 
 handle_call(get_alarms, State) ->
@@ -236,14 +238,11 @@ handle_event({node_up, Node}, State) ->
     {ok, State};
 
 handle_event({node_down, Node}, #alarms{alarmed_nodes = AN} = State) ->
-    AlarmsForDeadNode = case dict:find(Node, AN) of
-                            {ok, V} -> V;
-                            error   -> []
-                        end,
+    AlarmsForDeadNode = maps:get(Node, AN, []),
     {ok, lists:foldr(fun(Source, AccState) ->
                              ?LOG_WARNING("~ts resource limit alarm cleared for dead node ~tp",
-                                          [Source, Node]),
-                             maybe_alert(fun dict_unappend/3, Node, Source, false, AccState)
+                                          [format_resource_alarm_source(Source), Node]),
+                             maybe_alert(fun map_unappend/3, Node, Source, false, AccState)
                      end, State, AlarmsForDeadNode)};
 
 handle_event({register, Pid, AlertMFA}, State) ->
@@ -254,7 +253,7 @@ handle_event(_Event, State) ->
 
 handle_info({'DOWN', _MRef, process, Pid, _Reason},
             State = #alarms{alertees = Alertees}) ->
-    {ok, State#alarms{alertees = dict:erase(Pid, Alertees)}};
+    {ok, State#alarms{alertees = maps:remove(Pid, Alertees)}};
 
 handle_info(_Info, State) ->
     {ok, State}.
@@ -267,22 +266,14 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%----------------------------------------------------------------------------
 
-dict_append(Key, Val, Dict) ->
-    L = case dict:find(Key, Dict) of
-            {ok, V} -> V;
-            error   -> []
-        end,
-    dict:store(Key, lists:usort([Val|L]), Dict).
+map_append(Key, Val, Map) ->
+    maps:update_with(Key, fun(Vs) -> [Val | Vs] end, [Val], Map).
 
-dict_unappend(Key, Val, Dict) ->
-    L = case dict:find(Key, Dict) of
-            {ok, V} -> V;
-            error   -> []
-        end,
-
+map_unappend(Key, Val, Map) ->
+    L = maps:get(Key, Map, []),
     case lists:delete(Val, L) of
-        [] -> dict:erase(Key, Dict);
-        X  -> dict:store(Key, X, Dict)
+        [] -> maps:remove(Key, Map);
+        X  -> Map#{Key := X}
     end.
 
 maybe_alert(UpdateFun, Node, Source, WasAlertAdded,
@@ -290,10 +281,14 @@ maybe_alert(UpdateFun, Node, Source, WasAlertAdded,
                             alertees      = Alertees}) ->
     AN1 = UpdateFun(Node, Source, AN),
     %% Is alarm for Source still set on any node?
-    StillHasAlerts = lists:any(fun ({_Node, NodeAlerts}) -> lists:member(Source, NodeAlerts) end, dict:to_list(AN1)),
+    StillHasAlerts = rabbit_misc:maps_any(
+                       fun(_Node, NodeAlerts) ->
+                               lists:member(Source, NodeAlerts)
+                       end, AN1),
     case StillHasAlerts of
         true -> ok;
-        false -> ?LOG_WARNING("~ts resource limit alarm cleared across the cluster", [Source])
+        false -> ?LOG_WARNING("~ts resource limit alarm cleared across the cluster",
+                              [format_resource_alarm_source(Source)])
     end,
     Alert = {WasAlertAdded, StillHasAlerts, Node},
     case node() of
@@ -311,22 +306,24 @@ alert_remote(Alert, Alertees, Source) ->
 
 alert(Alertees, Source, Alert, NodeComparator) ->
     Node = node(),
-    dict:fold(fun (Pid, {M, F, A}, ok) ->
-                      case NodeComparator(Node, node(Pid)) of
-                          true  -> apply(M, F, A ++ [Pid, Source, Alert]);
-                          false -> ok
-                      end
-              end, ok, Alertees).
+    maps:foreach(fun (Pid, {M, F, A}) ->
+                         case NodeComparator(Node, node(Pid)) of
+                             true  -> apply(M, F, A ++ [Pid, Source, Alert]);
+                             false -> ok
+                         end
+                 end, Alertees).
 
 internal_register(Pid, {M, F, A} = AlertMFA,
                   State = #alarms{alertees = Alertees}) ->
     _MRef = erlang:monitor(process, Pid),
-    _ = case dict:find(node(), State#alarms.alarmed_nodes) of
-        {ok, Sources} -> [apply(M, F, A ++ [Pid, R, {true, true, node()}]) || R <- Sources];
-        error          -> ok
+    Node = node(),
+    _ = case State#alarms.alarmed_nodes of
+        #{Node := Sources} ->
+            [apply(M, F, A ++ [Pid, R, {true, true, node()}]) || R <- Sources];
+        _ ->
+            ok
     end,
-    NewAlertees = dict:store(Pid, AlertMFA, Alertees),
-    State#alarms{alertees = NewAlertees}.
+    State#alarms{alertees = Alertees#{Pid => AlertMFA}}.
 
 handle_set_resource_alarm(Source, Node, State) ->
     ?LOG_WARNING(
@@ -334,8 +331,8 @@ handle_set_resource_alarm(Source, Node, State) ->
       "**********************************************************~n"
       "*** Publishers will be blocked until this alarm clears ***~n"
       "**********************************************************~n",
-      [Source, Node]),
-    {ok, maybe_alert(fun dict_append/3, Node, Source, true, State)}.
+      [format_resource_alarm_source(Source), Node]),
+    {ok, maybe_alert(fun map_append/3, Node, Source, true, State)}.
 
 handle_set_alarm({file_descriptor_limit, []}, State) ->
     ?LOG_WARNING(
@@ -350,8 +347,8 @@ handle_set_alarm(Alarm, State) ->
 
 handle_clear_resource_alarm(Source, Node, State) ->
     ?LOG_WARNING("~ts resource limit alarm cleared on node ~tp",
-                 [Source, Node]),
-    {ok, maybe_alert(fun dict_unappend/3, Node, Source, false, State)}.
+                 [format_resource_alarm_source(Source), Node]),
+    {ok, maybe_alert(fun map_unappend/3, Node, Source, false, State)}.
 
 handle_clear_alarm(file_descriptor_limit, State) ->
     ?LOG_WARNING("file descriptor limit alarm cleared~n"),
@@ -361,14 +358,14 @@ handle_clear_alarm(Alarm, State) ->
     {ok, State}.
 
 is_node_alarmed(Source, Node, #alarms{alarmed_nodes = AN}) ->
-    case dict:find(Node, AN) of
-        {ok, Sources} ->
+    case AN of
+        #{Node := Sources} ->
             lists:member(Source, Sources);
-        error ->
+        _ ->
             false
     end.
 
 compute_alarms(#alarms{alarms = Alarms,
                    alarmed_nodes = AN}) ->
     Alarms ++ [ {{resource_limit, Source, Node}, []}
-                || {Node, Sources} <- dict:to_list(AN), Source <- Sources ].
+                || Node := Sources <- AN, Source <- Sources ].
