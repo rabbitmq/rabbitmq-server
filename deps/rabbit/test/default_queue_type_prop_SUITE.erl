@@ -15,6 +15,9 @@
 -compile(nowarn_export_all).
 -compile(export_all).
 
+suite() ->
+    [{timetrap, {minutes, 1}}].
+
 all() ->
     [
      prop_inject_dqt_output_invariants,
