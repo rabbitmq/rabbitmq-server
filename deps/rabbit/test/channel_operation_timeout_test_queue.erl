@@ -20,6 +20,10 @@
          set_queue_version/2,
          start/2, stop/1, zip_msgs_and_acks/4, handle_info/2]).
 
+%% For v3.13.x compatibility.
+-export([publish/6, publish_delivered/5,
+         ram_duration/1, set_ram_duration_target/2]).
+
 %%----------------------------------------------------------------------------
 %% This test backing queue follows the variable queue implementation, with
 %% the exception that it will introduce infinite delays on some operations if
@@ -223,11 +227,30 @@ purge(State) ->
 purge_acks(State) ->
     rabbit_variable_queue:purge_acks(State).
 
+%% For v3.13.x, argument was removed along with CMQs.
+publish(Msg, MsgProps, IsDelivered, ChPid, _Flow, State) ->
+    publish(Msg, MsgProps, IsDelivered, ChPid, State).
+
 publish(Msg, MsgProps, IsDelivered, ChPid, State) ->
-    rabbit_variable_queue:publish(Msg, MsgProps, IsDelivered, ChPid, State).
+    case erlang:function_exported(rabbit_variable_queue, publish, 6) of
+        true ->
+            rabbit_variable_queue:publish(Msg, MsgProps, IsDelivered, ChPid, flow, State);
+        false ->
+            rabbit_variable_queue:publish(Msg, MsgProps, IsDelivered, ChPid, State)
+    end.
+
+%% For v3.13.x, argument was removed along with CMQs.
+publish_delivered(Msg, MsgProps, ChPid, _Flow, State) ->
+    publish_delivered(Msg, MsgProps, ChPid, State).
 
 publish_delivered(Msg, MsgProps, ChPid, State) ->
-    rabbit_variable_queue:publish_delivered(Msg, MsgProps, ChPid, State).
+    case erlang:function_exported(rabbit_variable_queue, publish_delivered, 5) of
+        true ->
+            rabbit_variable_queue:publish_delivered(Msg, MsgProps, ChPid, flow, State);
+        false ->
+            rabbit_variable_queue:publish_delivered(Msg, MsgProps, ChPid, State)
+    end.
+
 
 discard(_MsgId, _ChPid, State) -> State.
 
@@ -313,6 +336,14 @@ set_queue_version(Version, State) ->
 
 zip_msgs_and_acks(Msgs, AckTags, Accumulator, State) ->
     rabbit_variable_queue:zip_msgs_and_acks(Msgs, AckTags, Accumulator, State).
+
+%% For v3.13.x compatibility, function was removed.
+ram_duration(State) ->
+    {infinity, State}.
+
+%% For v3.13.x compatibility, function was removed.
+set_ram_duration_target(_, State) ->
+    State.
 
 %% Delay
 maybe_delay(QPA) ->
