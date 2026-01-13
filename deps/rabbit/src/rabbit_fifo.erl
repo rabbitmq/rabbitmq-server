@@ -741,25 +741,87 @@ update_next_consumer_timeout(#?STATE{consumers = Cons} = State, Effects) ->
      [{timer, evaluate_consumer_timeout, Next, {abs, true}} | Effects]}.
 
 
--spec live_indexes(state()) -> [ra:index()].
+-spec live_indexes(state()) -> {ra_seq, ra_seq:state()}.
 live_indexes(#?STATE{cfg = #cfg{},
                      returns = Returns,
                      messages = Messages,
                      consumers = Consumers,
-                     dlx = #?DLX{discards = Discards}}) ->
-    MsgsIdxs = rabbit_fifo_pq:indexes(Messages),
-    DlxIndexes = lqueue:fold(fun (?TUPLE(_, Msg), Acc) ->
-                                     I = get_msg_idx(Msg),
-                                     [I | Acc]
-                             end, MsgsIdxs, Discards),
-    RtnIndexes = lqueue:fold(fun(Msg, Acc) -> [get_msg_idx(Msg) | Acc] end,
-                             DlxIndexes, Returns),
-    maps:fold(fun (_Cid, #consumer{checked_out = Ch}, Acc0) ->
-                      maps:fold(
-                        fun (_MsgId, ?C_MSG(Msg), Acc) ->
-                                [get_msg_idx(Msg) | Acc]
-                        end, Acc0, Ch)
-              end, RtnIndexes, Consumers).
+                     dlx = DLX}) ->
+    ExtraBuckets = prepare_extra_buckets(Returns, Consumers, DLX),
+    Seq = rabbit_fifo_pq:fold_by_index(fun build_ra_seq/2,
+                                       {[], undefined, undefined},
+                                       Messages,
+                                       ExtraBuckets),
+    {ra_seq, finalize_ra_seq(Seq)}.
+
+%% Prepare extra buckets for fold_by_index (keys > 31 to avoid priority
+%% collision)
+prepare_extra_buckets(Returns, Consumers, #?DLX{discards = Discards,
+                                                consumer = DlxConsumer}) ->
+    %% Bucket 32: returns (sorted by index)
+    B0 = case lqueue:len(Returns) of
+             0 -> #{};
+             _ -> #{32 => lqueue_to_sorted_queue(Returns)}
+         end,
+    %% Bucket 33: consumers checked_out (sorted by index)
+    B1 = case maps:size(Consumers) of
+             0 -> B0;
+             _ -> B0#{33 => consumers_to_sorted_queue(Consumers)}
+         end,
+    %% Bucket 34: dlx discards (sorted by index)
+    B2 = case lqueue:len(Discards) of
+             0 -> B1;
+             _ -> B1#{34 => dlx_discards_to_sorted_queue(Discards)}
+         end,
+    %% Bucket 35: dlx consumer checked_out (sorted by index)
+    case DlxConsumer of
+        undefined -> B2;
+        #dlx_consumer{checked_out = DlxCheckedOut}
+          when map_size(DlxCheckedOut) == 0 ->
+            B2;
+        #dlx_consumer{checked_out = DlxCheckedOut} ->
+            B2#{35 => dlx_consumer_to_sorted_queue(DlxCheckedOut)}
+    end.
+
+lqueue_to_sorted_queue(LQ) ->
+    Msgs = lqueue:to_list(LQ),
+    Sorted = lists:sort(fun(A, B) -> get_msg_idx(A) =< get_msg_idx(B) end, Msgs),
+    {length(Sorted), [], Sorted}.
+
+consumers_to_sorted_queue(Consumers) ->
+    Msgs = maps:fold(
+             fun (_Cid, #consumer{checked_out = Ch}, Acc) ->
+                     maps:fold(fun (_MsgId, ?C_MSG(Msg), A) -> [Msg | A] end, Acc, Ch)
+             end, [], Consumers),
+    Sorted = lists:sort(fun(A, B) -> get_msg_idx(A) =< get_msg_idx(B) end, Msgs),
+    {length(Sorted), [], Sorted}.
+
+dlx_discards_to_sorted_queue(Discards) ->
+    Msgs = lqueue:fold(fun (?TUPLE(_, Msg), Acc) -> [Msg | Acc] end, [], Discards),
+    Sorted = lists:sort(fun(A, B) -> get_msg_idx(A) =< get_msg_idx(B) end, Msgs),
+    {length(Sorted), [], Sorted}.
+
+dlx_consumer_to_sorted_queue(DlxCheckedOut) ->
+    Msgs = maps:fold(fun (_MsgId, ?TUPLE(_, Msg), Acc) -> [Msg | Acc] end, [], DlxCheckedOut),
+    Sorted = lists:sort(fun(A, B) -> get_msg_idx(A) =< get_msg_idx(B) end, Msgs),
+    {length(Sorted), [], Sorted}.
+
+%% Build ra_seq with Start/End as separate tuple elements to avoid allocations
+build_ra_seq(Idx, {SeqAcc, undefined, undefined}) ->
+    {SeqAcc, Idx, Idx};
+build_ra_seq(Idx, {SeqAcc, Start, End}) when Idx == End + 1 ->
+    {SeqAcc, Start, Idx};
+build_ra_seq(Idx, {SeqAcc, Start, End}) ->
+    {emit_range(Start, End, SeqAcc), Idx, Idx}.
+
+emit_range(S, S, Seq) -> [S | Seq];
+emit_range(S, E, Seq) when E == S + 1 -> [E, S | Seq];
+emit_range(S, E, Seq) -> [{S, E} | Seq].
+
+finalize_ra_seq({SeqAcc, undefined, undefined}) ->
+    SeqAcc;
+finalize_ra_seq({SeqAcc, Start, End}) ->
+    emit_range(Start, End, SeqAcc).
 
 -spec snapshot_installed(Meta, State, OldMeta, OldState) ->
     ra_machine:effects() when
@@ -1942,7 +2004,7 @@ complete(Meta, ConsumerKey, MsgIds,
                         credit = increase_credit(Con0, Len)},
     State1 = update_or_remove_con(Meta, ConsumerKey, Con, State0),
     {State1#?STATE{msg_bytes_checkout = BytesCheckout - SettledSize,
-                   discarded_bytes = DiscBytes + SettledSize + (Len *?ENQ_OVERHEAD_B),
+                   discarded_bytes = DiscBytes + SettledSize + (Len * ?ENQ_OVERHEAD_B),
                    messages_total = Tot - Len},
      Effects}.
 
@@ -3389,7 +3451,7 @@ dlx_apply(_Meta, {dlx, {settle, MsgIds}}, at_least_once,
                   Hdr = get_msg_header(Msg),
                   Indexes = rabbit_fifo_index:delete(Idx, Indexes0),
                   Size = get_header(size, Hdr),
-                  {Sz + Size + ?ENQ_OVERHEAD_B, 
+                  {Sz + Size + ?ENQ_OVERHEAD_B,
                    S#?DLX{consumer = C#dlx_consumer{checked_out =
                                                     maps:remove(MsgId, Checked)},
                           msg_bytes_checkout = BytesCheckout - Size,

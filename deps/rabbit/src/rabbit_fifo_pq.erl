@@ -23,7 +23,8 @@
          overview/1,
          take_while/2,
          any_priority_next/2,
-         fold_priorities_next/3
+         fold_priorities_next/3,
+         fold_by_index/4
         ]).
 
 -define(STATE, pq).
@@ -262,6 +263,93 @@ first_set_bit(0) ->
     32;
 first_set_bit(Bitmap) ->
     count_trailing(Bitmap band -Bitmap).
+
+%% @doc Fold over all indexes in ascending order, merging priority queue buckets
+%% with extra buckets (e.g., returns, consumers, dlx). Extra bucket keys should
+%% be > 31 to avoid collision with priority buckets.
+-spec fold_by_index(Fun, Acc0, state(), ExtraBuckets) -> Acc
+    when Fun :: fun((ra:index(), Acc) -> Acc),
+         Acc0 :: Acc,
+         ExtraBuckets :: #{pos_integer() => queue()},
+         Acc :: term().
+fold_by_index(Fun, Acc0, #?STATE{buckets = PQBuckets}, ExtraBuckets) ->
+    AllBuckets = maps:merge(PQBuckets, ExtraBuckets),
+    Iterators = buckets_to_iterators(AllBuckets),
+    case Iterators of
+        [] ->
+            Acc0;
+        [{Idx, {Out, In}}] ->
+            %% Single bucket - skip k-way merge, process directly
+            process_single_bucket(Fun, Fun(Idx, Acc0), Out, In);
+        _ ->
+            %% Multiple buckets - use k-way merge
+            {FirstIdx, FirstData, OtherIterators} =
+                find_min_iterator(Iterators),
+            NewIterators = advance_iterator(FirstData, OtherIterators),
+            fold_by_index_loop(Fun, Fun(FirstIdx, Acc0), NewIterators)
+    end.
+
+%% Iterator stores {Index, {RestOut, In}} - avoids Out ++ lists:reverse(In)
+buckets_to_iterators(Buckets) ->
+    maps:fold(
+      fun (_Key, Q, IterAcc) ->
+              case queue_to_iterator(Q) of
+                  empty ->
+                      IterAcc;
+                  {Idx, Data} ->
+                      [{Idx, Data} | IterAcc]
+              end
+      end, [], Buckets).
+
+queue_to_iterator(?EMPTY) ->
+    empty;
+queue_to_iterator({_, [], []}) ->
+    empty;
+queue_to_iterator({_, In, []}) ->
+    [First | Rest] = lists:reverse(In),
+    {msg_idx(First), {Rest, []}};
+queue_to_iterator({_, In, [First | Rest]}) ->
+    {msg_idx(First), {Rest, In}}.
+
+advance_iterator({[], []}, OtherIterators) ->
+    OtherIterators;
+advance_iterator({[], In}, OtherIterators) ->
+    [Next | Rest] = lists:reverse(In),
+    [{msg_idx(Next), {Rest, []}} | OtherIterators];
+advance_iterator({[Next | Rest], In}, OtherIterators) ->
+    [{msg_idx(Next), {Rest, In}} | OtherIterators].
+
+find_min_iterator([First | Rest]) ->
+    find_min_iterator(Rest, First, []).
+
+find_min_iterator([], {MinIdx, MinData}, Others) ->
+    {MinIdx, MinData, Others};
+find_min_iterator([{Idx, _} = Current | Tail], {MinIdx, _} = Min, Others) ->
+    if
+        Idx < MinIdx ->
+            find_min_iterator(Tail, Current, [Min | Others]);
+        true ->
+            find_min_iterator(Tail, Min, [Current | Others])
+    end.
+
+fold_by_index_loop(_Fun, Acc, []) ->
+    Acc;
+%% Single-bucket fast path during merge
+fold_by_index_loop(Fun, Acc, [{Idx, {RestOut, In}}]) ->
+    process_single_bucket(Fun, Fun(Idx, Acc), RestOut, In);
+fold_by_index_loop(Fun, Acc, Iterators) ->
+    {MinIdx, MinData, OtherIterators} = find_min_iterator(Iterators),
+    NewIterators = advance_iterator(MinData, OtherIterators),
+    fold_by_index_loop(Fun, Fun(MinIdx, Acc), NewIterators).
+
+%% Process Out first (foldl), then In (foldr - no reverse needed)
+process_single_bucket(_Fun, Acc, [], []) ->
+    Acc;
+process_single_bucket(Fun, Acc, [], In) ->
+    %% foldr processes right-to-left, giving correct order without reverse
+    lists:foldr(fun(Msg, A) -> Fun(msg_idx(Msg), A) end, Acc, In);
+process_single_bucket(Fun, Acc, [Msg | Rest], In) ->
+    process_single_bucket(Fun, Fun(msg_idx(Msg), Acc), Rest, In).
 
 -define(DEBRUIJN_SEQ, 16#077CB531).
 -define(DEBRUIJN_LOOKUP,
