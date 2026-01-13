@@ -348,6 +348,9 @@ update_in_khepri(XName, Fun) ->
                 {error, _} = Error ->
                     Error
             end;
+        {ok, #{Path := #{}}} ->
+            %% The node exists but has no data, e.g. due to a concurrent deletion.
+            ok;
         {error, {khepri, node_not_found, _}} ->
             ok;
         {error, _} = Error ->
