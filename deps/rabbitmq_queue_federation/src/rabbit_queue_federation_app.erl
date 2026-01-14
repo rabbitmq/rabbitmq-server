@@ -12,7 +12,7 @@
 -include("rabbit_queue_federation.hrl").
 
 -behaviour(application).
--export([start/2, stop/1]).
+-export([start/2, prep_stop/1, stop/1]).
 
 %% Dummy supervisor - see Ulf Wiger's comment at
 %% http://erlang.org/pipermail/erlang-questions/2010-April/050508.html
@@ -35,6 +35,10 @@ start(_Type, _StartArgs) ->
                {rabbitmq_queue_federation,
                 #{link_module => rabbit_federation_queue_link_sup_sup}}),
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
+
+prep_stop(State) ->
+    rabbit_federation_app_state:mark_as_shutting_down(),
+    State.
 
 stop(_State) ->
     ets:delete(?FEDERATION_ETS, rabbitmq_queue_federation),
