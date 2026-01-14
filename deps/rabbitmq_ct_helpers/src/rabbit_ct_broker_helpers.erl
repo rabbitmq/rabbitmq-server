@@ -883,7 +883,7 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
 
     NodeDir = filename:join(PrivDir, atom_to_list(InitialNodename)),
             [Nodename1, HostName1] = string:split(atom_to_list(Nodename), "@"),
-    PeerEnv = [
+    PeerEnv0 = [
         {"RABBITMQ_NODENAME", atom_to_list(Nodename)},
         {"RABBITMQ_BASE", NodeDir},
         {"RABBITMQ_LOG_BASE", filename:join(NodeDir, "log")},
@@ -894,35 +894,44 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
         %% RABBITMQ_KEEP_PID_FILE_ON_EXIT
         {"RABBITMQ_DIST_PORT", integer_to_list(DistPort)},
         {"RABBITMQ_CONFIG_FILE", ConfigFile},
-        {"RABBITMQ_LOG", "debug"},
-        {"RABBITMQ_ENABLED_PLUGINS", "ALL"}
+        {"RABBITMQ_LOG", "debug"}
     ],
     %% @todo ExtraArgs.
+    PeerEnv = case StartWithPluginsDisabled of
+                     true ->
+                        PeerEnv0;
+                     _ ->
+                        [{"RABBITMQ_ENABLED_PLUGINS", "ALL"}|PeerEnv0]
+                 end,
+
 
 
     case rabbit_ct_helpers:get_config(Config, rabbitmq_run_cmd) of
         undefined ->
             case peer:start(#{
                     name => Nodename1,
-                    longnames => true,
+                    longnames => false, %true,
                     host => HostName1,
                     connection => standard_io,
                     exec => os:find_executable(erl),
                     args => PeerArgs,
                     env => PeerEnv}) of
-                {ok, Pid, Nodename} ->
-                    ok = peer:call(Pid, file, set_cwd, [SrcDir]),
+                {ok, PeerPid, Nodename} ->
+                    ok = peer:call(PeerPid, file, set_cwd, [SrcDir]),
 %error(peer:call(Pid, init, get_arguments, [])),
 %                    error(peer:call(Pid, application, get_all_env, [syslog])),
 %                    error(peer:call(Pid, application, get_all_env, [kernel])),
                     %% @todo Figure out why it doesn't work in args.
 %                    _ = peer:call(Pid, net_kernel, set_net_ticktime, [5]),
-                    ok = peer:call(Pid, rabbit, boot, []),
+                    ok = peer:call(PeerPid, rabbit, boot, []),
 %                    error(peer:call(Pid, application, get_all_env, [rabbitmq_prometheus])),
 %                    error(peer:call(Pid, os, cmd, ["pwd"])),
+%                    dbg:tracer(process, {fun(Msg,_) -> ct:pal("TRACE ~p", [Msg]) end, undefined}),
+%                    dbg:p(PeerPid, [m, p]),
+                    store_peer_pid(Nodename, PeerPid),
                     NodeConfig1 = rabbit_ct_helpers:set_config(
                                     NodeConfig,
-                                    [{peer_pid, Pid},
+                                    [
                                      {use_secondary_umbrella, UseSecondaryUmbrella orelse UseSecondaryDist}
                                     ]),
                     query_node(Config, NodeConfig1);
@@ -1416,7 +1425,9 @@ stop_rabbitmq_nodes(Config) ->
 stop_rabbitmq_node(_Config, NodeConfig) ->
     Nodename = ?config(nodename, NodeConfig),
     cover_remove_node(Nodename),
-    PeerPid = ?config(peer_pid, NodeConfig),
+    %% @todo This needs to be independent of restarts. How? Otherwise the peer_pid is wrong on restart_node/1.
+    PeerPid = query_peer_pid(Nodename),
+    peer:call(PeerPid, rabbit, stop, []),
     peer:stop(PeerPid),
 %    SrcDir = ?config(effective_srcdir, NodeConfig),
 %    InitialMakeVars = ?config(make_vars_for_node_startup, NodeConfig),
@@ -1433,6 +1444,12 @@ stop_rabbitmq_node(_Config, NodeConfig) ->
 %            rabbit_ct_helpers:exec([RunCmd | Cmd])
 %    end,
     NodeConfig.
+
+store_peer_pid(Nodename, PeerPid) ->
+    persistent_term:put({peer_pid, Nodename}, PeerPid).
+
+query_peer_pid(Nodename) ->
+    persistent_term:get({peer_pid, Nodename}).
 
 find_crashes_in_logs(NodeConfigs, IgnoredCrashes) ->
     ct:log(
