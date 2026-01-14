@@ -64,7 +64,16 @@ list_routing_keys(XN) -> call(XN, list_routing_keys).
 start_link(Args) ->
     gen_server2:start_link(?MODULE, Args, [{timeout, infinity}]).
 
-init({Upstream, XName}) ->
+init(Args) ->
+    case rabbit_federation_app_state:is_shutting_down() of
+        true  ->
+            ?LOG_DEBUG("Exchange federation link: voluntarily stopping, the node (or plugin) is stopping"),
+            ignore;
+        false ->
+            init_link(Args)
+    end.
+
+init_link({Upstream, XName}) ->
     logger:set_process_metadata(#{domain => ?RMQLOG_DOMAIN_FEDERATION,
                                   exchange => XName}),
     %% If we are starting up due to a policy change then it's possible
@@ -298,14 +307,20 @@ record_binding(B = #binding{destination = Dest},
                   end,
     {DoIt, State#state{bindings = maps:put(key(B), Set, Bs)}}.
 
+-spec forget_binding(#binding{}, #state{}) -> {boolean(), #state{}}.
 forget_binding(B = #binding{destination = Dest},
                State = #state{bindings = Bs}) ->
-    Dests = sets:del_element(Dest, maps:get(key(B), Bs)),
-    {DoIt, Bs1} = case sets:size(Dests) of
-                      0 -> {true,  maps:remove(key(B), Bs)};
-                      _ -> {false, maps:put(key(B), Dests, Bs)}
-                  end,
-    {DoIt, State#state{bindings = Bs1}}.
+    case maps:find(key(B), Bs) of
+        {ok, Dests0} ->
+            Dests = sets:del_element(Dest, Dests0),
+            {DoIt, Bs1} = case sets:size(Dests) of
+                              0 -> {true,  maps:remove(key(B), Bs)};
+                              _ -> {false, maps:put(key(B), Dests, Bs)}
+                          end,
+            {DoIt, State#state{bindings = Bs1}};
+        error ->
+            {false, State}
+    end.
 
 binding_op(UpdateFun, Cmd, B = #binding{args = Args},
            State = #state{cmd_channel = Ch}) ->
