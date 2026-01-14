@@ -923,7 +923,7 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
 %                    error(peer:call(Pid, application, get_all_env, [kernel])),
                     %% @todo Figure out why it doesn't work in args.
 %                    _ = peer:call(Pid, net_kernel, set_net_ticktime, [5]),
-                    ok = peer:call(PeerPid, rabbit, boot, []),
+                    ok = peer:call(PeerPid, rabbit, boot, [], 30_000),
 %                    error(peer:call(Pid, application, get_all_env, [rabbitmq_prometheus])),
 %                    error(peer:call(Pid, os, cmd, ["pwd"])),
 %                    dbg:tracer(process, {fun(Msg,_) -> ct:pal("TRACE ~p", [Msg]) end, undefined}),
