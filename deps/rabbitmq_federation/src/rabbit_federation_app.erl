@@ -10,7 +10,7 @@
 -include_lib("rabbitmq_federation/include/logging.hrl").
 
 -behaviour(application).
--export([start/2, stop/1]).
+-export([start/2, prep_stop/1, stop/1]).
 
 %% Dummy supervisor - see Ulf Wiger's comment at
 %% http://erlang.org/pipermail/erlang-questions/2010-April/050508.html
@@ -30,6 +30,10 @@
 
 start(_Type, _StartArgs) ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
+
+prep_stop(State) ->
+    rabbit_federation_app_state:mark_as_shutting_down(),
+    State.
 
 stop(_State) ->
     rabbit_federation_pg:stop_scope(),

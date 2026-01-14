@@ -52,7 +52,16 @@ q(QName) ->
 
 %%----------------------------------------------------------------------------
 
-init({Upstream, Queue}) when ?is_amqqueue(Queue) ->
+init(Args) ->
+    case rabbit_federation_app_state:is_shutting_down() of
+        true  ->
+            ?LOG_DEBUG("Queue federation link: voluntarily stopping, the node (or plugin) is stopping"),
+            ignore;
+        false ->
+            init_link(Args)
+    end.
+
+init_link({Upstream, Queue}) when ?is_amqqueue(Queue) ->
     QName = amqqueue:get_name(Queue),
     logger:set_process_metadata(#{domain => ?RMQLOG_DOMAIN_FEDERATION,
                                   queue => QName}),

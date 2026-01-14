@@ -17,7 +17,10 @@ all() -> [
     obfuscate_upstream,
     obfuscate_upstream_params_network,
     obfuscate_upstream_params_network_with_char_list_password_value,
-    obfuscate_upstream_params_direct
+    obfuscate_upstream_params_direct,
+    shutdown_flag_defaults_to_false,
+    shutdown_flag_can_be_set,
+    shutdown_flag_can_be_cleared
 ].
 
 init_per_suite(Config) ->
@@ -62,4 +65,24 @@ obfuscate_upstream_params_network_with_char_list_password_value(_Config) ->
     },
     ObfuscatedUpstreamParams = rabbit_federation_util:obfuscate_upstream_params(UpstreamParams),
     ?assertEqual(UpstreamParams, rabbit_federation_util:deobfuscate_upstream_params(ObfuscatedUpstreamParams)),
+    ok.
+
+shutdown_flag_defaults_to_false(_Config) ->
+    rabbit_federation_app_state:reset_shutting_down_marker(),
+    ?assertEqual(false, rabbit_federation_app_state:is_shutting_down()),
+    ok.
+
+shutdown_flag_can_be_set(_Config) ->
+    rabbit_federation_app_state:reset_shutting_down_marker(),
+    ?assertEqual(false, rabbit_federation_app_state:is_shutting_down()),
+    rabbit_federation_app_state:mark_as_shutting_down(),
+    ?assertEqual(true, rabbit_federation_app_state:is_shutting_down()),
+    ok.
+
+shutdown_flag_can_be_cleared(_Config) ->
+    rabbit_federation_app_state:reset_shutting_down_marker(),
+    rabbit_federation_app_state:mark_as_shutting_down(),
+    ?assertEqual(true, rabbit_federation_app_state:is_shutting_down()),
+    rabbit_federation_app_state:reset_shutting_down_marker(),
+    ?assertEqual(false, rabbit_federation_app_state:is_shutting_down()),
     ok.
