@@ -39,10 +39,7 @@ The GNU Make 4-based build system is described in `CONTRIBUTING.md`.
  * `deps/rabbitmq_ct_client_helpers`: Common Test helpers for managing connections, channels
  * `deps/rabbitmq_ct_helpers`: Common Test helpers used by RabbitMQ test suites
  * `deps/rabbitmq_event_exchange`: exposes internal events to AMQP 0-9-1 clients
- * `deps/rabbitmq_exchange_federation`: exchange federation
- * `deps/rabbitmq_queue_federation`: queue federation
- * `deps/rabbitmq_federation`: a no-op plugin that depends on `rabbitmq_queue_federation` and `rabbitmq_exchange_federation`
- * `deps/rabbitmq_federation_common`: a common library used by federation plugins
+ * `deps/rabbitmq_federation`: queue and exchange federation (both in a single plugin before `4.2.0`)
  * `deps/rabbitmq_federation_management`: management UI extension for federation
  * `deps/rabbitmq_federation_prometheus`: Prometheus metrics for federation
  * `deps/rabbitmq_jms_topic_exchange`: JMS topic exchange (`x-jms-topic`) with SQL selection rules
