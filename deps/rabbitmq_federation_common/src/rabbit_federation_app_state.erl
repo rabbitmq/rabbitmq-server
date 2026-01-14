@@ -7,20 +7,24 @@
 
 %% Tracks transient application state for federation plugins.
 %% Used to prevent link restarts during node shutdown.
+%%
+%% Uses persistent_term for storage because prep_stop/1 is called by the
+%% application_controller, and application:set_env/3 would deadlock.
 -module(rabbit_federation_app_state).
 
 -export([is_shutting_down/0, mark_as_shutting_down/0, reset_shutting_down_marker/0]).
 
--define(APP, rabbitmq_federation_common).
+-define(KEY, {?MODULE, shutting_down}).
 
 -spec is_shutting_down() -> boolean().
 is_shutting_down() ->
-    application:get_env(?APP, shutting_down, false).
+    persistent_term:get(?KEY, false).
 
 -spec mark_as_shutting_down() -> ok.
 mark_as_shutting_down() ->
-    application:set_env(?APP, shutting_down, true).
+    persistent_term:put(?KEY, true).
 
 -spec reset_shutting_down_marker() -> ok.
 reset_shutting_down_marker() ->
-    application:unset_env(?APP, shutting_down).
+    _ = persistent_term:erase(?KEY),
+    ok.

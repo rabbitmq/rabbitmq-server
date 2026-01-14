@@ -68,16 +68,16 @@ obfuscate_upstream_params_network_with_char_list_password_value(_Config) ->
     ok.
 
 shutdown_flag_defaults_to_false(_Config) ->
-    application:unset_env(rabbitmq_federation_common, shutting_down),
+    ok = rabbit_federation_app_state:reset_shutting_down_marker(),
     ?assertEqual(false, rabbit_federation_app_state:is_shutting_down()),
     ok.
 
 shutdown_flag_can_be_set(_Config) ->
-    application:unset_env(rabbitmq_federation_common, shutting_down),
+    ok = rabbit_federation_app_state:reset_shutting_down_marker(),
     ?assertEqual(false, rabbit_federation_app_state:is_shutting_down()),
     ok = rabbit_federation_app_state:mark_as_shutting_down(),
     ?assertEqual(true, rabbit_federation_app_state:is_shutting_down()),
-    application:unset_env(rabbitmq_federation_common, shutting_down),
+    ok = rabbit_federation_app_state:reset_shutting_down_marker(),
     ok.
 
 shutdown_flag_can_be_cleared(_Config) ->
