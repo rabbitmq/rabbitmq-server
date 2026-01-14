@@ -34,7 +34,15 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
-init_per_group(Group, Config0) ->
+init_per_group(Group, Config) ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            {skip, "these tests don't use a cluster"};
+        _ ->
+            init_per_group1(Group, Config)
+    end.
+
+init_per_group1(Group, Config0) ->
     PrivDir0 = ?config(priv_dir, Config0),
     PrivDir = filename:join(PrivDir0, ?UNICODE_STRING),
     ok = file:make_dir(PrivDir),

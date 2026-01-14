@@ -33,6 +33,14 @@ groups() ->
 %% -------------------------------------------------------------------
 
 init_per_suite(Config) ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            {skip, "these tests don't use a cluster"};
+        _ ->
+            init_per_suite1(Config)
+    end.
+
+init_per_suite1(Config) ->
     rabbit_ct_helpers:log_environment(),
     Config1 = rabbit_ct_helpers:set_config(Config, [
                                                     {rmq_nodename_suffix, ?MODULE}

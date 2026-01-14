@@ -29,25 +29,19 @@ all() ->
 %% -------------------------------------------------------------------
 
 init_per_suite(Config) ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            {skip, "these tests don't use a cluster"};
+        _ ->
+            init_per_suite1(Config)
+    end.
+
+init_per_suite1(Config) ->
     rabbit_ct_helpers:log_environment(),
     rabbit_ct_helpers:run_setup_steps(Config).
 
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
-
-init_per_group(Group, Config) ->
-    Config1 = rabbit_ct_helpers:set_config(Config, [
-        {rmq_nodename_suffix, Group},
-        {rmq_nodes_count, 1}
-    ]),
-    rabbit_ct_helpers:run_steps(Config1,
-        rabbit_ct_broker_helpers:setup_steps() ++
-        rabbit_ct_client_helpers:setup_steps()).
-
-end_per_group(_Group, Config) ->
-    rabbit_ct_helpers:run_steps(Config,
-        rabbit_ct_client_helpers:teardown_steps() ++
-        rabbit_ct_broker_helpers:teardown_steps()).
 
 init_per_testcase(Testcase, Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, [
