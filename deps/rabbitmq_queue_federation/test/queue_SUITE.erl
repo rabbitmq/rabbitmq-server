@@ -146,6 +146,9 @@ end_per_group(_, Config) ->
       rabbit_ct_client_helpers:teardown_steps() ++
       rabbit_ct_broker_helpers:teardown_steps()).
 
+init_per_testcase(dynamic_plugin_stop_start = Testcase, Config) ->
+    ct:timetrap({seconds, 90}),
+    rabbit_ct_helpers:testcase_started(Config, Testcase);
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
