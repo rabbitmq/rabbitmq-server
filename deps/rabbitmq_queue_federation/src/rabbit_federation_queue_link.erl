@@ -56,6 +56,7 @@ q(QName) ->
 init({Upstream, Queue}) when ?is_amqqueue(Queue) ->
     case rabbit_federation_app_state:is_shutting_down() of
         true ->
+            ?LOG_DEBUG("Queue federation link: voluntarily stopping, the node (or plugin) is stopping"),
             ignore;
         false ->
             init_link({Upstream, Queue})

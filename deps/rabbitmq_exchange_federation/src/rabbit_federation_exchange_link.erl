@@ -68,6 +68,7 @@ start_link(Args) ->
 init({Upstream, XName}) ->
     case rabbit_federation_app_state:is_shutting_down() of
         true ->
+            ?LOG_DEBUG("Exchange federation link: voluntarily stopping, the node (or plugin) is stopping"),
             ignore;
         false ->
             init_link({Upstream, XName})
