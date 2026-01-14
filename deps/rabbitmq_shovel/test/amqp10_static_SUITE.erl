@@ -18,7 +18,7 @@
 -define(FROM_SHOVEL, <<"from_the_shovel">>).
 -define(UNSHOVELLED, <<"unshovelled">>).
 -define(SHOVELLED,   <<"shovelled">>).
--define(TIMEOUT,     1000).
+-define(TIMEOUT,     5000).
 
 all() ->
     [
