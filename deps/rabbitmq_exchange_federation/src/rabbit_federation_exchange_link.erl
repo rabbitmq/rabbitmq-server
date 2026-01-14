@@ -66,6 +66,14 @@ start_link(Args) ->
     gen_server2:start_link(?MODULE, Args, [{timeout, infinity}]).
 
 init({Upstream, XName}) ->
+    case rabbit_federation_app_state:is_shutting_down() of
+        true ->
+            ignore;
+        false ->
+            init_link({Upstream, XName})
+    end.
+
+init_link({Upstream, XName}) ->
     logger:set_process_metadata(#{domain => ?RMQLOG_DOMAIN_FEDERATION,
                                   exchange => XName}),
     %% If we are starting up due to a policy change then it's possible

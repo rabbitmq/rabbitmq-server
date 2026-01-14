@@ -31,6 +31,7 @@ start_link() ->
     %% and other places, so we have to start it very early outside of the supervision tree.
     %% The scope is stopped in stop/1.
     _ = rabbit_federation_pg:start_scope(?FEDERATION_PG_SCOPE),
+    rabbit_federation_app_state:reset_shutting_down_marker(),
     mirrored_supervisor:start_link({local, ?SUPERVISOR}, ?SUPERVISOR,
                                    ?MODULE, []).
 
