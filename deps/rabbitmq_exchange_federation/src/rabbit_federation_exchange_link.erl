@@ -311,14 +311,20 @@ record_binding(B = #binding{destination = Dest},
                   end,
     {DoIt, State#state{bindings = maps:put(key(B), Set, Bs)}}.
 
+-spec forget_binding(rabbit_types:binding(), #state{}) -> {boolean(), #state{}}.
 forget_binding(B = #binding{destination = Dest},
                State = #state{bindings = Bs}) ->
-    Dests = sets:del_element(Dest, maps:get(key(B), Bs)),
-    {DoIt, Bs1} = case sets:size(Dests) of
-                      0 -> {true,  maps:remove(key(B), Bs)};
-                      _ -> {false, maps:put(key(B), Dests, Bs)}
-                  end,
-    {DoIt, State#state{bindings = Bs1}}.
+    case maps:find(key(B), Bs) of
+        error ->
+            {false, State};
+        {ok, Dests0} ->
+            Dests = sets:del_element(Dest, Dests0),
+            {DoIt, Bs1} = case sets:size(Dests) of
+                              0 -> {true,  maps:remove(key(B), Bs)};
+                              _ -> {false, maps:put(key(B), Dests, Bs)}
+                          end,
+            {DoIt, State#state{bindings = Bs1}}
+    end.
 
 binding_op(UpdateFun, Cmd, B = #binding{args = Args},
            State = #state{cmd_channel = Ch}) ->
