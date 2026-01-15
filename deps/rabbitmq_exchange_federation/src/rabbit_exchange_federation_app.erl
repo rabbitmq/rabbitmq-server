@@ -57,6 +57,7 @@ prep_stop(State) ->
     State.
 
 stop(_State) ->
+    ok = rabbit_exchange_federation_sup:stop(),
     ets:delete(?FEDERATION_ETS, rabbitmq_exchange_federation),
     rabbit_federation_pg:stop_scope(?FEDERATION_PG_SCOPE),
     ok.
