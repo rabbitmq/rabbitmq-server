@@ -26,7 +26,7 @@
 
 -rabbit_boot_step({rabbit_exchange_federation_supervisor,
                    [{description, "federation"},
-                    {mfa,         {rabbit_sup, start_child, [?MODULE]}},
+                    {mfa,         {rabbit_sup, start_supervisor_child, [?MODULE]}},
                     {requires,    [kernel_ready, rabbit_federation_supervisor]},
                     {cleanup,     {?MODULE, stop, []}},
                     {enables,     rabbit_federation_exchange}]}).
