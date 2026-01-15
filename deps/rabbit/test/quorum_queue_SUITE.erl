@@ -1316,14 +1316,20 @@ force_shrink_member_to_current_member(Config) ->
               Config, Server0, <<"/">>, QQ, 3),
 
             rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
-                                         force_shrink_member_to_current_member, [<<"/">>, QQ]),
+                                         force_shrink_member_to_current_member,
+                                         [<<"/">>, QQ]),
 
             wait_for_messages_ready([Server0], RaName, 3),
             queue_utils:assert_number_of_replicas(
               Config, Server0, <<"/">>, QQ, 1),
 
             %% grow queues back to all nodes
-            [rpc:call(Server0, rabbit_quorum_queue, grow, [S, <<"/">>, <<".*">>, all]) || S <- [Server1, Server2]],
+            [begin
+                 Res = rpc:call(Server0, rabbit_quorum_queue, grow,
+                                [S, <<"/">>, <<".*">>, all, voter]),
+                 ct:pal("Grow result ~p", [Res])
+             end
+             || S <- [Server1, Server2]],
             queue_utils:assert_number_of_replicas(
               Config, Server0, <<"/">>, QQ, 3)
     end.
@@ -1891,7 +1897,8 @@ grow_queue(Config) ->
     assert_grown_queues(QQs, Server0, TargetClusterSize_1, MsgCount),
 
     %% grow queues to node 'Server1': non_voter
-    rpc:call(Server0, rabbit_quorum_queue, grow, [Server1, <<"/">>, <<".*">>, all, non_voter]),
+    rpc:call(Server0, rabbit_quorum_queue, grow,
+             [Server1, <<"/">>, <<".*">>, all, non_voter]),
     assert_grown_queues(QQs, Server0, TargetClusterSize_2, MsgCount),
 
     %% grow queues to node 'Server2': fail, non_voters found
@@ -2073,7 +2080,8 @@ priority_queue_fifo(Config) ->
              MsgP1
          end || P <- lists:seq(0, 4)],
 
-    validate_queue(Ch, Queue, ExpectedHi ++ ExpectedLo),
+    Expected = lists:reverse(ExpectedLo ++ ExpectedHi),
+    validate_queue(Ch, Queue, Expected),
     ok.
 
 priority_queue_2_1_ratio(Config) ->
@@ -2103,7 +2111,7 @@ priority_queue_2_1_ratio(Config) ->
              %% high priority is > 4
          end || P <- lists:seq(5, 14)],
 
-    Expected = lists_interleave(ExpectedLo, ExpectedHi),
+    Expected = lists:reverse(ExpectedLo ++ ExpectedHi),
 
     validate_queue(Ch, Queue, Expected),
     ok.
