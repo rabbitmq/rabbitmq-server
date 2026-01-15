@@ -3316,8 +3316,9 @@ do_snapshot(MacVer, Ts, #snapshot{index = _ChIdx,
                      (MsgsTot * 32) +
                      (NumEnqueuers * 96) +
                      (NumConsumers * 256),
+    Limit = (ApproxSnapSize * 5),
 
-    EnoughDataRemoved = DiscardedBytes - LastDiscardedBytes > (ApproxSnapSize * 3),
+    EnoughDataRemoved = DiscardedBytes - LastDiscardedBytes > Limit,
 
     {CheckMinInterval, _CheckMinIndexes, _CheckMaxIndexes} =
         persistent_term:get(quorum_queue_checkpoint_config,
