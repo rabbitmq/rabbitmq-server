@@ -30,6 +30,7 @@
          create_or_get/1,
          set/1,
          delete/2,
+         delete_if/3,
          update/2,
          update_decorators/2,
          exists/1
@@ -384,9 +385,20 @@ list_for_count_in_khepri(VHostName) ->
              rabbit_khepri:timeout_error().
 
 delete(QueueName, Reason) ->
+    delete_if(QueueName, [], Reason).
+
+-spec delete_if(QName, Conditions, Reason) -> Ret when
+      QName :: rabbit_amqqueue:name(),
+      Conditions :: [khepri_condition:condition()],
+      Reason :: atom(),
+      Ret :: ok |
+      Deletions :: rabbit_binding:deletions() |
+      rabbit_khepri:timeout_error().
+
+delete_if(QueueName, Conditions, Reason) ->
     rabbit_khepri:handle_fallback(
       #{mnesia => fun() -> delete_in_mnesia(QueueName, Reason) end,
-        khepri => fun() -> delete_in_khepri(QueueName) end
+        khepri => fun() -> delete_in_khepri(QueueName, Conditions) end
        }).
 
 delete_in_mnesia(QueueName, Reason) ->
@@ -405,15 +417,32 @@ delete_in_mnesia(QueueName, Reason) ->
               end
       end).
 
-delete_in_khepri(QueueName) ->
-    delete_in_khepri(QueueName, false).
+delete_in_khepri(QueueName, Conditions) ->
+    delete_in_khepri(QueueName, Conditions, false).
 
-delete_in_khepri(QueueName, OnlyDurable) ->
+delete_in_khepri(QueueName, Conditions, OnlyDurable) ->
     rabbit_khepri:transaction(
       fun () ->
+<<<<<<< HEAD
               Path = khepri_queue_path(QueueName),
               case khepri_tx_adv:delete(Path) of
                   {ok, #{data := _}} ->
+=======
+              Path0 = khepri_queue_path(QueueName),
+              Path = khepri_path:combine_with_conditions(Path0, Conditions),
+              UsesUniformWriteRet = try
+                                        khepri_tx:does_api_comply_with(uniform_write_ret)
+                                    catch
+                                        error:undef ->
+                                            false
+                                    end,
+              case khepri_tx_adv:delete(Path) of
+                  {ok, #{Path0 := #{data := _}}} when UsesUniformWriteRet ->
+                      %% we want to execute some things, as decided by rabbit_exchange,
+                      %% after the transaction.
+                      rabbit_db_binding:delete_for_destination_in_khepri(QueueName, OnlyDurable);
+                  {ok, #{data := _}} when not UsesUniformWriteRet ->
+>>>>>>> 8588ceef8 (Check exclusive queue owner before deletion)
                       %% we want to execute some things, as decided by rabbit_exchange,
                       %% after the transaction.
                       rabbit_db_binding:delete_for_destination_in_khepri(QueueName, OnlyDurable);
@@ -438,7 +467,7 @@ internal_delete(QueueName, OnlyDurable, Reason) ->
     %% HA queues are removed it can be removed.
     rabbit_khepri:handle_fallback(
       #{mnesia => fun() -> internal_delete_in_mnesia(QueueName, OnlyDurable, Reason) end,
-        khepri => fun() -> delete_in_khepri(QueueName, OnlyDurable) end
+        khepri => fun() -> delete_in_khepri(QueueName, [], OnlyDurable) end
        }).
 
 internal_delete_in_mnesia(QueueName, OnlyDurable, Reason) ->

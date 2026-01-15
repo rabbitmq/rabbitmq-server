@@ -7,6 +7,7 @@
 
 -module(rabbit_db_queue_SUITE).
 
+-include_lib("khepri/include/khepri.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include("amqqueue.hrl").
@@ -42,6 +43,7 @@ all_tests() ->
      count_by_vhost,
      set,
      delete,
+     delete_exclusive_queue,
      update,
      update_decorators,
      exists,
@@ -321,6 +323,39 @@ delete1(_Config) ->
     ?assertEqual(rabbit_binding:new_deletions(), Deletions),
     ?assertEqual(ok, rabbit_db_queue:delete(QName, normal)),
     ?assertEqual({error, not_found}, rabbit_db_queue:get(QName)),
+    passed.
+
+delete_exclusive_queue(Config) ->
+    case rabbit_ct_broker_helpers:configured_metadata_store(Config) of
+        mnesia ->
+            {skip, "this validates a bugfix only implemented for Khperi"};
+        _ ->
+            passed = rabbit_ct_broker_helpers:rpc(
+                       Config, 0, ?MODULE, delete_exclusive_queue1, [Config])
+    end.
+
+delete_exclusive_queue1(_Config) ->
+    QName = rabbit_misc:r(?VHOST, queue, <<"test-exclusive-queue">>),
+    Owner = spawn_link(fun() -> receive stop -> ok end end),
+    NotOwner = spawn_link(fun() -> receive stop -> ok end end),
+    Q = new_exclusive_queue(QName, rabbit_classic_queue, Owner),
+    ?assertEqual(ok, rabbit_db_queue:set(Q)),
+    ?assertEqual({ok, Q}, rabbit_db_queue:get(QName)),
+    %% Delete with wrong owner should not delete the queue
+    NotOwnerPattern = amqqueue:pattern_match_on_exclusive_owner(NotOwner),
+    NotOwnerConditions = [#if_data_matches{pattern = NotOwnerPattern}],
+    ?assertEqual(ok, rabbit_db_queue:delete_if(QName, NotOwnerConditions, normal)),
+    ?assertEqual({ok, Q}, rabbit_db_queue:get(QName)),
+    %% Delete with correct owner should delete the queue
+    OwnerPattern = amqqueue:pattern_match_on_exclusive_owner(Owner),
+    OwnerConditions = [#if_data_matches{pattern = OwnerPattern}],
+    Deletions = rabbit_db_queue:delete_if(QName, OwnerConditions, normal),
+    ?assertEqual(rabbit_binding:new_deletions(), Deletions),
+    ?assertEqual({error, not_found}, rabbit_db_queue:get(QName)),
+    unlink(Owner),
+    unlink(NotOwner),
+    Owner ! stop,
+    NotOwner ! stop,
     passed.
 
 update(Config) ->
@@ -620,3 +655,6 @@ new_queue(QName, Type) ->
 
 new_queue(#resource{virtual_host = VHost} = QName, Type, Pid) ->
     amqqueue:new(QName, Pid, true, false, none, [], VHost, #{}, Type).
+
+new_exclusive_queue(#resource{virtual_host = VHost} = QName, Type, Owner) ->
+    amqqueue:new(QName, none, true, false, Owner, [], VHost, #{}, Type).
