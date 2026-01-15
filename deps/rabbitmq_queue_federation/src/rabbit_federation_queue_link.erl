@@ -17,7 +17,7 @@
 -behaviour(gen_server2).
 
 -export([start_link/1, go/0, run/1, pause/1]).
--export([all_local/0, disconnect_all/0]).
+-export([all_local/0, disconnect_all/0, reconnect_all/0]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -68,6 +68,17 @@ disconnect_all() ->
                          [length(Pids)])
     end,
     [gen_server2:cast(Pid, disconnect_for_shutdown) || Pid <- Pids],
+    ok.
+
+-spec reconnect_all() -> ok.
+reconnect_all() ->
+    Pids = all_local(),
+    case Pids of
+        [] -> ok;
+        _  -> ?LOG_DEBUG("Queue federation: reconnecting ~b local link(s)",
+                         [length(Pids)])
+    end,
+    [gen_server2:cast(Pid, reconnect) || Pid <- Pids],
     ok.
 
 %%----------------------------------------------------------------------------
@@ -148,6 +159,15 @@ handle_cast(disconnect_for_shutdown, State = #state{dconn = DConn, conn = Conn})
     {noreply, State#state{dconn = undefined, conn = undefined}};
 
 handle_cast(disconnect_for_shutdown, State = #not_started{}) ->
+    {noreply, State};
+
+handle_cast(reconnect, State = #not_started{}) ->
+    {noreply, State};
+
+handle_cast(reconnect, State = #state{conn = undefined}) ->
+    {stop, {shutdown, restart}, State};
+
+handle_cast(reconnect, State = #state{}) ->
     {noreply, State};
 
 handle_cast(Msg, State) ->

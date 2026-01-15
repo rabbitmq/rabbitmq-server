@@ -17,7 +17,7 @@
 
 -export([go/0, add_binding/3, remove_bindings/3]).
 -export([list_routing_keys/1]). %% For testing
--export([all_local/0, disconnect_all/0]).
+-export([all_local/0, disconnect_all/0, reconnect_all/0]).
 
 -export([start_link/1]).
 
@@ -159,6 +159,15 @@ handle_cast(disconnect_for_shutdown, State = #state{
                           connection = undefined}};
 
 handle_cast(disconnect_for_shutdown, State = {not_started, _}) ->
+    {noreply, State};
+
+handle_cast(reconnect, State = {not_started, _}) ->
+    {noreply, State};
+
+handle_cast(reconnect, State = #state{connection = undefined}) ->
+    {stop, {shutdown, restart}, State};
+
+handle_cast(reconnect, State = #state{}) ->
     {noreply, State};
 
 handle_cast(Msg, State) ->
@@ -326,6 +335,17 @@ disconnect_all() ->
                          [length(Pids)])
     end,
     [gen_server2:cast(Pid, disconnect_for_shutdown) || Pid <- Pids],
+    ok.
+
+-spec reconnect_all() -> ok.
+reconnect_all() ->
+    Pids = all_local(),
+    case Pids of
+        [] -> ok;
+        _  -> ?LOG_DEBUG("Exchange federation: reconnecting ~b local link(s)",
+                         [length(Pids)])
+    end,
+    [gen_server2:cast(Pid, reconnect) || Pid <- Pids],
     ok.
 
 %%----------------------------------------------------------------------------

@@ -22,7 +22,8 @@ all() ->
     [
       {group, essential},
       {group, cluster_size_3},
-      {group, rolling_upgrade}
+      {group, rolling_upgrade},
+      {group, maintenance_mode}
     ].
 
 groups() ->
@@ -35,7 +36,10 @@ groups() ->
                             ]},
      {channel_use_mod_single, [], [
                                    %% TBD: port from v3.10.x in an Erlang 25-compatible way
-                                  ]}
+                                  ]},
+     {maintenance_mode, [], [
+                             maintenance_mode_disconnect_reconnect
+                            ]}
     ].
 
 essential() ->
@@ -96,6 +100,19 @@ init_per_group(rolling_upgrade = Group, Config) ->
       {rmq_nodes_clustered, false}
     ]),
   init_per_group1(Group, Config1);
+init_per_group(maintenance_mode, Config) ->
+  Suffix = rabbit_ct_helpers:testcase_absname(Config, "", "-"),
+  Config1 = rabbit_ct_helpers:set_config(Config, [
+      {rmq_nodename_suffix, Suffix},
+      {rmq_nodes_count, 1},
+      %% When a node is put into maintenance mode, its connections are forcibly closed which causes
+      %% Erlang AMQP 0-9-1 client connection processes to terminate abruptly.
+      %% Ignore such crashes in the logs.
+      {ignored_crashes, ["socket_closed"]}
+    ]),
+  rabbit_ct_helpers:run_steps(Config1,
+    rabbit_ct_broker_helpers:setup_steps() ++
+    rabbit_ct_client_helpers:setup_steps());
 init_per_group(Group, Config) ->
   init_per_group1(Group, Config).
 
@@ -698,6 +715,83 @@ child_id_format(Config) ->
           end;
       false ->
           {skip, "Should only run in mixed version environments"}
+  end.
+
+maintenance_mode_disconnect_reconnect(Config) ->
+  LinkCount = 50,
+  Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+  Uri = rabbit_ct_broker_helpers:node_uri(Config, 0),
+
+  ct:pal("Setting up ~b federated exchanges", [LinkCount]),
+
+  Exchanges = [list_to_binary(io_lib:format("maintenance.fed.x.~b", [N]))
+               || N <- lists:seq(1, LinkCount)],
+  UpstreamExchanges = [list_to_binary(io_lib:format("maintenance.upstream.x.~b", [N]))
+                       || N <- lists:seq(1, LinkCount)],
+
+  lists:foreach(
+    fun({Idx, UpX}) ->
+        Name = list_to_binary(io_lib:format("upstream-~b", [Idx])),
+        rabbit_ct_broker_helpers:set_parameter(
+          Config, 0, <<"federation-upstream">>, Name,
+          [{<<"uri">>, Uri}, {<<"exchange">>, UpX}])
+    end,
+    lists:zip(lists:seq(1, LinkCount), UpstreamExchanges)),
+
+  rabbit_ct_broker_helpers:set_policy(
+    Config, 0,
+    <<"maintenance-fed-policy">>, <<"^maintenance\\.fed\\.x\\.">>, <<"exchanges">>,
+    [{<<"federation-upstream-pattern">>, <<"upstream-">>}]),
+
+  Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
+  [declare_exchange(Ch, exchange_declare_method(X)) || X <- Exchanges],
+
+  ct:pal("Waiting for ~b federation links to become running", [LinkCount]),
+  ok = await_federation_links_running(Config, Server, LinkCount, 60),
+
+  ct:pal("All ~b links are running, now draining the node", [LinkCount]),
+  ok = rabbit_ct_broker_helpers:drain_node(Config, Server),
+
+  ct:pal("Node drained, verifying links are not running"),
+  timer:sleep(500),
+  RunningAfterDrain = count_running_links(Config, Server),
+  ct:pal("Running links after drain: ~b", [RunningAfterDrain]),
+  ?assert(RunningAfterDrain < LinkCount),
+
+  ct:pal("Reviving the node"),
+  ok = rabbit_ct_broker_helpers:revive_node(Config, Server),
+
+  ct:pal("Node revived, waiting for links to reconnect"),
+  ok = await_federation_links_running(Config, Server, LinkCount, 60),
+
+  ct:pal("All ~b links are running again after revive", [LinkCount]),
+
+  rabbit_ct_client_helpers:close_channel(Ch),
+  clean_up_federation_related_bits(Config).
+
+await_federation_links_running(Config, Server, ExpectedCount, SecondsLeft) when SecondsLeft =< 0 ->
+  RunningCount = count_running_links(Config, Server),
+  ct:pal("Timeout waiting for federation links: expected ~b, got ~b running",
+         [ExpectedCount, RunningCount]),
+  {error, timeout};
+await_federation_links_running(Config, Server, ExpectedCount, SecondsLeft) ->
+  RunningCount = count_running_links(Config, Server),
+  case RunningCount >= ExpectedCount of
+    true ->
+      ok;
+    false ->
+      timer:sleep(1000),
+      await_federation_links_running(Config, Server, ExpectedCount, SecondsLeft - 1)
+  end.
+
+count_running_links(Config, Server) ->
+  Status = rabbit_ct_broker_helpers:rpc(Config, Server,
+                                        rabbit_federation_status, status, []),
+  case Status of
+    {badrpc, _} -> 0;
+    List ->
+      length([S || S <- List,
+                   proplists:get_value(status, S) =:= running])
   end.
 
 %%
