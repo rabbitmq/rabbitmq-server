@@ -79,6 +79,7 @@
 %% Deprecated feature callback.
 -export([are_transient_nonexcl_used/1]).
 
+-include_lib("khepri/include/khepri.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("stdlib/include/qlc.hrl").
 -include("amqqueue.hrl").
@@ -1874,7 +1875,14 @@ internal_delete(Queue, ActingUser) ->
 
 internal_delete(Queue, ActingUser, Reason) ->
     QueueName = amqqueue:get_name(Queue),
-    case rabbit_db_queue:delete(QueueName, Reason) of
+    Conditions = case amqqueue:get_exclusive_owner(Queue) of
+                     none ->
+                         [];
+                     Owner ->
+                         Pattern = amqqueue:pattern_match_on_exclusive_owner(Owner),
+                         [#if_data_matches{pattern = Pattern}]
+                 end,
+    case rabbit_db_queue:delete_if(QueueName, Conditions, Reason) of
         ok ->
             ok;
         {error, timeout} = Err ->
