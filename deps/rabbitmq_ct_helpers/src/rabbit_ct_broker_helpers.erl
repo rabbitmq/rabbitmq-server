@@ -897,13 +897,19 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
         {"RABBITMQ_LOG", "debug"}
     ],
     %% @todo ExtraArgs.
+    PluginsDir = filename:join(SrcDir, "plugins"),
+    PeerEnv1 = case rabbit_ct_helpers:get_config(Config, rmq_plugins_dir) of
+                     undefined ->
+                         [{"RABBITMQ_PLUGINS_DIR", PluginsDir}|PeerEnv0];
+                     ExtraPluginsDir1 ->
+                         [{"RABBITMQ_PLUGINS_DIR", ExtraPluginsDir1 ++ ":" ++ PluginsDir}|PeerEnv0]
+                 end,
     PeerEnv = case StartWithPluginsDisabled of
                      true ->
-                        PeerEnv0;
+                        PeerEnv1;
                      _ ->
-                        [{"RABBITMQ_ENABLED_PLUGINS", "ALL"}|PeerEnv0]
+                        [{"RABBITMQ_ENABLED_PLUGINS", "ALL"}|PeerEnv1]
                  end,
-
 
 
     case rabbit_ct_helpers:get_config(Config, rabbitmq_run_cmd) of
