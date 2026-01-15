@@ -1,0 +1,17 @@
+[
+{connection_close_timeout_default,
+    "federation.queues.connection_close_timeout = 5000",
+    [{rabbitmq_queue_federation, [
+        {connection_close_timeout, 5000}
+    ]}],
+    [rabbitmq_queue_federation]
+},
+
+{connection_close_timeout_custom,
+    "federation.queues.connection_close_timeout = 3000",
+    [{rabbitmq_queue_federation, [
+        {connection_close_timeout, 3000}
+    ]}],
+    [rabbitmq_queue_federation]
+}
+].

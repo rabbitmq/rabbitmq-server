@@ -4,7 +4,8 @@ PROJECT_MOD = rabbit_queue_federation_app
 
 define PROJECT_ENV
 [
-	    {pgroup_name_cluster_id, false}
+	    {pgroup_name_cluster_id, false},
+	    {connection_close_timeout, 5000}
 	  ]
 endef
 
