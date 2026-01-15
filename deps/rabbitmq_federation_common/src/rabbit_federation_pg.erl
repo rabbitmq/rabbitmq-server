@@ -9,8 +9,8 @@
 
 -include_lib("kernel/include/logger.hrl").
 
-
--export([start_scope/1, stop_scope/1]).
+-export([start_scope/1,
+         stop_scope/1]).
 
 start_scope(Scope) ->
   ?LOG_DEBUG("Starting pg scope ~ts", [Scope]),
@@ -20,29 +20,7 @@ stop_scope(Scope) ->
   case whereis(Scope) of
       Pid when is_pid(Pid) ->
           ?LOG_DEBUG("Stopping pg scope ~ts", [Scope]),
-          Groups = pg:which_groups(Scope),
-          lists:foreach(
-            fun(Group) ->
-                    stop_group(Scope, Group)
-            end, Groups),
           exit(Pid, normal);
       _ ->
           ok
   end.
-
-stop_group(Scope, Group) ->
-    Members = pg:get_local_members(Scope, Group),
-    MRefs = [erlang:monitor(process, Member) || Member <- Members],
-    lists:foreach(
-      fun(Member) ->
-              exit(Member, normal)
-      end, Members),
-    lists:foreach(
-      fun(MRef) ->
-              receive
-                  {'DOWN', MRef, process, _Member, _Info} ->
-                      ?LOG_ALERT("Member ~p stopped: ~0p", [_Member, _Info]),
-                      ok
-              end
-      end, MRefs),
-    ok.

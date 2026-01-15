@@ -41,6 +41,7 @@ prep_stop(State) ->
     State.
 
 stop(_State) ->
+    ok = rabbit_queue_federation_sup:stop(),
     ets:delete(?FEDERATION_ETS, rabbitmq_queue_federation),
     rabbit_federation_pg:stop_scope(?FEDERATION_PG_SCOPE),
     ok.
