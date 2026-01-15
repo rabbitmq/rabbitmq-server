@@ -182,7 +182,7 @@ merge_metadata_in_khepri(VHostName, Metadata) ->
                 {error, _} = Error ->
                     Error
             end;
-        {ok, #{Path := #{}}} ->
+        {ok, #{has_data := false}} ->
             %% The node exists but has no data, e.g. due to a concurrent deletion.
             {error, {no_such_vhost, VHostName}};
         {error, {khepri, node_not_found, _}} ->
@@ -459,7 +459,7 @@ update_in_khepri(VHostName, UpdateFun) ->
                 Error ->
                     throw(Error)
             end;
-        {ok, #{Path := #{}}} ->
+        {ok, #{has_data := false}} ->
             %% The node exists but has no data, e.g. due to a concurrent deletion.
             throw({error, {no_such_vhost, VHostName}});
         {error, {khepri, node_not_found, _}} ->
