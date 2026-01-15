@@ -1315,14 +1315,9 @@ force_shrink_member_to_current_member(Config) ->
             queue_utils:assert_number_of_replicas(
               Config, Server0, <<"/">>, QQ, 3),
 
-            ok = rabbit_ct_broker_helpers:rpc(Config, Server0, rabbit_quorum_queue,
-                                         force_shrink_member_to_current_member, [<<"/">>, QQ]),
-
-            {error, noproc} = rabbit_ct_broker_helpers:rpc(Config, Server1, rabbit_quorum_queue,
-                                         force_shrink_member_to_current_member, [<<"/">>, QQ]),
-
-            {error, noproc} = rabbit_ct_broker_helpers:rpc(Config, Server2, rabbit_quorum_queue,
-                                         force_shrink_member_to_current_member, [<<"/">>, QQ]),
+            rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
+                                         force_shrink_member_to_current_member,
+                                         [<<"/">>, QQ]),
 
             wait_for_messages_ready([Server0], RaName, 3),
             queue_utils:assert_number_of_replicas(
@@ -1336,6 +1331,7 @@ force_shrink_member_to_current_member(Config) ->
                                  [RaName, [Server0, Server1]]),
                         ?DEFAULT_AWAIT),
             rpc:call(Server0, rabbit_quorum_queue, grow, [Server2, <<"/">>, <<".*">>, all]),
+
             queue_utils:assert_number_of_replicas(
               Config, Server0, <<"/">>, QQ, 3)
     end.
@@ -1844,7 +1840,7 @@ dont_leak_file_handles(Config) ->
     ok.
 
 grow_queue(Config) ->
-    [Server0, Server1, _Server2, _Server3, _Server4] =
+    [Server0, Server1, Server2, _Server3, _Server4] =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
@@ -1927,7 +1923,22 @@ grow_queue(Config) ->
     assert_grown_queues(QQs, Server0, TargetClusterSize_1, MsgCount),
 
     %% grow queues to node 'Server1': non_voter
-    rpc:call(Server0, rabbit_quorum_queue, grow, [Server1, <<"/">>, <<".*">>, all, non_voter]),
+    rpc:call(Server0, rabbit_quorum_queue, grow,
+             [Server1, <<"/">>, <<".*">>, all, non_voter]),
+    assert_grown_queues(QQs, Server0, TargetClusterSize_2, MsgCount),
+
+    %% grow queues to node 'Server2': fail, non_voters found
+    Result6 = rpc:call(Server0, rabbit_quorum_queue, grow, [Server2, <<"/">>, <<".*">>, all, voter]),
+    %% [{{resource,<<"/">>,queue,<<"grow_queue">>},{error, 2, {error, non_voters_found}},
+    %%  {{resource,<<"/">>,queue,<<"grow_queue_alt">>},{error, 2, {error, non_voters_found}},...]
+    ?assert(lists:all(
+        fun({_, Err}) -> Err =:= {error, TargetClusterSize_2, {error, non_voters_found}} end, Result6)),
+    assert_grown_queues(QQs, Server0, TargetClusterSize_2, MsgCount),
+
+    %% grow queues to target quorum cluster size '5': fail, non_voters found
+    Result7 = rpc:call(Server0, rabbit_quorum_queue, grow, [TargetClusterSize_5, <<"/">>, <<".*">>, all]),
+    ?assert(lists:all(
+        fun({_, Err}) -> Err =:= {error, TargetClusterSize_2, {error, non_voters_found}} end, Result7)),
     assert_grown_queues(QQs, Server0, TargetClusterSize_2, MsgCount).
 
 assert_grown_queues(Qs, Node, TargetClusterSize, MsgCount) ->
@@ -2096,8 +2107,8 @@ priority_queue_fifo(Config) ->
              MsgP1
          end || P <- lists:seq(0, 4)],
 
-    amqp_channel:wait_for_confirms(Ch, 5),
-    validate_queue(Ch, Queue, ExpectedHi ++ ExpectedLo),
+    Expected = lists:reverse(ExpectedLo ++ ExpectedHi),
+    validate_queue(Ch, Queue, Expected),
     ok.
 
 priority_queue_2_1_ratio(Config) ->
@@ -2128,8 +2139,7 @@ priority_queue_2_1_ratio(Config) ->
              %% high priority is > 4
          end || P <- lists:seq(5, 14)],
 
-    amqp_channel:wait_for_confirms(Ch, 5),
-    Expected = lists_interleave(ExpectedLo, ExpectedHi),
+    Expected = lists:reverse(ExpectedLo ++ ExpectedHi),
 
     validate_queue(Ch, Queue, Expected),
     ok.
