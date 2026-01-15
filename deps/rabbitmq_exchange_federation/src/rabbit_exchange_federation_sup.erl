@@ -12,11 +12,12 @@
 %% Supervises everything. There is just one of these.
 
 -include_lib("rabbit_common/include/rabbit.hrl").
--include("rabbit_exchange_federation.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -define(SUPERVISOR, ?MODULE).
 
--export([start_link/0, stop/0]).
+-export([start_link/0,
+         stop/0]).
 
 -export([init/1]).
 
@@ -36,9 +37,17 @@
 start_link() ->
     supervisor:start_link({local, ?SUPERVISOR}, ?MODULE, []).
 
+-spec stop() -> ok.
 stop() ->
-    ok = supervisor:terminate_child(rabbit_sup, ?MODULE),
-    ok = supervisor:delete_child(rabbit_sup, ?MODULE).
+    ?LOG_INFO("~s terminating...", [?MODULE]),
+    case supervisor:terminate_child(rabbit_sup, ?MODULE) of
+        ok ->
+            ?LOG_INFO("~s terminated", [?MODULE]),
+            ok = supervisor:delete_child(rabbit_sup, ?MODULE);
+        {error, not_found} ->
+            ?LOG_INFO("~s already terminated", [?MODULE]),
+            ok
+    end.
 
 %%----------------------------------------------------------------------------
 
