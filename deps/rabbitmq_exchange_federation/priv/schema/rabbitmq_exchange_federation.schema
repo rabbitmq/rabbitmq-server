@@ -14,3 +14,23 @@
 fun(Timeout) when is_integer(Timeout) ->
     Timeout =< 5000
 end}.
+
+%% Shutdown pacing configuration
+
+{mapping, "federation.exchanges.shutdown.link_batch_size", "rabbitmq_exchange_federation.shutdown_link_batch_size", [
+    {datatype, integer},
+    {default, 128},
+    {validators, ["non_zero_positive_integer"]}
+]}.
+
+{mapping, "federation.exchanges.shutdown.timeout", "rabbitmq_exchange_federation.shutdown_timeout", [
+    {datatype, integer},
+    {default, 180000},
+    {validators, ["non_zero_positive_integer"]}
+]}.
+
+{mapping, "federation.exchanges.shutdown.throttle_delay", "rabbitmq_exchange_federation.shutdown_throttle_delay", [
+    {datatype, integer},
+    {default, 50},
+    {validators, ["non_negative_integer"]}
+]}.
