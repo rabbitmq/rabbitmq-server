@@ -213,8 +213,9 @@ terminate(Reason, #state{downstream_connection = DConn,
                          queue                 = Queue}) when Reason =:= shutdown;
                                                               Reason =:= {shutdown, restart};
                                                               Reason =:= gone ->
+    Timeout = connection_close_timeout(),
     _ = timer:cancel(TRef),
-    rabbit_federation_link_util:ensure_connection_closed(DConn),
+    rabbit_federation_link_util:ensure_connection_closed(DConn, Timeout),
 
     ?LOG_DEBUG("Exchange federation: link is shutting down, resource cleanup mode: ~tp", [Upstream#upstream.resource_cleanup_mode]),
     case Upstream#upstream.resource_cleanup_mode of
@@ -227,7 +228,7 @@ terminate(Reason, #state{downstream_connection = DConn,
             delete_upstream_exchange(Conn, IntExchange)
     end,
 
-    rabbit_federation_link_util:ensure_connection_closed(Conn),
+    rabbit_federation_link_util:ensure_connection_closed(Conn, Timeout),
     rabbit_federation_link_util:log_terminate(Reason, Upstream, UParams, XName),
     ok;
 %% unexpected shutdown
@@ -237,14 +238,15 @@ terminate(Reason, #state{downstream_connection = DConn,
                          upstream_params       = UParams,
                          downstream_exchange   = XName,
                          internal_exchange_timer = TRef}) ->
+    Timeout = connection_close_timeout(),
     _ = timer:cancel(TRef),
 
-    rabbit_federation_link_util:ensure_connection_closed(DConn),
+    rabbit_federation_link_util:ensure_connection_closed(DConn, Timeout),
 
     %% unlike in the clean shutdown case above, we keep the queue
     %% and exchange around
 
-    rabbit_federation_link_util:ensure_connection_closed(Conn),
+    rabbit_federation_link_util:ensure_connection_closed(Conn, Timeout),
     rabbit_federation_link_util:log_terminate(Reason, Upstream, UParams, XName),
     ok.
 
@@ -511,7 +513,7 @@ open_command_channel(Conn, Upstream = #upstream{name = UName}, UParams, DownXNam
             erlang:monitor(process, CCh),
             {ok, CCh};
         E ->
-            rabbit_federation_link_util:ensure_connection_closed(Conn),
+            rabbit_federation_link_util:ensure_connection_closed(Conn, connection_close_timeout()),
             _ = rabbit_federation_link_util:connection_error(command_channel, E,
                                                              Upstream, UParams, DownXName, S0),
             E
@@ -712,3 +714,10 @@ handle_down(DCh, Reason, _Ch, _CmdCh, DCh, Args, State) ->
 handle_down(ChPid, Reason, Ch, CmdCh, _DCh, Args, State)
   when ChPid =:= Ch; ChPid =:= CmdCh ->
     rabbit_federation_link_util:handle_upstream_down(Reason, Args, State).
+
+connection_close_timeout() ->
+    Default = rabbit_federation_link_util:connection_close_timeout(),
+    Configured = application:get_env(rabbitmq_exchange_federation,
+                                     connection_close_timeout,
+                                     Default),
+    erlang:min(Configured, Default).
