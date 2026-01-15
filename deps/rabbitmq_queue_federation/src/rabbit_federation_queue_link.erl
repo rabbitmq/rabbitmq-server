@@ -194,9 +194,10 @@ terminate(Reason, #state{dconn           = DConn,
                          upstream        = Upstream,
                          upstream_params = UParams,
                          queue           = Q}) when ?is_amqqueue(Q) ->
+    Timeout = connection_close_timeout(),
     QName = amqqueue:get_name(Q),
-    rabbit_federation_link_util:ensure_connection_closed(DConn),
-    rabbit_federation_link_util:ensure_connection_closed(Conn),
+    rabbit_federation_link_util:ensure_connection_closed(DConn, Timeout),
+    rabbit_federation_link_util:ensure_connection_closed(Conn, Timeout),
     rabbit_federation_link_util:log_terminate(Reason, Upstream, UParams, QName),
     _ = pg:leave(?FEDERATION_PG_SCOPE, pgname({rabbit_federation_queue, QName}), self()),
     ok.
@@ -341,3 +342,10 @@ handle_down(DCh, Reason, _Ch, DCh, Args, State) ->
     rabbit_federation_link_util:handle_downstream_down(Reason, Args, State);
 handle_down(Ch, Reason, Ch, _DCh, Args, State) ->
     rabbit_federation_link_util:handle_upstream_down(Reason, Args, State).
+
+connection_close_timeout() ->
+    Default = rabbit_federation_link_util:connection_close_timeout(),
+    Configured = application:get_env(rabbitmq_queue_federation,
+                                     connection_close_timeout,
+                                     Default),
+    erlang:min(Configured, Default).
