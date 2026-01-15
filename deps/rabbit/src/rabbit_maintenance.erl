@@ -46,6 +46,12 @@
     maintenance_status/0
 ]).
 
+%% Federation is a special case; exclude these from Dialyzer since
+%% these modules won't be available in the 'rabbit' app but
+%% their use is guarded by 'rabbit_plugins:is_enabled/1'.
+-dialyzer({nowarn_function, [disconnect_federation_links/0,
+                             reconnect_federation_links/0]}).
+
 %%
 %% Boot
 %%
