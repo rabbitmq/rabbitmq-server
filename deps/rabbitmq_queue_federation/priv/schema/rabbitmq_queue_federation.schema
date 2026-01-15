@@ -19,18 +19,39 @@ end}.
 
 {mapping, "federation.queues.shutdown.link_batch_size", "rabbitmq_queue_federation.shutdown_link_batch_size", [
     {datatype, integer},
-    {default, 128},
     {validators, ["non_zero_positive_integer"]}
 ]}.
+
+{translation, "rabbitmq_queue_federation.shutdown_link_batch_size",
+fun(Conf) ->
+    case cuttlefish:conf_get("federation.queues.shutdown.link_batch_size", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
 
 {mapping, "federation.queues.shutdown.timeout", "rabbitmq_queue_federation.shutdown_timeout", [
     {datatype, integer},
-    {default, 180000},
     {validators, ["non_zero_positive_integer"]}
 ]}.
 
+{translation, "rabbitmq_queue_federation.shutdown_timeout",
+fun(Conf) ->
+    case cuttlefish:conf_get("federation.queues.shutdown.timeout", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
 {mapping, "federation.queues.shutdown.throttle_delay", "rabbitmq_queue_federation.shutdown_throttle_delay", [
     {datatype, integer},
-    {default, 50},
     {validators, ["non_negative_integer"]}
 ]}.
+
+{translation, "rabbitmq_queue_federation.shutdown_throttle_delay",
+fun(Conf) ->
+    case cuttlefish:conf_get("federation.queues.shutdown.throttle_delay", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.

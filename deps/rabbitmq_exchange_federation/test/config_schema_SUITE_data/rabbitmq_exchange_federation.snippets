@@ -2,10 +2,7 @@
 {connection_close_timeout_default,
     "federation.exchanges.connection_close_timeout = 5000",
     [{rabbitmq_exchange_federation, [
-        {connection_close_timeout, 5000},
-        {shutdown_link_batch_size, 128},
-        {shutdown_throttle_delay, 50},
-        {shutdown_timeout, 180000}
+        {connection_close_timeout, 5000}
     ]}],
     [rabbitmq_exchange_federation]
 },
@@ -13,10 +10,7 @@
 {connection_close_timeout_custom,
     "federation.exchanges.connection_close_timeout = 3000",
     [{rabbitmq_exchange_federation, [
-        {connection_close_timeout, 3000},
-        {shutdown_link_batch_size, 128},
-        {shutdown_throttle_delay, 50},
-        {shutdown_timeout, 180000}
+        {connection_close_timeout, 3000}
     ]}],
     [rabbitmq_exchange_federation]
 }
