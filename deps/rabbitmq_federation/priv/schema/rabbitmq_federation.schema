@@ -1,0 +1,21 @@
+%% This Source Code Form is subject to the terms of the Mozilla Public
+%% License, v. 2.0. If a copy of the MPL was not distributed with this
+%% file, You can obtain one at https://mozilla.org/MPL/2.0/.
+%%
+%% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term "Broadcom" refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%%
+
+{mapping, "federation.exchanges.connection_close_timeout", "rabbitmq_federation.exchange_connection_close_timeout", [
+    {datatype, integer},
+    {validators, ["non_negative_integer", "connection_close_timeout"]}
+]}.
+
+{mapping, "federation.queues.connection_close_timeout", "rabbitmq_federation.queue_connection_close_timeout", [
+    {datatype, integer},
+    {validators, ["non_negative_integer", "connection_close_timeout"]}
+]}.
+
+{validator, "connection_close_timeout", "timeout must not exceed 5000ms",
+fun(Timeout) when is_integer(Timeout) ->
+    Timeout =< 5000
+end}.
