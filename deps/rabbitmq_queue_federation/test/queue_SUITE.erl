@@ -150,6 +150,9 @@ end_per_group(_, Config) ->
 init_per_testcase(dynamic_plugin_stop_start = Testcase, Config) ->
     ct:timetrap({seconds, 90}),
     rabbit_ct_helpers:testcase_started(Config, Testcase);
+init_per_testcase(supervisor_shutdown_concurrency_safety = Testcase, Config) ->
+    ct:timetrap({seconds, 90}),
+    rabbit_ct_helpers:testcase_started(Config, Testcase);
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
@@ -358,12 +361,20 @@ supervisor_shutdown_concurrency_safety(Config) ->
           ok = rabbit_ct_broker_helpers:enable_plugin(Config, 0, "rabbitmq_queue_federation"),
 
           %% Wait for federation to be re-established
-          timer:sleep(?INITIAL_WAIT),
+          rabbit_ct_helpers:await_condition(
+            fun() ->
+                    Status = rabbit_ct_broker_helpers:rpc(Config, 0,
+                               rabbit_federation_status, status, []),
+                    L = [Entry || Entry <- Status,
+                         proplists:get_value(queue, Entry) =:= DownQ,
+                         proplists:get_value(upstream_queue, Entry) =:= UpQ,
+                         proplists:get_value(status, Entry) =:= running],
+                    length(L) =:= 1
+            end, 60000),
 
           %% Verify federation still works after recovery
-          expect_federation(Ch, UpQ, DownQ, ?EXPECT_FEDERATION_TIMEOUT)
+          expect_federation(Ch, UpQ, DownQ, 60000)
       end, upstream_downstream(Config)).
-
 restart_upstream(Config) ->
     [Rabbit, Hare] = rabbit_ct_broker_helpers:get_node_configs(Config,
       nodename),
