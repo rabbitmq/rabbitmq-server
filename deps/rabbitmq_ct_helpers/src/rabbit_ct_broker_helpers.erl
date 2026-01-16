@@ -882,16 +882,16 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
 
 
     NodeDir = filename:join(PrivDir, atom_to_list(InitialNodename)),
-            [Nodename1, HostName1] = string:split(atom_to_list(Nodename), "@"),
+    [Nodename1, HostName1] = string:split(atom_to_list(Nodename), "@"),
     PeerEnv0 = [
         {"RABBITMQ_NODENAME", atom_to_list(Nodename)},
         {"RABBITMQ_BASE", NodeDir},
+        {"RABBITMQ_PID_FILE", filename:join(NodeDir, atom_to_list(InitialNodename) ++ ".pid")},
         {"RABBITMQ_LOG_BASE", filename:join(NodeDir, "log")},
         {"RABBITMQ_MNESIA_DIR", filename:join(NodeDir, "mnesia")},
         {"RABBITMQ_FEATURE_FLAGS_FILE", filename:join(NodeDir, "feature_flags")},
         {"RABBITMQ_PLUGINS_EXPAND_DIR", filename:join(NodeDir, "plugins")},
         {"RABBITMQ_ENABLED_PLUGINS_FILE", filename:join(NodeDir, "enabled_plugins")},
-        %% RABBITMQ_KEEP_PID_FILE_ON_EXIT
         {"RABBITMQ_DIST_PORT", integer_to_list(DistPort)},
         {"RABBITMQ_CONFIG_FILE", ConfigFile},
         {"RABBITMQ_LOG", "debug"}
@@ -904,16 +904,26 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
                      ExtraPluginsDir1 ->
                          [{"RABBITMQ_PLUGINS_DIR", ExtraPluginsDir1 ++ ":" ++ PluginsDir}|PeerEnv0]
                  end,
-    PeerEnv = case StartWithPluginsDisabled of
+    PeerEnv2 = case StartWithPluginsDisabled of
                      true ->
                         PeerEnv1;
                      _ ->
                         [{"RABBITMQ_ENABLED_PLUGINS", "ALL"}|PeerEnv1]
                  end,
+    %% @todo Seems like this variable is set twice? Seen in rabbit logs.
+    PeerEnv = case KeepPidFile of
+                     true -> [{"RABBITMQ_KEEP_PID_FILE_ON_EXIT", "yes"}|PeerEnv2];
+                     _    -> PeerEnv2
+                 end,
 
 
     case rabbit_ct_helpers:get_config(Config, rabbitmq_run_cmd) of
         undefined ->
+        ct:pal("~p", [net_adm:names()]),
+%        case length(element(2,net_adm:names())) of
+%            4 -> timer:sleep(1000);
+%            _ -> ok
+%        end,
             case peer:start(#{
                     name => Nodename1,
                     longnames => false, %true,
@@ -1430,11 +1440,19 @@ stop_rabbitmq_nodes(Config) ->
 
 stop_rabbitmq_node(_Config, NodeConfig) ->
     Nodename = ?config(nodename, NodeConfig),
+    try query_peer_pid(Nodename) of
+        PeerPid ->
     cover_remove_node(Nodename),
-    %% @todo This needs to be independent of restarts. How? Otherwise the peer_pid is wrong on restart_node/1.
-    PeerPid = query_peer_pid(Nodename),
+%    PeerOsPid = peer:call(PeerPid, os, getpid, []),
+%    ct:pal("OS pid ~p", [PeerOsPid]),
     peer:call(PeerPid, rabbit, stop, []),
     peer:stop(PeerPid),
+    erase_peer_pid(Nodename)
+    catch error:badarg ->
+        ct:pal("Node ~p is already stopped.", [Nodename])
+    end,
+    %% Wait for the process to exit.
+%    ct:pal("~p", [os:cmd("while ps -p \"" ++ PeerOsPid ++ "\" >/dev/null 2>&1; do sleep 1; done")]),
 %    SrcDir = ?config(effective_srcdir, NodeConfig),
 %    InitialMakeVars = ?config(make_vars_for_node_startup, NodeConfig),
 %    InitialNodename = ?config(initial_nodename, NodeConfig),
@@ -1456,6 +1474,9 @@ store_peer_pid(Nodename, PeerPid) ->
 
 query_peer_pid(Nodename) ->
     persistent_term:get({peer_pid, Nodename}).
+
+erase_peer_pid(Nodename) ->
+    persistent_term:erase({peer_pid, Nodename}).
 
 find_crashes_in_logs(NodeConfigs, IgnoredCrashes) ->
     ct:log(
