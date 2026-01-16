@@ -1608,14 +1608,15 @@ upgrade_prop(Conf, Commands) ->
     [begin
          {PreEntries, PostEntries} = lists:split(SplitPos, Entries),
          %% run log v1
-         {V3, _V1Effs} = run_log(InitState, PreEntries,
-                                 fun (_) -> true end, FromVersion),
+         {VFrom, _V1Effs} = run_log(InitState, PreEntries,
+                                    fun (_) -> true end, FromVersion),
 
          %% perform conversion
-         #rabbit_fifo{} = V4 = element(1, rabbit_fifo:apply(
-                                            meta(length(PreEntries) + 1),
-                                            {machine_version, FromVersion, ToVersion},
-                                            V3)),
+         #rabbit_fifo{} = VTo = element(1, rabbit_fifo:apply(
+                                             meta(length(PreEntries) + 1),
+                                             {machine_version, FromVersion,
+                                              ToVersion},
+                                             VFrom)),
          %% assert invariants
          Fields = [num_ready_messages,
                    smallest_raft_index,
@@ -1624,17 +1625,17 @@ upgrade_prop(Conf, Commands) ->
                    enqueue_message_bytes,
                    checkout_message_bytes
                   ],
-         V3Overview = maps:with(Fields, FromMod:overview(V3)),
-         V4Overview = maps:with(Fields, ToMod:overview(V4)),
-         case V3Overview == V4Overview of
+         VFromOverview = maps:with(Fields, FromMod:overview(VFrom)),
+         VToOverview = maps:with(Fields, ToMod:overview(VTo)),
+         case VFromOverview == VToOverview of
              true -> ok;
              false ->
                  ct:pal("upgrade_prop failed expected~n~tp~nGot:~n~tp",
-                        [V3Overview, V4Overview]),
-                 ?assertEqual(V3Overview, V4Overview)
+                        [VFromOverview, VToOverview]),
+                 ?assertEqual(VFromOverview, VToOverview)
          end,
          %% check we can run the post entries from the converted state
-         run_log(V4, PostEntries, fun (_) -> true end, ToVersion)
+         run_log(VTo, PostEntries, fun (_) -> true end, ToVersion)
      end || SplitPos <- lists:seq(1, length(Entries))],
     true.
 

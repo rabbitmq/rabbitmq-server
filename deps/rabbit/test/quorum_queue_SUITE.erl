@@ -2079,6 +2079,7 @@ gh_12635(Config) ->
     ok.
 
 priority_queue_fifo(Config) ->
+    check_quorum_queues_v8_compat(Config),
     %% testing: if hi priority messages are published before lo priority
     %% messages they are always consumed first (fifo)
     [Server0 | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -2112,6 +2113,7 @@ priority_queue_fifo(Config) ->
     ok.
 
 priority_queue_2_1_ratio(Config) ->
+    check_quorum_queues_v8_compat(Config),
     %% testing: if lo priority messages are published before hi priority
     %% messages are consumed in a 2:1 hi to lo ratio
     [Server0 | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),

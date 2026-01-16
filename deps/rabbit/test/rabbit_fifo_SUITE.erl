@@ -374,12 +374,17 @@ credit_and_drain_test(Config) ->
     Cid = {Ctag, self()},
     {State1, _} = enq(Config, 1, 1, first, test_init(test)),
     {State2, _} = enq(Config, 2, 2, second, State1),
+    InitDelCnt = 16#ff_ff_ff_ff - 1,
     {State3, #{key := CKey}, CheckEffs} = checkout(Config, ?LINE, Cid,
-                                                   {auto, {credited, 16#ff_ff_ff_ff - 1}},
+                                                   {auto, {credited, InitDelCnt}},
                                                    State2),
+    ?assertMatch(#rabbit_fifo{consumers =
+                              #{CKey := #consumer{credit = 0,
+                                                  delivery_count = InitDelCnt}}},
+                 State3),
     ?ASSERT_NO_EFF({log_ext, _, _, _}, CheckEffs),
 
-    {State4, Effects} = credit(Config, CKey, ?LINE, 4, 16#ff_ff_ff_ff - 1,
+    {State4, Effects} = credit(Config, CKey, ?LINE, 4, InitDelCnt,
                                true, State3),
     ?assertMatch(#rabbit_fifo{consumers = #{CKey := #consumer{credit = 0,
                                                               delivery_count = 2}}},
@@ -387,7 +392,7 @@ credit_and_drain_test(Config) ->
     ?ASSERT_EFF({log_ext, [1, 2], _, _}, Effects),
     %% The credit_reply should be sent **after** the deliveries.
     ?assertEqual({send_msg, self(),
-                  {credit_reply, Ctag, _DeliveryCount = 1, _Credit = 0,
+                  {credit_reply, Ctag, _DeliveryCount = 2, _Credit = 0,
                    _Available = 0, _Drain = true},
                   ?DELIVERY_SEND_MSG_OPTS},
                  lists:last(Effects)),
@@ -1491,7 +1496,7 @@ single_active_returns_messages_on_noconnection_test(Config) ->
                           waiting_consumers =
                           [{CK1, #consumer{status = {suspected_down, up}}}]}
                when map_size(Cons) == 0),
-     ?ASSERT(_, fun (#rabbit_fifo{returns = Rtns}) ->
+     ?ASSERT(#rabbit_fifo{}, fun (#rabbit_fifo{returns = Rtns}) ->
                         lqueue:len(Rtns) == 1
                 end)
     ],
@@ -3205,10 +3210,10 @@ priorities_expire_test(Config) ->
 
      {?LINE + 101, {timeout, {expire_msgs, shallow}}},
 
-     ?ASSERT(_, fun(State) ->
-                        ?assertMatch(#{num_messages := 3},
-                                     rabbit_fifo:overview(State))
-                end)
+     ?ASSERT(#rabbit_fifo{}, fun(State) ->
+                                     ?assertMatch(#{num_messages := 3},
+                                                  rabbit_fifo:overview(State))
+                             end)
     ],
     {_State2, _} = run_log(Config, State0, Entries),
     ok.
@@ -3440,7 +3445,7 @@ consumer_timeout_cancelled_test(Config) ->
      %% as the consumer was cancelled it got completely removed at this point
      ?ASSERT(#rabbit_fifo{consumers = Con}
                when map_size(Con) == 0),
-     ?ASSERT(_)
+     ?ASSERT(#rabbit_fifo{})
     ],
     {_State1, _} = run_log(Config, State0, Entries),
     ok.
@@ -3495,7 +3500,7 @@ sac_consumer_timeout_test(Config) ->
                               [{_, #consumer{status = {timeout, up},
                                              timed_out_msg_ids = [0]}}]}
                when map_size(Con) == 1),
-     ?ASSERT(_)
+     ?ASSERT(#rabbit_fifo{})
     ],
     {State1, _} = run_log(Config, State0, Entries),
 
@@ -3594,12 +3599,8 @@ sac_consumer_timeout_noconnection_test(Config) ->
                           waiting_consumers =
                           [{CK1, #consumer{status = {timeout, up},
                                            timed_out_msg_ids = [0, 1]}}]}
-       when map_size(Ch) == 2),
-     ?ASSERT(_)
+       when map_size(Ch) == 2)
     ],
-    % debugger:start(),
-    % int:i(rabbit_fifo),
-    % int:break(rabbit_fifo, 616),
     {_State1, _} = run_log(Config, State0, Entries),
     ok.
 
