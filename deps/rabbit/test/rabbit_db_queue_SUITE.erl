@@ -64,7 +64,8 @@ mnesia_tests() ->
      foreach_transient,
      delete_transient,
      update_in_mnesia_tx,
-     get_durable_in_mnesia_tx
+     get_durable_in_mnesia_tx,
+     delete_exclusive_queue
     ].
 
 %% -------------------------------------------------------------------
@@ -330,13 +331,8 @@ delete1(_Config) ->
     passed.
 
 delete_exclusive_queue(Config) ->
-    case rabbit_ct_broker_helpers:configured_metadata_store(Config) of
-        mnesia ->
-            {skip, "this validates a bugfix only implemented for Khperi"};
-        _ ->
-            passed = rabbit_ct_broker_helpers:rpc(
-                       Config, 0, ?MODULE, delete_exclusive_queue1, [Config])
-    end.
+    passed = rabbit_ct_broker_helpers:rpc(
+               Config, 0, ?MODULE, delete_exclusive_queue1, [Config]).
 
 delete_exclusive_queue1(_Config) ->
     QName = rabbit_misc:r(?VHOST, queue, <<"test-exclusive-queue">>),
