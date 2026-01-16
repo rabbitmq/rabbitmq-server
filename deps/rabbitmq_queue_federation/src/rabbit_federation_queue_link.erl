@@ -27,7 +27,7 @@
 
 -record(not_started, {queue, run, upstream, upstream_params}).
 -record(state, {queue, run, conn, ch, dconn, dch, upstream, upstream_params,
-                unacked}).
+                unacked, link_state = running}).
 
 start_link(Args) ->
     gen_server2:start_link(?MODULE, Args, [{timeout, infinity}]).
@@ -64,8 +64,8 @@ disconnect_all() ->
     Pids = all_local(),
     case Pids of
         [] -> ok;
-        _  -> ?LOG_DEBUG("Queue federation: disconnecting ~b local link(s) for shutdown",
-                         [length(Pids)])
+        _  -> ?LOG_INFO("Queue federation: disconnecting ~b local link(s) for shutdown",
+                        [length(Pids)])
     end,
     [gen_server2:cast(Pid, disconnect_for_shutdown) || Pid <- Pids],
     ok.
@@ -75,8 +75,8 @@ reconnect_all() ->
     Pids = all_local(),
     case Pids of
         [] -> ok;
-        _  -> ?LOG_DEBUG("Queue federation: reconnecting ~b local link(s)",
-                         [length(Pids)])
+        _  -> ?LOG_INFO("Queue federation: reconnecting ~b local link(s)",
+                        [length(Pids)])
     end,
     [gen_server2:cast(Pid, reconnect) || Pid <- Pids],
     ok.
@@ -156,7 +156,7 @@ handle_cast(disconnect_for_shutdown, State = #state{dconn = DConn, conn = Conn})
     Timeout = connection_close_timeout(),
     rabbit_federation_link_util:ensure_connection_closed_async(DConn, Timeout),
     rabbit_federation_link_util:ensure_connection_closed_async(Conn, Timeout),
-    {noreply, State#state{dconn = undefined, conn = undefined}};
+    {noreply, State#state{dconn = undefined, conn = undefined, link_state = closing}};
 
 handle_cast(disconnect_for_shutdown, State = #not_started{}) ->
     {noreply, State};
@@ -164,7 +164,7 @@ handle_cast(disconnect_for_shutdown, State = #not_started{}) ->
 handle_cast(reconnect, State = #not_started{}) ->
     {noreply, State};
 
-handle_cast(reconnect, State = #state{conn = undefined}) ->
+handle_cast(reconnect, State = #state{link_state = closing}) ->
     {stop, {shutdown, restart}, State};
 
 handle_cast(reconnect, State = #state{}) ->
