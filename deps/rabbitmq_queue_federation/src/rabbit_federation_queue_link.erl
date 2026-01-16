@@ -27,7 +27,7 @@
 
 -record(not_started, {queue, run, upstream, upstream_params}).
 -record(state, {queue, run, conn, ch, dconn, dch, upstream, upstream_params,
-                unacked, link_state = running}).
+                unacked, link_state = starting}).
 
 start_link(Args) ->
     gen_server2:start_link(?MODULE, Args, [{timeout, infinity}]).
@@ -302,7 +302,8 @@ go(S0 = #not_started{run             = Run,
                                dch             = DCh,
                                upstream        = Upstream,
                                upstream_params = UParams,
-                               unacked         = Unacked}}
+                               unacked         = Unacked,
+                               link_state      = running}}
       end, Upstream, UParams, QName, S0).
 
 check_upstream_suitable(Conn) ->
