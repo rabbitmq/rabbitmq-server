@@ -856,13 +856,7 @@ snapshot_installed(_Meta, #?MODULE{cfg = #cfg{},
                 end, #{}, Consumers),
     delivery_effects(SendAcc, State).
 
-convert_v7_to_v8(#{system_time := Ts} = _Meta, StateV7) ->
-    %% the structure is intact for now
-    Cons0 = element(#?STATE.consumers, StateV7),
-    %% TODO: use default for now
-    Timeout = Ts + 1_800_000,
-    Cons = maps:map(
-             fun (_CKey, Con) ->
+v7_to_v8_consumer(Con, Timeout) ->
                      V7Cfg = element(#consumer.cfg, Con),
                      Status0 = element(#consumer.status, Con),
                      Ch0 = element(#consumer.checked_out, Con),
@@ -872,7 +866,8 @@ convert_v7_to_v8(#{system_time := Ts} = _Meta, StateV7) ->
                                          tag = element(#consumer_cfg.tag, V7Cfg),
                                          credit_mode = element(#consumer_cfg.credit_mode, V7Cfg),
                                          lifetime = element(#consumer_cfg.lifetime, V7Cfg),
-                                         priority = element(#consumer_cfg.priority, V7Cfg)
+                                         priority = element(#consumer_cfg.priority, V7Cfg),
+                                         timeout = 1_800_000
                                         },
                      Status = case Status0 of
                                   suspected_down ->
@@ -886,9 +881,25 @@ convert_v7_to_v8(#{system_time := Ts} = _Meta, StateV7) ->
                                checked_out = Ch,
                                credit = element(#consumer.credit, Con),
                                delivery_count = element(#consumer.delivery_count, Con)
-                              }
+                              }.
+
+convert_v7_to_v8(#{system_time := Ts} = _Meta, StateV7) ->
+    %% the structure is intact for now
+    Cons0 = element(#?STATE.consumers, StateV7),
+    Waiting0 = element(#?STATE.waiting_consumers, StateV7),
+    %% TODO: use default for now
+    %% TODO: review consumer timeout conversion
+    Timeout = Ts + 1_800_000,
+    Cons = maps:map(
+             fun (_CKey, Con) ->
+                     v7_to_v8_consumer(Con, Timeout)
              end, Cons0),
+    Waiting = lists:map(fun({Cid, Con}) ->
+                                {Cid, v7_to_v8_consumer(Con, Timeout)}
+                        end, Waiting0),
+
     Msgs = element(#?STATE.messages, StateV7),
+    Cfg = element(#?STATE.cfg, StateV7),
     {Hi, No} = rabbit_fifo_q:to_queues(Msgs),
     Pq0 = queue:fold(fun (I, Acc) ->
                              rabbit_fifo_pq:in(9, I, Acc)
@@ -897,9 +908,11 @@ convert_v7_to_v8(#{system_time := Ts} = _Meta, StateV7) ->
                             rabbit_fifo_pq:in(?DEFAULT_PRIORITY, I, Acc)
                     end, Pq0, No),
     StateV8 = StateV7,
-    StateV8#?STATE{discarded_bytes = 0,
+    StateV8#?STATE{cfg = Cfg#cfg{default_consumer_timeout =  1_800_000},
+                   discarded_bytes = 0,
                    messages = Pq,
                    consumers = Cons,
+                   waiting_consumers = Waiting,
                    next_consumer_timeout = Timeout,
                    last_command_time = Ts}.
 
@@ -2568,7 +2581,6 @@ expire(RaCmdTs, State0, Effects) ->
 timer_effect(#?STATE{messages_total = 0}, Effects) ->
     Effects;
 timer_effect(#?STATE{returns = Returns,
-                     last_command_time = Ts,
                      messages = Messages}, Effects) ->
     %% TODO: most queues don't use message ttls, to avoid doing this frequently
     %% when not required we could keep a flag in the machine state to indicate
@@ -2590,9 +2602,9 @@ timer_effect(#?STATE{returns = Returns,
                                undefined ->
                                    Acc;
                                Expiry when Acc == undefined ->
-                                   max(0, Expiry - Ts);
+                                   max(0, Expiry);
                                Expiry ->
-                                   CalcExpiry = max(0, Expiry - Ts),
+                                   CalcExpiry = max(0, Expiry),
                                    case CalcExpiry < Acc of
                                        true ->
                                            CalcExpiry;
@@ -2601,11 +2613,12 @@ timer_effect(#?STATE{returns = Returns,
                                    end
                            end
                    end, ReturnedExpiry, Messages),
+    ?LOG_DEBUG("EXPIRY ~w ~w ~p", [NextExpiry, ReturnedExpiry, Messages]),
     case NextExpiry of
         undefined ->
             Effects;
         Timeout ->
-            [{timer, expire_msgs, Timeout} | Effects]
+            [{timer, expire_msgs, Timeout, {abs, true}} | Effects]
     end.
 
 update_or_remove_con(Meta, ConsumerKey,
@@ -3745,14 +3758,14 @@ consumer_info(ConsumerKey,
                         delivery_count = DeliveryCount,
                         next_msg_id = NextMsgId},
               State) ->
+    #?MODULE{cfg = #cfg{consumer_strategy = Strat}} = State,
     #{next_msg_id => NextMsgId,
       credit => Credit,
       key => ConsumerKey,
       delivery_count => DeliveryCount,
       is_active => is_active(ConsumerKey, State),
+      consumer_strategy => Strat,
       num_checked_out => map_size(Checked)}.
-
-
 
 handle_waiting_timedout_consumers(Meta, Key, MsgIds, State0) ->
     case State0 of
