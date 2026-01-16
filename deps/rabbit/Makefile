@@ -232,19 +232,15 @@ define ct_master.erl
 	{ok, Pid2, _} = peer:start(StartOpts#{name => "rabbit_shard2"}),
 	{ok, Pid3, _} = peer:start(StartOpts#{name => "rabbit_shard3"}),
 	{ok, Pid4, _} = peer:start(StartOpts#{name => "rabbit_shard4"}),
-	{ok, Pid5, _} = peer:start(StartOpts#{name => "rabbit_shard5"}),
 	peer:call(Pid1, net_kernel, set_net_ticktime, [5]),
 	peer:call(Pid2, net_kernel, set_net_ticktime, [5]),
 	peer:call(Pid3, net_kernel, set_net_ticktime, [5]),
 	peer:call(Pid4, net_kernel, set_net_ticktime, [5]),
-	peer:call(Pid5, net_kernel, set_net_ticktime, [5]),
 	peer:call(Pid1, persistent_term, put, [rabbit_ct_tcp_port_base, 16000]),
 	peer:call(Pid2, persistent_term, put, [rabbit_ct_tcp_port_base, 20000]),
 	peer:call(Pid3, persistent_term, put, [rabbit_ct_tcp_port_base, 24000]),
 	peer:call(Pid4, persistent_term, put, [rabbit_ct_tcp_port_base, 28000]),
-	peer:call(Pid5, persistent_term, put, [rabbit_ct_tcp_port_base, 32000]),
 	[{[_], {ok, Results}}] = ct_master_fork:run("$1"),
-	peer:stop(Pid5),
 	peer:stop(Pid4),
 	peer:stop(Pid3),
 	peer:stop(Pid2),
@@ -311,19 +307,16 @@ define tpl_parallel_ct_test_spec
 {node, shard2, 'rabbit_shard2@localhost'}.
 {node, shard3, 'rabbit_shard3@localhost'}.
 {node, shard4, 'rabbit_shard4@localhost'}.
-{node, shard5, 'rabbit_shard5@localhost'}.
 
 {define, 'Set1', [$(call comma_list,$(addsuffix _SUITE,$1))]}.
 {define, 'Set2', [$(call comma_list,$(addsuffix _SUITE,$2))]}.
 {define, 'Set3', [$(call comma_list,$(addsuffix _SUITE,$3))]}.
 {define, 'Set4', [$(call comma_list,$(addsuffix _SUITE,$4))]}.
-{define, 'Set5', [$(call comma_list,$(addsuffix _SUITE,$5))]}.
 
 {suites, shard1, "test/", 'Set1'}.
 {suites, shard2, "test/", 'Set2'}.
 {suites, shard3, "test/", 'Set3'}.
 {suites, shard4, "test/", 'Set4'}.
-{suites, shard5, "test/", 'Set5'}.
 endef
 
 define parallel_ct_set_target
