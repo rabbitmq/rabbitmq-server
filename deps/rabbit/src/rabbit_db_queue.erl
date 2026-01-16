@@ -1474,8 +1474,7 @@ queue_matches_conditions([Q | _], [#if_data_matches{pattern = Pattern,
         [] -> false
     end;
 queue_matches_conditions(_, [Condition | _]) ->
-    %% Unknown condition type - don't delete to be safe
-    error({unsupported_condition_for_mnesia, Condition}).
+    error({unsupported_condition, Condition}).
 
 list_with_possible_retry_in_mnesia(Fun) ->
     %% amqqueue migration:
