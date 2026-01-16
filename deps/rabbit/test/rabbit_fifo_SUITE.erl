@@ -3604,6 +3604,27 @@ sac_consumer_timeout_noconnection_test(Config) ->
     {_State1, _} = run_log(Config, State0, Entries),
     ok.
 
+query_single_active_consumer_v7_test(Config) ->
+    ModV7 = rabbit_fifo_v7,
+    S0 = ModV7:init(#{name => ?FUNCTION_NAME,
+                      single_active_consumer_on => true,
+                      queue_resource => rabbit_misc:r(<<"/">>, queue, <<"test">>)}),
+
+    Cid = {atom_to_binary(?FUNCTION_NAME, utf8), self()},
+    Entries = [
+               {1, rabbit_fifo_v7:make_enqueue(self(), 1, banana)},
+               {2, rabbit_fifo_v7:make_enqueue(self(), 2, apple)},
+               {3, rabbit_fifo_v7:make_checkout(Cid,
+                                                {auto, {simple_prefetch, 1}},
+                                                #{})}
+              ],
+    {S1, _Effects} = run_log(rabbit_fifo_v7, Config, S0, Entries,
+                             fun (_) -> true end),
+
+    {value, _} = rabbit_fifo:query_single_active_consumer(S1),
+
+    ok.
+
 %% Utility
 
 init(Conf) -> rabbit_fifo:init(Conf).
