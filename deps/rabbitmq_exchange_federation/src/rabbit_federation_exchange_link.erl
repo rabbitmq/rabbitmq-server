@@ -45,7 +45,7 @@
                 unacked,
                 internal_exchange_timer,
                 internal_exchange_interval,
-                link_state = running}).
+                link_state = starting}).
 
 %%----------------------------------------------------------------------------
 
@@ -573,7 +573,8 @@ go(S0 = {not_started, {Upstream, UParams, DownXName}}) ->
               ?LOG_INFO("Federation link for ~ts (upstream: ~ts) will perform internal exchange checks "
                                          "every ~b seconds", [rabbit_misc:rs(DownXName), UName, round(Interval / 1000)]),
               TRef = erlang:send_after(Interval, self(), check_internal_exchange),
-              {noreply, State#state{internal_exchange_timer = TRef}}
+              {noreply, State#state{internal_exchange_timer = TRef,
+                                    link_state = running}}
       end, Upstream, UParams, DownXName, S0).
 
 log_link_startup_attempt(#upstream{name = Name, channel_use_mode = ChMode}, DownXName) ->
