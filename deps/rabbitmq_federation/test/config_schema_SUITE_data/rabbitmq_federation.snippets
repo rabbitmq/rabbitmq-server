@@ -29,5 +29,29 @@
         {queue_connection_close_timeout, 3000}
     ]}],
     [rabbitmq_federation]
+},
+
+{shutdown_link_batch_size,
+    "federation.shutdown.link_batch_size = 64",
+    [{rabbitmq_federation, [
+        {shutdown_link_batch_size, 64}
+    ]}],
+    [rabbitmq_federation]
+},
+
+{shutdown_timeout,
+    "federation.shutdown.timeout = 120000",
+    [{rabbitmq_federation, [
+        {shutdown_timeout, 120000}
+    ]}],
+    [rabbitmq_federation]
+},
+
+{shutdown_throttle_delay,
+    "federation.shutdown.throttle_delay = 100",
+    [{rabbitmq_federation, [
+        {shutdown_throttle_delay, 100}
+    ]}],
+    [rabbitmq_federation]
 }
 ].

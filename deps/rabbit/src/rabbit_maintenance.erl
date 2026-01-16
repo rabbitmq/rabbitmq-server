@@ -38,6 +38,12 @@
     table_definitions/0
 ]).
 
+%% Federation is a special case; exclude these from Dialyzer since
+%% these modules won't be available in the 'rabbit' app but
+%% their use is guarded by 'rabbit_plugins:is_enabled/1'.
+-dialyzer({nowarn_function, [disconnect_federation_links/0,
+                             reconnect_federation_links/0]}).
+
 -define(DEFAULT_STATUS,  regular).
 -define(DRAINING_STATUS, draining).
 
@@ -67,6 +73,16 @@ drain() ->
     ?LOG_WARNING("This node is being put into maintenance (drain) mode"),
     mark_as_being_drained(),
     ?LOG_INFO("Marked this node as undergoing maintenance"),
+    %% We intentionally do not rely on the internal event (see below) to stop federation links,
+    %% and violate the core/plugin separation here to avoid
+    %% interference with client connection listeners being stopped
+    %% (that will affect all federation links that connect to this node).
+    %% See rabbitmq/rabbitmq-server#15271 for details.
+    disconnect_federation_links(),
+
+    %% Listeners must be stopped after all federation links are disconnected (if any),
+    %% otherwise we may end up with a lot of scary log exceptions in case the federation
+    %% connections are local.
     _ = suspend_all_client_listeners(),
     ?LOG_WARNING("Suspended all listeners and will no longer accept client connections"),
     {ok, NConnections} = close_all_client_connections(),
@@ -104,6 +120,7 @@ revive() ->
     ?LOG_INFO("Resumed all listeners and will accept client connections again"),
     _ = resume_all_client_listeners(),
     ?LOG_INFO("Resumed all listeners and will accept client connections again"),
+    reconnect_federation_links(),
     unmark_as_being_drained(),
     ?LOG_INFO("Marked this node as back from maintenance and ready to serve clients"),
 
@@ -324,3 +341,25 @@ ok_or_first_error(ok, Acc) ->
     Acc;
 ok_or_first_error({error, _} = Err, _Acc) ->
     Err.
+
+disconnect_federation_links() ->
+    FederationEnabled = rabbit_plugins:is_enabled(rabbitmq_federation),
+    case FederationEnabled of
+        true ->
+            ?LOG_INFO("Disconnecting federation links"),
+            rabbit_federation_exchange_link:disconnect_all(),
+            rabbit_federation_queue_link:disconnect_all();
+        false ->
+            ok
+    end.
+
+reconnect_federation_links() ->
+    FederationEnabled = rabbit_plugins:is_enabled(rabbitmq_federation),
+    case FederationEnabled of
+        true ->
+            ?LOG_INFO("Reconnecting federation links"),
+            rabbit_federation_exchange_link:reconnect_all(),
+            rabbit_federation_queue_link:reconnect_all();
+        false ->
+            ok
+    end.

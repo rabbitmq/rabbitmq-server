@@ -12,6 +12,7 @@
 %% Supervises everything. There is just one of these.
 
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -define(SUPERVISOR, rabbit_federation_sup).
 
@@ -25,7 +26,7 @@
 
 -rabbit_boot_step({rabbit_federation_supervisor,
                    [{description, "federation"},
-                    {mfa,         {rabbit_sup, start_child, [?MODULE]}},
+                    {mfa,         {rabbit_sup, start_supervisor_child, [?MODULE]}},
                     {requires,    kernel_ready},
                     {cleanup,     {?MODULE, stop, []}},
                     {enables,     rabbit_federation_exchange},
@@ -38,10 +39,18 @@ start_link() ->
     rabbit_federation_event:add_handler(),
     R.
 
+-spec stop() -> ok.
 stop() ->
     rabbit_federation_event:remove_handler(),
-    ok = supervisor:terminate_child(rabbit_sup, ?MODULE),
-    ok = supervisor:delete_child(rabbit_sup, ?MODULE).
+    ?LOG_INFO("~s terminating...", [?MODULE]),
+    case supervisor:terminate_child(rabbit_sup, ?MODULE) of
+        ok ->
+            ?LOG_INFO("~s terminated", [?MODULE]),
+            ok = supervisor:delete_child(rabbit_sup, ?MODULE);
+        {error, not_found} ->
+            ?LOG_INFO("~s already terminated", [?MODULE]),
+            ok
+    end.
 
 %%----------------------------------------------------------------------------
 

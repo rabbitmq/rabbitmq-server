@@ -38,7 +38,13 @@ shutdown(Q) when ?is_amqqueue(Q) ->
     QName = amqqueue:get_name(Q),
     case active_for(Q) of
         true  -> rabbit_federation_queue_link_sup_sup:stop_child(Q),
-                 rabbit_federation_status:remove_exchange_or_queue(QName);
+                 try
+                     rabbit_federation_status:remove_exchange_or_queue(QName)
+                 catch
+                     exit:{noproc, _} -> ok;
+                     exit:{shutdown, _} -> ok;
+                     exit:shutdown -> ok
+                 end;
         false -> ok
     end,
     ok.
