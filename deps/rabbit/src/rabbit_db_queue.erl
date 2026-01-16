@@ -426,28 +426,12 @@ delete_in_khepri(QueueName, Conditions) ->
     delete_in_khepri(QueueName, Conditions, false).
 
 delete_in_khepri(QueueName, Conditions, OnlyDurable) ->
+    Path0 = khepri_queue_path(QueueName),
+    Path = khepri_path:combine_with_conditions(Path0, Conditions),
     rabbit_khepri:transaction(
       fun () ->
-<<<<<<< HEAD
-              Path = khepri_queue_path(QueueName),
               case khepri_tx_adv:delete(Path) of
                   {ok, #{data := _}} ->
-=======
-              Path0 = khepri_queue_path(QueueName),
-              Path = khepri_path:combine_with_conditions(Path0, Conditions),
-              UsesUniformWriteRet = try
-                                        khepri_tx:does_api_comply_with(uniform_write_ret)
-                                    catch
-                                        error:undef ->
-                                            false
-                                    end,
-              case khepri_tx_adv:delete(Path) of
-                  {ok, #{Path0 := #{data := _}}} when UsesUniformWriteRet ->
-                      %% we want to execute some things, as decided by rabbit_exchange,
-                      %% after the transaction.
-                      rabbit_db_binding:delete_for_destination_in_khepri(QueueName, OnlyDurable);
-                  {ok, #{data := _}} when not UsesUniformWriteRet ->
->>>>>>> 8588ceef8 (Check exclusive queue owner before deletion)
                       %% we want to execute some things, as decided by rabbit_exchange,
                       %% after the transaction.
                       rabbit_db_binding:delete_for_destination_in_khepri(QueueName, OnlyDurable);
