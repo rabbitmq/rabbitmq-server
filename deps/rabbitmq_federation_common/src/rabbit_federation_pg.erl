@@ -44,9 +44,9 @@ terminate_all_local_members(Scope, Timeout, BatchSize, ThrottleDelay) ->
 
 do_terminate_all(Members, Timeout, BatchSize, ThrottleDelay) ->
     Count = length(Members),
-    ?LOG_DEBUG("Federation: initiating paced shutdown for ~b link(s) "
-               "(batch_size=~p, throttle_delay=~bms, timeout=~bms)",
-               [Count, BatchSize, ThrottleDelay, Timeout]),
+    ?LOG_INFO("Federation: initiating paced shutdown for ~b link(s) "
+              "(batch_size=~p, throttle_delay=~bms, timeout=~bms)",
+              [Count, BatchSize, ThrottleDelay, Timeout]),
     Deadline = erlang:monotonic_time(millisecond) + Timeout,
     Batches = make_batches(Members, BatchSize),
     terminate_batches(Batches, ThrottleDelay, Deadline).

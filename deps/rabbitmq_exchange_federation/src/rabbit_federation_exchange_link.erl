@@ -44,7 +44,8 @@
                 downstream_exchange,
                 unacked,
                 internal_exchange_timer,
-                internal_exchange_interval}).
+                internal_exchange_interval,
+                link_state = running}).
 
 %%----------------------------------------------------------------------------
 
@@ -156,7 +157,8 @@ handle_cast(disconnect_for_shutdown, State = #state{
             rabbit_federation_link_util:ensure_connection_closed_async(Conn, Timeout)
     end,
     {noreply, State#state{downstream_connection = undefined,
-                          connection = undefined}};
+                          connection = undefined,
+                          link_state = closing}};
 
 handle_cast(disconnect_for_shutdown, State = {not_started, _}) ->
     {noreply, State};
@@ -164,7 +166,7 @@ handle_cast(disconnect_for_shutdown, State = {not_started, _}) ->
 handle_cast(reconnect, State = {not_started, _}) ->
     {noreply, State};
 
-handle_cast(reconnect, State = #state{connection = undefined}) ->
+handle_cast(reconnect, State = #state{link_state = closing}) ->
     {stop, {shutdown, restart}, State};
 
 handle_cast(reconnect, State = #state{}) ->
@@ -331,8 +333,8 @@ disconnect_all() ->
     Pids = all_local(),
     case Pids of
         [] -> ok;
-        _  -> ?LOG_DEBUG("Exchange federation: disconnecting ~b local link(s) for shutdown",
-                         [length(Pids)])
+        _  -> ?LOG_INFO("Exchange federation: disconnecting ~b local link(s) for shutdown",
+                        [length(Pids)])
     end,
     [gen_server2:cast(Pid, disconnect_for_shutdown) || Pid <- Pids],
     ok.
@@ -342,8 +344,8 @@ reconnect_all() ->
     Pids = all_local(),
     case Pids of
         [] -> ok;
-        _  -> ?LOG_DEBUG("Exchange federation: reconnecting ~b local link(s)",
-                         [length(Pids)])
+        _  -> ?LOG_INFO("Exchange federation: reconnecting ~b local link(s)",
+                        [length(Pids)])
     end,
     [gen_server2:cast(Pid, reconnect) || Pid <- Pids],
     ok.
