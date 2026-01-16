@@ -201,6 +201,7 @@ enqueue(QName, Msg, State) ->
 %% @param ConsumerTag a unique tag to identify this particular consumer.
 %% @param Settlement either `settled' or `unsettled'. When `settled' no
 %% further settlement needs to be done.
+%%
 %% @param State The {@module} state.
 %%
 %% @returns `{ok, IdMsg, State}' or `{error | timeout, term()}'

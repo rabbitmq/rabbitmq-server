@@ -1520,13 +1520,19 @@ query_consumers(#?STATE{consumers = Consumers,
 
 
 query_single_active_consumer(#?STATE{cfg = #cfg{consumer_strategy = single_active},
-                                     consumers = Consumers}) ->
-    case active_consumer(Consumers) of
+                                     consumers = Consumers} = State) ->
+    try active_consumer(Consumers) of
         undefined ->
             {error, no_value};
         {_CKey, ?CONSUMER_TAG_PID(Tag, Pid)} ->
             {value, {Tag, Pid}}
+    catch error:function_clause:_ ->
+              %% the state may be v7, try that
+              rabbit_fifo_v7:query_single_active_consumer(State)
     end;
+query_single_active_consumer(MaybeV7)
+  when is_tuple(MaybeV7) ->
+    rabbit_fifo_v7:query_single_active_consumer(MaybeV7);
 query_single_active_consumer(_) ->
     disabled.
 
