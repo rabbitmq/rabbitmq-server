@@ -1129,22 +1129,22 @@ single_active_consumer_priority_take_over(Config) ->
     QName = ?config(queue_name, Config),
     Q1 = <<QName/binary, "_1">>,
     RaNameQ1 = binary_to_atom(<<"%2F", "_", Q1/binary>>, utf8),
-    QueryFun = fun rabbit_fifo:query_single_active_consumer/1,
     Args = [{<<"x-queue-type">>, longstr, <<"quorum">>},
             {<<"x-single-active-consumer">>, bool, true}],
     ?assertEqual({'queue.declare_ok', Q1, 0, 0}, declare(Ch1, Q1, Args)),
     ok = subscribe(Ch1, Q1, false, <<"ch1-ctag1">>, [{"x-priority", byte, 1}]),
-    ?assertMatch({ok, {_, {value, {<<"ch1-ctag1">>, _}}}, _},
-                 rpc:call(Server0, ra, local_query, [RaNameQ1, QueryFun])),
+
+    ?assertMatch(#{single_active_consumer_id := {<<"ch1-ctag1">>, _}},
+                 machine_overview({RaNameQ1, Server0})),
+
     #'confirm.select_ok'{} = amqp_channel:call(Ch2, #'confirm.select'{}),
     publish_confirm(Ch2, Q1),
     %% higher priority consumer attaches
     ok = subscribe(Ch2, Q1, false, <<"ch2-ctag1">>, [{"x-priority", byte, 3}]),
 
     %% Q1 should still have Ch1 as consumer as it has pending messages
-    ?assertMatch({ok, {_, {value, {<<"ch1-ctag1">>, _}}}, _},
-                 rpc:call(Server0, ra, local_query,
-                          [RaNameQ1, QueryFun])),
+     ?assertMatch(#{single_active_consumer_id := {<<"ch1-ctag1">>, _}},
+                  machine_overview({RaNameQ1, Server0})),
 
     %% ack the message
     receive
@@ -1157,9 +1157,9 @@ single_active_consumer_priority_take_over(Config) ->
               exit(basic_deliver_timeout)
     end,
 
-    ?awaitMatch({ok, {_, {value, {<<"ch2-ctag1">>, _}}}, _},
-                rpc:call(Server0, ra, local_query, [RaNameQ1, QueryFun]),
-               ?DEFAULT_AWAIT),
+    ?awaitMatch(#{single_active_consumer_id := {<<"ch2-ctag1">>, _}},
+                machine_overview({RaNameQ1, Server0}),
+                ?DEFAULT_AWAIT),
     ok.
 
 single_active_consumer_priority_take_over_return(Config) ->
@@ -1185,23 +1185,22 @@ single_active_consumer_priority_take_over_base(DelLimit, Config) ->
     QName = ?config(queue_name, Config),
     Q1 = <<QName/binary, "_1">>,
     RaNameQ1 = binary_to_atom(<<"%2F", "_", Q1/binary>>, utf8),
-    QueryFun = fun rabbit_fifo:query_single_active_consumer/1,
     Args = [{<<"x-queue-type">>, longstr, <<"quorum">>},
             {<<"x-delivery-limit">>, long, DelLimit},
             {<<"x-single-active-consumer">>, bool, true}],
     ?assertEqual({'queue.declare_ok', Q1, 0, 0}, declare(Ch1, Q1, Args)),
     ok = subscribe(Ch1, Q1, false, <<"ch1-ctag1">>, [{"x-priority", byte, 1}]),
-    ?assertMatch({ok, {_, {value, {<<"ch1-ctag1">>, _}}}, _},
-                 rpc:call(Server0, ra, local_query, [RaNameQ1, QueryFun])),
+
+    ?assertMatch(#{single_active_consumer_id := {<<"ch1-ctag1">>, _}},
+                 machine_overview({RaNameQ1, Server0})),
     #'confirm.select_ok'{} = amqp_channel:call(Ch2, #'confirm.select'{}),
     publish_confirm(Ch2, Q1),
     %% higher priority consumer attaches
     ok = subscribe(Ch2, Q1, false, <<"ch2-ctag1">>, [{"x-priority", byte, 3}]),
 
     %% Q1 should still have Ch1 as consumer as it has pending messages
-    ?assertMatch({ok, {_, {value, {<<"ch1-ctag1">>, _}}}, _},
-                 rpc:call(Server0, ra, local_query,
-                          [RaNameQ1, QueryFun])),
+    ?assertMatch(#{single_active_consumer_id := {<<"ch1-ctag1">>, _}},
+                 machine_overview({RaNameQ1, Server0})),
 
     %% ack the message
     receive
@@ -1213,9 +1212,8 @@ single_active_consumer_priority_take_over_base(DelLimit, Config) ->
               exit(basic_deliver_timeout)
     end,
 
-    ?awaitMatch({ok, {_, {value, {<<"ch2-ctag1">>, _}}}, _},
-                rpc:call(Server0, ra, local_query, [RaNameQ1, QueryFun]),
-               ?DEFAULT_AWAIT),
+    ?awaitMatch(#{single_active_consumer_id := {<<"ch2-ctag1">>, _}},
+                 machine_overview({RaNameQ1, Server0}), ?DEFAULT_AWAIT),
     receive
         {#'basic.deliver'{consumer_tag = <<"ch2-ctag1">>,
                           delivery_tag = DeliveryTag2}, _} ->
@@ -1261,39 +1259,38 @@ single_active_consumer_priority(Config) ->
     RaNameQ2 = binary_to_atom(<<"%2F", "_", Q2/binary>>, utf8),
     RaNameQ3 = binary_to_atom(<<"%2F", "_", Q3/binary>>, utf8),
     %% assert each queue has a different consumer
-    QueryFun = fun rabbit_fifo:query_single_active_consumer/1,
 
     %% Q1 should have the consumer on Ch1
-    ?assertMatch({ok, {_, {value, {<<"ch1-ctag1">>, _}}}, _},
-                rpc:call(Server0, ra, local_query, [RaNameQ1, QueryFun])),
+    ?assertMatch(#{single_active_consumer_id := {<<"ch1-ctag1">>, _}},
+                 machine_overview({RaNameQ1, Server0})),
 
     %% Q2 Ch2
-    ?assertMatch({ok, {_, {value, {<<"ch2-ctag2">>, _}}}, _},
-                rpc:call(Server1, ra, local_query, [RaNameQ2, QueryFun])),
+    ?assertMatch(#{single_active_consumer_id := {<<"ch2-ctag2">>, _}},
+                 machine_overview({RaNameQ2, Server0})),
 
     %% Q3 Ch3
-    ?assertMatch({ok, {_, {value, {<<"ch3-ctag3">>, _}}}, _},
-                rpc:call(Server2, ra, local_query, [RaNameQ3, QueryFun])),
+    ?assertMatch(#{single_active_consumer_id := {<<"ch3-ctag3">>, _}},
+                 machine_overview({RaNameQ3, Server0})),
 
     %% close Ch3
     _ = rabbit_ct_client_helpers:close_channel(Ch3),
     flush(100),
 
     %% assert Q3 has Ch2 (priority 2) as consumer
-    ?assertMatch({ok, {_, {value, {<<"ch2-ctag3">>, _}}}, _},
-                rpc:call(Server2, ra, local_query, [RaNameQ3, QueryFun])),
+    ?assertMatch(#{single_active_consumer_id := {<<"ch2-ctag3">>, _}},
+                 machine_overview({RaNameQ3, Server0})),
 
     %% close Ch2
     _ = rabbit_ct_client_helpers:close_channel(Ch2),
     flush(100),
 
     %% assert all queues as has Ch1 as consumer
-    ?assertMatch({ok, {_, {value, {<<"ch1-ctag1">>, _}}}, _},
-                rpc:call(Server0, ra, local_query, [RaNameQ1, QueryFun])),
-    ?assertMatch({ok, {_, {value, {<<"ch1-ctag2">>, _}}}, _},
-                rpc:call(Server0, ra, local_query, [RaNameQ2, QueryFun])),
-    ?assertMatch({ok, {_, {value, {<<"ch1-ctag3">>, _}}}, _},
-                rpc:call(Server0, ra, local_query, [RaNameQ3, QueryFun])),
+    ?assertMatch(#{single_active_consumer_id := {<<"ch1-ctag1">>, _}},
+                 machine_overview({RaNameQ1, Server0})),
+    ?assertMatch(#{single_active_consumer_id := {<<"ch1-ctag2">>, _}},
+                 machine_overview({RaNameQ2, Server0})),
+    ?assertMatch(#{single_active_consumer_id := {<<"ch1-ctag3">>, _}},
+                 machine_overview({RaNameQ3, Server0})),
     ok.
 
 force_shrink_member_to_current_member(Config) ->
@@ -5441,6 +5438,7 @@ replica_states(Config) ->
              end, Result2).
 
 consumer_timeout(Config) ->
+    check_quorum_queues_v8_compat(Config),
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
 
     % rabbit_ct_client_helpers:open_unmanaged_connection(_),
@@ -5729,3 +5727,11 @@ lsof_rpc() ->
     Cmd = rabbit_misc:format(
             "lsof -p ~ts", [os:getpid()]),
     os:cmd(Cmd).
+
+machine_overview(ServerId) when is_tuple(ServerId) ->
+    case ra:member_overview(ServerId) of
+        {ok, #{machine := Mac}, _} ->
+            Mac;
+        Err ->
+            Err
+    end.
