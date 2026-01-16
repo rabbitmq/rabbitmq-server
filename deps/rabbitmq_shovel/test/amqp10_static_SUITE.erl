@@ -13,7 +13,6 @@
 
 -compile(export_all).
 
--define(EXCHANGE,    <<"test_exchange">>).
 -define(TO_SHOVEL,   <<"to_the_shovel">>).
 -define(FROM_SHOVEL, <<"from_the_shovel">>).
 -define(UNSHOVELLED, <<"unshovelled">>).
@@ -80,17 +79,17 @@ stop_shovel_plugin(Config) ->
 %% -------------------------------------------------------------------
 
 amqp10_destination_no_ack(Config) ->
-    amqp10_destination(Config, no_ack).
+    amqp10_destination(Config, no_ack, <<"exchange_no_ack">>).
 
 amqp10_destination_on_publish(Config) ->
-    amqp10_destination(Config, on_publish).
+    amqp10_destination(Config, on_publish, <<"exchange_on_publish">>).
 
 amqp10_destination_on_confirm(Config) ->
-    amqp10_destination(Config, on_confirm).
+    amqp10_destination(Config, on_confirm, <<"exchange_on_confirm">>).
 
-amqp10_destination(Config, AckMode) ->
+amqp10_destination(Config, AckMode, Exchange) ->
     TargetQ =  <<"a-queue">>,
-    ok = setup_amqp10_destination_shovel(Config, TargetQ, AckMode),
+    ok = setup_amqp10_destination_shovel(Config, TargetQ, AckMode, Exchange),
     Hostname = ?config(rmq_hostname, Config),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
     {ok, Conn} = amqp10_client:open_connection(Hostname, Port),
@@ -115,7 +114,7 @@ amqp10_destination(Config, AckMode) ->
                                        timestamp = Timestamp,
                                        type = ?UNSHOVELLED
                                       }},
-    publish(Chan, Msg, ?EXCHANGE, ?TO_SHOVEL),
+    publish(Chan, Msg, Exchange, ?TO_SHOVEL),
 
     receive
         {amqp10_msg, Receiver, InMsg} ->
@@ -225,7 +224,7 @@ setup_amqp10_source_shovel(Config, SourceQueue, DestQueue, AckMode) ->
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, setup_shovel,
                                       [Shovel]).
 
-setup_amqp10_destination_shovel(Config, Queue, AckMode) ->
+setup_amqp10_destination_shovel(Config, Queue, AckMode, Exchange) ->
     Hostname = ?config(rmq_hostname, Config),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
     Shovel = [{test_shovel,
@@ -234,8 +233,8 @@ setup_amqp10_destination_shovel(Config, Queue, AckMode) ->
                                              [Hostname, Port])]},
                   {declarations,
                    [{'queue.declare', [exclusive, auto_delete]},
-                    {'exchange.declare', [{exchange, ?EXCHANGE}, auto_delete]},
-                    {'queue.bind', [{queue, <<>>}, {exchange, ?EXCHANGE},
+                    {'exchange.declare', [{exchange, Exchange}, auto_delete]},
+                    {'queue.bind', [{queue, <<>>}, {exchange, Exchange},
                                     {routing_key, ?TO_SHOVEL}]}]},
                   {queue, <<>>}]},
                 {destination,
