@@ -13,5 +13,17 @@
         {connection_close_timeout, 3000}
     ]}],
     [rabbitmq_exchange_federation]
+},
+
+{shutdown_pacing,
+    "federation.exchanges.shutdown.link_batch_size = 64
+     federation.exchanges.shutdown.timeout = 60000
+     federation.exchanges.shutdown.throttle_delay = 100",
+    [{rabbitmq_exchange_federation, [
+        {shutdown_link_batch_size, 64},
+        {shutdown_throttle_delay, 100},
+        {shutdown_timeout, 60000}
+    ]}],
+    [rabbitmq_exchange_federation]
 }
 ].

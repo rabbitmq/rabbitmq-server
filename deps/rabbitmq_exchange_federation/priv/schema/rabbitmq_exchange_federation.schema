@@ -14,3 +14,44 @@
 fun(Timeout) when is_integer(Timeout) ->
     Timeout =< 5000
 end}.
+
+%% Shutdown pacing configuration
+
+{mapping, "federation.exchanges.shutdown.link_batch_size", "rabbitmq_exchange_federation.shutdown_link_batch_size", [
+    {datatype, integer},
+    {validators, ["non_zero_positive_integer"]}
+]}.
+
+{translation, "rabbitmq_exchange_federation.shutdown_link_batch_size",
+fun(Conf) ->
+    case cuttlefish:conf_get("federation.exchanges.shutdown.link_batch_size", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+{mapping, "federation.exchanges.shutdown.timeout", "rabbitmq_exchange_federation.shutdown_timeout", [
+    {datatype, integer},
+    {validators, ["non_zero_positive_integer"]}
+]}.
+
+{translation, "rabbitmq_exchange_federation.shutdown_timeout",
+fun(Conf) ->
+    case cuttlefish:conf_get("federation.exchanges.shutdown.timeout", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+{mapping, "federation.exchanges.shutdown.throttle_delay", "rabbitmq_exchange_federation.shutdown_throttle_delay", [
+    {datatype, integer},
+    {validators, ["non_negative_integer"]}
+]}.
+
+{translation, "rabbitmq_exchange_federation.shutdown_throttle_delay",
+fun(Conf) ->
+    case cuttlefish:conf_get("federation.exchanges.shutdown.throttle_delay", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
