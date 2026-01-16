@@ -68,11 +68,19 @@ init_per_group(mnesia_store = Group, Config0) ->
                 {rmq_nodes_count, 1}]),
     init_per_group_common(Group, Config);
 init_per_group(khepri_store = Group, Config0) ->
-    Config = rabbit_ct_helpers:set_config(
-               Config0,
-               [{metadata_store, khepri},
-                {rmq_nodes_count, 3}]),
-    init_per_group_common(Group, Config);
+    %% this is very hacky way of skipping the tests, but the khepri_db
+    %% flag exists in 3,13, but it's not compatible with 4.x.
+    SecondaryDist = os:getenv("SECONDARY_DIST", ""),
+    case string:str(SecondaryDist, "3.13.") == 0 of
+        true ->
+            Config = rabbit_ct_helpers:set_config(
+                       Config0,
+                       [{metadata_store, khepri},
+                        {rmq_nodes_count, 3}]),
+            init_per_group_common(Group, Config);
+        _ ->
+            {skip, "Khepri was not supported in 3.13"}
+    end;
 init_per_group(Group, Config0) ->
     Config = rabbit_ct_helpers:set_config(
                Config0,
