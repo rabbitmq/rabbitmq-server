@@ -54,7 +54,8 @@ essential() ->
       unbind_on_delete,
       unbind_on_client_unbind,
       exchange_federation_link_status,
-      lookup_exchange_status
+      lookup_exchange_status,
+      supervisor_shutdown_concurrency_safety
     ].
 
 suite() ->
@@ -592,6 +593,73 @@ lookup_exchange_status(Config) ->
     rabbit_federation_status, lookup, [Id]),
   lists:all(fun(K) -> lists:keymember(K, 1, Props) end,
             [key, uri, status, timestamp, id, supervisor, upstream]),
+
+  clean_up_federation_related_bits(Config).
+
+%% Stops the federation supervisor concurrently with runtime parameter
+%% changes and exchange deletion.
+supervisor_shutdown_concurrency_safety(Config) ->
+  FedX = <<"shutdown_race.federated">>,
+  FedX2 = <<"shutdown_race.federated2">>,
+  UpX = <<"shutdown_race.upstream.x">>,
+  rabbit_ct_broker_helpers:set_parameter(
+    Config, 0, <<"federation-upstream">>, <<"localhost">>,
+    [
+      {<<"uri">>,      rabbit_ct_broker_helpers:node_uri(Config, 0)},
+      {<<"exchange">>, UpX}
+    ]),
+  rabbit_ct_broker_helpers:set_policy(
+    Config, 0,
+    <<"fed.x">>, <<"^shutdown_race.federated">>, <<"exchanges">>,
+    [
+      {<<"federation-upstream">>, <<"localhost">>}
+    ]),
+
+  Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
+  Xs = [exchange_declare_method(FedX), exchange_declare_method(FedX2)],
+  declare_exchanges(Ch, Xs),
+
+  RK = <<"key">>,
+  Q = declare_and_bind_queue(Ch, FedX, RK),
+  _ = declare_and_bind_queue(Ch, FedX2, RK),
+  await_binding(Config, 0, UpX, RK),
+
+  %% Verify federation is working
+  publish_expect(Ch, UpX, RK, Q, <<"before_shutdown">>),
+
+  %% Stop the federation supervisor directly (simulating shutdown)
+  ct:pal("Stopping federation supervisor to simulate shutdown race"),
+  ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+         rabbit_exchange_federation_sup, stop, []),
+
+  %% Now trigger operations that would normally crash without the fix.
+  %% These should return ok, not crash with {noproc, _}
+
+  %% Test adjust/1 - this is called when parameters change
+  ct:pal("Calling adjust/1 after supervisor stopped"),
+  ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+         rabbit_federation_exchange_link_sup_sup, adjust, [everything]),
+  ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+         rabbit_federation_exchange_link_sup_sup, adjust,
+         [{clear_upstream, <<"/">>, <<"test-upstream">>}]),
+
+  %% Test stop_child/1 by deleting a federated exchange while the supervisor is down.
+  %% This triggers the decorator's delete callback, which calls stop_child.
+  ct:pal("Deleting federated exchange after supervisor stopped"),
+  delete_exchange(Ch, FedX2),
+
+  %% Test that the plugin can be cleanly disabled and re-enabled
+  %% even after this manual supervisor stop
+  ct:pal("Disabling and re-enabling plugin"),
+  ok = rabbit_ct_broker_helpers:disable_plugin(Config, 0, "rabbitmq_exchange_federation"),
+  ok = rabbit_ct_broker_helpers:enable_plugin(Config, 0, "rabbitmq_exchange_federation"),
+
+  %% Wait for federation to be re-established
+  timer:sleep(5000),
+
+  %% Verify federation still works after recovery
+  await_binding(Config, 0, UpX, RK),
+  publish_expect(Ch, UpX, RK, Q, <<"after_recovery">>),
 
   clean_up_federation_related_bits(Config).
 
