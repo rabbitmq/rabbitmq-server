@@ -15,7 +15,9 @@
 
 all() -> [
     reconnect_all_empty_scope,
-    reconnect_all_broadcasts_to_members
+    reconnect_all_broadcasts_to_members,
+    adjust_when_supervisor_not_running,
+    adjust_clear_upstream_when_supervisor_not_running
 ].
 
 init_per_suite(Config) ->
@@ -59,3 +61,19 @@ stop_pg_scope(Scope) ->
         _ -> ok
     end,
     ok.
+
+%% Test that adjust/1 returns ok when the supervisor is not running,
+%% for example, during a node shutdown when plugin tries to adjust federation
+%% links but the federation supervisor has already been stopped by the core.
+adjust_when_supervisor_not_running(_Config) ->
+    ?assertEqual(undefined, whereis(rabbit_federation_exchange_link_sup_sup)),
+    %% adjust/1 should return ok, not crash
+    ?assertEqual(ok, rabbit_federation_exchange_link_sup_sup:adjust(everything)),
+    ?assertEqual(ok, rabbit_federation_exchange_link_sup_sup:adjust({upstream, <<"test">>})),
+    ?assertEqual(ok, rabbit_federation_exchange_link_sup_sup:adjust({upstream_set, <<"test">>})).
+
+adjust_clear_upstream_when_supervisor_not_running(_Config) ->
+    ?assertEqual(undefined, whereis(rabbit_federation_exchange_link_sup_sup)),
+    %% adjust/1 with clear_upstream should not fail
+    ?assertEqual(ok, rabbit_federation_exchange_link_sup_sup:adjust({clear_upstream, <<"/">>, <<"test">>})),
+    ?assertEqual(ok, rabbit_federation_exchange_link_sup_sup:adjust({clear_upstream_set, <<"test">>})).

@@ -47,7 +47,8 @@ all_tests() ->
                                                        message_flow,
                                                        dynamic_reconfiguration,
                                                        federate_unfederate,
-                                                       dynamic_plugin_stop_start
+                                                       dynamic_plugin_stop_start,
+                                                       supervisor_shutdown_concurrency_safety
                                                       ]}
                                 ]},
      {with_disambiguate, [], [
@@ -315,6 +316,53 @@ dynamic_plugin_stop_start(Config) ->
             end, 90000),
           expect_federation(Ch, UpQ1, DownQ1, 120000)
       end, upstream_downstream(Config) ++ [q(DownQ2, Args)]).
+
+%% Stops the federation supervisor concurrently with runtime parameter
+%% changes and queue deletion.
+supervisor_shutdown_concurrency_safety(Config) ->
+    DownQ2 = <<"fed1.downstream2">>,
+    Args = ?config(target_queue_args, Config),
+    with_ch(Config,
+      fun (Ch) ->
+          UpQ = <<"upstream">>,
+          DownQ = <<"fed1.downstream">>,
+          maybe_declare_queue(Config, Ch, q(DownQ2, Args)),
+          expect_federation(Ch, UpQ, DownQ, ?EXPECT_FEDERATION_TIMEOUT),
+          expect_federation(Ch, UpQ, DownQ2, ?EXPECT_FEDERATION_TIMEOUT),
+
+          %% Stop the federation supervisor directly (simulating shutdown)
+          ct:pal("Stopping federation supervisor to simulate shutdown race"),
+          ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+                 rabbit_queue_federation_sup, stop, []),
+
+          %% Now trigger operations that would normally crash without the fix.
+          %% These should return ok, not crash with {noproc, _}
+
+          %% Test adjust/1 - this is called when parameters change
+          ct:pal("Calling adjust/1 after supervisor stopped"),
+          ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+                 rabbit_federation_queue_link_sup_sup, adjust, [everything]),
+          ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+                 rabbit_federation_queue_link_sup_sup, adjust,
+                 [{clear_upstream, <<"/">>, <<"test-upstream">>}]),
+
+          %% Test stop_child/1 by deleting a federated queue while the supervisor is down.
+          %% This triggers the decorator's shutdown callback, which calls stop_child.
+          ct:pal("Deleting federated queue after supervisor stopped"),
+          delete_queue(Ch, DownQ2),
+
+          %% Test that the plugin can be cleanly disabled and re-enabled
+          %% even after this manual supervisor stop
+          ct:pal("Disabling and re-enabling plugin"),
+          ok = rabbit_ct_broker_helpers:disable_plugin(Config, 0, "rabbitmq_queue_federation"),
+          ok = rabbit_ct_broker_helpers:enable_plugin(Config, 0, "rabbitmq_queue_federation"),
+
+          %% Wait for federation to be re-established
+          timer:sleep(?INITIAL_WAIT),
+
+          %% Verify federation still works after recovery
+          expect_federation(Ch, UpQ, DownQ, ?EXPECT_FEDERATION_TIMEOUT)
+      end, upstream_downstream(Config)).
 
 restart_upstream(Config) ->
     [Rabbit, Hare] = rabbit_ct_broker_helpers:get_node_configs(Config,
