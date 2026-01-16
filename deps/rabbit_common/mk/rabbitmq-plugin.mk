@@ -2,6 +2,10 @@ ifeq ($(filter rabbitmq-build.mk,$(notdir $(MAKEFILE_LIST))),)
 include $(dir $(lastword $(MAKEFILE_LIST)))rabbitmq-build.mk
 endif
 
+ifeq ($(filter rabbitmq-old-compiler.mk,$(notdir $(MAKEFILE_LIST))),)
+include $(dir $(lastword $(MAKEFILE_LIST)))rabbitmq-old-compiler.mk
+endif
+
 ifeq ($(filter rabbitmq-dist.mk,$(notdir $(MAKEFILE_LIST))),)
 include $(dir $(lastword $(MAKEFILE_LIST)))rabbitmq-dist.mk
 endif
