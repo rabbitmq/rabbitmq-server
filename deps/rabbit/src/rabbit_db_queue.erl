@@ -30,6 +30,7 @@
          create_or_get/1,
          set/1,
          delete/2,
+         delete_if/3,
          update/2,
          update_decorators/2,
          exists/1
@@ -384,34 +385,51 @@ list_for_count_in_khepri(VHostName) ->
              rabbit_khepri:timeout_error().
 
 delete(QueueName, Reason) ->
+    delete_if(QueueName, [], Reason).
+
+-spec delete_if(QName, Conditions, Reason) -> Ret when
+      QName :: rabbit_amqqueue:name(),
+      Conditions :: [khepri_condition:condition()],
+      Reason :: atom(),
+      Ret :: ok |
+      Deletions :: rabbit_binding:deletions() |
+      rabbit_khepri:timeout_error().
+
+delete_if(QueueName, Conditions, Reason) ->
     rabbit_khepri:handle_fallback(
-      #{mnesia => fun() -> delete_in_mnesia(QueueName, Reason) end,
-        khepri => fun() -> delete_in_khepri(QueueName) end
+      #{mnesia => fun() -> delete_in_mnesia(QueueName, Conditions, Reason) end,
+        khepri => fun() -> delete_in_khepri(QueueName, Conditions) end
        }).
 
-delete_in_mnesia(QueueName, Reason) ->
+delete_in_mnesia(QueueName, Conditions, Reason) ->
     rabbit_mnesia:execute_mnesia_transaction(
       fun () ->
               case {mnesia:wread({?MNESIA_TABLE, QueueName}),
                     mnesia:wread({?MNESIA_DURABLE_TABLE, QueueName})} of
                   {[], []} ->
                       ok;
-                  _ ->
-                      OnlyDurable = case Reason of
-                                        missing_owner -> true;
-                                        _ -> false
-                                    end,
-                      internal_delete_in_mnesia(QueueName, OnlyDurable, Reason)
+                  {Qs, DurableQs} ->
+                      case queue_matches_conditions(Qs ++ DurableQs, Conditions) of
+                          true ->
+                              OnlyDurable = case Reason of
+                                                missing_owner -> true;
+                                                _ -> false
+                                            end,
+                              internal_delete_in_mnesia(QueueName, OnlyDurable, Reason);
+                          false ->
+                              ok
+                      end
               end
       end).
 
-delete_in_khepri(QueueName) ->
-    delete_in_khepri(QueueName, false).
+delete_in_khepri(QueueName, Conditions) ->
+    delete_in_khepri(QueueName, Conditions, false).
 
-delete_in_khepri(QueueName, OnlyDurable) ->
+delete_in_khepri(QueueName, Conditions, OnlyDurable) ->
+    Path0 = khepri_queue_path(QueueName),
+    Path = khepri_path:combine_with_conditions(Path0, Conditions),
     rabbit_khepri:transaction(
       fun () ->
-              Path = khepri_queue_path(QueueName),
               case khepri_tx_adv:delete(Path) of
                   {ok, #{data := _}} ->
                       %% we want to execute some things, as decided by rabbit_exchange,
@@ -438,7 +456,7 @@ internal_delete(QueueName, OnlyDurable, Reason) ->
     %% HA queues are removed it can be removed.
     rabbit_khepri:handle_fallback(
       #{mnesia => fun() -> internal_delete_in_mnesia(QueueName, OnlyDurable, Reason) end,
-        khepri => fun() -> delete_in_khepri(QueueName, OnlyDurable) end
+        khepri => fun() -> delete_in_khepri(QueueName, [], OnlyDurable) end
        }).
 
 internal_delete_in_mnesia(QueueName, OnlyDurable, Reason) ->
@@ -1359,6 +1377,20 @@ clear_in_khepri() ->
 %% --------------------------------------------------------------
 %% Internal
 %% --------------------------------------------------------------
+
+queue_matches_conditions(_, []) ->
+    true;
+queue_matches_conditions([], _Conditions) ->
+    false;
+queue_matches_conditions([Q | _], [#if_data_matches{pattern = Pattern,
+                                                     conditions = Conditions} | Rest]) ->
+    MatchSpec = ets:match_spec_compile([{Pattern, Conditions, [match]}]),
+    case ets:match_spec_run([Q], MatchSpec) of
+        [match] -> queue_matches_conditions([Q], Rest);
+        [] -> false
+    end;
+queue_matches_conditions(_, [Condition | _]) ->
+    error({unsupported_condition, Condition}).
 
 list_with_possible_retry_in_mnesia(Fun) ->
     %% amqqueue migration:
