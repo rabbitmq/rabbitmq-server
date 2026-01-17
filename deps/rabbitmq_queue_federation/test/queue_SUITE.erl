@@ -330,6 +330,20 @@ supervisor_shutdown_concurrency_safety(Config) ->
           UpQ = <<"upstream">>,
           DownQ = <<"fed1.downstream">>,
           maybe_declare_queue(Config, Ch, q(DownQ2, Args)),
+
+          %% Wait for both federation links to be established before proceeding.
+          rabbit_ct_helpers:await_condition(
+            fun() ->
+                    Status = rabbit_ct_broker_helpers:rpc(Config, 0,
+                               rabbit_federation_status, status, []),
+                    L = [Entry || Entry <- Status,
+                         proplists:get_value(queue, Entry) =:= DownQ orelse
+                             proplists:get_value(queue, Entry) =:= DownQ2,
+                         proplists:get_value(upstream_queue, Entry) =:= UpQ,
+                         proplists:get_value(status, Entry) =:= running],
+                    length(L) =:= 2
+            end, ?EXPECT_FEDERATION_TIMEOUT),
+
           expect_federation(Ch, UpQ, DownQ, ?EXPECT_FEDERATION_TIMEOUT),
           expect_federation(Ch, UpQ, DownQ2, ?EXPECT_FEDERATION_TIMEOUT),
 
