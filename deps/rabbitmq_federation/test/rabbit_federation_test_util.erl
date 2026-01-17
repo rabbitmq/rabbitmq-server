@@ -380,3 +380,49 @@ q(Name, Args) ->
     #'queue.declare'{queue   = Name,
                      durable = true,
                      arguments = Args}.
+
+x(Name) ->
+    x(Name, <<"topic">>).
+
+x(Name, Type) ->
+    #'exchange.declare'{exchange = Name,
+                        type = Type,
+                        durable = true}.
+
+await_running_queue_federation(Config, Links, Timeout) ->
+    await_running_queue_federation(Config, 0, Links, Timeout).
+
+await_running_queue_federation(Config, Node, Links, Timeout) ->
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+              Status = rabbit_ct_broker_helpers:rpc(Config, Node,
+                         rabbit_federation_status, status, []),
+              lists:all(
+                fun({DownQ, UpQ}) ->
+                        lists:any(
+                          fun(Entry) ->
+                                  proplists:get_value(queue, Entry) =:= DownQ andalso
+                                  proplists:get_value(upstream_queue, Entry) =:= UpQ andalso
+                                  proplists:get_value(status, Entry) =:= running
+                          end, Status)
+                end, Links)
+      end, Timeout).
+
+await_running_exchange_federation(Config, Links, Timeout) ->
+    await_running_exchange_federation(Config, 0, Links, Timeout).
+
+await_running_exchange_federation(Config, Node, Links, Timeout) ->
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+              Status = rabbit_ct_broker_helpers:rpc(Config, Node,
+                         rabbit_federation_status, status, []),
+              lists:all(
+                fun({DownX, UpX}) ->
+                        lists:any(
+                          fun(Entry) ->
+                                  proplists:get_value(exchange, Entry) =:= DownX andalso
+                                  proplists:get_value(upstream_exchange, Entry) =:= UpX andalso
+                                  proplists:get_value(status, Entry) =:= running
+                          end, Status)
+                end, Links)
+      end, Timeout).

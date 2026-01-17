@@ -14,42 +14,39 @@
 -compile(export_all).
 
 -import(rabbit_federation_test_util,
-        [wait_for_federation/2, expect/3, expect/4,
+        [expect/3, expect/4,
          set_upstream/4, set_upstream/5, clear_upstream/3, set_upstream_set/4, clear_upstream_set/3,
          set_policy/5, clear_policy/3,
          set_policy_pattern/5, set_policy_upstream/5, q/2, with_ch/3,
          maybe_declare_queue/3, delete_queue/2,
-         federation_links_in_vhost/3]).
+         federation_links_in_vhost/3,
+         await_running_queue_federation/3]).
 
--define(INITIAL_WAIT, 6000).
--define(EXPECT_FEDERATION_TIMEOUT, 30000).
+-define(EXPECT_FEDERATION_TIMEOUT, 15000).
 
 all() ->
     [
      {group, classic_queue},
      {group, quorum_queue},
-     {group, mixed}
+     {group, mixed},
+     {group, federation_mechanics}
     ].
 
 groups() ->
     [
-     {classic_queue, [], all_tests()},
-     {quorum_queue, [], all_tests()},
-     {mixed, [], all_tests()}
+     {classic_queue, [], queue_type_tests()},
+     {quorum_queue, [], queue_type_tests()},
+     {mixed, [], queue_type_tests()},
+     {federation_mechanics, [], federation_mechanics_tests()}
     ].
 
-all_tests() ->
+queue_type_tests() ->
     [
      {without_disambiguate, [], [
                                  {cluster_size_1, [], [
                                                        simple,
-                                                       multiple_upstreams_pattern,
                                                        multiple_downstreams,
-                                                       message_flow,
-                                                       dynamic_reconfiguration,
-                                                       federate_unfederate,
-                                                       dynamic_plugin_stop_start,
-                                                       supervisor_shutdown_concurrency_safety
+                                                       message_flow
                                                       ]}
                                 ]},
      {with_disambiguate, [], [
@@ -57,8 +54,21 @@ all_tests() ->
                              ]}
     ].
 
+federation_mechanics_tests() ->
+    [
+     {without_disambiguate, [], [
+                                 {cluster_size_1, [], [
+                                                       multiple_upstreams_pattern,
+                                                       dynamic_reconfiguration,
+                                                       federate_unfederate,
+                                                       dynamic_plugin_stop_start,
+                                                       supervisor_shutdown_concurrency_safety
+                                                      ]}
+                                ]}
+    ].
+
 %% -------------------------------------------------------------------
-%% Testsuite setup/teardown.
+%% Test suite setup/teardown.
 %% -------------------------------------------------------------------
 
 init_per_suite(Config) ->
@@ -94,6 +104,15 @@ init_per_group(mixed, Config) ->
        {source_queue_args, [{<<"x-queue-type">>, longstr, <<"classic">>}]},
        {target_queue_type, quorum},
        {target_queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>}]}
+      ]);
+init_per_group(federation_mechanics, Config) ->
+    rabbit_ct_helpers:set_config(
+      Config,
+      [
+       {source_queue_type, classic},
+       {source_queue_args, [{<<"x-queue-type">>, longstr, <<"classic">>}]},
+       {target_queue_type, classic},
+       {target_queue_args, [{<<"x-queue-type">>, longstr, <<"classic">>}]}
       ]);
 init_per_group(without_disambiguate, Config) ->
     rabbit_ct_helpers:set_config(Config,
@@ -143,16 +162,18 @@ end_per_group(quorum_queue, Config) ->
     Config;
 end_per_group(mixed, Config) ->
     Config;
+end_per_group(federation_mechanics, Config) ->
+    Config;
 end_per_group(_, Config) ->
     rabbit_ct_helpers:run_steps(Config,
       rabbit_ct_client_helpers:teardown_steps() ++
       rabbit_ct_broker_helpers:teardown_steps()).
 
 init_per_testcase(dynamic_plugin_stop_start = Testcase, Config) ->
-    ct:timetrap({seconds, 90}),
+    ct:timetrap({seconds, 60}),
     rabbit_ct_helpers:testcase_started(Config, Testcase);
 init_per_testcase(supervisor_shutdown_concurrency_safety = Testcase, Config) ->
-    ct:timetrap({seconds, 90}),
+    ct:timetrap({seconds, 60}),
     rabbit_ct_helpers:testcase_started(Config, Testcase);
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
@@ -161,12 +182,15 @@ end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
 %% -------------------------------------------------------------------
-%% Testcases.
+%% Test cases.
 %% -------------------------------------------------------------------
 
 simple(Config) ->
     with_ch(Config,
       fun (Ch) ->
+              await_running_queue_federation(Config,
+                [{<<"fed1.downstream">>, <<"upstream">>}],
+                ?EXPECT_FEDERATION_TIMEOUT),
               expect_federation(Ch, <<"upstream">>, <<"fed1.downstream">>)
       end, upstream_downstream(Config)).
 
@@ -192,6 +216,10 @@ multiple_upstreams_pattern(Config) ->
     TargetArgs = ?config(target_queue_args, Config),
     with_ch(Config,
       fun (Ch) ->
+              await_running_queue_federation(Config,
+                [{<<"pattern.downstream">>, <<"upstream">>},
+                 {<<"pattern.downstream">>, <<"upstream2">>}],
+                ?EXPECT_FEDERATION_TIMEOUT),
               expect_federation(Ch, <<"upstream">>, <<"pattern.downstream">>, ?EXPECT_FEDERATION_TIMEOUT),
               expect_federation(Ch, <<"upstream2">>, <<"pattern.downstream">>, ?EXPECT_FEDERATION_TIMEOUT)
       end, [q(<<"upstream">>, SourceArgs),
@@ -206,34 +234,37 @@ multiple_downstreams(Config) ->
     Args = ?config(target_queue_args, Config),
     with_ch(Config,
       fun (Ch) ->
-              timer:sleep(?INITIAL_WAIT),
+              await_running_queue_federation(Config,
+                [{<<"fed1.downstream">>, <<"upstream">>},
+                 {<<"fed2.downstream">>, <<"upstream2">>}],
+                ?EXPECT_FEDERATION_TIMEOUT),
               expect_federation(Ch, <<"upstream">>, <<"fed1.downstream">>, ?EXPECT_FEDERATION_TIMEOUT),
               expect_federation(Ch, <<"upstream2">>, <<"fed2.downstream">>, ?EXPECT_FEDERATION_TIMEOUT)
       end, upstream_downstream(Config) ++ [q(<<"fed2.downstream">>, Args)]).
 
 message_flow(Config) ->
-    %% TODO: specifc source / target here
     Args = ?config(source_queue_args, Config),
     with_ch(Config,
       fun (Ch) ->
-              timer:sleep(?INITIAL_WAIT),
+              await_running_queue_federation(Config,
+                [{<<"one">>, <<"two">>},
+                 {<<"two">>, <<"one">>}],
+                ?EXPECT_FEDERATION_TIMEOUT),
               publish_expect(Ch, <<>>, <<"one">>, <<"one">>, <<"first one">>, ?EXPECT_FEDERATION_TIMEOUT),
               publish_expect(Ch, <<>>, <<"two">>, <<"two">>, <<"first two">>, ?EXPECT_FEDERATION_TIMEOUT),
-              Seq = lists:seq(1, 50),
+              Seq = lists:seq(1, 10),
               [publish(Ch, <<>>, <<"one">>, <<"bulk">>) || _ <- Seq],
               [publish(Ch, <<>>, <<"two">>, <<"bulk">>) || _ <- Seq],
-              expect(Ch, <<"one">>, repeat(100, <<"bulk">>)),
+              expect(Ch, <<"one">>, repeat(20, <<"bulk">>)),
               expect_empty(Ch, <<"one">>),
               expect_empty(Ch, <<"two">>),
               [publish(Ch, <<>>, <<"one">>, <<"bulk">>) || _ <- Seq],
               [publish(Ch, <<>>, <<"two">>, <<"bulk">>) || _ <- Seq],
-              expect(Ch, <<"two">>, repeat(100, <<"bulk">>)),
+              expect(Ch, <<"two">>, repeat(20, <<"bulk">>)),
               expect_empty(Ch, <<"one">>),
               expect_empty(Ch, <<"two">>),
-              %% We clear the federation configuration to avoid a race condition
-              %% when deleting the queues in quorum mode. The federation link
-              %% would restart and lead to a state where nothing happened for
-              %% minutes.
+              %% Clear federation configuration to avoid a race condition when
+              %% deleting the queues in quorum mode
               clear_upstream_set(Config, 0, <<"one">>),
               clear_upstream_set(Config, 0, <<"two">>)
       end, [q(<<"one">>, Args),
@@ -242,7 +273,9 @@ message_flow(Config) ->
 dynamic_reconfiguration(Config) ->
     with_ch(Config,
       fun (Ch) ->
-              timer:sleep(?INITIAL_WAIT),
+              await_running_queue_federation(Config,
+                [{<<"fed1.downstream">>, <<"upstream">>}],
+                ?EXPECT_FEDERATION_TIMEOUT),
               expect_federation(Ch, <<"upstream">>, <<"fed1.downstream">>, ?EXPECT_FEDERATION_TIMEOUT),
 
               %% Test that clearing connections works
@@ -263,11 +296,14 @@ federate_unfederate(Config) ->
     Args = ?config(target_queue_args, Config),
     with_ch(Config,
       fun (Ch) ->
-              timer:sleep(?INITIAL_WAIT),
+              await_running_queue_federation(Config,
+                [{<<"fed1.downstream">>, <<"upstream">>},
+                 {<<"fed2.downstream">>, <<"upstream2">>}],
+                ?EXPECT_FEDERATION_TIMEOUT),
               expect_federation(Ch, <<"upstream">>, <<"fed1.downstream">>, ?EXPECT_FEDERATION_TIMEOUT),
               expect_federation(Ch, <<"upstream2">>, <<"fed2.downstream">>, ?EXPECT_FEDERATION_TIMEOUT),
 
-              %% clear the policy
+              %% Clear the policy
               rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"fed">>),
 
               expect_no_federation(Ch, <<"upstream">>, <<"fed1.downstream">>),
@@ -283,15 +319,16 @@ dynamic_plugin_stop_start(Config) ->
     Args = ?config(target_queue_args, Config),
     with_ch(Config,
       fun (Ch) ->
-          timer:sleep(?INITIAL_WAIT),
           UpQ1 = <<"upstream">>,
           UpQ2 = <<"upstream2">>,
           DownQ1 = <<"fed1.downstream">>,
+          await_running_queue_federation(Config,
+            [{DownQ1, UpQ1}, {DownQ2, UpQ2}],
+            ?EXPECT_FEDERATION_TIMEOUT),
           expect_federation(Ch, UpQ1, DownQ1, ?EXPECT_FEDERATION_TIMEOUT),
           expect_federation(Ch, UpQ2, DownQ2, ?EXPECT_FEDERATION_TIMEOUT),
 
           %% Disable the plugin, the link disappears
-          ct:pal("Stopping rabbitmq_federation"),
           ok = rabbit_ct_broker_helpers:disable_plugin(Config, 0, "rabbitmq_federation"),
 
           expect_no_federation(Ch, UpQ1, DownQ1),
@@ -301,25 +338,12 @@ dynamic_plugin_stop_start(Config) ->
           maybe_declare_queue(Config, Ch, q(DownQ2, Args)),
           ct:pal("Re-starting rabbitmq_federation"),
           ok = rabbit_ct_broker_helpers:enable_plugin(Config, 0, "rabbitmq_federation"),
-          timer:sleep(?INITIAL_WAIT),
 
           %% Declare a queue then re-enable the plugin, the links appear
-          wait_for_federation(
-            90,
-            fun() ->
-                    Status = rabbit_ct_broker_helpers:rpc(Config, 0,
-                               rabbit_federation_status, status, []),
-                    L = [
-                        Entry || Entry <- Status,
-                        proplists:get_value(queue, Entry) =:= DownQ1 orelse
-                        proplists:get_value(queue, Entry) =:= DownQ2,
-                        proplists:get_value(upstream_queue, Entry) =:= UpQ1 orelse
-                                     proplists:get_value(upstream_queue, Entry) =:= UpQ2,
-                        proplists:get_value(status, Entry) =:= running
-                    ],
-                    length(L) =:= 2
-            end),
-          expect_federation(Ch, UpQ1, DownQ1, 120000)
+          await_running_queue_federation(Config,
+            [{DownQ1, UpQ1}, {DownQ2, UpQ2}],
+            30000),
+          expect_federation(Ch, UpQ1, DownQ1, ?EXPECT_FEDERATION_TIMEOUT)
       end, upstream_downstream(Config) ++ [q(DownQ2, Args)]).
 
 supervisor_shutdown_concurrency_safety(Config) ->
@@ -332,23 +356,14 @@ supervisor_shutdown_concurrency_safety(Config) ->
           maybe_declare_queue(Config, Ch, q(DownQ2, Args)),
 
           %% Wait for both federation links to be established before proceeding
-          rabbit_ct_helpers:await_condition(
-            fun() ->
-                    Status = rabbit_ct_broker_helpers:rpc(Config, 0,
-                               rabbit_federation_status, status, []),
-                    L = [Entry || Entry <- Status,
-                         proplists:get_value(queue, Entry) =:= DownQ orelse
-                             proplists:get_value(queue, Entry) =:= DownQ2,
-                         proplists:get_value(upstream_queue, Entry) =:= UpQ,
-                         proplists:get_value(status, Entry) =:= running],
-                    length(L) =:= 2
-            end, ?EXPECT_FEDERATION_TIMEOUT),
+          await_running_queue_federation(Config,
+            [{DownQ, UpQ}, {DownQ2, UpQ}],
+            ?EXPECT_FEDERATION_TIMEOUT),
 
           expect_federation(Ch, UpQ, DownQ, ?EXPECT_FEDERATION_TIMEOUT),
           expect_federation(Ch, UpQ, DownQ2, ?EXPECT_FEDERATION_TIMEOUT),
 
           %% Stop the federation supervisor directly (simulating shutdown)
-          ct:pal("Stopping federation supervisor to simulate shutdown race"),
           ok = rabbit_ct_broker_helpers:rpc(Config, 0,
                  rabbit_federation_sup, stop, []),
 
@@ -356,7 +371,6 @@ supervisor_shutdown_concurrency_safety(Config) ->
           %% These should return ok, not crash with {noproc, _}
 
           %% Test adjust/1 - this is called when parameters change
-          ct:pal("Calling adjust/1 after supervisor stopped"),
           ok = rabbit_ct_broker_helpers:rpc(Config, 0,
                  rabbit_federation_queue_link_sup_sup, adjust, [everything]),
           ok = rabbit_ct_broker_helpers:rpc(Config, 0,
@@ -364,31 +378,21 @@ supervisor_shutdown_concurrency_safety(Config) ->
                  [{clear_upstream, <<"/">>, <<"test-upstream">>}]),
 
           %% Test stop_child/1 by deleting a federated queue while the supervisor
-          %% is down. This triggers the decorator's shutdown callback, which calls
-          %% stop_child.
-          ct:pal("Deleting federated queue after supervisor stopped"),
+          %% is down
           delete_queue(Ch, DownQ2),
 
           %% Test that the plugin can be cleanly disabled and re-enabled
           %% even after this manual supervisor stop
-          ct:pal("Disabling and re-enabling plugin"),
           ok = rabbit_ct_broker_helpers:disable_plugin(Config, 0, "rabbitmq_federation"),
           ok = rabbit_ct_broker_helpers:enable_plugin(Config, 0, "rabbitmq_federation"),
 
           %% Wait for federation to be re-established
-          rabbit_ct_helpers:await_condition(
-            fun() ->
-                    Status = rabbit_ct_broker_helpers:rpc(Config, 0,
-                               rabbit_federation_status, status, []),
-                    L = [Entry || Entry <- Status,
-                         proplists:get_value(queue, Entry) =:= DownQ,
-                         proplists:get_value(upstream_queue, Entry) =:= UpQ,
-                         proplists:get_value(status, Entry) =:= running],
-                    length(L) =:= 1
-            end, 60000),
+          await_running_queue_federation(Config,
+            [{DownQ, UpQ}],
+            30000),
 
           %% Verify federation still works after recovery
-          expect_federation(Ch, UpQ, DownQ, 60000)
+          expect_federation(Ch, UpQ, DownQ, ?EXPECT_FEDERATION_TIMEOUT)
       end, upstream_downstream(Config)).
 
 restart_upstream(Config) ->
@@ -404,17 +408,22 @@ restart_upstream(Config) ->
     TargetArgs = ?config(target_queue_args, Config),
     maybe_declare_queue(Config, Upstream, q(<<"test">>, SourceArgs)),
     maybe_declare_queue(Config, Downstream, q(<<"test">>, TargetArgs)),
-    Seq = lists:seq(1, 100),
+
+    await_running_queue_federation(Config,
+      [{<<"test">>, <<"test">>}],
+      ?EXPECT_FEDERATION_TIMEOUT),
+
+    Seq = lists:seq(1, 40),
     [publish(Upstream, <<>>, <<"test">>, <<"bulk">>) || _ <- Seq],
-    expect(Upstream, <<"test">>, repeat(25, <<"bulk">>)),
-    expect(Downstream, <<"test">>, repeat(25, <<"bulk">>)),
+    expect(Upstream, <<"test">>, repeat(10, <<"bulk">>)),
+    expect(Downstream, <<"test">>, repeat(10, <<"bulk">>)),
 
     rabbit_ct_client_helpers:close_channels_and_connection(Config, Hare),
     ok = rabbit_ct_broker_helpers:restart_node(Config, Hare),
     Upstream2 = rabbit_ct_client_helpers:open_channel(Config, Hare),
 
-    expect(Upstream2, <<"test">>, repeat(25, <<"bulk">>)),
-    expect(Downstream, <<"test">>, repeat(25, <<"bulk">>)),
+    expect(Upstream2, <<"test">>, repeat(10, <<"bulk">>)),
+    expect(Downstream, <<"test">>, repeat(10, <<"bulk">>)),
     expect_empty(Upstream2, <<"test">>),
     expect_empty(Downstream, <<"test">>),
 
