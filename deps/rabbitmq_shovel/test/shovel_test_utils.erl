@@ -11,16 +11,17 @@
 -include_lib("common_test/include/ct.hrl").
 
 -export([set_param/3, set_param/4, set_param/5, set_param_nowait/3,
-         await_shovel/2, await_shovel/3, await_shovel/4, await_shovel1/3,
+         await_shovel/2, await_shovel/3, await_shovel/4,
          shovels_from_status/0, shovels_from_status/1,
+         shovels_from_parameters/0,
          get_shovel_status/2, get_shovel_status/3,
          restart_shovel/2,
-         await/1, await/2, await_amqp10_event/3, await_credit/1,
+         await_amqp10_event/3, await_credit/1,
          await_running_shovel/1, await_running_shovel/2,
          await_terminated_shovel/1, await_terminated_shovel/2,
          clear_param/2, clear_param/3, make_uri/2,
          make_uri/3, make_uri/5,
-         await_shovel1/4, await_no_shovel/2,
+         await_no_shovel/2,
          delete_all_queues/0,
          with_amqp10_session/2, with_amqp10_session/3,
          amqp10_publish/3, amqp10_publish/4,
@@ -29,7 +30,7 @@
          amqp10_publish_expect/5, amqp10_declare_queue/3,
          amqp10_subscribe/2, amqp10_expect/2,
          amqp10_publish_msg/4,
-         await_autodelete/2, await_autodelete1/2,
+         await_autodelete/2,
          invalid_param/2, invalid_param/3,
          valid_param/2, valid_param/3, valid_param1/3,
          with_amqp091_ch/2, amqp091_publish_expect/5,
@@ -83,26 +84,33 @@ await_shovel(Config, Node, Name) ->
     await_shovel(Config, Node, Name, running).
 
 await_shovel(Config, Node, Name, ExpectedState) ->
-    rabbit_ct_broker_helpers:rpc(Config, Node,
-      ?MODULE, await_shovel1, [Config, Name, ExpectedState]).
+    await_shovel1(Config, Node, Name, ExpectedState, 30_000).
 
-await_shovel1(Config, Name, ExpectedState) ->
-    await_shovel1(Config, Name, ExpectedState, 30_000).
-
-await_shovel1(_Config, Name, ExpectedState, Timeout) ->
-    Ret = await(fun() ->
-                  Status = shovels_from_status(ExpectedState),
-                  lists:member(Name, Status)
-          end, Timeout),
-    Ret.
+await_shovel1(Config, Node, Name, ExpectedState, Timeout) ->
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+              Status = rabbit_ct_broker_helpers:rpc(
+                         Config, Node, ?MODULE, shovels_from_status, [ExpectedState]),
+              lists:member(Name, Status)
+      end, Timeout).
 
 await_no_shovel(Config, Name) ->
-    try
-        rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, await_shovel1,
-                                     [Config, Name, running, 10_000]),
-        throw(unexpected_success)
-    catch
-        _:{exception, {await_timeout, false}, _} ->
+    await_no_shovel(Config, 0, Name, 10_000).
+
+await_no_shovel(Config, Node, Name, Timeout) ->
+    Deadline = erlang:monotonic_time(millisecond) + Timeout,
+    await_no_shovel_loop(Config, Node, Name, Deadline).
+
+await_no_shovel_loop(Config, Node, Name, Deadline) ->
+    Status = rabbit_ct_broker_helpers:rpc(
+               Config, Node, ?MODULE, shovels_from_status, [running]),
+    case {lists:member(Name, Status), erlang:monotonic_time(millisecond) < Deadline} of
+        {true, _} ->
+            ct:fail("Shovel ~p unexpectedly started", [Name]);
+        {false, true} ->
+            timer:sleep(500),
+            await_no_shovel_loop(Config, Node, Name, Deadline);
+        {false, false} ->
             ok
     end.
 
@@ -148,17 +156,19 @@ await_running_shovel(Name) ->
     await_running_shovel(Name, 30_000).
 
 await_running_shovel(Name, Timeout) ->
-    await(fun() ->
+    rabbit_ct_helpers:await_condition(
+      fun() ->
               lists:member(Name, static_shovels_from_status(running))
-          end, Timeout).
+      end, Timeout).
 
 await_terminated_shovel(Name) ->
     await_terminated_shovel(Name, 30_000).
 
 await_terminated_shovel(Name, Timeout) ->
-    await(fun() ->
+    rabbit_ct_helpers:await_condition(
+      fun() ->
               lists:member(Name, static_shovels_from_status(terminated))
-          end, Timeout).
+      end, Timeout).
 
 get_shovel_status(Config, Name) ->
     get_shovel_status(Config, 0, Name).
@@ -176,24 +186,6 @@ get_shovel_status(Config, Node, Name) ->
                 {Status, Info} ->
                     proplists:get_value(blocked_status, Info, Status)
             end
-    end.
-
-await(Pred) ->
-    case Pred() of
-        true  -> ok;
-        false -> timer:sleep(100),
-                 await(Pred)
-    end.
-
-await(_Pred, Timeout) when Timeout =< 0 ->
-    error(await_timeout);
-await(Pred, Timeout) ->
-    case Pred() of
-        true  -> ok;
-        Other when Timeout =< 100 ->
-            error({await_timeout, Other});
-        _ -> timer:sleep(100),
-             await(Pred, Timeout - 100)
     end.
 
 clear_param(Config, Name) ->
@@ -348,17 +340,21 @@ amqp10_expect_count(Session, Dest, Count) ->
     Msgs.
 
 await_autodelete(Config, Name) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, await_autodelete1, [Config, Name], 10000).
+    await_autodelete(Config, 0, Name, 10_000).
 
-await_autodelete1(_Config, Name) ->
-    await(
-      fun () -> not lists:member(Name, shovels_from_parameters()) end),
-    await(
-      fun () ->
-              not lists:member(Name,
-                               shovels_from_status())
-      end).
+await_autodelete(Config, Node, Name, Timeout) ->
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+              Params = rabbit_ct_broker_helpers:rpc(
+                         Config, Node, ?MODULE, shovels_from_parameters, []),
+              not lists:member(Name, Params)
+      end, Timeout),
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+              Status = rabbit_ct_broker_helpers:rpc(
+                         Config, Node, ?MODULE, shovels_from_status, []),
+              not lists:member(Name, Status)
+      end, Timeout).
 
 shovels_from_parameters() ->
     L = rabbit_runtime_parameters:list(<<"/">>, <<"shovel">>),

@@ -395,12 +395,9 @@ credit_flow(Config) ->
                   amqp_channel:wait_for_confirms(Ch),
 
                   %% Wait until the shovel is blocked
-                  shovel_test_utils:await(
+                  rabbit_ct_helpers:await_condition(
                     fun() ->
-                            case shovel_test_utils:get_shovel_status(Config, <<"test">>) of
-                                flow -> true;
-                                Status -> Status
-                            end
+                            flow =:= shovel_test_utils:get_shovel_status(Config, <<"test">>)
                     end,
                     5000),
 
@@ -429,7 +426,7 @@ credit_flow(Config) ->
                   %% message queues should be empty
                   resume_process(Config),
 
-                  shovel_test_utils:await(
+                  rabbit_ct_helpers:await_condition(
                     fun() ->
                             #{messages := Cnt} = message_count(Config, <<"src">>),
                             Cnt =:= 0
@@ -441,9 +438,9 @@ credit_flow(Config) ->
                         Config, 0, recon, proc_count, [message_queue_len, 1]),
                   ?assert(P < 3),
 
-                  shovel_test_utils:await(
+                  rabbit_ct_helpers:await_condition(
                     fun() ->
-                            shovel_test_utils:get_shovel_status(Config, <<"test">>) =:= running
+                            running =:= shovel_test_utils:get_shovel_status(Config, <<"test">>)
                     end,
                     5000)
               after
