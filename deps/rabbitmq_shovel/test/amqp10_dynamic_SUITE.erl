@@ -436,17 +436,21 @@ lookup_user(Config, Name) ->
     User.
 
 await_autodelete(Config, Name) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, await_autodelete1, [Config, Name], 10000).
+    await_autodelete(Config, 0, Name, 10_000).
 
-await_autodelete1(_Config, Name) ->
-    shovel_test_utils:await(
-      fun () -> not lists:member(Name, shovels_from_parameters()) end),
-    shovel_test_utils:await(
-      fun () ->
-              not lists:member(Name,
-                               shovel_test_utils:shovels_from_status())
-      end).
+await_autodelete(Config, Node, Name, Timeout) ->
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+              Params = rabbit_ct_broker_helpers:rpc(
+                         Config, Node, ?MODULE, shovels_from_parameters, []),
+              not lists:member(Name, Params)
+      end, Timeout),
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+              Status = rabbit_ct_broker_helpers:rpc(
+                         Config, Node, shovel_test_utils, shovels_from_status, []),
+              not lists:member(Name, Status)
+      end, Timeout).
 
 shovels_from_parameters() ->
     L = rabbit_runtime_parameters:list(<<"/">>, <<"shovel">>),

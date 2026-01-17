@@ -9,11 +9,10 @@
 
 -include_lib("common_test/include/ct.hrl").
 -export([set_param/3, set_param/4, set_param/5, set_param_nowait/3,
-         await_shovel/2, await_shovel/3, await_shovel/4, await_shovel1/3,
+         await_shovel/2, await_shovel/3, await_shovel/4,
          shovels_from_status/0, shovels_from_status/1,
          get_shovel_status/2, get_shovel_status/3,
          restart_shovel/2,
-         await/1, await/2,
          await_running_shovel/1, await_running_shovel/2,
          await_terminated_shovel/1, await_terminated_shovel/2,
          clear_param/2, clear_param/3, make_uri/2]).
@@ -53,15 +52,15 @@ await_shovel(Config, Node, Name) ->
     await_shovel(Config, Node, Name, running).
 
 await_shovel(Config, Node, Name, ExpectedState) ->
-    rabbit_ct_broker_helpers:rpc(Config, Node,
-      ?MODULE, await_shovel1, [Config, Name, ExpectedState]).
+    await_shovel1(Config, Node, Name, ExpectedState, 30_000).
 
-await_shovel1(_Config, Name, ExpectedState) ->
-    Ret = await(fun() ->
-                  Status = shovels_from_status(ExpectedState),
-                  lists:member(Name, Status)
-          end, 30_000),
-    Ret.
+await_shovel1(Config, Node, Name, ExpectedState, Timeout) ->
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+              Status = rabbit_ct_broker_helpers:rpc(
+                         Config, Node, ?MODULE, shovels_from_status, [ExpectedState]),
+              lists:member(Name, Status)
+      end, Timeout).
 
 shovels_from_status() ->
     shovels_from_status(running).
@@ -80,17 +79,19 @@ await_running_shovel(Name) ->
     await_running_shovel(Name, 30_000).
 
 await_running_shovel(Name, Timeout) ->
-    await(fun() ->
+    rabbit_ct_helpers:await_condition(
+      fun() ->
               lists:member(Name, static_shovels_from_status(running))
-          end, Timeout).
+      end, Timeout).
 
 await_terminated_shovel(Name) ->
     await_terminated_shovel(Name, 30_000).
 
 await_terminated_shovel(Name, Timeout) ->
-    await(fun() ->
+    rabbit_ct_helpers:await_condition(
+      fun() ->
               lists:member(Name, static_shovels_from_status(terminated))
-          end, Timeout).
+      end, Timeout).
 
 get_shovel_status(Config, Name) ->
     get_shovel_status(Config, 0, Name).
@@ -104,24 +105,6 @@ get_shovel_status(Config, Node, Name) ->
         _ ->
             {Status, Info} = proplists:get_value(info, S),
             proplists:get_value(blocked_status, Info, Status)
-    end.
-
-await(Pred) ->
-    case Pred() of
-        true  -> ok;
-        false -> timer:sleep(100),
-                 await(Pred)
-    end.
-
-await(_Pred, Timeout) when Timeout =< 0 ->
-    error(await_timeout);
-await(Pred, Timeout) ->
-    case Pred() of
-        true  -> ok;
-        Other when Timeout =< 100 ->
-            error({await_timeout, Other});
-        _ -> timer:sleep(100),
-             await(Pred, Timeout - 100)
     end.
 
 clear_param(Config, Name) ->

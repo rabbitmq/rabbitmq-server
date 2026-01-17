@@ -688,12 +688,9 @@ credit_flow(Config) ->
                   amqp_channel:wait_for_confirms(Ch),
 
                   %% Wait until the shovel is blocked
-                  shovel_test_utils:await(
+                  rabbit_ct_helpers:await_condition(
                     fun() ->
-                            case shovel_test_utils:get_shovel_status(Config, <<"test">>) of
-                                flow -> true;
-                                Status -> Status
-                            end
+                            flow =:= shovel_test_utils:get_shovel_status(Config, <<"test">>)
                     end,
                     5000),
 
@@ -722,7 +719,7 @@ credit_flow(Config) ->
                   %% message queues should be empty
                   resume_process(Config),
 
-                  shovel_test_utils:await(
+                  rabbit_ct_helpers:await_condition(
                     fun() ->
                             #{messages := Cnt} = message_count(Config, <<"src">>),
                             Cnt =:= 0
@@ -734,9 +731,9 @@ credit_flow(Config) ->
                         Config, 0, recon, proc_count, [message_queue_len, 1]),
                   ?assert(P < 3),
 
-                  shovel_test_utils:await(
+                  rabbit_ct_helpers:await_condition(
                     fun() ->
-                            shovel_test_utils:get_shovel_status(Config, <<"test">>) =:= running
+                            running =:= shovel_test_utils:get_shovel_status(Config, <<"test">>)
                     end,
                     5000)
               after
@@ -813,7 +810,7 @@ dest_resource_alarm(AckMode, Config) ->
                            {<<"src-queue">>, <<"temp">>},
                            {<<"dest-queue">>, <<"src">>},
                            {<<"src-delete-after">>, <<"queue-length">>}], none]),
-                  shovel_test_utils:await(
+                  rabbit_ct_helpers:await_condition(
                     fun() ->
                             #{messages := Cnt} = message_count(Config, <<"temp">>),
                             Cnt =:= 0
@@ -856,7 +853,7 @@ dest_resource_alarm(AckMode, Config) ->
                   %% arrive to the dest queue
                   set_vm_memory_high_watermark(Config, OrigLimit),
 
-                  catch shovel_test_utils:await(
+                  catch rabbit_ct_helpers:await_condition(
                     fun() ->
                             #{messages := Cnt} = message_count(Config, <<"dest">>),
                             Cnt =:= 1001
@@ -978,17 +975,21 @@ cleanup1(_Config) ->
      || Q <- rabbit_amqqueue:list()].
 
 await_autodelete(Config, Name) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, await_autodelete1, [Config, Name]).
+    await_autodelete(Config, 0, Name, 10_000).
 
-await_autodelete1(_Config, Name) ->
-    shovel_test_utils:await(
-      fun () -> not lists:member(Name, shovels_from_parameters()) end),
-    shovel_test_utils:await(
-      fun () ->
-              not lists:member(Name,
-                               shovel_test_utils:shovels_from_status())
-      end).
+await_autodelete(Config, Node, Name, Timeout) ->
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+              Params = rabbit_ct_broker_helpers:rpc(
+                         Config, Node, ?MODULE, shovels_from_parameters, []),
+              not lists:member(Name, Params)
+      end, Timeout),
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+              Status = rabbit_ct_broker_helpers:rpc(
+                         Config, Node, shovel_test_utils, shovels_from_status, []),
+              not lists:member(Name, Status)
+      end, Timeout).
 
 shovels_from_parameters() ->
     L = rabbit_runtime_parameters:list(<<"/">>, <<"shovel">>),
