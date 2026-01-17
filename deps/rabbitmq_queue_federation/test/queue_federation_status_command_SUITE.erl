@@ -11,6 +11,10 @@
 
 -compile(export_all).
 
+-import(queue_federation_test_helpers,
+        [setup_federation/1, setup_down_federation/1, with_ch/3, q/1,
+         await_running_federation/3]).
+
 -define(CMD, 'Elixir.RabbitMQ.CLI.Ctl.Commands.FederationStatusCommand').
 
 all() ->
@@ -55,10 +59,10 @@ end_per_suite(Config) ->
       rabbit_ct_broker_helpers:teardown_steps()).
 
 init_per_group(federated, Config) ->
-    rabbit_federation_test_util:setup_federation(Config),
+    setup_federation(Config),
     Config;
 init_per_group(federated_down, Config) ->
-    rabbit_federation_test_util:setup_down_federation(Config),
+    setup_down_federation(Config),
     Config;
 init_per_group(_, Config) ->
     Config.
@@ -89,32 +93,33 @@ run_federated(Config) ->
     [A] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Opts = #{node => A},
     %% All
-    rabbit_federation_test_util:with_ch(
+    with_ch(
       Config,
       fun(_) ->
-              timer:sleep(3000),
+              await_running_federation(Config,
+                [{<<"fed1.downstream">>, <<"upstream">>}], 15000),
               {stream, [Props]} = ?CMD:run([], Opts#{only_down => false}),
               <<"upstream">> = proplists:get_value(upstream_queue, Props),
               <<"fed1.downstream">> = proplists:get_value(queue, Props),
               <<"fed.tag">> = proplists:get_value(consumer_tag, Props),
               running = proplists:get_value(status, Props)
       end,
-      [rabbit_federation_test_util:q(<<"upstream">>),
-       rabbit_federation_test_util:q(<<"fed1.downstream">>)]),
+      [q(<<"upstream">>),
+       q(<<"fed1.downstream">>)]),
     %% Down
-    rabbit_federation_test_util:with_ch(
+    with_ch(
       Config,
       fun(_) ->
               {stream, []} = ?CMD:run([], Opts#{only_down => true})
       end,
-      [rabbit_federation_test_util:q(<<"upstream">>),
-       rabbit_federation_test_util:q(<<"fed1.downstream">>)]).
+      [q(<<"upstream">>),
+       q(<<"fed1.downstream">>)]).
 
 run_down_federated(Config) ->
     [A] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Opts = #{node => A},
     %% All
-    rabbit_federation_test_util:with_ch(
+    with_ch(
       Config,
       fun(_) ->
               rabbit_ct_helpers:await_condition(
@@ -127,10 +132,10 @@ run_down_federated(Config) ->
                             == lists:sort(Links)
                 end, 15000)
       end,
-      [rabbit_federation_test_util:q(<<"upstream">>),
-       rabbit_federation_test_util:q(<<"fed1.downstream">>)]),
+      [q(<<"upstream">>),
+       q(<<"fed1.downstream">>)]),
     %% Down
-    rabbit_federation_test_util:with_ch(
+    with_ch(
       Config,
       fun(_) ->
               rabbit_ct_helpers:await_condition(
@@ -141,8 +146,8 @@ run_down_federated(Config) ->
                             andalso (error == proplists:get_value(status, hd(Props)))
                 end, 15000)
       end,
-      [rabbit_federation_test_util:q(<<"upstream">>),
-       rabbit_federation_test_util:q(<<"fed1.downstream">>)]).
+      [q(<<"upstream">>),
+       q(<<"fed1.downstream">>)]).
 
 output_federated(Config) ->
     [A] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),

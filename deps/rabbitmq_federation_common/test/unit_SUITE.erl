@@ -109,8 +109,7 @@ terminate_all_shutdown_kills_non_trapping_processes(_Config) ->
     Pids = [spawn(fun() -> receive stop -> ok end end) || _ <- lists:seq(1, 10)],
     [pg:join(Scope, test_group, Pid) || Pid <- Pids],
     ?assertEqual(ok, rabbit_federation_pg:terminate_all_local_members(Scope, 5000)),
-    timer:sleep(100),
-    [?assertEqual(false, is_process_alive(Pid)) || Pid <- Pids],
+    await_all_dead(Pids),
     stop_pg_scope(Scope).
 
 terminate_all_timeout_force_kill(_Config) ->
@@ -122,8 +121,7 @@ terminate_all_timeout_force_kill(_Config) ->
     end) || _ <- lists:seq(1, 5)],
     [pg:join(Scope, test_group, Pid) || Pid <- Pids],
     ?assertEqual(ok, rabbit_federation_pg:terminate_all_local_members(Scope, 100)),
-    timer:sleep(100),
-    [?assertEqual(false, is_process_alive(Pid)) || Pid <- Pids],
+    await_all_dead(Pids),
     stop_pg_scope(Scope).
 
 terminate_all_paced_batching(_Config) ->
@@ -136,8 +134,7 @@ terminate_all_paced_batching(_Config) ->
     Timeout = 5000,
     ?assertEqual(ok, rabbit_federation_pg:terminate_all_local_members(
         Scope, Timeout, BatchSize, ThrottleDelay)),
-    timer:sleep(100),
-    [?assertEqual(false, is_process_alive(Pid)) || Pid <- Pids],
+    await_all_dead(Pids),
     stop_pg_scope(Scope).
 
 terminate_all_timeout_kills_remaining_batches(_Config) ->
@@ -153,8 +150,7 @@ terminate_all_timeout_kills_remaining_batches(_Config) ->
     Timeout = 50,
     ?assertEqual(ok, rabbit_federation_pg:terminate_all_local_members(
         Scope, Timeout, BatchSize, ThrottleDelay)),
-    timer:sleep(100),
-    [?assertEqual(false, is_process_alive(Pid)) || Pid <- Pids],
+    await_all_dead(Pids),
     stop_pg_scope(Scope).
 
 stop_pg_scope(Scope) ->
@@ -165,3 +161,16 @@ stop_pg_scope(Scope) ->
         _ -> ok
     end,
     ok.
+
+await_all_dead(Pids) ->
+    await_all_dead(Pids, 100).
+
+await_all_dead(Pids, AttemptsLeft) when AttemptsLeft =< 0 ->
+    [?assertEqual(false, is_process_alive(Pid)) || Pid <- Pids];
+await_all_dead(Pids, AttemptsLeft) ->
+    case lists:all(fun(Pid) -> not is_process_alive(Pid) end, Pids) of
+        true -> ok;
+        false ->
+            timer:sleep(10),
+            await_all_dead(Pids, AttemptsLeft - 1)
+    end.

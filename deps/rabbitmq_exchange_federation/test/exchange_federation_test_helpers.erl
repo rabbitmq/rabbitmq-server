@@ -5,7 +5,7 @@
 %% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
--module(rabbit_federation_test_util).
+-module(exchange_federation_test_helpers).
 
 -include("rabbit_exchange_federation.hrl").
 -include_lib("rabbitmq_federation_common/include/rabbit_federation.hrl").
@@ -244,3 +244,22 @@ x(Name, Type) ->
     #'exchange.declare'{exchange = Name,
                         type = Type,
                         durable = true}.
+
+await_running_federation(Config, Links, Timeout) ->
+    await_running_federation(Config, 0, Links, Timeout).
+
+await_running_federation(Config, Node, Links, Timeout) ->
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+              Status = rabbit_ct_broker_helpers:rpc(Config, Node,
+                         rabbit_federation_status, status, []),
+              lists:all(
+                fun({DownX, UpX}) ->
+                        lists:any(
+                          fun(Entry) ->
+                                  proplists:get_value(exchange, Entry) =:= DownX andalso
+                                  proplists:get_value(upstream_exchange, Entry) =:= UpX andalso
+                                  proplists:get_value(status, Entry) =:= running
+                          end, Status)
+                end, Links)
+      end, Timeout).

@@ -5,7 +5,7 @@
 %% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
--module(rabbit_federation_test_util).
+-module(queue_federation_test_helpers).
 
 -include_lib("rabbitmq_federation_common/include/rabbit_federation.hrl").
 -include_lib("eunit/include/eunit.hrl").
@@ -297,3 +297,22 @@ q(Name, Args) ->
     #'queue.declare'{queue   = Name,
                      durable = true,
                      arguments = Args}.
+
+await_running_federation(Config, Links, Timeout) ->
+    await_running_federation(Config, 0, Links, Timeout).
+
+await_running_federation(Config, Node, Links, Timeout) ->
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+              Status = rabbit_ct_broker_helpers:rpc(Config, Node,
+                         rabbit_federation_status, status, []),
+              lists:all(
+                fun({DownQ, UpQ}) ->
+                        lists:any(
+                          fun(Entry) ->
+                                  proplists:get_value(queue, Entry) =:= DownQ andalso
+                                  proplists:get_value(upstream_queue, Entry) =:= UpQ andalso
+                                  proplists:get_value(status, Entry) =:= running
+                          end, Status)
+                end, Links)
+      end, Timeout).
