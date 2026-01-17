@@ -677,7 +677,7 @@ reject_publish_down_target_quorum_queue(Config) ->
 
     %% Send 20 messages when target queue is down.
     ok = rabbit_ct_client_helpers:close_channel(Ch2),
-    ok = rabbit_ct_broker_helpers:stop_node(Config, Server2),
+    ok = rabbit_ct_broker_helpers:stop_broker(Config, Server2),
     [begin
          ok = amqp_channel:cast(Ch, #'basic.publish'{routing_key = SourceQ},
                                 #amqp_msg{props = #'P_basic'{expiration = integer_to_binary(N)},
@@ -685,7 +685,7 @@ reject_publish_down_target_quorum_queue(Config) ->
      end || N <- lists:seq(1, 20)],
 
     %% Send another 30 messages when target queue is up.
-    ok = rabbit_ct_broker_helpers:start_node(Config, Server2),
+    ok = rabbit_ct_broker_helpers:start_broker(Config, Server2),
     [begin
          ok = amqp_channel:cast(Ch, #'basic.publish'{routing_key = SourceQ},
                                 #amqp_msg{props = #'P_basic'{expiration = integer_to_binary(N)},
@@ -879,8 +879,8 @@ many_target_queues(Config) ->
     ?awaitMatch([{0, 0}],
                 dirty_query([Server1], RaName, fun rabbit_fifo:query_stat_dlx/1),
                 ?DEFAULT_WAIT, ?DEFAULT_INTERVAL),
-    ok = rabbit_ct_broker_helpers:stop_node(Config, Server3),
-    ok = rabbit_ct_broker_helpers:stop_node(Config, Server2),
+    ok = rabbit_ct_broker_helpers:stop_broker(Config, Server3),
+    ok = rabbit_ct_broker_helpers:stop_broker(Config, Server2),
     Msg2 = <<"m2">>,
     ok = amqp_channel:cast(Ch,
                            #'basic.publish'{routing_key = SourceQ},
@@ -894,8 +894,8 @@ many_target_queues(Config) ->
                 ?DEFAULT_WAIT, ?DEFAULT_INTERVAL),
     ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = Msg2}},
                  amqp_channel:call(Ch, #'basic.get'{queue = TargetQ1})),
-    ok = rabbit_ct_broker_helpers:start_node(Config, Server2),
-    ok = rabbit_ct_broker_helpers:start_node(Config, Server3),
+    ok = rabbit_ct_broker_helpers:start_broker(Config, Server2),
+    ok = rabbit_ct_broker_helpers:start_broker(Config, Server3),
     ?awaitMatch([{0, 0}],
                 dirty_query([Server1], RaName, fun rabbit_fifo:query_stat_dlx/1),
                 3000, 500),
@@ -930,14 +930,14 @@ single_dlx_worker(Config) ->
         [_, {active, 0}, _, _]],
        rabbit_ct_broker_helpers:rpc_all(Config, supervisor, count_children, [rabbit_fifo_dlx_sup])),
 
-    ok = rabbit_ct_broker_helpers:stop_node(Config, Server1),
+    ok = rabbit_ct_broker_helpers:stop_broker(Config, Server1),
     RaName = ra_name(SourceQ),
     {ok, _, {_, Leader0}} = ra:members({RaName, Server2}),
     ?assertNotEqual(Server1, Leader0),
     [Follower0] = Servers -- [Server1, Leader0],
     assert_active_dlx_workers(1, Config, Leader0),
     assert_active_dlx_workers(0, Config, Follower0),
-    ok = rabbit_ct_broker_helpers:start_node(Config, Server1),
+    ok = rabbit_ct_broker_helpers:start_broker(Config, Server1),
     consistently(
       ?_assertEqual(
          0,
