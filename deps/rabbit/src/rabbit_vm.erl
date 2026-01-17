@@ -93,7 +93,11 @@ memory() ->
      {mnesia,               MnesiaETS},
      {quorum_ets,           QuorumETS},
      {metadata_store_ets,   MetadataStoreETS},
+<<<<<<< HEAD
      {other_ets,            ETS - MnesiaETS - MetricsETS - MgmtDbETS - MsgIndexETS - QuorumETS - MetadataStoreETS},
+=======
+     {other_ets,            max(0, ETS - MnesiaETS - MetricsETS - MgmtDbETS - MsgIndexETS - MetadataStoreETS - lists:sum(QueuesEtsStats))},
+>>>>>>> 21b491a35 (Make sure that "Other ETS" and "Other system" memory metrics are never negative)
 
      %% Messages (mostly, some binaries are not messages)
      {binary,               Bin},
@@ -102,7 +106,7 @@ memory() ->
      %% System
      {code,                 Code},
      {atom,                 Atom},
-     {other_system,         System - ETS - Bin - Code - Atom},
+     {other_system,         max(0, System - ETS - Bin - Code - Atom)},
      {allocated_unused,     AllocatedUnused},
      {reserved_unallocated, OSReserved},
      {strategy,             Strategy},
