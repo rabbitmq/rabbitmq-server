@@ -16,6 +16,8 @@
          get_shovel_status/2, get_shovel_status/3,
          restart_shovel/2,
          await/1, await/2, await_amqp10_event/3, await_credit/1,
+         await_running_shovel/1, await_running_shovel/2,
+         await_terminated_shovel/1, await_terminated_shovel/2,
          clear_param/2, clear_param/3, make_uri/2,
          make_uri/3, make_uri/5,
          await_shovel1/4, await_no_shovel/2,
@@ -136,6 +138,27 @@ shovels_from_status(ExpectedState) ->
     S = rabbit_shovel_status:status(),
     [N || {{<<"/">>, N}, dynamic, {State, _}, _, _} <- S, State == ExpectedState] ++
         [N || {{<<"/">>, N}, dynamic, {State, _}, _} <- S, State == ExpectedState].
+
+static_shovels_from_status(ExpectedState) ->
+    S = rabbit_shovel_status:status(),
+    [N || {N, static, {State, _}, _, _} <- S, State == ExpectedState] ++
+        [N || {N, static, {State, _}, _} <- S, State == ExpectedState].
+
+await_running_shovel(Name) ->
+    await_running_shovel(Name, 30_000).
+
+await_running_shovel(Name, Timeout) ->
+    await(fun() ->
+              lists:member(Name, static_shovels_from_status(running))
+          end, Timeout).
+
+await_terminated_shovel(Name) ->
+    await_terminated_shovel(Name, 30_000).
+
+await_terminated_shovel(Name, Timeout) ->
+    await(fun() ->
+              lists:member(Name, static_shovels_from_status(terminated))
+          end, Timeout).
 
 get_shovel_status(Config, Name) ->
     get_shovel_status(Config, 0, Name).

@@ -441,10 +441,11 @@ credit_flow(Config) ->
                         Config, 0, recon, proc_count, [message_queue_len, 1]),
                   ?assert(P < 3),
 
-                  %% Status only transitions from flow to running
-                  %% after a 1 second state-change-interval
-                  timer:sleep(1000),
-                  running = shovel_test_utils:get_shovel_status(Config, <<"test">>)
+                  shovel_test_utils:await(
+                    fun() ->
+                            shovel_test_utils:get_shovel_status(Config, <<"test">>) =:= running
+                    end,
+                    5000)
               after
                   resume_process(Config),
                   set_default_credit(Config, OrigCredit)
