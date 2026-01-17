@@ -3497,8 +3497,8 @@ last_queue_confirms(Config) ->
     end,
 
     %% Make quorum queue unavailable.
-    ok = rabbit_ct_broker_helpers:stop_node(Config, 2),
-    ok = rabbit_ct_broker_helpers:stop_node(Config, 1),
+    ok = rabbit_ct_broker_helpers:stop_broker(Config, 2),
+    ok = rabbit_ct_broker_helpers:stop_broker(Config, 1),
 
     DTag2 = <<"t2">>,
     DTag3 = <<"t3">>,
@@ -3513,8 +3513,8 @@ last_queue_confirms(Config) ->
     after 200 -> ok
     end,
 
-    ok = rabbit_ct_broker_helpers:start_node(Config, 1),
-    ok = rabbit_ct_broker_helpers:start_node(Config, 2),
+    ok = rabbit_ct_broker_helpers:start_broker(Config, 1),
+    ok = rabbit_ct_broker_helpers:start_broker(Config, 2),
     %% Since the quorum queue has become available, we should now get a confirmation for m2.
     receive {amqp10_disposition, {accepted, DTag2}} -> ok
     after 30_000 -> ct:fail({missing_accepted, DTag2})
@@ -3573,7 +3573,7 @@ target_queue_deleted(Config) ->
     ?assertEqual(2, length(Members)),
     [{RaName, ReplicaNode}] = Members -- [ServerId0],
     ct:pal("Stopping node ~s to make quorum queue unavailable...", [ReplicaNode]),
-    ok = rabbit_ct_broker_helpers:stop_node(Config, ReplicaNode),
+    ok = rabbit_ct_broker_helpers:stop_broker(Config, ReplicaNode),
     flush("quorum queue is down"),
 
     DTag2 = <<"t2">>,
@@ -3589,7 +3589,7 @@ target_queue_deleted(Config) ->
     after 100 -> ok
     end,
 
-    ok = rabbit_ct_broker_helpers:start_node(Config, ReplicaNode),
+    ok = rabbit_ct_broker_helpers:start_broker(Config, ReplicaNode),
     %% Since the quorum queue has become available, we should now get a confirmation for m2.
     receive {amqp10_disposition, {accepted, DTag2}} -> ok
     after 30_000 -> ct:fail({missing_accepted, DTag2})
@@ -3631,7 +3631,7 @@ target_classic_queue_down(Config) ->
 
     %% Make classic queue down.
     flush("stopping node"),
-    ok = rabbit_ct_broker_helpers:stop_node(Config, ClassicQueueNode),
+    ok = rabbit_ct_broker_helpers:stop_broker(Config, ClassicQueueNode),
 
     %% We expect that the server closes links that receive from classic queues that are down.
     ExpectedError = #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_ILLEGAL_STATE},
@@ -3647,7 +3647,7 @@ target_classic_queue_down(Config) ->
     ok = amqp10_client:send_msg(Sender, amqp10_msg:new(DTag2, <<"m2">>, false)),
     ok = wait_for_settlement(DTag2, rejected),
 
-    ok = rabbit_ct_broker_helpers:start_node(Config, ClassicQueueNode),
+    ok = rabbit_ct_broker_helpers:start_broker(Config, ClassicQueueNode),
     %% Now that the classic queue is up again, we should be able to attach a new receiver
     %% and be able to send to and receive from the classic queue.
     {ok, Receiver2} = amqp10_client:attach_receiver_link(Session, <<"receiver 2">>, Address),
@@ -3794,8 +3794,8 @@ link_flow_control(Config) ->
     ?assertEqual([<<1>>], amqp10_msg:body(Msg1)),
 
     %% Make quorum queue unavailable.
-    ok = rabbit_ct_broker_helpers:stop_node(Config, 2),
-    ok = rabbit_ct_broker_helpers:stop_node(Config, 1),
+    ok = rabbit_ct_broker_helpers:stop_broker(Config, 2),
+    ok = rabbit_ct_broker_helpers:stop_broker(Config, 1),
 
     NumMsgs = 1000,
     %% Since the quorum queue is unavailable, we expect our quorum queue sender to run
@@ -3820,8 +3820,8 @@ link_flow_control(Config) ->
     end,
 
     %% Make quorum queue available again.
-    ok = rabbit_ct_broker_helpers:start_node(Config, 1),
-    ok = rabbit_ct_broker_helpers:start_node(Config, 2),
+    ok = rabbit_ct_broker_helpers:start_broker(Config, 1),
+    ok = rabbit_ct_broker_helpers:start_broker(Config, 2),
 
     %% Now, we exepct that the messages sent earlier make it actually into the quorum queue.
     %% Therefore, RabbitMQ should grant our quorum queue sender more credits.

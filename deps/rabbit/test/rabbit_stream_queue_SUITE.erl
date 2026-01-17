@@ -809,8 +809,8 @@ publish_coordinator_unavailable(Config) ->
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Config, Server0, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
     check_leader_and_replicas(Config, [Server0, Server1, Server2]),
-    ok = rabbit_ct_broker_helpers:stop_node(Config, Server1),
-    ok = rabbit_ct_broker_helpers:stop_node(Config, Server2),
+    ok = rabbit_ct_broker_helpers:stop_broker(Config, Server1),
+    ok = rabbit_ct_broker_helpers:stop_broker(Config, Server2),
     rabbit_ct_helpers:await_condition(
       fun () ->
               N = rabbit_ct_broker_helpers:rpc(Config, Server0, rabbit_nodes, list_running, []),
@@ -819,10 +819,8 @@ publish_coordinator_unavailable(Config) ->
     #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
     amqp_channel:register_confirm_handler(Ch, self()),
     publish(Ch, Q),
-    ok = rabbit_ct_broker_helpers:async_start_node(Config, Server1),
-    ok = rabbit_ct_broker_helpers:async_start_node(Config, Server2),
-    ok = rabbit_ct_broker_helpers:wait_for_async_start_node(Server1),
-    ok = rabbit_ct_broker_helpers:wait_for_async_start_node(Server2),
+    ok = rabbit_ct_broker_helpers:start_broker(Config, Server1),
+    ok = rabbit_ct_broker_helpers:start_broker(Config, Server2),
     rabbit_ct_helpers:await_condition(
       fun () ->
               Info = find_queue_info(Config, Server0, [online]),
@@ -2079,7 +2077,7 @@ leader_failover(Config) ->
     check_leader_and_replicas(Config, [Server1, Server2, Server3]),
     publish_confirm(Ch1, Q, [<<"msg">> || _ <- lists:seq(1, 100)]),
 
-    ok = rabbit_ct_broker_helpers:stop_node(Config, Server1),
+    ok = rabbit_ct_broker_helpers:stop_broker(Config, Server1),
 
     rabbit_ct_helpers:await_condition(
       fun () ->
@@ -2088,7 +2086,7 @@ leader_failover(Config) ->
               NewLeader = proplists:get_value(leader, Info),
               NewLeader =/= Server1
       end, 45000),
-    ok = rabbit_ct_broker_helpers:start_node(Config, Server1),
+    ok = rabbit_ct_broker_helpers:start_broker(Config, Server1),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
 leader_failover_dedupe(Config) ->
@@ -2135,7 +2133,7 @@ leader_failover_dedupe(Config) ->
     erlang:monitor(process, Pid),
     Pid ! go,
     timer:sleep(10),
-    ok = rabbit_ct_broker_helpers:stop_node(Config, DownNode),
+    ok = rabbit_ct_broker_helpers:stop_broker(Config, DownNode),
     %% this should cause a new leader to be elected and the channel on node 2
     %% to have to resend any pending messages to ensure none is lost
     rabbit_ct_helpers:await_condition(
@@ -2148,7 +2146,7 @@ leader_failover_dedupe(Config) ->
     ?assert(erlang:is_process_alive(Pid)),
     ct:pal("stopping"),
     Pid ! stop,
-    ok = rabbit_ct_broker_helpers:start_node(Config, DownNode),
+    ok = rabbit_ct_broker_helpers:start_broker(Config, DownNode),
 
     N = receive
             {last_msg, X} -> X
