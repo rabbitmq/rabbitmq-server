@@ -212,8 +212,8 @@ is_quorum_critical_test(Config) ->
     RaName = binary_to_atom(<<"%2F_", QName/binary>>, utf8),
     {ok, [_, {_, Server2}, {_, Server3}], _} = ra:members({RaName, Server}),
 
-    ok = rabbit_ct_broker_helpers:stop_node(Config, Server2),
-    ok = rabbit_ct_broker_helpers:stop_node(Config, Server3),
+    ok = rabbit_ct_broker_helpers:stop_broker(Config, Server2),
+    ok = rabbit_ct_broker_helpers:stop_broker(Config, Server3),
 
     Body = http_get_failed(Config, EndpointPath),
     ?assertEqual(<<"failed">>, maps:get(<<"status">>, Body)),

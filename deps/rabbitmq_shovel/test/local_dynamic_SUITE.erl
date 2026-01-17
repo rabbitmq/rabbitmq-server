@@ -218,8 +218,7 @@ local_to_local_counters(Config) ->
     Src = ?config(srcq, Config),
     Dest = ?config(destq, Config),
     %% Let's restart the node so the counters are reset
-    ok = rabbit_ct_broker_helpers:stop_node(Config, 0),
-    ok = rabbit_ct_broker_helpers:start_node(Config, 0),
+    ok = rabbit_ct_broker_helpers:restart_node(Config, 0),
     with_amqp10_session(
       Config,
       fun (Sess) ->
