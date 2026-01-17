@@ -13,11 +13,11 @@
 
 -compile(export_all).
 
--import(rabbit_federation_test_util,
+-import(queue_federation_test_helpers,
         [expect/3, expect_empty/2,
          set_upstream/4, clear_upstream/3, set_upstream_set/4,
          set_policy/5, clear_policy/3,
-         with_ch/3]).
+         with_ch/3, await_running_federation/3]).
 
 all() ->
     [
@@ -34,7 +34,7 @@ groups() ->
     ].
 
 suite() ->
-    [{timetrap, {minutes, 5}}].
+    [{timetrap, {minutes, 1}}].
 
 %% -------------------------------------------------------------------
 %% Testsuite setup/teardown.
@@ -47,7 +47,7 @@ init_per_suite(Config) ->
     rabbit_ct_helpers:run_setup_steps(Config1,
                                       rabbit_ct_broker_helpers:setup_steps() ++
                                           rabbit_ct_client_helpers:setup_steps() ++
-                                          [fun rabbit_federation_test_util:setup_federation/1]).
+                                          [fun queue_federation_test_helpers:setup_federation/1]).
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config,
                                          rabbit_ct_client_helpers:teardown_steps() ++
@@ -73,10 +73,10 @@ queue_status(Config) ->
     with_ch(
       Config,
       fun (_Ch) ->
-              timer:sleep(3000),
+              await_running_federation(Config,
+                [{<<"fed1.downstream">>, <<"upstream">>}], 15000),
               [Link] = rabbit_ct_broker_helpers:rpc(
-                         Config, 0, rabbit_federation_status, status,
-                         []),
+                         Config, 0, rabbit_federation_status, status, []),
               true = is_binary(proplists:get_value(id, Link))
       end, queue_SUITE:upstream_downstream()).
 
@@ -84,14 +84,13 @@ lookup_queue_status(Config) ->
     with_ch(
       Config,
       fun (_Ch) ->
-              timer:sleep(3000),
+              await_running_federation(Config,
+                [{<<"fed1.downstream">>, <<"upstream">>}], 15000),
               [Link] = rabbit_ct_broker_helpers:rpc(
-                         Config, 0, rabbit_federation_status, status,
-                         []),
+                         Config, 0, rabbit_federation_status, status, []),
               Id = proplists:get_value(id, Link),
               Props = rabbit_ct_broker_helpers:rpc(
-                        Config, 0, rabbit_federation_status, lookup,
-                        [Id]),
+                        Config, 0, rabbit_federation_status, lookup, [Id]),
               lists:all(fun(K) -> lists:keymember(K, 1, Props) end,
                         [key, uri, status, timestamp, id, supervisor, upstream])
       end, queue_SUITE:upstream_downstream()).
@@ -100,7 +99,8 @@ lookup_bad_status(Config) ->
     with_ch(
       Config,
       fun (_Ch) ->
-              timer:sleep(3000),
+              await_running_federation(Config,
+                [{<<"fed1.downstream">>, <<"upstream">>}], 15000),
               not_found = rabbit_ct_broker_helpers:rpc(
                             Config, 0, rabbit_federation_status, lookup,
                             [<<"justmadeitup">>])

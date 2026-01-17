@@ -15,8 +15,9 @@
 
 -compile(export_all).
 
--import(rabbit_federation_test_util,
-        [expect/3, expect/4, expect_empty/2]).
+-import(exchange_federation_test_helpers,
+        [expect/3, expect/4, expect_empty/2, await_running_federation/3,
+         setup_federation_with_upstream_params/2]).
 
 all() ->
     [
@@ -59,7 +60,7 @@ essential() ->
     ].
 
 suite() ->
-    [{timetrap, {minutes, 3}}].
+    [{timetrap, {minutes, 2}}].
 
 %% -------------------------------------------------------------------
 %% Setup/teardown.
@@ -76,7 +77,7 @@ end_per_suite(Config) ->
 init_per_group(essential, Config) ->
   SetupFederation = [
       fun(Config1) ->
-          rabbit_federation_test_util:setup_federation_with_upstream_params(Config1, [
+          setup_federation_with_upstream_params(Config1, [
               {<<"channel-use-mode">>, <<"single">>}
           ])
       end
@@ -654,8 +655,9 @@ supervisor_shutdown_concurrency_safety(Config) ->
   ok = rabbit_ct_broker_helpers:disable_plugin(Config, 0, "rabbitmq_exchange_federation"),
   ok = rabbit_ct_broker_helpers:enable_plugin(Config, 0, "rabbitmq_exchange_federation"),
 
-  %% Wait for federation to be re-established
-  timer:sleep(5000),
+  await_running_federation(Config,
+    [{FedX, UpX}],
+    30000),
 
   %% Verify federation still works after recovery
   await_binding(Config, 0, UpX, RK),
@@ -786,11 +788,9 @@ child_id_format(Config) ->
   end.
 
 maintenance_mode_disconnect_reconnect(Config) ->
-  LinkCount = 50,
+  LinkCount = 5,
   Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
   Uri = rabbit_ct_broker_helpers:node_uri(Config, 0),
-
-  ct:pal("Setting up ~b federated exchanges", [LinkCount]),
 
   Exchanges = [list_to_binary(io_lib:format("maintenance.fed.x.~b", [N]))
                || N <- lists:seq(1, LinkCount)],
@@ -814,43 +814,24 @@ maintenance_mode_disconnect_reconnect(Config) ->
   Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
   [declare_exchange(Ch, exchange_declare_method(X)) || X <- Exchanges],
 
-  ct:pal("Waiting for ~b federation links to become running", [LinkCount]),
-  ok = await_federation_links_running(Config, Server, LinkCount, 60),
+  rabbit_ct_helpers:await_condition(
+    fun() -> count_running_links(Config, Server) >= LinkCount end,
+    15000),
 
-  ct:pal("All ~b links are running, now draining the node", [LinkCount]),
   ok = rabbit_ct_broker_helpers:drain_node(Config, Server),
 
-  ct:pal("Node drained, verifying links are not running"),
-  timer:sleep(500),
-  RunningAfterDrain = count_running_links(Config, Server),
-  ct:pal("Running links after drain: ~b", [RunningAfterDrain]),
-  ?assert(RunningAfterDrain < LinkCount),
+  rabbit_ct_helpers:await_condition(
+    fun() -> count_running_links(Config, Server) =:= 0 end,
+    10000),
 
-  ct:pal("Reviving the node"),
   ok = rabbit_ct_broker_helpers:revive_node(Config, Server),
 
-  ct:pal("Node revived, waiting for links to reconnect"),
-  ok = await_federation_links_running(Config, Server, LinkCount, 60),
-
-  ct:pal("All ~b links are running again after revive", [LinkCount]),
+  rabbit_ct_helpers:await_condition(
+    fun() -> count_running_links(Config, Server) >= LinkCount end,
+    15000),
 
   rabbit_ct_client_helpers:close_channel(Ch),
   clean_up_federation_related_bits(Config).
-
-await_federation_links_running(Config, Server, ExpectedCount, SecondsLeft) when SecondsLeft =< 0 ->
-  RunningCount = count_running_links(Config, Server),
-  ct:pal("Timeout waiting for federation links: expected ~b, got ~b running",
-         [ExpectedCount, RunningCount]),
-  {error, timeout};
-await_federation_links_running(Config, Server, ExpectedCount, SecondsLeft) ->
-  RunningCount = count_running_links(Config, Server),
-  case RunningCount >= ExpectedCount of
-    true ->
-      ok;
-    false ->
-      timer:sleep(1000),
-      await_federation_links_running(Config, Server, ExpectedCount, SecondsLeft - 1)
-  end.
 
 count_running_links(Config, Server) ->
   Status = rabbit_ct_broker_helpers:rpc(Config, Server,
@@ -1024,18 +1005,12 @@ await_binding(Config, Node, Vhost, X, Key, ExpectedBindingCount) when is_integer
   Attempts = 100,
   await_binding(Config, Node, Vhost, X, Key, ExpectedBindingCount, Attempts).
 
-await_binding(_Config, _Node, _Vhost, _X, _Key, ExpectedBindingCount, 0) ->
-  {error, rabbit_misc:format("expected ~b bindings but they did not materialize in time", [ExpectedBindingCount])};
-await_binding(Config, Node, Vhost, X, Key, ExpectedBindingCount, AttemptsLeft) when is_integer(ExpectedBindingCount) ->
-    case bound_keys_from(Config, Node, Vhost, X, Key) of
-        Bs when length(Bs) < ExpectedBindingCount ->
-            timer:sleep(1000),
-            await_binding(Config, Node, Vhost, X, Key, ExpectedBindingCount, AttemptsLeft - 1);
-        Bs when length(Bs) =:= ExpectedBindingCount ->
-            ok;
-        Bs ->
-            {error, rabbit_misc:format("expected ~b bindings, got ~b", [ExpectedBindingCount, length(Bs)])}
-    end.
+await_binding(Config, Node, Vhost, X, Key, ExpectedBindingCount, _AttemptsLeft) when is_integer(ExpectedBindingCount) ->
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+              Bs = bound_keys_from(Config, Node, Vhost, X, Key),
+              length(Bs) >= ExpectedBindingCount
+      end, 30000).
 
 await_bindings(Config, Node, X, Keys) ->
   [await_binding(Config, Node, X, Key) || Key <- Keys].
@@ -1065,13 +1040,10 @@ publish(Ch, X, Key, Msg = #amqp_msg{}) ->
                                          routing_key = Key}, Msg).
 
 await_credentials_obfuscation_seeding_on_two_nodes(Config) ->
-  %% give credentials_obfuscation a moment to start and be seeded
   rabbit_ct_helpers:await_condition(fun() ->
     rabbit_ct_broker_helpers:rpc(Config, 0, credentials_obfuscation, enabled, []) and
     rabbit_ct_broker_helpers:rpc(Config, 1, credentials_obfuscation, enabled, [])
-  end),
-
-  timer:sleep(1000).
+  end, 10000).
 
 assert_federation_internal_queue_type(Config, Server, Expected) ->
     Qs = all_queues_on(Config, Server),

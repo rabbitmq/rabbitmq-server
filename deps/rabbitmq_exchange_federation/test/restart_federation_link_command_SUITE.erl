@@ -12,6 +12,9 @@
 
 -compile(export_all).
 
+-import(exchange_federation_test_helpers,
+        [setup_down_federation/1, with_ch/3, x/1]).
+
 -define(CMD, 'Elixir.RabbitMQ.CLI.Ctl.Commands.RestartFederationLinkCommand').
 
 all() ->
@@ -48,7 +51,7 @@ end_per_suite(Config) ->
       rabbit_ct_broker_helpers:teardown_steps()).
 
 init_per_group(federated_down, Config) ->
-    rabbit_federation_test_util:setup_down_federation(Config),
+    setup_down_federation(Config),
     Config;
 init_per_group(_, Config) ->
     Config.
@@ -78,17 +81,21 @@ output_not_federated(Config) ->
 run(Config) ->
     [A] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Opts = #{node => A},
-    rabbit_federation_test_util:with_ch(
+    with_ch(
       Config,
       fun(_) ->
-              timer:sleep(3000),
+              rabbit_ct_helpers:await_condition(
+                fun() ->
+                        Status = rabbit_ct_broker_helpers:rpc(Config, 0,
+                                   rabbit_federation_status, status, []),
+                        length(Status) >= 1
+                end, 15000),
               [Link | _] = rabbit_ct_broker_helpers:rpc(Config, 0,
-                                                        rabbit_federation_status, status,
-                                                        []),
+                                                        rabbit_federation_status, status, []),
               Id = proplists:get_value(id, Link),
               ok = ?CMD:run([Id], Opts)
       end,
-      [rabbit_federation_test_util:x(<<"fed1.downstream">>)]).
+      [x(<<"fed1.downstream">>)]).
 
 run_not_found(Config) ->
     [A] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),

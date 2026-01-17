@@ -5,9 +5,8 @@
 %% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
--module(rabbit_federation_test_util).
+-module(queue_federation_test_helpers).
 
--include("rabbit_exchange_federation.hrl").
 -include_lib("rabbitmq_federation_common/include/rabbit_federation.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -193,8 +192,72 @@ expect_empty(Ch, Q) ->
     ?assertMatch(#'basic.get_empty'{},
                  amqp_channel:call(Ch, #'basic.get'{ queue = Q })).
 
+set_upstream(Config, Node, Name, URI) ->
+    set_upstream(Config, Node, Name, URI, []).
+
+set_upstream(Config, Node, Name, URI, Extra) ->
+    rabbit_ct_broker_helpers:set_parameter(Config, Node,
+      <<"federation-upstream">>, Name, [{<<"uri">>, URI} | Extra]).
+
+set_upstream_in_vhost(Config, Node, VirtualHost, Name, URI) ->
+    set_upstream_in_vhost(Config, Node, VirtualHost, Name, URI, []).
+
+set_upstream_in_vhost(Config, Node, VirtualHost, Name, URI, Extra) ->
+    rabbit_ct_broker_helpers:set_parameter(Config, Node, VirtualHost,
+      <<"federation-upstream">>, Name, [{<<"uri">>, URI} | Extra]).
+
+clear_upstream(Config, Node, Name) ->
+    rabbit_ct_broker_helpers:clear_parameter(Config, Node,
+      <<"federation-upstream">>, Name).
+
+set_upstream_set(Config, Node, Name, Set) ->
+    rabbit_ct_broker_helpers:set_parameter(Config, Node,
+      <<"federation-upstream-set">>, Name,
+      [[{<<"upstream">>, UStream} | Extra] || {UStream, Extra} <- Set]).
+
+clear_upstream_set(Config, Node, Name) ->
+    rabbit_ct_broker_helpers:clear_parameter(Config, Node,
+      <<"federation-upstream-set">>, Name).
+
+set_policy(Config, Node, Name, Pattern, UpstreamSet) ->
+    rabbit_ct_broker_helpers:set_policy(Config, Node,
+      Name, Pattern, <<"all">>,
+      [{<<"federation-upstream-set">>, UpstreamSet}]).
+
+set_policy_pattern(Config, Node, Name, Pattern, Regex) ->
+    rabbit_ct_broker_helpers:set_policy(Config, Node,
+      Name, Pattern, <<"all">>,
+      [{<<"federation-upstream-pattern">>, Regex}]).
+
+clear_policy(Config, Node, Name) ->
+    rabbit_ct_broker_helpers:clear_policy(Config, Node, Name).
+
+set_policy_upstream(Config, Node, Pattern, URI, Extra) ->
+    set_policy_upstreams(Config, Node, Pattern, [{URI, Extra}]).
+
+set_policy_upstreams(Config, Node, Pattern, URIExtras) ->
+    put(upstream_num, 1),
+    [set_upstream(Config, Node, gen_upstream_name(), URI, Extra)
+     || {URI, Extra} <- URIExtras],
+    set_policy(Config, Node, Pattern, Pattern, <<"all">>).
+
+gen_upstream_name() ->
+    list_to_binary("upstream-" ++ integer_to_list(next_upstream_num())).
+
+next_upstream_num() ->
+    R = get(upstream_num) + 1,
+    put(upstream_num, R),
+    R.
+
+%% Make sure that even though multiple nodes are in a single
+%% distributed system, we still keep all our process groups separate.
+disambiguate(Config) ->
+    rabbit_ct_broker_helpers:rpc_all(Config,
+      application, set_env,
+      [rabbitmq_federation, pgroup_name_cluster_id, true]),
+    Config.
+
 %%----------------------------------------------------------------------------
-xr(Name) -> rabbit_misc:r(<<"/">>, exchange, Name).
 
 with_ch(Config, Fun, Methods) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config),
@@ -208,11 +271,11 @@ with_ch(Config, Fun, Methods) ->
     end,
     ok.
 
-declare_all(Config, Ch, Methods) -> [maybe_declare(Config, Ch, Op) || Op <- Methods].
+declare_all(Config, Ch, Methods) -> [maybe_declare_queue(Config, Ch, Op) || Op <- Methods].
 delete_all(Ch, Methods) ->
     [delete_queue(Ch, Q) || #'queue.declare'{queue = Q} <- Methods].
 
-maybe_declare(Config, Ch, #'queue.declare'{} = Method) ->
+maybe_declare_queue(Config, Ch, Method) ->
     OneOffCh = rabbit_ct_client_helpers:open_channel(Config),
     try
         amqp_channel:call(OneOffCh, Method#'queue.declare'{passive = true})
@@ -220,9 +283,7 @@ maybe_declare(Config, Ch, #'queue.declare'{} = Method) ->
         amqp_channel:call(Ch, Method)
     after
         catch rabbit_ct_client_helpers:close_channel(OneOffCh)
-    end;
-maybe_declare(_Config, Ch, #'exchange.declare'{} = Method) ->
-    amqp_channel:call(Ch, Method).
+    end.
 
 delete_queue(Ch, Q) ->
     amqp_channel:call(Ch, #'queue.delete'{queue = Q}).
@@ -237,10 +298,21 @@ q(Name, Args) ->
                      durable = true,
                      arguments = Args}.
 
-x(Name) ->
-    x(Name, <<"topic">>).
+await_running_federation(Config, Links, Timeout) ->
+    await_running_federation(Config, 0, Links, Timeout).
 
-x(Name, Type) ->
-    #'exchange.declare'{exchange = Name,
-                        type = Type,
-                        durable = true}.
+await_running_federation(Config, Node, Links, Timeout) ->
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+              Status = rabbit_ct_broker_helpers:rpc(Config, Node,
+                         rabbit_federation_status, status, []),
+              lists:all(
+                fun({DownQ, UpQ}) ->
+                        lists:any(
+                          fun(Entry) ->
+                                  proplists:get_value(queue, Entry) =:= DownQ andalso
+                                  proplists:get_value(upstream_queue, Entry) =:= UpQ andalso
+                                  proplists:get_value(status, Entry) =:= running
+                          end, Status)
+                end, Links)
+      end, Timeout).
