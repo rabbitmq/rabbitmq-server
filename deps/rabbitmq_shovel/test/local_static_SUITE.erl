@@ -468,16 +468,7 @@ setup_shovel(ShovelConfig) ->
     _ = application:stop(rabbitmq_shovel),
     application:set_env(rabbitmq_shovel, shovels, ShovelConfig, infinity),
     ok = application:start(rabbitmq_shovel),
-    await_running_shovel(test_shovel).
-
-await_running_shovel(Name) ->
-    case [N || {N, _, {running, _}, _, _}
-                      <- rabbit_shovel_status:status(),
-                         N =:= Name] of
-        [_] -> ok;
-        _   -> timer:sleep(100),
-               await_running_shovel(Name)
-    end.
+    shovel_test_utils:await_running_shovel(test_shovel).
 
 consume(Chan, Queue, NoAck) ->
     #'basic.consume_ok'{consumer_tag = CTag} =
