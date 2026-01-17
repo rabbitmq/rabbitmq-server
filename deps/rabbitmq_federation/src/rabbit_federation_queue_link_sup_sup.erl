@@ -36,7 +36,7 @@ start_link() ->
 %% Note that the next supervisor down, rabbit_federation_link_sup, is common
 %% between exchanges and queues.
 start_child(Q) ->
-    case mirrored_supervisor:start_child(
+    try mirrored_supervisor:start_child(
            ?SUPERVISOR,
            {id(Q), {rabbit_federation_link_sup, start_link, [Q]},
             transient, ?SUPERVISOR_WAIT, supervisor,
@@ -49,29 +49,53 @@ start_child(Q) ->
           ok;
         %% A link returned {stop, gone}, the link_sup shut down, that's OK.
         {error, {shutdown, _}} -> ok
+    catch
+        exit:{noproc, _} -> ok;
+        exit:{shutdown, _} -> ok;
+        exit:shutdown -> ok
     end.
 
 
 adjust({clear_upstream, VHost, UpstreamName}) ->
     _ = [rabbit_federation_link_sup:adjust(Pid, Q, {clear_upstream, UpstreamName}) ||
-            {Q, Pid, _, _} <- mirrored_supervisor:which_children(?SUPERVISOR),
+            {Q, Pid, _, _} <- which_children(),
             ?amqqueue_vhost_equals(Q, VHost)],
     ok;
 adjust(Reason) ->
     _ = [rabbit_federation_link_sup:adjust(Pid, Q, Reason) ||
-            {Q, Pid, _, _} <- mirrored_supervisor:which_children(?SUPERVISOR)],
+            {Q, Pid, _, _} <- which_children()],
     ok.
 
+which_children() ->
+    try
+        mirrored_supervisor:which_children(?SUPERVISOR)
+    catch
+        exit:{noproc, _} -> [];
+        exit:{shutdown, _} -> [];
+        exit:shutdown -> []
+    end.
+
 stop_child(Q) ->
-    case mirrored_supervisor:terminate_child(?SUPERVISOR, id(Q)) of
+    try mirrored_supervisor:terminate_child(?SUPERVISOR, id(Q)) of
       ok -> ok;
       {error, Err} ->
         QueueName = amqqueue:get_name(Q),
         ?LOG_WARNING("Attempt to stop a federation link for queue ~tp failed: ~tp",
                      [rabbit_misc:rs(QueueName), Err]),
         ok
+    catch
+        exit:{noproc, _} -> ok;
+        exit:{shutdown, _} -> ok;
+        exit:shutdown -> ok
     end,
-    _ = mirrored_supervisor:delete_child(?SUPERVISOR, id(Q)).
+    try
+        _ = mirrored_supervisor:delete_child(?SUPERVISOR, id(Q)),
+        ok
+    catch
+        exit:{noproc, _} -> ok;
+        exit:{shutdown, _} -> ok;
+        exit:shutdown -> ok
+    end.
 
 %%----------------------------------------------------------------------------
 
