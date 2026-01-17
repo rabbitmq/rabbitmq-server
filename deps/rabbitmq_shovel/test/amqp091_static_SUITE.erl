@@ -228,9 +228,9 @@ valid_configuration(Config) ->
 
 valid_configuration_with_predefined_resources(Config) ->
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, setup_shovels2, [Config]),
-    ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE,  await_terminated_shovel, [test_shovel]),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, shovel_test_utils, await_terminated_shovel, [test_shovel]),
     declare_queue(Config),
-    ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE,  await_running_shovel, [test_shovel]).
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, shovel_test_utils, await_running_shovel, [test_shovel]).
 
 run_valid_test(Config) ->
     Chan = rabbit_ct_client_helpers:open_channel(Config, 0),
@@ -342,7 +342,7 @@ setup_legacy_shovels1(Config) ->
       infinity),
 
     ok = application:start(rabbitmq_shovel),
-    await_running_shovel(test_shovel).
+    shovel_test_utils:await_running_shovel(test_shovel).
 
 setup_shovels1(Config) ->
     _ = application:stop(rabbitmq_shovel),
@@ -376,7 +376,7 @@ setup_shovels1(Config) ->
       infinity),
 
     ok = application:start(rabbitmq_shovel),
-    await_running_shovel(test_shovel).
+    shovel_test_utils:await_running_shovel(test_shovel).
 
 setup_shovels2(Config) ->
     _ = application:stop(rabbitmq_shovel),
@@ -405,20 +405,3 @@ setup_shovels2(Config) ->
       infinity),
 
     ok = application:start(rabbitmq_shovel).
-
-await_running_shovel(Name) ->
-    case [N || {N, _, {running, _}, _Metrics,  _}
-                      <- rabbit_shovel_status:status(),
-                         N =:= Name] of
-        [_] -> ok;
-        _   -> timer:sleep(100),
-               await_running_shovel(Name)
-    end.
-await_terminated_shovel(Name) ->
-    case [N || {N, _, {terminated, _}, _Metrics, _}
-                      <- rabbit_shovel_status:status(),
-                         N =:= Name] of
-        [_] -> ok;
-        _   -> timer:sleep(100),
-               await_terminated_shovel(Name)
-    end.
