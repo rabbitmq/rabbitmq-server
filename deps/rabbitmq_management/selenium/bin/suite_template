@@ -112,7 +112,8 @@ init_suite() {
   print "> PROFILES: ${PROFILES} "
   print "> (+) ADDON_PROFILES: ${ADDON_PROFILES} "
   PROFILES="${PROFILES} ${ADDON_PROFILES}"
-
+  print "> (=) final PROFILES: ${PROFILES} "
+  
   print "> ENV_FILE: ${ENV_FILE} "
   print "> COMMAND: ${COMMAND}"
   end "Initialized suite"

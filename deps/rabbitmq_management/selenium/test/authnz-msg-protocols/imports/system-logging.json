@@ -1,0 +1,25 @@
+{
+
+    "queues": [       
+        {
+            "name": "system-log",
+            "vhost": "/",
+            "durable": true,
+            "auto_delete": false,
+            "arguments": {
+                "x-queue-type": "classic"
+            }
+        }
+    ],
+    "exchanges": [],
+    "bindings": [
+        {
+            "source": "amq.rabbitmq.log",
+            "vhost": "/",
+            "destination": "system-log",
+            "destination_type": "queue",
+            "routing_key": "#",
+            "arguments": {}
+        }
+    ]
+}
