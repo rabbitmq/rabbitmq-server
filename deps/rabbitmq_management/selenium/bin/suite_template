@@ -29,8 +29,10 @@ TEST_DIR=$SELENIUM_ROOT_FOLDER/test
 BIN_DIR=$SELENIUM_ROOT_FOLDER/bin
 LOGS=${SELENIUM_ROOT_FOLDER}/logs/${SUITE}
 SCREENS=${SELENIUM_ROOT_FOLDER}/screens/${SUITE}
-CONF_DIR=/tmp/selenium/${SUITE}
+CONF_DIR=${SELENIUM_ROOT_FOLDER}/tmp/${SUITE}
 ENV_FILE=$CONF_DIR/.env
+
+rm -rf $CONF_DIR
 
 for f in $SCRIPT/components/*; do
   if [[ ! "$f" == *README.md ]]
@@ -108,6 +110,10 @@ init_suite() {
   print "> TEST_CONFIG_DIR: ${TEST_CONFIG_DIR} "
   print "> DOCKER_NETWORK: ${DOCKER_NETWORK} "
   print "> PROFILES: ${PROFILES} "
+  print "> (+) ADDON_PROFILES: ${ADDON_PROFILES} "
+  PROFILES="${PROFILES} ${ADDON_PROFILES}"
+  print "> (=) final PROFILES: ${PROFILES} "
+  
   print "> ENV_FILE: ${ENV_FILE} "
   print "> COMMAND: ${COMMAND}"
   end "Initialized suite"
