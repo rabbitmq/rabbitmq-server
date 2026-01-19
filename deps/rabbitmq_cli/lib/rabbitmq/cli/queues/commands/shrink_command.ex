@@ -22,9 +22,14 @@ defmodule RabbitMQ.CLI.Queues.Commands.ShrinkCommand do
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([node], %{node: node_name, errors_only: errs}) do
-    case :rabbit_misc.rpc_call(node_name, :rabbit_quorum_queue, :shrink_all, [to_atom(node)]) do
+    args = [".*", ".*", to_atom(node), :all]
+    case :rabbit_misc.rpc_call(node_name, :rabbit_queue_type_ra, :delete_members, args) do
       {:error, _} = error ->
         error
+
+      {:badrpc, {:EXIT, {:undef, _}}} ->
+        # Fallback for mixed version clusters with older nodes
+        :rabbit_misc.rpc_call(node_name, :rabbit_quorum_queue, :shrink_all, [to_atom(node)])
 
       {:badrpc, _} = error ->
         error
