@@ -97,16 +97,16 @@ Displays general help and commands supported by
 .\" ------------------------------------
 .It Cm grow Ar node Ar selector Fl -vhost-pattern Ar pattern Fl -queue-pattern Ar pattern Fl -errors-only
 .Pp
-Adds a new replica on the given node for all or a half of matching quorum queues.
+Adds a new replica on the given node for all or a half of matching queues.
 .Pp
 Supported
 .Ar selector
 values are:
 .Bl -tag -width Ds
 .It Dv Sy all
-Selects all quorum queues
+Selects all replicated queues
 .It Dv Sy even
-Selects quorum queues with an even number of replicas
+Selects replicated queues with an even number of replicas
 .El
 .Pp
 Example:
@@ -137,7 +137,7 @@ Example:
 .\" ------------------------------------
 .It Cm shrink Ar node
 .Pp
-Shrinks quorum queue clusters by removing any members (replicas) on the given node.
+Shrinks queue clusters by removing any members (replicas) on the given node.
 .Pp
 Example:
 .Sp
@@ -149,7 +149,7 @@ Example:
 .\" ------------------------------------
 .It Cm add_member Ar queue Ar node Fl -vhost Ar virtual-host
 .Pp
-Adds a quorum queue member (replica) on the given node.
+Adds a queue member (replica) on the given node.
 .Pp
 Example:
 .Sp
@@ -157,7 +157,7 @@ Example:
 .\" ------------------------------------
 .It Cm delete_member Ar queue Ar node Fl -vhost Ar virtual-host
 .Pp
-Removes a quorum queue member (replica) on the given node.
+Removes a queue member (replica) on the given node.
 .Pp
 Example:
 .Sp
@@ -169,7 +169,7 @@ Example:
 .\" ------------------------------------
 .It Cm quorum_status Ar queue Fl -vhost Ar virtual-host
 .Pp
-Displays quorum status of a quorum queue.
+Displays quorum status of a queue.
 .Pp
 Example:
 .Sp

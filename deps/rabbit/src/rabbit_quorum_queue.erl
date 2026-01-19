@@ -9,6 +9,7 @@
 -feature(maybe_expr, enable).
 
 -behaviour(rabbit_queue_type).
+-behaviour(rabbit_queue_type_ra).
 -behaviour(rabbit_policy_validator).
 -behaviour(rabbit_policy_merge_strategy).
 
@@ -30,7 +31,7 @@
 -export([supports_stateful_delivery/0,
          deliver/3]).
 -export([dead_letter_publish/5]).
--export([cluster_state/1, status/2]).
+-export([cluster_state/1, status/1, status/2]).
 -export([update_consumer_handler/8, update_consumer/9]).
 -export([cancel_consumer_handler/2, cancel_consumer/3]).
 -export([become_leader/2, handle_tick/3, spawn_deleter/1]).
@@ -119,7 +120,6 @@
 -type msg_id() :: non_neg_integer().
 -type qmsg() :: {rabbit_types:r('queue'), pid(), msg_id(), boolean(),
                  mc:state()}.
--type membership() :: voter | non_voter | promotable.  %% see ra_membership() in Ra.
 -type replica_states() :: #{atom() => replica_state()}.
 -type replica_state() :: leader | follower | non_voter | promotable.
 
@@ -1249,68 +1249,73 @@ status(Vhost, QueueName) ->
         {ok, Q} when ?amqqueue_is_classic(Q) ->
             {error, classic_queue_not_supported};
         {ok, Q} when ?amqqueue_is_quorum(Q) ->
-            {RName, _} = amqqueue:get_pid(Q),
-            Nodes = lists:sort(get_nodes(Q)),
-            [begin
-                 ServerId = {RName, N},
-                 case erpc_call(N, ?MODULE, key_metrics_rpc, [ServerId], ?RPC_TIMEOUT) of
-                     #{state := RaftState,
-                       membership := Membership,
-                       commit_index := Commit,
-                       term := Term,
-                       last_index := Last,
-                       last_applied := LastApplied,
-                       last_written_index := LastWritten,
-                       snapshot_index := SnapIdx,
-                       machine_version := MacVer} ->
-                         [{<<"Node Name">>, N},
-                          {<<"Raft State">>, RaftState},
-                          {<<"Membership">>, Membership},
-                          {<<"Last Log Index">>, Last},
-                          {<<"Last Written">>, LastWritten},
-                          {<<"Last Applied">>, LastApplied},
-                          {<<"Commit Index">>, Commit},
-                          {<<"Snapshot Index">>, SnapIdx},
-                          {<<"Term">>, Term},
-                          {<<"Machine Version">>, MacVer}
-                         ];
-                     #{state := noproc,
-                       membership := unknown,
-                       machine_version := MacVer} ->
-                         [{<<"Node Name">>, N},
-                          {<<"Raft State">>, noproc},
-                          {<<"Membership">>, <<>>},
-                          {<<"Last Log Index">>, <<>>},
-                          {<<"Last Written">>, <<>>},
-                          {<<"Last Applied">>, <<>>},
-                          {<<"Commit Index">>, <<>>},
-                          {<<"Snapshot Index">>, <<>>},
-                          {<<"Term">>, <<>>},
-                          {<<"Machine Version">>, MacVer}
-                         ];
-                     {error, Reason} ->
-                         State = case is_atom(Reason) of
-                                     true -> Reason;
-                                     false -> unknown
-                                 end,
-                         [{<<"Node Name">>, N},
-                          {<<"Raft State">>, State},
-                          {<<"Membership">>, <<>>},
-                          {<<"Last Log Index">>, <<>>},
-                          {<<"Last Written">>, <<>>},
-                          {<<"Last Applied">>, <<>>},
-                          {<<"Commit Index">>, <<>>},
-                          {<<"Snapshot Index">>, <<>>},
-                          {<<"Term">>, <<>>},
-                          {<<"Machine Version">>, <<>>}
-                         ]
-                 end
-             end || N <- Nodes];
+            status(Q);
         {ok, _Q} ->
             {error, not_quorum_queue};
         {error, not_found} = E ->
             E
     end.
+
+-spec status(amqqueue:amqqueue()) ->
+    [[{binary(), term()}]].
+status(Q) when ?amqqueue_is_quorum(Q) ->
+    {RName, _} = amqqueue:get_pid(Q),
+    Nodes = lists:sort(get_nodes(Q)),
+    [begin
+         ServerId = {RName, N},
+         case erpc_call(N, ?MODULE, key_metrics_rpc, [ServerId], ?RPC_TIMEOUT) of
+             #{state := RaftState,
+               membership := Membership,
+               commit_index := Commit,
+               term := Term,
+               last_index := Last,
+               last_applied := LastApplied,
+               last_written_index := LastWritten,
+               snapshot_index := SnapIdx,
+               machine_version := MacVer} ->
+                 [{<<"Node Name">>, N},
+                  {<<"Raft State">>, RaftState},
+                  {<<"Membership">>, Membership},
+                  {<<"Last Log Index">>, Last},
+                  {<<"Last Written">>, LastWritten},
+                  {<<"Last Applied">>, LastApplied},
+                  {<<"Commit Index">>, Commit},
+                  {<<"Snapshot Index">>, SnapIdx},
+                  {<<"Term">>, Term},
+                  {<<"Machine Version">>, MacVer}
+                 ];
+             #{state := noproc,
+               membership := unknown,
+               machine_version := MacVer} ->
+                 [{<<"Node Name">>, N},
+                  {<<"Raft State">>, noproc},
+                  {<<"Membership">>, <<>>},
+                  {<<"Last Log Index">>, <<>>},
+                  {<<"Last Written">>, <<>>},
+                  {<<"Last Applied">>, <<>>},
+                  {<<"Commit Index">>, <<>>},
+                  {<<"Snapshot Index">>, <<>>},
+                  {<<"Term">>, <<>>},
+                  {<<"Machine Version">>, MacVer}
+                 ];
+             {error, Reason} ->
+                 State = case is_atom(Reason) of
+                             true -> Reason;
+                             false -> unknown
+                         end,
+                 [{<<"Node Name">>, N},
+                  {<<"Raft State">>, State},
+                  {<<"Membership">>, <<>>},
+                  {<<"Last Log Index">>, <<>>},
+                  {<<"Last Written">>, <<>>},
+                  {<<"Last Applied">>, <<>>},
+                  {<<"Commit Index">>, <<>>},
+                  {<<"Snapshot Index">>, <<>>},
+                  {<<"Term">>, <<>>},
+                  {<<"Machine Version">>, <<>>}
+                 ]
+         end
+     end || N <- Nodes].
 
 add_member(VHost, Name, Node, Membership, Timeout)
   when is_binary(VHost) andalso
@@ -1344,6 +1349,8 @@ add_member(VHost, Name, Node, Membership, Timeout)
                     E
     end.
 
+add_member(Q, Node, Membership, Timeout) when ?amqqueue_is_quorum(Q) ->
+    do_add_member(Q, Node, Membership, Timeout);
 add_member(VHost, Name, Node, Timeout) when is_binary(VHost) ->
     %% NOTE needed to pass mixed cluster tests.
     add_member(VHost, Name, Node, promotable, Timeout).
@@ -1429,7 +1436,8 @@ delete_member(VHost, Name, Node) ->
                     E
     end.
 
-
+-spec delete_member(amqqueue:amqqueue(), node()) ->
+    ok | {error, term()}.
 delete_member(Q, Node) when ?amqqueue_is_quorum(Q) ->
     QName = amqqueue:get_name(Q),
     {RaName, _} = amqqueue:get_pid(Q),
@@ -1519,7 +1527,7 @@ shrink_all(Node) ->
 grow(Node, VhostSpec, QueueSpec, Strategy) ->
     grow(Node, VhostSpec, QueueSpec, Strategy, promotable).
 
--spec grow(node() | integer(), binary(), binary(), all | even, membership()) ->
+-spec grow(node() | integer(), binary(), binary(), all | even, rabbit_queue_type_ra:ra_membership()) ->
     [{rabbit_amqqueue:name(),
       {ok, pos_integer()} | {error, pos_integer(), term()}}].
 grow(Node, VhostSpec, QueueSpec, Strategy, Membership) when is_atom(Node) ->
@@ -1585,7 +1593,7 @@ maybe_grow(Q, Node, Membership, Size) ->
 maybe_grow(Q, Node, Membership, Size, QNodes) ->
     QName = amqqueue:get_name(Q),
     {ok, RaName} = qname_to_internal_name(QName),
-    case check_all_memberships(RaName, QNodes, voter) of
+    case rabbit_queue_type_ra:all_members_stable(RaName, QNodes) of
         true ->
             ?LOG_INFO("~ts: adding a new member (replica) on node ~w",
                             [rabbit_misc:rs(QName), Node]),
@@ -1604,22 +1612,6 @@ maybe_grow(Q, Node, Membership, Size, QNodes) ->
                     "~ts: failed to add member (replica) on node ~w, error: ~w",
                     [rabbit_misc:rs(QName), Node, Err]),
             {QName, {error, Size, Err}}
-    end.
-
-%% Compare local membership states of all nodes in parallel.
-%%
-%% Note a few things:
-%% 1. This function intentionally queries local member state and not the leader
-%% 2. ra:key_metrics/1 is sequential and not parallel
-%% 3. ra:key_metrics/1 is not multicall-friendly because it relies on erlang:node/0
-check_all_memberships(RaName, QNodes, CompareMembership) ->
-    case rpc:multicall(QNodes, ets, lookup, [ra_state, RaName]) of
-        {Result, []} ->
-            lists:all(
-                fun(M) -> M == CompareMembership end,
-                [Membership || [{_RaName, _RaState, Membership}] <- Result]);
-        _ ->
-            false
     end.
 
 -spec transfer_leadership(amqqueue:amqqueue(), node()) ->

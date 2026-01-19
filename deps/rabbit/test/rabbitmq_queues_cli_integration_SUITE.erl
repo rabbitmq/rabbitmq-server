@@ -22,19 +22,15 @@ groups() ->
         {tests, [], [
             shrink,
             grow,
-            grow_invalid_node_filtered
+            grow_invalid_node_filtered,
+            status_add_delete_member
         ]}
     ].
 
 init_per_suite(Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-        false ->
-            rabbit_ct_helpers:log_environment(),
-            Config1 = rabbit_ct_helpers:run_setup_steps(Config),
-            rabbit_ct_helpers:ensure_rabbitmq_queues_cmd(Config1);
-        _ ->
-            {skip, "growing and shrinking cannot be done in mixed mode"}
-    end.
+    rabbit_ct_helpers:log_environment(),
+    Config1 = rabbit_ct_helpers:run_setup_steps(Config),
+    rabbit_ct_helpers:ensure_rabbitmq_queues_cmd(Config1).
 
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
@@ -54,7 +50,16 @@ end_per_group(tests, Config) ->
                                     rabbit_ct_broker_helpers:teardown_steps()).
 
 init_per_testcase(Testcase, Config0) ->
-    rabbit_ct_helpers:testcase_started(Config0, Testcase).
+    case {Testcase, rabbit_ct_helpers:is_mixed_versions()} of
+        {shrink, true} ->
+            {skip, "shrink cannot be done in mixed mode"};
+        {grow, true} ->
+            {skip, "grow cannot be done in mixed mode"};
+        {grow_invalid_node_filtered, true} ->
+            {skip, "grow cannot be done in mixed mode"};
+        _ ->
+            rabbit_ct_helpers:testcase_started(Config0, Testcase)
+    end.
 
 end_per_testcase(Testcase, Config0) ->
     rabbit_ct_helpers:testcase_finished(Config0, Testcase).
@@ -124,6 +129,48 @@ grow_invalid_node_filtered(Config) ->
     {error, _ExitCode, _} = rabbitmq_queues(Config, 0, ["grow", DummyNode, "all"]),
     ok.
 
+%% Test the following CLI commands:
+%% rabbitmq-queues quorum_status
+%% rabbitmq-queues add_member
+%% rabbitmq-queues delete_member
+status_add_delete_member(Config) ->
+    Nodename0 = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Nodename2 = rabbit_ct_broker_helpers:get_node_config(Config, 2, nodename),
+    QName = "my-qq",
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+
+    Args = [{<<"x-quorum-initial-group-size">>, long, 1}],
+    #'queue.declare_ok'{} = declare_qq(Ch, QName, Args),
+
+    publish_confirm(Ch, QName),
+
+    %% Target new and old node in mixed version mode.
+    {ok, StatusOut0} = rabbitmq_queues_json(Config, 0, ["quorum_status", QName]),
+    {ok, StatusOut1} = rabbitmq_queues_json(Config, 1, ["quorum_status", QName]),
+    Status0 = parse_json_status(StatusOut0),
+    Status1 = parse_json_status(StatusOut1),
+    ?assertEqual([Nodename0], get_members(Status0)),
+    ?assertEqual([Nodename0], get_members(Status1)),
+
+    {ok, _AddOut} = rabbitmq_queues(Config, 1, ["add_member", QName, Nodename2]),
+
+    publish_confirm(Ch, QName),
+
+    {ok, StatusOut2} = rabbitmq_queues_json(Config, 1, ["quorum_status", QName]),
+    Status2 = parse_json_status(StatusOut2),
+    ?assertEqual([Nodename0, Nodename2],
+                 lists:sort(get_members(Status2))),
+
+    {ok, _DeleteOut} = rabbitmq_queues(Config, 1, ["delete_member", QName, Nodename0]),
+
+    publish_confirm(Ch, QName),
+
+    {ok, StatusOut3} = rabbitmq_queues_json(Config, 1, ["quorum_status", QName]),
+    Status3 = parse_json_status(StatusOut3),
+    ?assertEqual([Nodename2], get_members(Status3)).
+
 parse_result(S) ->
     Lines = string:split(S, "\n", all),
     maps:from_list(
@@ -146,6 +193,16 @@ declare_qq(Ch, Q) ->
 
 rabbitmq_queues(Config, N, Args) ->
     rabbit_ct_broker_helpers:rabbitmq_queues(Config, N, ["--silent" | Args]).
+
+rabbitmq_queues_json(Config, N, Args) ->
+    rabbit_ct_broker_helpers:rabbitmq_queues(Config, N, ["--silent", "--formatter", "json" | Args]).
+
+parse_json_status(JsonStr) ->
+    rabbit_json:decode(list_to_binary(JsonStr)).
+
+get_members(StatusList) when is_list(StatusList) ->
+    [binary_to_atom(Member) || #{<<"Node Name">> := Member} <- StatusList].
+
 
 publish_confirm(Ch, QName) ->
     ok = amqp_channel:cast(Ch,
