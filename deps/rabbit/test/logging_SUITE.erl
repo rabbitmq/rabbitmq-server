@@ -15,6 +15,9 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
+-import(rabbit_ct_broker_helpers,
+        [rpc/4]).
+
 -export([suite/0,
          all/0,
          groups/0,
@@ -54,6 +57,7 @@
          logging_to_exchange_works/1,
          update_log_exchange_config/1,
          use_exchange_logger_when_enabling_khepri_db/1,
+         use_exchange_logger_when_enabling_all_feature_flags/1,
 
          logging_to_syslog_works/1]).
 
@@ -101,7 +105,8 @@ groups() ->
      {exchange_output, [],
       [logging_to_exchange_works,
        update_log_exchange_config,
-       use_exchange_logger_when_enabling_khepri_db]},
+       use_exchange_logger_when_enabling_khepri_db,
+       use_exchange_logger_when_enabling_all_feature_flags]},
 
      {syslog_output, [],
       [logging_to_syslog_works]}
@@ -151,8 +156,6 @@ init_per_testcase(Testcase, Config) ->
         %% The exchange output requires RabbitMQ to run. All testcases in this
         %% group will run in the context of that RabbitMQ node.
         exchange_output ->
-            ExchProps = [{enabled, true},
-                         {level, debug}],
             Config1 = rabbit_ct_helpers:set_config(
                         Config,
                         [{rmq_nodename_suffix, Testcase}]),
@@ -162,15 +165,29 @@ init_per_testcase(Testcase, Config) ->
                                 Config1,
                                 [{rmq_nodes_count, 3},
                                  {metadata_store, mnesia}]);
+                          use_exchange_logger_when_enabling_all_feature_flags ->
+                              rabbit_ct_helpers:set_config(
+                                Config1,
+                                [{rmq_nodes_count, 3}]);
                           _ ->
                               rabbit_ct_helpers:set_config(
                                 Config1,
                                 [{rmq_nodes_count, 1}])
                       end,
-            Config3 = rabbit_ct_helpers:merge_app_env(
-                        Config2,
-                        {rabbit, [{log, [{exchange, ExchProps},
-                                         {file, [{level, debug}]}]}]}),
+            LogCfg = {log, [
+                            {exchange, [{enabled, true}, {level, debug}]},
+                            {file, [{level, debug}]}
+                           ]},
+            Config3 = case Testcase of
+                          use_exchange_logger_when_enabling_all_feature_flags ->
+                              rabbit_ct_helpers:merge_app_env(
+                                Config2, {rabbit, [LogCfg,
+                                                   {forced_feature_flags_on_init, []}
+                                                  ]});
+                          _ ->
+                              rabbit_ct_helpers:merge_app_env(
+                                Config2, {rabbit, [LogCfg]})
+                      end,
             rabbit_ct_helpers:run_steps(
               Config3,
               rabbit_ct_broker_helpers:setup_steps() ++
@@ -1121,6 +1138,50 @@ use_exchange_logger_when_enabling_khepri_db(Config) ->
     ?assertEqual(
        ok,
        rabbit_ct_broker_helpers:enable_feature_flag(Config, khepri_db)).
+
+%% Test case for https://github.com/rabbitmq/rabbitmq-server/discussions/11652
+use_exchange_logger_when_enabling_all_feature_flags(Config) ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            {skip, "This test case tests enabling all stable feature flags after "
+             "a rolling upgrade completed, i.e. all nodes run the same version."};
+        false ->
+            {_Conn, Chan} = rabbit_ct_client_helpers:open_connection_and_channel(Config),
+            QNames = [<<"cq">>, <<"qq">>, <<"sq">>],
+
+            #'queue.declare_ok'{} = amqp_channel:call(
+                                      Chan, #'queue.declare'{
+                                               queue = <<"cq">>,
+                                               durable = true,
+                                               arguments = [{<<"x-queue-type">>, longstr, <<"classic">>}]
+                                              }),
+            #'queue.declare_ok'{} = amqp_channel:call(
+                                      Chan, #'queue.declare'{
+                                               queue = <<"qq">>,
+                                               durable = true,
+                                               arguments = [{<<"x-queue-type">>, longstr, <<"quorum">>}]
+                                              }),
+            #'queue.declare_ok'{} = amqp_channel:call(
+                                      Chan, #'queue.declare'{
+                                               queue = <<"sq">>,
+                                               durable = true,
+                                               arguments = [{<<"x-queue-type">>, longstr, <<"stream">>}]
+                                              }),
+            [#'queue.bind_ok'{} = amqp_channel:call(
+                                    Chan, #'queue.bind'{
+                                             queue = QName,
+                                             exchange =  <<"amq.rabbitmq.log">>,
+                                             routing_key = <<"#">>}) ||
+             QName <- QNames],
+
+            %% Enabling all stable feature flags should not get stuck.
+            ?assertEqual(ok, rpc(Config, rabbit_feature_flags, enable_all, [stable])),
+
+            ?assertEqual(#{}, rpc(Config, rabbit_feature_flags, list, [disabled, stable])),
+
+            %% Sanity check that at least one log message ended up in all queues.
+            [ok = queue_utils:wait_for_min_messages(Config, QName, 1) || QName <- QNames]
+    end.
 
 logging_to_syslog_works(Config) ->
     Context = default_context(Config),
