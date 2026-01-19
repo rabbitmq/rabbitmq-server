@@ -14,3 +14,4 @@ test/*/certs/*.jks
 test/*/*/*.pem
 test/*/*/*.p12
 test/*/*/*.jks
+tmp/*
