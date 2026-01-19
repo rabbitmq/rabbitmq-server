@@ -1770,7 +1770,12 @@ is_active(_ConsumerKey, #?STATE{cfg = #cfg{consumer_strategy = competing}}) ->
     true;
 is_active(ConsumerKey, #?STATE{cfg = #cfg{consumer_strategy = single_active},
                                consumers = Consumers}) ->
-    ConsumerKey == active_consumer(Consumers).
+    case active_consumer(Consumers) of
+        {ConsumerKey, _} ->
+            true;
+        _ ->
+            false
+    end.
 
 maybe_return_all(#{system_time := Ts} = Meta, ConsumerKey,
                  #consumer{cfg = CCfg} = Consumer, S0,
@@ -2619,7 +2624,6 @@ timer_effect(#?STATE{returns = Returns,
                                    end
                            end
                    end, ReturnedExpiry, Messages),
-    ?LOG_DEBUG("EXPIRY ~w ~w ~p", [NextExpiry, ReturnedExpiry, Messages]),
     case NextExpiry of
         undefined ->
             Effects;

@@ -1041,7 +1041,7 @@ consume(Q, Spec, QState0) when ?amqqueue_is_quorum(Q) ->
     ConsumerMeta = rabbit_misc:maps_put_truthy(timeout, Timeout, ConsumerMeta0),
     case rabbit_fifo_client:checkout(ConsumerTag, Mode, ConsumerMeta, QState0) of
         {ok, Infos, QState} ->
-            %% this info was added in QQ v8
+            %% this info key was added in QQ v8
             IsSac = maps:get(consumer_strategy, Infos, competing) == single_active,
             case IsSac orelse single_active_consumer_on(Q) of
                 true ->

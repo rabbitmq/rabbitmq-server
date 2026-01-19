@@ -3625,6 +3625,36 @@ query_single_active_consumer_v7_test(Config) ->
 
     ok.
 
+query_single_active_consumer_consumer_info_test(Config) ->
+    S0 = rabbit_fifo:init(#{name => ?FUNCTION_NAME,
+                            single_active_consumer_on => true,
+                            queue_resource => rabbit_misc:r(<<"/">>, queue, <<"test">>)}),
+    Cid = {atom_to_binary(?FUNCTION_NAME, utf8), self()},
+    Check = rabbit_fifo:make_checkout(Cid, {auto, {simple_prefetch, 1}}, #{}),
+    RaftIdx1 = ?LINE,
+    {S1, {ok, Info}, _} = rabbit_fifo:apply(meta(Config, RaftIdx1), Check, S0),
+    ?assertMatch(#{is_active := true,
+                   credit := 1,
+                   next_msg_id := 0,
+                   key := RaftIdx1,
+                   delivery_count := 0,
+                   consumer_strategy := single_active,
+                   num_checked_out := 0}, Info),
+    Cid2 = {atom_to_binary(?FUNCTION_NAME, utf8), spawn(fun() -> ok end)},
+    Check2 = rabbit_fifo:make_checkout(Cid2, {auto, {simple_prefetch, 1}}, #{}),
+    RaftIdx2 = ?LINE,
+    {_, {ok, Info2}, _} = rabbit_fifo:apply(meta(Config, RaftIdx2), Check2,
+                                            S1),
+    ?assertMatch(#{is_active := false,
+                   credit := 1,
+                   next_msg_id := 0,
+                   key := RaftIdx2,
+                   delivery_count := 0,
+                   consumer_strategy := single_active,
+                   num_checked_out := 0}, Info2),
+    ok.
+
+
 %% Utility
 
 init(Conf) -> rabbit_fifo:init(Conf).
