@@ -426,3 +426,23 @@ await_running_exchange_federation(Config, Node, Links, Timeout) ->
                           end, Status)
                 end, Links)
       end, Timeout).
+
+%% Count running federation links on a node
+count_running_links(Config) ->
+    count_running_links(Config, 0).
+
+count_running_links(Config, Node) ->
+    Status = rabbit_ct_broker_helpers:rpc(Config, Node,
+               rabbit_federation_status, status, []),
+    case Status of
+        {badrpc, _} -> 0;
+        List ->
+            length([S || S <- List,
+                         proplists:get_value(status, S) =:= running])
+    end.
+
+%% Construct an AMQP URI for a specific virtual host
+uri_for_vhost(BaseUri, VHost) ->
+    %% Percent encoding of the path (e.g. replaces . with %2e)
+    EncodedVHost = binary:replace(VHost, <<".">>, <<"%2e">>, [global]),
+    <<BaseUri/binary, "/", EncodedVHost/binary>>.
