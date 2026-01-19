@@ -2,7 +2,8 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2021-2025 Broadcom. All Rights Reserved. The term "Broadcom"
+%% refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(logging_SUITE).
@@ -14,9 +15,6 @@
 -include_lib("rabbit_common/include/logging.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
-
--import(rabbit_ct_broker_helpers,
-        [rpc/4]).
 
 -export([suite/0,
          all/0,
@@ -159,35 +157,37 @@ init_per_testcase(Testcase, Config) ->
             Config1 = rabbit_ct_helpers:set_config(
                         Config,
                         [{rmq_nodename_suffix, Testcase}]),
-            Config2 = case Testcase of
-                          use_exchange_logger_when_enabling_khepri_db ->
-                              rabbit_ct_helpers:set_config(
-                                Config1,
-                                [{rmq_nodes_count, 3},
-                                 {metadata_store, mnesia}]);
-                          use_exchange_logger_when_enabling_all_feature_flags ->
-                              rabbit_ct_helpers:set_config(
-                                Config1,
-                                [{rmq_nodes_count, 3}]);
-                          _ ->
-                              rabbit_ct_helpers:set_config(
-                                Config1,
-                                [{rmq_nodes_count, 1}])
-                      end,
+            Config2 = (
+              case Testcase of
+                  use_exchange_logger_when_enabling_khepri_db ->
+                      rabbit_ct_helpers:set_config(
+                        Config1,
+                        [{rmq_nodes_count, 3},
+                         {metadata_store, mnesia}]);
+                  use_exchange_logger_when_enabling_all_feature_flags ->
+                      rabbit_ct_helpers:set_config(
+                        Config1,
+                        [{rmq_nodes_count, 3}]);
+                  _ ->
+                      rabbit_ct_helpers:set_config(
+                        Config1,
+                        [{rmq_nodes_count, 1}])
+              end),
             LogCfg = {log, [
                             {exchange, [{enabled, true}, {level, debug}]},
                             {file, [{level, debug}]}
                            ]},
-            Config3 = case Testcase of
-                          use_exchange_logger_when_enabling_all_feature_flags ->
-                              rabbit_ct_helpers:merge_app_env(
-                                Config2, {rabbit, [LogCfg,
-                                                   {forced_feature_flags_on_init, []}
-                                                  ]});
-                          _ ->
-                              rabbit_ct_helpers:merge_app_env(
-                                Config2, {rabbit, [LogCfg]})
-                      end,
+            Config3 = (
+              case Testcase of
+                  use_exchange_logger_when_enabling_all_feature_flags ->
+                      rabbit_ct_helpers:merge_app_env(
+                        Config2, {rabbit, [LogCfg,
+                                           {forced_feature_flags_on_init, []}
+                                          ]});
+                  _ ->
+                      rabbit_ct_helpers:merge_app_env(
+                        Config2, {rabbit, [LogCfg]})
+              end),
             rabbit_ct_helpers:run_steps(
               Config3,
               rabbit_ct_broker_helpers:setup_steps() ++
@@ -551,7 +551,9 @@ setting_message_format_works(Config) ->
     Format = ["level=", level, " ",
               "md_key=", md_key, " ",
               {md_key, ["known_md_key=", md_key], []}, " ",
-              {unknown_field, ["unknown_field=", unknown_field], ["unknown_field_spotted"]}, " ",
+              {unknown_field,
+               ["unknown_field=", unknown_field],
+               ["unknown_field_spotted"]}, " ",
               "unknown_field=", unknown_field, " ",
               "msg=", msg],
     {PrefixFormat, LineFormat} =
@@ -1104,26 +1106,33 @@ update_log_exchange_config(Config) ->
 
     ok = rabbit_ct_broker_helpers:rpc(
           Config, 0,
-          logger, update_formatter_config, [rmq_1_exchange, #{use_colors => true}]),
+          logger, update_formatter_config,
+          [rmq_1_exchange, #{use_colors => true}]),
     {ok, HandlerConfig1} =
         rabbit_ct_broker_helpers:rpc(
           Config, 0,
           logger, get_handler_config, [rmq_1_exchange]),
 
     %% use_colors config changed from false to true
-    ?assertMatch(#{formatter := {_, #{use_colors := false}}}, OrigHandlerConfig),
+    ?assertMatch(
+       #{formatter := {_, #{use_colors := false}}},
+       OrigHandlerConfig),
     ?assertMatch(#{formatter := {_, #{use_colors := true}}}, HandlerConfig1),
     %% no other formatter config changed
     ?assertEqual(
-       maps:without([use_colors], element(2, maps:get(formatter, OrigHandlerConfig))),
-       maps:without([use_colors], element(2, maps:get(formatter, HandlerConfig1)))),
+       maps:without([use_colors],
+                    element(2, maps:get(formatter, OrigHandlerConfig))),
+       maps:without([use_colors],
+                    element(2, maps:get(formatter, HandlerConfig1)))),
     %% no other handler config changed
     ?assertEqual(
        maps:without([formatter], OrigHandlerConfig),
        maps:without([formatter], HandlerConfig1)),
 
-    %% should not be possible to change exchange resource or setup_proc in config
-    logger:update_handler_config(rmq_1_exchange, config, #{exchange => "foo", setup_proc => self()}),
+    %% It should not be possible to change exchange resource or setup_proc in
+    %% config.
+    logger:update_handler_config(
+      rmq_1_exchange, config, #{exchange => "foo", setup_proc => self()}),
     {ok, HandlerConfig2} =
         rabbit_ct_broker_helpers:rpc(
           Config, 0,
@@ -1143,45 +1152,66 @@ use_exchange_logger_when_enabling_khepri_db(Config) ->
 use_exchange_logger_when_enabling_all_feature_flags(Config) ->
     case rabbit_ct_helpers:is_mixed_versions() of
         true ->
-            {skip, "This test case tests enabling all stable feature flags after "
-             "a rolling upgrade completed, i.e. all nodes run the same version."};
+            {skip,
+             "This test case tests enabling all stable feature flags after a "
+             "rolling upgrade completed, i.e. all nodes run the same "
+             "version."};
         false ->
-            {_Conn, Chan} = rabbit_ct_client_helpers:open_connection_and_channel(Config),
-            QNames = [<<"cq">>, <<"qq">>, <<"sq">>],
-
-            #'queue.declare_ok'{} = amqp_channel:call(
-                                      Chan, #'queue.declare'{
-                                               queue = <<"cq">>,
-                                               durable = true,
-                                               arguments = [{<<"x-queue-type">>, longstr, <<"classic">>}]
-                                              }),
-            #'queue.declare_ok'{} = amqp_channel:call(
-                                      Chan, #'queue.declare'{
-                                               queue = <<"qq">>,
-                                               durable = true,
-                                               arguments = [{<<"x-queue-type">>, longstr, <<"quorum">>}]
-                                              }),
-            #'queue.declare_ok'{} = amqp_channel:call(
-                                      Chan, #'queue.declare'{
-                                               queue = <<"sq">>,
-                                               durable = true,
-                                               arguments = [{<<"x-queue-type">>, longstr, <<"stream">>}]
-                                              }),
-            [#'queue.bind_ok'{} = amqp_channel:call(
-                                    Chan, #'queue.bind'{
-                                             queue = QName,
-                                             exchange =  <<"amq.rabbitmq.log">>,
-                                             routing_key = <<"#">>}) ||
-             QName <- QNames],
-
-            %% Enabling all stable feature flags should not get stuck.
-            ?assertEqual(ok, rpc(Config, rabbit_feature_flags, enable_all, [stable])),
-
-            ?assertEqual(#{}, rpc(Config, rabbit_feature_flags, list, [disabled, stable])),
-
-            %% Sanity check that at least one log message ended up in all queues.
-            [ok = queue_utils:wait_for_min_messages(Config, QName, 1) || QName <- QNames]
+            use_exchange_logger_when_enabling_all_feature_flags1(Config)
     end.
+
+use_exchange_logger_when_enabling_all_feature_flags1(Config) ->
+    {_Conn, Chan} = rabbit_ct_client_helpers:open_connection_and_channel(
+                      Config),
+    QNames = [<<"cq">>, <<"qq">>, <<"sq">>],
+
+    #'queue.declare_ok'{} = amqp_channel:call(
+                              Chan, #'queue.declare'{
+                                       queue = <<"cq">>,
+                                       durable = true,
+                                       arguments = [{<<"x-queue-type">>,
+                                                     longstr, <<"classic">>}]
+                                      }),
+    #'queue.declare_ok'{} = amqp_channel:call(
+                              Chan, #'queue.declare'{
+                                       queue = <<"qq">>,
+                                       durable = true,
+                                       arguments = [{<<"x-queue-type">>,
+                                                     longstr, <<"quorum">>}]
+                                      }),
+    #'queue.declare_ok'{} = amqp_channel:call(
+                              Chan, #'queue.declare'{
+                                       queue = <<"sq">>,
+                                       durable = true,
+                                       arguments = [{<<"x-queue-type">>,
+                                                     longstr, <<"stream">>}]
+                                      }),
+    lists:foreach(
+      fun(QName) ->
+              #'queue.bind_ok'{} = (
+                 amqp_channel:call(
+                   Chan, #'queue.bind'{
+                            queue = QName,
+                            exchange = <<"amq.rabbitmq.log">>,
+                            routing_key = <<"#">>}))
+      end, QNames),
+
+    %% Enabling all stable feature flags should not get stuck.
+    ?assertEqual(
+       ok,
+       rabbit_ct_broker_helpers:rpc(
+         Config, rabbit_feature_flags, enable_all, [stable])),
+
+    ?assertEqual(
+       #{},
+       rabbit_ct_broker_helpers:rpc(
+         Config, rabbit_feature_flags, list, [disabled, stable])),
+
+    %% Sanity check that at least one log message ended up in all queues.
+    lists:foreach(
+      fun(QName) ->
+              ok = queue_utils:wait_for_min_messages(Config, QName, 1)
+      end, QNames).
 
 logging_to_syslog_works(Config) ->
     Context = default_context(Config),
