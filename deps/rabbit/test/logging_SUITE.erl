@@ -2,12 +2,8 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-<<<<<<< HEAD
-%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
-=======
-%% Copyright (c) 2021-2026 Broadcom. All Rights Reserved. The term “Broadcom”
+%% Copyright (c) 2021-2025 Broadcom. All Rights Reserved. The term "Broadcom"
 %% refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
->>>>>>> fcd5e9b46 (logging_SUITE: Fix style issues)
 %%
 
 -module(logging_SUITE).
