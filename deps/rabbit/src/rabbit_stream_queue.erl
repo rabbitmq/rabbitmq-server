@@ -27,7 +27,7 @@
          deliver/3,
          settle/5,
          credit/6,
-         dequeue/5,
+         dequeue/6,
          info/2,
          queue_length/1,
          get_replicas/1,
@@ -585,8 +585,8 @@ stream_message(Msg) ->
             {Value, MsgData}
     end.
 
--spec dequeue(_, _, _, _, client()) -> no_return().
-dequeue(_, _, _, _, #stream_client{name = Name}) ->
+-spec dequeue(_, _, _, _, _, client()) -> no_return().
+dequeue(_, _, _, _, _Timeout, #stream_client{name = Name}) ->
     {protocol_error, not_implemented, "basic.get not supported by stream queues ~ts",
      [rabbit_misc:rs(Name)]}.
 
