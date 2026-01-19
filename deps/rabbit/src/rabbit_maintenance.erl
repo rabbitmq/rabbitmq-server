@@ -38,11 +38,15 @@
     table_definitions/0
 ]).
 
-%% Federation is a special case; exclude these from Dialyzer since
+%% Federation is a special case; exclude these from Dialyzer and xref since
 %% these modules won't be available in the 'rabbit' app but
 %% their use is guarded by 'rabbit_plugins:is_enabled/1'.
 -dialyzer({nowarn_function, [disconnect_federation_links/0,
                              reconnect_federation_links/0]}).
+-ignore_xref([{rabbit_federation_exchange_link, disconnect_all, 0},
+              {rabbit_federation_exchange_link, reconnect_all, 0},
+              {rabbit_federation_queue_link, disconnect_all, 0},
+              {rabbit_federation_queue_link, reconnect_all, 0}]).
 
 -define(DEFAULT_STATUS,  regular).
 -define(DRAINING_STATUS, draining).
