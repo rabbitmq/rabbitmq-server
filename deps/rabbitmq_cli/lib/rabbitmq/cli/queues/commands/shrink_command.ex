@@ -59,7 +59,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.ShrinkCommand do
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
   def banner([node], _) do
-    "Shrinking quorum queues on #{node}..."
+    "Shrinking queues on #{node}..."
   end
 
   def usage, do: "shrink <node> [--errors-only]"
@@ -80,7 +80,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.ShrinkCommand do
   def help_section, do: :cluster_management
 
   def description,
-    do: "Shrinks quorum queue clusters by removing any members (replicas) on the given node."
+    do: "Shrinks queue clusters by removing any members (replicas) on the given node."
 
   #
   # Implementation
