@@ -343,6 +343,21 @@ dynamic_plugin_stop_start(Config) ->
           await_running_queue_federation(Config,
             [{DownQ1, UpQ1}, {DownQ2, UpQ2}],
             30000),
+
+          %% Wait for the consumer to be fully attached (consumer_tag set).
+          %% The status may show "running" before the consumer is ready.
+          rabbit_ct_helpers:await_condition(
+            fun() ->
+                    Status = rabbit_ct_broker_helpers:rpc(Config, 0,
+                               rabbit_federation_status, status, []),
+                    lists:any(
+                      fun(Entry) ->
+                              proplists:get_value(queue, Entry) =:= DownQ1 andalso
+                              proplists:get_value(upstream_queue, Entry) =:= UpQ1 andalso
+                              proplists:get_value(consumer_tag, Entry) =/= undefined
+                      end, Status)
+            end, 30000),
+
           expect_federation(Ch, UpQ1, DownQ1, ?EXPECT_FEDERATION_TIMEOUT)
       end, upstream_downstream(Config) ++ [q(DownQ2, Args)]).
 
@@ -391,7 +406,24 @@ supervisor_shutdown_concurrency_safety(Config) ->
             [{DownQ, UpQ}],
             30000),
 
+<<<<<<< HEAD:deps/rabbitmq_federation/test/queue_SUITE.erl
           %% Verify federation still works after recovery
+=======
+          %% Wait for the consumer to be fully attached (consumer_tag set).
+          %% The status may show "running" before the consumer is ready.
+          rabbit_ct_helpers:await_condition(
+            fun() ->
+                    Status = rabbit_ct_broker_helpers:rpc(Config, 0,
+                               rabbit_federation_status, status, []),
+                    lists:any(
+                      fun(Entry) ->
+                              proplists:get_value(queue, Entry) =:= DownQ andalso
+                              proplists:get_value(upstream_queue, Entry) =:= UpQ andalso
+                              proplists:get_value(consumer_tag, Entry) =/= undefined
+                      end, Status)
+            end, 30000),
+
+>>>>>>> 819c87c44 (Attempt to deflake queue federation tests):deps/rabbitmq_queue_federation/test/queue_SUITE.erl
           expect_federation(Ch, UpQ, DownQ, ?EXPECT_FEDERATION_TIMEOUT)
       end, upstream_downstream(Config)).
 
