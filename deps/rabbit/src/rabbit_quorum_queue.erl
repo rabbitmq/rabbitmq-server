@@ -1243,7 +1243,6 @@ key_metrics_rpc(ServerId) ->
 -spec status(rabbit_types:vhost(), Name :: rabbit_misc:resource_name()) ->
     [[{binary(), term()}]] | {error, term()}.
 status(Vhost, QueueName) ->
-    %% Handle not found queues
     QName = #resource{virtual_host = Vhost, name = QueueName, kind = queue},
     case rabbit_amqqueue:lookup(QName) of
         {ok, Q} when ?amqqueue_is_classic(Q) ->
