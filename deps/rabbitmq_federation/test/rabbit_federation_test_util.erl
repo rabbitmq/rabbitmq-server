@@ -426,3 +426,20 @@ await_running_exchange_federation(Config, Node, Links, Timeout) ->
                           end, Status)
                 end, Links)
       end, Timeout).
+
+count_running_links(Config) ->
+    count_running_links(Config, 0).
+
+count_running_links(Config, Node) ->
+    Status = rabbit_ct_broker_helpers:rpc(Config, Node,
+               rabbit_federation_status, status, []),
+    case Status of
+        {badrpc, _} -> 0;
+        List ->
+            length([S || S <- List,
+                         proplists:get_value(status, S) =:= running])
+    end.
+
+uri_for_vhost(BaseUri, VHost) ->
+    EncodedVHost = binary:replace(VHost, <<".">>, <<"%2e">>, [global]),
+    <<BaseUri/binary, "/", EncodedVHost/binary>>.
