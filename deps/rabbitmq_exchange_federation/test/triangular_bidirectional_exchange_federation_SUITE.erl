@@ -189,12 +189,14 @@ cleanup_federation_triangle(Config) ->
 setup_federation_triangle_multi_node(Config) ->
     Nodes = [0, 1, 2],
 
-    %% Enable the federation plugin on all nodes (they are not clustered,
-    %% so each needs the plugin enabled explicitly)
+    %% Start the federation application on all nodes.
+    %% We use RPC instead of enable_plugin because the nodes are not clustered
+    %% and don't share the same plugin directory as the test runner.
     lists:foreach(
       fun(Node) ->
-              ok = rabbit_ct_broker_helpers:enable_plugin(
-                     Config, Node, "rabbitmq_federation")
+              {ok, _} = rabbit_ct_broker_helpers:rpc(
+                          Config, Node, application, ensure_all_started,
+                          [rabbitmq_exchange_federation])
       end, Nodes),
 
     lists:foreach(
