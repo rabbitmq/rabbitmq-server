@@ -76,11 +76,16 @@ init(Config) ->
 init_state(Config) ->
     Url = proplists:get_value(url, Config),
     Headers = proplists:get_value(http_headers, Config, []),
+    Timeout = https_request_timeout(),
+    HttpOptions0 = [{timeout, Timeout}, {connect_timeout, Timeout}],
     HttpOptions = case proplists:get_value(ssl_options, Config) of
-        undefined -> [];
-        SslOpts   -> [{ssl, SslOpts}]
+        undefined -> HttpOptions0;
+        SslOpts   -> [{ssl, SslOpts} | HttpOptions0]
     end,
     #http_state{url = Url, http_options = HttpOptions, headers = [{"connection", "close"} | Headers]}.
+
+https_request_timeout() ->
+    application:get_env(rabbitmq_trust_store, https_request_timeout, 20000).
 
 decode_cert_list(Body) ->
     try

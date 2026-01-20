@@ -5,7 +5,8 @@ PROJECT_MOD = rabbit_trust_store_app
 define PROJECT_ENV
 [
 	    {default_refresh_interval, 30},
-	    {providers, [rabbit_trust_store_file_provider]}
+	    {providers, [rabbit_trust_store_file_provider]},
+	    {https_request_timeout, 20000}
 	  ]
 endef
 
