@@ -189,6 +189,14 @@ cleanup_federation_triangle(Config) ->
 setup_federation_triangle_multi_node(Config) ->
     Nodes = [0, 1, 2],
 
+    %% Enable the federation plugin on all nodes (they are not clustered,
+    %% so each needs the plugin enabled explicitly)
+    lists:foreach(
+      fun(Node) ->
+              ok = rabbit_ct_broker_helpers:enable_plugin(
+                     Config, Node, "rabbitmq_exchange_federation")
+      end, Nodes),
+
     lists:foreach(
       fun(LocalNode) ->
               lists:foreach(
