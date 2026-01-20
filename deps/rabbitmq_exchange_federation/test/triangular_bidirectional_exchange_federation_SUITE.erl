@@ -68,19 +68,24 @@ init_per_group(triangle_topology, Config) ->
         [fun setup_vhosts/1,
          fun setup_federation_triangle/1]);
 init_per_group(triangle_topology_multi_node, Config) ->
-    Suffix = rabbit_ct_helpers:testcase_absname(Config, "", "-"),
-    Config1 = rabbit_ct_helpers:set_config(Config, [
-        {rmq_nodename_suffix, Suffix},
-        {rmq_nodes_count, 3},
-        {rmq_nodes_clustered, false},
-        %% Skip past the ports used by the triangle_topology group (1 node)
-        %% to avoid port conflicts
-        {tcp_ports_base, {skip_n_nodes, 1}}
-    ]),
-    rabbit_ct_helpers:run_steps(Config1,
-        rabbit_ct_broker_helpers:setup_steps() ++
-        rabbit_ct_client_helpers:setup_steps() ++
-        [fun setup_federation_triangle_multi_node/1]);
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            {skip, "not mixed versions compatible"};
+        _ ->
+            Suffix = rabbit_ct_helpers:testcase_absname(Config, "", "-"),
+            Config1 = rabbit_ct_helpers:set_config(Config, [
+                {rmq_nodename_suffix, Suffix},
+                {rmq_nodes_count, 3},
+                {rmq_nodes_clustered, false},
+                %% Skip past the ports used by the triangle_topology group (1 node)
+                %% to avoid port conflicts
+                {tcp_ports_base, {skip_n_nodes, 1}}
+            ]),
+            rabbit_ct_helpers:run_steps(Config1,
+                rabbit_ct_broker_helpers:setup_steps() ++
+                rabbit_ct_client_helpers:setup_steps() ++
+                [fun setup_federation_triangle_multi_node/1])
+    end;
 init_per_group(_, Config) ->
     Config.
 
