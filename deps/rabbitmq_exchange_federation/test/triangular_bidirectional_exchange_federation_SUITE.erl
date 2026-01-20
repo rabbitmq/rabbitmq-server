@@ -194,7 +194,7 @@ setup_federation_triangle_multi_node(Config) ->
     lists:foreach(
       fun(Node) ->
               ok = rabbit_ct_broker_helpers:enable_plugin(
-                     Config, Node, "rabbitmq_exchange_federation")
+                     Config, Node, "rabbitmq_federation")
       end, Nodes),
 
     lists:foreach(
