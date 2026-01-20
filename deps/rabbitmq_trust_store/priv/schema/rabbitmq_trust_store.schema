@@ -36,6 +36,19 @@ end}.
     {datatype, string}
 ]}.
 
+{mapping, "trust_store.https_request_timeout", "rabbitmq_trust_store.https_request_timeout", [
+    {datatype, integer},
+    {validators, ["non_negative_integer"]}
+]}.
+
+{translation, "rabbitmq_trust_store.https_request_timeout",
+fun(Conf) ->
+    case cuttlefish:conf_get("trust_store.https_request_timeout", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
 {mapping, "trust_store.ssl_options", "rabbitmq_trust_store.ssl_options", [
     {datatype, {enum, [none]}}
 ]}.
