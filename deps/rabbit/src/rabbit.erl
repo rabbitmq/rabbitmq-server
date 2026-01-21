@@ -205,11 +205,15 @@
                     {requires,    prevent_startup_if_node_was_reset},
                     {enables,     routing_ready}]}).
 
-
 -rabbit_boot_step({cluster_tags,
                    [{description, "Set cluster tags"},
                     {mfa,         {?MODULE, update_cluster_tags, []}},
                     {requires,    core_initialized}]}).
+
+-rabbit_boot_step({logger_exchange,
+                   [{description, "Declare exchange for rabbit_logger_exchange_h"},
+                    {mfa,         {rabbit_logger_exchange_h, declare_exchange, []}},
+                    {requires,    [core_initialized, recovery]}]}).
 
 -rabbit_boot_step({routing_ready,
                    [{description, "message delivery logic ready"},
