@@ -18,6 +18,12 @@ the website repository is [`rabbitmq/rabbitmq-website`](https://github.com/rabbi
 ## Building and Testing
 
 The GNU Make 4-based build system is described in `CONTRIBUTING.md`.
+When looking for GNU Make 4, consult `gmake` as well as `make`.
+
+### Dialyzer and xref
+
+Use `gmake dialyze` and `gmake xref` to run static code analysis tools
+from individual `deps/` component directories (see below).
 
 
 ## Repository Structure
@@ -101,6 +107,7 @@ These dependencies are cloned by `gmake` during the build process:
 ## Build System Files, Build Artifacts, Test Run Logs
 
  * `erlang.mk` is the heart of the Make-based build system
+ * `rabbitmq-components.mk` lists all dependencies, their sources (e.g. a Git repo or `hex.pm`) and target version
  * `mk`, `./*.mk`, `deps/rabbit_common/mk` are various Make files included into `Makefile`
  * `ebin`, `sbin`, `escript`, `plugins` directories contain build artifacts
  * `logs` contains Common Test run logs. Inspect it when troubleshooting test failures
@@ -133,7 +140,7 @@ Jobs and run results can be inspected via `gh` on the command line.
  * Make sure to use proper English grammar, in particular articles, punctuation and full stops at the end of sentences except for Markdown list items
 
 
-## Git Instructions
+## Git and GitHub (sans Actions) Instructions
 
 ### General
 
@@ -152,6 +159,11 @@ The currently developed branches are:
 
 When backporting commits to older branches,
 always use `git cherry-pick -x` to include a reference to the original commit.
+
+### Fetching GitHub PRs
+
+When fetching a GitHub pull request details or diffs, prefer the Web option over the `gh` CLI tool.
+`gh` can require an explicit operation approval.
 
 
 ## Writing Style Guide
