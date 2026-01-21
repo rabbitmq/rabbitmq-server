@@ -158,7 +158,7 @@ init_per_testcase(Testcase, Config) ->
                  andalso rabbit_ct_helpers:is_mixed_versions() of
                 true ->
                     {skip,
-                     "use_exchange_logger_when_enabling_all_feature_flags has a 4.1.x/3.13.x "
+                     "use_exchange_logger_when_enabling_all_feature_flags has a 4.2.x/3.13.7 "
                      "mixed mode incompatibility due to the lists of stable feature flags."};
                 false ->
                     init_per_testcase_exchange_output(Testcase, Config)
