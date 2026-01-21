@@ -101,6 +101,7 @@ updates:
       interval: "weekly"
       day: "saturday"
     groups:
+<<<<<<< HEAD
       dev-deps:
         dependency-type: "development"
       prod-deps:
@@ -111,3 +112,26 @@ updates:
     ignore:
       - dependency-name: "ch.qos.logback:logback-classic"
         versions: [ "[1.3,)" ]
+=======
+      minor-patch-updates:
+        applies-to: version-updates
+        update-types:
+          - "minor"
+          - "patch"
+  - package-ecosystem: "npm"
+    directory: "/selenium"
+    schedule:
+      interval: "daily"
+    target-branch: "v4.2.x"
+    cooldown:
+      semver-minor-days: 3
+      semver-major-days: 3
+    groups:
+      minor-patch-updates:
+        applies-to: version-updates
+        update-types:
+          - "minor"
+          - "patch"
+
+
+>>>>>>> 451b04e98 (Disable dependantbot for selenium in 4.1.x)
