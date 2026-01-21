@@ -154,18 +154,5 @@ updates:
         update-types:
           - "minor"
           - "patch"
-  - package-ecosystem: "npm"
-    directory: "/selenium"
-    schedule:
-      interval: "daily"
-    target-branch: "v4.1.x"
-    cooldown:
-      semver-minor-days: 3
-      semver-major-days: 3
-    groups:
-      minor-patch-updates:
-        applies-to: version-updates
-        update-types:
-          - "minor"
-          - "patch"
+
 
