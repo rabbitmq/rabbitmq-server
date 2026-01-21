@@ -18,6 +18,10 @@ the website repository is [`rabbitmq/rabbitmq-website`](https://github.com/rabbi
 ## Building and Testing
 
 The GNU Make 4-based build system is described in `CONTRIBUTING.md`.
+
+Consult `CONTRIBUTING.md` before running any tests, in particular to learn how to run
+a specific suite, group of cases or a single test case.
+
 When looking for GNU Make 4, consult `gmake` as well as `make`.
 
 ### Dialyzer and xref
