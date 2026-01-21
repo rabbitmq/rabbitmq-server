@@ -1020,9 +1020,14 @@ args(L)  -> rabbit_misc:to_amqp_table(L).
 %%
 
 list_exchanges() ->
-    %% exclude internal exchanges, they are not meant to be declared or used by
-    %% applications
-    [exchange_definition(X) || X <- lists:filter(fun(#exchange{internal = true}) -> false;
+    %% Exclude internal exchanges, they are not meant to be declared or used by
+    %% applications, except the exchange used by `rabbit_logger_exchange_h'
+    %% because its vhost depends on the configurable default vhost: we don't
+    %% want the exported definitions to depend on the configuration, that's why
+    %% we include it in the export.
+    LoggerExchange = rabbit_logger_exchange_h:exchange(),
+    [exchange_definition(X) || X <- lists:filter(fun(#exchange{name = Name}) when Name =:= LoggerExchange -> true;
+                                                    (#exchange{internal = true}) -> false;
                                                     (#exchange{name = #resource{name = <<>>}}) -> false;
                                                     (#exchange{name = #resource{name = <<"amq.", _Rest/binary>>}}) -> false;
                                                     (_) -> true

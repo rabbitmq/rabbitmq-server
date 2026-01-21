@@ -307,6 +307,7 @@ from_mnesia_to_khepri(Config) ->
                             rabbit_misc:r(<<"/">>, exchange, <<"amq.fanout">>),
                             rabbit_misc:r(<<"/">>, exchange, <<"amq.headers">>),
                             rabbit_misc:r(<<"/">>, exchange, <<"amq.match">>),
+                            rabbit_misc:r(<<"/">>, exchange, <<"amq.rabbitmq.log">>),
                             rabbit_misc:r(<<"/">>, exchange, <<"amq.rabbitmq.trace">>),
                             rabbit_misc:r(<<"/">>, exchange, <<"amq.topic">>),
                             rabbit_misc:r(<<"/">>, exchange, X)]),

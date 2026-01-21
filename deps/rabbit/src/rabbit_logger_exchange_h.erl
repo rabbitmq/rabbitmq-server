@@ -2,7 +2,12 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
+<<<<<<< HEAD
 %% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+=======
+%% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom”
+%% refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+>>>>>>> a908504c9 (rabbit_logger_exchange_h: Always declare exchange, even if exchange logging is disabled)
 %%
 
 -module(rabbit_logger_exchange_h).
@@ -15,8 +20,10 @@
 %% logger callbacks
 -export([log/2, adding_handler/1, removing_handler/1, changing_config/3,
          filter_config/1]).
+%% Boot step callback.
+-export([declare_exchange/0]).
+-export([exchange/0]).
 
--define(DECL_EXCHANGE_INTERVAL_SECS, 5).
 -define(LOG_EXCH_NAME, <<"amq.rabbitmq.log">>).
 -define(DEFAULT_FORMATTER, logger_formatter).
 -define(DEFAULT_FORMATTER_CONFIG, #{}).
@@ -78,7 +85,7 @@ do_log(
     Content = rabbit_basic:build_content(PBasic, Body),
     case mc_amqpl:message(Exchange, RoutingKey, Content) of
         {ok, Msg} ->
-            %% Publishing a message might involve a Erlang process, like a Ra
+            %% Publishing a message might involve an Erlang process, like a Ra
             %% server process, to log something and call itself. We need to
             %% publish the message asynchronously from a separate process and
             %% ignore the fate of that publish, to not block an Erlang
@@ -159,51 +166,17 @@ start_setup_proc(#{config := InternalConfig} = Config) ->
     Exchange = rabbit_misc:r(DefaultVHost, exchange, ?LOG_EXCH_NAME),
     InternalConfig1 = InternalConfig#{exchange => Exchange},
     Pid = spawn(fun() ->
-                        wait_for_initial_pass(60),
                         setup_proc(Config#{config => InternalConfig1})
                 end),
     InternalConfig2 = InternalConfig1#{setup_proc => Pid},
     Config#{config => InternalConfig2}.
 
-%% Declaring an exchange requires the metadata store to be ready
-%% which happens on a boot step after the second phase of the prelaunch.
-%% This function waits for the store initialisation.
-wait_for_initial_pass(0) ->
-    ok;
-wait_for_initial_pass(N) ->
-    case rabbit_db:is_init_finished() of
-        false ->
-            timer:sleep(1000),
-            wait_for_initial_pass(N - 1);
-        true ->
-            ok
-    end.
-
-setup_proc(
-  #{id := Id,
-    config := #{exchange := Exchange}} = Config) ->
+setup_proc(#{id := Id} = Config) ->
     %% We register this process using the logger handler ID. It makes
     %% debugging convenient but it's not critical. That's why we catch any
     %% exceptions and ignore the return value.
     _ = catch erlang:register(Id, self()),
-
-    case declare_exchange(Config) of
-        ok ->
-            ?LOG_INFO(
-               "Logging to ~ts ready", [rabbit_misc:rs(Exchange)],
-               #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
-            loop(Config);
-        error ->
-            ?LOG_DEBUG(
-               "Logging to ~ts not ready, trying again in ~b second(s)",
-               [rabbit_misc:rs(Exchange), ?DECL_EXCHANGE_INTERVAL_SECS],
-               #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
-            receive
-                stop -> ok
-            after ?DECL_EXCHANGE_INTERVAL_SECS * 1000 ->
-                      setup_proc(Config)
-            end
-    end.
+    loop(Config).
 
 loop(#{config := #{exchange := Exchange}} = Config) ->
     receive
@@ -214,44 +187,43 @@ loop(#{config := #{exchange := Exchange}} = Config) ->
             ok
     end.
 
-declare_exchange(#{config := #{exchange := Exchange}}) ->
-    try rabbit_exchange:declare(
-          Exchange, topic, true, false, true, [], ?INTERNAL_USER) of
-        {ok, #exchange{}} ->
-            ?LOG_DEBUG(
-               "Declared ~ts",
-               [rabbit_misc:rs(Exchange)],
-               #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
-            ok;
-        {error, timeout} ->
-            ?LOG_DEBUG(
-               "Could not declare ~ts because the operation timed out",
-               [rabbit_misc:rs(Exchange)],
-               #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
-            error
+exchange() ->
+    {ok, DefaultVHost} = application:get_env(rabbit, default_vhost),
+    Exchange = rabbit_misc:r(DefaultVHost, exchange, ?LOG_EXCH_NAME),
+    Exchange.
+
+declare_exchange() ->
+    Exchange = exchange(),
+    try
+        Ret = rabbit_exchange:declare(
+                Exchange, topic, true, false, true, [], ?INTERNAL_USER),
+        case Ret of
+            {ok, #exchange{}} ->
+                ?LOG_DEBUG(
+                   "Declared ~ts",
+                   [rabbit_misc:rs(Exchange)],
+                   #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+                ok;
+            {error, timeout} ->
+                ?LOG_DEBUG(
+                   "Could not declare ~ts because the operation timed out",
+                   [rabbit_misc:rs(Exchange)],
+                   #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+                ok
+        end
     catch
         Class:Reason ->
             ?LOG_DEBUG(
                "Could not declare ~ts, reason: ~0p:~0p",
                [rabbit_misc:rs(Exchange), Class, Reason],
                #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
-           error
+           ok
     end.
 
 unconfigure_exchange(
   #{config := #{exchange := Exchange,
                 setup_proc := Pid}}) ->
     Pid ! stop,
-    case rabbit_exchange:ensure_deleted(Exchange, false, ?INTERNAL_USER) of
-        ok ->
-            ok;
-        {error, timeout} ->
-            ?LOG_ERROR(
-              "Could not delete ~ts due to a timeout",
-              [rabbit_misc:rs(Exchange)],
-              #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
-            ok
-    end,
     ?LOG_INFO(
        "Logging to ~ts disabled",
        [rabbit_misc:rs(Exchange)],
