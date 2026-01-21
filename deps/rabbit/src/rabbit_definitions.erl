@@ -1021,10 +1021,10 @@ args(L)  -> rabbit_misc:to_amqp_table(L).
 
 list_exchanges() ->
     %% Exclude internal exchanges, they are not meant to be declared or used by
-    %% applications, except the exchange used by `rabbit_logger_exchange_h'
-    %% because its vhost depends on the configurable default vhost: we don't
+    %% applications, except for the exchange used by `rabbit_logger_exchange_h' ('amq.rabbitmq.log').
+    %% Its virtual host depends on the configurable default virtual host: we don't
     %% want the exported definitions to depend on the configuration, that's why
-    %% we include it in the export.
+    %% we include it in the exported data.
     LoggerExchange = rabbit_logger_exchange_h:exchange(),
     [exchange_definition(X) || X <- lists:filter(fun(#exchange{name = Name}) when Name =:= LoggerExchange -> true;
                                                     (#exchange{internal = true}) -> false;
