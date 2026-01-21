@@ -68,8 +68,8 @@ end_per_testcase(Testcase, Config) ->
 %% ---------------------------------------------------------------------------
 
 exchange_count(Config) ->
-    %% Default exchanges == 7
-    ?assertEqual(7, rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_exchange, count, [])).
+    %% Default exchanges == 8
+    ?assertEqual(8, rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_exchange, count, [])).
 
 queue_count(Config) ->
     Conn = rabbit_ct_client_helpers:open_connection(Config, 0),
