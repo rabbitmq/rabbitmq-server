@@ -33,21 +33,39 @@
 -spec status(rabbit_types:vhost(), rabbit_misc:resource_name()) ->
     [[{binary(), term()}]] | {error, term()}.
 status(VHost, Name) ->
-    with_ra_queue(VHost, Name,
-                  fun(Mod, Q) -> Mod:status(Q) end).
+    with_ra_queue(VHost, Name, fun(Mod, Q) -> Mod:status(Q) end).
 
 -spec add_member(rabbit_types:vhost(), rabbit_misc:resource_name(),
                  node(), ra_membership(), timeout()) ->
     ok | {error, term()}.
 add_member(VHost, Name, Node, Membership, Timeout) ->
-    with_ra_queue(VHost, Name,
-                  fun(Mod, Q) -> Mod:add_member(Q, Node, Membership, Timeout) end).
+    Fun = fun(Mod, Q) ->
+                  case is_queue_member(Q, Node) of
+                      true ->
+                          %% idempotent by design
+                          ok;
+                      false ->
+                          Mod:add_member(Q, Node, Membership, Timeout)
+                  end
+          end,
+    with_ra_queue(VHost, Name, Fun).
 
 -spec delete_member(rabbit_types:vhost(), rabbit_misc:resource_name(), node()) ->
     ok | {error, term()}.
 delete_member(VHost, Name, Node) ->
-    with_ra_queue(VHost, Name,
-                  fun(Mod, Q) -> Mod:delete_member(Q, Node) end).
+    Fun = fun(Mod, Q) ->
+                  case is_queue_member(Q, Node) of
+                      true ->
+                          Mod:delete_member(Q, Node);
+                      false ->
+                          %% idempotent by design
+                          ok
+                  end
+          end,
+    with_ra_queue(VHost, Name, Fun).
+
+is_queue_member(Q, Member) ->
+    lists:member(Member, amqqueue:get_nodes(Q)).
 
 with_ra_queue(VHost, Name, Fun) ->
     QName = rabbit_misc:queue_resource(VHost, Name),

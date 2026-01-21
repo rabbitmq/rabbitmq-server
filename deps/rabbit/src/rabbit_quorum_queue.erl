@@ -1371,48 +1371,54 @@ do_add_member(Q, Node, Membership, Timeout)
     ServerId = {RaName, Node},
     Members = members(Q),
 
-    MachineVersion = erpc_call(Node, rabbit_fifo, version, [], infinity),
-    Conf = make_ra_conf(Q, ServerId, Membership, MachineVersion),
-    case ra:start_server(?RA_SYSTEM, Conf) of
-        ok ->
-            ServerIdSpec = maps:with([id, uid, membership], Conf),
-            case ra:add_member(Members, ServerIdSpec, Timeout) of
-                {ok, {RaIndex, RaTerm}, Leader} ->
-                    Fun = fun(Q1) ->
-                                  Q2 = update_type_state(
-                                         Q1, fun(#{nodes := Nodes} = Ts) ->
-                                                     Ts#{nodes => lists:usort([Node | Nodes])}
-                                             end),
-                                  amqqueue:set_pid(Q2, Leader)
-                          end,
-                    %% The `ra:member_add/3` call above returns before the
-                    %% change is committed. This is ok for that addition but
-                    %% any follow-up changes to the cluster might be rejected
-                    %% with the `cluster_change_not_permitted` error.
-                    %%
-                    %% Instead of changing other places to wait or retry their
-                    %% cluster membership change, we wait for the current add
-                    %% to be applied using a conditional leader query before
-                    %% proceeding and returning.
-                    {ok, _, _} = ra:leader_query(
-                                   Leader,
-                                   {erlang, is_list, []},
-                                   #{condition => {applied, {RaIndex, RaTerm}}}),
-                    _ = rabbit_amqqueue:update(QName, Fun),
-                    ?LOG_INFO("Added a replica of quorum ~ts on node ~ts", [rabbit_misc:rs(QName), Node]),
-                    ok;
-                {timeout, _} ->
-                    _ = ra:force_delete_server(?RA_SYSTEM, ServerId),
-                    _ = ra:remove_member(Members, ServerId),
-                    {error, timeout};
+    case erpc_call(Node, rabbit_fifo, version, [], infinity) of
+        {error, _}  = Err ->
+            Err;
+        MachineVersion ->
+            Conf = make_ra_conf(Q, ServerId, Membership, MachineVersion),
+            case ra:start_server(?RA_SYSTEM, Conf) of
+                ok ->
+                    ServerIdSpec = maps:with([id, uid, membership], Conf),
+                    case ra:add_member(Members, ServerIdSpec, Timeout) of
+                        {ok, {RaIndex, RaTerm}, Leader} ->
+                            Fun = fun(Q1) ->
+                                          Q2 = update_type_state(
+                                                 Q1, fun(#{nodes := Nodes} = Ts) ->
+                                                             Ts#{nodes => lists:usort(
+                                                                            [Node | Nodes])}
+                                                     end),
+                                          amqqueue:set_pid(Q2, Leader)
+                                  end,
+                            %% The `ra:member_add/3` call above returns before the
+                            %% change is committed. This is ok for that addition but
+                            %% any follow-up changes to the cluster might be rejected
+                            %% with the `cluster_change_not_permitted` error.
+                            %%
+                            %% Instead of changing other places to wait or retry their
+                            %% cluster membership change, we wait for the current add
+                            %% to be applied using a conditional leader query before
+                            %% proceeding and returning.
+                            {ok, _, _} = ra:leader_query(
+                                           Leader,
+                                           {erlang, is_list, []},
+                                           #{condition => {applied, {RaIndex, RaTerm}}}),
+                            _ = rabbit_amqqueue:update(QName, Fun),
+                            ?LOG_INFO("Added a replica of quorum ~ts on node ~ts",
+                                      [rabbit_misc:rs(QName), Node]),
+                            ok;
+                        {timeout, _} ->
+                            _ = ra:force_delete_server(?RA_SYSTEM, ServerId),
+                            _ = ra:remove_member(Members, ServerId),
+                            {error, timeout};
+                        E ->
+                            _ = ra:force_delete_server(?RA_SYSTEM, ServerId),
+                            E
+                    end;
                 E ->
-                    _ = ra:force_delete_server(?RA_SYSTEM, ServerId),
+                    ?LOG_WARNING("Could not add a replica of quorum ~ts on node ~ts: ~p",
+                                 [rabbit_misc:rs(QName), Node, E]),
                     E
-            end;
-        E ->
-            ?LOG_WARNING("Could not add a replica of quorum ~ts on node ~ts: ~p",
-                               [rabbit_misc:rs(QName), Node, E]),
-            E
+            end
     end.
 
 delete_member(VHost, Name, Node) ->
