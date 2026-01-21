@@ -2,12 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-<<<<<<< HEAD
-%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
-=======
-%% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom”
-%% refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
->>>>>>> a908504c9 (rabbit_logger_exchange_h: Always declare exchange, even if exchange logging is disabled)
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term "Broadcom" refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_logger_exchange_h).
