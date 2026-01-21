@@ -72,11 +72,12 @@ end_per_group(_, Config) ->
     Config.
 
 init_per_testcase(Testcase, Config) ->
-    case {Testcase, rabbit_ct_helpers:is_mixed_versions()} of
-        {forget_cluster_node_with_one_last_stream, true} ->
+    case {is_stream_test(Testcase), rabbit_ct_helpers:is_mixed_versions()} of
+        {true, true} ->
             %% In a 4.2+ and 3.13.x mixed cluster, osiris 1.8.x (in 3.13.x) is
-            %% incompatible with 1.10.x in terms of badrpc message handling
-            {skip, "forget_cluster_node_with_one_last_stream is not mixed version compatible"};
+            %% incompatible with 1.10.x in terms of badrpc message handling.
+            %% Skip all stream-related tests in mixed version mode.
+            {skip, "stream tests are not mixed version compatible"};
         _ ->
             rabbit_ct_helpers:testcase_started(Config, Testcase),
             ClusterSize = ?config(rmq_nodes_count, Config),
@@ -90,6 +91,16 @@ init_per_testcase(Testcase, Config) ->
               rabbit_ct_broker_helpers:setup_steps() ++
               rabbit_ct_client_helpers:setup_steps())
     end.
+
+is_stream_test(Testcase) ->
+    lists:member(Testcase, [
+        forget_cluster_node_with_streams,
+        forget_cluster_node_with_one_last_stream,
+        forget_cluster_node_with_all_last_streams,
+        forget_cluster_node_with_quorum_queues_and_streams,
+        forget_cluster_node_with_one_last_quorum_member_and_streams,
+        forget_cluster_node_with_one_last_stream_and_quorum_queues
+    ]).
 
 end_per_testcase(Testcase, Config) ->
     Config1 = rabbit_ct_helpers:run_steps(Config,
