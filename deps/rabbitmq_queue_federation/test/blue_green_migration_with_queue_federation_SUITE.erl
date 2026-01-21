@@ -37,7 +37,7 @@ all() ->
 groups() ->
     [
      {blue_green_migration, [], [
-                                 blue_green_migration_simulation
+                                 case1
                                 ]}
     ].
 
@@ -118,7 +118,7 @@ cleanup_vhosts(Config) ->
 %% Test case
 %% -------------------------------------------------------------------
 
-blue_green_migration_simulation(Config) ->
+case1(Config) ->
     VHostPairs = lists:zip(?BLUE_VHOSTS, ?GREEN_VHOSTS),
 
     %% Green vhosts federate from their corresponding blue vhosts.
