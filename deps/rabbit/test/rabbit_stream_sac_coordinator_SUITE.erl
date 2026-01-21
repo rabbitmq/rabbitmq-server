@@ -28,6 +28,9 @@
 -define(STATE, rabbit_stream_sac_coordinator).
 -define(MOD, rabbit_stream_sac_coordinator).
 
+suite() ->
+    [{timetrap, {seconds, 240}}].
+
 all() ->
     [{group, tests}].
 

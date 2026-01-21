@@ -77,7 +77,7 @@ init_per_testcase(Testcase, Config) ->
             %% In a 4.2+ and 3.13.x mixed cluster, osiris 1.8.x (in 3.13.x) is
             %% incompatible with 1.10.x in terms of badrpc message handling.
             %% Skip all stream-related tests in mixed version mode.
-            {skip, "stream tests are not mixed version compatible"};
+            {skip, "forget_cluster_node streams-related tests are not mixed version compatible"};
         _ ->
             rabbit_ct_helpers:testcase_started(Config, Testcase),
             ClusterSize = ?config(rmq_nodes_count, Config),
