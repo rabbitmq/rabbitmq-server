@@ -154,15 +154,7 @@ init_per_testcase(Testcase, Config) ->
         %% The exchange output requires RabbitMQ to run. All testcases in this
         %% group will run in the context of that RabbitMQ node.
         exchange_output ->
-            case Testcase =:= use_exchange_logger_when_enabling_all_feature_flags
-                 andalso rabbit_ct_helpers:is_mixed_versions() of
-                true ->
-                    {skip,
-                     "use_exchange_logger_when_enabling_all_feature_flags has a 4.2.x/3.13.7 "
-                     "mixed mode incompatibility due to the lists of stable feature flags."};
-                false ->
-                    init_per_testcase_exchange_output(Testcase, Config)
-            end;
+            init_per_testcase_exchange_output(Testcase, Config);
 
         %% Other groups and testcases run the tested code directly without a
         %% RabbitMQ node running.
@@ -1152,6 +1144,20 @@ update_log_exchange_config(Config) ->
     ok.
 
 use_exchange_logger_when_enabling_khepri_db(Config) ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            case rabbit_ct_broker_helpers:enable_feature_flag(
+                   Config, 'rabbitmq_4.0.0') of
+                ok ->
+                    use_exchange_logger_when_enabling_khepri_db1(Config);
+                {skip, _} = Skip ->
+                    Skip
+            end;
+        false ->
+            use_exchange_logger_when_enabling_khepri_db1(Config)
+    end.
+
+use_exchange_logger_when_enabling_khepri_db1(Config) ->
     ?assertNot(rabbit_ct_broker_helpers:rpc(
                  Config, 0,
                  rabbit_feature_flags, is_enabled, [khepri_db])),
