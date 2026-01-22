@@ -117,7 +117,7 @@ from_mnesia_to_khepri(Config) ->
     Queues = lists:sort(rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, list, [])),
     ?assertMatch([_, _], Queues),
     Exchanges = lists:sort(rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_exchange, list, [])),
-    ?assertEqual(14, length(Exchanges)),
+    ?assertEqual(15, length(Exchanges)),
     Bindings = lists:sort(rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_binding, list, [<<"/">>])),
     ?assertEqual(4, length(Bindings)),
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
