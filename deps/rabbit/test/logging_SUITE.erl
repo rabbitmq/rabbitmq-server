@@ -169,6 +169,17 @@ init_per_testcase(Testcase, Config) ->
     end.
 
 init_per_testcase_exchange_output(Testcase, Config) ->
+    case Testcase =:= use_exchange_logger_when_enabling_all_feature_flags
+         andalso rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            {skip,
+             "use_exchange_logger_when_enabling_all_feature_flags "
+             "cannot run in mixed version mode"};
+        false ->
+            init_per_testcase_exchange_output1(Testcase, Config)
+    end.
+
+init_per_testcase_exchange_output1(Testcase, Config) ->
     Config1 = rabbit_ct_helpers:set_config(
                 Config,
                 [{rmq_nodename_suffix, Testcase}]),
@@ -1167,17 +1178,6 @@ use_exchange_logger_when_enabling_khepri_db1(Config) ->
 
 %% Test case for https://github.com/rabbitmq/rabbitmq-server/discussions/11652
 use_exchange_logger_when_enabling_all_feature_flags(Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-        true ->
-            {skip,
-             "This test case tests enabling all stable feature flags after a "
-             "rolling upgrade completed, i.e. all nodes run the same "
-             "version."};
-        false ->
-            use_exchange_logger_when_enabling_all_feature_flags1(Config)
-    end.
-
-use_exchange_logger_when_enabling_all_feature_flags1(Config) ->
     {_Conn, Chan} = rabbit_ct_client_helpers:open_connection_and_channel(
                       Config),
     QNames = [<<"cq">>, <<"qq">>, <<"sq">>],
