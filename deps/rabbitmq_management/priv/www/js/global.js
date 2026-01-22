@@ -990,7 +990,7 @@ QUEUE_TYPE["stream"] = {
     },
     tmpl: {
         "arguments"    : "stream-queue-arguments",
-        "user_policy_arguments": "quorum-queue-user-policy-arguments",
+        "user_policy_arguments": "stream-queue-user-policy-arguments",
         "operator_policy_arguments": "stream-queue-operator-policy-arguments",
         "list"   : "stream-queue-list",
         "stats"  : "stream-queue-stats",
