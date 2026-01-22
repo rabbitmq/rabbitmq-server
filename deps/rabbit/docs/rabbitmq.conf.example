@@ -874,9 +874,10 @@
 # net_ticktime = 60
 
 ## Inter-node communication port range.
-## The parameters inet_dist_listen_min and inet_dist_listen_max
-## can be configured in the classic config format only.
 ## Relevant doc guide: https://www.rabbitmq.com/docs/networking#epmd-inet-dist-port-range.
+##
+# distribution.listener.port_range.min = 25672
+# distribution.listener.port_range.max = 25672
 
 
 #
