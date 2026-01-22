@@ -3352,11 +3352,14 @@ do_snapshot(MacVer, Ts, #snapshot{index = _ChIdx,
           EnoughDataRemoved) orelse
          Force of
         true ->
+            %% TODO: if efficient we can set the index of the release cursor
+            %% condition to the highest live index instead of the snapshot index
             {#snapshot{index = LastAppliedIdx,
                        timestamp = Ts,
                        messages_total = MsgsTot,
                        discarded_bytes = DiscardedBytes},
-             [{release_cursor, LastAppliedIdx, MacState}]};
+             [{release_cursor, LastAppliedIdx, MacState,
+               #{condition => [{written, LastAppliedIdx}]}}]};
         false ->
             {Snap0, []}
     end.
