@@ -23,7 +23,7 @@
     <groovy-maven-plugin.version>2.1.1</groovy-maven-plugin.version>
     <groovy.version>2.4.21</groovy.version>
     <maven-compiler-plugin.version>3.14.1</maven-compiler-plugin.version>
-    <spotless.version>3.1.0</spotless.version>
+    <spotless.version>3.2.0</spotless.version>
     <google-java-format.version>1.17.0</google-java-format.version>
     <test-keystore.ca>${project.build.directory}/ca.keystore</test-keystore.ca>
     <test-keystore.password>bunnychow</test-keystore.password>
