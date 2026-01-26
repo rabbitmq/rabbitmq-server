@@ -216,31 +216,17 @@
 %% -------------------------------------------------------------------
 
 setup_steps() ->
-    case os:getenv("RABBITMQ_RUN") of
-        false ->
-            [
-                fun run_make_dist/1,
-                fun rabbit_ct_helpers:ensure_rabbitmqctl_cmd/1,
-                fun rabbit_ct_helpers:ensure_rabbitmqctl_app/1,
-                fun rabbit_ct_helpers:ensure_rabbitmq_plugins_cmd/1,
-                fun rabbit_ct_helpers:ensure_rabbitmq_diagnostics_cmd/1,
-                fun set_lager_flood_limit/1,
-                fun configure_metadata_store/1,
-                fun start_rabbitmq_nodes/1,
-                fun share_dist_and_proxy_ports_map/1
-            ];
-        _ ->
-            [
-                fun rabbit_ct_helpers:ensure_rabbitmqctl_cmd/1,
-                fun rabbit_ct_helpers:load_rabbitmqctl_app/1,
-                fun rabbit_ct_helpers:ensure_rabbitmq_plugins_cmd/1,
-                fun rabbit_ct_helpers:ensure_rabbitmq_diagnostics_cmd/1,
-                fun set_lager_flood_limit/1,
-                fun configure_metadata_store/1,
-                fun start_rabbitmq_nodes/1,
-                fun share_dist_and_proxy_ports_map/1
-            ]
-    end.
+    [
+        fun run_make_dist/1,
+        fun rabbit_ct_helpers:ensure_rabbitmqctl_cmd/1,
+        fun rabbit_ct_helpers:ensure_rabbitmqctl_app/1,
+        fun rabbit_ct_helpers:ensure_rabbitmq_plugins_cmd/1,
+        fun rabbit_ct_helpers:ensure_rabbitmq_diagnostics_cmd/1,
+        fun set_lager_flood_limit/1,
+        fun configure_metadata_store/1,
+        fun start_rabbitmq_nodes/1,
+        fun share_dist_and_proxy_ports_map/1
+    ].
 
 teardown_steps() ->
     [
@@ -1476,40 +1462,23 @@ rabbitmqctl(Config, Node, Args, Timeout) ->
     %% umbrella being configured.
     I = get_node_index(Config, Node),
     CanUseSecondary = (I + 1) rem 2 =:= 0,
-    BazelRunSecCmd = rabbit_ct_helpers:get_config(
-                       Config, rabbitmq_run_secondary_cmd),
     UseSecondaryDist = case ?config(secondary_dist, Config) of
                                false -> false;
                                _     -> CanUseSecondary
                            end,
     UseSecondaryUmbrella = case ?config(secondary_umbrella, Config) of
-                               false ->
-                                   case BazelRunSecCmd of
-                                       undefined -> false;
-                                       _         -> CanUseSecondary
-                                   end;
-                               _ ->
-                                   CanUseSecondary
+                               false -> false;
+                               _     -> CanUseSecondary
                            end,
     Rabbitmqctl = case UseSecondaryUmbrella of
                       true ->
-                          case BazelRunSecCmd of
-                              undefined ->
-                                  SrcDir = ?config(
-                                              secondary_current_srcdir,
-                                              Config),
-                                  SecScriptsDir = filename:join(
-                                                    [SrcDir, "sbin"]),
-                                  rabbit_misc:format(
-                                    "~ts/rabbitmqctl", [SecScriptsDir]);
-                              _ ->
-                                  BazelSecScriptsDir = filename:dirname(
-                                                         BazelRunSecCmd),
-                                  filename:join(
-                                    [BazelSecScriptsDir,
-                                     "sbin",
-                                     "rabbitmqctl"])
-                          end;
+                          SrcDir = ?config(
+                                      secondary_current_srcdir,
+                                      Config),
+                          SecScriptsDir = filename:join(
+                                            [SrcDir, "sbin"]),
+                          rabbit_misc:format(
+                            "~ts/rabbitmqctl", [SecScriptsDir]);
                       false ->
                           case UseSecondaryDist of
                               true ->
@@ -2510,13 +2479,8 @@ cover_remove_node(Config, Node) ->
     cover_remove_node(Nodename).
 
 if_cover(F) ->
-    case {
-      %% make ct COVER=1
-      os:getenv("COVER"),
-      %% bazel coverage
-      os:getenv("COVERAGE")
-     } of
-        {false, false} -> ok;
+    case os:getenv("COVER") of
+        false -> ok;
         _ -> _ = F(), ok
     end.
 
