@@ -1813,7 +1813,7 @@ dont_leak_file_handles(Config) ->
     ok.
 
 grow_queue(Config) ->
-    [Server0, Server1, Server2, _Server3, _Server4] =
+    [Server0, Server1, _Server2, _Server3, _Server4] =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
