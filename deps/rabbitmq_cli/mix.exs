@@ -138,8 +138,6 @@ defmodule RabbitMQCtl.MixfileBase do
     end
 
     make_cmd = System.get_env("MAKE", "make")
-    fake_cmd = "true"
-    is_bazel = System.get_env("IS_BAZEL") != nil
 
     # Note that normal deps will be fetched by Erlang.mk on build.
     [
@@ -154,12 +152,12 @@ defmodule RabbitMQCtl.MixfileBase do
       {
         :stdout_formatter,
         path: Path.join(deps_dir, "stdout_formatter"),
-        compile: if(is_bazel, do: fake_cmd, else: make_cmd)
+        compile: make_cmd
       },
       {
         :rabbit_common,
         path: Path.join(deps_dir, "rabbit_common"),
-        compile: if(is_bazel, do: fake_cmd, else: make_cmd),
+        compile: make_cmd,
         override: true
       }
     ] ++
@@ -173,7 +171,7 @@ defmodule RabbitMQCtl.MixfileBase do
             {
               :rabbit,
               path: Path.join(deps_dir, "rabbit"),
-              compile: if(is_bazel, do: fake_cmd, else: make_cmd),
+              compile: make_cmd,
               override: true
             },
             {
@@ -187,7 +185,7 @@ defmodule RabbitMQCtl.MixfileBase do
             {
               :amqp_client,
               path: Path.join(deps_dir, "amqp_client"),
-              compile: if(is_bazel, do: fake_cmd, else: make_cmd),
+              compile: make_cmd,
               override: true
             }
           ]

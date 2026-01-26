@@ -12,14 +12,7 @@ ExUnit.configure(
   timeout: ten_minutes
 )
 
-if System.get_env("BAZEL_TEST") == "1" do
-  ExUnit.configure(seed: 0)
-  :application.ensure_all_started(:mix)
-  :application.ensure_all_started(:rabbitmqctl)
-  ExUnit.start(trace: true)
-else
-  ExUnit.start()
-end
+ExUnit.start()
 
 # Elixir 1.15 compiler optimizations seem to require that we explicitly add to the code path
 true = Code.append_path(Path.join([System.get_env("DEPS_DIR"), "rabbit_common", "ebin"]))

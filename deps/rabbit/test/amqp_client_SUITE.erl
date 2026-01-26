@@ -4767,7 +4767,7 @@ message_ttl(Config) ->
 plugin(Config) ->
     Node = 0,
     Plugin = rabbitmq_amqp1_0,
-    %% rabbit/Makefile and rabbit/BUILD.bazel declare a test dependency on the rabbitmq_amqp1_0 plugin.
+    %% rabbit/Makefile declares a test dependency on the rabbitmq_amqp1_0 plugin.
     %% Therefore, we first disable, and then enable.
     ?assertEqual(ok, rabbit_ct_broker_helpers:disable_plugin(Config, Node, Plugin)),
     ?assertEqual(ok, rabbit_ct_broker_helpers:enable_plugin(Config, Node, Plugin)).

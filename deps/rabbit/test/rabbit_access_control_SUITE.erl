@@ -79,7 +79,7 @@ init_per_testcase(Testcase, Config)
        Testcase =:= with_disabled_plugin orelse
        Testcase =:= with_disabled_plugin_plus_internal ->
     rabbit_ct_helpers:testcase_started(Config, Testcase),
-    do_init_per_testcase(Testcase, Config, [fun prepare_my_plugin/1]);
+    do_init_per_testcase(Testcase, Config, [fun build_my_plugin/1]);
 init_per_testcase(_TestCase, Config) ->
     Config.
 
@@ -326,19 +326,6 @@ with_disabled_plugin_plus_internal(Config) ->
 %% -------------------------------------------------------------------
 %% Internal helpers.
 %% -------------------------------------------------------------------
-
-prepare_my_plugin(Config) ->
-    case os:getenv("RABBITMQ_RUN") of
-        false ->
-            build_my_plugin(Config);
-        _ ->
-            MyPluginDir = filename:dirname(
-                            filename:dirname(
-                              code:where_is_file("my_auth_plugin.app"))),
-            PluginsDir = filename:dirname(MyPluginDir),
-            rabbit_ct_helpers:set_config(
-              Config, [{rmq_plugins_dir, PluginsDir}])
-    end.
 
 build_my_plugin(Config) ->
     DataDir = filename:join(
