@@ -10,10 +10,10 @@
   <properties>
     <junit.jupiter.version>5.14.2</junit.jupiter.version>
     <assertj.version>3.27.6</assertj.version>
-    <qpid-jms-client.version>2.9.0</qpid-jms-client.version>
+    <qpid-jms-client.version>2.10.0</qpid-jms-client.version>
     <amqp-client.version>[0.6.0-SNAPSHOT,)</amqp-client.version>
     <logback.version>1.5.18</logback.version>
-    <spotless.version>3.1.0</spotless.version>
+    <spotless.version>3.2.0</spotless.version>
     <google-java-format.version>1.33.0</google-java-format.version>
     <maven-compiler-plugin.version>3.14.1</maven-compiler-plugin.version>
     <maven-surefire-plugin.version>3.5.4</maven-surefire-plugin.version>
