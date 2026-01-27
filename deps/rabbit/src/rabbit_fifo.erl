@@ -854,7 +854,37 @@ snapshot_installed(_Meta, #?MODULE{cfg = #cfg{},
                                 Acc
                         end
                 end, #{}, Consumers),
-    delivery_effects(SendAcc, State).
+    delivery_effects(SendAcc, State) ++
+    credit_reply_resend_effect(State).
+
+credit_reply_resend_effect(#?MODULE{cfg = #cfg{},
+                                    waiting_consumers = Waiting,
+                                    consumers = Consumers} = State) ->
+    Available0 = messages_ready(State),
+    maps:fold(fun (ConsumerKey,
+                   #consumer{cfg = #consumer_cfg{tag = CTag,
+                                                 credit_mode = {credited, _},
+                                                 pid = CPid},
+                             drain = Drain,
+                             credit = Credit,
+                             delivery_count = DeliveryCount},
+                   Acc) ->
+                      Available = case is_map_key(ConsumerKey, Consumers) of
+                                      true ->
+                                          Available0;
+                                      false ->
+                                          0
+                                  end,
+                      [{send_msg, CPid,
+                        {credit_reply, CTag, DeliveryCount,
+                         Credit, Available, Drain},
+                        ?DELIVERY_SEND_MSG_OPTS} | Acc];
+                  (_, _, Acc) ->
+                      Acc
+              end, [], maps:merge(Consumers, maps:from_list(Waiting))).
+
+
+
 
 v7_to_v8_consumer(Con, Timeout) ->
                      V7Cfg = element(#consumer.cfg, Con),
@@ -2797,7 +2827,8 @@ credit_active_consumer(Meta,
     LinkCreditSnd = link_credit_snd(DeliveryCountRcv, LinkCreditRcv,
                                     DeliveryCountSnd),
     %% grant the credit
-    Con1 = Con0#consumer{credit = LinkCreditSnd},
+    Con1 = Con0#consumer{drain = Drain,
+                         credit = LinkCreditSnd},
     ServiceQueue = maybe_queue_consumer(ConsumerKey, Con1, ServiceQueue0),
     State1 = State0#?STATE{service_queue = ServiceQueue,
                            consumers = maps:update(ConsumerKey, Con1, Cons0)},
@@ -2830,14 +2861,13 @@ credit_active_consumer(Meta,
                               Credit, Available, Drain},
                              ?DELIVERY_SEND_MSG_OPTS}]}.
 
-credit_inactive_consumer(
-  #credit{credit = LinkCreditRcv,
-          delivery_count = DeliveryCountRcv,
-          drain = Drain,
-          consumer_key = ConsumerKey},
-  #consumer{cfg = #consumer_cfg{pid = CPid,
-                                tag = CTag},
-            delivery_count = DeliveryCountSnd} = Con0,
+credit_inactive_consumer(#credit{credit = LinkCreditRcv,
+                                 delivery_count = DeliveryCountRcv,
+                                 drain = Drain,
+                                 consumer_key = ConsumerKey},
+                         #consumer{cfg = #consumer_cfg{pid = CPid,
+                                                       tag = CTag},
+                                   delivery_count = DeliveryCountSnd} = Con0,
   Waiting0, State0) ->
     %% No messages are available for inactive consumers.
     Available = 0,
@@ -2860,6 +2890,7 @@ credit_inactive_consumer(
         end,
     %% Grant the credit.
     Con = Con0#consumer{credit = Credit,
+                        drain = Drain,
                         delivery_count = DeliveryCount},
     Waiting = add_waiting({ConsumerKey, Con}, Waiting0),
     State = State0#?STATE{waiting_consumers = Waiting},
