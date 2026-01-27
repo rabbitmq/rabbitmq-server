@@ -2081,7 +2081,9 @@ handle_queue_actions(Actions, #state{} = State0) ->
           ({unblock, QName}, S = #state{queues_soft_limit_exceeded = QSLE}) ->
               S#state{queues_soft_limit_exceeded = sets:del_element(QName, QSLE)};
           ({queue_down, QName}, S) ->
-              handle_queue_down(QName, S)
+              handle_queue_down(QName, S);
+          (_Action, S) ->
+              S
       end, State0, Actions).
 
 handle_queue_down(QName, State0 = #state{cfg = #cfg{client_id = ClientId}}) ->

@@ -252,7 +252,9 @@ handle_event(QName, {deliver, Msg}, #?STATE{name = QName,
 handle_event(QName, {deliver, _Msg}, #?STATE{name = QName,
                                              dropped = Dropped} = State) ->
     rabbit_global_counters:messages_dead_lettered(maxlen, ?MODULE, disabled, 1),
-    {ok, State#?STATE{dropped = Dropped + 1}, []}.
+    {ok, State#?STATE{dropped = Dropped + 1}, []};
+handle_event(_QName, Action, State) ->
+    {ok, State, [Action]}.
 
 deliver_actions(QName, Ctag, Mc) ->
     Msgs = [{QName, self(), undefined, _Redelivered = false, Mc}],

@@ -435,8 +435,7 @@ handle_event(QName, {down, Pid, Info}, #?STATE{monitored = Monitored,
             {ok, State#?STATE{unconfirmed = U},
              [{rejected, QName, down, MsgIds} | Actions0]}
     end;
-handle_event(_QName, Action, State)
-  when element(1, Action) =:= credit_reply ->
+handle_event(_QName, Action, State) ->
     {ok, State, [Action]}.
 
 supports_stateful_delivery() -> true.

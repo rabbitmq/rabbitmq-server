@@ -2139,12 +2139,11 @@ handle_queue_actions(Actions, State) ->
               S#state{outgoing_pending = queue:in(Action, Pending)};
           ({queue_down, QName}, #state{stashed_down = L} = S) ->
               S#state{stashed_down = [QName | L]};
-          ({Action, _QName}, S)
-            when Action =:= block orelse
-                 Action =:= unblock ->
-              %% Ignore since we rely on our own mechanism to detect if a client sends to fast
-              %% into a link: If the number of outstanding queue confirmations grows,
-              %% we won't grant new credits to publishers.
+          (_Action, S) ->
+              %% Ignore 'block' and 'unblock' queue actions since we rely on our
+              %% own mechanism to detect if a client sends to fast into a link:
+              %% If the number of outstanding queue confirmations grows, we won't
+              %% grant new credits to publishers.
               S
       end, State, Actions).
 
