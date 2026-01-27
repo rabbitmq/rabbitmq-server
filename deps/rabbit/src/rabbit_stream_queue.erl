@@ -796,32 +796,32 @@ i(messages_unacknowledged, Q) when ?is_amqqueue(Q) ->
         [] ->
             0
     end;
-i(committed_offset, Q) ->
+i(committed_offset = F, Q) ->
     %% TODO should it be on a metrics table?
     %% The queue could be removed between the list() and this call
     %% to retrieve the overview. Let's default to '' if it's gone.
     Key = {osiris_writer, amqqueue:get_name(Q)},
-    case osiris_counters:overview(Key) of
-        undefined ->
-            '';
-        Data ->
-            maps:get(committed_offset, Data, '')
+    case osiris_counters:counters(Key, [F]) of
+        #{F := V} ->
+            V;
+        _ ->
+            ''
     end;
-i(committed_chunk_id, Q) ->
+i(committed_chunk_id = F, Q) ->
     Key = {osiris_writer, amqqueue:get_name(Q)},
-    case osiris_counters:overview(Key) of
-        undefined ->
-            '';
-        Data ->
-            maps:get(committed_chunk_id, Data, '')
+    case osiris_counters:counters(Key, [F]) of
+        #{F := V} ->
+            V;
+        _ ->
+            ''
     end;
-i(segments, Q) ->
+i(segments = F, Q) ->
     Key = {osiris_writer, amqqueue:get_name(Q)},
-    case osiris_counters:overview(Key) of
-        undefined ->
-            '';
-        Data ->
-            maps:get(segments, Data, '')
+    case osiris_counters:counters(Key, [F]) of
+        #{F := V} ->
+            V;
+        _ ->
+            ''
     end;
 i(policy, Q) ->
     case rabbit_policy:name(Q) of

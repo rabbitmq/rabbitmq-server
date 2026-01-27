@@ -869,8 +869,6 @@ core_metrics_special_chars(Config) ->
     ok.
 
 detailed_raft_metrics_test(Config) ->
-    ComponentMetrics = #{#{module => "ra_log_wal", ra_system => "coordination"} => ["1.0"],
-                         #{module => "ra_log_wal", ra_system => "quorum_queues"} => ["1.0"]},
     QQMetrics = #{#{queue => "a_quorum_queue", vhost => "/"} => ["1.0"]},
 
     {_, Body1} = http_get_with_pal(Config, "/metrics/detailed?family=ra_metrics&vhost=foo", [], 200),
