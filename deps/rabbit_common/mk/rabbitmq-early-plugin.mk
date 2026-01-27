@@ -25,41 +25,20 @@ CT_OPTS += -hidden
 
 CT_OPTS += -kernel net_ticktime 5
 
-# Enable the following common_test hooks on GH and Concourse:
-#
-# cth_fail_fast
-#   This hook will make sure the first failure puts an end to the
-#   testsuites; ie. all remaining tests are skipped.
-#
-# cth_styledout
-#   This hook will change the output of common_test to something more
-#   concise and colored. Not used on GitHub Actions except in parallel CT.
-
-ifndef GITHUB_ACTIONS
-CT_HOOKS += cth_styledout
-endif
-TEST_DEPS += cth_styledout
-
-ifdef CONCOURSE
-FAIL_FAST = 1
-SKIP_AS_ERROR = 1
-endif
-
-RMQ_CI_CT_HOOKS = cth_fail_fast
-ifeq ($(FAIL_FAST),1)
-CT_HOOKS += $(RMQ_CI_CT_HOOKS)
-TEST_DEPS += $(RMQ_CI_CT_HOOKS)
-endif
-
-dep_cth_fail_fast = git https://github.com/rabbitmq/cth_fail_fast.git master
-dep_cth_styledout = git https://github.com/rabbitmq/cth_styledout.git master
-
-CT_HOOKS_PARAM_VALUE = $(patsubst %,and %,$(CT_HOOKS))
-CT_OPTS += -ct_hooks $(wordlist 2,$(words $(CT_HOOKS_PARAM_VALUE)),$(CT_HOOKS_PARAM_VALUE))
-
+ifdef GITHUB_ACTIONS
 # On CI, set $RABBITMQ_CT_SKIP_AS_ERROR so that any skipped
 # testsuite/testgroup/testcase is considered an error.
-
-ifeq ($(SKIP_AS_ERROR),1)
 export RABBITMQ_CT_SKIP_AS_ERROR = true
+else
+# This hook will change the output of common_test to something more
+# concise and colored. Not used on GitHub Actions except in parallel
+# CT where it is hardcoded.
+CT_HOOKS += cth_styledout
+endif
+
+TEST_DEPS += cth_styledout
+dep_cth_styledout = git https://github.com/rabbitmq/cth_styledout.git master
+
+ifneq ($(strip $(CT_HOOKS)),)
+CT_OPTS += -ct_hooks $(CT_HOOKS)
 endif
