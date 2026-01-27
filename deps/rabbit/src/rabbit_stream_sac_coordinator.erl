@@ -44,9 +44,9 @@
          init_state/0,
          send_message/2,
          ensure_monitors/4,
-         handle_connection_down/3,
+         handle_connection_down/4,
          handle_node_reconnected/3,
-         presume_connection_down/2,
+         presume_connection_down/3,
          consumer_groups/3,
          group_consumers/5,
          overview/1,
@@ -89,6 +89,7 @@
         (is_record(C1, consumer) andalso is_record(C2, consumer) andalso
          C1#consumer.pid =:= C2#consumer.pid andalso
          C1#consumer.subscription_id =:= C2#consumer.subscription_id)).
+-define(V6_OR_MORE(Vsn), (Vsn >= 6)).
 
 %% Single Active Consumer API
 -spec register_consumer(binary(),
@@ -720,11 +721,12 @@ ensure_monitors(#command_purge_nodes{},
 ensure_monitors(_, #?MODULE{} = State0, Monitors, Effects) ->
     {State0, Monitors, Effects}.
 
--spec handle_connection_down(connection_pid(), term(), state()) ->
+-spec handle_connection_down(ra_machine:command_meta_data(), connection_pid(),
+                             term(), state()) ->
     {state(), ra_machine:effects()}.
-handle_connection_down(Pid, noconnection, State) ->
-    handle_connection_node_disconnected(Pid, State);
-handle_connection_down(Pid, _Reason,
+handle_connection_down(Meta, Pid, noconnection, State) ->
+    handle_connection_node_disconnected(Meta, Pid, State);
+handle_connection_down(_, Pid, _Reason,
                        #?MODULE{pids_groups = PidsGroups0} = State0) ->
     case maps:take(Pid, PidsGroups0) of
         error ->
@@ -739,22 +741,23 @@ handle_connection_down0(Pid, State, Groups) ->
                       handle_group_after_connection_down(Pid, Acc, G)
               end, {State, []}, Groups).
 
--spec handle_connection_node_disconnected(connection_pid(), state()) ->
+-spec handle_connection_node_disconnected(ra_machine:command_meta_data(),
+                                          connection_pid(), state()) ->
     {state(), ra_machine:effects()}.
-handle_connection_node_disconnected(ConnPid,
+handle_connection_node_disconnected(Meta, ConnPid,
                                     #?MODULE{pids_groups = PidsGroups0} = State0) ->
     case maps:take(ConnPid, PidsGroups0) of
         error ->
             {State0, []};
         {Groups, PidsGroups1} ->
             State1 = State0#?MODULE{pids_groups = PidsGroups1},
-            State2 =
-            maps:fold(fun(G, _, Acc) ->
-                              handle_group_after_connection_node_disconnected(
-                                ConnPid, Acc, G)
-                      end, State1, Groups),
+            {State2, Eff} =
+                maps:fold(fun(G, _, Acc) ->
+                                  handle_group_after_connection_node_disconnected(
+                                    Meta, ConnPid, Acc, G)
+                          end, {State1, []}, Groups),
             T = disconnected_timeout(State2),
-            {State2, [node_disconnected_timer_effect(ConnPid, T)]}
+            {State2, [node_disconnected_timer_effect(ConnPid, T) | Eff]}
     end.
     
 -spec handle_node_reconnected(node(), state(), ra_machine:effects()) ->
@@ -773,18 +776,50 @@ handle_node_reconnected(Node,
 
     {State0#?MODULE{pids_groups = PidsGroups1}, Effects1}.
 
--spec presume_connection_down(connection_pid(), state()) ->
+-spec presume_connection_down(ra_machine:command_meta_data(), connection_pid(),
+                              state()) ->
     {state(), ra_machine:effects()}.
-presume_connection_down(Pid, #?MODULE{groups = Groups} = State0) ->
+presume_connection_down(Meta, Pid, #?MODULE{groups = Groups} = State0) ->
     {State1, Eff} =
-    maps:fold(fun(G, _, {St, Eff}) ->
-                      handle_group_connection_presumed_down(Pid, St, Eff, G)
-              end, {State0, []}, Groups),
+        maps:fold(fun(G, _, {St, Eff}) ->
+                          handle_group_connection_presumed_down(Meta, Pid, St,
+                                                                Eff, G)
+                  end, {State0, []}, Groups),
     {State1, Eff}.
 
-handle_group_connection_presumed_down(Pid, #?MODULE{groups = Groups0} = S0,
+handle_group_connection_presumed_down(#{machine_version := Vsn}, Pid,
+                                      #?MODULE{groups = Groups0} = S0,
+                                      Eff0, {VH, S, Name} = K)
+  when is_map_key(K, Groups0) andalso ?V6_OR_MORE(Vsn) ->
+    #group{consumers = Consumers0} = G0 = lookup_group(VH, S, Name, Groups0),
+    {Consumers1, Updated} =
+        lists:foldr(
+          fun(#consumer{pid = P,
+                        status = {?DISCONNECTED, ?DEACTIVATING}} = C, {L, _})
+                when P == Pid ->
+                  %% Deactivating consumer presumed down, handshake cannot
+                  %% complete. Treat as waiting.
+                  {[csr_status(C, {?PDOWN, ?WAITING}) | L], true};
+             (#consumer{pid = P, status = {?DISCONNECTED, St}} = C, {L, _})
+                when P == Pid ->
+                  {[csr_status(C, {?PDOWN, St}) | L], true};
+             (C, {L, UpdatedFlag}) ->
+                  {[C | L], UpdatedFlag or false}
+          end, {[], false}, Consumers0),
+
+    case Updated of
+        true ->
+            G1 = G0#group{consumers = Consumers1},
+            {G2, Eff} = maybe_rebalance_group(G1, K),
+            Groups1 = update_groups(VH, S, Name, G2, Groups0),
+            {S0#?MODULE{groups = Groups1}, Eff ++ Eff0};
+        false ->
+            {S0, Eff0}
+    end;
+handle_group_connection_presumed_down(_, Pid, #?MODULE{groups = Groups0} = S0,
                                       Eff0, {VH, S, Name} = K)
   when is_map_key(K, Groups0) ->
+    %% V5 behavior
     #group{consumers = Consumers0} = G0 = lookup_group(VH, S, Name, Groups0),
     {Consumers1, Updated} =
         lists:foldr(
@@ -804,7 +839,7 @@ handle_group_connection_presumed_down(Pid, #?MODULE{groups = Groups0} = S0,
         false ->
             {S0, Eff0}
     end;
-handle_group_connection_presumed_down(_, S0, Eff0, _) ->
+handle_group_connection_presumed_down(_, _, S0, Eff0, _) ->
     {S0, Eff0}.
 
 handle_group_after_connection_down(Pid,
@@ -837,10 +872,42 @@ handle_group_after_connection_down(Pid,
 handle_group_after_connection_down(_, {S0, Eff0}, _) ->
     {S0, Eff0}.
 
-handle_group_after_connection_node_disconnected(ConnPid,
-                                                #?MODULE{groups = Groups0} = S0,
+handle_group_after_connection_node_disconnected(#{machine_version := Vsn}, ConnPid,
+                                                {#?MODULE{groups = Groups0} = S0,
+                                                 Eff0},
+                                                {VH, S, Name} = K)
+  when is_map_key(K, Groups0) andalso ?V6_OR_MORE(Vsn) ->
+    #group{consumers = Cs0} = G0 = lookup_group(VH, S, Name, Groups0),
+    {Cs1, NeedsRebalance} =
+        lists:foldr(fun(#consumer{status = {_, ?DEACTIVATING},
+                                  pid = Pid} = C0,
+                        {Acc, _}) when Pid =:= ConnPid ->
+                            %% Deactivating consumer disconnected, the handshake
+                            %% cannot complete. Treat as waiting and trigger
+                            %% rebalancing.
+                            C1 = csr_status(C0, {?DISCONNECTED, ?WAITING}),
+                            {[C1 | Acc], true};
+                       (#consumer{status = {_, St},
+                                  pid = Pid} = C0,
+                        {Acc, Flag}) when Pid =:= ConnPid ->
+                            C1 = csr_status(C0, {?DISCONNECTED, St}),
+                            {[C1 | Acc], Flag};
+                       (C, {Acc, Flag}) ->
+                            {[C | Acc], Flag}
+                    end, {[], false}, Cs0),
+    G1 = G0#group{consumers = Cs1},
+    {G2, Eff1} = case NeedsRebalance of
+                     true -> maybe_rebalance_group(G1, K);
+                     false -> {G1, []}
+                 end,
+    Groups1 = update_groups(VH, S, Name, G2, Groups0),
+    {S0#?MODULE{groups = Groups1}, Eff1 ++ Eff0};
+handle_group_after_connection_node_disconnected(_Meta, ConnPid,
+                                                {#?MODULE{groups = Groups0} = S0,
+                                                 Eff0},
                                                 {VH, S, Name} = K)
   when is_map_key(K, Groups0) ->
+    %% V5 behavior
     #group{consumers = Cs0} = G0 = lookup_group(VH, S, Name, Groups0),
     Cs1 = lists:foldr(fun(#consumer{status = {_, St},
                                     pid = Pid} = C0,
@@ -852,9 +919,9 @@ handle_group_after_connection_node_disconnected(ConnPid,
                       end, [], Cs0),
     G1 = G0#group{consumers = Cs1},
     Groups1 = update_groups(VH, S, Name, G1, Groups0),
-    S0#?MODULE{groups = Groups1};
-handle_group_after_connection_node_disconnected(_, S0, _) ->
-    S0.
+    {S0#?MODULE{groups = Groups1}, Eff0};
+handle_group_after_connection_node_disconnected(_, _, {S0, Eff0}, _) ->
+    {S0, Eff0}.
 
 -spec import_state(ra_machine:version(), map()) -> state().
 import_state(4, #{<<"groups">> := Groups, <<"pids_groups">> := PidsGroups}) ->
