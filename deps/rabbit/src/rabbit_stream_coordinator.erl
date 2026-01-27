@@ -1112,16 +1112,17 @@ wrap_reply(From, Reply) ->
 phase_start_replica(StreamId, #{epoch := Epoch,
                                 node := Node} = Args, Conf0) ->
     fun() ->
-            try osiris_replica:start(Node, Conf0) of
+            Conf1 = maybe_update_replica_conf(Conf0),
+            try osiris_replica:start(Node, Conf1) of
                 {ok, Pid} ->
                     ?LOG_INFO("~ts: ~ts: replica started on ~ts in ~b pid ~w",
-                                    [?MODULE, StreamId, Node, Epoch, Pid]),
+                              [?MODULE, StreamId, Node, Epoch, Pid]),
                     send_self_command({member_started, StreamId,
                                        Args#{pid => Pid}});
                 {error, already_present} ->
                     %% need to remove child record if this is the case
                     %% can it ever happen?
-                    _ = osiris:stop_member(Node, Conf0),
+                    _ = osiris:stop_member(Node, Conf1),
                     send_action_failed(StreamId, starting, Args);
                 {error, {already_started, Pid}} ->
                     %% TODO: we need to check that the current epoch is the same
@@ -1131,12 +1132,12 @@ phase_start_replica(StreamId, #{epoch := Epoch,
                                        Args#{pid => Pid}});
                 {error, Reason} ->
                     ?LOG_WARNING("~ts: Error while starting replica for ~ts on node ~ts in ~b : ~W",
-                                       [?MODULE, maps:get(name, Conf0), Node, Epoch, Reason, 10]),
+                                 [?MODULE, maps:get(name, Conf1), Node, Epoch, Reason, 10]),
                     maybe_sleep(Reason),
                     send_action_failed(StreamId, starting, Args)
             catch _:Error ->
                     ?LOG_WARNING("~ts: Error while starting replica for ~ts on node ~ts in ~b : ~W",
-                                       [?MODULE, maps:get(name, Conf0), Node, Epoch, Error, 10]),
+                                 [?MODULE, maps:get(name, Conf1), Node, Epoch, Error, 10]),
                     maybe_sleep(Error),
                     send_action_failed(StreamId, starting, Args)
             end
@@ -2470,3 +2471,11 @@ sac_list_nodes(State, Vsn) when ?V5_OR_MORE(Vsn) ->
     rabbit_stream_sac_coordinator:list_nodes(sac_state(State));
 sac_list_nodes(_, _) ->
     [].
+
+maybe_update_replica_conf(Conf) ->
+    case rabbit_feature_flags:is_enabled('rabbitmq_4.3.0') of
+        true ->
+            Conf#{features => #{committed_offset_calculate => true}};
+        _ ->
+            Conf
+    end.

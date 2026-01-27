@@ -807,18 +807,18 @@ stream_pub_sub_metrics(Config) ->
 
     Stream1 = atom_to_list(?FUNCTION_NAME) ++ "1",
     MsgPerBatch1 = 2, %% we'll publish 2 batches
-    {ok, S1, C1, CmttdChkId1} = publish_via_stream_protocol(list_to_binary(Stream1),
+    {ok, S1, C1} = publish_via_stream_protocol(list_to_binary(Stream1),
                                                             MsgPerBatch1, Config),
     Stream2 = atom_to_list(?FUNCTION_NAME) ++ "2",
     MsgPerBatch2 = 3, %% we'll publish 2 batches
-    {ok, S2, C2, CmttdChkId2} = publish_via_stream_protocol(list_to_binary(Stream2),
+    {ok, S2, C2} = publish_via_stream_protocol(list_to_binary(Stream2),
                                                             MsgPerBatch2, Config),
 
     %% aggregated metrics
 
     %% wait for the stream to emit stats
     %% (collect_statistics_interval set to 100ms in this test group)
-    ?awaitMatch(V when V == #{rabbitmq_stream_consumer_max_offset_lag => #{undefined => [3]}},
+    ?awaitMatch(#{rabbitmq_stream_consumer_max_offset_lag := #{undefined := [Lag]}} = _V when Lag > 0,
                  begin
                      {_, Body1} = http_get_with_pal(Config, "/metrics", [], 200),
                      maps:with([rabbitmq_stream_consumer_max_offset_lag],
@@ -827,16 +827,15 @@ stream_pub_sub_metrics(Config) ->
                  30000),
 
     %% per-object metrics
-     {_, Body2} = http_get_with_pal(Config, "/metrics/detailed?family=stream_consumer_metrics",
-                                    [], 200),
+    {_, Body2} = http_get_with_pal(Config, "/metrics/detailed?family=stream_consumer_metrics",
+                                   [], 200),
     ParsedBody2 = parse_response(Body2),
     #{rabbitmq_detailed_stream_consumer_max_offset_lag := MaxOffsetLag} = ParsedBody2,
 
-    %% we published 2 batches and received a first chunk (consumer offset = 0)
-    %% so the offset lag is the last committed chunk ID
-    ?assertEqual([{#{vhost => "/", queue => Stream1}, [CmttdChkId1]},
-                  {#{vhost => "/", queue => Stream2}, [CmttdChkId2]}],
-                 lists:sort(maps:to_list(MaxOffsetLag))),
+    #{#{vhost => "/", queue => Stream1} := [Lag1],
+      #{vhost => "/", queue => Stream2} := [Lag2]} = MaxOffsetLag,
+    ?assert(Lag1 > 0),
+    ?assert(Lag2 > 0),
     dispose_stream_connection(S1, C1, list_to_binary(Stream1)),
     dispose_stream_connection(S2, C2, list_to_binary(Stream2)),
     eventually(?_assertEqual([], rpc(Config, rabbit_amqqueue, list_by_type, [stream]))),
@@ -870,8 +869,6 @@ core_metrics_special_chars(Config) ->
     ok.
 
 detailed_raft_metrics_test(Config) ->
-    ComponentMetrics = #{#{module => "ra_log_wal", ra_system => "coordination"} => ["1.0"],
-                         #{module => "ra_log_wal", ra_system => "quorum_queues"} => ["1.0"]},
     QQMetrics = #{#{queue => "a_quorum_queue", vhost => "/"} => ["1.0"]},
 
     {_, Body1} = http_get_with_pal(Config, "/metrics/detailed?family=ra_metrics&vhost=foo", [], 200),
@@ -926,9 +923,9 @@ publish_via_stream_protocol(Stream, MsgPerBatch, Config) ->
     {ok, C6} = stream_test_utils:subscribe(S, C5, Stream, SubscriptionId, _InitialCredit = 0),
     ok = stream_test_utils:credit(S, SubscriptionId, 1),
     %% delivery of first batch of messages
-    {{deliver_v2, SubscriptionId, CommittedChunkId, _Bin1}, C7} =
+    {{deliver_v2, SubscriptionId, _CommittedChunkId, _Bin1}, C7} =
         stream_test_utils:receive_stream_commands(S, C6),
-    {ok, S, C7, CommittedChunkId}.
+    {ok, S, C7}.
 
 dispose_stream_connection(Sock, C0, Stream) ->
     {ok, C1} = stream_test_utils:delete_stream(Sock, C0, Stream),

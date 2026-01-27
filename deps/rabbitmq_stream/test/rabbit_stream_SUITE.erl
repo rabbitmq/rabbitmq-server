@@ -883,6 +883,8 @@ offset_lag_calculation(Config) ->
                    C02
            end, C1, [first, last, next, 0, 1_000, {timestamp, TheFuture}]),
 
+    %% we publish to have a first chunk with (MsgCount - 1) messages
+    %% and a second chunk with 1 message
     PubId = 1,
     {ok, C3} = stream_test_utils:declare_publisher(S, C2, St, PubId),
     MessageCount = 10,
@@ -913,12 +915,13 @@ offset_lag_calculation(Config) ->
                    C04
            end, C6, [{first, true,
                       fun(Offset, Lag) ->
-                              ?assert(Offset >= 0, "first, at least one chunk consumed"),
-                              ?assert(Lag > 0, "first, not all messages consumed")
+                              ?assertEqual(MessageCount - 2, Offset, "first, at least one chunk consumed"),
+                              ?assertEqual(1, Lag, "first, not all messages consumed")
                       end},
                      {last, true,
-                      fun(Offset, _Lag) ->
-                              ?assert(Offset > 0, "offset expected for last")
+                      fun(Offset, Lag) ->
+                              ?assertEqual(MessageCount - 1, Offset, "last offset for last spec"),
+                              ?assertEqual(0, Lag, "no offset lag for last spec")
                       end},
                      {next, false,
                       fun(Offset, Lag) ->
@@ -927,8 +930,8 @@ offset_lag_calculation(Config) ->
                       end},
                      {0, true,
                       fun(Offset, Lag) ->
-                              ?assert(Offset >= 0, "offset spec = 0, at least one chunk consumed"),
-                              ?assert(Lag > 0, "offset spec = 0, not all messages consumed")
+                              ?assertEqual(MessageCount - 2, Offset, "offset spec = 0, at least one chunk consumed"),
+                              ?assertEqual(1, Lag, "offset spec = 0, not all messages consumed")
                       end},
                      {1_000, false,
                       fun(Offset, Lag) ->
@@ -1720,7 +1723,9 @@ test_stream_stats(Transport, S, Stream, C0) ->
     ?assertMatch({response, 1,
                   {stream_stats, ?RESPONSE_CODE_OK,
                    #{<<"first_chunk_id">> := 0,
-                     <<"committed_chunk_id">> := 1}}},
+                     <<"committed_chunk_id">> := 1,
+                     <<"last_chunk_id">> := 1,
+                     <<"committed_offset">> := 1}}},
                  Cmd),
     C.
 

@@ -75,7 +75,7 @@
 -define(INFO_KEYS, [name, durable, auto_delete, arguments, leader, members, online, state,
                     messages, messages_ready, messages_unacknowledged, committed_offset,
                     policy, operator_policy, effective_policy_definition, type, memory,
-                    consumers, segments]).
+                    consumers, segments, committed_chunk_id]).
 
 -define(UNMATCHED_THRESHOLD, 200).
 
@@ -796,24 +796,32 @@ i(messages_unacknowledged, Q) when ?is_amqqueue(Q) ->
         [] ->
             0
     end;
-i(committed_offset, Q) ->
+i(committed_offset = F, Q) ->
     %% TODO should it be on a metrics table?
     %% The queue could be removed between the list() and this call
     %% to retrieve the overview. Let's default to '' if it's gone.
     Key = {osiris_writer, amqqueue:get_name(Q)},
-    case osiris_counters:overview(Key) of
-        undefined ->
-            '';
-        Data ->
-            maps:get(committed_offset, Data, '')
+    case osiris_counters:counters(Key, [F]) of
+        #{F := V} ->
+            V;
+        _ ->
+            ''
     end;
-i(segments, Q) ->
+i(committed_chunk_id = F, Q) ->
     Key = {osiris_writer, amqqueue:get_name(Q)},
-    case osiris_counters:overview(Key) of
-        undefined ->
-            '';
-        Data ->
-            maps:get(segments, Data, '')
+    case osiris_counters:counters(Key, [F]) of
+        #{F := V} ->
+            V;
+        _ ->
+            ''
+    end;
+i(segments = F, Q) ->
+    Key = {osiris_writer, amqqueue:get_name(Q)},
+    case osiris_counters:counters(Key, [F]) of
+        #{F := V} ->
+            V;
+        _ ->
+            ''
     end;
 i(policy, Q) ->
     case rabbit_policy:name(Q) of
@@ -872,6 +880,7 @@ status(Vhost, QueueName) ->
                   get_key(epoch, C),
                   get_key(offset, C),
                   get_key(committed_offset, C),
+                  get_key(committed_chunk_id, C),
                   get_key(first_offset, C),
                   get_key(readers, C),
                   get_key(segments, C)]
