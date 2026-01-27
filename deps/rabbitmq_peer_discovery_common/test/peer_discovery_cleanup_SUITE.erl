@@ -57,6 +57,9 @@ init_per_testcase(Testcase, Config) ->
             [{cluster_formation,
               [{peer_discovery_backend, rabbit_peer_discovery_dns},
                {peer_discovery_dns, [{hostname, Hostname}]},
+               %% We are going to cluster nodes after setting up meck so
+               %% limit the number of times it tries to cluster during boot.
+               {discovery_retry_limit, 0},
                %% Enable cleanup but set the interval high. Test cases should
                %% call rabbit_peer_discovery_cleanup:check_cluster/0 to force
                %% cleanup evaluation.
