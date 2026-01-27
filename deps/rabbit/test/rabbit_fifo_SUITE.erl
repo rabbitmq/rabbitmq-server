@@ -351,7 +351,7 @@ credit_with_drained_test(Config) ->
     %% checkout with a single credit
     {State1, #{key := CKey}, _} = checkout(Config, ?LINE, Cid, {auto, {credited, 0}}, State0),
     ?assertMatch(#rabbit_fifo{consumers = #{CKey := #consumer{credit = 0,
-                                                             delivery_count = 0}}},
+                                                              delivery_count = 0}}},
                  State1),
     {State2, _Effects2} = credit(Config, CKey, ?LINE, 1, 0, false, State1),
     ?assertMatch(#rabbit_fifo{consumers = #{CKey := #consumer{credit = 1,
@@ -452,6 +452,146 @@ credit_and_drain_single_active_consumer_test(Config) ->
                    ?DELIVERY_SEND_MSG_OPTS}
                  ],
                  Effects1).
+
+credit_inactive_consumer_drain_persisted_test(Config) ->
+    %% Verify that when an inactive consumer (waiting in SAC mode) receives
+    %% a credit command with drain=true, the drain flag is properly stored
+    %% in the consumer record.
+    State0 = init(#{name => ?FUNCTION_NAME,
+                    queue_resource => rabbit_misc:r(
+                                        "/", queue, atom_to_binary(?FUNCTION_NAME)),
+                    release_cursor_interval => 0,
+                    single_active_consumer_on => true}),
+    Self = self(),
+
+    Ctag1 = <<"ctag1">>,
+    Ctag2 = <<"ctag2">>,
+    C1 = {Ctag1, Self},
+    C2 = {Ctag2, Self},
+    CK1 = ?LINE,
+    CK2 = ?LINE,
+    Entries = [
+               {CK1, make_checkout(C1, {auto, {credited, 0}}, #{})},
+               {CK2, make_checkout(C2, {auto, {credited, 0}}, #{})}
+              ],
+    {State1, _} = run_log(Config, State0, Entries),
+
+    ?assertMatch(#{single_active_consumer_id := C1,
+                   single_active_num_waiting_consumers := 1},
+                 rabbit_fifo:overview(State1)),
+
+    %% Grant credit with drain=true to the inactive consumer C2.
+    {State2, _Effects} = credit(Config, CK2, ?LINE, 10, 0, true, State1),
+
+    %% Verify the drain flag is stored in the waiting consumer record.
+    ?assertMatch([{CK2, #consumer{drain = true,
+                                  credit = 0,
+                                  delivery_count = 10}}],
+                 rabbit_fifo:query_waiting_consumers(State2)),
+
+    %% Cancel C1 so C2 becomes active.
+    {State3, _, _} = apply(meta(Config, ?LINE),
+                           make_checkout(C1, cancel, #{}), State2),
+
+    %% Verify C2 is now active and still has drain=true.
+    ?assertMatch(#rabbit_fifo{consumers = #{CK2 := #consumer{drain = true}}},
+                 State3),
+    ok.
+
+snapshot_installed_resends_credit_reply_test(Config) ->
+    %% Verify that snapshot_installed/4 generates credit_reply effects
+    %% for credited consumers.
+    State0 = init(#{name => ?FUNCTION_NAME,
+                    queue_resource => rabbit_misc:r(
+                                        "/", queue, atom_to_binary(?FUNCTION_NAME)),
+                    release_cursor_interval => 0}),
+    Self = self(),
+
+    Ctag = <<"ctag">>,
+    Cid = {Ctag, Self},
+
+    %% Add a consumer with credited mode.
+    {State1, #{key := CKey}, _} =
+        checkout(Config, ?LINE, Cid, {auto, {credited, 0}}, State0),
+
+    %% Grant credit to the consumer.
+    {State2, _} = credit(Config, CKey, ?LINE, 5, 0, false, State1),
+
+    ?assertMatch(#rabbit_fifo{consumers =
+                              #{CKey := #consumer{credit = 5,
+                                                  delivery_count = 0}}},
+                 State2),
+
+    %% Call snapshot_installed and verify credit_reply is generated.
+    SnapshotMeta = #{index => 100, term => 1},
+    OldMeta = #{index => 50, term => 1},
+    Effects = rabbit_fifo:snapshot_installed(SnapshotMeta, State2,
+                                             OldMeta, State0),
+
+    ct:pal("Effects ~p", [Effects]),
+    ?ASSERT_EFF({send_msg, _Self,
+                 {credit_reply, _Ctag, _DeliveryCount, _Credit,
+                  _Available, _Drain},
+                 ?DELIVERY_SEND_MSG_OPTS}, Effects),
+    ok.
+
+snapshot_installed_resends_credit_reply_sac_test(Config) ->
+    %% Verify that snapshot_installed/4 generates credit_reply effects
+    %% for both active and waiting consumers in SAC mode, and that the
+    %% drain flag is correctly included.
+    State0 = init(#{name => ?FUNCTION_NAME,
+                    queue_resource => rabbit_misc:r(
+                                        "/", queue, atom_to_binary(?FUNCTION_NAME)),
+                    release_cursor_interval => 0,
+                    single_active_consumer_on => true}),
+    Self = self(),
+
+    Ctag1 = <<"ctag1">>,
+    Ctag2 = <<"ctag2">>,
+    C1 = {Ctag1, Self},
+    C2 = {Ctag2, Self},
+    CK1 = ?LINE,
+    CK2 = ?LINE,
+    Entries = [
+               {CK1, make_checkout(C1, {auto, {credited, 0}}, #{})},
+               {CK2, make_checkout(C2, {auto, {credited, 0}}, #{})}
+              ],
+    {State1, _} = run_log(Config, State0, Entries),
+
+    ?assertMatch(#{single_active_consumer_id := C1,
+                   single_active_num_waiting_consumers := 1},
+                 rabbit_fifo:overview(State1)),
+
+    %% Grant credit to active consumer C1 (drain=false).
+    {State2, _} = credit(Config, CK1, ?LINE, 5, 0, false, State1),
+
+    %% Grant credit to inactive consumer C2 with drain=true.
+    {State3, _} = credit(Config, CK2, ?LINE, 10, 0, true, State2),
+
+    %% Verify state before snapshot_installed.
+    ?assertMatch(#rabbit_fifo{consumers = #{CK1 := #consumer{credit = 5,
+                                                             drain = false}}},
+                 State3),
+    ?assertMatch([{CK2, #consumer{credit = 0,
+                                  drain = true,
+                                  delivery_count = 10}}],
+                 rabbit_fifo:query_waiting_consumers(State3)),
+
+    %% Call snapshot_installed.
+    SnapshotMeta = #{index => 100, term => 1},
+    OldMeta = #{index => 50, term => 1},
+    Effects = rabbit_fifo:snapshot_installed(SnapshotMeta, State3, OldMeta, State0),
+
+    %% Verify credit_reply for active consumer C1.
+    ?ASSERT_EFF({send_msg, _Self,
+                 {credit_reply, _Ctag1, _DeliveryCount1, _Credit1, _Available1, false},
+                 ?DELIVERY_SEND_MSG_OPTS}, Effects),
+
+    %% Verify credit_reply for waiting consumer C2 with drain=true.
+    ?ASSERT_EFF({send_msg, _Self,
+                 {credit_reply, _Ctag2, _DeliveryCount2, _Credit2, _Available2, true},
+                 ?DELIVERY_SEND_MSG_OPTS}, Effects),
+    ok.
 
 enq_enq_deq_test(C) ->
     Cid = {?FUNCTION_NAME_B, self()},
