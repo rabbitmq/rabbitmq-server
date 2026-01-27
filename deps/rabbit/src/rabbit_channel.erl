@@ -2803,6 +2803,8 @@ handle_queue_actions(Actions, State) ->
               S0;
          ({unblock, QName}, S0) ->
               credit_flow:unblock(QName),
+              S0;
+         (_Action, S0) ->
               S0
       end, State, Actions).
 

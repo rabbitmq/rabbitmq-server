@@ -668,9 +668,6 @@ handle_ra_event(QName, Leader, {applied, Seqs},
 handle_ra_event(QName, From, {machine, Del}, State0)
       when element(1, Del) == delivery ->
     handle_delivery(QName, From, Del, State0);
-handle_ra_event(_QName, _From, {machine, Action}, State)
-  when element(1, Action) =:= credit_reply ->
-    {ok, State, [Action]};
 handle_ra_event(_QName, _, {machine, {queue_status, Status}},
                 #state{} = State) ->
     %% just set the queue status
@@ -727,7 +724,9 @@ handle_ra_event(QName, Leader, close_cached_segments,
              end
      end, []};
 handle_ra_event(_QName, _Leader, {machine, eol}, State) ->
-    {eol, [{unblock, cluster_name(State)}]}.
+    {eol, [{unblock, cluster_name(State)}]};
+handle_ra_event(_QName, _Leader, {machine, Action}, State) ->
+    {ok, State, [Action]}.
 
 -spec close(state()) -> ok.
 close(#state{cached_segments = undefined}) ->
