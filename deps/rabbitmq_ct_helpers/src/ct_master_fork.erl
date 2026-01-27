@@ -738,11 +738,11 @@ master_format_gh_anno({error, {{exception, Reason, [{Mod, Fun, Arity, Loc}|_]}, 
     %% if we don't have the real file name.
     File = proplists:get_value(file, Loc, ".github"),
     Line = proplists:get_value(line, Loc, 0),
-    io_lib:format("::error file=~s,line=~b::~w:~tw/~b: ~w~n",
+    io_lib:format("::error file=~s,line=~b::~w:~tw/~b: ~0p~n",
         [File, Line, Mod, Fun, Arity, Reason]);
 master_format_gh_anno(Reason) ->
     %% Do the bare minimum if we don't know the error reason.
-    io_lib:format("::error file=.github,line=0::~w~n",
+    io_lib:format("::error file=.github,line=0::~0p~n",
         [Reason]).
 
 update_queue(take,Node,From,Lock={Op,Resource},Locks,Blocked) ->
