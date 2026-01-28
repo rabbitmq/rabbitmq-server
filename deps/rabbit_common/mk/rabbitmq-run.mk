@@ -105,9 +105,14 @@ export RABBITMQ_LOG
 DIST_ERL_LIBS = $(patsubst :%,%,$(patsubst %:,%,$(subst :$(APPS_DIR):,:,$(subst :$(DEPS_DIR):,:,:$(ERL_LIBS):))))
 
 ifdef PLUGINS_FROM_DEPS_DIR
-RMQ_PLUGINS_DIR=$(DEPS_DIR)
+RMQ_PLUGINS_DIR = $(DEPS_DIR)
+DIST_ERL_LIBS = $(ERL_LIBS)
 else
-RMQ_PLUGINS_DIR=$(CURDIR)/$(DIST_DIR)
+RMQ_PLUGINS_DIR = $(DIST_DIR)
+# We do not want to add apps/ or deps/ to ERL_LIBS
+# when running the release from dist. The `plugins`
+# directory is added to ERL_LIBS by rabbitmq-env.
+DIST_ERL_LIBS = $(patsubst :%,%,$(patsubst %:,%,$(subst :$(APPS_DIR):,:,$(subst :$(DEPS_DIR):,:,:$(ERL_LIBS):))))
 endif
 
 node_plugins_dir = $(if $(RABBITMQ_PLUGINS_DIR),$(RABBITMQ_PLUGINS_DIR),$(if $(EXTRA_PLUGINS_DIR),$(EXTRA_PLUGINS_DIR):$(RMQ_PLUGINS_DIR),$(RMQ_PLUGINS_DIR)))
