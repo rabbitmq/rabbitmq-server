@@ -1,5 +1,6 @@
 PROJECT = rabbitmq_peer_discovery_k8s
 PROJECT_DESCRIPTION = Kubernetes-based RabbitMQ peer discovery backend
+PROJECT_MOD = rabbitmq_peer_discovery_k8s_app
 
 DEPS = rabbit_common rabbitmq_peer_discovery_common rabbit
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers ct_helper meck

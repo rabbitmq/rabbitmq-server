@@ -1,5 +1,6 @@
 PROJECT = oauth2_client
 PROJECT_DESCRIPTION = OAuth2 client from the RabbitMQ Project
+PROJECT_MOD = oauth2_client_app
 
 BUILD_DEPS = rabbit
 DEPS = rabbit_common jose
@@ -16,9 +17,6 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-macros.mk \
 	      rabbit_common/mk/rabbitmq-run.mk \
 	      rabbit_common/mk/rabbitmq-test.mk \
 	      rabbit_common/mk/rabbitmq-tools.mk
-
-# Required to properly autopatch jose.
-ELIXIR = system
 
 include rabbitmq-components.mk
 include erlang.mk
