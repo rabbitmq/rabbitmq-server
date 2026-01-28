@@ -244,8 +244,8 @@ disposition(#link_ref{role = receiver,
                       session = Session,
                       link_handle = Handle},
             First, Last, Settled, DeliveryState) ->
-    gen_statem:call(Session, {disposition, Handle, First, Last, Settled,
-                              DeliveryState}, ?TIMEOUT).
+    gen_statem:cast(Session,
+                    {disposition, Handle, First, Last, Settled, DeliveryState}).
 
 
 %% -------------------------------------------------------------------
@@ -326,6 +326,21 @@ mapped(cast, {flow_session, IncomingWindow, RenewWhenBelow}, State0) ->
     State = State0#state{incoming_window = IncomingWindow,
                          auto_flow = AutoFlow},
     send_flow_session(State),
+    {keep_state, State};
+mapped(cast,
+       {disposition, OutputHandle, First, Last, Settled0, DeliveryState},
+       #state{links = Links} = State0) ->
+    #{OutputHandle := Link0 = #link{incoming_unsettled = Unsettled0}} = Links,
+    Unsettled = serial_number:foldl(fun maps:remove/2, Unsettled0, First, Last),
+    Link = Link0#link{incoming_unsettled = Unsettled},
+    State1 = State0#state{links = Links#{OutputHandle := Link}},
+    State = auto_flow(Link, State1),
+    Disp = #'v1_0.disposition'{role = translate_role(receiver),
+                               first = {uint, First},
+                               last = {uint, Last},
+                               settled = Settled0,
+                               state = translate_delivery_state(DeliveryState)},
+    ok = send(Disp, State),
     {keep_state, State};
 mapped(cast, #'v1_0.end'{} = End, State) ->
     %% We receive the first end frame, reply and terminate.
@@ -548,24 +563,6 @@ mapped({call, From = {Pid, _}},
         _ ->
             {keep_state_and_data, {reply, From, {error, link_not_found}}}
     end;
-
-mapped({call, From},
-       {disposition, OutputHandle, First, Last, Settled0, DeliveryState},
-       #state{links = Links} = State0) ->
-    #{OutputHandle := Link0 = #link{incoming_unsettled = Unsettled0}} = Links,
-    Unsettled = serial_number:foldl(fun maps:remove/2, Unsettled0, First, Last),
-    Link = Link0#link{incoming_unsettled = Unsettled},
-    State1 = State0#state{links = Links#{OutputHandle := Link}},
-    State = auto_flow(Link, State1),
-    Disposition = #'v1_0.disposition'{
-                     role = translate_role(receiver),
-                     first = {uint, First},
-                     last = {uint, Last},
-                     settled = Settled0,
-                     state = translate_delivery_state(DeliveryState)},
-    Res = send(Disposition, State),
-    {keep_state, State, {reply, From, Res}};
-
 mapped({call, From}, {attach, Attach}, State) ->
     {State1, LinkRef} = send_attach(fun send/2, Attach, From, State),
     {keep_state, State1, {reply, From, {ok, LinkRef}}};
