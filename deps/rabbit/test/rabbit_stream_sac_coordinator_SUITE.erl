@@ -27,6 +27,7 @@
 
 -define(STATE, rabbit_stream_sac_coordinator).
 -define(MOD, rabbit_stream_sac_coordinator).
+-define(META_V6, #{machine_version => 6}).
 
 suite() ->
     [{timetrap, {seconds, 240}}].
@@ -319,13 +320,13 @@ handle_connection_down_sac_should_get_activated_test(_) ->
     State0 = state(#{GroupId => Group}),
 
     {#?STATE{pids_groups = PidsGroups1, groups = Groups1} = State1,
-     Effects1} = ?MOD:handle_connection_down(Pid0, normal, State0),
+     Effects1} = ?MOD:handle_connection_down(?META_V6, Pid0, normal, State0),
     assertSize(1, PidsGroups1),
     assertSize(1, maps:get(Pid1, PidsGroups1)),
     assertSendMessageActivateEffect(Pid1, 1, Stream, ConsumerName, true, Effects1),
     assertHasGroup(GroupId, grp([csr(Pid1, 1, active)]), Groups1),
     {#?STATE{pids_groups = PidsGroups2, groups = Groups2},
-     Effects2} = ?MOD:handle_connection_down(Pid1, normal, State1),
+     Effects2} = ?MOD:handle_connection_down(?META_V6, Pid1, normal, State1),
     assertEmpty(PidsGroups2),
     assertEmpty(Effects2),
     assertEmpty(Groups2),
@@ -344,7 +345,7 @@ handle_connection_down_sac_active_does_not_change_test(_) ->
     State = state(#{GroupId => Group}),
 
     {#?STATE{pids_groups = PidsGroups, groups = Groups},
-     Effects} = ?MOD:handle_connection_down(Pid0, normal, State),
+     Effects} = ?MOD:handle_connection_down(?META_V6, Pid0, normal, State),
     assertSize(1, PidsGroups),
     assertSize(1, maps:get(Pid1, PidsGroups)),
     assertEmpty(Effects),
@@ -361,7 +362,7 @@ handle_connection_down_sac_no_more_consumers_test(_) ->
     State = state(#{GroupId => Group}),
 
     {#?STATE{pids_groups = PidsGroups, groups = Groups},
-     Effects} = ?MOD:handle_connection_down(Pid0, normal, State),
+     Effects} = ?MOD:handle_connection_down(?META_V6, Pid0, normal, State),
     assertEmpty(PidsGroups),
     assertEmpty(Groups),
     assertEmpty(Effects),
@@ -380,7 +381,7 @@ handle_connection_down_sac_no_consumers_in_down_connection_test(_) ->
                     Pid1 => maps:from_list([{GroupId, true}])}),
 
     {#?STATE{pids_groups = PidsGroups, groups = Groups},
-     Effects} = ?MOD:handle_connection_down(Pid0, normal, State),
+     Effects} = ?MOD:handle_connection_down(?META_V6, Pid0, normal, State),
 
     assertSize(1, PidsGroups),
     assertSize(1, maps:get(Pid1, PidsGroups)),
@@ -403,7 +404,7 @@ handle_connection_down_super_stream_active_stays_test(_) ->
     State = state(#{GroupId => Group}),
 
     {#?STATE{pids_groups = PidsGroups, groups = Groups},
-     Effects} = ?MOD:handle_connection_down(Pid1, normal, State),
+     Effects} = ?MOD:handle_connection_down(?META_V6, Pid1, normal, State),
     assertSize(1, PidsGroups),
     assertSize(1, maps:get(Pid0, PidsGroups)),
     assertEmpty(Effects),
@@ -427,7 +428,7 @@ handle_connection_down_super_stream_active_changes_test(_) ->
 
     {#?STATE{pids_groups = PidsGroups, groups = Groups},
      Effects} =
-    ?MOD:handle_connection_down(Pid0, normal, State),
+    ?MOD:handle_connection_down(?META_V6, Pid0, normal, State),
     assertSize(1, PidsGroups),
     assertSize(1, maps:get(Pid1, PidsGroups)),
     assertSendMessageSteppingDownEffect(Pid1, 1, Stream, ConsumerName, Effects),
@@ -450,7 +451,7 @@ handle_connection_down_super_stream_activate_in_remaining_connection_test(_) ->
     State = state(#{GroupId => Group}),
 
     {#?STATE{pids_groups = PidsGroups, groups = Groups},
-     Effects} = ?MOD:handle_connection_down(Pid0, normal, State),
+     Effects} = ?MOD:handle_connection_down(?META_V6, Pid0, normal, State),
     assertSize(1, PidsGroups),
     assertSize(1, maps:get(Pid1, PidsGroups)),
     assertSendMessageActivateEffect(Pid1, 3, Stream, ConsumerName, true, Effects),
@@ -475,7 +476,7 @@ handle_connection_down_super_stream_no_active_removed_or_present_test(_) ->
     State = state(#{GroupId => Group}),
 
     {#?STATE{pids_groups = PidsGroups, groups = Groups},
-     Effects} = ?MOD:handle_connection_down(Pid0, normal, State),
+     Effects} = ?MOD:handle_connection_down(?META_V6, Pid0, normal, State),
     assertSize(1, PidsGroups),
     assertSize(1, maps:get(Pid1, PidsGroups)),
     assertEmpty(Effects),
@@ -512,7 +513,7 @@ handle_connection_down_consumers_from_dead_connection_should_be_filtered_out_tes
 
     {#?STATE{pids_groups = PidsGroups1, groups = Groups1} = State1,
      Effects1} =
-    ?MOD:handle_connection_down(Pid0, normal, State0),
+    ?MOD:handle_connection_down(?META_V6, Pid0, normal, State0),
     assertSize(2, PidsGroups1),
     assertSize(1, maps:get(Pid1, PidsGroups1)),
     assertSize(1, maps:get(Pid2, PidsGroups1)),
@@ -523,7 +524,7 @@ handle_connection_down_consumers_from_dead_connection_should_be_filtered_out_tes
                    Groups1),
 
     {#?STATE{pids_groups = PidsGroups2, groups = Groups2},
-     Effects2} = ?MOD:handle_connection_down(Pid1, normal, State1),
+     Effects2} = ?MOD:handle_connection_down(?META_V6, Pid1, normal, State1),
     assertSize(1, PidsGroups2),
     assertSize(1, maps:get(Pid2, PidsGroups2)),
     assertSendMessageActivateEffect(Pid2, 2, Stream, ConsumerName, true, Effects2),
@@ -607,7 +608,7 @@ handle_connection_node_disconnected_test(_) ->
 
     {#?STATE{pids_groups = PidsGroups1, groups = Groups1} = _State1,
      [Effect1]} =
-    ?MOD:handle_connection_down(Pid1, noconnection, State0),
+    ?MOD:handle_connection_down(?META_V6, Pid1, noconnection, State0),
     assertSize(2, PidsGroups1),
     assertSize(1, maps:get(Pid0, PidsGroups1)),
     assertSize(1, maps:get(Pid2, PidsGroups1)),
@@ -754,7 +755,8 @@ presume_conn_down_simple_disconnected_becomes_presumed_down_test(_) ->
     Groups0 = #{GId => Group},
     State0 = state(Groups0),
 
-    {#?STATE{groups = Groups1}, Eff} = ?MOD:presume_connection_down(Pid0, State0),
+    {#?STATE{groups = Groups1}, Eff} = ?MOD:presume_connection_down(?META_V6,
+                                                                    Pid0, State0),
 
     assertHasGroup(GId, grp([csr(Pid0, 0, {presumed_down, active}),
                              csr(Pid1, 1, {connected, active}),
@@ -775,7 +777,8 @@ presume_conn_down_super_stream_disconnected_becomes_presumed_down_test(_) ->
     Groups0 = #{GId => Group},
     State0 = state(Groups0),
 
-    {#?STATE{groups = Groups1}, Eff} = ?MOD:presume_connection_down(Pid1, State0),
+    {#?STATE{groups = Groups1}, Eff} = ?MOD:presume_connection_down(?META_V6,
+                                                                    Pid1, State0),
 
     assertHasGroup(GId, grp(1, [csr(Pid0, 0, {connected, waiting}),
                                 csr(Pid1, 1, {presumed_down, active}),
@@ -797,7 +800,8 @@ presume_conn_down_simple_connected_does_not_become_presumed_down_test(_) ->
     Groups0 = #{GId => Group},
     State0 = state(Groups0),
 
-    {#?STATE{groups = Groups1}, Eff} = ?MOD:presume_connection_down(Pid1, State0),
+    {#?STATE{groups = Groups1}, Eff} = ?MOD:presume_connection_down(?META_V6,
+                                                                    Pid1, State0),
 
     assertHasGroup(GId, grp([csr(Pid0, 0, {connected, active}),
                              csr(Pid1, 1, {connected, waiting}),
@@ -818,7 +822,8 @@ presume_conn_down_super_stream_connected_does_not_become_presumed_down_test(_) -
     Groups0 = #{GId => Group},
     State0 = state(Groups0),
 
-    {#?STATE{groups = Groups1}, Eff} = ?MOD:presume_connection_down(Pid1, State0),
+    {#?STATE{groups = Groups1}, Eff} = ?MOD:presume_connection_down(?META_V6,
+                                                                    Pid1, State0),
 
     assertHasGroup(GId, grp(1, [csr(Pid0, 0, {connected, waiting}),
                                 csr(Pid1, 1, {connected, active}),
@@ -1044,7 +1049,7 @@ handle_connection_down_simple_disconn_active_block_rebalancing_test(_) ->
 
     Groups0 = #{GId => Group},
     State0 = state(Groups0),
-    {#?STATE{groups = Groups1}, Eff} = ?MOD:handle_connection_down(Pid2, normal,
+    {#?STATE{groups = Groups1}, Eff} = ?MOD:handle_connection_down(?META_V6, Pid2, normal,
                                                                    State0),
     assertHasGroup(GId, grp([csr(Pid0, 0, {connected, waiting}),
                              csr(Pid1, 0, {disconnected, active})]),
@@ -1063,7 +1068,7 @@ handle_connection_down_super_stream_disconn_active_block_rebalancing_test(_) ->
 
     Groups0 = #{GId => Group},
     State0 = state(Groups0),
-    {#?STATE{groups = Groups1}, Eff} = ?MOD:handle_connection_down(Pid0, normal,
+    {#?STATE{groups = Groups1}, Eff} = ?MOD:handle_connection_down(?META_V6, Pid0, normal,
                                                                    State0),
     assertHasGroup(GId, grp(1, [csr(Pid1, 0, {disconnected, active}),
                                 csr(Pid2, 0, {connected, waiting})]),
@@ -1083,7 +1088,7 @@ handle_connection_node_disconnected_simple_disconn_active_block_rebalancing_test
     Groups0 = #{GId => Group},
     State0 = state(Groups0),
     {#?STATE{groups = Groups1}, Eff} =
-    ?MOD:handle_connection_down(Pid2, noconnection, State0),
+    ?MOD:handle_connection_down(?META_V6, Pid2, noconnection, State0),
     assertHasGroup(GId, grp([csr(Pid0, 0, {connected, waiting}),
                              csr(Pid1, 0, {disconnected, active}),
                              csr(Pid2, 0, {disconnected, waiting})]),
@@ -1103,12 +1108,188 @@ handle_connection_node_disconnected_super_stream_disconn_active_block_rebalancin
     Groups0 = #{GId => Group},
     State0 = state(Groups0),
     {#?STATE{groups = Groups1}, Eff} =
-    ?MOD:handle_connection_down(Pid0, noconnection, State0),
+    ?MOD:handle_connection_down(?META_V6, Pid0, noconnection, State0),
     assertHasGroup(GId, grp(1, [csr(Pid0, 0, {disconnected, waiting}),
                                 csr(Pid1, 0, {disconnected, active}),
                                 csr(Pid2, 0, {connected, waiting})]),
                    Groups1),
     assertNodeDisconnectedTimerEffect(Pid0, Eff),
+    ok.
+
+%% When a deactivating consumer's node disconnects, the consumer should become
+%% {disconnected, waiting} and a new active should be selected
+handle_connection_node_disconnected_deactivating_triggers_rebalance_test(_) ->
+    Pid0 = new_process(),
+    Pid1 = new_process(),
+    Pid2 = new_process(),
+    GId = group_id(),
+    %% Consumer 1 is deactivating (stepping down)
+    Group = grp(1, [csr(Pid0, 0, {connected, waiting}),
+                    csr(Pid1, 1, {connected, deactivating}),
+                    csr(Pid2, 2, {connected, waiting})]),
+
+    Groups0 = #{GId => Group},
+    State0 = state(Groups0),
+
+    %% Node hosting Pid1 (the deactivating consumer) disconnects
+    {#?STATE{groups = Groups1}, Eff} =
+        ?MOD:handle_connection_down(?META_V6, Pid1, noconnection, State0),
+
+    %% The deactivating consumer should become {disconnected, waiting}
+    %% and rebalancing should select a new active consumer
+    %% partition_index=1, 2 eligible consumers (Pid0, Pid2)
+    %% 1 % 2 = 1, so Pid2 should become active
+    assertHasGroup(GId,
+                   grp(1, [csr(Pid0, 0, {connected, waiting}),
+                           csr(Pid1, 1, {disconnected, waiting}),
+                           csr(Pid2, 2, {connected, active})]),
+                   Groups1),
+
+    %% Should have timer effect for disconnected connection AND
+    %% activation effect for the new active consumer (SubId=2)
+    assertNodeDisconnectedTimerEffectPresent(Pid1, Eff),
+    assertContainsSendMessageEffect(Pid2, 2, stream(), name(), true, Eff),
+    ok.
+
+%% Simple stream - deactivating consumer disconnects
+handle_connection_node_disconnected_simple_deactivating_triggers_rebalance_test(_) ->
+    Pid0 = new_process(),
+    Pid1 = new_process(),
+    Pid2 = new_process(),
+    GId = group_id(),
+    %% Simple stream (partition_index = -1)
+    %% Pid1 is deactivating
+    Group = grp([csr(Pid0, 0, {connected, waiting}),
+                 csr(Pid1, 1, {connected, deactivating}),
+                 csr(Pid2, 2, {connected, waiting})]),
+
+    Groups0 = #{GId => Group},
+    State0 = state(Groups0),
+
+    {#?STATE{groups = Groups1}, Eff} =
+        ?MOD:handle_connection_down(?META_V6, Pid1, noconnection, State0),
+
+    %% For simple streams, the first connected consumer becomes active
+    assertHasGroup(GId,
+                   grp([csr(Pid0, 0, {connected, active}),
+                        csr(Pid1, 1, {disconnected, waiting}),
+                        csr(Pid2, 2, {connected, waiting})]),
+                   Groups1),
+
+    assertNodeDisconnectedTimerEffectPresent(Pid1, Eff),
+    assertContainsSendMessageEffect(Pid0, 0, stream(), name(), true, Eff),
+    ok.
+
+%% Deactivating consumer fully goes down (not just node disconnect)
+handle_connection_down_deactivating_triggers_rebalance_test(_) ->
+    Pid0 = new_process(),
+    Pid1 = new_process(),
+    Pid2 = new_process(),
+    GId = group_id(),
+    Group = grp(1, [csr(Pid0, 0, {connected, waiting}),
+                    csr(Pid1, 1, {connected, deactivating}),
+                    csr(Pid2, 2, {connected, waiting})]),
+
+    Groups0 = #{GId => Group},
+    State0 = state(Groups0),
+
+    %% Connection fully goes down (not noconnection)
+    {#?STATE{groups = Groups1}, Eff} =
+        ?MOD:handle_connection_down(?META_V6, Pid1, normal, State0),
+
+    %% Consumer is removed, and rebalancing picks new active
+    %% partition_index=1, 2 consumers remaining
+    %% 1 % 2 = 1, so Pid2 should become active
+    assertHasGroup(GId,
+                   grp(1, [csr(Pid0, 0, {connected, waiting}),
+                           csr(Pid2, 2, {connected, active})]),
+                   Groups1),
+
+    assertContainsSendMessageEffect(Pid2, 2, stream(), name(), true, Eff),
+    ok.
+
+%% Multiple consumers from same connection, one deactivating
+handle_connection_node_disconnected_multiple_one_deactivating_test(_) ->
+    Pid0 = new_process(),
+    Pid1 = new_process(),
+    GId = group_id(),
+    %% Pid0 has both a deactivating and a waiting consumer
+    Group = grp(1, [csr(Pid0, 0, {connected, deactivating}),
+                    csr(Pid0, 1, {connected, waiting}),
+                    csr(Pid1, 2, {connected, waiting})]),
+
+    Groups0 = #{GId => Group},
+    State0 = state(Groups0),
+
+    {#?STATE{groups = Groups1}, Eff} =
+        ?MOD:handle_connection_down(?META_V6, Pid0, noconnection, State0),
+
+    %% Deactivating consumer becomes waiting, and only Pid1's consumer
+    %% is eligible (connected). So Pid1's consumer should become active.
+    assertHasGroup(GId,
+                   grp(1, [csr(Pid0, 0, {disconnected, waiting}),
+                           csr(Pid0, 1, {disconnected, waiting}),
+                           csr(Pid1, 2, {connected, active})]),
+                   Groups1),
+
+    assertNodeDisconnectedTimerEffectPresent(Pid0, Eff),
+    assertContainsSendMessageEffect(Pid1, 2, stream(), name(), true, Eff),
+    ok.
+
+%% Deactivating consumer node disconnects, then reconnects and sends late
+%% activate_consumer command - should work correctly
+handle_connection_node_disconnected_deactivating_then_reconnect_test(_) ->
+    Pid0 = new_process(),
+    Pid1 = new_process(),
+    Pid2 = new_process(),
+    GId = group_id(),
+    Group = grp(1, [csr(Pid0, 0, {connected, waiting}),
+                    csr(Pid1, 1, {connected, deactivating}),
+                    csr(Pid2, 2, {connected, waiting})]),
+
+    Groups0 = #{GId => Group},
+    State0 = state(Groups0),
+
+    %% Step 1: Node disconnects
+    {#?STATE{groups = Groups1} = State1, _Eff1} =
+        ?MOD:handle_connection_down(?META_V6, Pid1, noconnection, State0),
+
+    assertHasGroup(GId,
+                   grp(1, [csr(Pid0, 0, {connected, waiting}),
+                           csr(Pid1, 1, {disconnected, waiting}),
+                           csr(Pid2, 2, {connected, active})]),
+                   Groups1),
+
+    %% Step 2: Node reconnects, connection_reconnected command
+    Cmd2 = connection_reconnected_command(Pid1),
+    {#?STATE{groups = Groups2} = State2, ok, Eff2} = ?MOD:apply(Cmd2, State1),
+
+    %% Pid1's consumer becomes connected again
+    %% For super stream PI=1, 3 consumers: 1 % 3 = 1
+    %% So consumer at index 1 (Pid1) should be active
+    %% This triggers deactivation of Pid2
+    assertHasGroup(GId,
+                   grp(1, [csr(Pid0, 0, {connected, waiting}),
+                           csr(Pid1, 1, {connected, waiting}),
+                           csr(Pid2, 2, {connected, deactivating})]),
+                   Groups2),
+
+    assertContainsSendMessageSteppingDownEffect(Pid2, 2, stream(), name(), Eff2),
+
+    %% Step 3: Late activate_consumer from the old deactivation (from Pid1)
+    %% This should work correctly - just re-evaluate who should be active
+    Cmd3 = activate_consumer_command(stream(), name()),
+    {#?STATE{groups = Groups3}, ok, Eff3} = ?MOD:apply(Cmd3, State2),
+
+    %% After activate: PI=1, 3 consumers, 1 % 3 = 1
+    %% Consumer at index 1 (Pid1) becomes active
+    assertHasGroup(GId,
+                   grp(1, [csr(Pid0, 0, {connected, waiting}),
+                           csr(Pid1, 1, {connected, active}),
+                           csr(Pid2, 2, {connected, waiting})]),
+                   Groups3),
+
+    assertContainsActivateMessage(Pid1, 1, Eff3),
     ok.
 
 connection_reconnected_simple_disconn_active_blocks_rebalancing_test(_) ->
@@ -1297,7 +1478,8 @@ presume_conn_down_simple_disconn_active_blocks_rebalancing_test(_) ->
     Groups0 = #{GId => Group},
     State0 = state(Groups0),
 
-    {#?STATE{groups = Groups1}, Eff} = ?MOD:presume_connection_down(Pid0, State0),
+    {#?STATE{groups = Groups1}, Eff} = ?MOD:presume_connection_down(?META_V6,
+                                                                    Pid0, State0),
 
     assertHasGroup(GId, grp([csr(Pid2, {disconnected, active}),
                              csr(Pid0, {presumed_down, waiting}),
@@ -1318,13 +1500,67 @@ presume_conn_down_super_stream_disconn_active_block_rebalancing_test(_) ->
     Groups0 = #{GId => Group},
     State0 = state(Groups0),
 
-    {#?STATE{groups = Groups1}, Eff} = ?MOD:presume_connection_down(Pid0, State0),
+    {#?STATE{groups = Groups1}, Eff} = ?MOD:presume_connection_down(?META_V6,
+                                                                    Pid0, State0),
 
     assertHasGroup(GId, grp(1, [csr(Pid0, {presumed_down, waiting}),
                                 csr(Pid1, {connected, waiting}),
                                 csr(Pid2, {disconnected, active})]),
                    Groups1),
     assertEmpty(Eff),
+    ok.
+
+%% When a disconnected deactivating consumer is presumed down, it should become
+%% {presumed_down, waiting} and a new active should be selected (simple stream)
+presume_conn_down_simple_deactivating_triggers_rebalance_test(_) ->
+    Pid0 = new_process(),
+    Pid1 = new_process(),
+    Pid2 = new_process(),
+    GId = group_id(),
+    %% Pid1 is disconnected and deactivating (edge case, defense in depth)
+    Group = grp([csr(Pid0, 0, {connected, waiting}),
+                 csr(Pid1, 1, {disconnected, deactivating}),
+                 csr(Pid2, 2, {connected, waiting})]),
+
+    Groups0 = #{GId => Group},
+    State0 = state(Groups0),
+
+    {#?STATE{groups = Groups1}, Eff} = ?MOD:presume_connection_down(?META_V6,
+                                                                    Pid1, State0),
+
+    %% Deactivating becomes waiting, first connected consumer becomes active
+    assertHasGroup(GId, grp([csr(Pid0, 0, {connected, active}),
+                             csr(Pid1, 1, {presumed_down, waiting}),
+                             csr(Pid2, 2, {connected, waiting})]),
+                   Groups1),
+    assertSendMessageActivateEffect(Pid0, 0, stream(), name(), true, Eff),
+    ok.
+
+%% When a disconnected deactivating consumer is presumed down, it should become
+%% {presumed_down, waiting} and a new active should be selected (super stream)
+presume_conn_down_super_stream_deactivating_triggers_rebalance_test(_) ->
+    Pid0 = new_process(),
+    Pid1 = new_process(),
+    Pid2 = new_process(),
+    GId = group_id(),
+    %% Pid1 is disconnected and deactivating (edge case, defense in depth)
+    Group = grp(1, [csr(Pid0, 0, {connected, waiting}),
+                    csr(Pid1, 1, {disconnected, deactivating}),
+                    csr(Pid2, 2, {connected, waiting})]),
+
+    Groups0 = #{GId => Group},
+    State0 = state(Groups0),
+
+    {#?STATE{groups = Groups1}, Eff} = ?MOD:presume_connection_down(?META_V6,
+                                                                    Pid1, State0),
+
+    %% Deactivating becomes waiting, partition_index=1, 2 eligible consumers
+    %% 1 % 2 = 1, so Pid2 becomes active
+    assertHasGroup(GId, grp(1, [csr(Pid0, 0, {connected, waiting}),
+                                csr(Pid1, 1, {presumed_down, waiting}),
+                                csr(Pid2, 2, {connected, active})]),
+                   Groups1),
+    assertSendMessageActivateEffect(Pid2, 2, stream(), name(), true, Eff),
     ok.
 
 purge_nodes_test(_) ->
@@ -1418,9 +1654,9 @@ node_disconnected_and_reconnected_test(_) ->
 
     State0 = state(#{GId0 => G0, GId1 => G1, GId2 => G2}),
 
-    {State1, Eff1} = ?MOD:handle_connection_down(N1P0, noconnection, State0),
-    {State2, Eff2} = ?MOD:handle_connection_down(N1P1, noconnection, State1),
-    {State3, Eff3} = ?MOD:handle_connection_down(N1P2, noconnection, State2),
+    {State1, Eff1} = ?MOD:handle_connection_down(?META_V6, N1P0, noconnection, State0),
+    {State2, Eff2} = ?MOD:handle_connection_down(?META_V6, N1P1, noconnection, State1),
+    {State3, Eff3} = ?MOD:handle_connection_down(?META_V6, N1P2, noconnection, State2),
 
     assertNodeDisconnectedTimerEffect(N1P0, Eff1),
     assertNodeDisconnectedTimerEffect(N1P1, Eff2),
@@ -1508,7 +1744,8 @@ node_disconnected_and_reconnected_test(_) ->
     assertEmpty(Eff6),
 
     %% last connection does not come back for some reason
-    {#?STATE{groups = Groups7}, Eff7} = ?MOD:presume_connection_down(N1P2, State6),
+    {#?STATE{groups = Groups7}, Eff7} = ?MOD:presume_connection_down(?META_V6,
+                                                                     N1P2, State6),
 
     assertHasGroup(GId0,
                    grp([csr(N0P0, {connected, active}),
@@ -1550,7 +1787,7 @@ node_disconnected_reconnected_connection_down_test(_) ->
     S0 = state(#{GId => G0}),
 
     {#?STATE{groups = G1} = S1, Eff1} =
-        ?MOD:handle_connection_down(P1, noconnection, S0),
+        ?MOD:handle_connection_down(?META_V6, P1, noconnection, S0),
 
     assertHasGroup(GId,
                    grp(1, [csr(P0, {connected, waiting}),
@@ -1571,7 +1808,7 @@ node_disconnected_reconnected_connection_down_test(_) ->
 
     assertContainsCheckConnectionEffect(P1, Eff2),
 
-    {#?STATE{groups = G3}, Eff3} = ?MOD:handle_connection_down(P1, normal, S2),
+    {#?STATE{groups = G3}, Eff3} = ?MOD:handle_connection_down(?META_V6, P1, normal, S2),
 
     assertHasGroup(GId,
                    grp(1, [csr(P0, {connected, waiting}),
@@ -1884,3 +2121,11 @@ assertNodeDisconnectedTimerEffect(Pid, [Effect]) ->
                   {sac, node_disconnected, #{connection_pid := Pid}},
                   _},
                  Effect).
+
+assertNodeDisconnectedTimerEffectPresent(Pid, Effects) ->
+    HasTimerEffect = lists:any(
+        fun({timer, {sac, node_disconnected, #{connection_pid := P}}, _})
+              when P =:= Pid -> true;
+           (_) -> false
+        end, Effects),
+    ?assert(HasTimerEffect, "Timer effect for disconnected connection not found").
