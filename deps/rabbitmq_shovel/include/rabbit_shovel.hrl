@@ -7,6 +7,8 @@
 
 -define(SHOVEL_APP, rabbitmq_shovel).
 
+-type shovel_definition() :: proplists:proplist() | map().
+
 -record(endpoint,
         {uris,
          resource_declaration
