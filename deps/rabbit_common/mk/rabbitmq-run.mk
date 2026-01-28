@@ -117,8 +117,19 @@ RABBITMQ_STREAM_DIR="$(call node_stream_dir,$(2))" \
 RABBITMQ_FEATURE_FLAGS_FILE="$(call node_feature_flags_file,$(2))" \
 RABBITMQ_PLUGINS_DIR="$(call node_plugins_dir)" \
 RABBITMQ_PLUGINS_EXPAND_DIR="$(call node_plugins_expand_dir,$(2))" \
-RABBITMQ_SERVER_START_ARGS="$(RABBITMQ_SERVER_START_ARGS)" \
-RABBITMQ_ENABLED_PLUGINS="$(RABBITMQ_ENABLED_PLUGINS)"
+RABBITMQ_SERVER_START_ARGS="$(RABBITMQ_SERVER_START_ARGS)"
+endef
+
+# Only set RABBITMQ_ENABLED_PLUGINS if the enabled plugins file doesn't
+# already exist. This ensures that on node restart, the existing enabled
+# plugins configuration is preserved rather than being overwritten by the
+# default value from the Makefile.
+define maybe_enabled_plugins
+if test -f "$(RABBITMQ_ENABLED_PLUGINS_FILE)"; then \
+	unset RABBITMQ_ENABLED_PLUGINS; \
+else \
+	export RABBITMQ_ENABLED_PLUGINS="$(RABBITMQ_ENABLED_PLUGINS)"; \
+fi
 endef
 
 BASIC_SCRIPT_ENV_SETTINGS = \
@@ -278,12 +289,14 @@ run-tls-broker: config = $(test_rabbitmq_config_with_tls)
 run-tls-broker: $(TEST_TLS_CERTS_DIR)
 
 run-broker run-tls-broker: node-tmpdir $(DIST_TARGET) $(TEST_CONFIG_FILE)
+	$(maybe_enabled_plugins); \
 	$(BASIC_SCRIPT_ENV_SETTINGS) \
 	  RABBITMQ_ALLOW_INPUT=true \
 	  RABBITMQ_CONFIG_FILE=$(RABBITMQ_CONFIG_FILE) \
 	  $(RABBITMQ_SERVER)
 
 run-background-broker: node-tmpdir $(DIST_TARGET)
+	$(maybe_enabled_plugins); \
 	$(BASIC_SCRIPT_ENV_SETTINGS) \
 	  $(RABBITMQ_SERVER) -detached
 
@@ -292,12 +305,14 @@ run-background-broker: node-tmpdir $(DIST_TARGET)
 # --------------------------------------------------------------------
 
 run-node: node-tmpdir $(DIST_TARGET)
+	$(maybe_enabled_plugins); \
 	$(BASIC_SCRIPT_ENV_SETTINGS) \
 	  RABBITMQ_NODE_ONLY=true \
 	  RABBITMQ_ALLOW_INPUT=true \
 	  $(RABBITMQ_SERVER)
 
 run-background-node: virgin-node-tmpdir $(DIST_TARGET)
+	$(maybe_enabled_plugins); \
 	$(BASIC_SCRIPT_ENV_SETTINGS) \
 	  RABBITMQ_NODE_ONLY=true \
 	  $(RABBITMQ_SERVER) -detached
@@ -314,6 +329,7 @@ endif
 RMQCTL_WAIT_TIMEOUT ?= 60000
 
 start-background-node: node-tmpdir $(DIST_TARGET)
+	$(maybe_enabled_plugins); \
 	$(BASIC_SCRIPT_ENV_SETTINGS) \
 	  RABBITMQ_NODE_ONLY=true \
 	  $(RABBITMQ_SERVER) \
@@ -322,6 +338,7 @@ start-background-node: node-tmpdir $(DIST_TARGET)
 	  $(RABBITMQCTL) -n $(RABBITMQ_NODENAME) wait --timeout $(RMQCTL_WAIT_TIMEOUT) $(RABBITMQ_PID_FILE) kernel
 
 start-background-broker: node-tmpdir $(DIST_TARGET)
+	$(maybe_enabled_plugins); \
 	$(BASIC_SCRIPT_ENV_SETTINGS) \
 	  $(RABBITMQ_SERVER) \
 	  $(REDIRECT_STDIO) &
