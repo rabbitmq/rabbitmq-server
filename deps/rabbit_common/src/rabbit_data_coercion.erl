@@ -17,7 +17,7 @@ to_binary(Val) when is_list(Val)     -> list_to_binary(Val);
 to_binary(Val) when is_atom(Val)     -> atom_to_binary(Val, utf8);
 to_binary(Val) when is_integer(Val)  -> integer_to_binary(Val);
 to_binary(Val) when is_function(Val) -> list_to_binary(io_lib:format("~w", [Val]));
-to_binary(Val)                       -> Val.
+to_binary(Val) when is_binary(Val)   -> Val.
 
 -spec to_list(Val :: integer() | list() | binary() | atom() | map() | inet:ip_address()) -> list().
 to_list(Val) when is_list(Val)    -> Val;

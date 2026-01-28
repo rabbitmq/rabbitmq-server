@@ -19,6 +19,7 @@
          validate_queue_args/2,
          validate_consumer_args/2,
          validate_delete_after/2,
+         deobfuscate_value/1,
          deobfuscated_uris/2
         ]).
 
@@ -236,6 +237,9 @@ validate_delete_after(_Name, N) when is_integer(N), N >= 0 -> ok;
 validate_delete_after(Name,  Term) ->
     {error, "~ts should be a number greater than or equal to 0, \"never\" or \"queue-length\", actually was "
      "~tp", [Name, Term]}.
+
+deobfuscate_value(Value) ->
+    credentials_obfuscation:decrypt(Value).
 
 deobfuscated_uris(Key, Def) ->
     ObfuscatedURIs = rabbit_misc:pget(Key, Def),

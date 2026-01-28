@@ -30,16 +30,15 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ErlangVersionCommand do
   end
 
   def run([], %{node: node_name, timeout: timeout, details: details}) do
-    case details do
-      true ->
-        :rabbit_data_coercion.to_binary(
-          :rabbit_misc.rpc_call(node_name, :rabbit_misc, :otp_system_version, [], timeout)
-        )
+    result =
+      case details do
+        true -> :rabbit_misc.rpc_call(node_name, :rabbit_misc, :otp_system_version, [], timeout)
+        false -> :rabbit_misc.rpc_call(node_name, :rabbit_misc, :platform_and_version, [], timeout)
+      end
 
-      false ->
-        :rabbit_data_coercion.to_binary(
-          :rabbit_misc.rpc_call(node_name, :rabbit_misc, :platform_and_version, [], timeout)
-        )
+    case result do
+      {:badrpc, _} = err -> err
+      value -> :rabbit_data_coercion.to_binary(value)
     end
   end
 
