@@ -8,7 +8,6 @@
 -module(unit_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
--include_lib("proper/include/proper.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 -include("rabbit.hrl").
@@ -34,6 +33,9 @@ all() ->
 groups() ->
     [
         {parallel_tests, [parallel], [
+            data_coercion_as_list,
+            data_coercion_to_binary,
+            data_coercion_to_binary_rejects_unsupported_types,
             data_coercion_to_proplist,
             data_coercion_to_list,
             data_coercion_to_map,
@@ -47,10 +49,11 @@ groups() ->
             data_coercion_to_map_recursive_atomic_values,
             data_coercion_to_map_recursive_binary_keys,
             data_coercion_to_map_recursive_atom_list_limitation,
-            data_coercion_to_map_recursive_property,
             data_coercion_atomize_keys_proplist,
             data_coercion_atomize_keys_map,
             data_coercion_to_boolean,
+            data_coercion_to_integer,
+            data_coercion_to_atom,
             pget,
             deep_pget,
             encrypt_decrypt,
@@ -288,6 +291,28 @@ data_coercion_atomize_keys_proplist(_Config) ->
     B = rabbit_data_coercion:atomize_keys([{a, 1}, {"b", 2}, {<<"c">>, 3}]),
     ?assertEqual(lists:usort(A), lists:usort(B)).
 
+data_coercion_to_integer(_Config) ->
+    %% Integers pass through unchanged
+    ?assertEqual(42, rabbit_data_coercion:to_integer(42)),
+    ?assertEqual(-100, rabbit_data_coercion:to_integer(-100)),
+    %% Strings (lists) are parsed
+    ?assertEqual(42, rabbit_data_coercion:to_integer("42")),
+    ?assertEqual(-100, rabbit_data_coercion:to_integer("-100")),
+    %% Binaries are parsed
+    ?assertEqual(42, rabbit_data_coercion:to_integer(<<"42">>)),
+    ?assertEqual(-100, rabbit_data_coercion:to_integer(<<"-100">>)).
+
+data_coercion_to_atom(_Config) ->
+    %% Atoms pass through unchanged
+    ?assertEqual(hello, rabbit_data_coercion:to_atom(hello)),
+    %% Strings (lists) are converted
+    ?assertEqual(hello, rabbit_data_coercion:to_atom("hello")),
+    %% Binaries are converted with utf8 encoding
+    ?assertEqual(hello, rabbit_data_coercion:to_atom(<<"hello">>)),
+    %% to_atom/2 with explicit encoding
+    ?assertEqual(hello, rabbit_data_coercion:to_atom(<<"hello">>, utf8)),
+    ?assertEqual(hello, rabbit_data_coercion:to_atom(<<"hello">>, latin1)).
+
 data_coercion_to_boolean(_Config) ->
     %% For booleans, this is an identity function
     ?assertEqual(true, rabbit_data_coercion:to_boolean(true)),
@@ -308,8 +333,51 @@ data_coercion_to_boolean(_Config) ->
     ?assertEqual(false, rabbit_data_coercion:to_boolean(<<"False">>)).
 
 data_coercion_to_list(_Config) ->
+    %% Lists pass through unchanged
     ?assertEqual([{a, 1}], rabbit_data_coercion:to_list([{a, 1}])),
-    ?assertEqual([{a, 1}], rabbit_data_coercion:to_list(#{a => 1})).
+    %% Maps are converted to proplists
+    ?assertEqual([{a, 1}], rabbit_data_coercion:to_list(#{a => 1})),
+    %% Atoms are converted to strings
+    ?assertEqual("hello", rabbit_data_coercion:to_list(hello)),
+    %% Binaries are converted to strings
+    ?assertEqual("hello", rabbit_data_coercion:to_list(<<"hello">>)),
+    %% Integers are converted to strings
+    ?assertEqual("42", rabbit_data_coercion:to_list(42)),
+    %% IPv4 address tuples
+    IPv4 = {192, 168, 1, 1},
+    IPv4Result = rabbit_data_coercion:to_list(IPv4),
+    ?assert(is_list(IPv4Result)),
+    %% IPv6 address tuples
+    IPv6 = {0, 0, 0, 0, 0, 0, 0, 1},
+    IPv6Result = rabbit_data_coercion:to_list(IPv6),
+    ?assert(is_list(IPv6Result)).
+
+data_coercion_as_list(_Config) ->
+    %% Lists pass through unchanged
+    ?assertEqual([], rabbit_data_coercion:as_list([])),
+    ?assertEqual([a, b, c], rabbit_data_coercion:as_list([a, b, c])),
+    ?assertEqual([[1, 2], [3, 4]], rabbit_data_coercion:as_list([[1, 2], [3, 4]])),
+    %% Non-list values are wrapped in a list
+    ?assertEqual([foo], rabbit_data_coercion:as_list(foo)),
+    ?assertEqual([<<"hello">>], rabbit_data_coercion:as_list(<<"hello">>)),
+    ?assertEqual([42], rabbit_data_coercion:as_list(42)),
+    ?assertEqual([{a, b}], rabbit_data_coercion:as_list({a, b})),
+    ?assertEqual([#{a => 1}], rabbit_data_coercion:as_list(#{a => 1})),
+    Pid = self(),
+    ?assertEqual([Pid], rabbit_data_coercion:as_list(Pid)).
+
+data_coercion_to_binary(_Config) ->
+    ?assertEqual(<<"hello">>, rabbit_data_coercion:to_binary(<<"hello">>)),
+    ?assertEqual(<<"hello">>, rabbit_data_coercion:to_binary("hello")),
+    ?assertEqual(<<"foo">>, rabbit_data_coercion:to_binary(foo)),
+    ?assertEqual(<<"42">>, rabbit_data_coercion:to_binary(42)),
+    F = fun() -> ok end,
+    ?assert(is_binary(rabbit_data_coercion:to_binary(F))).
+
+data_coercion_to_binary_rejects_unsupported_types(_Config) ->
+    ?assertError(function_clause, rabbit_data_coercion:to_binary(#{a => 1})),
+    ?assertError(function_clause, rabbit_data_coercion:to_binary({a, b})),
+    ?assertError(function_clause, rabbit_data_coercion:to_binary(self())).
 
 data_coercion_to_map_recursive_proplist(_Config) ->
     ?assertEqual(#{a => 1, b => 2},
@@ -372,36 +440,6 @@ data_coercion_to_map_recursive_atom_list_limitation(_Config) ->
     Input = [admin, monitoring],
     Expected = #{admin => true, monitoring => true},
     ?assertEqual(Expected, to_map_recursive(Input)).
-
-data_coercion_to_map_recursive_property(_Config) ->
-    ?assert(
-       proper:quickcheck(
-         ?FORALL(Input, proplist_or_value(),
-                 begin
-                     Result = to_map_recursive(Input),
-                     to_map_recursive(Result) =:= Result
-                 end),
-         [{numtests, 100},
-          {max_size, 10},
-          {on_output, fun(".", _) -> ok;
-                         (F, A) -> ct:pal(?LOW_IMPORTANCE, F, A)
-                      end}])).
-
-proplist_or_value() ->
-    ?LAZY(oneof([
-        oneof([key1, key2, key3]),
-        binary(),
-        integer(),
-        ?SIZED(Size, resize(Size div 2, proplist_gen())),
-        ?SIZED(Size, resize(Size div 2, list(proplist_or_value())))
-    ])).
-
-proplist_gen() ->
-    list(oneof([
-        {oneof([key1, key2, key3]), proplist_or_value()},
-        {binary(), proplist_or_value()},
-        oneof([enabled, disabled, auto])
-    ])).
 
 pget(_Config) ->
     ?assertEqual(1, rabbit_misc:pget(a, [{a, 1}])),

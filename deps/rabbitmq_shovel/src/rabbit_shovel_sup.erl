@@ -13,8 +13,6 @@
 
 -export([start_link/0, init/1]).
 
--import(rabbit_shovel_config, []).
-
 start_link() ->
     case parse_configuration(application:get_env(shovels)) of
         {ok, Configurations} ->
@@ -27,6 +25,8 @@ init([Configurations]) ->
     OpMode = rabbit_shovel_operating_mode:operating_mode(),
     ?LOG_DEBUG("Shovel: operating mode set to ~ts", [OpMode]),
 
+    ok = maybe_register_khepri_projection(),
+
     Len = dict:size(Configurations),
     SupTreeSpecs = supervisor_tree_child_specs(OpMode),
     StaticShovelSpecs = static_shovel_child_specs(OpMode, Configurations),
@@ -35,6 +35,20 @@ init([Configurations]) ->
     Opts = #{strategy => one_for_one, intensity => 2 * Len, period => 2},
     {ok, {Opts, ChildSpecs}}.
 
+maybe_register_khepri_projection() ->
+    case rabbit_khepri:is_enabled() of
+        true ->
+            case rabbit_shovel_index:register_projection() of
+                ok -> ok;
+                {error, exists} -> ok;
+                {error, {khepri, projection_already_exists, _}} -> ok;
+                {error, Reason} ->
+                    ?LOG_WARNING("Shovel: failed to register Khepri projection: ~tp", [Reason]),
+                    ok
+            end;
+        false ->
+            ok
+    end.
 
 supervisor_tree_child_specs(standard) ->
     [
