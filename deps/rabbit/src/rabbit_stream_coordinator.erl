@@ -86,8 +86,8 @@
 -include_lib("kernel/include/logger.hrl").
 
 -define(REPLICA_FRESHNESS_LIMIT_MS, 10 * 1000). %% 10s
--define(V2_OR_MORE(Vsn), Vsn >= 2).
--define(V5_OR_MORE(Vsn), Vsn >= 5).
+-define(V2_OR_MORE(Vsn), (Vsn >= 2)).
+-define(V5_OR_MORE(Vsn), (Vsn >= 5)).
 -define(SAC_V4, rabbit_stream_sac_coordinator_v4).
 -define(SAC_CURRENT, rabbit_stream_sac_coordinator).
 
@@ -543,7 +543,7 @@ reachable_coord_members() ->
     Nodes = rabbit_nodes:list_reachable(),
     [{?MODULE, Node} || Node <- Nodes].
 
-version() -> 5.
+version() -> 6.
 
 which_module(_) ->
     ?MODULE.
@@ -656,8 +656,8 @@ apply(#{machine_version := Vsn} = Meta, {down, Pid, Reason} = Cmd,
                                                monitors = Monitors1}, ok, Effects0)
             end;
         {sac, Monitors1} ->
-            {SacState1, SacEffects} = sac_handle_connection_down(SacState0, Pid,
-                                                                 Reason, Vsn),
+            {SacState1, SacEffects} = sac_handle_connection_down(Meta, SacState0,
+                                                                 Pid, Reason, Vsn),
             return(Meta, State#?MODULE{single_active_consumer = SacState1,
                                        monitors = Monitors1},
                    ok, [Effects0 ++ SacEffects]);
@@ -755,8 +755,7 @@ apply(Meta, {machine_version, From, To}, State0) ->
     return(Meta, State1, ok, Effects);
 apply(Meta, {timeout, {sac, node_disconnected, #{connection_pid := Pid}}},
       #?MODULE{single_active_consumer = SacState0} = State0) ->
-    Mod = sac_module(Meta),
-    {SacState1, Effects} = Mod:presume_connection_down(Pid, SacState0),
+    {SacState1, Effects} = sac_presume_connection_down(Meta, Pid, SacState0),
     return(Meta, State0#?MODULE{single_active_consumer = SacState1}, ok,
            Effects);
 apply(Meta, UnkCmd, State) ->
@@ -2441,10 +2440,19 @@ maps_to_list(M) ->
 ra_local_query(QueryFun) ->
     ra:local_query({?MODULE, node()}, QueryFun, infinity).
 
-sac_handle_connection_down(SacState, Pid, Reason, Vsn) when ?V5_OR_MORE(Vsn) ->
-    ?SAC_CURRENT:handle_connection_down(Pid, Reason, SacState);
-sac_handle_connection_down(SacState, Pid, _Reason, _Vsn) ->
+sac_handle_connection_down(Meta, SacState, Pid, Reason, Vsn) when ?V5_OR_MORE(Vsn) ->
+    ?SAC_CURRENT:handle_connection_down(Meta, Pid, Reason, SacState);
+sac_handle_connection_down(_Meta, SacState, Pid, _Reason, _Vsn) ->
     ?SAC_V4:handle_connection_down(Pid, SacState).
+
+sac_presume_connection_down(#{machine_version := Vsn} = Meta, Pid, SacState) ->
+    Mod = sac_module(Meta),
+    case Meta of
+        #{machine_version := Vsn} when ?V5_OR_MORE(Vsn) ->
+            Mod:presume_connection_down(Meta, Pid, SacState);
+        _ ->
+            Mod:presume_connection_down(Pid, SacState)
+    end.
 
 sac_handle_node_reconnected(#{machine_version := Vsn} = Meta, Node,
                             Sac, Effects) ->
