@@ -43,8 +43,8 @@ $(DIR)/testca/cacert.pem:
 	    chmod 700 private && \
 	    echo 01 > serial && \
 	    :> index.txt && \
-	    sed -e 's/@HOSTNAME@/$(HOSTNAME)/g' $(CURDIR)/openssl.cnf.in > $(CURDIR)/openssl.cnf && \
-	    openssl req -x509 -config $(CURDIR)/openssl.cnf -newkey rsa:2048 -days 365 \
+	    sed -e 's/@HOSTNAME@/$(HOSTNAME)/g' $(CURDIR)/openssl.cnf.in > $(dir $@)/openssl.cnf && \
+	    openssl req -x509 -config $(dir $@)/openssl.cnf -newkey rsa:2048 -days 365 \
 	      -out cacert.pem -outform PEM -subj /CN=MyTestCA/L=$$$$/ -nodes && \
 	    openssl x509 -in cacert.pem -out cacert.cer -outform DER ) $(openssl_output) \
 	  || (rm -rf $(dir $@) && false); }
@@ -52,12 +52,12 @@ $(DIR)/testca/cacert.pem:
 $(DIR)/%/cert.pem: $(DIR)/testca/cacert.pem
 	$(gen_verbose) mkdir -p $(DIR)/$(TARGET)
 	$(verbose) { ( cd $(DIR)/$(TARGET) && \
-	    sed -e 's/@HOSTNAME@/$(HOSTNAME)/g' $(CURDIR)/openssl.cnf.in > $(CURDIR)/openssl.cnf && \
+	    sed -e 's/@HOSTNAME@/$(HOSTNAME)/g' $(CURDIR)/openssl.cnf.in > $(DIR)/$(TARGET)/openssl.cnf && \
 	    openssl genrsa -out key.pem 2048 && \
-	    openssl req -config $(CURDIR)/openssl.cnf -new -key key.pem -out req.pem -outform PEM \
+	    openssl req -config $(DIR)/$(TARGET)/openssl.cnf -new -key key.pem -out req.pem -outform PEM \
 	      -subj /C=UK/ST=England/CN=$(HOSTNAME)/O=$(TARGET)/L=$$$$/ -nodes && \
 	    cd ../testca && \
-	    openssl ca -config $(CURDIR)/openssl.cnf -in ../$(TARGET)/req.pem -out \
+	    openssl ca -config $(DIR)/$(TARGET)/openssl.cnf -in ../$(TARGET)/req.pem -out \
 	      ../$(TARGET)/cert.pem -notext -batch -extensions \
 	      $(TARGET)_ca_extensions && \
 	    cd ../$(TARGET) && \
