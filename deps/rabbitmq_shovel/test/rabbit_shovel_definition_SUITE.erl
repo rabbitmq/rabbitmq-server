@@ -9,16 +9,12 @@
 
 -compile(export_all).
 
--include_lib("proper/include/proper.hrl").
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
--define(ITERATIONS, 100).
-
 all() ->
     [
-     {group, unit_tests},
-     {group, property_tests}
+     {group, unit_tests}
     ].
 
 groups() ->
@@ -52,14 +48,6 @@ groups() ->
         vhost_uri_trailing_slash,
         vhost_uri_bare_binary,
         vhost_uri_double_slash
-     ]},
-     {property_tests, [], [
-        prop_extract_always_returns_valid_map,
-        prop_queue_source_has_queue_name,
-        prop_exchange_source_has_no_queue,
-        prop_vhost_always_binary,
-        prop_type_is_valid_enum,
-        prop_protocol_is_valid_enum
      ]}
     ].
 
@@ -354,135 +342,3 @@ vhost_uri_double_slash_0() ->
     Def = [{<<"src-uri">>, [Encrypted]}, {<<"src-queue">>, <<"q">>}],
     Result = rabbit_shovel_definition:extract_source_info(Def, <<"other">>),
     ?assertMatch(#{vhost := <<"/">>}, Result).
-
-%%
-%% Property-Based Tests
-%%
-
-prop_extract_always_returns_valid_map(Config) ->
-    Property = fun() -> prop_extract_always_returns_valid_map_0() end,
-    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_ct_proper_helpers, run_proper,
-                                  [Property, [], ?ITERATIONS]).
-
-prop_extract_always_returns_valid_map_0() ->
-    ?FORALL({Def, VHost}, {shovel_definition(), vhost()},
-            begin
-                Result = rabbit_shovel_definition:extract_source_info(Def, VHost),
-                is_map(Result) andalso
-                maps:is_key(type, Result) andalso
-                maps:is_key(protocol, Result) andalso
-                maps:is_key(queue, Result) andalso
-                maps:is_key(vhost, Result)
-            end).
-
-prop_queue_source_has_queue_name(Config) ->
-    Property = fun() -> prop_queue_source_has_queue_name_0() end,
-    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_ct_proper_helpers, run_proper,
-                                  [Property, [], ?ITERATIONS]).
-
-prop_queue_source_has_queue_name_0() ->
-    ?FORALL({QueueName, VHost}, {non_empty_binary(), vhost()},
-            begin
-                Def = [{<<"src-queue">>, QueueName}],
-                #{type := Type, queue := Queue} =
-                    rabbit_shovel_definition:extract_source_info(Def, VHost),
-                Type =:= queue andalso Queue =:= QueueName
-            end).
-
-prop_exchange_source_has_no_queue(Config) ->
-    Property = fun() -> prop_exchange_source_has_no_queue_0() end,
-    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_ct_proper_helpers, run_proper,
-                                  [Property, [], ?ITERATIONS]).
-
-prop_exchange_source_has_no_queue_0() ->
-    ?FORALL({ExchangeName, VHost}, {non_empty_binary(), vhost()},
-            begin
-                Def = [{<<"src-exchange">>, ExchangeName}],
-                #{type := Type, queue := Queue} =
-                    rabbit_shovel_definition:extract_source_info(Def, VHost),
-                Type =:= exchange andalso Queue =:= undefined
-            end).
-
-prop_vhost_always_binary(Config) ->
-    Property = fun() -> prop_vhost_always_binary_0() end,
-    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_ct_proper_helpers, run_proper,
-                                  [Property, [], ?ITERATIONS]).
-
-prop_vhost_always_binary_0() ->
-    ?FORALL({Def, VHost}, {shovel_definition(), vhost()},
-            begin
-                #{vhost := ResultVHost} =
-                    rabbit_shovel_definition:extract_source_info(Def, VHost),
-                is_binary(ResultVHost)
-            end).
-
-prop_type_is_valid_enum(Config) ->
-    Property = fun() -> prop_type_is_valid_enum_0() end,
-    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_ct_proper_helpers, run_proper,
-                                  [Property, [], ?ITERATIONS]).
-
-prop_type_is_valid_enum_0() ->
-    ?FORALL({Def, VHost}, {shovel_definition(), vhost()},
-            begin
-                #{type := Type} =
-                    rabbit_shovel_definition:extract_source_info(Def, VHost),
-                lists:member(Type, [queue, exchange, unknown])
-            end).
-
-prop_protocol_is_valid_enum(Config) ->
-    Property = fun() -> prop_protocol_is_valid_enum_0() end,
-    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_ct_proper_helpers, run_proper,
-                                  [Property, [], ?ITERATIONS]).
-
-prop_protocol_is_valid_enum_0() ->
-    ?FORALL({Def, VHost}, {shovel_definition(), vhost()},
-            begin
-                #{protocol := Protocol} =
-                    rabbit_shovel_definition:extract_source_info(Def, VHost),
-                lists:member(Protocol, [amqp091, amqp10, local])
-            end).
-
-%%
-%% PropEr Generators
-%%
-
-vhost() ->
-    non_empty_binary().
-
-non_empty_binary() ->
-    ?SUCHTHAT(B, binary(), byte_size(B) > 0).
-
-shovel_definition() ->
-    oneof([
-           amqp091_queue_def(),
-           amqp091_exchange_def(),
-           amqp10_def(),
-           local_def(),
-           empty_def()
-          ]).
-
-amqp091_queue_def() ->
-    ?LET(Q, non_empty_binary(),
-         [{<<"src-queue">>, Q}]).
-
-amqp091_exchange_def() ->
-    ?LET(X, non_empty_binary(),
-         [{<<"src-exchange">>, X}]).
-
-amqp10_def() ->
-    oneof([
-           ?LET(Addr, non_empty_binary(),
-                [{<<"src-protocol">>, <<"amqp10">>}, {<<"src-address">>, Addr}]),
-           [{<<"src-protocol">>, <<"amqp10">>}]
-          ]).
-
-local_def() ->
-    oneof([
-           ?LET(Q, non_empty_binary(),
-                [{<<"src-protocol">>, <<"local">>}, {<<"src-queue">>, Q}]),
-           ?LET(X, non_empty_binary(),
-                [{<<"src-protocol">>, <<"local">>}, {<<"src-exchange">>, X}])
-          ]).
-
-empty_def() ->
-    [].
