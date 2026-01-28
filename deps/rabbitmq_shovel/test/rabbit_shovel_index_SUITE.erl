@@ -26,8 +26,10 @@ groups() ->
         shovels_by_source_exchange_empty_when_no_shovels,
         index_queue_source_shovel,
         index_exchange_source_shovel,
+        index_amqp10_queue_source_shovel,
         lookup_queue_source_shovel,
         lookup_exchange_source_shovel,
+        lookup_amqp10_queue_source_shovel,
         multiple_shovels_same_queue
      ]}
     ].
@@ -181,6 +183,50 @@ lookup_exchange_source_shovel_0() ->
     after
         rabbit_runtime_parameters:clear(VHost, <<"shovel">>, ShovelName, <<"test">>),
         rabbit_exchange:delete(Exchange, false, <<"test">>)
+    end.
+
+index_amqp10_queue_source_shovel(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, index_amqp10_queue_source_shovel1, []).
+
+index_amqp10_queue_source_shovel1() ->
+    VHost = <<"/">>,
+    ShovelName = <<"test-amqp10-shovel">>,
+    QueueName = <<"amqp10-source-queue">>,
+    Def = [{<<"src-protocol">>, <<"amqp10">>},
+           {<<"src-address">>, <<"/queues/", QueueName/binary>>},
+           {<<"dest-protocol">>, <<"amqp10">>},
+           {<<"dest-address">>, <<"/queues/dest-queue">>},
+           {<<"src-uri">>, <<"amqp://localhost">>},
+           {<<"dest-uri">>, <<"amqp://localhost">>}],
+    try
+        ok = rabbit_runtime_parameters:set(VHost, <<"shovel">>, ShovelName, Def, none),
+        timer:sleep(100),
+        Result = rabbit_shovel_index:shovels_by_source_queue(VHost, QueueName),
+        ?assertEqual([{VHost, ShovelName}], Result)
+    after
+        rabbit_runtime_parameters:clear(VHost, <<"shovel">>, ShovelName, <<"test">>)
+    end.
+
+lookup_amqp10_queue_source_shovel(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, lookup_amqp10_queue_source_shovel1, []).
+
+lookup_amqp10_queue_source_shovel1() ->
+    VHost = <<"/">>,
+    ShovelName = <<"test-lookup-amqp10-shovel">>,
+    QueueName = <<"lookup-amqp10-queue">>,
+    Def = [{<<"src-protocol">>, <<"amqp10">>},
+           {<<"src-address">>, <<"/queues/", QueueName/binary>>},
+           {<<"dest-protocol">>, <<"amqp10">>},
+           {<<"dest-address">>, <<"/queues/dest-queue">>},
+           {<<"src-uri">>, <<"amqp://localhost">>},
+           {<<"dest-uri">>, <<"amqp://localhost">>}],
+    try
+        ok = rabbit_runtime_parameters:set(VHost, <<"shovel">>, ShovelName, Def, none),
+        timer:sleep(100),
+        Result = rabbit_shovel_index:lookup({VHost, ShovelName}),
+        ?assertMatch(#{type := queue, queue := QueueName, protocol := amqp10, vhost := <<"/">>}, Result)
+    after
+        rabbit_runtime_parameters:clear(VHost, <<"shovel">>, ShovelName, <<"test">>)
     end.
 
 multiple_shovels_same_queue(Config) ->

@@ -31,6 +31,7 @@ groups() ->
         extract_amqp091_none_exchange_returns_unknown,
         extract_amqp10_address_source,
         extract_amqp10_queues_format,
+        extract_amqp10_queues_empty_name,
         extract_amqp10_amq_queue_format,
         extract_amqp10_exchanges_format,
         extract_amqp10_exchanges_with_key_format,
@@ -153,6 +154,15 @@ extract_amqp10_queues_format_0() ->
     Def2 = [{<<"src-protocol">>, <<"amqp10">>}, {<<"src-address">>, <<"/queues/my%2Fqueue">>}],
     Result2 = rabbit_shovel_definition:extract_source_info(Def2, <<"/">>),
     ?assertMatch(#{type := queue, queue := <<"my/queue">>}, Result2).
+
+extract_amqp10_queues_empty_name(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, extract_amqp10_queues_empty_name1, []).
+
+extract_amqp10_queues_empty_name1() ->
+    %% /queues/ with an empty queue name returns 'unknown'
+    Def = [{<<"src-protocol">>, <<"amqp10">>}, {<<"src-address">>, <<"/queues/">>}],
+    Result = rabbit_shovel_definition:extract_source_info(Def, <<"/">>),
+    ?assertMatch(#{type := unknown, queue := undefined, protocol := amqp10}, Result).
 
 extract_amqp10_amq_queue_format(Config) ->
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, extract_amqp10_amq_queue_format_0, []).
