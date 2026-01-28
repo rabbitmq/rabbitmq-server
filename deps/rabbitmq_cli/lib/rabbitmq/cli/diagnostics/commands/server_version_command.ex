@@ -12,9 +12,10 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ServerVersionCommand do
   use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
 
   def run([], %{node: node_name, timeout: timeout}) do
-    :rabbit_data_coercion.to_binary(
-      :rabbit_misc.rpc_call(node_name, :rabbit_misc, :version, [], timeout)
-    )
+    case :rabbit_misc.rpc_call(node_name, :rabbit_misc, :version, [], timeout) do
+      {:badrpc, _} = err -> err
+      value -> :rabbit_data_coercion.to_binary(value)
+    end
   end
 
   def output(result, %{formatter: "json"}) do
