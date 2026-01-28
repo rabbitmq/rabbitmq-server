@@ -94,7 +94,6 @@ run_setup_steps(Config, ExtraSteps) ->
                 fun ensure_rabbitmq_cli_srcdir/1,
                 fun ensure_rabbit_srcdir/1,
                 fun ensure_make_cmd/1,
-                fun ensure_erl_call_cmd/1,
                 fun ensure_ssl_certs/1,
                 fun start_long_running_testsuite_monitor/1,
                 fun load_elixir/1
@@ -380,16 +379,6 @@ ensure_make_cmd(Config) ->
         _       -> {skip,
                     "GNU Make required, " ++
                     "please set MAKE or 'make_cmd' in ct config"}
-    end.
-
-ensure_erl_call_cmd(Config) ->
-    ErlCall = filename:join(code:lib_dir(erl_interface), "bin/erl_call"),
-    Cmd = [ErlCall],
-    case exec(Cmd, [{match_stdout, "Usage: "}]) of
-        {ok, _} -> set_config(Config, {erl_call_cmd, ErlCall});
-        _       -> {skip,
-                    "erl_call required, " ++
-                    "please set ERL_CALL or 'erl_call_cmd' in ct config"}
     end.
 
 ensure_rabbitmqctl_cmd(Config) ->
