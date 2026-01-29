@@ -92,28 +92,12 @@ cd ../../../../
 make package-generic-unix
 make docker-image
 ```
->> Equivalent bazel command: `bazelisk run packaging/docker-image:rabbitmq`
-
-The last command prints something like this:
-```
- => => naming to docker.io/pivotalrabbitmq/rabbitmq:3.11.0-rc.2.51.g4f3e539.dirty                                                                            0.0s
-```
-
-Or if you prefer to use bazel run instead:
-```
-bazelisk run packaging/docker-image:rabbitmq
-```
 
 
 To run a suite with a particular docker image you do it like this:
 ```
 cd deps/rabbitmq_management/selenium
 RABBITMQ_DOCKER_IMAGE=pivotalrabbitmq/rabbitmq:3.11.0-rc.2.51.g4f3e539.dirty suites/authnz-mgt/oauth-with-uaa-with-mgt-prefix.sh
-```
-or like this if you built the docker image using bazel:
-```
-cd deps/rabbitmq_management/selenium
-RABBITMQ_DOCKER_IMAGE=bazel/packaging/docker-image:rabbitmq suites/authnz-mgt/oauth-with-uaa-with-mgt-prefix.sh
 ```
 
 To customise the Selenium docker image, use the env variable `SELENIUM_DOCKER_IMAGE`:
