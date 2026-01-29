@@ -3390,7 +3390,8 @@ do_snapshot(MacVer, Ts, #snapshot{index = _ChIdx,
                        messages_total = MsgsTot,
                        discarded_bytes = DiscardedBytes},
              [{release_cursor, LastAppliedIdx, MacState,
-               #{condition => [{written, LastAppliedIdx}]}}]};
+               #{condition => [{written, LastAppliedIdx},
+                               no_snapshot_sends]}}]};
         false ->
             {Snap0, []}
     end.
