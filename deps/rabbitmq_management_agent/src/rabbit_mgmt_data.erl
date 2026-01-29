@@ -108,14 +108,15 @@ vhost_data(Ranges, Id) ->
 
 node_data(Ranges, Id) ->
     maps:from_list(
-      [{mgmt_stats, mgmt_queue_length_stats(Id)}] ++
-      [{node_node_metrics, node_node_metrics()}] ++
-      node_raw_detail_stats_data(Ranges, Id) ++
-      [raw_message_data(node_coarse_stats,
+      [{mgmt_stats, mgmt_queue_length_stats(Id)},
+       {node_node_metrics, node_node_metrics()},
+       {node_stats, lookup_element(node_stats, Id)},
+       {mount_stats, [maps:to_list(M) || M <- rabbit_disk_monitor:get_mount_free()]},
+       raw_message_data(node_coarse_stats,
                         pick_range(coarse_node_stats, Ranges), Id),
        raw_message_data(node_persister_stats,
-                        pick_range(coarse_node_stats, Ranges), Id),
-       {node_stats, lookup_element(node_stats, Id)}] ++
+                        pick_range(coarse_node_stats, Ranges), Id)] ++
+      node_raw_detail_stats_data(Ranges, Id) ++
       node_connection_churn_rates_data(Ranges, Id)).
 
 overview_data(_Pid, User, Ranges, VHosts) ->

@@ -690,8 +690,13 @@ msg_store_dir_wildcard() ->
     rabbit_data_coercion:to_list(filename:join([msg_store_dir_base(), "*"])).
 
 msg_store_dir_base() ->
-    Dir = rabbit:data_dir(),
-    filename:join([Dir, "msg_stores", "vhosts"]).
+    case application:get_env(rabbit, classic_queue_data_dir) of
+        {ok, Dir} ->
+            Dir;
+        undefined ->
+            Dir = rabbit:data_dir(),
+            filename:join([Dir, "msg_stores", "vhosts"])
+    end.
 
 config_file_path(VHost) ->
     VHostDir = msg_store_dir_path(VHost),
