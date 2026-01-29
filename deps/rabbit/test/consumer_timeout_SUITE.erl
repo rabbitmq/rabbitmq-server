@@ -73,9 +73,16 @@ init_per_suite(Config0) ->
     Config3 = rabbit_ct_helpers:merge_app_env(
                 Config2, {rabbit, [{channel_tick_interval, 256},
                                    {quorum_tick_interval, 256}]}),
-    rabbit_ct_helpers:run_steps(Config3,
+    Config4 = rabbit_ct_helpers:run_steps(Config3,
                                 rabbit_ct_broker_helpers:setup_steps() ++
-                                rabbit_ct_client_helpers:setup_steps()).
+                                rabbit_ct_client_helpers:setup_steps()),
+    case rabbit_ct_broker_helpers:enable_feature_flag(Config4, 'rabbitmq_4.3.0') of
+        ok ->
+            Config4;
+        {skip, _} = Skip ->
+            end_per_suite(Config4),
+            Skip
+    end.
 
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_steps(Config,
