@@ -69,8 +69,8 @@
 -callback parse_source(definition()) -> {source_config(), Headers :: proplists:proplist()}.
 -callback parse_dest({VHost :: binary(), Name :: binary()}, ClusterName :: atom(), definition(), Headers :: proplists:proplist()) -> dest_config().
 
--callback validate_src(definition()) -> [ok | {error, Reason :: string()}].
--callback validate_dest(definition()) -> [ok | {error, Reason :: string()}].
+-callback validate_src(definition()) -> [ok | {error, Format :: string(), Args :: list()}].
+-callback validate_dest(definition()) -> [ok | {error, Format :: string(), Args :: list()}].
 
 -callback validate_src_funs(definition(), User :: binary()) ->
     [{Tag :: binary(), fun((Name :: atom(), Value :: term()) -> ok | {error, string()}), mandatory()}].
