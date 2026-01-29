@@ -217,16 +217,26 @@ subscribe_consumers(Config) ->
     subscribe(Ch, QName, false, CArgs),
 
     %% validate we can retrieve the consumers
-    Consumers = rpc:call(Server, rabbit_amqqueue, consumers_all, [<<"/">>]),
-    [Consumer] = lists:filter(fun(Props) ->
-                                      Resource = proplists:get_value(queue_name, Props),
-                                      QName == Resource#resource.name
-                              end, Consumers),
-    ?assert(is_pid(proplists:get_value(channel_pid, Consumer))),
-    ?assert(is_binary(proplists:get_value(consumer_tag, Consumer))),
-    ?assertEqual(true, proplists:get_value(ack_required, Consumer)),
-    ?assertEqual(10, proplists:get_value(prefetch_count, Consumer)),
-    ?assertEqual([], proplists:get_value(arguments, Consumer)),
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+              try
+                  Consumers = rpc:call(Server, rabbit_amqqueue, consumers_all, [<<"/">>]),
+                  ct:pal("Consumers ~p", [Consumers]),
+                  [Consumer] = lists:filter(fun(Props) ->
+                                                    Resource = proplists:get_value(queue_name, Props),
+                                                    QName == Resource#resource.name
+                                            end, Consumers),
+                  ?assert(is_pid(proplists:get_value(channel_pid, Consumer))),
+                  ?assert(is_binary(proplists:get_value(consumer_tag, Consumer))),
+                  ?assertEqual(true, proplists:get_value(ack_required, Consumer)),
+                  ?assertEqual(10, proplists:get_value(prefetch_count, Consumer)),
+                  ?assertEqual([], proplists:get_value(arguments, Consumer)),
+                  true
+              catch
+                  _:_ ->
+                      false
+              end
+      end, 30000),
 
     rabbit_ct_client_helpers:close_channel(Ch).
 
