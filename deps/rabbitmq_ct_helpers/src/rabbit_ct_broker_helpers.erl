@@ -1301,7 +1301,7 @@ stop_rabbitmq_node(_Config, NodeConfig) ->
         PeerPid ->
             cover_remove_node(Nodename),
             try
-                peer:call(PeerPid, rabbit, stop, []),
+                peer:call(PeerPid, rabbit, stop, [], 60_000),
                 peer:stop(PeerPid)
             catch exit:{noproc, _} ->
                 ct:pal("Node ~p was previously killed.", [Nodename])
