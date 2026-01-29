@@ -687,9 +687,9 @@ handle_tick(QName,
                   maybe_apply_policies(Q, Overview),
                   ok
               catch
-                  _:Err ->
-                      ?LOG_DEBUG("~ts: handle tick failed with ~p",
-                                       [rabbit_misc:rs(QName), Err]),
+                  _:Err:Stacktrace ->
+                      ?LOG_DEBUG("~ts: handle tick failed with ~p. Stacktrace: ~p",
+                                       [rabbit_misc:rs(QName), Err, Stacktrace]),
                       ok
               end
       end);
