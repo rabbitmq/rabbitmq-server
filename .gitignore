@@ -116,6 +116,7 @@ rabbitmq-server-*.tar.gz
 rabbitmq-server-*.tar.bz2
 rabbitmq-server-*.tar.xz
 rabbitmq-server-*.zip
+secondary_dist/
 
 # Trace tools output.
 *-ttb

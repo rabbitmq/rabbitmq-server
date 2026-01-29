@@ -42,3 +42,21 @@ dep_cth_styledout = git https://github.com/rabbitmq/cth_styledout.git master
 ifneq ($(strip $(CT_HOOKS)),)
 CT_OPTS += -ct_hooks $(CT_HOOKS)
 endif
+
+# We fetch a SECONDARY_DIST if SECONDARY_DIST_VSN is set and
+# we setup the SECONDARY_DIST variable. The location of the
+# secondary dists can be customized using SECONDARY_DIST_DIR
+# but note that it only works with an absolute path.
+ifneq ($(strip $(SECONDARY_DIST_VSN)),)
+SECONDARY_DIST_DIR ?= $(abspath $(CURDIR)/../../)/secondary_dist
+SECONDARY_DIST=$(SECONDARY_DIST_DIR)/rabbitmq_server-$(SECONDARY_DIST_VSN)
+export SECONDARY_DIST
+
+SECONDARY_DIST_DOWNLOAD_URL = https://github.com/rabbitmq/rabbitmq-server/releases/download/v$(SECONDARY_DIST_VSN)/rabbitmq-server-generic-unix-$(SECONDARY_DIST_VSN).tar.xz
+
+ifeq ($(wildcard $(SECONDARY_DIST)),)
+$(shell curl -L -o $(ERLANG_MK_TMP)/rabbitmq_server-$(SECONDARY_DIST_VSN).tar.xz $(SECONDARY_DIST_DOWNLOAD_URL) \
+    && mkdir -p $(SECONDARY_DIST) \
+    && tar -xf $(ERLANG_MK_TMP)/rabbitmq_server-$(SECONDARY_DIST_VSN).tar.xz -C $(dir $(SECONDARY_DIST)))
+endif
+endif
