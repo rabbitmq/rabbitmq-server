@@ -142,6 +142,10 @@ MANPAGES     = $(wildcard $(DOCS_DIR)/*.[0-9])
 WEB_MANPAGES = $(patsubst %,%.html,$(MANPAGES))
 MD_MANPAGES  = $(patsubst %,%.md,$(MANPAGES))
 
+# Export `DEP_PLUGINS` to force the rabbitmq-old-compiler.mk plugin on
+# dependencies.
+export DEP_PLUGINS = rabbit_common/mk/rabbitmq-old-compiler.mk
+
 CT_HOOKS = rabbit_ct_hook
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
