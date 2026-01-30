@@ -22,7 +22,7 @@
          cancel_checkout/3,
          enqueue/3,
          enqueue/4,
-         dequeue/4,
+         dequeue/5,
          settle/3,
          return/3,
          discard/3,
@@ -141,13 +141,13 @@ enqueue(QName, Correlation, Msg,
             {reject_publish, State0};
         {error, {shutdown, delete}} ->
             ?LOG_DEBUG("~ts: QQ ~ts tried to register enqueuer during delete shutdown",
-                             [?MODULE, rabbit_misc:rs(QName)]),
+                       [?MODULE, rabbit_misc:rs(QName)]),
             {reject_publish, State0};
         {timeout, _} ->
             {reject_publish, State0};
         Err ->
             ?LOG_DEBUG("~ts: QQ ~ts error when registering enqueuer ~p",
-                             [?MODULE, rabbit_misc:rs(QName), Err]),
+                       [?MODULE, rabbit_misc:rs(QName), Err]),
             exit(Err)
     end;
 enqueue(_QName, _Correlation, _Msg,
@@ -201,23 +201,30 @@ enqueue(QName, Msg, State) ->
 %% @param ConsumerTag a unique tag to identify this particular consumer.
 %% @param Settlement either `settled' or `unsettled'. When `settled' no
 %% further settlement needs to be done.
+%%
 %% @param State The {@module} state.
 %%
 %% @returns `{ok, IdMsg, State}' or `{error | timeout, term()}'
 -spec dequeue(rabbit_amqqueue:name(), rabbit_types:ctag(),
-              Settlement :: settled | unsettled, state()) ->
+              Settlement :: settled | unsettled,
+              ConsumerTimeout :: non_neg_integer() | infinity | undefined,
+              state()) ->
     {ok, non_neg_integer(), term(), non_neg_integer()}
      | {empty, state()} | {error | timeout, term()}.
-dequeue(QueueName, ConsumerTag, Settlement,
+dequeue(QueueName, ConsumerTag, Settlement, ConsumerTimeout,
         #state{cfg = #cfg{timeout = Timeout}} = State0) ->
     ServerId = pick_server(State0),
     %% dequeue never really needs to assign a consumer key so we just use
     %% the old ConsumerId format here
     ConsumerId = consumer_id(ConsumerTag),
+    Meta = case ConsumerTimeout of
+               undefined -> #{};
+               _ -> #{timeout => ConsumerTimeout}
+           end,
     case ra:process_command(ServerId,
                             rabbit_fifo:make_checkout(ConsumerId,
                                                       {dequeue, Settlement},
-                                                      #{}),
+                                                      Meta),
                             Timeout) of
         {ok, {dequeue, empty}, Leader} ->
             {empty, State0#state{leader = Leader}};
@@ -371,24 +378,12 @@ checkout(ConsumerTag, CreditMode, #{} = Meta,
        is_tuple(CreditMode) ->
     Servers = sorted_servers(State0),
     ConsumerId = consumer_id(ConsumerTag),
-    Spec = case rabbit_fifo:is_v4() of
-               true ->
-                   case CreditMode of
-                       {simple_prefetch, 0} ->
-                           {auto, {simple_prefetch,
-                                   ?UNLIMITED_PREFETCH_COUNT}};
-                       _ ->
-                           {auto, CreditMode}
-                   end;
-               false ->
-                   case CreditMode of
-                       {credited, _} ->
-                           {auto, 0, credited};
-                       {simple_prefetch, 0} ->
-                           {auto, ?UNLIMITED_PREFETCH_COUNT, simple_prefetch};
-                       {simple_prefetch, Num} ->
-                           {auto, Num, simple_prefetch}
-                   end
+    Spec = case CreditMode of
+               {simple_prefetch, 0} ->
+                   {auto, {simple_prefetch,
+                           ?UNLIMITED_PREFETCH_COUNT}};
+               _ ->
+                   {auto, CreditMode}
            end,
     Cmd = rabbit_fifo:make_checkout(ConsumerId, Spec, Meta),
     %% ???
@@ -413,13 +408,12 @@ checkout(ConsumerTag, CreditMode, #{} = Meta,
                                 end
                         end,
             ConsumerKey = maps:get(key, Reply, ConsumerId),
-            SDels = maps:update_with(
-                      ConsumerTag,
-                      fun (C) -> C#consumer{ack = Ack} end,
-                      #consumer{key = ConsumerKey,
-                                last_msg_id = LastMsgId,
-                                ack = Ack},
-                      CDels0),
+            SDels = maps:update_with(ConsumerTag,
+                                     fun (C) -> C#consumer{ack = Ack} end,
+                                     #consumer{key = ConsumerKey,
+                                               last_msg_id = LastMsgId,
+                                               ack = Ack},
+                                     CDels0),
             {ok, Reply, State0#state{leader = Leader,
                                      consumers = SDels}};
         Err ->
@@ -532,10 +526,16 @@ stat(Leader) ->
 stat(Leader, Timeout) ->
     %% short timeout as we don't want to spend too long if it is going to
     %% fail anyway
-    case ra:local_query(Leader, fun rabbit_fifo:query_stat/1, Timeout) of
-      {ok, {_, {R, C}}, _} -> {ok, R, C};
-      {error, _} = Error   -> Error;
-      {timeout, _} = Error -> Error
+    %% TODO: the overview is too large to be super efficient
+    %% but we use it for backwards compatibilty
+    case ra:member_overview(Leader, Timeout) of
+      {ok, #{machine := #{num_ready_messages := R,
+                          num_checked_out := C}}, _} ->
+            {ok, R, C};
+      {error, _} = Error ->
+            Error;
+      {timeout, _} = Error ->
+            Error
     end.
 
 update_machine_state(Server, Conf) ->
@@ -723,6 +723,9 @@ handle_ra_event(QName, Leader, close_cached_segments,
                      State#state{cached_segments = {Ref, Last, Cache}}
              end
      end, []};
+handle_ra_event(_QName, _Leader, {machine,
+                                  {released, _, _, _, _} = Action}, State) ->
+            {ok, State, [Action]};
 handle_ra_event(_QName, _Leader, {machine, eol}, State) ->
     {eol, [{unblock, cluster_name(State)}]};
 handle_ra_event(_QName, _Leader, {machine, Action}, State) ->
@@ -976,13 +979,14 @@ send_command(Server, Correlation, Command, Priority,
              #state{pending = Pending,
                     next_seq = Seq,
                     cfg = #cfg{soft_limit = SftLmt}} = State) ->
-    ok = case rabbit_fifo:is_return(Command) of
-             true ->
-                 %% returns are sent to the aux machine for pre-evaluation
-                 ra:cast_aux_command(Server, {Command, Seq, self()});
-             _ ->
-                 ra:pipeline_command(Server, Command, Seq, Priority)
-         end,
+    % ok = case rabbit_fifo:is_return(Command) of
+    %          true ->
+    %              %% returns are sent to the aux machine for pre-evaluation
+    %              ra:cast_aux_command(Server, {Command, Seq, self()});
+    %          _ ->
+    %              ra:pipeline_command(Server, Command, Seq, Priority)
+    %      end,
+    ok = ra:pipeline_command(Server, Command, Seq, Priority),
     State#state{pending = Pending#{Seq => {Correlation, Command}},
                 next_seq = Seq + 1,
                 slow = map_size(Pending) >= SftLmt}.
