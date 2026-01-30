@@ -65,7 +65,7 @@ delete_member(VHost, Name, Node) ->
     with_ra_queue(VHost, Name, Fun).
 
 is_queue_member(Q, Member) ->
-    lists:member(Member, amqqueue:get_nodes(Q)).
+    lists:member(Member, rabbit_queue_type:get_nodes(Q)).
 
 with_ra_queue(VHost, Name, Fun) ->
     QName = rabbit_misc:queue_resource(VHost, Name),
@@ -86,7 +86,7 @@ with_ra_queue(VHost, Name, Fun) ->
 -spec add_members(binary(), binary(), node(), all | even, ra_membership()) ->
     [{rabbit_amqqueue:name(), {ok, pos_integer()} | {error, pos_integer(), term()}}].
 add_members(VHostSpec, QueueSpec, Node, Strategy, Membership) ->
-    FilterFun = fun(Q) -> not lists:member(Node, amqqueue:get_nodes(Q)) end,
+    FilterFun = fun(Q) -> not lists:member(Node, rabbit_queue_type:get_nodes(Q)) end,
     Fun = fun(Mod, Q, Size) ->
                   case Mod:add_member(Q, Node, Membership, ?RA_MEMBERS_TIMEOUT) of
                       ok ->
@@ -101,7 +101,7 @@ add_members(VHostSpec, QueueSpec, Node, Strategy, Membership) ->
 -spec delete_members(binary(), binary(), node(), all | even) ->
     [{rabbit_amqqueue:name(), {ok, pos_integer()} | {error, pos_integer(), term()}}].
 delete_members(VHostSpec, QueueSpec, Node, Strategy) ->
-    FilterFun = fun(Q) -> lists:member(Node, amqqueue:get_nodes(Q)) end,
+    FilterFun = fun(Q) -> lists:member(Node, rabbit_queue_type:get_nodes(Q)) end,
     Fun = fun(Mod, Q, Size) ->
                   case Mod:delete_member(Q, Node) of
                       ok ->
@@ -118,7 +118,7 @@ modify_members_matching(VHostSpec, QueueSpec, Node, Strategy, FilterFun, Operati
             [begin
                  Mod = amqqueue:get_type(Q),
                  QName = amqqueue:get_name(Q),
-                 QNodes = amqqueue:get_nodes(Q),
+                 QNodes = rabbit_queue_type:get_nodes(Q),
                  Size = length(QNodes),
                  {ok, RaName} = rabbit_queue_type_util:qname_to_internal_name(QName),
                  Res = case all_members_stable(RaName, QNodes) of
@@ -131,7 +131,7 @@ modify_members_matching(VHostSpec, QueueSpec, Node, Strategy, FilterFun, Operati
              end
              || Q <- rabbit_amqqueue:list(),
                 FilterFun(Q),
-                matches_strategy(Strategy, amqqueue:get_nodes(Q)),
+                matches_strategy(Strategy, rabbit_queue_type:get_nodes(Q)),
                 is_ra_based(amqqueue:get_type(Q)),
                 is_match(amqqueue:get_vhost(Q), VHostSpec),
                 is_match(get_resource_name(amqqueue:get_name(Q)), QueueSpec)];
