@@ -34,8 +34,6 @@
                             await_no_shovel/2
                            ]).
 
--define(PARAM, <<"test">>).
-
 all() ->
     [
      {group, amqp091},
@@ -51,15 +49,15 @@ all() ->
 
 groups() ->
     [
-     {amqp091, [], tests()},
-     {amqp10, [], tests()},
-     {local, [], tests()},
-     {amqp091_to_amqp10, [], tests()},
-     {amqp091_to_local, [], tests()},
-     {amqp10_to_amqp091, [], tests()},
-     {amqp10_to_local, [], tests()},
-     {local_to_amqp091, [], tests()},
-     {local_to_amqp10, [], tests()}
+     {amqp091, [parallel], tests()},
+     {amqp10, [parallel], tests()},
+     {local, [parallel], tests()},
+     {amqp091_to_amqp10, [parallel], tests()},
+     {amqp091_to_local, [parallel], tests()},
+     {amqp10_to_amqp091, [parallel], tests()},
+     {amqp10_to_local, [parallel], tests()},
+     {local_to_amqp091, [parallel], tests()},
+     {local_to_amqp10, [parallel], tests()}
     ].
 
 tests() ->
@@ -229,6 +227,8 @@ init_per_testcase(Testcase, Config0) ->
     SrcQ = list_to_binary(atom_to_list(Testcase) ++ "_src"),
     DestQ = list_to_binary(atom_to_list(Testcase) ++ "_dest"),
     VHost = list_to_binary(atom_to_list(Testcase) ++ "_vhost"),
+    Group = proplists:get_value(name, ?config(tc_group_properties, Config0)),
+    Param = list_to_binary(atom_to_list(Group) ++ "_" ++ atom_to_list(Testcase)),
     ShovelArgs = [{<<"src-protocol">>, ?config(src_protocol, Config0)},
                   {<<"dest-protocol">>, ?config(dest_protocol, Config0)},
                   {?config(src_address, Config0), SrcQ},
@@ -236,12 +236,15 @@ init_per_testcase(Testcase, Config0) ->
     Config = rabbit_ct_helpers:set_config(
                Config0,
                [{srcq, SrcQ}, {destq, DestQ}, {shovel_args, ShovelArgs},
-                {alt_vhost, VHost}]),
+                {alt_vhost, VHost}, {param, Param}]),
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
 end_per_testcase(Testcase, Config) ->
-    shovel_test_utils:clear_param(Config, ?PARAM),
-    rabbit_ct_broker_helpers:rpc(Config, 0, shovel_test_utils, delete_all_queues, []),
+    shovel_test_utils:clear_param(Config, ?config(param, Config)),
+    Src = ?config(srcq, Config),
+    Dest = ?config(destq, Config),
+    Queues = [rabbit_misc:r(<<"/">>, queue, Src), rabbit_misc:r(<<"/">>, queue, Dest)],
+    rabbit_ct_broker_helpers:rpc(Config, 0, shovel_test_utils, delete_queues, [Queues]),
     _ = rabbit_ct_broker_helpers:delete_vhost(Config, ?config(alt_vhost, Config)),
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
@@ -251,12 +254,13 @@ end_per_testcase(Testcase, Config) ->
 simple(Config) ->
     Src = ?config(srcq, Config),
     Dest = ?config(destq, Config),
+    Param = ?config(param, Config),
     with_amqp10_session(
       Config,
       fun (Sess) ->
-              set_param(Config, ?PARAM, ?config(shovel_args, Config)),
+              set_param(Config, Param, ?config(shovel_args, Config)),
               amqp10_publish_expect(Sess, Src, Dest, <<"hello">>, 1),
-              Status = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_shovel_status, lookup, [{<<"/">>, ?PARAM}]),
+              Status = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_shovel_status, lookup, [{<<"/">>, Param}]),
               ?assertMatch([_|_], Status),
               ?assertMatch(#{metrics := #{forwarded := 1}}, maps:from_list(Status))
       end).
@@ -288,17 +292,17 @@ simple_stream_on_publish(Config) ->
 simple_stream(Config, AckMode, NMsgs) ->
     Src = ?config(srcq, Config),
     Dest = ?config(destq, Config),
+    Param = ?config(param, Config),
     with_amqp10_session(Config,
       fun (Sess) ->
               amqp10_declare_queue(Sess, Src, #{<<"x-queue-type">> => {utf8, <<"stream">>}}),
               amqp10_declare_queue(Sess, Dest, #{<<"x-queue-type">> => {utf8, <<"stream">>}}),
-              set_param(Config, ?PARAM,
+              set_param(Config, Param,
                         ?config(shovel_args, Config) ++ [{<<"ack-mode">>, AckMode}]),
               Receiver = amqp10_subscribe(Sess, Dest),
               amqp10_publish(Sess, Src, <<"tag1">>, NMsgs),
-              ?awaitMatch([{_Name, dynamic, {running, _}, #{forwarded := NMsgs}, _}],
-                          rabbit_ct_broker_helpers:rpc(Config, 0,
-                                                       rabbit_shovel_status, status, []),
+              ?awaitMatch({_Name, dynamic, {running, _}, #{forwarded := NMsgs}, _},
+                          shovel_status(Config, {<<"/">>, Param}),
                           30000),
               _ = amqp10_expect(Receiver, NMsgs, []),
               amqp10_client:detach_link(Receiver)
@@ -338,23 +342,23 @@ simple_queue_type_ack_mode(Config, Type, AckMode, NMsgs) ->
               amqp10_declare_queue(Sess, Dest, #{<<"x-queue-type">> => {utf8, Type}}),
               ExtraArgs = [{<<"ack-mode">>, AckMode}],
               ShovelArgs = ?config(shovel_args, Config) ++ ExtraArgs,
-              set_param(Config, ?PARAM, ShovelArgs),
+              set_param(Config, ?config(param, Config), ShovelArgs),
               amqp10_publish_expect(Sess, Src, Dest, <<"hello">>, NMsgs)
       end).
 
 delete_after_never(Config) ->
     Src = ?config(srcq, Config),
     Dest = ?config(destq, Config),
+    Param = ?config(param, Config),
     with_amqp10_session(
       Config,
       fun (Sess) ->
-              set_param(Config, ?PARAM,
+              set_param(Config, Param,
                         ?config(shovel_args, Config) ++
                             [{<<"src-delete-after">>, <<"never">>}]),
               amqp10_publish_expect(Sess, Src, Dest, <<"carrots">>, 5000),
-              ?awaitMatch([{_Name, dynamic, {running, _}, #{forwarded := 5000}, _}],
-                          rabbit_ct_broker_helpers:rpc(Config, 0,
-                                                       rabbit_shovel_status, status, []),
+              ?awaitMatch({_Name, dynamic, {running, _}, #{forwarded := 5000}, _},
+                          shovel_status(Config, {<<"/">>, Param}),
                           30000)
       end).
 
@@ -390,7 +394,7 @@ autodelete_no_ack(Config) ->
     ?assertMatch({error_string, _},
                  rabbit_ct_broker_helpers:rpc(
                    Config, 0, rabbit_runtime_parameters, set,
-                   [<<"/">>, <<"shovel">>, ?PARAM,
+                   [<<"/">>, <<"shovel">>, ?config(param, Config),
                     [{<<"src-uri">>,  Uri},
                      {<<"dest-uri">>, [Uri]}] ++ ShovelArgs,
                     none])).
@@ -398,6 +402,7 @@ autodelete_no_ack(Config) ->
 autodelete(Config, Type, AckMode, After, ExpSrc, ExpDest) ->
     Src = ?config(srcq, Config),
     Dest = ?config(destq, Config),
+    Param = ?config(param, Config),
     with_amqp10_session(
       Config,
       fun (Sess) ->
@@ -407,8 +412,8 @@ autodelete(Config, Type, AckMode, After, ExpSrc, ExpDest) ->
               ExtraArgs = [{<<"ack-mode">>, AckMode},
                            {<<"src-delete-after">>, After}],
               ShovelArgs = ?config(shovel_args, Config) ++ ExtraArgs,
-              set_param_nowait(Config, ?PARAM, ShovelArgs),
-              await_autodelete(Config, ?PARAM),
+              set_param_nowait(Config, Param, ShovelArgs),
+              await_autodelete(Config, Param),
               amqp10_expect_count(Sess, Src, ExpSrc),
               amqp10_expect_count(Sess, Dest, ExpDest)
       end).
@@ -430,6 +435,7 @@ autodelete_quorum_on_publish_with_rejections(Config) ->
 autodelete_with_rejections(Config, Type, AckMode, ExpSrc, ExpDest) ->
     Src = ?config(srcq, Config),
     Dest = ?config(destq, Config),
+    Param = ?config(param, Config),
     with_amqp10_session(
       Config,
       fun (Sess) ->
@@ -442,16 +448,10 @@ autodelete_with_rejections(Config, Type, AckMode, ExpSrc, ExpDest) ->
               ExtraArgs = [{<<"ack-mode">>, AckMode},
                            {<<"src-delete-after">>, 10}],
               ShovelArgs = ?config(shovel_args, Config) ++ ExtraArgs,
-              set_param_nowait(Config, ?PARAM, ShovelArgs),
-              await_autodelete(Config, ?PARAM),
-              Expected = lists:sort([[Src, integer_to_binary(ExpSrc)],
-                                     [Dest, integer_to_binary(ExpDest)]]),
-              ?awaitMatch(
-                 Expected,
-                 lists:sort(rabbit_ct_broker_helpers:rabbitmqctl_list(
-                              Config, 0,
-                              ["list_queues", "name", "messages", "--no-table-headers"])),
-                 45_000),
+              set_param_nowait(Config, Param, ShovelArgs),
+              await_autodelete(Config, Param),
+              ?awaitMatch(ExpSrc, list_queue_messages(Config, Src), 45_000),
+              ?awaitMatch(ExpDest, list_queue_messages(Config, Dest), 45_000),
               amqp10_expect_count(Sess, Src, ExpSrc),
               amqp10_expect_count(Sess, Dest, ExpDest)
       end).
@@ -459,6 +459,7 @@ autodelete_with_rejections(Config, Type, AckMode, ExpSrc, ExpDest) ->
 autodelete_with_quorum_rejections(Config, AckMode, ExpSrcFun) ->
     Src = ?config(srcq, Config),
     Dest = ?config(destq, Config),
+    Param = ?config(param, Config),
     Type = <<"quorum">>,
     with_amqp10_session(
       Config,
@@ -472,8 +473,8 @@ autodelete_with_quorum_rejections(Config, AckMode, ExpSrcFun) ->
               ExtraArgs = [{<<"ack-mode">>, AckMode},
                            {<<"src-delete-after">>, 50}],
               ShovelArgs = ?config(shovel_args, Config) ++ ExtraArgs,
-              set_param_nowait(Config, ?PARAM, ShovelArgs),
-              await_autodelete(Config, ?PARAM),
+              set_param_nowait(Config, Param, ShovelArgs),
+              await_autodelete(Config, Param),
               eventually(
                 ?_assert(
                    list_queue_messages(Config, Dest) >= 5),
@@ -485,24 +486,26 @@ autodelete_with_quorum_rejections(Config, AckMode, ExpSrcFun) ->
 
 no_vhost_access(Config) ->
     AltVHost = ?config(alt_vhost, Config),
+    Param = ?config(param, Config),
     ok = rabbit_ct_broker_helpers:add_vhost(Config, AltVHost),
     Uri = make_uri(Config, 0, AltVHost),
     ExtraArgs = [{<<"src-uri">>,  Uri}, {<<"dest-uri">>, [Uri]}],
     ShovelArgs = ?config(shovel_args, Config) ++ ExtraArgs,
     ok = rabbit_ct_broker_helpers:rpc(
            Config, 0, rabbit_runtime_parameters, set,
-           [<<"/">>, <<"shovel">>, ?PARAM, ShovelArgs, none]),
-    await_no_shovel(Config, ?PARAM).
+           [<<"/">>, <<"shovel">>, Param, ShovelArgs, none]),
+    await_no_shovel(Config, Param).
 
 no_user_access(Config) ->
+    Param = ?config(param, Config),
     Uri = make_uri(
             Config, 0, <<"guest">>, <<"forgotmypassword">>, <<"%2F">>),
     ShovelArgs = [{<<"src-uri">>,  Uri},
                   {<<"dest-uri">>, [Uri]}] ++ ?config(shovel_args, Config),
     ok = rabbit_ct_broker_helpers:rpc(
            Config, 0, rabbit_runtime_parameters, set,
-           [<<"/">>, <<"shovel">>, ?PARAM, ShovelArgs, none]),
-    await_no_shovel(Config, ?PARAM).
+           [<<"/">>, <<"shovel">>, Param, ShovelArgs, none]),
+    await_no_shovel(Config, Param).
 
 application_properties(Config) ->
     Src = ?config(srcq, Config),
@@ -510,7 +513,7 @@ application_properties(Config) ->
     with_amqp10_session(
       Config,
       fun (Sess) ->
-              set_param(Config, ?PARAM, ?config(shovel_args, Config)),
+              set_param(Config, ?config(param, Config), ?config(shovel_args, Config)),
               Tag = <<"tag1">>,
               Msg = amqp10_msg:set_application_properties(
                       #{<<"key">> => <<"value">>},
@@ -527,26 +530,19 @@ application_properties(Config) ->
 delete_src_queue(Config) ->
     Src = ?config(srcq, Config),
     Dest = ?config(destq, Config),
+    Param = ?config(param, Config),
     with_amqp10_session(Config,
       fun (Sess) ->
-              set_param(Config, ?PARAM, ?config(shovel_args, Config)),
+              set_param(Config, Param, ?config(shovel_args, Config)),
               _ = amqp10_publish_expect(Sess, Src, Dest, <<"hello">>, 1),
-              ?awaitMatch([{_Name, dynamic, {running, _}, #{forwarded := 1}, _}],
-                          rabbit_ct_broker_helpers:rpc(Config, 0,
-                                                       rabbit_shovel_status, status, []),
+              ?awaitMatch({_Name, dynamic, {running, _}, #{forwarded := 1}, _},
+                          shovel_status(Config, {<<"/">>, Param}),
                           30000),
               rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_queue,
                                            [Src, <<"/">>]),
-              ?awaitMatch(
-                 [[Dest, _],
-                  [Src, _]],
-                 lists:sort(rabbit_ct_broker_helpers:rabbitmqctl_list(
-                              Config, 0,
-                              ["list_queues", "name", "messages", "--no-table-headers"])),
-                 45_000),
-              ?awaitMatch([{_Name, dynamic, {running, _}, #{forwarded := 0}, _}],
-                          rabbit_ct_broker_helpers:rpc(Config, 0,
-                                                       rabbit_shovel_status, status, []),
+              ?awaitMatch(0, list_queue_messages(Config, Src), 45_000),
+              ?awaitMatch({_Name, dynamic, {running, _}, #{forwarded := 0}, _},
+                          shovel_status(Config, {<<"/">>, Param}),
                           30000),
               _ = amqp10_publish_expect(Sess, Src, Dest, <<"hello">>, 1)
       end).
@@ -556,11 +552,11 @@ shovel_status(Config) ->
     Dest = ?config(destq, Config),
     SrcProtocol = ?config(src_protocol, Config),
     DestProtocol = ?config(dest_protocol, Config),
-    set_param(Config, ?PARAM, ?config(shovel_args, Config)),
-    Status = rabbit_ct_broker_helpers:rpc(Config, 0,
-                                          rabbit_shovel_status, status, []),
-    ?assertMatch([{_, dynamic, {running, _}, _, _}], Status),
-    [{_, dynamic, {running, Info}, _, _}] = Status,
+    Param = ?config(param, Config),
+    set_param(Config, Param, ?config(shovel_args, Config)),
+    Status = shovel_status(Config, {<<"/">>, Param}),
+    ?assertMatch({_, dynamic, {running, _}, _, _}, Status),
+    {_, dynamic, {running, Info}, _, _} = Status,
     ?assertMatch(SrcProtocol, proplists:get_value(src_protocol, Info)),
     ?assertMatch(DestProtocol, proplists:get_value(dest_protocol, Info)),
     SrcAddress = binary_to_atom(binary:replace(?config(src_address, Config), <<"-">>, <<"_">>)),
@@ -572,19 +568,20 @@ shovel_status(Config) ->
 change_definition(Config) ->
     Src = ?config(srcq, Config),
     Dest = ?config(destq, Config),
+    Param = ?config(param, Config),
     Dest2 = <<Dest/binary,<<"_2">>/binary>>,
     DestAddress = ?config(dest_address, Config),
     with_amqp10_session(Config,
       fun (Sess) ->
               ShovelArgs = ?config(shovel_args, Config),
-              set_param(Config, ?PARAM, ShovelArgs),
+              set_param(Config, Param, ShovelArgs),
               amqp10_publish_expect(Sess, Src, Dest, <<"hello">>, 1),
               ShovelArgs0 = proplists:delete(DestAddress, ShovelArgs),
               ShovelArgs2 = [{DestAddress, Dest2} | ShovelArgs0],
-              set_param(Config, ?PARAM, ShovelArgs2),
+              set_param(Config, Param, ShovelArgs2),
               amqp10_publish_expect(Sess, Src, Dest2, <<"hello">>, 1),
               amqp10_expect_empty(Sess, Dest),
-              clear_param(Config, ?PARAM),
+              clear_param(Config, Param),
               amqp10_publish_expect(Sess, Src, Src, <<"hello">>, 1),
               amqp10_expect_empty(Sess, Dest),
               amqp10_expect_empty(Sess, Dest2)
@@ -598,7 +595,7 @@ disk_alarm(Config) ->
               ShovelArgs = ?config(shovel_args, Config),
               amqp10_publish(Sess, Src, <<"hello">>, 10),
               rabbit_ct_broker_helpers:set_alarm(Config, 0, disk),
-              set_param(Config, ?PARAM, ShovelArgs),
+              set_param(Config, ?config(param, Config), ShovelArgs),
               amqp10_expect_empty(Sess, Dest),
               rabbit_ct_broker_helpers:clear_alarm(Config, 0, disk),
               amqp10_expect_count(Sess, Dest, 10)
@@ -632,3 +629,9 @@ delete_queue(Name, VHost) ->
         _ ->
             ok
     end.
+
+shovel_status(Config, Name) ->
+    lists:keyfind(
+      Name, 1,
+      rabbit_ct_broker_helpers:rpc(Config, 0,
+                                   rabbit_shovel_status, status, [])).
