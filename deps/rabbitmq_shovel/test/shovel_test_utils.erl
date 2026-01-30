@@ -22,7 +22,7 @@
          clear_param/2, clear_param/3, make_uri/2,
          make_uri/3, make_uri/5,
          await_no_shovel/2,
-         delete_all_queues/0,
+         delete_all_queues/0, delete_queues/1,
          with_amqp10_session/2, with_amqp10_session/3,
          amqp10_publish/3, amqp10_publish/4,
          amqp10_expect_empty/2, amqp10_expect_one/2,
@@ -209,6 +209,17 @@ delete_all_queues() ->
               {ok, _} = rabbit_amqqueue:delete(Q, false, false, <<"dummy">>)
       end, Queues).
 
+delete_queues(List) ->
+    lists:foreach(
+      fun(QName) ->
+              case rabbit_amqqueue:lookup(QName) of
+                  {ok, Q} ->
+                      {ok, _} = rabbit_amqqueue:delete(Q, false, false, <<"dummy">>);
+                  _ ->
+                      ok
+              end
+      end, List).
+
 with_amqp10_session(Config, Fun) ->
     with_amqp10_session(Config, <<"/">>, Fun).
 
@@ -233,11 +244,16 @@ amqp10_publish(Sender, Tag, Payload) when is_binary(Payload) ->
     amqp10_publish_msg(Sender, Tag, Msg).
 
 amqp10_publish_msg(Sender, Tag, Msg) ->
-    ok = amqp10_client:send_msg(Sender, Msg),
-    receive
-        {amqp10_disposition, {accepted, Tag}} -> ok
-    after 15000 ->
-              exit(publish_disposition_not_received)
+    case amqp10_client:send_msg(Sender, Msg) of
+        ok ->
+            receive
+                {amqp10_disposition, {accepted, Tag}} -> ok
+            after 15000 ->
+                    exit(publish_disposition_not_received)
+            end;
+        {error, _} ->
+            %% retry
+            amqp10_publish_msg(Sender, Tag, Msg)
     end.
 
 amqp10_expect_empty(Session, Dest) ->
@@ -312,8 +328,16 @@ amqp10_expect(Receiver) ->
 
 amqp10_declare_queue(Sess, QName, Args) ->
     {ok, LinkPair} = rabbitmq_amqp_client:attach_management_link_pair_sync(Sess, <<"mgmt link pair">>),
-    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, #{arguments => Args}),
+    retry_declare(LinkPair, QName, Args),
     ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair).
+
+retry_declare(LinkPair, QName, Args) ->
+    case rabbitmq_amqp_client:declare_queue(LinkPair, QName, #{arguments => Args}) of
+        {ok, _} ->
+            ok;
+        _ ->
+            retry_declare(LinkPair, QName, Args)
+    end.
 
 amqp10_subscribe(Session, Dest) ->
     LinkName = <<"dynamic-receiver-", Dest/binary>>,
