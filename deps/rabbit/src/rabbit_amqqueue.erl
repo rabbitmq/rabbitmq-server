@@ -1577,8 +1577,20 @@ consumers(Q) when ?amqqueue_is_classic(Q) ->
 consumers(Q) when ?amqqueue_is_quorum(Q) ->
     QPid = amqqueue:get_pid(Q),
     case ra:local_query(QPid, fun rabbit_fifo:query_consumers/1) of
-        {ok, {_, Result}, _} -> maps:values(Result);
-        _                    -> []
+        {ok, {_, Result}, _} ->
+            maps:values(Result);
+        {error, _} ->
+            %% try a prior module in case we're in mixed versions
+            %% TODO: hack, replace this with something that can actually
+            %% resolve the correct module to use
+            case ra:local_query(QPid, fun rabbit_fifo_v7:query_consumers/1) of
+                {ok, {_, Result}, _} ->
+                    maps:values(Result);
+                _  ->
+                    []
+            end;
+        _ ->
+            []
     end;
 consumers(Q) when ?amqqueue_is_stream(Q) ->
     %% TODO how??? they only exist on the channel
