@@ -760,8 +760,8 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
         {"RABBITMQ_LOG_BASE", filename:join(NodeDir, "log")},
         {"RABBITMQ_MNESIA_BASE", filename:join(NodeDir, "mnesia")},
         {"RABBITMQ_MNESIA_DIR", filename:join(filename:join(NodeDir, "mnesia"), atom_to_list(InitialNodename))},
-        {"RABBITMQ_QUORUM_DIR", filename:join(NodeDir, "mnesia/quorum")},
-        {"RABBITMQ_STREAM_DIR", filename:join(NodeDir, "mnesia/stream")},
+        {"RABBITMQ_QUORUM_DIR", filename:join([NodeDir, "mnesia", "quorum"])},
+        {"RABBITMQ_STREAM_DIR", filename:join([NodeDir, "mnesia", "stream"])},
         {"RABBITMQ_FEATURE_FLAGS_FILE", filename:join(NodeDir, "feature_flags")},
         {"RABBITMQ_PLUGINS_EXPAND_DIR", filename:join(NodeDir, "plugins")},
         {"RABBITMQ_ENABLED_PLUGINS_FILE", filename:join(NodeDir, "enabled_plugins")},
@@ -814,52 +814,48 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
             PeerEnv3
     end,
     %% Start the peer node.
-    case peer:start(#{
-            name => Nodename1,
-            longnames => false,
-            host => HostName1,
-            connection => standard_io,
-            exec => os:find_executable("erl"),
-            args => PeerArgs,
-            env => PeerEnv}) of
-        {ok, PeerPid, Nodename} ->
-            %% Redirect the PeerPid's standard output to a file.
-            %% The standard output of the peer process is a redirect
-            %% from the peer node. We tie the file's process to PeerPid
-            %% so that it stays open until PeerPid exits.
-            %%
-            %% Both stdio and stderr are redirected to this file,
-            %% unlike when using make run-broker and friends.
-            _ = sys:replace_state(PeerPid, fun(St) ->
-                StdoutPath = filename:join(NodeDir, "log/startup_log"),
-                ok = filelib:ensure_dir(StdoutPath),
-                {ok, StdoutFd} = file:open(StdoutPath, [write, {encoding, utf8}]),
-                group_leader(StdoutFd, self()),
-                St
-            end),
-            %% Make sure the node runs in the right directory.
-            SetCwdPath = case UseSecondaryDist of
-                true -> ?config(secondary_dist, Config);
-                false -> SrcDir
-            end,
-            ok = peer:call(PeerPid, file, set_cwd, [SetCwdPath]),
-            %% Boot RabbitMQ.
-            try peer:call(PeerPid, rabbit, boot, [], 60_000) of
-                ok ->
-                    store_peer_pid(Nodename, PeerPid),
-                    NodeConfig1 = rabbit_ct_helpers:set_config(
-                                    NodeConfig,
-                                    [
-                                     {use_secondary_umbrella, UseSecondaryUmbrella orelse UseSecondaryDist}
-                                    ]),
-                    query_node(Config, NodeConfig1)
-            catch Class:Error ->
-                %% @todo Get rid of {skip,_} returns.
-                peer:stop(PeerPid),
-                {skip, {Class, Error}}
-            end;
-        Errrrr ->
-            error({error, Errrrr})
+    {ok, PeerPid, Nodename} = peer:start(#{
+        name => Nodename1,
+        longnames => false,
+        host => HostName1,
+        connection => standard_io,
+        exec => os:find_executable("erl"),
+        args => PeerArgs,
+        env => PeerEnv}),
+    %% Redirect the PeerPid's standard output to a file.
+    %% The standard output of the peer process is a redirect
+    %% from the peer node. We tie the file's process to PeerPid
+    %% so that it stays open until PeerPid exits.
+    %%
+    %% Both stdio and stderr are redirected to this file,
+    %% unlike when using make run-broker and friends.
+    _ = sys:replace_state(PeerPid, fun(St) ->
+        StdoutPath = filename:join([NodeDir, "log", "startup_log"]),
+        ok = filelib:ensure_dir(StdoutPath),
+        {ok, StdoutFd} = file:open(StdoutPath, [write, {encoding, utf8}]),
+        group_leader(StdoutFd, self()),
+        St
+    end),
+    %% Make sure the node runs in the right directory.
+    SetCwdPath = case UseSecondaryDist of
+        true -> ?config(secondary_dist, Config);
+        false -> SrcDir
+    end,
+    ok = peer:call(PeerPid, file, set_cwd, [SetCwdPath]),
+    %% Boot RabbitMQ.
+    try peer:call(PeerPid, rabbit, boot, [], 60_000) of
+        ok ->
+            store_peer_pid(Nodename, PeerPid),
+            NodeConfig1 = rabbit_ct_helpers:set_config(
+                            NodeConfig,
+                            [
+                             {use_secondary_umbrella, UseSecondaryUmbrella orelse UseSecondaryDist}
+                            ]),
+            query_node(Config, NodeConfig1)
+    catch Class:Error ->
+        %% @todo Get rid of {skip,_} returns.
+        peer:stop(PeerPid),
+        {skip, {Class, Error}}
     end.
 
 query_node(Config, NodeConfig) ->
