@@ -99,4 +99,4 @@ assert_args_equivalence(X, Args) ->
     rabbit_exchange:assert_args_equivalence(X, Args).
 
 hash_mod(RKey, N) ->
-    murmerl3:hash_32(RKey, ?SEED) rem N.
+    rabbit_murmur3:hash_32(RKey, ?SEED) rem N.
