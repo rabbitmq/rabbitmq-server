@@ -27,6 +27,7 @@
 
 %% Exported to be used by various rabbit_db_* modules
 -export([
+         delete_for_destination/1,
          delete_for_destination_in_mnesia/2,
          delete_for_destination_in_khepri/2,
          delete_all_for_exchange_in_mnesia/3,
@@ -857,6 +858,25 @@ delete_for_source_in_khepri(#resource{virtual_host = VHost, name = SrcName}) ->
                       Acc
               end
       end, [], Bindings).
+
+
+delete_for_destination(Dst) ->
+    rabbit_khepri:handle_fallback(
+      #{mnesia => fun() ->
+            rabbit_mnesia:execute_mnesia_transaction(
+                fun () ->
+                    delete_for_destination_in_mnesia(Dst, false)
+                end
+            )
+            end,
+        khepri => fun () ->
+            rabbit_khepri:transaction(
+                fun () ->
+                    delete_for_destination_in_khepri(Dst, false)
+                end
+            )
+        end
+       }).
 
 %% -------------------------------------------------------------------
 %% delete_for_destination_in_mnesia().
