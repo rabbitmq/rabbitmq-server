@@ -28,12 +28,12 @@
     <properties>
         <stream-client.version>[1.2.0-SNAPSHOT,)</stream-client.version>
         <junit.jupiter.version>5.14.2</junit.jupiter.version>
-        <assertj.version>3.27.6</assertj.version>
+        <assertj.version>3.27.7</assertj.version>
         <slf4j.version>2.0.17</slf4j.version>
         <logback.version>1.5.18</logback.version>
         <maven.compiler.plugin.version>3.14.1</maven.compiler.plugin.version>
         <maven-surefire-plugin.version>3.5.4</maven-surefire-plugin.version>
-        <spotless.version>3.2.0</spotless.version>
+        <spotless.version>3.2.1</spotless.version>
         <google-java-format.version>1.33.0</google-java-format.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
