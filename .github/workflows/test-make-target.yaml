@@ -112,8 +112,10 @@ jobs:
           ldap-utils \
           slapd
 
-        sudo systemctl is-active --quiet apparmor.service && sudo systemctl stop apparmor.service
-        sudo systemctl disable apparmor.service
+        sudo systemctl stop slapd
+
+        sudo aa-teardown || true
+        sudo systemctl disable --now apparmor.service
 
     - name: RUN LOW VERSION ERLANG NODE IN DOCKER
       if: inputs.make_target == 'ct-rabbit_fifo_prop'

@@ -21,17 +21,7 @@ all() ->
     ].
 
 groups() ->
-    %% Don't run testcases in parallel when Bazel is used because they fail
-    %% with various system errors in CI, like the inability to spawn system
-    %% processes or to open a TCP port.
-    UsesBazel = case os:getenv("RABBITMQ_RUN") of
-                    false -> false;
-                    _     -> true
-                end,
-    GroupOptions = case UsesBazel of
-                       false -> [parallel];
-                       true  -> []
-                   end,
+    GroupOptions = [parallel],
     AllTests = [publish,
                 consume,
                 consume_first_empty,
