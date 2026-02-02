@@ -134,7 +134,8 @@
         MaxVersion :: command_version()}]} |
      {stream_stats, Stream :: binary()} |
      {create_super_stream, stream_name(), Partitions :: [binary()], BindingKeys :: [binary()], Args :: #{binary() => binary()}} |
-     {delete_super_stream, stream_name()}} |
+     {delete_super_stream, stream_name()} |
+     {resolve_offset_spec, stream_name(), offset_spec(), Properties :: #{binary() => binary()}}} |
     {response, correlation_id(),
      {declare_publisher |
       delete_publisher |
@@ -167,7 +168,8 @@
      {exchange_command_versions, response_code(),
       [{Command :: atom(), MinVersion :: command_version(),
         MaxVersion :: command_version()}]} |
-     {stream_stats, response_code(), Stats :: #{binary() => integer()}}} |
+     {stream_stats, response_code(), Stats :: #{binary() => integer()}} |
+     {resolve_offset_spec, response_code(), osiris:offset()}} |
     {unknown, binary()}.
 
 -spec init(term()) -> state().
@@ -423,6 +425,8 @@ response_body({query_publisher_sequence = Tag, Code, Sequence}) ->
     {command_id(Tag), <<Code:16, Sequence:64>>};
 response_body({query_offset = Tag, Code, Offset}) ->
     {command_id(Tag), <<Code:16, Offset:64>>};
+response_body({resolve_offset_spec = Tag, Code, Offset}) ->
+    {command_id(Tag), <<Code:16, Offset:64>>};
 response_body({metadata = Tag, Endpoints, Metadata}) ->
     NumEps = length(Endpoints),
     {_, EndpointsBin} =
@@ -633,7 +637,30 @@ request_body({create_super_stream = Tag, SuperStream, Partitions, BindingKeys, A
            <<(length(BindingKeys)):32>>, BindingKeysBin,
            <<(map_size(Args)):32>>, ArgsBin]};
 request_body({delete_super_stream = Tag, SuperStream}) ->
-    {Tag, <<?STRING(SuperStream)>>}.
+    {Tag, <<?STRING(SuperStream)>>};
+request_body({resolve_offset_spec = Tag, Stream, OffsetSpec, Properties}) ->
+    OffsetSpecBin =
+        case OffsetSpec of
+            first ->
+                <<?OFFSET_TYPE_FIRST:16>>;
+            last ->
+                <<?OFFSET_TYPE_LAST:16>>;
+            next ->
+                <<?OFFSET_TYPE_NEXT:16>>;
+            Offset when is_integer(Offset) ->
+                <<?OFFSET_TYPE_OFFSET:16, Offset:64/unsigned>>;
+            {timestamp, Timestamp} ->
+                <<?OFFSET_TYPE_TIMESTAMP:16, Timestamp:64/signed>>
+        end,
+    PropertiesBin =
+        case map_size(Properties) of
+            0 ->
+                <<>>;
+            _ ->
+                PropsBin = generate_map(Properties),
+                [<<(map_size(Properties)):32>>, PropsBin]
+        end,
+    {Tag, [<<?STRING(Stream), OffsetSpecBin/binary>> | PropertiesBin]}.
 
 append_data(Prev, Data) when is_binary(Prev) ->
     [Prev, Data];
@@ -772,24 +799,13 @@ parse_request(<<?REQUEST:1,
                     OffsetCreditProperties,
                 {{timestamp, Timestamp}, Crdt, PropertiesBin}
         end,
-    Properties =
-        case PropsBin of
-            <<>> ->
-                #{};
-            <<_Count:32, Bin/binary>> ->
-                parse_map(Bin, #{});
-            _ ->
-                ?LOG_WARNING("Incorrect binary for subscription properties: ~w",
-                               [PropsBin]),
-                #{}
-        end,
     request(CorrelationId,
             {subscribe,
              SubscriptionId,
              Stream,
              OffsetSpec,
              Credit,
-             Properties});
+             parse_properties(PropsBin)});
 parse_request(<<?REQUEST:1,
                 ?COMMAND_QUERY_OFFSET:15,
                 ?VERSION_1:16,
@@ -930,6 +946,29 @@ parse_request(<<?REQUEST:1,
                 CorrelationId:32,
                 ?STRING(SuperStreamSize, SuperStream)>>) ->
     request(CorrelationId, {delete_super_stream, SuperStream});
+parse_request(<<?REQUEST:1,
+                ?COMMAND_RESOLVE_OFFSET_SPEC:15,
+                ?VERSION_1:16,
+                CorrelationId:32,
+                ?STRING(StreamSize, Stream),
+                OffsetType:16/signed,
+                OffsetValuePropsBin/binary>>) ->
+    {OffsetSpec, PropsBin} =
+        case OffsetType of
+            ?OFFSET_TYPE_FIRST ->
+                {first, OffsetValuePropsBin};
+            ?OFFSET_TYPE_LAST ->
+                {last, OffsetValuePropsBin};
+            ?OFFSET_TYPE_NEXT ->
+                {next, OffsetValuePropsBin};
+            ?OFFSET_TYPE_OFFSET ->
+                <<Offset:64/unsigned, Rest/binary>> = OffsetValuePropsBin,
+                {Offset, Rest};
+            ?OFFSET_TYPE_TIMESTAMP ->
+                <<Timestamp:64/signed, Rest/binary>> = OffsetValuePropsBin,
+                {{timestamp, Timestamp}, Rest}
+        end,
+    request(CorrelationId, {resolve_offset_spec, Stream, OffsetSpec, parse_properties(PropsBin)});
 parse_request(Bin) ->
     {unknown, Bin}.
 
@@ -1020,7 +1059,10 @@ parse_response_body(?COMMAND_EXCHANGE_COMMAND_VERSIONS,
 parse_response_body(?COMMAND_STREAM_STATS,
                     <<ResponseCode:16, _Count:32, StatsBin/binary>>) ->
     Info = parse_int_map(StatsBin, #{}),
-    {stream_stats, ResponseCode, Info}.
+    {stream_stats, ResponseCode, Info};
+parse_response_body(?COMMAND_RESOLVE_OFFSET_SPEC,
+                    <<ResponseCode:16, Offset:64>>) ->
+    {resolve_offset_spec, ResponseCode, Offset}.
 
 offset_spec(OffsetType, OffsetValueBin) ->
     case OffsetType of
@@ -1135,6 +1177,13 @@ list_of_longcodes(<<>>) ->
 list_of_longcodes(<<I:64, C:16, Rem/binary>>) ->
     [{I, C} | list_of_longcodes(Rem)].
 
+parse_properties(<<>>) ->
+    #{};
+parse_properties(<<_Count:32, Bin/binary>>) ->
+    parse_map(Bin, #{});
+parse_properties(_) ->
+    #{}.
+
 command_id(declare_publisher) ->
     ?COMMAND_DECLARE_PUBLISHER;
 command_id(publish) ->
@@ -1198,7 +1247,9 @@ command_id(stream_stats) ->
 command_id(create_super_stream) ->
     ?COMMAND_CREATE_SUPER_STREAM;
 command_id(delete_super_stream) ->
-    ?COMMAND_DELETE_SUPER_STREAM.
+    ?COMMAND_DELETE_SUPER_STREAM;
+command_id(resolve_offset_spec) ->
+    ?COMMAND_RESOLVE_OFFSET_SPEC.
 
 parse_command_id(?COMMAND_DECLARE_PUBLISHER) ->
     declare_publisher;
@@ -1259,7 +1310,9 @@ parse_command_id(?COMMAND_STREAM_STATS) ->
 parse_command_id(?COMMAND_CREATE_SUPER_STREAM) ->
     create_super_stream;
 parse_command_id(?COMMAND_DELETE_SUPER_STREAM) ->
-    delete_super_stream.
+    delete_super_stream;
+parse_command_id(?COMMAND_RESOLVE_OFFSET_SPEC) ->
+    resolve_offset_spec.
 
 element_index(Element, List) ->
     element_index(Element, List, 0).

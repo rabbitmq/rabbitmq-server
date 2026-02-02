@@ -76,12 +76,14 @@ groups() ->
        test_stream_test_utils,
        sac_subscription_with_partition_index_conflict_should_return_error,
        test_metadata_with_advertised_hints,
-       test_connection_properties_with_advertised_hints
+       test_connection_properties_with_advertised_hints,
+       test_resolve_offset_spec
       ]},
      %% Run `test_global_counters` on its own so the global metrics are
      %% initialised to 0 for each testcase
      {single_node_1, [], [test_global_counters]},
-     {cluster, [], [test_stream, test_stream_tls, test_metadata, java]}].
+     {cluster, [], [test_stream, test_stream_tls, test_metadata, java,
+                    test_resolve_offset_spec]}].
 
 init_per_suite(Config) ->
     case rabbit_ct_helpers:is_mixed_versions() of
@@ -1236,6 +1238,56 @@ test_connection_properties_with_advertised_hints(Config) ->
     
     ok.
 
+test_resolve_offset_spec(Config) ->
+    Stream = atom_to_binary(?FUNCTION_NAME, utf8),
+    Transport = gen_tcp,
+    Port = get_stream_port(Config),
+    Opts = [{active, false}, {mode, binary}],
+    {ok, S} = Transport:connect("localhost", Port, Opts),
+    C0 = rabbit_stream_core:init(0),
+    C1 = test_peer_properties(Transport, S, C0),
+    C2 = test_authenticate(Transport, S, C1),
+    C3 = test_create_stream(Transport, S, Stream, C2),
+
+    %% Test resolve_offset_spec on empty stream
+    C4 = test_resolve_offset_spec(Transport, S, Stream, first, #{},
+                                  ?RESPONSE_CODE_OK, 0, C3),
+    C5 = test_resolve_offset_spec(Transport, S, Stream, last, #{},
+                                  ?RESPONSE_CODE_OK, 0, C4),
+    C6 = test_resolve_offset_spec(Transport, S, Stream, next, #{},
+                                  ?RESPONSE_CODE_OK, 0, C5),
+
+    %% Publish some messages
+    PublisherId = 1,
+    C7 = test_declare_publisher(Transport, S, PublisherId, Stream, C6),
+    Body = <<"hello">>,
+    C8 = test_publish_confirm(Transport, S, PublisherId, 1, Body, C7),
+    C9 = test_publish_confirm(Transport, S, PublisherId, 2, Body, C8),
+
+    %% Test resolve_offset_spec after publishing
+    C10 = test_resolve_offset_spec(Transport, S, Stream, first, #{},
+                                   ?RESPONSE_CODE_OK, 0, C9),
+    C11 = test_resolve_offset_spec(Transport, S, Stream, last, #{},
+                                   ?RESPONSE_CODE_OK, C10),
+    C12 = test_resolve_offset_spec(Transport, S, Stream, next, #{},
+                                   ?RESPONSE_CODE_OK, 2, C11),
+    C13 = test_resolve_offset_spec(Transport, S, Stream, 0, #{},
+                                   ?RESPONSE_CODE_OK, 0, C12),
+
+    %% Test with timestamp (far future should return next offset)
+    FutureTimestamp = os:system_time(millisecond) + 3600000,
+    C14 = test_resolve_offset_spec(Transport, S, Stream, {timestamp, FutureTimestamp}, #{},
+                                   ?RESPONSE_CODE_OK, 2, C13),
+
+    %% Test on non-existent stream
+    C15 = test_resolve_offset_spec(Transport, S, <<"non_existent_stream">>, first, #{},
+                                   ?RESPONSE_CODE_STREAM_DOES_NOT_EXIST, 0, C14),
+
+    C16 = test_delete_stream(Transport, S, Stream, C15),
+    _C17 = test_close(Transport, S, C16),
+    closed = wait_for_socket_close(Transport, S, 10),
+    ok.
+
 filtered_events(Config, EventType) ->
     Events = rabbit_ct_broker_helpers:rpc(Config, 0,
                                           gen_event,
@@ -1726,6 +1778,24 @@ test_stream_stats(Transport, S, Stream, C0) ->
                      <<"committed_chunk_id">> := 1,
                      <<"last_chunk_id">> := 1,
                      <<"committed_offset">> := 1}}},
+                 Cmd),
+    C.
+
+test_resolve_offset_spec(Transport, S, Stream, OffsetSpec, Properties,
+                         ExpectedResponseCode, C0) ->
+    Frame = request({resolve_offset_spec, Stream, OffsetSpec, Properties}),
+    ok = Transport:send(S, Frame),
+    {Cmd, C} = receive_commands(Transport, S, C0),
+    ?assertMatch({response, 1, {resolve_offset_spec, ExpectedResponseCode, _}},
+                 Cmd),
+    C.
+
+test_resolve_offset_spec(Transport, S, Stream, OffsetSpec, Properties,
+                         ExpectedResponseCode, ExpectedOffset, C0) ->
+    Frame = request({resolve_offset_spec, Stream, OffsetSpec, Properties}),
+    ok = Transport:send(S, Frame),
+    {Cmd, C} = receive_commands(Transport, S, C0),
+    ?assertMatch({response, 1, {resolve_offset_spec, ExpectedResponseCode, ExpectedOffset}},
                  Cmd),
     C.
 
