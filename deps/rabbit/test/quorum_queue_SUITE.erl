@@ -1813,7 +1813,7 @@ dont_leak_file_handles(Config) ->
     ok.
 
 grow_queue(Config) ->
-    [Server0, Server1, Server2, _Server3, _Server4] =
+    [Server0, Server1, _Server2, _Server3, _Server4] =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
@@ -5394,7 +5394,7 @@ delete_queues() ->
      || Q <- rabbit_amqqueue:list()].
 
 stop_node(Config, Server) ->
-    rabbit_ct_broker_helpers:rabbitmqctl(Config, Server, ["stop"]).
+    rabbit_ct_broker_helpers:stop_node(Config, Server).
 
 get_message_bytes(Leader, QRes) ->
     case rpc:call(Leader, ets, lookup, [queue_metrics, QRes]) of

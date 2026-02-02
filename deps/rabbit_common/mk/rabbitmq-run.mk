@@ -335,7 +335,7 @@ start-background-node: node-tmpdir $(DIST_TARGET)
 	  $(RABBITMQ_SERVER) \
 	  $(REDIRECT_STDIO) &
 	ERL_LIBS="$(DIST_ERL_LIBS)" \
-	  $(RABBITMQCTL) -n $(RABBITMQ_NODENAME) wait --timeout $(RMQCTL_WAIT_TIMEOUT) $(RABBITMQ_PID_FILE) kernel
+	  $(RABBITMQCTL) -n $(RABBITMQ_NODENAME) wait --timeout $(RMQCTL_WAIT_TIMEOUT) $(RABBITMQ_PID_FILE)
 
 start-background-broker: node-tmpdir $(DIST_TARGET)
 	$(maybe_enabled_plugins); \

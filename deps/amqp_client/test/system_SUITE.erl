@@ -129,12 +129,8 @@ end_per_suite(Config) ->
       ] ++ rabbit_ct_broker_helpers:teardown_steps()).
 
 ensure_amqp_client_srcdir(Config) ->
-    case rabbit_ct_helpers:get_config(Config, rabbitmq_run_cmd) of
-        undefined ->
-            rabbit_ct_helpers:ensure_application_srcdir(Config,
-                                                        amqp_client, amqp_client);
-        _ -> Config
-    end.
+    rabbit_ct_helpers:ensure_application_srcdir(Config,
+                                                amqp_client, amqp_client).
 
 create_unauthorized_user(Config) ->
     Cmd = ["add_user", ?UNAUTHORIZED_USER, ?UNAUTHORIZED_USER],
@@ -1621,10 +1617,7 @@ set_resource_alarm(Resource, Config)
     Cmd = [{"RABBITMQ_NODENAME=~ts", [Nodename]},
            "set-resource-alarm",
            {"SOURCE=~ts", [Resource]}],
-    {ok, _} = case os:getenv("RABBITMQ_RUN") of
-        false -> rabbit_ct_helpers:make(Config, SrcDir, Cmd);
-        Run -> rabbit_ct_helpers:exec([Run | Cmd])
-    end.
+    rabbit_ct_helpers:make(Config, SrcDir, Cmd).
 
 clear_resource_alarm(Resource, Config)
   when Resource =:= memory orelse Resource =:= disk ->
@@ -1633,9 +1626,6 @@ clear_resource_alarm(Resource, Config)
     Cmd = [{"RABBITMQ_NODENAME=~ts", [Nodename]},
            "clear-resource-alarm",
            {"SOURCE=~ts", [Resource]}],
-    {ok, _} = case os:getenv("RABBITMQ_RUN") of
-        false -> rabbit_ct_helpers:make(Config, SrcDir, Cmd);
-        Run -> rabbit_ct_helpers:exec([Run | Cmd])
-    end.
+    rabbit_ct_helpers:make(Config, SrcDir, Cmd).
 
 fmt(Fmt, Args) -> list_to_binary(rabbit_misc:format(Fmt, Args)).

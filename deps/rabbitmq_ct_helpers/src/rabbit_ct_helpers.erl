@@ -24,7 +24,6 @@
     ensure_application_srcdir/4,
     ensure_rabbitmqctl_cmd/1,
     ensure_rabbitmqctl_app/1,
-    load_rabbitmqctl_app/1,
     ensure_rabbitmq_plugins_cmd/1,
     ensure_rabbitmq_queues_cmd/1,
     ensure_rabbitmq_streams_cmd/1,
@@ -81,9 +80,7 @@ run_setup_steps(Config) ->
     run_setup_steps(Config, []).
 
 run_setup_steps(Config, ExtraSteps) ->
-    Steps = case os:getenv("RABBITMQ_RUN") of
-        false ->
-            [
+    Steps = [
                 fun init_skip_as_error_flag/1,
                 fun guess_tested_erlang_app_name/1,
                 fun ensure_secondary_dist/1,
@@ -97,25 +94,10 @@ run_setup_steps(Config, ExtraSteps) ->
                 fun ensure_rabbitmq_cli_srcdir/1,
                 fun ensure_rabbit_srcdir/1,
                 fun ensure_make_cmd/1,
-                fun ensure_erl_call_cmd/1,
                 fun ensure_ssl_certs/1,
                 fun start_long_running_testsuite_monitor/1,
                 fun load_elixir/1
-            ];
-        _ ->
-            [
-                fun init_skip_as_error_flag/1,
-                fun ensure_secondary_umbrella/1,
-                fun ensure_current_srcdir/1,
-                fun ensure_rabbitmq_ct_helpers_srcdir/1,
-                fun maybe_rabbit_srcdir/1,
-                fun ensure_make_cmd/1,
-                fun ensure_rabbitmq_run_cmd/1,
-                fun ensure_rabbitmq_run_secondary_cmd/1,
-                fun ensure_ssl_certs/1,
-                fun start_long_running_testsuite_monitor/1
-            ]
-    end,
+            ],
     run_steps(Config, Steps ++ ExtraSteps).
 
 run_teardown_steps(Config) ->
@@ -337,15 +319,6 @@ ensure_rabbitmq_cli_srcdir(Config) ->
 ensure_rabbit_srcdir(Config) ->
     ensure_application_srcdir(Config, rabbit, rabbit).
 
-maybe_rabbit_srcdir(Config) ->
-    % Some tests under bazel use this value, others do not.
-    % By allowing this config to be optional, we avoid making
-    % more tests depend on rabbit
-    case ensure_application_srcdir(Config, rabbit, rabbit) of
-        {skip, _} -> Config;
-        Config1 -> Config1
-    end.
-
 ensure_application_srcdir(Config, App, Module) ->
     ensure_application_srcdir(Config, App, erlang, Module).
 
@@ -405,38 +378,6 @@ ensure_make_cmd(Config) ->
         _       -> {skip,
                     "GNU Make required, " ++
                     "please set MAKE or 'make_cmd' in ct config"}
-    end.
-
-ensure_rabbitmq_run_cmd(Config) ->
-    Path = os:getenv("RABBITMQ_RUN"),
-    case filelib:is_file(Path) of
-        true  -> set_config(Config, {rabbitmq_run_cmd, Path});
-        false -> {skip,
-                  "Bazel helper rabbitmq-run required, " ++
-                  "please set RABBITMQ_RUN"}
-    end.
-
-ensure_rabbitmq_run_secondary_cmd(Config) ->
-    case os:getenv("RABBITMQ_RUN_SECONDARY") of
-        false ->
-            Config;
-        Path ->
-            case filelib:is_file(Path) of
-                true  ->
-                    set_config(Config, {rabbitmq_run_secondary_cmd, Path});
-                false ->
-                    error("RABBITMQ_RUN_SECONDARY was set, but is not a valid file")
-            end
-    end.
-
-ensure_erl_call_cmd(Config) ->
-    ErlCall = filename:join(code:lib_dir(erl_interface), "bin/erl_call"),
-    Cmd = [ErlCall],
-    case exec(Cmd, [{match_stdout, "Usage: "}]) of
-        {ok, _} -> set_config(Config, {erl_call_cmd, ErlCall});
-        _       -> {skip,
-                    "erl_call required, " ++
-                    "please set ERL_CALL or 'erl_call_cmd' in ct config"}
     end.
 
 ensure_rabbitmqctl_cmd(Config) ->
@@ -516,19 +457,6 @@ ensure_rabbitmqctl_app(Config) ->
         false ->
             {skip, "Access to rabbitmq_cli ebin dir. required, " ++
              "please build rabbitmq_cli"}
-    end.
-
-load_rabbitmqctl_app(Config) ->
-    case application:load(rabbitmqctl) of
-        ok ->
-            Config;
-        {error, {already_loaded, rabbitmqctl}} ->
-            Config;
-        {error, Reason} ->
-            ct:pal(?LOW_IMPORTANCE,
-              "Failed to load rabbitmqctl application: ~tp", [Reason]),
-            {skip, "Application rabbitmqctl could not be loaded, " ++
-                "please place compiled rabbitmq_cli on the code path"}
     end.
 
 ensure_rabbitmq_plugins_cmd(Config) ->
@@ -727,11 +655,8 @@ get_selection(Config) ->
 
 
 symlink_priv_dir(Config) ->
-    case {os:type(), ?config(rabbitmq_run_cmd, Config)} of
-        {{win32, _}, _} ->
-            Config;
-        {_, Cmd} when Cmd =/= undefined ->
-            %% skip if bazel
+    case os:type() of
+        {win32, _} ->
             Config;
         _ ->
             SrcDir = ?config(current_srcdir, Config),
@@ -1148,13 +1073,11 @@ convert_to_unicode_binary(Arg) when is_binary(Arg) ->
 
 is_mixed_versions() ->
     os:getenv("SECONDARY_DIST") =/= false
-        orelse os:getenv("SECONDARY_UMBRELLA") =/= false
-        orelse os:getenv("RABBITMQ_RUN_SECONDARY") =/= false.
+        orelse os:getenv("SECONDARY_UMBRELLA") =/= false.
 
 is_mixed_versions(Config) ->
     get_config(Config, secondary_dist, false) =/= false
-        orelse get_config(Config, secondary_umbrella, false) =/= false
-        orelse get_config(Config, rabbitmq_run_secondary_cmd, false) =/= false.
+        orelse get_config(Config, secondary_umbrella, false) =/= false.
 
 %% -------------------------------------------------------------------
 %% Assertions that retry
