@@ -30,6 +30,8 @@
 
 -define(BACKEND_CONFIG_KEY, peer_discovery_aws).
 
+-define(VALID_EC2_INSTANCE_STATES, ["pending", "running", "shutting-down", "terminated", "stopping", "stopped"]).
+
 -define(CONFIG_MAPPING,
          #{
           aws_autoscaling                    => #peer_discovery_config_entry_meta{
@@ -321,8 +323,31 @@ maybe_add_instance_state_filters(QArgs, Num) ->
         [] ->
             QArgs;
         [_|_] ->
-            add_instance_state_filters(States, QArgs, Num)
+            ValidStates = validate_instance_states(States),
+            add_instance_state_filters(ValidStates, QArgs, Num)
     end.
+
+-spec validate_instance_states(list()) -> list().
+validate_instance_states(States) ->
+    NormalizedStates = [normalize_state(State) || State <- States],
+    {Valid, Invalid} = lists:partition(
+        fun(State) -> lists:member(State, ?VALID_EC2_INSTANCE_STATES) end,
+        NormalizedStates),
+    case Invalid of
+        [] ->
+            ok;
+        [_|_] ->
+            rabbit_log:warning(
+                "Ignoring invalid EC2 instance states in configuration: ~tp. "
+                "Valid states are: ~tp", [Invalid, ?VALID_EC2_INSTANCE_STATES])
+    end,
+    Valid.
+
+-spec normalize_state(atom() | string()) -> string().
+normalize_state(State) when is_atom(State) ->
+    atom_to_list(State);
+normalize_state(State) when is_list(State) ->
+    State.
 
 -spec add_instance_state_filters(list(), filters(), integer()) -> filters().
 add_instance_state_filters(States, QArgs, Num) ->
