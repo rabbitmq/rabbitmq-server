@@ -26,7 +26,9 @@ groups() ->
                  get_hostname_name_from_reservation_set,
                  registration_support,
                  network_interface_sorting,
-                 private_ip_address_sorting
+                 private_ip_address_sorting,
+                 get_hostname_by_instance_ids_with_state_filter,
+                 get_hostname_by_tags_with_state_filter
                 ]},
      {lock, [], [
                  lock_single_node,
@@ -102,6 +104,44 @@ get_hostname_name_from_reservation_set(_Config) ->
                                reservation_set(), []))
         end}]
     }).
+
+get_hostname_by_instance_ids_with_state_filter(_Config) ->
+    application:set_env(rabbit, cluster_formation,
+                       [{peer_discovery_aws, [{aws_ec2_instance_states, ["running", "pending"]}]}]),
+    meck:new(rabbitmq_aws, [passthrough]),
+    meck:expect(rabbitmq_aws, api_get_request,
+        fun("ec2", Path) ->
+            ?assert(string:str(Path, "Filter") > 0),
+            ?assert(string:str(Path, "instance-state-name") > 0),
+            ?assert(string:str(Path, "Value.1=running") > 0),
+            ?assert(string:str(Path, "Value.2=pending") > 0),
+            {ok, mock_describe_instances_response()}
+        end),
+    Result = rabbit_peer_discovery_aws:get_hostname_by_instance_ids(
+        ["i-abc123", "i-def456"], #{}),
+    ?assertEqual(["ip-10-0-16-29.eu-west-1.compute.internal",
+                  "ip-10-0-16-31.eu-west-1.compute.internal"], Result),
+    meck:unload(rabbitmq_aws),
+    application:unset_env(rabbit, cluster_formation).
+
+get_hostname_by_tags_with_state_filter(_Config) ->
+    application:set_env(rabbit, cluster_formation,
+                       [{peer_discovery_aws, [{aws_ec2_instance_states, ["running"]}]}]),
+    meck:new(rabbitmq_aws, [passthrough]),
+    meck:expect(rabbitmq_aws, api_get_request,
+        fun("ec2", Path) ->
+            ?assert(string:str(Path, "Filter") > 0),
+            ?assert(string:str(Path, "instance-state-name") > 0),
+            ?assert(string:str(Path, "Value.1=running") > 0),
+            ?assert(string:str(Path, "tag%3Aservice") > 0),
+            {ok, mock_describe_instances_response()}
+        end),
+    Tags = maps:from_list([{"service", "rabbitmq"}]),
+    Result = rabbit_peer_discovery_aws:get_hostname_by_tags(Tags),
+    ?assertEqual(["ip-10-0-16-29.eu-west-1.compute.internal",
+                  "ip-10-0-16-31.eu-west-1.compute.internal"], Result),
+    meck:unload(rabbitmq_aws),
+    application:unset_env(rabbit, cluster_formation).
 
 registration_support(_Config) ->
     ?assertEqual(false, rabbit_peer_discovery_aws:supports_registration()).
@@ -303,3 +343,7 @@ reservation_set() ->
                         ]}
                      ]}]}]},
                    {"privateIpAddress","10.0.16.31"}]}]}]}].
+
+mock_describe_instances_response() ->
+    [{"DescribeInstancesResponse",
+      [{"reservationSet", reservation_set()}]}].
