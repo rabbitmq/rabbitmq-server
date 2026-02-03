@@ -1234,7 +1234,13 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
 handle_method(#'basic.nack'{delivery_tag = DeliveryTag,
                             multiple     = Multiple,
                             requeue      = Requeue}, _, State) ->
-    reject(DeliveryTag, Requeue, Multiple, State);
+    Op = case Requeue of
+             true ->
+                 requeue;
+             false ->
+                 {modify, false, true, #{}}
+         end,
+    reject(DeliveryTag, Op, Multiple, State);
 
 handle_method(#'basic.ack'{delivery_tag = DeliveryTag,
                            multiple     = Multiple},
@@ -1543,7 +1549,13 @@ handle_method(#'basic.recover'{requeue = Requeue}, Content, State) ->
 
 handle_method(#'basic.reject'{delivery_tag = DeliveryTag, requeue = Requeue},
               _, State) ->
-    reject(DeliveryTag, Requeue, false, State);
+    Op = case Requeue of
+             true ->
+                 {modify, true, false, #{}};
+             false ->
+                 discard
+         end,
+    reject(DeliveryTag, Op, false, State);
 
 handle_method(#'exchange.declare'{nowait = NoWait} = Method,
               _, State = #ch{cfg = #conf{virtual_host = VHostPath,
@@ -1651,11 +1663,11 @@ handle_method(#'tx.commit'{}, _, State = #ch{tx      = {Deliveries, Acks},
     State1 = ?QUEUE:fold(fun deliver_to_queues/2, State, Deliveries),
     Rev = fun (X) -> lists:reverse(lists:sort(X)) end,
     {State2, Actions2} =
-        lists:foldl(fun ({ack,     A}, {Acc, Actions}) ->
+        lists:foldl(fun ({ack, A}, {Acc, Actions}) ->
                             {Acc0, Actions0} = settle_acks(Rev(A), Acc),
                             {Acc0, Actions ++ Actions0};
-                        ({Requeue, A}, {Acc, Actions}) ->
-                            {Acc0, Actions0} = internal_reject(Requeue, Rev(A), Limiter, Acc),
+                        ({Op, A}, {Acc, Actions}) ->
+                            {Acc0, Actions0} = internal_reject(Op, Rev(A), Limiter, Acc),
                             {Acc0, Actions ++ Actions0}
                     end, {State1, []}, lists:reverse(Acks)),
     State3 = handle_queue_actions(Actions2, State2),
@@ -1843,29 +1855,25 @@ basic_return(Content, RoutingKey, XNameBin,
                                                     routing_key = RoutingKey},
                                     Content).
 
-reject(DeliveryTag, Requeue, Multiple,
+reject(DeliveryTag, Op, Multiple,
        State = #ch{unacked_message_q = UAMQ, tx = Tx}) ->
     {Acked, Remaining} = collect_acks(UAMQ, DeliveryTag, Multiple),
     State1 = State#ch{unacked_message_q = Remaining},
     {noreply, case Tx of
                   none ->
-                      {State2, Actions} = internal_reject(Requeue, Acked, State1#ch.limiter, State1),
+                      {State2, Actions} = internal_reject(Op, Acked, State1#ch.limiter, State1),
                       handle_queue_actions(Actions, State2);
                   {Msgs, Acks} ->
-                      Acks1 = ack_cons(Requeue, Acked, Acks),
+                      Acks1 = ack_cons(Op, Acked, Acks),
                       State1#ch{tx = {Msgs, Acks1}}
               end}.
 
 %% NB: Acked is in youngest-first order
-internal_reject(Requeue, Acked, Limiter,
+internal_reject(Op, Acked, Limiter,
                 State = #ch{queue_states = QueueStates0}) ->
     {QueueStates, Actions} =
         foreach_per_queue(
           fun({QRef, CTag}, MsgIds, {Acc0, Actions0}) ->
-                  Op = case Requeue of
-                           false -> discard;
-                           true -> requeue
-                       end,
                   case rabbit_queue_type:settle(QRef, Op, CTag, MsgIds, Acc0) of
                       {ok, Acc, Actions} ->
                           {Acc, Actions0 ++ Actions};

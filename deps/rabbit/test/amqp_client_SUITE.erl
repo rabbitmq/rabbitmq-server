@@ -140,6 +140,8 @@ groups() ->
        dynamic_terminus_delete,
        delivery_count_classic_queue,
        delivery_count_quorum_queue,
+       delivery_count_amqpl_reject_nack_classic_queue,
+       delivery_count_amqpl_reject_nack_quorum_queue,
        modified_classic_queue,
        modified_quorum_queue,
        modified_dead_letter_headers_exchange,
@@ -452,6 +454,145 @@ delivery_count(QType, Config) ->
     ok = detach_link_sync(DLQReceiver),
     {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
     {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair, DLQName),
+    ok = close(Init).
+
+delivery_count_amqpl_reject_nack_classic_queue(Config) ->
+    delivery_count_amqpl_reject_nack(<<"classic">>, Config).
+
+delivery_count_amqpl_reject_nack_quorum_queue(Config) ->
+    delivery_count_amqpl_reject_nack(<<"quorum">>, Config).
+
+%% Test that AMQP 0.9.1 basic.reject and basic.nack correctly affect the AMQP 1.0 delivery-count:
+%% * basic.reject signals delivery failure and should increment delivery-count.
+%% * basic.nack should NOT increment delivery-count.
+delivery_count_amqpl_reject_nack(QType, Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    DLQName = <<QName/binary, "_dlq">>,
+
+    {_, Session, LinkPair} = Init = init(Config),
+    QProps = #{arguments => #{<<"x-queue-type">> => {utf8, QType},
+                              <<"x-dead-letter-exchange">> => {utf8, <<>>},
+                              <<"x-dead-letter-routing-key">> => {utf8, DLQName}}},
+    DLQProps = #{arguments => #{<<"x-queue-type">> => {utf8, QType}}},
+    {ok, #{type := QType}} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, QProps),
+    {ok, #{type := QType}} = rabbitmq_amqp_client:declare_queue(LinkPair, DLQName, DLQProps),
+
+    {Conn091, Ch091} = rabbit_ct_client_helpers:open_connection_and_channel(Config),
+
+    [amqp_channel:cast(Ch091,
+                       #'basic.publish'{routing_key = QName},
+                       #amqp_msg{payload = integer_to_binary(N)})
+     || N <- lists:seq(1, 10)],
+
+    #'basic.qos_ok'{} = amqp_channel:call(Ch091, #'basic.qos'{prefetch_count = 10}),
+    CTag091 = <<"ctag091">>,
+    #'basic.consume_ok'{} = amqp_channel:subscribe(
+                              Ch091,
+                              #'basic.consume'{queue = QName,
+                                               consumer_tag = CTag091},
+                              self()),
+    receive #'basic.consume_ok'{consumer_tag = CTag091} -> ok
+    after 9000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    DTags = [receive {#'basic.deliver'{consumer_tag = CTag091,
+                                       delivery_tag = DTag},
+                      #amqp_msg{payload = Payload}} ->
+                         ?assertEqual(integer_to_binary(N), Payload),
+                         DTag
+             after 9000 -> ct:fail({missing_deliver, ?LINE, N})
+             end || N <- lists:seq(1, 10)],
+
+    Address = rabbitmq_amqp_address:queue(QName),
+    DLQAddress = rabbitmq_amqp_address:queue(DLQName),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session, <<"my receiver">>, Address, unsettled),
+    receive {amqp10_event, {link, Receiver, attached}} -> ok
+    after 5000 -> ct:fail({missing_attached, ?LINE})
+    end,
+    {ok, DLQReceiver} = amqp10_client:attach_receiver_link(
+                          Session, <<"dlq receiver">>, DLQAddress, unsettled),
+    receive {amqp10_event, {link, DLQReceiver, attached}} -> ok
+    after 5000 -> ct:fail({missing_attached, ?LINE})
+    end,
+
+    [DTag1, DTag2 | Rest2] = DTags,
+    amqp_channel:cast(Ch091, #'basic.reject'{delivery_tag = DTag2,
+                                             requeue = true}),
+    DTag2b = receive {#'basic.deliver'{consumer_tag = CTag091,
+                                       delivery_tag = DTag2Redelivered,
+                                       redelivered = true},
+                      #amqp_msg{payload = <<"2">>}} ->
+                         DTag2Redelivered
+             after 9000 -> ct:fail({missing_deliver, ?LINE})
+             end,
+
+    %% Cancel the AMQP 0-9-1 consumer so requeued messages go to the AMQP 1.0 consumer.
+    #'basic.cancel_ok'{} = amqp_channel:call(Ch091, #'basic.cancel'{consumer_tag = CTag091}),
+
+    amqp_channel:cast(Ch091, #'basic.reject'{delivery_tag = DTag1,
+                                             requeue = false}),
+    {ok, Msg1} = amqp10_client:get_msg(DLQReceiver),
+    ?assertEqual(<<"1">>, amqp10_msg:body_bin(Msg1)),
+    ?assertMatch(#{delivery_count := 1}, amqp10_msg:headers(Msg1)),
+    ok = amqp10_client:settle_msg(DLQReceiver, Msg1, accepted),
+
+    amqp_channel:cast(Ch091, #'basic.reject'{delivery_tag = DTag2b,
+                                             requeue = true}),
+    {ok, Msg2} = amqp10_client:get_msg(Receiver),
+    ?assertEqual(<<"2">>, amqp10_msg:body_bin(Msg2)),
+    ?assertMatch(#{delivery_count := 2}, amqp10_msg:headers(Msg2)),
+    ok = amqp10_client:settle_msg(Receiver, Msg2, accepted),
+
+    [DTag3 | Rest3] = Rest2,
+    amqp_channel:cast(Ch091, #'basic.nack'{delivery_tag = DTag3,
+                                           requeue = false,
+                                           multiple = false}),
+    {ok, Msg3} = amqp10_client:get_msg(DLQReceiver),
+    ?assertEqual(<<"3">>, amqp10_msg:body_bin(Msg3)),
+    ?assertMatch(#{delivery_count := 0}, amqp10_msg:headers(Msg3)),
+    ok = amqp10_client:settle_msg(DLQReceiver, Msg3, accepted),
+
+    [DTag4 | Rest4] = Rest3,
+    amqp_channel:cast(Ch091, #'basic.nack'{delivery_tag = DTag4,
+                                           requeue = true,
+                                           multiple = false}),
+    {ok, Msg4} = amqp10_client:get_msg(Receiver),
+    ?assertEqual(<<"4">>, amqp10_msg:body_bin(Msg4)),
+    ?assertMatch(#{delivery_count := 0}, amqp10_msg:headers(Msg4)),
+    ok = amqp10_client:settle_msg(Receiver, Msg4, accepted),
+
+    [_DTag5, DTag6 | _Rest] = Rest4,
+    amqp_channel:cast(Ch091, #'basic.nack'{delivery_tag = DTag6,
+                                           requeue = false,
+                                           multiple = true}),
+    {ok, Msg5} = amqp10_client:get_msg(DLQReceiver),
+    {ok, Msg6} = amqp10_client:get_msg(DLQReceiver),
+    ?assertEqual(<<"5">>, amqp10_msg:body_bin(Msg5)),
+    ?assertEqual(<<"6">>, amqp10_msg:body_bin(Msg6)),
+    ?assertMatch(#{delivery_count := 0}, amqp10_msg:headers(Msg5)),
+    ?assertMatch(#{delivery_count := 0}, amqp10_msg:headers(Msg6)),
+    ok = amqp10_client:settle_msg(DLQReceiver, Msg5, accepted),
+    ok = amqp10_client:settle_msg(DLQReceiver, Msg6, accepted),
+
+    amqp_channel:cast(Ch091, #'basic.nack'{delivery_tag = 0,
+                                           requeue = true,
+                                           multiple = true}),
+    lists:foreach(fun(ExpectedPayload) ->
+                          {ok, Msg} = amqp10_client:get_msg(Receiver),
+                          ?assertEqual(ExpectedPayload,
+                                       amqp10_msg:body_bin(Msg)),
+                          ?assertMatch(#{delivery_count := 0},
+                                       amqp10_msg:headers(Msg)),
+                          ok = amqp10_client:settle_msg(Receiver, Msg, accepted)
+                  end,
+                  [<<"7">>, <<"8">>, <<"9">>, <<"10">>]),
+
+    ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn091, Ch091),
+    ok = amqp10_client:detach_link(Receiver),
+    ok = amqp10_client:detach_link(DLQReceiver),
+    {ok, #{message_count := 0}} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
+    {ok, #{message_count := 0}} = rabbitmq_amqp_client:delete_queue(LinkPair, DLQName),
     ok = close(Init).
 
 %% We test the modified outcome with classic queues.
