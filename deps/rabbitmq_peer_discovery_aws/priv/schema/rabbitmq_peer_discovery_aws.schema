@@ -108,3 +108,17 @@ fun(Conf) ->
         Value     -> rabbit_peer_discovery_util:as_list(Value)
     end
 end}.
+
+%% ec2_instance_states
+
+{mapping, "cluster_formation.aws.ec2_instance_states.$state", "rabbit.cluster_formation.peer_discovery_aws.aws_ec2_instance_states", [
+    {datatype, string}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_aws.aws_ec2_instance_states",
+fun(Conf) ->
+    case cuttlefish_variable:filter_by_prefix("cluster_formation.aws.ec2_instance_states", Conf) of
+        [] -> ["running", "pending"];
+        Settings -> [V || {_K, V} <- Settings]
+    end
+end}.
