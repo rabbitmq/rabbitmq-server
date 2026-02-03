@@ -285,8 +285,10 @@ get_hostname_by_instance_ids(Instances, Tag) ->
     QArgs = build_instance_list_qargs(Instances,
                                       [{"Action", "DescribeInstances"},
                                        {"Version", "2015-10-01"}]),
-    QArgs2 = lists:keysort(1, maybe_add_tag_filters(Tag, QArgs, 1)),
-    Path = "/?" ++ rabbitmq_aws_urilib:build_query_string(QArgs2),
+    QArgs1 = maybe_add_tag_filters(Tag, QArgs, 1),
+    QArgs2 = maybe_add_instance_state_filters(QArgs1, length(QArgs1) + 1),
+    QArgs3 = lists:keysort(1, QArgs2),
+    Path = "/?" ++ rabbitmq_aws_urilib:build_query_string(QArgs3),
     get_hostname_names(Path).
 
 -spec build_instance_list_qargs(Instances :: list(), Accum :: list()) -> list().
@@ -310,6 +312,30 @@ maybe_add_tag_filters(Tags, QArgs, Num) ->
                            AccN + 1}
                   end, {QArgs, Num}, Tags),
     Filters.
+
+-spec maybe_add_instance_state_filters(filters(), integer()) -> filters().
+maybe_add_instance_state_filters(QArgs, Num) ->
+    M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
+    States = get_config_key(aws_ec2_instance_states, M),
+    case States of
+        [] ->
+            QArgs;
+        [_|_] ->
+            add_instance_state_filters(States, QArgs, Num)
+    end.
+
+-spec add_instance_state_filters(list(), filters(), integer()) -> filters().
+add_instance_state_filters(States, QArgs, Num) ->
+    FilterName = {"Filter." ++ integer_to_list(Num) ++ ".Name", "instance-state-name"},
+    StateFilters = lists:foldl(
+        fun(State, {Acc, Index}) ->
+            Filter = {"Filter." ++ integer_to_list(Num) ++ ".Value." ++ integer_to_list(Index), State},
+            {[Filter | Acc], Index + 1}
+        end,
+        {[], 1},
+        States),
+    {StateValues, _} = StateFilters,
+    [FilterName | StateValues] ++ QArgs.
 
 -spec get_node_list_from_tags(tags()) -> {ok, {[node()], disc}}.
 get_node_list_from_tags(M) when map_size(M) =:= 0 ->
@@ -341,8 +367,10 @@ get_hostname_names(Path) ->
 
 get_hostname_by_tags(Tags) ->
     QArgs = [{"Action", "DescribeInstances"}, {"Version", "2015-10-01"}],
-    QArgs2 = lists:keysort(1, maybe_add_tag_filters(Tags, QArgs, 1)),
-    Path = "/?" ++ rabbitmq_aws_urilib:build_query_string(QArgs2),
+    QArgs1 = maybe_add_tag_filters(Tags, QArgs, 1),
+    QArgs2 = maybe_add_instance_state_filters(QArgs1, length(QArgs1) + 1),
+    QArgs3 = lists:keysort(1, QArgs2),
+    Path = "/?" ++ rabbitmq_aws_urilib:build_query_string(QArgs3),
     case get_hostname_names(Path) of
         error ->
             ?LOG_WARNING("Cannot discover any nodes because AWS "

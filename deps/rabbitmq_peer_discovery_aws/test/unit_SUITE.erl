@@ -22,6 +22,7 @@ groups() ->
     [
      {unit, [], [
                  maybe_add_tag_filters,
+                 maybe_add_instance_state_filters,
                  get_hostname_name_from_reservation_set,
                  registration_support,
                  network_interface_sorting,
@@ -47,6 +48,19 @@ maybe_add_tag_filters(_Config) ->
                      {"Filter.1.Value.1", "us-west-2"}]),
     Result = lists:sort(rabbit_peer_discovery_aws:maybe_add_tag_filters(Tags, [], 1)),
     ?assertEqual(Expectation, Result).
+
+maybe_add_instance_state_filters(_Config) ->
+    application:set_env(rabbit, cluster_formation,
+                       [{peer_discovery_aws, [{aws_ec2_instance_states, ["running", "pending"]}]}]),
+    QArgs = [{"Action", "DescribeInstances"}, {"Version", "2015-10-01"}],
+    Result = rabbit_peer_discovery_aws:maybe_add_instance_state_filters(QArgs, 1),
+    Expectation = [{"Filter.1.Name", "instance-state-name"},
+                   {"Filter.1.Value.2", "pending"},
+                   {"Filter.1.Value.1", "running"},
+                   {"Action", "DescribeInstances"},
+                   {"Version", "2015-10-01"}],
+    ?assertEqual(Expectation, Result),
+    application:unset_env(rabbit, cluster_formation).
 
 get_hostname_name_from_reservation_set(_Config) ->
     ok = eunit:test({
