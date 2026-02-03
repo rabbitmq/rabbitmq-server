@@ -38,9 +38,14 @@ DEPS = thoas ranch recon credentials_obfuscation
 
 -include development.pre.mk
 
+# Export `DEP_PLUGINS` to force the rabbitmq-old-compiler.mk plugin on
+# dependencies.
+export DEP_PLUGINS = rabbit_common/mk/rabbitmq-old-compiler.mk
+
 DEP_EARLY_PLUGINS = $(PROJECT)/mk/rabbitmq-early-plugin.mk
 # We do not depend on rabbit therefore can't run the broker.
 DEP_PLUGINS = $(PROJECT)/mk/rabbitmq-build.mk \
+	      $(PROJECT)/mk/rabbitmq-old-compiler.mk \
 	      $(PROJECT)/mk/rabbitmq-hexpm.mk
 
 PLT_APPS += mnesia crypto ssl

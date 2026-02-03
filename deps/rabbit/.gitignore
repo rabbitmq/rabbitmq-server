@@ -1,5 +1,6 @@
 /debug/
 /etc/
+/priv/compiler/
 /test/config_schema_SUITE_data/schema/**
 
 [Bb]in/
