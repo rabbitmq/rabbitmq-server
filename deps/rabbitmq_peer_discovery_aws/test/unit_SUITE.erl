@@ -23,6 +23,7 @@ groups() ->
      {unit, [], [
                  maybe_add_tag_filters,
                  maybe_add_instance_state_filters,
+                 validate_instance_states,
                  get_hostname_name_from_reservation_set,
                  registration_support,
                  network_interface_sorting,
@@ -63,6 +64,14 @@ maybe_add_instance_state_filters(_Config) ->
                    {"Version", "2015-10-01"}],
     ?assertEqual(Expectation, Result),
     application:unset_env(rabbit, cluster_formation).
+
+validate_instance_states(_Config) ->
+    ValidStates = ["pending", "running", "shutting-down", "terminated", "stopping", "stopped"],
+    ?assertEqual(ValidStates, rabbit_peer_discovery_aws:validate_instance_states(ValidStates)),
+    ?assertEqual(["running"], rabbit_peer_discovery_aws:validate_instance_states(["running", "invalid"])),
+    ?assertEqual([], rabbit_peer_discovery_aws:validate_instance_states(["bogus", "invalid"])),
+    ?assertEqual(["running", "pending"], rabbit_peer_discovery_aws:validate_instance_states([running, pending])),
+    ?assertEqual(["running"], rabbit_peer_discovery_aws:validate_instance_states([running, invalid])).
 
 get_hostname_name_from_reservation_set(_Config) ->
     ok = eunit:test({
