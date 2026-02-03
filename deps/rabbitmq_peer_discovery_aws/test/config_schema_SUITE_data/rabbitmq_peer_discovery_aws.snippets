@@ -103,5 +103,30 @@
                 ]}
             ]}
         ], [rabbitmq_peer_discovery_aws]
+    },
+    {aws_ec2_instance_states,
+        "cluster_formation.aws.ec2_instance_states.1 = running
+         cluster_formation.aws.ec2_instance_states.2 = pending",
+        [
+            {rabbit, [
+                {cluster_formation, [
+                    {peer_discovery_aws, [
+                        {aws_ec2_instance_states, ["running", "pending"]}
+                    ]}
+                ]}
+            ]}
+        ], [rabbitmq_peer_discovery_aws]
+    },
+    {aws_ec2_instance_states_single,
+        "cluster_formation.aws.ec2_instance_states.1 = running",
+        [
+            {rabbit, [
+                {cluster_formation, [
+                    {peer_discovery_aws, [
+                        {aws_ec2_instance_states, ["running"]}
+                    ]}
+                ]}
+            ]}
+        ], [rabbitmq_peer_discovery_aws]
     }
 ].

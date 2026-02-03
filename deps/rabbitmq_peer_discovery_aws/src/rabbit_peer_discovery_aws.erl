@@ -66,6 +66,11 @@
                                                    type          = atom,
                                                    env_variable  = "AWS_USE_PRIVATE_IP",
                                                    default_value = false
+                                                  },
+          aws_ec2_instance_states            => #peer_discovery_config_entry_meta{
+                                                   type          = list,
+                                                   env_variable  = "AWS_EC2_INSTANCE_STATES",
+                                                   default_value = ["running", "pending"]
                                                   }
          }).
 
