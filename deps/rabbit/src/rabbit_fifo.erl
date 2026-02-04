@@ -1142,7 +1142,7 @@ overview(#?STATE{consumers = Cons,
     maps:merge(maps:merge(Overview, DlxOverview), SacOverview).
 
 -spec get_checked_out(consumer_key(), msg_id(), msg_id(), state()) ->
-    [delivery_msg()].
+    [{msg_id(), {ra:index(), msg_header()}}].
 get_checked_out(CKey, From, To, #?STATE{consumers = Consumers}) ->
     case find_consumer(CKey, Consumers) of
         {_CKey, #consumer{checked_out = Checked}} ->
