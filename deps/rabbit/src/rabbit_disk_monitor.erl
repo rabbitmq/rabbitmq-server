@@ -385,6 +385,8 @@ alarmed_mounts(Mounts) ->
     maps:fold(
       fun (Path, #mount{available = Available,
                         limit = Limit}, Acc) when Available < Limit ->
+              %% Note: 'NaN' < Limit is true (Erlang term ordering), which is
+              %% correct fail-safe behavior when disk info is unavailable
               sets:add_element(Path, Acc);
           (_Path, _Mount, Acc) ->
               Acc
@@ -397,6 +399,8 @@ alarmed_queue_types(MountPoints) ->
       fun (_Path, #mount{available = Available,
                          limit = Limit,
                          queue_types = QTs}, Acc) when Available < Limit ->
+              %% Note: 'NaN' < Limit is true (Erlang term ordering), which is
+              %% correct fail-safe behavior when disk info is unavailable
               sets:union(QTs, Acc);
           (_Path, _Mount, Acc) ->
               Acc
