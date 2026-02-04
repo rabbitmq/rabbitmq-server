@@ -8,9 +8,6 @@ on:
       elixir_version:
         required: true
         type: string
-      metadata_store:
-        required: true
-        type: string
       mixed_clusters:
         required: true
         type: boolean
@@ -51,7 +48,6 @@ jobs:
     with:
       erlang_version: ${{ inputs.erlang_version }}
       elixir_version: ${{ inputs.elixir_version }}
-      metadata_store: ${{ inputs.metadata_store }}
       mixed_clusters: ${{ inputs.mixed_clusters }}
       previous_version: ${{ inputs.previous_version }}
       make_target: ${{ matrix.make_target }}
@@ -64,7 +60,6 @@ jobs:
     with:
       erlang_version: ${{ inputs.erlang_version }}
       elixir_version: ${{ inputs.elixir_version }}
-      metadata_store: ${{ inputs.metadata_store }}
       mixed_clusters: ${{ inputs.mixed_clusters }}
       previous_version: ${{ inputs.previous_version }}
       make_target: parallel-ct-set-1
@@ -79,7 +74,6 @@ jobs:
     with:
       erlang_version: ${{ inputs.erlang_version }}
       elixir_version: ${{ inputs.elixir_version }}
-      metadata_store: ${{ inputs.metadata_store }}
       mixed_clusters: ${{ inputs.mixed_clusters }}
       previous_version: ${{ inputs.previous_version }}
       make_target: ct-config_schema ct-unit
@@ -139,7 +133,6 @@ jobs:
     with:
       erlang_version: ${{ inputs.erlang_version }}
       elixir_version: ${{ inputs.elixir_version }}
-      metadata_store: ${{ inputs.metadata_store }}
       mixed_clusters: ${{ inputs.mixed_clusters }}
       previous_version: ${{ inputs.previous_version }}
       make_target: tests
