@@ -54,7 +54,6 @@
 
          logging_to_exchange_works/1,
          update_log_exchange_config/1,
-         use_exchange_logger_when_enabling_khepri_db/1,
          use_exchange_logger_when_enabling_all_feature_flags/1,
 
          logging_to_syslog_works/1]).
@@ -103,7 +102,6 @@ groups() ->
      {exchange_output, [],
       [logging_to_exchange_works,
        update_log_exchange_config,
-       use_exchange_logger_when_enabling_khepri_db,
        use_exchange_logger_when_enabling_all_feature_flags]},
 
      {syslog_output, [],
@@ -185,11 +183,6 @@ init_per_testcase_exchange_output1(Testcase, Config) ->
                 [{rmq_nodename_suffix, Testcase}]),
     Config2 = (
       case Testcase of
-          use_exchange_logger_when_enabling_khepri_db ->
-              rabbit_ct_helpers:set_config(
-                Config1,
-                [{rmq_nodes_count, 3},
-                 {metadata_store, mnesia}]);
           use_exchange_logger_when_enabling_all_feature_flags ->
               rabbit_ct_helpers:set_config(
                 Config1,
@@ -1153,28 +1146,6 @@ update_log_exchange_config(Config) ->
           logger, get_handler_config, [rmq_1_exchange]),
     ?assertEqual(HandlerConfig1, HandlerConfig2),
     ok.
-
-use_exchange_logger_when_enabling_khepri_db(Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-        true ->
-            case rabbit_ct_broker_helpers:enable_feature_flag(
-                   Config, 'rabbitmq_4.0.0') of
-                ok ->
-                    use_exchange_logger_when_enabling_khepri_db1(Config);
-                {skip, _} = Skip ->
-                    Skip
-            end;
-        false ->
-            use_exchange_logger_when_enabling_khepri_db1(Config)
-    end.
-
-use_exchange_logger_when_enabling_khepri_db1(Config) ->
-    ?assertNot(rabbit_ct_broker_helpers:rpc(
-                 Config, 0,
-                 rabbit_feature_flags, is_enabled, [khepri_db])),
-    ?assertEqual(
-       ok,
-       rabbit_ct_broker_helpers:enable_feature_flag(Config, khepri_db)).
 
 %% Test case for https://github.com/rabbitmq/rabbitmq-server/discussions/11652
 use_exchange_logger_when_enabling_all_feature_flags(Config) ->

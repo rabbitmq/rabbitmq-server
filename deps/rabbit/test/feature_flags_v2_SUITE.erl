@@ -241,7 +241,6 @@ setup_data_dir(Config) ->
         {error, {already_loaded, _}} -> ok
     end,
     ok = application:set_env(rabbit, data_dir, DataDir),
-    ok = application:set_env(mnesia, dir, DataDir),
     ok.
 
 setup_feature_flags_file(Config) ->
@@ -1420,7 +1419,7 @@ have_soft_required_feature_flag_in_cluster_and_add_member_without_it(
     ?assertEqual(ok, inject_on_nodes(Nodes, RequiredFeatureFlags)),
 
     ct:pal(
-      "Checking the feature flag is supported and enabled on existing the "
+      "Checking the feature flag is supported and enabled on the existing "
       "cluster only"),
     ok = run_on_node(
            NewNode,
@@ -1428,10 +1427,8 @@ have_soft_required_feature_flag_in_cluster_and_add_member_without_it(
                    ?assert(rabbit_feature_flags:is_supported(FeatureName)),
                    ?assertNot(rabbit_feature_flags:is_enabled(FeatureName)),
 
-                   DBDir = rabbit_db:dir(),
-                   ok = filelib:ensure_path(DBDir),
-                   SomeFile = filename:join(DBDir, "some-file.db"),
-                   ok = file:write_file(SomeFile, <<>>),
+                   ?assertEqual(ok, rabbit_khepri:setup(#{})),
+                   ?assertEqual(ok, rabbit_khepri:put([?MODULE, ?FUNCTION_NAME], running)),
                    ?assertNot(rabbit_db:is_virgin_node()),
                    ok
            end,
@@ -1520,10 +1517,8 @@ have_hard_required_feature_flag_in_cluster_and_add_member_without_it(
                    ?assert(rabbit_feature_flags:is_supported(FeatureName)),
                    ?assertNot(rabbit_feature_flags:is_enabled(FeatureName)),
 
-                   DBDir = rabbit_db:dir(),
-                   ok = filelib:ensure_path(DBDir),
-                   SomeFile = filename:join(DBDir, "some-file.db"),
-                   ok = file:write_file(SomeFile, <<>>),
+                   ?assertEqual(ok, rabbit_khepri:setup(#{})),
+                   ?assertEqual(ok, rabbit_khepri:put([?MODULE, ?FUNCTION_NAME], running)),
                    ?assertNot(rabbit_db:is_virgin_node()),
                    ok
            end,

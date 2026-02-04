@@ -21,22 +21,15 @@
 
 all() ->
     [
-      {group, mnesia_store},
-      {group, khepri_store},
-      {group, khepri_migration}
+      {group, tests}
     ].
 
 groups() ->
     [
-     {mnesia_store, [], [
-                         test_topic_selection,
-                         restart_with_auto_delete_topic_exchange
-                        ]},
-     {khepri_store, [], [
-                         test_topic_selection,
-                         restart_with_auto_delete_topic_exchange
-                        ]},
-     {khepri_migration, [], [from_mnesia_to_khepri]}
+     {tests, [], [
+                  test_topic_selection,
+                  restart_with_auto_delete_topic_exchange
+                 ]}
     ].
 
 %% -------------------------------------------------------------------
@@ -50,19 +43,7 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
-init_per_group(mnesia_store = Group, Config0) ->
-    Config = rabbit_ct_helpers:set_config(Config0, [{metadata_store, mnesia}]),
-    init_per_group_common(Group, Config);
-init_per_group(khepri_store = Group, Config0) ->
-    Config = rabbit_ct_helpers:set_config(
-               Config0,
-               [{metadata_store, khepri}]),
-    init_per_group_common(Group, Config);
-init_per_group(khepri_migration = Group, Config0) ->
-    Config = rabbit_ct_helpers:set_config(Config0, [{metadata_store, mnesia}]),
-    init_per_group_common(Group, Config).
-
-init_per_group_common(Group, Config) ->
+init_per_group(Group, Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, [
                                                     {rmq_nodename_suffix, Group}
                                                    ]),
@@ -117,32 +98,6 @@ restart_with_auto_delete_topic_exchange(Config) ->
     bind_queue(Channel, Q, Exchange, <<"select-key">>, [?BSELECTARG(<<"{ident, <<\"boolVal\">>}.">>)]),
     ok = rabbit_control_helper:command(stop_app, Server),
     ok = rabbit_control_helper:command(start_app, Server).
-
-from_mnesia_to_khepri(Config) ->
-    {Connection, Channel} = open_connection_and_channel(Config),
-    #'confirm.select_ok'{} = amqp_channel:call(Channel, #'confirm.select'{}),
-
-    Exchange = declare_rjms_exchange(Channel, "rjms_test_topic_selector_exchange", false, false, []),
-
-    %% Declare a queue and bind it
-    Q = declare_queue(Channel),
-    bind_queue(Channel, Q, Exchange, <<"select-key">>, [?BSELECTARG(<<"{ident, <<\"boolVal\">>}.">>)]),
-
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config, khepri_db) of
-        ok ->
-            case rabbit_ct_broker_helpers:enable_feature_flag(Config, rabbit_jms_topic_exchange_raft_based_metadata_store) of
-                ok ->
-                    publish_two_messages(Channel, Exchange, <<"select-key">>),
-                    amqp_channel:wait_for_confirms(Channel, 5),
-                    get_and_check(Channel, Q, 0, <<"true">>),
-                    close_connection_and_channel(Connection, Channel),
-                    ok;
-                Skip ->
-                    Skip
-            end;
-        Skip ->
-            Skip
-    end.
 
 %% -------------------------------------------------------------------
 %% Helpers.

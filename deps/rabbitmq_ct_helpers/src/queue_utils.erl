@@ -196,13 +196,8 @@ has_local_stream_member_rpc(QName) ->
     end.
 
 assert_number_of_replicas(Config, Server, VHost, QQ, Count) ->
-    _ = case rabbit_ct_broker_helpers:configured_metadata_store(Config) of
-            khepri ->
-                rabbit_ct_broker_helpers:rpc(
-                  Config, Server, rabbit_khepri, fence, [30000]);
-            mnesia ->
-                ok
-        end,
+    _ = rabbit_ct_broker_helpers:rpc(
+          Config, Server, rabbit_khepri, fence, [30000]),
     ?awaitMatch(
        Count,
        begin

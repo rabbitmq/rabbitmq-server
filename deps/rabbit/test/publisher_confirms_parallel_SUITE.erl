@@ -66,8 +66,7 @@ init_per_group(quorum_queue, Config) ->
       Config,
       [{queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>}]},
        {queue_durable, true}]);
-init_per_group(Group, Config0) ->
-    Config = rabbit_ct_helpers:set_config(Config0, [{metadata_store, mnesia}]),
+init_per_group(Group, Config) ->
     init_per_group0(Group, Config).
 
 init_per_group0(Group, Config) ->

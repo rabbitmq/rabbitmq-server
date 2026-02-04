@@ -271,7 +271,7 @@ PARALLEL_CT_SET_4_D = per_user_connection_channel_tracking product_info queue_ty
 
 PARALLEL_CT_SET_5_A = rabbit_direct_reply_to_prop direct_reply_to_amqpl direct_reply_to_amqp classic_queue
 PARALLEL_CT_SET_5_B = feature_flags_v2 backing_queue transactions
-PARALLEL_CT_SET_5_C = metadata_store_migration cluster_upgrade maintenance_mode
+PARALLEL_CT_SET_5_C = cluster_upgrade maintenance_mode
 PARALLEL_CT_SET_5_D = rabbit_fifo_dlx_integration publisher_confirms_parallel
 
 PARALLEL_CT_SET_1 = $(sort $(PARALLEL_CT_SET_1_A) $(PARALLEL_CT_SET_1_B) $(PARALLEL_CT_SET_1_C) $(PARALLEL_CT_SET_1_D))

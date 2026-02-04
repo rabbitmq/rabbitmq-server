@@ -21,8 +21,7 @@ groups() ->
     [
       {cluster_size_2, [], [
           crashing_durable,
-          give_up_after_repeated_crashes,
-          crashing_transient
+          give_up_after_repeated_crashes
         ]}
     ].
 
@@ -46,13 +45,6 @@ init_per_group(cluster_size_2, Config) ->
 end_per_group(_, Config) ->
     Config.
 
-init_per_testcase(crashing_transient = Testcase, Config) ->
-    case rabbit_ct_broker_helpers:configured_metadata_store(Config) of
-        mnesia ->
-            init_per_testcase0(Testcase, Config);
-        _ ->
-            {skip, "Transient queues not supported by Khepri"}
-    end;
 init_per_testcase(Testcase, Config) ->
     init_per_testcase0(Testcase, Config).
 
@@ -84,16 +76,6 @@ crashing_durable(Config) ->
     amqp_channel:call(ChA, #'confirm.select'{}),
     test_queue_failure(A, ChA, ConnB, 1,
                        #'queue.declare'{queue = QName, durable = true}),
-    ok.
-
-crashing_transient(Config) ->
-    [A, B] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    ChA = rabbit_ct_client_helpers:open_channel(Config, A),
-    ConnB = rabbit_ct_client_helpers:open_connection(Config, B),
-    QName = <<"crashing-q">>,
-    amqp_channel:call(ChA, #'confirm.select'{}),
-    test_queue_failure(A, ChA, ConnB, 0,
-                       #'queue.declare'{queue = QName, durable = false}),
     ok.
 
 test_queue_failure(Node, Ch, RaceConn, MsgCount, Decl) ->

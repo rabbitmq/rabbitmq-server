@@ -40,27 +40,27 @@ suite() ->
 
 all() ->
     [
-     {group, mnesia_store},
-     {group, khepri_store}
+     {group, global_qos},
+     {group, classic_queue_mirroring},
+     {group, transient_nonexcl_queues},
+     {group, queue_master_locator}
     ].
 
 groups() ->
-    Groups = [
-              {global_qos, [],
-               [when_global_qos_is_permitted_by_default,
-                when_global_qos_is_not_permitted_from_conf]},
-              {classic_queue_mirroring, [],
-               [set_policy_when_cmq_is_permitted_by_default,
-                set_policy_when_cmq_is_not_permitted_from_conf]},
-              {transient_nonexcl_queues, [],
-               [when_transient_nonexcl_is_permitted_by_default,
-                when_transient_nonexcl_is_not_permitted_from_conf]},
-              {queue_master_locator, [],
-               [when_queue_master_locator_is_permitted_by_default,
-                when_queue_master_locator_is_not_permitted_from_conf]}
-             ],
-    [{mnesia_store, [], Groups},
-     {khepri_store, [], Groups}].
+    [
+     {global_qos, [],
+      [when_global_qos_is_permitted_by_default,
+       when_global_qos_is_not_permitted_from_conf]},
+     {classic_queue_mirroring, [],
+      [set_policy_when_cmq_is_permitted_by_default,
+       set_policy_when_cmq_is_not_permitted_from_conf]},
+     {transient_nonexcl_queues, [],
+      [when_transient_nonexcl_is_permitted_by_default,
+       when_transient_nonexcl_is_not_permitted_from_conf]},
+     {queue_master_locator, [],
+      [when_queue_master_locator_is_permitted_by_default,
+       when_queue_master_locator_is_not_permitted_from_conf]}
+    ].
 
 %% -------------------------------------------------------------------
 %% Testsuite setup/teardown.
@@ -74,10 +74,6 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     Config.
 
-init_per_group(mnesia_store, Config) ->
-    rabbit_ct_helpers:set_config(Config, [{metadata_store, mnesia}]);
-init_per_group(khepri_store, Config) ->
-    rabbit_ct_helpers:set_config(Config, [{metadata_store, khepri}]);
 init_per_group(global_qos, Config) ->
     rabbit_ct_helpers:set_config(Config, {rmq_nodes_count, 1});
 init_per_group(classic_queue_mirroring, Config) ->
@@ -85,9 +81,7 @@ init_per_group(classic_queue_mirroring, Config) ->
 init_per_group(transient_nonexcl_queues, Config) ->
     rabbit_ct_helpers:set_config(Config, {rmq_nodes_count, 1});
 init_per_group(queue_master_locator, Config) ->
-    rabbit_ct_helpers:set_config(Config, {rmq_nodes_count, 1});
-init_per_group(_Group, Config) ->
-    Config.
+    rabbit_ct_helpers:set_config(Config, {rmq_nodes_count, 1}).
 
 end_per_group(_Group, Config) ->
     Config.
