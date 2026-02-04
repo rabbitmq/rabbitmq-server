@@ -122,3 +122,31 @@ fun(Conf) ->
         Settings -> [V || {_K, V} <- Settings]
     end
 end}.
+
+%% hostname_paths (multiple paths support)
+
+{mapping, "cluster_formation.aws.hostname_path.$number", "rabbit.cluster_formation.peer_discovery_aws.aws_hostname_paths", [
+    {datatype, string}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_aws.aws_hostname_paths",
+fun(Conf) ->
+    case cuttlefish_variable:filter_by_prefix("cluster_formation.aws.hostname_path", Conf) of
+        [] ->
+            cuttlefish:unset();
+        L ->
+            %% Extract and sort numbered paths (hostname_path.1, hostname_path.2, etc.)
+            L1 = lists:map(
+                   fun ({["cluster_formation", "aws", "hostname_path", N], V}) ->
+                           case string:to_integer(N) of
+                               {I, ""} ->
+                                   {I, V};
+                               _ ->
+                                   cuttlefish:invalid(io_lib:format("Cannot convert ~p to an integer", [N]))
+                           end;
+                       (Other) ->
+                           cuttlefish:invalid(io_lib:format("~p is invalid", [Other]))
+                   end, L),
+            [rabbit_peer_discovery_util:as_list(V) || {_, V} <- lists:sort(L1)]
+    end
+end}.
