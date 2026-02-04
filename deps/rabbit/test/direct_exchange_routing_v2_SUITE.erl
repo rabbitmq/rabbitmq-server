@@ -6,21 +6,37 @@
 
 -module(direct_exchange_routing_v2_SUITE).
 
--compile([export_all, nowarn_export_all]).
+-export([suite/0,
+         all/0,
+         groups/0,
+         init_per_suite/1,
+         end_per_suite/1,
+         init_per_group/2,
+         end_per_group/2,
+         init_per_testcase/2,
+         end_per_testcase/2,
+
+         remove_binding_unbind_queue/1,
+         remove_binding_delete_queue/1,
+         remove_binding_delete_queue_multiple/1,
+         remove_binding_delete_exchange/1,
+         recover_bindings/1,
+         route_exchange_to_exchange/1,
+         keep_binding_node_down_durable_queue/1,
+         join_cluster/1
+        ]).
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
--define(INDEX_TABLE_NAME, rabbit_index_route).
-
 %% in file direct_exchange_routing_v2_SUITE_data/definition.json:
-%% number of bindings where the source exchange is a direct exchange
--define(NUM_BINDINGS_TO_DIRECT_ECHANGE, 620).
+%% number of bindings
+-define(NUM_BINDINGS_TO_DIRECT_ECHANGE, 670).
 %% number of bindings where the source exchange is a direct exchange
 %% and both source exchange and destination queue are durable
--define(NUM_BINDINGS_TO_DIRECT_ECHANGE_DURABLE, 220).
+-define(NUM_BINDINGS_TO_DIRECT_ECHANGE_DURABLE, 420).
 
 %%%===================================================================
 %%% Common Test callbacks
@@ -41,12 +57,9 @@ groups() ->
        remove_binding_delete_queue_multiple,
        remove_binding_delete_exchange,
        recover_bindings,
-       route_exchange_to_exchange,
-       reset]},
+       route_exchange_to_exchange]},
      {cluster_size_2, [],
-      [remove_binding_node_down_transient_queue,
-       keep_binding_node_down_durable_queue
-      ]},
+      [keep_binding_node_down_durable_queue]},
      {unclustered_cluster_size_2, [],
       [join_cluster]}
     ].
@@ -61,21 +74,17 @@ end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
 init_per_group(Group = cluster_size_1, Config0) ->
-    Config = rabbit_ct_helpers:set_config(Config0, [{rmq_nodes_count, 1},
-                                                    {metadata_store, mnesia}]),
+    Config = rabbit_ct_helpers:set_config(Config0, [{rmq_nodes_count, 1}]),
     start_broker(Group, Config);
 init_per_group(Group = cluster_size_2, Config0) ->
-    Config = rabbit_ct_helpers:set_config(Config0, [{rmq_nodes_count, 2},
-                                                    {metadata_store, mnesia}]),
+    Config = rabbit_ct_helpers:set_config(Config0, [{rmq_nodes_count, 2}]),
     start_broker(Group, Config);
 init_per_group(Group = cluster_size_3, Config0) ->
-    Config = rabbit_ct_helpers:set_config(Config0, [{rmq_nodes_count, 3},
-                                                    {metadata_store, mnesia}]),
+    Config = rabbit_ct_helpers:set_config(Config0, [{rmq_nodes_count, 3}]),
     start_broker(Group, Config);
 init_per_group(Group = unclustered_cluster_size_2, Config0) ->
     Config = rabbit_ct_helpers:set_config(Config0, [{rmq_nodes_count, 2},
-                                                    {rmq_nodes_clustered, false},
-                                                    {metadata_store, mnesia}]),
+                                                    {rmq_nodes_clustered, false}]),
     start_broker(Group, Config).
 
 start_broker(Group, Config0) ->
@@ -94,15 +103,7 @@ init_per_testcase(_, Config) ->
 
 end_per_testcase(_, Config) ->
     %% Test that all bindings got removed from the database.
-    ?assertEqual([0,0,0,0,0],
-                 lists:map(fun(Table) ->
-                                   table_size(Config, Table)
-                           end, [rabbit_durable_route,
-                                 rabbit_semi_durable_route,
-                                 rabbit_route,
-                                 rabbit_reverse_route,
-                                 ?INDEX_TABLE_NAME])
-                ).
+    ?assertEqual([], list_bindings(Config)).
 
 %%%===================================================================
 %%% Test cases
@@ -121,12 +122,12 @@ remove_binding_unbind_queue(Config) ->
 
     declare_queue(Ch, Q, false),
     bind_queue(Ch, Q, X, RKey),
-    assert_index_table_non_empty(Config),
+    assert_bindings_list_non_empty(Config),
     publish(Ch, X, RKey),
     assert_confirm(),
 
     unbind_queue(Ch, Q, X, RKey),
-    assert_index_table_empty(Config),
+    assert_bindings_list_empty(Config),
     publish(Ch, X, RKey),
     assert_return(),
     delete_queue(Ch, Q),
@@ -145,12 +146,12 @@ remove_binding_delete_queue(Config) ->
 
     declare_queue(Ch, Q, false),
     bind_queue(Ch, Q, X, RKey),
-    assert_index_table_non_empty(Config),
+    assert_bindings_list_non_empty(Config),
     publish(Ch, X, RKey),
     assert_confirm(),
 
     delete_queue(Ch, Q),
-    assert_index_table_empty(Config),
+    assert_bindings_list_empty(Config),
     publish(Ch, X, RKey),
     assert_return(),
     ok.
@@ -175,17 +176,17 @@ remove_binding_delete_queue_multiple(Config) ->
 
     %% Table rabbit_index_route stores only bindings
     %% where the source exchange is a direct exchange.
-    ?assertEqual(2, table_size(Config, ?INDEX_TABLE_NAME)),
+    ?assertEqual(3, count_bindings(Config)),
     publish(Ch, X, RKey),
     assert_confirm(),
 
     delete_queue(Ch, Q1),
-    assert_index_table_non_empty(Config),
+    assert_bindings_list_non_empty(Config),
     publish(Ch, X, RKey),
     assert_confirm(),
 
     delete_queue(Ch, Q2),
-    assert_index_table_empty(Config),
+    assert_bindings_list_empty(Config),
     publish(Ch, X, RKey),
     assert_return(),
     ok.
@@ -206,46 +207,18 @@ remove_binding_delete_exchange(Config) ->
     declare_queue(Ch, Q, false),
     bind_queue(Ch, Q, DirectX, RKey),
     bind_queue(Ch, Q, FanoutX, RKey),
-    assert_index_table_non_empty(Config),
+    assert_bindings_list_non_empty(Config),
     publish(Ch, DirectX, RKey),
     assert_confirm(),
 
     %% Table rabbit_index_route stores only bindings
     %% where the source exchange is a direct exchange.
     delete_exchange(Ch, FanoutX),
-    assert_index_table_non_empty(Config),
+    assert_bindings_list_non_empty(Config),
 
     delete_exchange(Ch, DirectX),
-    assert_index_table_empty(Config),
+    assert_bindings_list_empty(Config),
     delete_queue(Ch, Q),
-    ok.
-
-remove_binding_node_down_transient_queue(Config) ->
-    [_Server1, Server2] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    {_Conn1, Ch1} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
-    {_Conn2, Ch2} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 1),
-
-    amqp_channel:call(Ch1, #'confirm.select'{}),
-    amqp_channel:register_confirm_handler(Ch1, self()),
-
-    X = <<"amq.direct">>,
-    Q = <<"q">>,
-    RKey = <<"k">>,
-
-    %% transient classic queue on Server2
-    declare_queue(Ch2, Q, false),
-    bind_queue(Ch1, Q, X, RKey),
-    assert_index_table_non_empty(Config),
-    publish(Ch1, X, RKey),
-    assert_confirm(),
-
-    rabbit_control_helper:command(stop_app, Server2),
-    %% We expect no route to transient classic queue when its host node is down.
-    assert_index_table_empty(Config),
-    rabbit_control_helper:command(start_app, Server2),
-    %% We expect route to NOT come back when transient queue's host node comes back.
-    assert_index_table_empty(Config),
-    delete_queue(Ch1, Q),
     ok.
 
 keep_binding_node_down_durable_queue(Config) ->
@@ -262,8 +235,9 @@ keep_binding_node_down_durable_queue(Config) ->
 
     %% durable classic queue on Server2
     declare_queue(Ch2, Q, true),
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_khepri, fence, [10000]),
     bind_queue(Ch1, Q, X, RKey),
-    assert_index_table_non_empty(Config),
+    assert_bindings_list_non_empty(Config),
     publish(Ch1, X, RKey),
     assert_confirm(),
 
@@ -271,9 +245,9 @@ keep_binding_node_down_durable_queue(Config) ->
     %% When the durable classic queue's host node is down,
     %% we expect that queue and its bindings still to exist
     %% (see https://github.com/rabbitmq/rabbitmq-server/pull/4563).
-    assert_index_table_non_empty(Config),
+    assert_bindings_list_non_empty(Config),
     rabbit_control_helper:command(start_app, Server2),
-    assert_index_table_non_empty(Config),
+    assert_bindings_list_non_empty(Config),
     delete_queue(Ch1, Q),
     ok.
 
@@ -281,11 +255,11 @@ recover_bindings(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     Path = filename:join([?config(data_dir, Config), "definition.json"]),
 
-    assert_index_table_empty(Config),
+    assert_bindings_list_empty(Config),
     rabbit_ct_broker_helpers:rabbitmqctl(Config, Server, ["import_definitions", Path], 10_000),
-    ?assertEqual(?NUM_BINDINGS_TO_DIRECT_ECHANGE, table_size(Config, ?INDEX_TABLE_NAME)),
+    ?assertEqual(?NUM_BINDINGS_TO_DIRECT_ECHANGE, count_bindings(Config)),
     ok = rabbit_ct_broker_helpers:restart_node(Config, 0),
-    ?assertEqual(?NUM_BINDINGS_TO_DIRECT_ECHANGE_DURABLE, table_size(Config, ?INDEX_TABLE_NAME)),
+    ?assertEqual(?NUM_BINDINGS_TO_DIRECT_ECHANGE_DURABLE, count_bindings(Config)),
 
     %% cleanup
     {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
@@ -313,7 +287,7 @@ route_exchange_to_exchange(Config) ->
     publish(Ch, DirectX, RKey),
     queue_utils:wait_for_messages(Config, [[Q1, <<"1">>, <<"1">>, <<"0">>]]),
     queue_utils:wait_for_messages(Config, [[Q2, <<"1">>, <<"1">>, <<"0">>]]),
-    ?assertEqual(1, table_size(Config, ?INDEX_TABLE_NAME)),
+    ?assertEqual(3, count_bindings(Config)),
 
     %% cleanup
     delete_queue(Ch, Q1),
@@ -323,19 +297,8 @@ route_exchange_to_exchange(Config) ->
                                                                        routing_key = RKey}),
     ok.
 
-reset(Config) ->
-    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-
-    ?assertEqual([Server], index_table_ram_copies(Config, 0)),
-    ok = rabbit_control_helper:command(stop_app, Server),
-    ok = rabbit_control_helper:command(reset, Server),
-    ok = rabbit_control_helper:command(start_app, Server),
-    %% After reset, upon node boot, we expect that the table gets re-created.
-    ?assertEqual([Server], index_table_ram_copies(Config, 0)).
-
 join_cluster(Config) ->
-    Servers0 = [Server1, Server2] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    Servers = lists:sort(Servers0),
+    [Server1, Server2] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     {_Conn1, Ch1} = rabbit_ct_client_helpers:open_connection_and_channel(Config, Server2),
     DirectX = <<"amq.direct">>,
@@ -347,10 +310,8 @@ join_cluster(Config) ->
 
     %% Server1 and Server2 are not clustered yet.
     %% Hence, every node has their own table (copy) and only Server2's table contains the binding.
-    ?assertEqual([Server2], index_table_ram_copies(Config, Server2)),
-    ?assertEqual([Server1], index_table_ram_copies(Config, Server1)),
-    ?assertEqual(1, table_size(Config, ?INDEX_TABLE_NAME, Server2)),
-    ?assertEqual(0, table_size(Config, ?INDEX_TABLE_NAME, Server1)),
+    ?assertEqual(1, count_bindings(Config, Server2)),
+    ?assertEqual(0, count_bindings(Config, Server1)),
 
     ok = rabbit_control_helper:command(stop_app, Server1),
     %% For the purpose of this test it shouldn't matter whether Server1 is reset. Both should work.
@@ -364,8 +325,7 @@ join_cluster(Config) ->
     ok = rabbit_control_helper:command(start_app, Server1),
 
     %% After Server1 joined Server2, the table should be clustered.
-    ?assertEqual(Servers, index_table_ram_copies(Config, Server1)),
-    ?assertEqual(1, table_size(Config, ?INDEX_TABLE_NAME, Server1)),
+    ?assertEqual(1, count_bindings(Config, Server1)),
 
     %% Publishing via Server2 via "direct exchange routing v2" should work.
     amqp_channel:call(Ch1, #'confirm.select'{}),
@@ -433,22 +393,20 @@ assert_return() ->
               throw(missing_return)
     end.
 
-assert_index_table_empty(Config) ->
-    ?awaitMatch(0, table_size(Config, ?INDEX_TABLE_NAME), 3000).
+assert_bindings_list_empty(Config) ->
+    ?awaitMatch(0, count_bindings(Config), 3000).
 
-assert_index_table_non_empty(Config) ->
-    ?assertNotEqual(0, table_size(Config, ?INDEX_TABLE_NAME)).
+assert_bindings_list_non_empty(Config) ->
+    ?assertNotEqual(0, count_bindings(Config)).
 
-index_table_ram_copies(Config, Node) ->
-    RamCopies = rabbit_ct_broker_helpers:rpc(Config, Node, mnesia, table_info,
-                                             [?INDEX_TABLE_NAME, ram_copies]),
-    lists:sort(RamCopies).
+count_bindings(Config) ->
+    length(list_bindings(Config)).
 
-table_size(Config, Table) ->
-    table_size(Config, Table, 0).
+count_bindings(Config, Server) ->
+    length(list_bindings(Config, Server)).
 
-table_size(Config, Table, Server) ->
-    %% Do not use
-    %% mnesia:table_info(Table, size)
-    %% as this returns 0 if the table doesn't exist.
-    rabbit_ct_broker_helpers:rpc(Config, Server, ets, info, [Table, size], 5000).
+list_bindings(Config) ->
+    list_bindings(Config, 0).
+
+list_bindings(Config, Server) ->
+    rabbit_ct_broker_helpers:rpc(Config, Server, rabbit_db_binding, get_all, []).

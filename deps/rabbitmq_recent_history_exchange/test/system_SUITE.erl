@@ -16,22 +16,12 @@
 
 all() ->
     [
-      {group, mnesia_store},
-      {group, khepri_store},
-      {group, khepri_migration}
+      {group, non_parallel_tests}
     ].
 
 groups() ->
     [
-     {mnesia_store, [], [
-                         {non_parallel_tests, [], all_tests()}
-                        ]},
-     {khepri_store, [], [
-                         {non_parallel_tests, [], all_tests()}
-                        ]},
-     {khepri_migration, [], [
-                             from_mnesia_to_khepri
-                            ]}
+     {non_parallel_tests, [], all_tests()}
     ].
 
 all_tests() ->
@@ -57,16 +47,6 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
-init_per_group(mnesia_store, Config) ->
-    case rabbit_ct_broker_helpers:configured_metadata_store(Config) of
-        khepri -> {skip, "These tests target Mnesia"};
-        _      -> Config
-    end;
-init_per_group(khepri_store, Config) ->
-    case rabbit_ct_broker_helpers:configured_metadata_store(Config) of
-        mnesia -> {skip, "These tests target Khepri"};
-        _      -> Config
-    end;
 init_per_group(_, Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, [
                                                     {rmq_nodename_suffix, ?MODULE},
@@ -76,10 +56,6 @@ init_per_group(_, Config) ->
                                       rabbit_ct_broker_helpers:setup_steps() ++
                                           rabbit_ct_client_helpers:setup_steps()).
 
-end_per_group(mnesia_store, Config) ->
-    Config;
-end_per_group(khepri_store, Config) ->
-    Config;
 end_per_group(_, Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config,
                                          rabbit_ct_client_helpers:teardown_steps() ++
@@ -317,74 +293,3 @@ qs() ->
 make_exchange_name(Config, Suffix) ->
     B = rabbit_ct_helpers:get_config(Config, test_resource_name),
     erlang:list_to_binary("x-" ++ B ++ "-" ++ Suffix).
-
-from_mnesia_to_khepri(Config) ->
-    MsgCount = 10,
-
-    {Conn, Chan} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
-
-    #'exchange.declare_ok'{} =
-        amqp_channel:call(Chan,
-                          #'exchange.declare' {
-                            exchange = make_exchange_name(Config, "1"),
-                            type = <<"x-recent-history">>,
-                            auto_delete = true
-                           }),
-
-    #'exchange.declare_ok'{} =
-        amqp_channel:call(Chan,
-                          #'exchange.declare' {
-                            exchange = make_exchange_name(Config, "2"),
-                            type = <<"direct">>,
-                            auto_delete = true
-                           }),
-
-    #'queue.declare_ok'{queue = Q} =
-        amqp_channel:call(Chan, #'queue.declare' {
-                                   queue     = <<"q">>
-                                  }),
-
-    #'queue.bind_ok'{} =
-        amqp_channel:call(Chan, #'queue.bind' {
-                                   queue = Q,
-                                   exchange = make_exchange_name(Config, "2"),
-                                   routing_key = <<"">>
-                                  }),
-
-    #'tx.select_ok'{} = amqp_channel:call(Chan, #'tx.select'{}),
-    [amqp_channel:call(Chan,
-                       #'basic.publish'{exchange = make_exchange_name(Config, "1")},
-                       #amqp_msg{props = #'P_basic'{}, payload = <<>>}) ||
-        _ <- lists:duplicate(MsgCount, const)],
-    amqp_channel:call(Chan, #'tx.commit'{}),
-
-    amqp_channel:call(Chan,
-                      #'exchange.bind' {
-                         source      = make_exchange_name(Config, "1"),
-                         destination = make_exchange_name(Config, "2"),
-                         routing_key = <<"">>
-                        }),
-
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config, khepri_db) of
-        ok ->
-            case rabbit_ct_broker_helpers:enable_feature_flag(Config, rabbit_recent_history_exchange_raft_based_metadata_store) of
-                ok ->
-                    #'queue.declare_ok'{message_count = Count, queue = Q} =
-                        amqp_channel:call(Chan, #'queue.declare' {
-                                                   passive   = true,
-                                                   queue     = Q
-                                                  }),
-                    ?assertEqual(MsgCount, Count),
-
-                    amqp_channel:call(Chan, #'exchange.delete' { exchange = make_exchange_name(Config, "1") }),
-                    amqp_channel:call(Chan, #'exchange.delete' { exchange = make_exchange_name(Config, "2") }),
-                    amqp_channel:call(Chan, #'queue.delete' { queue = Q }),
-
-                    rabbit_ct_client_helpers:close_connection_and_channel(Conn, Chan),
-                    ok;
-                Skip ->
-                    Skip
-            end;
-        Skip ->
-            Skip
-    end.

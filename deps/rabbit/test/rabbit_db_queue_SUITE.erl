@@ -12,20 +12,54 @@
 -include_lib("eunit/include/eunit.hrl").
 -include("amqqueue.hrl").
 
--compile(export_all).
+-export([all/0,
+         groups/0,
+         init_per_suite/1,
+         end_per_suite/1,
+         init_per_group/2,
+         end_per_group/2,
+         init_per_testcase/2,
+         end_per_testcase/2,
+
+         create_or_get/1, create_or_get1/1,
+         get/1, get1/1,
+         get_targets/1, get_targets1/1,
+         get_all/1, get_all1/1,
+         get_all_by_vhost/1, get_all_by_vhost1/1,
+         get_all_by_type/1, get_all_by_type1/1,
+         get_all_by_type_and_vhost/1, get_all_by_type_and_vhost1/1,
+         get_all_by_type_and_node/1, get_all_by_type_and_node1/1,
+         list/1, list1/1,
+         count/1, count1/1,
+         count_by_vhost/1, count_by_vhost1/1,
+         set/1, set1/1,
+         delete/1, delete1/1,
+         delete_exclusive_queue/1, delete_exclusive_queue1/1,
+         update/1, update1/1,
+         update_decorators/1, update_decorators1/1,
+         exists/1, exists1/1,
+         get_all_durable/1, get_all_durable1/1,
+         get_all_durable_by_type/1, get_all_durable_by_type1/1,
+         filter_all_durable/1, filter_all_durable1/1,
+         get_durable/1, get_durable1/1,
+         get_many_durable/1, get_many_durable1/1,
+         update_durable/1, update_durable1/1,
+         mark_local_durable_queues_stopped/1,
+         mark_local_durable_queues_stopped1/1,
+         foreach_durable/1, foreach_durable1/1,
+         internal_delete/1, internal_delete1/1
+        ]).
 
 -define(VHOST, <<"/">>).
 
 all() ->
     [
-     {group, all_tests},
-     {group, mnesia_store}
+     {group, all_tests}
     ].
 
 groups() ->
     [
-     {all_tests, [], all_tests()},
-     {mnesia_store, [], mnesia_tests()}
+     {all_tests, [], all_tests()}
     ].
 
 all_tests() ->
@@ -58,16 +92,6 @@ all_tests() ->
      internal_delete
     ].
 
-mnesia_tests() ->
-    [
-     set_dirty,
-     foreach_transient,
-     delete_transient,
-     update_in_mnesia_tx,
-     get_durable_in_mnesia_tx,
-     delete_exclusive_queue
-    ].
-
 %% -------------------------------------------------------------------
 %% Test suite setup/teardown.
 %% -------------------------------------------------------------------
@@ -79,13 +103,7 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
-init_per_group(mnesia_store = Group, Config0) ->
-    Config = rabbit_ct_helpers:set_config(Config0, [{metadata_store, mnesia}]),
-    init_per_group_common(Group, Config);
 init_per_group(Group, Config) ->
-    init_per_group_common(Group, Config).
-
-init_per_group_common(Group, Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, [
         {rmq_nodename_suffix, Group},
         {rmq_nodes_count, 1}
@@ -540,56 +558,6 @@ foreach_durable1(_Config) ->
     ?assertEqual({error, not_found}, rabbit_db_queue:get_durable(QName1)),
     passed.
 
-foreach_transient(Config) ->
-    passed = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, foreach_transient1, [Config]).
-
-foreach_transient1(_Config) ->
-    QName1 = rabbit_misc:r(?VHOST, queue, <<"test-queue1">>),
-    QName2 = rabbit_misc:r(?VHOST, queue, <<"test-queue2">>),
-    Q1 = new_queue(QName1, rabbit_classic_queue),
-    Q2 = new_queue(QName2, rabbit_classic_queue),
-    ?assertEqual(ok, rabbit_db_queue:set(Q1)),
-    ?assertEqual(ok, rabbit_db_queue:set_dirty(Q2)),
-    ?assertEqual(ok, rabbit_db_queue:foreach_transient(
-                       fun(Q0) ->
-                               rabbit_db_queue:internal_delete(amqqueue:get_name(Q0), true, normal)
-                       end)),
-    ?assertEqual({error, not_found}, rabbit_db_queue:get(QName1)),
-    ?assertEqual({error, not_found}, rabbit_db_queue:get_durable(QName1)),
-    ?assertEqual({error, not_found}, rabbit_db_queue:get(QName2)),
-    passed.
-
-delete_transient(Config) ->
-    passed = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_transient1, [Config]).
-
-delete_transient1(_Config) ->
-    QName1 = rabbit_misc:r(?VHOST, queue, <<"test-queue1">>),
-    QName2 = rabbit_misc:r(?VHOST, queue, <<"test-queue2">>),
-    Q1 = new_queue(QName1, rabbit_classic_queue),
-    Q2 = new_queue(QName2, rabbit_quorum_queue),
-    ?assertEqual(ok, rabbit_db_queue:set_dirty(Q1)),
-    ?assertEqual(ok, rabbit_db_queue:set_dirty(Q2)),
-    ?assertMatch({[QName1], _},
-                 rabbit_db_queue:delete_transient(
-                   fun(Q0) when ?is_amqqueue(Q0) ->
-                           amqqueue:get_type(Q0) == rabbit_classic_queue
-                   end)),
-    ?assertEqual({error, not_found}, rabbit_db_queue:get(QName1)),
-    ?assertMatch({ok, _}, rabbit_db_queue:get(QName2)),
-    passed.
-
-set_dirty(Config) ->
-    passed = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, set_dirty1, [Config]).
-
-set_dirty1(_Config) ->
-    QName1 = rabbit_misc:r(?VHOST, queue, <<"test-queue">>),
-    Q1 = new_queue(QName1, rabbit_classic_queue),
-    Q2 = amqqueue:set_decorators(Q1, []),
-    ok = rabbit_db_queue:set_dirty(Q1),
-    ?assertEqual({ok, Q2}, rabbit_db_queue:get(QName1)),
-    ?assertEqual({error, not_found}, rabbit_db_queue:get_durable(QName1)),
-    passed.
-
 internal_delete(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, internal_delete1, [Config]).
 
@@ -603,48 +571,6 @@ internal_delete1(_Config) ->
                        fun(Q0) when ?is_amqqueue(Q0) -> true end)),
     ?assertEqual({error, not_found}, rabbit_db_queue:get(QName)),
     ?assertEqual({error, not_found}, rabbit_db_queue:get_durable(QName)),
-    passed.
-
-update_in_mnesia_tx(Config) ->
-    passed = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, update_in_mnesia_tx1, [Config]).
-
-update_in_mnesia_tx1(_Config) ->
-    QName = rabbit_misc:r(?VHOST, queue, <<"test-queue">>),
-    Q = new_queue(QName, rabbit_classic_queue),
-    Pid = spawn(fun() -> ok end),
-    ?assertEqual({atomic, not_found},
-                 mnesia:transaction(fun() ->
-                                            rabbit_db_queue:update_in_mnesia_tx(
-                                              QName,
-                                              fun(Q0) -> amqqueue:set_pid(Q0, Pid) end)
-                                    end)),
-    ?assertEqual(ok, rabbit_db_queue:set(Q)),
-    {atomic, Q1} =
-        mnesia:transaction(fun() ->
-                                   rabbit_db_queue:update_in_mnesia_tx(
-                                     QName,
-                                     fun(Q0) -> amqqueue:set_pid(Q0, Pid) end)
-                           end),
-    ?assertEqual(Pid, amqqueue:get_pid(Q1)),
-    ?assertEqual({ok, Q1}, rabbit_db_queue:get(QName)),
-    ?assertEqual({ok, Q1}, rabbit_db_queue:get_durable(QName)),
-    passed.
-
-get_durable_in_mnesia_tx(Config) ->
-    passed = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, get_durable_in_mnesia_tx1, [Config]).
-
-get_durable_in_mnesia_tx1(_Config) ->
-    QName = rabbit_misc:r(?VHOST, queue, <<"test-queue">>),
-    Q = new_queue(QName, rabbit_classic_queue),
-    ?assertEqual({atomic, {error, not_found}},
-                 mnesia:transaction(fun() ->
-                                            rabbit_db_queue:get_durable_in_mnesia_tx(QName)
-                                    end)),
-    ?assertEqual(ok, rabbit_db_queue:set(Q)),
-    ?assertEqual({atomic, {ok, Q}},
-                 mnesia:transaction(fun() ->
-                                            rabbit_db_queue:get_durable_in_mnesia_tx(QName)
-                                    end)),
     passed.
 
 set_list(Qs) ->

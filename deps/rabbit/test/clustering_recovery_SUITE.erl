@@ -12,8 +12,36 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
--compile(nowarn_export_all).
--compile(export_all).
+-export([suite/0,
+         all/0,
+         groups/0,
+         init_per_suite/1,
+         end_per_suite/1,
+         init_per_group/2,
+         end_per_group/2,
+         init_per_testcase/2,
+         end_per_testcase/2,
+
+         force_standalone_boot/1,
+         force_standalone_boot_and_restart/1,
+         force_standalone_boot_and_restart_with_quorum_queues/1,
+         recover_after_partition_with_leader/1,
+         autodelete_transient_queue_after_partition_recovery_1/1,
+         autodelete_durable_queue_after_partition_recovery_1/1,
+         autodelete_transient_queue_after_partition_recovery_2/1,
+         autodelete_durable_queue_after_partition_recovery_2/1,
+         autodelete_transient_queue_after_node_loss/1,
+         autodelete_durable_queue_after_node_loss/1,
+         exclusive_transient_queue_after_partition_recovery_1/1,
+         exclusive_durable_queue_after_partition_recovery_1/1,
+         exclusive_transient_queue_after_partition_recovery_2/1,
+         exclusive_durable_queue_after_partition_recovery_2/1,
+         exclusive_transient_queue_after_node_loss/1,
+         exclusive_durable_queue_after_node_loss/1,
+         rolling_restart/1,
+         rolling_kill_restart/1,
+         forget_down_node/1
+        ]).
 
 -import(clustering_utils, [
                            assert_status/2,
@@ -24,60 +52,43 @@
 
 all() ->
     [
-     {group, mnesia_store},
-     {group, khepri_store}
+     {group, clustered_3_nodes},
+     {group, clustered_5_nodes}
     ].
 
 groups() ->
-    [{mnesia_store, [], [
-                         {clustered_3_nodes, [],
-                          [{cluster_size_3, [], [
-                                                 force_shrink_quorum_queue,
-                                                 force_shrink_all_quorum_queues,
-                                                 autodelete_transient_queue_after_partition_recovery_1,
-                                                 autodelete_durable_queue_after_partition_recovery_1,
-                                                 autodelete_transient_queue_after_node_loss,
-                                                 autodelete_durable_queue_after_node_loss,
-                                                 exclusive_transient_queue_after_partition_recovery_1,
-                                                 exclusive_durable_queue_after_partition_recovery_1,
-                                                 exclusive_transient_queue_after_node_loss,
-                                                 exclusive_durable_queue_after_node_loss
-                                                ]}
+    [
+     {clustered_3_nodes, [],
+      [{cluster_size_3, [], [
+        {cluster_size_3_sequential, [], [
+                             force_standalone_boot,
+                             force_standalone_boot_and_restart,
+                             force_standalone_boot_and_restart_with_quorum_queues,
+                             recover_after_partition_with_leader
+                            ]},
+        {cluster_size_3_parallel, [parallel], [
+                             autodelete_transient_queue_after_partition_recovery_1,
+                             autodelete_durable_queue_after_partition_recovery_1,
+                             autodelete_transient_queue_after_partition_recovery_2,
+                             autodelete_durable_queue_after_partition_recovery_2,
+                             autodelete_transient_queue_after_node_loss,
+                             autodelete_durable_queue_after_node_loss,
+                             exclusive_transient_queue_after_partition_recovery_1,
+                             exclusive_durable_queue_after_partition_recovery_1,
+                             exclusive_transient_queue_after_partition_recovery_2,
+                             exclusive_durable_queue_after_partition_recovery_2,
+                             exclusive_transient_queue_after_node_loss,
+                             exclusive_durable_queue_after_node_loss
+                            ]}
                           ]}
-                        ]},
-     {khepri_store, [], [
-                         {clustered_3_nodes, [],
-                          [{cluster_size_3, [], [
-                            {cluster_size_3_sequential, [], [
-                                                 force_standalone_boot,
-                                                 force_standalone_boot_and_restart,
-                                                 force_standalone_boot_and_restart_with_quorum_queues,
-                                                 recover_after_partition_with_leader
-                                                ]},
-                            {cluster_size_3_parallel, [parallel], [
-                                                 autodelete_transient_queue_after_partition_recovery_1,
-                                                 autodelete_durable_queue_after_partition_recovery_1,
-                                                 autodelete_transient_queue_after_partition_recovery_2,
-                                                 autodelete_durable_queue_after_partition_recovery_2,
-                                                 autodelete_transient_queue_after_node_loss,
-                                                 autodelete_durable_queue_after_node_loss,
-                                                 exclusive_transient_queue_after_partition_recovery_1,
-                                                 exclusive_durable_queue_after_partition_recovery_1,
-                                                 exclusive_transient_queue_after_partition_recovery_2,
-                                                 exclusive_durable_queue_after_partition_recovery_2,
-                                                 exclusive_transient_queue_after_node_loss,
-                                                 exclusive_durable_queue_after_node_loss
-                                                ]}
-                                              ]}
-                          ]},
-                         {clustered_5_nodes, [],
-                          [{cluster_size_5, [parallel], [
-                                                 rolling_restart,
-                                                 rolling_kill_restart,
-                                                 forget_down_node
-                                                ]}]
-                         }
-                        ]}
+      ]},
+     {clustered_5_nodes, [],
+      [{cluster_size_5, [parallel], [
+                             rolling_restart,
+                             rolling_kill_restart,
+                             forget_down_node
+                            ]}]
+     }
     ].
 
 suite() ->
@@ -99,20 +110,6 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
-init_per_group(khepri_store, Config) ->
-    case rabbit_ct_broker_helpers:configured_metadata_store(Config) of
-        mnesia ->
-            {skip, "These tests target Khepri"};
-        _ ->
-            Config
-    end;
-init_per_group(mnesia_store, Config) ->
-    case rabbit_ct_broker_helpers:configured_metadata_store(Config) of
-        khepri ->
-            {skip, "These tests target mnesia"};
-        _ ->
-            Config
-    end;
 init_per_group(clustered_3_nodes, Config) ->
     rabbit_ct_helpers:set_config(Config, [{rmq_nodes_clustered, true}]);
 init_per_group(clustered_5_nodes, Config) ->
@@ -195,56 +192,6 @@ end_per_testcase(Testcase, Config) ->
 %% -------------------------------------------------------------------
 %% Testcases
 %% -------------------------------------------------------------------
-
-force_shrink_all_quorum_queues(Config) ->
-    [Rabbit, Hare, Bunny] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-
-    QName1 = quorum_queue_name(1),
-    QName2 = quorum_queue_name(2),
-    QName3 = quorum_queue_name(3),
-    Args = [{<<"x-queue-type">>, longstr, <<"quorum">>}],
-    declare_and_publish_to_queue(Config, Rabbit, QName1, Args),
-    declare_and_publish_to_queue(Config, Rabbit, QName2, Args),
-    declare_and_publish_to_queue(Config, Rabbit, QName3, Args),
-
-    ok = rabbit_ct_broker_helpers:stop_node(Config, Hare),
-    ok = rabbit_ct_broker_helpers:stop_node(Config, Bunny),
-
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Rabbit),
-    ?assertExit(
-       {{shutdown, {connection_closing, {server_initiated_close, 541, _}}}, _},
-       amqp_channel:subscribe(Ch, #'basic.consume'{queue = QName1,
-                                                   consumer_tag = <<"ctag">>},
-                              self())),
-
-    ok = rabbit_ct_broker_helpers:rpc(Config, Rabbit, rabbit_quorum_queue, force_all_queues_shrink_member_to_current_member, []),
-
-    ok = consume_from_queue(Config, Rabbit, QName1),
-    ok = consume_from_queue(Config, Rabbit, QName2),
-    ok = consume_from_queue(Config, Rabbit, QName3),
-
-    ok.
-
-force_shrink_quorum_queue(Config) ->
-    [Rabbit, Hare, Bunny] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-
-    QName1 = quorum_queue_name(1),
-    Args = [{<<"x-queue-type">>, longstr, <<"quorum">>}],
-    declare_and_publish_to_queue(Config, Rabbit, QName1, Args),
-
-    ok = rabbit_ct_broker_helpers:stop_node(Config, Hare),
-    ok = rabbit_ct_broker_helpers:stop_node(Config, Bunny),
-
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Rabbit),
-    ?assertExit(
-       {{shutdown, {connection_closing, {server_initiated_close, 541, _}}}, _},
-       amqp_channel:subscribe(Ch, #'basic.consume'{queue = QName1,
-                                                   consumer_tag = <<"ctag">>},
-                              self())),
-
-    ok = rabbit_ct_broker_helpers:rpc(Config, Rabbit, rabbit_quorum_queue, force_shrink_member_to_current_member, [<<"/">>, QName1]),
-
-    ok = consume_from_queue(Config, Rabbit, QName1).
 
 force_standalone_boot(Config) ->
     %% Test for disaster recovery procedure command
@@ -618,164 +565,76 @@ temporary_queue_after_partition_recovery_1(Config, QueueDeclare) ->
       end, Majority),
     clustering_utils:assert_cluster_status({Nodes, Majority}, Majority),
 
-    IsAutoDeleteDurable = case QueueDeclare of
-                              #'queue.declare'{auto_delete = true,
-                                               durable = true} ->
-                                  true;
-                              _ ->
-                                  false
-                          end,
-    case rabbit_ct_broker_helpers:configured_metadata_store(Config) of
-        mnesia when not IsAutoDeleteDurable ->
-            clustering_utils:assert_cluster_status({Nodes, []}, [Node2]),
+    clustering_utils:assert_cluster_status({Nodes, [Node2]}, [Node2]),
 
-            %% With Mnesia, the client connection is terminated (the node is
-            %% stopped thanks to the pause_minority partition handling) and
-            %% the exclusive queue is deleted.
-            receive
-                {'DOWN', CMRef, _, _, Reason1} ->
-                    ct:pal("Connection ~p exited: ~p", [Conn, Reason1]),
-                    case Reason1 of
-                        {shutdown, {server_initiated_close, _, _}} ->
-                            ok;
-                        {channel0_died, {shutdown, _}} ->
-                            ok;
-                        _ ->
-                            ct:fail("Unexpected termination reason: ~p", [Reason1])
-                    end,
-                    ok
-            after Timeout ->
-                      ct:fail("Connection ~p still running", [Conn])
-            end,
-            receive
-                {'DOWN', QMRef, _, _, Reason2} ->
-                    ct:pal("Queue ~p exited: ~p", [QPid, Reason2]),
-                    ?assertEqual(normal, Reason2),
-                    ok
-            after Timeout ->
-                      ct:fail("Queue ~p still running", [QPid])
-            end,
+    %% The queue is still recorded everywhere.
+    lists:foreach(
+      fun(Node) ->
+              Ret = rabbit_ct_broker_helpers:rpc(
+                      Config, Node, rabbit_amqqueue, lookup, [QName]),
+              ct:pal("Queue lookup on node ~0p: ~p", [Node, Ret]),
+              ?assertEqual({ok, Queue}, Ret)
+      end, Nodes),
 
-            %% The queue was also deleted from the metadata store on nodes on
-            %% the majority side.
-            lists:foreach(
-              fun(Node) ->
-                      ?awaitMatch(
-                         {error, not_found},
-                         begin
-                             Ret = rabbit_ct_broker_helpers:rpc(
-                                     Config, Node,
-                                     rabbit_amqqueue, lookup, [QName]),
-                             ct:pal(
-                               "Queue lookup on node ~0p: ~p",
-                               [Node, Ret]),
-                             Ret
-                         end, Timeout)
-              end, Majority),
+    %% Prepare a publisher.
+    {PConn,
+     PCh} = rabbit_ct_client_helpers:open_connection_and_channel(
+              Config, Node2),
+    publish_many(PCh, QName#resource.name, 10),
+    consume(10),
 
-            %% We can resolve the network partition.
-            lists:foreach(
-              fun(Node) ->
-                      rabbit_ct_broker_helpers:allow_traffic_between(
-                        Node2, Node)
-              end, Majority),
-            clustering_utils:assert_cluster_status({Nodes, Nodes}, Nodes),
+    %% We resolve the network partition.
+    lists:foreach(
+      fun(Node) ->
+              rabbit_ct_broker_helpers:allow_traffic_between(
+                Node2, Node)
+      end, Majority),
+    clustering_utils:assert_cluster_status({Nodes, Nodes}, Nodes),
 
-            %% The queue is not recorded anywhere.
-            lists:foreach(
-              fun(Node) ->
-                      ?awaitMatch(
-                         {error, not_found},
-                         begin
-                             Ret = rabbit_ct_broker_helpers:rpc(
-                                     Config, Node,
-                                     rabbit_amqqueue, lookup, [QName]),
-                             ct:pal(
-                               "Queue lookup on node ~0p: ~p",
-                               [Node, Ret]),
-                             Ret
-                         end, Timeout)
-              end, Nodes),
-            ok;
+    publish_many(PCh, QName#resource.name, 10),
+    consume(10),
 
-        mnesia when IsAutoDeleteDurable ->
-            %% An auto-delete durable queue seems to survive a network
-            %% partition or a node loss. Thue, there is nothing to test in the
-            %% scope of this test case.
-            ok;
+    rabbit_ct_client_helpers:close_connection_and_channel(PConn, PCh),
 
-        khepri ->
-            clustering_utils:assert_cluster_status({Nodes, [Node2]}, [Node2]),
+    %% We terminate the channel and connection: the queue should
+    %% terminate and the metadata store should have no record of it.
+    _ = rabbit_ct_client_helpers:close_connection_and_channel(
+          Conn, Ch),
 
-            %% The queue is still recorded everywhere.
-            lists:foreach(
-              fun(Node) ->
-                      Ret = rabbit_ct_broker_helpers:rpc(
-                              Config, Node, rabbit_amqqueue, lookup, [QName]),
-                      ct:pal("Queue lookup on node ~0p: ~p", [Node, Ret]),
-                      ?assertEqual({ok, Queue}, Ret)
-              end, Nodes),
-
-            %% Prepare a publisher.
-            {PConn,
-             PCh} = rabbit_ct_client_helpers:open_connection_and_channel(
-                      Config, Node2),
-            publish_many(PCh, QName#resource.name, 10),
-            consume(10),
-
-            %% We resolve the network partition.
-            lists:foreach(
-              fun(Node) ->
-                      rabbit_ct_broker_helpers:allow_traffic_between(
-                        Node2, Node)
-              end, Majority),
-            clustering_utils:assert_cluster_status({Nodes, Nodes}, Nodes),
-
-            publish_many(PCh, QName#resource.name, 10),
-            consume(10),
-
-            rabbit_ct_client_helpers:close_connection_and_channel(PConn, PCh),
-
-            %% We terminate the channel and connection: the queue should
-            %% terminate and the metadata store should have no record of it.
-            _ = rabbit_ct_client_helpers:close_connection_and_channel(
-                  Conn, Ch),
-
-            receive
-                {'DOWN', CMRef, _, _, Reason1} ->
-                    ct:pal("Connection ~p exited: ~p", [Conn, Reason1]),
-                    ?assertEqual({shutdown, normal}, Reason1),
-                    ok
-            after Timeout ->
-                      ct:fail("Connection ~p still running", [Conn])
-            end,
-            receive
-                {'DOWN', QMRef, _, _, Reason} ->
-                    ct:pal("Queue ~p exited: ~p", [QPid, Reason]),
-                    ?assertEqual(normal, Reason),
-                    ok
-            after Timeout ->
-                      ct:fail("Queue ~p still running", [QPid])
-            end,
-
-            %% The queue was also deleted from the metadata store on all
-            %% nodes.
-            lists:foreach(
-              fun(Node) ->
-                      ?awaitMatch(
-                         {error, not_found},
-                         begin
-                             Ret = rabbit_ct_broker_helpers:rpc(
-                                     Config, Node,
-                                     rabbit_amqqueue, lookup, [QName]),
-                             ct:pal(
-                               "Queue lookup on node ~0p: ~p",
-                               [Node, Ret]),
-                             Ret
-                         end, Timeout)
-              end, Nodes),
+    receive
+        {'DOWN', CMRef, _, _, Reason1} ->
+            ct:pal("Connection ~p exited: ~p", [Conn, Reason1]),
+            ?assertEqual({shutdown, normal}, Reason1),
             ok
-    end.
+    after Timeout ->
+              ct:fail("Connection ~p still running", [Conn])
+    end,
+    receive
+        {'DOWN', QMRef, _, _, Reason} ->
+            ct:pal("Queue ~p exited: ~p", [QPid, Reason]),
+            ?assertEqual(normal, Reason),
+            ok
+    after Timeout ->
+              ct:fail("Queue ~p still running", [QPid])
+    end,
+
+    %% The queue was also deleted from the metadata store on all
+    %% nodes.
+    lists:foreach(
+      fun(Node) ->
+              ?awaitMatch(
+                 {error, not_found},
+                 begin
+                     Ret = rabbit_ct_broker_helpers:rpc(
+                             Config, Node,
+                             rabbit_amqqueue, lookup, [QName]),
+                     ct:pal(
+                       "Queue lookup on node ~0p: ~p",
+                       [Node, Ret]),
+                     Ret
+                 end, Timeout)
+      end, Nodes),
+    ok.
 
 autodelete_transient_queue_after_partition_recovery_2(Config) ->
     QueueDeclare = #'queue.declare'{auto_delete = true,
@@ -1038,81 +897,43 @@ temporary_queue_after_node_loss(Config, QueueDeclare) ->
                  Timeout)
       end, Majority),
 
-    IsAutoDeleteDurable = case QueueDeclare of
-                              #'queue.declare'{auto_delete = true,
-                                               durable = true} ->
-                                  true;
-                              _ ->
-                                  false
-                          end,
-    case rabbit_ct_broker_helpers:configured_metadata_store(Config) of
-        mnesia when not IsAutoDeleteDurable ->
-            clustering_utils:assert_cluster_status(
-              {Nodes, Majority}, Majority),
+    clustering_utils:assert_cluster_status(
+      {Nodes, Majority}, Majority),
 
-            %% The queue is already deleted from the metadata store on
-            %% remaining nodes.
-            lists:foreach(
-              fun(Node) ->
-                      ?awaitMatch(
-                         {error, not_found},
-                         begin
-                             Ret = rabbit_ct_broker_helpers:rpc(
-                                     Config, Node,
-                                     rabbit_amqqueue, lookup, [QName]),
-                             ct:pal(
-                               "Queue lookup on node ~0p: ~p",
-                               [Node, Ret]),
-                             Ret
-                         end, Timeout)
-              end, Majority),
-            ok;
+    %% The queue is still recorded on the remaining nodes.
+    lists:foreach(
+      fun(Node) ->
+              Ret = rabbit_ct_broker_helpers:rpc(
+                      Config, Node, rabbit_amqqueue, lookup, [QName]),
+              ct:pal("Queue lookup on node ~0p: ~p", [Node, Ret]),
+              ?assertEqual({ok, Queue}, Ret)
+      end, Majority),
 
-        mnesia when IsAutoDeleteDurable ->
-            %% An auto-delete durable queue seems to survive a network
-            %% partition or a node loss. Thue, there is nothing to test in the
-            %% scope of this test case.
-            ok;
+    %% We remove the lost node from the cluster.
+    ?assertEqual(
+       ok,
+       rabbit_ct_broker_helpers:forget_cluster_node(
+         Config, Node3, Node2)),
+    clustering_utils:assert_cluster_status(
+      {Majority, Majority}, Majority),
 
-        khepri ->
-            clustering_utils:assert_cluster_status(
-              {Nodes, Majority}, Majority),
-
-            %% The queue is still recorded on the remaining nodes.
-            lists:foreach(
-              fun(Node) ->
-                      Ret = rabbit_ct_broker_helpers:rpc(
-                              Config, Node, rabbit_amqqueue, lookup, [QName]),
-                      ct:pal("Queue lookup on node ~0p: ~p", [Node, Ret]),
-                      ?assertEqual({ok, Queue}, Ret)
-              end, Majority),
-
-            %% We remove the lost node from the cluster.
-            ?assertEqual(
-               ok,
-               rabbit_ct_broker_helpers:forget_cluster_node(
-                 Config, Node3, Node2)),
-            clustering_utils:assert_cluster_status(
-              {Majority, Majority}, Majority),
-
-            %% The queue was deleted from the metadata store on remaining
-            %% nodes.
-            lists:foreach(
-              fun(Node) ->
-                      ?awaitMatch(
-                         {error, not_found},
-                         begin
-                             Ret = rabbit_ct_broker_helpers:rpc(
-                                     Config, Node,
-                                     rabbit_amqqueue, lookup, [QName]),
-                             ct:pal(
-                               "Queue lookup on node ~0p: ~p",
-                               [Node, Ret]),
-                             Ret
-                         end, Timeout)
-              end, Majority),
-            ok
-    end.
+    %% The queue was deleted from the metadata store on remaining
+    %% nodes.
+    lists:foreach(
+      fun(Node) ->
+              ?awaitMatch(
+                 {error, not_found},
+                 begin
+                     Ret = rabbit_ct_broker_helpers:rpc(
+                             Config, Node,
+                             rabbit_amqqueue, lookup, [QName]),
+                     ct:pal(
+                       "Queue lookup on node ~0p: ~p",
+                       [Node, Ret]),
+                     Ret
+                 end, Timeout)
+      end, Majority),
+    ok.
 
 %% -------------------------------------------------------------------
 %% Internal utils
