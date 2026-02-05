@@ -1031,7 +1031,7 @@ cancelled_down_with_noconnection_comes_back_test(Config) ->
                                                          credit = 1}}}),
      {?LINE, rabbit_fifo:make_enqueue(self(), 1, one)},
      {?LINE, rabbit_fifo:make_enqueue(self(), 2, two)},
-     {CK1, make_checkout(C1, cancel, #{})},
+     {?LINE, make_checkout(C1, cancel, #{})},
      ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{status = cancelled,
                                                          credit = 0},
                                         CK2 := #consumer{status = up,
