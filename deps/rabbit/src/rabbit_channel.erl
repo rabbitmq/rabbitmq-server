@@ -1238,7 +1238,7 @@ handle_method(#'basic.nack'{delivery_tag = DeliveryTag,
              true ->
                  requeue;
              false ->
-                 {modify, false, true, #{}}
+                 settle(false, true)
          end,
     reject(DeliveryTag, Op, Multiple, State);
 
@@ -1551,7 +1551,7 @@ handle_method(#'basic.reject'{delivery_tag = DeliveryTag, requeue = Requeue},
               _, State) ->
     Op = case Requeue of
              true ->
-                 {modify, true, false, #{}};
+                 settle(true, false);
              false ->
                  discard
          end,
@@ -2270,6 +2270,11 @@ complete_tx(State = #ch{tx = failed}) ->
                             'tx.commit'),
                           State),
     State1#ch{tx = new_tx()}.
+
+-spec settle(boolean(), boolean()) ->
+    rabbit_queue_type:settle_op().
+settle(DeliveryFailed, UndeliverableHere) ->
+    {modify, DeliveryFailed, UndeliverableHere, _Annotations = #{}}.
 
 infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 
