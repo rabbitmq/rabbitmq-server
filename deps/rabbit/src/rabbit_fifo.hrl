@@ -160,7 +160,7 @@
          credit_mode :: credited | credit_mode(),
          lifetime = once :: once | auto,
          priority = 0 :: integer(),
-         timeout = 1800 :: seconds()}).
+         timeout = 1_800_000 :: milliseconds()}).
 
 -type consumer_status() :: up | cancelled | quiescing.
 
@@ -215,7 +215,7 @@
          delivery_limit :: option(non_neg_integer()),
          expires :: option(milliseconds()),
          msg_ttl :: option(milliseconds()),
-         default_consumer_timeout = 1_800_000 :: milliseconds(),
+         unused_2 = ?NIL,
          unused_3 = ?NIL
         }).
 

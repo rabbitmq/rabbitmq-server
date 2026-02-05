@@ -509,8 +509,10 @@ new(Q, State) when ?is_amqqueue(Q) ->
 consume(Q, Spec0, State) ->
     #ctx{state = CtxState0} = Ctx = get_ctx(Q, State),
     Mod = amqqueue:get_type(Q),
-    %% TODO: check if value is passed in already?
-    Spec = Spec0#{timeout => get_consumer_timeout(Q)},
+    Timeout0 = get_consumer_timeout(Spec0, Q),
+    Timeout = table_lookup(maps:get(args, Spec0, []),
+                           <<"x-consumer-timeout">>, Timeout0),
+    Spec = Spec0#{timeout => Timeout},
     case Mod:consume(Q, Spec, CtxState0) of
         {ok, CtxState} ->
             {ok, set_ctx(Q, Ctx#ctx{state = CtxState}, State)};
@@ -738,7 +740,7 @@ dequeue(Q, NoAck, LimiterPid, CTag, Ctxs)
   when ?is_amqqueue(Q) ->
     #ctx{state = State0} = Ctx = get_ctx(Q, Ctxs),
     Mod = amqqueue:get_type(Q),
-    Timeout = get_consumer_timeout(Q),
+    Timeout = get_consumer_timeout(#{}, Q),
     case Mod:dequeue(Q, NoAck, LimiterPid, CTag, Timeout, State0) of
         {ok, Num, Msg, State} ->
             {ok, Num, Msg, set_ctx(Q, Ctx#ctx{state = State}, Ctxs)};
@@ -872,17 +874,21 @@ check_vhost_queue_limit(Q) ->
                               [QueueName, VHost, Limit])
     end.
 
-get_consumer_timeout(Q) ->
-    % case rabbit_policy:get(<<"consumer-timeout">>, Q) of
-    case rabbit_queue_type_util:args_policy_lookup(
-           <<"consumer-timeout">>, fun (X, Y) -> erlang:min(X, Y) end, Q) of
+get_consumer_timeout(#{timeout := Timeout}, _Q)
+  when is_integer(Timeout) ->
+    %% a user provided value always overrides the configured value
+    Timeout;
+get_consumer_timeout(_, Q) ->
+    case rabbit_queue_type_util:args_policy_lookup(<<"consumer-timeout">>,
+                                                   fun (X, Y) ->
+                                                           erlang:min(X, Y)
+                                                   end, Q) of
         undefined ->
-            case application:get_env(rabbit, consumer_timeout) of
-                {ok, MS} when is_integer(MS) ->
-                    MS;
-                _ ->
-                    infinity
-            end;
+            %% strict assertion, it is not valid to unset the consumer_timeout
+            %% environment variable or set it to an invalid value
+            {ok, MS} = application:get_env(rabbit, consumer_timeout),
+            true = is_integer(MS),
+            MS;
         Val when is_integer(Val) ->
             Val
     end.
@@ -961,3 +967,13 @@ queue_vm_ets() ->
                         {KeysAcc ++ Keys, SupsAcc ++ Tables}
                 end,
                 {[], []}, rabbit_registry:lookup_all(queue)).
+
+table_lookup(Tbl, Key, Default) 
+  when is_list(Tbl) andalso
+       is_binary(Key) ->
+    case rabbit_misc:table_lookup(Tbl, Key) of
+        {_Type, Value} ->
+            Value;
+        _ ->
+            Default
+    end.
