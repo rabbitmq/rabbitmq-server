@@ -176,12 +176,18 @@ takeover_on(Config, Fun) ->
                                 arguments = Args,
                                 durable = true}),
     ok = rabbit_ct_broker_helpers:start_node(Config, A),
-    ACh2 = rabbit_ct_client_helpers:open_channel(Config, A),
-    #'queue.declare_ok'{message_count = 10} =
-        amqp_channel:call(
-          ACh2, #'queue.declare'{queue   = QName,
-                                 arguments = Args,
-                                 durable = true}),
+
+    ?awaitMatch(
+       #'queue.declare_ok'{message_count = 10},
+       begin
+           ACh2 = rabbit_ct_client_helpers:open_channel(Config, A),
+           amqp_channel:call(
+             ACh2, #'queue.declare'{queue   = QName,
+                                    arguments = Args,
+                                    durable = true,
+                                    passive = true})
+       end,
+       60000),
     ok.
 
 quorum_unaffected_after_vhost_failure(Config) ->
