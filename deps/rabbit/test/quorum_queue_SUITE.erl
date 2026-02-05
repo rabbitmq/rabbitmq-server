@@ -5457,7 +5457,7 @@ consumer_timeout(Config) ->
     end,
 
     publish(Ch, QQ),
-    %% Tag2 should receive the message but we don't ack it
+    %% Tag1 should receive the message but we don't ack it
     _DT1 = receive
                {#'basic.deliver'{delivery_tag = D1,
                                  consumer_tag = Tag1}, _} ->

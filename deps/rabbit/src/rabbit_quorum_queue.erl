@@ -1016,8 +1016,7 @@ consume(Q, Spec, QState0) when ?amqqueue_is_quorum(Q) ->
       args := Args,
       ok_msg := OkMsg,
       acting_user := ActingUser} = Spec,
-    %% TODO: validate consumer arguments
-    %% currently quorum queues do not support any arguments
+
     QName = amqqueue:get_name(Q),
     maybe_send_reply(ChPid, OkMsg),
     ConsumerTag = quorum_ctag(ConsumerTag0),
@@ -1030,15 +1029,17 @@ consume(Q, Spec, QState0) when ?amqqueue_is_quorum(Q) ->
                        0
                end,
     Priority = table_lookup(Args, <<"x-priority">>, 0),
-    Timeout = table_lookup(Args, <<"x-consumer-timeout">>,
-                           maps:get(timeout, Spec, undefined)),
+    %% rabbit_queue_type:consume/3 always adds this timeout field to the spec
+    %% containing the queue's / environment's default or the x-consumer-timeout
+    %% argument
+    Timeout = maps:get(timeout, Spec),
 
-    ConsumerMeta0 = #{ack => AckRequired,
-                      prefetch => Prefetch,
-                      args => Args,
-                      username => ActingUser,
-                      priority => Priority},
-    ConsumerMeta = rabbit_misc:maps_put_truthy(timeout, Timeout, ConsumerMeta0),
+    ConsumerMeta = #{ack => AckRequired,
+                     prefetch => Prefetch,
+                     args => Args,
+                     username => ActingUser,
+                     priority => Priority,
+                     timeout => Timeout},
     case rabbit_fifo_client:checkout(ConsumerTag, Mode, ConsumerMeta, QState0) of
         {ok, Infos, QState} ->
             %% this info key was added in QQ v8
@@ -1176,7 +1177,6 @@ stat(Q) when ?is_amqqueue(Q) ->
     stat(Q, 250).
 
 -spec stat(amqqueue:amqqueue(), non_neg_integer()) -> {'ok', non_neg_integer(), non_neg_integer()}.
-
 stat(Q, Timeout) when ?is_amqqueue(Q) ->
     try
         maybe
@@ -2507,13 +2507,13 @@ revive_local_queue_members() ->
     %% empty binary as the vhost name.
     {Recovered, Failed} = recover(<<>>, Queues),
     ?LOG_DEBUG("Successfully revived ~b quorum queue replicas",
-                     [length(Recovered)]),
+               [length(Recovered)]),
     case length(Failed) of
         0 ->
             ok;
         NumFailed ->
             ?LOG_ERROR("Failed to revive ~b quorum queue replicas",
-                             [NumFailed])
+                       [NumFailed])
     end,
 
     ?LOG_INFO("Restart of local quorum queue replicas is complete"),
@@ -2532,7 +2532,7 @@ queue_vm_ets() ->
 tick_interval() ->
     application:get_env(rabbit, quorum_tick_interval, ?TICK_INTERVAL).
 
-table_lookup(Tbl, Key, Default) 
+table_lookup(Tbl, Key, Default)
   when is_list(Tbl) andalso
        is_binary(Key) ->
     case rabbit_misc:table_lookup(Tbl, Key) of

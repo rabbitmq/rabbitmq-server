@@ -1411,46 +1411,6 @@ handle_method(#'basic.cancel'{consumer_tag = ConsumerTag, nowait = NoWait},
               _, State) ->
     OkMsg = #'basic.cancel_ok'{consumer_tag = ConsumerTag},
     cancel_consumer(ConsumerTag, NoWait, OkMsg, State);
-    % case maps:find(ConsumerTag, ConsumerMapping) of
-    %     error ->
-    %         %% Spec requires we ignore this situation.
-    %         return_ok(State, NoWait, OkMsg);
-    %     {ok, {Q, _CParams}} when ?is_amqqueue(Q) ->
-    %         QName = amqqueue:get_name(Q),
-
-    %         ConsumerMapping1 = maps:remove(ConsumerTag, ConsumerMapping),
-    %         QCons1 =
-    %             case maps:find(QName, QCons) of
-    %                 error       -> QCons;
-    %                 {ok, CTags} -> CTags1 = gb_sets:delete(ConsumerTag, CTags),
-    %                                case gb_sets:is_empty(CTags1) of
-    %                                    true  -> maps:remove(QName, QCons);
-    %                                    false -> maps:put(QName, CTags1, QCons)
-    %                                end
-    %             end,
-    %         NewState = State#ch{consumer_mapping = ConsumerMapping1,
-    %                             queue_consumers  = QCons1},
-    %         %% In order to ensure that no more messages are sent to
-    %         %% the consumer after the cancel_ok has been sent, we get
-    %         %% the queue process to send the cancel_ok on our
-    %         %% behalf. If we were sending the cancel_ok ourselves it
-    %         %% might overtake a message sent previously by the queue.
-    %         case rabbit_misc:with_exit_handler(
-    %                fun () -> {error, not_found} end,
-    %                fun () ->
-    %                        rabbit_queue_type:cancel(
-    %                          Q, #{consumer_tag => ConsumerTag,
-    %                               ok_msg => ok_msg(NoWait, OkMsg),
-    %                               user => Username}, QueueStates0)
-    %                end) of
-    %             {ok, QueueStates} ->
-    %                 rabbit_global_counters:consumer_deleted(amqp091),
-    %                 {noreply, NewState#ch{queue_states = QueueStates}};
-    %             {error, not_found} ->
-    %                 %% Spec requires we ignore this situation.
-    %                 return_ok(NewState, NoWait, OkMsg)
-    %         end
-    % end;
 
 handle_method(#'basic.cancel_ok'{consumer_tag = ConsumerTag}, _, State) ->
     cancel_consumer(ConsumerTag, false, undefined, State);
@@ -2740,40 +2700,6 @@ get_operation_timeout_and_deadline() ->
     Timeout = ?CHANNEL_OPERATION_TIMEOUT,
     Deadline =  now_millis() + Timeout,
     {Timeout, Deadline}.
-
-% get_queue_consumer_timeout(QName, #ch{cfg = #conf{consumer_timeout = GCT}})
-%   when is_record(QName, resource) ->
-%     case rabbit_amqqueue:lookup(QName) of
-%         {ok, Q} -> %% should we account for different queue states here?
-%             case rabbit_queue_type_util:args_policy_lookup(<<"consumer-timeout">>,
-%                                                            fun (X, Y) -> erlang:min(X, Y) end, Q) of
-%                 undefined -> GCT;
-%                 Val -> Val
-%             end;
-%         _ ->
-%             GCT
-%     end.
-
-% get_consumer_timeout(PA, State) ->
-%     get_queue_consumer_timeout(PA#pending_ack.queue, State).
-
-% evaluate_consumer_timeout(State = #ch{unacked_message_q = UAMQ}) ->
-%     case ?QUEUE:get(UAMQ, empty) of
-% 	    empty ->
-% 	        {noreply, State};
-% 	    PA ->  evaluate_consumer_timeout1(PA, State)
-%     end.
-
-% evaluate_consumer_timeout1(PA = #pending_ack{delivered_at = Time},
-%                            State) ->
-%     Now = erlang:monotonic_time(millisecond),
-%     case get_consumer_timeout(PA, State) of
-%         Timeout when is_integer(Timeout)
-%                      andalso Time < Now - Timeout ->
-%             handle_consumer_timed_out(Timeout, PA, State);
-%         _ ->
-%             {noreply, State}
-%     end.
 
 handle_consumer_timed_out(Timeout, ConsumerTag, MsgId, QName,
                           #ch{cfg = #conf{channel = Channel}} = State) ->

@@ -45,6 +45,7 @@
 
 -define(DEFAULT_PRIORITY, 4).
 -define(MAX_PRIORITY, 31).
+-define(DEFAULT_CONSUMER_TIMEOUT_MS, 1_800_000).
 
 -export([
          %% ra_machine callbacks
@@ -222,7 +223,6 @@ update_config(Conf, State) ->
                                competing
                        end,
     Cfg = State#?STATE.cfg,
-    DefConsumerTimeout = maps:get(consumer_timeout, Conf, 1_800_000),
 
     LastActive = maps:get(created, Conf, undefined),
     State#?STATE{cfg = Cfg#cfg{dead_letter_handler = DLH,
@@ -232,8 +232,7 @@ update_config(Conf, State) ->
                                consumer_strategy = ConsumerStrategy,
                                delivery_limit = DeliveryLimit,
                                expires = Expires,
-                               msg_ttl = MsgTTL,
-                               default_consumer_timeout = DefConsumerTimeout},
+                               msg_ttl = MsgTTL},
                  last_active = LastActive}.
 
 % msg_ids are scoped per consumer
@@ -938,7 +937,7 @@ convert_v7_to_v8(#{system_time := Ts} = _Meta, StateV7) ->
                             rabbit_fifo_pq:in(?DEFAULT_PRIORITY, I, Acc)
                     end, Pq0, No),
     StateV8 = StateV7,
-    StateV8#?STATE{cfg = Cfg#cfg{default_consumer_timeout =  1_800_000},
+    StateV8#?STATE{cfg = Cfg,
                    discarded_bytes = 0,
                    messages = Pq,
                    consumers = Cons,
@@ -3109,8 +3108,10 @@ is_expired(_Ts, _State) ->
 
 get_consumer_timeout(CMeta,
                      #?STATE{cfg =
-                             #cfg{default_consumer_timeout = DefaultTimeout}}) ->
-    maps:get(timeout, CMeta, DefaultTimeout).
+                             #cfg{}}) ->
+    %% the spec _should_ always contain the timeout key but we need to provide
+    %% a default to handle consumers from nodes running a prior version
+    maps:get(timeout, CMeta, ?DEFAULT_CONSUMER_TIMEOUT_MS).
 
 get_consumer_priority(#{priority := Priority}) ->
     Priority;
