@@ -2118,6 +2118,7 @@ force_shrink_member_to_current_member(VHost, Name) ->
         {ok, Q} when ?is_amqqueue(Q) ->
             {RaName, _} = amqqueue:get_pid(Q),
             OtherNodes = lists:delete(Node, get_nodes(Q)),
+<<<<<<< HEAD
             case do_force_shrink_members_to_current_member({RaName, Node}) of
                 ok ->
                     Fun = fun (Q0) ->
@@ -2125,11 +2126,24 @@ force_shrink_member_to_current_member(VHost, Name) ->
                                   TS = TS0#{nodes => [Node]},
                                   amqqueue:set_type_state(Q0, TS)
                           end,
+=======
+            case ra_server_proc:force_shrink_members_to_current_member({RaName, Node}) of
+                ok ->
+                    Fun = fun (Q0) ->
+                            TS0 = amqqueue:get_type_state(Q0),
+                            TS = TS0#{nodes => [Node]},
+                            amqqueue:set_type_state(Q0, TS)
+                    end,
+>>>>>>> c7b506745 (handle and return errors from force shrink operations on quorum queues and)
                     _ = rabbit_amqqueue:update(QName, Fun),
                     _ = [ra:force_delete_server(?RA_SYSTEM, {RaName, N}) || N <- OtherNodes],
                     ?LOG_WARNING("Shrinking ~ts finished", [QNameFmt]),
                     ok;
+<<<<<<< HEAD
                 {error, _} = Error ->
+=======
+                Error ->
+>>>>>>> c7b506745 (handle and return errors from force shrink operations on quorum queues and)
                     ?LOG_ERROR("Shrinking ~ts failed: ~tp", [QNameFmt, Error]),
                     Error
             end;
@@ -2178,6 +2192,7 @@ force_all_queues_shrink_member_to_current_member(ListQQFun, MatchFun)
     Node = node(),
     Results =
         [begin
+<<<<<<< HEAD
              QName = amqqueue:get_name(Q),
              {RaName, _} = amqqueue:get_pid(Q),
              OtherNodes = lists:delete(Node, get_nodes(Q)),
@@ -2205,6 +2220,34 @@ force_all_queues_shrink_member_to_current_member(ListQQFun, MatchFun)
             ok;
         _ ->
             ?LOG_ERROR("Shrinking finished with errors: ~tp", [Errors]),
+=======
+            QName = amqqueue:get_name(Q),
+            {RaName, _} = amqqueue:get_pid(Q),
+            OtherNodes = lists:delete(Node, get_nodes(Q)),
+            ?LOG_WARNING("Shrinking ~ts to a single node: ~ts", [rabbit_misc:rs(QName), Node]),
+            case ra_server_proc:force_shrink_members_to_current_member({RaName, Node}) of
+            ok ->
+                Fun = fun (QQ) ->
+                        TS0 = amqqueue:get_type_state(QQ),
+                        TS = TS0#{nodes => [Node]},
+                        amqqueue:set_type_state(QQ, TS)
+                end,
+                _ = rabbit_amqqueue:update(QName, Fun),
+                _ = [ra:force_delete_server(?RA_SYSTEM, {RaName, N}) || N <- OtherNodes],
+                ok;
+            Error ->
+                {QName, Error}
+            end
+        end || Q <- ListQQFun(),
+            amqqueue:get_type(Q) == ?MODULE,
+            MatchFun(Q)],
+    case lists:delete(ok, lists:usort(Results)) of
+        [] ->
+            ?LOG_WARNING("Shrinking finished with no errors"),
+            ok;
+        Errors ->
+            ?LOG_WARNING("Shrinking finished, with errors: ~tp", [Errors]),
+>>>>>>> c7b506745 (handle and return errors from force shrink operations on quorum queues and)
             Errors
     end.
 
