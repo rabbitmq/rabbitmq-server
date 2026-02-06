@@ -270,6 +270,7 @@ defmodule RabbitMQ.CLI.Core.Listeners do
   def protocol_label(:"http/prometheus"), do: "Prometheus exporter API over HTTP"
   def protocol_label(:"https/prometheus"), do: "Prometheus exporter API over TLS (HTTPS)"
   def protocol_label(:clustering), do: "inter-node and CLI tool communication"
+  def protocol_label(:"clustering/ssl"), do: "inter-node and CLI tool communication over TLS"
   def protocol_label(other), do: to_string(other)
 
   def normalize_protocol(proto) do
@@ -315,6 +316,10 @@ defmodule RabbitMQ.CLI.Core.Listeners do
       "ui" -> "http"
       "cli" -> "clustering"
       "distribution" -> "clustering"
+      "cli/ssl" -> "clustering/ssl"
+      "cli/tls" -> "clustering/ssl"
+      "distribution/ssl" -> "clustering/ssl"
+      "distribution/tls" -> "clustering/ssl"
       "webmqtt" -> "http/web-mqtt"
       "web-mqtt" -> "http/web-mqtt"
       "web_mqtt" -> "http/web-mqtt"
