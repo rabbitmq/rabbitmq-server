@@ -251,12 +251,10 @@ update_config(Conf, State) ->
 apply(Meta, {machine_version, FromVersion, ToVersion}, VXState) ->
     %% machine version upgrades cant be done in apply_
     State = convert(Meta, FromVersion, ToVersion, VXState),
-    %% TODO: force snapshot now?
     {State, ok, [{aux, {dlx, setup}}]};
 apply(#{system_time := Ts} = Meta, Cmd,
       #?STATE{discarded_bytes = DiscBytes} = State) ->
     %% add estimated discared_bytes
-    %% TODO: optimise!
     %% this is the simplest way to record the discarded bytes for most
     %% commands but it is a bit mory garby as almost always creates a new
     %% state copy before even processing the command
@@ -906,7 +904,7 @@ v7_to_v8_consumer(Con, Timeout) ->
                                          credit_mode = element(#consumer_cfg.credit_mode, V7Cfg),
                                          lifetime = element(#consumer_cfg.lifetime, V7Cfg),
                                          priority = element(#consumer_cfg.priority, V7Cfg),
-                                         timeout = 1_800_000
+                                         timeout = ?DEFAULT_CONSUMER_TIMEOUT_MS
                                         },
                      Status = case Status0 of
                                   suspected_down ->
@@ -926,9 +924,7 @@ convert_v7_to_v8(#{system_time := Ts} = _Meta, StateV7) ->
     %% the structure is intact for now
     Cons0 = element(#?STATE.consumers, StateV7),
     Waiting0 = element(#?STATE.waiting_consumers, StateV7),
-    %% TODO: use default for now
-    %% TODO: review consumer timeout conversion
-    Timeout = Ts + 1_800_000,
+    Timeout = Ts + ?DEFAULT_CONSUMER_TIMEOUT_MS,
     Cons = maps:map(
              fun (_CKey, Con) ->
                      v7_to_v8_consumer(Con, Timeout)
@@ -1126,11 +1122,9 @@ overview(#?STATE{consumers = Cons,
                           #{}
                   end,
     MsgsRet = lqueue:len(Returns),
-    %% TODO emit suitable overview metrics
-    #{
-      num_active_priorities := NumActivePriorities,
-      detail := Detail
-     } = rabbit_fifo_pq:overview(Messages),
+
+    #{num_active_priorities := NumActivePriorities,
+      detail := Detail} = rabbit_fifo_pq:overview(Messages),
 
     Overview = #{type => ?STATE,
                  config => Conf,
@@ -3359,51 +3353,60 @@ do_snapshot(MacVer, Ts, Ch, RaAux, DiscardedBytes, Force)
     LastTs = element(3, Ch),
     do_snapshot(MacVer, Ts, #snapshot{index = Idx, timestamp = LastTs},
                 RaAux, DiscardedBytes, Force);
-do_snapshot(MacVer, Ts, #snapshot{index = _ChIdx,
-                                  timestamp = SnapTime,
-                                  discarded_bytes = LastDiscardedBytes} = Snap0,
+do_snapshot(MacVer, Ts,
+            #snapshot{timestamp = SnapTime,
+                      discarded_bytes = LastDiscardedBytes} = Snap0,
             RaAux, DiscardedBytes, Force)
   when is_integer(MacVer) andalso MacVer >= 8 ->
-    LastAppliedIdx = ra_aux:last_applied(RaAux),
-    #?STATE{consumers = Consumers,
-            enqueuers = Enqueuers} = MacState = ra_aux:machine_state(RaAux),
-    TimeSince = Ts - SnapTime,
-    MsgsTot = messages_total(MacState),
-    %% if the approximate snapshot size * 2 can be reclaimed it is worth
-    %% taking a snapshot
-    %% take number of enqueues and consumers into account
-    %% message: 32 bytes
-    %% enqueuer: 96 bytes
-    %% consumer: 256 bytes
-    %% TODO: refine this
-    NumEnqueuers = map_size(Enqueuers),
-    NumConsumers = map_size(Consumers),
-    ApproxSnapSize = 4096 +
-                     (MsgsTot * 32) +
-                     (NumEnqueuers * 96) +
-                     (NumConsumers * 256),
-    Limit = (ApproxSnapSize * 5),
-
-    EnoughDataRemoved = DiscardedBytes - LastDiscardedBytes > Limit,
-
-    {CheckMinInterval, _CheckMinIndexes, _CheckMaxIndexes} =
+    {CheckMinInterval, _, _} =
         persistent_term:get(quorum_queue_checkpoint_config,
-                            {?CHECK_MIN_INTERVAL_MS, ?CHECK_MIN_INDEXES,
+                            {?CHECK_MIN_INTERVAL_MS,
+                             ?CHECK_MIN_INDEXES,
                              ?CHECK_MAX_INDEXES}),
-    EnoughTimeHasPassed = TimeSince > CheckMinInterval,
-    case (EnoughTimeHasPassed andalso
-          EnoughDataRemoved) orelse
-         Force of
+    TimeSince = Ts - SnapTime,
+    case TimeSince > CheckMinInterval orelse Force of
         true ->
-            %% TODO: if efficient we can set the index of the release cursor
-            %% condition to the highest live index instead of the snapshot index
-            {#snapshot{index = LastAppliedIdx,
-                       timestamp = Ts,
-                       messages_total = MsgsTot,
-                       discarded_bytes = DiscardedBytes},
-             [{release_cursor, LastAppliedIdx, MacState,
-               #{condition => [{written, LastAppliedIdx},
-                               no_snapshot_sends]}}]};
+            #?STATE{consumers = Consumers,
+                    enqueuers = Enqueuers,
+                    waiting_consumers = Waiting} = MacState =
+                ra_aux:machine_state(RaAux),
+            MsgsTot = messages_total(MacState),
+            %% If the approximate snapshot size * 5 can be reclaimed
+            %% it is worth taking a snapshot.
+            %% Estimates per component:
+            %%   message: 32 bytes
+            %%   checked-out message: 72 bytes
+            %%   enqueuer: 112 bytes
+            %%   consumer: 296 bytes
+            %%   waiting consumer: 312 bytes
+            NumEnqs = map_size(Enqueuers),
+            NumCons = map_size(Consumers),
+            NumWaiting = length(Waiting),
+            CheckedOut = maps:fold(
+                           fun (_, #consumer{checked_out = C}, Acc) ->
+                                   Acc + map_size(C)
+                           end, 0, Consumers),
+            ApproxSnapSize = 4096 +
+                             MsgsTot * 32 +
+                             CheckedOut * 72 +
+                             NumEnqs * 112 +
+                             NumCons * 296 +
+                             NumWaiting * 312,
+            Limit = ApproxSnapSize * 5,
+            EnoughDataRemoved = DiscardedBytes - LastDiscardedBytes,
+            case EnoughDataRemoved > Limit orelse Force of
+                true ->
+                    Idx = ra_aux:last_applied(RaAux),
+                    Snap = #snapshot{index = Idx,
+                                     timestamp = Ts,
+                                     messages_total = MsgsTot,
+                                     discarded_bytes = DiscardedBytes},
+                    Cond = #{condition => [{written, Idx},
+                                           no_snapshot_sends]},
+                    {Snap, [{release_cursor, Idx, MacState, Cond}]};
+                false ->
+                    {Snap0, []}
+            end;
         false ->
             {Snap0, []}
     end.
