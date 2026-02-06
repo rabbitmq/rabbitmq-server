@@ -99,7 +99,10 @@ stop_child({VHost, ShovelName} = Name) ->
 stop_and_delete_child(Id) ->
     case mirrored_supervisor:terminate_child(?SUPERVISOR, Id) of
         ok ->
-            ok = mirrored_supervisor:delete_child(?SUPERVISOR, Id);
+            case mirrored_supervisor:delete_child(?SUPERVISOR, Id) of
+                ok -> ok;
+                {error, not_found} -> ok
+            end;
         {error, not_found} = Error ->
             Error
     end.
