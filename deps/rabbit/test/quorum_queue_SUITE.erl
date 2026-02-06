@@ -1304,7 +1304,13 @@ force_shrink_member_to_current_member(Config) ->
             queue_utils:assert_number_of_replicas(
               Config, Server0, <<"/">>, QQ, 3),
 
-            rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
+            ok = rabbit_ct_broker_helpers:rpc(Config, Server0, rabbit_quorum_queue,
+                                         force_shrink_member_to_current_member, [<<"/">>, QQ]),
+
+            {error, noproc} = rabbit_ct_broker_helpers:rpc(Config, Server1, rabbit_quorum_queue,
+                                         force_shrink_member_to_current_member, [<<"/">>, QQ]),
+
+            {error, noproc} = rabbit_ct_broker_helpers:rpc(Config, Server2, rabbit_quorum_queue,
                                          force_shrink_member_to_current_member, [<<"/">>, QQ]),
 
             wait_for_messages_ready([Server0], RaName, 3),
@@ -1345,8 +1351,16 @@ force_all_queues_shrink_member_to_current_member(Config) ->
 
             %% match QQ only in shrink
             QQSpec = <<QQ/binary, "$">>,
-            rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
+            ok = rabbit_ct_broker_helpers:rpc(Config, Server0, rabbit_quorum_queue,
                                          force_all_queues_shrink_member_to_current_member, [QQSpec]),
+
+            ?assertMatch([{_, {error, noproc}} | _],
+                rabbit_ct_broker_helpers:rpc(Config, Server1, rabbit_quorum_queue,
+                                         force_all_queues_shrink_member_to_current_member, [QQSpec])),
+
+            ?assertMatch([{_, {error, noproc}} | _],
+                rabbit_ct_broker_helpers:rpc(Config, Server2, rabbit_quorum_queue,
+                                         force_all_queues_shrink_member_to_current_member, [QQSpec])),
 
             wait_for_messages_ready([Server0], ra_name(QQ), 3),
             queue_utils:assert_number_of_replicas(
@@ -1358,7 +1372,7 @@ force_all_queues_shrink_member_to_current_member(Config) ->
 
             %% match all queues on shrink
 
-            rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
+            ok = rabbit_ct_broker_helpers:rpc(Config, Server0, rabbit_quorum_queue,
                                          force_all_queues_shrink_member_to_current_member, []),
 
             [begin
