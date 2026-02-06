@@ -109,6 +109,10 @@ normalize_protocol(Protocol) ->
         "ui" -> "http";
         "cli" -> "clustering";
         "distribution" -> "clustering";
+        "cli/ssl" -> "clustering/ssl";
+        "cli/tls" -> "clustering/ssl";
+        "distribution/ssl" -> "clustering/ssl";
+        "distribution/tls" -> "clustering/ssl";
         "webmqtt" -> "http/web-mqtt";
         "web-mqtt" -> "http/web-mqtt";
         "web_mqtt" -> "http/web-mqtt";

@@ -275,17 +275,13 @@ tags_as_binaries(Tags) ->
 
 listener(#listener{node = Node, protocol = Protocol,
                    ip_address = IPAddress, port = Port, opts=Opts}) ->
-    TlsEnabled = has_tls_enabled(Protocol, Opts),
     [{node, Node},
-     {protocol, format_protocol(Protocol, TlsEnabled)},
+     {protocol, Protocol},
      {ip_address, ip(IPAddress)},
      {port, Port},
      {socket_opts, format_socket_opts(Opts)},
-     {tls, TlsEnabled}
+     {tls, has_tls_enabled(Protocol, Opts)}
     ].
-
-format_protocol(clustering, true) -> 'clustering/ssl';
-format_protocol(Protocol, _) -> Protocol.
 
 web_context(Props0) ->
     SslOpts0 = pget(ssl_opts, Props0, []),
@@ -298,14 +294,10 @@ web_context(Props0) ->
     Props1 = proplists:delete(ssl_opts, Props0),
     [{ssl_opts, format_socket_opts(SslOpts1)} | Props1].
 
+has_tls_enabled('clustering/ssl', _Opts) ->
+    true;
 has_tls_enabled(clustering, _Opts) ->
-    %% Erlang distribution TLS is configured externally via the -proto_dist
-    %% VM argument, not through RabbitMQ configuration.
-    case init:get_argument(proto_dist) of
-        {ok, [["inet_tls"]]} -> true;
-        {ok, [["inet6_tls"]]} -> true;
-        _ -> false
-    end;
+    false;
 has_tls_enabled(_Protocol, Opts) ->
     S = proplists:get_value(socket_opts, Opts, Opts),
     (proplists:get_value(ssl_opts, S, undefined) =/= undefined) orelse
