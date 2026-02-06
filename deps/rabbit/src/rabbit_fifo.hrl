@@ -253,11 +253,11 @@
          messages_total = 0 :: non_neg_integer(),
          % queue of returned msg_in_ids - when checking out it picks from
          returns = lqueue:new() :: lqueue:lqueue(term()),
-         % discareded bytes - a counter that is incremented every time a command
-         % is procesesed that does not need to be kept (live indexes).
-         % Approximate, used for triggering snapshots
-         % reset to 0 when release_cursor gets stored
-         discarded_bytes = 0,
+         % Reclaimable bytes - a counter that is incremented every time a
+         % command is processed that does not need to be kept (live indexes).
+         % Approximate, used for triggering snapshots.
+         % Reset to 0 when release_cursor gets stored.
+         reclaimable_bytes = 0,
          % a map containing all the live processes that have ever enqueued
          % a message to this queue
          enqueuers = #{} :: #{pid() => #enqueuer{}},
