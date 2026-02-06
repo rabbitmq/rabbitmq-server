@@ -9,6 +9,7 @@
 -module(rabbit_db_cluster).
 
 -include_lib("kernel/include/logger.hrl").
+-include_lib("stdlib/include/assert.hrl").
 
 -include_lib("rabbit_common/include/logging.hrl").
 
@@ -145,14 +146,22 @@ join(RemoteNode, NodeType)
                 rabbit_ff_registry_factory:release_state_change_lock()
             end,
 
-            %% After the regular reset, we also reset Mnesia specifically if
-            %% it is meant to be used. That's because we may switch back from
-            %% Khepri to Mnesia. To be safe, remove possibly stale files from
-            %% a previous instance where Mnesia was used.
+            %% After the regular reset and the copy of the remote feature flag
+            %% states above, Khepri might be disabled (because it is remotely).
+            %% We now require Khepri but the regular feature flags cluster sync
+            %% happens after clustering is in place for obvious reasons.
+            %%
+            %% Therefore, we need to enable Khepri remotely before we can move
+            %% on with the join.
             case rabbit_khepri:is_enabled(RemoteNode) of
-                true  -> ok;
-                false -> ok = rabbit_mnesia:reset_gracefully()
+                true ->
+                    ok;
+                false ->
+                    ok = erpc:call(
+                           RemoteNode,
+                           rabbit_feature_flags, enable, [khepri_db])
             end,
+            ?assert(rabbit_khepri:is_enabled(RemoteNode)),
 
             ok = rabbit_node_monitor:notify_left_cluster(node()),
 
@@ -174,10 +183,7 @@ join(RemoteNode, NodeType)
             ?LOG_INFO(
                "DB: joining cluster using remote nodes:~n~tp", [ClusterNodes],
                #{domain => ?RMQLOG_DOMAIN_DB}),
-            Ret = case rabbit_khepri:is_enabled(RemoteNode) of
-                      true  -> join_using_khepri(ClusterNodes, NodeType);
-                      false -> join_using_mnesia(ClusterNodes, NodeType)
-                  end,
+            Ret = join_using_khepri(ClusterNodes, NodeType),
 
             case Ret of
                 ok ->
@@ -201,6 +207,9 @@ join(RemoteNode, NodeType)
                         false ->
                             ok
                     end,
+                    ok = ensure_feature_flags_are_in_sync([node() | ClusterNodes], true),
+                    ?assert(rabbit_khepri:is_enabled()),
+
                     NeedMnesia = not rabbit_khepri:is_enabled(),
                     case RestartMnesia andalso NeedMnesia of
                         true  -> rabbit_mnesia:start_mnesia(false);
@@ -239,11 +248,6 @@ join(RemoteNode, NodeType)
         {error, _} = Error ->
             Error
     end.
-
-join_using_mnesia(ClusterNodes, disc) when is_list(ClusterNodes) ->
-    rabbit_mnesia:join_cluster(ClusterNodes, disc);
-join_using_mnesia(_ClusterNodes, ram = NodeType) ->
-    {error, {node_type_unsupported, mnesia, NodeType}}.
 
 join_using_khepri(ClusterNodes, disc) ->
     rabbit_khepri:add_member(node(), ClusterNodes);
