@@ -815,7 +815,7 @@ get_stability(FeatureProps) when ?IS_DEPRECATION(FeatureProps) ->
 %% <ul>
 %% <li>`hard': the feature flag must be enabled before the RabbitMQ node is
 %%   upgraded to a version where it is hard required.</li>
-%% <li>`soft': the feature flag will be automatically enabled wher a RabbitMQ
+%% <li>`soft': the feature flag will be automatically enabled when a RabbitMQ
 %%   node is upgraded to a version where it is soft required.</li>
 %% <li>`none': the feature flag is not required.</li>
 %% </ul>
