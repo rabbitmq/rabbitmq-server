@@ -78,7 +78,7 @@
 -define(INFO_KEYS, [name, durable, auto_delete, arguments, leader, members, online, state,
                     messages, messages_ready, messages_unacknowledged, committed_offset,
                     policy, operator_policy, effective_policy_definition, type, memory,
-                    consumers, segments]).
+                    consumers, segments, first_timestamp]).
 
 -define(UNMATCHED_THRESHOLD, 200).
 
@@ -837,6 +837,17 @@ i(segments, Q) ->
             '';
         Data ->
             maps:get(segments, Data, '')
+    end;
+i(first_timestamp, Q) ->
+    Key = {osiris_writer, amqqueue:get_name(Q)},
+    case osiris_counters:overview(Key) of
+        undefined ->
+            '';
+        Data ->
+            case maps:get(first_timestamp, Data, '') of
+                0 -> '';
+                V -> V
+            end
     end;
 i(policy, Q) ->
     case rabbit_policy:name(Q) of

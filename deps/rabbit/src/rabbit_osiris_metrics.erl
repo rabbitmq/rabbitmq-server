@@ -28,7 +28,8 @@
          memory,
          readers,
          consumers,
-         segments
+         segments,
+         first_timestamp
         ]).
 
 -record(state, {timeout :: non_neg_integer()}).
