@@ -1674,6 +1674,17 @@ end}.
     {validators, ["non_zero_positive_integer"]}
 ]}.
 
+%% Time to wait before returning messages to the queue when a consumer's
+%% node becomes unreachable (due to network partition), in milliseconds.
+%% Only applies to quorum queues.
+%%
+%% {consumer_disconnected_timeout, 10000},
+
+{mapping, "consumer_disconnected_timeout", "rabbit.consumer_disconnected_timeout", [
+    {datatype, integer},
+    {validators, ["non_zero_positive_integer"]}
+]}.
+
 %% Product name & version overrides.
 
 {mapping, "product.name", "rabbit.product_name", [

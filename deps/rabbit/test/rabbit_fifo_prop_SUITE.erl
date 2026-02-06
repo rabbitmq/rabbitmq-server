@@ -1036,7 +1036,7 @@ single_active_ordering_03(_Config) ->
                 make_settle(C1, [0]),
                 make_checkout(C1, cancel),
                 {down, C1Pid, noconnection},
-                {timeout, {consumer_down_timeout, C1}}
+                {timeout, {consumer_disconnected_timeout, C1}}
 
                 ],
     Conf = config(?FUNCTION_NAME, 0, 0, true, 0),
