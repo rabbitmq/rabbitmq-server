@@ -211,6 +211,7 @@ dispatcher() ->
      {"/health/checks/is-in-service",                          rabbit_mgmt_wm_health_check_is_in_service, []},
      {"/health/checks/below-node-connection-limit",            rabbit_mgmt_wm_health_check_below_node_connection_limit, []},
      {"/health/checks/ready-to-serve-clients",                 rabbit_mgmt_wm_health_check_ready_to_serve_clients, []},
+     {"/health/checks/reached-target-cluster-size",            rabbit_mgmt_wm_health_check_reached_target_cluster_size, []},
      {"/reset",                                                rabbit_mgmt_wm_reset, []},
      {"/reset/:node",                                          rabbit_mgmt_wm_reset, []},
      {"/rebalance/queues",                                     rabbit_mgmt_wm_rebalance_queues, [{queues, all}]},
