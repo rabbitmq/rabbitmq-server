@@ -2246,8 +2246,12 @@ force_all_queues_shrink_member_to_current_member(ListQQFun, MatchFun)
             ?LOG_WARNING("Shrinking finished with no errors"),
             ok;
         Errors ->
+<<<<<<< HEAD
             ?LOG_WARNING("Shrinking finished, with errors: ~tp", [Errors]),
 >>>>>>> c7b506745 (handle and return errors from force shrink operations on quorum queues and)
+=======
+            ?LOG_ERROR("Shrinking finished, with errors: ~tp", [Errors]),
+>>>>>>> e68260f64 (upadate log level for failed force shrink operations from warning to error)
             Errors
     end.
 
