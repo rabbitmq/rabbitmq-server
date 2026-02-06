@@ -1864,7 +1864,7 @@ khepri_db_migration_enable(#{feature_name := FeatureName}) ->
                "Feature flag `~s`: node ~0p already clustered (feature flag "
                "enabled as part of clustering?); "
                "skipping Mnesia->Khepri migration",
-               [node()],
+               [FeatureName, node()],
                #{domain => ?RMQLOG_DOMAIN_DB}),
             ok
     end.
