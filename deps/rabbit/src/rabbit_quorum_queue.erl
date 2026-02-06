@@ -2144,7 +2144,7 @@ force_shrink_member_to_current_member(VHost, Name) ->
                     Error
             end;
         _ ->
-            ?LOG_WARNING("Shrinking failed, ~ts not found", [QNameFmt]),
+            ?LOG_ERROR("Shrinking failed, ~ts not found", [QNameFmt]),
             {error, not_found}
     end.
 
@@ -2205,7 +2205,7 @@ force_all_queues_shrink_member_to_current_member(ListQQFun, MatchFun)
             ?LOG_WARNING("Shrinking finished with no errors"),
             ok;
         Errors ->
-            ?LOG_WARNING("Shrinking finished, with errors: ~tp", [Errors]),
+            ?LOG_ERROR("Shrinking finished, with errors: ~tp", [Errors]),
             Errors
     end.
 
