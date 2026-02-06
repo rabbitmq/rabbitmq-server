@@ -2128,15 +2128,21 @@ force_shrink_member_to_current_member(VHost, Name) ->
         {ok, Q} when ?is_amqqueue(Q) ->
             {RaName, _} = amqqueue:get_pid(Q),
             OtherNodes = lists:delete(Node, get_nodes(Q)),
-            ok = ra_server_proc:force_shrink_members_to_current_member({RaName, Node}),
-            Fun = fun (Q0) ->
-                          TS0 = amqqueue:get_type_state(Q0),
-                          TS = TS0#{nodes => [Node]},
-                          amqqueue:set_type_state(Q0, TS)
-                  end,
-            _ = rabbit_amqqueue:update(QName, Fun),
-            _ = [ra:force_delete_server(?RA_SYSTEM, {RaName, N}) || N <- OtherNodes],
-            ?LOG_WARNING("Shrinking ~ts finished", [QNameFmt]);
+            case ra_server_proc:force_shrink_members_to_current_member({RaName, Node}) of
+                ok ->
+                    Fun = fun (Q0) ->
+                            TS0 = amqqueue:get_type_state(Q0),
+                            TS = TS0#{nodes => [Node]},
+                            amqqueue:set_type_state(Q0, TS)
+                    end,
+                    _ = rabbit_amqqueue:update(QName, Fun),
+                    _ = [ra:force_delete_server(?RA_SYSTEM, {RaName, N}) || N <- OtherNodes],
+                    ?LOG_WARNING("Shrinking ~ts finished", [QNameFmt]),
+                    ok;
+                Error ->
+                    ?LOG_ERROR("Shrinking ~ts failed: ~tp", [QNameFmt, Error]),
+                    Error
+            end;
         _ ->
             ?LOG_WARNING("Shrinking failed, ~ts not found", [QNameFmt]),
             {error, not_found}
@@ -2172,24 +2178,36 @@ force_all_queues_shrink_member_to_current_member(QueueSpec) when is_binary(Queue
 force_all_queues_shrink_member_to_current_member(ListQQFun, MatchFun)
   when is_function(ListQQFun), is_function(MatchFun) ->
     Node = node(),
-    _ = [begin
-             QName = amqqueue:get_name(Q),
-             {RaName, _} = amqqueue:get_pid(Q),
-             OtherNodes = lists:delete(Node, get_nodes(Q)),
-             ?LOG_WARNING("Shrinking queue '~ts' to a single node: ~ts", [rabbit_misc:rs(QName), Node]),
-             ok = ra_server_proc:force_shrink_members_to_current_member({RaName, Node}),
-             Fun = fun (QQ) ->
-                           TS0 = amqqueue:get_type_state(QQ),
-                           TS = TS0#{nodes => [Node]},
-                           amqqueue:set_type_state(QQ, TS)
-                   end,
-             _ = rabbit_amqqueue:update(QName, Fun),
-             _ = [ra:force_delete_server(?RA_SYSTEM, {RaName, N}) || N <- OtherNodes]
-         end || Q <- ListQQFun(),
-                amqqueue:get_type(Q) == ?MODULE,
-                MatchFun(Q)],
-    ?LOG_WARNING("Shrinking finished"),
-    ok.
+    Results =
+        [begin
+            QName = amqqueue:get_name(Q),
+            {RaName, _} = amqqueue:get_pid(Q),
+            OtherNodes = lists:delete(Node, get_nodes(Q)),
+            ?LOG_WARNING("Shrinking ~ts to a single node: ~ts", [rabbit_misc:rs(QName), Node]),
+            case ra_server_proc:force_shrink_members_to_current_member({RaName, Node}) of
+            ok ->
+                Fun = fun (QQ) ->
+                        TS0 = amqqueue:get_type_state(QQ),
+                        TS = TS0#{nodes => [Node]},
+                        amqqueue:set_type_state(QQ, TS)
+                end,
+                _ = rabbit_amqqueue:update(QName, Fun),
+                _ = [ra:force_delete_server(?RA_SYSTEM, {RaName, N}) || N <- OtherNodes],
+                ok;
+            Error ->
+                {QName, Error}
+            end
+        end || Q <- ListQQFun(),
+            amqqueue:get_type(Q) == ?MODULE,
+            MatchFun(Q)],
+    case lists:delete(ok, lists:usort(Results)) of
+        [] ->
+            ?LOG_WARNING("Shrinking finished with no errors"),
+            ok;
+        Errors ->
+            ?LOG_WARNING("Shrinking finished, with errors: ~tp", [Errors]),
+            Errors
+    end.
 
 force_checkpoint_on_queue(QName) ->
     QNameFmt = rabbit_misc:rs(QName),
