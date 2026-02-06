@@ -111,6 +111,7 @@ groups() ->
                                             force_vhost_queues_shrink_member_to_current_member,
                                             force_checkpoint_on_queue,
                                             force_checkpoint,
+                                            publish_only_checkpoint,
                                             policy_repair,
                                             gh_12635,
                                             replica_states,
@@ -1619,6 +1620,60 @@ force_checkpoint(Config) ->
 
     % Result should only have quorum queue
     ?assertEqual(ExpectedRes, ForceCheckpointRes).
+
+publish_only_checkpoint(Config) ->
+    %% Verify that snapshots are taken in a publish-only workload (no consumers)
+    %% when enough log entries have been written, even though no data has been
+    %% consumed/removed.
+    check_quorum_queues_v8_compat(Config),
+    [Server0 | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
+    QQ = ?config(queue_name, Config),
+    RaName = ra_name(QQ),
+
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    %% Configure a low max indexes threshold for testing.
+    %% Default is 666,667 which would make the test too slow.
+    TestMaxIndexes = 1000,
+    %% v8+ uses quorum_queue_snapshot_config, v7 uses quorum_queue_checkpoint_config
+    ConfigKey = quorum_queue_snapshot_config,
+    OldConfig = rpc:call(Server0, persistent_term, get, [ConfigKey, undefined]),
+    ok = rpc:call(Server0, persistent_term, put,
+                  [ConfigKey,
+                   {?CHECK_MIN_INTERVAL_MS, ?CHECK_MIN_INDEXES, TestMaxIndexes}]),
+
+    try
+        %% Publish more messages than TestMaxIndexes (no consumers).
+        N = TestMaxIndexes + 500,
+        rabbit_ct_client_helpers:publish(Ch, QQ, N),
+        wait_for_messages_ready([Server0], RaName, N),
+
+        %% Wait for longer than CHECK_MIN_INTERVAL_MS to allow snapshot evaluation.
+        timer:sleep(?CHECK_MIN_INTERVAL_MS + 1000),
+
+        %% Trigger an eval to check snapshot conditions.
+        ok = rpc:call(Server0, ra, cast_aux_command, [{RaName, Server0}, eval]),
+
+        %% Verify that a snapshot was taken even though no messages were consumed.
+        rabbit_ct_helpers:await_condition(
+          fun() ->
+                  {ok, State, _} = rpc:call(Server0, ra, member_overview,
+                                            [{RaName, Server0}]),
+                  ct:pal("Ra server state: ~tp~n", [State]),
+                  #{log := #{snapshot_index := SnapIdx}} = State,
+                  SnapIdx =/= undefined
+          end, 30000)
+    after
+        %% Restore original config.
+        case OldConfig of
+            undefined ->
+                rpc:call(Server0, persistent_term, erase, [ConfigKey]);
+            _ ->
+                rpc:call(Server0, persistent_term, put, [ConfigKey, OldConfig])
+        end
+    end.
 
 % Tests that, if the process of a QQ is dead in the moment of declaring a policy
 % that affects such queue, when the process is made available again, the policy

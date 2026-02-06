@@ -3354,17 +3354,23 @@ do_snapshot(MacVer, Ts, Ch, RaAux, ReclaimableBytes, Force)
     do_snapshot(MacVer, Ts, #snapshot{index = Idx, timestamp = LastTs},
                 RaAux, ReclaimableBytes, Force);
 do_snapshot(MacVer, Ts,
-            #snapshot{timestamp = SnapTime,
+            #snapshot{index = LastSnapIdx,
+                      timestamp = SnapTime,
                       reclaimable_bytes = LastReclaimableBytes} = Snap0,
             RaAux, ReclaimableBytes, Force)
   when is_integer(MacVer) andalso MacVer >= 8 ->
-    {CheckMinInterval, _, _} =
-        persistent_term:get(quorum_queue_checkpoint_config,
+    {CheckMinInterval, _, CheckMaxIndexes} =
+        persistent_term:get(quorum_queue_snapshot_config,
                             {?CHECK_MIN_INTERVAL_MS,
                              ?CHECK_MIN_INDEXES,
                              ?CHECK_MAX_INDEXES}),
     TimeSince = Ts - SnapTime,
-    case TimeSince > CheckMinInterval orelse Force of
+    Idx = ra_aux:last_applied(RaAux),
+    IndexesSince = Idx - LastSnapIdx,
+    EnoughEntriesWritten = IndexesSince > CheckMaxIndexes,
+    case TimeSince > CheckMinInterval orelse
+         EnoughEntriesWritten orelse
+         Force of
         true ->
             #?STATE{consumers = Consumers,
                     enqueuers = Enqueuers,
@@ -3394,9 +3400,10 @@ do_snapshot(MacVer, Ts,
                              NumWaiting * 312,
             Limit = ApproxSnapSize * 5,
             EnoughDataRemoved = ReclaimableBytes - LastReclaimableBytes,
-            case EnoughDataRemoved > Limit orelse Force of
+            case EnoughDataRemoved > Limit orelse
+                 EnoughEntriesWritten orelse
+                 Force of
                 true ->
-                    Idx = ra_aux:last_applied(RaAux),
                     Snap = #snapshot{index = Idx,
                                      timestamp = Ts,
                                      messages_total = MsgsTot,
