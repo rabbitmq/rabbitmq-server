@@ -253,13 +253,13 @@ apply(Meta, {machine_version, FromVersion, ToVersion}, VXState) ->
     State = convert(Meta, FromVersion, ToVersion, VXState),
     {State, ok, [{aux, {dlx, setup}}]};
 apply(#{system_time := Ts} = Meta, Cmd,
-      #?STATE{discarded_bytes = DiscBytes} = State) ->
-    %% add estimated discared_bytes
-    %% this is the simplest way to record the discarded bytes for most
-    %% commands but it is a bit mory garby as almost always creates a new
-    %% state copy before even processing the command
-    Bytes = estimate_discarded_size(Cmd),
-    apply_(Meta, Cmd, State#?STATE{discarded_bytes = DiscBytes + Bytes,
+      #?STATE{reclaimable_bytes = DiscBytes} = State) ->
+    %% Add estimated reclaimable bytes.
+    %% This is the simplest way to record the reclaimable bytes for most
+    %% commands but it is a bit more garbage-y as almost always creates a
+    %% new state copy before even processing the command.
+    Bytes = estimate_reclaimable_size(Cmd),
+    apply_(Meta, Cmd, State#?STATE{reclaimable_bytes = DiscBytes + Bytes,
                                    last_command_time = Ts}).
 
 apply_(Meta, #enqueue{pid = From, seq = Seq,
@@ -660,11 +660,11 @@ apply_(Meta,
     checkout(Meta, State0, State1, Effects0);
 apply_(Meta, {dlx, _} = Cmd,
        #?STATE{cfg = #cfg{dead_letter_handler = DLH},
-               discarded_bytes = DiscardedBytes0,
+               reclaimable_bytes = ReclaimableBytes0,
                dlx = DlxState0} = State0) ->
-    {DlxState, DiscardedBytes, Effects0} = dlx_apply(Meta, Cmd, DLH, DlxState0),
+    {DlxState, ReclaimableBytes, Effects0} = dlx_apply(Meta, Cmd, DLH, DlxState0),
     State1 = State0#?STATE{dlx = DlxState,
-                           discarded_bytes = DiscardedBytes0 + DiscardedBytes},
+                           reclaimable_bytes = ReclaimableBytes0 + ReclaimableBytes},
     checkout(Meta, State0, State1, Effects0);
 apply_(#{system_time := Ts} = Meta,
        {timeout, evaluate_consumer_timeout},
@@ -944,7 +944,7 @@ convert_v7_to_v8(#{system_time := Ts} = _Meta, StateV7) ->
                     end, Pq0, No),
     StateV8 = StateV7,
     StateV8#?STATE{cfg = Cfg,
-                   discarded_bytes = 0,
+                   reclaimable_bytes = 0,
                    messages = Pq,
                    consumers = Cons,
                    waiting_consumers = Waiting,
@@ -1095,7 +1095,7 @@ overview(#?STATE{consumers = Cons,
                  msg_bytes_checkout = CheckoutBytes,
                  cfg = Cfg,
                  dlx = DlxState,
-                 discarded_bytes = DiscardedBytes,
+                 reclaimable_bytes = ReclaimableBytes,
                  messages = Messages,
                  returns = Returns,
                  waiting_consumers = WaitingConsumers} = State) ->
@@ -1137,7 +1137,7 @@ overview(#?STATE{consumers = Cons,
                  num_messages => messages_total(State),
                  enqueue_message_bytes => EnqueueBytes,
                  checkout_message_bytes => CheckoutBytes,
-                 discarded_bytes => DiscardedBytes,
+                 reclaimable_bytes_count => ReclaimableBytes,
                  smallest_raft_index => smallest_raft_index(State),
                  num_active_priorities => NumActivePriorities,
                  messages_by_priority => Detail
@@ -1178,7 +1178,7 @@ which_module(8) -> ?MODULE.
 -record(snapshot, {index :: ra:index(),
                    timestamp :: milliseconds(),
                    messages_total = 0 :: non_neg_integer(),
-                   discarded_bytes = 0 :: non_neg_integer()}).
+                   reclaimable_bytes = 0 :: non_neg_integer()}).
 -record(aux_gc, {last_raft_idx = 0 :: ra:index()}).
 -record(?AUX, {name :: atom(),
                last_decorators_state :: term(),
@@ -1221,7 +1221,7 @@ handle_aux(leader, cast, eval,
            RaAux) ->
 
     #?STATE{cfg = #cfg{resource = QName},
-            discarded_bytes = DiscardedBytes} = MacState =
+            reclaimable_bytes = ReclaimableBytes} = MacState =
         ra_aux:machine_state(RaAux),
 
     Ts = erlang:system_time(millisecond),
@@ -1233,7 +1233,7 @@ handle_aux(leader, cast, eval,
                           undefined
                 end,
     {Check, Effects0} = do_snapshot(EffMacVer, Ts, Check0, RaAux,
-                                    DiscardedBytes, false),
+                                    ReclaimableBytes, false),
 
     %% this is called after each batch of commands have been applied
     %% set timer for message expire
@@ -1254,9 +1254,9 @@ handle_aux(_RaftState, cast, eval,
     Ts = erlang:system_time(millisecond),
 
     EffMacVer = ra_aux:effective_machine_version(RaAux),
-    #?STATE{discarded_bytes = DiscardedBytes} = ra_aux:machine_state(RaAux),
+    #?STATE{reclaimable_bytes = ReclaimableBytes} = ra_aux:machine_state(RaAux),
     {Check, Effects} = do_snapshot(EffMacVer, Ts, Check0, RaAux,
-                                   DiscardedBytes, false),
+                                   ReclaimableBytes, false),
     {no_reply, Aux0#?AUX{last_checkpoint = Check}, RaAux, Effects};
 handle_aux(_RaftState, cast, {#return{msg_ids = MsgIds,
                                       consumer_key = Key} = Ret, Corr, Pid},
@@ -1383,12 +1383,12 @@ handle_aux(_RaState, _, force_checkpoint,
            #?AUX{last_checkpoint  = Check0} = Aux, RaAux) ->
     Ts = erlang:system_time(millisecond),
     #?STATE{cfg = #cfg{resource = QR},
-            discarded_bytes = DiscardedBytes} = ra_aux:machine_state(RaAux),
+            reclaimable_bytes = ReclaimableBytes} = ra_aux:machine_state(RaAux),
     ?LOG_DEBUG("~ts: rabbit_fifo: forcing checkpoint at ~b",
                [rabbit_misc:rs(QR), ra_aux:last_applied(RaAux)]),
     EffMacVer = ra_aux:effective_machine_version(RaAux),
     {Check, Effects} = do_snapshot(EffMacVer, Ts, Check0, RaAux,
-                                   DiscardedBytes, true),
+                                   ReclaimableBytes, true),
     {no_reply, Aux#?AUX{last_checkpoint = Check}, RaAux, Effects};
 handle_aux(leader, _, {dlx, setup}, Aux, RaAux) ->
     #?STATE{dlx = DlxState,
@@ -1845,7 +1845,7 @@ apply_enqueue(#{index := RaftIdx,
 decr_total(#?STATE{messages_total = Tot} = State) ->
     State#?STATE{messages_total = Tot - 1}.
 
-drop_head(#?STATE{discarded_bytes = DiscardedBytes0} = State0, Effects) ->
+drop_head(#?STATE{reclaimable_bytes = ReclaimableBytes0} = State0, Effects) ->
     case take_next_msg(State0) of
         {Msg, State1} ->
             Header = get_msg_header(Msg),
@@ -1855,7 +1855,7 @@ drop_head(#?STATE{discarded_bytes = DiscardedBytes0} = State0, Effects) ->
             {_, _RetainedBytes, DlxEffects} =
                 discard_or_dead_letter([Msg], maxlen, DLH, DlxState),
             Size = get_header(size, Header),
-            {State#?STATE{discarded_bytes = DiscardedBytes0 + Size + ?ENQ_OVERHEAD_B},
+            {State#?STATE{reclaimable_bytes = ReclaimableBytes0 + Size + ?ENQ_OVERHEAD_B},
              add_drop_head_effects(DlxEffects, Effects)};
         empty ->
             {State0, Effects}
@@ -1946,7 +1946,7 @@ maybe_enqueue(RaftIdx, Ts, From, MsgSeqNo, RawMsg,
               Effects0, #?STATE{msg_bytes_enqueue = BytesEnqueued,
                                 enqueuers = Enqueuers0,
                                 messages = Messages,
-                                discarded_bytes = DiscardedBytes0,
+                                reclaimable_bytes = ReclaimableBytes0,
                                 messages_total = Total} = State0) ->
     Size = MetaSize + BodySize,
     case maps:get(From, Enqueuers0, undefined) of
@@ -1982,13 +1982,13 @@ maybe_enqueue(RaftIdx, Ts, From, MsgSeqNo, RawMsg,
         #enqueuer{next_seqno = Next}
           when MsgSeqNo > Next ->
             %% TODO: when can this happen?
-            State = State0#?STATE{discarded_bytes =
-                                  DiscardedBytes0 + Size + ?ENQ_OVERHEAD_B},
+            State = State0#?STATE{reclaimable_bytes =
+                                  ReclaimableBytes0 + Size + ?ENQ_OVERHEAD_B},
             {out_of_sequence, State, Effects0};
         #enqueuer{next_seqno = Next} when MsgSeqNo =< Next ->
             % duplicate delivery
-            State = State0#?STATE{discarded_bytes =
-                                  DiscardedBytes0 + Size + ?ENQ_OVERHEAD_B},
+            State = State0#?STATE{reclaimable_bytes =
+                                  ReclaimableBytes0 + Size + ?ENQ_OVERHEAD_B},
             {duplicate, State, Effects0}
     end.
 
@@ -2023,7 +2023,7 @@ return_multiple(Meta, ConsumerKey, #consumer{checked_out = Checked} = Consumer,
 % complete(Meta, ConsumerKey, [MsgId],
 %          #consumer{checked_out = Checked0} = Con0,
 %          #?STATE{msg_bytes_checkout = BytesCheckout,
-%                  discarded_bytes = DiscBytes,
+%                  reclaimable_bytes = DiscBytes,
 %                  messages_total = Tot} = State0,
 %         Effects) ->
 %     case maps:take(MsgId, Checked0) of
@@ -2034,7 +2034,7 @@ return_multiple(Meta, ConsumerKey, #consumer{checked_out = Checked} = Consumer,
 %                                 credit = increase_credit(Con0, 1)},
 %             State1 = update_or_remove_con(Meta, ConsumerKey, Con, State0),
 %             {State1#?STATE{msg_bytes_checkout = BytesCheckout - SettledSize,
-%                            discarded_bytes = DiscBytes + SettledSize + ?ENQ_OVERHEAD,
+%                            reclaimable_bytes = DiscBytes + SettledSize + ?ENQ_OVERHEAD,
 %                            messages_total = Tot - 1},
 %              Effects};
 %         error ->
@@ -2043,7 +2043,7 @@ return_multiple(Meta, ConsumerKey, #consumer{checked_out = Checked} = Consumer,
 complete(Meta, ConsumerKey, MsgIds,
          #consumer{checked_out = Checked0} = Con0,
          #?STATE{msg_bytes_checkout = BytesCheckout,
-                 discarded_bytes = DiscBytes,
+                 reclaimable_bytes = DiscBytes,
                  messages_total = Tot} = State0, Effects) ->
     {SettledSize, Checked}
         = lists:foldl(
@@ -2062,7 +2062,7 @@ complete(Meta, ConsumerKey, MsgIds,
                         credit = increase_credit(Con0, Len)},
     State1 = update_or_remove_con(Meta, ConsumerKey, Con, State0),
     {State1#?STATE{msg_bytes_checkout = BytesCheckout - SettledSize,
-                   discarded_bytes = DiscBytes + SettledSize + (Len * ?ENQ_OVERHEAD_B),
+                   reclaimable_bytes = DiscBytes + SettledSize + (Len * ?ENQ_OVERHEAD_B),
                    messages_total = Tot - Len},
      Effects}.
 
@@ -2203,7 +2203,7 @@ return_one(Meta, MsgId, ?C_MSG(Msg0), DeliveryFailed, Anns,
            #?STATE{returns = Returns,
                    consumers = Consumers,
                    dlx = DlxState0,
-                   discarded_bytes = DiscardedBytes0,
+                   reclaimable_bytes = ReclaimableBytes0,
                    cfg = #cfg{delivery_limit = DeliveryLimit,
                               dead_letter_handler = DLH}} = State0,
            Effects0, ConsumerKey) ->
@@ -2222,7 +2222,7 @@ return_one(Meta, MsgId, ?C_MSG(Msg0), DeliveryFailed, Anns,
             %% of dead letter strategy, alt, consider adding a new argument to
             %% indicate if message ids were retained
             State1 = State0#?STATE{dlx = DlxState,
-                                   discarded_bytes = DiscardedBytes0 - RetainedBytes},
+                                   reclaimable_bytes = ReclaimableBytes0 - RetainedBytes},
             {State, Effects} = complete(Meta, ConsumerKey, [MsgId],
                                         Con0, State1, Effects0),
             {State, Effects ++ DlxEffects};
@@ -2561,7 +2561,7 @@ expire_shallow(Ts, #?STATE{cfg = #cfg{dead_letter_handler = DLH},
                            returns = Returns0,
                            messages = Messages0,
                            dlx = DlxState0,
-                           discarded_bytes = DiscardedBytes0,
+                           reclaimable_bytes = ReclaimableBytes0,
                            messages_total = Tot,
                            msg_bytes_enqueue = MsgBytesEnqueue} = State0) ->
 
@@ -2599,7 +2599,7 @@ expire_shallow(Ts, #?STATE{cfg = #cfg{dead_letter_handler = DLH},
                           returns = Returns,
                           messages = Messages,
                           messages_total = Tot - NumExpired,
-                          discarded_bytes = DiscardedBytes0 + DiscardedSize,
+                          reclaimable_bytes = ReclaimableBytes0 + DiscardedSize,
                           msg_bytes_enqueue = MsgBytesEnqueue - Size},
     {State, DlxEffects}.
 
@@ -2608,7 +2608,7 @@ expire(RaCmdTs, State0, Effects) ->
      #?STATE{cfg = #cfg{dead_letter_handler = DLH},
              dlx = DlxState0,
              messages_total = Tot,
-             discarded_bytes = DiscardedBytes0,
+             reclaimable_bytes = ReclaimablBytes0,
              msg_bytes_enqueue = MsgBytesEnqueue
             } = State1} =
         take_next_msg(State0),
@@ -2619,7 +2619,7 @@ expire(RaCmdTs, State0, Effects) ->
     DiscardedSize = Size + ?ENQ_OVERHEAD_B,
     State = State1#?STATE{dlx = DlxState,
                           messages_total = Tot - 1,
-                          discarded_bytes = DiscardedBytes0 + DiscardedSize,
+                          reclaimable_bytes = ReclaimablBytes0 + DiscardedSize,
                           msg_bytes_enqueue = MsgBytesEnqueue - Size},
     expire_msgs(RaCmdTs, true, State, Effects ++ DlxEffects).
 
@@ -3345,18 +3345,18 @@ msg_priority(Msg) ->
             ?DEFAULT_PRIORITY
     end.
 
-do_snapshot(MacVer, Ts, Ch, RaAux, DiscardedBytes, Force)
+do_snapshot(MacVer, Ts, Ch, RaAux, ReclaimableBytes, Force)
   when element(1, Ch) == checkpoint andalso
        is_integer(MacVer)  andalso
        MacVer >= 8 ->
     Idx = element(2, Ch),
     LastTs = element(3, Ch),
     do_snapshot(MacVer, Ts, #snapshot{index = Idx, timestamp = LastTs},
-                RaAux, DiscardedBytes, Force);
+                RaAux, ReclaimableBytes, Force);
 do_snapshot(MacVer, Ts,
             #snapshot{timestamp = SnapTime,
-                      discarded_bytes = LastDiscardedBytes} = Snap0,
-            RaAux, DiscardedBytes, Force)
+                      reclaimable_bytes = LastReclaimableBytes} = Snap0,
+            RaAux, ReclaimableBytes, Force)
   when is_integer(MacVer) andalso MacVer >= 8 ->
     {CheckMinInterval, _, _} =
         persistent_term:get(quorum_queue_checkpoint_config,
@@ -3393,14 +3393,14 @@ do_snapshot(MacVer, Ts,
                              NumCons * 296 +
                              NumWaiting * 312,
             Limit = ApproxSnapSize * 5,
-            EnoughDataRemoved = DiscardedBytes - LastDiscardedBytes,
+            EnoughDataRemoved = ReclaimableBytes - LastReclaimableBytes,
             case EnoughDataRemoved > Limit orelse Force of
                 true ->
                     Idx = ra_aux:last_applied(RaAux),
                     Snap = #snapshot{index = Idx,
                                      timestamp = Ts,
                                      messages_total = MsgsTot,
-                                     discarded_bytes = DiscardedBytes},
+                                     reclaimable_bytes = ReclaimableBytes},
                     Cond = #{condition => [{written, Idx},
                                            no_snapshot_sends]},
                     {Snap, [{release_cursor, Idx, MacState, Cond}]};
@@ -3415,7 +3415,7 @@ discard(Meta, MsgIds, ConsumerKey,
         #consumer{checked_out = Checked} = Con,
         DelFailed, Anns,
         #?STATE{cfg = #cfg{dead_letter_handler = DLH},
-                discarded_bytes = DiscardedBytes0,
+                reclaimable_bytes = DiscardedBytes0,
                 dlx = DlxState0} = State0) ->
     %% We publish to dead-letter exchange in the same order
     %% as messages got rejected by the client.
@@ -3431,7 +3431,7 @@ discard(Meta, MsgIds, ConsumerKey,
     {DlxState, RetainedBytes, Effects} =
         discard_or_dead_letter(DiscardMsgs, rejected, DLH, DlxState0),
     State = State0#?STATE{dlx = DlxState,
-                          discarded_bytes = DiscardedBytes0 - RetainedBytes},
+                          reclaimable_bytes = DiscardedBytes0 - RetainedBytes},
     complete_and_checkout(Meta, MsgIds, ConsumerKey, Con, Effects, State).
 
 incr_msg_headers(Msg0, DeliveryFailed, Anns) ->
@@ -3477,37 +3477,37 @@ maps_ordered_keys(Map) ->
 
 %% enqueue overhead: 256b + message size
 
-estimate_discarded_size(#?ENQ_V2{}) ->
+estimate_reclaimable_size(#?ENQ_V2{}) ->
     0;
-estimate_discarded_size(Cmd)
+estimate_reclaimable_size(Cmd)
   when is_record(Cmd, settle) orelse
        is_record(Cmd, return) orelse
        is_record(Cmd, discard) orelse
        is_record(Cmd, credit) ->
     128;
-estimate_discarded_size(#checkout{}) ->
+estimate_reclaimable_size(#checkout{}) ->
     300;
-estimate_discarded_size(#register_enqueuer{}) ->
+estimate_reclaimable_size(#register_enqueuer{}) ->
     200;
-estimate_discarded_size(#modify{}) ->
+estimate_reclaimable_size(#modify{}) ->
     256;
-estimate_discarded_size(#update_config{}) ->
+estimate_reclaimable_size(#update_config{}) ->
     512;
-estimate_discarded_size(#purge{}) ->
+estimate_reclaimable_size(#purge{}) ->
     64;
-estimate_discarded_size(#purge_nodes{}) ->
+estimate_reclaimable_size(#purge_nodes{}) ->
     64;
-estimate_discarded_size(#requeue{}) ->
+estimate_reclaimable_size(#requeue{}) ->
     0;
-estimate_discarded_size(#enqueue{}) ->
+estimate_reclaimable_size(#enqueue{}) ->
     0;
-estimate_discarded_size({nodeup, _}) ->
+estimate_reclaimable_size({nodeup, _}) ->
     96;
-estimate_discarded_size({down, _, _}) ->
+estimate_reclaimable_size({down, _, _}) ->
     96;
-estimate_discarded_size({dlx, _Cmd}) ->
+estimate_reclaimable_size({dlx, _Cmd}) ->
     64;
-estimate_discarded_size(_Cmd) ->
+estimate_reclaimable_size(_Cmd) ->
     %% something is better than nothing
     64.
 

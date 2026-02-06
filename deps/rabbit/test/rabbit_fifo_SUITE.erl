@@ -98,7 +98,7 @@ enq_enq_checkout_compat_test(C) ->
 enq_enq_checkout_v4_test(C) ->
     enq_enq_checkout_test(C, {auto, {simple_prefetch, 2}}).
 
-discarded_bytes_test(Config) ->
+reclaimable_bytes_test(Config) ->
     Conf = #{name => ?FUNCTION_NAME_B,
              queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B)
             },
@@ -110,36 +110,36 @@ discarded_bytes_test(Config) ->
     {State1, _} = enq(Config, ?LINE, 1, Msg, init(Conf)),
     %% enqueues should not increment discarded bytes
     ?assertMatch(#{num_messages := 1,
-                   discarded_bytes := 0}, rabbit_fifo:overview(State1)),
+                   reclaimable_bytes_count := 0}, rabbit_fifo:overview(State1)),
     Spec = {auto, {simple_prefetch, 2}},
     {State2, #{key := CKey,
                next_msg_id := NextMsgId}, _Effects} =
         checkout(Config, ?LINE, Cid, Spec, State1),
-    #{discarded_bytes := DiscBytes2} = rabbit_fifo:overview(State2),
+    #{reclaimable_bytes_count := DiscBytes2} = rabbit_fifo:overview(State2),
     ?assert(DiscBytes2 > 0),
     {State3, _} = settle(Config, CKey, ?LINE, [NextMsgId], State2),
     #{num_messages := 0,
-      discarded_bytes := DiscBytes3} = rabbit_fifo:overview(State3),
+      reclaimable_bytes_count := DiscBytes3} = rabbit_fifo:overview(State3),
     %% disc bytes increment shoudl include message size _and_ settle size
     ?assert(DiscBytes3 - DiscBytes2 > 1000),
 
     {State4, _, _} = apply(meta(Config, ?LINE),
                            {down, CPid, noconnection}, State3),
-    #{discarded_bytes := DiscBytes4} = rabbit_fifo:overview(State4),
+    #{reclaimable_bytes_count := DiscBytes4} = rabbit_fifo:overview(State4),
     ?assert(DiscBytes4 > DiscBytes3),
     {State5, _, _} = apply(meta(Config, ?LINE),
                            {nodeup, node()}, State4),
-    #{discarded_bytes := DiscBytes5} = rabbit_fifo:overview(State5),
+    #{reclaimable_bytes_count := DiscBytes5} = rabbit_fifo:overview(State5),
     ?assert(DiscBytes5 > DiscBytes4),
 
     {State6, _} = enq(Config, ?LINE, 2, Msg, State5),
     #{num_messages := 1,
-      discarded_bytes := DiscBytes5} = rabbit_fifo:overview(State6),
+      reclaimable_bytes_count := DiscBytes5} = rabbit_fifo:overview(State6),
     {State7, _, _} = apply(meta(Config, ?LINE),
                            rabbit_fifo:make_return(CKey, [NextMsgId + 1]),
                            State6),
     #{num_messages := 1,
-      discarded_bytes := DiscBytes7} = rabbit_fifo:overview(State7),
+      reclaimable_bytes_count := DiscBytes7} = rabbit_fifo:overview(State7),
     ?assert(DiscBytes7 > DiscBytes5 andalso DiscBytes7 - DiscBytes5 < 1000),
 
     %% discard without at-least-once dead lettering configured should
@@ -148,26 +148,26 @@ discarded_bytes_test(Config) ->
                            rabbit_fifo:make_discard(CKey, [NextMsgId + 2]),
                            State7),
     #{num_messages := 0,
-      discarded_bytes := DiscBytes8} = rabbit_fifo:overview(State8),
+      reclaimable_bytes_count := DiscBytes8} = rabbit_fifo:overview(State8),
     ?assert(DiscBytes8 - DiscBytes7 > 1000),
 
     {State9, _} = enq(Config, ?LINE, 3, Msg, State8),
     #{num_messages := 1,
-      discarded_bytes := DiscBytes9} = rabbit_fifo:overview(State9),
+      reclaimable_bytes_count := DiscBytes9} = rabbit_fifo:overview(State9),
 
     %% update config to have a delivery-limit
     Conf2 = Conf#{delivery_limit => 0},
     {State10, ok, _} = apply(meta(Config, 5),
                              rabbit_fifo:make_update_config(Conf2), State9),
     #{num_messages := 1,
-      discarded_bytes := DiscBytes10} = rabbit_fifo:overview(State10),
+      reclaimable_bytes_count := DiscBytes10} = rabbit_fifo:overview(State10),
     ?assert(DiscBytes10 > DiscBytes9),
 
     {State11, _, _} = apply(meta(Config, ?LINE),
                             {down, CPid, blah},
                             State10),
     #{num_messages := 0,
-      discarded_bytes := DiscBytes11} = rabbit_fifo:overview(State11),
+      reclaimable_bytes_count := DiscBytes11} = rabbit_fifo:overview(State11),
     ?assert(DiscBytes11 - DiscBytes10 > 1000),
 
     %% checkout again
@@ -184,13 +184,13 @@ discarded_bytes_test(Config) ->
     {State14, _} = enq(Config, ?LINE, 4, Msg, State13),
 
     #{num_messages := 1,
-      discarded_bytes := DiscBytes14} = rabbit_fifo:overview(State14),
+      reclaimable_bytes_count := DiscBytes14} = rabbit_fifo:overview(State14),
 
     {State15, _, _} = apply(meta(Config, ?LINE),
                             rabbit_fifo:make_discard(CKey2, [C2NextMsgId]),
                             State14),
     #{num_messages := 1,
-      discarded_bytes := DiscBytes15} = rabbit_fifo:overview(State15),
+      reclaimable_bytes_count := DiscBytes15} = rabbit_fifo:overview(State15),
     ?assert(DiscBytes15 > DiscBytes14 andalso
             DiscBytes15 - DiscBytes14 < 1000),
 
@@ -201,26 +201,26 @@ discarded_bytes_test(Config) ->
                             rabbit_fifo_dlx:make_checkout(DlxPid, 2),
                             State15),
     #{num_messages := 1,
-      discarded_bytes := DiscBytes16} = rabbit_fifo:overview(State16),
+      reclaimable_bytes_count := DiscBytes16} = rabbit_fifo:overview(State16),
     ?assert(DiscBytes16 > DiscBytes15),
 
     {State17, _, _} = apply(meta(Config, ?LINE),
                             rabbit_fifo_dlx:make_settle([0]),
                             State16),
     #{num_messages := 0,
-      discarded_bytes := DiscBytes17} = rabbit_fifo:overview(State17),
+      reclaimable_bytes_count := DiscBytes17} = rabbit_fifo:overview(State17),
     ?assert(DiscBytes17 - DiscBytes16 > 1000),
 
     {State18, _} = enq(Config, ?LINE, 5, Msg, State17),
     #{num_messages := 1,
-      discarded_bytes := DiscBytes17} = rabbit_fifo:overview(State18),
+      reclaimable_bytes_count := DiscBytes17} = rabbit_fifo:overview(State18),
 
     {State19, _, _} = apply(meta(Config, ?LINE),
                             rabbit_fifo:make_modify(CKey2, [C2NextMsgId + 1],
                                                     false, false, #{}),
                             State18),
     #{num_messages := 1,
-      discarded_bytes := DiscBytes19} = rabbit_fifo:overview(State19),
+      reclaimable_bytes_count := DiscBytes19} = rabbit_fifo:overview(State19),
     ?assert(DiscBytes19 > DiscBytes17),
 
     %% change the dlx handler
@@ -230,14 +230,14 @@ discarded_bytes_test(Config) ->
     {State20, ok, _} = apply(meta(Config, ?LINE),
                              rabbit_fifo:make_update_config(Conf4), State19),
     #{num_messages := 1,
-      discarded_bytes := DiscBytes20} = rabbit_fifo:overview(State20),
+      reclaimable_bytes_count := DiscBytes20} = rabbit_fifo:overview(State20),
 
     {State21, _, _} = apply(meta(Config, ?LINE),
                             rabbit_fifo:make_modify(CKey2, [C2NextMsgId + 2],
                                                     true, true, #{}),
                             State20),
     #{num_messages := 0,
-      discarded_bytes := DiscBytes21} = rabbit_fifo:overview(State21),
+      reclaimable_bytes_count := DiscBytes21} = rabbit_fifo:overview(State21),
     ?assert(DiscBytes21 - DiscBytes20 > 1000),
 
     %% unsubsrcibe
@@ -246,35 +246,35 @@ discarded_bytes_test(Config) ->
     ct:pal("State22 ~p", [State22]),
     #{num_messages := 0,
       num_consumers := 0,
-      discarded_bytes := DiscBytes22} = rabbit_fifo:overview(State22),
+      reclaimable_bytes_count := DiscBytes22} = rabbit_fifo:overview(State22),
     ?assert(DiscBytes22 > DiscBytes21),
 
     {State23, _} = enq(Config, ?LINE, 6, Msg, State22),
     #{num_messages := 1,
-      discarded_bytes := DiscBytes23} = rabbit_fifo:overview(State23),
+      reclaimable_bytes_count := DiscBytes23} = rabbit_fifo:overview(State23),
     ?assert(DiscBytes22 =:= DiscBytes23),
 
     {State24, _} = enq(Config, ?LINE, 7, Msg, State23),
     #{num_messages := 2,
-      discarded_bytes := DiscBytes24} = rabbit_fifo:overview(State24),
+      reclaimable_bytes_count := DiscBytes24} = rabbit_fifo:overview(State24),
     ?assert(DiscBytes23 =:= DiscBytes24),
 
     %% drop head should increment
     {State25, _} = enq(Config, ?LINE, 8, Msg, State24),
     #{num_messages := 2,
-      discarded_bytes := DiscBytes25} = rabbit_fifo:overview(State25),
+      reclaimable_bytes_count := DiscBytes25} = rabbit_fifo:overview(State25),
     ?assert(DiscBytes25 - DiscBytes24 > 1000),
 
     %% duplicate enqueue should also increment discarded bytes
     {State26, _} = enq(Config, ?LINE, 8, Msg, State25),
     #{num_messages := 2,
-      discarded_bytes := DiscBytes26} = rabbit_fifo:overview(State26),
+      reclaimable_bytes_count := DiscBytes26} = rabbit_fifo:overview(State26),
     ?assert(DiscBytes26 - DiscBytes25 > 1000),
     %% test expiration
     {State27, _, _} = apply(meta(Config, ?LINE),
                              rabbit_fifo:make_purge(), State26),
     #{num_messages := 0,
-      discarded_bytes := _DiscBytes27} = rabbit_fifo:overview(State27),
+      reclaimable_bytes_count := _DiscBytes27} = rabbit_fifo:overview(State27),
 
     Conf5 = Conf4#{msg_ttl => 1000,
                    max_length => undefined},
@@ -282,12 +282,12 @@ discarded_bytes_test(Config) ->
                              rabbit_fifo:make_update_config(Conf5), State27),
     {State29, _} = enq_ts(Config, ?LINE, 9, Msg, 0, State28),
     #{num_messages := 1,
-      discarded_bytes := DiscBytes29} = rabbit_fifo:overview(State29),
+      reclaimable_bytes_count := DiscBytes29} = rabbit_fifo:overview(State29),
     {State30, _} = enq_ts(Config, ?LINE, 10, Msg, 3000, State29),
     % {State31, _} = enq_ts(Config, ?LINE, 11, Msg, 5000, State30),
 
     #{num_messages := 1,
-      discarded_bytes := DiscBytes30} = rabbit_fifo:overview(State30),
+      reclaimable_bytes_count := DiscBytes30} = rabbit_fifo:overview(State30),
     ?assert(DiscBytes30 - DiscBytes29 > 1000),
     ok.
 
