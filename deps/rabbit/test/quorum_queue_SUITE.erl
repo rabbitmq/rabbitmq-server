@@ -217,7 +217,10 @@ all_tests() ->
      subscribe_from_each,
      dont_leak_file_handles,
      leader_health_check,
-     consumer_timeout
+     consumer_timeout,
+     consumer_disconnected_timeout_queue_arg,
+     consumer_disconnected_timeout_policy,
+     consumer_disconnected_timeout_global
     ].
 
 memory_tests() ->
@@ -313,10 +316,17 @@ init_per_testcase(Testcase, Config) when Testcase == partitioned_publisher;
                                             {queue_name, Q},
                                             {alt_queue_name, <<Q/binary, "_alt">>}
                                            ]),
-    rabbit_ct_helpers:run_steps(
+    Config3 = rabbit_ct_helpers:run_steps(
       Config2,
       rabbit_ct_broker_helpers:setup_steps() ++
-      rabbit_ct_client_helpers:setup_steps());
+      rabbit_ct_client_helpers:setup_steps()),
+    %% Set a shorter consumer_disconnected_timeout for partition tests
+    %% so messages are returned to the queue quickly after partition
+    [ok = rabbit_ct_broker_helpers:rpc(
+            Config3, N, application, set_env,
+            [rabbit, consumer_disconnected_timeout, 5000])
+     || N <- lists:seq(0, 2)],
+    Config3;
 init_per_testcase(T, Config)
   when T =:= leader_locator_balanced orelse
        T =:= leader_locator_policy ->
@@ -5479,6 +5489,63 @@ consumer_timeout(Config) ->
                 ra:member_overview({RaName, Server}),
                 ?DEFAULT_AWAIT),
     flush(1),
+    ok.
+
+consumer_disconnected_timeout_queue_arg(Config) ->
+    check_quorum_queues_v8_compat(Config),
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    CustomTimeout = 30000,
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ,
+                         [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                          {<<"x-consumer-disconnected-timeout">>, long, CustomTimeout}])),
+    RaName = ra_name(QQ),
+    ?awaitMatch({ok, #{machine := #{config := #{consumer_disconnected_timeout := CustomTimeout}}}, _},
+                ra:member_overview({RaName, Server}),
+                ?DEFAULT_AWAIT),
+    ok.
+
+consumer_disconnected_timeout_policy(Config) ->
+    check_quorum_queues_v8_compat(Config),
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    CustomTimeout = 45000,
+    ok = rabbit_ct_broker_helpers:set_policy(
+           Config, 0, <<"consumer-disconnected-timeout-policy">>,
+           QQ, <<"quorum_queues">>,
+           [{<<"consumer-disconnected-timeout">>, CustomTimeout}]),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ,
+                         [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    RaName = ra_name(QQ),
+    ?awaitMatch({ok, #{machine := #{config := #{consumer_disconnected_timeout := CustomTimeout}}}, _},
+                ra:member_overview({RaName, Server}),
+                ?DEFAULT_AWAIT),
+    ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"consumer-disconnected-timeout-policy">>),
+    ok.
+
+consumer_disconnected_timeout_global(Config) ->
+    check_quorum_queues_v8_compat(Config),
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    CustomTimeout = 120000,
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, application, set_env,
+           [rabbit, consumer_disconnected_timeout, CustomTimeout]),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ,
+                         [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    RaName = ra_name(QQ),
+    ?awaitMatch({ok, #{machine := #{config := #{consumer_disconnected_timeout := CustomTimeout}}}, _},
+                ra:member_overview({RaName, Server}),
+                ?DEFAULT_AWAIT),
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, application, unset_env,
+           [rabbit, consumer_disconnected_timeout]),
     ok.
 
 %%----------------------------------------------------------------------------

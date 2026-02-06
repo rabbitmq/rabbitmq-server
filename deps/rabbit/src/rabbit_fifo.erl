@@ -222,9 +222,17 @@ update_config(Conf, State) ->
                            false ->
                                competing
                        end,
+    DisconnectedTimeout = maps:get(consumer_disconnected_timeout, Conf, 60_000),
     Cfg = State#?STATE.cfg,
 
-    LastActive = maps:get(created, Conf, undefined),
+    %% Only set last_active from 'created' during init, not during config updates.
+    %% If last_active is already set, preserve it to avoid resetting queue TTL.
+    LastActive = case State#?STATE.last_active of
+                     undefined ->
+                         maps:get(created, Conf, undefined);
+                     Existing ->
+                         Existing
+                 end,
     State#?STATE{cfg = Cfg#cfg{dead_letter_handler = DLH,
                                overflow_strategy = Overflow,
                                max_length = MaxLength,
@@ -232,7 +240,8 @@ update_config(Conf, State) ->
                                consumer_strategy = ConsumerStrategy,
                                delivery_limit = DeliveryLimit,
                                expires = Expires,
-                               msg_ttl = MsgTTL},
+                               msg_ttl = MsgTTL,
+                               consumer_disconnected_timeout = DisconnectedTimeout},
                  last_active = LastActive}.
 
 % msg_ids are scoped per consumer
@@ -514,13 +523,14 @@ apply_(#{system_time := Ts} = Meta,
 
     Node = node(Pid),
 
+    DisconnectedTimeout = State0#?STATE.cfg#cfg.consumer_disconnected_timeout,
     {Cons, Effects1} =
         maps:fold(
           fun(CKey, #consumer{cfg = #consumer_cfg{pid = P}} = C0,
               {Cns0, Eff}) when P =:= Pid ->
                   C = update_consumer_status(suspected_down, C0),
-                  % TODO: make timeout configurable
-                  Eff0 = [{timer, {consumer_down_timeout, CKey}, 10_000} | Eff],
+                  Eff0 = [{timer, {consumer_disconnected_timeout, CKey},
+                           DisconnectedTimeout} | Eff],
                   Eff1 = consumer_update_active_effects(State0, C, false,
                                                         suspected_down, Eff0),
                   {Cns0#{CKey => C}, Eff1};
@@ -544,7 +554,7 @@ apply_(#{system_time := Ts} = Meta,
                                          waiting_consumers = WaitingConsumers,
                                          consumers = Cons,
                                          last_active = Ts}, Effects);
-apply_(Meta, {timeout, {consumer_down_timeout, CKey}},
+apply_(Meta, {timeout, {consumer_disconnected_timeout, CKey}},
        #?STATE{cfg = #cfg{consumer_strategy = competing},
                consumers = Consumers} = State0) ->
 
@@ -559,7 +569,7 @@ apply_(Meta, {timeout, {consumer_down_timeout, CKey}},
         _ ->
             {State0, []}
     end;
-apply_(#{system_time := Ts} = Meta, {timeout, {consumer_down_timeout, CKey}},
+apply_(#{system_time := Ts} = Meta, {timeout, {consumer_disconnected_timeout, CKey}},
        #?STATE{cfg = #cfg{consumer_strategy = single_active},
                waiting_consumers = Waiting0,
                consumers = Consumers} = State0) ->
@@ -621,7 +631,7 @@ apply_(Meta, {nodeup, Node}, #?STATE{consumers = Cons0,
                                                   C0, true, NextStatus, EAcc0),
                   %% cancel timers
                   EAcc = [{timer,
-                           {consumer_down_timeout, ConsumerKey},
+                           {consumer_disconnected_timeout, ConsumerKey},
                            infinity} | EAcc1],
 
                   {update_or_remove_con(Meta, ConsumerKey, C, SAcc), EAcc};
@@ -1103,7 +1113,8 @@ overview(#?STATE{consumers = Cons,
              consumer_strategy => Cfg#cfg.consumer_strategy,
              expires => Cfg#cfg.expires,
              msg_ttl => Cfg#cfg.msg_ttl,
-             delivery_limit => Cfg#cfg.delivery_limit},
+             delivery_limit => Cfg#cfg.delivery_limit,
+             consumer_disconnected_timeout => Cfg#cfg.consumer_disconnected_timeout},
     SacOverview = case active_consumer(Cons) of
                       {SacConsumerKey, SacCon} ->
                           SacConsumerId = consumer_id(SacCon),

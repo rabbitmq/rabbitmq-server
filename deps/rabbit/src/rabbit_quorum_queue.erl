@@ -362,13 +362,15 @@ gather_policy_config(Q, IsQueueDeclaration) ->
     Expires = args_policy_lookup(<<"expires">>, fun min/2, Q),
     MsgTTL = args_policy_lookup(<<"message-ttl">>, fun min/2, Q),
     DeadLetterHandler = dead_letter_handler(Q, Overflow),
+    DisconnectedTimeout = get_consumer_disconnected_timeout(Q),
     #{dead_letter_handler => DeadLetterHandler,
       max_length => MaxLength,
       max_bytes => MaxBytes,
       delivery_limit => DeliveryLimit,
       overflow_strategy => Overflow,
       expires => Expires,
-      msg_ttl => MsgTTL
+      msg_ttl => MsgTTL,
+      consumer_disconnected_timeout => DisconnectedTimeout
      }.
 
 ra_machine_config(Q) when ?is_amqqueue(Q) ->
@@ -559,7 +561,8 @@ capabilities() ->
                           <<"x-quorum-initial-group-size">>,
                           <<"x-delivery-limit">>,
                           <<"x-message-ttl">>,
-                          <<"x-queue-leader-locator">>],
+                          <<"x-queue-leader-locator">>,
+                          <<"x-consumer-disconnected-timeout">>],
       consumer_arguments => [<<"x-priority">>,
                              <<"x-consumer-timeout">>],
       server_named => false,
@@ -1688,6 +1691,15 @@ reclaim_memory(Vhost, QueueName) ->
     ra_log_wal:force_roll_over({?RA_WAL_NAME, Node}).
 
 %%----------------------------------------------------------------------------
+
+get_consumer_disconnected_timeout(Q) ->
+    case args_policy_lookup(<<"consumer-disconnected-timeout">>, fun min/2, Q) of
+        undefined ->
+            application:get_env(rabbit, consumer_disconnected_timeout, 60_000);
+        Val when is_integer(Val) ->
+            Val
+    end.
+
 dead_letter_handler(Q, Overflow) ->
     Exchange = args_policy_lookup(<<"dead-letter-exchange">>, fun queue_arg_has_precedence/2, Q),
     RoutingKey = args_policy_lookup(<<"dead-letter-routing-key">>, fun queue_arg_has_precedence/2, Q),

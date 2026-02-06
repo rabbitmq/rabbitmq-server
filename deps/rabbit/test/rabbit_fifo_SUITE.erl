@@ -1070,7 +1070,7 @@ down_with_noconnection_marks_suspect_and_node_is_monitored_test(Config) ->
     % because we received a noconnection we now need to monitor the node
     {State1b, _, _} = apply(meta(Config, ?LINE), {down, Self, noconnection}, State1),
     {State2, _, Effs} = apply(meta(Config, ?LINE), {down, Pid, noconnection}, State1b),
-    ?ASSERT_EFF({timer, {consumer_down_timeout, K}, _Timeout}, K == CKey, Effs),
+    ?ASSERT_EFF({timer, {consumer_disconnected_timeout, K}, _Timeout}, K == CKey, Effs),
     Node = node(),
     ?ASSERT_EFF({monitor, node, N}, N == Node , Effs),
 
@@ -1078,7 +1078,7 @@ down_with_noconnection_marks_suspect_and_node_is_monitored_test(Config) ->
               checked_out = CH1,
               status = {suspected_down, up}} = maps:get(CKey, State2#rabbit_fifo.consumers),
 
-    %% test enter_state(leader, to ensure that the consumer_down_timeout events
+    %% test enter_state(leader, to ensure that the consumer_disconnected_timeout events
 
     % when the node comes up we need to retry the process monitors for the
     % disconnected processes
@@ -1097,7 +1097,7 @@ down_with_noconnection_marks_suspect_and_node_is_monitored_test(Config) ->
     %% the node does not come back before the timeout
 
     {State4, _, []} = apply(meta(Config, ?LINE),
-                            {timeout, {consumer_down_timeout, CKey}},
+                            {timeout, {consumer_disconnected_timeout, CKey}},
                             State2),
     #consumer{status = {suspected_down, up},
               credit = 1,
@@ -1631,7 +1631,7 @@ single_active_returns_messages_on_noconnection_test(Config) ->
      {CK1, make_checkout(C1, {auto, {simple_prefetch, 1}}, #{})},
      {?LINE, rabbit_fifo:make_enqueue(self(), 1, msg)},
      {?LINE, {down, DownPid, noconnection}},
-     {?LINE, {timeout, {consumer_down_timeout, CK1}}},
+     {?LINE, {timeout, {consumer_disconnected_timeout, CK1}}},
      ?ASSERT(#rabbit_fifo{consumers = Cons,
                           waiting_consumers =
                           [{CK1, #consumer{status = {suspected_down, up}}}]}
@@ -1661,7 +1661,7 @@ single_active_consumer_replaces_consumer_when_down_noconnection_test(Config) ->
      ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{status = up}}}),
      {?LINE, {down, DownPid, noconnection}},
      ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{status = {suspected_down, up}}}}),
-     {?LINE, {timeout, {consumer_down_timeout, CK1}}},
+     {?LINE, {timeout, {consumer_disconnected_timeout, CK1}}},
      ?ASSERT(#rabbit_fifo{consumers = #{CK2 := #consumer{status = up,
                                                          checked_out = Ch2}},
                           waiting_consumers =
@@ -1705,7 +1705,7 @@ single_active_consumer_all_disconnected_test(Config) ->
      {?LINE, {nodeup, node(C1Pid)}},
      {assert_effs,
       fun (Effs) ->
-              ?ASSERT_EFF({timer, {consumer_down_timeout, K}, infinity},
+              ?ASSERT_EFF({timer, {consumer_disconnected_timeout, K}, infinity},
                           K == CK1, Effs)
       end},
      ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{status = up,
@@ -1904,9 +1904,11 @@ active_flag_updated_when_consumer_suspected_unsuspected_test(Config) ->
     ok.
 
 active_flag_not_updated_when_consumer_suspected_unsuspected_and_single_active_consumer_is_on_test(Config) ->
+    CustomTimeout = 30_000,
     State0 = init(#{name => ?FUNCTION_NAME,
                     queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
-                    single_active_consumer_on => true}),
+                    single_active_consumer_on => true,
+                    consumer_disconnected_timeout => CustomTimeout}),
 
     DummyFunction = fun() -> ok  end,
     Pid1 = spawn(DummyFunction),
@@ -1928,15 +1930,15 @@ active_flag_not_updated_when_consumer_suspected_unsuspected_and_single_active_co
      {?LINE, {down, Pid1, noconnection}},
      {assert_effs,
       fun (Effs) ->
-              ?ASSERT_EFF({timer, {consumer_down_timeout, K}, T},
-                          K == CK1 andalso is_integer(T), Effs)
+              ?ASSERT_EFF({timer, {consumer_disconnected_timeout, K}, T},
+                          K == CK1 andalso T == CustomTimeout, Effs)
       end},
      drop_effects,
      {?LINE, {nodeup, node()}},
      {assert_effs,
       fun (Effs) ->
               ?ASSERT_EFF({monitor, process, P}, P == Pid1, Effs),
-              ?ASSERT_EFF({timer, {consumer_down_timeout, K}, infinity},
+              ?ASSERT_EFF({timer, {consumer_disconnected_timeout, K}, infinity},
                           K == CK1, Effs),
               ?ASSERT_NO_EFF({monitor, process, P}, P == Pid2, Effs),
               ?ASSERT_NO_EFF({monitor, process, P}, P == Pid3, Effs)
@@ -2403,7 +2405,7 @@ single_active_consumer_quiescing_disconnected_test(Config) ->
                           waiting_consumers = [{CK2, _}]}),
      %% C1 is disconnected and times out
      {?LINE, {down, C1Pid, noconnection}},
-     {?LINE, {timeout, {consumer_down_timeout, CK1}}},
+     {?LINE, {timeout, {consumer_disconnected_timeout, CK1}}},
      ?ASSERT(
         #rabbit_fifo{consumers = #{CK2 := #consumer{status = up,
                                                     checked_out = Ch2}},
@@ -2500,7 +2502,7 @@ single_active_consumer_cancelled_with_pending_disconnected_test(Config) ->
                           #{CK1 := #consumer{status = {suspected_down, cancelled}},
                             CK2 := #consumer{status = up}},
                           waiting_consumers = []}),
-     {?LINE, {timeout, {consumer_down_timeout, CK1}}},
+     {?LINE, {timeout, {consumer_disconnected_timeout, CK1}}},
      %% cancelled consumer should have been removed
      ?ASSERT(#rabbit_fifo{consumers =
                           #{CK2 := #consumer{status = up}} = Cons,

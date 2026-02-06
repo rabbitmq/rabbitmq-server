@@ -215,7 +215,9 @@
          delivery_limit :: option(non_neg_integer()),
          expires :: option(milliseconds()),
          msg_ttl :: option(milliseconds()),
-         unused_2 = ?NIL,
+         %% time to wait before returning messages when consumer's node
+         %% becomes unreachable
+         consumer_disconnected_timeout = 60_000 :: milliseconds(),
          unused_3 = ?NIL
         }).
 
@@ -298,5 +300,5 @@
                     expires => non_neg_integer(),
                     msg_ttl => non_neg_integer(),
                     created => non_neg_integer(),
-                    consumer_timeout => seconds()
+                    consumer_disconnected_timeout => milliseconds()
                    }.
