@@ -1379,6 +1379,7 @@ force_all_queues_shrink_member_to_current_member(Config) ->
             ok = rabbit_ct_broker_helpers:rpc(Config, Server0, rabbit_quorum_queue,
                                          force_all_queues_shrink_member_to_current_member, [QQSpec]),
 
+<<<<<<< HEAD
             [{_, {error, noproc}}] =
                 rabbit_ct_broker_helpers:rpc(Config, Server1, rabbit_quorum_queue,
                     force_all_queues_shrink_member_to_current_member, [QQSpec]),
@@ -1386,6 +1387,15 @@ force_all_queues_shrink_member_to_current_member(Config) ->
             [{_, {error, noproc}}] =
                 rabbit_ct_broker_helpers:rpc(Config, Server2, rabbit_quorum_queue,
                     force_all_queues_shrink_member_to_current_member, [QQSpec]),
+=======
+            ?assertMatch([{_, {error, noproc}} | _],
+                rabbit_ct_broker_helpers:rpc(Config, Server1, rabbit_quorum_queue,
+                                         force_all_queues_shrink_member_to_current_member, [QQSpec])),
+
+            ?assertMatch([{_, {error, noproc}} | _],
+                rabbit_ct_broker_helpers:rpc(Config, Server2, rabbit_quorum_queue,
+                                         force_all_queues_shrink_member_to_current_member, [QQSpec])),
+>>>>>>> 099cb29f4 (update force shrink tests for quorum queues to verify expected error handling)
 
             wait_for_messages_ready([Server0], ra_name(QQ), 3),
             queue_utils:assert_number_of_replicas(
