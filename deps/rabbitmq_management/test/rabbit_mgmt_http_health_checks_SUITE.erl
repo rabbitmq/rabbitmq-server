@@ -53,7 +53,8 @@ all_tests() -> [
                 certificate_expiration_test,
                 is_in_service_test,
                 below_node_connection_limit_test,
-                ready_to_serve_clients_test
+                ready_to_serve_clients_test,
+                reached_target_cluster_size_test
                ].
 
 %% -------------------------------------------------------------------
@@ -522,6 +523,38 @@ ready_to_serve_clients_test(Config) ->
     [catch rabbit_ct_client_helpers:close_connection(C) || C <- Connections],
     rabbit_ct_broker_helpers:rpc(
       Config, 0, application, set_env, [rabbit, connection_max, infinity]),
+
+    passed.
+
+reached_target_cluster_size_test(Config) ->
+    Path = "/health/checks/reached-target-cluster-size",
+    Check0 = http_get(Config, Path, ?OK),
+    ?assertEqual(<<"ok">>, maps:get(status, Check0)),
+
+    %% Temporarily set target_cluster_size_hint above the cluster size.
+    OriginalCF = rabbit_ct_broker_helpers:rpc(
+      Config, 0, application, get_env, [rabbit, cluster_formation]),
+    rabbit_ct_broker_helpers:rpc(
+      Config, 0, application, set_env, [rabbit, cluster_formation, [{target_cluster_size_hint, 100}]]),
+
+    Body0 = http_get_failed(Config, Path),
+    ?assertEqual(<<"failed">>, maps:get(<<"status">>, Body0)),
+    ?assertEqual(true, maps:is_key(<<"reason">>, Body0)),
+    ?assertEqual(true, is_integer(maps:get(<<"online">>, Body0))),
+    ?assertEqual(100, maps:get(<<"target">>, Body0)),
+
+    %% Restore the original value.
+    case OriginalCF of
+        {ok, Val} ->
+            rabbit_ct_broker_helpers:rpc(
+              Config, 0, application, set_env, [rabbit, cluster_formation, Val]);
+        undefined ->
+            rabbit_ct_broker_helpers:rpc(
+              Config, 0, application, unset_env, [rabbit, cluster_formation])
+    end,
+
+    Check1 = http_get(Config, Path, ?OK),
+    ?assertEqual(<<"ok">>, maps:get(status, Check1)),
 
     passed.
 
