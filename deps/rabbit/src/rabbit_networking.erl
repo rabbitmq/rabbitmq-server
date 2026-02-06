@@ -46,6 +46,8 @@
 
 -export([ensure_listener_table_for_this_node/0]).
 
+-export([clustering_tls_enabled/0]).
+
 -deprecated([{force_connection_event_refresh, 1, eventually}]).
 
 -export([
@@ -423,7 +425,11 @@ maybe_get_epmd_port(Name, Host) ->
                     {ok, IP} -> IP;
                     _ -> {0,0,0,0,0,0,0,0}
                 end,
-            tcp_listener_started(clustering, [], IPAddress, Port);
+            Proto = case clustering_tls_enabled() of
+                        true  -> 'clustering/ssl';
+                        false -> clustering
+                    end,
+            tcp_listener_started(Proto, [], IPAddress, Port);
         noport ->
             throw({error, no_epmd_port})
     end.
@@ -457,6 +463,7 @@ node_client_listeners(Node) ->
         [] -> [];
         Xs ->
             lists:filter(fun (#listener{protocol = clustering}) -> false;
+                             (#listener{protocol = 'clustering/ssl'}) -> false;
                              (_) -> true
                          end, Xs)
     end.
@@ -758,3 +765,11 @@ ipv6_status(TestPort) ->
 ensure_listener_table_for_this_node() ->
     _ = ets:new(?ETS_TABLE, [named_table, public, bag, {keypos, #listener.node}]),
     ok.
+
+-spec clustering_tls_enabled() -> boolean().
+clustering_tls_enabled() ->
+    case init:get_argument(proto_dist) of
+        {ok, [["inet_tls"]]} -> true;
+        {ok, [["inet6_tls"]]} -> true;
+        _ -> false
+    end.
