@@ -2082,8 +2082,8 @@ priority_queue_fifo(Config) ->
     check_quorum_queues_v8_compat(Config),
     %% testing: if hi priority messages are published before lo priority
     %% messages they are always consumed first (fifo)
-    [Server0 | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
+    Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, hd(Servers)),
     Queue = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Queue, 0, 0},
                  declare(Ch, Queue,
@@ -2108,6 +2108,8 @@ priority_queue_fifo(Config) ->
          end || P <- lists:seq(0, 4)],
 
     Expected = lists:reverse(ExpectedLo ++ ExpectedHi),
+    RaName = ra_name(Queue),
+    wait_for_messages_ready(Servers, RaName, length(Expected)),
     validate_queue(Ch, Queue, Expected),
     ok.
 
@@ -2115,8 +2117,8 @@ priority_queue_2_1_ratio(Config) ->
     check_quorum_queues_v8_compat(Config),
     %% testing: if lo priority messages are published before hi priority
     %% messages are consumed in a 2:1 hi to lo ratio
-    [Server0 | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
+    Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, hd(Servers)),
     Queue = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Queue, 0, 0},
                  declare(Ch, Queue,
@@ -2140,7 +2142,8 @@ priority_queue_2_1_ratio(Config) ->
          end || P <- lists:seq(5, 14)],
 
     Expected = lists:reverse(ExpectedLo ++ ExpectedHi),
-
+    RaName = ra_name(Queue),
+    wait_for_messages_ready(Servers, RaName, length(Expected)),
     validate_queue(Ch, Queue, Expected),
     ok.
 
