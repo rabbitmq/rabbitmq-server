@@ -17,13 +17,13 @@
     <paho.v3.version>[1.2.5,)</paho.v3.version>
     <amqp-client.version>5.28.0</amqp-client.version>
     <junit.version>5.14.2</junit.version>
-    <assertj.version>3.27.6</assertj.version>
+    <assertj.version>3.27.7</assertj.version>
     <logback.version>1.2.13</logback.version>
     <maven-surefire-plugin.version>3.5.4</maven-surefire-plugin.version>
     <groovy-maven-plugin.version>2.1.1</groovy-maven-plugin.version>
     <groovy.version>2.4.21</groovy.version>
-    <maven-compiler-plugin.version>3.14.1</maven-compiler-plugin.version>
-    <spotless.version>3.2.0</spotless.version>
+    <maven-compiler-plugin.version>3.15.0</maven-compiler-plugin.version>
+    <spotless.version>3.2.1</spotless.version>
     <google-java-format.version>1.17.0</google-java-format.version>
     <test-keystore.ca>${project.build.directory}/ca.keystore</test-keystore.ca>
     <test-keystore.password>bunnychow</test-keystore.password>
@@ -131,7 +131,7 @@
         <plugin>
           <groupId>org.codehaus.mojo</groupId>
           <artifactId>keytool-maven-plugin</artifactId>
-          <version>2.0.1</version>
+          <version>2.0.2</version>
           <executions>
             <execution>
               <id>generate-test-ca-keystore</id>
