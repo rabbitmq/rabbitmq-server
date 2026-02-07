@@ -2090,6 +2090,25 @@ notify_decorators(QName, F, A) ->
             ok
     end.
 
+%% `ra_server_proc:force_shrink_members_to_current_member/1` typespec does
+%% not account for the '{error, _}' and 'timeout' values that can be returned.
+-dialyzer({nowarn_function, [do_force_shrink_members_to_current_member/1,
+                             force_shrink_member_to_current_member/2,
+                             force_all_queues_shrink_member_to_current_member/2]}).
+-spec do_force_shrink_members_to_current_member(ra:server_id()) ->
+    ok | {error, term()}.
+do_force_shrink_members_to_current_member(ServerId) ->
+    case ra_server_proc:force_shrink_members_to_current_member(ServerId) of
+        ok ->
+            ok;
+        timeout ->
+            {error, timeout};
+        {error, _} = Error ->
+            Error
+    end.
+
+-spec force_shrink_member_to_current_member(rabbit_types:vhost(), rabbit_misc:resource_name()) ->
+    ok | {error, term()}.
 force_shrink_member_to_current_member(VHost, Name) ->
     Node = node(),
     QName = rabbit_misc:r(VHost, queue, Name),
@@ -2099,26 +2118,36 @@ force_shrink_member_to_current_member(VHost, Name) ->
         {ok, Q} when ?is_amqqueue(Q) ->
             {RaName, _} = amqqueue:get_pid(Q),
             OtherNodes = lists:delete(Node, get_nodes(Q)),
-            ok = ra_server_proc:force_shrink_members_to_current_member({RaName, Node}),
-            Fun = fun (Q0) ->
-                          TS0 = amqqueue:get_type_state(Q0),
-                          TS = TS0#{nodes => [Node]},
-                          amqqueue:set_type_state(Q0, TS)
-                  end,
-            _ = rabbit_amqqueue:update(QName, Fun),
-            _ = [ra:force_delete_server(?RA_SYSTEM, {RaName, N}) || N <- OtherNodes],
-            ?LOG_WARNING("Shrinking ~ts finished", [QNameFmt]);
+            case do_force_shrink_members_to_current_member({RaName, Node}) of
+                ok ->
+                    Fun = fun (Q0) ->
+                                  TS0 = amqqueue:get_type_state(Q0),
+                                  TS = TS0#{nodes => [Node]},
+                                  amqqueue:set_type_state(Q0, TS)
+                          end,
+                    _ = rabbit_amqqueue:update(QName, Fun),
+                    _ = [ra:force_delete_server(?RA_SYSTEM, {RaName, N}) || N <- OtherNodes],
+                    ?LOG_WARNING("Shrinking ~ts finished", [QNameFmt]),
+                    ok;
+                {error, _} = Error ->
+                    ?LOG_ERROR("Shrinking ~ts failed: ~tp", [QNameFmt, Error]),
+                    Error
+            end;
         _ ->
-            ?LOG_WARNING("Shrinking failed, ~ts not found", [QNameFmt]),
+            ?LOG_ERROR("Shrinking failed, ~ts not found", [QNameFmt]),
             {error, not_found}
     end.
 
+-spec force_vhost_queues_shrink_member_to_current_member(rabbit_types:vhost()) ->
+    ok | [{rabbit_amqqueue:name(), {error, term()}}].
 force_vhost_queues_shrink_member_to_current_member(VHost) when is_binary(VHost) ->
     ?LOG_WARNING("Shrinking all quorum queues in vhost '~ts' to a single node: ~ts",
         [VHost, node()]),
     ListQQFun = fun() -> rabbit_amqqueue:list(VHost) end,
     force_all_queues_shrink_member_to_current_member(ListQQFun, _MatchFun = fun(_) -> true end).
 
+-spec force_vhost_queues_shrink_member_to_current_member(rabbit_types:vhost(), binary()) ->
+    ok | [{rabbit_amqqueue:name(), {error, term()}}].
 force_vhost_queues_shrink_member_to_current_member(VHost, QueueSpec)
   when is_binary(VHost), is_binary(QueueSpec) ->
     ?LOG_WARNING("Shrinking all quorum queues matching '~ts' in vhost '~ts' to a single node: ~ts",
@@ -2127,12 +2156,16 @@ force_vhost_queues_shrink_member_to_current_member(VHost, QueueSpec)
     MatchFun = fun(Q) -> is_match(get_resource_name(amqqueue:get_name(Q)), QueueSpec) end,
     force_all_queues_shrink_member_to_current_member(ListQQFun, MatchFun).
 
+-spec force_all_queues_shrink_member_to_current_member() ->
+    ok | [{rabbit_amqqueue:name(), {error, term()}}].
 force_all_queues_shrink_member_to_current_member() ->
     ?LOG_WARNING("Shrinking all quorum queues matching to a single node: ~ts",
         [node()]),
     ListQQFun = fun() -> rabbit_amqqueue:list() end,
     force_all_queues_shrink_member_to_current_member(ListQQFun, _MatchFun = fun(_) -> true end).
 
+-spec force_all_queues_shrink_member_to_current_member(binary()) ->
+    ok | [{rabbit_amqqueue:name(), {error, term()}}].
 force_all_queues_shrink_member_to_current_member(QueueSpec) when is_binary(QueueSpec) ->
     ?LOG_WARNING("Shrinking all quorum queues matching '~ts' to a single node: ~ts",
         [QueueSpec, node()]),
@@ -2143,24 +2176,37 @@ force_all_queues_shrink_member_to_current_member(QueueSpec) when is_binary(Queue
 force_all_queues_shrink_member_to_current_member(ListQQFun, MatchFun)
   when is_function(ListQQFun), is_function(MatchFun) ->
     Node = node(),
-    _ = [begin
+    Results =
+        [begin
              QName = amqqueue:get_name(Q),
              {RaName, _} = amqqueue:get_pid(Q),
              OtherNodes = lists:delete(Node, get_nodes(Q)),
-             ?LOG_WARNING("Shrinking queue '~ts' to a single node: ~ts", [rabbit_misc:rs(QName), Node]),
-             ok = ra_server_proc:force_shrink_members_to_current_member({RaName, Node}),
-             Fun = fun (QQ) ->
-                           TS0 = amqqueue:get_type_state(QQ),
-                           TS = TS0#{nodes => [Node]},
-                           amqqueue:set_type_state(QQ, TS)
-                   end,
-             _ = rabbit_amqqueue:update(QName, Fun),
-             _ = [ra:force_delete_server(?RA_SYSTEM, {RaName, N}) || N <- OtherNodes]
+             ?LOG_WARNING("Shrinking ~ts to a single node: ~ts", [rabbit_misc:rs(QName), Node]),
+             case do_force_shrink_members_to_current_member({RaName, Node}) of
+                 ok ->
+                     Fun = fun (QQ) ->
+                                   TS0 = amqqueue:get_type_state(QQ),
+                                   TS = TS0#{nodes => [Node]},
+                                   amqqueue:set_type_state(QQ, TS)
+                           end,
+                     _ = rabbit_amqqueue:update(QName, Fun),
+                     _ = [ra:force_delete_server(?RA_SYSTEM, {RaName, N}) || N <- OtherNodes],
+                     ok;
+                 {error, _} = Error ->
+                     {QName, Error}
+             end
          end || Q <- ListQQFun(),
                 amqqueue:get_type(Q) == ?MODULE,
                 MatchFun(Q)],
-    ?LOG_WARNING("Shrinking finished"),
-    ok.
+    Errors = [E || E <- Results, E =/= ok],
+    case Errors of
+        [] ->
+            ?LOG_WARNING("Shrinking finished with no errors"),
+            ok;
+        _ ->
+            ?LOG_ERROR("Shrinking finished with errors: ~tp", [Errors]),
+            Errors
+    end.
 
 force_checkpoint_on_queue(QName) ->
     QNameFmt = rabbit_misc:rs(QName),
