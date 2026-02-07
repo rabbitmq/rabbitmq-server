@@ -1317,8 +1317,14 @@ force_shrink_member_to_current_member(Config) ->
             queue_utils:assert_number_of_replicas(
               Config, Server0, <<"/">>, QQ, 1),
 
-            %% grow queues back to all nodes
-            [rpc:call(Server0, rabbit_quorum_queue, grow, [S, <<"/">>, <<".*">>, all]) || S <- [Server1, Server2]],
+            %% Important: make sure to grow back one node at a time, waiting for the new member
+            %% to become a voter before adding more.
+            rpc:call(Server0, rabbit_quorum_queue, grow, [Server1, <<"/">>, <<".*">>, all]),
+            ?awaitMatch(true,
+                        rpc:call(Server0, rabbit_queue_type_ra, all_members_stable,
+                                 [RaName, [Server0, Server1]]),
+                        ?DEFAULT_AWAIT),
+            rpc:call(Server0, rabbit_quorum_queue, grow, [Server2, <<"/">>, <<".*">>, all]),
             queue_utils:assert_number_of_replicas(
               Config, Server0, <<"/">>, QQ, 3)
     end.
@@ -1354,13 +1360,13 @@ force_all_queues_shrink_member_to_current_member(Config) ->
             ok = rabbit_ct_broker_helpers:rpc(Config, Server0, rabbit_quorum_queue,
                                          force_all_queues_shrink_member_to_current_member, [QQSpec]),
 
-            ?assertMatch([{_, {error, noproc}} | _],
+            [{_, {error, noproc}}] =
                 rabbit_ct_broker_helpers:rpc(Config, Server1, rabbit_quorum_queue,
-                                         force_all_queues_shrink_member_to_current_member, [QQSpec])),
+                    force_all_queues_shrink_member_to_current_member, [QQSpec]),
 
-            ?assertMatch([{_, {error, noproc}} | _],
+            [{_, {error, noproc}}] =
                 rabbit_ct_broker_helpers:rpc(Config, Server2, rabbit_quorum_queue,
-                                         force_all_queues_shrink_member_to_current_member, [QQSpec])),
+                    force_all_queues_shrink_member_to_current_member, [QQSpec]),
 
             wait_for_messages_ready([Server0], ra_name(QQ), 3),
             queue_utils:assert_number_of_replicas(
@@ -1382,8 +1388,14 @@ force_all_queues_shrink_member_to_current_member(Config) ->
                    Config, Server0, <<"/">>, Q, 1)
              end || Q <- QQs],
 
-            %% grow queues back to all nodes
-            [rpc:call(Server0, rabbit_quorum_queue, grow, [S, <<"/">>, <<".*">>, all]) || S <- [Server1, Server2]],
+            %% Important: make sure to grow back one node at a time, waiting for the new member
+            %% to become a voter before adding more.
+            rpc:call(Server0, rabbit_quorum_queue, grow, [Server1, <<"/">>, <<".*">>, all]),
+            [?awaitMatch(true,
+                         rpc:call(Server0, rabbit_queue_type_ra, all_members_stable,
+                                  [ra_name(Q), [Server0, Server1]]),
+                         ?DEFAULT_AWAIT) || Q <- QQs],
+            rpc:call(Server0, rabbit_quorum_queue, grow, [Server2, <<"/">>, <<".*">>, all]),
 
             [begin
                  RaName = ra_name(Q),
@@ -1480,8 +1492,18 @@ force_vhost_queues_shrink_member_to_current_member(Config) ->
                 end
             end || Q <- QQs, VHost <- VHosts],
 
-            %% grow queues back to all nodes in VHost2 only
-            [rpc:call(Server0, rabbit_quorum_queue, grow, [S, VHost2, <<".*">>, all]) || S <- [Server1, Server2]],
+            %% Important: make sure to grow back one node at a time, waiting for the new member
+            %% to become a voter before adding more (in this case, for VHost2 specifically).
+            rpc:call(Server0, rabbit_quorum_queue, grow, [Server1, VHost2, <<".*">>, all]),
+            [begin
+                 QQRes = rabbit_misc:r(VHost2, queue, Q),
+                 {ok, RN} = rpc:call(Server0, rabbit_queue_type_util, qname_to_internal_name, [QQRes]),
+                 ?awaitMatch(true,
+                             rpc:call(Server0, rabbit_queue_type_ra, all_members_stable,
+                                      [RN, [Server0, Server1]]),
+                             ?DEFAULT_AWAIT)
+             end || Q <- QQs],
+            rpc:call(Server0, rabbit_quorum_queue, grow, [Server2, VHost2, <<".*">>, all]),
 
             [begin
                 QQRes = rabbit_misc:r(VHost, queue, Q),
