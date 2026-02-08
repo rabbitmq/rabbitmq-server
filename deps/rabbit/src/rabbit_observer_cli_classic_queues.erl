@@ -80,8 +80,8 @@ sheet_body(State) ->
                         [
                             Pid, Vhost, Name,
                             format_int(MsgQ + GS2Q), format_int(MsgQ), format_int(GS2Q),
-                            proplists:get_value(q3, BQInfo),
-                            element(3, proplists:get_value(delta, BQInfo)),
+                            proplists:get_value(q_head, BQInfo),
+                            element(3, proplists:get_value(q_tail, BQInfo)),
                             proplists:get_value(num_pending_acks, BQInfo),
                             proplists:get_value(num_unconfirmed, BQInfo),
                             proplists:get_value(qi_buffer_size, BQInfo, 0),
