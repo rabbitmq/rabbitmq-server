@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2023-2025 Broadcom. All Rights Reserved. The term “Broadcom”
+%% Copyright (c) 2023-2026 Broadcom. All Rights Reserved. The term “Broadcom”
 %% refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
@@ -226,15 +226,15 @@
     {rabbit_topic_permission, rabbit_db_user_m2k_converter},
     {rabbit_runtime_parameters, rabbit_db_rtparams_m2k_converter},
     {rabbit_queue, rabbit_db_queue_m2k_converter},
+    {rabbit_durable_queue, rabbit_db_queue_m2k_converter},
     {rabbit_exchange, rabbit_db_exchange_m2k_converter},
+    {rabbit_durable_exchange, rabbit_db_exchange_m2k_converter},
     {rabbit_exchange_serial, rabbit_db_exchange_m2k_converter},
     {rabbit_route, rabbit_db_binding_m2k_converter},
+    {rabbit_durable_route, rabbit_db_binding_m2k_converter},
     {rabbit_node_maintenance_states, rabbit_db_maintenance_m2k_converter},
     {mirrored_sup_childspec, rabbit_db_msup_m2k_converter},
 
-    rabbit_durable_queue,
-    rabbit_durable_exchange,
-    rabbit_durable_route,
     rabbit_semi_durable_route,
     rabbit_reverse_route,
     rabbit_index_route
