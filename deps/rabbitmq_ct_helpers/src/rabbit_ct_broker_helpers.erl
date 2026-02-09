@@ -173,7 +173,6 @@
     test_writer/1,
     user/1,
 
-    configured_metadata_store/1,
     await_metadata_store_consistent/2,
     do_nodes_run_same_ra_machine_version/2
   ]).
@@ -994,9 +993,6 @@ share_dist_and_proxy_ports_map(Config) ->
     rpc_all(Config,
       application, set_env, [kernel, dist_and_proxy_ports_map, Map]),
     Config.
-
-configured_metadata_store(_Config) ->
-    khepri.
 
 %% Waits until the metadata store replica on Node is up to date with the leader.
 await_metadata_store_consistent(Config, Node) ->
