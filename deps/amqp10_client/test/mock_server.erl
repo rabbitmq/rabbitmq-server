@@ -19,7 +19,10 @@
 -include("src/amqp10_client_internal.hrl").
 
 start(Port) ->
-    {ok, LSock} = gen_tcp:listen(Port, [binary, {packet, 0}, {active, false}]),
+    {ok, LSock} = gen_tcp:listen(Port, [binary,
+                                        {packet, 0},
+                                        {active, false},
+                                        {reuseaddr, true}]),
     Pid = spawn(?MODULE, run, [LSock]),
     {LSock, Pid}.
 
