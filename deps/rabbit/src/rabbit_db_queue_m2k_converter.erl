@@ -45,7 +45,7 @@ init_copy_to_khepri(_StoreId, _MigrationId, Tables) ->
 %% @private
 
 copy_to_khepri(
-  rabbit_queue = Table, Record, State) when ?is_amqqueue(Record) ->
+  rabbit_durable_queue = Table, Record, State) when ?is_amqqueue(Record) ->
     Name = amqqueue:get_name(Record),
     ?LOG_DEBUG(
        "Mnesia->Khepri data copy: [~0p] key: ~0p",
