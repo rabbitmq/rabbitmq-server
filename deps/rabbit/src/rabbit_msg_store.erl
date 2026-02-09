@@ -1122,7 +1122,20 @@ write_action({Mask, #msg_location { ref_count = 0, file = File,
         {_Mask, [#file_summary {}]} ->
             ok = index_update_ref_counter(IndexEts, MsgId, +1), %% Effectively set to 1.
             State1 = adjust_valid_total_size(File, TotalSize, State),
-            {confirm, File, State1}
+            {confirm, File, State1};
+        {false, []} ->
+            %% Handle case where GC has deleted the file from the summary table
+            %% before we could look it up. This can occur during high load when
+            %% the GC asynchronously deletes files while write operations are
+            %% in progress. Since ref_count=0, the old copy is orphaned and
+            %% safe to discard. Delete stale index entry and write fresh copy
+            %% to current file.
+            ok = index_delete(IndexEts, MsgId),
+            {write, State};
+        {false_if_increment, []} ->
+            %% File deleted by GC, but client is dying - ignore the write
+            %% since the message will be deleted when client death is processed.
+            {ignore, File, State}
     end;
 write_action({_Mask, #msg_location { file = File }},
              MsgId, State = #msstate{ index_ets = IndexEts }) ->
