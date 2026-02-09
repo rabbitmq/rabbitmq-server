@@ -1170,7 +1170,7 @@ stat(Q) when ?is_amqqueue(Q) ->
 stat(Q, Timeout) when ?is_amqqueue(Q) ->
     try
         maybe
-            Leader ?= find_leader(Q),
+            {_, _} = Leader ?= find_leader(Q),
             {ok, _, _} = Result ?= rabbit_fifo_client:stat(Leader, Timeout),
             Result
         else
