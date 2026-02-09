@@ -1339,10 +1339,7 @@ force_shrink_member_to_current_member(Config) ->
             %% Important: make sure to grow back one node at a time, waiting for the new member
             %% to become a voter before adding more.
             rpc:call(Server0, rabbit_quorum_queue, grow, [Server1, <<"/">>, <<".*">>, all]),
-            ?awaitMatch(true,
-                        rpc:call(Server0, rabbit_queue_type_ra, all_members_stable,
-                                 [RaName, [Server0, Server1]]),
-                        ?DEFAULT_AWAIT),
+            ?awaitMatch(true, all_members_stable(RaName, [Server0, Server1]), ?DEFAULT_AWAIT),
             rpc:call(Server0, rabbit_quorum_queue, grow, [Server2, <<"/">>, <<".*">>, all]),
             queue_utils:assert_number_of_replicas(
               Config, Server0, <<"/">>, QQ, 3)
@@ -1411,8 +1408,7 @@ force_all_queues_shrink_member_to_current_member(Config) ->
             %% to become a voter before adding more.
             rpc:call(Server0, rabbit_quorum_queue, grow, [Server1, <<"/">>, <<".*">>, all]),
             [?awaitMatch(true,
-                         rpc:call(Server0, rabbit_queue_type_ra, all_members_stable,
-                                  [ra_name(Q), [Server0, Server1]]),
+                         all_members_stable(ra_name(Q), [Server0, Server1]),
                          ?DEFAULT_AWAIT) || Q <- QQs],
             rpc:call(Server0, rabbit_quorum_queue, grow, [Server2, <<"/">>, <<".*">>, all]),
 
@@ -1518,8 +1514,7 @@ force_vhost_queues_shrink_member_to_current_member(Config) ->
                  QQRes = rabbit_misc:r(VHost2, queue, Q),
                  {ok, RN} = rpc:call(Server0, rabbit_queue_type_util, qname_to_internal_name, [QQRes]),
                  ?awaitMatch(true,
-                             rpc:call(Server0, rabbit_queue_type_ra, all_members_stable,
-                                      [RN, [Server0, Server1]]),
+                             all_members_stable(RN, [Server0, Server1]),
                              ?DEFAULT_AWAIT)
              end || Q <- QQs],
             rpc:call(Server0, rabbit_quorum_queue, grow, [Server2, VHost2, <<".*">>, all]),
@@ -5465,3 +5460,15 @@ lsof_rpc() ->
     Cmd = rabbit_misc:format(
             "lsof -p ~ts", [os:getpid()]),
     os:cmd(Cmd).
+
+%% copy-pasted from 4.3+ rabbit_queue_type_ra module
+-spec all_members_stable(atom(), [node()]) -> boolean().
+all_members_stable(RaName, QNodes) ->
+    Result = erpc:multicall(QNodes, ets, lookup, [ra_state, RaName], ?TIMEOUT),
+    lists:all(fun({ok, [{_RaName, _RaState, Membership}]})
+                    when Membership =:= voter orelse
+                         Membership =:= non_voter ->
+                      true;
+                 (_) ->
+                      false
+              end, Result).
