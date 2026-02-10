@@ -168,7 +168,7 @@ function get_local_pref(k) {
   }
 }
 
-function get_pref(k) {
+function get_pref(k, defaultValue = undefined) {
     var val;
     if (local_storage_available()) {
         val = window.localStorage['rabbitmq.' + k];
@@ -177,7 +177,8 @@ function get_pref(k) {
         val = parse_cookie()[short_key(k)];
 
     }
-    var res = (val == undefined) ? default_pref(k) : val;
+    var res = (val == undefined) ? 
+        (defaultValue != undefined ? defaultValue : default_pref(k)) : val;
     return res;
 }
 

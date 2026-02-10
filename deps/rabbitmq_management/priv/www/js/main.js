@@ -204,7 +204,10 @@ function setup_constant_events() {
     $('#show-vhost').on('change', function() {
             current_vhost = $(this).val();
             store_pref('vhost', current_vhost);
-            update();
+            if (current_reqs && Object.keys(current_reqs).length > 0) {
+                update();
+            }
+            notifyOnVhostChange(current_vhost);
         });
     if (!vhosts_interesting) {
         $('#vhost-form').hide();
@@ -235,19 +238,83 @@ function update_vhosts() {
 function setup_extensions() {
     var extensions = JSON.parse(sync_get('/extensions'));
     extension_count = 0;
+    var javascript_files = [];
+
     for (var i in extensions) {
         var extension = extensions[i];
-        if ($.isPlainObject(extension) && extension.hasOwnProperty('javascript')) {
-            dynamic_load(extension.javascript);
+        if ($.isPlainObject(extension)) {
+            if (extension.hasOwnProperty('javascript')) {
+                // Collect JavaScript files for sequential loading
+                if (Array.isArray(extension.javascript)) {
+                    for (var j = 0; j < extension.javascript.length; j++) {
+                        javascript_files.push(extension.javascript[j]);
+                    }
+                } else {
+                    javascript_files.push(extension.javascript);
+                }
+            } 
+            if (extension.hasOwnProperty('css')) {
+                dynamic_css_load(extension.css);                
+            }
             extension_count++;
         }
     }
+    // Load JavaScript files sequentially to ensure dependencies are available
+    load_javascript_files_sequentially(javascript_files, 0);
 }
 
-function dynamic_load(filename) {
+function load_javascript_files_sequentially(files, index) {
+    if (index >= files.length) {
+        return; // All files loaded
+    }
+    console.debug(`Loading extension ${files[index]} ...`);
+    dynamic_javascript_file_load(files[index], function() {
+        // Load next file after current one has finished loading
+        console.debug(`Loaded extension ${files[index]} !`);
+        load_javascript_files_sequentially(files, index + 1);
+    });
+}
+
+function dynamic_javascript_load(arrayOrString) {
+    if (Array.isArray(arrayOrString)) {
+        for (const file of arrayOrString) {
+            dynamic_javascript_file_load(file);
+        }
+    }else {
+        dynamic_javascript_file_load(arrayOrString);
+    }
+}
+function dynamic_javascript_file_load(filename, callback) {
     var element = document.createElement('script');
     element.setAttribute('type', 'text/javascript');
     element.setAttribute('src', 'js/' + filename);
+
+    // Set up callback to fire when script has loaded
+    if (callback) {
+        element.onload = callback;
+        element.onerror = function() {
+            console.error('Failed to load script: ' + filename);
+            callback(); // Continue loading other scripts even if one fails
+        };
+    }
+
+    document.getElementsByTagName('head')[0].appendChild(element);
+    return element;
+}
+function dynamic_css_load(arrayOrString) {
+    if (Array.isArray(arrayOrString)) {
+        for (const file of arrayOrString) {
+            dynamic_css_file_load(file);
+        }
+    }else {
+        dynamic_css_file_load(arrayOrString);
+    }
+}
+function dynamic_css_file_load(filename) {
+    var element = document.createElement('link');
+    element.setAttribute('rel', 'stylesheet');
+    element.setAttribute('type', 'text/css');
+    element.setAttribute('href', 'css/' + filename);
     document.getElementsByTagName('head')[0].appendChild(element);
     return element;
 }
@@ -331,6 +398,7 @@ function render(reqs, template, highlight) {
     var old_template = current_template;
     current_template = template;
     current_reqs = reqs;
+    clear_postprocessors();
     for (var i in outstanding_reqs) {
         outstanding_reqs[i].abort();
     }
@@ -340,6 +408,11 @@ function render(reqs, template, highlight) {
         window.scrollTo(0, 0);
     }
     update();
+    notifyActivatedTab(current_highlight);
+}
+
+function reset_current_reqs() {
+    current_reqs = {};
 }
 
 function update() {
@@ -839,6 +912,8 @@ function postprocess() {
         $('.administrator-only').remove();
     }
 
+    invokeRegisteredPostProcessors();
+
     update_multifields();
 }
 
@@ -1319,7 +1394,7 @@ function update_status(status) {
 
 
 
-function with_req(method, path, body, fun) {
+function with_req(method, path, body, fun, on404fun) {
     if(!has_auth_credentials()) {
         // Clear any lingering auth settings in local storage and navigate to the login form.
         clear_auth();
@@ -1327,7 +1402,7 @@ function with_req(method, path, body, fun) {
         return;
     }
 
-    var json;
+    const full_page_404 = !on404fun
     var req = xmlHttpRequest();
     req.open(method, 'api' + path, true );
     var header = authorization_header();
@@ -1341,9 +1416,11 @@ function with_req(method, path, body, fun) {
             if (ix != -1) {
                 outstanding_reqs.splice(ix, 1);
             }
-            if (check_bad_response(req, true)) {
+            if (check_bad_response(req, full_page_404)) {
                 last_successful_connect = new Date();
                 fun(req);
+            } else if (req.status == 404) {
+                on404fun(JSON.parse(req.responseText))
             }
         }
     };
