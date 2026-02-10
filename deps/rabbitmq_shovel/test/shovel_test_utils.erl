@@ -259,7 +259,7 @@ amqp10_publish_msg(Sender, Tag, Msg) ->
 amqp10_expect_empty(Session, Dest) ->
     LinkName = <<"dynamic-receiver-", Dest/binary>>,
     {ok, Receiver} = amqp10_client:attach_receiver_link(Session, LinkName,
-                                                        Dest, settled,
+                                                        Dest, unsettled,
                                                         unsettled_state),
     ok = amqp10_client:flow_link_credit(Receiver, 1, never),
     receive
