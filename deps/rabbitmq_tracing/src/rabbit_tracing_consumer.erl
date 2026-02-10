@@ -194,7 +194,7 @@ log(text, Record, State) ->
             RQs  -> [RQs]
         end ++
         [Record#log_record.properties, Record#log_record.payload],
-    print_log(io_lib:format(Fmt, Args), State);
+    print_log(unicode:characters_to_binary(io_lib:format(Fmt, Args)), State);
 
 log(json, Record, State) ->
     _ = print_log([rabbit_json:encode(
