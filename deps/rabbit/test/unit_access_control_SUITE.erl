@@ -7,6 +7,7 @@
 
 -module(unit_access_control_SUITE).
 
+-include_lib("proper/include/proper.hrl").
 -include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("eunit/include/eunit.hrl").
@@ -23,7 +24,8 @@ groups() ->
     [
       {parallel_tests, [parallel], [
           password_hashing,
-          version_negotiation
+          version_negotiation,
+          expand_topic_permission_prop
       ]},
       {sequential_tests, [], [
           login_with_credentials_but_no_password,
@@ -283,7 +285,69 @@ auth_backend_internal_expand_topic_permission(_Config) ->
             <<"services/{vhost}/accounts/{username}/notifications">>,
             #{}
         ),
+
+    %% value with special characters
+    <<"^\\.\\*-sensors$">> =
+        rabbit_auth_backend_internal:expand_topic_permission(
+            <<"^{client_id}-sensors$">>,
+            #{<<"client_id">> => <<".*">>}
+        ),
+    %% value with all special characters
+    <<"^\\\\\\^\\$\\.\\|\\?\\*\\+\\(\\)\\[\\]\\{\\}$">> =
+        rabbit_auth_backend_internal:expand_topic_permission(
+            <<"^{client_id}$">>,
+            #{<<"client_id">> => <<"\\^$.|?*+()[]{}">>}
+        ),
+    %% expanded pattern matches the value literally
+    Pattern = rabbit_auth_backend_internal:expand_topic_permission(
+        <<"^{client_id}-sensors$">>,
+        #{<<"client_id">> => <<".*">>}
+    ),
+    nomatch = re:run(<<"anything-sensors">>, Pattern, [{capture, none}]),
+    match = re:run(<<".*-sensors">>, Pattern, [{capture, none}]),
+    %% value with brackets and pipe
+    PatternPipe = rabbit_auth_backend_internal:expand_topic_permission(
+        <<"^{client_id}$">>,
+        #{<<"client_id">> => <<"a]|[b">>}
+    ),
+    nomatch = re:run(<<"a">>, PatternPipe, [{capture, none}]),
+    nomatch = re:run(<<"b">>, PatternPipe, [{capture, none}]),
+    match = re:run(<<"a]|[b">>, PatternPipe, [{capture, none}]),
+    %% plain value
+    <<"^device123-sensors$">> =
+        rabbit_auth_backend_internal:expand_topic_permission(
+            <<"^{client_id}-sensors$">>,
+            #{<<"client_id">> => <<"device123">>}
+        ),
+    %% multiple variables
+    Result = rabbit_auth_backend_internal:expand_topic_permission(
+        <<"^{username}.{client_id}$">>,
+        #{<<"username">> => <<"user.name">>, <<"client_id">> => <<"id*1">>}
+    ),
+    match = re:run(<<"user.name.id*1">>, Result, [{capture, none}]),
+    nomatch = re:run(<<"userXname.idZ1">>, Result, [{capture, none}]),
+    %% empty value
+    <<"^-sensors$">> =
+        rabbit_auth_backend_internal:expand_topic_permission(
+            <<"^{client_id}-sensors$">>,
+            #{<<"client_id">> => <<>>}
+        ),
     ok.
+
+expand_topic_permission_prop(_Config) ->
+    Property = fun () -> prop_expand_topic_permission_matches_literally() end,
+    rabbit_ct_proper_helpers:run_proper(Property, [], 1000).
+
+prop_expand_topic_permission_matches_literally() ->
+    ?FORALL(V, binary(),
+        begin
+            Pattern = rabbit_auth_backend_internal:expand_topic_permission(
+                <<"^{x}$">>, #{<<"x">> => V}),
+            case re:run(V, Pattern, [{capture, none}]) of
+                match -> true;
+                nomatch -> false
+            end
+        end).
 
 %% Test AMQP 1.0 §2.2
 version_negotiation(Config) ->
