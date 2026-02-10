@@ -21,6 +21,7 @@ groups() ->
     Tests = [
         publish_topic_authorisation,
         subscribe_topic_authorisation,
+        publish_topic_authorisation_regex_not_injected,
         change_default_topic_exchange
     ],
 
@@ -131,6 +132,36 @@ subscribe_topic_authorisation(Config) ->
         ClientFoo, "SUBSCRIBE", [{"destination", RestrictedTopic}]),
     {ok, _Client2, Hdrs2, _} = stomp_receive(ClientFoo, "ERROR"),
     "access_refused" = proplists:get_value("message", Hdrs2),
+    ok.
+
+publish_topic_authorisation_regex_not_injected(Config) ->
+    Username = <<".*">>,
+    Password = <<"pass">>,
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_auth_backend_internal, add_user,
+                                 [Username, Password, <<"acting-user">>]),
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_auth_backend_internal, set_permissions, [
+        Username, <<"/">>, <<".*">>, <<".*">>, <<".*">>, <<"acting-user">>]),
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_auth_backend_internal, set_topic_permissions, [
+        Username, <<"/">>, <<"amq.topic">>, <<"^{username}\\.Authorised">>, <<"^{username}\\.Authorised">>, <<"acting-user">>]),
+    Version = ?config(version, Config),
+    StompPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stomp),
+    {ok, ClientRegex} = rabbit_stomp_client:connect(Version, ".*", "pass", StompPort),
+
+    rabbit_stomp_client:send(
+        ClientRegex, "SUBSCRIBE", [{"destination", "/topic/.*.Authorised"}]),
+    rabbit_stomp_client:send(
+        ClientRegex, "SEND", [{"destination", "/topic/.*.Authorised"}], ["allowed"]),
+    {ok, _Client1, _, Body} = stomp_receive(ClientRegex, "MESSAGE"),
+    [<<"allowed">>] = Body,
+
+    rabbit_stomp_client:send(
+        ClientRegex, "SEND", [{"destination", "/topic/injected.Authorised"}], ["denied"]),
+    {ok, _Client2, Hdrs2, _} = stomp_receive(ClientRegex, "ERROR"),
+    "access_refused" = proplists:get_value("message", Hdrs2),
+
+    rabbit_stomp_client:disconnect(ClientRegex),
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_auth_backend_internal, delete_user,
+                                 [Username, <<"acting-user">>]),
     ok.
 
 change_default_topic_exchange(Config) ->
