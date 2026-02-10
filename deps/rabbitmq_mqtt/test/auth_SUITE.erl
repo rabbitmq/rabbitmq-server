@@ -113,6 +113,7 @@ sub_groups() ->
        topic_read_permission,
        topic_write_permission,
        topic_write_permission_variable_expansion,
+       topic_write_permission_client_id_regex_not_injected,
        loopback_user_connects_from_remote_host,
        connect_permission
       ]
@@ -1113,6 +1114,24 @@ topic_write_permission_variable_expansion(Config) ->
               ,{["MQTT topic access refused: write access to topic "
                  "'mqtt-user.mqtt-vhost.other_client' in exchange 'amq.topic' in vhost "
                  "'mqtt-vhost' refused for user 'mqtt-user'",
+                 "MQTT connection .* is closing due to an authorization failure"],
+                fun () -> stop end}
+             ]),
+    ok.
+
+topic_write_permission_client_id_regex_not_injected(Config) ->
+    set_permissions(".*", ".*", ".*", Config),
+    set_topic_permissions("^{client_id}-sensors$", ".*", Config),
+    User = ?config(mqtt_user, Config),
+    CraftedClientId = <<".*">>,
+    {ok, C} = connect_user(User, ?config(mqtt_password, Config), Config, CraftedClientId),
+    {ok, _} = emqtt:connect(C),
+    ?assertMatch({ok, _}, emqtt:publish(C, <<".*-sensors">>, <<"payload">>, qos1)),
+    unlink(C),
+    ?assertMatch({error, _}, emqtt:publish(C, <<"anything-sensors">>, <<"payload">>, qos1)),
+    wait_log(Config,
+             [?FAIL_IF_CRASH_LOG
+              ,{["MQTT topic access refused",
                  "MQTT connection .* is closing due to an authorization failure"],
                 fun () -> stop end}
              ]),
