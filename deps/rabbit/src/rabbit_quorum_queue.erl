@@ -2253,6 +2253,9 @@ make_ra_conf(Q, ServerId, TickTimeout,
           end,
     FName = rabbit_misc:rs(QName),
     Formatter = {?MODULE, format_ra_event, [QName]},
+    MinRecoveryCheckpointInterval =
+        application:get_env(rabbit, quorum_min_recovery_checkpoint_interval,
+                            100_000),
     LogCfg = #{uid => UId,
                min_snapshot_interval => 0,
                % min_checkpoint_interval => CheckpointInterval,
@@ -2269,6 +2272,7 @@ make_ra_conf(Q, ServerId, TickTimeout,
                                   initial_members => Members,
                                   log_init_args => LogCfg,
                                   tick_timeout => TickTimeout,
+                                  min_recovery_checkpoint_interval => MinRecoveryCheckpointInterval,
                                   machine => RaMachine,
                                   initial_machine_version => MacVersion,
                                   ra_event_formatter => Formatter}).
@@ -2277,8 +2281,12 @@ make_mutable_config(Q) ->
     QName = amqqueue:get_name(Q),
     TickTimeout = application:get_env(rabbit, quorum_tick_interval,
                                       ?TICK_INTERVAL),
+    MinRecoveryCheckpointInterval =
+        application:get_env(rabbit, quorum_min_recovery_checkpoint_interval,
+                            100_000),
     Formatter = {?MODULE, format_ra_event, [QName]},
     #{tick_timeout => TickTimeout,
+      min_recovery_checkpoint_interval => MinRecoveryCheckpointInterval,
       ra_event_formatter => Formatter}.
 
 get_nodes(Q) when ?is_amqqueue(Q) ->
@@ -2474,7 +2482,8 @@ force_checkpoint_on_queue(QName) ->
             {error, classic_queue_not_supported};
         {ok, Q} when ?amqqueue_is_quorum(Q) ->
             {RaName, _} = amqqueue:get_pid(Q),
-            ?LOG_DEBUG("Sending command to force ~ts to take a checkpoint", [QNameFmt]),
+            ?LOG_DEBUG("Sending command to force ~ts to take a checkpoint",
+                       [QNameFmt]),
             Nodes = rabbit_queue_type:get_nodes(Q),
             _ = [ra:cast_aux_command({RaName, Node}, force_checkpoint)
                  || Node <- Nodes],
