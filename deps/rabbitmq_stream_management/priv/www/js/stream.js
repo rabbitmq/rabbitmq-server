@@ -12,12 +12,19 @@ dispatcher_add(function(sammy) {
                         'streamConnection', '#/stream/connections');
     });
     sammy.get('#/stream/super-streams', function() {
-        render({'vhosts': '/vhosts'}, 'superStreams', '#/stream/super-streams')
+        renderSuperStreams();
+    });
+    sammy.get('#/stream/super-streams/:vhost/:name', function() {
+                var vhost = esc(this.params['vhost']);
+                var name = esc(this.params['name']);
+                render({'superstream': {path:    '/stream/super-streams/' + vhost + '/' + name,
+                                  options: {ranges: ['data-rates-conn']}}
+                        }, "superStream", "#/stream/super-streams");
     });
     sammy.put('#/stream/super-streams', function() {
             put_cast_params(this, '/stream/super-streams/:vhost/:name',
                             ['name', 'pattern', 'policy'], ['priority'], []);
-            location.href = "/#/queues";
+            location.href = "/#/super-streams";
     });
     // not exactly dispatcher stuff, but we have to make sure this is called before
     // HTTP requests are made in case of refresh of the queue page
@@ -90,3 +97,34 @@ CONSUMER_OWNER_FORMATTERS.push({
 
 CONSUMER_OWNER_FORMATTERS.sort(CONSUMER_OWNER_FORMATTERS_COMPARATOR);
 
+function renderSuperStreams() {
+    render({'queues': {
+        path: url_pagination_template('stream/super-streams', 1, 100),
+        options: {
+            sort: true,
+            vhost: true,
+            pagination: true
+        }
+    }, 'vhosts': '/vhosts'}, 'superStreams', '#/super-streams');
+}
+function link_superstream(vhost, name) {
+    return _link_to(highlight_extra_whitespace(name), '#/stream/super-streams/' + esc(vhost) + '/' + esc(name), true, []);
+}
+
+function format_superstream_state(SuperStream) {
+   const states = SuperStream.partitions.reduce((countMap, partition) => {
+        const state = partition.state;
+        countMap.set(state, (countMap.get(state) || 0) + 1);
+        return countMap;
+    }, new Map());
+    if (states.size == 1) {
+        return fmt_object_state(SuperStream.partitions[0])
+    }
+    var html = ''
+    for (const [state, count] of states) {
+        html += fmt_object_state({state: state, count: count}, function(text, s) {
+          return `${text} (${s.count})`
+        })
+    }
+    return html
+} 

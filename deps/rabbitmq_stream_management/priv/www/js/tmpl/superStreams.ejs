@@ -1,4 +1,43 @@
-<h2> Super Streams </h2>
+<h1> Super Streams </h1>
+
+<div class="section" id="queues-paging-section">
+  <%= paginate_ui(queues, 'super-streams') %>
+</div>
+<div class="updatable" id="queues-table-section">
+<% if (queues.items.length > 0) { %>
+<table class="list">
+ <thead>
+  <tr>
+<% if (display.vhosts) { %>
+   <th><%= fmt_sort('Virtual host', 'vhost') %></th>
+<% } %>
+   <th><%= fmt_sort('Name',         'name') %></th>
+   <th><%= fmt_sort('Partitions',   'partition_count') %></th>
+   <th>State</th>
+  </tr>
+ </thead>
+ <tbody>
+<%
+  for (var i = 0; i < queues.items.length; i++) {
+    var queue = queues.items[i];
+%>
+  <tr>
+<% if (display.vhosts) { %>
+   <td><%= fmt_string(queue.vhost) %></td>
+<% } %>
+   <td><%= link_superstream(queue.vhost, queue.name) %></td>
+   <td><%= fmt_string(queue.partition_count, '') %></td>
+   <td class="c"><%= format_superstream_state(queue) %></td>
+  </tr>
+  <% } %>
+ </tbody>
+</table>
+<% } else { %>
+  <p>... no queues ...</p>
+<% } %>
+  </div>
+  </div>
+</div>
 
 <% if (ac.canAccessVhosts()) { %>
 <div class="section">
