@@ -934,7 +934,8 @@ QUEUE_TYPE["default"] = {
         "operator_policy_arguments": "classic-queue-operator-policy-arguments",
         "list"   : "classic-queue-list",
         "stats"  : "classic-queue-stats",
-        "node_details" : "classic-queue-node-details"
+        "node_details" : "classic-queue-node-details",
+        "get_message" : "classic-queue-get-message"
     }
 };
 
@@ -952,7 +953,8 @@ QUEUE_TYPE["classic"] = {
         "operator_policy_arguments": "classic-queue-operator-policy-arguments",
         "list"   : "classic-queue-list",
         "stats"  : "classic-queue-stats",
-        "node_details" : "classic-queue-node-details"
+        "node_details" : "classic-queue-node-details",
+        "get_message" : "classic-queue-get-message"
     }
 };
 
@@ -973,7 +975,8 @@ QUEUE_TYPE["quorum"] = {
         "operator_policy_arguments": "quorum-queue-operator-policy-arguments",
         "list"   : "quorum-queue-list",
         "stats": "quorum-queue-stats",
-        "node_details" : "quorum-queue-node-details"
+        "node_details" : "quorum-queue-node-details",
+        "get_message" : "classic-queue-get-message"
     }
 };
 
@@ -1110,3 +1113,63 @@ var BINARY_STATISTICS = {
            {name: 'System', colour: 'system',
             keys: [['other',               'other']]}]]
 };
+
+
+// Which postprocesor functions we need to call from postprocess() function call
+var current_postprocessors = new Map();
+function registerPostProcessor(name, postProcessorFun) {
+  if (current_postprocessors.has(name)) {
+    return false;
+  }
+  current_postprocessors.set(name, postProcessorFun);
+}
+function clear_postprocessors() {
+  current_postprocessors.clear(); 
+}
+function is_postprocessor_registered(name) {
+  return current_postprocessors.has(name);
+}
+function unregisterPostProcessor(name) {
+  current_postprocessors.delete(name);
+} 
+function invokeRegisteredPostProcessors() {
+  for (const [name, processorFun] of current_postprocessors) {
+    console.log(`Calling postprocessor ${name}`);
+    processorFun();  
+  }
+}
+
+class ApplicationListener {
+  onRefresh() {    
+  }
+  onVhostChange(newVhost) { 
+  }
+  onTabDeactivated(tab) {
+
+  }
+}
+var applicationListeners = new Map();
+function registerApplicationListener(name, listener) {
+  if (applicationListeners.has(name)) {
+    return false;
+  }
+  applicationListeners.set(name, listener);
+}
+function unregisterApplicationListener(name) {
+  applicationListeners.delete(name);
+}
+function notifyOnRefresh() {
+  for (const [name, listener] of applicationListeners) {
+    listener.onRefresh();  
+  }
+}
+function notifyOnVhostChange(newVhost) {
+  for (const [_name, listener] of applicationListeners) {
+    listener.onVhostChange(newVhost);  
+  }
+}
+function notifyActivatedTab(tab) {
+  for (const [_name, listener] of applicationListeners) {
+    listener.onTabActivated(tab);  
+  }
+}
