@@ -9,7 +9,7 @@
 
 %% TODO sort all this out; maybe there's scope for rabbit_mgmt_request?
 
--export([is_authorized/2, is_authorized_admin/2, is_authorized_admin/4,
+-export([is_authorized/2, is_authorized/4, is_authorized_admin/2, is_authorized_admin/4,
          is_authorized_admin/3, vhost/1, vhost_from_headers/1]).
 -export([is_authorized_vhost/2, is_authorized_user/3,
          is_authorized_user/4, is_authorized_user/5,
@@ -88,6 +88,10 @@ is_authorized_admin(ReqData, Context) ->
     rabbit_web_dispatch_access_control:is_authorized_admin(ReqData,
                                                  Context,
                                                  auth_config()).
+
+is_authorized(ReqData, Context, ErrorMsg, Fun) ->
+    rabbit_web_dispatch_access_control:is_authorized(ReqData, 
+                                            Context, ErrorMsg, Fun, auth_config()).
 
 is_authorized_admin(ReqData, Context, Token) ->
     AuthConfig = auth_config(),
