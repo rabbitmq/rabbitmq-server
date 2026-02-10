@@ -68,8 +68,15 @@ endif
 
 # Plugins to enable for `gmake run-broker`, `gmake start-cluster`, etc.
 # To override:
-#     gmake run-broker ENABLED_PLUGINS="rabbitmq_management rabbitmq_stream"
-#     gmake start-cluster NODES=3 ENABLED_PLUGINS="rabbitmq_management rabbitmq_stream rabbitmq_stream_management"
+#     gmake ENABLED_PLUGINS="rabbitmq_management rabbitmq_stream" run-broker
+#     gmake NODES=3 ENABLED_PLUGINS="rabbitmq_management rabbitmq_stream rabbitmq_stream_management" start-cluster
+#
+# Note: ENABLED_PLUGINS only takes effect on first start. On subsequent starts,
+# the enabled_plugins file is preserved. To change plugins on restart, either:
+#   - Add the `virgin-test-tmpdir` target to gmake:
+#         gmake ENABLED_PLUGINS="rabbitmq_management rabbitmq_stream" virgin-test-tmpdir run-broker
+#   - Delete the enabled_plugins file: rm /tmp/rabbitmq-test-instances/rabbit@*/enabled_plugins
+#   - Use rabbitmq-plugins: ./sbin/rabbitmq-plugins enable <plugin>
 ENABLED_PLUGINS ?= rabbitmq_management
 RABBITMQ_ENABLED_PLUGINS ?= $(call comma_list,$(ENABLED_PLUGINS))
 # This is necessary for the recursively called targets
