@@ -1384,7 +1384,7 @@ handle_aux(_RaState, _, force_checkpoint,
     Ts = erlang:system_time(millisecond),
     #?STATE{cfg = #cfg{resource = QR},
             reclaimable_bytes = ReclaimableBytes} = ra_aux:machine_state(RaAux),
-    ?LOG_DEBUG("~ts: rabbit_fifo: forcing checkpoint at ~b",
+    ?LOG_DEBUG("~ts: rabbit_fifo: forcing snapshot at ~b",
                [rabbit_misc:rs(QR), ra_aux:last_applied(RaAux)]),
     EffMacVer = ra_aux:effective_machine_version(RaAux),
     {Check, Effects} = do_snapshot(EffMacVer, Ts, Check0, RaAux,
@@ -3354,22 +3354,22 @@ do_snapshot(MacVer, Ts, Ch, RaAux, ReclaimableBytes, Force)
     do_snapshot(MacVer, Ts, #snapshot{index = Idx, timestamp = LastTs},
                 RaAux, ReclaimableBytes, Force);
 do_snapshot(MacVer, Ts,
-            #snapshot{index = LastSnapIdx,
+            #snapshot{index = _LastSnapIdx,
                       timestamp = SnapTime,
                       reclaimable_bytes = LastReclaimableBytes} = Snap0,
             RaAux, ReclaimableBytes, Force)
   when is_integer(MacVer) andalso MacVer >= 8 ->
-    {CheckMinInterval, _, CheckMaxIndexes} =
+    {CheckMinInterval, _, _CheckMaxIndexes} =
         persistent_term:get(quorum_queue_snapshot_config,
                             {?CHECK_MIN_INTERVAL_MS,
                              ?CHECK_MIN_INDEXES,
                              ?CHECK_MAX_INDEXES}),
     TimeSince = Ts - SnapTime,
     Idx = ra_aux:last_applied(RaAux),
-    IndexesSince = Idx - LastSnapIdx,
-    EnoughEntriesWritten = IndexesSince > CheckMaxIndexes,
+    % IndexesSince = Idx - LastSnapIdx,
+    % EnoughEntriesWritten = IndexesSince > CheckMaxIndexes,
     case TimeSince > CheckMinInterval orelse
-         EnoughEntriesWritten orelse
+         % EnoughEntriesWritten orelse
          Force of
         true ->
             #?STATE{consumers = Consumers,
@@ -3401,7 +3401,7 @@ do_snapshot(MacVer, Ts,
             Limit = ApproxSnapSize * 5,
             EnoughDataRemoved = ReclaimableBytes - LastReclaimableBytes,
             case EnoughDataRemoved > Limit orelse
-                 EnoughEntriesWritten orelse
+                 % EnoughEntriesWritten orelse
                  Force of
                 true ->
                     Snap = #snapshot{index = Idx,

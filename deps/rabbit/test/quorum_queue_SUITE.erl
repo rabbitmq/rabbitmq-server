@@ -111,7 +111,7 @@ groups() ->
                                             force_vhost_queues_shrink_member_to_current_member,
                                             force_checkpoint_on_queue,
                                             force_checkpoint,
-                                            publish_only_checkpoint,
+                                            recovery_checkpoint,
                                             policy_repair,
                                             gh_12635,
                                             replica_states,
@@ -1577,21 +1577,21 @@ force_checkpoint_on_queue(Config) ->
     rabbit_ct_helpers:await_condition(
       fun() ->
           {ok, State, _} = rpc:call(Server0, ra, member_overview, [{RaName, Server0}]),
-          ct:pal("Ra server state post forced checkpoint: ~tp~n", [State]),
+          % ct:pal("Ra server state post forced checkpoint: ~tp~n", [State]),
           #{log := #{snapshot_index := LCI}} = State,
           (LCI =/= undefined) andalso (LCI >= N)
       end),
     rabbit_ct_helpers:await_condition(
       fun() ->
           {ok, State, _} = rpc:call(Server1, ra, member_overview, [{RaName, Server1}]),
-          ct:pal("Ra server state post forced checkpoint: ~tp~n", [State]),
+          % ct:pal("Ra server state post forced checkpoint: ~tp~n", [State]),
           #{log := #{snapshot_index := LCI}} = State,
           (LCI =/= undefined) andalso (LCI >= N)
       end),
     rabbit_ct_helpers:await_condition(
       fun() ->
           {ok, State, _} = rpc:call(Server2, ra, member_overview, [{RaName, Server2}]),
-          ct:pal("Ra server state post forced checkpoint: ~tp~n", [State]),
+          % ct:pal("Ra server state post forced checkpoint: ~tp~n", [State]),
           #{log := #{snapshot_index := LCI}} = State,
           (LCI =/= undefined) andalso (LCI >= N)
       end).
@@ -1621,58 +1621,114 @@ force_checkpoint(Config) ->
     % Result should only have quorum queue
     ?assertEqual(ExpectedRes, ForceCheckpointRes).
 
-publish_only_checkpoint(Config) ->
-    %% Verify that snapshots are taken in a publish-only workload (no consumers)
-    %% when enough log entries have been written, even though no data has been
-    %% consumed/removed.
-    check_quorum_queues_v8_compat(Config),
-    [Server0 | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
-    QQ = ?config(queue_name, Config),
-    RaName = ra_name(QQ),
+recovery_checkpoint(Config) ->
+    %% Verify that recovery checkpoints are written on shutdown and used for
+    %% faster recovery when the Ra member is restarted. The recovery checkpoint
+    %% feature allows Ra to recover from a checkpoint instead of replaying the
+    %% entire log from the last snapshot.
+    [Server0, Server1, _Server2] = Servers =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
-                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
-
-    %% Configure a low max indexes threshold for testing.
-    %% Default is 666,667 which would make the test too slow.
-    TestMaxIndexes = 1000,
-    %% v8+ uses quorum_queue_snapshot_config, v7 uses quorum_queue_checkpoint_config
-    ConfigKey = quorum_queue_snapshot_config,
-    OldConfig = rpc:call(Server0, persistent_term, get, [ConfigKey, undefined]),
-    ok = rpc:call(Server0, persistent_term, put,
-                  [ConfigKey,
-                   {?CHECK_MIN_INTERVAL_MS, ?CHECK_MIN_INDEXES, TestMaxIndexes}]),
+    %% Configure a low min_recovery_checkpoint_interval (100 entries) on all
+    %% nodes to trigger recovery checkpoint writing with fewer messages.
+    TestInterval = 100,
+    EnvKey = quorum_min_recovery_checkpoint_interval,
+    OldEnvs = [{S, rpc:call(S, application, get_env, [rabbit, EnvKey])}
+               || S <- Servers],
+    [ok = rpc:call(S, application, set_env, [rabbit, EnvKey, TestInterval])
+     || S <- Servers],
 
     try
-        %% Publish more messages than TestMaxIndexes (no consumers).
-        N = TestMaxIndexes + 500,
-        rabbit_ct_client_helpers:publish(Ch, QQ, N),
+        Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
+        #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+        QQ = ?config(queue_name, Config),
+        RaName = ra_name(QQ),
+
+        ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                     declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+        %% Get the data directory for the Ra server on Server1 to check for
+        %% recovery checkpoint files.
+        UId = proplists:get_value(
+                RaName,
+                rpc:call(Server1, ra_directory, list_registered, [quorum_queues])),
+        DataDir = rpc:call(Server1, ra_env, server_data_dir, [quorum_queues, UId]),
+        RecoveryCheckpointDir = filename:join(DataDir, <<"recovery_checkpoint">>),
+        ct:pal("Recovery checkpoint directory: ~ts", [RecoveryCheckpointDir]),
+
+        %% Publish enough messages to exceed min_recovery_checkpoint_interval.
+        %% We need more than TestInterval (100) entries since the last snapshot.
+        N = 200,
+        [publish_confirm(Ch, QQ) || _ <- lists:seq(1, N)],
         wait_for_messages_ready([Server0], RaName, N),
 
-        %% Wait for longer than CHECK_MIN_INTERVAL_MS to allow snapshot evaluation.
-        timer:sleep(?CHECK_MIN_INTERVAL_MS + 1000),
+        %% Verify no recovery checkpoint exists yet (server is still running).
+        RCFilesBefore = case rpc:call(Server1, file, list_dir, [RecoveryCheckpointDir]) of
+                            {ok, Files} -> Files;
+                            {error, enoent} -> []
+                        end,
+        ct:pal("Recovery checkpoint files before stop: ~p", [RCFilesBefore]),
 
-        %% Trigger an eval to check snapshot conditions.
-        ok = rpc:call(Server0, ra, cast_aux_command, [{RaName, Server0}, eval]),
+        %% Stop the Ra server on Server1 - this should trigger recovery checkpoint
+        %% writing since we have more entries than min_recovery_checkpoint_interval.
+        ct:pal("Stopping Ra server on ~p...", [Server1]),
+        ok = rpc:call(Server1, ra, stop_server, [quorum_queues, {RaName, Server1}]),
 
-        %% Verify that a snapshot was taken even though no messages were consumed.
+        %% Check that a recovery checkpoint was written.
+        {ok, RCFilesAfter} = rpc:call(Server1, file, list_dir, [RecoveryCheckpointDir]),
+        ct:pal("Recovery checkpoint files after stop: ~p", [RCFilesAfter]),
+        ?assert(length(RCFilesAfter) > 0,
+                "Expected recovery checkpoint to be written on shutdown"),
+
+        %% Verify the recovery checkpoint directory contains the expected files.
+        [RCSubDir | _] = RCFilesAfter,
+        RCPath = filename:join(RecoveryCheckpointDir, RCSubDir),
+        {ok, RCContents} = rpc:call(Server1, file, list_dir, [RCPath]),
+        ct:pal("Recovery checkpoint contents: ~p", [RCContents]),
+        ?assert(lists:member("snapshot.dat", RCContents) orelse
+                lists:member(<<"snapshot.dat">>, RCContents),
+                "Expected snapshot.dat in recovery checkpoint"),
+
+        %% Restart the Ra server and verify it recovers correctly.
+        ct:pal("Restarting Ra server on ~p...", [Server1]),
+        ok = rpc:call(Server1, ra, restart_server, [quorum_queues, {RaName, Server1}]),
+
+        %% Wait for the server to rejoin the cluster.
         rabbit_ct_helpers:await_condition(
           fun() ->
-                  {ok, State, _} = rpc:call(Server0, ra, member_overview,
-                                            [{RaName, Server0}]),
-                  ct:pal("Ra server state: ~tp~n", [State]),
-                  #{log := #{snapshot_index := SnapIdx}} = State,
-                  SnapIdx =/= undefined
-          end, 30000)
+                  case rpc:call(Server1, ra, members, [{RaName, Server1}]) of
+                      {ok, Members, _Leader} ->
+                          lists:keymember(Server1, 2, Members);
+                      _ ->
+                          false
+                  end
+          end, 30000),
+
+        %% Verify state was recovered correctly by checking message count on both
+        %% the leader and the restarted follower.
+        ?awaitMatch({ok, {_, #{num_messages := N}}, _},
+                    rpc:call(Server0, ra, local_query,
+                             [{RaName, Server0}, fun rabbit_fifo:overview/1]),
+                    10000),
+        ?awaitMatch({ok, {_, #{num_messages := N}}, _},
+                    rpc:call(Server1, ra, local_query,
+                             [{RaName, Server1}, fun rabbit_fifo:overview/1]),
+                    10000),
+
+        %% Consume a message to verify the queue is fully functional after recovery.
+        Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server1),
+        {#'basic.get_ok'{}, #amqp_msg{}} =
+            amqp_channel:call(Ch1, #'basic.get'{queue = QQ, no_ack = true}),
+        ct:pal("Successfully consumed message after recovery checkpoint restart"),
+        ok
     after
-        %% Restore original config.
-        case OldConfig of
-            undefined ->
-                rpc:call(Server0, persistent_term, erase, [ConfigKey]);
-            _ ->
-                rpc:call(Server0, persistent_term, put, [ConfigKey, OldConfig])
-        end
+        %% Restore original environment settings.
+        [case OldVal of
+             undefined ->
+                 rpc:call(S, application, unset_env, [rabbit, EnvKey]);
+             {ok, V} ->
+                 rpc:call(S, application, set_env, [rabbit, EnvKey, V])
+         end || {S, OldVal} <- OldEnvs]
     end.
 
 % Tests that, if the process of a QQ is dead in the moment of declaring a policy
@@ -2784,8 +2840,7 @@ cleanup_queue_state_on_channel_after_publish(Config) ->
                  declare(Ch1, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
     RaName = ra_name(QQ),
     publish(Ch2, QQ),
-    Res = dirty_query(Servers, RaName, fun rabbit_fifo:query_consumer_count/1),
-    ct:pal ("Res ~tp", [Res]),
+    _Res = dirty_query(Servers, RaName, fun rabbit_fifo:query_consumer_count/1),
     wait_for_messages_pending_ack(Servers, RaName, 0),
     wait_for_messages_ready(Servers, RaName, 1),
     [NCh1, NCh2] = rpc:call(Server, rabbit_channel, list, []),
@@ -3811,7 +3866,6 @@ subscribe_redelivery_count(Config) ->
         {#'basic.deliver'{delivery_tag = DeliveryTag1,
                           redelivered  = true},
          #amqp_msg{props = #'P_basic'{headers = H1}}} ->
-            ct:pal("H1 ~p", [H1]),
             ?assertMatch({DCHeader, _, 1}, rabbit_basic:header(DCHeader, H1)),
             amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag1,
                                                 multiple = false,
@@ -3828,9 +3882,7 @@ subscribe_redelivery_count(Config) ->
             ?assertMatch({DCHeader, _, 2}, rabbit_basic:header(DCHeader, H2)),
             amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag2,
                                                multiple = false}),
-            ct:pal("wait_for_messages_ready", []),
             wait_for_messages_ready(Servers, RaName, 0),
-            ct:pal("wait_for_messages_pending_ack", []),
             wait_for_messages_pending_ack(Servers, RaName, 0)
     after ?TIMEOUT ->
               flush(500),
@@ -4940,7 +4992,6 @@ cancel_consumer_gh_3729(Config) ->
             #'queue.declare_ok'{queue = QQ,
                                 message_count = MC,
                                 consumer_count = CC} = amqp_channel:call(Ch, D),
-            ct:pal("Mc ~b CC ~b", [MC, CC]),
             MC =:= 1 andalso CC =:= 0
         end,
     rabbit_ct_helpers:await_condition(F, 30000),
