@@ -813,32 +813,40 @@ stream_pub_sub_metrics(Config) ->
     MsgPerBatch2 = 3, %% we'll publish 2 batches
     {ok, S2, C2} = publish_via_stream_protocol(list_to_binary(Stream2),
                                                             MsgPerBatch2, Config),
+    try
+        %% aggregated metrics
 
-    %% aggregated metrics
+        %% wait for the stream to emit stats
+        %% (collect_statistics_interval set to 100ms in this test group)
+        ?awaitMatch(#{rabbitmq_stream_consumer_max_offset_lag := #{undefined := [Lag]}} = _V when Lag > 0,
+                     begin
+                         {_, Body1} = http_get_with_pal(Config, "/metrics", [], 200),
+                         maps:with([rabbitmq_stream_consumer_max_offset_lag],
+                                   parse_response(Body1))
+                     end,
+                     30000),
 
-    %% wait for the stream to emit stats
-    %% (collect_statistics_interval set to 100ms in this test group)
-    ?awaitMatch(#{rabbitmq_stream_consumer_max_offset_lag := #{undefined := [Lag]}} = _V when Lag > 0,
-                 begin
-                     {_, Body1} = http_get_with_pal(Config, "/metrics", [], 200),
-                     maps:with([rabbitmq_stream_consumer_max_offset_lag],
-                               parse_response(Body1))
-                 end,
-                 30000),
-
-    %% per-object metrics
-    {_, Body2} = http_get_with_pal(Config, "/metrics/detailed?family=stream_consumer_metrics",
-                                   [], 200),
-    ParsedBody2 = parse_response(Body2),
-    #{rabbitmq_detailed_stream_consumer_max_offset_lag := MaxOffsetLag} = ParsedBody2,
-
-    #{#{vhost => "/", queue => Stream1} := [Lag1],
-      #{vhost => "/", queue => Stream2} := [Lag2]} = MaxOffsetLag,
-    ?assert(Lag1 > 0),
-    ?assert(Lag2 > 0),
-    dispose_stream_connection(S1, C1, list_to_binary(Stream1)),
-    dispose_stream_connection(S2, C2, list_to_binary(Stream2)),
-    eventually(?_assertEqual([], rpc(Config, rabbit_amqqueue, list_by_type, [stream]))),
+        %% per-object metrics
+        ?awaitMatch(
+            {Lag1, Lag2} when Lag1 > 0 andalso Lag2 > 0,
+            begin
+                {_, Body2} = http_get_with_pal(Config, "/metrics/detailed?family=stream_consumer_metrics",
+                                               [], 200),
+                case parse_response(Body2) of
+                    #{rabbitmq_detailed_stream_consumer_max_offset_lag :=
+                          #{#{vhost => "/", queue => Stream1} := [Lag1_],
+                            #{vhost => "/", queue => Stream2} := [Lag2_]}} ->
+                        {Lag1_, Lag2_};
+                    _ ->
+                        {0, 0}
+                end
+            end,
+            30000)
+    after
+        dispose_stream_connection(S1, C1, list_to_binary(Stream1)),
+        dispose_stream_connection(S2, C2, list_to_binary(Stream2)),
+        eventually(?_assertEqual([], rpc(Config, rabbit_amqqueue, list_by_type, [stream])))
+    end,
     ok.
 
 core_metrics_special_chars(Config) ->
