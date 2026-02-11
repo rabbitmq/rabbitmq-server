@@ -110,8 +110,19 @@ will run the older version.
 ``` shell
 # Run from repository root.
 # Starts a node with management and two stream plugins enabled
-gmake run-broker ENABLED_PLUGINS="rabbitmq_management rabbitmq_stream rabbitmq_stream_management"
+gmake ENABLED_PLUGINS="rabbitmq_management rabbitmq_stream rabbitmq_stream_management" run-broker
 ```
+
+**Note:** The `ENABLED_PLUGINS` variable only takes effect when starting a fresh node. On subsequent restarts, RabbitMQ preserves the enabled_plugins file, ignoring the `ENABLED_PLUGINS` value. To change the plugin list on restart, do one of the following:
+* Add the `virgin-test-tmpdir` target (this will delete all data!):
+    ```
+    gmake ENABLED_PLUGINS="rabbitmq_management rabbitmq_stream rabbitmq_stream_management" virgin-test-tmpdir run-broker
+    ```
+* Delete the `enabled_plugins` file:
+    ```
+    rm /tmp/rabbitmq-test-instances/rabbit@*/enabled_plugins`
+    ```
+* Use the `./sbin/rabbitmq-plugins enable/disable` commands.
 
 The nodes will be started in the background. They will use `rabbit@{hostname}` for its name, so CLI will be able to contact
 it without an explicit `-n` (`--node`) argument:
@@ -126,7 +137,7 @@ it without an explicit `-n` (`--node`) argument:
 ``` shell
 # Run from repository root.
 # Starts a three node cluster with management and two stream plugins enabled
-gmake start-cluster NODES=3 ENABLED_PLUGINS="rabbitmq_management rabbitmq_stream rabbitmq_stream_management"
+gmake NODES=3 ENABLED_PLUGINS="rabbitmq_management rabbitmq_stream rabbitmq_stream_management" start-cluster
 ```
 
 The node will use `rabbit-{n}@{hostname}` for names, so CLI must
@@ -168,7 +179,7 @@ When working on management UI code, besides starting the node with
 
 ``` shell
 # starts a node with management and two stream plugins enabled
-gmake run-broker ENABLED_PLUGINS="rabbitmq_management rabbitmq_stream rabbitmq_stream_management"
+gmake ENABLED_PLUGINS="rabbitmq_management rabbitmq_stream rabbitmq_stream_management" run-broker
 ```
 
 (or any other set of plugins), it is highly recommended to use [BrowserSync](https://browsersync.io/#install)
