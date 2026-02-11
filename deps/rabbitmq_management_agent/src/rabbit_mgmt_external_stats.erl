@@ -28,7 +28,8 @@
                      rates_mode, uptime, run_queue, processors, exchange_types,
                      auth_mechanisms, applications, contexts, log_files,
                      db_dir, config_files, net_ticktime, enabled_plugins,
-                     mem_calculation_strategy, ra_open_file_metrics]).
+                     mem_calculation_strategy, ra_open_file_metrics,
+                     rabbitmq_version, erlang_version, erlang_full_version]).
 
 -define(TEN_MINUTES_AS_SECONDS, 600).
 
@@ -268,7 +269,13 @@ i(context_switches, State) ->
     {State, Sw};
 i(ra_open_file_metrics, State) ->
     {State, [{ra_log_wal, 0},
-             {ra_log_segment_writer, 0}]}.
+             {ra_log_segment_writer, 0}]};
+i(rabbitmq_version, State) ->
+    {State, list_to_binary(rabbit:base_product_version())};
+i(erlang_version, State) ->
+    {State, list_to_binary(rabbit_misc:otp_release())};
+i(erlang_full_version, State) ->
+    {State, list_to_binary(rabbit_misc:otp_system_version())}.
 
 resource_alarm_set(Source) ->
     lists:member({{resource_limit, Source, node()},[]},
