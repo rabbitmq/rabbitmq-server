@@ -849,15 +849,18 @@ count_running_links(Config, Server) ->
 
 clean_up_federation_related_bits(Config) ->
     Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    NodeIndices = lists:seq(0, length(Nodes) - 1),
     [begin
          delete_all_policies_on(Config, N),
-         delete_all_runtime_parameters_on(Config, N),
-         delete_all_queues_on(Config, N),
-         delete_all_exchanges_on(Config, N)
-     end || N <- lists:seq(0, length(Nodes) - 1)],
+         delete_all_runtime_parameters_on(Config, N)
+     end || N <- NodeIndices],
     [rabbit_ct_helpers:await_condition(
-       fun() -> all_queues_on(Config, Node) =:= [] end,
-       30000) || Node <- Nodes],
+       fun() ->
+               delete_all_queues_on(Config, N),
+               all_queues_on(Config, N) =:= []
+       end,
+       30000) || N <- NodeIndices],
+    [delete_all_exchanges_on(Config, N) || N <- NodeIndices],
     ok.
 
 set_up_upstream(Config) ->
