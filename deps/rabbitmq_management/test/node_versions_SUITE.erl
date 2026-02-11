@@ -5,7 +5,7 @@
 %% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term "Broadcom" refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
--module(rabbit_mgmt_wm_nodes_version_SUITE).
+-module(node_versions_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
