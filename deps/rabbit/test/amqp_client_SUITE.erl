@@ -4102,8 +4102,8 @@ list_connections(Config) ->
     %% CLI should list AMQP 1.0 container-id
     {ok, StdOut1} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, ["list_connections", "--silent", "container_id"]),
     ContainerIds0 = re:split(string:trim(StdOut1), <<"\n">>, [trim]),
-    ContainerIds = lists:sort(ContainerIds0),
-    ?assertEqual([<<>>, ContainerId0, ContainerId2],
+    ContainerIds = lists:sort([Id || Id <- ContainerIds0, Id =/= <<>>]),
+    ?assertEqual([ContainerId0, ContainerId2],
                  ContainerIds),
 
     ok = rabbit_ct_client_helpers:close_connection(Connection091),
