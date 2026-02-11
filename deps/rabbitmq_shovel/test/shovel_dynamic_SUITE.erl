@@ -431,13 +431,13 @@ autodelete_quorum_on_confirm_with_rejections(Config) ->
     autodelete_with_quorum_rejections(Config, <<"on-confirm">>, ExpSrc).
 
 autodelete_classic_on_publish_with_rejections(Config) ->
-    autodelete_with_rejections(Config, <<"classic">>, <<"on-publish">>, 0, 5).
+    autodelete_with_rejections(Config, <<"classic">>, <<"on-publish">>, 1, 5).
 
 autodelete_quorum_on_publish_with_rejections(Config) ->
     ExpSrc = fun(_) -> 0 end,
     autodelete_with_quorum_rejections(Config, <<"on-publish">>, ExpSrc).
 
-autodelete_with_rejections(Config, Type, AckMode, ExpSrc, ExpDest) ->
+autodelete_with_rejections(Config, Type, AckMode, MaxExpSrc, ExpDest) ->
     Src = ?config(srcq, Config),
     Dest = ?config(destq, Config),
     Param = ?config(param, Config),
@@ -455,9 +455,13 @@ autodelete_with_rejections(Config, Type, AckMode, ExpSrc, ExpDest) ->
               ShovelArgs = ?config(shovel_args, Config) ++ ExtraArgs,
               set_param_nowait(Config, Param, ShovelArgs),
               await_autodelete(Config, Param),
-              ?awaitMatch(ExpSrc, list_queue_messages(Config, Src), 45_000),
+              %% With on-publish ack mode, the last source ack and the
+              %% autodelete exit race: the AMQP 1.0 disposition is sent
+              %% asynchronously and may not reach the source queue before
+              %% the connection is closed.
+              ?awaitMatch(N when N =< MaxExpSrc,
+                          list_queue_messages(Config, Src), 45_000),
               ?awaitMatch(ExpDest, list_queue_messages(Config, Dest), 45_000),
-              amqp10_expect_count(Sess, Src, ExpSrc),
               amqp10_expect_count(Sess, Dest, ExpDest)
       end).
 
