@@ -914,11 +914,7 @@ offset_lag_calculation(Config) ->
                    C04
            end, C6, [{first, true,
                       fun(Offset, Lag) ->
-<<<<<<< HEAD
-                              ?assert(Offset >= 0, "first, at least one chunk consumed"),
-=======
                               ?assert(Offset < MessageCount - 1, "first, not all chunks consumed"),
->>>>>>> de1ab8666 (Relax assertions in stream offset lag calculation test)
                               ?assert(Lag > 0, "first, not all messages consumed")
                       end},
                      {last, true,
@@ -932,11 +928,7 @@ offset_lag_calculation(Config) ->
                       end},
                      {0, true,
                       fun(Offset, Lag) ->
-<<<<<<< HEAD
-                              ?assert(Offset >= 0, "offset spec = 0, at least one chunk consumed"),
-=======
                               ?assert(Offset < MessageCount - 1, "offset spec = 0, not all chunks consumed"),
->>>>>>> de1ab8666 (Relax assertions in stream offset lag calculation test)
                               ?assert(Lag > 0, "offset spec = 0, not all messages consumed")
                       end},
                      {1_000, false,
