@@ -878,6 +878,7 @@ offset_lag_calculation(Config) ->
                    {ok, C01} = stream_test_utils:subscribe(S, C00, St, SubId,
                                                            10, #{}, OffsetSpec),
                    ConsumerInfo = consumer_offset_info(Config, ConnectionName),
+                   %% no messages yet
                    ?assertEqual({0, 0}, ConsumerInfo),
                    {ok, C02} = stream_test_utils:unsubscribe(S, C01, SubId),
                    C02
@@ -913,7 +914,7 @@ offset_lag_calculation(Config) ->
                    C04
            end, C6, [{first, true,
                       fun(Offset, Lag) ->
-                              ?assert(Offset >= 0, "first, at least one chunk consumed"),
+                              ?assert(Offset < MessageCount - 1, "first, not all chunks consumed"),
                               ?assert(Lag > 0, "first, not all messages consumed")
                       end},
                      {last, true,
@@ -927,7 +928,7 @@ offset_lag_calculation(Config) ->
                       end},
                      {0, true,
                       fun(Offset, Lag) ->
-                              ?assert(Offset >= 0, "offset spec = 0, at least one chunk consumed"),
+                              ?assert(Offset < MessageCount - 1, "offset spec = 0, not all chunks consumed"),
                               ?assert(Lag > 0, "offset spec = 0, not all messages consumed")
                       end},
                      {1_000, false,
