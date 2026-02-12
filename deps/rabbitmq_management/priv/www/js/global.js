@@ -647,9 +647,6 @@ var disable_stats;               // ...disable all stats, management only mode
 // Extensions write to this, the dispatcher maker reads it
 var dispatcher_modules = [];
 
-// We need to know when all extension script files have loaded
-var extension_count;
-
 // The dispatcher needs access to the Sammy app
 var app;
 
