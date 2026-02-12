@@ -188,6 +188,22 @@
 
 -type dead_letter_handler() :: option({at_most_once, applied_mfa()} | at_least_once).
 
+-type delayed_retry() :: disabled |
+                         {all | failed | returned,
+                          Min :: milliseconds(),
+                          Max :: milliseconds()}.
+
+-type deferral_token() :: binary().
+-type delayed_key() :: {milliseconds(), ra:index()}.
+
+-record(delayed,
+        {tree = gb_trees:empty() :: gb_trees:tree(delayed_key(), msg()),
+         %% Cached smallest entry for O(1) readiness check in take_next_msg
+         next = undefined :: option({milliseconds(), ra:index(), msg()}),
+         len = 0 :: non_neg_integer(),
+         %% Map from deferral token to tree key for direct message lookup
+         deferred = #{} :: #{deferral_token() => delayed_key()}}).
+
 -record(enqueuer,
         {next_seqno = 1 :: msg_seqno(),
          unused = ?NIL,
@@ -218,7 +234,8 @@
          %% time to wait before returning messages when consumer's node
          %% becomes unreachable
          consumer_disconnected_timeout = 60_000 :: milliseconds(),
-         unused_3 = ?NIL
+         %% delayed retry configuration for returned messages
+         delayed_retry = disabled :: delayed_retry()
         }).
 
 -record(messages,
@@ -283,7 +300,8 @@
          %% active in terms of consumer activity
          last_active :: option(non_neg_integer()),
          msg_cache :: option({ra:index(), raw_msg()}),
-         unused_2 = ?NIL
+         %% delayed retry messages awaiting redelivery
+         delayed = #delayed{} :: #delayed{}
         }).
 
 -type config() :: #{name := atom(),
@@ -300,5 +318,6 @@
                     expires => non_neg_integer(),
                     msg_ttl => non_neg_integer(),
                     created => non_neg_integer(),
-                    consumer_disconnected_timeout => milliseconds()
+                    consumer_disconnected_timeout => milliseconds(),
+                    delayed_retry => delayed_retry()
                    }.

@@ -2870,6 +2870,15 @@ checkout(Config, Idx, Cid, Spec, State) ->
             rabbit_fifo:make_checkout(Cid, Spec, #{}),
             State)).
 
+checkout_ts(Config, Idx, Ts, Cid, Credit, State)
+  when is_integer(Credit) ->
+    checkout_ts(Config, Idx, Ts, Cid, {auto, {simple_prefetch, Credit}}, State);
+checkout_ts(Config, Idx, Ts, Cid, Spec, State) ->
+    checkout_reply(
+      apply(meta(Config, Idx, Ts),
+            rabbit_fifo:make_checkout(Cid, Spec, #{}),
+            State)).
+
 settle(Config, Cid, Idx, MsgId, State) when is_integer(MsgId) ->
     settle(Config, Cid, Idx, [MsgId], State);
 settle(Config, Cid, Idx, MsgIds, State) when is_list(MsgIds) ->
@@ -2890,6 +2899,518 @@ checkout_reply({State, {ok, CInfo}, Effects}) when is_map(CInfo) ->
     {State, CInfo, Effects};
 checkout_reply(Oth) ->
     Oth.
+
+%% Delayed retry tests
+
+delayed_retry_disabled_test(Config) ->
+    %% When delayed_retry is disabled, returned messages go directly to returns queue
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+             delayed_retry => disabled},
+    State0 = init(Conf),
+    Cid = {?FUNCTION_NAME_B, self()},
+    {State1, _} = enq(Config, 1, 1, msg1, State0),
+    {State2, #{key := CKey, next_msg_id := MsgId}, _} =
+        checkout(Config, 2, Cid, {auto, {simple_prefetch, 1}}, State1),
+    %% Return the message
+    {State3, _} = return(Config, CKey, 3, MsgId, State2),
+    %% Message should be in returns, not delayed
+    ?assertMatch(#{num_ready_messages := 1,
+                   num_delayed_messages := 0}, rabbit_fifo:overview(State3)),
+    ok.
+
+delayed_retry_all_test(Config) ->
+    %% When delayed_retry is {all, Min, Max}, all returned messages are delayed
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+             delayed_retry => {all, 1000, 1000}},
+    State0 = init(Conf),
+    Cid = {?FUNCTION_NAME_B, self()},
+    {State1, _} = enq(Config, 1, 1, msg1, State0),
+    {State2, #{key := CKey, next_msg_id := MsgId}, _} =
+        checkout(Config, 2, Cid, {auto, {simple_prefetch, 1}}, State1),
+    %% Return the message (delivery_failed = false for simple return)
+    {State3, _} = return(Config, CKey, 3, MsgId, State2),
+    %% Message should be in delayed, not returns
+    ?assertMatch(#{num_ready_messages := 0,
+                   num_delayed_messages := 1}, rabbit_fifo:overview(State3)),
+    ok.
+
+delayed_retry_failed_only_test(Config) ->
+    %% When delayed_retry is {failed, Min, Max}, only failed deliveries are delayed
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+             delayed_retry => {failed, 1000, 1000}},
+    State0 = init(Conf),
+    Cid = {?FUNCTION_NAME_B, self()},
+    {State1, _} = enq(Config, 1, 1, msg1, State0),
+    {State2, #{key := CKey, next_msg_id := MsgId}, _} =
+        checkout(Config, 2, Cid, {auto, {simple_prefetch, 1}}, State1),
+    %% Simple return (delivery_failed = false) should NOT be delayed
+    {State3, _} = return(Config, CKey, 3, MsgId, State2),
+    ?assertMatch(#{num_ready_messages := 1,
+                   num_delayed_messages := 0}, rabbit_fifo:overview(State3)),
+    ok.
+
+delayed_retry_modify_failed_test(Config) ->
+    %% When using modify with delivery_failed=true, message should be delayed
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+             delayed_retry => {failed, 1000, 1000}},
+    State0 = init(Conf),
+    Cid = {?FUNCTION_NAME_B, self()},
+    {State1, _} = enq(Config, 1, 1, msg1, State0),
+    {State2, #{key := CKey, next_msg_id := MsgId}, _} =
+        checkout(Config, 2, Cid, {auto, {simple_prefetch, 1}}, State1),
+    %% Modify with delivery_failed=true should be delayed
+    {State3, _, _} = apply(meta(Config, 3),
+                           rabbit_fifo:make_modify(CKey, [MsgId], true, false, #{}),
+                           State2),
+    ?assertMatch(#{num_ready_messages := 0,
+                   num_delayed_messages := 1}, rabbit_fifo:overview(State3)),
+    ok.
+
+delayed_retry_returned_test(Config) ->
+    %% When delayed_retry is {returned, Min, Max}, only non-failed returns are delayed
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+             delayed_retry => {returned, 1000, 1000}},
+    State0 = init(Conf),
+    Cid = {?FUNCTION_NAME_B, self()},
+    {State1, _} = enq(Config, 1, 1, msg1, State0),
+    {State2, #{key := CKey, next_msg_id := MsgId}, _} =
+        checkout(Config, 2, Cid, {auto, {simple_prefetch, 1}}, State1),
+    %% Simple return (delivery_failed = false) SHOULD be delayed
+    {State3, _} = return(Config, CKey, 3, MsgId, State2),
+    ?assertMatch(#{num_ready_messages := 0,
+                   num_delayed_messages := 1}, rabbit_fifo:overview(State3)),
+    ok.
+
+delayed_retry_returned_with_failure_test(Config) ->
+    %% When delayed_retry is {returned, Min, Max}, failed deliveries are NOT delayed
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+             delayed_retry => {returned, 1000, 1000}},
+    State0 = init(Conf),
+    Cid = {?FUNCTION_NAME_B, self()},
+    {State1, _} = enq(Config, 1, 1, msg1, State0),
+    {State2, #{key := CKey, next_msg_id := MsgId}, _} =
+        checkout(Config, 2, Cid, {auto, {simple_prefetch, 1}}, State1),
+    %% Modify with delivery_failed=true should NOT be delayed
+    {State3, _, _} = apply(meta(Config, 3),
+                           rabbit_fifo:make_modify(CKey, [MsgId], true, false, #{}),
+                           State2),
+    ?assertMatch(#{num_ready_messages := 1,
+                   num_delayed_messages := 0}, rabbit_fifo:overview(State3)),
+    ok.
+
+delayed_retry_becomes_ready_test(Config) ->
+    %% Delayed message becomes ready after delay period
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+             delayed_retry => {all, 1000, 1000}},
+    State0 = init(Conf),
+    Cid = {?FUNCTION_NAME_B, self()},
+    {State1, _} = enq(Config, 1, 1, msg1, State0),
+    {State2, #{key := CKey, next_msg_id := MsgId}, _} =
+        checkout(Config, 2, Cid, {auto, {simple_prefetch, 1}}, State1),
+    %% Return at timestamp 100
+    {State3, _, _} = apply(meta(Config, 3, 100),
+                           rabbit_fifo:make_return(CKey, [MsgId]),
+                           State2),
+    ?assertMatch(#{num_ready_messages := 0,
+                   num_delayed_messages := 1,
+                   next_delayed_at := 1100}, rabbit_fifo:overview(State3)),
+    %% At timestamp 1099, message still not ready - checkout won't deliver
+    {State4, #{key := _CKey2}, _} =
+        checkout_ts(Config, 4, 1099, Cid, {auto, {simple_prefetch, 1}}, State3),
+    %% No message delivered yet (still delayed)
+    ?assertMatch(#{num_checked_out := 0}, rabbit_fifo:overview(State4)),
+    %% At timestamp 1100, message becomes ready
+    {State5, #{next_msg_id := _MsgId2}, _} =
+        checkout_ts(Config, 5, 1100, Cid, {auto, {simple_prefetch, 1}}, State3),
+    ?assertMatch(#{num_checked_out := 1,
+                   num_delayed_messages := 0}, rabbit_fifo:overview(State5)),
+    ok.
+
+delayed_retry_timer_effect_test(Config) ->
+    %% Timer effect should include next delayed timestamp
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+             delayed_retry => {all, 1000, 1000}},
+    State0 = init(Conf),
+    Cid = {?FUNCTION_NAME_B, self()},
+    {State1, _} = enq(Config, 1, 1, msg1, State0),
+    {State2, #{key := CKey, next_msg_id := MsgId}, _} =
+        checkout(Config, 2, Cid, {auto, {simple_prefetch, 1}}, State1),
+    %% Return at timestamp 100
+    {State3, _, Effects} = apply(meta(Config, 3, 100),
+                                 rabbit_fifo:make_return(CKey, [MsgId]),
+                                 State2),
+    %% Timer should be set for 1100 (100 + 1000)
+    ?ASSERT_EFF({timer, expire_msgs, 1100, {abs, true}}, Effects),
+    ok.
+
+delayed_retry_purge_test(Config) ->
+    %% Purge should clear delayed messages
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+             delayed_retry => {all, 1000, 1000}},
+    State0 = init(Conf),
+    Cid = {?FUNCTION_NAME_B, self()},
+    {State1, _} = enq(Config, 1, 1, msg1, State0),
+    {State2, #{key := CKey, next_msg_id := MsgId}, _} =
+        checkout(Config, 2, Cid, {auto, {simple_prefetch, 1}}, State1),
+    {State3, _} = return(Config, CKey, 3, MsgId, State2),
+    ?assertMatch(#{num_delayed_messages := 1}, rabbit_fifo:overview(State3)),
+    %% Purge
+    {State4, {purge, 1}, _} = apply(meta(Config, 4), rabbit_fifo:make_purge(), State3),
+    ?assertMatch(#{num_messages := 0,
+                   num_delayed_messages := 0}, rabbit_fifo:overview(State4)),
+    ok.
+
+delayed_retry_backoff_test(Config) ->
+    %% Delay should increase with delivery_count (linear backoff)
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+             delayed_retry => {all, 1000, 5000}},
+    State0 = init(Conf),
+    Cid = {?FUNCTION_NAME_B, self()},
+    {State1, _} = enq(Config, 1, 1, msg1, State0),
+    %% First delivery
+    {State2, #{key := CKey, next_msg_id := MsgId}, _} =
+        checkout_ts(Config, 2, 0, Cid, {auto, {simple_prefetch, 1}}, State1),
+    %% First return at ts=100, delivery_count=1, delay=1000
+    {State3, _, _} = apply(meta(Config, 3, 100),
+                           rabbit_fifo:make_return(CKey, [MsgId]),
+                           State2),
+    ?assertMatch(#{next_delayed_at := 1100}, rabbit_fifo:overview(State3)),
+    %% Second delivery at ts=1100
+    {State4, #{next_msg_id := MsgId2}, _} =
+        checkout_ts(Config, 4, 1100, Cid, {auto, {simple_prefetch, 1}}, State3),
+    %% Second return at ts=1200, delivery_count=2, delay=2000
+    {State5, _, _} = apply(meta(Config, 5, 1200),
+                           rabbit_fifo:make_return(CKey, [MsgId2]),
+                           State4),
+    ?assertMatch(#{next_delayed_at := 3200}, rabbit_fifo:overview(State5)),
+    %% Third delivery at ts=3200
+    {State6, #{next_msg_id := MsgId3}, _} =
+        checkout_ts(Config, 6, 3200, Cid, {auto, {simple_prefetch, 1}}, State5),
+    %% Third return at ts=3300, delivery_count=3, delay=3000
+    {State7, _, _} = apply(meta(Config, 7, 3300),
+                           rabbit_fifo:make_return(CKey, [MsgId3]),
+                           State6),
+    ?assertMatch(#{next_delayed_at := 6300}, rabbit_fifo:overview(State7)),
+    %% Fourth delivery at ts=6300
+    {State8, #{next_msg_id := MsgId4}, _} =
+        checkout_ts(Config, 8, 6300, Cid, {auto, {simple_prefetch, 1}}, State7),
+    %% Fourth return at ts=6400, delivery_count=4, delay=4000
+    {State9, _, _} = apply(meta(Config, 9, 6400),
+                           rabbit_fifo:make_return(CKey, [MsgId4]),
+                           State8),
+    ?assertMatch(#{next_delayed_at := 10400}, rabbit_fifo:overview(State9)),
+    %% Fifth delivery at ts=10400
+    {State10, #{next_msg_id := MsgId5}, _} =
+        checkout_ts(Config, 10, 10400, Cid, {auto, {simple_prefetch, 1}}, State9),
+    %% Fifth return at ts=10500, delivery_count=5, delay=5000 (clamped by max)
+    {State11, _, _} = apply(meta(Config, 11, 10500),
+                            rabbit_fifo:make_return(CKey, [MsgId5]),
+                            State10),
+    ?assertMatch(#{next_delayed_at := 15500}, rabbit_fifo:overview(State11)),
+    %% Sixth delivery at ts=15500
+    {State12, #{next_msg_id := MsgId6}, _} =
+        checkout_ts(Config, 12, 15500, Cid, {auto, {simple_prefetch, 1}}, State11),
+    %% Sixth return at ts=15600, delivery_count=6, delay=5000 (still clamped)
+    {State13, _, _} = apply(meta(Config, 13, 15600),
+                            rabbit_fifo:make_return(CKey, [MsgId6]),
+                            State12),
+    ?assertMatch(#{next_delayed_at := 20600}, rabbit_fifo:overview(State13)),
+    ok.
+
+delayed_retry_explicit_delivery_time_test(Config) ->
+    %% x-opt-delivery-time annotation should delay message regardless of config
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+             delayed_retry => disabled},
+    State0 = init(Conf),
+    Cid = {?FUNCTION_NAME_B, self()},
+    {State1, _} = enq(Config, 1, 1, msg1, State0),
+    {State2, #{key := CKey, next_msg_id := MsgId}, _} =
+        checkout_ts(Config, 2, 100, Cid, {auto, {simple_prefetch, 1}}, State1),
+    %% Modify with x-opt-delivery-time in the future should be delayed
+    %% even though delayed_retry is disabled
+    {State3, _, _} = apply(meta(Config, 3, 100),
+                           rabbit_fifo:make_modify(CKey, [MsgId], false, false,
+                                                   #{<<"x-opt-delivery-time">> => 5000}),
+                           State2),
+    ?assertMatch(#{num_ready_messages := 0,
+                   num_delayed_messages := 1,
+                   next_delayed_at := 5000}, rabbit_fifo:overview(State3)),
+    ok.
+
+delayed_retry_explicit_delivery_time_past_test(Config) ->
+    %% x-opt-delivery-time in the past should NOT delay (go to returns)
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+             delayed_retry => disabled},
+    State0 = init(Conf),
+    Cid = {?FUNCTION_NAME_B, self()},
+    {State1, _} = enq(Config, 1, 1, msg1, State0),
+    {State2, #{key := CKey, next_msg_id := MsgId}, _} =
+        checkout_ts(Config, 2, 100, Cid, {auto, {simple_prefetch, 1}}, State1),
+    %% Modify with x-opt-delivery-time in the past should NOT be delayed
+    {State3, _, _} = apply(meta(Config, 3, 100),
+                           rabbit_fifo:make_modify(CKey, [MsgId], false, false,
+                                                   #{<<"x-opt-delivery-time">> => 50}),
+                           State2),
+    ?assertMatch(#{num_ready_messages := 1,
+                   num_delayed_messages := 0}, rabbit_fifo:overview(State3)),
+    ok.
+
+delayed_retry_explicit_overrides_config_test(Config) ->
+    %% x-opt-delivery-time should override delayed_retry config calculation
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+             delayed_retry => {all, 1000, 1000}},
+    State0 = init(Conf),
+    Cid = {?FUNCTION_NAME_B, self()},
+    {State1, _} = enq(Config, 1, 1, msg1, State0),
+    {State2, #{key := CKey, next_msg_id := MsgId}, _} =
+        checkout_ts(Config, 2, 100, Cid, {auto, {simple_prefetch, 1}}, State1),
+    %% Config would calculate delay as 100 + 1000 = 1100
+    %% But explicit x-opt-delivery-time of 9999 should take precedence
+    {State3, _, _} = apply(meta(Config, 3, 100),
+                           rabbit_fifo:make_modify(CKey, [MsgId], false, false,
+                                                   #{<<"x-opt-delivery-time">> => 9999}),
+                           State2),
+    ?assertMatch(#{num_delayed_messages := 1,
+                   next_delayed_at := 9999}, rabbit_fifo:overview(State3)),
+    ok.
+
+delayed_retry_counts_towards_limit_test(Config) ->
+    %% Delayed messages should count towards max_length limit
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+             delayed_retry => {all, 10000, 10000},
+             max_length => 2},
+    State0 = init(Conf),
+    Cid = {?FUNCTION_NAME_B, self()},
+    %% Enqueue first message
+    {State1, _} = enq(Config, 1, 1, msg1, State0),
+    %% Checkout and return to put in delayed state
+    {State2, #{key := CKey, next_msg_id := MsgId}, _} =
+        checkout_ts(Config, 2, 100, Cid, {auto, {simple_prefetch, 1}}, State1),
+    {State3, _, _} = apply(meta(Config, 3, 100),
+                           rabbit_fifo:make_return(CKey, [MsgId]),
+                           State2),
+    %% Verify message is delayed
+    ?assertMatch(#{num_delayed_messages := 1,
+                   num_ready_messages := 0}, rabbit_fifo:overview(State3)),
+    %% Enqueue second message - should succeed (limit is 2)
+    {State4, _} = enq(Config, 4, 2, msg2, State3),
+    ?assertEqual(2, rabbit_fifo:query_messages_total(State4)),
+    %% Enqueue third message - should trigger drop_head since we're over limit
+    %% (delayed + ready = 2, adding one more exceeds limit)
+    {State5, _} = enq(Config, 5, 3, msg3, State4),
+    %% Total should still be 2 (one was dropped)
+    ?assertEqual(2, rabbit_fifo:query_messages_total(State5)),
+    ok.
+
+delayed_retry_all_command_test(Config) ->
+    %% Test that #delayed{op = {retry, all}} moves all delayed messages to returns
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+             delayed_retry => {all, 10000, 10000}},
+    State0 = init(Conf),
+    Cid = {?FUNCTION_NAME_B, self()},
+    %% Enqueue and checkout 3 messages
+    {State1, _} = enq(Config, 1, 1, msg1, State0),
+    {State2, _} = enq(Config, 2, 2, msg2, State1),
+    {State3, _} = enq(Config, 3, 3, msg3, State2),
+    {State4, #{key := CKey, next_msg_id := MsgId}, _} =
+        checkout_ts(Config, 4, 100, Cid, {auto, {simple_prefetch, 3}}, State3),
+    %% Return all 3 messages to put them in delayed state
+    {State5, _, _} = apply(meta(Config, 5, 100),
+                           rabbit_fifo:make_return(CKey, [MsgId, MsgId+1, MsgId+2]),
+                           State4),
+    ?assertMatch(#{num_delayed_messages := 3,
+                   num_ready_messages := 0}, rabbit_fifo:overview(State5)),
+    %% Retry all delayed messages - they get checked out immediately to the consumer
+    {State6, {ok, 3}, _} = apply(meta(Config, 6, 100),
+                                 rabbit_fifo:make_delayed({retry, all}),
+                                 State5),
+    ?assertMatch(#{num_delayed_messages := 0,
+                   num_checked_out := 3}, rabbit_fifo:overview(State6)),
+    ok.
+
+delayed_retry_count_command_test(Config) ->
+    %% Test that #delayed{op = {retry, N}} moves only that many messages
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+             delayed_retry => {all, 10000, 10000}},
+    State0 = init(Conf),
+    Cid = {?FUNCTION_NAME_B, self()},
+    %% Enqueue and checkout 3 messages
+    {State1, _} = enq(Config, 1, 1, msg1, State0),
+    {State2, _} = enq(Config, 2, 2, msg2, State1),
+    {State3, _} = enq(Config, 3, 3, msg3, State2),
+    {State4, #{key := CKey, next_msg_id := MsgId}, _} =
+        checkout_ts(Config, 4, 100, Cid, {auto, {simple_prefetch, 3}}, State3),
+    %% Return all 3 messages to put them in delayed state
+    {State5, _, _} = apply(meta(Config, 5, 100),
+                           rabbit_fifo:make_return(CKey, [MsgId, MsgId+1, MsgId+2]),
+                           State4),
+    ?assertMatch(#{num_delayed_messages := 3,
+                   num_ready_messages := 0}, rabbit_fifo:overview(State5)),
+    %% Retry only 2 delayed messages - they get checked out immediately
+    {State6, {ok, 2}, _} = apply(meta(Config, 6, 100),
+                                 rabbit_fifo:make_delayed({retry, 2}),
+                                 State5),
+    ?assertMatch(#{num_delayed_messages := 1,
+                   num_checked_out := 2}, rabbit_fifo:overview(State6)),
+    %% Retry remaining 1 message
+    {State7, {ok, 1}, _} = apply(meta(Config, 7, 100),
+                                 rabbit_fifo:make_delayed({retry, all}),
+                                 State6),
+    ?assertMatch(#{num_delayed_messages := 0,
+                   num_checked_out := 3}, rabbit_fifo:overview(State7)),
+    ok.
+
+delayed_retry_zero_command_test(Config) ->
+    %% Test that #delayed{op = {retry, 0}} does nothing
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+             delayed_retry => {all, 10000, 10000}},
+    State0 = init(Conf),
+    Cid = {?FUNCTION_NAME_B, self()},
+    {State1, _} = enq(Config, 1, 1, msg1, State0),
+    {State2, #{key := CKey, next_msg_id := MsgId}, _} =
+        checkout_ts(Config, 2, 100, Cid, {auto, {simple_prefetch, 1}}, State1),
+    {State3, _, _} = apply(meta(Config, 3, 100),
+                           rabbit_fifo:make_return(CKey, [MsgId]),
+                           State2),
+    ?assertMatch(#{num_delayed_messages := 1}, rabbit_fifo:overview(State3)),
+    %% Retry 0 messages - should do nothing
+    {State4, {ok, 0}, _} = apply(meta(Config, 4, 100),
+                                 rabbit_fifo:make_delayed({retry, 0}),
+                                 State3),
+    ?assertMatch(#{num_delayed_messages := 1,
+                   num_ready_messages := 0}, rabbit_fifo:overview(State4)),
+    ok.
+
+delayed_retry_empty_command_test(Config) ->
+    %% Test that #delayed{op = {retry, _}} on empty delayed queue returns 0
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+             delayed_retry => {all, 10000, 10000}},
+    State0 = init(Conf),
+    ?assertMatch(#{num_delayed_messages := 0}, rabbit_fifo:overview(State0)),
+    {State1, {ok, 0}, _} = apply(meta(Config, 1, 100),
+                                 rabbit_fifo:make_delayed({retry, all}),
+                                 State0),
+    ?assertMatch(#{num_delayed_messages := 0}, rabbit_fifo:overview(State1)),
+    {State2, {ok, 0}, _} = apply(meta(Config, 2, 100),
+                                 rabbit_fifo:make_delayed({retry, 10}),
+                                 State1),
+    ?assertMatch(#{num_delayed_messages := 0}, rabbit_fifo:overview(State2)),
+    ok.
+
+delayed_assign_deferred_test(Config) ->
+    %% Test assigning deferred messages by token to a specific consumer
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+             delayed_retry => {all, 10000, 10000}},
+    State0 = init(Conf),
+    Cid = {?FUNCTION_NAME_B, self()},
+    %% Enqueue a message
+    {State1, _} = enq(Config, 1, 1, msg1, State0),
+    %% Checkout the message
+    {State2, #{key := CKey, next_msg_id := MsgId}, _} =
+        checkout_ts(Config, 2, 100, Cid, {auto, {simple_prefetch, 2}}, State1),
+    %% Return with deferral token via modify
+    Token1 = <<"token-1">>,
+    Anns = #{<<"x-opt-deferral-token">> => Token1},
+    Modify = rabbit_fifo:make_modify(CKey, [MsgId], false, false, Anns),
+    {State3, _, _} = apply(meta(Config, 3, 100), Modify, State2),
+    ?assertMatch(#{num_delayed_messages := 1,
+                   num_checked_out := 0}, rabbit_fifo:overview(State3)),
+    %% Assign the deferred message back to the consumer
+    Cmd = rabbit_fifo:make_delayed({assign_deferred, CKey, [Token1]}),
+    {State4, {ok, 1}, _} = apply(meta(Config, 4, 100), Cmd, State3),
+    ?assertMatch(#{num_delayed_messages := 0,
+                   num_checked_out := 1}, rabbit_fifo:overview(State4)),
+    ok.
+
+delayed_assign_deferred_insufficient_credit_test(Config) ->
+    %% Test that assign_deferred fails when consumer has insufficient credit
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+             delayed_retry => {all, 10000, 10000}},
+    State0 = init(Conf),
+    Cid = {?FUNCTION_NAME_B, self()},
+    %% Enqueue 2 messages
+    {State1, _} = enq(Config, 1, 1, msg1, State0),
+    {State2, _} = enq(Config, 2, 2, msg2, State1),
+    %% Checkout both messages with prefetch 2
+    {State3, #{key := CKey, next_msg_id := MsgId}, _} =
+        checkout_ts(Config, 3, 100, Cid, {auto, {simple_prefetch, 2}}, State2),
+    %% Return both with deferral tokens
+    Token1 = <<"token-1">>,
+    Token2 = <<"token-2">>,
+    Anns1 = #{<<"x-opt-deferral-token">> => Token1},
+    Anns2 = #{<<"x-opt-deferral-token">> => Token2},
+    Mod1 = rabbit_fifo:make_modify(CKey, [MsgId], false, false, Anns1),
+    {State4, _, _} = apply(meta(Config, 4, 100), Mod1, State3),
+    Mod2 = rabbit_fifo:make_modify(CKey, [MsgId+1], false, false, Anns2),
+    {State5, _, _} = apply(meta(Config, 5, 100), Mod2, State4),
+    ?assertMatch(#{num_delayed_messages := 2,
+                   num_checked_out := 0}, rabbit_fifo:overview(State5)),
+    %% Consumer has credit 2 (returned), try to assign both - should succeed
+    Tokens = [Token1, Token2],
+    Cmd = rabbit_fifo:make_delayed({assign_deferred, CKey, Tokens}),
+    {State6, {ok, 2}, _} = apply(meta(Config, 6, 100), Cmd, State5),
+    ?assertMatch(#{num_delayed_messages := 0,
+                   num_checked_out := 2}, rabbit_fifo:overview(State6)),
+    ok.
+
+delayed_assign_deferred_not_found_test(Config) ->
+    %% Test that assign_deferred returns partial when some tokens not found
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+             delayed_retry => {all, 10000, 10000}},
+    State0 = init(Conf),
+    Cid = {?FUNCTION_NAME_B, self()},
+    %% Enqueue a message
+    {State1, _} = enq(Config, 1, 1, msg1, State0),
+    %% Checkout the message
+    {State2, #{key := CKey, next_msg_id := MsgId}, _} =
+        checkout_ts(Config, 2, 100, Cid, {auto, {simple_prefetch, 2}}, State1),
+    %% Return with deferral token
+    Token1 = <<"token-1">>,
+    Anns = #{<<"x-opt-deferral-token">> => Token1},
+    Mod = rabbit_fifo:make_modify(CKey, [MsgId], false, false, Anns),
+    {State3, _, _} = apply(meta(Config, 3, 100), Mod, State2),
+    %% Try to assign with one valid and one invalid token
+    Tokens = [Token1, <<"invalid-token">>],
+    Cmd = rabbit_fifo:make_delayed({assign_deferred, CKey, Tokens}),
+    {State4, {partial, 1, [<<"invalid-token">>]}, _} =
+        apply(meta(Config, 4, 100), Cmd, State3),
+    ?assertMatch(#{num_delayed_messages := 0,
+                   num_checked_out := 1}, rabbit_fifo:overview(State4)),
+    ok.
+
+delayed_assign_deferred_consumer_not_found_test(Config) ->
+    %% Test that assign_deferred fails when consumer doesn't exist
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+             delayed_retry => {all, 10000, 10000}},
+    State0 = init(Conf),
+    %% Try to assign to non-existent consumer
+    {_State, {error, consumer_not_found}, []} =
+        apply(meta(Config, 1, 100),
+              rabbit_fifo:make_delayed({assign_deferred, 999, [<<"token">>]}),
+              State0),
+    ok.
 
 run_log(Config, InitState, Entries) ->
     run_log(rabbit_fifo, Config, InitState, Entries, fun (_) -> true end).
