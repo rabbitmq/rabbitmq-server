@@ -44,29 +44,6 @@
 
 -export_type([state/0]).
 
--spec with_correlation_id(Fun, State) -> Ret when
-      Fun :: async_request_fun(),
-      State :: state(),
-      Ret :: {ok, NewState} | {error, Reason},
-      NewState :: state(),
-      Reason :: any().
-
-with_correlation_id(
-  Fun,
-  #?MODULE{seq_no = SeqNo0,
-           last_acked_seq_no = LastAckedSeqNo} = State0) ->
-    case SeqNo0 - LastAckedSeqNo >= ?MAX_ASYNC_REQUESTS of
-        true ->
-            case wait_for_async_requests(State0) of
-                {ok, State} ->
-                    with_correlation_id(Fun, State);
-                {error, _} = Error ->
-                    Error
-            end;
-        false ->
-            run_async_fun(Fun, State0)
-    end.
-
 %% `mnesia_to_khepri_converter' callbacks
 
 -spec init_copy_to_khepri(StoreId, MigrationId, Tables, Migrations) ->
@@ -167,62 +144,89 @@ finish_copy_to_khepri(State) ->
     {ok, _} = wait_for_all_async_requests(State),
     ok.
 
-wait_for_all_async_requests(
-  #?MODULE{seq_no = SeqNo,
-           last_acked_seq_no = LastAckedSeqNo} = State) ->
-    case SeqNo - LastAckedSeqNo > 0 of
-        true ->
-            case wait_for_async_requests(State) of
-                {ok, State1} ->
-                    wait_for_all_async_requests(State1);
-                {error, _} = Error ->
-                    Error
-            end;
-        false ->
-            {ok, State}
-    end.
-
--spec wait_for_async_requests(State) -> Ret when
+-spec with_correlation_id(Fun, State) -> Ret when
+      Fun :: async_request_fun(),
       State :: state(),
       Ret :: {ok, NewState} | {error, Reason},
       NewState :: state(),
       Reason :: any().
 
-wait_for_async_requests(State0) ->
+with_correlation_id(
+  Fun,
+  #?MODULE{seq_no = SeqNo0,
+           last_acked_seq_no = LastAckedSeqNo} = State) ->
+    case SeqNo0 - LastAckedSeqNo >= ?MAX_ASYNC_REQUESTS of
+        true ->
+            case wait_for_finished_async_requests(State) of
+                {ok, State1} ->
+                    with_correlation_id(Fun, State1);
+                {error, _} = Error ->
+                    Error
+            end;
+        false ->
+            run_async_fun(Fun, State)
+    end.
+
+wait_for_finished_async_requests(State) ->
+    wait_for_async_requests(State, 0).
+
+wait_for_all_async_requests(State) ->
+    wait_for_async_requests(State, infinity).
+
+-spec wait_for_async_requests(State, Timeout) -> Ret when
+      State :: state(),
+      Timeout :: timeout(),
+      Ret :: {ok, NewState} | {error, Reason},
+      NewState :: state(),
+      Reason :: any().
+
+wait_for_async_requests(
+  #?MODULE{async_requests = AsyncRequests} = State,
+  Timeout)
+  when AsyncRequests =/= #{} ->
     receive
         {ra_event, _, _} = RaEvent ->
-            Correlations = rabbit_khepri:handle_async_ret(RaEvent),
-            lists:foldl(
-              fun({CorrelationId, Result}, {ok, State}) ->
-                      #?MODULE{async_requests = AsyncRequests,
-                               seq_no = SeqNo,
-                               last_acked_seq_no = LastAcked} = State,
-                      {Fun, AsyncRequests1} = maps:take(
-                                                CorrelationId, AsyncRequests),
-                      LastAcked1 = erlang:max(SeqNo, LastAcked),
-                      State1 = State#?MODULE{last_acked_seq_no = LastAcked1,
-                                             async_requests = AsyncRequests1},
-                      case Result of
-                          ok ->
-                              {ok, State1};
-                          {ok, _} ->
-                              {ok, State1};
-                          {error, not_leader} ->
-                              %% If the command failed because it was sent to
-                              %% a non-leader member, retry the fun.
-                              %% `rabbit_khepri:handle_async_ret/1' has updated
-                              %% the leader information, so the next attempt
-                              %% might be sent to the correct member.
-                              run_async_fun(Fun, State1);
-                          {error, _} = Error ->
-                              Error
-                      end;
-                  (_Correlation, {error, _} = Error) ->
+            case handle_ra_event(RaEvent, State) of
+                {ok, State1} ->
+                    wait_for_async_requests(State1, Timeout);
+                {error, _} = Error ->
+                    Error
+            end
+    after Timeout ->
+              {ok, State}
+    end;
+wait_for_async_requests(State, _Timeout) ->
+    {ok, State}.
+
+handle_ra_event(RaEvent, State) ->
+    Correlations = rabbit_khepri:handle_async_ret(RaEvent),
+    lists:foldl(
+      fun({CorrelationId, Result}, {ok, State1}) ->
+              #?MODULE{async_requests = AsyncRequests,
+                       last_acked_seq_no = LastAcked} = State1,
+              {Fun, AsyncRequests1} = maps:take(
+                                        CorrelationId, AsyncRequests),
+              LastAcked1 = erlang:max(CorrelationId, LastAcked),
+              State2 = State1#?MODULE{last_acked_seq_no = LastAcked1,
+                                      async_requests = AsyncRequests1},
+              case Result of
+                  ok ->
+                      {ok, State2};
+                  {ok, _} ->
+                      {ok, State2};
+                  {error, not_leader} ->
+                      %% If the command failed because it was sent to
+                      %% a non-leader member, retry the fun.
+                      %% `rabbit_khepri:handle_async_ret/1' has updated
+                      %% the leader information, so the next attempt
+                      %% might be sent to the correct member.
+                      run_async_fun(Fun, State2);
+                  {error, _} = Error ->
                       Error
-              end, {ok, State0}, Correlations)
-    after 5_000 ->
-            {error, timeout}
-    end.
+              end;
+         (_Correlation, {error, _} = Error) ->
+              Error
+      end, {ok, State}, Correlations).
 
 run_async_fun(
   Fun,
