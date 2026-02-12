@@ -139,8 +139,10 @@ function check_login () {
   setup_constant_events()
   update_vhosts()
   update_interval()
-  setup_extensions()
-
+  setup_extensions(function onCompleted() {
+    console.info("All extensions have been loaded. Starting application ..");
+    start_app();
+  });
 
   return true
 }
@@ -232,7 +234,7 @@ function update_vhosts() {
     store_pref('vhost', current_vhost);
 }
 
-function setup_extensions() {
+function setup_extensions(onCompleted) {
     var extensions = JSON.parse(sync_get('/extensions'));
     var javascript_files = [];
     for (var i in extensions) {
@@ -253,21 +255,20 @@ function setup_extensions() {
             }
         }
     }
-    // Load JavaScript files sequentially; start_app() runs when all have loaded and registered
-    load_javascript_files_sequentially(javascript_files, 0);
+    load_javascript_files_sequentially(javascript_files, 0, onCompleted);
 }
 
-function load_javascript_files_sequentially(files, index) {
+function load_javascript_files_sequentially(files, index, onCompleted) {
     if (index >= files.length) {
-        console.info("All extension are loaded. Starting app...");
-        start_app();
+        if (typeof onCompleted === 'function') {
+            onCompleted();
+        }
         return;
     }
     console.debug(`Loading extension ${files[index]} ...`);
     dynamic_javascript_file_load(files[index], function() {
-        // Load next file after current one has finished loading
         console.debug(`Loaded extension ${files[index]} !`);
-        load_javascript_files_sequentially(files, index + 1);
+        load_javascript_files_sequentially(files, index + 1, onCompleted);
     });
 }
 
