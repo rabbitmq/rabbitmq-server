@@ -28,6 +28,8 @@
 -export([state_info/1, info/2, stat/1, infos/1, infos/2]).
 -export([credit/6, settle/5, dequeue/6, consume/3, cancel/3]).
 -export([purge/1]).
+-export([retry_delayed/2]).
+-export([assign_deferred/4]).
 -export([supports_stateful_delivery/0,
          deliver/3]).
 -export([dead_letter_publish/5]).
@@ -363,6 +365,7 @@ gather_policy_config(Q, IsQueueDeclaration) ->
     MsgTTL = args_policy_lookup(<<"message-ttl">>, fun min/2, Q),
     DeadLetterHandler = dead_letter_handler(Q, Overflow),
     DisconnectedTimeout = get_consumer_disconnected_timeout(Q),
+    DelayedRetry = get_delayed_retry_config(Q),
     #{dead_letter_handler => DeadLetterHandler,
       max_length => MaxLength,
       max_bytes => MaxBytes,
@@ -370,7 +373,8 @@ gather_policy_config(Q, IsQueueDeclaration) ->
       overflow_strategy => Overflow,
       expires => Expires,
       msg_ttl => MsgTTL,
-      consumer_disconnected_timeout => DisconnectedTimeout
+      consumer_disconnected_timeout => DisconnectedTimeout,
+      delayed_retry => DelayedRetry
      }.
 
 ra_machine_config(Q) when ?is_amqqueue(Q) ->
@@ -1199,6 +1203,22 @@ purge(Q) when ?is_amqqueue(Q) ->
     Server = amqqueue:get_pid(Q),
     rabbit_fifo_client:purge(Server).
 
+-spec retry_delayed(amqqueue:amqqueue(), all | non_neg_integer()) ->
+    {ok, non_neg_integer()} | {error | timeout, term()}.
+retry_delayed(Q, Mode) when ?is_amqqueue(Q) ->
+    Server = amqqueue:get_pid(Q),
+    rabbit_fifo_client:retry_delayed(Server, Mode).
+
+-spec assign_deferred(rabbit_types:ctag(), [binary()],
+                      rabbit_fifo_client:state(),
+                      amqqueue:amqqueue()) ->
+    {{ok, non_neg_integer()} |
+     {partial, non_neg_integer(), [binary()]} |
+     {error, term()},
+     rabbit_fifo_client:state()}.
+assign_deferred(CTag, Tokens, QState, _Q) ->
+    rabbit_fifo_client:assign_deferred(CTag, Tokens, QState).
+
 cleanup_data_dir() ->
     Names = [begin
                  {Name, _} = amqqueue:get_pid(Q),
@@ -1699,6 +1719,38 @@ get_consumer_disconnected_timeout(Q) ->
         Val when is_integer(Val) ->
             Val
     end.
+
+get_delayed_retry_config(Q) ->
+    case args_policy_lookup(<<"delayed-retry-type">>, fun policy_has_precedence/2, Q) of
+        <<"disabled">> ->
+            disabled;
+        undefined ->
+            disabled;
+        Type when Type =:= <<"all">>;
+                  Type =:= <<"failed">>;
+                  Type =:= <<"returned">> ->
+            Min = args_policy_lookup(<<"delayed-retry-min">>, fun min/2, Q),
+            Max0 = args_policy_lookup(<<"delayed-retry-max">>, fun min/2, Q),
+            case Min of
+                undefined ->
+                    disabled;
+                _ when is_integer(Min), Min > 0 ->
+                    Max = case Max0 of
+                              undefined -> Min;
+                              _ when is_integer(Max0), Max0 > 0 -> Max0;
+                              _ -> Min
+                          end,
+                    {delayed_retry_type(Type), Min, Max};
+                _ ->
+                    disabled
+            end;
+        _ ->
+            disabled
+    end.
+
+delayed_retry_type(<<"all">>) -> all;
+delayed_retry_type(<<"failed">>) -> failed;
+delayed_retry_type(<<"returned">>) -> returned.
 
 dead_letter_handler(Q, Overflow) ->
     Exchange = args_policy_lookup(<<"dead-letter-exchange">>, fun queue_arg_has_precedence/2, Q),

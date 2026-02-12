@@ -722,12 +722,14 @@ settle(#resource{kind = queue} = QRef, Op, CTag, MsgIds, Ctxs) ->
             end
     end.
 
--spec credit(queue_name(), rabbit_types:ctag(), delivery_count(), credit(), boolean(), state()) ->
+-spec credit(queue_name(), rabbit_types:ctag(), delivery_count(),
+             credit(), boolean(), state()) ->
     {ok, state(), actions()}.
 credit(QName, CTag, DeliveryCount, Credit, Drain, Ctxs) ->
     #ctx{state = State0,
          module = Mod} = Ctx = get_ctx(QName, Ctxs),
-    {State, Actions} = Mod:credit(QName, CTag, DeliveryCount, Credit, Drain, State0),
+    {State, Actions} = Mod:credit(QName, CTag, DeliveryCount, Credit,
+                                  Drain, State0),
     {ok, set_ctx(QName, Ctx#ctx{state = State}, Ctxs), Actions}.
 
 -spec dequeue(amqqueue:amqqueue(), boolean(),
