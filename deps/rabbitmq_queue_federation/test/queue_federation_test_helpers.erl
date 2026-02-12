@@ -312,7 +312,8 @@ await_running_federation(Config, Node, Links, Timeout) ->
                           fun(Entry) ->
                                   proplists:get_value(queue, Entry) =:= DownQ andalso
                                   proplists:get_value(upstream_queue, Entry) =:= UpQ andalso
-                                  proplists:get_value(status, Entry) =:= running
+                                  proplists:get_value(status, Entry) =:= running andalso
+                                  proplists:get_value(consumer_tag, Entry) =/= undefined
                           end, Status)
                 end, Links)
       end, Timeout).
