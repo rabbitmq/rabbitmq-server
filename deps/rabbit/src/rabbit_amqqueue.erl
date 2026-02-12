@@ -113,7 +113,7 @@
 
 -rabbit_deprecated_feature(
    {transient_nonexcl_queues,
-    #{deprecation_phase => permitted_by_default,
+    #{deprecation_phase => denied_by_default,
       doc_url => "https://blog.rabbitmq.com/posts/2021/08/4.0-deprecation-announcements/#removal-of-transient-non-exclusive-queues",
       callbacks => #{is_feature_used => {?MODULE, are_transient_nonexcl_used}}
      }}).
