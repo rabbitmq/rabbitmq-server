@@ -27,7 +27,10 @@ var KNOWN_ARGS = {'alternate-exchange':        {'short': 'AE',  'type': 'string'
                   'x-queue-leader-locator':    {'short': 'LL', 'type': 'string'},
                   'x-max-priority':            {'short': 'Pri', 'type': 'int'},
                   'x-single-active-consumer':  {'short': 'SAC', 'type': 'boolean'},
-                  'x-consumer-disconnected-timeout': {'short': 'CDT', 'type': 'int'}};
+                  'x-consumer-disconnected-timeout': {'short': 'CDT', 'type': 'int'},
+                  'x-delayed-retry-type':    {'short': 'DRT', 'type': 'string'},
+                  'x-delayed-retry-min':     {'short': 'DRm', 'type': 'int'},
+                  'x-delayed-retry-max':     {'short': 'DRM', 'type': 'int'}};
 
 // Things that are like arguments that we format the same way in listings.
 var IMPLICIT_ARGS = {'durable':         {'short': 'D',    'type': 'boolean'},
