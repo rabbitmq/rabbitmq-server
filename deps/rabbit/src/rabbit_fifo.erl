@@ -1186,12 +1186,14 @@ overview(#?STATE{consumers = Cons,
     #{num_active_priorities := NumActivePriorities,
       detail := Detail} = rabbit_fifo_pq:overview(Messages),
 
-    {DelayedLen, NextDelayedAt} = case Delayed of
-                                      #delayed{len = DL, next = undefined} ->
-                                          {DL, undefined};
-                                      #delayed{len = DL, next = {Ts, _, _}} ->
-                                          {DL, Ts}
-                                  end,
+    {DelayedLen, NextDelayedAt, LastDelayedAt} =
+        case Delayed of
+            #delayed{len = 0} ->
+                {0, undefined, undefined};
+            #delayed{len = DL, next = {NextTs, _, _}, tree = Tree} ->
+                {{LastTs, _}, _} = gb_trees:largest(Tree),
+                {DL, NextTs, LastTs}
+        end,
     Overview = #{type => ?STATE,
                  config => Conf,
                  num_consumers => map_size(Cons),
@@ -1202,6 +1204,7 @@ overview(#?STATE{consumers = Cons,
                  num_ready_messages_return => MsgsRet,
                  num_delayed_messages => DelayedLen,
                  next_delayed_at => NextDelayedAt,
+                 last_delayed_at => LastDelayedAt,
                  num_messages => messages_total(State),
                  enqueue_message_bytes => EnqueueBytes,
                  checkout_message_bytes => CheckoutBytes,

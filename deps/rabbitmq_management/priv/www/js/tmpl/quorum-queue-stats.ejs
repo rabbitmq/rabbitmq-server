@@ -31,6 +31,18 @@
         <td><%= fmt_table_short(queue.messages_by_priority) %></td>
       </tr>
       <% } %>
+      <% if (queue.next_delayed_at) { %>
+      <tr>
+        <th>Next delayed retry</th>
+        <td><%= fmt_date(new Date(queue.next_delayed_at)) %></td>
+      </tr>
+      <% } %>
+      <% if (queue.last_delayed_at) { %>
+      <tr>
+        <th>Last delayed retry</th>
+        <td><%= fmt_date(new Date(queue.last_delayed_at)) %></td>
+      </tr>
+      <% } %>
       <% if (queue.hasOwnProperty('delivery_limit')) { %>
       <tr>
         <th>Delivery limit <span class="help" id="queue-delivery-limit"></th>
@@ -46,7 +58,6 @@
         <th class="horizontal">Total</th>
         <th class="horizontal">Ready</th>
         <th class="horizontal">Unacked</th>
-        <th class="horizontal">Active priorities</th>
         <th class="horizontal">Returned</th>
         <th class="horizontal">Delayed</th>
         <th class="horizontal">Dead-lettered
@@ -66,9 +77,6 @@
         </td>
         <td class="r">
           <%= fmt_num_thousands(queue.messages_unacknowledged) %>
-        </td>
-        <td class="r">
-          <%= fmt_num_thousands(queue.messages_active_priorities) %>
         </td>
         <td class="r">
           <%= fmt_num_thousands(queue.messages_ready_returned) %>
@@ -93,10 +101,6 @@
         </td>
         <td class="r">
           <%= fmt_bytes(queue.message_bytes_unacknowledged) %>
-        </td>
-        <td class="r">
-        </td>
-        <td class="r">
         </td>
         <td class="r">
         </td>

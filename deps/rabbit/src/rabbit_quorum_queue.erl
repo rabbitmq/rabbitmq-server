@@ -649,6 +649,12 @@ handle_tick(QName,
                                      [{messages_active_priorities, V} | Acc];
                                 (num_delayed_messages, V, Acc) ->
                                      [{messages_delayed, V} | Acc];
+                                (next_delayed_at, V, Acc)
+                                  when is_integer(V) ->
+                                     [{next_delayed_at, V} | Acc];
+                                (last_delayed_at, V, Acc)
+                                  when is_integer(V) ->
+                                     [{last_delayed_at, V} | Acc];
                                 (_, _, Acc) ->
                                      Acc
                              end, info(Q, Keys), Overview),
