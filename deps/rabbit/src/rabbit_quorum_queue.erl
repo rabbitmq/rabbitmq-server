@@ -557,7 +557,10 @@ capabilities() ->
                           <<"x-delivery-limit">>,
                           <<"x-message-ttl">>,
                           <<"x-queue-leader-locator">>,
-                          <<"x-consumer-disconnected-timeout">>],
+                          <<"x-consumer-disconnected-timeout">>,
+                          <<"x-delayed-retry-type">>,
+                          <<"x-delayed-retry-min">>,
+                          <<"x-delayed-retry-max">>],
       consumer_arguments => [<<"x-priority">>,
                              <<"x-consumer-timeout">>],
       server_named => false,
@@ -635,6 +638,8 @@ handle_tick(QName,
                                      [{messages_by_priority, V} | Acc];
                                 (num_active_priorities, V, Acc) ->
                                      [{messages_active_priorities, V} | Acc];
+                                (num_delayed_messages, V, Acc) ->
+                                     [{messages_delayed, V} | Acc];
                                 (_, _, Acc) ->
                                      Acc
                              end, info(Q, Keys), Overview),
@@ -660,7 +665,10 @@ handle_tick(QName,
                                                     unlimited;
                                                 Limit ->
                                                     Limit
-                                            end}
+                                            end},
+                           {delayed_retry, fmt_delayed_retry(
+                                             maps:get(delayed_retry, Cfg,
+                                                      disabled))}
                            | Infos0],
                   rabbit_core_metrics:queue_stats(QName, Infos),
                   case repair_amqqueue_nodes(Q) of
@@ -1892,6 +1900,12 @@ get_delayed_retry_config(Q) ->
 delayed_retry_type(<<"all">>) -> all;
 delayed_retry_type(<<"failed">>) -> failed;
 delayed_retry_type(<<"returned">>) -> returned.
+
+fmt_delayed_retry(disabled) ->
+    <<"disabled">>;
+fmt_delayed_retry({Type, Min, Max}) ->
+    iolist_to_binary(
+      io_lib:format("~ts (min: ~bms, max: ~bms)", [Type, Min, Max])).
 
 dead_letter_handler(Q, Overflow) ->
     Exchange = args_policy_lookup(<<"dead-letter-exchange">>, fun queue_arg_has_precedence/2, Q),
