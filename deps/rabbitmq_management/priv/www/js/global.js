@@ -1144,7 +1144,7 @@ class ApplicationListener {
   }
   onVhostChange(newVhost) { 
   }
-  onTabDeactivated(tab) {
+  onTabActivated(tab) {
 
   }
 }
