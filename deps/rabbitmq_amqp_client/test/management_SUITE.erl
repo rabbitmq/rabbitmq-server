@@ -162,7 +162,7 @@ all_management_operations(Config) ->
     ?assertNot(rpc(Config, amqqueue, is_auto_delete, [Q])),
     ?assertEqual(rabbit_quorum_queue, rpc(Config, amqqueue, get_type, [Q])),
 
-    TargetAddr1 = <<"/amq/queue/", QName/binary>>,
+    TargetAddr1 = rabbitmq_amqp_address:queue(QName),
     {ok, Sender1} = amqp10_client:attach_sender_link(Session, <<"sender 1">>, TargetAddr1),
     ok = wait_for_credit(Sender1),
     flush(credited),
@@ -176,7 +176,7 @@ all_management_operations(Config) ->
     ?assertEqual(ok, rabbitmq_amqp_client:bind_queue(LinkPair, QName, SourceExchange, BindingKey1, #{})),
     %% This operation should be idempotent.
     ?assertEqual(ok, rabbitmq_amqp_client:bind_queue(LinkPair, QName, SourceExchange, BindingKey1, #{})),
-    TargetAddr2 = <<"/exchange/", SourceExchange/binary, "/", RoutingKey1/binary>>,
+    TargetAddr2 = rabbitmq_amqp_address:exchange(SourceExchange, RoutingKey1),
 
     {ok, Sender2} = amqp10_client:attach_sender_link(Session, <<"sender 2">>, TargetAddr2),
     ok = wait_for_credit(Sender2),
@@ -208,7 +208,7 @@ all_management_operations(Config) ->
                            arguments = [{<<"x-📥"/utf8>>, longstr, <<"📮"/utf8>>}]},
                  Exchange),
 
-    TargetAddr3 = <<"/exchange/", XName/binary>>,
+    TargetAddr3 = rabbitmq_amqp_address:exchange(XName),
     SourceExchange = <<"amq.direct">>,
     ?assertEqual(ok, rabbitmq_amqp_client:bind_queue(LinkPair, QName, XName, <<"ignored">>, #{})),
     ?assertEqual(ok, rabbitmq_amqp_client:bind_queue(LinkPair, QName, XName, <<"ignored">>, #{})),
@@ -225,7 +225,7 @@ all_management_operations(Config) ->
     BindingArgs = #{<<" 😬 "/utf8>> => {utf8, <<" 😬 "/utf8>>}},
     ?assertEqual(ok, rabbitmq_amqp_client:bind_exchange(LinkPair, XName, SourceExchange, BindingKey2, BindingArgs)),
     ?assertEqual(ok, rabbitmq_amqp_client:bind_exchange(LinkPair, XName, SourceExchange, BindingKey2, BindingArgs)),
-    TargetAddr4 = <<"/exchange/", SourceExchange/binary, "/", RoutingKey2/binary>>,
+    TargetAddr4 = rabbitmq_amqp_address:exchange(SourceExchange, RoutingKey2),
 
     {ok, Sender4} = amqp10_client:attach_sender_link(Session, <<"sender 4">>, TargetAddr4),
     ok = wait_for_credit(Sender4),
@@ -322,7 +322,7 @@ queue_binding_args(Config) ->
                     <<"x-match">> => {utf8, <<"all">>}},
     ?assertEqual(ok, rabbitmq_amqp_client:bind_queue(LinkPair, QName, Exchange, BindingKey, BindingArgs)),
 
-    TargetAddr = <<"/exchange/amq.headers">>,
+    TargetAddr = rabbitmq_amqp_address:exchange(<<"amq.headers">>),
     {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, TargetAddr),
     ok = wait_for_credit(Sender),
     flush(credited),

@@ -606,7 +606,7 @@ rpc(RequesterNode, ResponderNode, Config) ->
     ok = rabbit_ct_broker_helpers:await_metadata_store_consistent(Config, ResponderNode),
     {ok, ReceiverResponder} = amqp10_client:attach_receiver_link(
                                 SessionResponder, <<"receiver responder">>,
-                                RequestQueue, unsettled),
+                                AddrRequestQueue, unsettled),
     {ok, RequestMsg} = amqp10_client:get_msg(ReceiverResponder),
     ?assertEqual(<<"request-1">>, amqp10_msg:body_bin(RequestMsg)),
 

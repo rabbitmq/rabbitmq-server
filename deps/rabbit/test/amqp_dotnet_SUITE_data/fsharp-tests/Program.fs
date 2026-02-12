@@ -588,7 +588,7 @@ module Test =
             attachEvent.Set() |> ignore)
 
         let sender = SenderLink(ac.Session, "sender",
-                                Target(Address = "/exchange/amq.fanout"), onAttached)
+                                Target(Address = "/exchanges/amq.fanout"), onAttached)
 
         if not (attachEvent.WaitOne(9000)) then failwith "Expected broker to reply with attach frame"
 

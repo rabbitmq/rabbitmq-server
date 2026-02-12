@@ -124,7 +124,7 @@ amqp_credit_single_grant(Config) ->
     OpnConf = connection_config(Config),
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
     {ok, Session} = amqp10_client:begin_session_sync(Connection),
-    Address = <<"/queue/", Stream/binary>>,
+    Address = <<"/queues/", Stream/binary>>,
     {ok, Receiver} = amqp10_client:attach_receiver_link(
                        Session, <<"test-receiver">>, Address, settled,
                        configuration, #{<<"rabbitmq:stream-offset-spec">> => <<"first">>}),
@@ -145,7 +145,7 @@ amqp_credit_multiple_grants(Config) ->
     OpnConf = connection_config(Config),
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
     {ok, Session} = amqp10_client:begin_session_sync(Connection),
-    Address = <<"/queue/", Stream/binary>>,
+    Address = <<"/queues/", Stream/binary>>,
     {ok, Receiver} = amqp10_client:attach_receiver_link(
                        Session, <<"test-receiver">>, Address, unsettled,
                        configuration, #{<<"rabbitmq:stream-offset-spec">> => <<"first">>}),
@@ -250,7 +250,7 @@ amqp_attach_sub_batch(Config) ->
     OpnConf = connection_config(Config),
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
     {ok, Session} = amqp10_client:begin_session_sync(Connection),
-    Address = <<"/queue/", Stream/binary>>,
+    Address = <<"/queues/", Stream/binary>>,
     {ok, Receiver} = amqp10_client:attach_receiver_link(
                        Session, <<"test-receiver">>, Address, settled, configuration,
                        %% Attach in the middle of an uncompresssed sub batch.
@@ -284,7 +284,7 @@ amqp_property_filter(Config) ->
     OpnConf = connection_config(Config),
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
     {ok, Session} = amqp10_client:begin_session_sync(Connection),
-    Address = <<"/queue/", Stream/binary>>,
+    Address = <<"/queues/", Stream/binary>>,
 
     AppPropsFilter = [{{utf8, <<"my key">>},
                        {utf8, <<"my value">>}}],
@@ -321,7 +321,7 @@ amqp_property_filter(Config) ->
 
 amqp_sql_filter(Config) ->
     Stream = atom_to_binary(?FUNCTION_NAME),
-    Address = <<"/queue/", Stream/binary>>,
+    Address = <<"/queues/", Stream/binary>>,
 
     AppProps1 = #'v1_0.application_properties'{content = [{{utf8, <<"key">>}, {byte, 1}}]},
     AppProps2 = #'v1_0.application_properties'{content = [{{utf8, <<"key">>}, {byte, 2}}]},
