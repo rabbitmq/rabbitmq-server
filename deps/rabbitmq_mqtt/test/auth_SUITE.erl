@@ -928,8 +928,8 @@ disconnect_with_delayed_will(ClientId, Config) ->
                 Config,
                 ClientId,
                 non_clean_sess_opts() ++
-                [{properties, #{'Session-Expiry-Interval' => 3}},
-                 {will_props, #{'Will-Delay-Interval' => 3}},
+                [{properties, #{'Session-Expiry-Interval' => 5}},
+                 {will_props, #{'Will-Delay-Interval' => 5}},
                  {will_topic, <<"my/topic">>},
                  {will_payload, <<"msg">>}]),
     {ok, _} = emqtt:connect(C),
