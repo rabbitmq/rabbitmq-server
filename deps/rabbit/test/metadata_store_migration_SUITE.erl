@@ -2,13 +2,14 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(metadata_store_migration_SUITE).
 
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include("amqqueue.hrl").
 
 -compile([nowarn_export_all, export_all]).
 -compile(export_all).
@@ -24,7 +25,8 @@ all() ->
 groups() ->
     [
      {khepri_migration, [], [
-                             from_mnesia_to_khepri
+                             from_mnesia_to_khepri,
+                             amqqueue_v1_mirrored_supervisor_migration
                             ]}
     ].
 
@@ -39,17 +41,20 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
-init_per_group(khepri_migration = Group, Config0) ->
+init_per_group(khepri_migration, Config0) ->
     rabbit_ct_helpers:set_config(Config0, [{metadata_store, mnesia},
                                             {rmq_nodes_count, 1},
-                                            {rmq_nodename_suffix, Group},
                                             {tcp_ports_base}]).
 
 end_per_group(_, Config) ->
     Config.
 
-init_per_testcase(_Testcase, Config) ->
-    rabbit_ct_helpers:run_steps(Config, rabbit_ct_broker_helpers:setup_steps() ++ rabbit_ct_client_helpers:setup_steps()).
+init_per_testcase(Testcase, Config) ->
+    Config1 = rabbit_ct_helpers:set_config(Config,
+                                           {rmq_nodename_suffix, Testcase}),
+    rabbit_ct_helpers:run_steps(Config1,
+                                rabbit_ct_broker_helpers:setup_steps()
+                                ++ rabbit_ct_client_helpers:setup_steps()).
 
 end_per_testcase(Testcase, Config) ->
     Config1 = rabbit_ct_helpers:run_steps(
@@ -165,4 +170,121 @@ from_mnesia_to_khepri(Config) ->
     ?assertEqual({ok, <<"test content">>}, file:read_file(PluginDataFile)),
 
     ok.
+
+%% Verify that amqqueue_v1 records (tuple size 19) embedded in
+%% mirrored_sup_childspec Mnesia records are upgraded to v2 (tuple size 21)
+%% during the Mnesia-to-Khepri migration.
+%%
+%% Such v1 records may still exist embedded if they were created in an old
+%% RabbitMQ version, where classic queues used the amqqueue_v1 record format.
+%% Migration to Khepri is a good opportunity to get rid of the old format.
+amqqueue_v1_mirrored_supervisor_migration(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(
+               Config, 0, ?MODULE,
+               amqqueue_v1_mirrored_supervisor_migration1, [Config]).
+
+%% Callback used by rabbit_db_msup:khepri_mirrored_supervisor_path/2
+%% to convert the mirrored supervisor child ID to a Khepri path.
+%% This mimics rabbit_federation_queue_link_sup_sup:id_to_khepri_path/1
+%% but is defined here so the test does not depend on the federation plugin.
+id_to_khepri_path(Id) when ?is_amqqueue(Id) ->
+    #resource{virtual_host = VHost, name = Name} = amqqueue:get_name(Id),
+    [queue, VHost, Name].
+
+amqqueue_v1_mirrored_supervisor_migration1(_Config) ->
+    QName = #resource{virtual_host = <<"/">>, kind = queue,
+                      name = <<"v1-test-queue">>},
+    V1Queue = make_v1_queue(QName),
+    19 = tuple_size(V1Queue),
+
+    %% Use this test module as the Group so that id_to_khepri_path/1
+    %% defined above is called during the migration, avoiding a
+    %% dependency on the federation plugin.
+    Group = ?MODULE,
+    ChildSpec = {V1Queue,
+                 {rabbit_federation_link_sup, start_link,
+                  [rabbit_federation_queue_link, V1Queue]},
+                 transient, infinity, supervisor,
+                 [rabbit_federation_link_sup]},
+    MSupRecord = {mirrored_sup_childspec,
+                  {Group, V1Queue},
+                  undefined,
+                  ChildSpec},
+
+    %% Insert the v1 record directly into the mirrored_sup_childspec
+    %% Mnesia table, simulating a leftover from a pre-3.8 installation.
+    {atomic, ok} = mnesia:transaction(
+                     fun() ->
+                             mnesia:write(mirrored_sup_childspec, MSupRecord, write)
+                     end),
+
+    %% Verify the record is in Mnesia.
+    {atomic, [MSupRecord]} =
+    mnesia:transaction(
+      fun() ->
+              mnesia:read(mirrored_sup_childspec, {Group, V1Queue})
+      end),
+
+    %% Enable Khepri. This triggers the Mnesia-to-Khepri migration.
+    %% Before the fix, this would crash with a function_clause error
+    %% in id_to_khepri_path/1 because the ?is_amqqueue guard expects
+    %% tuple size 21.
+    ok = rabbit_feature_flags:enable(khepri_db),
+
+    %% Compute the expected upgraded v2 record so we can look it up
+    %% in Khepri after migration.
+    V2Queue = rabbit_db_msup_m2k_converter:amqqueue_v1_to_v2(V1Queue),
+    ?assertEqual(21, tuple_size(V2Queue)),
+
+    %% Verify the record was migrated to Khepri with the v1 record
+    %% upgraded to v2.
+    Path = rabbit_db_msup:khepri_mirrored_supervisor_path(Group, V2Queue),
+    {ok, MigratedRecord} = rabbit_khepri:get(Path),
+
+    %% The migrated record should exist and contain a valid
+    %% mirrored_sup_childspec.
+    {mirrored_sup_childspec, {_, MigratedId}, _, _} = MigratedRecord,
+
+    %% The Id in the key must be a v2 amqqueue record (tuple size 21).
+    ?assert(?is_amqqueue(MigratedId)),
+    ?assertEqual(QName, amqqueue:get_name(MigratedId)),
+
+    passed.
+
+%% -------------------------------------------------------------------
+%% Helpers.
+%% -------------------------------------------------------------------
+
+%% Build an amqqueue_v1 record (tuple size 19)
+%% as it would have been stored on RabbitMQ 3.7.x or earlier,
+%% before the quorum_queue feature flag added the `type` and
+%% `type_state` fields in 3.8.0.
+-spec make_v1_queue(rabbit_amqqueue:name()) -> tuple().
+make_v1_queue(QName) ->
+    Policy = [{vhost, <<"/">>},
+              {name, <<"test-policy">>},
+              {pattern, <<"^v1-">>},
+              {'apply-to', <<"queues">>},
+              {definition, [{<<"federation-upstream-set">>, <<"all">>}]},
+              {priority, 0}],
+    {amqqueue,
+     QName,
+     true,           %% durable
+     false,          %% auto_delete
+     none,           %% exclusive_owner
+     [],             %% arguments
+     none,           %% pid
+     none,           %% slave_pids
+     none,           %% sync_slave_pids
+     none,           %% recoverable_slaves
+     Policy,         %% policy
+     undefined,      %% operator_policy
+     none,           %% gm_pids
+     none,           %% decorators
+     none,           %% state
+     0,              %% policy_version
+     [],             %% slave_pids_pending_shutdown
+     <<"/">>,        %% vhost
+     #{user => <<"guest">>}  %% options
+    }.
 
