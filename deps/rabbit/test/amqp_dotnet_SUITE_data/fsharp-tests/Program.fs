@@ -576,7 +576,7 @@ module Test =
     // to return a descriptive error since a body is mandatory according to the AMQP spec.
     let messageWithoutBody uri =
         use ac = connectAnon uri
-        let sender = SenderLink(ac.Session, "sender", "/exchange/amq.fanout")
+        let sender = SenderLink(ac.Session, "sender", "/exchanges/amq.fanout")
 
         use detachEvent = new AutoResetEvent(false)
         let mutable linkError : Error = null
