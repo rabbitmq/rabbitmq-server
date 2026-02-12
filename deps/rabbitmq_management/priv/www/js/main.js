@@ -1401,8 +1401,6 @@ function with_req(method, path, body, fun, on404fun) {
         location.reload();
         return;
     }
-
-    const full_page_404 = !on404fun
     var req = xmlHttpRequest();
     req.open(method, 'api' + path, true );
     var header = authorization_header();
@@ -1416,12 +1414,10 @@ function with_req(method, path, body, fun, on404fun) {
             if (ix != -1) {
                 outstanding_reqs.splice(ix, 1);
             }
-            if (check_bad_response(req, full_page_404)) {
+            if (check_bad_response(req, !on404fun, on404fun)) {
                 last_successful_connect = new Date();
                 fun(req);
-            } else if (req.status == 404) {
-                on404fun(JSON.parse(req.responseText))
-            }
+            } 
         }
     };
     outstanding_reqs.push(req);
@@ -1512,7 +1508,14 @@ function initiate_logout(oauth, error = "") {
     clear_cookie_value('auth');    
     renderWarningMessageInLoginStatus(oauth, error);
 }
-function check_bad_response(req, full_page_404) {
+/**
+ * Handle bad http response
+ * @param {*} req 
+ * @param {*} full_page_404 In case of 404, reload entire html page with the error message
+ * @param {*} on404fun In case of 404, call this function or else show a popup error message
+ * @returns true if there was no bad response
+ */
+function check_bad_response(req, full_page_404, on404fun) {
     // 1223 == 204 - see https://www.enhanceie.com/ie/bugs.asp
     // MSIE7 and 8 appear to do this in response to HTTP 204.
     if ((req.status >= 200 && req.status < 300) || req.status == 1223) {
@@ -1523,17 +1526,26 @@ function check_bad_response(req, full_page_404) {
         replace_content('main', html);
     }
     else if (req.status >= 400 && req.status <= 404) {
-        var reason = JSON.parse(req.responseText).reason;
-        if (typeof(reason) != 'string') reason = JSON.stringify(reason);
-
-        var error = JSON.parse(req.responseText).error;
-        if (typeof(error) != 'string') error = JSON.stringify(error);
-
-        if (error == 'bad_request' || error == 'not_found' || error == 'not_authorised' || error == 'not_authorized') {
+        let response = JSON.parse(req.responseText);
+        var error = response.error;
+        if (typeof(error) != 'string') {
+            error = JSON.stringify(error);
+        }
+        let reason = response.reason;
+        if (typeof(reason) != 'string') {
+            reason = JSON.stringify(reason);
+        }
+        if (    error == 'bad_request' || 
+                error == 'not_found'  || 
+                reason == 'Not Found' || 
+                error == 'not_authorised' || 
+                error == 'not_authorized') {
             if ((req.status == 401 || req.status == 403) && oauth.enabled) {
-              initiate_logout(oauth, reason);
+                initiate_logout(oauth, reason);
+            } else if (on404fun && (typeof on404fun === 'function') && req.status == 404) {
+                on404fun(JSON.parse(req.responseText));
             } else {
-              show_popup('warn', fmt_escape_html(reason));
+                show_popup('warn', fmt_escape_html(reason));
             }
         } else if (error == 'page_out_of_range') {
             var seconds = 60;
