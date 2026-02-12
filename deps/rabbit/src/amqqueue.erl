@@ -579,7 +579,7 @@ make_internal(Q = #amqqueue{options = Options}) when is_map(Options) ->
 make_internal(Q = #amqqueue{options = Options}, Owner)
   when is_map(Options) andalso is_record(Owner, resource) ->
     Q#amqqueue{options = maps:merge(Options, #{internal => true,
-                                              interna_owner => Owner})}.
+                                              internal_owner => Owner})}.
 
 fields() ->
     fields(?record_version).
