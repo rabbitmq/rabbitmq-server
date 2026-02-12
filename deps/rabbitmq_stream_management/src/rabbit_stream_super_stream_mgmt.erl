@@ -13,7 +13,10 @@
          web_ui/0]).
 -export([init/2,
          content_types_accepted/2,
+         content_types_provided/2,
          is_authorized/2,
+%         delete_resource/2,
+         to_json/2,
          resource_exists/2,
          allowed_methods/2,
          accept_content/2]).
@@ -25,7 +28,7 @@
 -define(DEFAULT_RPC_TIMEOUT, 30_000).
 
 dispatcher() ->
-    [{"/stream/super-streams/:vhost/:name", ?MODULE, []}].
+    [{"/stream/super-streams/:vhost/:queue", ?MODULE, []}].
 
 web_ui() ->
     [].
@@ -40,11 +43,15 @@ init(Req, _State) ->
 variances(Req, Context) ->
     {[<<"accept-encoding">>, <<"origin">>], Req, Context}.
 
+content_types_provided(ReqData, Context) ->
+   {rabbit_mgmt_util:responder_map(to_json), ReqData, Context}.
+
 content_types_accepted(ReqData, Context) ->
     {[{{<<"application">>, <<"json">>, '*'}, accept_content}], ReqData, Context}.
 
 allowed_methods(ReqData, Context) ->
-    {[<<"PUT">>, <<"OPTIONS">>], ReqData, Context}.
+    {[<<"HEAD">>, <<"GET">>, <<"PUT">>, <<"OPTIONS">>], ReqData, Context}.
+%    {[<<"HEAD">>, <<"GET">>, <<"PUT">>, <<"DELETE">>, <<"OPTIONS">>], ReqData, Context}.
 
 resource_exists(ReqData, Context) ->
     %% just checking that the vhost requested exists
@@ -59,7 +66,7 @@ is_authorized(ReqData, Context) ->
 accept_content(ReqData0, #context{user = #user{username = ActingUser}} = Context) ->
     %% TODO validate arguments?
     VHost = rabbit_mgmt_util:id(vhost, ReqData0),
-    Name = rabbit_mgmt_util:id(name, ReqData0),
+    Name = rabbit_mgmt_util:id(queue, ReqData0),
     rabbit_mgmt_util:with_decode(
       [], ReqData0, Context,
       fun([], BodyMap, ReqData) ->
@@ -92,6 +99,18 @@ accept_content(ReqData0, #context{user = #user{username = ActingUser}} = Context
                       Error
               end
       end).
+
+%delete_resource(ReqData, Context) ->
+    %% We need to retrieve manually if-unused and if-empty, as the HTTP API uses '-'
+    %% while the record uses '_'
+
+    %% TODO use IfUnused and IfEmpty in rabbit_stream_mgmt_util:delete_super_stream
+    %% IfUnused = <<"true">> =:= rabbit_mgmt_util:qs_val(<<"if-unused">>, ReqData),
+    %% IfEmpty = <<"true">> =:= rabbit_mgmt_util:qs_val(<<"if-empty">>, ReqData),
+%    rabbit_stream_mgmt_util:delete_super_stream(ReqData, Context).
+
+to_json(ReqData, Context) ->
+    rabbit_mgmt_util:reply(rabbit_stream_mgmt_util:find_super_stream(ReqData), ReqData, Context).
 
 %%-------------------------------------------------------------------
 get_node(Props) ->
