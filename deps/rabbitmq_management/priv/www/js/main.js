@@ -70,9 +70,6 @@ function renderWarningMessageInLoginStatus(oauth, message) {
 
 function dispatcher_add(fun) {
     dispatcher_modules.push(fun);
-    if (dispatcher_modules.length == extension_count) {
-        start_app();
-    }
 }
 
 function dispatcher() {
@@ -237,9 +234,7 @@ function update_vhosts() {
 
 function setup_extensions() {
     var extensions = JSON.parse(sync_get('/extensions'));
-    extension_count = 0;
     var javascript_files = [];
-
     for (var i in extensions) {
         var extension = extensions[i];
         if ($.isPlainObject(extension)) {
@@ -252,20 +247,21 @@ function setup_extensions() {
                 } else {
                     javascript_files.push(extension.javascript);
                 }
-            } 
-            if (extension.hasOwnProperty('css')) {
-                dynamic_css_load(extension.css);                
             }
-            extension_count++;
+            if (extension.hasOwnProperty('css')) {
+                dynamic_css_load(extension.css);
+            }
         }
     }
-    // Load JavaScript files sequentially to ensure dependencies are available
+    // Load JavaScript files sequentially; start_app() runs when all have loaded and registered
     load_javascript_files_sequentially(javascript_files, 0);
 }
 
 function load_javascript_files_sequentially(files, index) {
     if (index >= files.length) {
-        return; // All files loaded
+        console.info("All extension are loaded. Starting app...");
+        start_app();
+        return;
     }
     console.debug(`Loading extension ${files[index]} ...`);
     dynamic_javascript_file_load(files[index], function() {
