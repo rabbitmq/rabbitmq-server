@@ -17,6 +17,11 @@
 -export([guess_number_of_cpu_cores/0, msacc_stats/1]).
 -export([get_gc_info/1, gc_all_processes/0]).
 -export([get_erl_path/0]).
+<<<<<<< HEAD
+=======
+-export([ulimit/0]).
+-export([crypto_lib_version/0]).
+>>>>>>> 3fb94c6e8 (HTTP API: export crypto lib version)
 
 -spec guess_number_of_cpu_cores() -> pos_integer().
 guess_number_of_cpu_cores() ->
@@ -63,3 +68,34 @@ get_erl_path() ->
         _ ->
             filename:join(BinDir, "erl")
     end.
+<<<<<<< HEAD
+=======
+
+-spec crypto_lib_version() -> binary().
+crypto_lib_version() ->
+    [{_, _, Version}] = crypto:info_lib(),
+    rabbit_data_coercion:to_binary(Version).
+
+%% To increase the number of file descriptors: on Windows set ERL_MAX_PORTS
+%% environment variable, on Linux set `ulimit -n`.
+ulimit() ->
+    IOStats = case erlang:system_info(check_io) of
+        [Val | _] when is_list(Val) -> Val;
+        Val when is_list(Val)       -> Val;
+        _Other                      -> []
+    end,
+    case proplists:get_value(max_fds, IOStats) of
+        MaxFds when is_integer(MaxFds) andalso MaxFds > 1 ->
+            case os:type() of
+                {win32, _OsName} ->
+                    %% On Windows max_fds is twice the number of open files:
+                    %%   https://github.com/erlang/otp/blob/64c8ae9966a720b9127f6d5a7e1fb4f9aeaca9b6/erts/emulator/sys/win32/sys.c#L2773-L2782
+                    MaxFds div 2;
+                _Any ->
+                    %% For other operating systems trust Erlang.
+                    MaxFds
+            end;
+        _ ->
+            unknown
+    end.
+>>>>>>> 3fb94c6e8 (HTTP API: export crypto lib version)

@@ -29,7 +29,8 @@
                      auth_mechanisms, applications, contexts, log_files,
                      db_dir, config_files, net_ticktime, enabled_plugins,
                      mem_calculation_strategy, ra_open_file_metrics,
-                     rabbitmq_version, erlang_version, erlang_full_version]).
+                     rabbitmq_version, erlang_version, erlang_full_version,
+                     crypto_lib_version]).
 
 -define(TEN_MINUTES_AS_SECONDS, 600).
 
@@ -275,7 +276,9 @@ i(rabbitmq_version, State) ->
 i(erlang_version, State) ->
     {State, list_to_binary(rabbit_misc:otp_release())};
 i(erlang_full_version, State) ->
-    {State, list_to_binary(rabbit_misc:otp_system_version())}.
+    {State, list_to_binary(rabbit_misc:otp_system_version())};
+i(crypto_lib_version, State) ->
+    {State, rabbit_misc:crypto_lib_version()}.
 
 resource_alarm_set(Source) ->
     lists:member({{resource_limit, Source, node()},[]},

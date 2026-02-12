@@ -27,7 +27,8 @@ groups() ->
     [
      {single_node, [], [
                         nodes_list_includes_version_fields,
-                        version_fields_match_expected_values
+                        version_fields_match_expected_values,
+                        overview_includes_crypto_lib_version
                        ]}
     ].
 
@@ -71,7 +72,8 @@ end_per_testcase(Testcase, Config) ->
 nodes_list_includes_version_fields(Config) ->
     eventually(
       ?_assertMatch(
-         [#{rabbitmq_version := _, erlang_version := _, erlang_full_version := _}],
+         [#{rabbitmq_version := _, erlang_version := _, erlang_full_version := _,
+            crypto_lib_version := _}],
          http_get(Config, "/nodes")),
       1000, 30),
     passed.
@@ -83,15 +85,28 @@ version_fields_match_expected_values(Config) ->
         rpc(Config, rabbit_misc, otp_release, [])),
     ExpectedErlangFullVersion = list_to_binary(
         rpc(Config, rabbit_misc, otp_system_version, [])),
+    [{_, _, CryptoVersionStr}] = rpc(Config, crypto, info_lib, []),
+    ExpectedCryptoLibVersion = rabbit_data_coercion:to_binary(CryptoVersionStr),
 
     [Node] = http_get(Config, "/nodes"),
     ?assertEqual(ExpectedRmqVersion, maps:get(rabbitmq_version, Node)),
     ?assertEqual(ExpectedErlangVersion, maps:get(erlang_version, Node)),
     ?assertEqual(ExpectedErlangFullVersion, maps:get(erlang_full_version, Node)),
+    ?assertEqual(ExpectedCryptoLibVersion, maps:get(crypto_lib_version, Node)),
 
     Path = "/nodes/" ++ binary_to_list(maps:get(name, Node)),
     NodeInfo = http_get(Config, Path, ?OK),
     ?assertEqual(ExpectedRmqVersion, maps:get(rabbitmq_version, NodeInfo)),
     ?assertEqual(ExpectedErlangVersion, maps:get(erlang_version, NodeInfo)),
     ?assertEqual(ExpectedErlangFullVersion, maps:get(erlang_full_version, NodeInfo)),
+    ?assertEqual(ExpectedCryptoLibVersion, maps:get(crypto_lib_version, NodeInfo)),
+    passed.
+
+overview_includes_crypto_lib_version(Config) ->
+    [{_, _, CryptoVersionStr}] = rpc(Config, crypto, info_lib, []),
+    ExpectedCryptoLibVersion = rabbit_data_coercion:to_binary(CryptoVersionStr),
+
+    Overview = http_get(Config, "/overview"),
+    ?assertEqual(ExpectedCryptoLibVersion,
+                 maps:get(crypto_lib_version, Overview)),
     passed.
