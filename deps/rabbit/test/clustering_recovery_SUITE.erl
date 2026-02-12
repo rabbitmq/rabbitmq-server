@@ -48,10 +48,13 @@ groups() ->
      {khepri_store, [], [
                          {clustered_3_nodes, [],
                           [{cluster_size_3, [], [
+                            {cluster_size_3_sequential, [], [
                                                  force_standalone_boot,
                                                  force_standalone_boot_and_restart,
                                                  force_standalone_boot_and_restart_with_quorum_queues,
-                                                 recover_after_partition_with_leader,
+                                                 recover_after_partition_with_leader
+                                                ]},
+                            {cluster_size_3_parallel, [parallel], [
                                                  autodelete_transient_queue_after_partition_recovery_1,
                                                  autodelete_durable_queue_after_partition_recovery_1,
                                                  autodelete_transient_queue_after_partition_recovery_2,
@@ -65,9 +68,10 @@ groups() ->
                                                  exclusive_transient_queue_after_node_loss,
                                                  exclusive_durable_queue_after_node_loss
                                                 ]}
+                                              ]}
                           ]},
                          {clustered_5_nodes, [],
-                          [{cluster_size_5, [], [
+                          [{cluster_size_5, [parallel], [
                                                  rolling_restart,
                                                  rolling_kill_restart,
                                                  forget_down_node
@@ -116,7 +120,9 @@ init_per_group(clustered_5_nodes, Config) ->
 init_per_group(cluster_size_3, Config) ->
     rabbit_ct_helpers:set_config(Config, [{rmq_nodes_count, 3}]);
 init_per_group(cluster_size_5, Config) ->
-    rabbit_ct_helpers:set_config(Config, [{rmq_nodes_count, 5}]).
+    rabbit_ct_helpers:set_config(Config, [{rmq_nodes_count, 5}]);
+init_per_group(_, Config) ->
+    Config.
 
 end_per_group(_, Config) ->
     Config.
