@@ -18,6 +18,7 @@
 -export([get_gc_info/1, gc_all_processes/0]).
 -export([get_erl_path/0]).
 -export([ulimit/0]).
+-export([crypto_lib_version/0]).
 
 -spec guess_number_of_cpu_cores() -> pos_integer().
 guess_number_of_cpu_cores() ->
@@ -64,6 +65,11 @@ get_erl_path() ->
         _ ->
             filename:join(BinDir, "erl")
     end.
+
+-spec crypto_lib_version() -> binary().
+crypto_lib_version() ->
+    [{_, _, Version}] = crypto:info_lib(),
+    rabbit_data_coercion:to_binary(Version).
 
 %% To increase the number of file descriptors: on Windows set ERL_MAX_PORTS
 %% environment variable, on Linux set `ulimit -n`.

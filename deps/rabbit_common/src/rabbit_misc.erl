@@ -60,7 +60,7 @@
 -export([os_cmd/1, pwsh_cmd/1, win32_cmd/2]).
 -export([is_os_process_alive/1]).
 -export([version/0, otp_release/0, platform_and_version/0, otp_system_version/0,
-         rabbitmq_and_erlang_versions/0, which_applications/0]).
+         crypto_lib_version/0, rabbitmq_and_erlang_versions/0, which_applications/0]).
 -export([sequence_error/1]).
 -export([check_expiry/1]).
 -export([base64url/1]).
@@ -222,6 +222,7 @@
 -spec version() -> string().
 -spec otp_release() -> string().
 -spec otp_system_version() -> string().
+-spec crypto_lib_version() -> binary().
 -spec platform_and_version() -> string().
 -spec rabbitmq_and_erlang_versions() -> {string(), string()}.
 -spec which_applications() -> [{atom(), string(), string()}].
@@ -1061,6 +1062,9 @@ platform_and_version() ->
 
 otp_system_version() ->
     string:strip(erlang:system_info(system_version), both, $\n).
+
+crypto_lib_version() ->
+    rabbit_runtime:crypto_lib_version().
 
 rabbitmq_and_erlang_versions() ->
   {version(), otp_release()}.
