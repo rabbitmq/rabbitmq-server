@@ -402,9 +402,11 @@ invalid_param(Config, Value) -> invalid_param(Config, Value, none).
 valid_param(Config, Value) -> valid_param(Config, Value, none).
 
 with_amqp091_ch(Config, Fun) ->
-    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0, <<"/">>),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
     Fun(Ch),
-    rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch),
+    rabbit_ct_client_helpers:close_channel(Ch),
+    rabbit_ct_client_helpers:close_connection(Conn),
     ok.
 
 amqp091_publish(Ch, X, Key, Payload) when is_binary(Payload) ->
