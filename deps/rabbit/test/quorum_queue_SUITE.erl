@@ -221,7 +221,14 @@ all_tests() ->
      consumer_timeout,
      consumer_disconnected_timeout_queue_arg,
      consumer_disconnected_timeout_policy,
-     consumer_disconnected_timeout_global
+     consumer_disconnected_timeout_global,
+     delayed_retry_disabled,
+     delayed_retry_all,
+     delayed_retry_failed,
+     delayed_retry_returned,
+     delayed_retry_backoff,
+     delayed_retry_explicit_delivery_time,
+     delayed_retry_counts_towards_limit
     ].
 
 memory_tests() ->
@@ -5699,6 +5706,311 @@ count_online_nodes(Server, VHost, Q0) ->
     QNameRes = rabbit_misc:r(VHost, queue, Q0),
     Info = rpc:call(Server, rabbit_quorum_queue, infos, [QNameRes, [online]]),
     length(proplists:get_value(online, Info, [])).
+
+%% Delayed retry tests
+
+delayed_retry_disabled(Config) ->
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    publish(Ch, QQ),
+    wait_for_messages(Config, [[QQ, <<"1">>, <<"1">>, <<"0">>]]),
+    DeliveryTag = basic_get_tag(Ch, QQ, false),
+    amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
+                                        multiple = false,
+                                        requeue = true}),
+    %% Message should be immediately available (not delayed)
+    wait_for_messages(Config, [[QQ, <<"1">>, <<"1">>, <<"0">>]]),
+    %% Should be able to get it right away
+    _ = basic_get_tag(Ch, QQ, true),
+    wait_for_messages(Config, [[QQ, <<"0">>, <<"0">>, <<"0">>]]),
+    ok.
+
+delayed_retry_all(Config) ->
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                  {<<"x-delayed-retry-type">>, longstr, <<"all">>},
+                                  {<<"x-delayed-retry-min">>, long, 2000}])),
+    RaName = ra_name(QQ),
+    publish(Ch, QQ),
+    wait_for_messages(Config, [[QQ, <<"1">>, <<"1">>, <<"0">>]]),
+    DeliveryTag = basic_get_tag(Ch, QQ, false),
+    amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
+                                        multiple = false,
+                                        requeue = true}),
+    %% Message should be delayed - not ready
+    timer:sleep(500),
+    wait_for_messages(Config, [[QQ, <<"1">>, <<"0">>, <<"0">>]]),
+    %% Verify delayed message count in overview
+    Overview1 = machine_overview({RaName, Server}),
+    ?assertEqual(1, maps:get(num_delayed_messages, Overview1)),
+    ?assert(is_integer(maps:get(next_delayed_at, Overview1))),
+    %% After delay expires, message becomes ready
+    timer:sleep(2000),
+    wait_for_messages(Config, [[QQ, <<"1">>, <<"1">>, <<"0">>]]),
+    %% Delayed count should be 0 now
+    Overview2 = machine_overview({RaName, Server}),
+    ?assertEqual(0, maps:get(num_delayed_messages, Overview2)),
+    ?assertEqual(undefined, maps:get(next_delayed_at, Overview2)),
+    _ = basic_get_tag(Ch, QQ, true),
+    wait_for_messages(Config, [[QQ, <<"0">>, <<"0">>, <<"0">>]]),
+    ok.
+
+delayed_retry_failed(Config) ->
+    %% Test that only failed deliveries are delayed with type=failed
+    {_Connection, Session, LinkPair} = Init = init(Config),
+    QQ = ?config(queue_name, Config),
+    Addr = rabbitmq_amqp_address:queue(QQ),
+    {ok, _} = rabbitmq_amqp_client:declare_queue(
+                LinkPair, QQ,
+                #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>},
+                                 <<"x-delayed-retry-type">> => {utf8, <<"failed">>},
+                                 <<"x-delayed-retry-min">> => {ulong, 2000}}}),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Addr),
+    wait_for_credit(Sender),
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"t1">>, <<"m1">>)),
+    ok = wait_for_accepts(1),
+    ok = detach_link_sync(Sender),
+
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session, <<"receiver">>, Addr, unsettled),
+    ok = amqp10_client:flow_link_credit(Receiver, 1, never, false),
+    M1 = receive {amqp10_msg, Receiver, Msg1} -> Msg1
+         after 5000 -> ct:fail({missing_msg, ?LINE})
+         end,
+    %% Return with delivery_failed=false - should NOT be delayed
+    ok = amqp10_client_session:disposition(Receiver,
+                                           amqp10_msg:delivery_id(M1),
+                                           amqp10_msg:delivery_id(M1),
+                                           true,
+                                           {modified, false, false, #{}}),
+    %% Message should be immediately ready
+    ok = amqp10_client:flow_link_credit(Receiver, 1, never, false),
+    M2 = receive {amqp10_msg, Receiver, Msg2} -> Msg2
+         after 1000 -> ct:fail({missing_msg, ?LINE})
+         end,
+    %% Now return with delivery_failed=true - should be delayed
+    ok = amqp10_client_session:disposition(Receiver,
+                                           amqp10_msg:delivery_id(M2),
+                                           amqp10_msg:delivery_id(M2),
+                                           true,
+                                           {modified, true, false, #{}}),
+    %% Message should NOT be immediately available
+    ok = amqp10_client:flow_link_credit(Receiver, 1, never, false),
+    receive {amqp10_msg, Receiver, _} ->
+                ct:fail(message_should_be_delayed)
+    after 500 -> ok
+    end,
+    ok = detach_link_sync(Receiver),
+    ok = close(Init).
+
+delayed_retry_returned(Config) ->
+    %% Test that only non-failed returns are delayed with type=returned
+    {_Connection, Session, LinkPair} = Init = init(Config),
+    QQ = ?config(queue_name, Config),
+    Addr = rabbitmq_amqp_address:queue(QQ),
+    {ok, _} = rabbitmq_amqp_client:declare_queue(
+                LinkPair, QQ,
+                #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>},
+                                 <<"x-delayed-retry-type">> => {utf8, <<"returned">>},
+                                 <<"x-delayed-retry-min">> => {ulong, 2000}}}),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Addr),
+    wait_for_credit(Sender),
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"t1">>, <<"m1">>)),
+    ok = wait_for_accepts(1),
+    ok = detach_link_sync(Sender),
+
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session, <<"receiver">>, Addr, unsettled),
+    ok = amqp10_client:flow_link_credit(Receiver, 1, never, false),
+    M1 = receive {amqp10_msg, Receiver, Msg1} -> Msg1
+         after 5000 -> ct:fail({missing_msg, ?LINE})
+         end,
+    %% Return with delivery_failed=true - should NOT be delayed
+    ok = amqp10_client_session:disposition(Receiver,
+                                           amqp10_msg:delivery_id(M1),
+                                           amqp10_msg:delivery_id(M1),
+                                           true,
+                                           {modified, true, false, #{}}),
+    %% Message should be immediately ready
+    ok = amqp10_client:flow_link_credit(Receiver, 1, never, false),
+    M2 = receive {amqp10_msg, Receiver, Msg2} -> Msg2
+         after 1000 -> ct:fail({missing_msg, ?LINE})
+         end,
+    %% Now return with delivery_failed=false - should be delayed
+    ok = amqp10_client_session:disposition(Receiver,
+                                           amqp10_msg:delivery_id(M2),
+                                           amqp10_msg:delivery_id(M2),
+                                           true,
+                                           {modified, false, false, #{}}),
+    %% Message should NOT be immediately available
+    ok = amqp10_client:flow_link_credit(Receiver, 1, never, false),
+    receive {amqp10_msg, Receiver, _} ->
+                ct:fail(message_should_be_delayed)
+    after 500 -> ok
+    end,
+    ok = detach_link_sync(Receiver),
+    ok = close(Init).
+
+delayed_retry_backoff(Config) ->
+    %% Test that delay increases with delivery count (linear backoff)
+    {_Connection, Session, LinkPair} = Init = init(Config),
+    QQ = ?config(queue_name, Config),
+    Addr = rabbitmq_amqp_address:queue(QQ),
+    {ok, _} = rabbitmq_amqp_client:declare_queue(
+                LinkPair, QQ,
+                #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>},
+                                 <<"x-delayed-retry-type">> => {utf8, <<"all">>},
+                                 <<"x-delayed-retry-min">> => {ulong, 1000},
+                                 <<"x-delayed-retry-max">> => {ulong, 2500}}}),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Addr),
+    wait_for_credit(Sender),
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"t1">>, <<"m1">>)),
+    ok = wait_for_accepts(1),
+    ok = detach_link_sync(Sender),
+
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session, <<"receiver">>, Addr, unsettled),
+    %% First delivery - delivery_count=0, so delay = 1000 * 1 = 1000ms
+    ok = amqp10_client:flow_link_credit(Receiver, 1, never, false),
+    M1 = receive {amqp10_msg, Receiver, Msg1} -> Msg1
+         after 5000 -> ct:fail({missing_msg, ?LINE})
+         end,
+    T1 = erlang:system_time(millisecond),
+    ok = amqp10_client_session:disposition(Receiver,
+                                           amqp10_msg:delivery_id(M1),
+                                           amqp10_msg:delivery_id(M1),
+                                           true,
+                                           {modified, true, false, #{}}),
+    %% Wait for message to become ready (should be ~1000ms)
+    ok = amqp10_client:flow_link_credit(Receiver, 1, never, false),
+    M2 = receive {amqp10_msg, Receiver, Msg2} -> Msg2
+         after 3000 -> ct:fail({missing_msg, ?LINE})
+         end,
+    T2 = erlang:system_time(millisecond),
+    Delay1 = T2 - T1,
+    %% Should be at least 900ms (allowing some timing slack)
+    ?assert(Delay1 >= 900),
+    %% Second return - delivery_count=1, so delay = 1000 * 2 = 2000ms
+    ok = amqp10_client_session:disposition(Receiver,
+                                           amqp10_msg:delivery_id(M2),
+                                           amqp10_msg:delivery_id(M2),
+                                           true,
+                                           {modified, true, false, #{}}),
+    ok = amqp10_client:flow_link_credit(Receiver, 1, never, false),
+    M3 = receive {amqp10_msg, Receiver, Msg3} -> Msg3
+         after 4000 -> ct:fail({missing_msg, ?LINE})
+         end,
+    T3 = erlang:system_time(millisecond),
+    Delay2 = T3 - T2,
+    %% Should be at least 1900ms
+    ?assert(Delay2 >= 1900),
+    %% Third return - delivery_count=2, so delay = 1000 * 3 = 3000ms, clamped to max 2500ms
+    ok = amqp10_client_session:disposition(Receiver,
+                                           amqp10_msg:delivery_id(M3),
+                                           amqp10_msg:delivery_id(M3),
+                                           true,
+                                           {modified, true, false, #{}}),
+    ok = amqp10_client:flow_link_credit(Receiver, 1, never, false),
+    _M4 = receive {amqp10_msg, Receiver, Msg4} -> Msg4
+          after 5000 -> ct:fail({missing_msg, ?LINE})
+          end,
+    T4 = erlang:system_time(millisecond),
+    Delay3 = T4 - T3,
+    %% Should be clamped to max_delay (2500ms), so at least 2400ms but less than 2800ms
+    ?assert(Delay3 >= 2400),
+    ?assert(Delay3 < 2800),
+    ok = detach_link_sync(Receiver),
+    ok = close(Init).
+
+delayed_retry_explicit_delivery_time(Config) ->
+    %% Test that x-opt-delivery-time annotation delays message regardless of config
+    {_Connection, Session, LinkPair} = Init = init(Config),
+    QQ = ?config(queue_name, Config),
+    Addr = rabbitmq_amqp_address:queue(QQ),
+    %% No delayed_retry config - disabled by default
+    {ok, _} = rabbitmq_amqp_client:declare_queue(
+                LinkPair, QQ,
+                #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>}}}),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Addr),
+    wait_for_credit(Sender),
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"t1">>, <<"m1">>)),
+    ok = wait_for_accepts(1),
+    ok = detach_link_sync(Sender),
+
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session, <<"receiver">>, Addr, unsettled),
+    ok = amqp10_client:flow_link_credit(Receiver, 1, never, false),
+    M1 = receive {amqp10_msg, Receiver, Msg1} -> Msg1
+         after 5000 -> ct:fail({missing_msg, ?LINE})
+         end,
+    %% Return with x-opt-delivery-time 2 seconds in the future
+    Now = erlang:system_time(millisecond),
+    DeliveryTime = Now + 2000,
+    ok = amqp10_client_session:disposition(Receiver,
+                                           amqp10_msg:delivery_id(M1),
+                                           amqp10_msg:delivery_id(M1),
+                                           true,
+                                           {modified, false, false,
+                                            #{<<"x-opt-delivery-time">> => DeliveryTime}}),
+    %% Message should NOT be immediately available
+    ok = amqp10_client:flow_link_credit(Receiver, 1, never, false),
+    receive {amqp10_msg, Receiver, _} ->
+                ct:fail(message_should_be_delayed)
+    after 500 -> ok
+    end,
+    %% After delay, message should be available
+    timer:sleep(2000),
+    ok = amqp10_client:flow_link_credit(Receiver, 1, never, false),
+    receive {amqp10_msg, Receiver, _M2} -> ok
+    after 1000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    ok = detach_link_sync(Receiver),
+    ok = close(Init).
+
+delayed_retry_counts_towards_limit(Config) ->
+    %% Test that delayed messages count towards max-length limit.
+    %% reject_publish allows one overshoot, so with max-length=2 we can have 3
+    %% messages before rejection kicks in.
+    [Server | _] = Servers =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    RaName = ra_name(QQ),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                  {<<"x-delayed-retry-type">>, longstr, <<"all">>},
+                                  {<<"x-delayed-retry-min">>, long, 10000},
+                                  {<<"x-max-length">>, long, 2},
+                                  {<<"x-overflow">>, longstr, <<"reject-publish">>}])),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+    %% Publish first message
+    ok = publish_confirm(Ch, QQ),
+    wait_for_messages(Config, [[QQ, <<"1">>, <<"1">>, <<"0">>]]),
+    %% Get and nack to put it in delayed state
+    DeliveryTag1 = basic_get_tag(Ch, QQ, false),
+    amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag1,
+                                        multiple = false,
+                                        requeue = true}),
+    %% Message is delayed (not ready) but still counts towards limit
+    wait_for_messages(Config, [[QQ, <<"1">>, <<"0">>, <<"0">>]]),
+    %% Publish second message - should succeed (limit is 2)
+    ok = publish_confirm(Ch, QQ),
+    wait_for_messages(Config, [[QQ, <<"2">>, <<"1">>, <<"0">>]]),
+    %% Publish third message - allowed due to overshoot
+    ok = publish_confirm(Ch, QQ),
+    %% Wait for the queue to process and send reject_publish notification
+    wait_for_messages_total(Servers, RaName, 3),
+    %% Fourth message should be rejected (limit exceeded + overshoot exhausted)
+    fail = publish_confirm(Ch, QQ),
+    ok.
+
+%% Helper functions
 
 publish_many(Ch, Queue, Count) ->
     [publish(Ch, Queue) || _ <- lists:seq(1, Count)].

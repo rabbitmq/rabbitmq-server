@@ -31,6 +31,8 @@
          handle_ra_event/4,
          untracked_enqueue/2,
          purge/1,
+         retry_delayed/2,
+         assign_deferred/3,
          update_machine_state/2,
          pending_size/1,
          num_cached_segments/1,
@@ -498,6 +500,48 @@ purge(Server) ->
         Err ->
             Err
     end.
+
+%% @doc Retry delayed messages immediately by adding them to the return queue.
+%% @param Server the Ra server id.
+%% @param Mode `all' to retry all delayed messages, or a non-negative integer
+%%   to retry at most that many messages (in order of scheduled ready time).
+%% @returns `{ok, NumRetried}' on success.
+-spec retry_delayed(ra:server_id(), all | non_neg_integer()) ->
+    {ok, non_neg_integer()} | {error | timeout, term()}.
+retry_delayed(Server, Mode) when Mode =:= all orelse
+                                 (is_integer(Mode) andalso Mode >= 0) ->
+    Cmd = rabbit_fifo:make_delayed({retry, Mode}),
+    case ra:process_command(Server, Cmd, ?COMMAND_TIMEOUT) of
+        {ok, {ok, Num}, _} ->
+            {ok, Num};
+        Err ->
+            Err
+    end.
+
+%% @doc Assign deferred messages by token to a consumer.
+%% @param ConsumerTag the tag uniquely identifying the consumer.
+%% @param Tokens list of deferral tokens (from x-opt-deferral-token).
+%% @param State the {@module} state
+%% @returns `{ok, NumAssigned}' on success,
+%%   `{partial, NumAssigned, NotFoundTokens}' if some tokens not found,
+%%   `{error, Reason}' on failure.
+-spec assign_deferred(rabbit_types:ctag(), [binary()], state()) ->
+    {{ok, non_neg_integer()} |
+     {partial, non_neg_integer(), [binary()]} |
+     {error, term()},
+     state()}.
+assign_deferred(ConsumerTag, [_|_] = Tokens, State0) ->
+    ConsumerKey = consumer_key(ConsumerTag, State0),
+    ServerId = pick_server(State0),
+    Cmd = rabbit_fifo:make_delayed({assign_deferred, ConsumerKey, Tokens}),
+    case ra:process_command(ServerId, Cmd, ?COMMAND_TIMEOUT) of
+        {ok, Reply, _} ->
+            {Reply, State0};
+        Err ->
+            {Err, State0}
+    end;
+assign_deferred(_ConsumerTag, [], State) ->
+    {{ok, 0}, State}.
 
 -spec pending_size(state()) -> non_neg_integer().
 pending_size(#state{pending = Pend}) ->
