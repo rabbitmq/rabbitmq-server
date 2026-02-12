@@ -55,10 +55,6 @@ copy_to_khepri(
     rabbit_db_m2k_converter:with_correlation_id(
       fun(CorrId) ->
               Extra = #{async => CorrId},
-              ?LOG_DEBUG(
-                 "Mnesia->Khepri data copy: [~0p] path: ~0p corr: ~0p",
-                 [Table, Path, CorrId],
-                 #{domain => ?KMM_M2K_TABLE_COPY_LOG_DOMAIN}),
               rabbit_khepri:put(Path, Record, Extra)
       end, State);
 copy_to_khepri(Table, Record, State) ->
@@ -84,10 +80,6 @@ delete_from_khepri(rabbit_queue = Table, Key, State) ->
     rabbit_db_m2k_converter:with_correlation_id(
       fun(CorrId) ->
               Extra = #{async => CorrId},
-              ?LOG_DEBUG(
-                 "Mnesia->Khepri data delete: [~0p] path: ~0p corr: ~0p",
-                 [Table, Path, CorrId],
-                 #{domain => ?KMM_M2K_TABLE_COPY_LOG_DOMAIN}),
               rabbit_khepri:delete(Path, Extra)
       end, State).
 
