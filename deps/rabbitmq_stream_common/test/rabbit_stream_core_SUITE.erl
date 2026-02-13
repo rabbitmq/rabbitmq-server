@@ -119,6 +119,17 @@ roundtrip(_Config) ->
                      [<<"stream1">>, <<"stream2">>, <<"stream3">>], [<<"bk1">>, <<"bk2">>, <<"bk3">>],
                      #{}}}),
     test_roundtrip({request, 99, {delete_super_stream, <<"super_stream_name">>}}),
+    [test_roundtrip({request, 99,
+                     {resolve_offset_spec, <<"stream_name">>, Spec, #{}}})
+     || Spec
+            <- [last,
+                next,
+                first,
+                65432,
+                {timestamp, erlang:system_time(millisecond)}]],
+    test_roundtrip({request, 99,
+                    {resolve_offset_spec, <<"stream_name">>, first,
+                     #{<<"filter.0">> => <<"value0">>}}}),
 
     %% RESPONSES
     [test_roundtrip({response, 99, {Tag, 53}})
@@ -136,6 +147,7 @@ roundtrip(_Config) ->
 
     test_roundtrip({response, 99, {query_publisher_sequence, 98, 1234}}),
     test_roundtrip({response, 99, {query_offset, 1, 12}}),
+    test_roundtrip({response, 99, {resolve_offset_spec, 1, 12345}}),
 
     test_roundtrip({response, 99,
                     {peer_properties, 1, #{<<"k1">> => <<"v1">>}}}),
