@@ -51,6 +51,7 @@ to_json(ReqData, Context = #context{user = User = #user{tags = Tags}}) ->
                  {node_tags,                 node_tags()},
                  {erlang_version,            erlang_version()},
                  {erlang_full_version,       erlang_full_version()},
+                 {crypto_lib_version,        rabbit_runtime:crypto_lib_version()},
                  {disable_stats,                 rabbit_mgmt_util:disable_stats(ReqData)},
                  {default_queue_type,            rabbit_queue_type:default_alias()},
                  {is_op_policy_updating_enabled, not rabbit_mgmt_features:is_op_policy_updating_disabled()},
