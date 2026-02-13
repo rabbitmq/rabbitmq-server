@@ -846,7 +846,7 @@ check_internal(Q, Username) ->
                             rabbit_misc:protocol_error(
                               resource_locked,
                               "Cannot delete protected ~ts. It was "
-                              "declared as an protected and can be deleted only by deleting the owner entity: ~ts",
+                              "declared as a protected queue and can be deleted only by deleting the owner entity: ~ts",
                               [rabbit_misc:rs(QueueName), rabbit_misc:rs(IOwner)])
                     end
             end;

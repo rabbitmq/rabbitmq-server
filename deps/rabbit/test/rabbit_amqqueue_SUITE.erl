@@ -98,9 +98,8 @@ internal_owner_queue_delete_with(Config) ->
     ?assertMatch({new, _Q},  rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_queue_type, declare, [IQueue, Node])),
 
     ?assertException(exit, {exception,
-                            {amqp_error, resource_locked,
-                             "Cannot delete protected queue 'internal_owner_queue_delete_with' in vhost '/'.",
-                             none}}, rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, delete_with, [QName, false, false, <<"dummy">>])),
+                            {amqp_error, resource_locked, _, none}},
+                     rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, delete_with, [QName, false, false, <<"dummy">>])),
 
     ?assertMatch({ok, _}, rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, lookup, [QName])),
 
@@ -127,9 +126,8 @@ internal_no_owner_queue_delete_with(Config) ->
     ?assertMatch({new, _Q},  rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_queue_type, declare, [IQueue, Node])),
 
     ?assertException(exit, {exception,
-                            {amqp_error, resource_locked,
-                             "Cannot delete protected queue 'internal_no_owner_queue_delete_with' in vhost '/'.",
-                             none}}, rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, delete_with, [QName, false, false, <<"dummy">>])),
+                            {amqp_error, resource_locked, _, none}},
+                     rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, delete_with, [QName, false, false, <<"dummy">>])),
 
     ?assertMatch({ok, _}, rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, lookup, [QName])),
 

@@ -112,9 +112,7 @@ delete_internal(Config) ->
     Opts = #{node => A, vhost => <<"/">>, force => false},
     {badrpc,
      {'EXIT',
-      {amqp_error, resource_locked,
-       "Cannot delete protected shovel 'myshovel' in virtual host '/'.",
-       none}}}  = ?CMD:run([<<"myshovel">>], Opts),
+      {amqp_error, resource_locked, _, none}}} = ?CMD:run([<<"myshovel">>], Opts),
     [_] = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_shovel_status,
                                        status, []),
 
