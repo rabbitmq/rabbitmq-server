@@ -1729,6 +1729,7 @@ repair_metadata_nodes(Config, UpdateFun) ->
     ok.
 
 recovery_checkpoint(Config) ->
+    check_quorum_queues_v8_compat(Config),
     %% Verify that recovery checkpoints are written on shutdown and used for
     %% faster recovery when the Ra member is restarted. The recovery checkpoint
     %% feature allows Ra to recover from a checkpoint instead of replaying the
@@ -5986,6 +5987,7 @@ count_online_nodes(Server, VHost, Q0) ->
 %% Delayed retry tests
 
 delayed_retry_disabled(Config) ->
+    check_quorum_queues_v8_compat(Config),
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
@@ -6005,6 +6007,7 @@ delayed_retry_disabled(Config) ->
     ok.
 
 delayed_retry_all(Config) ->
+    check_quorum_queues_v8_compat(Config),
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
@@ -6038,6 +6041,7 @@ delayed_retry_all(Config) ->
     ok.
 
 delayed_retry_failed(Config) ->
+    check_quorum_queues_v8_compat(Config),
     %% Test that only failed deliveries are delayed with type=failed
     {_Connection, Session, LinkPair} = Init = init(Config),
     QQ = ?config(queue_name, Config),
@@ -6086,6 +6090,7 @@ delayed_retry_failed(Config) ->
     ok = close(Init).
 
 delayed_retry_returned(Config) ->
+    check_quorum_queues_v8_compat(Config),
     %% Test that only non-failed returns are delayed with type=returned
     {_Connection, Session, LinkPair} = Init = init(Config),
     QQ = ?config(queue_name, Config),
@@ -6134,6 +6139,7 @@ delayed_retry_returned(Config) ->
     ok = close(Init).
 
 delayed_retry_backoff(Config) ->
+    check_quorum_queues_v8_compat(Config),
     %% Test that delay increases with delivery count (linear backoff)
     {_Connection, Session, LinkPair} = Init = init(Config),
     QQ = ?config(queue_name, Config),
@@ -6205,6 +6211,7 @@ delayed_retry_backoff(Config) ->
     ok = close(Init).
 
 delayed_retry_explicit_delivery_time(Config) ->
+    check_quorum_queues_v8_compat(Config),
     %% Test that x-opt-delivery-time annotation delays message regardless of config
     {_Connection, Session, LinkPair} = Init = init(Config),
     QQ = ?config(queue_name, Config),
@@ -6250,6 +6257,7 @@ delayed_retry_explicit_delivery_time(Config) ->
     ok = close(Init).
 
 delayed_retry_counts_towards_limit(Config) ->
+    check_quorum_queues_v8_compat(Config),
     %% Test that delayed messages count towards max-length limit.
     %% reject_publish allows one overshoot, so with max-length=2 we can have 3
     %% messages before rejection kicks in.
