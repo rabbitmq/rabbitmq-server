@@ -1001,13 +1001,16 @@ convert_v7_to_v8(#{system_time := Ts} = _Meta, StateV7) ->
                             rabbit_fifo_pq:in(?DEFAULT_PRIORITY, I, Acc)
                     end, Pq0, No),
     StateV8 = StateV7,
-    StateV8#?STATE{cfg = Cfg,
+    StateV8#?STATE{cfg = Cfg#cfg{consumer_disconnected_timeout = 60_000,
+                                 delayed_retry = disabled},
                    reclaimable_bytes = 0,
                    messages = Pq,
                    consumers = Cons,
                    waiting_consumers = Waiting,
                    next_consumer_timeout = Timeout,
-                   last_command_time = Ts}.
+                   last_command_time = Ts,
+                   delayed = #delayed{}
+                  }.
 
 purge_node(Meta, Node, State, Effects) ->
     lists:foldl(fun(Pid, {S0, E0}) ->
