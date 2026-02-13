@@ -647,9 +647,6 @@ var disable_stats;               // ...disable all stats, management only mode
 // Extensions write to this, the dispatcher maker reads it
 var dispatcher_modules = [];
 
-// We need to know when all extension script files have loaded
-var extension_count;
-
 // The dispatcher needs access to the Sammy app
 var app;
 
@@ -934,7 +931,8 @@ QUEUE_TYPE["default"] = {
         "operator_policy_arguments": "classic-queue-operator-policy-arguments",
         "list"   : "classic-queue-list",
         "stats"  : "classic-queue-stats",
-        "node_details" : "classic-queue-node-details"
+        "node_details" : "classic-queue-node-details",
+        "get_message" : "classic-queue-get-message"
     }
 };
 
@@ -952,7 +950,8 @@ QUEUE_TYPE["classic"] = {
         "operator_policy_arguments": "classic-queue-operator-policy-arguments",
         "list"   : "classic-queue-list",
         "stats"  : "classic-queue-stats",
-        "node_details" : "classic-queue-node-details"
+        "node_details" : "classic-queue-node-details",
+        "get_message" : "classic-queue-get-message"
     }
 };
 
@@ -973,7 +972,8 @@ QUEUE_TYPE["quorum"] = {
         "operator_policy_arguments": "quorum-queue-operator-policy-arguments",
         "list"   : "quorum-queue-list",
         "stats": "quorum-queue-stats",
-        "node_details" : "quorum-queue-node-details"
+        "node_details" : "quorum-queue-node-details",
+        "get_message" : "classic-queue-get-message"
     }
 };
 
@@ -1110,3 +1110,92 @@ var BINARY_STATISTICS = {
            {name: 'System', colour: 'system',
             keys: [['other',               'other']]}]]
 };
+
+
+// Which postprocesor functions we need to call from postprocess() function call
+var current_postprocessors = new Map();
+function registerPostProcessor(name, postProcessorFun) {
+  if (current_postprocessors.has(name)) {
+    return false;
+  }
+  current_postprocessors.set(name, postProcessorFun);
+}
+function clear_postprocessors() {
+  current_postprocessors.clear(); 
+}
+function is_postprocessor_registered(name) {
+  return current_postprocessors.has(name);
+}
+function unregisterPostProcessor(name) {
+  current_postprocessors.delete(name);
+} 
+function invokeRegisteredPostProcessors() {
+  for (const [name, processorFun] of current_postprocessors) {
+    console.debug(`Calling postprocessor ${name}`);
+    try {
+      processorFun();
+    } catch (err) {
+      console.error(`PostProcessor ${name} failed due to ${err}`);
+    }
+  }
+}
+
+class ApplicationListener {
+  onRefresh() {    
+  }
+  onVhostChange(newVhost) { 
+  }
+  onTabActivated(tab) {
+
+  }
+}
+var applicationListeners = new Map();
+function registerApplicationListener(name, listener) {
+  if (name == null || (typeof name === 'string' && name.trim() === '')) {
+    return false;
+  }
+  if (listener == null || typeof listener !== 'object') {
+    return false;
+  }
+  if (applicationListeners.has(name)) {
+    return false;
+  }
+  applicationListeners.set(name, listener);
+  return true;
+}
+function unregisterApplicationListener(name) {
+  applicationListeners.delete(name);
+}
+function notifyOnRefresh() {
+  for (const [_name, listener] of applicationListeners) {
+    if (listener && typeof listener.onRefresh === 'function') {
+      try {
+        listener.onRefresh();
+      } catch (err) {
+        console.error(`ApplicationListener failed due to ${err}`);
+      }
+    }
+  }
+}
+function notifyOnVhostChange(newVhost) {
+  for (const [_name, listener] of applicationListeners) {
+    if (listener && typeof listener.onVhostChange === 'function') {
+      try {
+        listener.onVhostChange(newVhost);
+      } catch (err) {
+        console.error(`ApplicationListener failed due to ${err}`);
+      }
+    }
+  }
+}
+function notifyActivatedTab(tab) {
+  for (const [_name, listener] of applicationListeners) {
+    if (listener && typeof listener.onTabActivated === 'function') {
+      try {
+        listener.onTabActivated(tab);
+      } catch (err) {
+        console.error(`ApplicationListener failed due to ${err}`);
+      }
+    }
+  }
+}
