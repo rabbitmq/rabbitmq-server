@@ -24,7 +24,7 @@
 
 -rabbit_deprecated_feature(
    {queue_master_locator,
-    #{deprecation_phase => permitted_by_default,
+    #{deprecation_phase => denied_by_default,
       messages =>
       #{when_permitted =>
         "queue-master-locator is deprecated. "
