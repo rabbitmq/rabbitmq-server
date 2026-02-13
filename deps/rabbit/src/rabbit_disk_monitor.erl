@@ -15,11 +15,6 @@
 %% watermark (configurable either as an absolute value or
 %% relative to the memory limit).
 %%
-%% Disk monitoring is done by shelling out to /usr/bin/df
-%% instead of related built-in OTP functions because currently
-%% this is the most reliable way of determining free disk space
-%% for the partition our internal database is on.
-%%
 %% Update interval is dynamically calculated assuming disk
 %% space is being filled at FAST_RATE.
 
@@ -31,25 +26,39 @@
          terminate/2, code_change/3]).
 
 -export([get_disk_free_limit/0, set_disk_free_limit/1,
+         set_disk_free_limit/2,
          get_min_check_interval/0, set_min_check_interval/1,
          get_max_check_interval/0, set_max_check_interval/1,
-         get_disk_free/0, set_enabled/1]).
+         get_disk_free/0, get_mount_free/0, set_enabled/1]).
 
 -define(SERVER, ?MODULE).
 -define(ETS_NAME, ?MODULE).
+-define(MOUNT_ETS_NAME, rabbit_disk_monitor_per_mount).
 -define(DEFAULT_MIN_DISK_CHECK_INTERVAL, 100).
 -define(DEFAULT_MAX_DISK_CHECK_INTERVAL, 10000).
 -define(DEFAULT_DISK_FREE_LIMIT, 50000000).
-%% 250MB/s i.e. 250kB/ms
--define(FAST_RATE, (250 * 1000)).
+
+-record(mount,
+        {%% name set in configuration
+         name :: binary(),
+         %% number set in configuration, used to order the disks in the UI
+         precedence :: integer(),
+         %% minimum bytes available
+         limit :: non_neg_integer(),
+         %% detected available disk space in bytes
+         available = 'NaN' :: non_neg_integer() | 'NaN',
+         %% set of queue types which should be blocked if the limit is exceeded
+         queue_types :: sets:set(rabbit_queue_type:queue_type())}).
 
 -record(state, {
-          %% monitor partition on which this directory resides
+          %% monitor partition on which the data directory resides
           dir,
           %% configured limit in bytes
           limit,
           %% last known free disk space amount in bytes
           actual,
+          %% extra file systems to monitor mapped to the queue types to
+          mounts = #{} :: mounts(),
           %% minimum check interval
           min_interval,
           %% maximum check interval
@@ -65,16 +74,25 @@
           %% on start-up
           retries,
           %% Interval between retries
-          interval,
-          %% Operating system in use
-          os,
-          %% Port running sh to execute df commands
-          port
+          interval
 }).
 
 %%----------------------------------------------------------------------------
 
 -type disk_free_limit() :: integer() | {'absolute', integer()} | string() | {'mem_relative', float() | integer()}.
+
+-type mounts() :: #{file:filename() => #mount{}}.
+
+%%----------------------------------------------------------------------------
+
+%% This needs to wait until the recovery phase so that queue types have a
+%% chance to register themselves.
+-rabbit_boot_step({monitor_mounts,
+                   [{description, "monitor per-queue-type mounts"},
+                    {mfa,         {gen_server, call,
+                                   [?MODULE, monitor_mounts]}},
+                    {requires,    recovery},
+                    {enables,     routing_ready}]}).
 
 %%----------------------------------------------------------------------------
 %% Public API
@@ -87,6 +105,11 @@ get_disk_free_limit() ->
 -spec set_disk_free_limit(disk_free_limit()) -> 'ok'.
 set_disk_free_limit(Limit) ->
     gen_server:call(?MODULE, {set_disk_free_limit, Limit}).
+
+-spec set_disk_free_limit(MountName :: binary(), integer()) -> 'ok'.
+set_disk_free_limit(MountName, Limit)
+  when is_binary(MountName) andalso is_integer(Limit) ->
+    gen_server:call(?MODULE, {set_disk_free_limit, MountName, Limit}).
 
 -spec get_min_check_interval() -> integer().
 get_min_check_interval() ->
@@ -108,6 +131,28 @@ set_max_check_interval(Interval) ->
 get_disk_free() ->
     safe_ets_lookup(disk_free, 'NaN').
 
+-spec get_mount_free() ->
+    [#{name := binary(),
+       available := non_neg_integer() | 'NaN',
+       limit := pos_integer()}].
+get_mount_free() ->
+    Ms0 = try
+              ets:tab2list(?MOUNT_ETS_NAME)
+          catch
+              error:badarg ->
+                  []
+          end,
+    Ms = lists:sort(
+           fun(#mount{precedence = A}, #mount{precedence = B}) ->
+                   %% ascending
+                   A < B
+           end, Ms0),
+    [#{name => Name,
+       available => Available,
+       limit => Limit} || #mount{name = Name,
+                                 available = Available,
+                                 limit = Limit} <- Ms].
+
 -spec set_enabled(string()) -> 'ok'.
 set_enabled(Enabled) ->
     gen_server:call(?MODULE, {set_enabled, Enabled}).
@@ -121,31 +166,26 @@ start_link(Args) ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [Args], []).
 
 init([Limit]) ->
-    Dir = dir(),
     {ok, Retries} = application:get_env(rabbit, disk_monitor_failure_retries),
     {ok, Interval} = application:get_env(rabbit, disk_monitor_failure_retry_interval),
+    MinInterval = application:get_env(rabbit, disk_monitor_min_interval,
+                                      ?DEFAULT_MIN_DISK_CHECK_INTERVAL),
+    MaxInterval = application:get_env(rabbit, disk_monitor_max_interval,
+                                      ?DEFAULT_MAX_DISK_CHECK_INTERVAL),
     ?ETS_NAME = ets:new(?ETS_NAME, [protected, set, named_table]),
-    State0 = #state{dir          = Dir,
-                    alarmed      = false,
+    ?MOUNT_ETS_NAME = ets:new(?MOUNT_ETS_NAME, [protected, set, named_table,
+                                                {keypos, #mount.name}]),
+    State0 = #state{alarmed      = false,
                     enabled      = true,
                     limit        = Limit,
                     retries      = Retries,
                     interval     = Interval},
-    State1 = set_min_check_interval(?DEFAULT_MIN_DISK_CHECK_INTERVAL, State0),
-    State2 = set_max_check_interval(?DEFAULT_MAX_DISK_CHECK_INTERVAL, State1),
+    State1 = set_min_check_interval(MinInterval, State0),
+    State2 = set_max_check_interval(MaxInterval, State1),
 
-    OS = os:type(),
-    Port = case OS of
-               {unix, _} ->
-                   start_portprogram();
-               {win32, _OSname} ->
-                   not_used
-           end,
-    State3 = State2#state{port=Port, os=OS},
+    State3 = enable(State2),
 
-    State4 = enable(State3),
-
-    {ok, State4}.
+    {ok, State3}.
 
 handle_call({set_disk_free_limit, _}, _From, #state{enabled = false} = State) ->
     ?LOG_INFO("Cannot set disk free limit: "
@@ -154,6 +194,23 @@ handle_call({set_disk_free_limit, _}, _From, #state{enabled = false} = State) ->
 
 handle_call({set_disk_free_limit, Limit}, _From, State) ->
     {reply, ok, set_disk_limits(State, Limit)};
+
+handle_call({set_disk_free_limit, Name, Limit}, _From,
+            #state{mounts = Mounts0} = State) ->
+    MatchingMount = lists:search(
+                      fun({_Path, #mount{name = N}}) ->
+                              Name =:= N
+                      end, maps:to_list(Mounts0)),
+    case MatchingMount of
+        {value, {Path, Mount}} ->
+            ?LOG_INFO("Updated disk free limit of mount '~ts'", [Name]),
+            Mounts = Mounts0#{Path := Mount#mount{limit = Limit}},
+            {reply, ok, State#state{mounts = Mounts}};
+        false ->
+            ?LOG_WARNING("Cannot set disk free limit for mount '~ts' since "
+                         "the name does not match any known mounts.", [Name]),
+            {reply, ok, State}
+    end;
 
 handle_call(get_max_check_interval, _From, State) ->
     {reply, State#state.max_interval, State};
@@ -184,6 +241,15 @@ handle_call({set_enabled, _Enabled = false}, _From, State = #state{enabled = fal
   ?LOG_INFO("Free disk space monitor was already disabled"),
   {reply, ok, State#state{enabled = false}};
 
+handle_call(monitor_mounts, _From, State) ->
+    case State of
+        #state{enabled = true} ->
+            State1 = State#state{mounts = mounts()},
+            {reply, ok, internal_update(State1)};
+        #state{enabled = false} ->
+            {reply, ok, State}
+    end;
+
 handle_call(_Request, _From, State) ->
     {noreply, State}.
 
@@ -210,43 +276,6 @@ code_change(_OldVsn, State, _Extra) ->
 %% Internal functions
 %%----------------------------------------------------------------------------
 
-start_portprogram() ->
-    Args = ["-s", "rabbit_disk_monitor"],
-    Opts = [stream, stderr_to_stdout, {args, Args}],
-    erlang:open_port({spawn_executable, "/bin/sh"}, Opts).
-
-run_port_cmd(Cmd0, Port) ->
-    %% Insert a carriage return, ^M or ASCII 13, after the command,
-    %% to indicate end of output
-    Cmd1 = io_lib:format("~ts < /dev/null; echo \"\^M\"~n", [Cmd0]),
-    Cmd2 = rabbit_data_coercion:to_utf8_binary(Cmd1),
-    Port ! {self(), {command, [Cmd2, 10]}}, % The 10 at the end is a newline
-    get_reply(Port, []).
-
-get_reply(Port, O) ->
-    receive
-        {Port, {data, N}} ->
-            case newline(N, O) of
-                {ok, Str} ->
-                    Str;
-                {more, Acc} ->
-                    get_reply(Port, Acc)
-            end;
-        {'EXIT', Port, Reason} ->
-            exit({port_died, Reason})
-    end.
-
-% Character 13 is ^M or carriage return
-newline([13|_], B) ->
-    {ok, lists:reverse(B)};
-newline([H|T], B) ->
-    newline(T, [H|B]);
-newline([], B) ->
-    {more, B}.
-
-find_cmd(Cmd) ->
-    os:find_executable(Cmd).
-
 safe_ets_lookup(Key, Default) ->
     try
         case ets:lookup(?ETS_NAME, Key) of
@@ -259,9 +288,6 @@ safe_ets_lookup(Key, Default) ->
         error:badarg ->
             Default
     end.
-
-% the partition / drive containing this directory will be monitored
-dir() -> rabbit:data_dir().
 
 set_min_check_interval(MinInterval, State) ->
     ets:insert(?ETS_NAME, {min_check_interval, MinInterval}),
@@ -279,125 +305,114 @@ set_disk_limits(State, Limit0) ->
     ets:insert(?ETS_NAME, {disk_free_limit, Limit}),
     internal_update(State1).
 
-internal_update(State = #state{limit   = Limit,
-                               dir     = Dir,
-                               alarmed = Alarmed,
-                               os      = OS,
-                               port    = Port}) ->
-    CurrentFree = get_disk_free(Dir, OS, Port),
+internal_update(#state{limit = DataDirLimit,
+                       dir = Dir,
+                       mounts = Mounts,
+                       alarmed = Alarmed} = State) ->
+    DiskFree = get_disk_free(State),
+    DataDirFree = maps:get(Dir, DiskFree, 'NaN'),
     %% note: 'NaN' is considered to be less than a number
-    NewAlarmed = CurrentFree < Limit,
+    NewAlarmed = DataDirFree < DataDirLimit,
     case {Alarmed, NewAlarmed} of
         {false, true} ->
-            emit_update_info("insufficient", CurrentFree, Limit),
+            emit_update_info("insufficient", DataDirFree, DataDirLimit),
             rabbit_alarm:set_alarm({{resource_limit, disk, node()}, []});
         {true, false} ->
-            emit_update_info("sufficient", CurrentFree, Limit),
+            emit_update_info("sufficient", DataDirFree, DataDirLimit),
             rabbit_alarm:clear_alarm({resource_limit, disk, node()});
         _ ->
             ok
     end,
-    ets:insert(?ETS_NAME, {disk_free, CurrentFree}),
-    State#state{alarmed = NewAlarmed, actual = CurrentFree}.
+    ets:insert(?ETS_NAME, {disk_free, DataDirFree}),
 
-get_disk_free(Dir, {unix, Sun}, Port)
-  when Sun =:= sunos; Sun =:= sunos4; Sun =:= solaris ->
-    Df = find_cmd("df"),
-    parse_free_unix(run_port_cmd(Df ++ " -k '" ++ Dir ++ "'", Port));
-get_disk_free(Dir, {unix, _}, Port) ->
-    Df = find_cmd("df"),
-    parse_free_unix(run_port_cmd(Df ++ " -kP '" ++ Dir ++ "'", Port));
-get_disk_free(Dir, {win32, _}, not_used) ->
-    % Dir:
-    % "c:/Users/username/AppData/Roaming/RabbitMQ/db/rabbit2@username-z01-mnesia"
-    case win32_get_drive_letter(Dir) of
-        error ->
-            ?LOG_WARNING("Expected the mnesia directory absolute "
-                               "path to start with a drive letter like "
-                               "'C:'. The path is: '~tp'", [Dir]),
-            {ok, Free} = win32_get_disk_free_dir(Dir),
-            Free;
-        DriveLetter ->
-            % Note: yes, "$\s" is the $char sequence for an ASCII space
-            F = fun([D, $:, $\\, $\s | _]) when D =:= DriveLetter ->
-                        true;
-                   (_) -> false
-                end,
-            % Note: we can use os_mon_sysinfo:get_disk_info/1 after the following is fixed:
-            % https://github.com/erlang/otp/issues/6156
-            try
-                  % Note: DriveInfoStr is in this format
-                  % "C:\\ DRIVE_FIXED 720441434112 1013310287872 720441434112\n"
-                  Lines = os_mon_sysinfo:get_disk_info(),
-                  [DriveInfoStr] = lists:filter(F, Lines),
-                  [DriveLetter, $:, $\\, $\s | DriveInfo] = DriveInfoStr,
+    NewMounts = maps:map(
+                 fun(Path, M) ->
+                         Available = maps:get(Path, DiskFree, 'NaN'),
+                         M#mount{available = Available}
+                 end, Mounts),
+    ets:insert(?MOUNT_ETS_NAME, [M || _Path := M <- NewMounts]),
 
-                  % https://docs.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getdiskfreespaceexa
-                  % lib/os_mon/c_src/win32sysinfo.c:
-                  % if (fpGetDiskFreeSpaceEx(drive,&availbytes,&totbytes,&totbytesfree)){
-                  %     sprintf(answer,"%s DRIVE_FIXED %I64u %I64u %I64u\n",drive,availbytes,totbytes,totbytesfree);
-                  ["DRIVE_FIXED", FreeBytesAvailableToCallerStr,
-                  _TotalNumberOfBytesStr, _TotalNumberOfFreeBytesStr] = string:tokens(DriveInfo, " "),
-                  list_to_integer(FreeBytesAvailableToCallerStr)
-            catch _:{timeout, _}:_ ->
-                    %% could not compute the result
-                    'NaN';
-                  _:Reason:_ ->
-                    ?LOG_WARNING("Free disk space monitoring failed to retrieve the amount of available space: ~p", [Reason]),
-                    %% could not compute the result
-                    'NaN'
-             end
-    end.
+    AlarmedMs = alarmed_mounts(Mounts),
+    AlarmedQTs = alarmed_queue_types(Mounts),
+    NewAlarmedMs = alarmed_mounts(NewMounts),
+    NewAlarmedQTs = alarmed_queue_types(NewMounts),
 
-parse_free_unix(Str) ->
-    case string:tokens(Str, "\n") of
-        [_, S | _] -> case string:tokens(S, " \t") of
-                          [_, _, _, Free | _] -> list_to_integer(Free) * 1024;
-                          _                   -> exit({unparseable, Str})
-                      end;
-        _          -> exit({unparseable, Str})
-    end.
+    NewlyClearedMs = sets:subtract(AlarmedMs, NewAlarmedMs),
+    NewlyClearedQTs = sets:subtract(AlarmedQTs, NewAlarmedQTs),
+    NewlyAlarmedMs = sets:subtract(NewAlarmedMs, AlarmedMs),
+    NewlyAlarmedQTs = sets:subtract(NewAlarmedQTs, AlarmedQTs),
 
-win32_get_drive_letter([DriveLetter, $:, $/ | _]) when (DriveLetter >= $a andalso DriveLetter =< $z) ->
-    % Note: os_mon_sysinfo returns drives with uppercase letters, so uppercase it here
-    DriveLetter - 32;
-win32_get_drive_letter([DriveLetter, $:, $/ | _]) when (DriveLetter >= $A andalso DriveLetter =< $Z) ->
-    DriveLetter;
-win32_get_drive_letter(_) ->
-    error.
+    lists:foreach(
+      fun(Path) ->
+              #mount{name = Name,
+                     limit = Limit,
+                     available = Available} = maps:get(Path, NewMounts),
+              emit_update_info(Name, "insufficient", Available, Limit)
+      end, lists:sort(sets:to_list(NewlyAlarmedMs))),
+    lists:foreach(
+      fun(QT) ->
+              Alarm = {resource_limit, {disk, QT}, node()},
+              rabbit_alarm:set_alarm({Alarm, []})
+      end, lists:sort(sets:to_list(NewlyAlarmedQTs))),
+    lists:foreach(
+      fun(Path) ->
+              #mount{name = Name,
+                     limit = Limit,
+                     available = Available} = maps:get(Path, NewMounts),
+              emit_update_info(Name, "sufficient", Available, Limit)
+      end, lists:sort(sets:to_list(NewlyClearedMs))),
+    lists:foreach(
+      fun(QT) ->
+              Alarm = {resource_limit, {disk, QT}, node()},
+              rabbit_alarm:clear_alarm(Alarm)
+      end, lists:sort(sets:to_list(NewlyClearedQTs))),
 
-win32_get_disk_free_dir(Dir) ->
-    %% On Windows, the Win32 API enforces a limit of 260 characters
-    %% (MAX_PATH). If we call `dir` with a path longer than that, it
-    %% fails with "File not found". Starting with Windows 10 version
-    %% 1607, this limit was removed, but the administrator has to
-    %% configure that.
-    %%
-    %% NTFS supports paths up to 32767 characters. Therefore, paths
-    %% longer than 260 characters exist but they are "inaccessible" to
-    %% `dir`.
-    %%
-    %% A workaround is to tell the Win32 API to not parse a path and
-    %% just pass it raw to the underlying filesystem. To do this, the
-    %% path must be prepended with "\\?\". That's what we do here.
-    %%
-    %% However, the underlying filesystem may not support forward
-    %% slashes transparently, as the Win32 API does. Therefore, we
-    %% convert all forward slashes to backslashes.
-    %%
-    %% See the following page to learn more about this:
-    %% https://ss64.com/nt/syntax-filenames.html
-    RawDir = "\\\\?\\" ++ string:replace(Dir, "/", "\\", all),
-    case run_os_cmd("dir /-C /W \"" ++ RawDir ++ "\"") of
-        {error, Error} ->
-            exit({unparseable, Error});
-        CommandResult ->
-            LastLine0 = lists:last(string:tokens(CommandResult, "\r\n")),
-            LastLine1 = lists:reverse(LastLine0),
-            {match, [Free]} = re:run(LastLine1, "(\\d+)",
-                                     [{capture, all_but_first, list}]),
-            {ok, list_to_integer(lists:reverse(Free))}
-    end.
+    State#state{alarmed = NewAlarmed,
+                actual = DataDirFree,
+                mounts = NewMounts}.
+
+emit_update_info(StateStr, CurrentFree, Limit) ->
+    ?LOG_INFO(
+      "Free disk space is ~ts. Free bytes: ~b. Limit: ~b",
+      [StateStr, CurrentFree, Limit]).
+emit_update_info(MountPoint, StateStr, CurrentFree, Limit) ->
+    ?LOG_INFO(
+      "Free space of disk '~ts' is ~ts. Free bytes: ~b. Limit: ~b",
+      [MountPoint, StateStr, CurrentFree, Limit]).
+
+-spec alarmed_mounts(mounts()) -> sets:set(file:filename()).
+alarmed_mounts(Mounts) ->
+    maps:fold(
+      fun (Path, #mount{available = Available,
+                        limit = Limit}, Acc) when Available < Limit ->
+              %% Note: 'NaN' < Limit is true (Erlang term ordering), which is
+              %% correct fail-safe behavior when disk info is unavailable
+              sets:add_element(Path, Acc);
+          (_Path, _Mount, Acc) ->
+              Acc
+      end, sets:new([{version, 2}]), Mounts).
+
+-spec alarmed_queue_types(mounts()) ->
+    sets:set(module()).
+alarmed_queue_types(MountPoints) ->
+    maps:fold(
+      fun (_Path, #mount{available = Available,
+                         limit = Limit,
+                         queue_types = QTs}, Acc) when Available < Limit ->
+              %% Note: 'NaN' < Limit is true (Erlang term ordering), which is
+              %% correct fail-safe behavior when disk info is unavailable
+              sets:union(QTs, Acc);
+          (_Path, _Mount, Acc) ->
+              Acc
+      end, sets:new([{version, 2}]), MountPoints).
+
+-spec get_disk_free(#state{}) ->
+    #{file:filename() => AvailableB :: non_neg_integer()}.
+get_disk_free(#state{dir = DataDir, mounts = Mounts}) ->
+    #{Mount => AvailableKiB * 1024 ||
+      {Mount, Total, AvailableKiB, Capacity} <- disksup:get_disk_info(),
+      {Total, AvailableKiB, Capacity} =/= {0, 0, 0},
+      Mount =:= DataDir orelse is_map_key(Mount, Mounts)}.
 
 interpret_limit({mem_relative, Relative})
     when is_number(Relative) ->
@@ -413,68 +428,145 @@ interpret_limit(Absolute) ->
             ?DEFAULT_DISK_FREE_LIMIT
     end.
 
-emit_update_info(StateStr, CurrentFree, Limit) ->
-    ?LOG_INFO(
-      "Free disk space is ~ts. Free bytes: ~b. Limit: ~b",
-      [StateStr, CurrentFree, Limit]).
-
 start_timer(State) ->
     State#state{timer = erlang:send_after(interval(State), self(), update)}.
 
-interval(#state{alarmed      = true,
-                max_interval = MaxInterval}) ->
-    MaxInterval;
-interval(#state{actual       = 'NaN',
-                max_interval = MaxInterval}) ->
-    MaxInterval;
-interval(#state{limit        = Limit,
-                actual       = Actual,
+interval(#state{actual = DataDirAvailable,
+                limit = DataDirLimit,
+                mounts = Mounts,
                 min_interval = MinInterval,
                 max_interval = MaxInterval}) ->
-    IdealInterval = 2 * (Actual - Limit) / ?FAST_RATE,
+    DataDirGap = case DataDirAvailable of
+                     N when is_integer(N) ->
+                         N - DataDirLimit;
+                     _ ->
+                         1_000_000_000
+                 end,
+    SmallestGap = maps:fold(
+                    fun (_Path, #mount{available = A, limit = L}, Min)
+                          when is_integer(A) ->
+                            erlang:min(A - L, Min);
+                        (_Path, _Mount, Min) ->
+                            Min
+                    end, DataDirGap, Mounts),
+    IdealInterval = 2 * SmallestGap / fast_rate(),
     trunc(erlang:max(MinInterval, erlang:min(MaxInterval, IdealInterval))).
+
+fast_rate() ->
+    %% 250MB/s i.e. 250kB/ms
+    application:get_env(rabbit, disk_monitor_fast_rate, 250_000).
+
+-spec mounts() -> mounts().
+mounts() ->
+    case application:get_env(rabbit, disk_free_limits) of
+        {ok, Limits} ->
+            maps:fold(
+              fun(Prec, #{name := Name,
+                          mount := Path,
+                          limit := Limit0,
+                          queue_types := QTs0}, Acc) ->
+                      Res = rabbit_resource_monitor_misc:parse_information_unit(
+                              Limit0),
+                      case Res of
+                          {ok, Limit} ->
+                              {Known, Unknown} = resolve_queue_types(QTs0),
+                              case Unknown of
+                                  [_ | _] ->
+                                      ?LOG_WARNING(
+                                        "Unknown queue types configured for "
+                                        "disk '~ts': ~ts",
+                                        [Name, lists:join(", ", Unknown)]),
+                                      ok;
+                                  _ ->
+                                      ok
+                              end,
+                              case Known of
+                                  [] ->
+                                      ?LOG_ERROR("No known queue types "
+                                                 "configured for disk '~ts'. "
+                                                 "The disk will not be "
+                                                 "monitored for free "
+                                                 "disk space.", [Name]),
+                                      Acc;
+                                  _ ->
+                                      QTs = sets:from_list(Known,
+                                                           [{version, 2}]),
+                                      Mount = #mount{name = Name,
+                                                     precedence = Prec,
+                                                     limit = Limit,
+                                                     queue_types = QTs},
+                                      Acc#{Path => Mount}
+                              end;
+                          {error, parse_error} ->
+                              ?LOG_ERROR("Unable to parse free disk limit "
+                                         "'~ts' for disk '~ts'. The disk will "
+                                         "not be monitored for free space.",
+                                         [Limit0, Name]),
+                              Acc
+                      end
+              end, #{}, Limits);
+        undefined ->
+            #{}
+    end.
+
+resolve_queue_types(QTs) ->
+    resolve_queue_types(QTs, {[], []}).
+
+resolve_queue_types([], Acc) ->
+    Acc;
+resolve_queue_types([QT | Rest], {Known, Unknown}) ->
+    case rabbit_registry:lookup_type_module(queue, QT) of
+        {ok, TypeModule} ->
+            resolve_queue_types(Rest, {[TypeModule | Known], Unknown});
+        {error, not_found} ->
+            resolve_queue_types(Rest, {Known, [QT | Unknown]})
+    end.
 
 enable(#state{retries = 0} = State) ->
     ?LOG_ERROR("Free disk space monitor failed to start!"),
     State;
-enable(#state{dir = Dir, os = OS, port = Port} = State) ->
-    enable_handle_disk_free(catch get_disk_free(Dir, OS, Port), State).
+enable(#state{dir = undefined,
+              interval = Interval,
+              retries = Retries} = State) ->
+    case resolve_data_dir() of
+        {ok, MountPoint} ->
+            enable(State#state{dir = MountPoint});
+        {error, Reason} ->
+            ?LOG_WARNING("Free disk space monitor encounter an error "
+                         "resolving the data directory '~ts'. Retries left: "
+                         "~b Error:~n~tp",
+                         [rabbit:data_dir(), Retries, Reason]),
+            erlang:send_after(Interval, self(), try_enable),
+            State#state{enabled = false}
+    end;
+enable(#state{dir = Dir,
+              retries = Retries,
+              interval = Interval,
+              limit = Limit} = State) ->
+    DiskFree = get_disk_free(State),
+    case vm_memory_monitor:get_total_memory() of
+        TotalMemory when is_integer(TotalMemory) ->
+            ?LOG_INFO("Enabling free disk space monitoring (data dir free "
+                      "space: ~b, total memory: ~b)",
+                      [maps:get(Dir, DiskFree, unknown), TotalMemory]),
+            start_timer(set_disk_limits(State, Limit));
+        unknown ->
+            ?LOG_WARNING("Free disk space monitor could not determine total "
+                         "memory. Retries left: ~b", [Retries]),
+            erlang:send_after(Interval, self(), try_enable),
+            State#state{enabled = false}
+    end.
 
-enable_handle_disk_free(DiskFree, State) when is_integer(DiskFree) ->
-    enable_handle_total_memory(catch vm_memory_monitor:get_total_memory(), DiskFree, State);
-enable_handle_disk_free(Error, #state{interval = Interval, retries = Retries} = State) ->
-    ?LOG_WARNING("Free disk space monitor encountered an error "
-                       "(e.g. failed to parse output from OS tools). "
-                       "Retries left: ~b Error:~n~tp",
-                       [Retries, Error]),
-    erlang:send_after(Interval, self(), try_enable),
-    State#state{enabled = false}.
-
-enable_handle_total_memory(TotalMemory, DiskFree, #state{limit = Limit} = State) when is_integer(TotalMemory) ->
-    ?LOG_INFO("Enabling free disk space monitoring "
-                    "(disk free space: ~b, total memory: ~b)", [DiskFree, TotalMemory]),
-    start_timer(set_disk_limits(State, Limit));
-enable_handle_total_memory(Error, _DiskFree, #state{interval = Interval, retries = Retries} = State) ->
-    ?LOG_WARNING("Free disk space monitor encountered an error "
-                       "retrieving total memory. "
-                       "Retries left: ~b Error:~n~tp",
-                       [Retries, Error]),
-    erlang:send_after(Interval, self(), try_enable),
-    State#state{enabled = false}.
-
-run_os_cmd(Cmd) ->
-    Pid = self(),
-    Ref = make_ref(),
-    CmdFun = fun() ->
-        CmdResult = rabbit_misc:os_cmd(Cmd),
-        Pid ! {Pid, Ref, CmdResult}
-    end,
-    CmdPid = spawn(CmdFun),
-    receive
-        {Pid, Ref, CmdResult} ->
-            CmdResult
-    after 5000 ->
-        exit(CmdPid, kill),
-        ?LOG_ERROR("Command timed out: '~ts'", [Cmd]),
-        {error, timeout}
+resolve_data_dir() ->
+    case disksup:get_disk_info(rabbit:data_dir()) of
+        [{"none", 0, 0, 0}] ->
+            {error, disksup_not_available};
+        [{MountPoint, 0, 0, 0}] ->
+            {error, {cannot_determine_space, MountPoint}};
+        [{MountPoint, _TotalKiB, _AvailableKiB, _Capacity}] ->
+            {ok, MountPoint};
+        [] ->
+            {error, no_disk_info};
+        [_ | _] = Infos ->
+            {error, {multiple_disks, length(Infos)}}
     end.

@@ -67,7 +67,7 @@
 -export([deactivate_limit_all/2]).
 
 -export([prepend_extra_bcc/1]).
--export([queue/1, queue_names/1]).
+-export([queue/1, queue_names/1, queue_types/1]).
 
 -export([kill_queue/2, kill_queue/3, kill_queue_hard/2, kill_queue_hard/3]).
 -export([delete_transient_queues_on_node/1]).
@@ -2085,6 +2085,15 @@ queue_names(Queues) ->
                       amqqueue:get_name(Q);
                  (Q) ->
                       amqqueue:get_name(Q)
+              end, Queues).
+
+-spec queue_types([Q | {Q, route_infos()}]) ->
+    [rabbit_queue_type:queue_type()] when Q :: amqqueue:target().
+queue_types(Queues) ->
+    lists:map(fun({Q, RouteInfos}) when is_map(RouteInfos) ->
+                      amqqueue:get_type(Q);
+                 (Q) ->
+                      amqqueue:get_type(Q)
               end, Queues).
 
 -spec lookup_extra_bcc(amqqueue:target(), binary()) ->

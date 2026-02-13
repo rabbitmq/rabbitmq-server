@@ -115,6 +115,7 @@ groups() ->
        resource_alarm_before_session_begin,
        resource_alarm_after_session_begin,
        resource_alarm_send_many,
+       per_queue_type_disk_alarm,
        max_message_size_client_to_server,
        max_message_size_server_to_client,
        global_counters,
@@ -229,7 +230,13 @@ init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
     rabbit_ct_helpers:merge_app_env(
       Config, {rabbit, [{quorum_tick_interval, 1000},
-                        {stream_tick_interval, 1000}
+                        {stream_tick_interval, 1000},
+                        %% Imaginary mount-point for per-queue-type disk alarms
+                        {disk_free_limits,
+                         #{1 => #{name => <<"streaming">>,
+                                  mount => "/does/not/exist",
+                                  limit => "2GB",
+                                  queue_types => [<<"stream">>]}}}
                        ]}).
 
 end_per_suite(Config) ->
@@ -3482,6 +3489,76 @@ auth_attempt_metrics(Config) ->
     ?assertEqual(1, proplists:get_value(auth_attempts, Attempt2)),
     ?assertEqual(0, proplists:get_value(auth_attempts_failed, Attempt2)),
     ?assertEqual(1, proplists:get_value(auth_attempts_succeeded, Attempt2)).
+
+per_queue_type_disk_alarm(Config) ->
+    Prefix = atom_to_binary(?FUNCTION_NAME),
+    Resource = {disk, rabbit_stream_queue},
+    CQ = <<Prefix/binary, "-classic">>,
+    SQ = <<Prefix/binary, "-stream">>,
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = CQ}),
+    #'queue.declare_ok'{} = amqp_channel:call(
+                              Ch, #'queue.declare'{
+                                     queue = SQ,
+                                     durable = true,
+                                     arguments = [{<<"x-queue-type">>, longstr, <<"stream">>}]}),
+
+    OpnConf = connection_config(Config),
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+
+    %% Set the alarm for the stream queue type.
+    ok = rabbit_ct_broker_helpers:set_alarm(Config, 0, Resource),
+
+    %% Attach one sender to the CQ and one to the SQ.
+    {ok, Session1} = amqp10_client:begin_session_sync(Connection),
+    {ok, Sender1} = amqp10_client:attach_sender_link(
+                      Session1, <<Prefix/binary, "-cq-sender">>,
+                      rabbitmq_amqp_address:queue(CQ), unsettled),
+    {ok, Session2} = amqp10_client:begin_session_sync(Connection),
+    {ok, Sender2} = amqp10_client:attach_sender_link(
+                      Session2, <<Prefix/binary, "-sq-sender">>,
+                      rabbitmq_amqp_address:queue(SQ), unsettled),
+
+    %% Both senders initially have link and session credit.
+    ok = wait_for_credit(Sender1),
+    ok = wait_for_credit(Sender2),
+    Tag1 = <<"tag1">>,
+    Msg1 = amqp10_msg:new(Tag1, <<"m1">>, false),
+    ?assertEqual(ok,
+                 amqp10_client:send_msg(Sender1, Msg1)),
+    ok = wait_for_accepted(Tag1),
+    ?assertEqual(ok,
+                 amqp10_client:send_msg(Sender2, Msg1)),
+    ok = wait_for_accepted(Tag1),
+
+    %% Once the SQ sender has delivered to a stream, it becomes blocked by
+    %% session flow control.
+    Tag2 = <<"tag2">>,
+    Msg2 = amqp10_msg:new(Tag2, <<"m2">>, false),
+    ?assertEqual(ok,
+                 amqp10_client:send_msg(Sender1, Msg2)),
+    ok = wait_for_accepted(Tag2),
+    ?assertEqual({error, remote_incoming_window_exceeded},
+                 amqp10_client:send_msg(Sender2, Msg2)),
+
+    %% Clear the alarm and the SQ sender can then send transfers.
+    ok = rabbit_ct_broker_helpers:clear_alarm(Config, 0, Resource),
+    Tag3 = <<"tag3">>,
+    Msg3 = amqp10_msg:new(Tag3, <<"m3">>, false),
+    ?assertEqual(ok,
+                 amqp10_client:send_msg(Sender1, Msg3)),
+    ok = wait_for_accepted(Tag3),
+    ?assertEqual(ok,
+                 amqp10_client:send_msg(Sender2, Msg3)),
+    ok = wait_for_accepted(Tag3),
+
+    ok = amqp10_client:detach_link(Sender1),
+    ok = end_session_sync(Session1),
+    ok = amqp10_client:detach_link(Sender2),
+    ok = end_session_sync(Session2),
+    #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = CQ}),
+    #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = SQ}),
+    ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch).
 
 max_message_size_client_to_server(Config) ->
     DefaultMaxMessageSize = rpc(Config, persistent_term, get, [max_message_size]),
