@@ -1540,7 +1540,7 @@ function check_bad_response(req, full_page_404, on404fun) {
             if ((req.status == 401 || req.status == 403) && oauth.enabled) {
                 initiate_logout(oauth, reason);
             } else if (on404fun && (typeof on404fun === 'function') && req.status == 404) {
-                on404fun(JSON.parse(req.responseText));
+                on404fun(response);
             } else {
                 show_popup('warn', fmt_escape_html(reason));
             }
