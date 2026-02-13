@@ -11,7 +11,7 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("kernel/include/logger.hrl").
 
--export([is_authorized/3, is_authorized/7, is_authorized_admin/3,
+-export([is_authorized/3, is_authorized/5, is_authorized/7, is_authorized_admin/3,
          is_authorized_admin/5, vhost/1, vhost_from_headers/1]).
 -export([is_authorized_vhost/3, is_authorized_user/4,
          is_authorized_user/5, is_authorized_user/6,
