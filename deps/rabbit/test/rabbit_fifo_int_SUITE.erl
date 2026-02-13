@@ -382,7 +382,7 @@ returns(Config) ->
             [{deliver, _tag, true,
               [{_, _, _, _, Msg1Out}]}] = Actions2,
             ?assert(mc:is(Msg1Out)),
-            ?assertEqual(1, mc:get_annotation(<<"x-delivery-count">>, Msg1Out)),
+            ?assertEqual(1, mc:get_annotation(<<"x-acquired-count">>, Msg1Out)),
             %% delivery_count should _not_ be incremented for a return
             ?assertEqual(undefined, mc:get_annotation(delivery_count, Msg1Out)),
             rabbit_fifo_client:modify(<<"tag">>, [MsgId1], true, false, #{}, FC4)
@@ -398,7 +398,8 @@ returns(Config) ->
             [{deliver, _, true,
               [{_, _, _, _, Msg2Out}]}] = Actions3,
             ?assert(mc:is(Msg2Out)),
-            ?assertEqual(2, mc:get_annotation(<<"x-delivery-count">>, Msg2Out)),
+            ?assertEqual(2, mc:get_annotation(<<"x-acquired-count">>, Msg2Out)),
+            ?assertEqual(1, mc:get_annotation(<<"x-delivery-count">>, Msg2Out)),
             %% delivery_count should be incremented for a modify with delivery_failed = true
             ?assertEqual(1, mc:get_annotation(delivery_count, Msg2Out)),
             rabbit_fifo_client:settle(<<"tag">>, [MsgId2], FC6)
