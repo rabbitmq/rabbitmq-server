@@ -75,7 +75,7 @@
 -define(INFO_KEYS, [name, durable, auto_delete, arguments, leader, members, online, state,
                     messages, messages_ready, messages_unacknowledged, committed_offset,
                     policy, operator_policy, effective_policy_definition, type, memory,
-                    consumers, segments, committed_chunk_id]).
+                    consumers, segments, committed_chunk_id, first_timestamp]).
 
 -define(UNMATCHED_THRESHOLD, 200).
 
@@ -818,6 +818,14 @@ i(committed_chunk_id = F, Q) ->
             ''
     end;
 i(segments = F, Q) ->
+    Key = {osiris_writer, amqqueue:get_name(Q)},
+    case osiris_counters:counters(Key, [F]) of
+        #{F := V} ->
+            V;
+        _ ->
+            ''
+    end;
+i(first_timestamp = F, Q) ->
     Key = {osiris_writer, amqqueue:get_name(Q)},
     case osiris_counters:counters(Key, [F]) of
         #{F := V} ->
