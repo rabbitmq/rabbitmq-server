@@ -1147,26 +1147,51 @@ class ApplicationListener {
 }
 var applicationListeners = new Map();
 function registerApplicationListener(name, listener) {
+  if (name == null || (typeof name === 'string' && name.trim() === '')) {
+    return false;
+  }
+  if (listener == null || typeof listener !== 'object') {
+    return false;
+  }
   if (applicationListeners.has(name)) {
     return false;
   }
   applicationListeners.set(name, listener);
+  return true;
 }
 function unregisterApplicationListener(name) {
   applicationListeners.delete(name);
 }
 function notifyOnRefresh() {
-  for (const [name, listener] of applicationListeners) {
-    listener.onRefresh();  
+  for (const [_name, listener] of applicationListeners) {
+    if (listener && typeof listener.onRefresh === 'function') {
+      try {
+        listener.onRefresh();
+      } catch (err) {
+        console.error(`ApplicationListener failed due to ${err}`);
+      }
+    }
   }
 }
 function notifyOnVhostChange(newVhost) {
   for (const [_name, listener] of applicationListeners) {
-    listener.onVhostChange(newVhost);  
+    if (listener && typeof listener.onVhostChange === 'function') {
+      try {
+        listener.onVhostChange(newVhost);
+      } catch (err) {
+        console.error(`ApplicationListener failed due to ${err}`);
+      }
+    }
   }
 }
 function notifyActivatedTab(tab) {
   for (const [_name, listener] of applicationListeners) {
-    listener.onTabActivated(tab);  
+    if (listener && typeof listener.onTabActivated === 'function') {
+      try {
+        listener.onTabActivated(tab);
+      } catch (err) {
+        console.error(`ApplicationListener failed due to ${err}`);
+      }
+    }
   }
 }
