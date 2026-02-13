@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 
 %% macros for memory optimised tuple structures
 %% [A|B] saves 1 byte compared to {A,B}
@@ -12,8 +12,6 @@
 %% Raw message data is always stored on disk.
 -define(MSG(Index, Header), ?TUPLE(Index, Header)).
 
--define(C_MSG(Timeout, Msg), {Timeout, Msg}).
--define(C_MSG(Msg), {_, Msg}).
 -define(NIL, []).
 
 -define(IS_HEADER(H),
@@ -22,26 +20,6 @@
         (is_map(H) andalso is_map_key(size, H))).
 
 -define(DELIVERY_SEND_MSG_OPTS, [local, ra_event]).
-
-%% constants for packed msg references where both the raft index and the size
-%% is packed into a single immidate term
-%%
-%% 59 bytes as immedate ints are signed
--define(PACKED_MAX, 16#7FFF_FFFF_FFFF_FFF).
-%% index bits - enough for 2000 days at 100k indexes p/sec
--define(PACKED_IDX_BITS, 44).
--define(PACKED_IDX_MAX, 16#FFFF_FFFF_FFF).
--define(PACKED_SZ_BITS, 15). %% size
--define(PACKED_SZ_MAX, 16#7FFF). %% 15 bits
-
--define(PACK(Idx, Sz),
-        (Idx bxor (Sz bsl ?PACKED_IDX_BITS))).
--define(PACKED_IDX(PackedInt),
-        (PackedInt band ?PACKED_IDX_MAX)).
--define(PACKED_SZ(PackedInt),
-        ((PackedInt bsr 44) band 16#7FFF)).
-
--define(IS_PACKED(Int), (Int >= 0 andalso Int =< ?PACKED_MAX)).
 
 -type optimised_tuple(A, B) :: nonempty_improper_list(A, B).
 
@@ -79,13 +57,7 @@
 -type msg_size() :: non_neg_integer().
 %% the size in bytes of the msg payload
 
-%% 60 byte integer, immediate
--type packed_msg() :: 0..?PACKED_MAX.
-
--type msg() :: packed_msg() | optimised_tuple(ra:index(), msg_header()).
-
-%% a consumer message
--type c_msg() :: {LockExpiration :: milliseconds(), msg()}.
+-type msg() :: optimised_tuple(ra:index(), msg_header()).
 
 -type delivery_msg() :: {msg_id(), {msg_header(), raw_msg()}}.
 %% A tuple consisting of the message id, and the headered message.
@@ -120,8 +92,7 @@
                            username => binary(),
                            prefetch => non_neg_integer(),
                            args => list(),
-                           priority => 0..255,
-                           timeout => milliseconds()
+                           priority => non_neg_integer()
                           }.
 %% static meta data associated with a consumer
 
@@ -134,7 +105,6 @@
 %% once these many bytes have been written since the last checkpoint
 %% we request a checkpoint irrespectively
 -define(CHECK_MAX_BYTES, 128_000_000).
--define(SNAP_OUT_BYTES, 64_000_000).
 
 -define(USE_AVG_HALF_LIFE, 10000.0).
 %% an average QQ without any message uses about 100KB so setting this limit
@@ -145,9 +115,7 @@
 -define(LOW_LIMIT, 0.8).
 -define(DELIVERY_CHUNK_LIMIT_B, 128_000).
 
--type seconds() :: non_neg_integer().
 -type milliseconds() :: non_neg_integer().
-
 -record(consumer_cfg,
         {meta = #{} :: consumer_meta(),
          pid :: pid(),
@@ -159,27 +127,18 @@
          %% command: `{credit, ReceiverDeliveryCount, Credit}'
          credit_mode :: credited | credit_mode(),
          lifetime = once :: once | auto,
-         priority = 0 :: integer(),
-         timeout = 1_800_000 :: milliseconds()}).
-
--type consumer_status() :: up | cancelled | quiescing.
+         priority = 0 :: integer()}).
 
 -record(consumer,
         {cfg = #consumer_cfg{},
-         status = up :: consumer_status() |
-                        {suspected_down, consumer_status()} |
-                        %% a message has been pending for longer than the
-                        %% consumer timeout
-                        {timeout, consumer_status()},
+         status = up :: up | suspected_down | cancelled | quiescing,
          next_msg_id = 0 :: msg_id(),
-         checked_out = #{} :: #{msg_id() => c_msg()},
+         checked_out = #{} :: #{msg_id() => msg()},
          %% max number of messages that can be sent
          %% decremented for each delivery
          credit = 0 :: non_neg_integer(),
          %% AMQP 1.0 §2.6.7
-         delivery_count :: rabbit_queue_type:delivery_count(),
-         timed_out_msg_ids = [] :: [msg_id()],
-         drain = false :: boolean()
+         delivery_count :: rabbit_queue_type:delivery_count()
         }).
 
 -type consumer() :: #consumer{}.
@@ -188,24 +147,9 @@
 
 -type dead_letter_handler() :: option({at_most_once, applied_mfa()} | at_least_once).
 
--type delayed_retry() :: disabled |
-                         {all | failed | returned,
-                          Min :: milliseconds(),
-                          Max :: milliseconds()}.
-
--type deferral_token() :: binary().
--type delayed_key() :: {milliseconds(), ra:index()}.
-
--record(delayed,
-        {tree = gb_trees:empty() :: gb_trees:tree(delayed_key(), msg()),
-         %% Cached smallest entry for O(1) readiness check in take_next_msg
-         next = undefined :: option({milliseconds(), ra:index(), msg()}),
-         len = 0 :: non_neg_integer(),
-         %% Map from deferral token to tree key for direct message lookup
-         deferred = #{} :: #{deferral_token() => delayed_key()}}).
-
 -record(enqueuer,
         {next_seqno = 1 :: msg_seqno(),
+         % out of order enqueues - sorted list
          unused = ?NIL,
          status = up :: up | suspected_down,
          %% it is useful to have a record of when this was blocked
@@ -231,50 +175,20 @@
          delivery_limit :: option(non_neg_integer()),
          expires :: option(milliseconds()),
          msg_ttl :: option(milliseconds()),
-         %% time to wait before returning messages when consumer's node
-         %% becomes unreachable
-         consumer_disconnected_timeout = 60_000 :: milliseconds(),
-         %% delayed retry configuration for returned messages
-         delayed_retry = disabled :: delayed_retry()
+         unused_2 = ?NIL,
+         unused_3 = ?NIL
         }).
-
--record(messages,
-        {
-         messages = rabbit_fifo_pq:new() :: rabbit_fifo_pq:state(),
-         messages_total = 0 :: non_neg_integer(),
-         % queue of returned msg_in_ids - when checking out it picks from
-         returns = lqueue:new() :: lqueue:lqueue(term())
-        }).
-
--record(dlx_consumer,
-        {pid :: pid(),
-         prefetch :: non_neg_integer(),
-         checked_out = #{} :: #{msg_id() =>
-                                optimised_tuple(rabbit_dead_letter:reason(), msg())},
-         next_msg_id = 0 :: msg_id()}).
-
--record(rabbit_fifo_dlx,
-        {consumer :: option(#dlx_consumer{}),
-         %% Queue of dead-lettered messages.
-         discards = lqueue:new() :: lqueue:lqueue(optimised_tuple(rabbit_dead_letter:reason(), msg())),
-         %% Raft indexes of messages in both discards queue and dlx_consumer's checked_out map
-         %% so that we get the smallest ra index in O(1).
-         ra_indexes = rabbit_fifo_index:empty() :: rabbit_fifo_index:state(),
-         msg_bytes = 0 :: non_neg_integer(),
-         msg_bytes_checkout = 0 :: non_neg_integer()}).
 
 -record(rabbit_fifo,
         {cfg :: #cfg{},
          % unassigned messages
-         messages = rabbit_fifo_pq:new() :: rabbit_fifo_pq:state(),
+         messages = rabbit_fifo_q:new() :: rabbit_fifo_q:state(),
          messages_total = 0 :: non_neg_integer(),
          % queue of returned msg_in_ids - when checking out it picks from
          returns = lqueue:new() :: lqueue:lqueue(term()),
-         % Reclaimable bytes - a counter that is incremented every time a
-         % command is processed that does not need to be kept (live indexes).
-         % Approximate, used for triggering snapshots.
-         % Reset to 0 when release_cursor gets stored.
-         reclaimable_bytes = 0,
+         % a counter of enqueues - used to trigger shadow copy points
+         % reset to 0 when release_cursor gets stored
+         enqueue_count = 0 :: non_neg_integer(),
          % a map containing all the live processes that have ever enqueued
          % a message to this queue
          enqueuers = #{} :: #{pid() => #enqueuer{}},
@@ -283,33 +197,30 @@
          % rabbit_fifo_index can be slow when calculating the smallest
          % index when there are large gaps but should be faster than gb_trees
          % for normal appending operations as it's backed by a map
-         last_command_time = 0,
-         next_consumer_timeout = infinity :: infinity | milliseconds(),
+         ra_indexes = rabbit_fifo_index:empty() :: rabbit_fifo_index:state(),
+         unused_1 = ?NIL,
          % consumers need to reflect consumer state at time of snapshot
          consumers = #{} :: #{consumer_key() => consumer()},
          % consumers that require further service are queued here
          service_queue = priority_queue:new() :: priority_queue:q(),
          %% state for at-least-once dead-lettering
-         dlx = #rabbit_fifo_dlx{} :: #rabbit_fifo_dlx{},
+         dlx = rabbit_fifo_dlx:init() :: rabbit_fifo_dlx:state(),
          msg_bytes_enqueue = 0 :: non_neg_integer(),
          msg_bytes_checkout = 0 :: non_neg_integer(),
          %% one is picked if active consumer is cancelled or dies
          %% used only when single active consumer is on
          waiting_consumers = [] :: [{consumer_key(), consumer()}],
-         %% records the timestamp whenever the queue was last considered
-         %% active in terms of consumer activity
          last_active :: option(non_neg_integer()),
          msg_cache :: option({ra:index(), raw_msg()}),
-         %% delayed retry messages awaiting redelivery
-         delayed = #delayed{} :: #delayed{}
+         unused_2 = ?NIL
         }).
 
 -type config() :: #{name := atom(),
                     queue_resource := rabbit_types:r('queue'),
                     dead_letter_handler => dead_letter_handler(),
                     become_leader_handler => applied_mfa(),
-                    % checkpoint_min_indexes => non_neg_integer(),
-                    % checkpoint_max_indexes => non_neg_integer(),
+                    checkpoint_min_indexes => non_neg_integer(),
+                    checkpoint_max_indexes => non_neg_integer(),
                     max_length => non_neg_integer(),
                     max_bytes => non_neg_integer(),
                     overflow_strategy => drop_head | reject_publish,
@@ -317,7 +228,5 @@
                     delivery_limit => non_neg_integer() | -1,
                     expires => non_neg_integer(),
                     msg_ttl => non_neg_integer(),
-                    created => non_neg_integer(),
-                    consumer_disconnected_timeout => milliseconds(),
-                    delayed_retry => delayed_retry()
+                    created => non_neg_integer()
                    }.

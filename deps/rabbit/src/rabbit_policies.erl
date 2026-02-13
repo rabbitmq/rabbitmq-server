@@ -28,6 +28,7 @@ register() ->
     %% such as rabbit_quorum_queue
     [rabbit_registry:register(Class, Name, ?MODULE) ||
         {Class, Name} <- [{policy_validator, <<"alternate-exchange">>},
+                          {policy_validator, <<"consumer-disconnected-timeout">>},
                           {policy_validator, <<"consumer-timeout">>},
                           {policy_validator, <<"dead-letter-exchange">>},
                           {policy_validator, <<"dead-letter-routing-key">>},
@@ -79,6 +80,12 @@ validate_policy0(<<"alternate-exchange">>, Value)
     ok;
 validate_policy0(<<"alternate-exchange">>, Value) ->
     {error, "~tp is not a valid alternate exchange name", [Value]};
+
+validate_policy0(<<"consumer-disconnected-timeout">>, Value)
+  when is_integer(Value), Value >= 0 ->
+    ok;
+validate_policy0(<<"consumer-disconnected-timeout">>, Value) ->
+    {error, "~tp is not a valid consumer disconnected timeout", [Value]};
 
 validate_policy0(<<"consumer-timeout">>, Value)
   when is_integer(Value), Value >= 0 ->

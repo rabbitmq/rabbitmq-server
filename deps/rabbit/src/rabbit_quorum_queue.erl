@@ -26,8 +26,10 @@
          delete/4,
          delete_immediately/1]).
 -export([state_info/1, info/2, stat/1, infos/1, infos/2]).
--export([credit/6, settle/5, dequeue/5, consume/3, cancel/3]).
+-export([credit/6, settle/5, dequeue/6, consume/3, cancel/3]).
 -export([purge/1]).
+-export([retry_delayed/2]).
+-export([assign_deferred/4]).
 -export([supports_stateful_delivery/0,
          deliver/3]).
 -export([dead_letter_publish/5]).
@@ -362,26 +364,28 @@ gather_policy_config(Q, IsQueueDeclaration) ->
     Expires = args_policy_lookup(<<"expires">>, fun min/2, Q),
     MsgTTL = args_policy_lookup(<<"message-ttl">>, fun min/2, Q),
     DeadLetterHandler = dead_letter_handler(Q, Overflow),
+    DisconnectedTimeout = get_consumer_disconnected_timeout(Q),
+    DelayedRetry = get_delayed_retry_config(Q),
     #{dead_letter_handler => DeadLetterHandler,
       max_length => MaxLength,
       max_bytes => MaxBytes,
       delivery_limit => DeliveryLimit,
       overflow_strategy => Overflow,
       expires => Expires,
-      msg_ttl => MsgTTL
+      msg_ttl => MsgTTL,
+      consumer_disconnected_timeout => DisconnectedTimeout,
+      delayed_retry => DelayedRetry
      }.
 
 ra_machine_config(Q) when ?is_amqqueue(Q) ->
     PolicyConfig = gather_policy_config(Q, true),
     QName = amqqueue:get_name(Q),
     {Name, _} = amqqueue:get_pid(Q),
-    PolicyConfig#{
-      name => Name,
-      queue_resource => QName,
-      become_leader_handler => {?MODULE, become_leader, [QName]},
-      single_active_consumer_on => single_active_consumer_on(Q),
-      created => erlang:system_time(millisecond)
-     }.
+    PolicyConfig#{name => Name,
+                  queue_resource => QName,
+                  single_active_consumer_on => single_active_consumer_on(Q),
+                  created => erlang:system_time(millisecond)
+                 }.
 
 resolve_delivery_limit(PolVal, ArgVal)
   when PolVal < 0 orelse ArgVal < 0 ->
@@ -397,10 +401,7 @@ queue_arg_has_precedence(_Policy, QueueArg) ->
 
 single_active_consumer_on(Q) ->
     QArguments = amqqueue:get_arguments(Q),
-    case rabbit_misc:table_lookup(QArguments, <<"x-single-active-consumer">>) of
-        {bool, true} -> true;
-        _            -> false
-    end.
+    table_lookup(QArguments, <<"x-single-active-consumer">>, false).
 
 update_consumer_handler(QName, {ConsumerTag, ChPid}, Exclusive, AckRequired,
                         Prefetch, Active, ActivityStatus, Args) ->
@@ -538,20 +539,39 @@ filter_quorum_critical(Queues, ReplicaStates, Self) ->
 
 capabilities() ->
     #{unsupported_policies => [%% Classic policies
-                               <<"max-priority">>, <<"queue-mode">>,
-                               <<"ha-mode">>, <<"ha-params">>,
-                               <<"ha-sync-mode">>, <<"ha-promote-on-shutdown">>, <<"ha-promote-on-failure">>,
+                               <<"max-priority">>,
+                               <<"queue-mode">>,
+                               <<"ha-mode">>,
+                               <<"ha-params">>,
+                               <<"ha-sync-mode">>,
+                               <<"ha-promote-on-shutdown">>, <<"ha-promote-on-failure">>,
                                <<"queue-master-locator">>,
                                %% Stream policies
-                               <<"max-age">>, <<"stream-max-segment-size-bytes">>, <<"initial-cluster-size">>],
-      queue_arguments => [<<"x-dead-letter-exchange">>, <<"x-dead-letter-routing-key">>,
-                          <<"x-dead-letter-strategy">>, <<"x-expires">>, <<"x-max-length">>,
-                          <<"x-max-length-bytes">>, <<"x-max-in-memory-length">>,
-                          <<"x-max-in-memory-bytes">>, <<"x-overflow">>,
-                          <<"x-single-active-consumer">>, <<"x-queue-type">>,
-                          <<"x-quorum-initial-group-size">>, <<"x-delivery-limit">>,
-                          <<"x-message-ttl">>, <<"x-queue-leader-locator">>],
-      consumer_arguments => [<<"x-priority">>],
+                               <<"max-age">>,
+                               <<"stream-max-segment-size-bytes">>,
+                               <<"initial-cluster-size">>],
+      queue_arguments => [<<"x-dead-letter-exchange">>,
+                          <<"x-dead-letter-routing-key">>,
+                          <<"x-dead-letter-strategy">>,
+                          <<"x-expires">>,
+                          <<"x-max-length">>,
+                          <<"x-max-length-bytes">>,
+                          %% in-memory argumetns are not used anymore
+                          <<"x-max-in-memory-length">>,
+                          <<"x-max-in-memory-bytes">>,
+                          <<"x-overflow">>,
+                          <<"x-single-active-consumer">>,
+                          <<"x-queue-type">>,
+                          <<"x-quorum-initial-group-size">>,
+                          <<"x-delivery-limit">>,
+                          <<"x-message-ttl">>,
+                          <<"x-queue-leader-locator">>,
+                          <<"x-consumer-disconnected-timeout">>,
+                          <<"x-delayed-retry-type">>,
+                          <<"x-delayed-retry-min">>,
+                          <<"x-delayed-retry-max">>],
+      consumer_arguments => [<<"x-priority">>,
+                             <<"x-consumer-timeout">>],
       server_named => false,
       rebalance_module => ?MODULE,
       can_redeliver => true,
@@ -589,8 +609,7 @@ handle_tick(QName,
               num_discarded := NumDiscarded,
               num_discard_checked_out  :=  NumDiscardedCheckedOut,
               discard_message_bytes := DiscardBytes,
-              discard_checkout_message_bytes := DiscardCheckoutBytes,
-              smallest_raft_index := _} = Overview,
+              discard_checkout_message_bytes := DiscardCheckoutBytes} = Overview,
             Nodes) ->
     %% this makes calls to remote processes so cannot be run inside the
     %% ra server
@@ -624,6 +643,18 @@ handle_tick(QName,
                                      [{messages_ready_normal, V} | Acc];
                                 (num_ready_messages_return, V, Acc) ->
                                      [{messages_ready_returned, V} | Acc];
+                                (messages_by_priority, V, Acc) ->
+                                     [{messages_by_priority, V} | Acc];
+                                (num_active_priorities, V, Acc) ->
+                                     [{messages_active_priorities, V} | Acc];
+                                (num_delayed_messages, V, Acc) ->
+                                     [{messages_delayed, V} | Acc];
+                                (next_delayed_at, V, Acc)
+                                  when is_integer(V) ->
+                                     [{next_delayed_at, V} | Acc];
+                                (last_delayed_at, V, Acc)
+                                  when is_integer(V) ->
+                                     [{last_delayed_at, V} | Acc];
                                 (_, _, Acc) ->
                                      Acc
                              end, info(Q, Keys), Overview),
@@ -649,7 +680,10 @@ handle_tick(QName,
                                                     unlimited;
                                                 Limit ->
                                                     Limit
-                                            end}
+                                            end},
+                           {delayed_retry, fmt_delayed_retry(
+                                             maps:get(delayed_retry, Cfg,
+                                                      disabled))}
                            | Infos0],
                   rabbit_core_metrics:queue_stats(QName, Infos),
                   case repair_amqqueue_nodes(Q) of
@@ -681,13 +715,13 @@ handle_tick(QName,
               catch
                   _:Err ->
                       ?LOG_DEBUG("~ts: handle tick failed with ~p",
-                                       [rabbit_misc:rs(QName), Err]),
+                                 [rabbit_misc:rs(QName), Err]),
                       ok
               end
       end);
 handle_tick(QName, Config, _Nodes) ->
     ?LOG_DEBUG("~ts: handle tick received unexpected config format ~tp",
-                     [rabbit_misc:rs(QName), Config]).
+               [rabbit_misc:rs(QName), Config]).
 
 repair_leader_record(Q, Name) ->
     Node = node(),
@@ -698,7 +732,7 @@ repair_leader_record(Q, Name) ->
         _ ->
             QName = amqqueue:get_name(Q),
             ?LOG_DEBUG("~ts: updating leader record to current node ~ts",
-                             [rabbit_misc:rs(QName), Node]),
+                       [rabbit_misc:rs(QName), Node]),
             ok = become_leader0(QName, Name),
             ok
     end,
@@ -967,11 +1001,13 @@ credit(_QName, CTag, DeliveryCount, Credit, Drain, QState) ->
     rabbit_fifo_client:credit(quorum_ctag(CTag), DeliveryCount, Credit, Drain, QState).
 
 -spec dequeue(amqqueue:amqqueue(), NoAck :: boolean(), pid(),
-              rabbit_types:ctag(), rabbit_fifo_client:state()) ->
+              rabbit_types:ctag(),
+              Timeout :: non_neg_integer() | infinity | undefined,
+              rabbit_fifo_client:state()) ->
     {empty, rabbit_fifo_client:state()} |
     {ok, QLen :: non_neg_integer(), qmsg(), rabbit_fifo_client:state()} |
     {error, term()}.
-dequeue(Q, NoAck, _LimiterPid, CTag0, QState0) ->
+dequeue(Q, NoAck, _LimiterPid, CTag0, Timeout, QState0) ->
     QName = amqqueue:get_name(Q),
     CTag = quorum_ctag(CTag0),
     Settlement = case NoAck of
@@ -980,7 +1016,7 @@ dequeue(Q, NoAck, _LimiterPid, CTag0, QState0) ->
                      false ->
                          unsettled
                  end,
-    rabbit_fifo_client:dequeue(QName, CTag, Settlement, QState0).
+    rabbit_fifo_client:dequeue(QName, CTag, Settlement, Timeout, QState0).
 
 -spec consume(amqqueue:amqqueue(),
               rabbit_queue_type:consume_spec(),
@@ -1001,8 +1037,7 @@ consume(Q, Spec, QState0) when ?amqqueue_is_quorum(Q) ->
       args := Args,
       ok_msg := OkMsg,
       acting_user := ActingUser} = Spec,
-    %% TODO: validate consumer arguments
-    %% currently quorum queues do not support any arguments
+
     QName = amqqueue:get_name(Q),
     maybe_send_reply(ChPid, OkMsg),
     ConsumerTag = quorum_ctag(ConsumerTag0),
@@ -1014,45 +1049,42 @@ consume(Q, Spec, QState0) when ?amqqueue_is_quorum(Q) ->
                    _ ->
                        0
                end,
-    Priority = case rabbit_misc:table_lookup(Args, <<"x-priority">>) of
-                   {_Key, Value} ->
-                       Value;
-                   _ ->
-                       0
-               end,
+    Priority = table_lookup(Args, <<"x-priority">>, 0),
+    %% rabbit_queue_type:consume/3 always adds this timeout field to the spec
+    %% containing the queue's / environment's default or the x-consumer-timeout
+    %% argument
+    Timeout = maps:get(timeout, Spec),
+
     ConsumerMeta = #{ack => AckRequired,
                      prefetch => Prefetch,
                      args => Args,
                      username => ActingUser,
-                     priority => Priority},
+                     priority => Priority,
+                     timeout => Timeout},
     case rabbit_fifo_client:checkout(ConsumerTag, Mode, ConsumerMeta, QState0) of
-        {ok, _Infos, QState} ->
-            case single_active_consumer_on(Q) of
+        {ok, Infos, QState} ->
+            %% this info key was added in QQ v8
+            IsSac = maps:get(consumer_strategy, Infos, competing) == single_active,
+            case IsSac orelse single_active_consumer_on(Q) of
                 true ->
-                    %% get the leader from state
-                    case rabbit_fifo_client:query_single_active_consumer(QState) of
-                        {ok, SacResult} ->
-                            ActivityStatus = case SacResult of
-                                                 {value, {ConsumerTag, ChPid}} ->
-                                                     single_active;
-                                                 _ ->
-                                                     waiting
-                                             end,
-                            rabbit_core_metrics:consumer_created(ChPid, ConsumerTag,
-                                                                 ExclusiveConsume,
-                                                                 AckRequired, QName,
-                                                                 Prefetch,
-                                                                 ActivityStatus == single_active,
-                                                                 ActivityStatus, Args),
-                            emit_consumer_created(ChPid, ConsumerTag,
-                                                  ExclusiveConsume,
-                                                  AckRequired, QName,
-                                                  Prefetch, Args, none,
-                                                  ActingUser),
-                            {ok, QState};
-                        Err ->
-                            consume_error(Err, QName)
-                    end;
+                    ActivityStatus = case Infos of
+                                         #{is_active := true} ->
+                                             single_active;
+                                         _ ->
+                                             waiting
+                                     end,
+                    rabbit_core_metrics:consumer_created(ChPid, ConsumerTag,
+                                                         ExclusiveConsume,
+                                                         AckRequired, QName,
+                                                         Prefetch,
+                                                         ActivityStatus == single_active,
+                                                         ActivityStatus, Args),
+                    emit_consumer_created(ChPid, ConsumerTag,
+                                          ExclusiveConsume,
+                                          AckRequired, QName,
+                                          Prefetch, Args, none,
+                                          ActingUser),
+                    {ok, QState};
                 false ->
                     rabbit_core_metrics:consumer_created(ChPid, ConsumerTag,
                                                          ExclusiveConsume,
@@ -1166,7 +1198,6 @@ stat(Q) when ?is_amqqueue(Q) ->
     stat(Q, 250).
 
 -spec stat(amqqueue:amqqueue(), non_neg_integer()) -> {'ok', non_neg_integer(), non_neg_integer()}.
-
 stat(Q, Timeout) when ?is_amqqueue(Q) ->
     try
         maybe
@@ -1185,6 +1216,22 @@ stat(Q, Timeout) when ?is_amqqueue(Q) ->
 purge(Q) when ?is_amqqueue(Q) ->
     Server = amqqueue:get_pid(Q),
     rabbit_fifo_client:purge(Server).
+
+-spec retry_delayed(amqqueue:amqqueue(), all | non_neg_integer()) ->
+    {ok, non_neg_integer()} | {error | timeout, term()}.
+retry_delayed(Q, Mode) when ?is_amqqueue(Q) ->
+    Server = amqqueue:get_pid(Q),
+    rabbit_fifo_client:retry_delayed(Server, Mode).
+
+-spec assign_deferred(rabbit_types:ctag(), [binary()],
+                      rabbit_fifo_client:state(),
+                      amqqueue:amqqueue()) ->
+    {{ok, non_neg_integer()} |
+     {partial, non_neg_integer(), [binary()]} |
+     {error, term()},
+     rabbit_fifo_client:state()}.
+assign_deferred(CTag, Tokens, QState, _Q) ->
+    rabbit_fifo_client:assign_deferred(CTag, Tokens, QState).
 
 cleanup_data_dir() ->
     Names = [begin
@@ -1678,6 +1725,53 @@ reclaim_memory(Vhost, QueueName) ->
     ra_log_wal:force_roll_over({?RA_WAL_NAME, Node}).
 
 %%----------------------------------------------------------------------------
+
+get_consumer_disconnected_timeout(Q) ->
+    case args_policy_lookup(<<"consumer-disconnected-timeout">>, fun min/2, Q) of
+        undefined ->
+            application:get_env(rabbit, consumer_disconnected_timeout, 60_000);
+        Val when is_integer(Val) ->
+            Val
+    end.
+
+get_delayed_retry_config(Q) ->
+    case args_policy_lookup(<<"delayed-retry-type">>, fun policy_has_precedence/2, Q) of
+        <<"disabled">> ->
+            disabled;
+        undefined ->
+            disabled;
+        Type when Type =:= <<"all">>;
+                  Type =:= <<"failed">>;
+                  Type =:= <<"returned">> ->
+            Min = args_policy_lookup(<<"delayed-retry-min">>, fun min/2, Q),
+            Max0 = args_policy_lookup(<<"delayed-retry-max">>, fun min/2, Q),
+            case Min of
+                undefined ->
+                    disabled;
+                _ when is_integer(Min), Min > 0 ->
+                    Max = case Max0 of
+                              undefined -> Min;
+                              _ when is_integer(Max0), Max0 > 0 -> Max0;
+                              _ -> Min
+                          end,
+                    {delayed_retry_type(Type), Min, Max};
+                _ ->
+                    disabled
+            end;
+        _ ->
+            disabled
+    end.
+
+delayed_retry_type(<<"all">>) -> all;
+delayed_retry_type(<<"failed">>) -> failed;
+delayed_retry_type(<<"returned">>) -> returned.
+
+fmt_delayed_retry(disabled) ->
+    <<"disabled">>;
+fmt_delayed_retry({Type, Min, Max}) ->
+    iolist_to_binary(
+      io_lib:format("~ts (min: ~bms, max: ~bms)", [Type, Min, Max])).
+
 dead_letter_handler(Q, Overflow) ->
     Exchange = args_policy_lookup(<<"dead-letter-exchange">>, fun queue_arg_has_precedence/2, Q),
     RoutingKey = args_policy_lookup(<<"dead-letter-routing-key">>, fun queue_arg_has_precedence/2, Q),
@@ -2034,7 +2128,7 @@ make_ra_conf(Q, ServerId, Membership, MacVersion)
                  Membership, MacVersion).
 
 make_ra_conf(Q, ServerId, TickTimeout,
-             SnapshotInterval, CheckpointInterval,
+             _SnapshotInterval, _CheckpointInterval,
              Membership, MacVersion) ->
     QName = amqqueue:get_name(Q),
     #resource{name = QNameBin} = QName,
@@ -2043,10 +2137,14 @@ make_ra_conf(Q, ServerId, TickTimeout,
     UId = ra:new_uid(ra_lib:to_binary(ClusterName)),
     FName = rabbit_misc:rs(QName),
     Formatter = {?MODULE, format_ra_event, [QName]},
+    MinRecoveryCheckpointInterval =
+        application:get_env(rabbit, quorum_min_recovery_checkpoint_interval,
+                            100_000),
     LogCfg = #{uid => UId,
-               snapshot_interval => SnapshotInterval,
-               min_checkpoint_interval => CheckpointInterval,
-               max_checkpoints => 3},
+               min_snapshot_interval => 0,
+               % min_checkpoint_interval => CheckpointInterval,
+               % max_checkpoints => 3,
+               major_compaction_strategy => {num_minors, 32}},
     rabbit_misc:maps_put_truthy(membership, Membership,
                                 #{cluster_name => ClusterName,
                                   id => ServerId,
@@ -2058,6 +2156,7 @@ make_ra_conf(Q, ServerId, TickTimeout,
                                   initial_members => Members,
                                   log_init_args => LogCfg,
                                   tick_timeout => TickTimeout,
+                                  min_recovery_checkpoint_interval => MinRecoveryCheckpointInterval,
                                   machine => RaMachine,
                                   initial_machine_version => MacVersion,
                                   ra_event_formatter => Formatter}).
@@ -2066,8 +2165,12 @@ make_mutable_config(Q) ->
     QName = amqqueue:get_name(Q),
     TickTimeout = application:get_env(rabbit, quorum_tick_interval,
                                       ?TICK_INTERVAL),
+    MinRecoveryCheckpointInterval =
+        application:get_env(rabbit, quorum_min_recovery_checkpoint_interval,
+                            100_000),
     Formatter = {?MODULE, format_ra_event, [QName]},
     #{tick_timeout => TickTimeout,
+      min_recovery_checkpoint_interval => MinRecoveryCheckpointInterval,
       ra_event_formatter => Formatter}.
 
 get_nodes(Q) when ?is_amqqueue(Q) ->
@@ -2244,7 +2347,8 @@ force_checkpoint_on_queue(QName) ->
             {error, classic_queue_not_supported};
         {ok, Q} when ?amqqueue_is_quorum(Q) ->
             {RaName, _} = amqqueue:get_pid(Q),
-            ?LOG_DEBUG("Sending command to force ~ts to take a checkpoint", [QNameFmt]),
+            ?LOG_DEBUG("Sending command to force ~ts to take a checkpoint",
+                       [QNameFmt]),
             Nodes = amqqueue:get_nodes(Q),
             _ = [ra:cast_aux_command({RaName, Node}, force_checkpoint)
                  || Node <- Nodes],
@@ -2496,13 +2600,13 @@ revive_local_queue_members() ->
     %% empty binary as the vhost name.
     {Recovered, Failed} = recover(<<>>, Queues),
     ?LOG_DEBUG("Successfully revived ~b quorum queue replicas",
-                     [length(Recovered)]),
+               [length(Recovered)]),
     case length(Failed) of
         0 ->
             ok;
         NumFailed ->
             ?LOG_ERROR("Failed to revive ~b quorum queue replicas",
-                             [NumFailed])
+                       [NumFailed])
     end,
 
     ?LOG_INFO("Restart of local quorum queue replicas is complete"),
@@ -2520,3 +2624,13 @@ queue_vm_ets() ->
 
 tick_interval() ->
     application:get_env(rabbit, quorum_tick_interval, ?TICK_INTERVAL).
+
+table_lookup(Tbl, Key, Default)
+  when is_list(Tbl) andalso
+       is_binary(Key) ->
+    case rabbit_misc:table_lookup(Tbl, Key) of
+        {_Type, Value} ->
+            Value;
+        _ ->
+            Default
+    end.
