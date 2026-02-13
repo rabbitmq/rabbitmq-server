@@ -223,8 +223,8 @@ end_per_group(_, Config) ->
 
 init_per_testcase(
   enable_feature_flag_when_ff_file_is_unwritable = Testcase, Config) ->
-    case erlang:system_info(otp_release) of
-        "26" ->
+    case rabbit_ct_broker_helpers:configured_metadata_store(Config) of
+        mnesia ->
             {skip, "Hits a crash in Mnesia fairly frequently"};
         _ ->
             do_init_per_testcase(Testcase, Config)
