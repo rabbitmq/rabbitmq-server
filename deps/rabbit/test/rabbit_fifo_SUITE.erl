@@ -3434,6 +3434,170 @@ delayed_assign_deferred_consumer_not_found_test(Config) ->
               State0),
     ok.
 
+delayed_retry_monotonic_timestamp_test(Config) ->
+    %% Verify that the delay is calculated from the command timestamp.
+    %% return_one uses max(last_command_time, Ts) to guard against
+    %% non-monotonic Ra timestamps. Since apply/3 sets
+    %% last_command_time = Ts before calling apply_/3, the effective
+    %% baseline is always the return command's own timestamp.
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+             delayed_retry => {all, 1000, 1000}},
+    State0 = init(Conf),
+    Cid = {?FUNCTION_NAME_B, self()},
+    {State1, _} = enq(Config, 1, 1, msg1, State0),
+    {State2, #{key := CKey, next_msg_id := MsgId}, _} =
+        checkout_ts(Config, 2, 100, Cid, {auto, {simple_prefetch, 1}}, State1),
+    %% Return at timestamp 300. Delay = 1000, so ready_at = 1300.
+    {State3, _, _} = apply(meta(Config, 3, 300),
+                           rabbit_fifo:make_return(CKey, [MsgId]),
+                           State2),
+    ?assertMatch(#{num_delayed_messages := 1,
+                   next_delayed_at := 1300}, rabbit_fifo:overview(State3)),
+    %% expire_msgs at 1299 should not promote the message
+    {State4, _, _} = apply(meta(Config, 4, 1299),
+                           {timeout, {expire_msgs, shallow}},
+                           State3),
+    ?assertMatch(#{num_delayed_messages := 1}, rabbit_fifo:overview(State4)),
+    %% expire_msgs at 1300 should promote and deliver the message
+    {State5, _, _} = apply(meta(Config, 5, 1300),
+                           {timeout, {expire_msgs, shallow}},
+                           State4),
+    ?assertMatch(#{num_checked_out := 1,
+                   num_delayed_messages := 0}, rabbit_fifo:overview(State5)),
+    ok.
+
+delayed_retry_consumer_down_test(Config) ->
+    %% When a consumer process dies, return_all is called with
+    %% DeliveryFailed = true (Reason == down). With delayed_retry
+    %% configured for failed deliveries, messages should be delayed.
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+             delayed_retry => {failed, 1000, 1000}},
+    State0 = init(Conf),
+    CPid = test_util:fake_pid(n1),
+    Cid = {?FUNCTION_NAME_B, CPid},
+    {State1, _} = enq(Config, 1, 1, msg1, State0),
+    {State2, _} = enq(Config, 2, 2, msg2, State1),
+    {State3, #{}, _} =
+        checkout_ts(Config, 3, 100, Cid, {auto, {simple_prefetch, 2}}, State2),
+    ?assertMatch(#{num_checked_out := 2}, rabbit_fifo:overview(State3)),
+    %% Consumer process dies. return_all passes DeliveryFailed = true
+    %% because Reason == down, so both messages should be delayed.
+    {State4, _, _} = apply(meta(Config, 4, 100), {down, CPid, noproc}, State3),
+    ?assertMatch(#{num_checked_out := 0,
+                   num_delayed_messages := 2,
+                   num_ready_messages := 0}, rabbit_fifo:overview(State4)),
+    ok.
+
+delayed_retry_consumer_disconnect_timeout_test(Config) ->
+    %% When a consumer is suspected down and the disconnected timeout
+    %% fires, return_all is called with DeliveryFailed = false.
+    %% With delayed_retry = {failed, ...}, messages should NOT be
+    %% delayed (only failed deliveries are delayed in this mode).
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+             delayed_retry => {failed, 1000, 1000}},
+    State0 = init(Conf),
+    CPid = test_util:fake_pid(n1@banana),
+    Cid = {?FUNCTION_NAME_B, CPid},
+    {State1, _} = enq(Config, 1, 1, msg1, State0),
+    {State2, #{key := CKey}, _} =
+        checkout_ts(Config, 2, 100, Cid, {auto, {simple_prefetch, 1}}, State1),
+    ?assertMatch(#{num_checked_out := 1}, rabbit_fifo:overview(State2)),
+    %% Node disconnects — consumer is marked as suspected_down
+    {State3, _, _} = apply(meta(Config, 3, 100),
+                           {down, CPid, noconnection}, State2),
+    %% Disconnected timeout fires — return_all with DeliveryFailed = false.
+    %% With {failed, ...} mode, non-failed returns are not delayed.
+    {State4, _, _} = apply(meta(Config, 4, 200),
+                           {timeout, {consumer_disconnected_timeout, CKey}},
+                           State3),
+    ?assertMatch(#{num_delayed_messages := 0}, rabbit_fifo:overview(State4)),
+    ok.
+
+delayed_retry_consumer_down_returned_mode_test(Config) ->
+    %% With delayed_retry = {returned, ...}, consumer death (down)
+    %% passes DeliveryFailed = true, so messages should NOT be delayed
+    %% (returned mode only delays non-failed returns).
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+             delayed_retry => {returned, 1000, 1000}},
+    State0 = init(Conf),
+    CPid = test_util:fake_pid(n1),
+    Cid = {?FUNCTION_NAME_B, CPid},
+    {State1, _} = enq(Config, 1, 1, msg1, State0),
+    {State2, #{}, _} =
+        checkout_ts(Config, 2, 100, Cid, {auto, {simple_prefetch, 1}}, State1),
+    ?assertMatch(#{num_checked_out := 1}, rabbit_fifo:overview(State2)),
+    %% Consumer dies — DeliveryFailed = true.
+    %% With {returned, ...} mode, failed deliveries are not delayed.
+    {State3, _, _} = apply(meta(Config, 3, 100), {down, CPid, noproc}, State2),
+    ?assertMatch(#{num_delayed_messages := 0}, rabbit_fifo:overview(State3)),
+    ok.
+
+delayed_retry_consumer_disconnect_all_mode_test(Config) ->
+    %% With delayed_retry = {all, ...}, the disconnected timeout
+    %% fires with DeliveryFailed = false, and all returns are delayed.
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+             delayed_retry => {all, 1000, 1000}},
+    State0 = init(Conf),
+    CPid = test_util:fake_pid(n1@banana),
+    Cid = {?FUNCTION_NAME_B, CPid},
+    {State1, _} = enq(Config, 1, 1, msg1, State0),
+    {State2, #{key := CKey}, _} =
+        checkout_ts(Config, 2, 100, Cid, {auto, {simple_prefetch, 1}}, State1),
+    ?assertMatch(#{num_checked_out := 1}, rabbit_fifo:overview(State2)),
+    %% Node disconnects
+    {State3, _, _} = apply(meta(Config, 3, 100),
+                           {down, CPid, noconnection}, State2),
+    %% Disconnected timeout fires — return_all with DeliveryFailed = false.
+    %% With {all, ...} mode, all returns are delayed.
+    {State4, _, _} = apply(meta(Config, 4, 200),
+                           {timeout, {consumer_disconnected_timeout, CKey}},
+                           State3),
+    ?assertMatch(#{num_delayed_messages := 1,
+                   num_ready_messages := 0}, rabbit_fifo:overview(State4)),
+    ok.
+
+delayed_retry_delivery_limit_takes_precedence_test(Config) ->
+    %% When a message exceeds the delivery_limit, it should be
+    %% dead-lettered rather than delayed, even when delayed_retry
+    %% is configured.
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+             delayed_retry => {all, 1000, 1000},
+             delivery_limit => 1},
+    State0 = init(Conf),
+    Cid = {?FUNCTION_NAME_B, self()},
+    {State1, _} = enq(Config, 1, 1, msg1, State0),
+    {State2, #{key := CKey, next_msg_id := MsgId}, _} =
+        checkout_ts(Config, 2, 100, Cid, {auto, {simple_prefetch, 1}}, State1),
+    %% First modify with delivery_failed=true: delivery_count becomes 1.
+    %% delivery_count (1) <= delivery_limit (1), so the message is delayed.
+    {State3, _, _} = apply(meta(Config, 3, 100),
+                           rabbit_fifo:make_modify(CKey, [MsgId], true, false, #{}),
+                           State2),
+    ?assertMatch(#{num_delayed_messages := 1,
+                   num_messages := 1}, rabbit_fifo:overview(State3)),
+    %% Promote the delayed message and deliver it
+    {State4, _, _} = apply(meta(Config, 4, 1200),
+                           {timeout, {expire_msgs, shallow}},
+                           State3),
+    ?assertMatch(#{num_checked_out := 1,
+                   num_delayed_messages := 0}, rabbit_fifo:overview(State4)),
+    %% Second modify with delivery_failed=true: delivery_count becomes 2.
+    %% delivery_count (2) > delivery_limit (1), so the message is
+    %% dead-lettered (discarded), not delayed.
+    {State5, _, _} = apply(meta(Config, 5, 1200),
+                           rabbit_fifo:make_modify(CKey, [MsgId + 1], true, false, #{}),
+                           State4),
+    ?assertMatch(#{num_delayed_messages := 0,
+                   num_checked_out := 0,
+                   num_messages := 0}, rabbit_fifo:overview(State5)),
+    ok.
+
 run_log(Config, InitState, Entries) ->
     run_log(rabbit_fifo, Config, InitState, Entries, fun (_) -> true end).
 
