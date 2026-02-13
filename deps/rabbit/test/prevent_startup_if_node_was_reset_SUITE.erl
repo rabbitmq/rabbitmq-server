@@ -14,21 +14,27 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
--compile(export_all).
+-export([all/0,
+         groups/0,
+         init_per_suite/1,
+         end_per_suite/1,
+         init_per_group/2,
+         end_per_group/2,
+         init_per_testcase/2,
+         end_per_testcase/2,
+
+         prevent_startup_if_node_was_reset_disabled/1,
+         prevent_startup_if_node_was_reset_enabled/1
+        ]).
 
 all() ->
     [
-        {group, single_node_mnesia},
-        {group, single_node_khepri}
+        {group, single_node}
     ].
 
 groups() ->
     [
-        {single_node_mnesia, [], [
-            prevent_startup_if_node_was_reset_disabled,
-            prevent_startup_if_node_was_reset_enabled
-        ]},
-        {single_node_khepri, [], [
+        {single_node, [], [
             prevent_startup_if_node_was_reset_disabled,
             prevent_startup_if_node_was_reset_enabled
         ]}
@@ -47,7 +53,6 @@ end_per_suite(Config) ->
 
 init_per_group(Groupname, Config) ->
     Config0 = rabbit_ct_helpers:set_config(Config, [
-        {metadata_store, meta_store(Groupname)},
         {rmq_nodes_clustered, false},
         {rmq_nodename_suffix, Groupname},
         {rmq_nodes_count, 1}
@@ -140,28 +145,10 @@ start_app(Config) ->
         Error -> Error
     end.
 
-maybe_enable_prevent_startup_if_node_was_reset(Config, prevent_startup_if_node_was_reset_enabled) ->
-    rabbit_ct_helpers:merge_app_env(
-        Config, {rabbit, [{prevent_startup_if_node_was_reset, true}]}
-    );
-maybe_enable_prevent_startup_if_node_was_reset(Config, _) ->
-    Config.
-
-meta_store(single_node_mnesia) ->
-    mnesia;
-meta_store(single_node_khepri) ->
-    khepri.
-
 schema_file(Config) ->
     DataDir = rabbit_ct_broker_helpers:get_node_config(Config, 0, data_dir),
-    MetaStore = rabbit_ct_helpers:get_config(Config, metadata_store),
-    case MetaStore of
-        mnesia ->
-            filename:join(DataDir, "schema.DAT");
-        khepri ->
-            NodeName = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-            filename:join([DataDir, "coordination", NodeName, "names.dets"])
-    end.
+    NodeName = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    filename:join([DataDir, "coordination", NodeName, "names.dets"]).
 
 set_env(Config, Bool) ->
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),

@@ -11,7 +11,26 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
--compile(export_all).
+-export([suite/0,
+         all/0,
+         groups/0,
+         init_per_suite/1,
+         end_per_suite/1,
+         init_per_group/2,
+         end_per_group/2,
+         init_per_testcase/2,
+         end_per_testcase/2,
+
+         max_length_default/1,
+         max_length_bytes_default/1,
+         max_length_drop_head/1,
+         max_length_bytes_drop_head/1,
+         max_length_reject_confirm/1,
+         max_length_bytes_reject_confirm/1,
+         max_length_drop_publish/1,
+         max_length_drop_publish_requeue/1,
+         max_length_bytes_drop_publish/1
+        ]).
 
 -define(TIMEOUT_LIST_OPS_PASS, 5000).
 -define(TIMEOUT, 30000).
@@ -21,17 +40,12 @@
 
 all() ->
     [
-      {group, mnesia_parallel_tests},
-      {group, khepri_parallel_tests}
+      {group, parallel_tests}
     ].
 
 groups() ->
     [
-     {mnesia_parallel_tests, [parallel], [
-          {max_length_classic, [], max_length_tests()},
-          {max_length_quorum, [], max_length_quorum_tests()}
-       ]},
-     {khepri_parallel_tests, [parallel], [
+     {parallel_tests, [parallel], [
           {max_length_classic, [], max_length_tests()},
           {max_length_quorum, [], max_length_quorum_tests()}
        ]}
@@ -78,23 +92,7 @@ init_per_group(max_length_quorum, Config) ->
       Config,
       [{queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>}]},
        {queue_durable, true}]);
-init_per_group(mnesia_parallel_tests = Group, Config0) ->
-    Config = rabbit_ct_helpers:set_config(Config0, [{metadata_store, mnesia}]),
-    init_per_group0(Group, Config);
-init_per_group(khepri_parallel_tests = Group, Config0) ->
-    %% this is very hacky way of skipping the tests, but the khepri_db
-    %% flag exists in 3,13, but it's not compatible with 4.x. We can remove
-    %% this after 4.2
-    SecondaryDist = os:getenv("SECONDARY_DIST", ""),
-    case string:str(SecondaryDist, "3.13.") == 0 of
-        true ->
-            Config = rabbit_ct_helpers:set_config(Config0, [{metadata_store, khepri}]),
-            init_per_group0(Group, Config);
-        _ ->
-            {skip, "Khepri was not supported in 3.13"}
-    end.
-
-init_per_group0(Group, Config) ->
+init_per_group(parallel_tests = Group, Config) ->
     case lists:member({group, Group}, all()) of
         true ->
             ClusterSize = 3,
