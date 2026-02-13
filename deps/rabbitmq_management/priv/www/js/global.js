@@ -1131,8 +1131,12 @@ function unregisterPostProcessor(name) {
 } 
 function invokeRegisteredPostProcessors() {
   for (const [name, processorFun] of current_postprocessors) {
-    console.log(`Calling postprocessor ${name}`);
-    processorFun();  
+    console.debug(`Calling postprocessor ${name}`);
+    try {
+      processorFun();
+    } catch (err) {
+      console.error(`PostProcessor ${name} failed due to ${err}`);
+    }
   }
 }
 
