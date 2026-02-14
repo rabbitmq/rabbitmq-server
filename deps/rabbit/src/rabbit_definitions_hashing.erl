@@ -58,6 +58,11 @@
 register() ->
     rabbit_registry:register(runtime_parameter, ?RUNTIME_PARAMETER_COMPONENT, ?MODULE).
 
+%% NOTE: This is an internal runtime parameter that must not appear in
+%% exported definitions. It is filtered out by
+%% ?INTERNAL_RUNTIME_PARAMETER_COMPONENTS in rabbit_definitions.erl.
+%% If you rename or change this component, update that list.
+
 
 validate(_VHost, ?RUNTIME_PARAMETER_COMPONENT, Name, Term, _User) ->
     rabbit_parameter_validation:binary(Name, Term).
