@@ -1112,7 +1112,7 @@ user_definition(User) ->
 %%   - rabbit_definitions_hashing (imported_definition_hash_value)
 -define(INTERNAL_RUNTIME_PARAMETER_COMPONENTS, [
     ?EXCHANGE_DELETE_IN_PROGRESS_COMPONENT,
-    <<"imported_definition_hash_value">>
+    ?IMPORTED_DEFINITION_HASH_COMPONENT
 ]).
 
 list_runtime_parameters() ->
