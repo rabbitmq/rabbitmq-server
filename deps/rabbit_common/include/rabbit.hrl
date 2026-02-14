@@ -248,6 +248,7 @@
 -define(DELETED_HEADER, <<"BCC">>).
 
 -define(EXCHANGE_DELETE_IN_PROGRESS_COMPONENT, <<"exchange-delete-in-progress">>).
+-define(IMPORTED_DEFINITION_HASH_COMPONENT, <<"imported_definition_hash_value">>).
 
 -define(CHANNEL_OPERATION_TIMEOUT, rabbit_misc:get_channel_operation_timeout()).
 
