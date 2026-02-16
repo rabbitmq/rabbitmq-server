@@ -529,7 +529,8 @@ tcp_port_base_for_broker0(Config, I, PortsCount) ->
     tcp_port_base_for_broker1(Base, I, PortsCount).
 
 tcp_port_base_for_broker1(Base, I, PortsCount) ->
-    Base + I * PortsCount * ?NODE_START_ATTEMPTS.
+    %% the initial attempt + NODE_START_ATTEMPTS retries
+    Base + I * PortsCount * (?NODE_START_ATTEMPTS + 1).
 
 %% @todo Refactor to simplify this...
 update_tcp_ports_in_rmq_config(NodeConfig, [tcp_port_amqp = Key | Rest]) ->
