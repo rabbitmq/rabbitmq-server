@@ -89,13 +89,15 @@ parse(_Name, {source, Source}) ->
                             proplists:get_value(queue, Source)),
     %% TODO parse
     CArgs = proplists:get_value(consumer_args, Source, []),
+    CTag = proplists:get_value(consumer_name, Source, <<>>),
     #{module => ?MODULE,
       uris => proplists:get_value(uris, Source),
       resource_decl => rabbit_shovel_util:decl_fun(?MODULE, {source, Source}),
       queue => Queue,
       delete_after => proplists:get_value(delete_after, Source, never),
       prefetch_count => Prefetch,
-      consumer_args => CArgs};
+      consumer_args => CArgs,
+      consumer_name => CTag};
 parse(Name, {destination, Dest}) ->
     PubProp = proplists:get_value(publish_properties, Dest, []),
     PropsFun = try_make_parse_publish(publish_properties, PubProp),
@@ -120,6 +122,7 @@ parse_source(Def) ->
     SrcQ     = pget(<<"src-queue">>, Def, none),
     SrcQArgs = pget(<<"src-queue-args">>,   Def, #{}),
     SrcCArgs = rabbit_misc:to_amqp_table(pget(<<"src-consumer-args">>, Def, [])),
+    SrcCTag = pget(<<"src-consumer-name">>, Def, <<>>),
     GlobalPredeclared = proplists:get_value(predeclared, application:get_env(?APP, topology, []), false),
     Predeclared = pget(<<"src-predeclared">>, Def, GlobalPredeclared),
     {SrcDeclFun, Queue, DestHeaders} =
@@ -151,7 +154,8 @@ parse_source(Def) ->
                   queue => Queue,
                   delete_after => opt_b2a(DeleteAfter),
                   prefetch_count => PrefetchCount,
-                  consumer_args => SrcCArgs
+                  consumer_args => SrcCArgs,
+                  consumer_name => SrcCTag
                  }, Details), DestHeaders}.
 
 parse_dest({VHost, Name}, ClusterName, Def, SourceHeaders) ->
@@ -230,6 +234,7 @@ validate_src_funs(_Def, User) ->
      {<<"src-queue">>,        fun rabbit_parameter_validation:binary/2, optional},
      {<<"src-queue-args">>,   fun rabbit_shovel_util:validate_queue_args/2, optional},
      {<<"src-consumer-args">>, fun rabbit_shovel_util:validate_consumer_args/2, optional},
+     {<<"src-consumer-name">>, fun rabbit_parameter_validation:binary/2, optional},
      {<<"prefetch-count">>,   fun rabbit_parameter_validation:number/2, optional},
      {<<"src-prefetch-count">>, fun rabbit_parameter_validation:number/2, optional},
      %% a deprecated pre-3.7 setting
@@ -264,7 +269,8 @@ init_source(Conf = #{ack_mode := AckMode,
                                  current := {Conn, Chan, _},
                                  prefetch_count := Prefetch,
                                  resource_decl := {M, F, MFArgs},
-                                 consumer_args := Args} = Src}) ->
+                                 consumer_args := Args,
+                                 consumer_name := CTag} = Src}) ->
     apply(M, F, MFArgs ++ [Conn, Chan]),
 
     NoAck = AckMode =:= no_ack,
@@ -283,6 +289,7 @@ init_source(Conf = #{ack_mode := AckMode,
     end,
     #'basic.consume_ok'{} =
         amqp_channel:subscribe(Chan, #'basic.consume'{queue = Queue,
+                                                      consumer_tag = CTag,
                                                       no_ack = NoAck,
                                                       arguments = Args}, self()),
     Conf#{source => Src#{remaining => Remaining,

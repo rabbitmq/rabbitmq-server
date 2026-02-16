@@ -108,12 +108,14 @@ parse(_Name, {source, Source}) ->
     Queue = parse_parameter(queue, fun parse_binary/1,
                             proplists:get_value(queue, Source)),
     CArgs = proplists:get_value(consumer_args, Source, []),
+    CTag = proplists:get_value(consumer_name, Source, <<>>),
     #{module => ?MODULE,
       uris => proplists:get_value(uris, Source),
       resource_decl => rabbit_shovel_util:decl_fun(?MODULE, {source, Source}),
       queue => Queue,
       delete_after => proplists:get_value(delete_after, Source, never),
-      consumer_args => CArgs};
+      consumer_args => CArgs,
+      consumer_name => CTag};
 parse(_Name, {destination, Dest}) ->
     Exchange = parse_parameter(dest_exchange, fun parse_binary/1,
                                proplists:get_value(dest_exchange, Dest, none)),
@@ -136,6 +138,7 @@ parse_source(Def) ->
     SrcQ     = pget(<<"src-queue">>, Def, none),
     SrcQArgs = pget(<<"src-queue-args">>,   Def, #{}),
     SrcCArgs = rabbit_misc:to_amqp_table(pget(<<"src-consumer-args">>, Def, [])),
+    SrcCTag = pget(<<"src-consumer-name">>, Def, <<>>),
     GlobalPredeclared = proplists:get_value(predeclared, application:get_env(?APP, topology, []), false),
     Predeclared = pget(<<"src-predeclared">>, Def, GlobalPredeclared),
     {SrcDeclFun, Queue, DestHeaders} =
@@ -164,7 +167,8 @@ parse_source(Def) ->
                   resource_decl => SrcDeclFun,
                   queue => Queue,
                   delete_after => opt_b2a(DeleteAfter),
-                  consumer_args => SrcCArgs
+                  consumer_args => SrcCArgs,
+                  consumer_name => SrcCTag
                  }, Details), DestHeaders}.
 
 parse_dest({_VHost, _Name}, _ClusterName, Def, _SourceHeaders) ->
@@ -224,6 +228,7 @@ validate_src_funs(_Def, User) ->
      {<<"src-queue">>, fun rabbit_parameter_validation:binary/2, optional},
      {<<"src-queue-args">>,   fun rabbit_shovel_util:validate_queue_args/2, optional},
      {<<"src-consumer-args">>, fun rabbit_shovel_util:validate_consumer_args/2, optional},
+     {<<"src-consumer-name">>, fun rabbit_parameter_validation:binary/2, optional},
      {<<"src-delete-after">>, fun rabbit_shovel_util:validate_delete_after/2, optional},
      {<<"src-predeclared">>,  fun rabbit_parameter_validation:boolean/2, optional}
     ].
@@ -297,13 +302,17 @@ maybe_add_dest_queue(State) ->
 
 init_source(State = #{source := #{queue_r := QName,
                                   consumer_args := Args,
+                                  consumer_name := CTag0,
                                   current := #{queue_states := QState0,
                                                vhost := VHost} = Current} = Src,
                       name := Name,
                       ack_mode := AckMode}) ->
     Mode = {credited, ?INITIAL_DELIVERY_COUNT},
     MaxLinkCredit = max_link_credit(),
-    CTag = consumer_tag(Name),
+    CTag = case CTag0 of
+               <<>> -> consumer_tag(Name);
+               _    -> CTag0
+           end,
     case rabbit_amqqueue:with(
            QName,
            fun(Q) ->
