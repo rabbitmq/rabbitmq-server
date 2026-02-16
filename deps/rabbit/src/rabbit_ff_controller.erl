@@ -762,8 +762,18 @@ get_stable_feature_flags(#{feature_flags := FeatureFlags}) ->
       fun(FeatureName, FeatureProps, Acc) ->
               Stability = rabbit_feature_flags:get_stability(FeatureProps),
               case Stability of
-                  stable -> [FeatureName | Acc];
-                  _      -> Acc
+                  stable when ?IS_FEATURE_FLAG(FeatureProps) ->
+                      [FeatureName | Acc];
+                  stable when ?IS_DEPRECATION(FeatureProps) ->
+                      Permitted = (
+                        rabbit_deprecated_features:should_be_permitted(
+                          FeatureName, FeatureProps)),
+                      case Permitted of
+                          true  -> Acc;
+                          false -> [FeatureName | Acc]
+                      end;
+                  _ ->
+                      Acc
               end
       end, [], FeatureFlags).
 
