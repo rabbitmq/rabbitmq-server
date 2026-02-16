@@ -10,6 +10,7 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 -compile(export_all).
@@ -107,7 +108,8 @@ tests() ->
      delete_src_queue,
      shovel_status,
      change_definition,
-     disk_alarm
+     disk_alarm,
+     consumer_tag
     ].
 
 %% -------------------------------------------------------------------
@@ -605,6 +607,30 @@ disk_alarm(Config) ->
               amqp10_expect_count(Sess, Dest, 10)
       end).
 
+consumer_tag(Config) ->
+    SrcProtocol = ?config(src_protocol, Config),
+    Src = ?config(srcq, Config),
+    Dest = ?config(destq, Config),
+    Param = ?config(param, Config),
+    CustomName = <<"my-custom-consumer-name">>,
+    with_amqp10_session(Config,
+                        fun (Sess) ->
+                                ExtraArgs = [{<<"src-consumer-name">>, CustomName}],
+                                ShovelArgs = ?config(shovel_args, Config) ++ ExtraArgs,
+                                set_param(Config, Param, ShovelArgs),
+                                amqp10_publish_expect(Sess, Src, Dest, <<"hello">>, 1),
+                                case SrcProtocol of
+                                    <<"amqp10">> ->
+                                        ?awaitMatch(true,
+                                                    has_outgoing_link_with_name(Config, Src, CustomName),
+                                                    30_000);
+                                    _ ->
+                                        ?awaitMatch(true,
+                                                    has_consumer_with_tag(Config, Src, CustomName),
+                                                    30_000)
+                                end
+                        end).
+
 %%----------------------------------------------------------------------------
 maybe_skip_local_protocol(Config) ->
     [Node] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -639,3 +665,33 @@ shovel_status(Config, Name) ->
       Name, 1,
       rabbit_ct_broker_helpers:rpc(Config, 0,
                                    rabbit_shovel_status, status, [])).
+
+has_consumer_with_tag(Config, QueueName, ExpectedTag) ->
+    Consumers = rabbit_ct_broker_helpers:rpc(
+                  Config, 0, rabbit_amqqueue, consumers_all, [<<"/">>]),
+    lists:any(fun(Props) ->
+                      Resource = proplists:get_value(queue_name, Props),
+                      Tag = proplists:get_value(consumer_tag, Props),
+                      Resource#resource.name == QueueName andalso Tag == ExpectedTag
+              end, Consumers).
+
+%% For AMQP 1.0 source shovels, the consumer tag reported by
+%% consumers_all/1 is the link handle (an integer), not the link name.
+has_outgoing_link_with_name(Config, QueueName, ExpectedLinkName) ->
+    SessionPids = rabbit_ct_broker_helpers:rpc(
+                    Config, 0, rabbit_amqp_session, list_local, []),
+    lists:any(
+      fun(Pid) ->
+              case rabbit_ct_broker_helpers:rpc(
+                     Config, 0, rabbit_amqp_session, info, [Pid]) of
+                  {ok, Infos} ->
+                      OutgoingLinks = proplists:get_value(outgoing_links, Infos, []),
+                      lists:any(
+                        fun(Link) ->
+                                proplists:get_value(link_name, Link) == ExpectedLinkName
+                                andalso proplists:get_value(queue_name, Link) == QueueName
+                        end, OutgoingLinks);
+                  _ ->
+                      false
+              end
+      end, SessionPids).

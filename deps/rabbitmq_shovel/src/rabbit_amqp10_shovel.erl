@@ -89,7 +89,8 @@ parse(_Name, {source, Conf}) ->
       prefetch_count => pget(prefetch_count, Conf, 1000),
       delete_after => pget(delete_after, Conf, never),
       source_address => pget(source_address, Conf),
-      consumer_args => pget(consumer_args, Conf, [])}.
+      consumer_args => pget(consumer_args, Conf, []),
+      consumer_name => pget(consumer_name, Conf, <<>>)}.
 
 parse_source(Def) ->
     Uris = deobfuscated_uris(<<"src-uri">>, Def),
@@ -97,12 +98,14 @@ parse_source(Def) ->
     DeleteAfter = pget(<<"src-delete-after">>, Def, <<"never">>),
     PrefetchCount = pget(<<"src-prefetch-count">>, Def, 1000),
     Headers = [],
+    SrcCName = pget(<<"src-consumer-name">>, Def, <<>>),
     {#{module => rabbit_amqp10_shovel,
        uris => Uris,
        source_address => Address,
        delete_after => opt_b2a(DeleteAfter),
        prefetch_count => PrefetchCount,
-       consumer_args => []}, Headers}.
+       consumer_args => [],
+       consumer_name => SrcCName}, Headers}.
 
 parse_dest({_VHost, _Name}, _ClusterName, Def, SourceHeaders) ->
     Uris = deobfuscated_uris(<<"dest-uri">>, Def),
@@ -146,6 +149,7 @@ validate_src_funs(_Def, User) ->
      {<<"src-uri">>, validate_uri_fun(User), mandatory},
      {<<"src-address">>, fun rabbit_parameter_validation:binary/2, mandatory},
      {<<"src-prefetch-count">>, fun rabbit_parameter_validation:number/2, optional},
+     {<<"src-consumer-name">>, fun rabbit_parameter_validation:binary/2, optional},
      {<<"src-delete-after">>, fun validate_amqp10_delete_after/2, optional}
     ].
 
@@ -171,7 +175,8 @@ validate_dest_funs(_Def, User) ->
 connect_source(State = #{name := Name,
                          ack_mode := AckMode,
                          source := #{uris := [Uri | _],
-                                     source_address := Addr} = Src}) ->
+                                     source_address := Addr,
+                                     consumer_name := CName} = Src}) ->
     SndSettleMode = case AckMode of
                         no_ack -> settled;
                         on_publish -> unsettled;
@@ -180,8 +185,12 @@ connect_source(State = #{name := Name,
     AttachFun = fun(S, L, A, SSM, D) ->
                         amqp10_client:attach_receiver_link(S, L, A, SSM, D, #{}, #{}, true)
                 end,
+    LinkNameOverride = case CName of
+                           <<>> -> undefined;
+                           _    -> CName
+                       end,
     {Conn, Sess, LinkRef} = connect(Name, SndSettleMode, Uri, "receiver", Addr, Src,
-                                    AttachFun),
+                                    AttachFun, LinkNameOverride),
     State#{source => Src#{current => #{conn => Conn,
                                        session => Sess,
                                        link => LinkRef,
@@ -199,7 +208,7 @@ connect_dest(State = #{name := Name,
                     end,
     AttachFun = fun amqp10_client:attach_sender_link_sync/5,
     {Conn, Sess, LinkRef} = connect(Name, SndSettleMode, Uri, "sender", Addr, Dst,
-                                    AttachFun),
+                                    AttachFun, undefined),
     %% wait for link credit here as if there are messages waiting we may try
     %% to forward before we've received credit
     State#{dest => Dst#{current => #{conn => Conn,
@@ -209,7 +218,7 @@ connect_dest(State = #{name := Name,
                                      link => LinkRef,
                                      uri => Uri}}}.
 
-connect(Name, SndSettleMode, Uri, Postfix, Addr, Map, AttachFun) ->
+connect(Name, SndSettleMode, Uri, Postfix, Addr, Map, AttachFun, LinkNameOverride) ->
     {ok, Config0} = amqp10_client:parse_uri(Uri),
     %% As done for AMQP 0.9.1, exclude AMQP 1.0 shovel connections from maintenance mode
     %% to prevent crashes and errors being logged by the shovel plugin when a node gets drained.
@@ -219,9 +228,12 @@ connect(Name, SndSettleMode, Uri, Postfix, Addr, Map, AttachFun) ->
     {ok, Conn} = amqp10_client:open_connection(Config),
     {ok, Sess} = amqp10_client:begin_session(Conn),
     link(Conn),
-    LinkName = begin
-                   LinkName0 = rabbit_shovel_util:gen_unique_name(Name, Postfix),
-                   rabbit_data_coercion:to_binary(LinkName0)
+    LinkName = case LinkNameOverride of
+                   undefined ->
+                       LinkName0 = rabbit_shovel_util:gen_unique_name(Name, Postfix),
+                       rabbit_data_coercion:to_binary(LinkName0);
+                   _ ->
+                       LinkNameOverride
                end,
     % needs to be sync, i.e. awaits the 'attach' event as
     % else we may try to use the link before it is ready
