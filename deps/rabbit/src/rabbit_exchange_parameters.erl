@@ -29,6 +29,11 @@ register() ->
       ?INTERNAL_USER),
     ok.
 
+%% NOTE: This is an internal runtime parameter that must not appear in
+%% exported definitions. It is filtered out by
+%% ?INTERNAL_RUNTIME_PARAMETER_COMPONENTS in rabbit_definitions.erl.
+%% If you rename or change this component, update that list.
+
 validate(_VHost, ?EXCHANGE_DELETE_IN_PROGRESS_COMPONENT, _Name, _Term, _User) ->
     ok.
 
