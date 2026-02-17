@@ -1157,13 +1157,8 @@ update_log_exchange_config(Config) ->
 use_exchange_logger_when_enabling_khepri_db(Config) ->
     case rabbit_ct_helpers:is_mixed_versions() of
         true ->
-            case rabbit_ct_broker_helpers:enable_feature_flag(
-                   Config, 'rabbitmq_4.0.0') of
-                ok ->
-                    use_exchange_logger_when_enabling_khepri_db1(Config);
-                {skip, _} = Skip ->
-                    Skip
-            end;
+            %% It needs 4.0.6 with https://github.com/rabbitmq/rabbitmq-server/pull/14796
+            {skip, "cannot run mixed version with 4.0.5"};
         false ->
             use_exchange_logger_when_enabling_khepri_db1(Config)
     end.
