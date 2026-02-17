@@ -881,12 +881,20 @@
 
 
 #
-# HTTP Dispatch
+# Common management and Prometheus settings
 #
 
-## Log all HTTP API requests to a directory.
-## This applies to all HTTP-based plugins (management, prometheus, etc.).
-## Falls back to management.http_log_dir when not set.
+## Relevant doc guides:
+##
+## https://www.rabbitmq.com/docs/management
+## https://www.rabbitmq.com/docs/prometheus
+
+## Log all requests to HTTP API to a file using the standard Apache Web server log format.
+## This enabled HTTP API request logging for both `rabbitmq_management` and `rabbitmq_prometheus` plugins.
+##
+## As of 4.3.0, the log rotation settings will apply to these files.
+##
+## The management plugin will fall back to `management.http_log_dir` when this setting is not set.
 ##
 # http_dispatch.access_log_dir = /path/to/log/dir
 
