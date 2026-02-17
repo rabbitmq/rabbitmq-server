@@ -389,12 +389,16 @@ handle_dest({'EXIT', _Pid, {shutdown, {server_initiated_close, _, Reason}}}, _St
 handle_dest(_Msg, _State) ->
     not_handled.
 
-close_source(#{source := #{current := #{conn := Conn}}}) ->
+close_source(#{source := #{current := #{conn := Conn,
+                                        session := Sess}}}) ->
+    _ = amqp10_client:end_session(Sess),
     _ = amqp10_client:close_connection(Conn),
     ok;
 close_source(_Config) -> ok.
 
-close_dest(#{dest := #{current := #{conn := Conn}}}) ->
+close_dest(#{dest := #{current := #{conn := Conn,
+                                    session := Sess}}}) ->
+    _ = amqp10_client:end_session(Sess),
     _ = amqp10_client:close_connection(Conn),
     ok;
 close_dest(_Config) -> ok.
