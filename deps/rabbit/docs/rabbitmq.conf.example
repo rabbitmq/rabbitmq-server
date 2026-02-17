@@ -881,12 +881,24 @@
 
 
 #
+# HTTP Dispatch
+#
+
+## Log all HTTP API requests to a directory.
+## This applies to all HTTP-based plugins (management, prometheus, etc.).
+## Falls back to management.http_log_dir when not set.
+##
+# http_dispatch.access_log_dir = /path/to/log/dir
+
+
+#
 # Management
 #
 
 ## Relevant doc guide: https://www.rabbitmq.com/docs/management
 
 ## Log all requests to the management HTTP API to a file.
+## Superseded by http_dispatch.access_log_dir.
 ##
 # management.http_log_dir = /path/to/access.log
 

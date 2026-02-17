@@ -11,6 +11,7 @@
 -define(RMQLOG_DOMAIN_PRELAUNCH,  ?DEFINE_RMQLOG_DOMAIN(prelaunch)).
 -define(RMQLOG_DOMAIN_QUEUE,      ?DEFINE_RMQLOG_DOMAIN(queue)).
 -define(RMQLOG_DOMAIN_UPGRADE,    ?DEFINE_RMQLOG_DOMAIN(upgrade)).
+-define(RMQLOG_DOMAIN_HTTP_ACCESS, ?DEFINE_RMQLOG_DOMAIN(http_api)).
 
 -define(DEFAULT_LOG_LEVEL, info).
 -define(FILTER_NAME, rmqlog_filter).
