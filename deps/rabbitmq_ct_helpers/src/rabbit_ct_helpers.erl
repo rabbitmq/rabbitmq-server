@@ -461,17 +461,10 @@ ensure_rabbitmqctl_cmd(Config) ->
         false ->
             Error;
         _ ->
-            Cmd = [Rabbitmqctl],
-            Env = [
-                   {"RABBITMQ_SCRIPTS_DIR", filename:dirname(Rabbitmqctl)}
-                  ],
-            case exec(Cmd, [drop_stdout, {env, Env}]) of
-                {error, 64, _} ->
+            case filelib:is_file(Rabbitmqctl) of
+                true ->
                     set_config(Config, {rabbitmqctl_cmd, Rabbitmqctl});
-                {error, Code, Reason} ->
-                    ct:pal("Exec failed with exit code ~tp: ~tp", [Code, Reason]),
-                    Error;
-                _ ->
+                false ->
                     Error
             end
     end.
@@ -547,14 +540,10 @@ ensure_rabbitmq_plugins_cmd(Config) ->
         false ->
             Error;
         _ ->
-            Cmd = [Rabbitmqplugins],
-            Env = [
-                   {"RABBITMQ_SCRIPTS_DIR", filename:dirname(Rabbitmqplugins)}
-                  ],
-            case exec(Cmd, [drop_stdout, {env, Env}]) of
-                {error, 64, _} ->
+            case filelib:is_file(Rabbitmqplugins) of
+                true ->
                     set_config(Config, {rabbitmq_plugins_cmd, Rabbitmqplugins});
-                _ ->
+                false ->
                     Error
             end
     end.
@@ -577,19 +566,12 @@ ensure_rabbitmq_queues_cmd(Config) ->
         false ->
             Error;
         _ ->
-            Cmd = [RabbitmqQueues],
-            Env = [
-                   {"RABBITMQ_SCRIPTS_DIR", filename:dirname(RabbitmqQueues)}
-                  ],
-            case exec(Cmd, [drop_stdout, {env, Env}]) of
-                {error, 64, _} ->
+            case filelib:is_file(RabbitmqQueues) of
+                true ->
                     set_config(Config,
                                {rabbitmq_queues_cmd,
                                 RabbitmqQueues});
-                {error, Code, Reason} ->
-                    ct:pal("Exec failed with exit code ~tp: ~tp", [Code, Reason]),
-                    Error;
-                _ ->
+                false ->
                     Error
             end
     end.
@@ -612,19 +594,12 @@ ensure_rabbitmq_streams_cmd(Config) ->
         false ->
             Error;
         _ ->
-            Cmd = [RabbitmqStreams],
-            Env = [
-                   {"RABBITMQ_SCRIPTS_DIR", filename:dirname(RabbitmqStreams)}
-                  ],
-            case exec(Cmd, [drop_stdout, {env, Env}]) of
-                {error, 64, _} ->
+            case filelib:is_file(RabbitmqStreams) of
+                true ->
                     set_config(Config,
                                {rabbitmq_streams_cmd,
                                 RabbitmqStreams});
-                {error, Code, Reason} ->
-                    ct:pal("Exec failed with exit code ~tp: ~tp", [Code, Reason]),
-                    Error;
-                _ ->
+                false ->
                     Error
             end
     end.
@@ -647,19 +622,12 @@ ensure_rabbitmq_diagnostics_cmd(Config) ->
         false ->
             Error;
         _ ->
-            Cmd = [RabbitmqDiagnostics],
-            Env = [
-                   {"RABBITMQ_SCRIPTS_DIR", filename:dirname(RabbitmqDiagnostics)}
-                  ],
-            case exec(Cmd, [drop_stdout, {env, Env}]) of
-                {error, 64, _} ->
+            case filelib:is_file(RabbitmqDiagnostics) of
+                true ->
                     set_config(Config,
                                {rabbitmq_diagnostics_cmd,
                                 RabbitmqDiagnostics});
-                {error, Code, Reason} ->
-                    ct:pal("Exec failed with exit code ~tp: ~tp", [Code, Reason]),
-                    Error;
-                _ ->
+                false ->
                     Error
             end
     end.
