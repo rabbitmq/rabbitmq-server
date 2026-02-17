@@ -983,9 +983,11 @@ terminate(Reason, State = #msstate { index_ets           = IndexEts,
         _ -> {" with reason ~0p", [Reason]}
     end,
     ?LOG_INFO("Stopping message store for directory '~ts'" ++ ExtraLog, [Dir|ExtraLogArgs]),
-    %% stop the gc first, otherwise it could be working and we pull
-    %% out the ets tables from under it.
-    ok = rabbit_msg_store_gc:stop(GCPid),
+    %% Stop the GC first, otherwise it could be working and we pull
+    %% out the ets tables from under it. Use a bounded timeout so
+    %% that if the GC is stuck (e.g. on disk I/O), we can still
+    %% write recovery files before the supervisor kills us.
+    stop_gc(GCPid, Dir),
     State3 = case CurHdl of
                  undefined -> State;
                  _         -> State2 = internal_sync(State),
@@ -1019,6 +1021,25 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 format_message_queue(Opt, MQ) -> rabbit_misc:format_message_queue(Opt, MQ).
+
+stop_gc(GCPid, Dir) ->
+    ShutdownTimeout = rabbit_misc:get_env(
+        rabbit, msg_store_shutdown_timeout, 600_000),
+    GCTimeout = max(ShutdownTimeout - 60_000, 5_000),
+    case rabbit_msg_store_gc:stop(GCPid, GCTimeout) of
+        ok ->
+            ok;
+        {error, timeout} ->
+            ?LOG_WARNING("Message store GC for directory '~ts' "
+                         "did not stop within ~bms, killing it",
+                         [Dir, GCTimeout]),
+            MRef = erlang:monitor(process, GCPid),
+            exit(GCPid, kill),
+            receive
+                {'DOWN', MRef, process, GCPid, _} -> ok
+            after min(GCTimeout div 2, 5_000) -> ok
+            end
+    end.
 
 %%----------------------------------------------------------------------------
 %% general helper functions
