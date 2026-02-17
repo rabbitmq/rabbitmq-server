@@ -32,15 +32,8 @@ jobs:
     steps:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v6
-<<<<<<< HEAD
-
-    - name: FETCH TAGS
-      run: git fetch --tags
-=======
       with:
-        ref: ${{ inputs.ref }}
         fetch-tags: true
->>>>>>> 2eee90fe9 (GH actions: fetch tags using actions/checkout (#15487))
 
     - name: EXTRACT ACTIVEMQ VERSION
       if: inputs.plugin == 'amqp10_client'
