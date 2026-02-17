@@ -453,14 +453,16 @@ handle_dest({bump_credit, Msg}, State) ->
 handle_dest(_Msg, _State) ->
     not_handled.
 
-close_source(#{source := #{current := {Conn, _, _}}}) ->
+close_source(#{source := #{current := {Conn, Ch, _}}}) ->
+    catch amqp_channel:close(Ch),
     catch amqp_connection:close(Conn, ?MAX_CONNECTION_CLOSE_TIMEOUT),
     ok;
 close_source(_) ->
     %% It never connected, connection doesn't exist
     ok.
 
-close_dest(#{dest := #{current := {Conn, _, _}}}) ->
+close_dest(#{dest := #{current := {Conn, Ch, _}}}) ->
+    catch amqp_channel:close(Ch),
     catch amqp_connection:close(Conn, ?MAX_CONNECTION_CLOSE_TIMEOUT),
     ok;
 close_dest(_) ->
