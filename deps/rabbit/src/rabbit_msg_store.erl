@@ -10,6 +10,7 @@
 -behaviour(gen_server2).
 
 -export([start_link/5, successfully_recovered_state/1,
+         gc_pid/1,
          client_init/3, client_terminate/1, client_delete_and_terminate/1,
          client_pre_hibernate/1, client_ref/1,
          write/4, write_flow/4, read/2, read_many/2, contains/2, remove/2]).
@@ -400,6 +401,11 @@ start_link(VHost, Type, Dir, ClientRefs, StartupFunState) when is_atom(Type) ->
 
 successfully_recovered_state(Server) ->
     gen_server2:call(Server, successfully_recovered_state, infinity).
+
+-spec gc_pid(server()) -> pid().
+
+gc_pid(Server) ->
+    gen_server2:call(Server, gc_pid, infinity).
 
 -spec client_init(server(), client_ref(), maybe_msg_id_fun()) -> client_msstate().
 
@@ -808,6 +814,7 @@ init([VHost, Type, BaseDir, ClientRefs, StartupFunState]) ->
 prioritise_call(Msg, _From, _Len, _State) ->
     case Msg of
         successfully_recovered_state                        -> 7;
+        gc_pid                                              -> 7;
         {new_client_state, _Ref, _Pid, _MODC}               -> 7;
         _                                                   -> 0
     end.
@@ -827,6 +834,9 @@ prioritise_info(Msg, _Len, _State) ->
 
 handle_call(successfully_recovered_state, _From, State) ->
     reply(State #msstate.successfully_recovered, State);
+
+handle_call(gc_pid, _From, State) ->
+    reply(State #msstate.gc_pid, State);
 
 handle_call({new_client_state, CRef, CPid, MsgOnDiskFun}, _From,
             State = #msstate { dir                = Dir,
