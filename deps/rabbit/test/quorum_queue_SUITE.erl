@@ -2016,6 +2016,7 @@ priority_queue_fifo(Config) ->
     ?assertEqual({'queue.declare_ok', Queue, 0, 0},
                  declare(Ch, Queue,
                          [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
     ExpectedHi =
         [begin
              MsgP5 = integer_to_binary(P),
@@ -2035,6 +2036,7 @@ priority_queue_fifo(Config) ->
              MsgP1
          end || P <- lists:seq(0, 4)],
 
+    amqp_channel:wait_for_confirms(Ch, 5),
     validate_queue(Ch, Queue, ExpectedHi ++ ExpectedLo),
     ok.
 
@@ -2047,6 +2049,7 @@ priority_queue_2_1_ratio(Config) ->
     ?assertEqual({'queue.declare_ok', Queue, 0, 0},
                  declare(Ch, Queue,
                          [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
     ExpectedLo =
         [begin
              MsgP1 = integer_to_binary(P),
@@ -2065,6 +2068,7 @@ priority_queue_2_1_ratio(Config) ->
              %% high priority is > 4
          end || P <- lists:seq(5, 14)],
 
+    amqp_channel:wait_for_confirms(Ch, 5),
     Expected = lists_interleave(ExpectedLo, ExpectedHi),
 
     validate_queue(Ch, Queue, Expected),
