@@ -1102,8 +1102,28 @@ user_definition(User) ->
       <<"limits">>            => internal_user:get_limits(User)
     }.
 
+%% Internal runtime parameter components that must not appear in
+%% exported definitions. These are implementation details, not
+%% user-defined parameters.
+%%
+%% If you add a new internal runtime parameter component, you MUST
+%% add it to this list. See also:
+%%   - rabbit_exchange_parameters (exchange-delete-in-progress)
+%%   - rabbit_definitions_hashing (imported_definition_hash_value)
+-define(INTERNAL_RUNTIME_PARAMETER_COMPONENTS, [
+    ?EXCHANGE_DELETE_IN_PROGRESS_COMPONENT,
+    ?IMPORTED_DEFINITION_HASH_COMPONENT
+]).
+
 list_runtime_parameters() ->
-    [runtime_parameter_definition(P) || P <- rabbit_runtime_parameters:list(), is_list(P)].
+    [runtime_parameter_definition(P)
+     || P <- rabbit_runtime_parameters:list(),
+        is_list(P),
+        not is_internal_runtime_parameter(P)].
+
+is_internal_runtime_parameter(Param) ->
+    lists:member(pget(component, Param),
+                 ?INTERNAL_RUNTIME_PARAMETER_COMPONENTS).
 
 runtime_parameter_definition(Param) ->
     #{

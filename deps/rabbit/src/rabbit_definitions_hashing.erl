@@ -42,7 +42,6 @@
 
 -define(DEFAULT_HASHING_ALGORITHM, sha256).
 -define(GLOBAL_RUNTIME_PARAMETER_KEY, imported_definition_hash_value).
--define(RUNTIME_PARAMETER_COMPONENT, <<"imported_definition_hash_value">>).
 -define(PARAMETER_NAME, <<"content_hash_value">>).
 
 %%
@@ -56,23 +55,25 @@
                     {enables, recovery}]}).
 
 register() ->
-    rabbit_registry:register(runtime_parameter, ?RUNTIME_PARAMETER_COMPONENT, ?MODULE).
+    rabbit_registry:register(runtime_parameter, ?IMPORTED_DEFINITION_HASH_COMPONENT, ?MODULE).
 
+%% NOTE: This is an internal runtime parameter that must not appear in
+%% exported definitions. It is filtered out by
+%% ?INTERNAL_RUNTIME_PARAMETER_COMPONENTS in rabbit_definitions.erl.
+%% If you rename or change this component, update that list.
 
-validate(_VHost, ?RUNTIME_PARAMETER_COMPONENT, Name, Term, _User) ->
+validate(_VHost, ?IMPORTED_DEFINITION_HASH_COMPONENT, Name, Term, _User) ->
     rabbit_parameter_validation:binary(Name, Term).
 
-notify(_VHost, ?RUNTIME_PARAMETER_COMPONENT, _Name, _Term0, _ActingUser) ->
+notify(_VHost, ?IMPORTED_DEFINITION_HASH_COMPONENT, _Name, _Term0, _ActingUser) ->
     %% this parameter is used internally by RabbitMQ core, so we don't expose
     %% state changes via internal events
     ok.
 
-notify_clear(_VHost, ?RUNTIME_PARAMETER_COMPONENT, _Name, _ActingUser) ->
+notify_clear(_VHost, ?IMPORTED_DEFINITION_HASH_COMPONENT, _Name, _ActingUser) ->
     %% this parameter is used internally by RabbitMQ core, so we don't expose
     %% state changes via internal events
     ok.
-
-
 
 -spec hashing_algorithm() -> crypto:sha1() | crypto:sha2() | undefined.
 hashing_algorithm() ->
@@ -103,7 +104,7 @@ stored_global_hash() ->
 
 -spec stored_vhost_specific_hash(vhost:name()) -> binary() | undefined.
 stored_vhost_specific_hash(VHostName) ->
-    case rabbit_runtime_parameters:lookup(VHostName, ?RUNTIME_PARAMETER_COMPONENT, ?PARAMETER_NAME) of
+    case rabbit_runtime_parameters:lookup(VHostName, ?IMPORTED_DEFINITION_HASH_COMPONENT, ?PARAMETER_NAME) of
         not_found -> undefined;
         Proplist  -> pget(value, Proplist)
     end.
@@ -121,4 +122,4 @@ store_global_hash(Value0, Username) ->
 -spec store_vhost_specific_hash(Value0 :: term(), VirtualHost :: vhost:name(), Username :: rabbit_types:username()) -> ok.
 store_vhost_specific_hash(VirtualHost, Value0, Username) ->
     Value = rabbit_data_coercion:to_binary(Value0),
-    rabbit_runtime_parameters:set(VirtualHost, ?RUNTIME_PARAMETER_COMPONENT, ?PARAMETER_NAME, Value, Username).
+    rabbit_runtime_parameters:set(VirtualHost, ?IMPORTED_DEFINITION_HASH_COMPONENT, ?PARAMETER_NAME, Value, Username).

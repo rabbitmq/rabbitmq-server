@@ -76,7 +76,8 @@ groups() ->
             export_import_round_trip_vhost_limits,
             export_import_round_trip_operator_policy_all_keys,
             export_import_round_trip_multiple_operator_policies,
-            export_import_round_trip_mixed_parameters
+            export_import_round_trip_mixed_parameters,
+            export_excludes_internal_runtime_parameters
         ]},
 
         {skip_if_unchanged, [], [
@@ -460,6 +461,35 @@ export_import_round_trip_mixed_parameters(Config) ->
         OpPolDefinition = maps:get(<<"definition">>, OpPolValue),
         ?assert(is_map(OpPolDefinition)),
         import_parsed(Config, Defs)
+    end).
+
+export_excludes_internal_runtime_parameters(Config) ->
+    run_if_not_mixed_versions(fun() ->
+        %% Set internal runtime parameters that should be filtered
+        ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+                rabbit_runtime_parameters, set,
+                [<<"/">>, <<"exchange-delete-in-progress">>,
+                 <<"test.exchange">>, true, none]),
+        ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+                rabbit_runtime_parameters, set,
+                [<<"/">>, <<"imported_definition_hash_value">>,
+                 <<"content_hash_value">>, <<"abc123">>, none]),
+        Defs = export(Config),
+        Parameters = maps:get(parameters, Defs, []),
+        InternalParams = [P || P <- Parameters,
+                               lists:member(maps:get(<<"component">>, P),
+                                   [<<"exchange-delete-in-progress">>,
+                                    <<"imported_definition_hash_value">>])],
+        ?assertEqual([], InternalParams),
+        %% Clean up
+        rabbit_ct_broker_helpers:rpc(Config, 0,
+                rabbit_runtime_parameters, clear,
+                [<<"/">>, <<"exchange-delete-in-progress">>,
+                 <<"test.exchange">>, none]),
+        rabbit_ct_broker_helpers:rpc(Config, 0,
+                rabbit_runtime_parameters, clear,
+                [<<"/">>, <<"imported_definition_hash_value">>,
+                 <<"content_hash_value">>, none])
     end).
 
 import_on_a_booting_node_using_classic_local_source(Config) ->
