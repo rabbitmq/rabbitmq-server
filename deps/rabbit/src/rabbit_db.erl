@@ -223,9 +223,9 @@ post_reset() ->
 %% @see is_virgin_node/1.
 
 is_virgin_node() ->
-    case rabbit_khepri:is_enabled() of
-        true  -> is_virgin_node_using_khepri();
-        false -> is_virgin_node_using_mnesia()
+    case rabbit_khepri:get_feature_state() of
+        enabled -> is_virgin_node_using_khepri();
+        _       -> is_virgin_node_using_mnesia()
     end.
 
 is_virgin_node_using_mnesia() ->
