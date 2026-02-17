@@ -63,10 +63,7 @@ init([]) ->
     Registry = {rabbit_web_dispatch_registry,
                 {rabbit_web_dispatch_registry, start_link, []},
                 transient, 5000, worker, [rabbit_web_dispatch_registry]},
-    Log = {rabbit_mgmt_access_logger, {gen_event, start_link,
-            [{local, webmachine_log_event}]},
-           permanent, 5000, worker, dynamic},
-    {ok, {{one_for_one, 10, 10}, [Registry, Log]}}.
+    {ok, {{one_for_one, 10, 10}, [Registry]}}.
 
 %%
 %% Implementation

@@ -41,15 +41,15 @@ http_dispatch.auth_backends.1.authz = rabbit_auth_backend_ip_range",
   []},
  {authn_authz_backend,
  "http_dispatch.auth_backends.1.authn = ldap
-http_dispatch.auth_backends.1.authz = internal",
+  http_dispatch.auth_backends.1.authz = internal",
   [{rabbitmq_web_dispatch,
        [{auth_backends,
             [{rabbit_auth_backend_ldap,rabbit_auth_backend_internal}]}]}],
   []},
  {authn_authz_multiple_backends,
   "http_dispatch.auth_backends.1.authn = ldap
-http_dispatch.auth_backends.1.authz = internal
-http_dispatch.auth_backends.2       = internal",
+   http_dispatch.auth_backends.1.authz = internal
+   http_dispatch.auth_backends.2       = internal",
   [{rabbitmq_web_dispatch,
        [{auth_backends,
             [{rabbit_auth_backend_ldap,rabbit_auth_backend_internal},
@@ -60,5 +60,10 @@ http_dispatch.auth_backends.2       = internal",
   [{rabbitmq_web_dispatch,
        [{auth_backends,
             [{rabbit_auth_backend_ldap,rabbit_auth_backend_ldap}]}]}],
+  []},
+ {access_log_dir,
+  "http_dispatch.access_log_dir = /tmp/rabbitmq-access-logs",
+  [{rabbitmq_web_dispatch,
+       [{access_log_dir, "/tmp/rabbitmq-access-logs"}]}],
   []}
 ].

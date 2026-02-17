@@ -2,10 +2,10 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term "Broadcom" refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
--module(rabbit_web_dispatch_SUITE).
+-module(system_SUITE).
 
 
 -compile(export_all).
@@ -108,21 +108,40 @@ log_source_address_test(Config) ->
 
 log_source_address_test1(Port) ->
     inets:start(),
-    %% Given: everything in place to issue AND log an HTTP response.
+    %% Given: a handler set up to capture access logs to a file.
+    LogFile = log_file(),
+    _ = file:delete(LogFile),
+    HandlerId = test_access_log_handler,
+    ok = logger:add_handler(HandlerId, logger_std_h, #{
+        level => all,
+        filter_default => stop,
+        filters => [
+            {domain_filter,
+             {fun logger_filters:domain/2,
+              {log, sub, [rabbitmq, http_api]}}}
+        ],
+        formatter => {rabbit_access_log_fmt, #{}},
+        config => #{
+            type => file,
+            file => LogFile
+        }
+    }),
     {ok, _} = rabbit_web_dispatch:register_context_handler(log_response_test,
         [{port, Port}], path(), table(), description()),
-    ok = webmachine_log:add_handler(webmachine_log_handler, [log_directory()]),
 
-    %% When: when a client makes a request.
+    %% When: a client makes a request.
     {ok, _Response} = httpc:request(get, {"http://127.0.0.1:" ++
         string(Port) ++ "/" ++ string(path()), []}, [],
         [{ip, string(source())}]),
 
-    %% Then: log written WITH source IP address AND path.
+    ok = logger_std_h:filesync(HandlerId),
+
+    %% Then: the log file contains the source IP, path, and status.
     true = logged(source()),
-    true = logged(path  ()),
+    true = logged(path()),
     true = logged(binary(status())),
 
+    logger:remove_handler(HandlerId),
     passed.
 
 %% Ancillary procedures for log test
@@ -133,9 +152,8 @@ path() -> <<"wonderland">>.
 %% HTTP server port.
 port() -> 4096.
 
-%% Log files will be written here.
-log_directory() ->
-    os:getenv("RABBITMQ_LOG_BASE") ++ "/".
+log_file() ->
+    filename:join(os:getenv("RABBITMQ_LOG_BASE"), "access.log").
 
 %% Source IP address of request.
 source() -> <<"127.0.0.1">>.
@@ -161,9 +179,7 @@ terminate(_, _, _) ->
 
 %% Predicate: the given `Text` is read from file.
 logged(Text) ->
-    {ok, Handle} = file:open(log_directory() ++
-        "access.log" ++ webmachine_log:suffix(webmachine_log:datehour()),
-        [read, binary]),
+    {ok, Handle} = file:open(log_file(), [read, binary]),
     logged(Handle, Text).
 
 logged(Handle, Text) ->
@@ -176,6 +192,7 @@ logged(Handle, Text) ->
                 [] ->
                     logged(Handle, Text);
                 [{N,_}] when is_integer(N), N >= 0 ->
+                    file:close(Handle),
                     true
             end
     end.

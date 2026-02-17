@@ -97,3 +97,13 @@ end}.
     {datatype, atom}
 ]}.
 
+%%
+%% HTTP API Access Log
+%%
+
+%% Log all HTTP API requests to a directory.
+%% Covers management, prometheus, and other HTTP-based plugins.
+%%
+
+{mapping, "http_dispatch.access_log_dir", "rabbitmq_web_dispatch.access_log_dir",
+    [{datatype, string}]}.

@@ -2,6 +2,12 @@ PROJECT = rabbitmq_web_dispatch
 PROJECT_DESCRIPTION = RabbitMQ Web Dispatcher
 PROJECT_MOD = rabbit_web_dispatch_app
 
+define PROJECT_ENV
+[
+	    {access_log_dir, none}
+	  ]
+endef
+
 define PROJECT_APP_EXTRA_KEYS
 	{broker_version_requirements, []}
 endef
