@@ -33,9 +33,8 @@ jobs:
     steps:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v6
-
-    - name: FETCH TAGS
-      run: git fetch --tags
+      with:
+        fetch-tags: true
 
     - name: SETUP OTP & ELIXIR
       uses: erlef/setup-beam@v1.19
