@@ -121,7 +121,7 @@ tests:: escript test-deps
 		ENABLED_PLUGINS="rabbitmq_federation rabbitmq_stomp rabbitmq_stream_management amqp_client" \
                 TMPDIR=$(PWD)/deps/rabbitmq_cli/logs \
 		$(if $(filter khepri,$(RABBITMQ_METADATA_STORE)),,RABBITMQ_FEATURE_FLAGS="-khepri_db"); \
-		rm -f logs; \
+		rm -rf logs; \
 		log_dir=$$(../../sbin/rabbitmqctl eval 'io:format("~s~n", [maps:get(log_base_dir,rabbit_prelaunch:get_context())]).'); \
 		log_dir=$$(echo "$$log_dir" | head -n 1); \
 		ln -s "$$log_dir" logs
@@ -161,7 +161,7 @@ endif
 clean:: clean-mix
 
 clean-mix:
-	$(gen_verbose) rm -f $(ESCRIPT_FILE) $(LINKED_ESCRIPTS) logs
+	$(gen_verbose) rm -rf $(ESCRIPT_FILE) $(LINKED_ESCRIPTS) logs
 	$(verbose) echo y | mix clean
 
 format:
