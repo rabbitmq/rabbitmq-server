@@ -453,6 +453,147 @@ unregister(Config) ->
                                               lookup, [X])),
     ok.
 
+<<<<<<< HEAD
+=======
+%% Test the plugin publishing internally with AMQP 0.9.1 while the client uses AMQP 1.0.
+amqp_0_9_1_amqp_connection(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    Address = rabbitmq_amqp_address:queue(QName),
+    {Connection1, Session, LinkPair} = amqp_init(Config),
+    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName,#{}),
+    ok = rabbitmq_amqp_client:bind_queue(
+           LinkPair, QName, <<"amq.rabbitmq.event">>, <<"connection.*">>, #{}),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session, <<"receiver">>, Address, settled),
+
+    OpnConf0 = amqp_connection_config(Config),
+    OpnConf = maps:update(container_id, <<"2nd container">>, OpnConf0),
+    {ok, Connection2} = amqp10_client:open_connection(OpnConf),
+    receive {amqp10_event, {connection, Connection2, opened}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+    {ok, Msg} = amqp10_client:get_msg(Receiver),
+    ?assertMatch(#{<<"x-routing-key">> := <<"connection.created">>},
+                 amqp10_msg:message_annotations(Msg)),
+    ?assertMatch(#{<<"container_id">> := <<"2nd container">>},
+                 amqp10_msg:application_properties(Msg)),
+    ok = amqp10_client:close_connection(Connection2),
+
+    {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
+    ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
+    ok = amqp10_client:end_session(Session),
+    ok = amqp10_client:close_connection(Connection1).
+
+%% Test the plugin publishing internally with AMQP 1.0 and the client using AMQP 1.0.
+amqp_1_0_amqp_connection(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    Address = rabbitmq_amqp_address:queue(QName),
+    {Connection1, Session, LinkPair} = amqp_init(Config),
+    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName,#{}),
+    ok = rabbitmq_amqp_client:bind_queue(
+           LinkPair, QName, <<"amq.rabbitmq.event">>, <<"connection.*">>, #{}),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session, <<"receiver">>, Address, settled),
+
+    Now = os:system_time(millisecond),
+    OpnConf0 = amqp_connection_config(Config),
+    OpnConf = maps:update(container_id, <<"2nd container">>, OpnConf0),
+    {ok, Connection2} = amqp10_client:open_connection(OpnConf),
+    receive {amqp10_event, {connection, Connection2, opened}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+    {ok, Msg} = amqp10_client:get_msg(Receiver),
+    ?assertEqual(<<>>, iolist_to_binary(amqp10_msg:body(Msg))),
+    MsgAnns = amqp10_msg:message_annotations(Msg),
+    ?assertMatch(#{<<"x-routing-key">> := <<"connection.created">>,
+                   <<"x-opt-container-id">> := <<"2nd container">>,
+                   <<"x-opt-channel-max">> := ChannelMax}
+                   when is_integer(ChannelMax),
+                        MsgAnns),
+    %% We expect to receive event properties that have complex types.
+    ClientProps = maps:get(<<"x-opt-client-properties">>, MsgAnns),
+    OtpRelease = integer_to_binary(?OTP_RELEASE),
+    ?assertMatch(#{
+                   {symbol, <<"version">>} := {utf8, _Version},
+                   {symbol, <<"product">>} := {utf8, <<"AMQP 1.0 client">>},
+                   {symbol, <<"platform">>} := {utf8, <<"Erlang/OTP ", OtpRelease/binary>>}
+                  },
+                 maps:from_list(ClientProps)),
+    FormattedPid = maps:get(<<"x-opt-pid">>, MsgAnns),
+
+    %% The formatted Pid should include the RabbitMQ node name:
+    ?assertMatch({match, _},
+                 re:run(FormattedPid, <<"rmq-ct-system_SUITE">>)),
+
+    #{creation_time := CreationTime} = amqp10_msg:properties(Msg),
+    ?assert(is_integer(CreationTime)),
+    ?assert(CreationTime > Now - 5000),
+    ?assert(CreationTime < Now + 5000),
+
+    ok = amqp10_client:close_connection(Connection2),
+    {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
+    ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
+    ok = amqp10_client:end_session(Session),
+    ok = amqp10_client:close_connection(Connection1).
+
+%% Test that routing on specific event properties works.
+headers_exchange(Config) ->
+    XName = <<"my headers exchange">>,
+    QName = atom_to_binary(?FUNCTION_NAME),
+    Address = rabbitmq_amqp_address:queue(QName),
+    OpnConf = amqp_connection_config(Config),
+    {Connection, Session, LinkPair} = amqp_init(Config),
+
+    ok = rabbitmq_amqp_client:declare_exchange(LinkPair, XName, #{type => <<"headers">>}),
+    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, #{}),
+    ok = rabbitmq_amqp_client:bind_queue(
+           LinkPair, QName, XName, <<>>,
+           #{<<"x-opt-container-id">> => {utf8, <<"client-2">>},
+             <<"x-match">> => {utf8, <<"any-with-x">>}}),
+    ok = rabbitmq_amqp_client:bind_exchange(
+           LinkPair, XName, <<"amq.rabbitmq.event">>, <<"connection.created">>, #{}),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session, <<"receiver">>, Address, settled),
+
+    %% Open two connections.
+    OpnConf1 = maps:update(container_id, <<"client-1">>, OpnConf),
+    {ok, Connection1} = amqp10_client:open_connection(OpnConf1),
+    receive {amqp10_event, {connection, Connection1, opened}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+    OpnConf2 = maps:update(container_id, <<"client-2">>, OpnConf),
+    {ok, Connection2} = amqp10_client:open_connection(OpnConf2),
+    receive {amqp10_event, {connection, Connection2, opened}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    %% Thanks to routing via headers exchange on event property
+    %% x-opt-container-id = client-2
+    %% we should only receive the second connection.created event.
+    ok = amqp10_client:flow_link_credit(Receiver, 1, never, false),
+    receive {amqp10_msg, Receiver, Msg} ->
+                ?assertMatch(#{<<"x-routing-key">> := <<"connection.created">>,
+                               <<"x-opt-container-id">> := <<"client-2">>},
+                             amqp10_msg:message_annotations(Msg))
+    after 5000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    receive {amqp10_event, {link, Receiver, credit_exhausted}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+    ok = amqp10_client:flow_link_credit(Receiver, 1, never, true),
+    receive {amqp10_event, {link, Receiver, credit_exhausted}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    ok = amqp10_client:close_connection(Connection1),
+    ok = amqp10_client:close_connection(Connection2),
+    {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
+    ok = rabbitmq_amqp_client:delete_exchange(LinkPair, XName),
+    ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
+    ok = amqp10_client:end_session(Session),
+    ok = amqp10_client:close_connection(Connection).
+
+>>>>>>> 1204452e8 (event exchange test: avoid race condition)
 %% -------------------------------------------------------------------
 %% Helpers
 %% -------------------------------------------------------------------
