@@ -158,7 +158,7 @@ endif
 clean:: clean-mix
 
 clean-mix:
-	$(gen_verbose) rm -f $(ESCRIPT_FILE) $(LINKED_ESCRIPTS) logs
+	$(gen_verbose) rm -rf $(ESCRIPT_FILE) $(LINKED_ESCRIPTS) logs
 	$(verbose) echo y | mix clean
 
 format:
