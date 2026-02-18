@@ -117,14 +117,11 @@ $(LINKED_ESCRIPTS): $(ESCRIPT_FILE)
 
 tests:: escript test-deps
 	$(verbose) $(MAKE) -C ../../ install-cli
+	$(verbose) rm -rf logs
 	$(verbose) $(MAKE) -C ../../ start-background-broker \
 		ENABLED_PLUGINS="rabbitmq_federation rabbitmq_stomp rabbitmq_stream_management amqp_client" \
                 TMPDIR=$(PWD)/deps/rabbitmq_cli/logs \
 		$(if $(filter khepri,$(RABBITMQ_METADATA_STORE)),,RABBITMQ_FEATURE_FLAGS="-khepri_db"); \
-		rm -f logs; \
-		log_dir=$$(../../sbin/rabbitmqctl eval 'io:format("~s~n", [maps:get(log_base_dir,rabbit_prelaunch:get_context())]).'); \
-		log_dir=$$(echo "$$log_dir" | head -n 1); \
-		ln -s "$$log_dir" logs
 	$(gen_verbose) $(MIX_TEST) \
 		$(if $(RABBITMQ_METADATA_STORE),--exclude $(filter-out $(RABBITMQ_METADATA_STORE),khepri mnesia),) \
 		$(TEST_FILE); \
