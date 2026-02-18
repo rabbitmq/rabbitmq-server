@@ -20,7 +20,12 @@
 -include_lib("rabbit_common/include/rabbit_misc.hrl").
 -include_lib("kernel/include/logger.hrl").
 
+-define(PG_SCOPE, pg_scope_direct_connection).
+
 %%----------------------------------------------------------------------------
+
+pg_scope() ->
+    persistent_term:get(?PG_SCOPE).
 
 -spec boot() -> 'ok'.
 
@@ -38,7 +43,7 @@ force_event_refresh(Ref) ->
 -spec list_local() -> [pid()].
 
 list_local() ->
-    pg_local:get_members(rabbit_direct).
+    pg:which_groups(pg_scope()).
 
 -spec list() -> [pid()].
 
@@ -186,7 +191,7 @@ connect1(User = #user{username = Username}, VHost, Pid, Infos) ->
             AuthzContext = proplists:get_value(variable_map, Infos, #{}),
             try rabbit_access_control:check_vhost_access(User, VHost,
                                                {ip, PeerHost}, AuthzContext) of
-                ok -> ok = pg_local:join(rabbit_direct, Pid),
+                ok -> ok = pg:join(pg_scope(), Pid, Pid),
                       rabbit_core_metrics:connection_created(Pid, Infos),
                       rabbit_event:notify(connection_created, Infos),
                       _ = rabbit_alarm:register(
@@ -246,7 +251,7 @@ start_channel(Number, ClientChannelPid, ConnPid, ConnName,
 -spec disconnect(pid(), rabbit_event:event_props()) -> 'ok'.
 
 disconnect(Pid, Infos) ->
-    pg_local:leave(rabbit_direct, Pid),
+    pg:leave(pg_scope(), Pid, Pid),
     rabbit_core_metrics:connection_closed(Pid),
     rabbit_event:notify(connection_closed, Infos).
 

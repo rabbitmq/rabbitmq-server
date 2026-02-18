@@ -33,7 +33,8 @@
          pg_local_scope/1,
          pg_scope_amqp091_channel/0,
          pg_scope_amqp091_connection/0,
-         pg_scope_non_amqp_connection/0]).
+         pg_scope_non_amqp_connection/0,
+         pg_scope_direct_connection/0]).
 %% For CLI, testing and mgmt-agent.
 -export([set_log_level/1, log_locations/0, config_files/0]).
 -export([is_booted/1, is_booted/0, is_booting/1, is_booting/0]).
@@ -46,6 +47,7 @@
          pg_local_amqp091_channel/0,
          pg_local_amqp091_connection/0,
          pg_local_non_amqp_connection/0,
+         pg_local_direct_connection/0,
          prevent_startup_if_node_was_reset/0]).
 
 -rabbit_boot_step({pre_boot, [{description, "rabbit boot start"}]}).
@@ -309,6 +311,12 @@
 -rabbit_boot_step({pg_local_non_amqp_connection,
                    [{description, "local-only pg scope for non-AMQP connections"},
                     {mfa,         {rabbit, pg_local_non_amqp_connection, []}},
+                    {requires,    kernel_ready},
+                    {enables,     core_initialized}]}).
+
+-rabbit_boot_step({pg_local_direct_connection,
+                   [{description, "local-only pg scope for direct connections"},
+                    {mfa,         {rabbit, pg_local_direct_connection, []}},
                     {requires,    kernel_ready},
                     {enables,     core_initialized}]}).
 
@@ -1182,6 +1190,11 @@ pg_local_non_amqp_connection() ->
     persistent_term:put(pg_scope_non_amqp_connection, PgScope),
     rabbit_sup:start_child(pg_non_amqp_connection, pg, [PgScope]).
 
+pg_local_direct_connection() ->
+    PgScope = pg_local_scope(direct_connection),
+    persistent_term:put(pg_scope_direct_connection, PgScope),
+    rabbit_sup:start_child(pg_direct_connection, pg, [PgScope]).
+
 pg_local_scope(Prefix) ->
     list_to_atom(io_lib:format("~s_~s", [Prefix, node()])).
 
@@ -1193,6 +1206,9 @@ pg_scope_amqp091_connection() ->
 
 pg_scope_non_amqp_connection() ->
     persistent_term:get(pg_scope_non_amqp_connection).
+
+pg_scope_direct_connection() ->
+    persistent_term:get(pg_scope_direct_connection).
 
 -spec update_cluster_tags() -> 'ok'.
 
