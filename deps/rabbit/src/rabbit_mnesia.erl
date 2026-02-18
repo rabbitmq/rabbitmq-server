@@ -965,13 +965,27 @@ stop_mnesia() ->
     ensure_mnesia_not_running().
 
 change_extra_db_nodes(ClusterNodes0, CheckOtherNodes) ->
+    change_extra_db_nodes(ClusterNodes0, CheckOtherNodes, 3).
+
+change_extra_db_nodes(ClusterNodes0, CheckOtherNodes, RetriesLeft) ->
     ClusterNodes = rabbit_nodes:nodes_excl_me(ClusterNodes0),
     case {mnesia:change_config(extra_db_nodes, ClusterNodes), ClusterNodes} of
         {{ok, []}, [_|_]} when CheckOtherNodes ->
             throw({error, {failed_to_cluster_with, ClusterNodes,
                            "Mnesia could not connect to any nodes."}});
         {{ok, Nodes}, _} ->
-            Nodes
+            Nodes;
+        {{error, _} = Error, _} when RetriesLeft > 0 ->
+            ?LOG_WARNING(
+               "Failed to add extra Mnesia db nodes ~tp: ~tp. "
+               "Retrying (~b attempts left).",
+               [ClusterNodes, Error, RetriesLeft - 1]),
+            timer:sleep(1000),
+            change_extra_db_nodes(ClusterNodes0, CheckOtherNodes,
+                                  RetriesLeft - 1);
+        {{error, _} = Error, _} ->
+            throw({error, {failed_to_cluster_with, ClusterNodes,
+                           rabbit_misc:format("~tp", [Error])}})
     end.
 
 check_nodes_consistency(Node, {RemoteAllNodes, _, _}) ->
@@ -1011,8 +1025,27 @@ check_mnesia_consistency(Node, ProtocolVersion) ->
         end
     end).
 
-negotiate_protocol([Node]) ->
-    mnesia_monitor:negotiate_protocol([Node]).
+negotiate_protocol(Nodes) ->
+    negotiate_protocol(Nodes, 3).
+
+negotiate_protocol([Node], RetriesLeft) ->
+    try
+        mnesia_monitor:negotiate_protocol([Node])
+    catch
+        exit:Reason when RetriesLeft > 0 ->
+            ?LOG_WARNING(
+               "Mnesia protocol negotiation with node ~tp "
+               "failed: ~tp. Retrying (~b attempts left).",
+               [Node, Reason, RetriesLeft - 1]),
+            timer:sleep(1000),
+            negotiate_protocol([Node], RetriesLeft - 1);
+        exit:Reason ->
+            ?LOG_WARNING(
+               "Mnesia protocol negotiation with node ~tp "
+               "failed: ~tp. No retries left.",
+               [Node, Reason]),
+            []
+    end.
 
 with_running_or_clean_mnesia(Fun) ->
     IsMnesiaRunning = case mnesia:system_info(is_running) of
