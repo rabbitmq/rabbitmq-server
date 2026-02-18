@@ -261,13 +261,13 @@ apply(Meta, {machine_version, FromVersion, ToVersion}, VXState) ->
     State = convert(Meta, FromVersion, ToVersion, VXState),
     {State, ok, [{aux, {dlx, setup}}]};
 apply(#{system_time := Ts} = Meta, Cmd,
-      #?STATE{reclaimable_bytes = DiscBytes} = State) ->
+      #?STATE{reclaimable_bytes = ReclBytes} = State) ->
     %% Add estimated reclaimable bytes.
     %% This is the simplest way to record the reclaimable bytes for most
     %% commands but it is a bit more garbage-y as almost always creates a
     %% new state copy before even processing the command.
     Bytes = estimate_reclaimable_size(Cmd),
-    apply_(Meta, Cmd, State#?STATE{reclaimable_bytes = DiscBytes + Bytes,
+    apply_(Meta, Cmd, State#?STATE{reclaimable_bytes = ReclBytes + Bytes,
                                    last_command_time = Ts}).
 
 apply_(Meta, #enqueue{pid = From, seq = Seq,
@@ -2122,7 +2122,7 @@ return_multiple(Meta, ConsumerKey, #consumer{checked_out = Checked} = Consumer,
 complete(Meta, ConsumerKey, MsgIds,
          #consumer{checked_out = Checked0} = Con0,
          #?STATE{msg_bytes_checkout = BytesCheckout,
-                 reclaimable_bytes = DiscBytes,
+                 reclaimable_bytes = ReclBytes,
                  messages_total = Tot} = State0, Effects) ->
     {SettledSize, Checked}
         = lists:foldl(
@@ -2141,7 +2141,7 @@ complete(Meta, ConsumerKey, MsgIds,
                         credit = increase_credit(Con0, Len)},
     State1 = update_or_remove_con(Meta, ConsumerKey, Con, State0),
     {State1#?STATE{msg_bytes_checkout = BytesCheckout - SettledSize,
-                   reclaimable_bytes = DiscBytes + SettledSize + (Len * ?ENQ_OVERHEAD_B),
+                   reclaimable_bytes = ReclBytes + SettledSize + (Len * ?ENQ_OVERHEAD_B),
                    messages_total = Tot - Len},
      Effects}.
 
