@@ -70,9 +70,6 @@ function renderWarningMessageInLoginStatus(oauth, message) {
 
 function dispatcher_add(fun) {
     dispatcher_modules.push(fun);
-    if (dispatcher_modules.length == extension_count) {
-        start_app();
-    }
 }
 
 function dispatcher() {
@@ -142,8 +139,10 @@ function check_login () {
   setup_constant_events()
   update_vhosts()
   update_interval()
-  setup_extensions()
-
+  setup_extensions(function onCompleted() {
+    console.info("All extensions have been loaded. Starting application ..");
+    start_app();
+  });
 
   return true
 }
@@ -204,7 +203,10 @@ function setup_constant_events() {
     $('#show-vhost').on('change', function() {
             current_vhost = $(this).val();
             store_pref('vhost', current_vhost);
-            update();
+            if (current_reqs && Object.keys(current_reqs).length > 0) {
+                update();
+            }
+            notifyOnVhostChange(current_vhost);
         });
     if (!vhosts_interesting) {
         $('#vhost-form').hide();
@@ -232,22 +234,84 @@ function update_vhosts() {
     store_pref('vhost', current_vhost);
 }
 
-function setup_extensions() {
+function setup_extensions(onCompleted) {
     var extensions = JSON.parse(sync_get('/extensions'));
-    extension_count = 0;
+    var javascript_files = [];
     for (var i in extensions) {
         var extension = extensions[i];
-        if ($.isPlainObject(extension) && extension.hasOwnProperty('javascript')) {
-            dynamic_load(extension.javascript);
-            extension_count++;
+        if ($.isPlainObject(extension)) {
+            if (extension.hasOwnProperty('javascript')) {
+                // Collect JavaScript files for sequential loading
+                if (Array.isArray(extension.javascript)) {
+                    for (var j = 0; j < extension.javascript.length; j++) {
+                        javascript_files.push(extension.javascript[j]);
+                    }
+                } else {
+                    javascript_files.push(extension.javascript);
+                }
+            }
+            if (extension.hasOwnProperty('css')) {
+                dynamic_css_load(extension.css);
+            }
         }
     }
+    load_javascript_files_sequentially(javascript_files, 0, onCompleted);
 }
 
-function dynamic_load(filename) {
+function load_javascript_files_sequentially(files, index, onCompleted) {
+    if (index >= files.length) {
+        if (typeof onCompleted === 'function') {
+            onCompleted();
+        }
+        return;
+    }
+    console.debug(`Loading extension ${files[index]} ...`);
+    dynamic_javascript_file_load(files[index], function() {
+        console.debug(`Loaded extension ${files[index]} !`);
+        load_javascript_files_sequentially(files, index + 1, onCompleted);
+    });
+}
+
+function dynamic_javascript_load(arrayOrString) {
+    if (Array.isArray(arrayOrString)) {
+        for (const file of arrayOrString) {
+            dynamic_javascript_file_load(file);
+        }
+    }else {
+        dynamic_javascript_file_load(arrayOrString);
+    }
+}
+function dynamic_javascript_file_load(filename, callback) {
     var element = document.createElement('script');
     element.setAttribute('type', 'text/javascript');
     element.setAttribute('src', 'js/' + filename);
+
+    // Set up callback to fire when script has loaded
+    if (callback) {
+        element.onload = callback;
+        element.onerror = function() {
+            console.error('Failed to load script: ' + filename);
+            callback(); // Continue loading other scripts even if one fails
+        };
+    }
+
+    document.getElementsByTagName('head')[0].appendChild(element);
+    return element;
+}
+function dynamic_css_load(arrayOrString) {
+    if (Array.isArray(arrayOrString)) {
+        for (const file of arrayOrString) {
+            dynamic_css_file_load(file);
+        }
+    }else {
+        dynamic_css_file_load(arrayOrString);
+    }
+}
+function dynamic_css_file_load(filename) {
+    var element = document.createElement('link');
+    element.setAttribute('rel', 'stylesheet');
+    element.setAttribute('type', 'text/css');
+    element.setAttribute('href', 'css/' + filename);
     document.getElementsByTagName('head')[0].appendChild(element);
     return element;
 }
@@ -331,6 +395,7 @@ function render(reqs, template, highlight) {
     var old_template = current_template;
     current_template = template;
     current_reqs = reqs;
+    clear_postprocessors();
     for (var i in outstanding_reqs) {
         outstanding_reqs[i].abort();
     }
@@ -340,6 +405,11 @@ function render(reqs, template, highlight) {
         window.scrollTo(0, 0);
     }
     update();
+    notifyActivatedTab(current_highlight);
+}
+
+function reset_current_reqs() {
+    current_reqs = {};
 }
 
 function update() {
@@ -839,6 +909,8 @@ function postprocess() {
         $('.administrator-only').remove();
     }
 
+    invokeRegisteredPostProcessors();
+
     update_multifields();
 }
 
@@ -1319,15 +1391,13 @@ function update_status(status) {
 
 
 
-function with_req(method, path, body, fun) {
+function with_req(method, path, body, fun, on404fun) {
     if(!has_auth_credentials()) {
         // Clear any lingering auth settings in local storage and navigate to the login form.
         clear_auth();
         location.reload();
         return;
     }
-
-    var json;
     var req = xmlHttpRequest();
     req.open(method, 'api' + path, true );
     var header = authorization_header();
@@ -1341,10 +1411,10 @@ function with_req(method, path, body, fun) {
             if (ix != -1) {
                 outstanding_reqs.splice(ix, 1);
             }
-            if (check_bad_response(req, true)) {
+            if (check_bad_response(req, !on404fun, on404fun)) {
                 last_successful_connect = new Date();
                 fun(req);
-            }
+            } 
         }
     };
     outstanding_reqs.push(req);
@@ -1435,7 +1505,14 @@ function initiate_logout(oauth, error = "") {
     clear_cookie_value('auth');    
     renderWarningMessageInLoginStatus(oauth, error);
 }
-function check_bad_response(req, full_page_404) {
+/**
+ * Handle bad http response
+ * @param {*} req 
+ * @param {*} full_page_404 In case of 404, reload entire html page with the error message
+ * @param {*} on404fun In case of 404, call this function or else show a popup error message
+ * @returns true if there was no bad response
+ */
+function check_bad_response(req, full_page_404, on404fun) {
     // 1223 == 204 - see https://www.enhanceie.com/ie/bugs.asp
     // MSIE7 and 8 appear to do this in response to HTTP 204.
     if ((req.status >= 200 && req.status < 300) || req.status == 1223) {
@@ -1446,17 +1523,26 @@ function check_bad_response(req, full_page_404) {
         replace_content('main', html);
     }
     else if (req.status >= 400 && req.status <= 404) {
-        var reason = JSON.parse(req.responseText).reason;
-        if (typeof(reason) != 'string') reason = JSON.stringify(reason);
-
-        var error = JSON.parse(req.responseText).error;
-        if (typeof(error) != 'string') error = JSON.stringify(error);
-
-        if (error == 'bad_request' || error == 'not_found' || error == 'not_authorised' || error == 'not_authorized') {
+        let response = JSON.parse(req.responseText);
+        var error = response.error;
+        if (typeof(error) != 'string') {
+            error = JSON.stringify(error);
+        }
+        let reason = response.reason;
+        if (typeof(reason) != 'string') {
+            reason = JSON.stringify(reason);
+        }
+        if (    error == 'bad_request' || 
+                error == 'not_found'  || 
+                reason == 'Not Found' || 
+                error == 'not_authorised' || 
+                error == 'not_authorized') {
             if ((req.status == 401 || req.status == 403) && oauth.enabled) {
-              initiate_logout(oauth, reason);
+                initiate_logout(oauth, reason);
+            } else if (on404fun && (typeof on404fun === 'function') && req.status == 404) {
+                on404fun(response);
             } else {
-              show_popup('warn', fmt_escape_html(reason));
+                show_popup('warn', fmt_escape_html(reason));
             }
         } else if (error == 'page_out_of_range') {
             var seconds = 60;
