@@ -651,13 +651,17 @@ headers_exchange(Config) ->
     %% Thanks to routing via headers exchange on event property
     %% x-opt-container-id = client-2
     %% we should only receive the second connection.created event.
-    ok = amqp10_client:flow_link_credit(Receiver, 2, never, true),
+    ok = amqp10_client:flow_link_credit(Receiver, 1, never, false),
     receive {amqp10_msg, Receiver, Msg} ->
                 ?assertMatch(#{<<"x-routing-key">> := <<"connection.created">>,
                                <<"x-opt-container-id">> := <<"client-2">>},
                              amqp10_msg:message_annotations(Msg))
     after 5000 -> ct:fail({missing_msg, ?LINE})
     end,
+    receive {amqp10_event, {link, Receiver, credit_exhausted}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+    ok = amqp10_client:flow_link_credit(Receiver, 1, never, true),
     receive {amqp10_event, {link, Receiver, credit_exhausted}} -> ok
     after 5000 -> ct:fail({missing_event, ?LINE})
     end,
