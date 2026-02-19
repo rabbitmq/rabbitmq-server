@@ -118,24 +118,28 @@ module Test =
          Guid("f275ea5e-0c57-4ad7-b11a-b20c563d3b71") :> obj
         ]
 
-    let testOutcome uri (attach: Attach) (cond: string) =
+    let testOutcome (uri:string) (attach:Attach) (expectedCond:string) =
         use ac = connectAnon uri
-        let trySet (mre: AutoResetEvent) =
-            try mre.Set() |> ignore with _ -> ()
+        let mutable errorName : string = null
+        use attachedEv = new AutoResetEvent(false)
+        use closedEv   = new AutoResetEvent(false)
 
-        use mre = new System.Threading.AutoResetEvent(false)
-        let mutable errorName = null
-        ac.Session.add_Closed (
-            new ClosedCallback (fun o err -> errorName <- string err.Condition; trySet mre))
+        ac.Session.add_Closed(
+            new ClosedCallback(fun _ err ->
+                if not (isNull err) then errorName <- string err.Condition
+                closedEv.Set() |> ignore))
 
-        let attached = new OnAttached (
-                        fun l attach -> errorName <- null; trySet mre)
+        let onAttached = new OnAttached(fun _ _ ->
+            attachedEv.Set() |> ignore)
 
-        let receiver = ReceiverLink(ac.Session, "test-receiver", attach, attached)
-        mre.WaitOne(1000) |> ignore
-        if cond = null then
+        let receiver = new ReceiverLink(ac.Session, "test-receiver", attach, onAttached)
+
+        if isNull expectedCond then
+            if not (attachedEv.WaitOne(9000)) then failwith "Expected broker to reply with attach frame"
             receiver.Close()
-        assertEqual cond errorName
+        else
+            if not (closedEv.WaitOne(9000)) then failwith "Expected session to close with error"
+            assertEqual expectedCond errorName
 
     let no_routes_is_released uri =
         // tests that a message sent to an exchange that resolves no routes for the
@@ -417,27 +421,21 @@ module Test =
             ["/exchanges/missing", "amqp:not-found"
              "/fruit/orange", "amqp:invalid-field"] do
             use ac = connectAnon uri
-            let trySet (mre: AutoResetEvent) =
-                try mre.Set() |> ignore with _ -> ()
+            use closedEv = new System.Threading.AutoResetEvent(false)
+            let mutable sessionError : Error = null
 
-            let mutable errorName = null
-            use mre = new System.Threading.AutoResetEvent(false)
-            ac.Session.add_Closed (
-                new ClosedCallback (fun _ err -> errorName <- err.Condition; trySet mre))
+            ac.Session.add_Closed(
+                new ClosedCallback(fun _ err ->
+                    sessionError <- err
+                    closedEv.Set() |> ignore))
 
-            let attached = new OnAttached (fun _ _ -> trySet mre)
+            let attached = new OnAttached(fun _ _ -> ())
+            let _sender = new SenderLink(ac.Session, "test-sender",
+                                         Target(Address = addr), attached)
 
-            let sender = new SenderLink(ac.Session, "test-sender",
-                                        Target(Address = addr), attached);
-            mre.WaitOne() |> ignore
-
-            try
-                let receiver = ReceiverLink(ac.Session, "test-receiver", addr)
-                receiver.Close()
-            with
-            | :? Amqp.AmqpException as ae ->
-                assertEqual (Symbol cond) (ae.Error.Condition)
-            | _ -> failwith "invalid expection thrown"
+            assertTrue (closedEv.WaitOne(9000))
+            assertNotNull sessionError
+            assertEqual (Symbol cond) sessionError.Condition
 
     let authFailure uri =
         try
