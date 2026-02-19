@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term "Broadcom" refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 [
@@ -13,6 +13,9 @@
   {endpoint_path,
    "prometheus.path = /metriczzz",
    [{rabbitmq_prometheus,[
+                          {disable_detailed_endpoint, false},
+                          {disable_memory_breakdown_endpoint, false},
+                          {disable_per_object_endpoint, true},
                           {path, "/metriczzz"}
                          ]}],
    [rabbitmq_prometheus]},
@@ -24,6 +27,9 @@
    {tcp_listener_port_only,
     "prometheus.tcp.port = 15692",
     [{rabbitmq_prometheus,[
+                           {disable_detailed_endpoint, false},
+                           {disable_memory_breakdown_endpoint, false},
+                           {disable_per_object_endpoint, true},
                            {tcp_config,[
                                         {port,15692}
                                        ]}
@@ -34,6 +40,9 @@
     "prometheus.tcp.ip   = 192.168.1.2
      prometheus.tcp.port = 15692",
     [{rabbitmq_prometheus,[
+                           {disable_detailed_endpoint, false},
+                           {disable_memory_breakdown_endpoint, false},
+                           {disable_per_object_endpoint, true},
                            {tcp_config,[
                                         {ip, "192.168.1.2"},
                                         {port,15692}
@@ -45,6 +54,9 @@
     "prometheus.tcp.compress = true",
     [
      {rabbitmq_prometheus, [
+                            {disable_detailed_endpoint, false},
+                            {disable_memory_breakdown_endpoint, false},
+                            {disable_per_object_endpoint, true},
                             {tcp_config, [{cowboy_opts, [{compress, true}]}]}
                            ]}
     ], [rabbitmq_prometheus]
@@ -55,6 +67,9 @@
      prometheus.tcp.idle_timeout = 123",
     [
      {rabbitmq_prometheus, [
+                            {disable_detailed_endpoint, false},
+                            {disable_memory_breakdown_endpoint, false},
+                            {disable_per_object_endpoint, true},
                             {tcp_config, [{cowboy_opts, [{compress,     true},
                                                        {idle_timeout, 123}]}]}
                            ]}
@@ -68,6 +83,9 @@
      prometheus.tcp.request_timeout = 789",
     [
      {rabbitmq_prometheus, [
+                            {disable_detailed_endpoint, false},
+                            {disable_memory_breakdown_endpoint, false},
+                            {disable_per_object_endpoint, true},
                             {tcp_config, [{cowboy_opts, [{compress,           true},
                                                        {idle_timeout,       123},
                                                        {inactivity_timeout, 456},
@@ -82,6 +100,9 @@
      prometheus.tcp.request_timeout = 789",
     [
      {rabbitmq_prometheus, [
+                            {disable_detailed_endpoint, false},
+                            {disable_memory_breakdown_endpoint, false},
+                            {disable_per_object_endpoint, true},
                             {tcp_config, [{cowboy_opts, [{idle_timeout,       123},
                                                        {inactivity_timeout, 456},
                                                        {request_timeout,    789}]}]}
@@ -93,6 +114,9 @@
     "prometheus.tcp.shutdown_timeout = 7000",
     [
      {rabbitmq_prometheus, [
+                            {disable_detailed_endpoint, false},
+                            {disable_memory_breakdown_endpoint, false},
+                            {disable_per_object_endpoint, true},
                             {tcp_config, [{cowboy_opts, [{shutdown_timeout, 7000}]}]}
                            ]}
     ], [rabbitmq_prometheus]
@@ -102,6 +126,9 @@
     "prometheus.tcp.max_keepalive = 120",
     [
      {rabbitmq_prometheus, [
+                            {disable_detailed_endpoint, false},
+                            {disable_memory_breakdown_endpoint, false},
+                            {disable_per_object_endpoint, true},
                             {tcp_config, [{cowboy_opts, [{max_keepalive, 120}]}]}
                            ]}
     ], [rabbitmq_prometheus]
@@ -111,6 +138,9 @@
     "prometheus.tcp.max_connections = 4096",
     [
      {rabbitmq_prometheus, [
+                            {disable_detailed_endpoint, false},
+                            {disable_memory_breakdown_endpoint, false},
+                            {disable_per_object_endpoint, true},
                             {tcp_config, [{max_connections, 4096}]}
                            ]}
     ], [rabbitmq_prometheus]
@@ -120,6 +150,9 @@
     "prometheus.tcp.max_connections = infinity",
     [
      {rabbitmq_prometheus, [
+                            {disable_detailed_endpoint, false},
+                            {disable_memory_breakdown_endpoint, false},
+                            {disable_per_object_endpoint, true},
                             {tcp_config, [{max_connections, infinity}]}
                            ]}
     ], [rabbitmq_prometheus]
@@ -128,6 +161,9 @@
    {tcp_listener,
     "prometheus.tcp.listener = 192.1.1.2:15676",
     [{rabbitmq_prometheus,[
+                           {disable_detailed_endpoint, false},
+                           {disable_memory_breakdown_endpoint, false},
+                           {disable_per_object_endpoint, true},
                            {tcp_config,[
                                         {ip, "192.1.1.2"},
                                         {port,15676}
@@ -138,6 +174,9 @@
    {tcp_listener_none,
     "prometheus.tcp.listener = none",
     [{rabbitmq_prometheus,[
+                           {disable_detailed_endpoint, false},
+                           {disable_memory_breakdown_endpoint, false},
+                           {disable_per_object_endpoint, true},
                            {tcp_config,[]}
                           ]}],
     [rabbitmq_prometheus]},
@@ -149,6 +188,9 @@
    {tls_listener_port_only,
     "prometheus.ssl.port = 15691",
     [{rabbitmq_prometheus,[
+                           {disable_detailed_endpoint, false},
+                           {disable_memory_breakdown_endpoint, false},
+                           {disable_per_object_endpoint, true},
                            {ssl_config,[
                                         {port,15691}
                                        ]}
@@ -159,6 +201,9 @@
     "prometheus.ssl.ip   = 192.168.1.2
      prometheus.ssl.port = 15691",
     [{rabbitmq_prometheus,[
+                           {disable_detailed_endpoint, false},
+                           {disable_memory_breakdown_endpoint, false},
+                           {disable_per_object_endpoint, true},
                            {ssl_config,[
                                         {ip, "192.168.1.2"},
                                         {port,15691}
@@ -175,6 +220,9 @@
      prometheus.ssl.verify   = verify_none
      prometheus.ssl.fail_if_no_peer_cert = false",
     [{rabbitmq_prometheus,[
+                           {disable_detailed_endpoint, false},
+                           {disable_memory_breakdown_endpoint, false},
+                           {disable_per_object_endpoint, true},
                            {ssl_config,[
                                         {ip, "192.168.1.2"},
                                         {port,15691},
@@ -217,6 +265,9 @@
      prometheus.ssl.ciphers.8 = ECDH-RSA-AES256-SHA384
      prometheus.ssl.ciphers.9 = DHE-RSA-AES256-GCM-SHA384",
     [{rabbitmq_prometheus,[
+                           {disable_detailed_endpoint, false},
+                           {disable_memory_breakdown_endpoint, false},
+                           {disable_per_object_endpoint, true},
                            {ssl_config,[
                                         {ip, "192.168.1.2"},
                                         {port,15691},
@@ -254,6 +305,9 @@
     "prometheus.ssl.compress = true",
     [
      {rabbitmq_prometheus, [
+                            {disable_detailed_endpoint, false},
+                            {disable_memory_breakdown_endpoint, false},
+                            {disable_per_object_endpoint, true},
                             {ssl_config, [{cowboy_opts, [{compress, true}]}]}
                            ]}
     ], [rabbitmq_prometheus]
@@ -264,6 +318,9 @@
      prometheus.ssl.idle_timeout = 123",
     [
      {rabbitmq_prometheus, [
+                            {disable_detailed_endpoint, false},
+                            {disable_memory_breakdown_endpoint, false},
+                            {disable_per_object_endpoint, true},
                             {ssl_config, [{cowboy_opts, [{compress,     true},
                                                          {idle_timeout, 123}]}]}
                            ]}
@@ -277,6 +334,9 @@
      prometheus.ssl.request_timeout = 789",
     [
      {rabbitmq_prometheus, [
+                            {disable_detailed_endpoint, false},
+                            {disable_memory_breakdown_endpoint, false},
+                            {disable_per_object_endpoint, true},
                             {ssl_config, [{cowboy_opts, [{compress,           true},
                                                          {idle_timeout,       123},
                                                          {inactivity_timeout, 456},
@@ -291,6 +351,9 @@
      prometheus.ssl.request_timeout = 789",
     [
      {rabbitmq_prometheus, [
+                            {disable_detailed_endpoint, false},
+                            {disable_memory_breakdown_endpoint, false},
+                            {disable_per_object_endpoint, true},
                             {ssl_config, [{cowboy_opts, [{idle_timeout,       123},
                                                          {inactivity_timeout, 456},
                                                          {request_timeout,    789}]}]}
@@ -302,6 +365,9 @@
     "prometheus.ssl.shutdown_timeout = 7000",
     [
      {rabbitmq_prometheus, [
+                            {disable_detailed_endpoint, false},
+                            {disable_memory_breakdown_endpoint, false},
+                            {disable_per_object_endpoint, true},
                             {ssl_config, [{cowboy_opts, [{shutdown_timeout, 7000}]}]}
                            ]}
     ], [rabbitmq_prometheus]
@@ -311,6 +377,9 @@
     "prometheus.ssl.max_keepalive = 120",
     [
      {rabbitmq_prometheus, [
+                            {disable_detailed_endpoint, false},
+                            {disable_memory_breakdown_endpoint, false},
+                            {disable_per_object_endpoint, true},
                             {ssl_config, [{cowboy_opts, [{max_keepalive, 120}]}]}
                            ]}
     ], [rabbitmq_prometheus]
@@ -320,6 +389,9 @@
     "prometheus.ssl.max_connections = 4096",
     [
      {rabbitmq_prometheus, [
+                            {disable_detailed_endpoint, false},
+                            {disable_memory_breakdown_endpoint, false},
+                            {disable_per_object_endpoint, true},
                             {ssl_config, [{max_connections, 4096}]}
                            ]}
     ], [rabbitmq_prometheus]
@@ -329,6 +401,9 @@
     "prometheus.ssl.max_connections = infinity",
     [
      {rabbitmq_prometheus, [
+                            {disable_detailed_endpoint, false},
+                            {disable_memory_breakdown_endpoint, false},
+                            {disable_per_object_endpoint, true},
                             {ssl_config, [{max_connections, infinity}]}
                            ]}
     ], [rabbitmq_prometheus]
@@ -338,7 +413,64 @@
     "prometheus.authentication.enabled = true",
     [
      {rabbitmq_prometheus, [
-                            {authentication, [{enabled, true}]}
+                            {authentication, [{enabled, true}]},
+                            {disable_detailed_endpoint, false},
+                            {disable_memory_breakdown_endpoint, false},
+                            {disable_per_object_endpoint, true}
+                           ]}
+    ], [rabbitmq_prometheus]
+   },
+
+   %%
+   %% Endpoint disable options
+   %%
+
+   {disable_memory_breakdown_endpoint,
+    "prometheus.disable_memory_breakdown_endpoint = true",
+    [
+     {rabbitmq_prometheus, [
+                            {disable_detailed_endpoint, false},
+                            {disable_memory_breakdown_endpoint, true},
+                            {disable_per_object_endpoint, true}
+                           ]}
+    ], [rabbitmq_prometheus]
+   },
+
+   {disable_per_object_endpoint,
+    "prometheus.disable_per_object_endpoint = true",
+    [
+     {rabbitmq_prometheus, [
+                            {disable_detailed_endpoint, false},
+                            {disable_memory_breakdown_endpoint, false},
+                            {disable_per_object_endpoint, true}
+                           ]}
+    ], [rabbitmq_prometheus]
+   },
+
+   {disable_detailed_endpoint,
+    "prometheus.disable_detailed_endpoint = true",
+    [
+     {rabbitmq_prometheus, [
+                            {disable_detailed_endpoint, true},
+                            {disable_memory_breakdown_endpoint, false},
+                            {disable_per_object_endpoint, true}
+                           ]}
+    ], [rabbitmq_prometheus]
+   },
+
+   %%
+   %% Metric blocklist options
+   %%
+
+   {disabled_metrics,
+    "prometheus.disabled_metrics.1 = queue_messages
+     prometheus.disabled_metrics.2 = connection_incoming_bytes_total",
+    [
+     {rabbitmq_prometheus, [
+                            {disable_detailed_endpoint, false},
+                            {disable_memory_breakdown_endpoint, false},
+                            {disable_per_object_endpoint, true},
+                            {disabled_metrics, [queue_messages, connection_incoming_bytes_total]}
                            ]}
     ], [rabbitmq_prometheus]
    },
