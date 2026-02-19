@@ -351,20 +351,20 @@ dynamic_plugin_stop_start(Config) ->
 %% Stops the federation supervisor concurrently with runtime parameter
 %% changes and queue deletion.
 supervisor_shutdown_concurrency_safety(Config) ->
-    DownQ2 = <<"fed1.downstream2">>,
+    DownQ2 = <<"fed2.downstream">>,
     Args = ?config(target_queue_args, Config),
     with_ch(Config,
       fun (Ch) ->
-          UpQ = <<"upstream">>,
-          DownQ = <<"fed1.downstream">>,
-          maybe_declare_queue(Config, Ch, q(DownQ2, Args)),
+          UpQ1 = <<"upstream">>,
+          UpQ2 = <<"upstream2">>,
+          DownQ1 = <<"fed1.downstream">>,
 
           await_running_federation(Config,
-            [{DownQ, UpQ}, {DownQ2, UpQ}],
+            [{DownQ1, UpQ1}, {DownQ2, UpQ2}],
             ?EXPECT_FEDERATION_TIMEOUT),
 
-          expect_federation(Ch, UpQ, DownQ, ?EXPECT_FEDERATION_TIMEOUT),
-          expect_federation(Ch, UpQ, DownQ2, ?EXPECT_FEDERATION_TIMEOUT),
+          expect_federation(Ch, UpQ1, DownQ1, ?EXPECT_FEDERATION_TIMEOUT),
+          expect_federation(Ch, UpQ2, DownQ2, ?EXPECT_FEDERATION_TIMEOUT),
 
           %% Stop the federation supervisor directly (simulating shutdown)
           ct:pal("Stopping federation supervisor to simulate shutdown race"),
@@ -394,11 +394,11 @@ supervisor_shutdown_concurrency_safety(Config) ->
           ok = rabbit_ct_broker_helpers:enable_plugin(Config, 0, "rabbitmq_queue_federation"),
 
           await_running_federation(Config,
-            [{DownQ, UpQ}],
+            [{DownQ1, UpQ1}],
             30000),
 
-          expect_federation(Ch, UpQ, DownQ, ?EXPECT_FEDERATION_TIMEOUT)
-      end, upstream_downstream(Config)).
+          expect_federation(Ch, UpQ1, DownQ1, ?EXPECT_FEDERATION_TIMEOUT)
+      end, upstream_downstream(Config) ++ [q(DownQ2, Args)]).
 restart_upstream(Config) ->
     [Rabbit, Hare] = rabbit_ct_broker_helpers:get_node_configs(Config,
       nodename),
