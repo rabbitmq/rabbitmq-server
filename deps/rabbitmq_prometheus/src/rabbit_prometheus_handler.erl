@@ -44,9 +44,18 @@ is_authorized(ReqData, Context) ->
 
 setup() ->
     setup_metrics(telemetry_registry()),
-    setup_metrics('per-object'),
-    setup_metrics('memory-breakdown'),
-    setup_metrics('detailed').
+    case application:get_env(rabbitmq_prometheus, disable_per_object_endpoint, false) of
+        true -> ok;
+        false -> setup_metrics('per-object')
+    end,
+    case application:get_env(rabbitmq_prometheus, disable_memory_breakdown_endpoint, false) of
+        true -> ok;
+        false -> setup_metrics('memory-breakdown')
+    end,
+    case application:get_env(rabbitmq_prometheus, disable_detailed_endpoint, false) of
+        true -> ok;
+        false -> setup_metrics('detailed')
+    end.
 
 setup_metrics(Registry) ->
     ScrapeDuration = [{name, ?SCRAPE_DURATION},

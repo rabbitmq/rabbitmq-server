@@ -111,7 +111,8 @@ init_per_group(per_object_metrics, Config0) ->
     init_per_group(aggregated_metrics, Config1);
 init_per_group(per_object_endpoint_metrics, Config0) ->
     PathConfig = {rabbitmq_prometheus, [
-        {return_per_object_metrics, false}
+        {return_per_object_metrics, false},
+        {disable_per_object_endpoint, false}
     ]},
     Config1 = rabbit_ct_helpers:merge_app_env(Config0, PathConfig),
     init_per_group(aggregated_metrics, Config1);
