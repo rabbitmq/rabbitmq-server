@@ -37,6 +37,7 @@
                             amqp091_publish_expect/5,
                             amqp091_publish/4,
                             amqp091_expect_empty/2,
+                            amqp091_await_empty/2,
                             amqp091_publish_expect/5
                            ]).
 
@@ -273,7 +274,7 @@ exchange_to_exchange(Config) ->
                                 {<<"dest-exchange">>, <<"amq.topic">>},
                                 {<<"dest-exchange-key">>, Dest}]),
               amqp091_publish(Ch, <<"amq.direct">>, Src, <<"hello">>),
-              amqp091_expect_empty(Ch, Src),
+              amqp091_await_empty(Ch, Src),
               amqp_channel:call(
                 Ch, #'queue.bind'{queue       = Src,
                                   exchange    = <<"amq.topic">>,
@@ -318,7 +319,7 @@ missing_create_exchange_dest(Config) ->
                              {<<"dest-exchange">>, Dest},
                              {<<"dest-exchange-key">>, Dest}]),
               amqp091_publish(Ch, <<"amq.direct">>, Src, <<"hello">>),
-              amqp091_expect_empty(Ch, Src),
+              amqp091_await_empty(Ch, Src),
               amqp_channel:call(
                 Ch, #'exchange.declare'{exchange = Dest}),
               amqp_channel:call(

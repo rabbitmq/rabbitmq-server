@@ -896,6 +896,10 @@ delete_create_queue(Config) ->
 
     %% some large retry_interval to avoid re-sending
     C = connect(?FUNCTION_NAME, Config, [{retry_interval, 300}]),
+
+    %% Send a message to register the QQ enqueuer.
+    {ok, _} = emqtt:publish(C, Topic, <<"first msg">>, qos1),
+
     NumMsgs = 50,
     TestPid = self(),
     spawn(
@@ -929,10 +933,10 @@ delete_create_queue(Config) ->
     DeclareQueues(),
 
     %% Sending a message to each of them should work.
-    {ok, _} = emqtt:publish(C, Topic, <<"m">>, qos1),
+    {ok, _} = emqtt:publish(C, Topic, <<"last msg">>, qos1),
     eventually(?_assertEqual(lists:sort([[CQ1, <<"1">>],
                                          %% This queue should have all messages because we did not delete it.
-                                         [CQ2, integer_to_binary(NumMsgs + 1)],
+                                         [CQ2, integer_to_binary(NumMsgs + 2)],
                                          [QQ, <<"1">>]]),
                              lists:sort(rabbitmqctl_list(Config, 0, ["list_queues", "name", "messages", "--no-table-headers"]))),
                1000, 10),
