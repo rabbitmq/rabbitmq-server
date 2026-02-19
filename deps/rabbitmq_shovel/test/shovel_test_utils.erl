@@ -35,6 +35,7 @@
          valid_param/2, valid_param/3, valid_param1/3,
          with_amqp091_ch/2, amqp091_publish_expect/5,
          amqp091_publish/4, amqp091_expect_empty/2,
+         amqp091_await_empty/2,
          amqp091_expect/3]).
 
 make_uri(Config, Node) ->
@@ -437,3 +438,24 @@ amqp091_expect(Ch, Q, Payload) ->
 
 amqp091_expect_empty(Ch, Q) ->
     #'basic.get_empty'{} = amqp_channel:call(Ch, #'basic.get'{ queue = Q }).
+
+amqp091_await_empty(Ch, Q) ->
+    amqp091_await_empty(Ch, Q, 10_000).
+
+amqp091_await_empty(Ch, Q, Timeout) ->
+    Deadline = erlang:monotonic_time(millisecond) + Timeout,
+    amqp091_await_empty_loop(Ch, Q, Deadline).
+
+amqp091_await_empty_loop(Ch, Q, Deadline) ->
+    case amqp_channel:call(Ch, #'basic.get'{queue = Q, no_ack = true}) of
+        #'basic.get_empty'{} ->
+            ok;
+        _ ->
+            case erlang:monotonic_time(millisecond) < Deadline of
+                true ->
+                    timer:sleep(100),
+                    amqp091_await_empty_loop(Ch, Q, Deadline);
+                false ->
+                    error({timeout_waiting_for_empty_queue, Q})
+            end
+    end.
