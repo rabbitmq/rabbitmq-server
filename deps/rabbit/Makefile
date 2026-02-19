@@ -117,6 +117,9 @@ define PROJECT_ENV
       	{dead_letter_worker_publisher_confirm_timeout, 180000},
 		{vhost_process_reconciliation_run_interval, 30},
 		{stream_read_ahead, true},
+		%% names of additional directories to ignore when determining whether
+		%% a node is starting as a blank one (with an unintialized data directory)
+		{additional_ignored_data_filenames, []},
 		%% for testing
 		{vhost_process_reconciliation_enabled, true},
 		{license_line, "Licensed under the MPL 2.0. Website: https://rabbitmq.com"}

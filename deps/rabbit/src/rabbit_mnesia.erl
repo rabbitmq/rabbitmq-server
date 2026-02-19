@@ -1057,23 +1057,37 @@ mnesia_and_msg_store_files() ->
         {ok, []} ->
             [];
         {ok, List0} ->
-            IgnoredFiles0 =
-            [rabbit_node_monitor:cluster_status_filename(),
-             rabbit_node_monitor:running_nodes_filename(),
-             rabbit_node_monitor:coordination_filename(),
-             rabbit_node_monitor:stream_filename(),
-             rabbit_node_monitor:default_quorum_filename(),
-             rabbit_node_monitor:classic_filename(),
-             rabbit_node_monitor:quorum_filename(),
-             rabbit_feature_flags:enabled_feature_flags_list_file(),
-             rabbit_khepri:dir(),
-             rabbit_plugins:user_provided_plugins_data_dir()],
+            IgnoredFiles0 = core_ignored_filenames() ++ additional_ignored_filenames(),
             IgnoredFiles = [filename:basename(File) || File <- IgnoredFiles0],
             ?LOG_DEBUG("Files and directories found in node's data directory: ~ts, of them to be ignored: ~ts",
                             [string:join(lists:usort(List0), ", "), string:join(lists:usort(IgnoredFiles), ", ")]),
             List = List0 -- IgnoredFiles,
             ?LOG_DEBUG("Files and directories found in node's data directory sans ignored ones: ~ts", [string:join(lists:usort(List), ", ")]),
             List
+    end.
+
+-spec core_ignored_filenames() -> rabbit_types:option([file:filename_all()]).
+core_ignored_filenames() ->
+    [
+        rabbit_node_monitor:cluster_status_filename(),
+        rabbit_node_monitor:running_nodes_filename(),
+        rabbit_node_monitor:coordination_filename(),
+        rabbit_node_monitor:stream_filename(),
+        rabbit_node_monitor:default_quorum_filename(),
+        rabbit_node_monitor:classic_filename(),
+        rabbit_node_monitor:quorum_filename(),
+        rabbit_feature_flags:enabled_feature_flags_list_file(),
+        rabbit_khepri:dir(),
+        rabbit_plugins:user_provided_plugins_data_dir()
+    ].
+
+-spec additional_ignored_filenames() -> rabbit_types:option([file:filename_all()]).
+additional_ignored_filenames() ->
+    case application:get_env(rabbit, additional_ignored_data_filenames) of
+        undefined ->
+            [];
+        {ok, Value} when is_list(Value) ->
+            Value
     end.
 
 is_only_clustered_disc_node() ->
