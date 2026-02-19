@@ -123,12 +123,13 @@ module Test =
         let mutable errorName : string = null
         use attachedEv = new AutoResetEvent(false)
         use closedEv   = new AutoResetEvent(false)
-        let onAttached = new OnAttached (fun _ _ -> attachedEv.Set() |> ignore)
+        let onAttached = new OnAttached (fun link _ ->
+            (link :?> Link).add_Closed(
+                new ClosedCallback (fun _ err ->
+                    if not (isNull err) then errorName <- string err.Condition
+                    closedEv.Set() |> ignore))
+            attachedEv.Set() |> ignore)
         let receiver = new ReceiverLink(ac.Session, "test-receiver", attach, onAttached)
-        receiver.add_Closed(
-            new ClosedCallback (fun _ err ->
-                if not (isNull err) then errorName <- string err.Condition
-                closedEv.Set() |> ignore))
 
         if not (attachedEv.WaitOne(9000)) then failwith "Expected broker to reply with attach frame"
         if isNull expectedCond then
@@ -427,17 +428,16 @@ module Test =
 
         let attached = new OnAttached (fun link attach ->
             if attach.Target = null then
+                (link :?> Link).add_Closed(new ClosedCallback(fun _ err ->
+                    linkError <- err
+                    detachEvent.Set() |> ignore))
                 attachEvent.Set() |> ignore
             else
                 failwith "Expected null target in attach response"
         )
 
-        let sender = new SenderLink(ac.Session, "test-sender",
-                                    Target(Address = "/exchanges/missing"), attached)
-
-        sender.add_Closed(new ClosedCallback(fun _ err ->
-            linkError <- err
-            detachEvent.Set() |> ignore))
+        let _sender = new SenderLink(ac.Session, "test-sender",
+                                     Target(Address = "/exchanges/missing"), attached)
 
         assertTrue (attachEvent.WaitOne(9000))
         assertTrue (detachEvent.WaitOne(9000))
@@ -456,17 +456,16 @@ module Test =
 
         let attached = new OnAttached (fun link attach ->
             if attach.Target = null then
+                (link :?> Link).add_Closed(new ClosedCallback(fun _ err ->
+                    linkError <- err
+                    detachEvent.Set() |> ignore))
                 attachEvent.Set() |> ignore
             else
                 failwith "Expected null target in attach response"
         )
 
-        let sender = new SenderLink(ac.Session, "test-sender",
-                                    Target(Address = "/fruit/orange"), attached)
-
-        sender.add_Closed(new ClosedCallback(fun _ err ->
-            linkError <- err
-            detachEvent.Set() |> ignore))
+        let _sender = new SenderLink(ac.Session, "test-sender",
+                                     Target(Address = "/fruit/orange"), attached)
 
         assertTrue (attachEvent.WaitOne(9000))
         assertTrue (detachEvent.WaitOne(9000))
@@ -485,17 +484,16 @@ module Test =
 
         let attached = new OnAttached (fun link attach ->
             if attach.Source = null then
+                (link :?> Link).add_Closed(new ClosedCallback(fun _ err ->
+                    linkError <- err
+                    detachEvent.Set() |> ignore))
                 attachEvent.Set() |> ignore
             else
                 failwith "Expected null source in attach response"
         )
 
-        let receiver = new ReceiverLink(ac.Session, "test-receiver",
-                                        Source(Address = "/queues/missing"), attached)
-
-        receiver.add_Closed(new ClosedCallback(fun _ err ->
-            linkError <- err
-            detachEvent.Set() |> ignore))
+        let _receiver = new ReceiverLink(ac.Session, "test-receiver",
+                                         Source(Address = "/queues/missing"), attached)
 
         assertTrue (attachEvent.WaitOne(9000))
         assertTrue (detachEvent.WaitOne(9000))
@@ -514,17 +512,16 @@ module Test =
 
         let attached = new OnAttached (fun link attach ->
             if attach.Source = null then
+                (link :?> Link).add_Closed(new ClosedCallback(fun _ err ->
+                    linkError <- err
+                    detachEvent.Set() |> ignore))
                 attachEvent.Set() |> ignore
             else
                 failwith "Expected null source in attach response"
         )
 
-        let receiver = new ReceiverLink(ac.Session, "test-receiver",
-                                        Source(Address = "/fruit/orange"), attached)
-
-        receiver.add_Closed(new ClosedCallback(fun _ err ->
-            linkError <- err
-            detachEvent.Set() |> ignore))
+        let _receiver = new ReceiverLink(ac.Session, "test-receiver",
+                                         Source(Address = "/fruit/orange"), attached)
 
         assertTrue (attachEvent.WaitOne(9000))
         assertTrue (detachEvent.WaitOne(9000))
