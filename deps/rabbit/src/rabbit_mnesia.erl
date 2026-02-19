@@ -1066,7 +1066,7 @@ mnesia_and_msg_store_files() ->
             List
     end.
 
--spec core_ignored_filenames() -> rabbit_types:option([file:filename_all()]).
+-spec core_ignored_filenames() -> [file:filename_all()].
 core_ignored_filenames() ->
     [
         rabbit_node_monitor:cluster_status_filename(),
@@ -1081,14 +1081,11 @@ core_ignored_filenames() ->
         rabbit_plugins:user_provided_plugins_data_dir()
     ].
 
--spec additional_ignored_filenames() -> rabbit_types:option([file:filename_all()]).
+-spec additional_ignored_filenames() -> [file:filename_all()].
 additional_ignored_filenames() ->
-    case application:get_env(rabbit, additional_ignored_data_filenames) of
-        undefined ->
-            [];
-        {ok, Value} when is_list(Value) ->
-            Value
-    end.
+    lists:flatmap(
+      fun({_Type, Module}) -> Module:ignored_data_dir_names() end,
+      rabbit_registry:lookup_all(node_data_dir_filter)).
 
 is_only_clustered_disc_node() ->
     node_type() =:= disc andalso is_clustered() andalso

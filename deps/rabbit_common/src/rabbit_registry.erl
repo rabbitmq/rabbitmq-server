@@ -190,6 +190,7 @@ class_module(policy_validator)    -> rabbit_policy_validator;
 class_module(operator_policy_validator) -> rabbit_policy_validator;
 class_module(policy_merge_strategy)     -> rabbit_policy_merge_strategy;
 class_module(channel_interceptor)       -> rabbit_channel_interceptor;
+class_module(node_data_dir_filter)      -> rabbit_node_data_dir_filter;
 class_module(Other) ->
     AttrsPerApp = rabbit_misc:rabbitmq_related_module_attributes(rabbit_registry_class),
     find_class_module(Other, AttrsPerApp).
