@@ -2124,6 +2124,49 @@ handle_frame_post_auth(Transport,
     send(Transport, S, Frame),
     {Connection1, State};
 handle_frame_post_auth(Transport,
+                       #stream_connection{socket = S,
+                                          virtual_host = VirtualHost,
+                                          user = User} =
+                           Connection0,
+                       State,
+                       {request, CorrelationId,
+                        {resolve_offset_spec, Stream, OffsetSpec, Properties}}) ->
+    {ResponseCode, Offset, Connection1} =
+        case rabbit_stream_utils:check_read_permitted(#resource{name = Stream,
+                                                                kind = queue,
+                                                                virtual_host =
+                                                                    VirtualHost},
+                                                      User, #{})
+        of
+            ok ->
+                case rabbit_stream_manager:lookup_member(VirtualHost, Stream) of
+                    {error, not_found} ->
+                        increase_protocol_counter(?STREAM_DOES_NOT_EXIST),
+                        {?RESPONSE_CODE_STREAM_DOES_NOT_EXIST, 0, Connection0};
+                    {error, not_available} ->
+                        increase_protocol_counter(?STREAM_NOT_AVAILABLE),
+                        {?RESPONSE_CODE_STREAM_NOT_AVAILABLE, 0, Connection0};
+                    {ok, MemberPid} ->
+                        Opts0 = #{chunk_selector => get_chunk_selector(Properties)},
+                        Opts1 = maps:merge(Opts0,
+                                           rabbit_stream_utils:filter_spec(Properties)),
+                        case resolve_offset_spec(MemberPid, OffsetSpec, Opts1) of
+                            {ok, ResolvedOffset} ->
+                                {?RESPONSE_CODE_OK, ResolvedOffset, Connection0};
+                            {error, _} ->
+                                {?RESPONSE_CODE_NO_OFFSET, 0, Connection0}
+                        end
+                end;
+            error ->
+                increase_protocol_counter(?ACCESS_REFUSED),
+                {?RESPONSE_CODE_ACCESS_REFUSED, 0, Connection0}
+        end,
+    Frame =
+        rabbit_stream_core:frame({response, CorrelationId,
+                                  {resolve_offset_spec, ResponseCode, Offset}}),
+    send(Transport, S, Frame),
+    {Connection1, State};
+handle_frame_post_auth(Transport,
                        #stream_connection{stream_subscriptions =
                                               StreamSubscriptions} =
                            Connection,
@@ -2821,7 +2864,7 @@ init_reader(ConnectionTransport,
     {ok, Segment} = osiris:init_reader(LocalMemberPid, OffsetSpec,
                                        CounterSpec, Options1),
     ?LOG_DEBUG("Next offset for subscription ~tp is ~tp",
-                     [SubscriptionId, osiris_log:next_offset(Segment)]),
+               [SubscriptionId, osiris_log:next_offset(Segment)]),
     Segment.
 
 single_active_consumer(#consumer{configuration =
@@ -3994,6 +4037,19 @@ i(connected_at, #stream_connection{connected_at = T}, _) ->
     T;
 i(_Unknown, _, _) ->
     ?UNKNOWN_FIELD.
+
+resolve_offset_spec(MemberPid, OffsetSpec, Options) ->
+    case node(MemberPid) of
+        Node when Node =:= node() ->
+            osiris:resolve_offset_spec(MemberPid, OffsetSpec, Options);
+        Node ->
+            try erpc:call(Node, osiris, resolve_offset_spec,
+                          [MemberPid, OffsetSpec, Options])
+            catch
+                error:{erpc, _} ->
+                    {error, erpc_error}
+            end
+    end.
 
 -spec send(module(), rabbit_net:socket(), iodata()) -> ok.
 send(Transport, Socket, Data) when is_atom(Transport) ->

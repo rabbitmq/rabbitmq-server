@@ -316,7 +316,8 @@ command_versions() ->
      {partitions, ?VERSION_1, ?VERSION_1},
      {stream_stats, ?VERSION_1, ?VERSION_1},
      {create_super_stream, ?VERSION_1, ?VERSION_1},
-     {delete_super_stream, ?VERSION_1, ?VERSION_1}].
+     {delete_super_stream, ?VERSION_1, ?VERSION_1},
+     {resolve_offset_spec, ?VERSION_1, ?VERSION_1}].
 
 q(VirtualHost, Name) ->
     rabbit_misc:r(VirtualHost, queue, Name).
