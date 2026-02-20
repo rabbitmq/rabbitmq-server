@@ -101,7 +101,7 @@
 <%= format('publish', {'mode': 'queue', 'queue': queue}) %>
 
 <% if (QUEUE_TYPE(queue).actions.get_message) { %>
-  <%= format(QUEUE_TYPE(queue).tmpl.get_message, {queue: queue}) %>
+  <%= format((QUEUE_TYPE(queue).tmpl && QUEUE_TYPE(queue).tmpl.get_message) || "classic-queue-get-message", {queue: queue}) %>
 <% } %>
 
 <% if (is_user_policymaker) { %>
