@@ -109,7 +109,9 @@ quorum_queues(Config) ->
                              {<<"src-queue">>,       <<"src">>},
                              {<<"dest-queue">>,      <<"dest">>},
                              {<<"src-queue-args">>,  #{<<"x-queue-type">> => <<"quorum">>}},
-                             {<<"dest-queue-args">>, #{<<"x-queue-type">> => <<"quorum">>}}
+                             {<<"dest-queue-args">>, #{<<"x-queue-type">> => <<"quorum">>,
+                                                       <<"x-dead-letter-exchange">> => <<"dlx1">>,
+                                                       <<"x-dead-letter-routing-key">> => <<"rk1">>}}
                             ]),
               amqp091_publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hello">>)
       end).
