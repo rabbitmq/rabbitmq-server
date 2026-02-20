@@ -57,10 +57,10 @@ handle_cast(_Request, State) ->
 handle_info(tick, #state{timeout = Timeout} = State) ->
     Data = osiris_counters:overview(),
     _ = maps:map(
-      fun ({osiris_writer, QName}, #{offset := Offs,
+      fun ({osiris_writer, QName}, #{committed_offset := COffs,
                                      first_offset := FstOffs}) ->
-              COffs = Offs + 1 - FstOffs,
-              rabbit_core_metrics:queue_stats(QName, COffs, 0, COffs, 0),
+              Offsets = COffs + 1 - FstOffs,
+              rabbit_core_metrics:queue_stats(QName, Offsets, 0, Offsets, 0),
               Infos = try
                           %% TODO complete stats!
                           case rabbit_amqqueue:lookup(QName) of
