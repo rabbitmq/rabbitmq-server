@@ -110,18 +110,10 @@ disable_multiple_metrics_test(Config) ->
     ?assertEqual(nomatch, re:run(Body, "^rabbitmq_connection_incoming_bytes_total ", [{capture, none}, multiline])).
 
 normalize_metric_name_test(_Config) ->
-    ?assertEqual(queue_messages, normalize_metric_name(rabbitmq_queue_messages)),
-    ?assertEqual(queue_messages, normalize_metric_name(rabbitmq_detailed_queue_messages)),
-    ?assertEqual(vhost_status, normalize_metric_name(rabbitmq_cluster_vhost_status)),
-    ?assertEqual(other_metric, normalize_metric_name(other_metric)).
-
-normalize_metric_name(Metric) when is_atom(Metric) ->
-    case atom_to_list(Metric) of
-        "rabbitmq_detailed_" ++ Rest -> list_to_atom(Rest);
-        "rabbitmq_cluster_" ++ Rest -> list_to_atom(Rest);
-        "rabbitmq_" ++ Rest -> list_to_atom(Rest);
-        _ -> Metric
-    end.
+    ?assertEqual(queue_messages, rabbit_prometheus_util:normalize_metric_name(rabbitmq_queue_messages)),
+    ?assertEqual(queue_messages, rabbit_prometheus_util:normalize_metric_name(rabbitmq_detailed_queue_messages)),
+    ?assertEqual(vhost_status, rabbit_prometheus_util:normalize_metric_name(rabbitmq_cluster_vhost_status)),
+    ?assertEqual(other_metric, rabbit_prometheus_util:normalize_metric_name(other_metric)).
 
 %% Helpers
 
