@@ -38,6 +38,7 @@
          format/2,
          remove/2,
          info/2,
+         get_nodes/1,
          state_info/1,
          format_status/1,
          info_down/2,
@@ -415,6 +416,15 @@ info(Q, Items) when ?amqqueue_state_is(Q, stopped) ->
 info(Q, Items) ->
     Mod = amqqueue:get_type(Q),
     Mod:info(Q, Items).
+
+-spec get_nodes(amqqueue:amqqueue_v2()) -> [node(),...].
+get_nodes(Q) ->
+    case info(Q, [members]) of
+        [{members, Nodes}] ->
+            Nodes;
+        [] ->
+            []
+    end.
 
 fold_state(Fun, Acc, #?STATE{ctxs = Ctxs}) ->
     maps:fold(Fun, Acc, Ctxs).

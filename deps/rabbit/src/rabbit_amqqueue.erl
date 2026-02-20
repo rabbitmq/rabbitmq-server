@@ -2034,12 +2034,7 @@ pseudo_queue(#resource{kind = queue} = QueueName, Pid, Durable)
                 ).
 
 get_quorum_nodes(Q) ->
-    case amqqueue:get_type_state(Q) of
-        #{nodes := Nodes} ->
-            Nodes;
-        _ ->
-            []
-    end.
+    rabbit_queue_type:get_nodes(Q).
 
 -spec prepend_extra_bcc(Qs) ->
     Qs when Qs :: [amqqueue:target() | {amqqueue:target(), route_infos()}].
