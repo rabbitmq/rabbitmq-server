@@ -37,6 +37,7 @@ all_tests() ->
     [
      direct_exchange,
      headers_exchange,
+     headers_exchange_key_presence_only,
      topic_exchange,
      fanout_exchange,
      invalid_exchange
@@ -268,6 +269,68 @@ headers_exchange(Config) ->
                  amqp_channel:call(Ch, #'basic.get'{queue = AltQ})),
     ?assertMatch(#'basic.get_empty'{},
                  amqp_channel:call(Ch, #'basic.get'{queue = AltQ})),
+    ok.
+
+%% Test that a headers exchange routes based on the presence of a header key
+%% alone when the binding argument uses the void type, regardless of the
+%% message's header value.
+headers_exchange_key_presence_only(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QAll = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QAll, 0, 0}, declare(Ch, QAll, [])),
+    QAny = ?config(alt_queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QAny, 0, 0}, declare(Ch, QAny, [])),
+
+    Headers = <<"amq.headers">>,
+
+    #'queue.bind_ok'{} =
+    amqp_channel:call(Ch,
+                      #'queue.bind'{exchange = Headers,
+                                    queue = QAll,
+                                    arguments = [{<<"x-match">>, longstr, <<"all-with-x">>},
+                                                 {<<"foo">>, void, undefined},
+                                                 {<<"x-foo">>, void, undefined}]
+                                   }),
+
+    #'queue.bind_ok'{} =
+    amqp_channel:call(Ch,
+                      #'queue.bind'{exchange = Headers,
+                                    queue = QAny,
+                                    arguments = [{<<"x-match">>, longstr, <<"any-with-x">>},
+                                                 {<<"foo">>, void, undefined},
+                                                 {<<"x-foo">>, void, undefined}]
+                                   }),
+
+    %% msg1: both keys present (with arbitrary values) -> routed to both queues
+    publish(Ch, Headers, <<>>, <<"msg1">>, [{<<"foo">>, longstr, <<"anything">>},
+                                            {<<"x-foo">>, long, 42}]),
+    %% msg2: only "foo" present -> routed to QAny only
+    publish(Ch, Headers, <<>>, <<"msg2">>, [{<<"foo">>, longstr, <<"whatever">>}]),
+    %% msg3: only "x-foo" present -> routed to QAny only
+    publish(Ch, Headers, <<>>, <<"msg3">>, [{<<"x-foo">>, longstr, <<"something">>}]),
+    %% msg4: neither key present -> routed to neither queue
+    publish(Ch, Headers, <<>>, <<"msg4">>, [{<<"other">>, longstr, <<"value">>}]),
+    %% msg5: no headers at all -> routed to neither queue
+    publish(Ch, Headers, <<>>, <<"msg5">>),
+
+    queue_utils:wait_for_messages(Config, [[QAll, <<"1">>, <<"1">>, <<"0">>],
+                                           [QAny, <<"3">>, <<"3">>, <<"0">>]]),
+
+    ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"msg1">>}},
+                 amqp_channel:call(Ch, #'basic.get'{queue = QAll})),
+    ?assertMatch(#'basic.get_empty'{},
+                 amqp_channel:call(Ch, #'basic.get'{queue = QAll})),
+
+    ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"msg1">>}},
+                 amqp_channel:call(Ch, #'basic.get'{queue = QAny})),
+    ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"msg2">>}},
+                 amqp_channel:call(Ch, #'basic.get'{queue = QAny})),
+    ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"msg3">>}},
+                 amqp_channel:call(Ch, #'basic.get'{queue = QAny})),
+    ?assertMatch(#'basic.get_empty'{},
+                 amqp_channel:call(Ch, #'basic.get'{queue = QAny})),
     ok.
 
 invalid_exchange(Config) ->
