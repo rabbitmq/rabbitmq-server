@@ -344,21 +344,7 @@ gather_policy_config(Q, IsQueueDeclaration) ->
     OverflowBin = args_policy_lookup(<<"overflow">>, fun policy_has_precedence/2, Q),
     Overflow = overflow(OverflowBin, drop_head, QName),
     MaxBytes = args_policy_lookup(<<"max-length-bytes">>, fun min/2, Q),
-    DeliveryLimit = case args_policy_lookup(<<"delivery-limit">>,
-                                            fun resolve_delivery_limit/2, Q) of
-                        undefined ->
-                            case IsQueueDeclaration of
-                                true ->
-                                    ?LOG_INFO(
-                                              "~ts: delivery_limit not set, defaulting to ~b",
-                                              [rabbit_misc:rs(QName), ?DEFAULT_DELIVERY_LIMIT]);
-                                false ->
-                                    ok
-                            end,
-                            ?DEFAULT_DELIVERY_LIMIT;
-                        DL ->
-                            DL
-                    end,
+    DeliveryLimit = get_delivery_limit(Q, IsQueueDeclaration),
     Expires = args_policy_lookup(<<"expires">>, fun min/2, Q),
     MsgTTL = args_policy_lookup(<<"message-ttl">>, fun min/2, Q),
     DeadLetterHandler = dead_letter_handler(Q, Overflow),
@@ -382,12 +368,6 @@ ra_machine_config(Q) when ?is_amqqueue(Q) ->
       single_active_consumer_on => single_active_consumer_on(Q),
       created => erlang:system_time(millisecond)
      }.
-
-resolve_delivery_limit(PolVal, ArgVal)
-  when PolVal < 0 orelse ArgVal < 0 ->
-    max(PolVal, ArgVal);
-resolve_delivery_limit(PolVal, ArgVal) ->
-    min(PolVal, ArgVal).
 
 policy_has_precedence(Policy, _QueueArg) ->
     Policy.
@@ -1747,6 +1727,29 @@ i_totals(Q) when ?is_amqqueue(Q) ->
              {messages, 0}]
     end.
 
+resolve_delivery_limit(PolVal, ArgVal)
+  when PolVal < 0 orelse ArgVal < 0 ->
+    max(PolVal, ArgVal);
+resolve_delivery_limit(PolVal, ArgVal) ->
+    min(PolVal, ArgVal).
+
+get_delivery_limit(Q) ->
+    get_delivery_limit(Q, false).
+
+get_delivery_limit(Q, ShouldLog) ->
+    PolicyValue = args_policy_lookup(<<"delivery-limit">>, fun resolve_delivery_limit/2, Q),
+    get_delivery_limit({handle_policy_value, PolicyValue}, Q, ShouldLog).
+
+get_delivery_limit({handle_policy_value, undefined}, Q, true) ->
+    QName = amqqueue:get_name(Q),
+    ?LOG_INFO("~ts: delivery_limit not set, defaulting to ~b",
+                [rabbit_misc:rs(QName), ?DEFAULT_DELIVERY_LIMIT]),
+    ?DEFAULT_DELIVERY_LIMIT;
+get_delivery_limit({handle_policy_value, undefined}, _Q, false) ->
+    ?DEFAULT_DELIVERY_LIMIT;
+get_delivery_limit({handle_policy_value, Limit}, _Q, _ShouldLog) when is_integer(Limit) ->
+    Limit.
+
 i(name,        Q) when ?is_amqqueue(Q) -> amqqueue:get_name(Q);
 i(durable,     Q) when ?is_amqqueue(Q) -> amqqueue:is_durable(Q);
 i(auto_delete, Q) when ?is_amqqueue(Q) -> amqqueue:is_auto_delete(Q);
@@ -1881,6 +1884,8 @@ i(message_bytes_dlx, Q) when ?is_amqqueue(Q) ->
         {timeout, _} ->
             0
     end;
+i(delivery_limit, Q) when ?is_amqqueue(Q) ->
+    get_delivery_limit(Q);
 i(_K, _Q) -> ''.
 
 open_files(Name) ->
@@ -1986,7 +1991,11 @@ format(Q, Ctx) when ?is_amqqueue(Q) ->
      {node, LeaderNode},
      {members, Nodes},
      {leader, LeaderNode},
-     {online, Online}].
+     {online, Online},
+     {policy, i(policy, Q)},
+     {operator_policy, i(operator_policy, Q)},
+     {effective_policy_definition, i(effective_policy_definition, Q)},
+     {delivery_limit, i(delivery_limit, Q)}].
 
 -spec quorum_messages(rabbit_amqqueue:name()) -> non_neg_integer().
 
