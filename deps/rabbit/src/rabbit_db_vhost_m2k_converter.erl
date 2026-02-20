@@ -2,12 +2,13 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2023-2026 Broadcom. All Rights Reserved. The term “Broadcom”
+%% refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_db_vhost_m2k_converter).
 
--behaviour(mnesia_to_khepri_converter).
+-behaviour(rabbit_db_m2k_converter).
 
 -include_lib("kernel/include/logger.hrl").
 -include_lib("khepri/include/khepri.hrl").
@@ -15,26 +16,22 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include("vhost.hrl").
 
--export([init_copy_to_khepri/3,
+-export([init_copy_to_khepri/4,
          copy_to_khepri/3,
          delete_from_khepri/3]).
 
--record(?MODULE, {}).
-
--spec init_copy_to_khepri(StoreId, MigrationId, Tables) -> Ret when
+-spec init_copy_to_khepri(StoreId, MigrationId, Tables, State) -> Ret when
       StoreId :: khepri:store_id(),
       MigrationId :: mnesia_to_khepri:migration_id(),
       Tables :: [mnesia_to_khepri:mnesia_table()],
-      Ret :: {ok, Priv},
-      Priv :: #?MODULE{}.
+      Ret :: {ok, State}.
 %% @private
 
-init_copy_to_khepri(_StoreId, _MigrationId, Tables) ->
+init_copy_to_khepri(_StoreId, _MigrationId, Tables, State) ->
     %% Clean up any previous attempt to copy the Mnesia table to Khepri.
     lists:foreach(fun clear_data_in_khepri/1, Tables),
 
-    SubState = #?MODULE{},
-    {ok, SubState}.
+    {ok, State}.
 
 -spec copy_to_khepri(Table, Record, State) -> Ret when
       Table :: mnesia_to_khepri:mnesia_table(),
