@@ -22,8 +22,7 @@
          host/0,
          tls_host/0,
          port/0,
-         tls_port/0,
-         kill_connection/1]).
+         tls_port/0]).
 -export([stop/1]).
 -export([emit_connection_info_local/3,
          emit_connection_info_all/4,
@@ -131,20 +130,6 @@ tls_port_from_listener() ->
 
 stop(_State) ->
     ok.
-
-kill_connection(ConnectionName) ->
-    ConnectionNameBin = rabbit_data_coercion:to_binary(ConnectionName),
-    lists:foreach(fun(ConnectionPid) ->
-                     ConnectionPid ! {infos, self()},
-                     receive
-                         {ConnectionPid,
-                          #{<<"connection_name">> := ConnectionNameBin}} ->
-                             exit(ConnectionPid, kill);
-                         {ConnectionPid, _ClientProperties} -> ok
-                     after 1000 -> ok
-                     end
-                  end,
-                  pg_local:get_members(rabbit_stream_connections)).
 
 emit_connection_info_all(Nodes, Items, Ref, AggregatorPid) ->
     Pids =

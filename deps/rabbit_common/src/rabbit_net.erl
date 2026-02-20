@@ -237,11 +237,18 @@ tcp_host(IPAddress) ->
     end.
 
 hostname() ->
-    {ok, Hostname} = inet:gethostname(),
-    case inet:gethostbyname(Hostname) of
-        {ok,    #hostent{h_name = Name}} -> Name;
-        {error, _Reason}                 -> Hostname
+    case persistent_term:get(platform_and_version, undefined) of
+        undefined ->
+            {ok, Hostname} = inet:gethostname(),
+            H = case inet:gethostbyname(Hostname) of
+                    {ok,    #hostent{h_name = Name}} -> Name;
+                    {error, _Reason}                 -> Hostname
+                end,
+                persistent_term:put(platform_and_version, H);
+        Hostname ->
+            Hostname
     end.
+
 
 format_nic_attribute({Key, undefined}) ->
     {Key, undefined};

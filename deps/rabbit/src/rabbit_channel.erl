@@ -301,9 +301,9 @@ send_command(Pid, Msg) ->
 %% Delete this function when feature flag rabbitmq_4.2.0 becomes required.
 -spec deliver_reply_local(pid(), binary(), mc:state()) -> ok.
 deliver_reply_local(Pid, Key, Message) ->
-    case pg_local:in_group(rabbit_channels, Pid) of
-        true  -> gen_server2:cast(Pid, {deliver_reply, Key, Message});
-        false -> ok
+    case pg:get_local_members(pg_scope(), Pid) of
+        [] -> ok;
+        _  -> gen_server2:cast(Pid, {deliver_reply, Key, Message})
     end.
 
 -spec list() -> [pid()].
@@ -315,7 +315,9 @@ list() ->
 -spec list_local() -> [pid()].
 
 list_local() ->
-    pg_local:get_members(rabbit_channels).
+    try pg:which_groups(pg_scope())
+    catch error:badarg -> []
+    end.
 
 -spec info_keys() -> rabbit_types:info_keys().
 
@@ -433,6 +435,10 @@ update_user_state(Pid, UserState) when is_pid(Pid) ->
 
 %%---------------------------------------------------------------------------
 
+-spec pg_scope() -> atom().
+pg_scope() ->
+    rabbit:pg_scope_amqp091_channel().
+
 init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, User, VHost,
       Capabilities, CollectorPid, LimiterPid, AmqpParams]) ->
     process_flag(trap_exit, true),
@@ -441,7 +447,7 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, User, VHost,
 
     ?LG_PROCESS_TYPE(channel),
     ?store_proc_name({ConnName, Channel}),
-    ok = pg_local:join(rabbit_channels, self()),
+    ok = pg:join(pg_scope(), self(), self()),
     Flow = case rabbit_misc:get_env(rabbit, classic_queue_flow_control, true) of
              true   -> flow;
              false  -> noflow
@@ -779,7 +785,7 @@ terminate(_Reason,
                       queue_states = QueueCtxs}) ->
     rabbit_queue_type:close(QueueCtxs),
     {_Res, _State1} = notify_queues(State),
-    pg_local:leave(rabbit_channels, self()),
+    pg:leave(pg_scope(), self(), self()),
     rabbit_event:if_enabled(State, #ch.stats_timer,
                             fun() -> emit_stats(State) end),
     [delete_stats(Tag) || {Tag, _} <- get()],
