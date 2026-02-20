@@ -413,9 +413,27 @@ update_matched_objects(VHost, PolicyDef, ActingUser) ->
                                         get_updated_exchange(Policies, OpPolicies),
                                         get_updated_queue(Policies, OpPolicies))
         end,
-    _ = [catch maybe_notify_of_policy_change(XRes, PolicyDef, ActingUser) || XRes <- XUpdateResults],
-    _ = [catch maybe_notify_of_policy_change(QRes, PolicyDef, ActingUser) || QRes <- QUpdateResults],
-    ok.
+    lists:foreach(
+      fun(XRes) ->
+              try maybe_notify_of_policy_change(XRes, PolicyDef, ActingUser)
+              catch Class:Reason ->
+                        {#exchange{name = XName}, _} = XRes,
+                        ?LOG_WARNING("Failed to apply policy change "
+                                     "notification for ~ts: ~ts ~tp",
+                                     [rabbit_misc:rs(XName), Class, Reason])
+              end
+      end, XUpdateResults),
+    lists:foreach(
+      fun(QRes) ->
+              try maybe_notify_of_policy_change(QRes, PolicyDef, ActingUser)
+              catch Class:Reason ->
+                        {Q, _} = QRes,
+                        QName = amqqueue:get_name(Q),
+                        ?LOG_WARNING("Failed to apply policy change "
+                                     "notification for ~ts: ~ts ~tp",
+                                     [rabbit_misc:rs(QName), Class, Reason])
+              end
+      end, QUpdateResults).
 
 get_updated_exchange(Policies, OpPolicies) ->
     fun(X = #exchange{name = XName,
