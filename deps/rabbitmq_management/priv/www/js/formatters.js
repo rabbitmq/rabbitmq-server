@@ -92,10 +92,16 @@ function fmt_date0(d) {
 }
 
 function fmt_timestamp(ts) {
+    if (ts == undefined) {
+        return UNKNOWN_REPR;
+    }
     return fmt_date(new Date(ts));
 }
 
 function fmt_timestamp_mini(ts) {
+    if (ts == undefined) {
+        return UNKNOWN_REPR;
+    }
     return fmt_date_mini(new Date(ts));
 }
 
