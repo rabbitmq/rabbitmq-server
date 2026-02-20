@@ -17,6 +17,7 @@
                     {enables, recovery}]}).
 
 -include_lib("rabbit/include/amqqueue.hrl").
+-include_lib("kernel/include/logger.hrl").
 -include("rabbit_queue_federation.hrl").
 
 -behaviour(rabbit_queue_decorator).
@@ -47,8 +48,15 @@ policy_changed(Q1, Q2) when ?is_amqqueue(Q1) ->
     QName = amqqueue:get_name(Q1),
     case rabbit_amqqueue:lookup(QName) of
         {ok, Q0} when ?is_amqqueue(Q0) ->
-            rpc:call(amqqueue:qnode(Q0), rabbit_federation_queue,
-                     policy_changed_local, [Q1, Q2]);
+            Node = amqqueue:qnode(Q0),
+            try erpc:call(Node, rabbit_federation_queue,
+                          policy_changed_local, [Q1, Q2])
+            catch Class:Reason ->
+                      ?LOG_WARNING("Queue federation failed to apply policy "
+                                   "change for ~ts on node ~tp: ~s ~tp",
+                                   [rabbit_misc:rs(QName), Node, Class, Reason]),
+                      ok
+            end;
         {error, not_found} ->
             ok
     end.
