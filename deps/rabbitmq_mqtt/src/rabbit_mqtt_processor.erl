@@ -2031,20 +2031,30 @@ handle_queue_event({queue_event, QName, Evt},
     case rabbit_queue_type:handle_event(QName, Evt, QStates0) of
         {ok, QStates, Actions} ->
             State1 = State0#state{queue_states = QStates},
-            State = handle_queue_actions(Actions, State1),
-            {ok, State};
+            try handle_queue_actions(Actions, State1) of
+                State ->
+                    {ok, State}
+            catch throw:Reason when Reason =:= consuming_queue_down;
+                                    Reason =:= consumer_timeout ->
+                    {error, Reason, State1}
+            end;
         {eol, Actions} ->
-            State1 = handle_queue_actions(Actions, State0),
-            {ConfirmPktIds, U} = rabbit_mqtt_confirms:remove_queue(QName, U0),
-            QStates = rabbit_queue_type:remove(QName, QStates0),
-            State = State1#state{queue_states = QStates,
-                                 unacked_client_pubs = U},
-            send_puback(ConfirmPktIds, ?RC_SUCCESS, State),
-            try handle_queue_down(QName, State) of
-                State2 ->
-                    {ok, State2}
-            catch throw:consuming_queue_down ->
-                    {error, consuming_queue_down, State}
+            try handle_queue_actions(Actions, State0) of
+                State1 ->
+                    {ConfirmPktIds, U} = rabbit_mqtt_confirms:remove_queue(QName, U0),
+                    QStates = rabbit_queue_type:remove(QName, QStates0),
+                    State = State1#state{queue_states = QStates,
+                                         unacked_client_pubs = U},
+                    send_puback(ConfirmPktIds, ?RC_SUCCESS, State),
+                    try handle_queue_down(QName, State) of
+                        State2 ->
+                            {ok, State2}
+                    catch throw:consuming_queue_down ->
+                            {error, consuming_queue_down, State}
+                    end
+            catch throw:Reason when Reason =:= consuming_queue_down;
+                                    Reason =:= consumer_timeout ->
+                    {error, Reason, State0}
             end;
         {protocol_error, _Type, _Reason, _ReasonArgs} = Error ->
             {error, Error, State0}
@@ -2082,6 +2092,10 @@ handle_queue_actions(Actions, #state{} = State0) ->
               S#state{queues_soft_limit_exceeded = sets:del_element(QName, QSLE)};
           ({queue_down, QName}, S) ->
               handle_queue_down(QName, S);
+          ({released, QName, _CTag, _MsgSeqNos, timeout}, _S) ->
+              ?LOG_INFO("Terminating MQTT connection because consumer on ~ts timed out",
+                        [rabbit_misc:rs(QName)]),
+              throw(consumer_timeout);
           (_Action, S) ->
               S
       end, State0, Actions).
@@ -2093,7 +2107,7 @@ handle_queue_down(QName, State0 = #state{cfg = #cfg{client_id = ClientId}}) ->
             State0;
         _QoS ->
             %% Consuming classic queue is down.
-            ?LOG_INFO("Terminating MQTT connection because consuming ~s is down.",
+            ?LOG_INFO("Terminating MQTT connection because consuming ~ts is down.",
                       [rabbit_misc:rs(QName)]),
             throw(consuming_queue_down)
     end.

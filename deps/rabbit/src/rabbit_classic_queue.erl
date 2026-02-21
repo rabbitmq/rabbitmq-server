@@ -56,7 +56,7 @@
          deliver/3,
          settle/5,
          credit/6,
-         dequeue/5,
+         dequeue/6,
          info/2,
          state_info/1,
          capabilities/0,
@@ -472,10 +472,12 @@ deliver(Qs0, Msg0, Options) ->
     {Qs, []}.
 
 -spec dequeue(amqqueue:amqqueue(), NoAck :: boolean(),
-              LimiterPid :: pid(), rabbit_types:ctag(), state()) ->
+              LimiterPid :: pid(), rabbit_types:ctag(),
+              Timeout :: non_neg_integer() | infinity | undefined,
+              state()) ->
     {ok, Count :: non_neg_integer(), rabbit_amqqueue:qmsg(), state()} |
     {empty, state()}.
-dequeue(Q, NoAck, LimiterPid, _CTag, State0) ->
+dequeue(Q, NoAck, LimiterPid, _CTag, _Timeout, State0) ->
     QName = amqqueue:get_name(Q),
     QPid = amqqueue:get_pid(Q),
     State1 = State0#?STATE{pid = QPid},

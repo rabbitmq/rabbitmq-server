@@ -133,7 +133,8 @@
                           args => rabbit_framing:amqp_table(),
                           filter => rabbit_amqp_filter:expression(),
                           ok_msg := term(),
-                          acting_user := rabbit_types:username()}.
+                          acting_user := rabbit_types:username(),
+                          timeout => non_neg_integer()}.
 -type cancel_reason() :: cancel | remove.
 -type cancel_spec() :: #{consumer_tag := rabbit_types:ctag(),
                          reason => cancel_reason(),
@@ -243,7 +244,9 @@
     {queue_state(), actions()}.
 
 -callback dequeue(amqqueue:amqqueue(), NoAck :: boolean(), LimiterPid :: pid(),
-                  rabbit_types:ctag(), queue_state()) ->
+                  rabbit_types:ctag(),
+                  Timeout :: non_neg_integer() | infinity | undefined,
+                  queue_state()) ->
     {ok, Count :: non_neg_integer(), rabbit_amqqueue:qmsg(), queue_state()} |
     {empty, queue_state()} |
     {error, term()} |
@@ -503,9 +506,13 @@ new(Q, State) when ?is_amqqueue(Q) ->
 -spec consume(amqqueue:amqqueue(), consume_spec(), state()) ->
     {ok, state()} |
     {error, Type :: atom(), Format :: string(), FormatArgs :: [term()]}.
-consume(Q, Spec, State) ->
+consume(Q, Spec0, State) ->
     #ctx{state = CtxState0} = Ctx = get_ctx(Q, State),
     Mod = amqqueue:get_type(Q),
+    Timeout0 = get_consumer_timeout(Spec0, Q),
+    Timeout = table_lookup(maps:get(args, Spec0, []),
+                           <<"x-consumer-timeout">>, Timeout0),
+    Spec = Spec0#{timeout => Timeout},
     case Mod:consume(Q, Spec, CtxState0) of
         {ok, CtxState} ->
             {ok, set_ctx(Q, Ctx#ctx{state = CtxState}, State)};
@@ -715,12 +722,14 @@ settle(#resource{kind = queue} = QRef, Op, CTag, MsgIds, Ctxs) ->
             end
     end.
 
--spec credit(queue_name(), rabbit_types:ctag(), delivery_count(), credit(), boolean(), state()) ->
+-spec credit(queue_name(), rabbit_types:ctag(), delivery_count(),
+             credit(), boolean(), state()) ->
     {ok, state(), actions()}.
 credit(QName, CTag, DeliveryCount, Credit, Drain, Ctxs) ->
     #ctx{state = State0,
          module = Mod} = Ctx = get_ctx(QName, Ctxs),
-    {State, Actions} = Mod:credit(QName, CTag, DeliveryCount, Credit, Drain, State0),
+    {State, Actions} = Mod:credit(QName, CTag, DeliveryCount, Credit,
+                                  Drain, State0),
     {ok, set_ctx(QName, Ctx#ctx{state = State}, Ctxs), Actions}.
 
 -spec dequeue(amqqueue:amqqueue(), boolean(),
@@ -729,10 +738,12 @@ credit(QName, CTag, DeliveryCount, Credit, Drain, Ctxs) ->
     {empty, state()} |
     rabbit_types:error(term()) |
     {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
-dequeue(Q, NoAck, LimiterPid, CTag, Ctxs) ->
+dequeue(Q, NoAck, LimiterPid, CTag, Ctxs)
+  when ?is_amqqueue(Q) ->
     #ctx{state = State0} = Ctx = get_ctx(Q, Ctxs),
     Mod = amqqueue:get_type(Q),
-    case Mod:dequeue(Q, NoAck, LimiterPid, CTag, State0) of
+    Timeout = get_consumer_timeout(#{}, Q),
+    case Mod:dequeue(Q, NoAck, LimiterPid, CTag, Timeout, State0) of
         {ok, Num, Msg, State} ->
             {ok, Num, Msg, set_ctx(Q, Ctx#ctx{state = State}, Ctxs)};
         {empty, State} ->
@@ -865,6 +876,25 @@ check_vhost_queue_limit(Q) ->
                               [QueueName, VHost, Limit])
     end.
 
+get_consumer_timeout(#{timeout := Timeout}, _Q)
+  when is_integer(Timeout) ->
+    %% a user provided value always overrides the configured value
+    Timeout;
+get_consumer_timeout(_, Q) ->
+    case rabbit_queue_type_util:args_policy_lookup(<<"consumer-timeout">>,
+                                                   fun (X, Y) ->
+                                                           erlang:min(X, Y)
+                                                   end, Q) of
+        undefined ->
+            %% strict assertion, it is not valid to unset the consumer_timeout
+            %% environment variable or set it to an invalid value
+            {ok, MS} = application:get_env(rabbit, consumer_timeout),
+            true = is_integer(MS),
+            MS;
+        Val when is_integer(Val) ->
+            Val
+    end.
+
 check_cluster_queue_limit(Q) ->
     #resource{name = QueueName} = amqqueue:get_name(Q),
     case rabbit_misc:get_env(rabbit, cluster_queue_limit, infinity) of
@@ -939,3 +969,13 @@ queue_vm_ets() ->
                         {KeysAcc ++ Keys, SupsAcc ++ Tables}
                 end,
                 {[], []}, rabbit_registry:lookup_all(queue)).
+
+table_lookup(Tbl, Key, Default) 
+  when is_list(Tbl) andalso
+       is_binary(Key) ->
+    case rabbit_misc:table_lookup(Tbl, Key) of
+        {_Type, Value} ->
+            Value;
+        _ ->
+            Default
+    end.

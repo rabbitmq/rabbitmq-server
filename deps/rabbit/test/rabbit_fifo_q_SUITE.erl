@@ -16,7 +16,6 @@ all() ->
 
 all_tests() ->
     [
-     hi,
      basics,
      hi_is_prioritised,
      get_lowest_index,
@@ -77,6 +76,8 @@ basics(_Config) ->
                      {no, ?MSG(4)},
                      {hi, ?MSG(5)}
                     ]),
+
+    ?assertEqual([1,2,3,4,5], lists:sort(rabbit_fifo_q:indexes(Q1))),
     {?MSG(1), Q2} = rabbit_fifo_q:out(Q1),
     {?MSG(3), Q3} = rabbit_fifo_q:out(Q2),
     {?MSG(2), Q4} = rabbit_fifo_q:out(Q3),

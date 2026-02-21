@@ -1,3 +1,10 @@
+%% This Source Code Form is subject to the terms of the Mozilla Public
+%% License, v. 2.0. If a copy of the MPL was not distributed with this
+%% file, You can obtain one at https://mozilla.org/MPL/2.0/.
+%%
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved.
+%% The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.
+%% All rights reserved.
 -module(rabbit_fifo_q).
 
 -include("rabbit_fifo.hrl").
@@ -7,7 +14,9 @@
          out/1,
          get/1,
          len/1,
+         to_queues/1,
          from_lqueue/1,
+         indexes/1,
          get_lowest_index/1,
          overview/1
         ]).
@@ -18,8 +27,10 @@
 
 %% a weighted priority queue with only two priorities
 
--record(?MODULE, {hi = ?EMPTY :: {list(msg()), list(msg())}, %% high
-                  no = ?EMPTY :: {list(msg()), list(msg())}, %% normal
+-type queue() :: {list(msg()), list(msg())}.
+
+-record(?MODULE, {hi = ?EMPTY :: queue(), %% high
+                  no = ?EMPTY :: queue(), %% normal
                   len = 0 :: non_neg_integer(),
                   dequeue_counter = 0 :: non_neg_integer()}).
 
@@ -75,11 +86,26 @@ get(#?MODULE{} = State) ->
 len(#?MODULE{len = Len}) ->
     Len.
 
+-spec to_queues(state()) -> {High :: queue(),
+                             Normal :: queue()}.
+to_queues(#?MODULE{hi = Hi,
+                   no = No}) ->
+    {Hi, No}.
+
+
 -spec from_lqueue(lqueue:lqueue(msg())) -> state().
 from_lqueue(LQ) ->
     lqueue:fold(fun (Item, Acc) ->
                         in(no, Item, Acc)
                 end, new(), LQ).
+
+-spec indexes(state()) -> [ra:index()].
+indexes(#?MODULE{hi = {Hi1, Hi2},
+                 no = {No1, No2}}) ->
+    A = lists:map(fun msg_idx/1, Hi1),
+    B = lists:foldl(fun msg_idx_fld/2, A, Hi2),
+    C = lists:foldl(fun msg_idx_fld/2, B, No1),
+    lists:foldl(fun msg_idx_fld/2, C, No2).
 
 -spec get_lowest_index(state()) -> undefined | ra:index().
 get_lowest_index(#?MODULE{len = 0}) ->
@@ -87,14 +113,14 @@ get_lowest_index(#?MODULE{len = 0}) ->
 get_lowest_index(#?MODULE{hi = Hi, no = No}) ->
     case peek(Hi) of
         empty ->
-            ?MSG(NoIdx, _) = peek(No),
-            NoIdx;
-        ?MSG(HiIdx, _) ->
+            msg_idx(peek(No));
+        HiMsg ->
+            HiIdx = msg_idx(HiMsg),
             case peek(No) of
-                ?MSG(NoIdx, _) ->
-                    min(HiIdx, NoIdx);
                 empty ->
-                    HiIdx
+                    HiIdx;
+                NoMsg ->
+                    min(HiIdx, msg_idx(NoMsg))
             end
     end.
 
@@ -119,8 +145,10 @@ overview(#?MODULE{len = Len,
 next(#?MODULE{hi = ?NON_EMPTY = Hi,
               no = ?NON_EMPTY = No,
               dequeue_counter = ?WEIGHT}) ->
-    ?MSG(HiIdx, _) = HiMsg = peek(Hi),
-    ?MSG(NoIdx, _) = NoMsg = peek(No),
+    HiMsg = peek(Hi),
+    NoMsg = peek(No),
+    HiIdx = msg_idx(HiMsg),
+    NoIdx = msg_idx(NoMsg),
     %% always favour hi priority messages when it is safe to do so,
     %% i.e. the index is lower than the next index for the 'no' queue
     case HiIdx < NoIdx of
@@ -150,3 +178,11 @@ drop({In, [_]}) ->
     {[], lists:reverse(In)};
 drop({In, [_ | Out]}) ->
     {In, Out}.
+
+msg_idx_fld(Msg, Acc) when is_list(Acc) ->
+    [msg_idx(Msg) | Acc].
+
+msg_idx(?MSG(Idx, _Header)) ->
+    Idx;
+msg_idx(Packed) when ?IS_PACKED(Packed) ->
+    ?PACKED_IDX(Packed).

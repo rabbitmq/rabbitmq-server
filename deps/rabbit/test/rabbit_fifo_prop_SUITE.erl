@@ -7,11 +7,10 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("rabbit/src/rabbit_fifo.hrl").
--include_lib("rabbit/src/rabbit_fifo_dlx.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--define(MACHINE_VERSION, 4).
+-define(MACHINE_VERSION, 8).
 
 %%%===================================================================
 %%% Common Test callbacks
@@ -61,7 +60,6 @@ all_tests() ->
      scenario32,
      upgrade,
      messages_total,
-     ra_indexes,
      simple_prefetch,
      simple_prefetch_without_checkout_cancel,
      simple_prefetch_01,
@@ -396,7 +394,6 @@ scenario21(_Config) ->
                 rabbit_fifo:make_settle(C1, [1])
                ],
     run_snapshot_test(#{name => ?FUNCTION_NAME,
-                        release_cursor_interval => 1,
                         dead_letter_handler => {at_most_once, {?MODULE, banana, []}}},
                       Commands),
     ok.
@@ -413,7 +410,6 @@ scenario22(_Config) ->
                 make_enqueue(E,5,msg(<<"5">>))
                ],
     run_snapshot_test(#{name => ?FUNCTION_NAME,
-                        release_cursor_interval => 1,
                         max_length => 3,
                         dead_letter_handler => {at_most_once, {?MODULE, banana, []}}},
                       Commands),
@@ -434,7 +430,6 @@ scenario24(_Config) ->
                 {down, E, noconnection} %% 7
                ],
     run_snapshot_test(#{name => ?FUNCTION_NAME,
-                        release_cursor_interval => 0,
                         deliver_limit => undefined,
                         max_length => 3,
                         overflow_strategy => drop_head,
@@ -461,7 +456,6 @@ scenario25(_Config) ->
                ],
     run_snapshot_test(#{name => ?FUNCTION_NAME,
                         max_bytes => undefined,
-                        release_cursor_interval => 0,
                         deliver_limit => undefined,
                         overflow_strategy => drop_head,
                         dead_letter_handler => {at_most_once, {?MODULE, banana, []}}
@@ -491,7 +485,6 @@ scenario26(_Config) ->
                 {down, C1Pid, noconnection}
                ],
     run_snapshot_test(#{name => ?FUNCTION_NAME,
-                        release_cursor_interval => 0,
                         deliver_limit => undefined,
                         max_length => 8,
                         overflow_strategy => drop_head,
@@ -506,7 +499,7 @@ scenario28(_Config) ->
              delivery_limit => undefined,
              max_in_memory_bytes => undefined,
              max_length => 1,name => ?FUNCTION_NAME,overflow_strategy => drop_head,
-             release_cursor_interval => 100,single_active_consumer_on => false},
+             single_active_consumer_on => false},
     Commands = [
                 make_enqueue(E,2,msg( <<>>)),
                 make_enqueue(E,3,msg( <<>>)),
@@ -560,7 +553,6 @@ scenario27(_Config) ->
     ?assert(
        single_active_prop(#{name => ?FUNCTION_NAME,
                             max_bytes => undefined,
-                            release_cursor_interval => 100,
                             deliver_limit => 1,
                             max_length => 1,
                             max_in_memory_length => 8,
@@ -583,7 +575,6 @@ scenario30(_Config) ->
                 make_enqueue(E,3,msg(<<>>)) %% 5
                ],
     run_snapshot_test(#{name => ?FUNCTION_NAME,
-                        release_cursor_interval => 0,
                         deliver_limit => undefined,
                         max_length => 1,
                         max_in_memory_length => 1,
@@ -615,7 +606,6 @@ scenario31(_Config) ->
                 {purge} %% 4
                ],
     run_snapshot_test(#{name => ?FUNCTION_NAME,
-                        release_cursor_interval => 0,
                         deliver_limit => undefined,
                         overflow_strategy => drop_head,
                         dead_letter_handler => {at_most_once, {?MODULE, banana, []}}
@@ -633,7 +623,6 @@ scenario32(_Config) ->
                 make_enqueue(E1,4,msg(<<0,0,0,0>>)) %% 3
                ],
     run_snapshot_test(#{name => ?FUNCTION_NAME,
-                        release_cursor_interval => 0,
                         max_length => 3,
                         deliver_limit => undefined,
                         overflow_strategy => drop_head,
@@ -658,7 +647,6 @@ scenario29(_Config) ->
                 {down, E, noconnection} %% 8
                ],
     run_snapshot_test(#{name => ?FUNCTION_NAME,
-                        release_cursor_interval => 0,
                         deliver_limit => undefined,
                         max_length => 5,
                         max_in_memory_length => 1,
@@ -681,7 +669,6 @@ scenario23(_Config) ->
                 make_enqueue(E,4,msg(<<>>)) %% 6
                ],
     run_snapshot_test(#{name => ?FUNCTION_NAME,
-                        release_cursor_interval => 0,
                         deliver_limit => undefined,
                         max_length => 2,
                         overflow_strategy => drop_head,
@@ -910,30 +897,6 @@ messages_total(_Config) ->
                       end)
       end, [], Size).
 
-ra_indexes(_Config) ->
-    meck:expect(rabbit_feature_flags, is_enabled, fun (_) -> false end),
-    Size = 256,
-    run_proper(
-      fun () ->
-              ?FORALL({Length, Bytes, DeliveryLimit, SingleActive},
-                      frequency([{5, {undefined, undefined, undefined, false}},
-                                 {5, {oneof([range(1, 10), undefined]),
-                                      oneof([range(1, 1000), undefined]),
-                                      oneof([range(1, 3), undefined]),
-                                      oneof([true, false])
-                                     }}]),
-                      begin
-                          Config  = config(?FUNCTION_NAME,
-                                           Length,
-                                           Bytes,
-                                           SingleActive,
-                                           DeliveryLimit),
-                      ?FORALL(O, ?LET(Ops, log_gen(Size), expand(Ops, Config)),
-                              collect({log_size, length(O)},
-                                      ra_indexes_prop(Config, O)))
-                      end)
-      end, [], Size).
-
 simple_prefetch(_Config) ->
     Size = 500,
     meck:expect(rabbit_feature_flags, is_enabled, fun (_) -> true end),
@@ -1072,10 +1035,11 @@ single_active_ordering_03(_Config) ->
                 make_checkout(C2, {auto,1,simple_prefetch}),
                 make_settle(C1, [0]),
                 make_checkout(C1, cancel),
-                {down, C1Pid, noconnection}
+                {down, C1Pid, noconnection},
+                {timeout, {consumer_disconnected_timeout, C1}}
+
                 ],
-    Conf0 = config(?FUNCTION_NAME, 0, 0, true, 0),
-    Conf = Conf0#{release_cursor_interval => 100},
+    Conf = config(?FUNCTION_NAME, 0, 0, true, 0),
     Indexes = lists:seq(1, length(Commands)),
     Entries = lists:zip(Indexes, Commands),
     try run_log(test_init(Conf), Entries) of
@@ -1163,7 +1127,7 @@ is_same_otp_version(ConfigOrNode) ->
     OurOTP =:= OtherOTP.
 
 two_nodes(Node) ->
-    Size = 500,
+    Size = 100,
     run_proper(
       fun () ->
               ?FORALL({Length, Bytes, DeliveryLimit, SingleActive},
@@ -1471,8 +1435,7 @@ config(Name, Length, MaxBytes, SingleActive, DeliveryLimit,
 map_max(0) -> undefined;
 map_max(N) -> N.
 
-max_length_prop(Conf0, Commands) ->
-    Conf = Conf0#{release_cursor_interval => 100},
+max_length_prop(Conf, Commands) ->
     Indexes = lists:seq(1, length(Commands)),
     Entries = lists:zip(Indexes, Commands),
     Invariant = fun (#rabbit_fifo{cfg = #cfg{max_length = MaxLen}} = S) ->
@@ -1512,8 +1475,7 @@ validate_idx_order(Idxs, ReleaseCursorIdx) ->
 %% * if new consumer subscribes, messages are checked out to new consumer
 %% * if dlx_worker fails receiving DOWN, messages are still in state.
 
-single_active_prop(Conf0, Commands, ValidateOrder) ->
-    Conf = Conf0#{release_cursor_interval => 100},
+single_active_prop(Conf, Commands, ValidateOrder) ->
     Indexes = lists:seq(1, length(Commands)),
     Entries = lists:zip(Indexes, Commands),
     %% invariant: there can only be one active consumer at any one time
@@ -1544,21 +1506,19 @@ single_active_prop(Conf0, Commands, ValidateOrder) ->
             false
     end.
 
-different_nodes_prop(Node, Conf0, Commands) ->
-    Conf = Conf0#{release_cursor_interval => 100},
+different_nodes_prop(Node, Conf, Commands) ->
     Indexes = lists:seq(1, length(Commands)),
     Entries = lists:zip(Indexes, Commands),
     InitState = test_init(Conf),
     Fun = fun(_) -> true end,
-    MachineVersion = 6,
+    MachineVersion = 8,
 
     {State1, _Effs1} = run_log(InitState, Entries, Fun, MachineVersion),
     {State2, _Effs2} = erpc:call(Node, ?MODULE, run_log,
                                  [InitState, Entries, Fun, MachineVersion]),
     State1 =:= State2.
 
-messages_total_prop(Conf0, Commands) ->
-    Conf = Conf0#{release_cursor_interval => 100},
+messages_total_prop(Conf, Commands) ->
     Indexes = lists:seq(1, length(Commands)),
     Entries = lists:zip(Indexes, Commands),
     InitState = test_init(Conf),
@@ -1571,7 +1531,7 @@ messages_total_invariant() ->
                      returns = R,
                      dlx = #rabbit_fifo_dlx{discards = D,
                                             consumer = DlxCon}} = S) ->
-            Base = rabbit_fifo_q:len(M) + lqueue:len(R),
+            Base = rabbit_fifo_pq:len(M) + lqueue:len(R),
             Tot0 = maps:fold(fun (_, #consumer{checked_out = Ch}, Acc) ->
                                      Acc + map_size(Ch)
                             end, Base, C),
@@ -1592,40 +1552,7 @@ messages_total_invariant() ->
             end
     end.
 
-ra_indexes_prop(Conf0, Commands) ->
-    Conf = Conf0#{release_cursor_interval => 100},
-    Indexes = lists:seq(1, length(Commands)),
-    Entries = lists:zip(Indexes, Commands),
-    InitState = test_init(Conf),
-    run_log(InitState, Entries, ra_indexes_invariant()),
-    true.
-
-ra_indexes_invariant() ->
-    %% The raft indexes contained in the `ra_indexes` `rabbit_fifo_index` must
-    %% be the same as all indexes checked out by consumers plus those in the
-    %% `returns` queue.
-    fun(#rabbit_fifo{ra_indexes = Index,
-                     consumers = C,
-                     returns = R}) ->
-            RIdxs = lqueue:fold(fun(?MSG(I, _), Acc) -> [I | Acc] end, [], R),
-            CIdxs = maps:fold(fun(_, #consumer{checked_out = Ch}, Acc0) ->
-                                      maps:fold(fun(_, ?MSG(I, _), Acc) ->
-                                                        [I | Acc]
-                                                end, Acc0, Ch)
-                              end, [], C),
-            ActualIdxs = lists:sort(RIdxs ++ CIdxs),
-            IndexIdxs = lists:sort(rabbit_fifo_index:to_list(Index)),
-            case ActualIdxs == IndexIdxs of
-                true -> true;
-                false ->
-                    ct:pal("ra_indexes invariant failed Expected ~b Got ~b",
-                           [ActualIdxs, IndexIdxs]),
-                    false
-            end
-    end.
-
-simple_prefetch_prop(Conf0, Commands, WithCheckoutCancel) ->
-    Conf = Conf0#{release_cursor_interval => 100},
+simple_prefetch_prop(Conf, Commands, WithCheckoutCancel) ->
     Indexes = lists:seq(1, length(Commands)),
     Entries = lists:zip(Indexes, Commands),
     InitState = test_init(Conf),
@@ -1670,26 +1597,26 @@ valid_simple_prefetch(Prefetch, _, CheckedOut, false, CId)
 valid_simple_prefetch(_, _, _, _, _) ->
     true.
 
-upgrade_prop(Conf0, Commands) ->
-    FromVersion = 3,
-    ToVersion = 4,
+upgrade_prop(Conf, Commands) ->
+    FromVersion = 7,
+    ToVersion = 8,
     FromMod = rabbit_fifo:which_module(FromVersion),
     ToMod = rabbit_fifo:which_module(ToVersion),
-    Conf = Conf0#{release_cursor_interval => 0},
     Indexes = lists:seq(1, length(Commands)),
     Entries = lists:zip(Indexes, Commands),
     InitState = test_init_v(Conf, FromVersion),
     [begin
          {PreEntries, PostEntries} = lists:split(SplitPos, Entries),
          %% run log v1
-         {V3, _V1Effs} = run_log(InitState, PreEntries,
-                                 fun (_) -> true end, FromVersion),
+         {VFrom, _V1Effs} = run_log(InitState, PreEntries,
+                                    fun (_) -> true end, FromVersion),
 
          %% perform conversion
-         #rabbit_fifo{} = V4 = element(1, rabbit_fifo:apply(
-                                            meta(length(PreEntries) + 1),
-                                            {machine_version, FromVersion, ToVersion},
-                                            V3)),
+         #rabbit_fifo{} = VTo = element(1, rabbit_fifo:apply(
+                                             meta(length(PreEntries) + 1),
+                                             {machine_version, FromVersion,
+                                              ToVersion},
+                                             VFrom)),
          %% assert invariants
          Fields = [num_ready_messages,
                    smallest_raft_index,
@@ -1698,17 +1625,17 @@ upgrade_prop(Conf0, Commands) ->
                    enqueue_message_bytes,
                    checkout_message_bytes
                   ],
-         V3Overview = maps:with(Fields, FromMod:overview(V3)),
-         V4Overview = maps:with(Fields, ToMod:overview(V4)),
-         case V3Overview == V4Overview of
+         VFromOverview = maps:with(Fields, FromMod:overview(VFrom)),
+         VToOverview = maps:with(Fields, ToMod:overview(VTo)),
+         case VFromOverview == VToOverview of
              true -> ok;
              false ->
                  ct:pal("upgrade_prop failed expected~n~tp~nGot:~n~tp",
-                        [V3Overview, V4Overview]),
-                 ?assertEqual(V3Overview, V4Overview)
+                        [VFromOverview, VToOverview]),
+                 ?assertEqual(VFromOverview, VToOverview)
          end,
          %% check we can run the post entries from the converted state
-         run_log(V4, PostEntries, fun (_) -> true end, ToVersion)
+         run_log(VTo, PostEntries, fun (_) -> true end, ToVersion)
      end || SplitPos <- lists:seq(1, length(Entries))],
     true.
 
@@ -1991,8 +1918,7 @@ expand(Ops, Config, EnqFun) ->
     InitConfig0 = #{name => proper,
                     queue_resource => #resource{virtual_host = <<"/">>,
                                                 kind = queue,
-                                                name = <<"blah">>},
-                    release_cursor_interval => 1},
+                                                name = <<"blah">>}},
     InitConfig = case Config of
                      #{dead_letter_handler := at_least_once} ->
                          %% Configure rabbit_fifo config with at_least_once so that
@@ -2277,7 +2203,6 @@ test_init(Conf) ->
 
 test_init(Mod, Conf) ->
     Default = #{queue_resource => blah,
-                release_cursor_interval => 0,
                 metrics_handler => {?MODULE, metrics_handler, []}},
     Mod:init(maps:merge(Default, Conf)).
 
@@ -2288,18 +2213,23 @@ test_init_v(Conf, Version) ->
     test_init(rabbit_fifo:which_module(Version), Conf).
 
 meta(Idx) ->
-    meta(Idx, 3).
+    meta(Idx, rabbit_fifo:version()).
 
 meta(Idx, Vsn) ->
-    #{machine_version => Vsn, index => Idx, term => 1, system_time => 0}.
+    #{machine_version => Vsn,
+      index => Idx,
+      term => 1,
+      reply_mode => {notify, Idx, self()},
+      system_time => 0}.
 
 make_checkout(Cid, Spec) ->
     make_checkout(Cid, Spec, #{}).
+
 make_checkout(Cid, Spec, Meta) ->
     rabbit_fifo:make_checkout(Cid, Spec, Meta).
 
 make_enqueue(Pid, Seq, Msg) ->
-    rabbit_fifo:make_enqueue(Pid, Seq, Msg).
+    rabbit_fifo:make_enqueue_old(Pid, Seq, Msg).
 
 make_settle(Cid, MsgIds) ->
     rabbit_fifo:make_settle(Cid, MsgIds).

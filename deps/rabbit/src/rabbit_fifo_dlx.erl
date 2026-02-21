@@ -7,7 +7,7 @@
 -module(rabbit_fifo_dlx).
 
 -include("rabbit_fifo_dlx.hrl").
--include("rabbit_fifo.hrl").
+-include("rabbit_fifo_v7.hrl").
 -include_lib("kernel/include/logger.hrl").
 -compile({no_auto_import, [apply/3]}).
 
@@ -26,7 +26,8 @@
          dehydrate/1,
          stat/1,
          update_config/4,
-         smallest_raft_index/1
+         smallest_raft_index/1,
+         live_indexes/1
         ]).
 
 -record(checkout, {consumer :: pid(),
@@ -164,7 +165,7 @@ discard(Msgs0, Reason, {at_most_once, {Mod, Fun, Args}}, State) ->
                                   Cmd = maps:get(Idx, Lookup),
                                   %% ensure header delivery count
                                   %% is copied to the message container
-                                  annotate_msg(H, rabbit_fifo:get_msg(Cmd))
+                                  annotate_msg(H, rabbit_fifo:get_msg_from_cmd(Cmd))
                               end || ?MSG(Idx, H) <- Msgs0],
                       [{mod_call, Mod, Fun, Args ++ [Reason, Msgs]}]
               end},
@@ -237,7 +238,7 @@ delivery_effects(CPid, Msgs0) ->
               Msgs = lists:zipwith(
                        fun (Cmd, {Reason, H, MsgId}) ->
                                {MsgId, {Reason,
-                                        annotate_msg(H, rabbit_fifo:get_msg(Cmd))}}
+                                        annotate_msg(H, rabbit_fifo:get_msg_from_cmd(Cmd))}}
                        end, Log, RsnIds),
               [{send_msg, CPid, {dlx_event, self(), {dlx_delivery, Msgs}}, [cast]}]
       end}].
@@ -364,6 +365,10 @@ dehydrate(State) ->
     option(non_neg_integer()).
 smallest_raft_index(#?MODULE{ra_indexes = Indexes}) ->
     rabbit_fifo_index:smallest(Indexes).
+
+-spec live_indexes(state()) -> [ra:index()].
+live_indexes(#?MODULE{ra_indexes = Indexes}) ->
+    rabbit_fifo_index:indexes(Indexes).
 
 annotate_msg(H, Msg) ->
     rabbit_fifo:annotate_msg(H, Msg).

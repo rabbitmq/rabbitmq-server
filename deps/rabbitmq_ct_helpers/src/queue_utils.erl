@@ -26,27 +26,29 @@
 
 wait_for_messages_ready(Servers, QName, Ready) ->
     wait_for_messages(Servers, QName, Ready,
-                      fun rabbit_fifo:query_messages_ready/1,
+                      num_ready_messages,
                       ?WFM_DEFAULT_NUMS).
 
 wait_for_messages_pending_ack(Servers, QName, Ready) ->
     wait_for_messages(Servers, QName, Ready,
-                      fun rabbit_fifo:query_messages_checked_out/1,
+                      num_checked_out,
                       ?WFM_DEFAULT_NUMS).
 
 wait_for_messages_total(Servers, QName, Total) ->
     wait_for_messages(Servers, QName, Total,
-                      fun rabbit_fifo:query_messages_total/1,
+                      num_messages,
                       ?WFM_DEFAULT_NUMS).
 
-wait_for_messages(Servers, QName, Total, Fun) ->
-    wait_for_messages(Servers, QName, Total, Fun, ?WFM_DEFAULT_NUMS).
+wait_for_messages(Servers, QName, Total, Key) ->
+    wait_for_messages(Servers, QName, Total, Key, ?WFM_DEFAULT_NUMS).
 
-wait_for_messages(Servers, QName, Number, Fun, 0) ->
-    Msgs = dirty_query(Servers, QName, Fun),
+wait_for_messages(Servers, QName, Number, MetricKey, 0) ->
+    ServerIds = [{QName, S} || S <- Servers],
+    Msgs = query_messages(ServerIds, MetricKey),
     ?assertEqual([Number || _ <- lists:seq(1, length(Servers))], Msgs);
-wait_for_messages(Servers, QName, Number, Fun, N) ->
-    Msgs = dirty_query(Servers, QName, Fun),
+wait_for_messages(Servers, QName, Number, MetricKey, N) ->
+    ServerIds = [{QName, S} || S <- Servers],
+    Msgs = query_messages(ServerIds, MetricKey),
     ct:log("Got messages ~tp ~tp", [QName, Msgs]),
     %% hack to allow the check to succeed in mixed versions clusters if at
     %% least one node matches the criteria rather than all nodes for
@@ -65,8 +67,20 @@ wait_for_messages(Servers, QName, Number, Fun, N) ->
             ok;
         _ ->
             timer:sleep(?WFM_SLEEP),
-            wait_for_messages(Servers, QName, Number, Fun, N - 1)
+            wait_for_messages(Servers, QName, Number, MetricKey, N - 1)
     end.
+
+query_messages(ServerIds, Key) ->
+    [begin
+         try ra:member_overview(ServerId) of
+             {ok, #{machine := #{Key := Value}}, _} ->
+                 Value;
+             _ ->
+                 undefined
+         catch _:_Err ->
+                   undefined
+         end
+     end || ServerId <- ServerIds].
 
 wait_for_messages(Config, Stats) ->
     wait_for_messages(Config, lists:sort(Stats), ?WFM_DEFAULT_NUMS).

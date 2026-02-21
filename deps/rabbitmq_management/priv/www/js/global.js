@@ -26,14 +26,19 @@ var KNOWN_ARGS = {'alternate-exchange':        {'short': 'AE',  'type': 'string'
                   'x-queue-master-locator':    {'short': 'ML', 'type': 'string'},
                   'x-queue-leader-locator':    {'short': 'LL', 'type': 'string'},
                   'x-max-priority':            {'short': 'Pri', 'type': 'int'},
-                  'x-single-active-consumer':  {'short': 'SAC', 'type': 'boolean'}};
+                  'x-single-active-consumer':  {'short': 'SAC', 'type': 'boolean'},
+                  'x-consumer-disconnected-timeout': {'short': 'CDT', 'type': 'int'},
+                  'x-delayed-retry-type':    {'short': 'DRT', 'type': 'string'},
+                  'x-delayed-retry-min':     {'short': 'DRm', 'type': 'int'},
+                  'x-delayed-retry-max':     {'short': 'DRM', 'type': 'int'}};
 
 // Things that are like arguments that we format the same way in listings.
 var IMPLICIT_ARGS = {'durable':         {'short': 'D',    'type': 'boolean'},
                      'auto-delete':     {'short': 'AD',   'type': 'boolean'},
                      'internal':        {'short': 'I',    'type': 'boolean'},
                      'exclusive':       {'short': 'Excl', 'type': 'boolean'},
-                     'messages delayed':{'short': 'DM',   'type': 'int'}};
+                     'messages delayed':{'short': 'DM',   'type': 'int'},
+                     'delayed retry':   {'short': 'DR',   'type': 'string'}};
 
 // Both the above
 var ALL_ARGS = {};
@@ -197,6 +202,18 @@ var HELP = {
 
     'queue-consumer-timeout':
     'If a consumer does not ack its delivery for more than the <a href="https://www.rabbitmq.com/consumers.html#acknowledgement-timeout">timeout value</a> (30 minutes by default), its channel will be closed with a <code>PRECONDITION_FAILED</code> channel exception.',
+
+    'queue-consumer-disconnected-timeout':
+    'How long to wait (in milliseconds) before returning checked out messages when a consumer\'s node becomes unreachable. Defaults to 60000 (60 seconds).<br/>(Sets the "<code>x-consumer-disconnected-timeout</code>" argument.)',
+
+    'queue-delayed-retry-type':
+    'The type of delayed retry for quorum queues. Valid values are <code>all</code> (retry all returned and failed messages), <code>failed</code> (retry only failed messages), <code>returned</code> (retry only returned messages), or <code>disabled</code>. You must also set <code>delayed-retry-min</code> for delayed retry to be enabled.',
+
+    'queue-delayed-retry-min':
+    'Required. The minimum delay (in milliseconds) before retrying a message. Delayed retry will not be enabled unless this value is set.',
+
+    'queue-delayed-retry-max':
+    'Optional. The maximum delay (in milliseconds) before retrying a message. Must be greater than or equal to the minimum delay. Defaults to the minimum delay if not set.',
 
     'queue-expires':
       'How long a queue can be unused for before it is automatically deleted (milliseconds).<br/>(Sets the "<a target="_blank" href="https://rabbitmq.com/ttl.html#queue-ttl">x-expires</a>" argument.)',
