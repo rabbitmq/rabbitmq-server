@@ -138,7 +138,9 @@
         "orientation": "horizontal",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -228,7 +230,9 @@
         "orientation": "horizontal",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -315,7 +319,9 @@
         "orientation": "horizontal",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -401,7 +407,9 @@
         "orientation": "horizontal",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -488,7 +496,9 @@
         "orientation": "horizontal",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -574,7 +584,9 @@
         "orientation": "horizontal",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -663,7 +675,9 @@
         "orientation": "horizontal",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -750,7 +764,9 @@
         "orientation": "horizontal",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -836,7 +852,9 @@
         "orientation": "horizontal",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -923,7 +941,9 @@
         "orientation": "horizontal",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -1248,7 +1268,9 @@
         "footer": {
           "countRows": false,
           "fields": "",
-          "reducer": ["sum"],
+          "reducer": [
+            "sum"
+          ],
           "show": false
         },
         "showHeader": true
@@ -1524,7 +1546,11 @@
       "id": 7,
       "options": {
         "legend": {
-          "calcs": ["lastNotNull", "max", "min"],
+          "calcs": [
+            "lastNotNull",
+            "max",
+            "min"
+          ],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": false
@@ -1781,7 +1807,11 @@
       "id": 8,
       "options": {
         "legend": {
-          "calcs": ["lastNotNull", "max", "min"],
+          "calcs": [
+            "lastNotNull",
+            "max",
+            "min"
+          ],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": false
@@ -1812,12 +1842,272 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "File descriptors available to the node OS process. Computed as the OS-level limit minus the number of file descriptors currently in use by the node.\n\nWhen this value reaches zero, the node will not be able to accept new connections or open new files.\n\n* [Networking and RabbitMQ](https://www.rabbitmq.com/docs/networking)\n* [File and Socket Descriptor Limits](https://www.rabbitmq.com/docs/networking#open-file-handle-limit)",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "line+area"
+            }
+          },
+          "links": [],
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red"
+              },
+              {
+                "color": "orange",
+                "value": 0
+              },
+              {
+                "color": "transparent",
+                "value": 100
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/^rabbit@[a-zA-Z\\.\\-]*?0(\\b|\\.)/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#56A64B",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/^rabbit@[a-zA-Z\\.\\-]*?1(\\b|\\.)/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#F2CC0C",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/^rabbit@[a-zA-Z\\.\\-]*?2(\\b|\\.)/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#3274D9",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/^rabbit@[a-zA-Z\\.\\-]*?3(\\b|\\.)/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#A352CC",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/^rabbit@[a-zA-Z\\.\\-]*?4(\\b|\\.)/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#FF780A",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/^rabbit@[a-zA-Z\\.\\-]*?5(\\b|\\.)/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#96D98D",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/^rabbit@[a-zA-Z\\.\\-]*?6(\\b|\\.)/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#FFEE52",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/^rabbit@[a-zA-Z\\.\\-]*?7(\\b|\\.)/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#8AB8FF",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/^rabbit@[a-zA-Z\\.\\-]*?8(\\b|\\.)/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#CA95E5",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/^rabbit@[a-zA-Z\\.\\-]*?9(\\b|\\.)/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#FFB357",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 20
+      },
+      "id": 75,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "max",
+            "min"
+          ],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "11.6.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "(rabbitmq_process_max_fds - rabbitmq_process_open_fds) * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\", rabbitmq_endpoint=\"$endpoint\"}",
+          "format": "time_series",
+          "instant": false,
+          "intervalFactor": 1,
+          "legendFormat": "{{rabbitmq_node}}",
+          "refId": "A"
+        }
+      ],
+      "title": "File descriptors available",
+      "type": "timeseries"
+    },
+    {
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 20
+        "y": 28
       },
       "id": 27,
       "panels": [],
@@ -2043,12 +2333,16 @@
         "h": 5,
         "w": 12,
         "x": 0,
-        "y": 21
+        "y": 29
       },
       "id": 9,
       "options": {
         "legend": {
-          "calcs": ["lastNotNull", "max", "min"],
+          "calcs": [
+            "lastNotNull",
+            "max",
+            "min"
+          ],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": false
@@ -2297,12 +2591,16 @@
         "h": 5,
         "w": 12,
         "x": 12,
-        "y": 21
+        "y": 29
       },
       "id": 19,
       "options": {
         "legend": {
-          "calcs": ["lastNotNull", "max", "min"],
+          "calcs": [
+            "lastNotNull",
+            "max",
+            "min"
+          ],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": false
@@ -2338,7 +2636,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 26
+        "y": 34
       },
       "id": 11,
       "panels": [],
@@ -2564,12 +2862,16 @@
         "h": 5,
         "w": 12,
         "x": 0,
-        "y": 27
+        "y": 35
       },
       "id": 13,
       "options": {
         "legend": {
-          "calcs": ["lastNotNull", "max", "min"],
+          "calcs": [
+            "lastNotNull",
+            "max",
+            "min"
+          ],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": false
@@ -2634,7 +2936,7 @@
         "h": 5,
         "w": 2,
         "x": 12,
-        "y": 27
+        "y": 35
       },
       "id": 73,
       "interval": "30s",
@@ -2645,7 +2947,9 @@
         "orientation": "auto",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -2845,7 +3149,7 @@
         "h": 5,
         "w": 10,
         "x": 14,
-        "y": 27
+        "y": 35
       },
       "id": 74,
       "options": {
@@ -2862,7 +3166,9 @@
         "namePlacement": "auto",
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -3230,12 +3536,16 @@
         "h": 5,
         "w": 12,
         "x": 0,
-        "y": 32
+        "y": 40
       },
       "id": 61,
       "options": {
         "legend": {
-          "calcs": ["lastNotNull", "max", "min"],
+          "calcs": [
+            "lastNotNull",
+            "max",
+            "min"
+          ],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": false
@@ -3484,12 +3794,16 @@
         "h": 5,
         "w": 12,
         "x": 12,
-        "y": 32
+        "y": 40
       },
       "id": 18,
       "options": {
         "legend": {
-          "calcs": ["lastNotNull", "max", "min"],
+          "calcs": [
+            "lastNotNull",
+            "max",
+            "min"
+          ],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": false
@@ -3602,12 +3916,16 @@
         "h": 5,
         "w": 12,
         "x": 0,
-        "y": 37
+        "y": 45
       },
       "id": 34,
       "options": {
         "legend": {
-          "calcs": ["lastNotNull", "max", "min"],
+          "calcs": [
+            "lastNotNull",
+            "max",
+            "min"
+          ],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": false
@@ -3869,12 +4187,16 @@
         "h": 5,
         "w": 12,
         "x": 12,
-        "y": 37
+        "y": 45
       },
       "id": 12,
       "options": {
         "legend": {
-          "calcs": ["lastNotNull", "max", "min"],
+          "calcs": [
+            "lastNotNull",
+            "max",
+            "min"
+          ],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": false
@@ -3910,7 +4232,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 42
+        "y": 50
       },
       "id": 29,
       "panels": [],
@@ -4136,12 +4458,16 @@
         "h": 5,
         "w": 12,
         "x": 0,
-        "y": 43
+        "y": 51
       },
       "id": 14,
       "options": {
         "legend": {
-          "calcs": ["lastNotNull", "max", "min"],
+          "calcs": [
+            "lastNotNull",
+            "max",
+            "min"
+          ],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": false
@@ -4393,12 +4719,16 @@
         "h": 5,
         "w": 12,
         "x": 12,
-        "y": 43
+        "y": 51
       },
       "id": 15,
       "options": {
         "legend": {
-          "calcs": ["lastNotNull", "max", "min"],
+          "calcs": [
+            "lastNotNull",
+            "max",
+            "min"
+          ],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": false
@@ -4647,12 +4977,16 @@
         "h": 5,
         "w": 12,
         "x": 0,
-        "y": 48
+        "y": 56
       },
       "id": 20,
       "options": {
         "legend": {
-          "calcs": ["lastNotNull", "max", "min"],
+          "calcs": [
+            "lastNotNull",
+            "max",
+            "min"
+          ],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": false
@@ -4901,12 +5235,16 @@
         "h": 5,
         "w": 12,
         "x": 12,
-        "y": 48
+        "y": 56
       },
       "id": 21,
       "options": {
         "legend": {
-          "calcs": ["lastNotNull", "max", "min"],
+          "calcs": [
+            "lastNotNull",
+            "max",
+            "min"
+          ],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": false
@@ -5155,12 +5493,16 @@
         "h": 5,
         "w": 12,
         "x": 0,
-        "y": 53
+        "y": 61
       },
       "id": 22,
       "options": {
         "legend": {
-          "calcs": ["lastNotNull", "max", "min"],
+          "calcs": [
+            "lastNotNull",
+            "max",
+            "min"
+          ],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": false
@@ -5273,12 +5615,16 @@
         "h": 5,
         "w": 12,
         "x": 12,
-        "y": 53
+        "y": 61
       },
       "id": 24,
       "options": {
         "legend": {
-          "calcs": ["lastNotNull", "max", "min"],
+          "calcs": [
+            "lastNotNull",
+            "max",
+            "min"
+          ],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": false
@@ -5391,12 +5737,16 @@
         "h": 5,
         "w": 12,
         "x": 0,
-        "y": 58
+        "y": 66
       },
       "id": 25,
       "options": {
         "legend": {
-          "calcs": ["lastNotNull", "max", "min"],
+          "calcs": [
+            "lastNotNull",
+            "max",
+            "min"
+          ],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": false
@@ -5509,12 +5859,16 @@
         "h": 5,
         "w": 12,
         "x": 12,
-        "y": 58
+        "y": 66
       },
       "id": 23,
       "options": {
         "legend": {
-          "calcs": ["lastNotNull", "max", "min"],
+          "calcs": [
+            "lastNotNull",
+            "max",
+            "min"
+          ],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": false
@@ -5550,7 +5904,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 63
+        "y": 71
       },
       "id": 53,
       "panels": [],
@@ -5775,12 +6129,16 @@
         "h": 5,
         "w": 12,
         "x": 0,
-        "y": 64
+        "y": 72
       },
       "id": 57,
       "options": {
         "legend": {
-          "calcs": ["lastNotNull", "max", "min"],
+          "calcs": [
+            "lastNotNull",
+            "max",
+            "min"
+          ],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": false
@@ -6033,12 +6391,16 @@
         "h": 5,
         "w": 4,
         "x": 12,
-        "y": 64
+        "y": 72
       },
       "id": 58,
       "options": {
         "legend": {
-          "calcs": ["lastNotNull", "max", "min"],
+          "calcs": [
+            "lastNotNull",
+            "max",
+            "min"
+          ],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": false
@@ -6290,12 +6652,16 @@
         "h": 5,
         "w": 4,
         "x": 16,
-        "y": 64
+        "y": 72
       },
       "id": 60,
       "options": {
         "legend": {
-          "calcs": ["lastNotNull", "max", "min"],
+          "calcs": [
+            "lastNotNull",
+            "max",
+            "min"
+          ],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": false
@@ -6547,12 +6913,16 @@
         "h": 5,
         "w": 4,
         "x": 20,
-        "y": 64
+        "y": 72
       },
       "id": 59,
       "options": {
         "legend": {
-          "calcs": ["lastNotNull", "max", "min"],
+          "calcs": [
+            "lastNotNull",
+            "max",
+            "min"
+          ],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": false
@@ -6588,7 +6958,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 69
+        "y": 77
       },
       "id": 51,
       "panels": [],
@@ -6813,12 +7183,16 @@
         "h": 5,
         "w": 12,
         "x": 0,
-        "y": 70
+        "y": 78
       },
       "id": 54,
       "options": {
         "legend": {
-          "calcs": ["lastNotNull", "max", "min"],
+          "calcs": [
+            "lastNotNull",
+            "max",
+            "min"
+          ],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": false
@@ -7070,12 +7444,16 @@
         "h": 5,
         "w": 6,
         "x": 12,
-        "y": 70
+        "y": 78
       },
       "id": 55,
       "options": {
         "legend": {
-          "calcs": ["lastNotNull", "max", "min"],
+          "calcs": [
+            "lastNotNull",
+            "max",
+            "min"
+          ],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": false
@@ -7327,12 +7705,16 @@
         "h": 5,
         "w": 6,
         "x": 18,
-        "y": 70
+        "y": 78
       },
       "id": 56,
       "options": {
         "legend": {
-          "calcs": ["lastNotNull", "max", "min"],
+          "calcs": [
+            "lastNotNull",
+            "max",
+            "min"
+          ],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": false
@@ -7368,7 +7750,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 75
+        "y": 83
       },
       "id": 46,
       "panels": [],
@@ -7593,12 +7975,16 @@
         "h": 5,
         "w": 12,
         "x": 0,
-        "y": 76
+        "y": 84
       },
       "id": 47,
       "options": {
         "legend": {
-          "calcs": ["lastNotNull", "max", "min"],
+          "calcs": [
+            "lastNotNull",
+            "max",
+            "min"
+          ],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": false
@@ -7850,12 +8236,16 @@
         "h": 5,
         "w": 6,
         "x": 12,
-        "y": 76
+        "y": 84
       },
       "id": 48,
       "options": {
         "legend": {
-          "calcs": ["lastNotNull", "max", "min"],
+          "calcs": [
+            "lastNotNull",
+            "max",
+            "min"
+          ],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": false
@@ -8108,12 +8498,16 @@
         "h": 5,
         "w": 6,
         "x": 18,
-        "y": 76
+        "y": 84
       },
       "id": 49,
       "options": {
         "legend": {
-          "calcs": ["lastNotNull", "max", "min"],
+          "calcs": [
+            "lastNotNull",
+            "max",
+            "min"
+          ],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": false
@@ -8146,7 +8540,9 @@
   ],
   "refresh": "15s",
   "schemaVersion": 41,
-  "tags": ["rabbitmq-prometheus"],
+  "tags": [
+    "rabbitmq-prometheus"
+  ],
   "templating": {
     "list": [
       {
@@ -8236,7 +8632,13 @@
     "to": "now"
   },
   "timepicker": {
-    "refresh_intervals": ["15s", "30s", "1m", "5m", "10m"]
+    "refresh_intervals": [
+      "15s",
+      "30s",
+      "1m",
+      "5m",
+      "10m"
+    ]
   },
   "timezone": "",
   "title": "RabbitMQ-Overview",
