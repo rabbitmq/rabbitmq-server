@@ -601,9 +601,18 @@ do_query_node_props(Nodes, FromNode) when Nodes =/= [] ->
 
     %% TODO: Replace with `rabbit_nodes:list_members/0' when the oldest
     %% supported version has it.
+    %%
+    %% We use ?ERPC_CALL_TIMEOUT here so that nodes which are still
+    %% initialising their Erlang distribution get a chance to respond before
+    %% being excluded from the sorted list. Without a retry window, a node
+    %% that starts slightly later than its peers can end up excluded from all
+    %% other nodes' queries, while it can still reach those peers itself.
+    %% This asymmetry causes two different seeds to be selected.
     MembersPerNode = [try
                           {ok,
-                           erpc_call(Node, rabbit_nodes, all, [], FromNode)}
+                           erpc_call(
+                             Node, rabbit_nodes, all, [], FromNode,
+                             ?ERPC_CALL_TIMEOUT)}
                       catch
                           Class:Reason ->
                               {Class, Reason}
