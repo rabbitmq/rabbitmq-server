@@ -8,9 +8,6 @@ on:
       elixir_version:
         required: true
         type: string
-      metadata_store:
-        required: true
-        type: string
       mixed_clusters:
         required: false
         default: false
@@ -140,7 +137,7 @@ jobs:
       run: |
         sudo netstat -ntp
         set -o pipefail
-        make -C deps/${{ inputs.plugin }} ${{ inputs.make_target }} RABBITMQ_METADATA_STORE=${{ inputs.metadata_store }} NON_DETERMINISTIC=1 2>&1 | sed "s/src\//deps\/${{ inputs.plugin }}\/src\//" | sed "s/test\//deps\/${{ inputs.plugin }}\/test\//" | sed "s/src\/enough\.erl:22:2:/IGNORED src\/enough.erl:22:2:/"
+        make -C deps/${{ inputs.plugin }} ${{ inputs.make_target }} NON_DETERMINISTIC=1 2>&1 | sed "s/src\//deps\/${{ inputs.plugin }}\/src\//" | sed "s/test\//deps\/${{ inputs.plugin }}\/test\//" | sed "s/src\/enough\.erl:22:2:/IGNORED src\/enough.erl:22:2:/"
 
     - name: CACHE ACTIVEMQ
       uses: actions/cache/save@v5
@@ -154,13 +151,13 @@ jobs:
     - name: RUN TESTS (rabbitmq_cli)
       if: inputs.plugin == 'rabbitmq_cli'
       run: |
-        make -C deps/${{ inputs.plugin }} ${{ inputs.make_target }} RABBITMQ_METADATA_STORE=${{ inputs.metadata_store }} PROJECT_VERSION="4.1.0"
+        make -C deps/${{ inputs.plugin }} ${{ inputs.make_target }} PROJECT_VERSION="4.1.0"
 
     - name: UPLOAD TEST LOGS
       if: always()
       uses: actions/upload-artifact@v6
       with:
-        name: CT logs (${{ inputs.plugin }} ${{ inputs.make_target }} OTP-${{ inputs.erlang_version }} ${{ inputs.metadata_store }}${{ inputs.mixed_clusters && ' mixed' || '' }})
+        name: CT logs (${{ inputs.plugin }} ${{ inputs.make_target }} OTP-${{ inputs.erlang_version }} ${{ inputs.mixed_clusters && ' mixed' || '' }})
         path: |
           logs/
           deps/rabbitmq_cli/logs/

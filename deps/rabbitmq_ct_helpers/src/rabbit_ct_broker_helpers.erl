@@ -173,7 +173,6 @@
     test_writer/1,
     user/1,
 
-    configured_metadata_store/1,
     await_metadata_store_consistent/2,
     do_nodes_run_same_ra_machine_version/2
   ]).
@@ -223,7 +222,6 @@ setup_steps() ->
         fun rabbit_ct_helpers:ensure_rabbitmq_plugins_cmd/1,
         fun rabbit_ct_helpers:ensure_rabbitmq_diagnostics_cmd/1,
         fun set_lager_flood_limit/1,
-        fun configure_metadata_store/1,
         fun start_rabbitmq_nodes/1,
         fun share_dist_and_proxy_ports_map/1
     ].
@@ -438,24 +436,8 @@ start_rabbitmq_node(Master, Config, NodeConfig, I) ->
               {failed_boot_attempts, Attempts + 1}),
             start_rabbitmq_node(Master, Config, NodeConfig5, I);
         NodeConfig4 ->
-            case uses_expected_metadata_store(Config, NodeConfig4) of
-                {MetadataStore, MetadataStore} ->
-                    Master ! {self(), I, NodeConfig4},
-                    unlink(Master);
-                {ExpectedMetadataStore, UsedMetadataStore} ->
-                    %% If the active metadata store is not the one expected, we
-                    %% stop the node and skip the test.
-                    _ = stop_rabbitmq_node(Config, NodeConfig4),
-                    Nodename = ?config(nodename, NodeConfig4),
-                    Error = {skip,
-                             rabbit_misc:format(
-                               "Node ~s is using the ~s metadata store, "
-                               "~s was expected",
-                               [Nodename, UsedMetadataStore,
-                                ExpectedMetadataStore])},
-                    Master ! {self(), Error},
-                    unlink(Master)
-            end
+            Master ! {self(), I, NodeConfig4},
+            unlink(Master)
     end.
 
 run_node_steps(Config, NodeConfig, I, [Step | Rest]) ->
@@ -648,33 +630,6 @@ write_config_file(Config, NodeConfig, _I) ->
             {skip, "Failed to create Erlang node config file \"" ++
              ConfigFile ++ "\": " ++ file:format_error(Reason)}
     end.
-
--define(REQUIRED_FEATURE_FLAGS, [
-    %% Required in 3.11:
-    virtual_host_metadata,
-    quorum_queue,
-    implicit_default_bindings,
-    maintenance_mode_status,
-    user_limits,
-    %% Required in 3.12:
-    stream_queue,
-    classic_queue_type_delivery_support,
-    tracking_records_in_ets,
-    stream_single_active_consumer,
-    listener_records_in_ets,
-    feature_flags_v2,
-    direct_exchange_routing_v2,
-    classic_mirrored_queue_version, %% @todo Missing in FF docs!!
-    %% Required in 3.12 in rabbitmq_management_agent:
-%    drop_unroutable_metric,
-%    empty_basic_get_metric,
-    %% Required in 4.0:
-    stream_sac_coordinator_unblock_group,
-    restart_streams,
-    stream_update_config_command,
-    stream_filtering,
-    message_containers %% @todo Update FF docs!! It *is* required.
-]).
 
 do_start_rabbitmq_node(Config, NodeConfig, I) ->
     %% @todo Review all instances of secondary_dist and secondary_umbrella and ensure it works for both.
@@ -892,40 +847,6 @@ query_node(Config, NodeConfig) ->
     cover_add_node(Nodename),
     rabbit_ct_helpers:set_config(NodeConfig, Vars).
 
-uses_expected_metadata_store(Config, NodeConfig) ->
-    case ?config(use_secondary_umbrella, NodeConfig) of
-        false ->
-            does_use_expected_metadata_store(Config, NodeConfig);
-        true ->
-            ExpectedMetadataStore = rabbit_ct_helpers:get_config(
-                                      Config, metadata_store),
-            case does_use_expected_metadata_store(Config, NodeConfig) of
-                {MetadataStore, MetadataStore} = Ret ->
-                    Ret;
-                _ when ExpectedMetadataStore =:= khepri ->
-                    Nodename = ?config(nodename, NodeConfig),
-                    _ = rpc(Config, Nodename, rabbit_feature_flags, enable, [khepri_db]),
-                    does_use_expected_metadata_store(Config, NodeConfig);
-                Ret ->
-                    Ret
-            end
-    end.
-
-does_use_expected_metadata_store(Config, NodeConfig) ->
-    %% We want to verify if the active metadata store matches the expected one.
-    Nodename = ?config(nodename, NodeConfig),
-    ExpectedMetadataStore = rabbit_ct_helpers:get_config(
-                              Config, metadata_store),
-    IsKhepriEnabled = rpc(Config, Nodename, rabbit_khepri, is_enabled, []),
-    UsedMetadataStore = case IsKhepriEnabled of
-                            true  -> khepri;
-                            false -> mnesia
-                        end,
-    ct:log(
-      "Metadata store on ~s: expected=~s, used=~s",
-      [Nodename, ExpectedMetadataStore, UsedMetadataStore]),
-    {ExpectedMetadataStore, UsedMetadataStore}.
-
 maybe_cluster_nodes(Config) ->
     Clustered0 = rabbit_ct_helpers:get_config(Config, rmq_nodes_clustered),
     Clustered = case Clustered0 of
@@ -1073,101 +994,20 @@ share_dist_and_proxy_ports_map(Config) ->
       application, set_env, [kernel, dist_and_proxy_ports_map, Map]),
     Config.
 
-configured_metadata_store(Config) ->
-    case rabbit_ct_helpers:get_config(Config, metadata_store) of
-        khepri ->
-            khepri;
-        mnesia ->
-            mnesia;
-        _ ->
-            case os:getenv("RABBITMQ_METADATA_STORE") of
-                "mnesia" -> mnesia;
-                _ -> khepri
-            end
-    end.
-
-configure_metadata_store(Config) ->
-    ct:log("Configuring metadata store..."),
-    Value = rabbit_ct_helpers:get_app_env(
-              Config, rabbit, forced_feature_flags_on_init, undefined),
-    MetadataStore = configured_metadata_store(Config),
-    Config1 = rabbit_ct_helpers:set_config(
-                Config, {metadata_store, MetadataStore}),
-    %% To enabled or disable `khepri_db', we use the relative forced feature
-    %% flags mechanism. This allows us to select the state of Khepri without
-    %% having to worry about other feature flags.
-    %%
-    %% However, RabbitMQ 4.0.x and older don't support it. See the
-    %% `uses_expected_metadata_store/2' check to see how Khepri is enabled in
-    %% this case.
-    case MetadataStore of
-        khepri ->
-            ct:log("Enabling Khepri metadata store"),
-            case Value of
-                undefined ->
-                    rabbit_ct_helpers:merge_app_env(
-                      Config1,
-                      {rabbit,
-                       [{forced_feature_flags_on_init,
-                         {rel, [khepri_db], []}}]});
-                {rel, ListToEnable, ListToSkip} ->
-                    Rel1 = {rel, [khepri_db | ListToEnable], ListToSkip},
-                    rabbit_ct_helpers:merge_app_env(
-                      Config1, {rabbit, [
-                        {forced_feature_flags_on_init, Rel1}
-                      ]}
-                    );
-                _ ->
-                    rabbit_ct_helpers:merge_app_env(
-                      Config1,
-                      {rabbit,
-                       [{forced_feature_flags_on_init,
-                         [khepri_db | Value]}]})
-            end;
-        mnesia ->
-            ct:log("Enabling Mnesia metadata store"),
-            case Value of
-                undefined ->
-                    rabbit_ct_helpers:merge_app_env(
-                      Config1,
-                      {rabbit,
-                       [{forced_feature_flags_on_init,
-                         {rel, [], [khepri_db]}}]});
-                {rel, ListToEnable, ListToSkip} ->
-                    Rel1 = {rel, ListToEnable, [khepri_db | ListToSkip]},
-                    rabbit_ct_helpers:merge_app_env(
-                      Config1, {rabbit, [
-                             {forced_feature_flags_on_init, Rel1}
-                      ]}
-                    );
-                _ ->
-                    rabbit_ct_helpers:merge_app_env(
-                      Config1,
-                      {rabbit,
-                       [{forced_feature_flags_on_init,
-                         Value -- [khepri_db]}]})
-            end
-    end.
-
 %% Waits until the metadata store replica on Node is up to date with the leader.
 await_metadata_store_consistent(Config, Node) ->
-    case configured_metadata_store(Config) of
-        mnesia ->
-            ok;
-        khepri ->
-            RaClusterName = rabbit_khepri:get_ra_cluster_name(),
-            Leader = rpc(Config, Node, ra_leaderboard, lookup_leader, [RaClusterName]),
-            LastAppliedLeader = ra_last_applied(Leader),
+    RaClusterName = rabbit_khepri:get_ra_cluster_name(),
+    Leader = rpc(Config, Node, ra_leaderboard, lookup_leader, [RaClusterName]),
+    LastAppliedLeader = ra_last_applied(Leader),
 
-            NodeName = get_node_config(Config, Node, nodename),
-            ServerId = {RaClusterName, NodeName},
-            rabbit_ct_helpers:eventually(
-              ?_assert(
-                 begin
-                     LastApplied = ra_last_applied(ServerId),
-                     is_integer(LastApplied) andalso LastApplied >= LastAppliedLeader
-                 end))
-    end.
+    NodeName = get_node_config(Config, Node, nodename),
+    ServerId = {RaClusterName, NodeName},
+    rabbit_ct_helpers:eventually(
+      ?_assert(
+         begin
+             LastApplied = ra_last_applied(ServerId),
+             is_integer(LastApplied) andalso LastApplied >= LastAppliedLeader
+         end)).
 
 ra_last_applied(ServerId) ->
     #{last_applied := LastApplied} = ra:key_metrics(ServerId),

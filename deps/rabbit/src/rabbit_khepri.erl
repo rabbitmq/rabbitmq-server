@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2023-2025 Broadcom. All Rights Reserved. The term “Broadcom”
+%% Copyright (c) 2023-2026 Broadcom. All Rights Reserved. The term “Broadcom”
 %% refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
@@ -180,9 +180,7 @@
          supports_rabbit_khepri_topic_trie_version/0]).
 
 -ifdef(TEST).
--export([register_projections/0,
-         force_metadata_store/1,
-         clear_forced_metadata_store/0]).
+-export([register_projections/0]).
 -endif.
 
 -type timeout_error() :: khepri:error(timeout).
@@ -228,15 +226,15 @@
     {rabbit_topic_permission, rabbit_db_user_m2k_converter},
     {rabbit_runtime_parameters, rabbit_db_rtparams_m2k_converter},
     {rabbit_queue, rabbit_db_queue_m2k_converter},
+    {rabbit_durable_queue, rabbit_db_queue_m2k_converter},
     {rabbit_exchange, rabbit_db_exchange_m2k_converter},
+    {rabbit_durable_exchange, rabbit_db_exchange_m2k_converter},
     {rabbit_exchange_serial, rabbit_db_exchange_m2k_converter},
     {rabbit_route, rabbit_db_binding_m2k_converter},
+    {rabbit_durable_route, rabbit_db_binding_m2k_converter},
     {rabbit_node_maintenance_states, rabbit_db_maintenance_m2k_converter},
     {mirrored_sup_childspec, rabbit_db_msup_m2k_converter},
 
-    rabbit_durable_queue,
-    rabbit_durable_exchange,
-    rabbit_durable_route,
     rabbit_semi_durable_route,
     rabbit_reverse_route,
     rabbit_index_route
@@ -1841,7 +1839,28 @@ get_feature_state(Node) ->
 
 %% @private
 
-khepri_db_migration_enable(#{feature_name := FeatureName}) ->
+-ifndef(TEST).
+khepri_db_migration_enable(Arg) ->
+    khepri_db_migration_enable1(Arg).
+-else.
+khepri_db_migration_enable(#{feature_name := FeatureName} = Arg) ->
+    case is_called_in_unit_test() of
+        false ->
+            khepri_db_migration_enable1(Arg);
+        true ->
+            ?LOG_INFO(
+               "Feature flag `~s`: skipping migration because this is "
+               "running in the context of a unit test",
+               [FeatureName],
+               #{domain => ?RMQLOG_DOMAIN_DB}),
+            ok
+    end.
+
+is_called_in_unit_test() ->
+    rabbit_feature_flags:does_override_nodes().
+-endif.
+
+khepri_db_migration_enable1(#{feature_name := FeatureName}) ->
     Members = locally_known_members(),
     case length(Members) < 2 of
         true ->
@@ -1871,7 +1890,18 @@ khepri_db_migration_enable(#{feature_name := FeatureName}) ->
 
 %% @private
 
-khepri_db_migration_post_enable(
+-ifndef(TEST).
+khepri_db_migration_post_enable(Arg) ->
+    khepri_db_migration_post_enable1(Arg).
+-else.
+khepri_db_migration_post_enable(Arg) ->
+    case is_called_in_unit_test() of
+        false -> khepri_db_migration_post_enable1(Arg);
+        true  -> ok
+    end.
+-endif.
+
+khepri_db_migration_post_enable1(
   #{feature_name := FeatureName, enabled := true}) ->
     ?LOG_DEBUG(
        "Feature flag `~s`: cleaning up after finished migration",
@@ -1895,7 +1925,7 @@ khepri_db_migration_post_enable(
     _ = rabbit_file:recursive_delete(MnesiaFiles ++ NodeMonitorFiles),
 
     ok;
-khepri_db_migration_post_enable(
+khepri_db_migration_post_enable1(
   #{feature_name := FeatureName, enabled := false}) ->
     ?LOG_DEBUG(
        "Feature flag `~s`: cleaning up after aborted migration",
@@ -2165,33 +2195,5 @@ handle_fallback(#{mnesia := MnesiaFun, khepri := KhepriFunOrRet})
               ?STORE_ID, ?MIGRATION_ID, MnesiaFun, KhepriFunOrRet)
     end.
 
--ifdef(TEST).
--define(FORCED_MDS_KEY, {?MODULE, forced_metadata_store}).
-
-force_metadata_store(Backend) ->
-    persistent_term:put(?FORCED_MDS_KEY, Backend).
-
-get_forced_metadata_store() ->
-    persistent_term:get(?FORCED_MDS_KEY, undefined).
-
-clear_forced_metadata_store() ->
-    _ = persistent_term:erase(?FORCED_MDS_KEY),
-    ok.
-
-is_enabled__internal(Blocking) ->
-    case get_forced_metadata_store() of
-        khepri ->
-            ?assert(
-               rabbit_feature_flags:is_enabled(khepri_db, non_blocking)),
-            true;
-        mnesia ->
-            ?assertNot(
-               rabbit_feature_flags:is_enabled(khepri_db, non_blocking)),
-            false;
-        undefined ->
-            rabbit_feature_flags:is_enabled(khepri_db, Blocking)
-    end.
--else.
 is_enabled__internal(Blocking) ->
     rabbit_feature_flags:is_enabled(khepri_db, Blocking).
--endif.

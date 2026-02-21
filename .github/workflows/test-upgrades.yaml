@@ -1,0 +1,153 @@
+name: Test upgrades
+
+on:
+  push:
+    branches:
+    - main
+    paths:
+    - deps/**
+    - scripts/**
+    - Makefile
+    - plugins.mk
+    - rabbitmq-components.mk
+    - .github/workflows/test-upgrades.yaml
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  old-dist:
+    name: "Build old RabbitMQ"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+
+    steps:
+      - name: Setup Erlant/OTP
+        uses: erlef/setup-beam@v1.19
+        with:
+          otp-version: '27' # Erlang/OTP version repeated later in this file.
+          elixir-version: '1.18'
+          hexpm-mirrors: |
+            https://builds.hex.pm
+            https://cdn.jsdelivr.net/hex
+
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          ref: 'v4.2.x'
+          fetch-tags: true
+
+      - name: Build
+        run: make dist -C deps/rabbit
+
+      - name: Upload dist for next job
+        uses: pyTooling/upload-artifact@v6
+        with:
+          name: old-dist
+          path: .
+          include-hidden-files: true
+          if-no-files-found: error
+
+  new-dist:
+    name: "Build new RabbitMQ"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+
+    steps:
+      - name: Setup Erlant/OTP
+        uses: erlef/setup-beam@v1.19
+        with: # Versions repeated later in this file.
+          otp-version: '27'
+          elixir-version: '1.18'
+          hexpm-mirrors: |
+            https://builds.hex.pm
+            https://cdn.jsdelivr.net/hex
+
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-tags: true
+
+      - name: Build
+        run: make dist -C deps/rabbit
+
+      - name: Upload dist for next job
+        uses: pyTooling/upload-artifact@v6
+        with:
+          name: new-dist
+          path: .
+          include-hidden-files: true
+          if-no-files-found: error
+
+  test:
+    name: "Test ${{ matrix.scenario }} + ${{ matrix.node_count }} node(s)"
+    runs-on: ubuntu-latest
+    needs:
+      - old-dist
+      - new-dist
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario:
+          - durable_queue
+          - transient_queue
+          - 100k_queues_import
+          - topic_bindings_import
+        node_count:
+          - 1
+          - 3
+        exclude:
+          # Transient queues on a single node go away during restart, there is
+          # no point testing this combination.
+          - scenario: transient_queue
+            node_count: 1
+
+    steps:
+      - name: Download old dist from previous job
+        uses: pyTooling/download-artifact@v7
+        with:
+          name: old-dist
+          path: ./OLD
+
+      - name: Download new dist from previous job
+        uses: pyTooling/download-artifact@v7
+        with:
+          name: new-dist
+          path: ./NEW
+
+      - name: Setup Erlant/OTP
+        uses: erlef/setup-beam@v1.19
+        with:
+          otp-version: '27'
+          elixir-version: '1.18'
+          hexpm-mirrors: |
+            https://builds.hex.pm
+            https://cdn.jsdelivr.net/hex
+
+      - name: Download omq(1)
+        uses: dsaltares/fetch-gh-release-asset@master
+        with:
+          repo: 'rabbitmq/omq'
+          regex: true
+          file: 'omq_.*_linux_amd64'
+          target: bin/
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run scenario
+        run: |
+          sh NEW/.github/workflows/test-upgrades.sh \
+            '${{ matrix.scenario }}' \
+            '${{ matrix.node_count }}'
+
+      - name: Upload data dirs for next job
+        if: always()
+        uses: pyTooling/upload-artifact@v6
+        with:
+          name: instances-data-dirs-${{ matrix.scenario }}-${{ matrix.node_count }}-nodes
+          path: test-instances
+          include-hidden-files: true
+          if-no-files-found: error

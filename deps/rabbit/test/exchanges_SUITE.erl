@@ -11,26 +11,37 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
--compile([nowarn_export_all, export_all]).
--compile(export_all).
+-export([suite/0,
+         all/0,
+         groups/0,
+         init_per_suite/1,
+         end_per_suite/1,
+         init_per_group/2,
+         end_per_group/2,
+         init_per_testcase/2,
+         end_per_testcase/2,
+
+         delete_queues/0,
+         delete_exchange/1,
+
+         direct_exchange/1,
+         headers_exchange/1,
+         topic_exchange/1,
+         fanout_exchange/1,
+         invalid_exchange/1
+        ]).
 
 suite() ->
     [{timetrap, 5 * 60000}].
 
 all() ->
     [
-     {group, mnesia_store},
-     {group, khepri_store},
-     {group, khepri_migration}
+     {group, tests}
     ].
 
 groups() ->
     [
-     {mnesia_store, [], all_tests()},
-     {khepri_store, [], all_tests()},
-     {khepri_migration, [], [
-                             from_mnesia_to_khepri
-                            ]}
+     {tests, [], all_tests()}
     ].
 
 all_tests() ->
@@ -54,17 +65,8 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
-init_per_group(mnesia_store = Group, Config0) ->
-    Config = rabbit_ct_helpers:set_config(Config0, [{metadata_store, mnesia}]),
-    init_per_group_common(Group, Config, 1);
-init_per_group(khepri_store = Group, Config0) ->
-    Config = rabbit_ct_helpers:set_config(Config0, [{metadata_store, khepri}]),
-    init_per_group_common(Group, Config, 1);
-init_per_group(khepri_migration = Group, Config0) ->
-    Config = rabbit_ct_helpers:set_config(Config0, [{metadata_store, mnesia}]),
-    init_per_group_common(Group, Config, 1).
-
-init_per_group_common(Group, Config, Size) ->
+init_per_group(Group, Config) ->
+    Size = 1,
     Config1 = rabbit_ct_helpers:set_config(Config,
                                            [{rmq_nodes_count, Size},
                                             {rmq_nodename_suffix, Group},
@@ -345,57 +347,6 @@ invalid_exchange(Config) ->
        amqp_channel:call(Ch, #'queue.bind'{exchange = <<"invalid">>,
                                            queue = Q,
                                            routing_key = Q})).
-
-from_mnesia_to_khepri(Config) ->
-    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
-    Q = ?config(queue_name, Config),
-    ?assertEqual({'queue.declare_ok', Q, 0, 0}, declare(Ch, Q, [])),
-
-    %% Test transient exchanges
-    X = ?config(exchange_name, Config),
-    #'exchange.declare_ok'{} = amqp_channel:call(Ch, #'exchange.declare'{exchange = X,
-                                                                         durable = false}),
-
-    %% Topic is the only exchange type that has its own mnesia/khepri tables.
-    %% Let's test that the exchange works as expected after migration
-    Topic = <<"amq.topic">>,
-    #'queue.bind_ok'{} = amqp_channel:call(Ch, #'queue.bind'{exchange = Topic,
-                                                             queue = Q,
-                                                             routing_key = <<"this.queue.rules">>}),
-
-    Exchanges = lists:sort([rabbit_misc:r(<<"/">>, exchange, <<>>),
-                            rabbit_misc:r(<<"/">>, exchange, <<"amq.direct">>),
-                            rabbit_misc:r(<<"/">>, exchange, <<"amq.fanout">>),
-                            rabbit_misc:r(<<"/">>, exchange, <<"amq.headers">>),
-                            rabbit_misc:r(<<"/">>, exchange, <<"amq.match">>),
-                            rabbit_misc:r(<<"/">>, exchange, <<"amq.rabbitmq.log">>),
-                            rabbit_misc:r(<<"/">>, exchange, <<"amq.rabbitmq.trace">>),
-                            rabbit_misc:r(<<"/">>, exchange, <<"amq.topic">>),
-                            rabbit_misc:r(<<"/">>, exchange, X)]),
-    ?assertEqual(
-       Exchanges,
-       lists:sort([X0#exchange.name ||
-                      X0 <- rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_exchange, list, [])])),
-
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config, khepri_db) of
-        ok ->
-            rabbit_ct_helpers:await_condition(
-              fun() ->
-                      RecoveredExchanges =
-                          lists:sort([X0#exchange.name ||
-                                         X0 <- rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_exchange, list, [])]),
-                      Exchanges == RecoveredExchanges
-              end),
-            publish(Ch, Topic, <<"this.queue.rules">>, <<"msg1">>),
-            ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"msg1">>}},
-                         amqp_channel:call(Ch, #'basic.get'{queue = Q})),
-            ?assertMatch(#'basic.get_empty'{},
-                         amqp_channel:call(Ch, #'basic.get'{queue = Q}));
-        Skip ->
-            Skip
-    end.
 
 %% Internal
 

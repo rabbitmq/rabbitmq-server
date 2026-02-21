@@ -10,8 +10,43 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("eunit/include/eunit.hrl").
--compile(nowarn_export_all).
--compile(export_all).
+
+-export([suite/0,
+         all/0,
+         groups/0,
+         init_per_suite/1,
+         end_per_suite/1,
+         init_per_group/2,
+         end_per_group/2,
+         init_per_testcase/2,
+         end_per_testcase/2,
+
+         forget_node/1,
+         forget_removes_things/1,
+         reset/1,
+         reset_removes_things/1,
+         reset_in_minority/1,
+         force_boot/1,
+         status_with_alarm/1,
+         pid_file_and_await_node_startup/1,
+         await_running_count/1,
+         persistent_cluster_id/1,
+         stop_start_cluster_node/1,
+         restart_cluster_node/1,
+         unsupported_forget_cluster_node_offline/1,
+         forget_unavailable_node/1,
+         forget_unavailable_node_in_minority/1,
+         join_and_part_cluster/1,
+         join_cluster_bad_operations/1,
+         join_cluster_in_minority/1,
+         join_cluster_with_rabbit_stopped/1,
+         force_reset_node/1,
+         join_to_start_interval/1,
+         forget_cluster_node/1,
+         start_nodes_in_reverse_order/1,
+         start_nodes_in_stop_order/1,
+         start_nodes_in_stop_order_with_force_boot/1
+        ]).
 
 -import(clustering_utils, [
                            assert_status/2,
@@ -22,85 +57,51 @@
 
 all() ->
     [
-     {group, mnesia_store},
-     {group, khepri_store}
+     {group, clustered_2_nodes},
+     {group, clustered_3_nodes},
+     {group, unclustered_3_nodes}
     ].
 
 groups() ->
-    [{mnesia_store, [], [
-                         {unclustered_2_nodes, [],
-                          [
-                           {cluster_size_2, [], [
-                                                 classic_config_discovery_node_list
-                                                ]}
-                          ]},
-                         {unclustered_3_nodes, [],
-                          [
-                           {cluster_size_3, [], [
-                                                 join_and_part_cluster,
-                                                 join_cluster_bad_operations,
-                                                 join_to_start_interval,
-                                                 forget_cluster_node,
-                                                 change_cluster_when_node_offline
-                                                ]}
-                          ]},
-                         {clustered_2_nodes, [],
-                          [
-                           {cluster_size_2, [], [
-                                                 forget_removes_things,
-                                                 reset_removes_things,
-                                                 forget_offline_removes_things,
-                                                 forget_unavailable_node,
-                                                 force_boot,
-                                                 status_with_alarm,
-                                                 pid_file_and_await_node_startup,
-                                                 await_running_count,
-                                                 start_with_invalid_schema_in_path,
-                                                 persistent_cluster_id
-                                                ]}
-                          ]}
-                        ]},
-     {khepri_store, [], [
-                         {clustered_2_nodes, [],
-                          [
-                           {cluster_size_2, [], [
-                                                 forget_node_in_khepri,
-                                                 forget_removes_things_in_khepri,
-                                                 reset_in_khepri,
-                                                 reset_removes_things_in_khepri,
-                                                 reset_in_minority,
-                                                 force_boot_in_khepri,
-                                                 status_with_alarm,
-                                                 pid_file_and_await_node_startup_in_khepri,
-                                                 await_running_count_in_khepri,
-                                                 persistent_cluster_id,
-                                                 stop_start_cluster_node,
-                                                 restart_cluster_node,
-                                                 unsupported_forget_cluster_node_offline
-
-                                                ]}
-                          ]},
-                         {clustered_3_nodes, [],
-                          [{cluster_size_3, [], [
-                                                 forget_unavailable_node,
-                                                 forget_unavailable_node_in_minority
-                                                ]}]},
-                         {unclustered_3_nodes, [],
-                          [
-                           {cluster_size_3, [], [
-                                                 join_and_part_cluster_in_khepri,
-                                                 join_cluster_bad_operations_in_khepri,
-                                                 join_cluster_in_minority,
-                                                 join_cluster_with_rabbit_stopped,
-                                                 force_reset_node_in_khepri,
-                                                 join_to_start_interval,
-                                                 forget_cluster_node_in_khepri,
-                                                 start_nodes_in_reverse_order,
-                                                 start_nodes_in_stop_order_in_khepri,
-                                                 start_nodes_in_stop_order_with_force_boot
-                                                ]}
-                          ]}
-                        ]}
+    [
+     {clustered_2_nodes, [],
+      [
+       {cluster_size_2, [], [
+                             forget_node,
+                             forget_removes_things,
+                             reset,
+                             reset_removes_things,
+                             reset_in_minority,
+                             force_boot,
+                             status_with_alarm,
+                             pid_file_and_await_node_startup,
+                             await_running_count,
+                             persistent_cluster_id,
+                             stop_start_cluster_node,
+                             restart_cluster_node,
+                             unsupported_forget_cluster_node_offline
+                            ]}
+      ]},
+     {clustered_3_nodes, [],
+      [{cluster_size_3, [], [
+                             forget_unavailable_node,
+                             forget_unavailable_node_in_minority
+                            ]}]},
+     {unclustered_3_nodes, [],
+      [
+       {cluster_size_3, [], [
+                             join_and_part_cluster,
+                             join_cluster_bad_operations,
+                             join_cluster_in_minority,
+                             join_cluster_with_rabbit_stopped,
+                             force_reset_node,
+                             join_to_start_interval,
+                             forget_cluster_node,
+                             start_nodes_in_reverse_order,
+                             start_nodes_in_stop_order,
+                             start_nodes_in_stop_order_with_force_boot
+                            ]}
+      ]}
     ].
 
 suite() ->
@@ -115,42 +116,11 @@ suite() ->
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
-    Config1 = rabbit_ct_helpers:merge_app_env(
-                Config, {rabbit, [
-                          {mnesia_table_loading_retry_limit, 2},
-                          {mnesia_table_loading_retry_timeout,1000}
-                         ]}),
-    rabbit_ct_helpers:run_setup_steps(Config1).
+    rabbit_ct_helpers:run_setup_steps(Config).
 
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
-init_per_group(khepri_store, Config) ->
-    case rabbit_ct_broker_helpers:configured_metadata_store(Config) of
-        mnesia ->
-            {skip, "These tests target Khepri"};
-        _ ->
-            Config
-    end;
-init_per_group(mnesia_store, Config) ->
-    case rabbit_ct_broker_helpers:configured_metadata_store(Config) of
-        khepri ->
-            {skip, "These tests target mnesia"};
-        _ ->
-            Config
-    end;
-init_per_group(unclustered_2_nodes, Config) ->
-    Config1 = rabbit_ct_helpers:set_config(
-                Config, [{rmq_nodes_clustered, false}]),
-    rabbit_ct_helpers:merge_app_env(
-      Config1, {rabbit, [{forced_feature_flags_on_init, [
-                                                         restart_streams,
-                                                         stream_sac_coordinator_unblock_group,
-                                                         stream_update_config_command,
-                                                         stream_filtering,
-                                                         message_containers,
-                                                         quorum_queue_non_voters
-                                                        ]}]});
 init_per_group(unclustered_3_nodes, Config) ->
     Config1 = rabbit_ct_helpers:set_config(
                 Config, [{rmq_nodes_clustered, false}]),
@@ -167,29 +137,15 @@ init_per_group(clustered_2_nodes, Config) ->
     rabbit_ct_helpers:set_config(Config, [{rmq_nodes_clustered, true}]);
 init_per_group(clustered_3_nodes, Config) ->
     rabbit_ct_helpers:set_config(Config, [{rmq_nodes_clustered, true}]);
-init_per_group(clustered_4_nodes, Config) ->
-    rabbit_ct_helpers:set_config(Config, [{rmq_nodes_clustered, true}]);
 init_per_group(cluster_size_2, Config) ->
     rabbit_ct_helpers:set_config(Config, [{rmq_nodes_count, 2}]);
 init_per_group(cluster_size_3, Config) ->
-    rabbit_ct_helpers:set_config(Config, [{rmq_nodes_count, 3}]);
-init_per_group(cluster_size_4, Config) ->
-    rabbit_ct_helpers:set_config(Config, [{rmq_nodes_count, 4}]).
+    rabbit_ct_helpers:set_config(Config, [{rmq_nodes_count, 3}]).
 
 end_per_group(_, Config) ->
     Config.
 
-init_per_testcase(create_bad_schema = Testcase, Config) ->
-    case rabbit_ct_broker_helpers:configured_metadata_store(Config) of
-        mnesia ->
-            init_per_testcase0(Testcase, Config);
-        _ ->
-            {skip, "Mnesia operations not supported by Khepri"}
-    end;
 init_per_testcase(Testcase, Config) ->
-    init_per_testcase0(Testcase, Config).
-
-init_per_testcase0(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase),
     ClusterSize = ?config(rmq_nodes_count, Config),
     TestNumber = rabbit_ct_helpers:testcase_number(Config, ?MODULE, Testcase),
@@ -212,19 +168,6 @@ end_per_testcase(Testcase, Config) ->
 %% Test cases
 %% -------------------------------------------------------------------
 
-start_with_invalid_schema_in_path(Config) ->
-    [Rabbit, Hare] = cluster_members(Config),
-    stop_app(Config, Rabbit),
-    stop_app(Config, Hare),
-
-    create_bad_schema(Rabbit, Hare, Config),
-
-    spawn(fun() -> start_app(Config, Hare) end),
-    case start_app(Config, Rabbit) of
-        ok  -> ok;
-        ErrRabbit -> error({unable_to_start_with_bad_schema_in_work_dir, ErrRabbit})
-    end.
-
 persistent_cluster_id(Config) ->
     case rabbit_ct_helpers:is_mixed_versions() of
       false ->
@@ -242,77 +185,6 @@ persistent_cluster_id(Config) ->
       _ ->
         %% skip the test in mixed version mode
         {skip, "Should not run in mixed version environments"}
-    end.
-
-create_bad_schema(Rabbit, Hare, Config) ->
-    {ok, RabbitMnesiaDir} = rpc:call(Rabbit, application, get_env, [mnesia, dir]),
-    {ok, HareMnesiaDir} = rpc:call(Hare, application, get_env, [mnesia, dir]),
-    %% Make sure we don't use the current dir:
-    PrivDir = ?config(priv_dir, Config),
-    ct:pal("Priv dir ~tp~n", [PrivDir]),
-    ok = filelib:ensure_dir(filename:join(PrivDir, "file")),
-
-    ok = rpc:call(Rabbit, file, set_cwd, [PrivDir]),
-    ok = rpc:call(Hare, file, set_cwd, [PrivDir]),
-
-    ok = rpc:call(Rabbit, application, unset_env, [mnesia, dir]),
-    ok = rpc:call(Hare, application, unset_env, [mnesia, dir]),
-    ok = rpc:call(Rabbit, mnesia, create_schema, [[Rabbit, Hare]]),
-    ok = rpc:call(Rabbit, mnesia, start, []),
-    {atomic,ok} = rpc:call(Rabbit, mnesia, create_table,
-                                   [rabbit_queue, [{ram_copies, [Rabbit, Hare]}]]),
-    stopped = rpc:call(Rabbit, mnesia, stop, []),
-    ok = rpc:call(Rabbit, application, set_env, [mnesia, dir, RabbitMnesiaDir]),
-    ok = rpc:call(Hare, application, set_env, [mnesia, dir, HareMnesiaDir]).
-
-join_and_part_cluster(Config) ->
-    [Rabbit, Hare, Bunny] = cluster_members(Config),
-    assert_not_clustered(Rabbit),
-    assert_not_clustered(Hare),
-    assert_not_clustered(Bunny),
-
-    stop_join_start(Config, Rabbit, Bunny),
-    assert_clustered([Rabbit, Bunny]),
-
-    stop_join_start(Config, Hare, Bunny),
-    assert_clustered([Rabbit, Bunny, Hare]),
-
-    %% Allow clustering with already clustered node
-    ok = stop_app(Config, Rabbit),
-    ok = join_cluster(Config, Rabbit, Hare),
-    ok = start_app(Config, Rabbit),
-
-    assert_clustered([Rabbit, Bunny, Hare]),
-
-    stop_reset_start(Config, Rabbit),
-    assert_not_clustered(Rabbit),
-    assert_clustered([Bunny, Hare]),
-
-    stop_reset_start(Config, Hare),
-    assert_not_clustered(Hare),
-    assert_not_clustered(Bunny),
-
-    %% Using `join_cluster` is allowed without stopping `rabbit` first since
-    %% 3.13.0. It will only work if all nodes support it: check if they all
-    %% expose `rabbit_ff_controller:is_running/0`.
-    Supported = lists:all(
-                  fun(R) -> R end,
-                  rabbit_ct_broker_helpers:rpc_all(
-                    Config, erlang, function_exported,
-                    [rabbit_ff_controller, is_running, 0])),
-    ct:pal(
-      "Do all nodes support `join_cluster` without stopping `rabbit` "
-      "first? ~p",
-      [Supported]),
-    case Supported of
-        true ->
-            ?assertEqual(ok, join_cluster(Config, Rabbit, Bunny)),
-            assert_clustered([Rabbit, Bunny]),
-
-            ?assertEqual(ok, join_cluster(Config, Hare, Bunny)),
-            assert_clustered([Rabbit, Bunny, Hare]);
-        false ->
-            ok
     end.
 
 stop_start_cluster_node(Config) ->
@@ -345,7 +217,7 @@ restart_cluster_node(Config) ->
 
     assert_clustered([Rabbit, Hare]).
 
-join_and_part_cluster_in_khepri(Config) ->
+join_and_part_cluster(Config) ->
     [Rabbit, Bunny, Hare] = cluster_members(Config),
     assert_not_clustered(Rabbit),
     assert_not_clustered(Hare),
@@ -381,23 +253,6 @@ join_and_part_cluster_in_khepri(Config) ->
     assert_clustered([Rabbit, Bunny, Hare]).
 
 join_cluster_bad_operations(Config) ->
-    [Rabbit, _Hare, _Bunny] = cluster_members(Config),
-
-    %% Nonexistent node
-    ok = stop_app(Config, Rabbit),
-    assert_failure(fun () -> join_cluster(Config, Rabbit, non@existent) end),
-    ok = start_app(Config, Rabbit),
-    assert_not_clustered(Rabbit),
-
-    %% Trying to cluster the node with itself
-    ok = stop_app(Config, Rabbit),
-    assert_failure(fun () -> join_cluster(Config, Rabbit, Rabbit) end),
-    ok = start_app(Config, Rabbit),
-    assert_not_clustered(Rabbit),
-
-    ok.
-
-join_cluster_bad_operations_in_khepri(Config) ->
     [Rabbit, _Hare, _Bunny] = cluster_members(Config),
 
     %% Nonexistent node
@@ -465,59 +320,6 @@ join_cluster_with_rabbit_stopped(Config) ->
     assert_clustered([Rabbit, Bunny, Hare]).
 
 forget_cluster_node(Config) ->
-    [Rabbit, Hare, Bunny] = cluster_members(Config),
-
-    %% Trying to remove a node not in the cluster should fail
-    assert_failure(fun () -> forget_cluster_node(Config, Hare, Rabbit) end),
-
-    stop_join_start(Config, Rabbit, Hare),
-    assert_clustered([Rabbit, Hare]),
-
-    %% Trying to remove an online node should fail
-    assert_failure(fun () -> forget_cluster_node(Config, Hare, Rabbit) end),
-
-    ok = stop_app(Config, Rabbit),
-    %% We're passing the --offline flag, but Hare is online
-    assert_failure(fun () -> forget_cluster_node(Config, Hare, Rabbit, true) end),
-    %% Removing some nonexistent node will fail
-    assert_failure(fun () -> forget_cluster_node(Config, Hare, non@existent) end),
-    ok = forget_cluster_node(Config, Hare, Rabbit),
-    assert_not_clustered(Hare),
-    assert_cluster_status({[Rabbit, Hare], [Rabbit, Hare], [Hare]},
-                          [Rabbit]),
-
-    %% Now we can't start Rabbit since it thinks that it's still in the cluster
-    %% with Hare, while Hare disagrees.
-    assert_failure(fun () -> start_app(Config, Rabbit) end),
-
-    ok = reset(Config, Rabbit),
-    ok = start_app(Config, Rabbit),
-    assert_not_clustered(Rabbit),
-
-    %% Now we remove Rabbit from an offline node.
-    stop_join_start(Config, Bunny, Hare),
-    stop_join_start(Config, Rabbit, Hare),
-    assert_clustered([Rabbit, Hare, Bunny]),
-    ok = stop_app(Config, Hare),
-    ok = stop_app(Config, Rabbit),
-    ok = stop_app(Config, Bunny),
-    %% This is fine but we need the flag
-    assert_failure(fun () -> forget_cluster_node(Config, Hare, Bunny) end),
-    %% Also fails because hare node is still running
-    assert_failure(fun () -> forget_cluster_node(Config, Hare, Bunny, true) end),
-    %% But this works
-    ok = rabbit_ct_broker_helpers:stop_node(Config, Hare),
-    ok = forget_cluster_node(Config, Hare, Bunny, true),
-    ok = rabbit_ct_broker_helpers:start_node(Config, Hare),
-    ok = start_app(Config, Rabbit),
-    %% Bunny still thinks its clustered with Rabbit and Hare
-    assert_failure(fun () -> start_app(Config, Bunny) end),
-    ok = reset(Config, Bunny),
-    ok = start_app(Config, Bunny),
-    assert_not_clustered(Bunny),
-    assert_clustered([Rabbit, Hare]).
-
-forget_cluster_node_in_khepri(Config) ->
     [Rabbit, Hare, _Bunny] = cluster_members(Config),
 
     %% Trying to remove a node not in the cluster should fail
@@ -547,29 +349,7 @@ unsupported_forget_cluster_node_offline(Config) ->
                                                 ["forget_cluster_node", "--offline", Rabbit]),
     is_not_supported(Ret0).
 
-forget_removes_things(Config) ->
-    test_removes_things(Config, fun (R, H) -> ok = forget_cluster_node(Config, H, R) end).
-
-reset_removes_things(Config) ->
-    test_removes_things(Config, fun (R, _H) -> ok = reset(Config, R) end).
-
-test_removes_things(Config, LoseRabbit) ->
-    Classic = <<"classic-queue">>,
-    [Rabbit, Hare | _] = cluster_members(Config),
-    RCh = rabbit_ct_client_helpers:open_channel(Config, Rabbit),
-    declare(RCh, Classic),
-    ok = stop_app(Config, Rabbit),
-
-    HCh = rabbit_ct_client_helpers:open_channel(Config, Hare),
-    {'EXIT',{{shutdown,{server_initiated_close,404,_}}, _}} =
-        (catch declare(HCh, Classic)),
-
-    ok = LoseRabbit(Rabbit, Hare),
-    HCh2 = rabbit_ct_client_helpers:open_channel(Config, Hare),
-    declare(HCh2, Classic),
-    ok.
-
-forget_node_in_khepri(Config) ->
+forget_node(Config) ->
     [Rabbit, Hare] = cluster_members(Config),
 
     assert_cluster_status({[Rabbit, Hare], [Rabbit, Hare], [Rabbit, Hare]},
@@ -582,7 +362,7 @@ forget_node_in_khepri(Config) ->
 
     ok.
 
-forget_removes_things_in_khepri(Config) ->
+forget_removes_things(Config) ->
     ClassicQueue = <<"classic-queue">>,
     [Rabbit, Hare | _] = cluster_members(Config),
 
@@ -657,7 +437,7 @@ get_raft_status(Config, Node) ->
             unknown
     end.
 
-reset_in_khepri(Config) ->
+reset(Config) ->
     ClassicQueue = <<"classic-queue">>,
     [Rabbit, Hare | _] = cluster_members(Config),
 
@@ -681,7 +461,7 @@ reset_in_khepri(Config) ->
 
     ok.
 
-reset_removes_things_in_khepri(Config) ->
+reset_removes_things(Config) ->
     ClassicQueue = <<"classic-queue">>,
     [Rabbit, Hare | _] = cluster_members(Config),
 
@@ -725,53 +505,7 @@ is_in_minority(Ret) ->
     {error, _, Msg} = Ret,
     ?assertMatch(match, re:run(Msg, ".*timed out.*minority.*", [{capture, none}])).
 
-forget_offline_removes_things(Config) ->
-    [Rabbit, Hare] = rabbit_ct_broker_helpers:get_node_configs(Config,
-      nodename),
-    Classic = <<"classic-queue">>,
-    X = <<"X">>,
-    RCh = rabbit_ct_client_helpers:open_channel(Config, Rabbit),
-    declare(RCh, Classic),
-
-    amqp_channel:call(RCh, #'exchange.declare'{durable     = true,
-                                               exchange    = X,
-                                               auto_delete = true}),
-    amqp_channel:call(RCh, #'queue.bind'{queue    = Classic,
-                                         exchange = X}),
-    ok = rabbit_ct_broker_helpers:stop_broker(Config, Rabbit),
-
-    HCh = rabbit_ct_client_helpers:open_channel(Config, Hare),
-    {'EXIT',{{shutdown,{server_initiated_close,404,_}}, _}} =
-        (catch declare(HCh, Classic)),
-
-    ok = rabbit_ct_broker_helpers:stop_node(Config, Hare),
-    ok = rabbit_ct_broker_helpers:stop_node(Config, Rabbit),
-    ok = forget_cluster_node(Config, Hare, Rabbit, true),
-    ok = rabbit_ct_broker_helpers:start_node(Config, Hare),
-
-    HCh2 = rabbit_ct_client_helpers:open_channel(Config, Hare),
-    declare(HCh2, Classic),
-    {'EXIT',{{shutdown,{server_initiated_close,404,_}}, _}} =
-        (catch amqp_channel:call(HCh2,#'exchange.declare'{durable     = true,
-                                                          exchange    = X,
-                                                          auto_delete = true,
-                                                          passive     = true})),
-    ok.
-
 force_boot(Config) ->
-    [Rabbit, Hare] = rabbit_ct_broker_helpers:get_node_configs(Config,
-      nodename),
-    {error, _, _} = rabbit_ct_broker_helpers:rabbitmqctl(Config, Rabbit,
-      ["force_boot"]),
-    ok = rabbit_ct_broker_helpers:stop_node(Config, Rabbit),
-    ok = rabbit_ct_broker_helpers:stop_node(Config, Hare),
-    {error, _} = rabbit_ct_broker_helpers:start_node(Config, Rabbit),
-    {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(Config, Rabbit,
-      ["force_boot"]),
-    ok = rabbit_ct_broker_helpers:start_node(Config, Rabbit),
-    ok.
-
-force_boot_in_khepri(Config) ->
     [Rabbit, _Hare] = rabbit_ct_broker_helpers:get_node_configs(Config,
       nodename),
     stop_app(Config, Rabbit),
@@ -779,79 +513,12 @@ force_boot_in_khepri(Config) ->
     ?assertMatch({ok, []}, rabbit_ct_broker_helpers:rabbitmqctl(Config, Rabbit, ["force_boot"])),
     ok.
 
-change_cluster_when_node_offline(Config) ->
-    [Rabbit, Hare, Bunny] = cluster_members(Config),
-
-    %% Cluster the three notes
-    stop_join_start(Config, Rabbit, Hare),
-    assert_clustered([Rabbit, Hare]),
-
-    stop_join_start(Config, Bunny, Hare),
-    assert_clustered([Rabbit, Hare, Bunny]),
-
-    %% Bring down Rabbit, and remove Bunny from the cluster while
-    %% Rabbit is offline
-    ok = stop_app(Config, Rabbit),
-    ok = stop_app(Config, Bunny),
-    ok = reset(Config, Bunny),
-    assert_cluster_status({[Bunny], [Bunny], []}, [Bunny]),
-    assert_cluster_status({[Rabbit, Hare], [Rabbit, Hare], [Hare]}, [Hare]),
-    assert_cluster_status(
-      {[Rabbit, Hare, Bunny], [Hare], [Rabbit, Hare, Bunny], [Rabbit, Hare, Bunny], [Hare, Bunny]}, [Rabbit]),
-
-    %% Bring Rabbit back up
-    ok = start_app(Config, Rabbit),
-    assert_clustered([Rabbit, Hare]),
-    ok = start_app(Config, Bunny),
-    assert_not_clustered(Bunny),
-    ok.
-
 is_not_supported(Ret) ->
     ?assertMatch({error, _, _}, Ret),
     {error, _, Msg} = Ret,
     ?assertMatch(match, re:run(Msg, ".*not_supported.*", [{capture, none}])).
 
-classic_config_discovery_node_list(Config) ->
-    [Rabbit, Hare] = cluster_members(Config),
-
-    %% We restart the node that is reconfigured during this testcase to make
-    %% sure it has the latest start time. This ensures that peer discovery will
-    %% always select the other node as the one to join.
-    %%
-    %% We do this because this testcase does not really reflect a real world
-    %% situation. Indeed, both nodes have inconsistent peer discovery
-    %% configuration and the configuration is changed at runtime using internal
-    %% calls (which we don't support).
-    %%
-    %% Without this, if node 2 was started first, it will select itself and
-    %% thus boot as a standalone node, expecting node 1 to join it. But node 1
-    %% is ready and never restarted/reconfigured.
-    rabbit_ct_broker_helpers:restart_node(Config, Hare),
-
-    ok = stop_app(Config, Hare),
-    ok = reset(Config, Hare),
-    ok = rpc:call(Hare, application, set_env,
-                  [rabbit, cluster_nodes, {[Rabbit], disc}]),
-    ok = start_app(Config, Hare),
-    assert_clustered([Rabbit, Hare]),
-
-    %% List of nodes [node()] is equivalent to {[node()], disk}
-    ok = stop_app(Config, Hare),
-    ok = reset(Config, Hare),
-    ok = rpc:call(Hare, application, set_env,
-                  [rabbit, cluster_nodes, [Rabbit]]),
-    ok = start_app(Config, Hare),
-    assert_clustered([Rabbit, Hare]),
-
-    ok = stop_app(Config, Hare),
-    ok = reset(Config, Hare),
-    %% If we use an invalid cluster_nodes conf, the node fails to start.
-    ok = rpc:call(Hare, application, set_env,
-                  [rabbit, cluster_nodes, "Yes, please"]),
-    assert_failure(fun () -> start_app(Config, Hare) end),
-    assert_not_clustered(Rabbit).
-
-force_reset_node_in_khepri(Config) ->
+force_reset_node(Config) ->
     [Rabbit, Hare, _Bunny] = cluster_members(Config),
 
     stop_join_start(Config, Rabbit, Hare),
@@ -907,32 +574,6 @@ pid_file_and_await_node_startup(Config) ->
     %% stop both nodes
     ok = rabbit_ct_broker_helpers:stop_node(Config, Rabbit),
     ok = rabbit_ct_broker_helpers:stop_node(Config, Hare),
-    %% starting first node fails - it was not the last node to stop
-    {error, _} = rabbit_ct_broker_helpers:start_node(Config, Rabbit),
-    PreviousPid = pid_from_file(RabbitPidFile),
-    %% start first node in the background
-    spawn_link(fun() ->
-        rabbit_ct_broker_helpers:start_node(Config, Rabbit)
-    end),
-    Attempts = 200,
-    Timeout = 50,
-    wait_for_pid_file_to_change(RabbitPidFile, PreviousPid, Attempts, Timeout),
-    {error, _, _} = rabbit_ct_broker_helpers:rabbitmqctl(Config, Rabbit,
-      ["wait", RabbitPidFile]).
-
-pid_file_and_await_node_startup_in_khepri(Config) ->
-    [Rabbit, Hare] = rabbit_ct_broker_helpers:get_node_configs(Config,
-      nodename),
-    RabbitConfig = rabbit_ct_broker_helpers:get_node_config(Config,Rabbit),
-    RabbitPidFile = ?config(pid_file, RabbitConfig),
-    %% ensure pid file is readable
-    {ok, _} = file:read_file(RabbitPidFile),
-    %% ensure wait works on running node
-    {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(Config, Rabbit,
-      ["wait", RabbitPidFile]),
-    %% stop both nodes
-    ok = rabbit_ct_broker_helpers:stop_node(Config, Rabbit),
-    ok = rabbit_ct_broker_helpers:stop_node(Config, Hare),
     %% start first node in the background. It will wait for Khepri
     %% and then Mnesia tables (which will already be available)
     spawn_link(fun() ->
@@ -949,46 +590,6 @@ pid_file_and_await_node_startup_in_khepri(Config) ->
                                                                ["wait", RabbitPidFile], 10000).
 
 await_running_count(Config) ->
-    [Rabbit, Hare] = rabbit_ct_broker_helpers:get_node_configs(Config,
-      nodename),
-    RabbitConfig = rabbit_ct_broker_helpers:get_node_config(Config,Rabbit),
-    RabbitPidFile = ?config(pid_file, RabbitConfig),
-    {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(Config, Rabbit,
-      ["wait", RabbitPidFile]),
-    %% stop both nodes
-    ok = rabbit_ct_broker_helpers:stop_node(Config, Hare),
-    ok = rabbit_ct_broker_helpers:stop_node(Config, Rabbit),
-    %% start one node in the background
-    rabbit_ct_broker_helpers:start_node(Config, Rabbit),
-    {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(Config, Rabbit,
-                                                   ["wait", RabbitPidFile]),
-    ?assertEqual(ok, rabbit_ct_broker_helpers:rpc(Config, Rabbit,
-                                                  rabbit_nodes,
-                                                  await_running_count, [1, 30000])),
-    ?assertEqual({error, timeout},
-                 rabbit_ct_broker_helpers:rpc(Config, Rabbit,
-                                              rabbit_nodes,
-                                              await_running_count, [2, 1000])),
-    ?assertEqual({error, timeout},
-                 rabbit_ct_broker_helpers:rpc(Config, Rabbit,
-                                              rabbit_nodes,
-                                              await_running_count, [5, 1000])),
-    rabbit_ct_broker_helpers:start_node(Config, Hare),
-    %% this now succeeds
-    ?assertEqual(ok, rabbit_ct_broker_helpers:rpc(Config, Rabbit,
-                                                  rabbit_nodes,
-                                                  await_running_count, [2, 30000])),
-    %% this still succeeds
-    ?assertEqual(ok, rabbit_ct_broker_helpers:rpc(Config, Rabbit,
-                                                  rabbit_nodes,
-                                                  await_running_count, [1, 30000])),
-    %% this still fails
-    ?assertEqual({error, timeout},
-                 rabbit_ct_broker_helpers:rpc(Config, Rabbit,
-                                              rabbit_nodes,
-                                              await_running_count, [5, 1000])).
-
-await_running_count_in_khepri(Config) ->
     [Rabbit, Hare] = rabbit_ct_broker_helpers:get_node_configs(Config,
       nodename),
     RabbitConfig = rabbit_ct_broker_helpers:get_node_config(Config,Rabbit),
@@ -1043,33 +644,7 @@ start_nodes_in_reverse_order(Config) ->
     ok = rabbit_ct_broker_helpers:start_node(Config, Rabbit),
     assert_clustered([Rabbit, Hare, Bunny]).
 
-%% Test booting nodes in the wrong order for Mnesia. Interesting...
 start_nodes_in_stop_order(Config) ->
-    [Rabbit, Bunny, Hare] = cluster_members(Config),
-    assert_not_clustered(Rabbit),
-    assert_not_clustered(Hare),
-    assert_not_clustered(Bunny),
-
-    stop_join_start(Config, Rabbit, Bunny),
-    stop_join_start(Config, Hare, Bunny),
-    assert_clustered([Rabbit, Hare, Bunny]),
-
-    ok = rabbit_ct_broker_helpers:stop_node(Config, Rabbit),
-    ok = rabbit_ct_broker_helpers:stop_node(Config, Hare),
-    ok = rabbit_ct_broker_helpers:stop_node(Config, Bunny),
-
-    Self = self(),
-    spawn(fun() ->
-                  Reply = rabbit_ct_broker_helpers:start_node(Config, Rabbit),
-                  Self ! {start_node_reply, Reply}
-          end),
-    ?assertMatch({error, {skip, _}}, rabbit_ct_broker_helpers:start_node(Config, Hare)),
-    receive
-        {start_node_reply, Reply} ->
-            ?assertMatch({error, {skip, _}}, Reply)
-    end.
-
-start_nodes_in_stop_order_in_khepri(Config) ->
     [Rabbit, Bunny, Hare] = cluster_members(Config),
     assert_not_clustered(Rabbit),
     assert_not_clustered(Hare),

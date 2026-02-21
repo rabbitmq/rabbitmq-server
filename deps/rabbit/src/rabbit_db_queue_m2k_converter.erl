@@ -2,38 +2,55 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2023-2026 Broadcom. All Rights Reserved. The term “Broadcom”
+%% refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_db_queue_m2k_converter).
 
--behaviour(mnesia_to_khepri_converter).
+-behaviour(rabbit_db_m2k_converter).
 
 -include_lib("kernel/include/logger.hrl").
+-include_lib("stdlib/include/assert.hrl").
+
 -include_lib("khepri_mnesia_migration/src/kmm_logging.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include("amqqueue.hrl").
 
--export([init_copy_to_khepri/3,
+-export([init_copy_to_khepri/4,
          copy_to_khepri/3,
          delete_from_khepri/3]).
 
--record(?MODULE, {}).
+-define(USE_TABLE_PRIV_KEY, {?MODULE, use_table}).
 
--spec init_copy_to_khepri(StoreId, MigrationId, Tables) -> Ret when
+-spec init_copy_to_khepri(StoreId, MigrationId, Tables, State) -> Ret when
       StoreId :: khepri:store_id(),
       MigrationId :: mnesia_to_khepri:migration_id(),
       Tables :: [mnesia_to_khepri:mnesia_table()],
-      Ret :: {ok, Priv},
-      Priv :: #?MODULE{}.
+      State :: rabbit_db_m2k_converter:state(),
+      Ret :: {ok, NewState},
+      NewState :: rabbit_db_m2k_converter:state().
 %% @private
 
-init_copy_to_khepri(_StoreId, _MigrationId, Tables) ->
+init_copy_to_khepri(_StoreId, _MigrationId, Tables, State) ->
     %% Clean up any previous attempt to copy the Mnesia table to Khepri.
     lists:foreach(fun clear_data_in_khepri/1, Tables),
 
-    SubState = #?MODULE{},
-    {ok, SubState}.
+    UseTable = case mnesia:table_info(rabbit_queue, size) of
+                   0            -> rabbit_durable_queue;
+                   N when N > 0 -> rabbit_queue
+               end,
+    ?assert(lists:member(UseTable, Tables)),
+    ?LOG_DEBUG(
+       "Mnesia->Khepri data copy: use table ~s in ~s",
+       [UseTable, ?MODULE],
+       #{domain => ?KMM_M2K_TABLE_COPY_LOG_DOMAIN}),
+    State1 = rabbit_db_m2k_converter:set_priv_data(
+               ?USE_TABLE_PRIV_KEY, UseTable, State),
+    {ok, State1}.
+
+get_priv_data(State) ->
+    rabbit_db_m2k_converter:get_priv_data(?USE_TABLE_PRIV_KEY, State).
 
 -spec copy_to_khepri(Table, Record, State) -> Ret when
       Table :: mnesia_to_khepri:mnesia_table(),
@@ -44,22 +61,31 @@ init_copy_to_khepri(_StoreId, _MigrationId, Tables) ->
       Reason :: any().
 %% @private
 
-copy_to_khepri(
-  rabbit_queue = Table, Record, State) when ?is_amqqueue(Record) ->
-    Name = amqqueue:get_name(Record),
-    ?LOG_DEBUG(
-       "Mnesia->Khepri data copy: [~0p] key: ~0p",
-       [Table, Name],
-       #{domain => ?KMM_M2K_TABLE_COPY_LOG_DOMAIN}),
-    Path = rabbit_db_queue:khepri_queue_path(Name),
-    rabbit_db_m2k_converter:with_correlation_id(
-      fun(CorrId) ->
-              Extra = #{async => CorrId},
-              rabbit_khepri:put(Path, Record, Extra)
-      end, State);
+copy_to_khepri(Table, Record, State)
+  when ?is_amqqueue(Record) andalso
+       (Table =:= rabbit_queue orelse Table =:= rabbit_durable_queue) ->
+    UseTable = get_priv_data(State),
+    case Table of
+        UseTable ->
+            Name = amqqueue:get_name(Record),
+            ?LOG_DEBUG(
+               "Mnesia->Khepri data copy: [~0p] key: ~0p",
+               [Table, Name],
+               #{domain => ?KMM_M2K_TABLE_COPY_LOG_DOMAIN}),
+            Path = rabbit_db_queue:khepri_queue_path(Name),
+            rabbit_db_m2k_converter:with_correlation_id(
+              fun(CorrId) ->
+                      Extra = #{async => CorrId},
+                      rabbit_khepri:put(Path, Record, Extra)
+              end, State);
+        _ ->
+            {ok, State}
+    end;
 copy_to_khepri(Table, Record, State) ->
-    ?LOG_DEBUG("Mnesia->Khepri unexpected record table ~0p record ~0p state ~0p",
-               [Table, Record, State]),
+    ?LOG_DEBUG(
+       "Mnesia->Khepri unexpected record table ~0p record ~0p state ~0p",
+       [Table, Record, State],
+       #{domain => ?KMM_M2K_TABLE_COPY_LOG_DOMAIN}),
     {error, unexpected_record}.
 
 -spec delete_from_khepri(Table, Key, State) -> Ret when
@@ -71,22 +97,28 @@ copy_to_khepri(Table, Record, State) ->
       Reason :: any().
 %% @private
 
-delete_from_khepri(rabbit_queue = Table, Key, State) ->
-    ?LOG_DEBUG(
-       "Mnesia->Khepri data delete: [~0p] key: ~0p",
-       [Table, Key],
-       #{domain => ?KMM_M2K_TABLE_COPY_LOG_DOMAIN}),
-    Path = rabbit_db_queue:khepri_queue_path(Key),
-    rabbit_db_m2k_converter:with_correlation_id(
-      fun(CorrId) ->
-              Extra = #{async => CorrId},
-              rabbit_khepri:delete(Path, Extra)
-      end, State).
+delete_from_khepri(Table, Key, State)
+  when Table =:= rabbit_queue orelse Table =:= rabbit_durable_queue ->
+    UseTable = get_priv_data(State),
+    case Table of
+        UseTable ->
+            ?LOG_DEBUG(
+               "Mnesia->Khepri data delete: [~0p] key: ~0p",
+               [Table, Key],
+               #{domain => ?KMM_M2K_TABLE_COPY_LOG_DOMAIN}),
+            Path = rabbit_db_queue:khepri_queue_path(Key),
+            rabbit_db_m2k_converter:with_correlation_id(
+              fun(CorrId) ->
+                      Extra = #{async => CorrId},
+                      rabbit_khepri:delete(Path, Extra)
+              end, State);
+        _ ->
+            {ok, State}
+    end.
 
 -spec clear_data_in_khepri(Table) -> ok when
       Table :: atom().
 
-clear_data_in_khepri(rabbit_queue) ->
-    rabbit_db_queue:clear_in_khepri();
-clear_data_in_khepri(rabbit_durable_queue) ->
+clear_data_in_khepri(Table)
+  when Table =:= rabbit_queue orelse Table =:= rabbit_durable_queue ->
     rabbit_db_queue:clear_in_khepri().

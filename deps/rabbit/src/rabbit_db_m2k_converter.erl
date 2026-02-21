@@ -13,8 +13,35 @@
 -include_lib("khepri_mnesia_migration/src/kmm_logging.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
+-callback init_copy_to_khepri(StoreId, MigrationId, Tables, State) -> Ret when
+      StoreId :: khepri:store_id(),
+      MigrationId :: mnesia_to_khepri:migration_id(),
+      Tables :: [mnesia_to_khepri:mnesia_table()],
+      State :: rabbit_db_m2k_converter:state(),
+      Ret :: {ok, NewState} | {error, Reason},
+      NewState :: rabbit_db_m2k_converter:state(),
+      Reason :: any().
+
+-callback copy_to_khepri(Table, Record, State) -> Ret when
+      Table :: mnesia_to_khepri:mnesia_table(),
+      Record :: tuple(),
+      State :: rabbit_db_m2k_converter:state(),
+      Ret :: {ok, NewState} | {error, Reason},
+      NewState :: rabbit_db_m2k_converter:state(),
+      Reason :: any().
+
+-callback delete_from_khepri(Table, Key, State) -> Ret when
+      Table :: mnesia_to_khepri:mnesia_table(),
+      Key :: any(),
+      State :: rabbit_db_m2k_converter:state(),
+      Ret :: {ok, NewState} | {error, Reason},
+      NewState :: rabbit_db_m2k_converter:state(),
+      Reason :: any().
+
 %% Functions for `rabbit_db_*_m2k_converter' modules to call.
--export([with_correlation_id/2]).
+-export([get_priv_data/2,
+         set_priv_data/3,
+         with_correlation_id/2]).
 
 %% `mnesia_to_khepri_converter' callbacks.
 -export([init_copy_to_khepri/4,
@@ -34,7 +61,7 @@
 -type async_request_fun() :: fun((correlation_id()) -> ok | {error, any()}).
 
 -record(?MODULE, {migrations :: migrations(),
-                  sub_states :: #{module() => any()},
+                  priv = #{} :: map(),
                   seq_no = 0 :: correlation_id(),
                   last_acked_seq_no = 0 :: correlation_id(),
                   async_requests = #{} :: #{correlation_id() =>
@@ -52,8 +79,8 @@
       MigrationId :: mnesia_to_khepri:migration_id(),
       Tables :: [mnesia_to_khepri:mnesia_table()],
       Migrations :: migrations(),
-      Ret :: {ok, Priv},
-      Priv :: #?MODULE{}.
+      Ret :: {ok, State},
+      State :: rabbit_db_m2k_converter:state().
 %% @private
 
 init_copy_to_khepri(StoreId, MigrationId, _Tables, Migrations) ->
@@ -67,32 +94,31 @@ init_copy_to_khepri(StoreId, MigrationId, _Tables, Migrations) ->
                              Acc
                      end, #{}, Migrations),
 
-    SubStates = maps:fold(
-                  fun(Mod, Tables, Acc) ->
-                          {ok, SubState} =
+    State1 = #?MODULE{migrations = Migrations},
+    State2 = maps:fold(
+                  fun(Mod, Tables, St) ->
+                          {ok, St1} =
                           case Mod of
                               {ActualMod, Args} ->
                                   ActualMod:init_copy_to_khepri(
                                     StoreId, MigrationId,
-                                    Tables, Args);
+                                    Tables, Args, St);
                               _ ->
                                   Mod:init_copy_to_khepri(
                                     StoreId, MigrationId,
-                                    Tables)
+                                    Tables, St)
                           end,
-                          Acc#{Mod => SubState}
-                  end, #{}, TablesPerMod),
+                          St1
+                  end, State1, TablesPerMod),
 
-    State = #?MODULE{migrations = Migrations,
-                     sub_states = SubStates},
-    {ok, State}.
+    {ok, State2}.
 
 -spec copy_to_khepri(Table, Record, State) -> Ret when
       Table :: mnesia_to_khepri:mnesia_table(),
       Record :: tuple(),
-      State :: state(),
+      State :: rabbit_db_m2k_converter:state(),
       Ret :: {ok, NewState} | {error, Reason},
-      NewState :: state(),
+      NewState :: rabbit_db_m2k_converter:state(),
       Reason :: any().
 %% @private
 
@@ -114,9 +140,9 @@ copy_to_khepri(
 -spec delete_from_khepri(Table, Key, State) -> Ret when
       Table :: mnesia_to_khepri:mnesia_table(),
       Key :: any(),
-      State :: state(),
+      State :: rabbit_db_m2k_converter:state(),
       Ret :: {ok, NewState} | {error, Reason},
-      NewState :: state(),
+      NewState :: rabbit_db_m2k_converter:state(),
       Reason :: any().
 %% @private
 
@@ -136,7 +162,7 @@ delete_from_khepri(
     end.
 
 -spec finish_copy_to_khepri(State) -> Ret when
-      State :: state(),
+      State :: rabbit_db_m2k_converter:state(),
       Ret :: ok.
 %% @private
 
@@ -144,11 +170,33 @@ finish_copy_to_khepri(State) ->
     {ok, _} = wait_for_all_async_requests(State),
     ok.
 
+-spec get_priv_data(Key, State) -> Value when
+      Key :: any(),
+      State :: rabbit_db_m2k_converter:state(),
+      Value :: any().
+%% @private
+
+get_priv_data(Key, #?MODULE{priv = Priv}) ->
+    Value = maps:get(Key, Priv),
+    Value.
+
+-spec set_priv_data(Key, Value, State) -> NewState when
+      Key :: any(),
+      Value :: any(),
+      State :: rabbit_db_m2k_converter:state(),
+      NewState :: rabbit_db_m2k_converter:state().
+%% @private
+
+set_priv_data(Key, Value, #?MODULE{priv = Priv} = State) ->
+    Priv1 = Priv#{Key => Value},
+    State1 = State#?MODULE{priv = Priv1},
+    State1.
+
 -spec with_correlation_id(Fun, State) -> Ret when
       Fun :: async_request_fun(),
-      State :: state(),
+      State :: rabbit_db_m2k_converter:state(),
       Ret :: {ok, NewState} | {error, Reason},
-      NewState :: state(),
+      NewState :: rabbit_db_m2k_converter:state(),
       Reason :: any().
 
 with_correlation_id(

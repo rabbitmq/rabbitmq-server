@@ -61,18 +61,11 @@ suite() ->
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
-    case rabbit_ct_broker_helpers:configured_metadata_store(Config) of
-        mnesia ->
-            %% This SUITE is meant to test how Khepri behaves in a minority,
-            %% so mnesia should be skipped.
-            {skip, "Minority testing not supported by mnesia"};
-        _ ->
-            rabbit_ct_helpers:run_setup_steps(
-              Config,
-              [
-               fun rabbit_ct_broker_helpers:configure_dist_proxy/1
-              ])
-    end.
+    rabbit_ct_helpers:run_setup_steps(
+      Config,
+      [
+       fun rabbit_ct_broker_helpers:configure_dist_proxy/1
+      ]).
 
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).

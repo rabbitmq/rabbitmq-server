@@ -17,8 +17,7 @@
 
 all() ->
     [
-     {group, tests},
-     {group, khepri_migration}
+     {group, tests}
     ].
 
 groups() ->
@@ -53,8 +52,7 @@ groups() ->
                   {cluster_size_1_network, [], ClusterSize1Tests},
                   {cluster_size_3_network, [], ClusterSize3Tests},
                   {cluster_size_3_direct,  [], ClusterSize3Tests}
-                 ]},
-     {khepri_migration, [], [from_mnesia_to_khepri]}
+                 ]}
     ].
 
 suite() ->
@@ -74,10 +72,6 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
-init_per_group(khepri_migration, Config) ->
-    Config1 = rabbit_ct_helpers:set_config(Config, [{connection_type, network},
-                                                    {metadata_store, mnesia}]),
-    init_per_multinode_group(cluster_size_1_network, Config1, 1);
 init_per_group(cluster_size_1_network, Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, [{connection_type, network}]),
     init_per_multinode_group(cluster_size_1_network, Config1, 1);
@@ -1464,33 +1458,6 @@ cluster_multiple_users_zero_limit(Config) ->
 
     set_user_connection_and_channel_limit(Config, Username1, -1, -1),
     set_user_connection_and_channel_limit(Config, Username2, -1, -1).
-
-from_mnesia_to_khepri(Config) ->
-    Username = proplists:get_value(rmq_username, Config),
-    rabbit_ct_helpers:await_condition(
-        fun () ->
-            count_connections_of_user(Config, Username) =:= 0 andalso
-            count_channels_of_user(Config, Username) =:= 0
-        end),
-
-    [Conn] = open_connections(Config, [0]),
-    [_Chan] = open_channels(Conn, 1),
-
-    rabbit_ct_helpers:await_condition(
-        fun () ->
-            count_connections_of_user(Config, Username) =:= 1 andalso
-            count_channels_of_user(Config, Username) =:= 1
-        end),
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config, khepri_db) of
-        ok ->
-            rabbit_ct_helpers:await_condition(
-              fun () ->
-                      count_connections_of_user(Config, Username) =:= 1 andalso
-                          count_channels_of_user(Config, Username) =:= 1
-              end);
-        Skip ->
-            Skip
-    end.
 
 %% -------------------------------------------------------------------
 %% Helpers

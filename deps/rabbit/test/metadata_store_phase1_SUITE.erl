@@ -157,7 +157,6 @@ init_per_suite(Config) ->
       [
        fun init_feature_flags/1,
        fun setup_code_mocking/1,
-       fun setup_mnesia/1,
        fun setup_khepri/1
       ]).
 
@@ -168,24 +167,14 @@ end_per_suite(Config) ->
        fun remove_code_mocking/1
       ]).
 
-setup_mnesia(Config) ->
-    %% Configure Mnesia directory in the common_test priv_dir and start it.
-    MnesiaDir = filename:join(
-                  ?config(priv_dir, Config),
-                  "mnesia"),
-    ct:pal("Mnesia directory: ~ts", [MnesiaDir]),
-    ok = file:make_dir(MnesiaDir),
-    ok = application:load(mnesia),
-    ok = application:set_env(mnesia, dir, MnesiaDir),
-    ok = application:set_env(rabbit, data_dir, MnesiaDir),
-    ok = mnesia:create_schema([node()]),
-    {ok, _} = application:ensure_all_started(mnesia),
-
-    ct:pal("Mnesia info below:"),
-    mnesia:info(),
-    Config.
-
 setup_khepri(Config) ->
+    DataDir = filename:join(
+                ?config(priv_dir, Config),
+                "mnesia"),
+    ct:pal("Data directory: ~ts", [DataDir]),
+    ok = file:make_dir(DataDir),
+    ok = application:set_env(rabbit, data_dir, DataDir),
+
     %% Start Khepri.
     {ok, _} = application:ensure_all_started(khepri),
 
@@ -251,26 +240,9 @@ end_per_group(_, Config) ->
 
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase),
-
-    rabbit_khepri:clear_forced_metadata_store(),
-
-    %% Create Mnesia tables.
-    TableDefs = rabbit_table:pre_khepri_definitions(),
-    lists:foreach(
-      fun ({Table, Def}) -> ok = rabbit_table:create(Table, Def) end,
-      TableDefs),
-
     Config.
 
 end_per_testcase(Testcase, Config) ->
-    rabbit_khepri:clear_forced_metadata_store(),
-
-    %% Delete Mnesia tables to clear any data.
-    TableDefs = rabbit_table:pre_khepri_definitions(),
-    lists:foreach(
-      fun ({Table, _}) -> {atomic, ok} = mnesia:delete_table(Table) end,
-      TableDefs),
-
     %% Clear all data in Khepri.
     ok = rabbit_khepri:delete("*"),
 
@@ -292,7 +264,7 @@ init_feature_flags(Config) ->
 %% We use `_With' (with the leading underscore) on purpose: we don't know if
 %% the code in `T' will use it. That code can still use `_With' of course.
 %% This simply avoids compiler warnings.
--define(with(T), fun(_With) -> T end).
+-define(with(T), fun() -> _With = khepri, T end).
 
 %%
 %% Virtual hosts.
@@ -321,16 +293,14 @@ write_non_existing_vhost(_) ->
               lookup_vhost(_With, VHostName))),
      ?with(check_storage(
              _With,
-             [{mnesia, rabbit_vhost, [VHost]},
-              {khepri, none,
+             [{khepri, none,
                #{rabbit_db_vhost:khepri_vhost_path(VHostName) => VHost}}]))
     ],
 
     ?assertEqual(
        ok,
        eunit:test(
-         [{setup, fun force_mnesia_use/0, [{with, mnesia, Tests}]},
-          {setup, fun force_khepri_use/0, [{with, khepri, Tests}]}],
+         Tests,
          [verbose])).
 
 write_existing_vhost(_) ->
@@ -362,16 +332,14 @@ write_existing_vhost(_) ->
               lookup_vhost(_With, VHostName))),
      ?with(check_storage(
              _With,
-             [{mnesia, rabbit_vhost, [VHost]},
-              {khepri, none,
+             [{khepri, none,
                #{rabbit_db_vhost:khepri_vhost_path(VHostName) => VHost}}]))
     ],
 
     ?assertEqual(
        ok,
        eunit:test(
-         [{setup, fun force_mnesia_use/0, [{with, mnesia, Tests}]},
-          {setup, fun force_khepri_use/0, [{with, khepri, Tests}]}],
+         Tests,
          [verbose])).
 
 check_vhost_exists(_) ->
@@ -395,16 +363,14 @@ check_vhost_exists(_) ->
               vhost_exists(_With, <<"non-existing-vhost">>))),
      ?with(check_storage(
              _With,
-             [{mnesia, rabbit_vhost, [VHost]},
-              {khepri, none,
+             [{khepri, none,
                #{rabbit_db_vhost:khepri_vhost_path(VHostName) => VHost}}]))
     ],
 
     ?assertEqual(
        ok,
        eunit:test(
-         [{setup, fun force_mnesia_use/0, [{with, mnesia, Tests}]},
-          {setup, fun force_khepri_use/0, [{with, khepri, Tests}]}],
+         Tests,
          [verbose])).
 
 list_vhost_names(_) ->
@@ -438,8 +404,7 @@ list_vhost_names(_) ->
               list_vhosts(_With))),
      ?with(check_storage(
              _With,
-             [{mnesia, rabbit_vhost, [VHostA, VHostB]},
-              {khepri, none,
+             [{khepri, none,
                #{rabbit_db_vhost:khepri_vhost_path(VHostNameA) => VHostA,
                  rabbit_db_vhost:khepri_vhost_path(VHostNameB) => VHostB}}]))
     ],
@@ -447,8 +412,7 @@ list_vhost_names(_) ->
     ?assertEqual(
        ok,
        eunit:test(
-         [{setup, fun force_mnesia_use/0, [{with, mnesia, Tests}]},
-          {setup, fun force_khepri_use/0, [{with, khepri, Tests}]}],
+         Tests,
          [verbose])).
 
 list_vhost_objects(_) ->
@@ -482,8 +446,7 @@ list_vhost_objects(_) ->
               list_vhost_records(_With))),
      ?with(check_storage(
              _With,
-             [{mnesia, rabbit_vhost, [VHostA, VHostB]},
-              {khepri, none,
+             [{khepri, none,
                #{rabbit_db_vhost:khepri_vhost_path(VHostNameA) => VHostA,
                  rabbit_db_vhost:khepri_vhost_path(VHostNameB) => VHostB}}]))
     ],
@@ -491,8 +454,7 @@ list_vhost_objects(_) ->
     ?assertEqual(
        ok,
        eunit:test(
-         [{setup, fun force_mnesia_use/0, [{with, mnesia, Tests}]},
-          {setup, fun force_khepri_use/0, [{with, khepri, Tests}]}],
+         Tests,
          [verbose])).
 
 update_non_existing_vhost(_) ->
@@ -521,15 +483,13 @@ update_non_existing_vhost(_) ->
               lookup_vhost(_With, VHostName))),
      ?with(check_storage(
              _With,
-             [{mnesia, rabbit_vhost, []},
-              {khepri, none, #{}}]))
+             [{khepri, none, #{}}]))
     ],
 
     ?assertEqual(
        ok,
        eunit:test(
-         [{setup, fun force_mnesia_use/0, [{with, mnesia, Tests}]},
-          {setup, fun force_khepri_use/0, [{with, khepri, Tests}]}],
+         Tests,
          [verbose])).
 
 update_existing_vhost(_) ->
@@ -561,16 +521,14 @@ update_existing_vhost(_) ->
               lookup_vhost(_With, VHostName))),
      ?with(check_storage(
              _With,
-             [{mnesia, rabbit_vhost, [UpdatedVHost]},
-              {khepri, none,
+             [{khepri, none,
                #{rabbit_db_vhost:khepri_vhost_path(VHostName) => UpdatedVHost}}]))
     ],
 
     ?assertEqual(
        ok,
        eunit:test(
-         [{setup, fun force_mnesia_use/0, [{with, mnesia, Tests}]},
-          {setup, fun force_khepri_use/0, [{with, khepri, Tests}]}],
+         Tests,
          [verbose])).
 
 update_non_existing_vhost_desc_and_tags(_) ->
@@ -591,15 +549,13 @@ update_non_existing_vhost_desc_and_tags(_) ->
               lookup_vhost(_With, VHostName))),
      ?with(check_storage(
              _With,
-             [{mnesia, rabbit_vhost, []},
-              {khepri, none, #{}}]))
+             [{khepri, none, #{}}]))
     ],
 
     ?assertEqual(
        ok,
        eunit:test(
-         [{setup, fun force_mnesia_use/0, [{with, mnesia, Tests}]},
-          {setup, fun force_khepri_use/0, [{with, khepri, Tests}]}],
+         Tests,
          [verbose])).
 
 update_existing_vhost_desc_and_tags(_) ->
@@ -636,16 +592,14 @@ update_existing_vhost_desc_and_tags(_) ->
               lookup_vhost(_With, VHostName))),
      ?with(check_storage(
              _With,
-             [{mnesia, rabbit_vhost, [UpdatedVHost]},
-              {khepri, none,
+             [{khepri, none,
                #{rabbit_db_vhost:khepri_vhost_path(VHostName) => UpdatedVHost}}]))
     ],
 
     ?assertEqual(
        ok,
        eunit:test(
-         [{setup, fun force_mnesia_use/0, [{with, mnesia, Tests}]},
-          {setup, fun force_khepri_use/0, [{with, khepri, Tests}]}],
+         Tests,
          [verbose])).
 
 delete_non_existing_vhost(_) ->
@@ -664,15 +618,13 @@ delete_non_existing_vhost(_) ->
               lookup_vhost(_With, VHostName))),
      ?with(check_storage(
              _With,
-             [{mnesia, rabbit_vhost, []},
-              {khepri, none, #{}}]))
+             [{khepri, none, #{}}]))
     ],
 
     ?assertEqual(
        ok,
        eunit:test(
-         [{setup, fun force_mnesia_use/0, [{with, mnesia, Tests}]},
-          {setup, fun force_khepri_use/0, [{with, khepri, Tests}]}],
+         Tests,
          [verbose])).
 
 delete_existing_vhost(_) ->
@@ -701,15 +653,13 @@ delete_existing_vhost(_) ->
               lookup_vhost(_With, VHostName))),
      ?with(check_storage(
              _With,
-             [{mnesia, rabbit_vhost, []},
-              {khepri, none, #{}}]))
+             [{khepri, none, #{}}]))
     ],
 
     ?assertEqual(
        ok,
        eunit:test(
-         [{setup, fun force_mnesia_use/0, [{with, mnesia, Tests}]},
-          {setup, fun force_khepri_use/0, [{with, khepri, Tests}]}],
+         Tests,
          [verbose])).
 
 %%
@@ -733,16 +683,14 @@ write_non_existing_user(_) ->
               lookup_user(_With, Username))),
      ?with(check_storage(
              _With,
-             [{mnesia, rabbit_user, [User]},
-              {khepri, none,
+             [{khepri, none,
                #{rabbit_db_user:khepri_user_path(Username) => User}}]))
     ],
 
     ?assertEqual(
        ok,
        eunit:test(
-         [{setup, fun force_mnesia_use/0, [{with, mnesia, Tests}]},
-          {setup, fun force_khepri_use/0, [{with, khepri, Tests}]}],
+         Tests,
          [verbose])).
 
 write_existing_user(_) ->
@@ -768,16 +716,14 @@ write_existing_user(_) ->
               lookup_user(_With, Username))),
      ?with(check_storage(
              _With,
-             [{mnesia, rabbit_user, [User]},
-              {khepri, none,
+             [{khepri, none,
                #{rabbit_db_user:khepri_user_path(Username) => User}}]))
     ],
 
     ?assertEqual(
        ok,
        eunit:test(
-         [{setup, fun force_mnesia_use/0, [{with, mnesia, Tests}]},
-          {setup, fun force_khepri_use/0, [{with, khepri, Tests}]}],
+         Tests,
          [verbose])).
 
 list_users(_) ->
@@ -799,8 +745,7 @@ list_users(_) ->
               list_user_records(_With))),
      ?with(check_storage(
              _With,
-             [{mnesia, rabbit_user, [UserA, UserB]},
-              {khepri, none,
+             [{khepri, none,
                #{rabbit_db_user:khepri_user_path(UsernameA) => UserA,
                  rabbit_db_user:khepri_user_path(UsernameB) => UserB}}]))
     ],
@@ -808,8 +753,7 @@ list_users(_) ->
     ?assertEqual(
        ok,
        eunit:test(
-         [{setup, fun force_mnesia_use/0, [{with, mnesia, Tests}]},
-          {setup, fun force_khepri_use/0, [{with, khepri, Tests}]}],
+         Tests,
          [verbose])).
 
 update_non_existing_user(_) ->
@@ -833,15 +777,13 @@ update_non_existing_user(_) ->
               lookup_user(_With, Username))),
      ?with(check_storage(
              _With,
-             [{mnesia, rabbit_user, []},
-              {khepri, none, #{}}]))
+             [{khepri, none, #{}}]))
     ],
 
     ?assertEqual(
        ok,
        eunit:test(
-         [{setup, fun force_mnesia_use/0, [{with, mnesia, Tests}]},
-          {setup, fun force_khepri_use/0, [{with, khepri, Tests}]}],
+         Tests,
          [verbose])).
 
 update_existing_user(_) ->
@@ -868,16 +810,14 @@ update_existing_user(_) ->
               lookup_user(_With, Username))),
      ?with(check_storage(
              _With,
-             [{mnesia, rabbit_user, [UpdatedUser]},
-              {khepri, none,
+             [{khepri, none,
                #{rabbit_db_user:khepri_user_path(Username) => UpdatedUser}}]))
     ],
 
     ?assertEqual(
        ok,
        eunit:test(
-         [{setup, fun force_mnesia_use/0, [{with, mnesia, Tests}]},
-          {setup, fun force_khepri_use/0, [{with, khepri, Tests}]}],
+         Tests,
          [verbose])).
 
 delete_non_existing_user(_) ->
@@ -896,15 +836,13 @@ delete_non_existing_user(_) ->
               lookup_user(_With, Username))),
      ?with(check_storage(
              _With,
-             [{mnesia, rabbit_user, []},
-              {khepri, none, #{}}]))
+             [{khepri, none, #{}}]))
     ],
 
     ?assertEqual(
        ok,
        eunit:test(
-         [{setup, fun force_mnesia_use/0, [{with, mnesia, Tests}]},
-          {setup, fun force_khepri_use/0, [{with, khepri, Tests}]}],
+         Tests,
          [verbose])).
 
 delete_existing_user(_) ->
@@ -927,15 +865,13 @@ delete_existing_user(_) ->
               lookup_user(_With, Username))),
      ?with(check_storage(
              _With,
-             [{mnesia, rabbit_user, []},
-              {khepri, none, #{}}]))
+             [{khepri, none, #{}}]))
     ],
 
     ?assertEqual(
        ok,
        eunit:test(
-         [{setup, fun force_mnesia_use/0, [{with, mnesia, Tests}]},
-          {setup, fun force_khepri_use/0, [{with, khepri, Tests}]}],
+         Tests,
          [verbose])).
 
 %%
@@ -969,18 +905,14 @@ write_user_permission_for_non_existing_vhost(_) ->
               check_vhost_access(_With, Username, VHostName))),
      ?with(check_storage(
              _With,
-             [{mnesia, rabbit_vhost, []},
-              {mnesia, rabbit_user, [User]},
-              {mnesia, rabbit_user_permission, []},
-              {khepri, none,
+             [{khepri, none,
                #{rabbit_db_user:khepri_user_path(Username) => User}}]))
     ],
 
     ?assertEqual(
        ok,
        eunit:test(
-         [{setup, fun force_mnesia_use/0, [{with, mnesia, Tests}]},
-          {setup, fun force_khepri_use/0, [{with, khepri, Tests}]}],
+         Tests,
          [verbose])).
 
 write_user_permission_for_non_existing_user(_) ->
@@ -1016,18 +948,14 @@ write_user_permission_for_non_existing_user(_) ->
               check_vhost_access(_With, Username, VHostName))),
      ?with(check_storage(
              _With,
-             [{mnesia, rabbit_vhost, [VHost]},
-              {mnesia, rabbit_user, []},
-              {mnesia, rabbit_user_permission, []},
-              {khepri, none,
+             [{khepri, none,
                #{rabbit_db_vhost:khepri_vhost_path(VHostName) => VHost}}]))
     ],
 
     ?assertEqual(
        ok,
        eunit:test(
-         [{setup, fun force_mnesia_use/0, [{with, mnesia, Tests}]},
-          {setup, fun force_khepri_use/0, [{with, khepri, Tests}]}],
+         Tests,
          [verbose])).
 
 write_user_permission_for_existing_user(_) ->
@@ -1069,10 +997,7 @@ write_user_permission_for_existing_user(_) ->
               check_vhost_access(_With, Username, VHostName))),
      ?with(check_storage(
              _With,
-             [{mnesia, rabbit_vhost, [VHost]},
-              {mnesia, rabbit_user, [User]},
-              {mnesia, rabbit_user_permission, [UserPermission]},
-              {khepri, none,
+             [{khepri, none,
                #{rabbit_db_vhost:khepri_vhost_path(VHostName) => VHost,
                  rabbit_db_user:khepri_user_path(Username) => User,
                  rabbit_db_user:khepri_user_permission_path(Username, VHostName) => UserPermission}}]))
@@ -1081,8 +1006,7 @@ write_user_permission_for_existing_user(_) ->
     ?assertEqual(
        ok,
        eunit:test(
-         [{setup, fun force_mnesia_use/0, [{with, mnesia, Tests}]},
-          {setup, fun force_khepri_use/0, [{with, khepri, Tests}]}],
+         Tests,
          [verbose])).
 
 check_resource_access(_) ->
@@ -1130,8 +1054,7 @@ check_resource_access(_) ->
     ?assertEqual(
        ok,
        eunit:test(
-         [{setup, fun force_mnesia_use/0, [{with, mnesia, Tests}]},
-          {setup, fun force_khepri_use/0, [{with, khepri, Tests}]}],
+         Tests,
          [verbose])).
 
 list_user_permissions_on_non_existing_vhost(_) ->
@@ -1152,18 +1075,14 @@ list_user_permissions_on_non_existing_vhost(_) ->
               list_user_vhost_permissions(_With, Username, VHostName))),
      ?with(check_storage(
              _With,
-             [{mnesia, rabbit_vhost, []},
-              {mnesia, rabbit_user, [User]},
-              {mnesia, rabbit_user_permission, []},
-              {khepri, none,
+             [{khepri, none,
                #{rabbit_db_user:khepri_user_path(Username) => User}}]))
     ],
 
     ?assertEqual(
        ok,
        eunit:test(
-         [{setup, fun force_mnesia_use/0, [{with, mnesia, Tests}]},
-          {setup, fun force_khepri_use/0, [{with, khepri, Tests}]}],
+         Tests,
          [verbose])).
 
 list_user_permissions_for_non_existing_user(_) ->
@@ -1193,18 +1112,14 @@ list_user_permissions_for_non_existing_user(_) ->
               list_user_vhost_permissions(_With, Username, VHostName))),
      ?with(check_storage(
              _With,
-             [{mnesia, rabbit_vhost, [VHost]},
-              {mnesia, rabbit_user, []},
-              {mnesia, rabbit_user_permission, []},
-              {khepri, none,
+             [{khepri, none,
                #{rabbit_db_vhost:khepri_vhost_path(VHostName) => VHost}}]))
     ],
 
     ?assertEqual(
        ok,
        eunit:test(
-         [{setup, fun force_mnesia_use/0, [{with, mnesia, Tests}]},
-          {setup, fun force_khepri_use/0, [{with, khepri, Tests}]}],
+         Tests,
          [verbose])).
 
 list_user_permissions(_) ->
@@ -1294,12 +1209,7 @@ list_user_permissions(_) ->
               list_user_vhost_permissions(_With, UsernameA, VHostNameA))),
      ?with(check_storage(
              _With,
-             [{mnesia, rabbit_vhost, [VHostA, VHostB]},
-              {mnesia, rabbit_user, [UserA, UserB]},
-              {mnesia, rabbit_user_permission, [UserPermissionA1,
-                                                UserPermissionA2,
-                                                UserPermissionB1]},
-              {khepri, none,
+             [{khepri, none,
                #{rabbit_db_vhost:khepri_vhost_path(VHostNameA) => VHostA,
                  rabbit_db_vhost:khepri_vhost_path(VHostNameB) => VHostB,
                  rabbit_db_user:khepri_user_path(UsernameA) => UserA,
@@ -1315,8 +1225,7 @@ list_user_permissions(_) ->
     ?assertEqual(
        ok,
        eunit:test(
-         [{setup, fun force_mnesia_use/0, [{with, mnesia, Tests}]},
-          {setup, fun force_khepri_use/0, [{with, khepri, Tests}]}],
+         Tests,
          [verbose])).
 
 clear_user_permission_for_non_existing_vhost(_) ->
@@ -1338,18 +1247,14 @@ clear_user_permission_for_non_existing_vhost(_) ->
               check_vhost_access(_With, Username, VHostName))),
      ?with(check_storage(
              _With,
-             [{mnesia, rabbit_vhost, []},
-              {mnesia, rabbit_user, [User]},
-              {mnesia, rabbit_user_permission, []},
-              {khepri, none,
+             [{khepri, none,
                #{rabbit_db_user:khepri_user_path(Username) => User}}]))
     ],
 
     ?assertEqual(
        ok,
        eunit:test(
-         [{setup, fun force_mnesia_use/0, [{with, mnesia, Tests}]},
-          {setup, fun force_khepri_use/0, [{with, khepri, Tests}]}],
+         Tests,
          [verbose])).
 
 clear_user_permission_for_non_existing_user(_) ->
@@ -1377,18 +1282,14 @@ clear_user_permission_for_non_existing_user(_) ->
               check_vhost_access(_With, Username, VHostName))),
      ?with(check_storage(
              _With,
-             [{mnesia, rabbit_vhost, [VHost]},
-              {mnesia, rabbit_user, []},
-              {mnesia, rabbit_user_permission, []},
-              {khepri, none,
+             [{khepri, none,
                #{rabbit_db_vhost:khepri_vhost_path(VHostName) => VHost}}]))
     ],
 
     ?assertEqual(
        ok,
        eunit:test(
-         [{setup, fun force_mnesia_use/0, [{with, mnesia, Tests}]},
-          {setup, fun force_khepri_use/0, [{with, khepri, Tests}]}],
+         Tests,
          [verbose])).
 
 clear_user_permission(_) ->
@@ -1433,10 +1334,7 @@ clear_user_permission(_) ->
                 _With, Username, VHostName, "my-resource", configure))),
      ?with(check_storage(
              _With,
-             [{mnesia, rabbit_vhost, [VHost]},
-              {mnesia, rabbit_user, [User]},
-              {mnesia, rabbit_user_permission, []},
-              {khepri, none,
+             [{khepri, none,
                #{rabbit_db_vhost:khepri_vhost_path(VHostName) => VHost,
                  rabbit_db_user:khepri_user_path(Username) => User}}]))
     ],
@@ -1444,8 +1342,7 @@ clear_user_permission(_) ->
     ?assertEqual(
        ok,
        eunit:test(
-         [{setup, fun force_mnesia_use/0, [{with, mnesia, Tests}]},
-          {setup, fun force_khepri_use/0, [{with, khepri, Tests}]}],
+         Tests,
          [verbose])).
 
 delete_user_and_check_resource_access(_) ->
@@ -1494,18 +1391,14 @@ delete_user_and_check_resource_access(_) ->
                 _With, Username, VHostName, "my-resource", configure))),
      ?with(check_storage(
              _With,
-             [{mnesia, rabbit_vhost, [VHost]},
-              {mnesia, rabbit_user, []},
-              {mnesia, rabbit_user_permission, []},
-              {khepri, none,
+             [{khepri, none,
                #{rabbit_db_vhost:khepri_vhost_path(VHostName) => VHost}}]))
     ],
 
     ?assertEqual(
        ok,
        eunit:test(
-         [{setup, fun force_mnesia_use/0, [{with, mnesia, Tests}]},
-          {setup, fun force_khepri_use/0, [{with, khepri, Tests}]}],
+         Tests,
          [verbose])).
 
 delete_vhost_and_check_resource_access(_) ->
@@ -1549,35 +1442,14 @@ delete_vhost_and_check_resource_access(_) ->
               delete_vhost(_With, VHostName))),
      ?with(check_storage(
              _With,
-             [{mnesia, rabbit_vhost, []},
-              {mnesia, rabbit_user, [User]},
-              {mnesia, rabbit_user_permission, [UserPermission]},
-              {khepri, none,
+             [{khepri, none,
                #{rabbit_db_user:khepri_user_path(Username) => User}}]))
     ],
-
-    %% In mnesia the permissions have to be deleted explicitly
-    %% Khepri permissions have a condition to automatically delete them
-    %% when the vhost is deleted
-    MnesiaTests =
-        [?with(?assert(
-                  check_vhost_access(_With, Username, VHostName))),
-         ?with(?assert(
-                  check_resource_access(
-                    _With, Username, VHostName, "my-resource", configure)))],
-
-    KhepriTests =
-        [?with(?assertNot(
-                  check_vhost_access(_With, Username, VHostName))),
-         ?with(?assertNot(
-                  check_resource_access(
-                    _With, Username, VHostName, "my-resource", configure)))],
 
     ?assertEqual(
        ok,
        eunit:test(
-         [{setup, fun force_mnesia_use/0, [{with, mnesia, Tests ++ MnesiaTests}]},
-          {setup, fun force_khepri_use/0, [{with, khepri, Tests ++ KhepriTests}]}],
+         Tests,
          [verbose])).
 
 %%
@@ -1623,18 +1495,14 @@ write_topic_permission_for_non_existing_vhost(_) ->
                 _With, Username, VHostName, Exchange, read, Context))),
      ?with(check_storage(
              _With,
-             [{mnesia, rabbit_vhost, []},
-              {mnesia, rabbit_user, [User]},
-              {mnesia, rabbit_topic_permission, []},
-              {khepri, none,
+             [{khepri, none,
                #{rabbit_db_user:khepri_user_path(Username) => User}}]))
     ],
 
     ?assertEqual(
        ok,
        eunit:test(
-         [{setup, fun force_mnesia_use/0, [{with, mnesia, Tests}]},
-          {setup, fun force_khepri_use/0, [{with, khepri, Tests}]}],
+         Tests,
          [verbose])).
 
 write_topic_permission_for_non_existing_user(_) ->
@@ -1682,18 +1550,14 @@ write_topic_permission_for_non_existing_user(_) ->
                 _With, Username, VHostName, Exchange, read, Context))),
      ?with(check_storage(
              _With,
-             [{mnesia, rabbit_vhost, [VHost]},
-              {mnesia, rabbit_user, []},
-              {mnesia, rabbit_topic_permission, []},
-              {khepri, none,
+             [{khepri, none,
                #{rabbit_db_vhost:khepri_vhost_path(VHostName) => VHost}}]))
     ],
 
     ?assertEqual(
        ok,
        eunit:test(
-         [{setup, fun force_mnesia_use/0, [{with, mnesia, Tests}]},
-          {setup, fun force_khepri_use/0, [{with, khepri, Tests}]}],
+         Tests,
          [verbose])).
 
 write_topic_permission_for_existing_user(_) ->
@@ -1748,10 +1612,7 @@ write_topic_permission_for_existing_user(_) ->
                 Context#{routing_key => <<"something-else">>}))),
      ?with(check_storage(
              _With,
-             [{mnesia, rabbit_vhost, [VHost]},
-              {mnesia, rabbit_user, [User]},
-              {mnesia, rabbit_topic_permission, [TopicPermission]},
-              {khepri, none,
+             [{khepri, none,
                #{rabbit_db_vhost:khepri_vhost_path(VHostName) => VHost,
                  rabbit_db_user:khepri_user_path(Username) => User,
                  rabbit_db_user:khepri_topic_permission_path(Username, VHostName, Exchange) =>
@@ -1761,8 +1622,7 @@ write_topic_permission_for_existing_user(_) ->
     ?assertEqual(
        ok,
        eunit:test(
-         [{setup, fun force_mnesia_use/0, [{with, mnesia, Tests}]},
-          {setup, fun force_khepri_use/0, [{with, khepri, Tests}]}],
+         Tests,
          [verbose])).
 
 list_topic_permissions_on_non_existing_vhost(_) ->
@@ -1784,18 +1644,14 @@ list_topic_permissions_on_non_existing_vhost(_) ->
                 _With, Username, VHostName, '_'))),
      ?with(check_storage(
              _With,
-             [{mnesia, rabbit_vhost, []},
-              {mnesia, rabbit_user, [User]},
-              {mnesia, rabbit_topic_permission, []},
-              {khepri, none,
+             [{khepri, none,
                #{rabbit_db_user:khepri_user_path(Username) => User}}]))
     ],
 
     ?assertEqual(
        ok,
        eunit:test(
-         [{setup, fun force_mnesia_use/0, [{with, mnesia, Tests}]},
-          {setup, fun force_khepri_use/0, [{with, khepri, Tests}]}],
+         Tests,
          [verbose])).
 
 list_topic_permissions_for_non_existing_user(_) ->
@@ -1825,18 +1681,14 @@ list_topic_permissions_for_non_existing_user(_) ->
               list_topic_permissions(_With, Username, VHostName, '_'))),
      ?with(check_storage(
              _With,
-             [{mnesia, rabbit_vhost, [VHost]},
-              {mnesia, rabbit_user, []},
-              {mnesia, rabbit_topic_permission, []},
-              {khepri, none,
+             [{khepri, none,
                #{rabbit_db_vhost:khepri_vhost_path(VHostName) => VHost}}]))
     ],
 
     ?assertEqual(
        ok,
        eunit:test(
-         [{setup, fun force_mnesia_use/0, [{with, mnesia, Tests}]},
-          {setup, fun force_khepri_use/0, [{with, khepri, Tests}]}],
+         Tests,
          [verbose])).
 
 list_topic_permissions(_) ->
@@ -1937,12 +1789,7 @@ list_topic_permissions(_) ->
               list_topic_permissions(_With, UsernameA, VHostNameA, '_'))),
      ?with(check_storage(
              _With,
-             [{mnesia, rabbit_vhost, [VHostA, VHostB]},
-              {mnesia, rabbit_user, [UserA, UserB]},
-              {mnesia, rabbit_topic_permission, [TopicPermissionA1,
-                                                 TopicPermissionA2,
-                                                 TopicPermissionB1]},
-              {khepri, none,
+             [{khepri, none,
                #{rabbit_db_vhost:khepri_vhost_path(VHostNameA) => VHostA,
                  rabbit_db_vhost:khepri_vhost_path(VHostNameB) => VHostB,
                  rabbit_db_user:khepri_user_path(UsernameA) => UserA,
@@ -1958,8 +1805,7 @@ list_topic_permissions(_) ->
     ?assertEqual(
        ok,
        eunit:test(
-         [{setup, fun force_mnesia_use/0, [{with, mnesia, Tests}]},
-          {setup, fun force_khepri_use/0, [{with, khepri, Tests}]}],
+         Tests,
          [verbose])).
 
 clear_specific_topic_permission_for_non_existing_vhost(_) ->
@@ -1989,18 +1835,14 @@ clear_specific_topic_permission_for_non_existing_vhost(_) ->
                 _With, Username, VHostName, Exchange, read, Context))),
      ?with(check_storage(
              _With,
-             [{mnesia, rabbit_vhost, []},
-              {mnesia, rabbit_user, [User]},
-              {mnesia, rabbit_user_permission, []},
-              {khepri, none,
+             [{khepri, none,
                #{rabbit_db_user:khepri_user_path(Username) => User}}]))
     ],
 
     ?assertEqual(
        ok,
        eunit:test(
-         [{setup, fun force_mnesia_use/0, [{with, mnesia, Tests}]},
-          {setup, fun force_khepri_use/0, [{with, khepri, Tests}]}],
+         Tests,
          [verbose])).
 
 clear_specific_topic_permission_for_non_existing_user(_) ->
@@ -2036,18 +1878,14 @@ clear_specific_topic_permission_for_non_existing_user(_) ->
                 _With, Username, VHostName, Exchange, read, Context))),
      ?with(check_storage(
              _With,
-             [{mnesia, rabbit_vhost, [VHost]},
-              {mnesia, rabbit_user, []},
-              {mnesia, rabbit_user_permission, []},
-              {khepri, none,
+             [{khepri, none,
                #{rabbit_db_vhost:khepri_vhost_path(VHostName) => VHost}}]))
     ],
 
     ?assertEqual(
        ok,
        eunit:test(
-         [{setup, fun force_mnesia_use/0, [{with, mnesia, Tests}]},
-          {setup, fun force_khepri_use/0, [{with, khepri, Tests}]}],
+         Tests,
          [verbose])).
 
 clear_specific_topic_permission(_) ->
@@ -2140,10 +1978,7 @@ clear_specific_topic_permission(_) ->
                 Context#{routing_key => <<"something-else">>}))),
      ?with(check_storage(
              _With,
-             [{mnesia, rabbit_vhost, [VHost]},
-              {mnesia, rabbit_user, [User]},
-              {mnesia, rabbit_topic_permission, [TopicPermissionB]},
-              {khepri, none,
+             [{khepri, none,
                #{rabbit_db_vhost:khepri_vhost_path(VHostName) => VHost,
                  rabbit_db_user:khepri_user_path(Username) => User,
                  rabbit_db_user:khepri_topic_permission_path(Username, VHostName, ExchangeB) =>
@@ -2153,8 +1988,7 @@ clear_specific_topic_permission(_) ->
     ?assertEqual(
        ok,
        eunit:test(
-         [{setup, fun force_mnesia_use/0, [{with, mnesia, Tests}]},
-          {setup, fun force_khepri_use/0, [{with, khepri, Tests}]}],
+         Tests,
          [verbose])).
 
 clear_all_topic_permission_for_non_existing_vhost(_) ->
@@ -2184,18 +2018,14 @@ clear_all_topic_permission_for_non_existing_vhost(_) ->
                 _With, Username, VHostName, Exchange, read, Context))),
      ?with(check_storage(
              _With,
-             [{mnesia, rabbit_vhost, []},
-              {mnesia, rabbit_user, [User]},
-              {mnesia, rabbit_user_permission, []},
-              {khepri, none,
+             [{khepri, none,
                #{rabbit_db_user:khepri_user_path(Username) => User}}]))
     ],
 
     ?assertEqual(
        ok,
        eunit:test(
-         [{setup, fun force_mnesia_use/0, [{with, mnesia, Tests}]},
-          {setup, fun force_khepri_use/0, [{with, khepri, Tests}]}],
+         Tests,
          [verbose])).
 
 clear_all_topic_permission_for_non_existing_user(_) ->
@@ -2231,18 +2061,14 @@ clear_all_topic_permission_for_non_existing_user(_) ->
                 _With, Username, VHostName, Exchange, read, Context))),
      ?with(check_storage(
              _With,
-             [{mnesia, rabbit_vhost, [VHost]},
-              {mnesia, rabbit_user, []},
-              {mnesia, rabbit_user_permission, []},
-              {khepri, none,
+             [{khepri, none,
                #{rabbit_db_vhost:khepri_vhost_path(VHostName) => VHost}}]))
     ],
 
     ?assertEqual(
        ok,
        eunit:test(
-         [{setup, fun force_mnesia_use/0, [{with, mnesia, Tests}]},
-          {setup, fun force_khepri_use/0, [{with, khepri, Tests}]}],
+         Tests,
          [verbose])).
 
 clear_all_topic_permissions(_) ->
@@ -2337,10 +2163,7 @@ clear_all_topic_permissions(_) ->
                 Context#{routing_key => <<"something-else">>}))),
      ?with(check_storage(
              _With,
-             [{mnesia, rabbit_vhost, [VHost]},
-              {mnesia, rabbit_user, [User]},
-              {mnesia, rabbit_topic_permission, []},
-              {khepri, none,
+             [{khepri, none,
                #{rabbit_db_vhost:khepri_vhost_path(VHostName) => VHost,
                  rabbit_db_user:khepri_user_path(Username) => User}}]))
     ],
@@ -2348,8 +2171,7 @@ clear_all_topic_permissions(_) ->
     ?assertEqual(
        ok,
        eunit:test(
-         [{setup, fun force_mnesia_use/0, [{with, mnesia, Tests}]},
-          {setup, fun force_khepri_use/0, [{with, khepri, Tests}]}],
+         Tests,
          [verbose])).
 
 delete_user_and_check_topic_access(_) ->
@@ -2412,18 +2234,14 @@ delete_user_and_check_topic_access(_) ->
                 Context#{routing_key => <<"something-else">>}))),
      ?with(check_storage(
              _With,
-             [{mnesia, rabbit_vhost, [VHost]},
-              {mnesia, rabbit_user, []},
-              {mnesia, rabbit_topic_permission, []},
-              {khepri, none,
+             [{khepri, none,
                #{rabbit_db_vhost:khepri_vhost_path(VHostName) => VHost}}]))
     ],
 
     ?assertEqual(
        ok,
        eunit:test(
-         [{setup, fun force_mnesia_use/0, [{with, mnesia, Tests}]},
-          {setup, fun force_khepri_use/0, [{with, khepri, Tests}]}],
+         Tests,
          [verbose])).
 
 delete_vhost_and_check_topic_access(_) ->
@@ -2476,175 +2294,90 @@ delete_vhost_and_check_topic_access(_) ->
               delete_vhost(_With, VHostName))),
      ?with(check_storage(
              _With,
-             [{mnesia, rabbit_vhost, []},
-              {mnesia, rabbit_user, [User]},
-              {mnesia, rabbit_topic_permission, [TopicPermission]},
-              {khepri, none,
-               #{rabbit_db_user:khepri_user_path(Username) => User}}]))
-    ],
-
-    %% In mnesia the permissions have to be deleted explicitly
-    %% Khepri permissions have a condition to automatically delete them
-    %% when the vhost is deleted
-    MnesiaTests =
-        [?with(?assert(
-                  check_topic_access(
-                    _With, Username, VHostName, Exchange, read, Context))),
-         ?with(?assertNot(
-                  check_topic_access(
-                    _With, Username, VHostName, Exchange, read,
-                    Context#{routing_key => <<"something-else">>})))],
-
-    KhepriTests =
-        [?with(?assertEqual(
-                  undefined,
-                  check_topic_access(
-                    _With, Username, VHostName, Exchange, read, Context))),
-         ?with(?assertEqual(
-                  undefined,
-                  check_topic_access(
-                    _With, Username, VHostName, Exchange, read,
-                    Context#{routing_key => <<"something-else">>})))],
+             [{khepri, none,
+               #{rabbit_db_user:khepri_user_path(Username) => User}}])),
+     ?with(?assertEqual(
+              undefined,
+              check_topic_access(
+                _With, Username, VHostName, Exchange, read, Context))),
+     ?with(?assertEqual(
+              undefined,
+              check_topic_access(
+                _With, Username, VHostName, Exchange, read,
+                Context#{routing_key => <<"something-else">>})))],
 
     ?assertEqual(
        ok,
        eunit:test(
-         [{setup, fun force_mnesia_use/0, [{with, mnesia, Tests ++ MnesiaTests}]},
-          {setup, fun force_khepri_use/0, [{with, khepri, Tests ++ KhepriTests}]}],
+         Tests,
          [verbose])).
 
 %% -------------------------------------------------------------------
 %% Helpers.
 %% -------------------------------------------------------------------
 
-force_mnesia_use() ->
-    ct:pal(?LOW_IMPORTANCE, "Using Mnesia (disabling feature flag)", []),
-    rabbit_khepri:force_metadata_store(mnesia).
-
-force_khepri_use() ->
-    ct:pal(?LOW_IMPORTANCE, "Using Khepri (enabling feature flag)", []),
-    rabbit_khepri:force_metadata_store(khepri).
-
-add_vhost(mnesia, VHostName, VHost) ->
-    rabbit_db_vhost:create_or_get_in_mnesia(VHostName, VHost);
 add_vhost(khepri, VHostName, VHost) ->
     rabbit_db_vhost:create_or_get_in_khepri(VHostName, VHost).
 
-lookup_vhost(mnesia, VHostName) ->
-    rabbit_db_vhost:get_in_mnesia(VHostName);
 lookup_vhost(khepri, VHostName) ->
     rabbit_db_vhost:get_in_khepri(VHostName).
 
-vhost_exists(mnesia, VHostName) ->
-    rabbit_db_vhost:exists_in_mnesia(VHostName);
 vhost_exists(khepri, VHostName) ->
     rabbit_db_vhost:exists_in_khepri(VHostName).
 
-list_vhosts(mnesia) ->
-    lists:sort(rabbit_db_vhost:list_in_mnesia());
 list_vhosts(khepri) ->
     lists:sort(rabbit_db_vhost:list_in_khepri()).
 
-list_vhost_records(mnesia) ->
-    lists:sort(rabbit_db_vhost:get_all_in_mnesia());
 list_vhost_records(khepri) ->
     lists:sort(rabbit_db_vhost:get_all_in_khepri()).
 
-update_vhost(mnesia, VHostName, Fun) ->
-    rabbit_db_vhost:update_in_mnesia(VHostName, Fun);
 update_vhost(khepri, VHostName, Fun) ->
     rabbit_db_vhost:update_in_khepri(VHostName, Fun).
 
-update_vhost(mnesia, VHostName, Description, Tags) ->
-    rabbit_db_vhost:merge_metadata_in_mnesia(VHostName,
-                                             #{description => Description,
-                                               tags => Tags});
 update_vhost(khepri, VHostName, Description, Tags) ->
     rabbit_db_vhost:merge_metadata_in_khepri(VHostName,
                                              #{description => Description,
                                                tags => Tags}).
 
-delete_vhost(mnesia, VHostName) ->
-    rabbit_db_vhost:delete_in_mnesia(VHostName);
 delete_vhost(khepri, VHostName) ->
     rabbit_db_vhost:delete_in_khepri(VHostName).
 
-add_user(mnesia, Username, User) ->
-    rabbit_db_user:create_in_mnesia(Username, User);
 add_user(khepri, Username, User) ->
     rabbit_db_user:create_in_khepri(Username, User).
 
-lookup_user(mnesia, Username) ->
-    rabbit_db_user:get_in_mnesia(Username);
 lookup_user(khepri, Username) ->
     rabbit_db_user:get_in_khepri(Username).
 
-list_user_records(mnesia) ->
-    lists:sort(rabbit_db_user:get_all_in_mnesia());
 list_user_records(khepri) ->
     lists:sort(rabbit_db_user:get_all_in_khepri()).
 
-update_user(mnesia, Username, Fun) ->
-    rabbit_db_user:update_in_mnesia(Username, Fun);
 update_user(khepri, Username, Fun) ->
     rabbit_db_user:update_in_khepri(Username, Fun).
 
-delete_user(mnesia, Username) ->
-    rabbit_db_user:delete_in_mnesia(Username);
 delete_user(khepri, Username) ->
     rabbit_db_user:delete_in_khepri(Username).
 
-set_permissions(mnesia, Username, VHostName, UserPermission) ->
-    rabbit_db_user:set_user_permissions_in_mnesia(
-      Username, VHostName, UserPermission);
 set_permissions(khepri, Username, VHostName, UserPermission) ->
     rabbit_db_user:set_user_permissions_in_khepri(
       Username, VHostName, UserPermission).
 
-list_user_vhost_permissions(mnesia, Username, VHostName) ->
-    lists:sort(
-      rabbit_db_user:match_user_permissions_in_mnesia(Username, VHostName));
 list_user_vhost_permissions(khepri, Username, VHostName) ->
     lists:sort(
       rabbit_db_user:match_user_permissions_in_khepri(Username, VHostName)).
 
-list_topic_permissions(mnesia, Username, VHostName, ExchangeName) ->
-    lists:sort(
-      rabbit_db_user:match_topic_permissions_in_mnesia(Username, VHostName, ExchangeName));
 list_topic_permissions(khepri, Username, VHostName, ExchangeName) ->
     lists:sort(
       rabbit_db_user:match_topic_permissions_in_khepri(Username, VHostName, ExchangeName)).
 
-check_vhost_access(mnesia, Username, VHostName) ->
-    rabbit_db_user:get_user_permissions_in_mnesia(
-      Username, VHostName) =/= undefined;
 check_vhost_access(khepri, Username, VHostName) ->
     rabbit_db_user:get_user_permissions_in_khepri(
       Username, VHostName) =/= undefined.
 
 set_topic_permissions(
-  mnesia, Username, VHostName, TopicPermission) ->
-    rabbit_db_user:set_topic_permissions_in_mnesia(
-      Username, VHostName, TopicPermission);
-set_topic_permissions(
   khepri, Username, VHostName, TopicPermission) ->
     rabbit_db_user:set_topic_permissions_in_khepri(
       Username, VHostName, TopicPermission).
 
-check_topic_access(mnesia, Username, VHostName, Exchange, Perm, Context) ->
-    case rabbit_db_user:get_topic_permissions_in_mnesia(
-           Username, VHostName, Exchange) of
-        undefined -> undefined;
-        #topic_permission{permission = P} ->
-            PermRegexp = case element(permission_index(Perm), P) of
-                             <<"">> -> <<$^, $$>>;
-                             RE     -> RE
-                         end,
-            case re:run(maps:get(routing_key, Context), PermRegexp, [{capture, none}]) of
-                match    -> true;
-                nomatch  -> false
-            end
-    end;
 check_topic_access(khepri, Username, VHostName, Exchange, Perm, Context) ->
     case rabbit_db_user:get_topic_permissions_in_khepri(
            Username, VHostName, Exchange) of
@@ -2660,26 +2393,10 @@ check_topic_access(khepri, Username, VHostName, Exchange, Perm, Context) ->
             end
     end.
 
-clear_permissions(mnesia, Username, VHostName) ->
-    rabbit_db_user:clear_user_permissions_in_mnesia(
-      Username, VHostName);
 clear_permissions(khepri, Username, VHostName) ->
     rabbit_db_user:clear_user_permissions_in_khepri(
       Username, VHostName).
 
-check_resource_access(mnesia, Username, VHostName, Resource, Perm) ->
-    case rabbit_db_user:get_user_permissions_in_mnesia(Username, VHostName) of
-        undefined -> false;
-        #user_permission{permission = P} ->
-            PermRegexp = case element(permission_index(Perm), P) of
-                             <<"">> -> <<$^, $$>>;
-                             RE     -> RE
-                         end,
-            case re:run(Resource, PermRegexp, [{capture, none}]) of
-                match    -> true;
-                nomatch  -> false
-            end
-    end;
 check_resource_access(khepri, Username, VHostName, Resource, Perm) ->
     case rabbit_db_user:get_user_permissions_in_khepri(Username, VHostName) of
         undefined -> false;
@@ -2698,9 +2415,6 @@ permission_index(configure) -> #permission.configure;
 permission_index(write)     -> #permission.write;
 permission_index(read)      -> #permission.read.
 
-clear_topic_permissions(mnesia, Username, VHostName, Exchange) ->
-    rabbit_db_user:clear_topic_permissions_in_mnesia(
-      Username, VHostName, Exchange);
 clear_topic_permissions(khepri, Username, VHostName, Exchange) ->
     rabbit_db_user:clear_topic_permissions_in_khepri(
       Username, VHostName, Exchange).
@@ -2713,8 +2427,6 @@ check_storage(With, [_ | Rest]) ->
 check_storage(_, []) ->
     ok.
 
-check_storage(mnesia, Table, Content) ->
-    ?assertEqual(Content, lists:sort(ets:tab2list(Table)));
 check_storage(khepri, none, Content) ->
     rabbit_khepri:info(),
     Path = [#if_all{conditions = [?KHEPRI_WILDCARD_STAR_STAR,

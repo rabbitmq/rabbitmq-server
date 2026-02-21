@@ -22,8 +22,7 @@ all() ->
     [
       {group, routing_tests},
       {group, hash_ring_management_tests},
-      {group, clustered},
-      {group, khepri_migration}
+      {group, clustered}
     ].
 
 suite() ->
@@ -33,10 +32,7 @@ groups() ->
     [
      {routing_tests, [], routing_tests()},
      {hash_ring_management_tests, [], hash_ring_management_tests()},
-     {clustered, [], [node_restart]},
-     {khepri_migration, [], [
-                             from_mnesia_to_khepri
-                            ]}
+     {clustered, [], [node_restart]}
     ].
 
 routing_tests() ->
@@ -80,13 +76,6 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
-init_per_group(khepri_migration = Group, Config) ->
-    case rabbit_ct_broker_helpers:configured_metadata_store(Config) of
-        mnesia ->
-            init_per_group(Group, Config, 1);
-        _ ->
-            {skip, "This group only targets mnesia"}
-    end;
 init_per_group(clustered = Group, Config) ->
     init_per_group(Group, Config, 3);
 init_per_group(Group, Config) ->
@@ -941,70 +930,6 @@ count_buckets_of_exchange(Config, X) ->
             ct:pal("BUCKET MAP ~p", [M]),
             maps:size(M);
         {error, not_found}                   -> 0
-    end.
-
-from_mnesia_to_khepri(Config) ->
-    Queues = [Q1, Q2, Q3, Q4] = ?RoutingTestQs,
-    IterationCount = ?DEFAULT_SAMPLE_COUNT,
-
-    CHX = <<"e">>,
-
-    clean_up_test_topology(Config, CHX, Queues),
-
-    {Conn, Chan} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
-    #'confirm.select_ok'{} = amqp_channel:call(Chan, #'confirm.select'{}),
-
-    #'exchange.declare_ok'{} =
-        amqp_channel:call(Chan,
-                          #'exchange.declare' {
-                            exchange = CHX,
-                            type = <<"x-consistent-hash">>,
-                            auto_delete = true,
-                            arguments = []
-                          }),
-    [#'queue.declare_ok'{} =
-         amqp_channel:call(Chan, #'queue.declare' {
-                             queue = Q, exclusive = true }) || Q <- Queues],
-    [#'queue.bind_ok'{} =
-         amqp_channel:call(Chan, #'queue.bind' {queue = Q,
-                                                exchange = CHX,
-                                                routing_key = <<"1">>})
-     || Q <- [Q1, Q2]],
-    [#'queue.bind_ok'{} =
-         amqp_channel:call(Chan, #'queue.bind' {queue = Q,
-                                                exchange = CHX,
-                                                routing_key = <<"2">>})
-     || Q <- [Q3, Q4]],
-
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config, khepri_db) of
-        ok ->
-            [amqp_channel:call(Chan,
-                               #'basic.publish'{exchange = CHX, routing_key = rnd()},
-                               #amqp_msg{props = #'P_basic'{}, payload = <<>>})
-             || _ <- lists:duplicate(IterationCount, const)],
-            amqp_channel:wait_for_confirms(Chan, 300),
-            timer:sleep(500),
-            Counts =
-                [begin
-                     #'queue.declare_ok'{message_count = M} =
-                         amqp_channel:call(Chan, #'queue.declare' {queue     = Q,
-                                                                   exclusive = true}),
-                     M
-                 end || Q <- Queues],
-            ?assertEqual(IterationCount, lists:sum(Counts)), %% All messages got routed
-            %% Chi-square test
-            %% H0: routing keys are not evenly distributed according to weight
-            Expected = [IterationCount div 6, IterationCount div 6, (IterationCount div 6) * 2, (IterationCount div 6) * 2],
-            Obs = lists:zip(Counts, Expected),
-            Chi = lists:sum([((O - E) * (O - E)) / E || {O, E} <- Obs]),
-            ct:pal("Chi-square test for 3 degrees of freedom is ~p, p = 0.01 is 11.35, observations (counts, expected): ~p",
-                   [Chi, Obs]),
-            clean_up_test_topology(Config, CHX, Queues),
-            rabbit_ct_client_helpers:close_connection_and_channel(Conn, Chan),
-            ok;
-        Skip ->
-            rabbit_ct_client_helpers:close_connection_and_channel(Conn, Chan),
-            Skip
     end.
 
 clean_up_test_topology(Config) ->

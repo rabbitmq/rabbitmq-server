@@ -148,7 +148,7 @@
    {khepri_db,
     #{desc          => "New Raft-based metadata store.",
       doc_url       => "https://www.rabbitmq.com/docs/next/metadata-store",
-      stability     => stable,
+      stability     => required,
       depends_on    => [feature_flags_v2,
                         direct_exchange_routing_v2,
                         maintenance_mode_status,

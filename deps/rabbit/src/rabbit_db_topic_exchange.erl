@@ -15,9 +15,7 @@
 %% migration from mnesia to khepri
 -export([
          split_topic_key/1,
-         split_topic_key_binary/1,
-         trie_binding_to_key/1,
-         trie_records_to_key/1
+         split_topic_key_binary/1
         ]).
 
 %% For testing
@@ -217,46 +215,6 @@ split_topic_key_binary(RoutingKey) ->
     binary:split(RoutingKey, Pattern, [global]).
 
 %% --------------------------------------------------------------
-%% trie_binding_to_key().
-%% --------------------------------------------------------------
-
--spec trie_binding_to_key(#topic_trie_binding{}) -> RoutingKey :: binary().
-
-trie_binding_to_key(#topic_trie_binding{trie_binding = #trie_binding{node_id = NodeId}}) ->
-    rabbit_mnesia:execute_mnesia_transaction(
-      fun() ->
-              follow_up_get_path(mnesia, rabbit_topic_trie_edge, NodeId)
-      end).
-
-%% --------------------------------------------------------------
-%% trie_records_to_key().
-%% --------------------------------------------------------------
-
--spec trie_records_to_key([#topic_trie_binding{}]) ->
-          [{#trie_binding{}, RoutingKey :: binary()}].
-
-trie_records_to_key(Records) ->
-    Tab = ensure_topic_deletion_ets(),
-    TrieBindings = lists:foldl(fun(#topic_trie_binding{} = R, Acc) ->
-                                       [R | Acc];
-                                  (#topic_trie_edge{} = R, Acc) ->
-                                       ets:insert(Tab, R),
-                                       Acc;
-                                  (_, Acc) ->
-                                       Acc
-                               end, [], Records),
-    List = lists:foldl(
-             fun(#topic_trie_binding{trie_binding = #trie_binding{node_id = Node} = TB} = B,
-                 Acc) ->
-                     case follow_up_get_path(ets, Tab, Node) of
-                         {error, not_found} -> [{TB, trie_binding_to_key(B)} | Acc];
-                         RK -> [{TB, RK} | Acc]
-                     end
-             end, [], TrieBindings),
-    ets:delete(Tab),
-    List.
-
-%% --------------------------------------------------------------
 %% Internal
 %% --------------------------------------------------------------
 
@@ -302,22 +260,6 @@ delete_in_mnesia_tx(Bs) ->
              ok
      end ||  #binding{source = X, key = K, destination = D, args = Args} <- Bs],
     ok.
-
-follow_up_get_path(Mod, Tab, Node) ->
-    follow_up_get_path(Mod, Tab, Node, []).
-
-follow_up_get_path(_Mod, _Tab, root, Acc) ->
-    Acc;
-follow_up_get_path(Mod, Tab, Node, Acc) ->
-    MatchHead = #topic_trie_edge{node_id = Node,
-                                 trie_edge = '$1'},
-    case Mod:select(Tab, [{MatchHead, [], ['$1']}]) of
-        [#trie_edge{node_id = PreviousNode,
-                    word = Word}] ->
-            follow_up_get_path(Mod, Tab, PreviousNode, [Word | Acc]);
-        [] ->
-            {error, not_found}
-    end.
 
 trie_match(X, Words, BKeys) ->
     trie_match(X, root, Words, BKeys, []).
@@ -480,15 +422,6 @@ add_matched(DestinationsArgs, true, Acc) ->
               [DestX | L]
       end, Acc, DestinationsArgs).
 
-ensure_topic_deletion_ets() ->
-    Tab = rabbit_db_topic_exchange_delete_table,
-    case ets:whereis(Tab) of
-        undefined ->
-            ets:new(Tab, [public, named_table, {keypos, #topic_trie_edge.trie_edge}]);
-        Tid ->
-            Tid
-    end.
-
 %% Khepri topic graph
 
 trie_match_in_khepri(X, Words, BKeys) ->
@@ -554,4 +487,3 @@ trie_bindings_in_khepri(X, Node, BKeys) ->
         [] ->
             []
     end.
-

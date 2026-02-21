@@ -13,21 +13,42 @@
 -include_lib("stdlib/include/assert.hrl").
 -include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
--compile(nowarn_export_all).
--compile(export_all).
+-export([all/0,
+         groups/0,
+         init_per_suite/1,
+         end_per_suite/1,
+         init_per_group/2,
+         end_per_group/2,
+         init_per_testcase/2,
+         end_per_testcase/2,
+
+         delete_queues/0,
+
+         policy_ttl/1,
+         operator_policy_ttl/1,
+         operator_retroactive_policy_ttl/1,
+         operator_retroactive_policy_publish_ttl/1,
+         queue_type_specific_policies/1,
+         classic_queue_version_policies/1,
+         overflow_policies/1,
+         is_supported_operator_policy_expires/1,
+         is_supported_operator_policy_message_ttl/1,
+         is_supported_operator_policy_max_length/1,
+         is_supported_operator_policy_max_in_memory_length/1,
+         is_supported_operator_policy_max_in_memory_bytes/1,
+         is_supported_operator_policy_delivery_limit/1,
+         is_supported_operator_policy_target_group_size/1,
+         is_supported_operator_policy_overflow/1
+        ]).
 
 all() ->
     [
-     {group, tests},
-     {group, khepri_migration}
+     {group, tests}
     ].
 
 groups() ->
     [
-     {tests, [], all_tests()},
-     {khepri_migration, [], [
-                             from_mnesia_to_khepri
-                            ]}
+     {tests, [], all_tests()}
     ].
 
 all_tests() ->
@@ -41,7 +62,6 @@ all_tests() ->
      overflow_policies,
      is_supported_operator_policy_expires,
      is_supported_operator_policy_message_ttl,
-     is_supported_operator_policy_max_length,
      is_supported_operator_policy_max_length,
      is_supported_operator_policy_max_in_memory_length,
      is_supported_operator_policy_max_in_memory_bytes,
@@ -61,13 +81,8 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
-init_per_group(tests = Group, Config) ->
-    init_per_group_common(Group, Config, 2);
-init_per_group(khepri_migration = Group, Config0) ->
-    Config = rabbit_ct_helpers:set_config(Config0, [{metadata_store, mnesia}]),
-    init_per_group_common(Group, Config, 1).
-
-init_per_group_common(Group, Config, Size) ->
+init_per_group(Group, Config) ->
+    Size = 2,
     Config1 = rabbit_ct_helpers:set_config(Config,
                                            [{rmq_nodes_count, Size},
                                             {rmq_nodename_suffix, Group},
@@ -284,11 +299,6 @@ is_supported_operator_policy_max_length(Config) ->
     effective_operator_policy_per_queue_type(
       Config, <<"max-length">>, Value, Value, Value, undefined).
 
-is_supported_operator_policy_max_length_bytes(Config) ->
-    Value = 1500,
-    effective_operator_policy_per_queue_type(
-      Config, <<"max-length-bytes">>, Value, Value, Value, Value).
-
 is_supported_operator_policy_max_in_memory_length(Config) ->
     Value = 30,
     effective_operator_policy_per_queue_type(
@@ -344,48 +354,6 @@ effective_operator_policy_per_queue_type(Config, Name, Value, ClassicValue, Quor
     passed.
 
 %%----------------------------------------------------------------------------
-from_mnesia_to_khepri(Config) ->
-    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
-    Q = ?config(queue_name, Config),
-    ?assertEqual({'queue.declare_ok', Q, 0, 0}, declare(Ch, Q)),
-
-    Policy = ?config(policy, Config),
-    ok = rabbit_ct_broker_helpers:set_policy(Config, 0, Policy, Q,
-                                             <<"queues">>,
-                                             [{<<"dead-letter-exchange">>, <<>>},
-                                              {<<"dead-letter-routing-key">>, Q}]),
-    OpPolicy = ?config(op_policy, Config),
-    ok = rabbit_ct_broker_helpers:set_operator_policy(Config, 0, OpPolicy, Q,
-                                                      <<"queues">>,
-                                                      [{<<"max-length">>, 10000}]),
-
-    Policies0 = lists:sort(rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_policy, list, [])),
-    Names0 = lists:sort([proplists:get_value(name, Props) || Props <- Policies0]),
-
-    ?assertEqual([Policy], Names0),
-
-    OpPolicies0 = lists:sort(rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_policy, list_op, [])),
-    OpNames0 = lists:sort([proplists:get_value(name, Props) || Props <- OpPolicies0]),
-
-    ?assertEqual([OpPolicy], OpNames0),
-
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config, khepri_db) of
-        ok ->
-            rabbit_ct_helpers:await_condition(
-              fun() ->
-                      (Policies0 ==
-                           lists:sort(rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_policy, list, [])))
-                          andalso
-                            (OpPolicies0 ==
-                                 lists:sort(rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_policy, list_op, [])))
-              end);
-        Skip ->
-            Skip
-    end.
-
-%%----------------------------------------------------------------------------
 delete_queues() ->
     [{ok, _} = rabbit_amqqueue:delete(Q, false, false, <<"dummy">>)
      || Q <- rabbit_amqqueue:list()].
@@ -412,24 +380,9 @@ publish1(Ch, Q, P) ->
                       #amqp_msg{props   = props(P),
                                 payload = erlang:md5(term_to_binary(P))}).
 
-publish1(Ch, Q, P, Pd) ->
-    amqp_channel:cast(Ch, #'basic.publish'{routing_key = Q},
-                      #amqp_msg{props   = props(P),
-                                payload = Pd}).
-
 props(undefined) -> #'P_basic'{delivery_mode = 2};
 props(P)         -> #'P_basic'{priority      = P,
                                delivery_mode = 2}.
-
-consume(Ch, Q, Ack) ->
-    amqp_channel:subscribe(Ch, #'basic.consume'{queue        = Q,
-                                                no_ack       = Ack =:= no_ack,
-                                                consumer_tag = <<"ctag">>},
-                           self()),
-    receive
-        #'basic.consume_ok'{consumer_tag = <<"ctag">>} ->
-             ok
-    end.
 
 get_empty(Ch, Q) ->
     #'basic.get_empty'{} = amqp_channel:call(Ch, #'basic.get'{queue = Q}).

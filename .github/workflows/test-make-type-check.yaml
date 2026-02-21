@@ -79,6 +79,5 @@ jobs:
     with:
       erlang_version: ${{ inputs.erlang_version }}
       elixir_version: ${{ inputs.elixir_version }}
-      metadata_store: khepri # Not actually used.
       make_target: dialyze
       plugin: ${{ matrix.plugin }}

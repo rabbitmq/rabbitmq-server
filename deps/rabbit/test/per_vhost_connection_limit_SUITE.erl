@@ -12,13 +12,38 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
--compile(nowarn_export_all).
--compile(export_all).
+-export([suite/0,
+         all/0,
+         groups/0,
+         init_per_suite/1,
+         end_per_suite/1,
+         init_per_group/2,
+         end_per_group/2,
+         init_per_testcase/2,
+         end_per_testcase/2,
+
+         most_basic_single_node_connection_count/1,
+         single_node_single_vhost_connection_count/1,
+         single_node_multiple_vhosts_connection_count/1,
+         single_node_list_in_vhost/1,
+         single_node_single_vhost_limit/1,
+         single_node_single_vhost_zero_limit/1,
+         single_node_multiple_vhosts_limit/1,
+         single_node_multiple_vhosts_zero_limit/1,
+         most_basic_cluster_connection_count/1,
+         cluster_single_vhost_connection_count/1,
+         cluster_multiple_vhosts_connection_count/1,
+         cluster_node_restart_connection_count/1,
+         cluster_node_list_on_node/1,
+         cluster_single_vhost_limit/1,
+         cluster_single_vhost_limit2/1,
+         cluster_single_vhost_zero_limit/1,
+         cluster_multiple_vhosts_zero_limit/1
+        ]).
 
 all() ->
     [
-     {group, tests},
-     {group, khepri_migration}
+     {group, tests}
     ].
 
 groups() ->
@@ -51,8 +76,7 @@ groups() ->
                   {cluster_size_3_network, [], ClusterSize3Tests},
                   {cluster_size_1_direct, [], ClusterSize1Tests},
                   {cluster_size_3_direct, [], ClusterSize3Tests}
-                 ]},
-     {khepri_migration, [], [from_mnesia_to_khepri]}
+                 ]}
     ].
 
 suite() ->
@@ -76,10 +100,6 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
-init_per_group(khepri_migration, Config) ->
-    Config1 = rabbit_ct_helpers:set_config(Config, [{connection_type, network},
-                                                    {metadata_store, mnesia}]),
-    init_per_multinode_group(cluster_size_1_network, Config1, 1);
 init_per_group(cluster_size_1_network, Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, [{connection_type, network}]),
     init_per_multinode_group(cluster_size_1_network, Config1, 1);
@@ -640,18 +660,6 @@ cluster_multiple_vhosts_zero_limit(Config) ->
     set_vhost_connection_limit(Config, VHost1, -1),
     set_vhost_connection_limit(Config, VHost2, -1).
 
-from_mnesia_to_khepri(Config) ->
-    VHost = <<"/">>,
-    ?assertEqual(0, count_connections_in(Config, VHost)),
-    [_Conn] = open_connections(Config, [{0, VHost}]),
-    ?awaitMatch(1, count_connections_in(Config, VHost), ?AWAIT, ?INTERVAL),
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config, khepri_db) of
-        ok ->
-            ?awaitMatch(1, count_connections_in(Config, VHost), ?AWAIT, ?INTERVAL);
-        Skip ->
-            Skip
-    end.
-
 %% -------------------------------------------------------------------
 
 open_connections(Config, NodesAndVHosts) ->
@@ -695,8 +703,6 @@ connections_in(Config, NodeIndex, VHost) ->
                                  rabbit_connection_tracking,
                                  list, [VHost]).
 
-connections_on_node(Config) ->
-    connections_on_node(Config, 0).
 connections_on_node(Config, NodeIndex) ->
     Node = rabbit_ct_broker_helpers:get_node_config(Config, NodeIndex, nodename),
     rabbit_ct_broker_helpers:rpc(Config, NodeIndex,
