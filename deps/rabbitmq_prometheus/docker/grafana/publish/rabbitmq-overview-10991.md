@@ -20,7 +20,7 @@ Metrics displayed:
 
 * Node identity, including RabbitMQ & Erlang/OTP version
 * Node memory & disk available before publishers blocked (alarm triggers)
-* Node file descriptors & TCP sockets available
+* Node file descriptors available
 * Ready & pending messages
 * Incoming message rates: published  / routed to queues / confirmed / unconfirmed / returned / dropped
 * Outgoing message rated: delivered with auto or manual acks / acknowledged / redelivered
