@@ -472,6 +472,7 @@ add_metric_family({Name, Type, Help, Metrics}, Callback) ->
     Callback(create_mf(MN, Help, Type, Metrics)).
 
 mf(Callback, Prefix, Contents, Data) ->
+    DisabledMetrics = rabbit_prometheus_util:normalize_disabled_metrics(application:get_env(rabbitmq_prometheus, disabled_metrics, [])),
     _ = [begin
          Fun = case Conversion of
                    undefined ->
@@ -488,7 +489,7 @@ mf(Callback, Prefix, Contents, Data) ->
                 {Type, Fun, Data}
             )
         )
-    end || {Index, Conversion, Name, Type, Help} <- Contents],
+    end || {Index, Conversion, Name, Type, Help} <- Contents, not lists:member(Name, DisabledMetrics)],
     [begin
         Fun = case Conversion of
                   undefined ->
@@ -505,7 +506,7 @@ mf(Callback, Prefix, Contents, Data) ->
                 {Type, Fun, Data}
             )
         )
-    end || {Index, Conversion, Name, Type, Help, Key} <- Contents].
+    end || {Index, Conversion, Name, Type, Help, Key} <- Contents, not lists:member(Name, DisabledMetrics)].
 
 mf_totals(Callback, Name, Type, Help, Size) ->
     Callback(
