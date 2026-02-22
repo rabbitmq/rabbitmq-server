@@ -428,10 +428,9 @@ control_throttle(State = #state{connection_state = ConnState,
                                 proc_state = PState,
                                 keepalive = KState
                                }) ->
-    Conserve = not sets:is_empty(BlockedBy),
     Throttle = case PState of
-                   connect_packet_unprocessed -> Conserve;
-                   _ -> rabbit_mqtt_processor:throttle(Conserve, PState)
+                   connect_packet_unprocessed -> not sets:is_empty(BlockedBy);
+                   _ -> rabbit_mqtt_processor:throttle(BlockedBy, PState)
                end,
     case {ConnState, Throttle} of
         {running, true} ->

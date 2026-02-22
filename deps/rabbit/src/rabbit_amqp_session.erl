@@ -384,6 +384,8 @@
           stashed_eol = [] :: [rabbit_amqqueue:name()],
 
           queue_states = rabbit_queue_type:init() :: rabbit_queue_type:state(),
+          queue_types_published = sets:new([{version, 2}]) ::
+                                  sets:set(rabbit_queue_type:queue_type()),
           permission_cache = [] :: permission_cache(),
           topic_permission_cache = [] :: topic_permission_cache()
          }).
@@ -451,9 +453,14 @@ init({ReaderPid, WriterPid, ChannelNum, MaxFrameSize, User, Vhost, ContainerId, 
     true = is_valid_max(MaxLinkCredit),
     true = is_valid_max(MaxQueueCredit),
     true = is_valid_max(MaxIncomingWindow),
-    IncomingWindow = case sets:is_empty(Alarms) of
-                         true -> MaxIncomingWindow;
-                         false -> 0
+    InResourceAlarm = sets:fold(fun ({disk, _}, Acc) ->
+                                        Acc;
+                                    (_, _) ->
+                                        true
+                                end, false, Alarms),
+    IncomingWindow = case InResourceAlarm of
+                         true -> 0;
+                         false -> MaxIncomingWindow
                      end,
     NextOutgoingId = ?INITIAL_OUTGOING_TRANSFER_ID,
 
@@ -585,36 +592,17 @@ handle_cast({queue_event, _, _} = QEvent, State0) ->
               log_error_and_close_session(Error, State0)
     end;
 handle_cast({conserve_resources, Alarm, Conserve},
-            #state{incoming_window = IncomingWindow0,
-                   cfg = #cfg{resource_alarms = Alarms0,
-                              incoming_window_margin = Margin0,
+            #state{cfg = #cfg{resource_alarms = Alarms0,
                               writer_pid = WriterPid,
-                              channel_num = Ch,
-                              max_incoming_window = MaxIncomingWindow
+                              channel_num = Ch
                              } = Cfg
                   } = State0) ->
     Alarms = case Conserve of
                  true -> sets:add_element(Alarm, Alarms0);
                  false -> sets:del_element(Alarm, Alarms0)
              end,
-    {SendFlow, IncomingWindow, Margin} =
-    case {sets:is_empty(Alarms0), sets:is_empty(Alarms)} of
-        {true, false} ->
-            %% Alarm kicked in.
-            %% Notify the client to not send us any more TRANSFERs. Since we decrase
-            %% our incoming window dynamically, there might be incoming in-flight
-            %% TRANSFERs. So, let's be lax and allow for some excess TRANSFERs.
-            {true, 0, MaxIncomingWindow};
-        {false, true} ->
-            %% All alarms cleared.
-            %% Notify the client that it can resume sending us TRANSFERs.
-            {true, MaxIncomingWindow, 0};
-        _ ->
-            {false, IncomingWindow0, Margin0}
-    end,
-    State = State0#state{incoming_window = IncomingWindow,
-                         cfg = Cfg#cfg{resource_alarms = Alarms,
-                                       incoming_window_margin = Margin}},
+    State1 = State0#state{cfg = Cfg#cfg{resource_alarms = Alarms}},
+    {SendFlow, State} = check_resource_alarm(State0, State1),
     case SendFlow of
         true ->
             Flow = session_flow_fields(#'v1_0.flow'{}, State),
@@ -639,6 +627,41 @@ handle_cast({reset_authz, User}, #state{cfg = Cfg} = State0) ->
     end;
 handle_cast(shutdown, State) ->
     {stop, normal, State}.
+
+is_in_resource_alarm(#state{cfg = #cfg{resource_alarms = Alarms},
+                            queue_types_published = QTs}) ->
+    sets:fold(
+      fun ({disk, QT}, Acc) ->
+              Acc orelse sets:is_element(QT, QTs);
+          (_, _) ->
+              true
+      end, false, Alarms).
+
+check_resource_alarm(State0,
+                     #state{incoming_window = IncomingWindow0,
+                            cfg = #cfg{incoming_window_margin = Margin0,
+                                       max_incoming_window = MaxIncomingWindow
+                                      } = Cfg} = State1) ->
+    WasBlocked = is_in_resource_alarm(State0),
+    IsBlocked = is_in_resource_alarm(State1),
+    {SendFlow, IncomingWindow, Margin} =
+    case IsBlocked of
+        true when not WasBlocked ->
+            %% Alarm kicked in.
+            %% Notify the client to not send us any more TRANSFERs. Since we decrase
+            %% our incoming window dynamically, there might be incoming in-flight
+            %% TRANSFERs. So, let's be lax and allow for some excess TRANSFERs.
+            {true, 0, MaxIncomingWindow};
+        false when WasBlocked ->
+            %% All alarms cleared.
+            %% Notify the client that it can resume sending us TRANSFERs.
+            {true, MaxIncomingWindow, 0};
+        _ ->
+            {false, IncomingWindow0, Margin0}
+    end,
+    State = State1#state{incoming_window = IncomingWindow,
+                         cfg = Cfg#cfg{incoming_window_margin = Margin}},
+    {SendFlow, State}.
 
 log_error_and_close_session(
   Error, State = #state{cfg = #cfg{reader_pid = ReaderPid,
@@ -1958,7 +1981,6 @@ session_flow_control_received_transfer(
          incoming_window = InWindow0,
          remote_outgoing_window = RemoteOutgoingWindow,
          cfg = #cfg{incoming_window_margin = Margin,
-                    resource_alarms = Alarms,
                     max_incoming_window = MaxIncomingWindow}
         } = State) ->
     InWindow1 = InWindow0 - 1,
@@ -1972,7 +1994,7 @@ session_flow_control_received_transfer(
             ok
     end,
     {Flows, InWindow} = case InWindow1 =< (MaxIncomingWindow div 2) andalso
-                             sets:is_empty(Alarms) of
+                             not is_in_resource_alarm(State) of
                             true ->
                                 %% We've reached halfway and there are no
                                 %% disk or memory alarm, open the window.
@@ -2388,6 +2410,7 @@ incoming_link_transfer(
                  multi_transfer_msg = MultiTransfer
                 } = Link0,
   State0 = #state{queue_states = QStates0,
+                  queue_types_published = QTs0,
                   permission_cache = PermCache0,
                   topic_permission_cache = TopicPermCache0,
                   cfg = #cfg{user = User = #user{username = Username},
@@ -2435,19 +2458,26 @@ incoming_link_transfer(
             Qs = rabbit_amqqueue:prepend_extra_bcc(Qs0),
             case rabbit_queue_type:deliver(Qs, Mc, Opts, QStates0) of
                 {ok, QStates, Actions} ->
+                    QTs1 = sets:from_list(rabbit_amqqueue:queue_types(Qs),
+                                          [{version, 2}]),
+                    QTs = sets:union(QTs0, QTs1),
                     State1 = State0#state{queue_states = QStates,
+                                          queue_types_published = QTs,
                                           permission_cache = PermCache,
                                           topic_permission_cache = TopicPermCache},
                     %% Confirms must be registered before processing actions
                     %% because actions may contain rejections of publishes.
                     {U, Reply0} = process_routing_confirm(
                                     Qs, Settled, DeliveryId, U0),
-                    State = handle_queue_actions(Actions, State1),
+                    State2 = handle_queue_actions(Actions, State1),
+                    {SendAlarmFlow, State} = check_resource_alarm(
+                                               State0, State2),
                     DeliveryCount = add(DeliveryCount0, 1),
                     Credit1 = Credit0 - 1,
                     {Credit, Reply1} = maybe_grant_link_credit(
                                          Credit1, MaxLinkCredit,
-                                         DeliveryCount, map_size(U), Handle),
+                                         DeliveryCount, map_size(U), Handle,
+                                         SendAlarmFlow),
                     Reply = Reply0 ++ Reply1,
                     Link = Link0#incoming_link{
                              delivery_count = DeliveryCount,
@@ -2482,7 +2512,8 @@ incoming_link_transfer(
                     Credit1 = Credit0 - 1,
                     {Credit, Reply0} = maybe_grant_link_credit(
                                          Credit1, MaxLinkCredit,
-                                         DeliveryCount, map_size(U0), Handle),
+                                         DeliveryCount, map_size(U0), Handle,
+                                         false),
                     Reply = [Disposition | Reply0],
                     Link = Link0#incoming_link{
                              delivery_count = DeliveryCount,
@@ -2613,8 +2644,9 @@ rejected(QNameBin, down) ->
                            {{symbol, <<"reason">>}, {symbol, <<"unavailable">>}}]}}}.
 
 
-maybe_grant_link_credit(Credit, MaxLinkCredit, DeliveryCount, NumUnconfirmed, Handle) ->
-    case grant_link_credit(Credit, MaxLinkCredit, NumUnconfirmed) of
+maybe_grant_link_credit(Credit, MaxLinkCredit, DeliveryCount, NumUnconfirmed,
+                        Handle, AlarmFlow) ->
+    case grant_link_credit(Credit, MaxLinkCredit, NumUnconfirmed) orelse AlarmFlow of
         true ->
             {MaxLinkCredit, [flow(Handle, DeliveryCount, MaxLinkCredit)]};
         false ->

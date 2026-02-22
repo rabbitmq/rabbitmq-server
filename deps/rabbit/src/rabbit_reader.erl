@@ -113,7 +113,14 @@
   %% a set of the reasons why we are
   %% blocked: {resource, memory}, {resource, disk}.
   %% More reasons can be added in the future.
-  blocked_by,
+  blocked_by = sets:new([{version, 2}]) ::
+               sets:set(flow | {resource,
+                                rabbit_alarm:resource_alarm_source()}),
+  %% the set of queue types which have been published to
+  %% by channels on this connection, used for per-queue
+  %% type disk alarm blocking
+  queue_types_published = #{} :: #{ChannelPid :: pid() =>
+                                   sets:set(rabbit_queue_type:queue_type())},
   %% true if received any publishes, false otherwise
   %% note that this will also be true when connection is
   %% already blocked
@@ -334,7 +341,6 @@ start_connection(Parent, HelperSups, RanchRef, Deb, Sock) ->
                 throttle            = #throttle{
                                          last_blocked_at = never,
                                          should_block = false,
-                                         blocked_by = sets:new([{version, 2}]),
                                          connection_blocked_message_sent = false
                                          },
                 proxy_socket = rabbit_net:maybe_get_proxy_socket(Sock)},
@@ -676,6 +682,14 @@ handle_other({'$gen_cast', {force_event_refresh, Ref}}, State)
 handle_other({'$gen_cast', {force_event_refresh, _Ref}}, State) ->
     %% Ignore, we will emit a created event once we start running.
     State;
+handle_other({'$gen_cast', {channel_published_to_queue_type, ChPid, QT}},
+             #v1{throttle = Throttle0} = State0) ->
+    QTs = maps:update_with(
+            ChPid, fun(ChQTs) -> sets:add_element(QT, ChQTs) end,
+            sets:from_list([QT], [{version, 2}]),
+            Throttle0#throttle.queue_types_published),
+    Throttle = Throttle0#throttle{queue_types_published = QTs},
+    control_throttle(State0#v1{throttle = Throttle});
 handle_other(ensure_stats, State) ->
     ensure_stats_timer(State);
 handle_other(emit_stats, State) ->
@@ -996,14 +1010,21 @@ is_over_node_channel_limit() ->
             end
     end.
 
-channel_cleanup(ChPid, State = #v1{channel_count = ChannelCount}) ->
+channel_cleanup(ChPid, State = #v1{channel_count = ChannelCount,
+                                   throttle = Throttle0} = State) ->
     case get({ch_pid, ChPid}) of
-        undefined       -> {undefined, State};
-        {Channel, MRef} -> credit_flow:peer_down(ChPid),
-                           erase({channel, Channel}),
-                           erase({ch_pid, ChPid}),
-                           erlang:demonitor(MRef, [flush]),
-                           {Channel, State#v1{channel_count = ChannelCount - 1}}
+        undefined ->
+            {undefined, State};
+        {Channel, MRef} ->
+            credit_flow:peer_down(ChPid),
+            erase({channel, Channel}),
+            erase({ch_pid, ChPid}),
+            erlang:demonitor(MRef, [flush]),
+            QT = maps:remove(ChPid,
+                             Throttle0#throttle.queue_types_published),
+            Throttle = Throttle0#throttle{queue_types_published = QT},
+            {Channel, State#v1{channel_count = ChannelCount - 1,
+                               throttle = Throttle}}
     end.
 
 all_channels() -> [ChPid || {{ch_pid, ChPid}, _ChannelMRef} <- get()].
@@ -1711,13 +1732,10 @@ send_error_on_channel0_and_close(Channel, Reason, State) ->
 blocked_by_message(#throttle{blocked_by = Reasons}) ->
   %% we don't want to report internal flow as a reason here since
   %% it is entirely transient
-  Reasons1 = sets:del_element(flow, Reasons),
-  RStr = string:join([format_blocked_by(R) || R <- sets:to_list(Reasons1)], " & "),
+  RStr = lists:join([rabbit_alarm:format_resource_alarm_source(R) ||
+                     {resource, R} <- sets:to_list(Reasons)],
+                    " & "),
   list_to_binary(rabbit_misc:format("low on ~ts", [RStr])).
-
-format_blocked_by({resource, memory}) -> "memory";
-format_blocked_by({resource, disk})   -> "disk";
-format_blocked_by({resource, disc})   -> "disk".
 
 update_last_blocked_at(Throttle) ->
     Throttle#throttle{last_blocked_at = erlang:monotonic_time()}.
@@ -1725,22 +1743,44 @@ update_last_blocked_at(Throttle) ->
 connection_blocked_message_sent(
     #throttle{connection_blocked_message_sent = BS}) -> BS.
 
-should_send_blocked(Throttle = #throttle{blocked_by = Reasons}) ->
+should_send_blocked(Throttle) ->
     should_block(Throttle)
     andalso
-    sets:size(sets:del_element(flow, Reasons)) =/= 0
+    do_throttle_reasons_apply(Throttle)
     andalso
     not connection_blocked_message_sent(Throttle).
 
-should_send_unblocked(Throttle = #throttle{blocked_by = Reasons}) ->
+should_send_unblocked(Throttle) ->
     connection_blocked_message_sent(Throttle)
     andalso
-    sets:size(sets:del_element(flow, Reasons)) == 0.
+    not do_throttle_reasons_apply(Throttle).
+
+do_throttle_reasons_apply(#throttle{blocked_by = Reasons} = Throttle) ->
+    lists:any(
+      fun ({resource, disk}) ->
+              true;
+          ({resource, memory}) ->
+              true;
+          ({resource, {disk, QT}}) ->
+              has_published_to_queue_type(QT, Throttle);
+          (_) ->
+              %% Flow control should not send connection.blocked
+              false
+      end, sets:to_list(Reasons)).
+
+has_published_to_queue_type(QT, #throttle{queue_types_published = QTs}) ->
+    rabbit_misc:maps_any(
+      fun(_ChPid, ChQT) -> sets:is_element(QT, ChQT) end, QTs).
 
 %% Returns true if we have a reason to block
 %% this connection.
-has_reasons_to_block(#throttle{blocked_by = Reasons}) ->
-    sets:size(Reasons) > 0.
+has_reasons_to_block(#throttle{blocked_by = Reasons} = Throttle) ->
+    lists:any(
+      fun ({resource, {disk, QType}}) ->
+              has_published_to_queue_type(QType, Throttle);
+          (_) ->
+              true
+      end, sets:to_list(Reasons)).
 
 is_blocked_by_flow(#throttle{blocked_by = Reasons}) ->
     sets:is_element(flow, Reasons).

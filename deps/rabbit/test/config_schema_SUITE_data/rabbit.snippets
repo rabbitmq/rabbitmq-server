@@ -208,6 +208,15 @@ ssl_options.crl_sources.1.path = /var/lib/rabbitmq/crls",
     "disk_free_limit.absolute = 2P",
     [{rabbit,[{disk_free_limit, "2P"}]}],
     []},
+  %% Disk monitor polling
+  {disk_monitor_tune_polling_parameters,
+    "disk_monitor.fast_rate = 1000000 # 1 GB/sec
+     disk_monitor.min_interval = 50
+     disk_monitor.max_interval = 20000",
+    [{rabbit,[{disk_monitor_fast_rate, 1_000_000},
+              {disk_monitor_min_interval, 50},
+              {disk_monitor_max_interval, 20_000}]}],
+    []},
 
  {default_users,
  "
@@ -489,6 +498,26 @@ tcp_listen_options.exit_on_close = false",
  {total_memory_available_override_value_units,
   "total_memory_available_override_value = 1024MB",
   [{rabbit,[{total_memory_available_override_value, "1024MB"}]}],
+  []},
+ {disk_free_limits_per_mount,
+  "disk_free_limits.1.name = messaging
+   disk_free_limits.1.mount = /data/queues
+   disk_free_limits.1.limit = 2GB
+   disk_free_limits.1.queue_types = classic,quorum
+
+   disk_free_limits.2.name = streaming
+   disk_free_limits.2.mount = /data/streams
+   disk_free_limits.2.limit = 2GB
+   disk_free_limits.2.queue_types = stream",
+  [{rabbit,[{disk_free_limits,
+             #{1 => #{name => <<"messaging">>,
+                      mount => "/data/queues",
+                      limit => "2GB",
+                      queue_types => [<<"classic">>, <<"quorum">>]},
+               2 => #{name => <<"streaming">>,
+                      mount => "/data/streams",
+                      limit => "2GB",
+                      queue_types => [<<"stream">>]}}}]}],
   []},
  {ranch_connection_max,
   "ranch_connection_max = 999",
@@ -1124,6 +1153,16 @@ credential_validator.regexp = ^abc\\d+",
   {classic_queue_default_version_invalid,
    "classic_queue.default_version = 3",
    [],
+   []},
+
+  %%
+  %% Classic queue data dir
+  %%
+  {classic_queue_data_dir,
+   "classic_queue.data_dir = /data/rabbitmq/classic",
+   [{rabbit, [
+      {classic_queue_data_dir, "/data/rabbitmq/classic"}
+     ]}],
    []},
 
   %%

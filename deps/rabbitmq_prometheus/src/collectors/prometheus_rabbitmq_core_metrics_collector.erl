@@ -85,6 +85,10 @@
         {2, undefined, erlang_net_ticktime_seconds, gauge, "Inter-node heartbeat interval", net_ticktime},
         {2, ?MILLISECOND, erlang_uptime_seconds, gauge, "Node uptime", uptime}
     ]},
+    {mount_metrics, [
+        {2, undefined, mount_space_available_bytes, gauge, "Disk space available in bytes on configured mount"},
+        {3, undefined, mount_space_available_limit_bytes, gauge, "Disk space available low watermark in bytes on configured mount"}
+    ]},
 
     {node_persister_metrics, [
         {2, undefined, io_read_ops_total, counter, "Total number of I/O read operations", io_read_count},
@@ -865,6 +869,12 @@ get_data(exchange_names, _, _) ->
                         Label = <<"vhost=\"", VHost/binary, "\",exchange=\"", Name/binary, "\",type=\"", (atom_to_binary(EType))/binary, "\"">>,
                         [{Label, 1}|Acc]
                 end, [], rabbit_exchange:list());
+get_data(mount_metrics, _, _) ->
+    [{<<"disk=", Name/binary>>, Available, Limit}
+     || #{name := Name,
+          available := Available,
+          limit := Limit} <- rabbit_disk_monitor:get_mount_free(),
+        Available =/= 'NaN'];
 get_data(Table, _, _) ->
     ets:tab2list(Table).
 
