@@ -15,7 +15,8 @@
          list_for_source_and_destination/2, list_for_source_and_destination/3,
          list_explicit/0]).
 -export([new_deletions/0, combine_deletions/2, add_deletion/5,
-         process_deletions/1, notify_deletions/2, group_bindings_fold/3]).
+         process_deletions/1, notify_deletions/2, group_bindings_fold/3,
+         delete_for_destination/2]).
 -export([info_keys/0, info/1, info/2, info_all/1, info_all/2, info_all/4]).
 
 -export([reverse_binding/1]).
@@ -532,3 +533,11 @@ fetch_deletion(XName, Deletions) ->
         error ->
             error
     end.
+
+%% @doc This function is used to delete bindings before a quorum queue is deleted.
+%% It is to avoid bindings pointing to queues under deletion.
+-spec delete_for_destination(rabbit_types:binding_destination(), rabbit_types:username()) -> ok.
+delete_for_destination(QName, User) ->
+    Deletions = rabbit_db_binding:delete_for_destination(QName),
+    process_deletions(Deletions),
+    notify_deletions(Deletions, User).
