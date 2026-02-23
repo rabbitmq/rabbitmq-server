@@ -728,7 +728,7 @@ apply_(#{system_time := Ts} = Meta,
                   %% messages as messages will be returned shortly anyway
                   %% or we could return expored messages but not change the status
                   case maps:filter(fun (_, ?C_MSG(T, _)) ->
-                                           Ts > T
+                                           Ts >= T
                                    end, Checked) of
                       M when map_size(M) == 0 ->
                           Acc;
