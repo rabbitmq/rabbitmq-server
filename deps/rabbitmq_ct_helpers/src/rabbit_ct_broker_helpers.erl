@@ -1543,7 +1543,8 @@ rabbitmqctl(Config, Node, Args, Timeout) ->
       {"RABBITMQ_MNESIA_DIR", ?config(data_dir, NodeConfig)},
       {"RABBITMQ_PLUGINS_DIR", ?config(plugins_dir, NodeConfig)},
       {"RABBITMQ_ENABLED_PLUGINS_FILE",
-        ?config(enabled_plugins_file, NodeConfig)}
+        ?config(enabled_plugins_file, NodeConfig)},
+      {"RABBITMQ_CTL_UNIQUE_NODE_NAME", "true"}
     ],
     Ret = rabbit_ct_helpers:get_config(
             NodeConfig, enabled_feature_flags_list_file),
@@ -1574,7 +1575,8 @@ rabbitmq_queues(Config, Node, Args) ->
       {"RABBITMQ_MNESIA_DIR", ?config(data_dir, NodeConfig)},
       {"RABBITMQ_PLUGINS_DIR", ?config(plugins_dir, NodeConfig)},
       {"RABBITMQ_ENABLED_PLUGINS_FILE",
-        ?config(enabled_plugins_file, NodeConfig)}
+        ?config(enabled_plugins_file, NodeConfig)},
+      {"RABBITMQ_CTL_UNIQUE_NODE_NAME", "true"}
     ],
     Ret = rabbit_ct_helpers:get_config(
             NodeConfig, enabled_feature_flags_list_file),
@@ -1598,7 +1600,8 @@ rabbitmq_streams(Config, Node, Args) ->
       {"RABBITMQ_MNESIA_DIR", ?config(data_dir, NodeConfig)},
       {"RABBITMQ_PLUGINS_DIR", ?config(plugins_dir, NodeConfig)},
       {"RABBITMQ_ENABLED_PLUGINS_FILE",
-        ?config(enabled_plugins_file, NodeConfig)}
+        ?config(enabled_plugins_file, NodeConfig)},
+      {"RABBITMQ_CTL_UNIQUE_NODE_NAME", "true"}
     ],
     Ret = rabbit_ct_helpers:get_config(
             NodeConfig, enabled_feature_flags_list_file),
@@ -1622,7 +1625,8 @@ rabbitmq_diagnostics(Config, Node, Args) ->
       {"RABBITMQ_MNESIA_DIR", ?config(data_dir, NodeConfig)},
       {"RABBITMQ_PLUGINS_DIR", ?config(plugins_dir, NodeConfig)},
       {"RABBITMQ_ENABLED_PLUGINS_FILE",
-        ?config(enabled_plugins_file, NodeConfig)}
+        ?config(enabled_plugins_file, NodeConfig)},
+      {"RABBITMQ_CTL_UNIQUE_NODE_NAME", "true"}
     ],
     Cmd = [Rabbitmqdiagnostics, "-n", Nodename | Args],
     rabbit_ct_helpers:exec(Cmd, [{env, Env}]).
@@ -2473,7 +2477,8 @@ plugin_action(Config, Node, Args) ->
       {"RABBITMQ_MNESIA_DIR", ?config(data_dir, NodeConfig)},
       {"RABBITMQ_PLUGINS_DIR", ?config(plugins_dir, NodeConfig)},
       {"RABBITMQ_ENABLED_PLUGINS_FILE",
-        ?config(enabled_plugins_file, NodeConfig)}
+        ?config(enabled_plugins_file, NodeConfig)},
+      {"RABBITMQ_CTL_UNIQUE_NODE_NAME", "true"}
     ],
     Cmd = [Rabbitmqplugins, "-n", Nodename | Args],
     {ok, _} = rabbit_ct_helpers:exec(Cmd, [{env, Env}]),

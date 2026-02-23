@@ -101,13 +101,24 @@ defmodule RabbitMQ.CLI.Core.Distribution do
         throw(err)
 
       rmq_hostname ->
-        # This limits the number of possible unique node names used by CLI tools to avoid
-        # the atom table from growing above the node limit. We must use reasonably unique IDs
-        # to allow for concurrent CLI tool execution.
-        #
-        # Enum.random/1 is constant time and space with range arguments https://hexdocs.pm/elixir/Enum.html#random/1.
-        id = Enum.random(1..1024)
+        id = generate_cli_node_id()
         String.to_atom("rabbitmqcli-#{id}-#{rmq_hostname}")
+    end
+  end
+
+  # The main goal is to limit the number of possible unique node names used by CLI
+  # tools to avoid the atom table from growing above the node limit.
+  # However, when RABBITMQ_CTL_UNIQUE_NODE_NAME is set, each CLI invocation gets
+  # a guaranteed unique node name. This avoids name collisions in CI environments
+  # that run many CLI commands concurrently. The unbounded atom
+  # table growth is acceptable in short-lived CI environments.
+  defp generate_cli_node_id do
+    case System.get_env("RABBITMQ_CTL_UNIQUE_NODE_NAME") do
+      nil ->
+        Enum.random(1..1024)
+
+      _ ->
+        "#{:os.getpid()}"
     end
   end
 end

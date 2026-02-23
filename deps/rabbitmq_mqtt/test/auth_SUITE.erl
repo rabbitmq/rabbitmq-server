@@ -898,7 +898,10 @@ will_queue_publish_permission_topic_write(Config) ->
 will_queue_delete_permission(Config) ->
     set_permissions(".*", ".*", ".*", Config),
     ClientId = atom_to_binary(?FUNCTION_NAME),
+    Vhost = ?config(mqtt_vhost, Config),
     disconnect_with_delayed_will(ClientId, Config),
+    QName = rabbit_misc:r(Vhost, queue, <<"mqtt-will-", ClientId/binary>>),
+    ?awaitMatch({ok, _}, rpc(Config, 0, rabbit_amqqueue, lookup, [QName]), 5000),
     set_permissions(<<>>, ".*", ".*", Config),
     %% Now we have a Will queue that user doesn't have permission to delete.
     %% Resuming the session should fail.

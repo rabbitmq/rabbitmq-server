@@ -157,7 +157,14 @@ leader_locator_client_local(Config) ->
          ?assertEqual({'queue.declare_ok', Q, 0, 0},
                       declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"classic">>},
                                       {<<"x-queue-leader-locator">>, longstr, <<"client-local">>}])),
-         {ok, Leader0} = rabbit_ct_broker_helpers:rpc(Config, Server, rabbit_amqqueue, lookup, [rabbit_misc:r(<<"/">>, queue, Q)]),
+         {ok, Leader0} = ?awaitMatch(
+                            {ok, _},
+                            rabbit_ct_broker_helpers:rpc(Config,
+                                                         Server,
+                                                         rabbit_amqqueue,
+                                                         lookup,
+                                                         [rabbit_misc:r(<<"/">>, queue, Q)]),
+                            5000),
          Leader = amqqueue:qnode(Leader0),
          ?assertEqual(Server, Leader),
          ?assertMatch(#'queue.delete_ok'{},
@@ -180,12 +187,19 @@ test_leader_locator(Config, Argument, Strategies) ->
 
     [begin
          Leaders = [begin
-                        ?assertMatch({'queue.declare_ok', Q, 0, 0},
+                        ?assertEqual({'queue.declare_ok', Q, 0, 0},
                                      declare(Ch, Q,
                                              [{<<"x-queue-type">>, longstr, <<"classic">>},
                                               {Argument, longstr, Strategy}])),
 
-                        {ok, Leader0} = rabbit_ct_broker_helpers:rpc(Config, Server, rabbit_amqqueue, lookup, [rabbit_misc:r(<<"/">>, queue, Q)]),
+                        {ok, Leader0} = ?awaitMatch(
+                                           {ok, _},
+                                           rabbit_ct_broker_helpers:rpc(Config,
+                                                                        Server,
+                                                                        rabbit_amqqueue,
+                                                                        lookup,
+                                                                        [rabbit_misc:r(<<"/">>, queue, Q)]),
+                                           5000),
                         Leader = amqqueue:qnode(Leader0),
                         Leader
                     end || Q <- Qs],
