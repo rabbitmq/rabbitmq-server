@@ -24,7 +24,7 @@ all() ->
 groups() ->
     [
      {net_ticktime_1, [], [
-          cluster_full_partition_with_autoheal
+          cluster_full_partition
      ]}
     ].
 
@@ -78,10 +78,8 @@ end_per_testcase(Testcase, Config) ->
 %% Test cases.
 %% -------------------------------------------------------------------
 
-cluster_full_partition_with_autoheal(Config) ->
+cluster_full_partition(Config) ->
     Username = proplists:get_value(rmq_username, Config),
-    rabbit_ct_broker_helpers:set_partition_handling_mode_globally(Config, autoheal),
-
     ?assertEqual(0, count_connections_in(Config, Username)),
     [A, B, C] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
@@ -123,15 +121,7 @@ cluster_full_partition_with_autoheal(Config) ->
     ?awaitMatch(All, list_running(Config, B), 60000, 3000),
     ?awaitMatch(All, list_running(Config, C), 60000, 3000),
 
-    %% During autoheal B's connections were dropped. Autoheal is not running
-    %% when Khepri is used.
-    KhepriEnabled = rabbit_ct_broker_helpers:is_feature_flag_enabled(
-                      Config, khepri_db),
-    ExpectedCount = case KhepriEnabled of
-                        true  -> {6, 15};
-                        false -> {4, 10}
-                    end,
-    ?awaitMatch(ExpectedCount,
+    ?awaitMatch({6, 15},
                 {count_connections_in(Config, Username),
                  count_channels_in(Config, Username)},
                 60000, 3000),
@@ -181,13 +171,7 @@ tracked_list_of_user(Config, NodeIndex, TrackingMod, Username) ->
                                  list_of_user, [Username]).
 
 list_running(Config, NodeIndex) ->
-    Ret = (catch rabbit_ct_broker_helpers:rpc(Config, NodeIndex, rabbit_nodes, list_running, [])),
-    Running = case Ret of
-                  {'EXIT', {{exception, undef, _}, _}} ->
-                      rabbit_ct_broker_helpers:rpc(Config, NodeIndex, rabbit_mnesia, cluster_nodes, [running]);
-                  _ ->
-                      Ret
-              end,
+    Running = rabbit_ct_broker_helpers:rpc(Config, NodeIndex, rabbit_nodes, list_running, []),
     case Running of
         List when is_list(List) ->
             lists:sort(List);

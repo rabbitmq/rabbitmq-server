@@ -44,17 +44,7 @@ defmodule ResetCommandTest do
   test "run: reset request to an active node with a running rabbit app fails", context do
     add_vhost("some_vhost")
     assert vhost_exists?("some_vhost")
-    node = get_rabbit_hostname()
-    ret = @command.run([], context[:opts])
-
-    case :rabbit_misc.rpc_call(node, :rabbit_khepri, :is_enabled, []) do
-      true ->
-        assert match?({:error, :rabbitmq_unexpectedly_running}, ret)
-
-      false ->
-        assert match?({:error, :mnesia_unexpectedly_running}, ret)
-    end
-
+    assert match?({:error, :rabbitmq_unexpectedly_running}, @command.run([], context[:opts]))
     assert vhost_exists?("some_vhost")
   end
 
@@ -67,12 +57,4 @@ defmodule ResetCommandTest do
     assert @command.banner([], context[:opts]) =~ ~r/Resetting node #{get_rabbit_hostname()}/
   end
 
-  test "output mnesia is running error", context do
-    exit_code = RabbitMQ.CLI.Core.ExitCodes.exit_software()
-
-    assert match?(
-             {:error, ^exit_code, "Mnesia is still running on node " <> _},
-             @command.output({:error, :mnesia_unexpectedly_running}, context[:opts])
-           )
-  end
 end

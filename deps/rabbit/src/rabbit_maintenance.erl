@@ -33,8 +33,7 @@
     resume_all_client_listeners/0,
     close_all_client_connections/0,
     primary_replica_transfer_candidate_nodes/0,
-    random_primary_replica_transfer_candidate_node/2,
-    table_definitions/0
+    random_primary_replica_transfer_candidate_node/2
 ]).
 
 -define(DEFAULT_STATUS,  regular).
@@ -59,9 +58,6 @@
 %%
 %% Boot
 %%
-
-table_definitions() ->
-    rabbit_db_maintenance:table_definitions().
 
 %%
 %% API

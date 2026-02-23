@@ -979,7 +979,6 @@ join_selected_node_locked(Node, NodeType) ->
     %% cluster.
     try
         Ret = rabbit_db_cluster:join(Node, NodeType),
-        ?assertNotEqual({ok, already_member}, Ret),
         case Ret of
             ok ->
                 ?LOG_INFO(

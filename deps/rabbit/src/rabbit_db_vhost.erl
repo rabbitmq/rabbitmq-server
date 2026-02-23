@@ -26,37 +26,14 @@
          update/2,
          enable_protection_from_deletion/1,
          disable_protection_from_deletion/1,
-         with_fun_in_mnesia_tx/2,
          with_fun_in_khepri_tx/2,
-         delete/1,
-         clear_in_khepri/0]).
+         delete/1]).
 
 -export([khepri_vhost_path/1]).
 
 %% For testing
 -export([clear/0]).
 
--ifdef(TEST).
--export([create_or_get_in_mnesia/2,
-         create_or_get_in_khepri/2,
-         get_in_mnesia/1,
-         get_in_khepri/1,
-         exists_in_mnesia/1,
-         exists_in_khepri/1,
-         list_in_mnesia/0,
-         list_in_khepri/0,
-         get_all_in_mnesia/0,
-         get_all_in_khepri/0,
-         update_in_mnesia/2,
-         update_in_khepri/2,
-         merge_metadata_in_mnesia/2,
-         merge_metadata_in_khepri/2,
-         delete_in_mnesia/1,
-         delete_in_khepri/1
-        ]).
--endif.
-
--define(MNESIA_TABLE, rabbit_vhost).
 -define(KHEPRI_PROJECTION, rabbit_khepri_vhost).
 
 %% -------------------------------------------------------------------
@@ -82,26 +59,6 @@ create_or_get(VHostName, Limits, Metadata)
        is_list(Limits) andalso
        is_map(Metadata) ->
     VHost = vhost:new(VHostName, Limits, Metadata),
-    rabbit_khepri:handle_fallback(
-      #{mnesia => fun() -> create_or_get_in_mnesia(VHostName, VHost) end,
-        khepri => fun() -> create_or_get_in_khepri(VHostName, VHost) end}).
-
-create_or_get_in_mnesia(VHostName, VHost) ->
-    rabbit_mnesia:execute_mnesia_transaction(
-      fun() -> create_or_get_in_mnesia_tx(VHostName, VHost) end).
-
-create_or_get_in_mnesia_tx(VHostName, VHost) ->
-    case mnesia:wread({?MNESIA_TABLE, VHostName}) of
-        [] ->
-            mnesia:write(?MNESIA_TABLE, VHost, write),
-            {new, VHost};
-
-        %% the vhost already exists
-        [ExistingVHost] ->
-            {existing, ExistingVHost}
-    end.
-
-create_or_get_in_khepri(VHostName, VHost) ->
     Path = khepri_vhost_path(VHostName),
     ?LOG_DEBUG("Inserting a virtual host record ~tp", [VHost]),
     case rabbit_khepri:create(Path, VHost) of
@@ -145,26 +102,6 @@ merge_metadata(VHostName, Metadata)
     end.
 
 do_merge_metadata(VHostName, Metadata) ->
-    rabbit_khepri:handle_fallback(
-      #{mnesia => fun() -> merge_metadata_in_mnesia(VHostName, Metadata) end,
-        khepri => fun() -> merge_metadata_in_khepri(VHostName, Metadata) end}).
-
-merge_metadata_in_mnesia(VHostName, Metadata) ->
-    rabbit_mnesia:execute_mnesia_transaction(
-      fun() -> merge_metadata_in_mnesia_tx(VHostName, Metadata) end).
-
-merge_metadata_in_mnesia_tx(VHostName, Metadata) ->
-    case mnesia:wread({?MNESIA_TABLE, VHostName}) of
-        [] ->
-            {error, {no_such_vhost, VHostName}};
-        [VHost0] when ?is_vhost(VHost0) ->
-            VHost1 = vhost:merge_metadata(VHost0, Metadata),
-            ?assert(?is_vhost(VHost1)),
-            mnesia:write(?MNESIA_TABLE, VHost1, write),
-            {ok, VHost1}
-    end.
-
-merge_metadata_in_khepri(VHostName, Metadata) ->
     Path = khepri_vhost_path(VHostName),
     Ret1 = rabbit_khepri:adv_get(Path),
     case Ret1 of
@@ -178,7 +115,7 @@ merge_metadata_in_khepri(VHostName, Metadata) ->
                 ok ->
                     {ok, VHost};
                 {error, {khepri, mismatching_node, _}} ->
-                    merge_metadata_in_khepri(VHostName, Metadata);
+                    merge_metadata(VHostName, Metadata);
                 {error, _} = Error ->
                     Error
             end;
@@ -206,26 +143,13 @@ merge_metadata_in_khepri(VHostName, Metadata) ->
 set_tags(VHostName, Tags)
   when is_binary(VHostName) andalso is_list(Tags) ->
     ConvertedTags = lists:usort([rabbit_data_coercion:to_atom(Tag) || Tag <- Tags]),
-    rabbit_khepri:handle_fallback(
-      #{mnesia => fun() -> set_tags_in_mnesia(VHostName, ConvertedTags) end,
-        khepri => fun() -> set_tags_in_khepri(VHostName, ConvertedTags) end}).
-
-set_tags_in_mnesia(VHostName, Tags) ->
-    rabbit_mnesia:execute_mnesia_transaction(
-      fun() -> set_tags_in_mnesia_tx(VHostName, Tags) end).
-
-set_tags_in_mnesia_tx(VHostName, Tags) ->
-    UpdateFun = fun(VHost) -> do_set_tags(VHost, Tags) end,
-    update_in_mnesia_tx(VHostName, UpdateFun).
+    UpdateFun = fun(VHost) -> do_set_tags(VHost, ConvertedTags) end,
+    update(VHostName, UpdateFun).
 
 do_set_tags(VHost, Tags) when ?is_vhost(VHost) andalso is_list(Tags) ->
     Metadata0 = vhost:get_metadata(VHost),
     Metadata1 = Metadata0#{tags => Tags},
     vhost:set_metadata(VHost, Metadata1).
-
-set_tags_in_khepri(VHostName, Tags) ->
-    UpdateFun = fun(VHost) -> do_set_tags(VHost, Tags) end,
-    update_in_khepri(VHostName, UpdateFun).
 
 %% -------------------------------------------------------------------
 %% Deletion protection
@@ -271,14 +195,6 @@ disable_protection_from_deletion(VHostName) ->
 %% @private
 
 exists(VHostName) when is_binary(VHostName) ->
-    rabbit_khepri:handle_fallback(
-      #{mnesia => fun() -> exists_in_mnesia(VHostName) end,
-        khepri => fun() -> exists_in_khepri(VHostName) end}).
-
-exists_in_mnesia(VHostName) ->
-    mnesia:dirty_read({?MNESIA_TABLE, VHostName}) /= [].
-
-exists_in_khepri(VHostName) ->
     try
         ets:member(?KHEPRI_PROJECTION, VHostName)
     catch
@@ -301,17 +217,6 @@ exists_in_khepri(VHostName) ->
 %% @private
 
 get(VHostName) when is_binary(VHostName) ->
-    rabbit_khepri:handle_fallback(
-      #{mnesia => fun() -> get_in_mnesia(VHostName) end,
-        khepri => fun() -> get_in_khepri(VHostName) end}).
-
-get_in_mnesia(VHostName) ->
-    case mnesia:dirty_read({?MNESIA_TABLE, VHostName}) of
-        [VHost] when ?is_vhost(VHost) -> VHost;
-        []                            -> undefined
-    end.
-
-get_in_khepri(VHostName) ->
     try ets:lookup(?KHEPRI_PROJECTION, VHostName) of
         [Record] -> Record;
         _        -> undefined
@@ -333,14 +238,6 @@ get_in_khepri(VHostName) ->
 %% @private
 
 get_all() ->
-    rabbit_khepri:handle_fallback(
-      #{mnesia => fun() -> get_all_in_mnesia() end,
-        khepri => fun() -> get_all_in_khepri() end}).
-
-get_all_in_mnesia() ->
-    mnesia:dirty_match_object(?MNESIA_TABLE, vhost:pattern_match_all()).
-
-get_all_in_khepri() ->
     try
         ets:tab2list(?KHEPRI_PROJECTION)
     catch
@@ -361,17 +258,6 @@ get_all_in_khepri() ->
 %% @private
 
 count_all() ->
-    rabbit_khepri:handle_fallback(
-      #{mnesia => fun() -> count_all_in_mnesia() end,
-        khepri => fun() -> count_all_in_khepri() end}).
-
-count_all_in_mnesia() ->
-    List = mnesia:dirty_match_object(
-             ?MNESIA_TABLE,
-             vhost:pattern_match_all()),
-    {ok, length(List)}.
-
-count_all_in_khepri() ->
     Path = khepri_vhost_path(?KHEPRI_WILDCARD_STAR),
     rabbit_khepri:count(Path).
 
@@ -388,14 +274,6 @@ count_all_in_khepri() ->
 %% @private
 
 list() ->
-    rabbit_khepri:handle_fallback(
-      #{mnesia => fun() -> list_in_mnesia() end,
-        khepri => fun() -> list_in_khepri() end}).
-
-list_in_mnesia() ->
-    mnesia:dirty_all_keys(?MNESIA_TABLE).
-
-list_in_khepri() ->
     try
         ets:select(
           ?KHEPRI_PROJECTION, [{vhost:pattern_match_names(), [], ['$1']}])
@@ -422,26 +300,6 @@ list_in_khepri() ->
 
 update(VHostName, UpdateFun)
   when is_binary(VHostName) andalso is_function(UpdateFun, 1) ->
-    rabbit_khepri:handle_fallback(
-      #{mnesia => fun() -> update_in_mnesia(VHostName, UpdateFun) end,
-        khepri => fun() -> update_in_khepri(VHostName, UpdateFun) end}).
-
-update_in_mnesia(VHostName, UpdateFun) ->
-    rabbit_mnesia:execute_mnesia_transaction(
-      fun() -> update_in_mnesia_tx(VHostName, UpdateFun) end).
-
-update_in_mnesia_tx(VHostName, UpdateFun)
-  when is_binary(VHostName) andalso is_function(UpdateFun, 1) ->
-    case mnesia:wread({?MNESIA_TABLE, VHostName}) of
-        [VHost0] when ?is_vhost(VHost0) ->
-            VHost1 = UpdateFun(VHost0),
-            mnesia:write(?MNESIA_TABLE, VHost1, write),
-            VHost1;
-        [] ->
-            mnesia:abort({no_such_vhost, VHostName})
-    end.
-
-update_in_khepri(VHostName, UpdateFun) ->
     Path = khepri_vhost_path(VHostName),
     case rabbit_khepri:adv_get(Path) of
         {ok, #{Path := #{data := V, payload_version := Vsn}}} ->
@@ -452,7 +310,7 @@ update_in_khepri(VHostName, UpdateFun) ->
                 ok ->
                     V1;
                 {error, {khepri, mismatching_node, _}} ->
-                    update_in_khepri(VHostName, UpdateFun);
+                    update(VHostName, UpdateFun);
                 Error ->
                     throw(Error)
             end;
@@ -465,30 +323,6 @@ update_in_khepri(VHostName, UpdateFun) ->
 %% -------------------------------------------------------------------
 %% with_fun_in_*_tx().
 %% -------------------------------------------------------------------
-
--spec with_fun_in_mnesia_tx(VHostName, TxFun) -> Fun when
-      VHostName :: vhost:name(),
-      TxFun :: fun(() -> Ret),
-      Fun :: fun(() -> Ret),
-      Ret :: any().
-%% @doc Returns a function, calling `TxFun' only if the virtual host named
-%% `VHostName' exists.
-%%
-%% The returned function must be used inside a Mnesia transaction.
-%%
-%% @returns a function calling `TxFun' only if the virtual host exists.
-%%
-%% @private
-
-with_fun_in_mnesia_tx(VHostName, TxFun)
-  when is_binary(VHostName) andalso is_function(TxFun, 0) ->
-    fun() ->
-            ?assert(mnesia:is_transaction()),
-            case mnesia:read({?MNESIA_TABLE, VHostName}) of
-                [_VHost] -> TxFun();
-                []       -> mnesia:abort({no_such_vhost, VHostName})
-            end
-    end.
 
 with_fun_in_khepri_tx(VHostName, Thunk) ->
     fun() ->
@@ -515,20 +349,6 @@ with_fun_in_khepri_tx(VHostName, Thunk) ->
 %% @private
 
 delete(VHostName) when is_binary(VHostName) ->
-    rabbit_khepri:handle_fallback(
-      #{mnesia => fun() -> delete_in_mnesia(VHostName) end,
-        khepri => fun() -> delete_in_khepri(VHostName) end}).
-
-delete_in_mnesia(VHostName) ->
-    rabbit_mnesia:execute_mnesia_transaction(
-      fun() -> delete_in_mnesia_tx(VHostName) end).
-
-delete_in_mnesia_tx(VHostName) ->
-    Existed = mnesia:wread({?MNESIA_TABLE, VHostName}) =/= [],
-    mnesia:delete({?MNESIA_TABLE, VHostName}),
-    Existed.
-
-delete_in_khepri(VHostName) ->
     Path = khepri_vhost_path(VHostName),
     case rabbit_khepri:delete_or_fail(Path) of
         ok -> true;
@@ -546,15 +366,6 @@ delete_in_khepri(VHostName) ->
 %% @private
 
 clear() ->
-    rabbit_khepri:handle_fallback(
-      #{mnesia => fun() -> clear_in_mnesia() end,
-        khepri => fun() -> clear_in_khepri() end}).
-
-clear_in_mnesia() ->
-    {atomic, ok} = mnesia:clear_table(?MNESIA_TABLE),
-    ok.
-
-clear_in_khepri() ->
     Path = khepri_vhost_path(?KHEPRI_WILDCARD_STAR),
     case rabbit_khepri:delete(Path) of
         ok    -> ok;

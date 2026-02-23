@@ -1457,7 +1457,7 @@ delete_member(Q, Node) when ?amqqueue_is_quorum(Q) ->
                 Res when element(1, Res) == ok orelse
                          Res == {error, not_member} ->
                     %% if not a member we can still proceed with updating the
-                    %% mnesia record and clean up server if still running
+                    %% queue record and clean up server if still running
                     Fun = fun(Q1) ->
                                   update_type_state(
                                     Q1,

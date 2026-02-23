@@ -15,7 +15,7 @@
 -export([description/0, serialise_events/0, route/3]).
 -export([validate/1, validate_binding/2, create/2, delete/2, add_binding/3,
          remove_bindings/3, assert_args_equivalence/2, policy_changed/2]).
--export([setup_schema/0, disable_plugin/0]).
+-export([disable_plugin/0]).
 -export([info/1, info/2]).
 
 -rabbit_boot_step({?MODULE,
@@ -25,12 +25,6 @@
                     {cleanup, {?MODULE, disable_plugin, []}},
                     {requires, rabbit_registry},
                     {enables, kernel_ready}]}).
-
--rabbit_boot_step({rabbit_exchange_type_recent_history_metadata_store,
-                   [{description, "recent history exchange type: metadata store"},
-                    {mfa, {?MODULE, setup_schema, []}},
-                    {requires, database},
-                    {enables, external_infrastructure}]}).
 
 -define(INTEGER_ARG_TYPES, [byte, short, signedint, long]).
 
@@ -46,7 +40,7 @@ serialise_events() -> false.
 route(#exchange{name      = XName,
                 arguments = Args}, Message, _Options) ->
     Length = table_lookup(Args, <<"x-recent-history-length">>),
-    maybe_cache_msg(XName, Message, Length),
+    _ = maybe_cache_msg(XName, Message, Length),
     rabbit_router:match_routing_key(XName, ['_']).
 
 validate(#exchange{arguments = Args}) ->
@@ -108,9 +102,6 @@ assert_args_equivalence(X, Args) ->
     rabbit_exchange:assert_args_equivalence(X, Args).
 
 %%----------------------------------------------------------------------------
-
-setup_schema() ->
-    rabbit_db_rh_exchange:setup_schema().
 
 disable_plugin() ->
     rabbit_registry:unregister(exchange, <<"x-recent-history">>),

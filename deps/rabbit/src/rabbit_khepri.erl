@@ -555,9 +555,8 @@ do_join(RemoteNode) when RemoteNode =/= node() ->
     case net_adm:ping(RemoteNode) of
         pong ->
             %% We verify the cluster membership before adding `ThisNode' to
-            %% `RemoteNode''s cluster. We do it mostly to keep the same
-            %% behavior as what we do with Mnesia. Otherwise, the interest is
-            %% limited given the check and the actual join are not atomic.
+            %% `RemoteNode''s cluster. The interest is limited given the
+            %% check and the actual join are not atomic.
 
             ?LOG_DEBUG(
                "Adding this node (~p) to Khepri cluster \"~s\" through "
@@ -655,7 +654,10 @@ do_remove_member(NodeToRemove) when NodeToRemove =/= node() ->
                "member of it: ~p",
                [NodeToRemove, ?RA_CLUSTER_NAME, lists:sort(CurrentNodes)],
                #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
-            rabbit_mnesia:e(not_a_cluster_node)
+            throw(
+              {error,
+               {not_a_cluster_node,
+                "The node selected is not in the cluster."}})
     end.
 
 remove_reachable_member(NodeToRemove) ->
@@ -819,18 +821,7 @@ check_cluster_consistency() ->
                 true  ->
                     ok;
                 false ->
-                    %% We delete the schema here since we think we are
-                    %% clustered with nodes that are no longer in the
-                    %% cluster and there is no other way to remove
-                    %% them from our schema. On the other hand, we are
-                    %% sure that there is another online node that we
-                    %% can use to sync the tables with. There is a
-                    %% race here: if between this check and the
-                    %% `init_db' invocation the cluster gets
-                    %% disbanded, we're left with a node with no
-                    %% mnesia data that will try to connect to offline
-                    %% nodes.
-                    %% TODO delete schema in khepri ???
+                    %% TODO Should we reset Khepri schema here?
                     ok
             end;
         {error, not_found} ->
@@ -1922,7 +1913,8 @@ khepri_db_migration_post_enable1(
        #{domain => ?RMQLOG_DOMAIN_DB}),
     _ = mnesia_to_khepri:cleanup_after_table_copy(?STORE_ID, ?MIGRATION_ID),
 
-    rabbit_mnesia:stop_mnesia(),
+    stopped = mnesia:stop(),
+    rabbit_mnesia:ensure_mnesia_not_running(),
 
     %% We delete all Mnesia-related files in the data directory. This is in
     %% case this node joins a Mnesia-based cluster: it will be reset and switch
@@ -1990,6 +1982,7 @@ sync_cluster_membership_from_mnesia(FeatureName) ->
     end.
 
 sync_cluster_membership_from_mnesia_locked(FeatureName) ->
+    _ = mnesia:start(),
     rabbit_mnesia:ensure_mnesia_running(),
 
     try

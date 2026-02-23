@@ -11,16 +11,6 @@ setup(_Context) ->
        "~n== Clustering ==", [],
        #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
 
-    case rabbit_khepri:is_enabled() of
-        true ->
-            ok;
-        false ->
-            ?LOG_DEBUG(
-               "Preparing cluster status files", [],
-               #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
-            rabbit_node_monitor:prepare_cluster_status_files()
-    end,
-
     ?LOG_DEBUG(
        "Checking cluster consistency", [],
        #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),

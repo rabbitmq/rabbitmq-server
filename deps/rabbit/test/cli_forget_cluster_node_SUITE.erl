@@ -54,12 +54,7 @@ suite() ->
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
-    Config1 = rabbit_ct_helpers:merge_app_env(
-                Config, {rabbit, [
-                          {mnesia_table_loading_retry_limit, 2},
-                          {mnesia_table_loading_retry_timeout,1000}
-                         ]}),
-    rabbit_ct_helpers:run_setup_steps(Config1).
+    rabbit_ct_helpers:run_setup_steps(Config).
 
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).

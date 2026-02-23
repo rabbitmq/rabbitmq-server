@@ -61,13 +61,7 @@ verify_status_equal(Node, Status, _AllNodes) ->
 
 verify_cluster_status_equal(Node, Status, AllNodes) ->
     NodeStatus = sort_cluster_status(cluster_status(Node)),
-    %% To be compatible with mixed version clusters in 3.11.x we use here
-    %% rabbit_mnesia:is_clustered/0 instead of rabbit_db_cluster:is_clustered/0
-    IsClustered0 = rpc:call(Node, rabbit_db_cluster, is_clustered, []),
-    IsClustered = case maybe_undef(IsClustered0) of
-                      undef -> rpc:call(Node, rabbit_mnesia, is_clustered, []);
-                      _     -> IsClustered0
-                  end,
+    IsClustered = rpc:call(Node, rabbit_db_cluster, is_clustered, []),
     ((AllNodes =/= [Node]) =:= IsClustered andalso equal(Status, NodeStatus)).
 
 equal({_, _, A, B, C}, {undef, undef, A, B, C}) ->
@@ -93,13 +87,7 @@ cluster_status(Node) ->
                          _     -> RunningMembers0
                      end,
 
-    %% To be compatible with mixed version clusters in 3.11.x we use here
-    %% rabbit_mnesia:cluster_nodes/1 instead of rabbit_db_cluster:members/0
-    AllDbNodes0 = rpc:call(Node, rabbit_db_cluster, members, []),
-    AllDbNodes = case maybe_undef(AllDbNodes0) of
-                     undef -> rpc:call(Node, rabbit_mnesia, cluster_nodes, [all]);
-                     _     -> AllDbNodes0
-                 end,
+    AllDbNodes = rpc:call(Node, rabbit_db_cluster, members, []),
     {DiscDbNodes, RunningDbNodes} =
     case rpc:call(Node, rabbit_khepri, is_enabled, []) of
         true ->

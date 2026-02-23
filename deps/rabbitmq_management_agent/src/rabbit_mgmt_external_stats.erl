@@ -195,7 +195,7 @@ infos([Item|T], Acc0, State0) ->
 i(name, State) ->
     {State, node()};
 i(partitions, State) ->
-    {State, rabbit_node_monitor:partitions()};
+    {State, []};
 i(fd_used, State) ->
     get_used_fd(State);
 i(fd_total, #state{fd_total = FdTotal}=State) ->

@@ -900,7 +900,7 @@ init_subscriptions(_SessionPresent = _SubscriptionsPresent = true,
         {ok, SubsQos1} ?= init_subscriptions0(?QOS_1, State),
         Subs = maps:merge(SubsQos0, SubsQos1),
         rabbit_global_counters:consumer_created(ProtoVer),
-        %% Cache subscriptions in process state to avoid future mnesia:match_object/3 queries.
+        %% Cache subscriptions in process state to perform fewer queries.
         {ok, State#state{subscriptions = Subs}}
     end;
 init_subscriptions(_, State) ->
@@ -1761,17 +1761,12 @@ process_routing_confirm(#{}, _, State) ->
 -spec send_puback(packet_id() | list(packet_id()), reason_code(), state()) -> ok.
 send_puback(PktIds0, ReasonCode, State)
   when is_list(PktIds0) ->
-    case rabbit_node_monitor:pause_partition_guard() of
-        ok ->
-            %% Classic queues confirm messages unordered.
-            %% Let's sort them here assuming most MQTT clients send with an increasing packet identifier.
-            PktIds = lists:usort(PktIds0),
-            lists:foreach(fun(Id) ->
-                                  send_puback(Id, ReasonCode, State)
-                          end, PktIds);
-        pausing ->
-            ok
-    end;
+    %% Classic queues confirm messages unordered.
+    %% Let's sort them here assuming most MQTT clients send with an increasing packet identifier.
+    PktIds = lists:usort(PktIds0),
+    lists:foreach(fun(Id) ->
+                          send_puback(Id, ReasonCode, State)
+                  end, PktIds);
 send_puback(PktId, ReasonCode, State = #state{cfg = #cfg{proto_ver = ProtoVer}}) ->
     rabbit_global_counters:messages_confirmed(ProtoVer, 1),
     Packet = #mqtt_packet{fixed = #mqtt_packet_fixed{type = ?PUBACK},

@@ -29,9 +29,6 @@
         , assert_args_equivalence/2
         , policy_changed/2 ]).
 
-%% Initialisation of database function:
--export([setup_db_schema/0]).
-
 -export([info/1, info/2]).
 
 %%----------------------------------------------------------------------------
@@ -43,19 +40,6 @@
                     , {cleanup, {rabbit_registry, unregister, [exchange, ?X_TYPE_NAME]}}
                     , {requires, rabbit_registry}
                     , {enables, kernel_ready} ] }).
-
-%% Initialise database
--rabbit_boot_step({ rabbit_jms_topic_exchange_mnesia
-                  , [ {description, "database exchange type JMS topic selector"}
-                    , {mfa, {?MODULE, setup_db_schema, []}}
-                    , {requires, database}
-                    , {enables, external_infrastructure} ] }).
-
-%%----------------------------------------------------------------------------
-
-% Initialise database table for all exchanges of type <<"x-jms-topic">>
-setup_db_schema() ->
-    rabbit_db_jms_exchange:setup_schema().
 
 %%----------------------------------------------------------------------------
 %% R E F E R E N C E   T Y P E   I N F O R M A T I O N
@@ -108,7 +92,7 @@ create(_Tx, #exchange{name = XName}) ->
 
 % Delete an exchange
 delete(_Tx, #exchange{name = XName}) ->
-    delete_state(XName),
+    _ = delete_state(XName),
     ok.
 
 % Before add binding

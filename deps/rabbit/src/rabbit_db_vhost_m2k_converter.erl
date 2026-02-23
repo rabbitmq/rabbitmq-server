@@ -85,4 +85,4 @@ delete_from_khepri(rabbit_vhost = Table, Key, State) ->
       Table :: atom().
 
 clear_data_in_khepri(rabbit_vhost) ->
-    rabbit_db_vhost:clear_in_khepri().
+    rabbit_db_vhost:clear().

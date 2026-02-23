@@ -28,7 +28,6 @@
 
 %% Exported to be used by various rabbit_db_* modules
 -export([
-         list_in_mnesia/2,
          list_in_khepri/1,
          list_in_khepri/2
         ]).
@@ -68,10 +67,7 @@ init() ->
             ok
     end,
 
-    Ret = case rabbit_khepri:is_enabled() of
-              true  -> init_using_khepri(IsVirgin);
-              false -> init_using_mnesia(IsVirgin)
-          end,
+    Ret = init_using_khepri(IsVirgin),
     case Ret of
         ok ->
             ?LOG_DEBUG(
@@ -92,14 +88,6 @@ pre_init(IsVirgin) ->
     Members = rabbit_db_cluster:members(),
     OtherMembers = rabbit_nodes:nodes_excl_me(Members),
     rabbit_db_cluster:ensure_feature_flags_are_in_sync(OtherMembers, IsVirgin).
-
-init_using_mnesia(_IsVirgin) ->
-    ?LOG_DEBUG(
-      "DB: initialize Mnesia",
-      #{domain => ?RMQLOG_DOMAIN_DB}),
-    ok = rabbit_mnesia:init(),
-    ?assertEqual(rabbit:data_dir(), mnesia_dir()),
-    rabbit_sup:start_child(mnesia_sync).
 
 init_using_khepri(IsVirgin) ->
     ?LOG_DEBUG(
@@ -125,22 +113,12 @@ clear_init_finished() ->
     _ = persistent_term:erase(?PT_KEY_INIT_FINISHED),
     ok.
 
--spec reset() -> Ret when
-      Ret :: ok.
+-spec reset() -> ok.
 %% @doc Resets the database and the node.
 
 reset() ->
-    ok = case rabbit_khepri:is_enabled() of
-             true  -> reset_using_khepri();
-             false -> reset_using_mnesia()
-         end,
+    ok = reset_using_khepri(),
     post_reset().
-
-reset_using_mnesia() ->
-    ?LOG_INFO(
-      "DB: resetting node (using Mnesia)",
-      #{domain => ?RMQLOG_DOMAIN_DB}),
-    rabbit_mnesia:reset().
 
 reset_using_khepri() ->
     ?LOG_DEBUG(
@@ -148,33 +126,17 @@ reset_using_khepri() ->
       #{domain => ?RMQLOG_DOMAIN_DB}),
     rabbit_khepri:reset().
 
--spec force_reset() -> Ret when
-      Ret :: ok.
+-spec force_reset() -> no_return().
 %% @doc Resets the database and the node.
 
 force_reset() ->
-    ok = case rabbit_khepri:is_enabled() of
-             true  -> force_reset_using_khepri();
-             false -> force_reset_using_mnesia()
-         end,
-    post_reset().
-
-force_reset_using_mnesia() ->
-    ?LOG_DEBUG(
-      "DB: resetting node forcefully (using Mnesia)",
-      #{domain => ?RMQLOG_DOMAIN_DB}),
-    rabbit_mnesia:force_reset().
-
--spec force_reset_using_khepri() -> no_return().
-
-force_reset_using_khepri() ->
     ?LOG_ERROR(
       "DB: resetting node forcefully is unsupported with Khepri",
       #{domain => ?RMQLOG_DOMAIN_DB}),
     throw({error, "Forced reset is unsupported with Khepri"}).
 
 -spec force_load_on_next_boot() -> Ret when
-      Ret :: ok.
+      Ret :: {error, unsupported_with_khepri}.
 %% @doc Requests that the database to be forcefully loaded during next boot.
 %%
 %% This is necessary when a node refuses to boot when the cluster is in a bad
@@ -185,30 +147,10 @@ force_load_on_next_boot() ->
     %% recovery scenarios where just a minority of nodes are accessible.
     %% Potentially, it could also be replaced with a way to export all the
     %% data.
-    case rabbit_khepri:is_enabled() of
-        true  -> {error, unsupported_with_khepri};
-        false -> force_load_on_next_boot_using_mnesia()
-    end.
-
-force_load_on_next_boot_using_mnesia() ->
-    ?LOG_DEBUG(
-      "DB: force load on next boot (using Mnesia)",
-      #{domain => ?RMQLOG_DOMAIN_DB}),
-    rabbit_mnesia:force_load_next_boot().
+    {error, unsupported_with_khepri}.
 
 post_reset() ->
     rabbit_feature_flags:reset(),
-
-    %% The cluster status files that RabbitMQ uses when Mnesia is the database
-    %% are initially created from rabbit_prelaunch_cluster. However, it will
-    %% only be done once the `rabbit` app is restarted. Meanwhile, they are
-    %% missing and the CLI or the testsuite may rely on them. Indeed, after
-    %% the reset, Mnesia is assumed to be the database and the cluster status
-    %% files should have been created the first time the application was
-    %% started already.
-    ThisNode = node(),
-    rabbit_node_monitor:write_cluster_status({[ThisNode], [ThisNode], []}),
-
     ok.
 
 %% -------------------------------------------------------------------
@@ -224,13 +166,7 @@ post_reset() ->
 %% @see is_virgin_node/1.
 
 is_virgin_node() ->
-    case rabbit_khepri:get_feature_state() of
-        enabled -> is_virgin_node_using_khepri();
-        _       -> is_virgin_node_using_mnesia()
-    end.
-
-is_virgin_node_using_mnesia() ->
-    rabbit_mnesia:is_virgin_node().
+    is_virgin_node_using_khepri().
 
 is_virgin_node_using_khepri() ->
     case rabbit_khepri:is_empty() of
@@ -294,13 +230,7 @@ needs_default_data() ->
 %% @returns the directory path.
 
 dir() ->
-    case rabbit_khepri:is_enabled() of
-        true  -> khepri_dir();
-        false -> mnesia_dir()
-    end.
-
-mnesia_dir() ->
-    rabbit_mnesia:dir().
+    khepri_dir().
 
 khepri_dir() ->
     rabbit_khepri:dir().
@@ -322,20 +252,6 @@ ensure_dir_exists() ->
         {error, Reason} ->
             throw({error, {cannot_create_db_dir, DBDir, Reason}})
     end.
-
-%% -------------------------------------------------------------------
-%% list_in_mnesia().
-%% -------------------------------------------------------------------
-
--spec list_in_mnesia(Table, Match) -> Objects when
-      Table :: atom(),
-      Match :: any(),
-      Objects :: [any()].
-
-list_in_mnesia(Table, Match) ->
-    %% Not dirty_match_object since that would not be transactional when used
-    %% in a tx context
-    mnesia:async_dirty(fun () -> mnesia:match_object(Table, Match, read) end).
 
 %% -------------------------------------------------------------------
 %% list_in_khepri().

@@ -315,7 +315,7 @@ terminate({shutdown, _} = R, State = #q{backing_queue = BQ}) ->
     terminate_shutdown(fun (BQS) -> BQ:terminate(R, BQS) end, State);
 terminate(normal, State = #q{status = {terminated_by, auto_delete}}) ->
     %% auto_delete case
-    %% To increase performance we want to avoid a mnesia_sync:sync call
+    %% To increase performance we want to avoid a metadata store sync call
     %% after every transaction, as we could be deleting simultaneously
     %% thousands of queues. A optimisation introduced by server#1513
     %% needs to be reverted by this case, avoiding to guard the delete
@@ -329,8 +329,7 @@ terminate(normal, State) ->
 terminate(_Reason,           State = #q{q = Q}) ->
     terminate_shutdown(fun (BQS) ->
                                Q2 = amqqueue:set_state(Q, crashed),
-                               %% When mnesia is removed this update can become
-                               %% an async Khepri command.
+                               %% TODO: This can become an async Khepri command.
                                _ = rabbit_amqqueue:store_queue(Q2),
                                BQS
                        end, State).
@@ -403,9 +402,7 @@ infinite_internal_delete(Q, ActingUser, Reason) ->
     end.
 
 delete_queue_record(Q, ActingUser, Reason) ->
-    %% This try-catch block transforms throws to errors since throws are not
-    %% logged. When mnesia is removed this `try` can be removed: Khepri returns
-    %% errors as error tuples instead.
+    %% TODO: Khepri returns errors as tuples, this try-catch can be removed.
     try
         rabbit_amqqueue:internal_delete(Q, ActingUser, Reason)
     catch

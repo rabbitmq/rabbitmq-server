@@ -37,12 +37,6 @@ recover() ->
     %% faster than other nodes handled DOWN messages from us.
     rabbit_amqqueue:on_node_down(node()),
 
-    %% Prepare rabbit_semi_durable_route table
-    {Time, _} = timer:tc(fun() ->
-                                 rabbit_binding:recover()
-                         end),
-    ?LOG_DEBUG("rabbit_binding:recover/0 completed in ~fs", [Time/1000000]),
-
     %% rabbit_vhost_sup_sup will start the actual recovery.
     %% So recovery will be run every time a vhost supervisor is restarted.
     ok = rabbit_vhost_sup_sup:start(),
@@ -90,13 +84,7 @@ recover(VHost) ->
             end
     end,
 
-    {Recovered, Failed} = rabbit_amqqueue:recover(VHost),
-    AllQs = Recovered ++ Failed,
-    QNames = [amqqueue:get_name(Q) || Q <- AllQs],
-    {Time, ok} = timer:tc(fun() ->
-                                  rabbit_binding:recover(rabbit_exchange:recover(VHost), QNames)
-                          end),
-    ?LOG_DEBUG("rabbit_binding:recover/2 for vhost ~ts completed in ~fs", [VHost, Time/1000000]),
+    {Recovered, _Failed} = rabbit_amqqueue:recover(VHost),
 
     ok = rabbit_amqqueue:start(Recovered),
     ok.

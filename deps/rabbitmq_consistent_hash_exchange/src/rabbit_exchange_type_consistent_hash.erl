@@ -47,7 +47,6 @@
 -define(SEED_ALGORITHM, exs1024).
 
 init() ->
-    rabbit_db_ch_exchange:setup_schema(),
     _ = recover(),
     ok.
 
@@ -121,16 +120,10 @@ recover() ->
     %% topology recovery has already happened, we have to recover state for any durable
     %% consistent hash exchanges since plugin activation was moved later in boot process
     %% starting with RabbitMQ 3.8.4
-    case list_exchanges() of
-        {error, Reason} ->
-            ?LOG_ERROR(
-              "Consistent hashing exchange: failed to recover durable exchange ring state, reason: ~tp",
-              [Reason]);
-        Xs ->
-            ?LOG_DEBUG("Consistent hashing exchange: have ~b durable exchanges to recover", [length(Xs)]),
-            %% TODO we need to know if we're first on the cluster to reset storage. In mnesia it's a ram table
-            [recover_exchange_and_bindings(X) || X <- lists:usort(Xs)]
-    end.
+    Xs = list_exchanges(),
+    ?LOG_DEBUG("Consistent hashing exchange: have ~b durable exchanges to recover", [length(Xs)]),
+    %% TODO: reset storage if this is the first node in the cluster
+    [recover_exchange_and_bindings(X) || X <- lists:usort(Xs)].
 
 list_exchanges() ->
     Pattern = #exchange{durable = true, type = 'x-consistent-hash', _ = '_'},
@@ -138,7 +131,7 @@ list_exchanges() ->
 
 recover_exchange_and_bindings(#exchange{name = XName} = X) ->
     ?LOG_DEBUG("Consistent hashing exchange: will recover exchange ~ts", [rabbit_misc:rs(XName)]),
-    create(none, X),
+    _ = create(none, X),
     ?LOG_DEBUG("Consistent hashing exchange: recovered exchange ~ts", [rabbit_misc:rs(XName)]),
     Bindings = rabbit_binding:list_for_source(XName),
     ?LOG_DEBUG("Consistent hashing exchange: have ~b bindings to recover for exchange ~ts",

@@ -59,7 +59,7 @@ init_with_lock_exits_after_errors(_Config) ->
 init_with_lock_ignore_after_errors(_Config) ->
     meck:expect(rabbit_peer_discovery_classic_config, lock, fun(_) -> {error, "test error"} end),
     ?assertEqual(
-       {error, {aborted_feature_flags_compat_check, {error, feature_flags_file_not_set}}},
+       {error, {aborted_feature_flags_compat_check, {error, {erpc, noconnection}}}},
        rabbit_peer_discovery:join_selected_node(rabbit_peer_discovery_classic_config, missing@localhost, disc)),
     ?assert(meck:validate(rabbit_peer_discovery_classic_config)),
     passed.
@@ -67,7 +67,7 @@ init_with_lock_ignore_after_errors(_Config) ->
 init_with_lock_not_supported(_Config) ->
     meck:expect(rabbit_peer_discovery_classic_config, lock, fun(_) -> not_supported end),
     ?assertEqual(
-       {error, {aborted_feature_flags_compat_check, {error, feature_flags_file_not_set}}},
+       {error, {aborted_feature_flags_compat_check, {error, {erpc, noconnection}}}},
        rabbit_peer_discovery:join_selected_node(rabbit_peer_discovery_classic_config, missing@localhost, disc)),
     ?assert(meck:validate(rabbit_peer_discovery_classic_config)),
     passed.
@@ -76,7 +76,7 @@ init_with_lock_supported(_Config) ->
     meck:expect(rabbit_peer_discovery_classic_config, lock, fun(_) -> {ok, data} end),
     meck:expect(rabbit_peer_discovery_classic_config, unlock, fun(data) -> ok end),
     ?assertEqual(
-       {error, {aborted_feature_flags_compat_check, {error, feature_flags_file_not_set}}},
+       {error, {aborted_feature_flags_compat_check, {error, {erpc, noconnection}}}},
        rabbit_peer_discovery:join_selected_node(rabbit_peer_discovery_classic_config, missing@localhost, disc)),
     ?assert(meck:validate(rabbit_peer_discovery_classic_config)),
     passed.

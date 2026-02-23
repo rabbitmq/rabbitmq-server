@@ -24,7 +24,6 @@ groups() ->
 
 all_tests() ->
     [
-     create_tables,
      create_or_update,
      find_mirror,
      delete,
@@ -67,13 +66,6 @@ end_per_testcase(Testcase, Config) ->
 %% ---------------------------------------------------------------------------
 %% Test Cases
 %% ---------------------------------------------------------------------------
-
-create_tables(Config) ->
-    passed = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, create_tables1, [Config]).
-
-create_tables1(_Config) ->
-    ?assertEqual(ok, rabbit_db_msup:create_tables()),
-    passed.
 
 create_or_update(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, create_or_update1, [Config]).

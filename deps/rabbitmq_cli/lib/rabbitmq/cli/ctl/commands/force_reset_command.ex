@@ -5,7 +5,7 @@
 ## Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ForceResetCommand do
-  alias RabbitMQ.CLI.Core.{DocGuide, ExitCodes}
+  alias RabbitMQ.CLI.Core.DocGuide
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -15,11 +15,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForceResetCommand do
 
   def run([], %{node: node_name}) do
     :rabbit_misc.rpc_call(node_name, :rabbit_db, :force_reset, [])
-  end
-
-  def output({:error, :mnesia_unexpectedly_running}, %{node: node_name}) do
-    {:error, ExitCodes.exit_software(),
-     RabbitMQ.CLI.DefaultOutput.mnesia_running_error(node_name)}
   end
 
   use RabbitMQ.CLI.DefaultOutput

@@ -84,12 +84,4 @@ defmodule JoinClusterCommandTest do
              ~r/Clustering node #{get_rabbit_hostname()} with a/
   end
 
-  test "output mnesia is running error", context do
-    exit_code = RabbitMQ.CLI.Core.ExitCodes.exit_software()
-
-    assert match?(
-             {:error, ^exit_code, "Mnesia is still running on node " <> _},
-             @command.output({:error, :mnesia_unexpectedly_running}, context[:opts])
-           )
-  end
 end

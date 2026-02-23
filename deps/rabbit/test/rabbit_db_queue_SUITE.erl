@@ -342,9 +342,9 @@ delete1(_Config) ->
     ?assertEqual({ok, Q}, rabbit_db_queue:get(QName)),
     %% TODO Can we handle the deletions outside of rabbit_db_queue? Probably not because
     %% they should be done in a single transaction, but what a horrid API to have!
-    Deletions = rabbit_db_queue:delete(QName, normal),
+    Deletions = rabbit_db_queue:delete(QName, false),
     ?assertEqual(rabbit_binding:new_deletions(), Deletions),
-    ?assertEqual(ok, rabbit_db_queue:delete(QName, normal)),
+    ?assertEqual(ok, rabbit_db_queue:delete(QName, false)),
     ?assertEqual({error, not_found}, rabbit_db_queue:get(QName)),
     passed.
 
@@ -362,12 +362,12 @@ delete_exclusive_queue1(_Config) ->
     %% Delete with wrong owner should not delete the queue
     NotOwnerPattern = amqqueue:pattern_match_on_exclusive_owner(NotOwner),
     NotOwnerConditions = [#if_data_matches{pattern = NotOwnerPattern}],
-    ?assertEqual(ok, rabbit_db_queue:delete_if(QName, NotOwnerConditions, normal)),
+    ?assertEqual(ok, rabbit_db_queue:delete_if(QName, NotOwnerConditions, false)),
     ?assertEqual({ok, Q}, rabbit_db_queue:get(QName)),
     %% Delete with correct owner should delete the queue
     OwnerPattern = amqqueue:pattern_match_on_exclusive_owner(Owner),
     OwnerConditions = [#if_data_matches{pattern = OwnerPattern}],
-    Deletions = rabbit_db_queue:delete_if(QName, OwnerConditions, normal),
+    Deletions = rabbit_db_queue:delete_if(QName, OwnerConditions, false),
     ?assertEqual(rabbit_binding:new_deletions(), Deletions),
     ?assertEqual({error, not_found}, rabbit_db_queue:get(QName)),
     unlink(Owner),
@@ -551,7 +551,7 @@ foreach_durable1(_Config) ->
     ?assertEqual(ok, rabbit_db_queue:set(Q1)),
     ?assertEqual(ok, rabbit_db_queue:foreach(
                        fun(Q0) ->
-                               rabbit_db_queue:internal_delete(amqqueue:get_name(Q0), true, normal)
+                               rabbit_db_queue:delete(amqqueue:get_name(Q0), true)
                        end,
                        fun(Q0) when ?is_amqqueue(Q0) -> true end)),
     ?assertEqual({error, not_found}, rabbit_db_queue:get(QName1)),
@@ -566,8 +566,8 @@ internal_delete1(_Config) ->
     Q = new_queue(QName, rabbit_classic_queue),
     ?assertEqual(ok, rabbit_db_queue:set(Q)),
     ?assertEqual(ok, rabbit_db_queue:foreach(
-                       fun(Q0) -> rabbit_db_queue:internal_delete(amqqueue:get_name(Q0),
-                                                                  false, normal) end,
+                       fun(Q0) -> rabbit_db_queue:delete(amqqueue:get_name(Q0),
+                                                         false) end,
                        fun(Q0) when ?is_amqqueue(Q0) -> true end)),
     ?assertEqual({error, not_found}, rabbit_db_queue:get(QName)),
     ?assertEqual({error, not_found}, rabbit_db_queue:get_durable(QName)),

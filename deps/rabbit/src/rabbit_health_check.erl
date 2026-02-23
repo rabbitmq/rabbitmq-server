@@ -33,7 +33,7 @@ node(Node, Timeout) ->
 local() ->
     ?LOG_WARNING("rabbitmqctl node_health_check and its HTTP API counterpart are DEPRECATED. "
                        "See https://www.rabbitmq.com/docs/monitoring#health-checks for replacement options."),
-    run_checks([list_channels, list_queues, alarms, rabbit_node_monitor]).
+    run_checks([list_channels, list_queues, alarms]).
 
 %%----------------------------------------------------------------------------
 %% Internal functions
@@ -56,15 +56,6 @@ node_health_check(list_channels) ->
 
 node_health_check(list_queues) ->
     health_check_queues(rabbit_vhost:list_names());
-
-node_health_check(rabbit_node_monitor) ->
-    case rabbit_node_monitor:partitions() of
-        [] ->
-            ok;
-        L when is_list(L), length(L) > 0 ->
-            ErrorMsg = io_lib:format("cluster partition in effect: ~tp", [L]),
-            {error_string, ErrorMsg}
-    end;
 
 node_health_check(alarms) ->
     % Note:

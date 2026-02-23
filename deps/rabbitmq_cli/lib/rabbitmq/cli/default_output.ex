@@ -20,11 +20,6 @@ defmodule RabbitMQ.CLI.DefaultOutput do
     format_output(format_khepri_output(normalize_output(result, opts), opts))
   end
 
-  def mnesia_running_error(node_name) do
-    "Mnesia is still running on node #{node_name}.\n" <>
-      "Please stop RabbitMQ with 'rabbitmqctl stop_app' first."
-  end
-
   def khepri_timeout_error(node_name) do
     "Khepri has timed out on node #{node_name}.\n" <>
       "Khepri cluster could be in minority."

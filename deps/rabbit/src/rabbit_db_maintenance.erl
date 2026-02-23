@@ -13,7 +13,6 @@
 -include("include/rabbit_khepri.hrl").
 
 -export([
-         table_definitions/0,
          set/1,
          get/1,
          get_consistent/1
@@ -22,22 +21,6 @@
 -export([
          khepri_maintenance_path/1
         ]).
-
--define(TABLE, rabbit_node_maintenance_states).
-
-%% -------------------------------------------------------------------
-%% table_definitions().
-%% -------------------------------------------------------------------
-
--spec table_definitions() -> [Def] when
-      Def :: {Name :: atom(), term()}.
-
-table_definitions() ->
-    [{?TABLE, maps:to_list(#{
-                             record_name => node_maintenance_state,
-                             attributes  => record_info(fields, node_maintenance_state),
-                             match => #node_maintenance_state{_ = '_'}
-                            })}].
 
 %% -------------------------------------------------------------------
 %% set().
@@ -51,35 +34,6 @@ table_definitions() ->
 %% @private
 
 set(Status) ->
-    rabbit_khepri:handle_fallback(
-      #{mnesia => fun() -> set_in_mnesia(Status) end,
-        khepri => fun() -> set_in_khepri(Status) end
-       }).
-
-set_in_mnesia(Status) ->
-    Res = mnesia:transaction(
-            fun () ->
-                    case mnesia:wread({?TABLE, node()}) of
-                        [] ->
-                            Row = #node_maintenance_state{
-                                     node   = node(),
-                                     status = Status
-                                    },
-                            mnesia:write(?TABLE, Row, write);
-                        [Row0] ->
-                            Row = Row0#node_maintenance_state{
-                                    node   = node(),
-                                    status = Status
-                                   },
-                            mnesia:write(?TABLE, Row, write)
-                    end
-            end),
-    case Res of
-        {atomic, ok} -> true;
-        _            -> false
-    end.
-
-set_in_khepri(Status) ->
     Node = node(),
     Path = khepri_maintenance_path(Node),
     Record = #node_maintenance_state{
@@ -105,20 +59,6 @@ set_in_khepri(Status) ->
 %% @private
 
 get(Node) ->
-    rabbit_khepri:handle_fallback(
-      #{mnesia => fun() -> get_in_mnesia(Node) end,
-        khepri => fun() -> get_in_khepri(Node) end
-       }).
-
-get_in_mnesia(Node) ->
-    case catch mnesia:dirty_read(?TABLE, Node) of
-        []  -> undefined;
-        [#node_maintenance_state{node = Node, status = Status}] ->
-            Status;
-        _   -> undefined
-    end.
-
-get_in_khepri(Node) ->
     Path = khepri_maintenance_path(Node),
     case rabbit_khepri:get(Path) of
         {ok, #node_maintenance_state{status = Status}} ->
@@ -141,21 +81,6 @@ get_in_khepri(Node) ->
 %% @private
 
 get_consistent(Node) ->
-    rabbit_khepri:handle_fallback(
-      #{mnesia => fun() -> get_consistent_in_mnesia(Node) end,
-        khepri => fun() -> get_consistent_in_khepri(Node) end
-       }).
-
-get_consistent_in_mnesia(Node) ->
-    case mnesia:transaction(fun() -> mnesia:read(?TABLE, Node) end) of
-        {atomic, []} -> undefined;
-        {atomic, [#node_maintenance_state{node = Node, status = Status}]} ->
-            Status;
-        {atomic, _}  -> undefined;
-        {aborted, _Reason} -> undefined
-    end.
-
-get_consistent_in_khepri(Node) ->
     Path = khepri_maintenance_path(Node),
     Options = #{favor => consistency},
     case rabbit_khepri:get(Path, Options) of

@@ -1862,7 +1862,8 @@ internal_delete(Queue, ActingUser, Reason) ->
                          Pattern = amqqueue:pattern_match_on_exclusive_owner(Owner),
                          [#if_data_matches{pattern = Pattern}]
                  end,
-    case rabbit_db_queue:delete_if(QueueName, Conditions, Reason) of
+    OnlyDurable = Reason =:= missing_owner,
+    case rabbit_db_queue:delete_if(QueueName, Conditions, OnlyDurable) of
         ok ->
             ok;
         {error, timeout} = Err ->
@@ -1879,8 +1880,7 @@ internal_delete(Queue, ActingUser, Reason) ->
 
 -spec forget_all(node()) -> 'ok'.
 
-%% This is used by `rabbit_mnesia:remove_node_if_mnesia_running/1' and
-%% `rabbit_khepri:remove_*_member/1'.
+%% This is used by `rabbit_khepri:remove_*_member/1'.
 forget_all(Node) ->
     ?LOG_INFO("Will remove all queues from node ~ts. The node is likely being removed from the cluster.", [Node]),
     UpdateFun = fun(Q) ->
@@ -1901,7 +1901,7 @@ forget_node_for_queue(Q) ->
     %% Don't process_deletions since that just calls callbacks and we
     %% are not really up.
     Name = amqqueue:get_name(Q),
-    rabbit_db_queue:internal_delete(Name, true, normal).
+    rabbit_db_queue:delete(Name, true).
 
 -spec run_backing_queue
         (pid(), atom(), (fun ((atom(), A) -> {[rabbit_types:msg_id()], A}))) ->
@@ -1932,31 +1932,18 @@ is_dead_exclusive(Q) when ?amqqueue_exclusive_owner_is_pid(Q) ->
 -spec on_node_up(node()) -> 'ok'.
 
 on_node_up(Node) ->
-    case rabbit_khepri:is_enabled() of
-        true ->
-            %% With Khepri, we try to delete transient queues now because it's
-            %% possible any updates timed out because of the lack of a quorum
-            %% while `Node' was down.
-            ok = delete_transient_queues_on_node(Node);
-        false ->
-            ok
-    end.
+    ok = delete_transient_queues_on_node(Node).
 
 -spec on_node_down(node()) -> 'ok'.
 
-on_node_down(Node) ->
-    case rabbit_khepri:is_enabled() of
-        true ->
-            %% With Khepri, we don't delete transient/exclusive queues. There
-            %% may be a network partition and the node will be reachable again
-            %% after the partition is repaired.
-            %%
-            %% If the node will never come back, it will likely be removed from
-            %% the cluster. We take care of transient queues at that time.
-            ok;
-        false ->
-            ok = delete_transient_queues_on_node(Node)
-    end.
+on_node_down(_Node) ->
+    %% With Khepri, we don't delete transient/exclusive queues. There
+    %% may be a network partition and the node will be reachable again
+    %% after the partition is repaired.
+    %%
+    %% If the node will never come back, it will likely be removed from
+    %% the cluster. We take care of transient queues at that time.
+    ok.
 
 -spec delete_transient_queues_on_node(Node) -> Ret when
       Node :: node(),

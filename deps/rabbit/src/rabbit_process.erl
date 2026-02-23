@@ -52,14 +52,7 @@ is_process_alive(Pid) when is_pid(Pid) ->
 is_process_alive({Name, Node}) when is_atom(Name) andalso is_atom(Node) ->
     case rabbit_nodes:is_running(Node) of
         true ->
-            try
-                erpc:call(Node, ?MODULE, is_registered_process_alive, [Name])
-            catch
-                error:{exception, undef, [{?MODULE, _, _, _} | _]} ->
-                    rpc:call(
-                      Node,
-                      rabbit_mnesia, is_registered_process_alive, [Name])
-            end;
+            erpc:call(Node, ?MODULE, is_registered_process_alive, [Name]);
         false ->
             false
     end.
