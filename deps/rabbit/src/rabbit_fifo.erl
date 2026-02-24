@@ -2071,10 +2071,10 @@ maybe_enqueue(RaftIdx, Ts, From, MsgSeqNo, RawMsg,
             {duplicate, State, Effects0}
     end.
 
-return(Meta, ConsumerKey, Consumer,
+return(Meta, ConsumerKey, Consumer0,
        MsgIds, IncrDelCount, Anns, Effects0, State0)
- when is_map(Anns) ->
-    %% We requeue in the same order as messages got returned by the client.
+  when is_map(Anns) ->
+    Consumer = maybe_untimeout(Consumer0, MsgIds),
     {State2, Effects1} = return_multiple(Meta, ConsumerKey, Consumer,
                                          MsgIds, IncrDelCount, Anns,
                                          Effects0, State0),

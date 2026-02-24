@@ -760,8 +760,8 @@ modified_quorum_queue(Config) ->
     %% (i.e. excluding list, map, array).
     ?assertEqual({value, {<<"x-other">>, long, 99}},
                  lists:keysearch(<<"x-other">>, 1, Headers)),
-    ?assertEqual({value, {<<"x-acquired-count">>, long, 5}},
-                 lists:keysearch(<<"x-acquired-count">>, 1, Headers)),
+    ?assertEqual({value, {<<"x-opt-acquired-count">>, long, 5}},
+                 lists:keysearch(<<"x-opt-acquired-count">>, 1, Headers)),
 
     ?assertEqual({value, {<<"x-delivery-count">>, long, 2}},
                  lists:keysearch(<<"x-delivery-count">>, 1, Headers)),
@@ -7026,14 +7026,14 @@ decimal_types(Config) ->
     {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
     ok = close(Init).
 
-%% Test that consumer timeout on quorum queues results in the server
-%% detaching the link with an error.
+%% Test that consumer timeout on quorum queues results in RabbitMQ
+%% sending a released disposition and the consumer continuing to receive
+%% messages after the client settles back.
 consumer_timeout_quorum_queue(Config) ->
     QName = atom_to_binary(?FUNCTION_NAME),
     Address = rabbitmq_amqp_address:queue(QName),
     PolicyName = <<"consumer-timeout-policy">>,
 
-    %% Set a short consumer timeout policy
     ok = rabbit_ct_broker_helpers:set_policy(
            Config, 0, PolicyName, QName, <<"quorum_queues">>,
            [{<<"consumer-timeout">>, 1000}]),
@@ -7044,49 +7044,81 @@ consumer_timeout_quorum_queue(Config) ->
     {ok, LinkPair} = rabbitmq_amqp_client:attach_management_link_pair_sync(
                        Session, <<"mgmt link pair">>),
 
-    %% Declare quorum queue
     {ok, #{type := <<"quorum">>}} = rabbitmq_amqp_client:declare_queue(
-                                       LinkPair, QName,
-                                       #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>}}}),
+                                      LinkPair, QName,
+                                      #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>}}}),
 
-    %% Create sender and receiver
     {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address),
     wait_for_credit(Sender),
 
-    %% Attach receiver in unsettled mode
-    {ok, Receiver} = amqp10_client:attach_receiver_link(
-                       Session,
-                       <<"receiver">>,
-                       Address,
-                       unsettled),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(Session, <<"receiver">>,
+                                                        Address, unsettled),
 
-    flush("After attach receiver link"),
-    %% Send a message
-    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"tag1">>, <<"test message">>, false)),
-    ok = wait_for_accepts(1),
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"tag1">>, <<"msg1">>, false)),
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"tag2">>, <<"msg2">>, false)),
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"tag3">>, <<"msg3">>, false)),
+    ok = wait_for_accepts(3),
+    ok = detach_link_sync(Sender),
 
-    %% Grant credit and receive the message but DON'T settle it
-    ok = amqp10_client:flow_link_credit(Receiver, 1, never),
-    Msg = receive
-              {amqp10_msg, Receiver, M} -> M
-          after 5000 -> ct:fail("did not receive message")
-          end,
-    ?assertEqual([<<"test message">>], amqp10_msg:body(Msg)),
+    %% Receive 2 messages but don't settle them.
+    ok = amqp10_client:flow_link_credit(Receiver, 2, never),
+    DeliveryId1 = receive {amqp10_msg, Receiver, M1} ->
+                              ?assertEqual([<<"msg1">>], amqp10_msg:body(M1)),
+                              amqp10_msg:delivery_id(M1)
+                  after 9000 -> ct:fail({missing_msg, ?LINE})
+                  end,
+    DeliveryId2 = receive {amqp10_msg, Receiver, M2} ->
+                              ?assertEqual([<<"msg2">>], amqp10_msg:body(M2)),
+                              amqp10_msg:delivery_id(M2)
+                  after 9000 -> ct:fail({missing_msg, ?LINE})
+                  end,
 
-    %% Now wait for consumer timeout - the server should detach the link with an error
-    receive
-        {amqp10_event, {link, Receiver, {detached, Error}}} ->
-            ct:pal("Received expected link detach due to consumer timeout: ~p", [Error]),
-            ?assertMatch(
-               #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_RESOURCE_LIMIT_EXCEEDED},
-               Error)
-    after 5000 ->
-              ct:fail(consumer_timeout_not_triggered)
+    %% After 1 second, RabbitMQ should release both messages due to consumer timeout.
+    %% Our client lib should settle back and notify us.
+    receive {amqp10_event, {link, Receiver, {disposition, released, Id1}}} ->
+                ?assertEqual(DeliveryId1, Id1)
+    after 9000 -> ct:fail({missing_event, ?LINE})
+    end,
+    receive {amqp10_event, {link, Receiver, {disposition, released, Id2}}} ->
+                ?assertEqual(DeliveryId2, Id2)
+    after 9000 -> ct:fail({missing_event, ?LINE})
     end,
 
-    %% Cleanup
-    ok = amqp10_client:detach_link(Sender),
-    {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
+    %% Our consumer's timeout state should now be cleared in the queue
+    %% so that we should receive more messages.
+    ok = amqp10_client:flow_link_credit(Receiver, 3, never),
+    %% We expect that RabbitMQ requeues and redelivers in the correct order.
+    receive {amqp10_msg, Receiver, M1Redelivered} ->
+                ?assertEqual([<<"msg1">>], amqp10_msg:body(M1Redelivered)),
+                %% Timed out messages should not count as failure
+                ?assertMatch(#{delivery_count := 0,
+                               first_acquirer := false},
+                             amqp10_msg:headers(M1Redelivered)),
+                ?assertMatch(#{<<"x-opt-acquired-count">> := 1},
+                             amqp10_msg:message_annotations(M1Redelivered)),
+                ok = amqp10_client:accept_msg(Receiver, M1Redelivered)
+    after 9000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    receive {amqp10_msg, Receiver, M2Redelivered} ->
+                ?assertEqual([<<"msg2">>], amqp10_msg:body(M2Redelivered)),
+                %% Timed out messages should not count as failure
+                ?assertMatch(#{delivery_count := 0,
+                               first_acquirer := false},
+                             amqp10_msg:headers(M2Redelivered)),
+                ?assertMatch(#{<<"x-opt-acquired-count">> := 1},
+                             amqp10_msg:message_annotations(M2Redelivered)),
+                ok = amqp10_client:accept_msg(Receiver, M2Redelivered)
+    after 9000 -> ct:fail({missing_msg, ?LINE})
+    end,
+
+    receive {amqp10_msg, Receiver, M3} ->
+                ?assertEqual([<<"msg3">>], amqp10_msg:body(M3)),
+                ok = amqp10_client:accept_msg(Receiver, M3)
+    after 9000 -> ct:fail({missing_msg, ?LINE})
+    end,
+
+    ok = detach_link_sync(Receiver),
+    {ok, #{message_count := 0}} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
     ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
     ok = end_session_sync(Session),
     ok = close_connection_sync(Connection),

@@ -245,7 +245,7 @@ add_delivery_count_header(Msg0, #{acquired_count := AcqCount} = Header)
   when is_integer(AcqCount) ->
     Msg = case mc:is(Msg0) of
               true ->
-                  Msg1 = mc:set_annotation(<<"x-acquired-count">>, AcqCount, Msg0),
+                  Msg1 = mc:set_annotation(<<"x-opt-acquired-count">>, AcqCount, Msg0),
                   Msg2 = case Header of
                             #{delivery_count := DelCnt} ->
                                 mc:set_annotation(<<"x-delivery-count">>,
