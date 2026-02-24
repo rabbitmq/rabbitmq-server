@@ -116,20 +116,20 @@ handle_continue(QRef, undefined) ->
                                          dead_letter_worker_consumer_prefetch),
     {ok, SettleTimeout} = application:get_env(rabbit,
                                               dead_letter_worker_publisher_confirm_timeout),
-    {ok, Q} = rabbit_amqqueue:lookup(QRef),
-    {ClusterName, _MaybeOldLeaderNode} = amqqueue:get_pid(Q),
-    case rabbit_fifo_dlx_client:checkout(QRef, {ClusterName, node()}, Prefetch) of
-        {ok, ConsumerState} ->
-            {noreply, lookup_topology(#state{queue_ref = QRef,
-                                             queue_type_state = rabbit_queue_type:init(),
-                                             settle_timeout = SettleTimeout,
-                                             dlx_client_state = ConsumerState,
-                                             monitor_ref = erlang:monitor(process, ClusterName)
-                                            })};
-        {error, non_local_leader = Reason} ->
-            {stop, {shutdown, Reason}, undefined};
-        Error ->
-            {stop, Error, undefined}
+    case rabbit_amqqueue:lookup(QRef) of
+        {ok, Q} ->
+            {ClusterName, _MaybeOldLeaderNode} = amqqueue:get_pid(Q),
+            ConsumerState = rabbit_fifo_dlx_client:checkout(
+                              QRef, {ClusterName, node()}, Prefetch),
+            {noreply, lookup_topology(
+                        #state{queue_ref = QRef,
+                               queue_type_state = rabbit_queue_type:init(),
+                               settle_timeout = SettleTimeout,
+                               dlx_client_state = ConsumerState,
+                               monitor_ref = erlang:monitor(process, ClusterName)
+                              })};
+        {error, not_found} ->
+            {stop, {shutdown, queue_not_found}, undefined}
     end.
 
 terminate(_Reason, State) ->
@@ -146,25 +146,36 @@ handle_cast({dlx_event, _LeaderPid, lookup_topology},
 handle_cast({dlx_event, LeaderPid, Evt},
             #state{queue_ref = _QRef,
                    dlx_client_state = DlxState0} = State0) ->
-    %% received dead-letter message from source queue
-    {ok, DlxState, Actions} = rabbit_fifo_dlx_client:handle_ra_event(LeaderPid, Evt, DlxState0),
-    State1 = State0#state{dlx_client_state = DlxState},
-    State = handle_queue_actions(Actions, State1),
-    {noreply, State};
-handle_cast({queue_event, QRef, Evt},
-            #state{queue_type_state = QTypeState0} = State0) ->
-
-    case rabbit_queue_type:handle_event(QRef, Evt, QTypeState0) of
-        {ok, QTypeState1, Actions} ->
-            %% received e.g. confirm from target queue
-            State1 = State0#state{queue_type_state = QTypeState1},
+    case rabbit_fifo_dlx_client:handle_ra_event(LeaderPid, Evt, DlxState0) of
+        {ok, DlxState, Actions} ->
+            State1 = State0#state{dlx_client_state = DlxState},
             State = handle_queue_actions(Actions, State1),
             {noreply, State};
-        {eol, Actions} ->
-            State = handle_queue_actions(Actions, State0),
-            remove_queue(QRef, State);
-        {protocol_error, _Type, _Reason, _Args} ->
+        ignore ->
             {noreply, State0}
+    end;
+handle_cast({queue_event, QRef, Evt},
+            #state{dlx_client_state = DlxState0,
+                   queue_type_state = QTypeState0} = State0) ->
+    case maybe_handle_dlx_event(Evt, DlxState0) of
+        {ok, DlxState, Actions} ->
+            State1 = State0#state{dlx_client_state = DlxState},
+            State = handle_queue_actions(Actions, State1),
+            {noreply, State};
+        {reject, _DlxState} ->
+            {stop, {shutdown, not_leader}, State0};
+        ignore ->
+            case rabbit_queue_type:handle_event(QRef, Evt, QTypeState0) of
+                {ok, QTypeState1, Actions} ->
+                    State1 = State0#state{queue_type_state = QTypeState1},
+                    State = handle_queue_actions(Actions, State1),
+                    {noreply, State};
+                {eol, Actions} ->
+                    State = handle_queue_actions(Actions, State0),
+                    remove_queue(QRef, State);
+                {protocol_error, _Type, _Reason, _Args} ->
+                    {noreply, State0}
+            end
     end;
 handle_cast(settle_timeout, State0) ->
     State = State0#state{timer = undefined},
@@ -568,6 +579,11 @@ cancel_timer(#state{timer = TRef} = State)
     State#state{timer = undefined};
 cancel_timer(State) ->
     State.
+
+maybe_handle_dlx_event({{_, _} = ServerId, Evt}, DlxState) ->
+    rabbit_fifo_dlx_client:handle_ra_event(ServerId, Evt, DlxState);
+maybe_handle_dlx_event(_Evt, _DlxState) ->
+    ignore.
 
 queue_names(Qs) ->
     lists:map(fun amqqueue:get_name/1, Qs).

@@ -15,6 +15,7 @@
 -record(state,{
           queue_resource :: rabbit_types:r(queue),
           leader :: ra:server_id(),
+          checkout_corr :: undefined | reference(),
           last_msg_id :: non_neg_integer() | -1
          }).
 -type state() :: #state{}.
@@ -35,39 +36,32 @@ settle(MsgIds, #state{leader = Leader} = State)
     {ok, State}.
 
 -spec checkout(rabbit_amqqueue:name(), ra:server_id(), non_neg_integer()) ->
-    {ok, state()} | {error, non_local_leader | ra_command_failed}.
+    state().
 checkout(QResource, Leader, NumUnsettled) ->
     Cmd = rabbit_fifo_dlx:make_checkout(self(), NumUnsettled),
-    State = #state{queue_resource = QResource,
-                   leader = Leader,
-                   last_msg_id = -1},
-    process_command(Cmd, State, 5).
+    Corr = make_ref(),
+    ra:pipeline_command(Leader, Cmd, Corr, normal),
+    #state{queue_resource = QResource,
+           leader = Leader,
+           checkout_corr = Corr,
+           last_msg_id = -1}.
 
-process_command(_Cmd, _State, 0) ->
-    {error, ra_command_failed};
-process_command(Cmd, #state{leader = Leader} = State, Tries) ->
-    case ra:process_command(Leader, Cmd, 60_000) of
-        {ok, ok, Leader} ->
-            {ok, State#state{leader = Leader}};
-        {ok, ok, NonLocalLeader} ->
-            ?LOG_WARNING("Failed to process command ~tp on quorum queue leader ~tp because actual leader is ~tp.",
-                               [Cmd, Leader, NonLocalLeader]),
-            {error, non_local_leader};
-        Err ->
-            ?LOG_WARNING("Failed to process command ~tp on quorum queue leader ~tp: ~tp~n"
-                               "Trying ~b more time(s)...",
-                               [Cmd, Leader, Err, Tries]),
-            process_command(Cmd, State, Tries - 1)
-    end.
-
--spec handle_ra_event(pid(), term(), state()) ->
-    {ok, state(), actions()}.
+-spec handle_ra_event(term(), term(), state()) ->
+    {ok, state(), actions()} | {reject, state()} | ignore.
 handle_ra_event(Leader, {dlx_delivery, _} = Del,
                 #state{leader = _Leader} = State) when node(Leader) == node() ->
     handle_delivery(Del, State);
-handle_ra_event(From, Evt, State) ->
+handle_ra_event(_From, {applied, [{Corr, ok}]},
+                #state{checkout_corr = Corr} = State)
+  when is_reference(Corr) ->
+    {ok, State#state{checkout_corr = undefined}, []};
+handle_ra_event(_From, {rejected, {not_leader, _Leader, Corr}},
+                #state{checkout_corr = Corr} = State)
+  when is_reference(Corr) ->
+    {reject, State};
+handle_ra_event(From, Evt, _State) ->
     ?LOG_DEBUG("Ignoring ra event ~tp from ~tp", [Evt, From]),
-    {ok, State, []}.
+    ignore.
 
 handle_delivery({dlx_delivery, [{FstId, _} | _] = IdMsgs},
                 #state{queue_resource = QRes,
