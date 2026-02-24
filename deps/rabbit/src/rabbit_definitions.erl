@@ -439,7 +439,8 @@ decode(Keys, Body) ->
 
 decode(<<"">>) ->
     {ok, #{}};
-decode(Body) ->
+decode(Body0) ->
+    Body = rabbit_misc:strip_bom(Body0),
     try
       Decoded = rabbit_json:decode(Body),
       Normalised = atomise_map_keys(Decoded),

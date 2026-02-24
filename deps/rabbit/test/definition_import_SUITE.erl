@@ -54,7 +54,8 @@ groups() ->
                                import_case19,
                                import_case20,
                                import_case21,
-                               import_case22
+                               import_case22,
+                               import_case23
                               ]},
 
         {boot_time_import_using_classic_source, [], [
@@ -340,6 +341,20 @@ import_case22(Config) ->
     ?assertEqual(false, vhost:is_protected_from_deletion(VHost2)),
 
     ok.
+
+%% Tests that definition files with any Unicode BOM prefix are imported successfully.
+import_case23(Config) ->
+    {ok, Body} = file:read_file(filename:join(?config(data_dir, Config), "case2.json")),
+    %% UTF-8
+    import_raw(Config, <<239, 187, 191, Body/binary>>),
+    %% UTF-16 BE
+    import_raw(Config, <<254, 255, Body/binary>>),
+    %% UTF-32 LE
+    import_raw(Config, <<255, 254, 0, 0, Body/binary>>),
+    %% UTF-16 LE
+    import_raw(Config, <<255, 254, Body/binary>>),
+    %% UTF-32 BE
+    import_raw(Config, <<0, 0, 254, 255, Body/binary>>).
 
 export_import_round_trip_case1(Config) ->
     case rabbit_ct_helpers:is_mixed_versions() of
