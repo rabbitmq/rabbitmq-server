@@ -599,11 +599,22 @@ do_query_node_props(Nodes, FromNode) when Nodes =/= [] ->
     %% node to the upstream node, regardless of their level.
     _ = logger:set_primary_config(level, debug),
 
-    %% TODO: Replace with `rabbit_nodes:list_members/0' when the oldest
-    %% supported version has it.
     MembersPerNode = [try
-                          {ok,
-                           erpc_call(Node, rabbit_nodes, all, [], FromNode)}
+                          Members0 = erpc_call(
+                                       Node,
+                                       rabbit_nodes, list_members, [],
+                                       FromNode),
+                          %% If `rabbit_nodes:list_members/0' returns an empty
+                          %% list, it means Khepri couldn't return it at this
+                          %% point. Let's assume the node is alone.
+                          Members1 = case Members0 of
+                                         [] ->
+                                             ThisNode = node(),
+                                             [ThisNode];
+                                         _ ->
+                                             Members0
+                                     end,
+                          {ok, Members1}
                       catch
                           Class:Reason ->
                               {Class, Reason}
