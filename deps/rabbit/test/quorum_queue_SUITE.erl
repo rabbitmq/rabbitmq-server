@@ -2845,37 +2845,25 @@ delete_declare0(Config) ->
     wait_for_messages_pending_ack(Servers, RaName, 0).
 
 delete_while_publishing(Config) ->
-    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config,
-                                                                   nodename),
-
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     PublisherChan = rabbit_ct_client_helpers:open_channel(Config, Server),
     DeleterChan = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(PublisherChan, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
-
-
     #'queue.bind_ok'{} = amqp_channel:call(
                            PublisherChan, #'queue.bind'{queue = QQ,
-                                             exchange = <<"amq.fanout">>}),
-
+                                                        exchange = <<"amq.fanout">>}),
     #'confirm.select_ok'{} = amqp_channel:call(PublisherChan, #'confirm.select'{}),
-
-    spawn(fun() ->
-        timer:sleep(100),
-        delete_queues(DeleterChan, [QQ])
-    end),
-
-    [begin
-        ok = amqp_channel:cast(PublisherChan,
-                               #'basic.publish'{
-                                    exchange = <<"amq.fanout">>,
-                                    routing_key = QQ},
-                                #amqp_msg{payload = erlang:integer_to_binary(N)})
-    end || N <- lists:seq(1, 30000)],
-
-    % we should not receive a nack, all messages should be confirmed
-    ?assert(amqp_channel:wait_for_confirms_or_die(PublisherChan)).
+    %% Publish without waiting for individual confirms so that some are still
+    %% in flight when the queue is deleted on a separate channel.
+    [ok = amqp_channel:cast(PublisherChan,
+                            #'basic.publish'{exchange = <<"amq.fanout">>,
+                                             routing_key = QQ},
+                            #amqp_msg{payload = erlang:integer_to_binary(N)})
+     || N <- lists:seq(1, 50_000)],
+    delete_queues(DeleterChan, [QQ]),
+    ?assert(amqp_channel:wait_for_confirms_or_die(PublisherChan, ?TIMEOUT)).
 
 sync_queue(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
