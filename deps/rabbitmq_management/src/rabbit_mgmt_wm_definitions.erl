@@ -176,10 +176,8 @@ is_authorized(ReqData, Context) ->
 
 decode(<<"">>) ->
     {ok, #{}};
-%% Strip the UTF-8 BOM if present.
-decode(<<16#EF, 16#BB, 16#BF, Rest/binary>>) ->
-    decode(Rest);
-decode(Body) ->
+decode(Body0) ->
+    Body = rabbit_misc:strip_bom(Body0),
     try
       Decoded = rabbit_json:decode(Body),
       Normalised = maps:fold(fun(K, V, Acc) ->

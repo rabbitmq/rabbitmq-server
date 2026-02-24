@@ -77,6 +77,7 @@
 -export([get_gc_info/1]).
 -export([group_proplists_by/2]).
 -export([raw_read_file/1]).
+-export([strip_bom/1]).
 -export([find_child/2]).
 -export([is_regular_file/1]).
 -export([safe_ets_update_counter/3, safe_ets_update_counter/4, safe_ets_update_counter/5,
@@ -1230,6 +1231,19 @@ raw_read_file(File) ->
     catch
         error:{badmatch, Error} -> Error
     end.
+
+-spec strip_bom(binary()) -> binary().
+%% UTF-8
+strip_bom(<<239, 187, 191, Rest/binary>>) -> Rest;
+%% UTF-16 BE
+strip_bom(<<254, 255, Rest/binary>>) -> Rest;
+%% UTF-32 LE (must precede UTF-16 LE to avoid partial match)
+strip_bom(<<255, 254, 0, 0, Rest/binary>>) -> Rest;
+%% UTF-16 LE
+strip_bom(<<255, 254, Rest/binary>>) -> Rest;
+%% UTF-32 BE
+strip_bom(<<0, 0, 254, 255, Rest/binary>>) -> Rest;
+strip_bom(Bin) -> Bin.
 
 -spec is_regular_file(Name) -> boolean() when
       Name :: file:filename_all().
