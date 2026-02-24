@@ -39,6 +39,7 @@ jobs:
           - ct-quorum_queue
           - ct-rabbit_stream_queue
           - ct-rabbit_fifo_prop
+          - ct-peer_discovery_classic_config
     uses: ./.github/workflows/test-make-target.yaml
     with:
       erlang_version: ${{ inputs.erlang_version }}
