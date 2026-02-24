@@ -14,6 +14,10 @@ on:
       - rabbitmq-components.mk
       - packaging/**
       - .github/workflows/oci-make.yaml
+  workflow_run:
+    workflows: [Peer Discovery AWS Integration Test]
+    types:
+      - requested
   workflow_dispatch:
     inputs:
       otp_version:
