@@ -91,6 +91,7 @@ defmodule RabbitMQ.CLI.Core.Distribution do
         {:ok, pid}
 
       {:error, reason} ->
+        :timer.sleep(500)
         start(node_name_type, attempts - 1, reason)
     end
   end
@@ -118,7 +119,7 @@ defmodule RabbitMQ.CLI.Core.Distribution do
         Enum.random(1..1024)
 
       _ ->
-        "#{:os.getpid()}"
+        "#{:os.getpid()}-#{System.unique_integer([:positive])}"
     end
   end
 end
