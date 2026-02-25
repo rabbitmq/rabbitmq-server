@@ -291,12 +291,17 @@ process_connect(
     end.
 
 fence() ->
-    case rabbit_khepri:fence(?FENCE_TIMEOUT) of
-        ok ->
-            ok;
-        {error, Reason} ->
-            ?LOG_ERROR("MQTT connection failed: rabbit_khepri:fence/1 failed: ~p", [Reason]),
-            {error, ?RC_SERVER_UNAVAILABLE}
+    case rabbit_khepri:is_enabled() of
+        true ->
+            case rabbit_khepri:fence(?FENCE_TIMEOUT) of
+                ok ->
+                    ok;
+                {error, Reason} ->
+                    ?LOG_ERROR("MQTT connection failed: rabbit_khepri:fence/1 failed: ~p", [Reason]),
+                    {error, ?RC_SERVER_UNAVAILABLE}
+            end;
+        false ->
+            ok
     end.
 
 -spec prefetch(ConnectProperties :: properties()) -> pos_integer().
