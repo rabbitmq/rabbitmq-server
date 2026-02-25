@@ -40,6 +40,7 @@
 -define(CONSUMER_TAG, <<"mqtt">>).
 -define(QUEUE_TTL_KEY, <<"x-expires">>).
 -define(DEFAULT_EXCHANGE_NAME, <<>>).
+-define(FENCE_TIMEOUT, 30_000).
 
 -ifdef(TEST).
 -define(SILENT_CLOSE_DELAY, 10).
@@ -205,9 +206,10 @@ process_connect(
         ok ?= check_user_connection_limit(Username),
         {ok, AuthzCtx} ?= check_vhost_access(VHost, User, ClientId, PeerIp),
         ok ?= check_user_loopback(Username, PeerIp),
-        ok ?= ensure_credential_expiry_timer(User, PeerIp),
         rabbit_core_metrics:auth_attempt_succeeded(PeerIp, Username, mqtt),
         ok = register_client_id(VHost, ClientId, CleanStart, WillProps),
+        ok ?= fence(),
+        ok ?= ensure_credential_expiry_timer(User, PeerIp),
         {ok, WillMsg} ?= make_will_msg(Packet),
         {TraceState, ConnName} = init_trace(VHost, ConnName0),
         ok = rabbit_mqtt_keepalive:start(KeepaliveSecs, Socket),
@@ -286,6 +288,15 @@ process_connect(
             SessPresent = false,
             send_conn_ack(ConnectReasonCode, SessPresent, ProtoVer, SendFun, MaxPacketSize, #{}),
             Err
+    end.
+
+fence() ->
+    case rabbit_khepri:fence(?FENCE_TIMEOUT) of
+        ok ->
+            ok;
+        {error, Reason} ->
+            ?LOG_ERROR("MQTT connection failed: rabbit_khepri:fence/1 failed: ~p", [Reason]),
+            {error, ?RC_SERVER_UNAVAILABLE}
     end.
 
 -spec prefetch(ConnectProperties :: properties()) -> pos_integer().
