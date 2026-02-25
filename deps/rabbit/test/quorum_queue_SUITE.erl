@@ -3053,8 +3053,8 @@ simple_confirm_availability_on_leader_change(Config) ->
     assert_cluster_status({Servers, Servers, Running}, Running),
 
     %% this should not fail as the channel should detect the new leader and
-    %% resend to that
-    ok = publish_confirm(Ch, QQ),
+    %% resend to that. Use a generous timeout because on slow CI.
+    ok = publish_confirm(Ch, QQ, 15000),
     ok = rabbit_ct_broker_helpers:start_node(Config, Node2),
     ok.
 
