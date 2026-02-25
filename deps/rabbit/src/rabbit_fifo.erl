@@ -1349,8 +1349,8 @@ handle_aux(_RaftState, cast, {#return{msg_ids = MsgIds,
                                   %% crashed and the message got removed
                                   case ra_aux:log_fetch(Idx, RA0) of
                                       {{_Term, _Meta, Cmd}, RA} ->
-                                          Msg = get_msg_from_cmd(Cmd),
-                                          {RA, [{MsgId, Idx, Header, Msg} | Acc]};
+                                          RawMsg = get_msg_from_cmd(Cmd),
+                                          {RA, [{MsgId, Idx, Header, RawMsg} | Acc]};
                                       {undefined, RA} ->
                                           {RA, Acc}
                                   end
