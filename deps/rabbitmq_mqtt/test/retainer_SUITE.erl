@@ -112,7 +112,7 @@ end_per_testcase(Testcase, Config) ->
 %% -------------------------------------------------------------------
 
 coerce_configuration_data(Config) ->
-    C = connect(<<"simpleClientRetainer">>, Config, [{ack_timeout, 1}]),
+    C = connect(atom_to_binary(?FUNCTION_NAME), Config, [{ack_timeout, 1}]),
 
     {ok, _, _} = emqtt:subscribe(C, <<"TopicA">>, qos0),
     ok = emqtt:publish(C, <<"TopicA">>, <<"Payload">>),
@@ -126,7 +126,7 @@ coerce_configuration_data(Config) ->
 %% sent messages for the translated topic (TopicA/Device/Field)
 %% -------------------------------------------------------------------
 should_translate_amqp2mqtt_on_publish(Config) ->
-    C = connect(<<"simpleClientRetainer">>, Config, [{ack_timeout, 1}]),
+    C = connect(atom_to_binary(?FUNCTION_NAME), Config, [{ack_timeout, 1}]),
     %% there's an active consumer
     {ok, _, _} = emqtt:subscribe(C, <<"TopicA/Device.Field">>, qos1),
     ok = emqtt:publish(C, <<"TopicA/Device.Field">>, #{},  <<"Payload">>, [{retain, true}]),
@@ -139,7 +139,7 @@ should_translate_amqp2mqtt_on_publish(Config) ->
 %% sent the retained message for the translated topic (TopicA/Device/Field)
 %% -------------------------------------------------------------------
 should_translate_amqp2mqtt_on_retention(Config) ->
-    C = connect(<<"simpleClientRetainer">>, Config, [{ack_timeout, 1}]),
+    C = connect(atom_to_binary(?FUNCTION_NAME), Config, [{ack_timeout, 1}]),
     %% publish with retain = true before a consumer comes around
     ok = emqtt:publish(C, <<"TopicA/Device.Field">>, #{},  <<"Payload">>, [{retain, true}]),
     {ok, _, _} = emqtt:subscribe(C, <<"TopicA/Device.Field">>, qos1),
@@ -152,14 +152,14 @@ should_translate_amqp2mqtt_on_retention(Config) ->
 %% sent retained message for the translated topic (TopicA/Device/Field)
 %% -------------------------------------------------------------------
 should_translate_amqp2mqtt_on_retention_search(Config) ->
-    C = connect(<<"simpleClientRetainer">>, Config, [{ack_timeout, 1}]),
+    C = connect(atom_to_binary(?FUNCTION_NAME), Config, [{ack_timeout, 1}]),
     ok = emqtt:publish(C, <<"TopicA/Device.Field">>, #{},  <<"Payload">>, [{retain, true}]),
     {ok, _, _} = emqtt:subscribe(C, <<"TopicA/Device/Field">>, qos1),
     ok = expect_publishes(C, <<"TopicA/Device/Field">>, [<<"Payload">>]),
     ok = emqtt:disconnect(C).
 
 does_not_retain(Config) ->
-    C = connect(<<"simpleClientRetainer">>, Config, [{ack_timeout, 1}]),
+    C = connect(atom_to_binary(?FUNCTION_NAME), Config, [{ack_timeout, 1}]),
     ok = emqtt:publish(C, <<"TopicA/Device.Field">>, #{},  <<"Payload">>, [{retain, true}]),
     {ok, _, _} = emqtt:subscribe(C, <<"TopicA/Device.Field">>, qos1),
     receive
