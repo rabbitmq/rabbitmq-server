@@ -8,14 +8,12 @@
 
 -include_lib("kernel/include/logger.hrl").
 
-
--export([checkout/3, settle/2, handle_ra_event/3,
+-export([checkout/3, settle/2, handle_registration/1, handle_ra_event/3,
          overview/1]).
 
 -record(state,{
           queue_resource :: rabbit_types:r(queue),
           leader :: ra:server_id(),
-          checkout_corr :: undefined | reference(),
           last_msg_id :: non_neg_integer() | -1
          }).
 -type state() :: #state{}.
@@ -36,32 +34,34 @@ settle(MsgIds, #state{leader = Leader} = State)
     {ok, State}.
 
 -spec checkout(rabbit_amqqueue:name(), ra:server_id(), non_neg_integer()) ->
-    state().
+    {reference(), state()}.
 checkout(QResource, Leader, NumUnsettled) ->
     Cmd = rabbit_fifo_dlx:make_checkout(self(), NumUnsettled),
     Corr = make_ref(),
     ra:pipeline_command(Leader, Cmd, Corr, normal),
-    #state{queue_resource = QResource,
-           leader = Leader,
-           checkout_corr = Corr,
-           last_msg_id = -1}.
+    {Corr, #state{queue_resource = QResource,
+                  leader = Leader,
+                  last_msg_id = -1}}.
 
--spec handle_ra_event(term(), term(), state()) ->
-    {ok, state(), actions()} | {reject, state()} | ignore.
+-spec handle_registration(term()) ->
+    {registered, reference()} | {not_leader, reference()} | ignore.
+handle_registration({{_, _}, {applied, [{Corr, ok}]}})
+  when is_reference(Corr) ->
+    {registered, Corr};
+handle_registration({{_, _}, {rejected, {not_leader, _Leader, Corr}}})
+  when is_reference(Corr) ->
+    {not_leader, Corr};
+handle_registration(_Evt) ->
+    ignore.
+
+-spec handle_ra_event(pid(), term(), state()) ->
+    {ok, state(), actions()}.
 handle_ra_event(Leader, {dlx_delivery, _} = Del,
                 #state{leader = _Leader} = State) when node(Leader) == node() ->
     handle_delivery(Del, State);
-handle_ra_event(_From, {applied, [{Corr, ok}]},
-                #state{checkout_corr = Corr} = State)
-  when is_reference(Corr) ->
-    {ok, State#state{checkout_corr = undefined}, []};
-handle_ra_event(_From, {rejected, {not_leader, _Leader, Corr}},
-                #state{checkout_corr = Corr} = State)
-  when is_reference(Corr) ->
-    {reject, State};
-handle_ra_event(From, Evt, _State) ->
+handle_ra_event(From, Evt, State) ->
     ?LOG_DEBUG("Ignoring ra event ~tp from ~tp", [Evt, From]),
-    ignore.
+    {ok, State, []}.
 
 handle_delivery({dlx_delivery, [{FstId, _} | _] = IdMsgs},
                 #state{queue_resource = QRes,
