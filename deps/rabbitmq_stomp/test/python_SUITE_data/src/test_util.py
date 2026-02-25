@@ -50,3 +50,11 @@ def rabbitmqctl(args):
     cmdline = [ctl, '-n', os.getenv('RABBITMQ_NODENAME')]
     cmdline.extend(args)
     subprocess.check_call(cmdline)
+
+def rabbitmqctl_output(args):
+    ctl = os.getenv('RABBITMQCTL')
+    cmdline = [ctl, '-n', os.getenv('RABBITMQ_NODENAME')]
+    cmdline.extend(args)
+    output = subprocess.check_output(cmdline).decode('utf-8')
+    print(output)
+    return output
