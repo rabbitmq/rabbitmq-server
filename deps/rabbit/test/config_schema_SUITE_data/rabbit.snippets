@@ -1121,6 +1121,27 @@ credential_validator.regexp = ^abc\\d+",
      ]}],
    []},
 
+   {raft_adaptive_failure_detector_scaling_factor,
+   "raft.adaptive_failure_detector.scaling_factor = 1.5",
+   [{aten, [
+      {scaling_factor, 1.5}
+     ]}],
+   []},
+
+   {raft_adaptive_failure_detector_heartbeat_interval,
+   "raft.adaptive_failure_detector.heartbeat_interval = 100",
+   [{aten, [
+      {heartbeat_interval, 100}
+     ]}],
+   []},
+
+   {raft_adaptive_failure_detector_detection_threshold,
+   "raft.adaptive_failure_detector.detection_threshold = 0.99",
+   [{aten, [
+      {detection_threshold, 0.99}
+     ]}],
+   []},
+
   %%
   %% Backing queue version
   %%
