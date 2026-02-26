@@ -72,7 +72,7 @@ jobs:
         make -C deps/rabbitmq_peer_discovery_aws ct-integration
     - name: UPLOAD TEST LOGS
       if: always()
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: CT logs
         path: "logs/"
