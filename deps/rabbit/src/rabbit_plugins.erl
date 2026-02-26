@@ -99,7 +99,7 @@ user_provided_plugins_data_dir() ->
         {ok, PluginsDataDir} ->
             PluginsDataDir;
         _ ->
-            DataDir = rabbit_mnesia:dir(),
+            DataDir = rabbit:data_dir(),
             filename:join([DataDir, "user_provided_plugins_data_dir"])
     end.
 
