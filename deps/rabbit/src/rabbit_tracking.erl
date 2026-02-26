@@ -106,7 +106,7 @@ delete_tracked_entry_internal(Node, Tab, TableNameFun, Key) ->
             ok;
         _ ->
             %% Node could be down, but also in a mixed version cluster this function is not
-            %% implemented on pre 3.11.x releases. Ensure that we clean up any mnesia table
-            mnesia:dirty_delete(TableNameFun(Node), Key)
+            %% implemented on pre 3.11.x releases. Ensure that we clean up any ETS table
+            _ = ets:delete(TableNameFun(Node), Key)
     end,
     ok.
