@@ -12,6 +12,7 @@ import functools
 import time
 import sys
 import os
+import test_util
 
 def connect(cnames):
     ''' Decorator that creates stomp connections and issues CONNECT '''
@@ -212,7 +213,11 @@ class TestParsing(unittest.TestCase):
         for cd in [self.cd1, self.cd2]:
             cd.sendall(subscribe.encode('utf-8'))
 
-        time.sleep(0.1)
+        bindings_count = 0
+        while bindings_count != 2:
+            time.sleep(0.1)
+            output = test_util.rabbitmqctl_output(['list_bindings'])
+            bindings_count = output.split().count('da9d4779')
 
         cmd = ('SEND\n'
                'content-type:text/plain\n'
