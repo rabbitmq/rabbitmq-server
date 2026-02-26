@@ -760,8 +760,8 @@ modified_quorum_queue(Config) ->
     %% (i.e. excluding list, map, array).
     ?assertEqual({value, {<<"x-other">>, long, 99}},
                  lists:keysearch(<<"x-other">>, 1, Headers)),
-    ?assertEqual({value, {<<"x-opt-acquired-count">>, long, 5}},
-                 lists:keysearch(<<"x-opt-acquired-count">>, 1, Headers)),
+    ?assertEqual({value, {<<"x-acquired-count">>, long, 5}},
+                 lists:keysearch(<<"x-acquired-count">>, 1, Headers)),
 
     ?assertEqual({value, {<<"x-delivery-count">>, long, 2}},
                  lists:keysearch(<<"x-delivery-count">>, 1, Headers)),
@@ -7094,7 +7094,7 @@ consumer_timeout_quorum_queue(Config) ->
                 ?assertMatch(#{delivery_count := 0,
                                first_acquirer := false},
                              amqp10_msg:headers(M1Redelivered)),
-                ?assertMatch(#{<<"x-opt-acquired-count">> := 1},
+                ?assertMatch(#{<<"x-acquired-count">> := 1},
                              amqp10_msg:message_annotations(M1Redelivered)),
                 ok = amqp10_client:accept_msg(Receiver, M1Redelivered)
     after 9000 -> ct:fail({missing_msg, ?LINE})
@@ -7105,7 +7105,7 @@ consumer_timeout_quorum_queue(Config) ->
                 ?assertMatch(#{delivery_count := 0,
                                first_acquirer := false},
                              amqp10_msg:headers(M2Redelivered)),
-                ?assertMatch(#{<<"x-opt-acquired-count">> := 1},
+                ?assertMatch(#{<<"x-acquired-count">> := 1},
                              amqp10_msg:message_annotations(M2Redelivered)),
                 ok = amqp10_client:accept_msg(Receiver, M2Redelivered)
     after 9000 -> ct:fail({missing_msg, ?LINE})
