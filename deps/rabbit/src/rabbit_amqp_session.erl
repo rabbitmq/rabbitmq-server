@@ -3191,13 +3191,14 @@ split_msg(T, Msg, MaxPayloadSize, Transfers) ->
 parse_attach_properties(undefined) ->
     [];
 parse_attach_properties({map, KVList}) ->
-    Key = {symbol, <<"rabbitmq:priority">>},
-    case proplists:lookup(Key, KVList) of
-        {Key, Val = {int, _Prio}} ->
-            [mc_amqpl:to_091(<<"x-priority">>, Val)];
-        _ ->
-            []
-    end.
+    lists:filtermap(
+      fun({{symbol, <<"rabbitmq:priority">>}, {int, _} = Val}) ->
+              {true, mc_amqpl:to_091(<<"x-priority">>, Val)};
+         ({{symbol, <<"rabbitmq:consumer-timeout">>}, {uint, _} = Val}) ->
+              {true, mc_amqpl:to_091(<<"x-consumer-timeout">>, Val)};
+         (_) ->
+              false
+      end, KVList).
 
 parse_filter(undefined) ->
     {undefined, undefined, []};

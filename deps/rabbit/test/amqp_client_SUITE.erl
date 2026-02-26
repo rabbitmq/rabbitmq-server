@@ -182,7 +182,8 @@ groups() ->
        x_cc_annotation_null,
        bad_x_cc_annotation_exchange,
        decimal_types,
-       consumer_timeout_quorum_queue
+       consumer_timeout_quorum_queue_policy,
+       consumer_timeout_quorum_queue_consumer_arg
       ]},
 
      {cluster_size_3, [shuffle],
@@ -7026,17 +7027,22 @@ decimal_types(Config) ->
     {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
     ok = close(Init).
 
-%% Test that consumer timeout on quorum queues results in RabbitMQ
-%% sending a released disposition and the consumer continuing to receive
-%% messages after the client settles back.
-consumer_timeout_quorum_queue(Config) ->
+consumer_timeout_quorum_queue_policy(Config) ->
     QName = atom_to_binary(?FUNCTION_NAME),
-    Address = rabbitmq_amqp_address:queue(QName),
-    PolicyName = <<"consumer-timeout-policy">>,
-
+    PolicyName = <<"consumer timeout policy">>,
     ok = rabbit_ct_broker_helpers:set_policy(
            Config, 0, PolicyName, QName, <<"quorum_queues">>,
            [{<<"consumer-timeout">>, 1000}]),
+    ok = consumer_timeout(Config, QName, #{}),
+    ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, PolicyName).
+
+consumer_timeout_quorum_queue_consumer_arg(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    LinkProperties = #{<<"rabbitmq:consumer-timeout">> => {uint, 1000}},
+    ok = consumer_timeout(Config, QName, LinkProperties).
+
+consumer_timeout(Config, QName, LinkProperties) ->
+    Address = rabbitmq_amqp_address:queue(QName),
 
     OpnConf = connection_config(Config),
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
@@ -7051,8 +7057,9 @@ consumer_timeout_quorum_queue(Config) ->
     {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address),
     wait_for_credit(Sender),
 
-    {ok, Receiver} = amqp10_client:attach_receiver_link(Session, <<"receiver">>,
-                                                        Address, unsettled),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session, <<"receiver">>, Address,
+                       unsettled, none, #{}, LinkProperties),
 
     ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"tag1">>, <<"msg1">>, false)),
     ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"tag2">>, <<"msg2">>, false)),
@@ -7101,7 +7108,6 @@ consumer_timeout_quorum_queue(Config) ->
     end,
     receive {amqp10_msg, Receiver, M2Redelivered} ->
                 ?assertEqual([<<"msg2">>], amqp10_msg:body(M2Redelivered)),
-                %% Timed out messages should not count as failure
                 ?assertMatch(#{delivery_count := 0,
                                first_acquirer := false},
                              amqp10_msg:headers(M2Redelivered)),
@@ -7121,8 +7127,7 @@ consumer_timeout_quorum_queue(Config) ->
     {ok, #{message_count := 0}} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
     ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
     ok = end_session_sync(Session),
-    ok = close_connection_sync(Connection),
-    ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, PolicyName).
+    ok = close_connection_sync(Connection).
 
 %% Attach a receiver to an unavailable quorum queue.
 attach_to_down_quorum_queue(Config) ->
