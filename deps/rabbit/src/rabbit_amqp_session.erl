@@ -385,7 +385,8 @@
           %% Queues that got deleted.
           stashed_eol = [] :: [rabbit_amqqueue:name()],
           %% The queue spontaneously released messages since the consumer did not settle in time.
-          stashed_consumer_timeout = #{} :: #{{rabbit_types:ctag(), rabbit_amqqueue:msg_id()} => true},
+          stashed_consumer_timeout = #{} :: #{{rabbit_types:ctag(),
+                                               rabbit_amqqueue:msg_id()} => true},
 
           queue_states = rabbit_queue_type:init() :: rabbit_queue_type:state(),
           permission_cache = [] :: permission_cache(),
@@ -660,7 +661,9 @@ log_error_and_close_session(
 noreply_coalesce(#state{stashed_rejected = [],
                         stashed_settled = [],
                         stashed_down = [],
-                        stashed_eol = []} = State) ->
+                        stashed_eol = [],
+                        stashed_consumer_timeout = Map} = State)
+  when map_size(Map) =:= 0 ->
     noreply(State);
 noreply_coalesce(#state{outgoing_pending = Pending} = State) ->
     case queue:is_empty(Pending) of
