@@ -238,7 +238,9 @@
           at_least_one_credit_req_in_flight :: boolean(),
           %% While at_least_one_credit_req_in_flight is true, we stash the
           %% latest credit request from the receiving client.
-          stashed_credit_req :: none | #credit_req{}
+          stashed_credit_req :: none | #credit_req{},
+          %% Whether a consumer timeout warning was already logged for this link.
+          timeout_logged :: boolean()
          }).
 
 -record(outgoing_unsettled, {
@@ -834,16 +836,41 @@ handle_stashed_settled(GrantCredits0, #state{cfg = #cfg{max_link_credit = MaxLin
 handle_stashed_consumer_timeout(#state{stashed_consumer_timeout = Map} = State)
   when map_size(Map) =:= 0 ->
     {[], State};
-handle_stashed_consumer_timeout(#state{stashed_consumer_timeout = ConsumerTimeout,
-                                       outgoing_unsettled_map = Unsettled} = State0) ->
-    Ids = maps:fold(fun(DeliveryId, #outgoing_unsettled{consumer_tag = CTag,
-                                                        msg_id = MsgId}, Acc) ->
-                            case is_map_key({CTag, MsgId}, ConsumerTimeout) of
-                                true -> [DeliveryId | Acc];
-                                false -> Acc
-                            end
-                    end, [], Unsettled),
-    State = State0#state{stashed_consumer_timeout = #{}},
+handle_stashed_consumer_timeout(#state{cfg = #cfg{container_id = ContainerId,
+                                                  conn_name = ConnName},
+                                       stashed_consumer_timeout = ConsumerTimeout,
+                                       outgoing_unsettled_map = Unsettled,
+                                       outgoing_links = Links0} = State0) ->
+    {Ids, CTags} = maps:fold(fun(DeliveryId,
+                                 #outgoing_unsettled{consumer_tag = CTag,
+                                                     msg_id = MsgId},
+                                 {Ids0, CTags0} = Acc) ->
+                                     case is_map_key({CTag, MsgId}, ConsumerTimeout) of
+                                         true ->
+                                             {[DeliveryId | Ids0], CTags0#{CTag => true}};
+                                         false ->
+                                             Acc
+                                     end
+                             end, {[], #{}}, Unsettled),
+    Links = maps:fold(
+              fun(CTag, true, Acc) ->
+                      Handle = ctag_to_handle(CTag),
+                      case Acc of
+                          #{Handle := #outgoing_link{timeout_logged = false,
+                                                     name = LinkName,
+                                                     queue_name = QName} = Link} ->
+                              ?LOG_WARNING(
+                                 "released unsettled messages due to consumer timeout on "
+                                 "connection '~ts' for link '~ts' with handle ~b to "
+                                 "AMQP container '~ts' consuming from ~ts",
+                                 [ConnName, LinkName, Handle, ContainerId, rabbit_misc:rs(QName)]),
+                              Acc#{Handle := Link#outgoing_link{timeout_logged = true}};
+                          _ ->
+                              Acc
+                      end
+              end, Links0, CTags),
+    State = State0#state{stashed_consumer_timeout = #{},
+                         outgoing_links = Links},
     {Ids, State}.
 
 handle_stashed_down(#state{stashed_down = []} = State) ->
@@ -1575,7 +1602,8 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
                                                               credit = 0,
                                                               drain = false},
                                           at_least_one_credit_req_in_flight = false,
-                                          stashed_credit_req = none},
+                                          stashed_credit_req = none,
+                                          timeout_logged = false},
                                    OutgoingLinks = OutgoingLinks0#{HandleInt => L},
                                    State1 = State0#state{queue_states = QStates,
                                                          outgoing_links = OutgoingLinks,
@@ -3981,7 +4009,7 @@ info_incoming_link(Handle, LinkName, SndSettleMode, TargetAddress,
 
 info_outgoing_management_links(Links) ->
     [info_outgoing_link(Handle, Name, ?MANAGEMENT_NODE_ADDRESS, <<>>,
-                        true, MaxMessageSize, [], DeliveryCount, Credit)
+                        true, MaxMessageSize, [], DeliveryCount, Credit, false)
      || Handle := #management_link{
                      name = Name,
                      max_message_size = MaxMessageSize,
@@ -3990,7 +4018,8 @@ info_outgoing_management_links(Links) ->
 
 info_outgoing_links(Links) ->
     [info_outgoing_link(Handle, Name, SourceAddress, QueueNameBin,
-                        SendSettled, MaxMessageSize, Filter, DeliveryCount, Credit)
+                        SendSettled, MaxMessageSize, Filter,
+                        DeliveryCount, Credit, ConsumerTimeoutLogged)
      || Handle := #outgoing_link{
                      name = Name,
                      source_address = SourceAddress,
@@ -4000,11 +4029,13 @@ info_outgoing_links(Links) ->
                      filter = Filter,
                      client_flow_ctl = #client_flow_ctl{
                                           delivery_count = DeliveryCount,
-                                          credit = Credit}}
+                                          credit = Credit},
+                     timeout_logged = ConsumerTimeoutLogged}
         <- Links].
 
 info_outgoing_link(Handle, LinkName, SourceAddress, QueueNameBin, SendSettled,
-                   MaxMessageSize, Filter, DeliveryCount, Credit) ->
+                   MaxMessageSize, Filter, DeliveryCount, Credit,
+                   ConsumerTimeout) ->
     [{handle, Handle},
      {link_name, LinkName},
      {source_address, SourceAddress},
@@ -4013,7 +4044,8 @@ info_outgoing_link(Handle, LinkName, SourceAddress, QueueNameBin, SendSettled,
      {max_message_size, MaxMessageSize},
      {filter, Filter},
      {delivery_count, DeliveryCount},
-     {credit, Credit}].
+     {credit, Credit},
+     {consumer_timeout, ConsumerTimeout}].
 
 format_filter(undefined) ->
     [];

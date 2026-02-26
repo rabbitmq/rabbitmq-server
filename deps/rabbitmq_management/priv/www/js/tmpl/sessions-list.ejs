@@ -131,7 +131,8 @@ function fmt_filter_value(value) {
       <th>max-message-size (bytes)</th>
       <th>delivery-count</th>
       <th>link-credit</th>
-      <th>Filters<span class="help" id="amqp-filter"></span></th>
+      <th>Consumer timeout <span class="help" id="amqp-consumer-timeout"></span></th>
+      <th>Filters <span class="help" id="amqp-filter"></span></th>
      </tr>
     </thead>
     <tbody>
@@ -148,6 +149,7 @@ function fmt_filter_value(value) {
       <td class="c"><%= fmt_string(out_link.max_message_size) %></td>
       <td class="c"><%= fmt_string(out_link.delivery_count) %></td>
       <td class="c"><%= fmt_string(out_link.credit) %></td>
+      <td class="c <%= out_link.consumer_timeout ? 'yellow-background' : '' %>"><%= fmt_boolean(out_link.consumer_timeout) %></td>
       <td class="c"><%= fmt_amqp_filter(out_link.filter) %></td>
      </tr>
 <% } %>

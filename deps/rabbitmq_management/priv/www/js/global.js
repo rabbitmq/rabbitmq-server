@@ -640,7 +640,10 @@ var HELP = {
       'Number of messages that have been sent to consumers but have not yet been settled/acknowledged.',
 
     'amqp-filter':
-      'Filters are predicates that define which messages RabbitMQ sends to the receiver. Each filter in the <a target="_blank" href="https://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-messaging-v1.0-os.html#type-filter-set">Filter Set</a> has a name displayed in the boxes below. Hovering over a box will display the filter descriptor and the filter definition.'
+      'Filters are predicates that define which messages RabbitMQ sends to the receiver. Each filter in the <a target="_blank" href="https://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-messaging-v1.0-os.html#type-filter-set">Filter Set</a> has a name displayed in the boxes below. Hovering over a box will display the filter descriptor and the filter definition.',
+
+    'amqp-consumer-timeout':
+      '"true" if this consumer has ever had messages released due to a consumer timeout, i.e. because the consumer did not settle messages within the configured (x-)consumer-timeout period.'
 };
 
 ///////////////////////////////////////////////////////////////////////////
