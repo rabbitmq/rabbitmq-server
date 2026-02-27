@@ -12,7 +12,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "chromedriver": "^145.0",
+    "chromedriver": "^146.0",
     "ejs": "^4.0.1",
     "express": "^5.1.0",
     "geckodriver": "^6.0.2",
