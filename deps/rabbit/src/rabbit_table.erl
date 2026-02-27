@@ -10,7 +10,7 @@
 -export([
     create/0, create/2, ensure_local_copies/1, ensure_table_copy/3,
     wait_for_replicated/1, wait/1, wait/2, wait_silent/2,
-    force_load/0, is_present/0, is_empty/0, needs_default_data/0,
+    force_load/0, is_present/0, is_empty/0,
     check_schema_integrity/1,
     clear_ram_only_tables/0, maybe_clear_ram_only_tables/0,
     retry_timeout/0, wait_for_replicated/0]).
@@ -203,24 +203,6 @@ is_present() -> names() -- mnesia:system_info(tables) =:= [].
 -spec is_empty() -> boolean().
 
 is_empty()           -> is_empty(names()).
-
--spec needs_default_data() -> boolean().
-
-needs_default_data() ->
-    case rabbit_khepri:is_enabled() of
-        true ->
-            needs_default_data_in_khepri();
-        false ->
-            needs_default_data_in_mnesia()
-    end.
-
-needs_default_data_in_khepri() ->
-    rabbit_db_user:count_all() =:= {ok, 0} orelse
-    rabbit_db_vhost:count_all() =:= {ok, 0}.
-
-needs_default_data_in_mnesia() ->
-    is_empty([rabbit_user, rabbit_user_permission,
-              rabbit_vhost]).
 
 is_empty(Names) ->
     lists:all(fun (Tab) -> mnesia:dirty_first(Tab) == '$end_of_table' end,

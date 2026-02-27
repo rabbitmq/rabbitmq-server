@@ -1170,7 +1170,7 @@ prevent_startup_if_node_was_reset() ->
             case filelib:is_file(MarkerFile) of
                 true ->
                     %% Not the first run, check if tables need default data
-                    case rabbit_table:needs_default_data() of
+                    case rabbit_db:needs_default_data() of
                         true ->
                             ?LOG_ERROR("Node has already been initialized, but database appears empty. "
                                        "This could indicate data loss or a split-brain scenario.",
@@ -1195,7 +1195,7 @@ prevent_startup_if_node_was_reset() ->
 
 maybe_insert_default_data() ->
     NoDefsToImport = not rabbit_definitions:has_configured_definitions_to_load(),
-    case rabbit_table:needs_default_data() andalso NoDefsToImport of
+    case rabbit_db:needs_default_data() andalso NoDefsToImport of
         true  ->
             ?LOG_INFO("Will seed default virtual host and user...",
                       #{domain => ?RMQLOG_DOMAIN_GLOBAL}),

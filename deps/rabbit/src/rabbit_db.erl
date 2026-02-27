@@ -20,6 +20,7 @@
          force_reset/0,
          force_load_on_next_boot/0,
          is_virgin_node/0, is_virgin_node/1,
+         needs_default_data/0,
          dir/0,
          ensure_dir_exists/0,
          is_init_finished/0,
@@ -257,6 +258,30 @@ is_virgin_node(Node) when is_atom(Node) ->
         _:_ ->
             undefined
     end.
+
+%% -------------------------------------------------------------------
+%% needs_default_data().
+%% -------------------------------------------------------------------
+
+-spec needs_default_data() -> NeedsDefaultData when
+      NeedsDefaultData :: boolean().
+%% @doc Indicates if this RabbitMQ node needs default data in the metadata
+%% store.
+%%
+%% The default data needed when a new node starts is:
+%% <ul>
+%% <li>a virtual host</li>
+%% <li>a user</li>
+%% </ul>
+%%
+%% So if the metadata store contains no virtual hosts or no users, this
+%% function returns true.
+%%
+%% @returns `true' if the node needs default data, `false' otherwise.
+
+needs_default_data() ->
+    rabbit_db_user:count_all() =:= {ok, 0} orelse
+    rabbit_db_vhost:count_all() =:= {ok, 0}.
 
 %% -------------------------------------------------------------------
 %% dir().
