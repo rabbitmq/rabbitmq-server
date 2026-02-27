@@ -44,6 +44,7 @@
          ensure_mnesia_dir/0,
          ensure_mnesia_running/0,
          ensure_node_type_is_permitted/1,
+         wait/2,
 
          %% Hooks used in `rabbit_node_monitor'
          on_node_up/1,
@@ -647,6 +648,63 @@ ensure_schema_integrity() ->
             ok;
         {error, Reason} ->
             throw({error, {schema_integrity_check_failed, Reason}})
+    end.
+
+-spec wait([atom()], boolean()) -> 'ok'.
+
+wait(TableNames, Retry) ->
+    {Timeout, Retries} = retry_timeout(Retry),
+    wait(TableNames, Timeout, Retries).
+
+wait(TableNames, Timeout, Retries) ->
+    %% Wait for tables must only wait for tables that have already been declared.
+    %% Otherwise, node boot returns a timeout when the Khepri ff is enabled from the start
+    ExistingTables = mnesia:system_info(tables),
+    MissingTables = TableNames -- ExistingTables,
+    TablesToMigrate = TableNames -- MissingTables,
+    wait1(TablesToMigrate, Timeout, Retries).
+
+wait1(TableNames, Timeout, Retries) ->
+    %% We might be in ctl here for offline ops, in which case we can't
+    %% get_env() for the rabbit app.
+    ?LOG_INFO("Waiting for Mnesia tables for ~tp ms, ~tp retries left",
+              [Timeout, Retries - 1]),
+    Result = case mnesia:wait_for_tables(TableNames, Timeout) of
+                 ok ->
+                     ok;
+                 {timeout, BadTabs} ->
+                     AllNodes = rabbit_nodes:list_members(),
+                     {error, {timeout_waiting_for_tables, AllNodes, BadTabs}};
+                 {error, Reason} ->
+                     AllNodes = rabbit_nodes:list_members(),
+                     {error, {failed_waiting_for_tables, AllNodes, Reason}}
+             end,
+    case {Retries, Result} of
+        {_, ok} ->
+            ?LOG_INFO("Successfully synced tables from a peer"),
+            ok;
+        {1, {error, _} = Error} ->
+            throw(Error);
+        {_, {error, Error}} ->
+            ?LOG_WARNING("Error while waiting for Mnesia tables: ~tp", [Error]),
+            wait1(TableNames, Timeout, Retries - 1)
+    end.
+
+retry_timeout(_Retry = false) ->
+    {retry_timeout(), 1};
+retry_timeout(_Retry = true) ->
+    Retries = case application:get_env(rabbit, mnesia_table_loading_retry_limit) of
+                  {ok, T}   -> T;
+                  undefined -> 10
+              end,
+    {retry_timeout(), Retries}.
+
+-spec retry_timeout() -> non_neg_integer() | infinity.
+
+retry_timeout() ->
+    case application:get_env(rabbit, mnesia_table_loading_retry_timeout) of
+        {ok, T}   -> T;
+        undefined -> 30000
     end.
 
 -spec copy_db(file:filename()) ->  rabbit_types:ok_or_error(any()).

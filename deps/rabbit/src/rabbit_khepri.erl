@@ -2122,7 +2122,7 @@ do_migrate_mnesia_tables(FeatureName, Migrations) ->
        "footprint",
        [FeatureName, length(Migrations)],
        #{domain => ?RMQLOG_DOMAIN_DB}),
-    rabbit_table:wait(Tables, _Retry = true),
+    rabbit_mnesia:wait(Tables, _Retry = true),
     Ret = mnesia_to_khepri:copy_tables(
             ?STORE_ID, ?MIGRATION_ID, Tables,
             {rabbit_db_m2k_converter, Migrations}),
