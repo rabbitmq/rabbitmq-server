@@ -780,6 +780,10 @@ pubsub(Config) ->
     {ok, _, [1]} = emqtt:subscribe(C1, Topic1, qos1),
     C0 = connect(<<"c0">>, Config, 0, []),
     {ok, _, [1]} = emqtt:subscribe(C0, Topic0, qos1),
+    %% Ensure both nodes have consistent metadata before publishing
+    %% cross-node.
+    ok = await_metadata_store_consistent(Config, 0),
+    ok = await_metadata_store_consistent(Config, 1),
 
     {ok, _} = emqtt:publish(C0, Topic1, <<"m1">>, qos1),
     receive {publish, #{client_pid := C1,
@@ -1202,6 +1206,7 @@ rabbit_mqtt_qos0_queue(Config) ->
 
     %% Place MQTT publisher process on old node in mixed version.
     Pub = connect(<<"publisher">>, Config, 1, []),
+    ok = await_metadata_store_consistent(Config, 1),
 
     Msg = <<"msg">>,
     ok = emqtt:publish(Pub, Topic, Msg, qos0),
