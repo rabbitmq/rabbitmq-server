@@ -460,7 +460,7 @@ query_local_pid(#stream_client{stream_id = StreamId} = State) ->
     case rabbit_stream_coordinator:local_pid(StreamId) of
         {ok, Pid} ->
             {Pid, State#stream_client{local_pid = Pid}};
-        {error, not_found} ->
+        {error, _} ->
             {undefined, State}
     end.
 
