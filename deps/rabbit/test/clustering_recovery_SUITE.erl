@@ -465,7 +465,7 @@ proxied_rpc(Config, Node, Module, Function, Args) ->
     Proxy = maps:get(Node, Proxies),
     peer:call(
       Proxy, rabbit_ct_broker_helpers, rpc,
-      [Config, Node, Module, Function, Args]).
+      [Config, Node, Module, Function, Args], 30000).
 
 get_leader_node(Config, Node) ->
     StoreId = rabbit_khepri:get_store_id(),
