@@ -566,7 +566,7 @@ add_replica(Config) ->
 
     Config1 = rabbit_ct_broker_helpers:cluster_nodes(
                 Config, Server1, [Server0]),
-    timer:sleep(1000),
+    await_queue_exists(Config1, Server0, Q),
     ?assertEqual({error, classic_queue_not_supported},
                  rpc:call(Server1, rabbit_stream_queue, add_replica,
                           [<<"/">>, QClassic, Server0])),
@@ -688,6 +688,7 @@ grow_coordinator_cluster(Config) ->
                  declare(Config, Server1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
     Config1 = rabbit_ct_broker_helpers:cluster_nodes(Config, Server1, [Server0]),
+    await_queue_exists(Config1, Server0, Q),
     %% at this point there _probably_ won't be a stream coordinator member on
     %% Server1
 
@@ -982,7 +983,7 @@ consume_without_local_replica(Config) ->
                  declare(Config, Server1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
     %% Add another node to the cluster, but it won't have a replica
     Config1 = rabbit_ct_broker_helpers:cluster_nodes(Config, Server1, [Server0]),
-    timer:sleep(1000),
+    await_queue_exists(Config1, Server0, Q),
 
     Ch1 = rabbit_ct_client_helpers:open_channel(Config1, Server0),
     qos(Ch1, 10, false),
@@ -2693,6 +2694,17 @@ receive_filtered_batch(Ch, Count, ExpectedSize) ->
 
 delete_queues(Qs) when is_list(Qs) ->
     lists:foreach(fun delete_testcase_queue/1, Qs).
+
+await_queue_exists(Config, Node, Q) ->
+    await_condition(
+      fun() ->
+              case rabbit_ct_broker_helpers:rpc(
+                     Config, Node, rabbit_amqqueue, lookup,
+                     [rabbit_misc:r(<<"/">>, queue, Q)]) of
+                  {ok, _} -> true;
+                  _       -> false
+              end
+      end, 30_000).
 
 delete_testcase_queue(Name) ->
     QName = rabbit_misc:r(<<"/">>, queue, Name),
