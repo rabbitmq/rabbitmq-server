@@ -365,7 +365,9 @@ stats_conn(Name, Oct) ->
 channel_series(Name, ListOfStats) ->
     [begin
          stats_ch(Name, XStats, QXStats, QStats),
-         timer:sleep(1000),
+         %% Must be well above the 1-second sample interval so that
+         %% force_collect_all/0 lands in a new exometer_slide interval.
+         timer:sleep(2000),
          force_collect_all()
      end || {XStats, QXStats, QStats} <- ListOfStats].
 
