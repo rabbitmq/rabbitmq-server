@@ -44,7 +44,7 @@ jobs:
         run: make dist -C deps/rabbit
 
       - name: Upload dist for next job
-        uses: pyTooling/upload-artifact@v6
+        uses: pyTooling/upload-artifact@v7
         with:
           name: old-dist
           path: .
@@ -76,7 +76,7 @@ jobs:
         run: make dist -C deps/rabbit
 
       - name: Upload dist for next job
-        uses: pyTooling/upload-artifact@v6
+        uses: pyTooling/upload-artifact@v7
         with:
           name: new-dist
           path: .
