@@ -895,7 +895,11 @@ recover(_Vhost, Queues) ->
                  %% with the UID in metadata store)
                  rabbit_log:info("Quorum ~ts: detected node UID change, "
                                  "deleting old data directory", [rabbit_misc:rs(QName)]),
-                 maybe_delete_data_dir(RaUId)
+                 maybe_delete_data_dir(RaUId);
+             _ ->
+                 %% This node is not in the members map.
+                 %% It should be very unlikely but be extra defensive anyway.
+                 ok
          end,
          Res = case ra:restart_server(?RA_SYSTEM, ServerId, MutConf) of
                    ok ->
@@ -1547,6 +1551,7 @@ do_add_member(Q0, Node, Membership, Timeout)
                     ?LOG_WARNING("Could not add a replica of quorum ~ts on node ~ts: ~p",
                                  [rabbit_misc:rs(QName), Node, E]),
                     E
+            end
     end.
 
 delete_member(VHost, Name, Node) ->
