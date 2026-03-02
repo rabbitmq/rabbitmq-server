@@ -84,7 +84,7 @@
               <option value="exchanges">Exchanges</option>
               <option value="queues">Queues</option>
               <% for (const [typename, type_config] of Object.entries(QUEUE_TYPE)) { %>
-                  <% if (typename != "default") { %>
+                  <% if (typename != "default" && type_config.policy_apply_to ) { %>
               <option value="<%= type_config.policy_apply_to %>"><%= type_config.label %> Queues</option>
                   <% } %>
               <% } %>
@@ -114,7 +114,7 @@
                   <span class="argument-link" field="definition" key="queue-leader-locator" type="string">Leader locator</span><span class="help" id="queue-leader-locator"></span></br>
                 </td>
                 <% for (const [typename, type_config] of Object.entries(QUEUE_TYPE)) { %>
-                    <% if (typename != "default") { %>
+                    <% if (typename != "default" && type_config.tmpl.user_policy_arguments) { %>
                         <%= format(type_config.tmpl.user_policy_arguments, {}) %>
                   <% } %>
                 <% } %>
@@ -245,7 +245,7 @@
             <select name="apply-to">
               <option value="queues">Queues</option>
               <% for (const [typename, type_config] of Object.entries(QUEUE_TYPE)) { %>
-                  <% if (typename != "default") { %>
+                  <% if (typename != "default"  && type_config.policy_apply_to  ) { %>
                       <option value="<%= type_config.policy_apply_to %>"><%= type_config.label %> Queues</option>
                   <% } %>
               <% } %>
@@ -262,7 +262,7 @@
             <div class="multifield" id="definitionop"></div>
             <table class="argument-links">
                 <% for (const [typename, type_config] of Object.entries(QUEUE_TYPE)) { %>
-                    <% if (typename != "default") { %>
+                    <% if (typename != "default" && type_config.tmpl.operator_policy_arguments) { %>
                         <%= format(type_config.tmpl.operator_policy_arguments, {}) %>
                     <% } %>
                 <% } %>

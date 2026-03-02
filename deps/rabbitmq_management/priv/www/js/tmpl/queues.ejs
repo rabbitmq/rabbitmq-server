@@ -233,7 +233,7 @@
             <select name="queuetype" onchange="select_queue_type(queuetype)">
                 <option value="default">Default for virtual host</option>
                 <% for (const [typename, type_config] of Object.entries(QUEUE_TYPE)) { %>
-                  <% if (typename != "default") { %>
+                  <% if (typename != "default" && type_config.tmpl.arguments) { %>
                   <% if (queue_type == typename) { %>
                       <option value="<%= typename%>" selected><%= type_config["label"]%></option>
                   <% } else { %>
