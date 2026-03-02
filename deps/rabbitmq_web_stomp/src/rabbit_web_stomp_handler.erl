@@ -140,8 +140,11 @@ websocket_init(State) ->
 close_connection(Pid, Reason) ->
     ?LOG_INFO("Web STOMP: will terminate connection process ~tp, reason: ~ts",
                                [Pid, Reason]),
-    sys:terminate(Pid, Reason),
-    ok.
+    try
+        sys:terminate(Pid, Reason)
+    catch
+        exit:{noproc, _} -> ok
+    end.
 
 init_processor_state(#state{socket=Sock, peername=PeerAddr, auth_hd=AuthHd}) ->
     Self = self(),
@@ -303,9 +306,19 @@ terminate(_Reason, _Req, State = #state{proc_state = ProcState}) ->
 terminate_heartbeaters(#state{heartbeat = {none, none}}) ->
     ok;
 terminate_heartbeaters(#state{heartbeat = {SPid, RPid}}) ->
-    sys:terminate(SPid, shutdown),
-    sys:terminate(RPid, shutdown),
+    %% Don't assume that these processes are still alive.
+    safe_terminate(SPid),
+    safe_terminate(RPid),
     ok.
+
+safe_terminate(none) ->
+    ok;
+safe_terminate(Pid) ->
+    try
+        sys:terminate(Pid, shutdown)
+    catch
+        exit:{noproc, _} -> ok
+    end.
 
 %%----------------------------------------------------------------------------
 
