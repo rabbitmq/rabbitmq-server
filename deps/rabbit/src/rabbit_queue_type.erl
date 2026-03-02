@@ -417,7 +417,7 @@ info(Q, Items) ->
     Mod = amqqueue:get_type(Q),
     Mod:info(Q, Items).
 
--spec get_nodes(amqqueue:amqqueue_v2()) -> [node(),...].
+-spec get_nodes(amqqueue:amqqueue_v2()) -> [node()].
 get_nodes(Q) ->
     case info(Q, [members]) of
         [{members, Nodes}] ->
