@@ -31,7 +31,7 @@
 -export([supports_stateful_delivery/0,
          deliver/3]).
 -export([dead_letter_publish/5]).
--export([cluster_state/1, status/2]).
+-export([cluster_state/1, status/1, status/2]).
 -export([update_consumer_handler/8, update_consumer/9]).
 -export([cancel_consumer_handler/2, cancel_consumer/3]).
 -export([become_leader/2, handle_tick/3, spawn_deleter/1]).
@@ -61,7 +61,7 @@
 -export([repair_amqqueue_nodes/1,
          repair_amqqueue_nodes/2
          ]).
--export([reclaim_memory/2,
+-export([reclaim_memory/1, reclaim_memory/2,
          wal_force_roll_over/1]).
 -export([notify_decorators/1,
          notify_decorators/3,
@@ -1245,6 +1245,11 @@ key_metrics_rpc(ServerId) ->
     Metrics = ra:key_metrics(ServerId),
     Metrics#{machine_version => rabbit_fifo:version()}.
 
+-spec status(rabbit_types:r(queue)) ->
+    [[{binary(), term()}]] | {error, term()}.
+status(#resource{virtual_host = Vhost, name = QueueName}) ->
+    status(Vhost, QueueName).
+
 -spec status(rabbit_types:vhost(), Name :: rabbit_misc:resource_name()) ->
     [[{binary(), term()}]] | {error, term()}.
 status(Vhost, QueueName) ->
@@ -1629,6 +1634,10 @@ matches_strategy(even, Members) ->
 
 is_match(Subj, E) ->
    nomatch /= re:run(Subj, E).
+
+-spec reclaim_memory(rabbit_types:r(queue)) -> ok | {error, term()}.
+reclaim_memory(#resource{virtual_host = Vhost, name = QueueName}) ->
+    reclaim_memory(Vhost, QueueName).
 
 -spec reclaim_memory(rabbit_types:vhost(), Name :: rabbit_misc:resource_name()) -> ok | {error, term()}.
 reclaim_memory(Vhost, QueueName) ->
