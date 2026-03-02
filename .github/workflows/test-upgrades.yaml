@@ -108,13 +108,13 @@ jobs:
 
     steps:
       - name: Download old dist from previous job
-        uses: pyTooling/download-artifact@v7
+        uses: pyTooling/download-artifact@v8
         with:
           name: old-dist
           path: ./OLD
 
       - name: Download new dist from previous job
-        uses: pyTooling/download-artifact@v7
+        uses: pyTooling/download-artifact@v8
         with:
           name: new-dist
           path: ./NEW
