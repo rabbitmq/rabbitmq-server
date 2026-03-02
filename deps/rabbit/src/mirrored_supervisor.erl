@@ -59,9 +59,7 @@
 %%
 %% 4) The restart strategy simple_one_for_one is not available.
 %%
-%% 5) Mnesia is used to hold global state. At some point your
-%%    application should invoke create_tables() (or table_definitions()
-%%    if it wants to manage table creation itself).
+%% 5) Khepri is used to hold global state.
 %%
 %% Internals
 %% ---------
@@ -111,7 +109,6 @@
          handle_cast/2]).
 
 -export([start_internal/2]).
--export([create_tables/0, table_definitions/0]).
 -export([supervisor/1, child/2]).
 
 -record(state, {overall,
@@ -161,9 +158,6 @@
       Group :: group_name(),
       ChildSpecs :: [?SUPERVISOR:child_spec()],
       Result :: {'ok', pid()} | {'error', term()}.
-
--spec create_tables() -> Result when
-      Result :: 'ok'.
 
 %%----------------------------------------------------------------------------
 
@@ -445,14 +439,6 @@ delete_all(Group) ->
     rabbit_db_msup:delete_all(Group).
 
 errors(Results) -> [E || {error, E} <- Results].
-
-%%----------------------------------------------------------------------------
-
-create_tables() ->
-    rabbit_db_msup:create_tables().
-
-table_definitions() ->
-    rabbit_db_msup:table_definitions().
 
 %%----------------------------------------------------------------------------
 

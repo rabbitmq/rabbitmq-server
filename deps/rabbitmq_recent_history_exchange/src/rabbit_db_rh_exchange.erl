@@ -12,12 +12,10 @@
 -include("rabbit_recent_history.hrl").
 
 -export([
-         setup_schema/0,
          get/1,
          insert/3,
          delete/0,
-         delete/1,
-         delete_in_khepri/0
+         delete/1
         ]).
 
 -export([khepri_recent_history_path/1]).
@@ -26,39 +24,10 @@
    [{?RH_TABLE, rabbit_db_rh_exchange_m2k_converter}]).
 
 %% -------------------------------------------------------------------
-%% setup_schema().
-%% -------------------------------------------------------------------
-
-setup_schema() ->
-    rabbit_khepri:handle_fallback(
-      #{mnesia => fun() -> setup_schema_in_mnesia() end,
-        khepri => fun() -> ok end
-       }).
-
-setup_schema_in_mnesia() ->
-    _ = mnesia:create_table(?RH_TABLE,
-                            [{attributes, record_info(fields, cached)},
-                             {record_name, cached},
-                             {type, set}]),
-    _ = mnesia:add_table_copy(?RH_TABLE, node(), ram_copies),
-    rabbit_table:wait([?RH_TABLE]),
-    ok.
-
-%% -------------------------------------------------------------------
 %% get().
 %% -------------------------------------------------------------------
 
 get(XName) ->
-    rabbit_khepri:handle_fallback(
-      #{mnesia => fun() -> get_in_mnesia(XName) end,
-        khepri => fun() -> get_in_khepri(XName) end
-       }).
-
-get_in_mnesia(XName) ->
-    rabbit_mnesia:execute_mnesia_transaction(
-      fun() -> get_in_mnesia_tx(XName) end).
-
-get_in_khepri(XName) ->
     Path = khepri_recent_history_path(XName),
     case rabbit_khepri:get(Path) of
         {ok, Cached} ->
@@ -67,43 +36,11 @@ get_in_khepri(XName) ->
             []
     end.
 
-get_in_mnesia_tx(XName) ->
-    case mnesia:read(?RH_TABLE, XName) of
-        [] ->
-            [];
-        [#cached{key = XName, content=Cached}] ->
-            Cached
-    end.
-
 %% -------------------------------------------------------------------
 %% insert().
 %% -------------------------------------------------------------------
 
 insert(XName, Message, Length) ->
-    rabbit_khepri:handle_fallback(
-      #{mnesia => fun() -> insert_in_mnesia(XName, Message, Length) end,
-        khepri => fun() -> insert_in_khepri(XName, Message, Length) end
-       }).
-
-insert_in_mnesia(XName, Message, Length) ->
-    rabbit_mnesia:execute_mnesia_transaction(
-      fun () ->
-              Cached = get_in_mnesia_tx(XName),
-              insert_in_mnesia(XName, Cached, Message, Length)
-      end).
-
-insert_in_mnesia(Key, Cached, Message, undefined) ->
-    insert0_in_mnesia(Key, Cached, Message, ?KEEP_NB);
-insert_in_mnesia(Key, Cached, Message, {_Type, Length}) ->
-    insert0_in_mnesia(Key, Cached, Message, Length).
-
-insert0_in_mnesia(Key, Cached, Message, Length) ->
-    mnesia:write(?RH_TABLE,
-                 #cached{key     = Key,
-                         content = [Message|lists:sublist(Cached, Length-1)]},
-                 write).
-
-insert_in_khepri(XName, Message, Length) ->
     Path = khepri_recent_history_path(XName),
     case rabbit_khepri:adv_get(Path) of
         {ok, #{Path := #{data := Cached0, payload_version := Vsn}}} ->
@@ -115,7 +52,7 @@ insert_in_khepri(XName, Message, Length) ->
                 ok ->
                     ok;
                 {error, {khepri, mismatching_node, _}} ->
-                    insert_in_khepri(XName, Message, Length);
+                    insert(XName, Message, Length);
                 {error, _} = Error ->
                     Error
             end;
@@ -136,37 +73,11 @@ add_to_cache(Cached, Message, Length) ->
 %% -------------------------------------------------------------------
 
 delete() ->
-    rabbit_khepri:handle_fallback(
-      #{mnesia => fun() -> delete_in_mnesia() end,
-        khepri => fun() -> delete_in_khepri() end
-       }).
-
-delete_in_mnesia() ->
-    case mnesia:delete_table(?RH_TABLE) of
-        {atomic, ok} ->
-            ok;
-        {aborted, Reason} ->
-            {error, Reason}
-    end.
-
-delete_in_khepri() ->
     Path = khepri_recent_history_path(
              ?KHEPRI_WILDCARD_STAR, ?KHEPRI_WILDCARD_STAR),
     rabbit_khepri:delete(Path).
 
 delete(XName) ->
-    rabbit_khepri:handle_fallback(
-      #{mnesia => fun() -> delete_in_mnesia(XName) end,
-        khepri => fun() -> delete_in_khepri(XName) end
-       }).
-
-delete_in_mnesia(XName) ->
-    rabbit_mnesia:execute_mnesia_transaction(
-      fun() ->
-              mnesia:delete(?RH_TABLE, XName, write)
-      end).
-
-delete_in_khepri(XName) ->
     Path = khepri_recent_history_path(XName),
     rabbit_khepri:delete(Path).
 

@@ -7,14 +7,8 @@
 
 -module(rabbit_mirror_queue_misc).
 
--include_lib("stdlib/include/assert.hrl").
-
--include("amqqueue.hrl").
-
 %% Deprecated feature callback.
 -export([are_cmqs_used/1]).
-
--include_lib("rabbit_common/include/rabbit.hrl").
 
 -rabbit_deprecated_feature(
    {classic_queue_mirroring,
@@ -57,53 +51,4 @@
 %%----------------------------------------------------------------------------
 
 are_cmqs_used(_) ->
-    case rabbit_khepri:get_feature_state() of
-        enabled ->
-            false;
-        _ ->
-            %% If we are using Mnesia, we want to check manually if the table
-            %% exists first. Otherwise it can conflict with the way
-            %% `rabbit_khepri:handle_fallback/1` works. Indeed, this function
-            %% and `rabbit_khepri:handle_fallback/1` rely on the `no_exists`
-            %% exception.
-            AllTables = mnesia:system_info(tables),
-            RuntimeParamsReady = lists:member(
-                                   rabbit_runtime_parameters, AllTables),
-            case RuntimeParamsReady of
-                true ->
-                    %% We also wait for the table because it could exist but
-                    %% may be unavailable. For instance, Mnesia needs another
-                    %% replica on another node before it considers it to be
-                    %% available.
-                    rabbit_table:wait_silent(
-                      [rabbit_runtime_parameters], _Retry = true),
-                    are_cmqs_used1();
-                false ->
-                    false
-            end
-    end.
-
-are_cmqs_used1() ->
-    try
-        LocalPolicies = rabbit_policy:list(),
-        LocalOpPolicies = rabbit_policy:list_op(),
-        has_ha_policies(LocalPolicies ++ LocalOpPolicies)
-    catch
-        exit:{aborted, {no_exists, _}} ->
-            %% This node is being initialized for the first time. Therefore it
-            %% must have no policies.
-            ?assert(rabbit_mnesia:is_running()),
-            false
-    end.
-
-has_ha_policies(Policies) ->
-    lists:any(
-      fun(Policy) ->
-              KeyList = proplists:get_value(definition, Policy),
-              does_policy_configure_cmq(KeyList)
-      end, Policies).
-
-does_policy_configure_cmq(Map) when is_map(Map) ->
-    is_map_key(<<"ha-mode">>, Map);
-does_policy_configure_cmq(KeyList) when is_list(KeyList) ->
-    lists:keymember(<<"ha-mode">>, 1, KeyList).
+    false.

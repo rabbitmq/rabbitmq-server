@@ -133,28 +133,12 @@ init_per_testcase(Testcase, Config) ->
         {tcp_ports_base, {skip_n_nodes, TestNumber * ClusterSize}},
         {keep_pid_file_on_exit, true}
       ]),
-    Config2 = case Testcase of
-                  _ when Testcase =:= autodelete_transient_queue_after_partition_recovery_1 orelse
-                         Testcase =:= autodelete_durable_queue_after_partition_recovery_1 orelse
-                         Testcase =:= autodelete_transient_queue_after_partition_recovery_2 orelse
-                         Testcase =:= autodelete_durable_queue_after_partition_recovery_2 orelse
-                         Testcase =:= exclusive_transient_queue_after_partition_recovery_1 orelse
-                         Testcase =:= exclusive_durable_queue_after_partition_recovery_1 orelse
-                         Testcase =:= exclusive_transient_queue_after_partition_recovery_2 orelse
-                         Testcase =:= exclusive_durable_queue_after_partition_recovery_2 ->
-                      rabbit_ct_helpers:merge_app_env(
-                        Config1,
-                        {rabbit,
-                         [{cluster_partition_handling, pause_minority}]});
-                  _ ->
-                      Config1
-              end,
-    Config3 = rabbit_ct_helpers:run_steps(
-                Config2,
+    Config2 = rabbit_ct_helpers:run_steps(
+                Config1,
                 rabbit_ct_broker_helpers:setup_steps() ++
                 rabbit_ct_client_helpers:setup_steps()),
-    case Config3 of
-        _ when is_list(Config3) andalso
+    case Config2 of
+        _ when is_list(Config2) andalso
                (Testcase =:= autodelete_transient_queue_after_partition_recovery_1 orelse
                 Testcase =:= autodelete_durable_queue_after_partition_recovery_1 orelse
                 Testcase =:= autodelete_transient_queue_after_partition_recovery_2 orelse
@@ -164,23 +148,23 @@ init_per_testcase(Testcase, Config) ->
                 Testcase =:= exclusive_transient_queue_after_partition_recovery_2 orelse
                 Testcase =:= exclusive_durable_queue_after_partition_recovery_2) ->
             NewEnough = ok =:= rabbit_ct_broker_helpers:enable_feature_flag(
-                                 Config3, 'rabbitmq_4.2.0'),
+                                 Config2, 'rabbitmq_4.2.0'),
             case NewEnough of
                 true ->
-                    Config3;
+                    Config2;
                 false ->
                     _ = rabbit_ct_helpers:run_steps(
-                          Config3,
+                          Config2,
                           rabbit_ct_client_helpers:teardown_steps() ++
                           rabbit_ct_broker_helpers:teardown_steps()),
-                    rabbit_ct_helpers:testcase_finished(Config3, Testcase),
+                    rabbit_ct_helpers:testcase_finished(Config2, Testcase),
                     {skip,
                      "The old node does not have improvements to "
                      "rabbit_amqqueue_process and rabbit_node_monitor"}
             end;
         _ ->
             %% Other testcases or failure to setup broker and client.
-            Config3
+            Config2
     end.
 
 end_per_testcase(Testcase, Config) ->

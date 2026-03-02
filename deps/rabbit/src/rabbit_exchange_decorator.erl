@@ -26,9 +26,7 @@
 
 -type(serial() :: pos_integer() | 'none').
 
-%% Callbacks on Khepri are always executed outside of a transaction, thus
-%% this implementation has been updated to reflect this. The 'transaction'
-%% parameter disappears, even for mnesia, callbacks run only once
+%% Callbacks are executed outside of a transaction. They run only once
 %% and their implementation must ensure any transaction required.
 
 -callback description() -> [proplists:property()].

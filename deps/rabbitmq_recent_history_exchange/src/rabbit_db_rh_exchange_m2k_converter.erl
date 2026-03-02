@@ -90,7 +90,7 @@ delete_from_khepri(?RH_TABLE = Table, Key, State) ->
       end, State).
 
 clear_data_in_khepri(?RH_TABLE) ->
-    case rabbit_db_rh_exchange:delete_in_khepri() of
+    case rabbit_db_rh_exchange:delete() of
         ok ->
             ok;
         Error ->

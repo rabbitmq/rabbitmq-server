@@ -291,7 +291,7 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--define(APPS, [os_mon, mnesia, rabbit_common, rabbitmq_prelaunch, ra, sysmon_handler, rabbit, osiris]).
+-define(APPS, [os_mon, rabbit_common, rabbitmq_prelaunch, ra, sysmon_handler, rabbit, osiris]).
 
 %% 1 minute
 -define(BOOT_START_TIMEOUT,     1 * 60 * 1000).
@@ -335,18 +335,11 @@ run_prelaunch_second_phase() ->
     %% The `rabbitmq_prelaunch` application creates the context map from
     %% the environment and the configuration files early during Erlang
     %% VM startup. Once it is done, all application environments are
-    %% configured (in particular `mnesia` and `ra`).
+    %% configured (in particular `ra`).
     %%
     %% This second phase depends on other modules & facilities of
     %% RabbitMQ core. That's why we need to run it now, from the
     %% `rabbit` application start function.
-
-    %% We assert Mnesia is stopped before we run the prelaunch
-    %% phases. See `rabbit_prelaunch` for an explanation.
-    %%
-    %% This is the second assertion, just in case Mnesia is started
-    %% between the two prelaunch phases.
-    rabbit_prelaunch:assert_mnesia_is_stopped(),
 
     %% Get the context created by `rabbitmq_prelaunch` then proceed
     %% with all steps in this phase.
@@ -374,39 +367,25 @@ run_prelaunch_second_phase() ->
     ok = rabbit_prelaunch_logging:setup(Context),
 
     %% The clustering steps requires Khepri to be started to check for
-    %% consistency. This is the opposite compared to Mnesia which must be
-    %% stopped. That's why we setup Khepri and the coordination Ra system it
-    %% depends on before, but only handle Mnesia after.
-    %%
-    %% We also always set it up, even when using Mnesia, to ensure it is ready
-    %% if/when the migration begins.
+    %% consistency. That's why we setup Khepri and the coordination Ra system
+    %% it depends on before.
     %%
     %% Note that this is only the Khepri store which is started here. We
     %% perform additional initialization steps in `rabbit_db:init()' which is
-    %% triggered from a boot step. This boot step handles both Mnesia and
-    %% Khepri and synchronizes the feature flags.
+    %% triggered from a boot step. This boot step handles Khepri and
+    %% synchronizes the feature flags.
     %%
     %% To sum up:
     %% 1. We start the Khepri store (always)
     %% 2. We verify the cluster, including the feature flags compatibility
-    %% 3. We start Mnesia (if Khepri is unused)
-    %% 4. We synchronize feature flags in `rabbit_db:init()'
-    %% 4. We finish to initialize either Mnesia or Khepri in `rabbit_db:init()'
+    %% 3. We synchronize feature flags in `rabbit_db:init()'
+    %% 4. We finish to initialize Khepri in `rabbit_db:init()'
     ok = rabbit_ra_systems:setup(Context),
     ok = rabbit_khepri:setup(Context),
 
     %% 4. Clustering checks. This covers the compatibility between nodes,
     %% feature-flags-wise.
     ok = rabbit_prelaunch_cluster:setup(Context),
-
-    case rabbit_khepri:is_enabled() of
-        true ->
-            ok;
-        false ->
-            %% Start Mnesia now that everything is ready.
-            ?LOG_DEBUG("Starting Mnesia"),
-            ok = mnesia:start()
-    end,
 
     ?LOG_DEBUG(""),
     ?LOG_DEBUG("== Prelaunch DONE =="),
@@ -507,9 +486,7 @@ stop() ->
 
 do_stop() ->
     Apps0 = ?APPS ++ rabbit_plugins:active(),
-    %% We ensure that Mnesia is stopped last (or more exactly, after rabbit).
-    Apps1 = app_utils:app_dependency_order(Apps0, true) -- [mnesia],
-    Apps = [mnesia | Apps1],
+    Apps = app_utils:app_dependency_order(Apps0, true),
     %% this will also perform unregistration with the peer discovery backend
     %% as needed
     stop_apps(Apps).
@@ -999,13 +976,11 @@ start(normal, []) ->
         {ok, SupPid}
     catch
         throw:{error, _} = Error ->
-            _ = mnesia:stop(),
             rabbit_prelaunch_errors:log_error(Error),
             rabbit_prelaunch:set_stop_reason(Error),
             rabbit_boot_state:set(stopped),
             Error;
         Class:Exception:Stacktrace ->
-            _ = mnesia:stop(),
             rabbit_prelaunch_errors:log_exception(
               Class, Exception, Stacktrace),
             Error = {error, Exception},
@@ -1111,7 +1086,6 @@ prep_stop(State) ->
 
 stop(State) ->
     ok = rabbit_alarm:stop(),
-    ok = rabbit_table:maybe_clear_ram_only_tables(),
     case State of
         [] -> rabbit_prelaunch:set_stop_reason(normal);
         _  -> rabbit_prelaunch:set_stop_reason(State)
@@ -1170,7 +1144,7 @@ prevent_startup_if_node_was_reset() ->
             case filelib:is_file(MarkerFile) of
                 true ->
                     %% Not the first run, check if tables need default data
-                    case rabbit_table:needs_default_data() of
+                    case rabbit_db:needs_default_data() of
                         true ->
                             ?LOG_ERROR("Node has already been initialized, but database appears empty. "
                                        "This could indicate data loss or a split-brain scenario.",
@@ -1195,7 +1169,7 @@ prevent_startup_if_node_was_reset() ->
 
 maybe_insert_default_data() ->
     NoDefsToImport = not rabbit_definitions:has_configured_definitions_to_load(),
-    case rabbit_table:needs_default_data() andalso NoDefsToImport of
+    case rabbit_db:needs_default_data() andalso NoDefsToImport of
         true  ->
             ?LOG_INFO("Will seed default virtual host and user...",
                       #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
@@ -1261,7 +1235,6 @@ get_default_data_param(Param) ->
 %%
 %% Here are a few examples:
 %% <ul>
-%% <li>Mnesia</li>
 %% <li>Feature flags state</li>
 %% <li>Ra systems's WAL and segment files</li>
 %% <li>Classic queues' messages</li>

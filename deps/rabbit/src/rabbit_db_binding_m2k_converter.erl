@@ -129,4 +129,4 @@ delete_from_khepri(Table, Key, State)
 
 clear_data_in_khepri(Table)
   when Table =:= rabbit_route orelse Table =:= rabbit_durable_route ->
-    rabbit_db_binding:clear_in_khepri().
+    rabbit_db_binding:clear().

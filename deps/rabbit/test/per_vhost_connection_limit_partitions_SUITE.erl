@@ -25,7 +25,7 @@ all() ->
 groups() ->
     [
      {net_ticktime_1, [], [
-          cluster_full_partition_with_autoheal
+          cluster_full_partition
      ]}
     ].
 
@@ -80,10 +80,8 @@ end_per_testcase(Testcase, Config) ->
 %% Test cases.
 %% -------------------------------------------------------------------
 
-cluster_full_partition_with_autoheal(Config) ->
+cluster_full_partition(Config) ->
     VHost = <<"/">>,
-    rabbit_ct_broker_helpers:set_partition_handling_mode_globally(Config, autoheal),
-
     ?assertEqual(0, count_connections_in(Config, VHost)),
     [A, B, C] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
@@ -112,15 +110,7 @@ cluster_full_partition_with_autoheal(Config) ->
     rabbit_ct_broker_helpers:allow_traffic_between(B, C),
     timer:sleep(?DELAY),
 
-    %% During autoheal B's connections were dropped. Autoheal is not running
-    %% when Khepri is used.
-    KhepriEnabled = rabbit_ct_broker_helpers:is_feature_flag_enabled(
-                      Config, khepri_db),
-    ExpectedCount = case KhepriEnabled of
-                        true  -> 6;
-                        false -> 4
-                    end,
-    ?awaitMatch(Connections when length(Connections) == ExpectedCount,
+    ?awaitMatch(Connections when length(Connections) == 6,
                                  connections_in(Config, VHost),
                                  60000, 3000),
 

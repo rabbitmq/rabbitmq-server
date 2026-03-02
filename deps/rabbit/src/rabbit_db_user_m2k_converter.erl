@@ -161,6 +161,6 @@ delete_from_khepri(rabbit_topic_permission = Table, Key, State) ->
       Table :: atom().
 
 clear_data_in_khepri(rabbit_user) ->
-    rabbit_db_user:clear_in_khepri();
+    rabbit_db_user:clear();
 clear_data_in_khepri(_) ->
     ok.

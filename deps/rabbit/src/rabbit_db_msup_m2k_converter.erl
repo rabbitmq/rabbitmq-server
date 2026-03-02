@@ -86,4 +86,4 @@ delete_from_khepri(
       Table :: atom().
 
 clear_data_in_khepri(mirrored_sup_childspec) ->
-    rabbit_db_msup:clear_in_khepri().
+    rabbit_db_msup:clear().

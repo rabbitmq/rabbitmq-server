@@ -50,7 +50,7 @@ memory() ->
 
     QueuesEtsStats = lists:map(fun ets_memory/1, QueueStatsEtsNames),
 
-    MnesiaETS           = mnesia_memory(),
+    MnesiaETS           = 0,
     MsgIndexETS         = ets_memory(msg_stores()),
     MetricsETS          = ets_memory([rabbit_metrics]),
     MetricsProc  = try
@@ -181,13 +181,6 @@ binary() ->
      {other,               Other - MetadataStoreProc}].
 
 %%----------------------------------------------------------------------------
-
-mnesia_memory() ->
-    case mnesia:system_info(is_running) of
-        yes -> lists:sum([bytes(mnesia:table_info(Tab, memory)) ||
-                             Tab <- mnesia:system_info(tables)]);
-        _   -> 0
-    end.
 
 ets_memory(Owners) ->
     lists:sum([V || {_K, V} <- ets_tables_memory(Owners)]).

@@ -684,27 +684,6 @@
 # queue_leader_locator = balanced
 
 
-## Partition handling strategy.
-## Primarily affects deployments that use Mnesia and classic queues.
-## Khepri and quorum queues, streams will always use Raft's failure recovery
-## strategy.
-##
-# cluster_partition_handling = ignore
-
-## Pauses all nodes on the minority side of a partition. The cluster
-## MUST have an odd number of nodes (3, 5, etc)
-# cluster_partition_handling = pause_minority
-
-## pause_if_all_down strategy require additional configuration
-# cluster_partition_handling = pause_if_all_down
-
-## Recover strategy. Can be either 'autoheal' or 'ignore'
-# cluster_partition_handling.pause_if_all_down.recover = ignore
-
-## Node names to check
-# cluster_partition_handling.pause_if_all_down.nodes.1 = rabbit@localhost
-# cluster_partition_handling.pause_if_all_down.nodes.2 = hare@localhost
-
 ## Make clustering happen *automatically* at startup. Only applied
 ## to nodes that have just been reset or started for the first time.
 ##

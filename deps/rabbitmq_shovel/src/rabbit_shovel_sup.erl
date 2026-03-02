@@ -36,17 +36,12 @@ init([Configurations]) ->
     {ok, {Opts, ChildSpecs}}.
 
 maybe_register_khepri_projection() ->
-    case rabbit_khepri:is_enabled() of
-        true ->
-            case rabbit_shovel_index:register_projection() of
-                ok -> ok;
-                {error, exists} -> ok;
-                {error, {khepri, projection_already_exists, _}} -> ok;
-                {error, Reason} ->
-                    ?LOG_WARNING("Shovel: failed to register Khepri projection: ~tp", [Reason]),
-                    ok
-            end;
-        false ->
+    case rabbit_shovel_index:register_projection() of
+        ok -> ok;
+        {error, exists} -> ok;
+        {error, {khepri, projection_already_exists, _}} -> ok;
+        {error, Reason} ->
+            ?LOG_WARNING("Shovel: failed to register Khepri projection: ~tp", [Reason]),
             ok
     end.
 

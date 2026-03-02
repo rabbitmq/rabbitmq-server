@@ -2178,34 +2178,27 @@ confirm(MsgSeqNos, QRef, State = #ch{unconfirmed = UC}) ->
 send_confirms_and_nacks(State = #ch{tx = none, confirmed = [], rejected = []}) ->
     State;
 send_confirms_and_nacks(State = #ch{tx = none, confirmed = C, rejected = R}) ->
-    case rabbit_node_monitor:pause_partition_guard() of
-        ok      ->
-            Confirms = lists:append(C),
-            rabbit_global_counters:messages_confirmed(amqp091, length(Confirms)),
-            Rejects = lists:append(R),
-            ConfirmMsgSeqNos =
-                lists:foldl(
-                    fun ({MsgSeqNo, XName}, MSNs) ->
-                        ?INCR_STATS(exchange_stats, XName, 1, confirm, State),
-                        [MsgSeqNo | MSNs]
-                    end, [], Confirms),
-            RejectMsgSeqNos = [MsgSeqNo || {MsgSeqNo, _} <- Rejects],
+    Confirms = lists:append(C),
+    rabbit_global_counters:messages_confirmed(amqp091, length(Confirms)),
+    Rejects = lists:append(R),
+    ConfirmMsgSeqNos =
+        lists:foldl(
+            fun ({MsgSeqNo, XName}, MSNs) ->
+                ?INCR_STATS(exchange_stats, XName, 1, confirm, State),
+                [MsgSeqNo | MSNs]
+            end, [], Confirms),
+    RejectMsgSeqNos = [MsgSeqNo || {MsgSeqNo, _} <- Rejects],
 
-            State1 = send_confirms(ConfirmMsgSeqNos,
-                                   RejectMsgSeqNos,
-                                   State#ch{confirmed = []}),
-            %% TODO: msg seq nos, same as for confirms. Need to implement
-            %% nack rates first.
-            send_nacks(RejectMsgSeqNos,
-                       ConfirmMsgSeqNos,
-                       State1#ch{rejected = []});
-        pausing -> State
-    end;
+    State1 = send_confirms(ConfirmMsgSeqNos,
+                           RejectMsgSeqNos,
+                           State#ch{confirmed = []}),
+    %% TODO: msg seq nos, same as for confirms. Need to implement
+    %% nack rates first.
+    send_nacks(RejectMsgSeqNos,
+               ConfirmMsgSeqNos,
+               State1#ch{rejected = []});
 send_confirms_and_nacks(State) ->
-    case rabbit_node_monitor:pause_partition_guard() of
-        ok      -> maybe_complete_tx(State);
-        pausing -> State
-    end.
+    maybe_complete_tx(State).
 
 send_nacks([], _, State) ->
     State;

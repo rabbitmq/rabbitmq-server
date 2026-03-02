@@ -41,11 +41,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.JoinClusterCommand do
     {:ok, "The node is already a member of this cluster"}
   end
 
-  def output({:error, :mnesia_unexpectedly_running}, %{node: node_name}) do
-    {:error, RabbitMQ.CLI.Core.ExitCodes.exit_software(),
-     RabbitMQ.CLI.DefaultOutput.mnesia_running_error(node_name)}
-  end
-
   def output({:error, :cannot_cluster_node_with_itself}, %{node: node_name}) do
     {:error, RabbitMQ.CLI.Core.ExitCodes.exit_software(),
      "Error: cannot cluster node with itself: #{node_name}"}

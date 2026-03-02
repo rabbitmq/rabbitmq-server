@@ -583,23 +583,6 @@ tcp_listen_options.exit_on_close = false",
   "ssl_handshake_timeout = 10000",
   [{rabbit,[{ssl_handshake_timeout,10000}]}],
   []},
- {cluster_partition_handling_pause_if_all_down,
-  "cluster_partition_handling = pause_if_all_down
-
-   ## Recover strategy. Can be either 'autoheal' or 'ignore'
-   cluster_partition_handling.pause_if_all_down.recover = ignore
-
-   ## Node names to check
-   cluster_partition_handling.pause_if_all_down.nodes.1 = rabbit@myhost1
-   cluster_partition_handling.pause_if_all_down.nodes.2 = rabbit@myhost2",
-  [{rabbit,
-       [{cluster_partition_handling,
-            {pause_if_all_down,[rabbit@myhost2,rabbit@myhost1],ignore}}]}],
-  []},
- {cluster_partition_handling_autoheal,
-  "cluster_partition_handling = autoheal",
-  [{rabbit,[{cluster_partition_handling,autoheal}]}],
-  []},
  {password_hashing,
   "password_hashing_module = rabbit_password_hashing_sha512",
   [{rabbit,[{password_hashing_module,rabbit_password_hashing_sha512}]}],

@@ -6,7 +6,6 @@
 -include_lib("rabbit_common/include/logging.hrl").
 
 -export([run_prelaunch_first_phase/0,
-         assert_mnesia_is_stopped/0,
          get_context/0,
          get_stop_reason/0,
          set_stop_reason/1,
@@ -56,17 +55,6 @@ do_run() ->
 
     %% Setup signal handler.
     ok = rabbit_prelaunch_sighandler:setup(),
-
-    %% We assert Mnesia is stopped before we run the prelaunch
-    %% phases.
-    %%
-    %% We need this because our cluster consistency check (in the second
-    %% phase) depends on Mnesia not being started before it has a chance
-    %% to run.
-    %%
-    %% Also, in the initial pass, we don't want Mnesia to run before
-    %% Erlang distribution is configured.
-    assert_mnesia_is_stopped(),
 
     %% Get informations to setup logging.
     Context0 = rabbit_env:get_context_before_logging_init(),
@@ -129,9 +117,6 @@ do_run() ->
     _ = erlang:garbage_collect(),
 
     ignore.
-
-assert_mnesia_is_stopped() ->
-    ?assertNot(lists:keymember(mnesia, 1, application:which_applications())).
 
 store_context(Context) when is_map(Context) ->
     persistent_term:put(?PT_KEY_CONTEXT, Context).

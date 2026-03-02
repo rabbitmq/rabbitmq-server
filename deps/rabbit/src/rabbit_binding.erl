@@ -10,7 +10,7 @@
 -include("amqqueue.hrl").
 -include_lib("kernel/include/logger.hrl").
 
--export([recover/0, recover/2, exists/1, add/2, add/3, remove/2, remove/3]).
+-export([exists/1, add/2, add/3, remove/2, remove/3]).
 -export([list/1, list_for_source/1, list_for_destination/1,
          list_for_source_and_destination/2, list_for_source_and_destination/3,
          list_explicit/0]).
@@ -82,50 +82,6 @@ new(Src, RoutingKey, Dst, Arguments) ->
                     destination_name, destination_kind,
                     routing_key, arguments,
                     vhost]).
-
-%% Global table recovery
-
-recover() ->
-    rabbit_db_binding:recover().
-
-%% Virtual host-specific recovery
-
--spec recover([rabbit_exchange:name()], [rabbit_amqqueue:name()]) ->
-                        'ok'.
-recover(XNames, QNames) ->
-    XNameSet = sets:from_list(XNames),
-    QNameSet = sets:from_list(QNames),
-    SelectSet = fun (#resource{kind = exchange}) -> XNameSet;
-                    (#resource{kind = queue})    -> QNameSet
-                end,
-    {ok, Gatherer} = gatherer:start_link(),
-    rabbit_db_binding:recover(
-      fun(Binding, Src, Dst, Fun) ->
-              recover_semi_durable_route(Gatherer, Binding, Src, Dst, SelectSet(Dst), Fun)
-      end),
-    empty = gatherer:out(Gatherer),
-    ok = gatherer:stop(Gatherer),
-    ok.
-
-recover_semi_durable_route(Gatherer, Binding, Src, Dst, ToRecover, Fun) ->
-    case sets:is_element(Dst, ToRecover) of
-        true  ->
-            case rabbit_exchange:lookup(Src) of
-                {ok, X} ->
-                    ok = gatherer:fork(Gatherer),
-                    ok = worker_pool:submit_async(
-                           fun () ->
-                                   Fun(Binding, X),
-                                   gatherer:finish(Gatherer)
-                           end);
-                {error, not_found}=Error ->
-                    ?LOG_WARNING(
-                      "expected exchange ~tp to exist during recovery, "
-                      "error: ~tp", [Src, Error]),
-                    ok
-            end;
-        false -> ok
-    end.
 
 -spec exists(rabbit_types:binding()) -> boolean() | bind_errors().
 

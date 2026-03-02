@@ -76,8 +76,6 @@
     is_being_drained_consistent_read/2,
     is_being_drained_consistent_read/3,
 
-    set_partition_handling_mode/3,
-    set_partition_handling_mode_globally/2,
     configure_dist_proxy/1,
     block_traffic_between/2,
     allow_traffic_between/2,
@@ -1267,14 +1265,6 @@ allow_traffic_between(NodeA, NodeB) ->
       [NodeA, NodeB]),
     ?assertEqual(ok, rpc:call(NodeA, inet_tcp_proxy_dist, allow, [NodeB])),
     ?assertEqual(ok, rpc:call(NodeB, inet_tcp_proxy_dist, allow, [NodeA])).
-
-set_partition_handling_mode_globally(Config, Mode) ->
-    rpc_all(Config,
-      application, set_env, [rabbit, cluster_partition_handling, Mode]).
-
-set_partition_handling_mode(Config, Nodes, Mode) ->
-    rpc(Config, Nodes,
-      application, set_env, [rabbit, cluster_partition_handling, Mode]).
 
 %% -------------------------------------------------------------------
 %% Calls to rabbitmqctl from Erlang.
