@@ -998,6 +998,21 @@ QUEUE_TYPE["stream"] = {
     }
 };
 
+QUEUE_TYPE["rabbit_mqtt_qos0_queue"] = {
+    label: "MQTT QoS0",
+    params: {},
+    actions: {
+        get_message: false,
+        purge: false
+    },
+    tmpl: {
+        "list"   : "classic-queue-list",
+        "stats"  : "classic-queue-stats",
+        "node_details" : "classic-queue-node-details"
+    }
+};
+
+
 // here I'll shortcut for now and let it be like that
 // other queue types can inject themlves where they want.
 // since the 'sections' object will likely keep key insertion
