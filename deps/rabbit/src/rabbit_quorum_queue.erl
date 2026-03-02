@@ -61,7 +61,7 @@
 -export([repair_amqqueue_nodes/1,
          repair_amqqueue_nodes/2
          ]).
--export([reclaim_memory/2,
+-export([reclaim_memory/1, reclaim_memory/2,
          wal_force_roll_over/1]).
 -export([notify_decorators/1,
          notify_decorators/3,
@@ -1255,8 +1255,10 @@ status(Vhost, QueueName) ->
             E
     end.
 
--spec status(amqqueue:amqqueue()) ->
-    [[{binary(), term()}]].
+-spec status(rabbit_types:r(queue) | amqqueue:amqqueue()) ->
+    [[{binary(), term()}]] | {error, term()}.
+status(#resource{virtual_host = Vhost, name = QueueName}) ->
+    status(Vhost, QueueName);
 status(Q) when ?amqqueue_is_quorum(Q) ->
     {RName, _} = amqqueue:get_pid(Q),
     Nodes = lists:sort(get_nodes(Q)),
@@ -1658,6 +1660,10 @@ matches_strategy(even, Members) ->
 
 is_match(Subj, E) ->
    nomatch /= re:run(Subj, E).
+
+-spec reclaim_memory(rabbit_types:r(queue)) -> ok | {error, term()}.
+reclaim_memory(#resource{virtual_host = Vhost, name = QueueName}) ->
+    reclaim_memory(Vhost, QueueName).
 
 -spec reclaim_memory(rabbit_types:vhost(), Name :: rabbit_misc:resource_name()) -> ok | {error, term()}.
 reclaim_memory(Vhost, QueueName) ->
