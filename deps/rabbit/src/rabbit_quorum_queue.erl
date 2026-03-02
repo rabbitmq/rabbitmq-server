@@ -61,6 +61,8 @@
 -export([repair_amqqueue_nodes/1,
          repair_amqqueue_nodes/2
          ]).
+%% For testing
+-export([merge_member_uids/3]).
 -export([reclaim_memory/1, reclaim_memory/2,
          wal_force_roll_over/1]).
 -export([notify_decorators/1,
@@ -773,25 +775,44 @@ repair_with_list_nodes(QName, Name, RaNodes, _OldTypeState) ->
             ok
     end.
 
-%% @doc Repair logic when OldTypeState has a map as nodes value.
+%% Repair logic to apply when `OldTypeState` is a map.
 %% Only adds new nodes that return valid UIDs.
 repair_with_map_nodes(QName, Name, RaNodes, PreviousUidsMap) ->
-    PrevNodes = maps:keys(PreviousUidsMap),
-    case lists:sort(PrevNodes) == lists:sort(RaNodes) of
-        true ->
+    NodesToAdd = RaNodes -- maps:keys(PreviousUidsMap),
+    {AddedNodesUids, _ErrorList} = gather_node_uids(QName, Name, NodesToAdd),
+    case merge_member_uids(RaNodes, PreviousUidsMap, AddedNodesUids) of
+        ok ->
             ok;
-        false ->
-            NodesToAdd = RaNodes -- PrevNodes,
-            {AddedNodesUids, _ErrorList} = gather_node_uids(QName, Name, NodesToAdd),
-            RemainingNodesUids = maps:with(RaNodes, PreviousUidsMap),
-            NewNodes = maps:merge(RemainingNodesUids, AddedNodesUids),
+        {Result, NewNodes} ->
             Fun = fun (Q) ->
                           Ts0 = amqqueue:get_type_state(Q),
                           Ts = Ts0#{nodes => NewNodes},
                           amqqueue:set_type_state(Q, Ts)
                   end,
             _ = rabbit_amqqueue:update(QName, Fun),
-            repaired
+            Result
+    end.
+
+%% Given the actual Ra membership, the previous UID map from the metadata
+%% store, and the UIDs successfully gathered [by the caller] for newly added nodes,
+%% returns `ok' if no update is needed, or `{ok | repaired, NewNodes}'
+%% with the map to write.
+%%
+%% Extracted for testability.
+-spec merge_member_uids([node()], #{node() => binary()},
+                               #{node() => binary()}) ->
+    ok | {ok | repaired, #{node() => binary()}}.
+merge_member_uids(RaNodes, PreviousUidsMap, AddedNodesUids) ->
+    RemainingNodesUids = maps:with(RaNodes, PreviousUidsMap),
+    NewNodes = maps:merge(RemainingNodesUids, AddedNodesUids),
+    case NewNodes =:= PreviousUidsMap of
+        true ->
+            ok;
+        false ->
+            case lists:sort(maps:keys(NewNodes)) =:= lists:sort(RaNodes) of
+                true -> {repaired, NewNodes};
+                false -> {ok, NewNodes}
+            end
     end.
 
 gather_node_uids(QName, Name, RaNodes) ->
