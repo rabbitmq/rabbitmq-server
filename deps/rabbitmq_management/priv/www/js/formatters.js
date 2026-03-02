@@ -791,7 +791,7 @@ function _link_to(name, url, highlight, args) {
     if (highlight == undefined) highlight = true;
     var title = null;
     if (args != undefined && args['x-internal-purpose'] != undefined) {
-        var purpose = args['x-internal-purpose'];
+        var purpose = fmt_escape_html(args['x-internal-purpose']);
         title = 'This is used internally by the ' + purpose + ' mechanism.';
     }
     return '<a href="' + url + '"' +
