@@ -54,6 +54,7 @@ groups() ->
         ]},
         {per_object_endpoint_metrics, [], [
             endpoint_per_object_metrics,
+            per_object_endpoint_no_duplicate_raft_type_lines,
             specific_erlang_metrics_present_test
         ]},
         {memory_breakdown_endpoint_metrics, [], [
@@ -422,6 +423,32 @@ aggregated_metrics_test(Config) ->
 
 endpoint_per_object_metrics(Config) ->
     per_object_metrics_test(Config, "/metrics/per-object").
+
+%% Verify that the per-object endpoint does not emit duplicate TYPE
+%% lines for Raft metrics that belong to different Ra systems.
+%%
+%% See https://github.com/rabbitmq/rabbitmq-server/issues/15600.
+per_object_endpoint_no_duplicate_raft_type_lines(Config) ->
+    {_Headers, Body} = http_get_with_pal(Config, "/metrics/per-object", [], 200),
+    RaftMetrics = ["rabbitmq_raft_term",
+                   "rabbitmq_raft_snapshot_index",
+                   "rabbitmq_raft_last_applied",
+                   "rabbitmq_raft_commit_index",
+                   "rabbitmq_raft_last_written_index",
+                   "rabbitmq_raft_commit_latency_seconds",
+                   "rabbitmq_raft_num_segments"],
+    lists:foreach(
+      fun(MetricName) ->
+              Pattern = "^# TYPE " ++ MetricName ++ " ",
+              case re:run(Body, Pattern, [global, multiline]) of
+                  {match, Matches} ->
+                      ?assertEqual(1, length(Matches),
+                                   lists:flatten(
+                                     io_lib:format("duplicate TYPE line for ~s", [MetricName])));
+                  nomatch ->
+                      ok
+              end
+      end, RaftMetrics).
 
 globally_configure_per_object_metrics_test(Config) ->
     per_object_metrics_test(Config, "/metrics").
