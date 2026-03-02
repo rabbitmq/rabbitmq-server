@@ -1488,17 +1488,16 @@ do_add_member(Q0, Node, Membership, Timeout)
     ServerId = {RaName, Node},
     Members = members(Q0),
     QTypeState0 = #{nodes := Nodes} = amqqueue:get_type_state(Q0),
-    NewRaUId = ra:new_uid(ra_lib:to_binary(RaName)),
     QTypeState = case Nodes of
                      L when is_list(L) ->
-                         %% Queue is not aware of node to uid mapping, just add the new node
+                         %% The node-to-UID mapping wasn't adopted yet, update the list
                          QTypeState0#{nodes => lists:usort([Node | Nodes])};
                      #{Node := _} ->
-                         %% Queue is aware and uid for targeted node exists, do nothing
+                         %% The node-to-UID mapping was adopted and an entry for the target node exists
                          QTypeState0;
                      _ ->
-                         %% Queue is aware but current node has no UId, regen uid
-                         QTypeState0#{nodes => Nodes#{Node => NewRaUId}}
+                         %% The node-to-UID mapping was adopted but this node has no UID entry yet, so generate one
+                         QTypeState0#{nodes => Nodes#{Node => ra:new_uid(ra_lib:to_binary(RaName))}}
                  end,
     Q = amqqueue:set_type_state(Q0, QTypeState),
     case erpc_call(Node, rabbit_fifo, version, [], infinity) of
@@ -1518,7 +1517,7 @@ do_add_member(Q0, Node, Membership, Timeout)
                                                         (#{nodes := #{Node := _}} = Ts) ->
                                                              Ts;
                                                         (#{nodes := NodesMap} = Ts) when is_map(NodesMap) ->
-                                                             Ts#{nodes => maps:put(Node, NewRaUId, NodesMap)}
+                                                             Ts#{nodes => maps:put(Node, maps:get(uid, Conf), NodesMap)}
                                                      end),
                                           amqqueue:set_pid(Q2, Leader)
                                   end,
