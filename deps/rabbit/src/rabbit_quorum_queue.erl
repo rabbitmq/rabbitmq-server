@@ -270,14 +270,15 @@ start_cluster(Q) ->
     {LeaderNode, FollowerNodes} =
         rabbit_queue_location:select_leader_and_followers(Q, QuorumSize),
     LeaderId = {RaName, LeaderNode},
-    UIDs = maps:from_list([{Node, ra:new_uid(ra_lib:to_binary(RaName))}
-                           || Node <- [LeaderNode | FollowerNodes]]),
     NewQ0 = amqqueue:set_pid(Q, LeaderId),
     NewQ1 = case rabbit_feature_flags:is_enabled(track_qq_members_uids) of
                 false ->
                     amqqueue:set_type_state(NewQ0,
                                             #{nodes => [LeaderNode | FollowerNodes]});
                 true ->
+                    UIDs = maps:from_list(
+                             [{Node, ra:new_uid(ra_lib:to_binary(RaName))}
+                              || Node <- [LeaderNode | FollowerNodes]]),
                     amqqueue:set_type_state(NewQ0,
                                             #{nodes => UIDs})
             end,
