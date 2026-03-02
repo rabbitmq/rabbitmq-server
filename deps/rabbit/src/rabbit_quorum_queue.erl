@@ -744,7 +744,6 @@ repair_amqqueue_nodes(Q0) ->
                     repaired
             end;
         true ->
-            {ok, Q0} = rabbit_amqqueue:lookup(QName),
             OldTypeState = amqqueue:get_type_state(Q0),
             case OldTypeState of
                 #{nodes := List} when is_list(List) ->
