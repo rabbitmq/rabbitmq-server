@@ -135,6 +135,8 @@
 %% we request a checkpoint irrespectively
 -define(CHECK_MAX_BYTES, 128_000_000).
 -define(SNAP_OUT_BYTES, 64_000_000).
+-define(SNAP_MIN_RECLAIMABLE_B, 4_000_000).
+-define(SNAP_MIN_RECLAIMABLE_LOW_B, 2_000_000).
 
 -define(USE_AVG_HALF_LIFE, 10000.0).
 %% an average QQ without any message uses about 100KB so setting this limit

@@ -1252,7 +1252,8 @@ which_module(8) -> ?MODULE.
 -record(snapshot, {index :: ra:index(),
                    timestamp :: milliseconds(),
                    messages_total = 0 :: non_neg_integer(),
-                   reclaimable_bytes = 0 :: non_neg_integer()}).
+                   reclaimable_bytes = 0 :: non_neg_integer(),
+                   min_reclaimable = ?SNAP_MIN_RECLAIMABLE_B :: non_neg_integer()}).
 -record(aux_gc, {last_raft_idx = 0 :: ra:index()}).
 -record(?AUX, {name :: atom(),
                last_decorators_state :: term(),
@@ -1268,10 +1269,17 @@ init_aux(Name) when is_atom(Name) ->
     ok = ra_machine_ets:create_table(rabbit_fifo_usage,
                                      [named_table, set, public,
                                       {write_concurrency, true}]),
+    {_, SnapMinReclaimable} =
+        persistent_term:get(quorum_queue_snapshot_config,
+                            {?CHECK_MIN_INTERVAL_MS,
+                             ?SNAP_MIN_RECLAIMABLE_B}),
+    Range = max(1, SnapMinReclaimable - ?SNAP_MIN_RECLAIMABLE_LOW_B),
+    MinReclaimable = ?SNAP_MIN_RECLAIMABLE_LOW_B + rand:uniform(Range),
     #?AUX{name = Name,
           last_checkpoint = #snapshot{index = 0,
                                       timestamp = erlang:system_time(millisecond),
-                                      messages_total = 0}}.
+                                      messages_total = 0,
+                                      min_reclaimable = MinReclaimable}}.
 
 handle_aux(RaftState, Tag, Cmd, AuxV2, RaAux)
   when element(1, AuxV2) == aux_v2 ->
@@ -3717,60 +3725,40 @@ do_snapshot(MacVer, Ts, Ch, RaAux, ReclaimableBytes, Force)
     do_snapshot(MacVer, Ts, #snapshot{index = Idx, timestamp = LastTs},
                 RaAux, ReclaimableBytes, Force);
 do_snapshot(MacVer, Ts,
-            #snapshot{index = _LastSnapIdx,
-                      timestamp = SnapTime,
-                      reclaimable_bytes = LastReclaimableBytes} = Snap0,
+            #snapshot{timestamp = SnapTime,
+                      reclaimable_bytes = LastReclaimableBytes,
+                      min_reclaimable = MinReclaimable} = Snap0,
             RaAux, ReclaimableBytes, Force)
   when is_integer(MacVer) andalso MacVer >= 8 ->
-    {CheckMinInterval, _, _CheckMaxIndexes} =
+    {CheckMinInterval, _} =
         persistent_term:get(quorum_queue_snapshot_config,
                             {?CHECK_MIN_INTERVAL_MS,
-                             ?CHECK_MIN_INDEXES,
-                             ?CHECK_MAX_INDEXES}),
+                             ?SNAP_MIN_RECLAIMABLE_B}),
     TimeSince = Ts - SnapTime,
-    Idx = ra_aux:last_applied(RaAux),
-    % IndexesSince = Idx - LastSnapIdx,
-    % EnoughEntriesWritten = IndexesSince > CheckMaxIndexes,
-    case TimeSince > CheckMinInterval orelse
-         % EnoughEntriesWritten orelse
-         Force of
+    case TimeSince > CheckMinInterval orelse Force of
         true ->
-            #?STATE{consumers = Consumers,
-                    enqueuers = Enqueuers,
-                    waiting_consumers = Waiting} = MacState =
-                ra_aux:machine_state(RaAux),
-            MsgsTot = messages_total(MacState),
-            %% If the approximate snapshot size * 5 can be reclaimed
-            %% it is worth taking a snapshot.
-            %% Estimates per component:
-            %%   message: 32 bytes
-            %%   checked-out message: 72 bytes
-            %%   enqueuer: 112 bytes
-            %%   consumer: 296 bytes
-            %%   waiting consumer: 312 bytes
-            NumEnqs = map_size(Enqueuers),
-            NumCons = map_size(Consumers),
-            NumWaiting = length(Waiting),
-            CheckedOut = maps:fold(
-                           fun (_, #consumer{checked_out = C}, Acc) ->
-                                   Acc + map_size(C)
-                           end, 0, Consumers),
-            ApproxSnapSize = 4096 +
-                             MsgsTot * 32 +
-                             CheckedOut * 72 +
-                             NumEnqs * 112 +
-                             NumCons * 296 +
-                             NumWaiting * 312,
-            Limit = ApproxSnapSize * 5,
-            EnoughDataRemoved = ReclaimableBytes - LastReclaimableBytes,
-            case EnoughDataRemoved > Limit orelse
-                 % EnoughEntriesWritten orelse
-                 Force of
+            DataRemoved = ReclaimableBytes - LastReclaimableBytes,
+            WalFillRatio = ra_aux:wal_fill_ratio(RaAux),
+            %% Scale the minimum reclaimable threshold inversely with the
+            %% WAL fill ratio. When the WAL is nearly empty the threshold
+            %% is high so we defer; when the WAL is nearly full the
+            %% threshold drops so we snapshot before rollover.
+            %% Also ensure the removed data exceeds the approximate
+            %% snapshot size so that the snapshot is smaller than the
+            %% data it saves.
+            ScaledLimit = round(MinReclaimable *
+                                (1.0 - WalFillRatio)),
+            MacState = ra_aux:machine_state(RaAux),
+            Limit = max(ScaledLimit, approx_snap_size(MacState)),
+            case DataRemoved > Limit orelse Force of
                 true ->
+                    Idx = ra_aux:last_applied(RaAux),
+                    MsgsTot = messages_total(MacState),
                     Snap = #snapshot{index = Idx,
-                                     timestamp = Ts,
-                                     messages_total = MsgsTot,
-                                     reclaimable_bytes = ReclaimableBytes},
+                                    timestamp = Ts,
+                                    messages_total = MsgsTot,
+                                    reclaimable_bytes = ReclaimableBytes,
+                                    min_reclaimable = MinReclaimable},
                     Cond = #{condition => [{written, Idx},
                                            no_snapshot_sends]},
                     {Snap, [{release_cursor, Idx, MacState, Cond}]};
@@ -3780,6 +3768,24 @@ do_snapshot(MacVer, Ts,
         false ->
             {Snap0, []}
     end.
+
+approx_snap_size(#?STATE{consumers = Consumers,
+                         enqueuers = Enqueuers,
+                         waiting_consumers = Waiting} = State) ->
+    MsgsTot = messages_total(State),
+    NumEnqs = map_size(Enqueuers),
+    NumCons = map_size(Consumers),
+    NumWaiting = length(Waiting),
+    CheckedOut = maps:fold(
+                   fun (_, #consumer{checked_out = C}, Acc) ->
+                           Acc + map_size(C)
+                   end, 0, Consumers),
+    4096 +
+    MsgsTot * 32 +
+    CheckedOut * 72 +
+    NumEnqs * 112 +
+    NumCons * 296 +
+    NumWaiting * 312.
 
 discard(Meta, MsgIds, ConsumerKey,
         #consumer{checked_out = Checked} = Con,
