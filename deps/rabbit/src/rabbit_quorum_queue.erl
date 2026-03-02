@@ -1539,11 +1539,15 @@ do_add_member(Q0, Node, Membership, Timeout)
                             _ = ra:remove_member(Members, ServerId),
                             {error, timeout};
                         E ->
+                            _ = ra:force_delete_server(?RA_SYSTEM, ServerId),
                             ?LOG_WARNING("Could not add a replica of quorum ~ts on node ~ts: ~p",
                                          [rabbit_misc:rs(QName), Node, E]),
                             E
-                    end
-            end
+                    end;
+                E ->
+                    ?LOG_WARNING("Could not add a replica of quorum ~ts on node ~ts: ~p",
+                                 [rabbit_misc:rs(QName), Node, E]),
+                    E
     end.
 
 delete_member(VHost, Name, Node) ->
