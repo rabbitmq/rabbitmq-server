@@ -1313,7 +1313,8 @@ register_projections() ->
                fun register_rabbit_bindings_projection/0,
                fun register_rabbit_route_by_source_key_projection/0,
                fun register_rabbit_route_by_source_projection/0,
-               fun register_rabbit_topic_graph_projection/0],
+               fun register_rabbit_topic_binding_projection/0,
+               fun register_rabbit_topic_trie_projection/0],
     rabbit_misc:for_each_while_ok(
       fun(RegisterFun) ->
               case RegisterFun() of
@@ -1533,93 +1534,192 @@ projection_fun_for_sets(MapFun) ->
             ok
     end.
 
-register_rabbit_topic_graph_projection() ->
-    Name = rabbit_khepri_topic_trie_v3,
-    %% This projection calls some external functions which are disallowed by
-    %% Horus because they interact with global or random state. We explicitly
-    %% allow them here for performance reasons.
+%% Topic routing via trie + ordered_set ETS projections (v4).
+%%
+%% Trie edges table (set) for fast trie navigation during routing:
+%%   Row:   {{XSrc, ParentNodeId, Word}, ChildNodeId, ChildCount}
+%%
+%% Leaf bindings table (ordered_set) for collecting destinations:
+%%   Row:   {{NodeId, BindingKey, Dest}}
+%%
+%% XSrc       = {VHost, ExchangeName} (binaries)
+%% NodeId     = root | reference()
+%% Word       = binary() (a single topic segment, e.g. <<"foo">>, <<"*">>, <<"#">>)
+%% ChildCount = non_neg_integer() (number of outgoing edges)
+%% Dest       = #resource{}
+register_rabbit_topic_binding_projection() ->
+    PathPattern = topic_binding_path_pattern(),
+    BindingPFun = fun(_Table, _Path, _OldProps, _NewProps) -> ok end,
+    BindingOpts = #{type => ordered_set,
+                    keypos => 1,
+                    read_concurrency => true},
+    Projection = khepri_projection:new(
+                   rabbit_khepri_topic_binding_v4, BindingPFun, BindingOpts),
+    khepri:register_projection(?STORE_ID, PathPattern, Projection).
+
+register_rabbit_topic_trie_projection() ->
+    BindingTabName = rabbit_khepri_topic_binding_v4,
     ShouldProcessFun =
     fun (rabbit_db_topic_exchange, split_topic_key_binary, 1, _From) ->
             %% This function uses `persistent_term' to store a lazily compiled
             %% binary pattern.
             false;
         (erlang, make_ref, 0, _From) ->
-            %% Randomness is discouraged in Ra effects since the effects are
-            %% executed separately by each cluster member. We'll use a random
-            %% value for trie node IDs but these IDs will live as long as the
-            %% projection table and do not need to be stable or reproducible
-            %% across restarts or across Erlang nodes.
+            %% References are used for trie node IDs. They are non-deterministic
+            %% across cluster members, but that's fine since both tables live
+            %% only as long as the projection and are rebuilt on restart.
             false;
         (ets, _F, _A, _From) ->
             false;
         (M, F, A, From) ->
             khepri_tx_adv:should_process_function(M, F, A, From)
     end,
-    Options = #{keypos => #topic_trie_edge_v2.trie_edge,
-                standalone_fun_options =>
-                #{should_process_function => ShouldProcessFun},
-                read_concurrency => true},
-    ProjectionFun =
-    fun(Table, Path, OldProps, NewProps) ->
-        {
-         VHost,
-         ExchangeName,
-         _Kind,
-         _DstName,
-         RoutingKey
-        } = rabbit_db_binding:khepri_route_path_to_args(Path),
-        Exchange = rabbit_misc:r(VHost, exchange, ExchangeName),
-        Words = rabbit_db_topic_exchange:split_topic_key_binary(RoutingKey),
-        case {OldProps, NewProps} of
-            {#{data := OldBindings}, #{data := NewBindings}} ->
-                ToInsert = sets:subtract(NewBindings, OldBindings),
-                ToDelete = sets:subtract(OldBindings, NewBindings),
-                follow_down_update(
-                  Table, Exchange, Words,
-                  fun(ExistingBindings) ->
-                          sets:union(
-                            sets:subtract(ExistingBindings, ToDelete),
-                            ToInsert)
-                  end);
-            {_, #{data := NewBindings}} ->
-                follow_down_update(
-                  Table, Exchange, Words,
-                  fun(ExistingBindings) ->
-                          sets:union(ExistingBindings, NewBindings)
-                  end);
-            {#{data := OldBindings}, _} ->
-                follow_down_update(
-                  Table, Exchange, Words,
-                  fun(ExistingBindings) ->
-                          sets:subtract(ExistingBindings, OldBindings)
-                  end);
-            {_, _} ->
-                ok
-        end
-    end,
-    Projection = khepri_projection:new(Name, ProjectionFun, Options),
-    PathPattern = rabbit_db_binding:khepri_route_path(
-                    _VHost = ?KHEPRI_WILDCARD_STAR,
-                    _Exchange = #if_data_matches{
-                                   pattern = #exchange{type = topic, _ = '_'}},
-                    _Kind = ?KHEPRI_WILDCARD_STAR,
-                    _DstName = ?KHEPRI_WILDCARD_STAR,
-                    _RoutingKey = ?KHEPRI_WILDCARD_STAR),
+    Opts = #{type => set,
+             keypos => 1,
+             standalone_fun_options => #{should_process_function => ShouldProcessFun},
+             read_concurrency => true},
+    PFun = fun(TrieTab, Path, OldProps, NewProps) ->
+                   BindingTab = ensure_topic_binding_table(BindingTabName),
+                   {VHost, ExchangeName, Kind, DstName, BindingKey} =
+                   rabbit_db_binding:khepri_route_path_to_args(Path),
+                   XSrc = {VHost, ExchangeName},
+                   Dest = rabbit_misc:r(VHost, Kind, DstName),
+                   Words = rabbit_db_topic_exchange:split_topic_key_binary(BindingKey),
+                   case {OldProps, NewProps} of
+                       {_, #{data := _}} ->
+                           LeafNodeId = trie_follow_down_create(TrieTab, XSrc, Words),
+                           ets:insert(BindingTab, {{LeafNodeId, BindingKey, Dest}});
+                       {#{data := _}, _} ->
+                           case trie_follow_down_get_path(TrieTab, XSrc, Words) of
+                               {ok, LeafNodeId, TriePath} ->
+                                   ets:delete(BindingTab, {LeafNodeId, BindingKey, Dest}),
+                                   trie_gc_path(TrieTab, BindingTab, TriePath);
+                               error ->
+                                   ok
+                           end;
+                       {_, _} ->
+                           ok
+                   end
+           end,
+    Projection = khepri_projection:new(rabbit_khepri_topic_trie_v4, PFun, Opts),
+    PathPattern = topic_binding_path_pattern(),
     _ = unregister_old_rabbit_topic_trie_projections(),
     khepri:register_projection(?STORE_ID, PathPattern, Projection).
+
+topic_binding_path_pattern() ->
+    rabbit_db_binding:khepri_route_path(
+      _VHost = ?KHEPRI_WILDCARD_STAR,
+      _Exchange = #if_data_matches{pattern = #exchange{type = topic,
+                                                       _ = '_'}},
+      _Kind = ?KHEPRI_WILDCARD_STAR,
+      _DstName = ?KHEPRI_WILDCARD_STAR,
+      _BindingKey = ?KHEPRI_WILDCARD_STAR).
+
+%% TODO: Khepri should support declaring dependencies between projections
+%% so that restore order is guaranteed. Until then, we lazily create the
+%% binding table here as a safety net: during restore_projections, the trie
+%% projection may be triggered before the binding projection's table is
+%% initialised due to Khepri's prepend-based list ordering.
+ensure_topic_binding_table(Name) ->
+    case ets:whereis(Name) of
+        undefined ->
+            ets:new(Name, [ordered_set, named_table, protected,
+                           {read_concurrency, true}]);
+        Tid ->
+            Tid
+    end.
+
+%% Walk down the trie following the given words, creating edges and
+%% intermediate nodes as needed. Returns the leaf node ID.
+%%
+%% Each trie row is a 3-tuple: {Key, ChildNodeId, ChildCount}.
+%% ChildCount tracks the number of outgoing edges from ChildNodeId.
+%% It is incremented when a new edge is created, decremented during GC.
+trie_follow_down_create(TrieTab, XSrc, Words) ->
+    trie_follow_down_create(TrieTab, XSrc, root, none, Words).
+
+trie_follow_down_create(_TrieTab, _XSrc, NodeId, _ParentKey, []) ->
+    NodeId;
+trie_follow_down_create(TrieTab, XSrc, ParentId, ParentKey, [Word | Rest]) ->
+    Key = {XSrc, ParentId, Word},
+    case ets:lookup_element(TrieTab, Key, 2, undefined) of
+        undefined ->
+            NewId = make_ref(),
+            ets:insert(TrieTab, {Key, NewId, 0}),
+            _ = case ParentKey of
+                    none ->
+                        ok;
+                    _ ->
+                        ets:update_counter(TrieTab, ParentKey, {3, 1})
+                end,
+            trie_follow_down_create(TrieTab, XSrc, NewId, Key, Rest);
+        ChildId ->
+            trie_follow_down_create(TrieTab, XSrc, ChildId, Key, Rest)
+    end.
+
+%% Walk down the trie following the given words, collecting the path
+%% for later GC. Returns {ok, LeafNodeId, Path} or error.
+trie_follow_down_get_path(TrieTab, XSrc, Words) ->
+    trie_follow_down_get_path(TrieTab, XSrc, root, none, Words, []).
+
+trie_follow_down_get_path(_TrieTab, _XSrc, NodeId, _ParentKey, [], Path) ->
+    {ok, NodeId, Path};
+trie_follow_down_get_path(TrieTab, XSrc, ParentId, ParentKey, [Word | Rest], Path) ->
+    Key = {XSrc, ParentId, Word},
+    case ets:lookup_element(TrieTab, Key, 2, undefined) of
+        undefined ->
+            error;
+        ChildId ->
+            trie_follow_down_get_path(TrieTab, XSrc, ChildId, Key, Rest,
+                                      [{Key, ParentKey, ChildId} | Path])
+    end.
+
+%% Walk the path bottom-up (path is already in leaf-to-root order).
+%% At each level, if the child node has no outgoing edges and no bindings,
+%% delete the edge, decrement the parent's count, and continue upward.
+trie_gc_path(_TrieTab, _BindingTab, []) ->
+    ok;
+trie_gc_path(TrieTab, BindingTab, [{Key, ParentEdgeKey, ChildId} | Rest]) ->
+    case trie_node_is_empty(TrieTab, BindingTab, Key, ChildId) of
+        true ->
+            ets:delete(TrieTab, Key),
+            _ = case ParentEdgeKey of
+                    none ->
+                        ok;
+                    _ ->
+                        ets:update_counter(TrieTab, ParentEdgeKey, {3, -1})
+                end,
+            trie_gc_path(TrieTab, BindingTab, Rest);
+        false ->
+            ok
+    end.
+
+%% A trie node is empty when it has no outgoing edges (ChildCount = 0) and
+%% no bindings in the bindings table.
+trie_node_is_empty(TrieTab, BindingTab, Key, ChildId) ->
+    case ets:lookup_element(TrieTab, Key, 3, 0) of
+        0 -> not trie_node_has_bindings(BindingTab, ChildId);
+        _ -> false
+    end.
+
+trie_node_has_bindings(BindingTab, NodeId) ->
+    case ets:next(BindingTab, {NodeId, <<>>, {}}) of
+        {NodeId, _, _} -> true;
+        _ -> false
+    end.
 
 supports_rabbit_khepri_topic_trie_v2() ->
     true.
 
 supports_rabbit_khepri_topic_trie_version() ->
-    3.
+    4.
 
 unregister_old_rabbit_topic_trie_projections() ->
     OldProjections = [{1, rabbit_khepri_topic_trie},
-                      {2, rabbit_khepri_topic_trie_v2}],
-    lists:foreach(
-      fun unregister_old_rabbit_topic_trie_projection/1,
-      OldProjections).
+                      {2, rabbit_khepri_topic_trie_v2},
+                      {3, rabbit_khepri_topic_trie_v3}],
+    lists:foreach(fun unregister_old_rabbit_topic_trie_projection/1,
+                  OldProjections).
 
 unregister_old_rabbit_topic_trie_projection({Version, ProjectionName}) ->
     Nodes = rabbit_nodes:list_members(),
@@ -1659,110 +1759,6 @@ unregister_old_rabbit_topic_trie_projection({Version, ProjectionName}) ->
                [ProjectionName],
                #{domain => ?RMQLOG_DOMAIN_DB}),
             ok
-    end.
-
--spec follow_down_update(Table, Exchange, Words, UpdateFn) -> Ret when
-      Table :: ets:tid(),
-      Exchange :: rabbit_types:exchange_name(),
-      Words :: [binary()],
-      BindingsSet :: sets:set(rabbit_types:binding()),
-      UpdateFn :: fun((BindingsSet) -> BindingsSet),
-      Ret :: ok.
-
-follow_down_update(Table, Exchange, Words, UpdateFn) ->
-    follow_down_update(Table, Exchange, root, Words, UpdateFn),
-    ok.
-
--spec follow_down_update(Table, Exchange, NodeId, Words, UpdateFn) -> Ret when
-      Table :: ets:tid(),
-      Exchange :: rabbit_types:exchange_name(),
-      NodeId :: root | rabbit_guid:guid(),
-      Words :: [binary()],
-      BindingsSet :: sets:set(rabbit_types:binding()),
-      UpdateFn :: fun((BindingsSet) -> BindingsSet),
-      Ret :: added | kept | deleted.
-
-follow_down_update(Table, Exchange, FromNodeId, [To | Rest], UpdateFn) ->
-    TrieEdge = #trie_edge{exchange_name = Exchange,
-                          node_id       = FromNodeId,
-                          word          = To},
-    {ToNodeId, IsNew} = case ets:lookup(Table, TrieEdge) of
-                            [#topic_trie_edge_v2{node_id = ExistingId}] ->
-                                {ExistingId, false};
-                            [] ->
-                                %% The Khepri topic graph table uses references
-                                %% for node IDs instead of `rabbit_guid:gen/0'
-                                %% used by mnesia. This is possible because the
-                                %% topic graph table is never persisted to
-                                %% disk. References take up slightly less
-                                %% memory and are very cheap to produce
-                                %% compared to `rabbit_guid' (which requires
-                                %% the `rabbit_guid' genserver to be online).
-                                NewNodeId = make_ref(),
-                                NewEdge = #topic_trie_edge_v2{
-                                             trie_edge = TrieEdge,
-                                             node_id = NewNodeId,
-                                             child_count = 0},
-                                %% Create the intermediary node.
-                                ets:insert(Table, NewEdge),
-                                {NewNodeId, true}
-                        end,
-    case follow_down_update(Table, Exchange, ToNodeId, Rest, UpdateFn) of
-        added ->
-            _ = ets:update_counter(
-                  Table, TrieEdge, {#topic_trie_edge_v2.child_count, 1}),
-            case IsNew of
-                true ->
-                    added;
-                false ->
-                    kept
-            end;
-        kept ->
-            false = IsNew, %% Assertion.
-            kept;
-        deleted ->
-            false = IsNew, %% Assertion.
-            NewCount = ets:update_counter(
-                         Table, TrieEdge,
-                         {#topic_trie_edge_v2.child_count, -1}),
-            if
-                NewCount > 0 ->
-                    kept;
-                NewCount =:= 0 ->
-                    ets:delete(Table, TrieEdge),
-                    deleted
-            end
-    end;
-follow_down_update(Table, Exchange, LeafNodeId, [], UpdateFn) ->
-    TrieEdge = #trie_edge{exchange_name = Exchange,
-                          node_id       = LeafNodeId,
-                          word          = bindings},
-    {Bindings, IsNew} = case ets:lookup(Table, TrieEdge) of
-                            [#topic_trie_edge_v2{
-                                node_id = {bindings, ExistingBindings}}] ->
-                                {ExistingBindings, false};
-                            [] ->
-                                {sets:new([{version, 2}]), true}
-                        end,
-    NewBindings = UpdateFn(Bindings),
-    case sets:is_empty(NewBindings) of
-        true ->
-            %% If the bindings have been deleted, delete the trie edge and
-            %% any edges that no longer lead to any bindings or other edges.
-            ets:delete(Table, TrieEdge),
-            deleted;
-        false ->
-            ToNodeId = {bindings, NewBindings},
-            Edge = #topic_trie_edge_v2{
-                      trie_edge = TrieEdge,
-                      node_id = ToNodeId},
-            ets:insert(Table, Edge),
-            case IsNew of
-                true ->
-                    added;
-                false ->
-                    kept
-            end
     end.
 
 %% -------------------------------------------------------------------
