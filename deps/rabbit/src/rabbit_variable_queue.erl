@@ -2371,10 +2371,14 @@ maybe_deltas_to_betas(DelsAndAcksFun,
     State2 = State1 #vqstate { ram_msg_count     = RamMsgCount   + RamCountsInc,
                                ram_bytes         = RamBytes      + RamBytesInc,
                                disk_read_count   = DiskReadCount + RamCountsInc },
+    %% An empty Q3a means we dropped every transient
+    %% message below the transient threshold during recovery.
     case ?QUEUE:len(Q3a) of
+        0 when DeltaSeqId1 >= DeltaSeqIdEnd ->
+            %% delta is now empty
+            State2 #vqstate { delta = ?BLANK_DELTA,
+                              delta_transient_bytes = 0 };
         0 ->
-            %% we ignored every message in the segment due to it being
-            %% transient and below the threshold
             maybe_deltas_to_betas(
               DelsAndAcksFun,
               State2 #vqstate {

@@ -78,7 +78,8 @@ all() ->
 groups() ->
     [{classic_queue_tests, [], [
 %        manual%,
-        classic_queue_v2
+        classic_queue_v2,
+        reg_recovery_tune_read_crash
      ]}
     ].
 
@@ -1109,3 +1110,35 @@ safe_teardown_queue(St) ->
              || QIFile <- filelib:wildcard(filename:join(VHostDir, "queues/*/*"))],
             cmd_teardown_queue(St)
     end.
+
+%% Regression tests.
+%%
+%% These tests cover scenarios are hard to reproduce by running the test suite normally
+%% because they require a very specific sequence of events.
+
+reg_recovery_tune_read_crash(Config) ->
+    true = rabbit_ct_broker_helpers:rpc(Config, 0,
+        ?MODULE, do_reg_recovery_tune_read_crash, [Config]).
+
+do_reg_recovery_tune_read_crash(Config) ->
+    St0 = #cq{name=?FUNCTION_NAME,
+              config=minimal_config(Config)},
+
+    Res1 = cmd_setup_queue(St0),
+    St1 = St0#cq{amq=Res1},
+
+    Res2 = cmd_channel_open(St1),
+    true = postcondition(St1, {call, undefined, cmd_channel_open, [St1]}, Res2),
+    St2 = next_state(St1, Res2, {call, undefined, cmd_channel_open, [St1]}),
+
+    Res3 = cmd_channel_publish_many(St2, Res2, 511, 260, 1, true, undefined),
+    true = postcondition(St2, {call, undefined, cmd_channel_publish_many, [St2, Res2, 511, 260, 1, true, undefined]}, Res3),
+    St3 = next_state(St2, Res3, {call, undefined, cmd_channel_publish_many, [St2, Res2, 511, 260, 1, true, undefined]}),
+
+    Res4 = cmd_restart_vhost_clean(St3),
+    true = postcondition(St3, {call, undefined, cmd_restart_vhost_clean, [St3]}, Res4),
+    St4 = next_state(St3, Res4, {call, undefined, cmd_restart_vhost_clean, [St3]}),
+
+    cmd_teardown_queue(St4),
+
+    true.
