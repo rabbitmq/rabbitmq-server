@@ -2013,7 +2013,7 @@ read_from_q_tail(DelsAndAcksFun,
                                ram_bytes         = RamBytes      + RamBytesInc,
                                disk_read_count   = DiskReadCount + RamCountsInc },
     %% An empty QHead1 means we dropped every transient
-    %% messages below the transient threshold during recovery.
+    %% message below the transient threshold during recovery.
     case ?QUEUE:len(QHead1) of
         0 when QTailSeqId1 >= QTailSeqIdEnd ->
             %% q_tail is now empty
