@@ -786,11 +786,18 @@ with_decode(Keys, Body, ReqData, Context, Fun) ->
                               end
     end.
 
+%% Only atomize keys that already exist in the atom table.
 decode(Keys, Body) ->
     case decode(Body) of
         {ok, J0} ->
-            J = maps:fold(fun(K, V, Acc) ->
-                    Acc#{binary_to_atom(K, utf8) => V}
+            J = maps:fold(fun(K, V, Acc) when is_atom(K) ->
+                      Acc#{K => V};
+                  (K, V, Acc) ->
+                      try binary_to_existing_atom(K, utf8) of
+                          Atom -> Acc#{Atom => V}
+                      catch
+                          error:badarg -> Acc
+                      end
                 end, J0, J0),
                 Results = [get_or_missing(K, J) || K <- Keys],
                 case [E || E = {key_missing, _} <- Results] of
@@ -897,8 +904,18 @@ with_vhost_and_props(Fun, ReqData, Context) ->
 props_to_method(MethodName, Props, Transformers, Extra) when Props =:= null orelse
                                                              Props =:= undefined ->
     props_to_method(MethodName, #{}, Transformers, Extra);
+%% Only atomize keys that already exist in the atom table.
 props_to_method(MethodName, Props, Transformers, Extra) ->
-    Props1 = [{list_to_atom(binary_to_list(K)), V} || {K, V} <- maps:to_list(Props)],
+    Props1 = lists:filtermap(
+               fun({K, V}) when is_atom(K) ->
+                       {true, {K, V}};
+                  ({K, V}) ->
+                       try binary_to_existing_atom(K, utf8) of
+                           Atom -> {true, {Atom, V}}
+                       catch
+                           error:badarg -> false
+                       end
+               end, rabbit_data_coercion:to_list(Props)),
     props_to_method(
       MethodName, rabbit_mgmt_format:format(Props1 ++ Extra, {Transformers, true})).
 
