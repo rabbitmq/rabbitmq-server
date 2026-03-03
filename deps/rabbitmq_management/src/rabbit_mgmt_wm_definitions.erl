@@ -180,12 +180,20 @@ decode(Body0) ->
     Body = rabbit_misc:strip_bom(Body0),
     try
       Decoded = rabbit_json:decode(Body),
-      Normalised = maps:fold(fun(K, V, Acc) ->
-                     Acc#{binary_to_atom(K, utf8) => V}
-                   end, Decoded, Decoded),
+      Normalised = atomise_known_keys(Decoded),
       {ok, Normalised}
     catch error:_ -> {error, not_json}
     end.
+
+%% Only atomize the atoms that already exist.
+atomise_known_keys(Map) ->
+    maps:fold(fun(K, V, Acc) ->
+        try binary_to_existing_atom(K, utf8) of
+            Atom -> Acc#{Atom => V}
+        catch
+            error:badarg -> Acc
+        end
+    end, #{}, Map).
 
 accept(Body, ReqData, Context = #context{user = #user{username = Username}}) ->
     %% At this point the request was fully received.
