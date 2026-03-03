@@ -96,7 +96,9 @@ publish_topic_authorisation(Config) ->
 
     %% send on authorised topic
     rabbit_stomp_client:send(
-        ClientFoo, "SUBSCRIBE", [{"destination", AuthorisedTopic}]),
+        ClientFoo, "SUBSCRIBE", [{"destination", AuthorisedTopic},
+                                 {"id", "s0"},
+                                 {"durable", "true"}]),
 
     rabbit_stomp_client:send(
         ClientFoo, "SEND", [{"destination", AuthorisedTopic}], ["authorised hello"]),
@@ -119,7 +121,9 @@ subscribe_topic_authorisation(Config) ->
 
     %% subscribe to authorised topic
     rabbit_stomp_client:send(
-        ClientFoo, "SUBSCRIBE", [{"destination", AuthorisedTopic}]),
+        ClientFoo, "SUBSCRIBE", [{"destination", AuthorisedTopic},
+                                 {"id", "s0"},
+                                 {"durable", "true"}]),
 
     rabbit_stomp_client:send(
         ClientFoo, "SEND", [{"destination", AuthorisedTopic}], ["authorised hello"]),
@@ -129,7 +133,9 @@ subscribe_topic_authorisation(Config) ->
 
     %% subscribe to restricted topic
     rabbit_stomp_client:send(
-        ClientFoo, "SUBSCRIBE", [{"destination", RestrictedTopic}]),
+        ClientFoo, "SUBSCRIBE", [{"destination", RestrictedTopic},
+                                 {"id", "s1"},
+                                 {"durable", "true"}]),
     {ok, _Client2, Hdrs2, _} = stomp_receive(ClientFoo, "ERROR"),
     "access_refused" = proplists:get_value("message", Hdrs2),
     ok.
@@ -148,7 +154,9 @@ publish_topic_authorisation_regex_not_injected(Config) ->
     {ok, ClientRegex} = rabbit_stomp_client:connect(Version, ".*", "pass", StompPort),
 
     rabbit_stomp_client:send(
-        ClientRegex, "SUBSCRIBE", [{"destination", "/topic/.*.Authorised"}]),
+        ClientRegex, "SUBSCRIBE", [{"destination", "/topic/.*.Authorised"},
+                                   {"id", "s0"},
+                                   {"durable", "true"}]),
     rabbit_stomp_client:send(
         ClientRegex, "SEND", [{"destination", "/topic/.*.Authorised"}], ["allowed"]),
     {ok, _Client1, _, Body} = stomp_receive(ClientRegex, "MESSAGE"),
@@ -179,7 +187,9 @@ change_default_topic_exchange(Config) ->
     0 = length(rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_binding, list_for_source, [#resource{virtual_host= <<"/">>, kind = exchange, name = Ex}])),
 
     rabbit_stomp_client:send(
-        ClientFoo, "SUBSCRIBE", [{"destination", AuthorisedTopic}]),
+        ClientFoo, "SUBSCRIBE", [{"destination", AuthorisedTopic},
+                                 {"id", "s0"},
+                                 {"durable", "true"}]),
 
     timer:sleep(500),
 
