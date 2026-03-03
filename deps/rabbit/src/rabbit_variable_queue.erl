@@ -2012,10 +2012,13 @@ read_from_q_tail(DelsAndAcksFun,
     State2 = State1 #vqstate { ram_msg_count     = RamMsgCount   + RamCountsInc,
                                ram_bytes         = RamBytes      + RamBytesInc,
                                disk_read_count   = DiskReadCount + RamCountsInc },
+    %% An empty QHead1 means we dropped every transient
+    %% message below the transient threshold during recovery.
     case ?QUEUE:len(QHead1) of
+        0 when QTailSeqId1 >= QTailSeqIdEnd ->
+            %% q_tail is now empty
+            State2 #vqstate { q_tail = ?BLANK_Q_TAIL };
         0 ->
-            %% we ignored every message in the segment due to it being
-            %% transient and below the threshold
             read_from_q_tail(
               DelsAndAcksFun,
               State2 #vqstate {
