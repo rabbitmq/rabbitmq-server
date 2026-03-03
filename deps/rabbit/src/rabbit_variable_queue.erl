@@ -2371,22 +2371,15 @@ maybe_deltas_to_betas(DelsAndAcksFun,
     State2 = State1 #vqstate { ram_msg_count     = RamMsgCount   + RamCountsInc,
                                ram_bytes         = RamBytes      + RamBytesInc,
                                disk_read_count   = DiskReadCount + RamCountsInc },
-<<<<<<< HEAD
-    case ?QUEUE:len(Q3a) of
-        0 ->
-            %% we ignored every message in the segment due to it being
-            %% transient and below the threshold
-            maybe_deltas_to_betas(
-=======
-    %% An empty QHead1 means we dropped every transient
+    %% An empty Q3a means we dropped every transient
     %% message below the transient threshold during recovery.
-    case ?QUEUE:len(QHead1) of
-        0 when QTailSeqId1 >= QTailSeqIdEnd ->
-            %% q_tail is now empty
-            State2 #vqstate { q_tail = ?BLANK_Q_TAIL };
+    case ?QUEUE:len(Q3a) of
+        0 when DeltaSeqId1 >= DeltaSeqIdEnd ->
+            %% delta is now empty
+            State2 #vqstate { delta = ?BLANK_DELTA,
+                              delta_transient_bytes = 0 };
         0 ->
-            read_from_q_tail(
->>>>>>> ccb1e4859 (CQ: Fix q_tail when all transient messages are dropped)
+            maybe_deltas_to_betas(
               DelsAndAcksFun,
               State2 #vqstate {
                 delta = d(Delta #delta { start_seq_id = DeltaSeqId1 })},
