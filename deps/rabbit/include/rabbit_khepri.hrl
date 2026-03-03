@@ -56,9 +56,9 @@
         ?RABBITMQ_KHEPRI_EXCHANGE_PATH(
           VHost, Exchange, [user_permissions, Username])).
 
--define(RABBITMQ_KHEPRI_ROUTE_PATH(VHost, SrcName, Kind, DstName, RoutingKey),
+-define(RABBITMQ_KHEPRI_ROUTE_PATH(VHost, SrcName, Kind, DstName, BindingKey),
         ?RABBITMQ_KHEPRI_EXCHANGE_PATH(
-          VHost, SrcName, [bindings, Kind, DstName, RoutingKey])).
+          VHost, SrcName, [bindings, Kind, DstName, BindingKey])).
 
 -define(RABBITMQ_KHEPRI_QUEUE_PATH(VHost, Name),
         ?RABBITMQ_KHEPRI_VHOST_PATH(VHost, [queues, Name])).
