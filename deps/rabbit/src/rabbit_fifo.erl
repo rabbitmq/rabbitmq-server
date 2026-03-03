@@ -3727,10 +3727,10 @@ do_snapshot(MacVer, Ts, Ch, RaAux, ReclaimableBytes, Force)
 do_snapshot(MacVer, Ts,
             #snapshot{timestamp = SnapTime,
                       reclaimable_bytes = LastReclaimableBytes,
-                      min_reclaimable = MinReclaimable} = Snap0,
+                      min_reclaimable = MinReclaimable0} = Snap0,
             RaAux, ReclaimableBytes, Force)
   when is_integer(MacVer) andalso MacVer >= 8 ->
-    {CheckMinInterval, _} =
+    {CheckMinInterval, SnapMinReclaimable} =
         persistent_term:get(quorum_queue_snapshot_config,
                             {?CHECK_MIN_INTERVAL_MS,
                              ?SNAP_MIN_RECLAIMABLE_B}),
@@ -3746,19 +3746,21 @@ do_snapshot(MacVer, Ts,
             %% Also ensure the removed data exceeds the approximate
             %% snapshot size so that the snapshot is smaller than the
             %% data it saves.
-            ScaledLimit = round(MinReclaimable *
+            ScaledLimit = round(MinReclaimable0 *
                                 (1.0 - WalFillRatio)),
             MacState = ra_aux:machine_state(RaAux),
             Limit = max(ScaledLimit, approx_snap_size(MacState)),
             case DataRemoved > Limit orelse Force of
                 true ->
+                    Range = max(1, SnapMinReclaimable - ?SNAP_MIN_RECLAIMABLE_LOW_B),
+                    MinReclaimable = ?SNAP_MIN_RECLAIMABLE_LOW_B + rand:uniform(Range),
                     Idx = ra_aux:last_applied(RaAux),
                     MsgsTot = messages_total(MacState),
                     Snap = #snapshot{index = Idx,
-                                    timestamp = Ts,
-                                    messages_total = MsgsTot,
-                                    reclaimable_bytes = ReclaimableBytes,
-                                    min_reclaimable = MinReclaimable},
+                                     timestamp = Ts,
+                                     messages_total = MsgsTot,
+                                     reclaimable_bytes = ReclaimableBytes,
+                                     min_reclaimable = MinReclaimable},
                     Cond = #{condition => [{written, Idx},
                                            no_snapshot_sends]},
                     {Snap, [{release_cursor, Idx, MacState, Cond}]};
