@@ -13,9 +13,6 @@ import os.path
 
 def ensure_ssl_auth_user():
     user = 'O=client,CN=%s' % socket.gethostname()
-    rabbitmqctl(['stop_app'])
-    rabbitmqctl(['reset'])
-    rabbitmqctl(['start_app'])
     rabbitmqctl(['add_user', user, 'foo'])
     rabbitmqctl(['clear_password', user])
     rabbitmqctl(['set_permissions', user, '.*', '.*', '.*'])
