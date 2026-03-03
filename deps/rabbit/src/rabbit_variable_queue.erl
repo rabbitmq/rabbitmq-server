@@ -2379,7 +2379,7 @@ maybe_deltas_to_betas(DelsAndAcksFun,
             maybe_deltas_to_betas(
 =======
     %% An empty QHead1 means we dropped every transient
-    %% messages below the transient threshold during recovery.
+    %% message below the transient threshold during recovery.
     case ?QUEUE:len(QHead1) of
         0 when QTailSeqId1 >= QTailSeqIdEnd ->
             %% q_tail is now empty
