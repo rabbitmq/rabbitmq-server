@@ -110,17 +110,18 @@ prop_connection_channel_counts(Config) ->
             begin
                 % ensure we begin with no connections
                 ct:pal("Init testcase"),
-                true = validate_counts(Config, []),
+                rabbit_ct_helpers:await_condition(
+                  fun () -> validate_counts(Config, []) end,
+                  60000),
                 Cons = lists:foldl(fun (Op, Agg) ->
                                           execute_op(Config, Op, Agg)
                                    end, [], Ops),
-                %% TODO retry a few times
                 ct:pal("Check testcase"),
-                Res = retry_for(
-                        fun() ->
-                                force_stats(Config),
-                                validate_counts(Config, Cons) end,
-                        60),
+                rabbit_ct_helpers:await_condition(
+                  fun () ->
+                          force_stats(Config),
+                          validate_counts(Config, Cons) end,
+                  60000),
                 ct:pal("Cleanup testcase"),
                 rabbit_ct_helpers:await_condition(
                   fun () ->
@@ -128,7 +129,7 @@ prop_connection_channel_counts(Config) ->
                           force_stats(Config),
                           validate_counts(Config, []) end,
                   60000),
-                Res
+                true
             end).
 
 validate_counts(Config, Conns) ->
@@ -291,14 +292,3 @@ dump_table(Config, Table) ->
     ct:pal(?LOW_IMPORTANCE, "Node 0: Dump of table ~tp:~n~tp~n", [Table, Data]),
     Data0 = rabbit_ct_broker_helpers:rpc(Config, 1, ets, tab2list, [Table]),
     ct:pal(?LOW_IMPORTANCE, "Node 1: Dump of table ~tp:~n~tp~n", [Table, Data0]).
-
-retry_for(_Fun, 0) ->
-    false;
-retry_for(Fun, Retries) ->
-    case Fun() of
-        true ->
-            true;
-        false ->
-            timer:sleep(1000),
-            retry_for(Fun, Retries - 1)
-    end.
