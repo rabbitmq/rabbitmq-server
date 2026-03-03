@@ -73,7 +73,7 @@ register_interceptor1(Config, Interceptor) ->
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, 0),
 
     QName = <<"register_interceptor-q">>,
-    amqp_channel:call(Ch1, #'queue.declare'{queue = QName}),
+    amqp_channel:call(Ch1, #'queue.declare'{queue = QName, durable = true}),
 
     [ChannelProc] = rabbit_channel:list() -- PredefinedChannels,
 
@@ -118,11 +118,11 @@ register_interceptor_failing_with_amqp_error1(Config, Interceptor) ->
 
     Q1 = <<"succeeding-q">>,
     #'queue.declare_ok'{} =
-        amqp_channel:call(Ch1, #'queue.declare'{queue = Q1}),
+        amqp_channel:call(Ch1, #'queue.declare'{queue = Q1, durable = true}),
 
     Q2 = <<"failing-with-amqp-error-q">>,
     try
-        amqp_channel:call(Ch1, #'queue.declare'{queue = Q2})
+        amqp_channel:call(Ch1, #'queue.declare'{queue = Q2, durable = true})
     catch
       _:Reason ->
           ?assertMatch(
@@ -138,7 +138,7 @@ register_interceptor_failing_with_amqp_error1(Config, Interceptor) ->
     [{interceptors, []}] = rabbit_channel:info(ChannelProc1, [interceptors]),
 
     #'queue.declare_ok'{} =
-        amqp_channel:call(Ch2, #'queue.declare'{queue = Q2}),
+        amqp_channel:call(Ch2, #'queue.declare'{queue = Q2, durable = true}),
 
     #'queue.delete_ok'{} = amqp_channel:call(Ch2, #'queue.delete' {queue = Q1}),
     #'queue.delete_ok'{} = amqp_channel:call(Ch2, #'queue.delete' {queue = Q2}),
@@ -167,11 +167,11 @@ register_interceptor_crashing_with_amqp_error_exception1(Config, Interceptor) ->
 
     Q1 = <<"succeeding-q">>,
     #'queue.declare_ok'{} =
-        amqp_channel:call(Ch1, #'queue.declare'{queue = Q1}),
+        amqp_channel:call(Ch1, #'queue.declare'{queue = Q1, durable = true}),
 
     Q2 = <<"crashing-with-amqp-exception-q">>,
     try
-        amqp_channel:call(Ch1, #'queue.declare'{queue = Q2})
+        amqp_channel:call(Ch1, #'queue.declare'{queue = Q2, durable = true})
     catch
       _:Reason ->
           ?assertMatch(
@@ -187,7 +187,7 @@ register_interceptor_crashing_with_amqp_error_exception1(Config, Interceptor) ->
     [{interceptors, []}] = rabbit_channel:info(ChannelProc1, [interceptors]),
 
     #'queue.declare_ok'{} =
-        amqp_channel:call(Ch2, #'queue.declare'{queue = Q2}),
+        amqp_channel:call(Ch2, #'queue.declare'{queue = Q2, durable = true}),
 
     #'queue.delete_ok'{} = amqp_channel:call(Ch2, #'queue.delete' {queue = Q1}),
     #'queue.delete_ok'{} = amqp_channel:call(Ch2, #'queue.delete' {queue = Q2}),

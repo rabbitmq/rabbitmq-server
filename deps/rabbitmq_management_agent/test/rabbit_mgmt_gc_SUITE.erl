@@ -103,7 +103,7 @@ queue_stats(Config) ->
     A = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, A),
 
-    amqp_channel:call(Ch, #'queue.declare'{queue = <<"queue_stats">>}),
+    amqp_channel:call(Ch, #'queue.declare'{queue = <<"queue_stats">>, durable = true}),
     amqp_channel:cast(Ch, #'basic.publish'{routing_key = <<"queue_stats">>},
                       #amqp_msg{payload = <<"hello">>}),
     {#'basic.get_ok'{}, _} = amqp_channel:call(Ch, #'basic.get'{queue = <<"queue_stats">>,
@@ -187,7 +187,7 @@ basic_queue_stats(Config) ->
     A = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, A),
 
-    amqp_channel:call(Ch, #'queue.declare'{queue = <<"queue_stats">>}),
+    amqp_channel:call(Ch, #'queue.declare'{queue = <<"queue_stats">>, durable = true}),
     amqp_channel:cast(Ch, #'basic.publish'{routing_key = <<"queue_stats">>},
                       #amqp_msg{payload = <<"hello">>}),
     {#'basic.get_ok'{}, _} = amqp_channel:call(Ch, #'basic.get'{queue = <<"queue_stats">>,
@@ -303,7 +303,7 @@ connection_stats(Config) ->
     A = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, A),
 
-    amqp_channel:call(Ch, #'queue.declare'{queue = <<"queue_stats">>}),
+    amqp_channel:call(Ch, #'queue.declare'{queue = <<"queue_stats">>, durable = true}),
     amqp_channel:cast(Ch, #'basic.publish'{routing_key = <<"queue_stats">>},
                       #amqp_msg{payload = <<"hello">>}),
     timer:sleep(1150),
@@ -352,7 +352,7 @@ channel_stats(Config) ->
     A = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, A),
 
-    amqp_channel:call(Ch, #'queue.declare'{queue = <<"queue_stats">>}),
+    amqp_channel:call(Ch, #'queue.declare'{queue = <<"queue_stats">>, durable = true}),
     amqp_channel:cast(Ch, #'basic.publish'{routing_key = <<"queue_stats">>},
                       #amqp_msg{payload = <<"hello">>}),
     {#'basic.get_ok'{}, _} = amqp_channel:call(Ch, #'basic.get'{queue = <<"queue_stats">>,
@@ -448,7 +448,7 @@ vhost_stats(Config) ->
     A = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, A),
 
-    amqp_channel:call(Ch, #'queue.declare'{queue = <<"queue_stats">>}),
+    amqp_channel:call(Ch, #'queue.declare'{queue = <<"queue_stats">>, durable = true}),
     amqp_channel:cast(Ch, #'basic.publish'{routing_key = <<"queue_stats">>},
                       #amqp_msg{payload = <<"hello">>}),
     {#'basic.get_ok'{}, _} = amqp_channel:call(Ch, #'basic.get'{queue = <<"queue_stats">>,
@@ -517,7 +517,7 @@ exchange_stats(Config) ->
     A = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, A),
 
-    amqp_channel:call(Ch, #'queue.declare'{queue = <<"queue_stats">>}),
+    amqp_channel:call(Ch, #'queue.declare'{queue = <<"queue_stats">>, durable = true}),
     amqp_channel:cast(Ch, #'basic.publish'{routing_key = <<"queue_stats">>},
                       #amqp_msg{payload = <<"hello">>}),
     {#'basic.get_ok'{}, _} = amqp_channel:call(Ch, #'basic.get'{queue = <<"queue_stats">>,
@@ -617,7 +617,7 @@ consumer_stats(Config) ->
     A = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, A),
 
-    amqp_channel:call(Ch, #'queue.declare'{queue = <<"queue_stats">>}),
+    amqp_channel:call(Ch, #'queue.declare'{queue = <<"queue_stats">>, durable = true}),
     amqp_channel:call(Ch, #'basic.consume'{queue = <<"queue_stats">>}),
     timer:sleep(1150),
 

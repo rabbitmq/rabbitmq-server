@@ -58,7 +58,12 @@ suite() ->
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
-    Config.
+    %% Remove when transient_nonexcl_queues is removed entirely,
+    %% and fix the .NET tests.
+    rabbit_ct_helpers:merge_app_env(
+                Config,
+                {rabbit,
+                 [{permit_deprecated_features, #{transient_nonexcl_queues => true}}]}).
 
 end_per_suite(Config) ->
     Config.

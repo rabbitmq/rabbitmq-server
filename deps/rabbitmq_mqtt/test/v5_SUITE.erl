@@ -1547,6 +1547,7 @@ will_delay_message_expiry(Config) ->
     #'queue.declare_ok'{} = amqp_channel:call(
                               Ch, #'queue.declare'{
                                      queue = Q1,
+                                     durable = true,
                                      arguments = [{<<"x-dead-letter-exchange">>, longstr, <<"">>},
                                                   {<<"x-dead-letter-routing-key">>, longstr, Q2}]}),
     #'queue.bind_ok'{} = amqp_channel:call(
@@ -1554,7 +1555,7 @@ will_delay_message_expiry(Config) ->
                                              exchange = <<"amq.topic">>,
                                              routing_key = <<"my.topic">>}),
     #'queue.declare_ok'{} = amqp_channel:call(
-                              Ch, #'queue.declare'{queue = Q2}),
+                              Ch, #'queue.declare'{queue = Q2, durable = true}),
     C = connect(<<"my-client">>, Config,
                 [{properties, #{'Session-Expiry-Interval' => 1}},
                  {will_props, #{'Will-Delay-Interval' => 1,
