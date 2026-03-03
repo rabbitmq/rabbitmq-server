@@ -1132,8 +1132,8 @@ do_reg_recovery_tune_read_crash(Config) ->
     St2 = next_state(St1, Res2, {call, undefined, cmd_channel_open, [St1]}),
 
     Res3 = cmd_channel_publish_many(St2, Res2, 511, 260, 1, true, undefined),
-    true = postcondition(St2, {call, undefined, cmd_channel_publish_many, [St2, Res3, 511, 260, 1, true, undefined]}, Res3),
-    St3 = next_state(St2, Res3, {call, undefined, cmd_channel_publish_many, [St2, Res3, 511, 260, 1, true, undefined]}),
+    true = postcondition(St2, {call, undefined, cmd_channel_publish_many, [St2, Res2, 511, 260, 1, true, undefined]}, Res3),
+    St3 = next_state(St2, Res3, {call, undefined, cmd_channel_publish_many, [St2, Res2, 511, 260, 1, true, undefined]}),
 
     Res4 = cmd_restart_vhost_clean(St3),
     true = postcondition(St3, {call, undefined, cmd_restart_vhost_clean, [St3]}, Res4),
