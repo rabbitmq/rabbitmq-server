@@ -1113,7 +1113,7 @@ safe_teardown_queue(St) ->
 
 %% Regression tests.
 %%
-%% These tests are hard to reproduce by running the test suite normally
+%% These tests cover scenarios are hard to reproduce by running the test suite normally
 %% because they require a very specific sequence of events.
 
 reg_recovery_tune_read_crash(Config) ->
