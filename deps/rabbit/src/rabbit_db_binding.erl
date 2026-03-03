@@ -635,11 +635,11 @@ khepri_route_path(
            key = RoutingKey}) ->
     khepri_route_path(VHost, SrcName, Kind, DstName, RoutingKey).
 
-khepri_route_path(VHost, SrcName, Kind, DstName, RoutingKey)
+khepri_route_path(VHost, SrcName, Kind, DstName, BindingKey)
   when ?IS_KHEPRI_PATH_CONDITION(Kind) andalso
        ?IS_KHEPRI_PATH_CONDITION(DstName) andalso
-       ?IS_KHEPRI_PATH_CONDITION(RoutingKey) ->
-    ?RABBITMQ_KHEPRI_ROUTE_PATH(VHost, SrcName, Kind, DstName, RoutingKey).
+       ?IS_KHEPRI_PATH_CONDITION(BindingKey) ->
+    ?RABBITMQ_KHEPRI_ROUTE_PATH(VHost, SrcName, Kind, DstName, BindingKey).
 
 khepri_route_path_to_args(Path) ->
     Pattern = khepri_route_path(
