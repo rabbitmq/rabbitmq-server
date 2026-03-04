@@ -40,6 +40,7 @@ groups() ->
         {global_labels, [], generic_tests()},
         {aggregated_metrics, [], [
             aggregated_metrics_test,
+            aggregated_endpoint_no_duplicate_raft_type_lines,
             specific_erlang_metrics_present_test,
             global_metrics_present_test,
             global_metrics_single_metric_family_test,
@@ -54,6 +55,7 @@ groups() ->
         ]},
         {per_object_endpoint_metrics, [], [
             endpoint_per_object_metrics,
+            per_object_endpoint_no_duplicate_raft_type_lines,
             specific_erlang_metrics_present_test
         ]},
         {memory_breakdown_endpoint_metrics, [], [
@@ -420,8 +422,39 @@ aggregated_metrics_test(Config) ->
     ?assertEqual(match, re:run(Body, "^rabbitmq_raft_segments{", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_raft_wal_files{", [{capture, none}, multiline])).
 
+%% Verify that the aggregated endpoint does not emit duplicate TYPE
+%% lines for Raft metrics that belong to different Ra systems.
+%%
+%% See https://github.com/rabbitmq/rabbitmq-server/issues/15600.
+aggregated_endpoint_no_duplicate_raft_type_lines(Config) ->
+    {_Headers, Body} = http_get_with_pal(Config, [], 200),
+    assert_no_duplicate_type_lines(Body,
+                                   ["rabbitmq_raft_commit_latency_seconds",
+                                    "rabbitmq_raft_max_commit_latency_seconds",
+                                    "rabbitmq_raft_max_num_segments",
+                                    "rabbitmq_raft_bytes_written",
+                                    "rabbitmq_raft_entries",
+                                    "rabbitmq_raft_mem_tables",
+                                    "rabbitmq_raft_segments",
+                                    "rabbitmq_raft_wal_files"]).
+
 endpoint_per_object_metrics(Config) ->
     per_object_metrics_test(Config, "/metrics/per-object").
+
+%% Verify that the per-object endpoint does not emit duplicate TYPE
+%% lines for Raft metrics that belong to different Ra systems.
+%%
+%% See https://github.com/rabbitmq/rabbitmq-server/issues/15600.
+per_object_endpoint_no_duplicate_raft_type_lines(Config) ->
+    {_Headers, Body} = http_get_with_pal(Config, "/metrics/per-object", [], 200),
+    assert_no_duplicate_type_lines(Body,
+                                   ["rabbitmq_raft_term",
+                                    "rabbitmq_raft_snapshot_index",
+                                    "rabbitmq_raft_last_applied",
+                                    "rabbitmq_raft_commit_index",
+                                    "rabbitmq_raft_last_written_index",
+                                    "rabbitmq_raft_commit_latency_seconds",
+                                    "rabbitmq_raft_num_segments"]).
 
 globally_configure_per_object_metrics_test(Config) ->
     per_object_metrics_test(Config, "/metrics").
@@ -1002,3 +1035,15 @@ parse_value(V) ->
         true -> list_to_integer(V);
         _ -> V
     end.
+
+%% Asserts that each metric in the list has exactly one TYPE line
+%% in the Prometheus output body.
+assert_no_duplicate_type_lines(Body, MetricNames) ->
+    lists:foreach(
+      fun(MetricName) ->
+              Pattern = "^# TYPE " ++ MetricName ++ " ",
+              {match, Matches} = re:run(Body, Pattern, [global, multiline]),
+              ?assertEqual(1, length(Matches),
+                           lists:flatten(
+                             io_lib:format("expected exactly one TYPE line for ~s", [MetricName])))
+      end, MetricNames).
