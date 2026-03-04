@@ -35,12 +35,19 @@ is_authorized(ReqData, {Mode, Context}) ->
 
 %%--------------------------------------------------------------------
 
+-spec get_filter(cowboy_req:req()) -> atom().
 get_filter(ReqData) ->
     case rabbit_mgmt_util:id(filter, ReqData) of
-        none                        -> all;
-        <<"management">>            -> rabbit_mgmt_storage;
-        Other when is_binary(Other) -> list_to_atom(binary_to_list(Other));
-        _                           -> all
+        none ->
+            all;
+        <<"management">> ->
+            rabbit_mgmt_storage;
+        Other when is_binary(Other) ->
+            try binary_to_existing_atom(Other, utf8)
+            catch error:badarg -> undefined
+            end;
+        _ ->
+            all
     end.
 
 augment(Mode, ReqData) ->

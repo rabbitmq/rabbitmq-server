@@ -11,6 +11,7 @@
   allowed_methods/2, accept_content/2, content_types_provided/2,
   content_types_accepted/2]).
 -export([variances/2]).
+-export([parse_ackmode/1]).
 
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -56,7 +57,7 @@ do_it(ReqData0, Context) ->
               rabbit_mgmt_util:with_channel(
                 VHost, ReqData, Context,
                 fun (Ch) ->
-                        AckMode = list_to_atom(binary_to_list(AckModeBin)),
+                        AckMode = parse_ackmode(AckModeBin),
                         Count = rabbit_mgmt_util:parse_int(CountBin),
                         Enc = case EncBin of
                                   <<"auto">>   -> auto;
@@ -93,10 +94,26 @@ basic_gets(Count, Ch, Q, AckMode, Enc, Trunc) ->
 ackmode_to_requeue(reject_requeue_false) -> false;
 ackmode_to_requeue(reject_requeue_true) -> true.
 
-parse_ackmode(ack_requeue_false) -> true;
-parse_ackmode(ack_requeue_true) -> false;
-parse_ackmode(reject_requeue_false) -> false;
-parse_ackmode(reject_requeue_true) -> false.
+-type ackmode() :: ack_requeue_true | ack_requeue_false |
+                   reject_requeue_true | reject_requeue_false.
+
+-spec parse_ackmode(binary()) -> ackmode().
+parse_ackmode(<<"ack_requeue_true">>)     -> ack_requeue_true;
+parse_ackmode(<<"ack_requeue_false">>)    -> ack_requeue_false;
+parse_ackmode(<<"reject_requeue_true">>)  -> reject_requeue_true;
+parse_ackmode(<<"reject_requeue_false">>) -> reject_requeue_false;
+parse_ackmode(Other) ->
+    throw({error, iolist_to_binary(
+                    [<<"Invalid ackmode value: ">>, Other,
+                     <<". Valid values are: ack_requeue_true, "
+                       "ack_requeue_false, reject_requeue_true, "
+                       "reject_requeue_false">>])}).
+
+-spec ackmode_no_ack(ackmode()) -> boolean().
+ackmode_no_ack(ack_requeue_false)    -> true;
+ackmode_no_ack(ack_requeue_true)     -> false;
+ackmode_no_ack(reject_requeue_false) -> false;
+ackmode_no_ack(reject_requeue_true)  -> false.
 
 
 % the messages must rejects later,
@@ -132,7 +149,7 @@ maybe_reject_or_nack(_Ch, _AckMode, _DeliveryTag) -> ok.
 basic_get(Ch, Q, AckMode, Enc, Trunc) ->
     case amqp_channel:call(Ch,
 			   #'basic.get'{queue = Q,
-					no_ack = parse_ackmode(AckMode)}) of
+					no_ack = ackmode_no_ack(AckMode)}) of
         {#'basic.get_ok'{redelivered   = Redelivered,
                          exchange      = Exchange,
                          routing_key   = RoutingKey,

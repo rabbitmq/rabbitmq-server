@@ -26,25 +26,22 @@ content_types_accepted(ReqData, Context) ->
   {[{'*', accept_content}], ReqData, Context}.
 
 resource_exists(ReqData, Context) ->
-  case rabbit_mgmt_util:id(node, ReqData) of
-    none -> {false, ReqData, Context};
-    Node ->
-      NodeExists = lists:member(rabbit_data_coercion:to_atom(Node), rabbit_nodes:list_running()),
-      {NodeExists, ReqData, Context}
+  case rabbit_mgmt_nodes:node_name_from_req(ReqData) of
+      {ok, Node} ->
+          {lists:member(Node, rabbit_nodes:list_running()), ReqData, Context};
+      {error, _} ->
+          {false, ReqData, Context}
   end.
 
 accept_content(ReqData, Context) ->
-  NewReplicaNode = rabbit_mgmt_util:id(node, ReqData),
+  {ok, Node} = rabbit_mgmt_nodes:node_name_from_req(ReqData),
   rabbit_mgmt_util:with_decode(
     [vhost_pattern, queue_pattern, strategy], ReqData, Context,
     fun([VHPattern, QPattern, Strategy], Body, _ReqData) ->
-      Membership = maps:get(<<"membership">>, Body, promotable),
-      rabbit_quorum_queue:grow(
-        rabbit_data_coercion:to_atom(NewReplicaNode),
-        VHPattern,
-        QPattern,
-        rabbit_data_coercion:to_atom(Strategy),
-        rabbit_data_coercion:to_atom(Membership))
+      Strat = rabbit_mgmt_nodes:safe_atom(Strategy, <<"strategy">>),
+      Membership0 = maps:get(<<"membership">>, Body, promotable),
+      Membership = rabbit_mgmt_nodes:safe_atom(Membership0, <<"membership">>),
+      rabbit_quorum_queue:grow(Node, VHPattern, QPattern, Strat, Membership)
     end),
   {true, ReqData, Context}.
 

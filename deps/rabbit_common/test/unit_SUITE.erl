@@ -27,6 +27,7 @@
 all() ->
     [
         {group, parallel_tests},
+        {group, sequential_tests},
         {group, gen_server2},
         {group, date_time}
     ].
@@ -51,6 +52,11 @@ groups() ->
             data_coercion_atomize_keys_proplist,
             data_coercion_atomize_keys_map,
             data_coercion_to_boolean,
+            data_coercion_to_integer,
+            data_coercion_to_atom,
+            data_coercion_to_existing_atom,
+            data_coercion_to_existing_atom_rejects_unknown,
+            data_coercion_to_existing_atom_passthrough,
             pget,
             deep_pget,
             encrypt_decrypt,
@@ -64,6 +70,9 @@ groups() ->
             name_type,
             get_erl_path,
             hexify
+        ]},
+        {sequential_tests, [], [
+            data_coercion_to_existing_atom_does_not_create_atoms
         ]},
         {gen_server2, [parallel], [
             stats_timer_is_working,
@@ -287,6 +296,65 @@ data_coercion_atomize_keys_proplist(_Config) ->
     A = [{a, 1}, {b, 2}, {c, 3}],
     B = rabbit_data_coercion:atomize_keys([{a, 1}, {"b", 2}, {<<"c">>, 3}]),
     ?assertEqual(lists:usort(A), lists:usort(B)).
+
+data_coercion_to_integer(_Config) ->
+    %% Integers pass through unchanged
+    ?assertEqual(42, rabbit_data_coercion:to_integer(42)),
+    ?assertEqual(-100, rabbit_data_coercion:to_integer(-100)),
+    %% Strings (lists) are parsed
+    ?assertEqual(42, rabbit_data_coercion:to_integer("42")),
+    ?assertEqual(-100, rabbit_data_coercion:to_integer("-100")),
+    %% Binaries are parsed
+    ?assertEqual(42, rabbit_data_coercion:to_integer(<<"42">>)),
+    ?assertEqual(-100, rabbit_data_coercion:to_integer(<<"-100">>)).
+
+data_coercion_to_atom(_Config) ->
+    %% Atoms pass through unchanged
+    ?assertEqual(hello, rabbit_data_coercion:to_atom(hello)),
+    %% Strings (lists) are converted
+    ?assertEqual(hello, rabbit_data_coercion:to_atom("hello")),
+    %% Binaries are converted with utf8 encoding
+    ?assertEqual(hello, rabbit_data_coercion:to_atom(<<"hello">>)),
+    %% to_atom/2 with explicit encoding
+    ?assertEqual(hello, rabbit_data_coercion:to_atom(<<"hello">>, utf8)),
+    ?assertEqual(hello, rabbit_data_coercion:to_atom(<<"hello">>, latin1)).
+
+data_coercion_to_existing_atom(_Config) ->
+    promotable = rabbit_data_coercion:to_existing_atom(<<"promotable">>),
+    non_voter  = rabbit_data_coercion:to_existing_atom(<<"non_voter">>),
+    voter      = rabbit_data_coercion:to_existing_atom(<<"voter">>),
+    all        = rabbit_data_coercion:to_existing_atom(<<"all">>),
+    even       = rabbit_data_coercion:to_existing_atom(<<"even">>),
+    %% List (string) inputs
+    promotable = rabbit_data_coercion:to_existing_atom("promotable"),
+    all        = rabbit_data_coercion:to_existing_atom("all"),
+    ok.
+
+data_coercion_to_existing_atom_rejects_unknown(_Config) ->
+    ?assertError(badarg,
+                 rabbit_data_coercion:to_existing_atom(<<"xyzzy_not_an_atom_42">>)),
+    ?assertError(badarg,
+                 rabbit_data_coercion:to_existing_atom(<<"fabricated_node@host">>)),
+    ?assertError(badarg,
+                 rabbit_data_coercion:to_existing_atom("xyzzy_not_an_atom_42")),
+    ok.
+
+data_coercion_to_existing_atom_passthrough(_Config) ->
+    hello = rabbit_data_coercion:to_existing_atom(hello),
+    true  = rabbit_data_coercion:to_existing_atom(true),
+    ok.
+
+data_coercion_to_existing_atom_does_not_create_atoms(_Config) ->
+    CountBefore = erlang:system_info(atom_count),
+    InvalidInputs = [<<"abc_made_up_", (integer_to_binary(I))/binary>>
+                     || I <- lists:seq(1, 10_000)],
+    lists:foreach(
+      fun(Bin) ->
+              catch rabbit_data_coercion:to_existing_atom(Bin)
+      end, InvalidInputs),
+    CountAfter = erlang:system_info(atom_count),
+    ?assert(CountAfter - CountBefore =< 50),
+    ok.
 
 data_coercion_to_boolean(_Config) ->
     %% For booleans, this is an identity function
