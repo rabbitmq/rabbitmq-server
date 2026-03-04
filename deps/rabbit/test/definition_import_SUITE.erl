@@ -95,11 +95,12 @@ groups() ->
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
     inets:start(),
-    %% Remove when queue_master_locator is removed entirely.
+    %% Remove when queue_master_locator/transient_nonexcl_queues are removed entirely.
     rabbit_ct_helpers:merge_app_env(
                 Config,
                 {rabbit,
-                 [{permit_deprecated_features, #{queue_master_locator => true}}]}).
+                 [{permit_deprecated_features, #{queue_master_locator => true,
+                                                 transient_nonexcl_queues => true}}]}).
 end_per_suite(Config) ->
     Config.
 

@@ -289,6 +289,7 @@ when_queue_master_locator_is_permitted_from_conf(Config) ->
        amqp_channel:call(
          Ch,
          #'queue.declare'{queue = QName,
+                          durable = true,
                           arguments = [{<<"x-queue-master-locator">>, longstr, <<"client-local">>}]})),
 
     ?assertEqual(
@@ -316,6 +317,7 @@ when_queue_master_locator_is_not_permitted_by_default(Config) ->
        amqp_channel:call(
          Ch,
          #'queue.declare'{queue = QName,
+                          durable = true,
                           arguments = [{<<"x-queue-master-locator">>, longstr, <<"client-local">>}]})),
 
     ?assertError(

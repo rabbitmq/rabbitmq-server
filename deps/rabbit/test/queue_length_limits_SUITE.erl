@@ -85,13 +85,11 @@ end_per_suite(Config) ->
 init_per_group(max_length_classic, Config) ->
     rabbit_ct_helpers:set_config(
       Config,
-      [{queue_args, [{<<"x-queue-type">>, longstr, <<"classic">>}]},
-       {queue_durable, false}]);
+      [{queue_args, [{<<"x-queue-type">>, longstr, <<"classic">>}]}]);
 init_per_group(max_length_quorum, Config) ->
     rabbit_ct_helpers:set_config(
       Config,
-      [{queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>}]},
-       {queue_durable, true}]);
+      [{queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>}]}]);
 init_per_group(parallel_tests = Group, Config) ->
     case lists:member({group, Group}, all()) of
         true ->
@@ -153,11 +151,10 @@ max_length_bytes_default(Config) ->
 max_length_bytes_drop_head(Config, ExtraArgs) ->
     {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     Args = ?config(queue_args, Config),
-    Durable = ?config(queue_durable, Config),
     QName = ?config(queue_name, Config),
 
     MaxLengthBytesArgs = [{<<"x-max-length-bytes">>, long, 100}],
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, arguments = MaxLengthBytesArgs ++ Args ++ ExtraArgs, durable = Durable}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, arguments = MaxLengthBytesArgs ++ Args ++ ExtraArgs, durable = true}),
 
     %% 80 bytes payload
     Payload1 = << <<"1">> || _ <- lists:seq(1, 80) >>,
@@ -175,11 +172,10 @@ max_length_default(Config) ->
 max_length_drop_head(Config, ExtraArgs) ->
     {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     Args = ?config(queue_args, Config),
-    Durable = ?config(queue_durable, Config),
     QName = ?config(queue_name, Config),
 
     MaxLengthArgs = [{<<"x-max-length">>, long, 1}],
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, arguments = MaxLengthArgs ++ Args ++ ExtraArgs, durable = Durable}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, arguments = MaxLengthArgs ++ Args ++ ExtraArgs, durable = true}),
 
     check_max_length_drops_head(QName, Ch, <<"1">>, <<"2">>, <<"3">>).
 
@@ -187,10 +183,9 @@ max_length_reject_confirm(Config) ->
     {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     Args = ?config(queue_args, Config),
     QName = ?config(queue_name, Config),
-    Durable = ?config(queue_durable, Config),
     MaxLengthArgs = [{<<"x-max-length">>, long, 1}],
     OverflowArgs = [{<<"x-overflow">>, longstr, <<"reject-publish">>}],
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, arguments = MaxLengthArgs ++ OverflowArgs ++ Args, durable = Durable}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, arguments = MaxLengthArgs ++ OverflowArgs ++ Args, durable = true}),
     #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
     check_max_length_drops_publish(QName, Ch, <<"1">>, <<"2">>, <<"3">>),
     check_max_length_rejects(QName, Ch, <<"1">>, <<"2">>, <<"3">>).
@@ -199,10 +194,9 @@ max_length_bytes_reject_confirm(Config) ->
     {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     Args = ?config(queue_args, Config),
     QNameBytes = ?config(queue_name, Config),
-    Durable = ?config(queue_durable, Config),
     MaxLengthBytesArgs = [{<<"x-max-length-bytes">>, long, 100}],
     OverflowArgs = [{<<"x-overflow">>, longstr, <<"reject-publish">>}],
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QNameBytes, arguments = MaxLengthBytesArgs ++ OverflowArgs ++ Args, durable = Durable}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QNameBytes, arguments = MaxLengthBytesArgs ++ OverflowArgs ++ Args, durable = true}),
     #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
 
     %% 80 bytes payload
@@ -216,33 +210,30 @@ max_length_bytes_reject_confirm(Config) ->
 max_length_drop_publish(Config) ->
     {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     Args = ?config(queue_args, Config),
-    Durable = ?config(queue_durable, Config),
     QName = ?config(queue_name, Config),
     MaxLengthArgs = [{<<"x-max-length">>, long, 1}],
     OverflowArgs = [{<<"x-overflow">>, longstr, <<"reject-publish">>}],
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, arguments = MaxLengthArgs ++ OverflowArgs ++ Args, durable = Durable}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, arguments = MaxLengthArgs ++ OverflowArgs ++ Args, durable = true}),
     %% If confirms are not enable, publishes will still be dropped in reject-publish mode.
     check_max_length_drops_publish(QName, Ch, <<"1">>, <<"2">>, <<"3">>).
 
 max_length_drop_publish_requeue(Config) ->
     {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     Args = ?config(queue_args, Config),
-    Durable = ?config(queue_durable, Config),
     QName = ?config(queue_name, Config),
     MaxLengthArgs = [{<<"x-max-length">>, long, 1}],
     OverflowArgs = [{<<"x-overflow">>, longstr, <<"reject-publish">>}],
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, arguments = MaxLengthArgs ++ OverflowArgs ++ Args, durable = Durable}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, arguments = MaxLengthArgs ++ OverflowArgs ++ Args, durable = true}),
     %% If confirms are not enable, publishes will still be dropped in reject-publish mode.
     check_max_length_requeue(QName, Ch, <<"1">>, <<"2">>).
 
 max_length_bytes_drop_publish(Config) ->
     {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     Args = ?config(queue_args, Config),
-    Durable = ?config(queue_durable, Config),
     QNameBytes = ?config(queue_name, Config),
     MaxLengthBytesArgs = [{<<"x-max-length-bytes">>, long, 100}],
     OverflowArgs = [{<<"x-overflow">>, longstr, <<"reject-publish">>}],
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QNameBytes, arguments = MaxLengthBytesArgs ++ OverflowArgs ++ Args, durable = Durable}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QNameBytes, arguments = MaxLengthBytesArgs ++ OverflowArgs ++ Args, durable = true}),
 
     %% 80 bytes payload
     Payload1 = << <<"1">> || _ <- lists:seq(1, 80) >>,

@@ -137,7 +137,7 @@ enable_ff(Config) ->
 
     #'queue.declare_ok'{} = amqp_channel:call(
                               RequesterCh,
-                              #'queue.declare'{queue = RequestQueue}),
+                              #'queue.declare'{queue = RequestQueue, durable = true}),
     #'confirm.select_ok'{} = amqp_channel:call(RequesterCh, #'confirm.select'{}),
     amqp_channel:register_confirm_handler(RequesterCh, self()),
 
@@ -162,7 +162,7 @@ enable_ff(Config) ->
                                      message_count = 0,
                                      consumer_count = 1},
                  amqp_channel:call(ResponderCh,
-                                   #'queue.declare'{queue = ReplyTo})),
+                                   #'queue.declare'{queue = ReplyTo, durable = true})),
 
     %% Send the first reply.
     amqp_channel:cast(
@@ -188,7 +188,7 @@ enable_ff(Config) ->
                                      message_count = 0,
                                      consumer_count = 1},
                  amqp_channel:call(ResponderCh,
-                                   #'queue.declare'{queue = ReplyTo})),
+                                   #'queue.declare'{queue = ReplyTo, durable = true})),
 
     %% Send the second reply.
     amqp_channel:cast(
@@ -211,7 +211,7 @@ enable_ff(Config) ->
 
     %% Responder checks again if the requester is still there.
     %% This time, the requester and its queue should be gone.
-    try amqp_channel:call(ResponderCh, #'queue.declare'{queue = ReplyTo}) of
+    try amqp_channel:call(ResponderCh, #'queue.declare'{queue = ReplyTo, durable = true}) of
         _ ->
             ct:fail("expected queue.declare to fail")
     catch exit:Reason ->
@@ -243,7 +243,7 @@ trace(Config) ->
     RequesterCh = rabbit_ct_client_helpers:open_channel(Config),
     ResponderCh = rabbit_ct_client_helpers:open_channel(Config),
 
-    [#'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = Q0}) || Q0 <- Qs],
+    [#'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = Q0, durable = true}) || Q0 <- Qs],
     #'queue.bind_ok'{} = amqp_channel:call(
                            Ch, #'queue.bind'{
                                   queue = TraceQueue,
@@ -428,7 +428,7 @@ amqpl_amqp_amqpl(Config) ->
            end,
 
     %% Send the request via AMQP 0.9.1
-    #'queue.declare_ok'{} = amqp_channel:call(Chan, #'queue.declare'{queue = RequestQ}),
+    #'queue.declare_ok'{} = amqp_channel:call(Chan, #'queue.declare'{queue = RequestQ, durable = true}),
     amqp_channel:cast(Chan,
                       #'basic.publish'{routing_key = RequestQ},
                       #amqp_msg{props = #'P_basic'{reply_to = ?REPLY_QUEUE,
@@ -514,7 +514,7 @@ amqp_amqpl_amqp(Config) ->
     ReplyPayload = <<"reply payload">>,
 
     Chan = rabbit_ct_client_helpers:open_channel(Config),
-    #'queue.declare_ok'{} = amqp_channel:call(Chan, #'queue.declare'{queue = RequestQ}),
+    #'queue.declare_ok'{} = amqp_channel:call(Chan, #'queue.declare'{queue = RequestQ, durable = true}),
 
     OpnConf0 = connection_config(Config),
     OpnConf = OpnConf0#{container_id := <<"requester">>,
@@ -570,7 +570,7 @@ amqp_amqpl_amqp(Config) ->
     ?assertEqual(#'queue.declare_ok'{queue = ReplyQ,
                                      message_count = 0,
                                      consumer_count = 1},
-                 amqp_channel:call(Chan, #'queue.declare'{queue = ReplyQ})),
+                 amqp_channel:call(Chan, #'queue.declare'{queue = ReplyQ, durable = true})),
 
     %% Send the reply via AMQP 0.9.1
     amqp_channel:cast(
@@ -596,7 +596,7 @@ amqp_amqpl_amqp(Config) ->
 
     %% AMQP 0.9.1 responder checks again if the AMQP 1.0 requester is still there.
     %% This time, the requester and its queue should be gone.
-    try amqp_channel:call(Chan, #'queue.declare'{queue = ReplyQ}) of
+    try amqp_channel:call(Chan, #'queue.declare'{queue = ReplyQ, durable = true}) of
         _ ->
             ct:fail("expected queue.declare to fail")
     catch exit:Reason ->
@@ -633,11 +633,11 @@ rpc(RequesterNode, ResponderNode, Config) ->
                                      message_count = 0,
                                      consumer_count = 1},
                  amqp_channel:call(RequesterCh,
-                                   #'queue.declare'{queue = ?REPLY_QUEUE})),
+                                   #'queue.declare'{queue = ?REPLY_QUEUE, durable = true})),
 
     #'queue.declare_ok'{} = amqp_channel:call(
                               RequesterCh,
-                              #'queue.declare'{queue = RequestQueue}),
+                              #'queue.declare'{queue = RequestQueue, durable = true}),
     #'confirm.select_ok'{} = amqp_channel:call(RequesterCh, #'confirm.select'{}),
     amqp_channel:register_confirm_handler(RequesterCh, self()),
 
@@ -668,7 +668,7 @@ rpc(RequesterNode, ResponderNode, Config) ->
                                      message_count = 0,
                                      consumer_count = 1},
                  amqp_channel:call(ResponderCh,
-                                   #'queue.declare'{queue = ReplyTo})),
+                                   #'queue.declare'{queue = ReplyTo, durable = true})),
 
     %% Send the reply.
     amqp_channel:cast(
@@ -742,7 +742,7 @@ rpc(RequesterNode, ResponderNode, Config) ->
 
     %% Responder checks again if the requester is still there.
     %% This time, the requester and its queue should be gone.
-    try amqp_channel:call(ResponderCh, #'queue.declare'{queue = ReplyTo}) of
+    try amqp_channel:call(ResponderCh, #'queue.declare'{queue = ReplyTo, durable = true}) of
         _ ->
             ct:fail("expected queue.declare to fail")
     catch exit:Reason ->

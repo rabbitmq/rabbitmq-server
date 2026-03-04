@@ -208,7 +208,7 @@ declare_on_dead_queue1(_Config, SecondaryNode) ->
     Self = self(),
     Pid = spawn(SecondaryNode,
                 fun () ->
-                        {new, Q} = rabbit_amqqueue:declare(QueueName, false, false, [], none, <<"acting-user">>),
+                        {new, Q} = rabbit_amqqueue:declare(QueueName, true, false, [], none, <<"acting-user">>),
                         QueueName = ?amqqueue_field_name(Q),
                         QPid = ?amqqueue_field_pid(Q),
                         exit(QPid, kill),
@@ -252,7 +252,7 @@ must_exit(Fun) ->
     end.
 
 dead_queue_loop(QueueName, OldPid) ->
-    {existing, Q} = rabbit_amqqueue:declare(QueueName, false, false, [], none, <<"acting-user">>),
+    {existing, Q} = rabbit_amqqueue:declare(QueueName, true, false, [], none, <<"acting-user">>),
     QPid = ?amqqueue_field_pid(Q),
     case QPid of
         OldPid -> timer:sleep(25),
