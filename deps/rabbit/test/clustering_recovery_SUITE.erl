@@ -128,7 +128,13 @@ init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase),
     ClusterSize = ?config(rmq_nodes_count, Config),
     TestNumber = rabbit_ct_helpers:testcase_number(Config, ?MODULE, Testcase),
-    Config1 = rabbit_ct_helpers:set_config(Config, [
+    %% Remove when transient_nonexcl_queues is removed entirely
+    %% and remove the corresponding tests.
+    Config0 = rabbit_ct_helpers:merge_app_env(
+                Config,
+                {rabbit,
+                 [{permit_deprecated_features, #{transient_nonexcl_queues => true}}]}),
+    Config1 = rabbit_ct_helpers:set_config(Config0, [
         {rmq_nodename_suffix, Testcase},
         {tcp_ports_base, {skip_n_nodes, TestNumber * ClusterSize}},
         {keep_pid_file_on_exit, true}
