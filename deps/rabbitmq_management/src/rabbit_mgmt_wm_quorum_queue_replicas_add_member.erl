@@ -38,7 +38,7 @@ accept_content(ReqData, Context) ->
     [node], ReqData, Context,
     fun([NewReplicaNode], Body, _ReqData) ->
       Node = rabbit_mgmt_nodes:require_node_name(NewReplicaNode),
-      Membership0 = maps:get(<<"membership">>, Body, promotable),
+      Membership0 = maps:get(membership, Body, promotable),
       Membership = rabbit_mgmt_nodes:safe_atom(Membership0, <<"membership">>),
       rabbit_amqqueue:with(
         rabbit_misc:r(VHost, queue, QName),
