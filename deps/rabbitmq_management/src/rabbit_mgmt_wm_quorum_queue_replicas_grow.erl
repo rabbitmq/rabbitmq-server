@@ -39,7 +39,7 @@ accept_content(ReqData, Context) ->
     [vhost_pattern, queue_pattern, strategy], ReqData, Context,
     fun([VHPattern, QPattern, Strategy], Body, _ReqData) ->
       Strat = rabbit_mgmt_nodes:safe_atom(Strategy, <<"strategy">>),
-      Membership0 = maps:get(<<"membership">>, Body, promotable),
+      Membership0 = maps:get(membership, Body, promotable),
       Membership = rabbit_mgmt_nodes:safe_atom(Membership0, <<"membership">>),
       rabbit_quorum_queue:grow(Node, VHPattern, QPattern, Strat, Membership)
     end),
