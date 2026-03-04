@@ -310,11 +310,11 @@ reply_list(Facts, DefaultSorts, ReqData, Context, Pagination) ->
 
     reply(SortList, ReqData, Context).
 
--spec get_sort_reverse(cowboy_req:req()) -> atom().
+-spec get_sort_reverse(cowboy_req:req()) -> boolean().
 get_sort_reverse(ReqData) ->
     case get_value_param(<<"sort_reverse">>, ReqData) of
-        undefined -> false;
-        V -> list_to_atom(V)
+        "true" -> true;
+        _      -> false
     end.
 
 -spec is_pagination_requested(#pagination{} | undefined) -> boolean().

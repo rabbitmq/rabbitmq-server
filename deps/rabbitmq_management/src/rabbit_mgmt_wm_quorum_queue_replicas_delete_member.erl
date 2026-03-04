@@ -35,10 +35,11 @@ delete_resource(ReqData, Context) ->
   Res = rabbit_mgmt_util:with_decode(
     [node], ReqData, Context,
     fun([NewReplicaNode], _Body, _ReqData) ->
+      Node = rabbit_mgmt_nodes:require_node_name(NewReplicaNode),
       rabbit_amqqueue:with(
         rabbit_misc:r(VHost, queue, QName),
         fun(_Q) ->
-          rabbit_quorum_queue:delete_member(VHost, QName, rabbit_data_coercion:to_atom(NewReplicaNode))
+          rabbit_quorum_queue:delete_member(VHost, QName, Node)
         end)
     end),
   case Res of
