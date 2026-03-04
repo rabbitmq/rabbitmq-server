@@ -440,14 +440,10 @@ per_object_endpoint_no_duplicate_raft_type_lines(Config) ->
     lists:foreach(
       fun(MetricName) ->
               Pattern = "^# TYPE " ++ MetricName ++ " ",
-              case re:run(Body, Pattern, [global, multiline]) of
-                  {match, Matches} ->
-                      ?assertEqual(1, length(Matches),
-                                   lists:flatten(
-                                     io_lib:format("duplicate TYPE line for ~s", [MetricName])));
-                  nomatch ->
-                      ok
-              end
+              {match, Matches} = re:run(Body, Pattern, [global, multiline]),
+              ?assertEqual(1, length(Matches),
+                           lists:flatten(
+                             io_lib:format("expected exactly one TYPE line for ~s", [MetricName])))
       end, RaftMetrics).
 
 globally_configure_per_object_metrics_test(Config) ->
