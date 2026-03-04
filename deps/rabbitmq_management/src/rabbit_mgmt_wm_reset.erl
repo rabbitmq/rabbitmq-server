@@ -25,10 +25,12 @@ allowed_methods(ReqData, Context) ->
     {[<<"DELETE">>, <<"OPTIONS">>], ReqData, Context}.
 
 resource_exists(ReqData, Context) ->
-    case get_node(ReqData) of
+    try get_node(ReqData) of
         none       -> {true, ReqData, Context};
         {ok, Node} -> {rabbit:is_running(Node),
                        ReqData, Context}
+    catch
+        error:badarg -> {false, ReqData, Context}
     end.
 
 delete_resource(ReqData, Context) ->
@@ -49,6 +51,6 @@ get_node(ReqData) ->
         none  ->
             none;
         Node0 ->
-            Node = list_to_atom(binary_to_list(Node0)),
+            Node = binary_to_existing_atom(Node0, utf8),
             {ok, Node}
     end.

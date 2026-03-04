@@ -66,10 +66,17 @@ node0(ReqData) ->
                none ->
                    node();
                Node0 ->
-                   list_to_atom(binary_to_list(Node0))
+                   try binary_to_existing_atom(Node0, utf8)
+                   catch error:badarg -> not_found
+                   end
            end,
-    case [N || N <- rabbit_mgmt_wm_nodes:all_nodes(ReqData),
-               proplists:get_value(name, N) == Node] of
-        []     -> not_found;
-        [_] -> Node
+    case Node of
+        not_found ->
+            not_found;
+        _ ->
+            case [N || N <- rabbit_mgmt_wm_nodes:all_nodes(ReqData),
+                       proplists:get_value(name, N) == Node] of
+                []  -> not_found;
+                [_] -> Node
+            end
     end.

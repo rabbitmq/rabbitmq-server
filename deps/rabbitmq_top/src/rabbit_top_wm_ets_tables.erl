@@ -7,7 +7,8 @@
 
 -module(rabbit_top_wm_ets_tables).
 
--export([init/2, to_json/2, content_types_provided/2, is_authorized/2]).
+-export([init/2, to_json/2, content_types_provided/2, is_authorized/2,
+         resource_exists/2]).
 
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 %%--------------------------------------------------------------------
@@ -19,12 +20,14 @@ init(Req, _State) ->
 content_types_provided(ReqData, Context) ->
    {[{<<"application/json">>, to_json}], ReqData, Context}.
 
+resource_exists(ReqData, Context) ->
+    {rabbit_mgmt_nodes:node_exists(ReqData), ReqData, Context}.
+
 to_json(ReqData, Context) ->
     Sort     = rabbit_top_util:sort_by_param(ReqData, memory),
-    Node     = rabbit_data_coercion:to_atom(rabbit_mgmt_util:id(node, ReqData)),
     Order    = rabbit_top_util:sort_order_param(ReqData),
     RowCount = rabbit_top_util:row_count_param(ReqData, 20),
-
+    {ok, Node} = rabbit_mgmt_nodes:node_name_from_req(ReqData),
     rabbit_mgmt_util:reply([{node,       Node},
                             {row_count,  RowCount},
                             {ets_tables, ets_tables(Node, Sort, Order, RowCount)}],
