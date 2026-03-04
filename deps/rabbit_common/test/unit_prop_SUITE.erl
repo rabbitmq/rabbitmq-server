@@ -25,7 +25,8 @@ groups() ->
         {parallel_tests, [parallel], [
             data_coercion_as_list_property,
             data_coercion_to_binary_roundtrip_property,
-            data_coercion_to_map_recursive_property
+            data_coercion_to_map_recursive_property,
+            data_coercion_to_existing_atom_property
         ]}
     ].
 
@@ -90,6 +91,20 @@ data_coercion_to_map_recursive_property(_Config) ->
           {on_output, fun(".", _) -> ok;
                          (F, A) -> ct:pal(?LOW_IMPORTANCE, F, A)
                       end}])).
+
+data_coercion_to_existing_atom_property(_Config) ->
+    ?assert(
+       proper:quickcheck(
+         ?FORALL(Bin, binary(),
+                 begin
+                     try
+                         rabbit_data_coercion:to_existing_atom(Bin),
+                         true
+                     catch
+                         error:badarg -> true
+                     end
+                 end),
+         [{numtests, 1000} | proper_opts()])).
 
 proplist_or_value() ->
     ?LAZY(oneof([
