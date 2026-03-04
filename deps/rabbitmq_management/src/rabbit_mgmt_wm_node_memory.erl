@@ -34,15 +34,12 @@ is_authorized(ReqData, {Mode, Context}) ->
     {Res, RD, {Mode, C}}.
 
 %%--------------------------------------------------------------------
-get_node(ReqData) ->
-    list_to_atom(binary_to_list(rabbit_mgmt_util:id(node, ReqData))).
 
 augment(Mode, ReqData) ->
-    Node = get_node(ReqData),
-    case rabbit_mgmt_nodes:node_exists(ReqData) of
-        false ->
+    case rabbit_mgmt_nodes:node_name_from_req(ReqData) of
+        {error, _} ->
             not_found;
-        true ->
+        {ok, Node} ->
             case rpc:call(Node, rabbit_vm, memory, [], infinity) of
                 {badrpc, _} -> [{memory, not_available}];
                 Result      -> [{memory, format(Mode, Result)}]

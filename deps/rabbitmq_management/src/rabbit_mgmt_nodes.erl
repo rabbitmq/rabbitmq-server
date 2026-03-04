@@ -16,11 +16,22 @@
 %% API
 %%
 
+-spec node_name_from_req(cowboy_req:req()) ->
+    {ok, node()} | {error, not_a_cluster_member}.
 node_name_from_req(ReqData) ->
-    list_to_atom(binary_to_list(rabbit_mgmt_util:id(node, ReqData))).
+    try binary_to_existing_atom(rabbit_mgmt_util:id(node, ReqData), utf8) of
+        Node ->
+            case rabbit_nodes:is_member(Node) of
+                true  -> {ok, Node};
+                false -> {error, not_a_cluster_member}
+            end
+    catch
+        error:badarg -> {error, not_a_cluster_member}
+    end.
 
-%% To be used in resource_exists/2
+-spec node_exists(cowboy_req:req()) -> boolean().
 node_exists(ReqData) ->
-    Node = node_name_from_req(ReqData),
-    AllNodes = rabbit_nodes:list_members(),
-    lists:member(Node, AllNodes).
+    case node_name_from_req(ReqData) of
+        {ok, _}    -> true;
+        {error, _} -> false
+    end.
