@@ -548,6 +548,9 @@ vhosts_test(Config) ->
     assert_item(#{name => <<"myvhost">>, cluster_state => #{Node => <<"running">>}},
                 http_get(Config, "/vhosts/myvhost")),
 
+    %% Restart on a non-existent node
+    http_post(Config, "/vhosts/myvhost/start/does-not-exist", [], ?BAD_REQUEST),
+
     %% Delete it
     http_delete(Config, "/vhosts/myvhost", {group, '2xx'}),
     %% It's not there
@@ -4154,6 +4157,10 @@ auth_attempts_test(Config) ->
     ?assertEqual(2, maps:get(auth_attempts, Amqp091_3)),
     ?assertEqual(2, maps:get(auth_attempts_succeeded, Amqp091_3)),
     ?assertEqual(0, maps:get(auth_attempts_failed, Amqp091_3)),
+
+    http_get(Config, "/auth/attempts/does-not-exist", ?NOT_FOUND),
+    http_get(Config, "/auth/attempts/does-not-exist/source", ?NOT_FOUND),
+    http_delete(Config, "/auth/attempts/does-not-exist", ?NOT_FOUND),
 
     passed.
 

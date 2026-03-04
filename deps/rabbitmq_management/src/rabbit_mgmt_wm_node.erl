@@ -35,7 +35,7 @@ is_authorized(ReqData, Context) ->
 %%--------------------------------------------------------------------
 
 node0(ReqData) ->
-    Node = list_to_atom(binary_to_list(rabbit_mgmt_util:id(node, ReqData))),
+    {ok, Node} = rabbit_mgmt_nodes:node_name_from_req(ReqData),
     [Data] = node_data(Node, ReqData),
     augment(ReqData, Node, Data).
 

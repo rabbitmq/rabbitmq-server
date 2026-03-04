@@ -126,11 +126,15 @@ print(Fmt, Val) ->
     list_to_binary(io_lib:format(Fmt, Val)).
 
 lookup(Id, ReqData) ->
-    Node = get_node(ReqData),
-    case rpc:call(Node, rabbit_federation_status, lookup, [Id], infinity) of
-        {badrpc, _}  -> false;
-        not_found -> false;
-        _ -> true
+    try get_node(ReqData) of
+        Node ->
+            case rpc:call(Node, rabbit_federation_status, lookup, [Id], infinity) of
+                {badrpc, _}  -> false;
+                not_found -> false;
+                _ -> true
+            end
+    catch
+        error:badarg -> false
     end.
 
 restart(Id, ReqData) ->
@@ -145,4 +149,4 @@ restart(Id, ReqData) ->
     end.
 
 get_node(ReqData) ->
-    list_to_atom(binary_to_list(rabbit_mgmt_util:id(node, ReqData))).
+    binary_to_existing_atom(rabbit_mgmt_util:id(node, ReqData), utf8).
