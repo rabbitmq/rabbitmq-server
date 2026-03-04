@@ -57,8 +57,33 @@ collect_aggregate_metrics(Prefix, Callback) ->
     collect_max_values(Prefix, Callback).
 
 collect_per_object_metrics(Prefix, Callback) ->
-    collect_key_component_metrics(Prefix, Callback),
-    collect_key_per_object_metrics(Prefix, Callback).
+    %% Combine Raft metrics from different Ra systems in a way that would
+    %% not produce duplicate HELP, TYPE labels.
+    %%
+    %% For quorum queues that have a lot of metrics that are not Raft-related,
+    %% we only use a fixed set of metrics.
+    CoordResult = seshat:format(ra,
+                    #{labels => as_binary,
+                      filter_fun => fun does_belong_to_coordination_system/1}),
+    QueueResult = seshat:format(ra,
+                    #{labels => as_binary,
+                      metrics => [term,
+                                  snapshot_index,
+                                  last_applied,
+                                  commit_index,
+                                  last_written_index,
+                                  commit_latency,
+                                  num_segments],
+                      filter_fun => fun does_belong_to_quorum_queue/1}),
+    maps:foreach(
+      fun(Name, #{type := Type, help := Help, values := Values}) ->
+              Callback(
+                create_mf(<<Prefix/binary, (prometheus_model_helpers:metric_name(Name))/binary>>,
+                          Help,
+                          Type,
+                          Values))
+      end,
+      merge_format_results(CoordResult, QueueResult)).
 
 collect_detailed_metrics(Prefix, Callback) ->
     VHostFilterFun = case get(prometheus_vhost_filter) of
@@ -72,27 +97,6 @@ collect_detailed_metrics(Prefix, Callback) ->
                              end
                      end,
     collect_all_matching_metrics(Prefix, Callback, VHostFilterFun).
-
-collect_key_per_object_metrics(Prefix, Callback) ->
-    QQMetrics = [term,
-                 snapshot_index,
-                 last_applied,
-                 commit_index,
-                 last_written_index,
-                 commit_latency,
-                 num_segments],
-    maps:foreach(
-      fun(Name, #{type := Type, help := Help, values := Values}) ->
-              Callback(
-                create_mf(<<Prefix/binary, (prometheus_model_helpers:metric_name(Name))/binary>>,
-                          Help,
-                          Type,
-                          Values))
-      end,
-      seshat:format(ra,
-                    #{labels => as_binary,
-                      metrics => QQMetrics,
-                      filter_fun => fun onlyQueues/1})).
 
 collect_all_matching_metrics(Prefix, Callback, VHostFilterFun) ->
     maps:foreach(
@@ -135,7 +139,7 @@ collect_max_values(Prefix, Callback) ->
       seshat:format(ra,
                     #{labels => as_binary,
                       metrics => QQMetrics,
-                      filter_fun => fun onlyQueues/1})).
+                      filter_fun => fun does_belong_to_quorum_queue/1})).
 
 collect_key_component_metrics(Prefix, Callback) ->
     %% quorum queue metrics
@@ -152,7 +156,7 @@ collect_key_component_metrics(Prefix, Callback) ->
       seshat:format(ra,
                     #{labels => as_binary,
                       metrics => WALMetrics ++ SegmentWriterMetrics,
-                      filter_fun => fun onlyQueues/1})),
+                      filter_fun => fun does_belong_to_quorum_queue/1})),
     %% Khepri and other coordination metrics
     maps:foreach(
       fun(Name, #{type := Type, help := Help, values := Values}) ->
@@ -164,10 +168,23 @@ collect_key_component_metrics(Prefix, Callback) ->
       end,
       seshat:format(ra,
                     #{labels => as_binary,
-                      filter_fun => fun onlyCoordinationSystem/1})).
+                      filter_fun => fun does_belong_to_coordination_system/1})).
 
-onlyCoordinationSystem(#{ra_system := coordination}) -> true;
-onlyCoordinationSystem(_) -> false.
+%% Merges two `seshat:format/2` results, combining
+%% values under a single metric family entry.
+merge_format_results(Map1, Map2) ->
+    maps:fold(
+      fun(Name, #{values := Values2} = Entry2, Acc) ->
+              case maps:find(Name, Acc) of
+                  {ok, #{values := Values1} = Entry1} ->
+                      Acc#{Name => Entry1#{values => maps:merge(Values1, Values2)}};
+                  error ->
+                      Acc#{Name => Entry2}
+              end
+      end, Map1, Map2).
 
-onlyQueues(#{queue := _}) -> true;
-onlyQueues(_) -> false.
+does_belong_to_coordination_system(#{ra_system := coordination}) -> true;
+does_belong_to_coordination_system(_) -> false.
+
+does_belong_to_quorum_queue(#{queue := _}) -> true;
+does_belong_to_quorum_queue(_) -> false.
