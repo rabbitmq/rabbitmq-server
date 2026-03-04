@@ -34,8 +34,6 @@ is_authorized(ReqData, {Mode, Context}) ->
     {Res, RD, {Mode, C}}.
 
 %%--------------------------------------------------------------------
-get_node(ReqData) ->
-    list_to_atom(binary_to_list(rabbit_mgmt_util:id(node, ReqData))).
 
 get_filter(ReqData) ->
     case rabbit_mgmt_util:id(filter, ReqData) of
@@ -45,20 +43,12 @@ get_filter(ReqData) ->
         _                           -> all
     end.
 
-node_exists(ReqData, Node) ->
-    case [N || N <- rabbit_mgmt_wm_nodes:all_nodes(ReqData),
-               proplists:get_value(name, N) == Node] of
-        [] -> false;
-        [_] -> true
-    end.
-
 augment(Mode, ReqData) ->
-    Node = get_node(ReqData),
     Filter = get_filter(ReqData),
-    case node_exists(ReqData, Node) of
-        false ->
+    case rabbit_mgmt_nodes:node_name_from_req(ReqData) of
+        {error, _} ->
             not_found;
-        true ->
+        {ok, Node} ->
             case rpc:call(Node, rabbit_vm, ets_tables_memory,
                           [Filter], infinity) of
                 {badrpc, _} -> [{ets_tables_memory, not_available}];

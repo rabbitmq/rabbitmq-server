@@ -11,8 +11,6 @@
          delete_resource/2, resource_exists/2]).
 -export([variances/2]).
 
--import(rabbit_misc, [pget/2]).
-
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 %%--------------------------------------------------------------------
 init(Req, [Mode]) ->
@@ -29,7 +27,7 @@ allowed_methods(ReqData, Context) ->
     {[<<"HEAD">>, <<"GET">>, <<"DELETE">>, <<"OPTIONS">>], ReqData, Context}.
 
 resource_exists(ReqData, Context) ->
-    {node_exists(ReqData, get_node(ReqData)), ReqData, Context}.
+    {rabbit_mgmt_nodes:node_exists(ReqData), ReqData, Context}.
 
 to_json(ReqData, {Mode, Context}) ->
     rabbit_mgmt_util:reply(augment(Mode, ReqData), ReqData, Context).
@@ -39,33 +37,22 @@ is_authorized(ReqData, {Mode, Context}) ->
     {Res, Req2, {Mode, Context2}}.
 
 delete_resource(ReqData, Context) ->
-    Node = get_node(ReqData),
-    case node_exists(ReqData, Node) of
-        false ->
+    case rabbit_mgmt_nodes:node_name_from_req(ReqData) of
+        {error, _} ->
             {false, ReqData, Context};
-        true ->
+        {ok, Node} ->
             case rpc:call(Node, rabbit_core_metrics, reset_auth_attempt_metrics, [], infinity) of
                 {badrpc, _} -> {false, ReqData, Context};
                 ok          -> {true, ReqData, Context}
             end
     end.
 %%--------------------------------------------------------------------
-get_node(ReqData) ->
-    list_to_atom(binary_to_list(rabbit_mgmt_util:id(node, ReqData))).
-
-node_exists(ReqData, Node) ->
-    case [N || N <- rabbit_mgmt_wm_nodes:all_nodes(ReqData),
-               proplists:get_value(name, N) == Node] of
-        [] -> false;
-        [_] -> true
-    end.
 
 augment(Mode, ReqData) ->
-    Node = get_node(ReqData),
-    case node_exists(ReqData, Node) of
-        false ->
+    case rabbit_mgmt_nodes:node_name_from_req(ReqData) of
+        {error, _} ->
             not_found;
-        true ->
+        {ok, Node} ->
             Fun = case Mode of
                       all -> get_auth_attempts;
                       by_source -> get_auth_attempts_by_source
