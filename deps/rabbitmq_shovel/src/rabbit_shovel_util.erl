@@ -224,12 +224,23 @@ validate_params_user(#amqp_params_network{}, _User) ->
     ok.
 
 validate_queue_args(Name, Term0) ->
-    Term = rabbit_data_coercion:to_proplist(Term0),
-    rabbit_parameter_validation:proplist(Name, rabbit_amqqueue:declare_args(), Term).
+    validate_amqp_table_args(Name, Term0, rabbit_amqqueue:declare_args()).
 
 validate_consumer_args(Name, Term0) ->
-    Term = rabbit_data_coercion:to_proplist(Term0),
-    rabbit_parameter_validation:proplist(Name, rabbit_amqqueue:consume_args(), Term).
+    validate_amqp_table_args(Name, Term0, rabbit_amqqueue:consume_args()).
+
+validate_amqp_table_args(Name, Term0, Args) ->
+    Table = rabbit_misc:to_amqp_table(rabbit_data_coercion:to_map(Term0)),
+    [case rabbit_misc:table_lookup(Table, Key) of
+         undefined -> ok;
+         TypeVal ->
+             case Fun(TypeVal, Table) of
+                 ok -> ok;
+                 {error, Error} ->
+                     {error, "invalid arg '~ts' in ~ts: ~255p",
+                      [Key, Name, Error]}
+             end
+     end || {Key, Fun} <- Args].
 
 validate_delete_after(_Name, <<"never">>)          -> ok;
 validate_delete_after(_Name, <<"queue-length">>)   -> ok;
