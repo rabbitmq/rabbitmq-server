@@ -41,7 +41,7 @@ defmodule PurgeQueueCommandTest do
     q = "foo"
     n = 20
 
-    declare_queue(q, @vhost)
+    declare_queue(q, @vhost, true)
     assert message_count(@vhost, q) == 0
 
     publish_messages(@vhost, q, n)

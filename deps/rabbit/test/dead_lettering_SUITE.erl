@@ -114,13 +114,11 @@ end_per_suite(Config) ->
 init_per_group(classic_queue, Config) ->
     rabbit_ct_helpers:set_config(
       Config,
-      [{queue_args, [{<<"x-queue-type">>, longstr, <<"classic">>}]},
-       {queue_durable, false}]);
+      [{queue_args, [{<<"x-queue-type">>, longstr, <<"classic">>}]}]);
 init_per_group(quorum_queue, Config) ->
     rabbit_ct_helpers:set_config(
       Config,
-      [{queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>}]},
-       {queue_durable, true}]);
+      [{queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>}]}]);
 init_per_group(at_most_once, Config) ->
     case outer_group_name(Config) of
         quorum_queue ->
@@ -378,7 +376,6 @@ dead_letter_reject_expire_expire(Config) ->
     Q2 = <<"a2">>,
     Q3 = <<"a3">>,
     Args = ?config(queue_args, Config),
-    Durable = ?config(queue_durable, Config),
 
     %% Test the followig topology message flow:
     %% Q1 --rejected--> Q2 --expired--> Q3 --expired-->
@@ -391,7 +388,7 @@ dead_letter_reject_expire_expire(Config) ->
                                  queue = Q1,
                                  arguments = Args ++ [{<<"x-dead-letter-exchange">>, longstr, <<>>},
                                                       {<<"x-dead-letter-routing-key">>, longstr, Q2}],
-                                 durable = Durable}),
+                                 durable = true}),
     #'queue.declare_ok'{} = amqp_channel:call(
                               Ch,
                               #'queue.declare'{
@@ -399,7 +396,7 @@ dead_letter_reject_expire_expire(Config) ->
                                  arguments = Args ++ [{<<"x-dead-letter-exchange">>, longstr, <<>>},
                                                       {<<"x-dead-letter-routing-key">>, longstr, Q3},
                                                       {<<"x-message-ttl">>, long, 5}],
-                                 durable = Durable}),
+                                 durable = true}),
     #'queue.declare_ok'{} = amqp_channel:call(
                               Ch,
                               #'queue.declare'{
@@ -407,7 +404,7 @@ dead_letter_reject_expire_expire(Config) ->
                                  arguments = Args ++ [{<<"x-dead-letter-exchange">>, longstr, <<>>},
                                                       {<<"x-dead-letter-routing-key">>, longstr, Q1},
                                                       {<<"x-message-ttl">>, long, 5}],
-                                 durable = Durable}),
+                                 durable = true}),
 
     %% Send a single message.
     P = <<"msg">>,
@@ -725,7 +722,6 @@ dead_letter_max_length_reject_publish_dlx(Config) ->
 dead_letter_missing_exchange(Config) ->
     {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     Args = ?config(queue_args, Config),
-    Durable = ?config(queue_durable, Config),
     QName = ?config(queue_name, Config),
     DLXQName = ?config(queue_name_dlx, Config),
     DLXExchange = <<"dlx-exchange-2">>,
@@ -734,8 +730,8 @@ dead_letter_missing_exchange(Config) ->
     DeadLetterArgs = [{<<"x-max-length">>, long, 1},
                       {<<"x-dead-letter-exchange">>, longstr, DLXExchange},
                       {<<"x-dead-letter-routing-key">>, longstr, DLXQName}],
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, arguments = DeadLetterArgs ++ Args, durable = Durable}),
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = DLXQName, durable = Durable}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, arguments = DeadLetterArgs ++ Args, durable = true}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = DLXQName, durable = true}),
 
     P1 = <<"msg1">>,
     P2 = <<"msg2">>,
@@ -787,14 +783,13 @@ dead_letter_routing_key(Config) ->
     QName = ?config(queue_name, Config),
     DLXQName = ?config(queue_name_dlx, Config),
     Args = ?config(queue_args, Config),
-    Durable = ?config(queue_durable, Config),
     DLXExchange = ?config(dlx_exchange, Config),
 
     %% Do not use a specific key
     DeadLetterArgs = [{<<"x-dead-letter-exchange">>, longstr, DLXExchange}],
     #'exchange.declare_ok'{} = amqp_channel:call(Ch, #'exchange.declare'{exchange = DLXExchange}),
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, arguments = DeadLetterArgs ++ Args, durable = Durable}),
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = DLXQName, durable = Durable}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, arguments = DeadLetterArgs ++ Args, durable = true}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = DLXQName, durable = true}),
 
     P1 = <<"msg1">>,
     P2 = <<"msg2">>,
@@ -846,14 +841,13 @@ dead_letter_routing_key_header_CC(Config) ->
     QName = ?config(queue_name, Config),
     DLXQName = ?config(queue_name_dlx, Config),
     Args = ?config(queue_args, Config),
-    Durable = ?config(queue_durable, Config),
     DLXExchange = ?config(dlx_exchange, Config),
 
     %% Do not use a specific key
     DeadLetterArgs = [{<<"x-dead-letter-exchange">>, longstr, DLXExchange}],
     #'exchange.declare_ok'{} = amqp_channel:call(Ch, #'exchange.declare'{exchange = DLXExchange}),
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, arguments = DeadLetterArgs ++ Args, durable = Durable}),
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = DLXQName, durable = Durable}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, arguments = DeadLetterArgs ++ Args, durable = true}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = DLXQName, durable = true}),
     #'queue.bind_ok'{} = amqp_channel:call(Ch, #'queue.bind'{queue       = DLXQName,
                                                              exchange    = DLXExchange,
                                                              routing_key = DLXQName}),
@@ -885,14 +879,13 @@ dead_letter_routing_key_header_BCC(Config) ->
     QName = ?config(queue_name, Config),
     DLXQName = ?config(queue_name_dlx, Config),
     Args = ?config(queue_args, Config),
-    Durable = ?config(queue_durable, Config),
     DLXExchange = ?config(dlx_exchange, Config),
 
     %% Do not use a specific key
     DeadLetterArgs = [{<<"x-dead-letter-exchange">>, longstr, DLXExchange}],
     #'exchange.declare_ok'{} = amqp_channel:call(Ch, #'exchange.declare'{exchange = DLXExchange}),
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, arguments = DeadLetterArgs ++ Args, durable = Durable}),
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = DLXQName, durable = Durable}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, arguments = DeadLetterArgs ++ Args, durable = true}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = DLXQName, durable = true}),
     #'queue.bind_ok'{} = amqp_channel:call(Ch, #'queue.bind'{queue       = DLXQName,
                                                              exchange    = DLXExchange,
                                                              routing_key = DLXQName}),
@@ -928,14 +921,13 @@ dead_letter_routing_key_header_BCC(Config) ->
 dead_letter_routing_key_cycle_max_length(Config) ->
     {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     Args = ?config(queue_args, Config),
-    Durable = ?config(queue_durable, Config),
     QName = ?config(queue_name, Config),
 
     DeadLetterArgs = [{<<"x-max-length">>, long, 1},
                       {<<"x-dead-letter-exchange">>, longstr, <<>>}],
     #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName,
                                                                    arguments = DeadLetterArgs ++ Args,
-                                                                   durable = Durable}),
+                                                                   durable = true}),
 
     P1 = <<"msg1">>,
     P2 = <<"msg2">>,
@@ -955,14 +947,13 @@ dead_letter_routing_key_cycle_max_length(Config) ->
 dead_letter_routing_key_cycle_ttl(Config) ->
     {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     Args = ?config(queue_args, Config),
-    Durable = ?config(queue_durable, Config),
     QName = ?config(queue_name, Config),
 
     DeadLetterArgs = [{<<"x-message-ttl">>, long, 1},
                       {<<"x-dead-letter-exchange">>, longstr, <<>>}],
     #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName,
                                                                    arguments = DeadLetterArgs ++ Args,
-                                                                   durable = Durable}),
+                                                                   durable = true}),
 
     P1 = <<"msg1">>,
     P2 = <<"msg2">>,
@@ -977,13 +968,12 @@ dead_letter_routing_key_cycle_ttl(Config) ->
 dead_letter_routing_key_cycle_with_reject(Config) ->
     {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     Args = ?config(queue_args, Config),
-    Durable = ?config(queue_durable, Config),
     QName = ?config(queue_name, Config),
 
     DeadLetterArgs = [{<<"x-dead-letter-exchange">>, longstr, <<>>}],
     #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName,
                                                                    arguments = DeadLetterArgs ++ Args,
-                                                                   durable = Durable}),
+                                                                   durable = true}),
 
     P = <<"msg1">>,
 
@@ -1017,15 +1007,14 @@ dead_letter_policy(Config) ->
     Args0 = ?config(queue_args, Config),
     %% declaring a quorum queue with x-dead-letter-strategy without defining a DLX will fail
     Args = proplists:delete(<<"x-dead-letter-strategy">>, Args0),
-    Durable = ?config(queue_durable, Config),
     DLXExchange = ?config(dlx_exchange, Config),
 
     %% Do not use arguments
     #'exchange.declare_ok'{} = amqp_channel:call(Ch, #'exchange.declare'{exchange = DLXExchange}),
     #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, arguments = Args,
-                                                                   durable = Durable}),
+                                                                   durable = true}),
     #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = DLXQName,
-                                                                   durable = Durable}),
+                                                                   durable = true}),
     #'queue.bind_ok'{} = amqp_channel:call(Ch, #'queue.bind'{queue       = DLXQName,
                                                              exchange    = DLXExchange,
                                                              routing_key = DLXQName}),
@@ -1232,14 +1221,13 @@ dead_letter_headers_reason_maxlen(Config) ->
 dead_letter_headers_cycle(Config) ->
     {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     Args = ?config(queue_args, Config),
-    Durable = ?config(queue_durable, Config),
     QName = ?config(queue_name, Config),
 
     DeadLetterArgs = [{<<"x-dead-letter-exchange">>, longstr, <<>>}],
     #'queue.declare_ok'{} =
         amqp_channel:call(Ch, #'queue.declare'{queue = QName,
                                                arguments = DeadLetterArgs ++ Args,
-                                               durable = Durable}),
+                                               durable = true}),
     P = <<"msg1">>,
 
     %% Publish message
@@ -1273,18 +1261,17 @@ dead_letter_headers_cycle(Config) ->
 dead_letter_headers_should_be_appended_for_each_event(Config) ->
     {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     Args = ?config(queue_args, Config),
-    Durable = ?config(queue_durable, Config),
     QName = ?config(queue_name, Config),
     Dlx1Name = ?config(queue_name_dlx, Config),
     Dlx2Name = ?config(queue_name_dlx_2, Config),
 
     DeadLetterArgs = [{<<"x-dead-letter-exchange">>, longstr, <<>>},
                       {<<"x-dead-letter-routing-key">>, longstr, Dlx1Name}],
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, arguments = DeadLetterArgs ++ Args, durable = Durable}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, arguments = DeadLetterArgs ++ Args, durable = true}),
     DeadLetterArgsDlx = [{<<"x-dead-letter-exchange">>, longstr, <<>>},
                          {<<"x-dead-letter-routing-key">>, longstr, Dlx2Name}],
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = Dlx1Name, arguments = DeadLetterArgsDlx ++ Args, durable = Durable}),
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = Dlx2Name, arguments = Args, durable = Durable}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = Dlx1Name, arguments = DeadLetterArgsDlx ++ Args, durable = true}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = Dlx2Name, arguments = Args, durable = true}),
 
     P = <<"msg1">>,
 
@@ -1321,14 +1308,13 @@ dead_letter_headers_should_not_be_appended_for_republish(Config) ->
     {Conn0, Ch0} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     {Conn1, Ch1} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 1),
     Args = ?config(queue_args, Config),
-    Durable = ?config(queue_durable, Config),
     QName = ?config(queue_name, Config),
     DlxName = ?config(queue_name_dlx, Config),
 
     DeadLetterArgs = [{<<"x-dead-letter-exchange">>, longstr, <<>>},
                       {<<"x-dead-letter-routing-key">>, longstr, DlxName}],
-    #'queue.declare_ok'{} = amqp_channel:call(Ch0, #'queue.declare'{queue = QName, arguments = DeadLetterArgs ++ Args, durable = Durable}),
-    #'queue.declare_ok'{} = amqp_channel:call(Ch0, #'queue.declare'{queue = DlxName, arguments = Args, durable = Durable}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch0, #'queue.declare'{queue = QName, arguments = DeadLetterArgs ++ Args, durable = true}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch0, #'queue.declare'{queue = DlxName, arguments = Args, durable = true}),
 
     P = <<"msg1">>,
 
@@ -1353,7 +1339,7 @@ dead_letter_headers_should_not_be_appended_for_republish(Config) ->
 
     #'queue.delete_ok'{} = amqp_channel:call(Ch0, #'queue.delete'{queue = QName}),
     DeadLetterArgs1 = DeadLetterArgs ++ [{<<"x-message-ttl">>, long, 1}],
-    #'queue.declare_ok'{} = amqp_channel:call(Ch0, #'queue.declare'{queue = QName, arguments = DeadLetterArgs1 ++ Args, durable = Durable}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch0, #'queue.declare'{queue = QName, arguments = DeadLetterArgs1 ++ Args, durable = true}),
 
     publish(Ch1, QName, [P], Headers1),
 
@@ -1379,14 +1365,13 @@ dead_letter_headers_CC(Config) ->
     QName = ?config(queue_name, Config),
     DLXQName = ?config(queue_name_dlx, Config),
     Args = ?config(queue_args, Config),
-    Durable = ?config(queue_durable, Config),
     DLXExchange = ?config(dlx_exchange, Config),
 
     %% Do not use a specific key for dead lettering, the CC header is passed
     DeadLetterArgs = [{<<"x-dead-letter-exchange">>, longstr, DLXExchange}],
     #'exchange.declare_ok'{} = amqp_channel:call(Ch, #'exchange.declare'{exchange = DLXExchange}),
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, arguments = DeadLetterArgs ++ Args, durable = Durable}),
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = DLXQName, durable = Durable}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, arguments = DeadLetterArgs ++ Args, durable = true}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = DLXQName, durable = true}),
     #'queue.bind_ok'{} = amqp_channel:call(Ch, #'queue.bind'{queue       = DLXQName,
                                                              exchange    = DLXExchange,
                                                              routing_key = DLXQName}),
@@ -1428,16 +1413,15 @@ dead_letter_headers_CC_with_routing_key(Config) ->
     QName = ?config(queue_name, Config),
     DLXQName = ?config(queue_name_dlx, Config),
     Args = ?config(queue_args, Config),
-    Durable = ?config(queue_durable, Config),
     DLXExchange = ?config(dlx_exchange, Config),
 
     DeadLetterArgs = [{<<"x-dead-letter-routing-key">>, longstr, DLXQName},
                       {<<"x-dead-letter-exchange">>, longstr, DLXExchange}],
     #'exchange.declare_ok'{} = amqp_channel:call(Ch, #'exchange.declare'{exchange = DLXExchange}),
     #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName,
-                                                                   arguments = DeadLetterArgs ++ Args, durable = Durable}),
+                                                                   arguments = DeadLetterArgs ++ Args, durable = true}),
     #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = DLXQName,
-                                                                   durable = Durable}),
+                                                                   durable = true}),
     #'queue.bind_ok'{} = amqp_channel:call(Ch, #'queue.bind'{queue = DLXQName,
                                                              exchange = DLXExchange,
                                                              routing_key = DLXQName}),
@@ -1478,14 +1462,13 @@ dead_letter_headers_BCC(Config) ->
     QName = ?config(queue_name, Config),
     DLXQName = ?config(queue_name_dlx, Config),
     Args = ?config(queue_args, Config),
-    Durable = ?config(queue_durable, Config),
     DLXExchange = ?config(dlx_exchange, Config),
 
     %% Do not use a specific key for dead lettering
     DeadLetterArgs = [{<<"x-dead-letter-exchange">>, longstr, DLXExchange}],
     #'exchange.declare_ok'{} = amqp_channel:call(Ch, #'exchange.declare'{exchange = DLXExchange}),
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, arguments = DeadLetterArgs ++ Args, durable = Durable}),
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = DLXQName, durable = Durable}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, arguments = DeadLetterArgs ++ Args, durable = true}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = DLXQName, durable = true}),
     #'queue.bind_ok'{} = amqp_channel:call(Ch, #'queue.bind'{queue       = DLXQName,
                                                              exchange    = DLXExchange,
                                                              routing_key = DLXQName}),
@@ -1535,7 +1518,6 @@ dead_letter_headers_first_death(Config) ->
     QName = ?config(queue_name, Config),
     DLXQName = ?config(queue_name_dlx, Config),
     Args = ?config(queue_args, Config),
-    Durable = ?config(queue_durable, Config),
     DLXExchange = ?config(dlx_exchange, Config),
 
     %% Let's create a small dead-lettering loop QName -> DLXQName -> QName
@@ -1544,8 +1526,8 @@ dead_letter_headers_first_death(Config) ->
     DLXDeadLetterArgs = [{<<"x-dead-letter-routing-key">>, longstr, QName},
                          {<<"x-dead-letter-exchange">>, longstr, <<>>}],
     #'exchange.declare_ok'{} = amqp_channel:call(Ch, #'exchange.declare'{exchange = DLXExchange}),
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, arguments = DeadLetterArgs ++ Args, durable = Durable}),
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = DLXQName, durable = Durable, arguments = DLXDeadLetterArgs}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, arguments = DeadLetterArgs ++ Args, durable = true}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = DLXQName, durable = true, arguments = DLXDeadLetterArgs}),
     #'queue.bind_ok'{} = amqp_channel:call(Ch, #'queue.bind'{queue       = DLXQName,
                                                              exchange    = DLXExchange,
                                                              routing_key = DLXQName}),
@@ -1596,21 +1578,20 @@ dead_letter_headers_first_death_route(Config) ->
     DLXExpiredQName = ?config(queue_name_dlx, Config),
     DLXRejectedQName = ?config(queue_name_dlx_2, Config),
     Args = ?config(queue_args, Config),
-    Durable = ?config(queue_durable, Config),
     DLXExchange = ?config(dlx_exchange, Config),
 
     #'exchange.declare_ok'{} = amqp_channel:call(Ch, #'exchange.declare'{exchange = DLXExchange,
                                                                          type = <<"headers">>}),
     #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName1,
                                                                    arguments = [{<<"x-dead-letter-exchange">>, longstr, DLXExchange} | Args],
-                                                                   durable = Durable}),
+                                                                   durable = true}),
     #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName2,
                                                                    arguments = [{<<"x-dead-letter-exchange">>, longstr, DLXExchange} | Args],
-                                                                   durable = Durable}),
+                                                                   durable = true}),
     #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = DLXExpiredQName,
-                                                                   durable = Durable}),
+                                                                   durable = true}),
     #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = DLXRejectedQName,
-                                                                   durable = Durable}),
+                                                                   durable = true}),
     #'queue.bind_ok'{} = amqp_channel:call(Ch, #'queue.bind'{queue       = DLXExpiredQName,
                                                              exchange    = DLXExchange,
                                                              arguments = [{<<"x-match">>, longstr, <<"all-with-x">>},
@@ -1665,10 +1646,9 @@ dead_letter_extra_bcc(Config) ->
     SourceQ = ?config(queue_name, Config),
     TargetQ = ?config(queue_name_dlx, Config),
     ExtraBCCQ = ?config(queue_name_dlx_2, Config),
-    Durable = ?config(queue_durable, Config),
     declare_dead_letter_queues(Ch, Config, SourceQ, TargetQ, [{<<"x-message-ttl">>, long, 0}]),
     #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = ExtraBCCQ,
-                                                                   durable = Durable}),
+                                                                   durable = true}),
     rabbit_ct_broker_helpers:rpc(Config, ?MODULE, set_queue_options,
                                  [TargetQ, #{extra_bcc => ExtraBCCQ}]),
     %% Publish message
@@ -1695,7 +1675,7 @@ metric_maxlen(Config) ->
                                                    arguments = [{<<"x-max-length">>, long, 1},
                                                                 {<<"x-overflow">>, longstr, <<"drop-head">>} |
                                                                 ?config(queue_args, Config)],
-                                                   durable = ?config(queue_durable, Config)}),
+                                                   durable = true}),
     %% Publish 1000 messages
     Payloads = lists:map(fun erlang:integer_to_binary/1, lists:seq(1, 1000)),
     publish(Ch, QName, Payloads),
@@ -1707,7 +1687,7 @@ metric_rejected(Config) ->
     #'queue.declare_ok'{} = amqp_channel:call(
                               Ch, #'queue.declare'{queue = QName,
                                                    arguments = ?config(queue_args, Config),
-                                                   durable = ?config(queue_durable, Config)}),
+                                                   durable = true}),
     %% Publish 1000 messages
     Payloads = lists:map(fun erlang:integer_to_binary/1, lists:seq(1, 1000)),
     publish(Ch, QName, Payloads),
@@ -1734,7 +1714,7 @@ metric_expired_queue_msg_ttl(Config) ->
                               Ch, #'queue.declare'{queue = QName,
                                                    arguments = [{<<"x-message-ttl">>, long, 0} |
                                                                 ?config(queue_args, Config)],
-                                                   durable = ?config(queue_durable, Config)}),
+                                                   durable = true}),
     %% Publish 1000 messages
     Payloads = lists:map(fun erlang:integer_to_binary/1, lists:seq(1, 1000)),
     publish(Ch, QName, Payloads),
@@ -1746,7 +1726,7 @@ metric_expired_per_msg_msg_ttl(Config) ->
     #'queue.declare_ok'{} = amqp_channel:call(
                               Ch, #'queue.declare'{queue = QName,
                                                    arguments = ?config(queue_args, Config),
-                                                   durable = ?config(queue_durable, Config)}),
+                                                   durable = true}),
     %% Publish 1000 messages
     Payloads = lists:map(fun erlang:integer_to_binary/1, lists:seq(1, 1000)),
     [amqp_channel:call(Ch, #'basic.publish'{routing_key = QName},
@@ -1765,11 +1745,13 @@ stream(Config) ->
     #'queue.declare_ok'{} = amqp_channel:call(
                               Ch0,
                               #'queue.declare'{queue = Q1,
+                                               durable = true,
                                                arguments = [{<<"x-dead-letter-exchange">>, longstr, <<>>},
                                                             {<<"x-dead-letter-routing-key">>, longstr, Q2}]}),
     #'queue.declare_ok'{} = amqp_channel:call(
                               Ch0,
                               #'queue.declare'{queue = Q2,
+                                               durable = true,
                                                arguments = [{<<"x-message-ttl">>, long, 2500},
                                                             {<<"x-dead-letter-exchange">>, longstr, <<>>},
                                                             {<<"x-dead-letter-routing-key">>, longstr, Q3}]}),
@@ -1864,7 +1846,6 @@ declare_dead_letter_queues(Ch, Config, QName, DLXQName) ->
 
 declare_dead_letter_queues(Ch, Config, QName, DLXQName, ExtraArgs) ->
     Args = ?config(queue_args, Config),
-    Durable = ?config(queue_durable, Config),
     DLXExchange = ?config(dlx_exchange, Config),
 
     %% Declare DLX exchange
@@ -1875,9 +1856,9 @@ declare_dead_letter_queues(Ch, Config, QName, DLXQName, ExtraArgs) ->
                       {<<"x-dead-letter-routing-key">>, longstr, DLXQName}],
     #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName,
                                                                    arguments = DeadLetterArgs ++ Args ++ ExtraArgs,
-                                                                   durable = Durable}),
+                                                                   durable = true}),
     %% Declare and bind DLX queue
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = DLXQName, durable = Durable}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = DLXQName, durable = true}),
     #'queue.bind_ok'{} = amqp_channel:call(Ch, #'queue.bind'{queue       = DLXQName,
                                                              exchange    = DLXExchange,
                                                              routing_key = DLXQName}).

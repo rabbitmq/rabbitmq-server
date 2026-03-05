@@ -35,7 +35,7 @@ defmodule ListBindingsCommandTest do
     default_keys =
       ~w(source_name source_kind destination_name destination_kind routing_key arguments)
 
-    declare_queue("test_queue", @vhost)
+    declare_queue("test_queue", @vhost, true)
     :timer.sleep(100)
 
     {keys, _} = @command.merge_defaults([], context[:opts])
@@ -82,7 +82,7 @@ defmodule ListBindingsCommandTest do
 
   test "run: can filter info keys", context do
     wanted_keys = ~w(source_name destination_name routing_key)
-    declare_queue("test_queue", @vhost)
+    declare_queue("test_queue", @vhost, true)
 
     assert run_command_to_list(@command, [wanted_keys, context[:opts]]) ==
              [[source_name: "", destination_name: "test_queue", routing_key: "test_queue"]]

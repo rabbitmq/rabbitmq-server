@@ -70,7 +70,7 @@ defmodule DeleteQueueCommandTest do
     q = "foo"
     n = 20
 
-    declare_queue(q, @vhost)
+    declare_queue(q, @vhost, true)
     publish_messages(@vhost, q, n)
 
     assert @command.run([q], context[:opts]) == {:ok, n}
@@ -144,7 +144,7 @@ defmodule DeleteQueueCommandTest do
     on_exit(context, fn -> delete_vhost(@vhost) end)
 
     q = "foo"
-    declare_queue(q, @vhost)
+    declare_queue(q, @vhost, true)
     assert @command.run([q], context[:opts]) == {:badrpc, :timeout}
   end
 
