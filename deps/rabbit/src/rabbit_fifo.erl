@@ -1194,7 +1194,7 @@ overview(#?STATE{consumers = Cons,
             #delayed{len = 0} ->
                 {0, undefined, undefined};
             #delayed{len = DL, next = {NextTs, _, _}, tree = Tree} ->
-                {{LastTs, _}, _} = gb_trees:largest(Tree),
+                {?TUPLE(LastTs, _), _} = gb_trees:largest(Tree),
                 {DL, NextTs, LastTs}
         end,
     Overview = #{type => ?STATE,
@@ -2544,14 +2544,14 @@ take_next_delayed(Ts, #delayed{next = {ReadyAt, Idx, Msg},
                                tree = Tree0,
                                len = Len,
                                deferred = Deferred0}) when Ts >= ReadyAt ->
-    Key = {ReadyAt, Idx},
+    Key = ?TUPLE(ReadyAt, Idx),
     Tree = gb_trees:delete(Key, Tree0),
     Next = case gb_trees:is_empty(Tree) of
                true ->
                    undefined;
                false ->
-                   {K, V} = gb_trees:smallest(Tree),
-                   {element(1, K), element(2, K), V}
+                   {?TUPLE(NextReadyAt, NextIdx), V} = gb_trees:smallest(Tree),
+                   {NextReadyAt, NextIdx, V}
            end,
     %% Remove any deferral token that maps to this key
     Deferred = maps:filter(fun(_Token, K) -> K =/= Key end, Deferred0),
@@ -2574,7 +2574,7 @@ take_ready_delayed(Ts, Delayed0, Acc) ->
     end.
 
 take_delayed_for_retry(all, _Ts, #delayed{tree = Tree}) ->
-    Msgs = [Msg || {_Key, Msg} <- gb_trees:to_list(Tree)],
+    Msgs = gb_trees:values(Tree),
     {Msgs, #delayed{tree = gb_trees:empty(), next = undefined, len = 0}};
 take_delayed_for_retry(0, _Ts, Delayed) ->
     {[], Delayed};
@@ -2595,7 +2595,7 @@ take_delayed_for_retry(N, Ts, #delayed{tree = Tree0, len = Len,
                            undefined;
                        false ->
                            {NextKey, NextMsg} = gb_trees:smallest(Tree),
-                           {ReadyAt, Idx} = NextKey,
+                           ?TUPLE(ReadyAt, Idx) = NextKey,
                            {ReadyAt, Idx, NextMsg}
                    end,
             %% Remove any deferral token that maps to this key
@@ -2640,7 +2640,7 @@ update_delayed_next(Tree) ->
             undefined;
         false ->
             {Key, Msg} = gb_trees:smallest(Tree),
-            {ReadyAt, Idx} = Key,
+            ?TUPLE(ReadyAt, Idx) = Key,
             {ReadyAt, Idx, Msg}
     end.
 
@@ -2694,7 +2694,7 @@ delayed_in(ReadyAt, Idx, Msg, DeferralToken, #delayed{tree = Tree0,
                                                       next = Next0,
                                                       len = Len,
                                                       deferred = Deferred0}) ->
-    Key = {ReadyAt, Idx},
+    Key = ?TUPLE(ReadyAt, Idx),
     Tree = gb_trees:insert(Key, Msg, Tree0),
     Next = case Next0 of
                undefined ->
@@ -3554,7 +3554,7 @@ smallest_delayed_index(Iter, Min) ->
     case gb_trees:next(Iter) of
         none ->
             Min;
-        {{_, Idx}, _, Iter1} ->
+        {?TUPLE(_, Idx), _, Iter1} ->
             smallest_delayed_index(Iter1, min(Idx, Min))
     end.
 

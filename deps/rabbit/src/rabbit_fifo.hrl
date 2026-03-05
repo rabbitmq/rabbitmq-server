@@ -196,7 +196,7 @@
                           Max :: milliseconds()}.
 
 -type deferral_token() :: binary().
--type delayed_key() :: {milliseconds(), ra:index()}.
+-type delayed_key() :: optimised_tuple(milliseconds(), ra:index()).
 
 -record(delayed,
         {tree = gb_trees:empty() :: gb_trees:tree(delayed_key(), msg()),
