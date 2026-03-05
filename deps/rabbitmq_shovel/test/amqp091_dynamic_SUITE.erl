@@ -132,14 +132,19 @@ stream_queues(Config) ->
       end).
 
 stream_queues_with_dest_args(Config) ->
-    shovel_test_utils:set_param(
-      Config,
-      <<"test">>, [
-                   {<<"src-queue">>,       <<"src">>},
-                   {<<"dest-queue">>,      <<"dest">>},
-                   {<<"dest-queue-args">>, #{<<"x-queue-type">> => <<"stream">>,
-                                             <<"x-max-age">>    => <<"12h">>}}
-                  ]).
+    with_amqp091_ch(Config,
+      fun (Ch) ->
+              shovel_test_utils:set_param(
+                Config,
+                <<"test">>, [
+                             {<<"src-queue">>,       <<"src">>},
+                             {<<"dest-queue">>,      <<"dest">>},
+                             {<<"dest-queue-args">>, #{<<"x-queue-type">> => <<"stream">>,
+                                                       <<"x-max-age">>    => <<"12h">>}}
+                            ]),
+              amqp091_publish(Ch, <<>>, <<"src">>, <<"hello">>),
+              shovel_test_utils:amqp091_await_empty(Ch, <<"src">>)
+      end).
 
 set_properties_using_map(Config) ->
     with_amqp091_ch(Config,
