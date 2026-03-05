@@ -308,10 +308,16 @@ format(Q, Ctx) ->
              {leader, LeaderNode},
              {online, Online},
              {members, Nodes},
-             {node, node(Pid)}];
+             {node, node(Pid)},
+             {policy, i(policy, Q)},
+             {operator_policy, i(operator_policy, Q)},
+             {effective_policy_definition, i(effective_policy_definition, Q)}];
         _ ->
             [{type, rabbit_queue_type:short_alias_of(?MODULE)},
-             {state, down}]
+             {state, down},
+             {policy, i(policy, Q)},
+             {operator_policy, i(operator_policy, Q)},
+             {effective_policy_definition, i(effective_policy_definition, Q)}]
     end.
 
 consume(Q, #{mode := {simple_prefetch, 0}}, _)

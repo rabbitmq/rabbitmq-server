@@ -1729,7 +1729,9 @@ get_delivery_limit({handle_policy_value, undefined}, Q, true) ->
 get_delivery_limit({handle_policy_value, undefined}, _Q, false) ->
     ?DEFAULT_DELIVERY_LIMIT;
 get_delivery_limit({handle_policy_value, Limit}, _Q, _ShouldLog) when is_integer(Limit) ->
-    Limit.
+    Limit;
+get_delivery_limit({handle_policy_value, _Other}, _Q, _ShouldLog) ->
+    ?DEFAULT_DELIVERY_LIMIT.
 
 i(name,        Q) when ?is_amqqueue(Q) -> amqqueue:get_name(Q);
 i(durable,     Q) when ?is_amqqueue(Q) -> amqqueue:is_durable(Q);
