@@ -49,7 +49,9 @@ groups() ->
      {stats_disabled_on_request, [], [disable_with_disable_stats_parameter_test]},
      {stats_disabled_via_config, [], [
          classic_queue_with_stats_disabled_test,
-         quorum_queue_with_stats_disabled_test
+         quorum_queue_with_stats_disabled_test,
+         quorum_queue_default_delivery_limit_with_stats_disabled_test,
+         stream_queue_with_stats_disabled_test
      ]},
      {invalid_config, [], [invalid_config_test]}
     ].
@@ -144,7 +146,7 @@ init_per_group(stats_disabled_via_config = Group, Config0) ->
         {rabbitmq_management, [
             {disable_management_stats, true}
         ]}),
-    Config3 = finish_init(Group, Config2, false),
+    Config3 = finish_init(Group, Config2, true),
     start_broker(Config3);
 init_per_group(Group, Config0) ->
     Config1 = finish_init(Group, Config0),
@@ -1486,6 +1488,12 @@ classic_queue_with_stats_disabled_test(Config) ->
     EffectiveDef = maps:get(effective_policy_definition, Queue),
     ?assertEqual(1024, maps:get('max-length', EffectiveDef)),
 
+    %% Verify the list endpoint also returns policy fields
+    Queues = http_get(Config, "/queues", ?OK),
+    [ListQ] = [Q || Q <- Queues, maps:get(name, Q) =:= <<"test-classic-queue">>],
+    ?assertEqual(<<"test-policy">>, maps:get(policy, ListQ)),
+    ?assertEqual(<<"test-op-policy">>, maps:get(operator_policy, ListQ)),
+
     http_delete(Config, "/queues/%2F/test-classic-queue", {group, '2xx'}),
     http_delete(Config, "/policies/%2F/test-policy", {group, '2xx'}),
     http_delete(Config, "/operator-policies/%2F/test-op-policy", {group, '2xx'}),
@@ -1521,9 +1529,72 @@ quorum_queue_with_stats_disabled_test(Config) ->
     ?assert(maps:is_key(effective_policy_definition, Queue)),
     EffectiveDef = maps:get(effective_policy_definition, Queue),
     ?assertEqual(1024, maps:get('max-length', EffectiveDef)),
+    ?assertEqual(<<"balanced">>, maps:get('queue-leader-locator', EffectiveDef)),
     ?assertEqual(40, maps:get(delivery_limit, Queue)),
 
     http_delete(Config, "/queues/%2F/test-quorum-queue", {group, '2xx'}),
+    http_delete(Config, "/policies/%2F/test-policy", {group, '2xx'}),
+    http_delete(Config, "/operator-policies/%2F/test-op-policy", {group, '2xx'}),
+
+    passed.
+
+quorum_queue_default_delivery_limit_with_stats_disabled_test(Config) ->
+    QArgs = #{durable => true,
+              arguments => #{'x-queue-type' => 'quorum'}},
+    PolicyArgs = #{pattern => <<".*">>,
+                   definition => #{'queue-leader-locator' => <<"balanced">>},
+                   priority => 0,
+                   'apply-to' => <<"queues">>},
+
+    http_put(Config, "/queues/%2F/test-qq-default-dl", QArgs, {group, '2xx'}),
+    http_put(Config, "/policies/%2F/test-policy", PolicyArgs, {group, '2xx'}),
+
+    await_condition(fun() ->
+        Queue = http_get(Config, "/queues/%2F/test-qq-default-dl", ?OK),
+        maps:get(policy, Queue, undefined) =:= <<"test-policy">>
+    end),
+
+    Queue = http_get(Config, "/queues/%2F/test-qq-default-dl", ?OK),
+
+    ?assertEqual(<<"test-policy">>, maps:get(policy, Queue)),
+    ?assertEqual(20, maps:get(delivery_limit, Queue)),
+
+    http_delete(Config, "/queues/%2F/test-qq-default-dl", {group, '2xx'}),
+    http_delete(Config, "/policies/%2F/test-policy", {group, '2xx'}),
+
+    passed.
+
+stream_queue_with_stats_disabled_test(Config) ->
+    QArgs = #{durable => true,
+              arguments => #{'x-queue-type' => 'stream'}},
+    PolicyArgs = #{pattern => <<".*">>,
+                   definition => #{'queue-leader-locator' => <<"balanced">>},
+                   priority => 0,
+                   'apply-to' => <<"queues">>},
+    OpPolicyArgs = #{pattern => <<".*">>,
+                     definition => #{'max-length-bytes' => 1000000000},
+                     priority => 0,
+                     'apply-to' => <<"queues">>},
+
+    http_put(Config, "/queues/%2F/test-stream-queue", QArgs, {group, '2xx'}),
+    http_put(Config, "/policies/%2F/test-policy", PolicyArgs, {group, '2xx'}),
+    http_put(Config, "/operator-policies/%2F/test-op-policy", OpPolicyArgs, {group, '2xx'}),
+
+    await_condition(fun() ->
+        Queue = http_get(Config, "/queues/%2F/test-stream-queue", ?OK),
+        maps:get(policy, Queue, undefined) =:= <<"test-policy">>
+    end),
+
+    Queue = http_get(Config, "/queues/%2F/test-stream-queue", ?OK),
+
+    ?assertEqual(<<"test-policy">>, maps:get(policy, Queue)),
+    ?assertEqual(<<"test-op-policy">>, maps:get(operator_policy, Queue)),
+    ?assert(maps:is_key(effective_policy_definition, Queue)),
+    EffectiveDef = maps:get(effective_policy_definition, Queue),
+    ?assertEqual(<<"balanced">>, maps:get('queue-leader-locator', EffectiveDef)),
+    ?assertEqual(1000000000, maps:get('max-length-bytes', EffectiveDef)),
+
+    http_delete(Config, "/queues/%2F/test-stream-queue", {group, '2xx'}),
     http_delete(Config, "/policies/%2F/test-policy", {group, '2xx'}),
     http_delete(Config, "/operator-policies/%2F/test-op-policy", {group, '2xx'}),
 
