@@ -71,7 +71,7 @@ stop(Pid) ->
 init([Connection, Q, Fun]) ->
     {ok, Channel} = amqp_connection:open_channel(
                         Connection, {amqp_direct_consumer, [self()]}),
-    amqp_channel:call(Channel, #'queue.declare'{queue = Q}),
+    amqp_channel:call(Channel, #'queue.declare'{queue = Q, durable = true}),
     amqp_channel:call(Channel, #'basic.consume'{queue = Q}),
     {ok, #state{channel = Channel, handler = Fun} }.
 

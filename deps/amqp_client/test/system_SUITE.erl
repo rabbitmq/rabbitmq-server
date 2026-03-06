@@ -492,7 +492,7 @@ basic_qos_test(Config, Prefetch) ->
     Parent = self(),
     {ok, Chan} = amqp_connection:open_channel(Connection),
     #'queue.declare_ok'{queue = Q} =
-        amqp_channel:call(Chan, #'queue.declare'{}),
+        amqp_channel:call(Chan, #'queue.declare'{durable = true}),
     Kids = [spawn(
             fun() ->
                 {ok, Channel} = amqp_connection:open_channel(Connection),
@@ -554,7 +554,7 @@ basic_recover(Config) ->
     {ok, Channel} = amqp_connection:open_channel(
                         Connection, {amqp_direct_consumer, [self()]}),
     #'queue.declare_ok'{queue = Q} =
-        amqp_channel:call(Channel, #'queue.declare'{}),
+        amqp_channel:call(Channel, #'queue.declare'{durable = true}),
     #'basic.consume_ok'{consumer_tag = Tag} =
         amqp_channel:call(Channel, #'basic.consume'{queue = Q}),
     receive #'basic.consume_ok'{consumer_tag = Tag} -> ok end,
@@ -596,7 +596,7 @@ basic_consume(Config) ->
 
 consume_loop(Channel, X, RoutingKey, Parent, Tag) ->
     #'queue.declare_ok'{queue = Q} =
-        amqp_channel:call(Channel, #'queue.declare'{}),
+        amqp_channel:call(Channel, #'queue.declare'{durable = true}),
     #'queue.bind_ok'{} =
         amqp_channel:call(Channel, #'queue.bind'{queue = Q,
                                                  exchange = X,
@@ -618,7 +618,7 @@ consume_notification(Config) ->
     {ok, Connection} = new_connection(Config),
     {ok, Channel} = amqp_connection:open_channel(Connection),
     #'queue.declare_ok'{queue = Q} =
-        amqp_channel:call(Channel, #'queue.declare'{}),
+        amqp_channel:call(Channel, #'queue.declare'{durable = true}),
     #'basic.consume_ok'{consumer_tag = CTag} = ConsumeOk =
         amqp_channel:call(Channel, #'basic.consume'{queue = Q}),
     receive ConsumeOk -> ok end,
@@ -633,7 +633,7 @@ basic_nack(Config) ->
     {ok, Connection} = new_connection(Config),
     {ok, Channel} = amqp_connection:open_channel(Connection),
     #'queue.declare_ok'{queue = Q}
-        = amqp_channel:call(Channel, #'queue.declare'{}),
+        = amqp_channel:call(Channel, #'queue.declare'{durable = true}),
 
     Payload = <<"m1">>,
 
@@ -657,7 +657,7 @@ large_content(Config) ->
     {ok, Connection} = new_connection(Config),
     {ok, Channel} = amqp_connection:open_channel(Connection),
     #'queue.declare_ok'{queue = Q}
-        = amqp_channel:call(Channel, #'queue.declare'{}),
+        = amqp_channel:call(Channel, #'queue.declare'{durable = true}),
     F = list_to_binary([rand:uniform(256)-1 || _ <- lists:seq(1, 1000)]),
     Payload = list_to_binary([F || _ <- lists:seq(1, 1000)]),
     Publish = #'basic.publish'{exchange = <<>>, routing_key = Q},
@@ -690,7 +690,7 @@ queue_exchange_binding(Channel, X, Parent, Tag) ->
     Q = list_to_binary(rabbit_misc:format("lifecycle.a.b.c.~b", [Tag])),
     Binding = <<"lifecycle.a.b.c.*">>,
     #'queue.declare_ok'{queue = Q1}
-        = amqp_channel:call(Channel, #'queue.declare'{queue = Q}),
+        = amqp_channel:call(Channel, #'queue.declare'{queue = Q, durable = true}),
     Q = Q1,
     Route = #'queue.bind'{queue = Q,
                           exchange = X,
@@ -803,7 +803,7 @@ queue_unbind(Config) ->
     Payload = <<"foobar">>,
     {ok, Channel} = amqp_connection:open_channel(Connection),
     amqp_channel:call(Channel, #'exchange.declare'{exchange = X}),
-    amqp_channel:call(Channel, #'queue.declare'{queue = Q}),
+    amqp_channel:call(Channel, #'queue.declare'{queue = Q, durable = true}),
     Bind = #'queue.bind'{queue = Q,
                          exchange = X,
                          routing_key = Key},
@@ -845,7 +845,7 @@ async_sync_method_serialization(Config) ->
         "async_sync_method_serialization", Config,
         fun (Channel, _X) ->
                 #'queue.declare_ok'{queue = Q} =
-                    amqp_channel:call(Channel, #'queue.declare'{}),
+                    amqp_channel:call(Channel, #'queue.declare'{durable = true}),
                 Q
         end,
         fun (Channel, X, Payload, _, _) ->
@@ -995,7 +995,7 @@ rpc_client(Config) ->
 rpc_correlation_server(Channel, Q) ->
     ok = amqp_channel:register_return_handler(Channel, self()),
     #'queue.declare_ok'{queue = Q} =
-      amqp_channel:call(Channel, #'queue.declare'{queue = Q}),
+      amqp_channel:call(Channel, #'queue.declare'{queue = Q, durable = true}),
     #'basic.consume_ok'{} =
       amqp_channel:call(Channel,
                         #'basic.consume'{queue = Q,
@@ -1042,7 +1042,7 @@ pub_and_close(Config) ->
     NMessages = 50000,
     {ok, Channel1} = amqp_connection:open_channel(Connection1),
     #'queue.declare_ok'{queue = Q} =
-        amqp_channel:call(Channel1, #'queue.declare'{}),
+        amqp_channel:call(Channel1, #'queue.declare'{durable = true}),
     %% Send messages
     pc_producer_loop(Channel1, <<>>, Q, Payload, NMessages),
     %% Close connection without closing channels
@@ -1178,7 +1178,7 @@ default_consumer(Config) ->
     amqp_selective_consumer:register_default_consumer(Channel, self()),
 
     #'queue.declare_ok'{queue = Q}
-        = amqp_channel:call(Channel, #'queue.declare'{}),
+        = amqp_channel:call(Channel, #'queue.declare'{durable = true}),
     Pid = spawn(fun () -> receive
                           after 10000 -> ok
                           end

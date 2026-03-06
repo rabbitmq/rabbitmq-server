@@ -132,7 +132,7 @@ defmodule ListQueuesCommandTest do
   test "run: info keys add additional keys", context do
     declare_queue("durable_queue", @vhost, true)
     publish_messages(@vhost, "durable_queue", 3)
-    declare_queue("auto_delete_queue", @vhost, false, true)
+    declare_queue("auto_delete_queue", @vhost, true, true)
     publish_messages(@vhost, "auto_delete_queue", 1)
 
     assert Keyword.equal?(
@@ -151,7 +151,7 @@ defmodule ListQueuesCommandTest do
   test "run: info keys order is preserved", context do
     declare_queue("durable_queue", @vhost, true)
     publish_messages(@vhost, "durable_queue", 3)
-    declare_queue("auto_delete_queue", @vhost, false, true)
+    declare_queue("auto_delete_queue", @vhost, true, true)
     publish_messages(@vhost, "auto_delete_queue", 1)
 
     assert Keyword.equal?(
