@@ -142,7 +142,7 @@ defmodule ListQueuesCommandTest do
              ]),
              [
                [name: "durable_queue", messages: 3, durable: true, auto_delete: false],
-               [name: "auto_delete_queue", messages: 1, durable: false, auto_delete: true]
+               [name: "auto_delete_queue", messages: 1, durable: true, auto_delete: true]
              ]
            )
   end
@@ -161,7 +161,7 @@ defmodule ListQueuesCommandTest do
              ]),
              [
                [messages: 3, durable: true, name: "durable_queue", auto_delete: false],
-               [messages: 1, durable: false, name: "auto_delete_queue", auto_delete: true]
+               [messages: 1, durable: true, name: "auto_delete_queue", auto_delete: true]
              ]
            )
   end

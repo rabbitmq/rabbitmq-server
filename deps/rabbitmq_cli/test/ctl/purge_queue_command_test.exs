@@ -38,7 +38,7 @@ defmodule PurgeQueueCommandTest do
     set_permissions(@user, @vhost, [".*", ".*", ".*"])
     on_exit(context, fn -> delete_vhost(@vhost) end)
 
-    q = "foo"
+    q = "purgefooq"
     n = 20
 
     declare_queue(q, @vhost, true)
