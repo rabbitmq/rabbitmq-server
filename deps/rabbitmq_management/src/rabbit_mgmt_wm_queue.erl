@@ -10,7 +10,7 @@
 -export([init/2, resource_exists/2, to_json/2,
          content_types_provided/2, content_types_accepted/2,
          is_authorized/2, allowed_methods/2, accept_content/2,
-         delete_resource/2, queue/1, queue/2]).
+         delete_resource/2, queue/1, queue/2, queue/3]).
 -export([variances/2]).
 
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
