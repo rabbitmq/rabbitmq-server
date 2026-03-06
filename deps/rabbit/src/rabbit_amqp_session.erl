@@ -238,7 +238,9 @@
           at_least_one_credit_req_in_flight :: boolean(),
           %% While at_least_one_credit_req_in_flight is true, we stash the
           %% latest credit request from the receiving client.
-          stashed_credit_req :: none | #credit_req{}
+          stashed_credit_req :: none | #credit_req{},
+          %% Whether a consumer timeout warning was already logged for this link.
+          timeout_logged :: boolean()
          }).
 
 -record(outgoing_unsettled, {
@@ -382,6 +384,9 @@
           stashed_down = []:: [rabbit_amqqueue:name()],
           %% Queues that got deleted.
           stashed_eol = [] :: [rabbit_amqqueue:name()],
+          %% The queue spontaneously released messages since the consumer did not settle in time.
+          stashed_consumer_timeout = #{} :: #{{rabbit_types:ctag(),
+                                               rabbit_amqqueue:msg_id()} => true},
 
           queue_states = rabbit_queue_type:init() :: rabbit_queue_type:state(),
           permission_cache = [] :: permission_cache(),
@@ -656,7 +661,9 @@ log_error_and_close_session(
 noreply_coalesce(#state{stashed_rejected = [],
                         stashed_settled = [],
                         stashed_down = [],
-                        stashed_eol = []} = State) ->
+                        stashed_eol = [],
+                        stashed_consumer_timeout = Map} = State)
+  when map_size(Map) =:= 0 ->
     noreply(State);
 noreply_coalesce(#state{outgoing_pending = Pending} = State) ->
     case queue:is_empty(Pending) of
@@ -683,11 +690,12 @@ send_buffered(State0) ->
     State = send_delivery_state_changes(State0),
     send_pending(State).
 
-%% Send confirms / rejects to publishers.
 send_delivery_state_changes(#state{stashed_rejected = [],
                                    stashed_settled = [],
                                    stashed_down = [],
-                                   stashed_eol = []} = State) ->
+                                   stashed_eol = [],
+                                   stashed_consumer_timeout = Map} = State)
+  when map_size(Map) =:= 0 ->
     State;
 send_delivery_state_changes(State0 = #state{cfg = #cfg{writer_pid = Writer,
                                                        channel_num = ChannelNum,
@@ -697,18 +705,26 @@ send_delivery_state_changes(State0 = #state{cfg = #cfg{writer_pid = Writer,
     {RejectedIds, GrantCredits0, State1} = handle_stashed_rejected(State0),
     maps:foreach(fun({QNameBin, Reason}, Ids) ->
                          Rejected = rejected(QNameBin, Reason),
-                         send_dispositions(Ids, Rejected, Writer, ChannelNum)
+                         send_dispositions(Ids, Rejected, ?AMQP_ROLE_RECEIVER,
+                                           true, Writer, ChannelNum)
                  end, RejectedIds),
     %% 2. Process queue confirmations.
     {AcceptedIds0, GrantCredits1, State2} = handle_stashed_settled(GrantCredits0, State1),
     %% 3. Process unavailable classic queues.
     {DetachFrames0, State3} = handle_stashed_down(State2),
     %% 4. Process queue deletions.
-    {ReleasedIds, AcceptedIds1, DetachFrames, GrantCredits, State} = handle_stashed_eol(DetachFrames0, GrantCredits1, State3),
-    send_dispositions(ReleasedIds, #'v1_0.released'{}, Writer, ChannelNum),
+    {ReleasedIds, AcceptedIds1, DetachFrames, GrantCredits,
+     State4} = handle_stashed_eol(DetachFrames0, GrantCredits1, State3),
+    send_dispositions(ReleasedIds, #'v1_0.released'{}, ?AMQP_ROLE_RECEIVER,
+                      true, Writer, ChannelNum),
     AcceptedIds = AcceptedIds1 ++ AcceptedIds0,
-    send_dispositions(AcceptedIds, #'v1_0.accepted'{}, Writer, ChannelNum),
+    send_dispositions(AcceptedIds, #'v1_0.accepted'{}, ?AMQP_ROLE_RECEIVER,
+                      true, Writer, ChannelNum),
     rabbit_global_counters:messages_confirmed(?PROTOCOL, length(AcceptedIds)),
+    %% 5. Process consumer timeouts
+    {TimeoutReleasedIds, State} = handle_stashed_consumer_timeout(State4),
+    send_dispositions(TimeoutReleasedIds, #'v1_0.released'{}, ?AMQP_ROLE_SENDER,
+                      false, Writer, ChannelNum),
     %% Send DETACH frames after DISPOSITION frames such that
     %% clients can handle DISPOSITIONs before closing their links.
     lists:foreach(fun(Frame) ->
@@ -810,6 +826,55 @@ handle_stashed_settled(GrantCredits0, #state{cfg = #cfg{max_link_credit = MaxLin
     State = State0#state{stashed_settled = [],
                          incoming_links = Ls},
     {Ids, GrantCredits, State}.
+
+%% When a consumer did not settle in time, the queue releases the messages and notifies us.
+%% We send DISPOSITION(released, settled=false) to the client. When the client settles back
+%% with DISPOSITION(released, settled=true), the normal requeue path in the queue machine
+%% calls maybe_untimeout to clear the consumer's timeout state. We follow [2.6.12]:
+%% "it is possible for the sending application [RabbitMQ] to transition a delivery to a terminal
+%% state at the sender spontaneously (i.e., not as a consequence of a disposition that has been
+%% received from the receiver). In this case the sender SHOULD send a disposition to the
+%% receiver, but not settle until the receiver confirms, via a disposition in the opposite
+%% direction, that it has updated the state at its endpoint."
+handle_stashed_consumer_timeout(#state{stashed_consumer_timeout = Map} = State)
+  when map_size(Map) =:= 0 ->
+    {[], State};
+handle_stashed_consumer_timeout(#state{cfg = #cfg{container_id = ContainerId,
+                                                  conn_name = ConnName},
+                                       stashed_consumer_timeout = ConsumerTimeout,
+                                       outgoing_unsettled_map = Unsettled,
+                                       outgoing_links = Links0} = State0) ->
+    {Ids, CTags} = maps:fold(fun(DeliveryId,
+                                 #outgoing_unsettled{consumer_tag = CTag,
+                                                     msg_id = MsgId},
+                                 {Ids0, CTags0} = Acc) ->
+                                     case is_map_key({CTag, MsgId}, ConsumerTimeout) of
+                                         true ->
+                                             {[DeliveryId | Ids0], CTags0#{CTag => true}};
+                                         false ->
+                                             Acc
+                                     end
+                             end, {[], #{}}, Unsettled),
+    Links = maps:fold(
+              fun(CTag, true, Acc) ->
+                      Handle = ctag_to_handle(CTag),
+                      case Acc of
+                          #{Handle := #outgoing_link{timeout_logged = false,
+                                                     name = LinkName,
+                                                     queue_name = QName} = Link} ->
+                              ?LOG_WARNING(
+                                 "released unsettled messages due to consumer timeout on "
+                                 "connection '~ts' for link '~ts' with handle ~b to "
+                                 "AMQP container '~ts' consuming from ~ts",
+                                 [ConnName, LinkName, Handle, ContainerId, rabbit_misc:rs(QName)]),
+                              Acc#{Handle := Link#outgoing_link{timeout_logged = true}};
+                          _ ->
+                              Acc
+                      end
+              end, Links0, CTags),
+    State = State0#state{stashed_consumer_timeout = #{},
+                         outgoing_links = Links},
+    {Ids, State}.
 
 handle_stashed_down(#state{stashed_down = []} = State) ->
     {[], State};
@@ -962,14 +1027,15 @@ detach(Handle, Link, Error = #'v1_0.error'{}) ->
 detach(Handle, Link, ErrorCondition) ->
     detach(Handle, Link, #'v1_0.error'{condition = ErrorCondition}).
 
-send_dispositions(Ids, DeliveryState, Writer, ChannelNum) ->
+send_dispositions(Ids, DeliveryState, Role, Settled, Writer, ChannelNum) ->
     Ranges = serial_number:ranges(Ids),
     lists:foreach(fun({First, Last}) ->
-                          Disposition = disposition(DeliveryState, First, Last),
+                          Disposition = disposition(DeliveryState, First,
+                                                    Last, Role, Settled),
                           rabbit_amqp_writer:send_command(Writer, ChannelNum, Disposition)
                   end, Ranges).
 
-disposition(DeliveryState, First, Last) ->
+disposition(DeliveryState, First, Last, Role, Settled) ->
     Last1 = case First of
                 Last ->
                     %% "If not set, this is taken to be the same as first." [2.7.6]
@@ -978,12 +1044,11 @@ disposition(DeliveryState, First, Last) ->
                 _ ->
                     ?UINT(Last)
             end,
-    #'v1_0.disposition'{
-       role = ?AMQP_ROLE_RECEIVER,
-       settled = true,
-       state = DeliveryState,
-       first = ?UINT(First),
-       last = Last1}.
+    #'v1_0.disposition'{role = Role,
+                        settled = Settled,
+                        state = DeliveryState,
+                        first = ?UINT(First),
+                        last = Last1}.
 
 handle_frame({Performative = #'v1_0.transfer'{handle = ?UINT(Handle)}, Paylaod},
              State0 = #state{incoming_links = IncomingLinks}) ->
@@ -1540,7 +1605,8 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
                                                               credit = 0,
                                                               drain = false},
                                           at_least_one_credit_req_in_flight = false,
-                                          stashed_credit_req = none},
+                                          stashed_credit_req = none,
+                                          timeout_logged = false},
                                    OutgoingLinks = OutgoingLinks0#{HandleInt => L},
                                    State1 = State0#state{queue_states = QStates,
                                                          outgoing_links = OutgoingLinks,
@@ -2130,6 +2196,11 @@ handle_queue_actions(Actions, State) ->
               S#state{stashed_settled = [Action | As]};
           ({rejected, _QName, _Reason, _DelIds} = Action, #state{stashed_rejected = As} = S) ->
               S#state{stashed_rejected = [Action | As]};
+          ({released, _QName, CTag, MsgIds, timeout}, #state{stashed_consumer_timeout = Map} = S) ->
+              L = lists:map(fun(MsgId) ->
+                                    {{CTag, MsgId}, true}
+                            end, MsgIds),
+              S#state{stashed_consumer_timeout = maps:merge(Map, maps:from_list(L))};
           ({deliver, CTag, AckRequired, Msgs}, S0) ->
               lists:foldl(fun(Msg, S) ->
                                   handle_deliver(CTag, AckRequired, Msg, S)
@@ -3123,13 +3194,14 @@ split_msg(T, Msg, MaxPayloadSize, Transfers) ->
 parse_attach_properties(undefined) ->
     [];
 parse_attach_properties({map, KVList}) ->
-    Key = {symbol, <<"rabbitmq:priority">>},
-    case proplists:lookup(Key, KVList) of
-        {Key, Val = {int, _Prio}} ->
-            [mc_amqpl:to_091(<<"x-priority">>, Val)];
-        _ ->
-            []
-    end.
+    lists:filtermap(
+      fun({{symbol, <<"rabbitmq:priority">>}, {int, _} = Val}) ->
+              {true, mc_amqpl:to_091(<<"x-priority">>, Val)};
+         ({{symbol, <<"rabbitmq:consumer-timeout">>}, {uint, _} = Val}) ->
+              {true, mc_amqpl:to_091(<<"x-consumer-timeout">>, Val)};
+         (_) ->
+              false
+      end, KVList).
 
 parse_filter(undefined) ->
     {undefined, undefined, []};
@@ -3941,7 +4013,7 @@ info_incoming_link(Handle, LinkName, SndSettleMode, TargetAddress,
 
 info_outgoing_management_links(Links) ->
     [info_outgoing_link(Handle, Name, ?MANAGEMENT_NODE_ADDRESS, <<>>,
-                        true, MaxMessageSize, [], DeliveryCount, Credit)
+                        true, MaxMessageSize, [], DeliveryCount, Credit, false)
      || Handle := #management_link{
                      name = Name,
                      max_message_size = MaxMessageSize,
@@ -3950,7 +4022,8 @@ info_outgoing_management_links(Links) ->
 
 info_outgoing_links(Links) ->
     [info_outgoing_link(Handle, Name, SourceAddress, QueueNameBin,
-                        SendSettled, MaxMessageSize, Filter, DeliveryCount, Credit)
+                        SendSettled, MaxMessageSize, Filter,
+                        DeliveryCount, Credit, ConsumerTimeoutLogged)
      || Handle := #outgoing_link{
                      name = Name,
                      source_address = SourceAddress,
@@ -3960,11 +4033,13 @@ info_outgoing_links(Links) ->
                      filter = Filter,
                      client_flow_ctl = #client_flow_ctl{
                                           delivery_count = DeliveryCount,
-                                          credit = Credit}}
+                                          credit = Credit},
+                     timeout_logged = ConsumerTimeoutLogged}
         <- Links].
 
 info_outgoing_link(Handle, LinkName, SourceAddress, QueueNameBin, SendSettled,
-                   MaxMessageSize, Filter, DeliveryCount, Credit) ->
+                   MaxMessageSize, Filter, DeliveryCount, Credit,
+                   ConsumerTimeout) ->
     [{handle, Handle},
      {link_name, LinkName},
      {source_address, SourceAddress},
@@ -3973,7 +4048,8 @@ info_outgoing_link(Handle, LinkName, SourceAddress, QueueNameBin, SendSettled,
      {max_message_size, MaxMessageSize},
      {filter, Filter},
      {delivery_count, DeliveryCount},
-     {credit, Credit}].
+     {credit, Credit},
+     {consumer_timeout, ConsumerTimeout}].
 
 format_filter(undefined) ->
     [];

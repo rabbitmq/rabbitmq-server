@@ -54,7 +54,7 @@
          delete/4,
          recover/2,
          settle/5,
-         dequeue/5,
+         dequeue/6,
          state_info/1,
          info/2,
          policy_apply_to_name/0
@@ -344,7 +344,7 @@ recover(_, _) ->
 settle(_, _, _, _, #?STATE{} = State) ->
     {State, []}.
 
-dequeue(_, _, _, _, #?STATE{name = Name}) ->
+dequeue(_, _, _, _, _, #?STATE{name = Name}) ->
     {protocol_error, not_implemented,
      "basic.get not supported by volatile ~ts",
      [rabbit_misc:rs(Name)]}.

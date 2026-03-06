@@ -190,6 +190,9 @@ function args_to_features(obj) {
     if (obj.durable) {
         res['durable'] = true;
     }
+    if (obj.delayed_retry != undefined) {
+        res['delayed retry'] = obj.delayed_retry == 'disabled' ? 'not enabled' : obj.delayed_retry;
+    }
     if (obj.auto_delete) {
         res['auto-delete'] = true;
     }
