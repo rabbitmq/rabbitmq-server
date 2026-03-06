@@ -264,7 +264,7 @@ stat(Q) ->
                     {gen_server2, call, [stat, infinity]}).
 
 
-format(Q, _Ctx) when ?is_amqqueue(Q) ->
+format(Q, Ctx) when ?is_amqqueue(Q) ->
     State = case amqqueue:get_state(Q) of
                 live ->
                     running;
@@ -273,7 +273,18 @@ format(Q, _Ctx) when ?is_amqqueue(Q) ->
             end,
     [{type, rabbit_queue_type:short_alias_of(?MODULE)},
      {state, State},
-     {node, node(amqqueue:get_pid(Q))}].
+     {node, node(amqqueue:get_pid(Q))}
+     | format_policy_fields(Q, Ctx)].
+
+format_policy_fields(Q, Ctx) ->
+    case maps:get(management_stats_disabled, Ctx, true) of
+        true ->
+            [{policy, i(policy, Q)},
+             {operator_policy, i(operator_policy, Q)},
+             {effective_policy_definition, i(effective_policy_definition, Q)}];
+        false ->
+            []
+    end.
 
 -spec init(amqqueue:amqqueue()) -> {ok, state()}.
 init(Q) when ?amqqueue_is_classic(Q) ->

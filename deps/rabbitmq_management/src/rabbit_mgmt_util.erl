@@ -49,7 +49,7 @@
 -export([catch_no_such_user_or_vhost/2]).
 -export([method_not_allowed/3]).
 
--export([disable_stats/1, enable_queue_totals/1]).
+-export([disable_stats/0, disable_stats/1, enable_queue_totals/1]).
 
 -export([set_resp_not_found/2]).
 
@@ -140,14 +140,16 @@ auth_config() ->
                    oauth2_enabled = OauthEnabled,
                    oauth_client_id = OauthClientId}.
 
+disable_stats() ->
+    not rabbit_mgmt_agent_config:is_metrics_collector_enabled() orelse
+    not rabbit_mgmt_features:are_stats_enabled().
+
 disable_stats(ReqData) ->
     MgmtOnly = case qs_val(<<"disable_stats">>, ReqData) of
                    <<"true">> -> true;
                    _ -> false
                end,
-    MgmtOnly orelse
-    not rabbit_mgmt_agent_config:is_metrics_collector_enabled() orelse
-    not rabbit_mgmt_features:are_stats_enabled().
+    MgmtOnly orelse disable_stats().
 
 enable_queue_totals(ReqData) ->
     EnableTotals = case qs_val(<<"enable_queue_totals">>, ReqData) of
@@ -267,7 +269,7 @@ reply0(Facts, ReqData, Context) ->
             {<<"application">>, <<"bert">>, _} ->
                 {term_to_binary(Facts), ReqData1, Context};
             _ ->
-                {rabbit_json:encode(rabbit_mgmt_format:format_nulls(Facts)),
+                {rabbit_json:encode(rabbit_mgmt_format:prepare_for_encoding(Facts)),
                  ReqData1, Context}
         end
     catch exit:{json_encode, E} ->

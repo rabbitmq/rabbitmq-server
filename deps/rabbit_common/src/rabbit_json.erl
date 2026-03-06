@@ -46,7 +46,7 @@ encode(Term) ->
 encode(Term, Opts) ->
     %% Fixup for JSON encoding
     %% * Transforms any Funs into strings
-    %% See rabbit_mgmt_format:format_nulls/1
+    %% See rabbit_mgmt_format:prepare_for_encoding/1
     F = fun
             (V) when is_function(V) ->
                 rabbit_data_coercion:to_binary(V);

@@ -303,10 +303,22 @@ format(Q, Ctx) ->
              {leader, LeaderNode},
              {online, Online},
              {members, Nodes},
-             {node, node(Pid)}];
+             {node, node(Pid)}
+             | format_policy_fields(Q, Ctx)];
         _ ->
             [{type, rabbit_queue_type:short_alias_of(?MODULE)},
-             {state, down}]
+             {state, down}
+             | format_policy_fields(Q, Ctx)]
+    end.
+
+format_policy_fields(Q, Ctx) ->
+    case maps:get(management_stats_disabled, Ctx, true) of
+        true ->
+            [{policy, i(policy, Q)},
+             {operator_policy, i(operator_policy, Q)},
+             {effective_policy_definition, i(effective_policy_definition, Q)}];
+        false ->
+            []
     end.
 
 consume(Q, #{mode := {simple_prefetch, 0}}, _)

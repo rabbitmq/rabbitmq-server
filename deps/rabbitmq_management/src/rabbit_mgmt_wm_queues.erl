@@ -76,22 +76,17 @@ basic(ReqData) ->
     %% a cluster wide query with a reasonably long (10s) timeout.
     %% TODO: replace with faster approximate function
     Running = rabbit_nodes:list_running(),
-    Ctx = #{running_nodes => Running},
+    StatsDisabled = rabbit_mgmt_util:disable_stats(ReqData),
+    Ctx = #{running_nodes => Running,
+            management_stats_disabled => StatsDisabled},
     FmtQ = fun (Q) -> rabbit_mgmt_format:queue(Q, Ctx) end,
-    case rabbit_mgmt_util:disable_stats(ReqData) of
+    case StatsDisabled of
         false ->
             list_queues(ReqData, Running, FmtQ, FmtQ);
         true ->
             case rabbit_mgmt_util:enable_queue_totals(ReqData) of
                 false ->
-                    list_queues(ReqData, Running,
-                                fun(Q) ->
-                                        FmtQ(Q) ++
-                                        %% TODO: just add policy name in
-                                        %% rabbit_mgmt_format:queue/1?
-                                        policy(Q)
-                                end,
-                                FmtQ);
+                    list_queues(ReqData, Running, FmtQ, FmtQ);
                 true ->
                     %% TODO: this is not optimised like the other code paths
                     %% most likely we can avoid the collector pattern by
@@ -169,9 +164,3 @@ collect_info_all(VHostPath) ->
 down_queues(ReqData, Running) ->
     Fun = fun(VhostPath) -> rabbit_amqqueue:list_down(VhostPath, Running) end,
     rabbit_mgmt_util:all_or_one_vhost(ReqData, Fun).
-
-policy(Q) ->
-    case rabbit_policy:name(Q) of
-        none -> [];
-        Policy -> [{policy, Policy}]
-    end.

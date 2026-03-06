@@ -10,7 +10,7 @@
 -export([init/2, resource_exists/2, to_json/2,
          content_types_provided/2, content_types_accepted/2,
          is_authorized/2, allowed_methods/2, accept_content/2,
-         delete_resource/2, queue/1, queue/2]).
+         delete_resource/2, queue/1, queue/2, queue/3]).
 -export([variances/2]).
 
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
@@ -39,17 +39,19 @@ resource_exists(ReqData, Context) ->
 
 to_json(ReqData, Context) ->
     try
-        case rabbit_mgmt_util:disable_stats(ReqData) of
+        StatsDisabled = rabbit_mgmt_util:disable_stats(ReqData),
+        case StatsDisabled of
             false ->
                 [Q] = rabbit_mgmt_db:augment_queues(
-                        [queue(ReqData)], rabbit_mgmt_util:range_ceil(ReqData),
+                        [queue(ReqData, StatsDisabled)],
+                        rabbit_mgmt_util:range_ceil(ReqData),
                         full),
                 Payload = rabbit_mgmt_format:clean_consumer_details(
                             rabbit_mgmt_format:strip_pids(Q)),
                 rabbit_mgmt_util:reply(ensure_defaults(Payload), ReqData, Context);
             true ->
                 Q = case rabbit_mgmt_util:enable_queue_totals(ReqData) of
-                    false -> queue(ReqData);
+                    false -> queue(ReqData, StatsDisabled);
                     true  -> queue_with_totals(ReqData)
                 end,
                 rabbit_mgmt_util:reply(
@@ -108,15 +110,20 @@ ensure_defaults(Payload0) ->
     end.
 
 queue(ReqData) ->
+    queue(ReqData, rabbit_mgmt_util:disable_stats(ReqData)).
+
+queue(ReqData, StatsDisabled) ->
     case rabbit_mgmt_util:vhost(ReqData) of
         not_found -> not_found;
-        VHost     -> queue(VHost, rabbit_mgmt_util:id(queue, ReqData))
+        VHost     ->
+            Ctx = #{management_stats_disabled => StatsDisabled},
+            queue(VHost, rabbit_mgmt_util:id(queue, ReqData), Ctx)
     end.
 
-queue(VHost, QName) ->
+queue(VHost, QName, Ctx) ->
     Name = rabbit_misc:r(VHost, queue, QName),
     case rabbit_amqqueue:lookup(Name) of
-        {ok, Q}            -> rabbit_mgmt_format:queue(Q);
+        {ok, Q}            -> rabbit_mgmt_format:queue(Q, Ctx);
         {error, not_found} -> not_found
     end.
 
