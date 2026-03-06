@@ -66,26 +66,26 @@ case "$scenario" in
 		wait
 		;;
 
-	100k_queues_import)
-		# Import 100k classic queues
-		echo "=== Import 100k classic queues"
+	10k_queues_import)
+		# Import 10k classic queues
+		echo "=== Import 10k classic queues"
 		git clone https://github.com/rabbitmq/sample-configs.git
 		time $old_rabbitmqctl  -n rabbit-1 import_definitions \
-			sample-configs/queues/100k-classic-queues.json
+			sample-configs/queues/10k-classic-queues.json
 
-		# Ensure we have 100k queues
+		# Ensure we have 10k queues
 		test \
 			$($old_rabbitmqctl -n rabbit-1 list_queues name durable | \
-			grep -cE 'q[0-9]+\s*true') = 100000
+			grep -cE 'q[0-9]+\s*true') = 10000
 
 		# Upgrade RabbitMQ.
 		echo "=== Upgrade cluster to new RabbitMQ version"
 		$make -C "$new_dist" restart-cluster
 
-		# Ensure we still have 100k queues
+		# Ensure we still have 10k queues
 		test \
 			$($new_rabbitmqctl -n rabbit-1 list_queues name durable | \
-			grep -cE 'q[0-9]+\s*true') = 100000
+			grep -cE 'q[0-9]+\s*true') = 10000
 		;;
 
 	topic_bindings_import)

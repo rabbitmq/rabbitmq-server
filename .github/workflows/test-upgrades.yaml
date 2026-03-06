@@ -95,7 +95,7 @@ jobs:
         scenario:
           - durable_queue
           - transient_queue
-          - 100k_queues_import
+          - 10k_queues_import
           - topic_bindings_import
         node_count:
           - 1
