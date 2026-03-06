@@ -267,7 +267,7 @@ reply0(Facts, ReqData, Context) ->
             {<<"application">>, <<"bert">>, _} ->
                 {term_to_binary(Facts), ReqData1, Context};
             _ ->
-                {rabbit_json:encode(rabbit_mgmt_format:format_nulls(Facts)),
+                {rabbit_json:encode(rabbit_mgmt_format:prepare_for_encoding(Facts)),
                  ReqData1, Context}
         end
     catch exit:{json_encode, E} ->
