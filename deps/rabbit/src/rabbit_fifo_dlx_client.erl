@@ -8,8 +8,7 @@
 
 -include_lib("kernel/include/logger.hrl").
 
-
--export([checkout/3, settle/2, handle_ra_event/3,
+-export([checkout/3, settle/2, handle_registration/1, handle_ra_event/3,
          overview/1]).
 
 -record(state,{
@@ -35,30 +34,25 @@ settle(MsgIds, #state{leader = Leader} = State)
     {ok, State}.
 
 -spec checkout(rabbit_amqqueue:name(), ra:server_id(), non_neg_integer()) ->
-    {ok, state()} | {error, non_local_leader | ra_command_failed}.
+    {reference(), state()}.
 checkout(QResource, Leader, NumUnsettled) ->
     Cmd = rabbit_fifo_dlx:make_checkout(self(), NumUnsettled),
-    State = #state{queue_resource = QResource,
-                   leader = Leader,
-                   last_msg_id = -1},
-    process_command(Cmd, State, 5).
+    Corr = make_ref(),
+    ra:pipeline_command(Leader, Cmd, Corr, normal),
+    {Corr, #state{queue_resource = QResource,
+                  leader = Leader,
+                  last_msg_id = -1}}.
 
-process_command(_Cmd, _State, 0) ->
-    {error, ra_command_failed};
-process_command(Cmd, #state{leader = Leader} = State, Tries) ->
-    case ra:process_command(Leader, Cmd, 60_000) of
-        {ok, ok, Leader} ->
-            {ok, State#state{leader = Leader}};
-        {ok, ok, NonLocalLeader} ->
-            ?LOG_WARNING("Failed to process command ~tp on quorum queue leader ~tp because actual leader is ~tp.",
-                               [Cmd, Leader, NonLocalLeader]),
-            {error, non_local_leader};
-        Err ->
-            ?LOG_WARNING("Failed to process command ~tp on quorum queue leader ~tp: ~tp~n"
-                               "Trying ~b more time(s)...",
-                               [Cmd, Leader, Err, Tries]),
-            process_command(Cmd, State, Tries - 1)
-    end.
+-spec handle_registration(term()) ->
+    {registered, reference()} | {not_leader, reference()} | ignore.
+handle_registration({{_, _}, {applied, [{Corr, ok}]}})
+  when is_reference(Corr) ->
+    {registered, Corr};
+handle_registration({{_, _}, {rejected, {not_leader, _Leader, Corr}}})
+  when is_reference(Corr) ->
+    {not_leader, Corr};
+handle_registration(_Evt) ->
+    ignore.
 
 -spec handle_ra_event(pid(), term(), state()) ->
     {ok, state(), actions()}.
