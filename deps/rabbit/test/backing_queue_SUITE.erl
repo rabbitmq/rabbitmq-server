@@ -64,6 +64,7 @@ groups() ->
           msg_store,
           msg_store_read_many_fanout,
           msg_store_file_scan,
+          msg_store_gc_stop_timeout,
           {backing_queue_v2, [], Common ++ V2Only}
         ]}
     ].
@@ -717,6 +718,74 @@ msg_store_file_scan1(Config) ->
 
 gen_id() ->
     rand:bytes(16).
+
+%% Test that when the GC process is unresponsive during shutdown,
+%% the msg_store recovers cleanly because terminate kills the GC
+%% after a bounded timeout and proceeds to write recovery files.
+msg_store_gc_stop_timeout(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, msg_store_gc_stop_timeout1, [Config]).
+
+msg_store_gc_stop_timeout1(_Config) ->
+    GenRef = fun() -> make_ref() end,
+    restart_msg_store_empty(),
+
+    %% Write some messages so the store has data to recover.
+    Ref = rabbit_guid:gen(),
+    MSCState = msg_store_client_init(?PERSISTENT_MSG_STORE, Ref),
+    MsgIds = [{GenRef(), msg_id_bin(M)} || M <- lists:seq(1, 50)],
+    ok = msg_store_write(MsgIds, MSCState),
+    ok = rabbit_msg_store:client_terminate(MSCState),
+
+    %% Get the msg_store pid and its GC pid.
+    StorePid = rabbit_vhost_msg_store:vhost_store_pid(
+                   ?VHOST, ?PERSISTENT_MSG_STORE),
+    GCPid = rabbit_msg_store:gc_pid(StorePid),
+    true = is_process_alive(GCPid),
+
+    %% Suspend the GC process so it cannot respond to the stop call.
+    ok = sys:suspend(GCPid),
+
+    %% Stop the transient store cleanly first.
+    rabbit_vhost_msg_store:stop(?VHOST, ?TRANSIENT_MSG_STORE),
+
+    %% Set a short shutdown timeout so the GC stop times out quickly.
+    %% The terminate callback reads this at runtime to compute the
+    %% GC timeout. The supervisor's own timeout (set at startup) is
+    %% still the original 600s, giving us plenty of room.
+    ok = application:set_env(rabbit, msg_store_shutdown_timeout, 6_000),
+
+    %% Now terminate the persistent store via the supervisor. The
+    %% terminate callback will call rabbit_msg_store_gc:stop with a
+    %% 5s timeout (max(6000 - 60000, 5000)). The GC is suspended so
+    %% the stop will time out, the GC will be killed, and terminate
+    %% will proceed to write recovery files.
+    {ok, VHostSup} = rabbit_vhost_sup_sup:get_vhost_sup(?VHOST),
+    ok = supervisor:terminate_child(VHostSup, ?PERSISTENT_MSG_STORE),
+
+    %% Restore the default timeout.
+    ok = application:set_env(rabbit, msg_store_shutdown_timeout, 600_000),
+
+    %% Delete the child specs so we can restart.
+    ok = supervisor:delete_child(VHostSup, ?PERSISTENT_MSG_STORE),
+
+    %% Restart the msg_store and check recovery state.
+    ok = rabbit_variable_queue:start_msg_store(
+             ?VHOST, [Ref], {fun ([]) -> finished end, []}),
+
+    %% The store should report a clean recovery because the fix
+    %% kills the unresponsive GC and proceeds to write recovery files.
+    true = rabbit_vhost_msg_store:successfully_recovered_state(
+                ?VHOST, ?PERSISTENT_MSG_STORE),
+
+    %% Verify all messages survived the unclean GC shutdown.
+    MSCState2 = msg_store_client_init(?PERSISTENT_MSG_STORE, Ref),
+    true = msg_store_contains(true, MsgIds, MSCState2),
+    ok = rabbit_msg_store:client_terminate(MSCState2),
+
+    %% Clean up.
+    restart_msg_store_empty(),
+    passed.
 
 gen_msg() ->
     gen_msg(1024 * 1024).
