@@ -281,6 +281,9 @@ i(messages, Q) ->
         _ ->
             0
     end;
+i(members, Q) ->
+    Pid = amqqueue:get_pid(Q),
+    [node(Pid)];
 i(_, _) ->
     ''.
 
