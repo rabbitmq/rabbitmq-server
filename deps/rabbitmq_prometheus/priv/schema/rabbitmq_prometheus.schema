@@ -148,3 +148,23 @@ end}.
 %% Authentication options ========================================================
 {mapping, "prometheus.authentication.enabled", "rabbitmq_prometheus.authentication.enabled",
     [{datatype, {enum, [true, false]}}]}.
+
+%% Endpoint disable options ========================================================
+{mapping, "prometheus.disable_memory_breakdown_endpoint", "rabbitmq_prometheus.disable_memory_breakdown_endpoint",
+    [{datatype, {enum, [true, false]}}, {default, false}]}.
+
+{mapping, "prometheus.disable_per_object_endpoint", "rabbitmq_prometheus.disable_per_object_endpoint",
+    [{datatype, {enum, [true, false]}}, {default, true}]}.
+
+{mapping, "prometheus.disable_detailed_endpoint", "rabbitmq_prometheus.disable_detailed_endpoint",
+    [{datatype, {enum, [true, false]}}, {default, false}]}.
+
+%% Metric blocklist options ========================================================
+{mapping, "prometheus.disabled_metrics.$metric", "rabbitmq_prometheus.disabled_metrics",
+    [{datatype, atom}]}.
+
+{translation, "rabbitmq_prometheus.disabled_metrics",
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("prometheus.disabled_metrics", Conf),
+    [V || {_, V} <- Settings]
+end}.

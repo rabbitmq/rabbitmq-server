@@ -35,15 +35,27 @@ build_dispatcher() ->
             true  -> PerObjectCollectors
         end
     ),
-    prometheus_registry:register_collectors('per-object',
-        CoreCollectors ++ PerObjectCollectors),
-    prometheus_registry:register_collectors('detailed', [
-        prometheus_rabbitmq_core_metrics_collector,
-        prometheus_rabbitmq_raft_metrics_collector
-        ]),
-    prometheus_registry:register_collectors('memory-breakdown', [
-        prometheus_rabbitmq_core_metrics_collector
-        ]),
+    case application:get_env(rabbitmq_prometheus, disable_per_object_endpoint, false) of
+        true -> ok;
+        false ->
+            prometheus_registry:register_collectors('per-object',
+                CoreCollectors ++ PerObjectCollectors)
+    end,
+    case application:get_env(rabbitmq_prometheus, disable_detailed_endpoint, false) of
+        true -> ok;
+        false ->
+            prometheus_registry:register_collectors('detailed', [
+                prometheus_rabbitmq_core_metrics_collector,
+                prometheus_rabbitmq_raft_metrics_collector
+            ])
+    end,
+    case application:get_env(rabbitmq_prometheus, disable_memory_breakdown_endpoint, false) of
+        true -> ok;
+        false ->
+            prometheus_registry:register_collectors('memory-breakdown', [
+                prometheus_rabbitmq_core_metrics_collector
+            ])
+    end,
     rabbit_prometheus_handler:setup(),
     cowboy_router:compile([{'_', dispatcher()}]).
 
