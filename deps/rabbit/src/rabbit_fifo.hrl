@@ -202,7 +202,6 @@
         {tree = gb_trees:empty() :: gb_trees:tree(delayed_key(), msg()),
          %% Cached smallest entry for O(1) readiness check in take_next_msg
          next = undefined :: option({milliseconds(), ra:index(), msg()}),
-         len = 0 :: non_neg_integer(),
          %% Map from deferral token to tree key for direct message lookup
          deferred = #{} :: #{deferral_token() => delayed_key()}}).
 

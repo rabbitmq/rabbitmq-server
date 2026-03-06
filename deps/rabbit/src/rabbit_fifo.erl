@@ -498,9 +498,9 @@ apply_(#{index := Idx} = Meta,
     checkout(Meta, State0, State2, [{monitor, process, Pid} | Effs], Reply);
 apply_(#{index := Index}, #purge{},
        #?STATE{messages_total = Total,
-               delayed = #delayed{len = DelayedLen}} = State0) ->
+               delayed = #delayed{tree = Tree}} = State0) ->
     NumReady = messages_ready(State0),
-    NumPurged = NumReady + DelayedLen,
+    NumPurged = NumReady + gb_trees:size(Tree),
     State1 = State0#?STATE{messages = rabbit_fifo_pq:new(),
                            messages_total = Total - NumPurged,
                            returns = lqueue:new(),
@@ -810,7 +810,7 @@ live_indexes(#?STATE{cfg = #cfg{},
 
 %% Prepare extra buckets for fold_by_index (keys > 31 to avoid priority
 %% collision)
-prepare_extra_buckets(Returns, Consumers, Delayed,
+prepare_extra_buckets(Returns, Consumers, #delayed{tree = Tree},
                       #?DLX{discards = Discards, consumer = DlxConsumer}) ->
     %% Bucket 32: returns (sorted by index)
     B0 = case lqueue:len(Returns) of
@@ -837,9 +837,9 @@ prepare_extra_buckets(Returns, Consumers, Delayed,
                  B2#{35 => dlx_consumer_to_sorted_queue(DlxCheckedOut)}
          end,
     %% Bucket 36: delayed messages (sorted by index)
-    case Delayed of
-        #delayed{len = 0} -> B3;
-        #delayed{tree = Tree} ->
+    case gb_trees:is_empty(Tree) of
+        true -> B3;
+        false ->
             B3#{36 => delayed_to_sorted_queue(Tree)}
     end.
 
@@ -1191,11 +1191,11 @@ overview(#?STATE{consumers = Cons,
 
     {DelayedLen, NextDelayedAt, LastDelayedAt} =
         case Delayed of
-            #delayed{len = 0} ->
+            #delayed{next = undefined} ->
                 {0, undefined, undefined};
-            #delayed{len = DL, next = {NextTs, _, _}, tree = Tree} ->
+            #delayed{next = {NextTs, _, _}, tree = Tree} ->
                 {?TUPLE(LastTs, _), _} = gb_trees:largest(Tree),
-                {DL, NextTs, LastTs}
+                {gb_trees:size(Tree), NextTs, LastTs}
         end,
     Overview = #{type => ?STATE,
                  config => Conf,
@@ -1709,8 +1709,8 @@ messages_ready(#?STATE{messages = M,
 
 %% Messages ready plus delayed - used for limit calculations.
 %% Delayed messages count towards the limit even though they're not ready.
-messages_ready_plus_delayed(#?STATE{delayed = #delayed{len = DelayedLen}} = State) ->
-    messages_ready(State) + DelayedLen.
+messages_ready_plus_delayed(#?STATE{delayed = #delayed{tree = Tree}} = State) ->
+    messages_ready(State) + gb_trees:size(Tree).
 
 messages_total(#?STATE{messages_total = Total,
                        dlx = DlxState}) ->
@@ -2542,7 +2542,6 @@ take_next_delayed(_Ts, #delayed{next = undefined}) ->
     empty;
 take_next_delayed(Ts, #delayed{next = {ReadyAt, Idx, Msg},
                                tree = Tree0,
-                               len = Len,
                                deferred = Deferred0}) when Ts >= ReadyAt ->
     Key = ?TUPLE(ReadyAt, Idx),
     Tree = gb_trees:delete(Key, Tree0),
@@ -2555,8 +2554,7 @@ take_next_delayed(Ts, #delayed{next = {ReadyAt, Idx, Msg},
            end,
     %% Remove any deferral token that maps to this key
     Deferred = maps:filter(fun(_Token, K) -> K =/= Key end, Deferred0),
-    Delayed = #delayed{tree = Tree, next = Next,
-                       len = Len - 1, deferred = Deferred},
+    Delayed = #delayed{tree = Tree, next = Next, deferred = Deferred},
     {Msg, Delayed};
 take_next_delayed(_Ts, #delayed{}) ->
     empty.
@@ -2575,7 +2573,7 @@ take_ready_delayed(Ts, Delayed0, Acc) ->
 
 take_delayed_for_retry(all, _Ts, #delayed{tree = Tree}) ->
     Msgs = gb_trees:values(Tree),
-    {Msgs, #delayed{tree = gb_trees:empty(), next = undefined, len = 0}};
+    {Msgs, #delayed{tree = gb_trees:empty(), next = undefined}};
 take_delayed_for_retry(0, _Ts, Delayed) ->
     {[], Delayed};
 take_delayed_for_retry(N, Ts, Delayed) when is_integer(N), N > 0 ->
@@ -2583,7 +2581,7 @@ take_delayed_for_retry(N, Ts, Delayed) when is_integer(N), N > 0 ->
 
 take_delayed_for_retry(0, _Ts, Delayed, Acc) ->
     {lists:reverse(Acc), Delayed};
-take_delayed_for_retry(N, Ts, #delayed{tree = Tree0, len = Len,
+take_delayed_for_retry(N, Ts, #delayed{tree = Tree0,
                                        deferred = Deferred0} = Delayed0, Acc) ->
     case gb_trees:is_empty(Tree0) of
         true ->
@@ -2600,8 +2598,7 @@ take_delayed_for_retry(N, Ts, #delayed{tree = Tree0, len = Len,
                    end,
             %% Remove any deferral token that maps to this key
             Deferred = maps:filter(fun(_Token, K) -> K =/= Key end, Deferred0),
-            Delayed = #delayed{tree = Tree, next = Next, len = Len - 1,
-                               deferred = Deferred},
+            Delayed = #delayed{tree = Tree, next = Next, deferred = Deferred},
             take_delayed_for_retry(N - 1, Ts, Delayed, [Msg | Acc])
     end.
 
@@ -2610,7 +2607,7 @@ take_deferred(Tokens, Delayed) ->
 
 take_deferred([], Delayed, MsgsAcc, NotFoundAcc) ->
     {lists:reverse(MsgsAcc), lists:reverse(NotFoundAcc), Delayed};
-take_deferred([Token | Rest], #delayed{tree = Tree0, len = Len,
+take_deferred([Token | Rest], #delayed{tree = Tree0,
                                        deferred = Deferred0} = Delayed0,
               MsgsAcc, NotFoundAcc) ->
     case maps:take(Token, Deferred0) of
@@ -2621,7 +2618,6 @@ take_deferred([Token | Rest], #delayed{tree = Tree0, len = Len,
                     Next = update_delayed_next(Tree),
                     Delayed = Delayed0#delayed{tree = Tree,
                                                next = Next,
-                                               len = Len - 1,
                                                deferred = Deferred1},
                     take_deferred(Rest, Delayed, [Msg | MsgsAcc], NotFoundAcc);
                 none ->
@@ -2692,7 +2688,6 @@ assign_to_consumer(#{system_time := Ts} = Meta, _Ts, ConsumerKey, Msgs,
 
 delayed_in(ReadyAt, Idx, Msg, DeferralToken, #delayed{tree = Tree0,
                                                       next = Next0,
-                                                      len = Len,
                                                       deferred = Deferred0}) ->
     Key = ?TUPLE(ReadyAt, Idx),
     Tree = gb_trees:insert(Key, Msg, Tree0),
@@ -2710,7 +2705,7 @@ delayed_in(ReadyAt, Idx, Msg, DeferralToken, #delayed{tree = Tree0,
                    _ ->
                        Deferred0#{DeferralToken => Key}
                end,
-    #delayed{tree = Tree, next = Next, len = Len + 1, deferred = Deferred}.
+    #delayed{tree = Tree, next = Next, deferred = Deferred}.
 
 peek_next_msg(#?STATE{returns = Returns0,
                      messages = Messages0}) ->
@@ -3519,7 +3514,7 @@ convert(Meta, 7, To, State) ->
 smallest_raft_index(#?STATE{messages = Messages,
                             returns = Returns,
                             consumers = Consumers,
-                            delayed = Delayed,
+                            delayed = #delayed{tree = Tree},
                             dlx = #?DLX{consumer = DlxConsumer,
                                         discards = Discards}}) ->
     Min0 = rabbit_fifo_pq:get_lowest_index(Messages),
@@ -3534,10 +3529,10 @@ smallest_raft_index(#?STATE{messages = Messages,
     Min3 = lqueue:fold(fun (?TUPLE(_Reason, Msg), Acc) ->
                               min(get_msg_idx(Msg), Acc)
                       end, Min2, Discards),
-    Min4 = case Delayed of
-               #delayed{len = 0} ->
+    Min4 = case gb_trees:is_empty(Tree) of
+               true ->
                    Min3;
-               #delayed{tree = Tree} ->
+               false ->
                    Iter = gb_trees:iterator(Tree),
                    smallest_delayed_index(Iter, Min3)
            end,
