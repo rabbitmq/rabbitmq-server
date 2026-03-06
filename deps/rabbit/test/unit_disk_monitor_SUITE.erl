@@ -9,17 +9,19 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
--compile(export_all).
-
--define(TIMEOUT, 30000).
+-compile([nowarn_export_all, export_all]).
 
 all() ->
     [
+      {group, schema_tests},
       {group, sequential_tests}
     ].
 
 groups() ->
     [
+      {schema_tests, [], [
+          duplicate_mount_path_is_allowed
+        ]},
       {sequential_tests, [], [
           set_disk_free_limit_command
         ]}
@@ -36,6 +38,8 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
+init_per_group(schema_tests, Config) ->
+    Config;
 init_per_group(Group, Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, [
         {rmq_nodename_suffix, Group},
@@ -45,6 +49,8 @@ init_per_group(Group, Config) ->
       rabbit_ct_broker_helpers:setup_steps() ++
       rabbit_ct_client_helpers:setup_steps()).
 
+end_per_group(schema_tests, _Config) ->
+    ok;
 end_per_group(_Group, Config) ->
     rabbit_ct_helpers:run_steps(Config,
       rabbit_ct_client_helpers:teardown_steps() ++
@@ -60,6 +66,21 @@ end_per_testcase(Testcase, Config) ->
 %% -------------------------------------------------------------------
 %% Test cases
 %% -------------------------------------------------------------------
+
+duplicate_mount_path_is_allowed(_Config) ->
+    SchemaFile = filename:join([code:priv_dir(rabbit), "schema", "rabbit.schema"]),
+    Conf = [
+        {["disk_free_limits", "1", "name"],        "streams"},
+        {["disk_free_limits", "1", "mount"],       "/mnt/data"},
+        {["disk_free_limits", "1", "limit"],       "2GB"},
+        {["disk_free_limits", "1", "queue_types"], "stream"},
+        {["disk_free_limits", "2", "name"],        "queues"},
+        {["disk_free_limits", "2", "mount"],       "/mnt/data"},
+        {["disk_free_limits", "2", "limit"],       "1GB"},
+        {["disk_free_limits", "2", "queue_types"], "classic"}
+    ],
+    Generated = cuttlefish_unit:generate_config(file, SchemaFile, Conf),
+    cuttlefish_unit:assert_valid_config(Generated).
 
 set_disk_free_limit_command(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,

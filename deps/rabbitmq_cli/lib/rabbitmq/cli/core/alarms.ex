@@ -21,6 +21,12 @@ defmodule RabbitMQ.CLI.Core.Alarms do
 
       {:resource_limit, :disk, alarmed_node_name}, acc ->
         ["Free disk space alarm on node #{alarmed_node_name}" | acc]
+
+      {{:resource_limit, {:disk, queue_type}, alarmed_node_name}, _}, acc ->
+        ["Free disk space alarm on node #{alarmed_node_name} for #{queue_type}" | acc]
+
+      {:resource_limit, {:disk, queue_type}, alarmed_node_name}, acc ->
+        ["Free disk space alarm on node #{alarmed_node_name} for #{queue_type}" | acc]
     end)
     |> Enum.reverse()
   end
