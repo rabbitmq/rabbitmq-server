@@ -103,7 +103,7 @@ validate_auth_mechanism({Type, <<"basic">>}, _AuthSettings) ->
 validate_auth_mechanism({_, _}, _AuthSettings) -> {error, unknown_auth_mechanism}.
 
 set_oauth_settings(AuthSettings) ->
-    JsonAuthSettings = rabbit_json:encode(rabbit_mgmt_format:format_nulls(AuthSettings)),
+    JsonAuthSettings = rabbit_json:encode(rabbit_mgmt_format:prepare_for_encoding(AuthSettings)),
     ["set_oauth_settings(", JsonAuthSettings, ");"].
 
 set_token_auth(AuthSettings, Req0) ->

@@ -2154,11 +2154,19 @@ format(Q, Ctx) when ?is_amqqueue(Q) ->
      {node, LeaderNode},
      {members, Nodes},
      {leader, LeaderNode},
-     {online, Online},
-     {policy, i(policy, Q)},
-     {operator_policy, i(operator_policy, Q)},
-     {effective_policy_definition, i(effective_policy_definition, Q)},
-     {delivery_limit, i(delivery_limit, Q)}].
+     {online, Online}
+     | format_policy_fields(Q, Ctx)].
+
+format_policy_fields(Q, Ctx) ->
+    case maps:get(management_stats_disabled, Ctx, true) of
+        true ->
+            [{policy, i(policy, Q)},
+             {operator_policy, i(operator_policy, Q)},
+             {effective_policy_definition, i(effective_policy_definition, Q)},
+             {delivery_limit, i(delivery_limit, Q)}];
+        false ->
+            []
+    end.
 
 -spec quorum_messages(rabbit_amqqueue:name()) -> non_neg_integer().
 

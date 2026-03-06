@@ -70,7 +70,9 @@ basic(ReqData) ->
     %% a cluster wide query with a reasonably long (10s) timeout.
     %% TODO: replace with faster approximate function
     Running = rabbit_nodes:list_running(),
-    Ctx = #{running_nodes => Running},
+    StatsDisabled = rabbit_mgmt_util:disable_stats(ReqData),
+    Ctx = #{running_nodes => Running,
+            management_stats_disabled => StatsDisabled},
     FmtQ = fun (Q) -> rabbit_mgmt_format:queue(Q, Ctx) end,
     User = rabbit_mgmt_util:id(user, ReqData),
     list_queues(ReqData, Running, FmtQ, FmtQ, User).
