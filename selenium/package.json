@@ -13,7 +13,7 @@
   "license": "ISC",
   "dependencies": {
     "chromedriver": "^146.0",
-    "ejs": "^4.0.1",
+    "ejs": "^5.0.1",
     "express": "^5.1.0",
     "geckodriver": "^6.0.2",
     "http-proxy": "^1.18.1",
