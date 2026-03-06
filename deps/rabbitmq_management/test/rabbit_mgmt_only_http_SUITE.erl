@@ -1461,7 +1461,7 @@ disable_with_disable_stats_parameter_test(Config) ->
     passed.
 
 classic_queue_with_stats_disabled_test(Config) ->
-    QArgs = #{arguments => #{'x-max-length' => 100}},
+    QArgs = #{durable => true, arguments => #{'x-max-length' => 100}},
     PolicyArgs = #{pattern => <<".*">>,
                    definition => #{'max-length' => 1024},
                    priority => 0,
