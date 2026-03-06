@@ -15,7 +15,7 @@
 -export([to_amqp_table/1, listener/1, web_context/1, properties/1, basic_properties/1]).
 -export([record/2, to_basic_properties/1]).
 -export([addr/1, port/1]).
--export([format_nulls/1]).
+-export([prepare_for_encoding/1]).
 -export([print/2, print/1]).
 
 -export([format_queue_stats/1, format_queue_basic_stats/1,
@@ -555,22 +555,38 @@ strip_pids([Any | T], Acc) ->
 strip_pids([], Acc) ->
     Acc.
 
-%% Format for JSON replies. Transforms '' into null
-format_nulls(Items) when is_list(Items) ->
-    [format_null_item(Pair) || Pair <- Items];
-format_nulls(Item) ->
+%% Format for JSON replies. Transforms '' into null and deduplicates keys.
+prepare_for_encoding(Items) when is_list(Items) ->
+    dedup_keys([format_null_item(Pair) || Pair <- Items]);
+prepare_for_encoding(Item) ->
     format_null_item(Item).
 
 format_null_item({Key, ''}) ->
     {Key, null};
 format_null_item({Key, Value}) when is_list(Value) ->
-    {Key, format_nulls(Value)};
+    {Key, prepare_for_encoding(Value)};
 format_null_item({Key, Value}) ->
     {Key, Value};
 format_null_item([{_K, _V} | _T] = L) ->
-    format_nulls(L);
+    prepare_for_encoding(L);
 format_null_item(Value) ->
     Value.
+
+%% Keep only the first occurrence of each key in a proplist.
+dedup_keys(Items) ->
+    dedup_keys(Items, sets:new([{version, 2}]), []).
+
+dedup_keys([], _Seen, Acc) ->
+    lists:reverse(Acc);
+dedup_keys([{Key, _} = Item | Rest], Seen, Acc) ->
+    case sets:is_element(Key, Seen) of
+        true ->
+            dedup_keys(Rest, Seen, Acc);
+        false ->
+            dedup_keys(Rest, sets:add_element(Key, Seen), [Item | Acc])
+    end;
+dedup_keys([Item | Rest], Seen, Acc) ->
+    dedup_keys(Rest, Seen, [Item | Acc]).
 
 -spec clean_consumer_details(proplists:proplist()) -> proplists:proplist().
 clean_consumer_details(Obj) ->

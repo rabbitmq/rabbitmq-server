@@ -665,10 +665,13 @@ node_stats(Ranges, Objs, Interval) ->
      end || Obj <- Objs].
 
 combine(New, Old) ->
+    NewKeys = [K || {K, _} <- New],
     case pget(state, Old) of
-        unknown -> New ++ Old;
-        live    -> New ++ delete_keys([state, online], Old);
-        _       -> lists:keydelete(state, 1, New) ++ Old
+        unknown -> New ++ delete_keys(NewKeys, Old);
+        live    -> New ++ delete_keys([state, online | NewKeys], Old);
+        _       ->
+            NewKeysNoState = lists:delete(state, NewKeys),
+            lists:keydelete(state, 1, New) ++ delete_keys(NewKeysNoState, Old)
     end.
 
 delete_keys(Keys, List) ->

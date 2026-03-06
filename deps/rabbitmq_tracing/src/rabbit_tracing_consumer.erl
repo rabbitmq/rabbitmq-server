@@ -90,8 +90,9 @@ init(Args0) ->
     end.
 
 handle_call(info_all, _From, State = #state{vhost = V, queue = Q}) ->
+    StatsDisabled = rabbit_mgmt_util:disable_stats(),
     [QInfo] = rabbit_mgmt_db:augment_queues(
-                [rabbit_mgmt_wm_queue:queue(V, Q)],
+                [rabbit_mgmt_wm_queue:queue(V, Q, #{management_stats_disabled => StatsDisabled})],
                 rabbit_mgmt_util:no_range(), basic),
     {reply, [{queue, rabbit_mgmt_format:strip_pids(QInfo)}], State};
 
