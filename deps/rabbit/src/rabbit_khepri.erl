@@ -2103,10 +2103,16 @@ discover_mnesia_tables_to_migrate1([], MigrationsPerApp) ->
       end, [], Apps).
 
 do_migrate_mnesia_tables(FeatureName, Migrations) ->
-    Tables = lists:map(
+    Tables = lists:flatmap(
                fun
-                   ({Table, _Mod}) when is_atom(Table) -> Table;
-                   (Table) when is_atom(Table)         -> Table
+                   ({{mf, Mod, Fun}, _Mod}) when is_atom(Mod), is_atom(Fun) ->
+                       apply(Mod, Fun, []);
+                   ({mf, Mod, Fun}) when is_atom(Mod), is_atom(Fun) ->
+                       apply(Mod, Fun, []);
+                   ({Table, _Mod}) when is_atom(Table) ->
+                       [Table];
+                   (Table) when is_atom(Table) ->
+                       [Table]
                end,
                Migrations),
     ?LOG_NOTICE(
