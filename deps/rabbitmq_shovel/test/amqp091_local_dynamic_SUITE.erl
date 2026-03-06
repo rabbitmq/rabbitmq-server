@@ -223,11 +223,13 @@ original_dest(Config) ->
                      Config, 0, rabbit_runtime_parameters, set,
                      [<<"/">>, <<"shovel">>, Param, ShovelArgs, none]),
               await_shovel(Config, 0, Param),
-              _ = amqp10_publish(Sess, Src, <<"hello">>, 1)
+              SrcAddress = rabbitmq_amqp_address:queue(Src),
+              _ = amqp10_publish(Sess, SrcAddress, <<"hello">>, 1)
       end),
     with_amqp10_session(Config, AltVHost,
                         fun (Sess) ->
-                                amqp10_expect_one(Sess, Dest)
+                                DestAddress = rabbitmq_amqp_address:queue(Dest),
+                                amqp10_expect_one(Sess, DestAddress)
                         end).
 
 exchange_dest(Config) ->
@@ -247,7 +249,9 @@ exchange_dest(Config) ->
                              {<<"dest-exchange">>, AltExchange},
                              {<<"dest-exchange-key">>, RoutingKey}
                             ]),
-              _ = amqp10_publish_expect(Sess, Src, Dest, <<"hello">>, 1)
+              SrcAddress = rabbitmq_amqp_address:queue(Src),
+              DestAddress = rabbitmq_amqp_address:queue(Dest),
+              _ = amqp10_publish_expect(Sess, SrcAddress, DestAddress, <<"hello">>, 1)
       end).
 
 exchange_to_exchange(Config) -> 
@@ -485,7 +489,9 @@ missing_src_and_dest_queue_with_false_src_and_dest_predeclared(Config) ->
                 Config, Param, shovel_queue_args(Config) ++
                     [{<<"src-predeclared">>, false},
                      {<<"dest-predeclared">>, false}]),
-              amqp10_publish_expect(Sess, Src, Dest, <<"hello">>, 1)
+              SrcAddress = rabbitmq_amqp_address:queue(Src),
+              DestAddress = rabbitmq_amqp_address:queue(Dest),
+              amqp10_publish_expect(Sess, SrcAddress, DestAddress, <<"hello">>, 1)
     end).
 
 predeclared_classic_src(Config) ->
@@ -505,7 +511,9 @@ predeclared_src(Config, Type) ->
                         shovel_queue_args(Config) ++
                             [{<<"src-predeclared">>, true}
                             ]),
-              _ = amqp10_publish_expect(Sess, Src, Dest, <<"hello">>, 1)
+              SrcAddress = rabbitmq_amqp_address:queue(Src),
+              DestAddress = rabbitmq_amqp_address:queue(Dest),
+              _ = amqp10_publish_expect(Sess, SrcAddress, DestAddress, <<"hello">>, 1)
       end).
 
 predeclared_stream_first_offset_src(Config) ->
@@ -523,15 +531,17 @@ predeclared_stream_offset_src(Config, Offset, ExpectedMsgs) ->
       Config,
       fun (Sess) ->
               amqp10_declare_queue(Sess, Src, #{<<"x-queue-type">> => {utf8, <<"stream">>}}),
-              amqp10_publish(Sess, Src, <<"tag1">>, 20),
+              SrcAddress = rabbitmq_amqp_address:queue(Src),
+              amqp10_publish(Sess, SrcAddress, <<"tag1">>, 20),
               set_param(Config, Param,
                         shovel_queue_args(Config) ++
                             [{<<"src-predeclared">>, true},
                              {<<"src-consumer-args">>,  #{<<"x-stream-offset">> => Offset}}
                             ]),
-              amqp10_expect_count(Sess, Dest, ExpectedMsgs),
-              amqp10_expect_empty(Sess, Dest),
-              _ = amqp10_publish_expect(Sess, Src, Dest, <<"hello">>, 1)
+              DestAddress = rabbitmq_amqp_address:queue(Dest),
+              amqp10_expect_count(Sess, DestAddress, ExpectedMsgs),
+              amqp10_expect_empty(Sess, DestAddress),
+              _ = amqp10_publish_expect(Sess, SrcAddress, DestAddress, <<"hello">>, 1)
       end).
 
 missing_predeclared_src(Config) ->
@@ -561,8 +571,9 @@ exchange_src(Config) ->
                          {<<"src-exchange-key">>, Src},
                          {<<"dest-queue">>, Dest}
                         ]),
-              Target = <<"/exchange/amq.direct/", Src/binary>>,
-              _ = amqp10_publish_expect(Sess, Target, Dest, <<"hello">>, 1)
+              Target = rabbitmq_amqp_address:exchange(<<"amq.direct">>, Src),
+              DestAddress = rabbitmq_amqp_address:queue(Dest),
+              _ = amqp10_publish_expect(Sess, Target, DestAddress, <<"hello">>, 1)
       end).
 
 queue_args_src(Config) ->
@@ -603,7 +614,9 @@ predeclared_dest(Config, Type) ->
               set_param(Config, Param,
                         shovel_queue_args(Config) ++
                             [{<<"dest-predeclared">>, true}]),
-              _ = amqp10_publish_expect(Sess, Src, Dest, <<"hello">>, 1)
+              SrcAddress = rabbitmq_amqp_address:queue(Src),
+              DestAddress = rabbitmq_amqp_address:queue(Dest),
+              _ = amqp10_publish_expect(Sess, SrcAddress, DestAddress, <<"hello">>, 1)
       end).
 
 missing_predeclared_dest(Config) ->
@@ -705,7 +718,8 @@ delete_after_queue_length(Config) ->
       Config,
       fun (Sess) ->
               amqp10_declare_queue(Sess, Src, #{}),
-              amqp10_publish(Sess, Src, <<"tag1">>, 18),
+              SrcAddress = rabbitmq_amqp_address:queue(Src),
+              amqp10_publish(Sess, SrcAddress, <<"tag1">>, 18),
               set_param_nowait(Config, Param,
                                shovel_queue_args(Config) ++
                                    [{<<"src-predeclared">>, true},
@@ -714,10 +728,12 @@ delete_after_queue_length(Config) ->
               %% The shovel parameter is only deleted when 'delete-after'
               %% is used. In any other failure, the shovel should
               %% remain and try to restart
-              amqp10_expect_count(Sess, Dest, 18),
+              ?awaitMatch(18, list_queue_messages(Config, Dest), 45_000),
+              DestAddress = rabbitmq_amqp_address:queue(Dest),
+              amqp10_expect_count(Sess, DestAddress, 18),
               await_autodelete(Config, Param),
-              amqp10_publish(Sess, Src, <<"tag1">>, 5),
-              amqp10_expect_empty(Sess, Dest)
+              amqp10_publish(Sess, SrcAddress, <<"tag1">>, 5),
+              amqp10_expect_empty(Sess, DestAddress)
       end).
 
 
@@ -748,7 +764,8 @@ autodelete(Config, Type, AckMode) ->
       fun (Sess) ->
               amqp10_declare_queue(Sess, Src, #{<<"x-queue-type">> => {utf8, Type}}),
               amqp10_declare_queue(Sess, Dest, #{<<"x-queue-type">> => {utf8, Type}}),
-              amqp10_publish(Sess, Src, <<"hello">>, 100),
+              SrcAddress = rabbitmq_amqp_address:queue(Src),
+              amqp10_publish(Sess, SrcAddress, <<"hello">>, 100),
               ?awaitMatch(100, list_queue_messages(Config, Src), 45_000),
               ?awaitMatch(0, list_queue_messages(Config, Dest), 45_000),
               ?awaitMatch(Type, list_queue_type(Config, Src), 45_000),
@@ -758,7 +775,8 @@ autodelete(Config, Type, AckMode) ->
               ShovelArgs = shovel_queue_args(Config) ++ ExtraArgs,
               set_param_nowait(Config, Param, ShovelArgs),
               await_autodelete(Config, Param),
-              amqp10_expect_count(Sess, Dest, 100)
+              DestAddress = rabbitmq_amqp_address:queue(Dest),
+              amqp10_expect_count(Sess, DestAddress, 100)
       end).
 
 %%----------------------------------------------------------------------------

@@ -92,6 +92,8 @@ simple(Config) ->
     Dest = ?config(destq, Config),
     with_amqp10_session(Config,
       fun (Sess) ->
+              amqp10_declare_queue(Sess, Src, #{}),
+              amqp10_declare_queue(Sess, Dest, #{}),
               test_amqp10_destination(Config, Src, Dest, Sess, <<"amqp10">>,
                                       <<"src-address">>)
       end).
@@ -101,6 +103,7 @@ simple_amqp10_dest(Config) ->
     Dest = ?config(destq, Config),
     with_amqp10_session(Config,
       fun (Sess) ->
+              amqp10_declare_queue(Sess, Dest, #{}),
               test_amqp10_destination(Config, Src, Dest, Sess, <<"amqp091">>,
                                       <<"src-queue">>)
       end).
@@ -114,25 +117,33 @@ amqp091_to_amqp10_with_dead_lettering(Config) ->
               amqp10_declare_queue(Sess, TmpQ, #{<<"x-max-length">> => {uint, 0},
                                                  <<"x-dead-letter-exchange">> => {utf8, <<"">>},
                                                  <<"x-dead-letter-routing-key">> => {utf8, Src}}),
+              amqp10_declare_queue(Sess, Dest, #{}),
+              TmpAddress = rabbitmq_amqp_address:queue(TmpQ),
+              DstAddress = rabbitmq_amqp_address:queue(Dest),
               {ok, Sender} = amqp10_client:attach_sender_link(Sess,
                                                               <<"sender-tmp">>,
-                                                              <<"/queues/", TmpQ/binary>>,
+                                                              TmpAddress,
                                                               unsettled,
                                                               unsettled_state),
               ok = await_amqp10_event(link, Sender, attached),
-              amqp10_expect_empty(Sess, TmpQ),
+              amqp10_expect_empty(Sess, TmpAddress),
               test_amqp10_destination(Config, Src, Dest, Sess, <<"amqp091">>, <<"src-queue">>),
               %% publish to tmp, it should be dead-lettered to src and then shovelled to dest
-              _ = amqp10_publish_expect(Sess, TmpQ, Dest, <<"hello">>, 1)
+              _ = amqp10_publish_expect(Sess, TmpAddress, DstAddress, <<"hello">>, 1)
       end).
 
 test_amqp10_destination(Config, Src, Dest, Sess, Protocol, ProtocolSrc) ->
     MapConfig = ?config(map_config, Config),
+    MaybeSrcAddress = case ProtocolSrc of
+                          <<"src-address">> -> rabbitmq_amqp_address:queue(Src);
+                          _ -> Src
+                      end,
+    DestAddress = rabbitmq_amqp_address:queue(Dest),
     shovel_test_utils:set_param(Config, ?PARAM,
                                 [{<<"src-protocol">>, Protocol},
-                                 {ProtocolSrc, Src},
+                                 {ProtocolSrc, MaybeSrcAddress},
                                  {<<"dest-protocol">>, <<"amqp10">>},
-                                 {<<"dest-address">>, Dest},
+                                 {<<"dest-address">>, DestAddress},
                                  {<<"dest-add-forward-headers">>, true},
                                  {<<"dest-add-timestamp-header">>, true},
                                  {<<"dest-application-properties">>,
@@ -158,7 +169,8 @@ test_amqp10_destination(Config, Src, Dest, Sess, Protocol, ProtocolSrc) ->
                                           [{<<"x-message-ann-key">>,
                                             <<"message-ann-value">>}]
                                   end}]),
-    [Msg] = amqp10_publish_expect(Sess, Src, Dest, <<"hello">>, 1),
+    SrcAddress = rabbitmq_amqp_address:queue(Src),
+    [Msg] = amqp10_publish_expect(Sess, SrcAddress, DestAddress, <<"hello">>, 1),
     AppProps = amqp10_msg:application_properties(Msg),
     Anns = amqp10_msg:message_annotations(Msg),
     %% We no longer add/override properties, application properties or
@@ -178,25 +190,31 @@ change_definition(Config) ->
     Src = ?config(srcq, Config),
     Dest = ?config(destq, Config),
     Dest2 = ?config(destq2, Config),
+    SrcAddress = rabbitmq_amqp_address:queue(Src),
+    DestAddress = rabbitmq_amqp_address:queue(Dest),
+    Dest2Address = rabbitmq_amqp_address:queue(Dest2),
     with_amqp10_session(Config,
       fun (Sess) ->
+              amqp10_declare_queue(Sess, Src, #{}),
+              amqp10_declare_queue(Sess, Dest, #{}),
+              amqp10_declare_queue(Sess, Dest2, #{}),
               shovel_test_utils:set_param(Config, ?PARAM,
-                                          [{<<"src-address">>,  Src},
+                                          [{<<"src-address">>,  SrcAddress},
                                            {<<"src-protocol">>, <<"amqp10">>},
                                            {<<"dest-protocol">>, <<"amqp10">>},
-                                           {<<"dest-address">>, Dest}]),
-              amqp10_publish_expect(Sess, Src, Dest, <<"hello1">>, 1),
+                                           {<<"dest-address">>, DestAddress}]),
+              amqp10_publish_expect(Sess, SrcAddress, DestAddress, <<"hello1">>, 1),
               shovel_test_utils:set_param(Config, ?PARAM,
-                                          [{<<"src-address">>,  Src},
+                                          [{<<"src-address">>,  SrcAddress},
                                            {<<"src-protocol">>, <<"amqp10">>},
                                            {<<"dest-protocol">>, <<"amqp10">>},
-                                           {<<"dest-address">>, Dest2}]),
-              amqp10_publish_expect(Sess, Src, Dest2, <<"hello2">>, 1),
-              amqp10_expect_empty(Sess, Dest),
+                                           {<<"dest-address">>, Dest2Address}]),
+              amqp10_publish_expect(Sess, SrcAddress, Dest2Address, <<"hello2">>, 1),
+              amqp10_expect_empty(Sess, DestAddress),
               shovel_test_utils:clear_param(Config, <<"test">>),
-              amqp10_publish_expect(Sess, Src, Src, <<"hello3">>, 1),
-              amqp10_expect_empty(Sess, Dest),
-              amqp10_expect_empty(Sess, Dest2)
+              amqp10_publish_expect(Sess, SrcAddress, SrcAddress, <<"hello3">>, 1),
+              amqp10_expect_empty(Sess, DestAddress),
+              amqp10_expect_empty(Sess, Dest2Address)
       end).
 
 test_amqp10_delete_after_queue_length(Config) ->

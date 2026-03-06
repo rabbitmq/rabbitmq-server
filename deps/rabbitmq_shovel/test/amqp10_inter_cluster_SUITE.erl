@@ -91,31 +91,36 @@ shovel(Caller, SrcNode, DestNode, ShovelNode, Config) ->
     SrcUri = shovel_test_utils:make_uri(Config, SrcNode),
     DestUri = shovel_test_utils:make_uri(Config, DestNode),
     ShovelName = atom_to_binary(Caller),
-    SrcQ = <<ShovelName/binary, " source">>,
-    DestQ = <<ShovelName/binary, " destination">>,
+    SrcQ = <<ShovelName/binary, "_source">>,
+    DestQ = <<ShovelName/binary, "_destination">>,
+    SrcAddress = rabbitmq_amqp_address:queue(SrcQ),
+    DestAddress = rabbitmq_amqp_address:queue(DestQ),
     Definition = [
                   {<<"src-uri">>,  SrcUri},
                   {<<"src-protocol">>, <<"amqp10">>},
-                  {<<"src-address">>, SrcQ},
+                  {<<"src-address">>, SrcAddress},
                   {<<"dest-uri">>, [DestUri]},
                   {<<"dest-protocol">>, <<"amqp10">>},
-                  {<<"dest-address">>, DestQ}
+                  {<<"dest-address">>, DestAddress}
                  ],
-    ok = rpc(Config, ShovelNode, rabbit_runtime_parameters, set,
-             [<<"/">>, <<"shovel">>, ShovelName, Definition, none]),
-    ok = shovel_test_utils:await_shovel(Config, ShovelNode, ShovelName),
-
     Hostname = ?config(rmq_hostname, Config),
     SrcPort = rabbit_ct_broker_helpers:get_node_config(Config, SrcNode, tcp_port_amqp),
     DestPort = rabbit_ct_broker_helpers:get_node_config(Config, DestNode, tcp_port_amqp),
     {ok, SrcConn} = amqp10_client:open_connection(Hostname, SrcPort),
     {ok, DestConn} = amqp10_client:open_connection(Hostname, DestPort),
     {ok, SrcSess} = amqp10_client:begin_session_sync(SrcConn),
+    shovel_test_utils:amqp10_declare_queue(SrcSess, SrcQ, #{}),
     {ok, DestSess} = amqp10_client:begin_session_sync(DestConn),
+    shovel_test_utils:amqp10_declare_queue(DestSess, DestQ, #{}),
+
+    ok = rpc(Config, ShovelNode, rabbit_runtime_parameters, set,
+             [<<"/">>, <<"shovel">>, ShovelName, Definition, none]),
+    ok = shovel_test_utils:await_shovel(Config, ShovelNode, ShovelName),
+
     {ok, Sender} = amqp10_client:attach_sender_link(
-                     SrcSess, <<"my sender">>, <<"/amq/queue/", SrcQ/binary>>, settled),
+                     SrcSess, <<"my sender">>, SrcAddress, settled),
     {ok, Receiver} = amqp10_client:attach_receiver_link(
-                       DestSess, <<"my receiver">>, <<"/amq/queue/", DestQ/binary>>, settled),
+                       DestSess, <<"my receiver">>, DestAddress, settled),
 
     ok = await_credit(Sender),
     NumMsgs = 20,

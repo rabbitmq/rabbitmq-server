@@ -19,6 +19,7 @@
                             amqp10_publish/4, amqp10_expect_one/2,
                             amqp10_expect_count/3, amqp10_expect/3,
                             amqp10_publish_expect/5, amqp10_subscribe/2,
+                            amqp10_declare_queue/3,
                             await_autodelete/2]).
 
 -define(PARAM, <<"test">>).
@@ -110,7 +111,9 @@ local_to_local_opt_headers(Config) ->
                                            {<<"dest-add-forward-headers">>, true},
                                            {<<"dest-add-timestamp-header">>, true}
                                           ]),
-              [Msg] = amqp10_publish_expect(Sess, Src, Dest, <<"hello">>, 1),
+              SrcAddress = rabbitmq_amqp_address:queue(Src),
+              DestAddress = rabbitmq_amqp_address:queue(Dest),
+              [Msg] = amqp10_publish_expect(Sess, SrcAddress, DestAddress, <<"hello">>, 1),
               ?assertMatch(#{<<"x-opt-shovel-name">> := ?PARAM,
                              <<"x-opt-shovel-type">> := <<"dynamic">>,
                              <<"x-opt-shovelled-by">> := _,
@@ -134,8 +137,10 @@ local_to_local_stream_no_ack(Config) ->
                                            {<<"dest-queue">>, Dest},
                                            {<<"ack-mode">>, <<"no-ack">>}
                                           ]),
-              Receiver = amqp10_subscribe(Sess, Dest),
-              amqp10_publish(Sess, Src, <<"tag1">>, 10),
+              DestAddress = rabbitmq_amqp_address:queue(Dest),
+              Receiver = amqp10_subscribe(Sess, DestAddress),
+              SrcAddress = rabbitmq_amqp_address:queue(Src),
+              amqp10_publish(Sess, SrcAddress, <<"tag1">>, 10),
               ?awaitMatch([{_Name, dynamic, {running, _}, #{forwarded := 10}, _}],
                           rabbit_ct_broker_helpers:rpc(Config, 0,
                                                        rabbit_shovel_status, status, []),
@@ -155,7 +160,9 @@ local_to_local_delete_dest_queue(Config) ->
                                            {<<"dest-protocol">>, <<"local">>},
                                            {<<"dest-queue">>, Dest}
                                           ]),
-              _ = amqp10_publish_expect(Sess, Src, Dest, <<"hello">>, 1),
+              SrcAddress = rabbitmq_amqp_address:queue(Src),
+              DestAddress = rabbitmq_amqp_address:queue(Dest),
+              _ = amqp10_publish_expect(Sess, SrcAddress, DestAddress, <<"hello">>, 1),
               ?awaitMatch([{_Name, dynamic, {running, _}, #{forwarded := 1}, _}],
                           rabbit_ct_broker_helpers:rpc(Config, 0,
                                                        rabbit_shovel_status, status, []),
@@ -188,9 +195,10 @@ local_to_local_stream_credit_flow(Config, AckMode) ->
                                            {<<"dest-predeclared">>, true},
                                            {<<"ack-mode">>, AckMode}
                                           ]),
-
-              Receiver = amqp10_subscribe(Sess, Dest),
-              amqp10_publish(Sess, Src, <<"tag1">>, 1000),
+              DestAddress = rabbitmq_amqp_address:queue(Dest),
+              Receiver = amqp10_subscribe(Sess, DestAddress),
+              SrcAddress = rabbitmq_amqp_address:queue(Src),
+              amqp10_publish(Sess, SrcAddress, <<"tag1">>, 1000),
               ?awaitMatch([{_Name, dynamic, {running, _}, #{forwarded := 1000}, _}],
                           rabbit_ct_broker_helpers:rpc(Config, 0,
                                                        rabbit_shovel_status, status, []),
@@ -232,7 +240,8 @@ local_to_local_counters(Config) ->
                                           ]),
               ?awaitMatch(#{publishers := 1, consumers := 1},
                           get_global_counters(Config), 30_000),
-              _ = amqp10_publish(Sess, Src, <<"tag1">>, 150),
+              SrcAddress = rabbitmq_amqp_address:queue(Src),
+              _ = amqp10_publish(Sess, SrcAddress, <<"tag1">>, 150),
               ?awaitMatch(#{consumers := 1, publishers := 1,
                             messages_received_total := 150,
                             messages_received_confirm_total := 150,
@@ -253,30 +262,33 @@ local_to_local_alarms(Config) ->
     with_amqp10_session(
       Config,
       fun (Sess) ->
-              amqp10_publish(Sess, Src, <<"hello">>, 1000),
+              amqp10_declare_queue(Sess, Src, #{}),
+              SrcAddress = rabbitmq_amqp_address:queue(Src),
+              amqp10_publish(Sess, SrcAddress, <<"hello">>, 1000),
               rabbit_ct_broker_helpers:set_alarm(Config, 0, disk),
               rabbit_ct_broker_helpers:set_alarm(Config, 0, disk),
               shovel_test_utils:set_param(Config, ?PARAM, ShovelArgs),
               ?awaitMatch({running, blocked}, get_blocked_status(Config), 30000),
-              amqp10_expect_empty(Sess, Dest),
+              DestAddress = rabbitmq_amqp_address:queue(Dest),
+              amqp10_expect_empty(Sess, DestAddress),
               rabbit_ct_broker_helpers:clear_alarm(Config, 0, disk),
               ?awaitMatch({running, running}, get_blocked_status(Config), 30000),
-              amqp10_expect_count(Sess, Dest, 1000),
+              amqp10_expect_count(Sess, DestAddress, 1000),
 
               shovel_test_utils:clear_param(Config, ?PARAM),
 
-              amqp10_publish(Sess, Src, <<"hello">>, 1000),
+              amqp10_publish(Sess, SrcAddress, <<"hello">>, 1000),
               rabbit_ct_broker_helpers:set_alarm(Config, 0, disk),
               rabbit_ct_broker_helpers:set_alarm(Config, 0, memory),
               shovel_test_utils:set_param(Config, ?PARAM, ShovelArgs),
               ?awaitMatch({running, blocked}, get_blocked_status(Config), 30000),
-              amqp10_expect_empty(Sess, Dest),
+              amqp10_expect_empty(Sess, DestAddress),
               rabbit_ct_broker_helpers:clear_alarm(Config, 0, disk),
               ?awaitMatch({running, blocked}, get_blocked_status(Config), 30000),
-              amqp10_expect_empty(Sess, Dest),
+              amqp10_expect_empty(Sess, DestAddress),
               rabbit_ct_broker_helpers:clear_alarm(Config, 0, memory),
               ?awaitMatch({running, running}, get_blocked_status(Config), 30000),
-              amqp10_expect_count(Sess, Dest, 1000)
+              amqp10_expect_count(Sess, DestAddress, 1000)
       end).
 %%----------------------------------------------------------------------------
 declare_queue(Config, VHost, QName) ->

@@ -296,10 +296,10 @@ amqp10_publish_expect(Session, Source, Destination, Payload, Count) ->
     amqp10_publish(Session, Source, Payload, Count),
     amqp10_expect_count(Session, Destination, Count).
 
-amqp10_expect_one(Session, Dest) ->
-    LinkName = <<"dynamic-receiver-", Dest/binary>>,
+amqp10_expect_one(Session, Address) ->
+    LinkName = <<"dynamic-receiver-", Address/binary>>,
     {ok, Receiver} = amqp10_client:attach_receiver_link(Session, LinkName,
-                                                        Dest, settled,
+                                                        Address, settled,
                                                         unsettled_state),
     ok = amqp10_client:flow_link_credit(Receiver, 1, never),
     Msg = amqp10_expect(Receiver),
@@ -348,10 +348,10 @@ amqp10_subscribe(Session, Dest) ->
     ok = amqp10_client:flow_link_credit(Receiver, 10, 1),
     Receiver.
 
-amqp10_expect_count(Session, Dest, Count) ->
-    LinkName = <<"dynamic-receiver-", Dest/binary>>,
+amqp10_expect_count(Session, Address, Count) ->
+    LinkName = <<"dynamic-receiver-", Address/binary>>,
     {ok, Receiver} = amqp10_client:attach_receiver_link(Session, LinkName,
-                                                        Dest, settled,
+                                                        Address, settled,
                                                         unsettled_state),
     ok = amqp10_client:flow_link_credit(Receiver, Count, never),
     Msgs = amqp10_expect(Receiver, Count, []),

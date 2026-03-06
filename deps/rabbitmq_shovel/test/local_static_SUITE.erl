@@ -497,9 +497,10 @@ attach_receiver(Config, TargetQ) ->
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
     {ok, Conn} = amqp10_client:open_connection(Hostname, Port),
     {ok, Sess} = amqp10_client:begin_session(Conn),
+    Address = rabbitmq_amqp_address:queue(TargetQ),
     {ok, Receiver} = amqp10_client:attach_receiver_link(Sess,
                                                         <<"amqp-destination-receiver">>,
-                                                        TargetQ, settled, unsettled_state),
+                                                        Address, settled, unsettled_state),
     ok = amqp10_client:flow_link_credit(Receiver, 5, never),
     {Conn, Receiver}.
 

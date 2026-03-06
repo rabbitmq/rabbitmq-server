@@ -191,6 +191,7 @@ delete_non_existent_dest_address(Config) ->
              {<<"src-queue">>,  <<"src">>},
              {<<"dest-protocol">>, <<"amqp10">>},
              {<<"dest-uri">>, Uri},
+             {<<"dest-predeclared">>, true},
              {<<"dest-address">>, <<"/queues/q2">>}],
             none]),
     ?awaitMatch([{{<<"/">>, <<"myshovel">>}, dynamic, {terminated, _}, _, _}],
