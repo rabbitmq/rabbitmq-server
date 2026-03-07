@@ -7,7 +7,7 @@
 
 -module(rabbit_db_jms_exchange_m2k_converter).
 
--behaviour(mnesia_to_khepri_converter).
+-behaviour(rabbit_db_m2k_converter).
 
 -include_lib("kernel/include/logger.hrl").
 -include_lib("khepri/include/khepri.hrl").
@@ -16,23 +16,19 @@
 
 -include("rabbit_jms_topic_exchange.hrl").
 
--export([init_copy_to_khepri/3,
+-export([init_copy_to_khepri/4,
          copy_to_khepri/3,
-         delete_from_khepri/3,
-         clear_data_in_khepri/1]).
+         delete_from_khepri/3]).
 
--record(?MODULE, {}).
-
--spec init_copy_to_khepri(StoreId, MigrationId, Tables) -> Ret when
+-spec init_copy_to_khepri(StoreId, MigrationId, Tables, State) -> Ret when
       StoreId :: khepri:store_id(),
       MigrationId :: mnesia_to_khepri:migration_id(),
       Tables :: [mnesia_to_khepri:mnesia_table()],
-      Ret :: {ok, Priv},
-      Priv :: #?MODULE{}.
+      Ret :: {ok, State}.
 %% @private
 
-init_copy_to_khepri(_StoreId, _MigrationId, _Tables) ->
-    State = #?MODULE{},
+init_copy_to_khepri(_StoreId, _MigrationId, Tables, State) ->
+    lists:foreach(fun clear_data_in_khepri/1, Tables),
     {ok, State}.
 
 -spec copy_to_khepri(Table, Record, State) -> Ret when
