@@ -585,7 +585,7 @@ get_nodes(Tag, Queue) ->
     lists:sort([binary_to_atom(B, utf8) || B <- maps:get(Tag, Queue)]).
 
 permissions_vhost_test(Config) ->
-    QArgs = #{},
+    QArgs = #{durable => true},
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
     http_put(Config, "/users/myadmin", [{password, <<"myadmin">>},
                                         {tags, <<"administrator">>}], {group, '2xx'}),
@@ -681,7 +681,7 @@ permissions_connection_channel_consumer_test(Config) ->
     http_put(Config, "/users/monitor", [{password, <<"monitor">>},
                                         {tags, <<"monitoring">>}], {group, '2xx'}),
     http_put(Config, "/permissions/%2F/monitor", PermArgs, {group, '2xx'}),
-    http_put(Config, "/queues/%2F/test", #{}, {group, '2xx'}),
+    http_put(Config, "/queues/%2F/test", #{durable => true}, {group, '2xx'}),
 
     {Conn1, UserConn, UserCh, UserConnCh} = get_conn(Config, "user", "user"),
     {Conn2, MonConn, MonCh, MonConnCh} = get_conn(Config, "monitor", "monitor"),
@@ -842,7 +842,7 @@ unregister_parameters_and_policy_validator(Config) ->
 arguments_test(Config) ->
     XArgs = [{type, <<"headers">>},
              {arguments, [{'alternate-exchange', <<"amq.direct">>}]}],
-    QArgs = [{arguments, [{'x-expires', 1800000}]}],
+    QArgs = [{durable, true}, {arguments, [{'x-expires', 1800000}]}],
     BArgs = [{routing_key, <<"">>},
              {arguments, [{'x-match', <<"all">>},
                           {foo, <<"bar">>}]}],
@@ -876,7 +876,7 @@ table_hash(Table) ->
     binary_to_list(rabbit_mgmt_format:args_hash(Table)).
 
 queue_actions_test(Config) ->
-    http_put(Config, "/queues/%2F/q", #{}, {group, '2xx'}),
+    http_put(Config, "/queues/%2F/q", #{durable => true}, {group, '2xx'}),
     http_post(Config, "/queues/%2F/q/actions", [{action, change_colour}], ?BAD_REQUEST),
     http_delete(Config, "/queues/%2F/q", {group, '2xx'}),
     passed.
@@ -1057,7 +1057,7 @@ exchanges_pagination_permissions_test(Config) ->
 
 
 queue_pagination_test(Config) ->
-    QArgs = #{},
+    QArgs = #{durable => true},
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
     http_put(Config, "/vhosts/vh1", none, {group, '2xx'}),
     http_put(Config, "/permissions/vh1/guest", PermArgs, {group, '2xx'}),
@@ -1183,7 +1183,7 @@ queue_pagination_test(Config) ->
     passed.
 
 queue_pagination_columns_test(Config) ->
-    QArgs = #{},
+    QArgs = #{durable => true},
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
     http_put(Config, "/vhosts/vh1", none, [?CREATED, ?NO_CONTENT]),
     http_put(Config, "/permissions/vh1/guest", PermArgs, [?CREATED, ?NO_CONTENT]),
@@ -1254,7 +1254,7 @@ queues_pagination_permissions_test(Config) ->
     http_put(Config, "/permissions/vh1/non-admin",   Perms, {group, '2xx'}),
     http_put(Config, "/permissions/%2F/admin",   Perms, {group, '2xx'}),
     http_put(Config, "/permissions/vh1/admin",   Perms, {group, '2xx'}),
-    QArgs = #{},
+    QArgs = #{durable => true},
     http_put(Config, "/queues/%2F/test0", QArgs, {group, '2xx'}),
     http_put(Config, "/queues/vh1/test1", QArgs, "non-admin","non-admin", {group, '2xx'}),
     FirstPage = http_get(Config, "/queues?page=1", "non-admin", "non-admin", ?OK),
@@ -1318,7 +1318,7 @@ samples_range_test(Config) ->
     ?assert(not maps:is_key(message_stats, Overview)),
 
     %% Queues
-    http_put(Config, "/queues/%2F/test0", #{}, {group, '2xx'}),
+    http_put(Config, "/queues/%2F/test0", #{durable => true}, {group, '2xx'}),
 
     rabbit_ct_helpers:await_condition(
         fun() ->
@@ -1360,7 +1360,7 @@ disable_with_disable_stats_parameter_test(Config) ->
     {Conn, Ch} = open_connection_and_channel(Config),
 
     %% Ensure we have some queue and exchange stats, needed later
-    http_put(Config, "/queues/%2F/test0", #{}, {group, '2xx'}),
+    http_put(Config, "/queues/%2F/test0", #{durable => true}, {group, '2xx'}),
     timer:sleep(1500),
     amqp_channel:call(Ch, #'basic.publish'{exchange = <<>>,
                                            routing_key = <<"test0">>},
@@ -1461,7 +1461,7 @@ disable_with_disable_stats_parameter_test(Config) ->
     passed.
 
 classic_queue_with_stats_disabled_test(Config) ->
-    QArgs = #{arguments => #{'x-max-length' => 100}},
+    QArgs = #{durable => true, arguments => #{'x-max-length' => 100}},
     PolicyArgs = #{pattern => <<".*">>,
                    definition => #{'max-length' => 1024},
                    priority => 0,
@@ -1601,7 +1601,7 @@ stream_queue_with_stats_disabled_test(Config) ->
     passed.
 
 sorting_test(Config) ->
-    QArgs = #{},
+    QArgs = #{durable => true},
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
     http_put(Config, "/vhosts/vh1", none, {group, '2xx'}),
     http_put(Config, "/permissions/vh1/guest", PermArgs, {group, '2xx'}),
@@ -1670,7 +1670,7 @@ columns_test(Config) ->
     Path = "/queues/%2F/columns.test",
     TTL = 30000,
     http_delete(Config, Path, [{group, '2xx'}, 404]),
-    http_put(Config, Path, [{arguments, [{<<"x-message-ttl">>, TTL}]}],
+    http_put(Config, Path, [{durable, true}, {arguments, [{<<"x-message-ttl">>, TTL}]}],
              {group, '2xx'}),
     Item = #{arguments => #{'x-message-ttl' => TTL, 'x-queue-type' => <<"classic">>}, name => <<"columns.test">>},
     timer:sleep(2000),
@@ -1684,7 +1684,7 @@ columns_test(Config) ->
 
 if_empty_unused_test(Config) ->
     http_put(Config, "/exchanges/%2F/test", #{}, {group, '2xx'}),
-    http_put(Config, "/queues/%2F/test", #{}, {group, '2xx'}),
+    http_put(Config, "/queues/%2F/test", #{durable => true}, {group, '2xx'}),
     http_post(Config, "/bindings/%2F/e/test/q/test", #{}, {group, '2xx'}),
     http_post(Config, "/exchanges/%2F/amq.default/publish",
               msg(<<"test">>, #{}, <<"Hello world">>), ?OK),

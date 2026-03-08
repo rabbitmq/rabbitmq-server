@@ -391,7 +391,7 @@ channel_queue_exchange_consumer_close_connection(Config) ->
 %% -------------------------------------------------------------------
 
 declare_queue(Chan) ->
-    Declare = #'queue.declare'{durable = false, auto_delete = true},
+    Declare = #'queue.declare'{durable = true, auto_delete = true},
     #'queue.declare_ok'{queue = Name} = amqp_channel:call(Chan, Declare),
     Name.
 

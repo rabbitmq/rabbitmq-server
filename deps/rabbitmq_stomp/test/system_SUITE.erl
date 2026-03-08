@@ -96,6 +96,7 @@ init_per_testcase0(publish_unauthorized_error, Config) ->
     Channel = ?config(amqp_channel, Config),
     #'queue.declare_ok'{} =
         amqp_channel:call(Channel, #'queue.declare'{queue       = <<"RestrictedQueue">>,
+                                                    durable     = true,
                                                     auto_delete = true}),
 
     rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_auth_backend_internal, add_user,
@@ -148,6 +149,7 @@ subscribe(Config) ->
     Client = ?config(stomp_client, Config),
     #'queue.declare_ok'{} =
         amqp_channel:call(Channel, #'queue.declare'{queue       = ?QUEUE,
+                                                    durable     = true,
                                                     auto_delete = true}),
 
     %% subscribe and wait for receipt
@@ -208,6 +210,7 @@ unsubscribe_ack(Config) ->
     Version = ?config(version, Config),
     #'queue.declare_ok'{} =
         amqp_channel:call(Channel, #'queue.declare'{queue       = ?QUEUE,
+                                                    durable     = true,
                                                     auto_delete = true}),
     %% subscribe and wait for receipt
     rabbit_stomp_client:send(
@@ -246,6 +249,7 @@ subscribe_ack(Config) ->
     Version = ?config(version, Config),
     #'queue.declare_ok'{} =
         amqp_channel:call(Channel, #'queue.declare'{queue       = ?QUEUE,
+                                                    durable     = true,
                                                     auto_delete = true}),
 
     %% subscribe and wait for receipt
@@ -278,6 +282,7 @@ send(Config) ->
     Client = ?config(stomp_client, Config),
     #'queue.declare_ok'{} =
         amqp_channel:call(Channel, #'queue.declare'{queue       = ?QUEUE,
+                                                    durable     = true,
                                                     auto_delete = true}),
 
     %% subscribe and wait for receipt
@@ -297,6 +302,7 @@ delete_queue_subscribe(Config) ->
     Client = ?config(stomp_client, Config),
     #'queue.declare_ok'{} =
         amqp_channel:call(Channel, #'queue.declare'{queue       = ?QUEUE,
+                                                    durable     = true,
                                                     auto_delete = true}),
 
     %% subscribe and wait for receipt
@@ -320,6 +326,7 @@ temp_destination_queue(Config) ->
     Client = ?config(stomp_client, Config),
     #'queue.declare_ok'{} =
         amqp_channel:call(Channel, #'queue.declare'{queue       = ?QUEUE,
+                                                    durable     = true,
                                                     auto_delete = true}),
     rabbit_stomp_client:send( Client, "SEND", [{"destination", ?DESTINATION},
                                                {"reply-to", "/temp-queue/foo"}],

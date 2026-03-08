@@ -188,7 +188,7 @@ set_node_limit(Config, Type, Limit) ->
                                  set_env, [rabbit, Type, Limit]).
 
 consume(Ch, Q, Tag) ->
-    #'queue.declare_ok'{queue = Q} = amqp_channel:call(Ch, #'queue.declare'{queue = Q}),
+    #'queue.declare_ok'{queue = Q} = amqp_channel:call(Ch, #'queue.declare'{queue = Q, durable = true}),
     try amqp_channel:call(Ch, #'basic.consume'{queue = Q, consumer_tag = Tag}) of
       #'basic.consume_ok'{} = OK -> {ok, OK};
       NotOk -> {error, NotOk}

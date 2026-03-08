@@ -74,7 +74,7 @@ exchange_count(Config) ->
 queue_count(Config) ->
     Conn = rabbit_ct_client_helpers:open_connection(Config, 0),
     {ok, Ch} = amqp_connection:open_channel(Conn),
-    amqp_channel:call(Ch, #'queue.declare'{ queue = <<"my-queue">> }),
+    amqp_channel:call(Ch, #'queue.declare'{ queue = <<"my-queue">>, durable = true }),
 
     ?assertEqual(1, rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, count, [])),
 

@@ -518,8 +518,8 @@ match_bidirectional(Config) ->
 
     [begin
          set_env(Config, ConfigurationFunction()),
-         Q1 = [#'queue.declare'{queue = <<"Alice-queue">>}],
-         Q2 = [#'queue.declare'{queue = <<"Ali">>}],
+         Q1 = [#'queue.declare'{queue = <<"Alice-queue">>, durable = true}],
+         Q2 = [#'queue.declare'{queue = <<"Ali">>, durable = true}],
          P = #amqp_params_network{port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp)},
          [test_resource(PTR) || PTR <- [{P?ALICE, Q1, ok},
                                         {P?ALICE, Q2, fail}]]
@@ -537,8 +537,8 @@ match_bidirectional_gh_100(Config) ->
 
     [begin
          set_env(Config, ConfigurationFunction()),
-         Q1 = [#'queue.declare'{queue = <<"Jimmy-queue">>}],
-         Q2 = [#'queue.declare'{queue = <<"Jimmy">>}],
+         Q1 = [#'queue.declare'{queue = <<"Jimmy-queue">>, durable = true}],
+         Q2 = [#'queue.declare'{queue = <<"Jimmy">>, durable = true}],
          P = #amqp_params_network{port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp)},
          [test_resource(PTR) || PTR <- [{P?JIMMY, Q1, ok},
                                         {P?JIMMY, Q2, ok}]]
@@ -765,7 +765,7 @@ in_group(Config) ->
                         {B?BOB, X, fail}]).
 
 const(Config) ->
-    Q = [#'queue.declare'{queue = <<"test">>}],
+    Q = [#'queue.declare'{queue = <<"test">>, durable = true}],
     B = #amqp_params_network{port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp)},
     test_resources([{B?ALICE, Q, ok},
                         {B?BOB, Q, fail}]).
@@ -773,7 +773,7 @@ const(Config) ->
 string_match(Config) ->
     B = fun(N) ->
                 [#'exchange.declare'{exchange = N},
-                 #'queue.declare'{queue = <<"test">>},
+                 #'queue.declare'{queue = <<"test">>, durable = true},
                  #'queue.bind'{exchange = N, queue = <<"test">>}]
         end,
     P = #amqp_params_network{port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp)},
@@ -782,9 +782,9 @@ string_match(Config) ->
                         {P?ALICE, B(<<"xch-Someone Else-abc123">>),    fail}]).
 
 boolean_logic(Config) ->
-    Q1 = [#'queue.declare'{queue = <<"test1">>},
+    Q1 = [#'queue.declare'{queue = <<"test1">>, durable = true},
           #'basic.consume'{queue = <<"test1">>}],
-    Q2 = [#'queue.declare'{queue = <<"test2">>},
+    Q2 = [#'queue.declare'{queue = <<"test2">>, durable = true},
           #'basic.consume'{queue = <<"test2">>}],
     P = #amqp_params_network{port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp)},
     [test_resource(PTR) || PTR <- [{P?ALICE, Q1, ok},
@@ -795,7 +795,7 @@ boolean_logic(Config) ->
 permission_match(Config) ->
     B = fun(N) ->
                 [#'exchange.declare'{exchange = N},
-                 #'queue.declare'{queue = <<"prefix-test">>},
+                 #'queue.declare'{queue = <<"prefix-test">>, durable = true},
                  #'queue.bind'{exchange = N, queue = <<"prefix-test">>}]
         end,
     P = #amqp_params_network{port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp)},

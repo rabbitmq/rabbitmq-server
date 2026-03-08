@@ -167,7 +167,7 @@ declare_and_bind_queues(Config, NodeCount, E) ->
   QueueNames.
 
 declare_and_bind_queue(Ch, E, Q) ->
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = Q}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = Q, durable = true}),
     #'queue.bind_ok'{} = amqp_channel:call(Ch, #'queue.bind'{queue = Q,
                                                              exchange = E,
                                                              routing_key = <<"">>}),
@@ -176,7 +176,7 @@ declare_and_bind_queue(Ch, E, Q) ->
 assert_total_queue_size(_Config, Chan, ExpectedSize, ExpectedQueues) ->
     Counts = [begin
                   #'queue.declare_ok'{message_count = M} =
-                  amqp_channel:call(Chan, #'queue.declare'{queue = Q}),
+                  amqp_channel:call(Chan, #'queue.declare'{queue = Q, durable = true}),
                   M
               end || Q <- ExpectedQueues],
     ?assertEqual(ExpectedSize, lists:sum(Counts)).
@@ -184,7 +184,7 @@ assert_total_queue_size(_Config, Chan, ExpectedSize, ExpectedQueues) ->
 assert_queue_size(_Config, Chan, ExpectedSize, ExpectedQueue) ->
     ct:log("assert_queue_size ~p ~p", [ExpectedSize, ExpectedQueue]),
     #'queue.declare_ok'{message_count = M} =
-    amqp_channel:call(Chan, #'queue.declare'{queue = ExpectedQueue}),
+    amqp_channel:call(Chan, #'queue.declare'{queue = ExpectedQueue, durable = true}),
     ?assertEqual(ExpectedSize, M).
 
 rnd() ->

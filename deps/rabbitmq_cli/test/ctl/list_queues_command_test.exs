@@ -89,7 +89,7 @@ defmodule ListQueuesCommandTest do
     n = 5000
 
     for i <- 1..n do
-      declare_queue("test_queue_" <> Integer.to_string(i), @vhost)
+      declare_queue("test_queue_" <> Integer.to_string(i), @vhost, true)
     end
 
     assert run_command_to_list(@command, [["name"], context[:opts]]) ==
@@ -106,9 +106,9 @@ defmodule ListQueuesCommandTest do
 
   @tag test_timeout: 5000
   test "run: return multiple queues", context do
-    declare_queue("test_queue_1", @vhost)
+    declare_queue("test_queue_1", @vhost, true)
     publish_messages(@vhost, "test_queue_1", 3)
-    declare_queue("test_queue_2", @vhost)
+    declare_queue("test_queue_2", @vhost, true)
     publish_messages(@vhost, "test_queue_2", 1)
 
     assert Keyword.equal?(
@@ -119,8 +119,8 @@ defmodule ListQueuesCommandTest do
 
   @tag test_timeout: 5000
   test "run: info keys filter single key", context do
-    declare_queue("test_queue_1", @vhost)
-    declare_queue("test_queue_2", @vhost)
+    declare_queue("test_queue_1", @vhost, true)
+    declare_queue("test_queue_2", @vhost, true)
 
     assert Keyword.equal?(
              run_command_to_list(@command, [["name"], context[:opts]]),
@@ -132,7 +132,7 @@ defmodule ListQueuesCommandTest do
   test "run: info keys add additional keys", context do
     declare_queue("durable_queue", @vhost, true)
     publish_messages(@vhost, "durable_queue", 3)
-    declare_queue("auto_delete_queue", @vhost, false, true)
+    declare_queue("auto_delete_queue", @vhost, true, true)
     publish_messages(@vhost, "auto_delete_queue", 1)
 
     assert Keyword.equal?(
@@ -142,7 +142,7 @@ defmodule ListQueuesCommandTest do
              ]),
              [
                [name: "durable_queue", messages: 3, durable: true, auto_delete: false],
-               [name: "auto_delete_queue", messages: 1, durable: false, auto_delete: true]
+               [name: "auto_delete_queue", messages: 1, durable: true, auto_delete: true]
              ]
            )
   end
@@ -151,7 +151,7 @@ defmodule ListQueuesCommandTest do
   test "run: info keys order is preserved", context do
     declare_queue("durable_queue", @vhost, true)
     publish_messages(@vhost, "durable_queue", 3)
-    declare_queue("auto_delete_queue", @vhost, false, true)
+    declare_queue("auto_delete_queue", @vhost, true, true)
     publish_messages(@vhost, "auto_delete_queue", 1)
 
     assert Keyword.equal?(
@@ -161,7 +161,7 @@ defmodule ListQueuesCommandTest do
              ]),
              [
                [messages: 3, durable: true, name: "durable_queue", auto_delete: false],
-               [messages: 1, durable: false, name: "auto_delete_queue", auto_delete: true]
+               [messages: 1, durable: true, name: "auto_delete_queue", auto_delete: true]
              ]
            )
   end
@@ -175,8 +175,8 @@ defmodule ListQueuesCommandTest do
       delete_vhost(other_vhost)
     end)
 
-    declare_queue("test_queue_1", @vhost)
-    declare_queue("test_queue_2", other_vhost)
+    declare_queue("test_queue_1", @vhost, true)
+    declare_queue("test_queue_2", other_vhost, true)
     assert run_command_to_list(@command, [["name"], context[:opts]]) == [[name: "test_queue_1"]]
 
     assert run_command_to_list(@command, [["name"], %{context[:opts] | :vhost => other_vhost}]) ==

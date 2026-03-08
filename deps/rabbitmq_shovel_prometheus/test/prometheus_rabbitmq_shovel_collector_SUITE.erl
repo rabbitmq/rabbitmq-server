@@ -153,7 +153,8 @@ create_static_shovel(Config, Name) ->
                                     ]},
                                    {'queue.declare',
                                     [{arguments,
-                                      [{<<"x-message-ttl">>, long, 60000}]}]},
+                                      [{<<"x-message-ttl">>, long, 60000}]},
+                                     durable]},
                                    {'queue.bind',
                                     [ {exchange, <<"my_fanout">>},
                                       {queue,    <<>>}
