@@ -63,7 +63,10 @@ init_per_group(_, Config) ->
 end_per_group(_, Config) ->
     Config.
 
-init_per_testcase(Testcase, Config) ->
+init_per_testcase(Testcase, Config0) ->
+    SrcQ = list_to_binary(atom_to_list(Testcase) ++ "_src"),
+    DestQ = list_to_binary(atom_to_list(Testcase) ++ "_dest"),
+    Config = [{srcq, SrcQ}, {destq, DestQ} | Config0],
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
 end_per_testcase(Testcase, Config) ->
@@ -88,7 +91,7 @@ amqp10_destination_on_confirm(Config) ->
     amqp10_destination(Config, on_confirm, <<"exchange_on_confirm">>).
 
 amqp10_destination(Config, AckMode, Exchange) ->
-    TargetQ =  <<"a-queue">>,
+    TargetQ = ?config(destq, Config),
     ok = setup_amqp10_destination_shovel(Config, TargetQ, AckMode, Exchange),
     Hostname = ?config(rmq_hostname, Config),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
@@ -165,8 +168,8 @@ amqp10_source_on_confirm(Config) ->
     amqp10_source(Config, on_confirm).
 
 amqp10_source(Config, AckMode) ->
-    SourceQ =  <<"source-queue">>,
-    DestQ =  <<"dest-queue">>,
+    SourceQ = ?config(srcq, Config),
+    DestQ = ?config(destq, Config),
     ok = setup_amqp10_source_shovel(Config, SourceQ, DestQ, AckMode),
     Chan = rabbit_ct_client_helpers:open_channel(Config, 0),
     CTag = consume(Chan, DestQ, AckMode =:= no_ack),
