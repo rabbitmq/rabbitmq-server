@@ -816,23 +816,32 @@ public class HttpTest {
       waitUntil(() -> consumersRequest.call().size() == initialCount + 1);
 
       String consumerTagPrefix = "stream.subid-";
-      Map<String, Object> consumersConsumer =
-          entity(
-              consumersRequest.call(),
-              m ->
-                  m.get("consumer_tag").toString().startsWith(consumerTagPrefix)
-                      && m.get("channel_details") != null
-                      && m.get("channel_details") instanceof Map
-                      && connectionName(client)
-                          .equals(
-                              ((Map<String, Object>) m.get("channel_details"))
-                                  .get("connection_name")));
+      Predicate<Map<String, Object>> consumerFilter =
+          m ->
+              m.get("consumer_tag") != null
+                  && m.get("consumer_tag").toString().startsWith(consumerTagPrefix)
+                  && m.get("channel_details") != null
+                  && m.get("channel_details") instanceof Map
+                  && connectionName(client)
+                      .equals(
+                          ((Map<String, Object>) m.get("channel_details"))
+                              .get("connection_name"));
+      waitUntil(() -> !entity(consumersRequest.call(), consumerFilter).isEmpty());
+      Map<String, Object> consumersConsumer = entity(consumersRequest.call(), consumerFilter);
 
       Callable<Map<String, Object>> queueRequest = () -> toMap(get("/queues/%2F/" + s));
+      waitUntil(
+          () -> {
+            Map<String, Object> q = queueRequest.call();
+            if (!q.containsKey("consumer_details")) return false;
+            Object cd = q.get("consumer_details");
+            if (!(cd instanceof List)) return false;
+            List<?> list = (List<?>) cd;
+            if (list.size() != 1) return false;
+            Map<?, ?> consumer = (Map<?, ?>) list.get(0);
+            return consumer.containsKey("ack_required");
+          });
       Map<String, Object> queueDetails = queueRequest.call();
-
-      assertThat(queueDetails).containsKey("consumer_details");
-      assertThat(queueDetails.get("consumer_details")).isInstanceOf(List.class).asList().hasSize(1);
       Map<String, Object> queueConsumer =
           ((List<Map<String, Object>>) queueDetails.get("consumer_details")).get(0);
 
