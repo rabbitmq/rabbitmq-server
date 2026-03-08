@@ -43,22 +43,26 @@ route(#exchange{name = XName}, Msg, Opts) ->
     RKeys = mc:routing_keys(Msg),
     lists:append([rabbit_db_topic_exchange:match(XName, RKey, Opts) || RKey <- RKeys]).
 
-validate(_X) -> ok.
-validate_binding(_X, _B) -> ok.
-create(_Serial, _X) -> ok.
+validate(_X) ->
+    ok.
 
-delete(_Serial, #exchange{name = X}) ->
-    rabbit_db_topic_exchange:delete_all_for_exchange(X).
+validate_binding(_X, _B) ->
+    ok.
 
-policy_changed(_X1, _X2) -> ok.
+create(_Serial, _X) ->
+    ok.
 
-add_binding(_Serial, _Exchange, Binding) ->
-    rabbit_db_topic_exchange:set(Binding).
+delete(_Serial, _X) ->
+    ok.
 
-remove_bindings(_Serial, _X, Bs) ->
-    rabbit_db_topic_exchange:delete(Bs).
+policy_changed(_X1, _X2) ->
+    ok.
+
+add_binding(_Serial, _Exchange, _Binding) ->
+    ok.
+
+remove_bindings(_Serial, _X, _Bs) ->
+    ok.
 
 assert_args_equivalence(X, Args) ->
     rabbit_exchange:assert_args_equivalence(X, Args).
-
-%%----------------------------------------------------------------------------
