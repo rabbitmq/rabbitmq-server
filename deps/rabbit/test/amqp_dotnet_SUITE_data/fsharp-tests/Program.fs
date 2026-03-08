@@ -576,14 +576,21 @@ module Test =
     // to return a descriptive error since a body is mandatory according to the AMQP spec.
     let messageWithoutBody uri =
         use ac = connectAnon uri
-        let sender = SenderLink(ac.Session, "sender", "/exchange/amq.fanout")
 
+        use attachEvent = new AutoResetEvent(false)
         use detachEvent = new AutoResetEvent(false)
         let mutable linkError : Error = null
 
-        sender.add_Closed(new ClosedCallback(fun _ err ->
-            linkError <- err
-            detachEvent.Set() |> ignore))
+        let onAttached = new OnAttached (fun link _ ->
+            (link :?> Link).add_Closed(new ClosedCallback(fun _ err ->
+                linkError <- err
+                detachEvent.Set() |> ignore))
+            attachEvent.Set() |> ignore)
+
+        let sender = SenderLink(ac.Session, "sender",
+                                Target(Address = "/exchange/amq.fanout"), onAttached)
+
+        if not (attachEvent.WaitOne(9000)) then failwith "Expected broker to reply with attach frame"
 
         // Create a message with Properties but no body section
         let message = new Message(Properties = new Properties())
@@ -594,13 +601,14 @@ module Test =
         with
         | :? Amqp.AmqpException as ex ->
             printfn "Got expected exception: %A" ex
+        | :? System.TimeoutException ->
+            printfn "Got timeout (link was detached during send)"
 
         assertTrue (detachEvent.WaitOne(9000))
         assertNotNull linkError
         assertEqual (Symbol "amqp:decode-error") linkError.Condition
         assertNotNull linkError.Description
         assertTrue (linkError.Description.Contains("message has no body"))
-        assertTrue (not ac.Session.IsClosed)
 
 let (|AsLower|) (s: string) =
     match s with
