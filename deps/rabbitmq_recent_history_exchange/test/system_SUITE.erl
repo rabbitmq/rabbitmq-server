@@ -129,7 +129,8 @@ e2e_test(Config) ->
 
     #'queue.declare_ok'{queue = Q} =
         amqp_channel:call(Chan, #'queue.declare' {
-                                   queue     = <<"q">>
+                                   queue     = <<"q">>,
+                                   durable   = true
                                   }),
 
     #'queue.bind_ok'{} =
@@ -181,7 +182,8 @@ multinode_test(Config) ->
 
     #'queue.declare_ok'{queue = Q} =
         amqp_channel:call(Chan, #'queue.declare' {
-                                   queue     = <<"q">>
+                                   queue     = <<"q">>,
+                                   durable   = true
                                   }),
 
     #'queue.bind_ok'{} =
@@ -200,7 +202,8 @@ multinode_test(Config) ->
 
     #'queue.declare_ok'{queue = Q2} =
         amqp_channel:call(Chan2, #'queue.declare' {
-                                   queue     = <<"q2">>
+                                   queue     = <<"q2">>,
+                                   durable   = true
                                   }),
 
     #'queue.bind_ok'{} =

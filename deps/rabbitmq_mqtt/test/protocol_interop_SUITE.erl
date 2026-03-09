@@ -484,7 +484,8 @@ mqtt_stomp_mqtt(Config) ->
     {ok, StompC0} = stomp_connect(Config),
     ok = stomp_send(StompC0, "SUBSCRIBE", [{"destination", "/topic/t.1"},
                                            {"receipt", "my-receipt"},
-                                           {"id", "subscription-888"}]),
+                                           {"id", "subscription-888"},
+                                           {"durable", "true"}]),
     {#stomp_frame{command = "RECEIPT",
                   headers = [{"receipt-id","my-receipt"}]}, StompC1} = stomp_recv(StompC0),
 

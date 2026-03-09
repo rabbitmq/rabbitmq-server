@@ -157,8 +157,8 @@ amqpl_headers(Header, Config) ->
 
     ok = set_topic_permissions(Config, "^a", ".*"),
 
-    #'queue.declare_ok'{} = amqp_channel:call(Ch1, #'queue.declare'{queue = QName1}),
-    #'queue.declare_ok'{} = amqp_channel:call(Ch1, #'queue.declare'{queue = QName2}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch1, #'queue.declare'{queue = QName1, durable = true}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch1, #'queue.declare'{queue = QName2, durable = true}),
     #'queue.bind_ok'{} = amqp_channel:call(Ch1, #'queue.bind'{queue = QName1,
                                                               exchange = <<"amq.topic">>,
                                                               routing_key = <<"a.1">>}),

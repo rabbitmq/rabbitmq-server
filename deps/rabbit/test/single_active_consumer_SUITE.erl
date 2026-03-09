@@ -65,7 +65,7 @@ init_per_group(classic_queue, Config) ->
             {<<"x-single-active-consumer">>, bool, true},
             {<<"x-queue-type">>, longstr, <<"classic">>}
         ],
-            auto_delete = true}
+            durable = true, auto_delete = true}
         } | Config];
 init_per_group(quorum_queue, Config) ->
     [{single_active_consumer_queue_declare,

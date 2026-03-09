@@ -28,8 +28,8 @@
          set_policy_when_cmq_is_permitted_by_default/1,
          set_policy_when_cmq_is_not_permitted_from_conf/1,
 
-         when_transient_nonexcl_is_permitted_by_default/1,
-         when_transient_nonexcl_is_not_permitted_from_conf/1,
+         when_transient_nonexcl_is_not_permitted/1,
+         when_transient_nonexcl_is_permitted_from_conf/1,
 
          when_queue_master_locator_is_permitted_from_conf/1,
          when_queue_master_locator_is_not_permitted_by_default/1
@@ -55,8 +55,8 @@ groups() ->
       [set_policy_when_cmq_is_permitted_by_default,
        set_policy_when_cmq_is_not_permitted_from_conf]},
      {transient_nonexcl_queues, [],
-      [when_transient_nonexcl_is_permitted_by_default,
-       when_transient_nonexcl_is_not_permitted_from_conf]},
+      [when_transient_nonexcl_is_not_permitted,
+       when_transient_nonexcl_is_permitted_from_conf]},
      {queue_master_locator, [],
       [when_queue_master_locator_is_permitted_from_conf,
        when_queue_master_locator_is_not_permitted_by_default]}
@@ -102,12 +102,12 @@ init_per_testcase(
                    #{classic_queue_mirroring => false}}]}),
     init_per_testcase1(Testcase, Config1);
 init_per_testcase(
-    when_transient_nonexcl_is_not_permitted_from_conf = Testcase, Config) ->
+    when_transient_nonexcl_is_permitted_from_conf = Testcase, Config) ->
     Config1 = rabbit_ct_helpers:merge_app_env(
                 Config,
                 {rabbit,
                  [{permit_deprecated_features,
-                   #{transient_nonexcl_queues => false}}]}),
+                   #{transient_nonexcl_queues => true}}]}),
     init_per_testcase1(Testcase, Config1);
 init_per_testcase(
     when_queue_master_locator_is_permitted_from_conf = Testcase, Config) ->
@@ -230,27 +230,7 @@ set_cmq_policy(Config) ->
 %% Transient non-exclusive queues.
 %% -------------------------------------------------------------------
 
-when_transient_nonexcl_is_permitted_by_default(Config) ->
-    [NodeA] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-
-    Ch = rabbit_ct_client_helpers:open_channel(Config, NodeA),
-
-    QName = list_to_binary(atom_to_list(?FUNCTION_NAME)),
-    ?assertEqual(
-       {'queue.declare_ok', QName, 0, 0},
-       amqp_channel:call(
-         Ch,
-         #'queue.declare'{queue = QName,
-                          durable = false,
-                          exclusive = false})),
-
-    ?assert(
-       log_file_contains_message(
-         Config, NodeA,
-         ["Deprecated features: `transient_nonexcl_queues`: Feature `transient_nonexcl_queues` is deprecated",
-          "By default, this feature can still be used for now."])).
-
-when_transient_nonexcl_is_not_permitted_from_conf(Config) ->
+when_transient_nonexcl_is_not_permitted(Config) ->
     [NodeA] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, NodeA),
@@ -272,7 +252,27 @@ when_transient_nonexcl_is_not_permitted_from_conf(Config) ->
        log_file_contains_message(
          Config, NodeA,
          ["Deprecated features: `transient_nonexcl_queues`: Feature `transient_nonexcl_queues` is deprecated",
-          "Its use is not permitted per the configuration"])).
+          "By default, this feature is not permitted anymore"])).
+
+when_transient_nonexcl_is_permitted_from_conf(Config) ->
+    [NodeA] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, NodeA),
+
+    QName = list_to_binary(atom_to_list(?FUNCTION_NAME)),
+    ?assertEqual(
+       {'queue.declare_ok', QName, 0, 0},
+       amqp_channel:call(
+         Ch,
+         #'queue.declare'{queue = QName,
+                          durable = false,
+                          exclusive = false})),
+
+    ?assert(
+       log_file_contains_message(
+         Config, NodeA,
+         ["Deprecated features: `transient_nonexcl_queues`: Feature `transient_nonexcl_queues` is deprecated",
+          "Its use is permitted per the configuration"])).
 
 %% -------------------------------------------------------------------
 %% (x-)queue-master-locator
@@ -289,6 +289,7 @@ when_queue_master_locator_is_permitted_from_conf(Config) ->
        amqp_channel:call(
          Ch,
          #'queue.declare'{queue = QName,
+                          durable = true,
                           arguments = [{<<"x-queue-master-locator">>, longstr, <<"client-local">>}]})),
 
     ?assertEqual(
@@ -316,6 +317,7 @@ when_queue_master_locator_is_not_permitted_by_default(Config) ->
        amqp_channel:call(
          Ch,
          #'queue.declare'{queue = QName,
+                          durable = true,
                           arguments = [{<<"x-queue-master-locator">>, longstr, <<"client-local">>}]})),
 
     ?assertError(

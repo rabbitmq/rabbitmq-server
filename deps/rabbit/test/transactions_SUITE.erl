@@ -109,7 +109,7 @@ delete_queue(Ch, QName) ->
 
 declare_queue(Ch, QName) ->
     #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName,
-                                                                   durable = false,
+                                                                   durable = true,
                                                                    exclusive = false,
                                                                    auto_delete = false}).
 publish(Ch, QName, Payload) ->

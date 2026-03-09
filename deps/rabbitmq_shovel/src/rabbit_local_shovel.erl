@@ -747,7 +747,9 @@ check_fun(QName, VHost, User) ->
 src_decl_exchange(SrcX, SrcXKey, VHost, User) ->
     Methods = [#'queue.bind'{routing_key = SrcXKey,
                              exchange    = SrcX},
-               #'queue.declare'{exclusive = true}],
+               %% Local can't be exclusive as it doesn't provide
+               %% a connection pid
+               #'queue.declare'{durable = true}],
     decl_fun(Methods, VHost, User).
 
 dest_decl_queue(none, _, _, _) ->

@@ -107,7 +107,7 @@ dest_resource_alarm(AckMode, Config) ->
     {Conn1, Ch1} = rabbit_ct_client_helpers:open_connection_and_channel(
                      Config, SourceIdx),
     amqp_channel:call(Ch1, #'confirm.select'{}),
-    amqp_channel:call(Ch1, #'queue.declare'{queue = <<"src">>}),
+    amqp_channel:call(Ch1, #'queue.declare'{queue = <<"src">>, durable = true}),
     publish(Ch1, <<>>, <<"src">>, <<"hello">>),
     true = amqp_channel:wait_for_confirms(Ch1),
     #{messages := 1} = message_count(Config, SourceIdx, <<"src">>),

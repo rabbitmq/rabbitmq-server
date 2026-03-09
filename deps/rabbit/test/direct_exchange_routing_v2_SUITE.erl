@@ -66,8 +66,14 @@ groups() ->
 
 suite() -> [{timetrap, {minutes, 3}}].
 
-init_per_suite(Config) ->
+init_per_suite(Config0) ->
     rabbit_ct_helpers:log_environment(),
+    %% Remove when transient_nonexcl_queues is removed entirely,
+    %% and fix/remove the tests that use transient queues.
+    Config = rabbit_ct_helpers:merge_app_env(
+                Config0,
+                {rabbit,
+                 [{permit_deprecated_features, #{transient_nonexcl_queues => true}}]}),
     rabbit_ct_helpers:run_setup_steps(Config, []).
 
 end_per_suite(Config) ->

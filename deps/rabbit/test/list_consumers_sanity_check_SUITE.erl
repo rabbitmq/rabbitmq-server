@@ -67,7 +67,7 @@ list_consumers_sanity_check(Config) ->
     %% this queue is not cleaned up because the entire node is
     %% reset between tests
     QName = <<"list_consumers_q">>,
-    #'queue.declare_ok'{} = amqp_channel:call(Chan, #'queue.declare'{queue = QName}),
+    #'queue.declare_ok'{} = amqp_channel:call(Chan, #'queue.declare'{queue = QName, durable = true}),
 
     %% No consumers even if we have some queues
     [] = rabbitmqctl_list_consumers(Config, A),
@@ -93,32 +93,3 @@ rabbitmqctl_list_consumers(Config, Node) ->
     [<<"Listing consumers", _/binary>> | ConsumerRows] = re:split(StdOut, <<"\n">>, [trim]),
     CTags = [ lists:nth(3, re:split(Row, <<"\t">>)) || Row <- ConsumerRows ],
     CTags.
-
-list_queues_online_and_offline(Config) ->
-    [A, B] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    ACh = rabbit_ct_client_helpers:open_channel(Config, A),
-    %% Node B will be stopped
-    BCh = rabbit_ct_client_helpers:open_channel(Config, B),
-    #'queue.declare_ok'{} = amqp_channel:call(ACh, #'queue.declare'{queue = <<"q_a_1">>, durable = true}),
-    #'queue.declare_ok'{} = amqp_channel:call(ACh, #'queue.declare'{queue = <<"q_a_2">>, durable = true}),
-    #'queue.declare_ok'{} = amqp_channel:call(BCh, #'queue.declare'{queue = <<"q_b_1">>, durable = true}),
-    #'queue.declare_ok'{} = amqp_channel:call(BCh, #'queue.declare'{queue = <<"q_b_2">>, durable = true}),
-
-    rabbit_ct_broker_helpers:rabbitmqctl(Config, B, ["stop"]),
-
-    GotUp = lists:sort(rabbit_ct_broker_helpers:rabbitmqctl_list(Config, A,
-        ["list_queues", "--online", "name", "--no-table-headers"])),
-    ExpectUp = [[<<"q_a_1">>], [<<"q_a_2">>]],
-    ExpectUp = GotUp,
-
-    GotDown = lists:sort(rabbit_ct_broker_helpers:rabbitmqctl_list(Config, A,
-        ["list_queues", "--offline", "name", "--no-table-headers"])),
-    ExpectDown = [[<<"q_b_1">>], [<<"q_b_2">>]],
-    ExpectDown = GotDown,
-
-    GotAll = lists:sort(rabbit_ct_broker_helpers:rabbitmqctl_list(Config, A,
-        ["list_queues", "name", "--no-table-headers"])),
-    ExpectAll = ExpectUp ++ ExpectDown,
-    ExpectAll = GotAll,
-
-    ok.

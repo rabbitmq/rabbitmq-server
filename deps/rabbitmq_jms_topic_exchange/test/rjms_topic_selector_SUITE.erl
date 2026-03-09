@@ -126,7 +126,7 @@ bind_queue(Ch, Q, Ex, RKey, Args) ->
 
 %% Declare a queue, return Q name (as binary)
 declare_queue(Ch) ->
-    #'queue.declare_ok'{queue = Q} = amqp_channel:call(Ch, #'queue.declare'{}),
+    #'queue.declare_ok'{queue = Q} = amqp_channel:call(Ch, #'queue.declare'{durable = true}),
     Q.
 
 %% Get message from Q and check remaining and payload.

@@ -746,7 +746,7 @@ adding_a_user_with_generated_password_hash_test(Config) ->
     http_delete(Config, "/users/user12", ?NO_CONTENT).
 
 adding_a_user_with_permissions_in_single_operation_test(Config) ->
-    QArgs = #{},
+    QArgs = #{durable => true},
     PermArgs = #{configure => <<".*">>,
                  write     => <<".*">>,
                  read      => <<".*">>},
@@ -1522,7 +1522,7 @@ stream_queues_have_consumers_field(Config) ->
 
 bindings_test(Config) ->
     XArgs = [{type, <<"direct">>}],
-    QArgs = #{},
+    QArgs = #{durable => true},
     http_put(Config, "/exchanges/%2F/myexchange", XArgs, {group, '2xx'}),
     http_put(Config, "/queues/%2F/myqueue", QArgs, {group, '2xx'}),
     BArgs = [{routing_key, <<"routing">>}, {arguments, []}],
@@ -1563,7 +1563,7 @@ bindings_test(Config) ->
 
 bindings_post_test(Config) ->
     XArgs = [{type, <<"direct">>}],
-    QArgs = #{},
+    QArgs = #{durable => true},
     BArgs = [{routing_key, <<"routing">>}, {arguments, [{foo, <<"bar">>}]}],
     http_put(Config, "/exchanges/%2F/myexchange", XArgs, {group, '2xx'}),
     http_put(Config, "/queues/%2F/myqueue", QArgs, {group, '2xx'}),
@@ -1602,7 +1602,7 @@ bindings_post_test(Config) ->
 bindings_null_routing_key_test(Config) ->
     http_delete(Config, "/exchanges/%2F/myexchange", {one_of, [201, 404]}),
     XArgs = [{type, <<"direct">>}],
-    QArgs = #{},
+    QArgs = #{durable => true},
     BArgs = [{routing_key, null}, {arguments, #{}}],
     http_put(Config, "/exchanges/%2F/myexchange", XArgs, {group, '2xx'}),
     http_put(Config, "/queues/%2F/myqueue", QArgs, {group, '2xx'}),
@@ -1695,7 +1695,7 @@ permissions_administrator_test(Config) ->
     passed.
 
 permissions_vhost_test(Config) ->
-    QArgs = #{},
+    QArgs = #{durable => true},
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
     http_put(Config, "/users/myadmin", [{password, <<"myadmin">>},
                                         {tags, <<"administrator">>}], {group, '2xx'}),
@@ -1773,7 +1773,7 @@ permissions_vhost_test(Config) ->
 
 permissions_amqp_test(Config) ->
     %% Just test that it works at all, not that it works in all possible cases.
-    QArgs = #{},
+    QArgs = #{durable => true},
     PermArgs = [{configure, <<"foo.*">>}, {write, <<"foo.*">>},
                 {read,      <<"foo.*">>}],
     http_put(Config, "/users/myuser", [{password, <<"myuser">>},
@@ -1787,7 +1787,7 @@ permissions_amqp_test(Config) ->
     passed.
 
 permissions_queue_delete_test(Config) ->
-    QArgs = #{},
+    QArgs = #{durable => true},
     PermArgs = [{configure, <<"foo.*">>}, {write, <<".*">>}, {read, <<".*">>}],
     http_put(Config, "/users/myuser", [{password, <<"myuser">>},
                                        {tags, <<"management">>}], {group, '2xx'}),
@@ -1832,7 +1832,7 @@ permissions_connection_channel_consumer_test(Config) ->
     http_put(Config, "/users/monitor", [{password, <<"monitor">>},
                                         {tags, <<"monitoring">>}], {group, '2xx'}),
     http_put(Config, "/permissions/%2F/monitor", PermArgs, {group, '2xx'}),
-    http_put(Config, "/queues/%2F/test", #{}, {group, '2xx'}),
+    http_put(Config, "/queues/%2F/test", #{durable => true}, {group, '2xx'}),
 
     {Conn1, UserConn, UserCh, UserConnCh} = get_conn(Config, "user", "user"),
     {Conn2, MonConn, MonCh, MonConnCh} = get_conn(Config, "monitor", "monitor"),
@@ -2434,7 +2434,7 @@ definitions_with_charset_test(Config) ->
 arguments_test(Config) ->
     XArgs = [{type, <<"headers">>},
                 {arguments, [{'alternate-exchange', <<"amq.direct">>}]}],
-    QArgs = [{arguments, [{'x-expires', 1800000}]}],
+    QArgs = [{durable, true}, {arguments, [{'x-expires', 1800000}]}],
     BArgs = [{routing_key, <<"">>},
                 {arguments, [{'x-match', <<"all">>},
                             {foo, <<"bar">>}]}],
@@ -2477,7 +2477,7 @@ arguments_table_test(Config) ->
     passed.
 
 queue_purge_test(Config) ->
-    QArgs = #{},
+    QArgs = #{durable => true},
     http_put(Config, "/queues/%2F/myqueue", QArgs, {group, '2xx'}),
     {Conn, Ch} = open_connection_and_channel(Config),
     Publish = fun() ->
@@ -2504,7 +2504,7 @@ queue_purge_test(Config) ->
     passed.
 
 queue_actions_test(Config) ->
-    http_put(Config, "/queues/%2F/q", #{}, {group, '2xx'}),
+    http_put(Config, "/queues/%2F/q", #{durable => true}, {group, '2xx'}),
     http_post(Config, "/queues/%2F/q/actions", [{action, change_colour}], ?BAD_REQUEST),
     http_delete(Config, "/queues/%2F/q", {group, '2xx'}),
     passed.
@@ -2689,7 +2689,7 @@ exchanges_pagination_permissions_test(Config) ->
 
 
 queue_pagination_test(Config) ->
-    QArgs = #{},
+    QArgs = #{durable => true},
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
     http_put(Config, "/vhosts/vh.tests.queue_pagination_test", none, {group, '2xx'}),
     http_put(Config, "/permissions/vh.tests.queue_pagination_test/guest", PermArgs, {group, '2xx'}),
@@ -2807,7 +2807,7 @@ queue_pagination_test(Config) ->
     passed.
 
 queue_pagination_columns_test(Config) ->
-    QArgs = #{},
+    QArgs = #{durable => true},
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
     http_put(Config, "/vhosts/vh.tests.queue_pagination_columns_test", none, [?CREATED, ?NO_CONTENT]),
     http_put(Config, "/permissions/vh.tests.queue_pagination_columns_test/guest", PermArgs, [?CREATED, ?NO_CONTENT]),
@@ -2873,7 +2873,7 @@ queue_pagination_columns_test(Config) ->
     passed.
 
 queues_detailed_test(Config) ->
-    QArgs = #{},
+    QArgs = #{durable => true},
     http_put(Config, "/queues/%2F/queue_a", QArgs, {group, '2xx'}),
     http_put(Config, "/queues/%2F/queue_c", QArgs, {group, '2xx'}),
 
@@ -2922,7 +2922,7 @@ queues_pagination_permissions_test(Config) ->
     http_put(Config, "/permissions/vh1/non-admin",   Perms, {group, '2xx'}),
     http_put(Config, "/permissions/%2F/admin",   Perms, {group, '2xx'}),
     http_put(Config, "/permissions/vh1/admin",   Perms, {group, '2xx'}),
-    QArgs = #{},
+    QArgs = #{durable => true},
     http_put(Config, "/queues/%2F/test0", QArgs, {group, '2xx'}),
     http_put(Config, "/queues/vh1/test1", QArgs, "non-admin","non-admin", {group, '2xx'}),
     FirstPage = http_get(Config, "/queues?page=1", "non-admin", "non-admin", ?OK),
@@ -2965,7 +2965,7 @@ user_queues_test(Config) ->
     http_put(Config, "/permissions/%2F/bob", Perms, {group, '2xx'}),
     http_put(Config, "/permissions/%2F/carlos", Perms, {group, '2xx'}),
 
-    QArgs = #{},
+    QArgs = #{durable => true},
     http_put(Config, "/queues/%2F/bobq", QArgs, "bob","bob", {group, '2xx'}),
     http_put(Config, "/queues/%2F/carlosq", QArgs, "carlos","carlos", {group, '2xx'}),
 
@@ -3039,7 +3039,7 @@ samples_range_test(Config) ->
     http_get(Config, "/overview?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
 
     %% Queues
-    http_put(Config, "/queues/%2F/test-001", #{}, {group, '2xx'}),
+    http_put(Config, "/queues/%2F/test-001", #{durable => true}, {group, '2xx'}),
 
     ?AWAIT(
        begin
@@ -3069,7 +3069,7 @@ samples_range_test(Config) ->
     passed.
 
 sorting_test(Config) ->
-    QArgs = #{},
+    QArgs = #{durable => true},
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
     http_put(Config, "/vhosts/vh19", none, {group, '2xx'}),
     http_put(Config, "/permissions/vh19/guest", PermArgs, {group, '2xx'}),
@@ -3115,7 +3115,7 @@ sorting_test(Config) ->
     passed.
 
 format_output_test(Config) ->
-    QArgs = #{},
+    QArgs = #{durable => true},
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
     http_put(Config, "/vhosts/vh129", none, {group, '2xx'}),
     http_put(Config, "/permissions/vh129/guest", PermArgs, {group, '2xx'}),
@@ -3137,7 +3137,7 @@ columns_test(Config) ->
     Path = "/queues/%2F/columns.test",
     TTL = 30000,
     http_delete(Config, Path, [{group, '2xx'}, 404]),
-    http_put(Config, Path, [{arguments, [{<<"x-message-ttl">>, TTL}]}],
+    http_put(Config, Path, [{durable, true}, {arguments, [{<<"x-message-ttl">>, TTL}]}],
              {group, '2xx'}),
     Item = #{arguments => #{'x-message-ttl' => TTL, 'x-queue-type' => <<"classic">>}, name => <<"columns.test">>},
 
@@ -3156,7 +3156,7 @@ get_test(Config) ->
                 [{table,
                   [{<<"uri">>, longstr,
                     <<"amqp://localhost/%2F/upstream">>}]}]}],
-    http_put(Config, "/queues/%2F/myqueue", #{}, {group, '2xx'}),
+    http_put(Config, "/queues/%2F/myqueue", #{durable => true}, {group, '2xx'}),
     {Conn, Ch} = open_connection_and_channel(Config),
     #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
     Publish = fun (Payload) ->
@@ -3219,7 +3219,7 @@ get_encoding_test(Config) ->
     BinPayload = base64:encode(<<0:64, 16#ff, 16#fd, 0:64>>),
     Utf8Msg = msg(<<"get_encoding_test">>, #{}, Utf8Payload, <<"base64">>),
     BinMsg  = msg(<<"get_encoding_test">>, #{}, BinPayload, <<"base64">>),
-    http_put(Config, "/queues/%2F/get_encoding_test", #{}, {group, '2xx'}),
+    http_put(Config, "/queues/%2F/get_encoding_test", #{durable => true}, {group, '2xx'}),
     http_post(Config, "/exchanges/%2F/amq.default/publish", Utf8Msg, ?OK),
     http_post(Config, "/exchanges/%2F/amq.default/publish", BinMsg,  ?OK),
 
@@ -3251,7 +3251,7 @@ get_encoding_test(Config) ->
 get_fail_test(Config) ->
     http_put(Config, "/users/myuser", [{password, <<"password">>},
                                        {tags, <<"management">>}], {group, '2xx'}),
-    http_put(Config, "/queues/%2F/myqueue", #{}, {group, '2xx'}),
+    http_put(Config, "/queues/%2F/myqueue", #{durable => true}, {group, '2xx'}),
     http_post(Config, "/queues/%2F/myqueue/get",
               [{ackmode, ack_requeue_false},
                {count,    1},
@@ -3266,7 +3266,7 @@ get_fail_test(Config) ->
 publish_test(Config) ->
     Headers = #{'x-forwarding' => [#{uri => <<"amqp://localhost/%2F/upstream">>}]},
     Msg = msg(<<"publish_test">>, Headers, <<"Hello world">>),
-    http_put(Config, "/queues/%2F/publish_test", #{}, {group, '2xx'}),
+    http_put(Config, "/queues/%2F/publish_test", #{durable => true}, {group, '2xx'}),
     ?assertEqual(#{routed => true},
                   http_post(Config, "/exchanges/%2F/amq.default/publish", Msg, ?OK)),
     [Msg2] = http_post(Config, "/queues/%2F/publish_test/get", [{ackmode, ack_requeue_false},
@@ -3285,7 +3285,7 @@ publish_large_message_test(Config) ->
   Headers = #{'x-forwarding' => [#{uri => <<"amqp://localhost/%2F/upstream">>}]},
   Body = binary:copy(<<"a">>, ?LARGE_BODY_BYTES),
   Msg = msg(<<"publish_accept_json_test">>, Headers, Body),
-  http_put(Config, "/queues/%2F/publish_accept_json_test", #{}, {group, '2xx'}),
+  http_put(Config, "/queues/%2F/publish_accept_json_test", #{durable => true}, {group, '2xx'}),
   ?assertEqual(#{routed => true},
                http_post_accept_json(Config, "/exchanges/%2F/amq.default/publish",
                                      Msg, ?OK)),
@@ -3310,7 +3310,7 @@ publish_large_message_exceeding_http_request_body_size_test(Config) ->
   Headers = #{'x-forwarding' => [#{uri => <<"amqp://localhost/%2F/upstream">>}]},
   Body = binary:copy(<<"a">>, ?EXCESSIVELY_LARGE_BODY_BYTES),
   Msg = msg(<<"large_message_exceeding_http_request_body_size_test">>, Headers, Body),
-  http_put(Config, "/queues/%2F/large_message_exceeding_http_request_body_size_test", #{}, {group, '2xx'}),
+  http_put(Config, "/queues/%2F/large_message_exceeding_http_request_body_size_test", #{durable => true}, {group, '2xx'}),
   %% exceeds the default HTTP API request body size limit
   http_post_accept_json(Config, "/exchanges/%2F/amq.default/publish",
                                      Msg, ?BAD_REQUEST),
@@ -3320,7 +3320,7 @@ publish_large_message_exceeding_http_request_body_size_test(Config) ->
 publish_accept_json_test(Config) ->
     Headers = #{'x-forwarding' => [#{uri => <<"amqp://localhost/%2F/upstream">>}]},
     Msg = msg(<<"publish_accept_json_test">>, Headers, <<"Hello world">>),
-    http_put(Config, "/queues/%2F/publish_accept_json_test", #{}, {group, '2xx'}),
+    http_put(Config, "/queues/%2F/publish_accept_json_test", #{durable => true}, {group, '2xx'}),
     ?assertEqual(#{routed => true},
                  http_post_accept_json(Config, "/exchanges/%2F/amq.default/publish",
                                        Msg, ?OK)),
@@ -3341,7 +3341,7 @@ publish_accept_json_test(Config) ->
 
 publish_fail_test(Config) ->
     Msg = msg(<<"publish_fail_test">>, [], <<"Hello world">>),
-    http_put(Config, "/queues/%2F/publish_fail_test", #{}, {group, '2xx'}),
+    http_put(Config, "/queues/%2F/publish_fail_test", #{durable => true}, {group, '2xx'}),
     http_put(Config, "/users/myuser", [{password, <<"password">>},
                                        {tags, <<"management">>}], {group, '2xx'}),
     http_post(Config, "/exchanges/%2F/amq.default/publish", Msg, "myuser", "password",
@@ -3378,7 +3378,7 @@ publish_base64_test(Config) ->
     Msg     = msg(<<"publish_base64_test">>, #{}, <<"YWJjZA==">>, <<"base64">>),
     BadMsg1 = msg(<<"publish_base64_test">>, #{}, <<"flibble">>,  <<"base64">>),
     BadMsg2 = msg(<<"publish_base64_test">>, #{}, <<"YWJjZA==">>, <<"base99">>),
-    http_put(Config, "/queues/%2F/publish_base64_test", #{}, {group, '2xx'}),
+    http_put(Config, "/queues/%2F/publish_base64_test", #{durable => true}, {group, '2xx'}),
     http_post(Config, "/exchanges/%2F/amq.default/publish", Msg, ?OK),
     http_post(Config, "/exchanges/%2F/amq.default/publish", BadMsg1, ?BAD_REQUEST),
     http_post(Config, "/exchanges/%2F/amq.default/publish", BadMsg2, ?BAD_REQUEST),
@@ -3397,7 +3397,7 @@ publish_unrouted_test(Config) ->
 
 if_empty_unused_test(Config) ->
     http_put(Config, "/exchanges/%2F/test", #{}, {group, '2xx'}),
-    http_put(Config, "/queues/%2F/test", #{}, {group, '2xx'}),
+    http_put(Config, "/queues/%2F/test", #{durable => true}, {group, '2xx'}),
     http_post(Config, "/bindings/%2F/e/test/q/test", #{}, {group, '2xx'}),
     http_post(Config, "/exchanges/%2F/amq.default/publish",
               msg(<<"test">>, #{}, <<"Hello world">>), ?OK),
@@ -4003,7 +4003,7 @@ user_limit_set_test(Config) ->
     http_put(Config, "/user-limits/limit_test_user_1/max-unknown", [{value, 200}], ?BAD_REQUEST).
 
 rates_test(Config) ->
-    http_put(Config, "/queues/%2F/myqueue", none, {group, '2xx'}),
+    http_put(Config, "/queues/%2F/myqueue", #{durable => true}, {group, '2xx'}),
     {Conn, Ch} = open_connection_and_channel(Config),
     Pid = spawn_link(fun() -> publish(Ch) end),
 

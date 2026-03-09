@@ -276,7 +276,7 @@ audit_vhost_deletion(Config) ->
     {ok, Ch2} = amqp_connection:open_channel(Conn),
 
     %% The user that creates the queue is the connection one, not the vhost creator
-    #'queue.declare_ok'{queue = _Q} = amqp_channel:call(Ch2, #'queue.declare'{}),
+    #'queue.declare_ok'{queue = _Q} = amqp_channel:call(Ch2, #'queue.declare'{durable = true}),
     receive_user_in_event(<<"queue.created">>, ConnUser, Config),
     ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch2),
 
