@@ -14,9 +14,9 @@
 -behaviour(gen_server).
 
 -export([start_link/2, connect/1, open_channel/3, hard_error_in_channel/3,
-         channel_internal_error/3, server_misbehaved/2, channels_terminated/1,
-         close/3, server_close/2, info/2, info_keys/0, info_keys/1,
-         register_blocked_handler/2, update_secret/2]).
+         channel_internal_error/3, channel_closed/2, server_misbehaved/2,
+         channels_terminated/1, close/3, server_close/2, info/2, info_keys/0,
+         info_keys/1, register_blocked_handler/2, update_secret/2]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2]).
 
@@ -32,7 +32,7 @@
                 %% connection.block, connection.unblock handler
                 block_handler,
                 blocked_by = sets:new([{version, 2}]),
-                queue_types_published = sets:new([{version, 2}]),
+                queue_types_published = #{},
                 closing = false %% #closing{} | false
                }).
 
@@ -96,6 +96,9 @@ hard_error_in_channel(Pid, ChannelPid, Reason) ->
 
 channel_internal_error(Pid, ChannelPid, Reason) ->
     gen_server:cast(Pid, {channel_internal_error, ChannelPid, Reason}).
+
+channel_closed(Pid, TaggedWriter) ->
+    gen_server:cast(Pid, {channel_closed, TaggedWriter}).
 
 server_misbehaved(Pid, AmqpError) ->
     gen_server:cast(Pid, {server_misbehaved, AmqpError}).
@@ -223,10 +226,23 @@ handle_cast({conserve_resources, Source, Conserve},
                  end,
     State1 = State#state{blocked_by = BlockedBy1},
     maybe_block(State, State1);
-handle_cast({channel_published_to_queue_type, _ChPid, QT},
+handle_cast({channel_published_to_queue_type, ServerChPid, QT},
             #state{queue_types_published = QTs} = State) ->
-    State1 = State#state{queue_types_published = sets:add_element(QT, QTs)},
-    maybe_block(State, State1).
+    %% ServerChPid is the server-side channel pid. We key by {direct, ServerChPid}
+    %% so channel_closed can remove the entry using the tagged writer.
+    Key = {direct, ServerChPid},
+    ChQTs = maps:get(Key, QTs, sets:new([{version, 2}])),
+    State1 = State#state{queue_types_published =
+                             QTs#{Key => sets:add_element(QT, ChQTs)}},
+    maybe_block(State, State1);
+handle_cast({channel_closed, {direct, ServerChPid}},
+            #state{queue_types_published = QTs} = State) ->
+    State1 = State#state{queue_types_published =
+                             maps:remove({direct, ServerChPid}, QTs)},
+    maybe_block(State, State1);
+handle_cast({channel_closed, {network, _WriterPid}}, State) ->
+    %% Network connections are handled by rabbit_reader, not here.
+    {noreply, State}.
 
 %% @private
 handle_info({'DOWN', _, process, BlockHandler, Reason},
@@ -284,7 +300,9 @@ maybe_block(State0, State1) ->
 
 should_block(#state{blocked_by = BlockedBy, queue_types_published = QTs}) ->
     lists:any(fun ({disk, QT}) ->
-                      sets:is_element(QT, QTs);
+                      maps:fold(fun(_, ChQTs, Acc) ->
+                                        Acc orelse sets:is_element(QT, ChQTs)
+                                end, false, QTs);
                   (_Resource) ->
                       true
               end, sets:to_list(BlockedBy)).

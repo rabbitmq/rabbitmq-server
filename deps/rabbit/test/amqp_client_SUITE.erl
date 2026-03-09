@@ -3649,7 +3649,8 @@ per_queue_type_disk_alarm(Config) ->
 per_queue_type_disk_alarm_direct_connection(Config) ->
     %% Test that a direct connection (used by plugins such as STOMP) is
     %% blocked when a per-queue-type disk alarm fires and the connection
-    %% has published to that queue type, and unblocked when the alarm clears.
+    %% has published to that queue type, and unblocked when the publishing
+    %% channel closes - even while the alarm remains active.
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     Resource = {disk, rabbit_classic_queue},
     QName = atom_to_binary(?FUNCTION_NAME),
@@ -3676,15 +3677,18 @@ per_queue_type_disk_alarm_direct_connection(Config) ->
     after 5000 -> exit(connection_was_not_blocked)
     end,
 
-    %% Clear the alarm. The connection should unblock.
-    ok = rpc:call(Node, rabbit_alarm, clear_alarm, [{resource_limit, Resource, Node}]),
+    %% Close the publishing channel. The connection should unblock since no
+    %% active channel has published to the alarmed queue type.
+    ok = amqp_channel:close(Ch),
     receive
         #'connection.unblocked'{} -> ok
     after 5000 -> exit(connection_was_not_unblocked)
     end,
 
-    #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = QName}),
-    ok = amqp_channel:close(Ch),
+    ok = rpc:call(Node, rabbit_alarm, clear_alarm, [{resource_limit, Resource, Node}]),
+    {ok, Ch2} = amqp_connection:open_channel(Conn),
+    #'queue.delete_ok'{} = amqp_channel:call(Ch2, #'queue.delete'{queue = QName}),
+    ok = amqp_channel:close(Ch2),
     ok = amqp_connection:close(Conn).
 
 max_message_size_client_to_server(Config) ->
