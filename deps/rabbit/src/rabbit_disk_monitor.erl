@@ -460,6 +460,8 @@ fast_rate() ->
 mounts() ->
     case application:get_env(rabbit, disk_free_limits) of
         {ok, Limits} ->
+            %% All four fields are guaranteed present by the disk_free_limits
+            %% translation in rabbit.schema.
             maps:fold(
               fun(Prec, #{name := Name,
                           mount := Path,

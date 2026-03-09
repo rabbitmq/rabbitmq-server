@@ -20,7 +20,8 @@ all() ->
 groups() ->
     [
       {schema_tests, [], [
-          duplicate_mount_path_is_allowed
+          duplicate_mount_path_is_allowed,
+          incomplete_mount_entry_is_rejected
         ]},
       {sequential_tests, [], [
           set_disk_free_limit_command
@@ -81,6 +82,15 @@ duplicate_mount_path_is_allowed(_Config) ->
     ],
     Generated = cuttlefish_unit:generate_config(file, SchemaFile, Conf),
     cuttlefish_unit:assert_valid_config(Generated).
+
+incomplete_mount_entry_is_rejected(_Config) ->
+    SchemaFile = filename:join([code:priv_dir(rabbit), "schema", "rabbit.schema"]),
+    Conf = [
+        {["disk_free_limits", "1", "name"],  "streams"},
+        {["disk_free_limits", "1", "mount"], "/mnt/data"}
+    ],
+    Generated = cuttlefish_unit:generate_config(file, SchemaFile, Conf),
+    cuttlefish_unit:assert_error_message(Generated, "Translation for 'rabbit.disk_free_limits' found invalid configuration: disk_free_limits.1 is missing required fields: [limit,queue_types]").
 
 set_disk_free_limit_command(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,

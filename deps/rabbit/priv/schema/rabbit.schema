@@ -1365,6 +1365,21 @@ fun(Conf) ->
                               sets:add_element(Name, Names)
                       end
               end, sets:new([{version, 2}]), Ls),
+            maps:foreach(
+              fun(Idx, Entry) ->
+                      %% All four fields are required by the pattern match in
+                      %% rabbit_disk_monitor:mounts/0.
+                      Required = [name, mount, limit, queue_types],
+                      Missing = [K || K <- Required, not maps:is_key(K, Entry)],
+                      case Missing of
+                          [] -> ok;
+                          _ ->
+                              cuttlefish:invalid(
+                                lists:flatten(io_lib:format(
+                                  "disk_free_limits.~b is missing required fields: ~p",
+                                  [Idx, Missing])))
+                      end
+              end, Ls),
             Ls
     end
 end}.
