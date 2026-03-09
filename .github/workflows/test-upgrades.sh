@@ -17,10 +17,10 @@ chmod a+x bin/*
 
 make=${MAKE:-make}
 
-old_dist=OLD/deps/rabbit
-new_dist=NEW/deps/rabbit
-old_rabbitmqctl=OLD/deps/rabbit/sbin/rabbitmqctl
-new_rabbitmqctl=NEW/deps/rabbit/sbin/rabbitmqctl
+old_dist=OLD
+new_dist=NEW
+old_rabbitmqctl=OLD/sbin/rabbitmqctl
+new_rabbitmqctl=NEW/sbin/rabbitmqctl
 
 echo "== Start cluster with old RabbitMQ version"
 $make -C "$old_dist" start-cluster RABBITMQ_FEATURE_FLAGS=-khepri_db

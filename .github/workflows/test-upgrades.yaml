@@ -41,7 +41,7 @@ jobs:
           fetch-tags: true
 
       - name: Build
-        run: make dist -C deps/rabbit
+        run: make dist
 
       - name: Upload dist for next job
         uses: pyTooling/upload-artifact@v7
@@ -73,7 +73,7 @@ jobs:
           fetch-tags: true
 
       - name: Build
-        run: make dist -C deps/rabbit
+        run: make dist
 
       - name: Upload dist for next job
         uses: pyTooling/upload-artifact@v7
