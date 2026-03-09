@@ -116,6 +116,7 @@ groups() ->
        resource_alarm_after_session_begin,
        resource_alarm_send_many,
        per_queue_type_disk_alarm,
+       per_queue_type_disk_alarm_direct_connection,
        max_message_size_client_to_server,
        max_message_size_server_to_client,
        global_counters,
@@ -3644,6 +3645,47 @@ per_queue_type_disk_alarm(Config) ->
     #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = CQ}),
     #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = SQ}),
     ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch).
+
+per_queue_type_disk_alarm_direct_connection(Config) ->
+    %% Test that a direct connection (used by plugins such as STOMP) is
+    %% blocked when a per-queue-type disk alarm fires and the connection
+    %% has published to that queue type, and unblocked when the alarm clears.
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Resource = {disk, rabbit_classic_queue},
+    QName = atom_to_binary(?FUNCTION_NAME),
+
+    {ok, Conn} = amqp_connection:start(#amqp_params_direct{node = Node}),
+    amqp_connection:register_blocked_handler(Conn, self()),
+
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName}),
+
+    %% Set the alarm using the actual node name so alert_remote fires for
+    %% remote pids such as amqp_gen_connection on the CT node.
+    ok = rpc:call(Node, rabbit_alarm, clear_alarm, [{resource_limit, Resource, Node}]),
+    ok = rpc:call(Node, rabbit_alarm, set_alarm, [{{resource_limit, Resource, Node}, []}]),
+
+    %% Publish to trigger blocking.
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+    amqp_channel:cast(Ch, #'basic.publish'{routing_key = QName},
+                      #amqp_msg{payload = <<"msg">>}),
+    true = amqp_channel:wait_for_confirms(Ch, 5),
+
+    receive
+        #'connection.blocked'{} -> ok
+    after 5000 -> exit(connection_was_not_blocked)
+    end,
+
+    %% Clear the alarm. The connection should unblock.
+    ok = rpc:call(Node, rabbit_alarm, clear_alarm, [{resource_limit, Resource, Node}]),
+    receive
+        #'connection.unblocked'{} -> ok
+    after 5000 -> exit(connection_was_not_unblocked)
+    end,
+
+    #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = QName}),
+    ok = amqp_channel:close(Ch),
+    ok = amqp_connection:close(Conn).
 
 max_message_size_client_to_server(Config) ->
     DefaultMaxMessageSize = rpc(Config, persistent_term, get, [max_message_size]),
