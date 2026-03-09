@@ -31,6 +31,9 @@
          get_max_check_interval/0, set_max_check_interval/1,
          get_disk_free/0, get_mount_free/0, set_enabled/1]).
 
+%% For testing
+-export([resolve_data_dir/1]).
+
 -define(SERVER, ?MODULE).
 -define(ETS_NAME, ?MODULE).
 -define(MOUNT_ETS_NAME, rabbit_disk_monitor_per_mount).
@@ -560,15 +563,21 @@ enable(#state{dir = Dir,
     end.
 
 resolve_data_dir() ->
-    case disksup:get_disk_info(rabbit:data_dir()) of
-        [{"none", 0, 0, 0}] ->
-            {error, disksup_not_available};
-        [{MountPoint, 0, 0, 0}] ->
-            {error, {cannot_determine_space, MountPoint}};
-        [{MountPoint, _TotalKiB, _AvailableKiB, _Capacity}] ->
-            {ok, MountPoint};
-        [] ->
-            {error, no_disk_info};
-        [_ | _] = Infos ->
-            {error, {multiple_disks, length(Infos)}}
-    end.
+    resolve_data_dir(disksup:get_disk_info(rabbit:data_dir())).
+
+-spec resolve_data_dir([{string(), non_neg_integer(), non_neg_integer(), non_neg_integer()}]) ->
+    {ok, string()} | {error, term()}.
+resolve_data_dir([{"none", 0, 0, 0}]) ->
+    {error, disksup_not_available};
+resolve_data_dir([{MountPoint, 0, 0, 0}]) ->
+    {error, {cannot_determine_space, MountPoint}};
+resolve_data_dir([{MountPoint, _TotalKiB, _AvailableKiB, _Capacity}]) ->
+    {ok, MountPoint};
+resolve_data_dir([]) ->
+    {error, no_disk_info};
+resolve_data_dir([_ | _] = Infos) ->
+    %% Multiple mounts match the data directory path. Pick the most specific
+    %% one, i.e. the mount point with the longest path.
+    Sorted = lists:sort(fun({A, _, _, _}, {B, _, _, _}) -> length(A) =< length(B) end, Infos),
+    {MountPoint, _, _, _} = lists:last(Sorted),
+    {ok, MountPoint}.
