@@ -1315,6 +1315,35 @@ purge_with_checkout_test(Config) ->
     ?assertEqual(1, maps:size(Checked)),
     ok.
 
+purge_dlx_test(Config) ->
+    Cid = {?FUNCTION_NAME_B, self()},
+    State0 = init(#{name => ?FUNCTION_NAME,
+                    queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+                    dead_letter_handler => at_least_once,
+                    max_in_memory_length => 0}),
+    {State1, _} = enq(Config, 1, 1, msg1, State0),
+    {State2, _} = enq(Config, 2, 2, msg2, State1),
+    {State3, #{key := CKey}, _} =
+        checkout(Config, 3, Cid, {auto, {simple_prefetch, 2}}, State2),
+    %% Discard one message to dead-letter it (at-least-once).
+    %% Message IDs 0 and 1 are checked out; discard message 0.
+    {State4, _, _} = apply(meta(Config, 4),
+                           rabbit_fifo:make_discard(CKey, [0]),
+                           State3),
+    ?assertMatch(#{num_discarded := 1},
+                 rabbit_fifo_dlx:overview(State4#rabbit_fifo.dlx)),
+    %% Purge should clear the DLX discards queue too.
+    %% 1 DLX message purged, 0 ready messages (the other is checked out).
+    {State5, {purge, NumPurged}, _} =
+        apply(meta(Config, 5), rabbit_fifo:make_purge(), State4),
+    ?assertEqual(1, NumPurged),
+    ?assertMatch(#{num_discarded := 0,
+                   num_discard_checked_out := 0,
+                   discard_message_bytes := 0,
+                   discard_checkout_message_bytes := 0},
+                 rabbit_fifo_dlx:overview(State5#rabbit_fifo.dlx)),
+    ok.
+
 cancelled_consumer_comes_back_after_noconnection_test(Config) ->
     S0 = init(#{name => ?FUNCTION_NAME,
                 queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),

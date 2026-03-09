@@ -498,13 +498,17 @@ apply_(#{index := Idx} = Meta,
     checkout(Meta, State0, State2, [{monitor, process, Pid} | Effs], Reply);
 apply_(#{index := Index}, #purge{},
        #?STATE{messages_total = Total,
-               delayed = #delayed{tree = Tree}} = State0) ->
+               delayed = #delayed{tree = Tree},
+               dlx = DlxState} = State0) ->
     NumReady = messages_ready(State0),
-    NumPurged = NumReady + gb_trees:size(Tree),
+    {NumDlx, _} = dlx_stat(DlxState),
+    DelayedLen = gb_trees:size(Tree),
+    NumPurged = NumReady + DelayedLen + NumDlx,
     State1 = State0#?STATE{messages = rabbit_fifo_pq:new(),
-                           messages_total = Total - NumPurged,
+                           messages_total = Total - NumReady - DelayedLen,
                            returns = lqueue:new(),
                            delayed = #delayed{},
+                           dlx = dlx_purge(DlxState),
                            msg_bytes_enqueue = 0
                           },
     Effects0 = [{aux, force_checkpoint}, garbage_collection],
@@ -4050,6 +4054,19 @@ switch_to(at_least_once, _, Effects) ->
 switch_to(_, State, Effects) ->
     {State, Effects}.
 
+
+dlx_purge(#?DLX{consumer = Consumer0} = State) ->
+    Consumer = case Consumer0 of
+                   undefined ->
+                       undefined;
+                   #dlx_consumer{} ->
+                       Consumer0#dlx_consumer{checked_out = #{}}
+               end,
+    State#?DLX{discards = lqueue:new(),
+               msg_bytes = 0,
+               msg_bytes_checkout = 0,
+               consumer = Consumer,
+               ra_indexes = rabbit_fifo_index:empty()}.
 
 dlx_stat(#?DLX{consumer = Con,
                discards = Discards,

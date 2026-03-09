@@ -6024,6 +6024,7 @@ delayed_retry_all(Config) ->
                                         requeue = true}),
     %% Message should be delayed - not ready
     timer:sleep(500),
+    % ct:pal("mac ov ~p", [machine_overview({RaName, Server})]),
     wait_for_messages(Config, [[QQ, <<"1">>, <<"0">>, <<"0">>]]),
     %% Verify delayed message count in overview
     Overview1 = machine_overview({RaName, Server}),
