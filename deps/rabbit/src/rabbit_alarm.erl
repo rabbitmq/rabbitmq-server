@@ -314,14 +314,21 @@ internal_register(Pid, {M, F, A} = AlertMFA,
     end,
     State#alarms{alertees = Alertees#{Pid => AlertMFA}}.
 
+handle_set_resource_alarm({disk, QueueType} = Source, Node, State) ->
+    log_resource_alarm_set(Source, Node),
+    ?LOG_WARNING("Only publishers to ~ts queues will be blocked.", [QueueType]),
+    {ok, maybe_alert(fun map_append/3, Node, Source, true, State)};
 handle_set_resource_alarm(Source, Node, State) ->
+    log_resource_alarm_set(Source, Node),
+    {ok, maybe_alert(fun map_append/3, Node, Source, true, State)}.
+
+log_resource_alarm_set(Source, Node) ->
     ?LOG_WARNING(
       "~ts resource limit alarm set on node ~tp.~n~n"
       "**********************************************************~n"
       "*** Publishers will be blocked until this alarm clears ***~n"
       "**********************************************************~n",
-      [format_resource_alarm_source(Source), Node]),
-    {ok, maybe_alert(fun map_append/3, Node, Source, true, State)}.
+      [format_resource_alarm_source(Source), Node]).
 
 handle_clear_resource_alarm(Source, Node, State) ->
     ?LOG_WARNING("~ts resource limit alarm cleared on node ~tp",
