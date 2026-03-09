@@ -41,7 +41,7 @@ jobs:
           fetch-tags: true
 
       - name: Build
-        run: make dist -C deps/rabbit
+        run: make dist
 
       - name: Upload dist for next job
         uses: pyTooling/upload-artifact@v7
@@ -73,7 +73,7 @@ jobs:
           fetch-tags: true
 
       - name: Build
-        run: make dist -C deps/rabbit
+        run: make dist
 
       - name: Upload dist for next job
         uses: pyTooling/upload-artifact@v7
@@ -149,6 +149,6 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: instances-data-dirs-${{ matrix.scenario }}-${{ matrix.node_count }}-nodes
-          path: test-instances/*/log/*
+          path: test-instances/*
           include-hidden-files: true
           if-no-files-found: error
