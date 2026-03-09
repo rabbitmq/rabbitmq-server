@@ -236,7 +236,7 @@
         nodes := [node()]}.
 %% A map passed to {@type is_feature_used_callback()}.
 
--type is_feature_used_callback_ret() :: boolean().
+-type is_feature_used_callback_ret() :: boolean() | undefined.
 %% Return value of the `is_feature_used' callback.
 
 -export_type([deprecated_feature_modattr/0,
