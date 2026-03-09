@@ -149,6 +149,6 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: instances-data-dirs-${{ matrix.scenario }}-${{ matrix.node_count }}-nodes
-          path: test-instances/*/log/*
+          path: test-instances/*
           include-hidden-files: true
           if-no-files-found: error
