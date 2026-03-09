@@ -161,6 +161,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
         %{:relative => val} -> "#{val} of available memory"
         # absolute value
         %{:absolute => val} -> "#{IU.convert(val, unit)} #{unit}"
+        nil -> "(unknown)"
       end
 
     memory_section =
