@@ -161,6 +161,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
         %{:relative => val} -> "#{val} of available memory"
         # absolute value
         %{:absolute => val} -> "#{IU.convert(val, unit)} #{unit}"
+        nil -> "(not available)"
       end
 
     memory_section =
@@ -176,7 +177,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
 
     disk_space_section = [
       "\n#{bright("Free Disk Space")}\n",
-      "Low free disk space watermark: #{IU.convert(m[:disk_free_limit], unit)} #{unit}",
+      "Low free disk space watermark: #{space_as_iu_or_unknown(m[:disk_free_limit], unit)}",
       "Free disk space: #{space_as_iu_or_unknown(m[:disk_free], unit)}"
     ]
 
@@ -264,7 +265,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
       net_ticktime: net_ticktime(result),
       vm_memory_calculation_strategy: Keyword.get(result, :vm_memory_calculation_strategy),
       vm_memory_high_watermark_setting:
-        Keyword.get(result, :vm_memory_high_watermark) |> formatted_watermark,
+        case Keyword.get(result, :vm_memory_high_watermark) do
+          nil -> nil
+          val -> formatted_watermark(val)
+        end,
       vm_memory_high_watermark_limit: Keyword.get(result, :vm_memory_limit),
       disk_free_limit: Keyword.get(result, :disk_free_limit),
       disk_free: Keyword.get(result, :disk_free),
@@ -298,6 +302,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
 
   def space_as_iu_or_unknown(value, unit) do
     case value do
+      nil ->
+        "(not available)"
+
       :NaN ->
         "(not available)"
 
