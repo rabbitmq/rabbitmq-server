@@ -54,10 +54,6 @@ defmodule RabbitMQ.CLI.Core.Memory do
     |> Enum.sort_by(fn {_key, %{bytes: bytes}} -> bytes end, &>=/2)
   end
 
-  def formatted_watermark(nil) do
-    nil
-  end
-
   def formatted_watermark(val) when is_float(val) do
     %{relative: val}
   end
