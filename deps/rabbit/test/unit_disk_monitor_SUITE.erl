@@ -14,7 +14,9 @@
 all() ->
     [
       {group, schema_tests},
-      {group, sequential_tests}
+      {group, resolve_data_dir_tests},
+      {group, sequential_tests},
+      {group, per_queue_type_alarm_tests}
     ].
 
 groups() ->
@@ -23,8 +25,15 @@ groups() ->
           duplicate_mount_path_is_allowed,
           incomplete_mount_entry_is_rejected
         ]},
+      {resolve_data_dir_tests, [], [
+          resolve_data_dir_single_result,
+          resolve_data_dir_multiple_results_picks_most_specific
+        ]},
       {sequential_tests, [], [
           set_disk_free_limit_command
+        ]},
+      {per_queue_type_alarm_tests, [], [
+          per_queue_type_alarm_clears_when_limit_lowered
         ]}
     ].
 
@@ -41,6 +50,26 @@ end_per_suite(Config) ->
 
 init_per_group(schema_tests, Config) ->
     Config;
+init_per_group(resolve_data_dir_tests, Config) ->
+    Config;
+init_per_group(per_queue_type_alarm_tests = Group, Config) ->
+    Config1 = rabbit_ct_helpers:set_config(Config, [
+        {rmq_nodename_suffix, Group},
+        {rmq_nodes_count, 1}
+      ]),
+    %% Configure a per-queue-type disk limit for the root mount and the classic
+    %% queue type. The initial limit is tiny so that no alarm fires at boot.
+    Config2 = rabbit_ct_helpers:merge_app_env(
+                Config1,
+                {rabbit,
+                 [{disk_free_limits,
+                   #{1 => #{name => <<"root">>,
+                            mount => "/",
+                            limit => "1",
+                            queue_types => [<<"classic">>]}}}]}),
+    rabbit_ct_helpers:run_steps(Config2,
+      rabbit_ct_broker_helpers:setup_steps() ++
+      rabbit_ct_client_helpers:setup_steps());
 init_per_group(Group, Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, [
         {rmq_nodename_suffix, Group},
@@ -51,6 +80,8 @@ init_per_group(Group, Config) ->
       rabbit_ct_client_helpers:setup_steps()).
 
 end_per_group(schema_tests, _Config) ->
+    ok;
+end_per_group(resolve_data_dir_tests, _Config) ->
     ok;
 end_per_group(_Group, Config) ->
     rabbit_ct_helpers:run_steps(Config,
@@ -92,6 +123,13 @@ incomplete_mount_entry_is_rejected(_Config) ->
     Generated = cuttlefish_unit:generate_config(file, SchemaFile, Conf),
     cuttlefish_unit:assert_error_message(Generated, "Translation for 'rabbit.disk_free_limits' found invalid configuration: disk_free_limits.1 is missing required fields: [limit,queue_types]").
 
+resolve_data_dir_single_result(_Config) ->
+    ?assertEqual({ok, "/"}, rabbit_disk_monitor:resolve_data_dir([{"/", 1000, 500, 50}])).
+
+resolve_data_dir_multiple_results_picks_most_specific(_Config) ->
+    Infos = [{"/", 1000, 500, 50}, {"/var", 2000, 1000, 50}],
+    ?assertEqual({ok, "/var"}, rabbit_disk_monitor:resolve_data_dir(Infos)).
+
 set_disk_free_limit_command(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,
       ?MODULE, set_disk_free_limit_command1, [Config]).
@@ -125,3 +163,36 @@ disk_free_limit_to_total_memory_ratio_is(MemRatio) ->
     % Total memory is unstable, so checking order
     true = ExpectedLimit/DiskFreeLimit < 1.2,
     true = ExpectedLimit/DiskFreeLimit > 0.98.
+
+%% Regression test: lowering a per-queue-type disk free limit must clear a
+%% standing alarm. Previously the alarm remained set forever because
+%% internal_update/1 recomputed the "before" alarmed set from the current
+%% (already updated) limits instead of the alarms actually in effect.
+per_queue_type_alarm_clears_when_limit_lowered(Config) ->
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    QTAlarm = {resource_limit, {disk, rabbit_classic_queue}, Node},
+    MountName = <<"root">>,
+
+    %% No per-queue-type disk alarm initially.
+    ?assertNot(has_local_alarm(Config, QTAlarm)),
+
+    %% Raise the limit far above the available space: the classic queue type
+    %% disk alarm must be set.
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, rabbit_disk_monitor, set_disk_free_limit,
+           [MountName, 999_000_000_000_000]),
+    ok = rabbit_ct_helpers:await_condition(
+           fun() -> has_local_alarm(Config, QTAlarm) end),
+
+    %% Lower the limit again: the alarm must clear.
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, rabbit_disk_monitor, set_disk_free_limit,
+           [MountName, 1]),
+    ok = rabbit_ct_helpers:await_condition(
+           fun() -> not has_local_alarm(Config, QTAlarm) end),
+    ok.
+
+has_local_alarm(Config, Alarm) ->
+    Alarms = rabbit_ct_broker_helpers:rpc(
+               Config, 0, rabbit_alarm, get_local_alarms, []),
+    lists:keymember(Alarm, 1, Alarms).
