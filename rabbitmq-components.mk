@@ -49,7 +49,8 @@ dep_credentials_obfuscation = hex 3.5.0
 dep_cuttlefish = hex 3.6.0
 dep_gen_batch_server = hex 0.8.8
 dep_jose = hex 1.11.10
-dep_khepri = hex 0.17.5
+# TODO point Khepri to hex when https://github.com/rabbitmq/khepri/pull/366 is released
+dep_khepri = git https://github.com/rabbitmq/khepri.git support-multi-table-projections
 dep_khepri_mnesia_migration = hex 0.8.1
 dep_meck = hex 1.0.0
 dep_osiris = git https://github.com/rabbitmq/osiris v1.12.0
