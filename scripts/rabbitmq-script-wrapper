@@ -17,7 +17,7 @@ main() {
   elif current_user_is_rabbitmq && ! calling_rabbitmq_plugins
   then
     exec_script_as_rabbitmq "$@"
-  elif current_user_is_root && calling_rabbitmq_plugins
+  elif (current_user_is_root || current_user_is_rabbitmq) && calling_rabbitmq_plugins    
   then
     run_script_as_rabbitmq "$@"
     _result="$?"
