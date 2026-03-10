@@ -1313,7 +1313,6 @@ register_projections() ->
                fun register_rabbit_bindings_projection/0,
                fun register_rabbit_route_by_source_key_projection/0,
                fun register_rabbit_route_by_source_projection/0,
-               fun register_rabbit_topic_binding_projection/0,
                fun register_rabbit_topic_trie_projection/0],
     rabbit_misc:for_each_while_ok(
       fun(RegisterFun) ->
@@ -1535,6 +1534,7 @@ projection_fun_for_sets(MapFun) ->
     end.
 
 %% Topic routing via trie + ordered_set ETS projections (v4).
+%% Uses a single Khepri projection with two ETS tables:
 %%
 %% Trie edges table (set) for fast trie navigation during routing:
 %%   Row:   {{XSrc, ParentNodeId, Word}, ChildNodeId, ChildCount}
@@ -1547,18 +1547,7 @@ projection_fun_for_sets(MapFun) ->
 %% Word       = binary() (a single topic segment, e.g. <<"foo">>, <<"*">>, <<"#">>)
 %% ChildCount = non_neg_integer() (number of outgoing edges)
 %% Dest       = #resource{}
-register_rabbit_topic_binding_projection() ->
-    PathPattern = topic_binding_path_pattern(),
-    BindingPFun = fun(_Table, _Path, _OldProps, _NewProps) -> ok end,
-    BindingOpts = #{type => ordered_set,
-                    keypos => 1,
-                    read_concurrency => true},
-    Projection = khepri_projection:new(
-                   rabbit_khepri_topic_binding_v4, BindingPFun, BindingOpts),
-    khepri:register_projection(?STORE_ID, PathPattern, Projection).
-
 register_rabbit_topic_trie_projection() ->
-    BindingTabName = rabbit_khepri_topic_binding_v4,
     ShouldProcessFun =
     fun (rabbit_db_topic_exchange, split_topic_key_binary, 1, _From) ->
             %% This function uses `persistent_term' to store a lazily compiled
@@ -1574,12 +1563,16 @@ register_rabbit_topic_trie_projection() ->
         (M, F, A, From) ->
             khepri_tx_adv:should_process_function(M, F, A, From)
     end,
-    Opts = #{type => set,
+    Opts = #{tables => #{rabbit_khepri_topic_trie_v4 =>
+                             #{type => set},
+                         rabbit_khepri_topic_binding_v4 =>
+                             #{type => ordered_set}},
              keypos => 1,
-             standalone_fun_options => #{should_process_function => ShouldProcessFun},
-             read_concurrency => true},
-    PFun = fun(TrieTab, Path, OldProps, NewProps) ->
-                   BindingTab = ensure_topic_binding_table(BindingTabName),
+             read_concurrency => true,
+             standalone_fun_options => #{should_process_function => ShouldProcessFun}},
+    PFun = fun(Tables, Path, OldProps, NewProps) ->
+                   #{rabbit_khepri_topic_trie_v4 := TrieTab,
+                     rabbit_khepri_topic_binding_v4 := BindingTab} = Tables,
                    {VHost, ExchangeName, Kind, DstName, BindingKey} =
                    rabbit_db_binding:khepri_route_path_to_args(Path),
                    XSrc = {VHost, ExchangeName},
@@ -1614,20 +1607,6 @@ topic_binding_path_pattern() ->
       _Kind = ?KHEPRI_WILDCARD_STAR,
       _DstName = ?KHEPRI_WILDCARD_STAR,
       _BindingKey = ?KHEPRI_WILDCARD_STAR).
-
-%% TODO: Khepri should support declaring dependencies between projections
-%% so that restore order is guaranteed. Until then, we lazily create the
-%% binding table here as a safety net: during restore_projections, the trie
-%% projection may be triggered before the binding projection's table is
-%% initialised due to Khepri's prepend-based list ordering.
-ensure_topic_binding_table(Name) ->
-    case ets:whereis(Name) of
-        undefined ->
-            ets:new(Name, [ordered_set, named_table, protected,
-                           {read_concurrency, true}]);
-        Tid ->
-            Tid
-    end.
 
 %% Walk down the trie following the given words, creating edges and
 %% intermediate nodes as needed. Returns the leaf node ID.
