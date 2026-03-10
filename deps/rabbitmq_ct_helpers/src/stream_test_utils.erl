@@ -171,7 +171,7 @@ sub_batch_entry_uncompressed(Sequence, AppProps, Bodies) ->
 sub_batch_entry_compressed(Sequence, Bodies) ->
     Uncompressed = lists:foldl(fun(Body, Acc) ->
                                        Bin = iolist_to_binary(amqp10_framing:encode_bin(#'v1_0.data'{content = Body})),
-                                       <<Acc/binary, Bin/binary>>
+                                       <<Acc/binary, 0:1, (byte_size(Bin)):31, Bin/binary>>
                                end, <<>>, Bodies),
     Compressed = zlib:gzip(Uncompressed),
     CompressedLen = byte_size(Compressed),
