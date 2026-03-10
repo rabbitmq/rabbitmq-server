@@ -335,7 +335,7 @@ mapped(cast,
     Link = Link0#link{incoming_unsettled = Unsettled},
     State1 = State0#state{links = Links#{OutputHandle := Link}},
     State = auto_flow(Link, State1),
-    Disp = #'v1_0.disposition'{role = translate_role(receiver),
+    Disp = #'v1_0.disposition'{role = ?AMQP_ROLE_RECEIVER,
                                first = {uint, First},
                                last = {uint, Last},
                                settled = Settled0,
@@ -489,19 +489,11 @@ mapped(cast, {Transfer0 = #'v1_0.transfer'{handle = {uint, InHandle}},
                                           {utf8, unicode:characters_to_binary(Description)}),
             {keep_state, update_link(Link, State0)}
     end;
-
-% role=true indicates the disposition is from a `receiver`. i.e. from the
-% clients point of view these are dispositions relating to `sender`links
-mapped(cast, #'v1_0.disposition'{role = true,
+mapped(cast, #'v1_0.disposition'{role = ?AMQP_ROLE_RECEIVER,
                                  settled = true,
                                  first = {uint, First},
-                                 last = Last0,
-                                 state = DeliveryState},
+                                 state = DeliveryState} = Disp,
        #state{outgoing_unsettled = Unsettled0} = State) ->
-    Last = case Last0 of
-               undefined -> First;
-               {uint, L} -> L
-           end,
     % TODO: no good if the range becomes very large!! refactor
     Unsettled = serial_number:foldl(
                   fun(Id, Acc0) ->
@@ -517,9 +509,59 @@ mapped(cast, #'v1_0.disposition'{role = true,
                               error ->
                                   Acc0
                           end
-                  end, Unsettled0, First, Last),
-
+                  end, Unsettled0, First, get_disposition_last(Disp)),
     {keep_state, State#state{outgoing_unsettled = Unsettled}};
+mapped(cast, #'v1_0.disposition'{role = ?AMQP_ROLE_SENDER,
+                                 settled = Settled,
+                                 first = {uint, First},
+                                 state = DeliveryState} = Disp,
+       #state{links = Links} = State0) ->
+    Last = get_disposition_last(Disp),
+    DS = translate_delivery_state(DeliveryState),
+    State = maps:fold(
+              fun(_OutputHandle, #link{role = receiver,
+                                       incoming_unsettled = Unsettled0,
+                                       notify = Pid,
+                                       ref = Ref} = Link0, Acc) ->
+                      {Ids, Unsettled} =
+                      maps:fold(
+                        fun(Id, _, {Ids0, U} = Acc0) ->
+                                case serial_number:in_range(Id, First, Last) of
+                                    true ->
+                                        {[Id | Ids0], maps:remove(Id, U)};
+                                    false ->
+                                        Acc0
+                                end
+                        end, {[], Unsettled0}, Unsettled0),
+                      case Ids of
+                          [] ->
+                              Acc;
+                          _ ->
+                              _ = [Pid ! {amqp10_event, {link, Ref, {disposition, DS, Id}}}
+                                   || Id <- serial_number:usort(Ids)],
+                              Link = Link0#link{incoming_unsettled = Unsettled},
+                              auto_flow(Link, update_link(Link, Acc))
+                      end;
+                 (_OutHandle, _SenderLink, S) ->
+                      S
+              end, State0, Links),
+    case default(Settled, false) of
+        false ->
+            %% "In this case the sender [broker] SHOULD send a disposition to the
+            %% receiver [us], but not settle until the receiver [we] confirms, via a
+            %% disposition in the opposite direction, that it has updated the state
+            %% at its endpoint." [2.6.12]
+            %% Here, we send the disposition in the opposite direction.
+            D = #'v1_0.disposition'{role = ?AMQP_ROLE_RECEIVER,
+                                    first = {uint, First},
+                                    last = {uint, Last},
+                                    settled = true,
+                                    state = DeliveryState},
+            ok = send(D, State);
+        true ->
+            ok
+    end,
+    {keep_state, State};
 mapped(cast, Frame, State) ->
     ?LOG_WARNING("Unhandled session frame ~tp in state ~tp",
                  [Frame, State]),
@@ -1069,8 +1111,6 @@ translate_delivery_state({modified,
 translate_delivery_state(released) -> #'v1_0.released'{};
 translate_delivery_state(received) -> #'v1_0.received'{}.
 
-translate_role(receiver) -> true.
-
 maybe_notify_link_credit(#link{role = sender,
                                link_credit = 0},
                          #link{role = sender,
@@ -1328,6 +1368,13 @@ boolean_to_role(?AMQP_ROLE_RECEIVER) ->
 
 default(undefined, Default) -> Default;
 default(Thing, _Default) -> Thing.
+
+get_disposition_last(#'v1_0.disposition'{last = {uint, Last}}) ->
+    Last;
+get_disposition_last(#'v1_0.disposition'{first = {uint, First},
+                                         last = undefined}) ->
+    %% "If not set, this is taken to be the same as first" [2.7.6]
+    First.
 
 format_status(Status = #{data := Data0}) ->
     #state{channel = Channel,
