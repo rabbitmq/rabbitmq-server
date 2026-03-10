@@ -1986,7 +1986,7 @@ server_closes_link_exchange(Settled, Config) ->
     RoutingKey = <<"my routing key">>,
     {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config),
     #'exchange.declare_ok'{} = amqp_channel:call(Ch, #'exchange.declare'{exchange = XName}),
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, durable = true}),
     #'queue.bind_ok'{} = amqp_channel:call(Ch, #'queue.bind'{queue = QName,
                                                              exchange = XName,
                                                              routing_key = RoutingKey}),
@@ -2106,7 +2106,7 @@ target_queues_deleted_accepted(Config) ->
     QNames = [Q1, Q2, Q3],
     {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config),
     [begin
-         #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName}),
+         #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, durable = true}),
          #'queue.bind_ok'{} = amqp_channel:call(Ch, #'queue.bind'{queue = QName,
                                                                   exchange = <<"amq.fanout">>})
      end || QName <- QNames],
@@ -3380,7 +3380,7 @@ detach_requeues_two_connections(QType, Config) ->
 resource_alarm_before_session_begin(Config) ->
     QName = atom_to_binary(?FUNCTION_NAME),
     {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config),
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, durable = true}),
     OpnConf = connection_config(Config),
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
 
@@ -3435,7 +3435,7 @@ resource_alarm_before_session_begin(Config) ->
 resource_alarm_after_session_begin(Config) ->
     QName = atom_to_binary(?FUNCTION_NAME),
     {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config),
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, durable = true}),
     Address = rabbitmq_amqp_address:queue(QName),
     OpnConf = connection_config(Config),
 
@@ -3504,7 +3504,7 @@ resource_alarm_after_session_begin(Config) ->
 resource_alarm_send_many(Config) ->
     QName = atom_to_binary(?FUNCTION_NAME),
     {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config),
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, durable = true}),
     Address = rabbitmq_amqp_address:queue(QName),
     OpnConf = connection_config(Config),
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
@@ -3567,7 +3567,7 @@ max_message_size_client_to_server(Config) ->
 
     QName = atom_to_binary(?FUNCTION_NAME),
     {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config),
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, durable = true}),
     Address = rabbitmq_amqp_address:queue(QName),
     OpnConf = connection_config(Config),
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
@@ -3596,7 +3596,7 @@ max_message_size_client_to_server(Config) ->
 max_message_size_server_to_client(Config) ->
     QName = atom_to_binary(?FUNCTION_NAME),
     {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config),
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, durable = true}),
     Address = rabbitmq_amqp_address:queue(QName),
     OpnConf = connection_config(Config),
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
@@ -3651,7 +3651,7 @@ last_queue_confirms(Config) ->
     Qs = [ClassicQ, QuorumQ],
     {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config),
     #'queue.declare_ok'{} = amqp_channel:call(
-                              Ch, #'queue.declare'{queue = ClassicQ}),
+                              Ch, #'queue.declare'{queue = ClassicQ, durable = true}),
     #'queue.declare_ok'{} = amqp_channel:call(
                               Ch, #'queue.declare'{
                                      queue = QuorumQ,
@@ -3723,7 +3723,7 @@ target_queue_deleted(Config) ->
     Qs = [ClassicQ, QuorumQ],
     {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config),
     #'queue.declare_ok'{} = amqp_channel:call(
-                              Ch, #'queue.declare'{queue = ClassicQ}),
+                              Ch, #'queue.declare'{queue = ClassicQ, durable = true}),
     #'queue.declare_ok'{} = amqp_channel:call(
                               Ch, #'queue.declare'{
                                      queue = QuorumQ,
@@ -4825,7 +4825,7 @@ trace(Q, QType, Config) ->
                                      queue = Q,
                                      durable = true,
                                      arguments = [{<<"x-queue-type">>, longstr, QType}]}),
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = TraceQ}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = TraceQ, durable = true}),
     #'queue.bind_ok'{} = amqp_channel:call(
                            Ch, #'queue.bind'{queue       = TraceQ,
                                              exchange    = <<"amq.rabbitmq.trace">>,
@@ -4945,7 +4945,7 @@ message_ttl(Config) ->
     QName = atom_to_binary(?FUNCTION_NAME),
     Address = rabbitmq_amqp_address:queue(QName),
     {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config),
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, durable = true}),
     ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch),
     OpnConf = connection_config(Config),
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
@@ -6266,7 +6266,7 @@ receive_many_auto_flow(QType, Config) ->
 incoming_window_closed_transfer_flow_order(Config) ->
     QName = atom_to_binary(?FUNCTION_NAME),
     {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config),
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, durable = true}),
     ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch),
     Address = rabbitmq_amqp_address:queue(QName),
     OpnConf = connection_config(Config),

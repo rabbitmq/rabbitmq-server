@@ -95,7 +95,7 @@ propagate_context_to_auth_backend1() ->
   %% variable_map is extracted when the channel is created and kept in its state
   {ok, Ch} = amqp_connection:open_channel(Conn),
   QName = <<"channel_propagate_context_to_authz_backend-q">>,
-  amqp_channel:call(Ch, #'queue.declare'{queue = QName}),
+  amqp_channel:call(Ch, #'queue.declare'{queue = QName, durable = true}),
 
   check_send_receive(Ch, <<"">>, QName, QName),
   amqp_channel:call(Ch, #'queue.bind'{queue = QName, exchange = <<"amq.topic">>, routing_key = <<"a.b">>}),

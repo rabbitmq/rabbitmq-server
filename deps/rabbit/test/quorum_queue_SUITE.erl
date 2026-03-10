@@ -253,7 +253,10 @@ init_per_suite(Config0) ->
     {ok, _} = application:ensure_all_started(amqp10_client),
     rabbit_ct_helpers:log_environment(),
     Config1 = rabbit_ct_helpers:merge_app_env(
-                Config0, {rabbit, [{quorum_tick_interval, 256}]}),
+                Config0, {rabbit, [{quorum_tick_interval, 256},
+                                   %% Remove when transient_nonexcl_queues is removed entirely
+                                   %% and fix the relevant tests.
+                                   {permit_deprecated_features, #{transient_nonexcl_queues => true}}]}),
     rabbit_ct_helpers:run_setup_steps(Config1, []).
 
 end_per_suite(Config) ->
@@ -288,11 +291,12 @@ init_per_group(Group, Config) ->
         2 when IsMixed ->
             {skip, "cluster size 2 isn't mixed versions compatible"};
         _ ->
-            %% Remove when global_qos is removed entirely.
+            %% Remove when global_qos/transient_nonexcl_queues is removed entirely.
             Config0 = rabbit_ct_helpers:merge_app_env(
                         Config,
                         {rabbit,
-                         [{permit_deprecated_features, #{global_qos => true}}]}),
+                         [{permit_deprecated_features, #{global_qos => true,
+                                                         transient_nonexcl_queues => true}}]}),
             Config1 = rabbit_ct_helpers:set_config(Config0,
                                                    [{rmq_nodes_count, ClusterSize},
                                                     {rmq_nodename_suffix, Group},

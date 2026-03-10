@@ -156,7 +156,7 @@ custom_header_undefined(Config) ->
                                         type = <<"x-consistent-hash">>,
                                         arguments = [{<<"hash-header">>, longstr, <<"hashme">>}]
                                        }),
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = Queue}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = Queue, durable = true}),
     #'queue.bind_ok'{} = amqp_channel:call(
                            Ch, #'queue.bind'{queue = Queue,
                                              exchange = Exchange,
@@ -468,7 +468,7 @@ test_binding_with_negative_routing_key(Config) ->
                                    type = <<"x-consistent-hash">>},
     #'exchange.declare_ok'{} = amqp_channel:call(Chan, Declare1),
     Q = <<"test-queue">>,
-    Declare2 = #'queue.declare'{queue = Q},
+    Declare2 = #'queue.declare'{queue = Q, durable = true},
     #'queue.declare_ok'{} = amqp_channel:call(Chan, Declare2),
     process_flag(trap_exit, true),
     Cmd = #'queue.bind'{exchange = <<"bind-fail">>,
@@ -490,7 +490,7 @@ test_binding_with_non_numeric_routing_key(Config) ->
                                    type = <<"x-consistent-hash">>},
     #'exchange.declare_ok'{} = amqp_channel:call(Chan, Declare1),
     Q = <<"test-queue">>,
-    Declare2 = #'queue.declare'{queue = Q},
+    Declare2 = #'queue.declare'{queue = Q, durable = true},
     #'queue.declare_ok'{} = amqp_channel:call(Chan, Declare2),
     process_flag(trap_exit, true),
     Cmd = #'queue.bind'{exchange = <<"bind-fail">>,

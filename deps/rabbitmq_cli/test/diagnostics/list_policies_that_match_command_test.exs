@@ -137,7 +137,7 @@ defmodule ListPoliciesThatMatchCommandTest do
       end)
     end)
 
-    declare_queue("foo", context[:vhost])
+    declare_queue("foo", context[:vhost], true)
     result = for policy <- @command.run(["foo"], context[:opts]), do: Map.new(policy)
 
     expected = ["matching-p2", "matching-p1", "matching-p0"]

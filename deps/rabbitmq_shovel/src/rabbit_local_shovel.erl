@@ -63,13 +63,15 @@
         ]).
 
 -export([
-         src_decl_exchange/4,
+         src_decl_exchange/5,
          decl_queue/4,
-         dest_decl_queue/4,
-         check_queue/4,
-         dest_check_queue/4,
+         decl_queue/5,
+         dest_decl_queue/5,
+         check_queue/5,
+         dest_check_queue/5,
          decl_fun/3,
-         check_fun/3
+         decl_fun/4,
+         check_fun/4
         ]).
 
 -import(rabbit_misc, [pget/2, pget/3]).
@@ -246,12 +248,13 @@ validate_dest_funs(_Def, User) ->
 
 connect_source(State = #{source := Src = #{resource_decl := {M, F, MFArgs},
                                            queue := QName0,
-                                           uris := [Uri | _]}}) ->
+                                           uris := [Uri | _]},
+                         name := ShovelName}) ->
     QState = rabbit_queue_type:init(),
     {User, VHost} = get_user_vhost_from_amqp_param(Uri),
     %% We handle the most recently declared queue to use anonymous functions
     %% It's usually the channel that does it
-    MRDQ = apply(M, F, MFArgs ++ [VHost, User]),
+    MRDQ = apply(M, F, MFArgs ++ [VHost, User, ShovelName]),
     QName = case QName0 of
                 <<>> -> MRDQ;
                 _ -> QName0
@@ -267,9 +270,10 @@ connect_source(State = #{source := Src = #{resource_decl := {M, F, MFArgs},
 
 connect_dest(State = #{dest := Dest = #{resource_decl := {M, F, MFArgs},
                                         uris := [Uri | _]},
-                       ack_mode := AckMode}) ->
+                       ack_mode := AckMode,
+                       name := ShovelName}) ->
     {User, VHost} = get_user_vhost_from_amqp_param(Uri),
-    apply(M, F, MFArgs ++ [VHost, User]),
+    apply(M, F, MFArgs ++ [VHost, User, ShovelName]),
 
     QState = rabbit_queue_type:init(),
     maybe_add_dest_queue(
@@ -702,6 +706,9 @@ remaining(Q, #{source := #{delete_after := 'queue-length'}}) ->
 remaining(_Q, #{source := #{delete_after := Count}}) ->
     Count.
 
+decl_fun(Decl, VHost, User, _ShovelName) ->
+    decl_fun(Decl, VHost, User).
+
 decl_fun(Decl, VHost, User) ->
     lists:foldr(
       fun(Method, MRDQ) -> %% keep track of most recently declared queue
@@ -739,20 +746,28 @@ expand_routing_key_shortcut(<<>>, <<>>, MRDQ) ->
 expand_routing_key_shortcut(_QueueNameBin, RoutingKey, _) ->
     RoutingKey.
 
-check_fun(QName, VHost, User) ->
+check_fun(QName, VHost, User, _ShovelName) ->
     Method = #'queue.declare'{queue = QName,
                               passive = true},
     decl_fun([Method], VHost, User).
 
-src_decl_exchange(SrcX, SrcXKey, VHost, User) ->
+src_decl_exchange(SrcX, SrcXKey, VHost, User, ShovelName) ->
+    Prefix = <<"local.shovel.src.exchange.">>,
+    QName = <<Prefix/binary, ShovelName/binary>>,
     Methods = [#'queue.bind'{routing_key = SrcXKey,
                              exchange    = SrcX},
-               #'queue.declare'{exclusive = true}],
+               %% Local can't be exclusive as it doesn't provide
+               %% a connection pid
+               #'queue.declare'{durable = true,
+                                queue = QName}],
     decl_fun(Methods, VHost, User).
 
-dest_decl_queue(none, _, _, _) ->
+dest_decl_queue(none, _, _, _, _) ->
     ok;
-dest_decl_queue(QName, QArgs, VHost, User) ->
+dest_decl_queue(QName, QArgs, VHost, User, _ShovelName) ->
+    decl_queue(QName, QArgs, VHost, User).
+
+decl_queue(QName, QArgs, VHost, User, _ShovelName) ->
     decl_queue(QName, QArgs, VHost, User).
 
 decl_queue(QName, QArgs, VHost, User) ->
@@ -767,9 +782,12 @@ decl_queue(QName, QArgs, VHost, User) ->
             decl_fun([Method], VHost, User)
     end.
 
-dest_check_queue(none, _, _, _) ->
+dest_check_queue(none, _, _, _, _) ->
     ok;
-dest_check_queue(QName, QArgs, VHost, User) ->
+dest_check_queue(QName, QArgs, VHost, User, _ShovelName) ->
+    check_queue(QName, QArgs, VHost, User).
+
+check_queue(QName, QArgs, VHost, User, _ShovelName) ->
     check_queue(QName, QArgs, VHost, User).
 
 check_queue(QName, _QArgs, VHost, User) ->

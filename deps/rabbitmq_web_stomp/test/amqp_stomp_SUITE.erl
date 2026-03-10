@@ -64,7 +64,7 @@ raw_recv(WS) ->
 pubsub_amqp(Config) ->
     Ch = ?config(amqp_channel, Config),
     #'queue.declare_ok'{} =
-        amqp_channel:call(Ch, #'queue.declare'{queue = ?QUEUE, auto_delete = true}),
+        amqp_channel:call(Ch, #'queue.declare'{queue = ?QUEUE, durable = true, auto_delete = true}),
 
     PortStr = rabbit_ws_test_util:get_web_stomp_port_str(Config),
     Protocol = ?config(protocol, Config),

@@ -375,6 +375,7 @@ declare_invalid_properties(Config) ->
          Config, Server,
          #'queue.declare'{queue     = Q,
                           durable   = false,
+                          exclusive = true,
                           arguments = [{<<"x-queue-type">>, longstr, <<"stream">>}]})).
 
 declare_server_named(Config) ->

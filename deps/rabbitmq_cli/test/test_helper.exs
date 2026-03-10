@@ -542,7 +542,7 @@ defmodule TestHelper do
 
   def message_count(vhost, queue_name) do
     with_channel(vhost, fn channel ->
-      {:ok, %{message_count: mc}} = AMQP.Queue.declare(channel, queue_name)
+      {:ok, %{message_count: mc}} = AMQP.Queue.declare(channel, queue_name, durable: true)
       mc
     end)
   end

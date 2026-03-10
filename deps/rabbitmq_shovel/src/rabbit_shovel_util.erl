@@ -156,7 +156,7 @@ parse_declaration({[{Method, Props} | Rest], Acc}) when is_list(Props) ->
         []            -> ok;
         UnknownFields -> fail({unknown_fields, Method, UnknownFields})
     end,
-    {Res, _Idx} = lists:foldl(
+    {Res0, _Idx} = lists:foldl(
                     fun (K, {R, Idx}) ->
                             NewR = case proplists:get_value(K, Props) of
                                        undefined -> R;
@@ -165,6 +165,16 @@ parse_declaration({[{Method, Props} | Rest], Acc}) when is_list(Props) ->
                             {NewR, Idx + 1}
                     end, {rabbit_framing_amqp_0_9_1:method_record(Method), 2},
                     FieldNames),
+    %% Let's transform transient non-exclusive into durables when the
+    %% feature is deprecated. User should use the right values,
+    %% but this declarations feature is a bit of a dark magic and lesser
+    %% used than static shovels.
+    Res = case Res0 of
+              #'queue.declare'{durable = false, exclusive = false} ->
+                  Res0#'queue.declare'{durable = true};
+              _ ->
+                  Res0
+          end,
     parse_declaration({Rest, [Res | Acc]});
 parse_declaration({[{Method, Props} | _Rest], _Acc}) ->
     fail({expected_method_field_list, Method, Props});

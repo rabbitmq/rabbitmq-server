@@ -40,12 +40,18 @@ end_per_suite(Config) ->
     Config.
 
 init_per_group(_, Config) ->
-    Config1 = rabbit_ct_helpers:set_config(Config,
+    Config0 = rabbit_ct_helpers:set_config(Config,
                                            [
                                                {rmq_nodename_suffix, ?MODULE},
                                                {rmq_certspwd, "bunnychow"}
                                             ]),
     rabbit_ct_helpers:log_environment(),
+    %% Remove when transient_nonexcl_queues is removed entirely,
+    %% and fix the Python tests.
+    Config1 = rabbit_ct_helpers:merge_app_env(
+                Config0,
+                {rabbit,
+                 [{permit_deprecated_features, #{transient_nonexcl_queues => true}}]}),
     Config2 = rabbit_ct_helpers:run_setup_steps(
         Config1,
         rabbit_ct_broker_helpers:setup_steps()),

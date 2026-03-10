@@ -163,7 +163,8 @@ pubsub(Config) ->
     Dst = "/topic/test-" ++ stomp:list_to_hex(binary_to_list(crypto:strong_rand_bytes(8))),
 
     ok = raw_send(WS, "SUBSCRIBE", [{"destination", Dst},
-                                    {"id", "s0"}]),
+                                    {"id", "s0"},
+                                    {"durable", "true"}]),
 
     CustHdr1K = "x-custom-hdr-1",
     CustHdr1 = {CustHdr1K, "value1"},
@@ -226,7 +227,8 @@ pubsub_binary(Config) ->
     Dst = "/topic/test-" ++ stomp:list_to_hex(binary_to_list(crypto:strong_rand_bytes(8))),
 
     ok = raw_send(WS, "SUBSCRIBE", [{"destination", Dst},
-                                    {"id", "s0"}]),
+                                    {"id", "s0"},
+                                    {"durable", "true"}]),
 
     ok = raw_send(WS, "SEND", [{"destination", Dst},
                               {"content-length", "3"}], <<"a\x00a">>),

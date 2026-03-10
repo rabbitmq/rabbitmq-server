@@ -80,7 +80,7 @@ defmodule ListConsumersCommandTest do
     consumer_tag = "i_am_consumer"
     info_keys_s = ~w(queue_name channel_pid consumer_tag ack_required prefetch_count arguments)
     info_keys_a = Enum.map(info_keys_s, &String.to_atom/1)
-    declare_queue(queue_name, @vhost)
+    declare_queue(queue_name, @vhost, true)
 
     with_channel(@vhost, fn channel ->
       {:ok, _} = AMQP.Basic.consume(channel, queue_name, nil, consumer_tag: consumer_tag)
@@ -104,8 +104,8 @@ defmodule ListConsumersCommandTest do
   test "run: consumers are grouped by queues (multiple consumer per queue)", context do
     queue_name1 = "test_queue1"
     queue_name2 = "test_queue2"
-    declare_queue("test_queue1", @vhost)
-    declare_queue("test_queue2", @vhost)
+    declare_queue("test_queue1", @vhost, true)
+    declare_queue("test_queue2", @vhost, true)
 
     with_channel(@vhost, fn channel ->
       {:ok, tag1} = AMQP.Basic.consume(channel, queue_name1)
