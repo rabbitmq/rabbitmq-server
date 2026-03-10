@@ -382,7 +382,16 @@ stop-node:
 NODES ?= 3
 
 start-brokers start-cluster: $(DIST_TARGET)
-	@if test '$@' = 'start-cluster'; then \
+	# nodes start in parallel; if the cookie file doesn't exist
+	# there's a race condition where one node creates it and sets
+	# permissions to read-only, while another node also can't find
+	# the cookie so it tries to create it, but it can't write
+	# to a read-only file. Best option - just create the cookie upfront
+	@if test ! -f "$$HOME/.erlang.cookie"; then \
+		openssl rand -hex 20 > "$$HOME/.erlang.cookie" && \
+		chmod 400 "$$HOME/.erlang.cookie"; \
+	fi; \
+	if test '$@' = 'start-cluster'; then \
 		for n in $$(seq $(NODES)); do \
 			nodename="rabbit-$$n@$(HOSTNAME)"; \
 			if test "$$nodeslist"; then \
