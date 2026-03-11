@@ -21,7 +21,8 @@ suite() ->
 
 groups() ->
     [{tests, [],
-      [roundtrip, roundtrip_metadata, roundtrip_metadata_no_leader]}].
+      [roundtrip, roundtrip_metadata, roundtrip_metadata_no_leader,
+       zero_size_frame_does_not_crash]}].
 
 init_per_suite(Config) ->
     Config.
@@ -194,6 +195,15 @@ roundtrip_metadata_no_leader(_Config) ->
           <<"stream3">> => stream_not_available},
     Cmd = {response, 1, {metadata, Endpoints, Metadata}},
     test_roundtrip(Cmd),
+    ok.
+
+%% A zero-size frame (e.g. sent by a port scanner) must not crash the parser.
+zero_size_frame_does_not_crash(_Config) ->
+    Init = rabbit_stream_core:init(undefined),
+    %% <<0,0,0,0>> is a valid frame header with size 0, producing an empty frame body
+    Data = <<0,0,0,0, 0,0,0,0>>,
+    State = rabbit_stream_core:incoming_data(Data, Init),
+    {[{unknown, <<>>}, {unknown, <<>>}], _} = rabbit_stream_core:all_commands(State),
     ok.
 
 test_roundtrip(Cmd) ->
