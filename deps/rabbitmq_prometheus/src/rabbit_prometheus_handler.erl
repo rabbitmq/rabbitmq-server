@@ -14,8 +14,8 @@
 
 -define(SCRAPE_DURATION, telemetry_scrape_duration_seconds).
 -define(SCRAPE_SIZE, telemetry_scrape_size_bytes).
-
 -define(AUTH_REALM, "Basic realm=\"RabbitMQ Prometheus\"").
+-define(MAX_QUEUE_FILTER_LENGTH, 2000).
 
 %% ===================================================================
 %% Cowboy Handler Callbacks
@@ -76,8 +76,12 @@ gen_response(<<"GET">>, Request) ->
         false ->
           cowboy_req:reply(404, #{}, <<"Unknown Registry">>, Request);
         Registry ->
-            put_filtering_options_into_process_dictionary(Request),
-            gen_metrics_response(Registry, Request)
+            case put_filtering_options_into_process_dictionary(Request) of
+                ok ->
+                    gen_metrics_response(Registry, Request);
+                {error, Reason} ->
+                    cowboy_req:reply(400, #{}, Reason, Request)
+            end
     end;
 gen_response(_, Request) ->
     Request.
@@ -129,7 +133,10 @@ registry() ->
 
 %% It's not easy to pass this information in a pure way (it'll require changing prometheus.erl)
 put_filtering_options_into_process_dictionary(Request) ->
-    #{vhost := VHosts, family := Families} = cowboy_req:match_qs([{vhost, [], undefined}, {family, [], undefined}], Request),
+    #{vhost := VHosts, family := Families, queue := Queues} =
+        cowboy_req:match_qs([{vhost, [], undefined},
+                             {family, [], undefined},
+                             {queue, [], undefined}], Request),
     case parse_vhosts(VHosts) of
         Vs when is_list(Vs) ->
             put(prometheus_vhost_filter, Vs);
@@ -140,7 +147,15 @@ put_filtering_options_into_process_dictionary(Request) ->
             put(prometheus_mf_filter, Fs);
         _ -> ok
     end,
-    ok.
+    case parse_queue_filter(Queues) of
+        {ok, MP} ->
+            put(prometheus_queue_filter, MP),
+            ok;
+        {error, _} = Err ->
+            Err;
+        false ->
+            ok
+    end.
 
 parse_vhosts(N) when is_binary(N) ->
     parse_vhosts([N]);
@@ -165,3 +180,24 @@ parse_metric_families([B|Bs]) ->
     end;
 parse_metric_families(_) ->
     false.
+
+parse_queue_filter(undefined) ->
+    false;
+parse_queue_filter(<<>>) ->
+    false;
+parse_queue_filter(B) when byte_size(B) > ?MAX_QUEUE_FILTER_LENGTH ->
+    {error, <<"'queue' regex too long">>};
+parse_queue_filter(B) when is_binary(B) ->
+    case re:compile(B) of
+        {ok, _} = OK ->
+            OK;
+        {error, {ErrStr, Pos}} ->
+            Msg = unicode:characters_to_binary(
+                    io_lib:format("Invalid 'queue' regex at position ~b: ~ts",
+                                  [Pos, ErrStr])),
+            {error, Msg}
+    end;
+parse_queue_filter([B]) when is_binary(B) ->
+    parse_queue_filter(B);
+parse_queue_filter([_|_]) ->
+    {error, <<"Only one 'queue' query parameter is allowed">>}.

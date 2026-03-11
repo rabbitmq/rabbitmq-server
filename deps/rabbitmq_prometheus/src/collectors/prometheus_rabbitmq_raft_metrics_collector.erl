@@ -96,15 +96,25 @@ collect_detailed_metrics(Prefix, Callback) ->
                                      false
                              end
                      end,
-    collect_all_matching_metrics(Prefix, Callback, VHostFilterFun).
+    QueueFilter = get(prometheus_queue_filter),
+    FilterFun = build_filter_fun(VHostFilterFun, QueueFilter),
+    collect_all_matching_metrics(Prefix, Callback, FilterFun).
 
-collect_all_matching_metrics(Prefix, Callback, VHostFilterFun) ->
+build_filter_fun(VHostFilterFun, undefined) ->
+    VHostFilterFun;
+build_filter_fun(VHostFilterFun, QueueFilter) ->
+    fun(#{queue := Q} = Labels) ->
+            VHostFilterFun(Labels) andalso re:run(Q, QueueFilter,
+                                                  [{capture, none},
+                                                   {match_limit, 50_000},
+                                                   {match_limit_recursion, 50_000}]) =:= match;
+       (_) ->
+            false
+    end.
+
+collect_all_matching_metrics(Prefix, Callback, FilterFun) ->
     maps:foreach(
-      fun(Name, #{type := Type, help := Help, values := Values0}) ->
-              Values = maps:filter(fun(#{vhost := V}, _) ->
-                                           VHostFilterFun(V);
-                                      (_, _) -> true
-                                   end, Values0),
+      fun(Name, #{type := Type, help := Help, values := Values}) ->
               Callback(
                 create_mf(<<Prefix/binary, (prometheus_model_helpers:metric_name(Name))/binary>>,
                           Help,
@@ -114,7 +124,7 @@ collect_all_matching_metrics(Prefix, Callback, VHostFilterFun) ->
       seshat:format(ra,
                     #{labels => as_binary,
                       metrics => all,
-                      filter_fun => VHostFilterFun})).
+                      filter_fun => FilterFun})).
 
 collect_max_values(Prefix, Callback) ->
     %% max values for QQ metrics

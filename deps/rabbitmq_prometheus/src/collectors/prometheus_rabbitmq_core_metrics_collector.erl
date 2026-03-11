@@ -290,47 +290,47 @@ register() ->
 deregister_cleanup(_) -> ok.
 
 collect_mf('detailed', Callback) ->
+    VHostsFilter = vhosts_filter_from_pdict(),
+    QueueFilter = queue_filter_from_pdict(),
     IncludedMFs = enabled_mfs_from_pdict(?METRICS_RAW),
-    collect(true, ?DETAILED_METRIC_NAME_PREFIX, vhosts_filter_from_pdict(), IncludedMFs, Callback),
-    collect(true, ?CLUSTER_METRIC_NAME_PREFIX, vhosts_filter_from_pdict(), enabled_mfs_from_pdict(?METRICS_CLUSTER), Callback),
-    %% the detailed endpoint should emit queue_info only if queue metrics were requested
+    collect(true, ?DETAILED_METRIC_NAME_PREFIX, VHostsFilter, QueueFilter, IncludedMFs, Callback),
+    collect(true, ?CLUSTER_METRIC_NAME_PREFIX, VHostsFilter, QueueFilter, enabled_mfs_from_pdict(?METRICS_CLUSTER), Callback),
     MFs = proplists:get_keys(IncludedMFs),
     case lists:member(queue_coarse_metrics, MFs) orelse
          lists:member(queue_consumer_count, MFs) orelse
          lists:member(queue_metrics, MFs) of
         true ->
-            emit_queue_info(?DETAILED_METRIC_NAME_PREFIX, vhosts_filter_from_pdict(), Callback);
+            emit_queue_info(?DETAILED_METRIC_NAME_PREFIX, VHostsFilter, QueueFilter, Callback);
         false -> ok
     end,
-    %% identity is here to enable filtering on a cluster name (as already happens in existing dashboards)
     emit_identity_info(<<"detailed">>, Callback),
     ok;
 collect_mf('per-object', Callback) ->
-    collect(true, ?METRIC_NAME_PREFIX, false, ?METRICS_RAW, Callback),
+    collect(true, ?METRIC_NAME_PREFIX, false, false, ?METRICS_RAW, Callback),
     totals(Callback),
-    emit_queue_info(?METRIC_NAME_PREFIX, false, Callback),
+    emit_queue_info(?METRIC_NAME_PREFIX, false, false, Callback),
     emit_identity_info(<<"per-object">>, Callback),
     ok;
 collect_mf('memory-breakdown', Callback) ->
-    collect(false, ?METRIC_NAME_PREFIX, false, ?METRICS_MEMORY_BREAKDOWN, Callback),
+    collect(false, ?METRIC_NAME_PREFIX, false, false, ?METRICS_MEMORY_BREAKDOWN, Callback),
     emit_identity_info(<<"memory-breakdown">>, Callback),
     ok;
 collect_mf(_Registry, Callback) ->
     PerObjectMetrics = application:get_env(rabbitmq_prometheus, return_per_object_metrics, false),
-    collect(PerObjectMetrics, ?METRIC_NAME_PREFIX, false, ?METRICS_RAW, Callback),
+    collect(PerObjectMetrics, ?METRIC_NAME_PREFIX, false, false, ?METRICS_RAW, Callback),
     totals(Callback),
     case PerObjectMetrics of
         true ->
             emit_identity_info(<<"per-object">>, Callback),
-            emit_queue_info(?METRIC_NAME_PREFIX, false, Callback);
+            emit_queue_info(?METRIC_NAME_PREFIX, false, false, Callback);
         false ->
             emit_identity_info(<<"aggregated">>, Callback)
     end,
     ok.
 
-collect(PerObjectMetrics, Prefix, VHostsFilter, IncludedMFs, Callback) ->
+collect(PerObjectMetrics, Prefix, VHostsFilter, QueueFilter, IncludedMFs, Callback) ->
     _ = [begin
-         Data = get_data(Table, PerObjectMetrics, VHostsFilter),
+         Data = get_data(Table, PerObjectMetrics, VHostsFilter, QueueFilter),
          mf(Callback, Prefix, Contents, Data)
      end || {Table, Contents} <- IncludedMFs, not mutually_exclusive_mf(PerObjectMetrics, Table, IncludedMFs)],
     ok.
@@ -440,27 +440,33 @@ membership({Name, Node}, Members) ->
 membership(_, _Members) ->
     undefined.
 
-emit_queue_info(Prefix, VHostsFilter, Callback) ->
+emit_queue_info(Prefix, VHostsFilter, QueueFilter, Callback) ->
     Help = <<"A metric with a constant '1' value and labels that provide some queue details">>,
     QInfos = lists:foldl(
                fun(Q, Acc) ->
                        #resource{virtual_host = VHost, name = Name} = amqqueue:get_name(Q),
                        case is_map(VHostsFilter) andalso maps:get(VHost, VHostsFilter) == false of
-                           true -> Acc;
+                           true ->
+                               Acc;
                            false ->
-                               Type = amqqueue:get_type(Q),
-                               Members = rabbit_queue_type:get_nodes(Q),
-                               case membership(amqqueue:get_pid(Q), Members) of
-                                   not_a_member ->
+                               case matches_queue_filter(Name, QueueFilter) of
+                                   false ->
                                        Acc;
-                                   Membership ->
-                                       QInfo = [
-                                                {vhost, VHost},
-                                                {queue, Name},
-                                                {queue_type, Type},
-                                                {membership, Membership}
-                                               ],
-                                       [{QInfo, 1}|Acc]
+                                   true ->
+                                       Type = amqqueue:get_type(Q),
+                                       Members = rabbit_queue_type:get_nodes(Q),
+                                       case membership(amqqueue:get_pid(Q), Members) of
+                                           not_a_member ->
+                                               Acc;
+                                           Membership ->
+                                               QInfo = [
+                                                        {vhost, VHost},
+                                                        {queue, Name},
+                                                        {queue_type, Type},
+                                                        {membership, Membership}
+                                                       ],
+                                               [{QInfo, 1}|Acc]
+                                       end
                                end
                        end
                end, [], rabbit_amqqueue:list()),
@@ -635,7 +641,7 @@ emit_gauge_metric_if_defined(Labels, Value) ->
       gauge_metric(Labels, Value)
   end.
 
-get_data(connection_metrics = Table, false, _) ->
+get_data(connection_metrics = Table, false, _, _) ->
     {Table, A1, A2, A3, A4} = ets:foldl(fun({_, Props}, {T, A1, A2, A3, A4}) ->
                                             {T,
                                              sum(proplists:get_value(recv_cnt, Props), A1),
@@ -644,7 +650,7 @@ get_data(connection_metrics = Table, false, _) ->
                                              sum(proplists:get_value(channels, Props), A4)}
                                     end, empty(Table), Table),
     [{Table, [{recv_cnt, A1}, {send_cnt, A2}, {send_pend, A3}, {channels, A4}]}];
-get_data(channel_metrics = Table, false, _) ->
+get_data(channel_metrics = Table, false, _, _) ->
     {Table, A1, A2, A3, A4, A5, A6, A7} =
         ets:foldl(fun({_, Props}, {T, A1, A2, A3, A4, A5, A6, A7}) ->
                           {T,
@@ -659,7 +665,7 @@ get_data(channel_metrics = Table, false, _) ->
      [{Table, [{consumer_count, A1}, {messages_unacknowledged, A2}, {messages_unconfirmed, A3},
                {messages_uncommitted, A4}, {acks_uncommitted, A5}, {prefetch_count, A6},
                {global_prefetch_count, A7}]}];
-get_data(stream_consumer_metrics = MF, false, _) ->
+get_data(stream_consumer_metrics = MF, false, _, _) ->
     Table = rabbit_stream_consumer_created, %% real table name
     try ets:foldl(fun({_, Props}, OldMax) ->
                           erlang:max(proplists:get_value(offset_lag, Props, 0), OldMax)
@@ -670,7 +676,7 @@ get_data(stream_consumer_metrics = MF, false, _) ->
             %% rabbitmq_stream plugin is not enabled
             []
     end;
-get_data(queue_consumer_count = MF, false, VHostsFilter) ->
+get_data(queue_consumer_count = MF, false, VHostsFilter, _) ->
     Table = queue_metrics, %% Real table name
     {_, A1} = ets:foldl(fun
                             ({#resource{kind = queue, virtual_host = VHost}, _, _}, Acc) when is_map(VHostsFilter), map_get(VHost, VHostsFilter) == false ->
@@ -681,7 +687,7 @@ get_data(queue_consumer_count = MF, false, VHostsFilter) ->
                                  }
                          end, empty(MF), Table),
     [{Table, [{consumers, A1}]}];
-get_data(queue_metrics = Table, false, VHostsFilter) ->
+get_data(queue_metrics = Table, false, VHostsFilter, _) ->
     {Table, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15} =
         ets:foldl(fun
                       ({#resource{kind = queue, virtual_host = VHost}, _, _}, Acc) when is_map(VHostsFilter), map_get(VHost, VHostsFilter) == false ->
@@ -695,7 +701,7 @@ get_data(queue_metrics = Table, false, VHostsFilter) ->
                {messages_bytes_persistent, A9}, {message_bytes, A10},
                {message_bytes_ready, A11}, {message_bytes_unacknowledged, A12},
                {disk_reads, A13}, {disk_writes, A14}, {segments, A15}]}];
-get_data(Table, false, VHostsFilter) when Table == channel_exchange_metrics;
+get_data(Table, false, VHostsFilter, _) when Table == channel_exchange_metrics;
                            Table == queue_coarse_metrics;
                            Table == queue_delivery_metrics;
                            Table == channel_queue_metrics;
@@ -728,7 +734,7 @@ get_data(Table, false, VHostsFilter) when Table == channel_exchange_metrics;
                        {T, V1 + A1, V2 + A2, V3 + A3, V4 + A4, V5 + A5, V6 + A6, V7 + A7}
                end, empty(Table), Table),
     [Result];
-get_data(exchange_metrics = Table, true, VHostsFilter) when is_map(VHostsFilter)->
+get_data(exchange_metrics = Table, true, VHostsFilter, _) when is_map(VHostsFilter)->
     ets:foldl(fun
         ({#resource{kind = exchange, virtual_host = VHost}, _, _, _, _, _} = Row, Acc) when
             map_get(VHost, VHostsFilter)
@@ -737,45 +743,65 @@ get_data(exchange_metrics = Table, true, VHostsFilter) when is_map(VHostsFilter)
         (_Row, Acc) ->
             Acc
     end, [], Table);
-get_data(queue_delivery_metrics = Table, true, VHostsFilter) when is_map(VHostsFilter) ->
+get_data(queue_delivery_metrics = Table, true, VHostsFilter, QueueFilter) when is_map(VHostsFilter) ->
     ets:foldl(fun
-        ({#resource{kind = queue, virtual_host = VHost}, _, _, _, _, _, _, _, _} = Row, Acc) when
+        ({#resource{kind = queue, virtual_host = VHost, name = QName}, _, _, _, _, _, _, _, _} = Row, Acc) when
             map_get(VHost, VHostsFilter)
         ->
-            [Row | Acc];
+            case matches_queue_filter(QName, QueueFilter) of
+                true -> [Row | Acc];
+                false -> Acc
+            end;
         (_Row, Acc) ->
             Acc
     end, [], Table);
-get_data(queue_exchange_metrics = Table, true, VHostsFilter) when is_map(VHostsFilter) ->
+get_data(queue_exchange_metrics = Table, true, VHostsFilter, QueueFilter) when is_map(VHostsFilter) ->
     ets:foldl(fun
         ({{
-            #resource{kind = queue, virtual_host = VHost},
+            #resource{kind = queue, virtual_host = VHost, name = QName},
             #resource{kind = exchange, virtual_host = VHost}
          }, _, _} = Row, Acc) when
             map_get(VHost, VHostsFilter)
         ->
-            [Row | Acc];
+            case matches_queue_filter(QName, QueueFilter) of
+                true -> [Row | Acc];
+                false -> Acc
+            end;
         (_Row, Acc) ->
             Acc
     end, [], Table);
-get_data(queue_coarse_metrics = Table, true, VHostsFilter) when is_map(VHostsFilter) ->
+get_data(queue_coarse_metrics = Table, true, VHostsFilter, QueueFilter) when is_map(VHostsFilter) ->
     ets:foldl(fun
-                  ({#resource{kind = queue, virtual_host = VHost}, _, _, _, _} = Row, Acc) when map_get(VHost, VHostsFilter) ->
-                      [Row|Acc];
+                  ({#resource{kind = queue, virtual_host = VHost, name = QName}, _, _, _, _} = Row, Acc) when map_get(VHost, VHostsFilter) ->
+                      case matches_queue_filter(QName, QueueFilter) of
+                          true -> [Row|Acc];
+                          false -> Acc
+                      end;
                   (_, Acc) ->
                       Acc
               end, [], Table);
-get_data(MF, true, VHostsFilter) when is_map(VHostsFilter), MF == queue_metrics orelse MF == queue_consumer_count ->
+get_data(MF, true, VHostsFilter, QueueFilter) when is_map(VHostsFilter), MF == queue_metrics orelse MF == queue_consumer_count ->
     Table = queue_metrics,
     ets:foldl(fun
-                  ({#resource{kind = queue, virtual_host = VHost}, _, _} = Row, Acc) when map_get(VHost, VHostsFilter) ->
-                      [Row|Acc];
+                  ({#resource{kind = queue, virtual_host = VHost, name = QName}, _, _} = Row, Acc) when map_get(VHost, VHostsFilter) ->
+                      case matches_queue_filter(QName, QueueFilter) of
+                          true -> [Row|Acc];
+                          false -> Acc
+                      end;
                   (_, Acc) ->
                       Acc
               end, [], Table);
-get_data(queue_consumer_count, true, _) ->
-    ets:tab2list(queue_metrics);
-get_data(stream_consumer_metrics, true, _) ->
+get_data(queue_consumer_count, true, _, QueueFilter) ->
+    filter_by_queue_name(ets:tab2list(queue_metrics), QueueFilter);
+get_data(queue_delivery_metrics = Table, true, _, QueueFilter) ->
+    filter_by_queue_name(ets:tab2list(Table), QueueFilter);
+get_data(queue_coarse_metrics = Table, true, _, QueueFilter) ->
+    filter_by_queue_name(ets:tab2list(Table), QueueFilter);
+get_data(MF, true, _, QueueFilter) when MF == queue_metrics ->
+    filter_by_queue_name(ets:tab2list(queue_metrics), QueueFilter);
+get_data(queue_exchange_metrics = Table, true, _, QueueFilter) ->
+    filter_by_queue_name(ets:tab2list(Table), QueueFilter);
+get_data(stream_consumer_metrics, true, _, QueueFilter) ->
     Table = rabbit_stream_consumer_created, %% real table name
     try ets:foldl(fun({{QueueName, _Pid, _SubId}, Props}, Map0) ->
                           Value = proplists:get_value(offset_lag, Props, 0),
@@ -786,19 +812,20 @@ get_data(stream_consumer_metrics, true, _) ->
                             Map0)
                   end, #{}, Table) of
         Map1 ->
-            maps:to_list(Map1)
+            Rows = maps:to_list(Map1),
+            filter_by_queue_name(Rows, QueueFilter)
     catch error:badarg ->
             %% rabbitmq_stream plugin is not enabled
             []
     end;
-get_data(vhost_status, _, _) ->
+get_data(vhost_status, _, _, _) ->
     [ { #{<<"vhost">> => VHost},
         case rabbit_vhost_sup_sup:is_vhost_alive(VHost) of
             true -> 1;
             false -> 0
         end}
       || VHost <- rabbit_vhost:list()  ];
-get_data(node_memory, _, _) ->
+get_data(node_memory, _, _, _) ->
     BreakdownPL = rabbit_vm:memory(),
     KeysOfInterest = [
         code,
@@ -830,7 +857,7 @@ get_data(node_memory, _, _) ->
     ],
     Data = maps:to_list(maps:with(KeysOfInterest, maps:from_list(BreakdownPL))),
     [{node_memory, Data}];
-get_data(exchange_bindings, _, _) ->
+get_data(exchange_bindings, _, _, _) ->
     Exchanges = lists:foldl(fun
                                 (#exchange{internal = true}, Acc) ->
                                     Acc;
@@ -854,7 +881,7 @@ get_data(exchange_bindings, _, _) ->
                       [{<<"vhost=\"", VHost/binary, "\",exchange=\"", Name/binary, "\",type=\"", Type/binary, "\"">>,
                         Bindings}|Acc]
               end, [], WithCount);
-get_data(exchange_names, _, _) ->
+get_data(exchange_names, _, _, _) ->
     lists:foldl(fun
                     (#exchange{internal = true}, Acc) ->
                         Acc;
@@ -864,7 +891,7 @@ get_data(exchange_names, _, _) ->
                         Label = <<"vhost=\"", VHost/binary, "\",exchange=\"", Name/binary, "\",type=\"", (atom_to_binary(EType))/binary, "\"">>,
                         [{Label, 1}|Acc]
                 end, [], rabbit_exchange:list());
-get_data(Table, _, _) ->
+get_data(Table, _, _, _) ->
     ets:tab2list(Table).
 
 
@@ -925,3 +952,34 @@ vhosts_filter_from_pdict() ->
             Enabled = maps:from_list([ {VHost, true} || VHost <- L ]),
             maps:merge(All, Enabled)
     end.
+
+queue_filter_from_pdict() ->
+    case get(prometheus_queue_filter) of
+        undefined -> false;
+        MP -> MP
+    end.
+
+matches_queue_filter(_QName, false) ->
+    true;
+matches_queue_filter(QName, MP) ->
+    re:run(QName, MP, [{capture, none},
+                       {match_limit, 50_000},
+                       {match_limit_recursion, 50_000}]) =:= match.
+
+filter_by_queue_name(Rows, false) ->
+    Rows;
+filter_by_queue_name(Rows, QueueFilter) ->
+    lists:filter(fun(Row) -> row_matches_queue_filter(Row, QueueFilter) end, Rows).
+
+row_matches_queue_filter({#resource{kind = queue, name = QName}, _}, QF) ->
+    matches_queue_filter(QName, QF);
+row_matches_queue_filter({#resource{kind = queue, name = QName}, _, _}, QF) ->
+    matches_queue_filter(QName, QF);
+row_matches_queue_filter({#resource{kind = queue, name = QName}, _, _, _, _}, QF) ->
+    matches_queue_filter(QName, QF);
+row_matches_queue_filter({#resource{kind = queue, name = QName}, _, _, _, _, _, _, _, _}, QF) ->
+    matches_queue_filter(QName, QF);
+row_matches_queue_filter({{#resource{kind = queue, name = QName}, #resource{kind = exchange}}, _, _}, QF) ->
+    matches_queue_filter(QName, QF);
+row_matches_queue_filter(_, _) ->
+    true.

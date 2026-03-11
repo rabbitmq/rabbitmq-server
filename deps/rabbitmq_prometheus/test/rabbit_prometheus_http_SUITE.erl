@@ -78,7 +78,16 @@ groups() ->
                                      vhost_status_metric,
                                      exchange_bindings_metric,
                                      exchange_names_metric,
-                                     detailed_raft_metrics_test
+                                     detailed_raft_metrics_test,
+                                     queue_filter_coarse_metrics_test,
+                                     queue_filter_consumer_count_test,
+                                     queue_filter_queue_metrics_test,
+                                     queue_filter_delivery_metrics_test,
+                                     queue_filter_queue_exchange_metrics_test,
+                                     queue_filter_raft_metrics_test,
+                                     queue_filter_combined_with_vhost_test,
+                                     queue_filter_multiple_patterns_rejected_test,
+                                     queue_filter_empty_is_ignored_test
         ]},
        {special_chars, [], [core_metrics_special_chars]},
        {authentication, [], [basic_auth]}
@@ -922,6 +931,114 @@ detailed_raft_metrics_test(Config) ->
 
     ok.
 
+
+queue_filter_coarse_metrics_test(Config) ->
+    %% Filter queues whose name contains "quorum"
+    {_, Body1} = http_get_with_pal(Config, "/metrics/detailed?family=queue_coarse_metrics&queue=quorum", [], 200),
+    Parsed1 = parse_response(Body1),
+    ?assertEqual(#{#{queue => "a_quorum_queue", vhost => "/"} => [0]},
+                 map_get(rabbitmq_detailed_queue_messages, Parsed1)),
+
+    %% Filter queues whose name starts with "vhost-1"
+    {_, Body2} = http_get_with_pal(Config, "/metrics/detailed?family=queue_coarse_metrics&queue=%5Evhost-1", [], 200),
+    Parsed2 = parse_response(Body2),
+    Expected2 = #{#{queue => "vhost-1-queue-with-consumer", vhost => "vhost-1"} => [7],
+                  #{queue => "vhost-1-queue-with-messages", vhost => "vhost-1"} => [7]},
+    ?assertEqual(Expected2,
+                 map_get(rabbitmq_detailed_queue_messages, Parsed2)),
+
+    %% Filter queues with a pattern that matches nothing
+    {_, Body3} = http_get_with_pal(Config, "/metrics/detailed?family=queue_coarse_metrics&queue=nonexistent_pattern", [], 200),
+    Parsed3 = parse_response(Body3),
+    ?assertEqual(undefined,
+                 maps:get(rabbitmq_detailed_queue_messages, Parsed3, undefined)),
+    ok.
+
+queue_filter_consumer_count_test(Config) ->
+    {_, Body} = http_get_with_pal(Config, "/metrics/detailed?family=queue_consumer_count&queue=with-consumer", [], 200),
+    Parsed = parse_response(Body),
+    Expected = #{#{queue => "vhost-1-queue-with-consumer", vhost => "vhost-1"} => [1],
+                 #{queue => "vhost-2-queue-with-consumer", vhost => "vhost-2"} => [1],
+                 #{queue => "default-queue-with-consumer", vhost => "/"} => [1]},
+    ?assertEqual(Expected,
+                 map_get(rabbitmq_detailed_queue_consumers, Parsed)),
+
+    %% queue_info should also be filtered
+    QueueInfo = map_get(rabbitmq_detailed_queue_info, Parsed),
+    lists:foreach(fun(#{queue := Q}) ->
+                          ?assertEqual(match, re:run(Q, "with-consumer", [{capture, none}]))
+                  end, maps:keys(QueueInfo)),
+    ok.
+
+queue_filter_queue_metrics_test(Config) ->
+    {_, Body} = http_get_with_pal(Config, "/metrics/detailed?family=queue_metrics&queue=%5Edefault-", [], 200),
+    Parsed = parse_response(Body),
+    Expected = #{#{queue => "default-queue-with-consumer", vhost => "/"} => [3],
+                 #{queue => "default-queue-with-messages", vhost => "/"} => [1]},
+    ?assertEqual(Expected,
+                 map_get(rabbitmq_detailed_queue_messages_ram, Parsed)),
+    ok.
+
+queue_filter_delivery_metrics_test(Config) ->
+    {_, Body} = http_get_with_pal(Config, "/metrics/detailed?family=queue_delivery_metrics&queue=with-consumer", [], 200),
+    Parsed = parse_response(Body),
+    Delivered = map_get(rabbitmq_detailed_queue_messages_delivered_ack_total, Parsed),
+    lists:foreach(fun(#{queue := Q}) ->
+                          ?assertMatch(match, re:run(Q, "with-consumer", [{capture, none}]))
+                  end, maps:keys(Delivered)),
+    ok.
+
+queue_filter_queue_exchange_metrics_test(Config) ->
+    {_, Body} = http_get_with_pal(Config, "/metrics/detailed?family=queue_exchange_metrics&queue=%5Evhost-2", [], 200),
+    Parsed = parse_response(Body),
+    Published = map_get(rabbitmq_detailed_queue_exchange_messages_published_total, Parsed),
+    lists:foreach(fun(#{queue := Q}) ->
+                          ?assertEqual(match, re:run(Q, "^vhost-2", [{capture, none}]))
+                  end, maps:keys(Published)),
+    ok.
+
+queue_filter_raft_metrics_test(Config) ->
+    QQMetrics = #{#{queue => "a_quorum_queue", vhost => "/"} => ["1.0"]},
+
+    %% Matching filter
+    {_, Body1} = http_get_with_pal(Config, "/metrics/detailed?family=ra_metrics&queue=a_quorum", [], 200),
+    ?assertEqual(QQMetrics,
+                 map_get(rabbitmq_detailed_raft_term, parse_response(Body1))),
+
+    %% Non-matching filter
+    {_, Body2} = http_get_with_pal(Config, "/metrics/detailed?family=ra_metrics&queue=nonexistent", [], 200),
+    ?assertEqual(undefined,
+                 maps:get(rabbitmq_detailed_raft_term, parse_response(Body2), undefined)),
+    ok.
+
+queue_filter_combined_with_vhost_test(Config) ->
+    %% Combine vhost and queue filters
+    {_, Body} = http_get_with_pal(Config,
+                                  "/metrics/detailed?family=queue_coarse_metrics&vhost=vhost-1&queue=with-messages",
+                                  [], 200),
+    Parsed = parse_response(Body),
+    Expected = #{#{queue => "vhost-1-queue-with-messages", vhost => "vhost-1"} => [7]},
+    ?assertEqual(Expected,
+                 map_get(rabbitmq_detailed_queue_messages, Parsed)),
+    ok.
+
+queue_filter_multiple_patterns_rejected_test(Config) ->
+    http_get_with_pal(Config,
+                      "/metrics/detailed?family=queue_coarse_metrics&queue=foo&queue=bar",
+                      [], 400),
+    ok.
+
+queue_filter_empty_is_ignored_test(Config) ->
+    {_, BodyNoFilter} = http_get_with_pal(Config,
+                                          "/metrics/detailed?family=queue_coarse_metrics",
+                                          [], 200),
+    {_, BodyEmpty} = http_get_with_pal(Config,
+                                       "/metrics/detailed?family=queue_coarse_metrics&queue=",
+                                       [], 200),
+    ParsedNoFilter = map_get(rabbitmq_detailed_queue_messages, parse_response(BodyNoFilter)),
+    ParsedEmpty = map_get(rabbitmq_detailed_queue_messages, parse_response(BodyEmpty)),
+    ?assertEqual(ParsedNoFilter, ParsedEmpty),
+    ok.
 
 basic_auth(Config) ->
     http_get(Config, [{"accept-encoding", "deflate"}], 401),
