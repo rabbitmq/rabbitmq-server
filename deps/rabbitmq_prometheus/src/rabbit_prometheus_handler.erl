@@ -14,8 +14,8 @@
 
 -define(SCRAPE_DURATION, telemetry_scrape_duration_seconds).
 -define(SCRAPE_SIZE, telemetry_scrape_size_bytes).
-
 -define(AUTH_REALM, "Basic realm=\"RabbitMQ Prometheus\"").
+-define(MAX_QUEUE_FILTER_LENGTH, 2000).
 
 %% ===================================================================
 %% Cowboy Handler Callbacks
@@ -183,6 +183,8 @@ parse_metric_families(_) ->
 
 parse_queue_filter(undefined) ->
     false;
+parse_queue_filter(B) when byte_size(B) > ?MAX_QUEUE_FILTER_LENGTH ->
+    {error, <<"'queue' regex too long">>};
 parse_queue_filter(B) when is_binary(B) ->
     case re:compile(B) of
         {ok, _} = OK ->
