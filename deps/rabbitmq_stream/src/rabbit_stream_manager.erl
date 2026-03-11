@@ -556,7 +556,15 @@ do_create_stream(VirtualHost, Reference, StreamQueueArguments, Username) ->
                             ?LOG_WARNING("Error while creating ~tp stream, "
                                                ++ Msg,
                                                [Reference] ++ Args),
-                            {error, validation_failed}
+                            {error, validation_failed};
+                        {protocol_error,
+                         internal_error,
+                         Msg,
+                         Args} ->
+                            ?LOG_WARNING("Error while creating ~tp stream, "
+                                               ++ Msg,
+                                               [Reference] ++ Args),
+                            {error, internal_error}
                     end
                 catch
                     exit:Error ->
