@@ -240,7 +240,8 @@ publish(Sender, Tag, Payload) when is_binary(Payload) ->
 
 publish(Session, Source, Dest, Tag, Payloads) ->
     LinkName = <<"dynamic-sender-", Dest/binary>>,
-    {ok, Sender} = amqp10_client:attach_sender_link(Session, LinkName, Source,
+    SrcAddress = rabbitmq_amqp_address:queue(Source),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, LinkName, SrcAddress,
                                                     unsettled, unsettled_state),
     ok = await_amqp10_event(link, Sender, attached),
     ok = await_credit(Sender),
@@ -258,8 +259,9 @@ publish_many(Session, Source, Dest, Tag, N) ->
 
 expect_many(Session, Dest, N) ->
     LinkName = <<"dynamic-receiver-", Dest/binary>>,
+    DestAddress = rabbitmq_amqp_address:queue(Dest),
     {ok, Receiver} = amqp10_client:attach_receiver_link(Session, LinkName,
-                                                        Dest, settled,
+                                                        DestAddress, settled,
                                                         unsettled_state),
     ok = amqp10_client:flow_link_credit(Receiver, 10, 1),
     Msgs = expect(Receiver, N, []),

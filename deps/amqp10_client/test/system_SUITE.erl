@@ -258,7 +258,7 @@ basic_roundtrip(Config) ->
     Hostname = ?config(rmq_hostname, Config),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
     OpenConf = #{address => Hostname, port => Port, sasl => anon},
-    roundtrip(OpenConf).
+    roundtrip(Config, OpenConf, ?FUNCTION_NAME).
 
 basic_roundtrip_tls(Config) ->
     Hostname = ?config(rmq_hostname, Config),
@@ -274,7 +274,7 @@ basic_roundtrip_tls(Config) ->
                 notify => self(),
                 container_id => <<"open_connection_tls_container">>,
                 sasl => ?config(sasl, Config)},
-    roundtrip(OpnConf).
+    roundtrip(Config, OpnConf, ?FUNCTION_NAME).
 
 %% ssl option validation fails if verify_peer is enabled without cacerts.
 %% Test that cacertfile option takes effect taken from the application env.
@@ -293,7 +293,7 @@ roundtrip_tls_global_config(Config) ->
                 notify => self(),
                 container_id => <<"open_connection_tls_container">>,
                 sasl => ?config(sasl, Config)},
-    roundtrip(OpnConf),
+    roundtrip(Config, OpnConf, ?FUNCTION_NAME),
     application:unset_env(amqp10_client, ssl_options).
 
 service_bus_config(Config, ContainerId) ->
@@ -310,10 +310,10 @@ service_bus_config(Config, ContainerId) ->
       sasl => {plain, User, Password}}.
 
 basic_roundtrip_service_bus(Config) ->
-    roundtrip(service_bus_config(Config, <<"basic_roundtrip_service_bus">>)).
+    roundtrip(Config, service_bus_config(Config, <<"basic_roundtrip_service_bus">>), ?FUNCTION_NAME).
 
 filtered_roundtrip_service_bus(Config) ->
-    filtered_roundtrip(service_bus_config(Config, <<"filtered_roundtrip_service_bus">>)).
+    filtered_roundtrip(Config, service_bus_config(Config, <<"filtered_roundtrip_service_bus">>), ?FUNCTION_NAME).
 
 roundtrip_large_messages(Config) ->
     Hostname = ?config(rmq_hostname, Config),
@@ -324,19 +324,21 @@ roundtrip_large_messages(Config) ->
     DataMb = rand:bytes(1024 * 1024),
     Data8Mb = rand:bytes(8 * 1024 * 1024),
     Data64Mb = rand:bytes(64 * 1024 * 1024),
-    ok = roundtrip(OpenConf, DataKb),
-    ok = roundtrip(OpenConf, DataMb),
-    ok = roundtrip(OpenConf, Data8Mb),
-    ok = roundtrip(OpenConf, Data64Mb).
+    ok = roundtrip(Config, OpenConf, roundtrip_large_messages_kb, DataKb),
+    ok = roundtrip(Config, OpenConf, roundtrip_large_messages_mb, DataMb),
+    ok = roundtrip(Config, OpenConf, roundtrip_large_messages_8mb, Data8Mb),
+    ok = roundtrip(Config, OpenConf, roundtrip_large_messages_64mb, Data64Mb).
 
-roundtrip(OpenConf) ->
-    roundtrip(OpenConf, <<"banana">>).
+roundtrip(Config, OpenConf, FnName) ->
+    roundtrip(Config, OpenConf, FnName, <<"banana">>).
 
-roundtrip(OpenConf, Body) ->
+roundtrip(Config, OpenConf, FnName, Body) ->
     {ok, Connection} = amqp10_client:open_connection(OpenConf),
     {ok, Session} = amqp10_client:begin_session(Connection),
+    QName = atom_to_binary(FnName),
+    Address = declare_queue(Config, QName),
     {ok, Sender} = amqp10_client:attach_sender_link(
-                     Session, <<"banana-sender">>, <<"test1">>, settled, unsettled_state),
+                     Session, <<"banana-sender">>, Address, settled, unsettled_state),
     await_link(Sender, credited, link_credit_timeout),
 
     Now = os:system_time(millisecond),
@@ -357,7 +359,7 @@ roundtrip(OpenConf, Body) ->
 
     {error, link_not_found} = amqp10_client:detach_link(Sender),
     {ok, Receiver} = amqp10_client:attach_receiver_link(
-                       Session, <<"banana-receiver">>, <<"test1">>, settled, unsettled_state),
+                       Session, <<"banana-receiver">>, Address, settled, unsettled_state),
     {ok, OutMsg} = amqp10_client:get_msg(Receiver, 4 * 60_000),
     ok = amqp10_client:end_session(Session),
     ok = amqp10_client:close_connection(Connection),
@@ -370,15 +372,17 @@ roundtrip(OpenConf, Body) ->
     ?assertEqual([Body], amqp10_msg:body(OutMsg)),
     ok.
 
-filtered_roundtrip(OpenConf) ->
-    filtered_roundtrip(OpenConf, <<"banana">>).
+filtered_roundtrip(Config, OpenConf, FnName) ->
+    filtered_roundtrip(Config, OpenConf, FnName, <<"banana">>).
 
-filtered_roundtrip(OpenConf, Body) ->
+filtered_roundtrip(Config, OpenConf, FnName, Body) ->
     {ok, Connection} = amqp10_client:open_connection(OpenConf),
     {ok, Session} = amqp10_client:begin_session(Connection),
+    QName = atom_to_binary(FnName),
+    Address = declare_queue(Config, QName),
     {ok, Sender} = amqp10_client:attach_sender_link(Session,
                                                     <<"default-sender">>,
-                                                    <<"test1">>,
+                                                    Address,
                                                     settled,
                                                     unsettled_state),
     await_link(Sender, credited, link_credit_timeout),
@@ -390,7 +394,7 @@ filtered_roundtrip(OpenConf, Body) ->
 
     {ok, DefaultReceiver} = amqp10_client:attach_receiver_link(Session,
                                                         <<"default-receiver">>,
-                                                        <<"test1">>,
+                                                        Address,
                                                         settled,
                                                         unsettled_state),
     ok = amqp10_client:send_msg(Sender, Msg1),
@@ -408,7 +412,7 @@ filtered_roundtrip(OpenConf, Body) ->
 
     {ok, FilteredReceiver} = amqp10_client:attach_receiver_link(Session,
                                                         <<"filtered-receiver">>,
-                                                        <<"test1">>,
+                                                        Address,
                                                         settled,
                                                         unsettled_state,
                                                         #{<<"apache.org:selector-filter:string">> => <<"amqp.annotation.x-opt-enqueuedtimeutc > ", Now2Binary/binary>>}),
@@ -431,8 +435,10 @@ transfer_id_vs_delivery_id(Config) ->
 
     {ok, Connection} = amqp10_client:open_connection(OpenConf),
     {ok, Session} = amqp10_client:begin_session(Connection),
+    QName = <<"test1">>,
+    Address = declare_queue(Config, QName),
     {ok, Sender} = amqp10_client:attach_sender_link(
-                     Session, <<"banana-sender">>, <<"test1">>, settled, unsettled_state),
+                     Session, <<"banana-sender">>, Address, settled, unsettled_state),
     await_link(Sender, credited, link_credit_timeout),
 
     P0 = binary:copy(<<0>>, 8_000_000),
@@ -446,7 +452,7 @@ transfer_id_vs_delivery_id(Config) ->
     await_link(Sender, {detached, normal}, link_detach_timeout),
 
     {ok, Receiver} = amqp10_client:attach_receiver_link(
-                       Session, <<"banana-receiver">>, <<"test1">>, settled, unsettled_state),
+                       Session, <<"banana-receiver">>, Address, settled, unsettled_state),
     {ok, RcvMsg1} = amqp10_client:get_msg(Receiver, 60_000 * 4),
     {ok, RcvMsg2} = amqp10_client:get_msg(Receiver, 60_000 * 4),
     ok = amqp10_client:end_session(Session),
@@ -513,9 +519,11 @@ early_transfer(Config) ->
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
     {ok, Connection} = amqp10_client:open_connection(Hostname, Port),
     {ok, Session} = amqp10_client:begin_session(Connection),
+    QName = <<"test">>,
+    Address = declare_queue(Config, QName),
     {ok, Sender} = amqp10_client:attach_sender_link(Session,
                                                     <<"early-transfer">>,
-                                                    <<"test">>),
+                                                    Address),
 
     Msg = amqp10_msg:new(<<"my-tag">>, <<"banana">>, true),
     % TODO: this is a timing issue - should use mock here really
@@ -526,7 +534,7 @@ early_transfer(Config) ->
     % attach then immediately detach
     LinkName = <<"early-transfer2">>,
     {ok, Sender2} = amqp10_client:attach_sender_link(Session, LinkName,
-                                                    <<"test">>),
+                                                    Address),
     {error, half_attached} = amqp10_client:detach_link(Sender2),
     await_link(Sender2, credited, credited_timeout),
     ok = amqp10_client:end_session(Session),
@@ -542,15 +550,17 @@ split_transfer(Config) ->
              sasl => ?config(sasl, Config)},
     {ok, Connection} = amqp10_client:open_connection(Conf),
     {ok, Session} = amqp10_client:begin_session(Connection),
+    QName = <<"test">>,
+    Address = declare_queue(Config, QName),
     Data = list_to_binary(string:chars(64, 1000)),
     {ok, Sender} = amqp10_client:attach_sender_link_sync(Session,
                                                          <<"data-sender">>,
-                                                         <<"test">>),
+                                                         Address),
     Msg = amqp10_msg:new(<<"my-tag">>, Data, true),
     ok = amqp10_client:send_msg(Sender, Msg),
     {ok, Receiver} = amqp10_client:attach_receiver_link(Session,
                                                         <<"data-receiver">>,
-                                                        <<"test">>),
+                                                        Address),
     {ok, OutMsg} = amqp10_client:get_msg(Receiver),
     ok = amqp10_client:end_session(Session),
     ok = amqp10_client:close_connection(Connection),
@@ -563,10 +573,12 @@ transfer_unsettled(Config) ->
              sasl => ?config(sasl, Config)},
     {ok, Connection} = amqp10_client:open_connection(Conf),
     {ok, Session} = amqp10_client:begin_session(Connection),
+    QName = <<"test">>,
+    Address = declare_queue(Config, QName),
     Data = list_to_binary(string:chars(64, 1000)),
     {ok, Sender} = amqp10_client:attach_sender_link_sync(Session,
                                                          <<"data-sender">>,
-                                                         <<"test">>, unsettled),
+                                                         Address, unsettled),
     await_link(Sender, credited, credited_timeout),
     DeliveryTag = <<"my-tag">>,
     Msg = amqp10_msg:new(DeliveryTag, Data, false),
@@ -575,7 +587,7 @@ transfer_unsettled(Config) ->
     ok = await_disposition(DeliveryTag),
     {ok, Receiver} = amqp10_client:attach_receiver_link(Session,
                                                         <<"data-receiver">>,
-                                                        <<"test">>, unsettled),
+                                                        Address, unsettled),
     {ok, OutMsg} = amqp10_client:get_msg(Receiver),
     ok = amqp10_client:accept_msg(Receiver, OutMsg),
     {error, timeout} = amqp10_client:get_msg(Receiver, 1000),
@@ -586,17 +598,18 @@ transfer_unsettled(Config) ->
 subscribe(Config) ->
     Hostname = ?config(rmq_hostname, Config),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
-    QueueName = atom_to_binary(?FUNCTION_NAME),
     {ok, Connection} = amqp10_client:open_connection(Hostname, Port),
     {ok, Session} = amqp10_client:begin_session(Connection),
+    QName = atom_to_binary(?FUNCTION_NAME),
+    Address = declare_queue(Config, QName),
     {ok, Sender} = amqp10_client:attach_sender_link_sync(Session,
                                                          <<"sub-sender">>,
-                                                         QueueName),
+                                                         Address),
     await_link(Sender, credited, link_credit_timeout),
     _ = publish_messages(Sender, <<"banana">>, 10),
     {ok, Receiver} = amqp10_client:attach_receiver_link(Session,
                                                         <<"sub-receiver">>,
-                                                        QueueName, unsettled),
+                                                        Address, unsettled),
     ok = amqp10_client:flow_link_credit(Receiver, 10, never),
     [begin
          receive {amqp10_msg, Receiver, Msg} ->
@@ -618,17 +631,18 @@ subscribe_with_auto_flow_settled(Config) ->
     SenderSettleMode = settled,
     Hostname = ?config(rmq_hostname, Config),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
-    QueueName = atom_to_binary(?FUNCTION_NAME),
     {ok, Connection} = amqp10_client:open_connection(Hostname, Port),
     {ok, Session} = amqp10_client:begin_session(Connection),
+    QName = atom_to_binary(?FUNCTION_NAME),
+    Address = declare_queue(Config, QName),
     {ok, Sender} = amqp10_client:attach_sender_link_sync(Session,
                                                          <<"sub-sender">>,
-                                                         QueueName),
+                                                         Address),
     await_link(Sender, credited, link_credit_timeout),
 
     publish_messages(Sender, <<"banana">>, 20),
     {ok, Receiver} = amqp10_client:attach_receiver_link(
-                       Session, <<"sub-receiver">>, QueueName, SenderSettleMode),
+                       Session, <<"sub-receiver">>, Address, SenderSettleMode),
     await_link(Receiver, attached, attached_timeout),
 
     ok = amqp10_client:flow_link_credit(Receiver, 5, 2),
@@ -643,18 +657,19 @@ subscribe_with_auto_flow_unsettled(Config) ->
     SenderSettleMode = unsettled,
     Hostname = ?config(rmq_hostname, Config),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
-    QueueName = atom_to_binary(?FUNCTION_NAME),
     {ok, Connection} = amqp10_client:open_connection(Hostname, Port),
     {ok, Session} = amqp10_client:begin_session(Connection),
+    QName = atom_to_binary(?FUNCTION_NAME),
+    Address = declare_queue(Config, QName),
     {ok, Sender} = amqp10_client:attach_sender_link_sync(Session,
                                                          <<"sub-sender">>,
-                                                         QueueName),
+                                                         Address),
     await_link(Sender, credited, link_credit_timeout),
 
     _ = publish_messages(Sender, <<"1-">>, 30),
     %% Use sender settle mode 'unsettled'.
     %% This should require us to manually settle message in order to receive more messages.
-    {ok, Receiver} = amqp10_client:attach_receiver_link(Session, <<"sub-receiver-2">>, QueueName, SenderSettleMode),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(Session, <<"sub-receiver-2">>, Address, SenderSettleMode),
     await_link(Receiver, attached, attached_timeout),
     ok = amqp10_client:flow_link_credit(Receiver, 5, 2),
     %% We should receive exactly 5 messages.
@@ -965,6 +980,22 @@ incoming_heartbeat(Config) ->
 
 %%% HELPERS
 %%%
+
+declare_queue(Config, QName) ->
+    case ?config(name, ?config(tc_group_properties, Config)) of
+        activemq ->
+            ok;
+        _ ->
+            Q = rabbit_misc:r(<<"/">>, queue, QName),
+            {_, _} = rabbit_ct_broker_helpers:rpc(Config, rabbit_amqqueue, declare,
+                [Q, true, false, [], none, <<"acting-user">>])
+    end,
+    queue_address(QName).
+
+%% From rabbitmq_amqp_address.
+queue_address(QueueName) ->
+    QueueNameQuoted = uri_string:quote(QueueName),
+    <<"/queues/", QueueNameQuoted/binary>>.
 
 await_link(Who, What, Err) ->
     receive

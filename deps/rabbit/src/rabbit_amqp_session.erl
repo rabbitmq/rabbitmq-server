@@ -20,7 +20,7 @@
 
 -rabbit_deprecated_feature(
    {amqp_address_v1,
-    #{deprecation_phase => permitted_by_default,
+    #{deprecation_phase => denied_by_default,
       doc_url => "https://www.rabbitmq.com/docs/amqp#addresses",
       messages =>
       #{when_permitted =>

@@ -212,11 +212,11 @@ amqp_dead_letter(Config) ->
      end || Stream <- [Stream1, Stream2]],
 
     {ok, Receiver1} = amqp10_client:attach_receiver_link(
-                        Session, <<"receiver 1">>, <<"/queue/", Stream1/binary>>, settled),
+                        Session, <<"receiver 1">>, rabbitmq_amqp_address:queue(Stream1), settled),
     {ok, Receiver2} = amqp10_client:attach_receiver_link(
-                        Session, <<"receiver 2">>, <<"/queue/", Stream2/binary>>, settled),
+                        Session, <<"receiver 2">>, rabbitmq_amqp_address:queue(Stream2), settled),
     {ok, Sender} = amqp10_client:attach_sender_link(
-                     Session, <<"sender">>, <<"/queue/", QQ/binary>>),
+                     Session, <<"sender">>, rabbitmq_amqp_address:queue(QQ)),
     receive {amqp10_event, {link, Sender, credited}} -> ok
     after 5000 -> ct:fail({missing_event, ?LINE})
     end,

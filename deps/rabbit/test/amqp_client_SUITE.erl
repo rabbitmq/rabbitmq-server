@@ -1817,6 +1817,8 @@ amqp091_to_amqp10_header_conversion(Session, Ch, QName, Address) ->
 
 %% Test sending and receiving concurrently on multiple sessions of the same connection.
 multiple_sessions(Config) ->
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config),
+
     OpnConf = connection_config(Config),
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
     %% Create 2 sessions on the same connection.
@@ -1827,10 +1829,18 @@ multiple_sessions(Config) ->
     Q1 = <<"q1">>,
     Q2 = <<"q2">>,
     Qs = [Q1, Q2],
+    #'queue.declare_ok'{} = amqp_channel:call(
+                              Ch, #'queue.declare'{
+                                     queue = Q1,
+                                     durable = true}),
+    #'queue.declare_ok'{} = amqp_channel:call(
+                              Ch, #'queue.declare'{
+                                     queue = Q2,
+                                     durable = true}),
     {ok, Receiver1} = amqp10_client:attach_receiver_link(
-                        Session1, <<"receiver link 1">>, Q1, settled, configuration),
+                        Session1, <<"receiver link 1">>, rabbitmq_amqp_address:queue(Q1), settled, configuration),
     {ok, Receiver2} = amqp10_client:attach_receiver_link(
-                        Session2, <<"receiver link 2">>, Q2, settled, configuration),
+                        Session2, <<"receiver link 2">>, rabbitmq_amqp_address:queue(Q2), settled, configuration),
     receive {amqp10_event, {link, Receiver1, attached}} -> ok
     after 30000 -> ct:fail("missing attached")
     end,
@@ -1843,7 +1853,6 @@ multiple_sessions(Config) ->
     ok = amqp10_client:flow_link_credit(Receiver2, NMsgsPerReceiver, never),
     flush("receiver attached"),
 
-    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config),
     [#'queue.bind_ok'{} = amqp_channel:call(Ch, #'queue.bind'{queue = QName,
                                                               exchange = <<"amq.fanout">>})
      || QName <- Qs],
@@ -3279,7 +3288,7 @@ detach_requeues_two_connections_quorum_queue(Config) ->
 
 detach_requeues_two_connections(QType, Config) ->
     QName = atom_to_binary(?FUNCTION_NAME),
-    Address = <<"/queue/", QName/binary>>,
+    Address = rabbitmq_amqp_address:queue(QName),
 
     %% Connect to new node.
     OpnConf0 = connection_config(0, Config),
@@ -4141,7 +4150,7 @@ queue_and_client_different_nodes(QueueLeaderNode, ClientNode, QueueType, Config)
     OpnConf = connection_config(ClientNode, Config),
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
     {ok, Session} = amqp10_client:begin_session_sync(Connection),
-    Address = <<"/amq/queue/", QName/binary>>,
+    Address = rabbitmq_amqp_address:queue(QName),
     {ok, Sender} = amqp10_client:attach_sender_link(
                      Session, <<"test-sender">>, Address),
     ok = wait_for_credit(Sender),
@@ -5835,7 +5844,7 @@ dead_letter_into_stream(Config) ->
                          }}),
        60_000, 5000),
     {ok, Receiver} = amqp10_client:attach_receiver_link(
-                       Session1, <<"receiver">>, <<"/amq/queue/", QName1/binary>>,
+                       Session1, <<"receiver">>, rabbitmq_amqp_address:queue(QName1),
                        settled, configuration,
                        #{<<"rabbitmq:stream-offset-spec">> => <<"first">>}),
     {ok, Sender} = amqp10_client:attach_sender_link(
@@ -5911,7 +5920,7 @@ accept_multiple_message_order(QType, Config) ->
     ok = amqp10_client:detach_link(Sender),
     assert_messages(QName, 5, 0, Config),
 
-    {ok, Receiver} = amqp10_client:attach_receiver_link(Session, <<"receiver">>, QName, unsettled),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(Session, <<"receiver">>, Address, unsettled),
     {ok, Msg1} = amqp10_client:get_msg(Receiver),
     {ok, Msg2} = amqp10_client:get_msg(Receiver),
     {ok, _Msg3} = amqp10_client:get_msg(Receiver),
@@ -5962,7 +5971,7 @@ release_multiple_message_order(QType, Config) ->
     ok = amqp10_client:detach_link(Sender),
     assert_messages(QName, 4, 0, Config),
 
-    {ok, Receiver} = amqp10_client:attach_receiver_link(Session, <<"receiver">>, QName, unsettled),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(Session, <<"receiver">>, Address, unsettled),
     {ok, Msg1} = amqp10_client:get_msg(Receiver),
     {ok, Msg2} = amqp10_client:get_msg(Receiver),
     {ok, Msg3} = amqp10_client:get_msg(Receiver),

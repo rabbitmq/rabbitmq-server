@@ -58,6 +58,7 @@
 
 -include_lib("kernel/include/logger.hrl").
 
+-define(APP, rabbitmq_shovel).
 -define(LINK_CREDIT_TIMEOUT, 20_000).
 -define(AWAIT_SEND_MSG_TIMEOUT, 1_000).
 
@@ -74,6 +75,15 @@ parse(_Name, {destination, Conf}) ->
     #{module => ?MODULE,
       uris => Uris,
       unacked => #{},
+      %% Static shovels use a topology declaration in amqp091 format,
+      %% this was not supported initially by amqp10 and will continue
+      %% to be ignored. src-predeclared and dest-predeclared is supported
+      %% by dynamic shovels after the deprecation of v1 addresses,
+      %% to declare queues when this field is set to `false`.
+      %% v1 addresses used to create the src/dest queues automatically,
+      %% so let's help out users by providing another way to create the
+      %% queues.
+      predeclared => true,
       target_address => pget(target_address, Conf),
       properties => maps:from_list(pget(properties, Conf, [])),
       application_properties => maps:from_list(pget(application_properties, Conf, [])),
@@ -88,6 +98,7 @@ parse(_Name, {source, Conf}) ->
       uris => Uris,
       prefetch_count => pget(prefetch_count, Conf, 1000),
       delete_after => pget(delete_after, Conf, never),
+      predeclared => true,
       source_address => pget(source_address, Conf),
       consumer_args => pget(consumer_args, Conf, []),
       consumer_name => pget(consumer_name, Conf, <<>>)}.
@@ -99,11 +110,14 @@ parse_source(Def) ->
     PrefetchCount = pget(<<"src-prefetch-count">>, Def, 1000),
     Headers = [],
     SrcCName = pget(<<"src-consumer-name">>, Def, <<>>),
+    GlobalPredeclared = proplists:get_value(predeclared, application:get_env(?APP, topology, []), false),
+    Predeclared = pget(<<"src-predeclared">>, Def, GlobalPredeclared),
     {#{module => rabbit_amqp10_shovel,
        uris => Uris,
        source_address => Address,
        delete_after => opt_b2a(DeleteAfter),
        prefetch_count => PrefetchCount,
+       predeclared => Predeclared,
        consumer_args => [],
        consumer_name => SrcCName}, Headers}.
 
@@ -119,9 +133,12 @@ parse_dest({_VHost, _Name}, _ClusterName, Def, SourceHeaders) ->
     MessageAnns =
         rabbit_data_coercion:to_proplist(
             pget(<<"dest-message-annotations">>, Def, [])),
+    GlobalPredeclared = proplists:get_value(predeclared, application:get_env(?APP, topology, []), false),
+    Predeclared = pget(<<"dest-predeclared">>, Def, GlobalPredeclared),
     #{module => rabbit_amqp10_shovel,
       uris => Uris,
       target_address => Address,
+      predeclared => Predeclared,
       message_annotations => maps:from_list(MessageAnns),
       application_properties => maps:from_list(AppProperties ++ SourceHeaders),
       properties => maps:from_list(
@@ -150,7 +167,8 @@ validate_src_funs(_Def, User) ->
      {<<"src-address">>, fun rabbit_parameter_validation:binary/2, mandatory},
      {<<"src-prefetch-count">>, fun rabbit_parameter_validation:number/2, optional},
      {<<"src-consumer-name">>, fun rabbit_parameter_validation:binary/2, optional},
-     {<<"src-delete-after">>, fun validate_amqp10_delete_after/2, optional}
+     {<<"src-delete-after">>, fun validate_amqp10_delete_after/2, optional},
+     {<<"src-predeclared">>,  fun rabbit_parameter_validation:boolean/2, optional}
     ].
 
 validate_dest_funs(_Def, User) ->
@@ -168,7 +186,8 @@ validate_dest_funs(_Def, User) ->
      %% keys are still accepted but will be ignored.
      {<<"dest-application-properties">>, fun validate_amqp10_map/2, optional},
      {<<"dest-message-annotations">>, fun validate_amqp10_map/2, optional},
-     {<<"dest-properties">>, fun validate_amqp10_map/2, optional}
+     {<<"dest-properties">>, fun validate_amqp10_map/2, optional},
+     {<<"dest-predeclared">>,  fun rabbit_parameter_validation:boolean/2, optional}
     ].
 
 -spec connect_source(state()) -> state().
@@ -176,6 +195,7 @@ connect_source(State = #{name := Name,
                          ack_mode := AckMode,
                          source := #{uris := [Uri | _],
                                      source_address := Addr,
+                                     predeclared := Predeclared,
                                      consumer_name := CName} = Src}) ->
     SndSettleMode = case AckMode of
                         no_ack -> settled;
@@ -190,7 +210,7 @@ connect_source(State = #{name := Name,
                            _    -> CName
                        end,
     {Conn, Sess, LinkRef} = connect(Name, SndSettleMode, Uri, "receiver", Addr, Src,
-                                    AttachFun, LinkNameOverride),
+                                    AttachFun, LinkNameOverride, Predeclared),
     State#{source => Src#{current => #{conn => Conn,
                                        session => Sess,
                                        link => LinkRef,
@@ -200,7 +220,8 @@ connect_source(State = #{name := Name,
 connect_dest(State = #{name := Name,
                        ack_mode := AckMode,
                        dest := #{uris := [Uri | _],
-                                 target_address := Addr} = Dst}) ->
+                                 target_address := Addr,
+                                 predeclared := Predeclared} = Dst}) ->
     SndSettleMode = case AckMode of
                         no_ack -> settled;
                         on_publish -> settled;
@@ -208,7 +229,7 @@ connect_dest(State = #{name := Name,
                     end,
     AttachFun = fun amqp10_client:attach_sender_link_sync/5,
     {Conn, Sess, LinkRef} = connect(Name, SndSettleMode, Uri, "sender", Addr, Dst,
-                                    AttachFun, undefined),
+                                    AttachFun, undefined, Predeclared),
     %% wait for link credit here as if there are messages waiting we may try
     %% to forward before we've received credit
     State#{dest => Dst#{current => #{conn => Conn,
@@ -218,7 +239,7 @@ connect_dest(State = #{name := Name,
                                      link => LinkRef,
                                      uri => Uri}}}.
 
-connect(Name, SndSettleMode, Uri, Postfix, Addr, Map, AttachFun, LinkNameOverride) ->
+connect(Name, SndSettleMode, Uri, Postfix, Addr, Map, AttachFun, LinkNameOverride, Predeclared) ->
     {ok, Config0} = amqp10_client:parse_uri(Uri),
     %% As done for AMQP 0.9.1, exclude AMQP 1.0 shovel connections from maintenance mode
     %% to prevent crashes and errors being logged by the shovel plugin when a node gets drained.
@@ -239,6 +260,7 @@ connect(Name, SndSettleMode, Uri, Postfix, Addr, Map, AttachFun, LinkNameOverrid
     % else we may try to use the link before it is ready
     Durability = maps:get(durability, Map, unsettled_state),
     %% Attach in raw mode
+    decl_queue(Sess, Addr, Predeclared),
     {ok, LinkRef} = AttachFun(Sess, LinkName, Addr,
                               SndSettleMode,
                               Durability),
@@ -517,3 +539,18 @@ validate_amqp10_map(Name, Terms0) ->
 
 opt_b2a(B) when is_binary(B) -> list_to_atom(binary_to_list(B));
 opt_b2a(N)                   -> N.
+
+decl_queue(_, _, true) ->
+    ok;
+decl_queue(Sess, Addr, false) ->
+    case rabbitmq_amqp_address:to_map(Addr) of
+        {ok, #{queue := QName}} ->
+            {ok, LinkPair} = rabbitmq_amqp_client:attach_management_link_pair_sync(Sess, <<"mgmt link pair">>),
+            Args = #{},
+            %% Best effort to declare queue, if something fails the next connection
+            %% steps will detect the failure
+            _ = rabbitmq_amqp_client:declare_queue(LinkPair, QName, #{arguments => Args}),
+            ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair);
+        _ ->
+            ok
+    end.

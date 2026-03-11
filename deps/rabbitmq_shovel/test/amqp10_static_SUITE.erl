@@ -89,14 +89,16 @@ amqp10_destination_on_confirm(Config) ->
 
 amqp10_destination(Config, AckMode, Exchange) ->
     TargetQ =  <<"a-queue">>,
-    ok = setup_amqp10_destination_shovel(Config, TargetQ, AckMode, Exchange),
     Hostname = ?config(rmq_hostname, Config),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
     {ok, Conn} = amqp10_client:open_connection(Hostname, Port),
     {ok, Sess} = amqp10_client:begin_session(Conn),
+    shovel_test_utils:amqp10_declare_queue(Sess, TargetQ, #{}),
+    ok = setup_amqp10_destination_shovel(Config, TargetQ, AckMode, Exchange),
+    TargetQAddress = rabbitmq_amqp_address:queue(TargetQ),
     {ok, Receiver} = amqp10_client:attach_receiver_link(Sess,
                                                         <<"amqp-destination-receiver">>,
-                                                        TargetQ, settled, unsettled_state),
+                                                        TargetQAddress, settled, unsettled_state),
     ok = amqp10_client:flow_link_credit(Receiver, 5, never),
     Chan = rabbit_ct_client_helpers:open_channel(Config, 0),
     Timestamp = erlang:system_time(millisecond),
@@ -167,6 +169,11 @@ amqp10_source_on_confirm(Config) ->
 amqp10_source(Config, AckMode) ->
     SourceQ =  <<"source-queue">>,
     DestQ =  <<"dest-queue">>,
+    shovel_test_utils:with_amqp10_session(
+      Config,
+      fun (Sess) ->
+              shovel_test_utils:amqp10_declare_queue(Sess, SourceQ, #{})
+      end),
     ok = setup_amqp10_source_shovel(Config, SourceQ, DestQ, AckMode),
     Chan = rabbit_ct_client_helpers:open_channel(Config, 0),
     CTag = consume(Chan, DestQ, AckMode =:= no_ack),
@@ -200,12 +207,13 @@ amqp10_source(Config, AckMode) ->
 setup_amqp10_source_shovel(Config, SourceQueue, DestQueue, AckMode) ->
     Hostname = ?config(rmq_hostname, Config),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    Address = rabbitmq_amqp_address:queue(SourceQueue),
     Shovel = [{test_shovel,
                [{source,
                  [{protocol, amqp10},
                   {uris, [rabbit_misc:format("amqp://~ts:~b",
                                              [Hostname, Port])]},
-                  {source_address, SourceQueue}]
+                  {source_address, Address}]
                 },
                 {destination,
                  [{uris, [rabbit_misc:format("amqp://~ts:~b/%2f?heartbeat=5",
@@ -227,6 +235,7 @@ setup_amqp10_source_shovel(Config, SourceQueue, DestQueue, AckMode) ->
 setup_amqp10_destination_shovel(Config, Queue, AckMode, Exchange) ->
     Hostname = ?config(rmq_hostname, Config),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    Address = rabbitmq_amqp_address:queue(Queue),
     Shovel = [{test_shovel,
                [{source,
                  [{uris, [rabbit_misc:format("amqp://~ts:~b/%2f?heartbeat=5",
@@ -243,7 +252,7 @@ setup_amqp10_destination_shovel(Config, Queue, AckMode, Exchange) ->
                                              [Hostname, Port])]},
                   {add_forward_headers, true},
                   {add_timestamp_header, true},
-                  {target_address, Queue}]
+                  {target_address, Address}]
                 },
                 {ack_mode, AckMode}]}],
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, setup_shovel,
@@ -251,19 +260,21 @@ setup_amqp10_destination_shovel(Config, Queue, AckMode, Exchange) ->
 setup_amqp10_shovel(Config, SourceQueue, DestQueue, AckMode) ->
     Hostname = ?config(rmq_hostname, Config),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    SourceAddress = rabbitmq_amqp_address:queue(SourceQueue),
+    DestAddress = rabbitmq_amqp_address:queue(DestQueue),
     Shovel = [{test_shovel,
                [{source,
                  [{protocol, amqp10},
                   {uris, [rabbit_misc:format("amqp://~ts:~b",
                                              [Hostname, Port])]},
-                  {source_address, SourceQueue}]},
+                  {source_address, SourceAddress}]},
                 {destination,
                  [{protocol, amqp10},
                   {uris, [rabbit_misc:format("amqp://~ts:~b",
                                              [Hostname, Port])]},
                   {add_forward_headers, true},
                   {add_timestamp_header, true},
-                  {target_address, DestQueue}]
+                  {target_address, DestAddress}]
                 },
                 {ack_mode, AckMode}]}],
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, setup_shovel,
