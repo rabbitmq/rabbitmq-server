@@ -27,6 +27,11 @@ all_tests() ->
      listeners,
      machine_version_upgrade_to_2,
      machine_version_upgrade_to_3,
+     machine_version_upgrade_to_7,
+     sac_v7_down_handler_should_not_use_monitors_map,
+     sac_v7_ensure_monitors_should_not_use_monitors_map,
+     sac_pre_v7_down_handler_should_use_monitors_map,
+     sac_pre_v7_ensure_monitors_should_use_monitors_map,
      new_stream,
      leader_down,
      leader_down_scenario_1,
@@ -60,9 +65,23 @@ init_per_group(_Group, Config) ->
 end_per_group(_Group, _Config) ->
     ok.
 
+init_per_testcase(TestCase, Config)
+  when TestCase =:= sac_v7_down_handler_should_not_use_monitors_map;
+       TestCase =:= sac_v7_ensure_monitors_should_not_use_monitors_map;
+       TestCase =:= sac_pre_v7_down_handler_should_use_monitors_map;
+       TestCase =:= sac_pre_v7_ensure_monitors_should_use_monitors_map ->
+    ok = meck:new(rabbit_stream_sac_coordinator, [no_link]),
+    Config;
 init_per_testcase(_TestCase, Config) ->
     Config.
 
+end_per_testcase(TestCase, _Config)
+  when TestCase =:= sac_v7_down_handler_should_not_use_monitors_map;
+       TestCase =:= sac_v7_ensure_monitors_should_not_use_monitors_map;
+       TestCase =:= sac_pre_v7_down_handler_should_use_monitors_map;
+       TestCase =:= sac_pre_v7_ensure_monitors_should_use_monitors_map ->
+    meck:unload(rabbit_stream_sac_coordinator),
+    ok;
 end_per_testcase(_TestCase, _Config) ->
     ok.
 
@@ -251,6 +270,123 @@ machine_version_to_3(From) ->
 
     ?assertNot(Sac1 == undefined),
     ?assertEqual(Effects, []),
+    ok.
+
+machine_version_upgrade_to_7(_) ->
+    Pid1 = spawn(fun() -> ok end),
+    Pid2 = spawn(fun() -> ok end),
+    Pid3 = spawn(fun() -> ok end),
+    S = <<"stream">>,
+    Monitors0 = #{Pid1 => sac,
+                  Pid2 => {S, member},
+                  Pid3 => sac},
+    State0 = #?STATE{monitors = Monitors0},
+
+    {State1, ok, Effects} = apply_cmd(#{index => 42}, {machine_version, 6, 7}, State0),
+
+    ?assertEqual(#{Pid2 => {S, member}}, State1#?STATE.monitors),
+    ?assertEqual([], Effects),
+    ok.
+
+sac_v7_down_handler_should_not_use_monitors_map(_) ->
+    ConnectionPid = spawn(fun() -> ok end),
+    SacState0 = fake_sac_state,
+    SacState1 = updated_sac_state,
+    meck:expect(rabbit_stream_sac_coordinator, handle_connection_down,
+                fun(_Meta, Pid, normal, State) when Pid =:= ConnectionPid,
+                                                    State =:= SacState0 ->
+                        {SacState1, []}
+                end),
+
+    OtherPid = spawn(fun() -> ok end),
+    Monitors0 = #{OtherPid => {<<"other">>, member}},
+    State0 = #?STATE{single_active_consumer = SacState0,
+                     monitors = Monitors0},
+
+    {State1, ok, _Effects} = apply_cmd(meta(#{index => 42, machine_version => 7}),
+                                       {down, ConnectionPid, normal}, State0),
+
+    ?assert(meck:called(rabbit_stream_sac_coordinator, handle_connection_down,
+                        ['_', ConnectionPid, normal, SacState0])),
+    ?assertEqual(SacState1, State1#?STATE.single_active_consumer),
+    ?assertEqual(Monitors0, State1#?STATE.monitors),
+    ok.
+
+sac_v7_ensure_monitors_should_not_use_monitors_map(_) ->
+    ConnectionPid = self(),
+    SacCmd = fake_sac_cmd,
+    SacState0 = fake_sac_state,
+    SacState1 = updated_sac_state,
+    meck:expect(rabbit_stream_sac_coordinator, apply,
+                fun(Cmd, State) when Cmd =:= SacCmd,
+                                     State =:= SacState0 ->
+                        {SacState1, {ok, true}, []}
+                end),
+    meck:expect(rabbit_stream_sac_coordinator, ensure_monitors,
+                fun(Cmd, State, Monitors, Effects) when Cmd =:= SacCmd,
+                                                        State =:= SacState1 ->
+                        {State, Monitors#{ConnectionPid => sac}, Effects}
+                end),
+
+    State0 = #?STATE{single_active_consumer = SacState0,
+                     monitors = #{}},
+
+    {State1, {ok, true}, _Effects} = apply_cmd(meta(#{index => 42, machine_version => 7}),
+                                               {sac, SacCmd}, State0),
+
+    ?assertEqual(#{}, State1#?STATE.monitors),
+    ?assertEqual(SacState1, State1#?STATE.single_active_consumer),
+    ok.
+
+sac_pre_v7_down_handler_should_use_monitors_map(_) ->
+    ConnectionPid = spawn(fun() -> ok end),
+    SacState0 = fake_sac_state,
+    SacState1 = updated_sac_state,
+    meck:expect(rabbit_stream_sac_coordinator, handle_connection_down,
+                fun(_Meta, Pid, normal, State) when Pid =:= ConnectionPid,
+                                                    State =:= SacState0 ->
+                        {SacState1, []}
+                end),
+
+    OtherPid = spawn(fun() -> ok end),
+    Monitors0 = #{ConnectionPid => sac,
+                  OtherPid => {<<"other">>, member}},
+    State0 = #?STATE{single_active_consumer = SacState0,
+                     monitors = Monitors0},
+
+    {State1, ok, _Effects} = apply_cmd(meta(#{index => 42, machine_version => 6}),
+                                       {down, ConnectionPid, normal}, State0),
+
+    ?assert(meck:called(rabbit_stream_sac_coordinator, handle_connection_down,
+                        ['_', ConnectionPid, normal, SacState0])),
+    ?assertEqual(SacState1, State1#?STATE.single_active_consumer),
+    ?assertEqual(#{OtherPid => {<<"other">>, member}}, State1#?STATE.monitors),
+    ok.
+
+sac_pre_v7_ensure_monitors_should_use_monitors_map(_) ->
+    ConnectionPid = self(),
+    SacCmd = fake_sac_cmd,
+    SacState0 = fake_sac_state,
+    SacState1 = updated_sac_state,
+    meck:expect(rabbit_stream_sac_coordinator, apply,
+                fun(Cmd, State) when Cmd =:= SacCmd,
+                                     State =:= SacState0 ->
+                        {SacState1, {ok, true}, []}
+                end),
+    meck:expect(rabbit_stream_sac_coordinator, ensure_monitors,
+                fun(Cmd, State, Monitors, Effects) when Cmd =:= SacCmd,
+                                                        State =:= SacState1 ->
+                        {State, Monitors#{ConnectionPid => sac}, Effects}
+                end),
+
+    State0 = #?STATE{single_active_consumer = SacState0,
+                     monitors = #{}},
+
+    {State1, {ok, true}, _Effects} = apply_cmd(meta(#{index => 42, machine_version => 6}),
+                                               {sac, SacCmd}, State0),
+
+    ?assertEqual(#{ConnectionPid => sac}, State1#?STATE.monitors),
+    ?assertEqual(SacState1, State1#?STATE.single_active_consumer),
     ok.
 
 new_stream(_) ->
