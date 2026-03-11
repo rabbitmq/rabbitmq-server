@@ -258,9 +258,7 @@
         {consumer :: option(#dlx_consumer{}),
          %% Queue of dead-lettered messages.
          discards = lqueue:new() :: lqueue:lqueue(optimised_tuple(rabbit_dead_letter:reason(), msg())),
-         %% Raft indexes of messages in both discards queue and dlx_consumer's checked_out map
-         %% so that we get the smallest ra index in O(1).
-         ra_indexes = rabbit_fifo_index:empty() :: rabbit_fifo_index:state(),
+         unused = ?NIL,
          msg_bytes = 0 :: non_neg_integer(),
          msg_bytes_checkout = 0 :: non_neg_integer()}).
 
@@ -279,11 +277,6 @@
          % a map containing all the live processes that have ever enqueued
          % a message to this queue
          enqueuers = #{} :: #{pid() => #enqueuer{}},
-         % index of all messages that have been delivered at least once
-         % used to work out the smallest live raft index
-         % rabbit_fifo_index can be slow when calculating the smallest
-         % index when there are large gaps but should be faster than gb_trees
-         % for normal appending operations as it's backed by a map
          last_command_time = 0,
          next_consumer_timeout = infinity :: infinity | milliseconds(),
          % consumers need to reflect consumer state at time of snapshot

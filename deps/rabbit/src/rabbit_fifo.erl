@@ -1004,6 +1004,8 @@ convert_v7_to_v8(#{system_time := Ts} = _Meta, StateV7) ->
     Pq = queue:fold(fun (I, Acc) ->
                             rabbit_fifo_pq:in(?DEFAULT_PRIORITY, I, Acc)
                     end, Pq0, No),
+    Dlx0 = element(#?STATE.dlx, StateV7),
+    Dlx = Dlx0#?DLX{unused = ?NIL},
     StateV8 = StateV7,
     StateV8#?STATE{cfg = Cfg#cfg{consumer_disconnected_timeout = 60_000,
                                  delayed_retry = disabled},
@@ -1013,6 +1015,7 @@ convert_v7_to_v8(#{system_time := Ts} = _Meta, StateV7) ->
                    waiting_consumers = Waiting,
                    next_consumer_timeout = Timeout,
                    last_command_time = Ts,
+                   dlx = Dlx,
                    delayed = #delayed{}
                   }.
 
@@ -3896,17 +3899,13 @@ dlx_apply(_Meta, {dlx, {settle, MsgIds}}, at_least_once,
         maps:fold(
           fun(MsgId, ?TUPLE(_Rsn, Msg),
               {Sz, #?DLX{consumer = #dlx_consumer{checked_out = Checked} = C,
-                         msg_bytes_checkout = BytesCheckout,
-                         ra_indexes = Indexes0} = S}) ->
-                  Idx = get_msg_idx(Msg),
+                         msg_bytes_checkout = BytesCheckout} = S}) ->
                   Hdr = get_msg_header(Msg),
-                  Indexes = rabbit_fifo_index:delete(Idx, Indexes0),
                   Size = get_header(size, Hdr),
                   {Sz + Size + ?ENQ_OVERHEAD_B,
                    S#?DLX{consumer = C#dlx_consumer{checked_out =
                                                     maps:remove(MsgId, Checked)},
-                          msg_bytes_checkout = BytesCheckout - Size,
-                          ra_indexes = Indexes}}
+                          msg_bytes_checkout = BytesCheckout - Size}}
           end, {0, State0}, Acked),
     {State, DBytes,
      [{mod_call, rabbit_global_counters, messages_dead_lettered_confirmed,
@@ -4065,8 +4064,7 @@ dlx_purge(#?DLX{consumer = Consumer0} = State) ->
     State#?DLX{discards = lqueue:new(),
                msg_bytes = 0,
                msg_bytes_checkout = 0,
-               consumer = Consumer,
-               ra_indexes = rabbit_fifo_index:empty()}.
+               consumer = Consumer}.
 
 dlx_stat(#?DLX{consumer = Con,
                discards = Discards,
@@ -4130,16 +4128,12 @@ discard_or_dead_letter(Msgs, Reason, at_least_once, State0)
                                         Acc + size_in_bytes(M) + ?ENQ_OVERHEAD_B
                                 end, 0, Msgs),
     State = lists:foldl(fun(Msg, #?DLX{discards = D0,
-                                       msg_bytes = B0,
-                                       ra_indexes = I0} = S0) ->
+                                       msg_bytes = B0} = S0) ->
                                 MsgSize = size_in_bytes(Msg),
                                 D = lqueue:in(?TUPLE(Reason, Msg), D0),
                                 B = B0 + MsgSize,
-                                Idx = get_msg_idx(Msg),
-                                I = rabbit_fifo_index:append(Idx, I0),
                                 S0#?DLX{discards = D,
-                                        msg_bytes = B,
-                                        ra_indexes = I}
+                                        msg_bytes = B}
                         end, State0, Msgs),
     {State, RetainedBytes,
      [{mod_call, rabbit_global_counters, messages_dead_lettered,
