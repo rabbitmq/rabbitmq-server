@@ -543,14 +543,14 @@ opt_b2a(N)                   -> N.
 decl_queue(_, _, true) ->
     ok;
 decl_queue(Sess, Addr, false) ->
-    case re:run(Addr, "(^/queues/)(.*)", [{capture, [2], binary}]) of
-        nomatch ->
-            ok;
-        {match, [QName]} ->
+    case rabbitmq_amqp_address:to_map(Addr) of
+        {ok, #{queue := QName}} ->
             {ok, LinkPair} = rabbitmq_amqp_client:attach_management_link_pair_sync(Sess, <<"mgmt link pair">>),
             Args = #{},
             %% Best effort to declare queue, if something fails the next connection
             %% steps will detect the failure
             _ = rabbitmq_amqp_client:declare_queue(LinkPair, QName, #{arguments => Args}),
-            ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair)
+            ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair);
+        _ ->
+            ok
     end.
