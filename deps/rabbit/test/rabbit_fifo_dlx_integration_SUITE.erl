@@ -948,16 +948,18 @@ single_dlx_worker(Config) ->
          0,
          length(rpc(Config, Server1, supervisor, which_children, [rabbit_fifo_dlx_sup], 1000)))),
 
-    Pid = rpc(Config, Leader0, erlang, whereis, [RaName]),
-    true = rpc(Config, Leader0, erlang, exit, [Pid, kill]),
+    %% Kill the leader node to verify the DLX worker follows leadership.
+    %% We kill the node rather than just the Ra process: killing only the process
+    %% allows the same node to be re-elected as the leader.
+    ok = rabbit_ct_broker_helpers:kill_node(Config, Leader0),
     {ok, _, {_, Leader1}} = ?awaitMatch({ok, _, _},
                                         ra:members({RaName, Follower0}),
                                         30000),
     ?assertNotEqual(Leader0, Leader1),
-    [Follower1, Follower2] = Servers -- [Leader1],
+    [Follower1] = [Server1, Follower0] -- [Leader1],
     assert_active_dlx_workers(0, Config, Follower1),
-    assert_active_dlx_workers(0, Config, Follower2),
-    assert_active_dlx_workers(1, Config, Leader1).
+    assert_active_dlx_workers(1, Config, Leader1),
+    ok = rabbit_ct_broker_helpers:start_node(Config, Leader0).
 
 assert_active_dlx_workers(N, Config, Server) ->
     ?awaitMatch(N, length(rpc(Config, Server, supervisor, which_children, [rabbit_fifo_dlx_sup], 2000)), 60000).
