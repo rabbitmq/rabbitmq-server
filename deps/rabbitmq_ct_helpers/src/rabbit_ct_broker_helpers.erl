@@ -1622,8 +1622,6 @@ force_vhost_failure(Config, Node, VHost, Attempts) ->
         false -> ok
     end.
 
-set_alarm(Config, Node, file_descriptor_limit = Resource) ->
-    rpc(Config, Node, rabbit_alarm, set_alarm, [{Resource, []}]);
 set_alarm(Config, Node, memory = Resource) ->
     rpc(Config, Node, rabbit_alarm, set_alarm, [{{resource_limit, Resource, Node}, []}]);
 set_alarm(Config, Node, disk = Resource) ->
@@ -1635,17 +1633,13 @@ get_alarms(Config, Node) ->
 get_local_alarms(Config, Node) ->
     rpc(Config, Node, rabbit_alarm, get_local_alarms, []).
 
-clear_alarm(Config, Node, file_descriptor_limit = Resource) ->
-    rpc(Config, Node, rabbit_alarm, clear_alarm, [Resource]);
 clear_alarm(Config, Node, memory = Resource) ->
     rpc(Config, Node, rabbit_alarm, clear_alarm, [{resource_limit, Resource, Node}]);
 clear_alarm(Config, Node, disk = Resource) ->
     rpc(Config, Node, rabbit_alarm, clear_alarm, [{resource_limit, Resource, Node}]).
 
 clear_all_alarms(Config, Node) ->
-    lists:foreach(fun ({file_descriptor_limit, _}) ->
-                        clear_alarm(Config, Node, file_descriptor_limit);
-                      ({{resource_limit, Resource, OnNode}, _}) when OnNode =:= Node ->
+    lists:foreach(fun ({{resource_limit, Resource, OnNode}, _}) when OnNode =:= Node ->
                         clear_alarm(Config, Node, Resource);
                       (_) -> ok
                   end, get_alarms(Config, Node)),

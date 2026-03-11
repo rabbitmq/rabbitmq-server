@@ -34,7 +34,6 @@ groups() ->
      {cluster_size_5, [], [is_quorum_critical_test]},
      {single_node, [], [
                         alarms_test,
-                        local_alarms_test,
                         metadata_store_initialized_test,
                         metadata_store_initialized_with_data_test,
                         is_quorum_critical_single_node_test,
@@ -143,30 +142,6 @@ alarms_test(Config) ->
         fun() -> rabbit_ct_broker_helpers:get_alarms(Config, Server) =:= [] end
     ),
     ct:pal("Alarms: ~tp", [rabbit_ct_broker_helpers:get_alarms(Config, Server)]),
-
-    passed.
-
-local_alarms_test(Config) ->
-    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-    rabbit_ct_broker_helpers:clear_all_alarms(Config, Server),
-
-    EndpointPath = "/health/checks/local-alarms",
-    Check0 = http_get(Config, EndpointPath, ?OK),
-    ?assertEqual(<<"ok">>, maps:get(status, Check0)),
-
-    ok = rabbit_ct_broker_helpers:set_alarm(Config, Server, file_descriptor_limit),
-    rabbit_ct_helpers:await_condition(
-        fun() -> rabbit_ct_broker_helpers:get_alarms(Config, Server) =/= [] end
-    ),
-
-    Body = http_get_failed(Config, EndpointPath),
-    ?assertEqual(<<"failed">>, maps:get(<<"status">>, Body)),
-    ?assert(is_list(maps:get(<<"alarms">>, Body))),
-
-    rabbit_ct_broker_helpers:clear_all_alarms(Config, Server),
-    rabbit_ct_helpers:await_condition(
-        fun() -> rabbit_ct_broker_helpers:get_local_alarms(Config, Server) =:= [] end
-    ),
 
     passed.
 

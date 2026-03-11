@@ -114,7 +114,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
     {:ok, m}
   end
 
-  def output(result, %{node: node_name}) when is_list(result) do
+  def output(result, %{}) when is_list(result) do
     m = result_map(result)
     total_cores = Enum.reduce(m[:cpu_cores], 0, fn {_, val}, acc -> acc + val end)
 
@@ -154,7 +154,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
       ] ++
         case m[:alarms] do
           [] -> ["(none)"]
-          xs -> alarm_lines(xs, node_name)
+          xs -> alarm_lines(xs)
         end
 
     partitions_section =

@@ -83,10 +83,6 @@ defmodule CheckLocalAlarmsCommandTest do
   test "output: when target node has a local alarm in effect, returns a failure", context do
     for input <- [
           [
-            :file_descriptor_limit
-          ],
-          [
-            :file_descriptor_limit,
             {{:resource_limit, :disk, get_rabbit_hostname()}, []},
             {{:resource_limit, :memory, get_rabbit_hostname()}, []}
           ]
@@ -100,14 +96,9 @@ defmodule CheckLocalAlarmsCommandTest do
        _context do
     for input <- [
           [
-            :file_descriptor_limit
-          ],
-          [
-            :file_descriptor_limit,
             {{:resource_limit, :disk, :hare@warp10}, []}
           ],
           [
-            :file_descriptor_limit,
             {{:resource_limit, :disk, get_rabbit_hostname()}, []},
             {{:resource_limit, :memory, get_rabbit_hostname()}, []}
           ]
