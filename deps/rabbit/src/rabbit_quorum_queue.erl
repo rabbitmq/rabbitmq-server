@@ -950,7 +950,9 @@ recover(_Vhost, Queues) ->
                        % queue was never started on this node
                        % so needs to be started from scratch.
                        case start_server(make_ra_conf(Q, ServerId)) of
-                           ok -> ok;
+                           ok ->
+                               _ = ra:trigger_election(ServerId),
+                               ok;
                            Err2 ->
                                ?LOG_WARNING("recover: quorum queue ~w could not"
                                                   " be started ~w", [Name, Err2]),
