@@ -185,6 +185,8 @@ all_tests() -> [
     publish_test,
     publish_large_message_test,
     publish_large_message_exceeding_http_request_body_size_test,
+    publish_body_size_limit_single_chunk_test,
+    direct_request_body_size_limit_test,
     publish_accept_json_test,
     publish_fail_test,
     publish_base64_test,
@@ -3316,6 +3318,32 @@ publish_large_message_exceeding_http_request_body_size_test(Config) ->
                                      Msg, ?BAD_REQUEST),
   http_delete(Config, "/queues/%2F/large_message_exceeding_http_request_body_size_test", {group, '2xx'}),
   passed.
+
+publish_body_size_limit_single_chunk_test(Config) ->
+  rpc(Config, application, set_env, [rabbitmq_management, max_http_body_size, 200]),
+  try
+    Headers = #{'x-forwarding' => [#{uri => <<"amqp://localhost/%2F/upstream">>}]},
+    Body = binary:copy(<<"a">>, 300),
+    Msg = msg(<<"publish_body_size_limit_single_chunk_test">>, Headers, Body),
+    http_put(Config, "/queues/%2F/publish_body_size_limit_single_chunk_test", #{durable => true}, {group, '2xx'}),
+    http_post_accept_json(Config, "/exchanges/%2F/amq.default/publish",
+                          Msg, ?BAD_REQUEST),
+    http_delete(Config, "/queues/%2F/publish_body_size_limit_single_chunk_test", {group, '2xx'}),
+    passed
+  after
+    rpc(Config, application, unset_env, [rabbitmq_management, max_http_body_size])
+  end.
+
+direct_request_body_size_limit_test(Config) ->
+  rpc(Config, application, set_env, [rabbitmq_management, max_http_body_size, 200]),
+  try
+    http_put(Config, "/queues/%2F/test_queue_body_limit", #{durable => true}, {group, '2xx'}),
+    LargeBody = #{durable => true, arguments => #{<<"x-message-ttl">> => 60000, <<"padding">> => binary:copy(<<"x">>, 300)}},
+    http_put(Config, "/queues/%2F/test_queue_body_limit_oversized", LargeBody, ?BAD_REQUEST),
+    passed
+  after
+    rpc(Config, application, unset_env, [rabbitmq_management, max_http_body_size])
+  end.
 
 publish_accept_json_test(Config) ->
     Headers = #{'x-forwarding' => [#{uri => <<"amqp://localhost/%2F/upstream">>}]},
