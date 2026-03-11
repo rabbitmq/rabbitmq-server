@@ -241,3 +241,14 @@
       callbacks     => #{enable =>
                          {rabbit_db_queue, replaced_delete_queue_transaction_enable}}
      }}).
+
+-rabbit_feature_flag(
+   {topic_binding_projection_v4,
+    #{desc          => "Enable the topic binding Khepri projection v4",
+      stability     => stable,
+      depends_on    => ['rabbitmq_4.3.0'],
+      callbacks     => #{enable =>
+                         {rabbit_khepri, topic_binding_projection_enable},
+                         post_enable =>
+                         {rabbit_khepri, topic_binding_projection_post_enable}}
+     }}).
