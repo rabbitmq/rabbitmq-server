@@ -9,16 +9,10 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--export([set/1, delete_all_for_exchange/1, delete/1, match/3]).
+-export([match/3]).
 
 %% Used by Khepri projections and the Mnesia-to-Khepri migration.
--export([
-         split_topic_key/1,
-         split_topic_key_binary/1
-        ]).
-
-%% For testing
--export([clear/0]).
+-export([split_topic_key_binary/1]).
 
 -define(KHEPRI_PROJECTION, rabbit_khepri_topic_trie_v3).
 
@@ -26,49 +20,6 @@
                          {rabbit_amqqueue:name(), rabbit_types:binding_key()}].
 
 -define(COMPILED_TOPIC_SPLIT_PATTERN, cp_dot).
-
-%% -------------------------------------------------------------------
-%% set().
-%% -------------------------------------------------------------------
-
--spec set(Binding) -> ok when
-      Binding :: rabbit_types:binding().
-%% @doc Sets a topic binding.
-%%
-%% @private
-
-set(#binding{}) ->
-    ok.
-
-%% -------------------------------------------------------------------
-%% delete_all_for_exchange().
-%% -------------------------------------------------------------------
-
--spec delete_all_for_exchange(ExchangeName) -> ok when
-      ExchangeName :: rabbit_exchange:name().
-%% @doc Deletes all topic bindings for the exchange named `ExchangeName'
-%%
-%% @private
-
-delete_all_for_exchange(_XName) ->
-    ok.
-
-%% -------------------------------------------------------------------
-%% delete().
-%% -------------------------------------------------------------------
-
--spec delete([Binding]) -> ok when
-      Binding :: rabbit_types:binding().
-%% @doc Deletes all given topic bindings
-%%
-%% @private
-
-delete(Bs) when is_list(Bs) ->
-    ok.
-
-%% -------------------------------------------------------------------
-%% match().
-%% -------------------------------------------------------------------
 
 -spec match(rabbit_exchange:name(),
             rabbit_types:routing_key(),
@@ -84,38 +35,6 @@ match(XName, RoutingKey, Opts) ->
     BKeys = maps:get(return_binding_keys, Opts, false),
     Words = split_topic_key_binary(RoutingKey),
     trie_match_in_khepri(XName, Words, BKeys).
-
-%% -------------------------------------------------------------------
-%% clear().
-%% -------------------------------------------------------------------
-
--spec clear() -> ok.
-%% @doc Deletes all topic bindings
-%%
-%% @private
-
-clear() ->
-    ok.
-
-%% --------------------------------------------------------------
-%% split_topic_key().
-%% --------------------------------------------------------------
-
--spec split_topic_key(RoutingKey) -> Words when
-      RoutingKey :: binary(),
-      Words :: [[byte()]].
-
-split_topic_key(Key) ->
-    split_topic_key(Key, [], []).
-
-split_topic_key(<<>>, [], []) ->
-    [];
-split_topic_key(<<>>, RevWordAcc, RevResAcc) ->
-    lists:reverse([lists:reverse(RevWordAcc) | RevResAcc]);
-split_topic_key(<<$., Rest/binary>>, RevWordAcc, RevResAcc) ->
-    split_topic_key(Rest, [], [lists:reverse(RevWordAcc) | RevResAcc]);
-split_topic_key(<<C:8, Rest/binary>>, RevWordAcc, RevResAcc) ->
-    split_topic_key(Rest, [C | RevWordAcc], RevResAcc).
 
 %% --------------------------------------------------------------
 %% split_topic_key_binary().
