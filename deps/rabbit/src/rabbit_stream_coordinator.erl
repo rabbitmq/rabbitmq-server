@@ -1380,6 +1380,15 @@ filter_command(_Meta, {delete_stream, _StreamId, #{}}, undefined) ->
     %% Attempting to delete a stream which does not exist. Reply 'ok' to the
     %% caller so that this action is idempotent.
     {reply, ok};
+filter_command(_Meta, {new_stream, _StreamId, #{}}, #stream{members = Members}) ->
+    MaybeLeader = [Pid || _Node := #member{state = {running, _, Pid},
+                                           role = {writer, _}} <- Members],
+    case MaybeLeader of
+        [LeaderPid] ->
+            {reply, {ok, LeaderPid}};
+        [] ->
+            {reply, '$ra_no_reply'}
+    end;
 filter_command(_, _, _) ->
     ok.
 
@@ -1389,8 +1398,8 @@ update_stream(Meta, Cmd, Stream) ->
     catch
         _:E:Stacktrace ->
             ?LOG_WARNING(
-              "~ts failed to update stream:~n~W~n~W",
-              [?MODULE, E, 10, Stacktrace, 10]),
+              "~ts failed to update stream:~n~P~n~P",
+              [?MODULE, E, 10, Stacktrace, 30]),
             Stream
     end.
 
