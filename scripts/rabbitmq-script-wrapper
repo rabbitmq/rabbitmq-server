@@ -102,9 +102,15 @@ exec_script_as_root() {
 run_script_help_and_fail() {
   "/usr/lib/rabbitmq/bin/$SCRIPT" help
 
-  echo "
-Only root or rabbitmq can run $SCRIPT
-"
+  msg="Only root or rabbitmq can run $SCRIPT"
+  if calling_rabbitmq_plugins
+  then
+    msg="Only root can run $SCRIPT"
+  fi
+
+  echo
+  echo "$msg"
+  echo
   exit 1
 }
 
