@@ -687,7 +687,9 @@ parse_command(Data) when is_list(Data) ->
     %% TODO: most commands are rare or small and likely to be a single
     %% binary, however publish and delivery should be parsed from the
     %% iodata rather than turned into a binary
-    parse_command(iolist_to_binary(Data)).
+    parse_command(iolist_to_binary(Data));
+parse_command(Data) when is_binary(Data) ->
+    {unknown, Data}.
 
 -spec parse_request(binary()) -> command().
 parse_request(<<?REQUEST:1,
