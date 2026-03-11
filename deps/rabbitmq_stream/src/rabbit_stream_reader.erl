@@ -1512,6 +1512,9 @@ handle_frame_pre_auth(Transport,
 handle_frame_pre_auth(_Transport, Connection, State, heartbeat) ->
     ?LOG_DEBUG("Received heartbeat frame pre auth"),
     {Connection, State};
+handle_frame_pre_auth(_Transport, Connection, State, {unknown, _}) ->
+    ?LOG_DEBUG("Received unrecognised data before authentication, closing connection."),
+    {Connection#stream_connection{connection_step = failure}, State};
 handle_frame_pre_auth(_Transport, Connection, State, Command) ->
     ?LOG_WARNING("unknown command ~w, closing connection.",
                                   [Command]),
@@ -2757,16 +2760,17 @@ handle_frame_post_auth(_Transport, Connection, State, heartbeat) ->
 handle_frame_post_auth(Transport,
                        #stream_connection{socket = S} = Connection,
                        State,
+                       {unknown, _}) ->
+    ?LOG_WARNING("Received unrecognised data after authentication, sending close command."),
+    send_close_and_increment(Transport, S),
+    {Connection#stream_connection{connection_step = close_sent}, State};
+handle_frame_post_auth(Transport,
+                       #stream_connection{socket = S} = Connection,
+                       State,
                        Command) ->
     ?LOG_WARNING("unknown command ~tp, sending close command.",
                        [Command]),
-    CloseReason = <<"unknown frame">>,
-    Frame =
-        rabbit_stream_core:frame({request, 1,
-                                  {close, ?RESPONSE_CODE_UNKNOWN_FRAME,
-                                   CloseReason}}),
-    send(Transport, S, Frame),
-    increase_protocol_counter(?UNKNOWN_FRAME),
+    send_close_and_increment(Transport, S),
     {Connection#stream_connection{connection_step = close_sent}, State}.
 
 complete_secret_update(NewUser = #user{username = Username},
@@ -3998,6 +4002,15 @@ i(_Unknown, _, _) ->
 -spec send(module(), rabbit_net:socket(), iodata()) -> ok.
 send(Transport, Socket, Data) when is_atom(Transport) ->
     Transport:send(Socket, Data).
+
+send_close_and_increment(Transport, S) ->
+    CloseReason = <<"unknown frame">>,
+    Frame =
+        rabbit_stream_core:frame({request, 1,
+                                  {close, ?RESPONSE_CODE_UNKNOWN_FRAME,
+                                   CloseReason}}),
+    send(Transport, S, Frame),
+    increase_protocol_counter(?UNKNOWN_FRAME).
 
 get_chunk_selector(Properties) ->
     binary_to_atom(maps:get(<<"chunk_selector">>, Properties,
