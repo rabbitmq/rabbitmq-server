@@ -1293,6 +1293,47 @@ end}.
 %% =====================
 %%
 
+%% No longer used, exists only for backwards compatibility
+{mapping, "cluster_partition_handling", "rabbit.cluster_partition_handling",
+    [{datatype, {enum, [ignore, pause_minority, autoheal, pause_if_all_down]}}]}.
+
+%% No longer used, exists only for backwards compatibility
+{mapping, "cluster_partition_handling.pause_if_all_down.recover",
+          "rabbit.cluster_partition_handling",
+          [{datatype, {enum, [ignore, autoheal]}}]}.
+
+%% No longer used, exists only for backwards compatibility
+{mapping, "cluster_partition_handling.pause_if_all_down.nodes.$name",
+          "rabbit.cluster_partition_handling",
+          [{datatype, atom}]}.
+
+%% No longer used, exists only for backwards compatibility
+{translation, "rabbit.cluster_partition_handling",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_partition_handling", Conf) of
+        pause_if_all_down ->
+            PauseIfAllDownNodes = cuttlefish_variable:filter_by_prefix(
+                "cluster_partition_handling.pause_if_all_down.nodes",
+                Conf),
+            case PauseIfAllDownNodes of
+                [] ->
+                    cuttlefish:invalid("Nodes required for pause_if_all_down");
+                _  ->
+                    Nodes = [ V || {K,V} <- PauseIfAllDownNodes ],
+                    PauseIfAllDownRecover = cuttlefish:conf_get(
+                        "cluster_partition_handling.pause_if_all_down.recover",
+                        Conf),
+                    case PauseIfAllDownRecover of
+                        Recover when Recover == ignore; Recover == autoheal ->
+                            {pause_if_all_down, Nodes, Recover};
+                        Invalid ->
+                            cuttlefish:invalid("Recover strategy required for pause_if_all_down")
+                    end
+            end;
+        Other -> Other
+    end
+end}.
+
 %% Number of delegate processes to use for intra-cluster
 %% communication. On a machine which has a very large number of cores
 %% and is also part of a cluster, you may wish to increase this value.
