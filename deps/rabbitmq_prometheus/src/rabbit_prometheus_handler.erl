@@ -183,6 +183,8 @@ parse_metric_families(_) ->
 
 parse_queue_filter(undefined) ->
     false;
+parse_queue_filter(<<>>) ->
+    false;
 parse_queue_filter(B) when byte_size(B) > ?MAX_QUEUE_FILTER_LENGTH ->
     {error, <<"'queue' regex too long">>};
 parse_queue_filter(B) when is_binary(B) ->

@@ -86,7 +86,8 @@ groups() ->
                                      queue_filter_queue_exchange_metrics_test,
                                      queue_filter_raft_metrics_test,
                                      queue_filter_combined_with_vhost_test,
-                                     queue_filter_multiple_patterns_rejected_test
+                                     queue_filter_multiple_patterns_rejected_test,
+                                     queue_filter_empty_is_ignored_test
         ]},
        {special_chars, [], [core_metrics_special_chars]},
        {authentication, [], [basic_auth]}
@@ -1025,6 +1026,18 @@ queue_filter_multiple_patterns_rejected_test(Config) ->
     http_get_with_pal(Config,
                       "/metrics/detailed?family=queue_coarse_metrics&queue=foo&queue=bar",
                       [], 400),
+    ok.
+
+queue_filter_empty_is_ignored_test(Config) ->
+    {_, BodyNoFilter} = http_get_with_pal(Config,
+                                          "/metrics/detailed?family=queue_coarse_metrics",
+                                          [], 200),
+    {_, BodyEmpty} = http_get_with_pal(Config,
+                                       "/metrics/detailed?family=queue_coarse_metrics&queue=",
+                                       [], 200),
+    ParsedNoFilter = map_get(rabbitmq_detailed_queue_messages, parse_response(BodyNoFilter)),
+    ParsedEmpty = map_get(rabbitmq_detailed_queue_messages, parse_response(BodyEmpty)),
+    ?assertEqual(ParsedNoFilter, ParsedEmpty),
     ok.
 
 basic_auth(Config) ->
