@@ -39,7 +39,8 @@
          nack/3,
          status/1,
          forward/3,
-         pending_count/1
+         pending_count/1,
+         connection_close/2
         ]).
 
 -rabbit_boot_step(
@@ -391,15 +392,18 @@ handle_dest(_Msg, _State) ->
 
 close_source(#{source := #{current := #{conn := Conn,
                                         session := Sess}}}) ->
-    _ = amqp10_client:end_session(Sess),
-    _ = amqp10_client:close_connection(Conn),
+    %% Wait for pending acks/nacks to be delivered
+    _ = timer:apply_after(10_000, ?MODULE, connection_close, [Conn, Sess]),
     ok;
 close_source(_Config) -> ok.
 
+connection_close(Conn, Sess) ->
+    _ = amqp10_client:end_session(Sess),
+    _ = amqp10_client:close_connection(Conn).
+
 close_dest(#{dest := #{current := #{conn := Conn,
                                     session := Sess}}}) ->
-    _ = amqp10_client:end_session(Sess),
-    _ = amqp10_client:close_connection(Conn),
+    connection_close(Conn, Sess),
     ok;
 close_dest(_Config) -> ok.
 
