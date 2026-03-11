@@ -14,6 +14,8 @@
 %% Used by Khepri projections and the Mnesia-to-Khepri migration.
 -export([split_topic_key_binary/1]).
 
+-define(KHEPRI_PROJECTION_V3, rabbit_khepri_topic_trie_v3).
+
 -define(TOPIC_TRIE_PROJECTION, rabbit_khepri_topic_trie_v4).
 -define(TOPIC_BINDING_PROJECTION, rabbit_khepri_topic_binding_v4).
 
@@ -32,14 +34,19 @@
 %%
 %% @private
 
-match(#resource{virtual_host = VHost, name = XName}, RoutingKey, Opts) ->
+match(#resource{virtual_host = VHost, name = XName} = X, RoutingKey, Opts) ->
     BKeys = maps:get(return_binding_keys, Opts, false),
     Words = split_topic_key_binary(RoutingKey),
-    try
-        trie_match({VHost, XName}, root, Words, BKeys, [])
-    catch
-        error:badarg ->
-            []
+    case rabbit_khepri:get_effective_topic_binding_projection_version() of
+        V when V >= 4 ->
+            try
+                trie_match({VHost, XName}, root, Words, BKeys, [])
+            catch
+                error:badarg ->
+                    []
+            end;
+        _ ->
+            trie_match_in_khepri(X, Words, BKeys)
     end.
 
 -spec split_topic_key_binary(RoutingKey) -> Words when
@@ -162,3 +169,93 @@ format_dest_bkeys([{#resource{kind = queue} = Dest, BKey} | Rest], Acc) ->
     format_dest_bkeys(Rest, [{Dest, BKey} | Acc]);
 format_dest_bkeys([{Dest, _BKey} | Rest], Acc) ->
     format_dest_bkeys(Rest, [Dest | Acc]).
+
+%% --------------------------------------------------------------
+%% Internal
+%% --------------------------------------------------------------
+
+-spec add_matched([rabbit_types:binding_destination() |
+                   {rabbit_types:binding_destination(), BindingArgs :: list()}],
+                  ReturnBindingKeys :: boolean(),
+                  match_result()) ->
+    match_result().
+add_matched(Destinations, false, Acc) ->
+    Destinations ++ Acc;
+add_matched(DestinationsArgs, true, Acc) ->
+    lists:foldl(
+      fun({DestQ = #resource{kind = queue}, BindingArgs}, L) ->
+              case rabbit_misc:table_lookup(BindingArgs, <<"x-binding-key">>) of
+                  {longstr, BKey} ->
+                      [{DestQ, BKey} | L];
+                  _ ->
+                      [DestQ | L]
+              end;
+         ({DestX, _BindingArgs}, L) ->
+              [DestX | L]
+      end, Acc, DestinationsArgs).
+
+%% Khepri topic graph
+
+trie_match_in_khepri(X, Words, BKeys) ->
+    try
+        trie_match_in_khepri(X, root, Words, BKeys, [])
+    catch
+        error:badarg ->
+            []
+    end.
+
+trie_match_in_khepri(X, Node, [], BKeys, ResAcc0) ->
+    Destinations = trie_bindings_in_khepri(X, Node, BKeys),
+    ResAcc = add_matched(Destinations, BKeys, ResAcc0),
+    trie_match_part_in_khepri(
+      X, Node, <<"#">>,
+      fun trie_match_skip_any_in_khepri/5, [], BKeys, ResAcc);
+trie_match_in_khepri(X, Node, [W | RestW] = Words, BKeys, ResAcc) ->
+    lists:foldl(fun ({WArg, MatchFun, RestWArg}, Acc) ->
+                        trie_match_part_in_khepri(
+                          X, Node, WArg, MatchFun, RestWArg, BKeys, Acc)
+                end, ResAcc, [{W, fun trie_match_in_khepri/5, RestW},
+                              {<<"*">>, fun trie_match_in_khepri/5, RestW},
+                              {<<"#">>,
+                               fun trie_match_skip_any_in_khepri/5, Words}]).
+
+trie_match_part_in_khepri(X, Node, Search, MatchFun, RestW, BKeys, ResAcc) ->
+    case trie_child_in_khepri(X, Node, Search) of
+        {ok, NextNode} -> MatchFun(X, NextNode, RestW, BKeys, ResAcc);
+        error          -> ResAcc
+    end.
+
+trie_match_skip_any_in_khepri(X, Node, [], BKeys, ResAcc) ->
+    trie_match_in_khepri(X, Node, [], BKeys, ResAcc);
+trie_match_skip_any_in_khepri(X, Node, [_ | RestW] = Words, BKeys, ResAcc) ->
+    trie_match_skip_any_in_khepri(
+      X, Node, RestW, BKeys,
+      trie_match_in_khepri(X, Node, Words, BKeys, ResAcc)).
+
+trie_child_in_khepri(X, Node, Word) ->
+    case ets:lookup(
+           ?KHEPRI_PROJECTION_V3,
+           #trie_edge{exchange_name = X,
+                      node_id       = Node,
+                      word          = Word}) of
+        [#topic_trie_edge_v2{node_id = NextNode}] -> {ok, NextNode};
+        []                                        -> error
+    end.
+
+trie_bindings_in_khepri(X, Node, BKeys) ->
+    case ets:lookup(
+           ?KHEPRI_PROJECTION_V3,
+           #trie_edge{exchange_name = X,
+                      node_id       = Node,
+                      word          = bindings}) of
+        [#topic_trie_edge_v2{node_id = {bindings, Bindings}}] ->
+            [case BKeys of
+                 true ->
+                     {Dest, Args};
+                 false ->
+                     Dest
+             end || #binding{destination = Dest,
+                             args        = Args} <- sets:to_list(Bindings)];
+        [] ->
+            []
+    end.

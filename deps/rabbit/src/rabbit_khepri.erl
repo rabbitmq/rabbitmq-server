@@ -179,6 +179,13 @@
 -export([supports_rabbit_khepri_topic_trie_v2/0,
          supports_rabbit_khepri_topic_trie_version/0]).
 
+%% Called locally to determine which projection to use.
+-export([get_effective_topic_binding_projection_version/0]).
+
+%% Used during topic binding projections related feature flags handling.
+-export([topic_binding_projection_enable/1,
+         topic_binding_projection_post_enable/1]).
+
 -ifdef(TEST).
 -export([register_projections/0]).
 -endif.
@@ -1313,7 +1320,7 @@ register_projections() ->
                fun register_rabbit_bindings_projection/0,
                fun register_rabbit_route_by_source_key_projection/0,
                fun register_rabbit_route_by_source_projection/0,
-               fun register_rabbit_topic_trie_projection/0],
+               fun register_rabbit_topic_binding_projection/0],
     rabbit_misc:for_each_while_ok(
       fun(RegisterFun) ->
               case RegisterFun() of
@@ -1533,6 +1540,92 @@ projection_fun_for_sets(MapFun) ->
             ok
     end.
 
+register_rabbit_topic_binding_projection() ->
+    case get_effective_topic_binding_projection_version() of
+        V when V >= 4 -> register_rabbit_topic_trie_projection();
+        _ ->             register_rabbit_topic_graph_projection()
+    end.
+
+%% Topic routing via trie ETS projection (v3).
+%%
+%% This is kept for backward compatibility only. This projection is unused
+%% after the `topic_binding_projection_v4' feature flag is enabled. It
+%% can be removed once this feature flag becomes required.
+register_rabbit_topic_graph_projection() ->
+    Name = rabbit_khepri_topic_trie_v3,
+    %% This projection calls some external functions which are disallowed by
+    %% Horus because they interact with global or random state. We explicitly
+    %% allow them here for performance reasons.
+    ShouldProcessFun =
+    fun (rabbit_db_topic_exchange, split_topic_key_binary, 1, _From) ->
+            %% This function uses `persistent_term' to store a lazily compiled
+            %% binary pattern.
+            false;
+        (erlang, make_ref, 0, _From) ->
+            %% Randomness is discouraged in Ra effects since the effects are
+            %% executed separately by each cluster member. We'll use a random
+            %% value for trie node IDs but these IDs will live as long as the
+            %% projection table and do not need to be stable or reproducible
+            %% across restarts or across Erlang nodes.
+            false;
+        (ets, _F, _A, _From) ->
+            false;
+        (M, F, A, From) ->
+            khepri_tx_adv:should_process_function(M, F, A, From)
+    end,
+    Options = #{keypos => #topic_trie_edge_v2.trie_edge,
+                standalone_fun_options =>
+                #{should_process_function => ShouldProcessFun},
+                read_concurrency => true},
+    ProjectionFun =
+    fun(Table, Path, OldProps, NewProps) ->
+        {
+         VHost,
+         ExchangeName,
+         _Kind,
+         _DstName,
+         RoutingKey
+        } = rabbit_db_binding:khepri_route_path_to_args(Path),
+        Exchange = rabbit_misc:r(VHost, exchange, ExchangeName),
+        Words = rabbit_db_topic_exchange:split_topic_key_binary(RoutingKey),
+        case {OldProps, NewProps} of
+            {#{data := OldBindings}, #{data := NewBindings}} ->
+                ToInsert = sets:subtract(NewBindings, OldBindings),
+                ToDelete = sets:subtract(OldBindings, NewBindings),
+                follow_down_update(
+                  Table, Exchange, Words,
+                  fun(ExistingBindings) ->
+                          sets:union(
+                            sets:subtract(ExistingBindings, ToDelete),
+                            ToInsert)
+                  end);
+            {_, #{data := NewBindings}} ->
+                follow_down_update(
+                  Table, Exchange, Words,
+                  fun(ExistingBindings) ->
+                          sets:union(ExistingBindings, NewBindings)
+                  end);
+            {#{data := OldBindings}, _} ->
+                follow_down_update(
+                  Table, Exchange, Words,
+                  fun(ExistingBindings) ->
+                          sets:subtract(ExistingBindings, OldBindings)
+                  end);
+            {_, _} ->
+                ok
+        end
+    end,
+    Projection = khepri_projection:new(Name, ProjectionFun, Options),
+    PathPattern = rabbit_db_binding:khepri_route_path(
+                    _VHost = ?KHEPRI_WILDCARD_STAR,
+                    _Exchange = #if_data_matches{
+                                   pattern = #exchange{type = topic, _ = '_'}},
+                    _Kind = ?KHEPRI_WILDCARD_STAR,
+                    _DstName = ?KHEPRI_WILDCARD_STAR,
+                    _RoutingKey = ?KHEPRI_WILDCARD_STAR),
+    _ = unregister_old_rabbit_topic_trie_projections(),
+    khepri:register_projection(?STORE_ID, PathPattern, Projection).
+
 %% Topic routing via trie + ordered_set ETS projections (v4).
 %% Uses a single Khepri projection with two ETS tables:
 %%
@@ -1547,6 +1640,9 @@ projection_fun_for_sets(MapFun) ->
 %% Word       = binary() (a single topic segment, e.g. <<"foo">>, <<"*">>, <<"#">>)
 %% ChildCount = non_neg_integer() (number of outgoing edges)
 %% Dest       = #resource{}
+%%
+%% This projection is only used once the `topic_binding_projection_v4' feature
+%% flag is enabled.
 register_rabbit_topic_trie_projection() ->
     ShouldProcessFun =
     fun (rabbit_db_topic_exchange, split_topic_key_binary, 1, _From) ->
@@ -1693,12 +1789,50 @@ supports_rabbit_khepri_topic_trie_v2() ->
 supports_rabbit_khepri_topic_trie_version() ->
     4.
 
+get_effective_topic_binding_projection_version() ->
+    IsEnabled = rabbit_feature_flags:is_enabled(
+                  topic_binding_projection_v4, non_blocking),
+    case IsEnabled of
+        true -> 4;
+        _    -> 3
+    end.
+
+topic_binding_projection_enable(
+  #{feature_name := topic_binding_projection_v4 = FeatureName}) ->
+    ?LOG_DEBUG(
+       "Feature flag `~s`: register topic binding projection v4",
+       [FeatureName],
+       #{domain => ?RMQLOG_DOMAIN_DB}),
+    case register_rabbit_topic_trie_projection() of
+        ok ->
+            ok;
+        {error, {khepri, projection_already_exists, _Info}} ->
+            ok;
+        {error, _} = Error ->
+            Error
+    end.
+
+topic_binding_projection_post_enable(
+  #{feature_name := topic_binding_projection_v4 = FeatureName}) ->
+    ?LOG_DEBUG(
+       "Feature flag `~s`: unregister old topic binding projections",
+       [FeatureName],
+       #{domain => ?RMQLOG_DOMAIN_DB}),
+    unregister_old_rabbit_topic_trie_projections(),
+    ok.
+
 unregister_old_rabbit_topic_trie_projections() ->
-    OldProjections = [{1, rabbit_khepri_topic_trie},
-                      {2, rabbit_khepri_topic_trie_v2},
-                      {3, rabbit_khepri_topic_trie_v3}],
+    OldProjections0 = [{1, rabbit_khepri_topic_trie},
+                       {2, rabbit_khepri_topic_trie_v2}],
+    OldProjections1 = case get_effective_topic_binding_projection_version() of
+                          V when V >= 4 ->
+                              OldProjections0 ++
+                              [{3, rabbit_khepri_topic_trie_v3}];
+                          _ ->
+                              OldProjections0
+                      end,
     lists:foreach(fun unregister_old_rabbit_topic_trie_projection/1,
-                  OldProjections).
+                  OldProjections1).
 
 unregister_old_rabbit_topic_trie_projection({Version, ProjectionName}) ->
     Nodes = rabbit_nodes:list_members(),
@@ -1738,6 +1872,110 @@ unregister_old_rabbit_topic_trie_projection({Version, ProjectionName}) ->
                [ProjectionName],
                #{domain => ?RMQLOG_DOMAIN_DB}),
             ok
+    end.
+
+-spec follow_down_update(Table, Exchange, Words, UpdateFn) -> Ret when
+      Table :: ets:tid(),
+      Exchange :: rabbit_types:exchange_name(),
+      Words :: [binary()],
+      BindingsSet :: sets:set(rabbit_types:binding()),
+      UpdateFn :: fun((BindingsSet) -> BindingsSet),
+      Ret :: ok.
+
+follow_down_update(Table, Exchange, Words, UpdateFn) ->
+    follow_down_update(Table, Exchange, root, Words, UpdateFn),
+    ok.
+
+-spec follow_down_update(Table, Exchange, NodeId, Words, UpdateFn) -> Ret when
+      Table :: ets:tid(),
+      Exchange :: rabbit_types:exchange_name(),
+      NodeId :: root | rabbit_guid:guid(),
+      Words :: [binary()],
+      BindingsSet :: sets:set(rabbit_types:binding()),
+      UpdateFn :: fun((BindingsSet) -> BindingsSet),
+      Ret :: added | kept | deleted.
+
+follow_down_update(Table, Exchange, FromNodeId, [To | Rest], UpdateFn) ->
+    TrieEdge = #trie_edge{exchange_name = Exchange,
+                          node_id       = FromNodeId,
+                          word          = To},
+    {ToNodeId, IsNew} = case ets:lookup(Table, TrieEdge) of
+                            [#topic_trie_edge_v2{node_id = ExistingId}] ->
+                                {ExistingId, false};
+                            [] ->
+                                %% The Khepri topic graph table uses references
+                                %% for node IDs instead of `rabbit_guid:gen/0'
+                                %% used by mnesia. This is possible because the
+                                %% topic graph table is never persisted to
+                                %% disk. References take up slightly less
+                                %% memory and are very cheap to produce
+                                %% compared to `rabbit_guid' (which requires
+                                %% the `rabbit_guid' genserver to be online).
+                                NewNodeId = make_ref(),
+                                NewEdge = #topic_trie_edge_v2{
+                                             trie_edge = TrieEdge,
+                                             node_id = NewNodeId,
+                                             child_count = 0},
+                                %% Create the intermediary node.
+                                ets:insert(Table, NewEdge),
+                                {NewNodeId, true}
+                        end,
+    case follow_down_update(Table, Exchange, ToNodeId, Rest, UpdateFn) of
+        added ->
+            _ = ets:update_counter(
+                  Table, TrieEdge, {#topic_trie_edge_v2.child_count, 1}),
+            case IsNew of
+                true ->
+                    added;
+                false ->
+                    kept
+            end;
+        kept ->
+            false = IsNew, %% Assertion.
+            kept;
+        deleted ->
+            false = IsNew, %% Assertion.
+            NewCount = ets:update_counter(
+                         Table, TrieEdge,
+                         {#topic_trie_edge_v2.child_count, -1}),
+            if
+                NewCount > 0 ->
+                    kept;
+                NewCount =:= 0 ->
+                    ets:delete(Table, TrieEdge),
+                    deleted
+            end
+    end;
+follow_down_update(Table, Exchange, LeafNodeId, [], UpdateFn) ->
+    TrieEdge = #trie_edge{exchange_name = Exchange,
+                          node_id       = LeafNodeId,
+                          word          = bindings},
+    {Bindings, IsNew} = case ets:lookup(Table, TrieEdge) of
+                            [#topic_trie_edge_v2{
+                                node_id = {bindings, ExistingBindings}}] ->
+                                {ExistingBindings, false};
+                            [] ->
+                                {sets:new([{version, 2}]), true}
+                        end,
+    NewBindings = UpdateFn(Bindings),
+    case sets:is_empty(NewBindings) of
+        true ->
+            %% If the bindings have been deleted, delete the trie edge and
+            %% any edges that no longer lead to any bindings or other edges.
+            ets:delete(Table, TrieEdge),
+            deleted;
+        false ->
+            ToNodeId = {bindings, NewBindings},
+            Edge = #topic_trie_edge_v2{
+                      trie_edge = TrieEdge,
+                      node_id = ToNodeId},
+            ets:insert(Table, Edge),
+            case IsNew of
+                true ->
+                    added;
+                false ->
+                    kept
+            end
     end.
 
 %% -------------------------------------------------------------------
