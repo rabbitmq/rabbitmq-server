@@ -15,7 +15,7 @@ describe('Once user is logged in', function () {
   let overview
   let captureScreen
   
-  this.timeout(45000) // hard-coded to 25secs because this test requires 35sec to run
+  this.timeout(75000)
 
   before(async function () {
     driver = buildDriver()
@@ -31,9 +31,11 @@ describe('Once user is logged in', function () {
     await idpLogin.login('rabbit_admin', 'rabbit_admin')
     await overview.isLoaded()
 
-    await delay(15000)
-    await overview.isLoaded() // still after accessTokenValiditySeconds = 15 sec
-    await overview.clickOnConnectionsTab() // and we can still interact with the ui
+    await delay(30000)
+    // Still loaded after accessTokenValiditySeconds = 30 sec
+    await overview.isLoaded()
+    // We can still interact with the UI
+    await overview.clickOnConnectionsTab()
   })
 
   after(async function () {

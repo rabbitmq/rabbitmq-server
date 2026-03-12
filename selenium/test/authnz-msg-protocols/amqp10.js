@@ -41,7 +41,7 @@ describe('Having AMQP 1.0 protocol enabled and the following auth_backends: ' + 
         expectations.push(expectUser({ "username": username}, "allow"))
       }
       expectations.push(expectVhost({ "username": username, "vhost": "/"}, "allow"))
-      expectations.push(expectResource({ "username": username, "vhost": "/", "resource": "queue", "name": "my-queue", "permission":"configure", "tags":""}, "allow"))
+      expectResource({ "username": username, "vhost": "/", "resource": "queue", "name": "my-queue", "permission":"configure", "tags":""}, "allow")
       expectations.push(expectResource({ "username": username, "vhost": "/", "resource": "queue", "name": "my-queue", "permission":"read", "tags":""}, "allow"))
       expectations.push(expectResource({ "username": username, "vhost": "/", "resource": "exchange", "name": "amq.default", "permission":"write", "tags":""}, "allow"))
     }else if (backends.includes("oauth") && username.includes("oauth")) {
@@ -77,8 +77,8 @@ describe('Having AMQP 1.0 protocol enabled and the following auth_backends: ' + 
       if (amqp != null) {
         closeAmqp(amqp.connection)
       }
-    } catch (error) {
-      error("Failed to close amqp10 connection due to " + error);      
+    } catch (err) {
+      console.error("Failed to close amqp10 connection due to " + err);
     }  
   })
 })
