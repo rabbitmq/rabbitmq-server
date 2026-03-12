@@ -240,20 +240,28 @@ tcp_connected(info, Msg, StateData) ->
                 fun(NextConnectionStep,
                     #statem_data{transport = Transport,
                                  connection = #stream_connection{socket = S}} =
-                        StatemData,
+                    StatemData,
                     NewConnection,
                     NewConnectionState) ->
-                   if NextConnectionStep =:= peer_properties_exchanged ->
-                          {next_state, peer_properties_exchanged,
-                           StatemData#statem_data{connection = NewConnection,
-                                                  connection_state =
-                                                      NewConnectionState}};
-                      true ->
-                          invalid_transition(Transport,
-                                             S,
-                                             ?FUNCTION_NAME,
-                                             NextConnectionStep)
-                   end
+                        if NextConnectionStep =:= peer_properties_exchanged ->
+                               {next_state, peer_properties_exchanged,
+                                StatemData#statem_data{connection = NewConnection,
+                                                       connection_state =
+                                                       NewConnectionState}};
+                           NextConnectionStep =:= tcp_connected ->
+                               %% No complete frame was parsed from the incoming data
+                               %% (e.g. a partial frame from a TCP segment boundary).
+                               %% Stay in the current state and wait for more data.
+                               {keep_state,
+                                StatemData#statem_data{connection = NewConnection,
+                                                       connection_state =
+                                                       NewConnectionState}};
+                           true ->
+                               invalid_transition(Transport,
+                                                  S,
+                                                  ?FUNCTION_NAME,
+                                                  NextConnectionStep)
+                        end
                 end);
 tcp_connected({call, From}, {info, _Items}, _StateData) ->
     %% must be a CLI call, not ready for this
@@ -276,20 +284,26 @@ peer_properties_exchanged(info, Msg, StateData) ->
                 fun(NextConnectionStep,
                     #statem_data{transport = Transport,
                                  connection = #stream_connection{socket = S}} =
-                        StatemData,
+                    StatemData,
                     NewConnection,
                     NewConnectionState) ->
-                   if NextConnectionStep =:= authenticating ->
-                          {next_state, authenticating,
-                           StatemData#statem_data{connection = NewConnection,
-                                                  connection_state =
-                                                      NewConnectionState}};
-                      true ->
-                          invalid_transition(Transport,
-                                             S,
-                                             ?FUNCTION_NAME,
-                                             NextConnectionStep)
-                   end
+                        if NextConnectionStep =:= authenticating ->
+                               {next_state, authenticating,
+                                StatemData#statem_data{connection = NewConnection,
+                                                       connection_state =
+                                                       NewConnectionState}};
+                           NextConnectionStep =:= peer_properties_exchanged ->
+                               %% No complete frame was parsed from the incoming data.
+                               {keep_state,
+                                StatemData#statem_data{connection = NewConnection,
+                                                       connection_state =
+                                                       NewConnectionState}};
+                           true ->
+                               invalid_transition(Transport,
+                                                  S,
+                                                  ?FUNCTION_NAME,
+                                                  NextConnectionStep)
+                        end
                 end);
 peer_properties_exchanged({call, From}, {info, _Items}, _StateData) ->
     %% must be a CLI call, not ready for this
@@ -311,29 +325,35 @@ authenticating(info, Msg, StateData) ->
                     #statem_data{transport = Transport,
                                  connection = #stream_connection{socket = S},
                                  config =
-                                     #configuration{frame_max = FrameMax,
-                                                    heartbeat = Heartbeat}} =
-                        StatemData,
+                                 #configuration{frame_max = FrameMax,
+                                                heartbeat = Heartbeat}} =
+                    StatemData,
                     NewConnection,
                     NewConnectionState) ->
-                   if NextConnectionStep =:= authenticated ->
-                          Frame =
-                              rabbit_stream_core:frame({tune, FrameMax,
-                                                        Heartbeat}),
-                          send(Transport, S, Frame),
-                          {next_state, tuning,
-                           StatemData#statem_data{connection =
-                                                      NewConnection#stream_connection{connection_step
-                                                                                          =
-                                                                                          tuning},
-                                                  connection_state =
-                                                      NewConnectionState}};
-                      true ->
-                          invalid_transition(Transport,
-                                             S,
-                                             ?FUNCTION_NAME,
-                                             NextConnectionStep)
-                   end
+                        if NextConnectionStep =:= authenticated ->
+                               Frame =
+                               rabbit_stream_core:frame({tune, FrameMax,
+                                                         Heartbeat}),
+                               send(Transport, S, Frame),
+                               {next_state, tuning,
+                                StatemData#statem_data{connection =
+                                                       NewConnection#stream_connection{connection_step
+                                                                                       =
+                                                                                       tuning},
+                                                       connection_state =
+                                                       NewConnectionState}};
+                           NextConnectionStep =:= authenticating ->
+                               %% No complete frame was parsed from the incoming data.
+                               {keep_state,
+                                StatemData#statem_data{connection = NewConnection,
+                                                       connection_state =
+                                                       NewConnectionState}};
+                           true ->
+                               invalid_transition(Transport,
+                                                  S,
+                                                  ?FUNCTION_NAME,
+                                                  NextConnectionStep)
+                        end
                 end);
 authenticating({call, From}, {info, _Items}, _StateData) ->
     %% must be a CLI call, not ready for this
@@ -354,26 +374,32 @@ tuning(info, Msg, StateData) ->
                     #statem_data{transport = Transport,
                                  connection = #stream_connection{socket = S},
                                  config = Configuration} =
-                        StatemData,
+                    StatemData,
                     NewConnection,
                     NewConnectionState) ->
-                   case NextConnectionStep of
-                       tuned ->
-                           {next_state, tuned,
-                            StatemData#statem_data{connection = NewConnection,
-                                                   connection_state =
-                                                       NewConnectionState}};
-                       opened ->
-                           transition_to_opened(Transport,
-                                                Configuration,
-                                                NewConnection,
-                                                NewConnectionState);
-                       _ ->
-                           invalid_transition(Transport,
-                                              S,
-                                              ?FUNCTION_NAME,
-                                              NextConnectionStep)
-                   end
+                        case NextConnectionStep of
+                            tuned ->
+                                {next_state, tuned,
+                                 StatemData#statem_data{connection = NewConnection,
+                                                        connection_state =
+                                                        NewConnectionState}};
+                            opened ->
+                                transition_to_opened(Transport,
+                                                     Configuration,
+                                                     NewConnection,
+                                                     NewConnectionState);
+                            tuning ->
+                                %% No complete frame was parsed from the incoming data.
+                                {keep_state,
+                                 StatemData#statem_data{connection = NewConnection,
+                                                        connection_state =
+                                                        NewConnectionState}};
+                            _ ->
+                                invalid_transition(Transport,
+                                                   S,
+                                                   ?FUNCTION_NAME,
+                                                   NextConnectionStep)
+                        end
                 end);
 tuning({call, From}, {info, _Items}, _StateData) ->
     %% must be a CLI call, not ready for this
@@ -393,7 +419,8 @@ tuned(info, Msg, StateData) ->
                 fun(NextConnectionStep,
                     #statem_data{transport = Transport,
                                  connection = #stream_connection{socket = S},
-                                 config = Configuration},
+                                 config = Configuration} =
+                        StatemData,
                     NewConnection,
                     NewConnectionState) ->
                    if NextConnectionStep =:= opened ->
@@ -401,6 +428,12 @@ tuned(info, Msg, StateData) ->
                                                Configuration,
                                                NewConnection,
                                                NewConnectionState);
+                      NextConnectionStep =:= tuned ->
+                          %% No complete frame was parsed from the incoming data.
+                          {keep_state,
+                           StatemData#statem_data{connection = NewConnection,
+                                                  connection_state =
+                                                      NewConnectionState}};
                       true ->
                           invalid_transition(Transport,
                                              S,
@@ -1512,6 +1545,9 @@ handle_frame_pre_auth(Transport,
 handle_frame_pre_auth(_Transport, Connection, State, heartbeat) ->
     ?LOG_DEBUG("Received heartbeat frame pre auth"),
     {Connection, State};
+handle_frame_pre_auth(_Transport, Connection, State, {unknown, _}) ->
+    ?LOG_DEBUG("Received unrecognised data before authentication, closing connection."),
+    {Connection#stream_connection{connection_step = failure}, State};
 handle_frame_pre_auth(_Transport, Connection, State, Command) ->
     ?LOG_WARNING("unknown command ~w, closing connection.",
                                   [Command]),
@@ -2801,16 +2837,17 @@ handle_frame_post_auth(_Transport, Connection, State, heartbeat) ->
 handle_frame_post_auth(Transport,
                        #stream_connection{socket = S} = Connection,
                        State,
+                       {unknown, _}) ->
+    ?LOG_WARNING("Received unrecognised data after authentication, sending close command."),
+    send_close_and_increment(Transport, S),
+    {Connection#stream_connection{connection_step = close_sent}, State};
+handle_frame_post_auth(Transport,
+                       #stream_connection{socket = S} = Connection,
+                       State,
                        Command) ->
     ?LOG_WARNING("unknown command ~tp, sending close command.",
                        [Command]),
-    CloseReason = <<"unknown frame">>,
-    Frame =
-        rabbit_stream_core:frame({request, 1,
-                                  {close, ?RESPONSE_CODE_UNKNOWN_FRAME,
-                                   CloseReason}}),
-    send(Transport, S, Frame),
-    increase_protocol_counter(?UNKNOWN_FRAME),
+    send_close_and_increment(Transport, S),
     {Connection#stream_connection{connection_step = close_sent}, State}.
 
 complete_secret_update(NewUser = #user{username = Username},
@@ -4055,6 +4092,15 @@ resolve_offset_spec(MemberPid, OffsetSpec, Options) ->
 -spec send(module(), rabbit_net:socket(), iodata()) -> ok.
 send(Transport, Socket, Data) when is_atom(Transport) ->
     Transport:send(Socket, Data).
+
+send_close_and_increment(Transport, S) ->
+    CloseReason = <<"unknown frame">>,
+    Frame =
+        rabbit_stream_core:frame({request, 1,
+                                  {close, ?RESPONSE_CODE_UNKNOWN_FRAME,
+                                   CloseReason}}),
+    send(Transport, S, Frame),
+    increase_protocol_counter(?UNKNOWN_FRAME).
 
 get_chunk_selector(Properties) ->
     binary_to_atom(maps:get(<<"chunk_selector">>, Properties,
