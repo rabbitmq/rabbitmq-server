@@ -1,5 +1,5 @@
 
-$(document).ready(function() {    
+$(document).ready(function() {
   var url_string = window.location.href;
   var url = new URL(url_string);
   var error = url.searchParams.get('error');
@@ -91,7 +91,7 @@ function start_app_login () {
       });
     }
   })
-  
+
   if (oauth.enabled) {
     if (has_auth_credentials()) {
       check_login();
@@ -345,7 +345,7 @@ function go_to_home() {
     // location.href = rabbit_path_prefix() + "/"
     location.href =  "/"
   }
-  
+
 function set_timer_interval(interval) {
     timer_interval = interval;
     reset_timer();
@@ -1411,10 +1411,28 @@ function with_req(method, path, body, fun, on404fun) {
             if (ix != -1) {
                 outstanding_reqs.splice(ix, 1);
             }
+            // This avoids a 401 error displayed when the user changes their password
+            // via the management UI and then the next auto-refresh request fails
+            // with the old (now invalid) credentials.
+            if (req.status === 401 && method === 'GET') {
+                if (window.own_creds_changed_at &&
+                    (Date.now() - window.own_creds_changed_at) < 10000) {
+                    console.debug("Suppressing 401 on auto-refresh within grace period after credential change");
+                    // Use a dummy empty response to maintain the callback chain and allow
+                    // the page to render with stale data for one refresh, and the updates
+                    // as usual.
+                    var emptyResponse = {
+                        responseText: '{}',
+                        status: 200
+                    };
+                    fun(emptyResponse);
+                    return;
+                }
+            }
             if (check_bad_response(req, !on404fun, on404fun)) {
                 last_successful_connect = new Date();
                 fun(req);
-            } 
+            }
         }
     };
     outstanding_reqs.push(req);
@@ -1502,12 +1520,12 @@ function sync_req(type, params0, path_template, options) {
 }
 function initiate_logout(oauth, error = "") {
     clear_pref('auth');
-    clear_cookie_value('auth');    
+    clear_cookie_value('auth');
     renderWarningMessageInLoginStatus(oauth, error);
 }
 /**
  * Handle bad http response
- * @param {*} req 
+ * @param {*} req
  * @param {*} full_page_404 In case of 404, reload entire html page with the error message
  * @param {*} on404fun In case of 404, call this function or else show a popup error message
  * @returns true if there was no bad response
@@ -1532,10 +1550,10 @@ function check_bad_response(req, full_page_404, on404fun) {
         if (typeof(reason) != 'string') {
             reason = JSON.stringify(reason);
         }
-        if (    error == 'bad_request' || 
-                error == 'not_found'  || 
-                reason == 'Not Found' || 
-                error == 'not_authorised' || 
+        if (    error == 'bad_request' ||
+                error == 'not_found'  ||
+                reason == 'Not Found' ||
+                error == 'not_authorised' ||
                 error == 'not_authorized') {
             if ((req.status == 401 || req.status == 403) && oauth.enabled) {
                 initiate_logout(oauth, reason);
@@ -1852,7 +1870,7 @@ function is_internal(queue) {
     return queue.internal;
 }
 
-function get_queue_type (queue) {    
+function get_queue_type (queue) {
     switch(queue.type) {
         case "classic":
         case "quorum":

@@ -238,9 +238,26 @@ dispatcher_add(function(sammy) {
             }
             return false;
         });
-      sammy.put('#/users-modify', function() {
-            if (sync_put(this, '/users/:username'))
+      sammy.put('#/users-modify', function () {
+            // This avoids a 401 error displayed when the user changes their password
+            // via the management UI and then the next auto-refresh request fails
+            // with the old (now invalid) credentials.
+            var username = this.params['username'];
+            var isOwnUser = user && user.name &&
+                            username && username === user.name;
+            if (isOwnUser) {
+                pause_auto_refresh();
+                window.own_creds_changed_at = Date.now();
+                setTimeout(resume_auto_refresh, 15000);
+            }
+            if (sync_put(this, '/users/:username')) {
                 go_to('#/users');
+            } else {
+                if (isOwnUser) {
+                    resume_auto_refresh();
+                    window.own_creds_changed_at = null;
+                }
+            }
             return false;
         });
       sammy.del('#/users', function() {
