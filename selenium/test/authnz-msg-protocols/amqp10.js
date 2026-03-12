@@ -77,8 +77,8 @@ describe('Having AMQP 1.0 protocol enabled and the following auth_backends: ' + 
       if (amqp != null) {
         closeAmqp(amqp.connection)
       }
-    } catch (error) {
-      error("Failed to close amqp10 connection due to " + error);      
+    } catch (err) {
+      console.error("Failed to close amqp10 connection due to " + err);
     }  
   })
 })
