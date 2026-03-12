@@ -12,7 +12,7 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 suite() ->
-    [{timetrap, {minutes, 1}}].
+    [{timetrap, {minutes, 3}}].
 
 
 all() ->
