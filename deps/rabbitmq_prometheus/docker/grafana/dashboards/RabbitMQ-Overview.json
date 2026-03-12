@@ -1800,7 +1800,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rabbitmq_disk_space_available_bytes * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\", rabbitmq_endpoint=\"$endpoint\"}",
+          "expr": "(rabbitmq_disk_space_available_bytes - rabbitmq_disk_space_available_limit_bytes) * on(instance,job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\",namespace=\"$namespace\", rabbitmq_endpoint=\"$endpoint\"}",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
