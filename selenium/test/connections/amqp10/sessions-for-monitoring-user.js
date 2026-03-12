@@ -43,12 +43,14 @@ describe('Given an amqp10 connection opened, listed and clicked on it', function
     await overview.isLoaded()
 
 
-    amqp = openAmqp()    
+    amqp = openAmqp('/queues/my-queue')
     await untilConnectionEstablished
     await overview.clickOnConnectionsTab()    
     await connectionsPage.isLoaded()
 
-    connections_table = await connectionsPage.getConnectionsTable(20)
+    connections_table = await doUntil(
+      function() { return connectionsPage.getConnectionsTable(20) },
+      function(table) { return table.length > 0 })
     assert.equal(1, connections_table.length)
     await connectionsPage.clickOnConnection(2)
     await connectionPage.isLoaded()
@@ -72,7 +74,7 @@ describe('Given an amqp10 connection opened, listed and clicked on it', function
     let incomingLink = connectionPage.getIncomingLinkInfo(sessions.incoming_links, 0)
     assert.equal(1, incomingLink.handle)
     assert.equal("sender-link", incomingLink.name)
-    assert.equal("my-queue", incomingLink.targetAddress)
+    assert.equal("/queues/my-queue", incomingLink.targetAddress)
     assert.equal("mixed", incomingLink.sndSettleMode)
     assert.equal("0", incomingLink.unconfirmedMessages)
     assert.equal(1, incomingLink.deliveryCount)
@@ -80,7 +82,7 @@ describe('Given an amqp10 connection opened, listed and clicked on it', function
     let outgoingLink = connectionPage.getOutgoingLinkInfo(sessions.outgoing_links, 0)
     assert.equal(0, outgoingLink.handle)
     assert.equal("receiver-link", outgoingLink.name)
-    assert.equal("my-queue", outgoingLink.sourceAddress)
+    assert.equal("/queues/my-queue", outgoingLink.sourceAddress)
     assert.equal("my-queue", outgoingLink.queueName)
     
     assert.equal(false, outgoingLink.sendSettled)
@@ -98,9 +100,12 @@ describe('Given an amqp10 connection opened, listed and clicked on it', function
     await untilMessageReceived
     assert.equal(2, receivedAmqpMessageCount)
 
-    await delay(5*1000) // wait until page refreshes
     let sessions = await doUntil(function() { return connectionPage.getSessions() },
-      function(obj) { return obj != undefined })
+      function(obj) {
+        if (obj == undefined) return false
+        let link = connectionPage.getIncomingLinkInfo(obj.incoming_links, 0)
+        return link.deliveryCount == 2
+      }, 2000)
     let incomingLink = connectionPage.getIncomingLinkInfo(sessions.incoming_links, 0)
     assert.equal(2, incomingLink.deliveryCount)
     
