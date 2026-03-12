@@ -61,6 +61,15 @@
       "name": "other"
     }
   ],
+  "queues": [
+    {
+      "name": "my-queue",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    }
+  ],
   "permissions": [
     {
       "user": "guest",
