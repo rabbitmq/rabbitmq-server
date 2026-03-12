@@ -46,7 +46,7 @@ module.exports = {
         connectionOptions.username + ":" + connectionOptions.password + "@" +
         connectionOptions.host + ":" + connectionOptions.port
   },
-  open: (queueName = "my-queue") => {
+  open: (queueName = "/queues/my-queue") => {
     let promise = new Promise((resolve, reject) => {
       container.on('connection_open', function(context) {
         resolve()
@@ -72,7 +72,7 @@ module.exports = {
       'sender' : sender
     }
   },
-  openReceiver: (handler, queueName = "my-queue") => {
+  openReceiver: (handler, queueName = "/queues/my-queue") => {
       return handler.connection.open_receiver({
         source: queueName,
         target: 'receiver-target',
