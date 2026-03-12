@@ -4,16 +4,19 @@
 %%
 %% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
-%% There are two types of alarms handled by this module:
+%% There is only one type of alarms handled by this module:
 %%
 %% * per-node resource (disk, memory) alarms for the whole cluster. If any node
 %%   has an alarm, then all publishing should be disabled across the
 %%   cluster until all alarms clear. When a node sets such an alarm,
 %%   this information is automatically propagated throughout the cluster.
 %%   `#alarms.alarmed_nodes' is being used to track this type of alarms.
-%% * limits local to this node (file_descriptor_limit). Used for information
-%%   purposes only: logging and getting node status. This information is not propagated
-%%   throughout the cluster. `#alarms.alarms' is being used to track this type of alarms.
+%%
+%% There used to be another type of alarm that has been removed
+%% but could be recovered from Git:
+%%
+%% * limits local to this node. Used for information purposes only:
+%%   logging and getting node status. This information is not propagated.
 %% @end
 
 -module(rabbit_alarm).
@@ -36,21 +39,18 @@
 
 -define(SERVER, ?MODULE).
 
--define(FILE_DESCRIPTOR_RESOURCE, <<"file descriptors">>).
 -define(MEMORY_RESOURCE, <<"memory">>).
 -define(DISK_SPACE_RESOURCE, <<"disk space">>).
 
 %%----------------------------------------------------------------------------
 
 -record(alarms, {alertees :: dict:dict(pid(), rabbit_types:mfargs()),
-                 alarmed_nodes :: dict:dict(node(), [resource_alarm_source()]),
-                 alarms :: [alarm()]}).
+                 alarmed_nodes :: dict:dict(node(), [resource_alarm_source()])}).
 
 -export_type([alarm/0]).
--type local_alarm() :: 'file_descriptor_limit'.
 -type resource_alarm_source() :: 'disk' | 'memory'.
 -type resource_alarm() :: {resource_limit, resource_alarm_source(), node()}.
--type alarm() :: local_alarm() | resource_alarm().
+-type alarm() :: resource_alarm().
 -type resource_alert() :: {WasAlarmSetForNode :: boolean(),
                            IsThereAnyAlarmWithSameSourceInTheCluster :: boolean(),
                            NodeForWhichAlarmWasSetOrCleared :: node()}.
@@ -120,16 +120,10 @@ filter_local_alarms(Alarms) ->
     lists:filter(fun is_local/1, Alarms).
 
 -spec is_local({alarm(), any()}) -> boolean().
-is_local({file_descriptor_limit, _}) -> true;
 is_local({{resource_limit, _Resource, Node}, _}) when Node =:= node() -> true;
 is_local({{resource_limit, _Resource, Node}, _}) when Node =/= node() -> false.
 
 -spec format_as_map(alarm()) -> #{binary() => term()}.
-format_as_map(file_descriptor_limit) ->
-    #{
-        <<"resource">> => ?FILE_DESCRIPTOR_RESOURCE,
-        <<"node">> => node()
-    };
 format_as_map({resource_limit, disk, Node}) ->
     #{
         <<"resource">> => ?DISK_SPACE_RESOURCE,
@@ -151,7 +145,6 @@ format_as_maps(Alarms) when is_list(Alarms) ->
     %% get_alarms/0 returns
     %%
     %%  [
-    %%    {file_descriptor_limit, []},
     %%    {{resource_limit, disk,   rabbit@warp10}, []},
     %%    {{resource_limit, memory, rabbit@warp10}, []}
     %%  ]
@@ -178,8 +171,7 @@ remote_conserve_resources(Pid, Source, {false, _, _}) ->
 
 init([]) ->
     {ok, #alarms{alertees      = dict:new(),
-                 alarmed_nodes = dict:new(),
-                 alarms        = []}}.
+                 alarmed_nodes = dict:new()}}.
 
 handle_call({register, Pid, AlertMFA}, State = #alarms{alarmed_nodes = AN}) ->
     {ok, lists:usort(lists:append([V || {_, V} <- dict:to_list(AN)])),
@@ -203,12 +195,6 @@ handle_event({set_alarm, {{resource_limit, Source, Node}, []}}, State) ->
                                             {node, Node}]),
             handle_set_resource_alarm(Source, Node, State)
     end;
-handle_event({set_alarm, Alarm}, State = #alarms{alarms = Alarms}) ->
-    case lists:member(Alarm, Alarms) of
-        true  -> {ok, State};
-        false -> UpdatedAlarms = lists:usort([Alarm|Alarms]),
-                 handle_set_alarm(Alarm, State#alarms{alarms = UpdatedAlarms})
-    end;
 
 handle_event({clear_alarm, {resource_limit, Source, Node}}, State) ->
     case is_node_alarmed(Source, Node, State) of
@@ -218,14 +204,6 @@ handle_event({clear_alarm, {resource_limit, Source, Node}}, State) ->
             handle_clear_resource_alarm(Source, Node, State);
         false ->
             {ok, State}
-    end;
-handle_event({clear_alarm, Alarm}, State = #alarms{alarms = Alarms}) ->
-    case lists:keymember(Alarm, 1, Alarms) of
-        true  -> handle_clear_alarm(
-                   Alarm, State#alarms{alarms = lists:keydelete(
-                                                  Alarm, 1, Alarms)});
-        false -> {ok, State}
-
     end;
 
 handle_event({node_up, Node}, State) ->
@@ -337,28 +315,10 @@ handle_set_resource_alarm(Source, Node, State) ->
       [Source, Node]),
     {ok, maybe_alert(fun dict_append/3, Node, Source, true, State)}.
 
-handle_set_alarm({file_descriptor_limit, []}, State) ->
-    ?LOG_WARNING(
-      "file descriptor limit alarm set.~n~n"
-      "********************************************************************~n"
-      "*** New connections will not be accepted until this alarm clears ***~n"
-      "********************************************************************~n"),
-    {ok, State};
-handle_set_alarm(Alarm, State) ->
-    ?LOG_WARNING("alarm '~tp' set", [Alarm]),
-    {ok, State}.
-
 handle_clear_resource_alarm(Source, Node, State) ->
     ?LOG_WARNING("~ts resource limit alarm cleared on node ~tp",
                  [Source, Node]),
     {ok, maybe_alert(fun dict_unappend/3, Node, Source, false, State)}.
-
-handle_clear_alarm(file_descriptor_limit, State) ->
-    ?LOG_WARNING("file descriptor limit alarm cleared~n"),
-    {ok, State};
-handle_clear_alarm(Alarm, State) ->
-    ?LOG_WARNING("alarm '~tp' cleared", [Alarm]),
-    {ok, State}.
 
 is_node_alarmed(Source, Node, #alarms{alarmed_nodes = AN}) ->
     case dict:find(Node, AN) of
@@ -368,7 +328,6 @@ is_node_alarmed(Source, Node, #alarms{alarmed_nodes = AN}) ->
             false
     end.
 
-compute_alarms(#alarms{alarms = Alarms,
-                   alarmed_nodes = AN}) ->
-    Alarms ++ [ {{resource_limit, Source, Node}, []}
-                || {Node, Sources} <- dict:to_list(AN), Source <- Sources ].
+compute_alarms(#alarms{alarmed_nodes = AN}) ->
+    [ {{resource_limit, Source, Node}, []}
+      || {Node, Sources} <- dict:to_list(AN), Source <- Sources ].

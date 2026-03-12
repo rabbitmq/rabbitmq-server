@@ -6,13 +6,13 @@
 
 defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckLocalAlarmsCommand do
   @moduledoc """
-  Exits with a non-zero code if the target node reports any local alarms.
+  DEPRECATED. This command is a no-op.
 
-  This command is meant to be used in health checks.
+  Local alarms (e.g. file descriptor limits) have been removed.
+  All alarms are now cluster-wide resource alarms.
   """
 
-  import RabbitMQ.CLI.Core.Alarms
-  import RabbitMQ.CLI.Core.Platform, only: [line_separator: 0]
+  alias RabbitMQ.CLI.Core.DocGuide
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -21,23 +21,8 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckLocalAlarmsCommand do
   use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
-  def run([], %{node: node_name, timeout: timeout}) do
-    # Example response when there are alarms:
-    #
-    # [
-    #  file_descriptor_limit,
-    #  {{resource_limit,disk,hare@warp10},[]},
-    #  {{resource_limit,memory,hare@warp10},[]},
-    #  {{resource_limit,disk,rabbit@warp10},[]},
-    #  {{resource_limit,memory,rabbit@warp10},[]}
-    # ]
-    #
-    # The topmost file_descriptor_limit alarm is node-local.
-    case :rabbit_misc.rpc_call(node_name, :rabbit_alarm, :get_alarms, [], timeout) do
-      [] -> []
-      xs when is_list(xs) -> local_alarms(xs, node_name)
-      other -> other
-    end
+  def run([], _opts) do
+    []
   end
 
   def output([], %{formatter: "json"}) do
@@ -52,35 +37,24 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckLocalAlarmsCommand do
     {:ok, "Node #{node_name} reported no local alarms"}
   end
 
-  def output(alarms, %{node: node_name, formatter: "json"}) do
-    {:error, :check_failed,
-     %{
-       "result" => "error",
-       "local" => alarm_lines(alarms, node_name),
-       "message" => "Node #{node_name} reported local alarms"
-     }}
-  end
-
-  def output(_alarms, %{silent: true}) do
-    {:error, :check_failed}
-  end
-
-  def output(alarms, %{node: node_name}) do
-    lines = alarm_lines(alarms, node_name)
-
-    {:error, Enum.join(lines, line_separator())}
-  end
-
   use RabbitMQ.CLI.DefaultOutput
 
-  def help_section(), do: :observability_and_health_checks
+  def help_section(), do: :deprecated
 
-  def description(),
-    do: "Health check that exits with a non-zero code if the target node reports any local alarms"
+  def description() do
+    "DEPRECATED. This command is a no-op. Local alarms have been removed. " <>
+      "See https://www.rabbitmq.com/alarms.html"
+  end
 
   def usage, do: "check_local_alarms"
 
-  def banner([], %{node: node_name}) do
-    "Asking node #{node_name} to report any local resource alarms ..."
+  def usage_doc_guides() do
+    [
+      DocGuide.alarms()
+    ]
+  end
+
+  def banner([], _opts) do
+    ["This command is DEPRECATED and is a no-op. It will be removed in a future version."]
   end
 end

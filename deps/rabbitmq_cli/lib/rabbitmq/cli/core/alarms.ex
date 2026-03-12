@@ -5,11 +5,8 @@
 ## Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Core.Alarms do
-  def alarm_lines(alarms, node_name) do
+  def alarm_lines(alarms) do
     Enum.reduce(alarms, [], fn
-      :file_descriptor_limit, acc ->
-        ["File descriptor limit alarm on node #{node_name}" | acc]
-
       {{:resource_limit, :memory, alarmed_node_name}, _}, acc ->
         ["Memory alarm on node #{alarmed_node_name}" | acc]
 
@@ -29,10 +26,6 @@ defmodule RabbitMQ.CLI.Core.Alarms do
     Enum.filter(
       alarms,
       fn
-        # local by definition
-        :file_descriptor_limit ->
-          true
-
         {{:resource_limit, _, a_node}, _} ->
           node_name == a_node
       end
@@ -41,7 +34,6 @@ defmodule RabbitMQ.CLI.Core.Alarms do
 
   def clusterwide_alarms(alarms, node_name) do
     alarms
-    |> Enum.reject(fn x -> x == :file_descriptor_limit end)
     |> Enum.filter(fn {{:resource_limit, _, a_node}, _} ->
       a_node != node_name
     end)
@@ -65,14 +57,6 @@ defmodule RabbitMQ.CLI.Core.Alarms do
 
   def alarm_maps(xs) do
     Enum.map(xs, &alarm_map/1)
-  end
-
-  def alarm_map(:file_descriptor_limit) do
-    %{
-      type: :resource_limit,
-      resource: :file_descriptors,
-      node: node()
-    }
   end
 
   def alarm_map({{:resource_limit, resource, node}, _}) do

@@ -82,14 +82,9 @@ defmodule CheckAlarmsCommandTest do
   test "output: when target node has an alarm in effect, returns a failure", context do
     for input <- [
           [
-            :file_descriptor_limit
-          ],
-          [
-            :file_descriptor_limit,
             {{:resource_limit, :disk, :hare@warp10}, []}
           ],
           [
-            :file_descriptor_limit,
             {{:resource_limit, :disk, :hare@warp10}, []},
             {{:resource_limit, :memory, :hare@warp10}, []},
             {{:resource_limit, :disk, :rabbit@warp10}, []},
@@ -104,14 +99,9 @@ defmodule CheckAlarmsCommandTest do
        _context do
     for input <- [
           [
-            :file_descriptor_limit
-          ],
-          [
-            :file_descriptor_limit,
             {{:resource_limit, :disk, :hare@warp10}, []}
           ],
           [
-            :file_descriptor_limit,
             {{:resource_limit, :disk, :hare@warp10}, []},
             {{:resource_limit, :memory, :hare@warp10}, []},
             {{:resource_limit, :disk, :rabbit@warp10}, []},

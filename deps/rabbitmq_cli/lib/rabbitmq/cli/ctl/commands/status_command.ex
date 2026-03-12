@@ -139,7 +139,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
       ] ++
         case m[:alarms] do
           [] -> ["(none)"]
-          xs -> alarm_lines(xs, node_name)
+          xs -> alarm_lines(xs)
         end
 
     tags_section =

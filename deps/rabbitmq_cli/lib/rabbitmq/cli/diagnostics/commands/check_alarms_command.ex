@@ -26,14 +26,11 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckAlarmsCommand do
     # Example response when there are alarms:
     #
     # [
-    #  file_descriptor_limit,
     #  {{resource_limit,disk,hare@warp10},[]},
     #  {{resource_limit,memory,hare@warp10},[]},
     #  {{resource_limit,disk,rabbit@warp10},[]},
     #  {{resource_limit,memory,rabbit@warp10},[]}
     # ]
-    #
-    # The topmost file_descriptor_limit alarm is node-local.
     :rabbit_misc.rpc_call(node_name, :rabbit_alarm, :get_alarms, [], timeout)
   end
 
@@ -56,8 +53,8 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckAlarmsCommand do
     {:error, :check_failed,
      %{
        "result" => "error",
-       "local" => alarm_lines(local, node_name),
-       "global" => alarm_lines(global, node_name),
+       "local" => alarm_lines(local),
+       "global" => alarm_lines(global),
        "message" => "Node #{node_name} reported alarms"
      }}
   end
@@ -66,8 +63,8 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckAlarmsCommand do
     {:error, :check_failed}
   end
 
-  def output(alarms, %{node: node_name}) when is_list(alarms) do
-    lines = alarm_lines(alarms, node_name)
+  def output(alarms, %{}) when is_list(alarms) do
+    lines = alarm_lines(alarms)
 
     {:error, :check_failed, Enum.join(lines, line_separator())}
   end

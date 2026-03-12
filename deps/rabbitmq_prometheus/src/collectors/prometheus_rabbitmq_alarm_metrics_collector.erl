@@ -37,19 +37,11 @@ collect_mf(_Registry, Callback) ->
             lists:foldl(fun ({{resource_limit, disk, _}, _}, Acc) ->
                                 maps:put(disk_limit, 1, Acc);
                             ({{resource_limit, memory, _}, _}, Acc) ->
-                                maps:put(memory_limit, 1, Acc);
-                            ({file_descriptor_limit, _}, Acc) ->
-                                maps:put(file_descriptor_limit, 1, Acc)
+                                maps:put(memory_limit, 1, Acc)
                         end,
                         #{},
                         Alarms),
 
-        Callback(create_mf(?METRIC_NAME(<<"file_descriptor_limit">>),
-                           <<"is 1 if file descriptor limit alarm is in effect">>,
-                           untyped,
-                           [untyped_metric(maps:get(file_descriptor_limit,
-                                                    ActiveAlarms,
-                                                    0))])),
         Callback(create_mf(?METRIC_NAME(<<"free_disk_space_watermark">>),
                            <<"is 1 if free disk space watermark alarm is in effect">>,
                            untyped,

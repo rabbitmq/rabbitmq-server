@@ -154,9 +154,9 @@ local_alarms_test(Config) ->
     Check0 = http_get(Config, EndpointPath, ?OK),
     ?assertEqual(<<"ok">>, maps:get(status, Check0)),
 
-    ok = rabbit_ct_broker_helpers:set_alarm(Config, Server, file_descriptor_limit),
+    ok = rabbit_ct_broker_helpers:set_alarm(Config, Server, memory),
     rabbit_ct_helpers:await_condition(
-        fun() -> rabbit_ct_broker_helpers:get_alarms(Config, Server) =/= [] end
+        fun() -> rabbit_ct_broker_helpers:get_local_alarms(Config, Server) =/= [] end
     ),
 
     Body = http_get_failed(Config, EndpointPath),
@@ -169,7 +169,6 @@ local_alarms_test(Config) ->
     ),
 
     passed.
-
 
 is_quorum_critical_single_node_test(Config) ->
     EndpointPath = "/health/checks/node-is-quorum-critical",
