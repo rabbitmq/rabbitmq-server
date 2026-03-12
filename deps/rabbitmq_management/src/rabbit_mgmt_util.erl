@@ -739,8 +739,22 @@ read_complete_body(Req0, Acc, BodySizeLimit) ->
             {error, http_body_limit_exceeded, BodySizeLimit, N};
         false ->
             case cowboy_req:read_body(Req0) of
-                {ok, Data, Req}   -> {ok, <<Acc/binary, Data/binary>>, Req};
-                {more, Data, Req} -> read_complete_body(Req, <<Acc/binary, Data/binary>>)
+                {ok, Data, Req} ->
+                    Total = <<Acc/binary, Data/binary>>,
+                    case byte_size(Total) > BodySizeLimit of
+                        true ->
+                            {error, http_body_limit_exceeded, BodySizeLimit, byte_size(Total)};
+                        false ->
+                            {ok, Total, Req}
+                    end;
+                {more, Data, Req} ->
+                    Total = <<Acc/binary, Data/binary>>,
+                    case byte_size(Total) > BodySizeLimit of
+                        true ->
+                            {error, http_body_limit_exceeded, BodySizeLimit, byte_size(Total)};
+                        false ->
+                            read_complete_body(Req, Total, BodySizeLimit)
+                    end
             end
     end.
 
@@ -764,8 +778,16 @@ do_read_complete_body_with_limit(Req0, Acc, BodySizeLimit) ->
             {error, http_body_limit_exceeded, BodySizeLimit, N};
         false ->
             case cowboy_req:read_body(Req0, #{length => BodySizeLimit, period => 30000}) of
-                {ok, Data, Req}   -> {ok, <<Acc/binary, Data/binary>>, Req};
-                {more, Data, Req} -> do_read_complete_body_with_limit(Req, <<Acc/binary, Data/binary>>, BodySizeLimit)
+                {ok, Data, Req} ->
+                    Total = <<Acc/binary, Data/binary>>,
+                    case byte_size(Total) > BodySizeLimit of
+                        true ->
+                            {error, http_body_limit_exceeded, BodySizeLimit, byte_size(Total)};
+                        false ->
+                            {ok, Total, Req}
+                    end;
+                {more, Data, Req} ->
+                    do_read_complete_body_with_limit(Req, <<Acc/binary, Data/binary>>, BodySizeLimit)
             end
     end.
 
@@ -890,16 +912,21 @@ with_vhost_and_props(Fun, ReqData, Context) ->
             not_found(rabbit_data_coercion:to_binary("vhost_not_found"),
                       ReqData, Context);
         VHost ->
-            {ok, Body, ReqData1} = read_complete_body(ReqData),
-            case decode(Body) of
-                {ok, Props} ->
-                    try
-                        Fun(VHost, Props, ReqData1)
-                    catch {error, Error} ->
-                            bad_request(Error, ReqData1, Context)
-                    end;
-                {error, Reason} ->
-                    bad_request(Reason, ReqData1, Context)
+            case read_complete_body(ReqData) of
+                {error, http_body_limit_exceeded, LimitApplied, BytesRead} ->
+                    ?LOG_WARNING("HTTP API: request exceeded maximum allowed payload size (limit: ~tp bytes, payload size: ~tp bytes)", [LimitApplied, BytesRead]),
+                    bad_request("Exceeded HTTP request body size limit", ReqData, Context);
+                {ok, Body, ReqData1} ->
+                    case decode(Body) of
+                        {ok, Props} ->
+                            try
+                                Fun(VHost, Props, ReqData1)
+                            catch {error, Error} ->
+                                    bad_request(Error, ReqData1, Context)
+                            end;
+                        {error, Reason} ->
+                            bad_request(Reason, ReqData1, Context)
+                    end
             end
     end.
 
