@@ -13,7 +13,7 @@ describe('Once user logs in with its own token', function () {
   let homePage
   let fakePortal
   let captureScreen
-  this.timeout(17000)
+  this.timeout(65000)
 
   before(async function () {
     driver = buildDriver()
@@ -32,7 +32,7 @@ describe('Once user logs in with its own token', function () {
 
   describe('when the token expires', function () {
     before(async function () {
-      await delay(15000)
+      await delay(30000)
     })
 
     it('user should be presented with a login button to log in', async function () {
