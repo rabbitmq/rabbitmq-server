@@ -219,7 +219,7 @@ setup_amqp10_source_shovel(Config, SourceQueue, DestQueue, AckMode) ->
                  [{uris, [rabbit_misc:format("amqp://~ts:~b/%2f?heartbeat=5",
                                              [Hostname, Port])]},
                   {declarations,
-                   [{'queue.declare', [{queue, DestQueue}, auto_delete]}]},
+                   [{'queue.declare', [{queue, DestQueue}, durable]}]},
                   {publish_fields, [{exchange, <<>>},
                                     {routing_key, DestQueue}]},
                   {publish_properties, [{delivery_mode, 2},
