@@ -217,12 +217,12 @@ clean_subscriptions_should_remove_only_affected_subscriptions_test(_) ->
 partial_frame_buffering_test(_) ->
     Init = rabbit_stream_core:init(undefined),
 
-    State1 = rabbit_stream_core:incoming_data(<<0, 0, 0, 4>>, Init),
+    State1 = rabbit_stream_core:incoming_data(<<0, 0, 0, 8>>, Init),
     {Commands1, State2} = rabbit_stream_core:all_commands(State1),
 
     ?assertEqual([], Commands1),
 
-    State3 = rabbit_stream_core:incoming_data(<<0, 0, 0, 4>>, State2),
+    State3 = rabbit_stream_core:incoming_data(<<0, 0, 0, 8>>, State2),
     {Commands2, _State4} = rabbit_stream_core:all_commands(State3),
 
     ?assertEqual([], Commands2),
