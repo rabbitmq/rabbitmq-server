@@ -12,8 +12,8 @@
 
 -include("amqqueue.hrl").
 -include("vhost.hrl").
+-include("rabbit_queue_type.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
--include_lib("amqp10_common/include/amqp10_types.hrl").
 -include_lib("kernel/include/logger.hrl").
 
 -export([
@@ -87,15 +87,14 @@
 -type correlation() :: term().
 -type arguments() :: queue_arguments | consumer_arguments.
 -type queue_type() ::  module().
-%% see AMQP 1.0 §2.6.7
--type delivery_count() :: sequence_no().
--type credit() :: uint().
 
 -define(STATE, ?MODULE).
 
 -define(DOWN_KEYS, [name, durable, auto_delete, arguments, pid, type, state]).
 
--type credit_reply_action() :: {credit_reply, rabbit_types:ctag(), delivery_count(), credit(),
+-type credit_reply_action() :: #credit_reply{} |
+                               %% old 6-tuple format for backward compatibility
+                               {credit_reply, rabbit_types:ctag(), delivery_count(), credit(),
                                 Available :: non_neg_integer(), Drain :: boolean()}.
 
 %% anything that the host process needs to do on behalf of the queue type session

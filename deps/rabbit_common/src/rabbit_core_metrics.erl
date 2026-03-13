@@ -256,9 +256,8 @@ consumer_created(ChPid, ConsumerTag, ExclusiveConsume, AckRequired, QName,
 
 consumer_updated(ChPid, ConsumerTag, ExclusiveConsume, AckRequired, QName,
                  PrefetchCount, Active, ActivityStatus, Args) ->
-    ets:insert(consumer_created, {{QName, ChPid, ConsumerTag}, ExclusiveConsume,
-                                   AckRequired, PrefetchCount, Active, ActivityStatus, Args}),
-    ok.
+    consumer_created(ChPid, ConsumerTag, ExclusiveConsume, AckRequired, QName,
+                     PrefetchCount, Active, ActivityStatus, Args).
 
 consumer_deleted(ChPid, ConsumerTag, QName) ->
     ets:delete(consumer_created, {QName, ChPid, ConsumerTag}),
