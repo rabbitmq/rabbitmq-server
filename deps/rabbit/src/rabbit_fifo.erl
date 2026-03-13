@@ -754,32 +754,35 @@ apply_(#{system_time := Ts} = Meta,
     %% Check if single_active consumer is in timeout or suspected_down state
     %% with no checked out messages
     %% and move it back to waiting_consumers if so
-    State2 =
+    {State2, Effects1} =
         case ConsumerStrat of
             single_active ->
                 maps:fold(
                   fun (CKey, #consumer{status = {_, _},
-                                       checked_out = Checked} = Con, S)
+                                       checked_out = Checked} = Con, {S, E})
                         when map_size(Checked) == 0 ->
                           %% Remove from active consumers and add to waiting
-                          %% if the consumer it timedout _and_ it has not
+                          %% if the consumer has timed out _and_ it has no
                           %% remaining messages checked out
                           Consumers = maps:remove(CKey, S#?STATE.consumers),
                           Waiting0 = S#?STATE.waiting_consumers,
                           Waiting = add_waiting({CKey, Con}, Waiting0),
-                          S#?STATE{consumers = Consumers,
-                                   waiting_consumers = Waiting};
+                          S1 = S#?STATE{consumers = Consumers,
+                                        waiting_consumers = Waiting},
+                          E1 = consumer_update_active_effects(
+                                 S1, Con, false, waiting, E),
+                          {S1, E1};
                      (_, _, Acc) ->
                           Acc
-                  end, State1,
+                  end, {State1, Effects0},
                   maps:iterator(State1#?STATE.consumers, ordered));
             _ ->
-                State1
+                {State1, Effects0}
         end,
 
-    {State3, Effects1} = update_next_consumer_timeout(State2, Effects0),
+    {State3, Effects2} = update_next_consumer_timeout(State2, Effects1),
     %% activate SAC
-    {State, Effects} = activate_next_consumer({State3, Effects1}),
+    {State, Effects} = activate_next_consumer({State3, Effects2}),
     checkout(Meta, State0, State, Effects);
 apply_(_Meta, Cmd, State) ->
     %% handle unhandled commands gracefully

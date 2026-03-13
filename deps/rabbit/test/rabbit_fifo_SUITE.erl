@@ -4372,6 +4372,18 @@ sac_consumer_timeout_test(Config) ->
                               [{CK1, #consumer{status = {timeout, up},
                                                timed_out_msg_ids = [0, 1]}}]}
                when map_size(Con) == 1),
+     {assert_effs,
+      fun (Effs) ->
+              %% Consumer1 should be marked as waiting
+              ?ASSERT_EFF({mod_call, rabbit_quorum_queue, update_consumer_handler,
+                           [_, C, _, _, _, false, waiting, _]},
+                          C == C1, Effs),
+              %% Consumer2 should be marked as single_active
+              ?ASSERT_EFF({mod_call, rabbit_quorum_queue, update_consumer_handler,
+                           [_, C, _, _, _, true, single_active, _]},
+                          C == C2, Effs)
+      end},
+     drop_effects,
      {Timeout + 3, rabbit_fifo:make_settle(CK1, [1])},
      ?ASSERT(#rabbit_fifo{consumers = Con,
                           waiting_consumers =
