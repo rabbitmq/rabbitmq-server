@@ -55,16 +55,16 @@ sequenceDiagram
 ```mermaid
 flowchart TB
   A(monitor) --noconnection--> B(status = disconnected, set up timer)
-  B -. timeout .-> C(status = forgotten)
+  B -. timeout .-> C(status = presumed_down)
   B -. nodeup .-> D(reissue monitors, send msg to connections)
   D -. down .-> E(handle connection down)
   D -. connection response .-> F(evaluate impacted groups)
 ```
 
-* composite status for consumers: `{connected, active}`, `{disconnected,active}`, etc.
+* composite status for consumers: `{connected, active}`, `{disconnected, active}`, `{presumed_down, active}`, etc.
 * `disconnected` status can prevent rebalancing in a group, e.g. `{disconnected, active}` (it is impossible to tell the active consumer to step down)
-* consumers in `forgotten` status are ignored during rebalancing
-* it may be necessary to reconcile a group if a `{forgotten, active}` consumer comes back in a group ("evaluate impacted groups" box above).
+* consumers in `presumed_down` status are ignored during rebalancing (they are not eligible)
+* it may be necessary to reconcile a group if a `{presumed_down, active}` consumer comes back in a group ("evaluate impacted groups" box above).
 This is unlikely though.
 
 ### Stale Node Detection

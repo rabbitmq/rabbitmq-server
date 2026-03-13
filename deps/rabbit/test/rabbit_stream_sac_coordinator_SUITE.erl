@@ -56,15 +56,6 @@ init_per_group(_Group, Config) ->
 end_per_group(_Group, _Config) ->
     ok.
 
-init_per_testcase(_TestCase, Config) ->
-    ok = meck:new(rabbit_feature_flags),
-    meck:expect(rabbit_feature_flags, is_enabled, fun (_) -> true end),
-    Config.
-
-end_per_testcase(_TestCase, _Config) ->
-    meck:unload(),
-    ok.
-
 check_conf_test(_) ->
     K = disconnected_timeout,
     Def = 60_000,
@@ -1870,21 +1861,21 @@ state_enter_test(_) ->
 
     assertEmpty(?MOD:state_enter(follower, #{})),
 
-    ?assertEqual(mon_node_eff([N0, N1, N2]),
+    ?assertEqual(mon_node_eff([N0, N1, N2]) ++ mon_proc_eff([P0, P1, P2]),
                  state_enter_leader(#{Id0 => grp([csr(P0), csr(P0), csr(P0)]),
                                       Id1 => grp([csr(P1), csr(P1), csr(P1)]),
                                       Id2 => grp([csr(P2), csr(P2), csr(P2)])})),
 
-    ?assertEqual(mon_node_eff([N0, N1]),
+    ?assertEqual(mon_node_eff([N0, N1]) ++ mon_proc_eff([P0, P1]),
                  state_enter_leader(#{Id0 => grp([csr(P0), csr(P0), csr(P0)]),
                                       Id1 => grp([csr(P1), csr(P1), csr(P1)]),
                                       Id2 => grp([csr(P0), csr(P1), csr(P1)])})),
 
-    ?assertEqual(lists:sort(mon_node_eff([N0, N1]) ++ [timer_eff(P1)]),
+    ?assertEqual(lists:sort(mon_node_eff([N0, N1]) ++ mon_proc_eff([P0, P1]) ++ [timer_eff(P1)]),
                  state_enter_leader(#{Id0 => grp([csr(P0), csr(P1, {disconnected, waiting})]),
                                       Id2 => grp([csr(P0)])})),
 
-    ?assertEqual(lists:sort(mon_node_eff([N0, N1, N2]) ++ timer_eff([P1, P2])),
+    ?assertEqual(lists:sort(mon_node_eff([N0, N1, N2]) ++ mon_proc_eff([P0, P1, P2]) ++ timer_eff([P1, P2])),
                  state_enter_leader(#{Id0 => grp([csr(P0), csr(P1, {disconnected, waiting})]),
                                       Id1 => grp([csr(P0), csr(P2, {disconnected, waiting})]),
                                       Id2 => grp([csr(P0), csr(P1, {disconnected, waiting})])})),
@@ -1897,6 +1888,12 @@ mon_node_eff(Nodes) when is_list(Nodes) ->
     lists:sort([mon_node_eff(N) || N <- Nodes]);
 mon_node_eff(N) ->
     {monitor, node, N}.
+
+mon_proc_eff(Pids) when is_list(Pids) ->
+    lists:sort([mon_proc_eff(P) || P <- Pids]);
+mon_proc_eff(Pid) ->
+    {monitor, process, Pid}.
+
 
 timer_eff(Pids) when is_list(Pids) ->
     lists:sort([timer_eff(Pid) || Pid <- Pids]);
