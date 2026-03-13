@@ -644,8 +644,15 @@ handle_queue_actions(Actions, State) ->
     lists:foldl(
       fun({deliver, _CTag, AckRequired, Msgs}, S0) ->
               handle_deliver(AckRequired, Msgs, S0);
-         ({credit_reply, _, _, _, _, _} = Action, S0) ->
-              handle_credit_reply(Action, S0);
+         (Action, S) when element(1, Action) =:= credit_reply ->
+              A = case Action of
+                      {credit_reply, Ctag, DelCnt, Credit, Avail, Drain} ->
+                          %% Backward compat clause: Add link state properties
+                          {credit_reply, Ctag, DelCnt, Credit, Avail, Drain, #{}};
+                      _ ->
+                          Action
+                  end,
+              handle_credit_reply(A, S);
          (_Action, S0) ->
               S0
       end, State, Actions).
@@ -933,7 +940,7 @@ grant_link_credit(Credit, MaxLinkCredit, NumUnconfirmed) ->
     NumUnconfirmed < MaxLinkCredit.
 
 %% Drain is ignored because local shovels do not use it.
-handle_credit_reply({credit_reply, CTag, DeliveryCount, Credit, _Available, _Drain},
+handle_credit_reply({credit_reply, CTag, DeliveryCount, Credit, _Available, _Drain, _Props},
                     #{source := #{credit := CCredit,
                                   max_link_credit := MaxLinkCredit,
                                   delivery_count := QDeliveryCount,

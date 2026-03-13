@@ -272,7 +272,7 @@ credit(_QName, CTag, DeliveryCountRcv, LinkCreditRcv, Drain,
                               end,
     {State#?STATE{delivery_count = DeliveryCount,
                   credit = Credit},
-     [{credit_reply, CTag, DeliveryCount, Credit, _Available = 0, Drain}]}.
+     [{credit_reply, CTag, DeliveryCount, Credit, _Available = 0, Drain, #{}}]}.
 
 close(#?STATE{}) ->
     ok.

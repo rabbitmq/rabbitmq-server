@@ -95,7 +95,12 @@
 
 -define(DOWN_KEYS, [name, durable, auto_delete, arguments, pid, type, state]).
 
+-type link_state_properties() :: #{atom() => term()}.
 -type credit_reply_action() :: {credit_reply, rabbit_types:ctag(), delivery_count(), credit(),
+                                Available :: non_neg_integer(), Drain :: boolean(),
+                                link_state_properties()} |
+                               %% Old backward compat credit_reply.
+                               {credit_reply, rabbit_types:ctag(), delivery_count(), credit(),
                                 Available :: non_neg_integer(), Drain :: boolean()}.
 
 %% anything that the host process needs to do on behalf of the queue type session
@@ -160,6 +165,7 @@
               cancel_spec/0,
               delivery_options/0,
               credit_reply_action/0,
+              link_state_properties/0,
               action/0,
               actions/0,
               reject_reason/0,
