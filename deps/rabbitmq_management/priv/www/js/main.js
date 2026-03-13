@@ -356,8 +356,13 @@ function reset_timer() {
         clearInterval(timer);
     }
     if (timer_interval != null) {
-        timer = setInterval(partial_update, timer_interval);
+        timer = setInterval(onRefresh, timer_interval);
     }
+}
+
+function onRefresh() {
+    partial_update();
+    notifyOnRefresh();
 }
 
 function pause_auto_refresh() {
