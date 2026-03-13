@@ -92,17 +92,13 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
 
     # Now remove the node from the cluster (resets Khepri on the target)
     ret =
-<<<<<<< HEAD
-      case :rabbit_misc.rpc_call(node_name, :rabbit_db_cluster, :forget_member, args) do
+      case :rabbit_misc.rpc_call(node_name, :rabbit_db_cluster, :forget_member, [atom_name, false]) do
         {:badrpc, {:EXIT, {:undef, _}}} ->
-          :rabbit_misc.rpc_call(node_name, :rabbit_mnesia, :forget_cluster_node, args)
+          :rabbit_misc.rpc_call(node_name, :rabbit_mnesia, :forget_cluster_node, [atom_name, false])
 
         ret0 ->
           ret0
       end
-=======
-      :rabbit_misc.rpc_call(node_name, :rabbit_db_cluster, :forget_member, [atom_name, false])
->>>>>>> 2555cb38e ('rabbitmqctl forget_cluster_node': shrink QQ and stream replicas first)
 
     case ret do
       {:error, {:failed_to_remove_node, ^atom_name, :rabbit_still_running}} ->
