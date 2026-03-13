@@ -59,7 +59,8 @@
          key_metrics_rpc/1]).
 
 %% for SAC coordinator
--export([sac_state/1]).
+-export([sac_state/1,
+         evaluate_sac_group/3]).
 
 %% for testing and debugging
 -export([eval_listeners/3,
@@ -273,6 +274,13 @@ update_config(Q, Config)
 
 sac_state(#?MODULE{single_active_consumer = SacState}) ->
     SacState.
+
+-spec evaluate_sac_group(binary(), binary(), binary()) ->
+    ok | {error, term()}.
+evaluate_sac_group(VirtualHost, Stream, ConsumerName) ->
+    rabbit_stream_sac_coordinator:evaluate_group(VirtualHost,
+                                                 Stream,
+                                                 ConsumerName).
 
 %% for debugging
 state() ->

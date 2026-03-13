@@ -1907,6 +1907,161 @@ state_enter_leader(MapState) ->
 list_nodes(MapState) ->
     lists:sort(?MOD:list_nodes(state(MapState))).
 
+evaluate_group_not_found_test(_) ->
+    State0 = state(),
+    Cmd = evaluate_group_command(<<"stream">>, <<"app">>, []),
+    {State0, {error, not_found}, []} = ?MOD:apply(Cmd, State0),
+    ok.
+
+evaluate_group_all_connected_no_dead_pids_test(_) ->
+    Pid0 = new_process(),
+    Pid1 = new_process(),
+    GId = group_id(),
+    Group = grp([csr(Pid0, 0, active),
+                 csr(Pid1, 1, waiting)]),
+    State0 = state(#{GId => Group}),
+    Cmd = evaluate_group_command(stream(), name(), []),
+    {#?STATE{groups = Groups1}, ok, Eff} = ?MOD:apply(Cmd, State0),
+    assertHasGroup(GId, grp([csr(Pid0, 0, active),
+                             csr(Pid1, 1, waiting)]),
+                   Groups1),
+    assertEmpty(Eff),
+    ok.
+
+evaluate_group_remove_dead_pid_consumers_test(_) ->
+    Pid0 = new_process(),
+    Pid1 = new_process(),
+    GId = group_id(),
+    Group = grp([csr(Pid0, 0, active),
+                 csr(Pid1, 1, waiting)]),
+    State0 = state(#{GId => Group}),
+    Cmd = evaluate_group_command(stream(), name(), [Pid0]),
+    {#?STATE{groups = Groups1}, ok, Eff} = ?MOD:apply(Cmd, State0),
+    assertHasGroup(GId, grp([csr(Pid1, 1, active)]),
+                   Groups1),
+    assertSendMessageActivateEffect(Pid1, 1, stream(), name(), true, Eff),
+    ok.
+
+evaluate_group_remove_disconnected_consumers_test(_) ->
+    Pid0 = new_process(),
+    Pid1 = new_process(),
+    Pid2 = new_process(),
+    GId = group_id(),
+    Group = grp([csr(Pid0, 0, {connected, active}),
+                 csr(Pid1, 1, {disconnected, waiting}),
+                 csr(Pid2, 2, {connected, waiting})]),
+    State0 = state(#{GId => Group}),
+    Cmd = evaluate_group_command(stream(), name(), []),
+    {#?STATE{groups = Groups1}, ok, Eff} = ?MOD:apply(Cmd, State0),
+    assertHasGroup(GId, grp([csr(Pid0, 0, {connected, active}),
+                             csr(Pid2, 2, {connected, waiting})]),
+                   Groups1),
+    assertEmpty(Eff),
+    ok.
+
+evaluate_group_remove_presumed_down_consumers_test(_) ->
+    Pid0 = new_process(),
+    Pid1 = new_process(),
+    Pid2 = new_process(),
+    GId = group_id(),
+    Group = grp([csr(Pid0, 0, {connected, waiting}),
+                 csr(Pid1, 1, {presumed_down, active}),
+                 csr(Pid2, 2, {connected, waiting})]),
+    State0 = state(#{GId => Group}),
+    Cmd = evaluate_group_command(stream(), name(), []),
+    {#?STATE{groups = Groups1}, ok, Eff} = ?MOD:apply(Cmd, State0),
+    assertHasGroup(GId, grp([csr(Pid0, 0, {connected, active}),
+                             csr(Pid2, 2, {connected, waiting})]),
+                   Groups1),
+    assertSendMessageActivateEffect(Pid0, 0, stream(), name(), true, Eff),
+    ok.
+
+evaluate_group_mix_dead_and_disconnected_test(_) ->
+    Pid0 = new_process(),
+    Pid1 = new_process(),
+    Pid2 = new_process(),
+    Pid3 = new_process(),
+    GId = group_id(),
+    Group = grp([csr(Pid0, 0, {connected, active}),
+                 csr(Pid1, 1, {disconnected, waiting}),
+                 csr(Pid2, 2, {connected, waiting}),
+                 csr(Pid3, 3, {connected, waiting})]),
+    State0 = state(#{GId => Group}),
+    Cmd = evaluate_group_command(stream(), name(), [Pid2]),
+    {#?STATE{groups = Groups1}, ok, Eff} = ?MOD:apply(Cmd, State0),
+    assertHasGroup(GId, grp([csr(Pid0, 0, {connected, active}),
+                             csr(Pid3, 3, {connected, waiting})]),
+                   Groups1),
+    assertEmpty(Eff),
+    ok.
+
+evaluate_group_empty_after_cleanup_test(_) ->
+    Pid0 = new_process(),
+    GId = group_id(),
+    Group = grp([csr(Pid0, 0, {disconnected, active})]),
+    State0 = state(#{GId => Group}),
+    Cmd = evaluate_group_command(stream(), name(), []),
+    {#?STATE{groups = Groups1}, ok, Eff} = ?MOD:apply(Cmd, State0),
+    assertEmpty(Groups1),
+    assertEmpty(Eff),
+    ok.
+
+evaluate_group_super_stream_rebalance_test(_) ->
+    Pid0 = new_process(),
+    Pid1 = new_process(),
+    Pid2 = new_process(),
+    GId = group_id(),
+    Group = grp(1, [csr(Pid0, 0, {connected, waiting}),
+                    csr(Pid1, 1, {connected, active}),
+                    csr(Pid2, 2, {connected, waiting})]),
+    State0 = state(#{GId => Group}),
+    Cmd = evaluate_group_command(stream(), name(), [Pid0]),
+    {#?STATE{groups = Groups1}, ok, Eff} = ?MOD:apply(Cmd, State0),
+    %% Pid0 removed (dead), 2 consumers left
+    %% partition_index=1, 1 % 2 = 1, so Pid2 should be active
+    %% current active is Pid1 at index 0, new active should be Pid2 at index 1
+    assertHasGroup(GId,
+                   grp(1, [csr(Pid1, 1, {connected, deactivating}),
+                           csr(Pid2, 2, {connected, waiting})]),
+                   Groups1),
+    assertSendMessageSteppingDownEffect(Pid1, 1, stream(), name(), Eff),
+    ok.
+
+evaluate_group_super_stream_active_removed_test(_) ->
+    Pid0 = new_process(),
+    Pid1 = new_process(),
+    GId = group_id(),
+    Group = grp(1, [csr(Pid0, 0, {disconnected, active}),
+                    csr(Pid1, 1, {connected, waiting})]),
+    State0 = state(#{GId => Group}),
+    Cmd = evaluate_group_command(stream(), name(), []),
+    {#?STATE{groups = Groups1}, ok, Eff} = ?MOD:apply(Cmd, State0),
+    %% disconnected active removed, only Pid1 left, should become active
+    assertHasGroup(GId,
+                   grp(1, [csr(Pid1, 1, {connected, active})]),
+                   Groups1),
+    assertSendMessageActivateEffect(Pid1, 1, stream(), name(), true, Eff),
+    ok.
+
+evaluate_group_ensure_monitors_test(_) ->
+    Pid0 = new_process(),
+    Pid1 = new_process(),
+    Pid2 = new_process(),
+    GId = group_id(),
+    Group0 = grp([csr(Pid0, 0, {connected, active}),
+                  csr(Pid1, 1, {disconnected, waiting}),
+                  csr(Pid2, 2, {connected, waiting})]),
+    State0 = state(#{GId => Group0}),
+    Cmd = evaluate_group_command(stream(), name(), []),
+    {State1, ok, _} = ?MOD:apply(Cmd, State0),
+    {#?STATE{pids_groups = PidsGroups1}, _, _} =
+        ?MOD:ensure_monitors(Cmd, State1, #{}, []),
+    assertSize(2, PidsGroups1),
+    ?assert(maps:is_key(Pid0, PidsGroups1)),
+    ?assert(maps:is_key(Pid2, PidsGroups1)),
+    ?assertNot(maps:is_key(Pid1, PidsGroups1)),
+    ok.
+
 start_node(Name) ->
     {ok, NodePid, Node} = peer:start(#{
         name => Name,
@@ -2040,6 +2195,12 @@ connection_reconnected_command(Pid) ->
 
 purge_nodes_command(Nodes) ->
     #command_purge_nodes{nodes = Nodes}.
+
+evaluate_group_command(Stream, ConsumerName, DeadPids) ->
+    #command_evaluate_group{vhost = <<"/">>,
+                            stream = Stream,
+                            consumer_name = ConsumerName,
+                            dead_pids = DeadPids}.
 
 assertContainsCheckConnectionEffect(Pid, Effects) ->
     assertContainsSendMessageEffect(Pid, {sac, check_connection, #{}}, Effects).
