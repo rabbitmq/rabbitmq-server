@@ -352,7 +352,11 @@ start_link(Driver, Connection, ChannelNumber, Consumer, Identity) ->
     gen_server:start_link(
       ?MODULE, [Driver, Connection, ChannelNumber, Consumer, Identity], []).
 
-set_writer(Pid, Writer) ->
+set_writer(Pid, {network, Writer}) ->
+    set_writer(Pid, Writer);
+set_writer(Pid, {direct, Writer}) ->
+    set_writer(Pid, Writer);
+set_writer(Pid, Writer) when is_pid(Pid) andalso is_pid(Writer) ->
     gen_server:cast(Pid, {set_writer, Writer}).
 
 enable_delivery_flow_control(Pid) ->
