@@ -248,12 +248,13 @@ dispatcher_add(function(sammy) {
             if (isOwnUser) {
                 pause_auto_refresh();
                 window.own_creds_changed_at = Date.now();
-                setTimeout(resume_auto_refresh, 15000);
+                window.own_creds_resume_timer = setTimeout(resume_auto_refresh, 15000);
             }
             if (sync_put(this, '/users/:username')) {
                 go_to('#/users');
             } else {
                 if (isOwnUser) {
+                    clearTimeout(window.own_creds_resume_timer);
                     resume_auto_refresh();
                     window.own_creds_changed_at = null;
                 }

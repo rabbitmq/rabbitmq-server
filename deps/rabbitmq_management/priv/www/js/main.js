@@ -629,6 +629,9 @@ function with_update(fun) {
     var model = [];
     model['extra_content'] = []; // magic key for extension point
     with_reqs(apply_state(current_reqs), model, function(json) {
+            if (json['suppressed']) {
+                return;
+            }
             var html = format(current_template, json);
             fun(html);
             update_status('ok');
@@ -1322,7 +1325,9 @@ function with_reqs(reqs, acc, fun) {
     if (keys(reqs).length > 0) {
         var key = keys(reqs)[0];
         with_req('GET', reqs[key], null, function(resp) {
-                if (key.startsWith("extra_")) {
+                if (resp.suppressed) {
+                    acc['suppressed'] = true;
+                } else if (key.startsWith("extra_")) {
                     var extraContent = acc["extra_content"];
                     extraContent[key] = JSON.parse(resp.responseText);
                     acc["extra_content"] = extraContent;
@@ -1418,14 +1423,7 @@ function with_req(method, path, body, fun, on404fun) {
                 if (window.own_creds_changed_at &&
                     (Date.now() - window.own_creds_changed_at) < 10000) {
                     console.debug("Suppressing 401 on auto-refresh within grace period after credential change");
-                    // Use a dummy empty response to maintain the callback chain and allow
-                    // the page to render with stale data for one refresh, and the updates
-                    // as usual.
-                    var emptyResponse = {
-                        responseText: '{}',
-                        status: 200
-                    };
-                    fun(emptyResponse);
+                    fun({suppressed: true});
                     return;
                 }
             }
