@@ -74,3 +74,8 @@
         {nodes :: [node()]}).
 -record(command_update_conf,
         {conf :: conf()}).
+-record(command_evaluate_group,
+        {vhost :: vhost(),
+         stream :: stream(),
+         consumer_name :: consumer_name(),
+         dead_pids :: [connection_pid()]}).
