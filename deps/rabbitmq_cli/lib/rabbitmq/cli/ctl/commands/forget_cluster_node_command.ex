@@ -47,10 +47,47 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
 
   def run([node_to_remove], %{node: node_name, offline: false}) do
     atom_name = to_atom(node_to_remove)
-    args = [atom_name, false]
 
+    # `forget_member/2` requires the target node's `rabbit` app to be stopped.
+    # Verify this precondition before shrinking any members (replicas).
+    case :rabbit_misc.rpc_call(node_name, :rabbit, :is_running, [atom_name]) do
+      true ->
+        {:error,
+         "RabbitMQ on node #{node_to_remove} must be stopped with 'rabbitmqctl -n #{node_to_remove} stop_app' before it can be removed"}
+
+      _ ->
+        do_run(node_to_remove, node_name, atom_name)
+    end
+  end
+
+  defp do_run(node_to_remove, node_name, atom_name) do
+    # Shrink quorum queue and stream members (replicas) before removing the node
+    # from the cluster.
+    #
+    # `forget_member/2` resets Khepri on the target node,
+    # which can cause the subsequent shrink RPCs to that node to time out,
+    # leaving Ra group membership and queue state in the metadata store inconsistent.
+    qq_shrink_result =
+      :rabbit_misc.rpc_call(node_name, :rabbit_quorum_queue, :shrink_all, [atom_name])
+
+    stream_shrink_result =
+      case :rabbit_misc.rpc_call(node_name, :rabbit_stream_queue, :delete_all_replicas, [
+             atom_name
+           ]) do
+        # For backwards compatibility
+        {:badrpc, {:EXIT, {:undef, [{:rabbit_stream_queue, :delete_all_replicas, _, _}]}}} ->
+          []
+
+        any ->
+          any
+      end
+
+    stream_coord_result =
+      :rabbit_misc.rpc_call(node_name, :rabbit_stream_coordinator, :forget_node, [atom_name])
+
+    # Now remove the node from the cluster (resets Khepri on the target)
     ret =
-      :rabbit_misc.rpc_call(node_name, :rabbit_db_cluster, :forget_member, args)
+      :rabbit_misc.rpc_call(node_name, :rabbit_db_cluster, :forget_member, [atom_name, false])
 
     case ret do
       {:error, {:failed_to_remove_node, ^atom_name, :rabbit_still_running}} ->
@@ -71,24 +108,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
         error
 
       :ok ->
-        qq_shrink_result =
-          :rabbit_misc.rpc_call(node_name, :rabbit_quorum_queue, :shrink_all, [atom_name])
-
-        stream_shrink_result =
-          case :rabbit_misc.rpc_call(node_name, :rabbit_stream_queue, :delete_all_replicas, [
-                 atom_name
-               ]) do
-            ## For backwards compatibility
-            {:badrpc, {:EXIT, {:undef, [{:rabbit_stream_queue, :delete_all_replicas, _, _}]}}} ->
-              []
-
-            any ->
-              any
-          end
-
-        stream_coord_result =
-          :rabbit_misc.rpc_call(node_name, :rabbit_stream_coordinator, :forget_node, [atom_name])
-
         is_error_fun = fn
           {_, {:ok, _}} ->
             false
