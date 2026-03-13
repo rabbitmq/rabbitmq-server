@@ -24,7 +24,8 @@
                      #command_activate_consumer{} |
                      #command_connection_reconnected{} |
                      #command_purge_nodes{} |
-                     #command_update_conf{}.
+                     #command_update_conf{} |
+                     #command_evaluate_group{}.
 
 -opaque state() :: #?MODULE{}.
 
@@ -54,7 +55,8 @@
          check_conf_change/1,
          list_nodes/1,
          state_enter/2,
-         is_sac_error/1
+         is_sac_error/1,
+         evaluate_group/3
         ]).
 -export([make_purge_nodes/1,
          make_update_conf/1]).
@@ -145,13 +147,73 @@ activate_consumer(VH, Stream, Name) ->
 connection_reconnected(Pid) ->
     process_command(#command_connection_reconnected{pid = Pid}).
 
+-spec evaluate_group(binary(), binary(), binary()) ->
+    ok | {error, sac_error() | term()}.
+evaluate_group(VirtualHost, Stream, ConsumerName) ->
+    case group_pids(VirtualHost, Stream, ConsumerName) of
+        {ok, Pids} ->
+            DeadPids = filter_dead_pids(Pids),
+            process_command(
+              #command_evaluate_group{vhost = VirtualHost,
+                                      stream = Stream,
+                                      consumer_name = ConsumerName,
+                                      dead_pids = DeadPids});
+        {error, _} = Err ->
+            Err
+    end.
+
+group_pids(VirtualHost, Stream, ConsumerName) ->
+    case ra_local_query(
+           fun(State) ->
+                   SacState = rabbit_stream_coordinator:sac_state(State),
+                   group_pids0(VirtualHost, Stream, ConsumerName, SacState)
+           end)
+    of
+        {ok, {_, Result}, _} ->
+            Result;
+        {error, noproc} ->
+            {error, not_found};
+        {error, _} = Err ->
+            Err;
+        {timeout, _} ->
+            {error, timeout}
+    end.
+
+group_pids0(VH, Stream, ConsumerName,
+            #?MODULE{groups = Groups} = S) when ?IS_STATE_REC(S) ->
+    GroupId = {VH, Stream, ConsumerName},
+    case Groups of
+        #{GroupId := #group{consumers = Consumers}} ->
+            PidMap = lists:foldl(fun(#consumer{pid = P}, Acc) ->
+                                        Acc#{P => true}
+                                 end, #{}, Consumers),
+            {ok, maps:keys(PidMap)};
+        _ ->
+            {error, not_found}
+    end;
+group_pids0(_, _, _, _) ->
+    {error, not_found}.
+
+filter_dead_pids(Pids) ->
+    lists:filter(fun(Pid) -> not is_pid_alive(Pid) end, Pids).
+
+is_pid_alive(Pid) when node(Pid) =:= node() ->
+    erlang:is_process_alive(Pid);
+is_pid_alive(Pid) ->
+    try
+        erpc:call(node(Pid), erlang, is_process_alive, [Pid], 5000)
+    catch
+        _:_ ->
+            false
+    end.
+
 process_command(Cmd) ->
     case rabbit_stream_coordinator:process_command(wrap_cmd(Cmd)) of
         {ok, Res, _} ->
             Res;
         {error, _} = Err ->
             ?LOG_WARNING("SAC coordinator command ~tp returned error ~tp",
-                               [Cmd, Err]),
+                         [Cmd, Err]),
             Err
     end.
 
@@ -341,6 +403,30 @@ apply(#command_connection_reconnected{pid = Pid},
               end, {State0, []}, Groups0),
 
     {State1, ok, Eff};
+apply(#command_evaluate_group{vhost = VH, stream = S,
+                              consumer_name = Name,
+                              dead_pids = DeadPids},
+      #?MODULE{groups = Groups0} = State0) ->
+    case lookup_group(VH, S, Name, Groups0) of
+        undefined ->
+            {State0, {error, not_found}, []};
+        #group{consumers = Consumers0} = G0 ->
+            DeadPidSet = maps:from_list([{P, true} || P <- DeadPids]),
+            Consumers1 =
+                lists:filter(
+                  fun(#consumer{pid = P, status = {Cnty, _}})
+                        when Cnty =:= ?DISCONNECTED orelse
+                             Cnty =:= ?PDOWN orelse
+                             is_map_key(P, DeadPidSet) ->
+                          false;
+                     (_) ->
+                          true
+                  end, Consumers0),
+            G1 = G0#group{consumers = Consumers1},
+            {G2, Effects} = maybe_rebalance_group(G1, {VH, S, Name}),
+            Groups1 = update_groups(VH, S, Name, G2, Groups0),
+            {State0#?MODULE{groups = Groups1}, ok, Effects}
+    end;
 apply(#command_purge_nodes{nodes = Nodes}, State0) ->
     {State1, Eff} = lists:foldl(fun(N, {S0, Eff0}) ->
                                         {S1, Eff1} = purge_node(N, S0),
@@ -718,6 +804,14 @@ ensure_monitors(#command_purge_nodes{},
     {State#?MODULE{pids_groups = AllPidsGroups},
      Monitors,
      Effects};
+ensure_monitors(#command_evaluate_group{},
+                #?MODULE{groups = Groups} = State,
+                Monitors,
+                Effects) ->
+    AllPidsGroups = compute_pid_group_dependencies(Groups),
+    {State#?MODULE{pids_groups = AllPidsGroups},
+     Monitors,
+     Effects};
 ensure_monitors(_, #?MODULE{} = State0, Monitors, Effects) ->
     {State0, Monitors, Effects}.
 
@@ -955,7 +1049,8 @@ list_nodes(#?MODULE{groups = Groups}) ->
 
 -spec state_enter(ra_server:ra_state(), state() | term()) ->
     ra_machine:effects().
-state_enter(leader, #?MODULE{groups = Groups} = State)
+state_enter(leader, #?MODULE{groups = Groups,
+                             pids_groups = PidsGroups} = State)
   when ?IS_STATE_REC(State) ->
     %% becoming leader, we re-issue monitors and timers for connections with
     %% disconnected consumers
@@ -978,8 +1073,9 @@ state_enter(leader, #?MODULE{groups = Groups} = State)
                                   end, Acc, Cs)
               end, {#{}, #{}}, Groups),
     DisTimeout = disconnected_timeout(State),
-    %% monitor involved nodes
+    %% monitor connections and involved nodes
     %% reset a timer for disconnected connections
+    [{monitor, process, P} || P <- lists:sort(maps:keys(PidsGroups))] ++
     [{monitor, node, N} || N <- lists:sort(maps:keys(Nodes))] ++
     [begin
          Time = case ts() - Ts of

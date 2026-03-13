@@ -59,7 +59,8 @@
          key_metrics_rpc/1]).
 
 %% for SAC coordinator
--export([sac_state/1]).
+-export([sac_state/1,
+         evaluate_sac_group/3]).
 
 %% for testing and debugging
 -export([eval_listeners/3,
@@ -88,6 +89,7 @@
 -define(REPLICA_FRESHNESS_LIMIT_MS, 10 * 1000). %% 10s
 -define(V2_OR_MORE(Vsn), (Vsn >= 2)).
 -define(V5_OR_MORE(Vsn), (Vsn >= 5)).
+-define(V7_OR_MORE(Vsn), (Vsn >= 7)). %% SAC monitors no longer in monitors map
 -define(SAC_V4, rabbit_stream_sac_coordinator_v4).
 -define(SAC_CURRENT, rabbit_stream_sac_coordinator).
 
@@ -272,6 +274,13 @@ update_config(Q, Config)
 
 sac_state(#?MODULE{single_active_consumer = SacState}) ->
     SacState.
+
+-spec evaluate_sac_group(binary(), binary(), binary()) ->
+    ok | {error, term()}.
+evaluate_sac_group(VirtualHost, Stream, ConsumerName) ->
+    rabbit_stream_sac_coordinator:evaluate_group(VirtualHost,
+                                                 Stream,
+                                                 ConsumerName).
 
 %% for debugging
 state() ->
@@ -543,7 +552,7 @@ reachable_coord_members() ->
     Nodes = rabbit_nodes:list_reachable(),
     [{?MODULE, Node} || Node <- Nodes].
 
-version() -> 6.
+version() -> 7.
 
 which_module(_) ->
     ?MODULE.
@@ -588,14 +597,21 @@ apply(#{index := _Idx, machine_version := MachineVersion} = Meta0,
         {reply, Reply} ->
             return(Meta, State0, Reply, [])
     end;
-apply(Meta, {sac, SacCommand}, #?MODULE{single_active_consumer = SacState0,
-                                        monitors = Monitors0} = State0) ->
+apply(#{machine_version := Vsn} = Meta, {sac, SacCommand},
+      #?MODULE{single_active_consumer = SacState0,
+               monitors = Monitors0} = State0) ->
     Mod = sac_module(Meta),
     {SacState1, Reply, Effects0} = Mod:apply(SacCommand, SacState0),
     {SacState2, Monitors1, Effects1} =
          Mod:ensure_monitors(SacCommand, SacState1, Monitors0, Effects0),
+    Monitors2 = case ?V7_OR_MORE(Vsn) of
+                    true ->
+                        Monitors0;
+                    false ->
+                        Monitors1
+                end,
     return(Meta, State0#?MODULE{single_active_consumer = SacState2,
-                                monitors = Monitors1}, Reply, Effects1);
+                                monitors = Monitors2}, Reply, Effects1);
 apply(#{machine_version := Vsn} = Meta, {down, Pid, Reason} = Cmd,
       #?MODULE{streams = Streams0,
                monitors = Monitors0,
@@ -607,6 +623,18 @@ apply(#{machine_version := Vsn} = Meta, {down, Pid, Reason} = Cmd,
                    _ ->
                        []
                end,
+    {SacState1, SacEffects} =
+        case Vsn >= 7 of
+            true ->
+                %% all down PIDs are submitted to SAC
+                %% it filters out if not interested
+                sac_handle_connection_down(Meta, SacState0,
+                                           Pid, Reason, Vsn);
+            false ->
+                {SacState0, []}
+        end,
+    Effects1 = Effects0 ++ SacEffects,
+    State1 = State#?MODULE{single_active_consumer = SacState1},
     case maps:take(Pid, Monitors0) of
         {{StreamId, listener}, Monitors} when Vsn < 2 ->
             Listeners = case maps:take(StreamId, StateListeners0) of
@@ -620,8 +648,8 @@ apply(#{machine_version := Vsn} = Meta, {down, Pid, Reason} = Cmd,
                                         Listeners1#{StreamId => Pids}
                                 end
                         end,
-            return(Meta, State#?MODULE{listeners = Listeners,
-                                       monitors = Monitors}, ok, Effects0);
+            return(Meta, State1#?MODULE{listeners = Listeners,
+                                        monitors = Monitors}, ok, Effects1);
         {{PidStreams, listener}, Monitors} when ?V2_OR_MORE(Vsn) ->
             Streams = maps:fold(
                 fun(StreamId, _, Acc) ->
@@ -638,31 +666,34 @@ apply(#{machine_version := Vsn} = Meta, {down, Pid, Reason} = Cmd,
                             Acc
                     end
                 end, Streams0, PidStreams),
-            return(Meta, State#?MODULE{streams = Streams,
-                                       monitors = Monitors}, ok, Effects0);
+            return(Meta, State1#?MODULE{streams = Streams,
+                                        monitors = Monitors}, ok, Effects1);
         {{StreamId, member}, Monitors1} ->
             case Streams0 of
                 #{StreamId := Stream0} ->
                     Stream1 = update_stream(Meta, Cmd, Stream0),
-                    {Stream, Effects} = evaluate_stream(Meta, Stream1, Effects0),
+                    {Stream, Effects} = evaluate_stream(Meta, Stream1, Effects1),
                     Streams = Streams0#{StreamId => Stream},
-                    return(Meta, State#?MODULE{streams = Streams,
-                                               monitors = Monitors1}, ok,
+                    return(Meta, State1#?MODULE{streams = Streams,
+                                                monitors = Monitors1}, ok,
                            Effects);
                 _ ->
                     %% stream not found, can happen if "late" downs are
                     %% received
-                    return(Meta, State#?MODULE{streams = Streams0,
-                                               monitors = Monitors1}, ok, Effects0)
+                    return(Meta, State1#?MODULE{streams = Streams0,
+                                                monitors = Monitors1}, ok, Effects1)
             end;
-        {sac, Monitors1} ->
-            {SacState1, SacEffects} = sac_handle_connection_down(Meta, SacState0,
-                                                                 Pid, Reason, Vsn),
-            return(Meta, State#?MODULE{single_active_consumer = SacState1,
-                                       monitors = Monitors1},
-                   ok, [Effects0 ++ SacEffects]);
+        {sac, Monitors1} when Vsn < 7 ->
+            #?MODULE{single_active_consumer = SacSt0} = State1,
+            {SacSt1, SacEfts} = sac_handle_connection_down(Meta, SacSt0,
+                                                           Pid, Reason, Vsn),
+            return(Meta, State1#?MODULE{single_active_consumer = SacSt1,
+                                        monitors = Monitors1},
+                   ok, Effects1 ++ SacEfts);
         error ->
-            return(Meta, State, ok, Effects0)
+            return(Meta, State1, ok, Effects1);
+        _ ->
+            return(Meta, State1, ok, Effects1)
     end;
 apply(#{machine_version := MachineVersion} = Meta,
       {register_listener, #{pid := Pid,
@@ -2304,6 +2335,9 @@ machine_version(4 = From, 5, #?MODULE{single_active_consumer = Sac0} = State) ->
     SacExport = rabbit_stream_sac_coordinator_v4:state_to_map(Sac0),
     Sac1 = rabbit_stream_sac_coordinator:import_state(From, SacExport),
     {State#?MODULE{single_active_consumer = Sac1}, []};
+machine_version(6, 7, #?MODULE{monitors = Monitors0} = State) ->
+    Monitors = maps:filter(fun(_Key, Value) -> Value =/= sac end, Monitors0),
+    {State#?MODULE{monitors = Monitors}, []};
 machine_version(From, To, State) ->
     ?LOG_INFO("Stream coordinator machine version changes from ~tp to ~tp, no state changes required.",
                     [From, To]),
