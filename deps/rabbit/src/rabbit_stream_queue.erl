@@ -1555,7 +1555,7 @@ credit_reply(CTag, #stream{delivery_count = DeliveryCount,
                            filtering_paused = false} = Str) ->
     {Str#stream{credit_reply_outstanding = false},
      [{credit_reply, CTag, DeliveryCount, Credit,
-       available_messages(Str), Drain}]};
+       available_messages(Str), Drain, #{}}]};
 credit_reply(_, Str) ->
     {Str, []}.
 

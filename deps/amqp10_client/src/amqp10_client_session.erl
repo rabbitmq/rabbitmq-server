@@ -144,7 +144,9 @@
                                Credit :: pos_integer()},
          incoming_unsettled = #{} :: #{delivery_number() => ok},
          footer_opt :: footer_opt() | undefined,
-         raw_mode = false :: boolean()
+         raw_mode = false :: boolean(),
+         %% link state properties from the flow frame
+         state_properties = maps:new() :: #{binary() => term()}
         }).
 
 -record(state,
@@ -414,9 +416,9 @@ mapped(cast, #'v1_0.flow'{handle = {uint, InHandle}} = Flow,
     {ok, #link{output_handle = OutHandle} = Link0} =
         find_link_by_input_handle(InHandle, State),
 
-     % TODO: handle `send_flow` return tag
-    {ok, Link} = handle_link_flow(Flow, Link0),
-    ok = maybe_notify_link_credit(Link0, Link),
+    {ok, Link1} = handle_link_flow(Flow, Link0),
+    ok = maybe_notify_link_credit(Link0, Link1),
+    Link = maybe_notify_link_state_properties(Flow, Link1),
     Links1 = Links#{OutHandle := Link},
     State1 = State#state{links = Links1},
     {keep_state, State1};
@@ -1031,11 +1033,17 @@ handle_link_flow(#'v1_0.flow'{delivery_count = TheirDC,
                               link_credit = {uint, TheirCredit},
                               available = Available,
                               drain = Drain0},
-                 Link0 = #link{role = receiver}) ->
+                 #link{role = receiver,
+                       link_credit = OurCredit} = Link0) ->
     Drain = default(Drain0, false),
     Link = case Drain andalso TheirCredit =:= 0 of
                true ->
-                   notify_credit_exhausted(Link0),
+                   case OurCredit > 0 of
+                       true ->
+                           notify_credit_exhausted(Link0);
+                       false ->
+                           ok
+                   end,
                    Link0#link{delivery_count = unpack(TheirDC),
                               link_credit = 0,
                               available = unpack(Available),
@@ -1056,9 +1064,11 @@ find_link_by_input_handle(InHandle, #state{link_handle_index = LHI,
             case Links of
                 #{OutHandle := Link} ->
                     {ok, Link};
-                _ -> not_found
+                _ ->
+                    not_found
             end;
-        _ -> not_found
+        _ ->
+            not_found
     end.
 
 with_link(InHandle, State, Fun) ->
@@ -1119,6 +1129,19 @@ maybe_notify_link_credit(#link{role = sender,
     notify_link(NewLink, credited);
 maybe_notify_link_credit(_Old, _New) ->
     ok.
+
+maybe_notify_link_state_properties(#'v1_0.flow'{properties = {map, KVList}},
+                                   #link{state_properties = OldProps} = Link)
+  when is_list(KVList) ->
+    case #{Key => unpack(Val) || {{symbol, Key}, Val} <- KVList} of
+        OldProps ->
+            Link;
+        NewProps ->
+            notify_link(Link, {state_properties, NewProps}),
+            Link#link{state_properties = NewProps}
+    end;
+maybe_notify_link_state_properties(#'v1_0.flow'{}, Link) ->
+    Link.
 
 notify_link_attached(Link, Perf, #state{connection_config = Cfg}) ->
     What = case Cfg of

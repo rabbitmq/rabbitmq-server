@@ -725,8 +725,13 @@ deliver_to_consumer(Pid, QName, CTag, AckRequired, Message) ->
     Evt = {deliver, CTag, AckRequired, [Message]},
     send_queue_event(Pid, QName, Evt).
 
-send_credit_reply(Pid, QName, Ctag, DeliveryCount, Credit, Available, Drain) ->
-    Evt = {credit_reply, Ctag, DeliveryCount, Credit, Available, Drain},
+send_credit_reply(Pid, QName, Ctag, DeliveryCount, Credit, Avail, Drain) ->
+    Evt = case rabbit_feature_flags:is_enabled('rabbitmq_4.3.0') of
+              true ->
+                  {credit_reply, Ctag, DeliveryCount, Credit, Avail, Drain, #{}};
+              false ->
+                  {credit_reply, Ctag, DeliveryCount, Credit, Avail, Drain}
+          end,
     send_queue_event(Pid, QName, Evt).
 
 send_queue_event(Pid, QName, Event) ->

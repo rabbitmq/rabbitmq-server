@@ -195,7 +195,8 @@
 -record(client_flow_ctl, {
           delivery_count :: sequence_no(),
           credit :: rabbit_queue_type:credit(),
-          echo :: boolean()
+          echo :: boolean(),
+          properties :: rabbit_queue_type:link_state_properties()
          }).
 
 %% Link flow control state for link between us (receiver) and queue (sender).
@@ -1599,7 +1600,8 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
                                           client_flow_ctl = #client_flow_ctl{
                                                                delivery_count = ?INITIAL_DELIVERY_COUNT,
                                                                credit = 0,
-                                                               echo = false},
+                                                               echo = false,
+                                                               properties = maps:new()},
                                           queue_flow_ctl = #queue_flow_ctl{
                                                               delivery_count = ?INITIAL_DELIVERY_COUNT,
                                                               credit = 0,
@@ -1668,7 +1670,8 @@ send_pending(#state{remote_incoming_window = RemoteIncomingWindow,
             end
     end.
 
-handle_credit_reply(Action = {credit_reply, Ctag, _DeliveryCount, _Credit, _Available, _Drain},
+handle_credit_reply(Action = {credit_reply, Ctag, _DeliveryCount, _Credit,
+                              _Available, _Drain, _Props},
                     State = #state{outgoing_links = OutgoingLinks}) ->
     Handle = ctag_to_handle(Ctag),
     case OutgoingLinks of
@@ -1680,70 +1683,96 @@ handle_credit_reply(Action = {credit_reply, Ctag, _DeliveryCount, _Credit, _Avai
     end.
 
 handle_credit_reply0(
-  {credit_reply, Ctag, DeliveryCount, Credit, Available, _Drain = false},
+  {credit_reply, Ctag, DeliveryCount, Credit, Available, false = Drain, Props},
   Handle,
   #outgoing_link{
      client_flow_ctl = #client_flow_ctl{
                           delivery_count = CDeliveryCount,
                           credit = CCredit,
-                          echo = CEcho
-                         },
+                          echo = CEcho,
+                          properties = OldProps
+                         } = CFC0,
      queue_flow_ctl = #queue_flow_ctl{
                          delivery_count = QDeliveryCount
                         } = QFC0,
      stashed_credit_req = StashedCreditReq
     } = Link0,
-  #state{outgoing_links = OutgoingLinks,
+  #state{cfg = #cfg{writer_pid = Writer,
+                    channel_num = ChanNum},
+         outgoing_links = OutgoingLinks,
          queue_states = QStates0
-        } = S0) ->
+        } = State) ->
 
-    %% Assertion: Our (receiver) delivery-count should be always
+    %% Our (receiver) delivery-count should be always
     %% in sync with the delivery-count of the sending queue.
-    QDeliveryCount = DeliveryCount,
+    case DeliveryCount of
+        QDeliveryCount ->
+            ok;
+        _ ->
+            exit({delivery_count_mismatch, QDeliveryCount, DeliveryCount})
+    end,
 
     case StashedCreditReq of
         #credit_req{} ->
             %% We prioritise the stashed client request over finishing the current
             %% top-up rounds because the latest link state from the client applies.
-            S = pop_credit_req(Handle, Ctag, Link0, S0),
-            echo(CEcho, Handle, CDeliveryCount, CCredit, Available, S),
-            S;
+            pop_credit_req(Handle, Ctag, Link0, State);
         none when Credit =:= 0 andalso
                   CCredit > 0 ->
             QName = Link0#outgoing_link.queue_name,
             %% Provide queue next batch of credits.
-            CappedCredit = cap_credit(CCredit, S0#state.cfg#cfg.max_queue_credit),
-            {ok, QStates, Actions} =
-            rabbit_queue_type:credit(
-              QName, Ctag, DeliveryCount, CappedCredit, false, QStates0),
+            CappedCredit = cap_credit(CCredit, State#state.cfg#cfg.max_queue_credit),
+            {ok, QStates, Actions} = rabbit_queue_type:credit(
+                                       QName, Ctag, DeliveryCount, CappedCredit,
+                                       false, QStates0),
             Link = Link0#outgoing_link{
                      queue_flow_ctl = QFC0#queue_flow_ctl{credit = CappedCredit},
                      at_least_one_credit_req_in_flight = true},
-            S = S0#state{queue_states = QStates,
-                         outgoing_links = OutgoingLinks#{Handle := Link}},
-            handle_queue_actions(Actions, S);
+            State1 = State#state{queue_states = QStates,
+                                 outgoing_links = OutgoingLinks#{Handle := Link}},
+            handle_queue_actions(Actions, State1);
         none ->
+            ConsumerActiveChanged = consumer_active_changed(OldProps, Props),
+            case CEcho orelse ConsumerActiveChanged of
+                true ->
+                    Flow0 = #'v1_0.flow'{handle = ?UINT(Handle),
+                                         delivery_count = ?UINT(CDeliveryCount),
+                                         link_credit = ?UINT(CCredit),
+                                         available = ?UINT(Available),
+                                         drain = Drain,
+                                         echo = false},
+                    Flow1 = case ConsumerActiveChanged of
+                                true ->
+                                    set_flow_properties(Flow0, Props);
+                                false ->
+                                    Flow0
+                            end,
+                    Flow = session_flow_fields(Flow1, State),
+                    rabbit_amqp_writer:send_command(Writer, ChanNum, Flow);
+                false ->
+                    ok
+            end,
             %% Although we (the receiver) usually determine link credit, we set here
             %% our link credit to what the queue says our link credit is (which is safer
             %% in case credit requests got applied out of order in quorum queues).
             %% This should be fine given that we asserted earlier that our delivery-count is
             %% in sync with the delivery-count of the sending queue.
             QFC = QFC0#queue_flow_ctl{credit = Credit},
-            Link = Link0#outgoing_link{
-                     queue_flow_ctl = QFC,
-                     at_least_one_credit_req_in_flight = false},
-            S = S0#state{outgoing_links = OutgoingLinks#{Handle := Link}},
-            echo(CEcho, Handle, CDeliveryCount, CCredit, Available, S),
-            S
+            CFC = CFC0#client_flow_ctl{properties = Props},
+            Link = Link0#outgoing_link{client_flow_ctl = CFC,
+                                       queue_flow_ctl = QFC,
+                                       at_least_one_credit_req_in_flight = false},
+            State#state{outgoing_links = OutgoingLinks#{Handle := Link}}
     end;
 handle_credit_reply0(
-  {credit_reply, Ctag, DeliveryCount, Credit, Available, _Drain = true},
+  {credit_reply, Ctag, DeliveryCount, Credit, Available, _Drain = true, Props},
   Handle,
   Link0 = #outgoing_link{
              queue_name = QName,
              client_flow_ctl = #client_flow_ctl{
                                   delivery_count = CDeliveryCount0,
-                                  credit = CCredit
+                                  credit = CCredit,
+                                  properties = OldProps
                                  } = CFC,
              queue_flow_ctl = #queue_flow_ctl{
                                  delivery_count = QDeliveryCount0
@@ -1794,14 +1823,22 @@ handle_credit_reply0(
             Flow0 = #'v1_0.flow'{handle = ?UINT(Handle),
                                  delivery_count = ?UINT(CDeliveryCount),
                                  link_credit = ?UINT(0),
+                                 available = ?UINT(Available),
                                  drain = true,
-                                 available = ?UINT(Available)},
-            Flow = session_flow_fields(Flow0, S0),
+                                 echo = false},
+            Flow1 = case consumer_active_changed(OldProps, Props) of
+                        true ->
+                            set_flow_properties(Flow0, Props);
+                        false ->
+                            Flow0
+                    end,
+            Flow = session_flow_fields(Flow1, S0),
             rabbit_amqp_writer:send_command(Writer, ChanNum, Flow),
             Link = Link0#outgoing_link{
                      client_flow_ctl = CFC#client_flow_ctl{
                                          delivery_count = CDeliveryCount,
-                                         credit = 0},
+                                         credit = 0,
+                                         properties = Props},
                      queue_flow_ctl = QFC#queue_flow_ctl{
                                         delivery_count = DeliveryCount,
                                         credit = 0,
@@ -1816,6 +1853,17 @@ handle_credit_reply0(
                     pop_credit_req(Handle, Ctag, Link, S)
             end
     end.
+
+consumer_active_changed(OldProps, #{active := Active})
+  when not is_map_key(active, OldProps) orelse
+       map_get(active, OldProps) =/= Active ->
+    true;
+consumer_active_changed(_, _) ->
+    false.
+
+set_flow_properties(Flow, #{active := Active}) ->
+    Flow#'v1_0.flow'{properties = {map, [{{symbol, <<"rabbitmq:active">>},
+                                          {boolean, Active}}]}}.
 
 pop_credit_req(
   Handle, Ctag,
@@ -1855,21 +1903,6 @@ pop_credit_req(
     S = S0#state{queue_states = QStates,
                  outgoing_links = OutgoingLinks#{Handle := Link}},
     handle_queue_actions(Actions, S).
-
-echo(Echo, HandleInt, DeliveryCount, LinkCredit, Available, State) ->
-    case Echo of
-        true ->
-            Flow0 = #'v1_0.flow'{handle = ?UINT(HandleInt),
-                                 delivery_count = ?UINT(DeliveryCount),
-                                 link_credit = ?UINT(LinkCredit),
-                                 available = ?UINT(Available)},
-            Flow = session_flow_fields(Flow0, State),
-            #cfg{writer_pid = Writer,
-                 channel_num = Channel} = State#state.cfg,
-            rabbit_amqp_writer:send_command(Writer, Channel, Flow);
-        false ->
-            ok
-    end.
 
 send_pending_delivery(#pending_delivery{
                          frames = Frames,
@@ -2205,9 +2238,16 @@ handle_queue_actions(Actions, State) ->
               lists:foldl(fun(Msg, S) ->
                                   handle_deliver(CTag, AckRequired, Msg, S)
                           end, S0, Msgs);
-          ({credit_reply, _Ctag, _DeliveryCount, _Credit, _Available, _Drain} = Action,
-           #state{outgoing_pending = Pending} = S) ->
-              S#state{outgoing_pending = queue:in(Action, Pending)};
+          (Action, #state{outgoing_pending = Pending} = S)
+            when element(1, Action) =:= credit_reply ->
+              A = case Action of
+                      {credit_reply, Ctag, DelCnt, Credit, Avail, Drain} ->
+                          %% Backward compat clause: Add link state properties
+                          {credit_reply, Ctag, DelCnt, Credit, Avail, Drain, #{}};
+                      _ ->
+                          Action
+                  end,
+              S#state{outgoing_pending = queue:in(A, Pending)};
           ({queue_down, QName}, #state{stashed_down = L} = S) ->
               S#state{stashed_down = [QName | L]};
           (_Action, S) ->
@@ -3584,7 +3624,7 @@ remove_outgoing_link(Ctag, OutgoingUnsettledMap0, OutgoingPending0)
     OutgoingPending = queue:filter(
                         fun(#pending_delivery{outgoing_unsettled = #outgoing_unsettled{consumer_tag = Tag}}) ->
                                 Tag =/= Ctag;
-                           ({credit_reply, Tag, _DeliveryCount, _Credit, _Available, _Drain}) ->
+                           ({credit_reply, Tag, _DeliveryCount, _Credit, _Available, _Drain, _Props}) ->
                                 Tag =/= Ctag;
                            (#pending_management_delivery{}) ->
                                 true;

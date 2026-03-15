@@ -593,6 +593,301 @@ snapshot_installed_resends_credit_reply_sac_test(Config) ->
                  ?DELIVERY_SEND_MSG_OPTS}, Effects),
     ok.
 
+link_state_properties_credit_test(Config) ->
+    State0 = init(#{name => ?FUNCTION_NAME,
+                    queue_resource => rabbit_misc:r(
+                                        "/", queue, atom_to_binary(?FUNCTION_NAME)),
+                    release_cursor_interval => 0,
+                    single_active_consumer_on => true}),
+    Self = self(),
+    Ctag1 = <<"ctag1">>,
+    Ctag2 = <<"ctag2">>,
+    C1 = {Ctag1, Self},
+    C2 = {Ctag2, Self},
+    CK1 = ?LINE,
+    CK2 = ?LINE,
+    Meta = #{link_state_properties => true},
+    Entries = [
+               {CK1, make_checkout(C1, {auto, {credited, 0}}, Meta)},
+               {CK2, make_checkout(C2, {auto, {credited, 0}}, Meta)}
+              ],
+    {State1, _} = run_log(Config, State0, Entries),
+    ?assertMatch(#{single_active_consumer_id := C1,
+                   single_active_num_waiting_consumers := 1},
+                 rabbit_fifo:overview(State1)),
+
+    %% Granting credit to the active consumer.
+    {State2, Effects1} = credit(Config, CK1, ?LINE, 10, 0, false, State1),
+    ?ASSERT_EFF({send_msg, Pid,
+                 {credit_reply, Ctag, 0, 10, 0, false, #{active := true}},
+                 ?DELIVERY_SEND_MSG_OPTS},
+                Pid =:= Self andalso Ctag =:= Ctag1,
+                Effects1),
+
+    %% Granting credit to the inactive consumer.
+    {State3, Effects2} = credit(Config, CK2, ?LINE, 10, 0, false, State2),
+    ?assertEqual({send_msg, Self,
+                  {credit_reply, Ctag2, 0, 10, 0, false, #{active => false}},
+                  ?DELIVERY_SEND_MSG_OPTS},
+                 Effects2),
+
+    %% Drain the active consumer.
+    {State4, Effects3} = credit(Config, CK1, ?LINE, 1, 0, true, State3),
+    ?assertEqual([{send_msg, Self,
+                   {credit_reply, Ctag1, 1, 0, 0, true, #{active => true}},
+                   ?DELIVERY_SEND_MSG_OPTS}],
+                 Effects3),
+
+    %% Drain the inactive consumer.
+    {_State5, Effects4} = credit(Config, CK2, ?LINE, 500, 0, true, State4),
+    ?assertEqual({send_msg, Self,
+                  {credit_reply, Ctag2, 500, 0, 0, true, #{active => false}},
+                  ?DELIVERY_SEND_MSG_OPTS},
+                 Effects4),
+    ok.
+
+link_state_properties_consumer_activation_test(Config) ->
+    %% When the active consumer is cancelled, the waiting consumer should
+    %% receive a credit_reply with #{active => true} via
+    %% consumer_update_active_effects.
+    State0 = init(#{name => ?FUNCTION_NAME,
+                    queue_resource => rabbit_misc:r(
+                                       "/", queue, atom_to_binary(?FUNCTION_NAME)),
+                    release_cursor_interval => 0,
+                    single_active_consumer_on => true}),
+    Self = self(),
+    Ctag1 = <<"ctag1">>,
+    Ctag2 = <<"ctag2">>,
+    C1 = {Ctag1, Self},
+    C2 = {Ctag2, Self},
+    CK1 = ?LINE,
+    CK2 = ?LINE,
+    CK3 = ?LINE,
+    Meta = #{link_state_properties => true},
+    Entries = [
+               {CK1, make_checkout(C1, {auto, {credited, 0}}, Meta)},
+               {CK2, make_checkout(C2, {auto, {credited, 0}}, Meta)}
+              ],
+    {State1, _} = run_log(Config, State0, Entries),
+
+    %% Remove the active consumer.
+    {_State2, Effects} = run_log(Config, State1,
+                                 [{CK3, make_checkout(C1, remove, #{})}]),
+    %% The waiting consumer should receive #{active => true}.
+    ?ASSERT_EFF({send_msg, Pid,
+                 {credit_reply, Ctag, 0, 0, 0, false, #{active := true}},
+                 ?DELIVERY_SEND_MSG_OPTS},
+                Pid =:= Self andalso Ctag =:= Ctag2,
+                Effects),
+    ok.
+
+%% Verify that when a waiting consumer is activated, the credit_reply
+%% containing #{active => true} is sent before any message delivery.
+%% This ordering is desired so that the session process can send
+%% the FLOW frame (with the active notification) to the AMQP 1.0
+%% client before any TRANSFER frames.
+link_state_properties_activation_before_delivery_test(Config) ->
+    State0 = init(#{name => ?FUNCTION_NAME,
+                    queue_resource => rabbit_misc:r(
+                                       "/", queue, atom_to_binary(?FUNCTION_NAME)),
+                    release_cursor_interval => 0,
+                    single_active_consumer_on => true}),
+    Self = self(),
+    Ctag1 = <<"ctag1">>,
+    Ctag2 = <<"ctag2">>,
+    C1 = {Ctag1, Self},
+    C2 = {Ctag2, Self},
+    CK1 = ?LINE,
+    CK2 = ?LINE,
+    Meta = #{link_state_properties => true},
+    Entries = [
+               {CK1, make_checkout(C1, {auto, {credited, 0}}, Meta)},
+               {CK2, make_checkout(C2, {auto, {credited, 0}}, Meta)}
+              ],
+    {State1, _} = run_log(Config, State0, Entries),
+
+    %% Enqueue a message so that the newly activated consumer gets a delivery.
+    EnqIdx = ?LINE,
+    {State2, _} = enq(Config, EnqIdx, 1, msg1, State1),
+
+    %% Grant credit to the waiting consumer.
+    {State3, _} = credit(Config, CK2, ?LINE, 10, 0, false, State2),
+
+    %% Remove the active consumer. This should activate consumer 2
+    %% and deliver the ready message.
+    {_State4, Effects} = run_log(Config, State3,
+                                 [{?LINE, make_checkout(C1, remove, #{})}]),
+
+    %% The activation credit_reply should appear before the delivery.
+    ?assertMatch([
+                  _Timer,
+                  {send_msg, Self,
+                   {credit_reply, Ctag2, _DeliveryCount = 0, _Credit = 10,
+                    _Available = 1, _Drain = false, #{active := true}},
+                   ?DELIVERY_SEND_MSG_OPTS},
+                  {mod_call, rabbit_quorum_queue, update_consumer_handler, _},
+                  {mod_call, rabbit_quorum_queue, cancel_consumer_handler, _},
+                  {log_ext, [EnqIdx], _Fun, _Local}
+                 ],
+                 Effects),
+    ok.
+
+%% A consumer without link_state_properties should not receive a
+%% credit_reply when it becomes active.
+link_state_properties_consumer_activation_no_optin_test(Config) ->
+    State0 = init(#{name => ?FUNCTION_NAME,
+                    queue_resource => rabbit_misc:r(
+                                       "/", queue, atom_to_binary(?FUNCTION_NAME)),
+                    release_cursor_interval => 0,
+                    single_active_consumer_on => true}),
+    Self = self(),
+    C1 = {<<"ctag1">>, Self},
+    C2 = {<<"ctag2">>, Self},
+    CK1 = ?LINE,
+    CK2 = ?LINE,
+    CK3 = ?LINE,
+    Entries = [
+               {CK1, make_checkout(C1, {auto, {credited, 0}}, #{})},
+               {CK2, make_checkout(C2, {auto, {credited, 0}}, #{})}
+              ],
+    {State1, _} = run_log(Config, State0, Entries),
+
+    %% Remove the active consumer.
+    {_State2, Effects} = run_log(Config, State1,
+                                 [{CK3, make_checkout(C1, remove, #{})}]),
+    ?ASSERT_NO_EFF({send_msg, _, _, _}, Effects),
+    ok.
+
+%% A simple_prefetch consumer should not receive a credit_reply.
+link_state_properties_consumer_activation_simple_prefetch_test(Config) ->
+    State0 = init(#{name => ?FUNCTION_NAME,
+                    queue_resource => rabbit_misc:r(
+                                       "/", queue, atom_to_binary(?FUNCTION_NAME)),
+                    release_cursor_interval => 0,
+                    single_active_consumer_on => true}),
+    Self = self(),
+    C1 = {<<"ctag1">>, Self},
+    C2 = {<<"ctag2">>, Self},
+    CK1 = ?LINE,
+    CK2 = ?LINE,
+    CK3 = ?LINE,
+    Meta = #{link_state_properties => true},
+    Entries = [
+               {CK1, make_checkout(C1, {auto, {simple_prefetch, 10}}, Meta)},
+               {CK2, make_checkout(C2, {auto, {simple_prefetch, 10}}, Meta)}
+              ],
+    {State1, _} = run_log(Config, State0, Entries),
+    {_State2, Effects} = run_log(Config, State1,
+                                 [{CK3, make_checkout(C1, cancel, #{})}]),
+    ?ASSERT_NO_EFF({send_msg, _, {credit_reply, _, _, _, _, _, _},
+                    ?DELIVERY_SEND_MSG_OPTS}, Effects),
+    ok.
+
+%% When a higher-priority consumer replaces the active consumer,
+%% the demoted consumer should receive #{active => false} and the
+%% promoted consumer should receive #{active => true}.
+link_state_properties_priority_replacement_test(Config) ->
+    State0 = init(#{name => ?FUNCTION_NAME,
+                    queue_resource => rabbit_misc:r(
+                                       "/", queue, atom_to_binary(?FUNCTION_NAME)),
+                    release_cursor_interval => 0,
+                    single_active_consumer_on => true}),
+    Self = self(),
+    Ctag1 = <<"ctag1">>,
+    Ctag2 = <<"ctag2">>,
+    C1 = {Ctag1, Self},
+    C2 = {Ctag2, Self},
+    CK1 = ?LINE,
+    CK2 = ?LINE,
+    Meta1 = #{link_state_properties => true, priority => 1},
+    Meta2 = #{link_state_properties => true, priority => 2},
+    Entries = [
+               {CK1, make_checkout(C1, {auto, {credited, 0}}, Meta1)}
+              ],
+    {State1, _} = run_log(Config, State0, Entries),
+    ?assertMatch(#{single_active_consumer_id := C1},
+                 rabbit_fifo:overview(State1)),
+
+    {State2, _} = credit(Config, CK1, ?LINE, 5, 0, false, State1),
+
+    %% Add a higher-priority consumer which triggers replacement.
+    {_State3, Effects} = run_log(Config, State2,
+                                 [{CK2, make_checkout(C2, {auto, {credited, 0}}, Meta2)}]),
+    ?ASSERT_EFF({send_msg, Pid,
+                 {credit_reply, Ctag, 0, 5, 0, false, #{active := false}},
+                 ?DELIVERY_SEND_MSG_OPTS},
+                Pid =:= Self andalso Ctag =:= Ctag1,
+                Effects),
+    ?ASSERT_EFF({send_msg, Pid,
+                 {credit_reply, Ctag, 0, 0, 0, false, #{active := true}},
+                 ?DELIVERY_SEND_MSG_OPTS},
+                Pid =:= Self andalso Ctag =:= Ctag2,
+                Effects),
+    ok.
+
+%% With competing consumer strategy, credit_reply should contain
+%% an empty properties map when link_state_properties is enabled.
+link_state_properties_competing_strategy_test(Config) ->
+    State0 = init(#{name => ?FUNCTION_NAME,
+                    queue_resource => rabbit_misc:r(
+                                       "/", queue, atom_to_binary(?FUNCTION_NAME)),
+                    release_cursor_interval => 0,
+                    single_active_consumer_on => false}),
+    Self = self(),
+    CK1 = ?LINE,
+    Meta = #{link_state_properties => true},
+    Entries = [{CK1, make_checkout({<<"ctag1">>, Self},
+                                   {auto, {credited, 0}}, Meta)}],
+    {State1, _} = run_log(Config, State0, Entries),
+
+    {_State2, Effects} = credit(Config, CK1, ?LINE, 10, 0, false, State1),
+    ?ASSERT_EFF({send_msg, Pid,
+                 {credit_reply, <<"ctag1">>, 0, 10, 0, false, Props},
+                 ?DELIVERY_SEND_MSG_OPTS},
+                Pid =:= Self andalso Props =:= #{},
+                Effects),
+    ok.
+
+%% Verify that snapshot_installed generates 7-tuple credit_reply effects
+%% with the correct active flag when link_state_properties is enabled.
+link_state_properties_snapshot_installed_test(Config) ->
+    State0 = init(#{name => ?FUNCTION_NAME,
+                    queue_resource => rabbit_misc:r(
+                                       "/", queue, atom_to_binary(?FUNCTION_NAME)),
+                    release_cursor_interval => 0,
+                    single_active_consumer_on => true}),
+    Self = self(),
+    Ctag1 = <<"ctag1">>,
+    Ctag2 = <<"ctag2">>,
+    C1 = {Ctag1, Self},
+    C2 = {Ctag2, Self},
+    CK1 = ?LINE,
+    CK2 = ?LINE,
+    Meta = #{link_state_properties => true},
+    Entries = [
+               {CK1, make_checkout(C1, {auto, {credited, 0}}, Meta)},
+               {CK2, make_checkout(C2, {auto, {credited, 0}}, Meta)}
+              ],
+    {State1, _} = run_log(Config, State0, Entries),
+    {State2, _} = credit(Config, CK1, ?LINE, 5, 0, false, State1),
+    {State3, _} = credit(Config, CK2, ?LINE, 10, 0, false, State2),
+
+    SnapshotMeta = #{index => 100, term => 1},
+    OldMeta = #{index => 50, term => 1},
+    Effects = rabbit_fifo:snapshot_installed(SnapshotMeta, State3, OldMeta, State0),
+
+    ?ASSERT_EFF({send_msg, Pid,
+                 {credit_reply, Ctag, 0, 5, 0, false, #{active := true}},
+                 ?DELIVERY_SEND_MSG_OPTS},
+                Pid =:= Self andalso Ctag =:= Ctag1,
+                Effects),
+    ?ASSERT_EFF({send_msg, Pid,
+                 {credit_reply, Ctag, 0, 10, 0, false, #{active := false}},
+                 ?DELIVERY_SEND_MSG_OPTS},
+                Pid =:= Self andalso Ctag =:= Ctag2,
+                Effects),
+    ok.
+
 enq_enq_deq_test(C) ->
     Cid = {?FUNCTION_NAME_B, self()},
     {State1, _} = enq(C, 1, 1, first, test_init(test)),
