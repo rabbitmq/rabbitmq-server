@@ -101,7 +101,8 @@
                          max_message_size => max_message_size(),
                          handle => output_handle(),
                          footer_opt => footer_opt(),
-                         raw_mode => boolean()
+                         raw_mode => boolean(),
+                         notify_when_state_properties_changed => boolean()
                         }.
 
 -type transfer_error() :: {error,
@@ -146,7 +147,7 @@
          footer_opt :: footer_opt() | undefined,
          raw_mode = false :: boolean(),
          %% link state properties from the flow frame
-         state_properties = maps:new() :: #{binary() => term()}
+         state_properties :: ignore | #{binary() => term()}
         }).
 
 -record(state,
@@ -978,6 +979,10 @@ send_attach(Send, #{name := Name, role := RoleTuple} = Args, {FromPid, _},
     ok = Send(Attach, State),
 
     Ref = make_link_ref(Role, self(), OutHandle),
+    StateProps =  case maps:get(notify_when_state_properties_changed, Args, false) of
+                      true -> maps:new();
+                      _ -> ignore
+                  end,
     Link = #link{name = Name,
                  ref = Ref,
                  output_handle = OutHandle,
@@ -989,8 +994,8 @@ send_attach(Send, #{name := Name, role := RoleTuple} = Args, {FromPid, _},
                  delivery_count = unpack(InitialDeliveryCount),
                  max_message_size = unpack(MaxMessageSize),
                  footer_opt = maps:get(footer_opt, Args, undefined),
-                 raw_mode = maps:get(raw_mode, Args, false)},
-
+                 raw_mode = maps:get(raw_mode, Args, false),
+                 state_properties = StateProps},
     {State#state{links = Links#{OutHandle => Link},
                  next_link_handle = NextLinkHandle,
                  link_index = LinkIndex#{{Role, Name} => OutHandle}}, Ref}.
@@ -1131,7 +1136,7 @@ maybe_notify_link_credit(_Old, _New) ->
     ok.
 
 maybe_notify_link_state_properties(#'v1_0.flow'{properties = {map, KVList}},
-                                   #link{state_properties = OldProps} = Link)
+                                   #link{state_properties = #{} = OldProps} = Link)
   when is_list(KVList) ->
     case #{Key => unpack(Val) || {{symbol, Key}, Val} <- KVList} of
         OldProps ->

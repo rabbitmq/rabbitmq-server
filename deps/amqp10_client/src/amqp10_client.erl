@@ -230,7 +230,7 @@ attach_sender_link(Session, Name, Target, SettleMode, Durability) ->
                                       durable => Durability}},
                    snd_settle_mode => SettleMode,
                    rcv_settle_mode => first},
-    amqp10_client_session:attach(Session, AttachArgs).
+    attach_link(Session, AttachArgs).
 
 %% @doc Attaches a receiver link to a source.
 %% This is asynchronous and will notify completion of the attach request to the
@@ -307,7 +307,7 @@ attach_receiver_link(Session, Name, Source, SettleMode, Durability, Filter, Prop
                    filter => Filter,
                    properties => Properties,
                    raw_mode => RawMode},
-    amqp10_client_session:attach(Session, AttachArgs).
+    attach_link(Session, AttachArgs).
 
 -spec attach_link(pid(), attach_args()) -> {ok, link_ref()}.
 attach_link(Session, AttachArgs) ->

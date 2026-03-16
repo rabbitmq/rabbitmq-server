@@ -928,8 +928,7 @@ snapshot_installed(_Meta, #?MODULE{cfg = #cfg{},
     delivery_effects(SendAcc, State) ++
     credit_reply_resend_effect(State).
 
-credit_reply_resend_effect(#?MODULE{cfg = #cfg{consumer_strategy = Strategy},
-                                    waiting_consumers = Waiting,
+credit_reply_resend_effect(#?MODULE{waiting_consumers = Waiting,
                                     consumers = Consumers} = State) ->
     Available = messages_ready(State),
     maps:fold(
@@ -944,12 +943,7 @@ credit_reply_resend_effect(#?MODULE{cfg = #cfg{consumer_strategy = Strategy},
           Acc) ->
               {Avail, Props} = case is_map_key(ConsumerKey, Consumers) of
                                    true ->
-                                       case Strategy of
-                                           single_active ->
-                                               {Available, #{active => true}};
-                                           _ ->
-                                               {Available, #{}}
-                                       end;
+                                       {Available, #{active => true}};
                                    false ->
                                        {0, #{active => false}}
                                end,
@@ -1779,8 +1773,7 @@ cancel_consumer(Meta, ConsumerKey,
             end
     end.
 
-consumer_update_active_effects(#?STATE{cfg = #cfg{consumer_strategy = Strategy,
-                                                  resource = QName}} = State,
+consumer_update_active_effects(#?STATE{cfg = #cfg{resource = QName}} = State,
                                #consumer{cfg = #consumer_cfg{meta = Meta,
                                                              pid = CPid,
                                                              tag = CTag,
@@ -1796,8 +1789,7 @@ consumer_update_active_effects(#?STATE{cfg = #cfg{consumer_strategy = Strategy,
                 [QName, {CTag, CPid}, false, Ack, Prefetch,
                  Active, ActivityStatus, Args]} | Effects0],
     case Mode of
-        {credited, _} when Strategy =:= single_active andalso
-                           map_get(link_state_properties, Meta) ->
+        {credited, _} when map_get(link_state_properties, Meta) =:= true ->
             Avail = case Active of
                         true -> messages_ready(State);
                         false -> 0
@@ -3211,8 +3203,7 @@ credit_active_consumer(Meta,
                                drain = Drain,
                                consumer_key = ConsumerKey},
                        #consumer{delivery_count = DeliveryCountSnd} = Con0,
-                       #?STATE{cfg = #cfg{consumer_strategy = Strategy},
-                               consumers = Cons0,
+                       #?STATE{consumers = Cons0,
                                service_queue = ServiceQueue0} = State0) ->
     LinkCreditSnd = link_credit_snd(DeliveryCountRcv, LinkCreditRcv,
                                     DeliveryCountSnd),
@@ -3246,18 +3237,12 @@ credit_active_consumer(Meta,
         end,
     Reply = case CMeta of
                 #{link_state_properties := true}  ->
-                    Props = case Strategy of
-                                single_active ->
-                                    #{active => true};
-                                _ ->
-                                    #{}
-                            end,
                     #credit_reply{ctag = CTag,
                                   delivery_count = DeliveryCount,
                                   credit = Credit,
                                   available = Avail,
                                   drain = Drain,
-                                  properties = Props};
+                                  properties = #{active => true}};
                 _ ->
                     {credit_reply, CTag, DeliveryCount, Credit, Avail, Drain}
             end,

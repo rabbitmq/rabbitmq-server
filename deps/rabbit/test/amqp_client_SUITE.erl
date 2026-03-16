@@ -2907,11 +2907,12 @@ single_active_consumer(QType, Config) ->
     flush(sender_attached),
 
     %% The 1st consumer will become active.
-    {ok, Receiver1} = amqp10_client:attach_receiver_link(
+    {ok, Receiver1} = amqp10_client:attach_link(
                         Session,
-                        <<"test-receiver-1">>,
-                        Address,
-                        unsettled),
+                        #{name => <<"test-receiver-1">>,
+                          role => {receiver, #{address => Address}, self()},
+                          snd_settle_mode => unsettled,
+                          notify_when_state_properties_changed => true}),
     receive {amqp10_event, {link, Receiver1, attached}} -> ok
     after 30000 -> ct:fail("missing attached")
     end,
@@ -2919,11 +2920,12 @@ single_active_consumer(QType, Config) ->
     ok = assert_active_notification(Receiver1, true, QType, ?LINE),
 
     %% The 2nd consumer will become inactive.
-    {ok, Receiver2} = amqp10_client:attach_receiver_link(
+    {ok, Receiver2} = amqp10_client:attach_link(
                         Session,
-                        <<"test-receiver-2">>,
-                        Address,
-                        unsettled),
+                        #{name => <<"test-receiver-2">>,
+                          role => {receiver, #{address => Address}, self()},
+                          snd_settle_mode => unsettled,
+                          notify_when_state_properties_changed => true}),
     receive {amqp10_event, {link, Receiver2, attached}} -> ok
     after 30000 -> ct:fail("missing attached")
     end,
@@ -3031,8 +3033,12 @@ single_active_consumer_quorum_queue_notification(Config) ->
     flush(queue_created),
 
     %% Attach Receiver 1: it should be notified it is the active consumer.
-    {ok, Receiver1} = amqp10_client:attach_receiver_link(
-                        Session, <<"receiver-1">>, Address, unsettled),
+    {ok, Receiver1} = amqp10_client:attach_link(
+                        Session,
+                        #{name => <<"receiver-1">>,
+                          role => {receiver, #{address => Address}, self()},
+                          snd_settle_mode => unsettled,
+                          notify_when_state_properties_changed => true}),
     receive {amqp10_event, {link, Receiver1, attached}} -> ok
     after 9000 -> ct:fail({missing_event, ?LINE})
     end,
@@ -3044,10 +3050,13 @@ single_active_consumer_quorum_queue_notification(Config) ->
     end,
 
     %% Attach low prio Receiver 2: it should be notified it is inactive/waiting.
-    {ok, Receiver2} = amqp10_client:attach_receiver_link(
-                        Session, <<"receiver-2">>, Address,
-                        unsettled, none, #{},
-                        #{<<"rabbitmq:priority">> => {int, -1}}),
+    {ok, Receiver2} = amqp10_client:attach_link(
+                        Session,
+                        #{name => <<"receiver-2">>,
+                          role => {receiver, #{address => Address}, self()},
+                          snd_settle_mode => unsettled,
+                          properties => #{<<"rabbitmq:priority">> => {int, -1}},
+                          notify_when_state_properties_changed => true}),
     receive {amqp10_event, {link, Receiver2, attached}} -> ok
     after 9000 -> ct:fail({missing_event, ?LINE})
     end,
@@ -3090,10 +3099,13 @@ single_active_consumer_quorum_queue_notification(Config) ->
 
     %% Attaching receiver 3 with higher prio should
     %% activate Receiver 3 and deactivate receiver 1.
-    {ok, Receiver3} = amqp10_client:attach_receiver_link(
-                        Session, <<"receiver-3">>, Address,
-                        unsettled, none, #{},
-                        #{<<"rabbitmq:priority">> => {int, 10}}),
+    {ok, Receiver3} = amqp10_client:attach_link(
+                        Session,
+                        #{name => <<"receiver-3">>,
+                          role => {receiver, #{address => Address}, self()},
+                          snd_settle_mode => unsettled,
+                          properties => #{<<"rabbitmq:priority">> => {int, 10}},
+                          notify_when_state_properties_changed => true}),
     receive {amqp10_event, {link, Receiver3, attached}} -> ok
     after 9000 -> ct:fail({missing_event, ?LINE})
     end,
@@ -3169,20 +3181,22 @@ single_active_consumer_drain(QType, Config) ->
     flush(credited),
 
     %% The 1st consumer will become active.
-    {ok, Receiver1} = amqp10_client:attach_receiver_link(
+    {ok, Receiver1} = amqp10_client:attach_link(
                         Session,
-                        <<"test-receiver-1">>,
-                        Address,
-                        unsettled),
+                        #{name => <<"test-receiver-1">>,
+                          role => {receiver, #{address => Address}, self()},
+                          snd_settle_mode => unsettled,
+                          notify_when_state_properties_changed => true}),
     receive {amqp10_event, {link, Receiver1, attached}} -> ok
     after 30000 -> ct:fail("missing attached")
     end,
     %% The 2nd consumer will become inactive.
-    {ok, Receiver2} = amqp10_client:attach_receiver_link(
+    {ok, Receiver2} = amqp10_client:attach_link(
                         Session,
-                        <<"test-receiver-2">>,
-                        Address,
-                        unsettled),
+                        #{name => <<"test-receiver-2">>,
+                          role => {receiver, #{address => Address}, self()},
+                          snd_settle_mode => unsettled,
+                          notify_when_state_properties_changed => true}),
     receive {amqp10_event, {link, Receiver2, attached}} -> ok
     after 30000 -> ct:fail("missing attached")
     end,

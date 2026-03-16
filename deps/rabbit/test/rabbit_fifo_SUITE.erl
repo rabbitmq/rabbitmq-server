@@ -842,11 +842,11 @@ link_state_properties_priority_replacement_test(Config) ->
     ok.
 
 %% With competing consumer strategy, credit_reply should contain
-%% an empty properties map when link_state_properties is enabled.
+%% a properties map signalling that consumers are active.
 link_state_properties_competing_strategy_test(Config) ->
     State0 = init(#{name => ?FUNCTION_NAME,
                     queue_resource => rabbit_misc:r(
-                                       "/", queue, atom_to_binary(?FUNCTION_NAME)),
+                                        "/", queue, atom_to_binary(?FUNCTION_NAME)),
                     release_cursor_interval => 0,
                     single_active_consumer_on => false}),
     Self = self(),
@@ -860,9 +860,9 @@ link_state_properties_competing_strategy_test(Config) ->
     ?ASSERT_EFF({send_msg, Pid,
                  #credit_reply{ctag = <<"ctag1">>, delivery_count = 0,
                                credit = 10, available = 0, drain = false,
-                               properties = Props},
+                               properties = #{active := true}},
                  ?DELIVERY_SEND_MSG_OPTS},
-                Pid =:= Self andalso Props =:= #{},
+                Pid =:= Self,
                 Effects),
     ok.
 
