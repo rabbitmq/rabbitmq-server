@@ -37,7 +37,7 @@ jobs:
         fetch-tags: true
 
     - name: SETUP OTP & ELIXIR
-      uses: erlef/setup-beam@v1.19
+      uses: erlef/setup-beam@v1
       with:
         otp-version: ${{ matrix.erlang_version }}
         elixir-version: ${{ matrix.elixir_version }}
