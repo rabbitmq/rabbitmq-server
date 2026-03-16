@@ -26,7 +26,7 @@ jobs:
 
     steps:
       - name: Setup Erlant/OTP
-        uses: erlef/setup-beam@v1.19
+        uses: erlef/setup-beam@v1
         with:
           otp-version: '27' # Erlang/OTP version repeated later in this file.
           elixir-version: '1.18'
@@ -59,7 +59,7 @@ jobs:
 
     steps:
       - name: Setup Erlant/OTP
-        uses: erlef/setup-beam@v1.19
+        uses: erlef/setup-beam@v1
         with: # Versions repeated later in this file.
           otp-version: '27'
           elixir-version: '1.18'
@@ -120,7 +120,7 @@ jobs:
           path: ./NEW
 
       - name: Setup Erlant/OTP
-        uses: erlef/setup-beam@v1.19
+        uses: erlef/setup-beam@v1
         with:
           otp-version: '27'
           elixir-version: '1.18'
