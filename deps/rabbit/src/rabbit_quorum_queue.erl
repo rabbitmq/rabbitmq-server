@@ -280,9 +280,8 @@ start_cluster(Q) ->
                     amqqueue:set_type_state(NewQ0,
                                             #{nodes => [LeaderNode | FollowerNodes]});
                 true ->
-                    UIDs = maps:from_list(
-                             [{Node, ra:new_uid(ra_lib:to_binary(RaName))}
-                              || Node <- [LeaderNode | FollowerNodes]]),
+                    UIDs = #{Node => ra:new_uid(ra_lib:to_binary(RaName))
+                             || Node <- [LeaderNode | FollowerNodes]},
                     amqqueue:set_type_state(NewQ0,
                                             #{nodes => UIDs})
             end,
@@ -1174,7 +1173,10 @@ consume(Q, Spec, QState0) when ?amqqueue_is_quorum(Q) ->
                      args => Args,
                      username => ActingUser,
                      priority => Priority,
-                     timeout => Timeout},
+                     timeout => Timeout,
+                     %% We are >= 4.3.0 and can handle link state properties
+                     %% in credit_reply
+                     link_state_properties => true},
     case rabbit_fifo_client:checkout(ConsumerTag, Mode, ConsumerMeta, QState0) of
         {ok, Infos, QState} ->
             %% this info key was added in QQ v8

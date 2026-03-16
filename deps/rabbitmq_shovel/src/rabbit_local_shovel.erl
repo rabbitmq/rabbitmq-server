@@ -10,9 +10,9 @@
 -behaviour(rabbit_shovel_behaviour).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
--include_lib("amqp10_common/include/amqp10_types.hrl").
 -include_lib("kernel/include/logger.hrl").
 -include_lib("rabbit/include/mc.hrl").
+-include_lib("rabbit/include/rabbit_queue_type.hrl").
 -include("rabbit_shovel.hrl").
 
 -rabbit_boot_step({rabbit_global_local_shovel_counters,
@@ -644,8 +644,17 @@ handle_queue_actions(Actions, State) ->
     lists:foldl(
       fun({deliver, _CTag, AckRequired, Msgs}, S0) ->
               handle_deliver(AckRequired, Msgs, S0);
-         ({credit_reply, _, _, _, _, _} = Action, S0) ->
-              handle_credit_reply(Action, S0);
+         ({credit_reply, Ctag, DelCnt, Credit0, Avail, Drain}, S) ->
+              %% Backward compat clause: Add link state properties
+              Action = #credit_reply{ctag = Ctag,
+                                     delivery_count = DelCnt,
+                                     credit = Credit0,
+                                     available = Avail,
+                                     drain = Drain,
+                                     properties = #{}},
+              handle_credit_reply(Action, S);
+         (#credit_reply{} = Action, S) ->
+              handle_credit_reply(Action, S);
          (_Action, S0) ->
               S0
       end, State, Actions).
@@ -933,7 +942,9 @@ grant_link_credit(Credit, MaxLinkCredit, NumUnconfirmed) ->
     NumUnconfirmed < MaxLinkCredit.
 
 %% Drain is ignored because local shovels do not use it.
-handle_credit_reply({credit_reply, CTag, DeliveryCount, Credit, _Available, _Drain},
+handle_credit_reply(#credit_reply{ctag = CTag,
+                                  delivery_count = DeliveryCount,
+                                  credit = Credit},
                     #{source := #{credit := CCredit,
                                   max_link_credit := MaxLinkCredit,
                                   delivery_count := QDeliveryCount,

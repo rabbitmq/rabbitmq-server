@@ -13,6 +13,7 @@
 -module(rabbit_volatile_queue).
 -behaviour(rabbit_queue_type).
 
+-include("rabbit_queue_type.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([new/1,
@@ -261,7 +262,7 @@ deliver_actions(QName, Ctag, Mc) ->
     [{deliver, Ctag, _AckRequired = false, Msgs}].
 
 credit(_QName, CTag, DeliveryCountRcv, LinkCreditRcv, Drain,
-       #?STATE{delivery_count = DeliveryCountSnd} = State) ->
+       #?STATE{delivery_count = DeliveryCountSnd} = State0) ->
     LinkCreditSnd = amqp10_util:link_credit_snd(
                       DeliveryCountRcv, LinkCreditRcv, DeliveryCountSnd),
     {DeliveryCount, Credit} = case Drain of
@@ -270,9 +271,15 @@ credit(_QName, CTag, DeliveryCountRcv, LinkCreditRcv, Drain,
                                   false ->
                                       {DeliveryCountSnd, LinkCreditSnd}
                               end,
-    {State#?STATE{delivery_count = DeliveryCount,
-                  credit = Credit},
-     [{credit_reply, CTag, DeliveryCount, Credit, _Available = 0, Drain}]}.
+    State = State0#?STATE{delivery_count = DeliveryCount,
+                          credit = Credit},
+    Action = #credit_reply{ctag = CTag,
+                           delivery_count = DeliveryCount,
+                           credit = Credit,
+                           available = 0,
+                           drain = Drain,
+                           properties = #{}},
+    {State, [Action]}.
 
 close(#?STATE{}) ->
     ok.

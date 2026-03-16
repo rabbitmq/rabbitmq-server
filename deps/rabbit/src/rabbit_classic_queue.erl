@@ -3,6 +3,7 @@
 -behaviour(rabbit_policy_validator).
 
 -include("amqqueue.hrl").
+-include("rabbit_queue_type.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("kernel/include/logger.hrl").
 
@@ -725,8 +726,18 @@ deliver_to_consumer(Pid, QName, CTag, AckRequired, Message) ->
     Evt = {deliver, CTag, AckRequired, [Message]},
     send_queue_event(Pid, QName, Evt).
 
-send_credit_reply(Pid, QName, Ctag, DeliveryCount, Credit, Available, Drain) ->
-    Evt = {credit_reply, Ctag, DeliveryCount, Credit, Available, Drain},
+send_credit_reply(Pid, QName, Ctag, DeliveryCount, Credit, Avail, Drain) ->
+    Evt = case rabbit_feature_flags:is_enabled('rabbitmq_4.3.0') of
+              true ->
+                  #credit_reply{ctag = Ctag,
+                                delivery_count = DeliveryCount,
+                                credit = Credit,
+                                available = Avail,
+                                drain = Drain,
+                                properties = #{}};
+              false ->
+                  {credit_reply, Ctag, DeliveryCount, Credit, Avail, Drain}
+          end,
     send_queue_event(Pid, QName, Evt).
 
 send_queue_event(Pid, QName, Event) ->

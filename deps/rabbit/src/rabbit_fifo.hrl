@@ -116,14 +116,14 @@
                          %% new v4 format
                          {once | auto, credit_mode()}.
 
+%% static meta data associated with a consumer
 -type consumer_meta() :: #{ack => boolean(),
                            username => binary(),
                            prefetch => non_neg_integer(),
                            args => list(),
                            priority => 0..255,
-                           timeout => milliseconds()
-                          }.
-%% static meta data associated with a consumer
+                           timeout => milliseconds(),
+                           link_state_properties => true}.
 
 -type applied_mfa() :: {module(), atom(), list()}.
 % represents a partially applied module call
@@ -180,8 +180,8 @@
          credit = 0 :: non_neg_integer(),
          %% AMQP 1.0 §2.6.7
          delivery_count :: rabbit_queue_type:delivery_count(),
-         timed_out_msg_ids = [] :: [msg_id()],
-         drain = false :: boolean()
+         drain = false :: boolean(),
+         timed_out_msg_ids = [] :: [msg_id()]
         }).
 
 -type consumer() :: #consumer{}.

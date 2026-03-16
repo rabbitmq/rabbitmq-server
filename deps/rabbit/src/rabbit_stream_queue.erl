@@ -68,8 +68,9 @@
          queue_vm_stats_sups/0,
          queue_vm_ets/0]).
 
--include_lib("rabbit_common/include/rabbit.hrl").
 -include("amqqueue.hrl").
+-include("rabbit_queue_type.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("kernel/include/logger.hrl").
 
 -define(INFO_KEYS, [name, durable, auto_delete, arguments, leader, members, online, state,
@@ -1554,8 +1555,12 @@ credit_reply(CTag, #stream{delivery_count = DeliveryCount,
                            credit_reply_outstanding = true,
                            filtering_paused = false} = Str) ->
     {Str#stream{credit_reply_outstanding = false},
-     [{credit_reply, CTag, DeliveryCount, Credit,
-       available_messages(Str), Drain}]};
+     [#credit_reply{ctag = CTag,
+                    delivery_count = DeliveryCount,
+                    credit = Credit,
+                    available = available_messages(Str),
+                    drain = Drain,
+                    properties = #{}}]};
 credit_reply(_, Str) ->
     {Str, []}.
 

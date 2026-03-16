@@ -106,6 +106,7 @@ groups() ->
        consumer_priority_quorum_queue,
        single_active_consumer_classic_queue,
        single_active_consumer_quorum_queue,
+       single_active_consumer_quorum_queue_notification,
        single_active_consumer_priority_quorum_queue,
        single_active_consumer_drain_classic_queue,
        single_active_consumer_drain_quorum_queue,
@@ -2906,26 +2907,30 @@ single_active_consumer(QType, Config) ->
     flush(sender_attached),
 
     %% The 1st consumer will become active.
-    {ok, Receiver1} = amqp10_client:attach_receiver_link(
+    {ok, Receiver1} = amqp10_client:attach_link(
                         Session,
-                        <<"test-receiver-1">>,
-                        Address,
-                        unsettled),
+                        #{name => <<"test-receiver-1">>,
+                          role => {receiver, #{address => Address}, self()},
+                          snd_settle_mode => unsettled,
+                          notify_when_state_properties_changed => true}),
     receive {amqp10_event, {link, Receiver1, attached}} -> ok
     after 30000 -> ct:fail("missing attached")
     end,
     ok = amqp10_client:flow_link_credit(Receiver1, 3, never),
+    ok = assert_active_notification(Receiver1, true, QType, ?LINE),
 
     %% The 2nd consumer will become inactive.
-    {ok, Receiver2} = amqp10_client:attach_receiver_link(
+    {ok, Receiver2} = amqp10_client:attach_link(
                         Session,
-                        <<"test-receiver-2">>,
-                        Address,
-                        unsettled),
+                        #{name => <<"test-receiver-2">>,
+                          role => {receiver, #{address => Address}, self()},
+                          snd_settle_mode => unsettled,
+                          notify_when_state_properties_changed => true}),
     receive {amqp10_event, {link, Receiver2, attached}} -> ok
     after 30000 -> ct:fail("missing attached")
     end,
     ok = amqp10_client:flow_link_credit(Receiver2, 3, never),
+    ok = assert_active_notification(Receiver2, false, QType, ?LINE),
 
     NumMsgs = 5,
     [begin
@@ -2960,18 +2965,38 @@ single_active_consumer(QType, Config) ->
     after 30000 -> ct:fail("missing detached")
     end,
 
+    case QType of
+        <<"quorum">> ->
+            %% We expect Receiver2 to receive its 'active' event **before**
+            %% it receives its first message.
+            receive Event ->
+                        ?assertMatch({amqp10_event,
+                                      {link, Receiver2,
+                                       {state_properties,
+                                        #{<<"rabbitmq:active">> := true}}}},
+                                     Event)
+            after 9000 ->
+                      ct:fail({missing_event, ?LINE})
+            end;
+        <<"classic">> ->
+            ok
+    end,
+
     %% Since Receiver 1 didn't settle msg 2 and msg 3 but detached the link,
     %% both messages should have been requeued.
     %% With single-active-consumer, we expect the original message order to be retained.
-    M2b = receive {amqp10_msg, Receiver2, Msg2b} -> ?assertEqual([<<"2">>], amqp10_msg:body(Msg2b)),
-                                                    Msg2b
+    M2b = receive {amqp10_msg, Receiver2, Msg2b} ->
+                      ?assertEqual([<<"2">>], amqp10_msg:body(Msg2b)),
+                      Msg2b
           after 30000 -> ct:fail({missing_msg, ?LINE})
           end,
-    receive {amqp10_msg, Receiver2, Msg3b} -> ?assertEqual([<<"3">>], amqp10_msg:body(Msg3b))
+    receive {amqp10_msg, Receiver2, Msg3b} ->
+                ?assertEqual([<<"3">>], amqp10_msg:body(Msg3b))
     after 30000 -> ct:fail({missing_msg, ?LINE})
     end,
-    M4 = receive {amqp10_msg, Receiver2, Msg4} -> ?assertEqual([<<"4">>], amqp10_msg:body(Msg4)),
-                                                  Msg4
+    M4 = receive {amqp10_msg, Receiver2, Msg4} ->
+                     ?assertEqual([<<"4">>], amqp10_msg:body(Msg4)),
+                     Msg4
          after 30000 -> ct:fail({missing_msg, ?LINE})
          end,
     receive {amqp10_event, {link, Receiver2, credit_exhausted}} -> ok
@@ -2994,6 +3019,148 @@ single_active_consumer(QType, Config) ->
     {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
     ok = close(Init).
 
+%% Test that AMQP 1.0 receivers consuming from a quorum queue with
+%% single active consumer enabled receive link state property notifications
+%% when their consumer activity status (active / inactive) changes.
+single_active_consumer_quorum_queue_notification(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    Address = rabbitmq_amqp_address:queue(QName),
+    {_, Session, LinkPair} = Init = init(Config),
+    QProps = #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>},
+                              <<"x-single-active-consumer">> => true}},
+    {ok, #{type := <<"quorum">>}} = rabbitmq_amqp_client:declare_queue(
+                                      LinkPair, QName, QProps),
+    flush(queue_created),
+
+    %% Attach Receiver 1: it should be notified it is the active consumer.
+    {ok, Receiver1} = amqp10_client:attach_link(
+                        Session,
+                        #{name => <<"receiver-1">>,
+                          role => {receiver, #{address => Address}, self()},
+                          snd_settle_mode => unsettled,
+                          notify_when_state_properties_changed => true}),
+    receive {amqp10_event, {link, Receiver1, attached}} -> ok
+    after 9000 -> ct:fail({missing_event, ?LINE})
+    end,
+    ok = amqp10_client:flow_link_credit(Receiver1, 1, never),
+    receive {amqp10_event, {link, Receiver1,
+                            {state_properties,
+                             #{<<"rabbitmq:active">> := true}}}} -> ok
+    after 9000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    %% Attach low prio Receiver 2: it should be notified it is inactive/waiting.
+    {ok, Receiver2} = amqp10_client:attach_link(
+                        Session,
+                        #{name => <<"receiver-2">>,
+                          role => {receiver, #{address => Address}, self()},
+                          snd_settle_mode => unsettled,
+                          properties => #{<<"rabbitmq:priority">> => {int, -1}},
+                          notify_when_state_properties_changed => true}),
+    receive {amqp10_event, {link, Receiver2, attached}} -> ok
+    after 9000 -> ct:fail({missing_event, ?LINE})
+    end,
+    ok = amqp10_client:flow_link_credit(Receiver2, 1, never),
+    receive {amqp10_event, {link, Receiver2,
+                            {state_properties,
+                             #{<<"rabbitmq:active">> := false}}}} -> ok
+    after 9000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    %% Even after we send further flows, we expect no further state_properties
+    %% change notifications since the consumer's active state hasn't changed.
+    ok = amqp10_client:flow_link_credit(Receiver1, 1, never),
+    ok = amqp10_client:flow_link_credit(Receiver2, 1, never),
+    receive Unexp0 -> ct:fail({unexpected, Unexp0})
+    after 20 -> ok
+    end,
+
+    ?assertEqual(0, get_available_messages(Receiver1)),
+    ?assertEqual(0, get_available_messages(Receiver2)),
+
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address),
+    receive {amqp10_event, {link, Sender, attached}} -> ok
+    after 9000 -> ct:fail({missing_event, ?LINE})
+    end,
+    ok = wait_for_credit(Sender),
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"t1">>, <<"m1">>)),
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"t2">>, <<"m2">>)),
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"t3">>, <<"m3">>)),
+    ok = wait_for_accepts(3),
+
+    receive {amqp10_msg, Receiver1, Msg1} ->
+                ?assertEqual(<<"m1">>, amqp10_msg:body_bin(Msg1)),
+                ok = amqp10_client:accept_msg(Receiver1, Msg1)
+    after 9000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    receive {amqp10_event, {link, Receiver1, credit_exhausted}} -> ok
+    after 9000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    %% Attaching receiver 3 with higher prio should
+    %% activate Receiver 3 and deactivate receiver 1.
+    {ok, Receiver3} = amqp10_client:attach_link(
+                        Session,
+                        #{name => <<"receiver-3">>,
+                          role => {receiver, #{address => Address}, self()},
+                          snd_settle_mode => unsettled,
+                          properties => #{<<"rabbitmq:priority">> => {int, 10}},
+                          notify_when_state_properties_changed => true}),
+    receive {amqp10_event, {link, Receiver3, attached}} -> ok
+    after 9000 -> ct:fail({missing_event, ?LINE})
+    end,
+    ok = amqp10_client:flow_link_credit(Receiver3, 1, never),
+    receive {amqp10_event, {link, Receiver3,
+                            {state_properties,
+                             #{<<"rabbitmq:active">> := true}}}} -> ok
+    after 9000 -> ct:fail({missing_event, ?LINE})
+    end,
+    receive {amqp10_event, {link, Receiver1,
+                            {state_properties,
+                             #{<<"rabbitmq:active">> := false}}}} -> ok
+    after 9000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    receive {amqp10_msg, Receiver3, Msg2} ->
+                ?assertEqual(<<"m2">>, amqp10_msg:body_bin(Msg2)),
+                ok = amqp10_client:accept_msg(Receiver3, Msg2)
+    after 9000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    receive {amqp10_event, {link, Receiver3, credit_exhausted}} -> ok
+    after 9000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    %% No messages should be available for inactive consumers.
+    ?assertEqual(0, get_available_messages(Receiver1)),
+    ?assertEqual(0, get_available_messages(Receiver2)),
+    %% m3 is available in the queue for the active consumer.
+    ?assertEqual(1, get_available_messages(Receiver3)),
+
+    %% Detaching Receiver 3 should activate Receiver 1.
+    ok = amqp10_client:detach_link(Receiver3),
+    receive {amqp10_event, {link, Receiver3, {detached, normal}}} -> ok
+    after 9000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    receive {amqp10_event, {link, Receiver1,
+                            {state_properties,
+                             #{<<"rabbitmq:active">> := true}}}} -> ok
+    after 9000 -> ct:fail({missing_event, ?LINE})
+    end,
+    ?assertEqual(1, get_available_messages(Receiver1)),
+    ?assertEqual(0, get_available_messages(Receiver2)),
+
+    %% We expect no further AMQP messages or events.
+    receive Unexp1 -> ct:fail({unexpected, Unexp1})
+    after 10 -> ok
+    end,
+
+    ok = detach_link_sync(Sender),
+    ok = detach_link_sync(Receiver1),
+    ok = detach_link_sync(Receiver2),
+    {ok, #{message_count := 1}} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
+    ok = close(Init).
+
 single_active_consumer_drain_classic_queue(Config) ->
     single_active_consumer_drain(<<"classic">>, Config).
 
@@ -3011,30 +3178,34 @@ single_active_consumer_drain(QType, Config) ->
     Address = rabbitmq_amqp_address:queue(QName),
     {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"test-sender">>, Address),
     ok = wait_for_credit(Sender),
+    flush(credited),
 
     %% The 1st consumer will become active.
-    {ok, Receiver1} = amqp10_client:attach_receiver_link(
+    {ok, Receiver1} = amqp10_client:attach_link(
                         Session,
-                        <<"test-receiver-1">>,
-                        Address,
-                        unsettled),
+                        #{name => <<"test-receiver-1">>,
+                          role => {receiver, #{address => Address}, self()},
+                          snd_settle_mode => unsettled,
+                          notify_when_state_properties_changed => true}),
     receive {amqp10_event, {link, Receiver1, attached}} -> ok
     after 30000 -> ct:fail("missing attached")
     end,
     %% The 2nd consumer will become inactive.
-    {ok, Receiver2} = amqp10_client:attach_receiver_link(
+    {ok, Receiver2} = amqp10_client:attach_link(
                         Session,
-                        <<"test-receiver-2">>,
-                        Address,
-                        unsettled),
+                        #{name => <<"test-receiver-2">>,
+                          role => {receiver, #{address => Address}, self()},
+                          snd_settle_mode => unsettled,
+                          notify_when_state_properties_changed => true}),
     receive {amqp10_event, {link, Receiver2, attached}} -> ok
     after 30000 -> ct:fail("missing attached")
     end,
-    flush(attached),
 
     %% Drain both active and inactive consumer for the 1st time.
     ok = amqp10_client:flow_link_credit(Receiver1, 100, never, true),
     ok = amqp10_client:flow_link_credit(Receiver2, 100, never, true),
+    ok = assert_active_notification(Receiver1, true, QType, ?LINE),
+    ok = assert_active_notification(Receiver2, false, QType, ?LINE),
     receive {amqp10_event, {link, Receiver1, credit_exhausted}} -> ok
     after 30000 -> ct:fail({missing_event, ?LINE})
     end,
@@ -3079,6 +3250,7 @@ single_active_consumer_drain(QType, Config) ->
     receive {amqp10_event, {link, Receiver1, {detached, normal}}} -> ok
     after 30000 -> ct:fail({missing_event, ?LINE})
     end,
+    ok = assert_active_notification(Receiver2, true, QType, ?LINE),
 
     %% Send 1 more message.
     ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"dtag3">>, <<"m3">>)),
@@ -6388,7 +6560,7 @@ incoming_window_closed_close_link(Config) ->
     ok = amqp10_client:detach_link(Sender),
     {ok, Receiver} = amqp10_client:attach_receiver_link(Session, <<"receiver">>, Address, unsettled),
     receive {amqp10_event, {link, Receiver, attached}} -> ok
-    after 30000 -> ct:fail(missing_attached)
+    after 9000 -> ct:fail(missing_attached)
     end,
     flush(receiver_attached),
 
@@ -7391,3 +7563,15 @@ find_event(Type, Props, Events) when is_list(Props), is_list(Events) ->
 
 close_incoming_window(Session) ->
     amqp10_client_session:flow(Session, 0, never).
+
+assert_active_notification(LinkRef, Active, <<"quorum">>, Line) ->
+    receive
+        {amqp10_event, {link, LinkRef, {state_properties, Props}}} ->
+            ?assertMatch(#{<<"rabbitmq:active">> := Active}, Props),
+            ok
+    after 9000 ->
+              ct:fail({missing_event, Line})
+    end;
+assert_active_notification(_, _, <<"classic">>, _) ->
+    %% Classic queues do currently not support this notification.
+    ok.
