@@ -90,7 +90,7 @@ is_authorized_admin(ReqData, Context) ->
                                                  auth_config()).
 
 is_authorized(ReqData, Context, ErrorMsg, Fun) ->
-    rabbit_web_dispatch_access_control:is_authorized(ReqData, 
+    rabbit_web_dispatch_access_control:is_authorized(ReqData,
                                             Context, ErrorMsg, Fun, auth_config()).
 
 is_authorized_admin(ReqData, Context, Token) ->
@@ -730,7 +730,8 @@ id(Key, ReqData) ->
 with_ids(Keys, ReqData, Context, Fun) ->
     Results = [id(K, ReqData) || K <- Keys],
     Pairs = lists:zip(Keys, Results),
-    case [K || {K, V} <- Pairs, V =:= none orelse V =:= <<>> orelse V =:= ""] of
+    MissingKeys = [K || {K, V} <- Pairs, V =:= none orelse V =:= <<>> orelse V =:= ""],
+    case MissingKeys of
         [] ->
             Fun(Results, ReqData, Context);
         [FirstMissing | _] ->
