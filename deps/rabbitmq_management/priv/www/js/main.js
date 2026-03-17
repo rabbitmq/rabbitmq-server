@@ -1392,8 +1392,10 @@ function update_status(status) {
 
 
 function with_req(method, path, body, fun, on404fun) {
+    if (password_change_in_progress) {
+        return;
+    }
     if(!has_auth_credentials()) {
-        // Clear any lingering auth settings in local storage and navigate to the login form.
         clear_auth();
         location.reload();
         return;
@@ -1517,6 +1519,9 @@ function check_bad_response(req, full_page_404, on404fun) {
     // MSIE7 and 8 appear to do this in response to HTTP 204.
     if ((req.status >= 200 && req.status < 300) || req.status == 1223) {
         return true;
+    }
+    else if (password_change_in_progress) {
+        return false;
     }
     else if (req.status == 404 && full_page_404) {
         var html = format('404', {});
@@ -1941,4 +1946,53 @@ function check_version() {
         store_pref('version', curVersion)
         location.reload()
     }
+}
+
+var password_change_in_progress = false;
+
+function change_own_password(sammy) {
+    var params = params_magic(sammy.params);
+    var path = 'api' + fill_path_template('/users/:username', params);
+    var new_password = sammy.params['password'];
+    var username = sammy.params['username'];
+    var done = false;
+
+    password_change_in_progress = true;
+    pause_auto_refresh();
+    for (var i in outstanding_reqs) {
+        outstanding_reqs[i].abort();
+    }
+    outstanding_reqs = [];
+
+    function finish() {
+        if (done) return;
+        done = true;
+        password_change_in_progress = false;
+        resume_auto_refresh();
+    }
+
+    var timeout = setTimeout(function() {
+        finish();
+        show_popup('warn',
+            'Password change request timed out. Please try logging in again.');
+    }, 30000);
+
+    var req = xmlHttpRequest();
+    req.open('PUT', path, true);
+    req.setRequestHeader('content-type', 'application/json');
+    req.setRequestHeader('authorization', authorization_header());
+    req.onreadystatechange = function() {
+        if (req.readyState == 4 && !done) {
+            clearTimeout(timeout);
+            if (req.status >= 200 && req.status < 300) {
+                set_basic_auth(username, new_password);
+                finish();
+                go_to('#/users');
+            } else {
+                finish();
+                check_bad_response(req, false);
+            }
+        }
+    };
+    req.send(JSON.stringify(params));
 }
