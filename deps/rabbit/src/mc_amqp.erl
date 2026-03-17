@@ -472,31 +472,45 @@ convert_from_3_13_msg(#msg{header = H,
 
 -spec protocol_state_message_annotations(amqp_annotations(), mc:annotations()) ->
     amqp_annotations().
-protocol_state_message_annotations(MA, Anns) ->
+protocol_state_message_annotations(MA0, Anns) ->
+    %% filter all MA's that are going to be overwritten by ANNS
+    MA = lists:filter(
+           fun
+               ({{symbol, <<"x-exchange">>}, _}) ->
+                   not maps:is_key(?ANN_EXCHANGE, Anns);
+               ({{symbol, <<"x-routing-key">>}, _}) ->
+                   not maps:is_key(?ANN_ROUTING_KEYS, Anns);
+               ({{symbol, <<"x-opt-rabbitmq-received-time">>}, _}) ->
+                   not maps:is_key(<<"timestamp_in_ms">>, Anns);
+               ({{symbol, <<"x-opt-deaths">>}, _}) ->
+                   not maps:is_key(deaths, Anns);
+               ({{symbol, <<"x-", _/binary>> = K}, _}) ->
+                   not maps:is_key(K, Anns);
+               (_) ->
+                   true
+           end, MA0),
+
     maps:fold(
       fun(?ANN_EXCHANGE, Exchange, L) ->
-              maps_upsert(<<"x-exchange">>, {utf8, Exchange}, L);
+              [{{symbol, <<"x-exchange">>}, {utf8, Exchange}} | L];
          (?ANN_ROUTING_KEYS, RKeys, L) ->
               RKey = hd(RKeys),
-              maps_upsert(<<"x-routing-key">>, {utf8, RKey}, L);
+              [{{symbol, <<"x-routing-key">>}, {utf8, RKey}} | L];
          (<<"x-", _/binary>> = K, V, L)
            when V =/= undefined ->
               %% any x-* annotations get added as message annotations
-              maps_upsert(K, mc_util:infer_type(V), L);
+              [{{symbol, K}, mc_util:infer_type(V)} | L];
          (<<"timestamp_in_ms">>, V, L) ->
-              maps_upsert(<<"x-opt-rabbitmq-received-time">>, {timestamp, V}, L);
+              [{{symbol, <<"x-opt-rabbitmq-received-time">>},
+                {timestamp, V}} | L];
          (deaths, Deaths, L)
            when is_list(Deaths) ->
               Maps = encode_deaths(Deaths),
-              maps_upsert(<<"x-opt-deaths">>, {array, map, Maps}, L);
+              [{{symbol, <<"x-opt-deaths">>},
+                {array, map, Maps}} | L];
          (_, _, Acc) ->
               Acc
       end, MA, Anns).
-
-maps_upsert(Key, TaggedVal, KVList) ->
-    TaggedKey = {symbol, Key},
-    Elem = {TaggedKey, TaggedVal},
-    lists:keystore(TaggedKey, 1, KVList, Elem).
 
 encode(Sections) when is_list(Sections) ->
     [amqp10_framing:encode_bin(Section) || Section <- Sections,
