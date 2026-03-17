@@ -21,7 +21,7 @@
 -export([bad_request/3, service_unavailable/3, bad_request_exception/4,
          internal_server_error/3, internal_server_error/4, precondition_failed/3,
          id/2, parse_bool/1, parse_int/1, redirect_to_home/3]).
--export([with_decode/4, not_found/3]).
+-export([with_decode/4, with_ids/4, not_found/3]).
 -export([with_channel/4, with_channel/5]).
 -export([props_to_method/2, props_to_method/4]).
 -export([all_or_one_vhost/2, reply/3, responder_map/1,
@@ -90,7 +90,7 @@ is_authorized_admin(ReqData, Context) ->
                                                  auth_config()).
 
 is_authorized(ReqData, Context, ErrorMsg, Fun) ->
-    rabbit_web_dispatch_access_control:is_authorized(ReqData, 
+    rabbit_web_dispatch_access_control:is_authorized(ReqData,
                                             Context, ErrorMsg, Fun, auth_config()).
 
 is_authorized_admin(ReqData, Context, Token) ->
@@ -723,6 +723,21 @@ halt_response(Code, Type, Reason, ReqData, Context) ->
 
 id(Key, ReqData) ->
     rabbit_web_dispatch_access_control:id(Key, ReqData).
+
+%% Resolve required path/binding IDs. If any Key is missing or empty, replies 400
+%% with "Missing required <key>". Otherwise calls Fun(ResolvedValues, ReqData, Context).
+%% id/2 returns none when the binding is not found; empty binding (<<>>, "") is also treated as missing.
+with_ids(Keys, ReqData, Context, Fun) ->
+    Results = [id(K, ReqData) || K <- Keys],
+    Pairs = lists:zip(Keys, Results),
+    MissingKeys = [K || {K, V} <- Pairs, V =:= none orelse V =:= <<>> orelse V =:= ""],
+    case MissingKeys of
+        [] ->
+            Fun(Results, ReqData, Context);
+        [FirstMissing | _] ->
+            Msg = <<"Missing required ", (atom_to_binary(FirstMissing, utf8))/binary>>,
+            bad_request(Msg, ReqData, Context)
+    end.
 
 %% IMPORTANT:
 %% Prefer read_complete_body_with_limit/2 with an explicit limit to make it easier
