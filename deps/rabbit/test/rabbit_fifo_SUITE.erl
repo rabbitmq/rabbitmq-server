@@ -3005,6 +3005,25 @@ register_enqueuer_test(Config) ->
     ?ASSERT_NO_EFF({send_msg, P, go, [ra_event]}, P == Pid2, Efx9),
     ok.
 
+enqueue_node_rates_test(Config) ->
+    State0 = init(#{name => ?FUNCTION_NAME,
+                    queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+                    max_length => 2,
+                    max_in_memory_length => 0,
+                    overflow_strategy => reject_publish}),
+    Pid1 = test_util:fake_pid(node()),
+    {State1, ok, [_]} = apply(meta(Config, 1, 100, {notify, 1, Pid1}),
+                              make_register_enqueuer(Pid1), State0),
+    {State2, ok, _} = apply(meta(Config, 2, 101, {notify, 2, Pid1}),
+                            rabbit_fifo:make_enqueue(Pid1, 1, <<"one">>), State1),
+    {State3, ok, _} = apply(meta(Config, 3, 102, {notify, 3, Pid1}),
+                            rabbit_fifo:make_enqueue(Pid1, 2, <<"two">>), State2),
+    Overview = rabbit_fifo:overview(State3),
+    Node = node(),
+    ?assertMatch(#{enqueuers_by_node := #{Node := 1},
+                   enqueue_bytes_by_node := #{Node := Bytes}} when Bytes > 0, Overview),
+    ok.
+
 reject_publish_purge_test(Config) ->
     State0 = init(#{name => ?FUNCTION_NAME,
                     queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
@@ -4004,6 +4023,44 @@ aux_test(_) ->
     ok = meck:new(ra_log, []),
     meck:expect(ra_log, last_index_term, fun (_) -> {0, 0} end),
     {no_reply, _Aux, _, []} = handle_aux(leader, cast, tick, Aux, State0),
+    meck:unload(),
+    ok.
+
+aux_enqueue_node_rates_test(_) ->
+    _ = ra_machine_ets:start_link(),
+    Aux0 = init_aux(aux_test),
+    LastApplied = 0,
+    State0 = #{machine_state =>
+               init(#{name => ?FUNCTION_NAME,
+                      queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+                      single_active_consumer_on => false}),
+               log => mock_log,
+               cfg => #cfg{},
+               last_applied => LastApplied},
+    ok = meck:new(ra_log, []),
+    meck:expect(ra_log, last_index_term, fun (_) -> {0, 0} end),
+    ok = meck:new(rabbit_quorum_queue, [passthrough]),
+    meck:expect(rabbit_quorum_queue, handle_tick, fun (_, _, _) -> test_util:fake_pid(node()) end),
+
+    %% Test not ready initially
+    {reply, {error, not_ready}, Aux0, State0} =
+        handle_aux(leader, {call, self()}, enqueue_node_rates, Aux0, State0),
+
+    Node = node(),
+    Overview0 = #{enqueue_bytes_by_node => #{Node => 1000}},
+    {no_reply, Aux1, State0, []} =
+        handle_aux(leader, cast, {handle_tick, [qname, Overview0, [Node]]}, Aux0, State0),
+
+    Overview1 = #{enqueue_bytes_by_node => #{Node => 2000}},
+    {no_reply, Aux2, State0, []} =
+        handle_aux(leader, cast, {handle_tick, [qname, Overview1, [Node]]}, Aux1, State0),
+
+    {reply, {ok, Rates}, Aux2, State0} =
+        handle_aux(leader, {call, self()}, enqueue_node_rates, Aux2, State0),
+
+    %% Rate should be calculated. ra_li:rate() returns something > 0 since we added 1000 bytes
+    ?assertMatch(#{Node := Rate} when Rate > 0, Rates),
+
     meck:unload(),
     ok.
 

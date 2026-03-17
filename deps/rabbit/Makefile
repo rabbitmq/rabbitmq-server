@@ -77,6 +77,7 @@ define PROJECT_ENV
 	    {credit_flow_default_credit, {400, 200}},
 	    {quorum_commands_soft_limit, 32},
 	    {quorum_cluster_size, 3},
+	    {quorum_queue_enqueue_rate_window, 900000},
 	    %% see rabbitmq-server#248
 	    %% and rabbitmq-server#667
 	    {channel_operation_timeout, 15000},

@@ -1167,6 +1167,13 @@ credential_validator.regexp = ^abc\\d+",
      ]}],
    []},
 
+  {quorum_queue_enqueue_rate_window,
+   "quorum_queue.enqueue_rate_window = 900000",
+   [{rabbit, [
+      {quorum_queue_enqueue_rate_window, 900000}
+     ]}],
+   []},
+
   {quorum_queue_commands_soft_limit,
    "quorum_queue.commands_soft_limit = 32",
    [{rabbit, [

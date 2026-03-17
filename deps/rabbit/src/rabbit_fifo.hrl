@@ -207,13 +207,13 @@
 
 -record(enqueuer,
         {next_seqno = 1 :: msg_seqno(),
-         unused = ?NIL,
+         created :: {ra:index(), milliseconds()},
          status = up :: up | suspected_down,
          %% it is useful to have a record of when this was blocked
          %% so that we can retry sending the block effect if
          %% the publisher did not receive the initial one
          blocked :: option(ra:index()),
-         unused_1 = ?NIL,
+         enqueued_bytes = 0 :: non_neg_integer(),
          unused_2 = ?NIL
         }).
 

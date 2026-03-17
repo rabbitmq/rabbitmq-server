@@ -2753,6 +2753,11 @@ end}.
   {validators, ["non_zero_positive_integer"]}
 ]}.
 
+{mapping, "quorum_queue.enqueue_rate_window", "rabbit.quorum_queue_enqueue_rate_window", [
+  {datatype, integer},
+  {validators, ["non_zero_positive_integer"]}
+]}.
+
 {mapping, "quorum_queue.commands_soft_limit", "rabbit.quorum_commands_soft_limit", [
   {datatype, integer},
   {validators, ["non_zero_positive_integer"]}
