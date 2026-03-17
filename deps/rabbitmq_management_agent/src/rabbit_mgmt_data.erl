@@ -353,14 +353,15 @@ lookup_channel_with_fallback_to_connection(ChannelOrConnectionPid) ->
 
 augment_connection_pid(Pid) ->
     Conn = lookup_element(connection_created_stats, Pid, 3),
-    case Conn of
-    [] -> %% If the connection has just been opened, we might not yet have the data
-        [];
-    _ ->
-        [{name,         pget(name,         Conn)},
-         {peer_port,    pget(peer_port,    Conn)},
-         {peer_host,    pget(peer_host,    Conn)}]
-    end.
+    Val = case Conn of
+        [] -> %% If the connection has just been opened, we might not yet have the data
+            [];
+        _ ->
+            [{name,         pget(name,         Conn)},
+            {peer_port,    pget(peer_port,    Conn)},
+            {peer_host,    pget(peer_host,    Conn)}]
+    end,
+    rabbit_data_coercion:to_map(Val).
 
 augmented_created_stats(_Pid, Key, Type) ->
     case created_stats(Key, Type) of
