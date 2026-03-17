@@ -89,6 +89,9 @@ check_epmd(State = #state{mod  = Mod,
 handle_port_please(init, noport, Me, Port) ->
     ?LOG_INFO("epmd does not know us, re-registering as ~ts", [Me]),
     {ok, Port};
+handle_port_please(check, noport, Me, undefined) ->
+    ?LOG_WARNING("epmd does not know us, re-registering ~ts, port is not known yet", [Me]),
+    {ok, undefined};
 handle_port_please(check, noport, Me, Port) ->
     ?LOG_WARNING("epmd does not know us, re-registering ~ts at port ~b", [Me, Port]),
     {ok, Port};
