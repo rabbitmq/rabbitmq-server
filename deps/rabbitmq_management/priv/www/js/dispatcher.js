@@ -239,17 +239,8 @@ dispatcher_add(function(sammy) {
             return false;
         });
       sammy.put('#/users-modify', function() {
-            var is_own_password_change =
-                this.params['password'] != undefined &&
-                this.params['password'] != '' &&
-                this.params['username'] == user.name;
-
-            if (is_own_password_change) {
-                change_own_password(this);
-            } else {
-                if (sync_put(this, '/users/:username'))
-                    go_to('#/users');
-            }
+            if (sync_put(this, '/users/:username'))
+                go_to('#/users');
             return false;
         });
       sammy.del('#/users', function() {
