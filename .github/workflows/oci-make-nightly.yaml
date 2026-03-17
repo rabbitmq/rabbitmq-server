@@ -23,10 +23,13 @@ jobs:
           - '27'
         branch:
           - main
+          - v4.3.x
           - v4.2.x
           - v4.1.x
         include:
           - branch: main
+            project_version: 4.4.0
+          - branch: v4.3.x
             project_version: 4.3.0
 
     runs-on: ubuntu-latest
@@ -79,6 +82,7 @@ jobs:
           - '27'
         branch:
           - main
+          - v4.3.x
           - v4.2.x
           - v4.1.x
 

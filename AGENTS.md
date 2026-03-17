@@ -159,7 +159,8 @@ Jobs and run results can be inspected via `gh` on the command line.
 
 The currently developed branches are:
 
- * `main` (becomes 4.3.0)
+ * `main` (becomes 4.4.0)
+ * `v4.3.x`
  * `v4.2.x`
  * `v4.1.x`
 
