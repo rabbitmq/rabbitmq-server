@@ -9,7 +9,7 @@
 
 -behaviour(gen_server).
 
--export([mode/0, refresh/0, list/0]). %% Console Interface.
+-export([mode/0, refresh/0, list/0, list_certificates/0]). %% Console Interface.
 -export([whitelisted/3, is_whitelisted/1]). %% Client-side Interface.
 -export([start_link/0]).
 -export([init/1, terminate/2,
@@ -86,6 +86,30 @@ list() ->
         end,
         ets:tab2list(table_name())),
     string:join(Formatted, "~n~n").
+
+-spec list_certificates() -> [map()].
+list_certificates() ->
+    lists:map(
+        fun(#entry{
+                name = N,
+                cert_id = CertId,
+                certificate = Cert,
+                issuer_id = {_, Serial}}) ->
+            Name = case N of
+                undefined -> unicode:characters_to_binary(io_lib:format("~tp", [CertId]));
+                _         -> unicode:characters_to_binary(N)
+            end,
+            Validity = unicode:characters_to_binary(rabbit_ssl:peer_cert_validity(Cert)),
+            Subject = unicode:characters_to_binary(rabbit_ssl:peer_cert_subject(Cert)),
+            Issuer = unicode:characters_to_binary(rabbit_ssl:peer_cert_issuer(Cert)),
+            SerialHex = unicode:characters_to_binary(io_lib:format("0x~.16.0B", [Serial])),
+            #{name => Name,
+              serial => SerialHex,
+              subject => Subject,
+              issuer => Issuer,
+              validity => Validity}
+        end,
+        ets:tab2list(table_name())).
 
 %% Client (SSL Socket) Interface
 
