@@ -160,25 +160,29 @@ certificates from a directory.
 
 ### Listing certificates
 
-To list the currently loaded certificates use the `rabbitmqctl` utility as follows:
+To list the currently loaded certificates, use `rabbitmqctl`:
 
-```
-    rabbitmqctl eval 'io:format(rabbit_trust_store:list()).'
-```
-
-This will output a formatted list of certificates similar to:
-
-```
-    Name: cert.pem
-    Serial: 1 | 0x1
-    Subject: O=client,CN=snowman.local
-    Issuer: L=87613,CN=MyTestRootCA
-    Validity: "2016-05-24T15:28:25Z - 2026-05-22T15:28:25Z"
+``` sh
+# Available as of RabbitMQ `4.3.0`, `4.2.6`
+rabbitmqctl list_trust_store_certificates
 ```
 
-Note that this command reads each certificate from disk in order to extract
-all the relevant information. If there are a large number of certificates in the
-trust store use this command sparingly.
+This will output a table of certificates similar to:
+
+```
+Listing trust store certificates on node rabbit@hostname...
+name	serial	subject	issuer	validity
+cert.pem	0x1	O=client,CN=snowman.local	L=87613,CN=MyTestRootCA	2016-05-24T15:28:25Z - 2026-05-22T15:28:25Z
+```
+
+### Refreshing certificates
+
+To trigger a manual refresh of the trust store certificates, use `rabbitmqctl`:
+
+``` sh
+# Available as of RabbitMQ `4.3.0`, `4.2.6`
+rabbitmqctl refresh_trust_store
+```
 
 
 ## How it Works
@@ -188,23 +192,11 @@ whitelists the certificates in the given directory, then accepting
 sockets can query the trust-store with their client's certificate. It
 refreshes the whitelist to correspond with changes in the directory's
 contents, installing and removing certificate details, after a refresh
-interval or a manual refresh (by invoking a `rabbitmqctl eval
-'rabbit_trust_store:refresh().'` from the commandline).
-
-
-## Building from Source
-
-See [Plugin Development guide](https://www.rabbitmq.com/plugin-development.html).
-
-TL;DR: running
-
-    make dist
-
-will build the plugin and put build artifacts under the `./plugins` directory.
+interval or a manual refresh (by running `rabbitmqctl refresh_trust_store`).
 
 
 ## Copyright and License
 
-(c) 2007-2024 Broadcom. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+(c) 2007-2026 Broadcom. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 
-Released under the MPL, the same license as RabbitMQ.
+Released under the MPLv2, the same license as RabbitMQ.
