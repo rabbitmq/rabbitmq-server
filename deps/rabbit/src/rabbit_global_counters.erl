@@ -155,8 +155,8 @@ boot_step() ->
           ?MESSAGES_DEAD_LETTERED_EXPIRED_COUNTER,
           ?MESSAGES_DEAD_LETTERED_REJECTED_COUNTER]),
     %% Source quorum queue dead letters.
-    %% Only quorum queues can dead letter due to delivery-limit exceeded.
-    %% Only quorum queues support dead letter strategy at-least-once.
+    %% Quorum queues can dead letter due to delivery-limit exceeded.
+    %% Quorum queues support dead letter strategy at-least-once.
     init(#{queue_type => rabbit_quorum_queue, dead_letter_strategy => disabled},
          [?MESSAGES_DEAD_LETTERED_MAXLEN_COUNTER,
           ?MESSAGES_DEAD_LETTERED_EXPIRED_COUNTER,

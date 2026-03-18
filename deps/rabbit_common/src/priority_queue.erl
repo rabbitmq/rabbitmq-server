@@ -33,7 +33,7 @@
 
 -export([new/0, is_queue/1, is_empty/1, len/1, to_list/1, from_list/1,
          in/2, in/3, out/1, out_p/1, join/2, filter/2, fold/3, highest/1,
-         member/2]).
+         member/2, rotate/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -232,3 +232,12 @@ r2f([X,Y|R], L) -> {queue, [X,Y], lists:reverse(R, []), L}.
 
 maybe_negate_priority(infinity) -> infinity;
 maybe_negate_priority(P)        -> -P.
+
+-spec rotate(pqueue()) -> pqueue().
+rotate(Q = {queue, _, _, _}) ->
+    case out(Q) of
+        {empty, _Q} -> Q;
+        {{value, V}, Q1} -> in(V, Q1)
+    end;
+rotate({pqueue, Queues}) ->
+    {pqueue, [{P, rotate(Q)} || {P, Q} <- Queues]}.

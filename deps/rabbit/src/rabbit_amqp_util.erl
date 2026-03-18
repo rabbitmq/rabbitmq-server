@@ -10,9 +10,10 @@
 
 -export([section_field_name_to_atom/1,
          capabilities/1,
+         atom_to_error_condition/1,
          protocol_error/3]).
 
--type header_field_name() :: priority.
+-type header_field_name() :: durable | priority.
 -type properties_field_name() :: message_id | user_id | to | subject | reply_to |
                                  correlation_id | content_type | content_encoding |
                                  absolute_expiry_time | creation_time | group_id |
@@ -63,6 +64,19 @@ capabilities([]) ->
 capabilities(Capabilities) ->
     Caps = [{symbol, C} || C <- Capabilities],
     {array, symbol, Caps}.
+
+-spec atom_to_error_condition(atom()) ->
+    {symbol, binary()}.
+atom_to_error_condition(precondition_failed) ->
+    ?V_1_0_AMQP_ERROR_PRECONDITION_FAILED;
+atom_to_error_condition(not_implemented) ->
+    ?V_1_0_AMQP_ERROR_NOT_IMPLEMENTED;
+atom_to_error_condition(decode_error) ->
+    ?V_1_0_AMQP_ERROR_DECODE_ERROR;
+atom_to_error_condition(access_refused) ->
+    ?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS;
+atom_to_error_condition(internal_error) ->
+    ?V_1_0_AMQP_ERROR_INTERNAL_ERROR.
 
 -spec protocol_error(term(), io:format(), [term()]) ->
     no_return().

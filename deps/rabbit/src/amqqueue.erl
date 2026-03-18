@@ -52,6 +52,7 @@
          % type_state
          get_type_state/1,
          set_type_state/2,
+         update_type_state/2,
          % state
          get_state/1,
          set_state/2,
@@ -465,11 +466,10 @@ set_pid(#amqqueue{} = Queue, Pid) ->
 % policy
 
 -spec get_policy(amqqueue()) -> proplists:proplist() | none | undefined.
-
 get_policy(#amqqueue{policy = Policy}) -> Policy.
 
--spec set_policy(amqqueue(), binary() | none | undefined) -> amqqueue().
-
+-spec set_policy(amqqueue(), proplists:proplist() | none | undefined) ->
+    amqqueue().
 set_policy(#amqqueue{} = Queue, Policy) ->
     Queue#amqqueue{policy = Policy}.
 
@@ -498,6 +498,11 @@ set_type_state(#amqqueue{} = Queue, TState) ->
     Queue#amqqueue{type_state = TState};
 set_type_state(Queue, _TState) ->
     Queue.
+
+-spec update_type_state(amqqueue(), fun((map()) -> map())) -> amqqueue().
+update_type_state(#amqqueue{} = Queue, Fun) ->
+    TState = get_type_state(Queue),
+    set_type_state(Queue, Fun(TState)).
 
 % state
 

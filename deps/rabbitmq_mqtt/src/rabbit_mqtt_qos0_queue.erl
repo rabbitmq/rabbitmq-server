@@ -239,7 +239,9 @@ capabilities() ->
       queue_arguments => [],
       rebalance_module => undefined,
       server_named => true,
-      unsupported_policies => []}.
+      unsupported_policies => [],
+      distribution_modes => [move]
+     }.
 
 -spec info(amqqueue:amqqueue(), all_keys | rabbit_types:info_keys()) ->
     rabbit_types:infos().

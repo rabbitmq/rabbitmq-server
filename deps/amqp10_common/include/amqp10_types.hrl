@@ -26,3 +26,6 @@
 
 % [3.2.16]
 -define(MESSAGE_FORMAT, 0).
+
+% [3.5.7]
+-type distribution_mode() :: move | copy.

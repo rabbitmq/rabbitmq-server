@@ -261,7 +261,7 @@ publish(Ch, QName, Count) ->
     _ = [amqp_channel:call(Ch,
                            #'basic.publish'{routing_key = QName},
                            #amqp_msg{props   = #'P_basic'{delivery_mode = 2},
-                                     payload = list_to_binary(integer_to_list(I))})
+                                     payload = integer_to_binary(I)})
          || I <- lists:seq(1, Count)],
     amqp_channel:wait_for_confirms(Ch).
 

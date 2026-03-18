@@ -3,7 +3,7 @@
 %% Dead Letter counters:
 %%
 %% The following two counters are mutually exclusive because
-%% quorum queue dead-letter-strategy at-least-once is incompatible with overflow drop-head.
+%% dead-letter-strategy at-least-once is incompatible with overflow drop-head.
 -define(MESSAGES_DEAD_LETTERED_MAXLEN, 1).
 -define(MESSAGES_DEAD_LETTERED_CONFIRMED, 1).
 -define(MESSAGES_DEAD_LETTERED_EXPIRED, 2).

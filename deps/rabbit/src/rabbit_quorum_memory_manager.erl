@@ -3,65 +3,59 @@
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
 %% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
-%%
+
 -module(rabbit_quorum_memory_manager).
 
 -behaviour(gen_event).
 
--export([init/1, handle_call/2, handle_event/2, handle_info/2,
-         terminate/2, code_change/3]).
--export([register/0, unregister/0]).
+-export([register/1,
+         unregister/1]).
 
--record(state, {last_roll_over,
-                interval}).
+-export([init/1,
+         handle_event/2,
+         handle_call/2,
+         handle_info/2,
+         terminate/2]).
 
--rabbit_boot_step({rabbit_quorum_memory_manager,
-                   [{description, "quorum memory manager"},
-                    {mfa,         {?MODULE, register, []}},
-                    {cleanup,     {?MODULE, unregister, []}},
-                    {requires,    rabbit_event},
-                    {enables,     recovery}]}).
+-record(state, {queue_mod :: module(),
+                last_roll_over :: never | integer(),
+                interval :: pos_integer()}).
 
-register() ->
-    gen_event:add_handler(rabbit_alarm, ?MODULE, []).
+register(QueueMod) ->
+    gen_event:add_handler(rabbit_alarm, {?MODULE, QueueMod}, [QueueMod]).
 
-unregister() ->
-    gen_event:delete_handler(rabbit_alarm, ?MODULE, []).
+unregister(QueueMod) ->
+    gen_event:delete_handler(rabbit_alarm, {?MODULE, QueueMod}, [QueueMod]).
 
-init([]) ->
-    {ok, #state{interval = interval()}}.
-
-handle_call( _, State) ->
-    {ok, ok, State}.
+init([QueueMod]) ->
+    Interval = application:get_env(rabbit, min_wal_roll_over_interval, 20_000),
+    {ok, #state{queue_mod = QueueMod,
+                last_roll_over = never,
+                interval = Interval}}.
 
 handle_event({set_alarm, {{resource_limit, memory, Node}, []}},
-             #state{last_roll_over = undefined} = State) when Node == node() ->
-    {ok, force_roll_over(State)};
-handle_event({set_alarm, {{resource_limit, memory, Node}, []}},
-             #state{last_roll_over = Last, interval = Interval } = State)
-  when Node == node() ->
-    Now = erlang:system_time(millisecond),
-    case Now > (Last + Interval) of
+             #state{last_roll_over = Last,
+                    interval = Interval} = State)
+  when Node =:= node() ->
+    case Last =:= never orelse
+         erlang:system_time(millisecond) > (Last + Interval) of
         true ->
             {ok, force_roll_over(State)};
         false ->
             {ok, State}
     end;
-handle_event(_, State) ->
+handle_event(_Event, State) ->
     {ok, State}.
 
-handle_info(_, State) ->
+handle_call(_Request, State) ->
+    {ok, ok, State}.
+
+handle_info(_Info, State) ->
     {ok, State}.
 
-terminate(_, _State) ->
+terminate(_Args, _State) ->
     ok.
 
-code_change(_OldVsn, State, _Extra) ->
-    {ok, State}.
-
-force_roll_over(State) ->
-    rabbit_quorum_queue:wal_force_roll_over(node()),
+force_roll_over(#state{queue_mod = QueueMod} = State) ->
+    QueueMod:wal_force_roll_over(node()),
     State#state{last_roll_over = erlang:system_time(millisecond)}.
-
-interval() ->
-    application:get_env(rabbit, min_wal_roll_over_interval, 20000).

@@ -57,7 +57,9 @@
          fold_state/3,
          is_policy_applicable/2,
          is_server_named_allowed/1,
-         amqp_capabilities/1,
+         amqp_link_capabilities/1,
+         amqp_source_capabilities/1,
+         distribution_modes/1,
          arguments/1,
          arguments/2,
          notify_decorators/1,
@@ -82,11 +84,13 @@
 
 -type queue_name() :: rabbit_amqqueue:name().
 -type queue_state() :: term().
--type reject_reason() :: maxlen | down.
+-type reject_reason() :: maxlen | msg_property_limit | down.
 %% sequence number typically
 -type correlation() :: term().
 -type arguments() :: queue_arguments | consumer_arguments.
 -type queue_type() ::  module().
+%% The default distribution-mode must be listed first.
+-type distribution_modes() :: [distribution_mode(), ...].
 
 -define(STATE, ?MODULE).
 
@@ -130,11 +134,12 @@
                           mode := consume_mode(),
                           consumer_tag := rabbit_types:ctag(),
                           exclusive_consume => boolean(),
-                          args => rabbit_framing:amqp_table(),
+                          args := rabbit_framing:amqp_table(),
                           filter => rabbit_amqp_filter:expression(),
                           ok_msg := term(),
                           acting_user := rabbit_types:username(),
-                          timeout => non_neg_integer()}.
+                          timeout => non_neg_integer(),
+                          distribution_mode => distribution_mode()}.
 -type cancel_reason() :: cancel | remove.
 -type cancel_spec() :: #{consumer_tag := rabbit_types:ctag(),
                          reason => cancel_reason(),
@@ -266,16 +271,20 @@
 -callback format(amqqueue:amqqueue(), Context :: map()) ->
     [{atom(), term()}].
 
-%% TODO: replace binary() with real types?
 -callback capabilities() ->
     #{unsupported_policies := [binary()],
       queue_arguments := [binary()],
       consumer_arguments := [binary()],
-      amqp_capabilities => [binary()],
+      %% will be advertised in the offered-capabilities field of the AMQP attach frame
+      amqp_link_capabilities => [binary()],
+      %% wll be advertised in the capabilities field of the AMQP source
+      amqp_source_capabilities => [binary()],
       server_named := boolean(),
       rebalance_module := module() | undefined,
       can_redeliver := boolean(),
-      is_replicable := boolean()}.
+      is_replicable := boolean(),
+      distribution_modes := distribution_modes()
+     }.
 
 -callback notify_decorators(amqqueue:amqqueue()) ->
     ok.
@@ -473,11 +482,22 @@ is_server_named_allowed(Type) ->
     Capabilities = Type:capabilities(),
     maps:get(server_named, Capabilities, false).
 
--spec amqp_capabilities(queue_type()) ->
+-spec amqp_link_capabilities(queue_type()) ->
     [binary()].
-amqp_capabilities(Type) ->
+amqp_link_capabilities(Type) ->
     Capabilities = Type:capabilities(),
     maps:get(?FUNCTION_NAME, Capabilities, []).
+
+-spec amqp_source_capabilities(queue_type()) ->
+    [binary()].
+amqp_source_capabilities(Type) ->
+    Capabilities = Type:capabilities(),
+    maps:get(?FUNCTION_NAME, Capabilities, []).
+
+-spec distribution_modes(queue_type()) ->
+    distribution_modes().
+distribution_modes(Type) ->
+    maps:get(?FUNCTION_NAME, Type:capabilities()).
 
 -spec arguments(arguments()) -> [binary()].
 arguments(ArgumentType) ->
@@ -561,10 +581,11 @@ recover(VHost, Qs) ->
                                                    [Q | X]
                                            end, [Q], Acc)
                end, ByType0, Qs),
-    maps:fold(fun (Mod, Queues, {R0, F0}) ->
-                      {Taken, {R, F}} =  timer:tc(Mod, recover, [VHost, Queues]),
+    maps:fold(fun(Mod, Queues, {R0, F0}) ->
+                      {Time, {R, F}} = timer:tc(Mod, recover, [VHost, Queues],
+                                                millisecond),
                       ?LOG_INFO("Recovering ~b queues of type ~ts took ~bms",
-                                      [length(Queues), Mod, Taken div 1000]),
+                                [length(Queues), Mod, Time]),
                       {R0 ++ R, F0 ++ F}
               end, {[], []}, ByType).
 
@@ -764,7 +785,6 @@ dequeue(Q, NoAck, LimiterPid, CTag, Ctxs)
         {protocol_error, _, _, _} = Err ->
             Err
     end.
-
 
 -spec added_to_rabbit_registry(atom(), atom()) -> ok.
 added_to_rabbit_registry(_Type, _ModuleName) -> ok.
