@@ -29,7 +29,7 @@
 -rabbit_feature_flag(
    {detailed_queues_endpoint,
     #{desc          => "Add a detailed queues HTTP API endpoint. Reduce number of metrics in the default endpoint.",
-      stability     => stable,
+      stability     => required,
       depends_on    => [feature_flags_v2]
      }}).
 
