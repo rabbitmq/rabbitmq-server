@@ -83,7 +83,8 @@
 -type target_def() :: #{address => terminus_address(),
                         durable => terminus_durability()}.
 -type source_def() :: #{address => terminus_address(),
-                        durable => terminus_durability()}.
+                        durable => terminus_durability(),
+                        distribution_mode => distribution_mode()}.
 
 -type attach_role() :: {sender, target_def()} | {receiver, source_def(), pid()}.
 
@@ -818,12 +819,19 @@ make_source(#{role := {receiver, Source, _Pid}} = AttachArgs) ->
                        _ ->
                            undefined
                    end,
+    DistMode = case Source of
+                   #{distribution_mode := Mode} ->
+                       amqp10_util:dist_mode_from_atom(Mode);
+                   _ ->
+                       undefined
+               end,
     Dynamic = maps:get(dynamic, Source, false),
     TranslatedFilter = translate_filters(maps:get(filter, AttachArgs, #{})),
     #'v1_0.source'{address = make_address(Source),
                    durable = {uint, Durable},
                    expiry_policy = ExpiryPolicy,
                    dynamic = Dynamic,
+                   distribution_mode = DistMode,
                    filter = TranslatedFilter,
                    capabilities = make_capabilities(Source)}.
 

@@ -83,6 +83,7 @@ define PROJECT_ENV
 	    %% See https://www.rabbitmq.com/docs/consumers#acknowledgement-timeout
 	    %% 30 minutes
 	    {consumer_timeout, 1800000},
+	    {consumer_disconnected_timeout, 60000},
 
 	    %% used by rabbit_peer_discovery_classic_config
 	    {cluster_nodes, {[], disc}},
@@ -248,7 +249,7 @@ define ct_master.erl
 endef
 
 PARALLEL_CT_SET_1_A = unit_rabbit_ssl unit_cluster_formation_locking_mocks unit_cluster_formation_sort_nodes unit_collections unit_config_value_encryption unit_connection_tracking
-PARALLEL_CT_SET_1_B = amqp_address amqp_auth amqp_filter_prop amqp_filter_sql amqp_filter_sql_unit amqp_dotnet amqp_jms signal_handling single_active_consumer unit_access_control_authn_authz_context_propagation unit_access_control_credential_validation unit_amqp091_content_framing unit_amqp091_server_properties unit_app_management
+PARALLEL_CT_SET_1_B = amqp_address amqp_auth amqp_filter_prop amqp_filter_sql amqp_filter_sql_unit amqp_dotnet signal_handling single_active_consumer unit_access_control_authn_authz_context_propagation unit_access_control_credential_validation unit_amqp091_content_framing unit_amqp091_server_properties unit_app_management
 PARALLEL_CT_SET_1_C = amqp_proxy_protocol amqpl_consumer_ack bindings rabbit_db_maintenance rabbit_db_msup rabbit_db_policy rabbit_db_queue rabbit_db_topic_exchange cluster_limit cluster_minority default_queue_type_prop term_to_binary_compat_prop topic_permission unicode unit_access_control
 PARALLEL_CT_SET_1_D = amqqueue_backward_compatibility channel_interceptor channel_operation_timeout classic_queue_prop config_schema peer_discovery_dns peer_discovery_tmp_hidden_node per_node_limit per_user_connection_channel_limit
 
@@ -352,8 +353,8 @@ ifdef TRACE_SUPERVISOR2
 RMQ_ERLC_OPTS += -DTRACE_SUPERVISOR2=true
 endif
 
-# https://www.erlang.org/doc/apps/parsetools/leex.html#file/2
 ifndef NON_DETERMINISTIC
+# https://www.erlang.org/doc/apps/parsetools/leex.html#file/2
 YRL_ERLC_OPTS += +deterministic
 endif
 

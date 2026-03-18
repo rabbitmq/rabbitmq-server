@@ -12,7 +12,13 @@
          check_auto_delete/1,
          check_exclusive/1,
          check_non_durable/1,
-         erpc_call/5]).
+         erpc_call/5,
+         local_or_remote_handler/4,
+         notify_consumer_created/9,
+         notify_consumer_deleted/4,
+         get_connected_nodes/1,
+         coarse_message_counts/1,
+         wait_for_projection/2]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include("amqqueue.hrl").
@@ -86,4 +92,88 @@ erpc_call(Node, M, F, A, Timeout) ->
             end;
         false ->
             {error, noconnection}
+    end.
+
+-spec local_or_remote_handler(pid(), module(), atom(), [term()]) -> term().
+local_or_remote_handler(Pid, Module, Function, Args) ->
+    Node = node(Pid),
+    case Node == node() of
+        true ->
+            erlang:apply(Module, Function, Args);
+        false ->
+            %% This could potentially block for a while if the node is
+            %% in disconnected state or tcp buffers are full.
+            erpc:cast(Node, Module, Function, Args)
+    end.
+
+-spec notify_consumer_created(pid(),
+                              rabbit_types:ctag(),
+                              boolean(),
+                              boolean(),
+                              rabbit_amqqueue:name(),
+                              non_neg_integer(),
+                              rabbit_framing:amqp_table(),
+                              reference() | none,
+                              rabbit_types:username()) -> ok.
+notify_consumer_created(ChPid, CTag, Exclusive, AckRequired, QName,
+                        PrefetchCount, Args, Ref, ActingUser) ->
+    Props = [{consumer_tag, CTag},
+             {exclusive, Exclusive},
+             {ack_required, AckRequired},
+             {channel, ChPid},
+             {queue, QName},
+             {prefetch_count, PrefetchCount},
+             {arguments, Args},
+             {user_who_performed_action, ActingUser}],
+    rabbit_event:notify(consumer_created, Props, Ref).
+
+-spec notify_consumer_deleted(pid(),
+                              rabbit_types:ctag(),
+                              rabbit_amqqueue:name(),
+                              rabbit_types:username()) -> ok.
+notify_consumer_deleted(ChPid, ConsumerTag, QName, ActingUser) ->
+    Props = [{consumer_tag, ConsumerTag},
+             {channel, ChPid},
+             {queue, QName},
+             {user_who_performed_action, ActingUser}],
+    rabbit_event:notify(consumer_deleted, Props).
+
+-spec get_connected_nodes(amqqueue:amqqueue()) -> [node()].
+get_connected_nodes(Q) when ?is_amqqueue(Q) ->
+    ErlangNodes = [node() | nodes()],
+    [N || N <- rabbit_amqqueue:get_quorum_nodes(Q),
+          lists:member(N, ErlangNodes)].
+
+-spec coarse_message_counts(amqqueue:amqqueue()) -> rabbit_types:infos().
+coarse_message_counts(Q) when ?is_amqqueue(Q) ->
+    QName = amqqueue:get_name(Q),
+    case ets:lookup(queue_coarse_metrics, QName) of
+        [{_, MR, MU, M, _}] ->
+            [{messages_ready, MR},
+             {messages_unacknowledged, MU},
+             {messages, M}];
+        [] ->
+            [{messages_ready, 0},
+             {messages_unacknowledged, 0},
+             {messages, 0}]
+    end.
+
+-spec wait_for_projection(node(), rabbit_amqqueue:name()) -> ok | no_return().
+wait_for_projection(Node, QName) ->
+    case rabbit_feature_flags:is_enabled(khepri_db) andalso Node =/= node() of
+        true ->
+            wait_for_remote_projection(Node, QName, 256);
+        false ->
+            ok
+    end.
+
+wait_for_remote_projection(Node, QName, 0) ->
+    exit({timeout, ?FUNCTION_NAME, Node, QName});
+wait_for_remote_projection(Node, QName, N) ->
+    case erpc_call(Node, rabbit_amqqueue, lookup, [QName], 100) of
+        {ok, _} ->
+            ok;
+        _ ->
+            timer:sleep(100),
+            wait_for_remote_projection(Node, QName, N - 1)
     end.
