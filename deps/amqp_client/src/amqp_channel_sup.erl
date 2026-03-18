@@ -34,10 +34,10 @@ start_link(Type, Connection, ConnName, InfraArgs, ChNumber,
                   modules => [amqp_channel]},
     {ok, ChPid} = supervisor:start_child(Sup, ChildSpec),
     case start_writer(Sup, Type, InfraArgs, ConnName, ChNumber, ChPid) of
-        {ok, Writer} ->
-            amqp_channel:set_writer(ChPid, Writer),
+        {ok, TaggedWriter} ->
+            amqp_channel:set_writer(ChPid, TaggedWriter),
             {ok, AState} = init_command_assembler(Type),
-            {ok, Sup, {ChPid, AState}};
+            {ok, Sup, {ChPid, TaggedWriter, AState}};
         {error, _}=Error ->
             Error
     end.
@@ -58,12 +58,11 @@ start_writer(_Sup, direct, [ConnPid, Node, User, VHost, Collector, AmqpParams],
     case rpc:call(Node, rabbit_direct, start_channel,
                [ChNumber, ChPid, ConnPid, ConnName, ?PROTOCOL, User,
                 VHost, ?CLIENT_CAPABILITIES, Collector, AmqpParams], ?DIRECT_OPERATION_TIMEOUT) of
-        {ok, _Writer} = Reply ->
-            Reply;
+        {ok, Writer} ->
+            {ok, {direct, Writer}};
         {badrpc, Reason} ->
             {error, {Reason, Node}};
-        Error ->
-            Error
+        Error -> Error
     end;
 start_writer(Sup, network, [Sock, FrameMax], ConnName, ChNumber, ChPid) ->
     GCThreshold = application:get_env(amqp_client, writer_gc_threshold, ?DEFAULT_GC_THRESHOLD),
@@ -76,7 +75,11 @@ start_writer(Sup, network, [Sock, FrameMax], ConnName, ChNumber, ChPid) ->
                   shutdown => ?WORKER_WAIT,
                   type => worker,
                   modules => [rabbit_writer]},
-    supervisor:start_child(Sup, ChildSpec).
+    case supervisor:start_child(Sup, ChildSpec) of
+        {ok, Writer} ->
+            {ok, {network, Writer}};
+        Error -> Error
+    end.
 
 init_command_assembler(direct)  -> {ok, none};
 init_command_assembler(network) -> rabbit_command_assembler:init().
