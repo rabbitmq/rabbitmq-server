@@ -143,12 +143,8 @@ connection_metric_idemp(Config, {N, R}) ->
                                5000),
     Table2 = [ Pid || {Pid, _} <- read_table_rpc(Config, connection_coarse_metrics)],
     % refresh stats 'R' times
-    [[begin
-          Pid ! emit_stats
-      end|| Pid <- Table] || _ <- lists:seq(1, R)],
-    [begin
-         _ = gen_server:call(Pid, {info, [pid]})
-     end|| Pid <- Table],
+    [[Pid ! emit_stats || Pid <- Table] || _ <- lists:seq(1, R)],
+    [_ = gen:call(Pid, rabbit_call, {info, [pid]}, 9000) || Pid <- Table],
     force_metric_gc(Config),
     TableAfter = [ Pid || {Pid, _} <- read_table_rpc(Config, connection_metrics)],
     TableAfter2 = [ Pid || {Pid, _} <- read_table_rpc(Config, connection_coarse_metrics)],

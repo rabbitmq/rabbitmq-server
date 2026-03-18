@@ -40,12 +40,7 @@ end_per_suite(Config) ->
       rabbit_ct_broker_helpers:teardown_steps()).
 
 init_per_testcase(Testcase, Config) ->
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config, 'rabbitmq_4.1.0') of
-        ok ->
-            rabbit_ct_helpers:testcase_started(Config, Testcase);
-        Skip = {skip, _Reason} ->
-            Skip
-    end.
+    rabbit_ct_helpers:testcase_started(Config, Testcase).
 
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
