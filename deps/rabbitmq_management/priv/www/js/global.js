@@ -186,7 +186,7 @@ const QUEUE_EXTRA_CONTENT_REQUESTS = [];
 // All help ? popups
 var HELP = {
     'delivery-limit':
-      'The number of allowed unsuccessful delivery attempts. Once a message has been delivered unsuccessfully more than this many times it will be dropped or dead-lettered, depending on the queue configuration. The default is always 20. A value of -1 or lower sets the limit to "unlimited".',
+      'The number of allowed unsuccessful delivery attempts. Once a message has been delivered unsuccessfully more than this many times it will be dropped or dead-lettered, depending on the queue configuration. The default is always 20. A value of -1 sets the limit to "unlimited".',
 
     'exchange-auto-delete':
       'If yes, the exchange will delete itself after at least one queue or exchange has been bound to this one, and then all queues or exchanges have been unbound.',
@@ -219,10 +219,10 @@ var HELP = {
       'How long a queue can be unused for before it is automatically deleted (milliseconds).<br/>(Sets the "<a target="_blank" href="https://rabbitmq.com/ttl.html#queue-ttl">x-expires</a>" argument.)',
 
     'queue-max-length':
-      'How many (ready) messages a queue can contain before it starts to drop them from its head.<br/>(Sets the "<a target="_blank" href="https://rabbitmq.com/maxlength.html">x-max-length</a>" argument.)',
+      'How many (ready) messages a queue can contain before it starts to drop them from its head or reject publishes, depending on the overflow behaviour.<br/>(Sets the "<a target="_blank" href="https://rabbitmq.com/maxlength.html">x-max-length</a>" argument.)',
 
     'queue-max-length-bytes':
-      'Total body size for ready messages a queue can contain before it starts to drop them from its head.<br/>(Sets the "<a target="_blank" href="https://rabbitmq.com/maxlength.html">x-max-length-bytes</a>" argument.)',
+      'Total body size for ready messages a queue can contain before it starts to drop them from its head or reject publishes, depending on the overflow behaviour.<br/>(Sets the "<a target="_blank" href="https://rabbitmq.com/maxlength.html">x-max-length-bytes</a>" argument.)',
 
     'queue-max-age':
       'How long a message published to a stream queue can live before it is discarded.',
@@ -264,7 +264,7 @@ var HELP = {
        'Set the rule by which the queue leader is located when declared on a cluster of nodes. Valid values are <code>client-local</code> (default) and <code>balanced</code>.',
 
     'queue-initial-cluster-size':
-       'Set the queue initial cluster size.',
+       'Set the queue initial cluster size, i.e. number of queue members/replicas',
 
     'quorum-queue-target-group-size':
        'The target number of replicas. Used by the <a target="_blank" href="https://www.rabbitmq.com/docs/quorum-queues#member-reconciliation">periodic membership reconciliation</a> mechanism.<br/>',
@@ -282,7 +282,7 @@ var HELP = {
       'Applies to messages dead-lettered with dead-letter-strategy <code>at-least-once</code>.',
 
     'queue-delivery-limit':
-      'The number of times a message can be returned to this queue before it is dead-lettered (if configured) or dropped.',
+      'The maximum number of failed delivery attempts before the message is dead-lettered (if configured) or dropped.',
 
     'queue-message-body-bytes':
       '<p>The sum total of the sizes of the message bodies in this queue. This only counts message bodies; it does not include message properties (including headers) or metadata used by the queue.</p><p>Note that some messages can be in memory and on disk at the same time.</p><p>For classic queues, if a message larger than <code>queue_index_embed_msgs_below</code> (4KB by default) is routed to multiple queues, its body will be stored only once and shared between queues. The value shown here does not take this optimization into account.</p>',

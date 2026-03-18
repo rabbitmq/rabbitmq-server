@@ -643,7 +643,11 @@ capabilities() ->
                                <<"max-age">>, <<"stream-max-segment-size-bytes">>,
                                <<"initial-cluster-size">>,
                                %% Quorum policies
-                               <<"delivery-limit">>, <<"dead-letter-strategy">>, <<"max-in-memory-length">>, <<"max-in-memory-bytes">>, <<"target-group-size">>],
+                               <<"delivery-limit">>, <<"dead-letter-strategy">>,
+                               <<"max-in-memory-length">>, <<"max-in-memory-bytes">>, <<"target-group-size">>,
+                               %% JMS policies
+                               <<"selector-fields">>,
+                               <<"selector-field-max-bytes">>],
       queue_arguments => [<<"x-expires">>, <<"x-message-ttl">>, <<"x-dead-letter-exchange">>,
                           <<"x-dead-letter-routing-key">>, <<"x-max-length">>,
                           <<"x-max-length-bytes">>, <<"x-max-priority">>,
@@ -654,7 +658,8 @@ capabilities() ->
       server_named => true,
       rebalance_module => undefined,
       can_redeliver => false,
-      is_replicable => false
+      is_replicable => false,
+      distribution_modes => [move]
      }.
 
 notify_decorators(Q) when ?is_amqqueue(Q) ->

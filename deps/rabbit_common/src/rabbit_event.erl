@@ -155,8 +155,9 @@ notify_if(false, _Type, _Props) -> ok.
 notify(Type, Props) -> notify(Type, rabbit_data_coercion:to_proplist(Props), none).
 
 notify(Type, Props, Ref) ->
+    Event = event_cons(Type, rabbit_data_coercion:to_proplist(Props), Ref),
     %% Using {Name, node()} here to not fail if the event handler is not started
-    gen_event:notify({?MODULE, node()}, event_cons(Type, rabbit_data_coercion:to_proplist(Props), Ref)).
+    gen_event:notify({?MODULE, node()}, Event).
 
 sync_notify(Type, Props) -> sync_notify(Type, Props, none).
 

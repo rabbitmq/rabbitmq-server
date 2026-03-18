@@ -29,8 +29,8 @@ wait_for_messages_ready(Servers, QName, Ready) ->
                       num_ready_messages,
                       ?WFM_DEFAULT_NUMS).
 
-wait_for_messages_pending_ack(Servers, QName, Ready) ->
-    wait_for_messages(Servers, QName, Ready,
+wait_for_messages_pending_ack(Servers, QName, NumAcquired) ->
+    wait_for_messages(Servers, QName, NumAcquired,
                       num_checked_out,
                       ?WFM_DEFAULT_NUMS).
 

@@ -23,6 +23,7 @@
          message_id/1,
          property/2,
          timestamp/1,
+         received_timestamp/1,
          priority/1,
          set_ttl/2,
          x_header/2,
@@ -286,6 +287,11 @@ timestamp(#?MODULE{annotations = Anns}) ->
     maps:get(?ANN_TIMESTAMP, Anns, undefined);
 timestamp(BasicMsg) ->
     mc_compat:timestamp(BasicMsg).
+
+-spec received_timestamp(state()) -> non_neg_integer().
+received_timestamp(#?MODULE{annotations = #{?ANN_RECEIVED_AT_TIMESTAMP := Ts}})
+  when is_integer(Ts) ->
+    Ts.
 
 -spec priority(state()) -> undefined | non_neg_integer().
 priority(#?MODULE{annotations = Anns}) ->

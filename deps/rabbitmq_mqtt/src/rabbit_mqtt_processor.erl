@@ -2085,6 +2085,7 @@ handle_queue_actions(Actions, #state{} = State0) ->
                   ?MQTT_PROTO_V5 ->
                       RC = case Reason of
                                maxlen -> ?RC_QUOTA_EXCEEDED;
+                               msg_property_limit -> ?RC_QUOTA_EXCEEDED;
                                _ -> ?RC_IMPLEMENTATION_SPECIFIC_ERROR
                            end,
                       send_puback(RejectPktIds, RC, S);

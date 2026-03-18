@@ -107,7 +107,7 @@ groups() ->
                                             single_active_consumer_priority_take_over_return,
                                             single_active_consumer_priority_take_over_requeue,
                                             single_active_consumer_priority,
-                                            force_shrink_member_to_current_member,
+                                            force_shrink_members_to_local_member,
                                             force_all_queues_shrink_member_to_current_member,
                                             force_vhost_queues_shrink_member_to_current_member,
                                             force_checkpoint_on_queue,
@@ -1327,7 +1327,7 @@ single_active_consumer_priority(Config) ->
                  machine_overview({RaNameQ3, Server0})),
     ok.
 
-force_shrink_member_to_current_member(Config) ->
+force_shrink_members_to_local_member(Config) ->
     case rabbit_ct_helpers:is_mixed_versions() of
         true ->
             {skip, "Should not run in mixed version environments"};
@@ -1346,13 +1346,30 @@ force_shrink_member_to_current_member(Config) ->
             queue_utils:assert_number_of_replicas(
               Config, Server0, <<"/">>, QQ, 3),
 
-            rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
-                                         force_shrink_member_to_current_member,
-                                         [<<"/">>, QQ]),
+            ?assertEqual(
+               ok,
+               rabbit_ct_broker_helpers:rpc(Config, Server0,
+                                            rabbit_queue_type_ra,
+                                            force_shrink_members_to_local_member,
+                                            [<<"/">>, QQ])),
 
             wait_for_messages_ready([Server0], RaName, 3),
             queue_utils:assert_number_of_replicas(
               Config, Server0, <<"/">>, QQ, 1),
+
+            ?assertEqual(
+               {error, no_local_member},
+               rabbit_ct_broker_helpers:rpc(Config, Server1,
+                                            rabbit_queue_type_ra,
+                                            force_shrink_members_to_local_member,
+                                            [<<"/">>, QQ])),
+
+            ?assertEqual(
+               {error, no_local_member},
+               rabbit_ct_broker_helpers:rpc(Config, Server2,
+                                            rabbit_queue_type_ra,
+                                            force_shrink_members_to_local_member,
+                                            [<<"/">>, QQ])),
 
             %% Important: make sure to grow back one node at a time, waiting for the new member
             %% to become a voter before adding more.
@@ -3710,8 +3727,6 @@ delete_member_during_node_down(Config) ->
                               [<<"/">>, QQ, Remove])),
 
     rabbit_ct_broker_helpers:start_node(Config, DownServer),
-    ?assertEqual(ok, rpc:call(Server, rabbit_quorum_queue, repair_amqqueue_nodes,
-                              [<<"/">>, QQ])),
     ok.
 
 %% These tests check if node removal would cause any queues to lose (or not lose)

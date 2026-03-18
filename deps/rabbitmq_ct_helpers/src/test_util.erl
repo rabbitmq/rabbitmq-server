@@ -4,14 +4,13 @@
          fake_pid/1
          ]).
 
-
 fake_pid(Node) ->
     NodeBin = rabbit_data_coercion:to_binary(Node),
-    ThisNodeSize = size(term_to_binary(node())) + 1,
+    ThisNodeSize = byte_size(term_to_binary(node())) + 1,
     Pid = spawn(fun () -> ok end),
     %% drop the local node data from a local pid
     <<Pre:ThisNodeSize/binary, LocalPidData/binary>> = term_to_binary(Pid),
-    S = size(NodeBin),
+    S = byte_size(NodeBin),
     %% get the encoding type of the pid
     <<_:8, Type:8/unsigned, _/binary>> = Pre,
     %% replace it with the incoming node binary
@@ -22,7 +21,6 @@ fake_pid(Node) ->
 -include_lib("eunit/include/eunit.hrl").
 
 fake_pid_test() ->
-    _ = fake_pid(banana),
-    ok.
+    ?assert(is_pid(fake_pid(banana))).
 
 -endif.

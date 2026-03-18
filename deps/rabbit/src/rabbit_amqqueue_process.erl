@@ -1234,26 +1234,10 @@ emit_stats(State, Extra) ->
     rabbit_core_metrics:queue_stats(Name, Extra ++ Infos),
     rabbit_core_metrics:queue_stats(Name, MR, MU, M, R).
 
-emit_consumer_created(ChPid, CTag, Exclusive, AckRequired, QName,
-                      PrefetchCount, Args, Ref, ActingUser) ->
-    rabbit_event:notify(consumer_created,
-                        [{consumer_tag,   CTag},
-                         {exclusive,      Exclusive},
-                         {ack_required,   AckRequired},
-                         {channel,        ChPid},
-                         {queue,          QName},
-                         {prefetch_count, PrefetchCount},
-                         {arguments,      Args},
-                         {user_who_performed_action, ActingUser}],
-                        Ref).
-
 emit_consumer_deleted(ChPid, ConsumerTag, QName, ActingUser) ->
     rabbit_core_metrics:consumer_deleted(ChPid, ConsumerTag, QName),
-    rabbit_event:notify(consumer_deleted,
-                        [{consumer_tag, ConsumerTag},
-                         {channel,      ChPid},
-                         {queue,        QName},
-                         {user_who_performed_action, ActingUser}]).
+    rabbit_queue_type_util:notify_consumer_deleted(ChPid, ConsumerTag,
+                                                   QName, ActingUser).
 
 %%----------------------------------------------------------------------------
 
@@ -1416,7 +1400,8 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
                 rabbit_core_metrics:consumer_created(
                 ChPid, ConsumerTag, ExclusiveConsume, AckRequired, QName,
                 PrefetchCount, ConsumerIsActive, ActivityStatus, Args),
-            emit_consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
+            rabbit_queue_type_util:notify_consumer_created(
+                ChPid, ConsumerTag, ExclusiveConsume,
                 AckRequired, QName, PrefetchCount,
                 Args, none, ActingUser),
             notify_decorators(State1),
@@ -1629,7 +1614,7 @@ handle_cast({force_event_refresh, Ref},
     AllConsumers = rabbit_queue_consumers:all(Consumers),
     ?LOG_DEBUG("Queue ~ts forced to re-emit events, consumers: ~tp",
                [rabbit_misc:rs(QName), AllConsumers]),
-    [emit_consumer_created(
+    [rabbit_queue_type_util:notify_consumer_created(
        Ch, CTag, ActiveOrExclusive, AckRequired, QName, Prefetch,
        Args, Ref, ActingUser) ||
         {Ch, CTag, AckRequired, Prefetch, ActiveOrExclusive, _, Args, ActingUser}
