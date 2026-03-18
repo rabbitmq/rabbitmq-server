@@ -662,9 +662,6 @@ handle_other({rabbit_call, From, {info, Items}}, State) ->
                            catch Error -> {error, Error}
                            end),
     State;
-handle_other({'$gen_call', From, Req}, State) ->
-    %% Delete this function clause when feature flag 'rabbitmq_4.1.0' becomes required.
-    handle_other({rabbit_call, From, Req}, State);
 handle_other({'$gen_cast', {force_event_refresh, Ref}}, State)
   when ?IS_RUNNING(State) ->
     rabbit_event:notify(
@@ -1886,17 +1883,12 @@ connection_duration(ConnectedAt) ->
     end.
 
 gen_call(Pid, Req, Timeout) ->
-    case rabbit_feature_flags:is_enabled('rabbitmq_4.1.0') of
-        true ->
-            %% We use gen:call/4 with label rabbit_call instead of gen_server:call/3 with label '$gen_call'
-            %% because cowboy_websocket does not let rabbit_web_amqp_handler handle '$gen_call' messages:
-            %% https://github.com/ninenines/cowboy/blob/2.12.0/src/cowboy_websocket.erl#L427-L430
-            case catch gen:call(Pid, rabbit_call, Req, Timeout) of
-                {ok, Res} ->
-                    Res;
-                {'EXIT', Reason} ->
-                    exit({Reason, {?MODULE, ?FUNCTION_NAME, [Pid, Req, Timeout]}})
-            end;
-        false ->
-            gen_server:call(Pid, Req, Timeout)
+    %% We use gen:call/4 with label rabbit_call instead of gen_server:call/3 with label '$gen_call'
+    %% because cowboy_websocket does not let rabbit_web_amqp_handler handle '$gen_call' messages:
+    %% https://github.com/ninenines/cowboy/blob/2.12.0/src/cowboy_websocket.erl#L427-L430
+    case catch gen:call(Pid, rabbit_call, Req, Timeout) of
+        {ok, Res} ->
+            Res;
+        {'EXIT', Reason} ->
+            exit({Reason, {?MODULE, ?FUNCTION_NAME, [Pid, Req, Timeout]}})
     end.

@@ -219,9 +219,6 @@ handle_other({rabbit_call, From, {info, Items}}, State) ->
             end,
     gen_server:reply(From, Reply),
     State;
-handle_other({'$gen_call', From, Req}, State) ->
-    %% Delete this function clause when feature flag 'rabbitmq_4.1.0' becomes required.
-    handle_other({rabbit_call, From, Req}, State);
 handle_other({'$gen_cast', {force_event_refresh, Ref}}, State) ->
     case ?IS_RUNNING(State) of
         true ->
