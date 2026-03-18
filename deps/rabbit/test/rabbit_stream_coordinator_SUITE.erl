@@ -33,6 +33,7 @@ all_tests() ->
      sac_pre_v7_down_handler_should_use_monitors_map,
      sac_pre_v7_ensure_monitors_should_use_monitors_map,
      new_stream,
+     new_stream_idempotent,
      leader_down,
      leader_down_scenario_1,
      replica_down,
@@ -494,6 +495,31 @@ new_stream(_) ->
                                                    current = undefined,
                                                    state = {running, E, R2Pid}}}},
                  S7),
+
+    ok.
+
+new_stream_idempotent(_) ->
+    S0 = rabbit_stream_coordinator:init(#{machine_version => 7}),
+    StreamId = atom_to_list(?FUNCTION_NAME),
+
+    TypeState = #{name => StreamId,
+                  retention => [],
+                  nodes => [node()]},
+    Q = new_q(list_to_binary(StreamId), TypeState),
+    NewStream = {new_stream, StreamId, #{leader_node => node(),
+                                         retention => [],
+                                         queue => Q}},
+    From = {self(), make_ref()},
+    StartIdx = ?LINE,
+    Meta = (meta(StartIdx))#{from => From},
+    {S1, '$ra_no_reply', _} = apply_cmd(Meta, NewStream, S0),
+    {S1, '$ra_no_reply', []} = apply_cmd(Meta#{index := ?LINE}, NewStream, S1),
+    Pid = self(),
+    {S2, _, _} = apply_cmd(meta(?LINE), {member_started, StreamId,
+                                         #{epoch => 1,
+                                           index => StartIdx,
+                                           pid => Pid}}, S1),
+    {_, {ok, Pid}, []} = apply_cmd(Meta#{index := ?LINE}, NewStream, S2),
 
     ok.
 
