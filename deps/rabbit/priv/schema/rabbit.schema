@@ -2988,7 +2988,7 @@ end}.
 fun(Conf) ->
     case cuttlefish_variable:filter_by_prefix("amqp10_client.ssl_options.key", Conf) of
         [{[_,_,Key], Val}|_] -> {list_to_atom(Key), list_to_binary(Val)};
-        _ -> undefined
+        _ -> cuttlefish:unset()
     end
 end}.
 
@@ -3026,7 +3026,7 @@ end}.
 fun(Conf) ->
     case cuttlefish:conf_get("amqp10_client.ssl_options.sni", Conf, undefined) of
         undefined -> cuttlefish:unset();
-        none      -> cuttlefish:unset();
+        none      -> disable;
         Hostname  -> Hostname
     end
 end}.
@@ -3096,7 +3096,7 @@ end}.
 fun(Conf) ->
     case cuttlefish_variable:filter_by_prefix("amqp_client.ssl_options.key", Conf) of
         [{[_,_,Key], Val}|_] -> {list_to_atom(Key), list_to_binary(Val)};
-        _ -> undefined
+        _ -> cuttlefish:unset()
     end
 end}.
 
@@ -3134,7 +3134,7 @@ end}.
 fun(Conf) ->
     case cuttlefish:conf_get("amqp_client.ssl_options.sni", Conf, undefined) of
         undefined -> cuttlefish:unset();
-        none      -> cuttlefish:unset();
+        none      -> disable;
         Hostname  -> Hostname
     end
 end}.
