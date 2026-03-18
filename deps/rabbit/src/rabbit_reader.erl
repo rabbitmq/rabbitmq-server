@@ -955,11 +955,11 @@ create_channel(Channel,
             put({ch_pid, ChPid}, {Channel, MRef}),
             put({channel, Channel}, {ChPid, AState}),
             {ok, {ChPid, AState}, State#v1{channel_count = ChannelCount + 1}};
-        {true, Limit, Fmt} ->
+        {true, Limit, Fmt, FmtArg} ->
             {error, rabbit_misc:amqp_error(
                       not_allowed,
                       Fmt,
-                      [node(), Limit], 'none')}
+                      [FmtArg, Limit], 'none')}
     end.
 
 is_over_limits(Username) ->
@@ -972,13 +972,13 @@ is_over_limits(Username) ->
                     Fmt =
                         "number of channels opened on node '~ts' has reached "
                         "the maximum allowed limit of (~w)",
-                    {true, Limit, Fmt}
+                    {true, Limit, Fmt, node()}
             end;
         {true, Limit} ->
             Fmt =
                 "number of channels opened for user '~ts' has reached "
                 "the maximum allowed user limit of (~w)",
-            {true, Limit, Fmt}
+            {true, Limit, Fmt, Username}
     end.
 
 is_over_node_channel_limit() ->
