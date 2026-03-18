@@ -1480,6 +1480,18 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_SENDER,
                               delivery_count = DeliveryCountInt,
                               credit = MaxLinkCredit},
             _Outcomes = outcomes(Source),
+            Caps = case QNameBin of
+                       undefined ->
+                           undefined;
+                       _ ->
+                           QName = rabbit_misc:r(Vhost, queue, QNameBin),
+                           case rabbit_amqqueue:lookup(QName) of
+                               {ok, Q} ->
+                                   link_capabilities(amqqueue:get_type(Q));
+                               _ ->
+                                   undefined
+                           end
+                   end,
             Reply = #'v1_0.attach'{
                        name = LinkName,
                        handle = Handle,
@@ -1489,7 +1501,8 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_SENDER,
                        target = Target,
                        %% We are the receiver.
                        role = ?AMQP_ROLE_RECEIVER,
-                       max_message_size = {ulong, MaxMessageSize}},
+                       max_message_size = {ulong, MaxMessageSize},
+                       offered_capabilities = Caps},
             Flow = #'v1_0.flow'{handle = Handle,
                                 delivery_count = DeliveryCount,
                                 link_credit = ?UINT(MaxLinkCredit)},
@@ -1542,7 +1555,8 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
             link_error(?V_1_0_AMQP_ERROR_INVALID_FIELD, "Attach refused: ~tp", [Reason]);
         {ok, #resource{name = QNameBin} = QName,
          #'v1_0.source'{address = {utf8, SourceAddress},
-                        filter = DesiredFilter} = Source,
+                        filter = DesiredFilter,
+                        distribution_mode = DesiredDistMode} = Source,
          PermCache1, TopicPermCache} ->
             PermCache = check_resource_access(QName, read, User, PermCache1),
             case rabbit_amqqueue:with(
@@ -1557,25 +1571,32 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
                                        [rabbit_misc:rs(QName)])
                            end,
                            ConsumerArgs0 = parse_attach_properties(Properties),
+                           QType = amqqueue:get_type(Q),
                            {EffectiveFilter,
                             ConsumerFilter,
-                            ConsumerArgs1} = parse_filter(DesiredFilter),
-                           Spec = #{no_ack => SndSettled,
-                                    channel_pid => self(),
-                                    limiter_pid => none,
-                                    limiter_active => false,
-                                    mode => {credited, ?INITIAL_DELIVERY_COUNT},
-                                    consumer_tag => handle_to_ctag(HandleInt),
-                                    exclusive_consume => false,
-                                    args => ConsumerArgs0 ++ ConsumerArgs1,
-                                    filter => ConsumerFilter,
-                                    ok_msg => undefined,
-                                    acting_user => Username},
+                            ConsumerArgs1} = parse_filter(DesiredFilter, QType),
+                           Spec0 = #{no_ack => SndSettled,
+                                     channel_pid => self(),
+                                     limiter_pid => none,
+                                     limiter_active => false,
+                                     mode => {credited, ?INITIAL_DELIVERY_COUNT},
+                                     consumer_tag => handle_to_ctag(HandleInt),
+                                     exclusive_consume => false,
+                                     args => ConsumerArgs0 ++ ConsumerArgs1,
+                                     filter => ConsumerFilter,
+                                     ok_msg => undefined,
+                                     acting_user => Username},
+                           Spec = case DesiredDistMode of
+                                      undefined ->
+                                          Spec0;
+                                      _ ->
+                                          maps:put(distribution_mode,
+                                                   amqp10_util:dist_mode_to_atom(DesiredDistMode),
+                                                   Spec0)
+                                  end,
                            case rabbit_queue_type:consume(Q, Spec, QStates0) of
                                {ok, QStates} ->
-                                   QType = amqqueue:get_type(Q),
-                                   OfferedCaps0 = rabbit_queue_type:amqp_capabilities(QType),
-                                   OfferedCaps = rabbit_amqp_util:capabilities(OfferedCaps0),
+                                   EffectiveDistMode = effective_dist_mode(DesiredDistMode, QType),
                                    A = #'v1_0.attach'{
                                           name = LinkName,
                                           handle = Handle,
@@ -1583,11 +1604,14 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
                                           snd_settle_mode = EffectiveSndSettleMode,
                                           rcv_settle_mode = RcvSettleMode,
                                           %% "the sending endpoint sets the filter actually in place" [3.5.3]
-                                          source = Source#'v1_0.source'{filter = EffectiveFilter},
+                                          source = Source#'v1_0.source'{
+                                                            filter = EffectiveFilter,
+                                                            distribution_mode = EffectiveDistMode,
+                                                            capabilities = source_capabilities(QType)},
                                           role = ?AMQP_ROLE_SENDER,
                                           %% Echo back that we will respect the client's requested max-message-size.
                                           max_message_size = MaybeMaxMessageSize,
-                                          offered_capabilities = OfferedCaps},
+                                          offered_capabilities = link_capabilities(QType)},
                                    L = #outgoing_link{
                                           name = LinkNameBin,
                                           source_address = SourceAddress,
@@ -1616,8 +1640,8 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
                                                          topic_permission_cache = TopicPermCache},
                                    rabbit_global_counters:consumer_created(?PROTOCOL),
                                    {ok, [A], State1};
-                               {error, _Type, Reason, Args} ->
-                                   link_error(?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
+                               {error, Type, Reason, Args} ->
+                                   link_error(rabbit_amqp_util:atom_to_error_condition(Type),
                                               Reason, Args)
                            end
                    end) of
@@ -2213,11 +2237,6 @@ session_flow_control_received_flow(
                 remote_outgoing_window = FlowOutgoingWindow,
                 remote_incoming_window = RemoteIncomingWindow}.
 
-% TODO: validate effective settle modes against
-%       those declared during attach
-
-% TODO: handle aborted transfers
-
 handle_queue_event({queue_event, QRef, Evt},
                    #state{queue_states = QStates0} = S0) ->
     case rabbit_queue_type:handle_event(QRef, Evt, QStates0) of
@@ -2309,7 +2328,6 @@ handle_deliver(ConsumerTag, AckRequired,
             State#state{outgoing_pending = queue:in(PendingDel, Pending),
                         outgoing_delivery_id = add(DeliveryId, 1)};
         _ ->
-            %% TODO handle missing link -- why does the queue think it's there?
             ?LOG_WARNING(
                "No link handle ~b exists for delivery with consumer tag ~p from queue ~tp",
                [Handle, ConsumerTag, QName]),
@@ -2724,6 +2742,16 @@ rejected(QNameBin, maxlen) ->
                   info = {map,
                           [{{symbol, <<"queue">>}, {utf8, QNameBin}},
                            {{symbol, <<"reason">>}, {symbol, <<"maxlen">>}}]}}};
+rejected(QNameBin, msg_property_limit) ->
+    %% Some configured message header/property limit was exceeded.
+    #'v1_0.rejected'{
+       error = #'v1_0.error'{
+                  condition = ?V_1_0_AMQP_ERROR_RESOURCE_LIMIT_EXCEEDED,
+                  description = {utf8, <<"message property limit exceeded for queue '",
+                                         QNameBin/binary, "'">>},
+                  info = {map,
+                          [{{symbol, <<"queue">>}, {utf8, QNameBin}},
+                           {{symbol, <<"reason">>}, {symbol, <<"property-limit-exceeded">>}}]}}};
 rejected(QNameBin, down) ->
     #'v1_0.rejected'{
        error = #'v1_0.error'{
@@ -2732,7 +2760,6 @@ rejected(QNameBin, down) ->
                   info = {map,
                           [{{symbol, <<"queue">>}, {utf8, QNameBin}},
                            {{symbol, <<"reason">>}, {symbol, <<"unavailable">>}}]}}}.
-
 
 maybe_grant_link_credit(Credit, MaxLinkCredit, DeliveryCount, NumUnconfirmed, Handle) ->
     case grant_link_credit(Credit, MaxLinkCredit, NumUnconfirmed) of
@@ -3253,14 +3280,38 @@ parse_attach_properties({map, KVList}) ->
               false
       end, KVList).
 
-parse_filter(undefined) ->
+effective_dist_mode(DesiredDistMode, QType) ->
+    case rabbit_queue_type:distribution_modes(QType) of
+        [Mode] ->
+            amqp10_util:dist_mode_from_atom(Mode);
+        [DefaultMode, _] ->
+            case DesiredDistMode of
+                {symbol, _} ->
+                    DesiredDistMode;
+                undefined ->
+                    amqp10_util:dist_mode_from_atom(DefaultMode)
+            end
+    end.
+
+link_capabilities(QType) ->
+    Caps = rabbit_queue_type:amqp_link_capabilities(QType),
+    rabbit_amqp_util:capabilities(Caps).
+
+source_capabilities(QType) ->
+    Caps = rabbit_queue_type:amqp_source_capabilities(QType),
+    rabbit_amqp_util:capabilities(Caps).
+
+parse_filter(undefined, _QType) ->
     {undefined, undefined, []};
-parse_filter({map, DesiredKVList}) ->
-    {EffectiveKVList, ConsusumerFilter, ConsumerArgs} =
-    lists:foldr(fun parse_filters/2, {[], undefined, []}, DesiredKVList),
-    {{map, EffectiveKVList}, ConsusumerFilter, ConsumerArgs}.
+parse_filter({map, DesiredKVList}, QType) ->
+    {EffectiveKVList, ConsumerFilter, ConsumerArgs} =
+    lists:foldr(fun(Filter, Acc) ->
+                        parse_filters(Filter, QType, Acc)
+                end, {[], undefined, []}, DesiredKVList),
+    {{map, EffectiveKVList}, ConsumerFilter, ConsumerArgs}.
 
 parse_filters(Filter = {{symbol, _Key}, {described, {symbol, <<"rabbitmq:stream-offset-spec">>}, Value}},
+              _QType,
               Acc = {EffectiveFilters, ConsumerFilter, ConsumerArgs}) ->
     case Value of
         {timestamp, Ts} ->
@@ -3281,6 +3332,7 @@ parse_filters(Filter = {{symbol, _Key}, {described, {symbol, <<"rabbitmq:stream-
             Acc
     end;
 parse_filters(Filter = {{symbol, _Key}, {described, {symbol, <<"rabbitmq:stream-filter">>}, Value}},
+              _QType,
               Acc = {EffectiveFilters, ConsumerFilter, ConsumerArgs}) ->
     case Value of
         {list, Filters0} ->
@@ -3299,19 +3351,21 @@ parse_filters(Filter = {{symbol, _Key}, {described, {symbol, <<"rabbitmq:stream-
             Acc
     end;
 parse_filters(Filter = {{symbol, _Key}, {described, {symbol, <<"rabbitmq:stream-match-unfiltered">>}, Match}},
+              _QType,
               {EffectiveFilters, ConsumerFilter, ConsumerArgs})
   when is_boolean(Match) ->
     Arg = {<<"x-stream-match-unfiltered">>, bool, Match},
     {[Filter | EffectiveFilters], ConsumerFilter, [Arg | ConsumerArgs]};
-parse_filters({Symbol = {symbol, <<"rabbitmq:stream-", _/binary>>}, Value}, Acc)
+parse_filters({Symbol = {symbol, <<"rabbitmq:stream-", _/binary>>}, Value}, QType, Acc)
   when element(1, Value) =/= described ->
     case rabbit_deprecated_features:is_permitted(amqp_filter_set_bug) of
         true ->
-            parse_filters({Symbol, {described, Symbol, Value}}, Acc);
+            parse_filters({Symbol, {described, Symbol, Value}}, QType, Acc);
         false ->
             Acc
     end;
 parse_filters(Filter = {{symbol, ?FILTER_NAME_SQL}, Value},
+              _QType,
               Acc = {EffectiveFilters, ConsumerFilter, ConsumerArgs}) ->
     case ConsumerFilter of
         undefined ->
@@ -3325,7 +3379,20 @@ parse_filters(Filter = {{symbol, ?FILTER_NAME_SQL}, Value},
             %% SQL and property filter expressions are mutually exclusive.
             Acc
     end;
+parse_filters(Filter = {{symbol, ?FILTER_NAME_SELECTOR}, {described, Descriptor, {utf8, Selector}}},
+              QType,
+              Acc = {EffectiveFilters, ConsumerFilter, ConsumerArgs})
+  when Descriptor =:= {symbol, ?DESCRIPTOR_NAME_SELECTOR_FILTER} orelse
+       Descriptor =:= {ulong, ?DESCRIPTOR_CODE_SELECTOR_FILTER} ->
+    case lists:member(?CAP_SELECTOR, rabbit_queue_type:amqp_source_capabilities(QType)) of
+        true ->
+            Arg = {<<"x-jms-selector">>, longstr, Selector},
+            {[Filter | EffectiveFilters], ConsumerFilter, [Arg | ConsumerArgs]};
+        false ->
+            Acc
+    end;
 parse_filters(Filter = {{symbol, _Key}, Value},
+              _QType,
               Acc = {EffectiveFilters, ConsumerFilter, ConsumerArgs}) ->
     case rabbit_amqp_filter_prop:parse(Value) of
         {ok, ParsedExpression = {Section, _}} ->
@@ -3963,6 +4030,7 @@ format_status(
                     stashed_settled = StashedSettled,
                     stashed_down = StashedDown,
                     stashed_eol = StashedEol,
+                    stashed_consumer_timeout = StashedConsumerTimeout,
                     queue_states = QueueStates,
                     permission_cache = PermissionCache,
                     topic_permission_cache = TopicPermissionCache}} = Status) ->
@@ -3984,6 +4052,7 @@ format_status(
               stashed_settled => StashedSettled,
               stashed_down => StashedDown,
               stashed_eol => StashedEol,
+              stashed_consumer_timeout => StashedConsumerTimeout,
               queue_states => rabbit_queue_type:format_status(QueueStates),
               permission_cache => PermissionCache,
               topic_permission_cache => TopicPermissionCache},

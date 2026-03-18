@@ -17,6 +17,7 @@
          close/1,
          handle_event/3]).
 -export([is_recoverable/1,
+         ra_system/0,
          recover/2,
          system_recover/1,
          stop/1,
@@ -120,6 +121,14 @@
                  [queue, <<"quorum">>]}},
      {requires, rabbit_registry},
      {enables, rabbit_policy}]}).
+
+-rabbit_boot_step(
+   {quorum_memory_alarm_handler,
+    [{description, "quorum queue memory alarm handler"},
+     {mfa, {rabbit_quorum_memory_manager, register, [?MODULE]}},
+     {cleanup, {rabbit_quorum_memory_manager, unregister, [?MODULE]}},
+     {requires, rabbit_event},
+     {enables, recovery}]}).
 
 -type msg_id() :: non_neg_integer().
 -type qmsg() :: {rabbit_types:r('queue'), pid(), msg_id(), boolean(),
@@ -300,7 +309,7 @@ start_cluster(Q) ->
                        || ServerId <- members(NewQ)],
 
             %% khepri projections on remote nodes are eventually consistent
-            wait_for_projections(LeaderNode, QName),
+            rabbit_queue_type_util:wait_for_projection(LeaderNode, QName),
             try erpc_call(LeaderNode, ra, start_cluster,
                           [?RA_SYSTEM, RaConfs, ?START_CLUSTER_TIMEOUT],
                           ?START_CLUSTER_RPC_TIMEOUT) of
@@ -395,10 +404,11 @@ single_active_consumer_on(Q) ->
 
 update_consumer_handler(QName, {ConsumerTag, ChPid}, Exclusive, AckRequired,
                         Prefetch, Active, ActivityStatus, Args) ->
-    catch local_or_remote_handler(ChPid, ?MODULE, update_consumer,
-                                  [QName, ChPid, ConsumerTag, Exclusive,
-                                   AckRequired, Prefetch, Active,
-                                   ActivityStatus, Args]).
+    catch rabbit_queue_type_util:local_or_remote_handler(ChPid, ?MODULE, update_consumer,
+                                                         [QName, ChPid, ConsumerTag,
+                                                          Exclusive, AckRequired,
+                                                          Prefetch, Active,
+                                                          ActivityStatus, Args]).
 
 update_consumer(QName, ChPid, ConsumerTag, Exclusive, AckRequired, Prefetch,
                 Active, ActivityStatus, Args) ->
@@ -408,23 +418,12 @@ update_consumer(QName, ChPid, ConsumerTag, Exclusive, AckRequired, Prefetch,
                                                ActivityStatus, Args).
 
 cancel_consumer_handler(QName, {ConsumerTag, ChPid}) ->
-    catch local_or_remote_handler(ChPid, ?MODULE, cancel_consumer,
-                                  [QName, ChPid, ConsumerTag]).
+    catch rabbit_queue_type_util:local_or_remote_handler(ChPid, ?MODULE, cancel_consumer,
+                                                         [QName, ChPid, ConsumerTag]).
 
 cancel_consumer(QName, ChPid, ConsumerTag) ->
     catch rabbit_core_metrics:consumer_deleted(ChPid, ConsumerTag, QName),
-    emit_consumer_deleted(ChPid, ConsumerTag, QName, ?INTERNAL_USER).
-
-local_or_remote_handler(ChPid, Module, Function, Args) ->
-    Node = node(ChPid),
-    case Node == node() of
-        true ->
-            erlang:apply(Module, Function, Args);
-        false ->
-            %% this could potentially block for a while if the node is
-            %% in disconnected state or tcp buffers are full
-            erpc:cast(Node, Module, Function, Args)
-    end.
+    rabbit_queue_type_util:notify_consumer_deleted(ChPid, ConsumerTag, QName, ?INTERNAL_USER).
 
 become_leader(_QName, _Name) ->
     %% noop now as we instead rely on the promt tick_timeout + repair to update
@@ -539,7 +538,10 @@ capabilities() ->
                                %% Stream policies
                                <<"max-age">>,
                                <<"stream-max-segment-size-bytes">>,
-                               <<"initial-cluster-size">>],
+                               <<"initial-cluster-size">>,
+                               %% JMS policies
+                               <<"selector-fields">>,
+                               <<"selector-field-max-bytes">>],
       queue_arguments => [<<"x-dead-letter-exchange">>,
                           <<"x-dead-letter-routing-key">>,
                           <<"x-dead-letter-strategy">>,
@@ -565,7 +567,8 @@ capabilities() ->
       server_named => false,
       rebalance_module => ?MODULE,
       can_redeliver => true,
-      is_replicable => true
+      is_replicable => true,
+      distribution_modes => [move]
      }.
 
 rpc_delete_metrics(QName) ->
@@ -676,13 +679,7 @@ handle_tick(QName,
                                                       disabled))}
                            | Infos0],
                   rabbit_core_metrics:queue_stats(QName, Infos),
-                  case repair_amqqueue_nodes(Q) of
-                      ok ->
-                          ok;
-                      repaired ->
-                          ?LOG_DEBUG("Repaired quorum ~ts amqqueue record",
-                                     [rabbit_misc:rs(QName)])
-                  end,
+                  repair_amqqueue_nodes(Q),
                   ExpectedNodes = rabbit_nodes:list_members(),
                   case Nodes -- ExpectedNodes of
                       [] ->
@@ -856,12 +853,15 @@ gather_node_uids(QName, Name, RaNodes) ->
 
 reductions(Name) ->
     try
-        {reductions, R} = process_info(whereis(Name), reductions),
+        {reductions, R} = erlang:process_info(whereis(Name), reductions),
         R
     catch
         error:badarg ->
             0
     end.
+
+ra_system() ->
+    ?RA_SYSTEM.
 
 is_recoverable(Q) when ?is_amqqueue(Q) and ?amqqueue_is_quorum(Q) ->
     Node = node(),
@@ -1195,11 +1195,9 @@ consume(Q, Spec, QState0) when ?amqqueue_is_quorum(Q) ->
                                                          Prefetch,
                                                          ActivityStatus == single_active,
                                                          ActivityStatus, Args),
-                    emit_consumer_created(ChPid, ConsumerTag,
-                                          ExclusiveConsume,
-                                          AckRequired, QName,
-                                          Prefetch, Args, none,
-                                          ActingUser),
+                    rabbit_queue_type_util:notify_consumer_created(
+                      ChPid, ConsumerTag, ExclusiveConsume, AckRequired,
+                      QName, Prefetch, Args, none, ActingUser),
                     {ok, QState};
                 false ->
                     rabbit_core_metrics:consumer_created(ChPid, ConsumerTag,
@@ -1207,9 +1205,9 @@ consume(Q, Spec, QState0) when ?amqqueue_is_quorum(Q) ->
                                                          AckRequired, QName,
                                                          Prefetch, true,
                                                          up, Args),
-                    emit_consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
-                                          AckRequired, QName, Prefetch,
-                                          Args, none, ActingUser),
+                    rabbit_queue_type_util:notify_consumer_created(
+                      ChPid, ConsumerTag, ExclusiveConsume, AckRequired,
+                      QName, Prefetch, Args, none, ActingUser),
                     {ok, QState}
             end;
         Err ->
@@ -1229,25 +1227,6 @@ cancel(_Q, #{consumer_tag := ConsumerTag} = Spec, State) ->
     maybe_send_reply(self(), maps:get(ok_msg, Spec, undefined)),
     Reason = maps:get(reason, Spec, cancel),
     rabbit_fifo_client:cancel_checkout(quorum_ctag(ConsumerTag), Reason, State).
-
-emit_consumer_created(ChPid, CTag, Exclusive, AckRequired, QName, PrefetchCount, Args, Ref, ActingUser) ->
-    rabbit_event:notify(consumer_created,
-                        [{consumer_tag,   CTag},
-                         {exclusive,      Exclusive},
-                         {ack_required,   AckRequired},
-                         {channel,        ChPid},
-                         {queue,          QName},
-                         {prefetch_count, PrefetchCount},
-                         {arguments,      Args},
-                         {user_who_performed_action, ActingUser}],
-                        Ref).
-
-emit_consumer_deleted(ChPid, ConsumerTag, QName, ActingUser) ->
-    rabbit_event:notify(consumer_deleted,
-        [{consumer_tag, ConsumerTag},
-            {channel, ChPid},
-            {queue, QName},
-            {user_who_performed_action, ActingUser}]).
 
 supports_stateful_delivery() -> true.
 
@@ -1300,7 +1279,7 @@ info(Q, all_keys) ->
     info(Q, ?INFO_KEYS);
 info(Q, Items) ->
     lists:foldr(fun(totals, Acc) ->
-                        i_totals(Q) ++ Acc;
+                        rabbit_queue_type_util:coarse_message_counts(Q) ++ Acc;
                    (type_specific, Acc) ->
                         format(Q, #{}) ++ Acc;
                    (Item, Acc) ->
@@ -1644,7 +1623,7 @@ delete_member(Q, Node) when ?amqqueue_is_quorum(Q) ->
                     %% if not a member we can still proceed with updating the
                     %% queue record and clean up server if still running
                     Fun = fun(Q1) ->
-                                  update_type_state(
+                                  amqqueue:update_type_state(
                                     Q1,
                                     fun(#{nodes := Nodes} = Ts) when is_list(Nodes) ->
                                             Ts#{nodes => lists:delete(Node, Nodes)};
@@ -1807,25 +1786,9 @@ maybe_grow(Q, Node, Membership, Size, QNodes) ->
     end.
 
 -spec transfer_leadership(amqqueue:amqqueue(), node()) ->
-    {migrated, node()} | {not_migrated, atom()}.
+    {ok, node()} | {error, term()}.
 transfer_leadership(Q, Destination) ->
-    {RaName, _} = Leader = amqqueue:get_pid(Q),
-    case ra:transfer_leadership(Leader, {RaName, Destination}) of
-        ok ->
-            case ra:members(Leader, ?RA_MEMBERS_TIMEOUT) of
-                {_, _, {_, NewNode}} ->
-                    {migrated, NewNode};
-                {timeout, _} ->
-                    {not_migrated, ra_members_timeout}
-            end;
-        already_leader ->
-            {not_migrated, already_leader};
-        {error, Reason} ->
-            {not_migrated, Reason};
-        {timeout, _} ->
-            %% TODO should we retry once?
-            {not_migrated, timeout}
-    end.
+    rabbit_queue_type_ra:transfer_leadership(Q, Destination).
 
 queue_length(Q) ->
     ServerId = amqqueue:get_pid(Q),
@@ -1973,19 +1936,6 @@ find_quorum_queues(VHost) ->
     Node = node(),
     rabbit_db_queue:get_all_by_type_and_node(VHost, ?MODULE, Node).
 
-i_totals(Q) when ?is_amqqueue(Q) ->
-    QName = amqqueue:get_name(Q),
-    case ets:lookup(queue_coarse_metrics, QName) of
-        [{_, MR, MU, M, _}] ->
-            [{messages_ready, MR},
-             {messages_unacknowledged, MU},
-             {messages, M}];
-        [] ->
-            [{messages_ready, 0},
-             {messages_unacknowledged, 0},
-             {messages, 0}]
-    end.
-
 resolve_delivery_limit(PolVal, ArgVal)
   when PolVal < 0 orelse ArgVal < 0 ->
     max(PolVal, ArgVal);
@@ -2089,7 +2039,7 @@ i(online, Q) -> online(Q);
 i(leader, Q) -> leader(Q);
 i(open_files, Q) when ?is_amqqueue(Q) ->
     {Name, _} = amqqueue:get_pid(Q),
-    Nodes = get_connected_nodes(Q),
+    Nodes = rabbit_queue_type_util:get_connected_nodes(Q),
     [Info || {ok, {_, _} = Info} <-
              erpc:multicall(Nodes, ?MODULE, open_files,
                             [Name], ?RPC_TIMEOUT)];
@@ -2210,7 +2160,7 @@ peek(_Pos, Q) when ?is_amqqueue(Q) ->
     {error, not_quorum_queue}.
 
 online(Q) when ?is_amqqueue(Q) ->
-    Nodes = get_connected_nodes(Q),
+    Nodes = rabbit_queue_type_util:get_connected_nodes(Q),
     {Name, _} = amqqueue:get_pid(Q),
     [node(Pid) || {ok, Pid} <-
                   erpc:multicall(Nodes, erlang, whereis,
@@ -2373,10 +2323,6 @@ get_nodes(Q) when ?is_amqqueue(Q) ->
         Map when is_map(Map) ->
             maps:keys(Map)
     end.
-
-get_connected_nodes(Q) when ?is_amqqueue(Q) ->
-    ErlangNodes = [node() | nodes()],
-    [N || N <- get_nodes(Q), lists:member(N, ErlangNodes)].
 
 update_type_state(Q, Fun) when ?is_amqqueue(Q) ->
     Ts = amqqueue:get_type_state(Q),
@@ -2590,26 +2536,6 @@ is_minority(All, Up) ->
     MinQuorum = length(All) div 2 + 1,
     length(Up) < MinQuorum.
 
-wait_for_projections(Node, QName) ->
-    case rabbit_feature_flags:is_enabled(khepri_db) andalso
-         Node =/= node() of
-        true ->
-            wait_for_projections(Node, QName, 256);
-        false ->
-            ok
-    end.
-
-wait_for_projections(Node, QName, 0) ->
-    exit({wait_for_projections_timed_out, Node, QName});
-wait_for_projections(Node, QName, N) ->
-    case erpc_call(Node, rabbit_amqqueue, lookup, [QName], 100) of
-        {ok, _} ->
-            ok;
-        _ ->
-            timer:sleep(100),
-            wait_for_projections(Node, QName, N - 1)
-    end.
-
 find_leader(Q) when ?is_amqqueue(Q) ->
     %% the get_pid field in the queue record is updated async after a leader
     %% change, so is likely to be the more stale than the leaderboard
@@ -2802,26 +2728,9 @@ stop_local_quorum_queue_followers() ->
      end || Q <- Queues],
     ?LOG_INFO("Stopped all local replicas of quorum queues hosted on this node").
 
+-spec revive() -> ok.
 revive() ->
-    revive_local_queue_members().
-
-revive_local_queue_members() ->
-    Queues = rabbit_amqqueue:list_local_followers(),
-    %% NB: this function ignores the first argument so we can just pass the
-    %% empty binary as the vhost name.
-    {Recovered, Failed} = recover(<<>>, Queues),
-    ?LOG_DEBUG("Successfully revived ~b quorum queue replicas",
-               [length(Recovered)]),
-    case length(Failed) of
-        0 ->
-            ok;
-        NumFailed ->
-            ?LOG_ERROR("Failed to revive ~b quorum queue replicas",
-                       [NumFailed])
-    end,
-
-    ?LOG_INFO("Restart of local quorum queue replicas is complete"),
-    ok.
+    rabbit_queue_type_ra:revive(?MODULE).
 
 queue_vm_stats_sups() ->
     {[quorum_queue_procs,

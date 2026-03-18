@@ -4,12 +4,12 @@
 %%
 %% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 
-%% One rabbit_fifo_dlx_worker process exists per (source) quorum queue that has at-least-once dead lettering
-%% enabled. The rabbit_fifo_dlx_worker process is co-located on the quorum queue leader node.
-%% Its job is to consume from the quorum queue's 'discards' queue (containing dead lettered messages)
+%% One rabbit_fifo_dlx_worker process exists per source quorum or source JMS queue that has at-least-once
+%% dead lettering enabled. The rabbit_fifo_dlx_worker process is co-located on the queue leader node.
+%% Its job is to consume from the queue's 'discards' queue (containing dead lettered messages)
 %% and to forward each dead lettered message at least once to every target queue.
 %% This is in contrast to at-most-once semantics of rabbit_dead_letter:publish/5 which is
-%% the only option for classic queues and was the only option for quorum queues in RMQ <= v3.9
+%% the only option for classic queues.
 %%
 %% Some parts of this module resemble the channel process in the sense that it needs to keep track what messages
 %% are consumed but not acked yet and what messages are published but not confirmed yet.
@@ -26,7 +26,6 @@
 -include("mc.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("kernel/include/logger.hrl").
-% -include_lib("rabbit_common/include/rabbit_framing.hrl").
 
 -behaviour(gen_server).
 
@@ -47,7 +46,7 @@
           consumed_msg_id :: non_neg_integer(),
           delivery :: mc:state(),
           reason :: rabbit_dead_letter:reason(),
-          %% routing keys (including CC keys) the message was published with to the source quorum queue
+          %% routing keys (including CC keys) the message was published with to the source queue
           original_routing_keys :: [rabbit_types:routing_key(),...],
           %% target queues for which publisher confirm has not been received yet
           unsettled = [] :: [rabbit_amqqueue:name()],
@@ -61,7 +60,7 @@
           %% Epoch time in milliseconds when the message was last published (i.e. rabbit_queue_type:deliver/3 invoked).
           %% It can be 'undefined' if the message was never published (for example no route exists).
           last_published_at :: undefined | integer(),
-          %% Epoch time in milliseconds when the message was consumed from the source quorum queue.
+          %% Epoch time in milliseconds when the message was consumed from the source queue.
           %% This value never changes.
           %% It's mainly informational and meant for debugging to understand for how long the message
           %% is sitting around without having received all publisher confirms.
@@ -181,12 +180,12 @@ redeliver_and_ack(State0) ->
 
 handle_info({'DOWN', Ref, process, _, _},
             #state{monitor_ref = Ref,
-                   queue_ref = QRef}) ->
-    %% Source quorum queue is down. Therefore, terminate ourself.
+                   queue_ref = QRef} = State) ->
+    %% Source queue is down. Therefore, terminate ourself.
     %% The new leader will re-create another dlx_worker.
     ?LOG_DEBUG("~ts terminating itself because leader of ~ts is down...",
-                     [?MODULE, rabbit_misc:rs(QRef)]),
-    supervisor:terminate_child(rabbit_fifo_dlx_sup, self());
+               [?MODULE, rabbit_misc:rs(QRef)]),
+    {stop, {shutdown, queue_leader_down}, State};
 handle_info({{'DOWN', QName}, _MRef, process, QPid, Reason},
             #state{queue_type_state = QTypeState0} = State0) ->
     %% received from target classic queue
@@ -462,7 +461,7 @@ redeliver(#pending{original_routing_keys = RKeys} = Pend,
           DLX,
           OutSeq,
           #state{routing_key = undefined} = State) ->
-    %% No dead-letter-routing-key defined for source quorum queue.
+    %% No dead-letter-routing-key defined for source queue.
     %% Therefore use all of messages's original routing keys (which can include CC and BCC recipients).
     %% This complies with the behaviour of the rabbit_dead_letter module.
     redeliver0(Pend, DLX, RKeys, OutSeq, State);
@@ -493,12 +492,12 @@ redeliver0(#pending{delivery = Msg0,
     RouteToQs0 = queue_names(
                    rabbit_amqqueue:prepend_extra_bcc(
                      rabbit_db_queue:get_targets(
-                       rabbit_exchange:route(DLX, Msg)))),
+                       rabbit_exchange:route(DLX, Msg, #{})))),
     case {RouteToQs0, Settled} of
         {[], [_|_]} ->
             %% Routes changed dynamically so that we don't await any publisher confirms anymore.
             %% Since we also received at least one publisher confirm (mandatory flag semantics),
-            %% we can ack the message to the source quorum queue.
+            %% we can ack the message to the source queue.
             State = State0#state{pendings = maps:remove(OutSeq, Pendings),
                                  settled_ids = [ConsumedId | SettledIds]},
             clear_log_no_route_once(State);
@@ -625,11 +624,11 @@ log_missing_dlx_once(#state{exchange_ref = SameDlx,
 log_missing_dlx_once(#state{exchange_ref = DlxResource,
                             queue_ref = QueueResource,
                             logged = Logged} = State) ->
-    ?LOG_WARNING("Cannot forward any dead-letter messages from source quorum ~ts because "
+    ?LOG_WARNING("Cannot forward any dead-letter messages from source ~ts because "
                        "its configured dead-letter-exchange ~ts does not exist. "
                        "Either create the configured dead-letter-exchange or re-configure "
-                       "the dead-letter-exchange policy for the source quorum queue to prevent "
-                       "dead-lettered messages from piling up in the source quorum queue. "
+                       "the dead-letter-exchange policy for the source queue to prevent "
+                       "dead-lettered messages from piling up in the source queue. "
                        "This message will not be logged again.",
                        [rabbit_misc:rs(QueueResource), rabbit_misc:rs(DlxResource)]),
     State#state{logged = maps:put(missing_dlx, DlxResource, Logged)}.
@@ -638,7 +637,7 @@ clear_log_missing_dlx_once(#state{exchange_ref = DlxResource,
                                   queue_ref = QueueResource,
                                   pendings = Pendings,
                                   logged = #{missing_dlx := MissingDlx} = Logged} = State) ->
-    ?LOG_INFO("Dead-letter-exchange ~ts found for quorum ~ts. Forwarding was previously "
+    ?LOG_INFO("Dead-letter-exchange ~ts found for ~ts. Forwarding was previously "
               "blocked since the configured dead-letter-exchange ~ts could not be found. "
               "Forwarding of ~b pending dead-letter messages will be attempted.",
               [rabbit_misc:rs(DlxResource), rabbit_misc:rs(QueueResource),
@@ -655,14 +654,14 @@ log_no_route_once(#state{queue_ref = QueueResource,
                          exchange_ref = DlxResource,
                          routing_key = RoutingKey,
                          logged = Logged} = State) ->
-    ?LOG_WARNING("Cannot forward any dead-letter messages from source quorum ~ts "
+    ?LOG_WARNING("Cannot forward any dead-letter messages from source ~ts "
                        "with configured dead-letter-exchange ~ts and configured "
                        "dead-letter-routing-key '~ts'. This can happen either if the dead-letter "
                        "routing topology is misconfigured (for example no queue bound to "
                        "dead-letter-exchange or wrong dead-letter-routing-key configured) or if "
                        "non-mirrored classic queues are bound whose host node is down. "
                        "Fix this issue to prevent dead-lettered messages from piling up "
-                       "in the source quorum queue. "
+                       "in the source queue. "
                        "This message will not be logged again.",
                        [rabbit_misc:rs(QueueResource), rabbit_misc:rs(DlxResource), RoutingKey]),
     State#state{logged = maps:put(no_route, {DlxResource, RoutingKey}, Logged)}.
@@ -672,7 +671,7 @@ clear_log_no_route_once(#state{exchange_ref = DlxResource,
                                queue_ref = QueueResource,
                                pendings = Pendings,
                                logged = #{no_route := {OldDlx, OldRoutingKey}} = Logged} = State) ->
-    ?LOG_INFO("Discovered a route to forward dead-letter messages from quorum ~ts on "
+    ?LOG_INFO("Discovered a route to forward dead-letter messages from ~ts on "
               "configured dead-letter-exchange ~ts and dead-letter-routing-key '~ts'. "
               "Previously dead-letter messages could not be forwarded on configured "
               "dead-letter-exchange ~ts and dead-letter-routing-key '~ts'. "
@@ -692,7 +691,7 @@ log_cycle_once(Queues, _, #state{logged = Logged} = State)
 log_cycle_once(Queues, RoutingKeys, #state{exchange_ref = DlxResource,
                                            queue_ref = QueueResource,
                                            logged = Logged} = State) ->
-    ?LOG_WARNING("Dead-letter queues cycle detected for source quorum ~ts "
+    ?LOG_WARNING("Dead-letter queues cycle detected for source ~ts "
                        "with dead-letter exchange ~ts and routing keys ~tp: ~tp "
                        "This message will not be logged again.",
                        [rabbit_misc:rs(QueueResource), rabbit_misc:rs(DlxResource),

@@ -318,11 +318,14 @@ capabilities() ->
     #{unsupported_policies => [],
       queue_arguments => [],
       consumer_arguments => [],
-      amqp_capabilities => [],
+      amqp_link_capabilities => [],
+      amqp_source_capabilities => [],
       server_named => false,
       rebalance_module => undefined,
-      can_redeliver => false ,
-      is_replicable => false}.
+      can_redeliver => false,
+      is_replicable => false,
+      distribution_modes => [move]
+     }.
 
 stop(_) ->
     ok.

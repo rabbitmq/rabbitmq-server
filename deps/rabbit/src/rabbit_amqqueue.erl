@@ -520,14 +520,16 @@ maybe_migrate(ByNode, MaxQueuesDesired, [N | Nodes]) ->
                     {not_migrated, update_not_migrated_queue(N, Queue, Queues, ByNode)};
                 _ ->
                     [{Length, Destination} | _] = sort_by_number_of_queues(Candidates, ByNode),
-                    ?LOG_INFO("Migrating queue ~tp from node ~tp with ~tp queues to node ~tp with ~tp queues",
-                              [Name, N, length(All), Destination, Length]),
+                    ?LOG_INFO("Migrating ~ts from node ~tp with ~b queues to node ~tp with ~b queues",
+                              [rabbit_misc:rs(Name), N, length(All), Destination, Length]),
                     case Module:transfer_leadership(Q, Destination) of
-                        {migrated, NewNode} ->
-                            ?LOG_INFO("Queue ~tp migrated to ~tp", [Name, NewNode]),
+                        {ok, NewNode} ->
+                            ?LOG_INFO("~ts migrated to ~tp",
+                                      [rabbit_misc:rs(Name), NewNode]),
                             {migrated, update_migrated_queue(NewNode, N, Queue, Queues, ByNode)};
-                        {not_migrated, Reason} ->
-                            ?LOG_WARNING("Error migrating queue ~tp: ~tp", [Name, Reason]),
+                        {error, Reason} ->
+                            ?LOG_WARNING("Error migrating ~ts: ~tp",
+                                         [rabbit_misc:rs(Name), Reason]),
                             {not_migrated, update_not_migrated_queue(N, Queue, Queues, ByNode)}
                     end
             end;
@@ -1450,6 +1452,15 @@ is_unresponsive(Q, Timeout) when ?amqqueue_is_mqtt_qos0(Q) ->
         %% TODO catch any exit??
         exit:{timeout, _} ->
             true
+    end;
+is_unresponsive(Q, Timeout) ->
+    Mod = amqqueue:get_type(Q),
+    case erlang:function_exported(Mod, is_responsive, 2) of
+        true ->
+            not Mod:is_responsive(Q, Timeout);
+        false ->
+            %% If the callback is not exported, assume the queue is responsive.
+            false
     end.
 
 format(Q) ->
@@ -2032,6 +2043,7 @@ pseudo_queue(#resource{kind = queue} = QueueName, Pid, Durable)
                  rabbit_classic_queue % Type
                 ).
 
+-spec get_quorum_nodes(amqqueue:amqqueue()) -> [node()].
 get_quorum_nodes(Q) ->
     rabbit_queue_type:get_nodes(Q).
 

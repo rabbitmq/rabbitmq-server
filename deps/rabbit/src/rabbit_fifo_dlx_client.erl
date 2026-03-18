@@ -50,11 +50,11 @@ process_command(Cmd, #state{leader = Leader} = State, Tries) ->
         {ok, ok, Leader} ->
             {ok, State#state{leader = Leader}};
         {ok, ok, NonLocalLeader} ->
-            ?LOG_WARNING("Failed to process command ~tp on quorum queue leader ~tp because actual leader is ~tp.",
+            ?LOG_WARNING("Failed to process command ~tp on queue leader ~tp because actual leader is ~tp.",
                                [Cmd, Leader, NonLocalLeader]),
             {error, non_local_leader};
         Err ->
-            ?LOG_WARNING("Failed to process command ~tp on quorum queue leader ~tp: ~tp~n"
+            ?LOG_WARNING("Failed to process command ~tp on queue leader ~tp: ~tp~n"
                                "Trying ~b more time(s)...",
                                [Cmd, Leader, Err, Tries]),
             process_command(Cmd, State, Tries - 1)

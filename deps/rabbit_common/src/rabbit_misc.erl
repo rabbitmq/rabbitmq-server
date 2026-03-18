@@ -714,7 +714,7 @@ gb_trees_cons(Key, Value, Tree) ->
         none            -> gb_trees:insert(Key, [Value], Tree)
     end.
 
-gb_trees_fold(Fun, Acc, Tree) ->
+gb_trees_fold(Fun, Acc, Tree) when is_function(Fun, 3) ->
     gb_trees_fold1(Fun, Acc, gb_trees:next(gb_trees:iterator(Tree))).
 
 gb_trees_fold1(_Fun, Acc, none) ->

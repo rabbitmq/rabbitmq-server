@@ -72,6 +72,7 @@
 -include("rabbit_queue_type.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("kernel/include/logger.hrl").
+-include_lib("amqp10_common/include/amqp10_filter.hrl").
 
 -define(INFO_KEYS, [name, durable, auto_delete, arguments, leader, members, online, state,
                     messages, messages_ready, messages_unacknowledged, committed_offset,
@@ -868,12 +869,17 @@ queue_length(Q) ->
 get_replicas(Q) ->
     i(members, Q).
 
--spec transfer_leadership(amqqueue:amqqueue(), node()) -> {migrated, node()} | {not_migrated, atom()}.
+-spec transfer_leadership(amqqueue:amqqueue(), node()) ->
+    {ok, node()} | {error, term()}.
 transfer_leadership(Q, Destination) ->
-    case rabbit_stream_coordinator:restart_stream(Q, #{preferred_leader_node => Destination}) of
-        {ok, NewNode} -> {migrated, NewNode};
-        {error, coordinator_unavailable} -> {not_migrated, timeout};
-        {error, Reason} -> {not_migrated, Reason}
+    Opts = #{preferred_leader_node => Destination},
+    case rabbit_stream_coordinator:restart_stream(Q, Opts) of
+        {ok, NewNode} ->
+            {ok, NewNode};
+        {error, coordinator_unavailable} ->
+            {error, timeout};
+        {error, _} = Err ->
+            Err
     end.
 
 -spec status(rabbit_types:vhost(), Name :: rabbit_misc:resource_name()) ->
@@ -1455,21 +1461,27 @@ capabilities() ->
                                <<"ha-promote-on-shutdown">>, <<"ha-promote-on-failure">>,
                                <<"queue-master-locator">>,
                                %% Quorum policies
-                               <<"dead-letter-strategy">>, <<"target-group-size">>],
+                               <<"dead-letter-strategy">>, <<"target-group-size">>,
+                               %% JMS policies
+                               <<"selector-fields">>,
+                               <<"selector-field-max-bytes">>],
       queue_arguments => [<<"x-max-length-bytes">>, <<"x-queue-type">>,
                           <<"x-max-age">>, <<"x-stream-max-segment-size-bytes">>,
                           <<"x-initial-cluster-size">>, <<"x-queue-leader-locator">>],
       consumer_arguments => [<<"x-stream-offset">>,
                              <<"x-stream-filter">>,
                              <<"x-stream-match-unfiltered">>],
-      %% [Filter-Expressions-v1.0] § 2.2
+      %% [Filter-Expressions-v1.0] § 2.2 mandates that these capabilities are
+      %% advertised in the offered-capabilities field of attach frame.
       %% https://docs.oasis-open.org/amqp/filtex/v1.0/csd01/filtex-v1.0-csd01.html#_Toc67929253
-      amqp_capabilities => [<<"AMQP_FILTEX_PROP_V1_0">>,
-                            <<"AMQP_FILTEX_SQL_V1_0">>],
+      amqp_link_capabilities => [?CAP_FILTEX_PROP,
+                                 ?CAP_FILTEX_SQL],
+      amqp_source_capabilities => [],
       server_named => false,
       rebalance_module => ?MODULE,
       can_redeliver => true,
-      is_replicable => true
+      is_replicable => true,
+      distribution_modes => [copy]
      }.
 
 notify_decorators(Q) when ?is_amqqueue(Q) ->
