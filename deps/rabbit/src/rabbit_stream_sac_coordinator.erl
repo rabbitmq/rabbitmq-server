@@ -955,7 +955,8 @@ list_nodes(#?MODULE{groups = Groups}) ->
 
 -spec state_enter(ra_server:ra_state(), state() | term()) ->
     ra_machine:effects().
-state_enter(leader, #?MODULE{groups = Groups} = State)
+state_enter(leader, #?MODULE{groups = Groups,
+                             pids_groups = PidsGroups} = State)
   when ?IS_STATE_REC(State) ->
     %% becoming leader, we re-issue monitors and timers for connections with
     %% disconnected consumers
@@ -978,8 +979,9 @@ state_enter(leader, #?MODULE{groups = Groups} = State)
                                   end, Acc, Cs)
               end, {#{}, #{}}, Groups),
     DisTimeout = disconnected_timeout(State),
-    %% monitor involved nodes
+    %% monitor connections and involved nodes
     %% reset a timer for disconnected connections
+    [{monitor, process, P} || P <- lists:sort(maps:keys(PidsGroups))] ++
     [{monitor, node, N} || N <- lists:sort(maps:keys(Nodes))] ++
     [begin
          Time = case ts() - Ts of
