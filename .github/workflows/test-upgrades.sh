@@ -33,14 +33,14 @@ case "$scenario" in
 		omq --uri amqp://localhost:5672 amqp091 -C 1000 -x 1 -y 0 --queues classic
 
 		# Ensure we have this queue with 1000 messages.
-		$old_rabbitmqctl -n rabbit-1 list_queues name messages | grep -qE 'omq-1\s*1000'
+		$old_rabbitmqctl -n rabbit-1 list_queues name messages | grep -qE 'omq-0\s*1000'
 
 		# Upgrade RabbitMQ.
 		echo "=== Upgrade cluster to new RabbitMQ version"
 		$make -C "$new_dist" restart-cluster
- 
+
 		# Ensure the queue is still there with its messages.
-		$new_rabbitmqctl -n rabbit-1 list_queues name messages | grep -qE 'omq-1\s*1000'
+		$new_rabbitmqctl -n rabbit-1 list_queues name messages | grep -qE 'omq-0\s*1000'
 		;;
 
 	transient_queue)
@@ -50,7 +50,7 @@ case "$scenario" in
 		sleep 1
 
 		# Ensure we the queue exists.
-		$old_rabbitmqctl -n rabbit-1 list_queues name durable | grep -qE 'omq-1\s*false'
+		$old_rabbitmqctl -n rabbit-1 list_queues name durable | grep -qE 'omq-0\s*false'
 
 		# Upgrade RabbitMQ on two out of three nodes.
 		# We can't upgrade all of them because omq(1) would be
@@ -59,7 +59,7 @@ case "$scenario" in
 		$make -C "$new_dist" restart-cluster NODES=2
 
 		# Ensure the queue is still there.
-		$new_rabbitmqctl -n rabbit-1 list_queues name durable | grep -qE 'omq-1\s*false'
+		$new_rabbitmqctl -n rabbit-1 list_queues name durable | grep -qE 'omq-0\s*false'
 
 		# Stop omq(1)
 		pkill omq
