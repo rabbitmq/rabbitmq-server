@@ -11,7 +11,7 @@
 
 -rabbit_feature_flag({?MODULE,
                       #{desc => "Local random exchange",
-                        stability => stable
+                        stability => required
                        }}).
 
 -rabbit_boot_step({?MODULE,

@@ -647,8 +647,12 @@ events(Config) ->
                       E2),
     assert_event_type(binding_created, E3),
     ExpectedBindingArgs = case ?config(mqtt_version, Config) of
-                              v5 -> [{mqtt_subscription_opts, Qos, false, false, 0, undefined},
-                                     {<<"x-binding-key">>, longstr, AmqpTopic}];
+                              v5 -> [{<<"x-binding-key">>, longstr, AmqpTopic},
+                                     {<<"x-mqtt-subscription-opts">>, table,
+                                      [{<<"no-local">>, bool, false},
+                                       {<<"qos">>, unsignedbyte, Qos},
+                                       {<<"retain-as-published">>, bool, false},
+                                       {<<"retain-handling">>, unsignedbyte, 0}]}];
                               _ -> []
                           end,
     assert_event_prop([{source_name, <<"amq.topic">>},
