@@ -1211,13 +1211,14 @@ handle_frame(#'v1_0.attach'{handle = ?UINT(Handle)},
                    "link handle value (~b) exceeds maximum link handle value (~b)",
                    [Handle, MaxHandle]);
 handle_frame(#'v1_0.attach'{name = {utf8, NameBin} = Name,
-                            handle = Handle,
+                            handle = ?UINT(HandleInt) = Handle,
                             role = Role,
                             source = Source,
                             target = Target,
                             snd_settle_mode = SndSettleMode,
                             rcv_settle_mode = RcvSettleMode} = Attach,
              State) ->
+    ok = validate_handle_not_in_use(HandleInt, State),
     try
         ok = validate_attach(Attach),
         handle_attach(Attach, State)
@@ -1506,10 +1507,6 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_SENDER,
             Flow = #'v1_0.flow'{handle = Handle,
                                 delivery_count = DeliveryCount,
                                 link_credit = ?UINT(MaxLinkCredit)},
-            %%TODO check that handle is not in use for any other open links.
-            %%"The handle MUST NOT be used for other open links. An attempt to attach
-            %% using a handle which is already associated with a link MUST be responded to
-            %% with an immediate close carrying a handle-in-use session-error."
             IncomingLinks = IncomingLinks0#{HandleInt => IncomingLink},
             State = State0#state{incoming_links = IncomingLinks,
                                  permission_cache = PermCache},
@@ -3424,12 +3421,28 @@ validate_attach(#'v1_0.attach'{unsettled = {map, [_|_]}}) ->
     exit_not_implemented("Link recovery not supported");
 validate_attach(#'v1_0.attach'{incomplete_unsettled = true}) ->
     exit_not_implemented("Link recovery not supported");
-validate_attach(
-  #'v1_0.attach'{snd_settle_mode = SndSettleMode,
-                 rcv_settle_mode = ?V_1_0_RECEIVER_SETTLE_MODE_SECOND})
+validate_attach(#'v1_0.attach'{snd_settle_mode = SndSettleMode,
+                               rcv_settle_mode = ?V_1_0_RECEIVER_SETTLE_MODE_SECOND})
   when SndSettleMode =/= ?V_1_0_SENDER_SETTLE_MODE_SETTLED ->
     exit_not_implemented("rcv-settle-mode second not supported");
 validate_attach(#'v1_0.attach'{}) ->
+    ok.
+
+%% "The handle MUST NOT be used for other open links. An attempt to attach
+%% using a handle which is already associated with a link MUST be responded
+%% to with an immediate close carrying a handle-in-use session-error." [2.7.3]
+validate_handle_not_in_use(Handle, #state{incoming_links = IL,
+                                          outgoing_links = OL,
+                                          incoming_management_links = IML,
+                                          outgoing_management_links = OML})
+  when is_map_key(Handle, IL) orelse
+       is_map_key(Handle, OL) orelse
+       is_map_key(Handle, IML) orelse
+       is_map_key(Handle, OML) ->
+    protocol_error(?V_1_0_SESSION_ERROR_HANDLE_IN_USE,
+                   "handle ~b is already associated with a link",
+                   [Handle]);
+validate_handle_not_in_use(_, _) ->
     ok.
 
 validate_multi_transfer_delivery_id(?UINT(Id), Id) ->
