@@ -2822,14 +2822,12 @@ ensure_source(#'v1_0.source'{
                 } = Source0,
               SndSettled, LinkName, Vhost, User, ContainerId,
               ConnPid, PermCache0, TopicPermCache) ->
-    FFEnabled = rabbit_volatile_queue:ff_enabled(),
     case maps:from_keys(Caps, true) of
         #{{symbol, ?CAP_VOLATILE_QUEUE} := true}
           when (Durable =:= undefined orelse Durable =:= ?V_1_0_TERMINUS_DURABILITY_NONE) andalso
                ExpiryPolicy =:= ?V_1_0_TERMINUS_EXPIRY_POLICY_LINK_DETACH andalso
                (Timeout =:= undefined orelse Timeout =:= {uint, 0}) andalso
-               SndSettled andalso
-               FFEnabled ->
+               SndSettled ->
             %% create volatile queue
             QNameBin = rabbit_volatile_queue:new_name(),
             Source = #'v1_0.source'{
