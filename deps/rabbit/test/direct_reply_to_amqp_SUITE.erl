@@ -70,16 +70,10 @@ init_per_group(Group, Config) ->
     Config1 = rabbit_ct_helpers:set_config(
                 Config, [{rmq_nodes_count, Nodes},
                          {rmq_nodename_suffix, Suffix}]),
-    Config2 = rabbit_ct_helpers:run_setup_steps(
-                Config1,
-                rabbit_ct_broker_helpers:setup_steps() ++
-                rabbit_ct_client_helpers:setup_steps()),
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config2, 'rabbitmq_4.2.0') of
-        ok ->
-            Config2;
-        {skip, _} = Skip ->
-            Skip
-    end.
+    rabbit_ct_helpers:run_setup_steps(
+      Config1,
+      rabbit_ct_broker_helpers:setup_steps() ++
+      rabbit_ct_client_helpers:setup_steps()).
 
 end_per_group(_Group, Config) ->
     rabbit_ct_helpers:run_teardown_steps(

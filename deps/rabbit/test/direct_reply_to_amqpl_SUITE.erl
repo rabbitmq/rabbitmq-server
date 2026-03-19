@@ -33,24 +33,20 @@
 all() ->
     [
      {group, cluster_size_1},
-     {group, cluster_size_1_ff_disabled},
      {group, cluster_size_3}
     ].
 
 groups() ->
     [
      {cluster_size_1, [shuffle],
-      cluster_size_1_common() ++
       [
+       trace,
+       failure_ack_mode,
+       failure_multiple_consumers,
+       failure_reuse_consumer_tag,
+       failure_publish,
        amqpl_amqp_amqpl,
        amqp_amqpl_amqp
-      ]},
-
-     %% Delete this group when feature flag rabbitmq_4.2.0 becomes required.
-     {cluster_size_1_ff_disabled, [],
-      cluster_size_1_common() ++
-      [
-       enable_ff % must run last
       ]},
 
      {cluster_size_3, [shuffle],
@@ -58,15 +54,6 @@ groups() ->
        rpc_new_to_old_node,
        rpc_old_to_new_node
       ]}
-    ].
-
-cluster_size_1_common() ->
-    [
-     trace,
-     failure_ack_mode,
-     failure_multiple_consumers,
-     failure_reuse_consumer_tag,
-     failure_publish
     ].
 
 %% -------------------------------------------------------------------
@@ -88,22 +75,12 @@ init_per_group(Group, Config) ->
                 _ ->
                     1
             end,
-    Config1 = case Group of
-                  cluster_size_1_ff_disabled ->
-                      rabbit_ct_helpers:merge_app_env(
-                        Config,
-                        {rabbit,
-                         [{forced_feature_flags_on_init,
-                           {rel, [], ['rabbitmq_4.2.0']}}]});
-                  _ ->
-                      Config
-              end,
-    Suffix = rabbit_ct_helpers:testcase_absname(Config1, "", "-"),
-    Config2 = rabbit_ct_helpers:set_config(
-                Config1, [{rmq_nodes_count, Nodes},
-                          {rmq_nodename_suffix, Suffix}]),
+    Suffix = rabbit_ct_helpers:testcase_absname(Config, "", "-"),
+    Config1 = rabbit_ct_helpers:set_config(
+                Config, [{rmq_nodes_count, Nodes},
+                         {rmq_nodename_suffix, Suffix}]),
     rabbit_ct_helpers:run_setup_steps(
-      Config2,
+      Config1,
       rabbit_ct_broker_helpers:setup_steps() ++
       rabbit_ct_client_helpers:setup_steps()).
 
@@ -118,114 +95,6 @@ init_per_testcase(Testcase, Config) ->
 
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
-
-%% Test enabling the feature flag while a client consumes from the volatile queue.
-%% Delete this test case when feature flag rabbitmq_4.2.0 becomes required.
-enable_ff(Config) ->
-    RequestQueue = <<"request queue">>,
-    RequestPayload = <<"my request">>,
-    CorrelationId = <<"my correlation ID">>,
-    RequesterCh = rabbit_ct_client_helpers:open_channel(Config),
-    ResponderCh = rabbit_ct_client_helpers:open_channel(Config),
-
-    amqp_channel:subscribe(RequesterCh,
-                           #'basic.consume'{queue = ?REPLY_QUEUE,
-                                            no_ack = true},
-                           self()),
-    CTag = receive #'basic.consume_ok'{consumer_tag = CTag0} -> CTag0
-           end,
-
-    #'queue.declare_ok'{} = amqp_channel:call(
-                              RequesterCh,
-                              #'queue.declare'{queue = RequestQueue, durable = true}),
-    #'confirm.select_ok'{} = amqp_channel:call(RequesterCh, #'confirm.select'{}),
-    amqp_channel:register_confirm_handler(RequesterCh, self()),
-
-    %% Send the request.
-    amqp_channel:cast(
-      RequesterCh,
-      #'basic.publish'{routing_key = RequestQueue},
-      #amqp_msg{props = #'P_basic'{reply_to = ?REPLY_QUEUE,
-                                   correlation_id = CorrelationId},
-                payload = RequestPayload}),
-    receive #'basic.ack'{} -> ok
-    end,
-
-    %% Receive the request.
-    {#'basic.get_ok'{},
-     #amqp_msg{props = #'P_basic'{reply_to = ReplyTo,
-                                  correlation_id = CorrelationId},
-               payload = RequestPayload}
-    } = amqp_channel:call(ResponderCh, #'basic.get'{queue = RequestQueue}),
-
-    ?assertEqual(#'queue.declare_ok'{queue = ReplyTo,
-                                     message_count = 0,
-                                     consumer_count = 1},
-                 amqp_channel:call(ResponderCh,
-                                   #'queue.declare'{queue = ReplyTo, durable = true})),
-
-    %% Send the first reply.
-    amqp_channel:cast(
-      ResponderCh,
-      #'basic.publish'{routing_key = ReplyTo},
-      #amqp_msg{props = #'P_basic'{correlation_id = CorrelationId},
-                payload = <<"reply 1">>}),
-
-    %% Receive the frst reply.
-    receive {#'basic.deliver'{consumer_tag = CTag,
-                              redelivered = false,
-                              exchange = <<>>,
-                              routing_key = ReplyTo},
-             #amqp_msg{payload = P1,
-                       props = #'P_basic'{correlation_id = CorrelationId}}} ->
-                ?assertEqual(<<"reply 1">>, P1)
-    after ?TIMEOUT -> ct:fail({missing_reply, ?LINE})
-    end,
-
-    ok = rabbit_ct_broker_helpers:enable_feature_flag(Config, 'rabbitmq_4.2.0'),
-
-    ?assertEqual(#'queue.declare_ok'{queue = ReplyTo,
-                                     message_count = 0,
-                                     consumer_count = 1},
-                 amqp_channel:call(ResponderCh,
-                                   #'queue.declare'{queue = ReplyTo, durable = true})),
-
-    %% Send the second reply.
-    amqp_channel:cast(
-      ResponderCh,
-      #'basic.publish'{routing_key = ReplyTo},
-      #amqp_msg{props = #'P_basic'{correlation_id = CorrelationId},
-                payload = <<"reply 2">>}),
-
-    %% Receive the second reply.
-    receive {#'basic.deliver'{consumer_tag = CTag},
-             #amqp_msg{payload = P2,
-                       props = #'P_basic'{correlation_id = CorrelationId}}} ->
-                ?assertEqual(<<"reply 2">>, P2)
-    after ?TIMEOUT -> ct:fail({missing_reply, ?LINE})
-    end,
-
-    %% Requester cancels consumption.
-    ?assertMatch(#'basic.cancel_ok'{consumer_tag = CTag},
-                 amqp_channel:call(RequesterCh, #'basic.cancel'{consumer_tag = CTag})),
-
-    %% Responder checks again if the requester is still there.
-    %% This time, the requester and its queue should be gone.
-    try amqp_channel:call(ResponderCh, #'queue.declare'{queue = ReplyTo, durable = true}) of
-        _ ->
-            ct:fail("expected queue.declare to fail")
-    catch exit:Reason ->
-              ?assertMatch(
-                 {{_, {_, _, <<"NOT_FOUND - no queue '",
-                               ReplyTo:(byte_size(ReplyTo))/binary,
-                               "' in vhost '/'">>}}, _},
-                 Reason)
-    end,
-
-    %% Clean up.
-    #'queue.delete_ok'{} = amqp_channel:call(RequesterCh,
-                                             #'queue.delete'{queue = RequestQueue}),
-    ok = rabbit_ct_client_helpers:close_channel(RequesterCh).
 
 %% Test case for
 %% https://github.com/rabbitmq/rabbitmq-server/discussions/11662

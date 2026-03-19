@@ -482,8 +482,6 @@ attach_source_queue_dynamic_exclusive(Config) ->
     ok = close_connection_sync(Connection).
 
 attach_source_queue_dynamic_volatile(Config) ->
-    ok = rabbit_ct_broker_helpers:enable_feature_flag(Config, 'rabbitmq_4.2.0'),
-
     OpnConf = connection_config(Config),
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
     {ok, Session} = amqp10_client:begin_session_sync(Connection),

@@ -62,8 +62,6 @@ prop_decode_reply_to(_) ->
 
             {ok, rabbit_pid_codec:recompose(PidParts)} =:=
                 rabbit_volatile_queue:pid_from_name(QNameBin, NodeMap)
-            andalso {ok, Key} =:=
-                rabbit_volatile_queue:key_from_name(QNameBin)
             andalso error =:=
                 rabbit_volatile_queue:pid_from_name(QNameBin, NoNodeMap)
             andalso error =:=
