@@ -20,10 +20,8 @@
          new_target/1,
          new_name/0,
          is/1,
-         key_from_name/1,
          pid_from_name/2,
          exists/1,
-         ff_enabled/0,
          local_cast/2,
          local_call/2]).
 
@@ -159,25 +157,10 @@ exists(#resource{kind = queue,
                  name = QNameBin} = QName) ->
     case pid_from_name(QNameBin) of
         {ok, Pid} when is_pid(Pid) ->
-            case ff_enabled() of
-                true ->
-                    Request = {has_state, QName, ?MODULE},
-                    MFA = {?MODULE, local_call, [Request]},
-                    try delegate:invoke(Pid, MFA)
-                    catch _:_ -> false
-                    end;
-                false ->
-                    case key_from_name(QNameBin) of
-                        {ok, Key} ->
-                            Msg = {declare_fast_reply_to, Key},
-                            try gen_server:call(Pid, Msg, infinity) of
-                                exists -> true;
-                                _ -> false
-                            catch exit:_ -> false
-                            end;
-                        error ->
-                            false
-                    end
+            Request = {has_state, QName, ?MODULE},
+            MFA = {?MODULE, local_call, [Request]},
+            try delegate:invoke(Pid, MFA)
+            catch _:_ -> false
             end;
         _ ->
             false
@@ -201,22 +184,11 @@ deliver(Qs, Msg, #{}) ->
     {[], []}.
 
 deliver0(Q, Msg) ->
-    QName = amqqueue:get_name(Q),
     QPid = amqqueue:get_pid(Q),
-    case ff_enabled() of
-        true ->
-            Request = {queue_event, QName, {deliver, Msg}},
-            MFA = {?MODULE, local_cast, [Request]},
-            delegate:invoke_no_result(QPid, MFA);
-        false ->
-            case key_from_name(QName#resource.name) of
-                {ok, Key} ->
-                    MFA = {rabbit_channel, deliver_reply_local, [Key, Msg]},
-                    delegate:invoke_no_result(QPid, MFA);
-                error ->
-                    ok
-            end
-    end.
+    QName = amqqueue:get_name(Q),
+    Request = {queue_event, QName, {deliver, Msg}},
+    MFA = {?MODULE, local_cast, [Request]},
+    delegate:invoke_no_result(QPid, MFA).
 
 -spec local_cast(pid(), term()) -> ok.
 local_cast(Pid, Request) ->
@@ -289,9 +261,6 @@ cancel(_, _, #?STATE{} = State) ->
 
 is_enabled() ->
     true.
-
-ff_enabled() ->
-    rabbit_feature_flags:is_enabled('rabbitmq_4.2.0').
 
 is_compatible(_, _, _) ->
     true.
@@ -420,19 +389,6 @@ pid_from_name(<<?PREFIX, Bin/binary>>, CandidateNodes) ->
     catch error:_ -> error
     end;
 pid_from_name(_, _) ->
-    error.
-
-%% Returns the base 64 encoded key.
--spec key_from_name(rabbit_misc:resource_name()) ->
-    {ok, binary()} | error.
-key_from_name(<<?PREFIX, Suffix/binary>>) ->
-    case binary:split(Suffix, <<".">>) of
-        [_Pid, Key] ->
-            {ok, Key};
-        _ ->
-            error
-    end;
-key_from_name(_) ->
     error.
 
 nodes_with_hashes() ->

@@ -63,7 +63,7 @@
          format_state/1, format_message_queue/2]).
 
 %% Internal
--export([list_local/0, emit_info_local/3, deliver_reply_local/3]).
+-export([list_local/0, emit_info_local/3]).
 -export([get_vhost/1, get_user/1]).
 %% For testing
 -export([build_topic_variable_map/3]).
@@ -297,14 +297,6 @@ shutdown(Pid) ->
 
 send_command(Pid, Msg) ->
     gen_server2:cast(Pid,  {command, Msg}).
-
-%% Delete this function when feature flag rabbitmq_4.2.0 becomes required.
--spec deliver_reply_local(pid(), binary(), mc:state()) -> ok.
-deliver_reply_local(Pid, Key, Message) ->
-    case pg_local:in_group(rabbit_channels, Pid) of
-        true  -> gen_server2:cast(Pid, {deliver_reply, Key, Message});
-        false -> ok
-    end.
 
 -spec list() -> [pid()].
 
@@ -561,20 +553,6 @@ handle_call({has_state, #resource{virtual_host = Vhost,
     reply(true, State);
 handle_call({has_state, _QName, _QType}, _From, State) ->
     reply(false, State);
-%% Delete below clause when feature flag rabbitmq_4.2.0 becomes required.
-handle_call({declare_fast_reply_to, Key}, _From, State = #ch{direct_reply = Reply}) ->
-    Result = case Reply of
-                 none ->
-                     not_found;
-                 #direct_reply{queue = QNameBin} ->
-                     case rabbit_volatile_queue:key_from_name(QNameBin) of
-                         {ok, Key} ->
-                             exists;
-                         _ ->
-                             not_found
-                     end
-             end,
-    reply(Result, State);
 
 handle_call(refresh_config, _From,
             State = #ch{cfg = #conf{virtual_host = VHost} = Cfg}) ->
@@ -647,30 +625,6 @@ handle_cast({command, Msg}, State) ->
     ok = send(Msg, State),
     noreply(State);
 
-%% Delete below clause when feature flag rabbitmq_4.2.0 becomes required.
-handle_cast({deliver_reply, Key, Mc},
-            #ch{cfg = #conf{state = ChanState,
-                            writer_pid = WriterPid,
-                            msg_interceptor_ctx = MsgIcptCtx},
-                next_tag = DeliveryTag,
-                direct_reply = #direct_reply{consumer_tag = Ctag,
-                                             queue = QNameBin}} = State)
-  when ChanState =/= closing ->
-    case rabbit_volatile_queue:key_from_name(QNameBin) of
-        {ok, Key} ->
-            ExchName = mc:exchange(Mc),
-            [RoutingKey | _] = mc:routing_keys(Mc),
-            Deliver = #'basic.deliver'{consumer_tag = Ctag,
-                                       delivery_tag = DeliveryTag,
-                                       redelivered = false,
-                                       exchange = ExchName,
-                                       routing_key = RoutingKey},
-            Content = outgoing_content(Mc, MsgIcptCtx),
-            ok = rabbit_writer:send_command(WriterPid, Deliver, Content);
-        _ ->
-            ok
-    end,
-    noreply(State);
 handle_cast({deliver_reply, _, _}, State) ->
     noreply(State);
 
