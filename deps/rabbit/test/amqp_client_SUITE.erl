@@ -184,7 +184,8 @@ groups() ->
        bad_x_cc_annotation_exchange,
        decimal_types,
        consumer_timeout_quorum_queue_policy,
-       consumer_timeout_quorum_queue_consumer_arg
+       consumer_timeout_quorum_queue_consumer_arg,
+       handle_in_use
       ]},
 
      {cluster_size_3, [shuffle],
@@ -5342,6 +5343,38 @@ attach_to_exclusive_queue(Config) ->
     ok = close_connection_sync(Connection),
     #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = QName}),
     ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch).
+
+%% "The handle MUST NOT be used for other open links. An attempt to attach
+%% using a handle which is already associated with a link MUST be responded
+%% to with an immediate close carrying a handle-in-use session-error." [2.7.3]
+handle_in_use(Config) ->
+    OpnConf = connection_config(Config),
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    {ok, Session} = amqp10_client:begin_session_sync(Connection),
+    Address = rabbitmq_amqp_address:exchange(<<"amq.direct">>, <<"my key">>),
+
+    Handle = 99,
+    SenderArgs1 = #{name => <<"sender-1">>,
+                    role => {sender, #{address => Address}},
+                    snd_settle_mode => mixed,
+                    rcv_settle_mode => first,
+                    handle => Handle},
+    {ok, Sender1} = amqp10_client:attach_link(Session, SenderArgs1),
+    ok = wait_for_credit(Sender1),
+
+    %% Attaching another link with the same handle should close the session.
+    SenderArgs2 = SenderArgs1#{name := <<"sender-2">>},
+    {ok, _Sender2} = amqp10_client:attach_link(Session, SenderArgs2),
+    receive {amqp10_event,
+             {session, Session,
+              {ended,
+               #'v1_0.error'{
+                  condition = ?V_1_0_SESSION_ERROR_HANDLE_IN_USE,
+                  description = {utf8, <<"handle 99 is already associated with a link">>}
+                 }}}} -> ok
+    after 9000 -> ct:fail({missing_event, ?LINE})
+    end,
+    ok = close_connection_sync(Connection).
 
 dynamic_target_short_link_name(Config) ->
     OpnConf0 = connection_config(Config),
