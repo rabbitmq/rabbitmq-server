@@ -139,12 +139,20 @@ init_suite() {
   mkdir -p ${SCREENS}
 }
 
+# The mocha-test image is only used when tests run in a container (_test / docker run).
+# Local commands (start-rabbitmq, start-others, stop-others, test via npm, etc.) skip the build.
 build_mocha_image() {
+  local need_mocha_docker_image="${1:-yes}"
   DOCKER_BUILD_ARGS=""
   if [[ -n "$MOCHA_DOCKER_FILE" ]]; then 
     DOCKER_BUILD_ARGS="-f $MOCHA_DOCKER_FILE "
   fi
   begin "Ensuring mocha-test image ($DOCKER_BUILD_ARGS) ..."
+  if [[ "$need_mocha_docker_image" != "yes" ]]; then
+    print "Skipped. Not required"
+    end "mocha-test image skipped"
+    return 0
+  fi
   tag=($(md5sum $SELENIUM_ROOT_FOLDER/package.json))
   print "> tag : $tag"
   if [[ $(docker images -q mocha-test:$tag 2> /dev/null) == "" ]]; then
@@ -570,7 +578,7 @@ run_local_with() {
   init_suite
   ensure_docker_network
   generate_env_file
-  build_mocha_image
+  build_mocha_image no
 
   if [[ "$PROFILES_FOR_OTHER" != "" ]]
   then 
