@@ -2,17 +2,17 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term "Broadcom" refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
--module(rabbit_routing_util).
+-module(rabbit_stomp_routing_util).
 
 -export([init_state/0, dest_prefixes/0, all_dest_prefixes/0]).
 -export([ensure_endpoint/4, ensure_endpoint/5, ensure_binding/3]).
 -export([dest_temp_queue/1]).
 
--include("amqp_client.hrl").
--include("rabbit_routing_prefixes.hrl").
+-include_lib("amqp_client/include/amqp_client.hrl").
+-include("rabbit_stomp_routing_prefixes.hrl").
 
 %%----------------------------------------------------------------------------
 
@@ -137,17 +137,29 @@ queue_declare_method(#'queue.declare'{} = Method, Type, Params) ->
                   false -> Method#'queue.declare'{auto_delete = true,
                                                   exclusive   = true}
               end,
+
     %% set the rest of queue.declare fields from Params
     Method2 = lists:foldl(fun (F, Acc) -> F(Acc, Params) end,
                 Method1, [fun update_queue_declare_arguments/2,
                           fun update_queue_declare_exclusive/2,
                           fun update_queue_declare_auto_delete/2,
                           fun update_queue_declare_nowait/2]),
+
+    Arguments = proplists:get_value(arguments, Params, []),
+    DefaultQueueType = proplists:get_value(default_queue_type, Params,
+                                           rabbit_queue_type:default()),
+    Method3 = case rabbit_amqqueue:get_queue_type(Arguments, DefaultQueueType) of
+                  T when T =:= rabbit_stream_queue; T =:= rabbit_quorum_queue ->
+                      Method2#'queue.declare'{durable   = true,
+                                             exclusive = false};
+                  _ -> Method2
+              end,
+
     case  {Type, proplists:get_value(subscription_queue_name_gen, Params)} of
         {topic, SQNG} when is_function(SQNG) ->
-            Method2#'queue.declare'{queue = SQNG()};
+            Method3#'queue.declare'{queue = SQNG()};
         {exchange, SQNG} when is_function(SQNG) ->
-            Method2#'queue.declare'{queue = SQNG()};
+            Method3#'queue.declare'{queue = SQNG()};
         _ ->
-            Method2
+            Method3
     end.

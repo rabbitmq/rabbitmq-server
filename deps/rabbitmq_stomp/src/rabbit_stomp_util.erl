@@ -17,7 +17,7 @@
 -export([trim_headers/1]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
--include_lib("amqp_client/include/rabbit_routing_prefixes.hrl").
+-include("rabbit_stomp_routing_prefixes.hrl").
 -include("rabbit_stomp_frame.hrl").
 -include("rabbit_stomp_headers.hrl").
 
@@ -135,7 +135,7 @@ headers_extra(SessionId, AckMode, Version,
     end.
 
 headers_post_process(Headers) ->
-    Prefixes = rabbit_routing_util:dest_prefixes(),
+    Prefixes = rabbit_stomp_routing_util:dest_prefixes(),
     [case Header of
          {?HEADER_REPLY_TO, V} ->
              case lists:any(fun (P) -> lists:prefix(P, V) end, Prefixes) of
@@ -333,10 +333,11 @@ default_params({exchange, _}) ->
     [{exclusive, true}, {auto_delete, true}];
 
 default_params({topic, _}) ->
-    [{exclusive, false}, {auto_delete, true}];
+    [{auto_delete, true}];
 
 default_params(_) ->
-    [{durable, false}].
+    [{exclusive, true},
+     {durable, false}].
 
 string_to_boolean("True") ->
     true;

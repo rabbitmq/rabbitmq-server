@@ -9,7 +9,7 @@
 
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
--include_lib("amqp_client/include/rabbit_routing_prefixes.hrl").
+-include("rabbit_stomp_routing_prefixes.hrl").
 -include("rabbit_stomp_frame.hrl").
 -compile(export_all).
 
@@ -149,7 +149,7 @@ headers_post_process_noop_replyto(_) ->
     [begin
          Headers = [{"reply-to", Prefix ++ "/something"}],
          Headers = rabbit_stomp_util:headers_post_process(Headers)
-     end || Prefix <- rabbit_routing_util:dest_prefixes()].
+     end || Prefix <- rabbit_stomp_routing_util:dest_prefixes()].
 
 headers_post_process_noop2(_) ->
     Headers  = [{"header1", "1"},
