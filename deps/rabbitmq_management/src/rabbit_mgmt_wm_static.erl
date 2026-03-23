@@ -33,17 +33,50 @@ init(Req0, [{App, Path}]) ->
 init(Req0, [{App, Path}|Tail]) ->
     Req1 = rabbit_mgmt_headers:set_common_permission_headers(Req0, ?MODULE),
     PathInfo = cowboy_req:path_info(Req1),
-    Filepath = filename:join([code:priv_dir(App), Path|PathInfo]),
-    %% We use erl_prim_loader because the file may be inside an .ez archive.
-    FileInfo = erl_prim_loader:read_file_info(binary_to_list(Filepath)),
-    case FileInfo of
-        {ok, #file_info{type = regular}} -> do_init(Req1, App, Path);
-        {ok, #file_info{type = symlink}} -> do_init(Req1, App, Path);
-        _                                -> init(Req0, Tail)
+    case validate_path_info(PathInfo) of
+        ok ->
+            Filepath = filename:join([code:priv_dir(App), Path|PathInfo]),
+            %% We use `erl_prim_loader` because the file may be inside
+            %% an .ez archive.
+            FileInfo = erl_prim_loader:read_file_info(
+                         binary_to_list(Filepath)),
+            case FileInfo of
+                {ok, #file_info{type = regular}} ->
+                    do_init(Req1, App, Path);
+                {ok, #file_info{type = symlink}} ->
+                    do_init(Req1, App, Path);
+                _ ->
+                    init(Req0, Tail)
+            end;
+        error ->
+            init(Req0, Tail)
     end.
 
 do_init(Req, App, Path) ->
     cowboy_static:init(Req, {priv_dir, App, Path}).
+
+%% Must be done here before `erl_prim_loader:read_file_info/1`
+%% is used.
+%%
+%% This mirrors the validation that `cowboy_static` performs internally
+%% except that this validation must happen before the one in Cowboy.
+validate_path_info([]) ->
+    ok;
+validate_path_info([<<".">>|_]) ->
+    error;
+validate_path_info([<<"..">>|_]) ->
+    error;
+validate_path_info([Segment|Tail]) ->
+    case validate_segment(Segment) of
+        ok    -> validate_path_info(Tail);
+        error -> error
+    end.
+
+validate_segment(Segment) ->
+    case binary:match(Segment, [<<$/>>, <<$\\>>, <<0>>]) of
+        nomatch -> ok;
+        _       -> error
+    end.
 
 malformed_request(Req, State) ->
     cowboy_static:malformed_request(Req, State).
