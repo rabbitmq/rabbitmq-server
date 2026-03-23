@@ -152,7 +152,7 @@ fun(Conf) ->
 end}.
 
 {mapping, "cluster_formation.etcd.password", "rabbit.cluster_formation.peer_discovery_etcd.etcd_password", [
-    {datatype, string}
+    {datatype, [tagged_binary, binary]}
 ]}.
 
 {translation, "rabbit.cluster_formation.peer_discovery_etcd.etcd_password",
@@ -226,7 +226,7 @@ end}.
     [{datatype, {enum, [true, false]}}]}.
 
 {mapping, "cluster_formation.etcd.ssl_options.password", "rabbit.cluster_formation.peer_discovery_etcd.ssl_options.password",
-    [{datatype, string}]}.
+    [{datatype, [tagged_binary, binary]}]}.
 
 {mapping, "cluster_formation.etcd.ssl_options.psk_identity", "rabbit.cluster_formation.peer_discovery_etcd.ssl_options.psk_identity",
     [{datatype, string}]}.
