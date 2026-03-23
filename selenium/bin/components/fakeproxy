@@ -34,6 +34,7 @@ init_fakeproxy() {
 start_fakeproxy() {
   begin "Starting fakeproxy ..."
 
+  build_mocha_image yes
   init_fakeproxy
   kill_container_if_exist fakeproxy
   mocha_test_tag=($(md5sum $SELENIUM_ROOT_FOLDER/package.json))
