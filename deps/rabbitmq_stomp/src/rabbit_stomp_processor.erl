@@ -30,7 +30,8 @@
                 adapter_info, send_fun, ssl_login_name, peer_addr,
                 %% see rabbitmq/rabbitmq-stomp#39
                 trailing_lf, auth_mechanism, auth_login,
-                default_topic_exchange, default_nack_requeue}).
+                default_topic_exchange, default_nack_requeue,
+                virtual_host}).
 
 -record(subscription, {dest_hdr, ack_mode, multi_ack, description}).
 
@@ -152,7 +153,7 @@ initial_state(Configuration,
        version             = none,
        pending_receipts    = undefined,
        config              = Configuration,
-       route_state         = rabbit_routing_util:init_state(),
+       route_state         = rabbit_stomp_routing_util:init_state(),
        reply_queues        = #{},
        frame_transformer   = undefined,
        trailing_lf         = application:get_env(rabbitmq_stomp, trailing_lf, true),
@@ -556,7 +557,7 @@ with_destination(Command, Frame, State, Fun) ->
                           "'~ts' is not a valid destination.~n"
                           "Valid destination types are: ~ts.~n",
                           [Content,
-                           string:join(rabbit_routing_util:all_dest_prefixes(),
+                           string:join(rabbit_stomp_routing_util:all_dest_prefixes(),
                                        ", ")], State)
             end;
         not_found ->
@@ -606,10 +607,11 @@ do_login(Username, Passwd, VirtualHost, Heartbeat, AdapterInfo, Version,
                 false -> [{?HEADER_SERVER, server_header()} | Headers]
               end,
                "",
-               State#proc_state{session_id = SessionId,
-                                channel    = Channel,
-                                connection = Connection,
-                                version    = Version});
+               State#proc_state{session_id   = SessionId,
+                                channel      = Channel,
+                                connection   = Connection,
+                                version      = Version,
+                                virtual_host = VirtualHost});
         {error, {auth_failure, _}} ->
             ?LOG_WARNING("STOMP login failed for user '~ts': authentication failed", [Username]),
             error("Bad CONNECT", "Access refused for user '" ++
@@ -650,7 +652,6 @@ server_header() ->
 
 do_subscribe(Destination, DestHdr, Frame,
              State = #proc_state{subscriptions = Subs,
-                                 route_state   = RouteState,
                                  channel       = Channel,
                                  default_topic_exchange = DfltTopicEx}) ->
     check_subscription_access(Destination, State),
@@ -658,7 +659,7 @@ do_subscribe(Destination, DestHdr, Frame,
         rabbit_stomp_frame:integer_header(Frame, ?HEADER_PREFETCH_COUNT,
                                           undefined),
     {AckMode, IsMulti} = rabbit_stomp_util:ack_mode(Frame),
-    case ensure_endpoint(source, Destination, Frame, Channel, RouteState) of
+    case ensure_endpoint(source, Destination, Frame, Channel, State) of
         {ok, Queue, RouteState1} ->
             {ok, ConsumerTag, Description} =
                 rabbit_stomp_util:consumer_tag(Frame),
@@ -687,7 +688,7 @@ do_subscribe(Destination, DestHdr, Frame,
                                                   exclusive    = false,
                                                   arguments    = Arguments},
                                                self()),
-                        ok = rabbit_routing_util:ensure_binding(
+                        ok = rabbit_stomp_routing_util:ensure_binding(
                                Queue, ExchangeAndKey, Channel)
                     catch exit:Err ->
                             %% it's safe to delete this queue, it
@@ -788,9 +789,8 @@ maybe_clean_up_queue(Queue, #proc_state{connection = Connection}) ->
 do_send(Destination, _DestHdr,
         Frame = #stomp_frame{body_iolist = BodyFragments},
         State = #proc_state{channel = Channel,
-                            route_state = RouteState,
                             default_topic_exchange = DfltTopicEx}) ->
-    case ensure_endpoint(dest, Destination, Frame, Channel, RouteState) of
+    case ensure_endpoint(dest, Destination, Frame, Channel, State) of
 
         {ok, _Q, RouteState1} ->
 
@@ -912,7 +912,7 @@ ensure_reply_to(Frame = #stomp_frame{headers = Headers}, State) ->
             {Frame, State};
         {ok, ReplyTo} ->
             {ok, Destination} = rabbit_routing_parser:parse_endpoint(ReplyTo),
-            case rabbit_routing_util:dest_temp_queue(Destination) of
+            case rabbit_stomp_routing_util:dest_temp_queue(Destination) of
                 none ->
                     {Frame, State};
                 TempQueueId ->
@@ -1128,7 +1128,8 @@ millis_to_seconds(M)               -> M div 1000.
 ensure_endpoint(_Direction, {queue, []}, _Frame, _Channel, _State) ->
     {error, {invalid_destination, "Destination cannot be blank"}};
 
-ensure_endpoint(source, EndPoint, {_, _, Headers, _} = Frame, Channel, State) ->
+ensure_endpoint(source, EndPoint, {_, _, Headers, _} = Frame, Channel,
+                #proc_state{virtual_host = VHost, route_state = RouteState}) ->
     Params =
         [{subscription_queue_name_gen,
           fun () ->
@@ -1138,16 +1139,20 @@ ensure_endpoint(source, EndPoint, {_, _, Headers, _} = Frame, Channel, State) ->
               {_, Name} = rabbit_routing_parser:parse_routing(EndPoint),
               list_to_binary(rabbit_stomp_util:subscription_queue_name(Name, Id, Frame))
           end
-         }] ++ rabbit_stomp_util:build_params(EndPoint, Headers),
+         },
+         {default_queue_type, rabbit_vhost:default_queue_type(VHost)}]
+        ++ rabbit_stomp_util:build_params(EndPoint, Headers),
     Arguments = rabbit_stomp_util:build_arguments(Headers),
-    rabbit_routing_util:ensure_endpoint(source, Channel, EndPoint,
-                                        [Arguments | Params], State);
+    rabbit_stomp_routing_util:ensure_endpoint(source, Channel, EndPoint,
+                                        [Arguments | Params], RouteState);
 
-ensure_endpoint(Direction, EndPoint, {_, _, Headers, _}, Channel, State) ->
-    Params = rabbit_stomp_util:build_params(EndPoint, Headers),
+ensure_endpoint(Direction, EndPoint, {_, _, Headers, _}, Channel,
+                #proc_state{virtual_host = VHost, route_state = RouteState}) ->
+    Params = [{default_queue_type, rabbit_vhost:default_queue_type(VHost)}
+              | rabbit_stomp_util:build_params(EndPoint, Headers)],
     Arguments = rabbit_stomp_util:build_arguments(Headers),
-    rabbit_routing_util:ensure_endpoint(Direction, Channel, EndPoint,
-                                        [Arguments | Params], State).
+    rabbit_stomp_routing_util:ensure_endpoint(Direction, Channel, EndPoint,
+                                        [Arguments | Params], RouteState).
 
 build_subscription_id(Frame) ->
     case rabbit_stomp_util:has_durable_header(Frame) of

@@ -247,14 +247,14 @@ declare(QueueName = #resource{virtual_host = VHost}, Durable, AutoDelete, Args,
     end.
 
 -spec get_queue_type(Args :: rabbit_framing:amqp_table()) -> rabbit_queue_type:queue_type().
-%% This version is not virtual host metadata-aware but will use
-%% the node-wide default type as well as 'rabbit_queue_type:fallback/0'.
+%% This version is not virtual host metadata-aware.
 get_queue_type([]) ->
     rabbit_queue_type:default();
 get_queue_type(Args) ->
     get_queue_type(Args, rabbit_queue_type:default()).
 
-%% This version should be used together with 'rabbit_vhost:default_queue_type/{1,2}'
+-spec get_queue_type(Args :: rabbit_framing:amqp_table(), DefaultQueueType :: rabbit_queue_type:queue_type()) -> rabbit_queue_type:queue_type().
+%% This version should be used together with 'rabbit_vhost:default_queue_type/{1,2}'.
 get_queue_type([], DefaultQueueType) ->
     rabbit_queue_type:discover(DefaultQueueType);
 get_queue_type(Args, DefaultQueueType) ->
