@@ -4604,6 +4604,151 @@ consumer_disconnected_timeout_test(Config) ->
     ],
     {_State1, _} = run_log(Config, State0, Entries),
     ok.
+consumer_timeout_return_test(Config) ->
+    %% Reproduces a bug where a consumer using credited mode (AMQP 1.0)
+    %% gets stuck after a consumer timeout. When the timed-out message is
+    %% returned (client settles with released), the consumer is not re-added
+    %% to the service queue because return_multiple finds no messages in
+    %% checked_out (already returned by the timeout handler) and thus never
+    %% calls update_or_remove_con / maybe_queue_consumer.
+    R = rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+    State0 = init(#{name => ?FUNCTION_NAME,
+                    queue_resource => R}),
+
+    {CK1, {_, _C1Pid} = C1} = {0, {?LINE_B, test_util:fake_pid(n1)}},
+    EnqIdx = 10,
+    Timeout1 = EnqIdx + 1000,
+
+    Entries =
+    [
+     %% Register a consumer with credited mode and a 1000ms timeout,
+     %% similar to an AMQP 1.0 consumer.
+     {CK1, make_checkout(C1, {auto, {credited, 0}},
+                         #{timeout => 1000})},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{cfg = Cfg,
+                                                         status = up,
+                                                         credit = 0}},
+                          next_consumer_timeout = infinity}
+               when Cfg#consumer_cfg.timeout == 1000),
+     %% Grant 1 credit.
+     {1, rabbit_fifo:make_credit(CK1, 1, 0, false)},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{status = up,
+                                                         credit = 1}}}),
+     %% Enqueue a message. It should be delivered (MsgId=0), credit goes to 0.
+     {EnqIdx, rabbit_fifo:make_enqueue(self(), 1, msg1)},
+     {assert_effs,
+      fun (Effs) ->
+              ?ASSERT_EFF({timer, evaluate_consumer_timeout, _, {abs, true}},
+                          Effs),
+              ok
+      end},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{status = up,
+                                                         credit = 0,
+                                                         checked_out = Ch}}}
+               when map_size(Ch) == 1),
+     drop_effects,
+     %% Consumer timeout fires. Message is returned, consumer enters timeout.
+     {Timeout1 + 1, {timeout, evaluate_consumer_timeout}},
+     ?ASSERT(#rabbit_fifo{consumers =
+                          #{CK1 := #consumer{status = {timeout, up},
+                                             timed_out_msg_ids = [0],
+                                             checked_out = Ch,
+                                             credit = 0}}}
+               when map_size(Ch) == 0),
+     %% Grant credit again before the return command.
+     {Timeout1 + 2, rabbit_fifo:make_credit(CK1, 1, 1, false)},
+     %% Client settles the released disposition: return command for MsgId=0.
+     %% maybe_untimeout should reset the consumer to up.
+     %% The consumer must be re-added to the service queue so that
+     %% checkout can deliver the message.
+     {Timeout1 + 3, rabbit_fifo:make_return(CK1, [0])},
+     %% The consumer should be up with 1 message checked out (redelivered).
+     ?ASSERT(#rabbit_fifo{consumers =
+                          #{CK1 := #consumer{status = up,
+                                             timed_out_msg_ids = [],
+                                             checked_out = Ch,
+                                             credit = 0}}}
+               when map_size(Ch) == 1),
+     {assert_effs,
+      fun (Effs) ->
+              ?ASSERT_EFF({timer, evaluate_consumer_timeout, _, {abs, true}},
+                          Effs),
+              ok
+      end}
+    ],
+    {_State1, _} = run_log(Config, State0, Entries),
+    ok.
+
+consumer_timeout_return_repeated_test(Config) ->
+    %% Verifies that repeated consumer timeouts work correctly.
+    %% After each timeout + return cycle, the message should be redelivered
+    %% and a new timeout timer should be set.
+    R = rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+    State0 = init(#{name => ?FUNCTION_NAME,
+                    queue_resource => R}),
+
+    {CK1, {_, _C1Pid} = C1} = {0, {?LINE_B, test_util:fake_pid(n1)}},
+    EnqIdx = 10,
+    Timeout1 = EnqIdx + 1000,
+
+    Entries =
+    [
+     {CK1, make_checkout(C1, {auto, {credited, 0}},
+                         #{timeout => 1000})},
+     {1, rabbit_fifo:make_credit(CK1, 1, 0, false)},
+     {EnqIdx, rabbit_fifo:make_enqueue(self(), 1, msg1)},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{status = up,
+                                                         credit = 0,
+                                                         checked_out = Ch}}}
+               when map_size(Ch) == 1),
+     drop_effects,
+
+     %% First timeout
+     {Timeout1 + 1, {timeout, evaluate_consumer_timeout}},
+     ?ASSERT(#rabbit_fifo{consumers =
+                          #{CK1 := #consumer{status = {timeout, up},
+                                             timed_out_msg_ids = [0],
+                                             checked_out = Ch}}}
+               when map_size(Ch) == 0),
+     %% Grant credit and return the timed-out message
+     {Timeout1 + 2, rabbit_fifo:make_credit(CK1, 1, 1, false)},
+     {Timeout1 + 3, rabbit_fifo:make_return(CK1, [0])},
+     %% Message should be redelivered as MsgId=1
+     ?ASSERT(#rabbit_fifo{consumers =
+                          #{CK1 := #consumer{status = up,
+                                             timed_out_msg_ids = [],
+                                             checked_out = Ch,
+                                             credit = 0}}}
+               when map_size(Ch) == 1),
+     drop_effects,
+
+     %% Second timeout (10s after redelivery at Timeout1 + 3)
+     {Timeout1 + 3 + 1000 + 1, {timeout, evaluate_consumer_timeout}},
+     ?ASSERT(#rabbit_fifo{consumers =
+                          #{CK1 := #consumer{status = {timeout, up},
+                                             timed_out_msg_ids = [1],
+                                             checked_out = Ch}}}
+               when map_size(Ch) == 0),
+     %% Grant credit and return the timed-out message again
+     {Timeout1 + 3 + 1000 + 2, rabbit_fifo:make_credit(CK1, 1, 2, false)},
+     {Timeout1 + 3 + 1000 + 3, rabbit_fifo:make_return(CK1, [1])},
+     %% Message should be redelivered as MsgId=2
+     ?ASSERT(#rabbit_fifo{consumers =
+                          #{CK1 := #consumer{status = up,
+                                             timed_out_msg_ids = [],
+                                             checked_out = Ch,
+                                             credit = 0}}}
+               when map_size(Ch) == 1),
+     {assert_effs,
+      fun (Effs) ->
+              ?ASSERT_EFF({timer, evaluate_consumer_timeout, _, {abs, true}},
+                          Effs),
+              ok
+      end}
+    ],
+    {_State1, _} = run_log(Config, State0, Entries),
+    ok.
+
 consumer_timeout_cancelled_test(Config) ->
     R = rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
     State0 = init(#{name => ?FUNCTION_NAME,

@@ -2128,8 +2128,8 @@ return(Meta, ConsumerKey, Consumer0,
 
 return_multiple(Meta, ConsumerKey, #consumer{checked_out = Checked} = Consumer,
                 MsgIds, IncrDelCount, Anns, Effects0,
-                #?STATE{consumers = Consumers} = State0) ->
-    State1 = State0#?STATE{consumers = Consumers#{ConsumerKey => Consumer}},
+                #?STATE{} = State0) ->
+    State1 = update_or_remove_con(Meta, ConsumerKey, Consumer, State0),
     {State, Effects} =
         lists:foldl(
           fun(MsgId, Acc = {S0, E0}) ->
