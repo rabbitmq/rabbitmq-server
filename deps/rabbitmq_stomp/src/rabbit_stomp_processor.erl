@@ -31,7 +31,7 @@
                 %% see rabbitmq/rabbitmq-stomp#39
                 trailing_lf, auth_mechanism, auth_login,
                 default_topic_exchange, default_nack_requeue,
-                default_queue_type}).
+                virtual_host}).
 
 -record(subscription, {dest_hdr, ack_mode, multi_ack, description}).
 
@@ -607,11 +607,11 @@ do_login(Username, Passwd, VirtualHost, Heartbeat, AdapterInfo, Version,
                 false -> [{?HEADER_SERVER, server_header()} | Headers]
               end,
                "",
-               State#proc_state{session_id         = SessionId,
-                                channel            = Channel,
-                                connection         = Connection,
-                                version            = Version,
-                                default_queue_type = rabbit_vhost:default_queue_type(VirtualHost)});
+               State#proc_state{session_id   = SessionId,
+                                channel      = Channel,
+                                connection   = Connection,
+                                version      = Version,
+                                virtual_host = VirtualHost});
         {error, {auth_failure, _}} ->
             ?LOG_WARNING("STOMP login failed for user '~ts': authentication failed", [Username]),
             error("Bad CONNECT", "Access refused for user '" ++
@@ -1131,7 +1131,7 @@ ensure_endpoint(_Direction, {queue, []}, _Frame, _Channel, _State) ->
     {error, {invalid_destination, "Destination cannot be blank"}};
 
 ensure_endpoint(source, EndPoint, {_, _, Headers, _} = Frame, Channel,
-                State = #proc_state{default_queue_type = DQT}) ->
+                State = #proc_state{virtual_host = VHost}) ->
     Params =
         [{subscription_queue_name_gen,
           fun () ->
@@ -1142,14 +1142,16 @@ ensure_endpoint(source, EndPoint, {_, _, Headers, _} = Frame, Channel,
               list_to_binary(rabbit_stomp_util:subscription_queue_name(Name, Id, Frame))
           end
          },
-         {default_queue_type, DQT}] ++ rabbit_stomp_util:build_params(EndPoint, Headers),
+         {default_queue_type, rabbit_vhost:default_queue_type(VHost)}]
+        ++ rabbit_stomp_util:build_params(EndPoint, Headers),
     Arguments = rabbit_stomp_util:build_arguments(Headers),
     rabbit_routing_util:ensure_endpoint(source, Channel, EndPoint,
                                         [Arguments | Params], State);
 
 ensure_endpoint(Direction, EndPoint, {_, _, Headers, _}, Channel,
-                State = #proc_state{default_queue_type = DQT}) ->
-    Params = [{default_queue_type, DQT} | rabbit_stomp_util:build_params(EndPoint, Headers)],
+                State = #proc_state{virtual_host = VHost}) ->
+    Params = [{default_queue_type, rabbit_vhost:default_queue_type(VHost)}
+              | rabbit_stomp_util:build_params(EndPoint, Headers)],
     Arguments = rabbit_stomp_util:build_arguments(Headers),
     rabbit_routing_util:ensure_endpoint(Direction, Channel, EndPoint,
                                         [Arguments | Params], State).
