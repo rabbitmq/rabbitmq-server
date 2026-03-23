@@ -14,5 +14,5 @@
 ]}.
 
 {mapping, "tracing.password", "rabbitmq_tracing.password", [
-    {datatype, string}
+    {datatype, [tagged_binary, binary]}
 ]}.

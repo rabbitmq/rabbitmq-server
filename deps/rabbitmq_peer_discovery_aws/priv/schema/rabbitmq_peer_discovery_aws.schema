@@ -50,7 +50,7 @@ end}.
 %% secret_key
 
 {mapping, "cluster_formation.aws.secret_key", "rabbit.cluster_formation.peer_discovery_aws.aws_secret_key", [
-    {datatype, string}
+    {datatype, [tagged_string, string]}
 ]}.
 
 {translation, "rabbit.cluster_formation.peer_discovery_aws.aws_secret_key",

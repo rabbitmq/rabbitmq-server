@@ -30,6 +30,7 @@ groups() ->
           decrypt_start_app_undefined,
           decrypt_start_app_wrong_passphrase,
           decrypt_config,
+          decrypt_config_map,
           rabbitmqctl_encode
         ]}
     ].
@@ -103,6 +104,33 @@ do_decrypt_config(Algo = {C, H, I, P}) ->
     %% Check that configuration was decrypted properly.
     RabbitConfig = application:get_all_env(rabbit),
     ok = application:unload(rabbit),
+    ok.
+
+decrypt_config_map(_Config) ->
+    Hashes = rabbit_pbe:supported_hashes() -- ?SKIPPED_HASHES,
+    Ciphers = rabbit_pbe:supported_ciphers() -- ?SKIPPED_CIPHERS,
+    Iterations = [1, 100, 1000],
+    _ = [begin
+        PassPhrase = crypto:strong_rand_bytes(16),
+        do_decrypt_config_map({C, H, I, PassPhrase})
+    end || H <- Hashes, C <- Ciphers, I <- Iterations],
+    ok.
+
+%% Verifies that encrypted values nested inside maps are decrypted,
+%% as required by e.g. rabbitmq_management.oauth_resource_servers.
+do_decrypt_config_map({C, H, I, P} = Algo) ->
+    case application:load(rabbit) of
+        ok -> ok;
+        {error, {already_loaded, rabbit}} -> ok
+    end,
+    Secret = <<"test_oauth_secret">>,
+    {encrypted, EncSecret} = rabbit_pbe:encrypt_term(C, H, I, P, Secret),
+    application:set_env(rabbit, test_map_decrypt,
+        #{<<"server">> => [{oauth_client_secret, {encrypted, EncSecret}}]}),
+    rabbit_prelaunch_conf:decrypt_config([rabbit], Algo),
+    {ok, Decrypted} = application:get_env(rabbit, test_map_decrypt),
+    Secret = proplists:get_value(oauth_client_secret, maps:get(<<"server">>, Decrypted)),
+    application:unset_env(rabbit, test_map_decrypt),
     ok.
 
 encrypt_value(Key, {C, H, I, P}) ->

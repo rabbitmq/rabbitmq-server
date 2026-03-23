@@ -528,6 +528,11 @@ decrypt({encrypted, _} = EncValue,
     decrypt(EncValue, Algo);
 decrypt(List, Algo) when is_list(List) ->
     decrypt_list(List, Algo, []);
+decrypt(Map, Algo) when is_map(Map) ->
+    maps:fold(fun(Key, Value, {AccMap, AccAlgo}) ->
+        {NewValue, NewAlgo} = decrypt(Value, AccAlgo),
+        {maps:put(Key, NewValue, AccMap), NewAlgo}
+    end, {#{}, Algo}, Map);
 decrypt(Value, Algo) ->
     {Value, Algo}.
 
