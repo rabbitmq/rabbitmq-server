@@ -2012,7 +2012,7 @@ end}.
     [{datatype, {enum, [true, false]}}]}.
 
 {mapping, "log.syslog.ssl_options.password", "syslog.protocol",
-    [{datatype, string}]}.
+    [{datatype, [tagged_binary, binary]}]}.
 
 {mapping, "log.syslog.ssl_options.psk_identity", "syslog.protocol",
     [{datatype, string}]}.
@@ -3012,7 +3012,7 @@ end}.
     [{datatype, {enum, [true, false]}}]}.
 
 {mapping, "amqp10_client.ssl_options.password", "amqp10_client.ssl_options.password",
-    [{datatype, string}]}.
+    [{datatype, [tagged_binary, binary]}]}.
 
 {mapping, "amqp10_client.ssl_options.psk_identity", "amqp10_client.ssl_options.psk_identity",
     [{datatype, string}]}.
@@ -3120,7 +3120,7 @@ end}.
     [{datatype, {enum, [true, false]}}]}.
 
 {mapping, "amqp_client.ssl_options.password", "amqp_client.ssl_options.password",
-    [{datatype, string}]}.
+    [{datatype, [tagged_binary, binary]}]}.
 
 {mapping, "amqp_client.ssl_options.psk_identity", "amqp_client.ssl_options.psk_identity",
     [{datatype, string}]}.

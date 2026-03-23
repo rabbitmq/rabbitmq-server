@@ -674,7 +674,7 @@
                           {oauth_enabled, true},
                           {oauth_provider_url, "http://localhost:8080"},
                           {oauth_client_id, "rabbitmq_client_code"},
-                          {oauth_client_secret, "rabbitmq_client_secret"},
+                          {oauth_client_secret, <<"rabbitmq_client_secret">>},
                           {oauth_scopes, "openid profile rabbitmq.*"},
                           {oauth_initiated_logon_type, idp_initiated},
                           {oauth_token_endpoint_params, [
