@@ -1,7 +1,7 @@
 const { By, Key, until, Builder } = require('selenium-webdriver')
 require('chromedriver')
 const assert = require('assert')
-const { buildDriver, captureScreensFor, teardown } = require('../../utils')
+const { buildDriver, captureScreensFor, teardown, delay } = require('../../utils')
 
 const OverviewPage = require('../../pageobjects/OverviewPage')
 const FakePortalPage = require('../../pageobjects/FakePortalPage')
@@ -28,6 +28,7 @@ describe('When a logged in user', function () {
 
   it('logs out', async function () {
     await overview.logout()
+    await delay(1500)
     await fakePortal.isLoaded()
   })
 
