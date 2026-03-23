@@ -146,11 +146,12 @@ queue_declare_method(#'queue.declare'{} = Method, Type, Params) ->
                           fun update_queue_declare_nowait/2]),
 
     Arguments = proplists:get_value(arguments, Params, []),
-    QueueType = rabbit_amqqueue:get_queue_type(Arguments),
-
-    Method3 = case QueueType of
-                  rabbit_stream_queue -> Method2#'queue.declare'{durable   = true,
-                                                                 exclusive = false};
+    DefaultQueueType = proplists:get_value(default_queue_type, Params,
+                                           rabbit_queue_type_common:default()),
+    Method3 = case rabbit_queue_type_common:get_queue_type(Arguments, DefaultQueueType) of
+                  T when T =:= rabbit_stream_queue; T =:= rabbit_quorum_queue ->
+                      Method2#'queue.declare'{durable   = true,
+                                             exclusive = false};
                   _ -> Method2
               end,
 
