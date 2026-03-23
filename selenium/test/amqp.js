@@ -52,7 +52,12 @@ module.exports = {
         resolve()
       })
     })
-    console.log("Opening amqp connection using " + JSON.stringify(connectionOptions))
+    log("Opening amqp connection using " + JSON.stringify(connectionOptions,
+       (key, value) => {
+        if (key === "key") return undefined; // omit this key
+          return value;
+        }
+    ))
     
     let connection = container.connect(connectionOptions)
     let receiver = connection.open_receiver({
