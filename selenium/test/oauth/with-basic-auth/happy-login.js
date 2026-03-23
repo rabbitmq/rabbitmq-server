@@ -1,7 +1,7 @@
 const { By, Key, until, Builder } = require('selenium-webdriver')
 require('chromedriver')
 const assert = require('assert')
-const { buildDriver, goToHome, captureScreensFor, teardown, idpLoginPage } = require('../../utils')
+const { buildDriver, goToHome, captureScreensFor, teardown, idpLoginPage, log } = require('../../utils')
 
 const SSOHomePage = require('../../pageobjects/SSOHomePage')
 const OverviewPage = require('../../pageobjects/OverviewPage')
@@ -38,6 +38,46 @@ describe('An user with administrator tag', function () {
       throw new Error('Failed to login')
     }
     await overview.logout()
+  })
+
+  describe("And logged in via OAuth 2.0", async function() {
+    before(async function() {
+      await homePage.clickToLogin()
+      await idpLogin.login('rabbit_admin', 'rabbit_admin')
+      if (!await overview.isLoaded()) {
+        throw new Error('Failed to login via OAuth 2.0')
+      }
+    })
+    it ('can reload page without being logged out', async function() {
+      log("About to refresh page")
+      overview.refresh()      
+      if (!await overview.isLoaded()) {
+        throw new Error('Failed to keep session opened')
+      }
+    })
+    after(async function () {
+       await overview.logout()
+    })
+  })
+
+  describe("An logged in via Basic Auth", async function() {
+    before(async function() {
+      await homePage.toggleBasicAuthSection()
+      await homePage.basicAuthLogin('guest', 'guest')
+      if (!await overview.isLoaded()) {
+        throw new Error('Failed to login')
+      }
+    })
+    it ('can reload page without being logged out', async function() {
+      log("About to refresh page")
+      overview.refresh()      
+      if (!await overview.isLoaded()) {
+        throw new Error('Failed to keep session opened')
+      }
+    })
+    after(async function () {
+       await overview.logout()
+    })
   })
 
   after(async function () {
