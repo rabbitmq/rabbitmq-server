@@ -1091,7 +1091,7 @@ two_nodes_different_otp_version(_Config) ->
                                     "to have different OTP versions"};
                         false ->
                             Prefixes = ["rabbit_fifo", "rabbit_misc", "mc",
-                                        "lqueue", "priority_queue", "ra_"],
+                                        "lqueue", "priority_queue", "ra_", "serial_number"],
                             [begin
                                  Mod = list_to_atom(ModStr),
                                  {Mod, Bin, _File} = code:get_object_code(Mod),
