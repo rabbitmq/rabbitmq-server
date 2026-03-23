@@ -19,7 +19,7 @@
                    [{description, "global local shovel counters"},
                     {mfa,         {?MODULE, boot_step,
                                    []}},
-                    {requires,    rabbit_global_counters},
+                    {requires,    [rabbit_global_counters, queue_type_registrations]},
                     {enables,     external_infrastructure}]}).
 
 -rabbit_boot_step(
@@ -96,9 +96,10 @@
 boot_step() ->
     Labels = #{protocol => ?PROTOCOL},
     rabbit_global_counters:init(Labels),
-    rabbit_global_counters:init(Labels#{queue_type => rabbit_classic_queue}),
-    rabbit_global_counters:init(Labels#{queue_type => rabbit_quorum_queue}),
-    rabbit_global_counters:init(Labels#{queue_type => rabbit_stream_queue}).
+    lists:foreach(
+      fun(QType) ->
+              rabbit_global_counters:init(Labels#{queue_type => QType})
+      end, rabbit_queue_type:known_queue_type_modules()).
 
 -spec conserve_resources(pid(),
                          rabbit_alarm:resource_alarm_source(),
