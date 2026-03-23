@@ -66,7 +66,7 @@
    stomp.default_pass = guest
    stomp.proxy_protocol = false
    stomp.hide_server_info = false",
-  [{rabbitmq_stomp,[{default_user,[{login,"guest"},{passcode,"guest"}]},
+  [{rabbitmq_stomp,[{default_user,[{login,"guest"},{passcode,<<"guest">>}]},
                     {proxy_protocol,false},{hide_server_info,false}]}],
   [rabbitmq_stomp]},
  {ssl_cert_login,
@@ -78,7 +78,7 @@
    stomp.default_pass = guest
    stomp.implicit_connect = true
    stomp.proxy_protocol = true",
-  [{rabbitmq_stomp,[{default_user,[{login,"guest"},{passcode,"guest"}]},
+  [{rabbitmq_stomp,[{default_user,[{login,"guest"},{passcode,<<"guest">>}]},
                     {implicit_connect,true},
                     {proxy_protocol,true}]}],
   [rabbitmq_stomp]},
