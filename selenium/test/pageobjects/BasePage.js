@@ -317,7 +317,7 @@ module.exports = class BasePage {
           'Timed out after [timeout=' + this.timeout + ';polling=' + this.polling + '] awaiting till visible ' + element,
           this.polling / 2)
       }catch(error) {
-          console.log("isDisplayed failed due to " + error);
+          require('../utils.js').log("isDisplayed failed due to " + error);
           return Promise.resolve(false);
       }
   }
