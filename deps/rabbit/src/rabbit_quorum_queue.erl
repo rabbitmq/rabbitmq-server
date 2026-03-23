@@ -120,7 +120,7 @@
      {cleanup,  {rabbit_registry, unregister,
                  [queue, <<"quorum">>]}},
      {requires, rabbit_registry},
-     {enables, rabbit_policy}]}).
+     {enables, [rabbit_policy, queue_type_registrations]}]}).
 
 -rabbit_boot_step(
    {quorum_memory_alarm_handler,
