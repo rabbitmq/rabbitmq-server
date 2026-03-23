@@ -248,13 +248,26 @@ declare(QueueName = #resource{virtual_host = VHost}, Durable, AutoDelete, Args,
 
 -spec get_queue_type(Args :: rabbit_framing:amqp_table()) -> rabbit_queue_type:queue_type().
 %% This version is not virtual host metadata-aware.
+get_queue_type([]) ->
+    rabbit_queue_type:default();
 get_queue_type(Args) ->
-    rabbit_queue_type_common:get_queue_type(Args, rabbit_queue_type:default()).
+    get_queue_type(Args, rabbit_queue_type:default()).
 
 -spec get_queue_type(Args :: rabbit_framing:amqp_table(), DefaultQueueType :: rabbit_queue_type:queue_type()) -> rabbit_queue_type:queue_type().
 %% This version should be used together with 'rabbit_vhost:default_queue_type/{1,2}'.
+get_queue_type([], DefaultQueueType) ->
+    rabbit_queue_type:discover(DefaultQueueType);
 get_queue_type(Args, DefaultQueueType) ->
-    rabbit_queue_type_common:get_queue_type(Args, DefaultQueueType).
+    case rabbit_misc:table_lookup(Args, <<"x-queue-type">>) of
+        undefined ->
+            rabbit_queue_type:discover(DefaultQueueType);
+        {longstr, undefined} ->
+            rabbit_queue_type:discover(DefaultQueueType);
+        {longstr, <<"undefined">>} ->
+            rabbit_queue_type:discover(DefaultQueueType);
+        {_, V} ->
+            rabbit_queue_type:discover(V)
+    end.
 
 -spec internal_declare(Queue, Recover) -> Ret when
       Queue :: amqqueue:amqqueue(),
