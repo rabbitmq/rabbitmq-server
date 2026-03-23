@@ -2,17 +2,17 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term "Broadcom" refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
--module(rabbit_routing_util).
+-module(rabbit_stomp_routing_util).
 
 -export([init_state/0, dest_prefixes/0, all_dest_prefixes/0]).
 -export([ensure_endpoint/4, ensure_endpoint/5, ensure_binding/3]).
 -export([dest_temp_queue/1]).
 
--include("amqp_client.hrl").
--include("rabbit_routing_prefixes.hrl").
+-include_lib("amqp_client/include/amqp_client.hrl").
+-include("rabbit_stomp_routing_prefixes.hrl").
 
 %%----------------------------------------------------------------------------
 
@@ -147,8 +147,8 @@ queue_declare_method(#'queue.declare'{} = Method, Type, Params) ->
 
     Arguments = proplists:get_value(arguments, Params, []),
     DefaultQueueType = proplists:get_value(default_queue_type, Params,
-                                           rabbit_queue_type_common:default()),
-    Method3 = case rabbit_queue_type_common:get_queue_type(Arguments, DefaultQueueType) of
+                                           rabbit_queue_type:default()),
+    Method3 = case rabbit_amqqueue:get_queue_type(Arguments, DefaultQueueType) of
                   T when T =:= rabbit_stream_queue; T =:= rabbit_quorum_queue ->
                       Method2#'queue.declare'{durable   = true,
                                              exclusive = false};
