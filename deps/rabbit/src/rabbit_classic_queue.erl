@@ -92,7 +92,7 @@
      {cleanup,  {rabbit_registry, unregister,
                  [queue, <<"classic">>]}},
      {requires, rabbit_registry},
-     {enables, [?MODULE, rabbit_policy]}]}).
+     {enables, [?MODULE, rabbit_policy, queue_type_registrations]}]}).
 
 -rabbit_boot_step(
    {?MODULE,
