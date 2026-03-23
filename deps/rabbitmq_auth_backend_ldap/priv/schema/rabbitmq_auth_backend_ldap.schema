@@ -290,7 +290,7 @@ end}.
     [{datatype, {enum, [true, false]}}]}.
 
 {mapping, "auth_ldap.ssl_options.password", "rabbitmq_auth_backend_ldap.ssl_options.password",
-    [{datatype, string}]}.
+    [{datatype, [tagged_binary, binary]}]}.
 
 {mapping, "auth_ldap.ssl_options.psk_identity", "rabbitmq_auth_backend_ldap.ssl_options.psk_identity",
     [{datatype, string}]}.

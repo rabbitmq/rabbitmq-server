@@ -53,7 +53,7 @@ end}.
 %% ACL token
 
 {mapping, "cluster_formation.consul.acl_token", "rabbit.cluster_formation.peer_discovery_consul.consul_acl_token", [
-    {datatype, string}
+    {datatype, [tagged_string, string]}
 ]}.
 
 {translation, "rabbit.cluster_formation.peer_discovery_consul.consul_acl_token",
@@ -416,7 +416,7 @@ end}.
 [{datatype, {enum, [true, false]}}]}.
 
 {mapping, "cluster_formation.consul.ssl_options.password", "rabbit.cluster_formation.peer_discovery_consul.ssl_options.password",
-[{datatype, string}]}.
+[{datatype, [tagged_binary, binary]}]}.
 
 {mapping, "cluster_formation.consul.ssl_options.psk_identity", "rabbit.cluster_formation.peer_discovery_consul.ssl_options.psk_identity",
 [{datatype, string}]}.

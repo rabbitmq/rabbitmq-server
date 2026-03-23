@@ -466,7 +466,7 @@ end}.
 {mapping, "management.oauth_client_id", "rabbitmq_management.oauth_client_id",
       [{datatype, string}]}.
 {mapping, "management.oauth_client_secret", "rabbitmq_management.oauth_client_secret",
-      [{datatype, string}]}.
+      [{datatype, [tagged_binary, binary]}]}.
 
 %% Configure OAuth2 authorization flow (defaults to code)
 {mapping, "management.oauth_response_type", "rabbitmq_management.oauth_response_type",
@@ -544,7 +544,7 @@ end}.
 {mapping,
   "management.oauth_resource_servers.$name.oauth_client_secret",
   "rabbitmq_management.oauth_resource_servers",
-  [{datatype, string}]
+  [{datatype, [tagged_binary, binary]}]
 }.
 
 {mapping,

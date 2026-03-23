@@ -189,7 +189,7 @@ end}.
 ]}.
 
 {mapping, "stomp.default_pass", "rabbitmq_stomp.default_user.passcode", [
-    {datatype, string}
+    {datatype, [tagged_binary, binary]}
 ]}.
 
 {mapping, "stomp.default_topic_exchange", "rabbitmq_stomp.default_topic_exchange", [
