@@ -99,7 +99,7 @@ function get_oauth_settings() {
 
 export function oauth_initialize_if_required(state = "index") {
   let oauth = oauth_initialize(get_oauth_settings())
-  if (!oauth.enabled) return oauth;
+  if (!oauth.enabled || has_auth_credentials()) return oauth;
   switch (state) {
     case 'login-callback':
       oauth_completeLogin(); break;
