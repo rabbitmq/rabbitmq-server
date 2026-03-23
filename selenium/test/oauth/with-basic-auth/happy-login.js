@@ -40,7 +40,7 @@ describe('An user with administrator tag', function () {
     await overview.logout()
   })
 
-  describe("And logged in via OAuth 2.0", async function() {
+  describe("and logged in via OAuth 2.0", async function() {
     before(async function() {
       await homePage.clickToLogin()
       await idpLogin.login('rabbit_admin', 'rabbit_admin')
@@ -60,7 +60,7 @@ describe('An user with administrator tag', function () {
     })
   })
 
-  describe("An logged in via Basic Auth", async function() {
+  describe("and logged in via basic auth", async function() {
     before(async function() {
       await homePage.toggleBasicAuthSection()
       await homePage.basicAuthLogin('guest', 'guest')
