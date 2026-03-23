@@ -79,6 +79,10 @@
                     {requires,    pre_boot},
                     {enables,     database}]}).
 
+-rabbit_boot_step({queue_type_registrations,
+                   [{description, "queue type registrations"},
+                    {requires,    rabbit_registry}]}).
+
 -rabbit_boot_step({database,
                    [{mfa,         {rabbit_db, init, []}},
                     {requires,    rabbit_registry},
