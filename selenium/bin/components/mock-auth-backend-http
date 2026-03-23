@@ -23,6 +23,9 @@ start_mock-auth-backend-http() {
   init_mock-auth-backend-http
   kill_container_if_exist mock-auth-backend-http
 
+  local logfile="${MOCK_AUTH_BACKEND_HTTP_LOG:-$LOGS/mock-auth-backend-http.log}"
+  print "> mock-auth-backend-http docker run log: ${logfile}"
+
   docker run \
     --detach \
     --name mock-auth-backend-http \
@@ -30,7 +33,12 @@ start_mock-auth-backend-http() {
     --publish 8888:1080 \
     --env MOCKSERVER_INITIALIZATION_JSON_PATH="/config/defaultExpectations.json" \
     -v ${AUTH_BACKEND_HTTP_DIR}:/config \
-    ${MOCKSERVER_DOCKER_IMAGE}
+    ${MOCKSERVER_DOCKER_IMAGE} 2>&1 | tee -a "${logfile}"
+
+  if [[ ${PIPESTATUS[0]} -ne 0 ]]; then
+    print "docker run failed; see ${logfile}"
+    return 1
+  fi
 
   wait_for_url $AUTH_BACKEND_HTTP_BASEURL/ready
   end "mock-auth-backend-http is ready"
