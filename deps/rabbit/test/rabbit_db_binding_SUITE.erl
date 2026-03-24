@@ -162,7 +162,7 @@ delete1(_Config) ->
     passed.
 
 auto_delete(Config) ->
-    passed = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete1, [Config]).
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, auto_delete1, [Config]).
 
 auto_delete1(_Config) ->
     XName1 = rabbit_misc:r(?VHOST, exchange, <<"test-exchange1">>),
@@ -177,9 +177,11 @@ auto_delete1(_Config) ->
     Ret = rabbit_db_binding:delete(Binding, fun(_, _) -> ok end),
     ?assertMatch({ok, _}, Ret),
     {ok, Deletions} = Ret,
-    ?assertMatch({#exchange{}, not_deleted, [#binding{}]},
+    ?assertMatch({#exchange{}, deleted, [#binding{}]},
                  rabbit_binding:fetch_deletion(XName1, Deletions)),
-    ?assertEqual(false, rabbit_db_binding:exists(Binding)),
+    ?assertEqual(
+       {error, {resources_missing, [{not_found, XName1}]}},
+       rabbit_db_binding:exists(Binding)),
     passed.
 
 get_all(Config) ->
