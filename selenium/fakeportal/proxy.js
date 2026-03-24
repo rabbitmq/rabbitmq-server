@@ -1,13 +1,13 @@
 var http = require('http'),
-    httpProxy = require('http-proxy');
+httpProxy = require('http-proxy');
 
 const XMLHttpRequest = require('xmlhttprequest').XMLHttpRequest
 
 const rabbitmq_url = process.env.RABBITMQ_URL || 'http://0.0.0.0:15672/';
 const client_id = process.env.CLIENT_ID;
 const client_secret = process.env.CLIENT_SECRET;
-const uaa_url = process.env.UAA_URL;
 const port = process.env.PORT;
+const idp_token_endpoint = process.env.IDP_TOKEN_ENDPOINT;
 
 //
 // Create a proxy server with custom application logic
@@ -52,7 +52,7 @@ function default_if_blank(value, defaultValue) {
 
 function access_token(id, secret) {
   const req = new XMLHttpRequest();
-  const url = uaa_url + '/oauth/token';
+  const url = idp_token_endpoint;
   const params = 'client_id=' + id +
     '&client_secret=' + secret +
     '&grant_type=client_credentials' +
