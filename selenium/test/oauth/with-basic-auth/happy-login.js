@@ -50,7 +50,7 @@ describe('An user with administrator tag', function () {
     })
     it ('can reload page without being logged out', async function() {
       log("About to refresh page")
-      overview.refresh()      
+      await overview.refresh()
       if (!await overview.isLoaded()) {
         throw new Error('Failed to keep session opened')
       }
@@ -70,7 +70,7 @@ describe('An user with administrator tag', function () {
     })
     it ('can reload page without being logged out', async function() {
       log("About to refresh page")
-      overview.refresh()      
+      await overview.refresh()
       if (!await overview.isLoaded()) {
         throw new Error('Failed to keep session opened')
       }
