@@ -496,7 +496,7 @@ delete_serial(XName) ->
       VHostName :: vhost:name().
 %% @doc Recovers all exchanges for a given vhost
 %%
-%% @returns ok
+%% @returns a list of exchange records
 %%
 %% @private
 
@@ -515,11 +515,6 @@ recover(VHost) ->
       fun() ->
               [_ = set_in_khepri_tx(X) || X <- Exchanges]
       end, rw, #{timeout => infinity}),
-    %% TODO: Move this callback back to `rabbit_exchange'.
-    [begin
-         Serial = rabbit_exchange:serial(X),
-         rabbit_exchange:callback(X, create, Serial, [X])
-     end || X <- Exchanges],
     Exchanges.
 
 %% -------------------------------------------------------------------

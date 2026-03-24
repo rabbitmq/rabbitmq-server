@@ -42,6 +42,24 @@
 
 recover(VHost) ->
     Xs = rabbit_db_exchange:recover(VHost),
+    [begin
+         Serial = rabbit_exchange:serial(X),
+         rabbit_exchange:callback(X, create, Serial, [X])
+     end || X <- Xs],
+    maps:foreach(
+      fun(Type, XsForType) ->
+              Mod = type_to_module(Type),
+              case erlang:function_exported(Mod, recover, 2) of
+                  true ->
+                      {Time, ok} = timer:tc(Mod, recover, [VHost, XsForType],
+                                            millisecond),
+                      ?LOG_INFO("Recovering ~b exchanges of type '~ts' took "
+                                "~bms", [length(XsForType), Type, Time]),
+                      ok;
+                  false ->
+                      ok
+              end
+      end, maps:groups_from_list(fun(#exchange{type = T}) -> T end, Xs)),
     [XName || #exchange{name = XName} <- Xs].
 
 -spec callback
