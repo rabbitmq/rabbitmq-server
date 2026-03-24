@@ -239,7 +239,7 @@ function store_cookie(dict) {
     var date;
     if (sessionTimeout != undefined) {
         date = new Date();
-        date.setMinutes(date.getMinutes() + parseInt(sessionTimeout));
+        date.setMinutes(date.getMinutes() + parseInt(sessionTimeout, 10));
     } else {
         date = default_hard_session_timeout();
     }
