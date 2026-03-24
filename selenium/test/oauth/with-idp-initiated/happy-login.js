@@ -41,7 +41,7 @@ describe('A user with a JWT token', function () {
     await fakePortal.login()
     await overview.isLoaded()
 
-    overview.refresh()      
+    await overview.refresh()
     if (!await overview.isLoaded()) {
       throw new Error('Failed to keep session opened')
     }
