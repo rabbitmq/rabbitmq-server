@@ -46,7 +46,7 @@ start_fakeproxy() {
     --publish 9090:9090 \
     --env PORT=9090 \
     --env RABBITMQ_URL="${RABBITMQ_URL_FOR_FAKEPROXY}" \
-    --env UAA_URL="${UAA_URL_FOR_FAKEPROXY}" \
+    --env IDP_TOKEN_ENDPOINT="${IDP_TOKEN_ENDPOINT}" \
     --env CLIENT_ID="${CLIENT_ID}" \
     --env CLIENT_SECRET="${CLIENT_SECRET}" \
     --env NODE_EXTRA_CA_CERTS=/etc/uaa/ca_uaa_certificate.pem \
