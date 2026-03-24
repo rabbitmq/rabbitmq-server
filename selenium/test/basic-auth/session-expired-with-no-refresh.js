@@ -6,31 +6,30 @@ const { buildDriver, goToHome, captureScreensFor, teardown, delay } = require('.
 const LoginPage = require('../pageobjects/LoginPage')
 const OverviewPage = require('../pageobjects/OverviewPage')
 
-describe('Once user is logged in and not refresh is configured', function () {
+describe('Once user is logged in and no refresh is configured', function () {
   let driver
+  let login
   let overview
   let captureScreen
-  this.timeout(65000) // hard-coded to 25secs because this test requires 35sec to run
+  this.timeout(65000)
 
   before(async function () {
     driver = buildDriver()
     await goToHome(driver)
     login = new LoginPage(driver)
     overview = new OverviewPage(driver)
-    captureScreen = captureScreensFor(driver, __filename)    
+    captureScreen = captureScreensFor(driver, __filename)
     await login.login('guest', 'guest')
-    await overview.isLoaded()    
+    await overview.isLoaded()
     await overview.selectRefreshOption("Do not refresh")
-    await overview.ensureTotalsSectionIsInvisible() // trigger a preference stored in cookie
-                                                    // which should honor login timeout     
+    // Trigger a preference stored in cookie, which should honor login timeout.
+    await overview.ensureTotalsSectionIsInvisible()
   })
 
   it('any authorized request after the session has expired should log the user out', async function () {
-    
     await delay(60000)
     await overview.clickOnConnectionsTab()
-    await login.isLoaded()   
-    
+    await login.isLoaded()
   })
 
   after(async function () {
