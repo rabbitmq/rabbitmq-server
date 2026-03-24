@@ -9,7 +9,32 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("eunit/include/eunit.hrl").
--compile(export_all).
+
+-export([all/0,
+         groups/0,
+         init_per_suite/1,
+         end_per_suite/1,
+         init_per_group/2,
+         end_per_group/2,
+         init_per_testcase/2,
+         end_per_testcase/2,
+
+         create/1, create1/1,
+         exists/1, exists1/1,
+         delete/1, delete1/1,
+         auto_delete/1, auto_delete1/1,
+         get_all/1, get_all1/1,
+         get_all_by_vhost/1, get_all_by_vhost1/1,
+         get_all_for_source/1, get_all_for_source1/1,
+         get_all_for_destination/1, get_all_for_destination1/1,
+         get_all_for_source_and_destination/1,
+         get_all_for_source_and_destination1/1,
+         get_all_for_source_and_destination_reverse/1,
+         get_all_for_source_and_destination_reverse1/1,
+         fold/1, fold1/1,
+         match/1, match1/1,
+         match_routing_key/1, match_routing_key1/1
+        ]).
 
 -define(VHOST, <<"/">>).
 
@@ -137,7 +162,7 @@ delete1(_Config) ->
     passed.
 
 auto_delete(Config) ->
-    passed = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete1, [Config]).
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, auto_delete1, [Config]).
 
 auto_delete1(_Config) ->
     XName1 = rabbit_misc:r(?VHOST, exchange, <<"test-exchange1">>),
@@ -152,9 +177,11 @@ auto_delete1(_Config) ->
     Ret = rabbit_db_binding:delete(Binding, fun(_, _) -> ok end),
     ?assertMatch({ok, _}, Ret),
     {ok, Deletions} = Ret,
-    ?assertMatch({#exchange{}, not_deleted, [#binding{}]},
+    ?assertMatch({#exchange{}, deleted, [#binding{}]},
                  rabbit_binding:fetch_deletion(XName1, Deletions)),
-    ?assertEqual(false, rabbit_db_binding:exists(Binding)),
+    ?assertEqual(
+       {error, {resources_missing, [{not_found, XName1}]}},
+       rabbit_db_binding:exists(Binding)),
     passed.
 
 get_all(Config) ->
