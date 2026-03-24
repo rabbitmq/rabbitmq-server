@@ -54,7 +54,8 @@ module.exports = {
     })
     log("Opening amqp connection using " + JSON.stringify(connectionOptions,
        (key, value) => {
-        if (key === "key") return undefined; // omit this key
+        // Omit the private key from the log output.
+        if (key === "key") return undefined;
           return value;
         }
     ))
