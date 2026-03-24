@@ -22,7 +22,7 @@ describe('Once user is logged in and no refresh is configured', function () {
     await login.login('guest', 'guest')
     await overview.isLoaded()
     await overview.selectRefreshOption("Do not refresh")
-    // Trigger a preference stored in cookie, which should honor login timeout.
+    // Trigger a UI preference change to verify it does not extend the session.
     await overview.ensureTotalsSectionIsInvisible()
   })
 
