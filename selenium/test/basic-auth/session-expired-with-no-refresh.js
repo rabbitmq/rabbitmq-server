@@ -17,21 +17,20 @@ describe('Once user is logged in', function () {
     await goToHome(driver)
     login = new LoginPage(driver)
     overview = new OverviewPage(driver)
-    captureScreen = captureScreensFor(driver, __filename)
+    captureScreen = captureScreensFor(driver, __filename)    
     await login.login('guest', 'guest')
     await overview.isLoaded()    
+    await overview.selectRefreshOption("Do not refresh")
     await overview.ensureTotalsSectionIsInvisible() // trigger a preference stored in cookie
-                                                    // which should honor login timeout 
-    
+                                                    // which should honor login timeout     
   })
 
   it('it has to login after the session expires', async function () {
     
     await delay(60000)
-    await login.isLoaded() 
-    await login.login('guest', 'guest')
-    await overview.isLoaded()
-    await overview.clickOnConnectionsTab() // and we can still interact with the ui
+    await overview.clickOnConnectionsTab()
+    await login.isLoaded()   
+    
   })
 
   after(async function () {
