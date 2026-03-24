@@ -33,8 +33,8 @@ module.exports = class OverviewPage extends BasePage {
   async ensureTotalsSectionIsVisible() {
     return this.ensureSectionIsVisible(TOTALS_SECTION)
   }
+
   async ensureTotalsSectionIsInvisible() {
     return this.ensureSectionIsInvisible(TOTALS_SECTION)
   }
-  
 }
