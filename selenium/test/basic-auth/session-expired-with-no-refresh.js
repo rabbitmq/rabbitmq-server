@@ -6,7 +6,7 @@ const { buildDriver, goToHome, captureScreensFor, teardown, delay } = require('.
 const LoginPage = require('../pageobjects/LoginPage')
 const OverviewPage = require('../pageobjects/OverviewPage')
 
-describe('Once user is logged in', function () {
+describe('Once user is logged in and not refresh is configured', function () {
   let driver
   let overview
   let captureScreen
@@ -25,7 +25,7 @@ describe('Once user is logged in', function () {
                                                     // which should honor login timeout     
   })
 
-  it('it has to login after the session expires', async function () {
+  it('any authorized request after the session has expired should log the user out', async function () {
     
     await delay(60000)
     await overview.clickOnConnectionsTab()
