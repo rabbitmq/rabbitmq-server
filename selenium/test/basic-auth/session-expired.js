@@ -20,7 +20,7 @@ describe('Once user is logged in', function () {
     captureScreen = captureScreensFor(driver, __filename)
     await login.login('guest', 'guest')
     await overview.isLoaded()
-    // Trigger a preference stored in cookie, which should honor login timeout.
+    // Trigger a UI preference change to verify it does not extend the session.
     await overview.ensureTotalsSectionIsInvisible()
   })
 
