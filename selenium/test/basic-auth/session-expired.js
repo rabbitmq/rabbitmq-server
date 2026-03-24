@@ -19,16 +19,14 @@ describe('Once user is logged in', function () {
     overview = new OverviewPage(driver)
     captureScreen = captureScreensFor(driver, __filename)
     await login.login('guest', 'guest')
-    await overview.isLoaded()    
-    await overview.ensureTotalsSectionIsInvisible() // trigger a preference stored in cookie
-                                                    // which should honor login timeout 
-    
+    await overview.isLoaded()
+    // Trigger a preference stored in cookie, which should honor login timeout.
+    await overview.ensureTotalsSectionIsInvisible()
   })
 
   it('it has to login after the session expires', async function () {
-    
     await delay(60000)
-    await login.isLoaded() 
+    await login.isLoaded()
     await login.login('guest', 'guest')
     await overview.isLoaded()
     await overview.clickOnConnectionsTab() // and we can still interact with the ui
