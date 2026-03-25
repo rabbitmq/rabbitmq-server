@@ -41,7 +41,7 @@ class CaptureScreenshot {
       await fsp.mkdir(screenshotsSubDir)
     }    
     const dest = path.join(screenshotsSubDir, name + '.png')
-    console.log("screenshot saved to " + dest)
+    module.exports.log("screenshot saved to " + dest)
     await fsp.writeFile(dest, image, 'base64')
   }
 }
@@ -146,7 +146,7 @@ module.exports = {
     const queryString = params.join('&');
     
     const url = d.baseUrl + '/login?' + queryString;
-    console.log("Navigating to " + url);
+    module.exports.log("Navigating to " + url);
     return d.driver.get(url);
   },
 
@@ -307,7 +307,7 @@ module.exports = {
         driver.executeScript('lambda-status=passed')
       } else {        
         if (captureScreen != null) {
-          console.log("Teardown failed . capture...");
+          module.exports.log("Teardown failed . capture...");
           await captureScreen.shot('after-failed');
         }
         driver.executeScript('lambda-status=failed')

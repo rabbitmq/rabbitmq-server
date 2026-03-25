@@ -14,6 +14,10 @@ const LOGGED_IN = 'loggedIn'
 const LOGIN_SESSION_TIMEOUT = "login_session_timeout"
 const AUTH_RESOURCE = 'auth_resource'
 
+const BASIC_AUTH_SCHEME = "Basic"
+const BEARER_AUTH_SCHEME = "Bearer"
+
+
 function set_auth_resource(resource) {
   store_local_pref(AUTH_RESOURCE, resource)
 }
@@ -24,9 +28,12 @@ function get_auth_resource() {
   return get_local_pref(AUTH_RESOURCE)
 }
 
-function has_auth_credentials() {
-    return get_local_pref(CREDENTIALS) != undefined && get_local_pref(AUTH_SCHEME) != undefined &&
-      get_cookie_value(LOGGED_IN) != undefined
+// When auth_scheme is undefined, matches any scheme for backwards compatibility.
+function has_auth_credentials(auth_scheme) {
+    let authenticated =get_local_pref(CREDENTIALS) != undefined && get_local_pref(AUTH_SCHEME) != undefined &&
+      get_cookie_value(LOGGED_IN) != undefined;
+    return authenticated && (auth_scheme == undefined 
+        || auth_scheme == get_auth_scheme());
 }
 function get_auth_credentials() {
     return get_local_pref(CREDENTIALS)
@@ -54,6 +61,7 @@ function set_auth(auth_scheme, credentials, validUntil) {
     store_local_pref(AUTH_SCHEME, auth_scheme)
     store_cookie_value_with_expiration(LOGGED_IN, "true", validUntil) // session marker
 }
+
 function authorization_header() {
     if (has_auth_credentials()) {
         return get_auth_scheme() + ' ' + get_auth_credentials();
