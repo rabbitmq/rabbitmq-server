@@ -782,25 +782,25 @@ apply_(#{system_time := Ts} = Meta,
                 {State1, Effects0}
         end,
 
-    {State3, Effects2} = update_next_consumer_timeout(State2, Effects1),
     %% activate SAC
-    {State, Effects} = activate_next_consumer({State3, Effects2}),
+    NextConsumerTimeout = next_consumer_timeout(State2),
+    {State, Effects} =
+        activate_next_consumer({State2#?STATE{next_consumer_timeout =
+                                              NextConsumerTimeout},
+                                Effects1}),
     checkout(Meta, State0, State, Effects);
 apply_(_Meta, Cmd, State) ->
     %% handle unhandled commands gracefully
     ?LOG_DEBUG("rabbit_fifo: unhandled command ~W", [Cmd, 10]),
     {State, ok, []}.
 
-update_next_consumer_timeout(#?STATE{consumers = Cons} = State, Effects) ->
-    Next = maps:fold(
-             fun (_, #consumer{checked_out = Ch}, Acc) ->
-                     Min = maps:fold(fun (_, ?C_MSG(T, _), A) ->
-                                             min(T, A)
-                                     end, infinity, Ch),
-                     min(Min, Acc)
-             end, infinity, Cons),
-    {State#?STATE{next_consumer_timeout = Next},
-     [{timer, evaluate_consumer_timeout, Next, {abs, true}} | Effects]}.
+next_consumer_timeout(#?STATE{consumers = Cons}) ->
+    maps:fold(fun (_, #consumer{checked_out = Ch}, Acc) ->
+                      Min = maps:fold(fun (_, ?C_MSG(T, _), A) ->
+                                              min(T, A)
+                                      end, infinity, Ch),
+                      min(Min, Acc)
+              end, infinity, Cons).
 
 
 -spec live_indexes(state()) -> {ra_seq, ra_seq:state()}.
@@ -1114,8 +1114,7 @@ state_enter(leader,
                     waiting_consumers = WaitingConsumers,
                     cfg = #cfg{resource = QRes,
                                dead_letter_handler = DLH},
-                    dlx = DlxState} = State) ->
-    TimerEffs = timer_effect(State, []),
+                    dlx = DlxState}) ->
     % return effects to monitor all current consumers and enqueuers
     Pids = lists:usort(maps:keys(Enqs)
                        ++ [P || ?CONSUMER_PID(P) <- maps:values(Cons)]
@@ -1124,7 +1123,7 @@ state_enter(leader,
     Nots = [{send_msg, P, leader_change, ra_event} || P <- Pids],
     NodeMons = lists:usort([{monitor, node, node(P)} || P <- Pids]),
     NotifyDecs = notify_decorators_startup(QRes),
-    Effects = TimerEffs ++ Mons ++ Nots ++ NodeMons ++ [NotifyDecs],
+    Effects = Mons ++ Nots ++ NodeMons ++ [NotifyDecs],
 
     case DLH of
         at_least_once ->
@@ -1275,7 +1274,8 @@ which_module(8) -> ?MODULE.
 -record(aux_gc, {last_raft_idx = 0 :: ra:index()}).
 -record(?AUX, {name :: atom(),
                last_decorators_state :: term(),
-               unused_1 :: term(),
+               last_consumer_timeout =
+                   infinity :: infinity | non_neg_integer(),
                gc = #aux_gc{} :: #aux_gc{},
                tick_pid :: undefined | pid(),
                cache = #{} :: map(),
@@ -1308,7 +1308,7 @@ handle_aux(RaftState, Tag, Cmd, AuxV3, RaAux)
   when element(1, AuxV3) == aux_v3 ->
     AuxV4 = #?AUX{name = element(2, AuxV3),
                   last_decorators_state = element(3, AuxV3),
-                  unused_1 = undefined,
+                  last_consumer_timeout = infinity,
                   gc = element(5, AuxV3),
                   tick_pid  = element(6, AuxV3),
                   cache = element(7, AuxV3),
@@ -1317,10 +1317,12 @@ handle_aux(RaftState, Tag, Cmd, AuxV3, RaAux)
     handle_aux(RaftState, Tag, Cmd, AuxV4, RaAux);
 handle_aux(leader, cast, eval,
            #?AUX{last_decorators_state = LastDec,
+                 last_consumer_timeout = LastConTimeout0,
                  last_checkpoint = Check0} = Aux0,
            RaAux) ->
 
     #?STATE{cfg = #cfg{resource = QName},
+            next_consumer_timeout = NextConTimeout,
             reclaimable_bytes = ReclaimableBytes} = MacState =
         ra_aux:machine_state(RaAux),
 
@@ -1337,16 +1339,29 @@ handle_aux(leader, cast, eval,
 
     %% this is called after each batch of commands have been applied
     %% set timer for message expire
-    %% should really be the last applied index ts but this will have to do
     Effects1 = timer_effect(MacState, Effects0),
+    %% if the timer has already elapsed (stale time from a prior leadership term)
+    %% then set infinity to ensure a timer is started
+    LastConTimeout = if LastConTimeout0 < Ts ->
+                            infinity;
+                        true ->
+                            LastConTimeout0
+                     end,
+
+    Effects2 = maybe_add_consumer_timeout_effect(NextConTimeout,
+                                                 LastConTimeout,
+                                                 Effects1),
     case query_notify_decorators_info(MacState) of
         LastDec ->
-            {no_reply, Aux0#?AUX{last_checkpoint = Check}, RaAux, Effects1};
+            {no_reply, Aux0#?AUX{last_checkpoint = Check,
+                                 last_consumer_timeout = NextConTimeout}, RaAux, Effects2};
         {MaxActivePriority, IsEmpty} = NewLast ->
             Effects = [notify_decorators_effect(QName, MaxActivePriority, IsEmpty)
-                       | Effects1],
+                       | Effects2],
             {no_reply, Aux0#?AUX{last_checkpoint = Check,
-                                 last_decorators_state = NewLast}, RaAux, Effects}
+                                 last_consumer_timeout = NextConTimeout,
+                                 last_decorators_state = NewLast}, RaAux,
+             Effects}
     end;
 handle_aux(_RaftState, cast, eval,
            #?AUX{last_checkpoint = Check0} = Aux0, RaAux) ->
@@ -2718,9 +2733,7 @@ assign_to_consumer(#{system_time := Ts} = Meta, _Ts, ConsumerKey, Msgs,
     State = update_or_remove_con(Meta, ConsumerKey, Con, State1),
     DelMsgs = lists:reverse(DeliveryMsgs),
     DeliveryEffect = delivery_effect(ConsumerKey, DelMsgs, State),
-    Effects = maybe_add_consumer_timeout_effect(NextConTimeout,
-                                                NextConTimeout0,
-                                                [DeliveryEffect | Effects0]),
+    Effects = [DeliveryEffect | Effects0],
     {State, Effects}.
 
 delayed_in(ReadyAt, Idx, Msg, DeferralToken, #delayed{tree = Tree0,
@@ -2819,45 +2832,45 @@ checkout_one(#{system_time := Ts} = Meta, ExpiredMsg0, InitState0, Effects0) ->
                     %% there are consumers waiting to be serviced
                     %% process consumer checkout
                     case maps:get(ConsumerKey, Cons0) of
-                                #consumer{credit = Credit,
-                                          status = Status}
-                                  when Credit =:= 0 orelse
-                                       Status =/= up ->
-                                    %% not an active consumer but still in the consumers
-                                    %% map - this can happen when draining
-                                    %% or when higher priority single active consumers
-                                    %% take over, recurse without consumer in service
-                                    %% queue
-                                    checkout_one(Meta, ExpiredMsg,
-                                                 InitState#?STATE{service_queue = SQ1},
-                                                 Effects1);
-                                #consumer{checked_out = Checked0,
-                                          next_msg_id = Next,
-                                          credit = Credit,
-                                          delivery_count = DelCnt0,
-                                          cfg = Cfg} = Con0 ->
-                                    Timeout = Ts + Cfg#consumer_cfg.timeout,
-                                    Checked = maps:put(Next, ?C_MSG(Timeout, Msg),
-                                                       Checked0),
-                                    DelCnt = add(DelCnt0, 1),
-                                    Con = Con0#consumer{checked_out = Checked,
-                                                        next_msg_id = Next + 1,
-                                                        credit = Credit - 1,
-                                                        delivery_count = DelCnt},
-                                    Size = get_header(size, get_msg_header(Msg)),
-                                    State1 =
-                                        State0#?STATE{service_queue = SQ1,
-                                                      msg_bytes_checkout = BytesCheckout + Size,
-                                                      msg_bytes_enqueue = BytesEnqueue - Size,
-                                                      next_consumer_timeout = min(Timeout, NextConTimeout)},
-                                    Effects = maybe_add_consumer_timeout_effect(Timeout,
-                                                                                NextConTimeout,
-                                                                                Effects1),
-                                    State = update_or_remove_con(
-                                               Meta, ConsumerKey, Con, State1),
-                                    {success, ConsumerKey, Next, Msg, ExpiredMsg,
-                                     State, Effects}
-                            end;
+                        #consumer{credit = Credit,
+                                  status = Status}
+                          when Credit =:= 0 orelse
+                               Status =/= up ->
+                            %% not an active consumer but still in the consumers
+                            %% map - this can happen when draining
+                            %% or when higher priority single active consumers
+                            %% take over, recurse without consumer in service
+                            %% queue
+                            checkout_one(Meta, ExpiredMsg,
+                                         InitState#?STATE{service_queue = SQ1},
+                                         Effects1);
+                        #consumer{checked_out = Checked0,
+                                  next_msg_id = Next,
+                                  credit = Credit,
+                                  delivery_count = DelCnt0,
+                                  cfg = Cfg} = Con0 ->
+                            Timeout = Ts + Cfg#consumer_cfg.timeout,
+                            Checked = maps:put(Next, ?C_MSG(Timeout, Msg),
+                                               Checked0),
+                            DelCnt = add(DelCnt0, 1),
+                            Con = Con0#consumer{checked_out = Checked,
+                                                next_msg_id = Next + 1,
+                                                credit = Credit - 1,
+                                                delivery_count = DelCnt},
+                            Size = get_header(size, get_msg_header(Msg)),
+                            State1 =
+                                State0#?STATE{service_queue = SQ1,
+                                              msg_bytes_checkout =
+                                                  BytesCheckout + Size,
+                                              msg_bytes_enqueue =
+                                                  BytesEnqueue - Size,
+                                              next_consumer_timeout =
+                                                  min(Timeout, NextConTimeout)},
+                            State = update_or_remove_con(Meta, ConsumerKey,
+                                                         Con, State1),
+                            {success, ConsumerKey, Next, Msg, ExpiredMsg,
+                             State, Effects1}
+                    end;
                 empty ->
                     {nochange, ExpiredMsg, InitState, Effects1}
             end;
@@ -2988,7 +3001,8 @@ timer_effect(#?STATE{messages_total = 0,
                      delayed = #delayed{next = undefined}}, Effects) ->
     Effects;
 timer_effect(#?STATE{messages_total = 0,
-                     delayed = #delayed{next = {NextDelayedTs, _, _}}}, Effects) ->
+                     delayed = #delayed{next = {NextDelayedTs, _, _}}},
+             Effects) ->
     [{timer, expire_msgs, NextDelayedTs, {abs, true}} | Effects];
 timer_effect(#?STATE{returns = Returns,
                      messages = Messages,
@@ -3027,15 +3041,21 @@ timer_effect(#?STATE{returns = Returns,
 
     %% Also consider the next delayed message timestamp
     NextDelayedTs = case Delayed of
-                        #delayed{next = undefined} -> undefined;
-                        #delayed{next = {Ts, _, _}} -> Ts
+                        #delayed{next = undefined} ->
+                            undefined;
+                        #delayed{next = {Ts, _, _}} ->
+                            Ts
                     end,
 
     NextTimeout = case {NextExpiry, NextDelayedTs} of
-                      {undefined, undefined} -> undefined;
-                      {undefined, D} -> D;
-                      {E, undefined} -> E;
-                      {E, D} -> min(E, D)
+                      {undefined, undefined} ->
+                          undefined;
+                      {undefined, D} ->
+                          D;
+                      {E, undefined} ->
+                          E;
+                      {E, D} ->
+                          min(E, D)
                   end,
 
     case NextTimeout of
@@ -4096,7 +4116,8 @@ switch_from(_, _, State) ->
 switch_to(at_least_once, _, Effects) ->
     %% Switch from some other strategy to at-least-once.
     %% Dlx worker needs to be started on the leader.
-    %% The cleanest way to determine the Ra state of this node is delegation to handle_aux.
+    %% The cleanest way to determine the Ra state of this node is
+    %% delegation to handle_aux.
     {#?DLX{}, Effects ++ [{aux, {dlx, setup}}]};
 switch_to(_, State, Effects) ->
     {State, Effects}.
