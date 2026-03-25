@@ -235,8 +235,14 @@ function parse_cookie() {
 }
 
 function store_cookie(dict) {
-    var date = new Date();
-    date.setFullYear(date.getFullYear() + 1);
+    var sessionTimeout = dict[short_key(LOGIN_SESSION_TIMEOUT)];
+    var date;
+    if (sessionTimeout != undefined) {
+        date = new Date();
+        date.setMinutes(date.getMinutes() + parseInt(sessionTimeout, 10));
+    } else {
+        date = default_hard_session_timeout();
+    }
     store_cookie_with_expiration(dict, date);
 }
 

@@ -6,11 +6,12 @@ const { buildDriver, goToHome, captureScreensFor, teardown, delay } = require('.
 const LoginPage = require('../pageobjects/LoginPage')
 const OverviewPage = require('../pageobjects/OverviewPage')
 
-describe('Once user is logged in', function () {
+describe('Once user is logged in and no refresh is configured', function () {
   let driver
+  let login
   let overview
   let captureScreen
-  this.timeout(65000) // hard-coded to 25secs because this test requires 35sec to run
+  this.timeout(65000)
 
   before(async function () {
     driver = buildDriver()
@@ -20,16 +21,15 @@ describe('Once user is logged in', function () {
     captureScreen = captureScreensFor(driver, __filename)
     await login.login('guest', 'guest')
     await overview.isLoaded()
+    await overview.selectRefreshOption("Do not refresh")
     // Trigger a UI preference change to verify it does not extend the session.
     await overview.ensureTotalsSectionIsInvisible()
   })
 
-  it('it has to login after the session expires', async function () {
+  it('any authorized request after the session has expired should log the user out', async function () {
     await delay(60000)
+    await overview.clickOnConnectionsTab()
     await login.isLoaded()
-    await login.login('guest', 'guest')
-    await overview.isLoaded()
-    await overview.clickOnConnectionsTab() // and we can still interact with the ui
   })
 
   after(async function () {

@@ -12,6 +12,8 @@ const DOWNLOAD_DEFINITIONS_SECTION = By.css('div#download-definitions-section')
 const CHOOSE_BROKER_DOWNLOAD_FILE = By.css('input#download-filename')
 const DOWNLOAD_BROKER_FILE = By.css('button#upload-definitions')
 
+const TOTALS_SECTION = By.css('div#main div#totals-section')
+
 module.exports = class OverviewPage extends BasePage {
 
   async uploadBrokerDefinitions(file) {
@@ -26,5 +28,13 @@ module.exports = class OverviewPage extends BasePage {
   }
   async downloadBrokerDefinitions(filename) {
     return this.click(DOWNLOAD_DEFINITIONS_SECTION)
+  }
+
+  async ensureTotalsSectionIsVisible() {
+    return this.ensureSectionIsVisible(TOTALS_SECTION)
+  }
+
+  async ensureTotalsSectionIsInvisible() {
+    return this.ensureSectionIsInvisible(TOTALS_SECTION)
   }
 }
