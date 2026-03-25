@@ -167,91 +167,42 @@ endif
 # --------------------------------------------------------------------
 
 define test_rabbitmq_config
-%% vim:ft=erlang:
-
-[
-  {rabbit, [
-$(if $(RABBITMQ_NODE_PORT),      {tcp_listeners$(comma) [$(RABBITMQ_NODE_PORT)]}$(comma),)
-      {loopback_users, []},
-      {cluster_name, "localhost"}
-    ]},
-  {rabbitmq_management, [
-$(if $(RABBITMQ_NODE_PORT),      {listener$(comma) [{port$(comma) $(shell echo "$$(($(RABBITMQ_NODE_PORT) + 10000))")}]},)
-    ]},
-  {rabbitmq_web_amqp, [
-$(if $(RABBITMQ_NODE_PORT),      {tcp_config$(comma) [{port$(comma) $(shell echo "$$((15678 + $(RABBITMQ_NODE_PORT) - 5672))")}]},)
-    ]},
-  {rabbitmq_mqtt, [
-$(if $(RABBITMQ_NODE_PORT),      {tcp_listeners$(comma) [$(shell echo "$$((1883 + $(RABBITMQ_NODE_PORT) - 5672))")]},)
-    ]},
-  {rabbitmq_web_mqtt, [
-$(if $(RABBITMQ_NODE_PORT),      {tcp_config$(comma) [{port$(comma) $(shell echo "$$((15675 + $(RABBITMQ_NODE_PORT) - 5672))")}]},)
-    ]},
-  {rabbitmq_web_mqtt_examples, [
-$(if $(RABBITMQ_NODE_PORT),      {listener$(comma) [{port$(comma) $(shell echo "$$((15670 + $(RABBITMQ_NODE_PORT) - 5672))")}]},)
-    ]},
-  {rabbitmq_stomp, [
-$(if $(RABBITMQ_NODE_PORT),      {tcp_listeners$(comma) [$(shell echo "$$((61613 + $(RABBITMQ_NODE_PORT) - 5672))")]},)
-    ]},
-  {rabbitmq_web_stomp, [
-$(if $(RABBITMQ_NODE_PORT),      {tcp_config$(comma) [{port$(comma) $(shell echo "$$((15674 + $(RABBITMQ_NODE_PORT) - 5672))")}]},)
-    ]},
-  {rabbitmq_web_stomp_examples, [
-$(if $(RABBITMQ_NODE_PORT),      {listener$(comma) [{port$(comma) $(shell echo "$$((15670 + $(RABBITMQ_NODE_PORT) - 5672))")}]},)
-    ]},
-  {rabbitmq_stream, [
-$(if $(RABBITMQ_NODE_PORT),      {tcp_listeners$(comma) [$(shell echo "$$((5552 + $(RABBITMQ_NODE_PORT) - 5672))")]},)
-    ]},
-  {rabbitmq_prometheus, [
-$(if $(RABBITMQ_NODE_PORT),      {tcp_config$(comma) [{port$(comma) $(shell echo "$$((15692 + $(RABBITMQ_NODE_PORT) - 5672))")}]},)
-    ]},
-  {ra, [
-      {data_dir, "$(RABBITMQ_QUORUM_DIR)"}
-    ]},
-  {osiris, [
-      {data_dir, "$(RABBITMQ_STREAM_DIR)"}
-    ]}
-].
+$(if $(RABBITMQ_NODE_PORT),listeners.tcp.default = $(RABBITMQ_NODE_PORT))
+loopback_users = none
+cluster_name = localhost
+$(if $(RABBITMQ_NODE_PORT),management.tcp.port = $(shell echo "$$(($(RABBITMQ_NODE_PORT) + 10000))"))
+$(if $(RABBITMQ_NODE_PORT),mqtt.listeners.tcp.default = $(shell echo "$$((1883 + $(RABBITMQ_NODE_PORT) - 5672))"))
+$(if $(RABBITMQ_NODE_PORT),web_mqtt.tcp.port = $(shell echo "$$((15675 + $(RABBITMQ_NODE_PORT) - 5672))"))
+$(if $(RABBITMQ_NODE_PORT),stomp.listeners.tcp.default = $(shell echo "$$((61613 + $(RABBITMQ_NODE_PORT) - 5672))"))
+$(if $(RABBITMQ_NODE_PORT),web_stomp.tcp.port = $(shell echo "$$((15674 + $(RABBITMQ_NODE_PORT) - 5672))"))
+$(if $(RABBITMQ_NODE_PORT),stream.listeners.tcp.default = $(shell echo "$$((5552 + $(RABBITMQ_NODE_PORT) - 5672))"))
+$(if $(RABBITMQ_NODE_PORT),prometheus.tcp.port = $(shell echo "$$((15692 + $(RABBITMQ_NODE_PORT) - 5672))"))
+raft.data_dir = $(RABBITMQ_QUORUM_DIR)
+stream.data_dir = $(RABBITMQ_STREAM_DIR)
 endef
 
 define test_rabbitmq_config_with_tls
-%% vim:ft=erlang:
-
-[
-  {rabbit, [
-      {loopback_users, []},
-      {ssl_listeners, [5671]},
-      {ssl_options, [
-          {cacertfile, "$(TEST_TLS_CERTS_DIR_in_config)/testca/cacert.pem"},
-          {certfile,   "$(TEST_TLS_CERTS_DIR_in_config)/server/cert.pem"},
-          {keyfile,    "$(TEST_TLS_CERTS_DIR_in_config)/server/key.pem"},
-          {verify, verify_peer},
-          {fail_if_no_peer_cert, false},
-          {honor_cipher_order, true}]}
-    ]},
-  {rabbitmq_management, [
-      {listener, [
-          {port, 15671},
-          {ssl,  true},
-          {ssl_opts, [
-            {cacertfile, "$(TEST_TLS_CERTS_DIR_in_config)/testca/cacert.pem"},
-            {certfile,   "$(TEST_TLS_CERTS_DIR_in_config)/server/cert.pem"},
-            {keyfile,    "$(TEST_TLS_CERTS_DIR_in_config)/server/key.pem"},
-            {verify, verify_peer},
-            {fail_if_no_peer_cert, false},
-            {honor_cipher_order, true}]}
-        ]}
-  ]},
-  {ra, [
-      {data_dir, "$(RABBITMQ_QUORUM_DIR)"}
-    ]},
-  {osiris, [
-      {data_dir, "$(RABBITMQ_STREAM_DIR)"}
-    ]}
-].
+loopback_users = none
+listeners.ssl.default = 5671
+ssl_options.cacertfile = $(TEST_TLS_CERTS_DIR_in_config)/testca/cacert.pem
+ssl_options.certfile   = $(TEST_TLS_CERTS_DIR_in_config)/server/cert.pem
+ssl_options.keyfile    = $(TEST_TLS_CERTS_DIR_in_config)/server/key.pem
+ssl_options.verify = verify_peer
+ssl_options.fail_if_no_peer_cert = false
+ssl_options.honor_cipher_order = true
+management.listener.port = 15671
+management.listener.ssl  = true
+management.listener.ssl_opts.cacertfile = $(TEST_TLS_CERTS_DIR_in_config)/testca/cacert.pem
+management.listener.ssl_opts.certfile   = $(TEST_TLS_CERTS_DIR_in_config)/server/cert.pem
+management.listener.ssl_opts.keyfile    = $(TEST_TLS_CERTS_DIR_in_config)/server/key.pem
+management.listener.ssl_opts.verify = verify_peer
+management.listener.ssl_opts.fail_if_no_peer_cert = false
+management.listener.ssl_opts.honor_cipher_order = true
+raft.data_dir = $(RABBITMQ_QUORUM_DIR)
+stream.data_dir = $(RABBITMQ_STREAM_DIR)
 endef
 
-TEST_CONFIG_FILE ?= $(TEST_TMPDIR)/test.config
+TEST_CONFIG_FILE ?= $(TEST_TMPDIR)/test.conf
 TEST_TLS_CERTS_DIR := $(TEST_TMPDIR)/tls-certs
 ifeq ($(origin TEST_TLS_CERTS_DIR_in_config),undefined)
 ifeq ($(PLATFORM),msys2)
@@ -404,22 +355,28 @@ start-brokers start-cluster: $(DIST_TARGET)
 	fi; \
 	for n in $$(seq $(NODES)); do \
 		nodename="rabbit-$$n@$(HOSTNAME)"; \
+		nodedir="$(TEST_TMPDIR)/$$nodename"; \
+		mkdir -p "$$nodedir"; \
+		printf '%s\n' \
+		  "loopback_users = none" \
+		  "cluster_name = localhost" \
+		  "listeners.tcp.default = $$((5672 + $$n - 1))" \
+		  "management.tcp.port = $$((15672 + $$n - 1))" \
+		  "mqtt.listeners.tcp.default = $$((1883 + $$n - 1))" \
+		  "web_mqtt.tcp.port = $$((1893 + $$n - 1))" \
+		  "stomp.listeners.tcp.default = $$((61613 + $$n - 1))" \
+		  "web_stomp.tcp.port = $$((61623 + $$n - 1))" \
+		  "prometheus.tcp.port = $$((15692 + $$n - 1))" \
+		  "stream.listeners.tcp.default = $$((5552 + $$n - 1))" \
+		  > "$$nodedir/rabbitmq.conf"; \
 		$(MAKE) start-background-broker \
 		  NOBUILD=1 \
 		  RABBITMQ_NODENAME="$$nodename" \
 		  RABBITMQ_NODE_PORT="$$((5672 + $$n - 1))" \
+		  RABBITMQ_CONFIG_FILE="$$nodedir/rabbitmq" \
 		  RABBITMQ_SERVER_START_ARGS=" \
-		  -rabbit loopback_users [] \
-		  -rabbit cluster_name localhost \
-		  -rabbitmq_management listener [{port,$$((15672 + $$n - 1))}] \
-		  -rabbitmq_mqtt tcp_listeners [$$((1883 + $$n - 1))] \
-		  -rabbitmq_web_mqtt tcp_config [{port,$$((1893 + $$n - 1))}] \
 		  -rabbitmq_web_mqtt_examples listener [{port,$$((1903 + $$n - 1))}] \
-		  -rabbitmq_stomp tcp_listeners [$$((61613 + $$n - 1))] \
-		  -rabbitmq_web_stomp tcp_config [{port,$$((61623 + $$n - 1))}] \
 		  -rabbitmq_web_stomp_examples listener [{port,$$((61633 + $$n - 1))}] \
-		  -rabbitmq_prometheus tcp_config [{port,$$((15692 + $$n - 1))}] \
-		  -rabbitmq_stream tcp_listeners [$$((5552 + $$n - 1))] \
 		  $$cluster_nodes_arg \
 		  " & \
 	done; \
@@ -445,21 +402,28 @@ restart-cluster:
 		  RABBITMQ_NODENAME="$$nodename"; \
 		echo "Sleeping for $(RESTART_DELAY) seconds..."; \
 		sleep $(RESTART_DELAY); \
+		nodedir="$(TEST_TMPDIR)/$$nodename"; \
+		mkdir -p "$$nodedir"; \
+		printf '%s\n' \
+		  "loopback_users = none" \
+		  "cluster_name = localhost" \
+		  "listeners.tcp.default = $$((5672 + $$n - 1))" \
+		  "management.tcp.port = $$((15672 + $$n - 1))" \
+		  "mqtt.listeners.tcp.default = $$((1883 + $$n - 1))" \
+		  "web_mqtt.tcp.port = $$((1893 + $$n - 1))" \
+		  "stomp.listeners.tcp.default = $$((61613 + $$n - 1))" \
+		  "web_stomp.tcp.port = $$((61623 + $$n - 1))" \
+		  "prometheus.tcp.port = $$((15692 + $$n - 1))" \
+		  "stream.listeners.tcp.default = $$((5552 + $$n - 1))" \
+		  > "$$nodedir/rabbitmq.conf"; \
 		$(MAKE) start-background-broker \
 		  NOBUILD=1 \
 		  RABBITMQ_NODENAME="$$nodename" \
 		  RABBITMQ_NODE_PORT="$$((5672 + $$n - 1))" \
+		  RABBITMQ_CONFIG_FILE="$$nodedir/rabbitmq" \
 		  RABBITMQ_SERVER_START_ARGS=" \
-		  -rabbit loopback_users [] \
-		  -rabbitmq_management listener [{port,$$((15672 + $$n - 1))}] \
-		  -rabbitmq_mqtt tcp_listeners [$$((1883 + $$n - 1))] \
-		  -rabbitmq_web_mqtt tcp_config [{port,$$((1893 + $$n - 1))}] \
 		  -rabbitmq_web_mqtt_examples listener [{port,$$((1903 + $$n - 1))}] \
-		  -rabbitmq_stomp tcp_listeners [$$((61613 + $$n - 1))] \
-		  -rabbitmq_web_stomp tcp_config [{port,$$((61623 + $$n - 1))}] \
 		  -rabbitmq_web_stomp_examples listener [{port,$$((61633 + $$n - 1))}] \
-		  -rabbitmq_prometheus tcp_config [{port,$$((15692 + $$n - 1))}] \
-		  -rabbitmq_stream tcp_listeners [$$((5552 + $$n - 1))] \
 		  "; \
 		  $(RABBITMQCTL) -n "$$nodename" await_online_nodes $(NODES) || exit 1; \
 	done; \
