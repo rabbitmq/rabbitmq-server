@@ -33,6 +33,20 @@ describe('A user with a JWT token', function () {
     assert.equal(await overview.getUser(), 'User ' + username)
   })
 
+  it ('can reload page without being logged out', async function() {
+    await fakePortal.goToHome(username, password)
+    if (!await fakePortal.isLoaded()) {
+      throw new Error('Failed to load fakePortal')
+    }
+    await fakePortal.login()
+    await overview.isLoaded()
+
+    await overview.refresh()
+    if (!await overview.isLoaded()) {
+      throw new Error('Failed to keep session opened')
+    }
+  })
+
   after(async function () {
     await teardown(driver, this, captureScreen)
   })

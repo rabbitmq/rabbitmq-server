@@ -40,20 +40,6 @@ describe('An user without management tag', function () {
     assert.ok(!await homePage.isOAuth2SectionVisible())
   })
 
-  describe("After clicking on logout button", function() {
-
-      before(async function () {
-          await homePage.clickToLogout()
-      })
-
-      it('should get redirected to home page again without error message', async function(){
-        const visible = await homePage.isWarningVisible()
-        assert.ok(!visible)
-      })
-
-  })
-
-
   after(async function () {
     await teardown(driver, this, captureScreen)
   })

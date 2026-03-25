@@ -100,13 +100,18 @@ function get_oauth_settings() {
 export function oauth_initialize_if_required(state = "index") {
   let oauth = oauth_initialize(get_oauth_settings())
   if (!oauth.enabled) return oauth;
+
   switch (state) {
     case 'login-callback':
       oauth_completeLogin(); break;
     case 'logout-callback':
       oauth_completeLogout(); break;
     default:
-      oauth = oauth_initiate(oauth);
+      if (has_auth_credentials(BASIC_AUTH_SCHEME)) {
+        break;
+      } else {
+        oauth = oauth_initiate(oauth);
+      }
   }
   return oauth;
 }

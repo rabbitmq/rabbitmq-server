@@ -22,6 +22,18 @@ describe('A user with a JWT token', function () {
     assert.equal(await overview.getUser(), 'User rabbit_idp_user')
   })
 
+
+  it ('can reload page without being logged out', async function() {
+    await goToHome(driver);
+    await overview.isLoaded();
+
+    await overview.refresh()
+    if (!await overview.isLoaded()) {
+      throw new Error('Failed to keep session opened')
+    }
+  })
+
+
   after(async function () {
     await teardown(driver, this, captureScreen)
   })
