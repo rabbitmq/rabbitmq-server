@@ -20,12 +20,11 @@ init_fakeproxy() {
   CLIENT_ID="${CLIENT_ID:-rabbit_idp_user}"
   CLIENT_SECRET="${CLIENT_SECRET:-rabbit_idp_user}"
   RABBITMQ_HOST_FOR_FAKEPROXY=${RABBITMQ_HOST_FOR_FAKEPROXY:-rabbitmq:15672}
-  UAA_URL_FOR_FAKEPROXY=${UAA_URL_FOR_FAKEPROXY:-http://uaa:8080}
 
   RABBITMQ_URL_FOR_FAKEPROXY=$(calculate_rabbitmq_url $RABBITMQ_HOST_FOR_FAKEPROXY)
 
   print "> FAKEPROXY_URL: ${FAKEPROXY_URL}"
-  print "> UAA_URL: ${UAA_URL_FOR_FAKEPROXY}"
+  print "> IDP_TOKEN_ENDPOINT: ${IDP_TOKEN_ENDPOINT}"
   print "> RABBITMQ_HOST_FOR_FAKEPROXY: ${RABBITMQ_HOST_FOR_FAKEPROXY}"
   print "> CLIENT_ID: ${CLIENT_ID}"
   print "> CLIENT_SECRET: ${CLIENT_SECRET}"
@@ -46,7 +45,7 @@ start_fakeproxy() {
     --publish 9090:9090 \
     --env PORT=9090 \
     --env RABBITMQ_URL="${RABBITMQ_URL_FOR_FAKEPROXY}" \
-    --env UAA_URL="${UAA_URL_FOR_FAKEPROXY}" \
+    --env IDP_TOKEN_ENDPOINT="${IDP_TOKEN_ENDPOINT}" \
     --env CLIENT_ID="${CLIENT_ID}" \
     --env CLIENT_SECRET="${CLIENT_SECRET}" \
     --env NODE_EXTRA_CA_CERTS=/etc/uaa/ca_uaa_certificate.pem \
