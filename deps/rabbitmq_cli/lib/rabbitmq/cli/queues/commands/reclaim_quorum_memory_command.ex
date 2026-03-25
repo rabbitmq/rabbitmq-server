@@ -67,8 +67,8 @@ defmodule RabbitMQ.CLI.Queues.Commands.ReclaimQuorumMemoryCommand do
 
   def description(),
     do:
-      "Flushes quorum queue processes WAL, performs a full sweep GC on all of its local Erlang processes"
+      "Requests a full sweep GC on all of a quorum queue's Erlang processes"
 
   def banner([name], %{}),
-    do: "Will flush Raft WAL of quorum queue #{name} ..."
+    do: "Will garbage collect quorum queue #{name} ..."
 end
