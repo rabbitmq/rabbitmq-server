@@ -278,6 +278,7 @@ reclaimable_bytes_test(Config) ->
       reclaimable_bytes_count := _DiscBytes27} = rabbit_fifo:overview(State27),
 
     Conf5 = Conf4#{msg_ttl => 1000,
+                   dead_letter_handler => at_least_once,
                    max_length => undefined},
     {State28, ok, _} = apply(meta(Config, ?LINE),
                              rabbit_fifo:make_update_config(Conf5), State27),
@@ -287,9 +288,22 @@ reclaimable_bytes_test(Config) ->
     {State30, _} = enq_ts(Config, ?LINE, 10, Msg, 3000, State29),
     % {State31, _} = enq_ts(Config, ?LINE, 11, Msg, 5000, State30),
 
-    #{num_messages := 1,
+    #{num_messages := 2,
       reclaimable_bytes_count := DiscBytes30} = rabbit_fifo:overview(State30),
-    ?assert(DiscBytes30 - DiscBytes29 > 1000),
+    %% The message is dead-lettered at_least_once, so its bytes are retained
+    %% in the DLX state and should not be added to reclaimable_bytes yet.
+    ?assert(DiscBytes30 - DiscBytes29 < 1000),
+
+    %% Now process the DLX message
+    {State31, _, _} = apply(meta(Config, ?LINE),
+                            rabbit_fifo_dlx:make_checkout(DlxPid, 1),
+                            State30),
+    {State32, _, _} = apply(meta(Config, ?LINE),
+                            rabbit_fifo_dlx:make_settle([0]),
+                            State31),
+    #{reclaimable_bytes_count := DiscBytes32} = rabbit_fifo:overview(State32),
+    %% After settling the DLX message, the bytes should finally be reclaimable
+    ?assert(DiscBytes32 - DiscBytes30 > 1000),
     ok.
 
 enq_enq_checkout_test(Config, Spec) ->
