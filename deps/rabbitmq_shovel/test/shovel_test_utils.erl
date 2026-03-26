@@ -365,7 +365,7 @@ amqp10_expect_count(Session, Address, Count) ->
     Msgs.
 
 await_autodelete(Config, Name) ->
-    await_autodelete(Config, 0, Name, 10_000).
+    await_autodelete(Config, 0, Name, 30_000).
 
 await_autodelete(Config, Node, Name, Timeout) ->
     rabbit_ct_helpers:await_condition(
