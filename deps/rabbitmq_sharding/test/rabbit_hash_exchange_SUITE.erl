@@ -13,16 +13,18 @@
 
 all() ->
     [
-      {group, non_parallel_tests}
+     {group, tests}
     ].
 
 groups() ->
     [
-      {non_parallel_tests, [], [
-                                routed_to_zero_queue_test,
-                                routed_to_one_queue_test,
-                                routed_to_many_queue_test
-                               ]}
+     {tests, [],
+      [
+       routed_to_zero_queue_test,
+       routed_to_one_queue_test,
+       routed_to_many_queue_test,
+       stable_routing_across_restarts_test
+      ]}
     ].
 
 %% -------------------------------------------------------------------
@@ -63,84 +65,142 @@ end_per_testcase(Testcase, Config) ->
 %% -------------------------------------------------------------------
 
 routed_to_zero_queue_test(Config) ->
-    test0(Config, fun () ->
-                  #'basic.publish'{exchange = make_exchange_name(Config, "0"), routing_key = rnd()}
-          end,
-          fun() ->
-                  #amqp_msg{props = #'P_basic'{}, payload = <<>>}
-          end, [], 5, 0),
-
-    passed.
+    ok = route(Config, [], 5, 0).
 
 routed_to_one_queue_test(Config) ->
-    test0(Config, fun () ->
-                  #'basic.publish'{exchange = make_exchange_name(Config, "0"), routing_key = rnd()}
-          end,
-          fun() ->
-                  #amqp_msg{props = #'P_basic'{}, payload = <<>>}
-          end, [<<"q1">>, <<"q2">>, <<"q3">>], 1, 1),
-
-    passed.
+    ok = route(Config, [<<"q1">>, <<"q2">>, <<"q3">>], 1, 1).
 
 routed_to_many_queue_test(Config) ->
-    test0(Config, fun () ->
-                  #'basic.publish'{exchange = make_exchange_name(Config, "0"), routing_key = rnd()}
-          end,
-          fun() ->
-                  #amqp_msg{props = #'P_basic'{}, payload = <<>>}
-          end, [<<"q1">>, <<"q2">>, <<"q3">>], 5, 5),
+    ok = route(Config, [<<"q1">>, <<"q2">>, <<"q3">>], 5, 5).
 
-    passed.
+route(Config, Queues, PublishCount, ExpectedRoutedCount) ->
+    {Conn, Chan} = rabbit_ct_client_helpers:open_connection_and_channel(Config),
+    B = rabbit_ct_helpers:get_config(Config, test_resource_name),
+    XNameBin = erlang:list_to_binary("x-" ++ B),
 
-test0(Config, MakeMethod, MakeMsg, Queues, MsgCount, Count) ->
-    {Conn, Chan} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
-    E = make_exchange_name(Config, "0"),
-
-    #'exchange.declare_ok'{} =
-        amqp_channel:call(Chan,
-                          #'exchange.declare' {
-                            exchange = E,
-                            type = <<"x-modulus-hash">>,
-                            auto_delete = true
-                           }),
-    [#'queue.declare_ok'{} =
-         amqp_channel:call(Chan, #'queue.declare' {
-                             queue = Q, exclusive = true }) || Q <- Queues],
-    [#'queue.bind_ok'{} =
-         amqp_channel:call(Chan, #'queue.bind'{queue = Q,
-                                               exchange = E,
-                                               routing_key = <<"">>})
+    #'exchange.declare_ok'{} = amqp_channel:call(Chan,
+                                                 #'exchange.declare'{
+                                                    exchange = XNameBin,
+                                                    type = <<"x-modulus-hash">>,
+                                                    durable = true,
+                                                    auto_delete = true}),
+    [begin
+         #'queue.declare_ok'{} = amqp_channel:call(Chan, #'queue.declare'{
+                                                            queue = Q,
+                                                            durable = true,
+                                                            exclusive = true}),
+         #'queue.bind_ok'{} = amqp_channel:call(Chan, #'queue.bind'{
+                                                         queue = Q,
+                                                         exchange = XNameBin})
+     end
      || Q <- Queues],
 
     amqp_channel:call(Chan, #'confirm.select'{}),
-
     [amqp_channel:call(Chan,
-                       MakeMethod(),
-                       MakeMsg()) || _ <- lists:duplicate(MsgCount, const)],
-
-    % ensure that the messages have been delivered to the queues before asking
-    % for the message count
+                       #'basic.publish'{exchange = XNameBin,
+                                        routing_key = rnd()},
+                       #amqp_msg{props = #'P_basic'{},
+                                 payload = <<>>}) ||
+     _ <- lists:duplicate(PublishCount, const)],
     amqp_channel:wait_for_confirms_or_die(Chan),
 
-    Counts =
-        [begin
-             #'queue.declare_ok'{message_count = M} =
-                 amqp_channel:call(Chan, #'queue.declare' {queue     = Q,
-                                                           exclusive = true }),
-             M
-         end || Q <- Queues],
+    Count = lists:foldl(
+              fun(Q, Acc) ->
+                      #'queue.declare_ok'{message_count = M} = amqp_channel:call(
+                                                                 Chan,
+                                                                 #'queue.declare'{
+                                                                    queue = Q,
+                                                                    durable = true,
+                                                                    exclusive = true}),
+                      Acc + M
+              end, 0, Queues),
+    ?assertEqual(ExpectedRoutedCount, Count),
 
-    ?assertEqual(Count, lists:sum(Counts)),
+    amqp_channel:call(Chan, #'exchange.delete'{exchange = XNameBin}),
+    [amqp_channel:call(Chan, #'queue.delete'{queue = Q}) || Q <- Queues],
+    ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Chan).
 
-    amqp_channel:call(Chan, #'exchange.delete' { exchange = E }),
-    [amqp_channel:call(Chan, #'queue.delete' { queue = Q }) || Q <- Queues],
+stable_routing_across_restarts_test(Config) ->
+    {Conn1, Chan1} = rabbit_ct_client_helpers:open_connection_and_channel(Config),
+    XNameBin = atom_to_binary(?FUNCTION_NAME),
+    NumQs = 40,
+    NumMsgs = 500,
 
-    rabbit_ct_client_helpers:close_connection_and_channel(Conn, Chan),
-    ok.
+    #'exchange.declare_ok'{} = amqp_channel:call(Chan1,
+                                                 #'exchange.declare'{
+                                                    exchange = XNameBin,
+                                                    type = <<"x-modulus-hash">>,
+                                                    durable = true}),
+    Queues = [erlang:list_to_binary("q-" ++ integer_to_list(I)) || I <- lists:seq(1, NumQs)],
+    [begin
+         #'queue.declare_ok'{} = amqp_channel:call(Chan1, #'queue.declare'{
+                                                             queue = Q,
+                                                             durable = true}),
+         #'queue.bind_ok'{} = amqp_channel:call(Chan1, #'queue.bind'{
+                                                          queue = Q,
+                                                          exchange = XNameBin,
+                                                          %% The routing key shouldn't matter
+                                                          routing_key = rnd()})
+     end
+     || Q <- Queues],
+
+    RoutingKeys = [rnd() || _ <- lists:seq(1, NumMsgs)],
+
+    amqp_channel:call(Chan1, #'confirm.select'{}),
+    [amqp_channel:call(Chan1,
+                       #'basic.publish'{exchange = XNameBin,
+                                        routing_key = RK},
+                       #amqp_msg{payload = RK})
+     || RK <- RoutingKeys],
+    amqp_channel:wait_for_confirms_or_die(Chan1),
+
+    Map1 = consume_all(Chan1, Queues),
+
+    %% Assert at least two queues got messages
+    NonEmptyQueues1 = maps:filter(fun(_Q, Msgs) -> length(Msgs) > 0 end, Map1),
+    ?assert(maps:size(NonEmptyQueues1) >= 2),
+
+    %% Assert all messages routed
+    ?assertEqual(NumMsgs, lists:sum([length(Msgs) || Msgs <- maps:values(Map1)])),
+
+    ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn1, Chan1),
+    %% Restart node
+    ok = rabbit_ct_broker_helpers:restart_node(Config, 0),
+    {Conn2, Chan2} = rabbit_ct_client_helpers:open_connection_and_channel(Config),
+
+    amqp_channel:call(Chan2, #'confirm.select'{}),
+    %% Publish the same messages again.
+    [amqp_channel:call(Chan2,
+                       #'basic.publish'{exchange = XNameBin,
+                                        routing_key = RK},
+                       #amqp_msg{payload = RK})
+     || RK <- RoutingKeys],
+    amqp_channel:wait_for_confirms_or_die(Chan2),
+
+    Map2 = consume_all(Chan2, Queues),
+
+    %% Assert the same messages ended up in the same queues,
+    %% i.e. that routing was stable.
+    ?assertEqual(Map1, Map2),
+
+    amqp_channel:call(Chan2, #'exchange.delete'{exchange = XNameBin}),
+    [amqp_channel:call(Chan2, #'queue.delete'{queue = Q}) || Q <- Queues],
+    ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn2, Chan2).
+
+consume_all(Chan, Queues) ->
+    lists:foldl(fun(Q, Map) ->
+                        Msgs = consume_queue(Chan, Q, []),
+                        maps:put(Q, Msgs, Map)
+                end, #{}, Queues).
+
+consume_queue(Chan, Q, L) ->
+    case amqp_channel:call(Chan, #'basic.get'{queue = Q,
+                                              no_ack = true}) of
+        #'basic.get_empty'{} ->
+            L;
+        {#'basic.get_ok'{}, #amqp_msg{payload = Payload}} ->
+            consume_queue(Chan, Q, L ++ [Payload])
+    end.
 
 rnd() ->
-    list_to_binary(integer_to_list(rand:uniform(1000000))).
-
-make_exchange_name(Config, Suffix) ->
-    B = rabbit_ct_helpers:get_config(Config, test_resource_name),
-    erlang:list_to_binary("x-" ++ B ++ "-" ++ Suffix).
+    integer_to_binary(rand:uniform(10_000_000)).

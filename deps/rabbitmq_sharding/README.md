@@ -65,6 +65,10 @@ queue where to route the message, where N is the number of queues
 bound to the exchange. **This exchange will completely ignore the
 binding key used to bind the queue to the exchange**.
 
+This exchange guarantees stable routing. As long as the bindings to the exchange remain the same,
+messages with the same routing key will always be routed to exactly the same destination queue,
+even across node restarts.
+
 There are other exchanges with similar behaviour:
 the _Consistent Hash Exchange_ or the _Random Exchange_.
 Those were designed with regular queues in mind, not this plugin, so `"x-modulus-hash"`

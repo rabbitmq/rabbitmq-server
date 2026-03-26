@@ -11,40 +11,50 @@
 
 -behaviour(rabbit_exchange_type).
 
--export([description/0, serialise_events/0, route/3, info/1, info/2]).
--export([validate/1, validate_binding/2,
-         create/2, delete/2, policy_changed/2,
-         add_binding/3, remove_bindings/3, assert_args_equivalence/2]).
+-export([description/0,
+         route/3,
+         serialise_events/0,
+         info/1,
+         info/2,
+         validate/1,
+         validate_binding/2,
+         create/2,
+         delete/2,
+         policy_changed/2,
+         add_binding/3,
+         remove_bindings/3,
+         assert_args_equivalence/2]).
 
 -rabbit_boot_step(
    {rabbit_sharding_exchange_type_modulus_hash_registry,
     [{description, "exchange type x-modulus-hash: registry"},
-     {mfa,         {rabbit_registry, register,
-                    [exchange, <<"x-modulus-hash">>, ?MODULE]}},
-     {cleanup, {rabbit_registry, unregister,
-                [exchange, <<"x-modulus-hash">>]}},
-     {requires,    rabbit_registry},
-     {enables,     kernel_ready}]}).
+     {mfa, {rabbit_registry, register, [exchange, <<"x-modulus-hash">>, ?MODULE]}},
+     {cleanup, {rabbit_registry, unregister, [exchange, <<"x-modulus-hash">>]}},
+     {requires, rabbit_registry},
+     {enables, kernel_ready}]}).
 
--define(PHASH2_RANGE, 134217728). %% 2^27
+%% 2^27
+-define(PHASH2_RANGE, 134217728).
 
 description() ->
     [{description, <<"Modulus Hashing Exchange">>}].
 
-serialise_events() -> false.
-
 route(#exchange{name = Name}, Msg, _Options) ->
-    Routes = mc:routing_keys(Msg),
-    Qs = rabbit_router:match_routing_key(Name, ['_']),
-    case length(Qs) of
-        0 -> [];
-        N -> [lists:nth(hash_mod(Routes, N), Qs)]
+    Destinations = rabbit_router:match_routing_key(Name, ['_']),
+    case length(Destinations) of
+        0 ->
+            [];
+        Len ->
+            %% We sort to guarantee stable routing after node restarts.
+            DestinationsSorted = lists:sort(Destinations),
+            Hash = erlang:phash2(mc:routing_keys(Msg), ?PHASH2_RANGE),
+            Destination = lists:nth(Hash rem Len + 1, DestinationsSorted),
+            [Destination]
     end.
 
 info(_) -> [].
-
 info(_, _) -> [].
-
+serialise_events() -> false.
 validate(_X) -> ok.
 validate_binding(_X, _B) -> ok.
 create(_Serial, _X) -> ok.
@@ -54,7 +64,3 @@ add_binding(_Serial, _X, _B) -> ok.
 remove_bindings(_Serial, _X, _Bs) -> ok.
 assert_args_equivalence(X, Args) ->
     rabbit_exchange:assert_args_equivalence(X, Args).
-
-hash_mod(Routes, N) ->
-    M = erlang:phash2(Routes, ?PHASH2_RANGE) rem N,
-    M + 1. %% erlang lists are 1..N indexed.
