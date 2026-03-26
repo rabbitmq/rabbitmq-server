@@ -53,14 +53,13 @@ module.exports = {
       throw new Error(req.responseText)
     }
   },
-  getNodes: (url) => {
+  getNodes: (url, authorization) => {
     log("Getting rabbitmq nodes ...")
     const req = new XMLHttpRequest()
-    let base64Credentials = btoa('administrator-only' + ":" + 'guest')
     let finalUrl = url + "/api/nodes?columns=name"
 
     req.open('GET', finalUrl, false)
-    req.setRequestHeader("Authorization", "Basic " + base64Credentials)
+    req.setRequestHeader("Authorization", authorization)
     
     req.send()
     if (req.status == 200 || req.status == 204 || req.status == 201) {
@@ -71,7 +70,7 @@ module.exports = {
       throw new Error(req.responseText)
     }
   },
-  setPolicy: (url, vhost, name, pattern, definition, appliedTo = "queues") => {
+  setPolicy: (url, authorization, vhost, name, pattern, definition, appliedTo = "queues") => {
     let policy = {
       "pattern": pattern,
       "apply-to": appliedTo,
@@ -80,11 +79,10 @@ module.exports = {
     log("Setting policy " + JSON.stringify(policy) 
       + " with name " + name + " for vhost " + vhost + " on "+ url)
     const req = new XMLHttpRequest()
-    let base64Credentials = btoa('administrator-only' + ":" + 'guest')
     let finalUrl = url + "/api/policies/" + encodeURIComponent(vhost) + "/" +
       encodeURIComponent(name)
     req.open('PUT', finalUrl, false)
-    req.setRequestHeader("Authorization", "Basic " + base64Credentials)
+    req.setRequestHeader("Authorization", authorization)
     req.setRequestHeader('Content-Type', 'application/json')
     
     req.send(JSON.stringify(policy))
@@ -96,14 +94,13 @@ module.exports = {
       throw new Error(req.responseText)
     }
   },
-  deletePolicy: (url, vhost, name) => {
+  deletePolicy: (url, authorization, vhost, name) => {
     log("Deleting policy " + name + " on vhost " + vhost)
     const req = new XMLHttpRequest()
-    let base64Credentials = btoa('administrator-only' + ":" + 'guest')
     let finalUrl = url + "/api/policies/" + encodeURIComponent(vhost) + "/" + 
       encodeURIComponent(name)
     req.open('DELETE', finalUrl, false)
-    req.setRequestHeader("Authorization", "Basic " + base64Credentials)
+    req.setRequestHeader("Authorization", authorization)
     
     req.send()
     if (req.status == 200 || req.status == 204) {
@@ -136,16 +133,15 @@ module.exports = {
       throw new Error(req.responseText)
     }
   },
-  grantPermissions: (url, vhost, user, permissions) => {
+  grantPermissions: (url, authorization, vhost, user, permissions) => {
     log("Granting permissions [" + JSON.stringify(permissions) + 
       "] for user " + user + " on vhost " + vhost + " on " + url)
 
     const req = new XMLHttpRequest()
-    let base64Credentials = btoa('administrator-only' + ":" + 'guest')
     let finalUrl = url + "/api/permissions/" + encodeURIComponent(vhost) + "/"
       + encodeURIComponent(user)
     req.open('PUT', finalUrl, false)
-    req.setRequestHeader("Authorization", "Basic " + base64Credentials)
+    req.setRequestHeader("Authorization", authorization)
     req.setRequestHeader('Content-Type', 'application/json')
     
     req.send(JSON.stringify(permissions))
@@ -227,6 +223,39 @@ module.exports = {
         log("Succesfully deleted queue " + vhost)
         return 
     }else {
+      error("status:" + req.status + " : " + req.responseText)
+      throw new Error(req.responseText)
+    }
+  },
+  createSuperStream: (url, authorization, vhost, name, partitions) => {
+    log("Creating super stream " + name + " with " + partitions + " partitions in vhost " + vhost)
+    const req = new XMLHttpRequest()
+    const finalUrl = url + "/api/stream/super-streams/" + encodeURIComponent(vhost) + "/"
+      + encodeURIComponent(name)
+    req.open('PUT', finalUrl, false)
+    req.setRequestHeader("Authorization", authorization)
+    req.setRequestHeader('Content-Type', 'application/json')
+    req.send(JSON.stringify({ partitions }))
+    if (req.status == 200 || req.status == 204 || req.status == 201) {
+      log("Successfully created super stream " + name)
+      return
+    } else {
+      error("status:" + req.status + " : " + req.responseText)
+      throw new Error(req.responseText)
+    }
+  },
+  deleteSuperStream: (url, authorization, vhost, name) => {
+    log("Deleting super stream " + name + " in vhost " + vhost)
+    const req = new XMLHttpRequest()
+    const finalUrl = url + "/api/stream/super-streams/" + encodeURIComponent(vhost) + "/"
+      + encodeURIComponent(name)
+    req.open('DELETE', finalUrl, false)
+    req.setRequestHeader("Authorization", authorization)
+    req.send()
+    if (req.status == 200 || req.status == 204) {
+      log("Successfully deleted super stream " + name)
+      return
+    } else {
       error("status:" + req.status + " : " + req.responseText)
       throw new Error(req.responseText)
     }
