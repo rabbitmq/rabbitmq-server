@@ -14,6 +14,11 @@ const CONSUMERS_SECTION = By.css('div#queue-consumers-section')
 const CONSUMERS_SECTION_TITLE = By.css('div#queue-consumers-section h2')
 const CONSUMERS_TABLE = By.css('div#queue-consumers-section table.list#consumers')
 
+const GET_MESSAGES_SECTION = By.css('div#main div#get-messages')
+
+const PUBLISH_SECTION_H2 = By.xpath('//*[@id="main"]//h2[text()="Publish message"]')
+const PUBLISH_SUBMIT_BUTTON = By.css('div#main form[action="#/exchanges/publish"] input[type=submit]')
+
 module.exports = class QueuePage extends BasePage {
   async isLoaded() {
     return this.waitForDisplayed(QUEUE_NAME)
@@ -44,5 +49,15 @@ module.exports = class QueuePage extends BasePage {
   async deleteQueue() {
     await this.click(DELETE_BUTTON)
     return this.acceptAlert()
+  }
+
+  async clickOnGetMessages() {
+    return this.click(GET_MESSAGES_SECTION)
+  }
+
+  async clickOnPublish() {
+    await this.click(PUBLISH_SECTION_H2)
+    await this.click(PUBLISH_SUBMIT_BUTTON)
+    return this.closePopupInfo()
   }
 }

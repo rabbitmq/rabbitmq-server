@@ -8,6 +8,7 @@ require('chromedriver')
 var chrome = require("selenium-webdriver/chrome");
 const UAALoginPage = require('./pageobjects/UAALoginPage')
 const KeycloakLoginPage = require('./pageobjects/KeycloakLoginPage')
+const SpringLoginPage = require('./pageobjects/SpringLoginPage')
 const assert = require('assert')
 
 const runLocal = String(process.env.RUN_LOCAL).toLowerCase() != 'false'
@@ -17,7 +18,7 @@ const hostname = process.env.RABBITMQ_HOSTNAME || 'localhost'
 const seleniumUrl = process.env.SELENIUM_URL || 'http://selenium:4444'
 const screenshotsDir = process.env.SCREENSHOTS_DIR || '/screens'
 const profiles = process.env.PROFILES || ''
-const debug = process.env.SELENIUM_DEBUG || false
+const debug = (process.env.SELENIUM_DEBUG === "true") || false
 
 function randomly_pick_baseurl(baseUrl) {
     urls = baseUrl.split(",")
@@ -41,7 +42,7 @@ class CaptureScreenshot {
       await fsp.mkdir(screenshotsSubDir)
     }    
     const dest = path.join(screenshotsSubDir, name + '.png')
-    module.exports.log("screenshot saved to " + dest)
+    console.log("screenshot saved to " + dest)
     await fsp.writeFile(dest, image, 'base64')
   }
 }
@@ -94,7 +95,7 @@ module.exports = {
       args: seleniumArgs
     });
     let driver = builder
-      .forBrowser('chrome')
+      .forBrowser('chrome')      
       //.setChromeOptions(options.excludeSwitches("disable-popup-blocking", "enable-automation"))
       .withCapabilities(chromeCapabilities)
       .build()
@@ -146,7 +147,7 @@ module.exports = {
     const queryString = params.join('&');
     
     const url = d.baseUrl + '/login?' + queryString;
-    module.exports.log("Navigating to " + url);
+    console.log("Navigating to " + url);
     return d.driver.get(url);
   },
 
@@ -180,16 +181,17 @@ module.exports = {
     let done = false 
     let attempts = 10
     let ret
+    let lastError
     do {
       try {
         module.exports.log("Calling doCallback (attempts:" + attempts + ") ... ")
         ret = await doCallback()
         module.exports.log("Calling booleanCallback (attempts:" + attempts 
           + ") with arg " + JSON.stringify(ret) + " ... ")
-        done =  booleanCallback(ret)
+        done = booleanCallback(ret)
+        lastError = undefined
       }catch(error) {
-        module.exports.error("Caught " + error + " on doUntil callback...")
-        
+        lastError = error
       }finally {
         if (!done) {
           module.exports.log("Waiting until next attempt")
@@ -199,6 +201,9 @@ module.exports = {
       attempts--
     } while (attempts > 0 && !done)
     if (!done) {
+      if (lastError) {
+        module.exports.error("Caught " + lastError + " on doUntil callback...")
+      }
       throw new Error(message)
     }else {
       return ret
@@ -239,6 +244,8 @@ module.exports = {
         preferredIdp = "uaa"
       } else if (process.env.PROFILES.includes("keycloak")) {
         preferredIdp = "keycloak"
+      } else if (process.env.PROFILES.includes("spring")) {
+        preferredIdp = "spring"
       } else {
         throw new Error("Missing uaa or keycloak profiles")
       }
@@ -246,6 +253,7 @@ module.exports = {
     switch(preferredIdp) {
       case "uaa": return new UAALoginPage(d)
       case "keycloak": return new KeycloakLoginPage(d)
+      case "spring": return new SpringLoginPage(d)
       default: new Error("Unsupported ipd " + preferredIdp)
     }
   },
@@ -260,17 +268,20 @@ module.exports = {
     }
   },
 
-  tokenFor: (client_id, client_secret, url = uaaUrl) => {
+  tokenFor: (client_id, client_secret, url = uaaUrl, scope) => {
     const req = new XMLHttpRequest()
-    const params = 'client_id=' + client_id +
+    let params = 'client_id=' + client_id +
       '&client_secret=' + client_secret +
       '&grant_type=client_credentials' +
-      '&token_format=jwt' +
       '&response_type=token'
+    if (scope != undefined && scope != "") {
+      params = params + '&scope=' + scope
+    } 
 
     req.open('POST', url, false)
     req.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded')
     req.setRequestHeader('Accept', 'application/json')
+    req.setRequestHeader("Authorization", "Basic " + btoa(client_id+":"+client_secret));
     req.send(params)
     if (req.status == 200) return JSON.parse(req.responseText).access_token
     else {
@@ -294,9 +305,8 @@ module.exports = {
     return undefined;
   },
 
-  teardown: async (d, test, captureScreen = null) => {
-    
-    driver = d.driver
+  teardown: async (d, test, captureScreen = null) => {    
+    let driver = d.driver
     driver.manage().logs().get(logging.Type.BROWSER).then(function(entries) {
         entries.forEach(function(entry) {
           module.exports.log('[%s] %s', entry.level.name, entry.message);
@@ -307,13 +317,15 @@ module.exports = {
         driver.executeScript('lambda-status=passed')
       } else {        
         if (captureScreen != null) {
-          module.exports.log("Teardown failed . capture...");
+          console.log("Teardown failed . capture...");
           await captureScreen.shot('after-failed');
         }
         driver.executeScript('lambda-status=failed')
       }
     }
+    module.exports.log(`Terminating browser ...`)
     await driver.quit()
+    module.exports.log(`Terminated browser`)
   },
 
   findTableRow: (table, booleanCallback) => {
