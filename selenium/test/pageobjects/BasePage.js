@@ -447,14 +447,10 @@ module.exports = class BasePage {
 
   async click (locator) {
     if (this.interactionDelay) await this.driver.sleep(this.interactionDelay)
-
-    const element = await this.waitForDisplayed(locator)
-    try {
+    return this.retryOnStale(async () => {
+      const element = await this.waitForDisplayed(locator)
       return element.click()
-    } catch(error) {
-      console.error("Failed to click on " + locator + " due to " + error);
-      throw error;
-    }
+    })
   }
 
   async submit (locator) {
@@ -463,10 +459,12 @@ module.exports = class BasePage {
   }
 
   async sendKeys (locator, keys) {
-    const element = await this.waitForDisplayed(locator)
-    await element.click()
-    await element.clear()
-    return element.sendKeys(keys)
+    return this.retryOnStale(async () => {
+      const element = await this.waitForDisplayed(locator)
+      await element.click()
+      await element.clear()
+      return element.sendKeys(keys)
+    })
   }
 
   async chooseFile (locator, file) {
