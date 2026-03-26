@@ -92,7 +92,7 @@ delete_from_khepri(?HASH_RING_STATE_TABLE = Table, Key, State) ->
 clear_data_in_khepri(?HASH_RING_STATE_TABLE) ->
     Path = rabbit_db_ch_exchange:khepri_consistent_hash_path(
              ?KHEPRI_WILDCARD_STAR, ?KHEPRI_WILDCARD_STAR),
-    case rabbit_khepri:delete(Path) of
+    case rabbit_khepri:delete_many(Path) of
         ok ->
             ok;
         Error ->

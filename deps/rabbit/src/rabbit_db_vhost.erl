@@ -367,7 +367,7 @@ delete(VHostName) when is_binary(VHostName) ->
 
 clear() ->
     Path = khepri_vhost_path(?KHEPRI_WILDCARD_STAR),
-    case rabbit_khepri:delete(Path) of
+    case rabbit_khepri:delete_many(Path) of
         ok    -> ok;
         Error -> throw(Error)
     end.

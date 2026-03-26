@@ -90,7 +90,7 @@ delete_from_khepri(?JMS_TOPIC_TABLE = Table, Key, State) ->
 clear_data_in_khepri(?JMS_TOPIC_TABLE) ->
     Path = rabbit_db_jms_exchange:khepri_jms_topic_exchange_path(
              ?KHEPRI_WILDCARD_STAR, ?KHEPRI_WILDCARD_STAR),
-    case rabbit_khepri:delete(Path) of
+    case rabbit_khepri:delete_many(Path) of
         ok ->
             ok;
         Error ->

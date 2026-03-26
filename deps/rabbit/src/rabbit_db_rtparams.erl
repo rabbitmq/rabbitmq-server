@@ -219,7 +219,7 @@ delete(VHostName, Comp, Name)
 
 do_delete(Key) ->
     Path = khepri_rp_path(Key),
-    ok = rabbit_khepri:delete(Path).
+    ok = rabbit_khepri:delete_many(Path).
 
 %% -------------------------------------------------------------------
 %% delete_vhost().
