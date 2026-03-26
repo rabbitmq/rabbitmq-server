@@ -4058,12 +4058,12 @@ leader_transfer_send(QName, QType, Config) ->
         ok = rabbit_ct_broker_helpers:kill_node(Config, 1),
         ok = wait_for_accepts(NumMsgs),
 
-        ok = rabbit_ct_broker_helpers:start_node(Config, 1),
         ok = detach_link_sync(Sender),
         ok = delete_queue(Session0, QName),
         ok = end_session_sync(Session0)
     after
-        close_connection_sync(Connection0)
+        close_connection_sync(Connection0),
+        ok = rabbit_ct_broker_helpers:start_node(Config, 1)
     end.
 
 %% rabbitmqctl list_connections
