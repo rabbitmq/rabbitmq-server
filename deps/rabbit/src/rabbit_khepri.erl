@@ -155,6 +155,7 @@
          adv_update/2, adv_update/3,
 
          delete/1, delete/2,
+         delete_many/1, delete_many/2,
          adv_delete/1, adv_delete/2,
          adv_delete_many/1, adv_delete_many/2,
          clear_payload/1, clear_payload/2,
@@ -1245,6 +1246,13 @@ delete(PathPattern) ->
     delete(PathPattern, #{}).
 
 delete(PathPattern, Options) ->
+    Options1 = maps:merge(?DEFAULT_COMMAND_OPTIONS, Options),
+    khepri:delete(?STORE_ID, PathPattern, Options1).
+
+delete_many(PathPattern) ->
+    delete_many(PathPattern, #{}).
+
+delete_many(PathPattern, Options) ->
     Options1 = maps:merge(?DEFAULT_COMMAND_OPTIONS, Options),
     khepri:delete_many(?STORE_ID, PathPattern, Options1).
 
