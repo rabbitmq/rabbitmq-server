@@ -462,8 +462,11 @@ do_generate-ca-server-client-kpi() {
 
   begin "Generate certs for $NAME"
 
+  CERT_LOG=$LOGS/generate-certs-${NAME}.log
+  print "Certificate generation output redirected to $CERT_LOG"
+
   if [ ! -d "$ROOT/tls-gen" ]; then
-    git clone https://github.com/michaelklishin/tls-gen $ROOT/tls-gen
+    git clone https://github.com/michaelklishin/tls-gen $ROOT/tls-gen >> $CERT_LOG 2>&1
   fi
 
   print "Generating CA and Server (localhost and $NAME) PKI under $FOLDER ..."
@@ -477,9 +480,9 @@ do_generate-ca-server-client-kpi() {
   fi 
   if [[ ! -z "${DEBUG}" ]]; then
     print "Used this openssl.conf"
-    cat openssl.cnf
+    cat openssl.cnf >> $CERT_LOG 2>&1
   fi
-  make CN=$NAME CLIENT_ALT_NAME=internaluser
+  make CN=$NAME CLIENT_ALT_NAME=internaluser >> $CERT_LOG 2>&1
   cp openssl.cnf.bak openssl.cnf  
   cd $CUR_DIR
 
