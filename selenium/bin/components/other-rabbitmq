@@ -65,28 +65,32 @@ start_local_other_rabbitmq() {
 
   RABBITMQ_TEST_DIR="${RABBITMQ_CONFIG_DIR}" 
 
-  ${BIN_DIR}/gen-rabbitmq-conf "${PROFILES_FOR_OTHER}" ${RABBITMQ_CONFIG_DIR} $OTHER_ENV_FILE /tmp/other$MOUNT_RABBITMQ_CONF
+  ${BIN_DIR}/gen-rabbitmq-conf "${PROFILES_FOR_OTHER}" ${RABBITMQ_CONFIG_DIR} \
+    $OTHER_ENV_FILE /tmp/other$MOUNT_RABBITMQ_CONF
 
   print "> EFFECTIVE RABBITMQ_CONFIG_FILE: /tmp/other$MOUNT_RABBITMQ_CONF"
-  cp ${RABBITMQ_CONFIG_DIR}/enabled_plugins /tmp/other/etc/rabbitmq/
-  RABBITMQ_ENABLED_PLUGINS=$(cat /tmp/other/etc/rabbitmq/enabled_plugins | tr -d " \t\n\r" | awk -F'[][]' '{print $2}')
-  print "> EFFECTIVE PLUGINS: $RABBITMQ_ENABLED_PLUGINS"
 
-  ${BIN_DIR}/gen-advanced-config "${PROFILES_FOR_OTHER}" ${RABBITMQ_CONFIG_DIR} $OTHER_ENV_FILE /tmp/other$MOUNT_ADVANCED_CONFIG
+  RABBITMQ_ENABLED_PLUGINS_FILE="/tmp/other/etc/rabbitmq/enabled_plugins"  
+  ${BIN_DIR}/gen-enabled_plugins "${PROFILES}" ${RABBITMQ_CONFIG_DIR} \
+    $RABBITMQ_ENABLED_PLUGINS_FILE
+  print "> EFFECTIVE ENABLED_PLUGINS_FILE: $RABBITMQ_ENABLED_PLUGINS_FILE"
+
+  ${BIN_DIR}/gen-advanced-config "${PROFILES_FOR_OTHER}" ${RABBITMQ_CONFIG_DIR} \
+    $OTHER_ENV_FILE /tmp/other$MOUNT_ADVANCED_CONFIG
   RESULT=$?
   if [ $RESULT -eq 0 ]; then
     print "> EFFECTIVE RABBITMQ_CONFIG_FILE: /tmp/other$MOUNT_ADVANCED_CONFIG"    
     gmake --directory=${RABBITMQ_SERVER_ROOT}  \
         RABBITMQ_NODENAME=${OTHER_RABBITMQ_NODENAME} \
         RABBITMQ_DIST_PORT=7001 \
-        RABBITMQ_ENABLED_PLUGINS="$RABBITMQ_ENABLED_PLUGINS" \
-  		RABBITMQ_CONFIG_FILE=/tmp/other$MOUNT_RABBITMQ_CONF \
+        RABBITMQ_ENABLED_PLUGINS_FILE="$RABBITMQ_ENABLED_PLUGINS_FILE" \
+  		  RABBITMQ_CONFIG_FILE=/tmp/other$MOUNT_RABBITMQ_CONF \
         RABBITMQ_ADVANCED_CONFIG_FILE=/tmp/other$MOUNT_ADVANCED_CONFIG run-broker
   else
     gmake --directory=${RABBITMQ_SERVER_ROOT} \
         RABBITMQ_NODENAME=${OTHER_RABBITMQ_NODENAME} \
         RABBITMQ_DIST_PORT=7001 \
-        RABBITMQ_ENABLED_PLUGINS="$RABBITMQ_ENABLED_PLUGINS" \
+        RABBITMQ_ENABLED_PLUGINS_FILE="$RABBITMQ_ENABLED_PLUGINS_FILE" \
   		RABBITMQ_CONFIG_FILE=/tmp/other$MOUNT_RABBITMQ_CONF run-broker
   fi
   print "> RABBITMQ_TEST_DIR: ${RABBITMQ_CONFIG_DIR}"
@@ -102,6 +106,9 @@ start_docker_other_rabbitmq() {
   mkdir -pv $CONF_DIR/other-rabbitmq/conf.d/
 
   RABBITMQ_TEST_DIR="/var/rabbitmq" 
+  ${BIN_DIR}/gen-enabled_plugins "${PROFILES}" ${RABBITMQ_CONFIG_DIR} $CONF_DIR/other-rabbitmq/enabled_plugins
+  print "> EFFECTIVE ENABLED_PLUGINS_FILE: $CONF_DIR/other-rabbitmq/enabled_plugins"
+
   ${BIN_DIR}/gen-rabbitmq-conf "${PROFILES_FOR_OTHER}" ${RABBITMQ_CONFIG_DIR} $OTHER_ENV_FILE $CONF_DIR/other-rabbitmq/rabbitmq.conf
   print "> EFFECTIVE RABBITMQ_CONFIG_FILE: $CONF_DIR/other-rabbitmq/rabbitmq.conf"
   ${BIN_DIR}/gen-advanced-config "${PROFILES_FOR_OTHER}" ${RABBITMQ_CONFIG_DIR} $OTHER_ENV_FILE $CONF_DIR/other-rabbitmq/advanced.config
@@ -115,10 +122,7 @@ start_docker_other_rabbitmq() {
   fi
   if [ -f ${RABBITMQ_CONFIG_DIR}/logging.conf ]; then
       cp ${RABBITMQ_CONFIG_DIR}/logging.conf $CONF_DIR/other-rabbitmq/conf.d/
-  fi
-  if [ -f ${RABBITMQ_CONFIG_DIR}/enabled_plugins ]; then
-      cp ${RABBITMQ_CONFIG_DIR}/enabled_plugins $CONF_DIR/other-rabbitmq
-  fi
+  fi  
   if [ -d "${RABBITMQ_CONFIG_DIR}/certs" ]; then
       cp -r ${RABBITMQ_CONFIG_DIR}/certs $CONF_DIR/other-rabbitmq
   fi

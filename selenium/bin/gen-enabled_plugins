@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+#set -x
+
+PROFILES=${1:?First parameter is a string with a comma-separated list of profiles}
+TEST_PATH=${2:?Second parameter is the directory env and enabled_plugins files are relative to}
+FINAL_ENABLED_PLUGINS_FILE=${3:?Third parameter is the name of the final enabled_plugins file. It is relative to where this script is run from}
+
+
+parentdir="$(dirname "$FINAL_ENABLED_PLUGINS_FILE")"
+mkdir -p "$parentdir"
+
+echo "" > "$FINAL_ENABLED_PLUGINS_FILE"
+
+# Convert comma-separated profiles to array
+IFS=',' read -ra PROFILE_ARRAY <<< "$PROFILES"
+
+# Temporary file to collect all plugins
+TEMP_PLUGINS_FILE=$(mktemp)
+
+# Find and process all matching enabled_plugins files
+for profile in "${PROFILE_ARRAY[@]}"; do
+    # Look for profile-specific enabled_plugins files (e.g., management.enabled_plugins)
+    profile_file="$TEST_PATH/${profile}.enabled_plugins"
+    if [[ -f "$profile_file" ]]; then
+        echo "> Processing $profile_file"
+        # Extract plugins from the erlang list format, removing brackets and whitespace
+        grep -o '\w\+' "$profile_file" | grep -v '^$' >> "$TEMP_PLUGINS_FILE"
+    fi
+done
+
+# Also process the base enabled_plugins file if it exists
+base_file="$TEST_PATH/enabled_plugins"
+if [[ -f "$base_file" ]]; then
+    echo "> Processing $base_file"
+    grep -o '\w\+' "$base_file" | grep -v '^$' >> "$TEMP_PLUGINS_FILE"
+fi
+
+# Remove duplicates and sort plugins
+sort -u "$TEMP_PLUGINS_FILE" > "${TEMP_PLUGINS_FILE}.sorted"
+
+# Generate the final erlang-formatted enabled_plugins file
+if [[ ! -s "${TEMP_PLUGINS_FILE}.sorted" ]]; then
+    echo "[]." > "$FINAL_ENABLED_PLUGINS_FILE"
+else
+    echo "[" > "$FINAL_ENABLED_PLUGINS_FILE"
+    while IFS= read -r plugin; do
+        if [[ -n "$plugin" ]]; then
+            echo "  $plugin," >> "$FINAL_ENABLED_PLUGINS_FILE"
+        fi
+    done < "${TEMP_PLUGINS_FILE}.sorted"
+
+    # Remove the trailing comma from the last line and close the array.
+    # Redirect through a temp file and back to preserve the original file's permissions
+    # (mktemp produces mode 600, which would make the file unreadable by the rabbitmq user in Docker).
+    _tmp=$(mktemp)
+    sed '$ s/,$//' "$FINAL_ENABLED_PLUGINS_FILE" > "$_tmp" && cat "$_tmp" > "$FINAL_ENABLED_PLUGINS_FILE"
+    rm -f "$_tmp"
+    echo "]." >> "$FINAL_ENABLED_PLUGINS_FILE"
+fi
+
+# Clean up temporary files
+rm -f "$TEMP_PLUGINS_FILE" "${TEMP_PLUGINS_FILE}.sorted"
+
+echo ">Generated $FINAL_ENABLED_PLUGINS_FILE with merged plugins from profiles: $PROFILES"

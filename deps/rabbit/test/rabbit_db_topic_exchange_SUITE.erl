@@ -81,7 +81,6 @@ init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config1, Testcase).
 
 end_per_testcase(Testcase, Config) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_db_topic_exchange, clear, []),
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
 %% ---------------------------------------------------------------------------
@@ -212,20 +211,24 @@ topic_trie_cleanup(Config) ->
                   ct:pal("Khepri version: ~b / ~s", [KhepriVersion2, KhepriVersion1]),
                   if
                       KhepriVersion2 >= 1704 ->
-                          %% Assert that no entries were found for this vhost
-                          %% after deletion.
-                          ?assertEqual([], VHostEntriesAfterDelete);
+                          %% Await until no entries remain for this vhost after
+                          %% deletion. The Khepri projection may lag on followers
+                          %% in a mixed-version cluster.
+                          ?awaitMatch(
+                             [],
+                             read_topic_trie_table(Config, Node, VHost, rabbit_khepri_topic_trie_v3),
+                             30_000);
                       true ->
-                          %% Assert that no entries were found for this vhost
-                          %% after deletion. This node does not have the fixed
-                          %% version of Khepri, so it won't delete the new
-                          %% `#topic_trie_edge_v2{}' correctly, that's why we
-                          %% filter them out.
+                          %% This branch uses a version of Khepri that has a bug,
+                          %% so it won't delete the new `#topic_trie_edge_v2{}`
+                          %% correctly. Therefore we filter those out and await only for the
+                          %% legacy entries to be gone.
                           ct:pal("Consider #topic_trie_edge{} records only"),
-                          ?assertEqual(
+                          ?awaitMatch(
                              [],
                              [E || #topic_trie_edge{} = E
-                                   <- VHostEntriesAfterDelete])
+                                   <- read_topic_trie_table(Config, Node, VHost, rabbit_khepri_topic_trie_v3)],
+                             30_000)
                   end
           end, Nodes),
 

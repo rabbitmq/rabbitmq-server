@@ -25,9 +25,20 @@ module.exports = class QueuesAndStreamsPage extends BasePage {
   async getQueuesTable(firstNColumns) {
     return this.getTable(TABLE_SECTION, firstNColumns)
   }
+  async isQueueVisible(vhost, name) {
+    const locator = By.css(
+      "div#queues-table-section table.list tbody tr td a[href='#/queues/" + vhost + "/" + name + "']")
+    return this.isDisplayed(locator)
+  }
+
   async clickOnQueue(vhost, name) {
-    return this.click(By.css(
-      "div#queues-table-section table.list tbody tr td a[href='#/queues/" + vhost + "/" + name + "']"))
+    const locator = By.css(
+      "div#queues-table-section table.list tbody tr td a[href='#/queues/" + vhost + "/" + name + "']")
+    return this.retryOnStale(async () => {
+      const element = await this.waitForDisplayed(locator)
+      await this.scrollTo(element)
+      return element.click()
+    })
   }
   async ensureAddQueueSectionIsVisible() {    
     await this.click(ADD_NEW_QUEUE_SECTION)
