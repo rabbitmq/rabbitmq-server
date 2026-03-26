@@ -154,9 +154,9 @@ start_docker_rabbitmq() {
 
   mkdir -pv $CONF_DIR/rabbitmq/conf.d/
 
-  RABBITMQ_TEST_DIR="/var/rabbitmq" 
+  RABBITMQ_TEST_DIR="/var/rabbitmq"
   ${BIN_DIR}/gen-enabled_plugins "${PROFILES}" ${RABBITMQ_CONFIG_DIR} $CONF_DIR/rabbitmq/enabled_plugins
-    print "> EFFECTIVE ENABLED_PLUGINS_FILE: $CONF_DIR/rabbitmq/enabled_plugins"
+  print "> EFFECTIVE ENABLED_PLUGINS_FILE: $CONF_DIR/rabbitmq/enabled_plugins"
 
   ${BIN_DIR}/gen-rabbitmq-conf "${PROFILES}" ${RABBITMQ_CONFIG_DIR} $ENV_FILE $CONF_DIR/rabbitmq/rabbitmq.conf
   print "> EFFECTIVE RABBITMQ_CONFIG_FILE: $CONF_DIR/rabbitmq/rabbitmq.conf"
