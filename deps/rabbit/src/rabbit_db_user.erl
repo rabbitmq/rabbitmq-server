@@ -586,7 +586,7 @@ clear_matching_user_permissions_in_mnesia_tx(Username, VHostName) ->
 
 clear_matching_user_permissions_in_khepri(Username, VHostName) ->
     Path = khepri_user_permission_path(any(Username), any(VHostName)),
-    ok = rabbit_khepri:delete(Path).
+    ok = rabbit_khepri:delete_many(Path).
 
 any('_') -> ?KHEPRI_WILDCARD_STAR;
 any(Value) -> Value.
@@ -955,7 +955,7 @@ clear_topic_permissions_in_mnesia_tx(Username, VHostName, ExchangeName) ->
 
 clear_topic_permissions_in_khepri(Username, VHostName, ExchangeName) ->
     Path = khepri_topic_permission_path(any(Username), any(VHostName), any(ExchangeName)),
-    rabbit_khepri:delete(Path).
+    rabbit_khepri:delete_many(Path).
 
 %% -------------------------------------------------------------------
 %% clear_matching_topic_permissions().
@@ -1011,7 +1011,7 @@ clear_matching_topic_permissions_in_khepri(
   Username, VHostName, ExchangeName) ->
     Path = khepri_topic_permission_path(
              any(Username), any(VHostName), any(ExchangeName)),
-    ok = rabbit_khepri:delete(Path).
+    ok = rabbit_khepri:delete_many(Path).
 
 %% -------------------------------------------------------------------
 %% delete().
@@ -1105,7 +1105,7 @@ clear_in_mnesia() ->
 
 clear_in_khepri() ->
     Path = khepri_user_path(?KHEPRI_WILDCARD_STAR),
-    case rabbit_khepri:delete(Path) of
+    case rabbit_khepri:delete_many(Path) of
         ok    -> ok;
         Error -> throw(Error)
     end.

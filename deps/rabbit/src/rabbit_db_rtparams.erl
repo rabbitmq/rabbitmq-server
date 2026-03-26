@@ -311,7 +311,7 @@ delete_matching_in_mnesia_tx(VHostName, Comp, Name) ->
 
 delete_in_khepri(Key) ->
     Path = khepri_rp_path(Key),
-    ok = rabbit_khepri:delete(Path).
+    ok = rabbit_khepri:delete_many(Path).
 
 delete_matching_in_khepri(VHostName, Comp, Name) ->
     Key = {?any(VHostName), ?any(Comp), ?any(Name)},

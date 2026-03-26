@@ -152,7 +152,7 @@ delete_in_mnesia() ->
 delete_in_khepri() ->
     Path = khepri_recent_history_path(
              ?KHEPRI_WILDCARD_STAR, ?KHEPRI_WILDCARD_STAR),
-    rabbit_khepri:delete(Path).
+    rabbit_khepri:delete_many(Path).
 
 delete(XName) ->
     rabbit_khepri:handle_fallback(
