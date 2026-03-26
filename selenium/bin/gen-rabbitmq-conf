@@ -4,8 +4,8 @@ SCRIPT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 #set -x
 
 PROFILES=${1:?First parameter is a string with a comma-separated list of profiles}
-TEST_PATH=${2:?First parameter is the directory env and config files are relative to}
-ENV_FILE=${3:?Second parameter is a comma-separated list of .env file which has exported template variables}
+TEST_PATH=${2:?Second parameter is the directory env and config files are relative to}
+ENV_FILE=${3:?Third parameter is a comma-separated list of .env file which has exported template variables}
 FINAL_CONFIG_FILE=${4:?Forth parameter is the name of the final config file. It is relative to where this script is run from}
 
 source $ENV_FILE

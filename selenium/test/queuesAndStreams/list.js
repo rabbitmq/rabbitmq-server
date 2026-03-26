@@ -7,7 +7,6 @@ const LoginPage = require('../pageobjects/LoginPage')
 const OverviewPage = require('../pageobjects/OverviewPage')
 const QueuesAndStreamsPage = require('../pageobjects/QueuesAndStreamsPage')
 const QueuePage = require('../pageobjects/QueuePage')
-const StreamPage = require('../pageobjects/StreamPage')
 
 describe('Queues and Streams management', function () {
   let driver
@@ -25,7 +24,7 @@ describe('Queues and Streams management', function () {
     overview = new OverviewPage(driver)
     queuesAndStreams = new QueuesAndStreamsPage(driver)
     queue = new QueuePage(driver)
-    stream = new StreamPage(driver)
+    stream = new QueuePage(driver)
     captureScreen = captureScreensFor(driver, __filename)
 
     await login.login('management', 'guest')
