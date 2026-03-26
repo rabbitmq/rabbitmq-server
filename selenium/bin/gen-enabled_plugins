@@ -41,20 +41,24 @@ fi
 sort -u "$TEMP_PLUGINS_FILE" > "${TEMP_PLUGINS_FILE}.sorted"
 
 # Generate the final erlang-formatted enabled_plugins file
-echo "[" > "$FINAL_ENABLED_PLUGINS_FILE"
-while IFS= read -r plugin; do
-    if [[ -n "$plugin" ]]; then
-        echo "  $plugin," >> "$FINAL_ENABLED_PLUGINS_FILE"
-    fi
-done < "${TEMP_PLUGINS_FILE}.sorted"
+if [[ ! -s "${TEMP_PLUGINS_FILE}.sorted" ]]; then
+    echo "[]." > "$FINAL_ENABLED_PLUGINS_FILE"
+else
+    echo "[" > "$FINAL_ENABLED_PLUGINS_FILE"
+    while IFS= read -r plugin; do
+        if [[ -n "$plugin" ]]; then
+            echo "  $plugin," >> "$FINAL_ENABLED_PLUGINS_FILE"
+        fi
+    done < "${TEMP_PLUGINS_FILE}.sorted"
 
-# Remove the trailing comma from the last line and close the array.
-# Redirect through a temp file and back to preserve the original file's permissions
-# (mktemp produces mode 600, which would make the file unreadable by the rabbitmq user in Docker).
-_tmp=$(mktemp)
-sed '$ s/,$//' "$FINAL_ENABLED_PLUGINS_FILE" > "$_tmp" && cat "$_tmp" > "$FINAL_ENABLED_PLUGINS_FILE"
-rm -f "$_tmp"
-echo "]." >> "$FINAL_ENABLED_PLUGINS_FILE"
+    # Remove the trailing comma from the last line and close the array.
+    # Redirect through a temp file and back to preserve the original file's permissions
+    # (mktemp produces mode 600, which would make the file unreadable by the rabbitmq user in Docker).
+    _tmp=$(mktemp)
+    sed '$ s/,$//' "$FINAL_ENABLED_PLUGINS_FILE" > "$_tmp" && cat "$_tmp" > "$FINAL_ENABLED_PLUGINS_FILE"
+    rm -f "$_tmp"
+    echo "]." >> "$FINAL_ENABLED_PLUGINS_FILE"
+fi
 
 # Clean up temporary files
 rm -f "$TEMP_PLUGINS_FILE" "${TEMP_PLUGINS_FILE}.sorted"
