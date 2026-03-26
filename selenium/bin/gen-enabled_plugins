@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-SCRIPT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-
 #set -x
 
 PROFILES=${1:?First parameter is a string with a comma-separated list of profiles}
@@ -9,9 +7,9 @@ FINAL_ENABLED_PLUGINS_FILE=${3:?Third parameter is the name of the final enabled
 
 
 parentdir="$(dirname "$FINAL_ENABLED_PLUGINS_FILE")"
-mkdir -p $parentdir
+mkdir -p "$parentdir"
 
-echo "" > $FINAL_ENABLED_PLUGINS_FILE
+echo "" > "$FINAL_ENABLED_PLUGINS_FILE"
 
 # Convert comma-separated profiles to array
 IFS=',' read -ra PROFILE_ARRAY <<< "$PROFILES"
