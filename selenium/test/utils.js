@@ -324,7 +324,6 @@ module.exports = {
       }
     }
     module.exports.log(`Terminating browser ...`)
-    await driver.close()
     await driver.quit()
     module.exports.log(`Terminated browser`)
   },
