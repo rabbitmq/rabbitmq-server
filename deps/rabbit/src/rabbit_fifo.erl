@@ -2929,7 +2929,7 @@ expire_shallow(Ts, #?STATE{cfg = #cfg{dead_letter_handler = DLH},
                            messages = Messages0,
                            delayed = Delayed0,
                            dlx = DlxState0,
-                           reclaimable_bytes = ReclaimableBytes0,
+                           reclaimable_bytes = ReclaimableBytes,
                            messages_total = Tot,
                            msg_bytes_enqueue = MsgBytesEnqueue} = State0) ->
 
@@ -2956,7 +2956,7 @@ expire_shallow(Ts, #?STATE{cfg = #cfg{dead_letter_handler = DLH},
 
     ExpMsgs = Expired0 ++ Expired,
 
-    {DlxState, _RetainedBytes, DlxEffects} =
+    {DlxState, RetainedBytes, DlxEffects} =
         discard_or_dead_letter(ExpMsgs, expired, DLH, DlxState0),
 
     NumExpired = length(ExpMsgs),
@@ -2967,13 +2967,13 @@ expire_shallow(Ts, #?STATE{cfg = #cfg{dead_letter_handler = DLH},
                                Acc + get_header(size, Header)
                        end, 0, ExpMsgs),
 
-    DiscardedSize = Size + (NumExpired * ?ENQ_OVERHEAD_B),
+    DiscardedSize = Size + (NumExpired * ?ENQ_OVERHEAD_B) - RetainedBytes,
     State = State0#?STATE{dlx = DlxState,
                           returns = Returns,
                           messages = Messages,
                           delayed = Delayed,
                           messages_total = Tot - NumExpired,
-                          reclaimable_bytes = ReclaimableBytes0 + DiscardedSize,
+                          reclaimable_bytes = ReclaimableBytes + DiscardedSize,
                           msg_bytes_enqueue = MsgBytesEnqueue - Size},
     {State, DlxEffects}.
 
@@ -2982,18 +2982,18 @@ expire(RaCmdTs, State0, Effects) ->
      #?STATE{cfg = #cfg{dead_letter_handler = DLH},
              dlx = DlxState0,
              messages_total = Tot,
-             reclaimable_bytes = ReclaimablBytes0,
+             reclaimable_bytes = ReclaimableBytes,
              msg_bytes_enqueue = MsgBytesEnqueue
             } = State1} =
         take_next_msg(State0),
-    {DlxState, _RetainedBytes, DlxEffects} =
+    {DlxState, RetainedBytes, DlxEffects} =
         discard_or_dead_letter([Msg], expired, DLH, DlxState0),
     Header = get_msg_header(Msg),
     Size = get_header(size, Header),
-    DiscardedSize = Size + ?ENQ_OVERHEAD_B,
+    DiscardedSize = Size + ?ENQ_OVERHEAD_B - RetainedBytes,
     State = State1#?STATE{dlx = DlxState,
                           messages_total = Tot - 1,
-                          reclaimable_bytes = ReclaimablBytes0 + DiscardedSize,
+                          reclaimable_bytes = ReclaimableBytes + DiscardedSize,
                           msg_bytes_enqueue = MsgBytesEnqueue - Size},
     expire_msgs(RaCmdTs, true, State, Effects ++ DlxEffects).
 
@@ -4193,17 +4193,14 @@ discard_or_dead_letter(Msgs0, Reason, {at_most_once, {Mod, Fun, Args}}, State) -
     {State, 0, [Effect]};
 discard_or_dead_letter(Msgs, Reason, at_least_once, State0)
   when Reason =/= maxlen ->
-    RetainedBytes = lists:foldl(fun (M, Acc) ->
-                                        Acc + size_in_bytes(M) + ?ENQ_OVERHEAD_B
-                                end, 0, Msgs),
-    State = lists:foldl(fun(Msg, #?DLX{discards = D0,
-                                       msg_bytes = B0} = S0) ->
-                                MsgSize = size_in_bytes(Msg),
-                                D = lqueue:in(?TUPLE(Reason, Msg), D0),
-                                B = B0 + MsgSize,
-                                S0#?DLX{discards = D,
-                                        msg_bytes = B}
-                        end, State0, Msgs),
+    {State, RetainedBytes} = lists:foldl(
+                               fun(Msg, {#?DLX{discards = D,
+                                              msg_bytes = B} = S, R}) ->
+                                       MsgSize = size_in_bytes(Msg),
+                                       {S#?DLX{discards = lqueue:in(?TUPLE(Reason, Msg), D),
+                                               msg_bytes = B + MsgSize},
+                                        R + MsgSize + ?ENQ_OVERHEAD_B}
+                               end, {State0, 0}, Msgs),
     {State, RetainedBytes,
      [{mod_call, rabbit_global_counters, messages_dead_lettered,
        [Reason, rabbit_quorum_queue, at_least_once, length(Msgs)]}]}.
