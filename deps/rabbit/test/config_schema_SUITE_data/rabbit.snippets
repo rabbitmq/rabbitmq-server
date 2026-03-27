@@ -1161,6 +1161,16 @@ credential_validator.regexp = ^abc\\d+",
    []},
 
   %%
+  %% Stream queues
+  %%
+  {stream_initial_cluster_size,
+   "stream.initial_cluster_size = 5",
+   [{rabbit, [
+      {stream_cluster_size, 5}
+     ]}],
+   []},
+
+  %%
   %% Runtime parameters
   %%
 
