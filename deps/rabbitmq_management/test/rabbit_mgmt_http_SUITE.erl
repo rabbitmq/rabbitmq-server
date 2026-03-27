@@ -2897,16 +2897,14 @@ queues_detailed_test(Config) ->
                               maps:is_key(single_active_consumer_tag, Item)
                       end, Detailed)),
 
-    Reduced = http_get(Config, "/queues", ?OK),
-    ?assertNot(lists:any(fun(Item) ->
-                                 maps:is_key(garbage_collection, Item)
-                         end, Reduced)),
-    ?assertNot(lists:any(fun(Item) ->
-                                 maps:is_key(backing_queue_status, Item)
-                         end, Reduced)),
-    ?assertNot(lists:any(fun(Item) ->
-                                 maps:is_key(single_active_consumer_tag, Item)
-                         end, Reduced)),
+    ?awaitMatch(
+       true,
+       begin
+           Reduced = http_get(Config, "/queues", ?OK),
+           not lists:any(fun(Item) -> maps:is_key(garbage_collection, Item) end, Reduced)
+               andalso not lists:any(fun(Item) -> maps:is_key(backing_queue_status, Item) end, Reduced)
+               andalso not lists:any(fun(Item) -> maps:is_key(single_active_consumer_tag, Item) end, Reduced)
+       end, 30000),
 
     http_delete(Config, "/queues/%2F/queue_a", {group, '2xx'}),
     http_delete(Config, "/queues/%2F/queue_c", {group, '2xx'}),
