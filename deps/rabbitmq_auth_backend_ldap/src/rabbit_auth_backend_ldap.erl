@@ -45,10 +45,19 @@ get_connections() ->
     worker_pool:submit(ldap_pool, fun() -> get(ldap_conns) end, reuse).
 
 purge_connections() ->
-    [ok = worker_pool:submit(ldap_pool,
-                             fun() -> purge_conn(Anon, Servers, Opts) end, reuse)
-     || {{Anon, Servers, Opts}, _} <- maps:to_list(get_connections())],
-    ok.
+    %% Get and purge must happen in the same worker submission
+    %% because ldap_conns is stored in the worker's process dictionary.
+    worker_pool:submit(ldap_pool,
+        fun() ->
+            case get(ldap_conns) of
+                undefined ->
+                    ok;
+                Conns ->
+                    [purge_conn(Anon, Servers, Opts)
+                     || {{Anon, Servers, Opts}, _} <- maps:to_list(Conns)],
+                    ok
+            end
+        end, reuse).
 
 user_login_authentication(Username, []) ->
     %% Without password, e.g. EXTERNAL
