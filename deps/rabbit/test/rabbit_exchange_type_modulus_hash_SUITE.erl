@@ -4,7 +4,7 @@
 %%
 %% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
--module(rabbit_hash_exchange_SUITE).
+-module(rabbit_exchange_type_modulus_hash_SUITE).
 
 -compile(export_all).
 
