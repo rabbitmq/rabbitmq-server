@@ -8,18 +8,14 @@ const amqplib = require('amqplib');
 
 const LoginPage = require('../pageobjects/LoginPage')
 const OverviewPage = require('../pageobjects/OverviewPage')
-const QueuesAndStreamsPage = require('../pageobjects/QueuesAndStreamsPage')
 const QueuePage = require('../pageobjects/QueuePage')
-const StreamPage = require('../pageobjects/StreamPage')
 
 
 describe('Given a quorum queue configured with SAC', function () {
   let driver
   let login
-  let queuesAndStreams
   let queuePage
   let queueName
-  let stream
   let overview
   let captureScreen
   
@@ -28,9 +24,7 @@ describe('Given a quorum queue configured with SAC', function () {
     await goToHome(driver)
     login = new LoginPage(driver)
     overview = new OverviewPage(driver)
-    queuesAndStreams = new QueuesAndStreamsPage(driver)
     queuePage = new QueuePage(driver)
-    stream = new StreamPage(driver)
     captureScreen = captureScreensFor(driver, __filename)
 
     await login.login('management', 'guest')

@@ -7,7 +7,6 @@ const LoginPage = require('../pageobjects/LoginPage')
 const OverviewPage = require('../pageobjects/OverviewPage')
 const QueuesAndStreamsPage = require('../pageobjects/QueuesAndStreamsPage')
 const QueuePage = require('../pageobjects/QueuePage')
-const StreamPage = require('../pageobjects/StreamPage')
 
 describe('Quorum queues', function () {
   let driver

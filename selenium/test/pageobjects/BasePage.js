@@ -16,6 +16,9 @@ const STREAM_CONNECTIONS_TAB = By.css('div#menu ul#tabs li#stream-connections')
 const FORM_POPUP_WARNING = By.css('div.form-popup-warn')
 const FORM_POPUP_WARNING_CLOSE_BUTTON = By.css('div.form-popup-warn span')
 
+const FORM_POPUP_INFO = By.css('div.form-popup-info')
+const FORM_POPUP_INFO_CLOSE_BUTTON = By.css('div.form-popup-info span')
+
 const FORM_POPUP_OPTIONS = By.css('div.form-popup-options')
 const ADD_MINUS_BUTTON = By.css('div#main table.list thead tr th.plus-minus')
 const TABLE_COLUMNS_POPUP = By.css('div.form-popup-options table.form')
@@ -33,20 +36,18 @@ module.exports = class BasePage {
     this.polling = parseInt(process.env.SELENIUM_POLLING) || 500 // how frequent selenium searches for an element
     this.interactionDelay = parseInt(process.env.SELENIUM_INTERACTION_DELAY) || 0 // slow down interactions (when rabbit is behind a http proxy)
   }
-
   async ensureSectionIsVisible(section) {
     let classes = await this.driver.findElement(section).getAttribute("class")
     if (classes.search('section-visible') < 0) {
-      return this.click(By.css(section.value + ' h2'))
+      return this.click(section)
     } else {
       return Promise.resolve(true)
     }
   }
-
   async ensureSectionIsInvisible(section) {
     let classes = await this.driver.findElement(section).getAttribute("class")
-    if (classes.search('section-invisible') < 0) {
-      return this.click(By.css(section.value + ' h2'))
+    if (classes.search('section-visible') >= 0) {
+      return this.click(section)
     } else {
       return Promise.resolve(true)
     }
@@ -125,11 +126,18 @@ module.exports = class BasePage {
     return this.waitForDisplayed(QUEUES_AND_STREAMS_TAB)
   }
 
-  async clickOnStreamTab () {
+  async clickOnStreamConnectionsTab () {
     return this.click(STREAM_CONNECTIONS_TAB)
   }
   async waitForStreamConnectionsTab() {
     return this.waitForDisplayed(STREAM_CONNECTIONS_TAB)
+  }
+
+  async clickOnTab (tabLocator) {
+    return this.click(tabLocator)
+  }
+  async waitForTab (tabLocator) {
+    return this.waitForDisplayed(tabLocator)
   }
 
   async getSelectableOptions(locator) {
@@ -241,14 +249,21 @@ module.exports = class BasePage {
   }
   async isPopupWarningDisplayed() {
     try  {      
-      let element = await driver.findElement(FORM_POPUP_WARNING)
+      let element = await this.driver.findElement(FORM_POPUP_WARNING)
       return element.isDisplayed()
     } catch(e) {
       return Promise.resolve(false)
-    }
-  
+    }  
   }
-  
+   async isPopupInfoDisplayed() {
+    try  {      
+      let element = await this.driver.findElement(FORM_POPUP_INFO)
+      return element.isDisplayed()
+    } catch(e) {
+      console.error("isPopupInfoDisplayed failed due to " + e)
+      return Promise.resolve(false)
+    }  
+  }
   async isPopupWarningNotDisplayed() {
     return this.isElementNotVisible(FORM_POPUP_WARNING)
   }
@@ -275,8 +290,17 @@ module.exports = class BasePage {
       'Timed out after [timeout=' + this.timeout + ';polling=' + this.polling + '] awaiting till visible ' + element,
       this.polling).getText().then((value) => value.substring(0, value.search('\n\nClose')))
   }
+  async getPopupInfo() {
+    let element = await this.driver.findElement(FORM_POPUP_INFO)
+    return this.driver.wait(until.elementIsVisible(element), this.timeout,
+      'Timed out after [timeout=' + this.timeout + ';polling=' + this.polling + '] awaiting till visible ' + element,
+      this.polling).getText().then((value) => value.substring(0, value.search('\n\nClose')))
+  }
   async closePopupWarning() {
     return this.click(FORM_POPUP_WARNING_CLOSE_BUTTON)
+  }
+  async closePopupInfo() {
+    return this.click(FORM_POPUP_INFO_CLOSE_BUTTON)
   }
   async clickOnSelectTableColumns() {
     return this.click(ADD_MINUS_BUTTON)
@@ -317,7 +341,7 @@ module.exports = class BasePage {
           'Timed out after [timeout=' + this.timeout + ';polling=' + this.polling + '] awaiting till visible ' + element,
           this.polling / 2)
       }catch(error) {
-          require('../utils.js').log("isDisplayed failed due to " + error);
+          console.log("isDisplayed failed due to " + error);
           return Promise.resolve(false);
       }
   }
@@ -328,7 +352,7 @@ module.exports = class BasePage {
     let rethrowError = null
     do {
       try {
-        return this.driver.wait(until.elementLocated(locator), this.timeout,
+        return await this.driver.wait(until.elementLocated(locator), this.timeout,
           'Timed out after [timeout=' + this.timeout + ';polling=' + this.polling + '] seconds locating ' + locator,
           this.polling)
       }catch(error) {
@@ -350,7 +374,7 @@ module.exports = class BasePage {
     let rethrowError = null
     do {      
       try {
-        return this.driver.wait(until.elementIsVisible(element), this.timeout,
+        return await this.driver.wait(until.elementIsVisible(element), this.timeout,
           'Timed out after [timeout=' + this.timeout + ';polling=' + this.polling + '] awaiting till visible ' + element,
           this.polling)
       }catch(error) {         
@@ -374,7 +398,7 @@ module.exports = class BasePage {
     do {
       if (this.interactionDelay && this.interactionDelay > 0) await this.driver.sleep(this.interactionDelay)
         try {
-          return this.waitForVisible(await this.waitForLocated(locator))
+          return await this.waitForVisible(await this.waitForLocated(locator))
         }catch(error) {
           if (error.name.includes("StaleElementReferenceError")) {
             retry = true
@@ -398,16 +422,35 @@ module.exports = class BasePage {
     return element.getAttribute('value')
   }
 
+  async retryOnStale (fn, attempts = 3) {
+    let lastError
+    do {
+      try {
+        return await fn()
+      } catch (error) {
+        if (error.name && error.name.includes('StaleElementReferenceError')) {
+          lastError = error
+        } else {
+          throw error
+        }
+      }
+    } while (--attempts > 0)
+    throw lastError
+  }
+
+  async scrollTo (element) {
+    return this.driver.executeScript(
+      'arguments[0].scrollIntoView({block: "center", behavior: "instant"});',
+      element
+    )
+  }
+
   async click (locator) {
     if (this.interactionDelay) await this.driver.sleep(this.interactionDelay)
-
-    const element = await this.waitForDisplayed(locator)
-    try {
+    return this.retryOnStale(async () => {
+      const element = await this.waitForDisplayed(locator)
       return element.click()
-    } catch(error) {
-      console.error("Failed to click on " + locator + " due to " + error);
-      throw error;
-    }
+    })
   }
 
   async submit (locator) {
@@ -416,10 +459,12 @@ module.exports = class BasePage {
   }
 
   async sendKeys (locator, keys) {
-    const element = await this.waitForDisplayed(locator)
-    await element.click()
-    await element.clear()
-    return element.sendKeys(keys)
+    return this.retryOnStale(async () => {
+      const element = await this.waitForDisplayed(locator)
+      await element.click()
+      await element.clear()
+      return element.sendKeys(keys)
+    })
   }
 
   async chooseFile (locator, file) {

@@ -538,6 +538,10 @@ fetch_deletion(XName, Deletions) ->
 %% It is to avoid bindings pointing to queues under deletion.
 -spec delete_for_destination(rabbit_types:binding_destination(), rabbit_types:username()) -> ok.
 delete_for_destination(QName, User) ->
-    Deletions = rabbit_db_binding:delete_for_destination(QName),
-    process_deletions(Deletions),
-    notify_deletions(Deletions, User).
+    case rabbit_db_binding:delete_for_destination(QName) of
+        Deletions when is_map(Deletions) ->
+            process_deletions(Deletions),
+            notify_deletions(Deletions, User);
+        {error, _} ->
+            ok
+    end.
