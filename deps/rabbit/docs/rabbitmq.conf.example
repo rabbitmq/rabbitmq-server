@@ -481,6 +481,11 @@
 ## at declaration time.
 # quorum_queue.initial_cluster_size = 3
 
+## Sets the initial stream queue replica count for newly declared stream queues.
+## This value can be overridden using the 'x-initial-cluster-size' queue argument
+## at declaration time, or by setting 'initial-cluster-size' in a policy.
+# stream.initial_cluster_size = 3
+
 ## Sets the maximum number of unconfirmed messages a channel can send
 ## before publisher flow control is triggered.
 ## The current default is configured to provide good performance and stability
