@@ -2912,6 +2912,11 @@ end}.
     {validators, ["is_supported_information_unit"]}
 ]}.
 
+{mapping, "stream.initial_cluster_size", "rabbit.stream_cluster_size", [
+  {datatype, integer},
+  {validators, ["non_zero_positive_integer"]}
+]}.
+
 {mapping, "cluster_tags.$tag", "rabbit.cluster_tags", [
     {datatype, [binary]}
 ]}.
