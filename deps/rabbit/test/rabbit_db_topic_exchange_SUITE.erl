@@ -108,6 +108,7 @@ init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config1, Testcase).
 
 end_per_testcase(Testcase, Config) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_db_topic_exchange, clear, []),
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
 %% ---------------------------------------------------------------------------

@@ -859,6 +859,11 @@ delete_for_source_in_khepri(#resource{virtual_host = VHost, name = SrcName}) ->
               end
       end, [], Bindings).
 
+-spec delete_for_destination(Dst) -> Ret when
+      Dst :: rabbit_types:binding_destination(),
+      Ret :: Deletions | Error,
+      Deletions :: rabbit_binding:deletions(),
+      Error :: {error, any()}.
 
 delete_for_destination(Dst) ->
     rabbit_khepri:handle_fallback(
