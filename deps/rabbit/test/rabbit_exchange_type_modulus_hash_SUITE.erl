@@ -23,7 +23,8 @@ groups() ->
        routed_to_zero_queue_test,
        routed_to_one_queue_test,
        routed_to_many_queue_test,
-       stable_routing_across_restarts_test
+       stable_routing_across_restarts_test,
+       weighted_routing_test
       ]}
     ].
 
@@ -186,6 +187,76 @@ stable_routing_across_restarts_test(Config) ->
     amqp_channel:call(Chan2, #'exchange.delete'{exchange = XNameBin}),
     [amqp_channel:call(Chan2, #'queue.delete'{queue = Q}) || Q <- Queues],
     ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn2, Chan2).
+
+weighted_routing_test(Config) ->
+    {Conn, Chan} = rabbit_ct_client_helpers:open_connection_and_channel(Config),
+    XNameBin = atom_to_binary(?FUNCTION_NAME),
+    Queues = [<<"q1">>, <<"q2">>, <<"q3">>],
+    NumMsgs = 600,
+
+    #'exchange.declare_ok'{} = amqp_channel:call(Chan,
+                                                 #'exchange.declare'{
+                                                    exchange = XNameBin,
+                                                    type = <<"x-modulus-hash">>,
+                                                    durable = true}),
+
+    [#'queue.declare_ok'{} = amqp_channel:call(Chan, #'queue.declare'{queue = Q,
+                                                                      durable = true})
+     || Q <- Queues],
+
+    %% Bind q1 once
+    #'queue.bind_ok'{} = amqp_channel:call(Chan, #'queue.bind'{queue = <<"q1">>,
+                                                               exchange = XNameBin}),
+
+    %% Bind q2 twice
+    #'queue.bind_ok'{} = amqp_channel:call(Chan, #'queue.bind'{queue = <<"q2">>,
+                                                               exchange = XNameBin,
+                                                               routing_key = <<"a">>}),
+    #'queue.bind_ok'{} = amqp_channel:call(Chan, #'queue.bind'{queue = <<"q2">>,
+                                                               exchange = XNameBin,
+                                                               routing_key = <<"b">>}),
+
+    %% Bind q3 three times
+    #'queue.bind_ok'{} = amqp_channel:call(Chan, #'queue.bind'{queue = <<"q3">>,
+                                                               exchange = XNameBin,
+                                                               routing_key = <<"a">>}),
+    #'queue.bind_ok'{} = amqp_channel:call(Chan, #'queue.bind'{queue = <<"q3">>,
+                                                               exchange = XNameBin,
+                                                               routing_key = <<"b">>}),
+    #'queue.bind_ok'{} = amqp_channel:call(Chan, #'queue.bind'{queue = <<"q3">>,
+                                                               exchange = XNameBin,
+                                                               routing_key = <<"c">>}),
+
+    amqp_channel:call(Chan, #'confirm.select'{}),
+    [amqp_channel:call(Chan,
+                       #'basic.publish'{exchange = XNameBin,
+                                        routing_key = integer_to_binary(I)},
+                       #amqp_msg{})
+     || I <- lists:seq(1, NumMsgs)],
+    amqp_channel:wait_for_confirms_or_die(Chan),
+
+    Counts = lists:foldl(
+               fun(Q, Acc) ->
+                       #'queue.declare_ok'{message_count = M} = amqp_channel:call(
+                                                                  Chan,
+                                                                  #'queue.declare'{queue = Q,
+                                                                                   durable = true}),
+                       maps:put(Q, M, Acc)
+               end, #{}, Queues),
+
+    C1 = maps:get(<<"q1">>, Counts),
+    C2 = maps:get(<<"q2">>, Counts),
+    C3 = maps:get(<<"q3">>, Counts),
+    ct:pal("q1: ~b, q2: ~b, q3: ~b", [C1, C2, C3]),
+
+    ?assertEqual(NumMsgs, C1 + C2 + C3),
+    %% Assert weighted distribution
+    ?assert(C1 < C2),
+    ?assert(C2 < C3),
+
+    amqp_channel:call(Chan, #'exchange.delete'{exchange = XNameBin}),
+    [amqp_channel:call(Chan, #'queue.delete'{queue = Q}) || Q <- Queues],
+    ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Chan).
 
 consume_all(Chan, Queues) ->
     lists:foldl(fun(Q, Map) ->
