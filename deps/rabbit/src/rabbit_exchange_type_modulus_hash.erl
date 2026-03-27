@@ -5,11 +5,11 @@
 %% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
--module(rabbit_sharding_exchange_type_modulus_hash).
-
--include_lib("rabbit_common/include/rabbit.hrl").
+-module(rabbit_exchange_type_modulus_hash).
 
 -behaviour(rabbit_exchange_type).
+
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([description/0,
          route/3,
@@ -25,13 +25,12 @@
          remove_bindings/3,
          assert_args_equivalence/2]).
 
--rabbit_boot_step(
-   {rabbit_sharding_exchange_type_modulus_hash_registry,
-    [{description, "exchange type x-modulus-hash: registry"},
-     {mfa, {rabbit_registry, register, [exchange, <<"x-modulus-hash">>, ?MODULE]}},
-     {cleanup, {rabbit_registry, unregister, [exchange, <<"x-modulus-hash">>]}},
-     {requires, rabbit_registry},
-     {enables, kernel_ready}]}).
+-rabbit_boot_step({?MODULE,
+                   [{description, "exchange type x-modulus-hash"},
+                    {mfa, {rabbit_registry, register,
+                           [exchange, <<"x-modulus-hash">>, ?MODULE]}},
+                    {requires, rabbit_registry},
+                    {enables, kernel_ready}]}).
 
 %% 2^27
 -define(PHASH2_RANGE, 134217728).

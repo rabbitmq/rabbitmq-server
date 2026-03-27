@@ -48,16 +48,10 @@ Do not use this plugin with quorum queues. Avoid classic mirrored queues in gene
 
 ## Messages Distribution Between Shards (Partitioning)
 
-The exchanges that ship by default with RabbitMQ work in an "all or
-nothing" fashion, i.e: if a routing key matches a set of queues bound
-to the exchange, then RabbitMQ will route the message to all the
-queues in that set. For this plugin to work it is necessary to
-route messages to an exchange that would partition messages, so they
-are routed to _at most_ one queue (a subset).
-
-The plugin provides a new exchange type, `"x-modulus-hash"`, that will use
+RabbitMQ provides a built-in exchange type, `"x-modulus-hash"`, that will use
 a hashing function to partition messages routed to a logical queue
-across a number of regular queues (shards).
+across a number of regular queues (shards). This exchange type is available
+in core RabbitMQ and does not require enabling this plugin to be used.
 
 The `"x-modulus-hash"` exchange will hash the routing key used to
 publish the message and then it will apply a `Hash mod N` to pick the
