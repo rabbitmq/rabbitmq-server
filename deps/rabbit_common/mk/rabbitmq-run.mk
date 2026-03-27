@@ -166,43 +166,113 @@ endif
 # Run a full RabbitMQ.
 # --------------------------------------------------------------------
 
-define test_rabbitmq_config
-$(if $(RABBITMQ_NODE_PORT),listeners.tcp.default = $(RABBITMQ_NODE_PORT))
-loopback_users = none
-cluster_name = localhost
-$(if $(RABBITMQ_NODE_PORT),management.tcp.port = $(shell echo "$$(($(RABBITMQ_NODE_PORT) + 10000))"))
-$(if $(RABBITMQ_NODE_PORT),mqtt.listeners.tcp.default = $(shell echo "$$((1883 + $(RABBITMQ_NODE_PORT) - 5672))"))
-$(if $(RABBITMQ_NODE_PORT),web_mqtt.tcp.port = $(shell echo "$$((15675 + $(RABBITMQ_NODE_PORT) - 5672))"))
-$(if $(RABBITMQ_NODE_PORT),stomp.listeners.tcp.default = $(shell echo "$$((61613 + $(RABBITMQ_NODE_PORT) - 5672))"))
-$(if $(RABBITMQ_NODE_PORT),web_stomp.tcp.port = $(shell echo "$$((15674 + $(RABBITMQ_NODE_PORT) - 5672))"))
-$(if $(RABBITMQ_NODE_PORT),stream.listeners.tcp.default = $(shell echo "$$((5552 + $(RABBITMQ_NODE_PORT) - 5672))"))
-$(if $(RABBITMQ_NODE_PORT),prometheus.tcp.port = $(shell echo "$$((15692 + $(RABBITMQ_NODE_PORT) - 5672))"))
-raft.data_dir = $(RABBITMQ_QUORUM_DIR)
-stream.data_dir = $(RABBITMQ_STREAM_DIR)
+# Shell function that returns true when a plugin is enabled.
+# Handles the special value ALL (all plugins enabled) as well as an explicit
+# space- or comma-separated list of plugin names.
+define plugin_enabled_fn
+plugin_enabled() { \
+	_enabled="$$1"; _plugin="$$2"; \
+	case "$$_enabled" in \
+		ALL) return 0 ;; \
+		*"$$_plugin"*) return 0 ;; \
+	esac; \
+	return 1; \
+}
 endef
 
-define test_rabbitmq_config_with_tls
-loopback_users = none
-listeners.ssl.default = 5671
-ssl_options.cacertfile = $(TEST_TLS_CERTS_DIR_in_config)/testca/cacert.pem
-ssl_options.certfile   = $(TEST_TLS_CERTS_DIR_in_config)/server/cert.pem
-ssl_options.keyfile    = $(TEST_TLS_CERTS_DIR_in_config)/server/key.pem
-ssl_options.verify = verify_peer
-ssl_options.fail_if_no_peer_cert = false
-ssl_options.honor_cipher_order = true
-management.listener.port = 15671
-management.listener.ssl  = true
-management.listener.ssl_opts.cacertfile = $(TEST_TLS_CERTS_DIR_in_config)/testca/cacert.pem
-management.listener.ssl_opts.certfile   = $(TEST_TLS_CERTS_DIR_in_config)/server/cert.pem
-management.listener.ssl_opts.keyfile    = $(TEST_TLS_CERTS_DIR_in_config)/server/key.pem
-management.listener.ssl_opts.verify = verify_peer
-management.listener.ssl_opts.fail_if_no_peer_cert = false
-management.listener.ssl_opts.honor_cipher_order = true
-raft.data_dir = $(RABBITMQ_QUORUM_DIR)
-stream.data_dir = $(RABBITMQ_STREAM_DIR)
+# Write the conf.d configuration fragments for run-broker.
+# $(1) = conf.d directory
+# $(2) = node TCP port (may be empty)
+# $(3) = quorum data dir
+# $(4) = stream data dir
+# $(5) = RABBITMQ_ENABLED_PLUGINS value
+define write_config_files_broker
+$(plugin_enabled_fn); \
+enabled="$(5)"; \
+mkdir -p "$(1)"; \
+{ \
+  $(if $(2),printf '%s\n' "listeners.tcp.default = $(2)"; )\
+  printf '%s\n' \
+    "loopback_users = none" \
+    "cluster_name = localhost" \
+    "raft.data_dir = $(3)"; \
+} > "$(1)/00-base.conf"; \
+if plugin_enabled "$$enabled" rabbitmq_management; then \
+  $(if $(2),\
+    printf '%s\n' "management.tcp.port = $$(($(2) + 10000))" > "$(1)/10-management.conf", \
+    true); \
+fi; \
+if plugin_enabled "$$enabled" rabbitmq_mqtt; then \
+  $(if $(2),\
+    printf '%s\n' "mqtt.listeners.tcp.default = $$((1883 + $(2) - 5672))" > "$(1)/20-mqtt.conf", \
+    true); \
+fi; \
+if plugin_enabled "$$enabled" rabbitmq_web_mqtt; then \
+  $(if $(2),\
+    printf '%s\n' "web_mqtt.tcp.port = $$((15675 + $(2) - 5672))" > "$(1)/30-web_mqtt.conf", \
+    true); \
+fi; \
+if plugin_enabled "$$enabled" rabbitmq_stomp; then \
+  $(if $(2),\
+    printf '%s\n' "stomp.listeners.tcp.default = $$((61613 + $(2) - 5672))" > "$(1)/40-stomp.conf", \
+    true); \
+fi; \
+if plugin_enabled "$$enabled" rabbitmq_web_stomp; then \
+  $(if $(2),\
+    printf '%s\n' "web_stomp.tcp.port = $$((15674 + $(2) - 5672))" > "$(1)/50-web_stomp.conf", \
+    true); \
+fi; \
+if plugin_enabled "$$enabled" rabbitmq_stream; then \
+  { \
+    $(if $(2),printf '%s\n' "stream.listeners.tcp.default = $$((5552 + $(2) - 5672))"; )\
+    printf '%s\n' "stream.data_dir = $(4)"; \
+  } > "$(1)/60-stream.conf"; \
+fi; \
+if plugin_enabled "$$enabled" rabbitmq_prometheus; then \
+  $(if $(2),\
+    printf '%s\n' "prometheus.tcp.port = $$((15692 + $(2) - 5672))" > "$(1)/70-prometheus.conf", \
+    true); \
+fi
 endef
 
-TEST_CONFIG_FILE ?= $(TEST_TMPDIR)/test.conf
+# Write the conf.d configuration fragments for run-tls-broker.
+# $(1) = conf.d directory
+# $(2) = quorum data dir
+# $(3) = stream data dir
+# $(4) = TLS certs directory
+# $(5) = RABBITMQ_ENABLED_PLUGINS value
+define write_config_files_tls_broker
+$(plugin_enabled_fn); \
+enabled="$(5)"; \
+mkdir -p "$(1)"; \
+printf '%s\n' \
+  "loopback_users = none" \
+  "listeners.ssl.default = 5671" \
+  "ssl_options.cacertfile = $(4)/testca/cacert.pem" \
+  "ssl_options.certfile   = $(4)/server/cert.pem" \
+  "ssl_options.keyfile    = $(4)/server/key.pem" \
+  "ssl_options.verify = verify_peer" \
+  "ssl_options.fail_if_no_peer_cert = false" \
+  "ssl_options.honor_cipher_order = true" \
+  "raft.data_dir = $(2)" \
+  "stream.data_dir = $(3)" \
+  > "$(1)/00-base.conf"; \
+if plugin_enabled "$$enabled" rabbitmq_management; then \
+  printf '%s\n' \
+    "management.listener.port = 15671" \
+    "management.listener.ssl  = true" \
+    "management.listener.ssl_opts.cacertfile = $(4)/testca/cacert.pem" \
+    "management.listener.ssl_opts.certfile   = $(4)/server/cert.pem" \
+    "management.listener.ssl_opts.keyfile    = $(4)/server/key.pem" \
+    "management.listener.ssl_opts.verify = verify_peer" \
+    "management.listener.ssl_opts.fail_if_no_peer_cert = false" \
+    "management.listener.ssl_opts.honor_cipher_order = true" \
+    > "$(1)/10-management.conf"; \
+fi
+endef
+
+TEST_CONFIG_DIR ?= $(TEST_TMPDIR)/conf.d
+.PHONY: $(TEST_CONFIG_DIR)
 TEST_TLS_CERTS_DIR := $(TEST_TMPDIR)/tls-certs
 ifeq ($(origin TEST_TLS_CERTS_DIR_in_config),undefined)
 ifeq ($(PLATFORM),msys2)
@@ -212,10 +282,6 @@ TEST_TLS_CERTS_DIR_in_config := $(TEST_TLS_CERTS_DIR)
 endif
 export TEST_TLS_CERTS_DIR_in_config
 endif
-
-.PHONY: $(TEST_CONFIG_FILE)
-$(TEST_CONFIG_FILE): node-tmpdir
-	$(gen_verbose) printf "$(subst $(newline),\n,$(subst ",\",$(config)))" > $@
 
 $(TEST_TLS_CERTS_DIR): node-tmpdir
 	$(gen_verbose) $(MAKE) -C $(DEPS_DIR)/rabbitmq_ct_helpers/tools/tls-certs \
@@ -234,16 +300,22 @@ DIST_TARGET ?= test-dist
 endif
 endif
 
-run-broker run-tls-broker: RABBITMQ_CONFIG_FILE := $(basename $(TEST_CONFIG_FILE))
-run-broker:     config = $(test_rabbitmq_config)
-run-tls-broker: config = $(test_rabbitmq_config_with_tls)
 run-tls-broker: $(TEST_TLS_CERTS_DIR)
 
-run-broker run-tls-broker: node-tmpdir $(DIST_TARGET) $(TEST_CONFIG_FILE)
+run-broker: node-tmpdir $(DIST_TARGET)
 	$(maybe_enabled_plugins); \
+	$(call write_config_files_broker,$(TEST_CONFIG_DIR),$(RABBITMQ_NODE_PORT),$(RABBITMQ_QUORUM_DIR),$(RABBITMQ_STREAM_DIR),$(RABBITMQ_ENABLED_PLUGINS)); \
 	$(BASIC_SCRIPT_ENV_SETTINGS) \
 	  RABBITMQ_ALLOW_INPUT=true \
-	  RABBITMQ_CONFIG_FILE=$(RABBITMQ_CONFIG_FILE) \
+	  RABBITMQ_CONFIG_FILES=$(TEST_CONFIG_DIR) \
+	  $(RABBITMQ_SERVER)
+
+run-tls-broker: node-tmpdir $(DIST_TARGET)
+	$(maybe_enabled_plugins); \
+	$(call write_config_files_tls_broker,$(TEST_CONFIG_DIR),$(RABBITMQ_QUORUM_DIR),$(RABBITMQ_STREAM_DIR),$(TEST_TLS_CERTS_DIR_in_config),$(RABBITMQ_ENABLED_PLUGINS)); \
+	$(BASIC_SCRIPT_ENV_SETTINGS) \
+	  RABBITMQ_ALLOW_INPUT=true \
+	  RABBITMQ_CONFIG_FILES=$(TEST_CONFIG_DIR) \
 	  $(RABBITMQ_SERVER)
 
 run-background-broker: node-tmpdir $(DIST_TARGET)
@@ -338,7 +410,9 @@ start-brokers start-cluster: $(DIST_TARGET)
 	# permissions to read-only, while another node also can't find
 	# the cookie so it tries to create it, but it can't write
 	# to a read-only file. Best option - just create the cookie upfront
-	@if test ! -f "$$HOME/.erlang.cookie"; then \
+	@$(plugin_enabled_fn); \
+	enabled="$(RABBITMQ_ENABLED_PLUGINS)"; \
+	if test ! -f "$$HOME/.erlang.cookie"; then \
 		openssl rand -hex 20 > "$$HOME/.erlang.cookie" && \
 		chmod 400 "$$HOME/.erlang.cookie"; \
 	fi; \
@@ -356,29 +430,55 @@ start-brokers start-cluster: $(DIST_TARGET)
 	for n in $$(seq $(NODES)); do \
 		nodename="rabbit-$$n@$(HOSTNAME)"; \
 		nodedir="$(TEST_TMPDIR)/$$nodename"; \
-		mkdir -p "$$nodedir"; \
+		confd="$$nodedir/conf.d"; \
+		mkdir -p "$$confd"; \
+		port="$$((5672 + $$n - 1))"; \
 		printf '%s\n' \
 		  "loopback_users = none" \
 		  "cluster_name = localhost" \
-		  "listeners.tcp.default = $$((5672 + $$n - 1))" \
-		  "management.tcp.port = $$((15672 + $$n - 1))" \
-		  "mqtt.listeners.tcp.default = $$((1883 + $$n - 1))" \
-		  "web_mqtt.tcp.port = $$((1893 + $$n - 1))" \
-		  "stomp.listeners.tcp.default = $$((61613 + $$n - 1))" \
-		  "web_stomp.tcp.port = $$((61623 + $$n - 1))" \
-		  "prometheus.tcp.port = $$((15692 + $$n - 1))" \
-		  "stream.listeners.tcp.default = $$((5552 + $$n - 1))" \
-		  > "$$nodedir/rabbitmq.conf"; \
+		  "listeners.tcp.default = $$port" \
+		  > "$$confd/00-base.conf"; \
+		if plugin_enabled "$$enabled" rabbitmq_management; then \
+			printf '%s\n' "management.tcp.port = $$((15672 + $$n - 1))" \
+			  > "$$confd/10-management.conf"; \
+		fi; \
+		if plugin_enabled "$$enabled" rabbitmq_mqtt; then \
+			printf '%s\n' "mqtt.listeners.tcp.default = $$((1883 + $$n - 1))" \
+			  > "$$confd/20-mqtt.conf"; \
+		fi; \
+		if plugin_enabled "$$enabled" rabbitmq_web_mqtt; then \
+			printf '%s\n' "web_mqtt.tcp.port = $$((1893 + $$n - 1))" \
+			  > "$$confd/30-web_mqtt.conf"; \
+		fi; \
+		if plugin_enabled "$$enabled" rabbitmq_stomp; then \
+			printf '%s\n' "stomp.listeners.tcp.default = $$((61613 + $$n - 1))" \
+			  > "$$confd/40-stomp.conf"; \
+		fi; \
+		if plugin_enabled "$$enabled" rabbitmq_web_stomp; then \
+			printf '%s\n' "web_stomp.tcp.port = $$((61623 + $$n - 1))" \
+			  > "$$confd/50-web_stomp.conf"; \
+		fi; \
+		if plugin_enabled "$$enabled" rabbitmq_stream; then \
+			printf '%s\n' "stream.listeners.tcp.default = $$((5552 + $$n - 1))" \
+			  > "$$confd/60-stream.conf"; \
+		fi; \
+		if plugin_enabled "$$enabled" rabbitmq_prometheus; then \
+			printf '%s\n' "prometheus.tcp.port = $$((15692 + $$n - 1))" \
+			  > "$$confd/70-prometheus.conf"; \
+		fi; \
+		server_start_args="$$cluster_nodes_arg"; \
+		if plugin_enabled "$$enabled" rabbitmq_web_mqtt; then \
+			server_start_args="-rabbitmq_web_mqtt_examples listener [{port,$$((1903 + $$n - 1))}] $$server_start_args"; \
+		fi; \
+		if plugin_enabled "$$enabled" rabbitmq_web_stomp; then \
+			server_start_args="-rabbitmq_web_stomp_examples listener [{port,$$((61633 + $$n - 1))}] $$server_start_args"; \
+		fi; \
 		$(MAKE) start-background-broker \
 		  NOBUILD=1 \
 		  RABBITMQ_NODENAME="$$nodename" \
-		  RABBITMQ_NODE_PORT="$$((5672 + $$n - 1))" \
-		  RABBITMQ_CONFIG_FILE="$$nodedir/rabbitmq" \
-		  RABBITMQ_SERVER_START_ARGS=" \
-		  -rabbitmq_web_mqtt_examples listener [{port,$$((1903 + $$n - 1))}] \
-		  -rabbitmq_web_stomp_examples listener [{port,$$((61633 + $$n - 1))}] \
-		  $$cluster_nodes_arg \
-		  " & \
+		  RABBITMQ_NODE_PORT="$$port" \
+		  RABBITMQ_CONFIG_FILES="$$confd" \
+		  RABBITMQ_SERVER_START_ARGS="$$server_start_args" & \
 	done; \
 	wait
 
@@ -394,7 +494,9 @@ NODES ?= 3
 
 # Rolling restart similar to what the Kubernetes Operator does
 restart-cluster:
-	@for n in $$(seq $(NODES) -1 1); do \
+	@$(plugin_enabled_fn); \
+	enabled="$(RABBITMQ_ENABLED_PLUGINS)"; \
+	for n in $$(seq $(NODES) -1 1); do \
 		nodename="rabbit-$$n@$(HOSTNAME)"; \
 		$(RABBITMQ_UPGRADE) -n "$$nodename" await_online_quorum_plus_one -t 604800 && \
 			$(RABBITMQ_UPGRADE) -n "$$nodename" drain; \
@@ -403,29 +505,56 @@ restart-cluster:
 		echo "Sleeping for $(RESTART_DELAY) seconds..."; \
 		sleep $(RESTART_DELAY); \
 		nodedir="$(TEST_TMPDIR)/$$nodename"; \
-		mkdir -p "$$nodedir"; \
+		confd="$$nodedir/conf.d"; \
+		mkdir -p "$$confd"; \
+		port="$$((5672 + $$n - 1))"; \
 		printf '%s\n' \
 		  "loopback_users = none" \
 		  "cluster_name = localhost" \
-		  "listeners.tcp.default = $$((5672 + $$n - 1))" \
-		  "management.tcp.port = $$((15672 + $$n - 1))" \
-		  "mqtt.listeners.tcp.default = $$((1883 + $$n - 1))" \
-		  "web_mqtt.tcp.port = $$((1893 + $$n - 1))" \
-		  "stomp.listeners.tcp.default = $$((61613 + $$n - 1))" \
-		  "web_stomp.tcp.port = $$((61623 + $$n - 1))" \
-		  "prometheus.tcp.port = $$((15692 + $$n - 1))" \
-		  "stream.listeners.tcp.default = $$((5552 + $$n - 1))" \
-		  > "$$nodedir/rabbitmq.conf"; \
+		  "listeners.tcp.default = $$port" \
+		  > "$$confd/00-base.conf"; \
+		if plugin_enabled "$$enabled" rabbitmq_management; then \
+			printf '%s\n' "management.tcp.port = $$((15672 + $$n - 1))" \
+			  > "$$confd/10-management.conf"; \
+		fi; \
+		if plugin_enabled "$$enabled" rabbitmq_mqtt; then \
+			printf '%s\n' "mqtt.listeners.tcp.default = $$((1883 + $$n - 1))" \
+			  > "$$confd/20-mqtt.conf"; \
+		fi; \
+		if plugin_enabled "$$enabled" rabbitmq_web_mqtt; then \
+			printf '%s\n' "web_mqtt.tcp.port = $$((1893 + $$n - 1))" \
+			  > "$$confd/30-web_mqtt.conf"; \
+		fi; \
+		if plugin_enabled "$$enabled" rabbitmq_stomp; then \
+			printf '%s\n' "stomp.listeners.tcp.default = $$((61613 + $$n - 1))" \
+			  > "$$confd/40-stomp.conf"; \
+		fi; \
+		if plugin_enabled "$$enabled" rabbitmq_web_stomp; then \
+			printf '%s\n' "web_stomp.tcp.port = $$((61623 + $$n - 1))" \
+			  > "$$confd/50-web_stomp.conf"; \
+		fi; \
+		if plugin_enabled "$$enabled" rabbitmq_stream; then \
+			printf '%s\n' "stream.listeners.tcp.default = $$((5552 + $$n - 1))" \
+			  > "$$confd/60-stream.conf"; \
+		fi; \
+		if plugin_enabled "$$enabled" rabbitmq_prometheus; then \
+			printf '%s\n' "prometheus.tcp.port = $$((15692 + $$n - 1))" \
+			  > "$$confd/70-prometheus.conf"; \
+		fi; \
+		server_start_args=""; \
+		if plugin_enabled "$$enabled" rabbitmq_web_mqtt; then \
+			server_start_args="-rabbitmq_web_mqtt_examples listener [{port,$$((1903 + $$n - 1))}] $$server_start_args"; \
+		fi; \
+		if plugin_enabled "$$enabled" rabbitmq_web_stomp; then \
+			server_start_args="-rabbitmq_web_stomp_examples listener [{port,$$((61633 + $$n - 1))}] $$server_start_args"; \
+		fi; \
 		$(MAKE) start-background-broker \
 		  NOBUILD=1 \
 		  RABBITMQ_NODENAME="$$nodename" \
-		  RABBITMQ_NODE_PORT="$$((5672 + $$n - 1))" \
-		  RABBITMQ_CONFIG_FILE="$$nodedir/rabbitmq" \
-		  RABBITMQ_SERVER_START_ARGS=" \
-		  -rabbitmq_web_mqtt_examples listener [{port,$$((1903 + $$n - 1))}] \
-		  -rabbitmq_web_stomp_examples listener [{port,$$((61633 + $$n - 1))}] \
-		  "; \
-		  $(RABBITMQCTL) -n "$$nodename" await_online_nodes $(NODES) || exit 1; \
+		  RABBITMQ_NODE_PORT="$$port" \
+		  RABBITMQ_CONFIG_FILES="$$confd" \
+		  RABBITMQ_SERVER_START_ARGS="$$server_start_args"; \
+		$(RABBITMQCTL) -n "$$nodename" await_online_nodes $(NODES) || exit 1; \
 	done; \
 	wait
 
