@@ -2899,6 +2899,19 @@ end}.
 {mapping, "stream.read_ahead", "rabbit.stream_read_ahead",
     [{datatype, [{enum, [true, false]}, integer, string]}]}.
 
+<<<<<<< HEAD
+=======
+{mapping, "stream.read_ahead_limit", "rabbit.stream_read_ahead_limit", [
+    {datatype, [integer, string]},
+    {validators, ["is_supported_information_unit"]}
+]}.
+
+{mapping, "stream.initial_cluster_size", "rabbit.stream_cluster_size", [
+  {datatype, integer},
+  {validators, ["non_zero_positive_integer"]}
+]}.
+
+>>>>>>> 69235a63f5 (Add config for stream initial cluster size, default to 3)
 {mapping, "cluster_tags.$tag", "rabbit.cluster_tags", [
     {datatype, [binary]}
 ]}.
