@@ -9,6 +9,7 @@
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 -compile(export_all).
 
@@ -131,6 +132,13 @@ register_interceptor_failing_with_amqp_error1(Config, Interceptor) ->
     end,
 
     Ch2 = rabbit_ct_client_helpers:open_channel(Config, 0),
+    %% After the error, the old channel process will terminate
+    %% asynchronously and may still be on the channel list.
+    %% Wait until there is exactly one live channel.
+    ?awaitMatch(
+      [P] when P =/= ChannelProc,
+      rabbit_channel:list() -- PredefinedChannels,
+      10000),
     [ChannelProc1] = rabbit_channel:list() -- PredefinedChannels,
 
     ok = rabbit_registry:unregister(channel_interceptor,
@@ -180,6 +188,13 @@ register_interceptor_crashing_with_amqp_error_exception1(Config, Interceptor) ->
     end,
 
     Ch2 = rabbit_ct_client_helpers:open_channel(Config, 0),
+    %% After the error, the old channel process will terminate
+    %% asynchronously and may still be on the channel list.
+    %% Wait until there is exactly one live channel.
+    ?awaitMatch(
+      [P] when P =/= ChannelProc,
+      rabbit_channel:list() -- PredefinedChannels,
+      10000),
     [ChannelProc1] = rabbit_channel:list() -- PredefinedChannels,
 
     ok = rabbit_registry:unregister(channel_interceptor,
