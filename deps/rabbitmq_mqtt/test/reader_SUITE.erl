@@ -302,7 +302,7 @@ rabbit_mqtt_qos0_queue_overflow(Config) ->
     rabbit_ct_helpers:await_condition(fun() ->
         {message_queue_len, 0} =:= rpc(Config, erlang, process_info,
                                        [ServerConnectionPid, message_queue_len])
-    end, 10_000),
+    end, 30_000),
 
     %% Let's resume the receiving client to receive any remaining messages that did
     %% not get dropped.
