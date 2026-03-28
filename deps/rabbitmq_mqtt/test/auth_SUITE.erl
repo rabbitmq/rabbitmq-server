@@ -168,7 +168,9 @@ init_per_group(Group, Config) ->
     Suffix = rabbit_ct_helpers:testcase_absname(Config, "", "-"),
     Config1 = rabbit_ct_helpers:set_config(Config, [
         {rmq_nodename_suffix, Suffix},
-        {rmq_certspwd, "bunnychow"}
+        {rmq_certspwd, "bunnychow"},
+        %% Client disconnection after failed authentication might produce these.
+        {ignored_crashes, ["** einval"]}
     ]),
     MqttConfig = mqtt_config(Group),
     AuthConfig = auth_config(Group),
