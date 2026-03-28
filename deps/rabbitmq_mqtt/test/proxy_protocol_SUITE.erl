@@ -9,6 +9,7 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 -define(TIMEOUT, 5000).
 
@@ -79,8 +80,9 @@ proxy_protocol_v1(Config) ->
     ok = inet:send(Socket, "PROXY TCP4 192.168.1.1 192.168.1.2 80 81\r\n"),
     ok = inet:send(Socket, connect_packet(Config)),
     {ok, _Packet} = gen_tcp:recv(Socket, 0, ?TIMEOUT),
-    timer:sleep(10),
-    ConnectionName = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, connection_name, []),
+    ConnectionName = ?awaitMatch(N when is_binary(N),
+                                 rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, connection_name, []),
+                                 5_000),
     match = re:run(ConnectionName, <<"^192.168.1.1:80 -> 192.168.1.2:81$">>, [{capture, none}]),
     gen_tcp:close(Socket),
     ok.
@@ -94,8 +96,9 @@ proxy_protocol_v1_tls(Config) ->
     {ok, SslSocket} = ssl:connect(Socket, [{verify, verify_none}], ?TIMEOUT),
     ok = ssl:send(SslSocket, connect_packet(Config)),
     {ok, _Packet} = ssl:recv(SslSocket, 0, ?TIMEOUT),
-    timer:sleep(10),
-    ConnectionName = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, connection_name, []),
+    ConnectionName = ?awaitMatch(N when is_binary(N),
+                                 rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, connection_name, []),
+                                 5_000),
     match = re:run(ConnectionName, <<"^192.168.1.1:80 -> 192.168.1.2:81$">>, [{capture, none}]),
     gen_tcp:close(Socket),
     ok.
@@ -111,16 +114,21 @@ proxy_protocol_v2_local(Config) ->
     ok = inet:send(Socket, ranch_proxy_header:header(ProxyInfo)),
     ok = inet:send(Socket, connect_packet(Config)),
     {ok, _Packet} = gen_tcp:recv(Socket, 0, ?TIMEOUT),
-    timer:sleep(10),
-    ConnectionName = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, connection_name, []),
+    ConnectionName = ?awaitMatch(N when is_binary(N),
+                                 rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, connection_name, []),
+                                 5_000),
     match = re:run(ConnectionName, <<"^127.0.0.1:\\d+ -> 127.0.0.1:\\d+$">>, [{capture, none}]),
     gen_tcp:close(Socket),
     ok.
 
 connection_name() ->
-    [{_Key, Values}] = ets:tab2list(connection_created),
-    {_, Name} = lists:keyfind(name, 1, Values),
-    Name.
+    case ets:tab2list(connection_created) of
+        [{_Key, Values}] ->
+            {_, Name} = lists:keyfind(name, 1, Values),
+            Name;
+        _ ->
+            undefined
+    end.
 
 merge_app_env(MqttConfig, Config) ->
     rabbit_ct_helpers:merge_app_env(Config, MqttConfig).

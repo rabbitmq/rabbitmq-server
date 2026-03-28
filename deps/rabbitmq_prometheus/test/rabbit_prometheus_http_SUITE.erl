@@ -182,7 +182,9 @@ init_per_group(detailed_metrics, Config0) ->
     #'basic.consume_ok'{consumer_tag = VHost2CTag} =
         amqp_channel:subscribe(VHost2Ch, #'basic.consume'{queue = <<"vhost-2-queue-with-consumer">>}, VHost2Consumer),
 
-    timer:sleep(1000),
+    rabbit_ct_helpers:await_condition(fun() ->
+        length(rabbit_ct_broker_helpers:rpc(Config1, 0, ets, tab2list, [consumer_stats])) >= 3
+    end, 30_000),
 
     Config1 ++ [ {default_consumer_pid, DefaultConsumer}
                , {default_consumer_ctag, DefaultCTag}
@@ -215,15 +217,20 @@ init_per_group(aggregated_metrics, Config0) ->
     amqp_channel:cast(Ch,
                       #'basic.publish'{routing_key = Q},
                       #amqp_msg{payload = <<"msg">>}),
-    timer:sleep(150),
-    {#'basic.get_ok'{}, #amqp_msg{}} = amqp_channel:call(Ch, #'basic.get'{queue = Q}),
+    ?awaitMatch({#'basic.get_ok'{}, #amqp_msg{}},
+                amqp_channel:call(Ch, #'basic.get'{queue = Q}),
+                10_000),
     %% We want to check consumer metrics, so we need at least 1 consumer bound
     %% but we don't care what it does if anything as long as the runner process does
     %% not have to handle the consumer's messages.
     ConsumerPid = sleeping_consumer(),
     #'basic.consume_ok'{consumer_tag = CTag} =
       amqp_channel:subscribe(Ch, #'basic.consume'{queue = Q}, ConsumerPid),
-    timer:sleep(10000),
+    rabbit_ct_helpers:eventually({?LINE, fun() ->
+        {_Headers, Body} = http_get(Config2, [], 200),
+        ?assertEqual(match, re:run(Body, "^rabbitmq_queue_consumers ",
+                                   [{capture, none}, multiline]))
+    end}, 200, 100),
 
     Config2 ++ [{channel_pid, Ch}, {queue_name, Q}, {consumer_tag, CTag}, {consumer_pid, ConsumerPid}];
 init_per_group(commercial, Config0) ->

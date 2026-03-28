@@ -109,8 +109,9 @@ link_starts_after_policy_enables_federation(Config) ->
     setup_upstream(Config),
     set_non_federation_policy(Config),
 
-    timer:sleep(3000),
-    assert_no_running_link_in_vhost(Config, ?config(down_vhost, Config)),
+    rabbit_ct_helpers:consistently({?LINE, fun() ->
+        assert_no_running_link_in_vhost(Config, ?config(down_vhost, Config))
+    end}, 300, 10),
 
     %% Update the policy to add federation keys
     setup_federation_policy(Config),

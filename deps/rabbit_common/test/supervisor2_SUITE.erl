@@ -20,9 +20,6 @@ intrinsic(_Config) ->
     Intensity = 5,
     Args = {one_for_one, intrinsic, Intensity},
     {passed, SupPid} = with_sup(Args, fun test_supervisor_intrinsic/1),
-    receive
-        {'EXIT', SupPid, shutdown} -> ok
-    end,
     false = is_process_alive(SupPid).
 
 delayed_restart(_Config) ->
@@ -71,26 +68,30 @@ test_supervisor_intrinsic(SupPid) ->
     ok = ping_child(SupPid),
 
     ok = exit_child(SupPid, abnormal),
-    ok = timer:sleep(100),
-    ok = ping_child(SupPid),
+    ok = await_child_up(SupPid),
 
     ok = exit_child(SupPid, {shutdown, restart}),
-    ok = timer:sleep(100),
-    ok = ping_child(SupPid),
+    ok = await_child_up(SupPid),
 
     ok = exit_child(SupPid, shutdown),
-    ok = timer:sleep(100),
+    %% Wait for the supervisor to exit before returning. If we return first,
+    %% with_sup/2 calls unlink/1 before the EXIT signal arrives, causing the
+    %% receive in intrinsic/1 to block indefinitely.
+    receive
+        {'EXIT', SupPid, shutdown} -> ok
+    after 5000 ->
+        ct:fail("supervisor did not shut down within 5 seconds")
+    end,
     passed.
 
 test_supervisor_delayed_restart(SupPid) ->
     ok = ping_child(SupPid),
 
     ok = exit_child(SupPid, abnormal),
-    ok = timer:sleep(100),
-    ok = ping_child(SupPid),
+    ok = await_child_up(SupPid),
 
     ok = exit_child(SupPid, abnormal),
-    ok = timer:sleep(100),
+    %% The child is in a delayed restart state; it must not respond immediately.
     timeout = ping_child(SupPid),
 
     ok = timer:sleep(1010),
@@ -102,8 +103,7 @@ test_supervisor_ignore_error_reports(SupPid, IsLogged = false) ->
     ok = ping_child(SupPid),
 
     ok = exit_child(SupPid, abnormal),
-    ok = timer:sleep(100),
-    ok = ping_child(SupPid),
+    ok = await_child_up(SupPid),
 
     ok = verify_error_events(SupPid, IsLogged),
 
@@ -115,8 +115,7 @@ test_supervisor_ignore_error_reports(SupPid, IsLogged = true) ->
     ok = ping_child(SupPid),
 
     ok = exit_child(SupPid, abnormal),
-    ok = timer:sleep(100),
-    ok = ping_child(SupPid),
+    ok = await_child_up(SupPid),
 
     ok = verify_error_events(SupPid, IsLogged),
 
@@ -130,8 +129,7 @@ test_supervisor_ignore_error_reports(SupPid, _IsLogged) ->
     ok = ping_child(SupPid),
 
     ok = exit_child(SupPid, abnormal),
-    ok = timer:sleep(100),
-    ok = ping_child(SupPid),
+    ok = await_child_up(SupPid),
 
     {ok, []} = test_event_handler:get_events(),
 
@@ -189,6 +187,12 @@ exit_child(SupPid, ExitType) ->
     end,
     with_child_pid(SupPid, F),
     ok.
+
+await_child_up(SupPid) ->
+    case ping_child(SupPid) of
+        ok      -> ok;
+        timeout -> await_child_up(SupPid)
+    end.
 
 with_child_pid(SupPid, Fun) ->
     case supervisor2:which_children(SupPid) of
