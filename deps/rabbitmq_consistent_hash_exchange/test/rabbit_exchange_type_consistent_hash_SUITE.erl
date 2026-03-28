@@ -436,7 +436,6 @@ test0(Config, MakeMethod, MakeMsg, DeclareArgs, [Q1, Q2, Q3, Q4] = Queues, Itera
                        MakeMethod(CHX),
                        MakeMsg()) || _ <- lists:duplicate(IterationCount, const)],
     amqp_channel:wait_for_confirms(Chan, 300),
-    timer:sleep(1000),
 
     Counts =
         [begin
@@ -633,7 +632,6 @@ test_hash_ring_updates_when_exclusive_queues_are_deleted_due_to_connection_closu
     ?assertEqual(18, count_buckets_of_exchange(Config, X)),
     assert_ring_consistency(Config, X),
     ok = amqp_connection:close(Conn),
-    timer:sleep(500),
 
     ct:pal("hash ring state after connection closure: ~tp", [hash_ring_state(Config, X)]),
 
@@ -690,7 +688,6 @@ test_hash_ring_updates_when_exclusive_queues_are_deleted_due_to_connection_closu
     ?assertEqual(NumQueues * Key, count_buckets_of_exchange(Config, X)),
     assert_ring_consistency(Config, X),
     ok = amqp_connection:close(Conn),
-    timer:sleep(1000),
 
     ct:pal("hash ring state after connection closure (~tp): ~tp", [XAsList, hash_ring_state(Config, X)]),
 

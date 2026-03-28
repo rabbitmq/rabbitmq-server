@@ -949,9 +949,6 @@ rpc(Config) ->
     Server = amqp_rpc_server:start(Connection, Q, RPCHandler),
     Client = amqp_rpc_client:start(Connection, Q),
     Input = 1,
-    %% give both server and client a moment to initialise,
-    %% set up their topology and so on
-    timer:sleep(2000),
     Reply = amqp_rpc_client:call(Client, term_to_binary(Input)),
     Expected = Fun(Input),
     DecodedReply = binary_to_term(Reply),
@@ -1237,7 +1234,11 @@ connection_blocked_network(Config) ->
     X = <<"amq.direct">>,
     K = Payload = <<"x">>,
     clear_resource_alarm(memory, Config),
-    timer:sleep(1000),
+    %% Wait for the alarm to clear before testing connection blocking.
+    rabbit_ct_helpers:await_condition(fun() ->
+        Alarms = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_alarm, get_alarms, []),
+        not lists:any(fun({{resource_limit, memory, _}, _}) -> true; (_) -> false end, Alarms)
+    end, 5000),
     {ok, Channel} = amqp_connection:open_channel(Connection),
     Parent = self(),
     Child = spawn_link(
@@ -1257,7 +1258,6 @@ connection_blocked_network(Config) ->
                                routing_key = K},
     amqp_channel:call(Channel, Publish,
                       #amqp_msg{payload = Payload}),
-    timer:sleep(1000),
     receive
         ok ->
             clear_resource_alarm(memory, Config),

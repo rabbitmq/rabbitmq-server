@@ -315,11 +315,11 @@ connections_test(Config) ->
              rabbit_mgmt_format:print(
                "/connections/127.0.0.1%3A~w%20-%3E%20127.0.0.1%3A~w",
                [LocalPort, amqp_port(Config)])),
-    timer:sleep(1500),
-    Connection = http_get(Config, Path, ?OK),
-    ?assertEqual(1, maps:size(Connection)),
-    ?assert(maps:is_key(name, Connection)),
-    ?assert(not maps:is_key(recv_oct_details, Connection)),
+    await_condition(fun() ->
+        C = http_get(Config, Path, ?OK),
+        maps:size(C) =:= 1 andalso maps:is_key(name, C) andalso
+        not maps:is_key(recv_oct_details, C)
+    end),
     http_delete(Config, Path, {group, '2xx'}),
     %% TODO rabbit_reader:shutdown/2 returns before the connection is
     %% closed. It may not be worth fixing.
@@ -692,13 +692,11 @@ permissions_connection_channel_consumer_test(Config) ->
     [amqp_channel:subscribe(
        Ch, #'basic.consume'{queue = <<"test">>}, self()) ||
         Ch <- [Ch1, Ch2, Ch3]],
-    timer:sleep(1500),
     AssertLength = fun (Path, User, Len) ->
+                       await_condition(fun() ->
                            Res = http_get(Config, Path, User, User, ?OK),
-                           rabbit_ct_helpers:await_condition(
-                               fun () ->
-                                   Len =:= length(Res)
-                               end)
+                           Len =:= length(Res)
+                       end)
                    end,
     AssertDisabled = fun(Path) ->
                          http_get(Config, Path, "user", "user", ?BAD_REQUEST),
@@ -764,7 +762,6 @@ consumers_test(Config, Args) ->
       Ch, #'basic.consume'{queue        = <<"test">>,
                            no_ack       = false,
                            consumer_tag = <<"my-ctag">> }, self()),
-    timer:sleep(1500),
 
     http_get(Config, "/consumers", ?BAD_REQUEST),
 
@@ -891,16 +888,18 @@ exclusive_queue_test(Config) ->
     {Conn, Ch} = open_connection_and_channel(Config),
     #'queue.declare_ok'{queue = QName} =
         amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
-    timer:sleep(2000),
     Path = "/queues/%2F/" ++ rabbit_http_util:quote_plus(QName),
-    Queue = http_get(Config, Path),
-    assert_item(#{name        => QName,
-                  vhost       => <<"/">>,
-                  durable     => false,
-                  auto_delete => false,
-                  exclusive   => true,
-                  arguments   => #{'x-queue-type' => <<"classic">>}
-                }, Queue),
+    await_condition(fun() ->
+        Queue = http_get(Config, Path),
+        assert_item(#{name        => QName,
+                      vhost       => <<"/">>,
+                      durable     => false,
+                      auto_delete => false,
+                      exclusive   => true,
+                      arguments   => #{'x-queue-type' => <<"classic">>}
+                    }, Queue),
+        true
+    end),
     amqp_channel:close(Ch),
     close_connection(Conn),
     passed.
@@ -951,10 +950,10 @@ exchanges_pagination_test(Config) ->
     http_put(Config, "/exchanges/%2F/test2_reg", QArgs, {group, '2xx'}),
     http_put(Config, "/exchanges/vh1/reg_test3", QArgs, {group, '2xx'}),
 
-    %% for stats to update
-    timer:sleep(1500),
-
-    Total     = length(rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_exchange, list_names, [])),
+    Total = length(rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_exchange, list_names, [])),
+    await_condition(fun() ->
+        Total =:= maps:get(total_count, http_get(Config, "/exchanges?page=1&page_size=2", ?OK))
+    end),
 
     PageOfTwo = http_get(Config, "/exchanges?page=1&page_size=2", ?OK),
     ?assertEqual(Total, maps:get(total_count, PageOfTwo)),
@@ -1032,8 +1031,10 @@ exchanges_pagination_permissions_test(Config) ->
     http_put(Config, "/exchanges/%2F/test0", QArgs, "admin", "admin", {group, '2xx'}),
     http_put(Config, "/exchanges/vh1/test1", QArgs, "non-admin", "non-admin", {group, '2xx'}),
 
-    %% for stats to update
-    timer:sleep(1500),
+    await_condition(fun() ->
+        8 =:= maps:get(total_count, http_get(Config, "/exchanges?page=1&name=test1",
+                                             "non-admin", "non-admin", ?OK))
+    end),
 
     FirstPage = http_get(Config, "/exchanges?page=1&name=test1", "non-admin", "non-admin", ?OK),
 
@@ -1069,10 +1070,10 @@ queue_pagination_test(Config) ->
     http_put(Config, "/queues/%2F/test2_reg", QArgs, {group, '2xx'}),
     http_put(Config, "/queues/vh1/reg_test3", QArgs, {group, '2xx'}),
 
-    %% for stats to update
-    timer:sleep(1500),
-
-    Total     = length(rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, list_names, [])),
+    Total = length(rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, list_names, [])),
+    await_condition(fun() ->
+        Total =:= maps:get(total_count, http_get(Config, "/queues?page=1&page_size=2", ?OK))
+    end),
 
     PageOfTwo = http_get(Config, "/queues?page=1&page_size=2", ?OK),
     ?assertEqual(Total, maps:get(total_count, PageOfTwo)),
@@ -1361,14 +1362,17 @@ disable_with_disable_stats_parameter_test(Config) ->
 
     %% Ensure we have some queue and exchange stats, needed later
     http_put(Config, "/queues/%2F/test0", #{durable => true}, {group, '2xx'}),
-    timer:sleep(1500),
     amqp_channel:call(Ch, #'basic.publish'{exchange = <<>>,
                                            routing_key = <<"test0">>},
                       #amqp_msg{payload = <<"message">>}),
 
     %% Channels.
 
-    timer:sleep(1500),
+    %% Wait until the management agent has collected stats
+    await_condition(fun() ->
+        [ConStats] = http_get(Config, "/connections", ?OK),
+        maps:is_key(recv_oct_details, ConStats)
+    end),
     %% Check first that stats are available
     http_get(Config, "/channels", ?OK),
     %% Now we can disable them
@@ -1673,7 +1677,9 @@ columns_test(Config) ->
     http_put(Config, Path, [{durable, true}, {arguments, [{<<"x-message-ttl">>, TTL}]}],
              {group, '2xx'}),
     Item = #{arguments => #{'x-message-ttl' => TTL, 'x-queue-type' => <<"classic">>}, name => <<"columns.test">>},
-    timer:sleep(2000),
+    await_condition(fun() ->
+        1 =:= length(http_get(Config, "/queues?columns=arguments.x-message-ttl,name", ?OK))
+    end),
     [Item] = http_get(Config, "/queues?columns=arguments.x-message-ttl,name", ?OK),
     Item = http_get(Config, "/queues/%2F/columns.test?columns=arguments.x-message-ttl,name", ?OK),
     ?assert(not maps:is_key(message_stats, Item)),
@@ -1704,8 +1710,6 @@ if_empty_unused_test(Config) ->
 
 invalid_config_test(Config) ->
     {Conn, _Ch} = open_connection_and_channel(Config),
-
-    timer:sleep(1500),
 
     %% Check first that stats aren't available (configured on test setup)
     http_get(Config, "/channels", ?BAD_REQUEST),

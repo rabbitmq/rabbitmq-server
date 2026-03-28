@@ -417,10 +417,9 @@ zero_session_expiry_disconnect_autodeletes_qos0_queue(Config) ->
 
     ok = emqtt:disconnect(C),
     %% After terminating a clean session, we expect any session state to be cleaned up on the server.
-    %% Give the node some time to clean up the MQTT QoS 0 queue.
-    timer:sleep(200),
-    L = rpc(Config, rabbit_amqqueue, list, []),
-    ?assertEqual(0, length(L)).
+    rabbit_ct_helpers:eventually(
+        {?LINE, fun() -> ?assertEqual(0, length(rpc(Config, rabbit_amqqueue, list, []))) end},
+        100, 50).
 
 session_expiry_disconnect_decrease(QueueType, Config) ->
     ClientId = ?FUNCTION_NAME,
@@ -435,9 +434,9 @@ session_expiry_disconnect_decrease(QueueType, Config) ->
 
     %% DISCONNECT decreases Session Expiry Interval from 100 seconds to 1 second.
     ok = emqtt:disconnect(C1, ?RC_NORMAL_DISCONNECTION, #{'Session-Expiry-Interval' => 1}),
-    %% Wait a bit since DISCONNECT is async.
-    timer:sleep(50),
-    assert_queue_ttl(1, 1, Config),
+    rabbit_ct_helpers:eventually(
+        {?LINE, fun() -> assert_queue_ttl(1, 1, Config) end},
+        100, 50),
 
     timer:sleep(1500),
     C2 = connect(ClientId, Config, [{clean_start, false}]),
@@ -494,8 +493,9 @@ session_expiry_disconnect_to_infinity(Config) ->
 
     %% Disconnect with infinity should remove queue TTL from both queues.
     ok = emqtt:disconnect(C1, ?RC_NORMAL_DISCONNECTION, #{'Session-Expiry-Interval' => 16#FFFFFFFF}),
-    timer:sleep(100),
-    assert_no_queue_ttl(2, Config),
+    rabbit_ct_helpers:eventually(
+        {?LINE, fun() -> assert_no_queue_ttl(2, Config) end},
+        100, 50),
 
     C2 = connect(ClientId, Config, [{clean_start, true}]),
     ok = emqtt:disconnect(C2).
