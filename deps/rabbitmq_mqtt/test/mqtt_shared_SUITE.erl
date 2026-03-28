@@ -1487,8 +1487,7 @@ duplicate_client_id(Config) ->
     assert_v5_disconnect_reason_code(Config, ?RC_SESSION_TAKEN_OVER),
     await_exit(C1a),
     await_exit(C2a),
-    timer:sleep(200),
-    ?assertEqual(2, length(all_connection_pids(Config))),
+    ?awaitMatch(2, length(all_connection_pids(Config)), 5_000),
     ok = emqtt:disconnect(C1b),
     ok = emqtt:disconnect(C2b),
     eventually(?_assertEqual(0, length(all_connection_pids(Config)))).
@@ -1617,9 +1616,7 @@ clean_session_disconnect_client(Config) ->
 
     ok = emqtt:disconnect(C),
     %% After terminating a clean session, we expect any session state to be cleaned up on the server.
-    timer:sleep(200), %% Give some time to clean up exclusive classic queue.
-    L = rpc(Config, rabbit_amqqueue, list, []),
-    ?assertEqual(0, length(L)).
+    ?awaitMatch([], rpc(Config, rabbit_amqqueue, list, []), 5_000).
 
 clean_session_node_restart(Config) ->
     clean_session_node_down(stop_node, Config).
@@ -1673,12 +1670,11 @@ trace(Config) ->
     {ok, _, [0]} = emqtt:subscribe(Sub, Topic, qos0),
     {ok, _} = emqtt:publish(Pub, Topic, Payload, qos1),
     ok = expect_publishes(Sub, Topic, [Payload]),
-    timer:sleep(10),
 
-    {#'basic.get_ok'{routing_key = <<"publish.amq.topic">>},
-     #amqp_msg{props = #'P_basic'{headers = PublishHeaders},
-               payload = Payload}} =
-    amqp_channel:call(Ch, #'basic.get'{queue = TraceQ}),
+    {_, #amqp_msg{props = #'P_basic'{headers = PublishHeaders}, payload = Payload}} =
+        ?awaitMatch({#'basic.get_ok'{routing_key = <<"publish.amq.topic">>}, _},
+                    amqp_channel:call(Ch, #'basic.get'{queue = TraceQ}),
+                    5_000),
     ?assertMatch(#{<<"exchange_name">> := <<"amq.topic">>,
                    <<"routing_keys">> := [Topic],
                    <<"connection">> := <<"127.0.0.1:", _/binary>>,
@@ -1733,12 +1729,11 @@ trace_large_message(Config) ->
                                        routing_key = <<".my.topic">>},
                       #amqp_msg{payload = Payload}),
     ok = expect_publishes(C, <<"/my/topic">>, [Payload]),
-    timer:sleep(10),
-    ?assertMatch(
+    ?awaitMatch(
        {#'basic.get_ok'{routing_key = <<"deliver.mqtt-subscription-my-clientqos0">>},
         #amqp_msg{payload = Payload}},
-       amqp_channel:call(Ch, #'basic.get'{queue = TraceQ})
-      ),
+       amqp_channel:call(Ch, #'basic.get'{queue = TraceQ}),
+       5_000),
 
     {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, ["trace_off"]),
     delete_queue(Ch, TraceQ),
@@ -1991,7 +1986,6 @@ bind_exchange_to_exchange_single_message(Config) ->
     %% we expect only one copy of the message to end up in the destination queue.
     eventually(?_assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"msg">>}},
                              amqp_channel:call(Ch, #'basic.get'{queue = Q}))),
-    timer:sleep(10),
     ?assertEqual(#'queue.delete_ok'{message_count = 0},
                  amqp_channel:call(Ch, #'queue.delete'{queue = Q})),
     ok = emqtt:disconnect(C),

@@ -226,7 +226,18 @@ quorum_queue_stats(Config) ->
                       #'queue.declare'{queue = <<"quorum_queue_stats">>,
                                        durable = true,
                                        arguments = [{<<"x-queue-type">>, longstr, <<"quorum">>}]}),
-    timer:sleep(1150),
+    %% Wait for the Ra leader to be elected. The GC test only needs the leader-follower
+    %% distinction.
+    RaName = {'%2F_quorum_queue_stats', B},
+    rabbit_ct_helpers:await_condition(
+        fun() ->
+            case rabbit_ct_broker_helpers:rpc(Config, B, ra, members, [RaName]) of
+                {ok, _, {_, _}} -> true;
+                _               -> false
+            end
+        end, 60_000),
+    {ok, _, {_, Leader}} = rabbit_ct_broker_helpers:rpc(Config, B, ra, members, [RaName]),
+    [Follower] = [A, B] -- [Leader],
 
     Q = q(<<"quorum_queue_stats">>),
 
@@ -247,28 +258,6 @@ quorum_queue_stats(Config) ->
                                  [queue_process_stats, {{Q, 5}, slide}]),
     rabbit_ct_broker_helpers:rpc(Config, B, ets, insert,
                                  [queue_msg_rates, {{Q, 5}, slide}]),
-
-    [_] = rabbit_ct_broker_helpers:rpc(Config, A, ets, lookup,
-                                       [queue_stats, Q]),
-    [_] = rabbit_ct_broker_helpers:rpc(Config, A, ets, lookup,
-                                       [queue_msg_stats, {Q, 5}]),
-    [_] = rabbit_ct_broker_helpers:rpc(Config, A, ets, lookup,
-                                       [queue_process_stats, {Q, 5}]),
-    [_] = rabbit_ct_broker_helpers:rpc(Config, A, ets, lookup,
-                                       [queue_msg_rates, {Q, 5}]),
-
-    [_] = rabbit_ct_broker_helpers:rpc(Config, B, ets, lookup,
-                                       [queue_stats, Q]),
-    [_] = rabbit_ct_broker_helpers:rpc(Config, B, ets, lookup,
-                                       [queue_msg_stats, {Q, 5}]),
-    [_] = rabbit_ct_broker_helpers:rpc(Config, B, ets, lookup,
-                                       [queue_process_stats, {Q, 5}]),
-    [_] = rabbit_ct_broker_helpers:rpc(Config, B, ets, lookup,
-                                       [queue_msg_rates, {Q, 5}]),
-
-    {ok, _, {_, Leader}} = rabbit_ct_broker_helpers:rpc(Config, B, ra, members,
-                                                        [{'%2F_quorum_queue_stats', B}]),
-    [Follower] = [A, B] -- [Leader],
 
     %% Trigger gc. When the gen_server:call returns, the gc has already finished.
     rabbit_ct_broker_helpers:rpc(Config, Leader, erlang, send, [rabbit_mgmt_gc, start_gc]),

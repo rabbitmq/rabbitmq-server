@@ -11,6 +11,7 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 all() ->
     [
@@ -109,10 +110,10 @@ index_queue_source_shovel_0() ->
            {<<"dest-uri">>, <<"amqp://">>}],
     try
         ok = rabbit_runtime_parameters:set(VHost, <<"shovel">>, ShovelName, Def, none),
-        %% Wait for projection to update
-        timer:sleep(100),
-        Result = rabbit_shovel_index:shovels_by_source_queue(VHost, QueueName),
-        ?assertEqual([{VHost, ShovelName}], Result)
+        ?awaitMatch([{VHost, ShovelName}],
+                    rabbit_shovel_index:shovels_by_source_queue(VHost, QueueName),
+                    30_000),
+        ok
     after
         rabbit_runtime_parameters:clear(VHost, <<"shovel">>, ShovelName, <<"test">>)
     end.
@@ -133,9 +134,10 @@ index_exchange_source_shovel_0() ->
     try
         {ok, _} = rabbit_exchange:declare(Exchange, topic, true, false, false, [], <<"test">>),
         ok = rabbit_runtime_parameters:set(VHost, <<"shovel">>, ShovelName, Def, none),
-        timer:sleep(100),
-        Result = rabbit_shovel_index:shovels_by_source_exchange(VHost, ExchangeName),
-        ?assertEqual([{VHost, ShovelName}], Result)
+        ?awaitMatch([{VHost, ShovelName}],
+                    rabbit_shovel_index:shovels_by_source_exchange(VHost, ExchangeName),
+                    30_000),
+        ok
     after
         rabbit_runtime_parameters:clear(VHost, <<"shovel">>, ShovelName, <<"test">>),
         rabbit_exchange:delete(Exchange, false, <<"test">>)
@@ -154,9 +156,10 @@ lookup_queue_source_shovel_0() ->
            {<<"dest-uri">>, <<"amqp://">>}],
     try
         ok = rabbit_runtime_parameters:set(VHost, <<"shovel">>, ShovelName, Def, none),
-        timer:sleep(100),
-        Result = rabbit_shovel_index:lookup({VHost, ShovelName}),
-        ?assertMatch(#{type := queue, queue := QueueName, protocol := amqp091, vhost := <<"/">>}, Result)
+        ?awaitMatch(#{type := queue, queue := QueueName, protocol := amqp091, vhost := <<"/">>},
+                    rabbit_shovel_index:lookup({VHost, ShovelName}),
+                    30_000),
+        ok
     after
         rabbit_runtime_parameters:clear(VHost, <<"shovel">>, ShovelName, <<"test">>)
     end.
@@ -177,9 +180,10 @@ lookup_exchange_source_shovel_0() ->
     try
         {ok, _} = rabbit_exchange:declare(Exchange, topic, true, false, false, [], <<"test">>),
         ok = rabbit_runtime_parameters:set(VHost, <<"shovel">>, ShovelName, Def, none),
-        timer:sleep(100),
-        Result = rabbit_shovel_index:lookup({VHost, ShovelName}),
-        ?assertMatch(#{type := exchange, exchange := ExchangeName, queue := undefined}, Result)
+        ?awaitMatch(#{type := exchange, exchange := ExchangeName, queue := undefined},
+                    rabbit_shovel_index:lookup({VHost, ShovelName}),
+                    30_000),
+        ok
     after
         rabbit_runtime_parameters:clear(VHost, <<"shovel">>, ShovelName, <<"test">>),
         rabbit_exchange:delete(Exchange, false, <<"test">>)
@@ -200,9 +204,10 @@ index_amqp10_queue_source_shovel1() ->
            {<<"dest-uri">>, <<"amqp://localhost">>}],
     try
         ok = rabbit_runtime_parameters:set(VHost, <<"shovel">>, ShovelName, Def, none),
-        timer:sleep(100),
-        Result = rabbit_shovel_index:shovels_by_source_queue(VHost, QueueName),
-        ?assertEqual([{VHost, ShovelName}], Result)
+        ?awaitMatch([{VHost, ShovelName}],
+                    rabbit_shovel_index:shovels_by_source_queue(VHost, QueueName),
+                    30_000),
+        ok
     after
         rabbit_runtime_parameters:clear(VHost, <<"shovel">>, ShovelName, <<"test">>)
     end.
@@ -222,9 +227,10 @@ lookup_amqp10_queue_source_shovel1() ->
            {<<"dest-uri">>, <<"amqp://localhost">>}],
     try
         ok = rabbit_runtime_parameters:set(VHost, <<"shovel">>, ShovelName, Def, none),
-        timer:sleep(100),
-        Result = rabbit_shovel_index:lookup({VHost, ShovelName}),
-        ?assertMatch(#{type := queue, queue := QueueName, protocol := amqp10, vhost := <<"/">>}, Result)
+        ?awaitMatch(#{type := queue, queue := QueueName, protocol := amqp10, vhost := <<"/">>},
+                    rabbit_shovel_index:lookup({VHost, ShovelName}),
+                    30_000),
+        ok
     after
         rabbit_runtime_parameters:clear(VHost, <<"shovel">>, ShovelName, <<"test">>)
     end.
@@ -248,9 +254,9 @@ multiple_shovels_same_queue_0() ->
     try
         ok = rabbit_runtime_parameters:set(VHost, <<"shovel">>, Shovel1, Def1, none),
         ok = rabbit_runtime_parameters:set(VHost, <<"shovel">>, Shovel2, Def2, none),
-        timer:sleep(100),
-        Result = rabbit_shovel_index:shovels_by_source_queue(VHost, QueueName),
-        ?assertEqual(2, length(Result)),
+        Result = ?awaitMatch([_, _],
+                             rabbit_shovel_index:shovels_by_source_queue(VHost, QueueName),
+                             30_000),
         ?assert(lists:member({VHost, Shovel1}, Result)),
         ?assert(lists:member({VHost, Shovel2}, Result))
     after

@@ -10,6 +10,7 @@
 
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 -include("rabbit_mqtt.hrl").
 -import(util, [connect/3, connect/4]).
 
@@ -90,20 +91,15 @@ run(Config) ->
 
     %% Open a connection
     C1 = connect(<<"simpleClient">>, Config, [{ack_timeout, 1}]),
-
-    timer:sleep(100),
-
-    [[{client_id, <<"simpleClient">>}]] =
-        'Elixir.Enum':to_list(?COMMAND:run([<<"client_id">>], Opts)),
+    ?awaitMatch([[{client_id, <<"simpleClient">>}]],
+                'Elixir.Enum':to_list(?COMMAND:run([<<"client_id">>], Opts)),
+                5_000),
 
     C2 = connect(<<"simpleClient1">>, Config, [{ack_timeout, 1}]),
-    timer:sleep(200),
-
-    [[{client_id, <<"simpleClient">>}, {user, <<"guest">>}],
-     [{client_id, <<"simpleClient1">>}, {user, <<"guest">>}]] =
-        lists:sort(
-            'Elixir.Enum':to_list(?COMMAND:run([<<"client_id">>, <<"user">>],
-                                               Opts))),
+    ?awaitMatch([[{client_id, <<"simpleClient">>}, {user, <<"guest">>}],
+                 [{client_id, <<"simpleClient1">>}, {user, <<"guest">>}]],
+                lists:sort('Elixir.Enum':to_list(?COMMAND:run([<<"client_id">>, <<"user">>], Opts))),
+                5_000),
 
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
     start_amqp_connection(network, Node, Port),
@@ -114,13 +110,11 @@ run(Config) ->
         lists:sort('Elixir.Enum':to_list(?COMMAND:run([<<"client_id">>], Opts))),
 
     start_amqp_connection(direct, Node, Port),
-    timer:sleep(200),
-
     %% Still two MQTT connections
-    ?assertEqual(
-       [[{client_id, <<"simpleClient">>}],
-        [{client_id, <<"simpleClient1">>}]],
-       lists:sort('Elixir.Enum':to_list(?COMMAND:run([<<"client_id">>], Opts)))),
+    ?awaitMatch([[{client_id, <<"simpleClient">>}],
+                 [{client_id, <<"simpleClient1">>}]],
+                lists:sort('Elixir.Enum':to_list(?COMMAND:run([<<"client_id">>], Opts))),
+                5_000),
 
     %% Verbose returns all keys
     AllKeys = lists:map(fun(I) -> atom_to_binary(I) end, ?INFO_ITEMS),
