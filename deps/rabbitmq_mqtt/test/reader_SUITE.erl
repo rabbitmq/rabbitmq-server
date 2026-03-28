@@ -278,6 +278,7 @@ rabbit_mqtt_qos0_queue_overflow(Config) ->
 
     Topic = atom_to_binary(?FUNCTION_NAME),
     Msg = binary:copy(<<"x">>, 4000),
+    %% Overflows the limit many times over
     NumMsgs = 10_000,
 
     %% Provoke TCP back-pressure from client to server by using very small buffers.
@@ -298,15 +299,16 @@ rabbit_mqtt_qos0_queue_overflow(Config) ->
                           ok = emqtt:publish(Pub, Topic, Msg, qos0)
                   end, lists:seq(1, NumMsgs)),
 
-    %% Wait for the server to process (send or drop) all messages.
+    %% Resume the consumer so that the TCP writes can complete.
+    %% Without this, the MQTT reader stays blocked on socket writes and
+    %% cannot drain its mailbox, so the `message_queue_len == 0` condition never materializes.
+    true = erlang:resume_process(Sub),
+
+    %% Now that the subscriber is reading again, the server can finish processing.
     rabbit_ct_helpers:await_condition(fun() ->
         {message_queue_len, 0} =:= rpc(Config, erlang, process_info,
                                        [ServerConnectionPid, message_queue_len])
     end, 30_000),
-
-    %% Let's resume the receiving client to receive any remaining messages that did
-    %% not get dropped.
-    true = erlang:resume_process(Sub),
     NumReceived = num_received(Topic, Msg, 0),
 
     {status, _, _, [_, _, _, _, Misc]} = sys:get_status(ServerConnectionPid),
