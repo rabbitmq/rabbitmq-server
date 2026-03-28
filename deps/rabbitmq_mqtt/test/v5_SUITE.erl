@@ -163,7 +163,9 @@ init_per_group(Group, Config0) ->
                 [{mqtt_version, v5},
                  {rmq_nodes_count, Nodes},
                  {rmq_nodename_suffix, Suffix},
-                 {start_rmq_with_plugins_disabled, true}
+                 {start_rmq_with_plugins_disabled, true},
+                 %% Client disconnection might produce these.
+                 {ignored_crashes, ["** einval"]}
                 ]),
     Config = rabbit_ct_helpers:merge_app_env(
                Config1,
