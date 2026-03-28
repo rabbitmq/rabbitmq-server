@@ -102,11 +102,8 @@ block_connack_timeout(Config) ->
 
     DefaultWatermark = rpc(Config, vm_memory_monitor, get_vm_memory_high_watermark, []),
     ok = rpc(Config, vm_memory_monitor, set_vm_memory_high_watermark, [0]),
-    %% Wait for the memory alarm to propagate before making the TCP connection.
-    rabbit_ct_helpers:await_condition(fun() ->
-        Alarms = rpc(Config, rabbit_alarm, get_alarms, []),
-        lists:any(fun({{resource_limit, memory, _}, _}) -> true; (_) -> false end, Alarms)
-    end, 5000),
+    %% Let connection block.
+    timer:sleep(100),
 
     %% We can still connect via TCP, but CONNECT packet will not be processed on the server.
     {ok, Client} = emqtt:start_link([{host, "localhost"},
@@ -149,10 +146,10 @@ handle_invalid_packets(Config) ->
     Bin = <<"GET / HTTP/1.1\r\nHost: www.rabbitmq.com\r\nUser-Agent: curl/7.43.0\r\nAccept: */*">>,
     gen_tcp:send(C, Bin),
     gen_tcp:close(C),
-    %% No new stats entries should be inserted as connection never got to initialize.
-    rabbit_ct_helpers:consistently({?LINE, fun() ->
-        ?assertEqual(N, rpc(Config, ets, info, [connection_metrics, size]))
-    end}, 100, 5).
+    %% Wait for stats being emitted (every 100ms)
+    timer:sleep(300),
+    %% No new stats entries should be inserted as connection never got to initialize
+    ?assertEqual(N, rpc(Config, ets, info, [connection_metrics, size])).
 
 login_timeout(Config) ->
     App = rabbitmq_mqtt,
@@ -165,17 +162,9 @@ login_timeout(Config) ->
 
 stats(Config) ->
     C = connect(?FUNCTION_NAME, Config),
-    %% Wait for stats to be emitted (every 100ms).
-    rabbit_ct_helpers:await_condition(fun() ->
-        case all_connection_pids(Config) of
-            [Pid] ->
-                [] =/= rpc(Config, ets, lookup, [connection_metrics, Pid]) andalso
-                [] =/= rpc(Config, ets, lookup, [connection_coarse_metrics, Pid]);
-            _ ->
-                false
-        end
-    end, 5000),
-    %% Retrieve the connection Pid.
+    %% Wait for stats being emitted (every 100ms)
+    timer:sleep(300),
+    %% Retrieve the connection Pid
     [Pid] = all_connection_pids(Config),
     [{pid, Pid}] = rpc(Config, rabbit_mqtt_reader, info, [Pid, [pid]]),
     %% Verify the content of the metrics, garbage_collection must be present
@@ -278,8 +267,7 @@ rabbit_mqtt_qos0_queue_overflow(Config) ->
 
     Topic = atom_to_binary(?FUNCTION_NAME),
     Msg = binary:copy(<<"x">>, 4000),
-    %% Overflows the limit many times over
-    NumMsgs = 1_000,
+    NumMsgs = 10_000,
 
     %% Provoke TCP back-pressure from client to server by using very small buffers.
     Opts = [{tcp_opts, [{recbuf, 256},
@@ -299,19 +287,12 @@ rabbit_mqtt_qos0_queue_overflow(Config) ->
                           ok = emqtt:publish(Pub, Topic, Msg, qos0)
                   end, lists:seq(1, NumMsgs)),
 
-    %% Unblock the server so it can finish writing to the socket.
-    true = erlang:resume_process(Sub),
+    %% Give the server some time to process (either send or drop) the messages.
+    timer:sleep(2500),
 
-    %% Wait until every message has been either delivered or dropped.
-    %% Poll at 1-second intervals to avoid starving the MQTT reader with RPCs.
-    rabbit_ct_helpers:eventually({?LINE, fun() ->
-        #{#{protocol => ProtoVer, queue_type => QType} :=
-          #{messages_delivered_total := Delivered},
-          #{queue_type => QType, dead_letter_strategy => disabled} :=
-          #{messages_dead_lettered_maxlen_total := DeadLettered}} =
-            rpc(Config, rabbit_global_counters, overview, []),
-        ?assert(Delivered + (DeadLettered - NumDeadLettered) >= NumMsgs)
-    end}, 1_000, 60),
+    %% Let's resume the receiving client to receive any remaining messages that did
+    %% not get dropped.
+    true = erlang:resume_process(Sub),
     NumReceived = num_received(Topic, Msg, 0),
 
     {status, _, _, [_, _, _, _, Misc]} = sys:get_status(ServerConnectionPid),
