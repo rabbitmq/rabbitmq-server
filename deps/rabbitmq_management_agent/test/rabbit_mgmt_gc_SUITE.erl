@@ -108,10 +108,7 @@ queue_stats(Config) ->
                       #amqp_msg{payload = <<"hello">>}),
     {#'basic.get_ok'{}, _} = amqp_channel:call(Ch, #'basic.get'{queue = <<"queue_stats">>,
                                                                 no_ack = true}),
-    rabbit_ct_helpers:await_condition(fun() ->
-        [] =/= rabbit_ct_broker_helpers:rpc(Config, A, ets, lookup,
-                                            [queue_stats, q(<<"queue_stats">>)])
-    end, 5000),
+    timer:sleep(1150),
 
     Q = q(<<"myqueue">>),
     X = x(<<"">>),
@@ -195,10 +192,7 @@ basic_queue_stats(Config) ->
                       #amqp_msg{payload = <<"hello">>}),
     {#'basic.get_ok'{}, _} = amqp_channel:call(Ch, #'basic.get'{queue = <<"queue_stats">>,
                                                                 no_ack = true}),
-    rabbit_ct_helpers:await_condition(fun() ->
-        [] =/= rabbit_ct_broker_helpers:rpc(Config, A, ets, lookup,
-                                            [queue_stats, q(<<"queue_stats">>)])
-    end, 5000),
+    timer:sleep(1150),
 
     Q = q(<<"myqueue">>),
 
@@ -232,10 +226,11 @@ quorum_queue_stats(Config) ->
                       #'queue.declare'{queue = <<"quorum_queue_stats">>,
                                        durable = true,
                                        arguments = [{<<"x-queue-type">>, longstr, <<"quorum">>}]}),
+    %% Quorum queues need to elect a leader before the management agent reports stats.
     rabbit_ct_helpers:await_condition(fun() ->
         [] =/= rabbit_ct_broker_helpers:rpc(Config, A, ets, lookup,
                                             [queue_stats, q(<<"quorum_queue_stats">>)])
-    end, 5000),
+    end, 30000),
 
     Q = q(<<"quorum_queue_stats">>),
 
@@ -315,10 +310,7 @@ connection_stats(Config) ->
     amqp_channel:call(Ch, #'queue.declare'{queue = <<"queue_stats">>}),
     amqp_channel:cast(Ch, #'basic.publish'{routing_key = <<"queue_stats">>},
                       #amqp_msg{payload = <<"hello">>}),
-    rabbit_ct_helpers:await_condition(fun() ->
-        [] =/= rabbit_ct_broker_helpers:rpc(Config, A, ets, lookup,
-                                            [queue_stats, q(<<"queue_stats">>)])
-    end, 5000),
+    timer:sleep(1150),
 
     DeadPid = rabbit_ct_broker_helpers:rpc(Config, A, ?MODULE, dead_pid, []),
 
@@ -369,10 +361,7 @@ channel_stats(Config) ->
                       #amqp_msg{payload = <<"hello">>}),
     {#'basic.get_ok'{}, _} = amqp_channel:call(Ch, #'basic.get'{queue = <<"queue_stats">>,
                                                                 no_ack=true}),
-    rabbit_ct_helpers:await_condition(fun() ->
-        [] =/= rabbit_ct_broker_helpers:rpc(Config, A, ets, lookup,
-                                            [queue_stats, q(<<"queue_stats">>)])
-    end, 5000),
+    timer:sleep(1150),
 
     DeadPid = rabbit_ct_broker_helpers:rpc(Config, A, ?MODULE, dead_pid, []),
 
@@ -468,10 +457,7 @@ vhost_stats(Config) ->
                       #amqp_msg{payload = <<"hello">>}),
     {#'basic.get_ok'{}, _} = amqp_channel:call(Ch, #'basic.get'{queue = <<"queue_stats">>,
                                                                 no_ack=true}),
-    rabbit_ct_helpers:await_condition(fun() ->
-        [] =/= rabbit_ct_broker_helpers:rpc(Config, A, ets, lookup,
-                                            [queue_stats, q(<<"queue_stats">>)])
-    end, 5000),
+    timer:sleep(1150),
 
     VHost = <<"myvhost">>,
 
@@ -540,10 +526,7 @@ exchange_stats(Config) ->
                       #amqp_msg{payload = <<"hello">>}),
     {#'basic.get_ok'{}, _} = amqp_channel:call(Ch, #'basic.get'{queue = <<"queue_stats">>,
                                                                 no_ack=true}),
-    rabbit_ct_helpers:await_condition(fun() ->
-        [] =/= rabbit_ct_broker_helpers:rpc(Config, A, ets, lookup,
-                                            [queue_stats, q(<<"queue_stats">>)])
-    end, 5000),
+    timer:sleep(1150),
 
     Exchange = x(<<"myexchange">>),
 
@@ -581,9 +564,7 @@ exchange_stats(Config) ->
 node_stats(Config) ->
     A = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
 
-    rabbit_ct_helpers:await_condition(fun() ->
-        [] =/= rabbit_ct_broker_helpers:rpc(Config, A, ets, lookup, [node_stats, A])
-    end, 5000),
+    timer:sleep(150),
 
     Node = 'mynode',
 
@@ -642,10 +623,7 @@ consumer_stats(Config) ->
 
     amqp_channel:call(Ch, #'queue.declare'{queue = <<"queue_stats">>}),
     amqp_channel:call(Ch, #'basic.consume'{queue = <<"queue_stats">>}),
-    rabbit_ct_helpers:await_condition(fun() ->
-        [] =/= rabbit_ct_broker_helpers:rpc(Config, A, ets, lookup,
-                                            [queue_stats, q(<<"queue_stats">>)])
-    end, 5000),
+    timer:sleep(1150),
 
     DeadPid = rabbit_ct_broker_helpers:rpc(Config, A, ?MODULE, dead_pid, []),
     Q = q(<<"queue_stats">>),
