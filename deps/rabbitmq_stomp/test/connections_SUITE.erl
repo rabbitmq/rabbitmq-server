@@ -11,6 +11,7 @@
 -import(rabbit_misc, [pget/2]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 -include("rabbit_stomp_frame.hrl").
 -define(DESTINATION, "/queue/bulk-test").
 
@@ -90,8 +91,7 @@ direct_client_connections_are_not_leaked(Config) ->
                            Client, "LOL", [{"", ""}])
                   end,
                   lists:seq(1, 100)),
-    timer:sleep(5000),
-    N = count_connections(Config),
+    ?awaitMatch(N, count_connections(Config), 30_000),
     ok.
 
 messages_not_dropped_on_disconnect(Config) ->
@@ -105,8 +105,7 @@ messages_not_dropped_on_disconnect(Config) ->
        [integer_to_list(Count)]) || Count <- lists:seq(1, 1000)],
     rabbit_stomp_client:disconnect(Client),
     QName = rabbit_misc:r(<<"/">>, queue, <<"bulk-test">>),
-    timer:sleep(3000),
-    N = count_connections(Config),
+    ?awaitMatch(N, count_connections(Config), 30_000),
     {ok, Q} = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, lookup, [QName]),
     Messages = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, info, [Q, [messages]]),
     1000 = pget(messages, Messages),
@@ -122,21 +121,21 @@ stats_are_not_leaked(Config) ->
     Bin = <<"GET / HTTP/1.1\r\nHost: www.rabbitmq.com\r\nUser-Agent: curl/7.43.0\r\nAccept: */*\n\n">>,
     gen_tcp:send(C, Bin),
     gen_tcp:close(C),
-    timer:sleep(1000), %% Wait for stats to be emitted, which it does every 100ms
-    N = rabbit_ct_broker_helpers:rpc(Config, 0, ets, info, [connection_metrics, size]),
+    ?awaitMatch(N, rabbit_ct_broker_helpers:rpc(Config, 0, ets, info, [connection_metrics, size]), 5_000),
     ok.
 
 stats(Config) ->
     StompPort = get_stomp_port(Config),
     {ok, Client} = rabbit_stomp_client:connect(StompPort),
-    timer:sleep(1000), %% Wait for stats to be emitted, which it does every 100ms
     %% Retrieve the connection Pid
-    [Reader] = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_stomp, list, []),
+    [Reader] = ?awaitMatch([_], rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_stomp, list, []), 5_000),
     [{_, Pid}] = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_stomp_reader,
                                               info, [Reader, [connection]]),
     %% Verify the content of the metrics, garbage_collection must be present
-    [{Pid, Props}] = rabbit_ct_broker_helpers:rpc(Config, 0, ets, lookup,
-                                                  [connection_metrics, Pid]),
+    [{Pid, Props}] = ?awaitMatch([{Pid, _}],
+                                 rabbit_ct_broker_helpers:rpc(Config, 0, ets, lookup,
+                                                              [connection_metrics, Pid]),
+                                 5_000),
     true = proplists:is_defined(garbage_collection, Props),
     0 = proplists:get_value(timeout, Props),
     %% If the coarse entry is present, stats were successfully emitted
@@ -149,14 +148,15 @@ heartbeat(Config) ->
     StompPort = get_stomp_port(Config),
     {ok, Client} = rabbit_stomp_client:connect("1.2", "guest", "guest", StompPort,
                                                [{"heart-beat", "5000,7000"}]),
-    timer:sleep(1000), %% Wait for stats to be emitted, which it does every 100ms
     %% Retrieve the connection Pid
-    [Reader] = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_stomp, list, []),
+    [Reader] = ?awaitMatch([_], rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_stomp, list, []), 5_000),
     [{_, Pid}] = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_stomp_reader,
                                               info, [Reader, [connection]]),
     %% Verify the content of the heartbeat timeout
-    [{Pid, Props}] = rabbit_ct_broker_helpers:rpc(Config, 0, ets, lookup,
-                                                  [connection_metrics, Pid]),
+    [{Pid, Props}] = ?awaitMatch([{Pid, _}],
+                                 rabbit_ct_broker_helpers:rpc(Config, 0, ets, lookup,
+                                                              [connection_metrics, Pid]),
+                                 5_000),
     5 = proplists:get_value(timeout, Props),
     rabbit_stomp_client:disconnect(Client),
     ok.

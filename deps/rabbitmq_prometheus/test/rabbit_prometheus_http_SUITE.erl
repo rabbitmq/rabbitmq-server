@@ -115,17 +115,17 @@ init_per_group(config_path, Config0) ->
 init_per_group(global_labels, Config0) ->
     GlobalLabelsConfig = {prometheus, [{global_labels, [{"foo", "bar"}]}]},
     Config1 = rabbit_ct_helpers:merge_app_env(Config0, GlobalLabelsConfig),
-    init_per_group(aggregated_metrics, Config1);
+    init_aggregated_metrics(global_labels, Config1);
 init_per_group(per_object_metrics, Config0) ->
     PathConfig = {rabbitmq_prometheus, [{return_per_object_metrics, true}]},
     Config1 = rabbit_ct_helpers:merge_app_env(Config0, PathConfig),
-    init_per_group(aggregated_metrics, Config1);
+    init_aggregated_metrics(per_object_metrics, Config1);
 init_per_group(per_object_endpoint_metrics, Config0) ->
     PathConfig = {rabbitmq_prometheus, [
         {return_per_object_metrics, false}
     ]},
     Config1 = rabbit_ct_helpers:merge_app_env(Config0, PathConfig),
-    init_per_group(aggregated_metrics, Config1);
+    init_aggregated_metrics(per_object_endpoint_metrics, Config1);
 init_per_group(detailed_metrics, Config0) ->
     StatsEnv = {rabbit, [{collect_statistics, coarse}, {collect_statistics_interval, 100}]},
 
@@ -191,7 +191,9 @@ init_per_group(detailed_metrics, Config0) ->
     #'basic.consume_ok'{consumer_tag = VHost2CTag} =
         amqp_channel:subscribe(VHost2Ch, #'basic.consume'{queue = <<"vhost-2-queue-with-consumer">>}, VHost2Consumer),
 
-    timer:sleep(1000),
+    rabbit_ct_helpers:await_condition(fun() ->
+        length(rabbit_ct_broker_helpers:rpc(Config1, 0, ets, tab2list, [consumer_stats])) >= 3
+    end, 30_000),
 
     Config1 ++ [ {default_consumer_pid, DefaultConsumer}
                , {default_consumer_ctag, DefaultCTag}
@@ -206,35 +208,7 @@ init_per_group(detailed_metrics, Config0) ->
                , {vhost2_conn, VHost2Conn}
                ];
 init_per_group(aggregated_metrics, Config0) ->
-    Config1 = rabbit_ct_helpers:merge_app_env(
-        Config0,
-        [{rabbit, [{collect_statistics, coarse}, {collect_statistics_interval, 100}]}]
-    ),
-    Config2 = init_per_group(aggregated_metrics, Config1, []),
-
-    A = rabbit_ct_broker_helpers:get_node_config(Config2, 0, nodename),
-    Ch = rabbit_ct_client_helpers:open_channel(Config2, A),
-
-    Q = <<"prometheus_test_queue">>,
-    amqp_channel:call(Ch,
-                      #'queue.declare'{queue = Q,
-                                       durable = true,
-                                       arguments = [{<<"x-queue-type">>, longstr, <<"quorum">>}]
-                                      }),
-    amqp_channel:cast(Ch,
-                      #'basic.publish'{routing_key = Q},
-                      #amqp_msg{payload = <<"msg">>}),
-    timer:sleep(150),
-    {#'basic.get_ok'{}, #amqp_msg{}} = amqp_channel:call(Ch, #'basic.get'{queue = Q}),
-    %% We want to check consumer metrics, so we need at least 1 consumer bound
-    %% but we don't care what it does if anything as long as the runner process does
-    %% not have to handle the consumer's messages.
-    ConsumerPid = sleeping_consumer(),
-    #'basic.consume_ok'{consumer_tag = CTag} =
-      amqp_channel:subscribe(Ch, #'basic.consume'{queue = Q}, ConsumerPid),
-    timer:sleep(10000),
-
-    Config2 ++ [{channel_pid, Ch}, {queue_name, Q}, {consumer_tag, CTag}, {consumer_pid, ConsumerPid}];
+    init_aggregated_metrics(aggregated_metrics, Config0);
 init_per_group(commercial, Config0) ->
     ProductConfig = {rabbit, [{product_name, "WolfMQ"}, {product_version, "2020"}]},
     Config1 = rabbit_ct_helpers:merge_app_env(Config0, ProductConfig),
@@ -280,6 +254,41 @@ init_per_group(authentication, Config) ->
 init_per_group(memory_breakdown_endpoint_metrics, Config) ->
     init_per_group(memory_breakdown_endpoint_metrics, Config, []).
 
+%% Common setup for groups that need aggregated metrics with a quorum queue.
+%% Each group gets its own node (via Group suffix) to avoid cascade failures.
+init_aggregated_metrics(Group, Config0) ->
+    Config1 = rabbit_ct_helpers:merge_app_env(
+        Config0,
+        [{rabbit, [{collect_statistics, coarse}, {collect_statistics_interval, 100}]}]
+    ),
+    Config2 = init_per_group(Group, Config1, []),
+
+    A = rabbit_ct_broker_helpers:get_node_config(Config2, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config2, A),
+
+    Q = <<"prometheus_test_queue">>,
+    amqp_channel:call(Ch,
+                      #'queue.declare'{queue = Q,
+                                       durable = true,
+                                       arguments = [{<<"x-queue-type">>, longstr, <<"quorum">>}]
+                                      }),
+    amqp_channel:cast(Ch,
+                      #'basic.publish'{routing_key = Q},
+                      #amqp_msg{payload = <<"msg">>}),
+    ?awaitMatch({#'basic.get_ok'{}, #amqp_msg{}},
+                amqp_channel:call(Ch, #'basic.get'{queue = Q}),
+                10_000),
+    ConsumerPid = sleeping_consumer(),
+    #'basic.consume_ok'{consumer_tag = CTag} =
+      amqp_channel:subscribe(Ch, #'basic.consume'{queue = Q}, ConsumerPid),
+    %% The pattern accounts for optional Prometheus labels.
+    rabbit_ct_helpers:eventually({?LINE, fun() ->
+        {_Headers, Body} = http_get(Config2, [], 200),
+        ?assertEqual(match, re:run(Body, "^rabbitmq_queue_consumers[{ ]",
+                                   [{capture, none}, multiline]))
+    end}, 200, 300),
+
+    Config2 ++ [{channel_pid, Ch}, {queue_name, Q}, {consumer_tag, CTag}, {consumer_pid, ConsumerPid}].
 
 
 init_per_group(Group, Config0, Extra) ->
@@ -290,14 +299,20 @@ init_per_group(Group, Config0, Extra) ->
     rabbit_ct_helpers:run_setup_steps(Config1, rabbit_ct_broker_helpers:setup_steps()
                                       ++ rabbit_ct_client_helpers:setup_steps()).
 
-end_per_group(aggregated_metrics, Config) ->
-    Ch = ?config(channel_pid, Config),
-    CTag = ?config(consumer_tag, Config),
-    amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = CTag}),
-    ConsumerPid = ?config(consumer_pid, Config),
-    ConsumerPid ! stop,
-    amqp_channel:call(Ch, #'queue.delete'{queue = ?config(queue_name, Config)}),
-    rabbit_ct_client_helpers:close_channel(Ch),
+end_per_group(Group, Config) when Group =:= aggregated_metrics;
+                                  Group =:= global_labels;
+                                  Group =:= per_object_metrics;
+                                  Group =:= per_object_endpoint_metrics ->
+    case ?config(channel_pid, Config) of
+        undefined ->
+            ok;
+        Ch ->
+            CTag = ?config(consumer_tag, Config),
+            amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = CTag}),
+            ?config(consumer_pid, Config) ! stop,
+            amqp_channel:call(Ch, #'queue.delete'{queue = ?config(queue_name, Config)}),
+            rabbit_ct_client_helpers:close_channel(Ch)
+    end,
     end_per_group_(Config);
 
 end_per_group(detailed_metrics, Config) ->

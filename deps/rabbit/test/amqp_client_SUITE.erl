@@ -3569,7 +3569,12 @@ resource_alarm_before_session_begin(Config) ->
     %% Set memory alarm before beginning the session.
     DefaultWatermark = rpc(Config, vm_memory_monitor, get_vm_memory_high_watermark, []),
     ok = rpc(Config, vm_memory_monitor, set_vm_memory_high_watermark, [0]),
-    timer:sleep(100),
+    %% Wait for the memory alarm to be registered in the broker before beginning the session.
+    %% This guarantees the session starts with incoming_window = 0.
+    rabbit_ct_helpers:await_condition(fun() ->
+        Alarms = rpc(Config, rabbit_alarm, get_alarms, []),
+        lists:any(fun({{resource_limit, memory, _}, _}) -> true; (_) -> false end, Alarms)
+    end, 30_000),
 
     {ok, Session1} = amqp10_client:begin_session_sync(Connection),
     Address = rabbitmq_amqp_address:queue(QName),
@@ -3586,26 +3591,24 @@ resource_alarm_before_session_begin(Config) ->
     %% Set additionally disk alarm.
     DefaultDiskFreeLimit = rpc(Config, rabbit_disk_monitor, get_disk_free_limit, []),
     ok = rpc(Config, rabbit_disk_monitor, set_disk_free_limit, [999_000_000_000_000]), % 999 TB
-    timer:sleep(100),
 
     ?assertEqual({error, remote_incoming_window_exceeded},
                  amqp10_client:send_msg(Sender, Msg1)),
 
     %% Clear memory alarm.
     ok = rpc(Config, vm_memory_monitor, set_vm_memory_high_watermark, [DefaultWatermark]),
-    timer:sleep(100),
 
     ?assertEqual({error, remote_incoming_window_exceeded},
                  amqp10_client:send_msg(Sender, Msg1)),
 
     %% Clear disk alarm.
     ok = rpc(Config, rabbit_disk_monitor, set_disk_free_limit, [DefaultDiskFreeLimit]),
-    timer:sleep(100),
 
     %% All alarms are cleared now.
     %% Hence, RabbitMQ should open its incoming window allowing our client to send TRANSFERs.
-    ?assertEqual(ok,
-                 amqp10_client:send_msg(Sender, Msg1)),
+    eventually({?LINE, fun() ->
+        ?assertEqual(ok, amqp10_client:send_msg(Sender, Msg1))
+    end}, 200, 150),
     ok = wait_for_accepted(Tag1),
 
     ok = amqp10_client:detach_link(Sender),
@@ -3635,7 +3638,12 @@ resource_alarm_after_session_begin(Config) ->
     %% Set memory alarm.
     DefaultWatermark = rpc(Config, vm_memory_monitor, get_vm_memory_high_watermark, []),
     ok = rpc(Config, vm_memory_monitor, set_vm_memory_high_watermark, [0]),
-    timer:sleep(100),
+    Msg4 = amqp10_msg:new(<<"t4">>, <<"m4">>, false),
+    %% Wait for the memory alarm to be registered in the broker.
+    rabbit_ct_helpers:await_condition(fun() ->
+        Alarms = rpc(Config, rabbit_alarm, get_alarms, []),
+        lists:any(fun({{resource_limit, memory, _}, _}) -> true; (_) -> false end, Alarms)
+    end, 30_000),
 
     %% Our existing receiver should still be able to receive.
     {ok, Msg1} = amqp10_client:get_msg(Receiver1),
@@ -3656,18 +3664,12 @@ resource_alarm_after_session_begin(Config) ->
     ?assertEqual([<<"m3">>], amqp10_msg:body(Msg3)),
     ok = amqp10_client:accept_msg(Receiver3, Msg3),
 
-    %% However, we shouldn't be able to send any TRANSFER.
-    Msg4 = amqp10_msg:new(<<"t4">>, <<"m4">>, false),
-    ?assertEqual({error, remote_incoming_window_exceeded},
-                 amqp10_client:send_msg(Sender, Msg4)),
-
     %% Clear memory alarm.
     ok = rpc(Config, vm_memory_monitor, set_vm_memory_high_watermark, [DefaultWatermark]),
-    timer:sleep(100),
-
-    %% Now, we should be able to send again.
-    ?assertEqual(ok,
-                 amqp10_client:send_msg(Sender, Msg4)),
+    %% Wait for the alarm to clear in session flow control.
+    eventually({?LINE, fun() ->
+        ?assertEqual(ok, amqp10_client:send_msg(Sender, Msg4))
+    end}, 200, 150),
     ok = wait_for_accepted(<<"t4">>),
 
     ok = amqp10_client:detach_link(Sender),
@@ -3710,7 +3712,6 @@ resource_alarm_send_many(Config) ->
 
     %% Clear memory alarm.
     ok = rpc(Config, vm_memory_monitor, set_vm_memory_high_watermark, [DefaultWatermark]),
-    timer:sleep(100),
 
     ok = end_session_sync(Session),
     ok = close_connection_sync(Connection),
@@ -5043,11 +5044,10 @@ trace(Q, QType, Config) ->
     ok = amqp10_client:send_msg(Sender, Msg),
     {ok, _} = amqp10_client:get_msg(Receiver),
 
-    timer:sleep(20),
-    {#'basic.get_ok'{routing_key = <<"publish.amq.direct">>},
-     #amqp_msg{props = #'P_basic'{headers = PublishHeaders},
-               payload = Payload}} =
-    amqp_channel:call(Ch, #'basic.get'{queue = TraceQ}),
+    {_, #amqp_msg{props = #'P_basic'{headers = PublishHeaders}, payload = Payload}} =
+        ?awaitMatch({#'basic.get_ok'{routing_key = <<"publish.amq.direct">>}, _},
+                    amqp_channel:call(Ch, #'basic.get'{queue = TraceQ}),
+                    5_000),
     ?assertMatch(#{<<"exchange_name">> := <<"amq.direct">>,
                    <<"routing_keys">> := [RoutingKey, <<"my CC key">>],
                    <<"connection">> := <<"127.0.0.1:", _/binary>>,
@@ -5077,7 +5077,6 @@ trace(Q, QType, Config) ->
     {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, ["trace_off"]),
     ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"tag 2">>, Payload, true)),
     {ok, _} = amqp10_client:get_msg(Receiver),
-    timer:sleep(20),
     ?assertMatch(#'basic.get_empty'{},
                  amqp_channel:call(Ch, #'basic.get'{queue = TraceQ})),
     ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch),

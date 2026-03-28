@@ -77,7 +77,10 @@ queue_metrics(Config) ->
     amqp_channel:call(Ch, #'queue.declare'{queue = <<"queue_metrics">>, durable = true}),
     amqp_channel:cast(Ch, #'basic.publish'{routing_key = <<"queue_metrics">>},
                       #amqp_msg{payload = <<"hello">>}),
-    timer:sleep(150),
+    rabbit_ct_helpers:await_condition(fun() ->
+        [] =/= rabbit_ct_broker_helpers:rpc(Config, A, ets, lookup,
+                                            [queue_metrics, q(<<"queue_metrics">>)])
+    end, 5000),
 
     Q = q(<<"myqueue">>),
 
@@ -116,7 +119,10 @@ connection_metrics(Config) ->
     amqp_channel:call(Ch, #'queue.declare'{queue = <<"queue_metrics">>, durable = true}),
     amqp_channel:cast(Ch, #'basic.publish'{routing_key = <<"queue_metrics">>},
                       #amqp_msg{payload = <<"hello">>}),
-    timer:sleep(200),
+    rabbit_ct_helpers:await_condition(fun() ->
+        [] =/= rabbit_ct_broker_helpers:rpc(Config, A, ets, tab2list,
+                                            [connection_coarse_metrics])
+    end, 5000),
 
     DeadPid = rabbit_ct_broker_helpers:rpc(Config, A, ?MODULE, dead_pid, []),
 
@@ -168,7 +174,10 @@ channel_metrics(Config) ->
                       #amqp_msg{payload = <<"hello">>}),
     {#'basic.get_ok'{}, _} = amqp_channel:call(Ch, #'basic.get'{queue = <<"queue_metrics">>,
                                                                 no_ack=true}),
-    timer:sleep(150),
+    rabbit_ct_helpers:await_condition(fun() ->
+        [] =/= rabbit_ct_broker_helpers:rpc(Config, A, ets, tab2list,
+                                            [channel_process_metrics])
+    end, 5000),
 
     DeadPid = rabbit_ct_broker_helpers:rpc(Config, A, ?MODULE, dead_pid, []),
 
@@ -281,7 +290,9 @@ consumer_metrics(Config) ->
 
     amqp_channel:call(Ch, #'queue.declare'{queue = <<"queue_metrics">>, durable = true}),
     amqp_channel:call(Ch, #'basic.consume'{queue = <<"queue_metrics">>}),
-    timer:sleep(200),
+    rabbit_ct_helpers:await_condition(fun() ->
+        [] =/= rabbit_ct_broker_helpers:rpc(Config, A, ets, tab2list, [consumer_created])
+    end, 5000),
 
     DeadPid = rabbit_ct_broker_helpers:rpc(Config, A, ?MODULE, dead_pid, []),
 
