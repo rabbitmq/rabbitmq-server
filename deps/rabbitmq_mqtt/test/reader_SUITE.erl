@@ -303,14 +303,15 @@ rabbit_mqtt_qos0_queue_overflow(Config) ->
     true = erlang:resume_process(Sub),
 
     %% Wait until every message has been either delivered or dropped.
-    rabbit_ct_helpers:await_condition(fun() ->
+    %% Poll at 1-second intervals to avoid starving the MQTT reader with RPCs.
+    rabbit_ct_helpers:eventually({?LINE, fun() ->
         #{#{protocol => ProtoVer, queue_type => QType} :=
           #{messages_delivered_total := Delivered},
           #{queue_type => QType, dead_letter_strategy => disabled} :=
           #{messages_dead_lettered_maxlen_total := DeadLettered}} =
             rpc(Config, rabbit_global_counters, overview, []),
-        Delivered + (DeadLettered - NumDeadLettered) >= NumMsgs
-    end, 30_000),
+        ?assert(Delivered + (DeadLettered - NumDeadLettered) >= NumMsgs)
+    end}, 1_000, 60),
     NumReceived = num_received(Topic, Msg, 0),
 
     {status, _, _, [_, _, _, _, Misc]} = sys:get_status(ServerConnectionPid),
