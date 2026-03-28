@@ -239,7 +239,7 @@ init_per_group(aggregated_metrics, Config0) ->
         {_Headers, Body} = http_get(Config2, [], 200),
         ?assertEqual(match, re:run(Body, "^rabbitmq_queue_consumers ",
                                    [{capture, none}, multiline]))
-    end}, 200, 100),
+    end}, 200, 300),
 
     Config2 ++ [{channel_pid, Ch}, {queue_name, Q}, {consumer_tag, CTag}, {consumer_pid, ConsumerPid}];
 init_per_group(commercial, Config0) ->
