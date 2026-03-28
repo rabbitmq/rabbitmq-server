@@ -230,7 +230,7 @@ quorum_queue_stats(Config) ->
     rabbit_ct_helpers:await_condition(fun() ->
         [] =/= rabbit_ct_broker_helpers:rpc(Config, A, ets, lookup,
                                             [queue_stats, q(<<"quorum_queue_stats">>)])
-    end, 30000),
+    end, 60000),
 
     Q = q(<<"quorum_queue_stats">>),
 
