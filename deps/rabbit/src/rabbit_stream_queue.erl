@@ -1243,7 +1243,7 @@ max_age(Age) ->
     Age.
 
 initial_cluster_size(undefined) ->
-    application:get_env(rabbit, stream_cluster_size, 3);
+    length(rabbit_nodes:list_members());
 initial_cluster_size(Val) ->
     Val.
 
