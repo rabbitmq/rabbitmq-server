@@ -3200,6 +3200,12 @@ resource_alarm_before_session_begin(Config) ->
     %% Set memory alarm before beginning the session.
     DefaultWatermark = rpc(Config, vm_memory_monitor, get_vm_memory_high_watermark, []),
     ok = rpc(Config, vm_memory_monitor, set_vm_memory_high_watermark, [0]),
+    %% Wait for the memory alarm to be registered in the broker before beginning the session.
+    %% This guarantees the session starts with incoming_window = 0.
+    rabbit_ct_helpers:await_condition(fun() ->
+        Alarms = rpc(Config, rabbit_alarm, get_alarms, []),
+        lists:any(fun({{resource_limit, memory, _}, _}) -> true; (_) -> false end, Alarms)
+    end, 30_000),
 
     {ok, Session1} = amqp10_client:begin_session_sync(Connection),
     Address = rabbitmq_amqp_address:queue(QName),
@@ -3210,14 +3216,8 @@ resource_alarm_before_session_begin(Config) ->
     %% In other words, the client is limited by session flow control, but not by link flow control.
     Tag1 = <<"tag1">>,
     Msg1 = amqp10_msg:new(Tag1, <<"m1">>, false),
-    %% Pre-settled probe: no disposition is sent back, avoiding stale settlements
-    %% in the test process mailbox while polling for alarm propagation.
-    Probe = amqp10_msg:new(<<"probe">>, <<"probe">>, true),
-    %% Wait for the alarm to take effect in session flow control.
-    eventually({?LINE, fun() ->
-        ?assertEqual({error, remote_incoming_window_exceeded},
-                     amqp10_client:send_msg(Sender, Probe))
-    end}, 100, 50),
+    ?assertEqual({error, remote_incoming_window_exceeded},
+                 amqp10_client:send_msg(Sender, Msg1)),
 
     %% Set additionally disk alarm.
     DefaultDiskFreeLimit = rpc(Config, rabbit_disk_monitor, get_disk_free_limit, []),
@@ -3238,9 +3238,8 @@ resource_alarm_before_session_begin(Config) ->
     %% All alarms are cleared now.
     %% Hence, RabbitMQ should open its incoming window allowing our client to send TRANSFERs.
     eventually({?LINE, fun() ->
-        ?assertEqual(ok, amqp10_client:send_msg(Sender, Probe))
-    end}, 100, 50),
-    ok = amqp10_client:send_msg(Sender, Msg1),
+        ?assertEqual(ok, amqp10_client:send_msg(Sender, Msg1))
+    end}, 200, 150),
     ok = wait_for_accepted(Tag1),
 
     ok = amqp10_client:detach_link(Sender),
@@ -3271,14 +3270,11 @@ resource_alarm_after_session_begin(Config) ->
     DefaultWatermark = rpc(Config, vm_memory_monitor, get_vm_memory_high_watermark, []),
     ok = rpc(Config, vm_memory_monitor, set_vm_memory_high_watermark, [0]),
     Msg4 = amqp10_msg:new(<<"t4">>, <<"m4">>, false),
-    %% Pre-settled probe: no disposition is sent back, avoiding stale settlements
-    %% in the test process mailbox while polling for alarm propagation.
-    Probe = amqp10_msg:new(<<"probe">>, <<"probe">>, true),
-    %% Wait for the alarm to take effect in session flow control.
-    eventually({?LINE, fun() ->
-        ?assertEqual({error, remote_incoming_window_exceeded},
-                     amqp10_client:send_msg(Sender, Probe))
-    end}, 100, 50),
+    %% Wait for the memory alarm to be registered in the broker.
+    rabbit_ct_helpers:await_condition(fun() ->
+        Alarms = rpc(Config, rabbit_alarm, get_alarms, []),
+        lists:any(fun({{resource_limit, memory, _}, _}) -> true; (_) -> false end, Alarms)
+    end, 30_000),
 
     %% Our existing receiver should still be able to receive.
     {ok, Msg1} = amqp10_client:get_msg(Receiver1),
@@ -3303,9 +3299,8 @@ resource_alarm_after_session_begin(Config) ->
     ok = rpc(Config, vm_memory_monitor, set_vm_memory_high_watermark, [DefaultWatermark]),
     %% Wait for the alarm to clear in session flow control.
     eventually({?LINE, fun() ->
-        ?assertEqual(ok, amqp10_client:send_msg(Sender, Probe))
-    end}, 100, 50),
-    ok = amqp10_client:send_msg(Sender, Msg4),
+        ?assertEqual(ok, amqp10_client:send_msg(Sender, Msg4))
+    end}, 200, 150),
     ok = wait_for_accepted(<<"t4">>),
 
     ok = amqp10_client:detach_link(Sender),
