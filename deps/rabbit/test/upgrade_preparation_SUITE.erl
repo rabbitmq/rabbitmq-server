@@ -81,7 +81,6 @@ await_quorum_plus_one_qq(Config) ->
     [A, B, _C] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, A),
     declare(Ch, <<"qq.1">>, [{<<"x-queue-type">>, longstr, <<"quorum">>}]),
-    timer:sleep(100),
     ?assert(await_quorum_plus_one(Config, 0)),
 
     ok = rabbit_ct_broker_helpers:stop_node(Config, B),
@@ -95,7 +94,6 @@ await_quorum_plus_one_stream(Config) ->
     [A, B, _C] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, A),
     declare(Ch, <<"st.1">>, [{<<"x-queue-type">>, longstr, <<"stream">>}]),
-    timer:sleep(100),
     ?assert(await_quorum_plus_one(Config, 0)),
 
     ok = rabbit_ct_broker_helpers:stop_node(Config, B),
@@ -109,7 +107,6 @@ await_quorum_plus_one_stream_coordinator(Config) ->
     [A, B, _C] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, A),
     declare(Ch, <<"st.1">>, [{<<"x-queue-type">>, longstr, <<"stream">>}]),
-    timer:sleep(100),
     ?assert(await_quorum_plus_one(Config, 0)),
     delete(Ch, <<"st.1">>),
     %% no queues/streams beyond this point

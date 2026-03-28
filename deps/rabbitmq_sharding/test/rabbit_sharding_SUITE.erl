@@ -12,6 +12,7 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("rabbit/include/amqqueue.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 -define(TEST_X, <<"sharding.test">>).
 
@@ -88,8 +89,7 @@ shard_empty_routing_key_test(Config) ->
       fun (Ch) ->
               amqp_channel:call(Ch, x_declare(?TEST_X)),
               set_policy(Config, 0, <<"3_shard">>, <<"^sharding">>, <<"exchanges">>, policy_definition(3)),
-              timer:sleep(1000),
-              ?assertEqual(6, length(queues(Config, 0))),
+              ?awaitMatch(6, length(queues(Config, 0)), 30_000),
 
               teardown(Config, Ch,
                        [{?TEST_X, 6}],
@@ -162,12 +162,10 @@ shard_update_routing_key_test(Config) ->
       fun (Ch) ->
               amqp_channel:call(Ch, x_declare(?TEST_X)),
               set_policy(Config, 0, <<"rkey">>, <<"^sharding">>, <<"exchanges">>, policy_definition(3, <<"1234">>)),
-              timer:sleep(1000),
-              Bs = bindings(Config, 0, ?TEST_X),
+              Bs = ?awaitMatch(Bs0 when length(Bs0) >= 6, bindings(Config, 0, ?TEST_X), 30_000),
 
               set_policy(Config, 0, <<"rkey">>, <<"^sharding">>, <<"exchanges">>, policy_definition(3, <<"4321">>)),
-              timer:sleep(1000),
-              Bs2 = bindings(Config, 0, ?TEST_X),
+              Bs2 = ?awaitMatch(Bs2_0 when Bs2_0 =/= Bs, bindings(Config, 0, ?TEST_X), 30_000),
 
               ?assert(Bs =/= Bs2),
 
