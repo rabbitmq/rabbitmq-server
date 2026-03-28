@@ -299,15 +299,17 @@ rabbit_mqtt_qos0_queue_overflow(Config) ->
                           ok = emqtt:publish(Pub, Topic, Msg, qos0)
                   end, lists:seq(1, NumMsgs)),
 
-    %% Resume the consumer so that the TCP writes can complete.
-    %% Without this, the MQTT reader stays blocked on socket writes and
-    %% cannot drain its mailbox, so the `message_queue_len == 0` condition never materializes.
+    %% Unblock the server so it can finish writing to the socket.
     true = erlang:resume_process(Sub),
 
-    %% Now that the subscriber is reading again, the server can finish processing.
+    %% Wait until every message has been either delivered or dropped.
     rabbit_ct_helpers:await_condition(fun() ->
-        {message_queue_len, 0} =:= rpc(Config, erlang, process_info,
-                                       [ServerConnectionPid, message_queue_len])
+        #{#{protocol => ProtoVer, queue_type => QType} :=
+          #{messages_delivered_total := Delivered},
+          #{queue_type => QType, dead_letter_strategy => disabled} :=
+          #{messages_dead_lettered_maxlen_total := DeadLettered}} =
+            rpc(Config, rabbit_global_counters, overview, []),
+        Delivered + (DeadLettered - NumDeadLettered) >= NumMsgs
     end, 30_000),
     NumReceived = num_received(Topic, Msg, 0),
 
