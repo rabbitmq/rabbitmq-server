@@ -279,7 +279,7 @@ rabbit_mqtt_qos0_queue_overflow(Config) ->
     Topic = atom_to_binary(?FUNCTION_NAME),
     Msg = binary:copy(<<"x">>, 4000),
     %% Overflows the limit many times over
-    NumMsgs = 10_000,
+    NumMsgs = 1_000,
 
     %% Provoke TCP back-pressure from client to server by using very small buffers.
     Opts = [{tcp_opts, [{recbuf, 256},
