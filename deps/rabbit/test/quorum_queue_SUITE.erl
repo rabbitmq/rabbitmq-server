@@ -2376,8 +2376,6 @@ at_most_once_dead_letter_order_expired(Config) ->
     wait_for_consensus(QQ, Config),
     wait_for_messages_ready(Servers, ra_name(QQ), 3),
 
-    %% Let m2 and m3 expire before consuming m1.
-    timer:sleep(10),
     ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"m1">>}},
                  amqp_channel:call(Ch, #'basic.get'{queue = QQ,
                                                     no_ack = true})),
@@ -4143,11 +4141,11 @@ oldest_entry_timestamp(Config) ->
 
     {'queue.purge_ok', 1} = amqp_channel:call(Ch, #'queue.purge'{queue = QQ}),
     Now = erlang:system_time(millisecond),
-    timer:sleep(100),
-    ?assertMatch({ok, Ts2} when Ts2 > Now,
-                 rabbit_ct_broker_helpers:rpc(Config, 0, ra,
-                                              aux_command,
-                                              [ServerId, oldest_entry_timestamp])),
+    ?awaitMatch({ok, Ts2} when is_integer(Ts2) andalso Ts2 > Now,
+                rabbit_ct_broker_helpers:rpc(Config, 0, ra,
+                                             aux_command,
+                                             [ServerId, oldest_entry_timestamp]),
+                5_000),
 
     ok.
 

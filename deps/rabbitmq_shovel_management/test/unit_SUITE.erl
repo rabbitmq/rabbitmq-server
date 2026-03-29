@@ -4,6 +4,7 @@
 -compile([export_all, nowarn_export_all]).
 
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 all() ->
     [blocked_status].
@@ -40,8 +41,7 @@ blocked_status(_Config) ->
     ok = rabbit_shovel_status:report_blocked_status(Name, running),
     ?assertEqual([{Name, flow}], get_shovel_states()),
 
-    timer:sleep(1000),
-    ?assertEqual([{Name, running}], get_shovel_states()),
+    ?awaitMatch([{Name, running}], get_shovel_states(), 5000),
 
     ok = rabbit_shovel_status:report_blocked_status(Name, flow),
     ?assertEqual([{Name, flow}], get_shovel_states()),
@@ -55,8 +55,7 @@ blocked_status(_Config) ->
     ok = rabbit_shovel_status:report_blocked_status(Name, running),
     ?assertEqual([{Name, flow}], get_shovel_states()),
 
-    timer:sleep(1000),
-    ?assertEqual([{Name, running}], get_shovel_states()),
+    ?awaitMatch([{Name, running}], get_shovel_states(), 5000),
 
     ok = rabbit_shovel_status:report_blocked_status(Name, blocked),
     ?assertEqual([{Name, blocked}], get_shovel_states()),
