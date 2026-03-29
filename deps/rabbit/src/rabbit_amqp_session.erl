@@ -1715,9 +1715,7 @@ handle_credit_reply0(#credit_reply{ctag = Ctag,
                                              echo = CEcho,
                                              properties = OldProps
                                             } = CFC0,
-                        queue_flow_ctl = #queue_flow_ctl{
-                                            delivery_count = QDeliveryCount
-                                           } = QFC0,
+                        queue_flow_ctl = QFC0,
                         stashed_credit_req = StashedCreditReq
                        } = Link0,
                      #state{cfg = #cfg{writer_pid = Writer,
@@ -1726,20 +1724,19 @@ handle_credit_reply0(#credit_reply{ctag = Ctag,
                             queue_states = QStates0
                            } = State) ->
 
-    %% Our (receiver) delivery-count should be always
-    %% in sync with the delivery-count of the sending queue.
-    case DeliveryCount of
-        QDeliveryCount ->
-            ok;
-        _ ->
-            exit({delivery_count_mismatch, QDeliveryCount, DeliveryCount})
-    end,
+    %% "The receiver's [our] value is calculated based on the last known value
+    %% from the sender [queue]". [2.6.7]
+    %% Therefore, we accept whatever the queue reports because deliveries can be
+    %% lost during leader changes or temporary distribution link outages while the
+    %% Ra credit command that advanced the delivery-count was still committed.
+    QFC = QFC0#queue_flow_ctl{delivery_count = DeliveryCount},
 
     case StashedCreditReq of
         #credit_req{} ->
+            Link = Link0#outgoing_link{queue_flow_ctl = QFC},
             %% We prioritise the stashed client request over finishing the current
             %% top-up rounds because the latest link state from the client applies.
-            pop_credit_req(Handle, Ctag, Link0, State);
+            pop_credit_req(Handle, Ctag, Link, State);
         none when Credit =:= 0 andalso
                   CCredit > 0 ->
             QName = Link0#outgoing_link.queue_name,
@@ -1749,7 +1746,7 @@ handle_credit_reply0(#credit_reply{ctag = Ctag,
                                        QName, Ctag, DeliveryCount, CappedCredit,
                                        false, QStates0),
             Link = Link0#outgoing_link{
-                     queue_flow_ctl = QFC0#queue_flow_ctl{credit = CappedCredit},
+                     queue_flow_ctl = QFC#queue_flow_ctl{credit = CappedCredit},
                      at_least_one_credit_req_in_flight = true},
             State1 = State#state{queue_states = QStates,
                                  outgoing_links = OutgoingLinks#{Handle := Link}},
@@ -1775,12 +1772,6 @@ handle_credit_reply0(#credit_reply{ctag = Ctag,
                 false ->
                     ok
             end,
-            %% Although we (the receiver) usually determine link credit, we set here
-            %% our link credit to what the queue says our link credit is (which is safer
-            %% in case credit requests got applied out of order in quorum queues).
-            %% This should be fine given that we asserted earlier that our delivery-count is
-            %% in sync with the delivery-count of the sending queue.
-            QFC = QFC0#queue_flow_ctl{credit = Credit},
             CFC = CFC0#client_flow_ctl{properties = Props},
             Link = Link0#outgoing_link{client_flow_ctl = CFC,
                                        queue_flow_ctl = QFC,
