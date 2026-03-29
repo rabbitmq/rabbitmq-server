@@ -216,7 +216,8 @@ groups() ->
        list_connections,
        detach_requeues_two_connections_classic_queue,
        detach_requeues_two_connections_quorum_queue,
-       attach_to_down_quorum_queue
+       attach_to_down_quorum_queue,
+       lost_deliveries_quorum_queue
       ]},
 
      {metrics, [shuffle],
@@ -7380,6 +7381,74 @@ attach_to_down_quorum_queue(Config) ->
     ok = rabbit_ct_broker_helpers:start_broker(Config, 2),
     {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair0, QName),
     ok = close(Init0).
+
+%% This test case used to reproduce the following crash in rabbit_amqp_session
+%% ```
+%% exception exit: {delivery_count_mismatch,0,2}
+%% ```
+lost_deliveries_quorum_queue(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    Address = rabbitmq_amqp_address:queue(QName),
+    RaName = ra_name(QName),
+
+    LeaderNode = get_node_config(Config, 0, nodename),
+    NonMemberNode = get_node_config(Config, 2, nodename),
+
+    {_, _, LinkPair} = Init = init(LeaderNode, Config),
+    {ok, #{}} = rabbitmq_amqp_client:declare_queue(
+                  LinkPair, QName,
+                  #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>},
+                                   <<"x-quorum-initial-group-size">> => {ulong, 1}}}),
+
+    OpnConf = connection_config(NonMemberNode, Config),
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    {ok, Session} = amqp10_client:begin_session_sync(Connection),
+
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"test-sender">>, Address),
+    receive {amqp10_event, {link, Sender, attached}} -> ok
+    after 9000 -> ct:fail({missing_event, ?LINE})
+    end,
+    ok = wait_for_credit(Sender),
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"t1">>, <<"m1">>)),
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"t2">>, <<"m2">>)),
+    ok = wait_for_accepted(<<"t1">>),
+    ok = wait_for_accepted(<<"t2">>),
+
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session, <<"test-receiver">>, Address, unsettled),
+    receive {amqp10_event, {link, Receiver, attached}} -> ok
+    after 9000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    %% The following triggers the delivery effects from the LeaderNode to
+    %% NonMemberNode to get lost. After the network recovers, the LeaderNode
+    %% will send a leader_change notification to the NonMemberNode (even
+    %% though the leader did not really change) causing the NonMemberNode to re-send
+    %% the credit request to the LeaderNode. The credit request gets therefore
+    %% applied again (idempotently), but this time the LeaderNode will send
+    %% a credit_reply with the advanced delivery-count **leading** the delivery-count
+    %% of NonMemberNode (due to the lost deliveries).
+    ok = rpc(Config, LeaderNode, sys, suspend, [RaName]),
+    ok = amqp10_client:flow_link_credit(Receiver, 3, never),
+    true = rpc(Config, NonMemberNode, erlang, disconnect_node, [LeaderNode]),
+    ok = rpc(Config, LeaderNode, sys, resume, [RaName]),
+    timer:sleep(100),
+
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"t3">>, <<"m3">>)),
+    ok = wait_for_accepted(<<"t3">>),
+
+    [M1, M2, M3] = receive_messages(Receiver, 3),
+    ?assertEqual(<<"m1">>, amqp10_msg:body_bin(M1)),
+    ?assertEqual(<<"m2">>, amqp10_msg:body_bin(M2)),
+    ?assertEqual(<<"m3">>, amqp10_msg:body_bin(M3)),
+    ok = amqp10_client:accept_msg(Receiver, M1),
+    ok = amqp10_client:accept_msg(Receiver, M2),
+    ok = amqp10_client:accept_msg(Receiver, M3),
+
+    ok = detach_link_sync(Sender),
+    ok = detach_link_sync(Receiver),
+    {ok, #{message_count := 0}} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
+    ok = close(Init).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% internal
