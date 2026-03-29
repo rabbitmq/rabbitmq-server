@@ -1361,12 +1361,7 @@ disable_with_disable_stats_parameter_test(Config) ->
     {Conn, Ch} = open_connection_and_channel(Config),
 
     %% Ensure we have some queue and exchange stats, needed later
-<<<<<<< HEAD
-    http_put(Config, "/queues/%2F/test0", #{}, {group, '2xx'}),
-    timer:sleep(1500),
-=======
     http_put(Config, "/queues/%2F/test0", #{durable => true}, {group, '2xx'}),
->>>>>>> 32e28de204 (Fix over 20 test flakes)
     amqp_channel:call(Ch, #'basic.publish'{exchange = <<>>,
                                            routing_key = <<"test0">>},
                       #amqp_msg{payload = <<"message">>}),

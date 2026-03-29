@@ -3670,12 +3670,8 @@ subscribe_redelivery_limit_disable(Config) ->
               flush(1),
               ct:fail("message did not arrive as expected")
     end,
-<<<<<<< HEAD
     wait_for_messages(Config, [[QQ, <<"0">>, <<"0">>, <<"0">>]]),
     ok = rabbit_ct_broker_helpers:clear_operator_policy(Config, 0, <<"delivery-limit">>),
-=======
-    wait_for_messages(Config, [[QQ, <<"1">>, <<"1">>, <<"0">>]]),
->>>>>>> 32e28de204 (Fix over 20 test flakes)
     ok.
 
 %% Test that consumer credit is increased correctly.
