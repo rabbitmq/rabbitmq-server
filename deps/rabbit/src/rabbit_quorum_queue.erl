@@ -651,6 +651,12 @@ handle_tick(QName,
                                 (_, _, Acc) ->
                                      Acc
                              end, info(Q, Keys), Overview),
+                  Blocks = case Cfg of
+                               #{dead_letter_handler := at_least_once} ->
+                                   rabbit_fifo_dlx_worker:block_reasons(QName);
+                               _ ->
+                                   undefined
+                           end,
                   MsgBytesDiscarded = DiscardBytes + DiscardCheckoutBytes,
                   MsgBytes = EnqueueBytes + CheckoutBytes + MsgBytesDiscarded,
                   Infos = [{consumers, NumConsumers},
@@ -664,6 +670,7 @@ handle_tick(QName,
                            {messages_persistent, NumMessages},
                            {messages_dlx, NumDiscarded + NumDiscardedCheckedOut},
                            {message_bytes_dlx, MsgBytesDiscarded},
+                           {at_least_once_dlx_block_reasons, Blocks},
                            {single_active_consumer_tag, SacTag},
                            {single_active_consumer_pid, SacPid},
                            {leader, node()},
