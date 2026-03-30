@@ -121,14 +121,16 @@ whitelisted(#'OTPCertificate'{}=C, {bad_cert, unknown_ca}, continue) ->
         true ->
             {valid, confirmed};
         false ->
-            {fail, "CA not known AND certificate not whitelisted"}
+            log_certificate_rejected("CA is not known and certificate is not whitelisted", C),
+            {fail, "CA is not known and certificate is not whitelisted"}
     end;
 whitelisted(#'OTPCertificate'{}=C, {bad_cert, selfsigned_peer}, continue) ->
     case is_whitelisted(C) of
         true ->
             {valid, confirmed};
         false ->
-            {fail, "certificate not whitelisted"}
+            log_certificate_rejected("certificate is not whitelisted", C),
+            {fail, "certificate is not whitelisted"}
     end;
 whitelisted(_, {bad_cert, _} = Reason, _) ->
     {fail, Reason};
@@ -369,4 +371,29 @@ clean_deleted_providers(Providers) ->
         ets:fun2ms(fun(#entry{provider = P})-> true end),
     Condition = [ {'=/=', '$1', Provider} || Provider <- Providers ],
     ets:select_delete(table_name(), [{EntryMatch, Condition, [true]}]).
+
+-spec log_certificate_rejected(string(), certificate()) -> ok.
+log_certificate_rejected(Reason, #'OTPCertificate'{} = C) ->
+    try
+        DER = public_key:pkix_encode('OTPCertificate', C, otp),
+        Fingerprint = format_fingerprint(crypto:hash(sha256, DER)),
+        ?LOG_WARNING("Trust store: ~ts "
+                     "(fingerprint: ~ts, "
+                     "issuer: ~ts, "
+                     "validity: ~ts)",
+                     [Reason,
+                      Fingerprint,
+                      rabbit_cert_info:issuer(DER),
+                      rabbit_cert_info:validity(DER)])
+    catch
+        _:_ ->
+            ?LOG_WARNING("Trust store: ~ts", [Reason])
+    end,
+    ok.
+
+format_fingerprint(Bin) ->
+    lists:flatten(
+      string:join(
+        [io_lib:format("~2.16.0B", [B]) || <<B>> <= Bin],
+        ":")).
 
