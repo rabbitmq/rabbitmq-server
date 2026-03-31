@@ -1398,10 +1398,12 @@ disable_with_disable_stats_parameter_test(Config) ->
     %% Exchange stats aren't published - even as 0 - until some messages have gone
     %% through. At the end of this test we ensure that at least the default exchange
     %% has something to show.
-    ExchangeStats = http_get(Config, "/exchanges", ?OK),
-    ?assert(lists:any(fun(E) ->
-                              maps:is_key(message_stats, E)
-                      end, ExchangeStats)),
+    await_condition(fun() ->
+        ExchangeStats = http_get(Config, "/exchanges", ?OK),
+        lists:any(fun(E) ->
+                          maps:is_key(message_stats, E)
+                  end, ExchangeStats)
+    end),
     %% Now we can disable them
     Exchanges = http_get(Config, "/exchanges?disable_stats=true", ?OK),
     ?assert(lists:all(fun(E) ->
@@ -1413,8 +1415,10 @@ disable_with_disable_stats_parameter_test(Config) ->
     %% Nodes.
 
     %% Check that stats are available
-    [NodeStats] = http_get(Config, "/nodes", ?OK),
-    ?assert(maps:is_key(channel_closed_details, NodeStats)),
+    await_condition(fun() ->
+        [NodeStats] = http_get(Config, "/nodes", ?OK),
+        maps:is_key(channel_closed_details, NodeStats)
+    end),
     %% Now we can disable them
     [Node] = http_get(Config, "/nodes?disable_stats=true", ?OK),
     ?assert(not maps:is_key(channel_closed_details, Node)),
@@ -1426,8 +1430,10 @@ disable_with_disable_stats_parameter_test(Config) ->
     %% Overview.
 
     %% Check that stats are available
-    OverviewStats = http_get(Config, "/overview", ?OK),
-    ?assert(maps:is_key(message_stats, OverviewStats)),
+    await_condition(fun() ->
+        OverviewStats = http_get(Config, "/overview", ?OK),
+        maps:is_key(message_stats, OverviewStats)
+    end),
     %% Now we can disable them
     Overview = http_get(Config, "/overview?disable_stats=true&lengths_age=60&lengths_incr=1", ?OK),
     ?assert(not maps:is_key(queue_totals, Overview)),
@@ -1437,8 +1443,10 @@ disable_with_disable_stats_parameter_test(Config) ->
     %% Queues.
 
     %% Check that stats are available
-    [QueueStats] = http_get(Config, "/queues/%2F?lengths_age=60&lengths_incr=1", ?OK),
-    ?assert(maps:is_key(message_stats, QueueStats)),
+    await_condition(fun() ->
+        [QueueStats] = http_get(Config, "/queues/%2F?lengths_age=60&lengths_incr=1", ?OK),
+        maps:is_key(message_stats, QueueStats)
+    end),
     %% Now we can disable them
     [Queue] = http_get(Config, "/queues/%2F?disable_stats=true", ?OK),
     ?assert(not maps:is_key(message_stats, Queue)),
@@ -1450,11 +1458,13 @@ disable_with_disable_stats_parameter_test(Config) ->
     %% Vhosts.
 
     %% Check that stats are available
-    VHostStats = http_get(Config, "/vhosts?lengths_age=60&lengths_incr=1", ?OK),
-    ?assert(lists:all(fun(E) ->
-                              maps:is_key(message_stats, E) and
-                                  maps:is_key(messages_ready_details, E)
-                      end, VHostStats)),
+    await_condition(fun() ->
+        VHostStats = http_get(Config, "/vhosts?lengths_age=60&lengths_incr=1", ?OK),
+        lists:all(fun(E) ->
+                          maps:is_key(message_stats, E) and
+                              maps:is_key(messages_ready_details, E)
+                  end, VHostStats)
+    end),
     %% Now we can disable them
     VHosts = http_get(Config, "/vhosts?disable_stats=true&lengths_age=60&lengths_incr=1", ?OK),
     ?assert(lists:all(fun(E) ->
