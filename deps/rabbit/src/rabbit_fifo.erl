@@ -369,7 +369,9 @@ apply_(#{index := Idx} = Meta,
                                                                 ?MSG(Idx, Header),
                                                                 Messages)},
             State2 = update_or_remove_con(Meta, ConsumerKey, Con, State1),
-            {State3, Effects} = activate_next_consumer({State2, []}),
+            Effects0 = maybe_cancel_consumer_effects(
+                          ConsumerKey, Con0, State2, []),
+            {State3, Effects} = activate_next_consumer({State2, Effects0}),
             checkout(Meta, State0, State3, Effects);
         _ ->
             {State00, ok, []}
@@ -680,11 +682,13 @@ apply_(Meta, {nodeup, Node}, #?STATE{consumers = Cons0,
                   EAcc1 = ConsumerUpdateActiveFun(SAcc, ConsumerKey,
                                                   C0, true, NextStatus, EAcc0),
                   %% cancel timers
-                  EAcc = [{timer,
-                           {consumer_disconnected_timeout, ConsumerKey},
-                           infinity} | EAcc1],
-
-                  {update_or_remove_con(Meta, ConsumerKey, C, SAcc), EAcc};
+                  EAcc2 = [{timer,
+                            {consumer_disconnected_timeout, ConsumerKey},
+                            infinity} | EAcc1],
+                  NewSAcc = update_or_remove_con(Meta, ConsumerKey, C, SAcc),
+                  EAcc = maybe_cancel_consumer_effects(
+                           ConsumerKey, C, NewSAcc, EAcc2),
+                  {NewSAcc, EAcc};
              (_, _, Acc) ->
                   Acc
           end, {State0, Effects0}, maps:iterator(Cons0, ordered)),
@@ -746,8 +750,11 @@ apply_(#{system_time := Ts} = Meta,
                           Con = update_consumer_status(
                                   timeout, Con0#consumer{timed_out_msg_ids = TimedOutMsgIds}),
                           ?CONSUMER_TAG_PID(Tag, Pid) = Con,
-                          E = [{send_msg, Pid,
-                                {released, QName, Tag, MsgIdsSorted, timeout}, ra_event} | E0],
+                          E1 = [{send_msg, Pid,
+                                 {released, QName, Tag, MsgIdsSorted, timeout},
+                                 ra_event} | E0],
+                          E = consumer_update_active_effects(
+                                S0, Con, false, timeout, E1),
                           return_multiple(Meta, CKey, Con, MsgIdsSorted, false,
                                           #{}, E, S0)
                   end
@@ -1134,7 +1141,7 @@ state_enter(leader,
     Effects;
 state_enter(eol, #?STATE{enqueuers = Enqs,
                          consumers = Cons0,
-                         waiting_consumers = WaitingConsumers0}) ->
+                         waiting_consumers = WaitingConsumers0} = State) ->
     Custs = maps:fold(fun(_K, ?CONSUMER_PID(P) = V, S) ->
                               S#{P => V}
                       end, #{}, Cons0),
@@ -1142,9 +1149,21 @@ state_enter(eol, #?STATE{enqueuers = Enqs,
                                             Acc#{P => V}
                                     end, #{}, WaitingConsumers0),
     AllConsumers = maps:merge(Custs, WaitingConsumers1),
+    %% Clean up consumer metrics entries so that they do not linger
+    %% after the queue is deleted.
+    CancelEffects0 =
+        maps:fold(fun(_K, Consumer, Acc) ->
+                          cancel_consumer_effects(consumer_id(Consumer),
+                                                  State, Acc)
+                  end, [], Cons0),
+    CancelEffects =
+        lists:foldl(fun({_, Consumer}, Acc) ->
+                            cancel_consumer_effects(consumer_id(Consumer),
+                                                    State, Acc)
+                    end, CancelEffects0, WaitingConsumers0),
     [{send_msg, P, eol, ra_event}
      || P <- maps:keys(maps:merge(Enqs, AllConsumers))] ++
-    [{aux, eol}];
+    [{aux, eol}] ++ CancelEffects;
 state_enter(_, #?STATE{cfg = #cfg{dead_letter_handler = DLH,
                                   resource = _QRes},
                        dlx = DlxState}) ->
@@ -1606,27 +1625,38 @@ query_consumers(#?STATE{consumers = Consumers,
             competing ->
                 fun(_ConsumerKey, #consumer{status = Status}) ->
                         case Status of
-                            {suspected_down, _}  ->
+                            {suspected_down, _} ->
                                 {false, suspected_down};
+                            {timeout, _} ->
+                                {false, timeout};
+                            cancelled ->
+                                {false, cancelled};
                             _ ->
                                 {true, Status}
                         end
                 end;
             single_active ->
                 SingleActiveConsumer = query_single_active_consumer(State),
-                fun(_, ?CONSUMER_TAG_PID(Tag, Pid)) ->
+                fun(_, ?CONSUMER_TAG_PID(Tag, Pid) = Consumer) ->
                         case SingleActiveConsumer of
                             {value, {Tag, Pid}} ->
                                 {true, single_active};
                             _ ->
-                                {false, waiting}
+                                case Consumer#consumer.status of
+                                    cancelled ->
+                                        {false, cancelled};
+                                    {suspected_down, _} ->
+                                        {false, suspected_down};
+                                    {timeout, _} ->
+                                        {false, timeout};
+                                    _ ->
+                                        {false, waiting}
+                                end
                         end
                 end
         end,
     FromConsumers =
-        maps:fold(fun (_, #consumer{status = cancelled}, Acc) ->
-                          Acc;
-                      (Key,
+        maps:fold(fun (Key,
                        #consumer{cfg = #consumer_cfg{tag = Tag,
                                                      pid = Pid,
                                                      meta = Meta}} = Consumer,
@@ -1645,10 +1675,7 @@ query_consumers(#?STATE{consumers = Consumers,
                   end, #{}, Consumers),
         FromWaitingConsumers =
             lists:foldl(
-              fun ({_, #consumer{status = cancelled}},
-                   Acc) ->
-                      Acc;
-                  ({Key,
+              fun ({Key,
                     #consumer{cfg = #consumer_cfg{tag = Tag,
                                                   pid = Pid,
                                                   meta = Meta}} = Consumer},
@@ -1829,13 +1856,18 @@ cancel_consumer0(Meta, ConsumerKey,
         #{ConsumerKey := Consumer} ->
             {S, Effects2} = maybe_return_all(Meta, ConsumerKey, Consumer,
                                              S0, Effects0, Reason),
-
-
-            %% The effects are emitted before the consumer is actually removed
-            %% if the consumer has unacked messages. This is a bit weird but
-            %% in line with what classic queues do (from an external point of
-            %% view)
-            Effects = cancel_consumer_effects(consumer_id(Consumer), S, Effects2),
+            Effects = case S#?STATE.consumers of
+                          #{ConsumerKey := CancelledConsumer} ->
+                              %% The consumer still has checked-out messages.
+                              %% Update the metrics to show it as inactive
+                              %% instead of deleting it.
+                              consumer_update_active_effects(
+                                S, CancelledConsumer, false, cancelled,
+                                Effects2);
+                          _ ->
+                              cancel_consumer_effects(
+                                consumer_id(Consumer), S, Effects2)
+                      end,
             {S, Effects};
         _ ->
             %% already removed: do nothing
@@ -2138,7 +2170,9 @@ return(Meta, ConsumerKey, Consumer0,
     {State2, Effects1} = return_multiple(Meta, ConsumerKey, Consumer,
                                          MsgIds, IncrDelCount, Anns,
                                          Effects0, State0),
-    {State3, Effects2} = activate_next_consumer({State2, Effects1}),
+    Effects1b = maybe_untimeout_effects(Consumer0, Consumer, ConsumerKey,
+                                        State2, Effects1),
+    {State3, Effects2} = activate_next_consumer({State2, Effects1b}),
     checkout(Meta, State0, State3, Effects2).
 
 return_multiple(Meta, ConsumerKey, #consumer{checked_out = Checked} = Consumer,
@@ -2240,14 +2274,33 @@ maybe_untimeout(#consumer{status = {timeout, Status},
 maybe_untimeout(#consumer{} = Consumer, _MsgIds) ->
     Consumer.
 
+%% Emit an update effect when a consumer transitions out of timeout state
+%% and is still present in the consumers map.
+maybe_untimeout_effects(#consumer{status = {timeout, _}},
+                        #consumer{status = Status} = Con,
+                        ConsumerKey,
+                        #?STATE{consumers = Consumers} = State,
+                        Effects)
+  when is_atom(Status) ->
+    case Consumers of
+        #{ConsumerKey := _} ->
+            consumer_update_active_effects(State, Con, true, Status, Effects);
+        _ ->
+            Effects
+    end;
+maybe_untimeout_effects(_, _, _, _, Effects) ->
+    Effects.
+
 complete_and_checkout(#{} = Meta, MsgIds, ConsumerKey,
                       #consumer{} = Con0,
                       Effects0, State0) ->
     Con1 = maybe_untimeout(Con0, MsgIds),
     {State1, Effects1} = complete(Meta, ConsumerKey, MsgIds,
                                   Con1, State0, Effects0),
+    Effects1b = maybe_cancel_consumer_effects(ConsumerKey, Con0, State1, Effects1),
+    Effects1c = maybe_untimeout_effects(Con0, Con1, ConsumerKey, State1, Effects1b),
     %% a completion could have removed the active/quiescing consumer
-    Effects2 = add_active_effect(Con1, State1, Effects1),
+    Effects2 = add_active_effect(Con1, State1, Effects1c),
     {State2, Effects} = activate_next_consumer(State1, Effects2),
     checkout(Meta, State0, State2, Effects).
 
@@ -2269,6 +2322,25 @@ cancel_consumer_effects(ConsumerId,
                         Effects) when is_tuple(ConsumerId) ->
     [{mod_call, rabbit_quorum_queue,
       cancel_consumer_handler, [QName, ConsumerId]} | Effects].
+
+%% Emit cancel_consumer_effects when a cancelled consumer has been removed
+%% from the state after settling its last checked-out message.
+%% The consumer's status may be `cancelled`, `{timeout, cancelled}`, or
+%% `{suspected_down, cancelled}` depending on when the settle occurs.
+maybe_cancel_consumer_effects(ConsumerKey, Consumer,
+                              #?STATE{consumers = Consumers} = State,
+                              Effects) ->
+    case is_consumer_cancelled(Consumer) andalso
+         not is_map_key(ConsumerKey, Consumers) of
+        true ->
+            cancel_consumer_effects(consumer_id(Consumer), State, Effects);
+        false ->
+            Effects
+    end.
+
+is_consumer_cancelled(#consumer{status = cancelled}) -> true;
+is_consumer_cancelled(#consumer{status = {_, cancelled}}) -> true;
+is_consumer_cancelled(_) -> false.
 
 update_msg_header(Key, Fun, Def, Msg) ->
     ?MSG(get_msg_idx(Msg),
@@ -2369,8 +2441,10 @@ return_one(#{system_time := Ts} = Meta, MsgId,
             State1 = State0#?STATE{dlx = DlxState,
                                    reclaimable_bytes =
                                        ReclaimableBytes0 - RetainedBytes},
-            {State, Effects} = complete(Meta, ConsumerKey, [MsgId],
-                                        Con0, State1, Effects0),
+            {State, Effects2} = complete(Meta, ConsumerKey, [MsgId],
+                                         Con0, State1, Effects0),
+            Effects = maybe_cancel_consumer_effects(
+                        ConsumerKey, Con0, State, Effects2),
             {State, Effects ++ DlxEffects};
         _ ->
             Checked = maps:remove(MsgId, Checked0),
@@ -2387,7 +2461,9 @@ return_one(#{system_time := Ts} = Meta, MsgId,
                              State0#?STATE{returns = lqueue:in(Msg, Returns)}
                      end,
             State = update_or_remove_con(Meta, ConsumerKey, Con, State1),
-            {add_bytes_return(Header, State), Effects0}
+            Effects = maybe_cancel_consumer_effects(
+                        ConsumerKey, Con0, State, Effects0),
+            {add_bytes_return(Header, State), Effects}
     end.
 
 should_delay(DeliveryFailed, DelayedRetry, Ts, Header, Anns) ->

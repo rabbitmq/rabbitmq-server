@@ -2121,9 +2121,10 @@ single_active_consumer_state_enter_eol_include_waiting_consumers_test(Config) ->
               ],
     {State1, _} = run_log(Config, State0, Entries),
     Effects = rabbit_fifo:state_enter(eol, State1),
-    %% 1 effect for each consumer process (channel process),
-    %% 1 effect for eol to handle rabbit_fifo_usage entries
-    ?assertEqual(4, length(Effects)),
+    %% 3 send_msg effects (one per unique consumer pid),
+    %% 1 {aux, eol} effect,
+    %% 4 cancel_consumer_effects (one per consumer)
+    ?assertEqual(8, length(Effects)),
     ok.
 
 query_consumers_test(Config) ->
@@ -2199,6 +2200,237 @@ query_consumers_when_single_active_consumer_is_on_test(Config) ->
                          ?assertEqual(waiting, ActivityStatus)
                   end
               end, [], Consumers),
+    ok.
+
+query_consumers_includes_cancelled_test(Config) ->
+    State0 = init(#{name => ?FUNCTION_NAME,
+                    queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+                    release_cursor_interval => 0,
+                    single_active_consumer_on => false}),
+
+    {CK1, C1} = {?LINE, {?LINE_B, self()}},
+    {CK2, C2} = {?LINE, {?LINE_B, self()}},
+    Entries = [
+               {CK1, make_checkout(C1, {auto, {simple_prefetch, 1}}, #{})},
+               {CK2, make_checkout(C2, {auto, {simple_prefetch, 1}}, #{})}
+              ],
+    {State1, _} = run_log(Config, State0, Entries),
+    Consumers0 = State1#rabbit_fifo.consumers,
+    Consumer = maps:get(CK1, Consumers0),
+    Consumers1 = maps:put(CK1, Consumer#consumer{status = cancelled},
+                          Consumers0),
+    State2 = State1#rabbit_fifo{consumers = Consumers1},
+
+    Consumers2 = rabbit_fifo:query_consumers(State2),
+    ?assertEqual(2, maps:size(Consumers2)),
+    maps:fold(fun(Key, {Pid, _Tag, _, _, Active, ActivityStatus, _, _}, _Acc) ->
+                      ?assertEqual(self(), Pid),
+                      case Key of
+                          CK1 ->
+                              ?assertNot(Active),
+                              ?assertEqual(cancelled, ActivityStatus);
+                          CK2 ->
+                              ?assert(Active),
+                              ?assertEqual(up, ActivityStatus)
+                      end
+              end, [], Consumers2),
+    ok.
+
+query_consumers_includes_timed_out_test(Config) ->
+    State0 = init(#{name => ?FUNCTION_NAME,
+                    queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+                    release_cursor_interval => 0,
+                    single_active_consumer_on => false}),
+
+    {CK1, C1} = {?LINE, {?LINE_B, self()}},
+    {CK2, C2} = {?LINE, {?LINE_B, self()}},
+    Entries = [
+               {CK1, make_checkout(C1, {auto, {simple_prefetch, 1}}, #{})},
+               {CK2, make_checkout(C2, {auto, {simple_prefetch, 1}}, #{})}
+              ],
+    {State1, _} = run_log(Config, State0, Entries),
+    Consumers0 = State1#rabbit_fifo.consumers,
+    Consumer = maps:get(CK1, Consumers0),
+    Consumers1 = maps:put(CK1, Consumer#consumer{status = {timeout, up}},
+                          Consumers0),
+    State2 = State1#rabbit_fifo{consumers = Consumers1},
+
+    Consumers2 = rabbit_fifo:query_consumers(State2),
+    ?assertEqual(2, maps:size(Consumers2)),
+    maps:fold(fun(Key, {Pid, _Tag, _, _, Active, ActivityStatus, _, _}, _Acc) ->
+                      ?assertEqual(self(), Pid),
+                      case Key of
+                          CK1 ->
+                              ?assertNot(Active),
+                              ?assertEqual(timeout, ActivityStatus);
+                          CK2 ->
+                              ?assert(Active),
+                              ?assertEqual(up, ActivityStatus)
+                      end
+              end, [], Consumers2),
+    ok.
+
+query_consumers_includes_cancelled_single_active_test(Config) ->
+    State0 = init(#{name => ?FUNCTION_NAME,
+                    queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+                    release_cursor_interval => 0,
+                    single_active_consumer_on => true}),
+
+    {CK1, C1} = {?LINE, {?LINE_B, self()}},
+    {CK2, C2} = {?LINE, {?LINE_B, self()}},
+    {CK3, C3} = {?LINE, {?LINE_B, self()}},
+    Entries = [
+               {CK1, make_checkout(C1, {auto, {simple_prefetch, 1}}, #{})},
+               {CK2, make_checkout(C2, {auto, {simple_prefetch, 1}}, #{})},
+               {CK3, make_checkout(C3, {auto, {simple_prefetch, 1}}, #{})}
+              ],
+    {State1, _} = run_log(Config, State0, Entries),
+    Consumers0 = State1#rabbit_fifo.consumers,
+    %% The active consumer in single_active mode is in the consumers map.
+    %% Mark it as cancelled to simulate a cancelled but not yet removed consumer.
+    [{ActiveKey, ActiveConsumer}] = maps:to_list(Consumers0),
+    Consumers1 = maps:put(ActiveKey,
+                          ActiveConsumer#consumer{status = cancelled},
+                          Consumers0),
+    State2 = State1#rabbit_fifo{consumers = Consumers1},
+
+    Consumers2 = rabbit_fifo:query_consumers(State2),
+    ?assertEqual(3, maps:size(Consumers2)),
+    maps:fold(fun(Key, {Pid, _Tag, _, _, Active, ActivityStatus, _, _}, _Acc) ->
+                      ?assertEqual(self(), Pid),
+                      case Key of
+                          ActiveKey ->
+                              ?assertNot(Active),
+                              ?assertEqual(cancelled, ActivityStatus);
+                          _ ->
+                              ?assertNot(Active),
+                              ?assertEqual(waiting, ActivityStatus)
+                      end
+              end, [], Consumers2),
+    ok.
+
+cancel_with_unacked_emits_update_then_settle_emits_delete_test(Config) ->
+    QName = rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+    State0 = init(#{name => ?FUNCTION_NAME,
+                    queue_resource => QName,
+                    release_cursor_interval => 0,
+                    single_active_consumer_on => false}),
+
+    {CK1, C1} = {?LINE, {?LINE_B, self()}},
+    Entries = [
+               {CK1, make_checkout(C1, {auto, {simple_prefetch, 2}}, #{})},
+               {?LINE, rabbit_fifo:make_enqueue(self(), 1, msg1)},
+               {?LINE, rabbit_fifo:make_enqueue(self(), 2, msg2)}
+              ],
+    {State1, _} = run_log(Config, State0, Entries),
+    ?assertMatch(#{CK1 := #consumer{checked_out = Ch}}
+                   when map_size(Ch) == 2, State1#rabbit_fifo.consumers),
+
+    %% Cancel the consumer while it has checked-out messages.
+    %% This should emit an update effect (not a delete).
+    {State2, _, CancelEffects} =
+        apply(meta(Config, ?LINE),
+              make_checkout(C1, cancel, #{}), State1),
+    ?assertMatch(#{CK1 := #consumer{status = cancelled}},
+                 State2#rabbit_fifo.consumers),
+    ?ASSERT_EFF({mod_call, rabbit_quorum_queue, update_consumer_handler,
+                 [QName, _, _, _, _, false, cancelled, _]}, CancelEffects),
+    ?ASSERT_NO_EFF({mod_call, rabbit_quorum_queue,
+                    cancel_consumer_handler, _}, CancelEffects),
+
+    %% Settle the first message. The consumer should still be present.
+    {State3, SettleEffects1} = settle(Config, CK1, ?LINE, 0, State2),
+    ?assertMatch(#{CK1 := #consumer{status = cancelled}},
+                 State3#rabbit_fifo.consumers),
+    ?ASSERT_NO_EFF({mod_call, rabbit_quorum_queue,
+                    cancel_consumer_handler, _}, SettleEffects1),
+
+    %% Settle the last message. The consumer should be removed and
+    %% the cancel effect should be emitted.
+    {State4, SettleEffects2} = settle(Config, CK1, ?LINE, 1, State3),
+    ?assertNot(is_map_key(CK1, State4#rabbit_fifo.consumers)),
+    ?ASSERT_EFF({mod_call, rabbit_quorum_queue,
+                 cancel_consumer_handler, [QName, _]}, SettleEffects2),
+    ok.
+
+timeout_emits_inactive_and_settle_emits_active_test(Config) ->
+    QName = rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+    State0 = init(#{name => ?FUNCTION_NAME,
+                    queue_resource => QName,
+                    release_cursor_interval => 0,
+                    single_active_consumer_on => false}),
+
+    {CK1, {_, _C1Pid} = C1} = {0, {?LINE_B, test_util:fake_pid(n1)}},
+    Enq1Idx = ?LINE,
+    Enq2Idx = ?LINE,
+    Timeout = ?LINE,
+    Entries = [
+               {CK1, make_checkout(C1, {auto, {simple_prefetch, 2}},
+                                   #{timeout => 1000})},
+               {Enq1Idx, rabbit_fifo:make_enqueue(self(), 1, one)},
+               {Enq2Idx, rabbit_fifo:make_enqueue(self(), 2, two)}
+              ],
+    {State1, _} = run_log(Config, State0, Entries),
+    ?assertMatch(#{CK1 := #consumer{status = up}},
+                 State1#rabbit_fifo.consumers),
+
+    %% Trigger consumer timeout. The consumer should be marked as inactive
+    %% with timeout status in the effects.
+    NextConTimeout = State1#rabbit_fifo.next_consumer_timeout,
+    {State2, _, TimeoutEffects} =
+        apply(meta(Config, Timeout, NextConTimeout + 1),
+              {timeout, evaluate_consumer_timeout}, State1),
+    ?assertMatch(#{CK1 := #consumer{status = {timeout, up}}},
+                 State2#rabbit_fifo.consumers),
+    ?ASSERT_EFF({mod_call, rabbit_quorum_queue, update_consumer_handler,
+                 [QName, _, _, _, _, false, timeout, _]}, TimeoutEffects),
+
+    %% Settle both timed-out messages. The consumer should transition back
+    %% to active with up status.
+    {State3, _, Settle1Effects} =
+        apply(meta(Config, ?LINE),
+              rabbit_fifo:make_settle(CK1, [0]), State2),
+    {State4, _, Settle2Effects} =
+        apply(meta(Config, ?LINE),
+              rabbit_fifo:make_settle(CK1, [1]), State3),
+    ?assertMatch(#{CK1 := #consumer{status = up}},
+                 State4#rabbit_fifo.consumers),
+    AllSettleEffects = Settle1Effects ++ Settle2Effects,
+    ?ASSERT_EFF({mod_call, rabbit_quorum_queue, update_consumer_handler,
+                 [QName, _, _, _, _, true, up, _]}, AllSettleEffects),
+    ok.
+
+eol_emits_cancel_for_consumers_with_checked_out_msgs_test(Config) ->
+    QName = rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+    State0 = init(#{name => ?FUNCTION_NAME,
+                    queue_resource => QName,
+                    release_cursor_interval => 0,
+                    single_active_consumer_on => false}),
+
+    {CK1, C1} = {?LINE, {?LINE_B, self()}},
+    Entries = [
+               {CK1, make_checkout(C1, {auto, {simple_prefetch, 2}}, #{})},
+               {?LINE, rabbit_fifo:make_enqueue(self(), 1, msg1)},
+               {?LINE, rabbit_fifo:make_enqueue(self(), 2, msg2)}
+              ],
+    {State1, _} = run_log(Config, State0, Entries),
+    ?assertMatch(#{CK1 := #consumer{checked_out = Ch}}
+                   when map_size(Ch) == 2, State1#rabbit_fifo.consumers),
+
+    %% Cancel the consumer while it has checked-out messages.
+    {State2, _, _} =
+        apply(meta(Config, ?LINE),
+              make_checkout(C1, cancel, #{}), State1),
+    ?assertMatch(#{CK1 := #consumer{status = cancelled}},
+                 State2#rabbit_fifo.consumers),
+
+    %% The queue is deleted (eol). The cancelled consumer still has
+    %% checked-out messages, so it would remain in the state.
+    %% The eol handler must emit cancel_consumer_handler effects
+    %% to clean up metrics entries.
+    Effects = rabbit_fifo:state_enter(eol, State2),
+    ?ASSERT_EFF({mod_call, rabbit_quorum_queue,
+                 cancel_consumer_handler, [QName, _]}, Effects),
     ok.
 
 active_flag_updated_when_consumer_suspected_unsuspected_test(Config) ->
