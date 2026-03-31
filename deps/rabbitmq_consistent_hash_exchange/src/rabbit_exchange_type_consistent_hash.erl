@@ -16,8 +16,8 @@
 -export([description/0, serialise_events/0, route/3]).
 -export([validate/1, validate_binding/2,
          create/2, delete/2, policy_changed/2,
-         add_binding/3, remove_bindings/3, assert_args_equivalence/2]).
--export([init/0]).
+         add_binding/3, remove_bindings/3, assert_args_equivalence/2,
+         recover/2]).
 -export([info/1, info/2]).
 -export([ring_state/2]).
 
@@ -31,13 +31,6 @@
      {cleanup,     {rabbit_registry, unregister,
                     [exchange, <<"x-consistent-hash">>]}}]}).
 
--rabbit_boot_step(
-   {rabbit_exchange_type_consistent_hash_metadata_store,
-    [{description, "exchange type x-consistent-hash: shared state"},
-     {mfa,         {?MODULE, init, []}},
-     {requires,    database},
-     {enables,     external_infrastructure}]}).
-
 %% This data model allows for efficient routing and exchange deletion
 %% but less efficient (linear) binding management.
 
@@ -45,10 +38,6 @@
 
 %% OTP 19.3 does not support exs1024s
 -define(SEED_ALGORITHM, exs1024).
-
-init() ->
-    _ = recover(),
-    ok.
 
 info(_X) -> [].
 info(_X, _) -> [].
@@ -116,18 +105,10 @@ maybe_initialise_hash_ring_state(#exchange{name = Name}) ->
 maybe_initialise_hash_ring_state(X = #resource{}) ->
     rabbit_db_ch_exchange:create(X).
 
-recover() ->
-    %% topology recovery has already happened, we have to recover state for any durable
-    %% consistent hash exchanges since plugin activation was moved later in boot process
-    %% starting with RabbitMQ 3.8.4
-    Xs = list_exchanges(),
-    ?LOG_DEBUG("Consistent hashing exchange: have ~b durable exchanges to recover", [length(Xs)]),
+recover(_VHost, Xs) ->
     %% TODO: reset storage if this is the first node in the cluster
-    [recover_exchange_and_bindings(X) || X <- lists:usort(Xs)].
-
-list_exchanges() ->
-    Pattern = #exchange{durable = true, type = 'x-consistent-hash', _ = '_'},
-    rabbit_db_exchange:match(Pattern).
+    _ = [recover_exchange_and_bindings(X) || X <- lists:usort(Xs)],
+    ok.
 
 recover_exchange_and_bindings(#exchange{name = XName} = X) ->
     ?LOG_DEBUG("Consistent hashing exchange: will recover exchange ~ts", [rabbit_misc:rs(XName)]),

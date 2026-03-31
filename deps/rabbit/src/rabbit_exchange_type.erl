@@ -69,6 +69,11 @@
 
 -callback info(rabbit_types:exchange(), [atom()]) -> [{atom(), term()}].
 
+%% Optional. Called during node boot.
+-callback recover(rabbit_types:vhost(), [rabbit_types:exchange()]) -> 'ok'.
+
+-optional_callbacks([recover/2]).
+
 added_to_rabbit_registry(Type, _ModuleName) ->
     persistent_term:erase(Type),
     ok.

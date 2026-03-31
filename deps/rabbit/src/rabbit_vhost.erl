@@ -84,6 +84,8 @@ recover(VHost) ->
             end
     end,
 
+    _ = rabbit_exchange:recover(VHost),
+
     {Recovered, _Failed} = rabbit_amqqueue:recover(VHost),
 
     ok = rabbit_amqqueue:start(Recovered),
