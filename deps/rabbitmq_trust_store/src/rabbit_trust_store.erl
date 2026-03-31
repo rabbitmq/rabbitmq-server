@@ -378,10 +378,12 @@ log_certificate_rejected(Reason, #'OTPCertificate'{} = C) ->
         DER = public_key:pkix_encode('OTPCertificate', C, otp),
         Fingerprint = format_fingerprint(crypto:hash(sha256, DER)),
         ?LOG_WARNING("Trust store: ~ts "
-                     "(fingerprint: ~ts, "
+                     "(subject: ~ts, "
+                     "fingerprint: ~ts, "
                      "issuer: ~ts, "
                      "validity: ~ts)",
                      [Reason,
+                      rabbit_cert_info:subject(DER),
                       Fingerprint,
                       rabbit_cert_info:issuer(DER),
                       rabbit_cert_info:validity(DER)])
