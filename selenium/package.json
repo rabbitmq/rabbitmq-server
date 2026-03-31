@@ -23,7 +23,7 @@
     "rhea": "^3.0.4",
     "selenium-webdriver": "^4.37.0",
     "xmlhttprequest": "^1.8.0",
-    "amqplib": "0.10.9"
+    "amqplib": "1.0.1"
   },
   "devDependencies": {
     "chai": "^6.2.0",
