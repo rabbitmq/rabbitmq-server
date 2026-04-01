@@ -336,7 +336,7 @@ clear_matching_user_permissions(Username, VHostName)
   when (is_binary(Username) orelse Username =:= '_') andalso
        (is_binary(VHostName) orelse VHostName =:= '_') ->
     Path = khepri_user_permission_path(any(Username), any(VHostName)),
-    ok = rabbit_khepri:delete(Path).
+    ok = rabbit_khepri:delete_many(Path).
 
 any('_') -> ?KHEPRI_WILDCARD_STAR;
 any(Value) -> Value.
@@ -553,7 +553,7 @@ clear_topic_permissions(Username, VHostName, ExchangeName)
   when is_binary(Username) andalso is_binary(VHostName) andalso
        (is_binary(ExchangeName) orelse ExchangeName =:= '_') ->
     Path = khepri_topic_permission_path(any(Username), any(VHostName), any(ExchangeName)),
-    rabbit_khepri:delete(Path).
+    rabbit_khepri:delete_many(Path).
 
 %% -------------------------------------------------------------------
 %% clear_matching_topic_permissions().
@@ -575,7 +575,7 @@ clear_matching_topic_permissions(Username, VHostName, ExchangeName)
        (is_binary(ExchangeName) orelse ExchangeName =:= '_') ->
     Path = khepri_topic_permission_path(
              any(Username), any(VHostName), any(ExchangeName)),
-    ok = rabbit_khepri:delete(Path).
+    ok = rabbit_khepri:delete_many(Path).
 
 %% -------------------------------------------------------------------
 %% delete().
@@ -610,7 +610,7 @@ delete(Username) when is_binary(Username) ->
 
 clear() ->
     Path = khepri_user_path(?KHEPRI_WILDCARD_STAR),
-    case rabbit_khepri:delete(Path) of
+    case rabbit_khepri:delete_many(Path) of
         ok    -> ok;
         Error -> throw(Error)
     end.

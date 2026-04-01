@@ -75,7 +75,7 @@ add_to_cache(Cached, Message, Length) ->
 delete() ->
     Path = khepri_recent_history_path(
              ?KHEPRI_WILDCARD_STAR, ?KHEPRI_WILDCARD_STAR),
-    rabbit_khepri:delete(Path).
+    rabbit_khepri:delete_many(Path).
 
 delete(XName) ->
     Path = khepri_recent_history_path(XName),

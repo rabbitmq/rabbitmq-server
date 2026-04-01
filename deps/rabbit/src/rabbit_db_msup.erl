@@ -140,9 +140,9 @@ delete_all(Group) ->
     Pattern = #mirrored_sup_childspec{key = {Group, '_'},
                                       _   = '_'},
     Conditions = [?KHEPRI_WILDCARD_STAR_STAR, #if_data_matches{pattern = Pattern}],
-    rabbit_khepri:delete(khepri_mirrored_supervisor_path(
-                           ?KHEPRI_WILDCARD_STAR,
-                           #if_all{conditions = Conditions})).
+    rabbit_khepri:delete_many(khepri_mirrored_supervisor_path(
+                                ?KHEPRI_WILDCARD_STAR,
+                                #if_all{conditions = Conditions})).
 
 %% -------------------------------------------------------------------
 %% clear().
@@ -153,7 +153,7 @@ delete_all(Group) ->
 clear() ->
     Path = khepri_mirrored_supervisor_path(
              ?KHEPRI_WILDCARD_STAR, ?KHEPRI_WILDCARD_STAR_STAR),
-    case rabbit_khepri:delete(Path) of
+    case rabbit_khepri:delete_many(Path) of
         ok -> ok;
         Error -> throw(Error)
     end.

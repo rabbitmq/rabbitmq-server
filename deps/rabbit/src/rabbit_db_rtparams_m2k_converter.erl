@@ -90,7 +90,7 @@ rtparams_path(Key) ->
 
 clear_data_in_khepri(rabbit_runtime_parameters) ->
     Path1 = rabbit_db_rtparams:khepri_global_rp_path(?KHEPRI_WILDCARD_STAR),
-    case rabbit_khepri:delete(Path1) of
+    case rabbit_khepri:delete_many(Path1) of
         ok -> ok;
         Error1 -> throw(Error1)
     end,
@@ -98,7 +98,7 @@ clear_data_in_khepri(rabbit_runtime_parameters) ->
               ?KHEPRI_WILDCARD_STAR,
               ?KHEPRI_WILDCARD_STAR,
               ?KHEPRI_WILDCARD_STAR),
-    case rabbit_khepri:delete(Path2) of
+    case rabbit_khepri:delete_many(Path2) of
         ok -> ok;
         Error2 -> throw(Error2)
     end.

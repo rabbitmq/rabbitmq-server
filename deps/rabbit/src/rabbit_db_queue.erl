@@ -951,7 +951,7 @@ get_in_khepri_tx(Name) ->
 
 clear() ->
     Path = khepri_queue_path(?KHEPRI_WILDCARD_STAR, ?KHEPRI_WILDCARD_STAR),
-    case rabbit_khepri:delete(Path) of
+    case rabbit_khepri:delete_many(Path) of
         ok -> ok;
         Error -> throw(Error)
     end.

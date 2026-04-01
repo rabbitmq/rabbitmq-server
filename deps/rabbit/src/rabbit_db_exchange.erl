@@ -585,7 +585,7 @@ clear_exchange_serials_in_khepri() ->
     khepri_delete(Path).
 
 khepri_delete(Path) ->
-    case rabbit_khepri:delete(Path) of
+    case rabbit_khepri:delete_many(Path) of
         ok -> ok;
         Error -> throw(Error)
     end.
