@@ -2058,8 +2058,10 @@ dont_leak_file_handles(Config) ->
      end || S <- Servers],
     timer:sleep(256),
 
+    ChsBefore = rpc:call(Server0, rabbit_channel, list, []),
     C = rabbit_ct_client_helpers:open_channel(Config, Server0),
-    [_, NCh1] = rpc:call(Server0, rabbit_channel, list, []),
+    ChsAfter = rpc:call(Server0, rabbit_channel, list, []),
+    [NCh1] = ChsAfter -- ChsBefore,
     qos(C, 1, false),
     subscribe(C, QQ, false),
     [begin
@@ -2961,6 +2963,7 @@ cleanup_queue_state_on_channel_after_publish(Config) ->
     %% are not affected by any other ra cluster that could be added in the future
     Children = length(rpc:call(Server, supervisor, which_children, [?SUPNAME])),
 
+    ChsBefore = rpc:call(Server, rabbit_channel, list, []),
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
     Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
@@ -2971,7 +2974,7 @@ cleanup_queue_state_on_channel_after_publish(Config) ->
     _Res = dirty_query(Servers, RaName, fun rabbit_fifo:query_consumer_count/1),
     wait_for_messages_pending_ack(Servers, RaName, 0),
     wait_for_messages_ready(Servers, RaName, 1),
-    [NCh1, NCh2] = rpc:call(Server, rabbit_channel, list, []),
+    [NCh1, NCh2] = rpc:call(Server, rabbit_channel, list, []) -- ChsBefore,
     %% Check the channel state contains the state for the quorum queue on
     %% channel 1 and 2
     wait_for_cleanup(Server, NCh1, 0),
@@ -2997,6 +3000,7 @@ cleanup_queue_state_on_channel_after_subscribe(Config) ->
     %% are not affected by any other ra cluster that could be added in the future
     Children = length(rpc:call(Server, supervisor, which_children, [?SUPNAME])),
 
+    ChsBefore = rpc:call(Server, rabbit_channel, list, []),
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
     Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
@@ -3017,7 +3021,7 @@ cleanup_queue_state_on_channel_after_subscribe(Config) ->
             wait_for_messages_ready(Servers, RaName, 0),
             wait_for_messages_pending_ack(Servers, RaName, 0)
     end,
-    [NCh1, NCh2] = rpc:call(Server, rabbit_channel, list, []),
+    [NCh1, NCh2] = rpc:call(Server, rabbit_channel, list, []) -- ChsBefore,
     %% Check the channel state contains the state for the quorum queue on channel 1 and 2
     wait_for_cleanup(Server, NCh1, 1),
     wait_for_cleanup(Server, NCh2, 1),
