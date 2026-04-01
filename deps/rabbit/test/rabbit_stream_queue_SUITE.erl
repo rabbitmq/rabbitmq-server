@@ -279,7 +279,8 @@ init_per_testcase(TestCase, Config)
   when TestCase == replica_recovery
        orelse TestCase == leader_failover
        orelse TestCase == leader_failover_dedupe
-       orelse TestCase == recover_after_leader_and_coordinator_kill ->
+       orelse TestCase == recover_after_leader_and_coordinator_kill
+       orelse TestCase == max_age_policy ->
     case rabbit_ct_helpers:is_mixed_versions() of
         true ->
             %% not supported because of machine version difference
