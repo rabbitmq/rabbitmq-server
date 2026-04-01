@@ -311,7 +311,7 @@ delete_matching_in_mnesia_tx(VHostName, Comp, Name) ->
 
 delete_in_khepri(Key) ->
     Path = khepri_rp_path(Key),
-    ok = rabbit_khepri:delete(Path).
+    ok = rabbit_khepri:delete_many(Path).
 
 delete_matching_in_khepri(VHostName, Comp, Name) ->
     Key = {?any(VHostName), ?any(Comp), ?any(Name)},
@@ -357,7 +357,7 @@ delete_vhost_in_mnesia_tx(VHostName) ->
 delete_vhost_in_khepri(VHostName) ->
     Pattern = khepri_vhost_rp_path(
                 VHostName, ?KHEPRI_WILDCARD_STAR, ?KHEPRI_WILDCARD_STAR),
-    case rabbit_khepri:adv_delete(Pattern) of
+    case rabbit_khepri:adv_delete_many(Pattern) of
         {ok, NodePropsMap} ->
             RTParams =
             maps:fold(
