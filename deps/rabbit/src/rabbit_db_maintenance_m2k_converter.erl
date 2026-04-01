@@ -86,7 +86,7 @@ delete_from_khepri(rabbit_node_maintenance_states = Table, Key, State) ->
 
 clear_data_in_khepri(rabbit_node_maintenance_states) ->
     Path = rabbit_db_maintenance:khepri_maintenance_path(?KHEPRI_WILDCARD_STAR),
-    case rabbit_khepri:delete(Path) of
+    case rabbit_khepri:delete_many(Path) of
         ok -> ok;
         Error -> throw(Error)
     end.

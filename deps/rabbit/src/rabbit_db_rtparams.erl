@@ -219,7 +219,7 @@ delete(VHostName, Comp, Name)
 
 do_delete(Key) ->
     Path = khepri_rp_path(Key),
-    ok = rabbit_khepri:delete(Path).
+    ok = rabbit_khepri:delete_many(Path).
 
 %% -------------------------------------------------------------------
 %% delete_vhost().
@@ -239,7 +239,7 @@ do_delete(Key) ->
 delete_vhost(VHostName) when is_binary(VHostName) ->
     Pattern = khepri_vhost_rp_path(
                 VHostName, ?KHEPRI_WILDCARD_STAR, ?KHEPRI_WILDCARD_STAR),
-    case rabbit_khepri:adv_delete(Pattern) of
+    case rabbit_khepri:adv_delete_many(Pattern) of
         {ok, NodePropsMap} ->
             RTParams =
             maps:fold(
