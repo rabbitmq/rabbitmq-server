@@ -492,11 +492,11 @@ list_group_consumers_run(Config) ->
         #{<<"single-active-consumer">> => <<"true">>,
           <<"name">> => ConsumerReference},
 
-    create_stream(S, Stream1, C),
-    subscribe(S, 0, Stream1, SubProperties, C),
-    handle_consumer_update(S, C, 0),
-    subscribe(S, 1, Stream1, SubProperties, C),
-    subscribe(S, 2, Stream1, SubProperties, C),
+    C1 = create_stream(S, Stream1, C),
+    C2 = subscribe(S, 0, Stream1, SubProperties, C1),
+    C3 = handle_consumer_update(S, C2, 0),
+    C4 = subscribe(S, 1, Stream1, SubProperties, C3),
+    C5 = subscribe(S, 2, Stream1, SubProperties, C4),
 
     ?awaitMatch(3, consumer_count(Config), ?WAIT),
 
@@ -512,11 +512,11 @@ list_group_consumers_run(Config) ->
         maps:merge(#{stream => Stream2, reference => ConsumerReference},
                    Opts),
 
-    create_stream(S, Stream2, C),
-    subscribe(S, 3, Stream2, SubProperties, C),
-    handle_consumer_update(S, C, 3),
-    subscribe(S, 4, Stream2, SubProperties, C),
-    subscribe(S, 5, Stream2, SubProperties, C),
+    C6 = create_stream(S, Stream2, C5),
+    C7 = subscribe(S, 3, Stream2, SubProperties, C6),
+    C8 = handle_consumer_update(S, C7, 3),
+    C9 = subscribe(S, 4, Stream2, SubProperties, C8),
+    C10 = subscribe(S, 5, Stream2, SubProperties, C9),
 
     ?awaitMatch(3 + 3, consumer_count(Config), ?WAIT),
 
@@ -527,13 +527,13 @@ list_group_consumers_run(Config) ->
                   [{subscription_id, 5}, {state, "waiting (connected)"}]],
                  Consumers2),
 
-    delete_stream(S, Stream1, C),
-    delete_stream(S, Stream2, C),
+    C11 = delete_stream(S, Stream1, C10),
+    C12 = delete_stream(S, Stream2, C11),
 
     {error, not_found} =
         ?COMMAND_LIST_GROUP_CONSUMERS:run(Args, OptsGroup2),
 
-    close(S, C),
+    close(S, C12),
     ok.
 
 activate_consumer_validate(_) ->
@@ -583,18 +583,18 @@ activate_consumer_run(Config) ->
     SubProperties =#{<<"single-active-consumer">> => <<"true">>,
                      <<"name">> => ConsumerReference},
 
-    create_stream(S, St, C),
-    subscribe(S, 0, St, SubProperties, C),
-    handle_consumer_update(S, C, 0),
-    subscribe(S, 1, St, SubProperties, C),
-    subscribe(S, 2, St, SubProperties, C),
+    C1 = create_stream(S, St, C),
+    C2 = subscribe(S, 0, St, SubProperties, C1),
+    C3 = handle_consumer_update(S, C2, 0),
+    C4 = subscribe(S, 1, St, SubProperties, C3),
+    C5 = subscribe(S, 2, St, SubProperties, C4),
 
     ?awaitMatch(3, consumer_count(Config), ?WAIT),
 
     ?assertEqual(ok, Cmd:run(Args, OptsGroup)),
     
-    delete_stream(S, St, C),
-    close(S, C),
+    C6 = delete_stream(S, St, C5),
+    close(S, C6),
     ok.
 
 handle_consumer_update(S, C0, SubId) ->
@@ -663,12 +663,12 @@ list_stream_tracking_run(Config) ->
     {S, C} = start_stream_connection(StreamPort),
     ?awaitMatch(1, connection_count(Config), ?WAIT),
 
-    create_stream(S, Stream, C),
+    C1 = create_stream(S, Stream, C),
 
     ?assertMatch([],
                  ?COMMAND_LIST_STREAM_TRACKING:run(Args, Opts#{all => true})),
 
-    store_offset(S, Stream, ConsumerReference, 42, C),
+    {ok, C1_1} = store_offset(S, Stream, ConsumerReference, 42, C1),
 
     ?assertMatch([[{type,offset}, {name, ConsumerReference}, {tracking_value, 42}]],
                 ?COMMAND_LIST_STREAM_TRACKING:run(Args, Opts#{all => true})),
@@ -676,17 +676,17 @@ list_stream_tracking_run(Config) ->
     ?assertMatch([[{type,offset}, {name, ConsumerReference}, {tracking_value, 42}]],
                 ?COMMAND_LIST_STREAM_TRACKING:run(Args, Opts#{offset => true})),
 
-    ok = store_offset(S, Stream, ConsumerReference, 55, C),
+    {ok, C1_2} = store_offset(S, Stream, ConsumerReference, 55, C1_1),
     ?assertMatch([[{type,offset}, {name, ConsumerReference}, {tracking_value, 55}]],
                 ?COMMAND_LIST_STREAM_TRACKING:run(Args, Opts#{offset => true})),
 
 
     PublisherId = 1,
-    rabbit_stream_SUITE:test_declare_publisher(gen_tcp, S, PublisherId,
-                                               PublisherReference, Stream, C),
-    rabbit_stream_SUITE:test_publish_confirm(gen_tcp, S, PublisherId, 42, <<"">>, C),
+    C2 = rabbit_stream_SUITE:test_declare_publisher(gen_tcp, S, PublisherId,
+                                               PublisherReference, Stream, C1_2),
+    C3 = rabbit_stream_SUITE:test_publish_confirm(gen_tcp, S, PublisherId, 42, <<"">>, C2),
 
-    ok = check_publisher_sequence(S, Stream, PublisherReference, 42, C),
+    {ok, C3_1} = check_publisher_sequence(S, Stream, PublisherReference, 42, C3),
 
     ?assertMatch([
                   [{type,writer},{name,<<"bar">>},{tracking_value, 42}],
@@ -699,18 +699,18 @@ list_stream_tracking_run(Config) ->
                  ],
                  ?COMMAND_LIST_STREAM_TRACKING:run(Args, Opts#{writer => true})),
 
-    rabbit_stream_SUITE:test_publish_confirm(gen_tcp, S, PublisherId, 66, <<"">>, C),
+    C4 = rabbit_stream_SUITE:test_publish_confirm(gen_tcp, S, PublisherId, 66, <<"">>, C3_1),
 
-    ok = check_publisher_sequence(S, Stream, PublisherReference, 66, C),
+    {ok, C4_1} = check_publisher_sequence(S, Stream, PublisherReference, 66, C4),
 
     ?assertMatch([
                   [{type,writer},{name,<<"bar">>},{tracking_value, 66}]
                  ],
                  ?COMMAND_LIST_STREAM_TRACKING:run(Args, Opts#{writer => true})),
 
-    delete_stream(S, Stream, C),
+    C5 = delete_stream(S, Stream, C4_1),
 
-    close(S, C),
+    close(S, C5),
     ok.
 
 reset_offset_validate(_) ->
@@ -759,17 +759,17 @@ reset_offset_run(Config) ->
 
     Port = rabbit_stream_SUITE:get_stream_port(Config),
     {S, C} = start_stream_connection(Port),
-    create_stream(S, St, C),
+    C1 = create_stream(S, St, C),
 
     ?assertEqual({error, no_reference}, Cmd:run(Args, OptsGroup)),
-    store_offset(S, St, Ref, 42, C),
+    {ok, C1_1} = store_offset(S, St, Ref, 42, C1),
 
-    check_stored_offset(S, St, Ref, 42, C),
+    {ok, C1_2} = check_stored_offset(S, St, Ref, 42, C1_1),
     ?assertMatch(ok, Cmd:run(Args, OptsGroup)),
-    check_stored_offset(S, St, Ref, 0, C),
+    {ok, C1_3} = check_stored_offset(S, St, Ref, 0, C1_2),
 
-    delete_stream(S, St, C),
-    close(S, C),
+    C2 = delete_stream(S, St, C1_3),
+    close(S, C2),
     ok.
 
 add_super_stream_merge_defaults(_Config) ->
@@ -1082,8 +1082,8 @@ store_offset(S, Stream, Reference, Value, C) ->
         rabbit_stream_core:frame({store_offset, Reference, Stream, Value}),
     ok = gen_tcp:send(S, StoreOffsetFrame),
     case check_stored_offset(S, Stream, Reference, Value, C, 20) of
-        ok ->
-            ok;
+        {ok, CNew} ->
+            {ok, CNew};
         _ ->
             {error, offset_not_stored}
     end.
@@ -1098,15 +1098,15 @@ check_stored_offset(S, Stream, Reference, Expected, C, Attempt) ->
     QueryOffsetFrame =
         rabbit_stream_core:frame({request, 1, {query_offset, Reference, Stream}}),
     ok = gen_tcp:send(S, QueryOffsetFrame),
-    {Cmd, _} = rabbit_stream_SUITE:receive_commands(gen_tcp, S, C),
+    {Cmd, CNew} = rabbit_stream_SUITE:receive_commands(gen_tcp, S, C),
     ?assertMatch({response, 1, {query_offset, ?RESPONSE_CODE_OK, _}}, Cmd),
     {response, 1, {query_offset, ?RESPONSE_CODE_OK, StoredValue}} = Cmd,
     case StoredValue of
         Expected ->
-            ok;
+            {ok, CNew};
         _ ->
             timer:sleep(50),
-            check_stored_offset(S, Stream, Reference, Expected, C, Attempt - 1)
+            check_stored_offset(S, Stream, Reference, Expected, CNew, Attempt - 1)
     end.
 
 check_publisher_sequence(S, Stream, Reference, Expected, C) ->
@@ -1118,15 +1118,15 @@ check_publisher_sequence(S, Stream, Reference, Expected, C, Attempt) ->
     QueryFrame =
         rabbit_stream_core:frame({request, 1, {query_publisher_sequence, Reference, Stream}}),
     ok = gen_tcp:send(S, QueryFrame),
-    {Cmd, _} = rabbit_stream_SUITE:receive_commands(gen_tcp, S, C),
+    {Cmd, CNew} = rabbit_stream_SUITE:receive_commands(gen_tcp, S, C),
     ?assertMatch({response, 1, {query_publisher_sequence, _, _}}, Cmd),
     {response, 1, {query_publisher_sequence, _, StoredValue}} = Cmd,
     case StoredValue of
         Expected ->
-            ok;
+            {ok, CNew};
         _ ->
             timer:sleep(50),
-            check_publisher_sequence(S, Stream, Reference, Expected, C, Attempt - 1)
+            check_publisher_sequence(S, Stream, Reference, Expected, CNew, Attempt - 1)
     end.
 
 gen_bin(L) ->
