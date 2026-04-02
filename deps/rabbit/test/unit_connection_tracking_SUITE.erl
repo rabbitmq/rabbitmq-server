@@ -100,16 +100,18 @@ connection_count(Config) ->
     ok.
 
 connection_lookup(Config) ->
+    ConnsBefore = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_connection_tracking, list, []),
     Conn = rabbit_ct_client_helpers:open_connection(Config, 0),
 
     %% Let's wait until the connection is registered, otherwise this test could fail in a slow
     %% machine as connection tracking is asynchronous
     rabbit_ct_helpers:await_condition(
       fun() ->
-              rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_connection_tracking, count, []) == 1
+              length(rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_connection_tracking, list, [])
+                     -- ConnsBefore) == 1
       end, 30000),
 
-    [Connection] = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_connection_tracking, list, []),
+    [Connection] = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_connection_tracking, list, []) -- ConnsBefore,
     ?assertMatch(Connection, rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_connection_tracking,
                                                           lookup,
                                                           [Connection#tracked_connection.name])),
