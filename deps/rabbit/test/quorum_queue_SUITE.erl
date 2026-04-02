@@ -5718,10 +5718,11 @@ restart_after_queue_reincarnation_(Config) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config, S1),
     QName = <<"QQ">>,
 
+    QsBefore = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, list, []),
     ?assertEqual({'queue.declare_ok', QName, 0, 0},
                  declare(Ch, QName, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
-    [Q] = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, list, []),
+    [Q] = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, list, []) -- QsBefore,
     VHost = amqqueue:get_vhost(Q),
 
     MessagesPublished = 1000,
@@ -5806,10 +5807,11 @@ no_messages_after_queue_reincarnation_(Config) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config, S1),
     QName = <<"QQ">>,
 
+    QsBefore = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, list, []),
     ?assertEqual({'queue.declare_ok', QName, 0, 0},
                  declare(Ch, QName, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
-    [Q] = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, list, []),
+    [Q] = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, list, []) -- QsBefore,
 
     publish(Ch, QName, <<"msg1">>),
     publish(Ch, QName, <<"msg2">>),
