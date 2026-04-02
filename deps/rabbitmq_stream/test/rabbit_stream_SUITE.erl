@@ -393,41 +393,42 @@ test_super_stream_creation_deletion(Config) ->
     Port = get_port(T, Config),
     Opts = get_opts(T),
     {ok, S} = T:connect("localhost", Port, Opts),
-    C = rabbit_stream_core:init(0),
-    test_peer_properties(T, S, C),
-    test_authenticate(T, S, C),
+    C0 = rabbit_stream_core:init(0),
+    C1 = test_peer_properties(T, S, C0),
+    C2 = test_authenticate(T, S, C1),
 
     Ss = atom_to_binary(?FUNCTION_NAME, utf8),
     Partitions = [unicode:characters_to_binary([Ss, <<"-">>, integer_to_binary(N)]) || N <- lists:seq(0, 2)],
     Bks = [integer_to_binary(N) || N <- lists:seq(0, 2)],
     SsCreationFrame = request({create_super_stream, Ss, Partitions, Bks, #{}}),
     ok = T:send(S, SsCreationFrame),
-    {Cmd1, _} = receive_commands(T, S, C),
+    {Cmd1, C3} = receive_commands(T, S, C2),
     ?assertMatch({response, 1, {create_super_stream, ?RESPONSE_CODE_OK}},
                  Cmd1),
 
     PartitionsFrame = request({partitions, Ss}),
     ok = T:send(S, PartitionsFrame),
-    {Cmd2, _} = receive_commands(T, S, C),
+    {Cmd2, C4} = receive_commands(T, S, C3),
     ?assertMatch({response, 1, {partitions, ?RESPONSE_CODE_OK, Partitions}},
                  Cmd2),
-    [begin
+    C5 = lists:foldl(fun(Rk, CAcc) ->
          RouteFrame = request({route, Rk, Ss}),
          ok = T:send(S, RouteFrame),
-         {Command, _} = receive_commands(T, S, C),
+         {Command, CAccNext} = receive_commands(T, S, CAcc),
          ?assertMatch({response, 1, {route, ?RESPONSE_CODE_OK, _}}, Command),
          {response, 1, {route, ?RESPONSE_CODE_OK, [P]}} = Command,
-         ?assertEqual(unicode:characters_to_binary([Ss, <<"-">>, Rk]), P)
-     end || Rk <- Bks],
+         ?assertEqual(unicode:characters_to_binary([Ss, <<"-">>, Rk]), P),
+         CAccNext
+     end, C4, Bks),
 
     SsDeletionFrame = request({delete_super_stream, Ss}),
     ok = T:send(S, SsDeletionFrame),
-    {Cmd3, _} = receive_commands(T, S, C),
+    {Cmd3, C6} = receive_commands(T, S, C5),
     ?assertMatch({response, 1, {delete_super_stream, ?RESPONSE_CODE_OK}},
                  Cmd3),
 
     ok = T:send(S, PartitionsFrame),
-    {Cmd4, _} = receive_commands(T, S, C),
+    {Cmd4, C7} = receive_commands(T, S, C6),
     ?assertMatch({response, 1, {partitions, ?RESPONSE_CODE_STREAM_DOES_NOT_EXIST, []}},
                  Cmd4),
 
@@ -435,11 +436,11 @@ test_super_stream_creation_deletion(Config) ->
     SsCreationBadFrame = request({create_super_stream, Ss,
                                   [<<"s1">>, <<"s2">>], [<<"bk1">>], #{}}),
     ok = T:send(S, SsCreationBadFrame),
-    {Cmd5, _} = receive_commands(T, S, C),
+    {Cmd5, C8} = receive_commands(T, S, C7),
     ?assertMatch({response, 1, {create_super_stream, ?RESPONSE_CODE_PRECONDITION_FAILED}},
                  Cmd5),
 
-    test_close(T, S, C),
+    test_close(T, S, C8),
     closed = wait_for_socket_close(T, S, 10),
     ok.
 
@@ -448,19 +449,19 @@ test_super_stream_duplicate_partitions(Config) ->
     Port = get_port(T, Config),
     Opts = get_opts(T),
     {ok, S} = T:connect("localhost", Port, Opts),
-    C = rabbit_stream_core:init(0),
-    test_peer_properties(T, S, C),
-    test_authenticate(T, S, C),
+    C0 = rabbit_stream_core:init(0),
+    C1 = test_peer_properties(T, S, C0),
+    C2 = test_authenticate(T, S, C1),
 
     Ss = atom_to_binary(?FUNCTION_NAME, utf8),
     Partitions = [<<"same-name">>, <<"same-name">>],
     SsCreationFrame = request({create_super_stream, Ss, Partitions, [<<"1">>, <<"2">>], #{}}),
     ok = T:send(S, SsCreationFrame),
-    {Cmd1, _} = receive_commands(T, S, C),
+    {Cmd1, C3} = receive_commands(T, S, C2),
     ?assertMatch({response, 1, {create_super_stream, ?RESPONSE_CODE_PRECONDITION_FAILED}},
                  Cmd1),
 
-    test_close(T, S, C),
+    test_close(T, S, C3),
     closed = wait_for_socket_close(T, S, 10),
     ok.
 
@@ -695,9 +696,9 @@ vhost_queue_limit(Config) ->
     Port = get_port(T, Config),
     Opts = get_opts(T),
     {ok, S} = T:connect("localhost", Port, Opts),
-    C = rabbit_stream_core:init(0),
-    test_peer_properties(T, S, C),
-    test_authenticate(T, S, C),
+    C0 = rabbit_stream_core:init(0),
+    C1 = test_peer_properties(T, S, C0),
+    C2 = test_authenticate(T, S, C1),
     QueueCount = rabbit_ct_broker_helpers:rpc(Config,
                                               0,
                                               rabbit_amqqueue,
@@ -715,7 +716,7 @@ vhost_queue_limit(Config) ->
     Bks = [integer_to_binary(N) || N <- lists:seq(0, PartitionCount)],
     SsCreationFrame = request({create_super_stream, Name, Partitions, Bks, #{}}),
     ok = T:send(S, SsCreationFrame),
-    {Cmd1, _} = receive_commands(T, S, C),
+    {Cmd1, C3} = receive_commands(T, S, C2),
     ?assertMatch({response, 1, {create_super_stream, ?RESPONSE_CODE_OK}},
                  Cmd1),
 
@@ -725,27 +726,27 @@ vhost_queue_limit(Config) ->
                                  [<<"1">>, <<"2">>, <<"3">>], #{}}),
 
     ok = T:send(S, SsCreationFrameKo),
-    {Cmd2, _} = receive_commands(T, S, C),
+    {Cmd2, C4} = receive_commands(T, S, C3),
     ?assertMatch({response, 1, {create_super_stream, ?RESPONSE_CODE_PRECONDITION_FAILED}},
                  Cmd2),
 
     CreateStreamFrame = request({create_stream, <<"exceed-queue-limit">>, #{}}),
     ok = T:send(S, CreateStreamFrame),
-    {Cmd3, C} = receive_commands(T, S, C),
+    {Cmd3, C5} = receive_commands(T, S, C4),
     ?assertMatch({response, 1, {create_stream, ?RESPONSE_CODE_PRECONDITION_FAILED}}, Cmd3),
 
     SsDeletionFrame = request({delete_super_stream, Name}),
     ok = T:send(S, SsDeletionFrame),
-    {Cmd4, _} = receive_commands(T, S, C),
+    {Cmd4, C6} = receive_commands(T, S, C5),
     ?assertMatch({response, 1, {delete_super_stream, ?RESPONSE_CODE_OK}},
                  Cmd4),
 
     ok = T:send(S, request({create_stream, Name, #{}})),
-    {Cmd5, C} = receive_commands(T, S, C),
+    {Cmd5, C7} = receive_commands(T, S, C6),
     ?assertMatch({response, 1, {create_stream, ?RESPONSE_CODE_OK}}, Cmd5),
 
     ok = T:send(S, request({delete_stream, Name})),
-    {Cmd6, C} = receive_commands(T, S, C),
+    {Cmd6, _C8} = receive_commands(T, S, C7),
     ?assertMatch({response, 1, {delete_stream, ?RESPONSE_CODE_OK}}, Cmd6),
 
     ok.
@@ -764,9 +765,9 @@ connection_should_be_closed_on_token_expiry(Config) ->
     Port = get_port(T, Config),
     Opts = get_opts(T),
     {ok, S} = T:connect("localhost", Port, Opts),
-    C = rabbit_stream_core:init(0),
-    test_peer_properties(T, S, C),
-    test_authenticate(T, S, C),
+    C0 = rabbit_stream_core:init(0),
+    C1 = test_peer_properties(T, S, C0),
+    test_authenticate(T, S, C1),
     closed = wait_for_socket_close(T, S, 10),
     ok = rpc(Config, 0, meck, unload, [Mod]).
 
@@ -775,18 +776,18 @@ should_receive_metadata_update_after_update_secret(Config) ->
     Port = get_port(T, Config),
     Opts = get_opts(T),
     {ok, S} = T:connect("localhost", Port, Opts),
-    C = rabbit_stream_core:init(0),
-    test_peer_properties(T, S, C),
-    test_authenticate(T, S, C),
+    C0 = rabbit_stream_core:init(0),
+    C1 = test_peer_properties(T, S, C0),
+    C2 = test_authenticate(T, S, C1),
 
     Prefix = atom_to_binary(?FUNCTION_NAME, utf8),
     PublishStream = <<Prefix/binary, <<"-publish">>/binary>>,
-    test_create_stream(T, S, PublishStream, C),
+    C3 = test_create_stream(T, S, PublishStream, C2),
     ConsumeStream = <<Prefix/binary, <<"-consume">>/binary>>,
-    test_create_stream(T, S, ConsumeStream, C),
+    C4 = test_create_stream(T, S, ConsumeStream, C3),
 
-    test_declare_publisher(T, S, 1, PublishStream, C),
-    test_subscribe(T, S, 1, ConsumeStream, C),
+    C5 = test_declare_publisher(T, S, 1, PublishStream, C4),
+    C6 = test_subscribe(T, S, 1, ConsumeStream, C5),
 
     rabbit_ct_broker_helpers:setup_meck(Config),
     Mod = rabbit_stream_utils,
@@ -794,7 +795,7 @@ should_receive_metadata_update_after_update_secret(Config) ->
     ok = rpc(Config, 0, meck, expect, [Mod, check_write_permitted, 2, error]),
     ok = rpc(Config, 0, meck, expect, [Mod, check_read_permitted, 3, error]),
 
-    C01 = expect_successful_authentication(try_authenticate(T, S, C, <<"PLAIN">>, <<"guest">>, <<"guest">>)),
+    C01 = expect_successful_authentication(try_authenticate(T, S, C6, <<"PLAIN">>, <<"guest">>, <<"guest">>)),
 
     {Meta1, C02} = receive_commands(T, S, C01),
     {metadata_update, Stream1, ?RESPONSE_CODE_STREAM_NOT_AVAILABLE} = Meta1,
@@ -810,12 +811,12 @@ should_receive_metadata_update_after_update_secret(Config) ->
     ok = rpc(Config, 0, meck, unload, [Mod]),
 
     {ok, S2} = T:connect("localhost", Port, Opts),
-    C2 = rabbit_stream_core:init(0),
-    test_peer_properties(T, S2, C2),
-    test_authenticate(T, S2, C2),
-    test_delete_stream(T, S2, PublishStream, C2, false),
-    test_delete_stream(T, S2, ConsumeStream, C2, false),
-    test_close(T, S2, C2),
+    C20 = rabbit_stream_core:init(0),
+    C21 = test_peer_properties(T, S2, C20),
+    C22 = test_authenticate(T, S2, C21),
+    C23 = test_delete_stream(T, S2, PublishStream, C22, false),
+    C24 = test_delete_stream(T, S2, ConsumeStream, C23, false),
+    test_close(T, S2, C24),
     closed = wait_for_socket_close(T, S2, 10),
     ok.
 
