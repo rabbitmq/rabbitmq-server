@@ -615,8 +615,8 @@ init_stream(Config, N, St) ->
     {ok, S, C0} = stream_test_utils:connect(stream_port(Config, N)),
     {ok, C1} = stream_test_utils:create_stream(S, C0, St),
     NC = node_count(Config),
-    wait_for_members(S, C1, St, NC),
-    {ok, _} = stream_test_utils:close(S, C1).
+    C2 = wait_for_members(S, C1, St, NC),
+    {ok, _} = stream_test_utils:close(S, C2).
 
 delete_stream(Port, St) ->
     {ok, S, C0} = stream_test_utils:connect(Port),
@@ -634,18 +634,20 @@ init_super_stream(Config, Node, Ss, PartitionIndex, ExpectedNode) ->
     {Cmd1, C1} = receive_commands(S, C0),
     ?assertMatch({response, ?CORR_ID, {create_super_stream, ?RESPONSE_CODE_OK}},
                  Cmd1),
-    [wait_for_members(S, C1, P, NC) || P <- Partitions],
+    C2 = lists:foldl(fun(P, CAcc) ->
+        wait_for_members(S, CAcc, P, NC)
+    end, C1, Partitions),
     Partition = lists:nth(PartitionIndex, Partitions),
     [#node{name = LN} | _] = topology(Config, Partition),
-    P = case LN of
+    {P, C3} = case LN of
             ExpectedNode ->
-                Partition;
+                {Partition, C2};
             _ ->
-                enforce_stream_leader_on_node(Config, S, C1,
+                enforce_stream_leader_on_node(Config, S, C2,
                                               Partitions, Partition,
                                               ExpectedNode, 10)
         end,
-    {ok, _} = stream_test_utils:close(S, C1),
+    {ok, _} = stream_test_utils:close(S, C3),
     P.
 
 
@@ -655,22 +657,22 @@ enforce_stream_leader_on_node(Config, S, C,
                               Partitions, Partition, Node, Count) ->
     CL = coordinator_leader(Config),
     NC = node_count(Config),
-    [begin
+    CNew = lists:foldl(fun(P, CAcc) ->
          case P of
              Partition ->
                  restart_stream(Config, CL, P, Node);
              _ ->
                  restart_stream(Config, CL, P, undefined)
          end,
-         wait_for_members(S, C, P, NC)
-     end || P <- Partitions],
+         wait_for_members(S, CAcc, P, NC)
+     end, C, Partitions),
     [#node{name = LN} | _] = topology(Config, Partition),
     case LN of
         Node ->
-            Partition;
+            {Partition, CNew};
         _ ->
             timer:sleep(500),
-            enforce_stream_leader_on_node(Config, S, C,
+            enforce_stream_leader_on_node(Config, S, CNew,
                                           Partitions, Partition, Node,
                                           Count - 1)
     end.
@@ -795,20 +797,25 @@ name() ->
     <<"app">>.
 
 wait_for_members(S, C, St, ExpectedCount) ->
+    wait_for_members(S, C, St, ExpectedCount, 200).
+
+wait_for_members(_S, _C, _St, ExpectedCount, 0) ->
+    ct:fail("Expected ~b stream members but condition "
+            "did not materialize", [ExpectedCount]);
+wait_for_members(S, C, St, ExpectedCount, Retries) ->
     T = ?TRSPT,
-    GetStreamNodes =
-        fun() ->
-           MetadataFrame = request({metadata, [St]}),
-           ok = gen_tcp:send(S, MetadataFrame),
-           {CmdMetadata, _} = receive_commands(T, S, C),
-           {response, 1,
-            {metadata, _Nodes, #{St := {Leader = {_H, _P}, Replicas}}}} =
-               CmdMetadata,
-           [Leader | Replicas]
-        end,
-    rabbit_ct_helpers:await_condition(fun() ->
-                                         length(GetStreamNodes()) == ExpectedCount
-                                      end).
+    MetadataFrame = request({metadata, [St]}),
+    ok = gen_tcp:send(S, MetadataFrame),
+    {CmdMetadata, CNew} = receive_commands(T, S, C),
+    {response, 1,
+     {metadata, _Nodes, #{St := {Leader = {_H, _P}, Replicas}}}} =
+        CmdMetadata,
+    case length([Leader | Replicas]) of
+        ExpectedCount -> CNew;
+        _ ->
+            timer:sleep(50),
+            wait_for_members(S, CNew, St, ExpectedCount, Retries - 1)
+    end.
 
 wait_for_disconnected_consumer(Config, Node, Stream) ->
     rabbit_ct_helpers:await_condition(
