@@ -480,17 +480,30 @@ test_metadata(Config) ->
               C2 = test_authenticate(Transport, S, C1),
               C3 = test_create_stream(Transport, S, Stream, C2),
               GetStreamNodes =
-              fun() ->
+              fun(CIn) ->
                       MetadataFrame = request({metadata, [Stream]}),
                       ok = Transport:send(S, MetadataFrame),
-                      {CmdMetadata, _} = receive_commands(Transport, S, C3),
+                      {CmdMetadata, COut} = receive_commands(Transport, S, CIn),
                       {response, 1,
                        {metadata, _Nodes, #{Stream := {Leader = {_H, _P}, Replicas}}}} =
                       CmdMetadata,
-                      [Leader | Replicas]
+                      {[Leader | Replicas], COut}
+              end,
+              AwaitMembers =
+              fun AwaitMembers(_CIn, ExpectedCount, 0) ->
+                      ct:fail("Expected ~b stream members but condition "
+                              "did not materialize", [ExpectedCount]);
+                  AwaitMembers(CIn, ExpectedCount, Retries) ->
+                      {Nodes, COut} = GetStreamNodes(CIn),
+                      case length(Nodes) of
+                          ExpectedCount -> COut;
+                          _ ->
+                              timer:sleep(50),
+                              AwaitMembers(COut, ExpectedCount, Retries - 1)
+                      end
               end,
 
-              await_condition(fun() -> length(GetStreamNodes()) == 3 end),
+              C4 = AwaitMembers(C3, 3, 200),
 
               rpc(Config, NodeInMaintenance, rabbit_maintenance, drain, []),
 
@@ -502,20 +515,20 @@ test_metadata(Config) ->
               end,
               await_condition(fun() -> IsBeingDrained() end),
 
-              await_condition(fun() -> length(GetStreamNodes()) == 2 end),
+              C5 = AwaitMembers(C4, 2, 200),
 
               rpc(Config, NodeInMaintenance, rabbit_maintenance, revive, []),
 
               await_condition(fun() -> IsBeingDrained() =:= false end),
 
-              await_condition(fun() -> length(GetStreamNodes()) == 3 end),
+              C6 = AwaitMembers(C5, 3, 200),
 
               DeleteStreamFrame = request({delete_stream, Stream}),
               ok = Transport:send(S, DeleteStreamFrame),
-              {CmdDelete, C4} = receive_commands(Transport, S, C3),
+              {CmdDelete, C7} = receive_commands(Transport, S, C6),
               ?assertMatch({response, 1, {delete_stream, ?RESPONSE_CODE_OK}},
                            CmdDelete),
-              _C5 = test_close(Transport, S, C4),
+              _C8 = test_close(Transport, S, C7),
               closed = wait_for_socket_close(Transport, S, 10)
       end, Transports),
 
@@ -988,13 +1001,13 @@ test_publisher_with_too_long_reference_errors(Config) ->
   Port = get_port(T, Config),
   Opts = get_opts(T),
   {ok, S} = T:connect("localhost", Port, Opts),
-  C = rabbit_stream_core:init(0),
+  C0 = rabbit_stream_core:init(0),
   ConnectionName = FunctionName,
-  test_peer_properties(T, S, #{<<"connection_name">> => ConnectionName}, C),
-  test_authenticate(T, S, C),
+  C1 = test_peer_properties(T, S, #{<<"connection_name">> => ConnectionName}, C0),
+  C2 = test_authenticate(T, S, C1),
 
   Stream = FunctionName,
-  test_create_stream(T, S, Stream, C),
+  C3 = test_create_stream(T, S, Stream, C2),
 
   MaxSize = 255,
   ReferenceOK = iolist_to_binary(lists:duplicate(MaxSize, <<"a">>)),
@@ -1003,15 +1016,16 @@ test_publisher_with_too_long_reference_errors(Config) ->
   Tests = [{1, ReferenceOK, ?RESPONSE_CODE_OK},
            {2, ReferenceKO, ?RESPONSE_CODE_PRECONDITION_FAILED}],
 
-  [begin
+  C4 = lists:foldl(fun({PubId, Ref, ExpectedResponseCode}, CAcc) ->
      F = request({declare_publisher, PubId, Ref, Stream}),
      ok = T:send(S, F),
-     {Cmd, C} = receive_commands(T, S, C),
-     ?assertMatch({response, 1, {declare_publisher, ExpectedResponseCode}}, Cmd)
-   end || {PubId, Ref, ExpectedResponseCode} <- Tests],
+     {Cmd, CNext} = receive_commands(T, S, CAcc),
+     ?assertMatch({response, 1, {declare_publisher, ExpectedResponseCode}}, Cmd),
+     CNext
+   end, C3, Tests),
 
-  test_delete_stream(T, S, Stream, C),
-  test_close(T, S, C),
+  C5 = test_delete_stream(T, S, Stream, C4),
+  test_close(T, S, C5),
   ok.
 
 test_consumer_with_too_long_reference_errors(Config) ->
@@ -1020,13 +1034,13 @@ test_consumer_with_too_long_reference_errors(Config) ->
   Port = get_port(T, Config),
   Opts = get_opts(T),
   {ok, S} = T:connect("localhost", Port, Opts),
-  C = rabbit_stream_core:init(0),
+  C0 = rabbit_stream_core:init(0),
   ConnectionName = FunctionName,
-  test_peer_properties(T, S, #{<<"connection_name">> => ConnectionName}, C),
-  test_authenticate(T, S, C),
+  C1 = test_peer_properties(T, S, #{<<"connection_name">> => ConnectionName}, C0),
+  C2 = test_authenticate(T, S, C1),
 
   Stream = FunctionName,
-  test_create_stream(T, S, Stream, C),
+  C3 = test_create_stream(T, S, Stream, C2),
 
   MaxSize = 255,
   ReferenceOK = iolist_to_binary(lists:duplicate(MaxSize, <<"a">>)),
@@ -1035,15 +1049,16 @@ test_consumer_with_too_long_reference_errors(Config) ->
   Tests = [{1, ReferenceOK, ?RESPONSE_CODE_OK},
            {2, ReferenceKO, ?RESPONSE_CODE_PRECONDITION_FAILED}],
 
-  [begin
+  C4 = lists:foldl(fun({SubId, Ref, ExpectedResponseCode}, CAcc) ->
      F = request({subscribe, SubId, Stream, first, 1, #{<<"name">> => Ref}}),
      ok = T:send(S, F),
-     {Cmd, C} = receive_commands(T, S, C),
-     ?assertMatch({response, 1, {subscribe, ExpectedResponseCode}}, Cmd)
-   end || {SubId, Ref, ExpectedResponseCode} <- Tests],
+     {Cmd, CNext} = receive_commands(T, S, CAcc),
+     ?assertMatch({response, 1, {subscribe, ExpectedResponseCode}}, Cmd),
+     CNext
+   end, C3, Tests),
 
-  test_delete_stream(T, S, Stream, C),
-  test_close(T, S, C),
+  C5 = test_delete_stream(T, S, Stream, C4),
+  test_close(T, S, C5),
   ok.
 
 subscribe_unsubscribe_should_create_events(Config) ->
