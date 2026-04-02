@@ -354,11 +354,17 @@ start_proxies(Config) ->
     %% goal is to make sure the common_test control node doesn't interfere
     %% with the nodes the RabbitMQ nodes can see, despite the blocking of the
     %% Erlang distribution connection.
+    %%
+    %% Prevent `global' from disconnecting proxy nodes during
+    %% deliberately created partitions.
     Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Proxies0 = [begin
                     {ok, Proxy, PeerNode} = peer:start_link(
                                               #{name => peer:random_name(),
                                                 connection => standard_io,
+                                                args => ["-kernel",
+                                                         "prevent_overlapping_partitions",
+                                                         "false"],
                                                 wait_boot => 120000}),
                     ct:pal("Proxy ~0p -> ~0p", [Proxy, PeerNode]),
                     Proxy
