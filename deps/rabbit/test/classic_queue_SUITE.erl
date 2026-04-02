@@ -126,7 +126,9 @@ flow_control(Config, FlowEnabled, VerifyFun) ->
     OrigCredit = set_default_credit(Config, {2, 1}),
     OrigFlow = set_flow_control(Config, FlowEnabled),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config),
+    ConnsBefore = rabbit_ct_broker_helpers:rpc(Config, rabbit_networking, local_connections, []),
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
     QueueName = atom_to_binary(?FUNCTION_NAME),
     declare(Ch, QueueName, [{<<"x-queue-type">>, longstr,  <<"classic">>}]),
     QPid = get_queue_pid(Config, QueueName),
@@ -136,7 +138,7 @@ flow_control(Config, FlowEnabled, VerifyFun) ->
         %% Publish 100 messages without publisher confirms
         publish_many(Ch, QueueName, 100),
 
-        [ConnPid] = rabbit_ct_broker_helpers:rpc(Config, rabbit_networking, local_connections, []),
+        [ConnPid] = rabbit_ct_broker_helpers:rpc(Config, rabbit_networking, local_connections, []) -- ConnsBefore,
 
         VerifyFun(QPid, ConnPid),
         ok
@@ -145,7 +147,7 @@ flow_control(Config, FlowEnabled, VerifyFun) ->
         delete_queues(Ch, [QueueName]),
         set_default_credit(Config, OrigCredit),
         set_flow_control(Config, OrigFlow),
-        rabbit_ct_client_helpers:close_channel(Ch)
+        rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch)
     end.
 
 leader_locator_client_local(Config) ->
