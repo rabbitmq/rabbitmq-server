@@ -8,7 +8,8 @@
 
 all() ->
     [
-     decode_reply_to
+     decode_reply_to,
+     volatile_queue_detection
     ].
 
 init_per_suite(Config) ->
@@ -37,6 +38,22 @@ decode_reply_to(Config) ->
       fun() -> prop_decode_reply_to(Config) end,
       [],
       ?ITERATIONS_TO_RUN_UNTIL_CONFIDENT).
+
+volatile_queue_detection(Config) ->
+    rabbit_ct_proper_helpers:run_proper(
+      fun() -> prop_volatile_queue_detection(Config) end,
+      [],
+      ?ITERATIONS_TO_RUN_UNTIL_CONFIDENT).
+
+prop_volatile_queue_detection(_) ->
+    ?FORALL(Suffix, non_empty(binary()),
+        begin
+            VolatileName = <<"amq.rabbitmq.reply-to.", Suffix/binary>>,
+            rabbit_volatile_queue:is(VolatileName)
+            andalso not rabbit_volatile_queue:is(<<"notvolatile.", Suffix/binary>>)
+            andalso not rabbit_volatile_queue:is(<<"amq.rabbitmq.reply-to">>)
+            andalso not rabbit_volatile_queue:is(<<"amq.rabbitmq.reply-t.", Suffix/binary>>)
+        end).
 
 prop_decode_reply_to(_) ->
     ?FORALL({Len, Random}, {pos_integer(), binary()},
