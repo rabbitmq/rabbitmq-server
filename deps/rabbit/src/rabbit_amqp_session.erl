@@ -2920,19 +2920,24 @@ ensure_source_v1(Address,
                     XNameBin = unicode:characters_to_binary(XNameList),
                     XName = exchange_resource(Vhost, XNameBin),
                     QName = queue_resource(Vhost, QNameBin),
-                    Binding = #binding{source = XName,
-                                       destination = QName,
-                                       key = RoutingKey},
-                    PermCache2 = check_resource_access(QName, write, User, PermCache1),
-                    PermCache = check_resource_access(XName, read, User, PermCache2),
-                    {ok, X} = rabbit_exchange:lookup(XName),
-                    TopicPermCache = check_read_permitted_on_topic(
-                                       X, User, RoutingKey, TopicPermCache0),
-                    case rabbit_binding:add(Binding, Username) of
-                        ok ->
-                            {ok, QName, PermCache, TopicPermCache};
-                        {error, _} = Err ->
-                            Err
+                    case rabbit_volatile_queue:is(QNameBin) of
+                        true ->
+                            {error, {volatile_queue_not_bindable, QNameBin}};
+                        false ->
+                            Binding = #binding{source = XName,
+                                               destination = QName,
+                                               key = RoutingKey},
+                            PermCache2 = check_resource_access(QName, write, User, PermCache1),
+                            PermCache = check_resource_access(XName, read, User, PermCache2),
+                            {ok, X} = rabbit_exchange:lookup(XName),
+                            TopicPermCache = check_read_permitted_on_topic(
+                                               X, User, RoutingKey, TopicPermCache0),
+                            case rabbit_binding:add(Binding, Username) of
+                                ok ->
+                                    {ok, QName, PermCache, TopicPermCache};
+                                {error, _} = Err ->
+                                    Err
+                            end
                     end
             end;
         {error, _} = Err ->

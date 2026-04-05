@@ -1010,6 +1010,18 @@ check_exchange_deletion(XName = #resource{name = <<"amq.", _/binary>>,
 check_exchange_deletion(_) ->
     ok.
 
+reject_volatile_queue_as_binding_target(queue, DestinationNameBin) ->
+    case rabbit_volatile_queue:is(DestinationNameBin) of
+        true ->
+            rabbit_misc:protocol_error(
+              access_refused,
+              "cannot bind or unbind to a volatile (direct reply-to) queue", []);
+        false ->
+            ok
+    end;
+reject_volatile_queue_as_binding_target(_, _) ->
+    ok.
+
 %% check that an exchange/queue name does not contain the reserved
 %% "amq."  prefix.
 %%
@@ -1714,6 +1726,7 @@ binding_action_with_checks(
   #user{username = Username} = User) ->
     ExchangeNameBin = strip_cr_lf(SourceNameBin0),
     DestinationNameBin = strip_cr_lf(DestinationNameBin0),
+    reject_volatile_queue_as_binding_target(DestinationType, DestinationNameBin),
     DestinationName = name_to_resource(DestinationType, DestinationNameBin, VHostPath),
     check_write_permitted(DestinationName, User, AuthzContext),
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
