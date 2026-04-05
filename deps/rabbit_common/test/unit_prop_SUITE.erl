@@ -26,7 +26,11 @@ groups() ->
             data_coercion_as_list_property,
             data_coercion_to_binary_roundtrip_property,
             data_coercion_to_map_recursive_property,
-            data_coercion_to_existing_atom_property
+            data_coercion_to_existing_atom_property,
+            is_loopback_ipv4_property,
+            is_loopback_ipv6_property,
+            is_loopback_ipv4_mapped_ipv6_property,
+            is_loopback_non_loopback_property
         ]}
     ].
 
@@ -127,3 +131,59 @@ proplist_gen() ->
         {proplist_key(), proplist_or_value()},
         oneof([enabled, disabled, auto])
     ])).
+
+%% Every 127.x.y.z address is loopback.
+is_loopback_ipv4_property(_Config) ->
+    ?assert(
+       proper:quickcheck(
+         ?FORALL({B, C, D},
+                 {range(0, 255), range(0, 255), range(0, 255)},
+                 rabbit_net:is_loopback({127, B, C, D})),
+         proper_opts())).
+
+%% ::1 is the only IPv6 loopback address.
+is_loopback_ipv6_property(_Config) ->
+    ?assert(rabbit_net:is_loopback({0, 0, 0, 0, 0, 0, 0, 1})),
+    ?assertNot(rabbit_net:is_loopback({0, 0, 0, 0, 0, 0, 0, 2})),
+    ?assert(
+       proper:quickcheck(
+         ?FORALL({A, B, C, D, E, F, G, H},
+                 {range(0, 65535), range(0, 65535), range(0, 65535), range(0, 65535),
+                  range(0, 65535), range(0, 65535), range(0, 65535), range(0, 65535)},
+                 begin
+                     IsSpecial =
+                         (A =:= 0 andalso B =:= 0 andalso C =:= 0 andalso
+                          D =:= 0 andalso E =:= 0) andalso
+                         ((F =:= 0 andalso G =:= 0 andalso H =:= 1) orelse
+                          (F =:= 65535)),
+                     ?IMPLIES(not IsSpecial,
+                              not rabbit_net:is_loopback({A, B, C, D, E, F, G, H}))
+                 end),
+         proper_opts())).
+
+%% IPv4-mapped IPv6 addresses (::ffff:a.b.c.d) are loopback iff
+%% the embedded IPv4 address is 127.x.y.z.
+is_loopback_ipv4_mapped_ipv6_property(_Config) ->
+    ?assert(
+       proper:quickcheck(
+         ?FORALL({AB, CD},
+                 {range(0, 65535), range(0, 65535)},
+                 begin
+                     Addr = {0, 0, 0, 0, 0, 65535, AB, CD},
+                     EmbeddedFirstOctet = AB bsr 8,
+                     case EmbeddedFirstOctet of
+                         127 -> rabbit_net:is_loopback(Addr);
+                         _   -> not rabbit_net:is_loopback(Addr)
+                     end
+                 end),
+         proper_opts())).
+
+%% Addresses outside the 127.0.0.0/8 range are not loopback.
+is_loopback_non_loopback_property(_Config) ->
+    ?assert(
+       proper:quickcheck(
+         ?FORALL({A, B, C, D},
+                 {range(0, 255), range(0, 255), range(0, 255), range(0, 255)},
+                 ?IMPLIES(A =/= 127,
+                          not rabbit_net:is_loopback({A, B, C, D}))),
+         proper_opts())).

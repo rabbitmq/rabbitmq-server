@@ -1485,6 +1485,7 @@ auth_phase(Response,
            State = #v1{connection = Connection =
                            #connection{auth_mechanism = {Name, AuthMechanism},
                                        auth_state     = AuthState,
+                                       peer_host      = PeerHost,
                                        host           = RemoteAddress},
                        sock = Sock}) ->
     ?LOG_DEBUG("Client address during authN phase: ~tp", [RemoteAddress]),
@@ -1505,7 +1506,7 @@ auth_phase(Response,
             State#v1{connection = Connection#connection{
                                     auth_state = AuthState1}};
         {ok, User = #user{username = Username}} ->
-            case rabbit_access_control:check_user_loopback(Username, Sock) of
+            case rabbit_access_control:check_user_loopback(Username, PeerHost) of
                 ok ->
                     rabbit_core_metrics:auth_attempt_succeeded(RemoteAddress, Username, amqp091),
                     notify_auth_result(Username, user_authentication_success,
