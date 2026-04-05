@@ -36,11 +36,16 @@ init_per_suite(Config) ->
                  {rabbitmq_ct_tls_verify, verify_none}]),
     Config2 = rabbit_ct_helpers:merge_app_env(
                 Config1,
-                [{rabbit, [{proxy_protocol, true}]}]),
-    rabbit_ct_helpers:run_setup_steps(
-      Config2,
-      rabbit_ct_broker_helpers:setup_steps() ++
-      rabbit_ct_client_helpers:setup_steps()).
+                [{rabbit, [{proxy_protocol, true},
+                           {anonymous_login_user, <<"proxy_test">>},
+                           {anonymous_login_pass, <<"proxy_test">>}]}]),
+    Config3 = rabbit_ct_helpers:run_setup_steps(
+                Config2,
+                rabbit_ct_broker_helpers:setup_steps() ++
+                rabbit_ct_client_helpers:setup_steps()),
+    rabbit_ct_broker_helpers:add_user(Config3, <<"proxy_test">>, <<"proxy_test">>),
+    rabbit_ct_broker_helpers:set_full_permissions(Config3, <<"proxy_test">>, <<"/">>),
+    Config3.
 
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config,

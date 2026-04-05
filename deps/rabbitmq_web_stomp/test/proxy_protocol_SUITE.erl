@@ -50,12 +50,15 @@ init_per_group(Group, Config) ->
                                             {rabbitmq_ct_tls_verify, verify_none},
                                             {rabbitmq_ct_tls_fail_if_no_peer_cert, false}]),
 
-    rabbit_ct_helpers:run_setup_steps(
-        Config1,
-        rabbit_ct_broker_helpers:setup_steps() ++ [
-            fun configure_proxy_protocol/1,
-            fun configure_ssl/1
-        ]).
+    Config2 = rabbit_ct_helpers:run_setup_steps(
+                 Config1,
+                 rabbit_ct_broker_helpers:setup_steps() ++ [
+                     fun configure_proxy_protocol/1,
+                     fun configure_ssl/1
+                 ]),
+    rabbit_ct_broker_helpers:add_user(Config2, <<"proxy_test">>, <<"proxy_test">>),
+    rabbit_ct_broker_helpers:set_full_permissions(Config2, <<"proxy_test">>, <<"/">>),
+    Config2.
 
 configure_proxy_protocol(Config) ->
     rabbit_ws_test_util:update_app_env(Config, proxy_protocol, true),
@@ -87,7 +90,7 @@ proxy_protocol_v1(Config) ->
     WS = rfc6455_client:new(Protocol ++ "://127.0.0.1:" ++ PortStr ++ "/ws", self(),
         undefined, [], "PROXY TCP4 192.168.1.1 192.168.1.2 80 81\r\n"),
     {ok, _} = rfc6455_client:open(WS),
-    Frame = stomp:marshal("CONNECT", [{"login","guest"}, {"passcode", "guest"}], <<>>),
+    Frame = stomp:marshal("CONNECT", [{"login","proxy_test"}, {"passcode", "proxy_test"}], <<>>),
     rfc6455_client:send(WS, Frame),
     {ok, _P} = rfc6455_client:recv(WS),
     ConnectionName = rabbit_ct_broker_helpers:rpc(Config, 0,
@@ -109,7 +112,7 @@ proxy_protocol_v2_local(Config) ->
     WS = rfc6455_client:new(Protocol ++ "://127.0.0.1:" ++ PortStr ++ "/ws", self(),
         undefined, [], ranch_proxy_header:header(ProxyInfo)),
     {ok, _} = rfc6455_client:open(WS),
-    Frame = stomp:marshal("CONNECT", [{"login","guest"}, {"passcode", "guest"}], <<>>),
+    Frame = stomp:marshal("CONNECT", [{"login","proxy_test"}, {"passcode", "proxy_test"}], <<>>),
     rfc6455_client:send(WS, Frame),
     {ok, _P} = rfc6455_client:recv(WS),
     ConnectionName = rabbit_ct_broker_helpers:rpc(Config, 0,
