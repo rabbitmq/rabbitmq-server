@@ -42,6 +42,8 @@ all_tests() ->
      list_with_multiple_vhosts,
      list_with_multiple_arguments,
      bind_to_unknown_queue,
+     bind_to_volatile_queue,
+     unbind_from_volatile_queue,
      binding_args_direct_exchange,
      binding_args_fanout_exchange,
 
@@ -624,6 +626,29 @@ bind_to_unknown_queue(Config) ->
                                                     routing_key = Q})),
     ?assertEqual([],
                  rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_binding, list, [<<"/">>])),
+    ok.
+
+%% Volatile (direct-reply-to) queues must not be valid binding targets
+bind_to_volatile_queue(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    VolatileQ = <<"amq.rabbitmq.reply-to.fake-encoded-pid.fake-key">>,
+    ?assertExit({{shutdown, {server_initiated_close, 403, _}}, _},
+                amqp_channel:call(Ch, #'queue.bind'{exchange = <<"amq.direct">>,
+                                                    queue = VolatileQ,
+                                                    routing_key = <<"key">>})),
+    ?assertEqual([],
+                 rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_binding, list, [<<"/">>])),
+    ok.
+
+unbind_from_volatile_queue(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    VolatileQ = <<"amq.rabbitmq.reply-to.fake-encoded-pid.fake-key">>,
+    ?assertExit({{shutdown, {server_initiated_close, 403, _}}, _},
+                amqp_channel:call(Ch, #'queue.unbind'{exchange = <<"amq.direct">>,
+                                                      queue = VolatileQ,
+                                                      routing_key = <<"key">>})),
     ok.
 
 %% Test case for https://github.com/rabbitmq/rabbitmq-server/issues/14533
