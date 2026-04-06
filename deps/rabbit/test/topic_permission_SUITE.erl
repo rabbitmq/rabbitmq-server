@@ -56,6 +56,15 @@ init_per_group(_, Config) ->
 end_per_group(_, Config) ->
     Config.
 
+init_per_testcase(Testcase, Config)
+  when Testcase =:= topic_permission_khepri_error_fails_closed;
+       Testcase =:= topic_permission_khepri_error_fails_closed_prop ->
+    case rabbit_ct_broker_helpers:configured_metadata_store(Config) of
+        mnesia ->
+            {skip, "These tests target Khepri"};
+        _ ->
+            rabbit_ct_helpers:testcase_started(Config, Testcase)
+    end;
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
