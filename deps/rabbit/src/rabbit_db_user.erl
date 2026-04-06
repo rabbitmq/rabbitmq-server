@@ -404,12 +404,14 @@ clear_all_permissions_for_vhost_in_khepri_tx(VHostName) ->
       Username :: rabbit_types:username(),
       VHostName :: vhost:name(),
       ExchangeName :: binary(),
-      Ret :: TopicPermission | undefined,
+      Ret :: TopicPermission | undefined | {error, term()},
       TopicPermission :: #topic_permission{}.
 %% @doc Returns the topic permissions for the given user and exchange in the
 %% given virtual host.
 %%
-%% @returns the topic permissions record if any, or `undefined'.
+%% @returns the topic permissions record if any, `undefined' if no topic
+%% permissions are set, or `{error, Reason}' if the metadata store query
+%% fails.
 %%
 %% @private
 
@@ -419,8 +421,12 @@ get_topic_permissions(Username, VHostName, ExchangeName)
        is_binary(ExchangeName) ->
     Path = khepri_topic_permission_path(Username, VHostName, ExchangeName),
     case rabbit_khepri:get(Path) of
-        {ok, TopicPermission} -> TopicPermission;
-        _                     -> undefined
+        {ok, TopicPermission} ->
+            TopicPermission;
+        {error, {khepri, node_not_found, _}} ->
+            undefined;
+        {error, _} = Error ->
+            Error
     end.
 
 %% -------------------------------------------------------------------

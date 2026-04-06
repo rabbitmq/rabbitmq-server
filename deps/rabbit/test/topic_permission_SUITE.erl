@@ -7,6 +7,7 @@
 
 -module(topic_permission_SUITE).
 
+-include_lib("proper/include/proper.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -26,7 +27,9 @@ groups() ->
        amqpl_cc_headers,
        amqpl_bcc_headers,
        topic_permission_database_access,
-       topic_permission_checks
+       topic_permission_checks,
+       topic_permission_khepri_error_fails_closed,
+       topic_permission_khepri_error_fails_closed_prop
       ]}
     ].
 
@@ -392,6 +395,105 @@ topic_permission_checks1(_Config) ->
     ) || Perm <- Permissions],
 
     ok.
+
+%% Topic permission checks must fail closed on metadata store errors.
+topic_permission_khepri_error_fails_closed(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+        ?MODULE, topic_permission_khepri_error_fails_closed1, [Config]).
+
+topic_permission_khepri_error_fails_closed1(_Config) ->
+    clear_tables(),
+    rabbit_vhost:add(<<"/">>, <<"acting-user">>),
+    rabbit_auth_backend_internal:add_user(<<"guest">>, <<"guest">>, <<"acting-user">>),
+    ok = rabbit_auth_backend_internal:set_topic_permissions(
+           <<"guest">>, <<"/">>, <<"amq.topic">>, "^a", "^a", <<"acting-user">>),
+
+    User = #auth_user{username = <<"guest">>},
+    Topic = #resource{name = <<"amq.topic">>, virtual_host = <<"/">>,
+                      kind = topic},
+    Context = #{routing_key => <<"secret.key">>},
+
+    %% Baseline: routing key does not match "^a", so access is denied
+    false = rabbit_auth_backend_internal:check_topic_access(
+              User, Topic, write, Context),
+
+    %% Mock rabbit_khepri:get to simulate a Khepri timeout
+    ok = meck:new(rabbit_khepri, [passthrough]),
+    meck:expect(rabbit_khepri, get,
+                fun(_Path) -> {error, timeout} end),
+    try
+        %% Must return {error, timeout}, not 'true'
+        {error, timeout} = rabbit_auth_backend_internal:check_topic_access(
+                             User, Topic, write, Context),
+        %% Also test with noproc
+        meck:expect(rabbit_khepri, get,
+                    fun(_Path) -> {error, noproc} end),
+        {error, noproc} = rabbit_auth_backend_internal:check_topic_access(
+                            User, Topic, write, Context)
+    after
+        meck:unload(rabbit_khepri)
+    end,
+
+    %% After unmocking, normal behavior resumes
+    false = rabbit_auth_backend_internal:check_topic_access(
+              User, Topic, write, Context),
+    true = rabbit_auth_backend_internal:check_topic_access(
+             User, Topic, write, #{routing_key => <<"a.b.c">>}),
+    ok.
+
+%% Property: for any error reason, check_topic_access must propagate it.
+topic_permission_khepri_error_fails_closed_prop(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+        ?MODULE, topic_permission_khepri_error_fails_closed_prop1, [Config]).
+
+topic_permission_khepri_error_fails_closed_prop1(_Config) ->
+    clear_tables(),
+    rabbit_vhost:add(<<"/">>, <<"acting-user">>),
+    rabbit_auth_backend_internal:add_user(<<"guest">>, <<"guest">>, <<"acting-user">>),
+    ok = rabbit_auth_backend_internal:set_topic_permissions(
+           <<"guest">>, <<"/">>, <<"amq.topic">>, "^a", "^a", <<"acting-user">>),
+    ok = meck:new(rabbit_khepri, [passthrough]),
+    try
+        Property = fun() -> prop_khepri_error_fails_closed() end,
+        rabbit_ct_proper_helpers:run_proper(Property, [], 100)
+    after
+        meck:unload(rabbit_khepri)
+    end,
+    ok.
+
+prop_khepri_error_fails_closed() ->
+    ?FORALL(
+       {ErrorReason, RoutingKey, Permission},
+       {khepri_error_reason(), topic_routing_key(), oneof([read, write])},
+       begin
+           meck:expect(rabbit_khepri, get,
+                       fun(_Path) -> {error, ErrorReason} end),
+           User = #auth_user{username = <<"guest">>},
+           Topic = #resource{name = <<"amq.topic">>, virtual_host = <<"/">>,
+                             kind = topic},
+           Context = #{routing_key => RoutingKey},
+           Result = rabbit_auth_backend_internal:check_topic_access(
+                      User, Topic, Permission, Context),
+           ?WHENFAIL(
+              ct:pal("FAIL: error=~p, routing_key=~p, perm=~p, result=~p",
+                     [ErrorReason, RoutingKey, Permission, Result]),
+              Result =:= {error, ErrorReason})
+       end).
+
+khepri_error_reason() ->
+    oneof([timeout, noproc,
+           {timeout, {gen_server, call, [fake_pid]}},
+           {nodedown, 'node@host'},
+           {no_more_servers_to_try, []},
+           {badmatch, undefined}]).
+
+topic_routing_key() ->
+    oneof([<<"a.b.c">>, <<"secret.key">>, <<"public.1">>,
+           <<"x.y.z">>, <<"">>,
+           ?LET(Parts,
+                non_empty(list(oneof([<<"a">>, <<"b">>, <<"secret">>,
+                                      <<"public">>, <<"x">>]))),
+                iolist_to_binary(lists:join(<<".">>, Parts)))]).
 
 clear_tables() ->
     ok = rabbit_db_vhost:clear(),
