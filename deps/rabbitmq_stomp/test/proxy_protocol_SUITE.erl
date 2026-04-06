@@ -36,10 +36,13 @@ init_per_suite(Config) ->
         {rabbitmq_ct_tls_verify, verify_none}
     ]),
     StompConfig = stomp_config(),
-    rabbit_ct_helpers:run_setup_steps(Config1,
-        [ fun(Conf) -> merge_app_env(StompConfig, Conf) end ] ++
-            rabbit_ct_broker_helpers:setup_steps() ++
-            rabbit_ct_client_helpers:setup_steps()).
+    Config2 = rabbit_ct_helpers:run_setup_steps(Config1,
+                  [ fun(Conf) -> merge_app_env(StompConfig, Conf) end ] ++
+                      rabbit_ct_broker_helpers:setup_steps() ++
+                      rabbit_ct_client_helpers:setup_steps()),
+    rabbit_ct_broker_helpers:add_user(Config2, <<"proxy_test">>, <<"proxy_test">>),
+    rabbit_ct_broker_helpers:set_full_permissions(Config2, <<"proxy_test">>, <<"/">>),
+    Config2.
 
 stomp_config() ->
     {rabbitmq_stomp, [
@@ -116,7 +119,7 @@ merge_app_env(StompConfig, Config) ->
 
 stomp_connect_frame() ->
     <<"CONNECT\n",
-      "login:guest\n",
-      "passcode:guest\n",
+      "login:proxy_test\n",
+      "passcode:proxy_test\n",
       "\n",
       0>>.

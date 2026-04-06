@@ -276,7 +276,7 @@ sock_funs(inbound)  -> {fun peername/1, fun sockname/1};
 sock_funs(outbound) -> {fun sockname/1, fun peername/1}.
 
 is_loopback(Sock) when is_port(Sock) ; ?IS_SSL(Sock) ->
-    case sockname(Sock) of
+    case peername(Sock) of
         {ok, {Addr, _Port}} -> is_loopback(Addr);
         {error, _}          -> false
     end;

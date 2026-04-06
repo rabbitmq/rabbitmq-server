@@ -1356,7 +1356,8 @@ handle_frame_pre_auth(Transport,
 handle_frame_pre_auth(Transport,
                       #stream_connection{socket = S,
                                          authentication_state = AuthState0,
-                                         host = Host} =
+                                         host = Host,
+                                         peer_host = PeerHost} =
                           Connection0,
                       State,
                       {request, CorrelationId,
@@ -1408,7 +1409,7 @@ handle_frame_pre_auth(Transport,
                         {ok, User = #user{username = Username}} ->
                             case
                                 rabbit_access_control:check_user_loopback(Username,
-                                                                          S)
+                                                                          PeerHost)
                             of
                                 ok ->
                                     rabbit_core_metrics:auth_attempt_succeeded(Host,
