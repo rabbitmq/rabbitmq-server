@@ -163,6 +163,8 @@ check_topic_access(#auth_user{username = Username},
     case rabbit_db_user:get_topic_permissions(Username, VHostPath, Name) of
         undefined ->
             true;
+        {error, _} = Err ->
+            Err;
         #topic_permission{permission = P} ->
             PermRegexp = case element(permission_index(Permission), P) of
                              %% <<"^$">> breaks Emacs' erlang mode
