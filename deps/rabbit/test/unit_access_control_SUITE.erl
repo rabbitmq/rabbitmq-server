@@ -25,7 +25,9 @@ groups() ->
       {parallel_tests, [parallel], [
           password_hashing,
           version_negotiation,
-          expand_topic_permission_prop
+          expand_topic_permission_prop,
+          is_loopback_prop,
+          check_user_loopback_prop
       ]},
       {sequential_tests, [], [
           login_with_credentials_but_no_password,
@@ -317,6 +319,111 @@ prop_expand_topic_permission_matches_literally() ->
                 nomatch -> false
             end
         end).
+
+is_loopback_prop(_Config) ->
+    Property = fun () -> prop_is_loopback() end,
+    rabbit_ct_proper_helpers:run_proper(Property, [], 1000).
+
+prop_is_loopback() ->
+    ?FORALL(Addr, ip_address(),
+        begin
+            Result = rabbit_net:is_loopback(Addr),
+            Expected = expected_is_loopback(Addr),
+            Result =:= Expected
+        end).
+
+check_user_loopback_prop(Config) ->
+    Property = fun () -> prop_check_user_loopback(Config) end,
+    rabbit_ct_proper_helpers:run_proper(Property, [], 1000).
+
+prop_check_user_loopback(Config) ->
+    ?FORALL({Addr, IsLoopbackUser}, {ip_address(), boolean()},
+        begin
+            Username = <<"test_user">>,
+            LoopbackUsers = case IsLoopbackUser of
+                                true  -> [Username];
+                                false -> []
+                            end,
+            rabbit_ct_broker_helpers:rpc(Config, 0,
+                application, set_env, [rabbit, loopback_users, LoopbackUsers]),
+            Result = rabbit_ct_broker_helpers:rpc(Config, 0,
+                rabbit_access_control, check_user_loopback, [Username, Addr]),
+            IsLoopback = expected_is_loopback(Addr),
+            Expected = case IsLoopback orelse not IsLoopbackUser of
+                           true  -> ok;
+                           false -> not_allowed
+                       end,
+            Result =:= Expected
+        end).
+
+%% Biased toward an even split between loopback and non-loopback addresses.
+ip_address() ->
+    proper_types:frequency([
+        {3, ipv4_loopback()},
+        {3, ipv4_non_loopback()},
+        {1, ipv6_loopback()},
+        {2, ipv6_non_loopback()},
+        {2, ipv4_mapped_ipv6_loopback()},
+        {2, ipv4_mapped_ipv6_non_loopback()}
+    ]).
+
+ipv4_loopback() ->
+    ?LET({B, C, D},
+         {proper_types:range(0, 255),
+          proper_types:range(0, 255),
+          proper_types:range(0, 255)},
+         {127, B, C, D}).
+
+ipv4_non_loopback() ->
+    ?SUCHTHAT(Addr,
+              ?LET({A, B, C, D},
+                   {proper_types:range(0, 255),
+                    proper_types:range(0, 255),
+                    proper_types:range(0, 255),
+                    proper_types:range(0, 255)},
+                   {A, B, C, D}),
+              element(1, Addr) =/= 127).
+
+ipv6_loopback() ->
+    proper_types:exactly({0, 0, 0, 0, 0, 0, 0, 1}).
+
+ipv6_non_loopback() ->
+    ?SUCHTHAT(Addr,
+              ?LET({A, B, C, D, E, F, G, H},
+                   {proper_types:range(0, 65535),
+                    proper_types:range(0, 65535),
+                    proper_types:range(0, 65535),
+                    proper_types:range(0, 65535),
+                    proper_types:range(0, 65535),
+                    proper_types:range(0, 65535),
+                    proper_types:range(0, 65535),
+                    proper_types:range(0, 65535)},
+                   {A, B, C, D, E, F, G, H}),
+              Addr =/= {0, 0, 0, 0, 0, 0, 0, 1} andalso
+              element(6, Addr) =/= 65535).
+
+ipv4_mapped_ipv6_loopback() ->
+    ?LET({B, C, D},
+         {proper_types:range(0, 255),
+          proper_types:range(0, 255),
+          proper_types:range(0, 255)},
+         {0, 0, 0, 0, 0, 65535, 127 * 256 + B, C * 256 + D}).
+
+ipv4_mapped_ipv6_non_loopback() ->
+    ?SUCHTHAT(Addr,
+              ?LET({A, B, C, D},
+                   {proper_types:range(0, 255),
+                    proper_types:range(0, 255),
+                    proper_types:range(0, 255),
+                    proper_types:range(0, 255)},
+                   {0, 0, 0, 0, 0, 65535, A * 256 + B, C * 256 + D}),
+              element(7, Addr) bsr 8 =/= 127).
+
+expected_is_loopback({127, _, _, _})             -> true;
+expected_is_loopback({0, 0, 0, 0, 0, 0, 0, 1})  -> true;
+expected_is_loopback({0, 0, 0, 0, 0, 65535, AB, CD}) ->
+    expected_is_loopback({AB bsr 8, AB band 255, CD bsr 8, CD band 255});
+expected_is_loopback(_)                          -> false.
 
 %% Test AMQP 1.0 §2.2
 version_negotiation(Config) ->
