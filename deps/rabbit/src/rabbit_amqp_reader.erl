@@ -852,9 +852,9 @@ vhost({utf8, <<"vhost:", VHost/binary>>}) ->
 vhost(_) ->
     application:get_env(rabbit, default_vhost, <<"/">>).
 
-check_user_loopback(#v1{connection = #v1_connection{user = #user{username = Username}},
-                        sock = Socket} = State) ->
-    case rabbit_access_control:check_user_loopback(Username, Socket) of
+check_user_loopback(#v1{connection = #v1_connection{user = #user{username = Username},
+                                                    peer_host = PeerHost}} = State) ->
+    case rabbit_access_control:check_user_loopback(Username, PeerHost) of
         ok ->
             ok;
         not_allowed ->
