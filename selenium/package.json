@@ -12,7 +12,12 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+<<<<<<< HEAD
     "chromedriver": "^147.0",
+=======
+    "amqplib": "1.0.3",
+    "chromedriver": "^147.0.1",
+>>>>>>> 8a1cf5a6b2 (Remove unused credentials and bump NPM deps)
     "ejs": "^5.0.1",
     "express": "^5.1.0",
     "geckodriver": "^6.0.2",
@@ -22,8 +27,12 @@
     "proxy": "^4.0.0",
     "rhea": "^3.0.4",
     "selenium-webdriver": "^4.37.0",
+<<<<<<< HEAD
     "xmlhttprequest": "^1.8.0",
     "amqplib": "1.0.3"
+=======
+    "xmlhttprequest": "^1.8.0"
+>>>>>>> 8a1cf5a6b2 (Remove unused credentials and bump NPM deps)
   },
   "devDependencies": {
     "chai": "^6.2.0",
