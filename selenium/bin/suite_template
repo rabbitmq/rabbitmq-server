@@ -85,6 +85,7 @@ COMMAND=$(parse_arguments $@)
 
 
 print() {
+  local i
   tabbing=""
   if [[  $PADDING_LEVEL -gt 0 ]]; then
     for i in $(seq $PADDING_LEVEL); do
@@ -604,6 +605,7 @@ run_local_with() {
   fi
 }
 determine_required_components_including_rabbitmq() {
+  local i
   for (( i=1; i<=$#; i++)) {
     eval val='$'$i
     REQUIRED_COMPONENTS+=( "$val" )
@@ -613,6 +615,7 @@ determine_required_components_including_rabbitmq() {
   fi
 }
 determine_required_components_excluding_rabbitmq() {
+  local i
   for (( i=1; i<=$#; i++)) {
     eval val='$'$i
     if [[ "$val" != "rabbitmq" ]] && [[ "$val" != "other_rabbitmq" ]]; then
@@ -621,6 +624,7 @@ determine_required_components_excluding_rabbitmq() {
   }
 }
 initOnly() {
+  local i
   for (( i=1; i<=$#; i++)) {
     eval val='$'$i
     if [[ $val != "rabbitmq" ]]; then  
@@ -717,6 +721,7 @@ test_local() {
 
 }
 ensure_components() {
+  local i
   for i in "${REQUIRED_COMPONENTS[@]}"
   do
     start="ensure_$i"
@@ -724,6 +729,7 @@ ensure_components() {
   done
 }
 start_components() {
+  local i
   for i in "${REQUIRED_COMPONENTS[@]}"
   do
     start="start_$i"
@@ -731,6 +737,7 @@ start_components() {
   done
 }
 teardown_components() {
+  local i
   skip_rabbitmq=${1:-false}
 
   begin "Tear down ... "
@@ -747,6 +754,7 @@ teardown_components() {
   end "Finished teardown"
 }
 save_components_logs() {
+  local i
   begin "Saving Logs to $LOGS for ${REQUIRED_COMPONENTS[@]} ..."
   for i in "${REQUIRED_COMPONENTS[@]}"
   do
