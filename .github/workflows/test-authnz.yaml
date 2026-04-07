@@ -52,11 +52,6 @@ jobs:
           https://builds.hex.pm
           https://cdn.jsdelivr.net/hex
 
-    - name: Authenticate To Google Cloud
-      uses: google-github-actions/auth@v3.0.0
-      with:
-        credentials_json: ${{ secrets.REMOTE_CACHE_CREDENTIALS_JSON }}
-
     - name: Build & Load RabbitMQ OCI
       run: |
         make package-generic-unix
