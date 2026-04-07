@@ -71,7 +71,7 @@ start_local_other_rabbitmq() {
   print "> EFFECTIVE RABBITMQ_CONFIG_FILE: /tmp/other$MOUNT_RABBITMQ_CONF"
 
   RABBITMQ_ENABLED_PLUGINS_FILE="/tmp/other/etc/rabbitmq/enabled_plugins"  
-  ${BIN_DIR}/gen-enabled_plugins "${PROFILES}" ${RABBITMQ_CONFIG_DIR} \
+  ${BIN_DIR}/gen-enabled_plugins "${PROFILES_FOR_OTHER}" ${RABBITMQ_CONFIG_DIR} \
     $RABBITMQ_ENABLED_PLUGINS_FILE
   print "> EFFECTIVE ENABLED_PLUGINS_FILE: $RABBITMQ_ENABLED_PLUGINS_FILE"
 
@@ -106,7 +106,7 @@ start_docker_other_rabbitmq() {
   mkdir -pv $CONF_DIR/other-rabbitmq/conf.d/
 
   RABBITMQ_TEST_DIR="/var/rabbitmq" 
-  ${BIN_DIR}/gen-enabled_plugins "${PROFILES}" ${RABBITMQ_CONFIG_DIR} $CONF_DIR/other-rabbitmq/enabled_plugins
+  ${BIN_DIR}/gen-enabled_plugins "${PROFILES_FOR_OTHER}" ${RABBITMQ_CONFIG_DIR} $CONF_DIR/other-rabbitmq/enabled_plugins
   print "> EFFECTIVE ENABLED_PLUGINS_FILE: $CONF_DIR/other-rabbitmq/enabled_plugins"
 
   ${BIN_DIR}/gen-rabbitmq-conf "${PROFILES_FOR_OTHER}" ${RABBITMQ_CONFIG_DIR} $OTHER_ENV_FILE $CONF_DIR/other-rabbitmq/rabbitmq.conf
