@@ -301,27 +301,30 @@ add_node_when_seed_node_is_leader(Config) ->
     AMember = {rabbit_khepri:get_store_id(), A},
     _ = ra:transfer_leadership(AMember, AMember),
     clustering_utils:assert_cluster_status({Cluster, Cluster}, Cluster),
+    %% Wait for the leadership transfer to settle before partitioning,
+    %% otherwise A can be stuck in `await_condition' and accept local
+    %% membership changes the test does not expect.
+    ct:pal("Waiting for cluster change permitted on node A"),
+    ?awaitMatch(
+       {ok, #{cluster_change_permitted := true,
+              leader_id := AMember}, AMember},
+       rabbit_ct_broker_helpers:rpc(
+         Config1, A, ra, member_overview, [AMember]),
+       60000),
 
     %% Minority partition: A
     partition_3_node_cluster(Config1),
 
-    Pong = ra:ping(AMember, 10000),
-    ct:pal("Member A state: ~0p", [Pong]),
-    case Pong of
-        {pong, State} when State =/= follower andalso State =/= candidate ->
-            Ret = rabbit_control_helper:command(
-                    join_cluster, E, [atom_to_list(A)], []),
-            ?assertMatch({error, _, _}, Ret),
-            {error, _, Msg} = Ret,
-            ?assertEqual(
-               match,
-               re:run(
-                 Msg, "(Khepri cluster could be in minority|\\{:rabbit, \\{\\{:error, :timeout\\})",
-                 [{capture, none}]));
-        Ret ->
-            ct:pal("A is not the expected leader: ~p", [Ret]),
-            {skip, "Node A was not elected leader"}
-    end.
+    ?assertEqual({pong, leader}, ra:ping(AMember, 10000)),
+    Ret = rabbit_control_helper:command(
+            join_cluster, E, [atom_to_list(A)], []),
+    ?assertMatch({error, _, _}, Ret),
+    {error, _, Msg} = Ret,
+    ?assertEqual(
+       match,
+       re:run(
+         Msg, "(Khepri cluster could be in minority|\\{:rabbit, \\{\\{:error, :timeout\\})",
+         [{capture, none}])).
 
 add_node_when_seed_node_is_follower(Config) ->
     [A, B, C, _D, E] = rabbit_ct_broker_helpers:get_node_configs(
@@ -331,44 +334,32 @@ add_node_when_seed_node_is_follower(Config) ->
     Cluster = [A, B, C],
     Config1 = rabbit_ct_broker_helpers:cluster_nodes(Config, Cluster),
 
+    AMember = {rabbit_khepri:get_store_id(), A},
     CMember = {rabbit_khepri:get_store_id(), C},
     ra:transfer_leadership(CMember, CMember),
     clustering_utils:assert_cluster_status({Cluster, Cluster}, Cluster),
+    %% Wait for the leadership transfer to C to settle before partitioning,
+    %% otherwise A can be stuck in `await_condition' and accept local
+    %% membership changes the test does not expect.
+    ?awaitMatch(
+       {ok, #{cluster_change_permitted := true,
+              leader_id := CMember}, AMember},
+       rabbit_ct_broker_helpers:rpc(
+         Config1, A, ra, member_overview, [AMember]),
+       60000),
 
     %% Minority partition: A
     partition_3_node_cluster(Config1),
 
-    AMember = {rabbit_khepri:get_store_id(), A},
-    Pong = ra:ping(AMember, 10000),
-    ct:pal("Member A state: ~0p", [Pong]),
-    case Pong of
-        {pong, State}
-          when State =:= follower orelse State =:= pre_vote ->
-            Ret = rabbit_control_helper:command(
-                    join_cluster, E, [atom_to_list(A)], []),
-            ?assertMatch({error, _, _}, Ret),
-            {error, _, Msg} = Ret,
-            ?assertEqual(
-               match,
-               re:run(
-                 Msg, "Khepri cluster could be in minority",
-                 [{capture, none}]));
-        {pong, await_condition} ->
-            Ret = rabbit_control_helper:command(
-                    join_cluster, E, [atom_to_list(A)], []),
-            ?assertMatch({error, _, _}, Ret),
-            {error, _, Msg} = Ret,
-            ?assertEqual(
-               match,
-               re:run(
-                 Msg, "\\{:rabbit, \\{\\{:error, :timeout\\}",
-                 [{capture, none}])),
-            clustering_utils:assert_cluster_status(
-              {Cluster, Cluster}, Cluster);
-        Ret ->
-            ct:pal("A is not the expected follower: ~p", [Ret]),
-            {skip, "Node A was not a follower"}
-    end.
+    Ret = rabbit_control_helper:command(
+            join_cluster, E, [atom_to_list(A)], []),
+    ?assertMatch({error, _, _}, Ret),
+    {error, _, Msg} = Ret,
+    ?assertEqual(
+       match,
+       re:run(
+         Msg, "Khepri cluster could be in minority",
+         [{capture, none}])).
 
 remove_node_when_seed_node_is_leader(Config) ->
     [A, B, C | _] = rabbit_ct_broker_helpers:get_node_configs(
