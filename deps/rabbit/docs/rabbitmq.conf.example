@@ -487,6 +487,10 @@
 ## when there are multiple publishers sending to the same quorum queue.
 # quorum_queue.commands_soft_limit = 32
 
+## Sets the maximum size of Raft log segment files for quorum queues.
+##
+# quorum_queue.segment_max_size_bytes = 64000000
+
 ## Changes classic queue storage implementation version.
 ## As of 4.0.0, version 2 is the default and this is a forward compatibility setting,
 ## that is, it will be useful when a new version is developed.

@@ -1160,6 +1160,13 @@ credential_validator.regexp = ^abc\\d+",
      ]}],
    []},
 
+  {quorum_queue_segment_max_size_bytes,
+   "quorum_queue.segment_max_size_bytes = 64000000",
+   [{rabbit, [
+      {quorum_segment_max_size_bytes, 64000000}
+     ]}],
+   []},
+
   %%
   %% Runtime parameters
   %%
