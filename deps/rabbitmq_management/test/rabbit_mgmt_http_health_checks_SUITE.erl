@@ -63,7 +63,10 @@ all_tests() -> [
 
 init_per_group(Group, Config0) ->
     PathConfig = {rabbitmq_management, [{path_prefix, ?PATH_PREFIX}]},
+    %% Keep `virtual_hosts_test` from racing the vhost reconciler.
+    RabbitConfig = {rabbit, [{vhost_process_reconciliation_enabled, false}]},
     Config1 = rabbit_ct_helpers:merge_app_env(Config0, PathConfig),
+    Config1b = rabbit_ct_helpers:merge_app_env(Config1, RabbitConfig),
     rabbit_ct_helpers:log_environment(),
     inets:start(),
     ClusterSize = case Group of
@@ -74,7 +77,7 @@ init_per_group(Group, Config0) ->
     NodeConf = [{rmq_nodename_suffix, Group},
                 {rmq_nodes_count, ClusterSize},
                 {tcp_ports_base}],
-    Config2 = rabbit_ct_helpers:set_config(Config1, NodeConf),
+    Config2 = rabbit_ct_helpers:set_config(Config1b, NodeConf),
     rabbit_ct_helpers:run_setup_steps(
       Config2,
       rabbit_ct_broker_helpers:setup_steps() ++
