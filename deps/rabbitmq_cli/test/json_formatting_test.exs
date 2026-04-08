@@ -29,7 +29,7 @@ defmodule JSONFormattingTest do
         error_check(command, exit_ok())
       end)
 
-    {:ok, doc} = JSON.decode(output)
+    {:ok, doc} = RabbitMQ.CLI.Core.JSON.decode(output)
 
     assert Map.has_key?(doc, "memory")
     assert Map.has_key?(doc, "listeners")
@@ -67,7 +67,7 @@ defmodule JSONFormattingTest do
         error_check(command, exit_ok())
       end)
 
-    {:ok, doc} = JSON.decode(output)
+    {:ok, doc} = RabbitMQ.CLI.Core.JSON.decode(output)
 
     assert Map.has_key?(doc, "running_nodes")
     running_nodes = doc["running_nodes"]
@@ -93,7 +93,7 @@ defmodule JSONFormattingTest do
         error_check(command, exit_ok())
       end)
 
-    {:ok, doc} = JSON.decode(output)
+    {:ok, doc} = RabbitMQ.CLI.Core.JSON.decode(output)
     assert Map.has_key?(doc, "rabbit")
     rabbit = doc["rabbit"]
     assert Map.has_key?(rabbit, "data_dir")

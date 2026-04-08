@@ -11,7 +11,7 @@ defmodule RabbitMQCtl.MixfileBase do
     [
       app: :rabbitmqctl,
       version: "4.0.0-dev",
-      elixir: ">= 1.13.4 and < 1.20.0",
+      elixir: ">= 1.17.0 and < 1.20.0",
       build_embedded: Mix.env() == :prod,
       start_permanent: Mix.env() == :prod,
       escript: [
@@ -26,8 +26,8 @@ defmodule RabbitMQCtl.MixfileBase do
         exclude: [
           CSV,
           CSV.Encode,
-          JSON,
           :mnesia,
+          :thoas,
           :msacc,
           :public_key,
           :pubkey_cert,
@@ -141,8 +141,9 @@ defmodule RabbitMQCtl.MixfileBase do
     # Note that normal deps will be fetched by Erlang.mk on build.
     [
       {
-        :json,
-        path: Path.join(deps_dir, "json")
+        :thoas,
+        path: Path.join(deps_dir, "thoas"),
+        override: true
       },
       {
         :csv,
