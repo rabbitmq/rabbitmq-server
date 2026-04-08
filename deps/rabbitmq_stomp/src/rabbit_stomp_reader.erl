@@ -422,7 +422,7 @@ processor_args(Configuration, Sock) ->
                               exit({send_failed, Reason})
                       end
               end,
-    {ok, {PeerAddr, _PeerPort}} = rabbit_net:sockname(RealSocket),
+    {ok, {PeerAddr, _PeerPort}} = rabbit_net:peername(RealSocket),
     {SendFun, adapter_info(Sock),
      ssl_login_name(RealSocket, Configuration), PeerAddr}.
 
