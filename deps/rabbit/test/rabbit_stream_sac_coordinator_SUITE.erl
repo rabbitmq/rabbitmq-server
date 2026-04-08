@@ -1911,10 +1911,15 @@ list_nodes(MapState) ->
     lists:sort(?MOD:list_nodes(state(MapState))).
 
 start_node(Name) ->
+    %% `wait_boot' is set explicitly because the 15-second default is too
+    %% tight when this suite runs alongside other parallel CT sets. On
+    %% timeout, `peer:start/1' calls `erlang:exit(timeout)', which would
+    %% crash the test case with the bare reason `timeout'.
     {ok, NodePid, Node} = peer:start(#{
         name => Name,
         connection => standard_io,
-        shutdown => close
+        shutdown => close,
+        wait_boot => 60_000
     }),
     {NodePid, Node}.
 

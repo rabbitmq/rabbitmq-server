@@ -762,6 +762,7 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
                      true -> ["RABBITMQ_KEEP_PID_FILE_ON_EXIT=yes" | ExtraArgs2];
                      _    -> ExtraArgs2
                  end,
+<<<<<<< HEAD
     ExtraArgs4 = case WithPlugins of
                      false -> ExtraArgs3;
                      _     -> ["NOBUILD=1" | ExtraArgs3]
@@ -882,6 +883,66 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
                     _ = rabbit_ct_helpers:exec([RunCmd | AbortCmd]),
                     {skip, "Failed to initialize RabbitMQ"}
             end
+=======
+    PeerEnv = if
+        UseSecondaryDist ->
+            [{"ERL_LIBS", filename:join(?config(secondary_dist, Config), "plugins")}|PeerEnv3];
+        UseSecondaryUmbrella ->
+            [{"ERL_LIBS", ?config(secondary_erlang_mk_depsdir, Config)}|PeerEnv3];
+        true ->
+            PeerEnv3
+    end,
+    %% Start the peer node.
+    %%
+    %% `wait_boot' is set explicitly because the 15-second default is too
+    %% tight when many nodes are started concurrently by parallel test
+    %% groups. On timeout, `peer:start/1' calls `erlang:exit(timeout)',
+    %% which propagates through the linked starter to the test case and
+    %% aborts the whole CT run.
+    {ok, PeerPid, Nodename} = peer:start(#{
+        name => Nodename1,
+        longnames => false,
+        host => HostName1,
+        connection => standard_io,
+        exec => os:find_executable("erl"),
+        args => PeerArgs,
+        env => PeerEnv,
+        wait_boot => 60_000}),
+    %% Redirect the PeerPid's standard output to a file.
+    %% The standard output of the peer process is a redirect
+    %% from the peer node. We tie the file's process to PeerPid
+    %% so that it stays open until PeerPid exits.
+    %%
+    %% Both stdio and stderr are redirected to this file,
+    %% unlike when using make run-broker and friends.
+    _ = sys:replace_state(PeerPid, fun(St) ->
+        StdoutPath = filename:join([NodeDir, "log", "startup_log"]),
+        ok = filelib:ensure_dir(StdoutPath),
+        {ok, StdoutFd} = file:open(StdoutPath, [write, {encoding, utf8}]),
+        group_leader(StdoutFd, self()),
+        St
+    end),
+    %% Make sure the node runs in the right directory.
+    SetCwdPath = case UseSecondaryDist of
+        true -> ?config(secondary_dist, Config);
+        false -> SrcDir
+    end,
+    ok = peer:call(PeerPid, file, set_cwd, [SetCwdPath]),
+    %% Boot RabbitMQ.
+    try peer:call(PeerPid, rabbit, boot, [], 60_000) of
+        ok ->
+            store_peer_pid(Nodename, PeerPid),
+            NodeConfig1 = rabbit_ct_helpers:set_config(
+                            NodeConfig,
+                            [
+                             {use_secondary_umbrella, UseSecondaryUmbrella orelse UseSecondaryDist}
+                            ]),
+            query_node(Config, NodeConfig1)
+    catch Class:Error ->
+        %% @todo Get rid of {skip,_} returns.
+        peer:stop(PeerPid),
+        {skip, {Class, Error}}
+>>>>>>> d0204ef89f (Give `peer`-started nodes more than 15s to boot)
     end.
 
 query_node(Config, NodeConfig) ->
