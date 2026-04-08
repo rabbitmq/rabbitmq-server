@@ -8,6 +8,7 @@
 -module(rabbit_db_queue).
 
 -include_lib("khepri/include/khepri.hrl").
+-include_lib("rabbit_common/include/logging.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include("amqqueue.hrl").
 
@@ -62,6 +63,9 @@
          update_in_khepri_tx/2,
          get_in_khepri_tx/1
         ]).
+
+%% Used for the `tie_binding_to_dest_with_keep_while_cond' feature flag.
+-export([tie_binding_to_dest_with_keep_while_cond_enable/1]).
 
 %% For testing
 -export([clear/0]).
@@ -283,33 +287,53 @@ delete(QueueName, OnlyDurable) ->
       Conditions :: [khepri_condition:condition()],
       OnlyDurable :: boolean(),
       Ret :: ok |
-      Deletions :: rabbit_binding:deletions() |
-      rabbit_khepri:timeout_error().
+             Deletions :: rabbit_binding:deletions() |
+             rabbit_khepri:timeout_error().
 
 delete_if(QueueName, Conditions, OnlyDurable) ->
-    rabbit_khepri:transaction(
-      fun () ->
-              Path0 = khepri_queue_path(QueueName),
-              Path = khepri_path:combine_with_conditions(Path0, Conditions),
-              UsesUniformWriteRet = try
-                                        khepri_tx:does_api_comply_with(uniform_write_ret)
-                                    catch
-                                        error:undef ->
-                                            false
-                                    end,
-              case khepri_tx_adv:delete(Path) of
-                  {ok, #{Path0 := #{data := _}}} when UsesUniformWriteRet ->
-                      %% we want to execute some things, as decided by rabbit_exchange,
-                      %% after the transaction.
-                      rabbit_db_binding:delete_for_destination_in_khepri(QueueName, OnlyDurable);
-                  {ok, #{data := _}} when not UsesUniformWriteRet ->
-                      %% we want to execute some things, as decided by rabbit_exchange,
-                      %% after the transaction.
-                      rabbit_db_binding:delete_for_destination_in_khepri(QueueName, OnlyDurable);
-                  {ok, _} ->
-                      ok
-              end
-      end, rw).
+    Path = khepri_queue_path(QueueName),
+    Pattern = khepri_path:combine_with_conditions(Path, Conditions),
+    FeatureFlag = rabbit_feature_flags:is_enabled(
+                    tie_binding_to_dest_with_keep_while_cond),
+    case FeatureFlag of
+        true ->
+            case rabbit_khepri:adv_delete(Pattern) of
+                {ok, #{Path := #{data := _}} = Deleted} ->
+                    rabbit_db_binding:khepri_ret_to_deletions(
+                      Deleted, OnlyDurable);
+                {ok, _} ->
+                    ok;
+                {error, _} = Error ->
+                    Error
+            end;
+        false ->
+            rabbit_khepri:transaction(
+              fun () ->
+                      UsesUniformWriteRet = (
+                        try
+                            khepri_tx:does_api_comply_with(uniform_write_ret)
+                        catch
+                            error:undef ->
+                                false
+                        end),
+                      case khepri_tx_adv:delete(Pattern) of
+                          {ok, #{Path := #{data := _}}}
+                            when UsesUniformWriteRet ->
+                              %% we want to execute some things, as decided by
+                              %% rabbit_exchange, after the transaction.
+                              rabbit_db_binding:delete_for_destination_in_khepri(
+                                QueueName, OnlyDurable);
+                          {ok, #{data := _}}
+                            when not UsesUniformWriteRet ->
+                              %% we want to execute some things, as decided by
+                              %% rabbit_exchange, after the transaction.
+                              rabbit_db_binding:delete_for_destination_in_khepri(
+                                QueueName, OnlyDurable);
+                          {ok, _} ->
+                              ok
+                      end
+              end, rw)
+    end.
 
 %% -------------------------------------------------------------------
 %% get_targets().
@@ -976,6 +1000,72 @@ list_with_possible_retry(Fun) ->
             end;
         Ret ->
             Ret
+    end.
+
+tie_binding_to_dest_with_keep_while_cond_enable(
+  #{feature_name := FeatureName}) ->
+    ?LOG_DEBUG(
+       "Feature flag `~s`: send transaction to add `keep_while` conditions",
+       [FeatureName],
+       #{domain => ?RMQLOG_DOMAIN_DB}),
+    Ret = rabbit_khepri:transaction(
+            fun() ->
+                    %% Auto-delete exchange.
+                    ?LOG_DEBUG(
+                       "Feature flag `~s`: add `keep_while` condition to "
+                       "auto-delete exchanges",
+                       [FeatureName],
+                       #{domain => ?RMQLOG_DOMAIN_DB}),
+                    ExchangePattern = rabbit_db_exchange:khepri_exchange_path(
+                                        ?KHEPRI_WILDCARD_STAR,
+                                        ?KHEPRI_WILDCARD_STAR),
+                    ok = khepri_tx:foreach(
+                           ExchangePattern,
+                           fun(ExchangePath, #{data := Exchange}) ->
+                                   PutOptions = rabbit_db_exchange:put_options(
+                                                  Exchange),
+                                   case PutOptions =:= #{} of
+                                       true ->
+                                           ok;
+                                       false ->
+                                           ok = khepri_tx:put(
+                                                  ExchangePath, Exchange,
+                                                  PutOptions)
+                                   end
+                           end),
+
+                    %% Bindings.
+                    ?LOG_DEBUG(
+                       "Feature flag `~s`: add `keep_while` condition to "
+                       "bindings",
+                       [FeatureName],
+                       #{domain => ?RMQLOG_DOMAIN_DB}),
+                    BindingPattern = rabbit_db_binding:khepri_route_path(
+                                       ?KHEPRI_WILDCARD_STAR,
+                                       ?KHEPRI_WILDCARD_STAR,
+                                       ?KHEPRI_WILDCARD_STAR,
+                                       ?KHEPRI_WILDCARD_STAR,
+                                       ?KHEPRI_WILDCARD_STAR),
+                    ok = khepri_tx:foreach(
+                           BindingPattern,
+                           fun(BindingPath, #{data := Set}) ->
+                                   PutOptions = rabbit_db_binding:put_options(
+                                                  BindingPath),
+                                   ok = khepri_tx:put(
+                                          BindingPath, Set,
+                                          PutOptions)
+                           end),
+                    ok
+            end, rw),
+    ?LOG_DEBUG(
+       "Feature flag `~s`: transaction return value: ~p",
+       [FeatureName, Ret],
+       #{domain => ?RMQLOG_DOMAIN_DB}),
+    case Ret of
+        {ok, ok} ->
+            ok;
+        Error ->
+            Error
     end.
 
 %% --------------------------------------------------------------
