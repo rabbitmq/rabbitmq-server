@@ -48,6 +48,6 @@ do_connections_query(ReqData, Context) ->
         false ->
             augmented(ReqData, Context);
         true ->
-            rabbit_mgmt_util:filter_tracked_conn_list(rabbit_connection_tracking:list(),
-                                                      ReqData, Context)
+            rabbit_mgmt_util:filter_conn_ch_list(
+              rabbit_mgmt_db:get_all_connections(), ReqData, Context)
     end.

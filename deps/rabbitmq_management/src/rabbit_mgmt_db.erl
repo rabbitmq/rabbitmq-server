@@ -23,7 +23,8 @@
          get_channel/2, get_connection/2,
          get_all_channels/1, get_all_connections/1,
          get_all_consumers/0, get_all_consumers/1,
-         get_overview/2, get_overview/1]).
+         get_overview/2, get_overview/1,
+         get_all_connections/0, get_connection/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3, handle_pre_hibernate/1,
@@ -189,6 +190,11 @@ get_connection(Name, Ranges) ->
                    end
            end).
 
+get_connection(Name) ->
+    submit(fun(_Interval) ->
+                   created_stats_delegated(Name, connection_created_stats)
+           end).
+
 get_all_channels(?NO_RANGES = Ranges) ->
     submit_cached(channels,
                   fun(Interval) ->
@@ -211,6 +217,11 @@ get_all_connections(Ranges) ->
     submit(fun(Interval) ->
                    Chans = created_stats_delegated(connection_created_stats),
                    connection_stats(Ranges, Chans, Interval)
+           end).
+
+get_all_connections() ->
+    submit(fun(_) ->
+                   created_stats_delegated(connection_created_stats)
            end).
 
 get_all_consumers() -> get_all_consumers(all).
