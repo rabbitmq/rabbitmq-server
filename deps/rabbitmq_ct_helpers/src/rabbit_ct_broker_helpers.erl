@@ -768,6 +768,12 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
             PeerEnv3
     end,
     %% Start the peer node.
+    %%
+    %% `wait_boot' is set explicitly because the 15-second default is too
+    %% tight when many nodes are started concurrently by parallel test
+    %% groups. On timeout, `peer:start/1' calls `erlang:exit(timeout)',
+    %% which propagates through the linked starter to the test case and
+    %% aborts the whole CT run.
     {ok, PeerPid, Nodename} = peer:start(#{
         name => Nodename1,
         longnames => false,
@@ -775,7 +781,8 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
         connection => standard_io,
         exec => os:find_executable("erl"),
         args => PeerArgs,
-        env => PeerEnv}),
+        env => PeerEnv,
+        wait_boot => 60_000}),
     %% Redirect the PeerPid's standard output to a file.
     %% The standard output of the peer process is a redirect
     %% from the peer node. We tie the file's process to PeerPid
