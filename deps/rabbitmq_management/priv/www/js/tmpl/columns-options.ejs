@@ -15,7 +15,12 @@
     <tr>
       <th><label><%= group %>:</label></th>
       <td>
-      <% for (var i = 0; i < options.length; i++) { %>
+      <% for (var i = 0; i < options.length; i++) {
+           if (mode === 'connections' && disable_stats &&
+               (options[i][0] === 'from_client' || options[i][0] === 'to_client')) {
+             continue;
+           }
+      %>
           <%= fmt_checkbox(mode + '-' + options[i][0], options[i][1], get_pref('column-' + mode + '-' + options[i][0]) == 'true') %>
       <% } %>
       </td>
