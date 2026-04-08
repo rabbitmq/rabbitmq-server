@@ -69,25 +69,34 @@ defmodule RabbitMQ.CLI.Core.JSON do
   end
 
   defp normalize(data) when is_list(data) do
-    try do
-      case :unicode.characters_to_binary(data, :utf8) do
-        binary when is_binary(binary) ->
-          binary
+    if proplist?(data) do
+      # `:thoas` encodes maps as JSON objects but is unreliable on lists of
+      # 2-tuples that contain non-proplist values nested inside, so we hand it
+      # a real map.
+      Map.new(data, fn {k, v} -> {normalize(k), normalize(v)} end)
+    else
+      try do
+        case :unicode.characters_to_binary(data, :utf8) do
+          binary when is_binary(binary) ->
+            binary
 
-        _ ->
+          _ ->
+            Enum.map(data, &normalize/1)
+        end
+      rescue
+        ArgumentError ->
           Enum.map(data, &normalize/1)
       end
-    rescue
-      ArgumentError ->
-        Enum.map(data, &normalize/1)
     end
   end
 
+  # `:thoas` does not accept bare tuples (only proplist 2-tuples nested in a
+  # list, handled above). Convert any other tuple to a list so it encodes as a
+  # JSON array, matching what the previous JSON library used to do.
   defp normalize(data) when is_tuple(data) do
     data
     |> Tuple.to_list()
     |> Enum.map(&normalize/1)
-    |> List.to_tuple()
   end
 
   defp normalize(data) when is_map(data) do
@@ -95,6 +104,15 @@ defmodule RabbitMQ.CLI.Core.JSON do
   end
 
   defp normalize(data), do: data
+
+  defp proplist?([_ | _] = list) do
+    Enum.all?(list, fn
+      {k, _v} when is_atom(k) or is_binary(k) -> true
+      _ -> false
+    end)
+  end
+
+  defp proplist?(_), do: false
 
   defp convert_binary(data) when is_binary(data) do
     try do
