@@ -25,6 +25,7 @@
 -define(COORD_WAL_MAX_SIZE_B, 64_000_000).
 -define(QUORUM_AER_MAX_RPC_SIZE, 16).
 -define(QUORUM_DEFAULT_WAL_MAX_ENTRIES, 500_000).
+-define(QUORUM_DEFAULT_SEGMENT_MAX_SIZE_B, 64_000_000).
 %% the default min bin vheap value in OTP 26
 -define(MIN_BIN_VHEAP_SIZE_DEFAULT, 46422).
 -define(MIN_BIN_VHEAP_SIZE_MULT, 64).
@@ -133,6 +134,8 @@ get_config(quorum_queues = RaSystem) ->
                           _ ->
                               ?MIN_BIN_VHEAP_SIZE_DEFAULT
                       end,
+    SegmentMaxSizeBytes = application:get_env(rabbit, quorum_segment_max_size_bytes,
+                                              ?QUORUM_DEFAULT_SEGMENT_MAX_SIZE_B),
 
     DefaultConfig#{name => RaSystem,
                    wal_min_bin_vheap_size => MinBinVheapSize,
@@ -142,6 +145,7 @@ get_config(quorum_queues = RaSystem) ->
                    wal_max_entries => WalMaxEntries,
                    segment_compute_checksums => SegmentChecksums,
                    compress_mem_tables => CompressMemTables,
+                   segment_max_size_bytes => SegmentMaxSizeBytes,
                    server_recovery_strategy => {rabbit_quorum_queue,
                                                 system_recover, []}};
 get_config(coordination = RaSystem) ->

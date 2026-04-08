@@ -2754,6 +2754,20 @@ end}.
   {validators, ["non_zero_positive_integer"]}
 ]}.
 
+{mapping, "quorum_queue.segment_max_size_bytes", "rabbit.quorum_segment_max_size_bytes", [
+  {datatype, integer},
+  {validators, ["non_zero_positive_integer"]}
+]}.
+
+{translation, "rabbit.quorum_segment_max_size_bytes",
+    fun(Conf) ->
+        case cuttlefish:conf_get("quorum_queue.segment_max_size_bytes", Conf, undefined) of
+            undefined -> cuttlefish:unset();
+            Val       -> Val
+        end
+    end
+}.
+
 %%
 %% Quorum Queue membership reconciliation
 %%
