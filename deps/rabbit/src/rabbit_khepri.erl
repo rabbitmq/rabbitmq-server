@@ -366,7 +366,7 @@ await_replication() ->
 %% Then it resets the store. This includes removing it from its cluster if
 %% any, and deleting all tree nodes.
 %%
-%% Finally, it stops the store and deteles files on disk.
+%% Finally, it stops the store and deletes files on disk.
 %%
 %% The Khepri application is left running.
 %%

@@ -41,7 +41,8 @@
          get_in_khepri_tx/1,
          update_in_khepri_tx/2,
          clear_exchanges_in_khepri/0,
-         clear_exchange_serials_in_khepri/0
+         clear_exchange_serials_in_khepri/0,
+         put_options/1
          ]).
 
 %% For testing
@@ -284,13 +285,36 @@ create_or_get(#exchange{name = XName} = X) ->
               Path0, [#if_any{conditions =
                               [#if_node_exists{exists = false},
                                #if_has_payload{has_payload = false}]}]),
-    case rabbit_khepri:put(Path1, X) of
+    FeatureFlag = rabbit_feature_flags:is_enabled(
+                    tie_binding_to_dest_with_keep_while_cond),
+    PutOptions = case FeatureFlag of
+                     true  -> put_options(X);
+                     false -> #{}
+                 end,
+    case rabbit_khepri:put(Path1, X, PutOptions) of
         ok ->
             {new, X};
         {error, {khepri, mismatching_node, #{node_props := #{data := ExistingX}}}} ->
             {existing, ExistingX};
         {error, timeout} = Err ->
             Err
+    end.
+
+put_options(Exchange) ->
+    case Exchange of
+        #exchange{name = #resource{virtual_host = VHost,
+                                   name = Name},
+                  auto_delete = true} ->
+            Path = rabbit_db_binding:khepri_route_path(
+                     VHost,
+                     Name,
+                     _Kind = ?KHEPRI_WILDCARD_STAR,
+                     _DstName = ?KHEPRI_WILDCARD_STAR,
+                     _RoutingKey = ?KHEPRI_WILDCARD_STAR),
+            KeepWhile = #{Path => #if_has_data{}},
+            #{keep_while => KeepWhile};
+        _ ->
+            #{}
     end.
 
 %% -------------------------------------------------------------------
