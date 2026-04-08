@@ -151,7 +151,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ExportDefinitionsCommand do
   defp serialise(raw_map, "json") do
     # rabbit_definitions already takes care of transforming all
     # proplists into maps
-    {:ok, json} = JSON.encode(raw_map)
+    {:ok, json} = RabbitMQ.CLI.Core.JSON.encode(raw_map)
     json
   end
 

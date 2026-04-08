@@ -138,6 +138,6 @@ defmodule SetVhostLimitsCommandTest do
 
   defp assert_limits(context) do
     limits = get_vhost_limits(context[:vhost])
-    assert {:ok, limits} == JSON.decode(context[:definition])
+    assert {:ok, limits} == RabbitMQ.CLI.Core.JSON.decode(context[:definition])
   end
 end

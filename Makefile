@@ -37,8 +37,6 @@ XREF_SCOPE = app deps
 # protocols directly.
 XREF_IGNORE = [ \
     {'Elixir.CSV.Encode',impl_for,1}, \
-    {'Elixir.JSON.Decoder',impl_for,1}, \
-    {'Elixir.JSON.Encoder',impl_for,1}, \
     {'Elixir.RabbitMQ.CLI.Core.DataCoercion',impl_for,1}]
 
 # Include Elixir libraries in the Xref checks.
