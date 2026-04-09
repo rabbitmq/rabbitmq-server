@@ -22,6 +22,7 @@ all() ->
 all_tests() ->
     [
      basics,
+     get_checked_out_aux,
      return,
      lost_return_is_resent_on_applied_after_leader_change,
      rabbit_fifo_returns_correlation,
@@ -148,6 +149,42 @@ basics(Config) ->
 
     rabbit_quorum_queue:stop_server(ServerId),
     ok.
+
+get_checked_out_aux(Config) ->
+    ClusterName = ?config(cluster_name, Config),
+    ServerId = ?config(node_id, Config),
+    ok = start_cluster(ClusterName, [ServerId]),
+    FState0 = rabbit_fifo_client:init([ServerId]),
+    {ok, #{key := ConsumerKey}, FState1} = rabbit_fifo_client:checkout(
+                                             <<"tag">>, {simple_prefetch, 3},
+                                             #{}, FState0),
+
+    {ok, FState2, []} = rabbit_fifo_client:enqueue(ClusterName, zero, FState1),
+    {ok, FState3, []} = rabbit_fifo_client:enqueue(ClusterName, one, FState2),
+    {ok, FState4, []} = rabbit_fifo_client:enqueue(ClusterName, two, FState3),
+
+    WaitFun = fun F(0, _S) ->
+                      ok;
+                  F(N, S) ->
+                      receive
+                          {ra_event, From, Evt} ->
+                              {ok, S1, Actions} = rabbit_fifo_client:handle_ra_event(
+                                                    ClusterName, From, Evt, S),
+                              Delivered = lists:sum([length(A) || {deliver, _, _, A} <- Actions]),
+                              F(N - Delivered, S1)
+                      after 9000 ->
+                                exit(timeout)
+                      end
+              end,
+    WaitFun(3, FState4),
+
+    Cmd = {get_checked_out, ConsumerKey, [0, 1, 2]},
+    ?assertMatch({ok, [{0, {_, zero}},
+                       {1, {_, one}},
+                       {2, {_, two}}]},
+                 ra:aux_command(ServerId, Cmd)),
+
+    ok = rabbit_quorum_queue:stop_server(ServerId).
 
 return(Config) ->
     ClusterName = ?config(cluster_name, Config),
