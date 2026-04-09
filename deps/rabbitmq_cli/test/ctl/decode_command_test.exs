@@ -109,16 +109,20 @@ defmodule DecodeCommandTest do
     assert {:ok, secret} ===
              @command.run([format_as_erlang_term(output), passphrase], context[:opts])
 
-    # wrong passphrase
-    assert match?(
-             {:error, _},
-             @command.run([format_as_erlang_term(encrypted), "wrong/passphrase"], context[:opts])
-           )
+    # Wrong passphrase: decryption usually errors out, but garbage bytes
+    # can occasionally form a valid Erlang term. Either way, the result
+    # must not be the original secret.
+    refute {:ok, secret} ===
+             @command.run(
+               [format_as_erlang_term(encrypted), "wrong/passphrase"],
+               context[:opts]
+             )
 
-    assert match?(
-             {:error, _},
-             @command.run([format_as_erlang_term(output), "wrong passphrase"], context[:opts])
-           )
+    refute {:ok, secret} ===
+             @command.run(
+               [format_as_erlang_term(output), "wrong passphrase"],
+               context[:opts]
+             )
   end
 
   defp format_as_erlang_term(value) do

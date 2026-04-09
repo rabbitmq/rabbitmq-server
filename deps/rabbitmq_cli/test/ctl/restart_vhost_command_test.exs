@@ -72,8 +72,16 @@ defmodule RestartVhostCommandTest do
 
   defp setup_vhosts do
     add_vhost(@vhost)
-    # give the vhost a chance to fully start and initialise
-    :timer.sleep(1000)
+    # Wait for the vhost supervisor to be fully started.
+    await_condition(
+      fn ->
+        match?(
+          {:ok, _},
+          :rpc.call(get_rabbit_hostname(), :rabbit_vhost_sup_sup, :get_vhost_sup, [@vhost])
+        )
+      end,
+      30_000
+    )
 
     on_exit(fn ->
       delete_vhost(@vhost)
