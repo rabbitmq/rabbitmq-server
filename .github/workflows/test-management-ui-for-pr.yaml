@@ -26,7 +26,7 @@ jobs:
         - chrome
         include:
         - erlang_version: "27.3"
-          elixir_version: 1.17
+          elixir_version: 1.18
     env:
       SELENIUM_DIR: selenium
       DOCKER_NETWORK: rabbitmq_net

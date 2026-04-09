@@ -131,6 +131,6 @@ defmodule SetUserLimitsCommandTest do
 
   defp assert_limits(context, definition) do
     limits = get_user_limits(context[:user])
-    assert {:ok, limits} == JSON.decode(definition)
+    assert {:ok, limits} == RabbitMQ.CLI.Core.JSON.decode(definition)
   end
 end
