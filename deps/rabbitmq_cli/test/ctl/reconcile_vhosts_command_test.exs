@@ -58,8 +58,14 @@ defmodule ReconcileVhostsCommandTest do
     node_name = context[:opts][:node]
     force_vhost_failure(node_name, vhost)
     assert :ok == @command.run([], context[:opts])
-    :timer.sleep(1000)
-    assert match?({:ok, _}, :rpc.call(node_name, :rabbit_vhost_sup_sup, :get_vhost_sup, [vhost]))
+    # Reconciliation is asynchronous; wait for the vhost supervisor to be
+    # restarted instead of assuming a fixed delay is enough.
+    await_condition(
+      fn ->
+        match?({:ok, _}, :rpc.call(node_name, :rabbit_vhost_sup_sup, :get_vhost_sup, [vhost]))
+      end,
+      30_000
+    )
   end
 
   #
@@ -68,8 +74,16 @@ defmodule ReconcileVhostsCommandTest do
 
   defp setup_vhosts do
     add_vhost(@vhost)
-    # give the vhost a chance to fully start and initialise
-    :timer.sleep(1000)
+    # Wait for the vhost supervisor to be fully started.
+    await_condition(
+      fn ->
+        match?(
+          {:ok, _},
+          :rpc.call(get_rabbit_hostname(), :rabbit_vhost_sup_sup, :get_vhost_sup, [@vhost])
+        )
+      end,
+      30_000
+    )
 
     on_exit(fn ->
       delete_vhost(@vhost)

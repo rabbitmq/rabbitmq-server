@@ -48,7 +48,9 @@ defmodule CloseConnectionCommandTest do
       nodes = @helpers.nodes_in_cluster(node)
       [[pid: pid]] = fetch_connection_pids(node, nodes)
       assert :ok == @command.run([:rabbit_misc.pid_to_string(pid), "test"], %{node: node})
-      Process.sleep(500)
+      # Closing a connection is asynchronous; poll instead of assuming a
+      # fixed delay is enough.
+      await_no_client_connections(node, 5_000)
       assert fetch_connection_pids(node, nodes) == []
     end)
   end
