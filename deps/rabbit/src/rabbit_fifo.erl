@@ -1442,7 +1442,7 @@ handle_aux(_, _, {get_checked_out, ConsumerKey, MsgIds}, Aux0, RaAux0) ->
                                   {S, Acc}
                           end
                   end, {RaAux0, []}, maps:with(MsgIds, Checked)),
-            {reply, {ok,  IdMsgs}, Aux0, RaState};
+            {reply, {ok, lists:keysort(1, IdMsgs)}, Aux0, RaState};
         _ ->
             {reply, {error, consumer_not_found}, Aux0, RaAux0}
     end;
