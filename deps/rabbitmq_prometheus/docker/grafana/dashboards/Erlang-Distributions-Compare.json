@@ -172,7 +172,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(erlang_vm_dist_send_bytes[60s]) * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=~\"$rabbitmq_cluster\", namespace=\"$namespace\", rabbitmq_endpoint=\"$endpoint\"}",
+          "expr": "rate(erlang_vm_dist_send_bytes[$__rate_interval]) * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=~\"$rabbitmq_cluster\", namespace=\"$namespace\", rabbitmq_endpoint=\"$endpoint\"}",
           "legendFormat": "{{rabbitmq_node}} -> {{peer}}",
           "range": true,
           "refId": "A"
@@ -442,7 +442,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(erlang_vm_dist_send_bytes[60s]) * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=~\"$rabbitmq_cluster\", namespace=\"$namespace\", rabbitmq_endpoint=\"$endpoint\"}",
+          "expr": "rate(erlang_vm_dist_send_bytes[$__rate_interval]) * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=~\"$rabbitmq_cluster\", namespace=\"$namespace\", rabbitmq_endpoint=\"$endpoint\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{rabbitmq_node}} -> {{peer}}",
@@ -549,7 +549,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum by(instance) (rate(node_network_receive_bytes_total{instance=~\"$host\"}[5m]))",
+          "expr": "sum by(instance) (rate(node_network_receive_bytes_total{instance=~\"$host\"}[$__rate_interval]))",
           "legendFormat": "{{instance}}",
           "refId": "A"
         },
@@ -558,7 +558,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum by(name) (rate(container_network_receive_bytes_total{name=~\"$container\"}[1m]))",
+          "expr": "sum by(name) (rate(container_network_receive_bytes_total{name=~\"$container\"}[$__rate_interval]))",
           "legendFormat": "{{name}}",
           "refId": "B"
         }
@@ -676,7 +676,7 @@
           },
           "datasourceErrors": {},
           "errors": {},
-          "expr": "sum by(instance) (rate(node_network_receive_bytes_total{instance=~\"$host\"}[5m]))",
+          "expr": "sum by(instance) (rate(node_network_receive_bytes_total{instance=~\"$host\"}[$__rate_interval]))",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
@@ -690,7 +690,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum by(name) (rate(container_network_receive_bytes_total{name=~\"$container\"}[1m]))",
+          "expr": "sum by(name) (rate(container_network_receive_bytes_total{name=~\"$container\"}[$__rate_interval]))",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{name}}",
@@ -783,7 +783,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum by(instance) (rate(node_network_transmit_bytes_total{instance=~\"$host\"}[5m]))",
+          "expr": "sum by(instance) (rate(node_network_transmit_bytes_total{instance=~\"$host\"}[$__rate_interval]))",
           "legendFormat": "{{instance}}",
           "refId": "A"
         },
@@ -792,7 +792,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum by(name) (rate(container_network_transmit_bytes_total{name=~\"$container\"}[1m]))",
+          "expr": "sum by(name) (rate(container_network_transmit_bytes_total{name=~\"$container\"}[$__rate_interval]))",
           "legendFormat": "{{name}}",
           "refId": "B"
         }
@@ -910,7 +910,7 @@
           },
           "datasourceErrors": {},
           "errors": {},
-          "expr": "sum by(instance) (rate(node_network_transmit_bytes_total{instance=~\"$host\"}[5m]))",
+          "expr": "sum by(instance) (rate(node_network_transmit_bytes_total{instance=~\"$host\"}[$__rate_interval]))",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
@@ -924,7 +924,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum by(name) (rate(container_network_transmit_bytes_total{name=~\"$container\"}[1m]))",
+          "expr": "sum by(name) (rate(container_network_transmit_bytes_total{name=~\"$container\"}[$__rate_interval]))",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{name}}",
@@ -1017,7 +1017,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "(max by (instance) (irate(node_cpu_seconds_total{job=\"node\", mode=~\"user|system|iowait|softirq\", instance=~\"$host\"}[5m])) * 100)",
+          "expr": "(max by (instance) (irate(node_cpu_seconds_total{job=\"node\", mode=~\"user|system|iowait|softirq\", instance=~\"$host\"}[$__rate_interval])) * 100)",
           "legendFormat": "{{instance}}",
           "refId": "A"
         },
@@ -1026,7 +1026,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum by(name) (irate(container_cpu_usage_seconds_total{name=~\"$container\"}[1m])) * 100",
+          "expr": "sum by(name) (irate(container_cpu_usage_seconds_total{name=~\"$container\"}[$__rate_interval])) * 100",
           "legendFormat": "{{name}}",
           "refId": "B"
         }
@@ -1144,7 +1144,7 @@
           },
           "datasourceErrors": {},
           "errors": {},
-          "expr": "(max by (instance) (irate(node_cpu_seconds_total{job=\"node\", mode=~\"user|system|iowait|softirq\", instance=~\"$host\"}[5m])) * 100)",
+          "expr": "(max by (instance) (irate(node_cpu_seconds_total{job=\"node\", mode=~\"user|system|iowait|softirq\", instance=~\"$host\"}[$__rate_interval])) * 100)",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
@@ -1158,7 +1158,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum by(name) (irate(container_cpu_usage_seconds_total{name=~\"$container\"}[1m])) * 100",
+          "expr": "sum by(name) (irate(container_cpu_usage_seconds_total{name=~\"$container\"}[$__rate_interval])) * 100",
           "format": "time_series",
           "hide": false,
           "intervalFactor": 1,
