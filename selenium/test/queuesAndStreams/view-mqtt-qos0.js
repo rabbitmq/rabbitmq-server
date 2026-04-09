@@ -1,3 +1,4 @@
+const fs = require('fs')
 const { By, Key, until, Builder } = require('selenium-webdriver')
 require('chromedriver')
 const assert = require('assert')
@@ -20,6 +21,8 @@ describe('Given a mqtt 5.0 connection with a qos 0 subscription with zero sessio
   let captureScreen
   let queueName
   let mqttOptions
+  let connectionsPage
+  let queuesAndStreamsPage
 
   let mqttProtocol = process.env.MQTT_PROTOCOL || 'mqtt'
   let usemtls = process.env.MQTT_USE_MTLS || false
