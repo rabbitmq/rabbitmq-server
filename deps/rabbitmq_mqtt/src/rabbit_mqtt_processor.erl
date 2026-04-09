@@ -89,11 +89,6 @@
          %% Maximum MQTT packet size in bytes for packets sent from server to client.
          max_packet_size_outbound :: max_packet_size(),
          topic_alias_maximum_outbound :: non_neg_integer(),
-         %% https://github.com/rabbitmq/rabbitmq-server/issues/13040
-         %% The database stores the MQTT subscription options in the binding arguments for:
-         %% * v1 as Erlang record #mqtt_subscription_opts{}
-         %% * v2 as AMQP 0.9.1 table
-         binding_args_v2 :: boolean(),
          msg_interceptor_ctx :: rabbit_msg_interceptor:context()
         }).
 

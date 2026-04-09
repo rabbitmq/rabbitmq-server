@@ -62,7 +62,7 @@ jobs:
         uses: erlef/setup-beam@v1
         with: # Versions repeated later in this file.
           otp-version: '27'
-          elixir-version: '1.18'
+          elixir-version: '1.19'
           hexpm-mirrors: |
             https://builds.hex.pm
             https://cdn.jsdelivr.net/hex
@@ -123,7 +123,7 @@ jobs:
         uses: erlef/setup-beam@v1
         with:
           otp-version: '27'
-          elixir-version: '1.18'
+          elixir-version: '1.19'
           hexpm-mirrors: |
             https://builds.hex.pm
             https://cdn.jsdelivr.net/hex

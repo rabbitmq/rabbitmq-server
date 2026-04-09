@@ -26,7 +26,7 @@ jobs:
         - '27'
         - '28'
         elixir_version:
-        - '1.18'
+        - '1.19'
     # @todo Add macOS and Windows.
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -65,7 +65,7 @@ jobs:
         erlang_version:
         - '28'
         elixir_version:
-        - '1.18'
+        - '1.19'
     uses: ./.github/workflows/test-make-tests.yaml
     with:
       erlang_version: ${{ matrix.erlang_version }}
@@ -80,7 +80,7 @@ jobs:
         erlang_version:
         - '28'
         elixir_version:
-        - '1.18'
+        - '1.19'
     uses: ./.github/workflows/test-make-tests.yaml
     with:
       erlang_version: ${{ matrix.erlang_version }}
@@ -95,7 +95,7 @@ jobs:
         erlang_version: # Latest OTP
         - '28'
         elixir_version: # Latest Elixir
-        - '1.18'
+        - '1.19'
     uses: ./.github/workflows/test-make-type-check.yaml
     with:
       erlang_version: ${{ matrix.erlang_version }}
