@@ -98,8 +98,10 @@ messages_not_dropped_on_disconnect(Config) ->
     StompPort = get_stomp_port(Config),
     N = count_connections(Config),
     {ok, Client} = rabbit_stomp_client:connect(StompPort),
+    %% STOMP connection registration is asynchronous; wait for it to be
+    %% readable (as in consistency).
     N1 = N + 1,
-    N1 = count_connections(Config),
+    ?awaitMatch(N1, count_connections(Config), 30_000),
     [rabbit_stomp_client:send(
        Client, "SEND", [{"destination", ?DESTINATION}],
        [integer_to_list(Count)]) || Count <- lists:seq(1, 1000)],

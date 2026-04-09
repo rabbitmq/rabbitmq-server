@@ -11,6 +11,7 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 -include("rabbit_stomp.hrl").
 
 
@@ -74,17 +75,16 @@ run(Config) ->
     StompPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stomp),
 
     {ok, _Client} = rabbit_stomp_client:connect(StompPort),
-    ct:sleep(100),
-
-    [[{session_id, _}]] =
-            'Elixir.Enum':to_list(?COMMAND:run([<<"session_id">>], Opts)),
-
+    %% STOMP connection registration is asynchronous; wait for it to be
+    %% readable (as in consistency).
+    ?awaitMatch([[{session_id, _}]],
+                'Elixir.Enum':to_list(?COMMAND:run([<<"session_id">>], Opts)),
+                30_000),
 
     {ok, _Client2} = rabbit_stomp_client:connect(StompPort),
-    ct:sleep(100),
-
-    [[{session_id, _}], [{session_id, _}]] =
-        'Elixir.Enum':to_list(?COMMAND:run([<<"session_id">>], Opts)),
+    ?awaitMatch([[{session_id, _}], [{session_id, _}]],
+                'Elixir.Enum':to_list(?COMMAND:run([<<"session_id">>], Opts)),
+                30_000),
 
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
     start_amqp_connection(network, Node, Port),
