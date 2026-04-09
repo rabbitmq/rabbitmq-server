@@ -84,7 +84,8 @@ defmodule ListConsumersCommandTest do
 
     with_channel(@vhost, fn channel ->
       {:ok, _} = AMQP.Basic.consume(channel, queue_name, nil, consumer_tag: consumer_tag)
-      :timer.sleep(100)
+      # Consumer registration is asynchronous; wait for it to be visible.
+      await_consumer_count(context[:opts], 1)
       [[consumer]] = run_command_to_list(@command, [info_keys_s, context[:opts]])
       assert info_keys_a == Keyword.keys(consumer)
       assert consumer[:consumer_tag] == consumer_tag
@@ -111,7 +112,8 @@ defmodule ListConsumersCommandTest do
       {:ok, tag1} = AMQP.Basic.consume(channel, queue_name1)
       {:ok, tag2} = AMQP.Basic.consume(channel, queue_name2)
       {:ok, tag3} = AMQP.Basic.consume(channel, queue_name2)
-      :timer.sleep(100)
+      # Consumer registration is asynchronous; wait for them to be visible.
+      await_consumer_count(context[:opts], 3)
 
       try do
         consumers =
@@ -149,7 +151,8 @@ defmodule ListConsumersCommandTest do
         {:ok, tag1} = AMQP.Basic.consume(channel, queue_name)
         {:ok, tag2} = AMQP.Basic.consume(channel, queue_name)
         {:ok, tag3} = AMQP.Basic.consume(channel, queue_name)
-        :timer.sleep(100)
+        # Consumer registration is asynchronous; wait for them to be visible.
+        await_consumer_count(context[:opts], 3)
 
         try do
           consumers =
@@ -201,7 +204,8 @@ defmodule ListConsumersCommandTest do
         {:ok, tag1} = AMQP.Basic.consume(channel, queue_name)
         {:ok, tag2} = AMQP.Basic.consume(channel, queue_name)
         {:ok, tag3} = AMQP.Basic.consume(channel, queue_name)
-        :timer.sleep(100)
+        # Consumer registration is asynchronous; wait for them to be visible.
+        await_consumer_count(context[:opts], 3)
 
         try do
           consumers =
@@ -226,7 +230,8 @@ defmodule ListConsumersCommandTest do
                  )
 
           AMQP.Basic.cancel(channel, tag1)
-          :timer.sleep(100)
+          # Consumer cancellation is asynchronous; wait for the count to drop.
+          await_consumer_count(context[:opts], 2)
 
           consumers =
             List.first(
@@ -299,5 +304,15 @@ defmodule ListConsumersCommandTest do
                   arguments: []
                 ]
               ], {1, :continue}}
+  end
+
+  defp await_consumer_count(opts, expected_count) do
+    await_condition(
+      fn ->
+        consumers = run_command_to_list(@command, [["queue_name"], opts])
+        Enum.reduce(consumers, 0, fn group, acc -> acc + length(group) end) == expected_count
+      end,
+      10_000
+    )
   end
 end
