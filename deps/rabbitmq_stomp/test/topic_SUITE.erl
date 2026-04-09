@@ -12,6 +12,7 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 -include("rabbit_stomp.hrl").
 -include("rabbit_stomp_frame.hrl").
 all() ->
@@ -191,9 +192,13 @@ change_default_topic_exchange(Config) ->
                                  {"id", "s0"},
                                  {"durable", "true"}]),
 
-    timer:sleep(500),
-
-    1 = length(rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_binding, list_for_source, [#resource{virtual_host= <<"/">>, kind = exchange, name = Ex}])),
+    %% STOMP SUBSCRIBE creates the binding asynchronously; wait for it
+    %% to be readable (as in consistency).
+    ?awaitMatch(1,
+                length(rabbit_ct_broker_helpers:rpc(
+                         Config, 0, rabbit_binding, list_for_source,
+                         [#resource{virtual_host = <<"/">>, kind = exchange, name = Ex}])),
+                30_000),
 
     rabbit_stomp_client:send(
         ClientFoo, "SEND", [{"destination", AuthorisedTopic}], ["ohai there"]),
