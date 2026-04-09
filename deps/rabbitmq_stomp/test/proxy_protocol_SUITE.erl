@@ -10,6 +10,7 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 -define(TIMEOUT, 5000).
 
@@ -70,9 +71,8 @@ proxy_protocol_v1(Config) ->
     ok = inet:send(Socket, "PROXY TCP4 192.168.1.1 192.168.1.2 80 81\r\n"),
     ok = inet:send(Socket, stomp_connect_frame()),
     {ok, _Packet} = gen_tcp:recv(Socket, 0, ?TIMEOUT),
-    ConnectionName = rabbit_ct_broker_helpers:rpc(Config, 0,
-        ?MODULE, connection_name, []),
-    match = re:run(ConnectionName, <<"^192.168.1.1:80 -> 192.168.1.2:81$">>, [{capture, none}]),
+    await_connection_name_match(
+      Config, <<"^192.168.1.1:80 -> 192.168.1.2:81$">>),
     gen_tcp:close(Socket),
     ok.
 
@@ -85,9 +85,8 @@ proxy_protocol_v1_tls(Config) ->
     {ok, SslSocket} = ssl:connect(Socket, [{verify, verify_none}], ?TIMEOUT),
     ok = ssl:send(SslSocket, stomp_connect_frame()),
     {ok, _Packet} = ssl:recv(SslSocket, 0, ?TIMEOUT),
-    ConnectionName = rabbit_ct_broker_helpers:rpc(Config, 0,
-        ?MODULE, connection_name, []),
-    match = re:run(ConnectionName, <<"^192.168.1.1:80 -> 192.168.1.2:81$">>, [{capture, none}]),
+    await_connection_name_match(
+      Config, <<"^192.168.1.1:80 -> 192.168.1.2:81$">>),
     gen_tcp:close(Socket),
     ok.
 
@@ -102,17 +101,31 @@ proxy_protocol_v2_local(Config) ->
     ok = inet:send(Socket, ranch_proxy_header:header(ProxyInfo)),
     ok = inet:send(Socket, stomp_connect_frame()),
     {ok, _Packet} = gen_tcp:recv(Socket, 0, ?TIMEOUT),
-    ConnectionName = rabbit_ct_broker_helpers:rpc(Config, 0,
-        ?MODULE, connection_name, []),
-    match = re:run(ConnectionName, <<"^127.0.0.1:\\d+ -> 127.0.0.1:\\d+$">>, [{capture, none}]),
+    await_connection_name_match(
+      Config, <<"^127.0.0.1:\\d+ -> 127.0.0.1:\\d+$">>),
     gen_tcp:close(Socket),
     ok.
 
-connection_name() ->
+%% The `connection_created' ETS table is populated asynchronously by
+%% the management agent; wait for an entry whose `name' matches the
+%% pattern.
+await_connection_name_match(Config, Pattern) ->
+    ?awaitMatch(true,
+                rabbit_ct_broker_helpers:rpc(
+                  Config, 0, ?MODULE, has_connection_name_matching, [Pattern]),
+                30_000).
+
+has_connection_name_matching(Pattern) ->
     Connections = ets:tab2list(connection_created),
-    {_Key, Values} = lists:nth(1, Connections),
-    {_, Name} = lists:keyfind(name, 1, Values),
-    Name.
+    lists:any(
+      fun({_Key, Values}) ->
+              case lists:keyfind(name, 1, Values) of
+                  {_, Name} ->
+                      re:run(Name, Pattern, [{capture, none}]) =:= match;
+                  false ->
+                      false
+              end
+      end, Connections).
 
 merge_app_env(StompConfig, Config) ->
     rabbit_ct_helpers:merge_app_env(Config, StompConfig).
