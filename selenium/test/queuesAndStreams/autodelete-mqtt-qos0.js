@@ -20,6 +20,7 @@ describe('Given an MQTT 5.0 connection with a qos 0 subscription with zero sessi
   let overview
   let captureScreen
   let queueName
+  let connectionsPage
 
   let mqttClient 
 
