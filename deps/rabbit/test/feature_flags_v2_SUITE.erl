@@ -159,10 +159,16 @@ start_slave_node(Parent, Config, Testcase, N) ->
     Name = list_to_atom(
              rabbit_misc:format("~ts-~b", [Testcase, N])),
     ct:pal("- Starting slave node `~ts@...`", [Name]),
+    %% `wait_boot' is set explicitly because the 15-second default is too
+    %% tight when many nodes are started concurrently by parallel test
+    %% groups. On timeout, `peer:start/1' calls `erlang:exit(timeout)',
+    %% which propagates through the linked starter to the test case and
+    %% aborts the whole CT run.
     {ok, NodePid, Node} = peer:start(#{
         name => Name,
         connection => standard_io,
-        shutdown => close
+        shutdown => close,
+        wait_boot => 60_000
     }),
     peer:call(NodePid, net_kernel, set_net_ticktime, [5]),
 
