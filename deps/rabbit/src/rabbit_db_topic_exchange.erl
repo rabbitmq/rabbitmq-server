@@ -46,7 +46,7 @@ match(#resource{virtual_host = VHost, name = XName} = X, RoutingKey, Opts) ->
                     []
             end;
         _ ->
-            trie_match_in_khepri(X, Words, BKeys)
+            trie_match_v3(X, Words, BKeys)
     end.
 
 -spec split_topic_key_binary(RoutingKey) -> Words when
@@ -170,69 +170,49 @@ format_dest_bkeys([{#resource{kind = queue} = Dest, BKey} | Rest], Acc) ->
 format_dest_bkeys([{Dest, _BKey} | Rest], Acc) ->
     format_dest_bkeys(Rest, [Dest | Acc]).
 
-%% --------------------------------------------------------------
-%% Internal
-%% --------------------------------------------------------------
+%% ==============================================================
+%% Old v3 Khepri topic graph.
+%% Delete these *_v3 functions when feature flag
+%% topic_binding_projection_v4 becomes required.
+%% ==============================================================
 
--spec add_matched([rabbit_types:binding_destination() |
-                   {rabbit_types:binding_destination(), BindingArgs :: list()}],
-                  ReturnBindingKeys :: boolean(),
-                  match_result()) ->
-    match_result().
-add_matched(Destinations, false, Acc) ->
-    Destinations ++ Acc;
-add_matched(DestinationsArgs, true, Acc) ->
-    lists:foldl(
-      fun({DestQ = #resource{kind = queue}, BindingArgs}, L) ->
-              case rabbit_misc:table_lookup(BindingArgs, <<"x-binding-key">>) of
-                  {longstr, BKey} ->
-                      [{DestQ, BKey} | L];
-                  _ ->
-                      [DestQ | L]
-              end;
-         ({DestX, _BindingArgs}, L) ->
-              [DestX | L]
-      end, Acc, DestinationsArgs).
-
-%% Khepri topic graph
-
-trie_match_in_khepri(X, Words, BKeys) ->
+trie_match_v3(X, Words, BKeys) ->
     try
-        trie_match_in_khepri(X, root, Words, BKeys, [])
+        trie_match_v3(X, root, Words, BKeys, [])
     catch
         error:badarg ->
             []
     end.
 
-trie_match_in_khepri(X, Node, [], BKeys, ResAcc0) ->
-    Destinations = trie_bindings_in_khepri(X, Node, BKeys),
-    ResAcc = add_matched(Destinations, BKeys, ResAcc0),
-    trie_match_part_in_khepri(
+trie_match_v3(X, Node, [], BKeys, ResAcc0) ->
+    Destinations = trie_bindings_v3(X, Node, BKeys),
+    ResAcc = add_matched_v3(Destinations, BKeys, ResAcc0),
+    trie_match_part_v3(
       X, Node, <<"#">>,
-      fun trie_match_skip_any_in_khepri/5, [], BKeys, ResAcc);
-trie_match_in_khepri(X, Node, [W | RestW] = Words, BKeys, ResAcc) ->
+      fun trie_match_skip_any_v3/5, [], BKeys, ResAcc);
+trie_match_v3(X, Node, [W | RestW] = Words, BKeys, ResAcc) ->
     lists:foldl(fun ({WArg, MatchFun, RestWArg}, Acc) ->
-                        trie_match_part_in_khepri(
+                        trie_match_part_v3(
                           X, Node, WArg, MatchFun, RestWArg, BKeys, Acc)
-                end, ResAcc, [{W, fun trie_match_in_khepri/5, RestW},
-                              {<<"*">>, fun trie_match_in_khepri/5, RestW},
+                end, ResAcc, [{W, fun trie_match_v3/5, RestW},
+                              {<<"*">>, fun trie_match_v3/5, RestW},
                               {<<"#">>,
-                               fun trie_match_skip_any_in_khepri/5, Words}]).
+                               fun trie_match_skip_any_v3/5, Words}]).
 
-trie_match_part_in_khepri(X, Node, Search, MatchFun, RestW, BKeys, ResAcc) ->
-    case trie_child_in_khepri(X, Node, Search) of
+trie_match_part_v3(X, Node, Search, MatchFun, RestW, BKeys, ResAcc) ->
+    case trie_child_v3(X, Node, Search) of
         {ok, NextNode} -> MatchFun(X, NextNode, RestW, BKeys, ResAcc);
         error          -> ResAcc
     end.
 
-trie_match_skip_any_in_khepri(X, Node, [], BKeys, ResAcc) ->
-    trie_match_in_khepri(X, Node, [], BKeys, ResAcc);
-trie_match_skip_any_in_khepri(X, Node, [_ | RestW] = Words, BKeys, ResAcc) ->
-    trie_match_skip_any_in_khepri(
+trie_match_skip_any_v3(X, Node, [], BKeys, ResAcc) ->
+    trie_match_v3(X, Node, [], BKeys, ResAcc);
+trie_match_skip_any_v3(X, Node, [_ | RestW] = Words, BKeys, ResAcc) ->
+    trie_match_skip_any_v3(
       X, Node, RestW, BKeys,
-      trie_match_in_khepri(X, Node, Words, BKeys, ResAcc)).
+      trie_match_v3(X, Node, Words, BKeys, ResAcc)).
 
-trie_child_in_khepri(X, Node, Word) ->
+trie_child_v3(X, Node, Word) ->
     case ets:lookup(
            ?KHEPRI_PROJECTION_V3,
            #trie_edge{exchange_name = X,
@@ -242,7 +222,7 @@ trie_child_in_khepri(X, Node, Word) ->
         []                                        -> error
     end.
 
-trie_bindings_in_khepri(X, Node, BKeys) ->
+trie_bindings_v3(X, Node, BKeys) ->
     case ets:lookup(
            ?KHEPRI_PROJECTION_V3,
            #trie_edge{exchange_name = X,
@@ -259,3 +239,18 @@ trie_bindings_in_khepri(X, Node, BKeys) ->
         [] ->
             []
     end.
+
+add_matched_v3(Destinations, false, Acc) ->
+    Destinations ++ Acc;
+add_matched_v3(DestinationsArgs, true, Acc) ->
+    lists:foldl(
+      fun({DestQ = #resource{kind = queue}, BindingArgs}, L) ->
+              case rabbit_misc:table_lookup(BindingArgs, <<"x-binding-key">>) of
+                  {longstr, BKey} ->
+                      [{DestQ, BKey} | L];
+                  _ ->
+                      [DestQ | L]
+              end;
+         ({DestX, _BindingArgs}, L) ->
+              [DestX | L]
+      end, Acc, DestinationsArgs).

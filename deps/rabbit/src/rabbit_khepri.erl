@@ -1708,7 +1708,7 @@ register_rabbit_topic_trie_projection() ->
            end,
     Projection = khepri_projection:new(rabbit_khepri_topic_trie_v4, PFun, Opts),
     PathPattern = topic_binding_path_pattern(),
-    _ = unregister_old_rabbit_topic_trie_projections(),
+    unregister_old_rabbit_topic_trie_projections(),
     khepri:register_projection(?STORE_ID, PathPattern, Projection).
 
 topic_binding_path_pattern() ->
@@ -1799,9 +1799,11 @@ trie_node_has_bindings(BindingTab, NodeId) ->
         _ -> false
     end.
 
+-spec supports_rabbit_khepri_topic_trie_v2() -> boolean().
 supports_rabbit_khepri_topic_trie_v2() ->
     true.
 
+-spec supports_rabbit_khepri_topic_trie_version() -> non_neg_integer().
 supports_rabbit_khepri_topic_trie_version() ->
     4.
 
