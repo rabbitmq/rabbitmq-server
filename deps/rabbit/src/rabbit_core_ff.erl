@@ -244,3 +244,14 @@
                          {rabbit_db_queue,
                           tie_binding_to_dest_with_keep_while_cond_enable}}
      }}).
+
+-rabbit_feature_flag(
+   {topic_binding_projection_v4,
+    #{desc          => "Enable the topic binding Khepri projection v4",
+      stability     => stable,
+      depends_on    => ['rabbitmq_4.3.0'],
+      callbacks     => #{enable =>
+                         {rabbit_khepri, topic_binding_projection_enable},
+                         post_enable =>
+                         {rabbit_khepri, topic_binding_projection_post_enable}}
+     }}).
