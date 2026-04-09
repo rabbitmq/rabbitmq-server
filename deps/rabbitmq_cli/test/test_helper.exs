@@ -947,6 +947,16 @@ defmodule TestHelper do
           file
       end
 
+    do_wait_for_log_message(message, log_file, attempts)
+  end
+
+  defp do_wait_for_log_message(message, log_file, 0) do
+    flunk(
+      "Ran out of attempts waiting for #{inspect(message)} to appear in #{inspect(log_file)}"
+    )
+  end
+
+  defp do_wait_for_log_message(message, log_file, attempts) do
     case File.read(log_file) do
       {:ok, data} ->
         case String.match?(data, Regex.compile!(message)) do
@@ -955,12 +965,12 @@ defmodule TestHelper do
 
           false ->
             :timer.sleep(100)
-            wait_for_log_message(message, log_file, attempts - 1)
+            do_wait_for_log_message(message, log_file, attempts - 1)
         end
 
       _ ->
         :timer.sleep(100)
-        wait_for_log_message(message, log_file, attempts - 1)
+        do_wait_for_log_message(message, log_file, attempts - 1)
     end
   end
 end
