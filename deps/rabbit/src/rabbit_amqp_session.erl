@@ -1641,6 +1641,7 @@ handle_credit_reply(Action = {credit_reply, Ctag, _DeliveryCount, _Credit, _Avai
             State
     end.
 
+<<<<<<< HEAD
 handle_credit_reply0(
   {credit_reply, Ctag, DeliveryCount, Credit, Available, _Drain = false},
   Handle,
@@ -1662,14 +1663,50 @@ handle_credit_reply0(
     %% Assertion: Our (receiver) delivery-count should be always
     %% in sync with the delivery-count of the sending queue.
     QDeliveryCount = DeliveryCount,
+=======
+handle_credit_reply0(#credit_reply{ctag = Ctag,
+                                   delivery_count = DeliveryCount,
+                                   credit = Credit,
+                                   available = Available,
+                                   drain = false = Drain,
+                                   properties = Props},
+                     Handle,
+                     #outgoing_link{
+                        client_flow_ctl = #client_flow_ctl{
+                                             delivery_count = CDeliveryCount,
+                                             credit = CCredit,
+                                             echo = CEcho,
+                                             properties = OldProps
+                                            } = CFC0,
+                        queue_flow_ctl = QFC0,
+                        stashed_credit_req = StashedCreditReq
+                       } = Link0,
+                     #state{cfg = #cfg{writer_pid = Writer,
+                                       channel_num = ChanNum},
+                            outgoing_links = OutgoingLinks,
+                            queue_states = QStates0
+                           } = State) ->
+
+    %% "The receiver's [our] value is calculated based on the last known value
+    %% from the sender [queue]". [2.6.7]
+    %% Therefore, we accept whatever the queue reports because deliveries can be
+    %% lost during leader changes or temporary distribution link outages while the
+    %% Ra credit command that advanced the delivery-count was still committed.
+    QFC = QFC0#queue_flow_ctl{delivery_count = DeliveryCount},
+>>>>>>> 5da7609017 (Handle delivery-count mismatch between session and QQ (#15973))
 
     case StashedCreditReq of
         #credit_req{} ->
+            Link = Link0#outgoing_link{queue_flow_ctl = QFC},
             %% We prioritise the stashed client request over finishing the current
             %% top-up rounds because the latest link state from the client applies.
+<<<<<<< HEAD
             S = pop_credit_req(Handle, Ctag, Link0, S0),
             echo(CEcho, Handle, CDeliveryCount, CCredit, Available, S),
             S;
+=======
+            pop_credit_req(Handle, Ctag, Link, State);
+>>>>>>> 5da7609017 (Handle delivery-count mismatch between session and QQ (#15973))
         none when Credit =:= 0 andalso
                   CCredit > 0 ->
             QName = Link0#outgoing_link.queue_name,
@@ -1679,12 +1716,13 @@ handle_credit_reply0(
             rabbit_queue_type:credit(
               QName, Ctag, DeliveryCount, CappedCredit, false, QStates0),
             Link = Link0#outgoing_link{
-                     queue_flow_ctl = QFC0#queue_flow_ctl{credit = CappedCredit},
+                     queue_flow_ctl = QFC#queue_flow_ctl{credit = CappedCredit},
                      at_least_one_credit_req_in_flight = true},
             S = S0#state{queue_states = QStates,
                          outgoing_links = OutgoingLinks#{Handle := Link}},
             handle_queue_actions(Actions, S);
         none ->
+<<<<<<< HEAD
             %% Although we (the receiver) usually determine link credit, we set here
             %% our link credit to what the queue says our link credit is (which is safer
             %% in case credit requests got applied out of order in quorum queues).
@@ -1697,6 +1735,33 @@ handle_credit_reply0(
             S = S0#state{outgoing_links = OutgoingLinks#{Handle := Link}},
             echo(CEcho, Handle, CDeliveryCount, CCredit, Available, S),
             S
+=======
+            ConsumerActiveChanged = consumer_active_changed(OldProps, Props),
+            case CEcho orelse ConsumerActiveChanged of
+                true ->
+                    Flow0 = #'v1_0.flow'{handle = ?UINT(Handle),
+                                         delivery_count = ?UINT(CDeliveryCount),
+                                         link_credit = ?UINT(CCredit),
+                                         available = ?UINT(Available),
+                                         drain = Drain,
+                                         echo = false},
+                    Flow1 = case ConsumerActiveChanged of
+                                true ->
+                                    set_flow_properties(Flow0, Props);
+                                false ->
+                                    Flow0
+                            end,
+                    Flow = session_flow_fields(Flow1, State),
+                    rabbit_amqp_writer:send_command(Writer, ChanNum, Flow);
+                false ->
+                    ok
+            end,
+            CFC = CFC0#client_flow_ctl{properties = Props},
+            Link = Link0#outgoing_link{client_flow_ctl = CFC,
+                                       queue_flow_ctl = QFC,
+                                       at_least_one_credit_req_in_flight = false},
+            State#state{outgoing_links = OutgoingLinks#{Handle := Link}}
+>>>>>>> 5da7609017 (Handle delivery-count mismatch between session and QQ (#15973))
     end;
 handle_credit_reply0(
   {credit_reply, Ctag, DeliveryCount, Credit, Available, _Drain = true},
