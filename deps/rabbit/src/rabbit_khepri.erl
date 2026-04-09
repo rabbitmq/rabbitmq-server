@@ -181,6 +181,13 @@
 -export([supports_rabbit_khepri_topic_trie_v2/0,
          supports_rabbit_khepri_topic_trie_version/0]).
 
+%% Called locally to determine which projection to use.
+-export([get_effective_topic_binding_projection_version/0]).
+
+%% Used during topic binding projections related feature flags handling.
+-export([topic_binding_projection_enable/1,
+         topic_binding_projection_post_enable/1]).
+
 -ifdef(TEST).
 -export([register_projections/0]).
 -endif.
@@ -1329,7 +1336,7 @@ register_projections() ->
                fun register_rabbit_bindings_projection/0,
                fun register_rabbit_route_by_source_key_projection/0,
                fun register_rabbit_route_by_source_projection/0,
-               fun register_rabbit_topic_graph_projection/0],
+               fun register_rabbit_topic_binding_projection/0],
     rabbit_misc:for_each_while_ok(
       fun(RegisterFun) ->
               case RegisterFun() of
@@ -1549,6 +1556,17 @@ projection_fun_for_sets(MapFun) ->
             ok
     end.
 
+register_rabbit_topic_binding_projection() ->
+    case get_effective_topic_binding_projection_version() of
+        V when V >= 4 -> register_rabbit_topic_trie_projection();
+        _ ->             register_rabbit_topic_graph_projection()
+    end.
+
+%% Topic routing via trie ETS projection (v3).
+%%
+%% This is kept for backward compatibility only. This projection is unused
+%% after the `topic_binding_projection_v4' feature flag is enabled. It
+%% can be removed once this feature flag becomes required.
 register_rabbit_topic_graph_projection() ->
     Name = rabbit_khepri_topic_trie_v3,
     %% This projection calls some external functions which are disallowed by
@@ -1624,18 +1642,215 @@ register_rabbit_topic_graph_projection() ->
     _ = unregister_old_rabbit_topic_trie_projections(),
     khepri:register_projection(?STORE_ID, PathPattern, Projection).
 
+%% Topic routing via trie + ordered_set ETS projections (v4).
+%% Uses a single Khepri projection with two ETS tables:
+%%
+%% Trie edges table (set) for fast trie navigation during routing:
+%%   Row:   {{XSrc, ParentNodeId, Word}, ChildNodeId, ChildCount}
+%%
+%% Leaf bindings table (ordered_set) for collecting destinations:
+%%   Row:   {{NodeId, BindingKey, Dest}}
+%%
+%% XSrc       = {VHost, ExchangeName} (binaries)
+%% NodeId     = root | reference()
+%% Word       = binary() (a single topic segment, e.g. <<"foo">>, <<"*">>, <<"#">>)
+%% ChildCount = non_neg_integer() (number of outgoing edges)
+%% Dest       = #resource{}
+%%
+%% This projection is only used once the `topic_binding_projection_v4' feature
+%% flag is enabled.
+register_rabbit_topic_trie_projection() ->
+    ShouldProcessFun =
+    fun (rabbit_db_topic_exchange, split_topic_key_binary, 1, _From) ->
+            %% This function uses `persistent_term' to store a lazily compiled
+            %% binary pattern.
+            false;
+        (erlang, make_ref, 0, _From) ->
+            %% References are used for trie node IDs. They are non-deterministic
+            %% across cluster members, but that's fine since both tables live
+            %% only as long as the projection and are rebuilt on restart.
+            false;
+        (ets, _F, _A, _From) ->
+            false;
+        (M, F, A, From) ->
+            khepri_tx_adv:should_process_function(M, F, A, From)
+    end,
+    Opts = #{tables => #{rabbit_khepri_topic_trie_v4 =>
+                             #{type => set},
+                         rabbit_khepri_topic_binding_v4 =>
+                             #{type => ordered_set}},
+             keypos => 1,
+             read_concurrency => true,
+             standalone_fun_options => #{should_process_function => ShouldProcessFun}},
+    PFun = fun(Tables, Path, OldProps, NewProps) ->
+                   #{rabbit_khepri_topic_trie_v4 := TrieTab,
+                     rabbit_khepri_topic_binding_v4 := BindingTab} = Tables,
+                   {VHost, ExchangeName, Kind, DstName, BindingKey} =
+                   rabbit_db_binding:khepri_route_path_to_args(Path),
+                   XSrc = {VHost, ExchangeName},
+                   Dest = rabbit_misc:r(VHost, Kind, DstName),
+                   Words = rabbit_db_topic_exchange:split_topic_key_binary(BindingKey),
+                   case {OldProps, NewProps} of
+                       {_, #{data := _}} ->
+                           LeafNodeId = trie_follow_down_create(TrieTab, XSrc, Words),
+                           ets:insert(BindingTab, {{LeafNodeId, BindingKey, Dest}});
+                       {#{data := _}, _} ->
+                           case trie_follow_down_get_path(TrieTab, XSrc, Words) of
+                               {ok, LeafNodeId, TriePath} ->
+                                   ets:delete(BindingTab, {LeafNodeId, BindingKey, Dest}),
+                                   trie_gc_path(TrieTab, BindingTab, TriePath);
+                               error ->
+                                   ok
+                           end;
+                       {_, _} ->
+                           ok
+                   end
+           end,
+    Projection = khepri_projection:new(rabbit_khepri_topic_trie_v4, PFun, Opts),
+    PathPattern = topic_binding_path_pattern(),
+    unregister_old_rabbit_topic_trie_projections(),
+    khepri:register_projection(?STORE_ID, PathPattern, Projection).
+
+topic_binding_path_pattern() ->
+    rabbit_db_binding:khepri_route_path(
+      _VHost = ?KHEPRI_WILDCARD_STAR,
+      _Exchange = #if_data_matches{pattern = #exchange{type = topic,
+                                                       _ = '_'}},
+      _Kind = ?KHEPRI_WILDCARD_STAR,
+      _DstName = ?KHEPRI_WILDCARD_STAR,
+      _BindingKey = ?KHEPRI_WILDCARD_STAR).
+
+%% Walk down the trie following the given words, creating edges and
+%% intermediate nodes as needed. Returns the leaf node ID.
+%%
+%% Each trie row is a 3-tuple: {Key, ChildNodeId, ChildCount}.
+%% ChildCount tracks the number of outgoing edges from ChildNodeId.
+%% It is incremented when a new edge is created, decremented during GC.
+trie_follow_down_create(TrieTab, XSrc, Words) ->
+    trie_follow_down_create(TrieTab, XSrc, root, none, Words).
+
+trie_follow_down_create(_TrieTab, _XSrc, NodeId, _ParentKey, []) ->
+    NodeId;
+trie_follow_down_create(TrieTab, XSrc, ParentId, ParentKey, [Word | Rest]) ->
+    Key = {XSrc, ParentId, Word},
+    case ets:lookup_element(TrieTab, Key, 2, undefined) of
+        undefined ->
+            NewId = make_ref(),
+            ets:insert(TrieTab, {Key, NewId, 0}),
+            _ = case ParentKey of
+                    none ->
+                        ok;
+                    _ ->
+                        ets:update_counter(TrieTab, ParentKey, {3, 1})
+                end,
+            trie_follow_down_create(TrieTab, XSrc, NewId, Key, Rest);
+        ChildId ->
+            trie_follow_down_create(TrieTab, XSrc, ChildId, Key, Rest)
+    end.
+
+%% Walk down the trie following the given words, collecting the path
+%% for later GC. Returns {ok, LeafNodeId, Path} or error.
+trie_follow_down_get_path(TrieTab, XSrc, Words) ->
+    trie_follow_down_get_path(TrieTab, XSrc, root, none, Words, []).
+
+trie_follow_down_get_path(_TrieTab, _XSrc, NodeId, _ParentKey, [], Path) ->
+    {ok, NodeId, Path};
+trie_follow_down_get_path(TrieTab, XSrc, ParentId, ParentKey, [Word | Rest], Path) ->
+    Key = {XSrc, ParentId, Word},
+    case ets:lookup_element(TrieTab, Key, 2, undefined) of
+        undefined ->
+            error;
+        ChildId ->
+            trie_follow_down_get_path(TrieTab, XSrc, ChildId, Key, Rest,
+                                      [{Key, ParentKey, ChildId} | Path])
+    end.
+
+%% Walk the path bottom-up (path is already in leaf-to-root order).
+%% At each level, if the child node has no outgoing edges and no bindings,
+%% delete the edge, decrement the parent's count, and continue upward.
+trie_gc_path(_TrieTab, _BindingTab, []) ->
+    ok;
+trie_gc_path(TrieTab, BindingTab, [{Key, ParentEdgeKey, ChildId} | Rest]) ->
+    case trie_node_is_empty(TrieTab, BindingTab, Key, ChildId) of
+        true ->
+            ets:delete(TrieTab, Key),
+            _ = case ParentEdgeKey of
+                    none ->
+                        ok;
+                    _ ->
+                        ets:update_counter(TrieTab, ParentEdgeKey, {3, -1})
+                end,
+            trie_gc_path(TrieTab, BindingTab, Rest);
+        false ->
+            ok
+    end.
+
+%% A trie node is empty when it has no outgoing edges (ChildCount = 0) and
+%% no bindings in the bindings table.
+trie_node_is_empty(TrieTab, BindingTab, Key, ChildId) ->
+    case ets:lookup_element(TrieTab, Key, 3, 0) of
+        0 -> not trie_node_has_bindings(BindingTab, ChildId);
+        _ -> false
+    end.
+
+trie_node_has_bindings(BindingTab, NodeId) ->
+    case ets:next(BindingTab, {NodeId, <<>>, {}}) of
+        {NodeId, _, _} -> true;
+        _ -> false
+    end.
+
+-spec supports_rabbit_khepri_topic_trie_v2() -> boolean().
 supports_rabbit_khepri_topic_trie_v2() ->
     true.
 
+-spec supports_rabbit_khepri_topic_trie_version() -> non_neg_integer().
 supports_rabbit_khepri_topic_trie_version() ->
-    3.
+    4.
+
+get_effective_topic_binding_projection_version() ->
+    IsEnabled = rabbit_feature_flags:is_enabled(
+                  topic_binding_projection_v4, non_blocking),
+    case IsEnabled of
+        true -> 4;
+        _    -> 3
+    end.
+
+topic_binding_projection_enable(
+  #{feature_name := topic_binding_projection_v4 = FeatureName}) ->
+    ?LOG_DEBUG(
+       "Feature flag `~s`: register topic binding projection v4",
+       [FeatureName],
+       #{domain => ?RMQLOG_DOMAIN_DB}),
+    case register_rabbit_topic_trie_projection() of
+        ok ->
+            ok;
+        {error, {khepri, projection_already_exists, _Info}} ->
+            ok;
+        {error, _} = Error ->
+            Error
+    end.
+
+topic_binding_projection_post_enable(
+  #{feature_name := topic_binding_projection_v4 = FeatureName}) ->
+    ?LOG_DEBUG(
+       "Feature flag `~s`: unregister old topic binding projections",
+       [FeatureName],
+       #{domain => ?RMQLOG_DOMAIN_DB}),
+    unregister_old_rabbit_topic_trie_projections(),
+    ok.
 
 unregister_old_rabbit_topic_trie_projections() ->
-    OldProjections = [{1, rabbit_khepri_topic_trie},
-                      {2, rabbit_khepri_topic_trie_v2}],
-    lists:foreach(
-      fun unregister_old_rabbit_topic_trie_projection/1,
-      OldProjections).
+    OldProjections0 = [{1, rabbit_khepri_topic_trie},
+                       {2, rabbit_khepri_topic_trie_v2}],
+    OldProjections1 = case get_effective_topic_binding_projection_version() of
+                          V when V >= 4 ->
+                              OldProjections0 ++
+                              [{3, rabbit_khepri_topic_trie_v3}];
+                          _ ->
+                              OldProjections0
+                      end,
+    lists:foreach(fun unregister_old_rabbit_topic_trie_projection/1,
+                  OldProjections1).
 
 unregister_old_rabbit_topic_trie_projection({Version, ProjectionName}) ->
     Nodes = rabbit_nodes:list_members(),
