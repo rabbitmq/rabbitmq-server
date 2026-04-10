@@ -165,19 +165,8 @@ var DISABLED_STATS_COLUMNS =
                    ['msgs-persistent', 'Persistent',     false],
                    ['msgs-total',      'Total',          true]]},
      'connections':
-     {'Overview': [['container_id', 'Container ID', true],
-                   ['user',   'User name', true]],
-      'Details': [['ssl',            'TLS',      true],
-                  ['ssl_info',       'TLS details',    false],
-                  ['protocol',       'Protocol',       true],
-                  ['channel_max',    'Channel max',    false],
-                  ['frame_max',      'Frame max',      false],
-                  ['auth_mechanism', 'SASL auth mechanism', false],
-                  ['client',         'Client',         false]],
-      'Network': [['from_client',  'From client',  false],
-                  ['to_client',    'To client',    false],
-                  ['heartbeat',    'Heartbeat',    false],
-                  ['connected_at', 'Connected at', false]]},
+     {'Overview': [['user',   'User name', true],
+                   ['state',  'State',     true]]},
 
      'vhosts':
      {'Overview': [['cluster-state',   'Cluster state',  false]]}};
