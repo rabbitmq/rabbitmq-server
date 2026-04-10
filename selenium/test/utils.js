@@ -30,9 +30,13 @@ function getRandomInt(max) {
 class CaptureScreenshot {
   driver
   test
+  /** When true, teardown skips after-failed.png (named failure shot already taken in afterEach). */
+  _suppressTeardownFailureShot
+
   constructor (webdriver, test) {
     this.driver = webdriver
     this.test = test
+    this._suppressTeardownFailureShot = false
   }
 
   async shot (name) {
@@ -45,6 +49,23 @@ class CaptureScreenshot {
     console.log("screenshot saved to " + dest)
     await fsp.writeFile(dest, image, 'base64')
   }
+}
+
+/**
+ * Turn a Mocha test title into a single path segment (no timestamp).
+ */
+function sanitizeScreenshotFileName (title) {
+  if (!title || typeof title !== 'string') {
+    return 'unnamed-test'
+  }
+  let s = title
+    .replace(/[/\\?%*:|"<>]/g, '-')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (s.length > 200) {
+    s = s.substring(0, 200)
+  }
+  return s.length > 0 ? s : 'unnamed-test'
 }
 
 module.exports = {
@@ -175,6 +196,25 @@ module.exports = {
 
   captureScreensFor: (d, test) => {
     return new CaptureScreenshot(d.driver, require('path').basename(test))
+  },
+
+  /**
+   * Call from afterEach: if the test that just finished failed, save a PNG named after
+   * its full title (parent describes + it), with no timestamp.
+   */
+  captureScreenshotIfFailed: async (captureScreen, mochaContext) => {
+    if (captureScreen == null || mochaContext == null || !mochaContext.currentTest) {
+      return
+    }
+    const ct = mochaContext.currentTest
+    if (ct.isPassed() || ct.pending) {
+      captureScreen._suppressTeardownFailureShot = false
+      return
+    }
+    const fullTitle = typeof ct.fullTitle === 'function' ? ct.fullTitle() : ct.title
+    const name = sanitizeScreenshotFileName(fullTitle)
+    await captureScreen.shot(name)
+    captureScreen._suppressTeardownFailureShot = true
   },
 
   doUntil: async (doCallback, booleanCallback, delayMs = 1000, message = "doUntil failed") => {
@@ -317,8 +357,12 @@ module.exports = {
         driver.executeScript('lambda-status=passed')
       } else {        
         if (captureScreen != null) {
-          console.log("Teardown failed . capture...");
-          await captureScreen.shot('after-failed');
+          if (captureScreen._suppressTeardownFailureShot) {
+            captureScreen._suppressTeardownFailureShot = false
+          } else {
+            console.log("Teardown failed . capture...");
+            await captureScreen.shot('after-failed');
+          }
         }
         driver.executeScript('lambda-status=failed')
       }
