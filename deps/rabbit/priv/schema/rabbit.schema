@@ -467,6 +467,10 @@ end}.
 {mapping, "metadata_store.khepri.default_timeout", "rabbit.khepri_default_timeout",
     [{datatype, integer}]}.
 
+{mapping, "metadata_store.khepri.snapshot_interval", "rabbit.khepri_snapshot_interval",
+    [{datatype, integer},
+     {validators, ["non_zero_positive_integer"]}]}.
+
 %% ===========================================================================
 
 %% Choose the available SASL mechanism(s) to expose.

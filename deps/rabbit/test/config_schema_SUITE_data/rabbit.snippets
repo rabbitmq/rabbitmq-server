@@ -986,6 +986,20 @@ credential_validator.regexp = ^abc\\d+",
      ]}],
    []},
 
+  {khepri_default_timeout,
+   "metadata_store.khepri.default_timeout = 123456",
+   [{rabbit,
+     [{khepri_default_timeout, 123456}]
+    }],
+   []},
+
+  {khepri_snapshot_interval,
+   "metadata_store.khepri.snapshot_interval = 123456",
+   [{rabbit,
+     [{khepri_snapshot_interval, 123456}]
+    }],
+   []},
+
   %%
   %% Definitions
   %%
