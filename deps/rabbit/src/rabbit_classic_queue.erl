@@ -564,7 +564,7 @@ i(operator_policy, Q) ->
     end;
 i(effective_policy_definition, Q) ->
     case rabbit_policy:effective_definition(Q) of
-        undefined -> [];
+        undefined -> #{};
         Def       -> Def
     end;
 i(type, _) ->
