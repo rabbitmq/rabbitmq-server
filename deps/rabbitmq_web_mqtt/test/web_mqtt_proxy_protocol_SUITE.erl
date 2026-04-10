@@ -12,6 +12,7 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 suite() ->
     [
@@ -87,9 +88,8 @@ proxy_protocol_v1(Config) ->
     {ok, _} = rfc6455_client:open(WS),
     rfc6455_client:send_binary(WS, rabbit_ws_test_util:mqtt_3_1_1_connect_packet()),
     {binary, _P} = rfc6455_client:recv(WS),
-    ConnectionName = rabbit_ct_broker_helpers:rpc(Config, 0,
-        ?MODULE, connection_name, []),
-    match = re:run(ConnectionName, <<"^192.168.1.1:80 -> 192.168.1.2:81$">>, [{capture, none}]),
+    await_connection_name_match(
+      Config, <<"^192.168.1.1:80 -> 192.168.1.2:81$">>),
     {close, _} = rfc6455_client:close(WS),
     ok.
 
@@ -107,14 +107,28 @@ proxy_protocol_v2_local(Config) ->
     {ok, _} = rfc6455_client:open(WS),
     rfc6455_client:send_binary(WS, rabbit_ws_test_util:mqtt_3_1_1_connect_packet()),
     {binary, _P} = rfc6455_client:recv(WS),
-    ConnectionName = rabbit_ct_broker_helpers:rpc(Config, 0,
-        ?MODULE, connection_name, []),
-    match = re:run(ConnectionName, <<"^127.0.0.1:\\d+ -> 127.0.0.1:\\d+$">>, [{capture, none}]),
+    await_connection_name_match(
+      Config, <<"^127.0.0.1:\\d+ -> 127.0.0.1:\\d+$">>),
     {close, _} = rfc6455_client:close(WS),
     ok.
 
-connection_name() ->
+%% The `connection_created' ETS table is populated asynchronously by
+%% the management agent; wait for an entry whose `name' matches the
+%% pattern.
+await_connection_name_match(Config, Pattern) ->
+    ?awaitMatch(true,
+                rabbit_ct_broker_helpers:rpc(
+                  Config, 0, ?MODULE, has_connection_name_matching, [Pattern]),
+                30_000).
+
+has_connection_name_matching(Pattern) ->
     Connections = ets:tab2list(connection_created),
-    {_Key, Values} = lists:nth(1, Connections),
-    {_, Name} = lists:keyfind(name, 1, Values),
-    Name.
+    lists:any(
+      fun({_Key, Values}) ->
+              case lists:keyfind(name, 1, Values) of
+                  {_, Name} ->
+                      re:run(Name, Pattern, [{capture, none}]) =:= match;
+                  false ->
+                      false
+              end
+      end, Connections).
