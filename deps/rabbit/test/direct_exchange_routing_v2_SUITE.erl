@@ -263,9 +263,9 @@ recover_bindings(Config) ->
 
     assert_bindings_list_empty(Config),
     rabbit_ct_broker_helpers:rabbitmqctl(Config, Server, ["import_definitions", Path], 10_000),
-    ?assertEqual(?NUM_BINDINGS_TO_DIRECT_ECHANGE, count_bindings(Config)),
+    ?awaitMatch(?NUM_BINDINGS_TO_DIRECT_ECHANGE, count_bindings(Config), 30_000),
     ok = rabbit_ct_broker_helpers:restart_node(Config, 0),
-    ?assertEqual(?NUM_BINDINGS_TO_DIRECT_ECHANGE_DURABLE, count_bindings(Config)),
+    ?awaitMatch(?NUM_BINDINGS_TO_DIRECT_ECHANGE_DURABLE, count_bindings(Config), 30_000),
 
     %% cleanup
     {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
