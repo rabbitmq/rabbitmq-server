@@ -2429,7 +2429,7 @@ invalid_policy(Config) ->
 
     ?assertEqual('', proplists:get_value(policy, Info)),
     ?assertEqual('', proplists:get_value(operator_policy, Info)),
-    ?assertEqual([], proplists:get_value(effective_policy_definition, Info)),
+    ?assertEqual(#{}, proplists:get_value(effective_policy_definition, Info)),
     ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"ttl">>),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
