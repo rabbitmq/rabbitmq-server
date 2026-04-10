@@ -293,6 +293,7 @@ setup(_Context) ->
                        metrics_labels => #{ra_system => ?RA_SYSTEM,
                                            module => ?MODULE},
                        friendly_name => ?RA_FRIENDLY_NAME,
+                       min_recovery_checkpoint_interval => 4096,
                        machine_config => MachineConfig},
     case khepri:start(?RA_SYSTEM, RaServerConfig) of
         {ok, ?STORE_ID} ->
