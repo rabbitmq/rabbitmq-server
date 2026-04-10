@@ -884,15 +884,17 @@ system_recover(quorum_queues) ->
     end.
 
 maybe_apply_policies(Q, #{config := CurrentConfig}) ->
-    %% delivery_limit can't be updated from a policy and thus has to be
-    %% excluded from the comparison
-    NewPolicyConfig = maps:without([delivery_limit],
-                                   gather_policy_config(Q, false)),
+    NewPolicyConfig = gather_policy_config(Q, false),
 
     RelevantKeys = maps:keys(NewPolicyConfig),
     CurrentPolicyConfig = maps:with(RelevantKeys, CurrentConfig),
 
-    ShouldUpdate = NewPolicyConfig =/= CurrentPolicyConfig,
+    %% Normalize undefined delivery_limit values to -1 (unlimited) for comparison.
+    %% rabbit_fifo may store undefined for older queues, but get_delivery_limit
+    %% always returns a concrete value (20 or -1), never undefined.
+    CurrentNorm = normalize_delivery_limit(CurrentPolicyConfig),
+
+    ShouldUpdate = NewPolicyConfig =/= CurrentNorm,
     case ShouldUpdate of
         true ->
             ?LOG_DEBUG("Re-applying policies for ~ts",
@@ -900,6 +902,13 @@ maybe_apply_policies(Q, #{config := CurrentConfig}) ->
             policy_changed(Q),
             ok;
         false -> ok
+    end.
+
+normalize_delivery_limit(Config) ->
+    case maps:get(delivery_limit, Config, undefined) of
+        undefined ->
+            Config#{delivery_limit => -1};
+        _ -> Config
     end.
 
 -spec recover(binary(), [amqqueue:amqqueue()]) ->

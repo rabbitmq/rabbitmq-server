@@ -196,6 +196,7 @@ all_tests() ->
      subscribe_redelivery_limit_disable,
      subscribe_redelivery_limit_many,
      subscribe_redelivery_policy,
+     delivery_limit_policy_update,
      subscribe_redelivery_limit_with_dead_letter,
      purge,
      consumer_metrics,
@@ -4224,6 +4225,52 @@ subscribe_redelivery_policy(Config) ->
 
     wait_for_messages(Config, [[QQ, <<"0">>, <<"0">>, <<"0">>]]),
     ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"delivery-limit">>).
+
+delivery_limit_policy_update(Config) ->
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+
+    %% Declare quorum queue without delivery limit
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    VHost = <<"%2F">>,
+    RaName = binary_to_atom(<<VHost/binary, "_", QQ/binary>>, utf8),
+
+    %% Initially, delivery_limit should be the default (20)
+    ?awaitMatch({ok, #{machine := #{config := #{delivery_limit := 20}}}, _},
+                rpc:call(Server, ra, member_overview, [RaName]),
+                ?DEFAULT_AWAIT),
+
+    %% Set a delivery limit policy
+    ok = rabbit_ct_broker_helpers:set_policy(
+           Config, 0, <<"delivery-limit-test">>, <<".*">>, <<"queues">>,
+           [{<<"delivery-limit">>, 5}]),
+
+    %% Verify that the policy was applied to the queue config
+    ?awaitMatch({ok, #{machine := #{config := #{delivery_limit := 5}}}, _},
+                rpc:call(Server, ra, member_overview, [RaName]),
+                ?DEFAULT_AWAIT),
+
+    %% Update the policy with a new delivery limit
+    ok = rabbit_ct_broker_helpers:set_policy(
+           Config, 0, <<"delivery-limit-test">>, <<".*">>, <<"queues">>,
+           [{<<"delivery-limit">>, 10}]),
+
+    %% Verify that the new policy was applied
+    ?awaitMatch({ok, #{machine := #{config := #{delivery_limit := 10}}}, _},
+                rpc:call(Server, ra, member_overview, [RaName]),
+                ?DEFAULT_AWAIT),
+
+    %% Clear the policy
+    ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"delivery-limit-test">>),
+
+    %% Verify that the default delivery limit is restored
+    ?awaitMatch({ok, #{machine := #{config := #{delivery_limit := 20}}}, _},
+                rpc:call(Server, ra, member_overview, [RaName]),
+                ?DEFAULT_AWAIT).
 
 subscribe_redelivery_limit_with_dead_letter(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
