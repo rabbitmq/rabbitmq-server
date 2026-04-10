@@ -971,10 +971,6 @@ function group_count(mode, group, bools) {
     var options = COLUMNS[mode][group];
     for (var i = 0; i < options.length; i++) {
         var column = options[i][0];
-        if (mode === 'connections' && disable_stats &&
-            (column === 'from_client' || column === 'to_client')) {
-            continue;
-        }
         if (show_column(mode, column)) count++;
     }
     return count;
