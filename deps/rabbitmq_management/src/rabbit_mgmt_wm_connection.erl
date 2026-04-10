@@ -40,7 +40,16 @@ to_json(ReqData, Context) ->
             false ->
                 conn_stats(ReqData);
             true ->
-                rabbit_mgmt_db:get_connection(rabbit_mgmt_util:id(connection, ReqData))
+                case rabbit_mgmt_db:get_connection(
+                       rabbit_mgmt_util:id(connection, ReqData)) of
+                    not_found ->
+                        %% IMPORTANT: connection_created_stats is empty when
+                        %% the metrics collector is disabled. Fall back to
+                        %% the tracked-connection record.
+                        conn(ReqData);
+                    Stats ->
+                        Stats
+                end
         end,
     ConnStatsWithoutPids = rabbit_mgmt_format:strip_pids(ConnStats),
     ReplyData = maps:from_list(ConnStatsWithoutPids),
