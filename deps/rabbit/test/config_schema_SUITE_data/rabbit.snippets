@@ -1231,6 +1231,80 @@ credential_validator.regexp = ^abc\\d+",
    []},
 
   %%
+  %% Coordination System Ra Parameters
+  %%
+
+  {coordination_wal_compute_checksums,
+   "coordination.wal_compute_checksums = true",
+   [{rabbit, [
+      {coordination_wal_compute_checksums, true}
+     ]}],
+   []},
+
+  {coordination_segment_compute_checksums,
+   "coordination.segment_compute_checksums = true",
+   [{rabbit, [
+      {coordination_segment_compute_checksums, true}
+     ]}],
+   []},
+
+  {coordination_wal_max_size_bytes,
+   "coordination.wal_max_size_bytes = 64000000",
+   [{rabbit, [
+      {coordination_wal_max_size_bytes, 64000000}
+     ]}],
+   []},
+
+  {coordination_wal_max_entries,
+   "coordination.wal_max_entries = 500000",
+   [{rabbit, [
+      {coordination_wal_max_entries, 500000}
+     ]}],
+   []},
+
+  {coordination_wal_max_batch_size,
+   "coordination.wal_max_batch_size = 4096",
+   [{rabbit, [
+      {coordination_wal_max_batch_size, 4096}
+     ]}],
+   []},
+
+  {coordination_segment_max_size_bytes,
+   "coordination.segment_max_size_bytes = 64000000",
+   [{rabbit, [
+      {coordination_segment_max_size_bytes, 64000000}
+     ]}],
+   []},
+
+  {coordination_segment_max_entries,
+   "coordination.segment_max_entries = 4096",
+   [{rabbit, [
+      {coordination_segment_max_entries, 4096}
+     ]}],
+   []},
+
+  {coordination_max_append_entries_rpc_batch_size,
+   "coordination.max_append_entries_rpc_batch_size = 16",
+   [{rabbit, [
+      {coordination_max_append_entries_rpc_batch_size, 16}
+     ]}],
+   []},
+
+  {coordination_compress_mem_tables,
+   "coordination.compress_mem_tables = true",
+   [{rabbit, [
+      {coordination_compress_mem_tables, true}
+     ]}],
+   []},
+
+  {coordination_snapshot_chunk_size,
+   "coordination.snapshot_chunk_size = 1000000",
+   [{rabbit, [
+      {coordination_snapshot_chunk_size, 1000000}
+     ]}],
+   []},
+
+  %%
   %% Runtime parameters
   %%
 

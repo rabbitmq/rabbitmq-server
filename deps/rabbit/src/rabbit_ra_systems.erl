@@ -29,6 +29,10 @@
 %% the default min bin vheap value in OTP 26
 -define(MIN_BIN_VHEAP_SIZE_DEFAULT, 46422).
 -define(MIN_BIN_VHEAP_SIZE_MULT, 64).
+%% coordination system Ra parameters
+-define(COORD_DEFAULT_WAL_COMPUTE_CHECKSUMS, true).
+-define(COORD_DEFAULT_SEGMENT_COMPUTE_CHECKSUMS, true).
+-define(COORD_DEFAULT_COMPRESS_MEM_TABLES, true).
 
 -spec setup() -> ok | no_return().
 
@@ -159,10 +163,40 @@ get_config(coordination = RaSystem) ->
     DefaultConfig = ra_system:default_config(),
     CoordDataDir = filename:join(
                      [rabbit:data_dir(), "coordination", node()]),
+    WalComputeChecksums = application:get_env(rabbit, coordination_wal_compute_checksums,
+                                               ?COORD_DEFAULT_WAL_COMPUTE_CHECKSUMS),
+    SegmentComputeChecksums = application:get_env(rabbit, coordination_segment_compute_checksums,
+                                                   ?COORD_DEFAULT_SEGMENT_COMPUTE_CHECKSUMS),
+    WalMaxSizeBytes = application:get_env(rabbit, coordination_wal_max_size_bytes,
+                                          ?COORD_WAL_MAX_SIZE_B),
+    WalMaxEntries = application:get_env(rabbit, coordination_wal_max_entries,
+                                        maps:get(wal_max_entries, DefaultConfig)),
+    WalMaxBatchSize = application:get_env(rabbit, coordination_wal_max_batch_size,
+                                          maps:get(wal_max_batch_size, DefaultConfig)),
+    SegmentMaxSizeBytes = application:get_env(rabbit, coordination_segment_max_size_bytes,
+                                              maps:get(segment_max_size_bytes, DefaultConfig)),
+    SegmentMaxEntries = application:get_env(rabbit, coordination_segment_max_entries,
+                                            maps:get(segment_max_entries, DefaultConfig)),
+    AERBatchSize = application:get_env(rabbit, coordination_max_append_entries_rpc_batch_size,
+                                       maps:get(default_max_append_entries_rpc_batch_size, DefaultConfig)),
+    CompressMemTables = application:get_env(rabbit, coordination_compress_mem_tables,
+                                            ?COORD_DEFAULT_COMPRESS_MEM_TABLES),
+    SnapshotChunkSize = application:get_env(rabbit, coordination_snapshot_chunk_size,
+                                            maps:get(snapshot_chunk_size, DefaultConfig)),
+    
     DefaultConfig#{name => RaSystem,
                    data_dir => CoordDataDir,
                    wal_data_dir => CoordDataDir,
-                   wal_max_size_bytes => ?COORD_WAL_MAX_SIZE_B,
+                   wal_compute_checksums => WalComputeChecksums,
+                   segment_compute_checksums => SegmentComputeChecksums,
+                   wal_max_size_bytes => WalMaxSizeBytes,
+                   wal_max_entries => WalMaxEntries,
+                   wal_max_batch_size => WalMaxBatchSize,
+                   segment_max_size_bytes => SegmentMaxSizeBytes,
+                   segment_max_entries => SegmentMaxEntries,
+                   default_max_append_entries_rpc_batch_size => AERBatchSize,
+                   compress_mem_tables => CompressMemTables,
+                   snapshot_chunk_size => SnapshotChunkSize,
                    names => ra_system:derive_names(RaSystem)}.
 
 -spec ensure_stopped() -> ok | no_return().
