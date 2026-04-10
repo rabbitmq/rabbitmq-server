@@ -48,15 +48,6 @@ do_connections_query(ReqData, Context) ->
         false ->
             augmented(ReqData, Context);
         true ->
-            case rabbit_mgmt_agent_config:is_metrics_collector_enabled() of
-                true ->
-                    rabbit_mgmt_util:filter_conn_ch_list(
-                      rabbit_mgmt_db:get_all_connections(), ReqData, Context);
-                false ->
-                    %% IMPORTANT: connection_created_stats is empty when the
-                    %% metrics collector is disabled. Fall back to the
-                    %% tracked-connection list.
-                    rabbit_mgmt_util:filter_tracked_conn_list(
-                      rabbit_connection_tracking:list(), ReqData, Context)
-            end
+            rabbit_mgmt_util:filter_tracked_conn_list(rabbit_connection_tracking:list(),
+                                                      ReqData, Context)
     end.
