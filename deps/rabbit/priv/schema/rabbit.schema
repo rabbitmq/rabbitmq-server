@@ -2754,6 +2754,53 @@ end}.
   {validators, ["non_zero_positive_integer"]}
 ]}.
 
+{mapping, "quorum_queue.wal_compute_checksums", "rabbit.quorum_wal_compute_checksums", [
+  {datatype, {enum, [true, false]}}
+]}.
+
+{mapping, "quorum_queue.segment_compute_checksums", "rabbit.quorum_segment_compute_checksums", [
+  {datatype, {enum, [true, false]}}
+]}.
+
+{mapping, "quorum_queue.max_append_entries_rpc_batch_size", "rabbit.quorum_max_append_entries_rpc_batch_size", [
+  {datatype, integer},
+  {validators, ["non_zero_positive_integer"]}
+]}.
+
+{mapping, "quorum_queue.compress_mem_tables", "rabbit.quorum_compress_mem_tables", [
+  {datatype, {enum, [true, false]}}
+]}.
+
+{mapping, "quorum_queue.segment_max_size_bytes", "rabbit.quorum_segment_max_size_bytes", [
+  {datatype, integer},
+  {validators, ["non_zero_positive_integer"]}
+]}.
+
+{mapping, "quorum_queue.segment_max_entries", "rabbit.quorum_segment_max_entries", [
+  {datatype, integer},
+  {validators, ["non_zero_positive_integer", "positive_16_bit_unsigned_integer"]}
+]}.
+
+{mapping, "quorum_queue.wal_max_size_bytes", "rabbit.quorum_wal_max_size_bytes", [
+  {datatype, integer},
+  {validators, ["non_zero_positive_integer"]}
+]}.
+
+{mapping, "quorum_queue.wal_max_entries", "rabbit.quorum_wal_max_entries", [
+  {datatype, integer},
+  {validators, ["non_zero_positive_integer"]}
+]}.
+
+{mapping, "quorum_queue.wal_max_batch_size", "rabbit.quorum_wal_max_batch_size", [
+  {datatype, integer},
+  {validators, ["non_zero_positive_integer"]}
+]}.
+
+{mapping, "quorum_queue.snapshot_chunk_size", "rabbit.quorum_snapshot_chunk_size", [
+  {datatype, integer},
+  {validators, ["non_zero_positive_integer"]}
+]}.
+
 %%
 %% Quorum Queue membership reconciliation
 %%
