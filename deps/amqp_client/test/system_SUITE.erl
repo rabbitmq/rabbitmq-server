@@ -1023,7 +1023,7 @@ rpc_client_consume_loop(Channel) ->
             rpc_client_consume_loop(Channel);
         _ ->
             rpc_client_consume_loop(Channel)
-    after 5000 ->
+    after 30000 ->
             exit(no_request_received)
     end.
 
