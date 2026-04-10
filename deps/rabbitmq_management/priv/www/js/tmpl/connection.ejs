@@ -59,12 +59,13 @@
 <% } %>
 </table>
 
-<% if (connection.state) { %>
 <table class="facts">
+<% if (connection.state) { %>
 <tr>
  <th>State</th>
  <td><%= fmt_object_state(connection) %></td>
 </tr>
+<% } %>
 <tr>
  <th>Heartbeat</th>
  <td><%= fmt_time(connection.timeout, 's') %></td>
@@ -78,8 +79,6 @@
  <td><%= connection.channel_max %> channels</td>
 </tr>
 </table>
-
-<% } %>
 
 </div>
 </div>
