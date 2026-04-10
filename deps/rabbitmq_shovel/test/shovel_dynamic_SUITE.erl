@@ -459,7 +459,9 @@ autodelete_quorum_on_confirm_with_rejections(Config) ->
     autodelete_with_quorum_rejections(Config, <<"on-confirm">>, ExpSrc).
 
 autodelete_classic_on_publish_with_rejections(Config) ->
-    autodelete_with_rejections(Config, <<"classic">>, <<"on-publish">>, 1, 5).
+    %% A full dest queue can cause a credit timeout, releasing
+    %% unconsumed messages back to the source queue.
+    autodelete_with_rejections(Config, <<"classic">>, <<"on-publish">>, 6, 5).
 
 autodelete_quorum_on_publish_with_rejections(Config) ->
     ExpSrc = fun(_) -> 0 end,
