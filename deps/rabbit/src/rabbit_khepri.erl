@@ -282,15 +282,18 @@ setup(_Context) ->
     ?LOG_DEBUG("Starting Khepri-based " ?RA_FRIENDLY_NAME),
     ok = ensure_ra_system_started(),
     Timeout = application:get_env(rabbit, khepri_default_timeout, 30000),
+    SnapshotInterval = application:get_env(rabbit, khepri_snapshot_interval, 50000),
     ok = application:set_env(
            [{khepri, [{default_timeout, Timeout},
                       {default_store_id, ?STORE_ID},
                       {default_ra_system, ?RA_SYSTEM}]}],
            [{persistent, true}]),
+    MachineConfig = #{snapshot_interval => SnapshotInterval},
     RaServerConfig = #{cluster_name => ?RA_CLUSTER_NAME,
                        metrics_labels => #{ra_system => ?RA_SYSTEM,
                                            module => ?MODULE},
-                       friendly_name => ?RA_FRIENDLY_NAME},
+                       friendly_name => ?RA_FRIENDLY_NAME,
+                       machine_config => MachineConfig},
     case khepri:start(?RA_SYSTEM, RaServerConfig) of
         {ok, ?STORE_ID} ->
             RetryTimeout = retry_timeout(),
