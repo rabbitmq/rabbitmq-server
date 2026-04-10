@@ -38,6 +38,7 @@ init_fakeportal() {
 start_fakeportal() {
   begin "Starting fakeportal ..."
 
+  build_mocha_image yes
   init_fakeportal
   kill_container_if_exist fakeportal
   mocha_test_tag=($(md5sum $SELENIUM_ROOT_FOLDER/package.json))

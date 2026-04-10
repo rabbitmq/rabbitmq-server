@@ -220,6 +220,15 @@ following command:
 MOCHA_DOCKER_FILE=\location\of\my\Dockerfile ./run-suites.sh
 ```
 
+When you run the tests locally, you need to run them with the environment variable 
+`MOCHA_DOCKER_FILE=Dockerfile.local` so that the scripts that build the docker image
+`mocha-test` which internally downloads npm packages. To download these packages, 
+you need to be in VPN via a gateway and have .npmrc file in the selenium folder 
+with a api key downloaded from Artifactory. There is an internal confluence page 
+that explains how do it.
+
+Without this docker file and .npmrc file, it is impossible to build mocha-test image.
+
 ## Issues deploying UAA 
 
 If you are not able to successfully run any test case that depends on UAA 
