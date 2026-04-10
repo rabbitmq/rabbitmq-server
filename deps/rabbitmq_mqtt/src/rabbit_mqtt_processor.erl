@@ -39,6 +39,7 @@
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
 -define(CONSUMER_TAG, <<"mqtt">>).
 -define(QUEUE_TTL_KEY, <<"x-expires">>).
+-define(WILL_QUEUE_EXPIRY_MARGIN_MS, 1_000).
 -define(DEFAULT_EXCHANGE_NAME, <<>>).
 -define(FENCE_TIMEOUT, 30_000).
 
@@ -1812,7 +1813,15 @@ maybe_send_will(
                     vhost = Vhost
                    }} = State)
   when is_integer(Delay) andalso Delay > 0 andalso SessionExpiry > 0 ->
-    QArgs0 = queue_ttl_args(SessionExpiry),
+    %% Extend x-expires by a small margin above the Session Expiry Interval
+    %% so that the queue-expiry timer cannot race with the message-TTL +
+    %% dead-letter path and silently drop the Will Message.
+    QArgs0 = case queue_ttl_args(SessionExpiry) of
+                 [] ->
+                     [];
+                 [{Key, Type, TtlMs}] ->
+                     [{Key, Type, TtlMs + ?WILL_QUEUE_EXPIRY_MARGIN_MS}]
+             end,
     QArgs =  QArgs0 ++ [{<<"x-dead-letter-exchange">>, longstr, XName},
                         {<<"x-dead-letter-routing-key">>, longstr,  mqtt_to_amqp(Topic)}],
     T = erlang:monotonic_time(millisecond),
