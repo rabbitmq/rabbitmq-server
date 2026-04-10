@@ -1167,7 +1167,7 @@ i(operator_policy,    #q{q = Q}) ->
     end;
 i(effective_policy_definition,  #q{q = Q}) ->
     case rabbit_policy:effective_definition(Q) of
-        undefined -> [];
+        undefined -> #{};
         Def       -> Def
     end;
 i(exclusive_consumer_pid, #q{active_consumer = {ChPid, _ConsumerTag}, single_active_consumer_on = false}) ->
