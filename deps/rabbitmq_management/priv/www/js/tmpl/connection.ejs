@@ -1,10 +1,11 @@
 <h2>Connection <%= fmt_string(connection.name) %> <%= fmt_maybe_vhost(connection.vhost) %></h1>
 
-<% if (!disable_stats) { %>
 <div class="section" id="connection-overview-section">
 <h2>Overview</h2>
 <div class="hider updatable">
+<% if (!disable_stats) { %>
   <%= data_rates('data-rates-conn', connection, 'Data rates') %>
+<% } %>
 
 <h3>Details</h3>
 <table class="facts facts-l">
@@ -83,6 +84,7 @@
 </div>
 </div>
 
+<% if (!disable_stats) { %>
 <% if (connection.protocol === 'AMQP 1-0' ||
        connection.protocol === 'Web AMQP 1-0') { %>
 
@@ -102,6 +104,7 @@
   </div>
 </div>
 
+<% } %>
 <% } %>
 
 <% if (connection.ssl) { %>
@@ -157,7 +160,7 @@
 </div>
 <% } %>
 
-<% if(connection.reductions || connection.garbage_collection) { %>
+<% if (!disable_stats && (connection.reductions || connection.garbage_collection)) { %>
 <div class="section-hidden" id="connection-runtime-metrics-section">
 <h2>Runtime Metrics (Advanced)</h2>
  <div class="hider updatable">
@@ -194,7 +197,6 @@
  </div>
 </div>
 
-<% } %>
 <% } %>
 
 <div class="section-hidden" id="connection-close-section">
