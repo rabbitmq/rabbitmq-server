@@ -24,7 +24,8 @@
 
 -define(COORD_WAL_MAX_SIZE_B, 64_000_000).
 -define(QUORUM_AER_MAX_RPC_SIZE, 16).
--define(QUORUM_DEFAULT_WAL_MAX_ENTRIES, 500_000).
+-define(QUORUM_DEFAULT_WAL_MAX_SIZE_B, 536_870_912).
+-define(QUORUM_DEFAULT_WAL_MAX_BATCH_SIZE, 4096).
 %% the default min bin vheap value in OTP 26
 -define(MIN_BIN_VHEAP_SIZE_DEFAULT, 46422).
 -define(MIN_BIN_VHEAP_SIZE_MULT, 64).
@@ -112,18 +113,13 @@ ensure_ra_system_started(RaSystem) ->
 
 -spec get_config(ra_system_name()) -> ra_system:config().
 get_config(quorum_queues = RaSystem) ->
-    DefaultConfig = get_default_config(),
+    DefaultConfig = ra_system:default_config(),
     Checksums = application:get_env(rabbit, quorum_compute_checksums, true),
     WalChecksums = application:get_env(rabbit, quorum_wal_compute_checksums, Checksums),
     SegmentChecksums = application:get_env(rabbit, quorum_segment_compute_checksums,
                                            Checksums),
-    WalMaxEntries = case DefaultConfig of
-                        #{wal_max_entries := MaxEntries}
-                          when is_integer(MaxEntries) ->
-                            MaxEntries;
-                        _ ->
-                            ?QUORUM_DEFAULT_WAL_MAX_ENTRIES
-                    end,
+    WalMaxEntries = application:get_env(rabbit, quorum_wal_max_entries,
+                                        maps:get(wal_max_entries, DefaultConfig)),
     AERBatchSize = application:get_env(rabbit, quorum_max_append_entries_rpc_batch_size,
                                        ?QUORUM_AER_MAX_RPC_SIZE),
     CompressMemTables = application:get_env(rabbit, quorum_compress_mem_tables, true),
@@ -133,6 +129,16 @@ get_config(quorum_queues = RaSystem) ->
                           _ ->
                               ?MIN_BIN_VHEAP_SIZE_DEFAULT
                       end,
+    SegmentMaxSizeBytes = application:get_env(rabbit, quorum_segment_max_size_bytes,
+                                              maps:get(segment_max_size_bytes, DefaultConfig)),
+    SegmentMaxEntries = application:get_env(rabbit, quorum_segment_max_entries,
+                                            maps:get(segment_max_entries, DefaultConfig)),
+    WalMaxSizeBytes = application:get_env(rabbit, quorum_wal_max_size_bytes,
+                                          ?QUORUM_DEFAULT_WAL_MAX_SIZE_B),
+    WalMaxBatchSize = application:get_env(rabbit, quorum_wal_max_batch_size,
+                                          ?QUORUM_DEFAULT_WAL_MAX_BATCH_SIZE),
+    SnapshotChunkSize = application:get_env(rabbit, quorum_snapshot_chunk_size,
+                                            maps:get(snapshot_chunk_size, DefaultConfig)),
 
     DefaultConfig#{name => RaSystem,
                    wal_min_bin_vheap_size => MinBinVheapSize,
@@ -142,10 +148,15 @@ get_config(quorum_queues = RaSystem) ->
                    wal_max_entries => WalMaxEntries,
                    segment_compute_checksums => SegmentChecksums,
                    compress_mem_tables => CompressMemTables,
+                   segment_max_size_bytes => SegmentMaxSizeBytes,
+                   segment_max_entries => SegmentMaxEntries,
+                   wal_max_size_bytes => WalMaxSizeBytes,
+                   wal_max_batch_size => WalMaxBatchSize,
+                   snapshot_chunk_size => SnapshotChunkSize,
                    server_recovery_strategy => {rabbit_quorum_queue,
                                                 system_recover, []}};
 get_config(coordination = RaSystem) ->
-    DefaultConfig = get_default_config(),
+    DefaultConfig = ra_system:default_config(),
     CoordDataDir = filename:join(
                      [rabbit:data_dir(), "coordination", node()]),
     DefaultConfig#{name => RaSystem,
@@ -154,13 +165,7 @@ get_config(coordination = RaSystem) ->
                    wal_max_size_bytes => ?COORD_WAL_MAX_SIZE_B,
                    names => ra_system:derive_names(RaSystem)}.
 
--spec get_default_config() -> ra_system:config().
-
-get_default_config() ->
-    ra_system:default_config().
-
 -spec ensure_stopped() -> ok | no_return().
-
 ensure_stopped() ->
     ?LOG_DEBUG(
        "Stopping Ra systems",
