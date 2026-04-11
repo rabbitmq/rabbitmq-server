@@ -8,7 +8,7 @@ endef
 
 
 DEPS = osiris
-TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers
+TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers proper
 
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 # We do not depend on rabbit therefore can't run the broker.
