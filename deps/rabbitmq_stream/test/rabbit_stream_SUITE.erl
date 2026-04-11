@@ -73,6 +73,8 @@ groups() ->
        test_publisher_with_too_long_reference_errors,
        test_consumer_with_too_long_reference_errors,
        subscribe_unsubscribe_should_create_events,
+       oversized_frame_rejected_pre_auth,
+       oversized_frame_rejected_post_auth,
        test_stream_test_utils,
        sac_subscription_with_partition_index_conflict_should_return_error,
        test_metadata_with_advertised_hints,
@@ -574,6 +576,33 @@ unauthenticated_client_rejected_tcp_connected(Config) ->
     Port = get_stream_port(Config),
     {ok, S} = gen_tcp:connect("localhost", Port, [{active, false}, {mode, binary}]),
     ?assertEqual(ok, gen_tcp:send(S, <<"invalid data">>)),
+    ?assertEqual(closed, wait_for_socket_close(gen_tcp, S, 1)).
+
+oversized_frame_rejected_pre_auth(Config) ->
+    Port = get_stream_port(Config),
+    {ok, S} = gen_tcp:connect("localhost", Port, [{active, false}, {mode, binary}]),
+    FrameMax = rpc(Config, 0, application, get_env,
+                   [rabbitmq_stream, frame_max, ?DEFAULT_FRAME_MAX]),
+    OversizedSize = FrameMax + 1000,
+    Header = <<OversizedSize:32>>,
+    ?assertEqual(ok, gen_tcp:send(S, Header)),
+    ?assertEqual(closed, wait_for_socket_close(gen_tcp, S, 1)).
+
+oversized_frame_rejected_post_auth(Config) ->
+    Transport = gen_tcp,
+    Port = get_stream_port(Config),
+    Opts = [{active, false}, {mode, binary}],
+    {ok, S} = Transport:connect("localhost", Port, Opts),
+    C0 = rabbit_stream_core:init(0),
+    C1 = test_peer_properties(Transport, S, C0),
+    C2 = test_authenticate(Transport, S, C1),
+    FrameMax = rpc(Config, 0, application, get_env,
+                   [rabbitmq_stream, frame_max, ?DEFAULT_FRAME_MAX]),
+    OversizedSize = FrameMax + 1000,
+    Header = <<OversizedSize:32>>,
+    ?assertEqual(ok, gen_tcp:send(S, Header)),
+    {Cmd, _C3} = receive_commands(Transport, S, C2),
+    ?assertMatch({request, _, {close, ?RESPONSE_CODE_FRAME_TOO_LARGE, _}}, Cmd),
     ?assertEqual(closed, wait_for_socket_close(gen_tcp, S, 1)).
 
 timeout_tcp_connected(Config) ->
