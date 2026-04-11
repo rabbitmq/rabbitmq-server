@@ -4500,7 +4500,6 @@ queue_length_limit_policy_cleared(Config) ->
            Config, 0, <<"max-length">>, QQ, <<"queues">>,
            [{<<"max-length">>, 2},
             {<<"overflow">>, <<"reject-publish">>}]),
-    timer:sleep(1000),
     RaName = ra_name(QQ),
     % QueryFun = fun rabbit_fifo:overview/1,
     ?awaitMatch({ok, #{machine := #{config := #{max_length := 2}}}, _},
