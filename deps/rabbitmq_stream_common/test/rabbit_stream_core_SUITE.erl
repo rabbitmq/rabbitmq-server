@@ -31,11 +31,16 @@ groups() ->
        frame_size_enforcement_chunked_header,
        frame_size_enforcement_valid_then_oversized,
        frame_size_enforcement_zero_size_frame,
+       set_frame_max_tightens_limit,
+       set_frame_max_allows_in_flight_frame_to_complete,
+       set_frame_max_to_unlimited,
+       set_frame_max_preserves_pending_commands,
        prop_frame_within_limit_accepted,
        prop_frame_exceeding_limit_rejected,
        prop_unlimited_accepts_any_size,
        prop_boundary_exact_limit_accepted,
-       prop_chunked_data_same_result]}].
+       prop_chunked_data_same_result,
+       prop_set_frame_max_matches_init]}].
 
 init_per_suite(Config) ->
     Config.
@@ -333,6 +338,58 @@ frame_size_enforcement_zero_size_frame(_Config) ->
     {[{unknown, <<>>}], _} = rabbit_stream_core:all_commands(State),
     ok.
 
+set_frame_max_tightens_limit(_Config) ->
+    InitialMax = 1000,
+    TightenedMax = 100,
+    Init = rabbit_stream_core:init(#{frame_max => InitialMax}),
+    Payload500 = binary:copy(<<0>>, 500),
+    Data500 = <<500:32, Payload500/binary>>,
+    State0 = rabbit_stream_core:incoming_data(Data500, Init),
+    {[{unknown, Payload500}], State1} =
+        rabbit_stream_core:all_commands(State0),
+    State2 = rabbit_stream_core:set_frame_max(TightenedMax, State1),
+    State3 = rabbit_stream_core:incoming_data(Data500, State2),
+    {[{frame_too_large, 500, TightenedMax}], _} =
+        rabbit_stream_core:all_commands(State3),
+    ok.
+
+set_frame_max_allows_in_flight_frame_to_complete(_Config) ->
+    InitialMax = 1000,
+    TightenedMax = 50,
+    Init = rabbit_stream_core:init(#{frame_max => InitialMax}),
+    %% Start a 500-byte frame whose header was accepted under the
+    %% initial limit but whose payload has not fully arrived.
+    FullPayload = binary:copy(<<0>>, 500),
+    <<FirstHalf:250/binary, SecondHalf/binary>> = FullPayload,
+    State0 =
+        rabbit_stream_core:incoming_data(<<500:32, FirstHalf/binary>>, Init),
+    %% Tightening the limit mid-frame must not retroactively reject an
+    %% already-accepted header. The remaining bytes complete the frame.
+    State1 = rabbit_stream_core:set_frame_max(TightenedMax, State0),
+    State2 = rabbit_stream_core:incoming_data(SecondHalf, State1),
+    {[{unknown, FullPayload}], _} = rabbit_stream_core:all_commands(State2),
+    ok.
+
+set_frame_max_to_unlimited(_Config) ->
+    Init = rabbit_stream_core:init(#{frame_max => 100}),
+    State1 = rabbit_stream_core:set_frame_max(unlimited, Init),
+    LargePayload = binary:copy(<<0>>, 5000),
+    LargeData = <<5000:32, LargePayload/binary>>,
+    State2 = rabbit_stream_core:incoming_data(LargeData, State1),
+    {[{unknown, LargePayload}], _} = rabbit_stream_core:all_commands(State2),
+    ok.
+
+set_frame_max_preserves_pending_commands(_Config) ->
+    InitialMax = 1000,
+    TightenedMax = 50,
+    Init = rabbit_stream_core:init(#{frame_max => InitialMax}),
+    ValidFrame = iolist_to_binary(rabbit_stream_core:frame(heartbeat)),
+    State0 = rabbit_stream_core:incoming_data(ValidFrame, Init),
+    %% Parsed commands must survive a frame_max change.
+    State1 = rabbit_stream_core:set_frame_max(TightenedMax, State0),
+    {[heartbeat], _} = rabbit_stream_core:all_commands(State1),
+    ok.
+
 prop_frame_within_limit_accepted(_Config) ->
     run_proper(
       fun() ->
@@ -419,6 +476,33 @@ prop_chunked_data_same_result(_Config) ->
                                            end, Init, Chunks),
                           {CmdsChunked, _} = rabbit_stream_core:all_commands(StateChunked),
                           CmdsWhole =:= CmdsChunked
+                      end)
+      end, [], 100).
+
+prop_set_frame_max_matches_init(_Config) ->
+    run_proper(
+      fun() ->
+              ?FORALL({InitialMax, NegotiatedMax, DeclaredSize},
+                      {range(100, 5000), range(50, 5000), range(1, 5000)},
+                      begin
+                          Header = <<DeclaredSize:32>>,
+                          Direct =
+                              rabbit_stream_core:init(
+                                #{frame_max => NegotiatedMax}),
+                          Updated =
+                              rabbit_stream_core:set_frame_max(
+                                NegotiatedMax,
+                                rabbit_stream_core:init(
+                                  #{frame_max => InitialMax})),
+                          {CmdsDirect, _} =
+                              rabbit_stream_core:all_commands(
+                                rabbit_stream_core:incoming_data(Header,
+                                                                 Direct)),
+                          {CmdsViaSet, _} =
+                              rabbit_stream_core:all_commands(
+                                rabbit_stream_core:incoming_data(Header,
+                                                                 Updated)),
+                          CmdsDirect =:= CmdsViaSet
                       end)
       end, [], 100).
 
