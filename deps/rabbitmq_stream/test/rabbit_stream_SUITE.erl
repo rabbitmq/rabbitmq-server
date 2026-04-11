@@ -77,6 +77,7 @@ groups() ->
        oversized_frame_rejected_post_auth,
        oversized_frame_rejected_after_tune_negotiation,
        frame_max_clamped_when_client_negotiates_higher,
+       client_tune_response_with_zero_frame_max_is_unlimited,
        test_stream_test_utils,
        sac_subscription_with_partition_index_conflict_should_return_error,
        test_metadata_with_advertised_hints,
@@ -672,6 +673,32 @@ frame_max_clamped_when_client_negotiates_higher(Config) ->
     {Cmd, _C6} = receive_commands(Transport, S, C5),
     ?assertMatch({request, _, {close, ?RESPONSE_CODE_FRAME_TOO_LARGE, _}}, Cmd),
     ?assertEqual(closed, wait_for_socket_close(gen_tcp, S, 1)).
+
+%% The stream protocol TUNE exchange follows the AMQP 0-9-1 convention
+%% where 0 means "no limit". A client that echoes FrameMax = 0 back to
+%% the server must not cause the server to clamp its parser to a
+%% 0-byte ceiling; the configured value must apply instead.
+client_tune_response_with_zero_frame_max_is_unlimited(Config) ->
+    Transport = gen_tcp,
+    Port = get_stream_port(Config),
+    Opts = [{active, false}, {mode, binary}],
+    {ok, S} = Transport:connect("localhost", Port, Opts),
+    C0 = rabbit_stream_core:init(0),
+    C1 = test_peer_properties(Transport, S, C0),
+    C2 = sasl_handshake(Transport, S, C1),
+    C3 = test_plain_sasl_authenticate(Transport, S, C2, <<"guest">>),
+    {{tune, _ServerFrameMax, _}, C4} = receive_commands(Transport, S, C3),
+    TuneResponse = frame({response, 0, {tune, 0, 0}}),
+    ok = Transport:send(S, TuneResponse),
+    OpenFrame = request(3, {open, <<"/">>}),
+    ok = Transport:send(S, OpenFrame),
+    %% If the server naively used min(0, Configured) = 0 for its
+    %% parser ceiling, the open frame itself would be rejected and
+    %% the server would send a close request instead of the expected
+    %% open response.
+    {Cmd, _C5} = receive_commands(Transport, S, C4),
+    ?assertMatch({response, 3, {open, ?RESPONSE_CODE_OK, _}}, Cmd),
+    gen_tcp:close(S).
 
 timeout_tcp_connected(Config) ->
     Port = get_stream_port(Config),
