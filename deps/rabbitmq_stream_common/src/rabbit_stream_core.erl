@@ -20,6 +20,7 @@
 -include_lib("kernel/include/logger.hrl").
 
 -export([init/1,
+         set_frame_max/2,
          incoming_data/2,
          next_command/1,
          all_commands/1,
@@ -177,6 +178,13 @@ init(Opts) when is_map(Opts) ->
     #?MODULE{cfg = #cfg{frame_max = FrameMax}};
 init(_) ->
     #?MODULE{cfg = #cfg{frame_max = unlimited}}.
+
+%% Updates the frame_max enforced by the parser. Called by the
+%% reader after TUNE so the negotiated value is enforced instead of
+%% the initial ceiling.
+-spec set_frame_max(non_neg_integer() | unlimited, state()) -> state().
+set_frame_max(FrameMax, #?MODULE{cfg = Cfg} = State) ->
+    State#?MODULE{cfg = Cfg#cfg{frame_max = FrameMax}}.
 
 -spec next_command(state()) -> {command(), state()} | empty.
 next_command(#?MODULE{commands = Commands0} = State) ->
