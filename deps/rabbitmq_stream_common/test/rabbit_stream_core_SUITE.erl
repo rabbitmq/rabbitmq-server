@@ -34,6 +34,8 @@ groups() ->
        set_frame_max_tightens_limit,
        set_frame_max_allows_in_flight_frame_to_complete,
        set_frame_max_to_unlimited,
+       init_with_zero_frame_max_means_unlimited,
+       set_frame_max_to_zero_means_unlimited,
        set_frame_max_preserves_pending_commands,
        prop_frame_within_limit_accepted,
        prop_frame_exceeding_limit_rejected,
@@ -361,6 +363,29 @@ set_frame_max_allows_in_flight_frame_to_complete(_Config) ->
 set_frame_max_to_unlimited(_Config) ->
     Init = rabbit_stream_core:init(#{frame_max => 100}),
     State1 = rabbit_stream_core:set_frame_max(unlimited, Init),
+    LargePayload = binary:copy(<<0>>, 5000),
+    LargeData = <<5000:32, LargePayload/binary>>,
+    State2 = rabbit_stream_core:incoming_data(LargeData, State1),
+    {[{unknown, LargePayload}], _} = rabbit_stream_core:all_commands(State2),
+    ok.
+
+%% The protocol convention is that frame_max = 0 means "no limit",
+%% as historically has been the case in RabbitMQ, AMQP 0-9-1.
+%% `init/1` must translate 0 to the parser's 'unlimited' sentinel,
+%% otherwise the parser would reject every frame as too large.
+init_with_zero_frame_max_means_unlimited(_Config) ->
+    Init = rabbit_stream_core:init(#{frame_max => 0}),
+    LargePayload = binary:copy(<<0>>, 5000),
+    LargeData = <<5000:32, LargePayload/binary>>,
+    State = rabbit_stream_core:incoming_data(LargeData, Init),
+    {[{unknown, LargePayload}], _} = rabbit_stream_core:all_commands(State),
+    ok.
+
+%% Same contract as above for `set_frame_max/2`: a post-TUNE update
+%% to 0 must resolve to "unlimited", not a 0-byte ceiling.
+set_frame_max_to_zero_means_unlimited(_Config) ->
+    Init = rabbit_stream_core:init(#{frame_max => 100}),
+    State1 = rabbit_stream_core:set_frame_max(0, Init),
     LargePayload = binary:copy(<<0>>, 5000),
     LargeData = <<5000:32, LargePayload/binary>>,
     State2 = rabbit_stream_core:incoming_data(LargeData, State1),

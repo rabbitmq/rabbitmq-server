@@ -174,7 +174,7 @@
 
 -spec init(#{frame_max => non_neg_integer() | unlimited} | term()) -> state().
 init(Opts) when is_map(Opts) ->
-    FrameMax = maps:get(frame_max, Opts, unlimited),
+    FrameMax = normalise_frame_max(maps:get(frame_max, Opts, unlimited)),
     #?MODULE{cfg = #cfg{frame_max = FrameMax}};
 init(_) ->
     #?MODULE{cfg = #cfg{frame_max = unlimited}}.
@@ -184,7 +184,16 @@ init(_) ->
 %% the initial ceiling.
 -spec set_frame_max(non_neg_integer() | unlimited, state()) -> state().
 set_frame_max(FrameMax, #?MODULE{cfg = Cfg} = State) ->
-    State#?MODULE{cfg = Cfg#cfg{frame_max = FrameMax}}.
+    State#?MODULE{cfg = Cfg#cfg{frame_max = normalise_frame_max(FrameMax)}}.
+
+%% `frame_max` = 0 means "no limit" (AMQP 0-9-1 convention);
+%% the parser expresses that as the atom `unlimited`.
+-spec normalise_frame_max(non_neg_integer() | unlimited) ->
+    pos_integer() | unlimited.
+normalise_frame_max(0) ->
+    unlimited;
+normalise_frame_max(FrameMax) ->
+    FrameMax.
 
 -spec next_command(state()) -> {command(), state()} | empty.
 next_command(#?MODULE{commands = Commands0} = State) ->
