@@ -110,7 +110,8 @@
 -ifdef(TEST).
 -export([ensure_token_expiry_timer/2,
          evaluate_state_after_secret_update/4,
-         clean_subscriptions/4]).
+         clean_subscriptions/4,
+         negotiate_frame_max/2]).
 -endif.
 
 callback_mode() ->
@@ -1470,10 +1471,8 @@ handle_frame_pre_auth(_Transport,
                       {tune, FrameMax, Heartbeat}) ->
     ?LOG_DEBUG("Tuning response ~tp ~tp ",
                                 [FrameMax, Heartbeat]),
-    %% The client must not negotiate a frame_max larger than the
-    %% value advertised by the server, so clamp it to the configured
-    %% ceiling before pushing the negotiated value into the parser.
-    NegotiatedFrameMax = min(FrameMax, ConfiguredFrameMax),
+    %% 0 on either side means "no limit" and must not be clamped to 0.
+    NegotiatedFrameMax = negotiate_frame_max(FrameMax, ConfiguredFrameMax),
     CoreState = rabbit_stream_core:set_frame_max(NegotiatedFrameMax,
                                                  CoreState0),
     Parent = self(),
@@ -1566,6 +1565,16 @@ handle_frame_pre_auth(_Transport, Connection, State, Command) ->
     ?LOG_WARNING("unknown command ~w, closing connection.",
                                   [Command]),
     {Connection#stream_connection{connection_step = failure}, State}.
+
+%% 0 on either side means "no limit"; fall back to the other value.
+-spec negotiate_frame_max(non_neg_integer(), non_neg_integer()) ->
+    non_neg_integer().
+negotiate_frame_max(0, Configured) ->
+    Configured;
+negotiate_frame_max(Client, 0) ->
+    Client;
+negotiate_frame_max(Client, Configured) ->
+    min(Client, Configured).
 
 auth_fail(Username, Msg, Args, Connection, ConnectionState) ->
     notify_auth_result(Username,

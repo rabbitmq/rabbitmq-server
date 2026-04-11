@@ -21,7 +21,8 @@
 -include_lib("rabbitmq_stream/src/rabbit_stream_reader.hrl").
 -include_lib("rabbitmq_stream_common/include/rabbit_stream.hrl").
 
--import(rabbit_stream_reader, [ensure_token_expiry_timer/2]).
+-import(rabbit_stream_reader, [ensure_token_expiry_timer/2,
+                               negotiate_frame_max/2]).
 
 %%%===================================================================
 %%% Common Test callbacks
@@ -226,6 +227,21 @@ partial_frame_buffering_test(_) ->
     {Commands2, _State4} = rabbit_stream_core:all_commands(State3),
 
     ?assertEqual([], Commands2),
+    ok.
+
+%% Covers every branch of negotiate_frame_max/2, including the cases
+%% where either side proposes 0 (protocol convention: "no limit").
+negotiate_frame_max_test(_) ->
+    %% Both sides propose explicit, positive limits: pick the lower.
+    ?assertEqual(1024, negotiate_frame_max(1024, 2048)),
+    ?assertEqual(1024, negotiate_frame_max(2048, 1024)),
+    ?assertEqual(1024, negotiate_frame_max(1024, 1024)),
+    %% Client proposes 0 (unlimited): the configured ceiling wins.
+    ?assertEqual(2048, negotiate_frame_max(0, 2048)),
+    %% Server is configured as unlimited: the client proposal wins.
+    ?assertEqual(1024, negotiate_frame_max(1024, 0)),
+    %% Both unlimited: stays unlimited (0 on the wire).
+    ?assertEqual(0, negotiate_frame_max(0, 0)),
     ok.
 
 consumer(S, Pid) ->
