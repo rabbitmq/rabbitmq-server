@@ -281,10 +281,11 @@ init_aggregated_metrics(Group, Config0) ->
     ConsumerPid = sleeping_consumer(),
     #'basic.consume_ok'{consumer_tag = CTag} =
       amqp_channel:subscribe(Ch, #'basic.consume'{queue = Q}, ConsumerPid),
-    %% The pattern accounts for optional Prometheus labels.
+    %% Probe /metrics/per-object: aggregated /metrics emits a zero value even
+    %% when queue_metrics is empty, so it is not a reliable readiness signal.
     rabbit_ct_helpers:eventually({?LINE, fun() ->
-        {_Headers, Body} = http_get(Config2, [], 200),
-        ?assertEqual(match, re:run(Body, "^rabbitmq_queue_consumers[{ ]",
+        {_Headers, Body} = http_get(Config2, "/metrics/per-object", [], 200),
+        ?assertEqual(match, re:run(Body, "^rabbitmq_queue_messages_ready{",
                                    [{capture, none}, multiline]))
     end}, 200, 300),
 
