@@ -27,16 +27,15 @@
          parse_command/1]).
 
 %% holds static or rarely changing fields
--record(cfg, {}).
+-record(cfg, {frame_max :: non_neg_integer() | unlimited}).
 -record(?MODULE,
         {cfg :: #cfg{},
          frames = [] :: [iodata()],
-         %% partial data
          data ::
              undefined |
-             %% this is only if the binary is smaller than 4 bytes
              binary() |
-             {RemainingBytes :: non_neg_integer(), iodata()},
+             {RemainingBytes :: non_neg_integer(), iodata()} |
+             {frame_too_large, non_neg_integer()},
          commands = queue:new() :: queue:queue(command())}).
 
 -opaque state() :: #?MODULE{}.
@@ -168,11 +167,16 @@
       [{Command :: atom(), MinVersion :: command_version(),
         MaxVersion :: command_version()}]} |
      {stream_stats, response_code(), Stats :: #{binary() => integer()}}} |
+    {frame_too_large, DeclaredSize :: non_neg_integer(),
+     MaxSize :: non_neg_integer()} |
     {unknown, binary()}.
 
--spec init(term()) -> state().
+-spec init(#{frame_max => non_neg_integer() | unlimited} | term()) -> state().
+init(Opts) when is_map(Opts) ->
+    FrameMax = maps:get(frame_max, Opts, unlimited),
+    #?MODULE{cfg = #cfg{frame_max = FrameMax}};
 init(_) ->
-    #?MODULE{cfg = #cfg{}}.
+    #?MODULE{cfg = #cfg{frame_max = unlimited}}.
 
 -spec next_command(state()) -> {command(), state()} | empty.
 next_command(#?MODULE{commands = Commands0} = State) ->
@@ -187,36 +191,47 @@ next_command(#?MODULE{commands = Commands0} = State) ->
 all_commands(#?MODULE{commands = Commands0} = State) ->
     {queue:to_list(Commands0), State#?MODULE{commands = queue:new()}}.
 
-%% returns frames
 -spec incoming_data(binary(), state()) -> state().
-%% TODO: check max frame size
 incoming_data(<<>>,
               #?MODULE{frames = Frames, commands = Commands} = State) ->
     State#?MODULE{frames = [], commands = parse_frames(Frames, Commands)};
 incoming_data(<<Size:32, Frame:Size/binary, Rem/binary>>,
-              #?MODULE{frames = Frames, data = undefined} = State) ->
-    incoming_data(Rem,
-                  State#?MODULE{frames = [Frame | Frames], data = undefined});
+              #?MODULE{cfg = #cfg{frame_max = FrameMax},
+                       frames = Frames,
+                       data = undefined} = State) ->
+    case frame_size_ok(Size, FrameMax) of
+        true ->
+            incoming_data(Rem,
+                          State#?MODULE{frames = [Frame | Frames],
+                                        data = undefined});
+        false ->
+            frame_too_large(Size, FrameMax, State)
+    end;
 incoming_data(<<Size:32, Rem/binary>>,
-              #?MODULE{frames = Frames,
+              #?MODULE{cfg = #cfg{frame_max = FrameMax},
+                       frames = Frames,
                        data = undefined,
                        commands = Commands} =
                   State) ->
-    %% not enough data to complete frame, stash and await more data
-    State#?MODULE{frames = [],
-                  data = {Size - byte_size(Rem), Rem},
-                  commands = parse_frames(Frames, Commands)};
+    case frame_size_ok(Size, FrameMax) of
+        true ->
+            State#?MODULE{frames = [],
+                          data = {Size - byte_size(Rem), Rem},
+                          commands = parse_frames(Frames, Commands)};
+        false ->
+            frame_too_large(Size, FrameMax, State)
+    end;
 incoming_data(Data,
               #?MODULE{frames = Frames,
                        data = undefined,
                        commands = Commands} =
                   State)
     when byte_size(Data) < 4 ->
-    %% not enough data to even know the size required
-    %% just stash binary and hit last clause next
     State#?MODULE{frames = [],
                   data = Data,
                   commands = parse_frames(Frames, Commands)};
+incoming_data(_Data, #?MODULE{data = {frame_too_large, _}} = State) ->
+    State;
 incoming_data(Data,
               #?MODULE{frames = Frames,
                        data = {Size, Partial},
@@ -240,6 +255,17 @@ incoming_data(Data, #?MODULE{data = Partial} = State)
     when is_binary(Partial) ->
     incoming_data(<<Partial/binary, Data/binary>>,
                   State#?MODULE{data = undefined}).
+
+frame_size_ok(_, unlimited) ->
+    true;
+frame_size_ok(Size, FrameMax) ->
+    Size =< FrameMax.
+
+frame_too_large(Size, FrameMax, #?MODULE{frames = Frames, commands = Commands} = State) ->
+    Cmd = {frame_too_large, Size, FrameMax},
+    State#?MODULE{frames = [],
+                  data = {frame_too_large, Size},
+                  commands = queue:in(Cmd, parse_frames(Frames, Commands))}.
 
 parse_frames(Frames, Queue) ->
     lists:foldr(fun(Frame, Acc) -> queue:in(parse_command(Frame), Acc)
