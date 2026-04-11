@@ -3,11 +3,11 @@
 -compile(nowarn_export_all).
 -compile(export_all).
 
-%% Common Test callb
-% -include_lib("proper/include/proper.hrl").
-% -include_lib("common_test/include/ct.hrl").
-
+-include_lib("proper/include/proper.hrl").
+-include_lib("eunit/include/eunit.hrl").
 -include("rabbit_stream.hrl").
+
+-import(rabbit_ct_proper_helpers, [run_proper/3]).
 
 %%%===================================================================
 %%% Common Test callbacks
@@ -22,7 +22,20 @@ suite() ->
 groups() ->
     [{tests, [],
       [roundtrip, roundtrip_metadata, roundtrip_metadata_no_leader,
-       zero_size_frame_does_not_crash]}].
+       zero_size_frame_does_not_crash,
+       frame_size_enforcement,
+       frame_size_enforcement_partial,
+       frame_size_enforcement_unlimited,
+       frame_size_enforcement_discards_after_error,
+       frame_size_enforcement_boundary,
+       frame_size_enforcement_chunked_header,
+       frame_size_enforcement_valid_then_oversized,
+       frame_size_enforcement_zero_size_frame,
+       prop_frame_within_limit_accepted,
+       prop_frame_exceeding_limit_rejected,
+       prop_unlimited_accepts_any_size,
+       prop_boundary_exact_limit_accepted,
+       prop_chunked_data_same_result]}].
 
 init_per_suite(Config) ->
     Config.
@@ -213,3 +226,213 @@ test_roundtrip(Cmd) ->
         rabbit_stream_core:all_commands(
             rabbit_stream_core:incoming_data(Frame, Init)),
     ok.
+
+frame_size_enforcement(_Config) ->
+    FrameMax = 100,
+    Init = rabbit_stream_core:init(#{frame_max => FrameMax}),
+    %% Frame within limit should be accepted
+    SmallCmd = heartbeat,
+    SmallFrame = iolist_to_binary(rabbit_stream_core:frame(SmallCmd)),
+    {[SmallCmd], _} =
+        rabbit_stream_core:all_commands(
+            rabbit_stream_core:incoming_data(SmallFrame, Init)),
+    %% Frame exceeding limit should produce frame_too_large error
+    OversizedPayload = binary:copy(<<0>>, FrameMax + 50),
+    OversizedSize = byte_size(OversizedPayload),
+    OversizedData = <<OversizedSize:32, OversizedPayload/binary>>,
+    State = rabbit_stream_core:incoming_data(OversizedData, Init),
+    {[{frame_too_large, OversizedSize, FrameMax}], _} =
+        rabbit_stream_core:all_commands(State),
+    ok.
+
+frame_size_enforcement_partial(_Config) ->
+    FrameMax = 100,
+    Init = rabbit_stream_core:init(#{frame_max => FrameMax}),
+    %% Declare a frame larger than FrameMax but only send header
+    DeclaredSize = FrameMax + 500,
+    Header = <<DeclaredSize:32>>,
+    State = rabbit_stream_core:incoming_data(Header, Init),
+    {[{frame_too_large, DeclaredSize, FrameMax}], _} =
+        rabbit_stream_core:all_commands(State),
+    ok.
+
+frame_size_enforcement_unlimited(_Config) ->
+    Init = rabbit_stream_core:init(#{frame_max => unlimited}),
+    %% Large frame should be accepted when unlimited
+    LargePayload = binary:copy(<<0>>, 10000),
+    LargeSize = byte_size(LargePayload),
+    LargeData = <<LargeSize:32, LargePayload/binary>>,
+    State = rabbit_stream_core:incoming_data(LargeData, Init),
+    {[{unknown, LargePayload}], _} = rabbit_stream_core:all_commands(State),
+    ok.
+
+frame_size_enforcement_discards_after_error(_Config) ->
+    FrameMax = 100,
+    Init = rabbit_stream_core:init(#{frame_max => FrameMax}),
+    %% Trigger frame_too_large error
+    DeclaredSize = FrameMax + 500,
+    Header = <<DeclaredSize:32>>,
+    State1 = rabbit_stream_core:incoming_data(Header, Init),
+    {[{frame_too_large, DeclaredSize, FrameMax}], State2} =
+        rabbit_stream_core:all_commands(State1),
+    %% Subsequent data should be discarded
+    MoreData = binary:copy(<<1>>, 1000),
+    State3 = rabbit_stream_core:incoming_data(MoreData, State2),
+    {[], _} = rabbit_stream_core:all_commands(State3),
+    ok.
+
+frame_size_enforcement_boundary(_Config) ->
+    FrameMax = 100,
+    Init = rabbit_stream_core:init(#{frame_max => FrameMax}),
+    %% Frame exactly at limit should be accepted
+    ExactPayload = binary:copy(<<0>>, FrameMax),
+    ExactData = <<FrameMax:32, ExactPayload/binary>>,
+    State1 = rabbit_stream_core:incoming_data(ExactData, Init),
+    {[{unknown, ExactPayload}], _} = rabbit_stream_core:all_commands(State1),
+    %% Frame one byte over limit should be rejected
+    OverByOne = FrameMax + 1,
+    OverPayload = binary:copy(<<0>>, OverByOne),
+    OverData = <<OverByOne:32, OverPayload/binary>>,
+    State2 = rabbit_stream_core:incoming_data(OverData, Init),
+    {[{frame_too_large, OverByOne, FrameMax}], _} =
+        rabbit_stream_core:all_commands(State2),
+    ok.
+
+frame_size_enforcement_chunked_header(_Config) ->
+    FrameMax = 100,
+    Init = rabbit_stream_core:init(#{frame_max => FrameMax}),
+    %% Send header in chunks (1 byte, then 3 bytes) for oversized frame
+    OversizedSize = FrameMax + 500,
+    <<B1:1/binary, B2:3/binary>> = <<OversizedSize:32>>,
+    State1 = rabbit_stream_core:incoming_data(B1, Init),
+    {[], State2} = rabbit_stream_core:all_commands(State1),
+    State3 = rabbit_stream_core:incoming_data(B2, State2),
+    {[{frame_too_large, OversizedSize, FrameMax}], _} =
+        rabbit_stream_core:all_commands(State3),
+    ok.
+
+frame_size_enforcement_valid_then_oversized(_Config) ->
+    FrameMax = 100,
+    Init = rabbit_stream_core:init(#{frame_max => FrameMax}),
+    %% Send a valid heartbeat frame followed by an oversized frame
+    ValidFrame = iolist_to_binary(rabbit_stream_core:frame(heartbeat)),
+    OversizedSize = FrameMax + 500,
+    OversizedHeader = <<OversizedSize:32>>,
+    CombinedData = <<ValidFrame/binary, OversizedHeader/binary>>,
+    State = rabbit_stream_core:incoming_data(CombinedData, Init),
+    {[heartbeat, {frame_too_large, OversizedSize, FrameMax}], _} =
+        rabbit_stream_core:all_commands(State),
+    ok.
+
+frame_size_enforcement_zero_size_frame(_Config) ->
+    FrameMax = 100,
+    Init = rabbit_stream_core:init(#{frame_max => FrameMax}),
+    %% Zero-size frame should be accepted (0 <= FrameMax)
+    ZeroSizeFrame = <<0:32>>,
+    State = rabbit_stream_core:incoming_data(ZeroSizeFrame, Init),
+    {[{unknown, <<>>}], _} = rabbit_stream_core:all_commands(State),
+    ok.
+
+prop_frame_within_limit_accepted(_Config) ->
+    run_proper(
+      fun() ->
+              ?FORALL({FrameMax, FrameSize},
+                      {range(10, 10000), range(1, 10000)},
+                      begin
+                          case FrameSize =< FrameMax of
+                              true ->
+                                  Init = rabbit_stream_core:init(#{frame_max => FrameMax}),
+                                  Payload = binary:copy(<<0>>, FrameSize),
+                                  Data = <<FrameSize:32, Payload/binary>>,
+                                  State = rabbit_stream_core:incoming_data(Data, Init),
+                                  {Cmds, _} = rabbit_stream_core:all_commands(State),
+                                  length(Cmds) =:= 1 andalso
+                                      element(1, hd(Cmds)) =/= frame_too_large;
+                              false ->
+                                  true
+                          end
+                      end)
+      end, [], 100).
+
+prop_frame_exceeding_limit_rejected(_Config) ->
+    run_proper(
+      fun() ->
+              ?FORALL({FrameMax, ExcessBytes},
+                      {range(10, 1000), range(1, 1000)},
+                      begin
+                          Init = rabbit_stream_core:init(#{frame_max => FrameMax}),
+                          DeclaredSize = FrameMax + ExcessBytes,
+                          Header = <<DeclaredSize:32>>,
+                          State = rabbit_stream_core:incoming_data(Header, Init),
+                          {Cmds, _} = rabbit_stream_core:all_commands(State),
+                          Cmds =:= [{frame_too_large, DeclaredSize, FrameMax}]
+                      end)
+      end, [], 100).
+
+prop_unlimited_accepts_any_size(_Config) ->
+    run_proper(
+      fun() ->
+              ?FORALL(FrameSize,
+                      range(1, 50000),
+                      begin
+                          Init = rabbit_stream_core:init(#{frame_max => unlimited}),
+                          Payload = binary:copy(<<0>>, FrameSize),
+                          Data = <<FrameSize:32, Payload/binary>>,
+                          State = rabbit_stream_core:incoming_data(Data, Init),
+                          {Cmds, _} = rabbit_stream_core:all_commands(State),
+                          length(Cmds) =:= 1 andalso
+                              element(1, hd(Cmds)) =/= frame_too_large
+                      end)
+      end, [], 100).
+
+prop_boundary_exact_limit_accepted(_Config) ->
+    run_proper(
+      fun() ->
+              ?FORALL(FrameMax,
+                      range(1, 10000),
+                      begin
+                          Init = rabbit_stream_core:init(#{frame_max => FrameMax}),
+                          Payload = binary:copy(<<0>>, FrameMax),
+                          Data = <<FrameMax:32, Payload/binary>>,
+                          State = rabbit_stream_core:incoming_data(Data, Init),
+                          {Cmds, _} = rabbit_stream_core:all_commands(State),
+                          length(Cmds) =:= 1 andalso
+                              element(1, hd(Cmds)) =/= frame_too_large
+                      end)
+      end, [], 100).
+
+prop_chunked_data_same_result(_Config) ->
+    run_proper(
+      fun() ->
+              ?FORALL({FrameMax, DeclaredSize, ChunkSizes},
+                      {range(100, 1000), range(50, 2000), non_empty(list(range(1, 50)))},
+                      begin
+                          Init = rabbit_stream_core:init(#{frame_max => FrameMax}),
+                          Header = <<DeclaredSize:32>>,
+                          StateWhole = rabbit_stream_core:incoming_data(Header, Init),
+                          {CmdsWhole, _} = rabbit_stream_core:all_commands(StateWhole),
+                          Chunks = chunk_binary(Header, ChunkSizes),
+                          StateChunked = lists:foldl(
+                                           fun(Chunk, S) ->
+                                                   {_, S2} = rabbit_stream_core:all_commands(S),
+                                                   rabbit_stream_core:incoming_data(Chunk, S2)
+                                           end, Init, Chunks),
+                          {CmdsChunked, _} = rabbit_stream_core:all_commands(StateChunked),
+                          CmdsWhole =:= CmdsChunked
+                      end)
+      end, [], 100).
+
+chunk_binary(Bin, ChunkSizes) ->
+    chunk_binary(Bin, ChunkSizes, []).
+
+chunk_binary(<<>>, _, Acc) ->
+    lists:reverse(Acc);
+chunk_binary(Bin, [], Acc) ->
+    lists:reverse([Bin | Acc]);
+chunk_binary(Bin, [Size | Rest], Acc) ->
+    case Bin of
+        <<Chunk:Size/binary, Rem/binary>> ->
+            chunk_binary(Rem, Rest, [Chunk | Acc]);
+        _ ->
+            lists:reverse([Bin | Acc])
+    end.

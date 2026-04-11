@@ -194,7 +194,7 @@ init([KeepaliveSup,
                 #stream_connection_state{consumers = #{},
                                          blocked = false,
                                          data =
-                                             rabbit_stream_core:init(undefined)},
+                                             rabbit_stream_core:init(#{frame_max => FrameMax})},
             Transport:setopts(RealSocket, [{active, once}]),
             _ = rabbit_alarm:register(self(), {?MODULE, resource_alarm, []}),
             ConnectionNegotiationStepTimeout =
@@ -1546,6 +1546,11 @@ handle_frame_pre_auth(Transport,
 handle_frame_pre_auth(_Transport, Connection, State, heartbeat) ->
     ?LOG_DEBUG("Received heartbeat frame pre auth"),
     {Connection, State};
+handle_frame_pre_auth(_Transport, Connection, State, {frame_too_large, Size, Max}) ->
+    ?LOG_ERROR("Frame size (~b bytes) exceeds maximum (~b bytes)",
+               [Size, Max]),
+    rabbit_global_counters:increase_protocol_counter(stream, ?FRAME_TOO_LARGE, 1),
+    {Connection#stream_connection{connection_step = failure}, State};
 handle_frame_pre_auth(_Transport, Connection, State, {unknown, _}) ->
     ?LOG_DEBUG("Received unrecognised data before authentication, closing connection."),
     {Connection#stream_connection{connection_step = failure}, State};
@@ -2835,6 +2840,19 @@ handle_frame_post_auth(Transport,
 handle_frame_post_auth(_Transport, Connection, State, heartbeat) ->
     ?LOG_DEBUG("Received heartbeat frame post auth"),
     {Connection, State};
+handle_frame_post_auth(Transport,
+                       #stream_connection{socket = S} = Connection,
+                       State,
+                       {frame_too_large, Size, Max}) ->
+    ?LOG_ERROR("Frame size (~b bytes) exceeds maximum (~b bytes)",
+               [Size, Max]),
+    rabbit_global_counters:increase_protocol_counter(stream, ?FRAME_TOO_LARGE, 1),
+    Frame =
+        rabbit_stream_core:frame({request, 1,
+                                  {close, ?RESPONSE_CODE_FRAME_TOO_LARGE,
+                                   <<"frame too large">>}}),
+    send(Transport, S, Frame),
+    {Connection#stream_connection{connection_step = close_sent}, State};
 handle_frame_post_auth(Transport,
                        #stream_connection{socket = S} = Connection,
                        State,
