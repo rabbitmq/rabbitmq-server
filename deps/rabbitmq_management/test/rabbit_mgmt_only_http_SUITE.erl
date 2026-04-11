@@ -51,7 +51,8 @@ groups() ->
          classic_queue_with_stats_disabled_test,
          quorum_queue_with_stats_disabled_test,
          quorum_queue_default_delivery_limit_with_stats_disabled_test,
-         stream_queue_with_stats_disabled_test
+         stream_queue_with_stats_disabled_test,
+         no_policy_effective_definition_type_test
      ]},
      {invalid_config, [], [invalid_config_test]}
     ].
@@ -1611,6 +1612,36 @@ stream_queue_with_stats_disabled_test(Config) ->
     http_delete(Config, "/queues/%2F/test-stream-queue", {group, '2xx'}),
     http_delete(Config, "/policies/%2F/test-policy", {group, '2xx'}),
     http_delete(Config, "/operator-policies/%2F/test-op-policy", {group, '2xx'}),
+
+    passed.
+
+%% Verifies that effective_policy_definition is a JSON object (not a JSON array)
+%% when no policy applies to a queue and management stats collection is disabled.
+%% See rabbitmq/hop#640.
+no_policy_effective_definition_type_test(Config) ->
+    ClassicArgs = #{durable => true},
+    QuorumArgs = #{durable => true,
+                   arguments => #{'x-queue-type' => 'quorum'}},
+    StreamArgs = #{durable => true,
+                   arguments => #{'x-queue-type' => 'stream'}},
+
+    http_put(Config, "/queues/%2F/test-classic-no-policy", ClassicArgs, {group, '2xx'}),
+    http_put(Config, "/queues/%2F/test-quorum-no-policy", QuorumArgs, {group, '2xx'}),
+    http_put(Config, "/queues/%2F/test-stream-no-policy", StreamArgs, {group, '2xx'}),
+
+    Endpoints = ["/queues/%2F/test-classic-no-policy",
+                 "/queues/%2F/test-quorum-no-policy",
+                 "/queues/%2F/test-stream-no-policy"],
+    lists:foreach(
+      fun(Endpoint) ->
+              Queue = http_get(Config, Endpoint, ?OK),
+              ?assert(maps:is_key(effective_policy_definition, Queue)),
+              ?assertEqual(#{}, maps:get(effective_policy_definition, Queue))
+      end, Endpoints),
+
+    http_delete(Config, "/queues/%2F/test-classic-no-policy", {group, '2xx'}),
+    http_delete(Config, "/queues/%2F/test-quorum-no-policy", {group, '2xx'}),
+    http_delete(Config, "/queues/%2F/test-stream-no-policy", {group, '2xx'}),
 
     passed.
 
