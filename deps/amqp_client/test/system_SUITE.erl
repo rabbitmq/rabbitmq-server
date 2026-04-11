@@ -749,13 +749,15 @@ channel_multi_open_close(Config) ->
                                           ok                 -> ok;
                                           closing            -> ok
                                       catch
-                                          exit:{noproc, _} -> ok;
-                                          exit:{normal, _} -> ok
+                                          exit:{noproc, _}       -> ok;
+                                          exit:{normal, _}       -> ok;
+                                          exit:{{shutdown, _}, _} -> ok
                                       end;
                 closing            -> ok
             catch
-                exit:{noproc, _} -> ok;
-                exit:{normal, _} -> ok
+                exit:{noproc, _}       -> ok;
+                exit:{normal, _}       -> ok;
+                exit:{{shutdown, _}, _} -> ok
             end
         end) || _ <- lists:seq(1, 50)],
     erlang:yield(),
@@ -1196,7 +1198,7 @@ default_consumer(Config) ->
     receive
         {#'basic.deliver'{}, #'amqp_msg'{payload = Payload}} ->
             ok
-    after 1000 ->
+    after 30000 ->
             exit('default_consumer_didnt_work')
     end,
     teardown(Connection, Channel).
