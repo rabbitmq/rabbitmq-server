@@ -10,9 +10,13 @@
 -include_lib("proper/include/proper.hrl").
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include("rabbit_stomp_frame.hrl").
 -compile([export_all, nowarn_export_all]).
 
 -import(rabbit_ct_proper_helpers, [run_proper/3]).
+
+%% Default max_headers is 100
+-define(LIMIT, 100).
 
 all() ->
     [{group, properties}].
@@ -25,29 +29,30 @@ groups() ->
        prop_duplicates_do_not_exhaust_limit
       ]}].
 
-%% Any frame with up to 100 unique header names parses successfully.
+%% Any frame with up to LIMIT unique header names parses successfully.
 prop_within_limit_succeeds(_Config) ->
     run_proper(
       fun() ->
-          ?FORALL(N, range(0, 100),
+          ?FORALL(N, range(0, ?LIMIT),
               begin
                   {ok, _, _} = parse(make_frame(unique_headers(N))),
                   true
               end)
       end, [], 1000).
 
-%% Any frame with more than 100 unique header names is rejected.
+%% Any frame with more than LIMIT unique header names is rejected.
 prop_over_limit_fails(_Config) ->
     run_proper(
       fun() ->
-          ?FORALL(N, range(101, 300),
+          ?FORALL(N, range(?LIMIT + 1, 300),
               begin
-                  {error, too_many_headers} = parse(make_frame(unique_headers(N))),
+                  {error, {max_headers, ?LIMIT}} = parse(make_frame(unique_headers(N))),
                   true
               end)
       end, [], 1000).
 
 %% Duplicate entries for a header name already seen never trigger the limit.
+%% Duplicates are discarded at O(1) with zero allocation.
 prop_duplicates_do_not_exhaust_limit(_Config) ->
     run_proper(
       fun() ->

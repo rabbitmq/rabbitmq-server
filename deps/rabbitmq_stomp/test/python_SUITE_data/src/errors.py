@@ -74,7 +74,7 @@ class TestErrors(base.BaseTest):
     def test_send_missing_destination(self):
         self.__test_missing_destination("SEND")
 
-    def test_send_missing_destination(self):
+    def test_subscribe_missing_destination(self):
         self.__test_missing_destination("SUBSCRIBE")
 
     def __test_missing_destination(self, command):

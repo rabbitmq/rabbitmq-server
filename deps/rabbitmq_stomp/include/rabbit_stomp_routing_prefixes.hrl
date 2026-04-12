@@ -5,11 +5,11 @@
 %% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term "Broadcom" refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
--define(QUEUE_PREFIX, "/queue").
--define(TOPIC_PREFIX, "/topic").
--define(EXCHANGE_PREFIX, "/exchange").
--define(AMQQUEUE_PREFIX, "/amq/queue").
--define(TEMP_QUEUE_PREFIX, "/temp-queue").
-%% reply queues names can have slashes in the content so no further
+-define(QUEUE_PREFIX, <<"/queue">>).
+-define(TOPIC_PREFIX, <<"/topic">>).
+-define(EXCHANGE_PREFIX, <<"/exchange">>).
+-define(AMQQUEUE_PREFIX, <<"/amq/queue">>).
+-define(TEMP_QUEUE_PREFIX, <<"/temp-queue">>).
+%% Reply queue names can have slashes in the content so no further
 %% parsing happens.
--define(REPLY_QUEUE_PREFIX, "/reply-queue/").
+-define(REPLY_QUEUE_PREFIX, <<"/reply-queue/">>).

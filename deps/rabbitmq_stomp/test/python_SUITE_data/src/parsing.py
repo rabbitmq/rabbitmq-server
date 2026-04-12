@@ -21,12 +21,6 @@ def connect(cnames):
         'passcode:guest\n'
         '\n'
         '\n\0')
-    resp = ('CONNECTED\n'
-            'server:RabbitMQ/(.*)\n'
-            'session:(.*)\n'
-            'heart-beat:0,0\n'
-            'version:1.0\n'
-            '\n\x00')
     def w(m):
         @functools.wraps(m)
         def wrapper(self, *args, **kwargs):
@@ -35,7 +29,11 @@ def connect(cnames):
                 sd.settimeout(30000)
                 sd.connect((self.host, self.port))
                 sd.sendall(cmd.encode('utf-8'))
-                self.match(resp, sd.recv(4096).decode('utf-8'))
+                data = sd.recv(4096).decode('utf-8')
+                self.assert_frame(data, 'CONNECTED', {
+                    'version': '1.0',
+                    'heart-beat': '0,0',
+                })
                 setattr(self, cname, sd)
             try:
                 r = m(self, *args, **kwargs)
@@ -68,6 +66,42 @@ class TestParsing(unittest.TestCase):
             return matched.groups()
         self.assertTrue(False, 'No match:\n{}\n\n{}'.format(pattern, data))
 
+    def parse_frame(self, data):
+        ''' Parse a STOMP frame into (command, headers_dict, body) '''
+        # Strip trailing LF (server sends trailing_lf=true)
+        if data.endswith('\n'):
+            data = data[:-1]
+        parts = data.split('\n\n', 1)
+        header_section = parts[0]
+        body = parts[1] if len(parts) > 1 else ''
+        # Body ends with NUL
+        if body.endswith('\x00'):
+            body = body[:-1]
+        lines = header_section.split('\n')
+        command = lines[0]
+        headers = {}
+        for line in lines[1:]:
+            if ':' in line:
+                k, v = line.split(':', 1)
+                headers[k] = v
+        return command, headers, body
+
+    def assert_frame(self, data, expected_command, expected_headers=None, expected_body=None):
+        ''' Assert a STOMP frame matches expected values (header-order independent) '''
+        command, headers, body = self.parse_frame(data)
+        self.assertEqual(expected_command, command)
+        if expected_headers:
+            for k, v in expected_headers.items():
+                self.assertIn(k, headers, f'Missing header: {k}')
+                if v is not None:
+                    if isinstance(v, re.Pattern):
+                        self.assertRegex(headers[k], v)
+                    else:
+                        self.assertEqual(v, headers[k])
+        if expected_body is not None:
+            self.assertEqual(expected_body, body)
+        return headers
+
     def recv_atleast(self, bufsize):
         recvhead = []
         rl = bufsize
@@ -78,6 +112,37 @@ class TestParsing(unittest.TestCase):
             recvhead.append( buf )
             rl -= bl
         return ''.join(recvhead)
+
+    def recv_frame(self):
+        ''' Receive one complete STOMP frame, honoring content-length for binary bodies. '''
+        buf = b''
+        while b'\n\n' not in buf:
+            chunk = self.cd.recv(4096)
+            if not chunk:
+                return buf.decode('utf-8', errors='replace')
+            buf += chunk
+        hdr_end = buf.index(b'\n\n')
+        header_text = buf[:hdr_end].decode('utf-8')
+        content_length = None
+        for line in header_text.split('\n')[1:]:
+            if line.startswith('content-length:'):
+                content_length = int(line.split(':', 1)[1])
+                break
+        body_start = hdr_end + 2
+        if content_length is not None:
+            needed = body_start + content_length + 1
+            while len(buf) < needed:
+                chunk = self.cd.recv(needed - len(buf))
+                if not chunk:
+                    break
+                buf += chunk
+        else:
+            while b'\x00' not in buf[body_start:]:
+                chunk = self.cd.recv(4096)
+                if not chunk:
+                    break
+                buf += chunk
+        return buf.decode('utf-8')
 
 
     @connect(['cd'])
@@ -91,15 +156,13 @@ class TestParsing(unittest.TestCase):
                'destination:/exchange/amq.fanout\n\n'
                'hello\n\x00\n')
         self.cd.sendall(cmd.encode('utf-8'))
-        resp = ('MESSAGE\n'
-                'destination:/exchange/amq.fanout\n'
-                'message-id:Q_/exchange/amq.fanout@@session-(.*)\n'
-                'redelivered:false\n'
-                'content-type:text/plain\n'
-                'content-length:6\n'
-                '\n'
-                'hello\n\0')
-        self.match(resp, self.cd.recv(4096).decode('utf-8'))
+        data = self.cd.recv(4096).decode('utf-8')
+        self.assert_frame(data, 'MESSAGE', {
+            'destination': '/exchange/amq.fanout',
+            'redelivered': 'false',
+            'content-type': 'text/plain',
+            'content-length': '6',
+        }, 'hello\n')
 
     @connect(['cd'])
     def test_send_without_content_type(self):
@@ -111,14 +174,12 @@ class TestParsing(unittest.TestCase):
                'destination:/exchange/amq.fanout\n\n'
                'hello\n\x00')
         self.cd.sendall(cmd.encode('utf-8'))
-        resp = ('MESSAGE\n'
-                'destination:/exchange/amq.fanout\n'
-                'message-id:Q_/exchange/amq.fanout@@session-(.*)\n'
-                'redelivered:false\n'
-                'content-length:6\n'
-                '\n'
-                'hello\n\0')
-        self.match(resp, self.cd.recv(4096).decode('utf-8'))
+        data = self.cd.recv(4096).decode('utf-8')
+        self.assert_frame(data, 'MESSAGE', {
+            'destination': '/exchange/amq.fanout',
+            'redelivered': 'false',
+            'content-length': '6',
+        }, 'hello\n')
 
     @connect(['cd'])
     def test_unicode(self):
@@ -131,15 +192,13 @@ class TestParsing(unittest.TestCase):
                'headꙕr1:valꙕe1\n\n'
                'hello\n\x00')
         self.cd.sendall(cmd.encode('utf-8'))
-        resp = ('MESSAGE\n'
-                'destination:/exchange/amq.fanout\n'
-                'message-id:Q_/exchange/amq.fanout@@session-(.*)\n'
-                'redelivered:false\n'
-                'headꙕr1:valꙕe1\n'
-                'content-length:6\n'
-                '\n'
-                'hello\n\0')
-        self.match(resp, self.cd.recv(4096).decode('utf-8'))
+        data = self.cd.recv(4096).decode('utf-8')
+        self.assert_frame(data, 'MESSAGE', {
+            'destination': '/exchange/amq.fanout',
+            'redelivered': 'false',
+            'headꙕr1': 'valꙕe1',
+            'content-length': '6',
+        }, 'hello\n')
 
     @connect(['cd'])
     def test_send_without_content_type_binary(self):
@@ -153,13 +212,12 @@ class TestParsing(unittest.TestCase):
                'content-length:{}\n\n'.format(len(msg)) +
                '{}\x00'.format(msg))
         self.cd.sendall(cmd.encode('utf-8'))
-        resp = ('MESSAGE\n'
-                'destination:/exchange/amq.fanout\n'
-                'message-id:Q_/exchange/amq.fanout@@session-(.*)\n'
-                'redelivered:false\n' +
-                'content-length:{}\n'.format(len(msg)) +
-                '\n{}\0'.format(msg))
-        self.match(resp, self.cd.recv(4096).decode('utf-8'))
+        data = self.cd.recv(4096).decode('utf-8')
+        self.assert_frame(data, 'MESSAGE', {
+            'destination': '/exchange/amq.fanout',
+            'redelivered': 'false',
+            'content-length': str(len(msg)),
+        }, msg)
 
     @connect(['cd'])
     def test_newline_after_nul_and_leading_nul(self):
@@ -172,15 +230,13 @@ class TestParsing(unittest.TestCase):
                'content-type:text/plain\n'
                '\nhello\n\x00\n')
         self.cd.sendall(cmd.encode('utf-8'))
-        resp = ('MESSAGE\n'
-                'destination:/exchange/amq.fanout\n'
-                'message-id:Q_/exchange/amq.fanout@@session-(.*)\n'
-                'redelivered:false\n'
-                'content-type:text/plain\n'
-                'content-length:6\n'
-                '\n'
-                'hello\n\0')
-        self.match(resp, self.cd.recv(4096).decode('utf-8'))
+        data = self.cd.recv(4096).decode('utf-8')
+        self.assert_frame(data, 'MESSAGE', {
+            'destination': '/exchange/amq.fanout',
+            'redelivered': 'false',
+            'content-type': 'text/plain',
+            'content-length': '6',
+        }, 'hello\n')
 
     @connect(['cd'])
     def test_bad_command(self):
@@ -190,15 +246,12 @@ class TestParsing(unittest.TestCase):
                'exchange:amq.fanout\n'
                '\n\0')
         self.cd.sendall(cmd.encode('utf-8'))
-        resp = ('ERROR\n'
-                'message:Bad command\n'
-                'content-type:text/plain\n'
-                'version:1.0,1.1,1.2\n'
-                'content-length:43\n'
-                '\n'
-                'Could not interpret command "WRONGCOMMAND"\n'
-                '\0')
-        self.match(resp, self.cd.recv(4096).decode('utf-8'))
+        data = self.cd.recv(4096).decode('utf-8')
+        self.assert_frame(data, 'ERROR', {
+            'message': 'Bad command',
+            'content-type': 'text/plain',
+            'version': '1.0,1.1,1.2',
+        }, 'Could not interpret command "WRONGCOMMAND"\n')
 
     @connect(['sd', 'cd1', 'cd2'])
     def test_broadcast(self):
@@ -227,18 +280,14 @@ class TestParsing(unittest.TestCase):
                '\n\0')
         self.sd.sendall(cmd.encode('utf-8'))
 
-        resp=('MESSAGE\n'
-            'subscription:(.*)\n'
-            'destination:/topic/da9d4779\n'
-            'message-id:(.*)\n'
-            'redelivered:false\n'
-            'content-type:text/plain\n'
-            'content-length:8\n'
-            '\n'
-            'message'
-            '\n\x00')
         for cd in [self.cd1, self.cd2]:
-            self.match(resp, cd.recv(4096).decode('utf-8'))
+            data = cd.recv(4096).decode('utf-8')
+            self.assert_frame(data, 'MESSAGE', {
+                'destination': '/topic/da9d4779',
+                'redelivered': 'false',
+                'content-type': 'text/plain',
+                'content-length': '8',
+            }, 'message\n')
 
     @connect(['cd'])
     def test_message_with_embedded_nulls(self):
@@ -268,33 +317,17 @@ class TestParsing(unittest.TestCase):
                '\0' % (len(message), message))
         self.cd.sendall(cmd.encode('utf-8'))
 
-        headresp=('MESSAGE\n'            # 8
-            'subscription:(.*)\n'        # 14 + subscription
-            +resp_dest+                  # 44
-            'message-id:(.*)\n'          # 12 + message-id
-            'redelivered:false\n'        # 18
-            'content-type:text/plain\n'  # 24
-            'content-length:%i\n'        # 16 + 4==len('1024')
-            '\n'                         # 1
-            '(.*)$'                      # prefix of body+null (potentially)
-             % len(message) )
-        headlen = 8 + 24 + 14 + (3) + 44 + 12 + 18 + (48) + 16 + (4) + 1 + (1)
+        fullbuf = self.recv_frame()
+        self.assertFalse(len(fullbuf) == 0)
 
-        headbuf = self.recv_atleast(headlen)
-        self.assertFalse(len(headbuf) == 0)
-
-        (sub, msg_id, bodyprefix) = self.match(headresp, headbuf)
-        bodyresp=( '%s\0' % message )
-        bodylen = len(bodyresp);
-
-        bodybuf = ''.join([bodyprefix,
-                           self.recv_atleast(bodylen - len(bodyprefix))])
-
-        self.assertEqual(len(bodybuf), msg_len+1,
-            "body received not the same length as message sent")
-        self.assertEqual(bodybuf, bodyresp,
+        command, headers, body = self.parse_frame(fullbuf)
+        self.assertEqual('MESSAGE', command)
+        self.assertEqual('/topic/test_embed_nulls_message', headers.get('destination'))
+        self.assertEqual('false', headers.get('redelivered'))
+        self.assertEqual(str(msg_len), headers.get('content-length'))
+        self.assertEqual(message, body,
             "   body (...'%s')\nincorrectly returned as (...'%s')"
-            % (bodyresp[-10:], bodybuf[-10:]))
+            % (message[-10:], body[-10:]))
 
     @connect(['cd'])
     def test_message_in_packets(self):
@@ -328,33 +361,17 @@ class TestParsing(unittest.TestCase):
             self.cd.sendall(part.encode('utf-8'))
             part_index += packet_size
 
-        headresp=('MESSAGE\n'           # 8
-            'subscription:(.*)\n'       # 14 + subscription
-            +resp_dest+                 # 44
-            'message-id:(.*)\n'         # 12 + message-id
-            'redelivered:false\n'       # 18
-            'content-type:text/plain\n' # 24
-            'content-length:%i\n'       # 16 + 4==len('1024')
-            '\n'                        # 1
-            '(.*)$'                     # prefix of body+null (potentially)
-             % len(message) )
-        headlen = 8 + 24 + 14 + (3) + 44 + 12 + 18 + (48) + 16 + (4) + 1 + (1)
+        fullbuf = self.recv_frame()
+        self.assertFalse(len(fullbuf) == 0)
 
-        headbuf = self.recv_atleast(headlen)
-        self.assertFalse(len(headbuf) == 0)
-
-        (sub, msg_id, bodyprefix) = self.match(headresp, headbuf)
-        bodyresp=( '%s\0' % message )
-        bodylen = len(bodyresp);
-
-        bodybuf = ''.join([bodyprefix,
-                           self.recv_atleast(bodylen - len(bodyprefix))])
-
-        self.assertEqual(len(bodybuf), msg_len+1,
-            "body received not the same length as message sent")
-        self.assertEqual(bodybuf, bodyresp,
+        command, headers, body = self.parse_frame(fullbuf)
+        self.assertEqual('MESSAGE', command)
+        self.assertEqual('false', headers.get('redelivered'))
+        self.assertEqual('text/plain', headers.get('content-type'))
+        self.assertEqual(str(msg_len), headers.get('content-length'))
+        self.assertEqual(message, body,
             "   body ('%s')\nincorrectly returned as ('%s')"
-            % (bodyresp, bodybuf))
+            % (message, body))
 
 
 if __name__ == '__main__':

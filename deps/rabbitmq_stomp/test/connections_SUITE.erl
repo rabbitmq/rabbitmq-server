@@ -10,10 +10,10 @@
 
 -import(rabbit_misc, [pget/2]).
 
--include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 -include("rabbit_stomp_frame.hrl").
--define(DESTINATION, "/queue/bulk-test").
+-define(DESTINATION, <<"/queue/bulk-test">>).
 
 all() ->
     [
@@ -88,23 +88,22 @@ direct_client_connections_are_not_leaked(Config) ->
                           %% send garbage which trips up the parser
                           gen_tcp:send(Socket, ?GARBAGE),
                           rabbit_stomp_client:send(
-                           Client, "LOL", [{"", ""}])
+                           Client, "LOL", [{<<"">>, <<"">>}])
                   end,
                   lists:seq(1, 100)),
-    ?awaitMatch(N, count_connections(Config), 30_000),
+    timer:sleep(5000),
+    N = count_connections(Config),
     ok.
 
 messages_not_dropped_on_disconnect(Config) ->
     StompPort = get_stomp_port(Config),
     N = count_connections(Config),
     {ok, Client} = rabbit_stomp_client:connect(StompPort),
-    %% STOMP connection registration is asynchronous; wait for it to be
-    %% readable (as in consistency).
     N1 = N + 1,
-    ?awaitMatch(N1, count_connections(Config), 30_000),
+    N1 = count_connections(Config),
     [rabbit_stomp_client:send(
-       Client, "SEND", [{"destination", ?DESTINATION}],
-       [integer_to_list(Count)]) || Count <- lists:seq(1, 1000)],
+       Client, 'SEND', [{<<"destination">>, ?DESTINATION}],
+       [integer_to_binary(Count)]) || Count <- lists:seq(1, 1000)],
     rabbit_stomp_client:disconnect(Client),
     QName = rabbit_misc:r(<<"/">>, queue, <<"bulk-test">>),
     ?awaitMatch(N, count_connections(Config), 30_000),
@@ -132,21 +131,21 @@ stats_are_not_leaked(Config) ->
     Bin = <<"GET / HTTP/1.1\r\nHost: www.rabbitmq.com\r\nUser-Agent: curl/7.43.0\r\nAccept: */*\n\n">>,
     gen_tcp:send(C, Bin),
     gen_tcp:close(C),
-    ?awaitMatch(N, rabbit_ct_broker_helpers:rpc(Config, 0, ets, info, [connection_metrics, size]), 5_000),
+    timer:sleep(1000), %% Wait for stats to be emitted, which it does every 100ms
+    N = rabbit_ct_broker_helpers:rpc(Config, 0, ets, info, [connection_metrics, size]),
     ok.
 
 stats(Config) ->
     StompPort = get_stomp_port(Config),
     {ok, Client} = rabbit_stomp_client:connect(StompPort),
+    timer:sleep(1000), %% Wait for stats to be emitted, which it does every 100ms
     %% Retrieve the connection Pid
-    [Reader] = ?awaitMatch([_], rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_stomp, list, []), 5_000),
+    [Reader] = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_stomp, list, []),
     [{_, Pid}] = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_stomp_reader,
                                               info, [Reader, [connection]]),
     %% Verify the content of the metrics, garbage_collection must be present
-    [{Pid, Props}] = ?awaitMatch([{Pid, _}],
-                                 rabbit_ct_broker_helpers:rpc(Config, 0, ets, lookup,
-                                                              [connection_metrics, Pid]),
-                                 5_000),
+    [{Pid, Props}] = rabbit_ct_broker_helpers:rpc(Config, 0, ets, lookup,
+                                                  [connection_metrics, Pid]),
     true = proplists:is_defined(garbage_collection, Props),
     0 = proplists:get_value(timeout, Props),
     %% If the coarse entry is present, stats were successfully emitted
@@ -158,16 +157,15 @@ stats(Config) ->
 heartbeat(Config) ->
     StompPort = get_stomp_port(Config),
     {ok, Client} = rabbit_stomp_client:connect("1.2", "guest", "guest", StompPort,
-                                               [{"heart-beat", "5000,7000"}]),
+                                               [{<<"heart-beat">>, <<"5000,7000">>}]),
+    timer:sleep(1000), %% Wait for stats to be emitted, which it does every 100ms
     %% Retrieve the connection Pid
-    [Reader] = ?awaitMatch([_], rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_stomp, list, []), 5_000),
+    [Reader] = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_stomp, list, []),
     [{_, Pid}] = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_stomp_reader,
                                               info, [Reader, [connection]]),
     %% Verify the content of the heartbeat timeout
-    [{Pid, Props}] = ?awaitMatch([{Pid, _}],
-                                 rabbit_ct_broker_helpers:rpc(Config, 0, ets, lookup,
-                                                              [connection_metrics, Pid]),
-                                 5_000),
+    [{Pid, Props}] = rabbit_ct_broker_helpers:rpc(Config, 0, ets, lookup,
+                                                  [connection_metrics, Pid]),
     5 = proplists:get_value(timeout, Props),
     rabbit_stomp_client:disconnect(Client),
     ok.
@@ -193,9 +191,9 @@ frame_size(Config) ->
       application, set_env, [rabbitmq_stomp, max_frame_size, 80]),
     StompPort = get_stomp_port(Config),
     {ok, Client} = rabbit_stomp_client:connect("1.2", "guest", "guest", StompPort,
-                                               [{"heart-beat", "5000,7000"}]),
+                                               [{<<"heart-beat">>, <<"5000,7000">>}]),
     ok = rabbit_stomp_client:send(
-      Client, "SEND", [{"destination", "qwe"}],
+      Client, 'SEND', [{<<"destination">>, <<"qwe">>}],
       ["Lorem ipsum dolor sit amet viverra fusce. "
        "Lorem ipsum dolor sit amet viverra fusce. "
        "Lorem ipsum dolor sit amet viverra fusce."
@@ -212,9 +210,9 @@ frame_size_huge(Config) ->
       application, set_env, [rabbitmq_stomp, max_frame_size, 700]),
     StompPort = get_stomp_port(Config),
     {ok, Client} = rabbit_stomp_client:connect("1.2", "guest", "guest", StompPort,
-                                               [{"heart-beat", "5000,7000"}]),
+                                               [{<<"heart-beat">>, <<"5000,7000">>}]),
     rabbit_stomp_client:send(
-      Client, "SEND", [{"destination", "qwe"}],
+      Client, 'SEND', [{<<"destination">>, <<"qwe">>}],
       [base64:encode(crypto:strong_rand_bytes(100000000))]),
     {S, _} = Client,
     {error, closed} = gen_tcp:recv(S, 0, 500),

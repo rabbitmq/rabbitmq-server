@@ -198,7 +198,8 @@ sub_non_existent(Config) ->
     ok = raw_send(WS, "SUBSCRIBE", [{"destination", "/exchange/doesnotexist"},
                                     {"id", "s0"}]),
 
-    {<<"ERROR">>, [{<<"message">>,<<"not_found">>} | _Tail ], <<"NOT_FOUND - no exchange 'doesnotexist' in vhost '/'">>} = raw_recv(WS),
+    {<<"ERROR">>, Headers, <<"no exchange 'doesnotexist' in vhost '/'">>} = raw_recv(WS),
+    <<"not_found">> = proplists:get_value(<<"message">>, Headers),
 
     {close, _} = raw_recv(WS),
     ok.

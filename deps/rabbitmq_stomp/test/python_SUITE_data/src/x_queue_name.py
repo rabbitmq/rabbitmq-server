@@ -13,7 +13,7 @@ import time
 import os
 import test_util
 
-class TestUserGeneratedQueueName(base.BaseTest):
+class TestQueueName(base.BaseTest):
 
     def test_exchange_dest(self):
         queueName='my-user-generated-queue-name-exchange'

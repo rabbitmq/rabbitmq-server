@@ -11,6 +11,9 @@
 -include("rabbit_stomp_frame.hrl").
 -compile(export_all).
 
+%% Default max_headers is 100
+-define(LIMIT, 100).
+
 all() ->
     [
      max_headers_accepted,
@@ -22,42 +25,43 @@ all() ->
      unique_and_duplicate_mix
     ].
 
-%% Exactly 100 unique headers must be accepted.
+%% Exactly LIMIT unique headers must be accepted.
 max_headers_accepted(_) ->
-    {ok, _, _} = parse(make_frame(unique_headers(100))).
+    {ok, _, _} = parse(make_frame(unique_headers(?LIMIT))).
 
-%% 101 unique headers must be rejected.
+%% LIMIT+1 unique headers must be rejected.
 exceeds_max_headers_rejected(_) ->
-    ?assertEqual({error, too_many_headers}, parse(make_frame(unique_headers(101)))).
+    ?assertEqual({error, {max_headers, ?LIMIT}},
+                 parse(make_frame(unique_headers(?LIMIT + 1)))).
 
-%% The same rejection must occur when the frame arrives in two TCP chunks,
-%% verifying that the seen-names map is preserved across chunk boundaries.
+%% The same rejection must occur when the frame arrives in two TCP chunks.
 exceeds_max_headers_rejected_chunked(_) ->
-    Full = make_frame(unique_headers(101)),
+    Full = make_frame(unique_headers(?LIMIT + 1)),
     Mid  = byte_size(Full) div 2,
     <<Chunk1:Mid/binary, Chunk2/binary>> = Full,
     {more, Resume} = parse(Chunk1),
-    ?assertEqual({error, too_many_headers}, parse(Chunk2, Resume)).
+    ?assertEqual({error, {max_headers, ?LIMIT}},
+                 parse(Chunk2, Resume)).
 
-%% When seen-names is at the limit a duplicate must be discarded, not rejected.
-%% The duplicate check must fire before the count check.
+%% When the map is at the limit, a duplicate must be discarded, not rejected.
 duplicate_at_limit_boundary_accepted(_) ->
-    Headers = unique_headers(100) ++ [{"h1", "dup"}],
+    Headers = unique_headers(?LIMIT) ++ [{"h1", "dup"}],
     {ok, Frame, _} = parse(make_frame(Headers)),
-    ?assertEqual({ok, "v"}, rabbit_stomp_frame:header(Frame, "h1")).
+    ?assertEqual({ok, <<"v">>}, rabbit_stomp_frame:header(Frame, <<"h1">>)).
 
 %% Duplicate header names do not count toward the limit.
 %% A frame with 200 repetitions of the same name has only one unique name.
 duplicates_do_not_count(_) ->
     Headers = [{"h", integer_to_list(I)} || I <- lists:seq(1, 200)],
     {ok, Frame, _} = parse(make_frame(Headers)),
-    ?assertEqual({ok, "1"}, rabbit_stomp_frame:header(Frame, "h")).
+    ?assertEqual({ok, <<"1">>}, rabbit_stomp_frame:header(Frame, <<"h">>)).
 
 %% The first occurrence of a header name is kept; later ones are ignored.
 first_occurrence_wins(_) ->
     Headers = [{"destination", "/queue/a"}, {"destination", "/queue/b"}],
     {ok, Frame, _} = parse(make_frame(Headers)),
-    ?assertEqual({ok, "/queue/a"}, rabbit_stomp_frame:header(Frame, "destination")).
+    ?assertEqual({ok, <<"/queue/a">>},
+                 rabbit_stomp_frame:header(Frame, <<"destination">>)).
 
 %% 50 unique headers plus any number of duplicates stays within the limit.
 unique_and_duplicate_mix(_) ->

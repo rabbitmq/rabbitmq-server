@@ -482,12 +482,12 @@ amqp_mqtt(Qos, Config) ->
 
 mqtt_stomp_mqtt(Config) ->
     {ok, StompC0} = stomp_connect(Config),
-    ok = stomp_send(StompC0, "SUBSCRIBE", [{"destination", "/topic/t.1"},
-                                           {"receipt", "my-receipt"},
-                                           {"id", "subscription-888"},
-                                           {"durable", "true"}]),
-    {#stomp_frame{command = "RECEIPT",
-                  headers = [{"receipt-id","my-receipt"}]}, StompC1} = stomp_recv(StompC0),
+    ok = stomp_send(StompC0, 'SUBSCRIBE', [{<<"destination">>, <<"/topic/t.1">>},
+                                           {<<"receipt">>, <<"my-receipt">>},
+                                           {<<"id">>, <<"subscription-888">>},
+                                           {<<"durable">>, <<"true">>}]),
+    {#stomp_frame{command = 'RECEIPT',
+                  headers = #{<<"receipt-id">> := <<"my-receipt">>}}, StompC1} = stomp_recv(StompC0),
 
     %% MQTT 5.0 to STOMP 1.2
     C = connect(<<"my-mqtt-client">>, Config),
@@ -513,40 +513,39 @@ mqtt_stomp_mqtt(Config) ->
                               'User-Property' => UserProperty},
                             RequestPayload, [{qos, 1}]),
 
-    {#stomp_frame{command = "MESSAGE",
-                  headers = Headers0,
-                  body_iolist = Body} = Msg1, StompC2} = stomp_recv(StompC1),
+    {#stomp_frame{command = 'MESSAGE',
+                  headers = Headers,
+                  body_iolist_rev = BodyRev} = Msg1, StompC2} = stomp_recv(StompC1),
+    Body = lists:reverse(BodyRev),
     ?assertEqual(RequestPayload, iolist_to_binary(Body)),
-    Headers1 = maps:from_list(Headers0),
-    Headers = maps:map(fun(_K, V) -> unicode:characters_to_binary(V) end, Headers1),
     ct:pal("Received STOMP 1.2 message:~n~p~n"
            "with headers map:~n~p", [Msg1, Headers]),
     ?assertMatch(
-       #{"content-type" := ContentType,
-         "correlation-id" := Correlation,
-         "destination" := <<"/topic/t.1">>,
+       #{<<"content-type">> := ContentType,
+         <<"correlation-id">> := Correlation,
+         <<"destination">> := <<"/topic/t.1">>,
          %% With Native STOMP, this should be translated to
          %% reply-to: /topic/response.topic
-         "x-reply-to-topic" := <<"response.topic">>,
-         "subscription" := <<"subscription-888">>,
-         "persistent" := <<"true">>,
+         <<"x-reply-to-topic">> := <<"response.topic">>,
+         <<"subscription">> := <<"subscription-888">>,
+         <<"persistent">> := <<"true">>,
          %% The STOMP spec mandates headers to be encoded as UTF-8, but unfortunately the RabbitMQ
          %% STOMP implementation (as of 3.13) does not adhere and therefore does not provide UTF-8 support.
-         % "rabbit🐇" := <<"carrot🥕"/utf8>>,
-         % "x-rabbit🐇" := <<"carrot🥕"/utf8>>,
-         "key" := <<"val1">>,
-         "x-key" := <<"val1">>
+         % <<"rabbit🐇"/utf8>> := <<"carrot🥕"/utf8>>,
+         % <<"x-rabbit🐇"/utf8>> := <<"carrot🥕"/utf8>>,
+         <<"key">> := <<"val1">>,
+         <<"x-key">> := <<"val1">>
         },
        Headers),
 
     %% STOMP 1.2 to MQTT 5.0
-    ok = stomp_send(StompC2, "SEND",
-                    [{"destination", "/topic/response.topic"},
-                     {"persistent", "true"},
-                     {"content-type", "application/json"},
-                     {"correlation-id", binary_to_list(Correlation)},
-                     {"x-key", "val4"}],
-                    ["{\"my\" : \"response\"}"]),
+    ok = stomp_send(StompC2, 'SEND',
+                    [{<<"destination">>, <<"/topic/response.topic">>},
+                     {<<"persistent">>, <<"true">>},
+                     {<<"content-type">>, <<"application/json">>},
+                     {<<"correlation-id">>, Correlation},
+                     {<<"x-key">>, <<"val4">>}],
+                    [<<"{\"my\" : \"response\"}">>]),
     ok = stomp_disconnect(StompC2),
 
     receive {publish, MqttMsg} ->
@@ -713,12 +712,12 @@ stomp_connect(Config) ->
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stomp),
     {ok, Sock} = gen_tcp:connect(localhost, Port, [{active, false}, binary]),
     Client0 = {Sock, []},
-    stomp_send(Client0, "CONNECT", [{"accept-version", "1.2"}]),
-    {#stomp_frame{command = "CONNECTED"}, Client1} = stomp_recv(Client0),
+    stomp_send(Client0, 'CONNECT', [{<<"accept-version">>, <<"1.2">>}]),
+    {#stomp_frame{command = 'CONNECTED'}, Client1} = stomp_recv(Client0),
     {ok, Client1}.
 
 stomp_disconnect(Client = {Sock, _}) ->
-    stomp_send(Client, "DISCONNECT"),
+    stomp_send(Client, 'DISCONNECT'),
     gen_tcp:close(Sock).
 
 stomp_send(Client, Command) ->
@@ -729,9 +728,9 @@ stomp_send(Client, Command, Headers) ->
 
 stomp_send({Sock, _}, Command, Headers, Body) ->
     Frame = rabbit_stomp_frame:serialize(
-              #stomp_frame{command = list_to_binary(Command),
-                           headers = Headers,
-                           body_iolist = Body}),
+              #stomp_frame{command     = Command,
+                           headers     = maps:from_list(Headers),
+                           body_iolist_rev = Body}),
     gen_tcp:send(Sock, Frame).
 
 stomp_recv({_Sock, []} = Client) ->
