@@ -841,7 +841,8 @@ test_successful_token_refresh(Config) ->
         <<"rabbitmq.configure:vhost1/*">>,
         <<"rabbitmq.write:vhost1/*">>,
         <<"rabbitmq.read:vhost1/*">>]),
-    ?UTIL_MOD:wait_for_token_to_expire(timer:seconds(Duration)),
+    %% Refresh 1 s before expiry to avoid racing the broker's expiry timer.
+    ?UTIL_MOD:wait_for_token_to_expire(timer:seconds(Duration) - 1000),
     ?assertEqual(ok, amqp_connection:update_secret(Conn, Token2,
         <<"token refresh">>)),
     {ok, Ch2} = amqp_connection:open_channel(Conn),
@@ -918,9 +919,14 @@ test_failed_token_refresh_case1(Config) ->
     ?assertEqual(ok, amqp_connection:update_secret(Conn, Token2,
         <<"token refresh">>)),
 
-    {ok, Ch2} = amqp_connection:open_channel(Conn),
-    ?assertExit({{shutdown, {server_initiated_close, 403, _}}, _},
-       amqp_channel:call(Ch2, #'queue.declare'{queue = <<"a.q">>, exclusive = true})),
+    %% The 530 close is async; it may arrive before or after open_channel.
+    try
+        {ok, Ch2} = amqp_connection:open_channel(Conn),
+        ?assertExit({{shutdown, {server_initiated_close, 403, _}}, _},
+           amqp_channel:call(Ch2, #'queue.declare'{queue = <<"a.q">>, exclusive = true}))
+    catch
+        exit:{{shutdown, {connection_closing, {server_initiated_close, 530, _}}}, _} -> ok
+    end,
 
     close_connection(Conn).
 
