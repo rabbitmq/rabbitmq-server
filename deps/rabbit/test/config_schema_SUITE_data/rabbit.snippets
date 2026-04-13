@@ -1771,5 +1771,21 @@ credential_validator.regexp = ^abc\\d+",
        {certfile,"test/config_schema_SUITE_data/certs/server_certificate.pem"},
        {keyfile,"test/config_schema_SUITE_data/certs/server_key.pem"},
        {psk_identity, "my_identity"}]}]}],
+  []},
+ {channel_interceptor_single_priority,
+  "channel_interceptor.priority.my_interceptor_module_1 = 5",
+  [{rabbit,
+    [{channel_interceptor_priorities,
+      [{my_interceptor_module_1, 5}]}]}],
+  []},
+ {channel_interceptor_multiple_priorities,
+  "channel_interceptor.priority.my_interceptor_module_1 = 5
+   channel_interceptor.priority.my_interceptor_module_2 = 10
+   channel_interceptor.priority.my_interceptor_module_3 = 15",
+  [{rabbit,
+    [{channel_interceptor_priorities,
+      [{my_interceptor_module_1, 5},
+       {my_interceptor_module_2, 10},
+       {my_interceptor_module_3, 15}]}]}],
   []}
 ].
