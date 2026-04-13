@@ -884,15 +884,20 @@ system_recover(quorum_queues) ->
     end.
 
 maybe_apply_policies(Q, #{config := CurrentConfig}) ->
-    %% delivery_limit can't be updated from a policy and thus has to be
-    %% excluded from the comparison
-    NewPolicyConfig = maps:without([delivery_limit],
-                                   gather_policy_config(Q, false)),
+    NewPolicyConfig = gather_policy_config(Q, false),
 
     RelevantKeys = maps:keys(NewPolicyConfig),
     CurrentPolicyConfig = maps:with(RelevantKeys, CurrentConfig),
 
-    ShouldUpdate = NewPolicyConfig =/= CurrentPolicyConfig,
+    %% Canonicalize delivery_limit for comparison: map any negative value to undefined.
+    %% rabbit_fifo normalizes negative delivery limits to undefined internally, but
+    %% policies can return any integer value. To prevent spurious updates (e.g. -2 vs -1
+    %% vs undefined all meaning unlimited), canonicalize to undefined which is how
+    %% rabbit_fifo represents unlimited internally.
+    CurrentNorm = canonicalize_delivery_limit(CurrentPolicyConfig),
+    NewNorm = canonicalize_delivery_limit(NewPolicyConfig),
+
+    ShouldUpdate = NewNorm =/= CurrentNorm,
     case ShouldUpdate of
         true ->
             ?LOG_DEBUG("Re-applying policies for ~ts",
@@ -900,6 +905,14 @@ maybe_apply_policies(Q, #{config := CurrentConfig}) ->
             policy_changed(Q),
             ok;
         false -> ok
+    end.
+
+canonicalize_delivery_limit(Config) ->
+    case maps:get(delivery_limit, Config, undefined) of
+        Value when is_integer(Value) orelse
+                   Value < 0 ->
+            Config#{delivery_limit => undefined};
+        _ -> Config
     end.
 
 -spec recover(binary(), [amqqueue:amqqueue()]) ->
