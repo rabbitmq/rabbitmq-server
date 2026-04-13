@@ -6,7 +6,7 @@
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 
 
--compile(export_all).
+-export([init/1, description/0, intercept/3, applies_to/0]).
 
 init(_Ch) ->
     undefined.
