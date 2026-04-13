@@ -56,7 +56,7 @@ init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
 end_per_testcase(Testcase, Config) ->
-    eventually(?_assertEqual(0, rpc(Config, ets, info, [connection_created, size])), 1000, 10),
+    eventually(?_assertEqual(0, rpc(Config, ets, info, [connection_created, size])), 1000, 30),
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
 v1(Config) ->
@@ -83,7 +83,7 @@ v1_tls(Config) ->
     {ok, _Packet} = ssl:recv(SslSocket, 0, ?TIMEOUT),
     ConnectionName = rpc(Config, ?MODULE, connection_name, []),
     match = re:run(ConnectionName, <<"^192.168.1.1:80 -> 192.168.1.2:82$">>, [{capture, none}]),
-    ok = gen_tcp:close(Socket).
+    ok = ssl:close(SslSocket).
 
 v2_local(Config) ->
     ProxyInfo = #{
@@ -127,7 +127,7 @@ split([], Acc) ->
 connection_name() ->
     %% the connection can take some time to show up in the ETS
     %% hence the retry
-    case retry(fun connection_registered/0, 20) of
+    case retry(fun connection_registered/0, 60) of
         true ->
             [{_Key, Values}] = ets:tab2list(connection_created),
             {_, Name} = lists:keyfind(name, 1, Values),

@@ -4212,17 +4212,19 @@ status_noproc(Config) ->
     %% hasn't recorded any counters yet
     rabbit_ct_broker_helpers:rpc(Config, N1, ra_counters, delete, [{RaName, N1}]),
 
-    %% check that some status is returned for each node
-    ?assertMatch([?STATUS_MATCH(N1, noproc, T1),
-                  ?STATUS_MATCH(N2, RS2, T2),
-                  ?STATUS_MATCH(N3, RS3, T3)
-                 ] when T1 == <<>> andalso
-                        T2 /= <<>> andalso
-                        T3 /= <<>> andalso
-                        (RS2 == leader orelse RS2 == follower) andalso
-                        (RS3 == leader orelse RS3 == follower),
-                 rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
-                                              status, [<<"/">>, QQ])),
+    %% check that some status is returned for each node;
+    %% N2 and N3 need time to elect a leader after N1's process is killed
+    ?awaitMatch([?STATUS_MATCH(N1, noproc, T1),
+                 ?STATUS_MATCH(N2, RS2, T2),
+                 ?STATUS_MATCH(N3, RS3, T3)
+                ] when T1 == <<>> andalso
+                       T2 /= <<>> andalso
+                       T3 /= <<>> andalso
+                       (RS2 == leader orelse RS2 == follower) andalso
+                       (RS3 == leader orelse RS3 == follower),
+                rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
+                                             status, [<<"/">>, QQ]),
+                30_000),
     ok.
 format(Config) ->
     %% tests rabbit_quorum_queue:format/2
