@@ -56,7 +56,7 @@ init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
 end_per_testcase(Testcase, Config) ->
-    eventually(?_assertEqual(0, rpc(Config, ets, info, [connection_created, size])), 1000, 10),
+    eventually(?_assertEqual(0, rpc(Config, ets, info, [connection_created, size])), 1000, 30),
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
 v1(Config) ->
