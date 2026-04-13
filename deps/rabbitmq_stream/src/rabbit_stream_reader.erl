@@ -958,11 +958,25 @@ open(info, check_outstanding_requests,
                            ),
             {keep_state, StatemData#statem_data{connection = Connection1}}
     end;
-open(info, token_expired, #statem_data{connection = Connection}) ->
-    _ = demonitor_all_streams(Connection),
-    ?LOG_INFO("Forcing stream connection ~tp closing because token expired",
-                               [self()]),
-    {stop, {shutdown, <<"Token expired">>}};
+open(info, token_expired, #statem_data{connection = Connection} = StatemData) ->
+    User = Connection#stream_connection.user,
+    Now = os:system_time(second),
+    case rabbit_access_control:expiry_timestamp(User) of
+        Ts when is_integer(Ts), Ts > Now ->
+            %% The timer was capped at the maximum interval and fired before
+            %% the credential actually expired. Restart it.
+            {_, Connection1} = ensure_token_expiry_timer(User, Connection),
+            {keep_state, StatemData#statem_data{connection = Connection1}};
+        never ->
+            {keep_state, StatemData#statem_data{
+                           connection = Connection#stream_connection{
+                                          token_expiry_timer = undefined}}};
+        _ ->
+            _ = demonitor_all_streams(Connection),
+            ?LOG_INFO("Forcing stream connection ~tp closing because token expired",
+                      [self()]),
+            {stop, {shutdown, <<"Token expired">>}}
+    end;
 open(info, {shutdown, Explanation} = Reason,
      #statem_data{connection = Connection}) ->
     %% rabbitmq_management or rabbitmq_stream_management plugin
