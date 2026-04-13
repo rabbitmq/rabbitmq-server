@@ -318,7 +318,7 @@ connections_test(Config) ->
                [LocalPort, amqp_port(Config)])),
     await_condition(fun() ->
         C = http_get(Config, Path, ?OK),
-        maps:size(C) =:= 1 andalso maps:is_key(name, C) andalso
+        maps:is_key(name, C) andalso maps:is_key(client_properties, C) andalso
         not maps:is_key(recv_oct_details, C)
     end),
     http_delete(Config, Path, {group, '2xx'}),

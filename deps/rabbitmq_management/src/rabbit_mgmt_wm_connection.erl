@@ -35,16 +35,16 @@ resource_exists(ReqData, Context) ->
     end.
 
 to_json(ReqData, Context) ->
-    case rabbit_mgmt_util:disable_stats(ReqData) of
-        false ->
-            ConnStats = conn_stats(ReqData),
-            ConnStatsWithoutPids = rabbit_mgmt_format:strip_pids(ConnStats),
-            ReplyData = maps:from_list(ConnStatsWithoutPids),
-            rabbit_mgmt_util:reply(ReplyData, ReqData, Context);
-        true ->
-            ReplyData = [{name, rabbit_mgmt_util:id(connection, ReqData)}],
-            rabbit_mgmt_util:reply(ReplyData, ReqData, Context)
-    end.
+    ConnStats =
+        case rabbit_mgmt_util:disable_stats(ReqData) of
+            false ->
+                conn_stats(ReqData);
+            true ->
+                rabbit_mgmt_db:get_connection(rabbit_mgmt_util:id(connection, ReqData))
+        end,
+    ConnStatsWithoutPids = rabbit_mgmt_format:strip_pids(ConnStats),
+    ReplyData = maps:from_list(ConnStatsWithoutPids),
+    rabbit_mgmt_util:reply(ReplyData, ReqData, Context).
 
 delete_resource(ReqData, Context) ->
     case conn(ReqData) of
