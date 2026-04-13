@@ -2082,11 +2082,30 @@ discover_mnesia_tables_to_migrate1([], MigrationsPerApp) ->
               Acc ++ maps:get(App, MigrationsPerApp)
       end, [], Apps).
 
+%% The MFA implementation must not assume any Rabbit sub-system is ready. Also,
+%% it must be able to run even when provided by a plugin and said plugin is not
+%% running.
+mnesia_tables_from_mfa(Mod, Fun, Args) ->
+    Ret = apply(Mod, Fun, Args),
+    ?assert(is_list(Ret)),
+    ?assert(lists:all(fun(Table) -> is_atom(Table) end, Ret)),
+    Ret.
+
 do_migrate_mnesia_tables(FeatureName, Migrations) ->
-    Tables = lists:map(
+    Tables = lists:flatmap(
                fun
-                   ({Table, _Mod}) when is_atom(Table) -> Table;
-                   (Table) when is_atom(Table)         -> Table
+                   ({Table, _Mod}) when is_atom(Table) ->
+                       [Table];
+                   (Table) when is_atom(Table) ->
+                       [Table];
+                   ({{mfa, Mod, Fun, Args}, _Mod}) when is_atom(Mod),
+                                                        is_atom(Fun),
+                                                        is_list(Args) ->
+                       mnesia_tables_from_mfa(Mod, Fun, Args);
+                   ({mfa, Mod, Fun, Args}) when is_atom(Mod),
+                                                is_atom(Fun),
+                                                is_list(Args) ->
+                       mnesia_tables_from_mfa(Mod, Fun, Args)
                end,
                Migrations),
     ?LOG_NOTICE(
