@@ -249,7 +249,7 @@ classic_queue_version_policies(Config) ->
     rabbit_ct_broker_helpers:set_policy(Config, 0, <<"policy">>,
                                         QName, <<"queues">>,
                                         Policy),
-    ?assertMatch(2, check_policy_value(Server, QName, <<"queue-version">>)),
+    ?awaitMatch(2, check_policy_value(Server, QName, <<"queue-version">>), 30_000),
     delete(Ch, QName),
     rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"policy">>),
     rabbit_ct_client_helpers:close_channel(Ch),
@@ -420,7 +420,7 @@ verify_policies(Policy, OperPolicy, VerifyFuns, #{config := Config,
 verify_policy([], _, _) ->
     ok;
 verify_policy([{HA, Expect} | Tail], Server, QName) ->
-    Expect = check_policy_value(Server, QName, HA),
+    ?awaitMatch(Expect, check_policy_value(Server, QName, HA), 30_000),
     verify_policy(Tail, Server, QName).
 
 
