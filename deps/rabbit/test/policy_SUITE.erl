@@ -471,7 +471,7 @@ verify_policies(Policy, OperPolicy, VerifyFuns, #{config := Config,
 verify_policy([], _, _) ->
     ok;
 verify_policy([{HA, Expect} | Tail], Server, QName) ->
-    Expect = check_policy_value(Server, QName, HA),
+    ?awaitMatch(Expect, check_policy_value(Server, QName, HA), 30_000),
     verify_policy(Tail, Server, QName).
 
 
