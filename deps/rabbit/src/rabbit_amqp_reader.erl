@@ -923,10 +923,7 @@ set_credential0(Cred,
                     maps:foreach(fun(_ChanNum, Pid) ->
                                          rabbit_amqp_session:reset_authz(Pid, User)
                                  end, Chans),
-                    case OldTimer of
-                        undefined -> ok;
-                        Ref -> ok = erlang:cancel_timer(Ref, [{info, false}])
-                    end,
+                    cancel_credential_expiry_timer(OldTimer),
                     NewTimer = maybe_start_credential_expiry_timer(User),
                     State#v1{connection = Conn#v1_connection{
                                             user = User,
@@ -960,6 +957,13 @@ maybe_start_credential_expiry_timer(User) ->
                     protocol_error(?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS,
                                    "credential expired ~b ms ago", [abs(Time)])
             end
+    end.
+
+cancel_credential_expiry_timer(undefined) -> ok;
+cancel_credential_expiry_timer(Ref) ->
+    _ = erlang:cancel_timer(Ref),
+    receive credential_expired -> ok
+    after 0 -> ok
     end.
 
 %% We don't trust the client at this point - force them to wait

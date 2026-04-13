@@ -691,8 +691,7 @@ handle_other(credential_expired,
     Now = os:system_time(second),
     case rabbit_access_control:expiry_timestamp(User) of
         Ts when is_integer(Ts), Ts > Now ->
-            %% The timer was capped at the maximum interval and fired
-            %% before the credential actually expired. Restart it.
+            %% Clock skew: the timer fired but the credential has not expired yet.
             maybe_start_credential_expiry_timer(User, State);
         never ->
             %% Credential no longer expires. This can happen if the auth

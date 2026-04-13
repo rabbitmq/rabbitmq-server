@@ -963,8 +963,7 @@ open(info, token_expired, #statem_data{connection = Connection} = StatemData) ->
     Now = os:system_time(second),
     case rabbit_access_control:expiry_timestamp(User) of
         Ts when is_integer(Ts), Ts > Now ->
-            %% The timer was capped at the maximum interval and fired before
-            %% the credential actually expired. Restart it.
+            %% The credential was renewed since the timer was started. Restart it.
             {_, Connection1} = ensure_token_expiry_timer(User, Connection),
             {keep_state, StatemData#statem_data{connection = Connection1}};
         never ->
