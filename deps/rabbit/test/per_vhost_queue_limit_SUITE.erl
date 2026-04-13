@@ -49,12 +49,12 @@ cluster_size_1_tests() ->
 cluster_size_2_tests() ->
     [
      most_basic_cluster_queue_count,
+     cluster_node_restart_queue_count, %% Must before `cluster_multiple_vhosts_zero_limit_with_durable_named_queue`.
      cluster_multiple_vhosts_queue_count,
      cluster_multiple_vhosts_limit,
      cluster_multiple_vhosts_zero_limit,
      cluster_multiple_vhosts_limit_with_durable_named_queue,
-     cluster_multiple_vhosts_zero_limit_with_durable_named_queue,
-     cluster_node_restart_queue_count
+     cluster_multiple_vhosts_zero_limit_with_durable_named_queue
     ].
 
 suite() ->
@@ -406,6 +406,7 @@ cluster_node_restart_queue_count(Config) ->
     ?awaitMatch(10, count_queues_in(Config, VHost, 0), ?AWAIT_TIMEOUT),
     ?awaitMatch(10, count_queues_in(Config, VHost, 1), ?AWAIT_TIMEOUT),
 
+    ct:pal("Restart RabbitMQ node 0"),
     rabbit_ct_broker_helpers:restart_broker(Config, 0),
     ?awaitMatch(0, count_queues_in(Config, VHost, 0), ?AWAIT_TIMEOUT),
 
@@ -419,6 +420,7 @@ cluster_node_restart_queue_count(Config) ->
     ?awaitMatch(25, count_queues_in(Config, VHost, 0), ?AWAIT_TIMEOUT),
     ?awaitMatch(25, count_queues_in(Config, VHost, 1), ?AWAIT_TIMEOUT),
 
+    ct:pal("Restart RabbitMQ node 1"),
     rabbit_ct_broker_helpers:restart_broker(Config, 1),
 
     ?awaitMatch(10, count_queues_in(Config, VHost, 0), ?AWAIT_TIMEOUT),
