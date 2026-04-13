@@ -22,7 +22,8 @@ groups() ->
      {non_parallel_tests, [], [
                                federation_links,
                                federation_down_links,
-                               restart_link
+                               restart_link,
+                               restart_link_requires_policymaker
                               ]}
     ].
 
@@ -141,6 +142,38 @@ restart_link(Config) ->
         http_delete(Config, "/users/myuser"),
         rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"fed">>),
         set_policy(Config)
+    end.
+
+restart_link_requires_policymaker(Config) ->
+    try
+        http_put(Config, "/users/mon",
+                 [{password, <<"mon">>}, {tags, <<"monitoring">>}],
+                 [?CREATED, ?NO_CONTENT]),
+        http_put(Config, "/users/policy",
+                 [{password, <<"policy">>}, {tags, <<"policymaker">>}],
+                 [?CREATED, ?NO_CONTENT]),
+        http_put(Config, "/permissions/%2F/mon",
+                 [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>},
+                  {vhost, <<"/">>}, {username, <<"mon">>}],
+                 [?CREATED, ?NO_CONTENT]),
+        http_put(Config, "/permissions/%2F/policy",
+                 [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>},
+                  {vhost, <<"/">>}, {username, <<"policy">>}],
+                 [?CREATED, ?NO_CONTENT]),
+
+        wait_until(fun() ->
+                           [] =/= http_get(Config, "/federation-links/state/down")
+                   end),
+
+        [Link | _] = http_get(Config, "/federation-links/state/down"),
+        RestartUri = restart_uri(Link),
+        %% A monitoring user should not be able to restart a federation link
+        http_delete(Config, RestartUri, "mon", "mon", ?NOT_AUTHORISED),
+        %% A policymaker user should be able to restart a federation link
+        http_delete(Config, RestartUri, "policy", "policy", ?NO_CONTENT)
+    after
+        http_delete(Config, "/users/mon"),
+        http_delete(Config, "/users/policy")
     end.
 
 %% -------------------------------------------------------------------

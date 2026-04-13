@@ -12,7 +12,7 @@
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("rabbitmq_ct_helpers/include/rabbit_mgmt_test.hrl").
 
--import(rabbit_mgmt_test_util, [http_get/3, http_get/5, http_put/4, http_post/4, http_delete/3, http_delete/4, http_get_fails/2]).
+-import(rabbit_mgmt_test_util, [http_get/3, http_get/5, http_put/4, http_post/4, http_delete/3, http_delete/4, http_delete/5, http_get_fails/2]).
 -import(rabbit_ct_helpers, [await_condition/2]).
 
 -compile(export_all).
@@ -21,7 +21,8 @@ all() ->
     [
      {group, dynamic_shovels},
      {group, static_shovels},
-     {group, plugin_management}
+     {group, plugin_management},
+     {group, authorization}
     ].
 
 groups() ->
@@ -43,6 +44,10 @@ groups() ->
 
     {plugin_management, [], [
                     dynamic_plugin_enable_disable
+                  ]},
+
+    {authorization, [], [
+                    delete_shovel_requires_policymaker
                   ]}
     ].
 
@@ -59,7 +64,8 @@ init_per_group(static_shovels, Config) ->
             "writer,send_failed,closed",
             "source_queue_down",
             "dest_queue_down",
-            "dependent process"
+            "dependent process",
+            "inbound_link_detached"
           ]}
     ]),
     rabbit_ct_helpers:run_setup_steps(Config1, [
@@ -76,7 +82,8 @@ init_per_group(_Group, Config) ->
             "writer,send_failed,closed",
             "source_queue_down",
             "dest_queue_down",
-            "dependent process"
+            "dependent process",
+            "inbound_link_detached"
           ]}
       ]),
     rabbit_ct_helpers:run_setup_steps(Config1, [
@@ -355,6 +362,37 @@ create_and_delete_a_dynamic_shovel_that_fails_to_connect(Config) ->
     timer:sleep(3_000),
     delete_shovel(Config, Name),
     await_shovel_removed(Config, ID).
+
+delete_shovel_requires_policymaker(Config) ->
+    remove_all_dynamic_shovels(Config, <<"/">>),
+    Name = <<"auth-test-shovel">>,
+    ID = {<<"/">>, Name},
+    await_shovel_removed(Config, ID),
+    try
+        http_put(Config, "/users/mon",
+                 #{password => <<"mon">>, tags => <<"monitoring">>},
+                 {group, '2xx'}),
+        http_put(Config, "/users/policy",
+                 #{password => <<"policy">>, tags => <<"policymaker">>},
+                 {group, '2xx'}),
+        Perms = #{configure => <<".*">>, write => <<".*">>, read => <<".*">>},
+        http_put(Config, "/permissions/%2F/mon", Perms, {group, '2xx'}),
+        http_put(Config, "/permissions/%2F/policy", Perms, {group, '2xx'}),
+
+        declare_shovel(Config, Name),
+        await_shovel_startup(Config, ID),
+
+        ShovelPath = "/shovels/vhost/%2F/auth-test-shovel",
+        %% A monitoring user should not be able to delete a shovel
+        http_delete(Config, ShovelPath, "mon", "mon", ?NOT_AUTHORISED),
+        %% A policymaker user should be able to delete a shovel
+        http_delete(Config, ShovelPath, "policy", "policy", ?NO_CONTENT),
+        await_shovel_removed(Config, ID)
+    after
+        catch http_delete(Config, "/users/mon", ?NO_CONTENT),
+        catch http_delete(Config, "/users/policy", ?NO_CONTENT),
+        remove_all_dynamic_shovels(Config, <<"/">>)
+    end.
 
 dynamic_plugin_enable_disable(Config) ->
     http_get(Config, "/shovels", ?OK),
