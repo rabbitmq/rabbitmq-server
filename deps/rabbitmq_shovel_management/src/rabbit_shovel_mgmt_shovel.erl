@@ -76,7 +76,12 @@ to_json(ReqData, Context) ->
         ReqData, Context).
 
 is_authorized(ReqData, Context) ->
-    rabbit_mgmt_util:is_authorized_monitor(ReqData, Context).
+    case cowboy_req:method(ReqData) of
+        <<"DELETE">> ->
+            rabbit_mgmt_util:is_authorized_policies(ReqData, Context);
+        _ ->
+            rabbit_mgmt_util:is_authorized_monitor(ReqData, Context)
+    end.
 
 delete_resource(ReqData, #context{user = #user{username = Username}}=Context) ->
     VHost = rabbit_mgmt_util:id(vhost, ReqData),
