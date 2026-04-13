@@ -81,7 +81,6 @@ v1_tls(Config) ->
     [ok = ssl:send(SslSocket, amqp_1_0_frame(FrameType))
      || FrameType <- [header_sasl, sasl_init, header_amqp, open]],
     {ok, _Packet} = ssl:recv(SslSocket, 0, ?TIMEOUT),
-    timer:sleep(1000),
     ConnectionName = rpc(Config, ?MODULE, connection_name, []),
     match = re:run(ConnectionName, <<"^192.168.1.1:80 -> 192.168.1.2:82$">>, [{capture, none}]),
     ok = gen_tcp:close(Socket).
