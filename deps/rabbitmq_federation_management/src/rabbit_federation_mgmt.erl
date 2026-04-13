@@ -62,7 +62,12 @@ is_authorized(ReqData, {Filter, Context}) ->
     {Res, RD, C} = rabbit_mgmt_util:is_authorized_monitor(ReqData, Context),
     {Res, RD, {Filter, C}};
 is_authorized(ReqData, Context) ->
-    rabbit_mgmt_util:is_authorized_monitor(ReqData, Context).
+    case cowboy_req:method(ReqData) of
+        <<"DELETE">> ->
+            rabbit_mgmt_util:is_authorized_policies(ReqData, Context);
+        _ ->
+            rabbit_mgmt_util:is_authorized_monitor(ReqData, Context)
+    end.
 
 delete_resource(ReqData, Context) ->
     Reply = case rabbit_mgmt_util:id(id, ReqData) of
