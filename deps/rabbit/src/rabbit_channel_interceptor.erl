@@ -9,7 +9,7 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--export([init/1, intercept_in/3]).
+-export([init/1, intercept_in/3, list/0]).
 
 -behaviour(rabbit_registry_class).
 
@@ -36,6 +36,10 @@ added_to_rabbit_registry(_Type, _ModuleName) ->
     rabbit_channel:refresh_interceptors().
 removed_from_rabbit_registry(_Type) ->
     rabbit_channel:refresh_interceptors().
+
+list() ->
+    Mods = [M || {_, M} <- rabbit_registry:lookup_all(channel_interceptor)],
+    [[{name, Mod}, {applies_to, Mod:applies_to()}, {priority, priority(Mod)}] || Mod <- Mods].
 
 init(Ch) ->
     Mods = [M || {_, M} <- rabbit_registry:lookup_all(channel_interceptor)],
