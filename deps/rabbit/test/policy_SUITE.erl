@@ -227,6 +227,7 @@ classic_queue_version_policies(Config) ->
     {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     QName = <<"policy_queue_version">>,
     declare(Ch, QName),
+<<<<<<< HEAD
     QueueVersionOnePolicy = [{<<"queue-version">>, 1}],
     QueueVersionTwoPolicy = [{<<"queue-version">>, 2}],
 
@@ -238,6 +239,13 @@ classic_queue_version_policies(Config) ->
     verify_policies(QueueVersionOnePolicy, QueueVersionTwoPolicy, QueueVersionTwoPolicy, Opts),
     verify_policies(QueueVersionTwoPolicy, QueueVersionOnePolicy, QueueVersionOnePolicy, Opts),
 
+=======
+    Policy = [{<<"queue-version">>, 2}],
+    rabbit_ct_broker_helpers:set_policy(Config, 0, <<"policy">>,
+                                        QName, <<"queues">>,
+                                        Policy),
+    ?awaitMatch(2, check_policy_value(Server, QName, <<"queue-version">>), 30_000),
+>>>>>>> a51b5dfc20 (Test flakes: adopt `?awaitMatch/3` in two more places)
     delete(Ch, QName),
     rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"policy">>),
     rabbit_ct_broker_helpers:clear_operator_policy(Config, 0, <<"op_policy">>),
@@ -471,7 +479,7 @@ verify_policies(Policy, OperPolicy, VerifyFuns, #{config := Config,
 verify_policy([], _, _) ->
     ok;
 verify_policy([{HA, Expect} | Tail], Server, QName) ->
-    Expect = check_policy_value(Server, QName, HA),
+    ?awaitMatch(Expect, check_policy_value(Server, QName, HA), 30_000),
     verify_policy(Tail, Server, QName).
 
 
