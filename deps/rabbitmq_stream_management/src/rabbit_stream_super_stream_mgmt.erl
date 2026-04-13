@@ -68,7 +68,14 @@ accept_content(ReqData0, #context{user = #user{username = ActingUser}} = Context
               case validate_partitions_or_binding_keys(PartitionsBin, BindingKeysStr, ReqData, Context) of
                   ok ->
                       Arguments = maps:get(arguments, BodyMap, #{}),
-                      Node = get_node(BodyMap),
+                      case get_node(BodyMap) of
+                      {error, not_member} ->
+                          N = maps:get(<<"node">>, BodyMap, <<>>),
+                          Msg = list_to_binary(
+                                  io_lib:format(
+                                    "Node ~ts is not a cluster member", [N])),
+                          rabbit_mgmt_util:bad_request(Msg, ReqData, Context);
+                      {ok, Node} ->
                       case PartitionsBin of
                           undefined ->
                               BindingKeys = binding_keys(BindingKeysStr),
@@ -87,6 +94,7 @@ accept_content(ReqData0, #context{user = #user{username = ActingUser}} = Context
                                   Error ->
                                       Error
                               end
+                      end
                       end;
                   Error ->
                       Error
@@ -96,9 +104,8 @@ accept_content(ReqData0, #context{user = #user{username = ActingUser}} = Context
 %%-------------------------------------------------------------------
 get_node(Props) ->
     case maps:get(<<"node">>, Props, undefined) of
-        undefined -> node();
-        N         -> rabbit_nodes:make(
-                       binary_to_list(N))
+        undefined -> {ok, node()};
+        N         -> rabbit_nodes:resolve_member(binary_to_list(N))
     end.
 
 binding_keys(BindingKeysStr) ->
