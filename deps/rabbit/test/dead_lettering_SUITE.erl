@@ -247,6 +247,7 @@ dead_letter_nack(Config) ->
     %% Queue is empty
     consume_empty(Ch, QName),
     %% Consume the first two messages from the dead letter queue
+    wait_for_messages(Config, [[DLXQName, <<"3">>, <<"2">>, <<"1">>]]),
     consume(Ch, DLXQName, [P1, P2]),
     consume_empty(Ch, DLXQName),
     ?assertEqual(3, counted(messages_dead_lettered_rejected_total, Config)).
@@ -1058,6 +1059,7 @@ dead_letter_policy(Config) ->
     wait_for_messages(Config, [[QName, <<"0">>, <<"0">>, <<"0">>]]),
     consume_empty(Ch, QName),
     %% Consume the message from the dead letter queue
+    wait_for_messages(Config, [[DLXQName, <<"1">>, <<"1">>, <<"0">>]]),
     consume(Ch, DLXQName, [P2]),
     consume_empty(Ch, DLXQName).
 
