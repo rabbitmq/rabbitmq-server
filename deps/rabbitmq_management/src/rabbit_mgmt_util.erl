@@ -879,9 +879,8 @@ get_or_missing(K, L) ->
 
 get_node(Props) ->
     case maps:get(<<"node">>, Props, undefined) of
-        undefined -> node();
-        N         -> rabbit_nodes:make(
-                       binary_to_list(N))
+        undefined -> {ok, node()};
+        N         -> rabbit_nodes:resolve_member(binary_to_list(N))
     end.
 
 direct_request(MethodName, Transformers, Extra, ErrorMsg, ReqData,
@@ -889,7 +888,13 @@ direct_request(MethodName, Transformers, Extra, ErrorMsg, ReqData,
     with_vhost_and_props(
       fun(VHost, Props, ReqData1) ->
               Method = props_to_method(MethodName, Props, Transformers, Extra),
-              Node = get_node(Props),
+              case get_node(Props) of
+              {error, not_member} ->
+                  N = maps:get(<<"node">>, Props, <<>>),
+                  Msg = io_lib:format("Node ~ts is not a cluster member", [N]),
+                  ?LOG_WARNING(ErrorMsg, [Msg]),
+                  bad_request(list_to_binary(Msg), ReqData1, Context);
+              {ok, Node} ->
               case rabbit_misc:rpc_call(Node, rabbit_channel, handle_method,
                                         [Method, none, #{}, none,
                                          VHost, User]) of
@@ -918,6 +923,7 @@ direct_request(MethodName, Transformers, Extra, ErrorMsg, ReqData,
                                         [Node, Reason])),
                         ReqData1, Context);
                   _      -> {true, ReqData1, Context}
+              end
               end
       end, ReqData, Context).
 
