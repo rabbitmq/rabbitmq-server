@@ -715,10 +715,6 @@ terminate(Explanation, State) when ?IS_RUNNING(State) ->
 terminate(_Explanation, State) ->
     {force, State}.
 
-<<<<<<< HEAD
-send_blocked(#v1{connection = #connection{protocol     = Protocol,
-                                          capabilities = Capabilities},
-=======
 maybe_start_credential_expiry_timer(User,
                                     State = #v1{credential_expiry_timer = OldTimer}) ->
     cancel_credential_expiry_timer(OldTimer),
@@ -736,8 +732,8 @@ cancel_credential_expiry_timer(Ref) ->
     _ = erlang:cancel_timer(Ref),
     ok.
 
-send_blocked(#v1{connection = #connection{capabilities = Capabilities},
->>>>>>> 48c2397dab (AMQP 0-9-1: clear permissions cache and re-check when secret changes)
+send_blocked(#v1{connection = #connection{protocol     = Protocol,
+                                          capabilities = Capabilities},
                  sock       = Sock}, Reason) ->
     case rabbit_misc:table_lookup(Capabilities, <<"connection.blocked">>) of
         {bool, true} ->

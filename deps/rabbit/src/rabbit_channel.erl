@@ -1798,8 +1798,6 @@ cancel_consumer(CTag, QName,
                                            {queue,        QName}]),
     State#ch{consumer_mapping = maps:remove(CTag, CMap)}.
 
-<<<<<<< HEAD
-=======
 server_consumer_cancel_supported(#ch{cfg = #conf{capabilities = Capabilities}}) ->
     {bool, true} == rabbit_misc:table_lookup(Capabilities,
                                              <<"consumer_cancel_notify">>).
@@ -1869,7 +1867,6 @@ cancel_consumer_recheck(CTag, Q,
              queue_consumers = QCons1,
              queue_states = QStates1}.
 
->>>>>>> 48c2397dab (AMQP 0-9-1: clear permissions cache and re-check when secret changes)
 binding_action_with_checks(
   Action, SourceNameBin0, DestinationType, DestinationNameBin0,
   RoutingKey, Arguments, VHostPath, ConnPid, AuthzContext,
