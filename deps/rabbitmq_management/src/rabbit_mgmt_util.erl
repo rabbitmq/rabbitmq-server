@@ -514,7 +514,7 @@ match_value({_, Value}, ValueTag, UseRegex) when UseRegex =:= "true" ->
                                   {match_limit, 50_000},
                                   {match_limit_recursion, 50_000}]) of
         {match, _} -> true;
-        match_limit -> false;
+        {error, _} -> false;
         nomatch -> false
     end;
 match_value({_, Value}, ValueTag, _) ->
