@@ -2325,9 +2325,15 @@ get_header(Key, Header)
 annotate_msg(Header, Msg0) ->
     case mc:is(Msg0) of
         true when is_map(Header) ->
-            Msg = maps:fold(fun (K, V, Acc) ->
-                                    mc:set_annotation(K, V, Acc)
-                            end, Msg0, maps:get(anns, Header, #{})),
+            Msg1 = maps:fold(fun (K, V, Acc) ->
+                                     mc:set_annotation(K, V, Acc)
+                             end, Msg0, maps:get(anns, Header, #{})),
+            Msg = case Header of
+                      #{acquired_count := AcqCount} ->
+                          mc:set_annotation(acquired_count, AcqCount, Msg1);
+                      _ ->
+                          Msg1
+                  end,
             case Header of
                 #{delivery_count := DelCount} ->
                     mc:set_annotation(delivery_count, DelCount, Msg);
