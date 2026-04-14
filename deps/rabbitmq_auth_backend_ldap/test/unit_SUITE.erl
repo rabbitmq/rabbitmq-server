@@ -19,6 +19,7 @@ all() ->
      ad_fill,
      rfc4514_escape_value,
      rfc4514_fill_dn,
+<<<<<<< HEAD
      dn_lookup_fallback_dn_escaping,
      user_dn_pattern_escaping_rmq_4282,
      user_bind_pattern_escaping_rmq_4282,
@@ -27,6 +28,8 @@ all() ->
      ad_variable_pattern_escaping_rmq_4282,
      bare_username_pattern_gh_17271,
      non_dn_pattern_no_escaping,
+=======
+>>>>>>> 9a3c55a (LDAP: handle DN template values per RFC 4514)
      user_dn_pattern_gh_7161,
      format_different_types_of_ldap_attribute_values,
      ldap_log_domain_routing,
@@ -56,7 +59,11 @@ rfc4514_escape_value(_Config) ->
     E("", ""),
     E(<<"binary">>, <<"binary">>),
     E(atom, "atom"),
+<<<<<<< HEAD
     %% Comma escaping
+=======
+    %% Comma — the primary injection vector
+>>>>>>> 9a3c55a (LDAP: handle DN template values per RFC 4514)
     E("user,ou=Evil", "user\\,ou=Evil"),
     %% All special characters
     E("a+b", "a\\+b"),
@@ -76,7 +83,11 @@ rfc4514_escape_value(_Config) ->
     E("a b", "a b"),
     %% Multiple specials
     E("a,b+c", "a\\,b\\+c"),
+<<<<<<< HEAD
     %% Backslash followed by comma
+=======
+    %% Backslash + comma (escape-the-escape attack)
+>>>>>>> 9a3c55a (LDAP: handle DN template values per RFC 4514)
     E("a\\,b", "a\\\\\\,b"),
     %% NUL byte
     E([0], [$\\, 0]),
@@ -92,7 +103,11 @@ rfc4514_fill_dn(_Config) ->
     F = fun(Fmt, Args, Res) ->
                 ?assertEqual(Res, rabbit_ldap_rfc4514:fill_dn(Fmt, Args))
         end,
+<<<<<<< HEAD
     %% A comma in the substituted value is escaped
+=======
+    %% DN injection prevented
+>>>>>>> 9a3c55a (LDAP: handle DN template values per RFC 4514)
     F("cn=${username},ou=People", [{username, "user,ou=Evil"}],
       "cn=user\\,ou=Evil,ou=People"),
     %% user_dn is NOT escaped (it is already a complete DN)
@@ -105,6 +120,7 @@ rfc4514_fill_dn(_Config) ->
       "cn=x\\,y,dc=b"),
     ok.
 
+<<<<<<< HEAD
 dn_lookup_fallback_dn_escaping(_Config) ->
     PrevPattern = application:get_env(rabbitmq_auth_backend_ldap, user_dn_pattern),
     PrevLog = application:get_env(rabbitmq_auth_backend_ldap, log),
@@ -349,6 +365,8 @@ ad_variable_pattern_escaping_rmq_4282(_Config) ->
 restore_env(Key, {ok, V}) -> application:set_env(rabbitmq_auth_backend_ldap, Key, V);
 restore_env(Key, undefined) -> application:unset_env(rabbitmq_auth_backend_ldap, Key).
 
+=======
+>>>>>>> 9a3c55a (LDAP: handle DN template values per RFC 4514)
 ad_fill(_Config) ->
     F = fun(Fmt, Args, Res) ->
                 ?assertEqual(Res, rabbit_auth_backend_ldap_util:fill(Fmt, Args))
