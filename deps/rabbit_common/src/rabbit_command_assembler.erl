@@ -33,7 +33,7 @@
 -type state() ::
         'method' |
         {'content_header', method(), class_id()} |
-        {'content_body',   method(), body_size(), class_id()}.
+        {'content_body',   method(), body_size(), content()}.
 
 -spec analyze_frame(frame_type(), binary()) ->
           frame() | 'heartbeat' | 'error'.
@@ -81,9 +81,17 @@ process({content_header, ClassId, 0, 0, PropertiesBin},
     Content = empty_content(ClassId, PropertiesBin),
     {ok, Method, Content, method};
 process({content_header, ClassId, 0, BodySize, PropertiesBin},
-        {content_header, Method, ClassId}) ->
+        {content_header, Method, ClassId})
+  when BodySize =< ?MAX_MSG_SIZE ->
     Content = empty_content(ClassId, PropertiesBin),
     {ok, {content_body, Method, BodySize, Content}};
+process({content_header, ClassId, 0, BodySize, _PropertiesBin},
+        {content_header, Method, ClassId}) when BodySize > ?MAX_MSG_SIZE ->
+    {error, rabbit_misc:amqp_error(
+              frame_error,
+              "content body size ~B exceeds maximum allowed size ~B",
+              [BodySize, ?MAX_MSG_SIZE],
+              rabbit_misc:method_record_type(Method))};
 process({content_header, HeaderClassId, 0, _BodySize, _PropertiesBin},
         {content_header, Method, ClassId}) ->
     unexpected_frame("expected content header for class ~w, "
@@ -94,13 +102,21 @@ process(_Frame, {content_header, Method, ClassId}) ->
                      "got non content header frame instead", [ClassId], Method);
 process({content_body, FragmentBin},
         {content_body, Method, RemainingSize,
-         Content = #content{payload_fragments_rev = Fragments}}) ->
+         Content = #content{payload_fragments_rev = Fragments}})
+  when byte_size(FragmentBin) =< RemainingSize ->
     NewContent = Content#content{
                    payload_fragments_rev = [FragmentBin | Fragments]},
-    case RemainingSize - size(FragmentBin) of
+    case RemainingSize - byte_size(FragmentBin) of
         0  -> {ok, Method, NewContent, method};
         Sz -> {ok, {content_body, Method, Sz, NewContent}}
     end;
+process({content_body, _FragmentBin},
+        {content_body, Method, _RemainingSize, _Content}) ->
+    {error, rabbit_misc:amqp_error(
+              frame_error,
+              "content body frame exceeds remaining content size",
+              [],
+              rabbit_misc:method_record_type(Method))};
 process(_Frame, {content_body, Method, _RemainingSize, _Content}) ->
     unexpected_frame("expected content body, "
                      "got non content body frame instead", [], Method).
