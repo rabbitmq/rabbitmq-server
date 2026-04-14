@@ -21,6 +21,7 @@ all_tests() ->
     [
      roundtrip,
      array_with_extra_input,
+     array32_count_exceeds_data,
      unsupported_type,
      peek_described_section_total_sizes,
      peek_described_section,
@@ -83,6 +84,24 @@ array_with_extra_input(_Config) ->
                 65, <<105,45,70,73,5,101,110,45,85,83>>, [true,true]},
 
     ?assertExit(Expected, amqp10_binary_parser:parse_many(Bin, [])).
+
+array32_count_exceeds_data(_Config) ->
+    Count = 16#FFFFFFFF,
+    Type = 16#45,
+    ArrayPayload = <<Count:32, Type>>,
+    Size = byte_size(ArrayPayload),
+    Bin = <<16#f0, Size:32, ArrayPayload/binary>>,
+    ?assertExit(
+       {failed_to_parse_array_count_exceeds_input, Type, Count, 0},
+       amqp10_binary_parser:parse(Bin)),
+    %% Also verify smaller mismatches are caught: 10 elements but only 3 data bytes
+    SmallType = 16#50,
+    SmallPayload = <<10:32, SmallType, 1, 2, 3>>,
+    SmallSize = byte_size(SmallPayload),
+    SmallBin = <<16#f0, SmallSize:32, SmallPayload/binary>>,
+    ?assertExit(
+       {failed_to_parse_array_count_exceeds_input, SmallType, 10, 3},
+       amqp10_binary_parser:parse(SmallBin)).
 
 unsupported_type(_Config) ->
     UnsupportedType = 16#02,
