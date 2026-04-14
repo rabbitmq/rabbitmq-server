@@ -15,7 +15,7 @@
          is_running/2, is_process_running/2,
          cluster_name/0, set_cluster_name/1, set_cluster_name/2, ensure_epmd/0,
          all_running/0,
-         is_member/1, list_members/0, list_consistent_members/0,
+         is_member/1, resolve_member/1, list_members/0, list_consistent_members/0,
          filter_members/1,
          is_reachable/1, list_reachable/0, list_unreachable/0,
          filter_reachable/1, filter_unreachable/1,
@@ -173,6 +173,22 @@ all_running() -> list_running().
 
 is_member(Node) when is_atom(Node) ->
     [Node] =:= filter_members([Node]).
+
+-spec resolve_member(string()) -> {ok, node()} | {error, not_member}.
+%% @doc Resolves a node name string to a cluster member atom.
+%%
+%% Accepts both short names (`"rabbit"') and full names
+%% (`"rabbit@hostname"').
+
+resolve_member(NodeStr) when is_list(NodeStr) ->
+    {Prefix, Suffix} = rabbit_nodes_common:parts(NodeStr),
+    FullName = lists:append([Prefix, "@", Suffix]),
+    FullNameBin = list_to_binary(FullName),
+    Members = list_members(),
+    case [M || M <- Members, atom_to_binary(M, utf8) =:= FullNameBin] of
+        [Member] -> {ok, Member};
+        _        -> {error, not_member}
+    end.
 
 -spec list_members() -> Nodes when
       Nodes :: [node()].
