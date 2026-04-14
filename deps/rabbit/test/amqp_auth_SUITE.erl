@@ -96,7 +96,12 @@ groups() ->
        bind_to_topic_exchange,
        unbind_queue_source,
        unbind_queue_target,
-       unbind_from_topic_exchange
+       unbind_from_topic_exchange,
+
+       %% Passive topology operations
+       passive_queue_declare,
+       passive_exchange_declare,
+       get_queue
       ]
      }
     ].
@@ -1150,6 +1155,75 @@ unbind_from_topic_exchange(Config) ->
 
     ok = close_connection_sync(Conn).
 
+passive_queue_declare(Config) ->
+    QName = <<"🍿"/utf8>>,
+    ok = set_permissions(Config, QName, <<>>, <<>>),
+    {Conn1, Session1, LinkPair1} = init_pair(Config),
+    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair1, QName, #{}),
+    ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair1),
+    ok = amqp10_client:end_session(Session1),
+    ok = close_connection_sync(Conn1),
+
+    %% missing configure permission to queue
+    ok = set_permissions(Config, <<>>, <<>>, <<>>),
+
+    {Conn091, Ch1} = open_amqpl_channel(Config),
+    monitor(process, Ch1),
+    _ = (catch amqp_channel:call(Ch1, #'queue.declare'{queue = QName, passive = true})),
+    assert_channel_down(Ch1),
+
+    ok = set_permissions(Config, QName, <<>>, <<>>),
+
+    {ok, Ch2} = amqp_connection:open_channel(Conn091),
+    #'queue.declare_ok'{queue = QName} =
+        amqp_channel:call(Ch2, #'queue.declare'{queue = QName, passive = true}),
+    ok = amqp_connection:close(Conn091).
+
+passive_exchange_declare(Config) ->
+    XName = <<"amq.direct">>,
+
+    %% missing configure permission to exchange
+    ok = set_permissions(Config, <<>>, <<>>, <<>>),
+
+    {Conn091, Ch1} = open_amqpl_channel(Config),
+    monitor(process, Ch1),
+    _ = (catch amqp_channel:call(Ch1, #'exchange.declare'{exchange = XName, passive = true})),
+    assert_channel_down(Ch1),
+
+    ok = set_permissions(Config, XName, <<>>, <<>>),
+
+    {ok, Ch2} = amqp_connection:open_channel(Conn091),
+    #'exchange.declare_ok'{} =
+        amqp_channel:call(Ch2, #'exchange.declare'{exchange = XName, passive = true}),
+    ok = amqp_connection:close(Conn091).
+
+get_queue(Config) ->
+    QName = <<"🍿"/utf8>>,
+    ok = set_permissions(Config, QName, <<>>, <<>>),
+    {Conn1, Session1, LinkPair1} = init_pair(Config),
+    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair1, QName, #{}),
+    ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair1),
+    ok = amqp10_client:end_session(Session1),
+    ok = close_connection_sync(Conn1),
+
+    %% missing configure permission to queue
+    ok = set_permissions(Config, <<>>, <<>>, <<>>),
+
+    %% Start a new connection since permissions are cached by the AMQP session process.
+    {Conn2, _, LinkPair2} = init_pair(Config),
+    ExpectedErr = error_unauthorized(
+                    <<"configure access to queue '", QName/binary,
+                      "' in vhost 'test vhost' refused for user 'test user'">>),
+    ?assertEqual({error, {session_ended, ExpectedErr}},
+                 rabbitmq_amqp_client:get_queue(LinkPair2, QName)),
+    ok = close_connection_sync(Conn2),
+
+    ok = set_permissions(Config, QName, <<>>, <<>>),
+
+    {Conn3, _, LinkPair3} = init_pair(Config),
+    {ok, #{}} = rabbitmq_amqp_client:get_queue(LinkPair3, QName),
+    ok = close_connection_sync(Conn3).
+
 init_pair(Config) ->
     OpnConf = connection_config(Config),
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
@@ -1213,3 +1287,18 @@ delete_all_queues(Config) ->
     Qs = rpc(Config, rabbit_amqqueue, list, []),
     [{ok, _QLen} = rpc(Config, rabbit_amqqueue, delete, [Q, false, false, <<"fake-user">>])
      || Q <- Qs].
+
+open_amqpl_channel(Config) ->
+    User = ?config(test_user, Config),
+    Vhost = ?config(test_vhost, Config),
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0, Vhost, User, User),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    {Conn, Ch}.
+
+assert_channel_down(Ch) ->
+    receive {'DOWN', _, process, Ch,
+             {shutdown, {server_initiated_close, 403, _}}} ->
+                ok
+    after ?TIMEOUT ->
+              ct:fail(did_not_receive_access_refused)
+    end.
