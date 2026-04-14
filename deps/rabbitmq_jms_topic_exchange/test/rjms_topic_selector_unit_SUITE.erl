@@ -34,7 +34,9 @@ groups() ->
                                     description_test,
                                     serialise_events_test,
                                     validate_test,
-                                    validate_binding_test
+                                    validate_binding_test,
+                                    validate_binding_rejects_unknown_atoms_test,
+                                    validate_binding_no_selector_test
                                    ]}
     ].
 
@@ -75,6 +77,19 @@ validate_test(_Config) ->
 
 validate_binding_test(_Config) ->
   ?assertEqual(ok, validate_binding(dummy_exchange(), dummy_binding())).
+
+validate_binding_rejects_unknown_atoms_test(_Config) ->
+  B = #binding{ key = <<"BindingKey">>
+              , destination = #resource{name = <<"DName">>}
+              , args = [{?RJMS_COMPILED_SELECTOR_ARG, longstr, <<"{xq7fkd9_3jrvm, 42}.">>}]},
+  ?assertMatch({error, {binding_invalid, _, _}},
+               validate_binding(dummy_exchange(), B)).
+
+validate_binding_no_selector_test(_Config) ->
+  B = #binding{ key = <<"BindingKey">>
+              , destination = #resource{name = <<"DName">>}
+              , args = []},
+  ?assertEqual(ok, validate_binding(dummy_exchange(), B)).
 
 dummy_exchange() ->
   #exchange{name = <<"XName">>, arguments = []}.
