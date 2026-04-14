@@ -1476,7 +1476,7 @@ discarded_message_with_dead_letter_handler_emits_log_effect_test(Config) ->
                                             Effects2),
     [{mod_call, somemod, somefun, [somearg, rejected, [McOut]]}] = Fun([Msg1]),
 
-    ?assertEqual(undefined, mc:get_annotation(acquired_count, McOut)),
+    ?assertEqual(1, mc:get_annotation(acquired_count, McOut)),
     ?assertEqual(1, mc:get_annotation(delivery_count, McOut)),
     ok.
 
