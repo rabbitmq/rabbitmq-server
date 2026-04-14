@@ -117,7 +117,10 @@ init(Req0, Opts) ->
                     end
             end,
             WsOpts0 = proplists:get_value(ws_opts, Opts, #{}),
-            WsOpts  = maps:merge(#{compress => true}, WsOpts0),
+            MaxFrameSize = application:get_env(
+                rabbitmq_stomp, max_frame_size, ?DEFAULT_MAX_FRAME_SIZE) + 4096,
+            WsOpts = maps:merge(#{compress => true,
+                                   max_frame_size => MaxFrameSize}, WsOpts0),
             {?MODULE, Req, #state{
                 frame_type         = proplists:get_value(type, Opts, text),
                 heartbeat_sup      = KeepaliveSup,
