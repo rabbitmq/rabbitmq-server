@@ -136,6 +136,9 @@ parse_array1(Count, <<?DESCRIBED, Rest/binary>>) ->
                        end, List),
     % this format cannot represent an empty array of described types
     {array, {described, Descriptor, Type}, Values};
+parse_array1(Count, <<Type, ArrayBin/binary>>)
+  when Count > byte_size(ArrayBin) ->
+    exit({failed_to_parse_array_count_exceeds_input, Type, Count, byte_size(ArrayBin)});
 parse_array1(Count, <<Type, ArrayBin/binary>>) ->
     parse_array2(Count, Type, ArrayBin, []).
 

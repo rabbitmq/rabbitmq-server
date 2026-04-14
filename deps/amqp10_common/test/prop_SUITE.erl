@@ -26,7 +26,8 @@ groups() ->
        prop_annotated_message,
        prop_server_mode_body,
        prop_server_mode_bare_message,
-       prop_frame
+       prop_frame,
+       prop_array32_terminates
       ]}
     ].
 
@@ -157,6 +158,24 @@ prop_frame(_Config) ->
                            Bin = iolist_to_binary(amqp10_framing:encode_bin(Frame)),
                            equals([Frame], amqp10_framing:decode_bin(Bin))
                        end)
+      end, [], 1000).
+
+prop_array32_terminates(_Config) ->
+    run_proper(
+      fun() ->
+          ?FORALL(
+             {Count, TypeByte, DataBin},
+             {adversarial_array_count(), integer(0, 16#FF), binary()},
+             begin
+                 ArrayPayload = <<Count:32, TypeByte, DataBin/binary>>,
+                 Size = byte_size(ArrayPayload),
+                 Bin = <<16#f0, Size:32, ArrayPayload/binary>>,
+                 try amqp10_binary_parser:parse(Bin) of
+                     {_, _} -> true
+                 catch
+                     _:_ -> true
+                 end
+             end)
       end, [], 1000).
 
 %%%%%%%%%%%%%%%
@@ -554,3 +573,8 @@ message_id() ->
 
 address_string() ->
     amqp_string().
+
+adversarial_array_count() ->
+    oneof([integer(0, 16),
+           integer(1000, 100_000),
+           exactly(16#FFFFFFFF)]).
