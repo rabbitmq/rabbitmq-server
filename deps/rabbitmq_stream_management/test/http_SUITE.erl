@@ -11,7 +11,8 @@
 -include_lib("rabbitmq_ct_helpers/include/rabbit_mgmt_test.hrl").
 
 -import(rabbit_mgmt_test_util, [
-                                http_put/4
+                                http_put/4,
+                                http_put/6
                                ]).
 
 -compile(export_all).
@@ -22,7 +23,8 @@ all() ->
 groups() ->
     [{non_parallel_tests, [], [
                                stream_management,
-                               create_super_stream
+                               create_super_stream,
+                               create_super_stream_requires_configure_permission
                               ]}].
 
 %% -------------------------------------------------------------------
@@ -138,6 +140,29 @@ create_super_stream(Config) ->
              #{partitions => 3,
                arguments => #{'queue-leader-locator' => <<"remote">>}},
              ?BAD_REQUEST),
+    ok.
+
+create_super_stream_requires_configure_permission(Config) ->
+    User = <<"no-configure">>,
+    Pass = <<"no-configure">>,
+    rabbit_ct_broker_helpers:add_user(Config, User, Pass),
+    rabbit_ct_broker_helpers:set_user_tags(Config, 0, User, [management]),
+    %% Grant write and read but no configure permission
+    rabbit_ct_broker_helpers:set_permissions(Config, User, <<"/">>,
+                                             <<"^$">>, <<".*">>, <<".*">>),
+    http_put(Config, "/stream/super-streams/%2F/denied-stream",
+             #{partitions => 3},
+             User, Pass,
+             ?NOT_AUTHORISED),
+    http_put(Config, "/stream/super-streams/%2F/denied-stream-bk",
+             #{'binding-keys' => "key1,key2"},
+             User, Pass,
+             ?NOT_AUTHORISED),
+    %% Verify that the same request succeeds with full permissions
+    http_put(Config, "/stream/super-streams/%2F/allowed-stream",
+             #{partitions => 3},
+             {group, '2xx'}),
+    rabbit_ct_broker_helpers:delete_user(Config, User),
     ok.
 
 get_stream_port(Config) ->
