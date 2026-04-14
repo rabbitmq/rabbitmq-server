@@ -1407,7 +1407,7 @@ handle_method0(#'connection.update_secret'{new_secret = NewSecret, reason = Reas
           [dynamic_connection_name(ConnName), Username, Reason]),
         State1 = State#v1{connection = Conn#connection{user = User1}},
         maybe_start_credential_expiry_timer(User1, State1);
-      {refused, Message} ->
+      {refused, Message, _Args} ->
         ?LOG_ERROR("Secret update was refused for user '~ts': ~tp",
                                     [Username, Message]),
         rabbit_misc:protocol_error(not_allowed, "New secret was refused by one of the backends", []);
