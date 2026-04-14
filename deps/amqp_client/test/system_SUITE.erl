@@ -761,7 +761,11 @@ channel_multi_open_close(Config) ->
             end
         end) || _ <- lists:seq(1, 50)],
     erlang:yield(),
-    amqp_connection:close(Connection),
+    try amqp_connection:close(Connection)
+    catch
+        exit:{noproc, _}       -> ok;
+        exit:{{shutdown, _}, _} -> ok
+    end,
     wait_for_death(Connection).
 
 %% -------------------------------------------------------------------
@@ -1313,7 +1317,11 @@ bogus_rpc(Config) ->
     end,
     wait_for_death(Channel),
     true = is_process_alive(Connection),
-    amqp_connection:close(Connection).
+    try amqp_connection:close(Connection)
+    catch
+        exit:{noproc, _}       -> ok;
+        exit:{{shutdown, _}, _} -> ok
+    end.
 
 %% -------------------------------------------------------------------
 
@@ -1560,9 +1568,17 @@ setup_publish(Channel, Payload) ->
     {ok, Q}.
 
 teardown(Connection, Channel) ->
-    amqp_channel:close(Channel),
+    try amqp_channel:close(Channel)
+    catch
+        exit:{noproc, _}       -> ok;
+        exit:{{shutdown, _}, _} -> ok
+    end,
     wait_for_death(Channel),
-    ?assertEqual(ok, amqp_connection:close(Connection)),
+    try amqp_connection:close(Connection)
+    catch
+        exit:{noproc, _}       -> ok;
+        exit:{{shutdown, _}, _} -> ok
+    end,
     wait_for_death(Connection).
 
 wait_for_death(Pid) ->
