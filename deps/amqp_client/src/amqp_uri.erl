@@ -248,13 +248,16 @@ find_integer_parameter(Value) ->
     end.
 
 find_boolean_parameter(Value) ->
-    Bool = list_to_atom(Value),
-    case is_boolean(Bool) of
-        true  -> return(Bool);
-        false -> fail({require_boolean, Bool})
+    case Value of
+        "true"  -> return(true);
+        "false" -> return(false);
+        _       -> fail({require_boolean, Value})
     end.
 
-find_atom_parameter(Value) -> return(list_to_atom(Value)).
+find_atom_parameter(Value) ->
+    try return(list_to_existing_atom(Value))
+    catch error:badarg -> fail({invalid_atom_parameter, Value})
+    end.
 
 mechanisms(ParsedUri) ->
     Query = proplists:get_value('query', ParsedUri),
@@ -262,11 +265,16 @@ mechanisms(ParsedUri) ->
                      []    -> ["plain", "amqplain"];
                      Mechs -> Mechs
                  end,
-    [case [list_to_atom(T) || T <- string:tokens(Mech, ":")] of
+    [case [safe_mechanism_token(T) || T <- string:tokens(Mech, ":")] of
          [F]    -> fun (R, P, S) -> amqp_auth_mechanisms:F(R, P, S) end;
          [M, F] -> fun (R, P, S) -> M:F(R, P, S) end;
          L      -> throw({not_mechanism, L})
      end || Mech <- Mechanisms].
+
+safe_mechanism_token(T) ->
+    try list_to_existing_atom(T)
+    catch error:badarg -> throw({unknown_mechanism, T})
+    end.
 
 %% --=: Plain state monad implementation start :=--
 run_state_monad(FunList, State) ->
