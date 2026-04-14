@@ -33,9 +33,15 @@
         {'content_body',   binary()}.
 
 -type state() ::
+<<<<<<< HEAD
         {'method',         protocol()} |
         {'content_header', method(), class_id(), protocol()} |
         {'content_body',   method(), body_size(), class_id(), protocol()}.
+=======
+        'method' |
+        {'content_header', method(), class_id()} |
+        {'content_body',   method(), body_size(), content()}.
+>>>>>>> f0155e674a (AMQP 0-9-1: refactor body size handling in command assembly)
 
 -spec analyze_frame(frame_type(), binary(), protocol()) ->
           frame() | 'heartbeat' | 'error'.
@@ -85,9 +91,23 @@ process({content_header, ClassId, 0, 0, PropertiesBin},
     Content = empty_content(ClassId, PropertiesBin, Protocol),
     {ok, Method, Content, {method, Protocol}};
 process({content_header, ClassId, 0, BodySize, PropertiesBin},
+<<<<<<< HEAD
         {content_header, Method, ClassId, Protocol}) ->
     Content = empty_content(ClassId, PropertiesBin, Protocol),
     {ok, {content_body, Method, BodySize, Content, Protocol}};
+=======
+        {content_header, Method, ClassId})
+  when BodySize =< ?MAX_MSG_SIZE ->
+    Content = empty_content(ClassId, PropertiesBin),
+    {ok, {content_body, Method, BodySize, Content}};
+process({content_header, ClassId, 0, BodySize, _PropertiesBin},
+        {content_header, Method, ClassId}) when BodySize > ?MAX_MSG_SIZE ->
+    {error, rabbit_misc:amqp_error(
+              frame_error,
+              "content body size ~B exceeds maximum allowed size ~B",
+              [BodySize, ?MAX_MSG_SIZE],
+              rabbit_misc:method_record_type(Method))};
+>>>>>>> f0155e674a (AMQP 0-9-1: refactor body size handling in command assembly)
 process({content_header, HeaderClassId, 0, _BodySize, _PropertiesBin},
         {content_header, Method, ClassId, _Protocol}) ->
     unexpected_frame("expected content header for class ~w, "
@@ -98,6 +118,7 @@ process(_Frame, {content_header, Method, ClassId, _Protocol}) ->
                      "got non content header frame instead", [ClassId], Method);
 process({content_body, FragmentBin},
         {content_body, Method, RemainingSize,
+<<<<<<< HEAD
          Content = #content{payload_fragments_rev = Fragments}, Protocol}) ->
     NewContent = Content#content{
                    payload_fragments_rev = [FragmentBin | Fragments]},
@@ -106,6 +127,24 @@ process({content_body, FragmentBin},
         Sz -> {ok, {content_body, Method, Sz, NewContent, Protocol}}
     end;
 process(_Frame, {content_body, Method, _RemainingSize, _Content, _Protocol}) ->
+=======
+         Content = #content{payload_fragments_rev = Fragments}})
+  when byte_size(FragmentBin) =< RemainingSize ->
+    NewContent = Content#content{
+                   payload_fragments_rev = [FragmentBin | Fragments]},
+    case RemainingSize - byte_size(FragmentBin) of
+        0  -> {ok, Method, NewContent, method};
+        Sz -> {ok, {content_body, Method, Sz, NewContent}}
+    end;
+process({content_body, _FragmentBin},
+        {content_body, Method, _RemainingSize, _Content}) ->
+    {error, rabbit_misc:amqp_error(
+              frame_error,
+              "content body frame exceeds remaining content size",
+              [],
+              rabbit_misc:method_record_type(Method))};
+process(_Frame, {content_body, Method, _RemainingSize, _Content}) ->
+>>>>>>> f0155e674a (AMQP 0-9-1: refactor body size handling in command assembly)
     unexpected_frame("expected content body, "
                      "got non content body frame instead", [], Method).
 
