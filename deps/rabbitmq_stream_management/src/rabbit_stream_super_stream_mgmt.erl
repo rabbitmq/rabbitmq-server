@@ -80,17 +80,19 @@ accept_content(ReqData0, #context{user = #user{username = ActingUser}} = Context
                           undefined ->
                               BindingKeys = binding_keys(BindingKeysStr),
                               Streams = streams_from_binding_keys(Name, BindingKeys),
-                              create_super_stream(Node, VHost, Name, Streams,
-                                                  Arguments, BindingKeys, ActingUser,
-                                                  ReqData, Context);
+                              check_and_create_super_stream(
+                                Node, VHost, Name, Streams,
+                                Arguments, BindingKeys, ActingUser,
+                                ReqData, Context);
                           _ ->
                               case validate_partitions(PartitionsBin, ReqData, Context) of
                                   Partitions when is_integer(Partitions) ->
                                       Streams = streams_from_partitions(Name, Partitions),
                                       RoutingKeys = routing_keys(Partitions),
-                                      create_super_stream(Node, VHost, Name, Streams,
-                                                          Arguments, RoutingKeys, ActingUser,
-                                                          ReqData, Context);
+                                      check_and_create_super_stream(
+                                        Node, VHost, Name, Streams,
+                                        Arguments, RoutingKeys, ActingUser,
+                                        ReqData, Context);
                                   Error ->
                                       Error
                               end
@@ -129,6 +131,20 @@ streams_from_partitions(Name, Partitions) ->
                     ++ "-"
                     ++ integer_to_list(K))
      || K <- lists:seq(0, Partitions - 1)].
+
+check_and_create_super_stream(NodeName, VHost, SuperStream, Streams,
+                              Arguments, RoutingKeys, ActingUser,
+                              ReqData, #context{user = User} = Context) ->
+    case rabbit_stream_utils:check_super_stream_management_permitted(
+           VHost, SuperStream, Streams, User) of
+        ok ->
+            create_super_stream(NodeName, VHost, SuperStream, Streams,
+                                Arguments, RoutingKeys, ActingUser,
+                                ReqData, Context);
+        error ->
+            rabbit_web_dispatch_access_control:not_authorised(
+              <<"Access refused.">>, ReqData, Context)
+    end.
 
 create_super_stream(NodeName, VHost, SuperStream, Streams, Arguments,
                     RoutingKeys, ActingUser, ReqData, Context) ->
