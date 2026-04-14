@@ -135,15 +135,15 @@
 <table class="facts">
   <tr>
     <th>Peer Certificate Issuer</th>
-    <td><%= connection.peer_cert_issuer %></td>
+    <td><%= fmt_string(connection.peer_cert_issuer) %></td>
   </tr>
   <tr>
     <th>Peer Certificate Subject</th>
-    <td><%= connection.peer_cert_subject %></td>
+    <td><%= fmt_string(connection.peer_cert_subject) %></td>
   </tr>
   <tr>
     <th>Peer Certificate Validity</th>
-    <td><%= connection.peer_cert_validity %></td>
+    <td><%= fmt_string(connection.peer_cert_validity) %></td>
   </tr>
 </table>
 <% } %>
