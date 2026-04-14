@@ -95,8 +95,20 @@ delete(_Tx, #exchange{name = XName}) ->
     _ = delete_state(XName),
     ok.
 
-% Before add binding
-validate_binding(_X, _B) -> ok.
+%% Sanitize selectors before creating bindings
+validate_binding(_X, #binding{args = Args}) ->
+  case get_string_arg(Args, ?RJMS_COMPILED_SELECTOR_ARG) of
+    error ->
+      ok;
+    Selector ->
+      case decode_term(Selector) of
+        {ok, _} ->
+          ok;
+        {error, Reason} ->
+          {error, {binding_invalid,
+                   "invalid JMS selector: ~tp", [Reason]}}
+      end
+  end.
 
 % A new binding has ben added or recovered
 add_binding( _Tx
@@ -183,15 +195,9 @@ check_fun(CompiledExp) ->
     end
   }.
 
-% get an erlang term from a string
+% Decodes an Erlang term using `sjx_parser:parse_term/1`.
 decode_term(Str) ->
-  try
-    {ok, Ts, _} = erl_scan:string(Str),
-    {ok, Term} = erl_parse:parse_term(Ts),
-    {ok, Term}
-  catch
-    Err -> {error, {invalid_erlang_term, Err}}
-  end.
+  sjx_parser:parse_term(Str).
 
 % Evaluate the selector and check against the Headers
 selector_match(Selector, Headers) ->
