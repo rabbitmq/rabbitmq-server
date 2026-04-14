@@ -706,7 +706,9 @@ handle_info(tick, #ch{} = State0) ->
     end,
     noreply(init_tick_timer(reset_tick_timer(State0)));
 handle_info({update_user_state, User}, State = #ch{cfg = Cfg}) ->
-    noreply(State#ch{cfg = Cfg#conf{user = User}}).
+    ok = clear_permission_cache(),
+    State1 = State#ch{cfg = Cfg#conf{user = User}},
+    noreply(recheck_consumers(State1)).
 
 
 handle_pre_hibernate(State0) ->
@@ -1719,6 +1721,71 @@ cancel_consumer(CTag, QName, #ch{cfg = #conf{},
 server_consumer_cancel_supported(#ch{cfg = #conf{capabilities = Capabilities}}) ->
     {bool, true} == rabbit_misc:table_lookup(Capabilities,
                                              <<"consumer_cancel_notify">>).
+
+%% After a credential update, re-checks read access for all existing consumers.
+%% Consumers that fail the authorization check are cancelled.
+recheck_consumers(State = #ch{cfg = #conf{user = User,
+                                          authz_context = AuthzContext},
+                              consumer_mapping = CMap}) ->
+    maps:fold(
+      fun(CTag, {Q, _CParams}, StateAcc) when ?is_amqqueue(Q) ->
+              QName = amqqueue:get_name(Q),
+              try
+                  check_resource_access(User, QName, read, AuthzContext),
+                  StateAcc
+              catch
+                  exit:#amqp_error{name = access_refused} ->
+                      ?LOG_WARNING(
+                        "Cancelling consumer ~tp on ~ts: "
+                        "read access refused after credential update",
+                        [CTag, rabbit_misc:rs(QName)]),
+                      cancel_consumer_recheck(CTag, Q, StateAcc)
+              end
+      end, State, CMap).
+
+cancel_consumer_recheck(CTag, Q,
+                        #ch{cfg = #conf{user = #user{username = Username}},
+                            consumer_mapping = CMap,
+                            queue_consumers = QCons,
+                            queue_states = QStates0} = State) ->
+    QName = amqqueue:get_name(Q),
+    case server_consumer_cancel_supported(State) of
+        true ->
+            ok = send(#'basic.cancel'{consumer_tag = CTag,
+                                      nowait = true}, State);
+        false ->
+            ok
+    end,
+    %% Use delete_any because the consumer might not be in queue_consumers yet
+    %% (a `basic.consume-ok` wasn't yet received).
+    QCons1 = case maps:find(QName, QCons) of
+                 error ->
+                     QCons;
+                 {ok, CTags} ->
+                     CTags1 = gb_sets:delete_any(CTag, CTags),
+                     case gb_sets:is_empty(CTags1) of
+                         true -> maps:remove(QName, QCons);
+                         false -> maps:put(QName, CTags1, QCons)
+                     end
+             end,
+    Spec = #{consumer_tag => CTag,
+             ok_msg => undefined,
+             user => Username},
+    QStates1 = case rabbit_misc:with_exit_handler(
+                      fun() -> {error, not_found} end,
+                      fun() ->
+                              rabbit_queue_type:cancel(Q, Spec, QStates0)
+                      end) of
+                   {ok, QS} -> QS;
+                   {error, not_found} -> QStates0
+               end,
+    rabbit_global_counters:consumer_deleted(amqp091),
+    rabbit_event:notify(consumer_deleted, [{consumer_tag, CTag},
+                                           {channel, self()},
+                                           {queue, QName}]),
+    State#ch{consumer_mapping = maps:remove(CTag, CMap),
+             queue_consumers = QCons1,
+             queue_states = QStates1}.
 
 binding_action_with_checks(
   Action, SourceNameBin0, DestinationType, DestinationNameBin0,

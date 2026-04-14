@@ -104,7 +104,8 @@
           proxy_socket,
           %% dynamic buffer
           dynamic_buffer_size = 128,
-          dynamic_buffer_moving_average = 0.0
+          dynamic_buffer_moving_average = 0.0,
+          credential_expiry_timer
 }).
 
 -record(throttle, {
@@ -681,6 +682,20 @@ handle_other({bump_credit, Msg}, State) ->
     %% Here we are receiving credit by some channel process.
     credit_flow:handle_bump_msg(Msg),
     control_throttle(State);
+handle_other(credential_expired, State) when ?IS_STOPPING(State) ->
+    State;
+handle_other(credential_expired,
+             State = #v1{connection = #connection{
+                           user = #user{username = Username},
+                           log_name = ConnName}}) ->
+    ?LOG_WARNING(
+      "closing AMQP connection ~ts of user '~ts': credential has expired",
+      [dynamic_connection_name(ConnName), Username]),
+    {ForceTermination, NewState} = terminate("credential expired", State),
+    case ForceTermination of
+        force  -> stop;
+        normal -> NewState
+    end;
 handle_other(Other, State) ->
     %% internal error -> something worth dying for
     maybe_emit_stats(State),
@@ -695,6 +710,23 @@ terminate(Explanation, State) when ?IS_RUNNING(State) ->
                                 connection_forced, "~ts", [Explanation], none))};
 terminate(_Explanation, State) ->
     {force, State}.
+
+maybe_start_credential_expiry_timer(User,
+                                    State = #v1{credential_expiry_timer = OldTimer}) ->
+    cancel_credential_expiry_timer(OldTimer),
+    case rabbit_access_control:expiry_timestamp(User) of
+        never ->
+            State#v1{credential_expiry_timer = undefined};
+        Ts when is_integer(Ts) ->
+            Time = max(0, (Ts - os:system_time(second)) * 1000),
+            Ref = erlang:send_after(Time, self(), credential_expired),
+            State#v1{credential_expiry_timer = Ref}
+    end.
+
+cancel_credential_expiry_timer(undefined) -> ok;
+cancel_credential_expiry_timer(Ref) ->
+    _ = erlang:cancel_timer(Ref),
+    ok.
 
 send_blocked(#v1{connection = #connection{capabilities = Capabilities},
                  sock       = Sock}, Reason) ->
@@ -1313,7 +1345,7 @@ handle_method0(#'connection.open'{virtual_host = VHost},
     ?LOG_INFO(
       "connection ~ts: user '~ts' authenticated and granted access to vhost '~ts'",
       [dynamic_connection_name(ConnName), Username, VHost]),
-    State1;
+    maybe_start_credential_expiry_timer(User, State1);
 handle_method0(#'connection.close'{}, State) when ?IS_RUNNING(State) ->
     lists:foreach(fun rabbit_channel:shutdown/1, all_channels()),
     maybe_close(State#v1{connection_state = closing});
@@ -1339,12 +1371,12 @@ handle_method0(#'connection.update_secret'{new_secret = NewSecret, reason = Reas
       [dynamic_connection_name(ConnName), Username, Reason]),
     case rabbit_access_control:update_state(User, NewSecret) of
       {ok, User1} ->
-        %% User/auth backend state has been updated. Now we can propagate it to channels
-        %% asynchronously and return. All the channels have to do is to update their
-        %% own state.
-        %%
-        %% Any secret update errors coming from the authz backend will be handled in the other branch.
-        %% Therefore we optimistically do no error handling here. MK.
+        %% User/auth backend state has been updated. Re-check vhost access
+        %% before proceeding, then propagate to channels. Each channel will
+        %% update its user state and re-check authorization for existing
+        %% consumers, cancelling any that are no longer authorized.
+        VHost = Conn#connection.vhost,
+        ok = rabbit_access_control:check_vhost_access(User1, VHost, {socket, Sock}, #{}),
         lists:foreach(fun(Ch) ->
           ?LOG_DEBUG("Updating user/auth backend state for channel ~tp", [Ch]),
           _ = rabbit_channel:update_user_state(Ch, User1)
@@ -1353,7 +1385,8 @@ handle_method0(#'connection.update_secret'{new_secret = NewSecret, reason = Reas
         ?LOG_INFO(
           "connection ~ts: user '~ts' updated secret, reason: ~ts",
           [dynamic_connection_name(ConnName), Username, Reason]),
-        State#v1{connection = Conn#connection{user = User1}};
+        State1 = State#v1{connection = Conn#connection{user = User1}},
+        maybe_start_credential_expiry_timer(User1, State1);
       {refused, Message} ->
         ?LOG_ERROR("Secret update was refused for user '~ts': ~tp",
                                     [Username, Message]),
