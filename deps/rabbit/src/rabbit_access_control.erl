@@ -403,7 +403,7 @@ check_user_id0(ClaimedUserName, #user{username = ActualUserName,
 
 -spec update_state(User :: rabbit_types:user(), NewState :: term()) ->
     {'ok', rabbit_types:user()} |
-    {'refused', string()} |
+    {'refused', string(), [any()]} |
     {'error', any()}.
 
 update_state(User = #user{authz_backends = Backends0}, NewState) ->
