@@ -373,7 +373,9 @@ convert_to(mc_amqp, #content{payload_fragments_rev = PFR} = Content, Env) ->
                     wrap(utf8, MsgId0)
             end,
     P = case amqp10_section_header(?AMQP10_PROPERTIES_HEADER, Headers) of
-            undefined ->
+            #'v1_0.properties'{} = V10Prop ->
+                V10Prop;
+            _ ->
                 #'v1_0.properties'{message_id = MsgId,
                                    user_id = wrap(binary, UserId),
                                    to = undefined,
@@ -386,26 +388,26 @@ convert_to(mc_amqp, #content{payload_fragments_rev = PFR} = Content, Env) ->
                                    %% this is semantically not the best idea but you
                                    %% could imagine these having similar behaviour
                                    group_id = wrap(utf8, AppId)
-                                  };
-            V10Prop ->
-                V10Prop
+                                  }
         end,
 
     AP = case amqp10_section_header(?AMQP10_APP_PROPERTIES_HEADER, Headers) of
-             undefined ->
+             #'v1_0.application_properties'{} = A ->
+                 A;
+             _ ->
                  %% non x- headers are stored as application properties when the type allows
                  APC = [{wrap(utf8, K), from_091(T, V)}
                         || {K, T, V} <- Headers,
                            supported_header_value_type(T),
                            not mc_util:is_x_header(K)],
-                 #'v1_0.application_properties'{content = APC};
-             A ->
-                 A
+                 #'v1_0.application_properties'{content = APC}
          end,
 
     %% x- headers are stored as message annotations
     MA = case amqp10_section_header(?AMQP10_MESSAGE_ANNOTATIONS_HEADER, Headers) of
-             undefined ->
+             #'v1_0.message_annotations'{} = Section ->
+                 Section;
+             _ ->
                  MAC0 = lists:filtermap(
                           fun({<<"x-", _/binary>> = K, T, V}) ->
                                   %% All message annotation keys need to be either a symbol or ulong
@@ -421,22 +423,32 @@ convert_to(mc_amqp, #content{payload_fragments_rev = PFR} = Content, Env) ->
                  %% `type' doesn't have a direct equivalent so adding as
                  %% a message annotation here
                  MAC = map_add(symbol, <<"x-basic-type">>, utf8, Type, MAC0),
-                 #'v1_0.message_annotations'{content = MAC};
-             Section ->
-                 Section
+                 #'v1_0.message_annotations'{content = MAC}
          end,
+    ReversedPFR = lists:reverse(PFR),
+    DefaultBody = [#'v1_0.data'{content = ReversedPFR}],
     BodySections = case Type of
                        ?AMQP10_TYPE ->
-                           amqp10_framing:decode_bin(
-                             iolist_to_binary(lists:reverse(PFR)));
+                           try amqp10_framing:decode_bin(
+                                 iolist_to_binary(ReversedPFR)) of
+                               Decoded when is_list(Decoded), Decoded =/= [] ->
+                                   case lists:all(fun is_amqp10_section/1, Decoded) of
+                                       true -> Decoded;
+                                       false -> DefaultBody
+                                   end;
+                               _ ->
+                                   DefaultBody
+                           catch _:_ ->
+                                     DefaultBody
+                           end;
                        _ ->
-                           [#'v1_0.data'{content = lists:reverse(PFR)}]
+                           DefaultBody
                    end,
     Tail = case amqp10_section_header(?AMQP10_FOOTER, Headers) of
-               undefined ->
-                   BodySections;
                #'v1_0.footer'{} = Footer ->
-                   BodySections ++ [Footer]
+                   BodySections ++ [Footer];
+               _ ->
+                   BodySections
            end,
 
     Sections = [H, MA, P, AP | Tail],
@@ -856,11 +868,23 @@ is_internal_header(_) ->
 amqp10_section_header(Header, Headers) ->
     case lists:keyfind(Header, 1, Headers) of
         {_, _, Data} when is_binary(Data) ->
-            [Section] = amqp10_framing:decode_bin(Data),
-            Section ;
+            try amqp10_framing:decode_bin(Data) of
+                [Section] -> Section;
+                _         -> undefined
+            catch
+                _:_ -> undefined
+            end;
         _ ->
             undefined
     end.
+
+is_amqp10_section(T) when is_tuple(T), tuple_size(T) >= 2, is_atom(element(1, T)) ->
+    case atom_to_binary(element(1, T)) of
+        <<"v1_0.", _/binary>> -> true;
+        _ -> false
+    end;
+is_amqp10_section(_) ->
+    false.
 
 amqp_encoded_binary(Section) ->
     iolist_to_binary(amqp10_framing:encode_bin(Section)).

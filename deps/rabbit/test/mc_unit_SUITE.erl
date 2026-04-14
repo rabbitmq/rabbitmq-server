@@ -43,7 +43,10 @@ all_tests() ->
      amqp_to_amqpl_data_body,
      amqp_amqpl_amqp_bodies,
      amqp_x_headers,
-     amqpl_x_headers
+     amqpl_x_headers,
+     amqpl_amqp_malformed_section_headers,
+     amqpl_amqp_malformed_body,
+     amqpl_amqp_wrong_section_type_in_footer
     ].
 
 %%%===================================================================
@@ -404,7 +407,7 @@ amqpl_amqp_bin_amqpl(_Config) ->
                                    },
                  Props10),
 
-    Get = fun(K, AP) -> amqp_map_get(utf8(K), AP) end,
+    Get = fun(K, AP) -> amqp_map_get(to_utf8(K), AP) end,
 
 
     ?assertEqual({long, 99}, Get(<<"a-stream-offset">>, AP10)),
@@ -484,7 +487,7 @@ thead2(K, T, Value) ->
     {symbol(atom_to_binary(K)), {T, Value}}.
 
 thead(T, Value) ->
-    {utf8(atom_to_binary(T)), {T, Value}}.
+    {to_utf8(atom_to_binary(T)), {T, Value}}.
 
 mc_util_uuid_to_urn_roundtrip(_Config) ->
     %% roundtrip uuid test
@@ -551,8 +554,8 @@ amqp_amqpl(_Config) ->
                        durable = true},
     MAC = [
            {{symbol, <<"x-stream-filter">>}, {utf8, <<"apple">>}},
-           thead2('x-list', list, [utf8(<<"l">>)]),
-           thead2('x-map', map, [{utf8(<<"k">>), utf8(<<"v">>)}]),
+           thead2('x-list', list, [to_utf8(<<"l">>)]),
+           thead2('x-map', map, [{to_utf8(<<"k">>), to_utf8(<<"v">>)}]),
            {{symbol, <<"x-array">>}, {array, utf8, [{utf8, <<"a">>}]}}
           ],
     M =  #'v1_0.message_annotations'{content = MAC},
@@ -582,7 +585,7 @@ amqp_amqpl(_Config) ->
           thead(byte, -128),
           thead(boolean, true),
           {{utf8, <<"boolean2">>}, false},
-          {utf8(<<"null">>), null}
+          {to_utf8(<<"null">>), null}
          ],
     A =  #'v1_0.application_properties'{content = AC},
     D =  #'v1_0.data'{content = <<"data">>},
@@ -773,8 +776,8 @@ amqp_amqpl_amqp_bodies(_Config) ->
 amqp_x_headers(_Config) ->
     MAC = [
            {{symbol, <<"x-stream-filter">>}, {utf8, <<"apple">>}},
-           thead2('x-list', list, [utf8(<<"l">>)]),
-           thead2('x-map', map, [{utf8(<<"k">>), utf8(<<"v">>)}])
+           thead2('x-list', list, [to_utf8(<<"l">>)]),
+           thead2('x-map', map, [{to_utf8(<<"k">>), to_utf8(<<"v">>)}])
           ],
     M =  #'v1_0.message_annotations'{content = MAC},
     AC = [thead(long, 5)],
@@ -816,6 +819,73 @@ amqpl_x_headers(_Config) ->
                    <<"x-delivery-count">> => {long, 2}},
                  mc:x_headers(BasicMsg)).
 
+%% Malformed x-amqp-1.0-* headers must not crash the conversion.
+amqpl_amqp_malformed_section_headers(_Config) ->
+    Malformed = <<"not valid amqp 1.0 binary">>,
+    Headers = [{<<"x-amqp-1.0-properties">>, longstr, Malformed},
+               {<<"x-amqp-1.0-app-properties">>, longstr, Malformed},
+               {<<"x-amqp-1.0-message-annotations">>, longstr, Malformed},
+               {<<"x-amqp-1.0-footer">>, longstr, Malformed}],
+    Props = #'P_basic'{headers = Headers,
+                       message_id = <<"msg1">>,
+                       delivery_mode = 2},
+    Content = #content{properties = Props,
+                       payload_fragments_rev = [<<"payload">>]},
+    Msg = mc:init(mc_amqpl, Content, annotations()),
+    Converted = mc:convert(mc_amqp, Msg),
+    ?assertNotEqual(undefined, Converted),
+
+    %% Empty binary.
+    Headers2 = [{<<"x-amqp-1.0-properties">>, longstr, <<>>}],
+    Props2 = #'P_basic'{headers = Headers2},
+    Content2 = #content{properties = Props2,
+                        payload_fragments_rev = [<<"data">>]},
+    Msg2 = mc:init(mc_amqpl, Content2, annotations()),
+    Converted2 = mc:convert(mc_amqp, Msg2),
+    ?assertNotEqual(undefined, Converted2),
+
+    %% Two sections where one is expected.
+    TwoSections = iolist_to_binary(
+                    [amqp10_framing:encode_bin(
+                       #'v1_0.properties'{message_id = {utf8, <<"a">>}}),
+                     amqp10_framing:encode_bin(
+                       #'v1_0.properties'{message_id = {utf8, <<"b">>}})]),
+    Headers3 = [{<<"x-amqp-1.0-properties">>, longstr, TwoSections}],
+    Props3 = #'P_basic'{headers = Headers3,
+                        message_id = <<"msg3">>},
+    Content3 = #content{properties = Props3,
+                        payload_fragments_rev = [<<"data">>]},
+    Msg3 = mc:init(mc_amqpl, Content3, annotations()),
+    Converted3 = mc:convert(mc_amqp, Msg3),
+    ?assertNotEqual(undefined, Converted3),
+    ok.
+
+%% type "amqp-1.0" with a malformed body must not crash.
+amqpl_amqp_malformed_body(_Config) ->
+    Props = #'P_basic'{type = <<"amqp-1.0">>,
+                       delivery_mode = 2},
+    Content = #content{properties = Props,
+                       payload_fragments_rev = [<<"not valid amqp">>]},
+    Msg = mc:init(mc_amqpl, Content, annotations()),
+    Converted = mc:convert(mc_amqp, Msg),
+    ?assertNotEqual(undefined, Converted),
+    ok.
+
+%% A non-footer section in x-amqp-1.0-footer must not crash.
+amqpl_amqp_wrong_section_type_in_footer(_Config) ->
+    NotAFooter = iolist_to_binary(
+                   amqp10_framing:encode_bin(
+                     #'v1_0.properties'{message_id = {utf8, <<"sneaky">>}})),
+    Headers = [{<<"x-amqp-1.0-footer">>, longstr, NotAFooter}],
+    Props = #'P_basic'{headers = Headers,
+                       message_id = <<"msg1">>},
+    Content = #content{properties = Props,
+                       payload_fragments_rev = [<<"data">>]},
+    Msg = mc:init(mc_amqpl, Content, annotations()),
+    Converted = mc:convert(mc_amqp, Msg),
+    ?assertNotEqual(undefined, Converted),
+    ok.
+
 %% Utility
 
 amqp10_encode_bin(L) when is_list(L) ->
@@ -826,7 +896,7 @@ amqp10_encode_bin(X) ->
 serialize_sections(Sections) ->
     iolist_to_binary([amqp10_framing:encode_bin(S) || S <- Sections]).
 
-utf8(V) ->
+to_utf8(V) ->
     {utf8, V}.
 
 symbol(V) ->
