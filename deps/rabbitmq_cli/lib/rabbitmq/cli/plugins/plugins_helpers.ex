@@ -215,7 +215,7 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
 
   defp update_enabled_plugins(node_name, plugins_file) do
     case :rabbit_misc.rpc_call(node_name, :rabbit_plugins, :ensure, [to_list(plugins_file)]) do
-      {:badrpc, :nodedown} -> {:error, :offline}
+      {:badrpc, _} -> {:error, :offline}
       {:error, :rabbit_not_running} -> {:error, :offline}
       {:ok, start, stop} -> {:ok, start, stop}
       {:error, _} = err -> err
