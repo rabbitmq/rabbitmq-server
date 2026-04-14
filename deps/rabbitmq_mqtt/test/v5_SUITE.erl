@@ -1030,6 +1030,10 @@ subscription_options_modify_qos(Qos, Config) ->
     Pub = connect(<<"publisher">>, Config),
     Sub = connect(<<"subscriber">>, Config),
     {ok, _, [Qos]} = emqtt:subscribe(Sub, Topic, Qos),
+    %% Confirm that the subscription route is active before starting
+    %% the fast sender loop, otherwise message "1" can be lost.
+    {ok, _} = emqtt:publish(Pub, Topic, <<"warmup">>, qos1),
+    ok = expect_publishes(Sub, Topic, [<<"warmup">>]),
     Sender = spawn_link(?MODULE, send, [self(), Pub, Topic, 0]),
     receive {publish, #{payload := <<"1">>,
                         properties := Props}} ->
@@ -1079,6 +1083,10 @@ session_upgrade_v3_v5_qos(Qos, Config) ->
                     non_clean_sess_opts()),
     ?assertEqual(3, proplists:get_value(proto_ver, emqtt:info(Subv3))),
     {ok, _, [Qos]} = emqtt:subscribe(Subv3, Topic, Qos),
+    %% Use QoS 0 for the warmup so it is not stored for redelivery
+    %% when the session is resumed with clean_start=false.
+    ok = emqtt:publish(Pub, Topic, <<"warmup">>, qos0),
+    ok = expect_publishes(Subv3, Topic, [<<"warmup">>]),
     Sender = spawn_link(?MODULE, send, [self(), Pub, Topic, 0]),
     receive {publish, #{payload := <<"1">>,
                         client_pid := Subv3}} -> ok
