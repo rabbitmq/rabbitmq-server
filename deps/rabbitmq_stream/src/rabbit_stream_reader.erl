@@ -4139,8 +4139,10 @@ send_close_and_increment(Transport, S) ->
     increase_protocol_counter(?UNKNOWN_FRAME).
 
 get_chunk_selector(Properties) ->
-    binary_to_atom(maps:get(<<"chunk_selector">>, Properties,
-                            <<"user_data">>)).
+    case maps:get(<<"chunk_selector">>, Properties, <<"user_data">>) of
+        <<"all">> -> all;
+        _         -> user_data
+    end.
 
 close_log(undefined) ->
     ok;
