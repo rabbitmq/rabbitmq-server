@@ -38,14 +38,14 @@ Some key doc guides include
  * [Clustering](https://www.rabbitmq.com/docs/clustering) and [Cluster Formation](https://www.rabbitmq.com/docs/cluster-formation)
  * [Configuration guide](https://www.rabbitmq.com/docs/configure)
  * [Client libraries and tools](https://www.rabbitmq.com/client-libraries/devtools)
- * [Monitoring](https://www.rabbitmq.com/docs/monitoring) and [Prometheus/Grafana](https://www.rabbitmq.com/docs/prometheus)
  * [Upgrading](https://www.rabbitmq.com/docs/upgrade)
  * [Kubernetes Cluster Operator](https://www.rabbitmq.com/kubernetes/operator/operator-overview)
- * [Production checklist](https://www.rabbitmq.com/docs/production-checklist)
  * [Quorum queues](https://www.rabbitmq.com/docs/quorum-queues): a replicated, data safety- and consistency-oriented queue type
  * [Streams](https://www.rabbitmq.com/docs/streams): a persistent and replicated append-only log with non-destructive consumer semantics
- * [Runtime Parameters and Policies](https://www.rabbitmq.com/docs/parameters)
- * [Runnable tutorials](https://github.com/rabbitmq/rabbitmq-tutorials/)
+ * [Runtime Parameters](https://www.rabbitmq.com/docs/parameters)
+ * [Policies](https://www.rabbitmq.com/docs/policies)
+ * [Monitoring](https://www.rabbitmq.com/docs/monitoring) and [Prometheus/Grafana](https://www.rabbitmq.com/docs/prometheus)
+ * [Production checklist](https://www.rabbitmq.com/docs/production-checklist)
 
 RabbitMQ documentation is also [developed on GitHub](https://github.com/rabbitmq/rabbitmq-website/).
 
