@@ -67,6 +67,7 @@
 -define(MAX_PAGE_SIZE, 500).
 
 -define(MAX_RANGE, 500).
+-define(MAX_FILTER_LENGTH, 1024).
 
 -record(pagination, {page = undefined, page_size = undefined,
                      name = undefined, use_regex = undefined}).
@@ -509,9 +510,12 @@ maybe_filter_context(List, _) ->
 
 
 match_value({_, Value}, ValueTag, UseRegex) when UseRegex =:= "true" ->
-    case re:run(Value, ValueTag, [caseless]) of
+    case re:run(Value, ValueTag, [caseless,
+                                  {match_limit, 50_000},
+                                  {match_limit_recursion, 50_000}]) of
         {match, _} -> true;
-        nomatch ->  false
+        {error, _} -> false;
+        nomatch -> false
     end;
 match_value({_, Value}, ValueTag, _) ->
     Pos = string:str(string:to_lower(binary_to_list(Value)),
@@ -527,6 +531,14 @@ maybe_filter_by_keyword(KeyTag, ValueTag, List, UseRegex) when
 maybe_filter_by_keyword(_, _, _, _) ->
     true.
 
+validate_name_filter(undefined, _) ->
+    undefined;
+validate_name_filter(Name, "true") when length(Name) > ?MAX_FILTER_LENGTH ->
+    throw({error, invalid_pagination_parameters,
+           "name filter regex is too long"});
+validate_name_filter(Name, _) ->
+    Name.
+
 check_request_param(V, ReqData) ->
     case qs_val(V, ReqData) of
 	undefined -> undefined;
@@ -538,8 +550,9 @@ check_request_param(V, ReqData) ->
 pagination_params(ReqData) ->
     PageNum  = check_request_param(<<"page">>, ReqData),
     PageSize = check_request_param(<<"page_size">>, ReqData),
-    Name = get_value_param(<<"name">>, ReqData),
+    Name0 = get_value_param(<<"name">>, ReqData),
     UseRegex = get_value_param(<<"use_regex">>, ReqData),
+    Name = validate_name_filter(Name0, UseRegex),
     case {PageNum, PageSize} of
         {undefined, _} ->
             undefined;
