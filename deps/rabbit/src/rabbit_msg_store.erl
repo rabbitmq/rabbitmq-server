@@ -1180,18 +1180,16 @@ remove_message(MsgId, CRef, State = #msstate{ index_ets = IndexEts }) ->
           when RefCount > 0 ->
             %% only update field, otherwise bad interaction with
             %% concurrent GC
-            Dec = fun () -> index_update_ref_counter(IndexEts, MsgId, -1) end,
+            ok = index_update_ref_counter(IndexEts, MsgId, -1),
             case RefCount of
                 %% Don't remove from cur_file_cache_ets here because
                 %% there may be further writes in the mailbox for the
                 %% same msg.
-                1 -> ok = Dec(),
-                     delete_file_if_empty(
+                1 -> delete_file_if_empty(
                        File, gc_candidate(File,
                          adjust_valid_total_size(
                                File, -TotalSize, State)));
-                _ -> ok = Dec(),
-                     gc_candidate(File, State)
+                _ -> gc_candidate(File, State)
             end
     end.
 
@@ -1656,7 +1654,7 @@ index_update(IndexEts, Obj) ->
     ok.
 
 index_update_fields(IndexEts, Key, Updates) ->
-    true = ets:update_element(IndexEts, Key, Updates),
+    _ = ets:update_element(IndexEts, Key, Updates),
     ok.
 
 index_update_ref_counter(IndexEts, Key, RefCount) ->
