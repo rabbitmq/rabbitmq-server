@@ -78,11 +78,13 @@ handle_http_req(<<"GET">>,
                 _Query,
                 null,
                 Vhost,
-                _User,
+                User,
                 _ConnPid,
-                PermCaches) ->
+                {PermCache0, TopicPermCache}) ->
     QNameBin = cow_uri:urldecode(QNameBinQuoted),
     QName = queue_resource(Vhost, QNameBin),
+    PermCache = check_resource_access(QName, configure, User, PermCache0),
+    PermCaches = {PermCache, TopicPermCache},
     case rabbit_amqqueue:with(
            QName,
            fun(Q) ->
