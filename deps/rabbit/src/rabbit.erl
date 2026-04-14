@@ -1411,7 +1411,6 @@ log_banner() ->
     Settings = [{"node",           node()},
                 {"home dir",       home_dir()},
                 {"config file(s)", config_files()},
-                {"cookie hash",    rabbit_nodes:cookie_hash()},
                 {"log(s)",         FirstLog}] ++
                OtherLogs ++
                [{"data dir",       data_dir()}],
