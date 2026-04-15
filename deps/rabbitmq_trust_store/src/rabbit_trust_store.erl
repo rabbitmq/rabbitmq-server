@@ -10,7 +10,7 @@
 -behaviour(gen_server).
 
 -export([mode/0, refresh/0, list/0, list_certificates/0]). %% Console Interface.
--export([whitelisted/3, is_whitelisted/1]). %% Client-side Interface.
+-export([whitelisted/3, is_whitelisted/1, is_whitelisted_der/1]). %% Client-side Interface.
 -export([start_link/0]).
 -export([init/1, terminate/2,
          handle_call/3, handle_cast/2,
@@ -38,6 +38,7 @@
     refresh_interval :: integer()
 }).
 -record(entry, {
+    fingerprint :: binary(),
     name :: string() | undefined,
     cert_id :: term(),
     provider :: module(),
@@ -143,8 +144,12 @@ whitelisted(_, {extension, _}, St) ->
 
 -spec is_whitelisted(certificate()) -> boolean().
 is_whitelisted(#'OTPCertificate'{}=C) ->
-    Id = extract_issuer_id(C),
-    ets:member(table_name(), Id).
+    DER = public_key:pkix_encode('OTPCertificate', C, otp),
+    is_whitelisted_der(DER).
+
+-spec is_whitelisted_der(binary()) -> boolean().
+is_whitelisted_der(DER) when is_binary(DER) ->
+    ets:member(table_name(), cert_fingerprint(DER)).
 
 %% Generic Server Callbacks
 
@@ -318,7 +323,8 @@ delete_cert(CertId, Provider) ->
     ets:select_delete(table_name(), MS).
 
 save_cert(CertId, Provider, Id, Cert, Name) ->
-    ets:insert(table_name(), #entry{cert_id = CertId,
+    ets:insert(table_name(), #entry{fingerprint = cert_fingerprint(Cert),
+                                    cert_id = CertId,
                                     provider = Provider,
                                     issuer_id = Id,
                                     certificate = Cert,
@@ -353,8 +359,11 @@ table_options() ->
     [protected,
      named_table,
      set,
-     {keypos, #entry.issuer_id},
+     {keypos, #entry.fingerprint},
      {heir, none}].
+
+cert_fingerprint(DER) when is_binary(DER) ->
+    crypto:hash(sha256, DER).
 
 extract_issuer_id(#'OTPCertificate'{} = C) ->
     {Serial, Issuer} = case public_key:pkix_issuer_id(C, other) of
