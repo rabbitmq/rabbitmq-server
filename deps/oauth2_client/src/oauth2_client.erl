@@ -407,11 +407,13 @@ extract_ssl_options_as_list(Map) ->
                 {undefined, undefined} ->
                     try public_key:cacerts_get() of
                         [] ->
-                            {verify_none, undefined, undefined};
+                            ?LOG_WARNING("No CA certificates found in the OS store. OAuth2 TLS connections may fail if verify_peer is required."),
+                            {verify_peer, [], undefined};
                         Certs ->
                             {verify_peer, Certs, undefined}
-                    catch _ ->
-                        {verify_none, undefined, undefined}
+                    catch _:_ ->
+                        ?LOG_WARNING("Failed to retrieve CA certificates from the OS store. OAuth2 TLS connections may fail if verify_peer is required."),
+                        {verify_peer, [], undefined}
                     end;
                 {CaCerts0, undefined} ->
                     {verify_peer, CaCerts0, undefined};

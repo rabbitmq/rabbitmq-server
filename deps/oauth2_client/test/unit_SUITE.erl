@@ -39,7 +39,9 @@ groups() ->
         peer_verification_set_to_verify_peer_without_cacerts_or_cacertfile,
         verify_set_to_verify_peer_with_cacerts,
         verify_set_to_verify_peer_with_cacertfile,
-        verify_set_to_verify_peer_without_cacerts_or_cacertfile
+        verify_set_to_verify_peer_without_cacerts_or_cacertfile,
+        verify_peer_does_not_downgrade_when_cacerts_empty,
+        verify_peer_does_not_downgrade_when_cacerts_throws
     ]},
     {get_expiration_time, [], [
         access_token_response_without_expiration_time,
@@ -271,6 +273,42 @@ verify_set_to_verify_peer_without_cacerts_or_cacertfile(_) ->
     ?assertEqual(Expected, oauth2_client:extract_ssl_options_as_list(#{
         verify => verify_peer
     })).
+
+verify_peer_does_not_downgrade_when_cacerts_empty(_) ->
+    meck:new(public_key, [unstick, passthrough]),
+    meck:expect(public_key, cacerts_get, fun() -> [] end),
+    try
+        Expected = [
+            {verify, verify_peer},
+            {depth, 10},
+            {crl_check, false},
+            {fail_if_no_peer_cert, false},
+            {cacerts, []}
+        ],
+        ?assertEqual(Expected, oauth2_client:extract_ssl_options_as_list(#{
+            verify => verify_peer
+        }))
+    after
+        meck:unload(public_key)
+    end.
+
+verify_peer_does_not_downgrade_when_cacerts_throws(_) ->
+    meck:new(public_key, [unstick, passthrough]),
+    meck:expect(public_key, cacerts_get, fun() -> erlang:error(not_found) end),
+    try
+        Expected = [
+            {verify, verify_peer},
+            {depth, 10},
+            {crl_check, false},
+            {fail_if_no_peer_cert, false},
+            {cacerts, []}
+        ],
+        ?assertEqual(Expected, oauth2_client:extract_ssl_options_as_list(#{
+            verify => verify_peer
+        }))
+    after
+        meck:unload(public_key)
+    end.
 
 peer_verification_set_to_verify_peer_with_cacertfile(_) ->
     Expected = [
