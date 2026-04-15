@@ -246,7 +246,7 @@ evaluate0({for, []}, _Args, _User, _LDAP) ->
 evaluate0({exists, DNPattern}, Args, _User, LDAP) ->
     %% eldap forces us to have a filter. objectClass should always be there.
     Filter = eldap:present("objectClass"),
-    DN = fill(DNPattern, Args),
+    DN = fill_dn(DNPattern, Args),
     R = object_exists(DN, Filter, LDAP),
     ?L1("evaluated exists for \"~ts\": ~tp", [DN, R]),
     R;
@@ -258,7 +258,7 @@ evaluate0({in_group, DNPattern, Desc}, Args,
           #auth_user{impl = ImplFun}, LDAP) ->
     UserDN = (ImplFun())#impl.user_dn,
     Filter = eldap:equalityMatch(Desc, UserDN),
-    DN = fill(DNPattern, Args),
+    DN = fill_dn(DNPattern, Args),
     R = object_exists(DN, Filter, LDAP),
     ?L1("evaluated in_group for \"~ts\": ~tp", [DN, R]),
     R;
@@ -277,7 +277,7 @@ evaluate0({in_group_nested, DNPattern, Desc, Scope}, Args,
                      B ->
                          B
                  end,
-    GroupDN = fill(DNPattern, Args),
+    GroupDN = fill_dn(DNPattern, Args),
     EldapScope =
         case Scope of
             subtree      -> eldap:wholeSubtree();
@@ -368,7 +368,7 @@ evaluate0({string, StringPattern}, Args, _User, _LDAP) ->
     R;
 
 evaluate0({attribute, DNPattern, AttributeName}, Args, _User, LDAP) ->
-    DN = fill(DNPattern, Args),
+    DN = fill_dn(DNPattern, Args),
     R = attribute(DN, AttributeName, LDAP),
     ?L1("evaluated attribute \"~ts\" for \"~ts\": ~tp",
         [AttributeName, DN, format_multi_attr(R)]),
@@ -880,7 +880,9 @@ username_to_dn_prebind(Username) ->
               fun (LDAP) -> dn_lookup(Username, LDAP) end).
 
 username_to_dn(Username, LDAP,  postbind) -> dn_lookup(Username, LDAP);
-username_to_dn(Username, _LDAP, _When)    -> fill_user_dn_pattern(Username).
+username_to_dn(Username, _LDAP, _When)    ->
+    ADArgs = rabbit_auth_backend_ldap_util:get_active_directory_args(Username),
+    fill_dn(env(user_dn_pattern), [{username, Username}] ++ ADArgs).
 
 dn_lookup(Username, LDAP) ->
     Filled = fill_user_dn_pattern(Username),
@@ -911,10 +913,11 @@ simple_bind_fill_pattern(Username) ->
     simple_bind_fill_pattern(env(user_bind_pattern), Username).
 
 simple_bind_fill_pattern(none, Username) ->
-    fill_user_dn_pattern(Username);
+    ADArgs = rabbit_auth_backend_ldap_util:get_active_directory_args(Username),
+    fill_dn(env(user_dn_pattern), [{username, Username}] ++ ADArgs);
 simple_bind_fill_pattern(Pattern, Username) ->
     ADArgs = rabbit_auth_backend_ldap_util:get_active_directory_args(Username),
-    fill(Pattern, [{username, Username}] ++ ADArgs).
+    fill_dn(Pattern, [{username, Username}] ++ ADArgs).
 
 creds(User) -> creds(User, env(other_bind)).
 
@@ -982,6 +985,12 @@ fill(Fmt, Args) ->
     ?L2("filling template \"~ts\" with~n            ~tp", [Fmt, Args]),
     R = rabbit_auth_backend_ldap_util:fill(Fmt, Args),
     ?L2("template result: \"~ts\"", [R]),
+    R.
+
+fill_dn(Fmt, Args) ->
+    ?L2("filling DN template \"~ts\" with~n            ~tp", [Fmt, Args]),
+    R = rabbit_ldap_rfc4514:fill_dn(Fmt, Args),
+    ?L2("DN template result: \"~ts\"", [R]),
     R.
 
 log_result({ok, #auth_user{}}) -> ok;

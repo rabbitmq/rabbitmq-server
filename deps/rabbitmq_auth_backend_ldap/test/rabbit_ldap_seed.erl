@@ -188,7 +188,12 @@ jimmy() ->
       {"description", ["^RMQ-foobar", "^RMQ-.*$"]}]}.
 
 add(H, {A, B}) ->
-    ok = eldap:add(H, A, B).
+    case eldap:add(H, A, B) of
+        ok -> ok;
+        %% The base entry may already exist when using a container-managed
+        %% slapd instance (e.g. on macOS).
+        {error, entryAlreadyExists} -> ok
+    end.
 
 connect({Host, Port}) ->
     LogOpts = [],
