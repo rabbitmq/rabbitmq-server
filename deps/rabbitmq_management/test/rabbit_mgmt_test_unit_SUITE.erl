@@ -22,7 +22,8 @@ groups() ->
                                    tokenise_test,
                                    pack_binding_test,
                                    default_restrictions,
-                                   path_prefix_test
+                                   path_prefix_test,
+                                   regex_dos_test
                                   ]}
     ].
 
@@ -95,6 +96,21 @@ path_prefix_test(_Config) ->
 
 default_restrictions(_) ->
     ?assertEqual(false, rabbit_mgmt_features:is_op_policy_updating_disabled()).
+
+regex_dos_test(_) ->
+    %% Verify that a normal regex still works
+    NormalRegex = "^test-queue$",
+    ?assertEqual(true, rabbit_mgmt_util:maybe_filter_by_keyword(
+        name, NormalRegex, [{name, <<"test-queue">>}], "true")),
+    ?assertEqual(false, rabbit_mgmt_util:maybe_filter_by_keyword(
+        name, NormalRegex, [{name, <<"other-queue">>}], "true")),
+
+    %% A catastrophic backtracking regex hits the match limit on non-matching input
+    %% and returns {error, _}. The mitigation maps this to false instead of hanging.
+    EvilRegex = "^(a+)+$",
+    TargetString = <<"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaac">>,
+    ?assertEqual(false, rabbit_mgmt_util:maybe_filter_by_keyword(
+        name, EvilRegex, [{name, TargetString}], "true")).
 
 %%--------------------------------------------------------------------
 
