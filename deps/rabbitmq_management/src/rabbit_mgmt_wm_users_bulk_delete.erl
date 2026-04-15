@@ -42,6 +42,6 @@ accept_content(ReqData0, Context = #context{user = #user{username = ActingUser}}
       [users], ReqData0, Context,
       fun([Users], _, ReqData) ->
               [rabbit_auth_backend_internal:delete_user(User, ActingUser)
-               || User <- Users],
+               || User <- Users, not rabbit_mgmt_util:is_protected_user(User)],
             {true, ReqData, Context}
       end).
