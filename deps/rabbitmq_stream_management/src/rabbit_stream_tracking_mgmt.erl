@@ -97,4 +97,4 @@ convert_writer_tracking(Writers) ->
               end, #{}, Writers).
 
 is_authorized(ReqData, Context) ->
-    rabbit_mgmt_util:is_authorized(ReqData, Context).
+    rabbit_mgmt_util:is_authorized_vhost(ReqData, Context).

@@ -214,6 +214,7 @@ all_tests() -> [
     config_environment_test,
     disabled_qq_replica_opers_test,
     qq_status_test,
+    qq_status_vhost_authorisation_test,
     list_deprecated_features_test,
     list_used_deprecated_features_test,
     connections_amqpl,
@@ -4255,6 +4256,25 @@ qq_status_test(Config) ->
     http_delete(Config, "/queues/%2f/cq_status", {group, '2xx'}),
     passed.
 
+qq_status_vhost_authorisation_test(Config) ->
+    Vhost = <<"qq-status-vh">>,
+    User = <<"qq-status-user">>,
+    rabbit_ct_broker_helpers:add_vhost(Config, Vhost),
+    rabbit_ct_broker_helpers:set_full_permissions(Config, <<"guest">>, Vhost),
+    QQArgs = [{durable, true}, {arguments, [{'x-queue-type', 'quorum'}]}],
+    http_put(Config, "/queues/qq-status-vh/qq_status_auth", QQArgs, {group, '2xx'}),
+    rabbit_ct_broker_helpers:add_user(Config, User, User),
+    rabbit_ct_broker_helpers:set_user_tags(Config, 0, User, [management]),
+    http_get(Config, "/queues/quorum/qq-status-vh/qq_status_auth/status",
+             User, User, ?NOT_AUTHORISED),
+    %% Permissions granted, must succeed.
+    rabbit_ct_broker_helpers:set_full_permissions(Config, User, Vhost),
+    http_get(Config, "/queues/quorum/qq-status-vh/qq_status_auth/status",
+             User, User, ?OK),
+    http_delete(Config, "/queues/qq-status-vh/qq_status_auth", {group, '2xx'}),
+    rabbit_ct_broker_helpers:delete_user(Config, User),
+    rabbit_ct_broker_helpers:delete_vhost(Config, Vhost),
+    passed.
 
 list_deprecated_features_test(Config) ->
     Desc = "This is a deprecated feature",
