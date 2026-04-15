@@ -387,7 +387,7 @@ close_source(#{source := #{current := #{conn := Conn,
 close_source(_Config) -> ok.
 
 connection_close(Conn, Sess, LinkRef) ->
-    _ = amqp10_client:detach_link(LinkRef),
+    catch amqp10_client:detach_link(LinkRef),
     _ = amqp10_client:end_session(Sess),
     _ = amqp10_client:close_connection(Conn).
 
