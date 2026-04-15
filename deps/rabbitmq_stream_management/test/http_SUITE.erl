@@ -11,6 +11,8 @@
 -include_lib("rabbitmq_ct_helpers/include/rabbit_mgmt_test.hrl").
 
 -import(rabbit_mgmt_test_util, [
+                                http_delete/3,
+                                http_get/5,
                                 http_put/4,
                                 http_put/6
                                ]).
@@ -24,7 +26,8 @@ groups() ->
     [{non_parallel_tests, [], [
                                stream_management,
                                create_super_stream,
-                               create_super_stream_requires_configure_permission
+                               create_super_stream_requires_configure_permission,
+                               stream_tracking_requires_vhost_access
                               ]}].
 
 %% -------------------------------------------------------------------
@@ -163,6 +166,26 @@ create_super_stream_requires_configure_permission(Config) ->
              #{partitions => 3},
              {group, '2xx'}),
     rabbit_ct_broker_helpers:delete_user(Config, User),
+    ok.
+
+stream_tracking_requires_vhost_access(Config) ->
+    Vhost = <<"tracking-vh">>,
+    User = <<"tracking-user">>,
+    rabbit_ct_broker_helpers:add_vhost(Config, Vhost),
+    rabbit_ct_broker_helpers:set_full_permissions(Config, <<"guest">>, Vhost),
+    StreamArgs = [{durable, true}, {arguments, [{'x-queue-type', 'stream'}]}],
+    http_put(Config, "/queues/tracking-vh/test-stream", StreamArgs, {group, '2xx'}),
+    rabbit_ct_broker_helpers:add_user(Config, User, User),
+    rabbit_ct_broker_helpers:set_user_tags(Config, 0, User, [management]),
+    http_get(Config, "/stream/tracking-vh/test-stream/tracking",
+             User, User, ?NOT_AUTHORISED),
+    %% Permissions granted, must succeed.
+    rabbit_ct_broker_helpers:set_full_permissions(Config, User, Vhost),
+    http_get(Config, "/stream/tracking-vh/test-stream/tracking",
+             User, User, ?OK),
+    http_delete(Config, "/queues/tracking-vh/test-stream", {group, '2xx'}),
+    rabbit_ct_broker_helpers:delete_user(Config, User),
+    rabbit_ct_broker_helpers:delete_vhost(Config, Vhost),
     ok.
 
 get_stream_port(Config) ->
