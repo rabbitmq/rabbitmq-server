@@ -2735,7 +2735,7 @@ transfer_leadership(_CandidateNodes) ->
                                             true;
                                         Err ->
                                             Name = amqqueue:get_name(Q),
-                                            ?LOG_DEBUG("Failed to wait for leader election for queue ~ts on ~tp Err ~ts",
+                                            ?LOG_DEBUG("Failed to wait for leader election for queue ~ts on ~tp Err ~tw",
                                                        [Name, N, Err]),
                                             false
                                     end
