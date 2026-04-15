@@ -798,7 +798,7 @@ add_policy(VHost, Param, Username) ->
 add_vhost(VHost, ActingUser) ->
     Name             = maps:get(name, VHost, undefined),
     IsTracingEnabled = maps:get(tracing, VHost, undefined),
-    Metadata         = rabbit_data_coercion:atomize_keys(maps:get(metadata, VHost, #{})),
+    Metadata         = rabbit_vhost:pick_known_metadata(maps:get(metadata, VHost, #{})),
     Description      = maps:get(description, VHost, maps:get(description, Metadata, <<"">>)),
     Tags             = maps:get(tags, VHost, maps:get(tags, Metadata, [])),
     DefaultQueueType = maps:get(default_queue_type, Metadata, undefined),
