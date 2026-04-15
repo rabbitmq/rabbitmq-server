@@ -141,6 +141,8 @@ websocket_init(State0 = #state{socket = Sock}) ->
         {ok, ConnStr} ->
             ConnName = rabbit_data_coercion:to_binary(ConnStr),
             ?LOG_INFO("Accepting Web MQTT connection ~s", [ConnName]),
+            LoginTimeout = application:get_env(rabbitmq_mqtt, login_timeout, 10_000),
+            erlang:send_after(LoginTimeout, self(), login_timeout),
             Alarms = rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
             State = State0#state{conn_name = ConnName,
                                  blocked_by = sets:from_list(Alarms, [{version, 2}])},
@@ -286,6 +288,12 @@ websocket_info(connection_created, State) ->
 websocket_info({?MODULE, From, {info, Items}}, State) ->
     Infos = infos(Items, State),
     gen:reply(From, Infos),
+    {[], State, hibernate};
+websocket_info(login_timeout, #state{proc_state = connect_packet_unprocessed,
+                                     conn_name = ConnName} = State) ->
+    ?LOG_ERROR("closing Web MQTT connection ~tp (login timeout)", [ConnName]),
+    stop(State);
+websocket_info(login_timeout, State) ->
     {[], State, hibernate};
 websocket_info(Msg, State) ->
     ?LOG_WARNING("Web MQTT: unexpected message ~tp", [Msg]),
