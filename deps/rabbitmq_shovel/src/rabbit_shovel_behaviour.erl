@@ -217,6 +217,5 @@ decr_remaining(N, State = #{source := #{remaining := M} = Src,
         true  -> State#{source => Src#{remaining => M - N}};
         false ->
             ?LOG_INFO("shutting down Shovel '~ts', no messages left to transfer", [Name]),
-            ?LOG_DEBUG("shutting down Shovel '~ts', no messages left to transfer. Shovel state: ~tp", [Name, State]),
             exit({shutdown, autodelete})
     end.
