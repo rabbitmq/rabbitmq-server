@@ -16,7 +16,8 @@
          set_limits/2, vhost_cluster_state/1, is_running_on_all_nodes/1, await_running_on_all_nodes/2,
         list/0, count/0, list_names/0, all/0, all_tagged_with/1]).
 -export([parse_tags/1, update_tags/3]).
--export([update_metadata/3, enable_protection_from_deletion/1, disable_protection_from_deletion/1]).
+-export([update_metadata/3, pick_known_metadata/1,
+         enable_protection_from_deletion/1, disable_protection_from_deletion/1]).
 -export([lookup/1, default_name/0]).
 -export([info/1, info/2, info_all/0, info_all/1, info_all/2, info_all/3]).
 -export([dir/1, msg_store_dir_path/1, msg_store_dir_wildcard/0, msg_store_dir_base/0, config_file_path/1, ensure_config_file/1]).
@@ -281,6 +282,25 @@ declare_default_exchanges(VHostName, ActingUser) ->
                        Err
               end
       end, DefaultExchanges).
+
+-spec pick_known_metadata(any()) -> #{atom() => any()}.
+
+pick_known_metadata(Raw) when is_map(Raw) ->
+    Known = [description, tags, default_queue_type, protected_from_deletion],
+    lists:foldl(
+      fun(Key, Acc) ->
+          BinKey = atom_to_binary(Key),
+          case maps:find(BinKey, Raw) of
+              {ok, V} -> Acc#{Key => V};
+              error ->
+                  case maps:find(Key, Raw) of
+                      {ok, V} -> Acc#{Key => V};
+                      error   -> Acc
+                  end
+          end
+      end, #{}, Known);
+pick_known_metadata(_) ->
+    #{}.
 
 -spec update_metadata(vhost:name(), vhost:metadata(), rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
 update_metadata(Name, undefined, _ActingUser) ->
