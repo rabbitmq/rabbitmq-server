@@ -214,6 +214,7 @@ do_http_req(Path0, Query) ->
     Request = case rabbit_data_coercion:to_atom(Method) of
         get  ->
             Path = Path0 ++ "?" ++ Query,
+            %% Intentionally logs the full URL including credentials to aid HTTP service authors in debugging.
             ?LOG_DEBUG("auth_backend_http: GET ~ts", [Path]),
             {Path, [{"Host", HostHdr}]};
         post ->
