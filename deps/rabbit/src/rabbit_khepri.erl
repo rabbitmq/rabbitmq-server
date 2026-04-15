@@ -2108,6 +2108,25 @@ do_migrate_mnesia_tables(FeatureName, Migrations) ->
                        mnesia_tables_from_mfa(Mod, Fun, Args)
                end,
                Migrations),
+    %% Expand MFA-based entries to {Table, Mod} pairs with actual atom table
+    %% names so that rabbit_db_m2k_converter can look up converters by table.
+    ExpandedMigrations = lists:flatmap(
+               fun
+                   ({Table, _Mod} = Entry) when is_atom(Table) ->
+                       [Entry];
+                   (Table) when is_atom(Table) ->
+                       [Table];
+                   ({{mfa, Mod, Fun, Args}, ConverterMod}) when is_atom(Mod),
+                                                                is_atom(Fun),
+                                                                is_list(Args) ->
+                       [{T, ConverterMod}
+                        || T <- mnesia_tables_from_mfa(Mod, Fun, Args)];
+                   ({mfa, Mod, Fun, Args}) when is_atom(Mod),
+                                                is_atom(Fun),
+                                                is_list(Args) ->
+                       mnesia_tables_from_mfa(Mod, Fun, Args)
+               end,
+               Migrations),
     ?LOG_NOTICE(
        "Feature flags: `~ts`: starting migration of ~b tables from Mnesia "
        "to Khepri; expect decrease in performance and increase in memory "
@@ -2117,7 +2136,7 @@ do_migrate_mnesia_tables(FeatureName, Migrations) ->
     rabbit_table:wait(Tables, _Retry = true),
     Ret = mnesia_to_khepri:copy_tables(
             ?STORE_ID, ?MIGRATION_ID, Tables,
-            {rabbit_db_m2k_converter, Migrations}),
+            {rabbit_db_m2k_converter, ExpandedMigrations}),
     case Ret of
         ok ->
             ?LOG_NOTICE(
