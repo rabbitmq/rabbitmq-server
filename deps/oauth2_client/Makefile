@@ -3,7 +3,7 @@ PROJECT_DESCRIPTION = OAuth2 client from the RabbitMQ Project
 
 BUILD_DEPS = rabbit
 DEPS = rabbit_common jose
-TEST_DEPS = rabbitmq_ct_helpers cowboy
+TEST_DEPS = rabbitmq_ct_helpers cowboy meck
 LOCAL_DEPS = ssl inets crypto public_key
 
 PLT_APPS = rabbit
