@@ -16,7 +16,8 @@ all() ->
     authorization_response,
     access_response,
     cache_expiration,
-    cache_expiration_topic
+    cache_expiration_topic,
+    expiry_timestamp_delegation
     ].
 
 init_per_suite(Config) ->
@@ -161,6 +162,11 @@ cache_expiration_topic(Config) ->
 
     false = rpc(Config,rabbit_auth_backend_internal, check_topic_access, [Auth, TopicResource, write, RestrictedTopicContext]),
     false = rpc(Config,rabbit_auth_backend_cache, check_topic_access, [Auth, TopicResource, write, RestrictedTopicContext]).
+
+expiry_timestamp_delegation(Config) ->
+    {ok, Auth} = rpc(Config,rabbit_auth_backend_internal, user_login_authentication, [<<"guest">>, [{password, <<"guest">>}]]),
+    %% rabbit_auth_backend_internal returns `never` for expiry_timestamp
+    never = rpc(Config,rabbit_auth_backend_cache, expiry_timestamp, [Auth]).
 
 rpc(Config, M, F, A) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, M, F, A).
