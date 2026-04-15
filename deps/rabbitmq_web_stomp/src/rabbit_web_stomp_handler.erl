@@ -131,6 +131,8 @@ init(Req0, Opts) ->
 websocket_init(State) ->
     process_flag(trap_exit, true),
     {ok, ProcessorState} = init_processor_state(State),
+    LoginTimeout = application:get_env(rabbitmq_stomp, login_timeout, 10_000),
+    erlang:send_after(LoginTimeout, self(), login_timeout),
     {ok, rabbit_event:init_stats_timer(
            State#state{proc_state     = ProcessorState,
                        parse_state    = rabbit_stomp_frame:initial_state()},
@@ -291,6 +293,13 @@ websocket_info(close_websocket, State) ->
 
 websocket_info(emit_stats, State) ->
     {ok, emit_stats(State)};
+
+websocket_info(login_timeout, State = #state{connection = C})
+  when C =:= none; C =:= undefined ->
+    ?LOG_ERROR("Web STOMP: closing connection (login timeout)"),
+    stop(State);
+websocket_info(login_timeout, State) ->
+    {ok, State};
 
 websocket_info(Msg, State) ->
     ?LOG_INFO("Web STOMP: unexpected message ~tp",
