@@ -97,7 +97,7 @@ generate_self_signed_cert(SubjectStr, Serial) ->
         serialNumber = Serial,
         signature = #'SignatureAlgorithm'{
             algorithm = ?'sha256WithRSAEncryption',
-            parameters = 'NULL'},
+            parameters = <<5, 0>>},
         issuer = Subject,
         validity = #'Validity'{
             notBefore = {utcTime, "250101000000Z"},
