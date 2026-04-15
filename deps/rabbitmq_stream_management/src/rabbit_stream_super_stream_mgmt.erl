@@ -23,6 +23,7 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -define(DEFAULT_RPC_TIMEOUT, 30_000).
+-define(MAX_PARTITIONS, 1000).
 
 dispatcher() ->
     [{"/stream/super-streams/:vhost/:name", ?MODULE, []}].
@@ -178,11 +179,19 @@ validate_partitions(PartitionsBin, ReqData, Context) ->
     try
         case rabbit_data_coercion:to_integer(PartitionsBin) of
             Int when Int < 1 ->
-                rabbit_mgmt_util:bad_request("The partition number must be greater than 0", ReqData, Context);
+                rabbit_mgmt_util:bad_request(
+                  "The partition number must be greater than 0",
+                  ReqData, Context);
+            Int when Int > ?MAX_PARTITIONS ->
+                rabbit_mgmt_util:bad_request(
+                  "The partition number must not exceed " ++
+                  integer_to_list(?MAX_PARTITIONS),
+                  ReqData, Context);
             Int ->
                 Int
         end
     catch
         _:_ ->
-            rabbit_mgmt_util:bad_request("The partitions must be a number", ReqData, Context)
+            rabbit_mgmt_util:bad_request(
+              "The partitions must be a number", ReqData, Context)
     end.
