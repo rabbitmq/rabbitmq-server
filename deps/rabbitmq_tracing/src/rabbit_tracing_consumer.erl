@@ -68,25 +68,37 @@ init(Args0) ->
     #'basic.consume_ok'{} =
         amqp_channel:subscribe(Ch, #'basic.consume'{queue  = Q,
                                                     no_ack = true}, self()),
+    case open_log_file(Name) of
+        {ok, F, Filename} ->
+            rabbit_tracing_traces:announce(VHost, Name, self()),
+            Format = list_to_atom(binary_to_list(pget(format, Args))),
+            ?LOG_INFO("Tracer opened log file ~tp with "
+                      "format ~tp", [Filename, Format]),
+            {ok, #state{conn = Conn, ch = Ch, vhost = VHost, queue = Q,
+                        file = F, filename = Filename, format = Format,
+                        buf = [], buf_cnt = 0, max_payload = MaxPayload}};
+        {error, Reason} ->
+            {stop, Reason}
+    end.
+
+open_log_file(Name) ->
     {ok, Dir} = application:get_env(directory),
-    Filename = Dir ++ "/" ++ binary_to_list(Name) ++ ".log",
-    case filelib:ensure_dir(Filename) of
-        ok ->
-            case prim_file:open(Filename, [append]) of
-                {ok, F} ->
-                    rabbit_tracing_traces:announce(VHost, Name, self()),
-                    Format = list_to_atom(binary_to_list(pget(format, Args))),
-                    ?LOG_INFO("Tracer opened log file ~tp with "
-                                    "format ~tp", [Filename, Format]),
-                    {ok, #state{conn = Conn, ch = Ch, vhost = VHost, queue = Q,
-                                file = F, filename = Filename,
-                                format = Format, buf = [], buf_cnt = 0,
-                                max_payload = MaxPayload}};
+    case rabbit_http_util:safe_relative_path(binary_to_list(Name)) of
+        undefined ->
+            {error, {invalid_trace_name, Name}};
+        SafeName ->
+            Filename = Dir ++ "/" ++ SafeName ++ ".log",
+            case filelib:ensure_dir(Filename) of
+                ok ->
+                    case prim_file:open(Filename, [append]) of
+                        {ok, F} ->
+                            {ok, F, Filename};
+                        {error, E} ->
+                            {error, {could_not_open, Filename, E}}
+                    end;
                 {error, E} ->
-                    {stop, {could_not_open, Filename, E}}
-            end;
-        {error, E} ->
-            {stop, {could_not_create_dir, Dir, E}}
+                    {error, {could_not_create_dir, Dir, E}}
+            end
     end.
 
 handle_call(info_all, _From, State = #state{vhost = V, queue = Q}) ->
