@@ -67,6 +67,7 @@ groups() ->
           test_successful_access_with_a_token_that_uses_multiple_scope_aliases_in_scope_field,
           test_successful_authorization_without_scopes,
           test_successful_authentication_without_scopes,
+          test_ignore_non_existing_tag_atoms,
           test_successful_access_with_a_token_that_uses_single_scope_alias_with_var_expansion,
           test_successful_access_with_a_token_that_uses_single_scope_alias_in_extra_scope_source_field,
           test_successful_access_with_a_token_that_uses_multiple_scope_aliases_in_extra_scope_source_field,
@@ -692,6 +693,18 @@ test_successful_authentication_without_scopes(_) ->
         ?UTIL_MOD:fixture_token(), Username), Jwk),
 
     {ok, #auth_user{username = Username} } =
+      user_login_authentication(Username, [{password, Token}]).
+
+test_ignore_non_existing_tag_atoms(_) ->
+    Jwk = ?UTIL_MOD:fixture_jwk(),
+    UaaEnv = [{signing_keys, #{<<"token-key">> => {map, Jwk}}}],
+    application:set_env(rabbitmq_auth_backend_oauth2, key_config, UaaEnv),
+
+    Username = <<"username">>,
+    Token    = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_sub(
+        ?UTIL_MOD:fixture_token([<<"rabbitmq.tag:i_do_not_exist_as_an_atom_123">>]), Username), Jwk),
+
+    {ok, #auth_user{username = Username, tags = []} } =
       user_login_authentication(Username, [{password, Token}]).
 
 test_successful_authorization_without_scopes(_) ->

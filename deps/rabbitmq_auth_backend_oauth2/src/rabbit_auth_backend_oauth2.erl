@@ -489,4 +489,11 @@ resolve_scope_var(Elem, Token, Vhost) ->
 tags_from(DecodedToken) ->
     Scopes    = maps:get(?SCOPE_JWT_FIELD, DecodedToken, []),
     TagScopes = filter_matching_scope_prefix_and_drop_it(Scopes, ?TAG_SCOPE_PREFIX),
-    lists:usort(lists:map(fun rabbit_data_coercion:to_atom/1, TagScopes)).
+    lists:usort(lists:filtermap(fun safe_to_atom/1, TagScopes)).
+
+safe_to_atom(Bin) ->
+    try
+        {true, rabbit_data_coercion:to_existing_atom(Bin)}
+    catch
+        error:badarg -> false
+    end.
