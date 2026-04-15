@@ -22,7 +22,8 @@ groups() ->
                                    tokenise_test,
                                    pack_binding_test,
                                    default_restrictions,
-                                   path_prefix_test
+                                   path_prefix_test,
+                                   regex_dos_test
                                   ]}
     ].
 
@@ -95,6 +96,20 @@ path_prefix_test(_Config) ->
 
 default_restrictions(_) ->
     ?assertEqual(false, rabbit_mgmt_features:is_op_policy_updating_disabled()).
+
+regex_dos_test(_) ->
+    %% This test ensures that a catastrophic backtracking regex does not hang the process.
+    %% The regex below will cause catastrophic backtracking if evaluated against a long string
+    %% of 'a's that does not end with 'b'.
+    EvilRegex = "^(a+)+$",
+    TargetString = <<"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab">>,
+    %% This should return true because the string matches
+    ?assertEqual(true, rabbit_mgmt_util:maybe_filter_by_keyword(name, EvilRegex, [{name, TargetString}], "true")),
+    
+    %% Now the string that causes backtracking
+    TargetStringFail = <<"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaac">>,
+    %% This should return false and not hang
+    ?assertEqual(false, rabbit_mgmt_util:maybe_filter_by_keyword(name, EvilRegex, [{name, TargetStringFail}], "true")).
 
 %%--------------------------------------------------------------------
 
