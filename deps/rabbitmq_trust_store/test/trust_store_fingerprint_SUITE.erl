@@ -88,7 +88,7 @@ is_whitelisted_der_matches_stored_cert(_Config) ->
 %% ------------------------------------------------------------------
 
 generate_self_signed_cert(SubjectStr, Serial) ->
-    Key = public_key:generate_key({rsa, 2048, 65537}),
+    Key = public_key:generate_key({namedCurve, secp256r1}),
     Subject = {rdnSequence, [[#'AttributeTypeAndValue'{
                                   type = ?'id-at-commonName',
                                   value = {utf8String, list_to_binary(SubjectStr)}}]]},
@@ -96,8 +96,8 @@ generate_self_signed_cert(SubjectStr, Serial) ->
         version = v3,
         serialNumber = Serial,
         signature = #'SignatureAlgorithm'{
-            algorithm = ?'sha256WithRSAEncryption',
-            parameters = <<5, 0>>},
+            algorithm = ?'ecdsa-with-SHA256',
+            parameters = asn1_NOVALUE},
         issuer = Subject,
         validity = #'Validity'{
             notBefore = {utcTime, "250101000000Z"},
@@ -105,11 +105,9 @@ generate_self_signed_cert(SubjectStr, Serial) ->
         subject = Subject,
         subjectPublicKeyInfo = #'OTPSubjectPublicKeyInfo'{
             algorithm = #'PublicKeyAlgorithm'{
-                algorithm = ?'rsaEncryption',
-                parameters = 'NULL'},
-            subjectPublicKey = #'RSAPublicKey'{
-                modulus = Key#'RSAPrivateKey'.modulus,
-                publicExponent = Key#'RSAPrivateKey'.publicExponent}},
+                algorithm = ?'id-ecPublicKey',
+                parameters = {namedCurve, ?secp256r1}},
+            subjectPublicKey = #'ECPoint'{point = Key#'ECPrivateKey'.publicKey}},
         extensions = []
     },
     CertDER = public_key:pkix_sign(TBS, Key),
