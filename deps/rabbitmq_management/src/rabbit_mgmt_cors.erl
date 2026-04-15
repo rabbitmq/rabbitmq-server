@@ -19,7 +19,7 @@ set_headers(ReqData, Module) ->
     case match_origin(ReqData1) of
         false ->
             ReqData1;
-        Origin ->
+        {Origin, AllowCredentials} ->
             ReqData2 = case cowboy_req:method(ReqData1) of
                 <<"OPTIONS">> -> handle_options(ReqData1, Module);
                 _             -> ReqData1
@@ -27,9 +27,14 @@ set_headers(ReqData, Module) ->
             ReqData3 = cowboy_req:set_resp_header(<<"access-control-allow-origin">>,
                                                   Origin,
                                                   ReqData2),
-            cowboy_req:set_resp_header(<<"access-control-allow-credentials">>,
-                                       "true",
-                                       ReqData3)
+            case AllowCredentials of
+                true ->
+                    cowboy_req:set_resp_header(<<"access-control-allow-credentials">>,
+                                               <<"true">>,
+                                               ReqData3);
+                false ->
+                    ReqData3
+            end
     end.
 
 %% Set max-age from configuration (default: 30 minutes).
@@ -73,11 +78,11 @@ match_origin(ReqData) ->
                 cors_allow_origins, []),
             case lists:member(binary_to_list(Origin), AllowedOrigins) of
                 true ->
-                    Origin;
+                    {Origin, true};
                 false ->
                     %% Maybe the configuration explicitly allows "*".
                     case lists:member("*", AllowedOrigins) of
-                        true  -> Origin;
+                        true  -> {<<"*">>, false};
                         false -> false
                     end
             end
