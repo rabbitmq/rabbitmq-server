@@ -78,6 +78,7 @@ some_tests() ->
     [
         users_test,
         users_protected_test,
+        users_protected_bulk_delete_test,
         exchanges_test,
         queues_test,
         bindings_test,
@@ -674,6 +675,24 @@ users_protected_test(Config) ->
     http_delete(Config, "/users/protected_user", ?BAD_REQUEST),
 
     rabbit_ct_broker_helpers:delete_user(Config, ProtectedUser),
+    passed.
+
+users_protected_bulk_delete_test(Config) ->
+    Protected = <<"protected_bulk">>,
+    Regular = <<"regular_bulk">>,
+    rabbit_ct_broker_helpers:add_user(Config, Protected),
+    rabbit_ct_broker_helpers:set_user_tags(Config, 0, Protected, [management, protected]),
+    rabbit_ct_broker_helpers:add_user(Config, Regular),
+    rabbit_ct_broker_helpers:set_user_tags(Config, 0, Regular, [management]),
+
+    http_post_json(Config, "/users/bulk-delete",
+                   "{\"users\": [\"protected_bulk\", \"regular_bulk\"]}",
+                   {group, '2xx'}),
+    %% The protected user must survive bulk deletion
+    http_get(Config, "/users/protected_bulk", {group, '2xx'}),
+    http_get(Config, "/users/regular_bulk", ?NOT_FOUND),
+
+    rabbit_ct_broker_helpers:delete_user(Config, Protected),
     passed.
 
 without_permissions_users_test(Config) ->
