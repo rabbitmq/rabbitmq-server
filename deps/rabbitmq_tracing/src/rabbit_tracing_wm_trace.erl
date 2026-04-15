@@ -50,7 +50,8 @@ accept_content(ReqData0, Ctx) ->
             rabbit_mgmt_util:with_decode(
               [format, pattern], ReqData0, Ctx,
               fun([_, _], Trace, ReqData) ->
-                      Fs = [fun val_payload_bytes/5, fun val_format/5,
+                      Fs = [fun val_name/5,
+                            fun val_payload_bytes/5, fun val_format/5,
                             fun val_create/5],
                       case lists:foldl(fun (F,  ok)  -> F(ReqData, Ctx, VHost,
                                                           Name, Trace);
@@ -82,6 +83,12 @@ trace(ReqData, Context) ->
             Name = rabbit_mgmt_util:id(name, ReqData),
             rabbit_tracing_util:apply_on_node(ReqData, Context, rabbit_tracing_traces,
                                               lookup, [VHost, Name])
+    end.
+
+val_name(_ReqData, _Context, _VHost, Name, _Trace) ->
+    case rabbit_http_util:safe_relative_path(binary_to_list(Name)) of
+        undefined -> <<"invalid trace name">>;
+        _         -> ok
     end.
 
 val_payload_bytes(_ReqData, _Context, _VHost, _Name, Trace) ->
