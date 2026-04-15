@@ -214,7 +214,8 @@ connect_source(State = #{name := Name,
     State#{source => Src#{current => #{conn => Conn,
                                        session => Sess,
                                        link => LinkRef,
-                                       uri => Uri}}}.
+                                       uri => list_to_binary(
+                                                amqp_uri:remove_credentials(Uri))}}}.
 
 -spec connect_dest(state()) -> state().
 connect_dest(State = #{name := Name,
@@ -237,7 +238,8 @@ connect_dest(State = #{name := Name,
                                      link_state => attached,
                                      pending => [],
                                      link => LinkRef,
-                                     uri => Uri}}}.
+                                     uri => list_to_binary(
+                                              amqp_uri:remove_credentials(Uri))}}}.
 
 connect(Name, SndSettleMode, Uri, Postfix, Addr, Map, AttachFun, LinkNameOverride, Predeclared) ->
     {ok, Config0} = amqp10_client:parse_uri(Uri),
