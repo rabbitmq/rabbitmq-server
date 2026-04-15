@@ -134,6 +134,7 @@ timestamp_hashing_test(Config) ->
 other_routing_test(Config) ->
     ok = test_binding_with_negative_routing_key(Config),
     ok = test_binding_with_non_numeric_routing_key(Config),
+    ok = test_binding_with_excessive_weight(Config),
     ok = test_non_supported_property(Config),
     ok = test_mutually_exclusive_arguments(Config),
     ok.
@@ -494,6 +495,29 @@ test_binding_with_non_numeric_routing_key(Config) ->
     process_flag(trap_exit, true),
     Cmd = #'queue.bind'{exchange = <<"bind-fail">>,
                         routing_key = <<"not-a-number">>},
+    ?assertExit(_, amqp_channel:call(Chan, Cmd)),
+
+    {Conn2, Ch2} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    amqp_channel:call(Ch2, #'queue.delete'{queue = Q}),
+
+    rabbit_ct_client_helpers:close_connection_and_channel(Conn, Chan),
+    rabbit_ct_client_helpers:close_connection_and_channel(Conn2, Ch2),
+    ok.
+
+test_binding_with_excessive_weight(Config) ->
+    {Conn, Chan} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    X = <<"bind-fail">>,
+    amqp_channel:call(Chan, #'exchange.delete' {exchange = X}),
+
+    Declare1 = #'exchange.declare'{exchange = X,
+                                   type = <<"x-consistent-hash">>},
+    #'exchange.declare_ok'{} = amqp_channel:call(Chan, Declare1),
+    Q = <<"test-queue">>,
+    Declare2 = #'queue.declare'{queue = Q, durable = true},
+    #'queue.declare_ok'{} = amqp_channel:call(Chan, Declare2),
+    process_flag(trap_exit, true),
+    Cmd = #'queue.bind'{exchange = <<"bind-fail">>,
+                        routing_key = <<"500000000">>},
     ?assertExit(_, amqp_channel:call(Chan, Cmd)),
 
     {Conn2, Ch2} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
