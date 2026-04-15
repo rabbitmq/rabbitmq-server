@@ -73,8 +73,10 @@ initial_state() -> none.
 -define(COLON_ESC, $c).
 -define(CR_ESC,    $r).
 
+-define(MAX_HEADERS, 100).
+
 %% parser state
--record(state, {acc, cmd, hdrs, hdrname}).
+-record(state, {acc, cmd, hdrs, seen = #{}, hdrname}).
 
 parse(Content, {resume, Continuation}) -> Continuation(Content);
 parse(Content, none                  ) -> parser(Content, noframe, #state{}).
@@ -108,13 +110,25 @@ parser(<<Ch:8,       Rest/binary>>, Term    ,  State) -> parser(Rest, Term, accu
 
 %% state transitions
 goto(noframe,  command,  Rest, State                                 ) -> parser(Rest, command, State#state{acc = []});
-goto(command,  headers,  Rest, State = #state{acc = Acc}             ) -> parser(Rest, headers, State#state{cmd = lists:reverse(Acc), hdrs = []});
+goto(command,  headers,  Rest, State = #state{acc = Acc}             ) -> parser(Rest, headers, State#state{cmd = lists:reverse(Acc), hdrs = [], seen = #{}});
 goto(headers,  body,     Rest,         #state{cmd = Cmd, hdrs = Hdrs}) -> parse_body(Rest, #stomp_frame{command = Cmd, headers = Hdrs});
 goto(headers,  hdrname,  Rest, State                                 ) -> parser(Rest, hdrname, State#state{acc = []});
 goto(hdrname,  hdrvalue, Rest, State = #state{acc = Acc}             ) -> parser(Rest, hdrvalue, State#state{acc = [], hdrname = lists:reverse(Acc)});
 goto(hdrname,  headers, _Rest,         #state{acc = Acc}             ) -> {error, {header_no_value, lists:reverse(Acc)}};  % badly formed header -- fatal error
-goto(hdrvalue, headers,  Rest, State = #state{acc = Acc, hdrs = Headers, hdrname = HdrName}) ->
-    parser(Rest, headers, State#state{hdrs = insert_header(Headers, HdrName, lists:reverse(Acc))}).
+goto(hdrvalue, headers,  Rest, State = #state{acc = Acc, hdrs = Headers, seen = Seen, hdrname = HdrName}) ->
+    case Seen of
+        #{HdrName := _} ->
+            parser(Rest, headers, State#state{acc = []});
+        _ when map_size(Seen) >= ?MAX_HEADERS ->
+            {error, too_many_headers};
+        _ ->
+            Value = lists:reverse(Acc),
+            parser(Rest, headers, State#state{
+                acc  = [],
+                hdrs = [{HdrName, Value} | Headers],
+                seen = Seen#{HdrName => true}
+            })
+    end.
 
 %% error atom
 unexpected_chars(noframe)  -> unexpected_chars_between_frames;
@@ -132,13 +146,6 @@ unescape(?BSL_ESC,   Fun) -> Fun(?BSL);
 unescape(?COLON_ESC, Fun) -> Fun(?COLON);
 unescape(?CR_ESC,    Fun) -> Fun(?CR);
 unescape(Ch,        _Fun) -> {error, {bad_escape, [?BSL, Ch]}}.
-
-%% insert header unless aleady seen
-insert_header(Headers, Name, Value) ->
-    case lists:keymember(Name, 1, Headers) of
-        true  -> Headers; % first header only
-        false -> [{Name, Value} | Headers]
-    end.
 
 parse_body(Content, Frame = #stomp_frame{command = Command}) ->
     case Command of
