@@ -11,6 +11,8 @@
 -include("rabbitmq_consistent_hash_exchange.hrl").
 -include_lib("kernel/include/logger.hrl").
 
+-define(MAX_BINDING_WEIGHT, 10_000).
+
 -behaviour(rabbit_exchange_type).
 
 -export([description/0, serialise_events/0, route/3]).
@@ -92,12 +94,19 @@ validate(#exchange{arguments = Args}) ->
 validate_binding(_X, #binding { key = K }) ->
     try
         V = list_to_integer(binary_to_list(K)),
-        case V < 1 of
-            true -> {error, {binding_invalid, "The binding key must be greater than 0", []}};
-            false -> ok
+        if
+            V < 1 ->
+                {error, {binding_invalid,
+                         "The binding key must be greater than 0", []}};
+            V > ?MAX_BINDING_WEIGHT ->
+                {error, {binding_invalid,
+                         "The binding key must not exceed ~b", [?MAX_BINDING_WEIGHT]}};
+            true ->
+                ok
         end
     catch error:badarg ->
-            {error, {binding_invalid, "The binding key must be an integer: ~tp", [K]}}
+            {error, {binding_invalid,
+                     "The binding key must be an integer: ~tp", [K]}}
     end.
 
 maybe_initialise_hash_ring_state(#exchange{name = Name}) ->
