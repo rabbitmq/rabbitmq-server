@@ -49,6 +49,7 @@ all() ->
         test_unsuccessful_access_with_a_token_that_uses_missing_scope_alias_in_scope_field,
         test_unsuccessful_access_with_a_token_that_uses_missing_scope_alias_in_extra_scope_source_field,
         test_username_from,
+        test_token_with_too_many_scopes,
         {group, with_rabbitmq_node},
         {group, with_resource_server_id}
       
@@ -67,6 +68,7 @@ groups() ->
           test_successful_access_with_a_token_that_uses_multiple_scope_aliases_in_scope_field,
           test_successful_authorization_without_scopes,
           test_successful_authentication_without_scopes,
+          test_ignore_non_existing_tag_atoms,
           test_successful_access_with_a_token_that_uses_single_scope_alias_with_var_expansion,
           test_successful_access_with_a_token_that_uses_single_scope_alias_in_extra_scope_source_field,
           test_successful_access_with_a_token_that_uses_multiple_scope_aliases_in_extra_scope_source_field,
@@ -186,7 +188,7 @@ normalize_token_scope_using_multiple_scopes_key(_) ->
         ResourceServer = ResourceServer0#resource_server{
             additional_scopes_key = <<"authorization.permissions.scopes realm_access.roles resource_access.account.roles">>
             },
-        Token = normalize_token_scope(ResourceServer, Token0),
+        {ok, Token} = normalize_token_scope(ResourceServer, Token0),
         ?assertEqual(lists:sort(ExpectedScope), lists:sort(uaa_jwt:get_scope(Token)), Case)
         end, Pairs).
 
@@ -244,7 +246,7 @@ normalize_token_scope_with_requesting_party_token_scopes(_) ->
     lists:foreach(fun({Case, Authorization, ExpectedScope}) ->
         ResourceServer0 = new_resource_server(<<"rabbitmq-resource">>),        
         Token0 = #{<<"authorization">> => Authorization},
-        Token = normalize_token_scope(ResourceServer0, Token0),
+        {ok, Token} = normalize_token_scope(ResourceServer0, Token0),
         ?assertEqual(ExpectedScope, uaa_jwt:get_scope(Token), Case)
         end, Pairs).
 
@@ -291,7 +293,7 @@ normalize_token_scope_with_rich_auth_request_using_regular_expression_with_clust
             resource_server_type = ?RESOURCE_SERVER_TYPE
           },
           Token0 = #{<<"authorization_details">> => Permissions},
-          Token = normalize_token_scope(ResourceServer, Token0),
+          {ok, Token} = normalize_token_scope(ResourceServer, Token0),
           ?assertEqual(lists:sort(ExpectedScope),
                 lists:sort(uaa_jwt:get_scope(Token)), Case)
       end, Pairs).
@@ -606,7 +608,7 @@ normalize_token_scope_with_rich_auth_request(_) ->
             resource_server_type = ?RESOURCE_SERVER_TYPE
         },
         Token0 = #{<<"authorization_details">> => Permissions},
-        Token = normalize_token_scope(ResourceServer, Token0),
+        {ok, Token} = normalize_token_scope(ResourceServer, Token0),
         ExpectedScopes = lists:sort(ExpectedScope0),
         ActualScopes = lists:sort(uaa_jwt:get_scope(Token)),
         ?assertEqual(ExpectedScopes, ActualScopes, Case)
@@ -676,7 +678,7 @@ normalize_token_scope_with_additional_scopes_complex_claims(_) ->
             additional_scopes_key = <<"custom-key">>
         },
         Token0 = #{<<"custom-key">> => Authorization},
-        Token = normalize_token_scope(ResourceServer, Token0),
+        {ok, Token} = normalize_token_scope(ResourceServer, Token0),
         ExpectedScopes = lists:sort(ExpectedScope0),
         ActualScopes = lists:sort(uaa_jwt:get_scope(Token)),
         ?assertEqual(ExpectedScopes, ActualScopes, Case)
@@ -692,6 +694,18 @@ test_successful_authentication_without_scopes(_) ->
         ?UTIL_MOD:fixture_token(), Username), Jwk),
 
     {ok, #auth_user{username = Username} } =
+      user_login_authentication(Username, [{password, Token}]).
+
+test_ignore_non_existing_tag_atoms(_) ->
+    Jwk = ?UTIL_MOD:fixture_jwk(),
+    UaaEnv = [{signing_keys, #{<<"token-key">> => {map, Jwk}}}],
+    application:set_env(rabbitmq_auth_backend_oauth2, key_config, UaaEnv),
+
+    Username = <<"username">>,
+    Token    = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_sub(
+        ?UTIL_MOD:fixture_token([<<"rabbitmq.tag:i_do_not_exist_as_an_atom_123">>]), Username), Jwk),
+
+    {ok, #auth_user{username = Username, tags = []} } =
       user_login_authentication(Username, [{password, Token}]).
 
 test_successful_authorization_without_scopes(_) ->
@@ -1376,7 +1390,7 @@ normalize_token_scopes_with_scope_prefix(_) ->
       ResourceServer = ResourceServer0#resource_server {
         scope_prefix = ScopePrefix
       },
-      Token = normalize_token_scope(ResourceServer, Token0),
+      {ok, Token} = normalize_token_scope(ResourceServer, Token0),
       ?assertEqual(ExpectedScopes, uaa_jwt:get_scope(Token))
       end, Scenarios).
 
@@ -1385,14 +1399,20 @@ normalize_token_scope_from_space_separated_list_in_scope_claim(_) ->
     Token0 = #{
         ?SCOPE_JWT_FIELD => <<"foo rabbitmq.bar bar.foo one.two foobar rabbitmq.other.third">>
     },
-    Token = normalize_token_scope(ResourceServer, Token0),
+    {ok, Token} = normalize_token_scope(ResourceServer, Token0),
     ?assertEqual([<<"bar">>, <<"other.third">>], uaa_jwt:get_scope(Token)).
 
 normalize_token_scope_without_scope_claim(_) ->
     ResourceServer = new_resource_server(?RESOURCE_SERVER_ID),
     Token0 = #{ },
-    ?assertEqual([], uaa_jwt:get_scope(normalize_token_scope(ResourceServer, Token0))).
+    {ok, Token} = normalize_token_scope(ResourceServer, Token0),
+    ?assertEqual([], uaa_jwt:get_scope(Token)).
 
+test_token_with_too_many_scopes(_) ->
+    ResourceServer = new_resource_server(?RESOURCE_SERVER_ID),
+    Scopes = [iolist_to_binary([<<"rabbitmq.read:*/">>, integer_to_binary(N)]) || N <- lists:seq(1, 2049)],
+    Token0 = #{?SCOPE_JWT_FIELD => Scopes},
+    ?assertEqual({error, too_many_scopes}, normalize_token_scope(ResourceServer, Token0)).
 
 test_extract_scope_from_path_expression(_) ->
     M = fun rabbit_auth_backend_oauth2:extract_scope_list_from_token_value/2,
