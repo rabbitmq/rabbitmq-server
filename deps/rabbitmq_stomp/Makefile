@@ -31,7 +31,7 @@ define PROJECT_APP_EXTRA_KEYS
 endef
 
 DEPS = ranch rabbit_common rabbit amqp_client
-TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers rabbitmq_management
+TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers rabbitmq_management proper
 
 PLT_APPS += rabbitmq_cli elixir ssl
 
