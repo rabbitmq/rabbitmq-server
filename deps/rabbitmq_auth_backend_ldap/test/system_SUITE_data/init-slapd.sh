@@ -13,6 +13,20 @@ readonly binddn="cn=config"
 readonly passwd=secret
 
 case "$(uname -s)" in
+    Darwin)
+        # On macOS, slapd must already be running externally (e.g. in a
+        # container) on the requested port.
+        for seconds in 1 2 3 4 5 6 7 8 9 10; do
+            ldapsearch -x -H "$uri" -b "" -s base namingContexts >/dev/null 2>&1 && break
+            sleep 1
+        done
+        ldapsearch -x -H "$uri" -b "" -s base namingContexts >/dev/null 2>&1 || {
+            echo "ERROR: no LDAP server reachable at $uri" >&2
+            exit 1
+        }
+        echo "SLAPD_PID=0"
+        exit 0
+        ;;
     Linux)
         if [ -x /usr/bin/slapd ]
         then
