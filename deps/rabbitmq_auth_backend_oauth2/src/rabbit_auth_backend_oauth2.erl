@@ -93,6 +93,10 @@ check_vhost_access(#auth_user{impl = DecodedTokenFun},
             rabbit_oauth2_scope:vhost_access(VHost, Scopes)
         end).
 
+-spec check_resource_access(rabbit_types:auth_user(), rabbit_types:r(atom()),
+                            rabbit_types:permission_atom(),
+                            rabbit_types:authz_context()) ->
+    boolean() | {'error', any()}.
 check_resource_access(#auth_user{impl = DecodedTokenFun},
                       Resource, Permission, _AuthzContext) ->
     with_decoded_token(DecodedTokenFun(),
@@ -101,6 +105,10 @@ check_resource_access(#auth_user{impl = DecodedTokenFun},
             rabbit_oauth2_scope:resource_access(Resource, Permission, Scopes)
         end).
 
+-spec check_topic_access(rabbit_types:auth_user(), rabbit_types:r(atom()),
+                         rabbit_types:permission_atom(),
+                         rabbit_types:topic_access_context()) ->
+    boolean() | {'error', any()}.
 check_topic_access(#auth_user{impl = DecodedTokenFun},
                    Resource, Permission, Context) ->
     with_decoded_token(DecodedTokenFun(),
@@ -109,6 +117,10 @@ check_topic_access(#auth_user{impl = DecodedTokenFun},
             rabbit_oauth2_scope:topic_access(Resource, Permission, Context, Scopes)
         end).
 
+-spec update_state(rabbit_types:auth_user(), term()) ->
+    {'ok', rabbit_types:auth_user()} |
+    {'refused', string(), [any()]} |
+    {'error', any()}.
 update_state(AuthUser, NewToken) ->
     case resolve_resource_server(NewToken) of
         {error, _} = Err0 -> Err0;
@@ -116,9 +128,9 @@ update_state(AuthUser, NewToken) ->
             case check_token(NewToken, Tuple) of
                 %% avoid logging the token
                 {refused, {error, {invalid_token, error, _Err, _Stacktrace}}} ->
-                    {refused, "Authentication using an OAuth 2/JWT token failed: provided token is invalid"};
+                    {refused, "Authentication using an OAuth 2/JWT token failed: provided token is invalid", []};
                 {refused, Err} ->
-                    {refused, rabbit_misc:format("Authentication using an OAuth 2/JWT token failed: ~tp", [Err])};
+                    {refused, rabbit_misc:format("Authentication using an OAuth 2/JWT token failed: ~tp", [Err]), []};
                 {ok, DecodedToken} ->
                     CurToken = AuthUser#auth_user.impl,
                     case ensure_same_username(
@@ -130,11 +142,12 @@ update_state(AuthUser, NewToken) ->
                                                     impl = fun() -> DecodedToken end}};
                         {error, mismatch_username_after_token_refresh} ->
                             {refused,
-                                "Not allowed to change username on refreshed token"}
+                                "Not allowed to change username on refreshed token", []}
                     end
             end
     end.
 
+-spec expiry_timestamp(rabbit_types:auth_user()) -> integer() | never.
 expiry_timestamp(#auth_user{impl = DecodedTokenFun}) ->
     case DecodedTokenFun() of
         #{<<"exp">> := Exp} when is_integer(Exp) ->

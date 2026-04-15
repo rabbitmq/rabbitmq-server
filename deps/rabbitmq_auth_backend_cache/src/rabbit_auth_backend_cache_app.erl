@@ -13,6 +13,8 @@
 -behaviour(supervisor).
 -export([init/1]).
 
+-include_lib("kernel/include/logger.hrl").
+
 start(_Type, _StartArgs) ->
     supervisor:start_link({local,?MODULE},?MODULE,[]).
 
@@ -34,4 +36,21 @@ init([]) ->
                   permanent, 5000, worker, [AuthCache]}];
         false -> []
     end,
+    validate_cached_backend(),
     {ok, {{one_for_one,3,10}, ChildSpecs}}.
+
+validate_cached_backend() ->
+    {ok, BackendConfig} = application:get_env(rabbitmq_auth_backend_cache,
+                                              cached_backend),
+    Backends = case BackendConfig of
+                   Mod when is_atom(Mod) -> [Mod];
+                   {N, Z}               -> [N, Z]
+               end,
+    case lists:member(rabbit_auth_backend_cache, Backends) of
+        true ->
+            ?LOG_ERROR(
+                "Auth backend cache: cached_backend must not be set "
+                "to rabbit_auth_backend_cache (the cache cannot wrap itself)");
+        false ->
+            ok
+    end.
