@@ -82,10 +82,7 @@ partial_chain(Chain) ->
     % special handling of clients that present a chain rather than just a peer cert.
     case lists:reverse(Chain) of
         [PeerDer, Ca | _] ->
-            Peer = public_key:pkix_decode_cert(PeerDer, otp),
-            % If the Peer is whitelisted make it's immediate Authority a trusted one.
-            % This means the peer will automatically be validated.
-            case rabbit_trust_store:is_whitelisted(Peer) of
+            case rabbit_trust_store:is_whitelisted_der(PeerDer) of
                 true -> {trusted_ca, Ca};
                 false -> unknown_ca
             end;
