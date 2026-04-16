@@ -109,15 +109,15 @@ messages_not_dropped_on_disconnect(Config) ->
     QName = rabbit_misc:r(<<"/">>, queue, <<"bulk-test">>),
     ?awaitMatch(N, count_connections(Config), 30_000),
     ?awaitMatch(
-       {ok, _},
-       rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, lookup, [QName]),
-       30_000),
-    {ok, Q} = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, lookup, [QName]),
-    ?awaitMatch(
        1000,
        begin
-           Messages = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, info, [Q, [messages]]),
-           pget(messages, Messages)
+           case rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, lookup, [QName]) of
+               {ok, Q0} ->
+                   pget(messages,
+                        rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, info, [Q0, [messages]]));
+               _ ->
+                   0
+           end
        end,
        30_000),
     ok.
