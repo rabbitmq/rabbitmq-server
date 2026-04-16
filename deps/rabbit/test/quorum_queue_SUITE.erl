@@ -3087,16 +3087,23 @@ recover_from_multiple_failures(Config) ->
     publish(Ch, QQ),
     publish(Ch, QQ),
 
-    wait_for_messages_ready([Server], RaName, 3),
-    wait_for_messages_pending_ack([Server], RaName, 0),
+    %% Publishing without quorum: messages are written to the local Raft
+    %% log but cannot be committed. The metrics update can take longer on
+    %% slower hosts (runners).
+    queue_utils:wait_for_messages([Server], RaName, 3,
+                                  num_ready_messages, 60_000 div 256),
+    queue_utils:wait_for_messages([Server], RaName, 0,
+                                  num_checked_out, 60_000 div 256),
 
     ok = rabbit_ct_broker_helpers:start_node(Config, Server1),
     ok = rabbit_ct_broker_helpers:start_node(Config, Server2),
 
     %% there is an assumption here that the messages were not lost and were
     %% recovered when a quorum was restored. Not the best test perhaps.
-    wait_for_messages_ready(Servers, RaName, 6),
-    wait_for_messages_pending_ack(Servers, RaName, 0).
+    queue_utils:wait_for_messages(Servers, RaName, 6,
+                                  num_ready_messages, 60_000 div 256),
+    queue_utils:wait_for_messages(Servers, RaName, 0,
+                                  num_checked_out, 60_000 div 256).
 
 publishing_to_unavailable_queue(Config) ->
     %% publishing to an unavailable queue but with a reachable member should result
