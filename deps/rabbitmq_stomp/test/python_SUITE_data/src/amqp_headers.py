@@ -14,7 +14,7 @@ class TestAmqpHeaders(base.BaseTest):
         self.listener.reset(1)
         queueName='test-amqp-headers-to-stomp'
 
-        # Set up STOMP subscription and wait for confirmation
+        # set up a subscription and wait for it to be confirmed
         self.subscribe_dest(self.conn, '/topic/test', None,
                             headers={'x-queue-name': queueName},
                             receipt='sub.receipt')
