@@ -35,6 +35,7 @@
 -define(DESCRIPTOR_CODE_DATA, 16#75).
 -define(DESCRIPTOR_CODE_AMQP_SEQUENCE, 16#76).
 -define(DESCRIPTOR_CODE_AMQP_VALUE, 16#77).
+-define(MAX_ZERO_WIDTH_ARRAY_COUNT, 10_000).
 
 
 %% server_mode is a special parsing mode used by RabbitMQ when parsing
@@ -121,8 +122,6 @@ parse(<<16#94, V:16/binary, _/binary>>, B) ->
 parse(<<Type, _/binary>>, B) ->
     throw({primitive_type_unsupported, Type, {position, B}}).
 
-%% array structure is {array, Ctor, [Data]}
-%% e.g. {array, symbol, [<<"amqp:accepted:list">>]}
 parse_array(UnitSize, Bin) ->
     <<Count:UnitSize, Bin1/binary>> = Bin,
     parse_array1(Count, Bin1).
@@ -136,6 +135,17 @@ parse_array1(Count, <<?DESCRIBED, Rest/binary>>) ->
                        end, List),
     % this format cannot represent an empty array of described types
     {array, {described, Descriptor, Type}, Values};
+parse_array1(Count, <<Type, ArrayBin/binary>>)
+  when Type >= 16#40 andalso Type =< 16#45 ->
+    %% This is an array that must have zero octets of data.
+    if byte_size(ArrayBin) > 0 ->
+           exit({failed_to_parse_array_extra_input_remaining, Type, byte_size(ArrayBin)});
+       Count > ?MAX_ZERO_WIDTH_ARRAY_COUNT ->
+           exit({failed_to_parse_array_count_exceeds_limit, Type, Count});
+       true ->
+           {Value, _} = parse_array_primitive(Type, <<>>),
+           {array, parse_constructor(Type), lists:duplicate(Count, Value)}
+    end;
 parse_array1(Count, <<Type, ArrayBin/binary>>)
   when Count > byte_size(ArrayBin) ->
     exit({failed_to_parse_array_count_exceeds_input, Type, Count, byte_size(ArrayBin)});
@@ -171,6 +181,11 @@ parse_constructor(16#82) -> double;
 parse_constructor(?CODE_ULONG) -> ulong;
 parse_constructor(16#81) -> long;
 parse_constructor(16#40) -> null;
+parse_constructor(16#41) -> boolean;
+parse_constructor(16#42) -> boolean;
+parse_constructor(16#43) -> uint;
+parse_constructor(16#44) -> ulong;
+parse_constructor(16#45) -> list;
 parse_constructor(16#56) -> boolean;
 parse_constructor(16#83) -> timestamp;
 parse_constructor(16#98) -> uuid;
@@ -181,11 +196,6 @@ parse_constructor(0) -> described;
 parse_constructor(X) ->
     exit({failed_to_parse_constructor, X}).
 
-parse_array_primitive(16#40, <<_:8/unsigned, _/binary>>) -> {null, 1};
-parse_array_primitive(16#41, <<_:8/unsigned, _/binary>>) -> {true, 1};
-parse_array_primitive(16#42, <<_:8/unsigned, _/binary>>) -> {false, 1};
-parse_array_primitive(16#43, <<_:8/unsigned, _/binary>>) -> {{uint, 0}, 1};
-parse_array_primitive(16#44, <<_:8/unsigned, _/binary>>) -> {{ulong, 0}, 1};
 parse_array_primitive(ElementType, Data) ->
     {Val, B} = parse(<<ElementType, Data/binary>>),
     {Val, B-1}.
