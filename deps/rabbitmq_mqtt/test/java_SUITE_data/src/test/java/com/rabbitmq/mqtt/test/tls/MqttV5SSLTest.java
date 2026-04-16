@@ -80,14 +80,14 @@ public class MqttV5SSLTest implements MqttCallback {
     client = new MqttClient(brokerUrl, clientId, null);
     try {
       client.connect(conOpt);
-      client.disconnect();
+      client.disconnect(5000);
     } catch (Exception ignored) {
     }
 
     client2 = new MqttClient(brokerUrl, clientId2, null);
     try {
       client2.connect(conOpt);
-      client2.disconnect();
+      client2.disconnect(5000);
     } catch (Exception ignored) {
     }
   }
