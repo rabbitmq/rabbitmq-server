@@ -22,6 +22,7 @@ all_tests() ->
      roundtrip,
      array_with_extra_input,
      array32_count_exceeds_data,
+     array_of_zero_width_elements,
      unsupported_type,
      peek_described_section_total_sizes,
      peek_described_section,
@@ -51,6 +52,9 @@ roundtrip(_Config) ->
                {binary, <<"inner value">>}},
               {binary, <<"outer value">>}},
              {array, ubyte, [{ubyte, 1}, {ubyte, 255}]},
+             {array, boolean, [true, false, true]},
+             {array, null, [null, null, null]},
+             {array, null, []},
              true,
              {list, [{utf8, <<"hi">>},
                      {described,
@@ -80,8 +84,8 @@ array_with_extra_input(_Config) ->
     Bin = <<83,16,192,85,10,177,0,0,0,1,48,161,12,114,97,98,98,105,116, 109,113,45,98,111,120,112,255,255,0,0,96,0,50,112,0,0,19,136,163,5,101,110,45,85,83,224,14,2,65,5,102,105,45,70,73,5,101,110,45,85,83,64,64,193,24,2,163,20,68,69,70,69,78,83,73,67,83,46,84,69,83,84,46,83,85,73,84,69,65>>,
 
     Expected = {failed_to_parse_array_extra_input_remaining,
-                %% element type, input, accumulated result
-                65, <<105,45,70,73,5,101,110,45,85,83>>, [true,true]},
+                %% element type, remaining input size
+                65, 12},
 
     ?assertExit(Expected, amqp10_binary_parser:parse_many(Bin, [])).
 
@@ -92,7 +96,7 @@ array32_count_exceeds_data(_Config) ->
     Size = byte_size(ArrayPayload),
     Bin = <<16#f0, Size:32, ArrayPayload/binary>>,
     ?assertExit(
-       {failed_to_parse_array_count_exceeds_input, Type, Count, 0},
+       {failed_to_parse_array_count_exceeds_limit, Type, Count},
        amqp10_binary_parser:parse(Bin)),
     %% Also verify smaller mismatches are caught: 10 elements but only 3 data bytes
     SmallType = 16#50,
@@ -102,6 +106,26 @@ array32_count_exceeds_data(_Config) ->
     ?assertExit(
        {failed_to_parse_array_count_exceeds_input, SmallType, 10, 3},
        amqp10_binary_parser:parse(SmallBin)).
+
+array_of_zero_width_elements(_Config) ->
+    %% Array8 (0xe0), Size=2, Count=10, Null Constructor=0x40 (width 0)
+    {Parsed40, 4} = amqp10_binary_parser:parse(<<16#e0, 2, 10, 16#40>>),
+    ?assertEqual({array, null, lists:duplicate(10, null)}, Parsed40),
+
+    {Parsed41, 4} = amqp10_binary_parser:parse(<<16#e0, 2, 10, 16#41>>),
+    ?assertEqual({array, boolean, lists:duplicate(10, true)}, Parsed41),
+
+    {Parsed42, 4} = amqp10_binary_parser:parse(<<16#e0, 2, 10, 16#42>>),
+    ?assertEqual({array, boolean, lists:duplicate(10, false)}, Parsed42),
+
+    {Parsed43, 4} = amqp10_binary_parser:parse(<<16#e0, 2, 10, 16#43>>),
+    ?assertEqual({array, uint, lists:duplicate(10, {uint, 0})}, Parsed43),
+
+    {Parsed44, 4} = amqp10_binary_parser:parse(<<16#e0, 2, 10, 16#44>>),
+    ?assertEqual({array, ulong, lists:duplicate(10, {ulong, 0})}, Parsed44),
+
+    {Parsed45, 4} = amqp10_binary_parser:parse(<<16#e0, 2, 10, 16#45>>),
+    ?assertEqual({array, list, lists:duplicate(10, {list, []})}, Parsed45).
 
 unsupported_type(_Config) ->
     UnsupportedType = 16#02,
