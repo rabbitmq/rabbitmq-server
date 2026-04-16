@@ -7,7 +7,7 @@
 
 -module(rfc6455_client).
 
--export([new/2, new/3, new/4, new/5, open/1, recv/1, recv/2, send/2, send_binary/2, close/1, close/2]).
+-export([new/2, new/3, new/4, new/5, new/6, open/1, recv/1, recv/2, send/2, send_binary/2, close/1, close/2]).
 
 -record(state, {host, port, addr, path, ppid, socket, data, phase, transport}).
 
@@ -23,6 +23,9 @@ new(WsUrl, PPid, AuthInfo, Protocols) ->
     new(WsUrl, PPid, AuthInfo, Protocols, <<>>).
 
 new(WsUrl, PPid, AuthInfo, Protocols, TcpPreface) ->
+    new(WsUrl, PPid, AuthInfo, Protocols, TcpPreface, []).
+
+new(WsUrl, PPid, AuthInfo, Protocols, TcpPreface, ExtraHeaders) ->
     _ = application:start(crypto),
     _ = application:ensure_all_started(ssl),
     {Transport, Url} = case WsUrl of
@@ -46,7 +49,7 @@ new(WsUrl, PPid, AuthInfo, Protocols, TcpPreface) ->
                    ppid = PPid,
                    transport = Transport},
     spawn_link(fun () ->
-                  start_conn(State, AuthInfo, Protocols, TcpPreface)
+                  start_conn(State, AuthInfo, Protocols, TcpPreface, ExtraHeaders)
           end).
 
 open(WS) ->
@@ -100,7 +103,7 @@ close(WS, WsReason) ->
 
 %% --------------------------------------------------------------------------
 
-start_conn(State = #state{transport = Transport}, AuthInfo, Protocols, TcpPreface) ->
+start_conn(State = #state{transport = Transport}, AuthInfo, Protocols, TcpPreface, ExtraHeaders) ->
     {ok, Socket} = case TcpPreface of
         <<>> ->
             TlsOpts = case Transport of
@@ -135,6 +138,15 @@ start_conn(State = #state{transport = Transport}, AuthInfo, Protocols, TcpPrefac
         _  -> "Sec-Websocket-Protocol: " ++ string:join(Protocols, ", ") ++ "\r\n"
     end,
 
+    OriginHd = case lists:keyfind("Origin", 1, ExtraHeaders) of
+        {_, ""} -> "";
+        {_, OriginVal} -> "Origin: " ++ OriginVal ++ "\r\n";
+        false -> "Origin: null\r\n"
+    end,
+
+    ExtraHd = lists:flatten([Name ++ ": " ++ Value ++ "\r\n"
+               || {Name, Value} <- ExtraHeaders, Name =/= "Origin"]),
+
     Key = base64:encode_to_string(crypto:strong_rand_bytes(16)),
     Transport:send(Socket,
         "GET " ++ State#state.path ++ " HTTP/1.1\r\n" ++
@@ -144,7 +156,8 @@ start_conn(State = #state{transport = Transport}, AuthInfo, Protocols, TcpPrefac
         AuthHd ++
         ProtocolHd ++
         "Sec-WebSocket-Key: " ++ Key ++ "\r\n" ++
-        "Origin: null\r\n" ++
+        OriginHd ++
+        ExtraHd ++
         "Sec-WebSocket-Version: 13\r\n\r\n"),
 
     loop(State#state{socket = Socket,
