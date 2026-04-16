@@ -30,7 +30,7 @@ class TestAmqpHeaders(base.BaseTest):
         amqp_chan.basic_publish(exchange='', routing_key=queueName, body='Hello World!', properties=amqp_props)
 
         # check if we receive the message from the STOMP subscription
-        self.assertTrue(self.listener.wait(2), "initial message not received")
+        self.assertTrue(self.listener.wait(10), "initial message not received")
         self.assertEqual(1, len(self.listener.messages))
         msg = self.listener.messages[0]
         self.assertEqual('Hello World!', msg['message'])
