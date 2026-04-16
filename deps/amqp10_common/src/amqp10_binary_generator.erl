@@ -211,7 +211,7 @@ generate2(boolean, true) -> 16#01;
 generate2(boolean, false) -> 16#00;
 generate2(boolean, {boolean, true}) -> 16#01;
 generate2(boolean, {boolean, false}) -> 16#00;
-generate2(null, null) -> 16#40;
+generate2(null, null) -> <<>>;
 generate2(char, {char,V}) when V>=0 andalso V=<16#10ffff -> <<V:32>>;
 generate2(ubyte, {ubyte, V}) -> V;
 generate2(byte, {byte, V}) -> <<V:8/signed>>;
