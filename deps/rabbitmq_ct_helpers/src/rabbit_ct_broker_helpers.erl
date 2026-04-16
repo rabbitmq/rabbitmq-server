@@ -1626,7 +1626,16 @@ force_vhost_failure(Config, Node, VHost, Attempts) ->
                     timer:sleep(300),
                     force_vhost_failure(Config, Node, VHost, Attempts - 1)
             end;
-        false -> ok
+        false ->
+            %% The vhost appears dead, but the supervisor may restart it.
+            %% Confirm it stays down.
+            timer:sleep(500),
+            case rpc(Config, Node, rabbit_vhost_sup_sup, is_vhost_alive, [VHost]) of
+                true ->
+                    force_vhost_failure(Config, Node, VHost, Attempts - 1);
+                false ->
+                    ok
+            end
     end.
 
 set_alarm(Config, Node, memory = Resource) ->
