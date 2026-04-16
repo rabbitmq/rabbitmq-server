@@ -3729,6 +3729,14 @@ cors_test(Config) ->
                                        [{"origin", "https://rabbitmq.com"}, auth_header("guest", "guest")]),
     false = lists:keymember("access-control-max-age", 1, HdNoMaxAgeCORS),
 
+    %% Test wildcard CORS configuration
+    rpc(Config, application, set_env, [rabbitmq_management, cors_allow_origins, ["*"]]),
+    {ok, {_, HdWildcardCORS, _}} = req(Config, get, "/overview",
+                                       [{"origin", "https://evil.com"}, auth_header("guest", "guest")]),
+    %% When using wildcard, the origin should be literally "*" and credentials should not be allowed
+    {_, "*"} = lists:keyfind("access-control-allow-origin", 1, HdWildcardCORS),
+    false = lists:keymember("access-control-allow-credentials", 1, HdWildcardCORS),
+
     %% Check OPTIONS method in all paths
     check_cors_all_endpoints(Config),
     %% Disable CORS again.

@@ -35,6 +35,8 @@
     filter_matching_scope_prefix/2,
     filter_matching_scope_prefix_and_drop_it/2]).
 
+-define(MAX_SCOPE_COUNT, 2048).
+
 -ifdef(TEST).
 -compile(export_all).
 -endif.
@@ -237,7 +239,11 @@ check_token(DecodedToken, _) when is_map(DecodedToken) ->
 check_token(Token, {ResourceServer, InternalOAuthProvider}) ->
     case decode_and_verify(Token, ResourceServer, InternalOAuthProvider) of
         {error, Reason} -> {refused, {error, Reason}};
-        {true, Payload} -> {ok, normalize_token_scope(ResourceServer, Payload)};
+        {true, Payload} ->
+            case normalize_token_scope(ResourceServer, Payload) of
+                {ok, NormalizedPayload} -> {ok, NormalizedPayload};
+                {error, Reason} -> {refused, {error, Reason}}
+            end;
         {false, _} -> {refused, signature_invalid}
     end.
 
@@ -251,16 +257,20 @@ extract_scopes_from_scope_claim(Payload) ->
     end.
 
 -spec normalize_token_scope(
-    ResourceServer :: resource_server(), DecodedToken :: decoded_jwt_token()) -> map().
+    ResourceServer :: resource_server(), DecodedToken :: decoded_jwt_token()) ->
+        {ok, map()} | {error, too_many_scopes}.
 normalize_token_scope(ResourceServer, Payload) ->
-
-    filter_duplicates(   
+    Payload1 = filter_duplicates(
         filter_matching_scope_prefix(ResourceServer,
             extract_scopes_from_rich_auth_request(ResourceServer,
-                extract_scopes_using_scope_aliases(ResourceServer, 
-                    extract_scopes_from_additional_scopes_key(ResourceServer, 
+                extract_scopes_using_scope_aliases(ResourceServer,
+                    extract_scopes_from_additional_scopes_key(ResourceServer,
                         extract_scopes_from_requesting_party_token(ResourceServer,
-                            extract_scopes_from_scope_claim(Payload))))))).
+                            extract_scopes_from_scope_claim(Payload))))))),
+    case length(get_scope(Payload1)) > ?MAX_SCOPE_COUNT of
+        true  -> {error, too_many_scopes};
+        false -> {ok, Payload1}
+    end.
 
 filter_duplicates(#{?SCOPE_JWT_FIELD := Scopes} = Payload) -> 
     set_scope(lists:usort(Scopes), Payload);
@@ -489,4 +499,11 @@ resolve_scope_var(Elem, Token, Vhost) ->
 tags_from(DecodedToken) ->
     Scopes    = maps:get(?SCOPE_JWT_FIELD, DecodedToken, []),
     TagScopes = filter_matching_scope_prefix_and_drop_it(Scopes, ?TAG_SCOPE_PREFIX),
-    lists:usort(lists:map(fun rabbit_data_coercion:to_atom/1, TagScopes)).
+    lists:usort(lists:filtermap(fun safe_to_atom/1, TagScopes)).
+
+safe_to_atom(Bin) ->
+    try
+        {true, rabbit_data_coercion:to_existing_atom(Bin)}
+    catch
+        error:badarg -> false
+    end.
