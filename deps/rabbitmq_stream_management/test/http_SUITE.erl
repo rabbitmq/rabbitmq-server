@@ -27,6 +27,7 @@ groups() ->
                                stream_management,
                                create_super_stream,
                                create_super_stream_requires_configure_permission,
+                               create_super_stream_partition_limits,
                                stream_tracking_requires_vhost_access
                               ]}].
 
@@ -166,6 +167,19 @@ create_super_stream_requires_configure_permission(Config) ->
              #{partitions => 3},
              {group, '2xx'}),
     rabbit_ct_broker_helpers:delete_user(Config, User),
+    ok.
+
+create_super_stream_partition_limits(Config) ->
+    http_put(Config, "/stream/super-streams/%2F/zero-parts",
+             #{partitions => 0}, ?BAD_REQUEST),
+    http_put(Config, "/stream/super-streams/%2F/neg-parts",
+             #{partitions => -5}, ?BAD_REQUEST),
+    http_put(Config, "/stream/super-streams/%2F/over-parts",
+             #{partitions => 1001}, ?BAD_REQUEST),
+    http_put(Config, "/stream/super-streams/%2F/huge-parts",
+             #{partitions => 500000000}, ?BAD_REQUEST),
+    http_put(Config, "/stream/super-streams/%2F/max-parts",
+             #{partitions => 1000}, {group, '2xx'}),
     ok.
 
 stream_tracking_requires_vhost_access(Config) ->
