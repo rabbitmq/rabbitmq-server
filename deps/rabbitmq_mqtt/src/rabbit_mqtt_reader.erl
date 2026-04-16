@@ -71,6 +71,7 @@ close_connection(Pid, Reason) ->
 init(Ref) ->
     process_flag(trap_exit, true),
     logger:set_process_metadata(#{domain => ?RMQLOG_DOMAIN_CONN ++ [mqtt]}),
+    rabbit_access_control:set_max_heap_size_unauthenticated(?APP_NAME),
     {ok, Sock} = rabbit_networking:handshake(Ref,
         application:get_env(?APP_NAME, proxy_protocol, false)),
     RealSocket = rabbit_net:unwrap_socket(Sock),

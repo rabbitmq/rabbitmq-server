@@ -146,6 +146,7 @@ init([KeepaliveSup,
         transport := ConnTransport}]) ->
     process_flag(trap_exit, true),
     logger:set_process_metadata(#{domain => ?RMQLOG_DOMAIN_CONN}),
+    rabbit_access_control:set_max_heap_size_unauthenticated(rabbitmq_stream),
     {ok, Sock} =
         rabbit_networking:handshake(Ref,
                                     application:get_env(rabbitmq_stream,
@@ -1408,6 +1409,7 @@ handle_frame_pre_auth(Transport,
                              {sasl_authenticate, ?RESPONSE_SASL_CHALLENGE,
                               Challenge}};
                         {ok, User = #user{username = Username}} ->
+                            rabbit_access_control:clear_max_heap_size(),
                             case
                                 rabbit_access_control:check_user_loopback(Username,
                                                                           PeerHost)
