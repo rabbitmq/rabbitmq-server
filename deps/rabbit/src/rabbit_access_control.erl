@@ -16,6 +16,8 @@
          check_user_id/2]).
 
 -export([permission_cache_can_expire/1, update_state/2, expiry_timestamp/1]).
+-export([set_max_heap_size_unauthenticated/1,
+         clear_max_heap_size/0]).
 
 %%----------------------------------------------------------------------------
 
@@ -450,3 +452,22 @@ expiry_timestamp(User = #user{authz_backends = Modules}) ->
                                 Ts0
                         end
                 end, never, Modules).
+
+%% Limit heap size for unauthenticated connections as a defense-in-depth
+%% mechanism to protect the RabbitMQ node against pre-authentication memory
+%% exhaustion attacks.
+-spec set_max_heap_size_unauthenticated(atom()) -> ok.
+set_max_heap_size_unauthenticated(App) ->
+    %% 16 MiB by default
+    Default = 16 * 1024 * 1024 div erlang:system_info(wordsize),
+    Size = application:get_env(App, max_heap_size_unauthenticated, Default),
+    _ = erlang:process_flag(max_heap_size, #{size => Size,
+                                             kill => true,
+                                             error_logger => true}),
+    ok.
+
+-spec clear_max_heap_size() -> ok.
+clear_max_heap_size() ->
+    %% "If set to zero, the heap size limit is disabled."
+    _ = erlang:process_flag(max_heap_size, 0),
+    ok.

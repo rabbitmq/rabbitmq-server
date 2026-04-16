@@ -590,6 +590,7 @@ do_login(Username, Passwd, VirtualHost, Heartbeat, AdapterInfo, Version,
                                virtual_host = VirtualHost,
                                adapter_info = AdapterInfo}, Username, Addr) of
         {ok, Connection} ->
+            rabbit_access_control:clear_max_heap_size(),
             link(Connection),
             {ok, Channel} = amqp_connection:open_channel(Connection),
             link(Channel),

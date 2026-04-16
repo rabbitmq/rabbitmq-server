@@ -772,12 +772,13 @@ auth_phase(
         {protocol_error, Msg, Args} ->
             auth_fail(none, State),
             protocol_error(?V_1_0_AMQP_ERROR_DECODE_ERROR, Msg, Args);
-        {challenge, Challenge, AuthState1} ->
-            Challenge = #'v1_0.sasl_challenge'{challenge = {binary, Challenge}},
+        {challenge, ChallengeBin, AuthState1} ->
+            Challenge = #'v1_0.sasl_challenge'{challenge = {binary, ChallengeBin}},
             ok = send_on_channel0(State, Challenge, rabbit_amqp_sasl),
             State1 = State#v1{connection = Conn#v1_connection{auth_state = AuthState1}},
             switch_callback(State1, {frame_header, sasl}, 8);
         {ok, User} ->
+            rabbit_access_control:clear_max_heap_size(),
             Outcome = #'v1_0.sasl_outcome'{code = ?V_1_0_SASL_CODE_OK},
             ok = send_on_channel0(State, Outcome, rabbit_amqp_sasl),
             State1 = State#v1{connection_state = waiting_amqp0100,

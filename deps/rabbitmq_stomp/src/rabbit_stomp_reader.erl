@@ -67,6 +67,7 @@ close_connection(Pid, Reason) ->
 init([SupHelperPid, Ref, Configuration]) ->
     logger:set_process_metadata(#{domain => ?RMQLOG_DOMAIN_CONN}),
     process_flag(trap_exit, true),
+    rabbit_access_control:set_max_heap_size_unauthenticated(rabbitmq_stomp),
     {ok, Sock} = rabbit_networking:handshake(Ref,
         application:get_env(rabbitmq_stomp, proxy_protocol, false)),
     RealSocket = rabbit_net:unwrap_socket(Sock),
