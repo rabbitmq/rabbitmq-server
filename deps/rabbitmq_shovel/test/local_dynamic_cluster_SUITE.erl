@@ -142,9 +142,12 @@ local_to_local_multiple_all_dest_down(Config) ->
                           list_queue_messages(Config),
                           30000),
               ok = rabbit_ct_broker_helpers:start_node(Config, 1),
-              ?awaitMatch([[<<"local_to_local_multiple_all_dest_down_dest">>, 10, 10, 0],
-                           [<<"local_to_local_multiple_all_dest_down_dest2">>, 10, 10, 0],
-                           [<<"local_to_local_multiple_all_dest_down_src">>, 0, 0, 0]],
+              %% The shovel re-publishes unconfirmed messages during recovery,
+              %% which can cause duplicates.
+              ?awaitMatch([[<<"local_to_local_multiple_all_dest_down_dest">>, N, N, 0],
+                           [<<"local_to_local_multiple_all_dest_down_dest2">>, M, M, 0],
+                           [<<"local_to_local_multiple_all_dest_down_src">>, 0, 0, 0]]
+                          when ((N >= 10) and (M >= 10)),
                           list_queue_messages(Config),
                           30000),
               expect_many(Sess, Dest, 10)
