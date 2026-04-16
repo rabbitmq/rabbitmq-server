@@ -479,11 +479,11 @@ public class MqttTest implements MqttCallback {
     client_opts.setCleanSession(false);
     MqttClient client = newConnectedClient(clientIdBase + "-1", client_opts);
     client.subscribe(topic, 1);
-    client.disconnect();
+    client.disconnect(5000);
 
     MqttClient client2 = newConnectedClient(clientIdBase + "-2", client_opts);
     publish(client2, topic, 1, payload);
-    client2.disconnect();
+    client2.disconnect(5000);
 
     client.setCallback(this);
     client.connect(client_opts);
@@ -494,9 +494,9 @@ public class MqttTest implements MqttCallback {
 
     // clean up with clean start true
     MqttClient cleanupClient1 = newConnectedClient(clientIdBase + "-1");
-    cleanupClient1.disconnect();
+    cleanupClient1.disconnect(5000);
     MqttClient cleanupClient2 = newConnectedClient(clientIdBase + "-2");
-    cleanupClient2.disconnect();
+    cleanupClient2.disconnect(5000);
   }
 
   @Test
@@ -556,7 +556,7 @@ public class MqttTest implements MqttCallback {
     client_opts.setCleanSession(false);
     MqttClient client = newConnectedClient(info, client_opts);
     client.subscribe(topic, 1);
-    client.disconnect();
+    client.disconnect(5000);
 
     MqttClient client2 = newConnectedClient(info, client_opts);
     publish(client2, topic, 1, payload);
@@ -658,7 +658,7 @@ public class MqttTest implements MqttCallback {
 
     // clean up
     MqttClient cleanupClient1 = newConnectedClient(clientIdBase + "-1");
-    cleanupClient1.disconnect();
+    cleanupClient1.disconnect(5000);
   }
 
   @Test
@@ -921,7 +921,7 @@ public class MqttTest implements MqttCallback {
     MqttConnectOptions cleanupOpts = new TestMqttConnectOptions();
     MqttClient cleanupClient =
         newConnectedClient("last-will-not-sent-on-restricted-topic", cleanupOpts);
-    cleanupClient.disconnect();
+    cleanupClient.disconnect(5000);
   }
 
   @Test
@@ -987,7 +987,7 @@ public class MqttTest implements MqttCallback {
     tearDownAmqp();
 
     waitAtMost(() -> receivedMessagesSize() == 1);
-    client.disconnect();
+    client.disconnect(5000);
   }
 
   // "A Server MAY allow a Client to supply a ClientId that has a length of zero bytes, however if
