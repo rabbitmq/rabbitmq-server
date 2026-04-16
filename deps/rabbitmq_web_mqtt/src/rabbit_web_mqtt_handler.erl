@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term "Broadcom" refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_web_mqtt_handler).
@@ -102,21 +102,31 @@ takeover(Parent, Ref, Socket, Transport, Opts, Buffer, {Handler, HandlerState}) 
 
 %% cowboy_websocket
 init(Req, Opts) ->
-    case cowboy_req:parse_header(<<"sec-websocket-protocol">>, Req) of
-        undefined ->
-            no_supported_sub_protocol(undefined, Req);
-        Protocol ->
-            case lists:search(fun(P) -> P =:= <<"mqtt">> orelse P =:= <<"mqttv3.1">> end, Protocol) of
-                false ->
-                    no_supported_sub_protocol(Protocol, Req);
-                {value, MatchedProtocol} ->
-                    Req1 = cowboy_req:set_resp_header(<<"sec-websocket-protocol">>, MatchedProtocol, Req),
-                    State = #state{socket = maps:get(proxy_header, Req, undefined),
-                                   stats_timer = rabbit_event:init_stats_timer()},
-                    WsOpts0 = proplists:get_value(ws_opts, Opts, #{}),
-                    WsOpts  = maps:merge(#{compress => true}, WsOpts0),
-                    {?MODULE, Req1, State, WsOpts#{data_delivery => relay}}
-            end
+    case check_origin(Req) of
+        ok ->
+            case cowboy_req:parse_header(<<"sec-websocket-protocol">>, Req) of
+                undefined ->
+                    no_supported_sub_protocol(undefined, Req);
+                Protocol ->
+                    case lists:search(fun(P) -> P =:= <<"mqtt">> orelse P =:= <<"mqttv3.1">> end, Protocol) of
+                        false ->
+                            no_supported_sub_protocol(Protocol, Req);
+                        {value, MatchedProtocol} ->
+                            Req1 = cowboy_req:set_resp_header(<<"sec-websocket-protocol">>, MatchedProtocol, Req),
+                            State = #state{socket = maps:get(proxy_header, Req, undefined),
+                                           stats_timer = rabbit_event:init_stats_timer()},
+                            WsOpts0 = proplists:get_value(ws_opts, Opts, #{}),
+                            WsOpts  = maps:merge(#{compress => true}, WsOpts0),
+                            {?MODULE, Req1, State, WsOpts#{data_delivery => relay}}
+                    end
+            end;
+        {error, origin_not_allowed} ->
+            ?LOG_WARNING("Web MQTT: WebSocket connection rejected, "
+                         "origin not in allow_origins: ~tp",
+                         [cowboy_req:header(<<"origin">>, Req)]),
+            {ok,
+             cowboy_req:reply(403, #{<<"connection">> => <<"close">>}, Req),
+             #state{}}
     end.
 
 %% We cannot use a gen_server call, because the handler process is a
@@ -319,11 +329,27 @@ terminate(_Reason, _Request,
 %% Internal.
 
 no_supported_sub_protocol(Protocol, Req) ->
-    %% The client MUST include “mqtt” in the list of WebSocket Sub Protocols it offers [MQTT-6.0.0-3].
+    %% The client MUST include "mqtt" in the list of WebSocket Sub Protocols it offers [MQTT-6.0.0-3].
     ?LOG_ERROR("Web MQTT: 'mqtt' not included in client offered subprotocols: ~tp", [Protocol]),
     {ok,
      cowboy_req:reply(400, #{<<"connection">> => <<"close">>}, Req),
      #state{}}.
+
+check_origin(Req) ->
+    case application:get_env(?APP, allow_origins, []) of
+        [] ->
+            ok;
+        AllowedOrigins ->
+            case cowboy_req:header(<<"origin">>, Req) of
+                undefined ->
+                    ok;
+                Origin ->
+                    case lists:member(binary_to_list(Origin), AllowedOrigins) of
+                        true -> ok;
+                        false -> {error, origin_not_allowed}
+                    end
+            end
+    end.
 
 handle_data(Data, State0 = #state{}) ->
     case handle_data1(Data, State0) of
