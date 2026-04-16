@@ -142,11 +142,13 @@ info(Pid, all) ->
 info(Pid, Items) ->
     {ok, Res} = gen:call(Pid, ?MODULE, {info, Items}),
     Res.
+
 -spec websocket_init(state()) ->
     {cowboy_websocket:commands(), state()} |
     {cowboy_websocket:commands(), state(), hibernate}.
 websocket_init(State0 = #state{socket = Sock}) ->
     logger:set_process_metadata(#{domain => ?RMQLOG_DOMAIN_CONN ++ [web_mqtt]}),
+    rabbit_access_control:set_max_heap_size_unauthenticated(?APP_NAME),
     case rabbit_net:connection_string(Sock, inbound) of
         {ok, ConnStr} ->
             ConnName = rabbit_data_coercion:to_binary(ConnStr),

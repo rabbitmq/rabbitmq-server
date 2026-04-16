@@ -162,9 +162,9 @@ shutdown(Pid, Explanation) ->
 init(Parent, HelperSups, Ref) ->
     logger:set_process_metadata(#{domain => ?RMQLOG_DOMAIN_CONN}),
     ?LG_PROCESS_TYPE(reader),
-    {ok, Sock} = rabbit_networking:handshake(Ref,
-        application:get_env(rabbit, proxy_protocol, false),
-        dynamic_buffer),
+    rabbit_access_control:set_max_heap_size_unauthenticated(rabbit),
+    ProxyProtocolEnabled = application:get_env(rabbit, proxy_protocol, false),
+    {ok, Sock} = rabbit_networking:handshake(Ref, ProxyProtocolEnabled, dynamic_buffer),
     Deb = sys:debug_options([]),
     start_connection(Parent, HelperSups, Ref, Deb, Sock).
 
@@ -1539,6 +1539,7 @@ auth_phase(Response,
             State#v1{connection = Connection#connection{
                                     auth_state = AuthState1}};
         {ok, User = #user{username = Username}} ->
+            rabbit_access_control:clear_max_heap_size(),
             case rabbit_access_control:check_user_loopback(Username, PeerHost) of
                 ok ->
                     rabbit_core_metrics:auth_attempt_succeeded(RemoteAddress, Username, amqp091),
