@@ -140,6 +140,7 @@ init(Req0, Opts) ->
 
 websocket_init(State) ->
     process_flag(trap_exit, true),
+    rabbit_access_control:set_max_heap_size_unauthenticated(rabbitmq_web_stomp),
     {ok, ProcessorState} = init_processor_state(State),
     LoginTimeout = application:get_env(rabbitmq_stomp, login_timeout, 10_000),
     erlang:send_after(LoginTimeout, self(), login_timeout),
