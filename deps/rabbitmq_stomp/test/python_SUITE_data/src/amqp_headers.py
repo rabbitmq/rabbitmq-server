@@ -14,8 +14,13 @@ class TestAmqpHeaders(base.BaseTest):
         self.listener.reset(1)
         queueName='test-amqp-headers-to-stomp'
 
-        # Set up STOMP subscription
-        self.subscribe_dest(self.conn, '/topic/test', None, headers={'x-queue-name': queueName})
+        # Set up STOMP subscription and wait for confirmation
+        self.subscribe_dest(self.conn, '/topic/test', None,
+                            headers={'x-queue-name': queueName},
+                            receipt='sub.receipt')
+        self.assertTrue(self.listener.wait(10), "SUBSCRIBE receipt not received")
+        self.assertEqual(1, len(self.listener.receipts))
+        self.listener.reset(1)
 
         # Set up AMQP connection
         amqp_params = pika.ConnectionParameters(host='localhost', port=int(os.environ["AMQP_PORT"]))
