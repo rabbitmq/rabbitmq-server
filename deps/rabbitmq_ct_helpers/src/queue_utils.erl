@@ -11,6 +11,7 @@
          wait_for_messages/2,
          wait_for_messages/3,
          wait_for_messages/4,
+         wait_for_messages/5,
          wait_for_min_messages/3,
          wait_for_max_messages/3,
          dirty_query/3,
