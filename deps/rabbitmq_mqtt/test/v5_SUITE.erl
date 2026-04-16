@@ -1047,19 +1047,25 @@ subscription_options_modify_qos(Qos, Config) ->
               after ?TIMEOUT -> ct:fail("could not stop publisher")
               end,
     ct:pal("Publisher sent ~b messages", [NumSent]),
-    LastExpectedPayload = integer_to_binary(NumSent),
-    receive {publish, #{payload := LastExpectedPayload,
-                        qos := Qos,
-                        client_pid := Sub,
-                        properties := #{'Subscription-Identifier' := 1}}} -> ok
-    after ?TIMEOUT -> ct:fail("did not receive ~s", [LastExpectedPayload])
-    end,
-    case Qos of
-        0 ->
-            assert_received_no_duplicates();
-        1 ->
-            ExpectedPayloads = [integer_to_binary(I) || I <- lists:seq(2, NumSent - 1)],
-            ok = expect_publishes(Sub, Topic, ExpectedPayloads)
+    %% On slow CI the sender may have only published message "1"
+    %% (already consumed above), so skip all remaining assertions.
+    if NumSent > 1 ->
+            LastExpectedPayload = integer_to_binary(NumSent),
+            receive {publish, #{payload := LastExpectedPayload,
+                                qos := Qos,
+                                client_pid := Sub,
+                                properties := #{'Subscription-Identifier' := 1}}} -> ok
+            after ?TIMEOUT -> ct:fail("did not receive ~s", [LastExpectedPayload])
+            end,
+            case Qos of
+                0 ->
+                    assert_received_no_duplicates();
+                1 ->
+                    ExpectedPayloads = [integer_to_binary(I) || I <- lists:seq(2, NumSent - 1)],
+                    ok = expect_publishes(Sub, Topic, ExpectedPayloads)
+            end;
+       true ->
+            ok
     end,
     ok = emqtt:disconnect(Pub),
     ok = emqtt:disconnect(Sub).
