@@ -414,16 +414,21 @@ handle_dest(_Msg, _State) ->
     not_handled.
 
 close_source(#{source := #{current := #{conn := Conn,
-                                        session := Sess}}}) ->
-    _ = amqp10_client:end_session(Sess),
-    _ = amqp10_client:close_connection(Conn),
+                                        session := Sess,
+                                        link := LinkRef}}}) ->
+    connection_close(Conn, Sess, LinkRef),
     ok;
 close_source(_Config) -> ok.
 
-close_dest(#{dest := #{current := #{conn := Conn,
-                                    session := Sess}}}) ->
+connection_close(Conn, Sess, LinkRef) ->
+    catch amqp10_client:detach_link(LinkRef),
     _ = amqp10_client:end_session(Sess),
-    _ = amqp10_client:close_connection(Conn),
+    _ = amqp10_client:close_connection(Conn).
+
+close_dest(#{dest := #{current := #{conn := Conn,
+                                    session := Sess,
+                                    link := LinkRef}}}) ->
+    connection_close(Conn, Sess, LinkRef),
     ok;
 close_dest(_Config) -> ok.
 
