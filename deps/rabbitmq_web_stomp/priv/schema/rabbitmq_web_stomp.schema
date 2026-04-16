@@ -32,6 +32,24 @@
 {mapping, "web_stomp.ws_path", "rabbitmq_web_stomp.ws_path",
     [{datatype, string}]}.
 
+{mapping, "web_stomp.allow_origins", "rabbitmq_web_stomp.allow_origins", [
+    {datatype, {enum, [none]}}
+]}.
+
+{mapping, "web_stomp.allow_origins.$name", "rabbitmq_web_stomp.allow_origins", [
+    {datatype, string}
+]}.
+
+{translation, "rabbitmq_web_stomp.allow_origins",
+fun(Conf) ->
+    case cuttlefish:conf_get("web_stomp.allow_origins", Conf, undefined) of
+        none -> [];
+        _ ->
+            Settings = cuttlefish_variable:filter_by_prefix("web_stomp.allow_origins", Conf),
+            [V || {_, V} <- Settings]
+    end
+end}.
+
 {mapping, "web_stomp.use_http_auth", "rabbitmq_web_stomp.use_http_auth",
     [{datatype, {enum, [true, false]}}]}.
 
