@@ -108,9 +108,18 @@ messages_not_dropped_on_disconnect(Config) ->
     rabbit_stomp_client:disconnect(Client),
     QName = rabbit_misc:r(<<"/">>, queue, <<"bulk-test">>),
     ?awaitMatch(N, count_connections(Config), 30_000),
-    {ok, Q} = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, lookup, [QName]),
-    Messages = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, info, [Q, [messages]]),
-    1000 = pget(messages, Messages),
+    ?awaitMatch(
+       1000,
+       begin
+           case rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, lookup, [QName]) of
+               {ok, Q0} ->
+                   pget(messages,
+                        rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, info, [Q0, [messages]]));
+               _ ->
+                   0
+           end
+       end,
+       30_000),
     ok.
 
 get_stomp_port(Config) ->

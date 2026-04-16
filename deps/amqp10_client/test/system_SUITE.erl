@@ -884,10 +884,12 @@ multi_transfer_without_delivery_id(Config) ->
                                              ]}
                 end,
     AttachStep = fun({0 = Ch, #'v1_0.attach'{role = true,
-                                             name = Name}, <<>>}) ->
+                                             name = Name,
+                                             source = Source}, <<>>}) ->
                          {Ch, [#'v1_0.attach'{name = Name,
                                               handle = {uint, 99},
                                               initial_delivery_count = {uint, 1},
+                                              source = Source,
                                               role = false}
                               ]}
                  end,

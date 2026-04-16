@@ -2080,12 +2080,16 @@ dont_leak_file_handles(Config) ->
     %% delete queue
     ?assertMatch(#'queue.delete_ok'{},
                  amqp_channel:call(Ch, #'queue.delete'{queue = QQ})),
-    [{_, MonBy3}] = rpc:call(Server0, erlang, process_info, [NCh1, [monitored_by]]),
-    NumMonRefsAfter = length([M || M <- MonBy3, is_reference(M)]),
-    %% this isn't an ideal way to assert this but every file handle creates
-    %% a monitor that (currenlty?) is a reference so we assert that we have
-    %% fewer reference monitors after
-    ?assert(NumMonRefsAfter < NumMonRefsBefore),
+    %% File handle monitors are cleaned up asynchronously after queue
+    %% deletion. Poll until the reference monitor count decreases.
+    ?awaitMatch(
+       true,
+       begin
+           [{_, MonBy3}] = rpc:call(Server0, erlang, process_info, [NCh1, [monitored_by]]),
+           NumMonRefsAfter = length([M || M <- MonBy3, is_reference(M)]),
+           NumMonRefsAfter < NumMonRefsBefore
+       end,
+       30_000),
 
     rabbit_ct_client_helpers:close_channel(C),
     ok.
@@ -3083,16 +3087,23 @@ recover_from_multiple_failures(Config) ->
     publish(Ch, QQ),
     publish(Ch, QQ),
 
-    wait_for_messages_ready([Server], RaName, 3),
-    wait_for_messages_pending_ack([Server], RaName, 0),
+    %% Publishing without quorum: messages are written to the local Raft
+    %% log but cannot be committed. The metrics update can take longer on
+    %% slower hosts (runners).
+    queue_utils:wait_for_messages([Server], RaName, 3,
+                                  num_ready_messages, 60_000 div 256),
+    queue_utils:wait_for_messages([Server], RaName, 0,
+                                  num_checked_out, 60_000 div 256),
 
     ok = rabbit_ct_broker_helpers:start_node(Config, Server1),
     ok = rabbit_ct_broker_helpers:start_node(Config, Server2),
 
     %% there is an assumption here that the messages were not lost and were
     %% recovered when a quorum was restored. Not the best test perhaps.
-    wait_for_messages_ready(Servers, RaName, 6),
-    wait_for_messages_pending_ack(Servers, RaName, 0).
+    queue_utils:wait_for_messages(Servers, RaName, 6,
+                                  num_ready_messages, 60_000 div 256),
+    queue_utils:wait_for_messages(Servers, RaName, 0,
+                                  num_checked_out, 60_000 div 256).
 
 publishing_to_unavailable_queue(Config) ->
     %% publishing to an unavailable queue but with a reachable member should result
