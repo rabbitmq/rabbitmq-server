@@ -199,6 +199,7 @@ process_connect(
         ok ?= check_vhost_connection_limit(VHost),
         {ok, User = #user{username = Username}} ?= check_user_login(VHost, Username2, Password,
                                                                     ClientId, PeerIp, ConnName0),
+        rabbit_access_control:clear_max_heap_size(),
         ok ?= check_user_connection_limit(Username),
         {ok, AuthzCtx} ?= check_vhost_access(VHost, User, ClientId, PeerIp),
         ok ?= check_user_loopback(Username, PeerIp),
