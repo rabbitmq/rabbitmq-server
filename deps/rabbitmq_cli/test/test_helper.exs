@@ -71,6 +71,8 @@ defmodule TestHelper do
     end
   end
 
+  def delete_vhost(nil), do: :ok
+
   def delete_vhost(name) do
     # some quick tests create and delete a vhost immediately, resulting
     # in a high enough restart intensity in rabbit_vhost_sup_wrapper to
@@ -106,6 +108,8 @@ defmodule TestHelper do
     ])
   end
 
+  def delete_user(nil), do: :ok
+
   def delete_user(name) do
     :rpc.call(get_rabbit_hostname(), :rabbit_auth_backend_internal, :delete_user, [
       name,
@@ -121,9 +125,13 @@ defmodule TestHelper do
     :rpc.call(get_rabbit_hostname(), :rabbit_trace, :start, [vhost])
   end
 
+  def trace_off(nil), do: :ok
+
   def trace_off(vhost) do
     :rpc.call(get_rabbit_hostname(), :rabbit_trace, :stop, [vhost])
   end
+
+  def set_user_tags(nil, _tags), do: :ok
 
   def set_user_tags(name, tags) do
     :rpc.call(get_rabbit_hostname(), :rabbit_auth_backend_internal, :set_tags, [
