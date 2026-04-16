@@ -441,7 +441,7 @@ public class MqttV5Test implements MqttCallback {
     client_opts.setCleanStart(false);
     MqttClient client = newConnectedClient(info, client_opts);
     client.subscribe(topic, 1);
-    client.disconnect();
+    client.disconnect(5000);
 
     MqttClient client2 = newConnectedClient(info, client_opts);
     publish(client2, topic, 1, payload);
@@ -465,11 +465,11 @@ public class MqttV5Test implements MqttCallback {
     client_opts.setSessionExpiryInterval(10L);
     MqttClient client = newConnectedClient(clientIdBase + "-1", client_opts);
     client.subscribe(topic, 1);
-    client.disconnect();
+    client.disconnect(5000);
 
     MqttClient client2 = newConnectedClient(clientIdBase + "-2", client_opts);
     publish(client2, topic, 1, payload);
-    client2.disconnect();
+    client2.disconnect(5000);
 
     client.setCallback(this);
     client.connect(client_opts);
@@ -481,9 +481,9 @@ public class MqttV5Test implements MqttCallback {
     // clean up with clean start true
     MqttConnectionOptions cleanupOpts = options();
     MqttClient cleanupClient1 = newConnectedClient(clientIdBase + "-1", cleanupOpts);
-    cleanupClient1.disconnect();
+    cleanupClient1.disconnect(5000);
     MqttClient cleanupClient2 = newConnectedClient(clientIdBase + "-2", cleanupOpts);
-    cleanupClient2.disconnect();
+    cleanupClient2.disconnect(5000);
   }
 
   @Test
@@ -814,7 +814,7 @@ public class MqttV5Test implements MqttCallback {
 
     // clean up with clean start true
     MqttClient cleanupClient = newConnectedClient("last-will-not-sent-on-restricted-topic");
-    cleanupClient.disconnect();
+    cleanupClient.disconnect(5000);
   }
 
   @Test
@@ -880,7 +880,7 @@ public class MqttV5Test implements MqttCallback {
     tearDownAmqp();
 
     waitAtMost(() -> receivedMessagesSize() == 1);
-    client.disconnect();
+    client.disconnect(5000);
   }
 
   // "A Server MAY allow a Client to supply a ClientId that has a length of zero bytes, however if
