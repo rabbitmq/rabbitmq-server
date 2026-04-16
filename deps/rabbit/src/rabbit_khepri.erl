@@ -183,13 +183,10 @@
 
 -ifdef(TEST).
 -export([register_projections/0,
-<<<<<<< HEAD
          force_metadata_store/1,
-         clear_forced_metadata_store/0]).
-=======
+         clear_forced_metadata_store/0,
          expand_mnesia_migrations/1,
          mnesia_tables_from_migrations/1]).
->>>>>>> e7c167129c (Tests, cosmetics #16042 #16139)
 -endif.
 
 -type timeout_error() :: khepri:error(timeout).
