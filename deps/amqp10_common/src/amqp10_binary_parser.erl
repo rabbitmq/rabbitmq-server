@@ -35,6 +35,7 @@
 -define(DESCRIPTOR_CODE_DATA, 16#75).
 -define(DESCRIPTOR_CODE_AMQP_SEQUENCE, 16#76).
 -define(DESCRIPTOR_CODE_AMQP_VALUE, 16#77).
+-define(MAX_ZERO_WIDTH_ARRAY_COUNT, 10_000).
 
 
 %% server_mode is a special parsing mode used by RabbitMQ when parsing
@@ -139,7 +140,7 @@ parse_array1(Count, <<Type, ArrayBin/binary>>)
     %% This is an array that must have zero octets of data.
     if byte_size(ArrayBin) > 0 ->
            exit({failed_to_parse_array_extra_input_remaining, Type, byte_size(ArrayBin)});
-       Count > 10_000 ->
+       Count > ?MAX_ZERO_WIDTH_ARRAY_COUNT ->
            exit({failed_to_parse_array_count_exceeds_limit, Type, Count});
        true ->
            {Value, _} = parse_array_primitive(Type, <<>>),
