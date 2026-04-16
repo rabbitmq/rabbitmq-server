@@ -1861,12 +1861,16 @@ dont_leak_file_handles(Config) ->
     %% delete queue
     ?assertMatch(#'queue.delete_ok'{},
                  amqp_channel:call(Ch, #'queue.delete'{queue = QQ})),
-    [{_, MonBy3}] = rpc:call(Server0, erlang, process_info, [NCh1, [monitored_by]]),
-    NumMonRefsAfter = length([M || M <- MonBy3, is_reference(M)]),
-    %% this isn't an ideal way to assert this but every file handle creates
-    %% a monitor that (currenlty?) is a reference so we assert that we have
-    %% fewer reference monitors after
-    ?assert(NumMonRefsAfter < NumMonRefsBefore),
+    %% File handle monitors are cleaned up asynchronously after queue
+    %% deletion. Poll until the reference monitor count decreases.
+    ?awaitMatch(
+       true,
+       begin
+           [{_, MonBy3}] = rpc:call(Server0, erlang, process_info, [NCh1, [monitored_by]]),
+           NumMonRefsAfter = length([M || M <- MonBy3, is_reference(M)]),
+           NumMonRefsAfter < NumMonRefsBefore
+       end,
+       30_000),
 
     rabbit_ct_client_helpers:close_channel(C),
     ok.
