@@ -93,5 +93,10 @@
  {hide_server_info,
   "stomp.hide_server_info = true",
   [{rabbitmq_stomp,[{hide_server_info,true}]}],
+  [rabbitmq_stomp]},
+
+ {max_frame_size_unauthenticated,
+  "stomp.max_frame_size_unauthenticated = 32768",
+  [{rabbitmq_stomp,[{max_frame_size_unauthenticated,32768}]}],
   [rabbitmq_stomp]}
 ].
