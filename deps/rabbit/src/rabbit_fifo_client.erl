@@ -579,7 +579,7 @@ stat(Leader, Timeout) ->
     %% but we use it for backwards compatibilty
     case ra:member_overview(Leader, Timeout) of
       {ok, #{machine := #{num_ready_messages := R,
-                          num_checked_out := C}}, _} ->
+                          num_consumers := C}}, _} ->
             {ok, R, C};
       {error, _} = Error ->
             Error;
