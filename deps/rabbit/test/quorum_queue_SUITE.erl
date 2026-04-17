@@ -216,6 +216,7 @@ all_tests() ->
      consumer_priorities,
      cancel_consumer_gh_3729,
      cancel_consumer_gh_12424,
+     queue_declare_passive_consumer_count,
      cancel_and_consume_with_same_tag,
      validate_messages_on_queue,
      amqpl_headers,
@@ -5239,6 +5240,30 @@ cancel_consumer_gh_12424(Config) ->
     R = #'basic.reject'{delivery_tag = DeliveryTag, requeue = false},
     ok = amqp_channel:cast(Ch, R),
     wait_for_messages(Config, [[QQ, <<"0">>, <<"0">>, <<"0">>]]),
+
+    ok.
+
+queue_declare_passive_consumer_count(Config) ->
+    QQ = ?config(queue_name, Config),
+
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+
+    ExpectedDeclareRslt0 = #'queue.declare_ok'{queue = QQ, message_count = 0, consumer_count = 0},
+    DeclareRslt0 = declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}]),
+    ?assertMatch(ExpectedDeclareRslt0, DeclareRslt0),
+
+    ok = subscribe(Ch, QQ, false),
+
+    ExpectedDeclareRslt1 = #'queue.declare_ok'{queue = QQ, message_count = 0, consumer_count = 1},
+    DeclareRslt1 = amqp_channel:call(Ch, #'queue.declare'{queue = QQ, passive = true}),
+    ?assertMatch(ExpectedDeclareRslt1, DeclareRslt1),
+
+    ok = cancel(Ch),
+
+    ExpectedDeclareRslt2 = #'queue.declare_ok'{queue = QQ, message_count = 0, consumer_count = 0},
+    DeclareRslt2 = amqp_channel:call(Ch, #'queue.declare'{queue = QQ, passive = true}),
+    ?assertMatch(ExpectedDeclareRslt2, DeclareRslt2),
 
     ok.
 
