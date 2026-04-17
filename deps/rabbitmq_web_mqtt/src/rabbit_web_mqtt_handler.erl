@@ -116,7 +116,10 @@ init(Req, Opts) ->
                             State = #state{socket = maps:get(proxy_header, Req, undefined),
                                            stats_timer = rabbit_event:init_stats_timer()},
                             WsOpts0 = proplists:get_value(ws_opts, Opts, #{}),
-                            WsOpts  = maps:merge(#{compress => true}, WsOpts0),
+                            MaxFrameSize = persistent_term:get(
+                                ?PERSISTENT_TERM_MAX_PACKET_SIZE_UNAUTHENTICATED) + 4096,
+                            WsOpts = maps:merge(#{compress => true,
+                                                  max_frame_size => MaxFrameSize}, WsOpts0),
                             {?MODULE, Req1, State, WsOpts#{data_delivery => relay}}
                     end
             end;
@@ -307,6 +310,10 @@ websocket_info(login_timeout, #state{proc_state = connect_packet_unprocessed,
     stop(State);
 websocket_info(login_timeout, State) ->
     {[], State, hibernate};
+websocket_info(increase_max_frame_size, State) ->
+    MaxFrameSize = persistent_term:get(
+        ?PERSISTENT_TERM_MAX_PACKET_SIZE_AUTHENTICATED) + 4096,
+    {[{set_options, #{max_frame_size => MaxFrameSize}}], State, hibernate};
 websocket_info(Msg, State) ->
     ?LOG_WARNING("Web MQTT: unexpected message ~tp", [Msg]),
     {[], State, hibernate}.
@@ -380,6 +387,7 @@ handle_data1(Data, State = #state{socket = Socket,
                         {ok, ProcState1} ->
                             ?LOG_INFO("Accepted Web MQTT connection ~ts for client ID ~ts",
                                       [ConnName, rabbit_mqtt_processor:info(client_id, ProcState1)]),
+                            self() ! increase_max_frame_size,
                             handle_data1(
                               Rest, State#state{parse_state = ParseState1,
                                                 proc_state = ProcState1});
