@@ -42,3 +42,4 @@
 -define(STOMP_GUIDE_URL, <<"https://rabbitmq.com/docs/stomp">>).
 
 -define(DEFAULT_MAX_FRAME_SIZE, 4 * 1024 * 1024).
+-define(DEFAULT_MAX_FRAME_SIZE_UNAUTHENTICATED, 65536).

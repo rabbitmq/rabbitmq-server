@@ -247,3 +247,6 @@ end}.
 
 {mapping, "stomp.max_frame_size", "rabbitmq_stomp.max_frame_size",
     [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+
+{mapping, "stomp.max_frame_size_unauthenticated", "rabbitmq_stomp.max_frame_size_unauthenticated",
+    [{datatype, integer}, {validators, ["non_zero_positive_integer"]}]}.
