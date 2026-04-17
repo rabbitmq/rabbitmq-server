@@ -53,7 +53,7 @@ adapter_name(State) ->
        PeerAddr :: inet:ip_address().
 
 -type process_frame_result() ::
-    {ok, term(), #proc_state{}} |
+    {ok, #proc_state{}, pid() | undefined} |
     {stop, term(), #proc_state{}}.
 
 -spec process_frame(#stomp_frame{}, #proc_state{}) ->
