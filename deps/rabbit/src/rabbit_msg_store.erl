@@ -989,7 +989,7 @@ terminate(Reason, State = #msstate { index_ets           = IndexEts,
     %% mid-callback on disk I/O. Bound the wait so terminate stays within
     %% the msg_store child's own supervisor shutdown timeout, and fall
     %% back to kill if the shutdown signal does not take effect in time.
-    stop_gc(GCPid),
+    stop_gc(GCPid, Dir),
     State3 = case CurHdl of
                  undefined -> State;
                  _         -> State2 = internal_sync(State),
@@ -1024,7 +1024,7 @@ code_change(_OldVsn, State, _Extra) ->
 
 format_message_queue(Opt, MQ) -> rabbit_misc:format_message_queue(Opt, MQ).
 
-stop_gc(GCPid) ->
+stop_gc(GCPid, Dir) ->
     ShutdownTimeout = rabbit_misc:get_env(
         rabbit, msg_store_shutdown_timeout, 600_000),
     Timeout = max(ShutdownTimeout - 60_000, 5_000),
@@ -1033,6 +1033,9 @@ stop_gc(GCPid) ->
     receive
         {'DOWN', MRef, process, GCPid, _} -> ok
     after Timeout ->
+        ?LOG_WARNING("Message store GC for directory '~ts' did not exit "
+                     "within ~bms of shutdown signal, killing it",
+                     [Dir, Timeout]),
         exit(GCPid, kill),
         receive
             {'DOWN', MRef, process, GCPid, _} -> ok
