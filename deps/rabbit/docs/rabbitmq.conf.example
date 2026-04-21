@@ -22,7 +22,7 @@
 ##
 ## Upgrading to RabbitMQ `4.3.0`
 
-## Enables deprecated non-durable (transient) exclusive queues
+## Enables deprecated non-durable (transient) non-exclusive queues
 ## (disabled by default as of RabbitMQ `4.3.0`)
 # deprecated_features.permit.transient_nonexcl_queues = true
 
@@ -795,7 +795,8 @@
 ## of the deprecation period), it is no longer possible to turn it back on
 ## from the configuration.
 ##
-## Enables deprecated non-durable (transient) exclusive queues to be declared
+## Enables deprecated non-durable (transient) exclusive queues
+## (disabled by default as of RabbitMQ `4.3.0`)
 # deprecated_features.permit.transient_nonexcl_queues = true
 ## Enables deprecated AMQP 1.0 addressing scheme v1
 # deprecated_features.permit.amqp_address_v1 = true
