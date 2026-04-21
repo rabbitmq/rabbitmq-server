@@ -20,6 +20,13 @@
 #
 
 ##
+## Upgrading to RabbitMQ `4.3.0`
+
+## Enables deprecated non-durable (transient) exclusive queues
+## (disabled by default as of RabbitMQ `4.3.0`)
+# deprecated_features.permit.transient_nonexcl_queues = true
+
+##
 ## Networking
 
 ## Relevant doc guide: https://www.rabbitmq.com/docs/networking.
@@ -788,20 +795,10 @@
 ## of the deprecation period), it is no longer possible to turn it back on
 ## from the configuration.
 ##
-# deprecated_features.permit.a_deprecated_feature = true
-# deprecated_features.permit.another_deprecated_feature = false
-
-## Timeout used when waiting for Mnesia tables in a cluster to
-## become available.
-##
-## Relevant doc guide: https://www.rabbitmq.com/docs/clustering#restarting
-# mnesia_table_loading_retry_timeout = 30000
-
-## Retries when waiting for Mnesia tables in the cluster startup. Note that
-## this setting is not applied to Mnesia upgrades or node deletions.
-##
-## Relevant doc guide: https://www.rabbitmq.com/docs/clustering#restarting
-# mnesia_table_loading_retry_limit = 10
+## Enables deprecated non-durable (transient) exclusive queues to be declared
+# deprecated_features.permit.transient_nonexcl_queues = true
+## Enables deprecated AMQP 1.0 addressing scheme v1
+# deprecated_features.permit.amqp_address_v1 = true
 
 ## Size in bytes below which to embed messages in the queue index.
 ## Relevant doc guide: https://www.rabbitmq.com/docs/persistence-conf
