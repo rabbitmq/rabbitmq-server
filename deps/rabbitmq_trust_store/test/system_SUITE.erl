@@ -198,10 +198,16 @@ library(_) ->
      ok.
 
 invasive_SSL_option_change(Config) ->
+    GroupProps = ?config(tc_group_properties, Config),
+    GroupName = proplists:get_value(name, GroupProps),
+    ExpectedFailIfNoPeerCert = case GroupName of
+        required_options -> false;
+        _                -> true
+    end,
     ok = rabbit_ct_broker_helpers:rpc(Config, 0,
-          ?MODULE, invasive_SSL_option_change1, []).
+          ?MODULE, invasive_SSL_option_change1, [ExpectedFailIfNoPeerCert]).
 
-invasive_SSL_option_change1() ->
+invasive_SSL_option_change1(ExpectedFailIfNoPeerCert) ->
     %% Given: Rabbit is started with the boot-steps in the
     %% Trust-Store's OTP Application file.
 
@@ -210,9 +216,9 @@ invasive_SSL_option_change1() ->
 
     %% Then: all necessary settings are correct.
     OptionsMap = proplists:to_map(lists:reverse(Options)),
-    verify_peer             = maps:get(verify, OptionsMap),
-    true                    = maps:get(fail_if_no_peer_cert, OptionsMap),
-    {Verifyfun, _UserState} = maps:get(verify_fun, OptionsMap),
+    verify_peer                = maps:get(verify, OptionsMap),
+    ExpectedFailIfNoPeerCert   = maps:get(fail_if_no_peer_cert, OptionsMap),
+    {Verifyfun, _UserState}    = maps:get(verify_fun, OptionsMap),
 
     {module, rabbit_trust_store} = erlang:fun_info(Verifyfun, module),
     ok.
