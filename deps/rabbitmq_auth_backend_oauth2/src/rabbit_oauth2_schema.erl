@@ -257,9 +257,41 @@ extract_resource_server_properties(Settings) ->
     KeyFun = fun extract_key_as_binary/1,
     ValueFun = fun extract_value/1,
 
-    OAuthProviders = [{Name, {list_to_atom(resource_servers_key_synonym(Key)), list_to_binary(V)}}
+    OAuthProviders = [{Name, {list_to_atom(resource_servers_key_synonym(Key)),
+        resource_server_property_value(Key, V)}}
         || {[?AUTH_OAUTH2, ?RESOURCE_SERVERS, Name, Key], V} <- Settings ],
     maps:groups_from_list(KeyFun, ValueFun, OAuthProviders).
+
+resource_server_property_value(Key, V) ->
+    case resource_servers_key_synonym(Key) of
+        "scope_pattern_syntax" ->
+            parse_scope_pattern_syntax_for_schema(V);
+        _ ->
+            resource_server_string_property_value(V)
+    end.
+
+resource_server_string_property_value(V) when is_binary(V) ->
+    V;
+resource_server_string_property_value(V) when is_list(V) ->
+    list_to_binary(V).
+
+parse_scope_pattern_syntax_for_schema(wildcard) ->
+    wildcard;
+parse_scope_pattern_syntax_for_schema(regexpr) ->
+    regexpr;
+parse_scope_pattern_syntax_for_schema(V) when is_binary(V) ->
+    parse_scope_pattern_syntax_for_schema(binary_to_list(V));
+parse_scope_pattern_syntax_for_schema(V) when is_list(V) ->
+    case string:lowercase(V) of
+        "wildcard" -> wildcard;
+        "regexpr" -> regexpr;
+        _ ->
+            cuttlefish:invalid(io_lib:format(
+                "Invalid scope_pattern_syntax: ~tp", [V]))
+    end;
+parse_scope_pattern_syntax_for_schema(V) ->
+    cuttlefish:invalid(io_lib:format(
+        "Invalid scope_pattern_syntax: ~tp", [V])).
 
 mapOauthProviderProperty({Key, Value}) ->
     {Key, case Key of

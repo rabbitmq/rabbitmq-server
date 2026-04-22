@@ -91,8 +91,10 @@ check_vhost_access(#auth_user{impl = DecodedTokenFun},
                    VHost, _AuthzData) ->
     with_decoded_token(DecodedTokenFun(),
         fun(Token) ->
-            Scopes = get_expanded_scopes(Token, #resource{virtual_host = VHost}),
-            rabbit_oauth2_scope:vhost_access(VHost, Scopes)
+            with_scopes_for_resource_syntax(Token, #resource{virtual_host = VHost},
+                fun(Syntax, Scopes) ->
+                    rabbit_oauth2_scope:vhost_access(VHost, Scopes, Syntax)
+                end)
         end).
 
 -spec check_resource_access(rabbit_types:auth_user(), rabbit_types:r(atom()),
@@ -103,8 +105,10 @@ check_resource_access(#auth_user{impl = DecodedTokenFun},
                       Resource, Permission, _AuthzContext) ->
     with_decoded_token(DecodedTokenFun(),
         fun(Token) ->
-            Scopes = get_expanded_scopes(Token, Resource),
-            rabbit_oauth2_scope:resource_access(Resource, Permission, Scopes)
+            with_scopes_for_resource_syntax(Token, Resource,
+                fun(Syntax, Scopes) ->
+                    rabbit_oauth2_scope:resource_access(Resource, Permission, Scopes, Syntax)
+                end)
         end).
 
 -spec check_topic_access(rabbit_types:auth_user(), rabbit_types:r(atom()),
@@ -115,8 +119,10 @@ check_topic_access(#auth_user{impl = DecodedTokenFun},
                    Resource, Permission, Context) ->
     with_decoded_token(DecodedTokenFun(),
         fun(Token) ->
-            Scopes = get_expanded_scopes(Token, Resource),
-            rabbit_oauth2_scope:topic_access(Resource, Permission, Context, Scopes)
+            with_scopes_for_resource_syntax(Token, Resource,
+                fun(Syntax, Scopes) ->
+                    rabbit_oauth2_scope:topic_access(Resource, Permission, Context, Scopes, Syntax)
+                end)
         end).
 
 -spec update_state(rabbit_types:auth_user(), term()) ->
@@ -197,6 +203,16 @@ with_decoded_token(DecodedToken, Fun) ->
         {error, Msg} = Err ->
             ?LOG_ERROR(Msg),
             Err
+    end.
+
+with_scopes_for_resource_syntax(Token, Resource, Fun) ->
+    case resolve_resource_server(Token) of
+        {error, _} ->
+            false;
+        {ResourceServer, _} ->
+            Syntax = ResourceServer#resource_server.scope_pattern_syntax,
+            Scopes = get_expanded_scopes(Token, Resource),
+            Fun(Syntax, Scopes)
     end.
 
 %% This is a helper function used with HOFs that may return errors.

@@ -103,6 +103,15 @@
  "rabbitmq_auth_backend_oauth2.verify_aud",
  [{datatype, {enum, [true, false]}}]}.
 
+%% How scope patterns match vhost names, resource names, and topic routing keys.
+%% wildcard uses RabbitMQ's legacy *-segment wildcard rules; regexpr treats each pattern
+%% as a Perl-compatible regular expression matched against the entire string.
+
+{mapping,
+ "auth_oauth2.scope_pattern_syntax",
+ "rabbitmq_auth_backend_oauth2.scope_pattern_syntax",
+ [{datatype, {enum, [wildcard, regexpr]}}]}.
+
 %% Configure the preferred username's JWT claim(s). These are the JWT claims or attributes
 %% used to determine the user's identity, a.k.a username.
 %% RabbitMQ appends `sub` and `client_id` claims.
@@ -380,6 +389,12 @@
   "auth_oauth2.resource_servers.$name.resource_server_type",
   "rabbitmq_auth_backend_oauth2.resource_servers",
   [{datatype, string}]
+}.
+
+{mapping,
+  "auth_oauth2.resource_servers.$name.scope_pattern_syntax",
+  "rabbitmq_auth_backend_oauth2.resource_servers",
+  [{datatype, {enum, [wildcard, regexpr]}}]
 }.
 
 {mapping,

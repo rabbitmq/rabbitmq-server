@@ -1416,7 +1416,7 @@ test_token_with_too_many_scopes(_) ->
 
 test_extract_scope_from_path_expression(_) ->
     M = fun rabbit_auth_backend_oauth2:extract_scope_list_from_token_value/2,
-    R = #resource_server{id = <<"rabbitmq">>},
+    R = #resource_server{id = <<"rabbitmq">>, scope_pattern_syntax = wildcard},
 
     [<<"role1">>] = extract_token_value(R,
         #{ <<"auth">> => #{ <<"permission">> => <<"role1">> }}, 
