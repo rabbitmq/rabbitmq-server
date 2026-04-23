@@ -41,23 +41,38 @@ checkout(QResource, Leader, NumUnsettled) ->
     State = #state{queue_resource = QResource,
                    leader = Leader,
                    last_msg_id = -1},
-    process_command(Cmd, State, 5).
+    checkout0(Cmd, State, 5).
 
-process_command(_Cmd, _State, 0) ->
+checkout0(_Cmd, _State, 0) ->
     {error, ra_command_failed};
-process_command(Cmd, #state{leader = Leader} = State, Tries) ->
-    case ra:process_command(Leader, Cmd, 60_000) of
-        {ok, ok, Leader} ->
-            {ok, State#state{leader = Leader}};
-        {ok, ok, NonLocalLeader} ->
-            ?LOG_WARNING("Failed to process command ~tp on queue leader ~tp because actual leader is ~tp.",
-                               [Cmd, Leader, NonLocalLeader]),
-            {error, non_local_leader};
-        Err ->
-            ?LOG_WARNING("Failed to process command ~tp on queue leader ~tp: ~tp~n"
-                               "Trying ~b more time(s)...",
-                               [Cmd, Leader, Err, Tries]),
-            process_command(Cmd, State, Tries - 1)
+checkout0(Cmd, #state{leader = Leader} = State, Tries) ->
+    Correlation = make_ref(),
+    %% We use ra:pipeline_command/4 instead of ra:process_command/3 because the
+    %% latter internally redirects to the new leader which we don't want.
+    ra:pipeline_command(Leader, Cmd, Correlation, normal),
+    receive_applied(Cmd, Correlation, State, Tries).
+
+receive_applied(Cmd, Corr, #state{queue_resource = QName,
+                                  leader = Leader} = State, Tries) ->
+    receive
+        {'$gen_cast', {queue_event, QName, {Leader, {applied, Results}}}} ->
+            case lists:member({Corr, ok}, Results) of
+                true ->
+                    {ok, State};
+                false ->
+                    receive_applied(Cmd, Corr, State, Tries)
+            end;
+        {'$gen_cast', {queue_event, QName,
+                       {_From, {rejected, {not_leader, NonLocalLeader, Corr}}}}} ->
+            ?LOG_WARNING("failed to apply command ~tp on leader ~tp "
+                         "because actual leader is ~tp",
+                         [Cmd, Leader, NonLocalLeader]),
+            {error, non_local_leader}
+    after 60_000 ->
+              ?LOG_WARNING("timed out applying command ~tp on leader ~tp; "
+                           "trying ~b more time(s)...",
+                           [Cmd, Leader, Tries - 1]),
+              checkout0(Cmd, State, Tries - 1)
     end.
 
 -spec handle_ra_event(pid(), term(), state()) ->
