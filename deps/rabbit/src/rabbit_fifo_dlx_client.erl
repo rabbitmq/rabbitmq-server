@@ -45,21 +45,6 @@ checkout(QResource, Leader, NumUnsettled) ->
 
 checkout0(_Cmd, _State, 0) ->
     {error, ra_command_failed};
-<<<<<<< HEAD
-process_command(Cmd, #state{leader = Leader} = State, Tries) ->
-    case ra:process_command(Leader, Cmd, 60_000) of
-        {ok, ok, Leader} ->
-            {ok, State#state{leader = Leader}};
-        {ok, ok, NonLocalLeader} ->
-            ?LOG_WARNING("Failed to process command ~tp on quorum queue leader ~tp because actual leader is ~tp.",
-                               [Cmd, Leader, NonLocalLeader]),
-            {error, non_local_leader};
-        Err ->
-            ?LOG_WARNING("Failed to process command ~tp on quorum queue leader ~tp: ~tp~n"
-                               "Trying ~b more time(s)...",
-                               [Cmd, Leader, Err, Tries]),
-            process_command(Cmd, State, Tries - 1)
-=======
 checkout0(Cmd, #state{leader = Leader} = State, Tries) ->
     Correlation = make_ref(),
     %% We use ra:pipeline_command/4 instead of ra:process_command/3 because the
@@ -88,7 +73,6 @@ receive_applied(Cmd, Corr, #state{queue_resource = QName,
                            "trying ~b more time(s)...",
                            [Cmd, Leader, Tries - 1]),
               checkout0(Cmd, State, Tries - 1)
->>>>>>> 449525258d (Fix dlx checkout command redirection (#16203))
     end.
 
 -spec handle_ra_event(pid(), term(), state()) ->
