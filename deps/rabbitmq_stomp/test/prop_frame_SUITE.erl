@@ -29,7 +29,10 @@ groups() ->
        prop_duplicates_do_not_exhaust_limit,
        prop_negative_content_length_rejected,
        prop_valid_content_length_round_trips,
-       prop_non_numeric_content_length_does_not_crash
+       prop_non_numeric_content_length_does_not_crash,
+       prop_round_trip,
+       prop_incremental_parse,
+       prop_max_body_length_enforced
       ]}].
 
 %% Any frame with up to LIMIT unique header names parses successfully.
@@ -108,6 +111,84 @@ prop_non_numeric_content_length_does_not_crash(_Config) ->
               end)
       end, [], 1000).
 
+%% Serialize then parse preserves command, headers, and body.
+%% Headers with escape-triggering characters (colon, backslash, LF, CR)
+%% exercise both the fast and slow parser paths.
+prop_round_trip(_Config) ->
+    run_proper(
+      fun() ->
+          ?FORALL({RawPairs, Body},
+                  {resize(5, list({stomp_hdr_name(), stomp_hdr_value()})),
+                   resize(200, binary())},
+              begin
+                  Hdrs = maps:from_list(
+                           [{<<"destination">>, <<"/queue/t">>} |
+                            [{K, V} || {K, V} <- RawPairs,
+                             K =/= <<"content-length">>,
+                             K =/= <<"destination">>]]),
+                  Frame = #stomp_frame{command = 'SEND',
+                                       headers = Hdrs,
+                                       body_iolist_rev = Body},
+                  Bin = iolist_to_binary(rabbit_stomp_frame:serialize(Frame)),
+                  {ok, Parsed, _} = parse(Bin),
+                  Parsed#stomp_frame.command =:= 'SEND' andalso
+                  lists:all(
+                    fun({K, V}) ->
+                        maps:get(K, Parsed#stomp_frame.headers, undefined) =:= V
+                    end, maps:to_list(Hdrs)) andalso
+                  Body =:= body_to_binary(Parsed)
+              end)
+      end, [], 500).
+
+%% Splitting a valid frame at any byte boundary and parsing in two
+%% chunks must produce the same frame as parsing in one call.
+prop_incremental_parse(_Config) ->
+    run_proper(
+      fun() ->
+          ?FORALL({Body, N},
+                  {resize(200, binary()), non_neg_integer()},
+              begin
+                  Bin = iolist_to_binary(
+                          rabbit_stomp_frame:serialize(
+                            #stomp_frame{command = 'SEND',
+                                         headers = #{<<"destination">> => <<"/queue/t">>},
+                                         body_iolist_rev = Body})),
+                  Pos = N rem (byte_size(Bin) + 1),
+                  <<C1:Pos/binary, C2/binary>> = Bin,
+                  {ok, Full, _} = parse(Bin),
+                  Chunked = case parse(C1) of
+                      {ok, F, _} -> F;
+                      {more, St} ->
+                          {ok, F2, _} = rabbit_stomp_frame:parse(C2, St),
+                          F2
+                  end,
+                  Full#stomp_frame.command =:= Chunked#stomp_frame.command andalso
+                  Full#stomp_frame.headers =:= Chunked#stomp_frame.headers andalso
+                  body_to_binary(Full) =:= body_to_binary(Chunked)
+              end)
+      end, [], 1000).
+
+%% A SEND frame exceeding max_body_length is always rejected.
+prop_max_body_length_enforced(_Config) ->
+    run_proper(
+      fun() ->
+          ?FORALL({MaxLen, BodySize},
+                  {range(1, 500), range(0, 1000)},
+              begin
+                  Body = binary:copy(<<"x">>, BodySize),
+                  Bin = iolist_to_binary(
+                          rabbit_stomp_frame:serialize(
+                            #stomp_frame{command = 'SEND',
+                                         headers = #{<<"destination">> => <<"/queue/t">>},
+                                         body_iolist_rev = Body})),
+                  Config = #stomp_parser_config{max_body_length = MaxLen},
+                  case rabbit_stomp_frame:parse(Bin, rabbit_stomp_frame:initial_state(Config)) of
+                      {ok, _, _} -> BodySize =< MaxLen;
+                      {error, _} -> BodySize > MaxLen
+                  end
+              end)
+      end, [], 1000).
+
 %%-------------------------------------------------------------------
 
 unique_headers(N) ->
@@ -122,13 +203,36 @@ send_frame(HdrName, HdrValue, Body) ->
                       HdrName, ":", HdrValue, "\n\n",
                       Body, "\0"]).
 
-%% Generator for binaries that are not valid integer strings.
+%% Produces binaries that are not valid integer strings.
 non_numeric_bin() ->
     ?SUCHTHAT(Bin,
               ?LET(Chars, list(range(0, 255)),
                    list_to_binary(
                      [C || C <- Chars, C =/= $\n, C =/= $\r, C =/= $:, C =/= $\\, C =/= 0])),
               not is_integer(catch binary_to_integer(string:trim(Bin)))).
+
+%% Produces non-empty, no NUL header names. Biased towards escaped chars.
+stomp_hdr_name() ->
+    ?SUCHTHAT(Bin,
+              ?LET(Chars, resize(15, non_empty(list(stomp_char()))),
+                   list_to_binary(Chars)),
+              Bin =/= <<"content-length">> andalso
+              Bin =/= <<"destination">>).
+
+%% Produces no-NUL header values. Biased towards escaped chars.
+stomp_hdr_value() ->
+    ?LET(Chars, resize(20, list(stomp_char())),
+         list_to_binary(Chars)).
+
+%% Biased towards characters that trigger the escape slow path.
+stomp_char() ->
+    frequency([{3, $:}, {3, $\\}, {3, $\n}, {3, $\r},
+               {88, range(32, 126)}]).
+
+body_to_binary(#stomp_frame{body_iolist_rev = Rev}) when is_list(Rev) ->
+    iolist_to_binary(lists:reverse(Rev));
+body_to_binary(#stomp_frame{body_iolist_rev = Bin}) when is_binary(Bin) ->
+    Bin.
 
 parse(Bin) ->
     rabbit_stomp_frame:parse(Bin, rabbit_stomp_frame:initial_state()).

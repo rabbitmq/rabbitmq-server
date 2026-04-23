@@ -18,7 +18,7 @@
 all() ->
     [
         messages_not_dropped_on_disconnect,
-        direct_client_connections_are_not_leaked,
+        connections_not_leaked_on_parse_error,
         stats_are_not_leaked,
         stats,
         heartbeat,
@@ -84,7 +84,7 @@ rpc_count_connections(Config, ConnSpec) ->
     rabbit_ct_broker_helpers:rpc(Config, 0,
                                  ranch_server, count_connections, [ConnSpec]).
 
-direct_client_connections_are_not_leaked(Config) ->
+connections_not_leaked_on_parse_error(Config) ->
     StompPort = get_stomp_port(Config),
     N = count_connections(Config),
     lists:foreach(fun (_) ->

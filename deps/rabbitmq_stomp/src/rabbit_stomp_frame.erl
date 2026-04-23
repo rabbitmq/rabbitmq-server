@@ -18,6 +18,7 @@
 -export([stream_offset_header/1, stream_filter_header/1]).
 -export([serialize/1, serialize/2]).
 
+%% Only used by tests. Production code uses `initial_state/1` with an explicitly provided config.
 initial_state() -> {none, ?DEFAULT_STOMP_PARSER_CONFIG}.
 initial_state(Config) -> {none, Config}.
 
@@ -453,7 +454,7 @@ integer_header(F, Key) ->
     case header(F, Key) of
         {ok, Str} ->
             try {ok, binary_to_integer(string:trim(Str))}
-            catch error:badarg -> not_found
+            catch _:_ -> not_found
             end;
         not_found -> not_found
     end.
