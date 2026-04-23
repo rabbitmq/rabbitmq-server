@@ -2829,6 +2829,58 @@ end}.
 
 
 %%
+%% Coordination System Ra Parameters
+%%
+
+{mapping, "coordination.wal_compute_checksums", "rabbit.coordination_wal_compute_checksums", [
+  {datatype, {enum, [true, false]}}
+]}.
+
+{mapping, "coordination.segment_compute_checksums", "rabbit.coordination_segment_compute_checksums", [
+  {datatype, {enum, [true, false]}}
+]}.
+
+{mapping, "coordination.wal_max_size_bytes", "rabbit.coordination_wal_max_size_bytes", [
+  {datatype, integer},
+  {validators, ["non_zero_positive_integer"]}
+]}.
+
+{mapping, "coordination.wal_max_entries", "rabbit.coordination_wal_max_entries", [
+  {datatype, integer},
+  {validators, ["non_zero_positive_integer"]}
+]}.
+
+{mapping, "coordination.wal_max_batch_size", "rabbit.coordination_wal_max_batch_size", [
+  {datatype, integer},
+  {validators, ["non_zero_positive_integer"]}
+]}.
+
+{mapping, "coordination.segment_max_size_bytes", "rabbit.coordination_segment_max_size_bytes", [
+  {datatype, integer},
+  {validators, ["non_zero_positive_integer"]}
+]}.
+
+{mapping, "coordination.segment_max_entries", "rabbit.coordination_segment_max_entries", [
+  {datatype, integer},
+  {validators, ["non_zero_positive_integer", "positive_16_bit_unsigned_integer"]}
+]}.
+
+{mapping, "coordination.max_append_entries_rpc_batch_size", "rabbit.coordination_max_append_entries_rpc_batch_size", [
+  {datatype, integer},
+  {validators, ["non_zero_positive_integer"]}
+]}.
+
+{mapping, "coordination.compress_mem_tables", "rabbit.coordination_compress_mem_tables", [
+  {datatype, {enum, [true, false]}}
+]}.
+
+{mapping, "coordination.snapshot_chunk_size", "rabbit.coordination_snapshot_chunk_size", [
+  {datatype, integer},
+  {validators, ["non_zero_positive_integer"]}
+]}.
+
+
+%%
 %% Runtime parameters
 %%
 

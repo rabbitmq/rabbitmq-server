@@ -534,6 +534,54 @@
 ##
 # quorum_queue.snapshot_chunk_size = 1000000
 
+##
+## Coordination System Ra Parameters
+##
+## Relevant doc guides:
+##
+## * https://www.rabbitmq.com/docs/clustering
+##
+
+## Coordination system WAL compute checksums flag.
+##
+# coordination.wal_compute_checksums = true
+
+## Coordination system segment compute checksums flag.
+##
+# coordination.segment_compute_checksums = true
+
+## Maximum size in bytes of each WAL file segment for the coordination system.
+##
+# coordination.wal_max_size_bytes = 64000000
+
+## Maximum number of entries allowed in the coordination system WAL.
+##
+# coordination.wal_max_entries = 500000
+
+## Maximum number of entries allowed in a single WAL write batch for the coordination system.
+##
+# coordination.wal_max_batch_size = 4096
+
+## Maximum size in bytes of each log segment for the coordination system.
+##
+# coordination.segment_max_size_bytes = 64000000
+
+## Maximum number of entries in a log segment for the coordination system.
+##
+# coordination.segment_max_entries = 4096
+
+## Maximum number of append entries RPC batch size for the coordination system.
+##
+# coordination.max_append_entries_rpc_batch_size = 16
+
+## Whether to compress memory tables in the coordination system.
+##
+# coordination.compress_mem_tables = true
+
+## Size of snapshot chunks in bytes for the coordination system.
+##
+# coordination.snapshot_chunk_size = 1000000
+
 ## Changes classic queue storage implementation version.
 ## As of 4.0.0, version 2 is the default and this is a forward compatibility setting,
 ## that is, it will be useful when a new version is developed.
