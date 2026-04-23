@@ -38,35 +38,37 @@
 
 all() ->
     [
-     {group, single_node},
+     {group, cluster_size_1},
      {group, cluster_size_3}
     ].
 
 groups() ->
     [
-     {single_node, [shuffle], [
-                               expired,
-                               rejected,
-                               delivery_limit,
-                               target_queue_not_bound,
-                               target_queue_deleted,
-                               dlx_missing,
-                               cycle,
-                               stats,
-                               drop_head_falls_back_to_at_most_once,
-                               switch_strategy,
-                               reject_publish_source_queue_max_length,
-                               reject_publish_source_queue_max_length_bytes,
-                               reject_publish_target_classic_queue,
-                               reject_publish_max_length_target_quorum_queue,
-                               target_quorum_queue_delete_create
-                              ]},
-     {cluster_size_3, [], [
-                           reject_publish_max_length_target_quorum_queue,
-                           reject_publish_down_target_quorum_queue,
-                           many_target_queues,
-                           single_dlx_worker
-                          ]}
+     {cluster_size_1, [shuffle],
+      [
+       expired,
+       rejected,
+       delivery_limit,
+       target_queue_not_bound,
+       target_queue_deleted,
+       dlx_missing,
+       cycle,
+       stats,
+       drop_head_falls_back_to_at_most_once,
+       switch_strategy,
+       reject_publish_source_queue_max_length,
+       reject_publish_source_queue_max_length_bytes,
+       reject_publish_target_classic_queue,
+       reject_publish_max_length_target_quorum_queue,
+       target_quorum_queue_delete_create
+      ]},
+     {cluster_size_3, [],
+      [
+       reject_publish_max_length_target_quorum_queue,
+       reject_publish_down_target_quorum_queue,
+       many_target_queues,
+       single_dlx_worker
+      ]}
     ].
 
 init_per_suite(Config0) ->
@@ -86,7 +88,7 @@ init_per_suite(Config0) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
-init_per_group(single_node = Group, Config) ->
+init_per_group(cluster_size_1 = Group, Config) ->
     init_per_group(Group, Config, 1);
 init_per_group(cluster_size_3 = Group, Config) ->
     init_per_group(Group, Config, 3).
@@ -954,7 +956,7 @@ single_dlx_worker(Config) ->
     ok = rabbit_ct_broker_helpers:kill_node(Config, Leader0),
     {ok, _, {_, Leader1}} = ?awaitMatch({ok, _, _},
                                         ra:members({RaName, Follower0}),
-                                        30000),
+                                        30_000),
     ?assertNotEqual(Leader0, Leader1),
     [Follower1] = [Server1, Follower0] -- [Leader1],
     assert_active_dlx_workers(0, Config, Follower1),
@@ -962,7 +964,9 @@ single_dlx_worker(Config) ->
     ok = rabbit_ct_broker_helpers:start_node(Config, Leader0).
 
 assert_active_dlx_workers(N, Config, Server) ->
-    ?awaitMatch(N, length(rpc(Config, Server, supervisor, which_children, [rabbit_fifo_dlx_sup], 2000)), 60000).
+    ?awaitMatch(N,
+                length(rpc(Config, Server, supervisor, which_children, [rabbit_fifo_dlx_sup], 5000)),
+                60_000).
 
 declare_queue(Channel, Queue, Args) ->
     #'queue.declare_ok'{} = amqp_channel:call(Channel, #'queue.declare'{
