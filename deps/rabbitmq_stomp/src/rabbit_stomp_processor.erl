@@ -251,7 +251,7 @@ command(_Request, State = #state{user = undefined,
                                           implicit_connect = false}}) ->
     {ok, send_error("Illegal command",
                     "You must log in using CONNECT first",
-                    State), none};
+                    State)};
 
 command({Command, Frame}, State = #state{cfg = #cfg{frame_transformer = FT}})
   when is_function(FT) ->

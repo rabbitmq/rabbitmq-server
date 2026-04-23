@@ -24,7 +24,11 @@ all() ->
         heartbeat,
         login_timeout,
         frame_size,
-        frame_size_huge
+        frame_size_huge,
+        unauthenticated_send_returns_error,
+        unauthenticated_subscribe_returns_error,
+        unauthenticated_disconnect_returns_error,
+        unauthenticated_error_does_not_crash_reader
     ].
 
 merge_app_env(Config) ->
@@ -216,4 +220,47 @@ frame_size_huge(Config) ->
       [base64:encode(crypto:strong_rand_bytes(100000000))]),
     {S, _} = Client,
     {error, closed} = gen_tcp:recv(S, 0, 500),
+    ok.
+
+%% Sending a SEND frame before CONNECT must produce an ERROR
+%% frame, not crash the reader process.
+unauthenticated_send_returns_error(Config) ->
+    StompPort = get_stomp_port(Config),
+    {ok, Sock} = gen_tcp:connect(localhost, StompPort, [{active, false}, binary]),
+    ok = gen_tcp:send(Sock, <<"SEND\ndestination:/queue/foo\n\nhello\0">>),
+    {ok, Data} = gen_tcp:recv(Sock, 0, 5000),
+    {ok, Frame, _} = rabbit_stomp_frame:parse(Data, rabbit_stomp_frame:initial_state()),
+    'ERROR' = Frame#stomp_frame.command,
+    gen_tcp:close(Sock).
+
+unauthenticated_subscribe_returns_error(Config) ->
+    StompPort = get_stomp_port(Config),
+    {ok, Sock} = gen_tcp:connect(localhost, StompPort, [{active, false}, binary]),
+    ok = gen_tcp:send(Sock, <<"SUBSCRIBE\ndestination:/queue/foo\nid:0\n\n\0">>),
+    {ok, Data} = gen_tcp:recv(Sock, 0, 5000),
+    {ok, Frame, _} = rabbit_stomp_frame:parse(Data, rabbit_stomp_frame:initial_state()),
+    'ERROR' = Frame#stomp_frame.command,
+    gen_tcp:close(Sock).
+
+unauthenticated_disconnect_returns_error(Config) ->
+    StompPort = get_stomp_port(Config),
+    {ok, Sock} = gen_tcp:connect(localhost, StompPort, [{active, false}, binary]),
+    ok = gen_tcp:send(Sock, <<"DISCONNECT\n\n\0">>),
+    {ok, Data} = gen_tcp:recv(Sock, 0, 5000),
+    {ok, Frame, _} = rabbit_stomp_frame:parse(Data, rabbit_stomp_frame:initial_state()),
+    'ERROR' = Frame#stomp_frame.command,
+    gen_tcp:close(Sock).
+
+%% After rejecting an unauthenticated frame, the reader must still
+%% be alive and able to accept a proper CONNECT.
+unauthenticated_error_does_not_crash_reader(Config) ->
+    StompPort = get_stomp_port(Config),
+    N = count_connections(Config),
+    {ok, Sock} = gen_tcp:connect(localhost, StompPort, [{active, false}, binary]),
+    ok = gen_tcp:send(Sock, <<"SEND\ndestination:/queue/foo\n\nhello\0">>),
+    {ok, Data} = gen_tcp:recv(Sock, 0, 5000),
+    {ok, ErrFrame, _} = rabbit_stomp_frame:parse(Data, rabbit_stomp_frame:initial_state()),
+    'ERROR' = ErrFrame#stomp_frame.command,
+    gen_tcp:close(Sock),
+    ?awaitMatch(N, count_connections(Config), 5_000),
     ok.
