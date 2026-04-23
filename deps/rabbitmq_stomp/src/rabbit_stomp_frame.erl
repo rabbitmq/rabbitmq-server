@@ -365,6 +365,9 @@ parse_body(Content, #ps{cmd = Cmd, hdrs = Hdrs,
         'SEND' ->
             case integer_header(Frame, ?HEADER_CONTENT_LENGTH, unknown) of
                 ContentLength when is_integer(ContentLength),
+                                   ContentLength < 0 ->
+                    {error, {invalid_content_length, ContentLength}};
+                ContentLength when is_integer(ContentLength),
                                    ContentLength > MaxBodyLength ->
                     {error, {max_body_length, ContentLength}};
                 ContentLength when is_integer(ContentLength) ->
@@ -403,9 +406,13 @@ parse_known_body(Content, Frame, Chunks, Remaining) ->
     end.
 
 finish_body(Content, Frame, Chunks, Pos) ->
-    <<Chunk:Pos/binary, 0, Rest/binary>> = Content,
-    Body = finalize_chunk(Chunk, Chunks),
-    {ok, Frame#stomp_frame{body_iolist_rev = Body}, Rest}.
+    case Content of
+        <<Chunk:Pos/binary, 0, Rest/binary>> ->
+            Body = finalize_chunk(Chunk, Chunks),
+            {ok, Frame#stomp_frame{body_iolist_rev = Body}, Rest};
+        _ ->
+            {error, missing_body_terminator}
+    end.
 
 finalize_chunk(<<>>,  Chunks) -> Chunks;
 finalize_chunk(Chunk, Chunks) -> [Chunk | Chunks].
@@ -444,7 +451,10 @@ boolean_header(F, K, D) -> default_value(boolean_header(F, K), D).
 
 integer_header(F, Key) ->
     case header(F, Key) of
-        {ok, Str} -> {ok, binary_to_integer(string:trim(Str))};
+        {ok, Str} ->
+            try {ok, binary_to_integer(string:trim(Str))}
+            catch error:badarg -> not_found
+            end;
         not_found -> not_found
     end.
 
