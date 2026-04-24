@@ -90,7 +90,8 @@
 -define(ACK_SUBGROUPS, [
     {group, 'Ack'},
     {group, 'Ack11'},
-    {group, 'Ack12'}
+    {group, 'Ack12'},
+    {group, 'Ack12AckHeader'}
 ]).
 
 -define(ACK_TESTS, [
@@ -109,6 +110,11 @@
 
 -define(ACK12_TESTS, [
     'Ack12.test_version'
+]).
+
+-define(ACK12ACKHEADER_TESTS, [
+    'Ack12AckHeader.test_ack_with_id_header_succeeds',
+    'Ack12AckHeader.test_ack_without_id_header_fails'
 ]).
 
 -define(AMQPHEADERS_TESTS, [
@@ -221,6 +227,7 @@
     {'Ack', [], ?ACK_TESTS},
     {'Ack11', [], ?ACK11_TESTS},
     {'Ack12', [], ?ACK12_TESTS},
+    {'Ack12AckHeader', [], ?ACK12ACKHEADER_TESTS},
     {'AmqpHeaders', [], ?AMQPHEADERS_TESTS},
     {'QueueProperties', [], ?QUEUEPROPERTIES_TESTS},
     {'Reliability', [], ?RELIABILITY_TESTS},
@@ -288,6 +295,8 @@
 'Ack.test_nack_without_requeueing'(Config) -> run_one_test(Config, "ack.TestAck.test_nack_without_requeueing").
 'Ack11.test_version'(Config) -> run_one_test(Config, "ack.TestAck11.test_version").
 'Ack12.test_version'(Config) -> run_one_test(Config, "ack.TestAck12.test_version").
+'Ack12AckHeader.test_ack_with_id_header_succeeds'(Config) -> run_one_test(Config, "ack.TestAck12AckHeader.test_ack_with_id_header_succeeds").
+'Ack12AckHeader.test_ack_without_id_header_fails'(Config) -> run_one_test(Config, "ack.TestAck12AckHeader.test_ack_without_id_header_fails").
 'AmqpHeaders.test_headers_to_stomp'(Config) -> run_one_test(Config, "amqp_headers.TestAmqpHeaders.test_headers_to_stomp").
 'QueueProperties.test_subscribe'(Config) -> run_one_test(Config, "queue_properties.TestQueueProperties.test_subscribe").
 'QueueProperties.test_send'(Config) -> run_one_test(Config, "queue_properties.TestQueueProperties.test_send").

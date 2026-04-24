@@ -264,7 +264,7 @@ internal_tag(Base) ->
 queue_tag(Base) ->
     <<?QUEUE_TAG_PREFIX, Base/binary>>.
 
-ack_header_name("1.2") -> ?HEADER_ACK;
+ack_header_name("1.2") -> ?HEADER_ID;
 ack_header_name("1.1") -> ?HEADER_MESSAGE_ID;
 ack_header_name("1.0") -> ?HEADER_MESSAGE_ID.
 
