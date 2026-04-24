@@ -258,23 +258,26 @@ defmodule DisablePluginsCommandTest do
   test "disabling a dependency disables all plugins that depend on it", context do
     assert {:stream, test_stream} = @command.run(["amqp_client"], context[:opts])
     result = Enum.to_list(test_stream)
-    expected_list = [:rabbitmq_exchange_federation, :rabbitmq_federation, :rabbitmq_federation_common, :rabbitmq_queue_federation, :rabbitmq_stomp]
+    expected_disabled = [:rabbitmq_exchange_federation, :rabbitmq_federation,
+                         :rabbitmq_federation_common, :rabbitmq_queue_federation]
     expected = [
-      [],
+      [:rabbitmq_stomp],
       %{
         mode: :online,
         started: [],
-        stopped: expected_list,
-        disabled: expected_list,
-        set: []
+        stopped: expected_disabled,
+        disabled: expected_disabled,
+        set: [:rabbitmq_stomp]
       }
     ]
     assert normalize_stream_result(expected) == normalize_stream_result(result)
 
-    assert {:ok, [[]]} == :file.consult(context[:opts][:enabled_plugins_file])
+    assert {:ok, [[:rabbitmq_stomp]]} == :file.consult(context[:opts][:enabled_plugins_file])
 
+    # Before native STOMP, this would be empty because STOMP depended on
+    # amqp_client. Native STOMP does not depend on amqp_client.
     result = :rabbit_misc.rpc_call(context[:opts][:node], :rabbit_plugins, :active, [])
-    assert Enum.empty?(result)
+    assert Enum.sort(result) == [:rabbitmq_stomp]
   end
 
   test "formats enabled plugins mismatch errors", context do

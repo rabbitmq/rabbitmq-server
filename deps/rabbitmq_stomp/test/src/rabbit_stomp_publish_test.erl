@@ -11,7 +11,7 @@
 
 -include("rabbit_stomp_frame.hrl").
 
--define(DESTINATION, "/queue/test").
+-define(DESTINATION, <<"/queue/test">>).
 
 -define(MICROS_PER_UPDATE,     5000000).
 -define(MICROS_PER_UPDATE_MSG, 100000).
@@ -27,7 +27,7 @@ run() ->
     Self = self(),
     spawn(fun() -> publish(Self, Pub, 0, erlang:monotonic_time()) end),
     rabbit_stomp_client:send(
-      Recv, "SUBSCRIBE", [{"destination", ?DESTINATION}]),
+      Recv, 'SUBSCRIBE', [{<<"destination">>, ?DESTINATION}]),
     spawn(fun() -> recv(Self, Recv, 0, erlang:monotonic_time()) end),
     report().
 
@@ -53,8 +53,8 @@ report() ->
 
 publish(Owner, Client, Count, TS) ->
     rabbit_stomp_client:send(
-      Client, "SEND", [{"destination", ?DESTINATION}],
-      [integer_to_list(Count)]),
+      Client, 'SEND', [{<<"destination">>, ?DESTINATION}],
+      [integer_to_binary(Count)]),
     Diff = erlang:convert_time_unit(
       erlang:monotonic_time() - TS, native, microseconds),
     case Diff > ?MICROS_PER_UPDATE_MSG of
@@ -65,9 +65,9 @@ publish(Owner, Client, Count, TS) ->
     end.
 
 recv(Owner, Client0, Count, TS) ->
-    {#stomp_frame{body_iolist = Body}, Client1} =
+    {#stomp_frame{body_iolist_rev = Body}, Client1} =
         rabbit_stomp_client:recv(Client0),
-    BodyInt = list_to_integer(binary_to_list(iolist_to_binary(Body))),
+    BodyInt = binary_to_integer(iolist_to_binary(Body)),
     Count = BodyInt,
     Diff = erlang:convert_time_unit(
       erlang:monotonic_time() - TS, native, microseconds),
@@ -77,4 +77,3 @@ recv(Owner, Client0, Count, TS) ->
                       erlang:monotonic_time());
         false -> recv(Owner, Client1, Count + 1, TS)
     end.
-

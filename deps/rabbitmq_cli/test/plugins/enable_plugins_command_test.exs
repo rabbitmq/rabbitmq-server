@@ -205,7 +205,8 @@ defmodule EnablePluginsCommandTest do
              Enum.to_list(test_stream0)
 
     check_plugins_enabled([:rabbitmq_stomp], context)
-    assert_equal_sets([:amqp_client, :rabbitmq_stomp], currently_active_plugins(context))
+    # Native STOMP does not depend on amqp_client
+    assert_equal_sets([:rabbitmq_stomp], currently_active_plugins(context))
 
     {:stream, test_stream1} = @command.run(["rabbitmq_federation"], context[:opts])
 

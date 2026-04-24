@@ -12,7 +12,7 @@ import os
 import re
 import rabbitman
 
-class TestUserGeneratedQueueName(base.BaseTest):
+class TestQuorumQueue(base.BaseTest):
 
     def test_quorum_queue(self):
         queueName = 'my-quorum-queue'

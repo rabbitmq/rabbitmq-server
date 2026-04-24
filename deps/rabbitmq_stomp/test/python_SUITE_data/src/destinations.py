@@ -37,7 +37,7 @@ class TestExchange(base.BaseTest):
         self.assertListener("Expecting an error", numErrs=1)
         err = self.listener.errors[0]
         self.assertEqual("not_found", err['headers']['message'])
-        self.assertRegex(err['message'], r'^NOT_FOUND')
+        self.assertRegex(err['message'], r'^no exchange')
         time.sleep(1)
         self.assertFalse(self.conn.is_connected())
 

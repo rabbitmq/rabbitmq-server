@@ -12,7 +12,7 @@ import os
 import re
 import rabbitman
 
-class TestUserGeneratedQueueName(base.BaseTest):
+class TestStreamQueue(base.BaseTest):
 
     def test_stream_queue(self):
         queueName = 'my-stream-queue'

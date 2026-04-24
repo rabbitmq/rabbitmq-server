@@ -127,7 +127,8 @@ defmodule SetPluginsCommandTest do
 
     assert {:ok, [[:rabbitmq_stomp]]} = :file.consult(context[:opts][:enabled_plugins_file])
 
-    assert [:amqp_client, :rabbitmq_stomp] =
+    # Native STOMP does not depend on amqp_client
+    assert [:rabbitmq_stomp] =
              Enum.sort(:rabbit_misc.rpc_call(context[:opts][:node], :rabbit_plugins, :active, []))
 
     assert {:stream, test_stream1} = @command.run(["rabbitmq_federation"], context[:opts])

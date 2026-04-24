@@ -4,7 +4,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+## Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term "Broadcom" refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 ##
 
 import unittest
@@ -20,7 +20,12 @@ def run_unittests(modules):
             if name.startswith("Test") and issubclass(obj, unittest.TestCase):
                 suite.addTest(unittest.TestLoader().loadTestsFromTestCase(obj))
 
-    ts = unittest.TextTestRunner(verbosity=10).run(unittest.TestSuite(suite))
+    ts = unittest.TextTestRunner(verbosity=2).run(unittest.TestSuite(suite))
     if ts.errors or ts.failures:
         sys.exit(1)
 
+if __name__ == '__main__':
+    if len(sys.argv) < 2:
+        print("Usage: test_runner.py <module> [module ...]", file=sys.stderr)
+        sys.exit(2)
+    run_unittests(sys.argv[1:])
