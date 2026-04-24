@@ -252,6 +252,72 @@ class TestAck12(TestAck):
        self.assertEqual('1.2', self.conn.version)
 
 
+class TestAck12AckHeader(unittest.TestCase):
+    """STOMP 1.2 ACK frames must carry the ack identifier in the 'id' header,
+    not 'ack' or 'message-id' (see STOMP 1.2 spec section 3.12). Exercised
+    over raw sockets to remove any stomp.py client ambiguity.
+    """
+
+    STOMP_PORT = int(os.environ["STOMP_PORT"])
+
+    def setUp(self):
+        import socket
+        self.sock = socket.socket()
+        self.sock.settimeout(5)
+        self.sock.connect(('localhost', self.STOMP_PORT))
+        self._send(b"CONNECT\naccept-version:1.2\nhost:/\nlogin:guest\npasscode:guest\n\n\0")
+        connected = self._recv()
+        assert connected.startswith(b"CONNECTED"), connected
+
+    def tearDown(self):
+        try:
+            self.sock.close()
+        except Exception:
+            pass
+
+    def _send(self, data):
+        self.sock.sendall(data)
+
+    def _recv(self):
+        buf = b""
+        while b"\0" not in buf:
+            chunk = self.sock.recv(4096)
+            if not chunk:
+                break
+            buf += chunk
+        return buf
+
+    def _get_ack_id(self, dest):
+        self._send(("SUBSCRIBE\ndestination:{}\nid:sub-1\nack:client\n\n\0"
+                    .format(dest)).encode())
+        self._send(("SEND\ndestination:{}\ncontent-length:5\n\nhello\0"
+                    .format(dest)).encode())
+        frame = self._recv()
+        assert frame.startswith(b"MESSAGE"), frame
+        headers_blob = frame.split(b"\n\n", 1)[0]
+        for line in headers_blob.split(b"\n")[1:]:
+            if line.startswith(b"ack:"):
+                return line[len(b"ack:"):].decode()
+        raise AssertionError("MESSAGE frame missing 'ack' header: " + repr(frame))
+
+    def test_ack_with_id_header_succeeds(self):
+        """Per STOMP 1.2 spec, ACK uses the 'id' header. Server must accept it."""
+        ack_id = self._get_ack_id("/queue/stomp12-ack-id")
+        self._send(("ACK\nid:{}\nreceipt:r1\n\n\0".format(ack_id)).encode())
+        resp = self._recv()
+        self.assertTrue(resp.startswith(b"RECEIPT"),
+                        "expected RECEIPT, got: " + repr(resp))
+
+    def test_ack_without_id_header_fails(self):
+        """A STOMP 1.2 ACK without the 'id' header must produce an ERROR frame."""
+        ack_id = self._get_ack_id("/queue/stomp12-ack-wrong")
+        self._send(("ACK\nmessage-id:{}\n\n\0".format(ack_id)).encode())
+        resp = self._recv()
+        self.assertTrue(resp.startswith(b"ERROR"),
+                        "expected ERROR, got: " + repr(resp))
+        self.assertIn(b"Missing header", resp)
+
+
 
 if __name__ == '__main__':
     import test_runner
