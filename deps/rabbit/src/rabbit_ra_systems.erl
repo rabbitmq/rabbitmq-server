@@ -7,6 +7,8 @@
 
 -module(rabbit_ra_systems).
 
+-behaviour(gen_server).
+
 -include_lib("kernel/include/logger.hrl").
 
 -include_lib("rabbit_common/include/logging.hrl").
@@ -19,6 +21,21 @@
          ensure_ra_system_stopped/1,
          ensure_started/0,
          ensure_stopped/0]).
+
+-export([start_link/0,
+         init/1,
+         handle_call/3,
+         handle_cast/2,
+         handle_info/2,
+         terminate/2,
+         code_change/3]).
+-export([stop/0]).
+
+-rabbit_boot_step({rabbit_ra_systems_monitor,
+                   [{description, "monitor process to shut down when Ra systems exit"},
+                    {mfa,         {rabbit_sup, start_child, [?MODULE]}},
+                    {requires,    [kernel_ready]},
+                    {cleanup,     {?MODULE, stop, []}}]}).
 
 -type ra_system_name() :: atom().
 
@@ -192,3 +209,38 @@ ensure_ra_system_stopped(RaSystem) ->
                #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
             throw(Error)
     end.
+
+%% ----------------------------------------------------------------------------
+
+start_link() ->
+    gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
+
+stop() ->
+    case supervisor:terminate_child(rabbit_sup, ?MODULE) of
+        ok -> ok = supervisor:delete_child(rabbit_sup, ?MODULE);
+        {error, not_found} -> ok
+    end.
+
+init(_) ->
+    process_flag(trap_exit, true),
+    Pid = whereis(ra_systems_sup),
+    true = link(Pid),
+    {ok, Pid, hibernate}.
+
+handle_call(_Request, _From, State) -> {noreply, State}.
+
+handle_cast(_Msg, State) -> {noreply, State}.
+
+handle_info({'EXIT', RaSystemsSup, Reason} = E, RaSystemsSup) ->
+    ?LOG_ERROR(
+        ?MODULE_STRING ": Ra system supervisor exited with reason ~tp~n",
+        [Reason],
+        #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+    exit(E);
+handle_info(_Info, State) -> {noreply, State}.
+
+terminate(_, RaSystemsSup) ->
+    true = unlink(RaSystemsSup),
+    ok.
+
+code_change(_OldVsn, State, _Extra) -> {ok, State}.
