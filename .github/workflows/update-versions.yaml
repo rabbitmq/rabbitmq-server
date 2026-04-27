@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           fetch-tags: true
-      - uses: carvel-dev/setup-action@5d992cccce670e9c44b4241e747132fd3cd43391 # v2.1.0
+      - uses: carvel-dev/setup-action@efbf2625e8469080d87175c02690634d4b0ad476 # v2.2.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           only: ytt
