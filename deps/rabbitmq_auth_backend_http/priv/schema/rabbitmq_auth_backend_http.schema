@@ -130,6 +130,15 @@ fun(Conf) ->
     [ V || {_, V} <- Settings ]
 end}.
 
+{mapping, "auth_http.ssl_options.ciphers.$cipher", "rabbitmq_auth_backend_http.ssl_options.ciphers",
+    [{datatype, string}]}.
+
+{translation, "rabbitmq_auth_backend_http.ssl_options.ciphers",
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("auth_http.ssl_options.ciphers", Conf),
+    lists:reverse([V || {_, V} <- Settings])
+end}.
+
 {mapping, "auth_http.ssl_options.sni", "rabbitmq_auth_backend_http.ssl_options.server_name_indication",
     [{datatype, [{enum, [none]}, string]}]}.
 
