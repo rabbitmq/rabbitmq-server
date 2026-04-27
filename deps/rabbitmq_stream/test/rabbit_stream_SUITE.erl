@@ -86,7 +86,8 @@ groups() ->
       ]},
      %% Run `test_global_counters` on its own so the global metrics are
      %% initialised to 0 for each testcase
-     {single_node_1, [], [test_global_counters]},
+     {single_node_1, [], [test_global_counters,
+                          test_message_size_metrics]},
      {cluster, [], [test_stream, test_stream_tls, test_metadata, java,
                     test_resolve_offset_spec]}].
 
@@ -284,6 +285,36 @@ test_global_counters(Config) ->
                    stream_error_unknown_frame_total => 0,
                    stream_error_vhost_access_failure_total => 0},
                  get_global_counters(Config)),
+    ok.
+
+test_message_size_metrics(Config) ->
+    Stream = atom_to_binary(?FUNCTION_NAME, utf8),
+    Transport = gen_tcp,
+    {S, C0} = connect_and_authenticate(Transport, Config),
+    C1 = test_create_stream(Transport, S, Stream, C0),
+    PublisherId = 1,
+    C2 = test_declare_publisher(Transport, S, PublisherId, Stream, C1),
+
+    BucketsBefore = rpc(Config, 0, rabbit_msg_size_metrics, raw_buckets, [stream]),
+
+    Body5B = <<"hello">>,
+    Body500B = binary:copy(<<"x">>, 500),
+    Body5KB = binary:copy(<<"x">>, 5_000),
+
+    C3 = test_publish_confirm(Transport, S, PublisherId, 1, Body5B, C2),
+    C4 = test_publish_confirm(Transport, S, PublisherId, 2, Body500B, C3),
+    C5 = test_publish_confirm(Transport, S, PublisherId, 3, Body5KB, C4),
+
+    BucketsAfter = rpc(Config, 0, rabbit_msg_size_metrics, raw_buckets, [stream]),
+    ?assertEqual(
+       [{100, 1},
+        {1_000, 1},
+        {10_000, 1}],
+       rabbit_msg_size_metrics:diff_raw_buckets(BucketsAfter, BucketsBefore)),
+
+    C6 = test_delete_stream(Transport, S, Stream, C5),
+    _C7 = test_close(Transport, S, C6),
+    closed = wait_for_socket_close(Transport, S, 10),
     ok.
 
 test_stream(Config) ->
