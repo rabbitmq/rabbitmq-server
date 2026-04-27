@@ -48,6 +48,13 @@ start_child(Q) ->
           ?LOG_WARNING("Federation link for queue ~tp was already started",
                        [rabbit_misc:rs(QueueName)]),
           ok;
+        {error, already_present} ->
+          QueueName = amqqueue:get_name(Q),
+          ?LOG_WARNING("Federation link for queue ~tp had a stale child spec; "
+                       "removing it so the link can be restarted",
+                       [rabbit_misc:rs(QueueName)]),
+          _ = mirrored_supervisor:delete_child(?SUPERVISOR, id(Q)),
+          ok;
         %% A link returned {stop, gone}, the link_sup shut down, that's OK.
         {error, {shutdown, _}} -> ok
     catch
