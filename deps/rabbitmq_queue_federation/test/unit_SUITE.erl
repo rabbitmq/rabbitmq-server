@@ -8,6 +8,7 @@
 -module(unit_SUITE).
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -include("rabbit_queue_federation.hrl").
 
@@ -17,7 +18,8 @@ all() -> [
     reconnect_all_empty_scope,
     reconnect_all_broadcasts_to_members,
     adjust_when_supervisor_not_running,
-    adjust_clear_upstream_when_supervisor_not_running
+    adjust_clear_upstream_when_supervisor_not_running,
+    start_child_handles_already_present
 ].
 
 init_per_suite(Config) ->
@@ -77,3 +79,23 @@ adjust_clear_upstream_when_supervisor_not_running(_Config) ->
     %% adjust/1 with clear_upstream should not fail
     ?assertEqual(ok, rabbit_federation_queue_link_sup_sup:adjust({clear_upstream, <<"/">>, <<"test">>})),
     ?assertEqual(ok, rabbit_federation_queue_link_sup_sup:adjust({clear_upstream_set, <<"test">>})).
+
+start_child_handles_already_present(_Config) ->
+    Name = #resource{virtual_host = <<"/">>, kind = queue, name = <<"q">>},
+    Q = amqqueue:new(Name, none, true, false, none, [], <<"/">>, #{}),
+    Self = self(),
+    ok = meck:new(mirrored_supervisor, [unstick, passthrough]),
+    ok = meck:expect(mirrored_supervisor, start_child,
+                     fun(_Sup, _ChildSpec) -> {error, already_present} end),
+    ok = meck:expect(mirrored_supervisor, delete_child,
+                     fun(_Sup, _Id) -> Self ! delete_child_called, ok end),
+    try
+        ?assertEqual(ok, rabbit_federation_queue_link_sup_sup:start_child(Q)),
+        receive
+            delete_child_called -> ok
+        after 1000 ->
+            ct:fail("delete_child/2 was not called to clean up stale spec")
+        end
+    after
+        ok = meck:unload(mirrored_supervisor)
+    end.
