@@ -843,6 +843,12 @@ server_system_recover(Config) ->
 
     true = ct_rpc:call(Server, erlang, exit, [EtsPid, kill]),
 
+    %% wait for ets server to be restarted
+    rabbit_ct_helpers:await_condition(
+        fun() ->
+                P = ct_rpc:call(Server, erlang, whereis, [ra_log_ets]),
+                is_pid(P) andalso P =/= EtsPid
+        end, 30000),
     %% validate quorum queue is still functional
     ?awaitMatch({ok, _, _},
                 begin
