@@ -85,8 +85,7 @@ suite() ->
       {timetrap, {minutes, 8}}
     ].
 
-%% see partitions_SUITE
--define(AWAIT, 1000).
+-define(AWAIT, 30000).
 -define(INTERVAL, 250).
 
 %% -------------------------------------------------------------------

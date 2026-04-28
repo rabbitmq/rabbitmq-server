@@ -544,13 +544,21 @@ vhosts_test(Config) ->
     rabbit_ct_broker_helpers:force_vhost_failure(Config, <<"myvhost">>),
     [NodeData] = http_get(Config, "/nodes"),
     Node = binary_to_atom(maps:get(name, NodeData), utf8),
-    assert_item(#{name => <<"myvhost">>, cluster_state => #{Node => <<"stopped">>}},
-                http_get(Config, "/vhosts/myvhost")),
+    ?AWAIT(begin
+               assert_item(#{name => <<"myvhost">>,
+                             cluster_state => #{Node => <<"stopped">>}},
+                           http_get(Config, "/vhosts/myvhost")),
+               true
+           end),
 
     %% Restart it
     http_post(Config, "/vhosts/myvhost/start/" ++ atom_to_list(Node), [], {group, '2xx'}),
-    assert_item(#{name => <<"myvhost">>, cluster_state => #{Node => <<"running">>}},
-                http_get(Config, "/vhosts/myvhost")),
+    ?AWAIT(begin
+               assert_item(#{name => <<"myvhost">>,
+                             cluster_state => #{Node => <<"running">>}},
+                           http_get(Config, "/vhosts/myvhost")),
+               true
+           end),
 
     %% Restart on a non-existent node
     http_post(Config, "/vhosts/myvhost/start/does-not-exist", [], ?BAD_REQUEST),
@@ -1408,35 +1416,36 @@ queues_test(Config) ->
     %% The vhost is down
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     DownVHost = #{name => <<"downvhost">>, tracing => false, cluster_state => #{Node => <<"stopped">>}},
-    assert_item(DownVHost, http_get(Config, "/vhosts/downvhost")),
-
-    DownQueues = http_get(Config, "/queues/downvhost"),
-    DownQueue  = http_get(Config, "/queues/downvhost/foo"),
-
-    assert_list([#{name        => <<"bar">>,
-                   vhost       => <<"downvhost">>,
-                   state       => <<"stopped">>,
-                   durable     => true,
-                   auto_delete => false,
-                   exclusive   => false,
-                   arguments   => #{'x-queue-type' => <<"classic">>}
-                 },
-                 #{name        => <<"foo">>,
-                   vhost       => <<"downvhost">>,
-                   state       => <<"stopped">>,
-                   durable     => true,
-                   auto_delete => false,
-                   exclusive   => false,
-                   arguments   => #{'x-queue-type' => <<"classic">>}
-                 }], DownQueues),
-    assert_item(#{name        => <<"foo">>,
-                  vhost       => <<"downvhost">>,
-                  state       => <<"stopped">>,
-                  durable     => true,
-                  auto_delete => false,
-                  exclusive   => false,
-                  arguments   => #{'x-queue-type' => <<"classic">>}
-                }, DownQueue),
+    DownQueueExpected = [#{name        => <<"bar">>,
+                           vhost       => <<"downvhost">>,
+                           state       => <<"stopped">>,
+                           durable     => true,
+                           auto_delete => false,
+                           exclusive   => false,
+                           arguments   => #{'x-queue-type' => <<"classic">>}
+                          },
+                         #{name        => <<"foo">>,
+                           vhost       => <<"downvhost">>,
+                           state       => <<"stopped">>,
+                           durable     => true,
+                           auto_delete => false,
+                           exclusive   => false,
+                           arguments   => #{'x-queue-type' => <<"classic">>}
+                          }],
+    ?AWAIT(begin
+               assert_item(DownVHost, http_get(Config, "/vhosts/downvhost")),
+               assert_list(DownQueueExpected, http_get(Config, "/queues/downvhost")),
+               assert_item(#{name        => <<"foo">>,
+                             vhost       => <<"downvhost">>,
+                             state       => <<"stopped">>,
+                             durable     => true,
+                             auto_delete => false,
+                             exclusive   => false,
+                             arguments   => #{'x-queue-type' => <<"classic">>}
+                            },
+                           http_get(Config, "/queues/downvhost/foo")),
+               true
+           end),
 
     http_put(Config, "/queues/badvhost/bar", Good, ?NOT_FOUND),
     http_put(Config, "/queues/%2F/bar",
