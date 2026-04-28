@@ -50,6 +50,13 @@ start_child(X) ->
           ?LOG_DEBUG("Federation link for exchange ~tp was already started",
                      [rabbit_misc:rs(ExchangeName)]),
           ok;
+        {error, already_present} ->
+          #exchange{name = ExchangeName} = X,
+          ?LOG_WARNING("Federation link for exchange ~tp had a stale child spec; "
+                       "removing it so the link can be restarted",
+                       [rabbit_misc:rs(ExchangeName)]),
+          _ = mirrored_supervisor:delete_child(?SUPERVISOR, id(X)),
+          ok;
         %% A link returned {stop, gone}, the link_sup shut down, that's OK.
         {error, {shutdown, _}} -> ok
     catch
