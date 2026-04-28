@@ -559,9 +559,10 @@ mqtt_scope_pattern_syntax_regexpr_subscribe_denied(Config) ->
             {password, Token}],
     {ok, C} = emqtt:start_link([{clientid, <<"mqtt-regex-denied">>} | Opts]),
     {ok, _} = emqtt:connect(C),
-    ?assertMatch({ok, _, [?MQTT_SUBACK_FAILURE_QOS]},
-        emqtt:subscribe(C, Topic, at_least_once)),
-    ok = emqtt:disconnect(C).
+    true = unlink(C),
+    Ret = emqtt:subscribe(C, Topic, at_least_once),
+    ct:log("Ret: ~p", [Ret]),
+    ?assertMatch({ok, _, [?MQTT_SUBACK_FAILURE_QOS]}, Ret).
 
 mqtt_expired_token(Config) ->
     {_Algo, Token} = generate_expired_token(Config),

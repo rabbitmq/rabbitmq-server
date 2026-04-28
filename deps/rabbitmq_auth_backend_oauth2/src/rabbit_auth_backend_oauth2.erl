@@ -146,8 +146,10 @@ update_state(AuthUser, NewToken) ->
                             CurToken(), DecodedToken) of
                         ok ->
                             Tags = tags_from(DecodedToken),
+                            Token1 = DecodedToken#{<<"x-rmq-scope-pattern-syntax">> =>
+                                                   ResourceServer#resource_server.scope_pattern_syntax},
                             {ok, AuthUser#auth_user{tags = Tags,
-                                                    impl = fun() -> DecodedToken end}};
+                                                    impl = fun() -> Token1 end}};
                         {error, mismatch_username_after_token_refresh} ->
                             {refused,
                                 "Not allowed to change username on refreshed token", []}
@@ -206,14 +208,9 @@ with_decoded_token(DecodedToken, Fun) ->
     end.
 
 with_scopes_for_resource_syntax(Token, Resource, Fun) ->
-    case resolve_resource_server(Token) of
-        {error, _} ->
-            false;
-        {ResourceServer, _} ->
-            Syntax = ResourceServer#resource_server.scope_pattern_syntax,
-            Scopes = get_expanded_scopes(Token, Resource),
-            Fun(Syntax, Scopes)
-    end.
+    Syntax = maps:get(<<"x-rmq-scope-pattern-syntax">>, Token, wildcard),
+    Scopes = get_expanded_scopes(Token, Resource),
+    Fun(Syntax, Scopes).
 
 %% This is a helper function used with HOFs that may return errors.
 -spec auth_user_from_token(Token, ResourceServer) -> Result
@@ -225,9 +222,11 @@ auth_user_from_token(Token0, ResourceServer) ->
         ResourceServer#resource_server.preferred_username_claims,
         Token0),
     Tags     = tags_from(Token0),
+    Token1   = Token0#{<<"x-rmq-scope-pattern-syntax">> =>
+                          ResourceServer#resource_server.scope_pattern_syntax},
     {ok, #auth_user{username = Username,
                     tags = Tags,
-                    impl = fun() -> Token0 end}}.
+                    impl = fun() -> Token1 end}}.
 
 ensure_same_username(PreferredUsernameClaims, CurrentDecodedToken, NewDecodedToken) ->
     CurUsername = username_from(PreferredUsernameClaims, CurrentDecodedToken),
