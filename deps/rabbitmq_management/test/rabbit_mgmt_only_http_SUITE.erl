@@ -293,13 +293,23 @@ vhosts_test(Config) ->
     rabbit_ct_broker_helpers:force_vhost_failure(Config, <<"myvhost">>),
     [NodeData] = http_get(Config, "/nodes"),
     Node = binary_to_atom(maps:get(name, NodeData), utf8),
-    assert_item(#{name => <<"myvhost">>, cluster_state => #{Node => <<"stopped">>}},
-                http_get(Config, "/vhosts/myvhost")),
+    await_condition(
+      fun() ->
+              assert_item(#{name => <<"myvhost">>,
+                            cluster_state => #{Node => <<"stopped">>}},
+                          http_get(Config, "/vhosts/myvhost")),
+              true
+      end),
 
     %% Restart it
     http_post(Config, "/vhosts/myvhost/start/" ++ atom_to_list(Node), [], {group, '2xx'}),
-    assert_item(#{name => <<"myvhost">>, cluster_state => #{Node => <<"running">>}},
-                http_get(Config, "/vhosts/myvhost")),
+    await_condition(
+      fun() ->
+              assert_item(#{name => <<"myvhost">>,
+                            cluster_state => #{Node => <<"running">>}},
+                          http_get(Config, "/vhosts/myvhost")),
+              true
+      end),
 
     %% Delete it
     http_delete(Config, "/vhosts/myvhost", {group, '2xx'}),
@@ -391,7 +401,6 @@ queues_test(Config) ->
     await_condition(
       fun() ->
               assert_item(DownVHost, http_get(Config, "/vhosts/downvhost")),
-              DownQueues = http_get(Config, "/queues/downvhost"),
               assert_list([#{name        => <<"bar">>,
                              vhost       => <<"downvhost">>,
                              state       => <<"stopped">>,
@@ -407,17 +416,17 @@ queues_test(Config) ->
                              auto_delete => false,
                              exclusive   => false,
                              arguments   => #{'x-queue-type' => <<"classic">>}
-                            }], DownQueues),
+                            }], http_get(Config, "/queues/downvhost")),
+              assert_item(#{name        => <<"foo">>,
+                            vhost       => <<"downvhost">>,
+                            state       => <<"stopped">>,
+                            durable     => true,
+                            auto_delete => false,
+                            exclusive   => false,
+                            arguments   => #{'x-queue-type' => <<"classic">>}},
+                          http_get(Config, "/queues/downvhost/foo")),
               true
       end),
-    DownQueue = http_get(Config, "/queues/downvhost/foo"),
-    assert_item(#{name        => <<"foo">>,
-                  vhost       => <<"downvhost">>,
-                  state       => <<"stopped">>,
-                  durable     => true,
-                  auto_delete => false,
-                  exclusive   => false,
-                  arguments   => #{'x-queue-type' => <<"classic">>}}, DownQueue),
 
     http_put(Config, "/queues/badvhost/bar", Good, ?NOT_FOUND),
     http_put(Config, "/queues/%2F/bar",
