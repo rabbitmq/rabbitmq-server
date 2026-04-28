@@ -384,12 +384,19 @@ global_info_keys() -> [name, value].
 %%---------------------------------------------------------------------------
 
 lookup_component(Component) ->
-    case rabbit_registry:lookup_module(
-           runtime_parameter, rabbit_data_coercion:to_atom(Component)) of
-        {error, not_found} -> {errors,
-                               [{"component ~ts not found", [Component]}]};
-        {ok, Module}       -> {ok, Module}
+    try rabbit_data_coercion:to_existing_atom(Component) of
+        ComponentAtom ->
+            case rabbit_registry:lookup_module(
+                   runtime_parameter, ComponentAtom) of
+                {error, not_found} -> component_not_found(Component);
+                {ok, Module}       -> {ok, Module}
+            end
+    catch
+        error:badarg -> component_not_found(Component)
     end.
+
+component_not_found(Component) ->
+    {errors, [{"component ~ts not found", [Component]}]}.
 
 flatten_errors(L) ->
     case [{F, A} || I <- lists:flatten([L]), {error, F, A} <- [I]] of
