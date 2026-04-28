@@ -440,11 +440,12 @@ session_expiry_disconnect_decrease(QueueType, Config) ->
         {?LINE, fun() -> assert_queue_ttl(1, 1, Config) end},
         100, 50),
 
-    %% Wait for the queue to be deleted, otherwise the reconnect can race
-    %% with the expiry timer and the new consumer fails with `noproc`.
+    %% Wait for the TTL to expire and the queue to be deleted before
+    %% reconnecting. Otherwise C2 may hit the queue mid-deletion and the broker
+    %% rejects the connection with an error.
     rabbit_ct_helpers:eventually(
-        {?LINE, fun() -> ?assertEqual(0, length(rpc(Config, rabbit_amqqueue, list, []))) end},
-        200, 30),
+        ?_assertEqual(0, rpc(Config, rabbit_amqqueue, count, [])),
+        200, 50),
     C2 = connect(ClientId, Config, [{clean_start, false}]),
     %% Server should reply in CONNACK that it does not have session state for our client ID.
     ?assertEqual({session_present, 0},
