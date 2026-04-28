@@ -84,19 +84,16 @@ start_child_handles_already_present(_Config) ->
     XName = #resource{virtual_host = <<"/">>, kind = exchange, name = <<"x">>},
     X = #exchange{name = XName, type = direct, durable = true,
                   auto_delete = false, internal = false, arguments = []},
-    Self = self(),
+    ExpectedId = (rabbit_exchange:immutable(X))#exchange{policy = X#exchange.policy},
     ok = meck:new(mirrored_supervisor, [unstick, passthrough]),
     ok = meck:expect(mirrored_supervisor, start_child,
                      fun(_Sup, _ChildSpec) -> {error, already_present} end),
     ok = meck:expect(mirrored_supervisor, delete_child,
-                     fun(_Sup, _Id) -> Self ! delete_child_called, ok end),
+                     fun(_Sup, _Id) -> ok end),
     try
         ?assertEqual(ok, rabbit_federation_exchange_link_sup_sup:start_child(X)),
-        receive
-            delete_child_called -> ok
-        after 1000 ->
-            ct:fail("delete_child/2 was not called to clean up stale spec")
-        end
+        ?assert(meck:called(mirrored_supervisor, delete_child,
+                            [rabbit_federation_exchange_link_sup_sup, ExpectedId]))
     after
         ok = meck:unload(mirrored_supervisor)
     end.
