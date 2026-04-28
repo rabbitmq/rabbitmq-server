@@ -52,7 +52,7 @@ accept_content(ReqData0, Context = #context{user = #user{username = Username}}) 
           Val = if is_map(Value) -> maps:to_list(Value);
                     true         -> Value
                 end,
-          rabbit_runtime_parameters:set_global(name(ReqData), Val, Username),
+          rabbit_runtime_parameters:set_global(raw_name(ReqData), Val, Username),
           {true, ReqData, Context}
       end).
 
@@ -68,4 +68,9 @@ is_authorized(ReqData, Context) ->
 parameter(ReqData) ->
     rabbit_runtime_parameters:lookup_global(name(ReqData)).
 
-name(ReqData)      -> rabbit_data_coercion:to_atom(rabbit_mgmt_util:id(name, ReqData)).
+name(ReqData) ->
+    try rabbit_data_coercion:to_existing_atom(rabbit_mgmt_util:id(name, ReqData))
+    catch error:badarg -> undefined
+    end.
+
+raw_name(ReqData) -> rabbit_mgmt_util:id(name, ReqData).
