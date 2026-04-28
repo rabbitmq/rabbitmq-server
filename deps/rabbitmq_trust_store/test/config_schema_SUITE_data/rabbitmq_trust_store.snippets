@@ -29,4 +29,37 @@
            {ssl_options,
                [{certfile,"test/config_schema_SUITE_data/certs/server_certificate.pem"},
                 {password,<<"i_am_password">>}]}]}],
-     [rabbitmq_trust_store]}].
+     [rabbitmq_trust_store]},
+ {ssl_options_ciphers,
+  "trust_store.providers.1 = http
+   trust_store.url = https://example.com
+   trust_store.ssl_options.cacertfile = test/config_schema_SUITE_data/certs/ca_certificate.pem
+   trust_store.ssl_options.certfile   = test/config_schema_SUITE_data/certs/server_certificate.pem
+   trust_store.ssl_options.keyfile    = test/config_schema_SUITE_data/certs/server_key.pem
+   trust_store.ssl_options.ciphers.1 = ECDHE-ECDSA-AES256-GCM-SHA384
+   trust_store.ssl_options.ciphers.2 = ECDHE-RSA-AES256-GCM-SHA384
+   trust_store.ssl_options.ciphers.3 = ECDHE-ECDSA-AES256-SHA384
+   trust_store.ssl_options.ciphers.4 = ECDHE-RSA-AES256-SHA384
+   trust_store.ssl_options.ciphers.5 = ECDH-ECDSA-AES256-GCM-SHA384
+   trust_store.ssl_options.ciphers.6 = ECDH-RSA-AES256-GCM-SHA384
+   trust_store.ssl_options.ciphers.7 = ECDH-ECDSA-AES256-SHA384
+   trust_store.ssl_options.ciphers.8 = ECDH-RSA-AES256-SHA384
+   trust_store.ssl_options.ciphers.9 = DHE-RSA-AES256-GCM-SHA384",
+  [{rabbitmq_trust_store,
+       [{providers,[rabbit_trust_store_http_provider]},
+        {url,"https://example.com"},
+        {ssl_options,
+            [{cacertfile,"test/config_schema_SUITE_data/certs/ca_certificate.pem"},
+             {certfile,"test/config_schema_SUITE_data/certs/server_certificate.pem"},
+             {keyfile,"test/config_schema_SUITE_data/certs/server_key.pem"},
+             {ciphers,
+              ["ECDHE-ECDSA-AES256-GCM-SHA384",
+               "ECDHE-RSA-AES256-GCM-SHA384",
+               "ECDHE-ECDSA-AES256-SHA384",
+               "ECDHE-RSA-AES256-SHA384",
+               "ECDH-ECDSA-AES256-GCM-SHA384",
+               "ECDH-RSA-AES256-GCM-SHA384",
+               "ECDH-ECDSA-AES256-SHA384",
+               "ECDH-RSA-AES256-SHA384",
+               "DHE-RSA-AES256-GCM-SHA384"]}]}]}],
+  [rabbitmq_trust_store]}].

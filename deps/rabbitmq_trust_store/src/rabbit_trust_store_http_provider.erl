@@ -14,7 +14,7 @@
 
 -define(PROFILE, ?MODULE).
 
--export([list_certs/1, list_certs/2, load_cert/3]).
+-export([list_certs/1, list_certs/2, load_cert/3, prepare_ssl_opts/1]).
 
 -record(http_state,{
     url :: string(),
@@ -80,9 +80,13 @@ init_state(Config) ->
     HttpOptions0 = [{timeout, Timeout}, {connect_timeout, Timeout}],
     HttpOptions = case proplists:get_value(ssl_options, Config) of
         undefined -> HttpOptions0;
-        SslOpts   -> [{ssl, SslOpts} | HttpOptions0]
+        SslOpts   -> [{ssl, prepare_ssl_opts(SslOpts)} | HttpOptions0]
     end,
     #http_state{url = Url, http_options = HttpOptions, headers = [{"connection", "close"} | Headers]}.
+
+-spec prepare_ssl_opts(proplists:proplist()) -> proplists:proplist().
+prepare_ssl_opts(SslOpts) ->
+    rabbit_ssl_options:fix_client(SslOpts).
 
 https_request_timeout() ->
     application:get_env(rabbitmq_trust_store, https_request_timeout, 20000).
