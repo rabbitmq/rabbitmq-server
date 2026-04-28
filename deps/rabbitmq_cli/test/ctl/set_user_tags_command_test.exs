@@ -37,6 +37,28 @@ defmodule SetUserTagsCommandTest do
     assert @command.validate([], %{}) == {:validation_failure, :not_enough_args}
   end
 
+  test "validate: rejects more than 32 tags" do
+    tags = for n <- 1..33, do: "tag-#{n}"
+
+    assert {:validation_failure, {:bad_argument, msg}} =
+             @command.validate([@user | tags], %{})
+
+    assert msg =~ "at most 32 tags"
+  end
+
+  test "validate: accepts exactly 32 tags" do
+    tags = for n <- 1..32, do: "tag-#{n}"
+    assert @command.validate([@user | tags], %{}) == :ok
+  end
+
+  test "output: maps the remote too_many_tags throw to a clean error" do
+    badrpc =
+      {:badrpc, {:EXIT, {{:nocatch, {:error, {:too_many_tags, 32}}}, []}}}
+
+    assert {:error, msg} = @command.output(badrpc, %{})
+    assert msg =~ "at most 32 tags"
+  end
+
   test "run: throws a badrpc when instructed to contact an unreachable RabbitMQ node" do
     opts = %{node: :jake@thedog, timeout: 200}
 
