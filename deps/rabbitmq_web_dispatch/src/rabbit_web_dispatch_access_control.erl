@@ -138,10 +138,12 @@ is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun, AuthConfig, R
              end,
     {IP, _} = cowboy_req:peer(ReqData),
 
-    AuthProps = [{password, Password}, {sockOrAddr, IP}] ++ case vhost(ReqData) of
-        VHost when is_binary(VHost) -> [{vhost, VHost}];
-        _                           -> []
-    end,
+    AuthProps = [{password, Password},
+                 {is_loopback, rabbit_net:is_loopback(IP)}] ++
+                case vhost(ReqData) of
+                    VHost when is_binary(VHost) -> [{vhost, VHost}];
+                    _                           -> []
+                end,
 
 	{ok, AuthBackends} = get_auth_backends(),
 
