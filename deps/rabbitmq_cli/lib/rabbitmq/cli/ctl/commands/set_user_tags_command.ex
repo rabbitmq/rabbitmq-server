@@ -9,10 +9,19 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetUserTagsCommand do
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
+  # Must match ?MAX_USER_TAGS in rabbit_auth_backend_internal.
+  @max_user_tags 32
+
   def merge_defaults(args, opts), do: {args, opts}
 
   def validate([], _) do
     {:validation_failure, :not_enough_args}
+  end
+
+  def validate([_user | tags], _) when length(tags) > @max_user_tags do
+    {:validation_failure,
+     {:bad_argument,
+      "A user can have at most #{@max_user_tags} tags (received #{length(tags)})"}}
   end
 
   def validate(_, _), do: :ok
@@ -35,6 +44,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetUserTagsCommand do
 
   def output({:error, {:no_such_user, username}}, _) do
     {:error, ExitCodes.exit_nouser(), "User \"#{username}\" does not exist"}
+  end
+
+  def output({:badrpc, {:EXIT, {{:nocatch, {:error, {:too_many_tags, max}}}, _stack}}}, _) do
+    {:error, "A user can have at most #{max} tags"}
   end
 
   use RabbitMQ.CLI.DefaultOutput
