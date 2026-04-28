@@ -55,8 +55,13 @@ accept_content(ReqData0, Context = #context{user = #user{username = ActingUser}}
             rabbit_mgmt_util:with_decode(
               [], ReqData0, Context,
               fun(_, User, ReqData) ->
-                      _ = put_user(User#{name => Username}, ActingUser),
-                      {true, ReqData, Context}
+                      case validate_tag_count(User) of
+                          ok ->
+                              _ = put_user(User#{name => Username}, ActingUser),
+                              {true, ReqData, Context};
+                          {error, Msg} ->
+                              rabbit_mgmt_util:bad_request(Msg, ReqData, Context)
+                      end
               end)
     end.
 
@@ -85,3 +90,17 @@ put_user(User, ActingUser) ->
 
 put_user(User, Version, ActingUser) ->
     rabbit_auth_backend_internal:put_user(User, Version, ActingUser).
+
+validate_tag_count(#{tags := Tags}) when is_list(Tags); is_binary(Tags) ->
+    Max = rabbit_auth_backend_internal:max_user_tags(),
+    case rabbit_auth_backend_internal:count_user_tags(Tags) of
+        N when N =< Max ->
+            ok;
+        N ->
+            Msg = rabbit_misc:format(
+                    "A user can have at most ~b tags (received ~b)",
+                    [Max, N]),
+            {error, iolist_to_binary(Msg)}
+    end;
+validate_tag_count(_) ->
+    ok.
