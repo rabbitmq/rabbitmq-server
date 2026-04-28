@@ -9,6 +9,7 @@
 
 -export([decompose/1,
          decompose_from_binary/1,
+         decompose_from_binary_safe/1,
          recompose/1,
          recompose_to_binary/1]).
 
@@ -21,6 +22,13 @@
                             id := non_neg_integer(),
                             serial := non_neg_integer(),
                             creation := non_neg_integer()}.
+
+-type decomposed_pid_bin() :: #{node := binary(),
+                                id := non_neg_integer(),
+                                serial := non_neg_integer(),
+                                creation := non_neg_integer()}.
+
+-export_type([decomposed_pid/0, decomposed_pid_bin/0]).
 
 -spec decompose(pid()) -> decomposed_pid().
 decompose(Pid) ->
@@ -41,6 +49,21 @@ decompose_from_binary(Bin) ->
       id => ID,
       serial => Serial,
       creation => Creation}.
+
+%% Returns the node as a binary and returns 'error' on malformed input.
+-spec decompose_from_binary_safe(binary()) -> {ok, decomposed_pid_bin()} | error.
+decompose_from_binary_safe(<<?TTB_PREFIX, ?NEW_PID_EXT,
+                             ?ATOM_UTF8_EXT, Len:16/integer, Node:Len/binary,
+                             ID:32/integer, Serial:32/integer,
+                             Creation:32/integer>>) ->
+    {ok, #{node => Node, id => ID, serial => Serial, creation => Creation}};
+decompose_from_binary_safe(<<?TTB_PREFIX, ?NEW_PID_EXT,
+                             ?SMALL_ATOM_UTF8_EXT, Len:8/integer, Node:Len/binary,
+                             ID:32/integer, Serial:32/integer,
+                             Creation:32/integer>>) ->
+    {ok, #{node => Node, id => ID, serial => Serial, creation => Creation}};
+decompose_from_binary_safe(_) ->
+    error.
 
 -spec recompose_to_binary(decomposed_pid()) -> binary().
 recompose_to_binary(#{node := Node,
