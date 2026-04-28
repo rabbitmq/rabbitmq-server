@@ -12,6 +12,7 @@
 -behaviour(application).
 -export([change_SSL_options/0]).
 -export([revert_SSL_options/0]).
+-export([merge_tls_options/1]).
 -export([start/2, stop/1]).
 
 -rabbit_boot_step({rabbit_trust_store, [
@@ -56,21 +57,29 @@ edit(Options) ->
                                "It will be overwritten by the plugin.", [Val]),
             ok
     end,
+    merge_tls_options(Options).
+
+merge_tls_options(Options) ->
     CaCerts =
         case lists:keymember(cacerts, 1, Options) orelse
              lists:keymember(cacertfile, 1, Options) of
             true ->
                 [];
             false ->
-                %% if verify_peer is enabled, then the ssl app
-                %% requires a cacerts option to be set even if it is
-                %% not used, as we rely on verify_fun instead.
+                %% Required by the `ssl` app when `verify_peer` is set,
+                %% even though we rely on `verify_fun`.
                 [{cacerts, []}]
         end,
-    %% Only enter those options neccessary for this application.
+    FailIfNoPeerCert =
+        case lists:keymember(fail_if_no_peer_cert, 1, Options) of
+            true ->
+                [];
+            false ->
+                [{fail_if_no_peer_cert, true}]
+        end,
     lists:ukeymerge(
       1,
-      lists:sort(CaCerts ++
+      lists:sort(CaCerts ++ FailIfNoPeerCert ++
                      [{verify_fun, {delegate(), continue}},
                       {partial_chain, fun partial_chain/1}
                      |required_options()]),
@@ -90,4 +99,4 @@ partial_chain(Chain) ->
     end.
 
 required_options() ->
-    [{verify, verify_peer}, {fail_if_no_peer_cert, true}].
+    [{verify, verify_peer}].
