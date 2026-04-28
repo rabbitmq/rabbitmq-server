@@ -33,7 +33,11 @@ to_json(ReqData, {Mode, Context}) ->
     rabbit_mgmt_util:reply(augment(Mode, ReqData), ReqData, Context).
 
 is_authorized(ReqData, {Mode, Context}) ->
-    {Res, Req2, Context2} = rabbit_mgmt_util:is_authorized_monitor(ReqData, Context),
+    AuthFun = case cowboy_req:method(ReqData) of
+                  <<"DELETE">> -> fun rabbit_mgmt_util:is_authorized_admin/2;
+                  _            -> fun rabbit_mgmt_util:is_authorized_monitor/2
+              end,
+    {Res, Req2, Context2} = AuthFun(ReqData, Context),
     {Res, Req2, {Mode, Context2}}.
 
 delete_resource(ReqData, Context) ->
