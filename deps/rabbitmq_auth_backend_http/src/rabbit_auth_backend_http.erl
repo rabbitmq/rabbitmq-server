@@ -98,10 +98,17 @@ is_internal_none_password(_, _) -> false.
 is_sockOrAddr(sockOrAddr) -> true;
 is_sockOrAddr(_) -> false.
 
+%% is_loopback is derived from the connection's peer address and is
+%% internal context, not a public credential, so it must not be sent to
+%% the external HTTP auth server.
+is_connection_context(is_loopback) -> true;
+is_connection_context(_) -> false.
+
 extract_other_credentials(AuthProps) ->
   PublicAuthProps = [{K,V} || {K,V} <-AuthProps, not is_internal_property(K) and
                                                   not is_internal_none_password(K, V) and
-                                                  not is_sockOrAddr(K)],
+                                                  not is_sockOrAddr(K) and
+                                                  not is_connection_context(K)],
   case PublicAuthProps of
     [] -> resolve_using_persisted_credentials(AuthProps);
     _ -> PublicAuthProps
