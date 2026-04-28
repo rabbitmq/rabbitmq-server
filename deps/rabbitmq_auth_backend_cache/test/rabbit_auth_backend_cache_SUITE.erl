@@ -6,7 +6,8 @@
 %%
 -module(rabbit_auth_backend_cache_SUITE).
 
--include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("common_test/include/ct.hrl").
 
 -compile(export_all).
 
@@ -17,6 +18,7 @@ all() ->
     access_response,
     cache_expiration,
     cache_expiration_topic,
+    cache_hit_across_reconnections,
     expiry_timestamp_delegation
     ].
 
@@ -40,6 +42,19 @@ init_per_testcase(access_response, Config) ->
         <<"guest">>, <<"/">>, <<"amq.topic">>, <<"^a">>, <<"^b">>, <<"acting-user">>
     ]),
     Config;
+init_per_testcase(cache_hit_across_reconnections, Config) ->
+    ok = rabbit_ct_broker_helpers:add_code_path_to_all_nodes(
+           Config, rabbit_auth_backend_cache_counting_mock),
+    ok = rpc(Config, rabbit_auth_backend_cache_counting_mock, init, []),
+    ok = rpc(
+      Config, application, set_env,
+      [rabbitmq_auth_backend_cache, cached_backend,
+       rabbit_auth_backend_cache_counting_mock]),
+    ok = rpc(
+      Config, application, set_env,
+      [rabbit, auth_backends, [rabbit_auth_backend_cache]]),
+    ok = rpc(Config, rabbit_auth_backend_cache, clear_cache, []),
+    Config;
 init_per_testcase(_TestCase, Config) ->
     Config.
 
@@ -52,6 +67,18 @@ end_per_testcase(TestCase, Config) when TestCase == access_response;
 end_per_testcase(cache_expiration, Config) ->
     rabbit_ct_broker_helpers:add_user(Config, <<"guest">>),
     rabbit_ct_broker_helpers:set_full_permissions(Config, <<"/">>),
+    Config;
+end_per_testcase(cache_hit_across_reconnections, Config) ->
+    %% Restore the default cached_backend defined in the application's
+    %% PROJECT_ENV so that subsequent test cases are unaffected.
+    ok = rpc(
+      Config, application, set_env,
+      [rabbitmq_auth_backend_cache, cached_backend,
+       rabbit_auth_backend_internal]),
+    ok = rpc(
+      Config, application, set_env,
+      [rabbit, auth_backends, [rabbit_auth_backend_internal]]),
+    ok = rpc(Config, rabbit_auth_backend_cache, clear_cache, []),
     Config;
 end_per_testcase(_TestCase, Config) ->
     Config.
@@ -162,6 +189,27 @@ cache_expiration_topic(Config) ->
 
     false = rpc(Config,rabbit_auth_backend_internal, check_topic_access, [Auth, TopicResource, write, RestrictedTopicContext]),
     false = rpc(Config,rabbit_auth_backend_cache, check_topic_access, [Auth, TopicResource, write, RestrictedTopicContext]).
+
+cache_hit_across_reconnections(Config) ->
+    %% Regression test for issue #16255: the cache backend used to miss on
+    %% every reconnection because the underlying socket, which varies per
+    %% connection, was part of AuthProps and therefore part of the cache
+    %% key. Two sequential AMQP 0-9-1 connections with the same credentials
+    %% should result in exactly one call to the underlying authentication
+    %% backend.
+    ok = rpc(Config, rabbit_auth_backend_cache_counting_mock, reset, []),
+    Host = ?config(rmq_hostname, Config),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    Params = #amqp_params_network{host = Host,
+                                  port = Port,
+                                  username = <<"guest">>,
+                                  password = <<"guest">>},
+    {ok, Conn1} = amqp_connection:start(Params),
+    ok = amqp_connection:close(Conn1),
+    {ok, Conn2} = amqp_connection:start(Params),
+    ok = amqp_connection:close(Conn2),
+    1 = rpc(Config, rabbit_auth_backend_cache_counting_mock,
+            authentication_call_count, []).
 
 expiry_timestamp_delegation(Config) ->
     {ok, Auth} = rpc(Config,rabbit_auth_backend_internal, user_login_authentication, [<<"guest">>, [{password, <<"guest">>}]]),
