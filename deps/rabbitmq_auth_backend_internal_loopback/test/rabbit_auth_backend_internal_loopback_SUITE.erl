@@ -65,9 +65,9 @@ end_per_suite(Config) ->
 init_per_group(localhost_connection, Config) ->
     ok = rabbit_ct_broker_helpers:add_user(Config, maps:get(username, ?LOOPBACK_USER)),
     ok = rabbit_ct_broker_helpers:add_user(Config, maps:get(username, ?NONLOOPBACK_USER)),
-    [{sockOrAddr, ?LOCALHOST_ADDR} | Config];
+    [{peer_addr, ?LOCALHOST_ADDR} | Config];
 init_per_group(nonlocalhost_connection, Config) ->
-    [{sockOrAddr, ?NONLOCALHOST_ADDR} | Config];
+    [{peer_addr, ?NONLOCALHOST_ADDR} | Config];
 init_per_group(_, Config) ->
     Config.
 
@@ -99,5 +99,5 @@ login_from_nonlocalhost_with_nonloopback_user(Config) ->
 rpc(Config, M, F, A) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, M, F, A).
 
-build_auth_props(Pass, Socket) ->
-    [{password, Pass}, {sockOrAddr, Socket}].
+build_auth_props(Pass, Addr) ->
+    [{password, Pass}, {is_loopback, rabbit_net:is_loopback(Addr)}].

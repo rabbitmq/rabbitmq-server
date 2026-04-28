@@ -78,42 +78,41 @@ user_login_authentication(Username, []) ->
 %% For cases when we do have a set of credentials. rabbit_auth_mechanism_plain:handle_response/2
 %% performs initial validation.
 user_login_authentication(Username, AuthProps) ->
-    case proplists:lookup(sockOrAddr, AuthProps) of
-        none -> {refused, ?NO_SOCKET_OR_ADDRESS_REJECTION_MESSAGE, [Username]};      % sockOrAddr doesn't exist
-        {sockOrAddr, SockOrAddr} ->
-            case rabbit_net:is_loopback(SockOrAddr) of
-                true ->
-                    case lists:keyfind(password, 1, AuthProps) of
-                        {password, <<"">>} ->
-                            {refused, ?BLANK_PASSWORD_REJECTION_MESSAGE,
-                             [Username]};
-                        {password, ""} ->
-                            {refused, ?BLANK_PASSWORD_REJECTION_MESSAGE,
-                             [Username]};
-                        {password, none} -> %% For cases when authenticating using an x.509 certificate
-                            internal_check_user_login(Username, fun(_) -> true end);
-                        {password, Cleartext} ->
-                            internal_check_user_login(
-                              Username,
-                              fun(User) ->
-                                  case internal_user:get_password_hash(User) of
-                                      <<Salt:4/binary, Hash/binary>> ->
-                                          Hash =:= rabbit_password:salted_hash(
-                                              hashing_module_for_user(User), Salt, Cleartext);
-                                      _ ->
-                                          false
-                                  end
-                              end);
-                        false ->
-                            case proplists:get_value(rabbit_auth_backend_internal, AuthProps, undefined) of
-                                undefined -> {refused, ?BLANK_PASSWORD_REJECTION_MESSAGE, [Username]};
-                                _ -> internal_check_user_login(Username, fun(_) -> true end)
-                            end
-                    end;
+    case proplists:lookup(is_loopback, AuthProps) of
+        none ->
+            %% is_loopback is not set, so we cannot tell whether the
+            %% connection is from localhost. Refuse.
+            {refused, ?NO_SOCKET_OR_ADDRESS_REJECTION_MESSAGE, [Username]};
+        {is_loopback, true} ->
+            case lists:keyfind(password, 1, AuthProps) of
+                {password, <<"">>} ->
+                    {refused, ?BLANK_PASSWORD_REJECTION_MESSAGE,
+                     [Username]};
+                {password, ""} ->
+                    {refused, ?BLANK_PASSWORD_REJECTION_MESSAGE,
+                     [Username]};
+                {password, none} -> %% For cases when authenticating using an x.509 certificate
+                    internal_check_user_login(Username, fun(_) -> true end);
+                {password, Cleartext} ->
+                    internal_check_user_login(
+                      Username,
+                      fun(User) ->
+                          case internal_user:get_password_hash(User) of
+                              <<Salt:4/binary, Hash/binary>> ->
+                                  Hash =:= rabbit_password:salted_hash(
+                                      hashing_module_for_user(User), Salt, Cleartext);
+                              _ ->
+                                  false
+                          end
+                      end);
                 false ->
-                    {refused, ?NOT_LOOPBACK_REJECTION_MESSAGE, [Username]}
-            end
-
+                    case proplists:get_value(rabbit_auth_backend_internal, AuthProps, undefined) of
+                        undefined -> {refused, ?BLANK_PASSWORD_REJECTION_MESSAGE, [Username]};
+                        _ -> internal_check_user_login(Username, fun(_) -> true end)
+                    end
+            end;
+        {is_loopback, false} ->
+            {refused, ?NOT_LOOPBACK_REJECTION_MESSAGE, [Username]}
     end.
 
 
