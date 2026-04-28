@@ -21,7 +21,7 @@
          expiry_timestamp/1]).
 
 %% for testing
--export([normalize_token_scope/2, get_expanded_scopes/2]).
+-export([normalize_token_scope/2, get_expanded_scopes/2, get_expanded_scopes/3]).
 
 -import(rabbit_data_coercion, [to_map/1]).
 -import(uaa_jwt, [
@@ -209,7 +209,7 @@ with_decoded_token(DecodedToken, Fun) ->
 
 with_scopes_for_resource_syntax(Token, Resource, Fun) ->
     Syntax = maps:get(<<"x-rmq-scope-pattern-syntax">>, Token, wildcard),
-    Scopes = get_expanded_scopes(Token, Resource),
+    Scopes = get_expanded_scopes(Token, Resource, Syntax),
     Fun(Syntax, Scopes).
 
 %% This is a helper function used with HOFs that may return errors.
@@ -469,8 +469,12 @@ find_claim_in_token(Claim, Token) ->
     end.
 
 -spec get_expanded_scopes(map(), #resource{}) -> [binary()].
-get_expanded_scopes(Token, #resource{virtual_host = VHost}) ->
-    Context = #{ token => Token , vhost => VHost},
+get_expanded_scopes(Token, Resource) ->
+    get_expanded_scopes(Token, Resource, wildcard).
+
+-spec get_expanded_scopes(map(), #resource{}, scope_pattern_syntax()) -> [binary()].
+get_expanded_scopes(Token, #resource{virtual_host = VHost}, Syntax) ->
+    Context = #{ token => Token, vhost => VHost, syntax => Syntax },
     case get_scope(Token) of
         [] -> [];
         Scopes -> lists:map(fun(Scope) -> list_to_binary(parse_scope(Scope, Context)) end, Scopes)
@@ -493,22 +497,31 @@ parse_scope_part(Elem, Acc, Stage, Context) ->
         _ -> Stage(Elem, Acc, Context)
     end.
 
-capture_var_name(Elem, Acc, #{ token := Token, vhost := Vhost}) ->
-    { Acc ++ resolve_scope_var(Elem, Token, Vhost), fun expect_closing_var/3}.
+capture_var_name(Elem, Acc, #{ token := Token, vhost := Vhost, syntax := Syntax }) ->
+    { Acc ++ resolve_scope_var(Elem, Token, Vhost, Syntax), fun expect_closing_var/3 }.
 
 expect_closing_var("}" , Acc, _Context) -> { Acc , undefined };
 expect_closing_var(_ , _Acc, _Context) -> {"", error}.
 
-resolve_scope_var(Elem, Token, Vhost) ->
-    case Elem of
-        "vhost" -> binary_to_list(Vhost);
-        _ ->
-            ElemAsBinary = list_to_binary(Elem),
-            binary_to_list(case maps:get(ElemAsBinary, Token, ElemAsBinary) of
-                          Value when is_binary(Value) -> Value;
-                          _ -> ElemAsBinary
-                        end)
+resolve_scope_var(Elem, Token, Vhost, Syntax) ->
+    Raw = case Elem of
+              "vhost" -> binary_to_list(Vhost);
+              _ ->
+                  ElemAsBinary = list_to_binary(Elem),
+                  binary_to_list(case maps:get(ElemAsBinary, Token, ElemAsBinary) of
+                                Value when is_binary(Value) -> Value;
+                                _ -> ElemAsBinary
+                              end)
+          end,
+    case Syntax of
+        regexpr -> escape_regex_metacharacters(Raw);
+        _       -> Raw
     end.
+
+escape_regex_metacharacters(Str) ->
+    binary_to_list(
+        re:replace(Str, <<"[.^$|()\\[\\]{}*+?\\\\]">>, <<"\\\\&">>,
+                   [global, {return, binary}, unicode])).
 
 -spec tags_from(decoded_jwt_token()) -> list(atom()).
 tags_from(DecodedToken) ->
