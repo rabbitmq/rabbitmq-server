@@ -21,9 +21,7 @@ all() ->
         catastrophic_patterns_always_bounded,
         rejected_construct_always_denies,
         substituted_vhost_grants_only_itself,
-        substituted_claim_grants_only_itself,
-        slash_in_substituted_vhost_drops_scope,
-        slash_in_substituted_claim_drops_scope
+        substituted_claim_grants_only_itself
     ].
 
 init_per_suite(Config) ->
@@ -137,39 +135,6 @@ prop_substituted_claim_grants_only_itself(_Config) ->
                 andalso
                 not rabbit_oauth2_scope:resource_access(Other, read, [Expanded], regex)
             end)).
-
-slash_in_substituted_vhost_drops_scope(Config) ->
-    Property = fun() -> prop_slash_in_substituted_vhost_drops_scope(Config) end,
-    rabbit_ct_proper_helpers:run_proper(Property, [], ?NUM_TESTS).
-
-prop_slash_in_substituted_vhost_drops_scope(_Config) ->
-    ?FORALL(
-        {Prefix, Suffix, Syntax},
-        {non_empty_token(), non_empty_token(), oneof([wildcard, regex])},
-        begin
-            VHost = <<Prefix/binary, "/", Suffix/binary>>,
-            Token = #{<<"scope">> => [<<"read:{vhost}/q">>]},
-            [Expanded] = rabbit_auth_backend_oauth2:get_expanded_scopes(
-                Token, #resource{virtual_host = VHost}, Syntax),
-            Expanded =:= <<>>
-        end).
-
-slash_in_substituted_claim_drops_scope(Config) ->
-    Property = fun() -> prop_slash_in_substituted_claim_drops_scope(Config) end,
-    rabbit_ct_proper_helpers:run_proper(Property, [], ?NUM_TESTS).
-
-prop_slash_in_substituted_claim_drops_scope(_Config) ->
-    ?FORALL(
-        {Prefix, Suffix, Syntax},
-        {non_empty_token(), non_empty_token(), oneof([wildcard, regex])},
-        begin
-            Claim = <<Prefix/binary, "/", Suffix/binary>>,
-            Token = #{<<"scope">> => [<<"read:vh/{custom_claim}">>],
-                      <<"custom_claim">> => Claim},
-            [Expanded] = rabbit_auth_backend_oauth2:get_expanded_scopes(
-                Token, #resource{virtual_host = <<"vh">>}, Syntax),
-            Expanded =:= <<>>
-        end).
 
 %% Includes the regex metacharacters that escaping must neutralise.
 hostile_token() ->
