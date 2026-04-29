@@ -432,7 +432,7 @@ topic_match_empty_routing_key(Config) ->
         %% Empty routing key should only match '#'
         ?assertEqual(
            [QHash],
-           sort_dests(do_match(Config, XName, <<>>, #{}))),
+           do_match(Config, XName, <<>>, #{})),
         %% Non-empty routing key should also match '#'
         ?assertEqual(
            sort_dests([QExact, QHash]),
@@ -905,10 +905,12 @@ topic_gen() ->
          list_to_binary(lists:join(".", Words))).
 
 topic_filter_gen() ->
-    frequency([{3, ?LET(Pat, resize(5, list(mqtt_segment_gen())),
-                        mk_filter_binary_mqtt(Pat))},
-               {1, ?LET(Pat, resize(5, list(amqp_segment_gen())),
-                        mk_filter_binary_amqp(Pat))}]).
+    ?SUCHTHAT(Filter,
+              frequency([{3, ?LET(Pat, resize(5, list(mqtt_segment_gen())),
+                                  mk_filter_binary_mqtt(Pat))},
+                         {1, ?LET(Pat, resize(5, list(amqp_segment_gen())),
+                                  mk_filter_binary_amqp(Pat))}]),
+              Filter =/= <<>>).
 
 topic_word_gen() ->
     oneof([<<"a">>, <<"b">>, <<"c">>, <<"d">>,

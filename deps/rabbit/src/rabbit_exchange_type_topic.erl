@@ -46,6 +46,8 @@ route(#exchange{name = XName}, Msg, Opts) ->
 validate(_X) ->
     ok.
 
+validate_binding(_X, #binding{key = <<>>}) ->
+    {error, {binding_invalid, "topic exchange binding key cannot be empty", []}};
 validate_binding(_X, _B) ->
     ok.
 

@@ -46,13 +46,15 @@ all_tests() ->
      unbind_from_volatile_queue,
      binding_args_direct_exchange,
      binding_args_fanout_exchange,
+     empty_binding_key_queue_to_topic_exchange,
 
      %% Exchange bindings
      bind_and_unbind_direct_exchange,
      bind_and_unbind_fanout_exchange,
      bind_and_delete_exchange_source,
      bind_and_delete_exchange_destination,
-     bind_to_unknown_exchange
+     bind_to_unknown_exchange,
+     empty_binding_key_exchange_to_topic_exchange
     ].
 
 %% -------------------------------------------------------------------
@@ -841,6 +843,38 @@ bind_and_delete_exchange_source(Config) ->
     ?assertEqual([],
                  rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_binding, list, [<<"/">>])),
     ok.
+
+empty_binding_key_queue_to_topic_exchange(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    Q = ?config(queue_name, Config),
+
+    #'queue.declare_ok'{} = declare(Ch, Q, []),
+    ?assertExit(
+       {{shutdown,
+         {server_initiated_close, 406,
+          <<"PRECONDITION_FAILED - topic exchange binding key cannot be empty">>}},
+        _},
+       amqp_channel:call(Ch, #'queue.bind'{exchange = <<"amq.topic">>,
+                                           queue = Q,
+                                           routing_key = <<"">>})),
+    ?assertEqual([], rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_binding, list_explicit, [])).
+
+empty_binding_key_exchange_to_topic_exchange(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    X = ?config(exchange_name, Config),
+
+    #'exchange.declare_ok'{} = amqp_channel:call(Ch, #'exchange.declare'{exchange = X}),
+    ?assertExit(
+       {{shutdown,
+         {server_initiated_close, 406,
+          <<"PRECONDITION_FAILED - topic exchange binding key cannot be empty">>}},
+        _},
+       amqp_channel:call(Ch, #'exchange.bind'{source = <<"amq.topic">>,
+                                              destination = X,
+                                              routing_key = <<"">>})),
+    ?assertEqual([], rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_binding, list_explicit, [])).
 
 %% Internal
 
