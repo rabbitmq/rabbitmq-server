@@ -83,7 +83,10 @@ handle_http_req(<<"GET">>,
                 {PermCache0, TopicPermCache}) ->
     QNameBin = cow_uri:urldecode(QNameBinQuoted),
     QName = queue_resource(Vhost, QNameBin),
-    PermCache = check_resource_access(QName, configure, User, PermCache0),
+    %% For security reviews:
+    %% unlike regular declarations, passive declares require *any* permission by design.
+    %% See rabbitmq/rabbitmq-server#16085 for context.
+    PermCache = check_any_resource_access(QName, [read, write, configure], User, PermCache0),
     PermCaches = {PermCache, TopicPermCache},
     case rabbit_amqqueue:with(
            QName,
@@ -405,6 +408,32 @@ handle_http_req(<<"PUT">>,
     {binary, Token} = ReqPayload,
     ok = rabbit_amqp_reader:set_credential(ConnPid, Token),
     {<<"204">>, null, PermCaches}.
+
+%% Used by passive declare operations.
+%%
+%% For security reviews:
+%% unlike regular declarations, passive declares require *any* permission on the
+%% target resource (e.g. a queue) by design.
+%% See rabbitmq/rabbitmq-server#16085 for context.
+%%
+%% Important: `configure` is intentionally tried last
+%% so that the error reported in the negative/refusal case matches that of a regular declare.
+check_any_resource_access(Resource, Perms, User, Cache) ->
+    case lists:any(fun(P) -> lists:member({Resource, P}, Cache) end, Perms) of
+        true ->
+            Cache;
+        false ->
+            try_any_resource_access(Resource, Perms, User, Cache)
+    end.
+
+try_any_resource_access(Resource, [Perm], User, Cache) ->
+    check_resource_access(Resource, Perm, User, Cache);
+try_any_resource_access(Resource, [Perm | Rest], User, Cache) ->
+    try
+        check_resource_access(Resource, Perm, User, Cache)
+    catch exit:#'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS} ->
+              try_any_resource_access(Resource, Rest, User, Cache)
+    end.
 
 decode_queue({map, KVList}) ->
     M = lists:foldl(
