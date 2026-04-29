@@ -498,7 +498,13 @@ parse_scope_part(Elem, Acc, Stage, Context) ->
     end.
 
 capture_var_name(Elem, Acc, #{ token := Token, vhost := Vhost, syntax := Syntax }) ->
-    { Acc ++ resolve_scope_var(Elem, Token, Vhost, Syntax), fun expect_closing_var/3 }.
+    Resolved = resolve_scope_var(Elem, Token, Vhost, Syntax),
+    %% Reject slashes in substituted values: scope segments are slash-delimited,
+    %% so an injected slash would inflate a queue scope into a topic scope.
+    case lists:member($/, Resolved) of
+        true  -> {"", error};
+        false -> { Acc ++ Resolved, fun expect_closing_var/3 }
+    end.
 
 expect_closing_var("}" , Acc, _Context) -> { Acc , undefined };
 expect_closing_var(_ , _Acc, _Context) -> {"", error}.
@@ -519,8 +525,11 @@ resolve_scope_var(Elem, Token, Vhost, Syntax) ->
     end.
 
 escape_regex_metacharacters(Str) ->
+    %% Escapes "-" as well: inside a [...] character class it forms a range,
+    %% so a template like "[{var}]" with var="a-z" would otherwise match any
+    %% letter rather than the literal three-character value.
     binary_to_list(
-        re:replace(Str, <<"[.^$|()\\[\\]{}*+?\\\\]">>, <<"\\\\&">>,
+        re:replace(Str, <<"[.^$|()\\[\\]{}*+?\\\\\\-]">>, <<"\\\\&">>,
                    [global, {return, binary}, unicode])).
 
 -spec tags_from(decoded_jwt_token()) -> list(atom()).
