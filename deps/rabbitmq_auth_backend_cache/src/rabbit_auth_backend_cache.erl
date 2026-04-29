@@ -150,12 +150,8 @@ redact_credentials(AuthProps) ->
 redact_pair({password, V}) -> {password, hash_secret(V)};
 redact_pair(Other)         -> Other.
 
-%% Use HMAC-SHA-256 with a per-node random salt rather than a plain
-%% digest. The salt defeats precomputed (rainbow-table) attacks against
-%% the low-entropy plaintext if cache contents are ever exposed (memory
-%% dump, debug shell). The salt is initialised once at app start (see
-%% `rabbit_auth_backend_cache_app:init/1') and regenerated on node
-%% restart along with the cache itself.
+%% The salt is initialised once at app start (see
+%% `rabbit_auth_backend_cache_app:init/1')
 hash_secret(V) ->
     {hmac_sha256, crypto:mac(hmac, sha256, key_salt(), term_to_binary(V))}.
 
@@ -195,5 +191,3 @@ should_cache(Result, Fun) ->
         {refusal, true} -> true;
         _               -> false
     end.
-
-    
