@@ -10,53 +10,153 @@
 -include("oauth2.hrl").
 
 -export([vhost_access/2,
+        vhost_access/3,
         resource_access/3,
+        resource_access/4,
         topic_access/4,
+        topic_access/5,
         concat_scopes/2,
         filter_matching_scope_prefix/2,
         filter_matching_scope_prefix_and_drop_it/2]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("kernel/include/logger.hrl").
+
+-define(REGEX_MATCH_LIMIT, 10000).
+-define(REGEX_MATCH_LIMIT_RECURSION, 1000).
+-define(MAX_REGEX_PATTERN_BYTES, 2048).
+
+-define(REJECTED_REGEX_CONSTRUCTS,
+        [<<"(?i">>, <<"(?I">>,
+         <<"(?m">>, <<"(?M">>,
+         <<"(?s">>, <<"(?S">>,
+         <<"(?x">>, <<"(?X">>,
+         <<"(?J">>, <<"(?U">>, <<"(?n">>,
+         <<"(?-">>, <<"(?C">>, <<"(?#">>,
+         <<"(*">>]).
 
 -type permission() :: read | write | configure.
 
 %% API functions --------------------------------------------------------------
 -spec vhost_access(binary(), [binary()]) -> boolean().
 vhost_access(VHost, Scopes) ->
+    vhost_access(VHost, Scopes, wildcard).
+
+-spec vhost_access(binary(), [binary()], scope_pattern_syntax()) -> boolean().
+vhost_access(VHost, Scopes, Syntax) ->
     PermissionScopes = get_scope_permissions(Scopes),
     lists:any(
         fun({VHostPattern, _, _, _}) ->
-            wildcard:match(VHost, VHostPattern)
+            pattern_match(Syntax, VHost, VHostPattern)
         end,
         PermissionScopes).
 
 -spec resource_access(rabbit_types:r(atom()), permission(), [binary()]) -> boolean().
+resource_access(Resource, Permission, Scopes) ->
+    resource_access(Resource, Permission, Scopes, wildcard).
+
+-spec resource_access(rabbit_types:r(atom()), permission(), [binary()],
+        scope_pattern_syntax()) -> boolean().
 resource_access(#resource{virtual_host = VHost, name = Name},
-                Permission, Scopes) ->
+                Permission, Scopes, Syntax) ->
     lists:any(
         fun({VHostPattern, NamePattern, _, ScopeGrantedPermission}) ->
-            wildcard:match(VHost, VHostPattern) andalso
-            wildcard:match(Name, NamePattern) andalso
+            pattern_match(Syntax, VHost, VHostPattern) andalso
+            pattern_match(Syntax, Name, NamePattern) andalso
             Permission =:= ScopeGrantedPermission
         end,
         get_scope_permissions(Scopes)).
 
 -spec topic_access(rabbit_types:r(atom()), permission(), map(), [binary()]) -> boolean().
+topic_access(Resource, Permission, Context, Scopes) ->
+    topic_access(Resource, Permission, Context, Scopes, wildcard).
+
+-spec topic_access(rabbit_types:r(atom()), permission(), map(), [binary()],
+        scope_pattern_syntax()) -> boolean().
 topic_access(#resource{virtual_host = VHost, name = ExchangeName},
              Permission,
              #{routing_key := RoutingKey},
-             Scopes) ->
+             Scopes,
+             Syntax) ->
     lists:any(
         fun({VHostPattern, ExchangeNamePattern, RoutingKeyPattern, ScopeGrantedPermission}) ->
             is_binary(RoutingKeyPattern) andalso
-            wildcard:match(VHost, VHostPattern) andalso
-            wildcard:match(ExchangeName, ExchangeNamePattern) andalso
-            wildcard:match(RoutingKey, RoutingKeyPattern) andalso
+            pattern_match(Syntax, VHost, VHostPattern) andalso
+            pattern_match(Syntax, ExchangeName, ExchangeNamePattern) andalso
+            pattern_match(Syntax, RoutingKey, RoutingKeyPattern) andalso
             Permission =:= ScopeGrantedPermission
         end,
         get_scope_permissions(Scopes)).
 
 %% Internal -------------------------------------------------------------------
+
+pattern_match(wildcard, Subject, Pattern) ->
+    wildcard:match(scope_match_subject(Subject), Pattern);
+pattern_match(regex, Subject, Pattern) ->
+    regex_full_string_match(scope_match_subject(Subject), Pattern).
+
+scope_match_subject(Subject) when is_binary(Subject) ->
+    Subject;
+scope_match_subject(Subject) ->
+    rabbit_data_coercion:to_binary(Subject).
+
+regex_full_string_match(Subject, Pattern)
+        when is_binary(Subject), is_binary(Pattern) ->
+    case byte_size(Pattern) > ?MAX_REGEX_PATTERN_BYTES of
+        true ->
+            ?LOG_WARNING(
+                "OAuth 2 scope regex rejected: pattern exceeds the ~b-byte limit "
+                "(actual size: ~b bytes)",
+                [?MAX_REGEX_PATTERN_BYTES, byte_size(Pattern)]),
+            false;
+        false ->
+            case has_rejected_construct(Pattern) of
+                true ->
+                    ?LOG_WARNING(
+                        "OAuth 2 scope regex rejected: pattern contains an unsupported "
+                        "construct (inline modifier, callout, comment or control verb): ~0tp",
+                        [Pattern]),
+                    false;
+                false ->
+                    do_regex_full_string_match(Subject, Pattern)
+            end
+    end;
+regex_full_string_match(_, _) ->
+    false.
+
+do_regex_full_string_match(Subject, Pattern) ->
+    Wrapped = <<"\\A(?:", Pattern/binary, ")\\z">>,
+    try
+        case re:compile(Wrapped, [unicode, anchored, ucp]) of
+            {ok, MP} ->
+                Opts = [{capture, none},
+                        {match_limit, ?REGEX_MATCH_LIMIT},
+                        {match_limit_recursion, ?REGEX_MATCH_LIMIT_RECURSION}],
+                case re:run(Subject, MP, Opts) of
+                    match ->
+                        true;
+                    nomatch ->
+                        false;
+                    {error, Reason} ->
+                        ?LOG_WARNING(
+                            "OAuth 2 scope regex match aborted "
+                            "(reason: ~tp, pattern: ~0tp)",
+                            [Reason, Pattern]),
+                        false
+                end;
+            {error, CompileReason} ->
+                ?LOG_WARNING(
+                    "OAuth 2 scope regex failed to compile "
+                    "(reason: ~tp, pattern: ~0tp)",
+                    [CompileReason, Pattern]),
+                false
+        end
+    catch _:_ ->
+        false
+    end.
+
+has_rejected_construct(Pattern) ->
+    binary:match(Pattern, ?REJECTED_REGEX_CONSTRUCTS) =/= nomatch.
 
 %% -spec get_scope_permissions([binary()]) -> [{rabbit_types:r(pattern), permission()}].
 get_scope_permissions(Scopes) when is_list(Scopes) ->

@@ -360,7 +360,7 @@ normalize_token_scope_with_rich_auth_request(_) ->
         ],
         [<<"read:*/*/*">> ]
     },
-    { "should filter out those permisions whose locations' regexpr do not match the cluster : {resource_server_id} ",
+    { "should filter out those permisions whose locations' regex do not match the cluster : {resource_server_id} ",
         [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
             <<"locations">> => [<<"cluster:rabbit*">>],
             <<"actions">> => [<<"read">>]
@@ -1416,7 +1416,7 @@ test_token_with_too_many_scopes(_) ->
 
 test_extract_scope_from_path_expression(_) ->
     M = fun rabbit_auth_backend_oauth2:extract_scope_list_from_token_value/2,
-    R = #resource_server{id = <<"rabbitmq">>},
+    R = #resource_server{id = <<"rabbitmq">>, scope_pattern_syntax = wildcard},
 
     [<<"role1">>] = extract_token_value(R,
         #{ <<"auth">> => #{ <<"permission">> => <<"role1">> }}, 

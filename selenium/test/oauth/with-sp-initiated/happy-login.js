@@ -6,6 +6,9 @@ const { buildDriver, goToHome, captureScreensFor, teardown, idpLoginPage } = req
 const SSOHomePage = require('../../pageobjects/SSOHomePage')
 const OverviewPage = require('../../pageobjects/OverviewPage')
 
+const management_username = process.env.MANAGEMENT_USERNAME || 'rabbit_admin'
+const management_password = process.env.MANAGEMENT_PASSWORD || 'rabbit_admin'
+
 describe('An user with administrator tag', function () {
   let driver
   let homePage
@@ -24,14 +27,15 @@ describe('An user with administrator tag', function () {
 
   it('can log in into the management ui', async function () {
     await homePage.clickToLogin()
-    await idpLogin.login('rabbit_admin', 'rabbit_admin')
+    await idpLogin.login(management_username, management_password)
     if (!await overview.isLoaded()) {
       throw new Error('Failed to login')
     }
-    assert.equal(await overview.getUser(), 'User rabbit_admin')
+    assert.equal(await overview.getUser(), 'User ' + management_username) 
   })
 
   after(async function () {
     await teardown(driver, this, captureScreen)
   })
+  
 })

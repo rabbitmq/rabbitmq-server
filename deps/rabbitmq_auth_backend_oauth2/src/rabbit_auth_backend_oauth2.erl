@@ -21,7 +21,7 @@
          expiry_timestamp/1]).
 
 %% for testing
--export([normalize_token_scope/2, get_expanded_scopes/2]).
+-export([normalize_token_scope/2, get_expanded_scopes/2, get_expanded_scopes/3]).
 
 -import(rabbit_data_coercion, [to_map/1]).
 -import(uaa_jwt, [
@@ -91,8 +91,10 @@ check_vhost_access(#auth_user{impl = DecodedTokenFun},
                    VHost, _AuthzData) ->
     with_decoded_token(DecodedTokenFun(),
         fun(Token) ->
-            Scopes = get_expanded_scopes(Token, #resource{virtual_host = VHost}),
-            rabbit_oauth2_scope:vhost_access(VHost, Scopes)
+            with_scopes_for_resource_syntax(Token, #resource{virtual_host = VHost},
+                fun(Syntax, Scopes) ->
+                    rabbit_oauth2_scope:vhost_access(VHost, Scopes, Syntax)
+                end)
         end).
 
 -spec check_resource_access(rabbit_types:auth_user(), rabbit_types:r(atom()),
@@ -103,8 +105,10 @@ check_resource_access(#auth_user{impl = DecodedTokenFun},
                       Resource, Permission, _AuthzContext) ->
     with_decoded_token(DecodedTokenFun(),
         fun(Token) ->
-            Scopes = get_expanded_scopes(Token, Resource),
-            rabbit_oauth2_scope:resource_access(Resource, Permission, Scopes)
+            with_scopes_for_resource_syntax(Token, Resource,
+                fun(Syntax, Scopes) ->
+                    rabbit_oauth2_scope:resource_access(Resource, Permission, Scopes, Syntax)
+                end)
         end).
 
 -spec check_topic_access(rabbit_types:auth_user(), rabbit_types:r(atom()),
@@ -115,8 +119,10 @@ check_topic_access(#auth_user{impl = DecodedTokenFun},
                    Resource, Permission, Context) ->
     with_decoded_token(DecodedTokenFun(),
         fun(Token) ->
-            Scopes = get_expanded_scopes(Token, Resource),
-            rabbit_oauth2_scope:topic_access(Resource, Permission, Context, Scopes)
+            with_scopes_for_resource_syntax(Token, Resource,
+                fun(Syntax, Scopes) ->
+                    rabbit_oauth2_scope:topic_access(Resource, Permission, Context, Scopes, Syntax)
+                end)
         end).
 
 -spec update_state(rabbit_types:auth_user(), term()) ->
@@ -140,8 +146,10 @@ update_state(AuthUser, NewToken) ->
                             CurToken(), DecodedToken) of
                         ok ->
                             Tags = tags_from(DecodedToken),
+                            Token1 = DecodedToken#{<<"x-rmq-scope-pattern-syntax">> =>
+                                                   ResourceServer#resource_server.scope_pattern_syntax},
                             {ok, AuthUser#auth_user{tags = Tags,
-                                                    impl = fun() -> DecodedToken end}};
+                                                    impl = fun() -> Token1 end}};
                         {error, mismatch_username_after_token_refresh} ->
                             {refused,
                                 "Not allowed to change username on refreshed token", []}
@@ -199,6 +207,11 @@ with_decoded_token(DecodedToken, Fun) ->
             Err
     end.
 
+with_scopes_for_resource_syntax(Token, Resource, Fun) ->
+    Syntax = maps:get(<<"x-rmq-scope-pattern-syntax">>, Token, wildcard),
+    Scopes = get_expanded_scopes(Token, Resource, Syntax),
+    Fun(Syntax, Scopes).
+
 %% This is a helper function used with HOFs that may return errors.
 -spec auth_user_from_token(Token, ResourceServer) -> Result
     when Token :: decoded_jwt_token(),
@@ -209,9 +222,11 @@ auth_user_from_token(Token0, ResourceServer) ->
         ResourceServer#resource_server.preferred_username_claims,
         Token0),
     Tags     = tags_from(Token0),
+    Token1   = Token0#{<<"x-rmq-scope-pattern-syntax">> =>
+                          ResourceServer#resource_server.scope_pattern_syntax},
     {ok, #auth_user{username = Username,
                     tags = Tags,
-                    impl = fun() -> Token0 end}}.
+                    impl = fun() -> Token1 end}}.
 
 ensure_same_username(PreferredUsernameClaims, CurrentDecodedToken, NewDecodedToken) ->
     CurUsername = username_from(PreferredUsernameClaims, CurrentDecodedToken),
@@ -454,8 +469,12 @@ find_claim_in_token(Claim, Token) ->
     end.
 
 -spec get_expanded_scopes(map(), #resource{}) -> [binary()].
-get_expanded_scopes(Token, #resource{virtual_host = VHost}) ->
-    Context = #{ token => Token , vhost => VHost},
+get_expanded_scopes(Token, Resource) ->
+    get_expanded_scopes(Token, Resource, wildcard).
+
+-spec get_expanded_scopes(map(), #resource{}, scope_pattern_syntax()) -> [binary()].
+get_expanded_scopes(Token, #resource{virtual_host = VHost}, Syntax) ->
+    Context = #{ token => Token, vhost => VHost, syntax => Syntax },
     case get_scope(Token) of
         [] -> [];
         Scopes -> lists:map(fun(Scope) -> list_to_binary(parse_scope(Scope, Context)) end, Scopes)
@@ -478,22 +497,40 @@ parse_scope_part(Elem, Acc, Stage, Context) ->
         _ -> Stage(Elem, Acc, Context)
     end.
 
-capture_var_name(Elem, Acc, #{ token := Token, vhost := Vhost}) ->
-    { Acc ++ resolve_scope_var(Elem, Token, Vhost), fun expect_closing_var/3}.
+capture_var_name(Elem, Acc, #{ token := Token, vhost := Vhost, syntax := Syntax }) ->
+    Resolved = resolve_scope_var(Elem, Token, Vhost, Syntax),
+    %% Reject slashes in substituted values: scope segments are slash-delimited,
+    %% so an injected slash would inflate a queue scope into a topic scope.
+    case lists:member($/, Resolved) of
+        true  -> {"", error};
+        false -> { Acc ++ Resolved, fun expect_closing_var/3 }
+    end.
 
 expect_closing_var("}" , Acc, _Context) -> { Acc , undefined };
 expect_closing_var(_ , _Acc, _Context) -> {"", error}.
 
-resolve_scope_var(Elem, Token, Vhost) ->
-    case Elem of
-        "vhost" -> binary_to_list(Vhost);
-        _ ->
-            ElemAsBinary = list_to_binary(Elem),
-            binary_to_list(case maps:get(ElemAsBinary, Token, ElemAsBinary) of
-                          Value when is_binary(Value) -> Value;
-                          _ -> ElemAsBinary
-                        end)
+resolve_scope_var(Elem, Token, Vhost, Syntax) ->
+    Raw = case Elem of
+              "vhost" -> binary_to_list(Vhost);
+              _ ->
+                  ElemAsBinary = list_to_binary(Elem),
+                  binary_to_list(case maps:get(ElemAsBinary, Token, ElemAsBinary) of
+                                Value when is_binary(Value) -> Value;
+                                _ -> ElemAsBinary
+                              end)
+          end,
+    case Syntax of
+        regex -> escape_regex_metacharacters(Raw);
+        _       -> Raw
     end.
+
+escape_regex_metacharacters(Str) ->
+    %% Escapes "-" as well: inside a [...] character class it forms a range,
+    %% so a template like "[{var}]" with var="a-z" would otherwise match any
+    %% letter rather than the literal three-character value.
+    binary_to_list(
+        re:replace(Str, <<"[.^$|()\\[\\]{}*+?\\\\-]">>, <<"\\\\&">>,
+                   [global, {return, binary}, unicode])).
 
 -spec tags_from(decoded_jwt_token()) -> list(atom()).
 tags_from(DecodedToken) ->
