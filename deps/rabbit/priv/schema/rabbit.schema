@@ -2847,6 +2847,30 @@ end}.
 }.
 
 %%
+%% Channel interceptors
+%%
+
+%% Priority levels for channel interceptor modules. Lower values run first, default is 0.
+%%
+%% e.g. channel_interceptor.priority.my_interceptor_module = 5
+%%
+
+{mapping, "channel_interceptor.priority.$name", "rabbit.channel_interceptor_priorities", [
+    {datatype, integer}]}.
+
+{translation, "rabbit.channel_interceptor_priorities",
+ fun(Conf) ->
+         case cuttlefish_variable:filter_by_prefix("channel_interceptor.priority", Conf) of
+             [] ->
+                 cuttlefish:unset();
+             L ->
+                 [{list_to_atom(Name), Priority}
+                  || {["channel_interceptor", "priority", Name], Priority} <- L]
+         end
+ end
+}.
+
+%%
 %% Message interceptors
 %%
 
