@@ -59,7 +59,7 @@
 -export([collect_info_all/2]).
 
 -export([is_policy_applicable/2, declare_args/0, consume_args/0]).
--export([is_server_named_allowed/1]).
+-export([is_server_named_allowed/1, server_named_queue_prefix/1]).
 
 -export([check_max_age/1]).
 -export([get_queue_type/1, get_queue_type/2, get_resource_vhost_name/1, get_resource_name/1]).
@@ -361,6 +361,19 @@ is_policy_applicable(QName, Policy) ->
 is_server_named_allowed(Args) ->
     Type = get_queue_type(Args),
     rabbit_queue_type:is_server_named_allowed(Type).
+
+-spec server_named_queue_prefix(rabbit_framing:amqp_table()) ->
+    {ok, binary()} | {error, {prefix_too_long, binary()}}.
+server_named_queue_prefix(Args) ->
+    case rabbit_misc:table_lookup(Args, <<"x-name-prefix">>) of
+        {longstr, Prefix} when Prefix =/= <<>> ->
+            case byte_size(Prefix) =< 64 of
+                true  -> {ok, Prefix};
+                false -> {error, {prefix_too_long, Prefix}}
+            end;
+        _ ->
+            {ok, <<"amq.gen">>}
+    end.
 
 -spec lookup(QueueName) -> Ret when
       QueueName :: name(),
