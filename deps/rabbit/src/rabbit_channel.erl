@@ -2442,11 +2442,12 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                 true  -> ConnPid;
                 false -> none
             end,
+    Args0Stripped = lists:keydelete(<<"x-name-prefix">>, 1, Args0),
     Args = rabbit_amqqueue:augment_declare_args(VHostPath,
                                                 DurableDeclare,
                                                 ExclusiveDeclare,
                                                 AutoDelete,
-                                                Args0),
+                                                Args0Stripped),
     StrippedQueueNameBin = strip_cr_lf(QueueNameBin),
     Durable = DurableDeclare andalso not ExclusiveDeclare,
     Kind = queue,
@@ -2454,7 +2455,17 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                         <<>> ->
                             case rabbit_amqqueue:is_server_named_allowed(Args) of
                                 true ->
-                                    rabbit_guid:binary(rabbit_guid:gen_secure(), "amq.gen");
+                                    NamePrefix =
+                                        case rabbit_amqqueue:server_named_queue_prefix(Args0) of
+                                            {ok, P} ->
+                                                strip_cr_lf(P);
+                                            {error, {prefix_too_long, P}} ->
+                                                rabbit_misc:protocol_error(
+                                                  precondition_failed,
+                                                  "Queue name prefix '~ts' exceeds the 64-byte limit",
+                                                  [strip_cr_lf(P)])
+                                        end,
+                                    rabbit_guid:binary(rabbit_guid:gen_secure(), NamePrefix);
                                 false ->
                                     rabbit_misc:protocol_error(
                                       precondition_failed,
