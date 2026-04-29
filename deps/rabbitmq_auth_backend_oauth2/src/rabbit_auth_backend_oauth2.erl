@@ -520,7 +520,7 @@ resolve_scope_var(Elem, Token, Vhost, Syntax) ->
                               end)
           end,
     case Syntax of
-        regexpr -> escape_regex_metacharacters(Raw);
+        regex -> escape_regex_metacharacters(Raw);
         _       -> Raw
     end.
 

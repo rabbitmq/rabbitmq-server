@@ -92,7 +92,7 @@ topic_access(#resource{virtual_host = VHost, name = ExchangeName},
 
 pattern_match(wildcard, Subject, Pattern) ->
     wildcard:match(scope_match_subject(Subject), Pattern);
-pattern_match(regexpr, Subject, Pattern) ->
+pattern_match(regex, Subject, Pattern) ->
     regex_full_string_match(scope_match_subject(Subject), Pattern).
 
 scope_match_subject(Subject) when is_binary(Subject) ->

@@ -53,11 +53,11 @@ time_match(Fun) ->
 
 deny(Pattern) ->
     ?assertEqual(false, rabbit_oauth2_scope:vhost_access(
-        <<"foo">>, [<<"read:", Pattern/binary, "/x">>], regexpr)).
+        <<"foo">>, [<<"read:", Pattern/binary, "/x">>], regex)).
 
 allow(Pattern, Subject) ->
     ?assertEqual(true, rabbit_oauth2_scope:vhost_access(
-        Subject, [<<"read:", Pattern/binary, "/x">>], regexpr)).
+        Subject, [<<"read:", Pattern/binary, "/x">>], regex)).
 
 catastrophic_nested_quantifier_returns_quickly(_Config) ->
     Subject = binary:copy(<<"a">>, 40),
@@ -65,7 +65,7 @@ catastrophic_nested_quantifier_returns_quickly(_Config) ->
     {Result, ElapsedMs} = time_match(
         fun() ->
             rabbit_oauth2_scope:resource_access(
-                vhost_resource(<<"vh">>, Subject), read, [Scope], regexpr)
+                vhost_resource(<<"vh">>, Subject), read, [Scope], regex)
         end),
     ?assertEqual(false, Result),
     ?assert(ElapsedMs < ?REDOS_TIME_BUDGET_MS).
@@ -76,7 +76,7 @@ catastrophic_alternation_returns_quickly(_Config) ->
     {Result, ElapsedMs} = time_match(
         fun() ->
             rabbit_oauth2_scope:resource_access(
-                vhost_resource(<<"vh">>, Subject), read, [Scope], regexpr)
+                vhost_resource(<<"vh">>, Subject), read, [Scope], regex)
         end),
     ?assertEqual(false, Result),
     ?assert(ElapsedMs < ?REDOS_TIME_BUDGET_MS).
@@ -86,73 +86,73 @@ oversized_pattern_denies_access(_Config) ->
     VHostScope = <<"read:", Big/binary, "/x">>,
     NameScope = <<"read:vh/", Big/binary>>,
     ?assertEqual(false, rabbit_oauth2_scope:vhost_access(
-        <<"vh">>, [VHostScope], regexpr)),
+        <<"vh">>, [VHostScope], regex)),
     ?assertEqual(false, rabbit_oauth2_scope:resource_access(
-        vhost_resource(<<"vh">>, <<"q">>), read, [NameScope], regexpr)).
+        vhost_resource(<<"vh">>, <<"q">>), read, [NameScope], regex)).
 
 pattern_at_max_size_is_accepted(_Config) ->
     Subject = binary:copy(<<"a">>, 2048),
     Scope = <<"read:", Subject/binary, "/x">>,
     ?assertEqual(true, rabbit_oauth2_scope:vhost_access(
-        Subject, [Scope], regexpr)).
+        Subject, [Scope], regex)).
 
 pattern_one_byte_over_max_is_rejected(_Config) ->
     Subject = binary:copy(<<"a">>, 2049),
     Scope = <<"read:", Subject/binary, "/x">>,
     ?assertEqual(false, rabbit_oauth2_scope:vhost_access(
-        Subject, [Scope], regexpr)).
+        Subject, [Scope], regex)).
 
 invalid_pattern_denies_access(_Config) ->
     ?assertEqual(false, rabbit_oauth2_scope:vhost_access(
-        <<"vh">>, [<<"read:[unterminated/x">>], regexpr)),
+        <<"vh">>, [<<"read:[unterminated/x">>], regex)),
     ?assertEqual(false, rabbit_oauth2_scope:resource_access(
         vhost_resource(<<"vh">>, <<"q">>),
-        read, [<<"read:vh/[unterminated">>], regexpr)).
+        read, [<<"read:vh/[unterminated">>], regex)).
 
 end_anchor_rejects_trailing_newline(_Config) ->
     ?assertEqual(false, rabbit_oauth2_scope:vhost_access(
-        <<"foo\n">>, [<<"read:foo/x">>], regexpr)),
+        <<"foo\n">>, [<<"read:foo/x">>], regex)),
     ?assertEqual(false, rabbit_oauth2_scope:vhost_access(
-        <<"foo\n">>, [<<"read:.+/x">>], regexpr)).
+        <<"foo\n">>, [<<"read:.+/x">>], regex)).
 
 prefix_match_does_not_grant_extra_suffix(_Config) ->
     ?assertEqual(false, rabbit_oauth2_scope:vhost_access(
-        <<"foobar">>, [<<"read:foo/x">>], regexpr)).
+        <<"foobar">>, [<<"read:foo/x">>], regex)).
 
 suffix_match_does_not_grant_extra_prefix(_Config) ->
     ?assertEqual(false, rabbit_oauth2_scope:vhost_access(
-        <<"barfoo">>, [<<"read:foo/x">>], regexpr)).
+        <<"barfoo">>, [<<"read:foo/x">>], regex)).
 
 matching_is_case_sensitive_by_default(_Config) ->
     ?assertEqual(false, rabbit_oauth2_scope:vhost_access(
-        <<"FOO">>, [<<"read:foo/x">>], regexpr)),
+        <<"FOO">>, [<<"read:foo/x">>], regex)),
     ?assertEqual(true, rabbit_oauth2_scope:vhost_access(
-        <<"FOO">>, [<<"read:[Ff][Oo][Oo]/x">>], regexpr)).
+        <<"FOO">>, [<<"read:[Ff][Oo][Oo]/x">>], regex)).
 
 any_scope_in_list_grants_access(_Config) ->
     Scopes = [<<"read:alpha/x">>, <<"read:beta/x">>, <<"read:[gG]amma/x">>],
     ?assertEqual(true, rabbit_oauth2_scope:vhost_access(
-        <<"beta">>, Scopes, regexpr)),
+        <<"beta">>, Scopes, regex)),
     ?assertEqual(true, rabbit_oauth2_scope:vhost_access(
-        <<"Gamma">>, Scopes, regexpr)),
+        <<"Gamma">>, Scopes, regex)),
     ?assertEqual(false, rabbit_oauth2_scope:vhost_access(
-        <<"delta">>, Scopes, regexpr)).
+        <<"delta">>, Scopes, regex)).
 
 permission_is_required_to_match(_Config) ->
     Resource = vhost_resource(<<"vh">>, <<"q">>),
     ?assertEqual(true, rabbit_oauth2_scope:resource_access(
-        Resource, write, [<<"write:vh/q">>], regexpr)),
+        Resource, write, [<<"write:vh/q">>], regex)),
     ?assertEqual(false, rabbit_oauth2_scope:resource_access(
-        Resource, write, [<<"read:vh/q">>], regexpr)),
+        Resource, write, [<<"read:vh/q">>], regex)),
     ?assertEqual(true, rabbit_oauth2_scope:resource_access(
-        Resource, configure, [<<"configure:vh/q">>], regexpr)).
+        Resource, configure, [<<"configure:vh/q">>], regex)).
 
 legitimate_patterns_still_match(_Config) ->
     ?assertEqual(true, rabbit_oauth2_scope:vhost_access(
-        <<"abc">>, [<<"read:[a-z]+/x">>], regexpr)),
+        <<"abc">>, [<<"read:[a-z]+/x">>], regex)),
     ?assertEqual(true, rabbit_oauth2_scope:resource_access(
         vhost_resource(<<"vh">>, <<"queue-1">>),
-        read, [<<"read:vh/queue-[0-9]+">>], regexpr)).
+        read, [<<"read:vh/queue-[0-9]+">>], regex)).
 
 inline_modifiers_are_rejected(_Config) ->
     deny(<<"(?i)foo">>),
@@ -182,7 +182,7 @@ topic_routing_key_rejects_inline_modifier(_Config) ->
     Topic = #resource{virtual_host = <<"vh">>, kind = topic, name = <<"ex">>},
     Scope = <<"read:vh/ex/(?i)foo">>,
     ?assertEqual(false, rabbit_oauth2_scope:topic_access(
-        Topic, read, #{routing_key => <<"foo">>}, [Scope], regexpr)).
+        Topic, read, #{routing_key => <<"foo">>}, [Scope], regex)).
 
 wildcard_syntax_unaffected_by_regex_restrictions(_Config) ->
     ?assertEqual(true, rabbit_oauth2_scope:vhost_access(

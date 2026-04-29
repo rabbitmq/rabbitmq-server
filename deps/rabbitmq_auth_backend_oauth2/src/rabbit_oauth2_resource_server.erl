@@ -257,7 +257,7 @@ get_scope_pattern_syntax_env() ->
 
 -spec normalize_scope_pattern_syntax_value(term()) -> scope_pattern_syntax().
 normalize_scope_pattern_syntax_value(wildcard) -> wildcard;
-normalize_scope_pattern_syntax_value(regexpr) -> regexpr;
+normalize_scope_pattern_syntax_value(regex) -> regex;
 normalize_scope_pattern_syntax_value(<<"wildcard">>) -> wildcard;
-normalize_scope_pattern_syntax_value(<<"regexpr">>) -> regexpr;
+normalize_scope_pattern_syntax_value(<<"regex">>) -> regex;
 normalize_scope_pattern_syntax_value(_) -> wildcard.

@@ -277,14 +277,14 @@ resource_server_string_property_value(V) when is_list(V) ->
 
 parse_scope_pattern_syntax_for_schema(wildcard) ->
     wildcard;
-parse_scope_pattern_syntax_for_schema(regexpr) ->
-    regexpr;
+parse_scope_pattern_syntax_for_schema(regex) ->
+    regex;
 parse_scope_pattern_syntax_for_schema(V) when is_binary(V) ->
     parse_scope_pattern_syntax_for_schema(binary_to_list(V));
 parse_scope_pattern_syntax_for_schema(V) when is_list(V) ->
     case string:lowercase(V) of
         "wildcard" -> wildcard;
-        "regexpr" -> regexpr;
+        "regex" -> regex;
         _ ->
             cuttlefish:invalid(io_lib:format(
                 "Invalid scope_pattern_syntax: ~tp", [V]))

@@ -18,7 +18,7 @@ all() ->
         permission_vhost,
         permission_resource,
         permission_topic,
-        scope_pattern_syntax_regexpr
+        scope_pattern_syntax_regex
     ].
 
 variable_expansion(_Config) ->
@@ -336,33 +336,33 @@ permission_topic(_Config) ->
         Resource <- ExampleResources,
         RoutingKey <- [<<"foo">>, <<"bar">>]].
 
-scope_pattern_syntax_regexpr(_Config) ->
+scope_pattern_syntax_regex(_Config) ->
     ?assertEqual(true, rabbit_oauth2_scope:vhost_access(
-        <<"42">>, [<<"read:[0-9]+/x">>], regexpr)),
+        <<"42">>, [<<"read:[0-9]+/x">>], regex)),
     ?assertEqual(false, rabbit_oauth2_scope:vhost_access(
-        <<"42a">>, [<<"read:[0-9]+/x">>], regexpr)),
+        <<"42a">>, [<<"read:[0-9]+/x">>], regex)),
     ?assertEqual(true, rabbit_oauth2_scope:resource_access(
         #resource{virtual_host = <<"vh">>, kind = queue, name = <<"abc">>},
         read,
         [<<"read:vh/[a-z]+">>],
-        regexpr)),
+        regex)),
     ?assertEqual(false, rabbit_oauth2_scope:resource_access(
         #resource{virtual_host = <<"vh">>, kind = queue, name = <<"123">>},
         read,
         [<<"read:vh/[a-z]+">>],
-        regexpr)),
+        regex)),
     ?assertEqual(true, rabbit_oauth2_scope:topic_access(
         #resource{virtual_host = <<"vh">>, kind = topic, name = <<"ex">>},
         read,
         #{routing_key => <<"routing.key">>},
         [<<"read:vh/ex/.+\\.key">>],
-        regexpr)),
+        regex)),
     ?assertEqual(false, rabbit_oauth2_scope:topic_access(
         #resource{virtual_host = <<"vh">>, kind = topic, name = <<"ex">>},
         read,
         #{routing_key => <<"routingXkey">>},
         [<<"read:vh/ex/.+\\.key">>],
-        regexpr)).
+        regex)).
 
 vhost_allowed(Vhost, Scopes) when is_list(Scopes) ->
     ?assertEqual(true, rabbit_oauth2_scope:vhost_access(Vhost, Scopes));

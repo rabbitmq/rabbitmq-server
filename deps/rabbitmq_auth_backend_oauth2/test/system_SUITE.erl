@@ -39,7 +39,7 @@ groups() ->
                        test_successful_token_refresh,
                        test_successful_connection_without_verify_aud,
                        mqtt,
-                       mqtt_scope_pattern_syntax_regexpr_accepted
+                       mqtt_scope_pattern_syntax_regex_accepted
                       ]},
      {basic_unhappy_path, [], [
                        test_failed_connection_with_expired_token,
@@ -51,7 +51,7 @@ groups() ->
                        mqtt_expired_token,
                        mqtt_expirable_token,
                        web_mqtt_expirable_token,
-                       mqtt_scope_pattern_syntax_regexpr_subscribe_denied
+                       mqtt_scope_pattern_syntax_regex_subscribe_denied
                       ]},
 
      {token_refresh, [], [
@@ -170,13 +170,13 @@ init_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection
   Config;
 
 init_per_testcase(Testcase, Config) when
-        Testcase =:= mqtt_scope_pattern_syntax_regexpr_accepted orelse
-        Testcase =:= mqtt_scope_pattern_syntax_regexpr_subscribe_denied ->
+        Testcase =:= mqtt_scope_pattern_syntax_regex_accepted orelse
+        Testcase =:= mqtt_scope_pattern_syntax_regex_subscribe_denied ->
     ok = rabbit_ct_broker_helpers:add_vhost(Config, ?MQTT_REGEXP_VHOST),
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
         [rabbitmq_auth_backend_oauth2, extra_scopes_source, ?EXTRA_SCOPES_SOURCE]),
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
-        [rabbitmq_auth_backend_oauth2, scope_pattern_syntax, regexpr]),
+        [rabbitmq_auth_backend_oauth2, scope_pattern_syntax, regex]),
     rabbit_ct_helpers:testcase_started(Config, Testcase),
     Config;
 
@@ -287,8 +287,8 @@ end_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection_
   Config;
 
 end_per_testcase(Testcase, Config) when
-        Testcase =:= mqtt_scope_pattern_syntax_regexpr_accepted orelse
-        Testcase =:= mqtt_scope_pattern_syntax_regexpr_subscribe_denied ->
+        Testcase =:= mqtt_scope_pattern_syntax_regex_accepted orelse
+        Testcase =:= mqtt_scope_pattern_syntax_regex_subscribe_denied ->
     rabbit_ct_broker_helpers:delete_vhost(Config, ?MQTT_REGEXP_VHOST),
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
         [rabbitmq_auth_backend_oauth2, extra_scopes_source]),
@@ -502,12 +502,12 @@ mqtt(Config) ->
     ok = emqtt:disconnect(Sub),
     ok = emqtt:disconnect(Pub).
 
-%% MQTT maps topics to AMQP routing keys (slashes become dots). Use `regexpr` scopes that match
+%% MQTT maps topics to AMQP routing keys (slashes become dots). Use `regex` scopes that match
 %% the vhost, `amq.topic`, and `test.topic` so publish/subscribe succeed.
 %%
 %% Subscribe also requires configure/read/write on the MQTT subscription queues and read/write on
 %% the topic exchange (`resource_access`), not only topic patterns.
-mqtt_scope_pattern_syntax_regexpr_accepted(Config) ->
+mqtt_scope_pattern_syntax_regex_accepted(Config) ->
     Topic = <<"test/topic">>,
     Payload = <<"mqtt-regex-ok">>,
     Scopes =
@@ -540,7 +540,7 @@ mqtt_scope_pattern_syntax_regexpr_accepted(Config) ->
     ok = emqtt:disconnect(Pub).
 
 %% Topic read uses a routing-key regex that does not match `test.topic` (from MQTT `test/topic`).
-mqtt_scope_pattern_syntax_regexpr_subscribe_denied(Config) ->
+mqtt_scope_pattern_syntax_regex_subscribe_denied(Config) ->
     Topic = <<"test/topic">>,
     Scopes =
         <<"rabbitmq.configure:^mqttregex$/^mqtt-subscription-.*$ "

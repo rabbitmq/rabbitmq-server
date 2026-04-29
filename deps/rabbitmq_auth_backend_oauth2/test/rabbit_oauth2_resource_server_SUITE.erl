@@ -101,8 +101,8 @@ verify_get_rabbitmq_server_configuration() -> [
         rabbitmq_has_scope_aliases
     ]},
     rabbitmq_scope_pattern_syntax_default_wildcard,
-    {with_scope_pattern_syntax_regexpr, [], [
-        rabbitmq_scope_pattern_syntax_is_regexpr
+    {with_scope_pattern_syntax_regex, [], [
+        rabbitmq_scope_pattern_syntax_is_regex
     ]}
 ].
 
@@ -132,8 +132,8 @@ verify_configuration_inheritance_with_rabbitmq2() -> [
         rabbitmq2_has_scope_aliases
     ]},
     rabbitmq2_scope_pattern_syntax_defaults_wildcard,
-    {with_scope_pattern_syntax_regexpr, [], [
-        rabbitmq2_scope_pattern_syntax_inherits_regexpr
+    {with_scope_pattern_syntax_regex, [], [
+        rabbitmq2_scope_pattern_syntax_inherits_regex
     ]}
 ].
 
@@ -183,8 +183,8 @@ init_per_group(with_scope_aliases, Config) ->
     set_env(scope_aliases, Aliases),
     [{scope_aliases, Aliases} | Config];
 
-init_per_group(with_scope_pattern_syntax_regexpr, Config) ->
-    set_env(scope_pattern_syntax, regexpr),
+init_per_group(with_scope_pattern_syntax_regex, Config) ->
+    set_env(scope_pattern_syntax, regex),
     Config;
 
 init_per_group(with_verify_aud_false, Config) ->
@@ -239,7 +239,7 @@ end_per_group(with_empty_scope_prefix, Config) ->
     unset_env(scope_prefix),
     Config;
 
-end_per_group(with_scope_pattern_syntax_regexpr, Config) ->
+end_per_group(with_scope_pattern_syntax_regex, Config) ->
     unset_env(scope_pattern_syntax),
     Config;
 
@@ -431,14 +431,14 @@ rabbitmq_has_scope_aliases(Config) ->
 rabbitmq_scope_pattern_syntax_default_wildcard(_) ->
     assert_scope_pattern_syntax(wildcard, ?RABBITMQ).
 
-rabbitmq_scope_pattern_syntax_is_regexpr(_) ->
-    assert_scope_pattern_syntax(regexpr, ?RABBITMQ).
+rabbitmq_scope_pattern_syntax_is_regex(_) ->
+    assert_scope_pattern_syntax(regex, ?RABBITMQ).
 
 rabbitmq2_scope_pattern_syntax_defaults_wildcard(_) ->
     assert_scope_pattern_syntax(wildcard, ?RABBITMQ_RESOURCE_TWO).
 
-rabbitmq2_scope_pattern_syntax_inherits_regexpr(_) ->
-    assert_scope_pattern_syntax(regexpr, ?RABBITMQ_RESOURCE_TWO).
+rabbitmq2_scope_pattern_syntax_inherits_regex(_) ->
+    assert_scope_pattern_syntax(regex, ?RABBITMQ_RESOURCE_TWO).
 
 verify_rabbitmq1_server_configuration(Config) ->
     ConfigRabbitMQ = ?config(?RABBITMQ_RESOURCE_ONE, Config),

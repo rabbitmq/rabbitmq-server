@@ -360,7 +360,7 @@ normalize_token_scope_with_rich_auth_request(_) ->
         ],
         [<<"read:*/*/*">> ]
     },
-    { "should filter out those permisions whose locations' regexpr do not match the cluster : {resource_server_id} ",
+    { "should filter out those permisions whose locations' regex do not match the cluster : {resource_server_id} ",
         [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
             <<"locations">> => [<<"cluster:rabbit*">>],
             <<"actions">> => [<<"read">>]

@@ -54,7 +54,7 @@ prop_unrelated_vhosts_never_granted(_Config) ->
             Escaped = re_escape(VHost),
             Scope = iolist_to_binary([<<"read:">>, Escaped, <<"/x">>]),
             Other = <<VHost/binary, Suffix/binary>>,
-            not rabbit_oauth2_scope:vhost_access(Other, [Scope], regexpr)
+            not rabbit_oauth2_scope:vhost_access(Other, [Scope], regex)
         end).
 
 %% Catastrophic-backtracking patterns must return within a small time bound,
@@ -75,7 +75,7 @@ prop_catastrophic_patterns_always_bounded(_Config) ->
                 #resource{virtual_host = <<"vh">>,
                           kind = queue,
                           name = Subject},
-                read, [Scope], regexpr),
+                read, [Scope], regex),
             (erlang:monotonic_time(millisecond) - T0) < 500
         end).
 
@@ -90,7 +90,7 @@ prop_rejected_construct_always_denies(_Config) ->
         begin
             Pattern = <<Prefix/binary, Tail/binary>>,
             Scope = <<"read:", Pattern/binary, "/x">>,
-            not rabbit_oauth2_scope:vhost_access(Subject, [Scope], regexpr)
+            not rabbit_oauth2_scope:vhost_access(Subject, [Scope], regex)
         end).
 
 substituted_vhost_grants_only_itself(Config) ->
@@ -107,10 +107,10 @@ prop_substituted_vhost_grants_only_itself(_Config) ->
                 Token = #{<<"scope">> => [<<"read:{vhost}/q">>]},
                 Resource = #resource{virtual_host = VHost},
                 [Expanded] = rabbit_auth_backend_oauth2:get_expanded_scopes(
-                    Token, Resource, regexpr),
-                rabbit_oauth2_scope:vhost_access(VHost, [Expanded], regexpr)
+                    Token, Resource, regex),
+                rabbit_oauth2_scope:vhost_access(VHost, [Expanded], regex)
                 andalso
-                not rabbit_oauth2_scope:vhost_access(Other, [Expanded], regexpr)
+                not rabbit_oauth2_scope:vhost_access(Other, [Expanded], regex)
             end)).
 
 substituted_claim_grants_only_itself(Config) ->
@@ -128,14 +128,14 @@ prop_substituted_claim_grants_only_itself(_Config) ->
                           <<"custom_claim">> => ClaimValue},
                 Resource = #resource{virtual_host = <<"vh">>},
                 [Expanded] = rabbit_auth_backend_oauth2:get_expanded_scopes(
-                    Token, Resource, regexpr),
+                    Token, Resource, regex),
                 Self = #resource{virtual_host = <<"vh">>,
                                  kind = queue, name = ClaimValue},
                 Other = #resource{virtual_host = <<"vh">>,
                                   kind = queue, name = OtherName},
-                rabbit_oauth2_scope:resource_access(Self, read, [Expanded], regexpr)
+                rabbit_oauth2_scope:resource_access(Self, read, [Expanded], regex)
                 andalso
-                not rabbit_oauth2_scope:resource_access(Other, read, [Expanded], regexpr)
+                not rabbit_oauth2_scope:resource_access(Other, read, [Expanded], regex)
             end)).
 
 slash_in_substituted_vhost_drops_scope(Config) ->
@@ -145,7 +145,7 @@ slash_in_substituted_vhost_drops_scope(Config) ->
 prop_slash_in_substituted_vhost_drops_scope(_Config) ->
     ?FORALL(
         {Prefix, Suffix, Syntax},
-        {non_empty_token(), non_empty_token(), oneof([wildcard, regexpr])},
+        {non_empty_token(), non_empty_token(), oneof([wildcard, regex])},
         begin
             VHost = <<Prefix/binary, "/", Suffix/binary>>,
             Token = #{<<"scope">> => [<<"read:{vhost}/q">>]},
@@ -161,7 +161,7 @@ slash_in_substituted_claim_drops_scope(Config) ->
 prop_slash_in_substituted_claim_drops_scope(_Config) ->
     ?FORALL(
         {Prefix, Suffix, Syntax},
-        {non_empty_token(), non_empty_token(), oneof([wildcard, regexpr])},
+        {non_empty_token(), non_empty_token(), oneof([wildcard, regex])},
         begin
             Claim = <<Prefix/binary, "/", Suffix/binary>>,
             Token = #{<<"scope">> => [<<"read:vh/{custom_claim}">>],

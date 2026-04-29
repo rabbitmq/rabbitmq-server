@@ -45,11 +45,11 @@ wildcard_vhost_with_slash_drops_scope(_Config) ->
 
 regex_vhost_with_slash_drops_scope(_Config) ->
     Token = #{<<"scope">> => [<<"read:{vhost}/q">>]},
-    ?assertEqual([<<>>], expand(Token, <<"vh/extra">>, regexpr)),
+    ?assertEqual([<<>>], expand(Token, <<"vh/extra">>, regex)),
     ?assertEqual(false, rabbit_oauth2_scope:vhost_access(
-        <<"vh">>, expand(Token, <<"vh/extra">>, regexpr), regexpr)),
+        <<"vh">>, expand(Token, <<"vh/extra">>, regex), regex)),
     ?assertEqual(false, rabbit_oauth2_scope:vhost_access(
-        <<"vh/extra">>, expand(Token, <<"vh/extra">>, regexpr), regexpr)).
+        <<"vh/extra">>, expand(Token, <<"vh/extra">>, regex), regex)).
 
 wildcard_claim_with_slash_drops_scope(_Config) ->
     Token = #{<<"scope">> => [<<"read:vh/{custom_claim}">>],
@@ -59,27 +59,27 @@ wildcard_claim_with_slash_drops_scope(_Config) ->
 regex_claim_with_slash_drops_scope(_Config) ->
     Token = #{<<"scope">> => [<<"read:vh/{custom_claim}">>],
               <<"custom_claim">> => <<"q/exchange/key">>},
-    ?assertEqual([<<>>], expand(Token, <<"vh">>, regexpr)).
+    ?assertEqual([<<>>], expand(Token, <<"vh">>, regex)).
 
 vhost_with_multiple_slashes_drops_scope(_Config) ->
     Token = #{<<"scope">> => [<<"read:{vhost}/q">>]},
     ?assertEqual([<<>>], expand(Token, <<"a/b/c/d">>, wildcard)),
-    ?assertEqual([<<>>], expand(Token, <<"a/b/c/d">>, regexpr)).
+    ?assertEqual([<<>>], expand(Token, <<"a/b/c/d">>, regex)).
 
 slash_only_vhost_drops_scope(_Config) ->
     Token = #{<<"scope">> => [<<"read:{vhost}/q">>]},
     ?assertEqual([<<>>], expand(Token, <<"/">>, wildcard)),
-    ?assertEqual([<<>>], expand(Token, <<"/">>, regexpr)).
+    ?assertEqual([<<>>], expand(Token, <<"/">>, regex)).
 
 leading_slash_vhost_drops_scope(_Config) ->
     Token = #{<<"scope">> => [<<"read:{vhost}/q">>]},
     ?assertEqual([<<>>], expand(Token, <<"/leading">>, wildcard)),
-    ?assertEqual([<<>>], expand(Token, <<"/leading">>, regexpr)).
+    ?assertEqual([<<>>], expand(Token, <<"/leading">>, regex)).
 
 trailing_slash_vhost_drops_scope(_Config) ->
     Token = #{<<"scope">> => [<<"read:{vhost}/q">>]},
     ?assertEqual([<<>>], expand(Token, <<"trailing/">>, wildcard)),
-    ?assertEqual([<<>>], expand(Token, <<"trailing/">>, regexpr)).
+    ?assertEqual([<<>>], expand(Token, <<"trailing/">>, regex)).
 
 legitimate_vhost_substitution_still_works_wildcard(_Config) ->
     Token = #{<<"scope">> => [<<"read:{vhost}/q">>]},
@@ -88,8 +88,8 @@ legitimate_vhost_substitution_still_works_wildcard(_Config) ->
 
 legitimate_vhost_substitution_still_works_regex(_Config) ->
     Token = #{<<"scope">> => [<<"read:{vhost}/q">>]},
-    ?assertEqual([<<"read:foo/q">>], expand(Token, <<"foo">>, regexpr)),
-    ?assertEqual([<<"read:foo\\.bar/q">>], expand(Token, <<"foo.bar">>, regexpr)).
+    ?assertEqual([<<"read:foo/q">>], expand(Token, <<"foo">>, regex)),
+    ?assertEqual([<<"read:foo\\.bar/q">>], expand(Token, <<"foo.bar">>, regex)).
 
 slash_in_one_scope_does_not_affect_others(_Config) ->
     Token = #{<<"scope">> => [<<"read:{vhost}/q">>,
@@ -97,19 +97,19 @@ slash_in_one_scope_does_not_affect_others(_Config) ->
                               <<"configure:vh/q">>]},
     ?assertEqual(
         [<<>>, <<"write:static/q">>, <<"configure:vh/q">>],
-        expand(Token, <<"vh/extra">>, regexpr)).
+        expand(Token, <<"vh/extra">>, regex)).
 
 topic_template_with_slash_in_vhost_drops_scope(_Config) ->
     Token = #{<<"scope">> => [<<"read:{vhost}/ex/key">>]},
     ?assertEqual([<<>>], expand(Token, <<"vh/q">>, wildcard)),
-    ?assertEqual([<<>>], expand(Token, <<"vh/q">>, regexpr)).
+    ?assertEqual([<<>>], expand(Token, <<"vh/q">>, regex)).
 
 slash_in_one_variable_drops_scope_with_multiple_variables(_Config) ->
     Token = #{<<"scope">> => [<<"read:{vhost}/{custom_claim}">>],
               <<"custom_claim">> => <<"good-value">>},
     ?assertEqual([<<>>], expand(Token, <<"vh/extra">>, wildcard)),
-    ?assertEqual([<<>>], expand(Token, <<"vh/extra">>, regexpr)),
+    ?assertEqual([<<>>], expand(Token, <<"vh/extra">>, regex)),
     BadClaim = #{<<"scope">> => [<<"read:{vhost}/{custom_claim}">>],
                  <<"custom_claim">> => <<"a/b">>},
     ?assertEqual([<<>>], expand(BadClaim, <<"vh">>, wildcard)),
-    ?assertEqual([<<>>], expand(BadClaim, <<"vh">>, regexpr)).
+    ?assertEqual([<<>>], expand(BadClaim, <<"vh">>, regex)).

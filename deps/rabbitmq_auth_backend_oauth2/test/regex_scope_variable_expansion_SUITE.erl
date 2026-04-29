@@ -40,66 +40,66 @@ wildcard_substitution_is_unchanged(_Config) ->
 
 regex_substitution_escapes_vhost_metacharacters(_Config) ->
     Token = #{<<"scope">> => [<<"read:{vhost}/q">>]},
-    ?assertEqual([<<"read:foo\\.bar/q">>], expand(Token, <<"foo.bar">>, regexpr)),
-    ?assertEqual([<<"read:\\(\\.\\*\\)/q">>], expand(Token, <<"(.*)">>, regexpr)).
+    ?assertEqual([<<"read:foo\\.bar/q">>], expand(Token, <<"foo.bar">>, regex)),
+    ?assertEqual([<<"read:\\(\\.\\*\\)/q">>], expand(Token, <<"(.*)">>, regex)).
 
 regex_substitution_escapes_claim_metacharacters(_Config) ->
     Token = #{<<"scope">> => [<<"read:vh/{custom_claim}">>],
               <<"custom_claim">> => <<".*">>},
-    ?assertEqual([<<"read:vh/\\.\\*">>], expand(Token, <<"vh">>, regexpr)).
+    ?assertEqual([<<"read:vh/\\.\\*">>], expand(Token, <<"vh">>, regex)).
 
 crafted_vhost_cannot_broaden_regex_scope(_Config) ->
     Token = #{<<"scope">> => [<<"read:{vhost}/q">>]},
-    [Expanded] = expand(Token, <<"(.*)">>, regexpr),
+    [Expanded] = expand(Token, <<"(.*)">>, regex),
     ?assertEqual(true, rabbit_oauth2_scope:vhost_access(
-        <<"(.*)">>, [Expanded], regexpr)),
+        <<"(.*)">>, [Expanded], regex)),
     ?assertEqual(false, rabbit_oauth2_scope:vhost_access(
-        <<"some-other-vhost">>, [Expanded], regexpr)).
+        <<"some-other-vhost">>, [Expanded], regex)).
 
 crafted_claim_cannot_broaden_regex_scope(_Config) ->
     Token = #{<<"scope">> => [<<"read:vh/{custom_claim}">>],
               <<"custom_claim">> => <<".*">>},
-    [Expanded] = expand(Token, <<"vh">>, regexpr),
+    [Expanded] = expand(Token, <<"vh">>, regex),
     ?assertEqual(true, rabbit_oauth2_scope:resource_access(
         #resource{virtual_host = <<"vh">>, kind = queue, name = <<".*">>},
-        read, [Expanded], regexpr)),
+        read, [Expanded], regex)),
     ?assertEqual(false, rabbit_oauth2_scope:resource_access(
         #resource{virtual_host = <<"vh">>, kind = queue, name = <<"any-other-queue">>},
-        read, [Expanded], regexpr)).
+        read, [Expanded], regex)).
 
 backslash_in_substituted_value_is_escaped(_Config) ->
     Token = #{<<"scope">> => [<<"read:{vhost}/q">>]},
-    ?assertEqual([<<"read:foo\\\\bar/q">>], expand(Token, <<"foo\\bar">>, regexpr)).
+    ?assertEqual([<<"read:foo\\\\bar/q">>], expand(Token, <<"foo\\bar">>, regex)).
 
 multiple_variables_in_one_scope_are_each_escaped(_Config) ->
     Token = #{<<"scope">> => [<<"read:{vhost}/{custom_claim}">>],
               <<"custom_claim">> => <<"q.+">>},
     ?assertEqual([<<"read:foo\\.bar/q\\.\\+">>],
-        expand(Token, <<"foo.bar">>, regexpr)).
+        expand(Token, <<"foo.bar">>, regex)).
 
 literal_pattern_text_is_not_escaped(_Config) ->
     Token = #{<<"scope">> => [<<"read:[a-z]+/{vhost}-q">>]},
     ?assertEqual([<<"read:[a-z]+/foo\\.bar-q">>],
-        expand(Token, <<"foo.bar">>, regexpr)).
+        expand(Token, <<"foo.bar">>, regex)).
 
 substituted_value_matches_self_under_regex(_Config) ->
     Token = #{<<"scope">> => [<<"read:{vhost}/q">>]},
     Hostile = <<"a.b*c+d?e^f$g|h(i)j[k]l{m}n\\o-p">>,
-    [Expanded] = expand(Token, Hostile, regexpr),
+    [Expanded] = expand(Token, Hostile, regex),
     ?assertEqual(true, rabbit_oauth2_scope:vhost_access(
-        Hostile, [Expanded], regexpr)).
+        Hostile, [Expanded], regex)).
 
 hyphen_in_substituted_value_is_escaped(_Config) ->
     Token = #{<<"scope">> => [<<"read:{vhost}/q">>]},
-    ?assertEqual([<<"read:a\\-z/q">>], expand(Token, <<"a-z">>, regexpr)).
+    ?assertEqual([<<"read:a\\-z/q">>], expand(Token, <<"a-z">>, regex)).
 
 %% A template that wraps the substitution inside a character class
 %% must not let the substituted value form a range (e.g. "a-z").
 crafted_value_cannot_form_range_inside_char_class(_Config) ->
     Token = #{<<"scope">> => [<<"read:[{custom_claim}]/q">>],
               <<"custom_claim">> => <<"a-z">>},
-    [Expanded] = expand(Token, <<"vh">>, regexpr),
+    [Expanded] = expand(Token, <<"vh">>, regex),
     ?assertEqual(false, rabbit_oauth2_scope:vhost_access(
-        <<"q">>, [Expanded], regexpr)),
+        <<"q">>, [Expanded], regex)),
     ?assertEqual(false, rabbit_oauth2_scope:vhost_access(
-        <<"m">>, [Expanded], regexpr)).
+        <<"m">>, [Expanded], regex)).

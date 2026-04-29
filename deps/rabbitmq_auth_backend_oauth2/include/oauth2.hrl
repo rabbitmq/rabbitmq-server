@@ -33,7 +33,7 @@
 -type raw_jwt_token() :: binary() | #{binary() => any()}.
 -type decoded_jwt_token() :: #{binary() => any()}.
 
--type scope_pattern_syntax() :: wildcard | regexpr.
+-type scope_pattern_syntax() :: wildcard | regex.
 
 -record(internal_oauth_provider, {
     id :: oauth_provider_id(),
