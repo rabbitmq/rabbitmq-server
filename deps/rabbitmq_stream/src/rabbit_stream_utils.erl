@@ -72,7 +72,7 @@ write_messages(?VERSION_1 = V, ClusterLeader,
                  Message:MessageSize/binary,
                  Rest/binary>>) ->
     write_messages0(V, ClusterLeader, PublisherRef, PublisherId, InternalId,
-                    PublishingId, Message, Rest);
+                    PublishingId, MessageSize, Message, Rest);
 write_messages(?VERSION_1 = V, ClusterLeader,
                PublisherRef,
                PublisherId,
@@ -88,7 +88,7 @@ write_messages(?VERSION_1 = V, ClusterLeader,
                  Rest/binary>>) ->
     Data = {batch, MessageCount, CompressionType, UncompressedSize, Batch},
     write_messages0(V, ClusterLeader, PublisherRef, PublisherId, InternalId,
-                    PublishingId, Data, Rest);
+                    PublishingId, undefined, Data, Rest);
 write_messages(?VERSION_2 = V, ClusterLeader,
                PublisherRef,
                PublisherId,
@@ -100,7 +100,7 @@ write_messages(?VERSION_2 = V, ClusterLeader,
                  Message:MessageSize/binary,
                  Rest/binary>>) ->
     write_messages0(V, ClusterLeader, PublisherRef, PublisherId, InternalId,
-                    PublishingId, Message, Rest);
+                    PublishingId, MessageSize, Message, Rest);
 write_messages(?VERSION_2 = V, ClusterLeader,
                PublisherRef,
                PublisherId,
@@ -112,9 +112,10 @@ write_messages(?VERSION_2 = V, ClusterLeader,
                  Message:MessageSize/binary,
                  Rest/binary>>) ->
     write_messages0(V, ClusterLeader, PublisherRef, PublisherId, InternalId,
-                    PublishingId, {FilterValue, Message}, Rest).
+                    PublishingId, MessageSize, {FilterValue, Message}, Rest).
 
-write_messages0(Vsn, ClusterLeader, PublisherRef, PublisherId, InternalId, PublishingId, Data, Rest) ->
+write_messages0(Vsn, ClusterLeader, PublisherRef, PublisherId, InternalId,
+                PublishingId, MessageSize, Data, Rest) ->
     Corr = case PublisherRef of
                undefined ->
                    %% we add the internal ID to detect late confirms from a stale publisher
@@ -124,6 +125,12 @@ write_messages0(Vsn, ClusterLeader, PublisherRef, PublisherId, InternalId, Publi
                    %% when deduplication is activated.
                    PublishingId
            end,
+    case MessageSize of
+        undefined ->
+            ok;
+        _ ->
+            rabbit_msg_size_metrics:observe(stream, MessageSize)
+    end,
     ok = osiris:write(ClusterLeader, PublisherRef, Corr, Data),
     write_messages(Vsn, ClusterLeader, PublisherRef, PublisherId, InternalId, Rest).
 

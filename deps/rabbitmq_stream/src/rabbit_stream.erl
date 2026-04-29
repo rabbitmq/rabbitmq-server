@@ -46,6 +46,7 @@ start(_Type, _Args) ->
                                 ?PROTOCOL_COUNTERS),
     rabbit_global_counters:init(#{protocol => stream,
                                   queue_type => ?STREAM_QUEUE_TYPE}),
+    rabbit_msg_size_metrics:init(stream),
     rabbit_stream_sup:start_link().
 
 tls_host() ->
