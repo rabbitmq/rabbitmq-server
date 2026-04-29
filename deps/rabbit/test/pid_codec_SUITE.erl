@@ -35,13 +35,13 @@ end_per_suite(_Config) -> ok.
 safe_decoder_roundtrip_self(_) ->
     Pid = self(),
     Bin = term_to_binary(Pid, [{minor_version, 2}]),
-    {ok, Parts} = rabbit_pid_codec:decompose_from_binary_safe(Bin),
+    {ok, Parts} = rabbit_pid_codec:decompose_from_binary(Bin),
     Recomposed = rabbit_pid_codec:recompose(Parts#{node := node()}),
     ?assertEqual(Pid, Recomposed).
 
 safe_decoder_returns_binary_node(_) ->
     Bin = term_to_binary(self(), [{minor_version, 2}]),
-    {ok, #{node := NodeBin}} = rabbit_pid_codec:decompose_from_binary_safe(Bin),
+    {ok, #{node := NodeBin}} = rabbit_pid_codec:decompose_from_binary(Bin),
     ?assert(is_binary(NodeBin)),
     ?assertEqual(atom_to_binary(node()), NodeBin).
 
@@ -67,7 +67,7 @@ safe_decoder_rejects_malformed(_) ->
              <<?TTB_PREFIX, ?NEW_PID_EXT,
                ?SMALL_ATOM_UTF8_EXT, 1:8, "x", 0:32, 0:32, 0:24>>
             ],
-    [?assertEqual(error, rabbit_pid_codec:decompose_from_binary_safe(C))
+    [?assertEqual(error, rabbit_pid_codec:decompose_from_binary(C))
      || C <- Cases].
 
 safe_decoder_no_atoms_for_unknown_node_names(_) ->
@@ -75,12 +75,12 @@ safe_decoder_no_atoms_for_unknown_node_names(_) ->
     Bins = [{Name, make_pid_bin(Name, I, I, I)} || {Name, I} <- Inputs],
     %% Warm up before sampling the atom count.
     {_, B0} = hd(Bins),
-    {ok, _} = rabbit_pid_codec:decompose_from_binary_safe(B0),
+    {ok, _} = rabbit_pid_codec:decompose_from_binary(B0),
     Before = erlang:system_info(atom_count),
     lists:foreach(
       fun({Name, B}) ->
               {ok, #{node := Got}} =
-                  rabbit_pid_codec:decompose_from_binary_safe(B),
+                  rabbit_pid_codec:decompose_from_binary(B),
               ?assertEqual(Name, Got)
       end,
       Bins),
@@ -91,7 +91,7 @@ safe_decoder_handles_long_node_names(_) ->
     Long = binary:copy(<<"a">>, 65535),
     Bin = make_pid_bin(Long, 1, 2, 3),
     {ok, #{node := Got, id := 1, serial := 2, creation := 3}} =
-        rabbit_pid_codec:decompose_from_binary_safe(Bin),
+        rabbit_pid_codec:decompose_from_binary(Bin),
     ?assertEqual(Long, Got).
 
 pid_from_name_no_atoms_for_crafted_input(_) ->
