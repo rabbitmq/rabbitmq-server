@@ -24,6 +24,7 @@ stop(_State) ->
 %%----------------------------------------------------------------------------
 
 init([]) ->
+    ok = rabbit_auth_backend_cache:init_key_salt(),
     {ok, AuthCache} = application:get_env(rabbitmq_auth_backend_cache,
                                           cache_module),
 
