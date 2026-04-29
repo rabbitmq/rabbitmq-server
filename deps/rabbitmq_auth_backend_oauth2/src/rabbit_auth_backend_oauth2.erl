@@ -498,13 +498,7 @@ parse_scope_part(Elem, Acc, Stage, Context) ->
     end.
 
 capture_var_name(Elem, Acc, #{ token := Token, vhost := Vhost, syntax := Syntax }) ->
-    Resolved = resolve_scope_var(Elem, Token, Vhost, Syntax),
-    %% Reject slashes in substituted values: scope segments are slash-delimited,
-    %% so an injected slash would inflate a queue scope into a topic scope.
-    case lists:member($/, Resolved) of
-        true  -> {"", error};
-        false -> { Acc ++ Resolved, fun expect_closing_var/3 }
-    end.
+    { Acc ++ resolve_scope_var(Elem, Token, Vhost, Syntax), fun expect_closing_var/3 }.
 
 expect_closing_var("}" , Acc, _Context) -> { Acc , undefined };
 expect_closing_var(_ , _Acc, _Context) -> {"", error}.
