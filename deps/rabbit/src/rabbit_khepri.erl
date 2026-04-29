@@ -1658,7 +1658,7 @@ register_rabbit_topic_graph_projection() ->
 %%   Row:   {{NodeId, BindingKey, Dest}}
 %%
 %% XSrc       = {VHost, ExchangeName} (binaries)
-%% NodeId     = root | reference()
+%% NodeId     = {root, XSrc} (v5) | root (v4) | reference()
 %% Word       = binary() (a single topic segment, e.g. <<"foo">>, <<"*">>, <<"#">>)
 %% ChildCount = non_neg_integer() (number of outgoing edges)
 %% Dest       = #resource{}
@@ -1733,7 +1733,7 @@ topic_binding_path_pattern() ->
 %% ChildCount tracks the number of outgoing edges from ChildNodeId.
 %% It is incremented when a new edge is created, decremented during GC.
 trie_follow_down_create(TrieTab, XSrc, Words) ->
-    trie_follow_down_create(TrieTab, XSrc, root, none, Words).
+    trie_follow_down_create(TrieTab, XSrc, {root, XSrc}, none, Words).
 
 trie_follow_down_create(_TrieTab, _XSrc, NodeId, _ParentKey, []) ->
     NodeId;
@@ -1757,7 +1757,7 @@ trie_follow_down_create(TrieTab, XSrc, ParentId, ParentKey, [Word | Rest]) ->
 %% Walk down the trie following the given words, collecting the path
 %% for later GC. Returns {ok, LeafNodeId, Path} or error.
 trie_follow_down_get_path(TrieTab, XSrc, Words) ->
-    trie_follow_down_get_path(TrieTab, XSrc, root, none, Words, []).
+    trie_follow_down_get_path(TrieTab, XSrc, {root, XSrc}, none, Words, []).
 
 trie_follow_down_get_path(_TrieTab, _XSrc, NodeId, _ParentKey, [], Path) ->
     {ok, NodeId, Path};

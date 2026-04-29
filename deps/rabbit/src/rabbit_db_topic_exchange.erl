@@ -39,8 +39,9 @@ match(#resource{virtual_host = VHost, name = XName} = X, RoutingKey, Opts) ->
     Words = split_topic_key_binary(RoutingKey),
     case rabbit_khepri:get_effective_topic_binding_projection_version() of
         V when V >= 4 ->
+            XSrc = {VHost, XName},
             try
-                trie_match({VHost, XName}, root, Words, BKeys, [])
+                trie_match(XSrc, {root, XSrc}, Words, BKeys, [])
             catch
                 error:badarg ->
                     []
