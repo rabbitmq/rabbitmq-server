@@ -10,6 +10,7 @@
 -behaviour(gen_server2).
 
 -export([start_link/5, successfully_recovered_state/1,
+         gc_pid/1,
          client_init/3, client_terminate/1, client_delete_and_terminate/1,
          client_pre_hibernate/1, client_ref/1,
          write/4, write_flow/4, read/2, read_many/2, contains/2, remove/2]).
@@ -400,6 +401,11 @@ start_link(VHost, Type, Dir, ClientRefs, StartupFunState) when is_atom(Type) ->
 
 successfully_recovered_state(Server) ->
     gen_server2:call(Server, successfully_recovered_state, infinity).
+
+-spec gc_pid(server()) -> pid().
+
+gc_pid(Server) ->
+    gen_server2:call(Server, gc_pid, infinity).
 
 -spec client_init(server(), client_ref(), maybe_msg_id_fun()) -> client_msstate().
 
@@ -808,6 +814,7 @@ init([VHost, Type, BaseDir, ClientRefs, StartupFunState]) ->
 prioritise_call(Msg, _From, _Len, _State) ->
     case Msg of
         successfully_recovered_state                        -> 7;
+        gc_pid                                              -> 7;
         {new_client_state, _Ref, _Pid, _MODC}               -> 7;
         _                                                   -> 0
     end.
@@ -827,6 +834,9 @@ prioritise_info(Msg, _Len, _State) ->
 
 handle_call(successfully_recovered_state, _From, State) ->
     reply(State #msstate.successfully_recovered, State);
+
+handle_call(gc_pid, _From, State) ->
+    reply(State #msstate.gc_pid, State);
 
 handle_call({new_client_state, CRef, CPid, MsgOnDiskFun}, _From,
             State = #msstate { dir                = Dir,
@@ -973,9 +983,13 @@ terminate(Reason, State = #msstate { index_ets           = IndexEts,
         _ -> {" with reason ~0p", [Reason]}
     end,
     ?LOG_INFO("Stopping message store for directory '~ts'" ++ ExtraLog, [Dir|ExtraLogArgs]),
-    %% stop the gc first, otherwise it could be working and we pull
-    %% out the ets tables from under it.
-    ok = rabbit_msg_store_gc:stop(GCPid),
+    %% Terminate the GC first, otherwise it could still be running and we
+    %% pull the ETS tables out from under it. The GC does not trap exits,
+    %% so an exit signal terminates it immediately even if it is stuck
+    %% mid-callback on disk I/O. Bound the wait so terminate stays within
+    %% the msg_store child's own supervisor shutdown timeout, and fall
+    %% back to kill if the shutdown signal does not take effect in time.
+    stop_gc(GCPid, Dir),
     State3 = case CurHdl of
                  undefined -> State;
                  _         -> State2 = internal_sync(State),
@@ -1009,6 +1023,24 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 format_message_queue(Opt, MQ) -> rabbit_misc:format_message_queue(Opt, MQ).
+
+stop_gc(GCPid, Dir) ->
+    ShutdownTimeout = rabbit_misc:get_env(
+        rabbit, msg_store_shutdown_timeout, 600_000),
+    Timeout = max(ShutdownTimeout - 60_000, 5_000),
+    MRef = erlang:monitor(process, GCPid),
+    exit(GCPid, shutdown),
+    receive
+        {'DOWN', MRef, process, GCPid, _} -> ok
+    after Timeout ->
+        ?LOG_WARNING("Message store GC for directory '~ts' did not exit "
+                     "within ~bms of shutdown signal, killing it",
+                     [Dir, Timeout]),
+        exit(GCPid, kill),
+        receive
+            {'DOWN', MRef, process, GCPid, _} -> ok
+        end
+    end.
 
 %%----------------------------------------------------------------------------
 %% general helper functions
