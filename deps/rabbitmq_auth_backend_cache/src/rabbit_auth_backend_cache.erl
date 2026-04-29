@@ -15,7 +15,8 @@
 -export([user_login_authentication/2, user_login_authorization/2,
          check_vhost_access/3, check_resource_access/4, check_topic_access/4,
          update_state/2, expiry_timestamp/1,
-         clear_cache_cluster_wide/0, clear_cache/0]).
+         clear_cache_cluster_wide/0, clear_cache/0,
+         init_key_salt/0, cache_key/2]).
 
 %% API
 
@@ -113,7 +114,8 @@ clear_cache() ->
 with_cache(BackendType, {F, A}, Fun) ->
     {ok, AuthCache} = application:get_env(rabbitmq_auth_backend_cache,
                                           cache_module),
-    case AuthCache:get({F, A}) of
+    Key = cache_key(F, A),
+    case AuthCache:get(Key) of
         {ok, Result} ->
             Result;
         {error, not_found} ->
@@ -122,11 +124,51 @@ with_cache(BackendType, {F, A}, Fun) ->
                                             cache_ttl),
             BackendResult = apply(Backend, F, A),
             case should_cache(BackendResult, Fun) of
-                true  -> ok = AuthCache:put({F, A}, BackendResult, TTL);
+                true  -> ok = AuthCache:put(Key, BackendResult, TTL);
                 false -> ok
             end,
             BackendResult
     end.
+
+%% Keep plaintext credentials out of the cache key. The full args are still
+%% passed to the underlying backend; only the lookup key is redacted.
+-spec cache_key(atom(), [term()]) -> {atom(), [term()]}.
+cache_key(user_login_authentication = F, [Username, AuthProps]) ->
+    {F, [Username, redact_credentials(AuthProps)]};
+cache_key(F, A) ->
+    {F, A}.
+
+redact_credentials(AuthProps) when is_list(AuthProps) ->
+    [redact_pair(Pair) || Pair <- AuthProps];
+redact_credentials(AuthProps) when is_map(AuthProps) ->
+    maps:map(fun (password, V) -> hash_secret(V);
+                 (_K, V)        -> V
+             end, AuthProps);
+redact_credentials(AuthProps) ->
+    AuthProps.
+
+redact_pair({password, V}) -> {password, hash_secret(V)};
+redact_pair(Other)         -> Other.
+
+%% The salt is initialised once at app start (see
+%% `rabbit_auth_backend_cache_app:init/1')
+hash_secret(V) ->
+    {hmac_sha256, crypto:mac(hmac, sha256, key_salt(), term_to_binary(V))}.
+
+-define(KEY_SALT_PT, {?MODULE, cache_key_salt}).
+
+%% Idempotent: a supervisor restart must not regenerate the salt or
+%% existing cache entries would become unreachable.
+init_key_salt() ->
+    case persistent_term:get(?KEY_SALT_PT, undefined) of
+        undefined ->
+            persistent_term:put(?KEY_SALT_PT, crypto:strong_rand_bytes(32));
+        _Existing ->
+            ok
+    end.
+
+key_salt() ->
+    persistent_term:get(?KEY_SALT_PT).
 
 get_cached_backend(Type) ->
     {ok, BackendConfig} = application:get_env(rabbitmq_auth_backend_cache,
@@ -149,5 +191,3 @@ should_cache(Result, Fun) ->
         {refusal, true} -> true;
         _               -> false
     end.
-
-    

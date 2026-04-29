@@ -104,9 +104,10 @@ rpc(Config, N, M, F, A) ->
     rabbit_ct_broker_helpers:rpc(Config, N, M, F, A).
 
 has_cache_entry(Config, Node, {F, A}) ->
-    {ok, AuthCache} = rpc(Config, Node, application, get_env, 
+    {ok, AuthCache} = rpc(Config, Node, application, get_env,
         [rabbitmq_auth_backend_cache, cache_module]),
-    case rpc(Config, Node, AuthCache, get, [{F, A}]) of
+    Key = rpc(Config, Node, rabbit_auth_backend_cache, cache_key, [F, A]),
+    case rpc(Config, Node, AuthCache, get, [Key]) of
         {ok, _} -> ok;
         {error, not_found} = E -> E
     end.
