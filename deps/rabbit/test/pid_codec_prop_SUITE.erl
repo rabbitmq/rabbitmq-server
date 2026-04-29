@@ -41,7 +41,7 @@ prop_safe_decoder_returns_ok_or_error(_) ->
 
 prop_safe_decoder_returns_ok_or_error_() ->
     ?FORALL(Bin, binary(),
-            case rabbit_pid_codec:decompose_from_binary_safe(Bin) of
+            case rabbit_pid_codec:decompose_from_binary(Bin) of
                 error -> true;
                 {ok, #{node := N, id := I, serial := S, creation := C}} ->
                     is_binary(N)
@@ -63,7 +63,7 @@ prop_safe_decoder_accepts_arbitrary_node_bytes_() ->
                 Bin = make_pid_bin(NodeBytes, ID, Serial, Creation),
                 {ok, #{node := Got, id := GotID,
                        serial := GotS, creation := GotC}} =
-                    rabbit_pid_codec:decompose_from_binary_safe(Bin),
+                    rabbit_pid_codec:decompose_from_binary(Bin),
                 Got =:= NodeBytes
                     andalso GotID =:= ID
                     andalso GotS =:= Serial
@@ -85,7 +85,7 @@ prop_safe_decoder_roundtrip_numeric_fields_() ->
                 Bin = rabbit_pid_codec:recompose_to_binary(Parts),
                 {ok, #{node := NB, id := GotID,
                        serial := GotS, creation := GotC}} =
-                    rabbit_pid_codec:decompose_from_binary_safe(Bin),
+                    rabbit_pid_codec:decompose_from_binary(Bin),
                 NB =:= NodeBin
                     andalso GotID =:= ID
                     andalso GotS =:= Serial
@@ -94,7 +94,7 @@ prop_safe_decoder_roundtrip_numeric_fields_() ->
 
 prop_safe_decoder_no_atom_growth(_) ->
     %% Warm up before sampling the atom count.
-    _ = rabbit_pid_codec:decompose_from_binary_safe(<<>>),
+    _ = rabbit_pid_codec:decompose_from_binary(<<>>),
     rabbit_ct_proper_helpers:run_proper(
       fun prop_safe_decoder_no_atom_growth_/0, [], ?PROP_ITERATIONS).
 
@@ -102,7 +102,7 @@ prop_safe_decoder_no_atom_growth_() ->
     ?FORALL(Bin, binary(),
             begin
                 Before = erlang:system_info(atom_count),
-                _ = rabbit_pid_codec:decompose_from_binary_safe(Bin),
+                _ = rabbit_pid_codec:decompose_from_binary(Bin),
                 erlang:system_info(atom_count) =:= Before
             end).
 
