@@ -377,19 +377,30 @@ pid_from_name(<<?PREFIX, Bin/binary>>, CandidateNodes) ->
     try
         [PidBase64, _KeyBase64] = binary:split(Bin, Cp),
         PidBin = base64:decode(PidBase64),
-        PidParts0 = #{node := ShortenedNodename} = rabbit_pid_codec:decompose_from_binary(PidBin),
-        {_, NodeHash} = rabbit_nodes_common:parts(ShortenedNodename),
-        case maps:get(list_to_integer(NodeHash), CandidateNodes, undefined) of
-            undefined ->
-                error;
-            Candidate ->
-                PidParts = maps:update(node, Candidate, PidParts0),
-                {ok, rabbit_pid_codec:recompose(PidParts)}
+        case rabbit_pid_codec:decompose_from_binary(PidBin) of
+            {ok, #{node := ShortenedNodename} = PidParts0} ->
+                NodeHash = node_hash_from_binary(ShortenedNodename),
+                case maps:get(NodeHash, CandidateNodes, undefined) of
+                    undefined ->
+                        error;
+                    Candidate ->
+                        PidParts = maps:update(node, Candidate, PidParts0),
+                        {ok, rabbit_pid_codec:recompose(PidParts)}
+                end;
+            error ->
+                error
         end
     catch error:_ -> error
     end;
 pid_from_name(_, _) ->
     error.
+
+%% Returns the integer hash following "@" in a synthetic node-name binary
+%% such as <<"reply@1234567">>. Malformed input raises and is caught by
+%% the surrounding try.
+node_hash_from_binary(NodeBin) ->
+    [_Prefix, Suffix] = binary:split(NodeBin, <<"@">>),
+    binary_to_integer(Suffix).
 
 nodes_with_hashes() ->
     #{erlang:phash2(Node) => Node || Node <- rabbit_nodes:list_members()}.
