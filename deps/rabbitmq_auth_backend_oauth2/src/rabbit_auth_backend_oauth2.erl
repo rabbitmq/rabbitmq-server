@@ -529,7 +529,7 @@ escape_regex_metacharacters(Str) ->
     %% so a template like "[{var}]" with var="a-z" would otherwise match any
     %% letter rather than the literal three-character value.
     binary_to_list(
-        re:replace(Str, <<"[.^$|()\\[\\]{}*+?\\\\\\-]">>, <<"\\\\&">>,
+        re:replace(Str, <<"[.^$|()\\[\\]{}*+?\\\\-]">>, <<"\\\\&">>,
                    [global, {return, binary}, unicode])).
 
 -spec tags_from(decoded_jwt_token()) -> list(atom()).
