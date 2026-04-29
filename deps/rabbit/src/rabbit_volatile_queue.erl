@@ -377,7 +377,7 @@ pid_from_name(<<?PREFIX, Bin/binary>>, CandidateNodes) ->
     try
         [PidBase64, _KeyBase64] = binary:split(Bin, Cp),
         PidBin = base64:decode(PidBase64),
-        case rabbit_pid_codec:decompose_from_binary_safe(PidBin) of
+        case rabbit_pid_codec:decompose_from_binary(PidBin) of
             {ok, #{node := ShortenedNodename} = PidParts0} ->
                 NodeHash = node_hash_from_binary(ShortenedNodename),
                 case maps:get(NodeHash, CandidateNodes, undefined) of
