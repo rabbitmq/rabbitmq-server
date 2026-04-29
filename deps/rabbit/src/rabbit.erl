@@ -1026,6 +1026,8 @@ do_run_postlaunch_phase(Plugins) ->
         ok = application:set_env(prometheus, instrumenters, [],
                                  [{persistent, true}]),
 
+        ok = application:set_env(kernel, log_missed_net_ticks, true),
+
         %% However, we want to run their boot steps and actually start
         %% them one by one, to ensure a dependency is fully started
         %% before a plugin which depends on it gets a chance to start.
