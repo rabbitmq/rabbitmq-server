@@ -52,7 +52,9 @@ handle_response(Response, _State) ->
 
 
 build_auth_props(Pass, Socket) ->
-    [{password, Pass}, {sockOrAddr, Socket}].
+    %% Pass a precomputed boolean, not the raw socket, so that AuthProps is
+    %% stable across reconnections of the same client. See issue #16255.
+    [{password, Pass}, {is_loopback, rabbit_net:is_loopback(Socket)}].
 
 extract_user_pass(Response) ->
     case extract_elem(Response) of
