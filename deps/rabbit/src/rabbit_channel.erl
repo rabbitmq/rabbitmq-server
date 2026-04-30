@@ -874,20 +874,26 @@ check_read_permitted(Resource, User, Context) ->
 %% unlike regular declarations, passive declares require *any* permission on the
 %% target resource (e.g. a queue) by design.
 %% See rabbitmq/rabbitmq-server#16085 for context.
-%%
-%% Important: `configure` is intentionally tried last
-%% so that the error reported in the negative/refusal case matches that of a regular declare.
 check_any_resource_access_permitted(Resource, User, Context) ->
-    Perms = [read, write, configure],
     Cache = case get(permission_cache) of
                 undefined -> [];
                 C -> C
             end,
-    HasCachedHit =
-        lists:any(fun(P) -> lists:member({Resource, Context, P}, Cache) end, Perms),
+    HasCachedHit = lists:any(fun({Res, Ctx, _Permission})
+                                   when Res =:= Resource andalso
+                                        Ctx =:= Context ->
+                                     true;
+                                (_) ->
+                                     false
+                             end, Cache),
     case HasCachedHit of
-        true -> ok;
-        false -> check_any_resource_access(User, Resource, Perms, Context)
+        true ->
+            ok;
+        false ->
+            %% 'configure' is intentionally tried last so that the error reported
+            %% in the negative/refusal case matches that of a regular declare.
+            Perms = [read, write, configure],
+            check_any_resource_access(User, Resource, Perms, Context)
     end.
 
 check_any_resource_access(User, Resource, [Perm], Context) ->
