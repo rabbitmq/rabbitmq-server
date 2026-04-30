@@ -255,3 +255,14 @@
                          post_enable =>
                          {rabbit_khepri, topic_binding_projection_post_enable}}
      }}).
+
+-rabbit_feature_flag(
+   {topic_binding_projection_v5,
+    #{desc          => "Enable the topic binding Khepri projection v5",
+      stability     => stable,
+      depends_on    => [topic_binding_projection_v4],
+      callbacks     => #{enable =>
+                         {rabbit_khepri, topic_binding_projection_v5_enable},
+                         post_enable =>
+                         {rabbit_khepri, topic_binding_projection_v5_post_enable}}
+     }}).
