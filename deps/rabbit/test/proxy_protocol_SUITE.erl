@@ -110,8 +110,14 @@ proxy_protocol_v2_local(Config) ->
     ok.
 
 connection_name() ->
-    ?awaitMatch([_], pg_local:get_members(rabbit_connections), 30000),
-    [Pid] = pg_local:get_members(rabbit_connections),
+    Scope = rabbit:pg_scope_amqp091_connection(),
+    GetGroups = fun() ->
+                    try pg:which_groups(Scope)
+                    catch error:badarg -> []
+                    end
+                end,
+    ?awaitMatch([_], GetGroups(), 30000),
+    [Pid] = GetGroups(),
     {dictionary, Dict} = process_info(Pid, dictionary),
     {process_name, {rabbit_reader, ConnectionName}} = lists:keyfind(process_name, 1, Dict),
     ConnectionName.
@@ -119,6 +125,10 @@ connection_name() ->
 wait_for_connection_close(Config) ->
     ?awaitMatch(
        [],
-       rabbit_ct_broker_helpers:rpc(
-         Config, 0, pg_local, get_members, [rabbit_connnections]),
+       begin
+           Scope = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit, pg_scope_amqp091_connection, []),
+           try rabbit_ct_broker_helpers:rpc(Config, 0, pg, which_groups, [Scope])
+           catch error:badarg -> []
+           end
+       end,
        30000).
