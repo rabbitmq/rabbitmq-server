@@ -868,6 +868,43 @@ check_write_permitted(Resource, User, Context) ->
 check_read_permitted(Resource, User, Context) ->
     check_resource_access(User, Resource, read, Context).
 
+%% Used by passive declare operations.
+%%
+%% For security reviews:
+%% unlike regular declarations, passive declares require *any* permission on the
+%% target resource (e.g. a queue) by design.
+%% See rabbitmq/rabbitmq-server#16085 for context.
+check_any_resource_access_permitted(Resource, User, Context) ->
+    Cache = case get(permission_cache) of
+                undefined -> [];
+                C -> C
+            end,
+    HasCachedHit = lists:any(fun({Res, Ctx, _Permission})
+                                   when Res =:= Resource andalso
+                                        Ctx =:= Context ->
+                                     true;
+                                (_) ->
+                                     false
+                             end, Cache),
+    case HasCachedHit of
+        true ->
+            ok;
+        false ->
+            %% 'configure' is intentionally tried last so that the error reported
+            %% in the negative/refusal case matches that of a regular declare.
+            Perms = [read, write, configure],
+            check_any_resource_access(User, Resource, Perms, Context)
+    end.
+
+check_any_resource_access(User, Resource, [Perm], Context) ->
+    check_resource_access(User, Resource, Perm, Context);
+check_any_resource_access(User, Resource, [Perm | Rest], Context) ->
+    try
+        check_resource_access(User, Resource, Perm, Context)
+    catch exit:#amqp_error{name = access_refused} ->
+              check_any_resource_access(User, Resource, Rest, Context)
+    end.
+
 check_write_permitted_on_topics(#exchange{type = topic} = Resource, User, Mc, AuthzContext) ->
     lists:foreach(
       fun(RoutingKey) ->
@@ -2542,7 +2579,10 @@ handle_method(#'queue.declare'{queue   = QueueNameBin,
               ConnPid, AuthzContext, _CollectorPid, VHostPath, User) ->
     StrippedQueueNameBin = strip_cr_lf(QueueNameBin),
     QueueName = rabbit_misc:queue_resource(VHostPath, StrippedQueueNameBin),
-    check_configure_permitted(QueueName, User, AuthzContext),
+    %% For security reviews:
+    %% unlike regular declarations, passive declares require *any* permission by design.
+    %% See rabbitmq/rabbitmq-server#16085 for context.
+    check_any_resource_access_permitted(QueueName, User, AuthzContext),
     Fun = fun (Q0) ->
               QStat = maybe_stat(NoWait, Q0),
               {QStat, Q0}
@@ -2651,7 +2691,10 @@ handle_method(#'exchange.declare'{exchange    = ExchangeNameBin,
               _ConnPid, AuthzContext, _CollectorPid, VHostPath, User) ->
     ExchangeName = rabbit_misc:r(VHostPath, exchange, strip_cr_lf(ExchangeNameBin)),
     check_not_default_exchange(ExchangeName),
-    check_configure_permitted(ExchangeName, User, AuthzContext),
+    %% For security reviews:
+    %% unlike regular declarations, passive declares require *any* permission by design.
+    %% See rabbitmq/rabbitmq-server#16085 for context.
+    check_any_resource_access_permitted(ExchangeName, User, AuthzContext),
     _ = rabbit_exchange:lookup_or_die(ExchangeName).
 
 handle_deliver(CTag, Ack, Msgs, State) ->

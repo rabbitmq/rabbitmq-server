@@ -83,7 +83,8 @@ handle_http_req(<<"GET">>,
                 {PermCache0, TopicPermCache}) ->
     QNameBin = cow_uri:urldecode(QNameBinQuoted),
     QName = queue_resource(Vhost, QNameBin),
-    PermCache = check_resource_access(QName, configure, User, PermCache0),
+    %% Same permission check as for queue.declare with passive=true in AMQP 0.9.1
+    PermCache = check_resource_any_access(QName, User, PermCache0),
     PermCaches = {PermCache, TopicPermCache},
     case rabbit_amqqueue:with(
            QName,
@@ -698,6 +699,28 @@ prohibit_default_exchange(#resource{kind = exchange,
     throw(<<"403">>, <<"operation not permitted on the default exchange">>, []);
 prohibit_default_exchange(_) ->
     ok.
+
+check_resource_any_access(Resource, User, Cache) ->
+    IsCached = lists:any(fun({R, _Permission}) when R =:= Resource ->
+                                 true;
+                            (_) ->
+                                 false
+                         end, Cache),
+    case IsCached of
+        true ->
+            Cache;
+        false ->
+            Perms = [read, write, configure],
+            try_resource_access(Resource, Perms, User, Cache)
+    end.
+
+try_resource_access(Resource, [Perm], User, Cache) ->
+    check_resource_access(Resource, Perm, User, Cache);
+try_resource_access(Resource, [Perm | Rest], User, Cache) ->
+    try check_resource_access(Resource, Perm, User, Cache)
+    catch exit:#'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS} ->
+              try_resource_access(Resource, Rest, User, Cache)
+    end.
 
 -spec prohibit_reserved_amq(rabbit_types:r(exchange | queue)) -> ok.
 prohibit_reserved_amq(Res = #resource{name = <<"amq.", _/binary>>}) ->

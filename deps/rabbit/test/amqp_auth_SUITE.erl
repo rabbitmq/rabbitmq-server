@@ -1164,37 +1164,50 @@ passive_queue_declare(Config) ->
     ok = amqp10_client:end_session(Session1),
     ok = close_connection_sync(Conn1),
 
-    %% missing configure permission to queue
+    %% No permissions: passive declare is refused.
     ok = set_permissions(Config, <<>>, <<>>, <<>>),
-
     {Conn091, Ch1} = open_amqpl_channel(Config),
     monitor(process, Ch1),
     _ = (catch amqp_channel:call(Ch1, #'queue.declare'{queue = QName, passive = true})),
     assert_channel_down(Ch1),
 
-    ok = set_permissions(Config, QName, <<>>, <<>>),
+    %% Passive declare permission checks are a special case, by design:
+    %% any permission (`configure`, `write`, or `read`) would do.
+    lists:foreach(
+      fun({ConfigP, WriteP, ReadP}) ->
+              ok = set_permissions(Config, ConfigP, WriteP, ReadP),
+              {ok, Ch} = amqp_connection:open_channel(Conn091),
+              #'queue.declare_ok'{queue = QName} =
+                  amqp_channel:call(Ch, #'queue.declare'{queue = QName, passive = true}),
+              ok = amqp_channel:close(Ch)
+      end, [{QName, <<>>,  <<>>},
+            {<<>>,  QName, <<>>},
+            {<<>>,  <<>>,  QName}]),
 
-    {ok, Ch2} = amqp_connection:open_channel(Conn091),
-    #'queue.declare_ok'{queue = QName} =
-        amqp_channel:call(Ch2, #'queue.declare'{queue = QName, passive = true}),
     ok = amqp_connection:close(Conn091).
 
 passive_exchange_declare(Config) ->
     XName = <<"amq.direct">>,
 
-    %% missing configure permission to exchange
+    %% No permissions of any kind? Then the passive declare is refused.
     ok = set_permissions(Config, <<>>, <<>>, <<>>),
-
     {Conn091, Ch1} = open_amqpl_channel(Config),
     monitor(process, Ch1),
     _ = (catch amqp_channel:call(Ch1, #'exchange.declare'{exchange = XName, passive = true})),
     assert_channel_down(Ch1),
 
-    ok = set_permissions(Config, XName, <<>>, <<>>),
+    %% Any of `configure`, `write`, or `read` alone grants the permission.
+    lists:foreach(
+      fun({ConfigP, WriteP, ReadP}) ->
+              ok = set_permissions(Config, ConfigP, WriteP, ReadP),
+              {ok, Ch} = amqp_connection:open_channel(Conn091),
+              #'exchange.declare_ok'{} =
+                  amqp_channel:call(Ch, #'exchange.declare'{exchange = XName, passive = true}),
+              ok = amqp_channel:close(Ch)
+      end, [{XName, <<>>,  <<>>},
+            {<<>>,  XName, <<>>},
+            {<<>>,  <<>>,  XName}]),
 
-    {ok, Ch2} = amqp_connection:open_channel(Conn091),
-    #'exchange.declare_ok'{} =
-        amqp_channel:call(Ch2, #'exchange.declare'{exchange = XName, passive = true}),
     ok = amqp_connection:close(Conn091).
 
 get_queue(Config) ->
@@ -1206,10 +1219,8 @@ get_queue(Config) ->
     ok = amqp10_client:end_session(Session1),
     ok = close_connection_sync(Conn1),
 
-    %% missing configure permission to queue
+    %% No permissions: refused on `configure' (tried last).
     ok = set_permissions(Config, <<>>, <<>>, <<>>),
-
-    %% Start a new connection since permissions are cached by the AMQP session process.
     {Conn2, _, LinkPair2} = init_pair(Config),
     ExpectedErr = error_unauthorized(
                     <<"configure access to queue '", QName/binary,
@@ -1218,11 +1229,16 @@ get_queue(Config) ->
                  rabbitmq_amqp_client:get_queue(LinkPair2, QName)),
     ok = close_connection_sync(Conn2),
 
-    ok = set_permissions(Config, QName, <<>>, <<>>),
-
-    {Conn3, _, LinkPair3} = init_pair(Config),
-    {ok, #{}} = rabbitmq_amqp_client:get_queue(LinkPair3, QName),
-    ok = close_connection_sync(Conn3).
+    %% Any of `configure`, `write`, or `read` alone grantts the permission.
+    lists:foreach(
+      fun({ConfigP, WriteP, ReadP}) ->
+              ok = set_permissions(Config, ConfigP, WriteP, ReadP),
+              {Conn, _, LinkPair} = init_pair(Config),
+              {ok, #{}} = rabbitmq_amqp_client:get_queue(LinkPair, QName),
+              ok = close_connection_sync(Conn)
+      end, [{QName, <<>>,  <<>>},
+            {<<>>,  QName, <<>>},
+            {<<>>,  <<>>,  QName}]).
 
 init_pair(Config) ->
     OpnConf = connection_config(Config),
