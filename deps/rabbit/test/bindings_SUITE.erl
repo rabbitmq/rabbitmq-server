@@ -750,9 +750,11 @@ topic_exchange_zero_words(Config) ->
     receive #'basic.ack'{} -> ok
     after 9000 -> ct:fail(confirm_timeout)
     end,
-    ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"m1">>}},
-                 amqp_channel:call(Ch, #'basic.get'{queue = Q1,
-                                                    no_ack = true})),
+    %% m1 must arrive at Q1 and must not leak into Q2
+    ?assertMatch(#'queue.declare_ok'{message_count = 1},
+                 amqp_channel:call(Ch, #'queue.declare'{queue = Q1, passive = true})),
+    ?assertMatch(#'queue.declare_ok'{message_count = 0},
+                 amqp_channel:call(Ch, #'queue.declare'{queue = Q2, passive = true})),
 
     ok = amqp_channel:cast(Ch,
                            #'basic.publish'{exchange = X2,
@@ -761,12 +763,35 @@ topic_exchange_zero_words(Config) ->
     receive #'basic.ack'{} -> ok
     after 9000 -> ct:fail(confirm_timeout)
     end,
-    ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"m2">>}},
-                 amqp_channel:call(Ch, #'basic.get'{queue = Q2, no_ack = true})),
+    %% m2 must arrive at Q2 and must not leak into Q1.
+    ?assertMatch(#'queue.declare_ok'{message_count = 1},
+                 amqp_channel:call(Ch, #'queue.declare'{queue = Q1, passive = true})),
+    ?assertMatch(#'queue.declare_ok'{message_count = 1},
+                 amqp_channel:call(Ch, #'queue.declare'{queue = Q2, passive = true})),
 
-    ?assertMatch(#'queue.delete_ok'{message_count = 0},
+    %% Unbinding the empty key stops message routing.
+    %% Zero words means the root is also the leaf, so `trie_follow_down_get_path/4`
+    %% returns an empty trie path and `trie_gc_path/3` will not have any edges to prune.
+    #'queue.unbind_ok'{} = amqp_channel:call(Ch, #'queue.unbind'{exchange = X1,
+                                                                  queue = Q1,
+                                                                  routing_key = ZeroWords}),
+    ok = amqp_channel:cast(Ch,
+                           #'basic.publish'{exchange = X1,
+                                            routing_key = ZeroWords},
+                           #amqp_msg{payload = <<"m3">>}),
+    receive #'basic.ack'{} -> ok
+    after 9000 -> ct:fail(confirm_timeout)
+    end,
+    %% For completeness' sake:
+    %% m3 must not reach Q1 (unbound) or Q2 (bound to a different exchange)
+    ?assertMatch(#'queue.declare_ok'{message_count = 1},
+                 amqp_channel:call(Ch, #'queue.declare'{queue = Q1, passive = true})),
+    ?assertMatch(#'queue.declare_ok'{message_count = 1},
+                 amqp_channel:call(Ch, #'queue.declare'{queue = Q2, passive = true})),
+
+    ?assertMatch(#'queue.delete_ok'{message_count = 1},
                  amqp_channel:call(Ch, #'queue.delete'{queue = Q1})),
-    ?assertMatch(#'queue.delete_ok'{message_count = 0},
+    ?assertMatch(#'queue.delete_ok'{message_count = 1},
                  amqp_channel:call(Ch, #'queue.delete'{queue = Q2})),
     #'exchange.delete_ok'{} = amqp_channel:call(Ch, #'exchange.delete'{exchange = X1}),
     #'exchange.delete_ok'{} = amqp_channel:call(Ch, #'exchange.delete'{exchange = X2}),
