@@ -1825,13 +1825,15 @@ topic_trie_table_names(4) ->
      rabbit_khepri_topic_binding_v4}.
 
 get_effective_topic_binding_projection_version() ->
-    case rabbit_feature_flags:is_enabled(topic_binding_projection_v5,
-                                         non_blocking) of
+    IsV5 = rabbit_feature_flags:is_enabled(topic_binding_projection_v5,
+                                           non_blocking),
+    case IsV5 of
         true ->
             5;
         _ ->
-            case rabbit_feature_flags:is_enabled(topic_binding_projection_v4,
-                                                 non_blocking) of
+            IsV4 = rabbit_feature_flags:is_enabled(topic_binding_projection_v4,
+                                                   non_blocking),
+            case IsV4 of
                 true ->
                     4;
                 _ ->
