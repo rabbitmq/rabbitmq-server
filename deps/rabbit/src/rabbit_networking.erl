@@ -468,13 +468,18 @@ node_client_listeners(Node) ->
                          end, Xs)
     end.
 
+pg_scope_amqp091_connection() ->
+    rabbit:pg_scope_amqp091_connection().
+
 -spec register_connection(pid()) -> ok.
 
-register_connection(Pid) -> pg_local:join(rabbit_connections, Pid).
+register_connection(Pid) ->
+    pg:join(pg_scope_amqp091_connection(), Pid, Pid).
 
 -spec unregister_connection(pid()) -> ok.
 
-unregister_connection(Pid) -> pg_local:leave(rabbit_connections, Pid).
+unregister_connection(Pid) ->
+    pg:leave(pg_scope_amqp091_connection(), Pid, Pid).
 
 -spec connections() -> [rabbit_types:connection()].
 connections() ->
@@ -483,17 +488,17 @@ connections() ->
 
 -spec local_connections() -> [rabbit_types:connection()].
 local_connections() ->
-    Amqp091Pids = pg_local:get_members(rabbit_connections),
+    Amqp091Pids = pg:which_groups(pg_scope_amqp091_connection()),
     Amqp10Pids = rabbit_amqp1_0:list_local(),
     Amqp10Pids ++ Amqp091Pids.
 
 -spec register_non_amqp_connection(pid()) -> ok.
 
-register_non_amqp_connection(Pid) -> pg_local:join(rabbit_non_amqp_connections, Pid).
+register_non_amqp_connection(Pid) -> pg:join(rabbit:pg_scope_non_amqp_connection(), Pid, Pid).
 
 -spec unregister_non_amqp_connection(pid()) -> ok.
 
-unregister_non_amqp_connection(Pid) -> pg_local:leave(rabbit_non_amqp_connections, Pid).
+unregister_non_amqp_connection(Pid) -> pg:leave(rabbit:pg_scope_non_amqp_connection(), Pid, Pid).
 
 -spec non_amqp_connections() -> [rabbit_types:connection()].
 
@@ -503,7 +508,7 @@ non_amqp_connections() ->
 
 -spec local_non_amqp_connections() -> [rabbit_types:connection()].
 local_non_amqp_connections() ->
-  pg_local:get_members(rabbit_non_amqp_connections).
+  pg:which_local_groups(rabbit:pg_scope_non_amqp_connection()).
 
 -spec connection_info(rabbit_types:connection(), rabbit_types:info_keys()) ->
           rabbit_types:infos().

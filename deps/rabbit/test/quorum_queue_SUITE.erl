@@ -2991,8 +2991,17 @@ cleanup_queue_state_on_channel_after_publish(Config) ->
     [NCh1, NCh2] = rpc:call(Server, rabbit_channel, list, []) -- ChsBefore,
     %% Check the channel state contains the state for the quorum queue on
     %% channel 1 and 2
-    wait_for_cleanup(Server, NCh1, 0),
-    wait_for_cleanup(Server, NCh2, 1),
+    %% Note: pg:get_local_members doesn't guarantee order, so we need to identify
+    %% which channel has queue state
+    {ChWithoutState, ChWithState} = case length(rpc:call(Server,
+                                                         rabbit_channel,
+                                                         list_queue_states,
+                                                         [NCh1])) of
+        0 -> {NCh1, NCh2};
+        1 -> {NCh2, NCh1}
+    end,
+    wait_for_cleanup(Server, ChWithoutState, 0),
+    wait_for_cleanup(Server, ChWithState, 1),
     %% then delete the queue and wait for the process to terminate
     ?assertMatch(#'queue.delete_ok'{},
                  amqp_channel:call(Ch1, #'queue.delete'{queue = QQ})),
@@ -3002,8 +3011,8 @@ cleanup_queue_state_on_channel_after_publish(Config) ->
                                           [?SUPNAME]))
       end, 30000),
     %% Check that all queue states have been cleaned
-    wait_for_cleanup(Server, NCh2, 0),
-    wait_for_cleanup(Server, NCh1, 0).
+    wait_for_cleanup(Server, ChWithState, 0),
+    wait_for_cleanup(Server, ChWithoutState, 0).
 
 cleanup_queue_state_on_channel_after_subscribe(Config) ->
     %% Declare/delete the queue and publish in one channel, while consuming on a
