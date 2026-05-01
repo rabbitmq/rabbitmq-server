@@ -1062,7 +1062,7 @@ check_max_age_arg({Type,    _}, _Args) ->
     {error, {unacceptable_type, Type}}.
 
 check_max_age(MaxAge) ->
-    case re:run(MaxAge, "(^[0-9]*)(.*)", [{capture, all_but_first, list}]) of
+    case re:run(MaxAge, "(^[0-9]+)(.*)", [{capture, all_but_first, list}]) of
         {match, [Value, Unit]} ->
             case list_to_integer(Value) of
                 I when I > 0 ->
