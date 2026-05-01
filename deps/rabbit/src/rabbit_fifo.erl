@@ -3776,7 +3776,7 @@ msg_priority(Msg) ->
         true ->
             case mc:priority(Msg) of
                 P when is_integer(P) ->
-                    min(P, ?MAX_PRIORITY);
+                    max(0, min(P, ?MAX_PRIORITY));
                 _ ->
                     ?DEFAULT_PRIORITY
             end;
