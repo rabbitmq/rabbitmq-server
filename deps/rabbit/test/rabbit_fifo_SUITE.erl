@@ -4889,6 +4889,14 @@ query_single_active_consumer_v7_test(Config) ->
 
     ok.
 
+enqueue_negative_priority_test(Config) ->
+    S0 = test_init(test),
+    Msg = mk_mc(<<"msg">>, #'P_basic'{priority = -1}),
+    {S1, _E1} = enq(Config, ?LINE, 1, Msg, S0),
+    #{detail := Detail} = rabbit_fifo_pq:overview(S1#rabbit_fifo.messages),
+    ?assertEqual(#{0 => 1}, Detail),
+    ok.
+
 query_single_active_consumer_consumer_info_test(Config) ->
     S0 = rabbit_fifo:init(#{name => ?FUNCTION_NAME,
                             single_active_consumer_on => true,
