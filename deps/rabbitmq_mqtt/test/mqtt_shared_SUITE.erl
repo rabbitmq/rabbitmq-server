@@ -601,7 +601,8 @@ events(Config) ->
     ok = rabbit_ct_broker_helpers:add_code_path_to_all_nodes(Config, event_recorder),
     Server = get_node_config(Config, 0, nodename),
     ok = gen_event:add_handler({rabbit_event, Server}, event_recorder, []),
-
+    %% Drain any residual events left over from a previous test case.
+    _ = get_events(Server),
     ClientId = atom_to_binary(?FUNCTION_NAME),
     C = connect(ClientId, Config),
 

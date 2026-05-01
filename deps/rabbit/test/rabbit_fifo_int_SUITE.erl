@@ -256,8 +256,9 @@ lost_return_is_resent_on_applied_after_leader_change(Config) ->
     %% by the new leader, not the old
     {ok, F6, _} = rabbit_fifo_client:handle_ra_event(ClusterName, NextLeader,
                                                      RaEvt, F5),
-    %% this should resend the never applied enqueue
-    {_, _, F7} = process_ra_events(receive_ra_events(1, 0), ClusterName, F6),
+    %% this should resend the never applied enqueue; extra leader changes can
+    %% arrive on mixed-version clusters, so retry if the applied event is missed
+    {_, _, F7} = receive_applied_retrying(ClusterName, F6),
 
     ?assertEqual(0, rabbit_fifo_client:pending_size(F7)),
 
@@ -883,6 +884,25 @@ receive_ra_events(Applied, Deliveries, Acc) ->
             receive_ra_events(Applied, Deliveries, [Evt | Acc])
     after ?TIMEOUT ->
             exit({missing_events, Applied, Deliveries, Acc})
+    end.
+
+%% Waits for exactly one applied event. On mixed-version clusters an extra
+%% `leader_change` event may arrive before the applied event, causing
+%% `receive_ra_events/2` to time out. When that happens the accumulated
+%% `leader_change` events are fed through the client so it updates its leader
+%% pointer and resends pending commands, then the wait is retried.
+receive_applied_retrying(ClusterName, State) ->
+    receive_applied_retrying(ClusterName, State, 3).
+
+receive_applied_retrying(_ClusterName, _State, 0) ->
+    exit(missing_applied_event);
+receive_applied_retrying(ClusterName, State, Retries) ->
+    try
+        process_ra_events(receive_ra_events(1, 0), ClusterName, State)
+    catch
+        exit:{missing_events, _, _, Acc} ->
+            {_, _, State1} = process_ra_events(lists:reverse(Acc), ClusterName, State),
+            receive_applied_retrying(ClusterName, State1, Retries - 1)
     end.
 
 %% Flusing the mailbox to later check that deliveries hasn't been received
