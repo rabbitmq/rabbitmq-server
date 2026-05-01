@@ -287,14 +287,12 @@ consume_without_acknowledging(Ch, QName, Count) ->
     CTag = receive #'basic.consume_ok'{consumer_tag = C} -> C end,
     accumulate_without_acknowledging(Ch, CTag, Count, []).
 
-accumulate_without_acknowledging(Ch, CTag, Remaining, Acc) when Remaining =:= 0 ->
-    amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = CTag}),
+accumulate_without_acknowledging(_Ch, _CTag, Remaining, Acc) when Remaining =:= 0 ->
     lists:reverse(Acc);
 accumulate_without_acknowledging(Ch, CTag, Remaining, Acc) ->
     receive {#'basic.deliver'{consumer_tag = CTag, delivery_tag = DTag}, _Msg} ->
            accumulate_without_acknowledging(Ch, CTag, Remaining - 1, [DTag | Acc])
     after 5000 ->
-           amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = CTag}),
            exit(timeout)
     end.
 
