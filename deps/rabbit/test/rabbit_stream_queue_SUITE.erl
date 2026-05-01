@@ -344,6 +344,13 @@ declare_max_age(Config) ->
                [{<<"x-queue-type">>, longstr, <<"stream">>},
                 {<<"x-max-age">>, longstr, <<"1A">>}])),
 
+    %% "D" has no leading digits; must return a clean error, not crash
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 406, _}}, _},
+       declare(Config, Server, Q,
+               [{<<"x-queue-type">>, longstr, <<"stream">>},
+                {<<"x-max-age">>, longstr, <<"D">>}])),
+
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
                                              {<<"x-max-age">>, longstr, <<"1Y">>}])),
@@ -402,11 +409,17 @@ declare_invalid_filter_size(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     Q = ?config(queue_name, Config),
 
-    ExpectedError = <<"PRECONDITION_FAILED - Invalid value for  x-stream-filter-size-bytes">>,
+    ExpectedError = <<"PRECONDITION_FAILED - Invalid value for x-stream-filter-size-bytes">>,
     ?assertExit(
        {{shutdown, {server_initiated_close, 406, ExpectedError}}, _},
        declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
-                                   {<<"x-stream-filter-size-bytes">>, long, 256}])).
+                                   {<<"x-stream-filter-size-bytes">>, long, 256}])),
+
+    %% Non-integer type must be rejected now that the arg is in stream capabilities
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 406, _}}, _},
+       declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                   {<<"x-stream-filter-size-bytes">>, longstr, <<"128">>}])).
 
 consume_invalid_arg(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),

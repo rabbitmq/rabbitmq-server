@@ -177,9 +177,14 @@ check_filter_size(Q) ->
     case rabbit_misc:table_lookup(Args, <<"x-stream-filter-size-bytes">>) of
         undefined ->
             ok;
+        {Type, _Val} when Type =/= long, Type =/= short, Type =/= signedint,
+                           Type =/= unsignedint, Type =/= unsignedbyte,
+                           Type =/= unsignedshort, Type =/= byte ->
+            {protocol_error, precondition_failed,
+             "Invalid type for x-stream-filter-size-bytes", []};
         {_Type, Val} when Val > 255 orelse Val < 16 ->
             {protocol_error, precondition_failed,
-             "Invalid value for  x-stream-filter-size-bytes", []};
+             "Invalid value for x-stream-filter-size-bytes", []};
         _ ->
             ok
     end.
@@ -1467,6 +1472,7 @@ capabilities() ->
                                <<"selector-field-max-bytes">>],
       queue_arguments => [<<"x-max-length-bytes">>, <<"x-queue-type">>,
                           <<"x-max-age">>, <<"x-stream-max-segment-size-bytes">>,
+                          <<"x-stream-filter-size-bytes">>,
                           <<"x-initial-cluster-size">>, <<"x-queue-leader-locator">>],
       consumer_arguments => [<<"x-stream-offset">>,
                              <<"x-stream-filter">>,
