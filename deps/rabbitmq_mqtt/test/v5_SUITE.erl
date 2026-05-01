@@ -446,6 +446,20 @@ session_expiry_disconnect_decrease(QueueType, Config) ->
     rabbit_ct_helpers:eventually(
         ?_assertEqual(0, rpc(Config, rabbit_amqqueue, count, [])),
         200, 50),
+    %% For quorum queues, Khepri may remove the DB record before the Ra process
+    %% exits. Wait until the Ra server process is also gone to avoid hitting
+    %% a half-torn-down queue on reconnect.
+    case QueueType of
+        rabbit_quorum_queue ->
+            QName = amqqueue:get_name(Q1),
+            {ok, LocalName} = rpc(Config, rabbit_queue_type_util,
+                                  qname_to_internal_name, [QName]),
+            rabbit_ct_helpers:eventually(
+                ?_assertEqual(undefined, rpc(Config, erlang, whereis, [LocalName])),
+                200, 50);
+        _ ->
+            ok
+    end,
     C2 = connect(ClientId, Config, [{clean_start, false}]),
     %% Server should reply in CONNACK that it does not have session state for our client ID.
     ?assertEqual({session_present, 0},
