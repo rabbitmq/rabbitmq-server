@@ -687,6 +687,10 @@ handle_info({'DOWN', _MRef, process, Pid, normal}, State) ->
     ?LOG_DEBUG("Process ~0p monitored by channel ~0p exited", [Pid, self()]),
     {noreply, State};
 
+%% `erpc` encodes a successful return as `{Ref, return, Value}` and the spawned
+%% helper exits with that reason; ignore it rather than crashing the channel.
+handle_info({'EXIT', _Pid, {Ref, return, _}}, State) when is_reference(Ref) ->
+    noreply(State);
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};
 
