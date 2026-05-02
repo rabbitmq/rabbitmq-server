@@ -12,6 +12,8 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -compile([nowarn_export_all, export_all]).
 
+-import(rabbit_ct_helpers, [consistently/3]).
+
 %% The reconciler has two modes of triggering itself
 %% - timer based
 %% - event based
@@ -136,11 +138,11 @@ auto_grow(Config) ->
 
     add_server_to_cluster(Server0, Server1),
     %% With 2 nodes in the cluster, target group size is not reached, so no
-    %% new members should be available. We sleep a while so the periodic check
-    %% runs
-    timer:sleep(4000),
-    {ok, Members, _} = ra:members({queue_utils:ra_name(QQ), Server1}),
-    ?assertEqual(1, length(Members)),
+    %% new members should be available. Verify this holds over multiple
+    %% reconciliation cycles.
+    consistently(
+        ?_assertEqual(1, length(element(2, ra:members({queue_utils:ra_name(QQ), Server1})))),
+        1000, 4),
 
     add_server_to_cluster(Server2, Server1),
     %% With 3 nodes in the cluster, target size is met so eventually it should
@@ -175,10 +177,11 @@ auto_grow_drained_node(Config) ->
         fun () -> rabbit_ct_broker_helpers:is_being_drained_local_read(Config, Server0) end,
         10000),
     add_server_to_cluster(Server2, Server1),
-    timer:sleep(5000),
-    %% We have 3 nodes, but one is drained, so it will not be concidered.
-    {ok, Members1, _} = ra:members({queue_utils:ra_name(QQ), Server1}),
-    ?assertEqual(1, length(Members1)),
+    %% We have 3 nodes, but one is drained, so it will not be considered.
+    %% Verify this holds over multiple reconciliation cycles.
+    consistently(
+        ?_assertEqual(1, length(element(2, ra:members({queue_utils:ra_name(QQ), Server1})))),
+        1000, 5),
 
     rabbit_ct_broker_helpers:unmark_as_being_drained(Config, Server0),
     rabbit_ct_helpers:await_condition(

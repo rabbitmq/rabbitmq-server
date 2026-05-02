@@ -534,9 +534,6 @@ handles_reject_notification(Config) ->
     % reverse order - should try the first node in the list first
     F0 = rabbit_fifo_client:init([ServerId2, ServerId1]),
     {ok, F1, []} = rabbit_fifo_client:enqueue(ClusterName, one, F0),
-
-    timer:sleep(500),
-
     % the applied notification
     _F2 = process_ra_events(receive_ra_events(1, 0), ClusterName, F1),
     rabbit_quorum_queue:stop_server(ServerId1),
@@ -646,10 +643,10 @@ cancel_checkout_with_pending(Config, Reason) ->
            end, F3, Msgs),
 
     {ok, _F4} = rabbit_fifo_client:cancel_checkout(<<"tag">>, Reason, F4),
-    timer:sleep(100),
-    {ok, Overview, _} = ra:member_overview(ServerId),
-    ?assertMatch(#{machine := #{num_messages := 0,
-                                num_consumers := 0}}, Overview),
+    rabbit_ct_helpers:eventually(
+        ?_assertMatch(#{machine := #{num_messages := 0, num_consumers := 0}},
+                      element(2, ra:member_overview(ServerId))),
+        200, 20),
     flush(),
     ok.
 
