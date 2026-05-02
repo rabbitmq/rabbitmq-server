@@ -1068,8 +1068,7 @@ check_max_age(MaxAge) ->
                 I when I > 0 ->
                     case lists:member(Unit, ["Y", "M", "D", "h", "m", "s"]) of
                         true ->
-                            Int = list_to_integer(Value),
-                            Int * unit_value_in_ms(Unit);
+                            I * unit_value_in_ms(Unit);
                         false ->
                             {error, invalid_max_age}
                     end;
