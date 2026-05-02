@@ -88,9 +88,8 @@ publish_unauthorized_no_disconnect(Config) ->
 
     ok = emqtt:publish(C, <<"topic3">>, <<"payload">>, [{qos, 0}]),
 
-    timer:sleep(100),
     %% Client should be still connected.
-    ?assert(is_process_alive(C)),
+    rabbit_ct_helpers:consistently(?_assert(is_process_alive(C)), 50, 3),
 
     ok = emqtt:disconnect(C).
 
@@ -109,9 +108,8 @@ subscribe_unauthorized_no_disconnect(Config) ->
             ?assertEqual(?RC_FAILURE, ReasonCode)
     end,
 
-    timer:sleep(100),
     %% Client should be still connected.
-    ?assert(is_process_alive(C)),
+    rabbit_ct_helpers:consistently(?_assert(is_process_alive(C)), 50, 3),
 
     ok = emqtt:disconnect(C).
 
@@ -134,9 +132,8 @@ unsubscribe_unauthorized_no_disconnect(Config) ->
 
     {ok, _, ReasonCodes0} = emqtt:unsubscribe(C, <<"topic1">>),
 
-    timer:sleep(100),
     %% Client should be still connected.
-    ?assert(is_process_alive(C)),
+    rabbit_ct_helpers:consistently(?_assert(is_process_alive(C)), 50, 3),
 
     ok = rabbit_ct_broker_helpers:rpc(
            Config, rabbit_auth_backend_internal, set_topic_permissions,
