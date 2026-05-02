@@ -415,7 +415,8 @@ declare_invalid_filter_size(Config) ->
        declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
                                    {<<"x-stream-filter-size-bytes">>, long, 256}])),
 
-    %% Non-integer type must be rejected now that the arg is in stream capabilities
+    %% `x-stream-filter-size-bytes` is now in stream capabilities, so `check_non_neg_int_arg/2`
+    %% runs during declare argument validation and rejects non-integer types
     ?assertExit(
        {{shutdown, {server_initiated_close, 406, _}}, _},
        declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
