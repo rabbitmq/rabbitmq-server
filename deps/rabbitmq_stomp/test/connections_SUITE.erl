@@ -91,11 +91,7 @@ direct_client_connections_are_not_leaked(Config) ->
                            Client, "LOL", [{"", ""}])
                   end,
                   lists:seq(1, 100)),
-<<<<<<< HEAD
     ?awaitMatch(N, count_connections(Config), 30_000),
-=======
-    rabbit_ct_helpers:await_condition(fun() -> count_connections(Config) =:= N end, 30_000),
->>>>>>> f364a7fce (Fix more test flakes (QQs, MQTT, STOMP, Stream Protocol))
     ok.
 
 messages_not_dropped_on_disconnect(Config) ->
