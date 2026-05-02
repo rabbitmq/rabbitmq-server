@@ -1031,7 +1031,8 @@ publish_permission_will_message(Config) ->
                            <<"client-with-will">>,
                            Opts),
     {ok, _} = emqtt:connect(C),
-    timer:sleep(100),
+    rabbit_ct_helpers:await_condition(
+      fun() -> util:all_connection_pids(Config) =/= [] end, 5_000),
     [ServerPublisherPid] = util:all_connection_pids(Config),
 
     Sub = open_mqtt_connection(Config),
