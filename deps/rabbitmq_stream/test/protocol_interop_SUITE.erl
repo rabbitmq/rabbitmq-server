@@ -60,8 +60,11 @@ init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
 end_per_testcase(Testcase, Config) ->
-    %% Wait for exclusive or auto-delete queues being deleted.
-    timer:sleep(800),
+    rabbit_ct_helpers:await_condition(
+        fun() ->
+            Qs = rabbit_ct_broker_helpers:rpc(Config, rabbit_amqqueue, list, []),
+            not lists:any(fun(Q) -> amqqueue:get_exclusive_owner(Q) =/= none end, Qs)
+        end, 10_000),
     rabbit_ct_broker_helpers:rpc(Config, ?MODULE, delete_queues, []),
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
