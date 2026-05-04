@@ -418,7 +418,6 @@ pid_from_name(<<?PREFIX, Bin/binary>>, CandidateNodes) ->
 pid_from_name(_, _) ->
     error.
 
-<<<<<<< HEAD
 %% Returns the base 64 encoded key.
 -spec key_from_name(rabbit_misc:resource_name()) ->
     {ok, binary()} | error.
@@ -431,14 +430,13 @@ key_from_name(<<?PREFIX, Suffix/binary>>) ->
     end;
 key_from_name(_) ->
     error.
-=======
+
 %% Returns the integer hash following "@" in a synthetic node-name binary
 %% such as <<"reply@1234567">>. Malformed input raises and is caught by
 %% the surrounding try.
 node_hash_from_binary(NodeBin) ->
     [_Prefix, Suffix] = binary:split(NodeBin, <<"@">>),
     binary_to_integer(Suffix).
->>>>>>> fa3a26d20b (Refactor Direct Reply-to one more time)
 
 nodes_with_hashes() ->
     #{erlang:phash2(Node) => Node || Node <- rabbit_nodes:list_members()}.
