@@ -29,18 +29,24 @@
          handle_other/2,
          ensure_stats_timer/1]).
 
+-ifdef(TEST).
+-export([check_node_connection_limit/1]).
+-endif.
+
 -import(rabbit_amqp_util, [protocol_error/3]).
 
 -define(IS_RUNNING(State), State#v1.connection_state =:= running).
 
 unpack_from_0_9_1(
   {Sock, PendingRecv, SupPid, Buf, BufLen, ProxySocket,
-   ConnectionName, Host, PeerHost, Port, PeerPort, ConnectedAt, StatsTimer},
+   ConnectionName, Host, PeerHost, Port, PeerPort, ConnectedAt, StatsTimer,
+   RanchRef},
   Parent) ->
     logger:update_process_metadata(#{connection => ConnectionName}),
     #v1{parent           = Parent,
         websocket        = false,
         sock             = Sock,
+        ranch_ref        = RanchRef,
         callback         = {frame_header, sasl},
         pending_recv     = PendingRecv,
         helper_sup       = SupPid,
@@ -435,6 +441,7 @@ handle_connection_frame(
                                    user = User = #user{username = Username},
                                    auth_mechanism = {Mechanism, _Mod}
                                   },
+      ranch_ref = RanchRef,
       helper_sup = HelperSupPid,
       sock = Sock} = State0) ->
     Vhost = vhost(Hostname),
@@ -442,6 +449,8 @@ handle_connection_frame(
                                      vhost => Vhost,
                                      user => Username}),
     ok = check_user_loopback(State0),
+    %% Enforced before per-vhost and per-user limits for efficiency.
+    ok = check_node_connection_limit(RanchRef),
     ok = check_vhost_exists(Vhost, State0),
     ok = check_vhost_alive(Vhost),
     ok = rabbit_access_control:check_vhost_access(User, Vhost, {socket, Sock}, #{}),
@@ -884,6 +893,27 @@ check_vhost_alive(Vhost) ->
             protocol_error(?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
                            "AMQP 1.0 connection failed: virtual host '~s' is down",
                            [Vhost])
+    end.
+
+-spec check_node_connection_limit(ranch:ref() | undefined) -> ok.
+check_node_connection_limit(undefined) ->
+    %% AMQP-over-WebSockets connections won't have an associated Ranch listener
+    ok;
+check_node_connection_limit(RanchRef) ->
+    case application:get_env(rabbit, connection_max, infinity) of
+        infinity ->
+            ok;
+        Limit when is_integer(Limit), Limit >= 0 ->
+            #{active_connections := ActiveConns} = ranch:info(RanchRef),
+            case ActiveConns > Limit of
+                false ->
+                    ok;
+                true ->
+                    protocol_error(
+                      ?V_1_0_AMQP_ERROR_RESOURCE_LIMIT_EXCEEDED,
+                      "connection refused: node connection limit (~p) is reached",
+                      [Limit])
+            end
     end.
 
 check_vhost_connection_limit(Vhost, Username) ->

@@ -1711,6 +1711,7 @@ become_10(State) ->
     State#v1{connection_state = {become, Fun}}.
 
 pack_for_1_0(Buf, BufLen, #v1{sock         = Sock,
+                              ranch_ref    = RanchRef,
                               pending_recv = PendingRecv,
                               helper_sup = {_HelperSup091, HelperSup10},
                               proxy_socket = ProxySocket,
@@ -1723,7 +1724,8 @@ pack_for_1_0(Buf, BufLen, #v1{sock         = Sock,
                                               peer_port = PeerPort,
                                               connected_at = ConnectedAt}}) ->
     {Sock, PendingRecv, HelperSup10, Buf, BufLen, ProxySocket,
-     Name, Host, PeerHost, Port, PeerPort, ConnectedAt, StatsTimer}.
+     Name, Host, PeerHost, Port, PeerPort, ConnectedAt, StatsTimer,
+     RanchRef}.
 
 respond_and_close(State, Channel, Reason, LogErr) ->
     log_hard_error(State, Channel, LogErr),
