@@ -438,6 +438,10 @@
 ##
 # connection_max = 5000
 
+## Set the max permissible number of AMQP 1.0 client connections on the node.
+##
+# amqp10_connection_max = 5000
+
 ## Sets the maximum number of AMQP 1.0 sessions that can be simultaneously
 ## active on an AMQP 1.0 connection.
 ##

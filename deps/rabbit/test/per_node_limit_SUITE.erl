@@ -12,6 +12,8 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
+-define(TIMEOUT, 30000).
+
 -compile(export_all).
 
 all() ->
@@ -23,6 +25,7 @@ groups() ->
     [
      {limit_tests, [], [
                         node_connection_limit,
+                        node_amqp1_0_connection_limit,
                         vhost_limit,
                         channel_consumers_limit,
                         node_channel_limit
@@ -74,6 +77,7 @@ end_per_testcase(Testcase, Config) ->
     set_node_limit(Config, channel_max_per_node, infinity),
     set_node_limit(Config, consumer_max_per_channel, infinity),
     set_node_limit(Config, connection_max, infinity),
+    set_node_limit(Config, amqp10_connection_max, infinity),
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
 %% -------------------------------------------------------------------
@@ -95,6 +99,72 @@ node_connection_limit(Config) ->
     C = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0),
     true = is_pid(C),
     close_all_connections([C]),
+    ok.
+
+node_amqp1_0_connection_limit(Config) ->
+    Host = proplists:get_value(rmq_hostname, Config),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    OpnConf = #{address => Host,
+                port => Port,
+                container_id => <<"limit-test">>,
+                sasl => {plain, <<"guest">>, <<"guest">>}},
+
+    %% Set limit to 0, don't accept any AMQP 1.0 connections
+    set_node_limit(Config, amqp10_connection_max, 0),
+    {ok, C0} = amqp10_client:open_connection(OpnConf),
+    receive {amqp10_event, {connection, C0, {closed, _}}} -> ok
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
+    end,
+
+    %% Set limit to 2, accept 2 connections
+    set_node_limit(Config, amqp10_connection_max, 2),
+    {ok, C1} = amqp10_client:open_connection(OpnConf),
+    receive {amqp10_event, {connection, C1, opened}} -> ok
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
+    end,
+    {ok, C2} = amqp10_client:open_connection(
+                 OpnConf#{container_id => <<"limit-test-2">>}),
+    receive {amqp10_event, {connection, C2, opened}} -> ok
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
+    end,
+
+    %% 3rd connection should be rejected
+    {ok, C3} = amqp10_client:open_connection(
+                 OpnConf#{container_id => <<"limit-test-3">>}),
+    receive {amqp10_event, {connection, C3, {closed, _}}} -> ok
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
+    end,
+
+    %% Close one, then a new one should be accepted
+    ok = amqp10_client:close_connection(C1),
+    receive {amqp10_event, {connection, C1, {closed, normal}}} -> ok
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
+    end,
+    %% Give the broker a moment to deregister the connection
+    timer:sleep(500),
+    {ok, C4} = amqp10_client:open_connection(
+                 OpnConf#{container_id => <<"limit-test-4">>}),
+    receive {amqp10_event, {connection, C4, opened}} -> ok
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
+    end,
+
+    ok = amqp10_client:close_connection(C2),
+    ok = amqp10_client:close_connection(C4),
+    receive {amqp10_event, {connection, C2, {closed, normal}}} -> ok
+    after ?TIMEOUT -> ok end,
+    receive {amqp10_event, {connection, C4, {closed, normal}}} -> ok
+    after ?TIMEOUT -> ok end,
+
+    %% Set to infinity, should accept connections again
+    set_node_limit(Config, amqp10_connection_max, infinity),
+    {ok, C5} = amqp10_client:open_connection(
+                 OpnConf#{container_id => <<"limit-test-5">>}),
+    receive {amqp10_event, {connection, C5, opened}} -> ok
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
+    end,
+    ok = amqp10_client:close_connection(C5),
+    receive {amqp10_event, {connection, C5, {closed, normal}}} -> ok
+    after ?TIMEOUT -> ok end,
     ok.
 
 vhost_limit(Config) ->

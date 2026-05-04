@@ -445,6 +445,7 @@ handle_connection_frame(
     ok = check_vhost_exists(Vhost, State0),
     ok = check_vhost_alive(Vhost),
     ok = rabbit_access_control:check_vhost_access(User, Vhost, {socket, Sock}, #{}),
+    ok = check_node_amqp1_0_connection_limit(),
     ok = check_vhost_connection_limit(Vhost, Username),
     ok = check_user_connection_limit(Username),
     Timer = maybe_start_credential_expiry_timer(User),
@@ -884,6 +885,23 @@ check_vhost_alive(Vhost) ->
             protocol_error(?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
                            "AMQP 1.0 connection failed: virtual host '~s' is down",
                            [Vhost])
+    end.
+
+check_node_amqp1_0_connection_limit() ->
+    case rabbit_misc:get_env(rabbit, amqp10_connection_max, infinity) of
+        infinity ->
+            ok;
+        Limit when is_integer(Limit) ->
+            Count = length(rabbit_amqp1_0:list_local()),
+            case Count >= Limit of
+                false ->
+                    ok;
+                true ->
+                    protocol_error(
+                      ?V_1_0_AMQP_ERROR_RESOURCE_LIMIT_EXCEEDED,
+                      "connection refused: node AMQP 1.0 connection limit (~p) is reached",
+                      [Limit])
+            end
     end.
 
 check_vhost_connection_limit(Vhost, Username) ->
