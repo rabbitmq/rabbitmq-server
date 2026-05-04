@@ -43,6 +43,10 @@
 -record(v1,
         {parent :: pid(),
          helper_sup :: pid(),
+         %% A Ranch listener reference, used to enforce the per-node
+         %% `connection_max` limit.
+         %% Will be `undefined` for AMQP-over-WebSockets connections.
+         ranch_ref = undefined :: undefined | ranch:ref(),
          writer = none :: none | pid(),
          heartbeater = none :: none | rabbit_heartbeat:heartbeaters(),
          session_sup = none :: none | pid(),
