@@ -22,25 +22,42 @@
                             serial := non_neg_integer(),
                             creation := non_neg_integer()}.
 
+-type decomposed_pid_bin() :: #{node := binary(),
+                                id := non_neg_integer(),
+                                serial := non_neg_integer(),
+                                creation := non_neg_integer()}.
+
+-export_type([decomposed_pid/0, decomposed_pid_bin/0]).
+
 -spec decompose(pid()) -> decomposed_pid().
 decompose(Pid) ->
     Bin = term_to_binary(Pid, [{minor_version, 2}]),
-    decompose_from_binary(Bin).
+    {ok, #{node := NodeBin} = Parts} = decompose_from_binary(Bin),
+    %% Safe: the input is a real local pid, so its node atom always exists.
+    Parts#{node := binary_to_existing_atom(NodeBin, utf8)}.
 
--spec decompose_from_binary(binary()) -> decomposed_pid().
-decompose_from_binary(Bin) ->
-    <<?TTB_PREFIX, ?NEW_PID_EXT, PidData/binary>> = Bin,
-    {Node, Rest} = case PidData of
-                       <<?ATOM_UTF8_EXT, Len:16/integer, Node0:Len/binary, Rest1/binary>> ->
-                           {Node0, Rest1};
-                       <<?SMALL_ATOM_UTF8_EXT, Len/integer, Node0:Len/binary, Rest1/binary>> ->
-                           {Node0, Rest1}
-                   end,
-    <<ID:32/integer, Serial:32/integer, Creation:32/integer>> = Rest,
-    #{node => binary_to_atom(Node, utf8),
-      id => ID,
-      serial => Serial,
-      creation => Creation}.
+%% Returns the node name as a binary and 'error' on malformed input.
+-spec decompose_from_binary(binary()) -> {ok, decomposed_pid_bin()} | error.
+decompose_from_binary(<<?TTB_PREFIX, ?NEW_PID_EXT,
+                        ?ATOM_UTF8_EXT, Len:16/integer, Node:Len/binary,
+                        ID:32/integer, Serial:32/integer,
+                        Creation:32/integer>>) ->
+    {ok,
+      #{node => Node,
+        id => ID,
+        serial => Serial,
+        creation => Creation}};
+decompose_from_binary(<<?TTB_PREFIX, ?NEW_PID_EXT,
+                        ?SMALL_ATOM_UTF8_EXT, Len:8/integer, Node:Len/binary,
+                        ID:32/integer, Serial:32/integer,
+                        Creation:32/integer>>) ->
+    {ok,
+      #{node => Node,
+        id => ID,
+        serial => Serial,
+        creation => Creation}};
+decompose_from_binary(_) ->
+    error.
 
 -spec recompose_to_binary(decomposed_pid()) -> binary().
 recompose_to_binary(#{node := Node,
