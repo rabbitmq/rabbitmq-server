@@ -1698,10 +1698,10 @@ trace(Config) ->
                    <<"routed_queues">> := [<<"mqtt-subscription-trace_subscriberqos0">>]},
                  rabbit_misc:amqp_table(PublishHeaders)),
 
-    {#'basic.get_ok'{routing_key = <<"deliver.mqtt-subscription-trace_subscriberqos0">>},
-     #amqp_msg{props = #'P_basic'{headers = DeliverHeaders},
-               payload = Payload}} =
-    amqp_channel:call(Ch, #'basic.get'{queue = TraceQ}),
+    {_, #amqp_msg{props = #'P_basic'{headers = DeliverHeaders}, payload = Payload}} =
+        ?awaitMatch({#'basic.get_ok'{routing_key = <<"deliver.mqtt-subscription-trace_subscriberqos0">>}, _},
+                    amqp_channel:call(Ch, #'basic.get'{queue = TraceQ}),
+                    5_000),
     ?assertMatch(#{<<"exchange_name">> := <<"amq.topic">>,
                    <<"routing_keys">> := [Topic],
                    <<"connection">> := <<"127.0.0.1:", _/binary>>,

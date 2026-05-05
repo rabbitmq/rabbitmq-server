@@ -2159,8 +2159,16 @@ grow_queue(Config) ->
 
     %% grow queues to quorum cluster size > '5' (limit = 5).
     TargetClusterSize_10 = 10,
-    Result5 = rpc:call(Server0, rabbit_quorum_queue, grow, [TargetClusterSize_10, <<"/">>, <<".*">>, all]),
-    ?assert(lists:all(fun({_, {R, _}}) -> R =:= ok end, Result5)),
+    rabbit_ct_helpers:await_condition(
+        fun() ->
+            rpc:call(Server0, rabbit_quorum_queue, grow,
+                     [TargetClusterSize_10, <<"/">>, <<".*">>, all]),
+            lists:all(
+                fun(Q) ->
+                    {ok, Q0} = rpc:call(Server0, rabbit_amqqueue, lookup, [Q, <<"/">>]),
+                    length(rabbit_queue_type:get_nodes(Q0)) =:= TargetClusterSize_5
+                end, QQs)
+        end, 30_000),
     assert_grown_queues(QQs, Server0, TargetClusterSize_5, MsgCount),
 
     %% shrink all queues again down to 1 member
