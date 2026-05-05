@@ -14,8 +14,8 @@
 
 -include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
--define(TOPIC_TRIE_PROJECTION, rabbit_khepri_topic_trie_v4).
--define(TOPIC_BINDING_PROJECTION, rabbit_khepri_topic_binding_v4).
+-define(TOPIC_TRIE_PROJECTION, rabbit_khepri_topic_trie_v5).
+-define(TOPIC_BINDING_PROJECTION, rabbit_khepri_topic_binding_v5).
 
 -export([all/0,
          groups/0,
@@ -90,7 +90,7 @@ init_per_group(cluster_size_3 = _Group, Config0) ->
     case Config1 of
         _ when is_list(Config1) ->
             Ret = rabbit_ct_broker_helpers:enable_feature_flag(
-                    Config1, topic_binding_projection_v4),
+                    Config1, topic_binding_projection_v5),
             case Ret of
                 ok ->
                     Config1;

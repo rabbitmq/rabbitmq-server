@@ -16,9 +16,6 @@
 
 -define(KHEPRI_PROJECTION_V3, rabbit_khepri_topic_trie_v3).
 
--define(TOPIC_TRIE_PROJECTION, rabbit_khepri_topic_trie_v4).
--define(TOPIC_BINDING_PROJECTION, rabbit_khepri_topic_binding_v4).
-
 -type match_result() :: [rabbit_types:binding_destination() |
                          {rabbit_amqqueue:name(), rabbit_types:binding_key()}].
 
@@ -39,8 +36,14 @@ match(#resource{virtual_host = VHost, name = XName} = X, RoutingKey, Opts) ->
     Words = split_topic_key_binary(RoutingKey),
     case rabbit_khepri:get_effective_topic_binding_projection_version() of
         V when V >= 4 ->
+            XSrc = {VHost, XName},
+            {TrieTab, BindingTab} = rabbit_khepri:topic_trie_table_names(V),
+            Root = case V of
+                       4 -> root;
+                       _ -> {root, XSrc}
+                   end,
             try
-                trie_match({VHost, XName}, root, Words, BKeys, [])
+                trie_match(XSrc, TrieTab, BindingTab, Root, Words, BKeys, [])
             catch
                 error:badarg ->
                     []
@@ -87,37 +90,36 @@ split_topic_key_binary(RoutingKey) ->
 %% leaf for fanout 0-2, or O(log N + F) per leaf for fanout F > 2.
 %% ==============================================================
 
-trie_match(XSrc, Node, [], BKeys, Acc0) ->
-    Acc1 = trie_bindings(Node, BKeys, Acc0),
-    trie_match_try(XSrc, Node, <<"#">>,
-                   fun trie_match_skip_any/5,
+trie_match(XSrc, TrieTab, BindTab, Node, [], BKeys, Acc0) ->
+    Acc1 = trie_bindings(BindTab, Node, BKeys, Acc0),
+    trie_match_try(XSrc, TrieTab, BindTab, Node, <<"#">>,
+                   fun trie_match_skip_any/7,
                    [], BKeys, Acc1);
-trie_match(XSrc, Node, [W | RestW] = Words, BKeys, Acc0) ->
-    Acc1 = trie_match_try(XSrc, Node, W,
-                          fun trie_match/5,
+trie_match(XSrc, TrieTab, BindTab, Node, [W | RestW] = Words, BKeys, Acc0) ->
+    Acc1 = trie_match_try(XSrc, TrieTab, BindTab, Node, W,
+                          fun trie_match/7,
                           RestW, BKeys, Acc0),
-    Acc2 = trie_match_try(XSrc, Node, <<"*">>,
-                          fun trie_match/5,
+    Acc2 = trie_match_try(XSrc, TrieTab, BindTab, Node, <<"*">>,
+                          fun trie_match/7,
                           RestW, BKeys, Acc1),
-    trie_match_try(XSrc, Node, <<"#">>,
-                   fun trie_match_skip_any/5,
+    trie_match_try(XSrc, TrieTab, BindTab, Node, <<"#">>,
+                   fun trie_match_skip_any/7,
                    Words, BKeys, Acc2).
 
-trie_match_try(XSrc, Node, Word, MatchFun, RestW, BKeys, Acc) ->
-    case ets:lookup_element(?TOPIC_TRIE_PROJECTION,
-                            {XSrc, Node, Word}, 2, undefined) of
+trie_match_try(XSrc, TrieTab, BindTab, Node, Word, MatchFun, RestW, BKeys, Acc) ->
+    case ets:lookup_element(TrieTab, {XSrc, Node, Word}, 2, undefined) of
         undefined ->
             Acc;
         NextNode ->
-            MatchFun(XSrc, NextNode, RestW, BKeys, Acc)
+            MatchFun(XSrc, TrieTab, BindTab, NextNode, RestW, BKeys, Acc)
     end.
 
-trie_match_skip_any(XSrc, Node, [], BKeys, Acc) ->
-    trie_match(XSrc, Node, [], BKeys, Acc);
-trie_match_skip_any(XSrc, Node, [_ | RestW] = Words, BKeys, Acc) ->
+trie_match_skip_any(XSrc, TrieTab, BindTab, Node, [], BKeys, Acc) ->
+    trie_match(XSrc, TrieTab, BindTab, Node, [], BKeys, Acc);
+trie_match_skip_any(XSrc, TrieTab, BindTab, Node, [_ | RestW] = Words, BKeys, Acc) ->
     trie_match_skip_any(
-      XSrc, Node, RestW, BKeys,
-      trie_match(XSrc, Node, Words, BKeys, Acc)).
+      XSrc, TrieTab, BindTab, Node, RestW, BKeys,
+      trie_match(XSrc, TrieTab, BindTab, Node, Words, BKeys, Acc)).
 
 %% Collect all destinations bound at the given trie node.
 %%
@@ -129,15 +131,15 @@ trie_match_skip_any(XSrc, Node, [_ | RestW] = Words, BKeys, Acc) ->
 %% ets:select/2 occurs an O(log N) seek followed by an O(F) range scan,
 %% which is cheaper than F individual ets:next/2 calls
 %% (each O(log N) due to CATree fresh-stack allocation).
-trie_bindings(NodeId, BKeys, Acc) ->
+trie_bindings(BindingTab, NodeId, BKeys, Acc) ->
     StartKey = {NodeId, <<>>, {}},
-    case ets:next(?TOPIC_BINDING_PROJECTION, StartKey) of
+    case ets:next(BindingTab, StartKey) of
         {NodeId, BKey1, Dest1} = Key1 ->
-            case ets:next(?TOPIC_BINDING_PROJECTION, Key1) of
+            case ets:next(BindingTab, Key1) of
                 {NodeId, BKey2, Dest2} = Key2 ->
-                    case ets:next(?TOPIC_BINDING_PROJECTION, Key2) of
+                    case ets:next(BindingTab, Key2) of
                         {NodeId, _, _} ->
-                            collect_select(NodeId, BKeys, Acc);
+                            collect_select(BindingTab, NodeId, BKeys, Acc);
                         _ ->
                             Acc1 = collect_binding(Dest1, BKey1, BKeys, Acc),
                             collect_binding(Dest2, BKey2, BKeys, Acc1)
@@ -154,12 +156,12 @@ collect_binding(#resource{kind = queue} = Dest, BindingKey, true, Acc) ->
 collect_binding(Dest, _BindingKey, _ReturnBindingKeys, Acc) ->
     [Dest | Acc].
 
-collect_select(NodeId, false, Acc) ->
-    Dests = ets:select(?TOPIC_BINDING_PROJECTION,
+collect_select(BindingTab, NodeId, false, Acc) ->
+    Dests = ets:select(BindingTab,
                        [{{{NodeId, '_', '$1'}}, [], ['$1']}]),
     Dests ++ Acc;
-collect_select(NodeId, true, Acc) ->
-    DestsAndBKeys = ets:select(?TOPIC_BINDING_PROJECTION,
+collect_select(BindingTab, NodeId, true, Acc) ->
+    DestsAndBKeys = ets:select(BindingTab,
                                [{{{NodeId, '$1', '$2'}}, [], [{{'$2', '$1'}}]}]),
     format_dest_bkeys(DestsAndBKeys, Acc).
 
