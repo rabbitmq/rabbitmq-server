@@ -1875,6 +1875,184 @@ dont_leak_file_handles(Config) ->
     rabbit_ct_client_helpers:close_channel(C),
     ok.
 
+<<<<<<< HEAD
+=======
+grow_queue(Config) ->
+    [Server0, Server1, _Server2, _Server3, _Server4] =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
+    QQ = ?config(queue_name, Config),
+    AQ = ?config(alt_queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                  {<<"x-quorum-initial-group-size">>, long, 5}])),
+    ?assertEqual({'queue.declare_ok', AQ, 0, 0},
+                 declare(Ch, AQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                  {<<"x-quorum-initial-group-size">>, long, 5}])),
+
+    QQs = [QQ, AQ],
+    MsgCount = 3,
+
+    [begin
+        RaName = ra_name(Q),
+        rabbit_ct_client_helpers:publish(Ch, Q, MsgCount),
+        wait_for_messages_ready([Server0], RaName, MsgCount),
+        {ok, Q0} = rpc:call(Server0, rabbit_amqqueue, lookup, [Q, <<"/">>]),
+        Nodes0 = rabbit_queue_type:get_nodes(Q0),
+        ?assertEqual(5, length(Nodes0))
+    end || Q <- QQs],
+
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
+        force_all_queues_shrink_member_to_current_member, []),
+
+    TargetClusterSize_1 = 1,
+    assert_grown_queues(QQs, Server0, TargetClusterSize_1, MsgCount),
+
+    %% grow queues to node 'Server1'
+    TargetClusterSize_2 = 2,
+    Result1 = rpc:call(Server0, rabbit_quorum_queue, grow, [Server1, <<"/">>, <<".*">>, all]),
+    %% [{{resource,<<"/">>,queue,<<"grow_queue">>},{ok,2}},
+    %%  {{resource,<<"/">>,queue,<<"grow_queue_alt">>},{ok,2}},...]
+    ?assert(lists:all(fun({_, {R, _}}) -> R =:= ok end, Result1)),
+    assert_grown_queues(QQs, Server0, TargetClusterSize_2, MsgCount),
+
+    %% grow queues to quorum cluster size '2' has no effect
+    Result2 = rpc:call(Server0, rabbit_quorum_queue, grow, [TargetClusterSize_2, <<"/">>, <<".*">>, all]),
+    ?assertEqual([], Result2),
+    assert_grown_queues(QQs, Server0, TargetClusterSize_2, MsgCount),
+
+    %% grow queues to quorum cluster size '3'
+    TargetClusterSize_3 = 3,
+    Result3 = rpc:call(Server0, rabbit_quorum_queue, grow, [TargetClusterSize_3, <<"/">>, <<".*">>, all, voter]),
+    ?assert(lists:all(fun({_, {R, _}}) -> R =:= ok end, Result3)),
+    assert_grown_queues(QQs, Server0, TargetClusterSize_3, MsgCount),
+
+    %% grow queues to quorum cluster size '5'
+    TargetClusterSize_5 = 5,
+    Result4 = rpc:call(Server0, rabbit_quorum_queue, grow, [TargetClusterSize_5, <<"/">>, <<".*">>, all, voter]),
+    ?assert(lists:all(fun({_, {R, _}}) -> R =:= ok end, Result4)),
+    assert_grown_queues(QQs, Server0, TargetClusterSize_5, MsgCount),
+
+    %% shrink all queues again down to 1 member
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
+        force_all_queues_shrink_member_to_current_member, []),
+    assert_grown_queues(QQs, Server0, TargetClusterSize_1, MsgCount),
+
+    %% grow queues to quorum cluster size > '5' (limit = 5).
+    TargetClusterSize_10 = 10,
+    rabbit_ct_helpers:await_condition(
+        fun() ->
+            rpc:call(Server0, rabbit_quorum_queue, grow,
+                     [TargetClusterSize_10, <<"/">>, <<".*">>, all]),
+            lists:all(
+                fun(Q) ->
+                    {ok, Q0} = rpc:call(Server0, rabbit_amqqueue, lookup, [Q, <<"/">>]),
+                    length(rabbit_queue_type:get_nodes(Q0)) =:= TargetClusterSize_5
+                end, QQs)
+        end, 30_000),
+    assert_grown_queues(QQs, Server0, TargetClusterSize_5, MsgCount),
+
+    %% shrink all queues again down to 1 member
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
+        force_all_queues_shrink_member_to_current_member, []),
+    assert_grown_queues(QQs, Server0, TargetClusterSize_1, MsgCount),
+
+    %% attempt to grow queues to quorum cluster size < '0'.
+    BadTargetClusterSize = -5,
+    ?assertEqual({error, bad_quorum_cluster_size},
+        rpc:call(Server0, rabbit_quorum_queue, grow, [BadTargetClusterSize, <<"/">>, <<".*">>, all])),
+
+    %% shrink all queues again down to 1 member
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
+        force_all_queues_shrink_member_to_current_member, []),
+    assert_grown_queues(QQs, Server0, TargetClusterSize_1, MsgCount),
+
+    %% grow queues to target quorum cluster size '5': fail, non_voters found
+    rabbit_ct_helpers:await_condition(
+      fun () ->
+              Result7 = rpc:call(Server0, rabbit_quorum_queue, grow,
+                                 [TargetClusterSize_5, <<"/">>, <<".*">>, all]),
+              lists:all(
+                fun({_, Err}) ->
+                        Err =:= {error, TargetClusterSize_5, {error, non_voters_found}}
+                end, Result7)
+      end),
+    assert_grown_queues(QQs, Server0, TargetClusterSize_5, MsgCount).
+
+assert_grown_queues(Qs, Node, TargetClusterSize, MsgCount) ->
+    [begin
+        RaName = ra_name(Q),
+        wait_for_messages_ready([Node], RaName, MsgCount),
+        {ok, Q0} = rpc:call(Node, rabbit_amqqueue, lookup, [Q, <<"/">>]),
+        Nodes0 = rabbit_queue_type:get_nodes(Q0),
+        ?assertEqual(TargetClusterSize, length(Nodes0))
+    end || Q <- Qs].
+
+consumer_message_is_delevered_after_snapshot(Config) ->
+    %% a consumer on a node that received a snapshot should have it's messages
+    %% delivered
+    [Server0, _Server1, Server2] = Nodes =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+                                      [rabbit, quorum_min_checkpoint_interval, 1]),
+
+    Ch0 = rabbit_ct_client_helpers:open_channel(Config, Server0),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch0, #'confirm.select'{}),
+    QQ = ?config(queue_name, Config),
+    RaName = ra_name(QQ),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch0, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    %% stop server on a follower node
+    ok = rpc:call(Server2, ra, stop_server, [quorum_queues, {RaName, Server2}]),
+    Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server2),
+    %% create a consumer
+    qos(Ch2, 2, false),
+    subscribe(Ch2, QQ, false),
+
+    %% publish some messages and make sure a snapshot has been taken
+    Msg = crypto:strong_rand_bytes(13_000),
+
+    [publish(Ch0, QQ, Msg) || _ <- lists:seq(1, 5000)],
+    amqp_channel:wait_for_confirms(Ch0, 5),
+    %% need to sleep here a bit as QQs wont take
+    %% snapshots more often than once every second
+    timer:sleep(1100),
+
+    %% then purge
+    #'queue.purge_ok'{} = amqp_channel:call(Ch0, #'queue.purge'{queue = QQ}),
+
+    MacVer = lists:min([V || {ok, V} <-
+                             erpc:multicall(Nodes, rabbit_fifo, version, [])]),
+    ct:pal("machine version is ~b", [MacVer]),
+
+    %% only await snapshot if all members have at least machine version 8
+    if MacVer >= 8 ->
+           rabbit_ct_helpers:await_condition(
+             fun () ->
+                     {ok, #{log := Log}, _} = rpc:call(Server0, ra, member_overview,
+                                                       [{RaName, Server0}]),
+                     undefined =/= maps:get(snapshot_index, Log)
+             end);
+       true ->
+           ok
+    end,
+    %% restart stopped member
+    ok = rpc:call(Server2, ra, restart_server, [quorum_queues, {RaName, Server2}]),
+
+    %% messages should be delivered
+    receive
+        {#'basic.deliver'{delivery_tag = _DeliveryTag}, _} ->
+            ok
+    after 30000 ->
+              flush(1),
+              ct:fail("expected messages were not delivered")
+    end,
+    ok.
+
+>>>>>>> 71edc16388 (Test flakes may05 2026 (#16305) (#16306))
 gh_12635(Config) ->
     check_quorum_queues_v4_compat(Config),
 
