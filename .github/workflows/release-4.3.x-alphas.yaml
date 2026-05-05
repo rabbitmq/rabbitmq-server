@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - "main"
+      - "v4.3.x"
     paths:
       - "deps/*/src/**"
       - 'deps/rabbitmq_management/priv/**'
