@@ -46,6 +46,8 @@ all_tests() ->
      delete_two_replicas,
      delete_replica_2,
      leader_start_failed,
+     member_started_older_epoch,
+     replica_started_older_epoch,
      overview
     ].
 
@@ -1544,6 +1546,109 @@ delete_replica_leader(_) ->
                                                    state = {ready, E2}}
                                     }},
                  S4),
+    ok.
+
+member_started_older_epoch(_) ->
+    [N1, _N2, _N3] = Nodes = [r@n1, r@n2, r@n3],
+    StreamId = atom_to_list(?FUNCTION_NAME),
+    Name = list_to_binary(StreamId),
+    TypeState = #{name => StreamId,
+                  nodes => Nodes},
+    Q = new_q(Name, TypeState),
+    From = {self(), make_ref()},
+    Meta = #{system_time => ?LINE,
+             from => From},
+    S0 = update_stream(Meta, {new_stream, StreamId,
+                              #{leader_node => N1,
+                                queue => Q}}, undefined),
+    Idx1 = ?LINE,
+    Meta1 = meta(Idx1),
+    {S1, _} = evaluate_stream(Meta1, S0, []),
+    E1LeaderPid = fake_pid(N1),
+    ?assertMatch(#stream{members = #{N1 := #member{state = {ready, 1},
+                                                   current = {starting, _},
+                                                   target = running}}}, S1),
+    %% this fakes a prior member_started event
+    S2 = update_stream(Meta1, {member_started, StreamId,
+                              #{epoch => 0,
+                                index => Idx1,
+                                pid => E1LeaderPid}}, S1),
+    %% The bug was that S2 would be equal to S1 because the event was ignored
+    %% and current was left as {starting, Idx1}.
+    %% The fix clears current to undefined.
+    %% Ensure the state is still ready, 1 (not running, 0)
+    ?assertMatch(#stream{members = #{N1 := #member{state = {ready, 1},
+                                                   current = undefined,
+                                                   target = running}}}, S2),
+    Meta2 = meta(?LINE),
+    {S3, Actions} = evaluate_stream(Meta2, S2, []),
+    ct:pal("S3 ~p Actions ~p", [S3, Actions]),
+    ok.
+
+replica_started_older_epoch(_) ->
+    [N1, N2, _N3] = Nodes = [r@n1, r@n2, r@n3],
+    StreamId = atom_to_list(?FUNCTION_NAME),
+    Name = list_to_binary(StreamId),
+    TypeState = #{name => StreamId,
+                  nodes => Nodes},
+    Q = new_q(Name, TypeState),
+    From = {self(), make_ref()},
+    Meta = #{system_time => ?LINE,
+             from => From},
+    S0 = update_stream(Meta, {new_stream, StreamId,
+                              #{leader_node => N1,
+                                queue => Q}}, undefined),
+    Idx1 = ?LINE,
+    Meta1 = meta(Idx1),
+    {S1, _} = evaluate_stream(Meta1, S0, []),
+
+    %% Advance leader to running state so replicas get start actions
+    E1LeaderPid = fake_pid(N1),
+    S2 = update_stream(Meta1, {member_started, StreamId,
+                              #{epoch => 1,
+                                index => Idx1,
+                                pid => E1LeaderPid}}, S1),
+
+    %% evaluate again so replica (N2) gets started
+    Idx2 = ?LINE,
+    Meta2 = meta(Idx2),
+    {S3, _} = evaluate_stream(Meta2, S2, []),
+
+    %% Assert N2 is starting
+    ?assertMatch(#stream{members = #{N2 := #member{state = {ready, 1},
+                                                   current = {starting, Idx2},
+                                                   target = running}}}, S3),
+
+    E1ReplicaPid = fake_pid(N2),
+    %% send member_started with older epoch 0 for N2
+    S4 = update_stream(Meta2, {member_started, StreamId,
+                              #{epoch => 0,
+                                index => Idx2,
+                                pid => E1ReplicaPid}}, S3),
+    %% Check that current is undefined for replica N2
+    ?assertMatch(#stream{members = #{N2 := #member{state = {ready, 1},
+                                                   current = undefined,
+                                                   target = running}}}, S4),
+
+    %% evaluate again, it should emit a new start_replica action for N2
+    Meta3 = meta(?LINE),
+    {S5, Actions} = evaluate_stream(Meta3, S4, []),
+    ?assertMatch(#stream{members = #{N2 := #member{state = {ready, 1},
+                                                   current = {starting, _},
+                                                   target = running}}}, S5),
+    ?assertMatch([{aux, {start_replica, StreamId,
+                         #{node := N2, epoch := 1}, _}}], Actions),
+
+    %% send member_started with the correct epoch for N2
+    Idx3 = maps:get(index, Meta3),
+    S6 = update_stream(Meta3, {member_started, StreamId,
+                              #{epoch => 1,
+                                index => Idx3,
+                                pid => E1ReplicaPid}}, S5),
+    ?assertMatch(#stream{members =
+                         #{N2 := #member{state = {running, 1, E1ReplicaPid},
+                                         current = undefined,
+                                         target = running}}}, S6),
     ok.
 
 overview(_Config) ->

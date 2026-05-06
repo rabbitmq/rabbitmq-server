@@ -90,6 +90,7 @@
 -define(V2_OR_MORE(Vsn), (Vsn >= 2)).
 -define(V5_OR_MORE(Vsn), (Vsn >= 5)).
 -define(V7_OR_MORE(Vsn), (Vsn >= 7)). %% SAC monitors no longer in monitors map
+-define(V8_OR_MORE(Vsn), (Vsn >= 8)). %% Fix member_started bug
 -define(SAC_V4, rabbit_stream_sac_coordinator_v4).
 -define(SAC_CURRENT, rabbit_stream_sac_coordinator).
 
@@ -552,7 +553,7 @@ reachable_coord_members() ->
     Nodes = rabbit_nodes:list_reachable(),
     [{?MODULE, Node} || Node <- Nodes].
 
-version() -> 7.
+version() -> 8.
 
 which_module(_) ->
     ?MODULE.
@@ -1154,12 +1155,14 @@ phase_start_replica(StreamId, #{epoch := Epoch,
                     %% can it ever happen?
                     _ = osiris:stop_member(Node, Conf1),
                     send_action_failed(StreamId, starting, Args);
-                {error, {already_started, Pid}} ->
-                    %% TODO: we need to check that the current epoch is the same
-                    %% before we can be 100% sure it is started in the correct
-                    %% epoch, can this happen? who knows...
-                    send_self_command({member_started, StreamId,
-                                       Args#{pid => Pid}});
+                {error, {already_started, _Pid}} ->
+                    %% The member is already running but we can't be sure it's in the
+                    %% correct epoch. Stop it and fail the action so the state machine
+                    %% retries and starts it cleanly in the correct epoch.
+                    ?LOG_INFO("~ts: ~ts: replica already started on ~ts, stopping to retry in correct epoch ~b",
+                              [?MODULE, StreamId, Node, Epoch]),
+                    _ = osiris:stop_member(Node, Conf1),
+                    send_action_failed(StreamId, starting, Args);
                 {error, Reason} ->
                     ?LOG_WARNING("~ts: Error while starting replica for ~ts on node ~ts in ~b : ~W",
                                  [?MODULE, maps:get(name, Conf1), Node, Epoch, Reason, 10]),
@@ -1525,29 +1528,47 @@ update_stream0(#{system_time := _Ts} = _Meta,
         false ->
             Stream0
     end;
-update_stream0(#{system_time := _Ts},
+update_stream0(_Meta,
                {member_started, _StreamId,
-                #{epoch := E,
-                  index := Idx,
-                  pid := Pid} = Args}, #stream{epoch = E,
-                                               members = Members} = Stream0) ->
+                #{epoch := EPOCH,
+                  index := IDX,
+                  pid := Pid} = Args},
+               #stream{epoch = EPOCH,
+                       members = Members} = Stream0) ->
+    %% member started in current epoch
     Node = node(Pid),
     case maps:get(Node, Members, undefined) of
-        #member{role = {_, E},
-                current = {starting, Idx},
+        #member{role = {_, EPOCH},
+                current = {starting, IDX},
                 state = _} = Member0 ->
-            %% this is what we expect, leader epoch should match overall
+            %% this is what we expect, member epoch should match overall
             %% epoch
-            Member = Member0#member{state = {running, E, Pid},
+            Member = Member0#member{state = {running, EPOCH, Pid},
                                     current = undefined},
-            %% TODO: we need to tell the machine to monitor the leader
+
             Stream0#stream{members =
                            Members#{Node => Member}};
         Member ->
             %% do we just ignore any members started events from unexpected
             %% epochs?
             ?LOG_WARNING("~ts: member started unexpected ~w ~w",
-                               [?MODULE, Args, Member]),
+                         [?MODULE, Args, Member]),
+            Stream0
+    end;
+update_stream0(#{machine_version := Vsn},
+               {member_started, _StreamId,
+                #{index := IDX,
+                  pid := Pid}},
+               #stream{members = Members} = Stream0)
+  when ?V8_OR_MORE(Vsn) ->
+    %% member started in different epoch just needs to be reset then will
+    %% be re-evaluated
+    Node = node(Pid),
+    case maps:get(Node, Members, undefined) of
+        #member{current = {starting, IDX}} = Member0 ->
+            Member = Member0#member{current = undefined},
+            Stream0#stream{members = Members#{Node => Member}};
+        _ ->
             Stream0
     end;
 update_stream0(#{system_time := _Ts},
@@ -1928,7 +1949,7 @@ eval_retention(#{index := Idx} = Meta,
 evaluate_stream(#{index := Idx} = Meta,
                 #stream{id = StreamId,
                         reply_to = From,
-                        epoch = Epoch,
+                        epoch = EPOCH,
                         mnesia = {MnesiaTag, MnesiaEpoch},
                         members = Members0} = Stream0, Effs0) ->
     case find_leader(Members0) of
@@ -1943,20 +1964,20 @@ evaluate_stream(#{index := Idx} = Meta,
              Effs = [Action | Effs0],
              Stream = Stream0#stream{reply_to = undefined},
              eval_replicas(Meta, {LeaderNode, Writer}, Replicas, Stream, Effs);
-        {{LeaderNode, #member{state = {down, Epoch},
+        {{LeaderNode, #member{state = {down, EPOCH},
                               target = stopped,
                               current = undefined} = Writer0},
          Replicas} ->
              %% leader is down - all replicas need to be stopped
              %% and tail infos retrieved
              %% some replicas may already be in stopping or ready state
-             Args = Meta#{epoch => Epoch,
+             Args = Meta#{epoch => EPOCH,
                           node => LeaderNode},
              Conf = make_writer_conf(LeaderNode, Stream0),
              Action = {aux, {stop, StreamId, Args, Conf}},
              Writer = Writer0#member{current = {stopping, Idx}},
              eval_replicas(Meta, {LeaderNode, Writer}, Replicas, Stream0, [Action | Effs0]);
-        {{LeaderNode, #member{state = {ready, Epoch}, %% writer ready in current epoch
+        {{LeaderNode, #member{state = {ready, EPOCH}, %% writer ready in current epoch
                               target = running,
                               current = undefined} = Writer0},
          _Replicas} ->
@@ -1967,10 +1988,10 @@ evaluate_stream(#{index := Idx} = Meta,
              Members = Members0#{LeaderNode =>
                                  Writer0#member{current = {starting, Idx},
                                                 conf = WConf}},
-             Args = Meta#{node => LeaderNode, epoch => Epoch},
+             Args = Meta#{node => LeaderNode, epoch => EPOCH},
              Actions = [{aux, {start_writer, StreamId, Args, WConf}} | Effs0],
              {Stream0#stream{members = Members}, Actions};
-        {{_WriterNode, #member{state = {running, Epoch, LeaderPid},
+        {{_WriterNode, #member{state = {running, EPOCH, LeaderPid},
                                target = running}} = Writer, Replicas} ->
              Effs1 = case From of
                          undefined ->
@@ -1980,9 +2001,9 @@ evaluate_stream(#{index := Idx} = Meta,
                              wrap_reply(From, {ok, LeaderPid}) ++ Effs0
                      end,
              Stream1 = Stream0#stream{reply_to = undefined},
-             case MnesiaTag == updated andalso MnesiaEpoch < Epoch of
+             case MnesiaTag == updated andalso MnesiaEpoch < EPOCH of
                  true ->
-                     Args = Meta#{node => node(LeaderPid), epoch => Epoch},
+                     Args = Meta#{node => node(LeaderPid), epoch => EPOCH},
                      Effs = [{aux,
                               {update_mnesia, StreamId, Args,
                                make_replica_conf(LeaderPid, Stream1)}} | Effs1],
@@ -1996,7 +2017,7 @@ evaluate_stream(#{index := Idx} = Meta,
                               current = undefined} = Writer0}, Replicas}
            when element(1, S) =/= stopped ->
              %% leader should be stopped
-             Args = Meta#{node => LeaderNode, epoch => Epoch},
+             Args = Meta#{node => LeaderNode, epoch => EPOCH},
              Action = {aux, {stop, StreamId, Args,
                              make_writer_conf(LeaderNode, Stream0)}},
              Writer = Writer0#member{current = {stopping, Idx}},
