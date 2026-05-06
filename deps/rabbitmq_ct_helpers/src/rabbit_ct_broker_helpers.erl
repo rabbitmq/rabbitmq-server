@@ -1001,7 +1001,13 @@ share_dist_and_proxy_ports_map(Config) ->
 
 %% Waits until the metadata store replica on Node is up to date with the leader.
 await_metadata_store_consistent(Config, Node) ->
-    ok = rpc(Config, Node, rabbit_khepri, fence, [60_000]).
+    case rpc(Config, Node, rabbit_khepri, fence, [60_000]) of
+        ok ->
+            ok;
+        Ret ->
+            ct:fail("rabbit_khepri:fence/1 failed on node ~tp: ~tp",
+                    [Node, Ret])
+    end.
 
 do_nodes_run_same_ra_machine_version(Config, RaMachineMod) ->
     [MacVer1 | MacVerN] = MacVers = rpc_all(Config, RaMachineMod, version, []),
