@@ -50,9 +50,8 @@ defmodule RabbitMQ.CLI.Core.JSONTest do
   describe "encode/1 — bare tuple handling (regression for cluster_nodes-style values)" do
     test "a non-proplist 2-tuple value is encoded as a JSON array" do
       # `:cluster_nodes` in rabbit's environment looks like
-      # `{[node1, node2], :disc}`. Before the fix, this crashed `:thoas` with
-      # `function_clause` because the first element of the tuple is a list,
-      # not an atom or binary, so it does not match thoas's proplist heuristic.
+      # `{[node1, node2], :disc}`. Tuples must be normalised to lists before
+      # encoding because `:json` does not accept bare tuples.
       input = [cluster_nodes: {[:rabbit@n1, :rabbit@n2], :disc}]
       {:ok, bin} = JSON.encode(input)
       assert {:ok, %{"cluster_nodes" => [["rabbit@n1", "rabbit@n2"], "disc"]}} ==

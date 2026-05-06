@@ -3,7 +3,7 @@ PROJECT_DESCRIPTION = RabbitMQ prelaunch setup
 PROJECT_VERSION = 4.0.0
 PROJECT_MOD = rabbit_prelaunch_app
 
-DEPS = rabbit_common cuttlefish thoas osiris systemd
+DEPS = rabbit_common cuttlefish osiris systemd
 
 PLT_APPS += runtime_tools eunit
 

@@ -8,9 +8,7 @@ defmodule RabbitMQ.CLI.Core.JSON do
   @moduledoc """
   Thin JSON facade used by the CLI tools.
 
-  Wraps `:thoas` so the rest of the codebase does not depend on a specific
-  backend, and so the module name does not collide with the `JSON` module
-  added to Elixir's standard library in 1.18.
+  It normalizes some of the more complex data types.
 
   `encode/1` returns `{:ok, binary}` and `decode/1` returns
   `{:ok, term} | {:error, term}`, matching the shape that callers throughout
@@ -19,12 +17,16 @@ defmodule RabbitMQ.CLI.Core.JSON do
 
   @spec encode(term()) :: {:ok, binary()}
   def encode(term) do
-    {:ok, :thoas.encode(normalize(term))}
+    {:ok, IO.iodata_to_binary(:json.encode(normalize(term)))}
   end
 
   @spec decode(iodata()) :: {:ok, term()} | {:error, term()}
   def decode(bin) do
-    :thoas.decode(bin)
+    try do
+      {:ok, :json.decode(IO.iodata_to_binary(bin))}
+    catch
+      :error, reason -> {:error, reason}
+    end
   end
 
   # Convert Erlang strings (lists of integers) to binaries for proper JSON
@@ -70,9 +72,8 @@ defmodule RabbitMQ.CLI.Core.JSON do
 
   defp normalize(data) when is_list(data) do
     if proplist?(data) do
-      # `:thoas` encodes maps as JSON objects but is unreliable on lists of
-      # 2-tuples that contain non-proplist values nested inside, so we hand it
-      # a real map.
+      # `:json` encodes maps as JSON objects. Convert proplists to maps so that
+      # any non-proplist values nested inside are handled correctly.
       Map.new(data, fn {k, v} -> {normalize(k), normalize(v)} end)
     else
       try do
@@ -90,9 +91,8 @@ defmodule RabbitMQ.CLI.Core.JSON do
     end
   end
 
-  # `:thoas` does not accept bare tuples (only proplist 2-tuples nested in a
-  # list, handled above). Convert any other tuple to a list so it encodes as a
-  # JSON array, matching what the previous JSON library used to do.
+  # `:json` does not accept bare tuples. Convert any tuple to a list so it
+  # encodes as a JSON array.
   defp normalize(data) when is_tuple(data) do
     data
     |> Tuple.to_list()

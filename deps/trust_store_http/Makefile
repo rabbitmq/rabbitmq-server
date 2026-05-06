@@ -7,7 +7,7 @@ define PROJECT_APP_EXTRA_KEYS
 endef
 
 LOCAL_DEPS = ssl
-DEPS = cowboy thoas
+DEPS = cowboy
 
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 # We do not depend on rabbit therefore can't run the broker.

@@ -33,7 +33,7 @@ json_encode(Files) ->
     Map = #{certificates => [ #{id   => cert_id(FileName, FileDate, FileHash),
                                 path => cert_path(FileName)}
                               || {FileName, FileDate, FileHash} <- Files ]},
-    thoas:encode(Map).
+    json:encode(Map).
 
 cert_id(FileName, FileDate, FileHash) ->
     iolist_to_binary(io_lib:format("~ts:~tp:~tp", [FileName, FileDate, FileHash])).

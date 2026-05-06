@@ -27,7 +27,6 @@ defmodule RabbitMQCtl.MixfileBase do
           CSV,
           CSV.Encode,
           :mnesia,
-          :thoas,
           :msacc,
           :public_key,
           :pubkey_cert,
@@ -140,11 +139,6 @@ defmodule RabbitMQCtl.MixfileBase do
 
     # Note that normal deps will be fetched by Erlang.mk on build.
     [
-      {
-        :thoas,
-        path: Path.join(deps_dir, "thoas"),
-        override: true
-      },
       {
         :csv,
         path: Path.join(deps_dir, "csv")

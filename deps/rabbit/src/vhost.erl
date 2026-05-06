@@ -221,7 +221,7 @@ new_metadata(Description, Tags, <<"undefined">>) ->
     %% See rabbitmq/rabbitmq-server#10469
     new_metadata(Description, Tags, undefined);
 new_metadata(Description, Tags, null) ->
-    %% JSON null (thoas), see rabbitmq/rabbitmq-server#10469
+    %% JSON null, see rabbitmq/rabbitmq-server#10469
     new_metadata(Description, Tags, undefined);
 new_metadata(Description, Tags, nil) ->
     %% JSON null (Elixir JSON), see rabbitmq/rabbitmq-server#10469

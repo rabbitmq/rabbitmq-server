@@ -105,7 +105,6 @@ These dependencies are cloned by `gmake` during the build process:
  * `deps/khepri` is [`khepri`](https://github.com/rabbitmq/khepri), an embedded distributed Ra-based [schema data store](https://www.rabbitmq.com/docs/metadata-store)
  * `deps/cuttlefish` is [`cuttlefish`](https://github.com/Kyorai/cuttlefish/), a `rabbitmq.conf` parser and translation library
  * `deps/cowboy` is the HTTP server and API framework used by the RabbitMQ HTTP API and other HTTP and WebSockets-based plugins
- * `deps/thoas` is [Thoas](https://github.com/lpil/thoas), a JSON parser and generator
  * `deps/seshat` is [`seshat`](https://github.com/rabbitmq/seshat), a counters (metrics) library
 
 
