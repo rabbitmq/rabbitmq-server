@@ -308,6 +308,7 @@ collect_mf('detailed', Callback) ->
 collect_mf('per-object', Callback) ->
     collect(true, ?METRIC_NAME_PREFIX, false, false, ?METRICS_RAW, Callback),
     totals(Callback),
+    emit_client_library_metrics(Callback),
     emit_queue_info(?METRIC_NAME_PREFIX, false, false, Callback),
     emit_identity_info(<<"per-object">>, Callback),
     ok;
@@ -319,6 +320,7 @@ collect_mf(_Registry, Callback) ->
     PerObjectMetrics = application:get_env(rabbitmq_prometheus, return_per_object_metrics, false),
     collect(PerObjectMetrics, ?METRIC_NAME_PREFIX, false, false, ?METRICS_RAW, Callback),
     totals(Callback),
+    emit_client_library_metrics(Callback),
     case PerObjectMetrics of
         true ->
             emit_identity_info(<<"per-object">>, Callback),
@@ -346,6 +348,62 @@ emit_identity_info(Endpoint, Callback) ->
     add_metric_family(build_info(), Callback),
     add_metric_family(identity_info(Endpoint), Callback),
     ok.
+
+emit_client_library_metrics(Callback) ->
+    Counts = ets:foldl(
+        fun({_Pid, Infos}, Acc) ->
+            Product = client_product(Infos),
+            Platform = client_platform(Infos),
+            Protocol = format_protocol(proplists:get_value(protocol, Infos)),
+            Key = {Product, Platform, Protocol},
+            maps:update_with(Key, fun(V) -> V + 1 end, 1, Acc)
+        end, #{}, connection_created),
+    Metrics = maps:fold(
+        fun({Product, Platform, Protocol}, Count, Acc) ->
+            [{[{product, Product}, {platform, Platform}, {protocol, Protocol}], Count} | Acc]
+        end, [], Counts),
+    add_metric_family(
+        {connections_by_client_library, gauge,
+         "Connections grouped by client library and protocol", Metrics},
+        Callback).
+
+client_product(Infos) ->
+    client_property(Infos, <<"product">>).
+
+client_platform(Infos) ->
+    normalize_platform(client_property(Infos, <<"platform">>)).
+
+client_property(Infos, Key) ->
+    case proplists:get_value(client_properties, Infos) of
+        Props when is_list(Props) ->
+            case rabbit_misc:table_lookup(Props, Key) of
+                {_Type, Value} -> Value;
+                undefined -> <<>>
+            end;
+        _ ->
+            <<>>
+    end.
+
+%% Normalize platform to just the language/runtime name. Strip version details
+%% to keep cardinality bounded.
+normalize_platform(Platform) ->
+    hd(binary:split(Platform, <<" ">>)).
+
+format_protocol({0, 9, 1}) -> <<"amqp091">>;
+format_protocol({1, 0}) -> <<"amqp10">>;
+format_protocol({'AMQP', {0, 9, 1}}) -> <<"amqp091">>;
+format_protocol({'AMQP', {1, 0}}) -> <<"amqp10">>;
+format_protocol({'Web AMQP', {1, 0}}) -> <<"amqp10">>;
+format_protocol({'MQTT', {5, 0}}) -> <<"mqtt50">>;
+format_protocol({'MQTT', {3, 1, 1}}) -> <<"mqtt311">>;
+format_protocol({'MQTT', {3, 1}}) -> <<"mqtt310">>;
+format_protocol({'STOMP', {1, 0}}) -> <<"stomp10">>;
+format_protocol({'STOMP', {1, 1}}) -> <<"stomp11">>;
+format_protocol({'STOMP', {1, 2}}) -> <<"stomp12">>;
+format_protocol({'Web MQTT', V}) -> format_protocol({'MQTT', V});
+format_protocol({'Web STOMP', V}) -> format_protocol({'STOMP', V});
+format_protocol(P) when is_binary(P) -> P;
+format_protocol(_) -> <<"unknown">>.
 
 %% Aggregated `auth``_attempt_detailed_metrics` and
 %% `auth_attempt_metrics` are the same numbers. The former is just
