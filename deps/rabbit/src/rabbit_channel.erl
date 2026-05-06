@@ -64,6 +64,7 @@
 
 %% Internal
 -export([list_local/0, emit_info_local/3]).
+-export([is_local/1]).
 -export([get_vhost/1, get_user/1]).
 %% For testing
 -export([build_topic_variable_map/3]).
@@ -426,6 +427,10 @@ update_user_state(Pid, UserState) when is_pid(Pid) ->
     end.
 
 %%---------------------------------------------------------------------------
+
+-spec is_local(pid()) -> boolean().
+is_local(Pid) ->
+    pg:get_local_members(pg_scope(), Pid) =/= [].
 
 -spec pg_scope() -> atom().
 pg_scope() ->

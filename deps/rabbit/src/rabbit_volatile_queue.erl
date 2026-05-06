@@ -208,7 +208,7 @@ local_call(Pid, Request) ->
 
 is_local(Pid) ->
     rabbit_amqp_session:is_local(Pid) orelse
-    pg:get_local_members(rabbit:pg_scope_amqp091_channel(), Pid) =/= [].
+    rabbit_channel:is_local(Pid).
 
 handle_event(QName, {deliver, Msg}, #?STATE{name = QName,
                                             ctag = Ctag,
