@@ -1582,8 +1582,17 @@ member_started_older_epoch(_) ->
                                                    target = running}}}, S2),
     Meta2 = meta(?LINE),
     {S3, Actions} = evaluate_stream(Meta2, S2, []),
-    ct:pal("S3 ~p Actions ~p", [S3, Actions]),
-    ok.
+    ?assertMatch(#stream{members = #{N1 := #member{state = {ready, 1},
+                                                   current = {starting, _},
+                                                   target = running}}}, S3),
+    ?assert(lists:any(fun({aux, StartWriter})
+                              when is_tuple(StartWriter),
+                                   tuple_size(StartWriter) >= 1,
+                                   element(1, StartWriter) =:= start_writer ->
+                              true;
+                         (_) ->
+                              false
+                      end, Actions)).
 
 replica_started_older_epoch(_) ->
     [N1, N2, _N3] = Nodes = [r@n1, r@n2, r@n3],
