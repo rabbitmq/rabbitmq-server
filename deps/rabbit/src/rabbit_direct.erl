@@ -20,18 +20,14 @@
 -include_lib("rabbit_common/include/rabbit_misc.hrl").
 -include_lib("kernel/include/logger.hrl").
 
--define(TABLE, ?MODULE).
-
 %%----------------------------------------------------------------------------
 
 -spec boot() -> 'ok'.
 
-boot() ->
-    ?TABLE = ets:new(?TABLE, [set, public, named_table]),
-    rabbit_sup:start_supervisor_child(
-      rabbit_direct_client_sup, rabbit_client_sup,
-      [{local, rabbit_direct_client_sup},
-       {rabbit_channel_sup, start_link, []}]).
+boot() -> rabbit_sup:start_supervisor_child(
+            rabbit_direct_client_sup, rabbit_client_sup,
+            [{local, rabbit_direct_client_sup},
+             {rabbit_channel_sup, start_link, []}]).
 
 -spec force_event_refresh(reference()) -> 'ok'.
 
@@ -42,7 +38,7 @@ force_event_refresh(Ref) ->
 -spec list_local() -> [pid()].
 
 list_local() ->
-    [Pid || {Pid} <- ets:tab2list(?TABLE)].
+    pg_local:get_members(rabbit_direct).
 
 -spec list() -> [pid()].
 
@@ -190,7 +186,7 @@ connect1(User = #user{username = Username}, VHost, Pid, Infos) ->
             AuthzContext = proplists:get_value(variable_map, Infos, #{}),
             try rabbit_access_control:check_vhost_access(User, VHost,
                                                {ip, PeerHost}, AuthzContext) of
-                ok -> ets:insert(?TABLE, {Pid}),
+                ok -> ok = pg_local:join(rabbit_direct, Pid),
                       rabbit_core_metrics:connection_created(Pid, Infos),
                       rabbit_event:notify(connection_created, Infos),
                       _ = rabbit_alarm:register(
@@ -250,7 +246,7 @@ start_channel(Number, ClientChannelPid, ConnPid, ConnName,
 -spec disconnect(pid(), rabbit_event:event_props()) -> 'ok'.
 
 disconnect(Pid, Infos) ->
-    ets:delete(?TABLE, Pid),
+    pg_local:leave(rabbit_direct, Pid),
     rabbit_core_metrics:connection_closed(Pid),
     rabbit_event:notify(connection_closed, Infos).
 
