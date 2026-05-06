@@ -36,6 +36,9 @@
          get_appropriate_warning_when_disconnected/1,
          get_appropriate_warning_when_removed/1,
          deprecated_feature_enabled_if_feature_flag_depends_on_it/1,
+         re_permit_denied_feature_after_config_change/1,
+         permit_config_does_not_override_dependency_cascade/1,
+         config_flip_to_deny_respects_is_feature_used_cb/1,
          list_all_deprecated_features/1,
          list_used_deprecated_features/1,
 
@@ -70,6 +73,9 @@ groups() ->
              get_appropriate_warning_when_disconnected,
              get_appropriate_warning_when_removed,
              deprecated_feature_enabled_if_feature_flag_depends_on_it,
+             re_permit_denied_feature_after_config_change,
+             permit_config_does_not_override_dependency_cascade,
+             config_flip_to_deny_respects_is_feature_used_cb,
              list_all_deprecated_features,
              list_used_deprecated_features
             ],
@@ -527,7 +533,7 @@ get_appropriate_warning_when_permitted(Config) ->
          || Node <- AllNodes].
 
 get_appropriate_warning_when_denied(Config) ->
-    [FirstNode | _] = AllNodes = ?config(nodes, Config),
+    AllNodes = ?config(nodes, Config),
     feature_flags_v2_SUITE:connect_nodes(AllNodes),
     feature_flags_v2_SUITE:override_running_nodes(AllNodes),
 
@@ -564,14 +570,24 @@ get_appropriate_warning_when_denied(Config) ->
            end)
          || Node <- AllNodes],
 
-    ok = feature_flags_v2_SUITE:run_on_node(
-           FirstNode,
+    %% Switch the configuration to deny the deprecated feature and refresh the
+    %% registry on every node. The new state and warning must reflect
+    %% the local configuration, including in a cluster where a peer's
+    %% prior state could otherwise be "propagated back".
+    _ = [ok =
+         feature_flags_v2_SUITE:run_on_node(
+           Node,
            fun() ->
+                   application:set_env(
+                     rabbit, permit_deprecated_features,
+                     #{FeatureName => false}, [{persistent, false}]),
                    ?assertEqual(
                       ok,
-                      rabbit_feature_flags:enable(FeatureName)),
+                      rabbit_feature_flags:
+                        refresh_feature_flags_after_app_load()),
                    ok
-           end),
+           end)
+         || Node <- AllNodes],
 
     _ = [ok =
          feature_flags_v2_SUITE:run_on_node(
@@ -727,6 +743,181 @@ deprecated_feature_enabled_if_feature_flag_depends_on_it(Config) ->
                       rabbit_deprecated_features:is_permitted(FeatureName)),
                    ok
            end )
+         || Node <- AllNodes].
+
+%% Verifies that a deprecated feature in the `denied_by_default'
+%% phase can be permitted again by setting
+%% `deprecated_features.permit.X = true' in `rabbitmq.conf' and
+%% refreshing the registry, including in a cluster where peers
+%% still hold the previously denied state and would otherwise
+%% propagate it back during the refresh.
+re_permit_denied_feature_after_config_change(Config) ->
+    AllNodes = ?config(nodes, Config),
+    feature_flags_v2_SUITE:connect_nodes(AllNodes),
+    feature_flags_v2_SUITE:override_running_nodes(AllNodes),
+
+    FeatureName = ?FUNCTION_NAME,
+    FeatureFlags = #{FeatureName =>
+                     #{provided_by => rabbit,
+                       deprecation_phase => denied_by_default}},
+    ?assertEqual(
+       ok,
+       feature_flags_v2_SUITE:inject_on_nodes(AllNodes, FeatureFlags)),
+
+    _ = [ok =
+         feature_flags_v2_SUITE:run_on_node(
+           Node,
+           fun() ->
+                   ?assert(rabbit_feature_flags:is_supported(FeatureName)),
+                   ?assert(rabbit_feature_flags:is_enabled(FeatureName)),
+                   ?assertNot(
+                      rabbit_deprecated_features:is_permitted(FeatureName)),
+                   ok
+           end)
+         || Node <- AllNodes],
+
+    _ = [ok =
+         feature_flags_v2_SUITE:run_on_node(
+           Node,
+           fun() ->
+                   application:set_env(
+                     rabbit, permit_deprecated_features,
+                     #{FeatureName => true}, [{persistent, false}]),
+                   ?assertEqual(
+                      ok,
+                      rabbit_feature_flags:
+                        refresh_feature_flags_after_app_load()),
+                   ok
+           end)
+         || Node <- AllNodes],
+
+    _ = [ok =
+         feature_flags_v2_SUITE:run_on_node(
+           Node,
+           fun() ->
+                   ?assertNot(rabbit_feature_flags:is_enabled(FeatureName)),
+                   ?assert(
+                      rabbit_deprecated_features:is_permitted(FeatureName)),
+                   ok
+           end)
+         || Node <- AllNodes].
+
+%% When a regular feature flag depends on a deprecated feature,
+%% enabling it must deny the deprecated feature regardless of
+%% what `permit_deprecated_features' says.
+permit_config_does_not_override_dependency_cascade(Config) ->
+    [FirstNode | _] = AllNodes = ?config(nodes, Config),
+    feature_flags_v2_SUITE:connect_nodes(AllNodes),
+    feature_flags_v2_SUITE:override_running_nodes(AllNodes),
+
+    FeatureName = ?FUNCTION_NAME,
+    FeatureFlags = #{FeatureName =>
+                     #{provided_by => rabbit,
+                       deprecation_phase => permitted_by_default},
+
+                     my_feature_flag =>
+                     #{provided_by => rabbit,
+                       stability => experimental,
+                       depends_on => [FeatureName]}},
+
+    _ = [ok =
+         feature_flags_v2_SUITE:run_on_node(
+           Node,
+           fun() ->
+                   application:set_env(
+                     rabbit, permit_deprecated_features,
+                     #{FeatureName => true}, [{persistent, false}])
+           end)
+         || Node <- AllNodes],
+
+    ?assertEqual(
+       ok,
+       feature_flags_v2_SUITE:inject_on_nodes(AllNodes, FeatureFlags)),
+
+    _ = [ok =
+         feature_flags_v2_SUITE:run_on_node(
+           Node,
+           fun() ->
+                   ?assertNot(rabbit_feature_flags:is_enabled(FeatureName)),
+                   ?assert(
+                      rabbit_deprecated_features:is_permitted(FeatureName)),
+                   ok
+           end)
+         || Node <- AllNodes],
+
+    ok = feature_flags_v2_SUITE:run_on_node(
+           FirstNode,
+           fun() ->
+                   ?assertEqual(
+                      ok,
+                      rabbit_feature_flags:enable(my_feature_flag)),
+                   ok
+           end),
+
+    _ = [ok =
+         feature_flags_v2_SUITE:run_on_node(
+           Node,
+           fun() ->
+                   ?assert(rabbit_feature_flags:is_enabled(my_feature_flag)),
+                   ?assert(rabbit_feature_flags:is_enabled(FeatureName)),
+                   ?assertNot(
+                      rabbit_deprecated_features:is_permitted(FeatureName)),
+                   ok
+           end)
+         || Node <- AllNodes].
+
+%% A deprecated feature whose `is_feature_used' callback returns
+%% `true' (here, the `feature_is_used/1' stub) must not be denied
+%% by a configuration change alone: the existing safeguard that
+%% gates denials on the callback must remain effective even when
+%% the new state is computed during registry init rather than via
+%% an explicit `rabbit_feature_flags:enable/1' call.
+config_flip_to_deny_respects_is_feature_used_cb(Config) ->
+    AllNodes = ?config(nodes, Config),
+    feature_flags_v2_SUITE:connect_nodes(AllNodes),
+    feature_flags_v2_SUITE:override_running_nodes(AllNodes),
+
+    FeatureName = ?FUNCTION_NAME,
+    FeatureFlags = #{FeatureName =>
+                     #{provided_by => rabbit,
+                       deprecation_phase => permitted_by_default,
+                       callbacks => #{is_feature_used =>
+                                      {?MODULE, feature_is_used}}}},
+    ?assertEqual(
+       ok,
+       feature_flags_v2_SUITE:inject_on_nodes(AllNodes, FeatureFlags)),
+
+    _ = [ok =
+         feature_flags_v2_SUITE:run_on_node(
+           Node,
+           fun() ->
+                   ?assert(
+                      rabbit_deprecated_features:is_permitted(FeatureName)),
+                   ok
+           end)
+         || Node <- AllNodes],
+
+    _ = [ok =
+         feature_flags_v2_SUITE:run_on_node(
+           Node,
+           fun() ->
+                   application:set_env(
+                     rabbit, permit_deprecated_features,
+                     #{FeatureName => false}, [{persistent, false}]),
+                   _ = rabbit_feature_flags:
+                         refresh_feature_flags_after_app_load(),
+                   ok
+           end)
+         || Node <- AllNodes],
+
+    _ = [ok =
+         feature_flags_v2_SUITE:run_on_node(
+           Node,
+           fun() ->
+                   ?assert(
+                      rabbit_deprecated_features:is_permitted(FeatureName)),
+                   ok
+           end)
          || Node <- AllNodes].
 
 list_all_deprecated_features(Config) ->

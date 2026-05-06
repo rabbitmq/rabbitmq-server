@@ -119,6 +119,8 @@
          get_warning/1]).
 -export([extend_properties/2,
          should_be_permitted/2,
+         is_permit_explicitly_configured/1,
+         is_feature_in_use/2,
          enable_underlying_feature_flag_cb/1,
          list/1]).
 
@@ -510,7 +512,8 @@ should_be_permitted(FeatureName, FeatureProps) ->
         denied_by_default ->
             is_permitted_in_configuration(FeatureName, false);
         Phase ->
-            case is_permitted_in_configuration(FeatureName, false) of
+            Permitted = is_permitted_in_configuration(FeatureName, false),
+            case Permitted andalso should_log_warning(FeatureName) of
                 true ->
                     ?LOG_WARNING(
                        "Deprecated features: `~ts`: ~ts feature, it "
@@ -522,6 +525,35 @@ should_be_permitted(FeatureName, FeatureProps) ->
             end,
             false
     end.
+
+-spec is_permit_explicitly_configured(FeatureName) -> IsConfigured when
+      FeatureName :: rabbit_feature_flags:feature_name(),
+      IsConfigured :: boolean().
+%% @doc Indicates whether `permit_deprecated_features' has an explicit
+%% entry (key) for the given feature. In other words, returns `true`
+%% if the feature is explicitly permitted in the local configuration file(s).
+%%
+%% @private
+
+is_permit_explicitly_configured(FeatureName) ->
+    Settings = application:get_env(rabbit, permit_deprecated_features, #{}),
+    maps:is_key(FeatureName, Settings).
+
+-spec is_feature_in_use(FeatureName, FeatureProps) -> InUse when
+      FeatureName :: rabbit_feature_flags:feature_name(),
+      FeatureProps :: feature_props_extended(),
+      InUse :: boolean() | undefined.
+%% @doc Invokes the `is_feature_used' callback for the given deprecated
+%% feature on the local node. Returns `undefined' when no callback is
+%% registered.
+%%
+%% @private
+
+is_feature_in_use(FeatureName, FeatureProps) ->
+    is_deprecated_feature_in_use(
+      #{feature_name => FeatureName,
+        feature_props => FeatureProps,
+        nodes => [node()]}).
 
 -spec is_permitted_in_configuration(FeatureName, Default) -> IsPermitted when
       FeatureName :: rabbit_feature_flags:feature_name(),

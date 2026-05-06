@@ -299,9 +299,61 @@ maybe_initialize_registry(NewSupportedFeatureFlags,
                       State
               end;
           (FeatureName, FeatureProps) when ?IS_DEPRECATION(FeatureProps) ->
+              %% When `permit_deprecated_features` is explicitly set in `rabbitmq.conf`,
+              %% make sure that the local setting wins over any state propagated from a cluster
+              %% peer. Without this, during a rolling upgrade different nodes
+              %% can end up with a different deprecated feature state, leading the
+              %% user (operator) to believe that the setting has no effect.
+              %% See rabbitmq/rabbitmq#16324 for details.
+              %%
+              %% If not, preserve the existing state to keep explicit
+              %% `rabbit_feature_flags:enable/1' calls and the
+              %% dependency cascade below effective.
+              Phase = rabbit_deprecated_features:get_phase(FeatureProps),
+              Configured =
+              (Phase =:= permitted_by_default orelse
+               Phase =:= denied_by_default)
+              andalso
+              rabbit_deprecated_features:is_permit_explicitly_configured(
+                FeatureName),
               case FeatureStates0 of
-                  #{FeatureName := FeatureState} ->
+                  #{FeatureName := FeatureState} when not Configured ->
                       FeatureState;
+                  #{FeatureName := false = FeatureState} when Configured ->
+                      %% Denying a currently permitted feature from
+                      %% configuration bypasses the `is_feature_used/1`
+                      %% callback check that
+                      %% `rabbit_feature_flags:enable/1` runs. Re-do
+                      %% that check here so an in-use feature is not
+                      %% silently denied.
+                      NewState = not rabbit_deprecated_features:
+                                       should_be_permitted(
+                                         FeatureName, FeatureProps),
+                      case NewState of
+                          true ->
+                              case rabbit_deprecated_features:
+                                     is_feature_in_use(
+                                       FeatureName, FeatureProps) of
+                                  true ->
+                                      ?LOG_WARNING(
+                                         "Deprecated features: `~ts`: "
+                                         "configuration would deny "
+                                         "this feature, but it is "
+                                         "actively used and remains "
+                                         "permitted. Stop using the "
+                                         "feature before changing "
+                                         "`deprecated_features.permit"
+                                         ".~ts`",
+                                         [FeatureName, FeatureName],
+                                         #{domain =>
+                                           ?RMQLOG_DOMAIN_FEAT_FLAGS}),
+                                      FeatureState;
+                                  _ ->
+                                      NewState
+                              end;
+                          false ->
+                              NewState
+                      end;
                   _ ->
                       not rabbit_deprecated_features:should_be_permitted(
                             FeatureName, FeatureProps)
