@@ -31,8 +31,10 @@
 %% under the License.
 %%
 %% %CopyrightEnd%
-%%
+
 -module(pg_local).
+%% Use pg instead.
+-deprecated(module).
 
 -include_lib("kernel/include/logger.hrl").
 
