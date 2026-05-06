@@ -1001,22 +1001,13 @@ share_dist_and_proxy_ports_map(Config) ->
 
 %% Waits until the metadata store replica on Node is up to date with the leader.
 await_metadata_store_consistent(Config, Node) ->
-    RaClusterName = rabbit_khepri:get_ra_cluster_name(),
-    Leader = rpc(Config, Node, ra_leaderboard, lookup_leader, [RaClusterName]),
-    LastAppliedLeader = ra_last_applied(Leader),
-
-    NodeName = get_node_config(Config, Node, nodename),
-    ServerId = {RaClusterName, NodeName},
-    rabbit_ct_helpers:eventually(
-      ?_assert(
-         begin
-             LastApplied = ra_last_applied(ServerId),
-             is_integer(LastApplied) andalso LastApplied >= LastAppliedLeader
-         end)).
-
-ra_last_applied(ServerId) ->
-    #{last_applied := LastApplied} = ra:key_metrics(ServerId),
-    LastApplied.
+    case rpc(Config, Node, rabbit_khepri, fence, [60_000]) of
+        ok ->
+            ok;
+        Ret ->
+            ct:fail("rabbit_khepri:fence/1 failed on node ~tp: ~tp",
+                    [Node, Ret])
+    end.
 
 do_nodes_run_same_ra_machine_version(Config, RaMachineMod) ->
     [MacVer1 | MacVerN] = MacVers = rpc_all(Config, RaMachineMod, version, []),
