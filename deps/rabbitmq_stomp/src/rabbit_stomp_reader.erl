@@ -248,6 +248,15 @@ handle_info({'EXIT', _From, Reason}, State) ->
 
 process_received_bytes([], State) ->
     {ok, State};
+%% Detect a TLS ClientHello (TLS record content type 22) sent to a non-TLS
+%% listener and emit a user-friendly error instead of a confusing parse failure.
+process_received_bytes(<<16#16, _/binary>>,
+                       State = #reader_state{current_frame_size = 0,
+                                             conn_name = ConnName}) ->
+    ?LOG_ERROR("STOMP detected TLS ClientHello from ~ts: TLS-enabled client is "
+               "connecting to a non-TLS STOMP listener",
+               [ConnName]),
+    {stop, normal, State};
 process_received_bytes(Bytes,
                        State = #reader_state{
                          max_frame_size = MaxFrameSize,

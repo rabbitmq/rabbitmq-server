@@ -611,6 +611,15 @@ ranch_handshake(Ref) ->
         %% https://github.com/rabbitmq/rabbitmq-server/pull/12304
         exit:{shutdown, {closed, _}} = Error:Stacktrace ->
             erlang:raise(exit, Error, Stacktrace);
+        %% A non-TLS client connected to a TLS listener. The TLS server sent
+        %% an 'unexpected_message' alert because the first bytes were not a
+        %% valid TLS ClientHello.
+        exit:{shutdown, {{tls_alert, {unexpected_message, _}}, {PeerIp, PeerPort}}} = Error:Stacktrace ->
+            PeerAddress = io_lib:format("~ts:~tp", [rabbit_misc:ntoab(PeerIp), PeerPort]),
+            Protocol = ranch_ref_to_protocol(Ref),
+            ?LOG_WARNING("~ts is connecting to the ~p listener without using TLS",
+                         [PeerAddress, Protocol]),
+            erlang:raise(exit, Error, Stacktrace);
         exit:{shutdown, {Reason, {PeerIp, PeerPort}}} = Error:Stacktrace ->
             PeerAddress = io_lib:format("~ts:~tp", [rabbit_misc:ntoab(PeerIp), PeerPort]),
             Protocol = ranch_ref_to_protocol(Ref),
