@@ -35,6 +35,7 @@ env:
   # For workflow_run events github.sha is the default branch HEAD, not the triggering branch HEAD.
   # Use the actual branch HEAD SHA in both cases.
   HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.workflow_run.head_sha || github.sha }}
+  VERSION: 4.3.0+${{ github.event.pull_request.head.sha || github.event.workflow_run.head_sha || github.sha }}
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.workflow_run.head_branch || github.ref }}
   cancel-in-progress: true
@@ -72,7 +73,7 @@ jobs:
       - name: make package-generic-unix
         if: steps.authorized.outputs.authorized == 'true'
         run: |
-          make package-generic-unix PROJECT_VERSION=4.3.0+${{ env.HEAD_SHA }}
+          make package-generic-unix PROJECT_VERSION=${{ env.VERSION }}
       - name: Upload package-generic-unix
         if: steps.authorized.outputs.authorized == 'true'
         uses: actions/upload-artifact@v7
@@ -137,4 +138,4 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.otp_version }}
           build-args: |
             OTP_VERSION=${{ matrix.otp_version }}
-            RABBITMQ_VERSION=4.3.0+${{ env.HEAD_SHA }}
+            RABBITMQ_VERSION=${{ env.VERSION }}
