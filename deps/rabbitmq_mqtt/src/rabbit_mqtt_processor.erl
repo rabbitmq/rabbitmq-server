@@ -5,13 +5,11 @@
 %% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 -module(rabbit_mqtt_processor).
--feature(maybe_expr, enable).
 
 -export([info/2, init/4, process_packet/2,
          terminate/3, handle_pre_hibernate/0,
          handle_down/2, handle_queue_event/2,
          proto_version_tuple/1, throttle/2, format_status/1,
-         remove_duplicate_client_id_connections/2,
          remove_duplicate_client_id_connections/3,
          update_trace/2, send_disconnect/2]).
 
@@ -727,14 +725,6 @@ register_client_id(VHost, ClientId, CleanStart, WillProps)
                         ?MODULE,
                         remove_duplicate_client_id_connections,
                         [PgGroup, self(), SendWill]).
-
-%% remove_duplicate_client_id_connections/2 is only called from 3.13 nodes.
-%% Hence, this function can be deleted when mixed version clusters between
-%% this version and 3.13 are disallowed.
--spec remove_duplicate_client_id_connections(
-        {rabbit_types:vhost(), client_id()}, pid()) -> ok.
-remove_duplicate_client_id_connections(PgGroup, PidToKeep) ->
-    remove_duplicate_client_id_connections(PgGroup, PidToKeep, true).
 
 -spec remove_duplicate_client_id_connections(
         {rabbit_types:vhost(), client_id()}, pid(), boolean()) -> ok.

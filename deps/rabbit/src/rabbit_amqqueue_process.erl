@@ -25,7 +25,6 @@
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, handle_pre_hibernate/1, prioritise_call/4,
          prioritise_cast/3, prioritise_info/3, format_state/1, format_message_queue/2]).
--export([format/1]).
 -export([is_policy_applicable/2]).
 
 %% Queue's state
@@ -1791,10 +1790,6 @@ format_state(#q{}=S) ->
     maybe_format_backing_queue_state(S).
 
 format_message_queue(Opt, MQ) -> rabbit_misc:format_message_queue(Opt, MQ).
-
-%% TODO: this can be removed after 3.13
-format(Q) when ?is_amqqueue(Q) ->
-    [{node, node(amqqueue:get_pid(Q))}].
 
 -spec is_policy_applicable(amqqueue:amqqueue(), any()) -> boolean().
 is_policy_applicable(_Q, _Policy) ->
