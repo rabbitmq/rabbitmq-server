@@ -1134,7 +1134,7 @@ infos(Items, #q{q = Q} = State) ->
                          {messages, i(messages, State)},
                          {messages_unacknowledged, i(messages_unacknowledged, State)}] ++ Acc;
                    (type_specific, Acc) ->
-                        format(Q) ++ Acc;
+                        [{node, node(amqqueue:get_pid(Q))}] ++ Acc;
                    (Item, Acc) ->
                         [{Item, i(Item, State)} | Acc]
                 end, [], Items).
