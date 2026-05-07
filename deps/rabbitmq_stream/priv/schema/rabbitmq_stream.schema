@@ -211,7 +211,7 @@ end}.
 ]}.
 
 {mapping, "stream.connection_max", "rabbitmq_stream.connection_max",
-  [{datatype, [{atom, infinity}, integer]}]}.
+  [{datatype, [{atom, infinity}, integer]}, {validators, ["non_negative_integer"]}]}.
 
 {translation, "rabbitmq_stream.connection_max",
  fun(Conf) ->
