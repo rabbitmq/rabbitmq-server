@@ -982,6 +982,8 @@ refresh_after_app_load_task() ->
       Ret :: ok | {error, Reason},
       Reason :: term().
 
+enable_many(#{states_per_node := _}, []) ->
+    ok;
 enable_many(#{states_per_node := _} = Inventory, FeatureNames) ->
     %% We acquire a lock before making any change to the registry. This is not
     %% used by the controller (because it is already using a globally
