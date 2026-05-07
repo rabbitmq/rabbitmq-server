@@ -48,7 +48,10 @@
          activating_plugin_with_new_ff_disabled/1,
          activating_plugin_with_new_ff_enabled/1,
          enable_plugin_feature_flag_after_deactivating_plugin/1,
-         restart_node_with_unknown_enabled_feature_flag/1
+         restart_node_with_unknown_enabled_feature_flag/1,
+
+         is_feature_flag_supported/2,
+         is_feature_flag_enabled/2
         ]).
 
 suite() ->
