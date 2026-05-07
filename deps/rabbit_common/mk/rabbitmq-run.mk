@@ -242,6 +242,15 @@ define test_rabbitmq_config_with_tls
             {honor_cipher_order, true}]}
         ]}
   ]},
+  {rabbitmq_mqtt, [
+      {ssl_listeners, [8883]}
+    ]},
+  {rabbitmq_stomp, [
+      {ssl_listeners, [61614]}
+    ]},
+  {rabbitmq_stream, [
+      {ssl_listeners, [5551]}
+    ]},
   {ra, [
       {data_dir, "$(RABBITMQ_QUORUM_DIR)"}
     ]},
