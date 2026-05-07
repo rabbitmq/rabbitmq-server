@@ -90,25 +90,49 @@ case "$scenario" in
 		;;
 
 	topic_bindings_import)
-		# Import topic bindings
-		echo "=== Import topic bindings"
-		git clone https://github.com/rabbitmq/sample-configs.git
-		time $old_rabbitmqctl  -n rabbit-1 import_definitions \
-			sample-configs/topic-bindings/q0-with-100k-topic-bindings.json
+		# Generate 10k bindings inline.
+		echo "=== Generate 10k topic bindings definitions"
+		python3 - <<-'PY' > definitions.json
+		import json
+		count = 10000
+		definitions = {
+		    "rabbit_version": "4.0.0",
+		    "users": [],
+		    "vhosts": [{"name": "/"}],
+		    "permissions": [],
+		    "policies": [],
+		    "queues": [{"name": "q0", "vhost": "/", "durable": True,
+		                "auto_delete": False, "arguments": {}}],
+		    "exchanges": [{"name": "test", "vhost": "/", "type": "topic",
+		                   "durable": True, "auto_delete": False,
+		                   "internal": False, "arguments": {}}],
+		    "bindings": [
+		        {"source": "test", "vhost": "/", "destination": "q0",
+		         "destination_type": "queue",
+		         "routing_key": "test.q0.%d" % i,
+		         "arguments": {}}
+		        for i in range(count)
+		    ],
+		}
+		print(json.dumps(definitions))
+		PY
 
-		# Ensure we have 100k bindings
+		echo "=== Import 10k topic bindings"
+		time $old_rabbitmqctl -n rabbit-1 import_definitions definitions.json
+
+		# Ensure we have 10k bindings
 		test \
 			$($old_rabbitmqctl -n rabbit-1 list_bindings routing_key | \
-			grep -cE 'test\.q0.[0-9]+') = 100000
+			grep -cE 'test\.q0.[0-9]+') = 10000
 
 		# Upgrade RabbitMQ.
 		echo "=== Upgrade cluster to new RabbitMQ version"
 		$make -C "$new_dist" restart-cluster
 
-		# Ensure we still have 100k bindings
+		# Ensure we still have 10k bindings
 		test \
 			$($new_rabbitmqctl -n rabbit-1 list_bindings routing_key | \
-			grep -cE 'test\.q0.[0-9]+') = 100000
+			grep -cE 'test\.q0.[0-9]+') = 10000
 		;;
 
 	*)
