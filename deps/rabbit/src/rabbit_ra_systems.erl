@@ -125,12 +125,7 @@ get_config(quorum_queues = RaSystem) ->
     AERBatchSize = application:get_env(rabbit, quorum_max_append_entries_rpc_batch_size,
                                        ?QUORUM_AER_MAX_RPC_SIZE),
     CompressMemTables = application:get_env(rabbit, quorum_compress_mem_tables, true),
-    MinBinVheapSize = case code_version:get_otp_version() of
-                          OtpMaj when OtpMaj >= 27 ->
-                              ?MIN_BIN_VHEAP_SIZE_DEFAULT * ?MIN_BIN_VHEAP_SIZE_MULT;
-                          _ ->
-                              ?MIN_BIN_VHEAP_SIZE_DEFAULT
-                      end,
+    MinBinVheapSize = ?MIN_BIN_VHEAP_SIZE_DEFAULT * ?MIN_BIN_VHEAP_SIZE_MULT,
     SegmentMaxSizeBytes = application:get_env(rabbit, quorum_segment_max_size_bytes,
                                               maps:get(segment_max_size_bytes, DefaultConfig)),
     SegmentMaxEntries = application:get_env(rabbit, quorum_segment_max_entries,
