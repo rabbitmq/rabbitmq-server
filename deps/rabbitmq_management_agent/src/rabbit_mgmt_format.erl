@@ -26,8 +26,12 @@
 
 -export([strip_queue_pids/1]).
 
+<<<<<<< HEAD
 -export([clean_consumer_details/1, clean_channel_details/1, clean_connection_details/1,
          clean_owner_pid_details/1]).
+=======
+-export([clean_consumer_details/1, clean_channel_details/1, clean_connection_details/1]).
+>>>>>>> 770fc94549 (HTTP API: format empty `channel.connection_details` as an empty JSON object)
 
 -export([args_hash/1]).
 
@@ -623,6 +627,7 @@ clean_connection_details(Obj) ->
 format_connection_details([]) -> #{};
 format_connection_details(Any) -> Any.
 
+<<<<<<< HEAD
 -spec clean_owner_pid_details(proplists:proplist()) -> proplists:proplist().
 clean_owner_pid_details(Obj) ->
     case pget(owner_pid_details, Obj) of
@@ -634,6 +639,8 @@ clean_owner_pid_details(Obj) ->
 format_owner_pid_details([]) -> #{};
 format_owner_pid_details(Any) -> Any.
 
+=======
+>>>>>>> 770fc94549 (HTTP API: format empty `channel.connection_details` as an empty JSON object)
 -spec format_consumer_arguments(proplists:proplist()) -> proplists:proplist().
 format_consumer_arguments(Obj) ->
     %% Make sure arguments is a map and not an empty list
