@@ -1741,27 +1741,14 @@ recover_index_and_client_refs(true, ClientRefs, Dir, Name) ->
         {false, Error} ->
             Fresh("failed to read recovery terms: ~tp", [Error]);
         {true, Terms} ->
-            RecClientRefs  = proplists:get_value(client_refs, Terms, []),
-            %% We expect the index module to either be unset or be set
-            %% to rabbit_msg_store_ets_index. This is needed for graceful
-            %% upgrade to RabbitMQ 4.0 and above. Starting from 4.0
-            %% however RabbitMQ will not save the index module in the
-            %% recovery terms, so this check can be removed in 4.1 or later.
-            %% What this effectively does is that for users that had a
-            %% custom index module in 3.13 we force a dirty recovery
-            %% to switch them to ets. Others can proceed as normal.
-            RecIndexModule = proplists:get_value(index_module, Terms,
-                rabbit_msg_store_ets_index),
-            case (lists:sort(ClientRefs) =:= lists:sort(RecClientRefs)
-                  andalso RecIndexModule =:= rabbit_msg_store_ets_index) of
+            RecClientRefs = proplists:get_value(client_refs, Terms, []),
+            case lists:sort(ClientRefs) =:= lists:sort(RecClientRefs) of
                 true  -> case index_recover(Dir) of
                              {ok, IndexEts} ->
                                  {true, IndexEts, ClientRefs};
                              {error, Error} ->
                                  Fresh("failed to recover index: ~tp", [Error])
                          end;
-                false when RecIndexModule =/= rabbit_msg_store_ets_index ->
-                    Fresh("custom index backends have been removed; using ETS index", []);
                 false -> Fresh("recovery terms differ from present", [])
             end
     end.
