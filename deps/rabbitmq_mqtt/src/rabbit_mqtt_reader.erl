@@ -318,6 +318,16 @@ log_tls_alert(Alert, ConnName) ->
 
 process_received_bytes(<<>>, State) ->
     {noreply, ensure_stats_timer(State), ?HIBERNATE_AFTER};
+%% Detect a TLS ClientHello (TLS record content type 22) sent to a non-TLS
+%% listener and emit a user-friendly error instead of a confusing parse failure
+%% with a large stacktrace.
+process_received_bytes(<<16#16, _/binary>>,
+                       State = #state{proc_state = connect_packet_unprocessed,
+                                      conn_name = ConnName}) ->
+    ?LOG_ERROR("MQTT detected TLS ClientHello from ~ts: TLS-enabled client is "
+               "connecting to a non-TLS MQTT listener",
+               [ConnName]),
+    {stop, {shutdown, tls_connection_on_non_tls_listener}, State};
 process_received_bytes(Bytes, State = #state{socket = Socket,
                                              parse_state = ParseState,
                                              proc_state = ProcState,

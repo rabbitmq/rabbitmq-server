@@ -237,6 +237,16 @@ tcp_connected(state_timeout, close,
               #statem_data{transport = Transport,
                            connection = #stream_connection{socket = Socket}}) ->
     state_timeout(?FUNCTION_NAME, Transport, Socket);
+%% Detect a TLS ClientHello (TLS record content type 22) sent to a non-TLS
+%% listener and emit a user-friendly error instead of a confusing frame size
+%% error (the TLS record header bytes are misread as a huge frame length).
+tcp_connected(info, {tcp, Socket, <<16#16, _/binary>>},
+              #statem_data{connection = #stream_connection{socket = Socket,
+                                                           name = ConnName}}) ->
+    ?LOG_ERROR("Stream protocol detected TLS ClientHello from ~ts: TLS-enabled "
+               "client is connecting to a non-TLS stream listener",
+               [ConnName]),
+    stop;
 tcp_connected(info, Msg, StateData) ->
     handle_info(Msg, StateData,
                 fun(NextConnectionStep,

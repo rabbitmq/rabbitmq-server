@@ -42,7 +42,8 @@ wrap_password_opt(Opts0) ->
 fix(Config) ->
     fix_verify_fun(
       fix_ssl_protocol_versions(
-        hibernate_after(Config))).
+        fix_log_level(
+          hibernate_after(Config)))).
 
 -spec fix_client(rabbit_types:infos()) -> rabbit_types:infos().
 fix_client(Config) ->
@@ -137,4 +138,14 @@ hibernate_after(Config) ->
             Config;
         false ->
             [{Key, 6_000} | Config]
+    end.
+
+%% Suppress OTP's TLS state machine process notices by defaulting to warning
+%% level. RabbitMQ logs all relevant TLS handshake errors itself, so the
+%% OTP-level notices for the same events are redundant. Users can override
+%% this by setting the log_level SSL option explicitly.
+fix_log_level(Config) ->
+    case proplists:is_defined(log_level, Config) of
+        true  -> Config;
+        false -> [{log_level, warning} | Config]
     end.
