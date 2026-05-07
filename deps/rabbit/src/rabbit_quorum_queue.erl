@@ -6,7 +6,6 @@
 %%
 
 -module(rabbit_quorum_queue).
--feature(maybe_expr, enable).
 
 -behaviour(rabbit_queue_type).
 -behaviour(rabbit_queue_type_ra).
