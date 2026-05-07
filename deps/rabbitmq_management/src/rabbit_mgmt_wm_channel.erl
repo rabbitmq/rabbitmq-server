@@ -37,8 +37,9 @@ resource_exists(ReqData, Context) ->
 to_json(ReqData, Context) ->
     case rabbit_mgmt_util:disable_stats(ReqData) of
         false ->
-            Payload = rabbit_mgmt_format:clean_consumer_details(
-                        rabbit_mgmt_format:strip_pids(channel(ReqData))),
+            Payload = rabbit_mgmt_format:clean_connection_details(
+                        rabbit_mgmt_format:clean_consumer_details(
+                          rabbit_mgmt_format:strip_pids(channel(ReqData)))),
             rabbit_mgmt_util:reply(
               maps:from_list(Payload),
               ReqData, Context);

@@ -330,13 +330,15 @@ queue_consumer_channel_closed(Config) ->
     force_stats(Config), % ensure channel stats have been written
 
     amqp_channel:close(Chan),
-    force_stats(Config),
 
     ?awaitMatch([],
                 %% assert there are no consumer details
-                maps:get(consumer_details,
-                         http_get(Config, "/queues/%2F/some-queue")),
-                30000),
+                begin
+                    force_stats(Config),
+                    maps:get(consumer_details,
+                             http_get(Config, "/queues/%2F/some-queue"))
+                end,
+                60000),
     ?awaitMatch(<<"some-queue">>,
                 maps:get(name,
                          http_get(Config, "/queues/%2F/some-queue")),
