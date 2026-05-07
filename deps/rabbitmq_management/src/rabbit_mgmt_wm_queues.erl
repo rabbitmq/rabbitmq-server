@@ -138,9 +138,11 @@ augment(Mode) ->
                                 {_, _, all} -> basic;
                                 _ -> detailed
                             end,
-                    rabbit_mgmt_db:augment_queues(Basic,
-                                                  rabbit_mgmt_util:range_ceil(ReqData),
-                                                  Stats);
+                    [rabbit_mgmt_format:clean_owner_pid_details(Q)
+                     || Q <- rabbit_mgmt_db:augment_queues(
+                               Basic,
+                               rabbit_mgmt_util:range_ceil(ReqData),
+                               Stats)];
                 true ->
                     Basic
             end
