@@ -111,7 +111,7 @@ format(Node, Info, Chs) ->
                       %% was restarted on another node, we might get duplicates;
                       %% we don't really know which one is the most up-to-date
                       %% so let's just take the first one
-                      [{local_channel, Ch}];
+                      [{local_channel, rabbit_mgmt_format:clean_connection_details(Ch)}];
                   []   -> []
               end,
     [{node, Node} | format_info(Info)] ++ LocalCh.

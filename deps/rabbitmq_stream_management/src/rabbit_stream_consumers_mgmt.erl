@@ -56,8 +56,9 @@ to_json(ReqData, Context = #context{user = User}) ->
                           VHost
                   end,
             Consumers =
-                rabbit_mgmt_format:strip_pids(
-                    rabbit_stream_mgmt_db:get_all_consumers(Arg)),
+                [rabbit_mgmt_format:clean_connection_details(I)
+                 || I <- rabbit_mgmt_format:strip_pids(
+                           rabbit_stream_mgmt_db:get_all_consumers(Arg))],
             rabbit_mgmt_util:reply_list(filter_user(Consumers, User),
                                         [],
                                         ReqData,

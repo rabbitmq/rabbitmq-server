@@ -26,7 +26,8 @@
 
 -export([strip_queue_pids/1]).
 
--export([clean_consumer_details/1, clean_channel_details/1, clean_connection_details/1]).
+-export([clean_consumer_details/1, clean_channel_details/1, clean_connection_details/1,
+         clean_owner_pid_details/1]).
 
 -export([args_hash/1]).
 
@@ -621,6 +622,17 @@ clean_connection_details(Obj) ->
 
 format_connection_details([]) -> #{};
 format_connection_details(Any) -> Any.
+
+-spec clean_owner_pid_details(proplists:proplist()) -> proplists:proplist().
+clean_owner_pid_details(Obj) ->
+    case pget(owner_pid_details, Obj) of
+        undefined -> Obj;
+        Opd ->
+            pset(owner_pid_details, format_owner_pid_details(Opd), Obj)
+    end.
+
+format_owner_pid_details([]) -> #{};
+format_owner_pid_details(Any) -> Any.
 
 -spec format_consumer_arguments(proplists:proplist()) -> proplists:proplist().
 format_consumer_arguments(Obj) ->

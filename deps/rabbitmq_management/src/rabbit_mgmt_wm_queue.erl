@@ -46,8 +46,9 @@ to_json(ReqData, Context) ->
                         [queue(ReqData, StatsDisabled)],
                         rabbit_mgmt_util:range_ceil(ReqData),
                         full),
-                Payload = rabbit_mgmt_format:clean_consumer_details(
-                            rabbit_mgmt_format:strip_pids(Q)),
+                Payload = rabbit_mgmt_format:clean_owner_pid_details(
+                            rabbit_mgmt_format:clean_consumer_details(
+                              rabbit_mgmt_format:strip_pids(Q))),
                 rabbit_mgmt_util:reply(ensure_defaults(Payload), ReqData, Context);
             true ->
                 Q = case rabbit_mgmt_util:enable_queue_totals(ReqData) of
