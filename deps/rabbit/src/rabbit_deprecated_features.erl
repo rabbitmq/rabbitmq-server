@@ -120,7 +120,8 @@
 -export([extend_properties/2,
          should_be_permitted/2,
          enable_underlying_feature_flag_cb/1,
-         list/1]).
+         list/1,
+         list_denied_but_should_be_permitted/1]).
 
 -type deprecated_feature_modattr() :: {rabbit_feature_flags:feature_name(),
                                        feature_props()}.
@@ -643,3 +644,122 @@ is_deprecated_feature_in_use(
     end;
 is_deprecated_feature_in_use(_) ->
     undefined.
+
+-spec list_denied_but_should_be_permitted(Inventory) -> PermittedList when
+      Inventory :: rabbit_feature_flags:cluster_inventory(),
+      PermittedList :: [rabbit_feature_flags:feature_name()].
+
+list_denied_but_should_be_permitted(
+  #{feature_flags := FeatureFlags,
+    states_per_node := StatesPerNode} = Inventory) ->
+    %% First, we list all feature flags (including denied deprecated features)
+    %% that are enabled on at least one node. We will use this list to figure
+    %% out if some deprecated features should be permitted again among them.
+    AllEnabled0 = maps:fold(
+                    fun(_Node, States, Acc) ->
+                            Enabled = maps:fold(
+                                        fun
+                                            (FN, true, Acc1) ->
+                                                [FN | Acc1];
+                                           (_FN, _State, Acc1) ->
+                                                Acc1
+                                        end, [], States),
+                            Acc ++ Enabled
+                    end, [], StatesPerNode),
+    AllEnabled = lists:usort(AllEnabled0),
+    %% We walk through the list of enabled feature flags and check if some of
+    %% them are deprecated features that should now be permitted.
+    PermittedByConfig = (
+      lists:filter(
+        fun(FeatureName) ->
+                FeatureProps = maps:get(FeatureName, FeatureFlags),
+                if
+                    ?IS_FEATURE_FLAG(FeatureProps) ->
+                        false;
+                    ?IS_DEPRECATION(FeatureProps) ->
+                        should_be_permitted(FeatureName, FeatureProps)
+                end
+        end, AllEnabled)),
+    %% Among this deprecated features that should be permitted again, are there
+    %% any that can't be permitted because another enabled feature flag depends
+    %% on it, directly or through a dependency chain?
+    NeededByOthers = lists:filter(
+                       fun(FeatureName) ->
+                               do_enabled_feature_flags_depend_on(
+                                 Inventory, AllEnabled, FeatureName)
+                       end, PermittedByConfig),
+    case NeededByOthers of
+        [] ->
+            ok;
+        _ ->
+            ?LOG_DEBUG(
+               "Deprecated features: deprecated features that can't be"
+               "permitted from configuration because they are needed "
+               "by other feature flags: ~0p",
+               [NeededByOthers],
+               #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS})
+    end,
+    %% Based on the previous step, we can compute the final list of deprecated
+    %% features that should be permitted again.
+    Permitted = PermittedByConfig -- NeededByOthers,
+    case Permitted of
+        [] ->
+            ok;
+        _ ->
+            ?LOG_DEBUG(
+               "Feature flags: deprecated features that should be "
+               "permitted again (i.e. corresponding feature flag "
+               "disabled): ~0p",
+               [Permitted],
+               #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS})
+    end,
+    Permitted.
+
+do_enabled_feature_flags_depend_on(
+  #{feature_flags := FeatureFlags} = Inventory,
+  AllEnabled,
+  FeatureName) ->
+    %% Find any feature flags that depend on the given `FeatureName' deprecated
+    %% feature.
+    DependOnIt = maps:fold(
+                   fun
+                       (ParentFeatureName, #{depends_on := DependsOn}, Acc) ->
+                           case lists:member(FeatureName, DependsOn) of
+                               true ->
+                                   %% `FeatureName' is directly needed by
+                                   %% `ParentFeatureName'.
+                                   [ParentFeatureName | Acc];
+                               false ->
+                                   Acc
+                           end;
+                       (_ParentFeatureName, _FeatureProps, Acc) ->
+                           Acc
+                   end, [], FeatureFlags),
+    case DependOnIt of
+        [] ->
+            %% `FeatureName' is not needed by any feature flag.
+            false;
+        _ ->
+            %% We now need to check if the feature flags that depend directly
+            %% on `FeatureName' are enabled.
+            EnabledAndDependOnIt = lists:filter(
+                                     fun(ParentFeatureName) ->
+                                             lists:member(
+                                               ParentFeatureName, AllEnabled)
+                                     end, DependOnIt),
+            case EnabledAndDependOnIt of
+                [_ | _] ->
+                    %% There are enabled feature flags that depend on
+                    %% `FeatureName'.
+                    true;
+                [] ->
+                    %% The feature flags that depend on `FeatureName' are not
+                    %% enabled. However other enabled feature flags could
+                    %% depend on them. Therefore we need to recurse.
+                    lists:any(
+                      fun(ParentFeatureName) ->
+                              do_enabled_feature_flags_depend_on(
+                                Inventory, AllEnabled, ParentFeatureName)
+                      end, DependOnIt)
+            end
+    end.
