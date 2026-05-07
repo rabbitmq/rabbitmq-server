@@ -152,9 +152,9 @@ roundtrip(_Config) ->
                 delete_stream,
                 create_super_stream,
                 delete_super_stream,
-                open,
                 close]],
 
+    test_roundtrip({response, 99, {open, 98, #{}}}),
     test_roundtrip({response, 99, {query_publisher_sequence, 98, 1234}}),
     test_roundtrip({response, 99, {query_offset, 1, 12}}),
 
