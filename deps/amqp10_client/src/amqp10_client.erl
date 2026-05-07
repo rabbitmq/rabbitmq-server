@@ -482,7 +482,7 @@ parse_result(Map) ->
     end.
 
 parse_usertoken(U) ->
-    [User, Pass] = string:tokens(U, ":"),
+    [User, Pass] = string:lexemes(U, ":"),
     {plain,
      to_binary(uri_string:percent_decode(User)),
      to_binary(uri_string:percent_decode(Pass))}.
@@ -502,7 +502,7 @@ parse_tls_opt("verify", V, Acc)
 parse_tls_opt("verify", _V, _Acc) ->
     throw({invalid_option, verify});
 parse_tls_opt("versions", V, Acc) ->
-    Parts = string:tokens(V, ","),
+    Parts = string:lexemes(V, ","),
     Versions = [try_to_existing_atom(P) || P <- Parts],
     [{versions, Versions} | Acc];
 parse_tls_opt("fail_if_no_peer_cert", V, Acc)

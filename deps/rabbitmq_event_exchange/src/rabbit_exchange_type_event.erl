@@ -201,7 +201,7 @@ key(federation_link_status) ->
 key(federation_link_removed) ->
     <<"federation.link.removed">>;
 key(S) ->
-    case string:tokens(atom_to_list(S), "_") of
+    case string:lexemes(atom_to_list(S), "_") of
         [_, "stats"] -> ignore;
         Tokens       -> list_to_binary(string:join(Tokens, "."))
     end.

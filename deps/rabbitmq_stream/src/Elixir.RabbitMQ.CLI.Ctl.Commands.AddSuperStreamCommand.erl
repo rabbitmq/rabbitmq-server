@@ -198,9 +198,9 @@ run([SuperStream],
         Opts) ->
     BindingKeys =
         [rabbit_data_coercion:to_binary(
-             string:strip(K))
+             string:trim(K))
          || K
-                <- string:tokens(
+                <- string:lexemes(
                        rabbit_data_coercion:to_list(BindingKeysStr), ",")],
     Streams =
         [list_to_binary(binary_to_list(SuperStream)

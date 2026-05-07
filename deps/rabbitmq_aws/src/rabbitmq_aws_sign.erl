@@ -58,7 +58,7 @@ headers(Request) ->
 %% @doc Extract the date from the AMZ timestamp format.
 %% @end
 amz_date(AMZTimestamp) ->
-    [RequestDate, _] = string:tokens(AMZTimestamp, "T"),
+    [RequestDate, _] = string:lexemes(AMZTimestamp, "T"),
     RequestDate.
 
 -spec append_headers(
@@ -74,10 +74,10 @@ amz_date(AMZTimestamp) ->
 %% @end
 append_headers(AMZDate, ContentLength, PayloadHash, Hostname, SecurityToken, Headers) ->
     Defaults = default_headers(AMZDate, ContentLength, PayloadHash, Hostname, SecurityToken),
-    Headers1 = [{string:to_lower(Key), Value} || {Key, Value} <- Headers],
+    Headers1 = [{string:lowercase(Key), Value} || {Key, Value} <- Headers],
     Keys = lists:usort(
         lists:append(
-            [string:to_lower(Key) || {Key, _} <- Defaults],
+            [string:lowercase(Key) || {Key, _} <- Defaults],
             [Key || {Key, _} <- Headers1]
         )
     ),
@@ -147,7 +147,7 @@ canonical_headers(Headers) ->
 canonical_headers([], CanonicalHeaders) ->
     lists:flatten(CanonicalHeaders);
 canonical_headers([{Key, Value} | T], CanonicalHeaders) ->
-    Header = string:join([string:to_lower(Key), Value], ":") ++ "\n",
+    Header = string:join([string:lowercase(Key), Value], ":") ++ "\n",
     canonical_headers(T, lists:append(CanonicalHeaders, [Header])).
 
 -spec credential_scope(
@@ -169,7 +169,7 @@ credential_scope(RequestDate, Region, Service) ->
 %%      is not specified.
 %% @end
 header_value(Key, Headers, Default) ->
-    proplists:get_value(Key, Headers, proplists:get_value(string:to_lower(Key), Headers, Default)).
+    proplists:get_value(Key, Headers, proplists:get_value(string:lowercase(Key), Headers, Default)).
 
 -spec hmac_sign(Key :: string(), Message :: string()) -> string().
 %% @doc Return the SHA-256 hash for the specified value.
@@ -215,7 +215,7 @@ request_hash(Method, Path, QArgs, Headers, Payload) ->
     EncodedPath = uri_string:recompose(#{path => RawPath}),
     CanonicalRequest = string:join(
         [
-            string:to_upper(atom_to_list(Method)),
+            string:uppercase(atom_to_list(Method)),
             EncodedPath,
             query_string(QArgs),
             canonical_headers(Headers),
@@ -259,7 +259,7 @@ signed_headers(Headers) ->
 signed_headers([], SignedHeaders) ->
     string:join(SignedHeaders, ";");
 signed_headers([{Key, _} | T], SignedHeaders) ->
-    signed_headers(T, SignedHeaders ++ [string:to_lower(Key)]).
+    signed_headers(T, SignedHeaders ++ [string:lowercase(Key)]).
 
 -spec signature(
     StringToSign :: string(),
@@ -312,7 +312,7 @@ string_to_sign(RequestTimestamp, RequestDate, Region, Service, RequestHash) ->
 %% @doc Case-insensitive sorting of the request headers
 %% @end
 sort_headers(Headers) ->
-    lists:sort(fun({A, _}, {B, _}) -> string:to_lower(A) =< string:to_lower(B) end, Headers).
+    lists:sort(fun({A, _}, {B, _}) -> string:lowercase(A) =< string:lowercase(B) end, Headers).
 
 -spec get_content_length(Request :: #request{}) -> non_neg_integer().
 get_content_length(#request{body = Body}) when is_binary(Body) ->

@@ -134,7 +134,7 @@ format_msg(Msg, Meta, #{single_line := true} = Config) ->
       %% The following behavior is the same as the one in the official
       %% `logger_formatter'; the code is taken from:
       %% https://github.com/erlang/otp/blob/c5ed910098e9c2787e2c3f9f462c84322064e00d/lib/kernel/src/logger_formatter.erl
-      FormattedMsg1 = string:strip(FormattedMsg, both),
+      FormattedMsg1 = string:trim(FormattedMsg),
       re:replace(
         FormattedMsg1,
         ",?\r?\n\s*",

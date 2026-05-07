@@ -164,7 +164,7 @@ determine_elixir_version(Config) ->
                               Cmd = ["elixir", "-e", "IO.puts System.version"],
                               case rabbit_ct_helpers:exec(Cmd) of
                                   {ok, Output} ->
-                                      string:strip(Output, right, $\n);
+                                      string:trim(Output, trailing, "\n");
                                   _ ->
                                       ""
                               end;
@@ -379,7 +379,7 @@ list_dirs_to_upload(Config) ->
                                       "recursive-test-deps-list.log"]),
             {ok, Content} = file:read_file(ListFile),
             global:del_lock(LockId, LockNodes),
-            DepsDirs0 = string:tokens(binary_to_list(Content), "\n"),
+            DepsDirs0 = string:lexemes(binary_to_list(Content), "\n"),
             DepsDirs = filter_out_subdirs(SrcDir, DepsDirs0),
             ErlangMkPath = ?config(erlang_mk_path, Config),
             RabbitmqComponentsPath = ?config(rabbitmq_components_path, Config),
@@ -395,7 +395,7 @@ list_dirs_to_upload(Config) ->
 
 list_dirs_to_download(Config) ->
     PrivDir = ?config(priv_dir, Config),
-    PrivDirParent = filename:dirname(string:strip(PrivDir, right, $/)),
+    PrivDirParent = filename:dirname(string:trim(PrivDir, trailing, "/")),
     Dirs1 = case rabbit_ct_helpers:get_config(Config, dirs_to_download) of
                 undefined -> [PrivDirParent];
                 Dirs0     -> [PrivDirParent
@@ -589,7 +589,7 @@ query_terraform_uuid(Config) ->
           ],
     case rabbit_ct_helpers:exec(Cmd) of
         {ok, Output} ->
-            Uuid = string:strip(string:strip(Output, right, $\n)),
+            Uuid = string:trim(string:trim(Output, trailing, "\n")),
             rabbit_ct_helpers:set_config(Config, {terraform_uuid, Uuid});
         _ ->
             {skip, "Terraform failed to query unique ID"}
@@ -681,7 +681,7 @@ ensure_instance_count(Config, TRef) ->
           ],
     case rabbit_ct_helpers:exec(Cmd) of
         {ok, Output} ->
-            CountStr = string:strip(string:strip(Output, right, $\n)),
+            CountStr = string:trim(string:trim(Output, trailing, "\n")),
             Current = erlang:list_to_integer(CountStr),
             Requested = instance_count(Config),
             ct:pal(?LOW_IMPORTANCE,
@@ -727,15 +727,15 @@ do_query_terraform_map(Config, TfState, Var) ->
     end.
 
 parse_terraform_map(Output) ->
-    Lines = [string:strip(L, right, $,)
-             || L <- string:tokens(
-                       string:strip(Output, right, $\n),
+    Lines = [string:trim(L, trailing, ",")
+             || L <- string:lexemes(
+                       string:trim(Output, trailing, "\n"),
                        "\n"),
                 string:find(L, "=") =/= nomatch],
     [begin
-         [K0, V0] = string:tokens(L, "="),
-         K = string:strip(string:strip(K0), both, $"),
-         V = string:strip(string:strip(V0), both, $"),
+         [K0, V0] = string:lexemes(L, "="),
+         K = string:trim(string:trim(K0), both, "\""),
+         V = string:trim(string:trim(V0), both, "\""),
          {K, V}
      end || L <- Lines].
 
@@ -796,7 +796,7 @@ write_inetrc(Config) ->
     ct:pal(
       ?LOW_IMPORTANCE,
       "Erlang inetrc:~n~ts",
-      [string:strip(["  " ++ Line || Line <- Lines], right, $\n)]),
+      [string:trim(["  " ++ Line || Line <- Lines], trailing, "\n")]),
     case file:write_file(Filename, Lines) of
         ok ->
             os:putenv("ERL_INETRC", Filename),
