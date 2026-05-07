@@ -51,7 +51,7 @@ user_login_authentication(Username, AuthProps) ->
                     {refused, "Denied by the backing HTTP service", []};
                 "allow" ++ Rest ->
                     Tags = [rabbit_data_coercion:to_atom(T)
-                            || T <- string:tokens(Rest, " ")],
+                            || T <- string:lexemes(Rest, " ")],
                     {ok, #auth_user{
                             username = Username,
                             tags = Tags,
@@ -247,7 +247,7 @@ do_http_req(Path0, Query) ->
             ?LOG_DEBUG("auth_backend_http: response code is ~tp, body: '~ts'", [Code, Body]),
             case lists:member(Code, ?SUCCESSFUL_RESPONSE_CODES) of
                 true ->
-                    string:strip(Body);
+                    string:trim(Body);
                 false ->
                     {error, {Code, Body}}
             end;

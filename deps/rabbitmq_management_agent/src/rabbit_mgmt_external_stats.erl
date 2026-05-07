@@ -76,9 +76,9 @@ get_used_fd({unix, BSD}, State0)
     Output = os:cmd("fstat -p " ++ os:getpid()),
     try
         F = fun (Line) ->
-                    lists:all(IsDigit, lists:nth(4, string:tokens(Line, " ")))
+                    lists:all(IsDigit, lists:nth(4, string:lexemes(Line, " ")))
             end,
-        UsedFd = length(lists:filter(F, string:tokens(Output, "\n"))),
+        UsedFd = length(lists:filter(F, string:lexemes(Output, "\n"))),
         {State0, UsedFd}
     catch _:Error:Stacktrace ->
               State1 = log_fd_error("Could not parse fstat output:~n~ts~n~tp",
@@ -140,7 +140,7 @@ find_files_line([]) ->
 % rabbit_misc:win32_cmd trims the output, so there will be no
 % leading/trailing whitespace
 find_files_line(["File " ++ Rest | _T]) ->
-    [Files] = string:tokens(Rest, ": "),
+    [Files] = string:lexemes(Rest, ": "),
     list_to_integer(Files);
 find_files_line([_H | T]) ->
     find_files_line(T).

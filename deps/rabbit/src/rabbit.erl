@@ -1336,9 +1336,9 @@ force_event_refresh(Ref) ->
 log_broker_started(Plugins) ->
     PluginList = iolist_to_binary([rabbit_misc:format(" * ~ts~n", [P])
                                    || P <- Plugins]),
-    Message = string:strip(rabbit_misc:format(
+    Message = string:trim(rabbit_misc:format(
         "Server startup complete; ~b plugins started.~n~ts",
-        [length(Plugins), PluginList]), right, $\n),
+        [length(Plugins), PluginList]), trailing, "\n"),
     ?LOG_INFO(Message,
               #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
     io:format(" completed with ~tp plugins.~n", [length(Plugins)]).
@@ -1470,7 +1470,7 @@ log_banner() ->
                      rabbit_misc:format(
                        " ~-" ++ integer_to_list(DescrLen) ++ "s: ~ts~n", [K, V])
              end,
-    Banner = string:strip(lists:flatten(
+    Banner = string:trim(lists:flatten(
                [case S of
                     {"config file(s)" = K, []} ->
                         Format(K, "(none)");
@@ -1478,7 +1478,7 @@ log_banner() ->
                         [Format(K, V0) | [Format("", V) || V <- Vs]];
                     {K, V} ->
                         Format(K, V)
-                end || S <- Settings]), right, $\n),
+                end || S <- Settings]), trailing, "\n"),
     ?LOG_INFO("~n~ts", [Banner],
               #{domain => ?RMQLOG_DOMAIN_GLOBAL}).
 

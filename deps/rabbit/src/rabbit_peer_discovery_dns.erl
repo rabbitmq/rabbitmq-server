@@ -94,7 +94,7 @@ decode_record(ipv6) ->
 lookup(SeedHostname, LongNamesUsed, IPv) ->
     IPs   = inet_res:lookup(SeedHostname, in, decode_record(IPv)),
     ?LOG_INFO("Addresses discovered via ~ts records of ~ts: ~ts",
-		    [string:to_upper(atom_to_list(decode_record(IPv))),
+		    [string:uppercase(atom_to_list(decode_record(IPv))),
 		     SeedHostname,
 		     string:join([inet_parse:ntoa(IP) || IP <- IPs], ", ")]),
     Hosts = [extract_host(inet:gethostbyaddr(A), LongNamesUsed, A) ||
@@ -107,7 +107,7 @@ extract_host({ok, {hostent, FQDN, _, _, _, _}}, true, _Address) ->
   FQDN;
 %% short node names are used
 extract_host({ok, {hostent, FQDN, _, _, _, _}}, false, _Address) ->
-  lists:nth(1, string:tokens(FQDN, "."));
+  hd(string:lexemes(FQDN, "."));
 extract_host({error, Error}, _, Address) ->
   ?LOG_ERROR("Reverse DNS lookup for address ~ts failed: ~tp",
                    [inet_parse:ntoa(Address), Error]),

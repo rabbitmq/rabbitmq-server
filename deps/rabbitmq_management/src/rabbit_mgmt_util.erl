@@ -518,8 +518,8 @@ match_value({_, Value}, ValueTag, UseRegex) when UseRegex =:= "true" ->
         nomatch -> false
     end;
 match_value({_, Value}, ValueTag, _) ->
-    Pos = string:str(string:to_lower(binary_to_list(Value)),
-        string:to_lower(ValueTag)),
+    Pos = string:str(string:lowercase(binary_to_list(Value)),
+        string:lowercase(ValueTag)),
     case Pos of
         Pos  when Pos > 0 -> true;
         _ -> false
@@ -627,7 +627,7 @@ sort_key(Item, [Sort | Sorts]) ->
     [get_dotted_value(Sort, Item) | sort_key(Item, Sorts)].
 
 get_dotted_value(Key, Item) ->
-    Keys = string:tokens(Key, "."),
+    Keys = string:lexemes(Key, "."),
     get_dotted_value0(Keys, Item).
 
 get_dotted_value0([Key], Item) ->
@@ -665,8 +665,8 @@ extract_columns_list(Items, ReqData) ->
 columns(ReqData) ->
     case qs_val(<<"columns">>, ReqData) of
         undefined -> all;
-        Bin       -> [[list_to_binary(T) || T <- string:tokens(C, ".")]
-                      || C <- string:tokens(binary_to_list(Bin), ",")]
+        Bin       -> [[list_to_binary(T) || T <- string:lexemes(C, ".")]
+                      || C <- string:lexemes(binary_to_list(Bin), ",")]
     end.
 
 extract_column_items(Item, all) ->
@@ -1138,7 +1138,7 @@ filter_tracked_conn_list(List, ReqData, #context{user = #user{username = FilterU
 set_resp_header(K, V, ReqData) ->
     cowboy_req:set_resp_header(K, strip_crlf(V), ReqData).
 
-strip_crlf(Str) -> lists:append(string:tokens(Str, "\r\n")).
+strip_crlf(Str) -> lists:append(string:lexemes(Str, "\r\n")).
 
 args([]) -> args(#{});
 args(L)  -> rabbit_mgmt_format:to_amqp_table(L).

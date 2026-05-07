@@ -235,7 +235,7 @@ urlsplit_scheme([C | Rest], Acc) when ((C >= $a andalso C =< $z) orelse
                                        C =:= $.) ->
     urlsplit_scheme(Rest, [C | Acc]);
 urlsplit_scheme([$: | Rest], Acc=[_ | _]) ->
-    {string:to_lower(lists:reverse(Acc)), Rest};
+    {string:lowercase(lists:reverse(Acc)), Rest};
 urlsplit_scheme(_Rest, _Acc) ->
     no_scheme.
 
@@ -313,7 +313,7 @@ urlsplit_query([C | Rest], Acc) ->
 parse_header(String) ->
     %% TODO: This is exactly as broken as Python's cgi module.
     %%       Should parse properly like mochiweb_cookies.
-    [Type | Parts] = [string:strip(S) || S <- string:tokens(String, ";")],
+    [Type | Parts] = [string:trim(S) || S <- string:lexemes(String, ";")],
     F = fun (S, Acc) ->
                 case lists:splitwith(fun (C) -> C =/= $= end, S) of
                     {"", _} ->
@@ -323,11 +323,11 @@ parse_header(String) ->
                         %% Skip anything with no value
                         Acc;
                     {Name, [$\= | Value]} ->
-                        [{string:to_lower(string:strip(Name)),
-                          unquote_header(string:strip(Value))} | Acc]
+                        [{string:lowercase(string:trim(Name)),
+                          unquote_header(string:trim(Value))} | Acc]
                 end
         end,
-    {string:to_lower(Type),
+    {string:lowercase(Type),
      lists:foldr(F, [], Parts)}.
 
 unquote_header("\"" ++ Rest) ->
@@ -382,12 +382,12 @@ parse_qvalues(QValuesStr) ->
     try
         lists:map(
             fun(Pair) ->
-                [Type | Params] = string:tokens(Pair, ";"),
+                [Type | Params] = string:lexemes(Pair, ";"),
                 NormParams = normalize_media_params(Params),
                 {Q, NonQParams} = extract_q(NormParams),
-                {string:join([string:strip(Type) | NonQParams], ";"), Q}
+                {string:join([string:trim(Type) | NonQParams], ";"), Q}
             end,
-            string:tokens(string:to_lower(QValuesStr), ",")
+            string:lexemes(string:lowercase(QValuesStr), ",")
         )
     catch
         _Type:_Error ->

@@ -282,7 +282,7 @@ get_process_memory_using_strategy(rss, #state{os_type = {unix, linux},
                                               page_size = PageSize,
                                               proc_file = ProcFile}) ->
     Data = read_proc_file(ProcFile),
-    [_|[RssPagesStr|_]] = string:tokens(Data, " "),
+    [_|[RssPagesStr|_]] = string:lexemes(Data, " "),
     ProcMem = list_to_integer(RssPagesStr) * PageSize,
     {ok, ProcMem};
 get_process_memory_using_strategy(rss, #state{os_type = {unix, _},
@@ -448,7 +448,7 @@ cmd(Command) ->
     cmd(Command, true).
 
 cmd(Command, ThrowIfMissing) ->
-    Exec = hd(string:tokens(Command, " ")),
+    Exec = hd(string:lexemes(Command, " ")),
     case {ThrowIfMissing, os:find_executable(Exec)} of
         {true, false} ->
             throw({command_not_found, Exec});
@@ -508,19 +508,19 @@ get_total_memory({win32, _OSname}) ->
 
 get_total_memory({unix, linux}) ->
     File = read_proc_file("/proc/meminfo"),
-    Lines = string:tokens(File, "\n"),
+    Lines = string:lexemes(File, "\n"),
     Dict = dict:from_list(lists:map(fun parse_line_linux/1, Lines)),
     dict:fetch('MemTotal', Dict);
 
 get_total_memory({unix, sunos}) ->
     File = cmd("/usr/sbin/prtconf"),
-    Lines = string:tokens(File, "\n"),
+    Lines = string:lexemes(File, "\n"),
     Dict = dict:from_list(lists:map(fun parse_line_sunos/1, Lines)),
     dict:fetch('Memory size', Dict);
 
 get_total_memory({unix, aix}) ->
     File = cmd("/usr/bin/vmstat -v"),
-    Lines = string:tokens(File, "\n"),
+    Lines = string:lexemes(File, "\n"),
     Dict = dict:from_list(lists:map(fun parse_line_aix/1, Lines)),
     dict:fetch('memory pages', Dict) * 4096;
 
@@ -531,14 +531,14 @@ get_total_memory(_OsType) ->
 %% or (with broken OS/modules) "Readahead      123456 kB"
 parse_line_linux(Line) ->
     {Name, Value, UnitRest} =
-        case string:tokens(Line, ":") of
+        case string:lexemes(Line, ":") of
             %% no colon in the line
             [S] ->
                 [K, RHS] = re:split(S, "\s", [{parts, 2}, {return, list}]),
-                [V | Unit] = string:tokens(RHS, " "),
+                [V | Unit] = string:lexemes(RHS, " "),
                 {K, V, Unit};
             [K, RHS | _Rest] ->
-                [V | Unit] = string:tokens(RHS, " "),
+                [V | Unit] = string:lexemes(RHS, " "),
                 {K, V, Unit}
         end,
     Value1 = case UnitRest of
@@ -550,9 +550,9 @@ parse_line_linux(Line) ->
 
 %% A line looks like "Memory size: 1024 Megabytes"
 parse_line_sunos(Line) ->
-    case string:tokens(Line, ":") of
+    case string:lexemes(Line, ":") of
         [Name, RHS | _Rest] ->
-            [Value1 | UnitsRest] = string:tokens(RHS, " "),
+            [Value1 | UnitsRest] = string:lexemes(RHS, " "),
             Value2 = case UnitsRest of
                          ["Gigabytes"] ->
                              list_to_integer(Value1) * ?ONE_MiB * 1024;
@@ -570,7 +570,7 @@ parse_line_sunos(Line) ->
 %% Lines look like " 12345 memory pages"
 %% or              "  80.1 maxpin percentage"
 parse_line_aix(Line) ->
-    [Value | NameWords] = string:tokens(Line, " "),
+    [Value | NameWords] = string:lexemes(Line, " "),
     Name = string:join(NameWords, " "),
     {list_to_atom(Name),
      case lists:member($., Value) of

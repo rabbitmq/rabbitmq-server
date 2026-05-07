@@ -41,7 +41,7 @@ translate_scope_aliases(Conf) ->
         extract_scope_aliases_as_list_of_alias_scope_props(Settings)).
 
 convert_space_separated_string_to_list_of_binaries(String) ->
-    [ list_to_binary(V) || V <- string:tokens(String, " ")].
+    [ list_to_binary(V) || V <- string:lexemes(String, " ")].
 
 extract_scope_alias_as_map(Settings) ->
     maps:from_list([{

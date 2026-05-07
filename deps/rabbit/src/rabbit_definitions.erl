@@ -1174,7 +1174,7 @@ is_internal_parameter(Param) ->
     Name = rabbit_data_coercion:to_list(pget(name, Param)),
     %% if global parameter name starts with an "internal", consider it to be internal
     %% and exclude it from definition export
-    string:left(Name, length(?INTERNAL_GLOBAL_PARAM_PREFIX)) =:= ?INTERNAL_GLOBAL_PARAM_PREFIX.
+    string:prefix(Name, ?INTERNAL_GLOBAL_PARAM_PREFIX) =/= nomatch.
 
 list_policies() ->
     [policy_definition(P) || P <- rabbit_policy:list()].

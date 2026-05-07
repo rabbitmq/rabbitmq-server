@@ -34,7 +34,7 @@ parse_content([], Value) ->
 parse_content(#xmlElement{} = Element, Accum) ->
     lists:append(parse_node(Element), Accum);
 parse_content(#xmlText{value = Value}, Accum) ->
-    case string:strip(Value) of
+    case string:trim(Value) of
         "" -> Accum;
         "\n" -> Accum;
         Stripped -> lists:append([Stripped], Accum)
