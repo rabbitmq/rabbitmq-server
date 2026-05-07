@@ -6,8 +6,6 @@
 %%
 -module(amqp10_client_socket).
 
--feature(maybe_expr, enable).
-
 -export([connect/3,
          set_active_once/1,
          send/2,

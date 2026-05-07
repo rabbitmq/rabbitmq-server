@@ -16,8 +16,6 @@
 
 -module(rabbit_stream_manager).
 
--feature(maybe_expr, enable).
-
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit/include/amqqueue.hrl").

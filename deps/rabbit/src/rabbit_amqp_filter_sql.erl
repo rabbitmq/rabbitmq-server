@@ -5,7 +5,6 @@
 %% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 -module(rabbit_amqp_filter_sql).
--feature(maybe_expr, enable).
 
 -include_lib("amqp10_common/include/amqp10_filter.hrl").
 -include_lib("kernel/include/logger.hrl").

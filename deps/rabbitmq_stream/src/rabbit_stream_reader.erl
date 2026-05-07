@@ -15,8 +15,6 @@
 
 -module(rabbit_stream_reader).
 
--feature(maybe_expr, enable).
-
 -behaviour(gen_statem).
 
 -include("rabbit_stream_utils.hrl").
