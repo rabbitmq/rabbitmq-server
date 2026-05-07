@@ -15,7 +15,6 @@
 -include("rabbit_amqp_reader.hrl").
 
 -export([init/1,
-         info/2,
          mainloop/2,
          set_credential/2,
          notify_session_ending/3]).
@@ -997,22 +996,6 @@ maybe_start_credential_expiry_timer(User) ->
 %% for a bit so they can't DOS us with repeated failed logins etc.
 silent_close_delay() ->
     timer:sleep(?SILENT_CLOSE_DELAY).
-
-%% This function is deprecated.
-%% It could be called in 3.13 / 4.0 mixed version clusters by the old 3.13 CLI command
-%% rabbitmqctl list_amqp10_connections
-%%
-%% rabbitmqctl list_connections
-%% listing AMQP 1.0 connections in 4.0 uses rabbit_reader:info/2 instead.
--spec info(rabbit_types:connection(), rabbit_types:info_keys()) ->
-    rabbit_types:infos().
-info(Pid, InfoItems) ->
-    case gen_server:call(Pid, {info, InfoItems}, infinity) of
-        {ok, InfoList} ->
-            InfoList;
-        {error, Reason} ->
-            throw(Reason)
-    end.
 
 infos(Items, State) ->
     [{Item, i(Item, State)} || Item <- Items].
