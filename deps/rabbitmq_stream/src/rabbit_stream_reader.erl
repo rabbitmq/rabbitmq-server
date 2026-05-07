@@ -4261,8 +4261,10 @@ check_node_connection_limit(RanchRef) ->
                     ok;
                 true ->
                     {error, io_lib:format("connection refused: node connection "
-                                          "limit (~p) is reached", [Limit])}
-            end
+                                          "limit (~tp) is reached", [Limit])}
+            end;
+        _Invalid ->
+            ok
     end.
 
 check_vhost_alive(VHost) ->
@@ -4270,16 +4272,22 @@ check_vhost_alive(VHost) ->
         true ->
             ok;
         false ->
-            {error, io_lib:format("vhost '~s' is down", [VHost])}
+            {error, io_lib:format("vhost '~ts' is down", [VHost])}
     end.
 
 check_vhost_connection_limit(VHost) ->
-    case rabbit_vhost_limit:is_over_connection_limit(VHost) of
+    try rabbit_vhost_limit:is_over_connection_limit(VHost) of
         false ->
             ok;
         {true, Limit} ->
-            {error, io_lib:format("vhost connection limit (~p) is reached
-                                  for vhost '~s'", [Limit, VHost])}
+            {error, io_lib:format("vhost connection limit (~tp) is reached "
+                                  "for vhost '~ts'", [Limit, VHost])}
+    catch
+        throw:{error, {no_such_vhost, VHost}} ->
+            {error, io_lib:format("vhost '~ts' not found", [VHost])};
+        throw:{error, {cannot_get_limit, VHost, timeout}} ->
+            {error, io_lib:format("connection limit for vhost '~ts' cannot "
+                                  "be queried, timeout", [VHost])}
     end.
 
 check_user_connection_limit(Username) ->
@@ -4287,8 +4295,8 @@ check_user_connection_limit(Username) ->
         false ->
             ok;
         {true, Limit} ->
-            {error, io_lib:format("user connection limit (~p) is
-                                  reached for user '~s'", [Limit, Username])}
+            {error, io_lib:format("user connection limit (~tp) is reached "
+                                  "for user '~ts'", [Limit, Username])}
     end.
 
 check_vhost_access(User = #user{username = Username}, VHost, S) ->
@@ -4296,6 +4304,6 @@ check_vhost_access(User = #user{username = Username}, VHost, S) ->
         ok ->
             ok
     catch exit:#amqp_error{name = not_allowed} ->
-              {error, io_lib:format("access refused for user "
-                                    "'~s' to vhost '~s'", [Username, VHost])}
+              {error, io_lib:format("access refused for user '~ts' "
+                                    "to vhost '~ts'", [Username, VHost])}
     end.
