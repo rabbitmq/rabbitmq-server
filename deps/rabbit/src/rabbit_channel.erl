@@ -2354,10 +2354,6 @@ i(cached_segments,   #ch{queue_states = QS}) ->
 i(state,                   #ch{cfg = #conf{state = running}}) -> credit_flow:state();
 i(state,                   #ch{cfg = #conf{state = State}}) -> State;
 i(prefetch_count,          #ch{cfg = #conf{consumer_prefetch = C}})    -> C;
-%% Retained for backwards compatibility e.g. in mixed version clusters,
-%% can be removed starting with 4.2. MK.
-i(global_prefetch_count, #ch{limiter = Limiter}) ->
-    rabbit_limiter:get_prefetch_limit(Limiter);
 i(interceptors, #ch{interceptor_state = IState}) ->
     IState;
 i(garbage_collection, _State) ->
