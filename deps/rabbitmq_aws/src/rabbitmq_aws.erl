@@ -397,8 +397,8 @@ maybe_decode_body(_ContentType, Body) ->
 %% @doc parse a content type string returning a tuple of type/subtype
 %% @end
 parse_content_type(ContentType) ->
-    Parts = string:tokens(ContentType, ";"),
-    [Type, Subtype] = string:tokens(lists:nth(1, Parts), "/"),
+    Parts = string:lexemes(ContentType, ";"),
+    [Type, Subtype] = string:lexemes(hd(Parts), "/"),
     {Type, Subtype}.
 
 -spec perform_request(

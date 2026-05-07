@@ -890,10 +890,10 @@ clear_user_limits(Username, LimitType, ActingUser) ->
     notify_limit_clear(Username, ActingUser).
 
 tag_list_from(Tags) when is_list(Tags) ->
-    [to_atom(string:strip(to_list(T))) || T <- validate_tag_count(Tags)];
+    [to_atom(string:trim(to_list(T))) || T <- validate_tag_count(Tags)];
 tag_list_from(Tags) when is_binary(Tags) ->
-    [to_atom(string:strip(T)) ||
-        T <- validate_tag_count(string:tokens(to_list(Tags), ","))].
+    [to_atom(string:trim(T)) ||
+        T <- validate_tag_count(string:lexemes(to_list(Tags), ","))].
 
 validate_tag_count(Tags) when is_list(Tags), length(Tags) =< ?MAX_USER_TAGS ->
     Tags;
@@ -911,7 +911,7 @@ max_user_tags() ->
 count_user_tags(Tags) when is_list(Tags) ->
     length(Tags);
 count_user_tags(Tags) when is_binary(Tags) ->
-    length(string:tokens(to_list(Tags), ",")).
+    length(string:lexemes(to_list(Tags), ",")).
 
 flatten_errors(L) ->
     case [{F, A} || I <- lists:flatten([L]), {error, F, A} <- [I]] of

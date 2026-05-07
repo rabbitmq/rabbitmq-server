@@ -306,7 +306,7 @@ ini_file_data(_, false) ->
 %% @end
 ini_format_key(Key) ->
     case io_lib:printable_list(Key) of
-        true -> list_to_atom(string:strip(Key));
+        true -> list_to_atom(string:trim(Key));
         false -> {error, type}
     end.
 
@@ -404,7 +404,7 @@ ini_parse_section_name(CurrentSection, Line) ->
 %% @doc Split a key value pair delimited by ``=`` to a list of strings.
 %% @end
 ini_split_line(Line) ->
-    string:tokens(string:strip(binary_to_list(Line)), "=").
+    string:lexemes(string:trim(binary_to_list(Line)), "=").
 
 -spec instance_availability_zone_url() -> string().
 %% @doc Return the URL for querying the availability zone from the Instance
@@ -605,7 +605,7 @@ lookup_region_from_settings(Region) ->
 %%      returns the string().
 %% @end
 maybe_convert_number(Value) ->
-    Stripped = string:strip(Value),
+    Stripped = string:trim(Value),
     case string:to_float(Stripped) of
         {error, no_float} ->
             try
@@ -721,11 +721,11 @@ get_instruction_on_instance_metadata_error(ErrorMessage) ->
 parse_iso8601_timestamp(Timestamp) when is_binary(Timestamp) ->
     parse_iso8601_timestamp(binary_to_list(Timestamp));
 parse_iso8601_timestamp(Timestamp) ->
-    [Date, Time] = string:tokens(Timestamp, "T"),
-    [Year, Month, Day] = string:tokens(Date, "-"),
-    [Hour, Minute, Second] = string:tokens(Time, ":"),
+    [Date, Time] = string:lexemes(Timestamp, "T"),
+    [Year, Month, Day] = string:lexemes(Date, "-"),
+    [Hour, Minute, Second] = string:lexemes(Time, ":"),
     {{list_to_integer(Year), list_to_integer(Month), list_to_integer(Day)}, {
-        list_to_integer(Hour), list_to_integer(Minute), list_to_integer(string:left(Second, 2))
+        list_to_integer(Hour), list_to_integer(Minute), list_to_integer(string:slice(Second, 0, 2))
     }}.
 
 -spec profile() -> string().

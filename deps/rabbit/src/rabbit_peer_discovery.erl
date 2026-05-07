@@ -1229,7 +1229,7 @@ normalize({error, Reason}) ->
 -spec node_prefix() -> string().
 
 node_prefix() ->
-    case string:tokens(atom_to_list(node()), ?NODENAME_PART_SEPARATOR) of
+    case string:lexemes(atom_to_list(node()), ?NODENAME_PART_SEPARATOR) of
         [Prefix, _] -> Prefix;
         [_]         -> ?DEFAULT_PREFIX
     end.
@@ -1238,7 +1238,7 @@ node_prefix() ->
 
 append_node_prefix(Value) when is_binary(Value) orelse is_list(Value) ->
     Val = rabbit_data_coercion:to_list(Value),
-    Hostname = case string:tokens(Val, ?NODENAME_PART_SEPARATOR) of
+    Hostname = case string:lexemes(Val, ?NODENAME_PART_SEPARATOR) of
                    [_ExistingPrefix, HN] -> HN;
                    [HN]                  -> HN
                end,

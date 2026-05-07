@@ -106,5 +106,5 @@ format_line([], _, _, _, Line) ->
     remove_trailing_whitespaces(Line).
 
 remove_trailing_whitespaces([Tail | Line]) ->
-    Tail1 = string:strip(Tail, right),
+    Tail1 = string:trim(Tail, trailing),
     lists:reverse([Tail1 | Line]).

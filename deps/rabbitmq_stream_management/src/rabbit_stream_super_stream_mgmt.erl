@@ -113,9 +113,9 @@ get_node(Props) ->
 
 binding_keys(BindingKeysStr) ->
     [rabbit_data_coercion:to_binary(
-       string:strip(K))
+       string:trim(K))
      || K
-            <- string:tokens(
+            <- string:lexemes(
                  rabbit_data_coercion:to_list(BindingKeysStr), ",")].
 
 routing_keys(Partitions) ->

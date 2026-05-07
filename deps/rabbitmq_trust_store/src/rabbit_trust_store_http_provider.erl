@@ -63,9 +63,9 @@ load_cert(_, Attributes, Config) ->
     end.
 
 join_url(BaseUrl, CertPath)  ->
-    string:strip(rabbit_data_coercion:to_list(BaseUrl), right, $/)
+    string:trim(rabbit_data_coercion:to_list(BaseUrl), trailing, "/")
     ++ "/" ++
-    string:strip(rabbit_data_coercion:to_list(CertPath), left, $/).
+    string:trim(rabbit_data_coercion:to_list(CertPath), leading, "/").
 
 init(Config) ->
     _ = inets:start(httpc, [{profile, ?PROFILE}]),
