@@ -1127,7 +1127,7 @@ connections_amqp(Config) ->
     after 5000 -> ct:fail(opened_timeout)
     end,
     eventually(?_assertEqual(1, length(http_get(Config, "/connections"))), 1000, 10),
-    ?assertEqual(1, length(rpc(Config, rabbit_amqp1_0, list_local, []))),
+    ?assertEqual(1, length(rpc(Config, rabbit_amqp_reader, local_connections, []))),
     [Connection1] = http_get(Config, "/connections"),
     ?assertMatch(#{node := Node,
                    vhost := <<"/">>,
@@ -1169,7 +1169,7 @@ connections_amqp(Config) ->
     end,
     eventually(?_assertNot(is_process_alive(C2))),
     eventually(?_assertEqual([], http_get(Config, "/connections")), 10, 5),
-    ?assertEqual(0, length(rpc(Config, rabbit_amqp1_0, list_local, []))).
+    ?assertEqual(0, length(rpc(Config, rabbit_amqp_reader, local_connections, []))).
 
 %% Test that AMQP 1.0 sessions and links can be listed via the rabbitmq_management plugin.
 amqp_sessions(Config) ->

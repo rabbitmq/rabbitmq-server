@@ -16,6 +16,7 @@
 
 -export([init/1,
          mainloop/2,
+         local_connections/0,
          set_credential/2,
          notify_session_ending/3]).
 
@@ -546,7 +547,8 @@ handle_connection_frame(
            Infos),
     ok = rabbit_event:notify(connection_created, Infos),
     ok = maybe_emit_stats(State),
-    ok = rabbit_amqp1_0:register_connection(self()),
+    ok = register_connection(self()),
+
     Caps = [%% https://docs.oasis-open.org/amqp/linkpair/v1.0/cs01/linkpair-v1.0-cs01.html#_Toc51331306
             <<"LINK_PAIR_V1_0">>,
             %% https://docs.oasis-open.org/amqp/anonterm/v1.0/cs01/anonterm-v1.0-cs01.html#doc-anonymous-relay
@@ -996,6 +998,16 @@ maybe_start_credential_expiry_timer(User) ->
 %% for a bit so they can't DOS us with repeated failed logins etc.
 silent_close_delay() ->
     timer:sleep(?SILENT_CLOSE_DELAY).
+
+-spec local_connections() -> [pid()].
+local_connections() ->
+    pg:which_groups(pg_scope()).
+
+register_connection(Pid) ->
+    pg:join(pg_scope(), Pid, Pid).
+
+pg_scope() ->
+    rabbit:pg_local_scope(amqp_connection).
 
 infos(Items, State) ->
     [{Item, i(Item, State)} || Item <- Items].

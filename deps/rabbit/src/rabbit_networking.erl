@@ -489,7 +489,7 @@ connections() ->
 -spec local_connections() -> [rabbit_types:connection()].
 local_connections() ->
     Amqp091Pids = pg:which_groups(pg_scope_amqp091_connection()),
-    Amqp10Pids = rabbit_amqp1_0:list_local(),
+    Amqp10Pids = rabbit_amqp_reader:local_connections(),
     Amqp10Pids ++ Amqp091Pids.
 
 -spec register_non_amqp_connection(pid()) -> ok.
