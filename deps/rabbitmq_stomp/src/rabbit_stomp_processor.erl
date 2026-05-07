@@ -7,8 +7,6 @@
 
 -module(rabbit_stomp_processor).
 
--feature(maybe_expr, enable).
-
 -compile({no_auto_import, [error/3]}).
 
 -export([initial_state/2,

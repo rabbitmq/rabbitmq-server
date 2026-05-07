@@ -88,8 +88,6 @@
 
 -module(rabbit_khepri).
 
--feature(maybe_expr, enable).
-
 -include_lib("kernel/include/logger.hrl").
 -include_lib("stdlib/include/assert.hrl").
 
