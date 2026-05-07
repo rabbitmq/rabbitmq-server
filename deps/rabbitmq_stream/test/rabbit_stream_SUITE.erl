@@ -1115,7 +1115,7 @@ unauthorized_vhost_access_should_close_with_delay(Config) ->
     C2 = test_plain_sasl_authenticate(T, S, sasl_handshake(T, S, C1), User),
     Start = erlang:monotonic_time(millisecond),
     R = do_tune(T, S, C2),
-    ?assertMatch({{response,_,{open,12}}, _}, R),
+    ?assertMatch({{response,_,{open, 12, _}}, _}, R),
     End = erlang:monotonic_time(millisecond),
     %% the stream reader module defines the delay (3 seconds)
     ?assert(End - Start > 2_000),

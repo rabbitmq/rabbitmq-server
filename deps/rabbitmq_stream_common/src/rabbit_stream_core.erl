@@ -1026,6 +1026,12 @@ parse_request(Bin) ->
     {unknown, Bin}.
 
 parse_response(<<?RESPONSE:1,
+                 ?COMMAND_OPEN:15,
+                 ?VERSION_1:16,
+                 CorrelationId:32,
+                 ResponseCode:16>>) ->
+    {response, CorrelationId, {open, ResponseCode, #{}}};
+parse_response(<<?RESPONSE:1,
                  CommandId:15,
                  ?VERSION_1:16,
                  CorrelationId:32,
