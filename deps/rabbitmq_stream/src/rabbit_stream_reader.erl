@@ -188,6 +188,7 @@ init([KeepaliveSup,
                                    transport = ConnTransport,
                                    proxy_socket =
                                        rabbit_net:maybe_get_proxy_socket(Sock),
+                                   ranch_ref = Ref,
                                    correlation_id_sequence = 0,
                                    outstanding_requests = #{},
                                    request_timeout = RequestTimeout,
@@ -1508,20 +1509,21 @@ handle_frame_pre_auth(_Transport,
                                   heartbeater = Heartbeater},
      State#stream_connection_state{data = CoreState}};
 handle_frame_pre_auth(Transport,
-                      #stream_connection{user = User,
+                      #stream_connection{user = User = #user{username = Username},
                                          socket = S,
+                                         ranch_ref = RanchRef,
                                          transport = TransportLayer} =
                           Connection,
                       State,
                       {request, CorrelationId, {open, VirtualHost}}) ->
-    %% FIXME enforce connection limit (see rabbit_reader:is_over_connection_limit/2)
     ?LOG_DEBUG("Open frame received for ~ts", [VirtualHost]),
     Connection1 =
-        try
-            rabbit_access_control:check_vhost_access(User,
-                                                     VirtualHost,
-                                                     {socket, S},
-                                                     #{}),
+        maybe
+            ok ?= check_node_connection_limit(RanchRef),
+            ok ?= check_vhost_alive(VirtualHost),
+            ok ?= check_vhost_connection_limit(VirtualHost),
+            ok ?= check_user_connection_limit(Username),
+            ok ?= check_vhost_access(User, VirtualHost, S),
 
             AdHost = advertised_host(TransportLayer),
             AdPort = rabbit_data_coercion:to_binary(advertised_port(TransportLayer)),
@@ -1535,13 +1537,13 @@ handle_frame_pre_auth(Transport,
                                            ConnProps}}),
 
             send(Transport, S, Frame),
-            %% FIXME check if vhost is alive (see rabbit_reader:is_vhost_alive/2)
 
             {_, Conn} = ensure_token_expiry_timer(User,
                                                   Connection#stream_connection{connection_step = opened,
                                                                                virtual_host = VirtualHost}),
             Conn
-        catch exit:#amqp_error{explanation = Explanation} ->
+        else
+            {error, Explanation} ->
                   ?LOG_WARNING("Opening connection failed: ~ts", [Explanation]),
                   silent_close_delay(),
                   F = rabbit_stream_core:frame({response, CorrelationId,
@@ -4178,3 +4180,63 @@ advertised_port_fun(tcp) ->
     port;
 advertised_port_fun(ssl) ->
     tls_port.
+
+check_node_connection_limit(undefined) ->
+    ok;
+check_node_connection_limit(RanchRef) ->
+    case application:get_env(rabbitmq_stream, connection_max, infinity) of
+        infinity ->
+            ok;
+        Limit when is_integer(Limit), Limit >= 0 ->
+            #{active_connections := ActiveConns} = ranch:info(RanchRef),
+            case ActiveConns > Limit of
+                false ->
+                    ok;
+                true ->
+                    {error, io_lib:format("connection refused: node connection "
+                                          "limit (~tp) is reached", [Limit])}
+            end;
+        _Invalid ->
+            ok
+    end.
+
+check_vhost_alive(VHost) ->
+    case rabbit_vhost_sup_sup:is_vhost_alive(VHost) of
+        true ->
+            ok;
+        false ->
+            {error, io_lib:format("vhost '~ts' is down", [VHost])}
+    end.
+
+check_vhost_connection_limit(VHost) ->
+    try rabbit_vhost_limit:is_over_connection_limit(VHost) of
+        false ->
+            ok;
+        {true, Limit} ->
+            {error, io_lib:format("vhost connection limit (~tp) is reached "
+                                  "for vhost '~ts'", [Limit, VHost])}
+    catch
+        throw:{error, {no_such_vhost, VHost}} ->
+            {error, io_lib:format("vhost '~ts' not found", [VHost])};
+        throw:{error, {cannot_get_limit, VHost, timeout}} ->
+            {error, io_lib:format("connection limit for vhost '~ts' cannot "
+                                  "be queried, timeout", [VHost])}
+    end.
+
+check_user_connection_limit(Username) ->
+    case rabbit_auth_backend_internal:is_over_connection_limit(Username) of
+        false ->
+            ok;
+        {true, Limit} ->
+            {error, io_lib:format("user connection limit (~tp) is reached "
+                                  "for user '~ts'", [Limit, Username])}
+    end.
+
+check_vhost_access(User = #user{username = Username}, VHost, S) ->
+    try rabbit_access_control:check_vhost_access(User, VHost, {socket, S}, #{}) of
+        ok ->
+            ok
+    catch exit:#amqp_error{name = not_allowed} ->
+              {error, io_lib:format("access refused for user '~ts' "
+                                    "to vhost '~ts'", [Username, VHost])}
+    end.
