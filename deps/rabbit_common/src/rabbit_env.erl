@@ -1357,8 +1357,6 @@ product_name_from_node(#{from_remote_node := Remote} = Context) ->
     case Ret of
         {badrpc, nodedown} ->
             update_context(Context, product_name, undefined, default);
-        {query, _, _} ->
-            update_context(Context, product_name, undefined, default);
         {error, _} ->
             update_context(Context, product_name, undefined, default);
         Value  ->
@@ -1391,8 +1389,6 @@ product_version_from_node(#{from_remote_node := Remote} = Context) ->
           end,
     case Ret of
         {badrpc, _} ->
-            update_context(Context, product_version, undefined, default);
-        {query, _, _} ->
             update_context(Context, product_version, undefined, default);
         {error, _} ->
             update_context(Context, product_version, undefined, default);
@@ -1436,8 +1432,6 @@ motd_file_from_node(#{from_remote_node := Remote} = Context) ->
           end,
     case Ret of
         {badrpc, _} ->
-            update_context(Context, motd_file, undefined, default);
-        {query, _, _} ->
             update_context(Context, motd_file, undefined, default);
         {error, _} ->
             update_context(Context, motd_file, undefined, default);

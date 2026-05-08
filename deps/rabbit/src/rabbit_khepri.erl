@@ -861,8 +861,6 @@ check_cluster_consistency(Node, CheckNodesConsistency) ->
          end of
         error ->
             {error, not_found};
-        {ok, {badrpc, _Reason}} ->
-            {error, not_found};
         {ok, {_OTP, _Rabbit, {error, _Reason}}} ->
             {error, not_found};
         {ok, {_OTP, _Rabbit, {ok, Status}}} when CheckNodesConsistency ->

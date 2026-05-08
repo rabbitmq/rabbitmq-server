@@ -226,8 +226,7 @@ validate_params_user(#amqp_params_direct{virtual_host = VHost},
     case VHostAccess of
         ok -> ok;
         NotOK ->
-            ?LOG_DEBUG("rabbit_access_control:check_vhost_access result: ~tp", [NotOK]),
-            NotOK
+            ?LOG_DEBUG("rabbit_access_control:check_vhost_access result: ~tp", [NotOK])
     end,
     case rabbit_vhost:exists(VHost) andalso VHostAccess of
         ok -> ok;
