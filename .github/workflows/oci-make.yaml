@@ -31,9 +31,13 @@ on:
         default: false
 env:
   REGISTRY_IMAGE: pivotalrabbitmq/rabbitmq
-  VERSION: 4.3.0+${{ github.sha }}
+  # For pull_request events github.sha is an ephemeral merge commit, not the branch HEAD.
+  # For workflow_run events github.sha is the default branch HEAD, not the triggering branch HEAD.
+  # Use the actual branch HEAD SHA in both cases.
+  HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.workflow_run.head_sha || github.sha }}
+  VERSION: 4.3.0+${{ env.HEAD_SHA }}
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.workflow_run.head_branch || github.ref }}
   cancel-in-progress: true
 jobs:
   build-package-generic-unix:
@@ -58,6 +62,8 @@ jobs:
       - name: Checkout
         if: steps.authorized.outputs.authorized == 'true'
         uses: actions/checkout@v6
+        with:
+          ref: ${{ env.HEAD_SHA }}
       - name: Configure Erlang
         if: steps.authorized.outputs.authorized == 'true'
         uses: erlef/setup-beam@v1
@@ -87,6 +93,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: ${{ env.HEAD_SHA }}
       - name: Download package-generic-unix
         uses: actions/download-artifact@v8
         with:
@@ -107,7 +115,7 @@ jobs:
           tags: |
             type=ref,event=branch
             type=ref,event=pr
-            type=sha,format=long
+            type=raw,value=sha-${{ env.HEAD_SHA }}
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
       - name: Set up Docker Buildx
