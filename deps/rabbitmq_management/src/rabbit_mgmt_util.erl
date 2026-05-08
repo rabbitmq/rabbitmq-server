@@ -1199,7 +1199,7 @@ list_login_vhosts(User, AuthzData) ->
           end].
 
 % rabbitmq/rabbitmq-auth-backend-http#100
-log_access_control_result({'EXIT', #amqp_error{name = Name, explanation = Msg}}) ->
+log_access_control_result({error, #amqp_error{name = Name, explanation = Msg}}) ->
     ?LOG_DEBUG("rabbit_access_control:check_vhost_access result: '~tp', ~ts", [Name, Msg]);
 log_access_control_result(NotOK) ->
     ?LOG_DEBUG("rabbit_access_control:check_vhost_access result: ~tp", [NotOK]).

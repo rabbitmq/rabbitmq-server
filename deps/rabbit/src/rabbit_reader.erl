@@ -1300,9 +1300,6 @@ handle_method0(#'connection.tune_ok'{frame_max   = FrameMax,
                         ok;
                     {error, Reason} ->
                         Parent ! {heartbeat_send_error, Reason},
-                        ok;
-                    Unexpected ->
-                        Parent ! {heartbeat_send_error, Unexpected},
                         ok
                 end,
                 ok
