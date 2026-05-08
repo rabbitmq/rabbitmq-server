@@ -116,6 +116,8 @@ jobs:
             type=ref,event=branch
             type=ref,event=pr
             type=raw,value=sha-${{ env.HEAD_SHA }}
+          labels: |
+            org.opencontainers.image.revision=${{ env.HEAD_SHA }}
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
       - name: Set up Docker Buildx
