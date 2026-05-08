@@ -255,7 +255,9 @@ like(Subject,{{prefix, PrefixSize, _} = Prefix,
     like(Subject, Suffix);
 like(Subject, CompiledRe)
   when element(1, CompiledRe) =:= re_pattern ->
-    try re:run(Subject, CompiledRe, [{capture, none}]) of
+    try re:run(Subject, CompiledRe, [{capture, none},
+                                     {match_limit, 50_000},
+                                     {match_limit_recursion, 50_000}]) of
         match ->
             true;
         _ ->
