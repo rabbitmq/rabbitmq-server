@@ -4184,7 +4184,7 @@ advertised_port_fun(ssl) ->
 check_node_connection_limit(undefined) ->
     ok;
 check_node_connection_limit(RanchRef) ->
-    case application:get_env(rabbitmq_stream, connection_max, infinity) of
+    case application:get_env(rabbitmq_stream, max_connections, infinity) of
         infinity ->
             ok;
         Limit when is_integer(Limit), Limit >= 0 ->
