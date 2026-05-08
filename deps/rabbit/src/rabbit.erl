@@ -480,9 +480,10 @@ spawn_boot_marker() ->
     %% We register a process doing nothing to indicate that RabbitMQ is
     %% booting. This is checked by `is_booting(Node)` on a remote node.
     Marker = spawn_link(fun() -> receive stop -> ok end end),
-    case catch register(rabbit_boot, Marker) of
-        true -> {ok, Marker};
-        _    -> {already_booting, Marker}
+    try register(rabbit_boot, Marker) of
+        true -> {ok, Marker}
+    catch
+        _:_ -> {already_booting, Marker}
     end.
 
 stop_boot_marker(Marker) ->
@@ -1427,11 +1428,7 @@ print_banner() ->
               CfgLocations).
 
 emu_flavor() ->
-    %% emu_flavor was introduced in Erlang 24 so we need to catch the error on Erlang 23
-    case catch(erlang:system_info(emu_flavor)) of
-        {'EXIT', _} -> "emu";
-        EmuFlavor -> EmuFlavor
-    end.
+    erlang:system_info(emu_flavor).
 
 crypto_version() ->
     [{CryptoLibName, _, CryptoLibVersion}] = crypto:info_lib(),

@@ -856,14 +856,16 @@ check_cluster_consistency() ->
 %% @private
 
 check_cluster_consistency(Node, CheckNodesConsistency) ->
-    case (catch remote_node_info(Node)) of
-        {badrpc, _Reason} ->
+    case try {ok, remote_node_info(Node)}
+         catch _:_ -> error
+         end of
+        error ->
             {error, not_found};
-        {'EXIT', {badarg, _Reason}} ->
+        {ok, {badrpc, _Reason}} ->
             {error, not_found};
-        {_OTP, _Rabbit, {error, _Reason}} ->
+        {ok, {_OTP, _Rabbit, {error, _Reason}}} ->
             {error, not_found};
-        {_OTP, _Rabbit, {ok, Status}} when CheckNodesConsistency ->
+        {ok, {_OTP, _Rabbit, {ok, Status}}} when CheckNodesConsistency ->
             case rabbit_db_cluster:check_compatibility(Node) of
                 ok ->
                     case check_nodes_consistency(Node, Status) of
@@ -873,7 +875,7 @@ check_cluster_consistency(Node, CheckNodesConsistency) ->
                 Error ->
                     Error
             end;
-        {_OTP, _Rabbit, {ok, Status}} ->
+        {ok, {_OTP, _Rabbit, {ok, Status}}} ->
             {ok, Status}
     end.
 

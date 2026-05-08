@@ -481,7 +481,7 @@ publish(Chan, Msg, Exchange, RoutingKey) ->
                            Msg).
 
 delete_queues(Qs) when is_list(Qs) ->
-    (catch lists:foreach(fun delete_testcase_queue/1, Qs)).
+    try lists:foreach(fun delete_testcase_queue/1, Qs) catch _:_ -> ok end.
 
 delete_testcase_queue(Name) ->
     QName = rabbit_misc:r(<<"/">>, queue, Name),

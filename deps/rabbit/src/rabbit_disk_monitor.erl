@@ -438,10 +438,16 @@ enable(#state{retries = 0} = State) ->
     ?LOG_ERROR("Free disk space monitor failed to start!"),
     State;
 enable(#state{dir = Dir, os = OS, port = Port} = State) ->
-    enable_handle_disk_free(catch get_disk_free(Dir, OS, Port), State).
+    DiskFree = try get_disk_free(Dir, OS, Port)
+               catch _:E -> {error, E}
+               end,
+    enable_handle_disk_free(DiskFree, State).
 
 enable_handle_disk_free(DiskFree, State) when is_integer(DiskFree) ->
-    enable_handle_total_memory(catch vm_memory_monitor:get_total_memory(), DiskFree, State);
+    TotalMem = try vm_memory_monitor:get_total_memory()
+               catch _:E -> {error, E}
+               end,
+    enable_handle_total_memory(TotalMem, DiskFree, State);
 enable_handle_disk_free(Error, #state{interval = Interval, retries = Retries} = State) ->
     ?LOG_WARNING("Free disk space monitor encountered an error "
                        "(e.g. failed to parse output from OS tools). "
