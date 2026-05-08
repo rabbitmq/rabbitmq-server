@@ -278,7 +278,10 @@ get_authz_data(ReqData) ->
 
 check_vhost_access(ReqData, User, VHost) ->
     AuthzData = get_authz_data(ReqData),
-    case catch rabbit_access_control:check_vhost_access(User, VHost, AuthzData, #{}) of
+    Res = try rabbit_access_control:check_vhost_access(User, VHost, AuthzData, #{})
+          catch _:E -> {error, E}
+          end,
+    case Res of
         ok -> true;
         NotOK ->
             log_access_control_result(NotOK),

@@ -971,7 +971,7 @@ scrub_dn(DN, _) ->
 scrub_rdn([], Acc) ->
     string:join(lists:reverse(Acc), ",");
 scrub_rdn([DN|Rem], Acc) ->
-    DN0 = case catch string:lexemes(DN, "=") of
+    DN0 = case try string:lexemes(DN, "=") catch _:_ -> [] end of
               L = [RDN, _] -> case string:lowercase(RDN) of
                                   "cn"  -> [RDN, ?SCRUBBED_CREDENTIAL];
                                   "dc"  -> [RDN, ?SCRUBBED_CREDENTIAL];
@@ -986,7 +986,9 @@ scrub_rdn([DN|Rem], Acc) ->
   scrub_rdn(Rem, [string:join(DN0, "=")|Acc]).
 
 is_dn(S) when is_list(S) ->
-    case catch string:lexemes(rabbit_data_coercion:to_list(S), "=") of
+    case try string:lexemes(rabbit_data_coercion:to_list(S), "=")
+         catch _:_ -> []
+         end of
         L when length(L) > 1 -> true;
         _                    -> false
     end;

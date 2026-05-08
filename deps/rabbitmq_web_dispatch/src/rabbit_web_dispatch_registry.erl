@@ -44,10 +44,11 @@ set_fallback(Listener, FallbackHandler) ->
 lookup(Listener, Req) ->
     case lookup_dispatch(Listener) of
         {ok, {Selectors, Fallback}} ->
-            case catch match_request(Selectors, Req) of
-                {'EXIT', Reason} -> {error, {lookup_failure, Reason}};
-                not_found        -> {ok, Fallback};
-                Dispatch         -> {ok, Dispatch}
+            try match_request(Selectors, Req) of
+                not_found -> {ok, Fallback};
+                Dispatch  -> {ok, Dispatch}
+            catch
+                _:Reason -> {error, {lookup_failure, Reason}}
             end;
         Err ->
             Err

@@ -438,7 +438,7 @@ do_start_child(SupName, Child) ->
     end.
 
 do_start_child_i(M, F, A) ->
-    case catch apply(M, F, A) of
+    try apply(M, F, A) of
         {ok, Pid} when is_pid(Pid) ->
             {ok, Pid};
         {ok, Pid, Extra} when is_pid(Pid) ->
@@ -448,6 +448,9 @@ do_start_child_i(M, F, A) ->
         {error, Error} ->
             {error, Error};
         What ->
+            {error, What}
+    catch
+        _:What ->
             {error, What}
     end.
 

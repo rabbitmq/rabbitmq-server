@@ -209,7 +209,9 @@ non_numeric_bin() ->
               ?LET(Chars, list(range(0, 255)),
                    list_to_binary(
                      [C || C <- Chars, C =/= $\n, C =/= $\r, C =/= $:, C =/= $\\, C =/= 0])),
-              not is_integer(catch binary_to_integer(string:trim(Bin)))).
+              not is_integer(try binary_to_integer(string:trim(Bin))
+                             catch _:_ -> error
+                             end)).
 
 %% Produces non-empty, no NUL header names. Biased towards escaped chars.
 stomp_hdr_name() ->

@@ -182,9 +182,10 @@ filter_queues(Expected, Got) ->
 ra_machines_use_same_version(MachineModule, Config, Nodenames)
   when length(Nodenames) >= 1 ->
     [MachineAVersion | OtherMachinesVersions] =
-    [(catch rabbit_ct_broker_helpers:rpc(
-              Config, Nodename,
-              MachineModule, version, []))
+    [(try rabbit_ct_broker_helpers:rpc(
+              Config, Nodename, MachineModule, version, [])
+       catch _:E -> {error, E}
+       end)
      || Nodename <- Nodenames],
     lists:all(fun(V) -> V =:= MachineAVersion end, OtherMachinesVersions).
 

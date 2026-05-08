@@ -1293,7 +1293,9 @@ handle_method0(#'connection.tune_ok'{frame_max   = FrameMax,
     Parent = self(),
     SendFun =
         fun() ->
-                case catch rabbit_net:send(Sock, Frame) of
+                case try rabbit_net:send(Sock, Frame)
+                     catch _:E -> {error, E}
+                     end of
                     ok ->
                         ok;
                     {error, Reason} ->
@@ -1935,9 +1937,9 @@ gen_call(Pid, Req, Timeout) ->
     %% We use gen:call/4 with label rabbit_call instead of gen_server:call/3 with label '$gen_call'
     %% because cowboy_websocket does not let rabbit_web_amqp_handler handle '$gen_call' messages:
     %% https://github.com/ninenines/cowboy/blob/2.12.0/src/cowboy_websocket.erl#L427-L430
-    case catch gen:call(Pid, rabbit_call, Req, Timeout) of
-        {ok, Res} ->
-            Res;
-        {'EXIT', Reason} ->
+    try gen:call(Pid, rabbit_call, Req, Timeout) of
+        {ok, Res} -> Res
+    catch
+        _:Reason ->
             exit({Reason, {?MODULE, ?FUNCTION_NAME, [Pid, Req, Timeout]}})
     end.
