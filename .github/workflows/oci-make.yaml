@@ -35,7 +35,7 @@ env:
   # For workflow_run events github.sha is the default branch HEAD, not the triggering branch HEAD.
   # Use the actual branch HEAD SHA in both cases.
   HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.workflow_run.head_sha || github.sha }}
-  VERSION: 4.3.0+${{ env.HEAD_SHA }}
+  VERSION: 4.3.0+${{ github.event.pull_request.head.sha || github.event.workflow_run.head_sha || github.sha }}
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.workflow_run.head_branch || github.ref }}
   cancel-in-progress: true
