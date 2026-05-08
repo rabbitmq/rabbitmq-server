@@ -73,5 +73,9 @@
           stream.credits_required_for_unblocking = 25000",
       [{rabbitmq_stream,[{initial_credits, 100000},
                          	{credits_required_for_unblocking, 25000}]}],
+      [rabbitmq_stream]},
+  {connection_max,
+      "stream.connection_max = 10",
+      [{rabbitmq_stream,[{connection_max, 10}]}],
       [rabbitmq_stream]}
 ].

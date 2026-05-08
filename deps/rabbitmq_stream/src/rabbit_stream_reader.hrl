@@ -91,6 +91,7 @@
              atomics:atomics_ref(), % number of bytes sent with send_file (for metrics)
          transport :: tcp | ssl,
          proxy_socket :: undefined | ranch_transport:socket(),
+         ranch_ref :: ranch:ref(),
          correlation_id_sequence :: integer(),
          outstanding_requests :: #{integer() => #request{}},
          deliver_version :: rabbit_stream_core:command_version(),

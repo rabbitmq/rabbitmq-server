@@ -62,6 +62,9 @@ groups() ->
        close_connection_on_consumer_update_timeout,
        set_filter_size,
        vhost_queue_limit,
+       vhost_connection_limit,
+       user_connection_limit,
+       node_connection_limit,
        connection_should_be_closed_on_token_expiry,
        should_receive_metadata_update_after_update_secret,
        store_offset_requires_read_access,
@@ -197,6 +200,18 @@ init_per_testcase(vhost_queue_limit = TestCase, Config) ->
     ok = rabbit_ct_broker_helpers:set_vhost_limit(Config, 0, <<"/">>, max_queues, QueueCount + 5),
     rabbit_ct_helpers:testcase_started(Config, TestCase);
 
+init_per_testcase(vhost_connection_limit = TestCase, Config) ->
+    ok = rabbit_ct_broker_helpers:set_vhost_limit(Config, 0, <<"/">>, max_connections, 2),
+    rabbit_ct_helpers:testcase_started(Config, TestCase);
+
+init_per_testcase(user_connection_limit = TestCase, Config) ->
+    ok = rabbit_ct_broker_helpers:set_user_limits(Config, <<"guest">>, #{max_connections => 1}),
+    rabbit_ct_helpers:testcase_started(Config, TestCase);
+
+init_per_testcase(node_connection_limit = TestCase, Config) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env, [rabbitmq_stream, connection_max, 0]),
+    rabbit_ct_helpers:testcase_started(Config, TestCase);
+
 init_per_testcase(store_offset_requires_read_access = TestCase, Config) ->
   ok = rabbit_ct_broker_helpers:add_user(Config, <<"test">>),
   rabbit_ct_helpers:testcase_started(Config, TestCase);
@@ -234,6 +249,16 @@ end_per_testcase(vhost_queue_limit = TestCase, Config) ->
                                      rabbit_vhost_limit,
                                      clear,
                                      [<<"/">>, <<"guest">>]),
+    rabbit_ct_helpers:testcase_finished(Config, TestCase);
+
+end_per_testcase(vhost_connection_limit = TestCase, Config) ->
+    ok = rabbit_ct_broker_helpers:clear_vhost_limit(Config, 0, <<"/">>),
+    rabbit_ct_helpers:testcase_finished(Config, TestCase);
+end_per_testcase(user_connection_limit = TestCase, Config) ->
+    ok = rabbit_ct_broker_helpers:clear_user_limits(Config, <<"guest">>, max_connections),
+    rabbit_ct_helpers:testcase_finished(Config, TestCase);
+end_per_testcase(node_connection_limit = TestCase, Config) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env, [rabbitmq_stream, connection_max, infinity]),
     rabbit_ct_helpers:testcase_finished(Config, TestCase);
 end_per_testcase(store_offset_requires_read_access = TestCase, Config) ->
     ok = rabbit_ct_broker_helpers:delete_user(Config, <<"test">>),
@@ -826,6 +851,124 @@ set_filter_size(Config) ->
     closed = wait_for_socket_close(Transport, S, 10),
     ok.
 
+vhost_connection_limit(Config) ->
+    T = gen_tcp,
+    Port = get_port(T, Config),
+    Opts = get_opts(T),
+
+    %% First connection
+    {ok, S1} = T:connect("localhost", Port, Opts),
+    C1_0 = rabbit_stream_core:init(0),
+    C1_1 = test_peer_properties(T, S1, C1_0),
+    C1_2 = test_authenticate(T, S1, C1_1),
+
+    %% Second connection
+    {ok, S2} = T:connect("localhost", Port, Opts),
+    C2_0 = rabbit_stream_core:init(0),
+    C2_1 = test_peer_properties(T, S2, C2_0),
+    C2_2 = test_authenticate(T, S2, C2_1),
+
+    %% Wait for connection tracking to sync
+    ?awaitMatch(2, count_connections_per_vhost(Config), 30000),
+
+    %% Third connection should fail
+    {ok, S3} = T:connect("localhost", Port, Opts),
+    C3_0 = rabbit_stream_core:init(0),
+    C3_1 = test_peer_properties(T, S3, C3_0),
+    C3_2 = test_plain_sasl_authenticate(T, S3, sasl_handshake(T, S3, C3_1), <<"guest">>),
+
+    {Tune, C3_3} = receive_commands(T, S3, C3_2),
+    {tune, ?DEFAULT_FRAME_MAX, ?DEFAULT_HEARTBEAT} = Tune,
+
+    TuneFrame = rabbit_stream_core:frame({response, 0, {tune, ?DEFAULT_FRAME_MAX, 0}}),
+    ok = T:send(S3, TuneFrame),
+
+    OpenFrame = request(3, {open, <<"/">>}),
+    ok = T:send(S3, OpenFrame),
+
+    {Cmd, _C3_4} = receive_commands(T, S3, C3_3),
+    ?assertMatch({response, 3, {open, ?RESPONSE_VHOST_ACCESS_FAILURE, _}}, Cmd),
+
+    _ = test_close(T, S1, C1_2),
+    _ = test_close(T, S2, C2_2),
+    closed = wait_for_socket_close(T, S1, 10),
+    closed = wait_for_socket_close(T, S2, 10),
+    closed = wait_for_socket_close(T, S3, 10),
+    ok.
+
+user_connection_limit(Config) ->
+    T = gen_tcp,
+    Port = get_port(T, Config),
+    Opts = get_opts(T),
+
+    %% First connection
+    {ok, S1} = T:connect("localhost", Port, Opts),
+    C1_0 = rabbit_stream_core:init(0),
+    C1_1 = test_peer_properties(T, S1, C1_0),
+    C1_2 = test_authenticate(T, S1, C1_1),
+
+    %% Wait for connection tracking to sync
+    ?awaitMatch(1, count_connections_per_vhost(Config), 30000),
+
+    %% Second connection should fail
+    {ok, S2} = T:connect("localhost", Port, Opts),
+    C2_0 = rabbit_stream_core:init(0),
+    C2_1 = test_peer_properties(T, S2, C2_0),
+    C2_2 = test_plain_sasl_authenticate(T, S2, sasl_handshake(T, S2, C2_1), <<"guest">>),
+
+    %% Read tune frame from server
+    {Tune, C2_3} = receive_commands(T, S2, C2_2),
+    {tune, ?DEFAULT_FRAME_MAX, ?DEFAULT_HEARTBEAT} = Tune,
+
+    %% Manually send tune and open frames
+    TuneFrame = rabbit_stream_core:frame({response, 0, {tune, ?DEFAULT_FRAME_MAX, 0}}),
+    ok = T:send(S2, TuneFrame),
+
+    OpenFrame = request(3, {open, <<"/">>}),
+    ok = T:send(S2, OpenFrame),
+
+    {Cmd, _C2_4} = receive_commands(T, S2, C2_3),
+    ?assertMatch({response, 3, {open, ?RESPONSE_VHOST_ACCESS_FAILURE, _}}, Cmd),
+
+    _ = test_close(T, S1, C1_2),
+    closed = wait_for_socket_close(T, S1, 10),
+    closed = wait_for_socket_close(T, S2, 10),
+    ok.
+
+node_connection_limit(Config) ->
+    T = gen_tcp,
+    Port = get_port(T, Config),
+    Opts = get_opts(T),
+
+    %% First connection should fail because limit is 0
+    {ok, S1} = T:connect("localhost", Port, Opts),
+    C1_0 = rabbit_stream_core:init(0),
+    C1_1 = test_peer_properties(T, S1, C1_0),
+    C1_2 = test_plain_sasl_authenticate(T, S1, sasl_handshake(T, S1, C1_1), <<"guest">>),
+
+    %% Read tune frame from server
+    {Tune, C1_3} = receive_commands(T, S1, C1_2),
+    {tune, ?DEFAULT_FRAME_MAX, ?DEFAULT_HEARTBEAT} = Tune,
+
+    %% Manually send tune and open frames
+    TuneFrame = rabbit_stream_core:frame({response, 0, {tune, ?DEFAULT_FRAME_MAX, 0}}),
+    ok = T:send(S1, TuneFrame),
+
+    OpenFrame = request(3, {open, <<"/">>}),
+    ok = T:send(S1, OpenFrame),
+
+    {Cmd, _C1_4} = receive_commands(T, S1, C1_3),
+    ?assertMatch({response, 3, {open, ?RESPONSE_VHOST_ACCESS_FAILURE, _}}, Cmd),
+
+    closed = wait_for_socket_close(T, S1, 10),
+    ok.
+
+count_connections_per_vhost(Config)  ->
+    rabbit_ct_broker_helpers:rpc(
+      Config, 0,
+      rabbit_connection_tracking, count_local_tracked_items_in_vhost,
+      [<<"/">>]).
+
 vhost_queue_limit(Config) ->
     T = gen_tcp,
     Port = get_port(T, Config),
@@ -1115,7 +1258,7 @@ unauthorized_vhost_access_should_close_with_delay(Config) ->
     C2 = test_plain_sasl_authenticate(T, S, sasl_handshake(T, S, C1), User),
     Start = erlang:monotonic_time(millisecond),
     R = do_tune(T, S, C2),
-    ?assertMatch({{response,_,{open,12}}, _}, R),
+    ?assertMatch({{response,_,{open, 12, _}}, _}, R),
     End = erlang:monotonic_time(millisecond),
     %% the stream reader module defines the delay (3 seconds)
     ?assert(End - Start > 2_000),
