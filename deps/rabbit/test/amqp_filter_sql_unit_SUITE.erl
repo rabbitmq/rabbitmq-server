@@ -500,7 +500,12 @@ like_operator(_Config) ->
     %% Combined with other operators
     true = match("description LIKE '%test%' AND country = 'UK'", app_props()),
     true = match("(city LIKE 'Paris') OR (description LIKE '%test%')", app_props()),
-    true = match("city LIKE 'Paris' OR description LIKE '%test%'", app_props()).
+    true = match("city LIKE 'Paris' OR description LIKE '%test%'", app_props()),
+
+    false = match("k LIKE '%%X'",      [{{utf8, <<"k">>}, {utf8, <<"abc">>}}]),
+    true  = match("k LIKE '%%X'",      [{{utf8, <<"k">>}, {utf8, <<"abcX">>}}]),
+    true  = match("k LIKE '%%a%%b%%'", [{{utf8, <<"k">>}, {utf8, <<"xaxbx">>}}]),
+    false = match("k LIKE '%%a%%b%%'", [{{utf8, <<"k">>}, {utf8, <<"xbxax">>}}]).
 
 in_operator(_Config) ->
     AppPropsUtf8 = [{{utf8, <<"country">>}, {utf8, <<"🇬🇧"/utf8>>}}],
