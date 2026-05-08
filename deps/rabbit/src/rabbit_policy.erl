@@ -403,15 +403,18 @@ notify_clear(VHost, <<"operator_policy">>, Name, ActingUser) ->
 %% deleted; in which case it's fine to do nothing.
 update_matched_objects(VHost, PolicyDef, ActingUser) ->
     {XUpdateResults, QUpdateResults} =
-        case catch {list(VHost), list_op(VHost)} of
-            {'EXIT', {throw, {error, {no_such_vhost, _}}}} ->
-                {[], []}; %% [2]
-            {'EXIT', Exit} ->
-                exit(Exit);
+        try {list(VHost), list_op(VHost)} of
             {Policies, OpPolicies} ->
                 rabbit_db_policy:update(VHost,
                                         get_updated_exchange(Policies, OpPolicies),
                                         get_updated_queue(Policies, OpPolicies))
+        catch
+            throw:{error, {no_such_vhost, _}} ->
+                {[], []}; %% [2]
+            exit:Exit ->
+                exit(Exit);
+            error:ErrReason:ErrStack ->
+                exit({ErrReason, ErrStack})
         end,
     lists:foreach(
       fun(XRes) ->

@@ -46,11 +46,10 @@ unregister(Class, TypeName) ->
 %% can throw a badarg, indicating that the type cannot have been
 %% registered.
 binary_to_type(TypeBin) when is_binary(TypeBin) ->
-    case catch binary_to_existing_atom(TypeBin) of
-        {'EXIT', {badarg, _}} ->
-            {error, not_found};
-        TypeAtom ->
-            TypeAtom
+    try binary_to_existing_atom(TypeBin) of
+        TypeAtom -> TypeAtom
+    catch
+        error:badarg -> {error, not_found}
     end.
 
 lookup_module(Class, T) when is_atom(T) ->
@@ -164,15 +163,16 @@ conditional_unregister(_) ->
     ok.
 
 sanity_check_module(ClassModule, Module) ->
-    case catch lists:member(ClassModule,
-                            lists:flatten(
-                              [Bs || {Attr, Bs} <-
-                                         Module:module_info(attributes),
-                                     Attr =:= behavior orelse
-                                         Attr =:= behaviour])) of
-        {'EXIT', {undef, _}}  -> {error, not_module};
-        false                 -> {error, {not_type, ClassModule}};
-        true                  -> ok
+    try lists:member(ClassModule,
+                     lists:flatten(
+                       [Bs || {Attr, Bs} <-
+                                  Module:module_info(attributes),
+                              Attr =:= behavior orelse
+                                  Attr =:= behaviour])) of
+        false -> {error, {not_type, ClassModule}};
+        true  -> ok
+    catch
+        error:undef -> {error, not_module}
     end.
 
 

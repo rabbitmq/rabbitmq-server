@@ -172,11 +172,10 @@ parse_metric_families([B|Bs]) ->
     %% binary_to_existing_atom() should be enough, as it's used for filtering things out.
     %% Getting a full list of supported metrics would be harder.
     %% NB But on the other hand, it's nice to have validation. Implement it?
-    case catch erlang:binary_to_existing_atom(B) of
-        A when is_atom(A) ->
-            [A|parse_metric_families(Bs)];
-        _ ->
-            parse_metric_families(Bs)
+    try erlang:binary_to_existing_atom(B) of
+        A -> [A|parse_metric_families(Bs)]
+    catch
+        _:_ -> parse_metric_families(Bs)
     end;
 parse_metric_families(_) ->
     false.

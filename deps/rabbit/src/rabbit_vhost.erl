@@ -453,19 +453,22 @@ put_vhost(Name, Description, Tags0, DefaultQueueType, Trace, Username) ->
                      update(Name, Description, ParsedTags, DefaultQueueType, Username);
                  false ->
                      Metadata = vhost:new_metadata(Description, ParsedTags, DefaultQueueType),
-                     case catch do_add(Name, Metadata, Username) of
-                         ok ->
-                             %% wait for up to 45 seconds for the vhost to initialise
-                             %% on all nodes
-                             case await_running_on_all_nodes(Name, 45000) of
-                                 ok               ->
-                                     maybe_grant_full_permissions(Name, Username);
-                                 {error, timeout} ->
-                                     {error, timeout}
-                             end;
-                         Err ->
-                             Err
-                     end
+                    try do_add(Name, Metadata, Username) of
+                        ok ->
+                            %% wait for up to 45 seconds for the vhost to initialise
+                            %% on all nodes
+                            case await_running_on_all_nodes(Name, 45000) of
+                                ok               ->
+                                    maybe_grant_full_permissions(Name, Username);
+                                {error, timeout} ->
+                                    {error, timeout}
+                            end;
+                        Err ->
+                            Err
+                    catch
+                        _:Err ->
+                            {error, Err}
+                    end
              end,
     case Trace of
         true      -> rabbit_trace:start(Name);
