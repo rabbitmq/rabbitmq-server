@@ -173,10 +173,13 @@ start_link({global, _SupName}, _Group, _Mod, _Args) ->
 start_link0(Prefix, Group, Init) ->
     case apply(?SUPERVISOR, start_link,
                Prefix ++ [?SUP_MODULE, {overall, Group, Init}]) of
-        {ok, Pid} -> case catch call(Pid, {init, Pid}) of
-                         ok -> {ok, Pid};
-                         E  -> E
-                     end;
+        {ok, Pid} ->
+            case try call(Pid, {init, Pid})
+                 catch _:Err -> {error, Err}
+                 end of
+                ok    -> {ok, Pid};
+                Other -> Other
+            end;
         Other     -> Other
     end.
 

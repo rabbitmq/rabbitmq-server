@@ -908,7 +908,9 @@ open(info, heartbeat_send,
      #statem_data{transport = Transport,
                   connection = #stream_connection{socket = S} = Connection}) ->
     Frame = rabbit_stream_core:frame(heartbeat),
-    case catch send(Transport, S, Frame) of
+    case try send(Transport, S, Frame)
+         catch _:E -> {error, E}
+         end of
         ok ->
             keep_state_and_data;
         Unexpected ->

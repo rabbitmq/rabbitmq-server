@@ -751,12 +751,14 @@ erpc_call(Node, Mod, Fun, Args, FromNode, Timeout) when Timeout >= 0 ->
     catch
         error:{erpc, _} = Reason:Stacktrace ->
             Peer = node(),
-            _ = catch erpc:call(
-                        FromNode,
-                        logger, debug,
-                        ["Peer discovery: temporary hidden node '~ts' "
-                        "failed to connect to '~ts': ~0p",
-                         [Peer, Node, Reason]]),
+            try erpc:call(
+                    FromNode,
+                    logger, debug,
+                    ["Peer discovery: temporary hidden node '~ts' "
+                    "failed to connect to '~ts': ~0p",
+                     [Peer, Node, Reason]])
+            catch _:_ -> ok
+            end,
             Sleep = 1000,
             timer:sleep(Sleep),
             NewTimeout = Timeout - Sleep,
@@ -1074,7 +1076,7 @@ maybe_unregister() ->
 
 discovery_retries(Backend) ->
     {_Retries, RetryDelay} = RetryConfig = discovery_retries_from_config(),
-    case catch Backend:retry_strategy() of
+    case try Backend:retry_strategy() catch _:_ -> undefined end of
         unlimited ->
             {unlimited, RetryDelay};
         _ ->

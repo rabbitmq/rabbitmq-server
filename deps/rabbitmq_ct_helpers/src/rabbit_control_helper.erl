@@ -26,7 +26,9 @@ command(Command, Node, Args, Opts) ->
 async_command(Command, Node, Args, Opts) ->
     Self = self(),
     spawn(fun() ->
-                  Reply = (catch command(Command, Node, Args, Opts)),
+                  Reply = try command(Command, Node, Args, Opts)
+                          catch _:E -> {error, E}
+                          end,
                   Self ! {async_command, Node, Reply}
           end).
 
