@@ -56,8 +56,6 @@ names(Hostname, RetriesLeft) ->
     [Hostname, RetriesLeft]),
   case try epmd_names(Hostname) catch _:_ -> {error, failed} end of
     {ok, R } -> {ok, R};
-    noport ->
-      names(Hostname, RetriesLeft - 1);
     {error, nxdomain} ->
       timer:sleep(?NXDOMAIN_RETRY_WAIT),
       names(Hostname, RetriesLeft - 1);
