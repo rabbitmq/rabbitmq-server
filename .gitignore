@@ -1,3 +1,9 @@
+# AI
+.claude/
+
+# Tools
+mise.toml
+
 # Editor/OS temporary and unwanted files.
 *~
 \#*
@@ -22,7 +28,6 @@ logs/
 **/test/*.beam
 **/test/ct.cover.spec
 ct.set-*.spec
-
 elvis
 
 # Dependencies excluding RabbitMQ applications.
