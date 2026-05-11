@@ -1102,7 +1102,11 @@ check_node_connection_limit() ->
                     ?LOG_ERROR("MQTT connection failed: node connection limit ~b is reached",
                                [Limit]),
                     {error, ?RC_QUOTA_EXCEEDED};
-                _ ->
+                MqttConns when is_integer(MqttConns) ->
+                    ok;
+                Other ->
+                    ?LOG_WARNING("MQTT pg scope ETS table '~ts' size is ~tp",
+                                 [PgScope, Other]),
                     ok
             end;
         _ ->
