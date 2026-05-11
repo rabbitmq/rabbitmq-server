@@ -23,8 +23,10 @@
 -type ra_system_name() :: atom().
 
 -define(COORD_WAL_MAX_SIZE_B, 64_000_000).
+-define(COORD_WAL_MAX_ENTRIES, 500_000).
 -define(QUORUM_AER_MAX_RPC_SIZE, 16).
 -define(QUORUM_DEFAULT_WAL_MAX_SIZE_B, 536_870_912).
+-define(QUORUM_DEFAULT_WAL_MAX_ENTRIES, 500_000).
 -define(QUORUM_DEFAULT_WAL_MAX_BATCH_SIZE, 4096).
 %% the default min bin vheap value in OTP 26
 -define(MIN_BIN_VHEAP_SIZE_DEFAULT, 46422).
@@ -119,7 +121,7 @@ get_config(quorum_queues = RaSystem) ->
     SegmentChecksums = application:get_env(rabbit, quorum_segment_compute_checksums,
                                            Checksums),
     WalMaxEntries = application:get_env(rabbit, quorum_wal_max_entries,
-                                        maps:get(wal_max_entries, DefaultConfig)),
+                                        ?QUORUM_DEFAULT_WAL_MAX_ENTRIES),
     AERBatchSize = application:get_env(rabbit, quorum_max_append_entries_rpc_batch_size,
                                        ?QUORUM_AER_MAX_RPC_SIZE),
     CompressMemTables = application:get_env(rabbit, quorum_compress_mem_tables, true),
@@ -163,6 +165,7 @@ get_config(coordination = RaSystem) ->
                    data_dir => CoordDataDir,
                    wal_data_dir => CoordDataDir,
                    wal_max_size_bytes => ?COORD_WAL_MAX_SIZE_B,
+                   wal_max_entries => ?COORD_WAL_MAX_ENTRIES,
                    names => ra_system:derive_names(RaSystem)}.
 
 -spec ensure_stopped() -> ok | no_return().
