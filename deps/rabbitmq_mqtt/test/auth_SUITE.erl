@@ -359,11 +359,6 @@ init_per_testcase(T, Config)
        T =:= client_id_from_cert_dn ->
     SetupProcess = setup_rabbit_auth_backend_mqtt_mock(Config),
     rabbit_ct_helpers:set_config(Config, {mock_setup_process, SetupProcess});
-
-init_per_testcase(T = node_connection_limit, Config) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
-                                 [rabbitmq_mqtt, max_connections, 0]),
-    testcase_started(Config, T);
 init_per_testcase(Testcase, Config) ->
     testcase_started(Config, Testcase).
 
@@ -504,11 +499,6 @@ end_per_testcase(T, Config)
     SetupProcess ! stop,
     close_all_connections(Config);
 
-end_per_testcase(node_connection_limit = T, Config) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
-                                 [rabbitmq_mqtt, max_connections, infinity]),
-    close_all_connections(Config),
-    rabbit_ct_helpers:testcase_finished(Config, T);
 end_per_testcase(Testcase, Config) ->
     close_all_connections(Config),
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
@@ -1332,10 +1322,12 @@ user_connection_limit(Config) ->
     ok = rabbit_ct_broker_helpers:clear_user_limits(Config, DefaultUser, max_connections).
 
 node_connection_limit(Config) ->
+    ok = rpc(Config, 0, application, set_env, [rabbitmq_mqtt, max_connections, 0]),
     {ok, C} = connect_anonymous(Config, <<"client1">>),
     ExpectedError = expected_connection_limit_error(Config),
     unlink(C),
-    ?assertMatch({error, {ExpectedError, _}}, emqtt:connect(C)).
+    ?assertMatch({error, {ExpectedError, _}}, emqtt:connect(C)),
+    ok = rpc(Config, 0, application, unset_env, [rabbitmq_mqtt, max_connections]).
 
 expected_connection_limit_error(Config) ->
     case ?config(mqtt_version, Config) of

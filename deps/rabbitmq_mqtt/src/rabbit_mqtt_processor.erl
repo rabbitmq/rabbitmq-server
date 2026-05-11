@@ -188,7 +188,6 @@ process_connect(
     end,
     Result0 =
     maybe
-        ok ?= check_node_connection_limit(),
         ok ?= check_extended_auth(ConnectProps),
         {ok, ClientId1} ?= extract_client_id_from_certificate(ClientId0, Socket),
         {ok, ClientId} ?= ensure_client_id(ClientId1, CleanStart, ProtoVer),
@@ -197,6 +196,7 @@ process_connect(
         ?LOG_DEBUG("MQTT connection ~s picked vhost using ~s", [ConnName0, VHostPickedUsing]),
         ok ?= check_vhost_exists(VHost, Username2, PeerIp),
         ok ?= check_vhost_alive(VHost),
+        ok ?= check_node_connection_limit(),
         ok ?= check_vhost_connection_limit(VHost),
         {ok, User = #user{username = Username}} ?= check_user_login(VHost, Username2, Password,
                                                                     ClientId, PeerIp, ConnName0),
@@ -1083,10 +1083,10 @@ check_vhost_exists(VHost, Username, PeerIp) ->
     end.
 
 check_node_connection_limit() ->
-    case application:get_env(rabbitmq_mqtt, max_connections, infinity) of
+    case application:get_env(?APP_NAME, max_connections, infinity) of
         infinity ->
             ok;
-        Limit when is_integer(Limit), Limit >= 0 ->
+        Limit when is_integer(Limit) andalso Limit >= 0 ->
             PgScope = persistent_term:get(?PG_SCOPE),
             %% pg:init/1 creates a named ETS table using the scope atom as the table
             %% name. Each row holds one group: {Group, AllPids, LocalPids}. Since
@@ -1098,8 +1098,8 @@ check_node_connection_limit() ->
             %% expensive when the node hosts a large number of MQTT connections.
             %% Note: OTP-27.3.4.11 source code used as a reference.
             case ets:info(PgScope, size) of
-                ActiveConns when is_integer(ActiveConns), ActiveConns >= Limit ->
-                    ?LOG_ERROR("MQTT connection failed: node connection limit ~tp is reached",
+                MqttConns when is_integer(MqttConns) andalso MqttConns >= Limit ->
+                    ?LOG_ERROR("MQTT connection failed: node connection limit ~b is reached",
                                [Limit]),
                     {error, ?RC_QUOTA_EXCEEDED};
                 _ ->
