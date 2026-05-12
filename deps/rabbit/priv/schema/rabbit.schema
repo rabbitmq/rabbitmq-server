@@ -3264,8 +3264,9 @@ fun(IpStr) ->
 end}.
 
 {validator, "non_negative_integer", "number should be greater or equal to zero",
-fun(Int) when is_integer(Int) ->
-    Int >= 0
+fun(infinity) -> true;
+   (Int) when is_integer(Int) -> Int >= 0;
+   (_) -> false
 end}.
 
 {validator, "non_zero_positive_integer", "number should be greater or equal to one",
