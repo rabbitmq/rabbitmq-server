@@ -43,12 +43,13 @@ endif
 # We do that in this file, which is included by all projects, to ensure
 # all projects use the same versions. It avoids conflicts.
 
-dep_cowboy = hex 2.14.1
-dep_cowlib = hex 2.16.0
+dep_cowboy = hex 2.15.0
+dep_cowlib = hex 2.16.1
 dep_credentials_obfuscation = hex 3.5.0
 dep_cuttlefish = hex 3.7.0
 dep_gen_batch_server = hex 0.10.0
-dep_jose = hex 1.11.10
+dep_gun = hex 2.3.0
+dep_jose = hex 1.11.12
 dep_khepri = hex 0.18.0
 dep_khepri_mnesia_migration = hex 0.8.1
 dep_meck = hex 1.0.0
