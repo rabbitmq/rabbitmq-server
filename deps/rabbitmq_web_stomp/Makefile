@@ -28,7 +28,7 @@ PLT_APPS += cowlib
 # See rabbitmq-components.mk.
 BUILD_DEPS += ranch
 
-dep_gun = hex 2.2.0
+dep_gun = hex 2.3.0
 
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
