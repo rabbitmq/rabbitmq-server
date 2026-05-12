@@ -828,9 +828,7 @@ disable_plugin(Config) ->
 %%
 
 clear_all_table_data() ->
-    %% In mixed-version clusters a secondary node may not have every
-    %% `?CORE_TABLES` table — `ets:info/1` returns `undefined` for an
-    %% absent table; skip rather than crash `init_per_testcase`.
+    %% Forward-compat: skip tables a mixed-version secondary may lack.
     [ets:delete_all_objects(T) || {T, _} <- ?CORE_TABLES,
                                   ets:info(T) =/= undefined],
     rabbit_mgmt_storage:reset(),
