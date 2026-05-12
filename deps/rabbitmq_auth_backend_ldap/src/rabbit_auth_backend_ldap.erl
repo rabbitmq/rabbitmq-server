@@ -525,16 +525,25 @@ with_ldap({ok, Creds}, Fun, Servers) ->
     Opts1 = case env(log) of
                 network ->
                     Pre = "    LDAP network traffic: ",
-                    ?LOG_INFO("LDAP connecting to servers: ~tp", [Servers]),
-                    [{log, fun(1, S, A) -> ?LOG_WARNING(Pre ++ S, A);
+                    ?LOG_INFO("LDAP connecting to servers: ~tp", [Servers],
+                              #{domain => ?RMQLOG_DOMAIN_LDAP}),
+                    [{log, fun(1, S, A) ->
+                                   ?LOG_WARNING(Pre ++ S, A,
+                                                #{domain => ?RMQLOG_DOMAIN_LDAP});
                               (2, S, A) ->
-                                   ?LOG_INFO(Pre ++ S, scrub_creds(A, []))
+                                   ?LOG_INFO(Pre ++ S, scrub_creds(A, []),
+                                             #{domain => ?RMQLOG_DOMAIN_LDAP})
                            end} | Opts0];
                 network_unsafe ->
                     Pre = "    LDAP network traffic: ",
-                    ?LOG_INFO("    LDAP connecting to servers: ~tp", [Servers]),
-                    [{log, fun(1, S, A) -> ?LOG_WARNING(Pre ++ S, A);
-                              (2, S, A) -> ?LOG_INFO(   Pre ++ S, A)
+                    ?LOG_INFO("    LDAP connecting to servers: ~tp", [Servers],
+                              #{domain => ?RMQLOG_DOMAIN_LDAP}),
+                    [{log, fun(1, S, A) ->
+                                   ?LOG_WARNING(Pre ++ S, A,
+                                                #{domain => ?RMQLOG_DOMAIN_LDAP});
+                              (2, S, A) ->
+                                   ?LOG_INFO(Pre ++ S, A,
+                                             #{domain => ?RMQLOG_DOMAIN_LDAP})
                            end} | Opts0];
                 _ ->
                     Opts0
@@ -559,7 +568,8 @@ with_ldap({ok, Creds}, Fun, Servers) ->
 with_login(Creds, Servers, Opts, Fun) ->
     with_login(Creds, Servers, Opts, Fun, ?LDAP_OPERATION_RETRIES).
 with_login(_Creds, _Servers, _Opts, _Fun, 0 = _RetriesLeft) ->
-    ?LOG_WARNING("LDAP failed to perform an operation. TCP connection to a LDAP server was closed or otherwise defunct. Exhausted all retries."),
+    ?LOG_WARNING("LDAP failed to perform an operation. TCP connection to a LDAP server was closed or otherwise defunct. Exhausted all retries.",
+                 #{domain => ?RMQLOG_DOMAIN_LDAP}),
     {error, ldap_connect_error};
 with_login(Creds, Servers, Opts, Fun, RetriesLeft) ->
     case get_or_create_conn(Creds == anon, Servers, Opts) of
@@ -618,9 +628,11 @@ with_login(Creds, Servers, Opts, Fun, RetriesLeft) ->
 
 purge_connection(Creds, Servers, Opts) ->
     %% purge and retry with a new connection
-    ?LOG_WARNING("TCP connection to a LDAP server was closed or otherwise defunct."),
+    ?LOG_WARNING("TCP connection to a LDAP server was closed or otherwise defunct.",
+                 #{domain => ?RMQLOG_DOMAIN_LDAP}),
     purge_conn(Creds == anon, Servers, Opts),
-    ?LOG_WARNING("LDAP will retry with a new connection.").
+    ?LOG_WARNING("LDAP will retry with a new connection.",
+                 #{domain => ?RMQLOG_DOMAIN_LDAP}).
 
 call_ldap_fun(Fun, LDAP) ->
     call_ldap_fun(Fun, LDAP, "").
@@ -734,7 +746,8 @@ purge_conn(IsAnon, Servers, Opts) ->
     Conns = get(ldap_conns),
     Key = {IsAnon, Servers, Opts},
     {ok, Conn} = maps:find(Key, Conns),
-    ?LOG_WARNING("LDAP will purge an already closed or defunct LDAP server connection from the pool"),
+    ?LOG_WARNING("LDAP will purge an already closed or defunct LDAP server connection from the pool",
+                 #{domain => ?RMQLOG_DOMAIN_LDAP}),
     % We cannot close the connection with eldap:close/1 because as of OTP-13327
     % eldap will try to do_unbind first and will fail with a `{gen_tcp_error, closed}`.
     % Since we know that the connection is already closed, we just
@@ -782,7 +795,8 @@ ssl_options(Opts0) ->
     Opts1 = rabbit_ssl_options:fix_client(Opts0),
     case env(ssl_hostname_verification, undefined) of
         wildcard ->
-            ?LOG_DEBUG("Enabling wildcard-aware hostname verification for LDAP client connections"),
+            ?LOG_DEBUG("Enabling wildcard-aware hostname verification for LDAP client connections",
+                       #{domain => ?RMQLOG_DOMAIN_LDAP}),
             %% Needed for non-HTTPS connections that connect to servers that use wildcard certificates.
             %% See https://erlang.org/doc/man/public_key.html#pkix_verify_hostname_match_fun-1.
             [{customize_hostname_check, [{match_fun, public_key:pkix_verify_hostname_match_fun(https)}]} | Opts1];
@@ -799,8 +813,9 @@ get_expected_env_str(Key, Default) ->
     V = case env(Key) of
             Default ->
                 ?LOG_WARNING("rabbitmq_auth_backend_ldap configuration key '~tp' is set to "
-                                        "the default value of '~tp', expected to get a non-default value",
-                                        [Key, Default]),
+                             "the default value of '~tp', expected to get a non-default value",
+                             [Key, Default],
+                             #{domain => ?RMQLOG_DOMAIN_LDAP}),
                 Default;
             V0 ->
                 V0
@@ -899,7 +914,8 @@ dn_lookup(Username, LDAP) ->
             DN;
         {ok, {eldap_search_result, Entries, _Referrals, _Controls}} ->
             ?LOG_WARNING("Searching for DN for ~ts, got back ~tp",
-                               [Filled, Entries]),
+                         [Filled, Entries],
+                         #{domain => ?RMQLOG_DOMAIN_LDAP}),
             Filled;
         {error, _} = E ->
             exit(E)
@@ -978,7 +994,8 @@ is_dn(_S) -> false.
 
 log(Fmt,  Args) -> case env(log) of
                        false -> ok;
-                       _     -> ?LOG_INFO(Fmt ++ "", Args)
+                       _     -> ?LOG_INFO(Fmt ++ "", Args,
+                                          #{domain => ?RMQLOG_DOMAIN_LDAP})
                    end.
 
 fill(Fmt, Args) ->
