@@ -59,6 +59,20 @@ end}.
     [{datatype, string},
      {validators, ["is_ip"]}]}.
 
+{mapping, "management.tcp.max_connections", "rabbitmq_management.tcp_config.max_connections",
+    [{datatype, [{atom, infinity}, integer]},
+     {validators, ["non_negative_integer"]}]}.
+
+{translation, "rabbitmq_management.tcp_config.max_connections",
+fun(Conf) ->
+    case cuttlefish:conf_get("management.tcp.max_connections", Conf, undefined) of
+        undefined                -> cuttlefish:unset();
+        infinity                 -> infinity;
+        Val when is_integer(Val) -> Val;
+        _                        -> cuttlefish:invalid("should be a non-negative integer")
+    end
+end}.
+
 {mapping, "management.tcp.compress", "rabbitmq_management.tcp_config.cowboy_opts.compress",
     [{datatype, {enum, [true, false]}}]}.
 {mapping, "management.tcp.idle_timeout", "rabbitmq_management.tcp_config.cowboy_opts.idle_timeout",
@@ -89,6 +103,21 @@ end}.
     [{datatype, integer}]}.
 {mapping, "management.ssl.ip", "rabbitmq_management.ssl_config.ip",
     [{datatype, string}, {validators, ["is_ip"]}]}.
+
+{mapping, "management.ssl.max_connections", "rabbitmq_management.ssl_config.max_connections",
+    [{datatype, [{atom, infinity}, integer]},
+     {validators, ["non_negative_integer"]}]}.
+
+{translation, "rabbitmq_management.ssl_config.max_connections",
+fun(Conf) ->
+    case cuttlefish:conf_get("management.ssl.max_connections", Conf, undefined) of
+        undefined                -> cuttlefish:unset();
+        infinity                 -> infinity;
+        Val when is_integer(Val) -> Val;
+        _                        -> cuttlefish:invalid("should be a non-negative integer")
+    end
+end}.
+
 {mapping, "management.ssl.certfile", "rabbitmq_management.ssl_config.certfile",
     [{datatype, string}, {validators, ["pem_file"]}]}.
 {mapping, "management.ssl.keyfile", "rabbitmq_management.ssl_config.keyfile",

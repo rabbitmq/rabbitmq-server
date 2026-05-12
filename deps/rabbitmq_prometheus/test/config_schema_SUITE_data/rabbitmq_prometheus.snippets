@@ -107,6 +107,24 @@
     ], [rabbitmq_prometheus]
    },
 
+   {tcp_listener_max_connections_integer,
+    "prometheus.tcp.max_connections = 4096",
+    [
+     {rabbitmq_prometheus, [
+                            {tcp_config, [{max_connections, 4096}]}
+                           ]}
+    ], [rabbitmq_prometheus]
+   },
+
+   {tcp_listener_max_connections_infinity,
+    "prometheus.tcp.max_connections = infinity",
+    [
+     {rabbitmq_prometheus, [
+                            {tcp_config, [{max_connections, infinity}]}
+                           ]}
+    ], [rabbitmq_prometheus]
+   },
+
    {tcp_listener,
     "prometheus.tcp.listener = 192.1.1.2:15676",
     [{rabbitmq_prometheus,[
@@ -294,6 +312,24 @@
     [
      {rabbitmq_prometheus, [
                             {ssl_config, [{cowboy_opts, [{max_keepalive, 120}]}]}
+                           ]}
+    ], [rabbitmq_prometheus]
+   },
+
+   {tls_listener_max_connections_integer,
+    "prometheus.ssl.max_connections = 4096",
+    [
+     {rabbitmq_prometheus, [
+                            {ssl_config, [{max_connections, 4096}]}
+                           ]}
+    ], [rabbitmq_prometheus]
+   },
+
+   {tls_listener_max_connections_infinity,
+    "prometheus.ssl.max_connections = infinity",
+    [
+     {rabbitmq_prometheus, [
+                            {ssl_config, [{max_connections, infinity}]}
                            ]}
     ], [rabbitmq_prometheus]
    },

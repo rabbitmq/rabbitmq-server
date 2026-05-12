@@ -14,7 +14,7 @@ endef
 
 LOCAL_DEPS = inets
 DEPS = amqp_client rabbit_common rabbit cowboy
-TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers
+TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers proper
 
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
