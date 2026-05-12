@@ -31,7 +31,12 @@ groups() ->
           max_in_memory_length,
           delivery_limit,
           classic_queue_lazy_mode,
-          length_limit_overflow_mode
+          length_limit_overflow_mode,
+          delayed_retry_type,
+          delayed_retry_min,
+          delayed_retry_max,
+          delayed_retry_min_required_with_type,
+          delayed_retry_max_not_less_than_min
         ]}
     ].
 
@@ -148,3 +153,49 @@ requires_integer_value(Key) ->
     test_valid_and_invalid_values(Key,
         [-1, 0, 1, 1000, -10000],
         [<<"a.binary">>, 0.1]).
+
+delayed_retry_type(_Config) ->
+    [?assertEqual(ok,
+                  rabbit_quorum_queue:validate_policy([{<<"delayed-retry-type">>, T},
+                                                       {<<"delayed-retry-min">>, 1000}]))
+     || T <- [<<"all">>, <<"failed">>, <<"returned">>]],
+    ?assertEqual(ok,
+                 rabbit_quorum_queue:validate_policy([{<<"delayed-retry-type">>, <<"disabled">>}])),
+    [?assertMatch({error, _, _},
+                  rabbit_quorum_queue:validate_policy([{<<"delayed-retry-type">>, T},
+                                                       {<<"delayed-retry-min">>, 1000}]))
+     || T <- [<<"none">>, <<"unknown">>, 0, true]].
+
+delayed_retry_min(_Config) ->
+    test_valid_and_invalid_values(rabbit_quorum_queue, <<"delayed-retry-min">>,
+        [1, 100, 5000],
+        [0, -1, <<"100">>, 0.1]).
+
+delayed_retry_max(_Config) ->
+    test_valid_and_invalid_values(rabbit_quorum_queue, <<"delayed-retry-max">>,
+        [1, 100, 5000],
+        [0, -1, <<"100">>, 0.1]).
+
+delayed_retry_min_required_with_type(_Config) ->
+    %% delayed-retry-min must be present when type is not disabled
+    [?assertMatch({error, _, _},
+                  rabbit_quorum_queue:validate_policy([{<<"delayed-retry-type">>, T}]))
+     || T <- [<<"all">>, <<"failed">>, <<"returned">>]],
+    %% disabled and absent type do not require delayed-retry-min
+    ?assertEqual(ok, rabbit_quorum_queue:validate_policy([{<<"delayed-retry-type">>, <<"disabled">>}])),
+    ?assertEqual(ok, rabbit_quorum_queue:validate_policy([{<<"delayed-retry-min">>, 1000}])).
+
+delayed_retry_max_not_less_than_min(_Config) ->
+    %% max must not be smaller than min
+    ?assertMatch({error, _, _},
+                 rabbit_quorum_queue:validate_policy([{<<"delayed-retry-type">>, <<"all">>},
+                                                     {<<"delayed-retry-min">>, 5000},
+                                                     {<<"delayed-retry-max">>, 1000}])),
+    ?assertEqual(ok,
+                 rabbit_quorum_queue:validate_policy([{<<"delayed-retry-type">>, <<"all">>},
+                                                     {<<"delayed-retry-min">>, 1000},
+                                                     {<<"delayed-retry-max">>, 1000}])),
+    ?assertEqual(ok,
+                 rabbit_quorum_queue:validate_policy([{<<"delayed-retry-type">>, <<"all">>},
+                                                     {<<"delayed-retry-min">>, 1000},
+                                                     {<<"delayed-retry-max">>, 5000}])).

@@ -187,7 +187,7 @@
 
 -rabbit_boot_step(
    {?MODULE,
-    [{description, "QQ target group size policies. "
+    [{description, "QQ policies. "
       "target-group-size controls the targeted number of "
       "member nodes for the queue. If set, RabbitMQ will try to "
       "grow the queue members to the target size. "
@@ -198,18 +198,78 @@
             [operator_policy_validator, <<"target-group-size">>, ?MODULE]}},
      {mfa, {rabbit_registry, register,
             [policy_merge_strategy, <<"target-group-size">>, ?MODULE]}},
+     {mfa, {rabbit_registry, register,
+            [policy_validator, <<"delayed-retry-type">>, ?MODULE]}},
+     {mfa, {rabbit_registry, register,
+            [policy_validator, <<"delayed-retry-min">>, ?MODULE]}},
+     {mfa, {rabbit_registry, register,
+            [policy_validator, <<"delayed-retry-max">>, ?MODULE]}},
+     {mfa, {rabbit_registry, register,
+            [operator_policy_validator, <<"delayed-retry-type">>, ?MODULE]}},
+     {mfa, {rabbit_registry, register,
+            [operator_policy_validator, <<"delayed-retry-min">>, ?MODULE]}},
+     {mfa, {rabbit_registry, register,
+            [operator_policy_validator, <<"delayed-retry-max">>, ?MODULE]}},
+     {mfa, {rabbit_registry, register,
+            [policy_merge_strategy, <<"delayed-retry-type">>, ?MODULE]}},
+     {mfa, {rabbit_registry, register,
+            [policy_merge_strategy, <<"delayed-retry-min">>, ?MODULE]}},
+     {mfa, {rabbit_registry, register,
+            [policy_merge_strategy, <<"delayed-retry-max">>, ?MODULE]}},
      {requires, [rabbit_registry]},
      {enables, recovery}]}).
 
 validate_policy(Args) ->
-    Count = proplists:get_value(<<"target-group-size">>, Args, none),
-    case is_integer(Count) andalso Count > 0 of
-        true -> ok;
-        false -> {error, "~tp is not a valid qq target count value", [Count]}
+    case lists:foldl(fun ({Key, Value}, ok) -> validate_policy0(Key, Value);
+                         (_, Error) -> Error
+                     end, ok, Args) of
+        ok    -> validate_delayed_retry_constraints(Args);
+        Error -> Error
     end.
 
+validate_delayed_retry_constraints(Args) ->
+    Type = proplists:get_value(<<"delayed-retry-type">>, Args),
+    Min  = proplists:get_value(<<"delayed-retry-min">>, Args),
+    Max  = proplists:get_value(<<"delayed-retry-max">>, Args),
+    case {Type, Min} of
+        {T, undefined} when T =/= undefined, T =/= <<"disabled">> ->
+            {error, "delayed-retry-min is required when delayed-retry-type is ~ts", [T]};
+        _ when is_integer(Min), is_integer(Max), Max < Min ->
+            {error, "delayed-retry-max (~b) must not be smaller than delayed-retry-min (~b)", [Max, Min]};
+        _ ->
+            ok
+    end.
+
+validate_policy0(<<"target-group-size">>, Value) ->
+    case is_integer(Value) andalso Value > 0 of
+        true  -> ok;
+        false -> {error, "~tp is not a valid qq target count value", [Value]}
+    end;
+validate_policy0(<<"delayed-retry-type">>, <<"all">>)      -> ok;
+validate_policy0(<<"delayed-retry-type">>, <<"failed">>)   -> ok;
+validate_policy0(<<"delayed-retry-type">>, <<"returned">>) -> ok;
+validate_policy0(<<"delayed-retry-type">>, <<"disabled">>) -> ok;
+validate_policy0(<<"delayed-retry-type">>, Value) ->
+    {error, "~tp is not a valid delayed retry type. Must be one of: all, failed, returned, disabled", [Value]};
+validate_policy0(<<"delayed-retry-min">>, Value)
+  when is_integer(Value), Value > 0 ->
+    ok;
+validate_policy0(<<"delayed-retry-min">>, Value) ->
+    {error, "~tp is not a valid delayed retry minimum delay. Must be a positive integer", [Value]};
+validate_policy0(<<"delayed-retry-max">>, Value)
+  when is_integer(Value), Value > 0 ->
+    ok;
+validate_policy0(<<"delayed-retry-max">>, Value) ->
+    {error, "~tp is not a valid delayed retry maximum delay. Must be a positive integer", [Value]}.
+
 merge_policy_value(<<"target-group-size">>, Val, OpVal) ->
-    max(Val, OpVal).
+    max(Val, OpVal);
+merge_policy_value(<<"delayed-retry-type">>, _Val, OpVal) ->
+    OpVal;
+merge_policy_value(<<"delayed-retry-min">>, Val, OpVal) ->
+    max(Val, OpVal);
+merge_policy_value(<<"delayed-retry-max">>, Val, OpVal) ->
+    min(Val, OpVal).
 
 %%----------- rabbit_queue_type ---------------------------------------------
 
