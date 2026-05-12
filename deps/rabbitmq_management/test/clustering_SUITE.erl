@@ -828,7 +828,11 @@ disable_plugin(Config) ->
 %%
 
 clear_all_table_data() ->
-    [ets:delete_all_objects(T) || {T, _} <- ?CORE_TABLES],
+    %% In mixed-version clusters a secondary node may not have every
+    %% `?CORE_TABLES` table — `ets:info/1` returns `undefined` for an
+    %% absent table; skip rather than crash `init_per_testcase`.
+    [ets:delete_all_objects(T) || {T, _} <- ?CORE_TABLES,
+                                  ets:info(T) =/= undefined],
     rabbit_mgmt_storage:reset(),
     [gen_server:call(P, purge_cache)
      || {_, P, _, _} <- supervisor:which_children(rabbit_mgmt_db_cache_sup)],
