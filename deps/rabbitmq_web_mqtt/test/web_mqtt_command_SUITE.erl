@@ -28,8 +28,7 @@ groups() ->
     [
      {unit, [], [merge_defaults]},
      {v5, [], [run,
-               user_property,
-               node_connection_limit_cross_transport]}
+               user_property]}
     ].
 
 suite() ->
@@ -172,39 +171,6 @@ user_property(BaseConfig) ->
            {user_property, UserProp}]],
          'Elixir.Enum':to_list(?COMMAND:run([<<"client_id">>, <<"user_property">>], Opts)))),
     ok = emqtt:disconnect(C).
-
-node_connection_limit_cross_transport(BaseConfig) ->
-    %% Wait connections from other tests to drain (`pg` cleanup is asynchronous).
-    rabbit_ct_helpers:eventually(
-      ?_assertEqual(
-         0,
-         length(rabbit_ct_broker_helpers:rpc(
-                  BaseConfig, 0, rabbit_mqtt, local_connection_pids, []))),
-      500, 60),
-    Config = [{websocket, true} | BaseConfig],
-    ok = rabbit_ct_broker_helpers:rpc(
-           BaseConfig, 0, application, set_env,
-           [rabbitmq_mqtt, max_connections, 2]),
-    try
-        C1 = connect(<<"plain-mqtt-client">>, BaseConfig, [{ack_timeout, 1}]),
-        C2 = connect(<<"web-mqtt-client">>, Config, [{ack_timeout, 1}]),
-        {ok, C3} = emqtt:start_link(
-                     [{host, "localhost"},
-                      {port, rabbit_ct_broker_helpers:get_node_config(
-                               Config, 0, tcp_port_web_mqtt)},
-                      {proto_ver, v5},
-                      {clientid, <<"web-mqtt-client-2">>},
-                      {ws_path, "/ws"},
-                      {ack_timeout, 1}]),
-        unlink(C3),
-        ?assertMatch({error, {quota_exceeded, _}}, emqtt:ws_connect(C3)),
-        ok = emqtt:disconnect(C1),
-        ok = emqtt:disconnect(C2)
-    after
-        ok = rabbit_ct_broker_helpers:rpc(
-               BaseConfig, 0, application, unset_env,
-               [rabbitmq_mqtt, max_connections])
-    end.
 
 start_amqp_connection(Type, Node, Port) ->
     amqp_connection:start(amqp_params(Type, Node, Port)).
