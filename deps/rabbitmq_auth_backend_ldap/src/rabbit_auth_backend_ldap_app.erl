@@ -33,7 +33,8 @@ start(_Type, _StartArgs) ->
         true  -> ok;
         false -> ?LOG_WARNING(
                    "LDAP plugin loaded, but rabbit_auth_backend_ldap is not "
-                   "in the list of auth_backends. LDAP auth will not work.")
+                   "in the list of auth_backends. LDAP auth will not work.",
+                   #{domain => ?RMQLOG_DOMAIN_LDAP})
     end,
     {ok, SSL} = application:get_env(rabbitmq_auth_backend_ldap, use_ssl),
     {ok, TLS} = application:get_env(rabbitmq_auth_backend_ldap, use_starttls),
@@ -56,6 +57,4 @@ configured(M,  [_    |T]) -> configured(M, T).
 
 %%----------------------------------------------------------------------------
 
-init([]) ->
-    logger:set_process_metadata(#{domain => ?RMQLOG_DOMAIN_LDAP}),
-    {ok, {{one_for_one, 3, 10}, []}}.
+init([]) -> {ok, {{one_for_one, 3, 10}, []}}.
