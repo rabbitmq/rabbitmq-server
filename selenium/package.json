@@ -12,7 +12,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "amqplib": "1.0.7",
+    "amqplib": "1.2.0",
     "chromedriver": "^148.0.0",
     "ejs": "^5.0.1",
     "express": "^5.1.0",
