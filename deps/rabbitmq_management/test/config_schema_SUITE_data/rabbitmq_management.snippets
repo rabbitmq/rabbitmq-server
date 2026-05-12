@@ -99,6 +99,24 @@
   ], [rabbitmq_management]
  },
 
+ {tcp_listener_max_connections_integer,
+  "management.tcp.max_connections = 4096",
+  [
+   {rabbitmq_management, [
+                          {tcp_config, [{max_connections, 4096}]}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+ {tcp_listener_max_connections_infinity,
+  "management.tcp.max_connections = infinity",
+  [
+   {rabbitmq_management, [
+                          {tcp_config, [{max_connections, infinity}]}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
 
  %%
  %% TLS listener
@@ -266,6 +284,24 @@
   [
    {rabbitmq_management, [
                           {ssl_config, [{cowboy_opts, [{max_keepalive, 120}]}]}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+ {tls_listener_max_connections_integer,
+  "management.ssl.max_connections = 4096",
+  [
+   {rabbitmq_management, [
+                          {ssl_config, [{max_connections, 4096}]}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+ {tls_listener_max_connections_infinity,
+  "management.ssl.max_connections = infinity",
+  [
+   {rabbitmq_management, [
+                          {ssl_config, [{max_connections, infinity}]}
                          ]}
   ], [rabbitmq_management]
  },
