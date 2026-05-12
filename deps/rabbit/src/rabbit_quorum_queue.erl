@@ -221,7 +221,7 @@
 
 validate_policy(Args) ->
     case lists:foldl(fun ({Key, Value}, ok) -> validate_policy0(Key, Value);
-                         (_, Error)         -> Error
+                         (_, Error) -> Error
                      end, ok, Args) of
         ok    -> validate_delayed_retry_constraints(Args);
         Error -> Error
