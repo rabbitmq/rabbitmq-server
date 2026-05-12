@@ -213,7 +213,9 @@ handle_info({keepalive, Req}, State = #state{proc_state = PState,
             rabbit_mqtt_processor:send_disconnect(?RC_KEEP_ALIVE_TIMEOUT, PState),
             {stop, {shutdown, keepalive_timeout}, State};
         {error, Reason} ->
-            {stop, Reason, State}
+            %% Socket already closed (e.g. `einval` from
+            %% `inet:getstat/2`). Let `tcp_closed` handle teardown.
+            network_error(Reason, State)
     end;
 
 handle_info(credential_expired,
