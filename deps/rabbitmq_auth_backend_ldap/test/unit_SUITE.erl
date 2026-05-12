@@ -9,6 +9,7 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("rabbitmq_auth_backend_ldap/include/logging.hrl").
 
 -compile([export_all]).
 
@@ -19,7 +20,9 @@ all() ->
      rfc4514_escape_value,
      rfc4514_fill_dn,
      user_dn_pattern_gh_7161,
-     format_different_types_of_ldap_attribute_values
+     format_different_types_of_ldap_attribute_values,
+     ldap_log_domain_routing,
+     ldap_log_callsites_carry_domain
     ].
 
 fill(_Config) ->
@@ -45,7 +48,7 @@ rfc4514_escape_value(_Config) ->
     E("", ""),
     E(<<"binary">>, <<"binary">>),
     E(atom, "atom"),
-    %% Comma — the primary injection vector
+    %% Comma escaping
     E("user,ou=Evil", "user\\,ou=Evil"),
     %% All special characters
     E("a+b", "a\\+b"),
@@ -65,7 +68,7 @@ rfc4514_escape_value(_Config) ->
     E("a b", "a b"),
     %% Multiple specials
     E("a,b+c", "a\\,b\\+c"),
-    %% Backslash + comma (escape-the-escape attack)
+    %% Backslash followed by comma
     E("a\\,b", "a\\\\\\,b"),
     %% NUL byte
     E([0], [$\\, 0]),
@@ -133,4 +136,65 @@ format_different_types_of_ldap_attribute_values(_Config) ->
     ?assertEqual("28000-ß", rabbit_auth_backend_ldap:format_multi_attr(NonAsciiAttr)),
 
     ?assertEqual("one; 28000-ß; two; ", rabbit_auth_backend_ldap:format_multi_attr(["one", NonAsciiAttr, "two"])),
+    ok.
+
+%% `?RMQLOG_DOMAIN_LDAP` log even routing
+ldap_log_domain_routing(_Config) ->
+    HandlerId = ldap_log_capture,
+    Ref = make_ref(),
+    HandlerCfg = #{config => #{pid => self(), ref => Ref},
+                   filter_default => stop,
+                   filters => [{ldap_domain,
+                                {fun logger_filters:domain/2,
+                                 {log, sub, ?RMQLOG_DOMAIN_LDAP}}}],
+                   level => all},
+    ok = logger:add_handler(HandlerId, ?MODULE, HandlerCfg),
+    try
+        %% `notice` is higher than the default primary logger level used by CT;
+        %% thherefore `info` and `debug` messages  would be dropped before reaching any handler
+        logger:log(notice, "ldap-domain event ~tp", [Ref],
+                   #{domain => ?RMQLOG_DOMAIN_LDAP}),
+        logger:log(notice, "other-domain event ~tp", [Ref],
+                   #{domain => [rabbitmq, somewhere_else]}),
+        logger:log(notice, "no-domain event ~tp", [Ref], #{}),
+        receive
+            {Ref, Event} ->
+                ?assertMatch(#{meta := #{domain := [rabbitmq, ldap]}}, Event)
+        after 5000 ->
+            ct:fail("LDAP-domain event was not captured by the test handler")
+        end,
+        receive
+            {Ref, Unexpected} -> ct:fail({non_ldap_event_leaked, Unexpected})
+        after 200 ->
+            ok
+        end
+    after
+        _ = logger:remove_handler(HandlerId)
+    end.
+
+%% Verifies that every `?LOG_*` call site in the LDAP plugin sources passes the
+%% LDAP domain in its metadata
+ldap_log_callsites_carry_domain(_Config) ->
+    SrcDir = filename:join(code:lib_dir(rabbitmq_auth_backend_ldap), "src"),
+    Files = ["rabbit_auth_backend_ldap.erl",
+             "rabbit_auth_backend_ldap_app.erl"],
+    [check_log_callsite_invariant(filename:join(SrcDir, F)) || F <- Files],
+    ok.
+
+check_log_callsite_invariant(Path) ->
+    {ok, Bin} = file:read_file(Path),
+    LogCalls = count_substr(<<"?LOG_">>, Bin),
+    Domains  = count_substr(<<"RMQLOG_DOMAIN_LDAP">>, Bin),
+    ?assertEqual(LogCalls, Domains,
+                 lists:flatten(io_lib:format(
+                   "~ts: ~b ?LOG_ macro callsites but ~b RMQLOG_DOMAIN_LDAP "
+                   "references; every callsite must pass the LDAP domain",
+                   [Path, LogCalls, Domains]))).
+
+count_substr(Needle, Haystack) ->
+    length(binary:matches(Haystack, Needle)).
+
+%% Used by `ldap_log_domain_routing/1`
+log(LogEvent, #{config := #{pid := Pid, ref := Ref}}) ->
+    Pid ! {Ref, LogEvent},
     ok.
