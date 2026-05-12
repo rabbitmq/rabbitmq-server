@@ -19,6 +19,7 @@
          merge_metadata/2,
          set_tags/2,
          exists/1,
+         exists_uncached/1,
          get/1,
          get_all/0,
          count_all/0,
@@ -200,6 +201,32 @@ exists(VHostName) when is_binary(VHostName) ->
     catch
         error:badarg ->
             false
+    end.
+
+%% -------------------------------------------------------------------
+%% exists_uncached().
+%% -------------------------------------------------------------------
+
+-spec exists_uncached(VHostName) -> Ret when
+      VHostName :: vhost:name(),
+      Ret :: boolean() | {error, any()}.
+%% @doc Checks if the virtual host named `VHostName' exists by querying
+%% Khepri directly, bypassing the ETS-backed projection.
+%%
+%% @returns `true' if the virtual host exists in Khepri, `false' if it does
+%% not exist, or `{error, Reason}' if Khepri is unavailable.
+%%
+%% @private
+
+exists_uncached(VHostName) when is_binary(VHostName) ->
+    Path = khepri_vhost_path(VHostName),
+    case rabbit_khepri:get(Path) of
+        {ok, _} ->
+            true;
+        {error, {khepri, node_not_found, _}} ->
+            false;
+        {error, _} = Error ->
+            Error
     end.
 
 %% -------------------------------------------------------------------
