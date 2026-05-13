@@ -65,9 +65,9 @@ create_or_get(VHostName, Limits, Metadata)
     case rabbit_khepri:create(Path, VHost) of
         ok ->
             {new, VHost};
-        {error, {khepri, mismatching_node,
-                 #{node_path := Path,
-                   node_props := #{data := ExistingVHost}}}} ->
+        {error, ?khepri_error(mismatching_node,
+                              #{node_path := Path,
+                                node_props := #{data := ExistingVHost}})} ->
             {existing, ExistingVHost};
         Error ->
             throw(Error)
@@ -115,12 +115,12 @@ do_merge_metadata(VHostName, Metadata) ->
             case Ret2 of
                 ok ->
                     {ok, VHost};
-                {error, {khepri, mismatching_node, _}} ->
+                {error, ?khepri_error(mismatching_node, _)} ->
                     merge_metadata(VHostName, Metadata);
                 {error, _} = Error ->
                     Error
             end;
-        {error, {khepri, node_not_found, _}} ->
+        {error, ?khepri_error(node_not_found, _)} ->
             {error, {no_such_vhost, VHostName}};
         {error, _} = Error ->
             Error
@@ -223,7 +223,7 @@ exists_uncached(VHostName) when is_binary(VHostName) ->
     case rabbit_khepri:get(Path) of
         {ok, _} ->
             true;
-        {error, {khepri, node_not_found, _}} ->
+        {error, ?khepri_error(node_not_found, _)} ->
             false;
         {error, _} = Error ->
             Error
@@ -336,12 +336,12 @@ update(VHostName, UpdateFun)
             case rabbit_khepri:put(Path1, V1) of
                 ok ->
                     V1;
-                {error, {khepri, mismatching_node, _}} ->
+                {error, ?khepri_error(mismatching_node, _)} ->
                     update(VHostName, UpdateFun);
                 Error ->
                     throw(Error)
             end;
-        {error, {khepri, node_not_found, _}} ->
+        {error, ?khepri_error(node_not_found, _)} ->
             throw({error, {no_such_vhost, VHostName}});
         Error ->
             throw(Error)
