@@ -948,9 +948,10 @@ end}.
 %% Set the max permissible number of channels per connection.
 %% 0 means "no limit".
 %%
-%% {channel_max, 0},
+%% {max_channels_per_connection, 0},
 
-{mapping, "channel_max", "rabbit.channel_max", [{datatype, integer}]}.
+{mapping, "max_channels_per_connection", "rabbit.channel_max",
+  [{datatype, integer}, {alias, "channel_max"}]}.
 
 {mapping, "channel_max_per_node", "rabbit.channel_max_per_node",
   [{datatype, [{atom, infinity}, integer]}]}.
@@ -1002,14 +1003,15 @@ end}.
 %% Set the max permissible number of client connections per node.
 %% `infinity` means "no limit".
 %%
-%% {connection_max, infinity},
+%% {max_connections, infinity},
 
-{mapping, "connection_max", "rabbit.connection_max",
-  [{datatype, [{atom, infinity}, integer]}]}.
+{mapping, "max_connections", "rabbit.connection_max",
+  [{datatype, [{atom, infinity}, integer]},
+   {alias, "connection_max"}]}.
 
 {translation, "rabbit.connection_max",
  fun(Conf) ->
-  case cuttlefish:conf_get("connection_max", Conf, undefined) of
+  case cuttlefish:conf_get("max_connections", Conf, undefined) of
       undefined -> cuttlefish:unset();
       infinity  -> infinity;
       Val when is_integer(Val) -> Val;
