@@ -1002,14 +1002,15 @@ end}.
 %% Set the max permissible number of client connections per node.
 %% `infinity` means "no limit".
 %%
-%% {connection_max, infinity},
+%% {max_connections, infinity},
 
-{mapping, "connection_max", "rabbit.connection_max",
-  [{datatype, [{atom, infinity}, integer]}]}.
+{mapping, "max_connections", "rabbit.connection_max",
+  [{datatype, [{atom, infinity}, integer]},
+   {alias, "connection_max"}]}.
 
 {translation, "rabbit.connection_max",
  fun(Conf) ->
-  case cuttlefish:conf_get("connection_max", Conf, undefined) of
+  case cuttlefish:conf_get("max_connections", Conf, undefined) of
       undefined -> cuttlefish:unset();
       infinity  -> infinity;
       Val when is_integer(Val) -> Val;
