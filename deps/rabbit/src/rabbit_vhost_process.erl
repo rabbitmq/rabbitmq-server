@@ -64,17 +64,35 @@ handle_info(check_vhost, VHost) ->
     case rabbit_vhost:exists(VHost) of
         true  -> {noreply, VHost};
         false ->
-            ?LOG_WARNING("Virtual host '~ts' is gone. "
-                               "Stopping its top level supervisor.",
+            %% The ETS-backed projection may be transiently empty / out-of-sync
+            %% when Khepri Ra server is recovering (which should never happen
+            %% during normal operations). Confirm using a Khepri query before
+            %% taking the destructive shutdown action, to avoid a false
+            %% positive.
+            case rabbit_db_vhost:exists_uncached(VHost) of
+                true ->
+                    %% Vhost exists in Khepri; the ETS projection was out of sync.
+                    ?LOG_DEBUG("Virtual host '~ts' ETS projection was transiently empty "
+                               "(e.g. during Khepri Ra server recovery). Skipping shutdown.",
                                [VHost]),
-            %% Stop vhost's top supervisor in a one-off process to avoid a deadlock:
-            %% us (a child process) waiting for supervisor shutdown and our supervisor(s)
-            %% waiting for us to shutdown.
-            spawn(
-                fun() ->
-                    rabbit_vhost_sup_sup:stop_and_delete_vhost(VHost)
-                end),
-            {noreply, VHost}
+                    {noreply, VHost};
+                false ->
+                    ?LOG_WARNING("Virtual host '~ts' is gone. "
+                                 "Stopping its top level supervisor.",
+                                 [VHost]),
+                    %% Stop vhost's top supervisor in a one-off process to avoid a deadlock:
+                    %% us (a child process) waiting for supervisor shutdown and our supervisor(s)
+                    %% waiting for us to shutdown.
+                    spawn(
+                        fun() ->
+                            rabbit_vhost_sup_sup:stop_and_delete_vhost(VHost)
+                        end),
+                    {noreply, VHost};
+                {error, _} ->
+                    %% Khepri is unavailable. Cannot confirm the vhost is
+                    %% gone, so do nothing to avoid a false positive.
+                    {noreply, VHost}
+            end
     end;
 handle_info(_, VHost) ->
     {noreply, VHost}.
