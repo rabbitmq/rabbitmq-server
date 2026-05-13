@@ -187,6 +187,16 @@
    [{rabbitmq_mqtt, [
       {message_interceptors, []}
      ]}],
-   []}
+   []},
+
+  {max_connections,
+   "mqtt.max_connections = 10",
+   [{rabbitmq_mqtt,[{max_connections, 10}]}],
+   [rabbitmq_mqtt]},
+
+  {max_connections_infinity,
+   "mqtt.max_connections = infinity",
+   [{rabbitmq_mqtt,[{max_connections, infinity}]}],
+   [rabbitmq_mqtt]}
 
 ].
