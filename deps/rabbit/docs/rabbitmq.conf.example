@@ -423,8 +423,9 @@
 
 ## Set the max permissible number of channels per AMQP 0-9-1 connection.
 ## 0 means "no limit".
+## The previous name, `channel_max`, is still accepted as an alias.
 ##
-# channel_max = 128
+# max_channels_per_connection = 128
 
 ## Set the max permissible number of channels across all AMQP 0-9-1 connections on the node.
 ##
@@ -435,8 +436,9 @@
 # consumer_max_per_channel = 100
 
 ## Set the max permissible number of client connections on the node.
+## The previous name, `connection_max`, is still accepted as an alias.
 ##
-# connection_max = 5000
+# max_connections = 5000
 
 ## Sets the maximum number of AMQP 1.0 sessions that can be simultaneously
 ## active on an AMQP 1.0 connection.
