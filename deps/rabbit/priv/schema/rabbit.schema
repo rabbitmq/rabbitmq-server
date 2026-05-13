@@ -948,9 +948,10 @@ end}.
 %% Set the max permissible number of channels per connection.
 %% 0 means "no limit".
 %%
-%% {channel_max, 0},
+%% {max_channels_per_connection, 0},
 
-{mapping, "channel_max", "rabbit.channel_max", [{datatype, integer}]}.
+{mapping, "max_channels_per_connection", "rabbit.channel_max",
+  [{datatype, integer}, {alias, "channel_max"}]}.
 
 {mapping, "channel_max_per_node", "rabbit.channel_max_per_node",
   [{datatype, [{atom, infinity}, integer]}]}.
