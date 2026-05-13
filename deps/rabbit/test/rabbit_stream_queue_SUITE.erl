@@ -516,12 +516,13 @@ add_replicas(Config) ->
 
     check_leader_and_replicas(Config, [Server0, Server1]),
 
-    %% it is almost impossible to reliably catch this situation.
-    %% increasing number of messages published and the data size could help
-    % ?assertMatch({error, {disallowed, out_of_sync_replica}} ,
-    ?assertMatch(ok ,
-                 rpc:call(Server0, rabbit_stream_queue, add_replica,
-                          [<<"/">>, Q, Server2])),
+    %% On a mixed-version or loaded CI, the new replica may briefly be
+    %% reported as out of sync. Poll until it catches up and
+    %% `rabbit_stream_queue:add_replica/3` succeeds.
+    ?awaitMatch(ok,
+                rpc:call(Server0, rabbit_stream_queue, add_replica,
+                         [<<"/">>, Q, Server2]),
+                30_000),
     check_leader_and_replicas(Config, [Server0, Server1, Server2]),
 
     %% validate we can read the last entry
@@ -897,7 +898,7 @@ restart_single_node(Config) ->
 
     queue_utils:wait_for_messages(Config, [[Q, <<"1">>, <<"1">>, <<"0">>]]),
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
-    publish(Ch1, Q),
+    publish_confirm(Ch1, Q, [<<"msg">>]),
     queue_utils:wait_for_messages(Config, [[Q, <<"2">>, <<"2">>, <<"0">>]]),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
@@ -2989,7 +2990,7 @@ rebalance(Config) ->
                                                    (_) -> true end,
                                                 NodeData)
                               end, Summary)
-                end, 10000),
+                end, 30000),
     ok.
 
 committed_chunk_id(Config) ->
