@@ -14,8 +14,15 @@
 
 -define(SUP, ?MODULE).
 
+%% Ranch reads these keys from the top of its `transport_opts` map.
+-define(RANCH_TRANSPORT_OPT_KEYS, [max_connections, num_acceptors, num_conns_sups]).
+
 %% External exports
 -export([start_link/0, ensure_listener/1, stop_listener/1]).
+
+-ifdef(TEST).
+-export([build_ranch_transport_opts/1]).
+-endif.
 
 %% supervisor callbacks
 -export([init/1]).
@@ -31,7 +38,8 @@ ensure_listener(Listener) ->
             {error, {no_port_given, Listener}};
         _ ->
             {Transport, TransportOpts0, ProtoOpts} = preprocess_config(Listener),
-            TransportOpts = rabbit_ssl_options:wrap_password_opt(TransportOpts0),
+            TransportOpts1 = rabbit_ssl_options:wrap_password_opt(TransportOpts0),
+            TransportOpts = build_ranch_transport_opts(TransportOpts1),
             ProtoOptsMap = maps:from_list(ProtoOpts),
             StreamHandlers = stream_handlers_config(ProtoOpts),
             ?LOG_DEBUG("Starting HTTP[S] listener with transport ~ts", [Transport]),
@@ -111,6 +119,24 @@ transport_config(Options0) ->
 
 protocol_config(Options) ->
     proplists:get_value(cowboy_opts, Options, []).
+
+%% Ranch options such as `max_connections` must sit at the top of a
+%% `transport_opts` map, not under `socket_opts` (where they would reach
+%% `gen_tcp:listen` and fail). Build that map when any are present;
+%% otherwise pass the proplist through and let Ranch wrap it as
+%% `#{socket_opts => Proplist}` itself.
+build_ranch_transport_opts(Options) ->
+    {RanchOpts, SocketOpts} =
+        lists:partition(fun is_ranch_transport_opt/1, Options),
+    case RanchOpts of
+        []    -> Options;
+        [_|_] -> (proplists:to_map(RanchOpts))#{socket_opts => SocketOpts}
+    end.
+
+is_ranch_transport_opt({Key, _}) ->
+    lists:member(Key, ?RANCH_TRANSPORT_OPT_KEYS);
+is_ranch_transport_opt(_) ->
+    false.
 
 stream_handlers_config(Options) ->
     case lists:keyfind(compress, 1, Options) of
