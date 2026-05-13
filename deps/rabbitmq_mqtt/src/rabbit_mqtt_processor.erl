@@ -196,6 +196,7 @@ process_connect(
         ?LOG_DEBUG("MQTT connection ~s picked vhost using ~s", [ConnName0, VHostPickedUsing]),
         ok ?= check_vhost_exists(VHost, Username2, PeerIp),
         ok ?= check_vhost_alive(VHost),
+        ok ?= check_node_connection_limit(),
         ok ?= check_vhost_connection_limit(VHost),
         {ok, User = #user{username = Username}} ?= check_user_login(VHost, Username2, Password,
                                                                     ClientId, PeerIp, ConnName0),
@@ -1079,6 +1080,37 @@ check_vhost_exists(VHost, Username, PeerIp) ->
             ?LOG_ERROR("MQTT connection failed: virtual host '~s' does not exist", [VHost]),
             auth_attempt_failed(PeerIp, Username),
             {error, ?RC_BAD_USER_NAME_OR_PASSWORD}
+    end.
+
+check_node_connection_limit() ->
+    case application:get_env(?APP_NAME, max_connections, infinity) of
+        infinity ->
+            ok;
+        Limit when is_integer(Limit) andalso Limit >= 0 ->
+            PgScope = persistent_term:get(?PG_SCOPE),
+            %% pg:init/1 creates a named ETS table using the scope atom as the table
+            %% name. Each row holds one group: {Group, AllPids, LocalPids}. Since
+            %% MQTT enforces unique client IDs per vhost, every connected client
+            %% occupies exactly one group, so the table size equals the number of
+            %% active connections node-wide across all listeners and transports.
+            %% We use ets:info/2 (O(1)) rather than pg:which_groups/1, which
+            %% performs a full table scan via ets:match/2 and is O(N) — too
+            %% expensive when the node hosts a large number of MQTT connections.
+            %% Note: OTP-27.3.4.11 source code used as a reference.
+            case ets:info(PgScope, size) of
+                MqttConns when is_integer(MqttConns) andalso MqttConns >= Limit ->
+                    ?LOG_ERROR("MQTT connection failed: node connection limit ~b is reached",
+                               [Limit]),
+                    {error, ?RC_QUOTA_EXCEEDED};
+                MqttConns when is_integer(MqttConns) ->
+                    ok;
+                Other ->
+                    ?LOG_WARNING("MQTT pg scope ETS table '~ts' size is ~tp",
+                                 [PgScope, Other]),
+                    ok
+            end;
+        _ ->
+            ok
     end.
 
 check_vhost_connection_limit(VHost) ->

@@ -121,7 +121,10 @@ sub_groups() ->
      {limit, [shuffle],
       [vhost_connection_limit,
        vhost_queue_limit,
-       user_connection_limit
+       user_connection_limit,
+       node_connection_limit,
+       node_connection_limit_cross_listener,
+       node_connection_limit_infinity
       ]}
     ].
 
@@ -358,7 +361,6 @@ init_per_testcase(T, Config)
        T =:= client_id_from_cert_dn ->
     SetupProcess = setup_rabbit_auth_backend_mqtt_mock(Config),
     rabbit_ct_helpers:set_config(Config, {mock_setup_process, SetupProcess});
-
 init_per_testcase(Testcase, Config) ->
     testcase_started(Config, Testcase).
 
@@ -1320,6 +1322,73 @@ user_connection_limit(Config) ->
     ?assertMatch({error, {ExpectedError, _}}, emqtt:connect(C2)),
     ok = emqtt:disconnect(C1),
     ok = rabbit_ct_broker_helpers:clear_user_limits(Config, DefaultUser, max_connections).
+
+node_connection_limit(Config) ->
+    %% Wait connections from other tests to drain (`pg` cleanup is asynchronous).
+    ?awaitMatch(0, count_local_mqtt_connections(Config), 30000),
+    ok = set_node_max_connections(Config, 2),
+    ExpectedError = expected_connection_limit_error(Config),
+    try
+        {ok, C1} = connect_anonymous(Config, <<"client1">>),
+        {ok, _} = emqtt:connect(C1),
+        {ok, C2} = connect_anonymous(Config, <<"client2">>),
+        {ok, _} = emqtt:connect(C2),
+        {ok, C3} = connect_anonymous(Config, <<"client3">>),
+        unlink(C3),
+        ?assertMatch({error, {ExpectedError, _}}, emqtt:connect(C3)),
+        ok = emqtt:disconnect(C1),
+        ?awaitMatch(1, count_local_mqtt_connections(Config), 30000),
+        {ok, C4} = connect_anonymous(Config, <<"client4">>),
+        {ok, _} = emqtt:connect(C4),
+        ok = emqtt:disconnect(C2),
+        ok = emqtt:disconnect(C4)
+    after
+        ok = unset_node_max_connections(Config)
+    end.
+
+node_connection_limit_cross_listener(Config) ->
+    %% Wait connections from other tests to drain (`pg` cleanup is asynchronous).
+    ?awaitMatch(0, count_local_mqtt_connections(Config), 30000),
+    ok = set_node_max_connections(Config, 2),
+    ExpectedError = expected_connection_limit_error(Config),
+    try
+        {ok, C1} = connect_anonymous(Config, <<"plain-client">>),
+        {ok, _} = emqtt:connect(C1),
+        {ok, C2} = connect_ssl(<<"tls-client">>, Config),
+        {ok, _} = emqtt:connect(C2),
+        {ok, C3} = connect_anonymous(Config, <<"extra-client">>),
+        unlink(C1),
+        unlink(C2),
+        unlink(C3),
+        ?assertMatch({error, {ExpectedError, _}}, emqtt:connect(C3)),
+        ok = emqtt:disconnect(C1),
+        ok = emqtt:disconnect(C2)
+    after
+        ok = unset_node_max_connections(Config)
+    end.
+
+node_connection_limit_infinity(Config) ->
+    ok = set_node_max_connections(Config, infinity),
+    try
+        Clients = [begin
+                       Id = list_to_binary("infinity-" ++ integer_to_list(N)),
+                       {ok, C} = connect_anonymous(Config, Id),
+                       {ok, _} = emqtt:connect(C),
+                       C
+                   end || N <- lists:seq(1, 5)],
+        [ok = emqtt:disconnect(C) || C <- Clients]
+    after
+        ok = unset_node_max_connections(Config)
+    end.
+
+set_node_max_connections(Config, Limit) ->
+    rpc(Config, 0, application, set_env, [rabbitmq_mqtt, max_connections, Limit]).
+
+unset_node_max_connections(Config) ->
+    rpc(Config, 0, application, unset_env, [rabbitmq_mqtt, max_connections]).
+
+count_local_mqtt_connections(Config) ->
+    length(rpc(Config, 0, rabbit_mqtt, local_connection_pids, [])).
 
 expected_connection_limit_error(Config) ->
     case ?config(mqtt_version, Config) of

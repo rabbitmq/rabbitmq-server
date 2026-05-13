@@ -331,6 +331,9 @@ queue_consumer_channel_closed(Config) ->
 
     amqp_channel:close(Chan),
 
+    %% 1 s polling (default is 50 ms): tight polling re-fires
+    %% `force_stats/1` often enough that on mixed-version CI the
+    %% consumer-cleanup race keeps re-opening.
     ?awaitMatch([],
                 %% assert there are no consumer details
                 begin
@@ -338,7 +341,7 @@ queue_consumer_channel_closed(Config) ->
                     maps:get(consumer_details,
                              http_get(Config, "/queues/%2F/some-queue"))
                 end,
-                60000),
+                60000, 1000),
     ?awaitMatch(<<"some-queue">>,
                 maps:get(name,
                          http_get(Config, "/queues/%2F/some-queue")),
