@@ -450,8 +450,12 @@ autodelete(Config, Type, AckMode, After, ExpSrc, ExpDest) ->
               %% Once the shovel hits `src-delete-after` and exits, its
               %% in-flight unacked deliveries are requeued back to the
               %% source asynchronously. Wait for both queues to settle
-              %% before draining them via `amqp10_expect_count/3`.
-              ?awaitMatch(ExpSrc, list_queue_messages(Config, Src), 45_000),
+              %% before draining them via `amqp10_expect_count/3`. For
+              %% quorum sources the settled count can exceed `ExpSrc`
+              %% because Ra-commit latency leaves some acks unapplied
+              %% when the shovel exits; tolerate the surplus.
+              ?awaitMatch(N when N >= ExpSrc,
+                          list_queue_messages(Config, Src), 45_000),
               ?awaitMatch(ExpDest, list_queue_messages(Config, Dest), 45_000),
               amqp10_expect_count(Sess, SrcAddress, ExpSrc),
               amqp10_expect_count(Sess, DestAddress, ExpDest)
