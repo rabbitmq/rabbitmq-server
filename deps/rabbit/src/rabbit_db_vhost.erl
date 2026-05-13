@@ -19,6 +19,7 @@
          merge_metadata/2,
          set_tags/2,
          exists/1,
+         exists_uncached/1,
          get/1,
          get_all/0,
          count_all/0,
@@ -107,9 +108,9 @@ create_or_get_in_khepri(VHostName, VHost) ->
     case rabbit_khepri:create(Path, VHost) of
         ok ->
             {new, VHost};
-        {error, {khepri, mismatching_node,
-                 #{node_path := Path,
-                   node_props := #{data := ExistingVHost}}}} ->
+        {error, ?khepri_error(mismatching_node,
+                              #{node_path := Path,
+                                node_props := #{data := ExistingVHost}})} ->
             {existing, ExistingVHost};
         Error ->
             throw(Error)
@@ -177,12 +178,12 @@ merge_metadata_in_khepri(VHostName, Metadata) ->
             case Ret2 of
                 ok ->
                     {ok, VHost};
-                {error, {khepri, mismatching_node, _}} ->
-                    merge_metadata_in_khepri(VHostName, Metadata);
+                {error, ?khepri_error(mismatching_node, _)} ->
+                    merge_metadata(VHostName, Metadata);
                 {error, _} = Error ->
                     Error
             end;
-        {error, {khepri, node_not_found, _}} ->
+        {error, ?khepri_error(node_not_found, _)} ->
             {error, {no_such_vhost, VHostName}};
         {error, _} = Error ->
             Error
@@ -284,6 +285,32 @@ exists_in_khepri(VHostName) ->
     catch
         error:badarg ->
             false
+    end.
+
+%% -------------------------------------------------------------------
+%% exists_uncached().
+%% -------------------------------------------------------------------
+
+-spec exists_uncached(VHostName) -> Ret when
+      VHostName :: vhost:name(),
+      Ret :: boolean() | {error, any()}.
+%% @doc Checks if the virtual host named `VHostName' exists by querying
+%% Khepri directly, bypassing the ETS-backed projection.
+%%
+%% @returns `true' if the virtual host exists in Khepri, `false' if it does
+%% not exist, or `{error, Reason}' if Khepri is unavailable.
+%%
+%% @private
+
+exists_uncached(VHostName) when is_binary(VHostName) ->
+    Path = khepri_vhost_path(VHostName),
+    case rabbit_khepri:get(Path) of
+        {ok, _} ->
+            true;
+        {error, ?khepri_error(node_not_found, _)} ->
+            false;
+        {error, _} = Error ->
+            Error
     end.
 
 %% -------------------------------------------------------------------
@@ -451,12 +478,12 @@ update_in_khepri(VHostName, UpdateFun) ->
             case rabbit_khepri:put(Path1, V1) of
                 ok ->
                     V1;
-                {error, {khepri, mismatching_node, _}} ->
-                    update_in_khepri(VHostName, UpdateFun);
+                {error, ?khepri_error(mismatching_node, _)} ->
+                    update(VHostName, UpdateFun);
                 Error ->
                     throw(Error)
             end;
-        {error, {khepri, node_not_found, _}} ->
+        {error, ?khepri_error(node_not_found, _)} ->
             throw({error, {no_such_vhost, VHostName}});
         Error ->
             throw(Error)
