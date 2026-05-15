@@ -477,9 +477,9 @@ register_connection(Pid) ->
     pg:join(pg_scope_amqp091_connection(), Pid, Pid).
 
 -spec unregister_connection(pid()) -> ok.
-
 unregister_connection(Pid) ->
-    pg:leave(pg_scope_amqp091_connection(), Pid, Pid).
+    _ = pg:leave(pg_scope_amqp091_connection(), Pid, Pid),
+    ok.
 
 -spec connections() -> [rabbit_types:connection()].
 connections() ->
