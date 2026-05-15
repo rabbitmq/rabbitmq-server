@@ -46,10 +46,18 @@ encode(Term) ->
 encode(Term, Opts) ->
     %% Fixup for JSON encoding
     %% * Transforms any Funs into strings
+    %% * Transforms IPv4/IPv6 address tuples into their textual form
     %% See rabbit_mgmt_format:prepare_for_encoding/1
     F = fun
             (V) when is_function(V) ->
                 rabbit_data_coercion:to_binary(V);
+            ({A, B, C, D} = IP)
+              when is_integer(A), is_integer(B), is_integer(C), is_integer(D) ->
+                list_to_binary(rabbit_misc:ntoa(IP));
+            ({A, B, C, D, E, G, H, I} = IP)
+              when is_integer(A), is_integer(B), is_integer(C), is_integer(D),
+                   is_integer(E), is_integer(G), is_integer(H), is_integer(I) ->
+                list_to_binary(rabbit_misc:ntoa(IP));
             (V) ->
                 V
         end,
@@ -71,10 +79,12 @@ try_encode(Term, Opts) ->
 
 fixup_terms(Items, FixupFun) when is_list(Items) ->
     [fixup_item(Pair, FixupFun) || Pair <- Items];
+fixup_terms(Items, FixupFun) when is_map(Items) ->
+    maps:map(fun(_K, V) -> fixup_terms(V, FixupFun) end, Items);
 fixup_terms(Item, FixupFun) ->
     fixup_item(Item, FixupFun).
 
-fixup_item({Key, Value}, FixupFun) when is_list(Value) ->
+fixup_item({Key, Value}, FixupFun) when is_list(Value); is_map(Value) ->
     {Key, fixup_terms(Value, FixupFun)};
 fixup_item({Key, Value}, FixupFun) ->
     {Key, FixupFun(Value)};

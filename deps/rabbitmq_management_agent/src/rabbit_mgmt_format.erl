@@ -138,6 +138,8 @@ format_connection_created({host, Value}) ->
     {host, addr(Value)};
 format_connection_created({peer_host, Value}) ->
     {peer_host, addr(Value)};
+format_connection_created({peer_addr, Value}) ->
+    {peer_addr, addr(Value)};
 format_connection_created({port, Value}) ->
     {port, port(Value)};
 format_connection_created({peer_port, Value}) ->
