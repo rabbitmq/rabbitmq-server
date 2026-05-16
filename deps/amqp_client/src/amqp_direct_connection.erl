@@ -237,6 +237,8 @@ ssl_cert_info(Sock) ->
                                     rabbit_cert_info:issuer(Cert))},
              {peer_cert_subject,  list_to_binary(
                                     rabbit_cert_info:subject(Cert))},
+             {peer_cert_serial_number, list_to_binary(
+                                    rabbit_cert_info:serial_number(Cert))},
              {peer_cert_validity, list_to_binary(
                                     rabbit_cert_info:validity(Cert))}];
         _ ->

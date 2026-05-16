@@ -1094,6 +1094,7 @@ i(SSL, #v1{sock = Sock, proxy_socket = ProxySock})
 i(Cert, #v1{sock = Sock})
   when Cert =:= peer_cert_issuer;
        Cert =:= peer_cert_subject;
+       Cert =:= peer_cert_serial_number;
        Cert =:= peer_cert_validity ->
     rabbit_ssl:cert_info(Cert, Sock);
 i(client_properties, #v1{connection = #v1_connection{properties = Props}}) ->

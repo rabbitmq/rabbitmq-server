@@ -542,6 +542,7 @@ i(conn_name, #state{conn_name = Val}) ->
 i(Cert, #state{socket = Sock})
   when Cert =:= peer_cert_issuer;
        Cert =:= peer_cert_subject;
+       Cert =:= peer_cert_serial_number;
        Cert =:= peer_cert_validity ->
     rabbit_ssl:cert_info(Cert, rabbit_net:unwrap_socket(Sock));
 i(state, S) ->
