@@ -13,6 +13,7 @@
          subject/1,
          subject_alternative_names/1,
          validity/1,
+         serial_number/1,
          subject_items/2,
          extensions/1
 ]).
@@ -80,6 +81,14 @@ subject_alternative_names(Cert) ->
         #'Extension'{extnValue = Val} -> Val
     catch _:_ -> []
     end.
+
+-spec serial_number(certificate()) -> string().
+serial_number(Cert) ->
+    cert_info(fun(#'OTPCertificate' {
+                     tbsCertificate = #'OTPTBSCertificate' {
+                       serialNumber = SN }}) ->
+                      integer_to_list(SN, 16)
+              end, Cert).
 
 %% Return a string describing the certificate's validity.
 -spec validity(certificate()) -> string().
@@ -197,6 +206,10 @@ format_asn1_value({utcTime, [Y1, Y2, M1, M2, D1, D2, H1, H2,
                              Min1, Min2, S1, S2, $Z]}) ->
     rabbit_misc:format("20~c~c-~c~c-~c~cT~c~c:~c~c:~c~cZ",
                        [Y1, Y2, M1, M2, D1, D2, H1, H2, Min1, Min2, S1, S2]);
+format_asn1_value({generalTime,
+                   [Y1,Y2,Y3,Y4,Mo1,Mo2,D1,D2,H1,H2,Mi1,Mi2,S1,S2,$Z]}) ->
+    rabbit_misc:format("~c~c~c~c-~c~c-~c~cT~c~c:~c~c:~c~cZ",
+                  [Y1,Y2,Y3,Y4, Mo1,Mo2, D1,D2,H1,H2, Mi1,Mi2, S1,S2]);
 %% We appear to get an untagged value back for an ia5string
 %% (e.g. domainComponent).
 format_asn1_value(V) when is_list(V) ->
