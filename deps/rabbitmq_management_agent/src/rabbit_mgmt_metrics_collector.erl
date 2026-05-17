@@ -424,7 +424,8 @@ aggregate_entry({Id, Exclusive, AckRequired, PrefetchCount,
             {NextStats, Ops , State};
         [{_K, V}] ->
             CurrentActive = proplists:get_value(active, V, undefined),
-            case Active =:= CurrentActive of
+            CurrentActivityStatus = proplists:get_value(activity_status, V, undefined),
+            case {Active, ActivityStatus} =:= {CurrentActive, CurrentActivityStatus} of
                 false ->
                     Fmt = rabbit_mgmt_format:format([{exclusive, Exclusive},
                                                      {ack_required, AckRequired},

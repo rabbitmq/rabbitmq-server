@@ -116,7 +116,13 @@ consumers(Consumers, SingleActiveConsumer, SingleActiveConsumerOn, Acc) ->
                                           end
                                       end;
                                   false ->
-                                      fun(_) -> {true, up} end
+                                      %% C = {ChPid, Consumer}
+                                      fun(C) ->
+                                          case is_blocked(C) of
+                                              true  -> {true, blocked};
+                                              false -> {true, up}
+                                          end
+                                      end
                               end,
     priority_queue:fold(
       fun ({ChPid, Consumer}, _P, Acc1) ->
