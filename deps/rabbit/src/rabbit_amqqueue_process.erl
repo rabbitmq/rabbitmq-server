@@ -440,7 +440,10 @@ code_change(_OldVsn, State, _Extra) ->
 %%----------------------------------------------------------------------------
 
 maybe_notify_decorators(false, State) -> State;
-maybe_notify_decorators(true,  State) -> notify_decorators(State), State.
+maybe_notify_decorators(true,  State) -> 
+    notify_decorators(State),
+    notify_consumers_state_changed(State),
+    State.
 
 notify_decorators_if_became_empty(WasEmpty, State) ->
     case (not WasEmpty) andalso is_empty(State) of
@@ -1502,6 +1505,27 @@ maybe_notify_consumer_updated(#q{single_active_consumer_on = true} = State, _Pre
         _ ->
             ok
     end.
+
+%% Refresh the consumer_created ETS table for every consumer on this queue,
+%% so the management API reflects the current activity_status
+%% including `blocked` for consumers wedged by the per-
+%% consumer unsent_message_count limit of 200.
+notify_consumers_state_changed(State = #q{consumers                 = Consumers,
+                                          active_consumer           = SACHolder,
+                                          single_active_consumer_on = SACOn}) ->
+    QName = qname(State),
+    All = rabbit_queue_consumers:all(Consumers, SACHolder, SACOn),
+    lists:foreach(
+        fun({ChPid, CTag, AckReq, Prefetch, Active, Status, Args, _User}) ->
+            Exclusive = case {SACOn, SACHolder} of
+                            {false, {ChPid, CTag}} -> true;
+                            _                      -> false
+                        end,
+            rabbit_core_metrics:consumer_updated(
+                ChPid, CTag, Exclusive, AckReq, QName,
+                Prefetch, Active, Status, Args)
+        end, All),
+    ok.
 
 handle_cast(init, State) ->
     init_it({no_barrier, non_clean_shutdown}, none, State);
