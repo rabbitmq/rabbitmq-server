@@ -10,7 +10,8 @@
 -include_lib("public_key/include/public_key.hrl").
 -include_lib("kernel/include/logger.hrl").
 
--export([peer_cert_issuer/1, peer_cert_subject/1, peer_cert_validity/1]).
+-export([peer_cert_issuer/1, peer_cert_subject/1, 
+         peer_cert_serial_number/1, peer_cert_validity/1]).
 -export([peer_cert_subject_items/2, peer_cert_auth_name/1, peer_cert_auth_name/2]).
 -export([cipher_suites_erlang/2, cipher_suites_erlang/1,
          cipher_suites_openssl/2, cipher_suites_openssl/1,
@@ -111,6 +112,9 @@ peer_cert_subject_items(Cert, Type) ->
 peer_cert_subject_alternative_names(Cert, Type) ->
     SANs = rabbit_cert_info:subject_alternative_names(Cert),
     lists:filter(fun({Key, _}) -> Key =:= Type end, SANs).
+
+peer_cert_serial_number(Cert) ->
+    rabbit_cert_info:serial_number(Cert).
 
 %% Return a string describing the certificate's validity.
 peer_cert_validity(Cert) ->
@@ -234,6 +238,8 @@ cert_info(peer_cert_issuer, Sock) ->
     cert_info0(fun peer_cert_issuer/1, Sock);
 cert_info(peer_cert_subject, Sock) ->
     cert_info0(fun peer_cert_subject/1, Sock);
+cert_info(peer_cert_serial_number, Sock) ->
+    cert_info0(fun peer_cert_serial_number/1, Sock);
 cert_info(peer_cert_validity, Sock) ->
     cert_info0(fun peer_cert_validity/1, Sock).
 
