@@ -131,6 +131,10 @@
 <% if (connection.peer_cert_issuer != '') { %>
 <table class="facts">
   <tr>
+    <th>Peer Certificate Serial Number</th>
+    <td><%= connection.peer_cert_serial_number %></td>
+  </tr>
+  <tr>
     <th>Peer Certificate Issuer</th>
     <td><%= fmt_string(connection.peer_cert_issuer) %></td>
   </tr>
@@ -151,7 +155,7 @@
 <% if (properties_size(connection.client_properties) > 0) { %>
 <div class="section-hidden" id="connection-client-properies-section">
 <h2>Client properties</h2>
-<div class="hider">
+<div class="hider updatable">
 <%= fmt_table_long(connection.client_properties) %>
 </div>
 </div>

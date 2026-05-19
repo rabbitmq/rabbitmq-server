@@ -127,7 +127,7 @@
 -define(CREATION_EVENT_KEYS,
         [pid, name, port, peer_port, host,
         peer_host, ssl, peer_cert_subject, peer_cert_issuer,
-        peer_cert_validity, auth_mechanism, ssl_protocol,
+        peer_cert_serial_number, peer_cert_validity, auth_mechanism, ssl_protocol,
         ssl_key_exchange, ssl_cipher, ssl_hash, protocol, user, vhost,
         timeout, frame_max, channel_max, client_properties, connected_at,
         node, user_who_performed_action]).
@@ -135,7 +135,7 @@
 -define(AUTH_NOTIFICATION_INFO_KEYS,
         [host, name, peer_host, peer_port, protocol, auth_mechanism,
          ssl, ssl_protocol, ssl_cipher, peer_cert_issuer, peer_cert_subject,
-         peer_cert_validity]).
+         peer_cert_serial_number, peer_cert_validity]).
 
 -define(IS_RUNNING(State),
         (State#v1.connection_state =:= running orelse
@@ -1642,6 +1642,7 @@ i(SSL, #v1{sock = Sock, proxy_socket = ProxySock})
 i(Cert, #v1{sock = Sock})
   when Cert =:= peer_cert_issuer;
        Cert =:= peer_cert_subject;
+       Cert =:= peer_cert_serial_number;
        Cert =:= peer_cert_validity ->
     rabbit_ssl:cert_info(Cert, Sock);
 i(channels,           #v1{channel_count = ChannelCount}) -> ChannelCount;

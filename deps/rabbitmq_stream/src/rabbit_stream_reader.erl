@@ -43,6 +43,7 @@
          ssl,
          peer_cert_subject,
          peer_cert_issuer,
+         peer_cert_serial_number,
          peer_cert_validity,
          auth_mechanism,
          ssl_protocol,
@@ -80,6 +81,7 @@
          ssl_cipher,
          peer_cert_issuer,
          peer_cert_subject,
+         peer_cert_serial_number,
          peer_cert_validity]).
 -define(UNKNOWN_FIELD, unknown_field).
 -define(SILENT_CLOSE_DELAY, 3_000).
@@ -4033,6 +4035,7 @@ i(SSL, #stream_connection{socket = Sock, proxy_socket = ProxySock}, _)
 i(Cert, #stream_connection{socket = Sock},_)
   when Cert =:= peer_cert_issuer;
        Cert =:= peer_cert_subject;
+       Cert =:= peer_cert_serial_number;
        Cert =:= peer_cert_validity ->
     rabbit_ssl:cert_info(Cert, Sock);
 i(channels, _, _) ->
