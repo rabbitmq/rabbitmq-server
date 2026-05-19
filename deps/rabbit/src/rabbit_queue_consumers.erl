@@ -350,8 +350,12 @@ deliver_to_consumer(FetchFun,
     R.
 
 is_blocked(Consumer = {ChPid, _C}) ->
-    #cr{blocked_consumers = BlockedConsumers} = lookup_ch(ChPid),
-    priority_queue:member(Consumer, BlockedConsumers).
+    case lookup_ch(ChPid) of
+        not_found ->
+            false;
+        #cr{blocked_consumers = BlockedConsumers} ->
+            priority_queue:member(Consumer, BlockedConsumers)
+    end.
 
 -spec record_ack(ch(), pid(), ack()) -> 'ok'.
 
