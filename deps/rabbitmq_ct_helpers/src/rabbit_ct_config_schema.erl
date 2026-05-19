@@ -24,6 +24,12 @@ init_schemas(App, Config) ->
 run_snippets(Config) ->
     {ok, [Snippets]} = file:consult(?config(conf_snippets, Config)),
     ct:pal("Loaded config schema snippets: ~tp", [Snippets]),
+    %% Snippets may reference relative paths (e.g. cert files).
+    %% Set CWD to the plugin source directory so they resolve.
+    case ?config(current_srcdir, Config) of
+        undefined -> ok;
+        SrcDir -> ok = file:set_cwd(SrcDir)
+    end,
     %% Parse schemas once and reuse across all snippets to avoid
     %% re-discovering and re-parsing all schema files per snippet.
     Schema = load_schema(),
