@@ -806,6 +806,9 @@ add_vhost(VHost, ActingUser) ->
     case rabbit_vhost:put_vhost(Name, Description, Tags, DefaultQueueType, IsTracingEnabled, ActingUser) of
         ok ->
             ok;
+        {error, invalid_queue_type, DQT} ->
+            Msg = rabbit_misc:format("~ts is not a valid queue type", [DQT]),
+            throw({error, Msg});
         {error, _} = Err1 ->
             throw(Err1)
     end,

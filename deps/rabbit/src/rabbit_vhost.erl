@@ -414,7 +414,7 @@ delete_ignoring_protection(Name, ActingUser) ->
     rabbit_queue_type:queue_type() | 'undefined' | binary(),
     boolean(),
     rabbit_types:username()) ->
-    'ok' | {'error', any()} | {'EXIT', any()}.
+    'ok' | {'error', any()} | {'error', 'invalid_queue_type', any()} | {'EXIT', any()}.
 put_vhost(Name, Description, Tags0, DefaultQueueType, Trace, Username) ->
     Tags = case Tags0 of
       undefined   -> <<"">>;
