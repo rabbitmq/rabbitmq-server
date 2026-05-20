@@ -306,6 +306,8 @@
 -spec discover(binary() | atom()) -> queue_type().
 discover(<<"undefined">>) ->
     fallback();
+discover(<<>>) ->
+    fallback();
 discover(undefined) ->
     fallback();
 discover(TypeDescriptor) ->
@@ -846,6 +848,7 @@ inject_dqt(M) when is_map(M) ->
         undefined -> default();
         <<"undefined">> -> default();
         "undefined" -> default();
+        <<>> -> default();
         Valid -> Valid
     end,
     NQT = short_alias_of(DQT),
