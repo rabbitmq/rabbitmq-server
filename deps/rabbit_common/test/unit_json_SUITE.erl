@@ -25,6 +25,8 @@ groups() ->
             encode_primitives,
             encode_proplist_as_object,
             encode_map,
+            encode_map_with_string_keys,
+            encode_map_with_string_keys_in_nested_proplist,
             encode_nested_structures,
             encode_function_as_string,
             try_encode_returns_ok_tuple
@@ -70,6 +72,22 @@ encode_proplist_as_object(_Config) ->
 encode_map(_Config) ->
     Encoded = rabbit_json:encode(#{<<"k">> => <<"v">>}),
     ?assertEqual(#{<<"k">> => <<"v">>}, rabbit_json:decode(Encoded)).
+
+encode_map_with_string_keys(_Config) ->
+    %% OTP 27's json:key/2 does not support string (list) keys; they must be
+    %% silently converted to binary before encoding.
+    Encoded = rabbit_json:encode(#{"key" => <<"value">>}),
+    ?assertEqual(#{<<"key">> => <<"value">>}, rabbit_json:decode(Encoded)).
+
+encode_map_with_string_keys_in_nested_proplist(_Config) ->
+    %% Mirrors rabbit_mgmt_wm_auth:produce_auth_settings/2 where
+    %% oauth_resource_servers values are maps keyed by resource server IDs
+    %% that may be stored as strings rather than binaries.
+    Term = [{<<"resource_servers">>, #{"rabbitmq" => [{<<"id">>, <<"rabbitmq">>}]}}],
+    Encoded = rabbit_json:encode(Term),
+    ?assertEqual(
+        #{<<"resource_servers">> => #{<<"rabbitmq">> => #{<<"id">> => <<"rabbitmq">>}}},
+        rabbit_json:decode(Encoded)).
 
 encode_nested_structures(_Config) ->
     Term = [{<<"outer">>, [{<<"inner">>, [1, 2, 3]}]}],
