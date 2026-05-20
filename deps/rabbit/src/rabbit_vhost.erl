@@ -320,9 +320,11 @@ update_metadata(Name, Metadata0, _ActingUser) when is_map(Metadata0) andalso map
 update_metadata(Name, Metadata0, ActingUser) ->
     KnownKeys = [description, tags, default_queue_type, protected_from_deletion],
     Metadata1 = maps:with(KnownKeys, Metadata0),
-    %% See rabbitmq/rabbitmq-server#10469
+    %% See rabbitmq/rabbitmq-server#10469, rabbitmq/rabbitmq-server#16481
     Metadata = case Metadata1 of
         #{default_queue_type := <<"undefined">>} ->
+            maps:remove(default_queue_type, Metadata1);
+        #{default_queue_type := <<>>} ->
             maps:remove(default_queue_type, Metadata1);
         #{default_queue_type := null} ->
             maps:remove(default_queue_type, Metadata1);
@@ -613,6 +615,7 @@ default_queue_type(VirtualHost, FallbackQueueType) ->
             case vhost:get_default_queue_type(Record) of
                 undefined       -> NodeDefault;
                 <<"undefined">> -> NodeDefault;
+                <<>>            -> NodeDefault;
                 Type            -> Type
             end
 end.
@@ -735,6 +738,8 @@ i(metadata, VHost) ->
         M = #{default_queue_type := undefined} ->
             M#{default_queue_type => DQT};
         M = #{default_queue_type := <<"undefined">>} ->
+            M#{default_queue_type => DQT};
+        M = #{default_queue_type := <<>>} ->
             M#{default_queue_type => DQT};
         M = #{default_queue_type := null} ->
             M#{default_queue_type => DQT};
