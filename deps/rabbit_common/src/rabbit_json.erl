@@ -63,5 +63,13 @@ encode_value({A, B, C, D, E, F, G, H} = IP, Encode)
   when is_integer(A), is_integer(B), is_integer(C), is_integer(D),
        is_integer(E), is_integer(F), is_integer(G), is_integer(H) ->
     json:encode_value(list_to_binary(rabbit_misc:ntoa(IP)), Encode);
+%% OTP 27's json:key/2 does not support string (list) keys.
+%% Convert any list keys to binary to avoid a function_clause error.
+encode_value(Map, Encode) when is_map(Map) ->
+    NormMap = maps:fold(fun
+        (K, V, Acc) when is_list(K) -> maps:put(list_to_binary(K), V, Acc);
+        (K, V, Acc)                 -> maps:put(K, V, Acc)
+    end, #{}, Map),
+    json:encode_map(NormMap, Encode);
 encode_value(Other, Encode) ->
     json:encode_value(Other, Encode).
