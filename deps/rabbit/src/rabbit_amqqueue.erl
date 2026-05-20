@@ -767,6 +767,7 @@ augment_declare_args(VHost, Durable, Exclusive, AutoDelete, Args0) ->
         #{default_queue_type := DefaultQueueType}
           when is_binary(DefaultQueueType) andalso
                DefaultQueueType =/= <<"undefined">> andalso
+               DefaultQueueType =/= <<>> andalso
                not HasQTypeArg ->
             update_args_table_with_queue_type(DefaultQueueType, Durable, Exclusive, AutoDelete, Args0);
         _ ->
