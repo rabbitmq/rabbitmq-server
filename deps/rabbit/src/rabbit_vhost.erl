@@ -204,22 +204,15 @@ do_add(Name, Metadata0, ActingUser) ->
     Description = maps:get(description, Metadata, undefined),
     Tags = maps:get(tags, Metadata, []),
 
-    %% validate default_queue_type
     case Metadata of
         #{default_queue_type := DQT} ->
-            %% check that the queue type is known
             ?LOG_DEBUG("Default queue type of virtual host '~ts' is ~tp",
                              [Name, DQT]),
-            try rabbit_queue_type:discover(DQT) of
-                QueueType when is_atom(QueueType) ->
-                    case rabbit_queue_type:is_enabled(QueueType) of
-                        true ->
-                            ok;
-                        false ->
-                            throw({error, queue_type_feature_flag_is_not_enabled})
-                    end
-            catch _:_ ->
-                      throw({error, invalid_queue_type, DQT})
+            case rabbit_queue_type:validate_default_queue_type(DQT) of
+                ok ->
+                    ok;
+                {error, _} ->
+                    throw({error, invalid_queue_type, DQT})
             end;
         _ ->
             ok
