@@ -871,12 +871,21 @@ validate_default_queue_type(<<"undefined">>) -> ok;
 validate_default_queue_type(<<>>) ->
     {error, <<"default_queue_type must not be an empty string">>};
 validate_default_queue_type(Value) when is_binary(Value) ->
-    case lists:member(Value, known_queue_type_names()) of
-        true -> ok;
-        false ->
-            Msg = iolist_to_binary(
-                    io_lib:format("~ts is not a valid queue type", [Value])),
-            {error, Msg}
+    try discover(Value) of
+        QueueType when is_atom(QueueType) ->
+            case is_enabled(QueueType) of
+                true ->
+                    ok;
+                false ->
+                    Msg = iolist_to_binary(
+                            io_lib:format(
+                              "queue type ~ts is not enabled", [Value])),
+                    {error, Msg}
+            end
+    catch _:_ ->
+              Msg = iolist_to_binary(
+                      io_lib:format("~ts is not a valid queue type", [Value])),
+              {error, Msg}
     end;
 validate_default_queue_type(_) -> ok.
 
