@@ -19,16 +19,20 @@ all() ->
      inject_dqt_undefined_binary,
      inject_dqt_null,
      inject_dqt_nil,
+     inject_dqt_empty_binary,
      inject_dqt_preserves_existing_metadata,
      new_metadata_sanitizes_undefined_binary,
      new_metadata_sanitizes_null,
      new_metadata_sanitizes_nil,
+     new_metadata_sanitizes_empty_binary,
      vhost_import_with_undefined_dqt,
      vhost_import_with_null_dqt,
      vhost_import_with_nil_dqt,
+     vhost_import_with_empty_binary_dqt,
      update_metadata_sanitizes_undefined_binary,
      update_metadata_sanitizes_null,
-     update_metadata_sanitizes_nil
+     update_metadata_sanitizes_nil,
+     update_metadata_sanitizes_empty_binary
     ].
 
 %% -------------------------------------------------------------------
@@ -88,6 +92,14 @@ inject_dqt_nil(Config) ->
         rpc(Config, 0, rabbit_queue_type, inject_dqt, [Input]),
     ok.
 
+inject_dqt_empty_binary(Config) ->
+    Expected = rpc(Config, 0, rabbit_queue_type, default_alias, []),
+    Input = #{default_queue_type => <<"">>, name => <<"/">>},
+    #{default_queue_type := Expected,
+      metadata := #{default_queue_type := Expected}} =
+        rpc(Config, 0, rabbit_queue_type, inject_dqt, [Input]),
+    ok.
+
 %% Existing metadata keys should be preserved when injecting DQT
 inject_dqt_preserves_existing_metadata(Config) ->
     Expected = rpc(Config, 0, rabbit_queue_type, default_alias, []),
@@ -127,6 +139,12 @@ new_metadata_sanitizes_nil(Config) ->
         rpc(Config, 0, vhost, new_metadata, [<<"description">>, [], nil]),
     ok.
 
+new_metadata_sanitizes_empty_binary(Config) ->
+    Expected = rpc(Config, 0, rabbit_queue_type, default_alias, []),
+    #{default_queue_type := Expected} =
+        rpc(Config, 0, vhost, new_metadata, [<<"description">>, [], <<"">>]),
+    ok.
+
 vhost_import_with_undefined_dqt(Config) ->
     VHost = <<"import-undefined-dqt-test">>,
     Expected = rpc(Config, 0, rabbit_queue_type, default_alias, []),
@@ -163,6 +181,21 @@ vhost_import_with_nil_dqt(Config) ->
     try
         ok = rpc(Config, 0, rabbit_vhost, put_vhost,
                  [VHost, <<"test description">>, [], nil, false, <<"test-user">>]),
+        V = rpc(Config, 0, rabbit_vhost, lookup, [VHost]),
+        Metadata = rpc(Config, 0, vhost, get_metadata, [V]),
+        #{default_queue_type := StoredDQT} = Metadata,
+        Expected = StoredDQT
+    after
+        rpc(Config, 0, rabbit_vhost, delete, [VHost, <<"test-user">>])
+    end,
+    ok.
+
+vhost_import_with_empty_binary_dqt(Config) ->
+    VHost = <<"import-empty-binary-dqt-test">>,
+    Expected = rpc(Config, 0, rabbit_queue_type, default_alias, []),
+    try
+        ok = rpc(Config, 0, rabbit_vhost, put_vhost,
+                 [VHost, <<"test description">>, [], <<"">>, false, <<"test-user">>]),
         V = rpc(Config, 0, rabbit_vhost, lookup, [VHost]),
         Metadata = rpc(Config, 0, vhost, get_metadata, [V]),
         #{default_queue_type := StoredDQT} = Metadata,
@@ -216,6 +249,23 @@ update_metadata_sanitizes_nil(Config) ->
         #{default_queue_type := <<"classic">>} = rpc(Config, 0, vhost, get_metadata, [V1]),
         ok = rpc(Config, 0, rabbit_vhost, update_metadata,
                  [VHost, #{default_queue_type => nil}, <<"test-user">>]),
+        V2 = rpc(Config, 0, rabbit_vhost, lookup, [VHost]),
+        #{default_queue_type := StoredDQT} = rpc(Config, 0, vhost, get_metadata, [V2]),
+        <<"classic">> = StoredDQT
+    after
+        rpc(Config, 0, rabbit_vhost, delete, [VHost, <<"test-user">>])
+    end,
+    ok.
+
+update_metadata_sanitizes_empty_binary(Config) ->
+    VHost = <<"update-metadata-empty-binary-dqt-test">>,
+    try
+        ok = rpc(Config, 0, rabbit_vhost, put_vhost,
+                 [VHost, <<"test">>, [], <<"classic">>, false, <<"test-user">>]),
+        V1 = rpc(Config, 0, rabbit_vhost, lookup, [VHost]),
+        #{default_queue_type := <<"classic">>} = rpc(Config, 0, vhost, get_metadata, [V1]),
+        ok = rpc(Config, 0, rabbit_vhost, update_metadata,
+                 [VHost, #{default_queue_type => <<"">>}, <<"test-user">>]),
         V2 = rpc(Config, 0, rabbit_vhost, lookup, [VHost]),
         #{default_queue_type := StoredDQT} = rpc(Config, 0, vhost, get_metadata, [V2]),
         <<"classic">> = StoredDQT
