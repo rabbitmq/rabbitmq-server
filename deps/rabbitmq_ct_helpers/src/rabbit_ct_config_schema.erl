@@ -24,13 +24,22 @@ init_schemas(App, Config) ->
 run_snippets(Config) ->
     {ok, [Snippets]} = file:consult(?config(conf_snippets, Config)),
     ct:pal("Loaded config schema snippets: ~tp", [Snippets]),
+    %% Snippets may reference relative paths (e.g. cert files).
+    %% Set CWD to the plugin source directory so they resolve.
+    case ?config(current_srcdir, Config) of
+        undefined -> ok;
+        SrcDir -> ok = file:set_cwd(SrcDir)
+    end,
+    %% Parse schemas once and reuse across all snippets to avoid
+    %% re-discovering and re-parsing all schema files per snippet.
+    Schema = load_schema(),
     lists:foreach(
       fun({N, S, C, P}) ->
-              ok = test_snippet(Config, {snippet_id(N), S, []}, C, P, true);
+              ok = test_snippet(Config, Schema, {snippet_id(N), S, []}, C, P, true);
          ({N, S, A, C, P}) ->
-              ok = test_snippet(Config, {snippet_id(N), S, A},  C, P, true);
+              ok = test_snippet(Config, Schema, {snippet_id(N), S, A},  C, P, true);
          ({N, S, A, C, P, nosort}) ->
-              ok = test_snippet(Config, {snippet_id(N), S, A},  C, P, false)
+              ok = test_snippet(Config, Schema, {snippet_id(N), S, A},  C, P, false)
       end,
       Snippets),
     ok.
@@ -44,15 +53,15 @@ snippet_id(A) when is_atom(A) ->
 snippet_id(L) when is_list(L) ->
     L.
 
-test_snippet(Config, Snippet = {SnipID, _, _}, Expected, _Plugins, Sort) ->
+test_snippet(Config, Schema, Snippet = {SnipID, _, _}, Expected, _Plugins, Sort) ->
     {ConfFile, AdvancedFile} = write_snippet(Config, Snippet),
     %% We ignore the rabbit -> log portion of the config on v3.9+, where the lager
     %% dependency has been dropped
     Generated = case code:which(lager) of
                     non_existing ->
-                        without_rabbit_log(generate_config(ConfFile, AdvancedFile));
+                        without_rabbit_log(generate_config(Schema, ConfFile, AdvancedFile));
                     _ ->
-                        generate_config(ConfFile, AdvancedFile)
+                        generate_config(Schema, ConfFile, AdvancedFile)
                 end,
     {Exp, Gen} = case Sort of
                      true ->
@@ -78,10 +87,31 @@ write_snippet(Config, {Name, Conf, Advanced}) ->
     ok = rabbit_file:write_term_file(AdvancedFile, [Advanced]),
     {ConfFile, AdvancedFile}.
 
-generate_config(ConfFile, AdvancedFile) ->
+generate_config(Schema, ConfFile, AdvancedFile) ->
+    case cuttlefish_conf:files([ConfFile]) of
+        {errorlist, Errors} ->
+            throw({error, {failed_to_parse_configuration_file, Errors}});
+        Conf ->
+            Config = case cuttlefish_generator:map(Schema, Conf) of
+                         {error, Phase, {errorlist, Errors}} ->
+                             throw({error, {failed_to_prepare_configuration, Phase, Errors}});
+                         ValidConfig ->
+                             proplists:delete(vm_args, ValidConfig)
+                     end,
+            case rabbit_prelaunch_file:consult_file(AdvancedFile) of
+                {ok, [AdvancedConfig]} ->
+                    cuttlefish_advanced:overlay(Config, AdvancedConfig);
+                {ok, _} ->
+                    Config;
+                {error, _} ->
+                    Config
+            end
+    end.
+
+load_schema() ->
     Context = rabbit_env:get_context(),
-    rabbit_prelaunch_conf:generate_config_from_cuttlefish_files(
-      Context, [ConfFile], AdvancedFile).
+    SchemaFiles = rabbit_prelaunch_conf:find_cuttlefish_schemas(Context),
+    cuttlefish_schema:files(SchemaFiles).
 
 without_rabbit_log(ErlangConfig) ->
     case proplists:get_value(rabbit, ErlangConfig) of
