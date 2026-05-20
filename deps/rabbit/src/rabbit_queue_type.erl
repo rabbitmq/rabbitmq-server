@@ -77,7 +77,8 @@
          added_to_rabbit_registry/2,
          removed_from_rabbit_registry/1,
          known_queue_type_names/0,
-         known_queue_type_modules/0
+         known_queue_type_modules/0,
+         validate_default_queue_type/1
         ]).
 
 -type queue_name() :: rabbit_amqqueue:name().
@@ -835,6 +836,25 @@ known_queue_type_names() ->
     Registered = rabbit_registry:lookup_all(queue),
     {QueueTypes, _} = lists:unzip(Registered),
     lists:map(fun(X) -> atom_to_binary(X) end, QueueTypes).
+
+-spec validate_default_queue_type(Value) -> Ret when
+      Value :: binary() | atom() | undefined,
+      Ret :: ok | {error, binary()}.
+validate_default_queue_type(undefined) -> ok;
+validate_default_queue_type(null) -> ok;
+validate_default_queue_type(nil) -> ok;
+validate_default_queue_type(<<"undefined">>) -> ok;
+validate_default_queue_type(<<>>) ->
+    {error, <<"default_queue_type must not be an empty string">>};
+validate_default_queue_type(Value) when is_binary(Value) ->
+    case lists:member(Value, known_queue_type_names()) of
+        true -> ok;
+        false ->
+            Msg = iolist_to_binary(
+                    io_lib:format("~ts is not a valid queue type", [Value])),
+            {error, Msg}
+    end;
+validate_default_queue_type(_) -> ok.
 
 inject_dqt(VHost) when ?is_vhost(VHost) ->
     inject_dqt(vhost:to_map(VHost));
