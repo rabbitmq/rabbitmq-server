@@ -70,7 +70,7 @@ accept_content(ReqData0, Context = #context{user = #user{username = Username}}) 
               %% so fall back to it. See rabbitmq/rabbitmq-server#7734.
               FallbackQT = maps:get(defaultqueuetype, BodyMap, undefined),
               DefaultQT = maps:get(default_queue_type, BodyMap, FallbackQT),
-              case validate_default_queue_type(DefaultQT) of
+              case rabbit_queue_type:validate_default_queue_type(DefaultQT) of
                   ok ->
                       case rabbit_vhost:put_vhost(Name, Description, Tags, DefaultQT, Trace, Username) of
                           ok ->
@@ -130,20 +130,3 @@ id(ReqData) ->
       [Value] -> Value;
       Value   -> Value
     end.
-
-validate_default_queue_type(undefined) -> ok;
-validate_default_queue_type(null) -> ok;
-validate_default_queue_type(nil) -> ok;
-validate_default_queue_type(<<"undefined">>) -> ok;
-validate_default_queue_type(<<>>) ->
-    {error, <<"default_queue_type must not be an empty string">>};
-validate_default_queue_type(Value) when is_binary(Value) ->
-    case lists:member(Value, rabbit_queue_type:known_queue_type_names()) of
-        true -> ok;
-        false ->
-            Msg = iolist_to_binary(
-                    io_lib:format("~ts is not a valid queue type", [Value])),
-            {error, Msg}
-    end;
-validate_default_queue_type(_) -> ok.
-
