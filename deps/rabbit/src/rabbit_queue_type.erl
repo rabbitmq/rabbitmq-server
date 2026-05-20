@@ -858,6 +858,37 @@ known_queue_type_names() ->
     {QueueTypes, _} = lists:unzip(Registered),
     lists:map(fun(X) -> atom_to_binary(X) end, QueueTypes).
 
+<<<<<<< HEAD
+=======
+-spec validate_default_queue_type(Value) -> Ret when
+      Value :: binary() | atom() | undefined,
+      Ret :: ok | {error, binary()}.
+validate_default_queue_type(undefined) -> ok;
+validate_default_queue_type(null) -> ok;
+validate_default_queue_type(nil) -> ok;
+validate_default_queue_type(<<"undefined">>) -> ok;
+validate_default_queue_type(<<>>) ->
+    {error, <<"default_queue_type must not be an empty string">>};
+validate_default_queue_type(Value) when is_binary(Value) ->
+    try discover(Value) of
+        QueueType when is_atom(QueueType) ->
+            case is_enabled(QueueType) of
+                true ->
+                    ok;
+                false ->
+                    Msg = rabbit_data_coercion:to_binary(
+                            rabbit_misc:format(
+                              "queue type ~ts is not enabled", [Value])),
+                    {error, Msg}
+            end
+    catch _:_ ->
+              Msg = rabbit_data_coercion:to_binary(
+                      rabbit_misc:format("~ts is not a valid queue type", [Value])),
+              {error, Msg}
+    end;
+validate_default_queue_type(_) -> ok.
+
+>>>>>>> 51a7abe2f3 (Use `rabbit_data_coercion:to_binary(rabbit_misc:format(...))` idiom (#16481))
 inject_dqt(VHost) when ?is_vhost(VHost) ->
     inject_dqt(vhost:to_map(VHost));
 inject_dqt(VHost) when is_list(VHost) ->
