@@ -877,14 +877,14 @@ validate_default_queue_type(Value) when is_binary(Value) ->
                 true ->
                     ok;
                 false ->
-                    Msg = iolist_to_binary(
-                            io_lib:format(
+                    Msg = rabbit_data_coercion:to_binary(
+                            rabbit_misc:format(
                               "queue type ~ts is not enabled", [Value])),
                     {error, Msg}
             end
     catch _:_ ->
-              Msg = iolist_to_binary(
-                      io_lib:format("~ts is not a valid queue type", [Value])),
+              Msg = rabbit_data_coercion:to_binary(
+                      rabbit_misc:format("~ts is not a valid queue type", [Value])),
               {error, Msg}
     end;
 validate_default_queue_type(_) -> ok.

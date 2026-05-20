@@ -807,7 +807,8 @@ add_vhost(VHost, ActingUser) ->
         ok ->
             ok;
         {error, invalid_queue_type, DQT} ->
-            Msg = rabbit_misc:format("~ts is not a valid queue type", [DQT]),
+            Msg = rabbit_data_coercion:to_binary(
+                    rabbit_misc:format("~ts is not a valid queue type", [DQT])),
             throw({error, Msg});
         {error, _} = Err1 ->
             throw(Err1)
