@@ -3708,7 +3708,10 @@ send_file_callback(?VERSION_2,
        FrameBeginning
     end.
 
--spec send_chunks(term(), module(), #consumer{}, atomics:atomics_ref()) ->
+-spec send_chunks(rabbit_stream_core:command_version(),
+                  module(),
+                  #consumer{},
+                  atomics:atomics_ref()) ->
     {ok, #consumer{}} | {error, term()}.
 send_chunks(DeliverVersion,
             Transport,
@@ -3722,6 +3725,13 @@ send_chunks(DeliverVersion,
                 LastLstOffset,
                 Counter).
 
+-spec send_chunks(rabbit_stream_core:command_version(),
+                  module(),
+                  #consumer{},
+                  non_neg_integer(),
+                  undefined | osiris:offset(),
+                  atomics:atomics_ref()) ->
+    {ok, #consumer{}} | {error, term()}.
 send_chunks(_DeliverVersion,
             _Transport,
             #consumer{send_limit = SendLimit} = Consumer,
@@ -3751,6 +3761,15 @@ send_chunks(DeliverVersion,
                 true,
                 Counter).
 
+-spec send_chunks(rabbit_stream_core:command_version(),
+                  module(),
+                  #consumer{},
+                  osiris_log:state(),
+                  non_neg_integer(),
+                  undefined | osiris:offset(),
+                  boolean(),
+                  atomics:atomics_ref()) ->
+    {ok, #consumer{}} | {error, term()}.
 send_chunks(_DeliverVersion,
             Transport,
             #consumer{
