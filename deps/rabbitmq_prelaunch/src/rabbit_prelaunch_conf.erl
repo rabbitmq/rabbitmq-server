@@ -9,6 +9,7 @@
 -export([setup/1,
          get_config_state/0,
          generate_config_from_cuttlefish_files/3,
+         find_cuttlefish_schemas/1,
          decrypt_config/1]).
 
 %% Only used in tests.
