@@ -16,8 +16,19 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddVhostCommand do
     {args, Map.merge(%{description: "", tags: ""}, opts)}
   end
 
-  use RabbitMQ.CLI.Core.AcceptsOnePositionalArgument
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
+
+  def validate(args, _) when length(args) == 0 do
+    {:validation_failure, :not_enough_args}
+  end
+
+  def validate(args, _) when length(args) > 1 do
+    {:validation_failure, :too_many_args}
+  end
+
+  def validate([_vhost], opts) do
+    VirtualHosts.validate_default_queue_type(opts)
+  end
 
   def run([vhost], %{
         node: node_name,
@@ -53,6 +64,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddVhostCommand do
 
   def output({:error, :invalid_queue_type}, _opts) do
     {:error, ExitCodes.exit_usage(), "Unsupported default queue type"}
+  end
+
+  def output({:error, :invalid_queue_type, dqt}, _opts) do
+    {:error, ExitCodes.exit_usage(), VirtualHosts.invalid_queue_type_message(dqt)}
   end
 
   def output({:badrpc, {:EXIT, {:vhost_limit_exceeded, msg}}}, _opts) do

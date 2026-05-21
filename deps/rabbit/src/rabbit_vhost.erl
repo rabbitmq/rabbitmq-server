@@ -204,22 +204,15 @@ do_add(Name, Metadata0, ActingUser) ->
     Description = maps:get(description, Metadata, undefined),
     Tags = maps:get(tags, Metadata, []),
 
-    %% validate default_queue_type
     case Metadata of
         #{default_queue_type := DQT} ->
-            %% check that the queue type is known
             ?LOG_DEBUG("Default queue type of virtual host '~ts' is ~tp",
                              [Name, DQT]),
-            try rabbit_queue_type:discover(DQT) of
-                QueueType when is_atom(QueueType) ->
-                    case rabbit_queue_type:is_enabled(QueueType) of
-                        true ->
-                            ok;
-                        false ->
-                            throw({error, queue_type_feature_flag_is_not_enabled})
-                    end
-            catch _:_ ->
-                      throw({error, invalid_queue_type, DQT})
+            case rabbit_queue_type:validate_default_queue_type(DQT) of
+                ok ->
+                    ok;
+                {error, _} ->
+                    throw({error, invalid_queue_type, DQT})
             end;
         _ ->
             ok
@@ -312,7 +305,8 @@ pick_known_metadata(Raw) when is_map(Raw) ->
 pick_known_metadata(_) ->
     #{}.
 
--spec update_metadata(vhost:name(), vhost:metadata(), rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
+-spec update_metadata(vhost:name(), vhost:metadata(), rabbit_types:username()) ->
+    'ok' | {'error', any()} | {'error', 'invalid_queue_type', any()}.
 update_metadata(Name, undefined, _ActingUser) ->
     case rabbit_db_vhost:exists(Name) of
         true ->
@@ -329,8 +323,43 @@ update_metadata(Name, Metadata0, _ActingUser) when is_map(Metadata0) andalso map
     end;
 update_metadata(Name, Metadata0, ActingUser) ->
     KnownKeys = [description, tags, default_queue_type, protected_from_deletion],
-    Metadata = maps:with(KnownKeys, Metadata0),
+    Metadata1 = maps:with(KnownKeys, Metadata0),
+    %% See rabbitmq/rabbitmq-server#10469, rabbitmq/rabbitmq-server#16481
+    Metadata = case Metadata1 of
+        #{default_queue_type := <<"undefined">>} ->
+            maps:remove(default_queue_type, Metadata1);
+        #{default_queue_type := <<>>} ->
+            maps:remove(default_queue_type, Metadata1);
+        #{default_queue_type := null} ->
+            maps:remove(default_queue_type, Metadata1);
+        #{default_queue_type := nil} ->
+            maps:remove(default_queue_type, Metadata1);
+        _ ->
+            Metadata1
+    end,
 
+    case validate_metadata_default_queue_type(Metadata) of
+        ok ->
+            persist_metadata_update(Name, Metadata, ActingUser);
+        {error, _, _} = Err ->
+            Err
+    end.
+
+-spec validate_metadata_default_queue_type(vhost:metadata()) ->
+    'ok' | {'error', 'invalid_queue_type', any()}.
+validate_metadata_default_queue_type(#{default_queue_type := DQT}) ->
+    case rabbit_queue_type:validate_default_queue_type(DQT) of
+        ok ->
+            ok;
+        {error, _} ->
+            {error, invalid_queue_type, DQT}
+    end;
+validate_metadata_default_queue_type(_) ->
+    ok.
+
+-spec persist_metadata_update(vhost:name(), vhost:metadata(), rabbit_types:username()) ->
+    rabbit_types:ok_or_error(any()).
+persist_metadata_update(Name, Metadata, ActingUser) ->
     case rabbit_db_vhost:merge_metadata(Name, Metadata) of
         {ok, VHost} ->
             Description = vhost:get_description(VHost),
@@ -418,7 +447,7 @@ delete_ignoring_protection(Name, ActingUser) ->
     rabbit_queue_type:queue_type() | 'undefined' | binary(),
     boolean(),
     rabbit_types:username()) ->
-    'ok' | {'error', any()} | {'EXIT', any()}.
+    'ok' | {'error', any()} | {'error', 'invalid_queue_type', any()} | {'EXIT', any()}.
 put_vhost(Name, Description, Tags0, DefaultQueueType, Trace, Username) ->
     Tags = case Tags0 of
       undefined   -> <<"">>;
@@ -612,6 +641,7 @@ default_queue_type(VirtualHost, FallbackQueueType) ->
             case vhost:get_default_queue_type(Record) of
                 undefined       -> NodeDefault;
                 <<"undefined">> -> NodeDefault;
+                <<>>            -> NodeDefault;
                 Type            -> Type
             end
 end.
@@ -734,6 +764,12 @@ i(metadata, VHost) ->
         M = #{default_queue_type := undefined} ->
             M#{default_queue_type => DQT};
         M = #{default_queue_type := <<"undefined">>} ->
+            M#{default_queue_type => DQT};
+        M = #{default_queue_type := <<>>} ->
+            M#{default_queue_type => DQT};
+        M = #{default_queue_type := null} ->
+            M#{default_queue_type => DQT};
+        M = #{default_queue_type := nil} ->
             M#{default_queue_type => DQT};
         M = #{default_queue_type := QT} ->
             M#{default_queue_type => rabbit_queue_type:short_alias_of(QT)};

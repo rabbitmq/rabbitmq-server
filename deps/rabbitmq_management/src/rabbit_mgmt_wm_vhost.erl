@@ -70,24 +70,35 @@ accept_content(ReqData0, Context = #context{user = #user{username = Username}}) 
               %% so fall back to it. See rabbitmq/rabbitmq-server#7734.
               FallbackQT = maps:get(defaultqueuetype, BodyMap, undefined),
               DefaultQT = maps:get(default_queue_type, BodyMap, FallbackQT),
-              case rabbit_vhost:put_vhost(Name, Description, Tags, DefaultQT, Trace, Username) of
+              case rabbit_queue_type:validate_default_queue_type(DefaultQT) of
                   ok ->
-                      {true, ReqData, Context};
-                  {error, timeout} ->
-                      rabbit_mgmt_util:internal_server_error(
-                        timeout,
-                        "Timed out waiting for the vhost to initialise",
-                        ReqData0, Context);
-                  {error, E} ->
-                      Reason = iolist_to_binary(
-                                 io_lib:format(
-                                   "Error occurred while adding vhost: ~tp",
-                                   [E])),
-                      rabbit_mgmt_util:internal_server_error(
-                        Reason, ReqData0, Context);
-                  {'EXIT', {vhost_limit_exceeded,
-                      Explanation}} ->
-                      rabbit_mgmt_util:bad_request(list_to_binary(Explanation), ReqData, Context)
+                      case rabbit_vhost:put_vhost(Name, Description, Tags, DefaultQT, Trace, Username) of
+                          ok ->
+                              {true, ReqData, Context};
+                          {error, timeout} ->
+                              rabbit_mgmt_util:internal_server_error(
+                                timeout,
+                                "Timed out waiting for the vhost to initialise",
+                                ReqData0, Context);
+                          {error, invalid_queue_type, DQT} ->
+                              BackstopMsg = case rabbit_queue_type:validate_default_queue_type(DQT) of
+                                                {error, M} -> M;
+                                                ok -> <<"invalid default_queue_type">>
+                                            end,
+                              rabbit_mgmt_util:bad_request(BackstopMsg, ReqData, Context);
+                          {error, E} ->
+                              Reason = iolist_to_binary(
+                                         io_lib:format(
+                                           "Error occurred while adding vhost: ~tp",
+                                           [E])),
+                              rabbit_mgmt_util:internal_server_error(
+                                Reason, ReqData0, Context);
+                          {'EXIT', {vhost_limit_exceeded,
+                              Explanation}} ->
+                              rabbit_mgmt_util:bad_request(list_to_binary(Explanation), ReqData, Context)
+                      end;
+                  {error, Msg} ->
+                      rabbit_mgmt_util:bad_request(Msg, ReqData, Context)
               end
       end).
 
@@ -125,4 +136,3 @@ id(ReqData) ->
       [Value] -> Value;
       Value   -> Value
     end.
-

@@ -36,26 +36,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.UpdateVhostMetadataCommand do
         {:validation_failure, :not_enough_args}
 
       _ ->
-        # description and tags can be anything but default queue type must
-        # be a value from a known set
-        case m[:default_queue_type] do
-          nil ->
-            :ok
-
-          "quorum" ->
-            :ok
-
-          "stream" ->
-            :ok
-
-          "classic" ->
-            :ok
-
-          other ->
-            {:validation_failure,
-             {:bad_argument,
-              "Default queue type must be one of: quorum, stream, classic. Provided: #{other}"}}
-        end
+        VirtualHosts.validate_default_queue_type(m)
     end
   end
 
@@ -80,6 +61,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.UpdateVhostMetadataCommand do
 
   def output({:error, :invalid_queue_type}, _opts) do
     {:error, ExitCodes.exit_usage(), "Unsupported default queue type"}
+  end
+
+  def output({:error, :invalid_queue_type, dqt}, _opts) do
+    {:error, ExitCodes.exit_usage(), VirtualHosts.invalid_queue_type_message(dqt)}
   end
 
   use RabbitMQ.CLI.DefaultOutput
