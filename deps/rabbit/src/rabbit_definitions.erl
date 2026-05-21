@@ -806,10 +806,8 @@ add_vhost(VHost, ActingUser) ->
     case rabbit_vhost:put_vhost(Name, Description, Tags, DefaultQueueType, IsTracingEnabled, ActingUser) of
         ok ->
             ok;
-        {error, invalid_queue_type, DQT} ->
-            Msg = rabbit_data_coercion:to_binary(
-                    rabbit_misc:format("~ts is not a valid queue type", [DQT])),
-            throw({error, Msg});
+        {error, invalid_queue_type, DQT1} ->
+            throw({error, invalid_queue_type_message(DQT1)});
         {error, _} = Err1 ->
             throw(Err1)
     end,
@@ -819,9 +817,18 @@ add_vhost(VHost, ActingUser) ->
     case rabbit_vhost:update_metadata(Name, Metadata, ActingUser) of
         ok ->
             ok;
+        {error, invalid_queue_type, DQT2} ->
+            throw({error, invalid_queue_type_message(DQT2)});
         {error, _} = Err2 ->
             throw(Err2)
     end.
+
+-spec invalid_queue_type_message(any()) -> binary().
+invalid_queue_type_message(<<>>) ->
+    <<"default_queue_type must not be an empty string">>;
+invalid_queue_type_message(DQT) ->
+    rabbit_data_coercion:to_binary(
+      rabbit_misc:format("~ts is not a valid queue type", [DQT])).
 
 add_permission(Permission, ActingUser) ->
     rabbit_auth_backend_internal:set_permissions(maps:get(user,      Permission, undefined),

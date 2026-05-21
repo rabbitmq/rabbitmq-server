@@ -133,6 +133,10 @@ all_tests() -> [
     vhosts_test,
     vhosts_description_test,
     vhosts_trace_test,
+    vhosts_default_queue_type_empty_string_rejected_test,
+    vhosts_default_queue_type_unknown_rejected_test,
+    vhosts_default_queue_type_update_empty_string_rejected_test,
+    vhosts_default_queue_type_update_unknown_rejected_test,
     users_legacy_administrator_test,
     adding_a_user_with_password_test,
     adding_a_user_with_password_hash_test,
@@ -602,6 +606,38 @@ vhosts_trace_test(Config) ->
     assert_item(Disabled, http_get(Config, "/vhosts/myvhost")),
     http_delete(Config, "/vhosts/myvhost", {group, '2xx'}),
 
+    passed.
+
+vhosts_default_queue_type_empty_string_rejected_test(Config) ->
+    http_put(Config, "/vhosts/dqt-empty-vhost",
+             [{default_queue_type, <<"">>}], ?BAD_REQUEST),
+    http_get(Config, "/vhosts/dqt-empty-vhost", ?NOT_FOUND),
+    passed.
+
+vhosts_default_queue_type_unknown_rejected_test(Config) ->
+    http_put(Config, "/vhosts/dqt-unknown-vhost",
+             [{default_queue_type, <<"made-up-queue-type">>}], ?BAD_REQUEST),
+    http_get(Config, "/vhosts/dqt-unknown-vhost", ?NOT_FOUND),
+    passed.
+
+vhosts_default_queue_type_update_empty_string_rejected_test(Config) ->
+    http_put(Config, "/vhosts/dqt-update-empty-vhost",
+             [{default_queue_type, <<"classic">>}], {group, '2xx'}),
+    http_put(Config, "/vhosts/dqt-update-empty-vhost",
+             [{default_queue_type, <<"">>}], ?BAD_REQUEST),
+    Result = http_get(Config, "/vhosts/dqt-update-empty-vhost"),
+    #{metadata := #{default_queue_type := <<"classic">>}} = Result,
+    http_delete(Config, "/vhosts/dqt-update-empty-vhost", {group, '2xx'}),
+    passed.
+
+vhosts_default_queue_type_update_unknown_rejected_test(Config) ->
+    http_put(Config, "/vhosts/dqt-update-unknown-vhost",
+             [{default_queue_type, <<"classic">>}], {group, '2xx'}),
+    http_put(Config, "/vhosts/dqt-update-unknown-vhost",
+             [{default_queue_type, <<"made-up-queue-type">>}], ?BAD_REQUEST),
+    Result = http_get(Config, "/vhosts/dqt-update-unknown-vhost"),
+    #{metadata := #{default_queue_type := <<"classic">>}} = Result,
+    http_delete(Config, "/vhosts/dqt-update-unknown-vhost", {group, '2xx'}),
     passed.
 
 users_test(Config) ->
