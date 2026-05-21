@@ -758,6 +758,11 @@ module_attributes_from_apps(Name, Apps) ->
             [[{App, Module} || Module <- Modules] ||
                 App           <- Apps,
                 {ok, Modules} <- [application:get_key(App, modules)]])),
+    Unloaded = [M || {_, M} <- Targets, not erlang:module_loaded(M)],
+    _ = case Unloaded of
+            [] -> ok;
+            _ -> code:ensure_modules_loaded(Unloaded)
+        end,
     lists:foldl(
       fun ({App, Module}, Acc) ->
               case lists:append([Atts || {N, Atts} <- module_attributes(Module),
