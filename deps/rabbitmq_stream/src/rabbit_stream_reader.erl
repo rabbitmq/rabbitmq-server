@@ -2107,6 +2107,14 @@ handle_frame_post_auth(Transport,
                                                "peer",
                                                []),
                     throw({stop, normal});
+                {error, Reason} ->
+                    ?LOG_INFO("Error while sending chunks: ~tp",
+                                               [Reason]),
+                    {Connection,
+                     State#stream_connection_state{consumers =
+                                                       Consumers#{SubscriptionId
+                                                                      =>
+                                                                      Consumer}}};
                 {ok, Consumer1} ->
                     {Connection,
                      State#stream_connection_state{consumers =
@@ -2941,6 +2949,11 @@ maybe_dispatch_on_subscription(Transport,
                                        "peer",
                                        []),
             throw({stop, normal});
+        {error, Reason} ->
+            ?LOG_INFO("Error while sending chunks: ~tp",
+                                       [Reason]),
+            Consumers1 = Consumers#{SubscriptionId => ConsumerState},
+            State#stream_connection_state{consumers = Consumers1};
         {ok, #consumer{log = Log1, credit = Credit1} = ConsumerState1} ->
             Consumers1 = Consumers#{SubscriptionId => ConsumerState1},
 
@@ -3695,6 +3708,11 @@ send_file_callback(?VERSION_2,
        FrameBeginning
     end.
 
+-spec send_chunks(rabbit_stream_core:command_version(),
+                  module(),
+                  #consumer{},
+                  atomics:atomics_ref()) ->
+    {ok, #consumer{}} | {error, term()}.
 send_chunks(DeliverVersion,
             Transport,
             #consumer{credit = Credit, last_listener_offset = LastLstOffset} =
@@ -3707,6 +3725,13 @@ send_chunks(DeliverVersion,
                 LastLstOffset,
                 Counter).
 
+-spec send_chunks(rabbit_stream_core:command_version(),
+                  module(),
+                  #consumer{},
+                  non_neg_integer(),
+                  undefined | osiris:offset(),
+                  atomics:atomics_ref()) ->
+    {ok, #consumer{}} | {error, term()}.
 send_chunks(_DeliverVersion,
             _Transport,
             #consumer{send_limit = SendLimit} = Consumer,
@@ -3736,6 +3761,15 @@ send_chunks(DeliverVersion,
                 true,
                 Counter).
 
+-spec send_chunks(rabbit_stream_core:command_version(),
+                  module(),
+                  #consumer{},
+                  osiris_log:state(),
+                  non_neg_integer(),
+                  undefined | osiris:offset(),
+                  boolean(),
+                  atomics:atomics_ref()) ->
+    {ok, #consumer{}} | {error, term()}.
 send_chunks(_DeliverVersion,
             Transport,
             #consumer{
