@@ -79,7 +79,8 @@
          added_to_rabbit_registry/2,
          removed_from_rabbit_registry/1,
          known_queue_type_names/0,
-         known_queue_type_modules/0
+         known_queue_type_modules/0,
+         validate_default_queue_type/1
         ]).
 
 -type queue_name() :: rabbit_amqqueue:name().
@@ -311,6 +312,8 @@
 
 -spec discover(binary() | atom()) -> queue_type().
 discover(<<"undefined">>) ->
+    fallback();
+discover(<<>>) ->
     fallback();
 discover(undefined) ->
     fallback();
@@ -858,6 +861,38 @@ known_queue_type_names() ->
     {QueueTypes, _} = lists:unzip(Registered),
     lists:map(fun(X) -> atom_to_binary(X) end, QueueTypes).
 
+-spec validate_default_queue_type(Value) -> Ret when
+      Value :: any(),
+      Ret :: ok | {error, binary()}.
+validate_default_queue_type(undefined) -> ok;
+validate_default_queue_type(null) -> ok;
+validate_default_queue_type(nil) -> ok;
+validate_default_queue_type(<<"undefined">>) -> ok;
+validate_default_queue_type(<<>>) ->
+    {error, <<"default_queue_type must not be an empty string">>};
+validate_default_queue_type(Value) when is_binary(Value); is_atom(Value) ->
+    ValBin = rabbit_data_coercion:to_binary(Value),
+    try discover(Value) of
+        QueueType when is_atom(QueueType) ->
+            case is_enabled(QueueType) of
+                true ->
+                    ok;
+                false ->
+                    Msg = rabbit_data_coercion:to_binary(
+                            rabbit_misc:format(
+                              "queue type ~ts is not enabled", [ValBin])),
+                    {error, Msg}
+            end
+    catch _:_ ->
+              Msg = rabbit_data_coercion:to_binary(
+                      rabbit_misc:format("~ts is not a valid queue type", [ValBin])),
+              {error, Msg}
+    end;
+validate_default_queue_type(Other) ->
+    Msg = rabbit_data_coercion:to_binary(
+            rabbit_misc:format("~tp is not a valid default_queue_type value", [Other])),
+    {error, Msg}.
+
 inject_dqt(VHost) when ?is_vhost(VHost) ->
     inject_dqt(vhost:to_map(VHost));
 inject_dqt(VHost) when is_list(VHost) ->
@@ -871,6 +906,7 @@ inject_dqt(M) when is_map(M) ->
         nil -> default();
         <<"undefined">> -> default();
         "undefined" -> default();
+        <<>> -> default();
         Valid -> Valid
     end,
     NQT = short_alias_of(DQT),

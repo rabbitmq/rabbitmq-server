@@ -59,6 +59,12 @@ defmodule UpdateVhostMetadataCommandTest do
                "Default queue type must be one of: quorum, stream, classic. Provided: unknown"}}
   end
 
+  test "validate: empty string default queue type fails validation" do
+    assert @command.validate(["a-vhost"], %{default_queue_type: ""}) ==
+             {:validation_failure,
+              {:bad_argument, "Default queue type must not be an empty string"}}
+  end
+
   test "run: passing a valid vhost name and description succeeds", context do
     add_vhost(@vhost)
     desc = "desc 2"
