@@ -116,9 +116,9 @@ end_per_suite(Config) ->
 init_per_group(direct, Config) ->
     Config;
 init_per_group(cluster_size_1, Config) ->
-    rabbit_ct_helpers:set_config(Config, {nodes_count, 1});
+    rabbit_ct_helpers:set_config(Config, {rmq_nodes_count, 1});
 init_per_group(cluster_size_3, Config) ->
-    rabbit_ct_helpers:set_config(Config, {nodes_count, 3});
+    rabbit_ct_helpers:set_config(Config, {rmq_nodes_count, 3});
 init_per_group(_Group, Config) ->
     Config.
 
@@ -140,7 +140,7 @@ end_per_testcase(_Testcase, Config) ->
       [fun stop_slave_nodes/1]).
 
 start_slave_nodes(Config, Testcase) ->
-    NodesCount = ?config(nodes_count, Config),
+    NodesCount = ?config(rmq_nodes_count, Config),
     ct:pal("Starting ~b slave node(s):", [NodesCount]),
     Parent = self(),
     Starters = [spawn_link(

@@ -29,6 +29,8 @@
          override_denied_by_default_in_configuration/1,
          override_disconnected_in_configuration/1,
          override_removed_in_configuration/1,
+         change_from_denied_to_permitted_in_configuration_and_restart/1,
+         change_from_denied_to_permitted_in_configuration_but_needed/1,
          has_is_feature_used_cb_returning_false/1,
          has_is_feature_used_cb_returning_true/1,
          get_appropriate_warning_when_permitted/1,
@@ -63,6 +65,8 @@ groups() ->
              override_denied_by_default_in_configuration,
              override_disconnected_in_configuration,
              override_removed_in_configuration,
+             change_from_denied_to_permitted_in_configuration_and_restart,
+             change_from_denied_to_permitted_in_configuration_but_needed,
              has_is_feature_used_cb_returning_false,
              has_is_feature_used_cb_returning_true,
              get_appropriate_warning_when_permitted,
@@ -91,17 +95,27 @@ end_per_suite(Config) ->
     Config.
 
 init_per_group(cluster_size_1, Config) ->
-    rabbit_ct_helpers:set_config(Config, {nodes_count, 1});
+    rabbit_ct_helpers:set_config(Config, {rmq_nodes_count, 1});
 init_per_group(cluster_size_3, Config) ->
-    rabbit_ct_helpers:set_config(Config, {nodes_count, 3});
+    rabbit_ct_helpers:set_config(Config, [{rmq_nodes_count, 3},
+                                          {rmq_nodes_clustered, true}]);
 init_per_group(_Group, Config) ->
     Config.
 
 end_per_group(_Group, Config) ->
     Config.
 
+init_per_testcase(Testcase, Config)
+  when Testcase =:= change_from_denied_to_permitted_in_configuration_and_restart orelse
+       Testcase =:= change_from_denied_to_permitted_in_configuration_but_needed ->
+    Config1 = rabbit_ct_helpers:set_config(
+                Config, [{rmq_nodename_suffix, Testcase}]),
+    Config2 = rabbit_ct_helpers:testcase_started(Config1, Testcase),
+    Config3 = rabbit_ct_helpers:run_steps(
+                Config2, rabbit_ct_broker_helpers:setup_steps()),
+    Config3;
 init_per_testcase(Testcase, Config) ->
-    NodesCount = ?config(nodes_count, Config),
+    NodesCount = ?config(rmq_nodes_count, Config),
     NodenamePrefix = list_to_atom(
                        lists:flatten(
                          io_lib:format("~s-cs~b", [Testcase, NodesCount]))),
@@ -111,6 +125,13 @@ init_per_testcase(Testcase, Config) ->
                feature_flags_v2_SUITE:start_slave_nodes(Cfg, NodenamePrefix)
        end]).
 
+end_per_testcase(Testcase, Config)
+  when Testcase =:= change_from_denied_to_permitted_in_configuration_and_restart orelse
+       Testcase =:= change_from_denied_to_permitted_in_configuration_but_needed ->
+    Config1 = rabbit_ct_helpers:run_steps(
+                Config,
+                rabbit_ct_broker_helpers:teardown_steps()),
+    rabbit_ct_helpers:testcase_finished(Config1, Testcase);
 end_per_testcase(_Testcase, Config) ->
     rabbit_ct_helpers:run_steps(
       Config,
@@ -409,6 +430,124 @@ override_removed_in_configuration(Config) ->
                    ok
            end)
          || Node <- AllNodes].
+
+change_from_denied_to_permitted_in_configuration_and_restart(Config) ->
+    [FirstNode | _] = AllNodes = rabbit_ct_broker_helpers:get_node_configs(
+                                   Config, nodename),
+
+    FeatureName = ?FUNCTION_NAME,
+    FeatureFlags = #{FeatureName =>
+                     #{provided_by => rabbit,
+                       deprecation_phase => denied_by_default}},
+
+    Ok = [ok || _ <- AllNodes],
+    True = [true || _ <- AllNodes],
+    False = [false || _ <- AllNodes],
+
+    ?assertEqual(
+       Ok,
+       rabbit_ct_broker_helpers:rpc_all(
+         Config,
+         rabbit_feature_flags, inject_test_feature_flags, [FeatureFlags])),
+    ?assertEqual(
+       Ok,
+       rabbit_ct_broker_helpers:rpc_all(
+         Config,
+         rabbit_feature_flags, refresh_feature_flags_after_app_load, [])),
+
+    ?assertEqual(
+       True,
+       feature_flags_SUITE:is_feature_flag_supported(Config, FeatureName)),
+    ?assertEqual(
+       True,
+       feature_flags_SUITE:is_feature_flag_enabled(Config, FeatureName)),
+    ?assertEqual(
+       False,
+       is_deprecated_feature_permitted(Config, FeatureName)),
+
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, FirstNode,
+           application, set_env,
+           [rabbit, permit_deprecated_features, #{FeatureName => true}, [{persistent, true}]]),
+    ok = rabbit_ct_broker_helpers:restart_broker(Config, FirstNode),
+
+    ?assertEqual(
+       True,
+       feature_flags_SUITE:is_feature_flag_supported(Config, FeatureName)),
+    ?assertEqual(
+       False,
+       feature_flags_SUITE:is_feature_flag_enabled(Config, FeatureName)),
+    ?assertEqual(
+       True,
+       is_deprecated_feature_permitted(Config, FeatureName)).
+
+change_from_denied_to_permitted_in_configuration_but_needed(Config) ->
+    [FirstNode | _] = AllNodes = rabbit_ct_broker_helpers:get_node_configs(
+                                   Config, nodename),
+
+    FeatureName = ?FUNCTION_NAME,
+    ParentFeatureName = parent_feature_flag,
+    GrandParentFeatureName = grand_parent_feature_flag,
+    FeatureFlags = #{FeatureName =>
+                     #{provided_by => rabbit,
+                       deprecation_phase => denied_by_default},
+                     ParentFeatureName =>
+                     #{provided_by => rabbit,
+                       stability => experimental,
+                       depends_on => [FeatureName]},
+                     GrandParentFeatureName =>
+                     #{provided_by => rabbit,
+                       stability => experimental,
+                       depends_on => [ParentFeatureName]}},
+
+    Ok = [ok || _ <- AllNodes],
+    True = [true || _ <- AllNodes],
+    False = [false || _ <- AllNodes],
+
+    ?assertEqual(
+       Ok,
+       rabbit_ct_broker_helpers:rpc_all(
+         Config,
+         rabbit_feature_flags, inject_test_feature_flags, [FeatureFlags])),
+    ?assertEqual(
+       Ok,
+       rabbit_ct_broker_helpers:rpc_all(
+         Config,
+         rabbit_feature_flags, refresh_feature_flags_after_app_load, [])),
+    ?assertEqual(
+       ok,
+       rabbit_ct_broker_helpers:enable_feature_flag(
+         Config, GrandParentFeatureName)),
+
+    ?assertEqual(
+       True,
+       feature_flags_SUITE:is_feature_flag_supported(Config, FeatureName)),
+    ?assertEqual(
+       True,
+       feature_flags_SUITE:is_feature_flag_enabled(Config, FeatureName)),
+    ?assertEqual(
+       False,
+       is_deprecated_feature_permitted(Config, FeatureName)),
+
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, FirstNode,
+           application, set_env,
+           [rabbit, permit_deprecated_features, #{FeatureName => true}, [{persistent, true}]]),
+    ok = rabbit_ct_broker_helpers:restart_broker(Config, FirstNode),
+
+    ?assertEqual(
+       True,
+       feature_flags_SUITE:is_feature_flag_supported(Config, FeatureName)),
+    ?assertEqual(
+       True,
+       feature_flags_SUITE:is_feature_flag_enabled(Config, FeatureName)),
+    ?assertEqual(
+       False,
+       is_deprecated_feature_permitted(Config, FeatureName)).
+
+is_deprecated_feature_permitted(Config, FeatureName) ->
+    rabbit_ct_broker_helpers:rpc_all(
+      Config, rabbit_deprecated_features, is_permitted, [FeatureName]).
 
 has_is_feature_used_cb_returning_false(Config) ->
     AllNodes = ?config(nodes, Config),
