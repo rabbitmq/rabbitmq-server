@@ -993,6 +993,8 @@ refresh_after_app_load_task() ->
       Ret :: ok | {error, Reason},
       Reason :: term().
 
+enable_many(#{states_per_node := _}, []) ->
+    ok;
 enable_many(#{states_per_node := _} = Inventory, FeatureNames) ->
     %% We acquire a lock before making any change to the registry. This is not
     %% used by the controller (because it is already using a globally
@@ -1501,19 +1503,38 @@ merge_feature_flags(FeatureFlagsA, FeatureFlagsB) ->
 list_feature_flags_enabled_somewhere(
   #{states_per_node := StatesPerNode},
   HandleStateChanging) ->
-    %% We want to collect feature flags which are enabled on at least one
-    %% node.
+    %% We want to collect feature flags which are enabled on at least one node.
+    %% We exclude feature flags that are already enabled everywhere.
+    NodeCount = maps:size(StatesPerNode),
     MergedStates = maps:fold(
                      fun(_Node, FeatureStates, Acc1) ->
                              maps:fold(
                                fun
                                    (FeatureName, true, Acc2) ->
-                                       Acc2#{FeatureName => true};
+                                       Count = maps:get(FeatureName, Acc2, 0),
+                                       case Count + 1 of
+                                           NodeCount ->
+                                               %% This feature flag is already
+                                               %% enabled everywhere, remove it
+                                               %% from the list.
+                                               maps:remove(FeatureName, Acc2);
+                                           NewCount ->
+                                               Acc2#{FeatureName => NewCount}
+                                       end;
                                    (_FeatureName, false, Acc2) ->
                                        Acc2;
                                    (FeatureName, state_changing, Acc2)
                                      when HandleStateChanging ->
-                                       Acc2#{FeatureName => true}
+                                       Count = maps:get(FeatureName, Acc2, 0),
+                                       case Count + 1 of
+                                           NodeCount ->
+                                               %% This feature flag is already
+                                               %% enabled everywhere, remove it
+                                               %% from the list.
+                                               maps:remove(FeatureName, Acc2);
+                                           NewCount ->
+                                               Acc2#{FeatureName => NewCount}
+                                       end
                                end, Acc1, FeatureStates)
                      end, #{}, StatesPerNode),
     lists:sort(maps:keys(MergedStates)).
