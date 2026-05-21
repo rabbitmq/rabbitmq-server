@@ -17,9 +17,6 @@
 all() ->
     [
      inject_dqt_undefined_binary,
-<<<<<<< HEAD
-     inject_dqt_preserves_existing_metadata
-=======
      inject_dqt_null,
      inject_dqt_nil,
      inject_dqt_empty_binary,
@@ -35,17 +32,12 @@ all() ->
      update_metadata_sanitizes_undefined_binary,
      update_metadata_sanitizes_null,
      update_metadata_sanitizes_nil,
-<<<<<<< HEAD
-     update_metadata_sanitizes_empty_binary
->>>>>>> 0de540b7cb (Add tests for empty binary `default_queue_type` (#16481))
-=======
      update_metadata_sanitizes_empty_binary,
      update_metadata_rejects_unknown_dqt,
      validate_default_queue_type_accepts_known_sentinels,
      validate_default_queue_type_rejects_empty_binary,
      validate_default_queue_type_rejects_unknown_type,
      validate_default_queue_type_rejects_non_binary
->>>>>>> c1d4af8a64 (Follow-up tweaks, more tests #16481 #16488)
     ].
 
 %% -------------------------------------------------------------------
@@ -103,8 +95,6 @@ inject_dqt_undefined_binary(Config) ->
         rpc(Config, 0, rabbit_queue_type, inject_dqt, [Input]),
     ok.
 
-<<<<<<< HEAD
-=======
 inject_dqt_null(Config) ->
     Expected = rpc(Config, 0, rabbit_queue_type, default_alias, []),
     Input = #{default_queue_type => null, name => <<"/">>},
@@ -129,7 +119,6 @@ inject_dqt_empty_binary(Config) ->
         rpc(Config, 0, rabbit_queue_type, inject_dqt, [Input]),
     ok.
 
->>>>>>> 0de540b7cb (Add tests for empty binary `default_queue_type` (#16481))
 %% Existing metadata keys should be preserved when injecting DQT
 inject_dqt_preserves_existing_metadata(Config) ->
     Expected = rpc(Config, 0, rabbit_queue_type, default_alias, []),
@@ -146,8 +135,6 @@ inject_dqt_preserves_existing_metadata(Config) ->
                     tags := [replicate]}} =
         rpc(Config, 0, rabbit_queue_type, inject_dqt, [Input]),
     ok.
-<<<<<<< HEAD
-=======
 
 new_metadata_sanitizes_undefined_binary(Config) ->
     Expected = rpc(Config, 0, rabbit_queue_type, default_alias, []),
@@ -305,9 +292,6 @@ update_metadata_sanitizes_empty_binary(Config) ->
         rpc(Config, 0, rabbit_vhost, delete, [VHost, <<"test-user">>])
     end,
     ok.
-<<<<<<< HEAD
->>>>>>> 0de540b7cb (Add tests for empty binary `default_queue_type` (#16481))
-=======
 
 update_metadata_rejects_unknown_dqt(Config) ->
     VHost = <<"update-metadata-unknown-dqt-test">>,
@@ -355,4 +339,3 @@ validate_default_queue_type_rejects_non_binary(Config) ->
     {error, M2} = rpc(Config, 0, rabbit_queue_type, validate_default_queue_type, [[]]),
     true = is_binary(M2),
     ok.
->>>>>>> c1d4af8a64 (Follow-up tweaks, more tests #16481 #16488)

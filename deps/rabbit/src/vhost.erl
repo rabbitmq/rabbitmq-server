@@ -217,8 +217,6 @@ new_metadata(Description, Tags, undefined) ->
     #{description => Description,
         default_queue_type => rabbit_queue_type:default_alias(),
         tags => Tags};
-<<<<<<< HEAD
-=======
 new_metadata(Description, Tags, <<"undefined">>) ->
     %% See rabbitmq/rabbitmq-server#10469
     new_metadata(Description, Tags, undefined);
@@ -231,7 +229,6 @@ new_metadata(Description, Tags, null) ->
 new_metadata(Description, Tags, nil) ->
     %% JSON null (Elixir JSON), see rabbitmq/rabbitmq-server#10469
     new_metadata(Description, Tags, undefined);
->>>>>>> f6946ea8ef (Treat empty binary `default_queue_type` as unset (#16481))
 new_metadata(Description, Tags, DefaultQueueType) ->
     #{description => Description,
       tags => Tags,

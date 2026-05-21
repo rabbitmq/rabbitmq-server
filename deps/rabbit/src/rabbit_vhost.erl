@@ -323,9 +323,6 @@ update_metadata(Name, Metadata0, _ActingUser) when is_map(Metadata0) andalso map
     end;
 update_metadata(Name, Metadata0, ActingUser) ->
     KnownKeys = [description, tags, default_queue_type, protected_from_deletion],
-<<<<<<< HEAD
-    Metadata = maps:with(KnownKeys, Metadata0),
-=======
     Metadata1 = maps:with(KnownKeys, Metadata0),
     %% See rabbitmq/rabbitmq-server#10469, rabbitmq/rabbitmq-server#16481
     Metadata = case Metadata1 of
@@ -340,7 +337,6 @@ update_metadata(Name, Metadata0, ActingUser) ->
         _ ->
             Metadata1
     end,
->>>>>>> f6946ea8ef (Treat empty binary `default_queue_type` as unset (#16481))
 
     case validate_metadata_default_queue_type(Metadata) of
         ok ->
@@ -769,15 +765,12 @@ i(metadata, VHost) ->
             M#{default_queue_type => DQT};
         M = #{default_queue_type := <<"undefined">>} ->
             M#{default_queue_type => DQT};
-<<<<<<< HEAD
-=======
         M = #{default_queue_type := <<>>} ->
             M#{default_queue_type => DQT};
         M = #{default_queue_type := null} ->
             M#{default_queue_type => DQT};
         M = #{default_queue_type := nil} ->
             M#{default_queue_type => DQT};
->>>>>>> f6946ea8ef (Treat empty binary `default_queue_type` as unset (#16481))
         M = #{default_queue_type := QT} ->
             M#{default_queue_type => rabbit_queue_type:short_alias_of(QT)};
         M when is_map(M) ->
