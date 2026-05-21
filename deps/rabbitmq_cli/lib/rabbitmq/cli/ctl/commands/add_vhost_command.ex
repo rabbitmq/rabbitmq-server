@@ -66,6 +66,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddVhostCommand do
     {:error, ExitCodes.exit_usage(), "Unsupported default queue type"}
   end
 
+  def output({:error, :invalid_queue_type, dqt}, _opts) do
+    {:error, ExitCodes.exit_usage(), VirtualHosts.invalid_queue_type_message(dqt)}
+  end
+
   def output({:badrpc, {:EXIT, {:vhost_limit_exceeded, msg}}}, _opts) do
     {:error, ExitCodes.exit_usage(), msg}
   end

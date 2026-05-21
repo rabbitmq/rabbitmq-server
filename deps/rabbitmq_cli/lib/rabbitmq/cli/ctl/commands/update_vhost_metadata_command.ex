@@ -63,6 +63,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.UpdateVhostMetadataCommand do
     {:error, ExitCodes.exit_usage(), "Unsupported default queue type"}
   end
 
+  def output({:error, :invalid_queue_type, dqt}, _opts) do
+    {:error, ExitCodes.exit_usage(), VirtualHosts.invalid_queue_type_message(dqt)}
+  end
+
   use RabbitMQ.CLI.DefaultOutput
 
   def usage,

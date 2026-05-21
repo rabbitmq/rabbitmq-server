@@ -305,7 +305,8 @@ pick_known_metadata(Raw) when is_map(Raw) ->
 pick_known_metadata(_) ->
     #{}.
 
--spec update_metadata(vhost:name(), vhost:metadata(), rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
+-spec update_metadata(vhost:name(), vhost:metadata(), rabbit_types:username()) ->
+    'ok' | {'error', any()} | {'error', 'invalid_queue_type', any()}.
 update_metadata(Name, undefined, _ActingUser) ->
     case rabbit_db_vhost:exists(Name) of
         true ->
@@ -341,6 +342,28 @@ update_metadata(Name, Metadata0, ActingUser) ->
     end,
 >>>>>>> f6946ea8ef (Treat empty binary `default_queue_type` as unset (#16481))
 
+    case validate_metadata_default_queue_type(Metadata) of
+        ok ->
+            persist_metadata_update(Name, Metadata, ActingUser);
+        {error, _, _} = Err ->
+            Err
+    end.
+
+-spec validate_metadata_default_queue_type(vhost:metadata()) ->
+    'ok' | {'error', 'invalid_queue_type', any()}.
+validate_metadata_default_queue_type(#{default_queue_type := DQT}) ->
+    case rabbit_queue_type:validate_default_queue_type(DQT) of
+        ok ->
+            ok;
+        {error, _} ->
+            {error, invalid_queue_type, DQT}
+    end;
+validate_metadata_default_queue_type(_) ->
+    ok.
+
+-spec persist_metadata_update(vhost:name(), vhost:metadata(), rabbit_types:username()) ->
+    rabbit_types:ok_or_error(any()).
+persist_metadata_update(Name, Metadata, ActingUser) ->
     case rabbit_db_vhost:merge_metadata(Name, Metadata) of
         {ok, VHost} ->
             Description = vhost:get_description(VHost),

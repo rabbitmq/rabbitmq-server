@@ -80,6 +80,12 @@ accept_content(ReqData0, Context = #context{user = #user{username = Username}}) 
                                 timeout,
                                 "Timed out waiting for the vhost to initialise",
                                 ReqData0, Context);
+                          {error, invalid_queue_type, DQT} ->
+                              BackstopMsg = case rabbit_queue_type:validate_default_queue_type(DQT) of
+                                                {error, M} -> M;
+                                                ok -> <<"invalid default_queue_type">>
+                                            end,
+                              rabbit_mgmt_util:bad_request(BackstopMsg, ReqData, Context);
                           {error, E} ->
                               Reason = iolist_to_binary(
                                          io_lib:format(

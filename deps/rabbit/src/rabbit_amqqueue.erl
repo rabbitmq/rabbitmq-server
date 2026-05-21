@@ -266,6 +266,8 @@ get_queue_type(Args, DefaultQueueType) ->
             rabbit_queue_type:discover(DefaultQueueType);
         {longstr, <<"undefined">>} ->
             rabbit_queue_type:discover(DefaultQueueType);
+        {longstr, <<>>} ->
+            rabbit_queue_type:discover(DefaultQueueType);
         {_, V} ->
             rabbit_queue_type:discover(V)
     end.
@@ -883,6 +885,8 @@ maybe_inject_default_queue_type_shortcut_into_args(Args0, DefaultQueueType) ->
             inject_default_queue_type_shortcut_into_args(Args0, DefaultQueueType);
         {longstr, <<"undefined">>} ->
             %% Important: use a shortcut such as 'quorum' or 'stream' that for the given queue type module
+            inject_default_queue_type_shortcut_into_args(Args0, DefaultQueueType);
+        {longstr, <<>>} ->
             inject_default_queue_type_shortcut_into_args(Args0, DefaultQueueType);
         _ValueIsAlreadySet ->
             Args0
