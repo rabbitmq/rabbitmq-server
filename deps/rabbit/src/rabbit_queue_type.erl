@@ -879,6 +879,8 @@ inject_dqt(M) when is_map(M) ->
     %% "undefined", or a missing key by falling back to the node default
     DQT = case RawDQT of
         undefined -> default();
+        null -> default();
+        nil -> default();
         <<"undefined">> -> default();
         "undefined" -> default();
         <<>> -> default();
