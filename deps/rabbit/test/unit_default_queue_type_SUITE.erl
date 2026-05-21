@@ -32,7 +32,12 @@ all() ->
      update_metadata_sanitizes_undefined_binary,
      update_metadata_sanitizes_null,
      update_metadata_sanitizes_nil,
-     update_metadata_sanitizes_empty_binary
+     update_metadata_sanitizes_empty_binary,
+     update_metadata_rejects_unknown_dqt,
+     validate_default_queue_type_accepts_known_sentinels,
+     validate_default_queue_type_rejects_empty_binary,
+     validate_default_queue_type_rejects_unknown_type,
+     validate_default_queue_type_rejects_non_binary
     ].
 
 %% -------------------------------------------------------------------
@@ -272,4 +277,51 @@ update_metadata_sanitizes_empty_binary(Config) ->
     after
         rpc(Config, 0, rabbit_vhost, delete, [VHost, <<"test-user">>])
     end,
+    ok.
+
+update_metadata_rejects_unknown_dqt(Config) ->
+    VHost = <<"update-metadata-unknown-dqt-test">>,
+    try
+        ok = rpc(Config, 0, rabbit_vhost, put_vhost,
+                 [VHost, <<"test">>, [], <<"classic">>, false, <<"test-user">>]),
+        {error, invalid_queue_type, <<"made-up">>} =
+            rpc(Config, 0, rabbit_vhost, update_metadata,
+                [VHost, #{default_queue_type => <<"made-up">>}, <<"test-user">>]),
+        V = rpc(Config, 0, rabbit_vhost, lookup, [VHost]),
+        #{default_queue_type := <<"classic">>} = rpc(Config, 0, vhost, get_metadata, [V])
+    after
+        rpc(Config, 0, rabbit_vhost, delete, [VHost, <<"test-user">>])
+    end,
+    ok.
+
+validate_default_queue_type_accepts_known_sentinels(Config) ->
+    ok = rpc(Config, 0, rabbit_queue_type, validate_default_queue_type, [undefined]),
+    ok = rpc(Config, 0, rabbit_queue_type, validate_default_queue_type, [null]),
+    ok = rpc(Config, 0, rabbit_queue_type, validate_default_queue_type, [nil]),
+    ok = rpc(Config, 0, rabbit_queue_type, validate_default_queue_type, [<<"undefined">>]),
+    ok = rpc(Config, 0, rabbit_queue_type, validate_default_queue_type, [<<"classic">>]),
+    ok = rpc(Config, 0, rabbit_queue_type, validate_default_queue_type, [<<"quorum">>]),
+    %% Queue type names that are atoms are equally valid.
+    ok = rpc(Config, 0, rabbit_queue_type, validate_default_queue_type, [classic]),
+    ok = rpc(Config, 0, rabbit_queue_type, validate_default_queue_type, [quorum]),
+    ok.
+
+validate_default_queue_type_rejects_empty_binary(Config) ->
+    {error, Msg} = rpc(Config, 0, rabbit_queue_type, validate_default_queue_type, [<<>>]),
+    true = is_binary(Msg),
+    {match, _} = re:run(Msg, <<"empty">>),
+    ok.
+
+validate_default_queue_type_rejects_unknown_type(Config) ->
+    {error, Msg} = rpc(Config, 0, rabbit_queue_type, validate_default_queue_type,
+                       [<<"made-up">>]),
+    true = is_binary(Msg),
+    {match, _} = re:run(Msg, <<"made-up">>),
+    ok.
+
+validate_default_queue_type_rejects_non_binary(Config) ->
+    {error, M1} = rpc(Config, 0, rabbit_queue_type, validate_default_queue_type, [42]),
+    true = is_binary(M1),
+    {error, M2} = rpc(Config, 0, rabbit_queue_type, validate_default_queue_type, [[]]),
+    true = is_binary(M2),
     ok.

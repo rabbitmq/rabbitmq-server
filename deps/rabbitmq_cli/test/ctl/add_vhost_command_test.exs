@@ -45,6 +45,19 @@ defmodule AddVhostCommandTest do
            }) == :ok
   end
 
+  test "validate: empty string default queue type fails validation" do
+    assert @command.validate(["new-vhost"], %{default_queue_type: ""}) ==
+             {:validation_failure,
+              {:bad_argument, "Default queue type must not be an empty string"}}
+  end
+
+  test "validate: unknown default queue type fails validation" do
+    assert @command.validate(["new-vhost"], %{default_queue_type: "unknown"}) ==
+             {:validation_failure,
+              {:bad_argument,
+               "Default queue type must be one of: quorum, stream, classic. Provided: unknown"}}
+  end
+
   @tag vhost: @vhost
   test "run: passing a valid vhost name to a running RabbitMQ node succeeds", context do
     assert @command.run([context[:vhost]], context[:opts]) == :ok
