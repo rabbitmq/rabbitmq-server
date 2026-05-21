@@ -114,6 +114,7 @@ prop_preserves_valid_types(Config) ->
                 undefined -> ResultDQT =:= Default;
                 <<"undefined">> -> ResultDQT =:= Default;
                 "undefined" -> ResultDQT =:= Default;
+                <<"">> -> ResultDQT =:= Default;
                 <<"classic">> -> ResultDQT =:= <<"classic">>;
                 <<"quorum">> -> ResultDQT =:= <<"quorum">>;
                 <<"stream">> -> ResultDQT =:= <<"stream">>
@@ -133,6 +134,7 @@ dqt_gen() ->
         undefined,
         <<"undefined">>,
         "undefined",
+        <<"">>,
         <<"classic">>,
         <<"quorum">>,
         <<"stream">>
