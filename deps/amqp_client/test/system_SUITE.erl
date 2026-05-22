@@ -27,8 +27,9 @@
 %% unsubscribes
 -define(WAIT, 10000).
 
-%% How to long wait for a process to die after an expected failure
--define(PROCESS_EXIT_TIMEOUT, 5000).
+%% How long to wait for a process to die after an expected failure.
+%% Must be high enough to hande parallel `teardown_loop`, `bogus_rpc_loop groups` runs.
+-define(PROCESS_EXIT_TIMEOUT, 30000).
 
 all() ->
     [
