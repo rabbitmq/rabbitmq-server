@@ -341,5 +341,27 @@
                             {authentication, [{enabled, true}]}
                            ]}
     ], [rabbitmq_prometheus]
-   }
+   },
+
+   {tls_listener_password_plain,
+    "prometheus.ssl.password = t0p$3cr3t",
+    [{rabbitmq_prometheus,[
+                           {ssl_config,[
+                                        {ssl_opts, [
+                                          {password, "t0p$3cr3t"}
+                                        ]}
+                                       ]}
+                          ]}],
+    [rabbitmq_prometheus]},
+
+   {tls_listener_password_encrypted,
+    "prometheus.ssl.password = encrypted:GhC4J5lh2DUkbdyKO0aMI8aYJ54mwe4eEWzou4yRFAHMF82IbD6cRiYAiBa8UIzR",
+    [{rabbitmq_prometheus,[
+                           {ssl_config,[
+                                        {ssl_opts, [
+                                          {password, {encrypted, "GhC4J5lh2DUkbdyKO0aMI8aYJ54mwe4eEWzou4yRFAHMF82IbD6cRiYAiBa8UIzR"}}
+                                        ]}
+                                       ]}
+                          ]}],
+    [rabbitmq_prometheus]}
 ].
