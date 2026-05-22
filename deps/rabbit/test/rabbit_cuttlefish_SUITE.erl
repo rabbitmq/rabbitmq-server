@@ -11,12 +11,27 @@
 
 -compile(export_all).
 
+-define(KEY, "x.y.password").
+-define(TOKENS, ["x", "y", "password"]).
+
 all() ->
     [
         aggregate_props_empty,
         aggregate_props_one_group,
         aggregate_props_two_groups,
-        aggregate_props_with_prefix
+        aggregate_props_with_prefix,
+
+        optionally_tagged_binary_plain_string,
+        optionally_tagged_binary_plain_binary,
+        optionally_tagged_binary_encrypted_string,
+        optionally_tagged_binary_encrypted_binary,
+        optionally_tagged_binary_other_tag_normalized_to_encrypted,
+
+        optionally_tagged_string_plain_string,
+        optionally_tagged_string_plain_binary,
+        optionally_tagged_string_encrypted_string,
+        optionally_tagged_string_encrypted_binary,
+        optionally_tagged_string_other_tag_normalized_to_encrypted
     ].
 
 groups() ->
@@ -53,3 +68,55 @@ aggregate_props_with_prefix(_) ->
             {["other"], "settings"}
         ], ["pre", "fix"]),
     ?assertEqual(Have, [{<<"1">>, [{<<"banana">>, "apple"}]}]).
+
+optionally_tagged_binary_plain_string(_) ->
+    Conf = [{?TOKENS, "secret"}],
+    ?assertEqual(<<"secret">>, rabbit_cuttlefish:optionally_tagged_binary(?KEY, Conf)).
+
+optionally_tagged_binary_plain_binary(_) ->
+    Conf = [{?TOKENS, <<"secret">>}],
+    ?assertEqual(<<"secret">>, rabbit_cuttlefish:optionally_tagged_binary(?KEY, Conf)).
+
+optionally_tagged_binary_encrypted_string(_) ->
+    Conf = [{?TOKENS, {encrypted, "cFqLR9plain=="}}],
+    ?assertEqual({encrypted, <<"cFqLR9plain==">>},
+                 rabbit_cuttlefish:optionally_tagged_binary(?KEY, Conf)).
+
+optionally_tagged_binary_encrypted_binary(_) ->
+    Conf = [{?TOKENS, {encrypted, <<"cFqLR9plain==">>}}],
+    ?assertEqual({encrypted, <<"cFqLR9plain==">>},
+                 rabbit_cuttlefish:optionally_tagged_binary(?KEY, Conf)).
+
+optionally_tagged_binary_other_tag_normalized_to_encrypted(_) ->
+    BinConf = [{?TOKENS, {custom, <<"value">>}}],
+    StrConf = [{?TOKENS, {custom, "value"}}],
+    ?assertEqual({encrypted, <<"value">>},
+                 rabbit_cuttlefish:optionally_tagged_binary(?KEY, BinConf)),
+    ?assertEqual({encrypted, <<"value">>},
+                 rabbit_cuttlefish:optionally_tagged_binary(?KEY, StrConf)).
+
+optionally_tagged_string_plain_string(_) ->
+    Conf = [{?TOKENS, "secret"}],
+    ?assertEqual("secret", rabbit_cuttlefish:optionally_tagged_string(?KEY, Conf)).
+
+optionally_tagged_string_plain_binary(_) ->
+    Conf = [{?TOKENS, <<"secret">>}],
+    ?assertEqual("secret", rabbit_cuttlefish:optionally_tagged_string(?KEY, Conf)).
+
+optionally_tagged_string_encrypted_string(_) ->
+    Conf = [{?TOKENS, {encrypted, "cFqLR9plain=="}}],
+    ?assertEqual({encrypted, "cFqLR9plain=="},
+                 rabbit_cuttlefish:optionally_tagged_string(?KEY, Conf)).
+
+optionally_tagged_string_encrypted_binary(_) ->
+    Conf = [{?TOKENS, {encrypted, <<"cFqLR9plain==">>}}],
+    ?assertEqual({encrypted, "cFqLR9plain=="},
+                 rabbit_cuttlefish:optionally_tagged_string(?KEY, Conf)).
+
+optionally_tagged_string_other_tag_normalized_to_encrypted(_) ->
+    StrConf = [{?TOKENS, {custom, "value"}}],
+    BinConf = [{?TOKENS, {custom, <<"value">>}}],
+    ?assertEqual({encrypted, "value"},
+                 rabbit_cuttlefish:optionally_tagged_string(?KEY, StrConf)),
+    ?assertEqual({encrypted, "value"},
+                 rabbit_cuttlefish:optionally_tagged_string(?KEY, BinConf)).
