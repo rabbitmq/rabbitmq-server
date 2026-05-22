@@ -92,6 +92,7 @@
          C1#consumer.pid =:= C2#consumer.pid andalso
          C1#consumer.subscription_id =:= C2#consumer.subscription_id)).
 -define(V6_OR_MORE(Vsn), (Vsn >= 6)).
+-define(V8_OR_MORE(Vsn), (Vsn >= 8)).
 
 %% Single Active Consumer API
 -spec register_consumer(binary(),
@@ -849,6 +850,21 @@ handle_connection_down0(Pid, State, Groups) ->
 -spec handle_connection_node_disconnected(ra_machine:command_meta_data(),
                                           connection_pid(), state()) ->
     {state(), ra_machine:effects()}.
+handle_connection_node_disconnected(#{machine_version := Vsn} = Meta, ConnPid,
+                                    #?MODULE{pids_groups = PidsGroups0} = State0)
+  when ?V8_OR_MORE(Vsn) ->
+    case maps:get(ConnPid, PidsGroups0, error) of
+        error ->
+            {State0, []};
+        Groups ->
+            {State2, Eff} =
+                maps:fold(fun(G, _, Acc) ->
+                                  handle_group_after_connection_node_disconnected(
+                                    Meta, ConnPid, Acc, G)
+                          end, {State0, []}, Groups),
+            T = disconnected_timeout(State2),
+            {State2, [node_disconnected_timer_effect(ConnPid, T) | Eff]}
+    end;
 handle_connection_node_disconnected(Meta, ConnPid,
                                     #?MODULE{pids_groups = PidsGroups0} = State0) ->
     case maps:take(ConnPid, PidsGroups0) of
@@ -884,13 +900,26 @@ handle_node_reconnected(Node,
 -spec presume_connection_down(ra_machine:command_meta_data(), connection_pid(),
                               state()) ->
     {state(), ra_machine:effects()}.
-presume_connection_down(Meta, Pid, #?MODULE{groups = Groups} = State0) ->
-    {State1, Eff} =
-        maps:fold(fun(G, _, {St, Eff}) ->
-                          handle_group_connection_presumed_down(Meta, Pid, St,
-                                                                Eff, G)
-                  end, {State0, []}, Groups),
-    {State1, Eff}.
+presume_connection_down(#{machine_version := Vsn} = Meta, Pid, #?MODULE{groups = Groups0, pids_groups = PidsGroups0} = State0)
+  when ?V8_OR_MORE(Vsn) ->
+    case maps:take(Pid, PidsGroups0) of
+        error ->
+            maps:fold(fun(G, _, {St, Eff}) ->
+                              handle_group_connection_presumed_down(Meta, Pid, St,
+                                                                    Eff, G)
+                      end, {State0, []}, Groups0);
+        {Groups, PidsGroups1} ->
+            State1 = State0#?MODULE{pids_groups = PidsGroups1},
+            maps:fold(fun(G, _, {St, Eff}) ->
+                              handle_group_connection_presumed_down(Meta, Pid, St,
+                                                                    Eff, G)
+                      end, {State1, []}, Groups)
+    end;
+presume_connection_down(Meta, Pid, #?MODULE{groups = Groups0} = State0) ->
+    maps:fold(fun(G, _, {St, Eff}) ->
+                      handle_group_connection_presumed_down(Meta, Pid, St,
+                                                            Eff, G)
+              end, {State0, []}, Groups0).
 
 handle_group_connection_presumed_down(#{machine_version := Vsn}, Pid,
                                       #?MODULE{groups = Groups0} = S0,
