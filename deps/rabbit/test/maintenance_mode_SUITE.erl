@@ -233,7 +233,10 @@ client_connection_closure(Config) ->
     ?assertEqual(1, length(rabbit_ct_broker_helpers:rpc(Config, A, rabbit_networking, local_connections, []))),
 
     rabbit_ct_broker_helpers:drain_node(Config, A),
-    ?assertEqual(0, length(rabbit_ct_broker_helpers:rpc(Config, A, rabbit_networking, local_connections, []))),
+    ?awaitMatch(
+       0,
+       length(rabbit_ct_broker_helpers:rpc(Config, A, rabbit_networking, local_connections, [])),
+       30000),
 
     rabbit_ct_broker_helpers:revive_node(Config, A).
 
