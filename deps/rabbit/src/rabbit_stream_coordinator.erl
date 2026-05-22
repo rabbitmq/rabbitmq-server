@@ -552,7 +552,7 @@ reachable_coord_members() ->
     Nodes = rabbit_nodes:list_reachable(),
     [{?MODULE, Node} || Node <- Nodes].
 
-version() -> 7.
+version() -> 8.
 
 which_module(_) ->
     ?MODULE.
@@ -2349,6 +2349,8 @@ machine_version(4 = From, 5, #?MODULE{single_active_consumer = Sac0} = State) ->
 machine_version(6, 7, #?MODULE{monitors = Monitors0} = State) ->
     Monitors = maps:filter(fun(_Key, Value) -> Value =/= sac end, Monitors0),
     {State#?MODULE{monitors = Monitors}, []};
+machine_version(7, 8, State) ->
+    {State, []};
 machine_version(From, To, State) ->
     ?LOG_INFO("Stream coordinator machine version changes from ~tp to ~tp, no state changes required.",
                     [From, To]),
