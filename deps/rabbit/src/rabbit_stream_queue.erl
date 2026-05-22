@@ -1632,7 +1632,40 @@ drain(TransferCandidates) ->
     case whereis(rabbit_stream_coordinator) of
         undefined -> ok;
         _Pid -> transfer_leadership_of_stream_coordinator(TransferCandidates)
-    end.
+    end,
+    transfer_leadership_of_local_stream_leaders(TransferCandidates).
+
+-spec transfer_leadership_of_local_stream_leaders([node()]) -> ok.
+transfer_leadership_of_local_stream_leaders([]) ->
+    ok;
+transfer_leadership_of_local_stream_leaders(TransferCandidates) ->
+    LocalLeaderQueues = list_local_leaders(),
+    ?LOG_INFO("transferring leadership of ~b local stream leaders...",
+              [length(LocalLeaderQueues)]),
+    QueuesChunked = ra_lib:lists_chunk(256, LocalLeaderQueues),
+    [begin
+         Refs = [begin
+              Nodes = get_nodes(Q),
+              case rabbit_maintenance:random_primary_replica_transfer_candidate_node(TransferCandidates, Nodes) of
+                  {ok, PreferredNode} ->
+                      {_, Ref} = spawn_monitor(fun() ->
+                          rabbit_stream_coordinator:restart_stream(Q, #{preferred_leader_node => PreferredNode})
+                      end),
+                      Ref;
+                  undefined ->
+                      undefined
+              end
+          end || Q <- Queues],
+         [receive {'DOWN', Ref, process, _, _} -> ok end || Ref <- Refs, Ref =/= undefined],
+         timer:sleep(1000)
+     end || Queues <- QueuesChunked],
+    ok.
+
+list_local_leaders() ->
+    [Q || Q <- rabbit_amqqueue:list(),
+          ?amqqueue_type_is(Q, ?MODULE),
+          amqqueue:get_state(Q) =/= crashed,
+          amqqueue:get_leader_node(Q) =:= node()].
 
 revive() ->
     ok.
