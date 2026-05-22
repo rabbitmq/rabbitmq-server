@@ -733,7 +733,21 @@ set_vhost_connection_limit(Config, NodeIndex, VHost, Count) ->
     ok = rabbit_ct_broker_helpers:control_action(
       set_vhost_limits, Node,
       ["{\"max-connections\": " ++ integer_to_list(Count) ++ "}"],
-      [{"-p", binary_to_list(VHost)}]).
+      [{"-p", binary_to_list(VHost)}]),
+    %% Await runtime-parameter propagation to every cluster node.
+    Expected = case Count of
+                   C when C < 0 -> undefined;
+                   C            -> {ok, C}
+               end,
+    Nodenames = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    lists:foreach(
+      fun(I) ->
+              ?awaitMatch(
+                 Expected,
+                 rabbit_ct_broker_helpers:rpc(
+                   Config, I, rabbit_vhost_limit, connection_limit, [VHost]),
+                 ?AWAIT, ?INTERVAL)
+      end, lists:seq(0, length(Nodenames) - 1)).
 
 expect_that_client_connection_is_rejected(Config) ->
     expect_that_client_connection_is_rejected(Config, 0).
