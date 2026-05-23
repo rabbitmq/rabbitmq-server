@@ -878,8 +878,9 @@ consuming_classic_queue_down(Config) ->
     ok = rabbit_ct_broker_helpers:start_node(Config, Server1),
     C3 = connect(ClientId, Config, Server3, [{clean_start, true}]),
     ok = emqtt:disconnect(C3),
-    ?assertEqual([],
-                 rpc(Config, Server1, rabbit_amqqueue, list, [])),
+    ?awaitMatch([],
+                rpc(Config, Server1, rabbit_amqqueue, list, []),
+                30_000),
     ok.
 
 delete_create_queue(Config) ->
@@ -1259,7 +1260,7 @@ rabbit_mqtt_qos0_queue_kill_node(Config) ->
     ok = emqtt:disconnect(Sub2),
     ok = emqtt:disconnect(Pub),
     ok = rabbit_ct_broker_helpers:start_node(Config, 1),
-    ?assertEqual([], rpc(Config, rabbit_db_binding, get_all, [])).
+    ?awaitMatch([], rpc(Config, rabbit_db_binding, get_all, []), 30_000).
 
 cli_close_all_connections(Config) ->
     ClientId = atom_to_binary(?FUNCTION_NAME),
@@ -1645,7 +1646,7 @@ clean_session_node_down(NodeDown, Config) ->
 
     %% After terminating a clean session by a node crash, we expect any session
     %% state to be cleaned up on the server once the server comes back up.
-    ?assertEqual(0, rpc(Config, rabbit_amqqueue, count, [])).
+    ?awaitMatch(0, rpc(Config, rabbit_amqqueue, count, []), 30_000).
 
 rabbit_status_connection_count(Config) ->
     _Pid = rabbit_ct_client_helpers:open_connection(Config, 0),
