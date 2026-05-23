@@ -1051,6 +1051,9 @@ dead_letter_policy(Config) ->
                     amqqueue:get_policy(Q0)
                 end,
                 30000),
+    %% `handle_tick/3` can briefly revert `dead_letter_handler` when its
+    %% local Khepri lookup races with replication; wait until it settles.
+    ok = await_dead_letter_handler_applied(Config, QName),
     %% Nack the second message
     amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DTag2,
                                         multiple     = false,
@@ -1919,3 +1922,32 @@ header_lookup(undefined, _Key) ->
     undefined;
 header_lookup(Headers, Key) ->
     rabbit_misc:table_lookup(Headers, Key).
+
+await_dead_letter_handler_applied(Config, QName) ->
+    QRes = rabbit_misc:r(<<"/">>, queue, QName),
+    {ok, Q} = rabbit_ct_broker_helpers:rpc(
+                Config, 0, rabbit_amqqueue, lookup, [QRes], infinity),
+    case amqqueue:get_type(Q) of
+        rabbit_quorum_queue ->
+            {ok, RaName} = rabbit_queue_type_util:qname_to_internal_name(QRes),
+            Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+            Server = {RaName, Node},
+            ?awaitMatch(DLH when DLH =/= undefined,
+                        dead_letter_handler(Config, Server),
+                        30_000),
+            rabbit_ct_helpers:consistently(
+              ?_assertNotEqual(undefined,
+                               dead_letter_handler(Config, Server))),
+            ok;
+        _ ->
+            ok
+    end.
+
+dead_letter_handler(Config, Server) ->
+    case rabbit_ct_broker_helpers:rpc(
+           Config, 0, ra, member_overview, [Server], infinity) of
+        {ok, #{machine := #{config := #{dead_letter_handler := DLH}}}, _} ->
+            DLH;
+        _ ->
+            undefined
+    end.
