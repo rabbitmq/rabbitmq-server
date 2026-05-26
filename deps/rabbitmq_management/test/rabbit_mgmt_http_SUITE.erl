@@ -193,6 +193,7 @@ all_tests() -> [
     publish_large_message_exceeding_http_request_body_size_test,
     publish_body_size_limit_single_chunk_test,
     direct_request_body_size_limit_test,
+    definitions_multipart_body_size_limit_test,
     publish_accept_json_test,
     publish_fail_test,
     publish_base64_test,
@@ -3438,6 +3439,27 @@ direct_request_body_size_limit_test(Config) ->
   after
     rpc(Config, application, unset_env, [rabbitmq_management, max_http_body_size])
   end.
+
+definitions_multipart_body_size_limit_test(Config) ->
+    rpc(Config, application, set_env, [rabbitmq_management, max_http_body_size, 200]),
+    try
+        %% A small but valid definitions payload, turned into an oversized
+        %% multipart upload by appending padding.
+        SmallDefs = #{users => [], vhosts => [#{name => <<"test">>}]},
+        Data = binary_to_list(format_for_upload(SmallDefs)),
+        Boundary = "------------definitions_multipart_body_size_limit_test",
+        LargeBody = list_to_binary(lists:duplicate(300, $\s)),
+        OversizedMultipart = format_multipart_filedata(Boundary,
+            [{file, "file", Data ++ binary_to_list(LargeBody)}]),
+        ContentType = lists:concat(["multipart/form-data; boundary=", Boundary]),
+        MoreHeaders = [{"content-type", ContentType},
+                       {"content-length", integer_to_list(length(OversizedMultipart))}],
+        http_upload_raw(Config, post, "/definitions", OversizedMultipart,
+                        "guest", "guest", ?BAD_REQUEST, MoreHeaders),
+        passed
+    after
+        rpc(Config, application, unset_env, [rabbitmq_management, max_http_body_size])
+    end.
 
 publish_accept_json_test(Config) ->
     Headers = #{'x-forwarding' => [#{uri => <<"amqp://localhost/%2F/upstream">>}]},
