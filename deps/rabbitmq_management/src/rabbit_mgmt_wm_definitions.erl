@@ -86,7 +86,7 @@ all_definitions(ReqData, Context) ->
     ReqData1 = case rabbit_mgmt_util:qs_val(<<"download">>, ReqData) of
                    undefined -> ReqData;
                    Filename  -> rabbit_mgmt_util:set_resp_header(
-                       <<"Content-Disposition">>,
+                       <<"content-disposition">>,
                        [<<"attachment; filename=">>, cow_http:ensure_token(Filename)],
                        ReqData)
                end,
