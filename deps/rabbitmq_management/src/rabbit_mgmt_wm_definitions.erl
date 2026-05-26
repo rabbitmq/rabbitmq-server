@@ -93,7 +93,7 @@ maybe_content_disposition(ReqData) ->
             ReqData;
         #{download := Filename} ->
             rabbit_mgmt_util:set_resp_header(
-                <<"Content-Disposition">>,
+                <<"content-disposition">>,
                 [<<"attachment; filename=">>, Filename],
                 ReqData)
     end.
