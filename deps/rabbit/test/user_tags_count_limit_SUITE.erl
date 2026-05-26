@@ -225,13 +225,13 @@ put_user_list_above_limit_rejected1() ->
 %% the cap is rejected, regardless of contents.
 prop_set_tags_count_bound(Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, prop_set_tags_count_bound1, []).
+      ?MODULE, set_tags_count_bound_prop, []).
 
-prop_set_tags_count_bound1() ->
+set_tags_count_bound_prop() ->
     rabbit_ct_proper_helpers:run_proper(
-      fun prop_tag_count_bound/0, [], 50).
+      fun tag_count_bound_prop/0, [], 50).
 
-prop_tag_count_bound() ->
+tag_count_bound_prop() ->
     ?FORALL(N, range(0, ?MAX_USER_TAGS * 2),
         begin
             Username = <<"proper_user">>,

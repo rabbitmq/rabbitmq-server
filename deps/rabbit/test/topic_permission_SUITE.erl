@@ -463,14 +463,14 @@ topic_permission_khepri_error_fails_closed_prop1(_Config) ->
            <<"guest">>, <<"/">>, <<"amq.topic">>, "^a", "^a", <<"acting-user">>),
     ok = meck:new(rabbit_khepri, [passthrough]),
     try
-        Property = fun() -> prop_khepri_error_fails_closed() end,
+        Property = fun() -> khepri_error_fails_closed_prop() end,
         rabbit_ct_proper_helpers:run_proper(Property, [], 100)
     after
         meck:unload(rabbit_khepri)
     end,
     ok.
 
-prop_khepri_error_fails_closed() ->
+khepri_error_fails_closed_prop() ->
     ?FORALL(
        {ErrorReason, RoutingKey, Permission},
        {khepri_error_reason(), topic_routing_key(), oneof([read, write])},
