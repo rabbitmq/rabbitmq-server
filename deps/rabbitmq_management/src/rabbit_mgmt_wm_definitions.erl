@@ -87,8 +87,8 @@ all_definitions(ReqData, Context) ->
                    undefined -> ReqData;
                    Filename  -> rabbit_mgmt_util:set_resp_header(
                        <<"Content-Disposition">>,
-                       "attachment; filename=" ++
-                       binary_to_list(Filename), ReqData)
+                       [<<"attachment; filename=">>, cow_http:ensure_token(Filename)],
+                       ReqData)
                end,
 
     rabbit_mgmt_util:reply(Result, ReqData1, Context).
