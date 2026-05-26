@@ -197,6 +197,11 @@
   {max_connections_infinity,
    "mqtt.max_connections = infinity",
    [{rabbitmq_mqtt,[{max_connections, infinity}]}],
+   [rabbitmq_mqtt]},
+
+  {tcp_listen_options_none_disables_via_shortcut,
+   "mqtt.tcp_listen_options = none",
+   [{rabbitmq_mqtt,[{tcp_listen_options, []}]}],
    [rabbitmq_mqtt]}
 
 ].
