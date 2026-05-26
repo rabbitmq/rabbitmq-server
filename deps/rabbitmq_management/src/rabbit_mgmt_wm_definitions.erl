@@ -83,15 +83,20 @@ all_definitions(ReqData, Context) ->
         {explanation, rabbit_data_coercion:to_binary(io_lib:format("Definitions of cluster '~ts'", [rabbit_nodes:cluster_name()]))}
     ],
     Result = TopLevelDefsAndMetadata ++ retain_whitelisted(Contents),
-    ReqData1 = case rabbit_mgmt_util:qs_val(<<"download">>, ReqData) of
-                   undefined -> ReqData;
-                   Filename  -> rabbit_mgmt_util:set_resp_header(
-                       <<"Content-Disposition">>,
-                       "attachment; filename=" ++
-                       binary_to_list(Filename), ReqData)
-               end,
-
+    ReqData1 = maybe_content_disposition(ReqData),
     rabbit_mgmt_util:reply(Result, ReqData1, Context).
+
+maybe_content_disposition(ReqData) ->
+    Constraint = cowboy_constraints:from_fun(fun cow_http:ensure_token/1),
+    case cowboy_req:match_qs([{download, [Constraint], undefined}], ReqData) of
+        #{download := undefined} ->
+            ReqData;
+        #{download := Filename} ->
+            rabbit_mgmt_util:set_resp_header(
+                <<"Content-Disposition">>,
+                [<<"attachment; filename=">>, Filename],
+                ReqData)
+    end.
 
 accept_json(ReqData0, Context) ->
     BodySizeLimit = application:get_env(rabbitmq_management, max_http_body_size, ?MANAGEMENT_DEFAULT_HTTP_MAX_BODY_SIZE),
@@ -148,13 +153,7 @@ vhost_definitions(ReqData, VHostName, Context) ->
         {limits, vhost:get_limits(VHost)}
     ],
     Result = TopLevelDefsAndMetadata ++ retain_whitelisted(Contents),
-
-    ReqData1 = case rabbit_mgmt_util:qs_val(<<"download">>, ReqData) of
-                   undefined -> ReqData;
-                   Filename  ->
-                       HeaderVal = "attachment; filename=" ++ binary_to_list(Filename),
-                       rabbit_mgmt_util:set_resp_header(<<"Content-Disposition">>, HeaderVal, ReqData)
-               end,
+    ReqData1 = maybe_content_disposition(ReqData),
     rabbit_mgmt_util:reply(Result, ReqData1, Context).
 
 accept_multipart(ReqData0, Context) ->
