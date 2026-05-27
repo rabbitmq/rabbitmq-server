@@ -22,7 +22,7 @@ end}.
 %% use_private_ip
 
 {mapping, "cluster_formation.aws.use_private_ip", "rabbit.cluster_formation.peer_discovery_aws.aws_use_private_ip", [
-    {datatype, {enum, [true, false]}}
+    {datatype, boolean}
 ]}.
 
 {translation, "rabbit.cluster_formation.peer_discovery_aws.aws_use_private_ip",
@@ -64,7 +64,7 @@ end}.
 %% use_autoscaling_group
 
 {mapping, "cluster_formation.aws.use_autoscaling_group", "rabbit.cluster_formation.peer_discovery_aws.aws_autoscaling", [
-    {datatype, {enum, [true, false]}}
+    {datatype, boolean}
 ]}.
 
 {translation, "rabbit.cluster_formation.peer_discovery_aws.aws_autoscaling",
