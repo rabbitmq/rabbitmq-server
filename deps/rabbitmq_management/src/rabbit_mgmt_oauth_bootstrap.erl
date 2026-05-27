@@ -113,7 +113,7 @@ set_token_auth(AuthSettings, Req0) ->
                 {bearer, Token} ->
                     {
                         Req0,
-                        ["set_token_auth('", Token, "');"]
+                        ["set_token_auth(", rabbit_json:encode(Token), ");"]
                     };
                 _ ->
                     Cookies = cowboy_req:parse_cookies(Req0),
@@ -131,7 +131,7 @@ set_token_auth(AuthSettings, Req0) ->
                                         path => ?OAUTH2_BOOTSTRAP_PATH,
                                         same_site => strict
                                     }),
-                                ["set_token_auth('", Token, "');"]
+                                ["set_token_auth(", rabbit_json:encode(Token), ");"]
                             }
                     end
             end;
