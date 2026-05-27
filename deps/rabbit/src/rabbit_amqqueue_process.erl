@@ -933,33 +933,10 @@ ack(AckTags, ChPid, State) ->
 
 requeue(AckTags, ChPid, State) ->
     subtract_acks(ChPid, AckTags, State,
-<<<<<<< HEAD
-                  fun (State1) -> requeue_and_run(AckTags, false, State1) end).
+                  fun (State1) -> requeue_and_run(AckTags, [], State1) end).
 
 requeue_and_run(AckTags,
-                ActiveConsumersChanged,
-=======
-                  fun (State1) -> requeue_and_run(AckTags, DelFailed, [], State1) end).
-
-discard(AckTags, DelFailed, ChPid, State) ->
-    with_dlx(
-      State#q.dlx,
-      fun (X) -> subtract_acks(ChPid, AckTags, State,
-                               fun (State1) ->
-                                       dead_letter_rejected_msgs(
-                                         AckTags, DelFailed, X, State1)
-                               end) end,
-      fun () -> rabbit_global_counters:messages_dead_lettered(rejected, rabbit_classic_queue,
-                                                              disabled, length(AckTags)),
-                ack(AckTags, ChPid, State) end).
-
-requeue_and_run(AckTags, Unblocked, State) ->
-    requeue_and_run(AckTags, true, Unblocked, State).
-
-requeue_and_run(AckTags,
-                DelFailed,
                 Unblocked,
->>>>>>> 9c179ed812 (Avoid O(n) complexity of `notify_consumers_state_changed/1`)
                 #q{backing_queue = BQ,
                    backing_queue_state = BQS0} = State0) ->
     WasEmpty = BQ:is_empty(BQS0),

@@ -500,20 +500,10 @@ drained(AdvancedDeliveryCount, ChPid, CTag) ->
             ok
     end.
 
-<<<<<<< HEAD
 -spec process_credit(rabbit_queue_type:delivery_count() | credit_api_v1,
                      rabbit_queue_type:credit(), ch(), rabbit_types:ctag(), state()) ->
-    'unchanged' | {'unblocked', state()}.
-process_credit(DeliveryCountRcv, LinkCredit, ChPid, CTag, State) ->
-=======
--spec process_credit(rabbit_queue_type:delivery_count(),
-                     rabbit_queue_type:credit(),
-                     ch(),
-                     rabbit_types:ctag(),
-                     state()) ->
     'unchanged' | {'unblocked', [{ch(), consumer()}], state()}.
-process_credit(DeliveryCountRcv, LinkCreditRcv, ChPid, CTag, State) ->
->>>>>>> 9c179ed812 (Avoid O(n) complexity of `notify_consumers_state_changed/1`)
+process_credit(DeliveryCountRcv, LinkCredit, ChPid, CTag, State) ->
     case lookup_ch(ChPid) of
         #cr{link_states = LinkStates = #{CTag := LinkState =
                                              #link_state{delivery_count = DeliveryCountSnd,
