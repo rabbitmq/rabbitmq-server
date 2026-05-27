@@ -50,7 +50,7 @@ fun(Conf) ->
 end}.
 
 {mapping, "auth_cache.cache_ttl", "rabbitmq_auth_backend_cache.cache_ttl", [
-    {datatype, integer}, {validators, ["non_negative_integer"]}
+    {datatype, {integer, non_negative}}
 ]}.
 
 {mapping, "auth_cache.cache_module", "rabbitmq_auth_backend_cache.cache_module", [
@@ -58,5 +58,5 @@ end}.
 ]}.
 
 {mapping, "auth_cache.cache_refusals", "rabbitmq_auth_backend_cache.cache_refusals", [
-    {datatype, {enum, [true, false]}}
+    {datatype, boolean}
 ]}.

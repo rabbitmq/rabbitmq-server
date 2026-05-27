@@ -101,25 +101,25 @@ end}.
 }.
 
 {mapping, "web_mqtt.ssl.honor_cipher_order", "rabbitmq_web_mqtt.ssl_config.honor_cipher_order",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "web_mqtt.ssl.honor_ecc_order", "rabbitmq_web_mqtt.ssl_config.honor_ecc_order",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "web_mqtt.ssl.reuse_sessions", "rabbitmq_web_mqtt.ssl_config.reuse_sessions",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "web_mqtt.ssl.secure_renegotiate", "rabbitmq_web_mqtt.ssl_config.secure_renegotiate",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "web_mqtt.ssl.client_renegotiation", "rabbitmq_web_mqtt.ssl_config.client_renegotiation",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "web_mqtt.ssl.crl_check", "rabbitmq_web_mqtt.ssl_config.crl_check",
     [{datatype, [{enum, [true, false, peer, best_effort]}]}]}.
 
 {mapping, "web_mqtt.ssl.depth", "rabbitmq_web_mqtt.ssl_config.depth",
-    [{datatype, integer}, {validators, ["byte"]}]}.
+    [{datatype, byte}]}.
 
 {mapping, "web_mqtt.ssl.versions.$version", "rabbitmq_web_mqtt.ssl_config.versions",
     [{datatype, atom}]}.
@@ -161,7 +161,7 @@ end}.
 
 %% backwards compatibility
 {mapping, "web_mqtt.cowboy_opts.timeout", "rabbitmq_web_mqtt.cowboy_opts.idle_timeout",
-    [{datatype, integer}, {validators, ["non_negative_integer"]}]
+    [{datatype, {integer, non_negative}}]
 }.
 %% recent Cowboy versions have several timeout settings
 {mapping, "web_mqtt.cowboy_opts.idle_timeout", "rabbitmq_web_mqtt.cowboy_opts.idle_timeout",
@@ -184,13 +184,13 @@ end}.
 }.
 
 {mapping, "web_mqtt.ws_opts.compress", "rabbitmq_web_mqtt.cowboy_ws_opts.compress",
-    [{datatype, {enum, [true, false]}}]
+    [{datatype, boolean}]
 }.
 {mapping, "web_mqtt.ws_opts.max_frame_size", "rabbitmq_web_mqtt.cowboy_ws_opts.max_frame_size",
-    [{datatype, integer}, {validators, ["non_negative_integer"]}]
+    [{datatype, {integer, non_negative}}]
 }.
 {mapping, "web_mqtt.ws_opts.idle_timeout", "rabbitmq_web_mqtt.cowboy_ws_opts.idle_timeout",
-    [{datatype, integer}, {validators, ["non_negative_integer"]}]
+    [{datatype, {integer, non_negative}}]
 }.
 
 %% Whether or not to enable proxy protocol support.
@@ -198,7 +198,7 @@ end}.
 %% {proxy_protocol, false}
 
 {mapping, "web_mqtt.proxy_protocol", "rabbitmq_web_mqtt.proxy_protocol",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 %%
 %% File Handle Cache (no-op, kept for compatibility).
@@ -206,5 +206,5 @@ end}.
 
 {mapping, "web_mqtt.use_file_handle_cache", "rabbitmq_web_mqtt.use_file_handle_cache",
     [
-        {datatype, {enum, [true, false]}}
+        {datatype, boolean}
     ]}.

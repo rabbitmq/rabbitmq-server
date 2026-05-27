@@ -53,20 +53,20 @@ end}.
 ]}.
 
 {mapping, "stomp.tcp_listen_options.nodelay", "rabbitmq_stomp.tcp_listen_options.nodelay", [
-    {datatype, {enum, [true, false]}}
+    {datatype, boolean}
 ]}.
 
 {mapping, "stomp.tcp_listen_options.buffer", "rabbitmq_stomp.tcp_listen_options.buffer",
     [{datatype, integer}]}.
 
 {mapping, "stomp.tcp_listen_options.delay_send", "rabbitmq_stomp.tcp_listen_options.delay_send",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "stomp.tcp_listen_options.dontroute", "rabbitmq_stomp.tcp_listen_options.dontroute",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "stomp.tcp_listen_options.exit_on_close", "rabbitmq_stomp.tcp_listen_options.exit_on_close",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "stomp.tcp_listen_options.fd", "rabbitmq_stomp.tcp_listen_options.fd",
     [{datatype, integer}]}.
@@ -78,7 +78,7 @@ end}.
     [{datatype, integer}]}.
 
 {mapping, "stomp.tcp_listen_options.keepalive", "rabbitmq_stomp.tcp_listen_options.keepalive",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "stomp.tcp_listen_options.low_msgq_watermark", "rabbitmq_stomp.tcp_listen_options.low_msgq_watermark",
     [{datatype, integer}]}.
@@ -99,7 +99,7 @@ end}.
     [{datatype, integer}]}.
 
 {mapping, "stomp.tcp_listen_options.send_timeout_close", "rabbitmq_stomp.tcp_listen_options.send_timeout_close",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "stomp.tcp_listen_options.sndbuf", "rabbitmq_stomp.tcp_listen_options.sndbuf",
     [{datatype, integer}]}.
@@ -108,10 +108,10 @@ end}.
     [{datatype, integer}]}.
 
 {mapping, "stomp.tcp_listen_options.linger.on", "rabbitmq_stomp.tcp_listen_options.linger",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "stomp.tcp_listen_options.linger.timeout", "rabbitmq_stomp.tcp_listen_options.linger",
-    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+    [{datatype, {integer, non_negative}}]}.
 
 {translation, "rabbitmq_stomp.tcp_listen_options.linger",
 fun(Conf) ->
@@ -164,7 +164,7 @@ end}.
 %% Defaults to true.
 
 {mapping, "stomp.ssl_cert_login", "rabbitmq_stomp.ssl_cert_login",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 %% Set a default user name and password. This is used as the default login
 %% whenever a CONNECT frame omits the login and passcode headers.
@@ -211,24 +211,24 @@ end}.
 %% Defaults to true.
 
 {mapping, "stomp.implicit_connect", "rabbitmq_stomp.implicit_connect",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "stomp.login_timeout", "rabbitmq_stomp.login_timeout",
-    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+    [{datatype, {integer, non_negative}}]}.
 
 %% Whether or not to enable proxy protocol support.
 %%
 %% Defaults to false.
 
 {mapping, "stomp.proxy_protocol", "rabbitmq_stomp.proxy_protocol",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 %% Whether or not to hide server info
 %%
 %% Defaults to false.
 
 {mapping, "stomp.hide_server_info", "rabbitmq_stomp.hide_server_info",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 %% Whether or not to always requeue the message on nack
 %% If not set then coordinated by the usage of the frame "requeue" header
@@ -237,7 +237,7 @@ end}.
 %% Defaults to true.
 
 {mapping, "stomp.default_nack_requeue", "rabbitmq_stomp.default_nack_requeue",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 
 
@@ -246,7 +246,7 @@ end}.
 %% Defaults to 192Kb.
 
 {mapping, "stomp.max_frame_size", "rabbitmq_stomp.max_frame_size",
-    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+    [{datatype, {integer, non_negative}}]}.
 
 {mapping, "stomp.max_frame_size_unauthenticated", "rabbitmq_stomp.max_frame_size_unauthenticated",
-    [{datatype, integer}, {validators, ["non_zero_positive_integer"]}]}.
+    [{datatype, {integer, positive}}]}.
