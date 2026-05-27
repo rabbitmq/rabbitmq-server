@@ -28,6 +28,7 @@ groups() ->
                                 channel_connection_close,
                                 channel_queue_exchange_consumer_close_connection,
                                 channel_queue_delete_queue,
+                                consumer_activity_status_blocked_then_up,
                                 connection_metric_count_test,
                                 channel_metric_count_test,
                                 queue_metric_count_test,
@@ -383,6 +384,69 @@ channel_queue_exchange_consumer_close_connection(Config) ->
     ?awaitMatch([], read_table_rpc(Config, channel_queue_metrics), 30000),
     ?awaitMatch([], read_table_rpc(Config, consumer_created), 30000),
     ok.
+
+consumer_activity_status_blocked_then_up(Config) ->
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config),
+    QName = atom_to_binary(?FUNCTION_NAME),
+    try
+        {ok, Ch} = amqp_connection:open_channel(Conn),
+        #'queue.declare_ok'{} = amqp_channel:call(
+                                   Ch, #'queue.declare'{queue = QName,
+                                                        durable = true}),
+        Prefetch = 5,
+        #'basic.qos_ok'{} = amqp_channel:call(
+                              Ch, #'basic.qos'{prefetch_count = Prefetch}),
+        amqp_channel:subscribe(Ch, #'basic.consume'{queue = QName,
+                                                    no_ack = false},
+                               self()),
+        receive #'basic.consume_ok'{} -> ok
+        after 5000 -> ct:fail(no_consume_ok)
+        end,
+        %% Publish prefetch+1 messages: the consumer blocks at prefetch, and
+        %% one ack later the queue is empty, so it does not block again.
+        [amqp_channel:call(Ch,
+                           #'basic.publish'{routing_key = QName},
+                           #amqp_msg{payload = <<"x">>})
+         || _ <- lists:seq(1, Prefetch + 1)],
+        ?awaitMatch(
+           [{{_Q, _ChPid, _CTag}, _Excl, _Ack, _Pref, true, blocked, _Args}],
+           read_table_rpc(Config, consumer_created),
+           30000),
+        HighestTag = highest_delivery_tag(Prefetch),
+        ok = amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = HighestTag,
+                                                multiple = true}),
+        ?awaitMatch(
+           [{{_Q, _ChPid, _CTag}, _Excl, _Ack, _Pref, true, up, _Args}],
+           read_table_rpc(Config, consumer_created),
+           30000)
+    after
+        catch rabbit_ct_client_helpers:close_connection(Conn),
+        _ = rabbit_ct_broker_helpers:rpc(
+              Config, 0, rabbit_amqqueue, delete_with,
+              [rabbit_misc:r(<<"/">>, queue, QName), false, false,
+               <<"acting-user">>]),
+        force_metric_gc(Config)
+    end,
+    ?awaitMatch([], read_table_rpc(Config, consumer_created), 30000),
+    ok.
+
+highest_delivery_tag(MinDeliveries) ->
+    highest_delivery_tag(MinDeliveries, undefined).
+
+highest_delivery_tag(0, Highest) ->
+    receive
+        {#'basic.deliver'{delivery_tag = T}, _Msg} ->
+            highest_delivery_tag(0, T)
+    after 200 ->
+            Highest
+    end;
+highest_delivery_tag(N, _Highest) ->
+    receive
+        {#'basic.deliver'{delivery_tag = T}, _Msg} ->
+            highest_delivery_tag(N - 1, T)
+    after 5000 ->
+            ct:fail({timeout_waiting_for_delivery, N})
+    end.
 
 
 

@@ -442,8 +442,13 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%----------------------------------------------------------------------------
 
-maybe_notify_decorators(false, State) -> State;
-maybe_notify_decorators(true,  State) -> notify_decorators(State), State.
+maybe_notify_state_change([], [], State) ->
+    State;
+maybe_notify_state_change(Blocked, Unblocked, State) ->
+    notify_decorators(State),
+    notify_consumer_transitions(Blocked, blocked, State),
+    notify_consumer_transitions(Unblocked, up, State),
+    State.
 
 notify_decorators_if_became_empty(WasEmpty, State) ->
     case (not WasEmpty) andalso is_empty(State) of
@@ -704,20 +709,23 @@ discard(#delivery{confirm = Confirm,
     BQS1 = BQ:discard(Msg, SenderPid, BQS),
     {BQS1, MTC1}.
 
-run_message_queue(ActiveConsumersChanged, State) ->
+run_message_queue(Unblocked, State) ->
+    run_message_queue([], Unblocked, State).
+
+run_message_queue(Blocked, Unblocked, State) ->
     case is_empty(State) of
-        true  -> maybe_notify_decorators(ActiveConsumersChanged, State);
+        true  -> maybe_notify_state_change(Blocked, Unblocked, State);
         false -> case rabbit_queue_consumers:deliver(
                         fun(AckRequired) -> fetch(AckRequired, State) end,
                         qname(State), State#q.consumers,
                         State#q.single_active_consumer_on, State#q.active_consumer) of
-                     {delivered, ActiveConsumersChanged1, State1, Consumers} ->
+                     {delivered, Blocked1, State1, Consumers} ->
                          run_message_queue(
-                           ActiveConsumersChanged or ActiveConsumersChanged1,
+                           Blocked1 ++ Blocked, Unblocked,
                            State1#q{consumers = Consumers});
-                     {undelivered, ActiveConsumersChanged1, Consumers} ->
-                         maybe_notify_decorators(
-                           ActiveConsumersChanged or ActiveConsumersChanged1,
+                     {undelivered, Blocked1, Consumers} ->
+                         maybe_notify_state_change(
+                           Blocked1 ++ Blocked, Unblocked,
                            State#q{consumers = Consumers})
                  end
     end.
@@ -736,15 +744,15 @@ attempt_delivery(Delivery = #delivery{sender  = SenderPid,
                (false) -> {{Message, Delivered, undefined},
                            discard(Delivery, BQ, BQS, MTC, amqqueue:get_name(Q))}
            end, qname(State), State#q.consumers, State#q.single_active_consumer_on, State#q.active_consumer) of
-        {delivered, ActiveConsumersChanged, {BQS1, MTC1}, Consumers} ->
-            {delivered,   maybe_notify_decorators(
-                            ActiveConsumersChanged,
+        {delivered, Blocked, {BQS1, MTC1}, Consumers} ->
+            {delivered,   maybe_notify_state_change(
+                            Blocked, [],
                             State#q{backing_queue_state = BQS1,
                                     msg_id_to_channel   = MTC1,
                                     consumers           = Consumers})};
-        {undelivered, ActiveConsumersChanged, Consumers} ->
-            {undelivered, maybe_notify_decorators(
-                            ActiveConsumersChanged,
+        {undelivered, Blocked, Consumers} ->
+            {undelivered, maybe_notify_state_change(
+                            Blocked, [],
                             State#q{consumers = Consumers})}
     end.
 
@@ -925,10 +933,10 @@ ack(AckTags, ChPid, State) ->
 
 requeue(AckTags, ChPid, State) ->
     subtract_acks(ChPid, AckTags, State,
-                  fun (State1) -> requeue_and_run(AckTags, false, State1) end).
+                  fun (State1) -> requeue_and_run(AckTags, [], State1) end).
 
 requeue_and_run(AckTags,
-                ActiveConsumersChanged,
+                Unblocked,
                 #q{backing_queue = BQ,
                    backing_queue_state = BQS0} = State0) ->
     WasEmpty = BQ:is_empty(BQS0),
@@ -937,13 +945,13 @@ requeue_and_run(AckTags,
     {_Dropped, State2} = maybe_drop_head(State1),
     State3 = drop_expired_msgs(State2),
     State = notify_decorators_if_became_empty(WasEmpty, State3),
-    run_message_queue(ActiveConsumersChanged, State).
+    run_message_queue(Unblocked, State).
 
 possibly_unblock(Update, ChPid, State = #q{consumers = Consumers}) ->
     case rabbit_queue_consumers:possibly_unblock(Update, ChPid, Consumers) of
-        unchanged               -> State;
-        {unblocked, Consumers1} -> State1 = State#q{consumers = Consumers1},
-                                   run_message_queue(true, State1)
+        unchanged                          -> State;
+        {unblocked, Unblocked, Consumers1} -> State1 = State#q{consumers = Consumers1},
+                                              run_message_queue(Unblocked, State1)
     end.
 
 should_auto_delete(#q{q = Q})
@@ -993,7 +1001,7 @@ handle_ch_down(DownPid, State = #q{consumers                 = Consumers,
                     {stop, State2};
                 false ->
                     State3 = ensure_expiry_timer(State2),
-                    State4 = requeue_and_run(ChAckTags, false, State3),
+                    State4 = requeue_and_run(ChAckTags, [], State3),
                     {ok, State4}
             end
     end.
@@ -1038,10 +1046,10 @@ backing_queue_timeout(State = #q{backing_queue       = BQ,
 
 subtract_acks(ChPid, AckTags, State = #q{consumers = Consumers}, Fun) ->
     case rabbit_queue_consumers:subtract_acks(ChPid, AckTags, Consumers) of
-        not_found               -> State;
-        unchanged               -> Fun(State);
-        {unblocked, Consumers1} -> State1 = State#q{consumers = Consumers1},
-                                   run_message_queue(true, Fun(State1))
+        not_found                          -> State;
+        unchanged                          -> Fun(State);
+        {unblocked, Unblocked, Consumers1} -> State1 = State#q{consumers = Consumers1},
+                                              run_message_queue(Unblocked, Fun(State1))
     end.
 
 message_properties(Message, Confirm, #q{ttl = TTL}) ->
@@ -1424,7 +1432,7 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
                 AckRequired, QName, PrefetchCount,
                 Args, none, ActingUser),
             notify_decorators(State1),
-            reply(ok, run_message_queue(false, State1))
+            reply(ok, run_message_queue([], State1))
     end;
 
 handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg, ActingUser}, From, State) ->
@@ -1457,7 +1465,7 @@ handle_call({stop_consumer, #{pid := ChPid,
             notify_decorators(State1),
             case should_auto_delete(State1) of
                 false ->
-                    State2 = requeue_and_run(AckTags, Holder =/= Holder1, State1),
+                    State2 = requeue_and_run(AckTags, [], State1),
                     State3 = ensure_expiry_timer(State2),
                     reply(ok, State3);
                 true  ->
@@ -1532,6 +1540,39 @@ maybe_notify_consumer_updated(#q{single_active_consumer_on = true} = State, _Pre
         _ ->
             ok
     end.
+
+%% Emit one `consumer_updated` event per consumer that just transitioned
+%% (got blocked or unblocked).
+%% This function specifically helps avoir iteration or state updates of all
+%% consumers, which is expensive (O(n)) for workloads where consumers
+%% with low prefetch outnumber publishers.
+notify_consumer_transitions(Transitions, Status,
+                            State = #q{active_consumer           = SACHolder,
+                                       single_active_consumer_on = SACOn}) ->
+    QName = qname(State),
+    lists:foreach(
+        fun(QEntry = {ChPid, Consumer}) ->
+                {CTag, AckReq, Prefetch, Args} =
+                    rabbit_queue_consumers:get_infos(Consumer),
+                {Active, ActivityStatus} =
+                    case SACOn of
+                        true ->
+                            case SACHolder of
+                                QEntry -> {true, single_active};
+                                _      -> {false, waiting}
+                            end;
+                        false ->
+                            {true, Status}
+                    end,
+                Exclusive = case {SACOn, SACHolder} of
+                                {false, {ChPid, CTag}} -> true;
+                                _                      -> false
+                            end,
+                rabbit_core_metrics:consumer_updated(
+                  ChPid, CTag, Exclusive, AckReq, QName,
+                  Prefetch, Active, ActivityStatus, Args)
+        end, Transitions),
+    ok.
 
 handle_cast(init, State) ->
     init_it({no_barrier, non_clean_shutdown}, none, State);
@@ -1617,9 +1658,9 @@ handle_cast({credit, SessionPid, CTag, DeliveryCountRcv, Credit, Drain},
                DeliveryCountRcv, Credit, SessionPid, CTag, Consumers0) of
             unchanged ->
                 State0;
-            {unblocked, Consumers1} ->
+            {unblocked, Unblocked, Consumers1} ->
                 State1 = State0#q{consumers = Consumers1},
-                run_message_queue(true, State1)
+                run_message_queue(Unblocked, State1)
         end,
     case rabbit_queue_consumers:get_link_state(SessionPid, CTag) of
         {credit_api_v1, PostCred}

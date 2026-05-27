@@ -16,7 +16,10 @@ all() ->
         is_same,
         get_consumer,
         get,
-        list_consumers
+        list_consumers,
+        list_consumers_reports_blocked,
+        list_consumers_sac_active_overrides_blocked,
+        list_consumers_sac_inactive_overrides_blocked
     ].
 
 is_same(_Config) ->
@@ -95,6 +98,68 @@ list_consumers(_Config) ->
                     ?assert(Active),
                     ?assertEqual(up, ActivityStatus)
                 end, [], ConsumersNoSingleActive),
+    ok.
+
+list_consumers_reports_blocked(_Config) ->
+    ChPid = self(),
+    Consumer = consumer(ChPid, <<"blocked-tag">>),
+    install_ch_record(ChPid, [Consumer]),
+    try
+        State = state(consumers([])),
+        Result = rabbit_queue_consumers:all(State, none, false),
+        ?assertEqual(1, length(Result)),
+        [{Pid, Tag, _Ack, _Pref, Active, ActivityStatus, _Args, _User}] = Result,
+        ?assertEqual(ChPid, Pid),
+        ?assertEqual(<<"blocked-tag">>, Tag),
+        ?assert(Active),
+        ?assertEqual(blocked, ActivityStatus)
+    after
+        uninstall_ch_record(ChPid)
+    end.
+
+list_consumers_sac_active_overrides_blocked(_Config) ->
+    ChPid = self(),
+    Consumer = consumer(ChPid, <<"sac-tag">>),
+    install_ch_record(ChPid, [Consumer]),
+    try
+        State = state(consumers([])),
+        Result = rabbit_queue_consumers:all(State, Consumer, true),
+        ?assertEqual(1, length(Result)),
+        [{_Pid, _Tag, _Ack, _Pref, Active, ActivityStatus, _Args, _User}] = Result,
+        ?assert(Active),
+        ?assertEqual(single_active, ActivityStatus)
+    after
+        uninstall_ch_record(ChPid)
+    end.
+
+list_consumers_sac_inactive_overrides_blocked(_Config) ->
+    ChPid = self(),
+    HolderConsumer = consumer(ChPid, <<"sac-holder">>),
+    OtherConsumer  = consumer(ChPid, <<"sac-waiting">>),
+    install_ch_record(ChPid, [OtherConsumer]),
+    try
+        State = state(consumers([])),
+        Result = rabbit_queue_consumers:all(State, HolderConsumer, true),
+        ?assertEqual(1, length(Result)),
+        [{_Pid, _Tag, _Ack, _Pref, Active, ActivityStatus, _Args, _User}] = Result,
+        ?assertNot(Active),
+        ?assertEqual(waiting, ActivityStatus)
+    after
+        uninstall_ch_record(ChPid)
+    end.
+
+%% #cr field order: ch_pid, monitor_ref, acktags, consumer_count,
+%% blocked_consumers, limiter, unsent_message_count, link_states.
+install_ch_record(ChPid, ConsumerEntries) ->
+    BlockedQ = lists:foldl(fun (C, Acc) -> priority_queue:in(C, Acc) end,
+                           priority_queue:new(), ConsumerEntries),
+    CR = {cr, ChPid, undefined, queue:new(), length(ConsumerEntries),
+          BlockedQ, undefined, 0, #{}},
+    put({ch, ChPid}, CR),
+    ok.
+
+uninstall_ch_record(ChPid) ->
+    _ = erase({ch, ChPid}),
     ok.
 
 consumers([]) ->
