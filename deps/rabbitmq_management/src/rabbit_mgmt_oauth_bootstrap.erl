@@ -72,7 +72,7 @@ get_auth_mechanism(Req) ->
                     end;
                 Val -> {Req, {strict_auth_mechanism, Val}}
             end;
-        {Type, _} = Auth -> { cowboy_req:set_resp_cookie(term_to_binary(Type),
+        {Type, _} = Auth -> { cowboy_req:set_resp_cookie(atom_to_binary(Type),
                                     <<"">>, Req, #{
                                         max_age => 0,
                                         http_only => true,
