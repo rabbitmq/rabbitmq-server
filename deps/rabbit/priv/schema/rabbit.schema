@@ -467,12 +467,6 @@ end}.
 {mapping, "metadata_store.khepri.default_timeout", "rabbit.khepri_default_timeout",
     [{datatype, integer}]}.
 
-<<<<<<< HEAD
-=======
-{mapping, "metadata_store.khepri.snapshot_interval", "rabbit.khepri_snapshot_interval",
-    [{datatype, {integer, positive}}]}.
-
->>>>>>> 3f101696b0 (Initial migration to Cuttlefish `3.8.0`)
 %% ===========================================================================
 
 %% Choose the available SASL mechanism(s) to expose.
@@ -1671,19 +1665,6 @@ end}.
     {datatype, {integer, positive}}
 ]}.
 
-<<<<<<< HEAD
-=======
-%% Time to wait before returning messages to the queue when a consumer's
-%% node becomes unreachable (due to network partition), in milliseconds.
-%% Only applies to quorum queues.
-%%
-%% {consumer_disconnected_timeout, 10000},
-
-{mapping, "consumer_disconnected_timeout", "rabbit.consumer_disconnected_timeout", [
-    {datatype, {integer, positive}}
-]}.
-
->>>>>>> 3f101696b0 (Initial migration to Cuttlefish `3.8.0`)
 %% Product name & version overrides.
 
 {mapping, "product.name", "rabbit.product_name", [
@@ -2740,49 +2721,6 @@ end}.
   {datatype, {integer, positive}}
 ]}.
 
-<<<<<<< HEAD
-=======
-{mapping, "quorum_queue.wal_compute_checksums", "rabbit.quorum_wal_compute_checksums", [
-  {datatype, boolean}
-]}.
-
-{mapping, "quorum_queue.segment_compute_checksums", "rabbit.quorum_segment_compute_checksums", [
-  {datatype, boolean}
-]}.
-
-{mapping, "quorum_queue.max_append_entries_rpc_batch_size", "rabbit.quorum_max_append_entries_rpc_batch_size", [
-  {datatype, {integer, positive}}
-]}.
-
-{mapping, "quorum_queue.compress_mem_tables", "rabbit.quorum_compress_mem_tables", [
-  {datatype, boolean}
-]}.
-
-{mapping, "quorum_queue.segment_max_size_bytes", "rabbit.quorum_segment_max_size_bytes", [
-  {datatype, {integer, positive}}
-]}.
-
-{mapping, "quorum_queue.segment_max_entries", "rabbit.quorum_segment_max_entries", [
-  {datatype, {integer, [{min, 1}, {max, 65535}]}}
-]}.
-
-{mapping, "quorum_queue.wal_max_size_bytes", "rabbit.quorum_wal_max_size_bytes", [
-  {datatype, {integer, positive}}
-]}.
-
-{mapping, "quorum_queue.wal_max_entries", "rabbit.quorum_wal_max_entries", [
-  {datatype, {integer, positive}}
-]}.
-
-{mapping, "quorum_queue.wal_max_batch_size", "rabbit.quorum_wal_max_batch_size", [
-  {datatype, {integer, positive}}
-]}.
-
-{mapping, "quorum_queue.snapshot_chunk_size", "rabbit.quorum_snapshot_chunk_size", [
-  {datatype, {integer, positive}}
-]}.
-
->>>>>>> 3f101696b0 (Initial migration to Cuttlefish `3.8.0`)
 %%
 %% Quorum Queue membership reconciliation
 %%

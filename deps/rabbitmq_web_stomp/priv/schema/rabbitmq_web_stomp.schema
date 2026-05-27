@@ -214,10 +214,5 @@ end}.
 
 {mapping, "web_stomp.use_file_handle_cache", "rabbitmq_web_stomp.use_file_handle_cache",
     [
-<<<<<<< HEAD
-        {datatype, {enum, [true, false]}}
-    ]}.
-=======
         {datatype, boolean}
     ]}.
->>>>>>> 3f101696b0 (Initial migration to Cuttlefish `3.8.0`)
