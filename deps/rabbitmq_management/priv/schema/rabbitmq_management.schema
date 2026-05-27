@@ -23,7 +23,7 @@
 %% Max HTTP body limit
 
 {mapping, "management.http.max_body_size", "rabbitmq_management.max_http_body_size",
-    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+    [{datatype, {integer, non_negative}}]}.
 
 {translation, "rabbitmq_management.max_http_body_size",
 fun(Conf) ->
@@ -43,7 +43,7 @@ end}.
 %%
 
 {mapping, "management.delegate_count", "rabbitmq_management.delegate_count", [
-    {datatype, integer}, {validators, ["non_negative_integer"]}
+    {datatype, {integer, non_negative}}
 ]}.
 
 %% HTTP (TCP) listener options ========================================================
@@ -74,17 +74,17 @@ fun(Conf) ->
 end}.
 
 {mapping, "management.tcp.compress", "rabbitmq_management.tcp_config.cowboy_opts.compress",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 {mapping, "management.tcp.idle_timeout", "rabbitmq_management.tcp_config.cowboy_opts.idle_timeout",
-    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+    [{datatype, {integer, non_negative}}]}.
 {mapping, "management.tcp.inactivity_timeout", "rabbitmq_management.tcp_config.cowboy_opts.inactivity_timeout",
-    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+    [{datatype, {integer, non_negative}}]}.
 {mapping, "management.tcp.request_timeout", "rabbitmq_management.tcp_config.cowboy_opts.request_timeout",
-    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+    [{datatype, {integer, non_negative}}]}.
 {mapping, "management.tcp.shutdown_timeout", "rabbitmq_management.tcp_config.cowboy_opts.shutdown_timeout",
-    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+    [{datatype, {integer, non_negative}}]}.
 {mapping, "management.tcp.max_keepalive", "rabbitmq_management.tcp_config.cowboy_opts.max_keepalive",
-    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+    [{datatype, {integer, non_negative}}]}.
 
 
 %% HTTPS (TLS) listener options ========================================================
@@ -131,25 +131,25 @@ end}.
     {datatype, {enum, [verify_peer, verify_none]}}]}.
 
 {mapping, "management.ssl.fail_if_no_peer_cert", "rabbitmq_management.ssl_config.fail_if_no_peer_cert", [
-    {datatype, {enum, [true, false]}}]}.
+    {datatype, boolean}]}.
 
 {mapping, "management.ssl.honor_cipher_order", "rabbitmq_management.ssl_config.honor_cipher_order",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "management.ssl.honor_ecc_order", "rabbitmq_management.ssl_config.honor_ecc_order",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "management.ssl.reuse_sessions", "rabbitmq_management.ssl_config.reuse_sessions",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "management.ssl.secure_renegotiate", "rabbitmq_management.ssl_config.secure_renegotiate",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "management.ssl.client_renegotiation", "rabbitmq_management.ssl_config.client_renegotiation",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "management.ssl.depth", "rabbitmq_management.ssl_config.depth",
-    [{datatype, integer}, {validators, ["byte"]}]}.
+    [{datatype, byte}]}.
 
 {mapping, "management.ssl.versions.$version", "rabbitmq_management.ssl_config.versions",
     [{datatype, atom}]}.
@@ -170,17 +170,17 @@ fun(Conf) ->
 end}.
 
 {mapping, "management.ssl.compress", "rabbitmq_management.ssl_config.cowboy_opts.compress",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 {mapping, "management.ssl.idle_timeout", "rabbitmq_management.ssl_config.cowboy_opts.idle_timeout",
-    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+    [{datatype, {integer, non_negative}}]}.
 {mapping, "management.ssl.inactivity_timeout", "rabbitmq_management.ssl_config.cowboy_opts.inactivity_timeout",
-    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+    [{datatype, {integer, non_negative}}]}.
 {mapping, "management.ssl.request_timeout", "rabbitmq_management.ssl_config.cowboy_opts.request_timeout",
-    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+    [{datatype, {integer, non_negative}}]}.
 {mapping, "management.ssl.shutdown_timeout", "rabbitmq_management.ssl_config.cowboy_opts.shutdown_timeout",
-    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+    [{datatype, {integer, non_negative}}]}.
 {mapping, "management.ssl.max_keepalive", "rabbitmq_management.ssl_config.cowboy_opts.max_keepalive",
-    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+    [{datatype, {integer, non_negative}}]}.
 
 
 
@@ -203,25 +203,25 @@ end}.
      {validators, ["is_ip"]}]}.
 
 {mapping, "management.listener.ssl", "rabbitmq_management.listener.ssl",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "management.listener.server.compress", "rabbitmq_management.listener.cowboy_opts.compress",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "management.listener.server.idle_timeout", "rabbitmq_management.listener.cowboy_opts.idle_timeout",
-    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+    [{datatype, {integer, non_negative}}]}.
 
 {mapping, "management.listener.server.inactivity_timeout", "rabbitmq_management.listener.cowboy_opts.inactivity_timeout",
-    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+    [{datatype, {integer, non_negative}}]}.
 
 {mapping, "management.listener.server.request_timeout", "rabbitmq_management.listener.cowboy_opts.request_timeout",
-    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+    [{datatype, {integer, non_negative}}]}.
 
 {mapping, "management.listener.server.shutdown_timeout", "rabbitmq_management.listener.cowboy_opts.shutdown_timeout",
-    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+    [{datatype, {integer, non_negative}}]}.
 
 {mapping, "management.listener.server.max_keepalive", "rabbitmq_management.listener.cowboy_opts.max_keepalive",
-    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+    [{datatype, {integer, non_negative}}]}.
 
 %% Legacy HTTPS listener options ========================================================
 
@@ -241,7 +241,7 @@ end}.
     {datatype, {enum, [verify_peer, verify_none]}}]}.
 
 {mapping, "management.listener.ssl_opts.fail_if_no_peer_cert", "rabbitmq_management.listener.ssl_opts.fail_if_no_peer_cert", [
-    {datatype, {enum, [true, false]}}]}.
+    {datatype, boolean}]}.
 
 {mapping, "management.listener.ssl_opts.cacertfile", "rabbitmq_management.listener.ssl_opts.cacertfile",
     [{datatype, string}, {validators, ["pem_file"]}]}.
@@ -250,19 +250,19 @@ end}.
     [{datatype, string}, {validators, ["pem_file"]}]}.
 
 {mapping, "management.listener.ssl_opts.honor_cipher_order", "rabbitmq_management.listener.ssl_opts.honor_cipher_order",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "management.listener.ssl_opts.honor_ecc_order", "rabbitmq_management.listener.ssl_opts.honor_ecc_order",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "management.listener.ssl_opts.reuse_sessions", "rabbitmq_management.listener.ssl_opts.reuse_sessions",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "management.listener.ssl_opts.secure_renegotiate", "rabbitmq_management.listener.ssl_opts.secure_renegotiate",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "management.listener.ssl_opts.client_renegotiation", "rabbitmq_management.listener.ssl_opts.client_renegotiation",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 
 {mapping, "management.listener.ssl_opts.versions.$version", "rabbitmq_management.listener.ssl_opts.versions",
@@ -287,7 +287,7 @@ end}.
     [{datatype, [{enum, [true, false, peer, best_effort]}]}]}.
 
 {mapping, "management.listener.ssl_opts.depth", "rabbitmq_management.listener.ssl_opts.depth",
-    [{datatype, integer}, {validators, ["byte"]}]}.
+    [{datatype, byte}]}.
 
 {mapping, "management.listener.ssl_opts.dh", "rabbitmq_management.listener.ssl_opts.dh",
     [{datatype, string}]}.
@@ -321,7 +321,7 @@ end}.
     [{datatype, string}, {validators, ["pem_file"]}]}.
 
 {mapping, "management.listener.ssl_opts.log_alert", "rabbitmq_management.listener.ssl_opts.log_alert",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "management.listener.ssl_opts.password", "rabbitmq_management.listener.ssl_opts.password",
     [{datatype, [tagged_binary, binary]}]}.
@@ -340,7 +340,7 @@ end}.
 %%  Login session timeout in minutes
 
 {mapping, "management.login_session_timeout", "rabbitmq_management.login_session_timeout", [
-    {datatype, integer}, {validators, ["non_negative_integer"]}
+    {datatype, {integer, non_negative}}
 ]}.
 
 %%
@@ -348,7 +348,7 @@ end}.
 %%
 
 {mapping, "management.db_cache_multiplier", "rabbitmq_management.management_db_cache_multiplier", [
-    {datatype, integer}, {validators, ["non_negative_integer"]}
+    {datatype, {integer, non_negative}}
 ]}.
 
 
@@ -376,7 +376,7 @@ end}.
 
 
 {mapping, "management.cors.max_age", "rabbitmq_management.cors_max_age", [
-    {datatype, integer}, {validators, ["non_negative_integer"]}
+    {datatype, {integer, non_negative}}
 ]}.
 
 {translation, "rabbitmq_management.cors_max_age",
@@ -463,16 +463,16 @@ end}.
 
 
 {mapping, "management.disable_basic_auth", "rabbitmq_management.disable_basic_auth",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 %% Management only
 
 {mapping, "management.disable_stats", "rabbitmq_management.disable_management_stats", [
-    {datatype, {enum, [true, false]}}
+    {datatype, boolean}
 ]}.
 
 {mapping, "management.enable_queue_totals", "rabbitmq_management.enable_queue_totals", [
-    {datatype, {enum, [true, false]}}]}.
+    {datatype, boolean}]}.
 
 %% ===========================================================================
 %% Authorization
@@ -480,11 +480,11 @@ end}.
 
 %% Enable OAuth2 in the management ui
 {mapping, "management.oauth_enabled", "rabbitmq_management.oauth_enabled",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 %% Enable Basic Auth in the management ui along with OAuth2 (it requires an additional auth_backend)
 {mapping, "management.oauth_disable_basic_auth", "rabbitmq_management.oauth_disable_basic_auth",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 %% The URL of the OIDC/OAuth2 provider
 {mapping, "management.oauth_provider_url", "rabbitmq_management.oauth_provider_url",
@@ -548,7 +548,7 @@ end}.
 {mapping,
   "management.oauth_resource_servers.$name.disabled",
   "rabbitmq_management.oauth_resource_servers", [
-   {datatype, {enum, [true, false]}},
+   {datatype, boolean},
    {include_default, false}
 ]}.
 
@@ -664,20 +664,20 @@ end}.
 %% Disables setting operator policies over API.
 
 {mapping, "management.restrictions.operator_policy_changes.disabled", "rabbitmq_management.restrictions.operator_policy_changes.disabled", [
-    {datatype, {enum, [true, false]}},
+    {datatype, boolean},
     {include_default, false}
 ]}.
 
 %% Disables add/remove/grow/shrink over API.
 
 {mapping, "management.restrictions.quorum_queue_replica_operations.disabled", "rabbitmq_management.restrictions.quorum_queue_replica_operations.disabled", [
-    {datatype, {enum, [true, false]}},
+    {datatype, boolean},
     {include_default, false}
 ]}.
 
 %% Require authentication for the HTTP API reference page.
 
 {mapping, "management.require_auth_for_api_reference", "rabbitmq_management.require_auth_for_api_reference", [
-    {datatype, {enum, [true, false]}},
+    {datatype, boolean},
     {include_default, false}
 ]}.
