@@ -1508,8 +1508,6 @@ function sync_req(type, params0, path_template, options) {
     }
 }
 function initiate_logout(oauth, error = "") {
-    clear_pref('auth');
-    clear_cookie_value('auth');    
     renderWarningMessageInLoginStatus(oauth, error);
 }
 /**
