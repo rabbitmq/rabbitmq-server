@@ -66,13 +66,16 @@ handle_options(ReqData0, Module) ->
                                ReqData2).
 
 %% If the origin header is missing or "null", we disable CORS.
+%% We also disable if origin header is "*" to avoid echoing
+%% back "*" when the configuration explicitly allows "*".
 %% Otherwise, we only enable it if the origin is found in the
 %% cors_allow_origins configuration variable, or if "*" is (it
 %% allows all origins).
 match_origin(ReqData) ->
     case cowboy_req:header(<<"origin">>, ReqData) of
-        undefined -> false;
+        undefined  -> false;
         <<"null">> -> false;
+        <<"*">>    -> false;
         Origin     ->
             AllowedOrigins = application:get_env(rabbitmq_management,
                 cors_allow_origins, []),
