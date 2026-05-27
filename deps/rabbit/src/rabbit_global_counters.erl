@@ -179,6 +179,14 @@ boot_step() ->
 init(Labels) ->
     init(Labels, []).
 
+%% Backwards compatibility for plugins before v4.2.0
+init(Labels = [{protocol, _Protocol}, {queue_type, _QueueType}], Extra) ->
+    init(maps:from_list(Labels), Extra);
+init(Labels = [{protocol, _Protocol}], Extra) ->
+    init(maps:from_list(Labels), Extra);
+init(Labels = [{queue_type, _QueueType}, {dead_letter_strategy, _DLS}], Extra) ->
+    init(maps:from_list(Labels), Extra);
+
 init(Labels = #{protocol := Protocol, queue_type := QueueType}, Extra) ->
     _ = seshat:new_group(?MODULE),
     Counters = seshat:new(?MODULE, Labels, ?PROTOCOL_QUEUE_TYPE_COUNTERS ++ Extra, Labels),
