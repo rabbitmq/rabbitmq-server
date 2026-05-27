@@ -23,5 +23,7 @@ init(Req0, Listener) ->
                 [["<li><a href=\"/", Path, "/\">", Desc, "</a></li>"]
                  || {Path, Desc} <- Contexts]
         end,
-    Req = cowboy_req:reply(200, #{}, [HTMLPrefix, List, HTMLSuffix], Req0),
+    Req = cowboy_req:reply(200, #{
+        <<"content-type">> => <<"text/html">>
+    }, [HTMLPrefix, List, HTMLSuffix], Req0),
     {ok, Req, Listener}.
