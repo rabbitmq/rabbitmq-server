@@ -57,9 +57,12 @@ handle_options(ReqData0, Module) ->
     end,
     ReqData2 = case ReqHeaders of
         undefined -> ReqData1;
-        _         -> cowboy_req:set_resp_header(<<"access-control-allow-headers">>,
-                                                ReqHeaders,
-                                                ReqData0)
+        _         ->
+            %% Ensure access-control-request-headers is valid before using it:
+            _ = cow_http_hd:parse_access_control_request_headers(ReqHeaders),
+            cowboy_req:set_resp_header(<<"access-control-allow-headers">>,
+                                       ReqHeaders,
+                                       ReqData0)
     end,
     cowboy_req:set_resp_header(<<"access-control-allow-methods">>,
                                AllowMethods,
