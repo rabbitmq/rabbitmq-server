@@ -51,7 +51,7 @@ fun(Conf) ->
 end}.
 
 {mapping, "web_stomp.use_http_auth", "rabbitmq_web_stomp.use_http_auth",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {translation,
     "rabbitmq_web_stomp.tcp_config",
@@ -110,25 +110,25 @@ end}.
 }.
 
 {mapping, "web_stomp.ssl.honor_cipher_order", "rabbitmq_web_stomp.ssl_config.honor_cipher_order",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "web_stomp.ssl.honor_ecc_order", "rabbitmq_web_stomp.ssl_config.honor_ecc_order",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "web_stomp.ssl.reuse_sessions", "rabbitmq_web_stomp.ssl_config.reuse_sessions",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "web_stomp.ssl.secure_renegotiate", "rabbitmq_web_stomp.ssl_config.secure_renegotiate",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "web_stomp.ssl.client_renegotiation", "rabbitmq_web_stomp.ssl_config.client_renegotiation",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "web_stomp.ssl.crl_check", "rabbitmq_web_stomp.ssl_config.crl_check",
     [{datatype, [{enum, [true, false, peer, best_effort]}]}]}.
 
 {mapping, "web_stomp.ssl.depth", "rabbitmq_web_stomp.ssl_config.depth",
-    [{datatype, integer}, {validators, ["byte"]}]}.
+    [{datatype, byte}]}.
 
 {mapping, "web_stomp.ssl.versions.$version", "rabbitmq_web_stomp.ssl_config.versions",
     [{datatype, atom}]}.
@@ -168,7 +168,7 @@ end}.
 
 %% backwards compatibility
 {mapping, "web_stomp.cowboy_opts.timeout", "rabbitmq_web_stomp.cowboy_opts.idle_timeout",
-    [{datatype, integer}, {validators, ["non_negative_integer"]}]
+    [{datatype, {integer, non_negative}}]
 }.
 %% recent Cowboy versions have several timeout settings
 {mapping, "web_stomp.cowboy_opts.idle_timeout", "rabbitmq_web_stomp.cowboy_opts.idle_timeout",
@@ -191,13 +191,13 @@ end}.
 }.
 
 {mapping, "web_stomp.ws_opts.compress", "rabbitmq_web_stomp.cowboy_ws_opts.compress",
-    [{datatype, {enum, [true, false]}}]
+    [{datatype, boolean}]
 }.
 {mapping, "web_stomp.ws_opts.max_frame_size", "rabbitmq_web_stomp.cowboy_ws_opts.max_frame_size",
-    [{datatype, integer}, {validators, ["non_negative_integer"]}]
+    [{datatype, {integer, non_negative}}]
 }.
 {mapping, "web_stomp.ws_opts.idle_timeout", "rabbitmq_web_stomp.cowboy_ws_opts.idle_timeout",
-    [{datatype, integer}, {validators, ["non_negative_integer"]}]
+    [{datatype, {integer, non_negative}}]
 }.
 
 
@@ -206,7 +206,7 @@ end}.
 %% {proxy_protocol, false}
 
 {mapping, "web_stomp.proxy_protocol", "rabbitmq_web_stomp.proxy_protocol",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 %%
 %% File Handle Cache (no-op, kept for compatibility).
@@ -214,5 +214,5 @@ end}.
 
 {mapping, "web_stomp.use_file_handle_cache", "rabbitmq_web_stomp.use_file_handle_cache",
     [
-        {datatype, {enum, [true, false]}}
+        {datatype, boolean}
     ]}.

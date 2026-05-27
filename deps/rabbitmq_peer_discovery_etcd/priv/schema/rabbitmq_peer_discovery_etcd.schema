@@ -42,8 +42,7 @@ end}.
 %% Legacy: etcd port
 
 {mapping, "cluster_formation.etcd.port", "rabbit.cluster_formation.peer_discovery_etcd.etcd_port", [
-    {datatype, integer},
-    {validators, ["non_negative_integer"]}
+    {datatype, {integer, non_negative}}
 ]}.
 
 {translation, "rabbit.cluster_formation.peer_discovery_etcd.etcd_port",
@@ -99,8 +98,7 @@ end}.
 %% node key ttl
 
 {mapping, "cluster_formation.etcd.node_ttl", "rabbit.cluster_formation.peer_discovery_etcd.etcd_node_ttl", [
-    {datatype, integer},
-    {validators, ["non_negative_integer"]}
+    {datatype, {integer, non_negative}}
 ]}.
 
 {translation, "rabbit.cluster_formation.peer_discovery_etcd.etcd_node_ttl",
@@ -114,13 +112,11 @@ end}.
 %% lock acquisition timeout
 
 {mapping, "cluster_formation.etcd.lock_wait_time", "rabbit.cluster_formation.peer_discovery_etcd.lock_wait_time", [
-    {datatype, integer},
-    {validators, ["non_negative_integer"]}
+    {datatype, {integer, non_negative}}
 ]}.
 
 {mapping, "cluster_formation.etcd.lock_timeout", "rabbit.cluster_formation.peer_discovery_etcd.lock_wait_time", [
-    {datatype, integer},
-    {validators, ["non_negative_integer"]}
+    {datatype, {integer, non_negative}}
 ]}.
 
 %% an alias for lock acquisition timeout to be consistent with the etcd backend
@@ -200,7 +196,7 @@ end}.
     [{datatype, [{enum, [true, false, peer, best_effort]}]}]}.
 
 {mapping, "cluster_formation.etcd.ssl_options.depth", "rabbit.cluster_formation.peer_discovery_etcd.ssl_options.depth",
-    [{datatype, integer}, {validators, ["byte"]}]}.
+    [{datatype, byte}]}.
 
 {mapping, "cluster_formation.etcd.ssl_options.key.RSAPrivateKey", "rabbit.cluster_formation.peer_discovery_etcd.ssl_options.key",
     [{datatype, string}]}.
@@ -223,7 +219,7 @@ end}.
     [{datatype, string}, {validators, ["pem_file"]}]}.
 
 {mapping, "cluster_formation.etcd.ssl_options.log_alert", "rabbit.cluster_formation.peer_discovery_etcd.ssl_options.log_alert",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "cluster_formation.etcd.ssl_options.password", "rabbit.cluster_formation.peer_discovery_etcd.ssl_options.password",
     [{datatype, [tagged_binary, binary]}]}.
@@ -232,10 +228,10 @@ end}.
     [{datatype, string}]}.
 
 {mapping, "cluster_formation.etcd.ssl_options.reuse_sessions", "rabbit.cluster_formation.peer_discovery_etcd.ssl_options.reuse_sessions",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "cluster_formation.etcd.ssl_options.secure_renegotiate", "rabbit.cluster_formation.peer_discovery_etcd.ssl_options.secure_renegotiate",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "cluster_formation.etcd.ssl_options.versions.$version", "rabbit.cluster_formation.peer_discovery_etcd.ssl_options.versions",
     [{datatype, atom}]}.
