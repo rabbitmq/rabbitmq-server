@@ -6,8 +6,8 @@
 %%
 
 {mapping, "federation.queues.connection_close_timeout", "rabbitmq_queue_federation.connection_close_timeout", [
-    {datatype, integer},
-    {validators, ["non_negative_integer", "connection_close_timeout"]}
+    {datatype, {integer, non_negative}},
+    {validators, ["connection_close_timeout"]}
 ]}.
 
 {validator, "connection_close_timeout", "timeout must not exceed 5000ms",
@@ -18,8 +18,7 @@ end}.
 %% Shutdown pacing configuration
 
 {mapping, "federation.queues.shutdown.link_batch_size", "rabbitmq_queue_federation.shutdown_link_batch_size", [
-    {datatype, integer},
-    {validators, ["non_zero_positive_integer"]}
+    {datatype, {integer, positive}}
 ]}.
 
 {translation, "rabbitmq_queue_federation.shutdown_link_batch_size",
@@ -31,8 +30,7 @@ fun(Conf) ->
 end}.
 
 {mapping, "federation.queues.shutdown.timeout", "rabbitmq_queue_federation.shutdown_timeout", [
-    {datatype, integer},
-    {validators, ["non_zero_positive_integer"]}
+    {datatype, {integer, positive}}
 ]}.
 
 {translation, "rabbitmq_queue_federation.shutdown_timeout",
@@ -44,8 +42,7 @@ fun(Conf) ->
 end}.
 
 {mapping, "federation.queues.shutdown.throttle_delay", "rabbitmq_queue_federation.shutdown_throttle_delay", [
-    {datatype, integer},
-    {validators, ["non_negative_integer"]}
+    {datatype, {integer, non_negative}}
 ]}.
 
 {translation, "rabbitmq_queue_federation.shutdown_throttle_delay",

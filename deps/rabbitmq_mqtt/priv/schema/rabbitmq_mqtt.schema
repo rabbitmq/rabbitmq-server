@@ -13,7 +13,7 @@
 %% {allow_anonymous, true},
 
 {mapping, "mqtt.allow_anonymous", "rabbitmq_mqtt.allow_anonymous",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 %% Whether the MQTT client will be disconnected when it publishes or subscribes
 %% to a topic without permissions.
@@ -21,7 +21,7 @@
 %% {disconnect_on_unauthorized, true},
 
 {mapping, "mqtt.disconnect_on_unauthorized", "rabbitmq_mqtt.disconnect_on_unauthorized",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 %% If you have multiple chosts, specify the one to which the
 %% adapter connects.
@@ -87,7 +87,7 @@ end}.
 %%
 %% {sparkplug, true},
 {mapping, "mqtt.sparkplug", "rabbitmq_mqtt.sparkplug",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "mqtt.retained_message_store", "rabbitmq_mqtt.retained_message_store",
     [{datatype, atom}]}.
@@ -100,10 +100,10 @@ end}.
 %% {proxy_protocol, false}
 
 {mapping, "mqtt.proxy_protocol", "rabbitmq_mqtt.proxy_protocol",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "mqtt.login_timeout", "rabbitmq_mqtt.login_timeout",
-    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+    [{datatype, {integer, non_negative}}]}.
 
 %% TCP/SSL Configuration (as per the broker configuration).
 %%
@@ -174,7 +174,7 @@ fun(Conf) ->
 end}.
 
 {mapping, "mqtt.ssl_cert_login", "rabbitmq_mqtt.ssl_cert_login", [
-    {datatype, {enum, [true, false]}}]}.
+    {datatype, boolean}]}.
 
 
 {mapping, "mqtt.ssl_cert_client_id_from", "rabbitmq_mqtt.ssl_cert_client_id_from", [
@@ -186,7 +186,7 @@ end}.
 ]}.
 
 {mapping, "mqtt.ssl_cert_login_san_index", "rabbitmq_mqtt.ssl_cert_login_san_index", [
-    {datatype, integer}, {validators, ["non_negative_integer"]}
+    {datatype, {integer, non_negative}}
 ]}.
 
 
@@ -215,20 +215,20 @@ end}.
 ]}.
 
 {mapping, "mqtt.tcp_listen_options.nodelay", "rabbitmq_mqtt.tcp_listen_options.nodelay", [
-    {datatype, {enum, [true, false]}}
+    {datatype, boolean}
 ]}.
 
 {mapping, "mqtt.tcp_listen_options.buffer", "rabbitmq_mqtt.tcp_listen_options.buffer",
     [{datatype, integer}]}.
 
 {mapping, "mqtt.tcp_listen_options.delay_send", "rabbitmq_mqtt.tcp_listen_options.delay_send",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "mqtt.tcp_listen_options.dontroute", "rabbitmq_mqtt.tcp_listen_options.dontroute",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "mqtt.tcp_listen_options.exit_on_close", "rabbitmq_mqtt.tcp_listen_options.exit_on_close",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "mqtt.tcp_listen_options.fd", "rabbitmq_mqtt.tcp_listen_options.fd",
     [{datatype, integer}]}.
@@ -240,7 +240,7 @@ end}.
     [{datatype, integer}]}.
 
 {mapping, "mqtt.tcp_listen_options.keepalive", "rabbitmq_mqtt.tcp_listen_options.keepalive",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "mqtt.tcp_listen_options.low_msgq_watermark", "rabbitmq_mqtt.tcp_listen_options.low_msgq_watermark",
     [{datatype, integer}]}.
@@ -261,7 +261,7 @@ end}.
     [{datatype, integer}]}.
 
 {mapping, "mqtt.tcp_listen_options.send_timeout_close", "rabbitmq_mqtt.tcp_listen_options.send_timeout_close",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "mqtt.tcp_listen_options.sndbuf", "rabbitmq_mqtt.tcp_listen_options.sndbuf",
     [{datatype, integer}]}.
@@ -270,10 +270,10 @@ end}.
     [{datatype, integer}]}.
 
 {mapping, "mqtt.tcp_listen_options.linger.on", "rabbitmq_mqtt.tcp_listen_options.linger",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "mqtt.tcp_listen_options.linger.timeout", "rabbitmq_mqtt.tcp_listen_options.linger",
-    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+    [{datatype, {integer, non_negative}}]}.
 
 {translation, "rabbitmq_mqtt.tcp_listen_options.linger",
 fun(Conf) ->
@@ -304,25 +304,22 @@ end}.
 %%
 %% {mailbox_soft_limit, 30},
 {mapping, "mqtt.mailbox_soft_limit", "rabbitmq_mqtt.mailbox_soft_limit",
-    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+    [{datatype, {integer, non_negative}}]}.
 
 %% Maximum packet size
 
 {mapping, "mqtt.max_packet_size_unauthenticated", "rabbitmq_mqtt.max_packet_size_unauthenticated", [
-    {datatype, integer},
-    {validators, ["non_zero_positive_integer"]}
+    {datatype, {integer, positive}}
 ]}.
 
 {mapping, "mqtt.max_packet_size_authenticated", "rabbitmq_mqtt.max_packet_size_authenticated", [
-    {datatype, integer},
-    {validators, ["non_zero_positive_integer"]}
+    {datatype, {integer, positive}}
 ]}.
 
 %% Topic Aliax Maximum
 
 {mapping, "mqtt.topic_alias_maximum", "rabbitmq_mqtt.topic_alias_maximum", [
-    {datatype, integer},
-    {validators, ["non_negative_integer"]}
+    {datatype, {integer, non_negative}}
 ]}.
 
 %%
@@ -330,7 +327,7 @@ end}.
 %%
 
 {mapping, "mqtt.message_interceptors.$stage.$name.$key", "rabbitmq_mqtt.message_interceptors", [
-    {datatype, {enum, [true, false]}}
+    {datatype, boolean}
 ]}.
 
 {translation, "rabbitmq_mqtt.message_interceptors",

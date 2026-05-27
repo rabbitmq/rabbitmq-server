@@ -8,7 +8,7 @@
 %% interval
 
 {mapping, "cluster_formation.node_cleanup.interval", "rabbit.cluster_formation.node_cleanup.cleanup_interval", [
-    {datatype, integer}, {validators, ["non_negative_integer"]}
+    {datatype, {integer, non_negative}}
 ]}.
 
 {translation, "rabbit.cluster_formation.node_cleanup.cleanup_interval",
@@ -23,7 +23,7 @@ end}.
 %% only log warnings?
 
 {mapping, "cluster_formation.node_cleanup.only_log_warning", "rabbit.cluster_formation.node_cleanup.cleanup_only_log_warning", [
-    {datatype, {enum, [true, false]}}
+    {datatype, boolean}
 ]}.
 
 {translation, "rabbit.cluster_formation.node_cleanup.cleanup_only_log_warning",
