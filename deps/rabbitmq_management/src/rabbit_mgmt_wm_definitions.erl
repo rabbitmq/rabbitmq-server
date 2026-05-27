@@ -83,11 +83,13 @@ all_definitions(ReqData, Context) ->
         {explanation, rabbit_data_coercion:to_binary(io_lib:format("Definitions of cluster '~ts'", [rabbit_nodes:cluster_name()]))}
     ],
     Result = TopLevelDefsAndMetadata ++ retain_whitelisted(Contents),
-    ReqData1 = case rabbit_mgmt_util:qs_val(<<"download">>, ReqData) of
+    Constraint = cowboy_constraints:from_fun(fun cow_http:ensure_token/1),
+    ReqData1 = case cowboy_req:match_qs([{<<"download">>, [Constraint], undefined}],
+                                        ReqData) of
                    undefined -> ReqData;
                    Filename  -> rabbit_mgmt_util:set_resp_header(
                        <<"content-disposition">>,
-                       [<<"attachment; filename=">>, cow_http:ensure_token(Filename)],
+                       [<<"attachment; filename=">>, Filename],
                        ReqData)
                end,
 
