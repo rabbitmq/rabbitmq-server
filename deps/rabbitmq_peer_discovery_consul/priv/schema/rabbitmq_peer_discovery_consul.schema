@@ -113,7 +113,7 @@ end}.
 %% compute service address automatically?
 
 {mapping, "cluster_formation.consul.svc_addr_auto", "rabbit.cluster_formation.peer_discovery_consul.consul_svc_addr_auto", [
-    {datatype, {enum, [true, false]}}
+    {datatype, boolean}
 ]}.
 
 {translation, "rabbit.cluster_formation.peer_discovery_consul.consul_svc_addr_auto",
@@ -143,7 +143,7 @@ end}.
 %% use (Erlang) node name when computing service address?
 
 {mapping, "cluster_formation.consul.svc_addr_use_nodename", "rabbit.cluster_formation.peer_discovery_consul.consul_svc_addr_nodename", [
-    {datatype, {enum, [true, false]}}
+    {datatype, boolean}
 ]}.
 
 {translation, "rabbit.cluster_formation.peer_discovery_consul.consul_svc_addr_nodename",
@@ -188,7 +188,7 @@ end}.
 %% include nodes with warnings?
 
 {mapping, "cluster_formation.consul.include_nodes_with_warnings", "rabbit.cluster_formation.peer_discovery_consul.include_nodes_with_warnings", [
-    {datatype, {enum, [true, false]}}
+    {datatype, boolean}
 ]}.
 
 {translation, "rabbit.cluster_formation.peer_discovery_consul.consul_include_nodes_with_warnings",
@@ -219,7 +219,7 @@ end}.
 %% service check TTL
 
 {mapping, "cluster_formation.consul.svc_ttl", "rabbit.cluster_formation.peer_discovery_consul.consul_svc_ttl", [
-    {datatype, integer}, {validators, ["non_negative_integer"]}
+    {datatype, {integer, non_negative}}
 ]}.
 
 {translation, "rabbit.cluster_formation.peer_discovery_consul.consul_svc_ttl",
@@ -234,7 +234,7 @@ end}.
 %% should a node in warning state be deregister by Consul after a period of time?
 
 {mapping, "cluster_formation.consul.deregister_after", "rabbit.cluster_formation.peer_discovery_consul.consul_deregister_after", [
-    {datatype, integer}, {validators, ["non_negative_integer"]}
+    {datatype, {integer, non_negative}}
 ]}.
 
 {translation, "rabbit.cluster_formation.peer_discovery_consul.consul_deregister_after",
@@ -249,7 +249,7 @@ end}.
 %% use long node names?
 
 {mapping, "cluster_formation.consul.use_longname", "rabbit.cluster_formation.peer_discovery_consul.consul_use_longname", [
-    {datatype, {enum, [true, false]}}
+    {datatype, boolean}
 ]}.
 
 {translation, "rabbit.cluster_formation.peer_discovery_consul.consul_use_longname",
@@ -317,11 +317,11 @@ end}.
 %% lock acquisition timeout
 
 {mapping, "cluster_formation.consul.lock_wait_time", "rabbit.cluster_formation.peer_discovery_consul.lock_wait_time", [
-    {datatype, integer}, {validators, ["non_negative_integer"]}
+    {datatype, {integer, non_negative}}
 ]}.
 
 {mapping, "cluster_formation.consul.lock_timeout", "rabbit.cluster_formation.peer_discovery_consul.lock_wait_time", [
-    {datatype, integer}, {validators, ["non_negative_integer"]}
+    {datatype, {integer, non_negative}}
 ]}.
 
 %% an alias for lock acquisition timeout to be consistent with the etcd backend
@@ -359,7 +359,7 @@ end}.
 {datatype, {enum, [verify_peer, verify_none]}}]}.
 
 {mapping, "cluster_formation.consul.ssl_options.fail_if_no_peer_cert", "rabbit.cluster_formation.peer_discovery_consul.ssl_options.fail_if_no_peer_cert", [
-{datatype, {enum, [true, false]}}]}.
+{datatype, boolean}]}.
 
 {mapping, "cluster_formation.consul.ssl_options.cacertfile", "rabbit.cluster_formation.peer_discovery_consul.ssl_options.cacertfile",
 [{datatype, string}, {validators, ["file_accessible"]}]}.
@@ -379,7 +379,7 @@ end}.
 [{datatype, [{enum, [true, false, peer, best_effort]}]}]}.
 
 {mapping, "cluster_formation.consul.ssl_options.depth", "rabbit.cluster_formation.peer_discovery_consul.ssl_options.depth",
-[{datatype, integer}, {validators, ["byte"]}]}.
+[{datatype, byte}]}.
 
 {mapping, "cluster_formation.consul.ssl_options.dh", "rabbit.cluster_formation.peer_discovery_consul.ssl_options.dh",
 [{datatype, string}]}.
@@ -413,7 +413,7 @@ end}.
 [{datatype, string}, {validators, ["file_accessible"]}]}.
 
 {mapping, "cluster_formation.consul.ssl_options.log_alert", "rabbit.cluster_formation.peer_discovery_consul.ssl_options.log_alert",
-[{datatype, {enum, [true, false]}}]}.
+[{datatype, boolean}]}.
 
 {mapping, "cluster_formation.consul.ssl_options.password", "rabbit.cluster_formation.peer_discovery_consul.ssl_options.password",
 [{datatype, [tagged_binary, binary]}]}.
@@ -422,10 +422,10 @@ end}.
 [{datatype, string}]}.
 
 {mapping, "cluster_formation.consul.ssl_options.reuse_sessions", "rabbit.cluster_formation.peer_discovery_consul.ssl_options.reuse_sessions",
-[{datatype, {enum, [true, false]}}]}.
+[{datatype, boolean}]}.
 
 {mapping, "cluster_formation.consul.ssl_options.secure_renegotiate", "rabbit.cluster_formation.peer_discovery_consul.ssl_options.secure_renegotiate",
-[{datatype, {enum, [true, false]}}]}.
+[{datatype, boolean}]}.
 
 {mapping, "cluster_formation.consul.ssl_options.versions.$version", "rabbit.cluster_formation.peer_discovery_consul.ssl_options.versions",
 [{datatype, atom}]}.

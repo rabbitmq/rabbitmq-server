@@ -54,8 +54,7 @@ end}.
 %% Kubernetes port
 
 {mapping, "cluster_formation.k8s.port", "rabbit.cluster_formation.peer_discovery_k8s.k8s_port", [
-    {datatype, integer},
-    {validators, ["non_negative_integer"]}
+    {datatype, {integer, non_negative}}
 ]}.
 
 {translation, "rabbit.cluster_formation.peer_discovery_k8s.k8s_port",
@@ -163,7 +162,7 @@ fun(Conf) ->
 end}.
 
 {mapping, "cluster_formation.k8s.tls.fail_if_no_peer_cert", "rabbit.cluster_formation.peer_discovery_k8s.ssl_options.fail_if_no_peer_cert", [
-    {datatype, {enum, [true, false]}}
+    {datatype, boolean}
 ]}.
 
 {translation, "rabbit.cluster_formation.peer_discovery_k8s.ssl_options.fail_if_no_peer_cert",

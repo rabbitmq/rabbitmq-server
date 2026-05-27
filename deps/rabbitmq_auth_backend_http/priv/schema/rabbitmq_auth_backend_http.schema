@@ -41,7 +41,7 @@ end}.
     {datatype, {enum, [verify_peer, verify_none]}}]}.
 
 {mapping, "auth_http.ssl_options.fail_if_no_peer_cert", "rabbitmq_auth_backend_http.ssl_options.fail_if_no_peer_cert", [
-    {datatype, {enum, [true, false]}}]}.
+    {datatype, boolean}]}.
 
 {mapping, "auth_http.ssl_options.cacertfile", "rabbitmq_auth_backend_http.ssl_options.cacertfile",
     [{datatype, string}, {validators, ["file_accessible"]}]}.
@@ -58,13 +58,13 @@ fun(Conf) ->
 end}.
 
 {mapping, "auth_http.ssl_options.client_renegotiation", "rabbitmq_auth_backend_http.ssl_options.client_renegotiation",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "auth_http.ssl_options.crl_check", "rabbitmq_auth_backend_http.ssl_options.crl_check",
     [{datatype, [{enum, [true, false, peer, best_effort]}]}]}.
 
 {mapping, "auth_http.ssl_options.depth", "rabbitmq_auth_backend_http.ssl_options.depth",
-    [{datatype, integer}, {validators, ["byte"]}]}.
+    [{datatype, byte}]}.
 
 {mapping, "auth_http.ssl_options.dh", "rabbitmq_auth_backend_http.ssl_options.dh",
     [{datatype, string}]}.
@@ -78,10 +78,10 @@ end}.
     [{datatype, string}, {validators, ["file_accessible"]}]}.
 
 {mapping, "auth_http.ssl_options.honor_cipher_order", "rabbitmq_auth_backend_http.ssl_options.honor_cipher_order",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "auth_http.ssl_options.honor_ecc_order", "rabbitmq_auth_backend_http.ssl_options.honor_ecc_order",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "auth_http.ssl_options.key.RSAPrivateKey", "rabbitmq_auth_backend_http.ssl_options.key",
     [{datatype, string}]}.
@@ -104,7 +104,7 @@ end}.
     [{datatype, string}, {validators, ["file_accessible"]}]}.
 
 {mapping, "auth_http.ssl_options.log_alert", "rabbitmq_auth_backend_http.ssl_options.log_alert",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "auth_http.ssl_options.password", "rabbitmq_auth_backend_http.ssl_options.password",
     [{datatype, [tagged_binary, binary]}]}.
@@ -113,10 +113,10 @@ end}.
     [{datatype, string}]}.
 
 {mapping, "auth_http.ssl_options.reuse_sessions", "rabbitmq_auth_backend_http.ssl_options.reuse_sessions",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "auth_http.ssl_options.secure_renegotiate", "rabbitmq_auth_backend_http.ssl_options.secure_renegotiate",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "auth_http.ssl_options.versions.$version", "rabbitmq_auth_backend_http.ssl_options.versions",
     [{datatype, atom}]}.
@@ -150,3 +150,9 @@ end}.
 
 {mapping, "auth_http.ssl_options.hostname_verification", "rabbitmq_auth_backend_http.ssl_hostname_verification", [
     {datatype, {enum, [wildcard, none]}}]}.
+
+%% No-op stub: pre-3.8.0 cuttlefish silently ignored unknown validator names,
+%% so call sites referencing "uri" performed no check. 3.8.0 rejects undefined
+%% names; this preserves the original accept-all behaviour.
+{validator, "uri", "URI string (no additional validation)",
+ fun(_Uri) -> true end}.

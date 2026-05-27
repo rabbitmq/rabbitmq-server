@@ -109,7 +109,7 @@ end}.
 %% {reverse_dns_lookups, true},
 
 {mapping, "reverse_dns_lookups", "rabbit.reverse_dns_lookups", [
-    {datatype, {enum, [true, false]}}
+    {datatype, boolean}
 ]}.
 
 {mapping, "erlang.K", "vm_args.+K", [
@@ -155,7 +155,7 @@ fun(Conf) ->
 end}.
 
 {mapping, "definitions.skip_if_unchanged", "rabbit.definitions.skip_if_unchanged", [
-    {datatype, {enum, [true, false]}}]}.
+    {datatype, boolean}]}.
 
 {mapping, "definitions.hashing.algorithm", "rabbit.definitions.hashing_algorithm", [
     {datatype, {enum, [sha, sha224, sha256, sha384, sha512]}}]}.
@@ -172,7 +172,7 @@ end}.
     {datatype, {enum, [verify_peer, verify_none]}}]}.
 
 {mapping, "definitions.tls.fail_if_no_peer_cert", "rabbit.definitions.ssl_options.fail_if_no_peer_cert", [
-    {datatype, {enum, [true, false]}}]}.
+    {datatype, boolean}]}.
 
 {mapping, "definitions.tls.cacertfile", "rabbit.definitions.ssl_options.cacertfile",
     [{datatype, string}, {validators, ["file_accessible"]}]}.
@@ -189,13 +189,13 @@ fun(Conf) ->
 end}.
 
 {mapping, "definitions.tls.reuse_session", "rabbit.definitions.ssl_options.reuse_session",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "definitions.tls.crl_check", "rabbit.definitions.ssl_options.crl_check",
     [{datatype, [{enum, [true, false, peer, best_effort]}]}]}.
 
 {mapping, "definitions.tls.depth", "rabbit.definitions.ssl_options.depth",
-    [{datatype, integer}, {validators, ["byte"]}]}.
+    [{datatype, byte}]}.
 
 {mapping, "definitions.tls.dh", "rabbit.definitions.ssl_options.dh",
     [{datatype, string}]}.
@@ -217,7 +217,7 @@ end}.
     [{datatype, string}, {validators, ["file_accessible"]}]}.
 
 {mapping, "definitions.tls.log_alert", "rabbit.definitions.ssl_options.log_alert",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "definitions.tls.password", "rabbit.definitions.ssl_options.password",
     [{datatype, [tagged_binary, binary]}]}.
@@ -228,10 +228,10 @@ fun(Conf) ->
 end}.
 
 {mapping, "definitions.tls.secure_renegotiate", "rabbit.definitions.ssl_options.secure_renegotiate",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "definitions.tls.reuse_sessions", "rabbit.definitions.ssl_options.reuse_sessions",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "definitions.tls.versions.$version", "rabbit.definitions.ssl_options.versions",
     [{datatype, atom}]}.
@@ -295,7 +295,7 @@ end}.
 %%                {fail_if_no_peer_cert, false}]},
 
 {mapping, "ssl_allow_poodle_attack", "rabbit.ssl_allow_poodle_attack",
-[{datatype, {enum, [true, false]}}]}.
+[{datatype, boolean}]}.
 
 {mapping, "ssl_options", "rabbit.ssl_options", [
     {datatype, {enum, [none]}}
@@ -313,7 +313,7 @@ end}.
     {datatype, {enum, [verify_peer, verify_none]}}]}.
 
 {mapping, "ssl_options.fail_if_no_peer_cert", "rabbit.ssl_options.fail_if_no_peer_cert", [
-    {datatype, {enum, [true, false]}}]}.
+    {datatype, boolean}]}.
 
 {mapping, "ssl_options.cacertfile", "rabbit.ssl_options.cacertfile",
     [{datatype, string}, {validators, ["file_accessible"]}]}.
@@ -330,7 +330,7 @@ fun(Conf) ->
 end}.
 
 {mapping, "ssl_options.client_renegotiation", "rabbit.ssl_options.client_renegotiation",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "ssl_options.crl_check", "rabbit.ssl_options.crl_check",
     [{datatype, [{enum, [true, false, peer, best_effort]}]}]}.
@@ -380,7 +380,7 @@ fun(Conf) ->
 end}.
 
 {mapping, "ssl_options.depth", "rabbit.ssl_options.depth",
-    [{datatype, integer}, {validators, ["byte"]}]}.
+    [{datatype, byte}]}.
 
 {mapping, "ssl_options.dh", "rabbit.ssl_options.dh",
     [{datatype, string}]}.
@@ -394,10 +394,10 @@ end}.
     [{datatype, string}, {validators, ["file_accessible"]}]}.
 
 {mapping, "ssl_options.honor_cipher_order", "rabbit.ssl_options.honor_cipher_order",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "ssl_options.honor_ecc_order", "rabbit.ssl_options.honor_ecc_order",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "ssl_options.key.RSAPrivateKey", "rabbit.ssl_options.key",
     [{datatype, string}]}.
@@ -423,7 +423,7 @@ end}.
     [{datatype, {enum, [emergency, alert, critical, error, warning, notice, info, debug]}}]}.
 
 {mapping, "ssl_options.log_alert", "rabbit.ssl_options.log_alert",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "ssl_options.password", "rabbit.ssl_options.password",
     [{datatype, [tagged_binary, binary]}]}.
@@ -437,10 +437,10 @@ end}.
     [{datatype, string}]}.
 
 {mapping, "ssl_options.reuse_sessions", "rabbit.ssl_options.reuse_sessions",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "ssl_options.secure_renegotiate", "rabbit.ssl_options.secure_renegotiate",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "ssl_options.versions.$version", "rabbit.ssl_options.versions",
     [{datatype, atom}]}.
@@ -461,7 +461,7 @@ fun(Conf) ->
 end}.
 
 {mapping, "ssl_options.bypass_pem_cache", "ssl.bypass_pem_cache",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 
 {mapping, "metadata_store.khepri.default_timeout", "rabbit.khepri_default_timeout",
@@ -604,7 +604,7 @@ end}.
 ]}.
 
 {mapping, "ssl_cert_login_san_index", "rabbit.ssl_cert_login_san_index", [
-    {datatype, integer}, {validators, ["non_negative_integer"]}
+    {datatype, {integer, non_negative}}
 ]}.
 
 %% TLS handshake timeout, in milliseconds.
@@ -625,7 +625,7 @@ end}.
 %% of certain operations, e.g. queue initialisation and recovery on node boot.
 
 {mapping, "default_worker_pool_size", "rabbit.default_worker_pool_size", [
-    {datatype, integer}, {validators, ["non_negative_integer"]}
+    {datatype, {integer, non_negative}}
 ]}.
 
 %% Password hashing implementation. Will only affect newly
@@ -652,7 +652,7 @@ end}.
 ]}.
 
 {mapping, "credential_validator.min_length", "rabbit.credential_validator.min_length", [
-    {datatype, integer}, {validators, ["non_negative_integer"]}
+    {datatype, {integer, non_negative}}
 ]}.
 
 {mapping, "credential_validator.regexp", "rabbit.credential_validator.regexp", [
@@ -806,8 +806,7 @@ end}.
 ]}.
 
 {mapping, "default_policies.operator.$id.max_length", "rabbit.default_policies.operator", [
-    {validators, ["non_zero_positive_integer"]},
-    {datatype, integer}
+    {datatype, {integer, positive}}
 ]}.
 
 {mapping, "default_policies.operator.$id.max_length_bytes", "rabbit.default_policies.operator", [
@@ -822,13 +821,11 @@ end}.
 
 {mapping, "default_policies.operator.$id.max_in_memory_length", "rabbit.default_policies.operator",
     [
-        {validators, ["non_zero_positive_integer"]},
-        {datatype, integer}
+        {datatype, {integer, positive}}
     ]}.
 
 {mapping, "default_policies.operator.$id.delivery_limit", "rabbit.default_policies.operator", [
-    {validators, ["non_zero_positive_integer"]},
-    {datatype, integer}
+    {datatype, {integer, positive}}
 ]}.
 
 {mapping, "default_policies.operator.$id.classic_queues.ha_mode", "rabbit.default_policies.operator", [
@@ -845,8 +842,7 @@ end}.
 
 {mapping, "default_policies.operator.$id.classic_queues.queue_version", "rabbit.default_policies.operator",
     [
-        {validators, ["non_zero_positive_integer"]},
-        {datatype, integer}
+        {datatype, {integer, positive}}
     ]}.
 
 {translation, "rabbit.default_policies.operator", fun(Conf) ->
@@ -885,13 +881,11 @@ end}.
 ]}.
 
 {mapping, "default_limits.vhosts.$id.max_connections", "rabbit.default_limits.vhosts", [
-    {validators, [ "non_zero_positive_integer"]},
-    {datatype, integer}
+    {datatype, {integer, positive}}
 ]}.
 
 {mapping, "default_limits.vhosts.$id.max_queues", "rabbit.default_limits.vhosts", [
-    {validators, [ "non_zero_positive_integer"]},
-    {datatype, integer}
+    {datatype, {integer, positive}}
 ]}.
 
 {translation, "rabbit.default_limits.vhosts", fun(Conf) ->
@@ -909,7 +903,7 @@ end}.
 %% {default_user_tags, [administrator]},
 
 {mapping, "default_user_tags.$tag", "rabbit.default_user_tags",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {translation, "rabbit.default_user_tags",
 fun(Conf) ->
@@ -987,14 +981,14 @@ end}.
 %%
 %% {session_max_per_connection, 1},
 {mapping, "session_max_per_connection", "rabbit.session_max_per_connection",
- [{datatype, integer}, {validators, ["positive_16_bit_unsigned_integer"]}]}.
+ [{datatype, {integer, [{min, 1}, {max, 65535}]}}]}.
 
 %% Sets the maximum number of AMQP 1.0 links that can be simultaneously
 %% active on an AMQP 1.0 session.
 %%
 %% {link_max_per_session, 10},
 {mapping, "link_max_per_session", "rabbit.link_max_per_session",
- [{datatype, integer}, {validators, ["positive_32_bit_unsigned_integer"]}]}.
+ [{datatype, {integer, [{min, 1}, {max, 4294967295}]}}]}.
 
 %% Set the max permissible number of client connections per node.
 %% `infinity` means "no limit".
@@ -1088,20 +1082,20 @@ end}.
 ]}.
 
 {mapping, "tcp_listen_options.nodelay", "rabbit.tcp_listen_options.nodelay", [
-    {datatype, {enum, [true, false]}}
+    {datatype, boolean}
 ]}.
 
 {mapping, "tcp_listen_options.buffer", "rabbit.tcp_listen_options.buffer",
     [{datatype, integer}]}.
 
 {mapping, "tcp_listen_options.delay_send", "rabbit.tcp_listen_options.delay_send",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "tcp_listen_options.dontroute", "rabbit.tcp_listen_options.dontroute",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "tcp_listen_options.exit_on_close", "rabbit.tcp_listen_options.exit_on_close",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "tcp_listen_options.fd", "rabbit.tcp_listen_options.fd",
     [{datatype, integer}]}.
@@ -1113,7 +1107,7 @@ end}.
     [{datatype, integer}]}.
 
 {mapping, "tcp_listen_options.keepalive", "rabbit.tcp_listen_options.keepalive",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "tcp_listen_options.low_msgq_watermark", "rabbit.tcp_listen_options.low_msgq_watermark",
     [{datatype, integer}]}.
@@ -1134,7 +1128,7 @@ end}.
     [{datatype, integer}]}.
 
 {mapping, "tcp_listen_options.send_timeout_close", "rabbit.tcp_listen_options.send_timeout_close",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "tcp_listen_options.sndbuf", "rabbit.tcp_listen_options.sndbuf",
     [{datatype, integer}]}.
@@ -1143,10 +1137,10 @@ end}.
     [{datatype, integer}]}.
 
 {mapping, "tcp_listen_options.linger.on", "rabbit.tcp_listen_options.linger",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "tcp_listen_options.linger.timeout", "rabbit.tcp_listen_options.linger",
-    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+    [{datatype, {integer, non_negative}}]}.
 
 {translation, "rabbit.tcp_listen_options.linger",
 fun(Conf) ->
@@ -1223,7 +1217,7 @@ end}.
 
 {mapping, "vm_memory_high_watermark_paging_ratio",
           "rabbit.vm_memory_high_watermark_paging_ratio",
-          [{datatype, float}, {validators, ["less_than_1"]}]}.
+          [{datatype, {float, [{gt, 0}, {lt, 1}]}}]}.
 
 %% DEPRECATED. Not used since RabbitMQ 4.0
 %%
@@ -1343,7 +1337,7 @@ end}.
 %%
 
 {mapping, "delegate_count", "rabbit.delegate_count", [
-    {datatype, integer}, {validators, ["non_negative_integer"]}
+    {datatype, {integer, non_negative}}
 ]}.
 
 %% Mirror sync batch size, in messages. Increasing this will speed
@@ -1423,7 +1417,7 @@ end}.
 %%
 
 {mapping, "cluster_formation.registration.enabled", "rabbit.cluster_formation.perform_registration", [
-    {datatype, {enum, [true, false]}}
+    {datatype, boolean}
 ]}.
 
 %% Cluster formation: lock acquisition retries as passed to https://erlang.org/doc/man/global.html#set_lock-3
@@ -1432,21 +1426,18 @@ end}.
 
 {mapping, "cluster_formation.internal_lock_retries", "rabbit.cluster_formation.internal_lock_retries",
     [
-     {datatype, integer},
-     {validators, ["non_zero_positive_integer"]}
+     {datatype, {integer, positive}}
     ]}.
 
 %% Cluster formation: discovery failure retries
 
 {mapping, "cluster_formation.lock_retry_limit", "rabbit.cluster_formation.lock_retry_limit",
     [
-     {datatype, integer},
-     {validators, ["non_zero_positive_integer"]}
+     {datatype, {integer, positive}}
     ]}.
 {mapping, "cluster_formation.lock_retry_timeout", "rabbit.cluster_formation.lock_retry_timeout",
     [
-     {datatype, integer},
-     {validators, ["non_zero_positive_integer"]}
+     {datatype, {integer, positive}}
     ]}.
 
 {mapping, "cluster_formation.discovery_retry_limit", "rabbit.cluster_formation.discovery_retry_limit",
@@ -1465,8 +1456,7 @@ end}.
 
 {mapping, "cluster_formation.discovery_retry_interval", "rabbit.cluster_formation.discovery_retry_interval",
     [
-     {datatype, integer},
-     {validators, ["non_zero_positive_integer"]}
+     {datatype, {integer, positive}}
     ]}.
 
 
@@ -1476,8 +1466,7 @@ end}.
 %%
 
 {mapping, "cluster_formation.target_cluster_size_hint", "rabbit.cluster_formation.target_cluster_size_hint", [
-    {datatype, integer},
-    {validators, ["non_zero_positive_integer"]}
+    {datatype, {integer, positive}}
 ]}.
 
 
@@ -1609,7 +1598,7 @@ end}.
 %% DEPRECATED: this is a no-op and is kept only to allow old configs.
 
 {mapping, "hipe_compile", "rabbit.hipe_compile",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 %% Timeout used when waiting for Mnesia tables in a cluster to
 %% become available.
@@ -1629,8 +1618,7 @@ end}.
 
 {mapping, "message_store_shutdown_timeout", "rabbit.msg_store_shutdown_timeout",
     [
-        {datatype, integer},
-        {validators, ["non_zero_positive_integer"]}
+        {datatype, {integer, positive}}
     ]}.
 
 %% Size in bytes below which to embed messages in the queue index. See
@@ -1646,7 +1634,7 @@ end}.
 %% {background_gc_enabled, true}
 
 {mapping, "background_gc_enabled", "rabbit.background_gc_enabled",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 %% Interval (in milliseconds) at which we run background GC.
 %%
@@ -1660,7 +1648,7 @@ end}.
 %% {proxy_protocol, false}
 
 {mapping, "proxy_protocol", "rabbit.proxy_protocol",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 %% Whether to stop the rabbit application if a vhost has
 %% to terminate for any reason.
@@ -1674,8 +1662,7 @@ end}.
 %% {consumer_timeout, 1800000},
 
 {mapping, "consumer_timeout", "rabbit.consumer_timeout", [
-    {datatype, integer},
-    {validators, ["non_zero_positive_integer"]}
+    {datatype, {integer, positive}}
 ]}.
 
 %% Product name & version overrides.
@@ -1702,7 +1689,7 @@ end}.
 %%
 
 {mapping, "prevent_startup_if_node_was_reset", "rabbit.prevent_startup_if_node_was_reset", [
-    {datatype, {enum, [true, false]}}
+    {datatype, boolean}
 ]}.
 
 % ==========================
@@ -1710,7 +1697,7 @@ end}.
 % ==========================
 
 {mapping, "log.summarize_process_state", "rabbit.summarize_process_state_when_logged", [
-    {datatype, {enum, [true, false]}}
+    {datatype, boolean}
 ]}.
 
 {mapping, "log.error_logger_format_depth", "kernel.error_logger_format_depth", [
@@ -1732,7 +1719,7 @@ end}.
     {validators, ["dir_writable"]}]}.
 
 {mapping, "log.console", "rabbit.log.console.enabled", [
-    {datatype, {enum, [true, false]}}
+    {datatype, boolean}
 ]}.
 {mapping, "log.console.level", "rabbit.log.console.level", [
     {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
@@ -1811,7 +1798,7 @@ end}.
  end}.
 
 {mapping, "log.exchange", "rabbit.log.exchange.enabled", [
-    {datatype, {enum, [true, false]}}
+    {datatype, boolean}
 ]}.
 {mapping, "log.exchange.level", "rabbit.log.exchange.level", [
     {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
@@ -1850,7 +1837,7 @@ end}.
  end}.
 
 {mapping, "log.journald", "rabbit.log.journald.enabled", [
-    {datatype, {enum, [true, false]}}
+    {datatype, boolean}
 ]}.
 {mapping, "log.journald.level", "rabbit.log.journald.level", [
     {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
@@ -1865,7 +1852,7 @@ end}.
  end}.
 
 {mapping, "log.syslog", "rabbit.log.syslog.enabled", [
-    {datatype, {enum, [true, false]}}
+    {datatype, boolean}
 ]}.
 
 {mapping, "log.syslog.level", "rabbit.log.syslog.level", [
@@ -1916,7 +1903,7 @@ end}.
 ]}.
 
 {mapping, "log.syslog.multiline_mode", "syslog.multiline_mode", [
-    {datatype, {enum, [true, false]}}
+    {datatype, boolean}
 ]}.
 
 {mapping, "log.syslog.ip", "syslog.dest_host", [
@@ -1958,7 +1945,7 @@ end}.
     {datatype, {enum, [verify_peer, verify_none]}}]}.
 
 {mapping, "log.syslog.ssl_options.fail_if_no_peer_cert", "syslog.protocol", [
-    {datatype, {enum, [true, false]}}]}.
+    {datatype, boolean}]}.
 
 {mapping, "log.syslog.ssl_options.cacertfile", "syslog.protocol",
     [{datatype, string}, {validators, ["file_accessible"]}]}.
@@ -1970,13 +1957,13 @@ end}.
     [{datatype, string}]}.
 
 {mapping, "log.syslog.ssl_options.client_renegotiation", "syslog.protocol",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "log.syslog.ssl_options.crl_check", "syslog.protocol",
     [{datatype, [{enum, [true, false, peer, best_effort]}]}]}.
 
 {mapping, "log.syslog.ssl_options.depth", "syslog.protocol",
-    [{datatype, integer}, {validators, ["byte"]}]}.
+    [{datatype, byte}]}.
 
 {mapping, "log.syslog.ssl_options.dh", "syslog.protocol",
     [{datatype, string}]}.
@@ -1985,10 +1972,10 @@ end}.
     [{datatype, string}, {validators, ["file_accessible"]}]}.
 
 {mapping, "log.syslog.ssl_options.honor_cipher_order", "syslog.protocol",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "log.syslog.ssl_options.honor_ecc_order", "syslog.protocol",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "log.syslog.ssl_options.key.RSAPrivateKey", "syslog.protocol",
     [{datatype, string}]}.
@@ -2003,7 +1990,7 @@ end}.
     [{datatype, string}, {validators, ["file_accessible"]}]}.
 
 {mapping, "log.syslog.ssl_options.log_alert", "syslog.protocol",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "log.syslog.ssl_options.password", "syslog.protocol",
     [{datatype, [tagged_binary, binary]}]}.
@@ -2012,10 +1999,10 @@ end}.
     [{datatype, string}]}.
 
 {mapping, "log.syslog.ssl_options.reuse_sessions", "syslog.protocol",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "log.syslog.ssl_options.secure_renegotiate", "syslog.protocol",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "log.syslog.ssl_options.versions.$version", "syslog.protocol",
     [{datatype, atom}]}.
@@ -2101,7 +2088,7 @@ end}.
 ]}.
 {mapping, "log.file.rotation.compress", "rabbit.log.file.compress", [
     {default, false},
-    {datatype, {enum, [true, false]}}
+    {datatype, boolean}
 ]}.
 {mapping, "log.file.rotation.size", "rabbit.log.file.size", [
     {datatype, integer}
@@ -2154,7 +2141,7 @@ end}.
 ]}.
 {mapping, "log.connection.rotation.compress", "rabbit.log.categories.connection.compress_on_rotate", [
     {default, false},
-    {datatype, {enum, [true, false]}}
+    {datatype, boolean}
 ]}.
 {mapping, "log.connection.rotation.size", "rabbit.log.categories.connection.max_no_bytes", [
     {datatype, integer}
@@ -2175,7 +2162,7 @@ end}.
 ]}.
 {mapping, "log.channel.rotation.compress", "rabbit.log.categories.channel.compress_on_rotate", [
     {default, false},
-    {datatype, {enum, [true, false]}}
+    {datatype, boolean}
 ]}.
 {mapping, "log.channel.rotation.size", "rabbit.log.categories.channel.max_no_bytes", [
     {datatype, integer}
@@ -2196,7 +2183,7 @@ end}.
 ]}.
 {mapping, "log.mirroring.rotation.compress", "rabbit.log.categories.mirroring.compress_on_rotate", [
     {default, false},
-    {datatype, {enum, [true, false]}}
+    {datatype, boolean}
 ]}.
 {mapping, "log.mirroring.rotation.size", "rabbit.log.categories.mirroring.max_no_bytes", [
     {datatype, integer}
@@ -2217,7 +2204,7 @@ end}.
 ]}.
 {mapping, "log.queue.rotation.compress", "rabbit.log.categories.queue.compress_on_rotate", [
     {default, false},
-    {datatype, {enum, [true, false]}}
+    {datatype, boolean}
 ]}.
 {mapping, "log.queue.rotation.size", "rabbit.log.categories.queue.max_no_bytes", [
     {datatype, integer}
@@ -2238,7 +2225,7 @@ end}.
 ]}.
 {mapping, "log.federation.rotation.compress", "rabbit.log.categories.federation.compress_on_rotate", [
     {default, false},
-    {datatype, {enum, [true, false]}}
+    {datatype, boolean}
 ]}.
 {mapping, "log.federation.rotation.size", "rabbit.log.categories.federation.max_no_bytes", [
     {datatype, integer}
@@ -2259,7 +2246,7 @@ end}.
 ]}.
 {mapping, "log.upgrade.rotation.compress", "rabbit.log.categories.upgrade.compress_on_rotate", [
     {default, false},
-    {datatype, {enum, [true, false]}}
+    {datatype, boolean}
 ]}.
 {mapping, "log.upgrade.rotation.size", "rabbit.log.categories.upgrade.max_no_bytes", [
     {datatype, integer}
@@ -2280,7 +2267,7 @@ end}.
 ]}.
 {mapping, "log.ra.rotation.compress", "rabbit.log.categories.ra.compress_on_rotate", [
     {default, false},
-    {datatype, {enum, [true, false]}}
+    {datatype, boolean}
 ]}.
 {mapping, "log.ra.rotation.size", "rabbit.log.categories.ra.max_no_bytes", [
     {datatype, integer}
@@ -2298,7 +2285,7 @@ end}.
 ]}.
 {mapping, "log.default.rotation.compress", "rabbit.log.categories.default.compress_on_rotate", [
     {default, false},
-    {datatype, {enum, [true, false]}}
+    {datatype, boolean}
 ]}.
 {mapping, "log.default.rotation.size", "rabbit.log.categories.default.max_no_bytes", [
     {datatype, integer}
@@ -2314,7 +2301,7 @@ end}.
 
 {mapping,
  "deprecated_features.permit.$name", "rabbit.permit_deprecated_features",
- [{datatype, {enum, [true, false]}}]
+ [{datatype, boolean}]
 }.
 
 %% This converts:
@@ -2337,18 +2324,15 @@ end}.
 % ==========================
 
 {mapping, "net_ticktime", "kernel.net_ticktime",[
-    {datatype, [integer]},
-    {validators, ["non_zero_positive_integer"]}
+    {datatype, {integer, positive}}
 ]}.
 
 {mapping, "distribution.listener.port_range.min", "kernel.inet_dist_listen_min", [
-    {datatype, [integer]},
-    {validators, ["non_zero_positive_integer"]}
+    {datatype, {integer, positive}}
 ]}.
 
 {mapping, "distribution.listener.port_range.max", "kernel.inet_dist_listen_max", [
-    {datatype, [integer]},
-    {validators, ["non_zero_positive_integer"]}
+    {datatype, {integer, positive}}
 ]}.
 
 {mapping, "distribution.listener.interface", "kernel.inet_dist_use_interface", [
@@ -2531,8 +2515,7 @@ end}.
 %%
 
 {mapping, "raft.segment_max_entries", "ra.segment_max_entries", [
-  {datatype, integer},
-  {validators, ["non_zero_positive_integer", "positive_16_bit_unsigned_integer"]}
+  {datatype, {integer, [{min, 1}, {max, 65535}]}}
 ]}.
 
 {translation, "ra.segment_max_entries",
@@ -2545,8 +2528,7 @@ end}.
 }.
 
 {mapping, "raft.wal_max_size_bytes", "ra.wal_max_size_bytes", [
-  {datatype, integer},
-  {validators, ["non_zero_positive_integer"]}
+  {datatype, {integer, positive}}
 ]}.
 
 {translation, "ra.wal_max_size_bytes",
@@ -2559,8 +2541,7 @@ end}.
 }.
 
 {mapping, "raft.wal_max_entries", "ra.wal_max_entries", [
-  {datatype, integer},
-  {validators, ["non_zero_positive_integer"]}
+  {datatype, {integer, positive}}
 ]}.
 
 {translation, "ra.wal_max_entries",
@@ -2573,8 +2554,7 @@ end}.
 }.
 
 {mapping, "raft.wal_hibernate_after", "ra.wal_hibernate_after", [
-  {datatype, integer},
-  {validators, ["non_zero_positive_integer"]}
+  {datatype, {integer, positive}}
 ]}.
 
 {translation, "ra.wal_hibernate_after",
@@ -2587,8 +2567,7 @@ end}.
 }.
 
 {mapping, "raft.wal_max_batch_size", "ra.wal_max_batch_size", [
-  {datatype, integer},
-  {validators, ["non_zero_positive_integer"]}
+  {datatype, {integer, positive}}
 ]}.
 
 {translation, "ra.wal_max_batch_size",
@@ -2601,8 +2580,7 @@ end}.
 }.
 
 {mapping, "raft.snapshot_chunk_size", "ra.snapshot_chunk_size", [
-  {datatype, integer},
-  {validators, ["non_zero_positive_integer"]}
+  {datatype, {integer, positive}}
 ]}.
 
 {translation, "ra.snapshot_chunk_size",
@@ -2628,8 +2606,7 @@ end}.
 }.
 
 {mapping, "raft.adaptive_failure_detector.poll_interval", "aten.poll_interval", [
-  {datatype, integer},
-  {validators, ["non_zero_positive_integer"]}
+  {datatype, {integer, positive}}
 ]}.
 
 {translation, "aten.poll_interval",
@@ -2655,8 +2632,7 @@ end}.
 }.
 
 {mapping, "raft.adaptive_failure_detector.heartbeat_interval", "aten.heartbeat_interval", [
-  {datatype, integer},
-  {validators, ["non_zero_positive_integer"]}
+  {datatype, {integer, positive}}
 ]}.
 
 {translation, "aten.heartbeat_interval",
@@ -2697,19 +2673,19 @@ end}.
 
 %% Enable or disable local random exchange
 {mapping, "exchange_types.local_random.enabled", "rabbit.local_random_exchange_enabled", [
-    {datatype, {enum, [true, false]}}
+    {datatype, boolean}
 ]}.
 
 %% Enable queue types
 
 {mapping, "queue_types.classic.enabled", "rabbit.classic_queues_enabled", [
-    {datatype, {enum, [true, false]}}
+    {datatype, boolean}
 ]}.
 {mapping, "queue_types.stream.enabled", "rabbit.stream_queues_enabled", [
-    {datatype, {enum, [true, false]}}
+    {datatype, boolean}
 ]}.
 {mapping, "queue_types.quorum.enabled", "rabbit.quorum_queues_enabled", [
-    {datatype, {enum, [true, false]}}
+    {datatype, boolean}
 ]}.
 
 %%
@@ -2718,8 +2694,7 @@ end}.
 
 %% DEPRECATED. Not used since RabbitMQ 4.0
 {mapping, "classic_queue.default_version", "rabbit.classic_queue_default_version", [
-  {datatype, integer},
-  {validators, ["non_zero_positive_integer"]}
+  {datatype, {integer, positive}}
 ]}.
 
 {translation, "rabbit.classic_queue_default_version",
@@ -2733,19 +2708,17 @@ end}.
 }.
 
 {mapping, "quorum_queue.compute_checksums", "rabbit.quorum_compute_checksums", [
-    {datatype, {enum, [true, false]}}]}.
+    {datatype, boolean}]}.
 
 {mapping, "quorum_queue.property_equivalence.relaxed_checks_on_redeclaration", "rabbit.quorum_relaxed_checks_on_redeclaration", [
-    {datatype, {enum, [true, false]}}]}.
+    {datatype, boolean}]}.
 
 {mapping, "quorum_queue.initial_cluster_size", "rabbit.quorum_cluster_size", [
-  {datatype, integer},
-  {validators, ["non_zero_positive_integer"]}
+  {datatype, {integer, positive}}
 ]}.
 
 {mapping, "quorum_queue.commands_soft_limit", "rabbit.quorum_commands_soft_limit", [
-  {datatype, integer},
-  {validators, ["non_zero_positive_integer"]}
+  {datatype, {integer, positive}}
 ]}.
 
 %%
@@ -2753,21 +2726,21 @@ end}.
 %%
 
 {mapping, "quorum_queue.continuous_membership_reconciliation.enabled", "rabbit.quorum_membership_reconciliation_enabled", [
-    {datatype, {enum, [true, false]}}]}.
+    {datatype, boolean}]}.
 
 {mapping, "quorum_queue.continuous_membership_reconciliation.auto_remove", "rabbit.quorum_membership_reconciliation_auto_remove", [
-    {datatype, {enum, [true, false]}}]}.
+    {datatype, boolean}]}.
 
 {mapping, "quorum_queue.continuous_membership_reconciliation.interval", "rabbit.quorum_membership_reconciliation_interval", [
-    {datatype, integer}, {validators, ["non_negative_integer"]}
+    {datatype, {integer, non_negative}}
 ]}.
 
 {mapping, "quorum_queue.continuous_membership_reconciliation.trigger_interval", "rabbit.quorum_membership_reconciliation_trigger_interval", [
-    {datatype, integer}, {validators, ["non_negative_integer"]}
+    {datatype, {integer, non_negative}}
 ]}.
 
 {mapping, "quorum_queue.continuous_membership_reconciliation.target_group_size", "rabbit.quorum_membership_reconciliation_target_group_size", [
-    {datatype, integer}, {validators, ["non_negative_integer"]}
+    {datatype, {integer, non_negative}}
 ]}.
 
 
@@ -2776,8 +2749,7 @@ end}.
 %%
 
 {mapping, "runtime_parameters.limits.$category", "rabbit.runtime_parameters.limits", [
-    {datatype, integer},
-    {validators, ["non_negative_integer"]}
+    {datatype, {integer, non_negative}}
 ]}.
 
 {translation, "rabbit.runtime_parameters.limits",
@@ -2794,7 +2766,7 @@ end}.
 %%
 
 {mapping, "message_interceptors.$stage.$name.$key", "rabbit.message_interceptors", [
-    {datatype, {enum, [true, false]}}]}.
+    {datatype, boolean}]}.
 
 {translation, "rabbit.message_interceptors",
  fun(Conf) ->
@@ -2860,12 +2832,10 @@ end}.
 }.
 
 {mapping, "stream.replication.port_range.min", "osiris.port_range", [
-    {datatype, [integer]},
-    {validators, ["non_zero_positive_integer"]}
+    {datatype, {integer, positive}}
 ]}.
 {mapping, "stream.replication.port_range.max", "osiris.port_range", [
-    {datatype, [integer]},
-    {validators, ["non_zero_positive_integer"]}
+    {datatype, {integer, positive}}
 ]}.
 
 {translation, "osiris.port_range",
@@ -2899,7 +2869,7 @@ end}.
 }.
 
 {mapping, "stream.read_ahead", "rabbit.stream_read_ahead",
-    [{datatype, [{enum, [true, false]}, integer, string]}]}.
+    [{datatype, [boolean, integer, string]}]}.
 
 {mapping, "cluster_tags.$tag", "rabbit.cluster_tags", [
     {datatype, [binary]}
@@ -2975,7 +2945,7 @@ end}.
     [{datatype, [{enum, [true, false, peer, best_effort]}]}]}.
 
 {mapping, "amqp10_client.ssl_options.depth", "amqp10_client.ssl_options.depth",
-    [{datatype, integer}, {validators, ["byte"]}]}.
+    [{datatype, byte}]}.
 
 {mapping, "amqp10_client.ssl_options.key.RSAPrivateKey", "amqp10_client.ssl_options.key",
     [{datatype, string}]}.
@@ -2998,7 +2968,7 @@ end}.
     [{datatype, string}, {validators, ["file_accessible"]}]}.
 
 {mapping, "amqp10_client.ssl_options.log_alert", "amqp10_client.ssl_options.log_alert",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "amqp10_client.ssl_options.password", "amqp10_client.ssl_options.password",
     [{datatype, [tagged_binary, binary]}]}.
@@ -3007,10 +2977,10 @@ end}.
     [{datatype, string}]}.
 
 {mapping, "amqp10_client.ssl_options.reuse_sessions", "amqp10_client.ssl_options.reuse_sessions",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "amqp10_client.ssl_options.secure_renegotiate", "amqp10_client.ssl_options.secure_renegotiate",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "amqp10_client.ssl_options.versions.$version", "amqp10_client.ssl_options.versions",
     [{datatype, atom}]}.
@@ -3083,7 +3053,7 @@ end}.
     [{datatype, [{enum, [true, false, peer, best_effort]}]}]}.
 
 {mapping, "amqp_client.ssl_options.depth", "amqp_client.ssl_options.depth",
-    [{datatype, integer}, {validators, ["byte"]}]}.
+    [{datatype, byte}]}.
 
 {mapping, "amqp_client.ssl_options.key.RSAPrivateKey", "amqp_client.ssl_options.key",
     [{datatype, string}]}.
@@ -3106,7 +3076,7 @@ end}.
     [{datatype, string}, {validators, ["file_accessible"]}]}.
 
 {mapping, "amqp_client.ssl_options.log_alert", "amqp_client.ssl_options.log_alert",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "amqp_client.ssl_options.password", "amqp_client.ssl_options.password",
     [{datatype, [tagged_binary, binary]}]}.
@@ -3115,10 +3085,10 @@ end}.
     [{datatype, string}]}.
 
 {mapping, "amqp_client.ssl_options.reuse_sessions", "amqp_client.ssl_options.reuse_sessions",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "amqp_client.ssl_options.secure_renegotiate", "amqp_client.ssl_options.secure_renegotiate",
-    [{datatype, {enum, [true, false]}}]}.
+    [{datatype, boolean}]}.
 
 {mapping, "amqp_client.ssl_options.versions.$version", "amqp_client.ssl_options.versions",
     [{datatype, atom}]}.
