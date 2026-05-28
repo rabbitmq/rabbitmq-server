@@ -3,6 +3,7 @@
 SCRIPT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 TEST_CASES_PATH=/basic-auth
+PROFILES="one-minute-session-timeout"
 
 source $SCRIPT/../../bin/suite_template $@
 run
