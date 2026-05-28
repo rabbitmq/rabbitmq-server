@@ -28,6 +28,10 @@
         <th>Segments</th>
         <td><%= fmt_string(queue.segments) %></td>
       </tr>
+      <tr>
+        <th>Oldest message</th>
+        <td><%= fmt_timestamp_mini(queue.first_timestamp) %></td>
+      </tr>
     </table>
 
     <table class="facts">
