@@ -5,7 +5,7 @@ WORKDIR /code
 COPY package.json package.json
 
 FROM base AS test
-RUN npm install --verbose
+RUN npm install --ignore-scripts --verbose
 
 ENTRYPOINT [ "npm" ]
 CMD [ "" ]
