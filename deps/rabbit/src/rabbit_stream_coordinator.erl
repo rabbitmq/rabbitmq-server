@@ -56,7 +56,9 @@
          ra_local_query/1]).
 
 -export([log_overview/1,
-         key_metrics_rpc/1]).
+         key_metrics_rpc/1,
+         is_replica_fresh/2,
+         is_replication_stale/2]).
 
 %% for SAC coordinator
 -export([sac_state/1,
@@ -214,11 +216,7 @@ add_replica(Q, Node) when ?is_amqqueue(Q) ->
     Pid = amqqueue:get_pid(Q),
     try
         ReplState0 = osiris_writer:query_replication_state(Pid),
-        {{_, InitTs}, ReplState} = maps:take(node(Pid), ReplState0),
-        {MaxTs, MinTs} = maps:fold(fun (_, {_, Ts}, {Max, Min}) ->
-                                           {max(Ts, Max), min(Ts, Min)}
-                                   end, {InitTs, InitTs}, ReplState),
-        case (MaxTs - MinTs) > ?REPLICA_FRESHNESS_LIMIT_MS of
+        case is_replication_stale(node(Pid), ReplState0) of
             true ->
                 {error, {disallowed, out_of_sync_replica}};
             false ->
@@ -237,6 +235,24 @@ add_replica(Q, Node) when ?is_amqqueue(Q) ->
         _:Error ->
             {error, Error}
     end.
+
+-spec is_replication_stale(node(), map()) -> boolean().
+is_replication_stale(LeaderNode, ReplState0) ->
+    case maps:take(LeaderNode, ReplState0) of
+        {{_, LeaderTs}, ReplState} ->
+            maps:fold(fun(_, {_, Ts}, Acc) ->
+                              Acc orelse not is_replica_fresh(LeaderTs, Ts)
+                      end, false, ReplState);
+        error ->
+            true
+    end.
+
+-spec is_replica_fresh(integer(), integer()) -> boolean().
+is_replica_fresh(LeaderTs, ReplicaTs)
+  when is_integer(LeaderTs) andalso is_integer(ReplicaTs) ->
+    (LeaderTs - ReplicaTs) =< ?REPLICA_FRESHNESS_LIMIT_MS;
+is_replica_fresh(_, _) ->
+    false.
 
 delete_replica(StreamId, Node) ->
     process_command({delete_replica, StreamId, #{node => Node}}).

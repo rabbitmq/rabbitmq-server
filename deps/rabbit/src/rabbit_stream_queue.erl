@@ -77,7 +77,8 @@
 -define(INFO_KEYS, [name, durable, auto_delete, arguments, leader, members, online, state,
                     messages, messages_ready, messages_unacknowledged, committed_offset,
                     policy, operator_policy, effective_policy_definition, type, memory,
-                    consumers, segments, committed_chunk_id, first_timestamp]).
+                    consumers, segments, committed_chunk_id, first_timestamp,
+                    replica_freshness_status]).
 
 -define(UNMATCHED_THRESHOLD, 200).
 
@@ -850,6 +851,15 @@ i(first_timestamp = F, Q) ->
         _ ->
             ''
     end;
+i(replica_freshness_status, Q) ->
+    case amqqueue:get_pid(Q) of
+        none ->
+            #{};
+        undefined ->
+            #{};
+        LeaderPid ->
+            replica_freshness(LeaderPid)
+    end;
 i(policy, Q) ->
     case rabbit_policy:name(Q) of
         none   -> '';
@@ -906,9 +916,19 @@ status(Vhost, QueueName) ->
         {ok, Q} when ?amqqueue_is_quorum(Q) ->
             {error, quorum_queue_not_supported};
         {ok, Q} when ?amqqueue_is_stream(Q) ->
+            QNameBin = amqqueue:get_name(Q),
+            FreshnessMap = case amqqueue:get_pid(Q) of
+                               none -> #{};
+                               undefined -> #{};
+                               LeaderPid -> replica_freshness_cached(QNameBin, LeaderPid)
+                           end,
             [begin
+                 Node = maps:get(node, C),
+                 FreshnessVal = maps:get(Node, FreshnessMap, false),
+                 SyncStatus = format_sync_status(maps:is_key(epoch, C), FreshnessVal),
                  [get_key(role, C),
                   get_key(node, C),
+                  {synchronized, SyncStatus},
                   get_key(epoch, C),
                   get_key(offset, C),
                   get_key(committed_offset, C),
@@ -925,6 +945,31 @@ status(Vhost, QueueName) ->
 
 get_key(Key, Cnt) ->
     {Key, maps:get(Key, Cnt, undefined)}.
+
+format_sync_status(false, _) ->
+    <<"unknown">>;
+format_sync_status(true, {IsFresh, TimeLag, OffsetLag}) ->
+    IsFreshStr = format_boolean(IsFresh),
+    TimeLagStr =
+        case TimeLag of
+            undefined -> <<"unknown">>;
+            _         -> list_to_binary(integer_to_list(TimeLag) ++ "ms")
+        end,
+    OffsetLagStr =
+        case OffsetLag of
+            undefined -> <<"unknown">>;
+            _         ->
+                list_to_binary(integer_to_list(OffsetLag) ++ " msgs")
+        end,
+    <<IsFreshStr/binary, " (", TimeLagStr/binary, ", ",
+      OffsetLagStr/binary, " behind)">>;
+format_sync_status(true, IsFresh) when is_boolean(IsFresh) ->
+    format_boolean(IsFresh);
+format_sync_status(true, _) ->
+    <<"unknown">>.
+
+format_boolean(true)  -> <<"yes">>;
+format_boolean(false) -> <<"no">>.
 
 -spec get_role({pid() | undefined, writer | replica}) -> writer | replica.
 get_role({_, Role}) -> Role.
@@ -1545,12 +1590,79 @@ close_log(Log) ->
 %% between the time this function is called and the time decision based on its result is made
 -spec list_with_minimum_quorum() -> [amqqueue:amqqueue()].
 list_with_minimum_quorum() ->
-    lists:filter(fun (Q) ->
-                         StreamId = maps:get(name, amqqueue:get_type_state(Q)),
-                         {ok, Members} = rabbit_stream_coordinator:members(StreamId),
-                         RunningMembers = maps:filter(fun(_, {State, _}) -> State =/= undefined end, Members),
-                         map_size(RunningMembers) =< map_size(Members) div 2 + 1
-                 end, rabbit_amqqueue:list_local_stream_queues()).
+    lists:filter(
+      fun(Q) ->
+              StreamId = maps:get(name, amqqueue:get_type_state(Q)),
+              {ok, Members} = rabbit_stream_coordinator:members(StreamId),
+              RunningMembers = maps:filter(
+                                 fun(_, {State, _}) -> State =/= undefined end,
+                                 Members),
+              UpToDateRunningMembers =
+                  case amqqueue:get_pid(Q) of
+                      none -> #{};
+                      undefined -> #{};
+                      LeaderPid ->
+                          FreshnessMap = replica_freshness_cached(amqqueue:get_name(Q), LeaderPid),
+                          maps:filter(
+                            fun(Node, _) ->
+                                    case maps:get(Node, FreshnessMap, false) of
+                                        {IsFresh, _, _} -> IsFresh;
+                                        IsFresh -> IsFresh
+                                    end
+                            end, RunningMembers)
+                  end,
+              map_size(UpToDateRunningMembers) =< map_size(Members) div 2 + 1
+      end, rabbit_amqqueue:list_local_stream_queues()).
+
+replica_freshness_cached(QName, LeaderPid) ->
+    Node = node(LeaderPid),
+    try
+        LookupResult =
+            case Node =:= node() of
+                true ->
+                    ets:lookup(queue_metrics, QName);
+                false ->
+                    rpc:call(Node, ets, lookup, [queue_metrics, QName], 2000)
+            end,
+        case LookupResult of
+            [{QName, Proplist, _DeleteMarker}] ->
+                proplists:get_value(replica_freshness_status, Proplist, #{});
+            _ ->
+                replica_freshness(LeaderPid)
+        end
+    catch
+        _:_ ->
+            replica_freshness(LeaderPid)
+    end.
+
+replica_freshness(LeaderPid) ->
+    try osiris_writer:query_replication_state(LeaderPid) of
+        ReplState0 ->
+            case maps:take(node(LeaderPid), ReplState0) of
+                {{LeaderOffset, LeaderTs}, ReplState} ->
+                    FreshnessMap = maps:map(
+                        fun(_, {ReplicaOffset, ReplicaTs}) ->
+                            IsFresh = rabbit_stream_coordinator:is_replica_fresh(LeaderTs, ReplicaTs),
+                            TimeLag = case is_integer(LeaderTs) andalso
+                                           is_integer(ReplicaTs) of
+                                          true  -> LeaderTs - ReplicaTs;
+                                          false -> undefined
+                                      end,
+                            OffsetLag = case is_integer(LeaderOffset) andalso
+                                             is_integer(ReplicaOffset) of
+                                            true  -> LeaderOffset - ReplicaOffset;
+                                            false -> undefined
+                                        end,
+                            {IsFresh, TimeLag, OffsetLag}
+                        end, ReplState),
+                    FreshnessMap#{node(LeaderPid) => {true, 0, 0}};
+                error ->
+                    #{}
+            end
+    catch
+        _:_ ->
+            #{}
+    end.
 
 get_nodes(Q) when ?is_amqqueue(Q) ->
     #{nodes := Nodes} = amqqueue:get_type_state(Q),

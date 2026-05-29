@@ -29,7 +29,8 @@
          readers,
          consumers,
          segments,
-         first_timestamp
+         first_timestamp,
+         replica_freshness_status
         ]).
 
 -record(state, {timeout :: non_neg_integer()}).
