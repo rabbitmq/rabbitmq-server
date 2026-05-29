@@ -31,7 +31,7 @@ start_prodkeycloak-proxy() {
   MOUNT_HTTPD_CONFIG_DIR=$CONF_DIR/httpd
 
   mkdir -p $MOUNT_HTTPD_CONFIG_DIR
-  ${BIN_DIR}/gen-httpd-conf" "${HTTPD_CONFIG_DIR} $ENV_FILE $MOUNT_HTTPD_CONFIG_DIR/httpd.conf
+  "${BIN_DIR}/gen-httpd-conf" "${HTTPD_CONFIG_DIR}" "$ENV_FILE" "$MOUNT_HTTPD_CONFIG_DIR/httpd.conf"
   print "> EFFECTIVE HTTPD_CONFIG_FILE: $MOUNT_HTTPD_CONFIG_DIR/httpd.conf"
   cp ${HTTPD_CONFIG_DIR}/.htpasswd $MOUNT_HTTPD_CONFIG_DIR
   
