@@ -155,9 +155,13 @@ all_tests() ->
      declare_invalid_arg_1,
      declare_invalid_arg_2,
      declare_invalid_arg_3,
+     declare_invalid_consumer_timeout,
+     declare_invalid_consumer_disconnected_timeout,
      relaxed_argument_equivalence_checks_on_qq_redeclare,
      consume_invalid_arg_1,
      consume_invalid_arg_2,
+     consume_invalid_consumer_timeout_negative,
+     consume_invalid_consumer_timeout_wrong_type,
      start_queue,
      long_name,
      stop_queue,
@@ -538,6 +542,26 @@ declare_invalid_arg_3(Config) ->
        declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"quorum">>},
                        {<<"x-max-length">>, long, -5}])).
 
+declare_invalid_consumer_timeout(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    Q = ?config(queue_name, Config),
+
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 406, _}}, _},
+       declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                       {<<"x-consumer-timeout">>, long, -1}])).
+
+declare_invalid_consumer_disconnected_timeout(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    Q = ?config(queue_name, Config),
+
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 406, _}}, _},
+       declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                       {<<"x-consumer-disconnected-timeout">>, long, -1}])).
+
 
 relaxed_argument_equivalence_checks_on_qq_redeclare(Config) ->
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
@@ -611,6 +635,40 @@ consume_invalid_arg_2(Config) ->
        amqp_channel:subscribe(Ch, #'basic.consume'{
                                      queue = Q,
                                      arguments = [{<<"x-priority">>, longstr, <<"important">>}],
+                                     no_ack = false,
+                                     consumer_tag = <<"ctag">>},
+                              self())).
+
+consume_invalid_consumer_timeout_negative(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    Q = ?config(queue_name, Config),
+
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 406, _}}, _},
+       amqp_channel:subscribe(Ch, #'basic.consume'{
+                                     queue = Q,
+                                     arguments = [{<<"x-consumer-timeout">>, long, -1}],
+                                     no_ack = false,
+                                     consumer_tag = <<"ctag">>},
+                              self())).
+
+consume_invalid_consumer_timeout_wrong_type(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    Q = ?config(queue_name, Config),
+
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 406, _}}, _},
+       amqp_channel:subscribe(Ch, #'basic.consume'{
+                                     queue = Q,
+                                     arguments = [{<<"x-consumer-timeout">>, longstr, <<"never">>}],
                                      no_ack = false,
                                      consumer_tag = <<"ctag">>},
                               self())).

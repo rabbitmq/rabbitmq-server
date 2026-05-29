@@ -961,6 +961,8 @@ declare_args() ->
      {<<"x-overflow">>, fun check_overflow/2},
      {<<"x-queue-version">>, fun check_queue_version/2},
      {<<"x-single-active-consumer">>, fun check_single_active_consumer_arg/2},
+     {<<"x-consumer-timeout">>, fun check_non_neg_int_arg/2},
+     {<<"x-consumer-disconnected-timeout">>, fun check_non_neg_int_arg/2},
      {<<"x-queue-type">>, fun check_queue_type/2},
      {<<"x-quorum-initial-group-size">>, fun check_initial_cluster_size_arg/2},
      {<<"x-max-age">>, fun check_max_age_arg/2},
@@ -970,6 +972,7 @@ declare_args() ->
      {<<"x-queue-leader-locator">>, fun check_queue_leader_locator_arg/2}].
 
 consume_args() -> [{<<"x-priority">>,              fun check_int_arg/2},
+                   {<<"x-consumer-timeout">>,      fun check_non_neg_int_arg/2},
                    {<<"x-stream-offset">>, fun check_stream_offset_arg/2}].
 
 check_int_arg({Type, _}, _) ->

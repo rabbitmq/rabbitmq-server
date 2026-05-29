@@ -619,6 +619,7 @@ capabilities() ->
                           <<"x-message-ttl">>,
                           <<"x-queue-leader-locator">>,
                           <<"x-consumer-disconnected-timeout">>,
+                          <<"x-consumer-timeout">>,
                           <<"x-delayed-retry-type">>,
                           <<"x-delayed-retry-min">>,
                           <<"x-delayed-retry-max">>],
