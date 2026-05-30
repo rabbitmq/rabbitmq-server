@@ -6,7 +6,7 @@
   "scripts": {
     "fakeportal": "node fakeportal/app.js",
     "fakeproxy": "node fakeportal/proxy.js",
-    "test": " eval $(cat $ENV_FILE ) && mocha --recursive --trace-warnings --timeout 40000"
+    "test": ". $ENV_FILE && mocha --recursive --trace-warnings --timeout 40000"
   },
   "keywords": [],
   "author": "",
