@@ -199,88 +199,10 @@ end}.
 
 %% TCP listener section ======================================================
 
-{mapping, "mqtt.tcp_listen_options", "rabbitmq_mqtt.tcp_listen_options", [
-    {datatype, {enum, [none]}}]}.
-
-{translation, "rabbitmq_mqtt.tcp_listen_options",
-fun(Conf) ->
-    case cuttlefish:conf_get("mqtt.tcp_listen_options", Conf) of
-        none -> [];
-        _    -> cuttlefish:invalid("Invalid mqtt.tcp_listen_options")
-    end
-end}.
-
-{mapping, "mqtt.tcp_listen_options.backlog", "rabbitmq_mqtt.tcp_listen_options.backlog", [
-    {datatype, integer}
-]}.
-
-{mapping, "mqtt.tcp_listen_options.nodelay", "rabbitmq_mqtt.tcp_listen_options.nodelay", [
-    {datatype, boolean}
-]}.
-
-{mapping, "mqtt.tcp_listen_options.buffer", "rabbitmq_mqtt.tcp_listen_options.buffer",
-    [{datatype, integer}]}.
-
-{mapping, "mqtt.tcp_listen_options.delay_send", "rabbitmq_mqtt.tcp_listen_options.delay_send",
-    [{datatype, boolean}]}.
-
-{mapping, "mqtt.tcp_listen_options.dontroute", "rabbitmq_mqtt.tcp_listen_options.dontroute",
-    [{datatype, boolean}]}.
-
-{mapping, "mqtt.tcp_listen_options.exit_on_close", "rabbitmq_mqtt.tcp_listen_options.exit_on_close",
-    [{datatype, boolean}]}.
-
-{mapping, "mqtt.tcp_listen_options.fd", "rabbitmq_mqtt.tcp_listen_options.fd",
-    [{datatype, integer}]}.
-
-{mapping, "mqtt.tcp_listen_options.high_msgq_watermark", "rabbitmq_mqtt.tcp_listen_options.high_msgq_watermark",
-    [{datatype, integer}]}.
-
-{mapping, "mqtt.tcp_listen_options.high_watermark", "rabbitmq_mqtt.tcp_listen_options.high_watermark",
-    [{datatype, integer}]}.
-
-{mapping, "mqtt.tcp_listen_options.keepalive", "rabbitmq_mqtt.tcp_listen_options.keepalive",
-    [{datatype, boolean}]}.
-
-{mapping, "mqtt.tcp_listen_options.low_msgq_watermark", "rabbitmq_mqtt.tcp_listen_options.low_msgq_watermark",
-    [{datatype, integer}]}.
-
-{mapping, "mqtt.tcp_listen_options.low_watermark", "rabbitmq_mqtt.tcp_listen_options.low_watermark",
-    [{datatype, integer}]}.
-
-{mapping, "mqtt.tcp_listen_options.port", "rabbitmq_mqtt.tcp_listen_options.port",
-    [{datatype, integer}, {validators, ["port"]}]}.
-
-{mapping, "mqtt.tcp_listen_options.priority", "rabbitmq_mqtt.tcp_listen_options.priority",
-    [{datatype, integer}]}.
-
-{mapping, "mqtt.tcp_listen_options.recbuf", "rabbitmq_mqtt.tcp_listen_options.recbuf",
-    [{datatype, integer}]}.
-
-{mapping, "mqtt.tcp_listen_options.send_timeout", "rabbitmq_mqtt.tcp_listen_options.send_timeout",
-    [{datatype, integer}]}.
-
-{mapping, "mqtt.tcp_listen_options.send_timeout_close", "rabbitmq_mqtt.tcp_listen_options.send_timeout_close",
-    [{datatype, boolean}]}.
-
-{mapping, "mqtt.tcp_listen_options.sndbuf", "rabbitmq_mqtt.tcp_listen_options.sndbuf",
-    [{datatype, integer}]}.
-
-{mapping, "mqtt.tcp_listen_options.tos", "rabbitmq_mqtt.tcp_listen_options.tos",
-    [{datatype, integer}]}.
-
-{mapping, "mqtt.tcp_listen_options.linger.on", "rabbitmq_mqtt.tcp_listen_options.linger",
-    [{datatype, boolean}]}.
-
-{mapping, "mqtt.tcp_listen_options.linger.timeout", "rabbitmq_mqtt.tcp_listen_options.linger",
-    [{datatype, {integer, non_negative}}]}.
-
-{translation, "rabbitmq_mqtt.tcp_listen_options.linger",
-fun(Conf) ->
-    LingerOn = cuttlefish:conf_get("mqtt.tcp_listen_options.linger.on", Conf, false),
-    LingerTimeout = cuttlefish:conf_get("mqtt.tcp_listen_options.linger.timeout", Conf, 0),
-    {LingerOn, LingerTimeout}
-end}.
+{include_partial, {rabbit, "tcp_listen_options"},
+    [{prefix, "mqtt.tcp_listen_options"},
+     {app_prefix, "rabbitmq_mqtt.tcp_listen_options"},
+     {disable_with, none}]}.
 
 %% Durable queue type to be used for QoS 1 subscriptions
 %%
