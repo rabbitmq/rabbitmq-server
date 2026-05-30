@@ -4173,15 +4173,7 @@ login_test(Config) ->
             [{"content-type", "application/x-www-form-urlencoded"}],
             <<"username=myuser&password=myuser">>),
     ?assertEqual(200, CodeAct),
-
-    %% Extract the authorization header
-    Cookie = list_to_binary(proplists:get_value("set-cookie", Headers)),
-    [_, Auth] = binary:split(Cookie, <<"=">>, []),
-
-    %% Request the overview with the auth obtained
-    {ok, {{_, CodeAct1, _}, _, _}} =
-        req(Config, get, "/overview", [{"Authorization", "Basic " ++ binary_to_list(Auth)}]),
-    ?assertEqual(200, CodeAct1),
+    ?assert(not proplists:is_defined("set-cookie", Headers)),
 
     %% Let's request a login with an unknown user
     {ok, {{_, CodeAct2, _}, Headers2, _}} =
