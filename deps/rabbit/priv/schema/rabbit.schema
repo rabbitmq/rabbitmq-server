@@ -297,51 +297,58 @@ end}.
 {mapping, "ssl_allow_poodle_attack", "rabbit.ssl_allow_poodle_attack",
 [{datatype, boolean}]}.
 
-{mapping, "ssl_options", "rabbit.ssl_options", [
-    {datatype, {enum, [none]}}
-]}.
+{include_partial, {rabbit, "ssl_options"},
+    [{prefix, "ssl_options"},
+     {app_prefix, "rabbit.ssl_options"},
+     {disable_with, none}]}.
 
-{translation, "rabbit.ssl_options",
+%% `key.*` is kept inline so the no-match branch stays
+%% `cuttlefish:unset/0`: the historical primary-listener behavior.
+
+{mapping, "ssl_options.key.RSAPrivateKey", "rabbit.ssl_options.key",
+    [{datatype, string}]}.
+
+{mapping, "ssl_options.key.DSAPrivateKey", "rabbit.ssl_options.key",
+    [{datatype, string}]}.
+
+{mapping, "ssl_options.key.PrivateKeyInfo", "rabbit.ssl_options.key",
+    [{datatype, string}]}.
+
+{translation, "rabbit.ssl_options.key",
 fun(Conf) ->
-    case cuttlefish:conf_get("ssl_options", Conf, undefined) of
-        none -> [];
-        _    -> cuttlefish:invalid("Invalid ssl_options")
+    case cuttlefish_variable:filter_by_prefix("ssl_options.key", Conf) of
+        [{[_,_,Key], Val}|_] -> {list_to_atom(Key), list_to_binary(Val)};
+        _ -> cuttlefish:unset()
     end
 end}.
 
-{mapping, "ssl_options.verify", "rabbit.ssl_options.verify", [
-    {datatype, {enum, [verify_peer, verify_none]}}]}.
+%% Primary listener extras on top of the shared partial.
 
-{mapping, "ssl_options.fail_if_no_peer_cert", "rabbit.ssl_options.fail_if_no_peer_cert", [
-    {datatype, boolean}]}.
-
-{mapping, "ssl_options.cacertfile", "rabbit.ssl_options.cacertfile",
-    [{datatype, string}, {validators, ["pem_file"]}]}.
-
-{mapping, "ssl_options.certfile", "rabbit.ssl_options.certfile",
-    [{datatype, string}, {validators, ["pem_file"]}]}.
-
-{mapping, "ssl_options.cert", "rabbit.ssl_options.cert",
-    [{datatype, string}]}.
-
-{translation, "rabbit.ssl_options.cert",
-fun(Conf) ->
-    list_to_binary(cuttlefish:conf_get("ssl_options.cert", Conf))
-end}.
-
-{mapping, "ssl_options.client_renegotiation", "rabbit.ssl_options.client_renegotiation",
+{mapping, "ssl_options.client_renegotiation",
+    "rabbit.ssl_options.client_renegotiation",
     [{datatype, boolean}]}.
 
-{mapping, "ssl_options.crl_check", "rabbit.ssl_options.crl_check",
-    [{datatype, [{enum, [true, false, peer, best_effort]}]}]}.
+{mapping, "ssl_options.honor_cipher_order",
+    "rabbit.ssl_options.honor_cipher_order",
+    [{datatype, boolean}]}.
+
+{mapping, "ssl_options.honor_ecc_order",
+    "rabbit.ssl_options.honor_ecc_order",
+    [{datatype, boolean}]}.
+
+{mapping, "ssl_options.log_level", "rabbit.ssl_options.log_level",
+    [{datatype, {enum, [emergency, alert, critical, error,
+                        warning, notice, info, debug]}}]}.
 
 {mapping, "ssl_options.crl_sources.$index", "rabbit.ssl_options.crl_cache",
     [{datatype, {enum, [http, dir]}}]}.
 
-{mapping, "ssl_options.crl_sources.$index.timeout", "rabbit.ssl_options.crl_cache",
+{mapping, "ssl_options.crl_sources.$index.timeout",
+    "rabbit.ssl_options.crl_cache",
     [{datatype, integer}]}.
 
-{mapping, "ssl_options.crl_sources.$index.path", "rabbit.ssl_options.crl_cache",
+{mapping, "ssl_options.crl_sources.$index.path",
+    "rabbit.ssl_options.crl_cache",
     [{datatype, string}]}.
 
 {translation, "rabbit.ssl_options.crl_cache",
@@ -379,85 +386,12 @@ fun(Conf) ->
     end
 end}.
 
-{mapping, "ssl_options.depth", "rabbit.ssl_options.depth",
-    [{datatype, byte}]}.
-
-{mapping, "ssl_options.dh", "rabbit.ssl_options.dh",
-    [{datatype, string}]}.
-
-{translation, "rabbit.ssl_options.dh",
-fun(Conf) ->
-    list_to_binary(cuttlefish:conf_get("ssl_options.dh", Conf))
-end}.
-
-{mapping, "ssl_options.dhfile", "rabbit.ssl_options.dhfile",
-    [{datatype, string}, {validators, ["file_accessible"]}]}.
-
-{mapping, "ssl_options.honor_cipher_order", "rabbit.ssl_options.honor_cipher_order",
-    [{datatype, boolean}]}.
-
-{mapping, "ssl_options.honor_ecc_order", "rabbit.ssl_options.honor_ecc_order",
-    [{datatype, boolean}]}.
-
-{mapping, "ssl_options.key.RSAPrivateKey", "rabbit.ssl_options.key",
-    [{datatype, string}]}.
-
-{mapping, "ssl_options.key.DSAPrivateKey", "rabbit.ssl_options.key",
-    [{datatype, string}]}.
-
-{mapping, "ssl_options.key.PrivateKeyInfo", "rabbit.ssl_options.key",
-    [{datatype, string}]}.
-
-{translation, "rabbit.ssl_options.key",
-fun(Conf) ->
-    case cuttlefish_variable:filter_by_prefix("ssl_options.key", Conf) of
-        [{[_,_,Key], Val}|_] -> {list_to_atom(Key), list_to_binary(Val)};
-        _ -> cuttlefish:unset()
-    end
-end}.
-
-{mapping, "ssl_options.keyfile", "rabbit.ssl_options.keyfile",
-    [{datatype, string}, {validators, ["pem_file"]}]}.
-
-{mapping, "ssl_options.log_level", "rabbit.ssl_options.log_level",
-    [{datatype, {enum, [emergency, alert, critical, error, warning, notice, info, debug]}}]}.
-
-{mapping, "ssl_options.log_alert", "rabbit.ssl_options.log_alert",
-    [{datatype, boolean}]}.
-
-{mapping, "ssl_options.password", "rabbit.ssl_options.password",
-    [{datatype, [tagged_binary, binary]}]}.
+%% Replace the partial's plain pass-through translation for password
+%% with the rabbit-specific optionally-tagged binary handler.
 
 {translation, "rabbit.ssl_options.password",
 fun(Conf) ->
     rabbit_cuttlefish:optionally_tagged_binary("ssl_options.password", Conf)
-end}.
-
-{mapping, "ssl_options.psk_identity", "rabbit.ssl_options.psk_identity",
-    [{datatype, string}]}.
-
-{mapping, "ssl_options.reuse_sessions", "rabbit.ssl_options.reuse_sessions",
-    [{datatype, boolean}]}.
-
-{mapping, "ssl_options.secure_renegotiate", "rabbit.ssl_options.secure_renegotiate",
-    [{datatype, boolean}]}.
-
-{mapping, "ssl_options.versions.$version", "rabbit.ssl_options.versions",
-    [{datatype, atom}]}.
-
-{translation, "rabbit.ssl_options.versions",
-fun(Conf) ->
-    Settings = cuttlefish_variable:filter_by_prefix("ssl_options.versions", Conf),
-    [V || {_, V} <- Settings]
-end}.
-
-{mapping, "ssl_options.ciphers.$cipher", "rabbit.ssl_options.ciphers",
-    [{datatype, string}]}.
-
-{translation, "rabbit.ssl_options.ciphers",
-fun(Conf) ->
-    Settings = cuttlefish_variable:filter_by_prefix("ssl_options.ciphers", Conf),
-    lists:reverse([V || {_, V} <- Settings])
 end}.
 
 {mapping, "ssl_options.bypass_pem_cache", "ssl.bypass_pem_cache",
@@ -1069,88 +1003,10 @@ end}.
 
 %% TCP listener section ======================================================
 
-{mapping, "tcp_listen_options", "rabbit.tcp_listen_options", [
-    {datatype, {enum, [none]}}]}.
-
-{translation, "rabbit.tcp_listen_options",
-fun(Conf) ->
-    case cuttlefish:conf_get("tcp_listen_options", Conf, undefined) of
-        none -> [];
-        _    -> cuttlefish:invalid("Invalid tcp_listen_options")
-    end
-end}.
-
-{mapping, "tcp_listen_options.backlog", "rabbit.tcp_listen_options.backlog", [
-    {datatype, integer}
-]}.
-
-{mapping, "tcp_listen_options.nodelay", "rabbit.tcp_listen_options.nodelay", [
-    {datatype, boolean}
-]}.
-
-{mapping, "tcp_listen_options.buffer", "rabbit.tcp_listen_options.buffer",
-    [{datatype, integer}]}.
-
-{mapping, "tcp_listen_options.delay_send", "rabbit.tcp_listen_options.delay_send",
-    [{datatype, boolean}]}.
-
-{mapping, "tcp_listen_options.dontroute", "rabbit.tcp_listen_options.dontroute",
-    [{datatype, boolean}]}.
-
-{mapping, "tcp_listen_options.exit_on_close", "rabbit.tcp_listen_options.exit_on_close",
-    [{datatype, boolean}]}.
-
-{mapping, "tcp_listen_options.fd", "rabbit.tcp_listen_options.fd",
-    [{datatype, integer}]}.
-
-{mapping, "tcp_listen_options.high_msgq_watermark", "rabbit.tcp_listen_options.high_msgq_watermark",
-    [{datatype, integer}]}.
-
-{mapping, "tcp_listen_options.high_watermark", "rabbit.tcp_listen_options.high_watermark",
-    [{datatype, integer}]}.
-
-{mapping, "tcp_listen_options.keepalive", "rabbit.tcp_listen_options.keepalive",
-    [{datatype, boolean}]}.
-
-{mapping, "tcp_listen_options.low_msgq_watermark", "rabbit.tcp_listen_options.low_msgq_watermark",
-    [{datatype, integer}]}.
-
-{mapping, "tcp_listen_options.low_watermark", "rabbit.tcp_listen_options.low_watermark",
-    [{datatype, integer}]}.
-
-{mapping, "tcp_listen_options.port", "rabbit.tcp_listen_options.port",
-    [{datatype, integer}, {validators, ["port"]}]}.
-
-{mapping, "tcp_listen_options.priority", "rabbit.tcp_listen_options.priority",
-    [{datatype, integer}]}.
-
-{mapping, "tcp_listen_options.recbuf", "rabbit.tcp_listen_options.recbuf",
-    [{datatype, integer}]}.
-
-{mapping, "tcp_listen_options.send_timeout", "rabbit.tcp_listen_options.send_timeout",
-    [{datatype, integer}]}.
-
-{mapping, "tcp_listen_options.send_timeout_close", "rabbit.tcp_listen_options.send_timeout_close",
-    [{datatype, boolean}]}.
-
-{mapping, "tcp_listen_options.sndbuf", "rabbit.tcp_listen_options.sndbuf",
-    [{datatype, integer}]}.
-
-{mapping, "tcp_listen_options.tos", "rabbit.tcp_listen_options.tos",
-    [{datatype, integer}]}.
-
-{mapping, "tcp_listen_options.linger.on", "rabbit.tcp_listen_options.linger",
-    [{datatype, boolean}]}.
-
-{mapping, "tcp_listen_options.linger.timeout", "rabbit.tcp_listen_options.linger",
-    [{datatype, {integer, non_negative}}]}.
-
-{translation, "rabbit.tcp_listen_options.linger",
-fun(Conf) ->
-    LingerOn = cuttlefish:conf_get("tcp_listen_options.linger.on", Conf, false),
-    LingerTimeout = cuttlefish:conf_get("tcp_listen_options.linger.timeout", Conf, 0),
-    {LingerOn, LingerTimeout}
-end}.
+{include_partial, {rabbit, "tcp_listen_options"},
+    [{prefix, "tcp_listen_options"},
+     {app_prefix, "rabbit.tcp_listen_options"},
+     {disable_with, none}]}.
 
 
 %% ==========================================================================
