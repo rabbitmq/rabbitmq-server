@@ -72,7 +72,7 @@ get_auth_mechanism(Req) ->
                     end;
                 Val -> {Req, {strict_auth_mechanism, Val}}
             end;
-        {Type, _} = Auth -> { cowboy_req:set_resp_cookie(term_to_binary(Type),
+        {Type, _} = Auth -> { cowboy_req:set_resp_cookie(atom_to_binary(Type),
                                     <<"">>, Req, #{
                                         max_age => 0,
                                         http_only => true,
@@ -113,7 +113,7 @@ set_token_auth(AuthSettings, Req0) ->
                 {bearer, Token} ->
                     {
                         Req0,
-                        ["set_token_auth('", Token, "');"]
+                        ["set_token_auth(", rabbit_json:encode(Token), ");"]
                     };
                 _ ->
                     Cookies = cowboy_req:parse_cookies(Req0),
@@ -131,7 +131,7 @@ set_token_auth(AuthSettings, Req0) ->
                                         path => ?OAUTH2_BOOTSTRAP_PATH,
                                         same_site => strict
                                     }),
-                                ["set_token_auth('", Token, "');"]
+                                ["set_token_auth(", rabbit_json:encode(Token), ");"]
                             }
                     end
             end;
