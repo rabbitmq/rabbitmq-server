@@ -70,10 +70,20 @@ function sanitizeScreenshotFileName (title) {
 
 module.exports = {
   log: (message) => {
-    if (debug) console.log(new Date() + " " + message)
+    if (debug) console.log(new Date().toISOString() + " [debug] " + message)
+  },
+  info: (message) => {
+    console.log(new Date().toISOString() + " [info] " + message)
   },
   error: (message) => {
-    console.error(new Date() + " " + message)
+    console.error(new Date().toISOString() + " [error] " + message)
+  },
+  mask: (value) => {
+    if (value === undefined || value === null) return String(value)
+    const s = String(value)
+    if (s.length === 0) return "(empty)"
+    if (s.length <= 6) return "***"
+    return s.slice(0, 3) + "***(" + s.length + " chars)"
   },
   hasProfile: (profile) => {
     return profiles.includes(profile)
@@ -298,36 +308,47 @@ module.exports = {
     }
   },
   openIdConfiguration: (url) => {
+    const target = url + "/.well-known/openid-configuration"
     const req = new XMLHttpRequest()
-    req.open('GET', url + "/.well-known/openid-configuration", false)
-    req.send()
-    if (req.status == 200) return JSON.parse(req.responseText)
-    else {
-      module.exports.error(req.responseText)
-      throw new Error(req.responseText)
+    try {
+      req.open('GET', target, false)
+      req.send()
+    } catch (e) {
+      module.exports.error("GET " + target + " failed: " + e.message)
+      throw e
     }
+    if (req.status == 200) return JSON.parse(req.responseText)
+    module.exports.error("GET " + target + " returned " + req.status +
+      " body[0..200]: " + String(req.responseText).slice(0, 200))
+    throw new Error("openIdConfiguration failed with status " + req.status)
   },
 
   tokenFor: (client_id, client_secret, url = uaaUrl, scope) => {
     const req = new XMLHttpRequest()
-    let params = 'client_id=' + client_id +
-      '&client_secret=' + client_secret +
+    let params = 'client_id=' + encodeURIComponent(client_id) +
+      '&client_secret=' + encodeURIComponent(client_secret) +
       '&grant_type=client_credentials' +
       '&response_type=token'
     if (scope != undefined && scope != "") {
-      params = params + '&scope=' + scope
-    } 
-
-    req.open('POST', url, false)
-    req.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded')
-    req.setRequestHeader('Accept', 'application/json')
-    req.setRequestHeader("Authorization", "Basic " + btoa(client_id+":"+client_secret));
-    req.send(params)
-    if (req.status == 200) return JSON.parse(req.responseText).access_token
-    else {
-      module.exports.error(req.responseText)
-      throw new Error(req.responseText)
+      params = params + '&scope=' + encodeURIComponent(scope)
     }
+
+    try {
+      req.open('POST', url, false)
+      req.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded')
+      req.setRequestHeader('Accept', 'application/json')
+      req.setRequestHeader("Authorization", "Basic " + btoa(client_id + ":" + client_secret))
+      req.send(params)
+    } catch (e) {
+      module.exports.error("POST " + url + " (client_id=" + client_id +
+        ", secret=" + module.exports.mask(client_secret) + ") failed: " + e.message)
+      throw e
+    }
+    if (req.status == 200) return JSON.parse(req.responseText).access_token
+    module.exports.error("POST " + url + " (client_id=" + client_id +
+      ") returned " + req.status + " body[0..200]: " +
+      String(req.responseText).slice(0, 200))
+    throw new Error("tokenFor failed with status " + req.status)
   },
 
   assertAllOptions: (expectedOptions, actualOptions) => {

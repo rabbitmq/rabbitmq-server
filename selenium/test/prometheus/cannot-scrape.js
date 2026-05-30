@@ -1,6 +1,6 @@
 const assert = require('assert')
 const XMLHttpRequest = require('xmlhttprequest').XMLHttpRequest
-const { log, error, tokenFor, openIdConfiguration } = require('../utils')
+const { info, mask, tokenFor, openIdConfiguration } = require('../utils')
 
 const managementUrl = process.env.RABBITMQ_URL || 'http://rabbitmq:15672/'
 const prometheusUrl = process.env.PROMETHEUS_URL ||
@@ -14,12 +14,16 @@ describe('Prometheus endpoint with a management-only OAuth2 client (no monitorin
   let token
 
   before(function () {
-    log('oauthProviderUrl: ' + oauthProviderUrl)
-    log('clientId: ' + clientId)
+    info('prometheusUrl: ' + prometheusUrl)
+    info('oauthProviderUrl: ' + oauthProviderUrl)
+    info('clientId: ' + clientId + ', clientSecret: ' + mask(clientSecret))
+    assert.ok(oauthProviderUrl, 'OAUTH_PROVIDER_URL env var must be set')
+    assert.ok(clientId, 'PROMETHEUS_MANAGEMENT_CLIENT_ID env var must be set')
+    assert.ok(clientSecret, 'PROMETHEUS_MANAGEMENT_CLIENT_SECRET env var must be set')
     const openIdConfig = openIdConfiguration(oauthProviderUrl)
-    log('token_endpoint: ' + openIdConfig.token_endpoint)
+    info('token_endpoint: ' + openIdConfig.token_endpoint)
     token = tokenFor(clientId, clientSecret, openIdConfig.token_endpoint)
-    log('Obtained access token')
+    info('Obtained access token: ' + mask(token))
   })
 
   it('cannot scrape /metrics', function () {
