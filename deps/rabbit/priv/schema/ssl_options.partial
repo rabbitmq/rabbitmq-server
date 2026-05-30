@@ -1,0 +1,88 @@
+%% Cuttlefish partial: shared TLS options used by every RabbitMQ
+%% schema that exposes an `ssl_options` block — protocol listeners,
+%% peer-discovery backends, the HTTP and LDAP auth backends, the trust
+%% store and shovel. Pair with the include directive:
+%%
+%%   {include_partial, {rabbit, "ssl_options"},
+%%       [{prefix, "<scope>.ssl_options"},
+%%        {app_prefix, "<app>.ssl_options"},
+%%        {disable_with, none}]}.
+%%
+%% Consumers with extras (rabbit's primary listener has CRL sources and
+%% log levels, auth_ldap has honor_cipher_order, etc.) declare those
+%% inline alongside the include.
+
+{mapping, "verify", "verify",
+    [{datatype, {enum, [verify_peer, verify_none]}}]}.
+
+{mapping, "fail_if_no_peer_cert", "fail_if_no_peer_cert",
+    [{datatype, boolean}]}.
+
+{mapping, "cacertfile", "cacertfile",
+    [{datatype, string}, {validators, ["pem_file"]}]}.
+
+{mapping, "certfile", "certfile",
+    [{datatype, string}, {validators, ["pem_file"]}]}.
+
+{mapping, "cert", "cert", [{datatype, string}]}.
+
+{partial_translation, "cert",
+    fun(Conf, ConfPrefix, _AppPrefix) ->
+        list_to_binary(cuttlefish:conf_get(ConfPrefix ++ ".cert", Conf))
+    end}.
+
+{mapping, "crl_check", "crl_check",
+    [{datatype, [{enum, [true, false, peer, best_effort]}]}]}.
+
+{mapping, "depth", "depth", [{datatype, byte}]}.
+
+{mapping, "dh", "dh", [{datatype, string}]}.
+
+{partial_translation, "dh",
+    fun(Conf, ConfPrefix, _AppPrefix) ->
+        list_to_binary(cuttlefish:conf_get(ConfPrefix ++ ".dh", Conf))
+    end}.
+
+{mapping, "dhfile", "dhfile",
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+
+%% `key.RSAPrivateKey` and friends are intentionally left out of the
+%% partial. The pre-migration translations diverged across consumers
+%% (`cuttlefish:unset/0` vs the atom `undefined` for the no-match
+%% branch, plus an upstream bug in non-rabbit consumers where the
+%% `[_,_,Key]` 3-segment pattern never matched their 5+ segment paths)
+%% and the partial cannot preserve both shapes simultaneously. Each
+%% consumer keeps its `key.*` mappings and translation inline so the
+%% generated `app.config` stays byte-identical with the pre-migration version of the schema.
+
+{mapping, "keyfile", "keyfile",
+    [{datatype, string}, {validators, ["pem_file"]}]}.
+
+{mapping, "log_alert", "log_alert", [{datatype, boolean}]}.
+
+{mapping, "password", "password",
+    [{datatype, [tagged_binary, binary]}]}.
+
+{mapping, "psk_identity", "psk_identity", [{datatype, string}]}.
+
+{mapping, "reuse_sessions", "reuse_sessions", [{datatype, boolean}]}.
+
+{mapping, "secure_renegotiate", "secure_renegotiate", [{datatype, boolean}]}.
+
+{mapping, "versions.$version", "versions", [{datatype, atom}]}.
+
+{partial_translation, "versions",
+    fun(Conf, ConfPrefix, _AppPrefix) ->
+        Settings = cuttlefish_variable:filter_by_prefix(
+                     ConfPrefix ++ ".versions", Conf),
+        [V || {_, V} <- Settings]
+    end}.
+
+{mapping, "ciphers.$cipher", "ciphers", [{datatype, string}]}.
+
+{partial_translation, "ciphers",
+    fun(Conf, ConfPrefix, _AppPrefix) ->
+        Settings = cuttlefish_variable:filter_by_prefix(
+                     ConfPrefix ++ ".ciphers", Conf),
+        lists:reverse([V || {_, V} <- Settings])
+    end}.
