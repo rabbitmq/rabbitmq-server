@@ -1,0 +1,66 @@
+%% Cuttlefish partial: TCP listener options shared by every RabbitMQ
+%% protocol listener (AMQP, MQTT, STOMP, Stream). Included from
+%% rabbit.schema for its own listener and from the per-protocol schemas
+%% with their respective conf and app prefixes.
+%%
+%% Pair with the include directive:
+%%
+%%   {include_partial, {rabbit, "tcp_listen_options"},
+%%       [{prefix, "<protocol>.tcp_listen_options"},
+%%        {app_prefix, "<app>.tcp_listen_options"},
+%%        {disable_with, none}]}.
+%%
+%% `disable_with` emits the historical `<prefix> = none` guard mapping
+%% plus its translation — keeping the user-facing surface unchanged.
+
+{mapping, "backlog", "backlog", [{datatype, integer}]}.
+
+{mapping, "nodelay", "nodelay", [{datatype, boolean}]}.
+
+{mapping, "buffer", "buffer", [{datatype, integer}]}.
+
+{mapping, "delay_send", "delay_send", [{datatype, boolean}]}.
+
+{mapping, "dontroute", "dontroute", [{datatype, boolean}]}.
+
+{mapping, "exit_on_close", "exit_on_close", [{datatype, boolean}]}.
+
+{mapping, "fd", "fd", [{datatype, integer}]}.
+
+{mapping, "high_msgq_watermark", "high_msgq_watermark", [{datatype, integer}]}.
+
+{mapping, "high_watermark", "high_watermark", [{datatype, integer}]}.
+
+{mapping, "keepalive", "keepalive", [{datatype, boolean}]}.
+
+{mapping, "low_msgq_watermark", "low_msgq_watermark", [{datatype, integer}]}.
+
+{mapping, "low_watermark", "low_watermark", [{datatype, integer}]}.
+
+{mapping, "port", "port", [{datatype, integer}, {validators, ["port"]}]}.
+
+{mapping, "priority", "priority", [{datatype, integer}]}.
+
+{mapping, "recbuf", "recbuf", [{datatype, integer}]}.
+
+{mapping, "send_timeout", "send_timeout", [{datatype, integer}]}.
+
+{mapping, "send_timeout_close", "send_timeout_close", [{datatype, boolean}]}.
+
+{mapping, "sndbuf", "sndbuf", [{datatype, integer}]}.
+
+{mapping, "tos", "tos", [{datatype, integer}]}.
+
+{mapping, "linger.on", "linger", [{datatype, boolean}]}.
+
+{mapping, "linger.timeout", "linger",
+    [{datatype, {integer, non_negative}}]}.
+
+{partial_translation, "linger",
+    fun(Conf, ConfPrefix, _AppPrefix) ->
+        LingerOn = cuttlefish:conf_get(ConfPrefix ++ ".linger.on",
+                                       Conf, false),
+        LingerTimeout = cuttlefish:conf_get(ConfPrefix ++ ".linger.timeout",
+                                            Conf, 0),
+        {LingerOn, LingerTimeout}
+    end}.
