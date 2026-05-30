@@ -402,9 +402,13 @@ do_list_schemas_in_app(App, SchemaDir) ->
         {ok, Files} ->
             ?LOG_DEBUG("  [x] ~ts", [App],
                        #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
+            %% Match `.schema` exactly so cuttlefish 3.8.0+ partial files
+            %% (`.partial`) and other sidecars (editor swapfiles, OS
+            %% metadata) stay out of `cuttlefish_schema:files/1`.
             [filename:join(SchemaDir, File)
              || [C | _] = File <- Files,
-                C =/= $.];
+                C =/= $.,
+                filename:extension(File) =:= ".schema"];
         error ->
             ?LOG_DEBUG(
               "  [ ] ~ts (no readable schema dir)", [App],
