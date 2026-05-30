@@ -38,8 +38,7 @@ is_authorized(ReqData0, Context) ->
     Password = proplists:get_value(<<"password">>, Body),
     case rabbit_mgmt_util:is_authorized_user(ReqData, Context, Username, Password) of
         {true, ReqData1, Context1} ->
-            Value = base64:encode(<<Username/binary,":",Password/binary>>),
-            {true, cowboy_req:set_resp_cookie(<<"auth">>, Value, ReqData1), Context1};
+            {true, ReqData1, Context1};
         Other ->
             Other
     end.
