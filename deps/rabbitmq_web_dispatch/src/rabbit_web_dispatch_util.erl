@@ -25,8 +25,8 @@ parse_auth_header(Header) ->
     end.
 
 relativise("/" ++ F, "/" ++ T) ->
-    From = string:tokens(F, "/"),
-    To = string:tokens(T, "/"),
+    From = string:lexemes(F, "/"),
+    To = string:lexemes(T, "/"),
     string:join(relativise0(From, To), "/").
 
 relativise0([H], [H|_] = To) ->
@@ -51,5 +51,5 @@ unrelativise(F, T)          -> case string:str(F, "/") of
 strip_tail("") -> exit(not_enough_to_strip);
 strip_tail(S)  -> case string:rstr(S, "/") of
                       0 -> "";
-                      I -> string:left(S, I - 1)
+                      I -> string:slice(S, 0, I - 1)
                   end.

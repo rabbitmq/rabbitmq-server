@@ -99,7 +99,7 @@ parse_userinfo(undefined) -> undefined;
 parse_userinfo([]) -> undefined;
 parse_userinfo({User, undefined}) -> {User, undefined};
 parse_userinfo({User, Password}) -> {User, Password};
-parse_userinfo(Value) -> parse_userinfo_result(string:tokens(Value, ":")).
+parse_userinfo(Value) -> parse_userinfo_result(string:lexemes(Value, ":")).
 
 -spec parse_userinfo_result(list()) ->
     {username() | undefined, password() | undefined} | undefined.

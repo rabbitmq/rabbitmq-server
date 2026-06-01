@@ -1931,7 +1931,9 @@ start_node(Config, Node) ->
 async_start_node(Config, Node) ->
     Self = self(),
     spawn(fun() ->
-                  Reply = (catch start_node(Config, Node)),
+                  Reply = try start_node(Config, Node)
+                          catch _:E -> {error, E}
+                          end,
                   Self ! {async_start_node, Node, Reply}
           end),
     ok.

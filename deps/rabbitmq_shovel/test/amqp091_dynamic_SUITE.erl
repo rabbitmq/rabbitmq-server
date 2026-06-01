@@ -520,7 +520,9 @@ spawn_suspender_proc(Pid) ->
         spawn(
           fun() ->
                   register(suspender, self()),
-                  Res = catch (true = erlang:suspend_process(Pid)),
+                  Res = try true = erlang:suspend_process(Pid)
+                          catch _:E -> E
+                          end,
                   ReqPid ! {suspend_res, self(), Res},
                   %% wait indefinitely
                   receive stop -> ok end
@@ -535,7 +537,10 @@ find_shovel_pid(Config) ->
     [ShovelPid] = [P || P <- rabbit_ct_broker_helpers:rpc(
                                Config, 0, erlang, processes, []),
                         rabbit_shovel_worker ==
-                            (catch element(1, erpc:call(node(P), proc_lib, initial_call, [P])))],
+                            (try element(1, erpc:call(
+                                               node(P), proc_lib, initial_call, [P]))
+                             catch _:_ -> undefined
+                             end)],
     ShovelPid.
 
 get_shovel_state(ShovelPid) ->

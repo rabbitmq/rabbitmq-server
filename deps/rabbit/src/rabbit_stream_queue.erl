@@ -6,7 +6,6 @@
 %%
 
 -module(rabbit_stream_queue).
--feature(maybe_expr, enable).
 
 -include("mc.hrl").
 

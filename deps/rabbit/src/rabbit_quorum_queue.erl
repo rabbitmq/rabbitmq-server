@@ -6,7 +6,6 @@
 %%
 
 -module(rabbit_quorum_queue).
--feature(maybe_expr, enable).
 
 -behaviour(rabbit_queue_type).
 -behaviour(rabbit_queue_type_ra).
@@ -1147,7 +1146,9 @@ delete(Q, _IfUnused, _IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
 
 force_delete_queue(Servers) ->
     [begin
-         case catch(ra:force_delete_server(?RA_SYSTEM, S)) of
+         case try ra:force_delete_server(?RA_SYSTEM, S)
+              catch _:E -> {error, E}
+              end of
              ok -> ok;
              Err ->
                  ?LOG_WARNING(

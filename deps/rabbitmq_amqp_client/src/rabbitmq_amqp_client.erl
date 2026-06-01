@@ -6,8 +6,6 @@
 
 -module(rabbitmq_amqp_client).
 
--feature(maybe_expr, enable).
-
 -include("rabbitmq_amqp_client.hrl").
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
 

@@ -15,8 +15,8 @@
 -include("rabbit_amqp_reader.hrl").
 
 -export([init/1,
-         info/2,
          mainloop/2,
+         local_connections/0,
          set_credential/2,
          notify_session_ending/3]).
 
@@ -547,7 +547,8 @@ handle_connection_frame(
            Infos),
     ok = rabbit_event:notify(connection_created, Infos),
     ok = maybe_emit_stats(State),
-    ok = rabbit_amqp1_0:register_connection(self()),
+    ok = register_connection(self()),
+
     Caps = [%% https://docs.oasis-open.org/amqp/linkpair/v1.0/cs01/linkpair-v1.0-cs01.html#_Toc51331306
             <<"LINK_PAIR_V1_0">>,
             %% https://docs.oasis-open.org/amqp/anonterm/v1.0/cs01/anonterm-v1.0-cs01.html#doc-anonymous-relay
@@ -998,21 +999,15 @@ maybe_start_credential_expiry_timer(User) ->
 silent_close_delay() ->
     timer:sleep(?SILENT_CLOSE_DELAY).
 
-%% This function is deprecated.
-%% It could be called in 3.13 / 4.0 mixed version clusters by the old 3.13 CLI command
-%% rabbitmqctl list_amqp10_connections
-%%
-%% rabbitmqctl list_connections
-%% listing AMQP 1.0 connections in 4.0 uses rabbit_reader:info/2 instead.
--spec info(rabbit_types:connection(), rabbit_types:info_keys()) ->
-    rabbit_types:infos().
-info(Pid, InfoItems) ->
-    case gen_server:call(Pid, {info, InfoItems}, infinity) of
-        {ok, InfoList} ->
-            InfoList;
-        {error, Reason} ->
-            throw(Reason)
-    end.
+-spec local_connections() -> [pid()].
+local_connections() ->
+    pg:which_groups(pg_scope()).
+
+register_connection(Pid) ->
+    pg:join(pg_scope(), Pid, Pid).
+
+pg_scope() ->
+    rabbit:pg_local_scope(amqp_connection).
 
 infos(Items, State) ->
     [{Item, i(Item, State)} || Item <- Items].

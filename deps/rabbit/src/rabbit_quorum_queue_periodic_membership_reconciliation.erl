@@ -7,8 +7,6 @@
 
 -module(rabbit_quorum_queue_periodic_membership_reconciliation).
 
--feature(maybe_expr, enable).
-
 -behaviour(gen_server).
 
 -export([on_node_up/1, on_node_down/1, queue_created/1, policy_set/0]).

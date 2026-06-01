@@ -188,7 +188,7 @@ guess_tested_erlang_app_name(Config) ->
              "plt file required, please set DIALYZER_PLT"};
         Filename ->
             AppName0 = filename:basename(Filename, ".plt"),
-            AppName = string:strip(AppName0, left, $.),
+            AppName = string:trim(AppName0, leading, "."),
             set_config(Config, {tested_erlang_app, list_to_atom(AppName)})
     end.
 
@@ -612,7 +612,7 @@ link_name(["deps", _ | Tail]) ->
 link_name(X) -> X.
 
 get_selection_from_tc_logfile(["logs", _, S | _Tail]) ->
-    {ok, link_name(string:tokens(S, "."))};
+    {ok, link_name(string:lexemes(S, "."))};
 get_selection_from_tc_logfile([_ | Tail]) ->
     get_selection_from_tc_logfile(Tail);
 get_selection_from_tc_logfile([]) -> not_found.
@@ -1031,7 +1031,7 @@ merge_app_env_in_erlconf(ErlangConfig, []) ->
     ErlangConfig.
 
 nodename_to_hostname(Nodename) when is_atom(Nodename) ->
-    [_, Hostname] = string:tokens(atom_to_list(Nodename), "@"),
+    [_, Hostname] = string:lexemes(atom_to_list(Nodename), "@"),
     Hostname.
 
 convert_to_unicode_binary(Arg) when is_list(Arg) ->
@@ -1103,7 +1103,7 @@ eventually({Line, Assertion} = TestObj, PollInterval, PollCount)
   when is_integer(Line), Line >= 0, is_function(Assertion, 0),
        is_integer(PollInterval), PollInterval >= 0,
        is_integer(PollCount), PollCount > 0 ->
-    case catch Assertion() of
+    case try Assertion() catch _:E -> {error, E} end of
         ok ->
             ok;
         Err ->

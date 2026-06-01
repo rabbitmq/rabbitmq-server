@@ -18,14 +18,8 @@
 -spec adjust_for_message_handling_proc() -> ok.
 adjust_for_message_handling_proc() ->
     process_flag(message_queue_data, off_heap),
-    case code_version:get_otp_version() of
-        OtpMaj when OtpMaj >= 27 ->
-            %% 46422 is the default min_bin_vheap_size and for OTP 27 and above
-            %% we want to substantially increase it for processes that may buffer
-            %% messages. 32x has proven workable in testing whilst not being
-            %% ridiculously large
-            process_flag(min_bin_vheap_size, 46422 * 32),
-            ok;
-        _ ->
-            ok
-    end.
+    %% 46422 is the default min_bin_vheap_size; 32x has proven workable in
+    %% testing for processes that may buffer messages, whilst not being
+    %% ridiculously large.
+    process_flag(min_bin_vheap_size, 46422 * 32),
+    ok.

@@ -408,7 +408,7 @@ epmd_port_please(Name, Host, 0) ->
 epmd_port_please(Name, Host, RetriesLeft) ->
     ?LOG_DEBUG("Getting epmd port node '~ts', ~b retries left",
     [Name, RetriesLeft]),
-  case catch maybe_get_epmd_port(Name, Host) of
+  case try maybe_get_epmd_port(Name, Host) catch _:E -> {error, E} end of
     ok -> ok;
     {error, _} ->
       timer:sleep(?PORT_PLEASE_ATTEMPTS_WAIT),
@@ -489,7 +489,7 @@ connections() ->
 -spec local_connections() -> [rabbit_types:connection()].
 local_connections() ->
     Amqp091Pids = pg:which_groups(pg_scope_amqp091_connection()),
-    Amqp10Pids = rabbit_amqp1_0:list_local(),
+    Amqp10Pids = rabbit_amqp_reader:local_connections(),
     Amqp10Pids ++ Amqp091Pids.
 
 -spec register_non_amqp_connection(pid()) -> ok.

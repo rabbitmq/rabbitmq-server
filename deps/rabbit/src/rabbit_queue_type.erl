@@ -6,7 +6,6 @@
 %%
 
 -module(rabbit_queue_type).
--feature(maybe_expr, enable).
 
 -behaviour(rabbit_registry_class).
 

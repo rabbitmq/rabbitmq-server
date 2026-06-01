@@ -7,8 +7,6 @@
 
 -module(rabbit_stomp_processor).
 
--feature(maybe_expr, enable).
-
 -compile({no_auto_import, [error/3]}).
 
 -export([initial_state/2,
@@ -288,18 +286,16 @@ process_request(ProcessFun, State) ->
 
 
 process_request(ProcessFun, SuccessFun, State) ->
-    Res = case catch ProcessFun(State) of
-              {'EXIT',
-               {{shutdown,
-                 {server_initiated_close, ReplyCode, Explanation}}, _}} ->
+    Res = try ProcessFun(State) of
+              Result -> Result
+          catch
+              error:{shutdown, {server_initiated_close, ReplyCode, Explanation}}:_ ->
                   amqp_death(ReplyCode, Explanation, State);
-              {'EXIT', {amqp_error, Name, Msg, _}} ->
+              exit:{amqp_error, Name, Msg, _} ->
                   amqp_death(Name, Msg, State);
-              {'EXIT', Reason} ->
+              Class:Reason ->
                   priv_error("Processing error", "Processing error",
-                             Reason, State);
-              Result ->
-                  Result
+                             {Class, Reason}, State)
           end,
     case Res of
         {ok, Frame, NewState} ->

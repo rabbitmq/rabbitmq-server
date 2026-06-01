@@ -331,18 +331,20 @@ stop(Name, Reason, Timeout) ->
 %% is handled here (? Shall we do that here (or rely on timeouts) ?).
 %% -----------------------------------------------------------------
 call(Name, Request) ->
-    case catch gen:call(Name, '$gen_call', Request) of
-        {ok,Res} ->
-            Res;
-        {'EXIT',Reason} ->
+    try gen:call(Name, '$gen_call', Request) of
+        {ok, Res} ->
+            Res
+    catch
+        _:Reason ->
             exit({Reason, {?MODULE, call, [Name, Request]}})
     end.
 
 call(Name, Request, Timeout) ->
-    case catch gen:call(Name, '$gen_call', Request, Timeout) of
-        {ok,Res} ->
-            Res;
-        {'EXIT',Reason} ->
+    try gen:call(Name, '$gen_call', Request, Timeout) of
+        {ok, Res} ->
+            Res
+    catch
+        _:Reason ->
             exit({Reason, {?MODULE, call, [Name, Request, Timeout]}})
     end.
 
@@ -486,10 +488,11 @@ handle_call_result(MRef, Result, Refs, AccList) ->
 %% Apply a function to a generic server's state.
 %% -----------------------------------------------------------------
 with_state(Name, Fun) ->
-    case catch gen:call(Name, '$with_state', Fun, infinity) of
-        {ok,Res} ->
-            Res;
-        {'EXIT',Reason} ->
+    try gen:call(Name, '$with_state', Fun, infinity) of
+        {ok, Res} ->
+            Res
+    catch
+        _:Reason ->
             exit({Reason, {?MODULE, with_state, [Name, Fun]}})
     end.
 
@@ -562,7 +565,7 @@ init_it(Starter, Parent, Name0, Mod, Args, Options) ->
                               debug   = Debug,
                               emit_stats_fun = EmitStatsFun,
                               stop_stats_fun = StopStatsFun }),
-    case catch Mod:init(Args) of
+    try Mod:init(Args) of
         {ok, State} ->
             proc_lib:init_ack(Starter, {ok, self()}),
             loop(init_stats(GS2State#gs2_state { state         = State,
@@ -602,14 +605,20 @@ init_it(Starter, Parent, Name0, Mod, Args, Options) ->
             unregister_name(Name0),
             proc_lib:init_ack(Starter, ignore),
             exit(normal);
-        {'EXIT', Reason} ->
-            unregister_name(Name0),
-            proc_lib:init_ack(Starter, {error, Reason}),
-            exit(Reason);
         Else ->
             Error = {bad_return_value, Else},
             proc_lib:init_ack(Starter, {error, Error}),
             exit(Error)
+    catch
+        error:Reason:Stack ->
+            ErrWithStack = {Reason, Stack},
+            unregister_name(Name0),
+            proc_lib:init_ack(Starter, {error, ErrWithStack}),
+            exit(ErrWithStack);
+        exit:Reason ->
+            unregister_name(Name0),
+            proc_lib:init_ack(Starter, {error, Reason}),
+            exit(Reason)
     end.
 
 name({local,Name}) -> Name;
@@ -619,7 +628,7 @@ name({global,Name}) -> Name;
 name(Name) -> Name.
 
 unregister_name({local,Name}) ->
-    _ = (catch unregister(Name));
+    try unregister(Name) catch _:_ -> ok end;
 unregister_name({global,Name}) ->
     _ = global:unregister_name(Name);
 unregister_name(Pid) when is_pid(Pid) ->
@@ -726,11 +735,16 @@ pre_hibernate(GS2State0 = #gs2_state { state          = State,
     GS2State = EmitStatsFun(stop_stats_timer(GS2State0)),
     case erlang:function_exported(Mod, handle_pre_hibernate, 1) of
         true ->
-            case catch Mod:handle_pre_hibernate(State) of
+            try Mod:handle_pre_hibernate(State) of
                 {hibernate, NState} ->
-                    hibernate(GS2State #gs2_state { state = NState } );
+                    hibernate(GS2State #gs2_state { state = NState });
                 Reply ->
                     handle_common_termination(Reply, pre_hibernate, GS2State)
+            catch
+                exit:ExitReason ->
+                    terminate(ExitReason, pre_hibernate, GS2State);
+                _:ErrReason:ErrStack ->
+                    terminate({ErrReason, ErrStack}, pre_hibernate, GS2State)
             end;
         false ->
             hibernate(GS2State)
@@ -741,7 +755,7 @@ post_hibernate(GS2State0 = #gs2_state { state = State,
     GS2State = ensure_stats_timer(GS2State0),
     case erlang:function_exported(Mod, handle_post_hibernate, 1) of
         true ->
-            case catch Mod:handle_post_hibernate(State) of
+            try Mod:handle_post_hibernate(State) of
                 {noreply, NState} ->
                     process_next_msg(GS2State #gs2_state { state = NState,
                                                            time  = infinity });
@@ -750,6 +764,11 @@ post_hibernate(GS2State0 = #gs2_state { state = State,
                                                            time  = Time });
                 Reply ->
                     handle_common_termination(Reply, post_hibernate, GS2State)
+            catch
+                exit:ExitReason ->
+                    terminate(ExitReason, post_hibernate, GS2State);
+                _:ErrReason:ErrStack ->
+                    terminate({ErrReason, ErrStack}, post_hibernate, GS2State)
             end;
         false ->
             %% use hibernate here, not infinity. This matches
@@ -900,36 +919,8 @@ rec_nodes(Tag, [{N,R}|Tail], Name, Badnodes, Replies, Time, TimerId ) ->
             %% Collect all replies that already have arrived
             rec_nodes_rest(Tag, Tail, Name, [N|Badnodes], Replies)
     end;
-rec_nodes(Tag, [N|Tail], Name, Badnodes, Replies, Time, TimerId) ->
-    %% R6 node
-    receive
-        {nodedown, N} ->
-            monitor_node(N, false),
-            rec_nodes(Tag, Tail, Name, [N|Badnodes], Replies, 2000, TimerId);
-        {{Tag, N}, Reply} ->  %% Tag is bound !!!
-            receive {nodedown, N} -> ok after 0 -> ok end,
-            monitor_node(N, false),
-            rec_nodes(Tag, Tail, Name, Badnodes,
-                      [{N,Reply}|Replies], 2000, TimerId);
-        {timeout, TimerId, _} ->
-            receive {nodedown, N} -> ok after 0 -> ok end,
-            monitor_node(N, false),
-            %% Collect all replies that already have arrived
-            rec_nodes_rest(Tag, Tail, Name, [N | Badnodes], Replies)
-    after Time ->
-            case rpc:call(N, erlang, whereis, [Name]) of
-                Pid when is_pid(Pid) -> % It exists try again.
-                    rec_nodes(Tag, [N|Tail], Name, Badnodes,
-                              Replies, infinity, TimerId);
-                _ -> % badnode
-                    receive {nodedown, N} -> ok after 0 -> ok end,
-                    monitor_node(N, false),
-                    rec_nodes(Tag, Tail, Name, [N|Badnodes],
-                              Replies, 2000, TimerId)
-            end
-    end;
 rec_nodes(_, [], _, Badnodes, Replies, _, TimerId) ->
-    case catch erlang:cancel_timer(TimerId) of
+    case try erlang:cancel_timer(TimerId) catch _:_ -> false end of
         false ->  % It has already sent it's message
             receive
                 {timeout, TimerId, _} -> ok
@@ -953,21 +944,6 @@ rec_nodes_rest(Tag, [{N,R}|Tail], Name, Badnodes, Replies) ->
             unmonitor(R),
             rec_nodes_rest(Tag, Tail, Name, [N|Badnodes], Replies)
     end;
-rec_nodes_rest(Tag, [N|Tail], Name, Badnodes, Replies) ->
-    %% R6 node
-    receive
-        {nodedown, N} ->
-            monitor_node(N, false),
-            rec_nodes_rest(Tag, Tail, Name, [N|Badnodes], Replies);
-        {{Tag, N}, Reply} ->  %% Tag is bound !!!
-            receive {nodedown, N} -> ok after 0 -> ok end,
-            monitor_node(N, false),
-            rec_nodes_rest(Tag, Tail, Name, Badnodes, [{N,Reply}|Replies])
-    after 0 ->
-            receive {nodedown, N} -> ok after 0 -> ok end,
-            monitor_node(N, false),
-            rec_nodes_rest(Tag, Tail, Name, [N|Badnodes], Replies)
-    end;
 rec_nodes_rest(_Tag, [], _Name, Badnodes, Replies) ->
     {Replies, Badnodes}.
 
@@ -982,14 +958,8 @@ start_monitor(Node, Name) when is_atom(Node), is_atom(Name) ->
             self() ! {'DOWN', Ref, process, {Name, Node}, noconnection},
             {Node, Ref};
        true ->
-            case catch erlang:monitor(process, {Name, Node}) of
-                {'EXIT', _} ->
-                    %% Remote node is R6
-                    monitor_node(Node, true),
-                    Node;
-                Ref when is_reference(Ref) ->
-                    {Node, Ref}
-            end
+            Ref = erlang:monitor(process, {Name, Node}),
+            {Node, Ref}
     end.
 
 %% Cancels a monitor started with Ref=erlang:monitor(_, _).
@@ -1032,7 +1002,7 @@ handle_msg({'$gen_call', From, Msg}, GS2State = #gs2_state { mod = Mod,
                                                              state = State,
                                                              name = Name,
                                                              debug = Debug }) ->
-    case catch Mod:handle_call(Msg, From, State) of
+    try Mod:handle_call(Msg, From, State) of
         {reply, Reply, NState} ->
             Debug1 = common_reply(Name, From, Reply, NState, Debug),
             loop(GS2State #gs2_state { state = NState,
@@ -1044,17 +1014,30 @@ handle_msg({'$gen_call', From, Msg}, GS2State = #gs2_state { mod = Mod,
                                        time  = Time1,
                                        debug = Debug1});
         {stop, Reason, Reply, NState} ->
-            {'EXIT', R} =
-                (catch terminate(Reason, Msg,
-                                 GS2State #gs2_state { state = NState })),
+            R = try terminate(Reason, Msg,
+                              GS2State #gs2_state { state = NState })
+                catch exit:ExitReason -> ExitReason
+                end,
             _ = common_reply(Name, From, Reply, NState, Debug),
             exit(R);
         Other ->
             handle_common_reply(Other, Msg, GS2State)
+    catch
+        exit:ExitReason ->
+            terminate(ExitReason, Msg, GS2State);
+        _:ErrReason:ErrStack ->
+            terminate({ErrReason, ErrStack}, Msg, GS2State)
     end;
 handle_msg(Msg, GS2State = #gs2_state { mod = Mod, state = State }) ->
-    Reply = (catch dispatch(Msg, Mod, State)),
-    handle_common_reply(Reply, Msg, GS2State).
+    try dispatch(Msg, Mod, State) of
+        Reply ->
+            handle_common_reply(Reply, Msg, GS2State)
+    catch
+        exit:ExitReason ->
+            terminate(ExitReason, Msg, GS2State);
+        _:ErrReason:ErrStack ->
+            terminate({ErrReason, ErrStack}, Msg, GS2State)
+    end.
 
 handle_common_reply(Reply, Msg, GS2State = #gs2_state { name  = Name,
                                                         debug = Debug}) ->
@@ -1109,13 +1092,16 @@ system_terminate(Reason, _Parent, Debug, GS2State) ->
 system_code_change(GS2State = #gs2_state { mod   = Mod,
                                            state = State },
                    _Module, OldVsn, Extra) ->
-    case catch Mod:code_change(OldVsn, State, Extra) of
+    try Mod:code_change(OldVsn, State, Extra) of
         {ok, NewState} ->
             NewGS2State = find_prioritisers(
                             GS2State #gs2_state { state = NewState }),
             {ok, NewGS2State};
         Else ->
             Else
+    catch
+        _:Reason:Stack ->
+            {'EXIT', {Reason, Stack}}
     end.
 
 %%-----------------------------------------------------------------
@@ -1155,11 +1141,7 @@ terminate(Reason, Msg, #gs2_state { name  = Name,
                                     stop_stats_fun = StopStatsFun
                                     } = GS2State) ->
     StopStatsFun(stop_stats_timer(GS2State)),
-    case catch Mod:terminate(Reason, ModState0) of
-        {'EXIT', R} ->
-            ModState1 = maybe_format_state(Mod, ModState0),
-            error_info(R, Reason, Name, Msg, ModState1, Debug),
-            exit(R);
+    try Mod:terminate(Reason, ModState0) of
         _ ->
             case Reason of
                 normal ->
@@ -1173,6 +1155,16 @@ terminate(Reason, Msg, #gs2_state { name  = Name,
                     error_info(Reason, undefined, Name, Msg, ModState1, Debug),
                     exit(Reason)
             end
+    catch
+        error:R:Stack ->
+            ErrWithStack = {R, Stack},
+            ModState1 = maybe_format_state(Mod, ModState0),
+            error_info(ErrWithStack, Reason, Name, Msg, ModState1, Debug),
+            exit(ErrWithStack);
+        exit:R ->
+            ModState1 = maybe_format_state(Mod, ModState0),
+            error_info(R, Reason, Name, Msg, ModState1, Debug),
+            exit(R)
     end.
 
 maybe_format_state(M, ModState) ->
@@ -1246,13 +1238,13 @@ dbg_options(Name, Opts) ->
     dbg_opts(Name, Opts).
 
 dbg_opts(Name, Opts) ->
-    case catch sys:debug_options(Opts) of
-        {'EXIT',_} ->
+    try sys:debug_options(Opts) of
+        Dbg -> Dbg
+    catch
+        _:_ ->
             format("~tp: ignoring erroneous debug options - ~tp~n",
                    [Name, Opts]),
-            [];
-        Dbg ->
-            Dbg
+            []
     end.
 
 get_proc_name(Pid) when is_pid(Pid) ->
@@ -1326,21 +1318,31 @@ function_exported_or_default(Mod, Fun, Arity, Default) ->
     case erlang:function_exported(Mod, Fun, Arity) of
         true -> case Arity of
                     3 -> fun (Msg, GS2State = #gs2_state { state = State }) ->
-                                 case catch Mod:Fun(Msg, 0, State) of
+                                 try Mod:Fun(Msg, 0, State) of
                                      drop ->
                                          drop;
                                      Res when is_integer(Res) ->
                                          Res;
                                      Err ->
                                          handle_common_termination(Err, Msg, GS2State)
+                                 catch
+                                     exit:ExitReason ->
+                                         terminate(ExitReason, Msg, GS2State);
+                                     _:ErrReason:ErrStack ->
+                                         terminate({ErrReason, ErrStack}, Msg, GS2State)
                                  end
                          end;
                     4 -> fun (Msg, From, GS2State = #gs2_state { state = State }) ->
-                                 case catch Mod:Fun(Msg, From, 0, State) of
+                                 try Mod:Fun(Msg, From, 0, State) of
                                      Res when is_integer(Res) ->
                                          Res;
                                      Err ->
                                          handle_common_termination(Err, Msg, GS2State)
+                                 catch
+                                     exit:ExitReason ->
+                                         terminate(ExitReason, Msg, GS2State);
+                                     _:ErrReason:ErrStack ->
+                                         terminate({ErrReason, ErrStack}, Msg, GS2State)
                                  end
                          end
                 end;
@@ -1374,9 +1376,10 @@ format_status(Opt, StatusData) ->
 
 callback(Mod, FunName, Args, DefaultThunk) ->
     case erlang:function_exported(Mod, FunName, length(Args)) of
-        true  -> case catch apply(Mod, FunName, Args) of
-                     {'EXIT', _} -> DefaultThunk();
-                     Success     -> Success
+        true  -> try apply(Mod, FunName, Args) of
+                     Success -> Success
+                 catch
+                     _:_ -> DefaultThunk()
                  end;
         false -> DefaultThunk()
     end.

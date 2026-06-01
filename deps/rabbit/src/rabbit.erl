@@ -480,9 +480,10 @@ spawn_boot_marker() ->
     %% We register a process doing nothing to indicate that RabbitMQ is
     %% booting. This is checked by `is_booting(Node)` on a remote node.
     Marker = spawn_link(fun() -> receive stop -> ok end end),
-    case catch register(rabbit_boot, Marker) of
-        true -> {ok, Marker};
-        _    -> {already_booting, Marker}
+    try register(rabbit_boot, Marker) of
+        true -> {ok, Marker}
+    catch
+        _:_ -> {already_booting, Marker}
     end.
 
 stop_boot_marker(Marker) ->
@@ -1336,9 +1337,9 @@ force_event_refresh(Ref) ->
 log_broker_started(Plugins) ->
     PluginList = iolist_to_binary([rabbit_misc:format(" * ~ts~n", [P])
                                    || P <- Plugins]),
-    Message = string:strip(rabbit_misc:format(
+    Message = string:trim(rabbit_misc:format(
         "Server startup complete; ~b plugins started.~n~ts",
-        [length(Plugins), PluginList]), right, $\n),
+        [length(Plugins), PluginList]), trailing, "\n"),
     ?LOG_INFO(Message,
               #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
     io:format(" completed with ~tp plugins.~n", [length(Plugins)]).
@@ -1427,11 +1428,7 @@ print_banner() ->
               CfgLocations).
 
 emu_flavor() ->
-    %% emu_flavor was introduced in Erlang 24 so we need to catch the error on Erlang 23
-    case catch(erlang:system_info(emu_flavor)) of
-        {'EXIT', _} -> "emu";
-        EmuFlavor -> EmuFlavor
-    end.
+    erlang:system_info(emu_flavor).
 
 crypto_version() ->
     [{CryptoLibName, _, CryptoLibVersion}] = crypto:info_lib(),
@@ -1470,7 +1467,7 @@ log_banner() ->
                      rabbit_misc:format(
                        " ~-" ++ integer_to_list(DescrLen) ++ "s: ~ts~n", [K, V])
              end,
-    Banner = string:strip(lists:flatten(
+    Banner = string:trim(lists:flatten(
                [case S of
                     {"config file(s)" = K, []} ->
                         Format(K, "(none)");
@@ -1478,7 +1475,7 @@ log_banner() ->
                         [Format(K, V0) | [Format("", V) || V <- Vs]];
                     {K, V} ->
                         Format(K, V)
-                end || S <- Settings]), right, $\n),
+                end || S <- Settings]), trailing, "\n"),
     ?LOG_INFO("~n~ts", [Banner],
               #{domain => ?RMQLOG_DOMAIN_GLOBAL}).
 

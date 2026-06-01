@@ -961,7 +961,7 @@ scrub_dn(DN, network_unsafe) -> DN;
 scrub_dn(DN, false)          -> DN;
 scrub_dn(DN, _) ->
     case is_dn(DN) of
-        true -> scrub_rdn(string:tokens(DN, ","), []);
+        true -> scrub_rdn(string:lexemes(DN, ","), []);
         _    ->
             %% We aren't fully certain its a DN, & don't know what sensitive
             %% info could be contained, thus just scrub the entire credential
@@ -971,8 +971,8 @@ scrub_dn(DN, _) ->
 scrub_rdn([], Acc) ->
     string:join(lists:reverse(Acc), ",");
 scrub_rdn([DN|Rem], Acc) ->
-    DN0 = case catch string:tokens(DN, "=") of
-              L = [RDN, _] -> case string:to_lower(RDN) of
+    DN0 = case try string:lexemes(DN, "=") catch _:_ -> [] end of
+              L = [RDN, _] -> case string:lowercase(RDN) of
                                   "cn"  -> [RDN, ?SCRUBBED_CREDENTIAL];
                                   "dc"  -> [RDN, ?SCRUBBED_CREDENTIAL];
                                   "ou"  -> [RDN, ?SCRUBBED_CREDENTIAL];
@@ -986,7 +986,9 @@ scrub_rdn([DN|Rem], Acc) ->
   scrub_rdn(Rem, [string:join(DN0, "=")|Acc]).
 
 is_dn(S) when is_list(S) ->
-    case catch string:tokens(rabbit_data_coercion:to_list(S), "=") of
+    case try string:lexemes(rabbit_data_coercion:to_list(S), "=")
+         catch _:_ -> []
+         end of
         L when length(L) > 1 -> true;
         _                    -> false
     end;

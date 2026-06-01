@@ -16,8 +16,6 @@
 
 -module(rabbit_stream_utils).
 
--feature(maybe_expr, enable).
-
 %% API
 -export([enforce_correct_name/1,
          write_messages/6,
