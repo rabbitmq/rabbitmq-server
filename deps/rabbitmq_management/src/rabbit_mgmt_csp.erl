@@ -12,6 +12,8 @@
 
 -export([set_headers/1]).
 
+-include_lib("kernel/include/logger.hrl").
+
 -define(CSP_HEADER, <<"content-security-policy">>).
 
 %%
@@ -20,9 +22,24 @@
 
 set_headers(ReqData) ->
     case application:get_env(rabbitmq_management, content_security_policy) of
-        undefined   -> ReqData;
+        undefined   ->
+            maybe_warn(ReqData),
+            ReqData;
         {ok, Value} ->
             cowboy_req:set_resp_header(?CSP_HEADER,
                                        rabbit_data_coercion:to_binary(Value),
                                        ReqData)
     end.
+
+maybe_warn(#{port := Port}) ->
+    case persistent_term:get({rabbitmq_management_csp_warning, Port}, false) of
+        false ->
+            _ = ?LOG_WARNING("CSP disabled for management listener "
+                "on port ~b; consider enabling content_security_policy option",
+                [Port]),
+            persistent_term:put({rabbitmq_management_csp_warning, Port}, true);
+        true ->
+            ok
+    end;
+maybe_warn(_) ->
+    ok.

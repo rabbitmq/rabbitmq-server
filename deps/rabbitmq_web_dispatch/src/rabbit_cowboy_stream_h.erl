@@ -66,16 +66,18 @@ log_stream_response({headers, Status, _Headers}, Req) ->
                #{domain => ?RMQLOG_DOMAIN_HTTP_ACCESS}).
 
 format_access_log(Status, Body, Req) ->
-    User = user_from_req(Req),
+    User = sanitize(user_from_req(Req)),
     Time = format_time(),
     StatusStr = integer_to_list(Status),
     Length = integer_to_list(body_length(Body)),
-    Method = cowboy_req:method(Req),
-    Path = cowboy_req:path(Req),
+    Method = escape_for_quoted_log(cowboy_req:method(Req)),
+    Path = escape_for_quoted_log(cowboy_req:path(Req)),
     {Peer, _Port} = cowboy_req:peer(Req),
     Version = cowboy_req:version(Req),
-    Referer = cowboy_req:header(<<"referer">>, Req, <<>>),
-    UserAgent = cowboy_req:header(<<"user-agent">>, Req, <<>>),
+    Referer = escape_for_quoted_log(
+                cowboy_req:header(<<"referer">>, Req, <<>>)),
+    UserAgent = escape_for_quoted_log(
+                  cowboy_req:header(<<"user-agent">>, Req, <<>>)),
     [fmt_ip(Peer), " - ", User, " ", Time, " \"", Method, " ", Path,
      " ", atom_to_list(Version), "\" ",
      StatusStr, " ", Length, " \"", Referer,
@@ -134,3 +136,43 @@ zone(Val) when Val < 0 ->
     io_lib:format("-~4..0w", [abs(Val)]);
 zone(Val) when Val >= 0 ->
     io_lib:format("+~4..0w", [Val]).
+
+sanitize(Value) ->
+    Bin0 = rabbit_data_coercion:to_binary(Value),
+    Bin1 = binary:replace(Bin0, [<<"\r">>, <<"\n">>], <<>>, [global]),
+    << <<(case C < 32 orelse C =:= 127 of
+              true  -> $?;
+              false -> C
+          end)>> || <<C>> <= Bin1 >>.
+
+escape_for_quoted_log(Value) ->
+    Bin = sanitize(Value),
+    Bin1 = binary:replace(Bin, <<"\\">>, <<"\\\\">>, [global]),
+    binary:replace(Bin1, <<"\"">>, <<"\\\"">>, [global]).
+
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+
+sanitize_test() ->
+    ?assertEqual(<<"hello">>, sanitize(<<"hello">>)),
+    ?assertEqual(<<"hello">>, sanitize("hello")),
+    %% CR/LF are removed (to keep log lines intact)
+    ?assertEqual(<<"helloworld">>, sanitize(<<"hello\nworld">>)),
+    ?assertEqual(<<"helloworld">>, sanitize(<<"hello\r\nworld">>)),
+    %% Other control characters are replaced with ?
+    ?assertEqual(<<"hello?world">>, sanitize(<<"hello\tworld">>)),
+    ?assertEqual(<<"hello?world?">>, sanitize(<<"hello\x00world\x1f">>)),
+    ?assertEqual(<<"abc">>, sanitize(<<"a\rb\nc">>)),
+    ok.
+
+escape_for_quoted_log_test() ->
+    ?assertEqual(<<"hello">>, escape_for_quoted_log(<<"hello">>)),
+    %% A literal backslash in the input gets escaped to \\
+    ?assertEqual(<<"hello\\\\nworld">>, escape_for_quoted_log(<<"hello\\nworld">>)),
+    %% Double quotes are escaped
+    ?assertEqual(<<"say \\\"hi\\\"">>, escape_for_quoted_log(<<"say \"hi\"">>)),
+    %% Combined: controls removed + quotes escaped
+    ?assertEqual(<<"pathwith\\\"quote\\\"">>, escape_for_quoted_log(<<"path\nwith\"quote\"">>)),
+    ok.
+
+-endif.
