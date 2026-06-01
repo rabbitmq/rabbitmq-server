@@ -35,7 +35,7 @@ build_dispatcher() ->
             true  -> PerObjectCollectors
         end
     ),
-    case application:get_env(rabbitmq_prometheus, disable_per_object_endpoint, false) of
+    case application:get_env(rabbitmq_prometheus, disable_per_object_endpoint, true) of
         true -> ok;
         false ->
             prometheus_registry:register_collectors('per-object',

@@ -44,7 +44,7 @@ is_authorized(ReqData, Context) ->
 
 setup() ->
     setup_metrics(telemetry_registry()),
-    case application:get_env(rabbitmq_prometheus, disable_per_object_endpoint, false) of
+    case application:get_env(rabbitmq_prometheus, disable_per_object_endpoint, true) of
         true -> ok;
         false -> setup_metrics('per-object')
     end,

@@ -184,13 +184,13 @@ end}.
 
 %% Endpoint disable options ========================================================
 {mapping, "prometheus.disable_memory_breakdown_endpoint", "rabbitmq_prometheus.disable_memory_breakdown_endpoint",
-    [{datatype, {enum, [true, false]}}, {default, false}]}.
+    [{datatype, {enum, [true, false]}}]}.
 
 {mapping, "prometheus.disable_per_object_endpoint", "rabbitmq_prometheus.disable_per_object_endpoint",
-    [{datatype, {enum, [true, false]}}, {default, true}]}.
+    [{datatype, {enum, [true, false]}}]}.
 
 {mapping, "prometheus.disable_detailed_endpoint", "rabbitmq_prometheus.disable_detailed_endpoint",
-    [{datatype, {enum, [true, false]}}, {default, false}]}.
+    [{datatype, {enum, [true, false]}}]}.
 
 %% Metric blocklist options ========================================================
 {mapping, "prometheus.disabled_metrics.$metric", "rabbitmq_prometheus.disabled_metrics",
