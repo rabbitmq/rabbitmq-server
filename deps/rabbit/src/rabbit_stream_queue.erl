@@ -916,11 +916,10 @@ status(Vhost, QueueName) ->
         {ok, Q} when ?amqqueue_is_quorum(Q) ->
             {error, quorum_queue_not_supported};
         {ok, Q} when ?amqqueue_is_stream(Q) ->
-            QNameBin = amqqueue:get_name(Q),
             FreshnessMap = case amqqueue:get_pid(Q) of
                                none -> #{};
                                undefined -> #{};
-                               LeaderPid -> replica_freshness_cached(QNameBin, LeaderPid)
+                               LeaderPid -> replica_freshness(LeaderPid)
                            end,
             [begin
                  Node = maps:get(node, C),
@@ -1602,7 +1601,7 @@ list_with_minimum_quorum() ->
                       none -> #{};
                       undefined -> #{};
                       LeaderPid ->
-                          FreshnessMap = replica_freshness_cached(amqqueue:get_name(Q), LeaderPid),
+                          FreshnessMap = replica_freshness(LeaderPid),
                           maps:filter(
                             fun(Node, _) ->
                                     case maps:get(Node, FreshnessMap, false) of
@@ -1613,27 +1612,6 @@ list_with_minimum_quorum() ->
                   end,
               map_size(UpToDateRunningMembers) =< map_size(Members) div 2 + 1
       end, rabbit_amqqueue:list_local_stream_queues()).
-
-replica_freshness_cached(QName, LeaderPid) ->
-    Node = node(LeaderPid),
-    try
-        LookupResult =
-            case Node =:= node() of
-                true ->
-                    ets:lookup(queue_metrics, QName);
-                false ->
-                    rpc:call(Node, ets, lookup, [queue_metrics, QName], 2000)
-            end,
-        case LookupResult of
-            [{QName, Proplist, _DeleteMarker}] ->
-                proplists:get_value(replica_freshness_status, Proplist, #{});
-            _ ->
-                replica_freshness(LeaderPid)
-        end
-    catch
-        _:_ ->
-            replica_freshness(LeaderPid)
-    end.
 
 replica_freshness(LeaderPid) ->
     try osiris_writer:query_replication_state(LeaderPid) of

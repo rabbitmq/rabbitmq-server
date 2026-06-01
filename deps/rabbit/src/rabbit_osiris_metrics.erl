@@ -15,6 +15,7 @@
          code_change/3]).
 
 -define(TICK_TIMEOUT, 5000).
+-define(REPLICA_FRESHNESS_REFRESH_INTERVAL, 30000).
 -define(SERVER, ?MODULE).
 
 -define(STATISTICS_KEYS,
@@ -33,7 +34,12 @@
          replica_freshness_status
         ]).
 
--record(state, {timeout :: non_neg_integer()}).
+-define(STATISTICS_KEYS_NO_REPLICA_FRESHNESS,
+        ?STATISTICS_KEYS -- [replica_freshness_status]).
+
+-record(state, {timeout :: non_neg_integer(),
+               replica_freshness_cache = #{} :: #{rabbit_types:rabbit_amqqueue_name() =>
+                                                 {integer(), term()}}}).
 
 %%----------------------------------------------------------------------------
 %% Starts the raw metrics storage and owns the ETS tables.
@@ -56,42 +62,78 @@ handle_call(_Request, _From, State) ->
 handle_cast(_Request, State) ->
     {noreply, State}.
 
-handle_info(tick, #state{timeout = Timeout} = State) ->
+handle_info(tick, #state{timeout = Timeout,
+                         replica_freshness_cache = Cache0} = State) ->
     Data = osiris_counters:overview(),
-    _ = maps:map(
+    Now = erlang:monotonic_time(millisecond),
+    {Cache1, ActiveQNamesRev} = maps:fold(
       fun ({osiris_writer, QName}, #{offset := Offs,
-                                     first_offset := FstOffs}) ->
+                                     first_offset := FstOffs}, {Cache, ActiveQNames}) ->
               COffs = Offs + 1 - FstOffs,
               rabbit_core_metrics:queue_stats(QName, COffs, 0, COffs, 0),
-              Infos = try
-                          %% TODO complete stats!
-                          case rabbit_amqqueue:lookup(QName) of
-                              {ok, Q} ->
-                                  rabbit_stream_queue:info(Q, ?STATISTICS_KEYS);
-                              _ ->
-                                  []
-                          end
-                      catch
-                          _:_ ->
-                              %% It's possible that the writer has died but
-                              %% it's still on the amqqueue record, so the
-                              %% `erlang:process_info/2` calls will return
-                              %% `undefined` and crash with a badmatch.
-                              %% At least for now, skipping the metrics might
-                              %% be the best option. Otherwise this brings
-                              %% down `rabbit_sup` and the whole `rabbit` app.
-                              []
-                      end,
+              {Infos, Cache1} = try
+                                    %% TODO complete stats!
+                                    case rabbit_amqqueue:lookup(QName) of
+                                        {ok, Q} ->
+                                            stream_infos(QName, Q, Now, Cache);
+                                        _ ->
+                                            {[], Cache}
+                                    end
+                                catch
+                                    _:_ ->
+                                        %% It's possible that the writer has died but
+                                        %% it's still on the amqqueue record, so the
+                                        %% `erlang:process_info/2` calls will return
+                                        %% `undefined` and crash with a badmatch.
+                                        %% At least for now, skipping the metrics might
+                                        %% be the best option. Otherwise this brings
+                                        %% down `rabbit_sup` and the whole `rabbit` app.
+                                        {[], Cache}
+                                end,
               rabbit_core_metrics:queue_stats(QName, Infos),
-              ok;
-          (_, _V) ->
-              ok
-      end, Data),
+              {Cache1, [QName | ActiveQNames]};
+          (_, _V, Acc) ->
+              Acc
+      end, {Cache0, []}, Data),
+    Cache2 = maps:with(ActiveQNamesRev, Cache1),
     erlang:send_after(Timeout, self(), tick),
-    {noreply, State}.
+    {noreply, State#state{replica_freshness_cache = Cache2}}.
 
 terminate(_Reason, _State) ->
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+stream_infos(QName, Q, Now, Cache0) ->
+    Infos0 = rabbit_stream_queue:info(Q, ?STATISTICS_KEYS_NO_REPLICA_FRESHNESS),
+    {ReplicaFreshness, Cache1} = replica_freshness_status(QName, Q, Now, Cache0),
+    {Infos0 ++ [{replica_freshness_status, ReplicaFreshness}], Cache1}.
+
+replica_freshness_status(QName, Q, Now, Cache0) ->
+    case maps:get(QName, Cache0, undefined) of
+        {RefreshedAt, ReplicaFreshness}
+          when Now - RefreshedAt < ?REPLICA_FRESHNESS_REFRESH_INTERVAL ->
+            {ReplicaFreshness, Cache0};
+        _ ->
+            refresh_replica_freshness_status(QName, Q, Now, Cache0)
+    end.
+
+refresh_replica_freshness_status(QName, Q, Now, Cache0) ->
+    try rabbit_stream_queue:info(Q, [replica_freshness_status]) of
+        [{replica_freshness_status, ReplicaFreshness}] ->
+            {ReplicaFreshness, Cache0#{QName => {Now, ReplicaFreshness}}};
+        _ ->
+            stale_or_unknown_replica_freshness(QName, Cache0)
+    catch
+        _:_ ->
+            stale_or_unknown_replica_freshness(QName, Cache0)
+    end.
+
+stale_or_unknown_replica_freshness(QName, Cache0) ->
+    case maps:get(QName, Cache0, undefined) of
+        {_, ReplicaFreshness} ->
+            {ReplicaFreshness, Cache0};
+        undefined ->
+            {#{}, Cache0}
+    end.
