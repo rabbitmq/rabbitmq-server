@@ -5,18 +5,18 @@
 %% Copyright (c) 2007-2026 Broadcom. All Rights Reserved.
 %% The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.
 %% All rights reserved.
--module(rabbit_fifo).
+-module(rabbit_fifo_v8).
 
 -behaviour(ra_machine).
 
 -compile(inline_list_funcs).
 -compile(inline).
 -compile({no_auto_import, [apply/3]}).
--dialyzer({nowarn_function, convert_v8_to_v9/2}).
+-dialyzer({nowarn_function, convert_v7_to_v8/2}).
 -dialyzer(no_improper_lists).
 
 -include("rabbit_queue_type.hrl").
--include("rabbit_fifo.hrl").
+-include("rabbit_fifo_v8.hrl").
 
 -include_lib("kernel/include/logger.hrl").
 
@@ -105,7 +105,8 @@
          make_garbage_collection/0,
          make_delayed/1,
 
-         exec_read/3
+         exec_read/3,
+         convert_v7_to_v8/2
 
         ]).
 
@@ -966,9 +967,69 @@ credit_reply_resend_effect(#?STATE{waiting_consumers = Waiting,
               Acc
       end, [], maps:merge(Consumers, maps:from_list(Waiting))).
 
-convert_v8_to_v9(#{} = _Meta, StateV8) ->
-    State = StateV8,
-    State.
+v7_to_v8_consumer(Con, Timeout) ->
+                     V7Cfg = element(#consumer.cfg, Con),
+                     Status0 = element(#consumer.status, Con),
+                     Ch0 = element(#consumer.checked_out, Con),
+                     Ch = maps:map(fun (_, M) -> ?C_MSG(Timeout, M) end, Ch0),
+                     Cfg = #consumer_cfg{meta = element(#consumer_cfg.meta, V7Cfg),
+                                         pid = element(#consumer_cfg.pid, V7Cfg),
+                                         tag = element(#consumer_cfg.tag, V7Cfg),
+                                         credit_mode = element(#consumer_cfg.credit_mode, V7Cfg),
+                                         lifetime = element(#consumer_cfg.lifetime, V7Cfg),
+                                         priority = element(#consumer_cfg.priority, V7Cfg),
+                                         timeout = ?DEFAULT_CONSUMER_TIMEOUT_MS
+                                        },
+                     Status = case Status0 of
+                                  suspected_down ->
+                                      {suspected_down, up};
+                                  _ ->
+                                      Status0
+                              end,
+                     #consumer{cfg = Cfg,
+                               status = Status,
+                               next_msg_id = element(#consumer.next_msg_id, Con),
+                               checked_out = Ch,
+                               credit = element(#consumer.credit, Con),
+                               delivery_count = element(#consumer.delivery_count, Con)
+                              }.
+
+convert_v7_to_v8(#{system_time := Ts} = _Meta, StateV7) ->
+    %% the structure is intact for now
+    Cons0 = element(#?STATE.consumers, StateV7),
+    Waiting0 = element(#?STATE.waiting_consumers, StateV7),
+    Timeout = Ts + ?DEFAULT_CONSUMER_TIMEOUT_MS,
+    Cons = maps:map(
+             fun (_CKey, Con) ->
+                     v7_to_v8_consumer(Con, Timeout)
+             end, Cons0),
+    Waiting = lists:map(fun({Cid, Con}) ->
+                                {Cid, v7_to_v8_consumer(Con, Timeout)}
+                        end, Waiting0),
+
+    Msgs = element(#?STATE.messages, StateV7),
+    Cfg = element(#?STATE.cfg, StateV7),
+    {Hi, No} = rabbit_fifo_q:to_queues(Msgs),
+    Pq0 = queue:fold(fun (I, Acc) ->
+                             rabbit_fifo_pq:in(9, I, Acc)
+                     end, rabbit_fifo_pq:new(), Hi),
+    Pq = queue:fold(fun (I, Acc) ->
+                            rabbit_fifo_pq:in(?DEFAULT_PRIORITY, I, Acc)
+                    end, Pq0, No),
+    Dlx0 = element(#?STATE.dlx, StateV7),
+    Dlx = Dlx0#?DLX{unused = ?NIL},
+    StateV8 = StateV7,
+    StateV8#?STATE{cfg = Cfg#cfg{consumer_disconnected_timeout = 60_000,
+                                 delayed_retry = disabled},
+                   reclaimable_bytes = 0,
+                   messages = Pq,
+                   consumers = Cons,
+                   waiting_consumers = Waiting,
+                   next_consumer_timeout = Timeout,
+                   last_command_time = Ts,
+                   dlx = Dlx,
+                   delayed = #delayed{}
+                  }.
 
 purge_node(Meta, Node, State, Effects) ->
     lists:foldl(fun(Pid, {S0, E0}) ->
@@ -1192,7 +1253,7 @@ get_checked_out(CKey, From, To, #?STATE{consumers = Consumers}) ->
     end.
 
 -spec version() -> pos_integer().
-version() -> 9.
+version() -> 8.
 
 which_module(0) -> rabbit_fifo_v0;
 which_module(1) -> rabbit_fifo_v1;
@@ -1202,8 +1263,7 @@ which_module(4) -> rabbit_fifo_v7;
 which_module(5) -> rabbit_fifo_v7;
 which_module(6) -> rabbit_fifo_v7;
 which_module(7) -> rabbit_fifo_v7;
-which_module(8) -> rabbit_fifo_v8;
-which_module(9) -> ?MODULE.
+which_module(8) -> ?MODULE.
 
 -define(AUX, aux_v4).
 
@@ -1670,7 +1730,10 @@ query_notify_decorators_info(#?STATE{consumers = Consumers} = State) ->
 
 -spec usage(atom()) -> float().
 usage(Name) when is_atom(Name) ->
-    ets:lookup_element(rabbit_fifo_usage, Name, 2, 0.0).
+    case ets:lookup(rabbit_fifo_usage, Name) of
+        [] -> 0.0;
+        [{_, Use}] -> Use
+    end.
 
 %%% Internal
 
@@ -3520,9 +3583,7 @@ convert(Meta, 6, To, State) ->
     %% no conversion needed, this version only includes a logic change
     convert(Meta, 7, To, State);
 convert(Meta, 7, To, State) ->
-    convert(Meta, 8, To, rabbit_fifo_v8:convert_v7_to_v8(Meta, State));
-convert(Meta, 8, To, State) ->
-    convert(Meta, 9, To, convert_v8_to_v9(Meta, State)).
+    convert(Meta, 8, To, convert_v7_to_v8(Meta, State)).
 
 smallest_raft_index(#?STATE{messages = Messages,
                             returns = Returns,
