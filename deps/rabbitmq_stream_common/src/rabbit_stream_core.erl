@@ -678,10 +678,8 @@ request_body({create_super_stream = Tag, SuperStream, Partitions, BindingKeys, A
 request_body({delete_super_stream = Tag, SuperStream}) ->
     {Tag, <<?STRING(SuperStream)>>}.
 
-append_data(Prev, Data) when is_binary(Prev) ->
-    [Prev, Data];
-append_data(Prev, Data) when is_list(Prev) ->
-    Prev ++ [Data].
+append_data(Prev, Data) ->
+    [Prev, Data].
 
 wrap_in_frame(IOData) ->
     Size = iolist_size(IOData),
