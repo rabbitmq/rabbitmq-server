@@ -158,7 +158,6 @@ init([KeepaliveSup,
         {ok, ConnStr} ->
             Credits = atomics:new(1, [{signed, true}]),
             SendFileOct = atomics:new(1, [{signed, false}]),
-            atomics:put(SendFileOct, 1, 0),
             init_credit(Credits, InitialCredits),
             {PeerHost, PeerPort, Host, Port} =
                 socket_op(Sock,
