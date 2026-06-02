@@ -108,7 +108,8 @@
          tuning/3,
          tuned/3,
          open/3,
-         close_sent/3]).
+         close_sent/3,
+         silent_close/3]).
 -ifdef(TEST).
 -export([ensure_token_expiry_timer/2,
          evaluate_state_after_secret_update/4,
@@ -260,6 +261,11 @@ tcp_connected(info, Msg, StateData) ->
                                 StatemData#statem_data{connection = NewConnection,
                                                        connection_state =
                                                        NewConnectionState}};
+                           NextConnectionStep =:= silent_close ->
+                               {next_state, silent_close,
+                                StatemData#statem_data{connection = NewConnection,
+                                                       connection_state =
+                                                       NewConnectionState}};
                            true ->
                                invalid_transition(Transport,
                                                   S,
@@ -299,6 +305,11 @@ peer_properties_exchanged(info, Msg, StateData) ->
                            NextConnectionStep =:= peer_properties_exchanged ->
                                %% No complete frame was parsed from the incoming data.
                                {keep_state,
+                                StatemData#statem_data{connection = NewConnection,
+                                                       connection_state =
+                                                       NewConnectionState}};
+                           NextConnectionStep =:= silent_close ->
+                               {next_state, silent_close,
                                 StatemData#statem_data{connection = NewConnection,
                                                        connection_state =
                                                        NewConnectionState}};
@@ -352,6 +363,11 @@ authenticating(info, Msg, StateData) ->
                                 StatemData#statem_data{connection = NewConnection,
                                                        connection_state =
                                                        NewConnectionState}};
+                           NextConnectionStep =:= silent_close ->
+                               {next_state, silent_close,
+                                StatemData#statem_data{connection = NewConnection,
+                                                       connection_state =
+                                                       NewConnectionState}};
                            true ->
                                invalid_transition(Transport,
                                                   S,
@@ -398,6 +414,11 @@ tuning(info, Msg, StateData) ->
                                  StatemData#statem_data{connection = NewConnection,
                                                         connection_state =
                                                         NewConnectionState}};
+                            silent_close ->
+                                {next_state, silent_close,
+                                 StatemData#statem_data{connection = NewConnection,
+                                                        connection_state =
+                                                        NewConnectionState}};
                             _ ->
                                 invalid_transition(Transport,
                                                    S,
@@ -435,6 +456,11 @@ tuned(info, Msg, StateData) ->
                       NextConnectionStep =:= tuned ->
                           %% No complete frame was parsed from the incoming data.
                           {keep_state,
+                           StatemData#statem_data{connection = NewConnection,
+                                                  connection_state =
+                                                      NewConnectionState}};
+                      NextConnectionStep =:= silent_close ->
+                          {next_state, silent_close,
                            StatemData#statem_data{connection = NewConnection,
                                                   connection_state =
                                                       NewConnectionState}};
@@ -740,6 +766,10 @@ open(info, {OK, S, Data},
                       "transition to invalid state",
                       [self()]),
             {stop, {shutdown, <<"Invalid state">>}};
+        silent_close ->
+            {next_state, silent_close,
+             StatemData#statem_data{connection = Connection1,
+                                    connection_state = State1}};
         _ ->
             State2 =
                 case Blocked of
@@ -1245,6 +1275,37 @@ close_sent({call, From}, {info, _Items}, _StateData) ->
     {keep_state_and_data, {reply, From, []}}.
 
 
+maybe_send_or_delay_frame(_Transport, _Socket, Frame, silent_close) ->
+    erlang:send_after(?SILENT_CLOSE_DELAY, self(), {silent_close_timeout, Frame}),
+    ok;
+maybe_send_or_delay_frame(Transport, Socket, Frame, _OtherStep) ->
+    send(Transport, Socket, Frame).
+
+silent_close(enter, _OldState, _StatemData) ->
+    keep_state_and_data;
+silent_close(info, {silent_close_timeout, Frame},
+             #statem_data{transport = Transport, connection = #stream_connection{socket = S}}) ->
+    %% send the withheld frame and close the connection.
+    send(Transport, S, Frame),
+    stop;
+silent_close(info, {Closed, S}, #statem_data{connection = #stream_connection{socket = S}})
+  when Closed =:= tcp_closed; Closed =:= ssl_closed ->
+    %% socket dropped, stopping
+    stop;
+silent_close(info, {tcp, _S, _Data}, _StatemData) ->
+    %% ignore traffic
+    keep_state_and_data;
+silent_close(info, {shutdown, Explanation} = Reason, _StatemData) ->
+    %% allow to force-kill the connection via the CLI / management
+    ?LOG_INFO("Forcing stream connection ~tp closing during tarpit: ~tp", [self(), Explanation]),
+    {stop, Reason};
+    %% ignore resource alarms or anything else
+silent_close(info, _Msg, _StatemData) ->
+    keep_state_and_data;
+silent_close({call, From}, {info, _Items}, _StateData) ->
+    {keep_state_and_data, {reply, From, []}}.
+
+
 handle_inbound_data_pre_auth(Transport, Connection, State, Data) ->
     handle_inbound_data(Transport,
                         Connection,
@@ -1387,8 +1448,7 @@ handle_frame_pre_auth(Transport,
                                                                     stream),
                             auth_fail(Username, Msg, Args, C1, State),
                             ?LOG_WARNING(Msg, Args),
-                            silent_close_delay(),
-                            {C1#stream_connection{connection_step = failure},
+                            {C1#stream_connection{connection_step = silent_close},
                              {sasl_authenticate,
                               ?RESPONSE_AUTHENTICATION_FAILURE, <<>>}};
                         {protocol_error, Msg, Args} ->
@@ -1442,10 +1502,10 @@ handle_frame_pre_auth(Transport,
                                       <<>>}}
                             end
                     end,
-                Frame =
-                    rabbit_stream_core:frame({response, CorrelationId,
-                                              CmdBody}),
-                send(Transport, S, Frame),
+                Frame = rabbit_stream_core:frame({response, CorrelationId,
+                                                  CmdBody}),
+                maybe_send_or_delay_frame(Transport, S, Frame,
+                                          C2#stream_connection.connection_step),
                 C2;
             {error, _} ->
                 CmdBody =
@@ -1546,13 +1606,12 @@ handle_frame_pre_auth(Transport,
         else
             {error, Explanation} ->
                   ?LOG_WARNING("Opening connection failed: ~ts", [Explanation]),
-                  silent_close_delay(),
                   F = rabbit_stream_core:frame({response, CorrelationId,
                                                 {open,
                                                  ?RESPONSE_VHOST_ACCESS_FAILURE,
                                                  #{}}}),
-                  send(Transport, S, F),
-                  Connection#stream_connection{connection_step = failure}
+                  maybe_send_or_delay_frame(Transport, S, F, silent_close),
+                  Connection#stream_connection{connection_step = silent_close}
         end,
     {Connection1, State};
 handle_frame_pre_auth(_Transport, Connection, State, heartbeat) ->
@@ -1655,8 +1714,7 @@ handle_frame_post_auth(Transport,
                                                                   stream),
                           auth_fail(NewUsername, Msg, Args, C1, S1),
                           ?LOG_WARNING(Msg, Args),
-                          silent_close_delay(),
-                          {C1#stream_connection{connection_step = failure},
+                          {C1#stream_connection{connection_step = silent_close},
                            {sasl_authenticate,
                             ?RESPONSE_AUTHENTICATION_FAILURE, <<>>}};
                       {protocol_error, Msg, Args} ->
@@ -1688,18 +1746,17 @@ handle_frame_post_auth(Transport,
                                                                           stream),
                                   ?LOG_WARNING("Not allowed to change username '~ts'. Only password",
                                                                 [Username]),
-                                  silent_close_delay(),
                                   {C1#stream_connection{connection_step =
-                                                            failure},
+                                                            silent_close},
                                    {sasl_authenticate,
                                     ?RESPONSE_SASL_CANNOT_CHANGE_USERNAME,
                                     <<>>}}
                           end
                   end,
-              Frame =
-                  rabbit_stream_core:frame({response, CorrelationId,
-                                            CmdBody}),
-              send(Transport, Socket, Frame),
+              Frame = rabbit_stream_core:frame({response, CorrelationId,
+                                                CmdBody}),
+              maybe_send_or_delay_frame(Transport, Socket, Frame,
+                                        C2#stream_connection.connection_step),
               case CmdBody of
                   {sasl_authenticate, ?RESPONSE_CODE_OK, _} ->
                      #stream_connection{user = NewUsr} = C2,
@@ -1710,12 +1767,11 @@ handle_frame_post_auth(Transport,
         {OtherMechanism, _} ->
               ?LOG_WARNING("User '~ts' cannot change initial auth mechanism '~ts' for '~ts'",
                                               [Username, NewMechanism, OtherMechanism]),
-              silent_close_delay(),
               CmdBody =
                 {sasl_authenticate, ?RESPONSE_SASL_CANNOT_CHANGE_MECHANISM, <<>>},
               Frame = rabbit_stream_core:frame({response, CorrelationId, CmdBody}),
-              send(Transport, Socket, Frame),
-              {C1#stream_connection{connection_step = failure}, S1}
+              maybe_send_or_delay_frame(Transport, Socket, Frame, silent_close),
+              {C1#stream_connection{connection_step = silent_close}, S1}
       end,
     {Connection1, State1};
 handle_frame_post_auth(Transport,
@@ -2922,8 +2978,7 @@ complete_secret_update(NewUser = #user{username = Username},
     catch exit:#amqp_error{explanation = Explanation} ->
               ?LOG_WARNING("Stream connection no longer has the permissions to access its target virtual host ('~ts') after a secret (token) update: ~ts",
                            [VH, Explanation]),
-              silent_close_delay(),
-              {C1#stream_connection{connection_step = failure},
+              {C1#stream_connection{connection_step = silent_close},
                {sasl_authenticate, ?RESPONSE_VHOST_ACCESS_FAILURE, <<>>}}
     end.
 
@@ -4184,10 +4239,6 @@ stream_from_consumers(SubId, Consumers) ->
             undefined
     end.
 
-%% We don't trust the client at this point - force them to wait
-%% for a bit so they can't DOS us with repeated failed logins etc.
-silent_close_delay() ->
-    timer:sleep(?SILENT_CLOSE_DELAY).
 
 sac_connection_reconnected(Pid) ->
     sac_call(fun() ->
