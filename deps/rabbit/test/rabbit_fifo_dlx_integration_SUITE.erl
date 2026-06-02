@@ -655,8 +655,8 @@ reject_publish_max_length_target_quorum_queue(Config) ->
                      amqp_channel:call(Ch, #'basic.get'{queue = TargetQ}),
                      30000)
      end || N <- lists:seq(1,4)],
-    eventually(?_assertMatch([{0, _}],
-                             dirty_query([Server], RaName, fun rabbit_fifo:query_stat_dlx/1)), 500, 10),
+    eventually(?_assertMatch(#{num_discarded := 0},
+                             machine_overview({RaName, Server}))),
     ?assertEqual(4, counted(messages_dead_lettered_expired_total, Config)),
     eventually(?_assertEqual(4, counted(messages_dead_lettered_confirmed_total, Config))).
 
@@ -706,8 +706,8 @@ reject_publish_down_target_quorum_queue(Config) ->
                          sets:add_element(Msg, S)
                  end, sets:new([{version, 2}]), lists:seq(1, 50)),
     ?assertEqual(50, sets:size(Received)),
-    eventually(?_assertMatch([{0, _}],
-                             dirty_query([Server], RaName, fun rabbit_fifo:query_stat_dlx/1)), 500, 10),
+    eventually(?_assertMatch(#{num_discarded := 0},
+                             machine_overview({RaName, Server}))),
     ?assertEqual(50, counted(messages_dead_lettered_expired_total, Config)),
     eventually(?_assertEqual(50, counted(messages_dead_lettered_confirmed_total, Config))).
 
@@ -999,3 +999,11 @@ counted(Metric, Config) ->
 metric(Metric, Counters) ->
     Metrics = maps:get(#{queue_type => rabbit_quorum_queue, dead_letter_strategy => at_least_once}, Counters),
     maps:get(Metric, Metrics).
+
+machine_overview(ServerId) when is_tuple(ServerId) ->
+    case ra:member_overview(ServerId) of
+        {ok, #{machine := Mac}, _} ->
+            Mac;
+        Err ->
+            Err
+    end.
