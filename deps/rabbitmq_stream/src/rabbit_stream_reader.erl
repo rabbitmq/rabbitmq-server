@@ -85,6 +85,7 @@
          peer_cert_validity]).
 -define(UNKNOWN_FIELD, unknown_field).
 -define(SILENT_CLOSE_DELAY, 3_000).
+-define(METADATA_TIMEOUT, 10_000).
 -define(SAC_MOD, rabbit_stream_sac_coordinator).
 
 -import(rabbit_stream_utils, [check_write_permitted/2,
@@ -2489,21 +2490,28 @@ handle_frame_post_auth(Transport,
                         =:= false
                      end,
                      Nodes0),
+    HostFun = advertised_host_fun(TransportLayer),
+    PortFun = advertised_port_fun(TransportLayer),
+
+    FetchFun = fun() -> {rabbit_stream:HostFun(), rabbit_stream:PortFun()} end,
+    Results = erpc:multicall(Nodes, FetchFun, ?METADATA_TIMEOUT),
     NodeEndpoints =
-        lists:foldr(fun(Node, Acc) ->
-                       HostFun = advertised_host_fun(TransportLayer),
-                       PortFun = advertised_port_fun(TransportLayer),
-                       Host = rpc:call(Node, rabbit_stream, HostFun, []),
-                       Port = rpc:call(Node, rabbit_stream, PortFun, []),
-                       case {is_binary(Host), is_integer(Port)} of
-                           {true, true} -> Acc#{Node => {Host, Port}};
-                           _ ->
-                               ?LOG_WARNING("Error when retrieving broker '~tp' metadata: ~tp ~tp",
-                                            [Node, Host, Port]),
-                               Acc
-                       end
-                    end,
-                    #{}, Nodes),
+        lists:foldl(
+          fun({Node, {ok, {Host, Port}}}, Acc) when is_binary(Host), is_integer(Port) ->
+                 %% Happy path: Node responded in time with valid data
+                 Acc#{Node => {Host, Port}};
+             ({Node, {ok, {Host, Port}}}, Acc) ->
+                 %% Node responded, but data was malformed
+                 ?LOG_WARNING("Error when retrieving broker '~tp' metadata: ~tp ~tp",
+                              [Node, Host, Port]),
+                 Acc;
+             ({Node, Error}, Acc) ->
+                 %% Node timed out, was unreachable, or threw an exception
+                 ?LOG_WARNING("Error/Timeout when retrieving broker '~tp' metadata: ~tp",
+                              [Node, Error]),
+                 Acc
+          end,
+          #{}, lists:zip(Nodes, Results)),
 
     Metadata =
         lists:foldl(fun(Stream, Acc) ->
