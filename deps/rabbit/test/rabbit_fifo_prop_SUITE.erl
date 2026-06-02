@@ -10,7 +10,7 @@
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--define(MACHINE_VERSION, 8).
+-define(MACHINE_VERSION, 9).
 
 %%%===================================================================
 %%% Common Test callbacks
@@ -84,7 +84,8 @@ all_tests() ->
      dlx_09,
      single_active_ordering_02,
      two_nodes_same_otp_version,
-     two_nodes_different_otp_version
+     two_nodes_different_otp_version,
+     ingress_bytes_by_node_accumulation
     ].
 
 groups() ->
@@ -1126,6 +1127,29 @@ is_same_otp_version(ConfigOrNode) ->
     ct:pal("Our CT node runs OTP ~s, other node runs OTP ~s", [OurOTP, OtherOTP]),
     OurOTP =:= OtherOTP.
 
+ingress_bytes_by_node_accumulation(_Config) ->
+    Size = 500,
+    run_proper(
+      fun () ->
+              InitConf = config(?FUNCTION_NAME, undefined, undefined, false, undefined),
+              ?FORALL(O, ?LET(Ops, log_gen_different_nodes(Size), expand(Ops, InitConf)),
+                      begin
+                          Indexes = lists:seq(1, length(O)),
+                          Entries = lists:zip(Indexes, O),
+                          InitState = test_init(InitConf),
+                          {State1, _Effs1} = run_log(InitState, Entries),
+                          IngressByNode = State1#rabbit_fifo.ingress_bytes_by_node,
+                          %% Verify the map is properly populated
+                          IsMap = is_map(IngressByNode),
+                          %% Verify all values are non-negative
+                          ValidValues = maps:fold(
+                            fun(_, V, Acc) ->
+                                    Acc andalso is_integer(V) andalso V >= 0
+                            end, true, IngressByNode),
+                          IsMap andalso ValidValues
+                      end)
+      end, [], Size).
+
 two_nodes(Node) ->
     Size = 100,
     run_proper(
@@ -1511,7 +1535,7 @@ different_nodes_prop(Node, Conf, Commands) ->
     Entries = lists:zip(Indexes, Commands),
     InitState = test_init(Conf),
     Fun = fun(_) -> true end,
-    MachineVersion = 8,
+    MachineVersion = rabbit_fifo:version(),
 
     {State1, _Effs1} = run_log(InitState, Entries, Fun, MachineVersion),
     {State2, _Effs2} = erpc:call(Node, ?MODULE, run_log,
@@ -1598,8 +1622,8 @@ valid_simple_prefetch(_, _, _, _, _) ->
     true.
 
 upgrade_prop(Conf, Commands) ->
-    FromVersion = 7,
-    ToVersion = 8,
+    FromVersion = 8,
+    ToVersion = 9,
     FromMod = rabbit_fifo:which_module(FromVersion),
     ToMod = rabbit_fifo:which_module(ToVersion),
     Indexes = lists:seq(1, length(Commands)),
