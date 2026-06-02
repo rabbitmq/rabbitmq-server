@@ -787,10 +787,7 @@ open(info, {OK, S, Data},
                     true ->
                         case should_unblock(Connection, Configuration) of
                             true ->
-                                setopts(Transport, S, [{active, once}]),
-                                ok =
-                                    rabbit_heartbeat:resume_monitor(Heartbeater),
-                                State1#stream_connection_state{blocked = false};
+                                maybe_unblock(Transport, S, Heartbeater, State1);
                             false ->
                                 State1
                         end;
@@ -1077,9 +1074,7 @@ open(cast,
             true ->
                 case should_unblock(Connection, Configuration) of
                     true ->
-                        setopts(Transport, S, [{active, once}]),
-                        ok = rabbit_heartbeat:resume_monitor(Heartbeater),
-                        State#stream_connection_state{blocked = false};
+                        maybe_unblock(Transport, S, Heartbeater, State);
                     false ->
                         State
                 end;
@@ -2572,7 +2567,7 @@ handle_frame_post_auth(Transport,
         rabbit_stream_core:frame({response, CorrelationId,
                                   {route, ResponseCode, Streams}}),
 
-    Transport:send(S, Frame),
+    send(Transport, S, Frame),
     {Connection, State};
 handle_frame_post_auth(Transport,
                        #stream_connection{socket = S,
@@ -2593,7 +2588,7 @@ handle_frame_post_auth(Transport,
         rabbit_stream_core:frame({response, CorrelationId,
                                   {partitions, ResponseCode, Partitions}}),
 
-    Transport:send(S, Frame),
+    send(Transport, S, Frame),
     {Connection, State};
 handle_frame_post_auth(Transport,
                        #stream_connection{transport = ConnTransport,
@@ -3201,8 +3196,7 @@ handle_subscription(Transport,#stream_connection{
             case StreamSubscriptions of
                 #{Stream := SubscriptionIds} ->
                     StreamSubscriptions#{Stream =>
-                                         [SubscriptionId]
-                                         ++ SubscriptionIds};
+                                         [SubscriptionId | SubscriptionIds]};
                 _ ->
                     StreamSubscriptions#{Stream =>
                                          [SubscriptionId]}
@@ -4392,3 +4386,8 @@ check_vhost_access(User = #user{username = Username}, VHost, S) ->
               {error, io_lib:format("access refused for user '~ts' "
                                     "to vhost '~ts'", [Username, VHost])}
     end.
+
+maybe_unblock(Transport, Socket, Heartbeater, State) ->
+    setopts(Transport, Socket, [{active, once}]),
+    ok = rabbit_heartbeat:resume_monitor(Heartbeater),
+    State#stream_connection_state{blocked = false}.
