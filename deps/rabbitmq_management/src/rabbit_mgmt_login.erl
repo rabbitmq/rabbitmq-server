@@ -8,13 +8,10 @@
 -module(rabbit_mgmt_login).
 
 -export([init/2]).
--export([canonical_login_error/1, sanitise_location/1]).
 
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include("rabbit_mgmt.hrl").
 -include_lib("kernel/include/logger.hrl").
-
--define(MAX_LOCATION_LEN, 1024).
 
 %%--------------------------------------------------------------------
 %% /api/login endpoint
@@ -121,7 +118,7 @@ handleAccessToken(Req0, AccessToken, State) ->
                                          AccessToken,
                                          Req1, State);
         {false, ReqData1, Reason} ->
-            reply_with_error(Reason, ReqData1, State)
+            replyWithError(Reason, ReqData1, State)
     end.
 
 redirect_to_home_with_cookie(CookiePath, CookieName, CookieValue, Req=#{scheme := Scheme}, State) ->
@@ -146,40 +143,14 @@ get_home_uri(Req0) ->
     cowboy_req:uri(Req0, #{path => rabbit_mgmt_util:get_path_prefix() ++ "/", qs => undefined}).
 
 
-reply_with_error(Reason, Req, State) ->
-    Code     = canonical_login_error(Reason),
-    QS       = cow_qs:qs([{<<"error">>, Code}]),
-    Home     = cowboy_req:uri(Req, #{
-        path => rabbit_mgmt_util:get_path_prefix() ++ "/",
-        qs   => QS
+replyWithError(Reason, Req, State) ->
+    Home = cowboy_req:uri(Req, #{
+        path => rabbit_mgmt_util:get_path_prefix() ++ "/", 
+        qs => "error=" ++ Reason
     }),
-    Location = sanitise_location(iolist_to_binary(Home)),
-    Req2 = cowboy_req:reply(302, #{<<"Location">> => Location}, <<>>, Req),
+    Req2 = cowboy_req:reply(302, #{
+        <<"Location">> => iolist_to_binary(Home) 
+    }, <<>>, Req),
     {ok, Req2, State}.
 
--spec canonical_login_error(term()) -> binary().
-canonical_login_error(Reason) when is_binary(Reason) ->
-    case lists:member(Reason, ?LOGIN_ERROR_CODES) of
-        true  -> Reason;
-        false -> ?DEFAULT_LOGIN_ERROR_CODE
-    end;
-canonical_login_error(Reason) when is_atom(Reason) ->
-    canonical_login_error(atom_to_binary(Reason, utf8));
-canonical_login_error(Reason) when is_list(Reason) ->
-    try unicode:characters_to_binary(Reason) of
-        B when is_binary(B) -> canonical_login_error(B);
-        _                   -> ?DEFAULT_LOGIN_ERROR_CODE
-    catch
-        error:_ -> ?DEFAULT_LOGIN_ERROR_CODE
-    end;
-canonical_login_error(_) ->
-    ?DEFAULT_LOGIN_ERROR_CODE.
 
--spec sanitise_location(binary()) -> binary().
-sanitise_location(Loc) when byte_size(Loc) > ?MAX_LOCATION_LEN ->
-    <<"/">>;
-sanitise_location(Loc) ->
-    case binary:match(Loc, [<<"\r">>, <<"\n">>]) of
-        nomatch -> Loc;
-        _       -> <<"/">>
-    end.
