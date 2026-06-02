@@ -1977,11 +1977,9 @@ handle_frame_post_auth(Transport, {ok, #stream_connection{user = User} = C}, Sta
   increase_protocol_counter(Counter),
   {C, State};
 handle_frame_post_auth(Transport,
-                       {ok, #stream_connection{
-                               stream_subscriptions = StreamSubscriptions,
-                               virtual_host = VirtualHost,
-                               user = User} = Connection},
-                       State,
+                       {ok, #stream_connection{virtual_host = VirtualHost,
+                                               user = User} = Connection},
+                       #stream_connection_state{consumers = Consumers} = State,
                        {request, CorrelationId,
                         {subscribe,
                          SubscriptionId,
@@ -2017,8 +2015,7 @@ handle_frame_post_auth(Transport,
                     increase_protocol_counter(?STREAM_DOES_NOT_EXIST),
                     {Connection, State};
                 {ok, LocalMemberPid} ->
-                    case subscription_exists(StreamSubscriptions,
-                                             SubscriptionId)
+                    case maps:is_key(SubscriptionId, Consumers)
                     of
                         true ->
                             response(Transport,
@@ -2197,13 +2194,62 @@ handle_frame_post_auth(Transport,
     send(Transport, S, Frame),
     {Connection1, State};
 handle_frame_post_auth(Transport,
+<<<<<<< HEAD
                        #stream_connection{stream_subscriptions =
                                               StreamSubscriptions} =
                            Connection,
                        #stream_connection_state{} = State,
+=======
+                       #stream_connection{socket = S,
+                                          virtual_host = VirtualHost,
+                                          user = User} =
+                           Connection0,
+                       State,
+                       {request, CorrelationId,
+                        {resolve_offset_spec, Stream, OffsetSpec, Properties}}) ->
+    {ResponseCode, Offset, Connection1} =
+        case rabbit_stream_utils:check_read_permitted(#resource{name = Stream,
+                                                                kind = queue,
+                                                                virtual_host =
+                                                                    VirtualHost},
+                                                      User, #{})
+        of
+            ok ->
+                case rabbit_stream_manager:lookup_member(VirtualHost, Stream) of
+                    {error, not_found} ->
+                        increase_protocol_counter(?STREAM_DOES_NOT_EXIST),
+                        {?RESPONSE_CODE_STREAM_DOES_NOT_EXIST, 0, Connection0};
+                    {error, not_available} ->
+                        increase_protocol_counter(?STREAM_NOT_AVAILABLE),
+                        {?RESPONSE_CODE_STREAM_NOT_AVAILABLE, 0, Connection0};
+                    {ok, MemberPid} ->
+                        Opts0 = #{chunk_selector => get_chunk_selector(Properties)},
+                        Opts1 = maps:merge(Opts0,
+                                           rabbit_stream_utils:filter_spec(Properties)),
+                        case resolve_offset_spec(MemberPid, OffsetSpec, Opts1) of
+                            {ok, ResolvedOffset} ->
+                                {?RESPONSE_CODE_OK, ResolvedOffset, Connection0};
+                            {error, _} ->
+                                {?RESPONSE_CODE_NO_OFFSET, 0, Connection0}
+                        end
+                end;
+            error ->
+                increase_protocol_counter(?ACCESS_REFUSED),
+                {?RESPONSE_CODE_ACCESS_REFUSED, 0, Connection0}
+        end,
+    Frame =
+        rabbit_stream_core:frame({response, CorrelationId,
+                                  {resolve_offset_spec, ResponseCode,
+                                   ?OFFSET_TYPE_OFFSET, Offset}}),
+    send(Transport, S, Frame),
+    {Connection1, State};
+handle_frame_post_auth(Transport,
+                       Connection,
+                       #stream_connection_state{consumers = Consumers} = State,
+>>>>>>> e544844a8a (Replace O(N) subscription_exists/2 with O(log N) map lookup)
                        {request, CorrelationId,
                         {unsubscribe, SubscriptionId}}) ->
-    case subscription_exists(StreamSubscriptions, SubscriptionId) of
+    case maps:is_key(SubscriptionId, Consumers) of
         false ->
             response(Transport,
                      Connection,
@@ -3659,11 +3705,6 @@ response(Transport,
          rabbit_stream_core:frame({response, CorrelationId,
                                    {Command, ResponseCode}})).
 
-subscription_exists(StreamSubscriptions, SubscriptionId) ->
-    SubscriptionIds =
-        lists:flatten(
-            maps:values(StreamSubscriptions)),
-    lists:any(fun(Id) -> Id =:= SubscriptionId end, SubscriptionIds).
 
 send_file_callback(?VERSION_1,
                    _Log,
