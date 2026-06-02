@@ -1983,11 +1983,9 @@ handle_frame_post_auth(Transport, {ok, #stream_connection{user = User} = C}, Sta
   increase_protocol_counter(Counter),
   {C, State};
 handle_frame_post_auth(Transport,
-                       {ok, #stream_connection{
-                               stream_subscriptions = StreamSubscriptions,
-                               virtual_host = VirtualHost,
-                               user = User} = Connection},
-                       State,
+                       {ok, #stream_connection{virtual_host = VirtualHost,
+                                               user = User} = Connection},
+                       #stream_connection_state{consumers = Consumers} = State,
                        {request, CorrelationId,
                         {subscribe,
                          SubscriptionId,
@@ -2023,8 +2021,7 @@ handle_frame_post_auth(Transport,
                     increase_protocol_counter(?STREAM_DOES_NOT_EXIST),
                     {Connection, State};
                 {ok, LocalMemberPid} ->
-                    case subscription_exists(StreamSubscriptions,
-                                             SubscriptionId)
+                    case maps:is_key(SubscriptionId, Consumers)
                     of
                         true ->
                             response(Transport,
@@ -2247,13 +2244,11 @@ handle_frame_post_auth(Transport,
     send(Transport, S, Frame),
     {Connection1, State};
 handle_frame_post_auth(Transport,
-                       #stream_connection{stream_subscriptions =
-                                              StreamSubscriptions} =
-                           Connection,
-                       #stream_connection_state{} = State,
+                       Connection,
+                       #stream_connection_state{consumers = Consumers} = State,
                        {request, CorrelationId,
                         {unsubscribe, SubscriptionId}}) ->
-    case subscription_exists(StreamSubscriptions, SubscriptionId) of
+    case maps:is_key(SubscriptionId, Consumers) of
         false ->
             response(Transport,
                      Connection,
@@ -3709,11 +3704,6 @@ response(Transport,
          rabbit_stream_core:frame({response, CorrelationId,
                                    {Command, ResponseCode}})).
 
-subscription_exists(StreamSubscriptions, SubscriptionId) ->
-    SubscriptionIds =
-        lists:flatten(
-            maps:values(StreamSubscriptions)),
-    lists:any(fun(Id) -> Id =:= SubscriptionId end, SubscriptionIds).
 
 send_file_callback(?VERSION_1,
                    _Log,
