@@ -364,17 +364,13 @@ frame({tune, FrameMax, Heartbeat}) ->
                     FrameMax:32,
                     Heartbeat:32>>);
 frame({publish_error, PublisherId, ErrCode, PublishingIds}) ->
-    Details =
-        iolist_to_binary(lists:foldr(fun(PubId, Acc) ->
-                                        [<<PubId:64, ErrCode:16>> | Acc]
-                                     end,
-                                     [], PublishingIds)),
-    wrap_in_frame(<<?REQUEST:1,
-                    ?COMMAND_PUBLISH_ERROR:15,
-                    ?VERSION_1:16,
-                    PublisherId:8,
-                    (length(PublishingIds)):32,
-                    Details/binary>>);
+    Details = [<<PubId:64, ErrCode:16>> || PubId <- PublishingIds],
+    wrap_in_frame([<<?REQUEST:1,
+                     ?COMMAND_PUBLISH_ERROR:15,
+                     ?VERSION_1:16,
+                     PublisherId:8,
+                     (length(PublishingIds)):32>>,
+                   Details]);
 frame({request, CorrelationId, Body}) ->
     {CmdTag, BodyBin} = request_body(Body),
     CmdId = command_id(CmdTag),
