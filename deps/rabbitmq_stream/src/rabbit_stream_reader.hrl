@@ -23,6 +23,7 @@
 -type connection_step() :: tcp_connected | peer_properties_exchanged |
                            authenticating | authenticated | tuning |
                            tuned | opened | failure |
+                           silent_close |
                            closing | close_sent | closing_done.
 
 -record(publisher,
