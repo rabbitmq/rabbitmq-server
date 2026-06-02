@@ -713,10 +713,8 @@ request_body({resolve_offset_spec = Tag, Stream, OffsetSpec, Properties}) ->
         end,
     {Tag, [<<?STRING(Stream), OffsetSpecBin/binary>> | PropertiesBin]}.
 
-append_data(Prev, Data) when is_binary(Prev) ->
-    [Prev, Data];
-append_data(Prev, Data) when is_list(Prev) ->
-    Prev ++ [Data].
+append_data(Prev, Data) ->
+    [Prev, Data].
 
 wrap_in_frame(IOData) ->
     Size = iolist_size(IOData),
