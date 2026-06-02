@@ -295,7 +295,12 @@
          last_active :: option(non_neg_integer()),
          msg_cache :: option({ra:index(), raw_msg()}),
          %% delayed retry messages awaiting redelivery
-         delayed = #delayed{} :: #delayed{}
+         delayed = #delayed{} :: #delayed{},
+         %% bytes enqueued, accumulated per originating node since the
+         %% creation of this state machine. Monotonically non-decreasing
+         %% on every node (under leader replication). Used by leader
+         %% migration tooling to estimate per-node ingress.
+         ingress_bytes_by_node = #{} :: #{node() | undefined => non_neg_integer()}
         }).
 
 -type config() :: #{name := atom(),

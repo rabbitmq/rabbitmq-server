@@ -203,8 +203,7 @@
               delayed_op/0]).
 
 -spec init(config()) -> state().
-init(#{name := Name,
-       queue_resource := Resource} = Conf) ->
+init(#{name := Name, queue_resource := Resource} = Conf) ->
     update_config(Conf, #?STATE{cfg = #cfg{name = Name,
                                            resource = Resource}}).
 
@@ -696,9 +695,12 @@ apply_(Meta, {nodeup, Node}, #?STATE{consumers = Cons0,
 apply_(_, {nodedown, _Node}, State) ->
     {State, ok};
 apply_(Meta, #purge_nodes{nodes = Nodes}, State0) ->
-    {State, Effects} = lists:foldl(fun(Node, {S, E}) ->
+    {State1, Effects} = lists:foldl(fun(Node, {S, E}) ->
                                            purge_node(Meta, Node, S, E)
                                    end, {State0, []}, Nodes),
+    State = State1#?STATE{
+        ingress_bytes_by_node =
+            maps:without(Nodes, State1#?STATE.ingress_bytes_by_node)},
     {State, ok, Effects};
 apply_(Meta,
        #update_config{config = #{} = Conf},
@@ -967,8 +969,7 @@ credit_reply_resend_effect(#?STATE{waiting_consumers = Waiting,
       end, [], maps:merge(Consumers, maps:from_list(Waiting))).
 
 convert_v8_to_v9(#{} = _Meta, StateV8) ->
-    State = StateV8,
-    State.
+    erlang:append_element(StateV8, #{}).
 
 purge_node(Meta, Node, State, Effects) ->
     lists:foldl(fun(Pid, {S0, E0}) ->
@@ -1171,7 +1172,8 @@ overview(#?STATE{consumers = Cons,
                  reclaimable_bytes_count => ReclaimableBytes,
                  smallest_raft_index => smallest_raft_index(State),
                  num_active_priorities => NumActivePriorities,
-                 messages_by_priority => Detail
+                 messages_by_priority => Detail,
+                 ingress_bytes_by_node => State#?STATE.ingress_bytes_by_node
                  },
     DlxOverview = dlx_overview(DlxState),
     maps:merge(maps:merge(Overview, DlxOverview), SacOverview).
@@ -1205,7 +1207,13 @@ which_module(7) -> rabbit_fifo_v7;
 which_module(8) -> rabbit_fifo_v8;
 which_module(9) -> ?MODULE.
 
--define(AUX, aux_v4).
+-define(AUX, aux_v5).
+-define(DEFAULT_INGRESS_DECAY_MS, 60_000).
+
+-record(ingress_aux,
+        {last_totals = #{} :: #{node() | undefined => non_neg_integer()},
+         estimators = #{} :: #{node() | undefined => ra_li:state()},
+         decay_ms = ?DEFAULT_INGRESS_DECAY_MS :: pos_integer()}).
 
 -record(snapshot, {index :: ra:index(),
                    timestamp :: milliseconds(),
@@ -1220,7 +1228,8 @@ which_module(9) -> ?MODULE.
                gc = #aux_gc{} :: #aux_gc{},
                tick_pid :: undefined | pid(),
                cache = #{} :: map(),
-               last_checkpoint :: tuple() | #snapshot{}
+               last_checkpoint :: tuple() | #snapshot{},
+               ingress = #ingress_aux{} :: #ingress_aux{}
               }).
 
 init_aux(Name) when is_atom(Name) ->
@@ -1234,11 +1243,38 @@ init_aux(Name) when is_atom(Name) ->
                              ?SNAP_MIN_RECLAIMABLE_B}),
     Range = max(1, SnapMinReclaimable - ?SNAP_MIN_RECLAIMABLE_LOW_B),
     MinReclaimable = ?SNAP_MIN_RECLAIMABLE_LOW_B + rand:uniform(Range),
+    DecayMs = persistent_term:get(rabbit_fifo_ingress_decay_ms,
+                                  ?DEFAULT_INGRESS_DECAY_MS),
     #?AUX{name = Name,
           last_checkpoint = #snapshot{index = 0,
                                       timestamp = erlang:system_time(millisecond),
                                       messages_total = 0,
-                                      min_reclaimable = MinReclaimable}}.
+                                      min_reclaimable = MinReclaimable},
+          ingress = #ingress_aux{decay_ms = DecayMs}}.
+
+update_ingress(Overview, Nodes, #ingress_aux{last_totals = LastTotals,
+                                              estimators = Estimators0,
+                                              decay_ms = DecayMs} = Ingress) ->
+    NewTotals = maps:get(ingress_bytes_by_node, Overview, #{}),
+    Ts = erlang:monotonic_time(millisecond),
+    Estimators1 =
+        maps:fold(fun(Node, NewTotal, Est) ->
+                      Delta = NewTotal - maps:get(Node, LastTotals, 0),
+                      Li0 = maps:get(Node, Est, ra_li:new(DecayMs)),
+                      Li1 = ra_li:update(Delta, Ts, Li0),
+                      Est#{Node => Li1}
+                  end, Estimators0, NewTotals),
+    ActiveNodes = sets:from_list(Nodes, [{version, 2}]),
+    Estimators = maps:filter(fun(Node, _) ->
+                                  Node =:= undefined orelse
+                                  sets:is_element(Node, ActiveNodes)
+                             end, Estimators1),
+    Ingress#ingress_aux{last_totals = NewTotals,
+                        estimators = Estimators}.
+
+compute_ingress_rates(#ingress_aux{estimators = Estimators}) ->
+    Ts = erlang:monotonic_time(millisecond),
+    maps:map(fun(_Node, Li) -> ra_li:rate(Ts, Li) end, Estimators).
 
 handle_aux(RaftState, Tag, Cmd, AuxV2, RaAux)
   when element(1, AuxV2) == aux_v2 ->
@@ -1256,6 +1292,19 @@ handle_aux(RaftState, Tag, Cmd, AuxV3, RaAux)
                   last_checkpoint = element(8, AuxV3)
                  },
     handle_aux(RaftState, Tag, Cmd, AuxV4, RaAux);
+handle_aux(RaftState, Tag, Cmd, AuxV4, RaAux)
+  when element(1, AuxV4) == aux_v4 ->
+    DecayMs = persistent_term:get(rabbit_fifo_ingress_decay_ms,
+                                  ?DEFAULT_INGRESS_DECAY_MS),
+    AuxV5 = #?AUX{name = element(2, AuxV4),
+                  last_decorators_state = element(3, AuxV4),
+                  last_consumer_timeout = element(4, AuxV4),
+                  gc = element(5, AuxV4),
+                  tick_pid = element(6, AuxV4),
+                  cache = element(7, AuxV4),
+                  last_checkpoint = element(8, AuxV4),
+                  ingress = #ingress_aux{decay_ms = DecayMs}},
+    handle_aux(RaftState, Tag, Cmd, AuxV5, RaAux);
 handle_aux(leader, cast, eval,
            #?AUX{last_decorators_state = LastDec,
                  last_consumer_timeout = LastConTimeout0,
@@ -1348,22 +1397,25 @@ handle_aux(_RaftState, cast, {#return{msg_ids = MsgIds,
             %% for returns with a delivery limit set we can just return as before
             {no_reply, Aux0, RaAux0, [{append, Ret, {notify, Corr, Pid}}]}
     end;
-handle_aux(leader, _, {handle_tick, [QName, Overview0, Nodes]},
-           #?AUX{tick_pid = Pid} = Aux, RaAux) ->
-    Overview = Overview0#{members_info => ra_aux:members_info(RaAux)},
-    NewPid =
-        case process_is_alive(Pid) of
-            false ->
-                %% No active TICK pid
-                %% this function spawns and returns the tick process pid
-                rabbit_quorum_queue:handle_tick(QName, Overview, Nodes);
-            true ->
-                %% Active TICK pid, do nothing
-                Pid
-        end,
 
-    %% TODO: check consumer timeouts
-    {no_reply, Aux#?AUX{tick_pid = NewPid}, RaAux, []};
+handle_aux(RaftState, _, {handle_tick, [QName, Overview0, Nodes]},
+           #?AUX{tick_pid = Pid, ingress = Ingress0} = Aux, RaAux) ->
+    Overview = Overview0#{members_info => ra_aux:members_info(RaAux)},
+    Ingress = update_ingress(Overview0, Nodes, Ingress0),
+    Aux1 = Aux#?AUX{ingress = Ingress},
+    case RaftState of
+        leader ->
+            NewPid =
+                case process_is_alive(Pid) of
+                    false ->
+                        rabbit_quorum_queue:handle_tick(QName, Overview, Nodes);
+                    true ->
+                        Pid
+                end,
+            {no_reply, Aux1#?AUX{tick_pid = NewPid}, RaAux, []};
+        _ ->
+            {no_reply, Aux1, RaAux, []}
+    end;
 handle_aux(_, _, {get_checked_out, ConsumerKey, MsgIds}, Aux0, RaAux0) ->
     #?STATE{cfg = #cfg{},
             consumers = Consumers} = ra_aux:machine_state(RaAux0),
@@ -1460,6 +1512,10 @@ handle_aux(leader, _, {dlx, setup}, Aux, RaAux) ->
 handle_aux(_, _, {dlx, teardown, Pid}, Aux, RaAux) ->
     terminate_dlx_worker(Pid),
     {no_reply, Aux, RaAux};
+handle_aux(_, {call, _From}, get_ingress_rates,
+           #?AUX{ingress = Ingress} = Aux, RaAux) ->
+    Rates = compute_ingress_rates(Ingress),
+    {reply, {ok, Rates}, Aux, RaAux};
 handle_aux(_, _, Unhandled, Aux, RaAux) ->
     #?STATE{cfg = #cfg{resource = QR}} = ra_aux:machine_state(RaAux),
     ?LOG_DEBUG("~ts: rabbit_fifo: unhandled aux command ~P",
@@ -1907,12 +1963,24 @@ maybe_return_all(#{system_time := Ts} = Meta, ConsumerKey,
              Effects}
     end.
 
+node_of(undefined) -> undefined;
+node_of(Pid) when is_pid(Pid) -> node(Pid).
+
+bump_ingress(Node, Size, Map) ->
+    maps:update_with(Node, fun(V) -> V + Size end, Size, Map).
+
 apply_enqueue(#{index := RaftIdx,
                 system_time := Ts} = Meta, From,
               Seq, RawMsg, Size, State0) ->
     case maybe_enqueue(RaftIdx, Ts, From, Seq, RawMsg, Size, [], State0) of
         {ok, State1, Effects1} ->
-            checkout(Meta, State0, State1, Effects1);
+            {MetaSize, BodySize} = Size,
+            TotalSize = MetaSize + BodySize,
+            IngressByNode = State1#?STATE.ingress_bytes_by_node,
+            State2 = State1#?STATE{
+                ingress_bytes_by_node =
+                    bump_ingress(node_of(From), TotalSize, IngressByNode)},
+            checkout(Meta, State0, State2, Effects1);
         {out_of_sequence, State, Effects} ->
             {State, not_enqueued, Effects};
         {duplicate, State, Effects} ->
