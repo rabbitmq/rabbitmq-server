@@ -1912,7 +1912,7 @@ matches_strategy(even, Members) ->
     length(Members) rem 2 == 0.
 
 is_match(Subj, E) ->
-   nomatch /= re:run(Subj, E).
+   rabbit_re:matches(Subj, E).
 
 -spec reclaim_memory(rabbit_types:r(queue)) -> ok | {error, term()}.
 reclaim_memory(#resource{virtual_host = Vhost, name = QueueName}) ->
@@ -2700,7 +2700,7 @@ leader_health_check(QueueNameOrRegEx, VHost, ProcessLimitThreshold) ->
         lists:flatten(
             [begin
                 {resource, _VHostN, queue, QueueName} = QResource = amqqueue:get_name(Q),
-                case re:run(QueueName, QueueNameOrRegEx, [{capture, none}]) of
+                case rabbit_re:run(QueueName, QueueNameOrRegEx) of
                     match ->
                         {ClusterName, _} = rabbit_amqqueue:pid_of(Q),
                         _Pid = spawn(fun() -> run_leader_health_check(ClusterName, QResource, HealthCheckRef, ParentPID) end);

@@ -512,9 +512,7 @@ maybe_filter_context(List, _) ->
 
 
 match_value({_, Value}, ValueTag, UseRegex) when UseRegex =:= "true" ->
-    case re:run(Value, ValueTag, [caseless,
-                                  {match_limit, 50_000},
-                                  {match_limit_recursion, 50_000}]) of
+    case rabbit_re:run(Value, ValueTag, [caseless]) of
         {match, _} -> true;
         {error, _} -> false;
         nomatch -> false
