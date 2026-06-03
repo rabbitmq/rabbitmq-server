@@ -1115,7 +1115,9 @@ parse_response_body(?COMMAND_STREAM_STATS,
     {stream_stats, ResponseCode, Info};
 parse_response_body(?COMMAND_RESOLVE_OFFSET_SPEC,
                     <<ResponseCode:16, OffsetType:16, Offset:64>>) ->
-    {resolve_offset_spec, ResponseCode, OffsetType, Offset}.
+    {resolve_offset_spec, ResponseCode, OffsetType, Offset};
+parse_response_body(CommandId, Data) ->
+    {unknown, CommandId, Data}.
 
 offset_spec(OffsetType, OffsetValueBin) ->
     case OffsetType of
