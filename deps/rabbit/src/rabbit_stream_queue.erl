@@ -1548,8 +1548,44 @@ list_with_minimum_quorum() ->
                          StreamId = maps:get(name, amqqueue:get_type_state(Q)),
                          {ok, Members} = rabbit_stream_coordinator:members(StreamId),
                          RunningMembers = maps:filter(fun(_, {State, _}) -> State =/= undefined end, Members),
-                         map_size(RunningMembers) =< map_size(Members) div 2 + 1
+                         UpToDateRunningMembers = up_to_date_running_members(Q, RunningMembers),
+                         map_size(UpToDateRunningMembers) =< map_size(Members) div 2 + 1
                  end, rabbit_amqqueue:list_local_stream_queues()).
+
+%% Filters running stream members returning only those that are sufficiently up to date.
+up_to_date_running_members(Q, RunningMembers) ->
+    case amqqueue:get_pid(Q) of
+        none ->
+            #{};
+        LeaderPid ->
+            FreshnessMap = replica_freshness(LeaderPid),
+            maps:filter(fun(Node, _) ->
+                                is_fresh_member(Node, FreshnessMap)
+                        end, RunningMembers)
+    end.
+
+%% Returns whether a given node is considered fresh based on the freshness map status.
+is_fresh_member(Node, FreshnessMap) ->
+    maps:get(Node, FreshnessMap, false).
+
+%% Queries the leader replica of the stream to construct a map of nodes to their lag status.
+replica_freshness(LeaderPid) ->
+    try osiris_writer:query_replication_state(LeaderPid) of
+        ReplState0 ->
+            case maps:take(node(LeaderPid), ReplState0) of
+                {{_, LeaderTs}, ReplState} ->
+                    FreshnessMap = maps:map(
+                        fun(_, {_, ReplicaTs}) ->
+                            rabbit_stream_coordinator:is_replica_fresh(LeaderTs, ReplicaTs)
+                        end, ReplState),
+                    FreshnessMap#{node(LeaderPid) => true};
+                error ->
+                    #{}
+            end
+    catch
+        _:_ ->
+            #{}
+    end.
 
 get_nodes(Q) when ?is_amqqueue(Q) ->
     #{nodes := Nodes} = amqqueue:get_type_state(Q),
