@@ -50,10 +50,14 @@ list(Name, Term) ->
     {error, "~ts should be list, actually was ~tp", [Name, Term]}.
 
 regex(Name, Term) when is_binary(Term) ->
-    case re:compile(Term) of
-        {ok, _}         -> ok;
-        {error, Reason} -> {error, "~ts should be regular expression "
-                                   "but is invalid: ~tp", [Name, Reason]}
+    case rabbit_re:compile(Term) of
+        {ok, _}                  -> ok;
+        {error, pattern_too_long} ->
+            {error, "~ts must not exceed ~b bytes",
+             [Name, rabbit_re:max_pattern_length()]};
+        {error, Reason}          ->
+            {error, "~ts should be regular expression "
+                    "but is invalid: ~tp", [Name, Reason]}
     end;
 regex(Name, Term) ->
     {error, "~ts should be a binary but was ~tp", [Name, Term]}.
