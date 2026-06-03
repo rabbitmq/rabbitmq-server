@@ -24,7 +24,9 @@ groups() ->
           register_interceptor,
           register_interceptor_failing_with_amqp_error,
           register_interceptor_crashing_with_amqp_error_exception,
-          register_failing_interceptors
+          register_failing_interceptors,
+          conflicting_interceptors_close_network_connections_gracefully,
+          conflicting_interceptors_close_direct_connections_gracefully
         ]}
     ].
 
@@ -212,6 +214,94 @@ register_interceptor_crashing_with_amqp_error_exception1(Config, Interceptor) ->
 register_failing_interceptors(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,
       ?MODULE, register_interceptor1, [Config, failing_dummy_interceptor]).
+
+conflicting_interceptors_close_network_connections_gracefully(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, conflicting_interceptors_close_network_connections_gracefully1, [Config]).
+
+conflicting_interceptors_close_network_connections_gracefully1(Config) ->
+    ok = rabbit_registry:register(channel_interceptor,
+                                  <<"dummy interceptor">>,
+                                  dummy_interceptor),
+    ok = rabbit_registry:register(channel_interceptor,
+                                  <<"conflicting dummy interceptor">>,
+                                  conflicting_dummy_interceptor),
+    try
+        Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0),
+        ?assert(is_pid(Conn)),
+        ?assert(is_process_alive(Conn)),
+        ConnMRef = erlang:monitor(process, Conn),
+        Result = try amqp_connection:open_channel(Conn)
+                 catch _:_ -> {error, channel_open_failed}
+                 end,
+        ?assertMatch({error, _}, Result),
+        receive
+            {'DOWN', ConnMRef, process, Conn, ConnExitReason} ->
+                ?assertMatch(
+                    {shutdown, {server_initiated_close, _, _}},
+                    ConnExitReason)
+        after 10000 ->
+            ct:fail("Connection process did not terminate")
+        end
+    after
+        ok = rabbit_registry:unregister(channel_interceptor,
+                                        <<"dummy interceptor">>),
+        ok = rabbit_registry:unregister(channel_interceptor,
+                                        <<"conflicting dummy interceptor">>)
+    end,
+    %% Verify the server still accepts new connections and channels
+    Conn2 = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0),
+    ?assert(is_pid(Conn2)),
+    {ok, Ch} = amqp_connection:open_channel(Conn2),
+    ?assert(is_pid(Ch)),
+    ok = amqp_connection:close(Conn2),
+    passed.
+
+conflicting_interceptors_close_direct_connections_gracefully(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, conflicting_interceptors_close_direct_connections_gracefully1, [Config]).
+
+conflicting_interceptors_close_direct_connections_gracefully1(Config) ->
+    ok = rabbit_registry:register(channel_interceptor,
+                                  <<"dummy interceptor">>,
+                                  dummy_interceptor),
+    ok = rabbit_registry:register(channel_interceptor,
+                                  <<"conflicting dummy interceptor">>,
+                                  conflicting_dummy_interceptor),
+    try
+        Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+        Params = #amqp_params_direct{node = Node,
+                                     virtual_host = <<"/">>,
+                                     username = <<"guest">>,
+                                     password = <<"guest">>},
+        {ok, Conn} = amqp_connection:start(Params),
+        ?assert(is_pid(Conn)),
+        ?assert(is_process_alive(Conn)),
+        %% open_channel must return {error, _} gracefully, not crash.
+        %% If the connection process crashes (e.g. badmatch in
+        %% amqp_channels_manager), this call will throw and fail the test.
+        Result = amqp_connection:open_channel(Conn),
+        ?assertMatch({error, _}, Result),
+        ?assert(is_process_alive(Conn)),
+        ok = amqp_connection:close(Conn)
+    after
+        ok = rabbit_registry:unregister(channel_interceptor,
+                                        <<"dummy interceptor">>),
+        ok = rabbit_registry:unregister(channel_interceptor,
+                                        <<"conflicting dummy interceptor">>)
+    end,
+    %% Verify the server still accepts new direct connections and channels
+    Node2 = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Params2 = #amqp_params_direct{node = Node2,
+                                  virtual_host = <<"/">>,
+                                  username = <<"guest">>,
+                                  password = <<"guest">>},
+    {ok, Conn2} = amqp_connection:start(Params2),
+    ?assert(is_pid(Conn2)),
+    {ok, Ch} = amqp_connection:open_channel(Conn2),
+    ?assert(is_pid(Ch)),
+    ok = amqp_connection:close(Conn2),
+    passed.
 
 check_send_receive(Ch1, QName, Send, Receive) ->
     amqp_channel:call(Ch1,
