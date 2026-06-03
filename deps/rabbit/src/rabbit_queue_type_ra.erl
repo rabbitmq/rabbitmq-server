@@ -208,7 +208,7 @@ matches_strategy(even, Members) ->
     length(Members) rem 2 =:= 0.
 
 is_match(Subject, RE) ->
-    match =:= re:run(Subject, RE, [{capture, none}]).
+    rabbit_re:matches(Subject, RE).
 
 get_resource_name(#resource{name = Name}) ->
     Name.

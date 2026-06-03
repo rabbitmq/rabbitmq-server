@@ -962,9 +962,7 @@ queue_filter_from_pdict() ->
 matches_queue_filter(_QName, false) ->
     true;
 matches_queue_filter(QName, MP) ->
-    re:run(QName, MP, [{capture, none},
-                       {match_limit, 50_000},
-                       {match_limit_recursion, 50_000}]) =:= match.
+    rabbit_re:matches(QName, MP).
 
 filter_by_queue_name(Rows, false) ->
     Rows;
