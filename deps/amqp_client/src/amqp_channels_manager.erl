@@ -105,12 +105,15 @@ handle_open_channel(ProposedNumber, Consumer, InfraArgs,
                     State = #state{channel_sup_sup = ChSupSup}) ->
     case new_number(ProposedNumber, State) of
         {ok, Number} ->
-            {ok, _ChSup, {Ch, AState}} =
-                amqp_channel_sup_sup:start_channel_sup(ChSupSup, InfraArgs,
-                                                       Number, Consumer),
-            NewState = internal_register(Number, Ch, AState, State),
-            erlang:monitor(process, Ch),
-            {reply, {ok, Ch}, NewState};
+            case amqp_channel_sup_sup:start_channel_sup(ChSupSup, InfraArgs,
+                                                        Number, Consumer) of
+                {ok, _ChSup, {Ch, AState}} ->
+                    NewState = internal_register(Number, Ch, AState, State),
+                    erlang:monitor(process, Ch),
+                    {reply, {ok, Ch}, NewState};
+                {error, _} = Error ->
+                    {reply, Error, State}
+            end;
         {error, _} = Error ->
             {reply, Error, State}
     end.
