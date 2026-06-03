@@ -2271,10 +2271,8 @@ handle_frame_post_auth(Transport,
                         increase_protocol_counter(?STREAM_NOT_AVAILABLE),
                         {?RESPONSE_CODE_STREAM_NOT_AVAILABLE, 0, Connection0};
                     {ok, MemberPid} ->
-                        Opts0 = #{chunk_selector => get_chunk_selector(Properties)},
-                        Opts1 = maps:merge(Opts0,
-                                           rabbit_stream_utils:filter_spec(Properties)),
-                        case resolve_offset_spec(MemberPid, OffsetSpec, Opts1) of
+                        Options = reader_options(Properties),
+                        case resolve_offset_spec(MemberPid, OffsetSpec, Options) of
                             {ok, ResolvedOffset} ->
                                 {?RESPONSE_CODE_OK, ResolvedOffset, Connection0};
                             {error, _} ->
@@ -3000,11 +2998,9 @@ init_reader(ConnectionTransport,
             OffsetSpec) ->
     CounterSpec = {{?MODULE, QueueResource, SubscriptionId, self()}, []},
     Options0 = #{transport => ConnectionTransport,
-                 chunk_selector => get_chunk_selector(Properties),
                  read_ahead => rabbit_stream_queue:read_ahead()},
 
-    Options1 = maps:merge(Options0,
-                          rabbit_stream_utils:filter_spec(Properties)),
+    Options1 = maps:merge(Options0, reader_options(Properties)),
     {ok, Segment} = osiris:init_reader(LocalMemberPid, OffsetSpec,
                                        CounterSpec, Options1),
     ?LOG_DEBUG("Next offset for subscription ~tp is ~tp",
@@ -4207,6 +4203,10 @@ get_chunk_selector(Properties) ->
         <<"all">> -> all;
         _         -> user_data
     end.
+
+reader_options(Properties) ->
+    Opts = #{chunk_selector => get_chunk_selector(Properties)},
+    maps:merge(Opts, rabbit_stream_utils:filter_spec(Properties)).
 
 close_log(undefined) ->
     ok;
