@@ -209,7 +209,7 @@ connect1(User = #user{username = Username}, VHost, Pid, Infos) ->
         (rabbit_channel:channel_number(), pid(), pid(), string(),
          rabbit_types:protocol(), rabbit_types:user(), rabbit_types:vhost(),
          rabbit_framing:amqp_table(), pid(), any()) ->
-            {'ok', pid()}.
+            {'ok', pid()} | {'error', any()}.
 
 %% Kept for compatibility with older amqp_client versions (rpc:call).
 start_channel(Number, ClientChannelPid, ConnPid, ConnName, _Protocol,
@@ -221,19 +221,26 @@ start_channel(Number, ClientChannelPid, ConnPid, ConnName, _Protocol,
         (rabbit_channel:channel_number(), pid(), pid(), string(),
          rabbit_types:user(), rabbit_types:vhost(),
          rabbit_framing:amqp_table(), pid(), any()) ->
-            {'ok', pid()}.
+            {'ok', pid()} | {'error', any()}.
 
 start_channel(Number, ClientChannelPid, ConnPid, ConnName,
               User = #user{username = Username}, VHost, Capabilities,
               Collector, AmqpParams) ->
     case rabbit_auth_backend_internal:is_over_channel_limit(Username) of
         false ->
-            {ok, _, {ChannelPid, _}} =
-                supervisor:start_child(
-                  rabbit_direct_client_sup,
-                  [{direct, Number, ClientChannelPid, ConnPid, ConnName,
-                    User, VHost, Capabilities, Collector, AmqpParams}]),
-            {ok, ChannelPid};
+            case supervisor:start_child(
+                   rabbit_direct_client_sup,
+                   [{direct, Number, ClientChannelPid, ConnPid, ConnName,
+                     User, VHost, Capabilities, Collector, AmqpParams}]) of
+                {ok, _, {ChannelPid, _}} ->
+                    {ok, ChannelPid};
+                {error, Reason} ->
+                    ?LOG_ERROR(
+                        "Error on direct connection ~tp~n"
+                        "failed to open channel: ~tp",
+                        [ConnPid, Reason]),
+                    {error, channel_open_failed}
+            end;
         {true, Limit} ->
             ?LOG_ERROR(
                 "Error on direct connection ~tp~n"

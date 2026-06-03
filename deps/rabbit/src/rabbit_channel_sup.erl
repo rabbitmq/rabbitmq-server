@@ -42,7 +42,8 @@
 
 %%----------------------------------------------------------------------------
 
--spec start_link(start_link_args()) -> {'ok', pid(), {pid(), any()}}.
+-spec start_link(start_link_args()) ->
+    {'ok', pid(), {pid(), any()}} | {'error', any()}.
 
 start_link({tcp, Sock, Channel, FrameMax, ReaderPid, ConnName, User,
             VHost, Capabilities, Collector}) ->
@@ -62,9 +63,14 @@ start_link({tcp, Sock, Channel, FrameMax, ReaderPid, ConnName, User,
                   shutdown => ?FAIR_WAIT,
                   type => worker,
                   modules => [rabbit_channel]},
-    {ok, ChannelPid} = supervisor:start_child(SupPid, ChildSpec),
-    {ok, AState} = rabbit_command_assembler:init(),
-    {ok, SupPid, {ChannelPid, AState}};
+    case supervisor:start_child(SupPid, ChildSpec) of
+        {ok, ChannelPid} ->
+            {ok, AState} = rabbit_command_assembler:init(),
+            {ok, SupPid, {ChannelPid, AState}};
+        {error, Reason} ->
+            rabbit_misc:shutdown_supervisor(SupPid),
+            {error, Reason}
+    end;
 start_link({direct, Channel, ClientChannelPid, ConnPid, ConnName,
             User, VHost, Capabilities, Collector, AmqpParams}) ->
     {ok, SupPid} = supervisor:start_link(
@@ -81,8 +87,13 @@ start_link({direct, Channel, ClientChannelPid, ConnPid, ConnName,
                   shutdown => ?FAIR_WAIT,
                   type => worker,
                   modules => [rabbit_channel]},
-    {ok, ChannelPid} = supervisor:start_child(SupPid, ChildSpec),
-    {ok, SupPid, {ChannelPid, none}}.
+    case supervisor:start_child(SupPid, ChildSpec) of
+        {ok, ChannelPid} ->
+            {ok, SupPid, {ChannelPid, none}};
+        {error, Reason} ->
+            rabbit_misc:shutdown_supervisor(SupPid),
+            {error, Reason}
+    end.
 
 %%----------------------------------------------------------------------------
 
