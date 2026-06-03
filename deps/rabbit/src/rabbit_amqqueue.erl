@@ -481,7 +481,7 @@ get_resource_vhost_name(#resource{virtual_host = VHostName}) ->
     VHostName.
 
 is_match(Subj, RegEx) ->
-   nomatch /= re:run(Subj, RegEx).
+   rabbit_re:matches(Subj, RegEx).
 
 iterative_rebalance(ByNode, MaxQueuesDesired) ->
     case maybe_migrate(ByNode, MaxQueuesDesired) of
