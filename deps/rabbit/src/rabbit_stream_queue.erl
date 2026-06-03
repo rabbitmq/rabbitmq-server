@@ -905,9 +905,17 @@ status(Vhost, QueueName) ->
         {ok, Q} when ?amqqueue_is_quorum(Q) ->
             {error, quorum_queue_not_supported};
         {ok, Q} when ?amqqueue_is_stream(Q) ->
+            FreshnessMap = case amqqueue:get_pid(Q) of
+                               none -> #{};
+                               LeaderPid -> replica_freshness(LeaderPid)
+                           end,
             [begin
+                 Node = maps:get(node, C),
+                 FreshnessVal = maps:get(Node, FreshnessMap, {false, undefined, undefined}),
+                 SyncStatus = format_sync_status(maps:is_key(epoch, C), FreshnessVal),
                  [get_key(role, C),
                   get_key(node, C),
+                  {synchronized, SyncStatus},
                   get_key(epoch, C),
                   get_key(offset, C),
                   get_key(committed_offset, C),
@@ -924,6 +932,29 @@ status(Vhost, QueueName) ->
 
 get_key(Key, Cnt) ->
     {Key, maps:get(Key, Cnt, undefined)}.
+
+format_sync_status(false, _) ->
+    <<"unknown">>;
+format_sync_status(true, {IsFresh, TimeLag, OffsetLag}) ->
+    IsFreshStr = format_boolean(IsFresh),
+    TimeLagStr =
+        case TimeLag of
+            undefined -> <<"unknown">>;
+            _         -> list_to_binary(integer_to_list(TimeLag) ++ "ms")
+        end,
+    OffsetLagStr =
+        case OffsetLag of
+            undefined -> <<"unknown">>;
+            _         ->
+                list_to_binary(integer_to_list(OffsetLag) ++ " msgs")
+        end,
+    <<IsFreshStr/binary, " (", TimeLagStr/binary, ", ",
+      OffsetLagStr/binary, " behind)">>;
+format_sync_status(true, _) ->
+    <<"unknown">>.
+
+format_boolean(true)  -> <<"yes">>;
+format_boolean(false) -> <<"no">>.
 
 -spec get_role({pid() | undefined, writer | replica}) -> writer | replica.
 get_role({_, Role}) -> Role.
@@ -1566,19 +1597,23 @@ up_to_date_running_members(Q, RunningMembers) ->
 
 %% Returns whether a given node is considered fresh based on the freshness map status.
 is_fresh_member(Node, FreshnessMap) ->
-    maps:get(Node, FreshnessMap, false).
+    {IsFresh, _, _} = maps:get(Node, FreshnessMap, {false, undefined, undefined}),
+    IsFresh.
 
 %% Queries the leader replica of the stream to construct a map of nodes to their lag status.
 replica_freshness(LeaderPid) ->
     try osiris_writer:query_replication_state(LeaderPid) of
         ReplState0 ->
             case maps:take(node(LeaderPid), ReplState0) of
-                {{_, LeaderTs}, ReplState} ->
+                {{LeaderOffset, LeaderTs}, ReplState} ->
                     FreshnessMap = maps:map(
-                        fun(_, {_, ReplicaTs}) ->
-                            rabbit_stream_coordinator:is_replica_fresh(LeaderTs, ReplicaTs)
+                        fun(_, {ReplicaOffset, ReplicaTs}) ->
+                            IsFresh = rabbit_stream_coordinator:is_replica_fresh(LeaderTs, ReplicaTs),
+                            TimeLag = LeaderTs - ReplicaTs,
+                            OffsetLag = LeaderOffset - ReplicaOffset,
+                            {IsFresh, TimeLag, OffsetLag}
                         end, ReplState),
-                    FreshnessMap#{node(LeaderPid) => true};
+                    FreshnessMap#{node(LeaderPid) => {true, 0, 0}};
                 error ->
                     #{}
             end
