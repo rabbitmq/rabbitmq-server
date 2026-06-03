@@ -665,10 +665,28 @@ publish_at_most_once(X, Msg)
     {ok, state(), actions()} | {error, Reason :: term()}.
 deliver(Qs, Message, Options, State) ->
     try
-        deliver0(Qs, Message, Options, State)
+        Result = deliver0(Qs, Message, Options, State),
+        intercept_enqueue(Qs, Message),
+        Result
     catch
         exit:Reason ->
             {error, Reason}
+    end.
+
+%% Notify queue interceptors once per destination queue, after the message has
+%% been delivered into the queues (the queue boundary, symmetric to settle/5).
+%% Gated so the common case of no registered interceptor adds a single
+%% persistent_term read to this hot path rather than one per destination queue.
+intercept_enqueue(Qs, Message) ->
+    case rabbit_queue_interceptor:enabled() of
+        false ->
+            ok;
+        true ->
+            lists:foreach(fun(Elem) ->
+                                  {Q, _BindingKeys} = queue_binding_keys(Elem),
+                                  rabbit_queue_interceptor:enqueue(
+                                    amqqueue:get_name(Q), Message)
+                          end, Qs)
     end.
 
 deliver0(Qs, Message0, Options, stateless) ->
@@ -749,6 +767,7 @@ settle(#resource{kind = queue} = QRef, Op, CTag, MsgIds, Ctxs) ->
              module = Mod} = Ctx ->
             case Mod:settle(QRef, Op, CTag, MsgIds, State0) of
                 {State, Actions} ->
+                    rabbit_queue_interceptor:settle(QRef, Op, CTag, MsgIds),
                     {ok, set_ctx(QRef, Ctx#ctx{state = State}, Ctxs), Actions};
                 Err ->
                     Err
