@@ -826,13 +826,10 @@ open(info,
     {Connection1, ConnState1} =
         case Consumers0 of
             #{SubId :=
-                  #consumer{configuration =
-                                #consumer_configuration{properties =
-                                                            Properties} =
-                                    Conf0,
+                  #consumer{configuration = Conf0,
                             log = Log0} =
                       Consumer0} ->
-                case single_active_consumer(Properties) of
+                case single_active_consumer(consumer_properties(Consumer0)) of
                     true ->
                         Log1 =
                             case {Active, Log0} of
@@ -3013,11 +3010,10 @@ init_reader(ConnectionTransport,
                [SubscriptionId, osiris_log:next_offset(Segment)]),
     Segment.
 
-single_active_consumer(#consumer{configuration =
-                                 #consumer_configuration{properties = Properties}}) ->
-    single_active_consumer(Properties);
+single_active_consumer(#consumer{} = Consumer) ->
+    single_active_consumer(consumer_properties(Consumer));
 single_active_consumer(#{<<"single-active-consumer">> :=
-                             <<"true">>}) ->
+                         <<"true">>}) ->
     true;
 single_active_consumer(_Properties) ->
     false.
@@ -3351,16 +3347,12 @@ ensure_token_expiry_timer(User, #stream_connection{token_expiry_timer = Timer} =
 maybe_unregister_consumer(_, _, false = _Sac, Requests) ->
     Requests;
 maybe_unregister_consumer(VirtualHost,
-                          #consumer{configuration =
-                                        #consumer_configuration{stream = Stream,
-                                                                properties =
-                                                                    Properties,
-                                                                subscription_id
-                                                                    =
-                                                                    SubscriptionId}},
+                          #consumer{configuration = #consumer_configuration{
+                                                       subscription_id = SubscriptionId}} = Consumer,
                           true = _Sac,
                           Requests) ->
-    ConsumerName = consumer_name(Properties),
+    Stream = consumer_stream(Consumer),
+    ConsumerName = consumer_name(consumer_properties(Consumer)),
 
     Requests1 = maps:fold(
                   fun(_, #request{content = #{active := false,
@@ -3671,8 +3663,7 @@ remove_subscription(SubscriptionId,
 
     Requests1 = maybe_unregister_consumer(
                   VirtualHost, Consumer,
-                  single_active_consumer(
-                    Consumer#consumer.configuration#consumer_configuration.properties),
+                  single_active_consumer(consumer_properties(Consumer)),
                   Requests0),
     {Connection2#stream_connection{outstanding_requests = Requests1},
      State#stream_connection_state{consumers = Consumers1}}.
@@ -4051,23 +4042,15 @@ consumer_i(connection_pid, _) ->
     self();
 consumer_i(node, _) ->
     node();
-consumer_i(properties,
-           #consumer{configuration =
-                         #consumer_configuration{properties = Properties}}) ->
-    Properties;
-consumer_i(stream,
-           #consumer{configuration =
-                         #consumer_configuration{stream = Stream}}) ->
-    Stream;
-consumer_i(active,
-           #consumer{configuration =
-                         #consumer_configuration{active = Active}}) ->
-    Active;
-consumer_i(activity_status,
-           #consumer{configuration =
-                         #consumer_configuration{active = Active,
-                                                 properties = Properties}}) ->
-    rabbit_stream_utils:consumer_activity_status(Active, Properties);
+consumer_i(properties, Consumer) ->
+    consumer_properties(Consumer);
+consumer_i(stream, Consumer) ->
+    consumer_stream(Consumer);
+consumer_i(active, Consumer) ->
+    consumer_active(Consumer);
+consumer_i(activity_status, Consumer) ->
+    rabbit_stream_utils:consumer_activity_status(consumer_active(Consumer),
+                                                 consumer_properties(Consumer));
 consumer_i(_Unknown, _) ->
     ?UNKNOWN_FIELD.
 
@@ -4247,12 +4230,11 @@ setopts(Transport, Sock, Opts) ->
 
 stream_from_consumers(SubId, Consumers) ->
     case Consumers of
-        #{SubId := #consumer{configuration = #consumer_configuration{stream = S}}} ->
-            S;
+        #{SubId := Consumer} ->
+            consumer_stream(Consumer);
         _ ->
             undefined
     end.
-
 
 sac_connection_reconnected(Pid) ->
     sac_call(fun() ->
@@ -4387,3 +4369,12 @@ maybe_unblock(Transport, Socket, Heartbeater, State) ->
     setopts(Transport, Socket, [{active, once}]),
     ok = rabbit_heartbeat:resume_monitor(Heartbeater),
     State#stream_connection_state{blocked = false}.
+
+consumer_properties(#consumer{configuration = #consumer_configuration{properties = Properties}}) ->
+    Properties.
+
+consumer_stream(#consumer{configuration = #consumer_configuration{stream = Stream}}) ->
+    Stream.
+
+consumer_active(#consumer{configuration = #consumer_configuration{active = Active}}) ->
+    Active.
