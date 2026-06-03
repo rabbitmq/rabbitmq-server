@@ -225,7 +225,7 @@ conflicting_interceptors_close_network_connections_gracefully1(Config) ->
                                   dummy_interceptor),
     ok = rabbit_registry:register(channel_interceptor,
                                   <<"conflicting dummy interceptor">>,
-                                  conflicting_dummy_interceptor),
+                                  dummy_interceptor_conflicting),
     try
         Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0),
         ?assert(is_pid(Conn)),
@@ -267,7 +267,7 @@ conflicting_interceptors_close_direct_connections_gracefully1(Config) ->
                                   dummy_interceptor),
     ok = rabbit_registry:register(channel_interceptor,
                                   <<"conflicting dummy interceptor">>,
-                                  conflicting_dummy_interceptor),
+                                  dummy_interceptor_conflicting),
     try
         Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
         Params = #amqp_params_direct{node = Node,
