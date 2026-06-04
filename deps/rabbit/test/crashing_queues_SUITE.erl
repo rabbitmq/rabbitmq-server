@@ -39,7 +39,9 @@ end_per_suite(Config) ->
 
 init_per_group(cluster_size_2, Config) ->
     rabbit_ct_helpers:set_config(Config, [
-        {rmq_nodes_count, 2}
+        {rmq_nodes_count, 2},
+        %% This suite intentionally forces queue processes to fail.
+        {find_crashes, false}
       ]).
 
 end_per_group(_, Config) ->
