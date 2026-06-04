@@ -277,9 +277,9 @@ conflicting_interceptors_close_direct_connections_gracefully1(Config) ->
         {ok, Conn} = amqp_connection:start(Params),
         ?assert(is_pid(Conn)),
         ?assert(is_process_alive(Conn)),
-        %% open_channel must return {error, _} gracefully, not crash.
+        %% `open_channel` must return `{error, _}` gracefully, not crash.
         %% If the connection process crashes (e.g. badmatch in
-        %% amqp_channels_manager), this call will throw and fail the test.
+        %% `amqp_channels_manager`), this call will throw and fail the test.
         Result = amqp_connection:open_channel(Conn),
         ?assertMatch({error, _}, Result),
         ?assert(is_process_alive(Conn)),
