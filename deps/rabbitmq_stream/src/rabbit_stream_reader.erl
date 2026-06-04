@@ -1327,11 +1327,31 @@ handle_inbound_data(Transport,
                     HandleFrameFun) ->
     CoreState1 = rabbit_stream_core:incoming_data(Data, CoreState0),
     {Commands, CoreState} = rabbit_stream_core:all_commands(CoreState1),
-    lists:foldl(fun(Command, {C, S}) ->
-                   HandleFrameFun(Transport, C, S, Command)
-                end,
-                {Connection, State#stream_connection_state{data = CoreState}},
-                Commands).
+    StateWithUpdatedCore = State#stream_connection_state{data = CoreState},
+    process_commands(Commands, Transport, Connection, StateWithUpdatedCore, HandleFrameFun).
+
+%% Process commands one by one, allowing for early exits (short-circuiting).
+process_commands([], _Transport, Connection, State, _HandleFrameFun) ->
+    {Connection, State};
+process_commands([Command | Rest], Transport, Connection, State, HandleFrameFun) ->
+    {NextConnection, NextState} = HandleFrameFun(Transport, Connection, State, Command),
+    %% Check if the state machine has transitioned into a state where
+    %% further frame processing should be halted.
+    case NextConnection#stream_connection.connection_step of
+        silent_close ->
+            {NextConnection, NextState};
+        failure ->
+            {NextConnection, NextState};
+        closing ->
+            {NextConnection, NextState};
+        close_sent ->
+            {NextConnection, NextState};
+        closing_done ->
+            {NextConnection, NextState};
+        _NormalStep ->
+            %% Continue processing the next pipelined frame
+            process_commands(Rest, Transport, NextConnection, NextState, HandleFrameFun)
+    end.
 
 publishing_ids_from_messages(_, <<>>) ->
     [];
