@@ -149,7 +149,12 @@ consumer_timeout_with_basic_cancel_capability(Config) ->
     {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     QName = ?config(queue_name, Config),
     declare_queue(Ch, Config, QName),
+    amqp_channel:call(Ch, #'confirm.select'{}),
     publish(Ch, QName, [<<"msg1">>]),
+    %% Settle the publish before polling `list_queues/0`: on a freshly-declared
+    %% quorum queue the local node's view of the message count can lag
+    %% the actual write by enough for `wait_for_messages/2` to time out at 0/0/0.
+    amqp_channel:wait_for_confirms_or_die(Ch, 30),
     wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
     Ctag = <<"ctag">>,
     subscribe(Ch, QName, false, Ctag),
@@ -200,7 +205,9 @@ consumer_timeout_basic_get(Config) ->
     {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     QName = ?config(queue_name, Config),
     declare_queue(Ch, Config, QName),
+    amqp_channel:call(Ch, #'confirm.select'{}),
     publish(Ch, QName, [<<"msg1">>]),
+    amqp_channel:wait_for_confirms_or_die(Ch, 30),
     wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
     %% Fetch message via basic.get without acknowledging
     [_DelTag] = consume(Ch, QName, [<<"msg1">>]),
@@ -247,7 +254,9 @@ consumer_timeout_no_basic_cancel_capability(Config) ->
     {ok, Ch} = amqp_connection:open_channel(Conn),
     QName = ?config(queue_name, Config),
     declare_queue(Ch, Config, QName),
+    amqp_channel:call(Ch, #'confirm.select'{}),
     publish(Ch, QName, [<<"msg1">>]),
+    amqp_channel:wait_for_confirms_or_die(Ch, 30),
     wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
     erlang:monitor(process, Conn),
     erlang:monitor(process, Ch),
