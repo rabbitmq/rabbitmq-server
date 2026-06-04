@@ -124,10 +124,14 @@ validate_policy([{<<"federation-upstream-set">>, Value}]) ->
 
 validate_policy([{<<"federation-upstream-pattern">>, Value}])
   when is_binary(Value) ->
-    case re:compile(Value) of
-        {ok, _}         -> ok;
-        {error, Reason} -> {error, "could not compile pattern ~ts to a regular expression. "
-                                   "Error: ~tp", [Value, Reason]}
+    case rabbit_re:compile(Value) of
+        {ok, _}                  -> ok;
+        {error, pattern_too_long} ->
+            {error, "federation-upstream-pattern must not exceed ~b bytes",
+             [rabbit_re:max_pattern_length()]};
+        {error, Reason}          ->
+            {error, "could not compile pattern ~ts to a regular expression. "
+                    "Error: ~tp", [Value, Reason]}
     end;
 validate_policy([{<<"federation-upstream-pattern">>, Value}]) ->
     {error, "~tp is not a valid federation upstream pattern name", [Value]};
