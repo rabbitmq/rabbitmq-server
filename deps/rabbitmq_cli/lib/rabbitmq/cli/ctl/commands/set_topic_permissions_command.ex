@@ -48,12 +48,25 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetTopicPermissionsCommand do
      }}
   end
 
+  def output({:error, {:no_such_exchange, exchange}}, %{node: node_name, formatter: "json"}) do
+    {:error,
+     %{
+       "result" => "error",
+       "node" => node_name,
+       "message" => "Exchange #{exchange} does not exist"
+     }}
+  end
+
   def output({:error, {:no_such_user, username}}, _) do
     {:error, ExitCodes.exit_nouser(), "User #{username} does not exist"}
   end
 
   def output({:error, {:no_such_vhost, vhost}}, _) do
     {:error, "Virtual host #{vhost} does not exist"}
+  end
+
+  def output({:error, {:no_such_exchange, exchange}}, _) do
+    {:error, "Exchange #{exchange} does not exist"}
   end
 
   use RabbitMQ.CLI.DefaultOutput

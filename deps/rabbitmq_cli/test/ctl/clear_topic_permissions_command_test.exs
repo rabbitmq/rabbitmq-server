@@ -27,6 +27,7 @@ defmodule ClearTopicPermissionsTest do
 
     on_exit([], fn ->
       clear_topic_permissions(@user, @specific_vhost)
+      delete_exchange("topic1", @specific_vhost)
       delete_user(@user)
       delete_vhost(@specific_vhost)
     end)
@@ -35,6 +36,7 @@ defmodule ClearTopicPermissionsTest do
   end
 
   setup context do
+    declare_topic_exchange("topic1", @specific_vhost)
     set_topic_permissions(@user, @specific_vhost, "amq.topic", "^a", "^b")
     set_topic_permissions(@user, @specific_vhost, "topic1", "^a", "^b")
 

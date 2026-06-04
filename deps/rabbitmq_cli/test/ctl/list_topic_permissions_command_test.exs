@@ -22,11 +22,13 @@ defmodule ListTopicPermissionsCommandTest do
 
     add_vhost(@vhost)
     add_user(@user, @password)
+    declare_topic_exchange("topic1", @vhost)
     set_topic_permissions(@user, @vhost, "amq.topic", "^a", "^b")
     set_topic_permissions(@user, @vhost, "topic1", "^a", "^b")
 
     on_exit([], fn ->
       clear_topic_permissions(@user, @vhost)
+      delete_exchange("topic1", @vhost)
       delete_user(@user)
       delete_vhost(@vhost)
     end)
