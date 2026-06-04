@@ -364,17 +364,13 @@ frame({tune, FrameMax, Heartbeat}) ->
                     FrameMax:32,
                     Heartbeat:32>>);
 frame({publish_error, PublisherId, ErrCode, PublishingIds}) ->
-    Details =
-        iolist_to_binary(lists:foldr(fun(PubId, Acc) ->
-                                        [<<PubId:64, ErrCode:16>> | Acc]
-                                     end,
-                                     [], PublishingIds)),
-    wrap_in_frame(<<?REQUEST:1,
-                    ?COMMAND_PUBLISH_ERROR:15,
-                    ?VERSION_1:16,
-                    PublisherId:8,
-                    (length(PublishingIds)):32,
-                    Details/binary>>);
+    Details = [<<PubId:64, ErrCode:16>> || PubId <- PublishingIds],
+    wrap_in_frame([<<?REQUEST:1,
+                     ?COMMAND_PUBLISH_ERROR:15,
+                     ?VERSION_1:16,
+                     PublisherId:8,
+                     (length(PublishingIds)):32>>,
+                   Details]);
 frame({request, CorrelationId, Body}) ->
     {CmdTag, BodyBin} = request_body(Body),
     CmdId = command_id(CmdTag),
@@ -678,10 +674,8 @@ request_body({create_super_stream = Tag, SuperStream, Partitions, BindingKeys, A
 request_body({delete_super_stream = Tag, SuperStream}) ->
     {Tag, <<?STRING(SuperStream)>>}.
 
-append_data(Prev, Data) when is_binary(Prev) ->
-    [Prev, Data];
-append_data(Prev, Data) when is_list(Prev) ->
-    Prev ++ [Data].
+append_data(Prev, Data) ->
+    [Prev, Data].
 
 wrap_in_frame(IOData) ->
     Size = iolist_size(IOData),
@@ -1071,7 +1065,9 @@ parse_response_body(?COMMAND_EXCHANGE_COMMAND_VERSIONS,
 parse_response_body(?COMMAND_STREAM_STATS,
                     <<ResponseCode:16, _Count:32, StatsBin/binary>>) ->
     Info = parse_int_map(StatsBin, #{}),
-    {stream_stats, ResponseCode, Info}.
+    {stream_stats, ResponseCode, Info};
+parse_response_body(CommandId, Data) ->
+    {unknown, CommandId, Data}.
 
 offset_spec(OffsetType, OffsetValueBin) ->
     case OffsetType of
