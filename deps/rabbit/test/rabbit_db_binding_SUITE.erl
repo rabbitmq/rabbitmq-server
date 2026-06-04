@@ -600,15 +600,15 @@ tie_binding_to_dest_with_keep_while_cond_orphan_nodes1(_Config) ->
        {new, #exchange{}},
        rabbit_db_exchange:create_or_get(Exchange)),
 
-    %% Writing a leaf below a non-existent source exchange leaves the
-    %% intermediate exchange-level node without a payload.
+    %% A leaf below a non-existent source exchange leaves the intermediate
+    %% exchange-level node without a payload. Reuse `XName' as the
+    %% destination so the migration's `keep_while' holds.
     SrcName = <<".*">>,
-    DstName = <<NamePrefix/binary, "-dst">>,
     BindingPath = rabbit_db_binding:khepri_route_path(
                     ?VHOST,
                     SrcName,
-                    queue,
-                    DstName,
+                    exchange,
+                    XName#resource.name,
                     <<"">>),
     OrphanExchangePath = rabbit_db_exchange:khepri_exchange_path(
                            ?VHOST, SrcName),

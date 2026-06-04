@@ -614,6 +614,31 @@ set_topic_permissions(Username, VirtualHost, Exchange, WritePerm, ReadPerm, Acti
                       throw({error, {invalid_regexp, RegexpBin, Reason}})
               end
       end, [WritePerm, ReadPerm]),
+    %% Pre-flight: user, virtual host, exchange (order matters for error reporting). See #16587.
+    case rabbit_auth_backend_internal:exists(Username) of
+        true -> ok;
+        false ->
+            ?LOG_WARNING("Failed to set topic permissions on exchange '~ts' for user "
+                         "'~ts' in virtual host '~ts': the user does not exist.",
+                         [Exchange, Username, VirtualHost]),
+            throw({error, {no_such_user, Username}})
+    end,
+    case rabbit_vhost:exists(VirtualHost) of
+        true -> ok;
+        false ->
+            ?LOG_WARNING("Failed to set topic permissions on exchange '~ts' for user "
+                         "'~ts' in virtual host '~ts': the virtual host does not exist.",
+                         [Exchange, Username, VirtualHost]),
+            throw({error, {no_such_vhost, VirtualHost}})
+    end,
+    case rabbit_exchange:exists(rabbit_misc:r(VirtualHost, exchange, Exchange)) of
+        true -> ok;
+        false ->
+            ?LOG_WARNING("Failed to set topic permissions on exchange '~ts' for user "
+                         "'~ts' in virtual host '~ts': the exchange does not exist.",
+                         [Exchange, Username, VirtualHost]),
+            throw({error, {no_such_exchange, Exchange}})
+    end,
     try
         TopicPermission = #topic_permission{
                              topic_permission_key = #topic_permission_key{

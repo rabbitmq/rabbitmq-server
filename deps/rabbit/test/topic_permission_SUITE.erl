@@ -250,6 +250,12 @@ topic_permission_database_access1(_Config) ->
     1 = length(rabbit_auth_backend_internal:list_user_vhost_topic_permissions(<<"guest">>,<<"other-vhost">>)),
     2 = length(rabbit_auth_backend_internal:list_topic_permissions()),
 
+    %% `set_topic_permissions' rejects unknown exchanges, so declare the two
+    %% extras here as topic exchanges before referencing them.
+    [rabbit_exchange:declare(
+       rabbit_misc:r(<<"/">>, exchange, X), topic, true, false, false, [],
+       <<"acting-user">>) || X <- [<<"topic1">>, <<"topic2">>]],
+
     rabbit_auth_backend_internal:set_topic_permissions(
         <<"guest">>, <<"/">>, <<"topic1">>, "^a", "^a", <<"acting-user">>
     ),
@@ -286,6 +292,10 @@ topic_permission_database_access1(_Config) ->
         <<"non-existing-user">>, <<"non-existing-vhost">>, <<"amq.topic">>, ".*", ".*", <<"acting-user">>
     )),
 
+    {error, {no_such_exchange, _}} = (catch rabbit_auth_backend_internal:set_topic_permissions(
+        <<"guest">>, <<"/">>, <<"non-existing-exchange">>, ".*", ".*", <<"acting-user">>
+    )),
+
     {error, {no_such_user, _}} = (catch rabbit_auth_backend_internal:list_user_topic_permissions(
         <<"non-existing-user">>
     )),
@@ -297,6 +307,10 @@ topic_permission_database_access1(_Config) ->
     {error, {invalid_regexp, _, _}} = (catch rabbit_auth_backend_internal:set_topic_permissions(
         <<"guest">>, <<"/">>, <<"amq.topic">>, "[", "^a", <<"acting-user">>
     )),
+
+    [rabbit_exchange:delete(
+       rabbit_misc:r(<<"/">>, exchange, X), false, <<"acting-user">>)
+     || X <- [<<"topic1">>, <<"topic2">>]],
     ok.
 
 topic_permission_checks(Config) ->

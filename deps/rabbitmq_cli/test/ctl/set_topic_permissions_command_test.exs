@@ -97,6 +97,16 @@ defmodule SetTopicPermissionsCommandTest do
   end
 
   @tag user: @user, vhost: @root
+  test "run: a non-existent exchange returns a no-such-exchange error", context do
+    assert @command.run(
+             [context[:user], "no-such-exchange", "^a", "^b"],
+             context[:opts]
+           ) == {:error, {:no_such_exchange, "no-such-exchange"}}
+
+    assert Enum.count(list_user_topic_permissions(context[:user])) == 0
+  end
+
+  @tag user: @user, vhost: @root
   test "run: invalid regex patterns return error", context do
     n = Enum.count(list_user_topic_permissions(context[:user]))
 
