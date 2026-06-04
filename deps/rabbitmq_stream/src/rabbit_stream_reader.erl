@@ -2262,57 +2262,8 @@ handle_frame_post_auth(Transport,
     send(Transport, S, Frame),
     {Connection1, State};
 handle_frame_post_auth(Transport,
-<<<<<<< HEAD
-                       #stream_connection{stream_subscriptions =
-                                              StreamSubscriptions} =
-                           Connection,
-                       #stream_connection_state{} = State,
-=======
-                       #stream_connection{socket = S,
-                                          virtual_host = VirtualHost,
-                                          user = User} =
-                           Connection0,
-                       State,
-                       {request, CorrelationId,
-                        {resolve_offset_spec, Stream, OffsetSpec, Properties}}) ->
-    {ResponseCode, Offset, Connection1} =
-        case rabbit_stream_utils:check_read_permitted(#resource{name = Stream,
-                                                                kind = queue,
-                                                                virtual_host =
-                                                                    VirtualHost},
-                                                      User, #{})
-        of
-            ok ->
-                case rabbit_stream_manager:lookup_member(VirtualHost, Stream) of
-                    {error, not_found} ->
-                        increase_protocol_counter(?STREAM_DOES_NOT_EXIST),
-                        {?RESPONSE_CODE_STREAM_DOES_NOT_EXIST, 0, Connection0};
-                    {error, not_available} ->
-                        increase_protocol_counter(?STREAM_NOT_AVAILABLE),
-                        {?RESPONSE_CODE_STREAM_NOT_AVAILABLE, 0, Connection0};
-                    {ok, MemberPid} ->
-                        Options = reader_options(Properties),
-                        case resolve_offset_spec(MemberPid, OffsetSpec, Options) of
-                            {ok, ResolvedOffset} ->
-                                {?RESPONSE_CODE_OK, ResolvedOffset, Connection0};
-                            {error, _} ->
-                                {?RESPONSE_CODE_NO_OFFSET, 0, Connection0}
-                        end
-                end;
-            error ->
-                increase_protocol_counter(?ACCESS_REFUSED),
-                {?RESPONSE_CODE_ACCESS_REFUSED, 0, Connection0}
-        end,
-    Frame =
-        rabbit_stream_core:frame({response, CorrelationId,
-                                  {resolve_offset_spec, ResponseCode,
-                                   ?OFFSET_TYPE_OFFSET, Offset}}),
-    send(Transport, S, Frame),
-    {Connection1, State};
-handle_frame_post_auth(Transport,
                        Connection,
                        #stream_connection_state{consumers = Consumers} = State,
->>>>>>> e544844a8a (Replace O(N) subscription_exists/2 with O(log N) map lookup)
                        {request, CorrelationId,
                         {unsubscribe, SubscriptionId}}) ->
     case maps:is_key(SubscriptionId, Consumers) of

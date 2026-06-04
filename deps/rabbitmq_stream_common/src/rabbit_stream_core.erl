@@ -1065,16 +1065,9 @@ parse_response_body(?COMMAND_EXCHANGE_COMMAND_VERSIONS,
 parse_response_body(?COMMAND_STREAM_STATS,
                     <<ResponseCode:16, _Count:32, StatsBin/binary>>) ->
     Info = parse_int_map(StatsBin, #{}),
-<<<<<<< HEAD
-    {stream_stats, ResponseCode, Info}.
-=======
     {stream_stats, ResponseCode, Info};
-parse_response_body(?COMMAND_RESOLVE_OFFSET_SPEC,
-                    <<ResponseCode:16, OffsetType:16, Offset:64>>) ->
-    {resolve_offset_spec, ResponseCode, OffsetType, Offset};
 parse_response_body(CommandId, Data) ->
     {unknown, CommandId, Data}.
->>>>>>> da6f1fd813 (Add fallback clause to parse_response_body/2 in stream core)
 
 offset_spec(OffsetType, OffsetValueBin) ->
     case OffsetType of
