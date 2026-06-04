@@ -374,17 +374,13 @@ frame({tune, FrameMax, Heartbeat}) ->
                     FrameMax:32,
                     Heartbeat:32>>);
 frame({publish_error, PublisherId, ErrCode, PublishingIds}) ->
-    Details =
-        iolist_to_binary(lists:foldr(fun(PubId, Acc) ->
-                                        [<<PubId:64, ErrCode:16>> | Acc]
-                                     end,
-                                     [], PublishingIds)),
-    wrap_in_frame(<<?REQUEST:1,
-                    ?COMMAND_PUBLISH_ERROR:15,
-                    ?VERSION_1:16,
-                    PublisherId:8,
-                    (length(PublishingIds)):32,
-                    Details/binary>>);
+    Details = [<<PubId:64, ErrCode:16>> || PubId <- PublishingIds],
+    wrap_in_frame([<<?REQUEST:1,
+                     ?COMMAND_PUBLISH_ERROR:15,
+                     ?VERSION_1:16,
+                     PublisherId:8,
+                     (length(PublishingIds)):32>>,
+                   Details]);
 frame({request, CorrelationId, Body}) ->
     {CmdTag, BodyBin} = request_body(Body),
     CmdId = command_id(CmdTag),
@@ -713,10 +709,8 @@ request_body({resolve_offset_spec = Tag, Stream, OffsetSpec, Properties}) ->
         end,
     {Tag, [<<?STRING(Stream), OffsetSpecBin/binary>> | PropertiesBin]}.
 
-append_data(Prev, Data) when is_binary(Prev) ->
-    [Prev, Data];
-append_data(Prev, Data) when is_list(Prev) ->
-    Prev ++ [Data].
+append_data(Prev, Data) ->
+    [Prev, Data].
 
 wrap_in_frame(IOData) ->
     Size = iolist_size(IOData),
@@ -1121,7 +1115,9 @@ parse_response_body(?COMMAND_STREAM_STATS,
     {stream_stats, ResponseCode, Info};
 parse_response_body(?COMMAND_RESOLVE_OFFSET_SPEC,
                     <<ResponseCode:16, OffsetType:16, Offset:64>>) ->
-    {resolve_offset_spec, ResponseCode, OffsetType, Offset}.
+    {resolve_offset_spec, ResponseCode, OffsetType, Offset};
+parse_response_body(CommandId, Data) ->
+    {unknown, CommandId, Data}.
 
 offset_spec(OffsetType, OffsetValueBin) ->
     case OffsetType of
