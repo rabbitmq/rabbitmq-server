@@ -38,8 +38,6 @@
          rabbit_types:user(), rabbit_types:vhost(),
          rabbit_framing:amqp_table(), pid()}.
 
--define(FAIR_WAIT, 70000).
-
 %%----------------------------------------------------------------------------
 
 -spec start_link(start_link_args()) ->

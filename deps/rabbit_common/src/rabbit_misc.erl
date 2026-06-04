@@ -1442,7 +1442,7 @@ shutdown_supervisor(SupPid) when is_pid(SupPid) ->
     exit(SupPid, shutdown),
     receive
         {'DOWN', MRef, process, SupPid, _} -> ok
-    after ?DEFAULT_TIMEOUT ->
+    after ?FAIR_WAIT ->
         exit({shutdown_supervisor_timeout, SupPid})
     end.
 
