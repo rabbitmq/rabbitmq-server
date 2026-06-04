@@ -7,4 +7,3 @@
 
 -define(RPC_TIMEOUT, 15_000).
 -define(RPC_INFINITE_TIMEOUT, infinity).
--define(DEFAULT_TIMEOUT, 5_000).

@@ -38,8 +38,6 @@
          rabbit_types:user(), rabbit_types:vhost(),
          rabbit_framing:amqp_table(), pid()}.
 
--define(FAIR_WAIT, 70000).
-
 %%----------------------------------------------------------------------------
 
 -spec start_link(start_link_args()) ->
@@ -63,6 +61,8 @@ start_link({tcp, Sock, Channel, FrameMax, ReaderPid, ConnName, User,
                   shutdown => ?FAIR_WAIT,
                   type => worker,
                   modules => [rabbit_channel]},
+    %% For potential backports to 4.1: this call site will need adjustment compared to 4.2 and newer series.
+    %% Thread `Protocol` through `start_link_args/0` and `rabbit_command_assembler:init/1`.
     case supervisor:start_child(SupPid, ChildSpec) of
         {ok, ChannelPid} ->
             {ok, AState} = rabbit_command_assembler:init(),

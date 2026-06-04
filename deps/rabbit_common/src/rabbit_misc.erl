@@ -1436,14 +1436,20 @@ find_child(Supervisor, Name) ->
     [Pid || {Name1, Pid, _Type, _Modules} <- supervisor:which_children(Supervisor),
             Name1 =:= Name].
 
+%% Must be called by the process that holds the link to SupPid.
+-spec shutdown_supervisor(pid()) -> ok.
 shutdown_supervisor(SupPid) when is_pid(SupPid) ->
     MRef = erlang:monitor(process, SupPid),
     unlink(SupPid),
     exit(SupPid, shutdown),
     receive
         {'DOWN', MRef, process, SupPid, _} -> ok
-    after ?DEFAULT_TIMEOUT ->
-        exit({shutdown_supervisor_timeout, SupPid})
+    after ?FAIR_WAIT ->
+        erlang:demonitor(MRef, [flush]),
+        ?LOG_WARNING(
+            "rabbit_misc:shutdown_supervisor/1 timed out waiting for ~tp to terminate",
+            [SupPid]),
+        ok
     end.
 
 %% -------------------------------------------------------------------------
