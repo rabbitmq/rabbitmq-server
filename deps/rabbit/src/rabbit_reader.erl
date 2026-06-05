@@ -55,6 +55,8 @@
 
 -export([conserve_resources/3, server_properties/1]).
 
+-export([is_over_node_channel_limit/0]).
+
 -define(NORMAL_TIMEOUT, 3).
 -define(CLOSING_TIMEOUT, 30).
 -define(CHANNEL_TERMINATION_TIMEOUT, 3).
