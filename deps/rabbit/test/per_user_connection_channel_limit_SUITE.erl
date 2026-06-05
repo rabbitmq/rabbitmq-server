@@ -1141,6 +1141,8 @@ cluster_single_user_limit(Config) ->
     expect_that_client_connection_is_rejected(Config, 0, Username),
     expect_that_client_connection_is_rejected(Config, 1, Username),
     expect_that_client_channel_is_rejected(Conn1),
+    %% On direct connections, channel rejection does not close the connection.
+    close_connections([Conn1]),
     rabbit_ct_helpers:await_condition(
         fun () ->
             is_process_alive(Conn1) =:= false andalso
@@ -1175,6 +1177,8 @@ cluster_single_user_limit2(Config) ->
     expect_that_client_connection_is_rejected(Config, 0, Username),
     expect_that_client_connection_is_rejected(Config, 1, Username),
     expect_that_client_channel_is_rejected(Conn1),
+    %% On direct connections, channel rejection does not close the connection.
+    close_connections([Conn1]),
     rabbit_ct_helpers:await_condition(
         fun () ->
             is_process_alive(Conn1) =:= false andalso
@@ -1225,6 +1229,8 @@ cluster_single_user_zero_limit(Config) ->
             count_connections_of_user(Config, Username) =:= 1
         end),
     expect_that_client_channel_is_rejected(ConnA),
+    %% On direct connections, channel rejection does not close the connection.
+    close_connections([ConnA]),
     rabbit_ct_helpers:await_condition(
         fun () ->
             count_connections_of_user(Config, Username) =:= 0 andalso
@@ -1268,6 +1274,8 @@ cluster_single_user_clear_limits(Config) ->
     expect_that_client_connection_is_rejected(Config, 0, Username),
     expect_that_client_connection_is_rejected(Config, 1, Username),
     expect_that_client_channel_is_rejected(Conn1),
+    %% On direct connections, channel rejection does not close the connection.
+    close_connections([Conn1]),
     rabbit_ct_helpers:await_condition(
         fun () ->
             is_process_alive(Conn1) =:= false andalso
@@ -1336,6 +1344,8 @@ cluster_multiple_users_clear_limits(Config) ->
             count_connections_of_user(Config, Username2) =:= 1
         end),
     expect_that_client_channel_is_rejected(ConnA),
+    %% On direct connections, channel rejection does not close the connection.
+    close_connections([ConnA]),
 
     rabbit_ct_helpers:await_condition(
         fun () ->
@@ -1420,6 +1430,8 @@ cluster_multiple_users_zero_limit(Config) ->
     [ConnA, ConnB] = open_connections(Config, [{0, Username1}, {1, Username2}]),
 
     expect_that_client_channel_is_rejected(ConnA),
+    %% On direct connections, channel rejection does not close the connection.
+    close_connections([ConnA]),
     rabbit_ct_helpers:await_condition(
         fun () ->
             count_connections_of_user(Config, Username1) =:= 0 andalso
