@@ -229,41 +229,52 @@ start_channel(Number, ClientChannelPid, ConnPid, ConnName,
               Collector, AmqpParams) ->
     case rabbit_auth_backend_internal:is_over_channel_limit(Username) of
         false ->
-            case supervisor:start_child(
-                   rabbit_direct_client_sup,
-                   [{direct, Number, ClientChannelPid, ConnPid, ConnName,
-                     User, VHost, Capabilities, Collector, AmqpParams}]) of
-                {ok, _, {ChannelPid, _}} ->
-                    {ok, ChannelPid};
-                {error, Reason} ->
-                    ?LOG_ERROR(
-                        "Error on direct connection ~tp~n"
-                        "failed to open channel: ~tp",
-                        [ConnPid, Reason]),
-                    {error, channel_open_failed}
+            case rabbit_reader:is_over_node_channel_limit() of
+                false ->
+                    case supervisor:start_child(
+                           rabbit_direct_client_sup,
+                           [{direct, Number, ClientChannelPid, ConnPid, ConnName,
+                             User, VHost, Capabilities, Collector, AmqpParams}]) of
+                        {ok, _, {ChannelPid, _}} ->
+                            {ok, ChannelPid};
+                        {error, Reason} ->
+                            ?LOG_ERROR(
+                                "Error on direct connection ~tp~n"
+                                "failed to open channel: ~tp",
+                                [ConnPid, Reason]),
+                            {error, channel_open_failed}
+                    end;
+                {true, NodeLimit} ->
+                    Text = rabbit_misc:format(
+                            "number of channels opened on node '~ts' has "
+                            "reached the maximum allowed limit of (~w)",
+                            [node(), NodeLimit]),
+                    ?LOG_ERROR("Error on direct connection ~tp~n~ts",
+                               [ConnPid, Text]),
+                    cast_server_close(ConnPid, Text),
+                    {error, not_allowed}
             end;
         {true, Limit} ->
-            ?LOG_ERROR(
-                "Error on direct connection ~tp~n"
-                "number of channels opened for user '~ts' has reached the "
-                "maximum allowed limit of (~w)",
-                [ConnPid, Username, Limit]),
-            %% Mirror `rabbit_reader:handle_exception/3` for the network case:
-            %% a per-user channel-limit error is connection-level, so signal
-            %% the direct connection to terminate with a server-initiated close.
-            ReplyText = rabbit_data_coercion:to_binary(
-                          rabbit_misc:format(
-                            "number of channels opened for user '~ts' "
-                            "has reached the maximum allowed limit of (~w)",
-                            [Username, Limit])),
-            gen_server:cast(ConnPid,
-                {server_close,
-                 #'connection.close'{reply_code = ?NOT_ALLOWED,
-                                     reply_text = ReplyText,
-                                     class_id = 0,
-                                     method_id = 0}}),
+            Text = rabbit_misc:format(
+                    "number of channels opened for user '~ts' has "
+                    "reached the maximum allowed limit of (~w)",
+                    [Username, Limit]),
+            ?LOG_ERROR("Error on direct connection ~tp~n~ts",
+                       [ConnPid, Text]),
+            cast_server_close(ConnPid, Text),
             {error, not_allowed}
     end.
+
+%% Mirror `rabbit_reader:handle_exception/3` for the network case: a
+%% channel-limit error is connection-level, so signal the direct
+%% connection to terminate with a server-initiated close.
+cast_server_close(ConnPid, Text) ->
+    gen_server:cast(ConnPid,
+        {server_close,
+         #'connection.close'{reply_code = ?NOT_ALLOWED,
+                             reply_text = rabbit_data_coercion:to_binary(Text),
+                             class_id = 0,
+                             method_id = 0}}).
 
 -spec disconnect(pid(), rabbit_event:event_props()) -> 'ok'.
 
