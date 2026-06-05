@@ -17,6 +17,7 @@
          conserve_resources/3]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("rabbit_common/include/rabbit_misc.hrl").
 -include_lib("kernel/include/logger.hrl").
 
@@ -247,6 +248,20 @@ start_channel(Number, ClientChannelPid, ConnPid, ConnName,
                 "number of channels opened for user '~ts' has reached the "
                 "maximum allowed limit of (~w)",
                 [ConnPid, Username, Limit]),
+            %% Mirror `rabbit_reader:handle_exception/3` for the network case:
+            %% a per-user channel-limit error is connection-level, so signal
+            %% the direct connection to terminate with a server-initiated close.
+            ReplyText = rabbit_data_coercion:to_binary(
+                          rabbit_misc:format(
+                            "number of channels opened for user '~ts' "
+                            "has reached the maximum allowed limit of (~w)",
+                            [Username, Limit])),
+            gen_server:cast(ConnPid,
+                {server_close,
+                 #'connection.close'{reply_code = ?NOT_ALLOWED,
+                                     reply_text = ReplyText,
+                                     class_id = 0,
+                                     method_id = 0}}),
             {error, not_allowed}
     end.
 
