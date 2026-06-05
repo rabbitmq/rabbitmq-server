@@ -1617,11 +1617,23 @@ await_user_limit_visible(Config, Username, LimitType, Value) ->
       fun(I) ->
               ?awaitMatch(
                  Expected,
-                 rabbit_ct_broker_helpers:rpc(
-                   Config, I, rabbit_auth_backend_internal, get_user_limit,
-                   [Username, LimitType]),
+                 lookup_user_limit(Config, I, Username, LimitType),
                  ?AWAIT, ?INTERVAL)
       end, lists:seq(0, length(Nodenames) - 1)).
+
+lookup_user_limit(Config, NodeIndex, Username, LimitType) ->
+    case rabbit_ct_broker_helpers:rpc(
+           Config, NodeIndex, rabbit_auth_backend_internal, get_user_limits,
+           [Username]) of
+        undefined ->
+            undefined;
+        Limits when is_map(Limits) ->
+            case maps:get(LimitType, Limits, undefined) of
+                N when is_integer(N), N < 0 -> undefined;
+                N when is_integer(N), N >= 0 -> {ok, N};
+                undefined -> undefined
+            end
+    end.
 
 clear_all_user_limits(Config, Username) ->
     clear_all_user_limits(Config, 0, Username).
