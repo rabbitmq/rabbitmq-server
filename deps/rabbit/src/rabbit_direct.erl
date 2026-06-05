@@ -234,12 +234,22 @@ start_channel(Number, ClientChannelPid, ConnPid, ConnName, Protocol,
               Collector, AmqpParams) ->
     case rabbit_auth_backend_internal:is_over_channel_limit(Username) of
         false ->
-            {ok, _, {ChannelPid, _}} =
-                supervisor:start_child(
-                  rabbit_direct_client_sup,
-                  [{direct, Number, ClientChannelPid, ConnPid, ConnName, Protocol,
-                    User, VHost, Capabilities, Collector, AmqpParams}]),
-            {ok, ChannelPid};
+            case rabbit_reader:is_over_node_channel_limit() of
+                false ->
+                    {ok, _, {ChannelPid, _}} =
+                        supervisor:start_child(
+                          rabbit_direct_client_sup,
+                          [{direct, Number, ClientChannelPid, ConnPid, ConnName, Protocol,
+                            User, VHost, Capabilities, Collector, AmqpParams}]),
+                    {ok, ChannelPid};
+                {true, NodeLimit} ->
+                    ?LOG_ERROR(
+                        "Error on direct connection ~tp~n"
+                        "number of channels opened on node '~ts' has reached "
+                        "the maximum allowed limit of (~w)",
+                        [ConnPid, node(), NodeLimit]),
+                    {error, not_allowed}
+            end;
         {true, Limit} ->
             ?LOG_ERROR(
                 "Error on direct connection ~tp~n"
