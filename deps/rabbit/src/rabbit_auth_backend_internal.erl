@@ -29,7 +29,8 @@
 ]).
 
 -export([set_user_limits/3, clear_user_limits/3, is_over_connection_limit/1,
-         is_over_channel_limit/1, get_user_limits/0, get_user_limits/1]).
+         is_over_channel_limit/1, get_user_limit/2,
+         get_user_limits/0, get_user_limits/1]).
 
 -export([user_info_keys/0, perms_info_keys/0,
          user_perms_info_keys/0, vhost_perms_info_keys/0,
