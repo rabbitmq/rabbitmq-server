@@ -247,7 +247,7 @@ start_channel(Number, ClientChannelPid, ConnPid, ConnName,
                 {true, NodeLimit} ->
                     Text = rabbit_misc:format(
                             "number of channels opened on node '~ts' has "
-                            "reached the maximum allowed limit of (~w)",
+                            "reached the maximum allowed limit of ~w",
                             [node(), NodeLimit]),
                     ?LOG_ERROR("Error on direct connection ~tp~n~ts",
                                [ConnPid, Text]),
@@ -257,7 +257,7 @@ start_channel(Number, ClientChannelPid, ConnPid, ConnName,
         {true, Limit} ->
             Text = rabbit_misc:format(
                     "number of channels opened for user '~ts' has "
-                    "reached the maximum allowed limit of (~w)",
+                    "reached the maximum allowed limit of ~w",
                     [Username, Limit]),
             ?LOG_ERROR("Error on direct connection ~tp~n~ts",
                        [ConnPid, Text]),
