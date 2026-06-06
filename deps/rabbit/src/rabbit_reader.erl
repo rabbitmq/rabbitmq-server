@@ -1011,13 +1011,13 @@ is_over_limits(Username) ->
                 {true, Limit} ->
                     Fmt =
                         "number of channels opened on node '~ts' has reached "
-                        "the maximum allowed limit of (~w)",
+                        "the maximum allowed limit of ~w",
                     {true, Limit, Fmt, node()}
             end;
         {true, Limit} ->
             Fmt =
                 "number of channels opened for user '~ts' has reached "
-                "the maximum allowed user limit of (~w)",
+                "the maximum allowed user limit of ~w",
             {true, Limit, Fmt, Username}
     end.
 
