@@ -240,7 +240,7 @@ start_channel(Number, ClientChannelPid, ConnPid, ConnName,
                     ?LOG_ERROR(
                         "Error on direct connection ~tp~n"
                         "number of channels opened on node '~ts' has reached "
-                        "the maximum allowed limit of (~w)",
+                        "the maximum allowed limit of ~w",
                         [ConnPid, node(), NodeLimit]),
                     {error, not_allowed}
             end;
@@ -248,7 +248,7 @@ start_channel(Number, ClientChannelPid, ConnPid, ConnName,
             ?LOG_ERROR(
                 "Error on direct connection ~tp~n"
                 "number of channels opened for user '~ts' has reached the "
-                "maximum allowed limit of (~w)",
+                "maximum allowed limit of ~w",
                 [ConnPid, Username, Limit]),
             {error, not_allowed}
     end.
