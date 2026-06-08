@@ -104,7 +104,10 @@ build_filter_fun(VHostFilterFun, undefined) ->
     VHostFilterFun;
 build_filter_fun(VHostFilterFun, QueueFilter) ->
     fun(#{queue := Q} = Labels) ->
-            VHostFilterFun(Labels) andalso rabbit_re:matches(Q, QueueFilter);
+            VHostFilterFun(Labels) andalso re:run(Q, QueueFilter,
+                                                  [{capture, none},
+                                                   {match_limit, 50_000},
+                                                   {match_limit_recursion, 50_000}]) =:= match;
        (_) ->
             false
     end.

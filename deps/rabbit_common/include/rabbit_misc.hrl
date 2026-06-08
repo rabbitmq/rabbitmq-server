@@ -5,5 +5,5 @@
 %% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
--define(RPC_TIMEOUT, 15_000).
+-define(RPC_TIMEOUT, 15000).
 -define(RPC_INFINITE_TIMEOUT, infinity).

@@ -371,6 +371,20 @@ defmodule TestHelper do
     ])
   end
 
+  def declare_topic_exchange(name, vhost) do
+    declare_exchange(name, vhost, :topic, true)
+  end
+
+  def delete_exchange(name, vhost) do
+    exchange_name = :rabbit_misc.r(vhost, :exchange, name)
+
+    :rpc.call(get_rabbit_hostname(), :rabbit_exchange, :delete, [
+      exchange_name,
+      false,
+      "acting-user"
+    ])
+  end
+
   def list_permissions(vhost) do
     :rpc.call(
       get_rabbit_hostname(),

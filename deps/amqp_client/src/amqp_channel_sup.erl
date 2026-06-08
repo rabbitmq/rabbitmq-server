@@ -39,7 +39,6 @@ start_link(Type, Connection, ConnName, InfraArgs, ChNumber,
             {ok, AState} = init_command_assembler(Type),
             {ok, Sup, {ChPid, AState}};
         {error, _}=Error ->
-            rabbit_misc:shutdown_supervisor(Sup),
             Error
     end.
 

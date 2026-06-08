@@ -255,12 +255,16 @@ like(Subject,{{prefix, PrefixSize, _} = Prefix,
     like(Subject, Suffix);
 like(Subject, CompiledRe)
   when element(1, CompiledRe) =:= re_pattern ->
-    case rabbit_re:run(Subject, CompiledRe) of
-        match           -> true;
-        nomatch         -> false;
-        %% Subject is not a UTF-8 string.
-        {error, badarg} -> undefined;
-        {error, _}      -> false
+    try re:run(Subject, CompiledRe, [{capture, none},
+                                     {match_limit, 50_000},
+                                     {match_limit_recursion, 50_000}]) of
+        match ->
+            true;
+        _ ->
+            false
+    catch error:badarg ->
+              %% This branch is hit if Subject is not a UTF-8 string.
+              undefined
     end.
 
 get_field_value(priority, Msg) ->

@@ -1215,7 +1215,7 @@ matches_strategy(even, Members) ->
     length(Members) rem 2 == 0.
 
 is_match(Subj, E) ->
-    rabbit_re:matches(Subj, E).
+    nomatch /= re:run(Subj, E).
 
 get_resource_name(#resource{name = Name}) ->
     Name.

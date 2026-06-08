@@ -85,10 +85,10 @@ all_definitions(ReqData, Context) ->
     Result = TopLevelDefsAndMetadata ++ retain_whitelisted(Contents),
     ReqData1 = case rabbit_mgmt_util:qs_val(<<"download">>, ReqData) of
                    undefined -> ReqData;
-                   Filename  -> rabbit_mgmt_util:set_resp_header(
-                       <<"Content-Disposition">>,
-                       "attachment; filename=" ++
-                       binary_to_list(Filename), ReqData)
+                   Filename  ->
+                       Header = rabbit_mgmt_util:content_disposition_attachment(Filename),
+                       rabbit_mgmt_util:set_resp_header(
+                         <<"Content-Disposition">>, Header, ReqData)
                end,
 
     rabbit_mgmt_util:reply(Result, ReqData1, Context).
@@ -152,8 +152,9 @@ vhost_definitions(ReqData, VHostName, Context) ->
     ReqData1 = case rabbit_mgmt_util:qs_val(<<"download">>, ReqData) of
                    undefined -> ReqData;
                    Filename  ->
-                       HeaderVal = "attachment; filename=" ++ binary_to_list(Filename),
-                       rabbit_mgmt_util:set_resp_header(<<"Content-Disposition">>, HeaderVal, ReqData)
+                       Header = rabbit_mgmt_util:content_disposition_attachment(Filename),
+                       rabbit_mgmt_util:set_resp_header(
+                         <<"Content-Disposition">>, Header, ReqData)
                end,
     rabbit_mgmt_util:reply(Result, ReqData1, Context).
 

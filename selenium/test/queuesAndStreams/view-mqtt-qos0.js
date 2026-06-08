@@ -1,5 +1,6 @@
 const fs = require('fs')
 const { By, Key, until, Builder } = require('selenium-webdriver')
+require('chromedriver')
 const assert = require('assert')
 const { buildDriver, goToHome, goToQueue, captureScreensFor, teardown, doUntil, findTableRow } = require('../utils')
 const { createQueue, deleteQueue, getManagementUrl, basicAuthorization } = require('../mgt-api')

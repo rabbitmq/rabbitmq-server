@@ -112,12 +112,8 @@ publisher_confirms(Config) ->
     amqp_channel:call(Ch, #'confirm.select'{}),
     amqp_channel:register_confirm_handler(Ch, self()),
     publish(Ch, QName, [<<"msg1">>]),
-    %% Wait for the publish to be confirmed before polling `list_queues/0`:
-    %% on a freshly-declared quorum queue, the local node's view of the
-    %% message count can lag the actual write by enough for the 30 s
-    %% `wait_for_messages/2` poll to time out at 0/0/0.
-    amqp_channel:wait_for_confirms_or_die(Ch, 30),
     wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
+    amqp_channel:wait_for_confirms(Ch, 5),
     amqp_channel:unregister_confirm_handler(Ch),
     ok.
 
