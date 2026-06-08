@@ -893,8 +893,19 @@ csv_tags(N) ->
 %% "external" authentication mechanism or backend is used.
 %% See rabbitmq/rabbitmq-management#383.
 adding_a_user_without_password_or_hash_test(Config) ->
+    %% Regression: rabbitmq/rabbitmq-server#16629.
     http_put(Config, "/users/no-pwd", [{tags, <<"management">>}], [?CREATED, ?NO_CONTENT]),
+    assert_item(#{name              => <<"no-pwd">>,
+                  tags              => [<<"management">>],
+                  password_hash     => <<>>,
+                  hashing_algorithm => <<"rabbit_password_hashing_sha256">>},
+                http_get(Config, "/users/no-pwd")),
     http_put(Config, "/users/no-pwd", [{tags, <<"management">>}], [?CREATED, ?NO_CONTENT]),
+    assert_item(#{name              => <<"no-pwd">>,
+                  tags              => [<<"management">>],
+                  password_hash     => <<>>,
+                  hashing_algorithm => <<"rabbit_password_hashing_sha256">>},
+                http_get(Config, "/users/no-pwd")),
     http_delete(Config, "/users/no-pwd", ?NO_CONTENT).
 
 adding_a_user_with_both_password_and_hash_fails_test(Config) ->
