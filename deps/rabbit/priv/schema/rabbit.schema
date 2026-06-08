@@ -161,9 +161,22 @@ end}.
     {datatype, {enum, [sha, sha224, sha256, sha384, sha512]}}]}.
 
 %% Load definitions from a remote URL over HTTPS. See
-%% https://www.rabbitmq.com/docs/management#load-definitions
+%% https://www.rabbitmq.com/docs/management#load-definitions.
 {mapping, "definitions.https.url", "rabbit.definitions.url",
-    [{datatype, string}]}.
+    [{datatype, [tagged_string, string]}]}.
+
+%% The tagged_string datatype matches any alphanumeric prefix followed by `:`,
+%% which includes URL schemes like `https:`. Treat the `encrypted` tag as a
+%% tagged value to be decrypted later; reconstruct the URL for any other tag.
+{translation, "rabbit.definitions.url",
+fun(Conf) ->
+    case cuttlefish:conf_get("definitions.https.url", Conf, undefined) of
+        undefined                                -> cuttlefish:unset();
+        {encrypted, Rest}                        -> {encrypted, Rest};
+        {Scheme, Rest} when is_atom(Scheme)      -> atom_to_list(Scheme) ++ ":" ++ Rest;
+        Str                                      -> Str
+    end
+end}.
 
 %% Client-side TLS settings used by e.g. HTTPS definition loading mechanism.
 %% These can be reused by other clients.
