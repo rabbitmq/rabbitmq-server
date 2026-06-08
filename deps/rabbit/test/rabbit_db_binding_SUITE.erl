@@ -36,7 +36,11 @@
          match/1, match1/1,
          match_routing_key/1, match_routing_key1/1,
          tie_binding_to_dest_with_keep_while_cond/1,
-         tie_binding_to_dest_with_keep_while_cond1/1
+         tie_binding_to_dest_with_keep_while_cond1/1,
+         tie_binding_to_dest_with_keep_while_cond_orphan_nodes/1,
+         tie_binding_to_dest_with_keep_while_cond_orphan_nodes1/1,
+         tie_binding_to_dest_with_keep_while_cond_orphan_topic_permission/1,
+         tie_binding_to_dest_with_keep_while_cond_orphan_topic_permission1/1
         ]).
 
 -define(VHOST, <<"/">>).
@@ -55,7 +59,9 @@ groups() ->
        delete_v2,
        auto_delete_v1,
        auto_delete_v2,
-       tie_binding_to_dest_with_keep_while_cond]}
+       tie_binding_to_dest_with_keep_while_cond,
+       tie_binding_to_dest_with_keep_while_cond_orphan_nodes,
+       tie_binding_to_dest_with_keep_while_cond_orphan_topic_permission]}
     ].
 
 all_tests() ->
@@ -566,5 +572,88 @@ tie_binding_to_dest_with_keep_while_cond1(_Config) ->
     ?assert(rabbit_khepri:exists(XPath2)),
     ?assertNot(rabbit_khepri:exists(BPath1)),
     ?assertNot(rabbit_khepri:exists(BPath2)),
+
+    passed.
+
+tie_binding_to_dest_with_keep_while_cond_orphan_nodes(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(
+               Config, 0,
+               ?MODULE,
+               tie_binding_to_dest_with_keep_while_cond_orphan_nodes1,
+               [Config]).
+
+tie_binding_to_dest_with_keep_while_cond_orphan_nodes1(_Config) ->
+    %% Regression test: an orphan exchange-level tree node (with bindings
+    %% underneath but no exchange record of its own) used to crash the
+    %% migration with `function_clause'.
+
+    ?assertNot(
+       rabbit_feature_flags:is_enabled(
+         tie_binding_to_dest_with_keep_while_cond)),
+
+    NamePrefix = atom_to_binary(?FUNCTION_NAME),
+    XName = rabbit_misc:r(?VHOST, exchange, <<NamePrefix/binary, "-x">>),
+    Exchange = #exchange{
+                  name = XName,
+                  durable = true, auto_delete = false, decorators = {[], []}},
+    ?assertMatch(
+       {new, #exchange{}},
+       rabbit_db_exchange:create_or_get(Exchange)),
+
+    %% Writing a leaf below a non-existent source exchange leaves the
+    %% intermediate exchange-level node without a payload.
+    SrcName = <<".*">>,
+    DstName = <<NamePrefix/binary, "-dst">>,
+    BindingPath = rabbit_db_binding:khepri_route_path(
+                    ?VHOST,
+                    SrcName,
+                    queue,
+                    DstName,
+                    <<"">>),
+    OrphanExchangePath = rabbit_db_exchange:khepri_exchange_path(
+                           ?VHOST, SrcName),
+    ?assertEqual(ok, rabbit_khepri:put(BindingPath, sets:new())),
+    ?assert(rabbit_khepri:exists(BindingPath)),
+    ?assert(rabbit_khepri:exists(OrphanExchangePath)),
+
+    ?assertEqual(
+       ok,
+       rabbit_feature_flags:enable(
+         tie_binding_to_dest_with_keep_while_cond)),
+
+    passed.
+
+tie_binding_to_dest_with_keep_while_cond_orphan_topic_permission(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(
+               Config, 0,
+               ?MODULE,
+               tie_binding_to_dest_with_keep_while_cond_orphan_topic_permission1,
+               [Config]).
+
+tie_binding_to_dest_with_keep_while_cond_orphan_topic_permission1(_Config) ->
+    %% Same regression as `tie_binding_to_dest_with_keep_while_cond_orphan_nodes',
+    %% but the orphan is left by a topic permission whose `exchange' field
+    %% does not match any real exchange (e.g. `.*').
+
+    ?assertNot(
+       rabbit_feature_flags:is_enabled(
+         tie_binding_to_dest_with_keep_while_cond)),
+
+    ExchangeName = <<".*">>,
+    TopicPermissionPath = rabbit_db_user:khepri_topic_permission_path(
+                            <<"a-user">>,
+                            ?VHOST,
+                            ExchangeName),
+    OrphanExchangePath = rabbit_db_exchange:khepri_exchange_path(
+                           ?VHOST, ExchangeName),
+    ?assertEqual(
+       ok, rabbit_khepri:put(TopicPermissionPath, #topic_permission{})),
+    ?assert(rabbit_khepri:exists(TopicPermissionPath)),
+    ?assert(rabbit_khepri:exists(OrphanExchangePath)),
+
+    ?assertEqual(
+       ok,
+       rabbit_feature_flags:enable(
+         tie_binding_to_dest_with_keep_while_cond)),
 
     passed.

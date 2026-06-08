@@ -47,7 +47,7 @@ handle_event(#event{type      = Type,
                                               pattern = Pattern} = State) ->
     _ = case key(Type) of
         ignore -> ok;
-        Key    -> case rabbit_re:run(Key, Pattern) of
+        Key    -> case re:run(Key, Pattern, [{capture, none}]) of
                       match ->
                           Data = [{'event', Key}] ++
                               fmt_proplist([{'timestamp_in_ms', TS} | Props]),

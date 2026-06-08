@@ -29,8 +29,7 @@
 ]).
 
 -export([set_user_limits/3, clear_user_limits/3, is_over_connection_limit/1,
-         is_over_channel_limit/1, get_user_limit/2,
-         get_user_limits/0, get_user_limits/1]).
+         is_over_channel_limit/1, get_user_limits/0, get_user_limits/1]).
 
 -export([user_info_keys/0, perms_info_keys/0,
          user_perms_info_keys/0, vhost_perms_info_keys/0,
@@ -156,11 +155,9 @@ check_resource_access(#auth_user{username = Username},
                              <<"">> -> <<$^, $$>>;
                              RE     -> RE
                          end,
-            case rabbit_re:run(Name, PermRegexp) of
-                match   -> true;
-                nomatch -> false;
-                %% Deny on regex error.
-                _Error  -> false
+            case re:run(Name, PermRegexp, [{capture, none}]) of
+                match    -> true;
+                nomatch  -> false
             end
     end.
 
@@ -183,11 +180,9 @@ check_topic_access(#auth_user{username = Username},
                 PermRegexp,
                 maps:get(variable_map, Context, undefined)
             ),
-            case rabbit_re:run(maps:get(routing_key, Context),
-                               PermRegexpExpanded) of
-                match   -> true;
-                nomatch -> false;
-                _Error  -> false
+            case re:run(maps:get(routing_key, Context), PermRegexpExpanded, [{capture, none}]) of
+                match    -> true;
+                nomatch  -> false
             end
     end.
 
@@ -502,7 +497,7 @@ set_permissions(Username, VirtualHost, ConfigurePerm, WritePerm, ReadPerm, Actin
     _ = lists:map(
       fun (RegexpBin) ->
               Regexp = binary_to_list(RegexpBin),
-              case rabbit_re:compile(Regexp) of
+              case re:compile(Regexp) of
                   {ok, _}         -> ok;
                   {error, Reason} ->
                       ?LOG_WARNING("Failed to set permissions for user '~ts' in virtual host '~ts': "
@@ -610,7 +605,7 @@ set_topic_permissions(Username, VirtualHost, Exchange, WritePerm, ReadPerm, Acti
     ReadPermRegex = rabbit_data_coercion:to_binary(ReadPerm),
     lists:foreach(
       fun (RegexpBin) ->
-              case rabbit_re:compile(RegexpBin) of
+              case re:compile(RegexpBin) of
                   {ok, _}         -> ok;
                   {error, Reason} ->
                       ?LOG_WARNING("Failed to set topic permissions on exchange '~ts' for user "

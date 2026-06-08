@@ -102,7 +102,7 @@ find_contents(RegExp, VHost) ->
     Upstreams0 = rabbit_runtime_parameters:list(
                     VHost, <<"federation-upstream">>),
     Upstreams  = [rabbit_data_coercion:to_list(U) || U <- Upstreams0,
-                    rabbit_re:matches(pget(name, U), RegExp)],
+                    re:run(pget(name, U), RegExp) =/= nomatch],
     [[{<<"upstream">>, pget(name, U)}] || U <- Upstreams].
 
 from_set_contents(Set, XorQ) ->

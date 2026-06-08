@@ -38,10 +38,11 @@
          rabbit_types:user(), rabbit_types:vhost(),
          rabbit_framing:amqp_table(), pid()}.
 
+-define(FAIR_WAIT, 70000).
+
 %%----------------------------------------------------------------------------
 
--spec start_link(start_link_args()) ->
-    {'ok', pid(), {pid(), any()}} | {'error', any()}.
+-spec start_link(start_link_args()) -> {'ok', pid(), {pid(), any()}}.
 
 start_link({tcp, Sock, Channel, FrameMax, ReaderPid, ConnName, User,
             VHost, Capabilities, Collector}) ->
@@ -61,16 +62,9 @@ start_link({tcp, Sock, Channel, FrameMax, ReaderPid, ConnName, User,
                   shutdown => ?FAIR_WAIT,
                   type => worker,
                   modules => [rabbit_channel]},
-    %% For potential backports to 4.1: this call site will need adjustment compared to 4.2 and newer series.
-    %% Thread `Protocol` through `start_link_args/0` and `rabbit_command_assembler:init/1`.
-    case supervisor:start_child(SupPid, ChildSpec) of
-        {ok, ChannelPid} ->
-            {ok, AState} = rabbit_command_assembler:init(),
-            {ok, SupPid, {ChannelPid, AState}};
-        {error, Reason} ->
-            rabbit_misc:shutdown_supervisor(SupPid),
-            {error, Reason}
-    end;
+    {ok, ChannelPid} = supervisor:start_child(SupPid, ChildSpec),
+    {ok, AState} = rabbit_command_assembler:init(),
+    {ok, SupPid, {ChannelPid, AState}};
 start_link({direct, Channel, ClientChannelPid, ConnPid, ConnName,
             User, VHost, Capabilities, Collector, AmqpParams}) ->
     {ok, SupPid} = supervisor:start_link(
@@ -87,13 +81,8 @@ start_link({direct, Channel, ClientChannelPid, ConnPid, ConnName,
                   shutdown => ?FAIR_WAIT,
                   type => worker,
                   modules => [rabbit_channel]},
-    case supervisor:start_child(SupPid, ChildSpec) of
-        {ok, ChannelPid} ->
-            {ok, SupPid, {ChannelPid, none}};
-        {error, Reason} ->
-            rabbit_misc:shutdown_supervisor(SupPid),
-            {error, Reason}
-    end.
+    {ok, ChannelPid} = supervisor:start_child(SupPid, ChildSpec),
+    {ok, SupPid, {ChannelPid, none}}.
 
 %%----------------------------------------------------------------------------
 

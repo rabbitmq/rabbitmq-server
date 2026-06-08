@@ -18,3 +18,13 @@
 -define(OAUTH2_BOOTSTRAP_PATH,                      <<"js/oidc-oauth/bootstrap.js">>).
 -define(MANAGEMENT_LOGIN_STRICT_AUTH_MECHANISM,     <<"strict_auth_mechanism">>).
 -define(MANAGEMENT_LOGIN_PREFERRED_AUTH_MECHANISM,  <<"preferred_auth_mechanism">>).
+
+-define(DEFAULT_LOGIN_ERROR_CODE, <<"not_authorised">>).
+
+-define(LOGIN_ERROR_CODES,
+        [<<"Not_Authorized">>,
+         ?DEFAULT_LOGIN_ERROR_CODE,
+         <<"invalid_credentials">>,
+         <<"token_invalid">>,
+         <<"token_expired">>,
+         <<"unsupported_mechanism">>]).

@@ -4,6 +4,7 @@ const fsp = fs.promises
 const path = require('path')
 const { By, Key, until, Builder, logging, Capabilities } = require('selenium-webdriver')
 const proxy = require('selenium-webdriver/proxy')
+require('chromedriver')
 var chrome = require("selenium-webdriver/chrome");
 const UAALoginPage = require('./pageobjects/UAALoginPage')
 const KeycloakLoginPage = require('./pageobjects/KeycloakLoginPage')
