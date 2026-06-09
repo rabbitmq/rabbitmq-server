@@ -799,9 +799,14 @@ function postprocess() {
         });
 
     $('#download-definitions').on('click', function() {
+        var filename = $('#download-filename').val()
+        if (!is_valid_token(filename)) {
+            show_popup('warn', 'Filename must only contain a-z A-Z 0-9 ! # $ % & \' * + - . ^ _ ` | ~ characters.')
+            return
+        }
         var idx = $("select[name='vhost-download'] option:selected").index()
         var vhost = ((idx <=0 ) ? "" : "/" + esc($("select[name='vhost-download'] option:selected").val()))
-        var download_filename = esc($('#download-filename').val())
+        var download_filename = esc(filename)
         var path = '/definitions' + vhost
         with_req('GET', path, null, function(resp) {
             if (resp.status >= 200 && resp.status <= 299) {
@@ -926,6 +931,11 @@ function is_valid_regexp(value) {
     } catch (e) {
         return false;
     }
+}
+
+// HTTP token defined in RFC9110 5.6.2.
+function is_valid_token(value) {
+    return value.length > 0 && /^[a-zA-Z0-9!#$%&'*+\-.^_`|~]+$/.test(value);
 }
 
 function url_pagination_template_context(template, context, defaultPage, defaultPageSize){

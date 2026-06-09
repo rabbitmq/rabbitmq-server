@@ -83,15 +83,20 @@ all_definitions(ReqData, Context) ->
         {explanation, rabbit_data_coercion:to_binary(io_lib:format("Definitions of cluster '~ts'", [rabbit_nodes:cluster_name()]))}
     ],
     Result = TopLevelDefsAndMetadata ++ retain_whitelisted(Contents),
-    ReqData1 = case rabbit_mgmt_util:qs_val(<<"download">>, ReqData) of
-                   undefined -> ReqData;
-                   Filename  -> rabbit_mgmt_util:set_resp_header(
-                       <<"Content-Disposition">>,
-                       "attachment; filename=" ++
-                       binary_to_list(Filename), ReqData)
-               end,
-
+    ReqData1 = maybe_content_disposition(ReqData),
     rabbit_mgmt_util:reply(Result, ReqData1, Context).
+
+maybe_content_disposition(ReqData) ->
+    Constraint = cowboy_constraints:from_fun(fun cow_http:ensure_token/1),
+    case cowboy_req:match_qs([{download, [Constraint], undefined}], ReqData) of
+        #{download := undefined} ->
+            ReqData;
+        #{download := Filename} ->
+            cowboy_req:set_resp_header(
+                <<"content-disposition">>,
+                [<<"attachment; filename=">>, Filename],
+                ReqData)
+    end.
 
 accept_json(ReqData0, Context) ->
     BodySizeLimit = application:get_env(rabbitmq_management, max_http_body_size, ?MANAGEMENT_DEFAULT_HTTP_MAX_BODY_SIZE),
@@ -148,24 +153,27 @@ vhost_definitions(ReqData, VHostName, Context) ->
         {limits, vhost:get_limits(VHost)}
     ],
     Result = TopLevelDefsAndMetadata ++ retain_whitelisted(Contents),
-
-    ReqData1 = case rabbit_mgmt_util:qs_val(<<"download">>, ReqData) of
-                   undefined -> ReqData;
-                   Filename  ->
-                       HeaderVal = "attachment; filename=" ++ binary_to_list(Filename),
-                       rabbit_mgmt_util:set_resp_header(<<"Content-Disposition">>, HeaderVal, ReqData)
-               end,
+    ReqData1 = maybe_content_disposition(ReqData),
     rabbit_mgmt_util:reply(Result, ReqData1, Context).
 
 accept_multipart(ReqData0, Context) ->
-    {Parts, ReqData} = get_all_parts(ReqData0),
-    Redirect = get_part(<<"redirect">>, Parts),
-    Payload = get_part(<<"file">>, Parts),
-    Resp = {Res, _, _} = accept(Payload, ReqData, Context),
-    case {Res, Redirect} of
-        {true, unknown} -> {true, ReqData, Context};
-        {true, _}       -> {{true, Redirect}, ReqData, Context};
-        _               -> Resp
+    BodySizeLimit = application:get_env(rabbitmq_management, max_http_body_size,
+                                        ?MANAGEMENT_DEFAULT_HTTP_MAX_BODY_SIZE),
+    case get_all_parts(ReqData0, BodySizeLimit) of
+        {error, http_body_limit_exceeded, LimitApplied, BytesRead} ->
+            _ = ?LOG_WARNING("HTTP API: uploaded definition file size (~tp) exceeded the maximum request body limit of ~tp bytes. "
+                             "Use the 'management.http.max_body_size' key in rabbitmq.conf to increase the limit if necessary",
+                             [BytesRead, LimitApplied]),
+            rabbit_mgmt_util:bad_request("Exceeded HTTP request body size limit", ReqData0, Context);
+        {Parts, ReqData} ->
+            Redirect = get_part(<<"redirect">>, Parts),
+            Payload = get_part(<<"file">>, Parts),
+            Resp = {Res, _, _} = accept(Payload, ReqData, Context),
+            case {Res, Redirect} of
+                {true, unknown} -> {true, ReqData, Context};
+                {true, _}       -> {{true, Redirect}, ReqData, Context};
+                _               -> Resp
+            end
     end.
 
 is_authorized(ReqData, Context) ->
@@ -240,28 +248,55 @@ apply_defs(Body, ActingUser) ->
 apply_defs(Body, ActingUser, VHost) ->
     rabbit_definitions:apply_defs(Body, ActingUser, VHost).
 
-get_all_parts(Req) ->
-    get_all_parts(Req, []).
+get_all_parts(Req, BodySizeLimit) ->
+    %% Early rejection when the declared Content-Length exceeds the limit.
+    %% This mirrors the behaviour of read_complete_body_with_limit/2 for
+    %% regular (non-multipart) bodies.
+    case cowboy_req:body_length(Req) of
+        N when is_integer(N), N > BodySizeLimit ->
+            {error, http_body_limit_exceeded, BodySizeLimit, N};
+        _ ->
+            get_all_parts(Req, 0, BodySizeLimit, [])
+    end.
 
-get_all_parts(Req0, Acc) ->
+get_all_parts(Req0, BodySize0, BodySizeLimit, Acc) ->
     case cowboy_req:read_part(Req0) of
         {done, Req1} ->
             {Acc, Req1};
         {ok, Headers, Req1} ->
+            %% Approximate maximum size of part headers.
+            BodySize1 = BodySize0 + 2048,
             Name = case cow_multipart:form_data(Headers) of
                        {data, N} -> N;
                        {file, N, _, _} -> N
                    end,
-            {ok, Body, Req2} = stream_part_body(Req1, <<>>),
-            get_all_parts(Req2, [{Name, Body}|Acc])
+            case stream_part_body(Req1, BodySize1, BodySizeLimit, <<>>) of
+                {ok, Body, BodySize, Req2} ->
+                    get_all_parts(Req2, BodySize, BodySizeLimit, [{Name, Body}|Acc]);
+                {error, http_body_limit_exceeded, _, _} = Error ->
+                    Error
+            end
     end.
 
-stream_part_body(Req0, Acc) ->
-    case cowboy_req:read_part_body(Req0) of
+stream_part_body(Req0, BodySize, BodySizeLimit, Acc) ->
+    %% Pass an explicit length to read_part_body so that Cowboy's internal
+    %% buffering (default 8 MiB) respects the configured limit instead of
+    %% always accumulating large chunks before returning control to us.
+    Opts = #{length => BodySizeLimit},
+    case cowboy_req:read_part_body(Req0, Opts) of
+        {more, Data, _} when BodySize + byte_size(Data) > BodySizeLimit ->
+            {error, http_body_limit_exceeded, BodySizeLimit, BodySize + byte_size(Data)};
         {more, Data, Req1} ->
-            stream_part_body(Req1, <<Acc/binary, Data/binary>>);
+            stream_part_body(Req1, BodySize + byte_size(Data), BodySizeLimit,
+                             <<Acc/binary, Data/binary>>);
         {ok, Data, Req1} ->
-            {ok, <<Acc/binary, Data/binary>>, Req1}
+            Total = BodySize + byte_size(Data),
+            case Total > BodySizeLimit of
+                true ->
+                    {error, http_body_limit_exceeded, BodySizeLimit, Total};
+                false ->
+                    {ok, <<Acc/binary, Data/binary>>, Total, Req1}
+            end
     end.
 
 get_part(Name, Parts) ->
