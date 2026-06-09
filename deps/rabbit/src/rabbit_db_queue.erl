@@ -1016,9 +1016,10 @@ tie_binding_to_dest_with_keep_while_cond_enable(
                        "auto-delete exchanges",
                        [FeatureName],
                        #{domain => ?RMQLOG_DOMAIN_DB}),
+                    %% `#if_has_data{}' skips data-less intermediate nodes.
                     ExchangePattern = rabbit_db_exchange:khepri_exchange_path(
                                         ?KHEPRI_WILDCARD_STAR,
-                                        ?KHEPRI_WILDCARD_STAR),
+                                        #if_has_data{}),
                     ok = khepri_tx:foreach(
                            ExchangePattern,
                            fun(ExchangePath, #{data := Exchange}) ->
@@ -1040,12 +1041,13 @@ tie_binding_to_dest_with_keep_while_cond_enable(
                        "bindings",
                        [FeatureName],
                        #{domain => ?RMQLOG_DOMAIN_DB}),
+                    %% Same `#if_has_data{}' guard as above.
                     BindingPattern = rabbit_db_binding:khepri_route_path(
                                        ?KHEPRI_WILDCARD_STAR,
                                        ?KHEPRI_WILDCARD_STAR,
                                        ?KHEPRI_WILDCARD_STAR,
                                        ?KHEPRI_WILDCARD_STAR,
-                                       ?KHEPRI_WILDCARD_STAR),
+                                       #if_has_data{}),
                     ok = khepri_tx:foreach(
                            BindingPattern,
                            fun(BindingPath, #{data := Set}) ->
