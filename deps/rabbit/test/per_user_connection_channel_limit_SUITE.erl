@@ -12,6 +12,9 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
+-define(AWAIT, 30000).
+-define(INTERVAL, 250).
+
 -compile(nowarn_export_all).
 -compile(export_all).
 
@@ -1138,6 +1141,8 @@ cluster_single_user_limit(Config) ->
     expect_that_client_connection_is_rejected(Config, 0, Username),
     expect_that_client_connection_is_rejected(Config, 1, Username),
     expect_that_client_channel_is_rejected(Conn1),
+    %% On direct connections, channel rejection does not close the connection.
+    close_connections([Conn1]),
     rabbit_ct_helpers:await_condition(
         fun () ->
             is_process_alive(Conn1) =:= false andalso
@@ -1172,6 +1177,8 @@ cluster_single_user_limit2(Config) ->
     expect_that_client_connection_is_rejected(Config, 0, Username),
     expect_that_client_connection_is_rejected(Config, 1, Username),
     expect_that_client_channel_is_rejected(Conn1),
+    %% On direct connections, channel rejection does not close the connection.
+    close_connections([Conn1]),
     rabbit_ct_helpers:await_condition(
         fun () ->
             is_process_alive(Conn1) =:= false andalso
@@ -1222,6 +1229,8 @@ cluster_single_user_zero_limit(Config) ->
             count_connections_of_user(Config, Username) =:= 1
         end),
     expect_that_client_channel_is_rejected(ConnA),
+    %% On direct connections, channel rejection does not close the connection.
+    close_connections([ConnA]),
     rabbit_ct_helpers:await_condition(
         fun () ->
             count_connections_of_user(Config, Username) =:= 0 andalso
@@ -1265,6 +1274,8 @@ cluster_single_user_clear_limits(Config) ->
     expect_that_client_connection_is_rejected(Config, 0, Username),
     expect_that_client_connection_is_rejected(Config, 1, Username),
     expect_that_client_channel_is_rejected(Conn1),
+    %% On direct connections, channel rejection does not close the connection.
+    close_connections([Conn1]),
     rabbit_ct_helpers:await_condition(
         fun () ->
             is_process_alive(Conn1) =:= false andalso
@@ -1333,6 +1344,8 @@ cluster_multiple_users_clear_limits(Config) ->
             count_connections_of_user(Config, Username2) =:= 1
         end),
     expect_that_client_channel_is_rejected(ConnA),
+    %% On direct connections, channel rejection does not close the connection.
+    close_connections([ConnA]),
 
     rabbit_ct_helpers:await_condition(
         fun () ->
@@ -1417,6 +1430,8 @@ cluster_multiple_users_zero_limit(Config) ->
     [ConnA, ConnB] = open_connections(Config, [{0, Username1}, {1, Username2}]),
 
     expect_that_client_channel_is_rejected(ConnA),
+    %% On direct connections, channel rejection does not close the connection.
+    close_connections([ConnA]),
     rabbit_ct_helpers:await_condition(
         fun () ->
             count_connections_of_user(Config, Username1) =:= 0 andalso
@@ -1577,7 +1592,9 @@ set_user_connection_and_channel_limit(Config, NodeIndex, Username, ConnLimit, Ch
     ok = rabbit_ct_broker_helpers:control_action(
       set_user_limits, Node, [rabbit_data_coercion:to_list(Username)] ++
       ["{\"max-connections\": " ++ integer_to_list(ConnLimit) ++ "," ++
-       " \"max-channels\": " ++ integer_to_list(ChLimit) ++ "}"]).
+       " \"max-channels\": " ++ integer_to_list(ChLimit) ++ "}"]),
+    await_user_limit_visible(Config, Username, <<"max-connections">>, ConnLimit),
+    await_user_limit_visible(Config, Username, <<"max-channels">>, ChLimit).
 
 set_user_connection_limit_only(Config, Username, ConnLimit) ->
     set_user_connection_limit_only(Config, 0, Username, ConnLimit).
@@ -1587,7 +1604,8 @@ set_user_connection_limit_only(Config, NodeIndex, Username, ConnLimit) ->
              Config, NodeIndex, nodename),
     ok = rabbit_ct_broker_helpers:control_action(
       set_user_limits, Node, [rabbit_data_coercion:to_list(Username)] ++
-      ["{\"max-connections\": " ++ integer_to_list(ConnLimit) ++ "}"]).
+      ["{\"max-connections\": " ++ integer_to_list(ConnLimit) ++ "}"]),
+    await_user_limit_visible(Config, Username, <<"max-connections">>, ConnLimit).
 
 set_user_channel_limit_only(Config, Username, ChLimit) ->
     set_user_channel_limit_only(Config, 0, Username, ChLimit).
@@ -1597,7 +1615,37 @@ set_user_channel_limit_only(Config, NodeIndex, Username, ChLimit) ->
              Config, NodeIndex, nodename),
     ok = rabbit_ct_broker_helpers:control_action(
       set_user_limits, Node, [rabbit_data_coercion:to_list(Username)] ++
-      ["{\"max-channels\": " ++ integer_to_list(ChLimit) ++ "}"]).
+      ["{\"max-channels\": " ++ integer_to_list(ChLimit) ++ "}"]),
+    await_user_limit_visible(Config, Username, <<"max-channels">>, ChLimit).
+
+%% Awaits runtime-parameter propagation to every cluster node.
+await_user_limit_visible(Config, Username, LimitType, Value) ->
+    Expected = case Value of
+                   V when V < 0 -> undefined;
+                   V            -> {ok, V}
+               end,
+    Nodenames = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    lists:foreach(
+      fun(I) ->
+              ?awaitMatch(
+                 Expected,
+                 lookup_user_limit(Config, I, Username, LimitType),
+                 ?AWAIT, ?INTERVAL)
+      end, lists:seq(0, length(Nodenames) - 1)).
+
+lookup_user_limit(Config, NodeIndex, Username, LimitType) ->
+    case rabbit_ct_broker_helpers:rpc(
+           Config, NodeIndex, rabbit_auth_backend_internal, get_user_limits,
+           [Username]) of
+        undefined ->
+            undefined;
+        Limits when is_map(Limits) ->
+            case maps:get(LimitType, Limits, undefined) of
+                N when is_integer(N), N < 0 -> undefined;
+                N when is_integer(N), N >= 0 -> {ok, N};
+                undefined -> undefined
+            end
+    end.
 
 clear_all_user_limits(Config, Username) ->
     clear_all_user_limits(Config, 0, Username).
@@ -1605,7 +1653,9 @@ clear_all_user_limits(Config, NodeIndex, Username) ->
     Node  = rabbit_ct_broker_helpers:get_node_config(
               Config, NodeIndex, nodename),
     ok = rabbit_ct_broker_helpers:control_action(
-        clear_user_limits, Node, [rabbit_data_coercion:to_list(Username), "all"]).
+        clear_user_limits, Node, [rabbit_data_coercion:to_list(Username), "all"]),
+    await_user_limit_visible(Config, Username, <<"max-connections">>, -1),
+    await_user_limit_visible(Config, Username, <<"max-channels">>, -1).
 
 expect_that_client_connection_is_rejected(Config) ->
     expect_that_client_connection_is_rejected(Config, 0).

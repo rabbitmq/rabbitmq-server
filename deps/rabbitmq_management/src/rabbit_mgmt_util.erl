@@ -31,7 +31,6 @@
 -export([filter_tracked_conn_list/3]).
 -export([with_decode/5, decode/1, decode/2, set_resp_header/3,
          args/1, read_complete_body/1, read_complete_body_with_limit/2]).
--export([content_disposition_attachment/1]).
 -export([reply_list/3, reply_list/5, reply_list/4,
          sort_list/2, destination_type/1, reply_list_or_paginate/3
          ]).
@@ -69,7 +68,6 @@
 
 -define(MAX_RANGE, 500).
 -define(MAX_FILTER_LENGTH, 1024).
--define(MAX_ATTACHMENT_FILENAME_LEN, 500).
 
 -record(pagination, {page = undefined, page_size = undefined,
                      name = undefined, use_regex = undefined}).
@@ -512,9 +510,7 @@ maybe_filter_context(List, _) ->
 
 
 match_value({_, Value}, ValueTag, UseRegex) when UseRegex =:= "true" ->
-    case re:run(Value, ValueTag, [caseless,
-                                  {match_limit, 50_000},
-                                  {match_limit_recursion, 50_000}]) of
+    case rabbit_re:run(Value, ValueTag, [caseless]) of
         {match, _} -> true;
         {error, _} -> false;
         nomatch -> false
@@ -1140,54 +1136,7 @@ filter_tracked_conn_list(List, ReqData, #context{user = #user{username = FilterU
 set_resp_header(K, V, ReqData) ->
     cowboy_req:set_resp_header(K, strip_crlf(V), ReqData).
 
-strip_crlf(Str) when is_list(Str) ->
-    lists:append(string:tokens(Str, "\r\n"));
-strip_crlf(Str) when is_binary(Str) ->
-    binary:replace(Str, [<<"\r">>, <<"\n">>], <<>>, [global]).
-
--spec content_disposition_attachment(binary()) -> binary().
-content_disposition_attachment(Filename0) when is_binary(Filename0) ->
-    Filename = case byte_size(Filename0) > ?MAX_ATTACHMENT_FILENAME_LEN of
-                   true  -> binary:part(Filename0, 0, ?MAX_ATTACHMENT_FILENAME_LEN);
-                   false -> Filename0
-               end,
-    Ascii   = ascii_fallback(Filename),
-    Encoded = rfc5987_encode(Filename),
-    <<"attachment; filename=\"", Ascii/binary,
-      "\"; filename*=UTF-8''", Encoded/binary>>.
-
--spec ascii_fallback(binary()) -> binary().
-ascii_fallback(B) ->
-    << <<(safe_byte(C))>> || <<C>> <= B >>.
-
--spec safe_byte(byte()) -> byte().
-safe_byte(C) when C >= $A, C =< $Z -> C;
-safe_byte(C) when C >= $a, C =< $z -> C;
-safe_byte(C) when C >= $0, C =< $9 -> C;
-safe_byte($.) -> $.;
-safe_byte($_) -> $_;
-safe_byte($-) -> $-;
-safe_byte(_)  -> $_.
-
-%% RFC 5987 percent-encoding. Shares the unreserved alphabet with the
-%% ASCII fallback above so both forms decode to the same character set.
--spec rfc5987_encode(binary()) -> binary().
-rfc5987_encode(B) ->
-    << <<(rfc5987_byte(C))/binary>> || <<C>> <= B >>.
-
--spec rfc5987_byte(byte()) -> binary().
-rfc5987_byte(C) when C >= $A, C =< $Z -> <<C>>;
-rfc5987_byte(C) when C >= $a, C =< $z -> <<C>>;
-rfc5987_byte(C) when C >= $0, C =< $9 -> <<C>>;
-rfc5987_byte($.) -> <<".">>;
-rfc5987_byte($_) -> <<"_">>;
-rfc5987_byte($-) -> <<"-">>;
-rfc5987_byte(C) ->
-    <<"%", (hex_nibble(C bsr 4)), (hex_nibble(C band 16#0F))>>.
-
--spec hex_nibble(0..15) -> byte().
-hex_nibble(N) when N < 10 -> $0 + N;
-hex_nibble(N)             -> $A + N - 10.
+strip_crlf(Str) -> lists:append(string:tokens(Str, "\r\n")).
 
 args([]) -> args(#{});
 args(L)  -> rabbit_mgmt_format:to_amqp_table(L).

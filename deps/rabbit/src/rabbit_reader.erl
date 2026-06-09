@@ -55,6 +55,8 @@
 
 -export([conserve_resources/3, server_properties/1]).
 
+-export([is_over_node_channel_limit/0]).
+
 -define(NORMAL_TIMEOUT, 3).
 -define(CLOSING_TIMEOUT, 30).
 -define(CHANNEL_TERMINATION_TIMEOUT, 3).
@@ -975,15 +977,24 @@ create_channel(Channel,
                    } = State) ->
     case is_over_limits(Username) of
         false ->
-            {ok, _ChSupPid, {ChPid, AState}} =
-                rabbit_channel_sup_sup:start_channel(
-                  ChanSupSup, {tcp, Sock, Channel, FrameMax, self(), Name,
-                               User, VHost, Capabilities,
-                               Collector}),
-            MRef = erlang:monitor(process, ChPid),
-            put({ch_pid, ChPid}, {Channel, MRef}),
-            put({channel, Channel}, {ChPid, AState}),
-            {ok, {ChPid, AState}, State#v1{channel_count = ChannelCount + 1}};
+            case rabbit_channel_sup_sup:start_channel(
+                   ChanSupSup, {tcp, Sock, Channel, FrameMax, self(), Name,
+                                User, VHost, Capabilities,
+                                Collector}) of
+                {ok, _ChSupPid, {ChPid, AState}} ->
+                    MRef = erlang:monitor(process, ChPid),
+                    put({ch_pid, ChPid}, {Channel, MRef}),
+                    put({channel, Channel}, {ChPid, AState}),
+                    {ok, {ChPid, AState}, State#v1{channel_count = ChannelCount + 1}};
+                {error, Reason} ->
+                    ?LOG_ERROR(
+                        "Connection ~ts failed to open channel ~tp: ~tp",
+                        [Name, Channel, Reason]),
+                    {error, rabbit_misc:amqp_error(
+                              internal_error,
+                              "failed to open channel ~tp",
+                              [Channel], none)}
+            end;
         {true, Limit, Fmt, FmtArg} ->
             {error, rabbit_misc:amqp_error(
                       not_allowed,
@@ -1000,13 +1011,13 @@ is_over_limits(Username) ->
                 {true, Limit} ->
                     Fmt =
                         "number of channels opened on node '~ts' has reached "
-                        "the maximum allowed limit of (~w)",
+                        "the maximum allowed limit of ~w",
                     {true, Limit, Fmt, node()}
             end;
         {true, Limit} ->
             Fmt =
                 "number of channels opened for user '~ts' has reached "
-                "the maximum allowed user limit of (~w)",
+                "the maximum allowed user limit of ~w",
             {true, Limit, Fmt, Username}
     end.
 
