@@ -309,7 +309,7 @@
         <td>
           <p>
             <label for="download-filename">Filename for download:</label><br/>
-            <input type="text" id="download-filename" value="<%= fmt_download_filename(overview.node) %>" class="wide" />
+            <input type="text" id="download-filename" value="<%= fmt_download_filename(overview.node) %>" class="wide" pattern="[a-zA-Z0-9!#$%&'*+\-.^_`|~]+" title="Filename must only contain a-z A-Z 0-9 and the characters ! # $ % & ' * + - . ^ _ ` | ~" />
           </p>
         </td>
         <td>
