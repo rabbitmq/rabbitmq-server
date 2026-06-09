@@ -84,6 +84,7 @@ var ALL_COLUMNS =
                    ['state',                'State',                  true]],
       'Messages': [['msgs-ready',      'Ready',          true],
                    ['msgs-unacked',    'Unacknowledged', true],
+                   ['msgs-delayed',    'Delayed',        false],
                    ['msgs-ram',        'In memory',      false],
                    ['msgs-persistent', 'Persistent',     false],
                    ['msgs-total',      'Total',          true]],

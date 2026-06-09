@@ -69,6 +69,9 @@
 <% if (show_column('queues', 'msgs-unacked')) { %>
     <th><%= fmt_sort('Unacked',      'messages_unacknowledged') %></th>
 <% } %>
+<% if (show_column('queues', 'msgs-delayed')) { %>
+    <th><%= fmt_sort('Delayed',      'messages_delayed') %></th>
+<% } %>
 <% if (show_column('queues', 'msgs-ram')) { %>
     <th><%= fmt_sort('In Memory',    'messages_ram') %></th>
 <% } %>
@@ -167,6 +170,9 @@
 <% } %>
 <% } %>
 <% if(!disable_stats) { %>
+<% if (show_column('queues', 'msgs-delayed')) { %>
+   <td class="r"><%= fmt_num_thousands(queue.messages_delayed) %></td>
+<% } %>
 <% if (show_column('queues', 'msgs-ram')) { %>
    <td class="r"><%= fmt_num_thousands(queue.messages_ram) %></td>
 <% } %>
