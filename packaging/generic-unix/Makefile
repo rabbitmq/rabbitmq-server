@@ -1,5 +1,8 @@
 SOURCE_DIST_FILE ?= $(wildcard ../../../rabbitmq-server-*.tar.xz)
 
+# Avoid creating macOS AppleDouble/resource fork files in tarballs.
+export COPYFILE_DISABLE = 1
+
 ifneq ($(filter-out clean,$(MAKECMDGOALS)),)
 ifeq ($(SOURCE_DIST_FILE),)
 $(error Cannot find source archive; please specify SOURCE_DIST_FILE)
