@@ -786,10 +786,9 @@ put_user(User, Version, ActingUser) ->
                 {true, true}   ->
                     throw({error, both_password_and_password_hash_are_provided});
                 {false, false} ->
-                    %% this user won't be able to sign in using
-                    %% a username/password pair but can be used for x509 certificate authentication,
-                    %% with authn backends such as HTTP or LDAP and so on.
-                    create_user_with_password(PassedCredentialValidation, Username, <<"">>, Tags, Permissions, Limits, ActingUser)
+                    %% Passwordless user: cannot use password authentication
+                    %% but x509 and other authn backends still work.
+                    create_user_sans_password(Username, Tags, Permissions, Limits, ActingUser)
             end
     end.
 
@@ -820,6 +819,12 @@ create_user_with_password(_PassedCredentialValidation = false, _Username, _Passw
     %% we don't log here because
     %% rabbit_auth_backend_internal will do it
     throw({error, credential_validation_failed}).
+
+create_user_sans_password(Username, Tags, PreconfiguredPermissions, Limits, ActingUser) ->
+    %% Store an empty hash so that the record matches what `clear_password/2` produces.
+    HashingAlgorithm = rabbit_password:hashing_mod(),
+    add_user_sans_validation(Username, <<"">>, HashingAlgorithm, Tags, Limits, ActingUser),
+    preconfigure_permissions(Username, PreconfiguredPermissions, ActingUser).
 
 create_user_with_password_hash(Username, PasswordHash, Tags, User, Version, PreconfiguredPermissions, Limits, ActingUser) ->
     %% when a hash this provided, credential validation
