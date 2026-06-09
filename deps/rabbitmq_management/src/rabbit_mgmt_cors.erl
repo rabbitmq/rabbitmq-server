@@ -57,22 +57,28 @@ handle_options(ReqData0, Module) ->
     end,
     ReqData2 = case ReqHeaders of
         undefined -> ReqData1;
-        _         -> cowboy_req:set_resp_header(<<"access-control-allow-headers">>,
-                                                ReqHeaders,
-                                                ReqData0)
+        _         ->
+            %% Ensure access-control-request-headers is valid before using it:
+            _ = cow_http_hd:parse_access_control_request_headers(ReqHeaders),
+            cowboy_req:set_resp_header(<<"access-control-allow-headers">>,
+                                       ReqHeaders,
+                                       ReqData0)
     end,
     cowboy_req:set_resp_header(<<"access-control-allow-methods">>,
                                AllowMethods,
                                ReqData2).
 
 %% If the origin header is missing or "null", we disable CORS.
+%% We also disable if origin header is "*" to avoid echoing
+%% back "*" when the configuration explicitly allows "*".
 %% Otherwise, we only enable it if the origin is found in the
 %% cors_allow_origins configuration variable, or if "*" is (it
 %% allows all origins).
 match_origin(ReqData) ->
     case cowboy_req:header(<<"origin">>, ReqData) of
-        undefined -> false;
+        undefined  -> false;
         <<"null">> -> false;
+        <<"*">>    -> false;
         Origin     ->
             AllowedOrigins = application:get_env(rabbitmq_management,
                 cors_allow_origins, []),

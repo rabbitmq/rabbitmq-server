@@ -29,7 +29,7 @@
 -export([filter_conn_ch_list/3, filter_user/2, list_login_vhosts/2,
          list_login_vhosts_names/2]).
 -export([filter_tracked_conn_list/3]).
--export([with_decode/5, decode/1, decode/2, set_resp_header/3,
+-export([with_decode/5, decode/1, decode/2,
          args/1, read_complete_body/1, read_complete_body_with_limit/2]).
 -export([reply_list/3, reply_list/5, reply_list/4,
          sort_list/2, destination_type/1, reply_list_or_paginate/3
@@ -264,7 +264,7 @@ reply(Facts, ReqData, Context) ->
     reply0(extract_columns(Facts, ReqData), ReqData, Context).
 
 reply0(Facts, ReqData, Context) ->
-    ReqData1 = set_resp_header(<<"cache-control">>, "no-cache", ReqData),
+    ReqData1 = cowboy_req:set_resp_header(<<"cache-control">>, "no-cache", ReqData),
     try
         case maps:get(media_type, ReqData1, undefined) of
             {<<"application">>, <<"bert">>, _} ->
@@ -1117,11 +1117,6 @@ filter_tracked_conn_list(List, ReqData, #context{user = #user{username = FilterU
               {user, Username},
               {node, Node}] || #tracked_connection{name = Name, vhost = VHost, username = Username, node = Node} <- List, VHost == FilterVHost, Username == FilterUsername]
     end.
-
-set_resp_header(K, V, ReqData) ->
-    cowboy_req:set_resp_header(K, strip_crlf(V), ReqData).
-
-strip_crlf(Str) -> lists:append(string:tokens(Str, "\r\n")).
 
 args([]) -> args(#{});
 args(L)  -> rabbit_mgmt_format:to_amqp_table(L).

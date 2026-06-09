@@ -12,9 +12,9 @@
 -export([set_common_permission_headers/2]).
 -export([set_cors_headers/2, set_hsts_headers/2, set_csp_headers/2, set_no_cache_headers/2]).
 
--define(X_CONTENT_TYPE_OPTIONS_HEADER, <<"X-Content-Type-Options">>).
--define(X_FRAME_OPTIONS_HEADER, <<"X-Frame-Options">>).
--define(X_XSS_PROTECTION_HEADER, <<"X-XSS-Protection">>).
+-define(X_CONTENT_TYPE_OPTIONS_HEADER, <<"x-content-type-options">>).
+-define(X_FRAME_OPTIONS_HEADER, <<"x-frame-options">>).
+-define(X_XSS_PROTECTION_HEADER, <<"x-xss-protection">>).
 
 %%
 %% API

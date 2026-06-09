@@ -10,6 +10,8 @@
 
 -export([execute/2]).
 
+-include_lib("kernel/include/logger.hrl").
+
 execute(Req, Env) ->
     %% Find the correct dispatch list for this path.
     Listener = maps:get(rabbit_listener, Env),
@@ -17,8 +19,8 @@ execute(Req, Env) ->
         {ok, Dispatch} ->
             {ok, Req, maps:put(dispatch, Dispatch, Env)};
         {error, Reason} ->
-            Req2 = cowboy_req:reply(500,
-                #{<<"content-type">> => <<"text/plain">>},
-                "Registry Error: " ++ io_lib:format("~tp", [Reason]), Req),
+            _ = ?LOG_ERROR("WEB DISPATCH: registry error: ~tp",
+                [Reason]),
+            Req2 = cowboy_req:reply(500, Req),
             {stop, Req2}
     end.
