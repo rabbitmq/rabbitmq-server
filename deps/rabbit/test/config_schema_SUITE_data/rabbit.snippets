@@ -1099,6 +1099,42 @@ credential_validator.regexp = ^abc\\d+",
     ]}]}],
   []},
 
+  %% modern configuration key, HTTPS source with a tagged (encrypted) URL
+ {definition_files_encrypted_url,
+  "definitions.import_backend = https
+                     definitions.https.url = encrypted:GhC4J5lh2DUkbdyKO0aMI8aYJ54mwe4eEWzou4yRFAHMF82IbD6cRiYAiBa8UIzR",
+  [{rabbit, [
+    {definitions, [
+      {import_backend, rabbit_definitions_import_https},
+      {url, {encrypted, "GhC4J5lh2DUkbdyKO0aMI8aYJ54mwe4eEWzou4yRFAHMF82IbD6cRiYAiBa8UIzR"}}
+    ]}]}],
+  []},
+
+  %% HTTPS URL with a non-default port and userinfo. Exercises URL
+  %% reconstruction when cuttlefish's tagged_string parser splits at the
+  %% first colon and leaves multiple colons in the remainder.
+ {definition_files_https_url_with_port_and_userinfo,
+  "definitions.import_backend = https
+                     definitions.https.url = https://admin:s3cret@rabbitmq.example.com:8443/env-1/case1.json",
+  [{rabbit, [
+    {definitions, [
+      {import_backend, rabbit_definitions_import_https},
+      {url, "https://admin:s3cret@rabbitmq.example.com:8443/env-1/case1.json"}
+    ]}]}],
+  []},
+
+  %% Plain HTTP URL (different scheme than the key name suggests). Exercises
+  %% URL reconstruction for a non-https scheme.
+ {definition_files_http_url,
+  "definitions.import_backend = https
+                     definitions.https.url = http://rabbitmq.example.com/case1.json",
+  [{rabbit, [
+    {definitions, [
+      {import_backend, rabbit_definitions_import_https},
+      {url, "http://rabbitmq.example.com/case1.json"}
+    ]}]}],
+  []},
+
   %%
   %% Raft
   %%

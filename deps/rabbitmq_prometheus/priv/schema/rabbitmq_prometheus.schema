@@ -112,11 +112,11 @@ end}.
 {mapping, "prometheus.ssl.cacertfile", "rabbitmq_prometheus.ssl_config.ssl_opts.cacertfile",
     [{datatype, string}, {validators, ["file_accessible"]}]}.
 {mapping, "prometheus.ssl.password", "rabbitmq_prometheus.ssl_config.ssl_opts.password",
-    [{datatype, [tagged_string, string]}]}.
+    [{datatype, [tagged_binary, binary]}]}.
 
 {translation, "rabbitmq_prometheus.ssl_config.ssl_opts.password",
 fun(Conf) ->
-    rabbit_cuttlefish:optionally_tagged_string("prometheus.ssl.password", Conf)
+    rabbit_cuttlefish:optionally_tagged_binary("prometheus.ssl.password", Conf)
 end}.
 
 {mapping, "prometheus.ssl.verify", "rabbitmq_prometheus.ssl_config.ssl_opts.verify", [
