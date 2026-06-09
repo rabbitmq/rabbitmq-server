@@ -7,6 +7,9 @@ PROJECT_DESCRIPTION = RabbitMQ Server
 # value from rabbitmq-components.mk.
 export RABBITMQ_VERSION := $(PROJECT_VERSION)
 
+# Avoid creating macOS AppleDouble/resource fork files in tarballs.
+export COPYFILE_DISABLE = 1
+
 # Release artifacts are put in $(PACKAGES_DIR).
 PACKAGES_DIR ?= $(abspath PACKAGES)
 
@@ -89,6 +92,7 @@ RSYNC_V = $(RSYNC_V_$(V))
 BASE_RSYNC_FLAGS += -a $(RSYNC_V) \
 	       --delete					\
 	       --delete-excluded			\
+	       --exclude '._*'				\
 	       --exclude '.sw?' --exclude '.*.sw?'	\
 	       --exclude '*.beam'			\
 	       --exclude '*.d'				\
