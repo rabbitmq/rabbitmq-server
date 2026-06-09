@@ -1,6 +1,9 @@
 all: package-generic-unix
 	@:
 
+# Avoid creating macOS AppleDouble/resource fork files in tarballs.
+export COPYFILE_DISABLE = 1
+
 # --------------------------------------------------------------------
 # Packaging.
 # --------------------------------------------------------------------
