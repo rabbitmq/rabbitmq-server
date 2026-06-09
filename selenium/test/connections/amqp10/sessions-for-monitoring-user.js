@@ -1,5 +1,4 @@
 const { By, Key, until, Builder } = require('selenium-webdriver')
-require('chromedriver')
 const assert = require('assert')
 const { open: openAmqp, once: onceAmqp, on: onAmqp, close: closeAmqp } = require('../../amqp')
 const { buildDriver, goToHome, captureScreensFor, teardown, delay, doUntil } = require('../../utils')

@@ -28,7 +28,7 @@ start_link() ->
     supervisor:start_link(?MODULE, []).
 
 -spec start_channel(pid(), rabbit_channel_sup:start_link_args()) ->
-          {'ok', pid(), {pid(), any()}}.
+          {'ok', pid(), {pid(), any()}} | {'error', any()}.
 
 start_channel(Pid, Args) ->
     supervisor:start_child(Pid, [Args]).
