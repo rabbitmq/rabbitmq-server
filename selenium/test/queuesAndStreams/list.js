@@ -74,6 +74,7 @@ describe('Queues and Streams management', function () {
       "columns": [
         {"name:":"Ready","id":"checkbox-queues-msgs-ready"},
         {"name:":"Unacknowledged","id":"checkbox-queues-msgs-unacked"},
+        {"name:":"Delayed","id":"checkbox-queues-msgs-delayed"},
         {"name:":"In memory","id":"checkbox-queues-msgs-ram"},
         {"name:":"Persistent","id":"checkbox-queues-msgs-persistent"},
         {"name:":"Total","id":"checkbox-queues-msgs-total"}
