@@ -1,5 +1,4 @@
 const { By, Key, until, Builder } = require('selenium-webdriver')
-require('chromedriver')
 const assert = require('assert')
 const { buildDriver, goToHome, captureScreensFor, teardown, doUntil, log, delay } = require('../utils')
 const { getManagementUrl, basicAuthorization, createVhost, deleteVhost } = require('../mgt-api')

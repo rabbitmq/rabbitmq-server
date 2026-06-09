@@ -977,15 +977,24 @@ create_channel(Channel,
                    } = State) ->
     case is_over_limits(Username) of
         false ->
-            {ok, _ChSupPid, {ChPid, AState}} =
-                rabbit_channel_sup_sup:start_channel(
-                  ChanSupSup, {tcp, Sock, Channel, FrameMax, self(), Name,
-                               User, VHost, Capabilities,
-                               Collector}),
-            MRef = erlang:monitor(process, ChPid),
-            put({ch_pid, ChPid}, {Channel, MRef}),
-            put({channel, Channel}, {ChPid, AState}),
-            {ok, {ChPid, AState}, State#v1{channel_count = ChannelCount + 1}};
+            case rabbit_channel_sup_sup:start_channel(
+                   ChanSupSup, {tcp, Sock, Channel, FrameMax, self(), Name,
+                                User, VHost, Capabilities,
+                                Collector}) of
+                {ok, _ChSupPid, {ChPid, AState}} ->
+                    MRef = erlang:monitor(process, ChPid),
+                    put({ch_pid, ChPid}, {Channel, MRef}),
+                    put({channel, Channel}, {ChPid, AState}),
+                    {ok, {ChPid, AState}, State#v1{channel_count = ChannelCount + 1}};
+                {error, Reason} ->
+                    ?LOG_ERROR(
+                        "Connection ~ts failed to open channel ~tp: ~tp",
+                        [Name, Channel, Reason]),
+                    {error, rabbit_misc:amqp_error(
+                              internal_error,
+                              "failed to open channel ~tp",
+                              [Channel], none)}
+            end;
         {true, Limit, Fmt, FmtArg} ->
             {error, rabbit_misc:amqp_error(
                       not_allowed,

@@ -58,6 +58,83 @@ topic_access(#resource{virtual_host = VHost, name = ExchangeName},
 
 %% Internal -------------------------------------------------------------------
 
+<<<<<<< HEAD
+=======
+pattern_match(wildcard, Subject, Pattern) ->
+    wildcard:match(scope_match_subject(Subject), Pattern);
+pattern_match(regex, Subject, Pattern) ->
+    regex_full_string_match(scope_match_subject(Subject), Pattern).
+
+scope_match_subject(Subject) when is_binary(Subject) ->
+    Subject;
+scope_match_subject(Subject) ->
+    rabbit_data_coercion:to_binary(Subject).
+
+regex_full_string_match(Subject, Pattern)
+        when is_binary(Subject), is_binary(Pattern) ->
+    case byte_size(Pattern) > ?MAX_REGEX_PATTERN_BYTES of
+        true ->
+            ?LOG_WARNING(
+                "OAuth 2 scope regex rejected: pattern exceeds the ~b-byte limit "
+                "(actual size: ~b bytes)",
+                [?MAX_REGEX_PATTERN_BYTES, byte_size(Pattern)]),
+            false;
+        false ->
+            case has_rejected_construct(Pattern) of
+                true ->
+                    ?LOG_WARNING(
+                        "OAuth 2 scope regex rejected: pattern contains an unsupported "
+                        "construct (inline modifier, callout, comment or control verb): ~0tp",
+                        [Pattern]),
+                    false;
+                false ->
+                    do_regex_full_string_match(Subject, Pattern)
+            end
+    end;
+regex_full_string_match(_, _) ->
+    false.
+
+do_regex_full_string_match(Subject, Pattern) ->
+    Wrapped = <<"\\A(?:", Pattern/binary, ")\\z">>,
+    try
+        %% OAuth 2 enforces its own pattern length limit
+        %% (`?MAX_REGEX_PATTERN_BYTES`), which is higher than
+        %% `rabbit_re:compile/2`'s.
+        case re:compile(Wrapped, [unicode, anchored, ucp]) of
+            {ok, MP} ->
+                %% Caller-supplied `match_limit` and `match_limit_recursion`
+                %% override `rabbit_re`'s defaults via `re:run/3`'s last-wins
+                %% rule, keeping OAuth 2's tighter bounds.
+                Opts = [{capture, none},
+                        {match_limit, ?REGEX_MATCH_LIMIT},
+                        {match_limit_recursion, ?REGEX_MATCH_LIMIT_RECURSION}],
+                case rabbit_re:run(Subject, MP, Opts) of
+                    match ->
+                        true;
+                    nomatch ->
+                        false;
+                    {error, Reason} ->
+                        ?LOG_WARNING(
+                            "OAuth 2 scope regex match aborted "
+                            "(reason: ~tp, pattern: ~0tp)",
+                            [Reason, Pattern]),
+                        false
+                end;
+            {error, CompileReason} ->
+                ?LOG_WARNING(
+                    "OAuth 2 scope regex failed to compile "
+                    "(reason: ~tp, pattern: ~0tp)",
+                    [CompileReason, Pattern]),
+                false
+        end
+    catch _:_ ->
+        false
+    end.
+
+has_rejected_construct(Pattern) ->
+    binary:match(Pattern, ?REJECTED_REGEX_CONSTRUCTS) =/= nomatch.
+
+>>>>>>> b310e17814 (Revert "Fix a `tiie_binding_to_dest_with_keep_while_cond`-specific crash on data-less Khepri tree nodes")
 %% -spec get_scope_permissions([binary()]) -> [{rabbit_types:r(pattern), permission()}].
 get_scope_permissions(Scopes) when is_list(Scopes) ->
     lists:filtermap(
