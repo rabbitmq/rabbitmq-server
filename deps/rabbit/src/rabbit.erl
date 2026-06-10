@@ -95,6 +95,16 @@
                     {requires,    rabbit_registry},
                     {enables,     external_infrastructure}]}).
 
+-rabbit_boot_step({quorum_queue_ra_system,
+                   [{description, "quorum queue Ra system"},
+                    {mfa,         {rabbit_sup, start_supervisor_child,
+                                   [rabbit_ra_systems_sup,
+                                    rabbit_ra_systems_sup,
+                                    [],
+                                    permanent]}},
+                    {requires,    database},
+                    {enables,     external_infrastructure}]}).
+
 -rabbit_boot_step({networking_metadata_store,
                    [{description, "networking infrastructure"},
                     {mfa,         {rabbit_sup, start_child, [rabbit_networking_store]}},
