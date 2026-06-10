@@ -238,7 +238,7 @@ confirm_nack(Config) ->
 
 confirm_nack1(Config) ->
     {_Writer, _Limiter, Ch} = rabbit_ct_broker_helpers:test_channel(),
-    ok = rabbit_channel:do(Ch, #'channel.open'{}),
+    ok = rabbit_channel_common:do(Ch, #'channel.open'{}),
     receive #'channel.open_ok'{} -> ok
     after ?TIMEOUT -> throw(failed_to_receive_channel_open_ok)
     end,
@@ -248,14 +248,14 @@ confirm_nack1(Config) ->
     QName2 = ?config(queue_name_2, Config),
     DeclareBindDurableQueue =
         fun(QName) ->
-                rabbit_channel:do(Ch, #'queue.declare'{durable = Durable,
-                                                       queue = QName,
-                                                       arguments = Args}),
+                rabbit_channel_common:do(Ch, #'queue.declare'{durable = Durable,
+                                                              queue = QName,
+                                                              arguments = Args}),
                 receive #'queue.declare_ok'{} ->
-                        rabbit_channel:do(Ch, #'queue.bind'{
-                                                 queue = QName,
-                                                 exchange = <<"amq.direct">>,
-                                                 routing_key = <<"confirms-magic">>}),
+                        rabbit_channel_common:do(Ch, #'queue.bind'{
+                                                        queue = QName,
+                                                        exchange = <<"amq.direct">>,
+                                                        routing_key = <<"confirms-magic">>}),
                         receive #'queue.bind_ok'{} -> ok
                         after ?TIMEOUT -> throw(failed_to_bind_queue)
                         end
@@ -269,7 +269,7 @@ confirm_nack1(Config) ->
     {ok, Q1} = rabbit_amqqueue:lookup(rabbit_misc:r(<<"/">>, queue, QName1)),
     QPid1 = amqqueue:get_pid(Q1),
     %% Enable confirms
-    rabbit_channel:do(Ch, #'confirm.select'{}),
+    rabbit_channel_common:do(Ch, #'confirm.select'{}),
     receive
         #'confirm.select_ok'{} -> ok
     after ?TIMEOUT -> throw(failed_to_enable_confirms)
@@ -277,8 +277,8 @@ confirm_nack1(Config) ->
     %% stop the queue
     ok = gen_server:stop(QPid1, shutdown, 5000),
     %% Publish a message
-    rabbit_channel:do(Ch, #'basic.publish'{exchange = <<"amq.direct">>,
-                                           routing_key = <<"confirms-magic">>
+    rabbit_channel_common:do(Ch, #'basic.publish'{exchange = <<"amq.direct">>,
+                                                  routing_key = <<"confirms-magic">>
                                           },
                       rabbit_basic:build_content(
                         #'P_basic'{delivery_mode = 2}, <<"">>)),
