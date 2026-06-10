@@ -76,7 +76,7 @@ channel_statistics1(_Config) ->
 
     %% Set up a channel and queue
     {_Writer, Ch} = test_spawn(),
-    rabbit_channel:do(Ch, #'queue.declare'{durable = true}),
+    rabbit_channel_common:do(Ch, #'queue.declare'{durable = true}),
     QName = receive #'queue.declare_ok'{queue = Q0} -> Q0
             after ?TIMEOUT -> throw(failed_to_receive_queue_declare_ok)
             end,
@@ -95,10 +95,10 @@ channel_statistics1(_Config) ->
     test_ch_metrics(Check1, ?TIMEOUT),
 
     %% Publish and get a message
-    rabbit_channel:do(Ch, #'basic.publish'{exchange = <<"">>,
-                                           routing_key = QName},
+    rabbit_channel_common:do(Ch, #'basic.publish'{exchange = <<"">>,
+                                                  routing_key = QName},
                       rabbit_basic:build_content(#'P_basic'{}, <<"">>)),
-    rabbit_channel:do(Ch, #'basic.get'{queue = QName}),
+    rabbit_channel_common:do(Ch, #'basic.get'{queue = QName}),
 
     %% Check the stats reflect that
     Check2 = fun() ->
@@ -115,7 +115,7 @@ channel_statistics1(_Config) ->
     test_ch_metrics(Check2, ?TIMEOUT),
 
     %% Check the stats are marked for removal on queue deletion.
-    rabbit_channel:do(Ch, #'queue.delete'{queue = QName}),
+    rabbit_channel_common:do(Ch, #'queue.delete'{queue = QName}),
     Check3 = fun() ->
                      [{{Ch, QRes}, 1, 0, 0, 0, 0, 0, 0, 1}] = ets:lookup(
                                                                 channel_queue_metrics,
@@ -163,7 +163,7 @@ test_ch_metrics(Fun, Timeout) ->
 
 test_spawn() ->
     {Writer, _Limiter, Ch} = rabbit_ct_broker_helpers:test_channel(),
-    ok = rabbit_channel:do(Ch, #'channel.open'{}),
+    ok = rabbit_channel_common:do(Ch, #'channel.open'{}),
     receive #'channel.open_ok'{} -> ok
     after ?TIMEOUT -> throw(failed_to_receive_channel_open_ok)
     end,
