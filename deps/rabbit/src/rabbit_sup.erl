@@ -17,6 +17,7 @@
          start_supervisor_child/1,
          start_supervisor_child/2,
          start_supervisor_child/3,
+         start_supervisor_child/4,
          start_restartable_child/1,
          start_restartable_child/2,
          start_delayed_restartable_child/1,
@@ -74,10 +75,16 @@ start_supervisor_child(Mod, Args) -> start_supervisor_child(Mod, Mod, Args).
 -spec start_supervisor_child(atom(), atom(), [any()]) -> 'ok'.
 
 start_supervisor_child(ChildId, Mod, Args) ->
+    start_supervisor_child(ChildId, Mod, Args, transient).
+
+-spec start_supervisor_child(atom(), atom(), [any()],
+                             supervisor:restart()) -> 'ok'.
+
+start_supervisor_child(ChildId, Mod, Args, Restart) ->
     child_reply(supervisor:start_child(
                   ?SERVER,
                   {ChildId, {Mod, start_link, Args},
-                   transient, infinity, supervisor, [Mod]})).
+                   Restart, infinity, supervisor, [Mod]})).
 
 -spec start_restartable_child(atom()) -> 'ok'.
 

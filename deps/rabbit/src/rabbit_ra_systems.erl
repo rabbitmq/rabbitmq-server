@@ -14,6 +14,9 @@
 -export([setup/0,
          setup/1,
          all_ra_systems/0,
+         all_prelaunch_ra_systems/0,
+         all_app_ra_systems/0,
+         get_config/1,
          are_running/0,
          ensure_ra_system_started/1,
          ensure_ra_system_stopped/1,
@@ -46,13 +49,30 @@ setup(_) ->
 -spec all_ra_systems() -> [ra_system_name()].
 
 all_ra_systems() ->
-    [coordination,
-     quorum_queues].
+    all_prelaunch_ra_systems() ++ all_app_ra_systems().
+
+%% Systems that must be available during prelaunch, before the `rabbit'
+%% application supervision tree exists. `coordination' backs Khepri, which
+%% `rabbit_khepri:setup/0' starts during prelaunch.
+-spec all_prelaunch_ra_systems() -> [ra_system_name()].
+
+all_prelaunch_ra_systems() ->
+    [coordination].
+
+%% Systems whose lifetime is tied to the `rabbit' application supervision tree,
+%% owned by `rabbit_ra_systems_sup' as static children.
+-spec all_app_ra_systems() -> [ra_system_name()].
+
+all_app_ra_systems() ->
+    [quorum_queues].
 
 -spec are_running() -> AreRunning when
       AreRunning :: boolean().
 
 are_running() ->
+    prelaunch_systems_running() andalso app_systems_running().
+
+prelaunch_systems_running() ->
     try
         %% FIXME: We hard-code the name of an internal Ra process here.
         Children = supervisor:which_children(ra_systems_sup),
@@ -60,7 +80,20 @@ are_running() ->
           fun(RaSystem) ->
                   is_ra_system_running(Children, RaSystem)
           end,
-          all_ra_systems())
+          all_prelaunch_ra_systems())
+    catch
+        exit:{noproc, _} ->
+            false
+    end.
+
+app_systems_running() ->
+    try
+        Children = supervisor:which_children(rabbit_ra_systems_sup),
+        lists:all(
+          fun(RaSystem) ->
+                  is_ra_system_running(Children, RaSystem)
+          end,
+          all_app_ra_systems())
     catch
         exit:{noproc, _} ->
             false
@@ -76,11 +109,14 @@ is_ra_system_running(Children, RaSystem) ->
 
 ensure_started() ->
     ?LOG_DEBUG(
-       "Starting Ra systems",
+       "Starting prelaunch Ra systems",
        #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
-    lists:foreach(fun ensure_ra_system_started/1, all_ra_systems()),
+    %% Only prelaunch-owned systems are started here. App-owned systems (see
+    %% all_app_ra_systems/0) are started by rabbit_ra_systems_sup as part of
+    %% the rabbit application supervision tree.
+    lists:foreach(fun ensure_ra_system_started/1, all_prelaunch_ra_systems()),
     ?LOG_DEBUG(
-       "Ra systems started",
+       "Prelaunch Ra systems started",
        #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
     ok.
 
@@ -166,14 +202,16 @@ get_config(coordination = RaSystem) ->
 -spec ensure_stopped() -> ok | no_return().
 ensure_stopped() ->
     ?LOG_DEBUG(
-       "Stopping Ra systems",
+       "Stopping prelaunch Ra systems",
        #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+    %% Only prelaunch-owned systems are stopped here. App-owned systems are
+    %% stopped when rabbit_ra_systems_sup terminates.
     %% lists:reverse/1 is used to stop systems in the same order as would be
     %% done if the ra application was terminated.
     lists:foreach(fun ensure_ra_system_stopped/1,
-                  lists:reverse(all_ra_systems())),
+                  lists:reverse(all_prelaunch_ra_systems())),
     ?LOG_DEBUG(
-       "Ra systems stopped",
+       "Prelaunch Ra systems stopped",
        #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
     ok.
 
