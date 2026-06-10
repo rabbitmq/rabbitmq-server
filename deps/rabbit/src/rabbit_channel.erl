@@ -612,7 +612,12 @@ handle_cast({method, Method, Content, Flow},
 handle_cast(ready_for_close,
             State = #ch{cfg = #conf{state = closing,
                                     writer_pid = WriterPid}}) ->
-    ok = rabbit_writer:send_command_sync(WriterPid, #'channel.close_ok'{}),
+    try
+        rabbit_writer:send_command_sync(WriterPid, #'channel.close_ok'{})
+    catch
+        _Class:Reason ->
+            ?LOG_DEBUG("Failed to send 'channel.close_ok' to client on a terminating connection, reason: ~tp", [Reason])
+    end,
     {stop, normal, State};
 
 handle_cast(terminate, State = #ch{cfg = #conf{writer_pid = WriterPid}}) ->
