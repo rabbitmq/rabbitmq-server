@@ -52,7 +52,7 @@
 -export([send_command/2]).
 -export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1,
          emit_info_all/4, info_local/1]).
--export([refresh_config_local/0, ready_for_close/1]).
+-export([refresh_config_local/0]).
 -export([refresh_interceptors/0]).
 -export([force_event_refresh/1]).
 -export([update_user_state/2]).
@@ -399,11 +399,6 @@ refresh_interceptors() ->
       end,
       list_local()),
     ok.
-
--spec ready_for_close(pid()) -> 'ok'.
-
-ready_for_close(Pid) ->
-    rabbit_channel_common:ready_for_close(Pid).
 
 -spec force_event_refresh(reference()) -> 'ok'.
 
