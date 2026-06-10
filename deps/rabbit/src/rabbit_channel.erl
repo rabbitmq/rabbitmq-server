@@ -48,7 +48,11 @@
 
 -behaviour(gen_server2).
 
+<<<<<<< HEAD
 -export([start_link/11, start_link/12, do/2, do/3, do_flow/3, flush/1, shutdown/1]).
+=======
+-export([start_link/10, start_link/11, flush/1, shutdown/1]).
+>>>>>>> a3f2286c3b (remove unnecessary rabbit_channel:do/{2,3} and rabbit_channel:do_flow/3 - prefer those in rabbit_channel_common)
 -export([send_command/2]).
 -export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1,
          emit_info_all/4, info_local/1]).
@@ -264,27 +268,6 @@ start_link(Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User,
     gen_server2:start_link(
       ?MODULE, [Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol,
                 User, VHost, Capabilities, CollectorPid, Limiter, AmqpParams], []).
-
--spec do(pid(), rabbit_framing:amqp_method_record()) -> 'ok'.
-
-do(Pid, Method) ->
-    rabbit_channel_common:do(Pid, Method).
-
--spec do
-        (pid(), rabbit_framing:amqp_method_record(),
-         rabbit_types:'maybe'(rabbit_types:content())) ->
-            'ok'.
-
-do(Pid, Method, Content) ->
-    rabbit_channel_common:do(Pid, Method, Content).
-
--spec do_flow
-        (pid(), rabbit_framing:amqp_method_record(),
-         rabbit_types:'maybe'(rabbit_types:content())) ->
-            'ok'.
-
-do_flow(Pid, Method, Content) ->
-    rabbit_channel_common:do_flow(Pid, Method, Content).
 
 -spec flush(pid()) -> 'ok'.
 
