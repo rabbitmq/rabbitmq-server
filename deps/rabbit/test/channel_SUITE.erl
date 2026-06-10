@@ -70,10 +70,10 @@ ready_for_close_with_dead_writer1(_Config) ->
     MRef = erlang:monitor(process, Ch),
 
     %% Change channel to closing state (via the reader).
-    rabbit_channel:do(Ch, #'channel.close'{reply_code = 200,
-                                           reply_text = <<"OK">>,
-                                           class_id = 0,
-                                           method_id = 0}),
+    rabbit_channel_common:do(Ch, #'channel.close'{reply_code = 200,
+                                                  reply_text = <<"OK">>,
+                                                  class_id = 0,
+                                                  method_id = 0}),
     receive
         {channel_closing, Ch} -> ok
     after ?TIMEOUT ->
@@ -96,7 +96,7 @@ ready_for_close_with_dead_writer1(_Config) ->
 
 start_channel_and_writer() ->
     {Writer, _Limiter, Ch} = rabbit_ct_broker_helpers:test_channel(),
-    ok = rabbit_channel:do(Ch, #'channel.open'{}),
+    ok = rabbit_channel_common:do(Ch, #'channel.open'{}),
     receive #'channel.open_ok'{} -> ok
     after ?TIMEOUT -> throw(failed_to_receive_channel_open_ok)
     end,

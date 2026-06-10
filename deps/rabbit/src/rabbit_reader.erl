@@ -1091,11 +1091,11 @@ process_frame(Frame, Channel, State) ->
                     put(ChKey, {ChPid, NewAState}),
                     post_process_frame(Frame, ChPid, State1);
                 {ok, Method, NewAState} ->
-                    rabbit_channel:do(ChPid, Method),
+                    rabbit_channel_common:do(ChPid, Method),
                     put(ChKey, {ChPid, NewAState}),
                     post_process_frame(Frame, ChPid, State1);
                 {ok, Method, Content, NewAState} ->
-                    rabbit_channel:do_flow(ChPid, Method, Content),
+                    rabbit_channel_common:do_flow(ChPid, Method, Content),
                     put(ChKey, {ChPid, NewAState}),
                     post_process_frame(Frame, ChPid, control_throttle(State1));
                 {error, Reason} ->
