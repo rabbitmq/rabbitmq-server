@@ -679,7 +679,9 @@ open_connections(Config, NodesAndVHosts) ->
 close_connections(Conns) ->
     lists:foreach(fun
       (Conn) ->
-          rabbit_ct_client_helpers:close_connection(Conn)
+          try rabbit_ct_client_helpers:close_connection(Conn)
+          catch _:_ -> ok
+          end
       end, Conns).
 
 kill_connections(Conns) ->
