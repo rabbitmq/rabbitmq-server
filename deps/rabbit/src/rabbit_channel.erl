@@ -590,7 +590,7 @@ handle_cast(ready_for_close,
         rabbit_writer:send_command_sync(WriterPid, #'channel.close_ok'{})
     catch
         _Class:Reason ->
-            ?LOG_DEBUG("Failed to send 'channel.close_ok' to client on a terminating connection, reason: ~tp", [Reason])
+            ?LOG_DEBUG("Failed to send 'channel.close_ok' on a terminating connection, reason: ~tp", [Reason])
     end,
     {stop, normal, State};
 
