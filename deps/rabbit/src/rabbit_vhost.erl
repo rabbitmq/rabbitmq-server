@@ -178,7 +178,16 @@ add(Name, Metadata, ActingUser) ->
     case exists(Name) of
         true  -> ok;
         false ->
-            catch(do_add(Name, Metadata, ActingUser))
+            try do_add(Name, Metadata, ActingUser) of
+                ok -> ok
+            catch
+                throw:Err ->
+                    Err;
+                exit:Err ->
+                    {'EXIT', Err};
+                error:Err:Stacktrace ->
+                    {'EXIT', {Err, Stacktrace}}
+            end
     end.
 
 do_add(Name, Metadata0, ActingUser) ->
@@ -466,8 +475,12 @@ put_vhost(Name, Description, Tags0, DefaultQueueType, Trace, Username) ->
                         Err ->
                             Err
                     catch
-                        _:Err ->
-                            {error, Err}
+                        throw:Err ->
+                            Err;
+                        exit:Err ->
+                            {'EXIT', Err};
+                        error:Err:Stacktrace ->
+                            {'EXIT', {Err, Stacktrace}}
                     end
              end,
     case Trace of
