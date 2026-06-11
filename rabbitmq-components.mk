@@ -44,7 +44,7 @@ endif
 # all projects use the same versions. It avoids conflicts.
 
 dep_cowboy = hex 2.16.0
-dep_cowlib = hex 2.17.0
+dep_cowlib = hex 2.17.1
 dep_credentials_obfuscation = hex 3.5.0
 dep_cuttlefish = hex 3.9.1
 dep_gen_batch_server = hex 0.9.1
