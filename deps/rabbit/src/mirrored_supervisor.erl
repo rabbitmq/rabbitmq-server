@@ -355,24 +355,43 @@ handle_info({'DOWN', _Ref, process, Pid, _Reason},
                            group    = Group,
                            overall  = O,
                            child_order = ChildOrder}) ->
+    %% A peer mirroring process went down. If we sort first in the group, take
+    %% over its children. This touches Khepri, which can be temporarily
+    %% unavailable, for example during the leader election triggered by the
+    %% very partition that caused this 'DOWN'. We must not crash here: crashing
+    %% restarts the mirroring process and, on repeated failures, exhausts the
+    %% supervisor's restart intensity and tears down the whole group. Instead
+    %% we log and let the periodic reconciliation loop take over the orphaned
+    %% children once Khepri is reachable again.
+    %%
     %% No guarantee pg will have received the DOWN before us.
-    R = case lists:sort(pg:get_members(Group)) -- [Pid] of
-            [O | _] -> ChildSpecs = update_all(O, Pid),
-                       case ChildSpecs of
-                           _ when is_list(ChildSpecs) ->
-                               [start(Delegate, ChildSpec)
-                                || ChildSpec <- restore_child_order(
-                                                  ChildSpecs,
-                                                  ChildOrder)];
-                           {error, _} ->
-                               [ChildSpecs]
-                       end;
-            _       -> []
-        end,
-    case errors(R) of
-        []     -> {noreply, State};
-        Errors -> {stop, {shutdown, Errors}, State}
-    end;
+    try
+        case lists:sort(pg:get_members(Group)) -- [Pid] of
+            [O | _] ->
+                case update_all(O, Pid) of
+                    ChildSpecs when is_list(ChildSpecs) ->
+                        Results = [start(Delegate, ChildSpec)
+                                   || ChildSpec <- restore_child_order(
+                                                     ChildSpecs, ChildOrder)],
+                        case errors(Results) of
+                            []     -> ok;
+                            Errors ->
+                                ?LOG_WARNING("Mirrored supervisor: failover in group ~tp could not start some children, reconciliation will retry: ~tp",
+                                             [Group, Errors])
+                        end;
+                    {error, UpdateError} ->
+                        ?LOG_WARNING("Mirrored supervisor: failover in group ~tp failed (~tp), reconciliation will retry",
+                                     [Group, UpdateError])
+                end;
+            _ ->
+                ok
+        end
+    catch
+        Class:CatchReason:Stacktrace ->
+            ?LOG_WARNING("Mirrored supervisor: failover in group ~tp raised ~tp:~tp, reconciliation will retry~n~tp",
+                         [Group, Class, CatchReason, Stacktrace])
+    end,
+    {noreply, State};
 
 handle_info(reconcile, State = #state{overall  = Overall,
                                       delegate = Delegate,
