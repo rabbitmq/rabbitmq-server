@@ -394,19 +394,38 @@ reconcile_children(Group, Overall, Delegate) ->
 do_reconcile_children(Group, Overall, Delegate) ->
     case ?SUPERVISOR:which_children(Delegate) of
         Children when is_list(Children) ->
-            %% Stop any local child the metadata store says is owned by another
-            %% node, so that exactly one node runs each child.
-            [case rabbit_db_msup:find_mirror(Group, Id) of
-                 {ok, Owner} when Owner =/= Overall ->
-                     ?LOG_WARNING("Mirrored supervisor: child ~tp in group ~tp is owned by another node ~tp (we are ~tp), stopping local instance",
-                                  [Id, Group, node(Owner), node()]),
-                     catch ?SUPERVISOR:terminate_child(Delegate, Id),
-                     catch ?SUPERVISOR:delete_child(Delegate, Id);
-                 _ ->
-                     ok
-             end
-             || {Id, Pid, _, _} <- Children, is_pid(Pid)],
-            reclaim_orphans(Group, Overall, Delegate);
+            Members = rabbit_nodes:list_members(),
+            TotalSize = length(Members),
+            Reachable = rabbit_nodes:list_reachable(),
+            %% A strict majority of cluster members must be reachable to keep
+            %% children running locally. On an even split (for example 2|2 of
+            %% four nodes) neither side reaches the majority, so both sides stop
+            %% their children; the majority side, once one exists again, reclaims
+            %% them on partition heal. Clusters with fewer than three members
+            %% never stop children this way, since they cannot have a majority.
+            IsMinority = (TotalSize >= 3) andalso (length(Reachable) < (TotalSize div 2) + 1),
+            case IsMinority of
+                true ->
+                    [begin
+                         ?LOG_WARNING("Mirrored supervisor: node is in a minority partition (~tp/~tp nodes reachable), stopping local instance of child ~tp in group ~tp",
+                                      [length(Reachable), TotalSize, Id, Group]),
+                         catch ?SUPERVISOR:terminate_child(Delegate, Id),
+                         catch ?SUPERVISOR:delete_child(Delegate, Id)
+                     end
+                     || {Id, Pid, _, _} <- Children, is_pid(Pid)];
+                false ->
+                    [case rabbit_db_msup:find_mirror(Group, Id) of
+                         {ok, Owner} when Owner =/= Overall ->
+                             ?LOG_WARNING("Mirrored supervisor: child ~tp in group ~tp is owned by another node ~tp (we are ~tp), stopping local instance",
+                                          [Id, Group, node(Owner), node()]),
+                             catch ?SUPERVISOR:terminate_child(Delegate, Id),
+                             catch ?SUPERVISOR:delete_child(Delegate, Id);
+                         _ ->
+                             ok
+                     end
+                     || {Id, Pid, _, _} <- Children, is_pid(Pid)],
+                    reclaim_orphans(Group, Overall, Delegate)
+            end;
         _ ->
             ok
     end.
