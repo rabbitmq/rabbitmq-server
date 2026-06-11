@@ -7,7 +7,12 @@
 
 -module(mirrored_supervisor).
 
+-compile(nowarn_deprecated_catch).
+
+-include_lib("khepri/include/khepri.hrl").
+-include("include/rabbit_khepri.hrl").
 -include_lib("kernel/include/logger.hrl").
+-include("mirrored_supervisor.hrl").
 
 %% Mirrored Supervisor
 %% ===================
@@ -270,7 +275,9 @@ handle_call({init, Overall}, _From,
     Results = [maybe_start(Group, Overall, Delegate, S) || S <- ChildSpecs],
     mirrored_supervisor_locks:unlock(LockId),
     case errors(Results) of
-        []     -> {reply, ok, State1};
+        []     ->
+            erlang:send_after(10000, self(), reconcile),
+            {reply, ok, State1};
         Errors -> {stop, {shutdown, Errors}, State1}
     end;
 
@@ -360,8 +367,87 @@ handle_info({'DOWN', _Ref, process, Pid, _Reason},
         Errors -> {stop, {shutdown, Errors}, State}
     end;
 
+handle_info(reconcile, State = #state{overall  = Overall,
+                                      delegate = Delegate,
+                                      group    = Group}) when Overall =/= undefined ->
+    reconcile_children(Group, Overall, Delegate),
+    erlang:send_after(30000, self(), reconcile),
+    {noreply, State};
+
 handle_info(Info, State) ->
     {stop, {unexpected_info, Info}, State}.
+
+reconcile_children(Group, Overall, Delegate) ->
+    %% This runs periodically on every node, so it must tolerate Khepri being
+    %% temporarily unavailable (for example during a leader election or a
+    %% partition), which is precisely when this code is most needed. Any error
+    %% is logged and swallowed; the next reconcile tick retries.
+    try
+        do_reconcile_children(Group, Overall, Delegate)
+    catch
+        Class:Reason:Stacktrace ->
+            ?LOG_WARNING("Mirrored supervisor: reconciliation of group ~tp failed, will retry on the next tick: ~tp:~tp~n~tp",
+                         [Group, Class, Reason, Stacktrace]),
+            ok
+    end.
+
+do_reconcile_children(Group, Overall, Delegate) ->
+    case ?SUPERVISOR:which_children(Delegate) of
+        Children when is_list(Children) ->
+            %% Stop any local child the metadata store says is owned by another
+            %% node, so that exactly one node runs each child.
+            [case rabbit_db_msup:find_mirror(Group, Id) of
+                 {ok, Owner} when Owner =/= Overall ->
+                     ?LOG_WARNING("Mirrored supervisor: child ~tp in group ~tp is owned by another node ~tp (we are ~tp), stopping local instance",
+                                  [Id, Group, node(Owner), node()]),
+                     catch ?SUPERVISOR:terminate_child(Delegate, Id),
+                     catch ?SUPERVISOR:delete_child(Delegate, Id);
+                 _ ->
+                     ok
+             end
+             || {Id, Pid, _, _} <- Children, is_pid(Pid)],
+            reclaim_orphans(Group, Overall, Delegate);
+        _ ->
+            ok
+    end.
+
+reclaim_orphans(Group, Overall, Delegate) ->
+    ActiveMembers = pg:get_members(Group),
+    case lists:sort(ActiveMembers) of
+        [Overall | _] ->
+            Pattern = #mirrored_sup_childspec{key = {Group, '_'}, _ = '_'},
+            Conditions = [?KHEPRI_WILDCARD_STAR_STAR, #if_data_matches{pattern = Pattern}],
+            PathPattern = rabbit_db_msup:khepri_mirrored_supervisor_path(
+                            ?KHEPRI_WILDCARD_STAR,
+                            #if_all{conditions = Conditions}),
+            case rabbit_khepri:get_many(PathPattern) of
+                {ok, Map} ->
+                    [case S0 of
+                         #mirrored_sup_childspec{mirroring_pid = OwnerPid, childspec = ChildSpec, key = {Group, Id}} ->
+                             case lists:member(OwnerPid, ActiveMembers) of
+                                 false ->
+                                     ?LOG_NOTICE("Mirrored supervisor: reclaiming orphan child ~tp in group ~tp (previous owner ~tp was dead/unreachable)",
+                                                 [Id, Group, OwnerPid]),
+                                     NewS = S0#mirrored_sup_childspec{mirroring_pid = Overall},
+                                     case rabbit_khepri:put(Path, NewS) of
+                                         ok ->
+                                             catch ?SUPERVISOR:start_child(Delegate, ChildSpec);
+                                         _ ->
+                                             ok
+                                     end;
+                                 true ->
+                                     ok
+                             end;
+                         _ ->
+                             ok
+                     end
+                     || {Path, S0} <- maps:to_list(Map)];
+                _ ->
+                    ok
+            end;
+        _ ->
+            ok
+    end.
 
 terminate(_Reason, _State) ->
     ok.
