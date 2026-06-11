@@ -22,7 +22,9 @@ all() ->
     set_timeout,
     cancel_timeout,
     cancel_timeout_by_setting,
-    dispatch_async_blocks_until_task_begins
+    dispatch_async_blocks_until_task_begins,
+    unexpected_cast_does_not_terminate_worker,
+    unexpected_info_does_not_terminate_worker
     ].
 
 init_per_testcase(_, Config) ->
@@ -218,3 +220,41 @@ dispatch_async_blocks_until_task_begins(_) ->
                         false
                 end,
     ?assert(DidFinish, "appearance of a free worker should unblock the dispatcher").
+
+unexpected_cast_does_not_terminate_worker(_) ->
+    Worker = worker_pool:submit(?POOL_NAME,
+        fun() -> self() end,
+        reuse),
+    ?assert(is_process_alive(Worker)),
+    gen_server2:cast(Worker, {bogus_unknown_cast, make_ref()}),
+    timer:sleep(100),
+    ?assert(is_process_alive(Worker)),
+    %% Verify the worker can still execute jobs
+    Self = self(),
+    Ref = make_ref(),
+    worker_pool_worker:next_job_from(Worker, Self),
+    worker_pool_worker:submit(Worker,
+        fun() -> Self ! {done, Ref} end,
+        reuse),
+    receive {done, Ref} -> ok
+    after 1000 -> error(worker_terminated_after_unexpected_cast)
+    end.
+
+unexpected_info_does_not_terminate_worker(_) ->
+    Worker = worker_pool:submit(?POOL_NAME,
+        fun() -> self() end,
+        reuse),
+    ?assert(is_process_alive(Worker)),
+    Worker ! {bogus_unknown_message, make_ref()},
+    timer:sleep(100),
+    ?assert(is_process_alive(Worker)),
+    %% Verify the worker can still execute jobs
+    Self = self(),
+    Ref = make_ref(),
+    worker_pool_worker:next_job_from(Worker, Self),
+    worker_pool_worker:submit(Worker,
+        fun() -> Self ! {done, Ref} end,
+        reuse),
+    receive {done, Ref} -> ok
+    after 1000 -> error(worker_terminated_after_unexpected_info)
+    end.
