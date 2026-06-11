@@ -262,11 +262,18 @@ handle_call({init, Overall}, _From,
     Rest = pg:get_members(Group) -- [Overall],
     Nodes = [node(M) || M <- Rest],
     ?LOG_DEBUG("Mirrored supervisor: known group ~tp members: ~tp on nodes ~tp", [Group, Rest, Nodes]),
-    case Rest of
-        [] ->
-            ?LOG_DEBUG("Mirrored supervisor: no known peer members in group ~tp, will delete all child records for it", [Group]),
+    %% An empty group is not enough to justify deleting all child records: a
+    %% peer's mirroring process may simply not have (re)joined the group yet,
+    %% and the records (owned by other nodes) may back children that are still
+    %% running cluster-wide. Deleting them here would wipe those children's
+    %% records on every node. Only clear the records when this node is the sole
+    %% reachable cluster member, i.e. a genuine single-node (re)start; otherwise
+    %% leave any genuinely orphaned records to the reconciliation loop.
+    case Rest =:= [] andalso rabbit_nodes:list_reachable() =:= [node()] of
+        true ->
+            ?LOG_DEBUG("Mirrored supervisor: no known peer members in group ~tp and no other reachable cluster members, will delete all child records for it", [Group]),
             delete_all(Group);
-        _  -> ok
+        false -> ok
     end,
     [begin
          ?GEN_SERVER:cast(mirroring(Pid), {ensure_monitoring, Overall}),
