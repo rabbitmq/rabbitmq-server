@@ -418,42 +418,41 @@ reconcile_children(Group, Overall, Delegate) ->
     end.
 
 do_reconcile_children(Group, Overall, Delegate) ->
-    case ?SUPERVISOR:which_children(Delegate) of
-        Children when is_list(Children) ->
-            Members = rabbit_nodes:list_members(),
-            TotalSize = length(Members),
-            Reachable = rabbit_nodes:list_reachable(),
-            %% A strict majority of cluster members must be reachable to keep
-            %% children running locally. On an even split (for example 2|2 of
-            %% four nodes) neither side reaches the majority, so both sides stop
-            %% their children; the majority side, once one exists again, reclaims
-            %% them on partition heal. Clusters with fewer than three members
-            %% never stop children this way, since they cannot have a majority.
-            IsMinority = (TotalSize >= 3) andalso (length(Reachable) < (TotalSize div 2) + 1),
-            case IsMinority of
-                true ->
-                    [begin
-                         ?LOG_WARNING("Mirrored supervisor: node is in a minority partition (~tp/~tp nodes reachable), stopping local instance of child ~tp in group ~tp",
-                                      [length(Reachable), TotalSize, Id, Group]),
-                         catch ?SUPERVISOR:terminate_child(Delegate, Id),
-                         catch ?SUPERVISOR:delete_child(Delegate, Id)
-                     end
-                     || {Id, Pid, _, _} <- Children, is_pid(Pid)];
-                false ->
-                    [case rabbit_db_msup:find_mirror(Group, Id) of
-                         {ok, Owner} when Owner =/= Overall ->
-                             ?LOG_WARNING("Mirrored supervisor: child ~tp in group ~tp is owned by another node ~tp (we are ~tp), stopping local instance",
-                                          [Id, Group, node(Owner), node()]),
-                             catch ?SUPERVISOR:terminate_child(Delegate, Id),
-                             catch ?SUPERVISOR:delete_child(Delegate, Id);
-                         _ ->
-                             ok
-                     end
-                     || {Id, Pid, _, _} <- Children, is_pid(Pid)],
-                    reclaim_orphans(Group, Overall, Delegate)
-            end;
-        _ ->
-            ok
+    Children = ?SUPERVISOR:which_children(Delegate),
+    RunningIds = [Id || {Id, Pid, _, _} <- Children, is_pid(Pid)],
+    Members = rabbit_nodes:list_members(),
+    TotalSize = length(Members),
+    Reachable = rabbit_nodes:list_reachable(),
+    %% A strict majority of cluster members must be reachable to keep children
+    %% running locally. On an even split (for example 2|2 of four nodes) neither
+    %% side reaches the majority, so both sides stop their children; the
+    %% majority side, once one exists again, reclaims them on partition heal.
+    %% Clusters with fewer than three members never stop children this way,
+    %% since they cannot have a majority.
+    IsMinority = (TotalSize >= 3) andalso (length(Reachable) < (TotalSize div 2) + 1),
+    case IsMinority of
+        true ->
+            lists:foreach(
+              fun(Id) ->
+                      ?LOG_WARNING("Mirrored supervisor: node is in a minority partition (~tp/~tp nodes reachable), stopping local instance of child ~tp in group ~tp",
+                                   [length(Reachable), TotalSize, Id, Group]),
+                      catch ?SUPERVISOR:terminate_child(Delegate, Id),
+                      catch ?SUPERVISOR:delete_child(Delegate, Id)
+              end, RunningIds);
+        false ->
+            lists:foreach(
+              fun(Id) ->
+                      case rabbit_db_msup:find_mirror(Group, Id) of
+                          {ok, Owner} when Owner =/= Overall ->
+                              ?LOG_WARNING("Mirrored supervisor: child ~tp in group ~tp is owned by another node ~tp (we are ~tp), stopping local instance",
+                                           [Id, Group, node(Owner), node()]),
+                              catch ?SUPERVISOR:terminate_child(Delegate, Id),
+                              catch ?SUPERVISOR:delete_child(Delegate, Id);
+                          _ ->
+                              ok
+                      end
+              end, RunningIds),
+            reclaim_orphans(Group, Overall, Delegate)
     end.
 
 reclaim_orphans(Group, Overall, Delegate) ->
@@ -467,26 +466,31 @@ reclaim_orphans(Group, Overall, Delegate) ->
                             #if_all{conditions = Conditions}),
             case rabbit_khepri:get_many(PathPattern) of
                 {ok, Map} ->
-                    [case S0 of
-                         #mirrored_sup_childspec{mirroring_pid = OwnerPid, childspec = ChildSpec, key = {Group, Id}} ->
-                             case lists:member(OwnerPid, ActiveMembers) of
-                                 false ->
-                                     ?LOG_NOTICE("Mirrored supervisor: reclaiming orphan child ~tp in group ~tp (previous owner ~tp was dead/unreachable)",
-                                                 [Id, Group, OwnerPid]),
-                                     NewS = S0#mirrored_sup_childspec{mirroring_pid = Overall},
-                                     case rabbit_khepri:put(Path, NewS) of
-                                         ok ->
-                                             catch ?SUPERVISOR:start_child(Delegate, ChildSpec);
-                                         _ ->
-                                             ok
-                                     end;
-                                 true ->
-                                     ok
-                             end;
-                         _ ->
-                             ok
-                     end
-                     || {Path, S0} <- maps:to_list(Map)];
+                    lists:foreach(
+                      %% get_many already restricts results to this group via
+                      %% the #if_data_matches condition, so the key's group
+                      %% element is always Group here.
+                      fun({Path, #mirrored_sup_childspec{mirroring_pid = OwnerPid,
+                                                         childspec = ChildSpec,
+                                                         key = {_, Id}} = S0}) ->
+                              case lists:member(OwnerPid, ActiveMembers) of
+                                  false ->
+                                      ?LOG_NOTICE("Mirrored supervisor: reclaiming orphan child ~tp in group ~tp (previous owner ~tp was dead/unreachable)",
+                                                  [Id, Group, OwnerPid]),
+                                      NewS = S0#mirrored_sup_childspec{mirroring_pid = Overall},
+                                      case rabbit_khepri:put(Path, NewS) of
+                                          ok ->
+                                              catch ?SUPERVISOR:start_child(Delegate, ChildSpec),
+                                              ok;
+                                          _ ->
+                                              ok
+                                      end;
+                                  true ->
+                                      ok
+                              end;
+                         (_) ->
+                              ok
+                      end, maps:to_list(Map));
                 _ ->
                     ok
             end;
