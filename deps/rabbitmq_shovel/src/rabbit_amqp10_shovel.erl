@@ -104,9 +104,10 @@ parse_source(Def) ->
        prefetch_count => PrefetchCount,
        consumer_args => []}, Headers}.
 
-parse_dest({_VHost, _Name}, _ClusterName, Def, SourceHeaders) ->
+parse_dest({_VHost, _Name}, _ClusterName, Def, _SourceHeaders) ->
     Uris = deobfuscated_uris(<<"dest-uri">>, Def),
     Address = pget(<<"dest-address">>, Def),
+<<<<<<< HEAD
     Properties =
         rabbit_data_coercion:to_proplist(
             pget(<<"dest-properties">>, Def, [])),
@@ -125,6 +126,14 @@ parse_dest({_VHost, _Name}, _ClusterName, Def, SourceHeaders) ->
                       lists:map(fun({K, V}) ->
                                         {rabbit_data_coercion:to_atom(K), V}
                                 end, Properties)),
+=======
+    GlobalPredeclared = proplists:get_value(predeclared, application:get_env(?APP, topology, []), false),
+    Predeclared = pget(<<"dest-predeclared">>, Def, GlobalPredeclared),
+    #{module => rabbit_amqp10_shovel,
+      uris => Uris,
+      target_address => Address,
+      predeclared => Predeclared,
+>>>>>>> f05734d738 (Shovels: refactor in follow-up to #14256)
       add_timestamp_header => pget(<<"dest-add-timestamp-header">>, Def, false),
       add_forward_headers => pget(<<"dest-add-forward-headers">>, Def, false),
       unacked => #{}
