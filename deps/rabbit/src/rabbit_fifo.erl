@@ -290,9 +290,12 @@ apply_(_Meta, #register_enqueuer{pid = Pid},
                 false ->
                     State0#?STATE{enqueuers = Enqueuers0#{Pid => #enqueuer{}}}
             end,
-    Res = case is_over_limit(State) of
-              true when Overflow == reject_publish ->
-                  reject_publish;
+    Res = case Overflow of
+              reject_publish ->
+                  case is_over_limit(State) of
+                      true -> reject_publish;
+                      false -> ok
+                  end;
               _ ->
                   ok
           end,
@@ -1981,6 +1984,10 @@ apply_enqueue(#{index := RaftIdx,
                 ingress_bytes_by_node =
                     bump_ingress(node_of(From), TotalSize, IngressByNode)},
             checkout(Meta, State0, State2, Effects1);
+        {reject_publish_dlx, State, Effects} ->
+            %% Message was rejected and dead-lettered before enqueuing.
+            %% Reply with reject_publish so the client nacks the publisher.
+            checkout(Meta, State0, State, Effects, reject_publish);
         {out_of_sequence, State, Effects} ->
             {State, not_enqueued, Effects};
         {duplicate, State, Effects} ->
@@ -2074,6 +2081,38 @@ maybe_enqueue(RaftIdx, Ts, undefined, undefined, RawMsg,
               {MetaSize, BodySize},
               Effects, #?STATE{msg_bytes_enqueue = Enqueue,
                                messages = Messages,
+                               cfg = #cfg{overflow_strategy = reject_publish_dlx,
+                                          dead_letter_handler = DLH},
+                               dlx = DlxState,
+                               reclaimable_bytes = ReclaimableBytes0,
+                               messages_total = Total} = State0) ->
+    %% Untracked enqueue rejected due to reject_publish_dlx overflow
+    Size = MetaSize + BodySize,
+    case would_overflow(Size, State0) of
+        true ->
+            Header0 = maybe_set_msg_ttl(RawMsg, Ts, Size, State0),
+            Header = maybe_set_msg_delivery_count(RawMsg, Header0),
+            Msg = make_msg(RaftIdx, Header),
+            {_, _, DlxEffects} =
+                discard_or_dead_letter([Msg], maxlen, DLH, DlxState),
+            State = State0#?STATE{reclaimable_bytes = ReclaimableBytes0 +
+                                                      Size + ?ENQ_OVERHEAD_B},
+            {reject_publish_dlx, State, DlxEffects ++ Effects};
+        false ->
+            Header0 = maybe_set_msg_ttl(RawMsg, Ts, Size, State0),
+            Header = maybe_set_msg_delivery_count(RawMsg, Header0),
+            Msg = make_msg(RaftIdx, Header),
+            Priority = msg_priority(RawMsg),
+            State = State0#?STATE{msg_bytes_enqueue = Enqueue + Size,
+                                  messages_total = Total + 1,
+                                  messages = rabbit_fifo_pq:in(Priority, Msg,
+                                                               Messages)},
+            {ok, State, Effects}
+    end;
+maybe_enqueue(RaftIdx, Ts, undefined, undefined, RawMsg,
+              {MetaSize, BodySize},
+              Effects, #?STATE{msg_bytes_enqueue = Enqueue,
+                               messages = Messages,
                                messages_total = Total} = State0) ->
     % direct enqueue without tracking
     Size = MetaSize + BodySize,
@@ -2088,11 +2127,9 @@ maybe_enqueue(RaftIdx, Ts, undefined, undefined, RawMsg,
     {ok, State, Effects};
 maybe_enqueue(RaftIdx, Ts, From, MsgSeqNo, RawMsg,
               {MetaSize, BodySize} = MsgSize,
-              Effects0, #?STATE{msg_bytes_enqueue = BytesEnqueued,
+              Effects0, #?STATE{cfg = Cfg,
                                 enqueuers = Enqueuers0,
-                                messages = Messages,
-                                reclaimable_bytes = ReclaimableBytes0,
-                                messages_total = Total} = State0) ->
+                                reclaimable_bytes = ReclaimableBytes0} = State0) ->
     Size = MetaSize + BodySize,
     case maps:get(From, Enqueuers0, undefined) of
         undefined ->
@@ -2103,27 +2140,31 @@ maybe_enqueue(RaftIdx, Ts, From, MsgSeqNo, RawMsg,
             {Res, State, [{monitor, process, From} | Effects]};
         #enqueuer{next_seqno = MsgSeqNo} = Enq0 ->
             % it is the next expected seqno
-            % TODO: it is not good to query the `mc' container inside the
-            % statemachine as it may be modified to behave differently without
-            % concern for the state machine
-            Header0 = maybe_set_msg_ttl(RawMsg, Ts, Size, State0),
-            Header = maybe_set_msg_delivery_count(RawMsg, Header0),
-            Msg = make_msg(RaftIdx, Header),
             Enq = Enq0#enqueuer{next_seqno = MsgSeqNo + 1},
-            MsgCache = case can_immediately_deliver(State0) of
-                           true ->
-                               {RaftIdx, RawMsg};
-                           false ->
-                               undefined
-                       end,
-            Priority = msg_priority(RawMsg),
-            State = State0#?STATE{msg_bytes_enqueue = BytesEnqueued + Size,
-                                  messages_total = Total + 1,
-                                  messages = rabbit_fifo_pq:in(Priority, Msg, Messages),
-                                  enqueuers = Enqueuers0#{From => Enq},
-                                  msg_cache = MsgCache
-                                 },
-            {ok, State, Effects0};
+            case Cfg of
+                #cfg{overflow_strategy = reject_publish_dlx,
+                     dead_letter_handler = DLH} ->
+                    case would_overflow(Size, State0) of
+                        true ->
+                            Header0 = maybe_set_msg_ttl(RawMsg, Ts, Size, State0),
+                            Header = maybe_set_msg_delivery_count(RawMsg, Header0),
+                            Msg = make_msg(RaftIdx, Header),
+                            {_, _, DlxEffects} =
+                                discard_or_dead_letter([Msg], maxlen, DLH,
+                                                      State0#?STATE.dlx),
+                            State = State0#?STATE{
+                                      reclaimable_bytes =
+                                          ReclaimableBytes0 + Size + ?ENQ_OVERHEAD_B,
+                                      enqueuers = Enqueuers0#{From => Enq}},
+                            {reject_publish_dlx, State, DlxEffects ++ Effects0};
+                        false ->
+                            enqueue_msg(RaftIdx, Ts, RawMsg, Size, Enq, From,
+                                        Effects0, State0)
+                    end;
+                _ ->
+                    enqueue_msg(RaftIdx, Ts, RawMsg, Size, Enq, From,
+                                Effects0, State0)
+            end;
         #enqueuer{next_seqno = Next}
           when MsgSeqNo > Next ->
             %% TODO: when can this happen?
@@ -2136,6 +2177,29 @@ maybe_enqueue(RaftIdx, Ts, From, MsgSeqNo, RawMsg,
                                   ReclaimableBytes0 + Size + ?ENQ_OVERHEAD_B},
             {duplicate, State, Effects0}
     end.
+
+enqueue_msg(RaftIdx, Ts, RawMsg, Size, Enq, From, Effects0,
+            #?STATE{msg_bytes_enqueue = BytesEnqueued,
+                    enqueuers = Enqueuers0,
+                    messages = Messages,
+                    messages_total = Total} = State0) ->
+    Header0 = maybe_set_msg_ttl(RawMsg, Ts, Size, State0),
+    Header = maybe_set_msg_delivery_count(RawMsg, Header0),
+    Msg = make_msg(RaftIdx, Header),
+    MsgCache = case can_immediately_deliver(State0) of
+                   true ->
+                       {RaftIdx, RawMsg};
+                   false ->
+                       undefined
+               end,
+    Priority = msg_priority(RawMsg),
+    State = State0#?STATE{msg_bytes_enqueue = BytesEnqueued + Size,
+                          messages_total = Total + 1,
+                          messages = rabbit_fifo_pq:in(Priority, Msg, Messages),
+                          enqueuers = Enqueuers0#{From => Enq},
+                          msg_cache = MsgCache
+                         },
+    {ok, State, Effects0}.
 
 return(Meta, ConsumerKey, Consumer0,
        MsgIds, IncrDelCount, Anns, Effects0, State0)
@@ -2521,17 +2585,13 @@ evaluate_limit0(Index, BeforeState,
         true when Strategy == reject_publish ->
             %% generate send_msg effect for each enqueuer to let them know
             %% they need to block
-            {Enqs, Effects} =
-                maps:fold(
-                  fun (P, #enqueuer{blocked = undefined} = E0, {Enqs, Acc}) ->
-                          E = E0#enqueuer{blocked = Index},
-                          {Enqs#{P => E},
-                           [{send_msg, P, {queue_status, reject_publish},
-                             [ra_event]} | Acc]};
-                      (_P, _E, Acc) ->
-                          Acc
-                  end, {Enqs0, Effects0}, Enqs0),
+            {Enqs, Effects} = block_enqueuers(Index, Enqs0, Effects0),
             {State0#?STATE{enqueuers = Enqs}, Effects};
+        _ when Strategy == reject_publish_dlx ->
+            %% For reject_publish_dlx, we don't block enqueuers.
+            %% Messages always flow to the server where they are rejected
+            %% and dead-lettered. The publisher gets a nack via the reply.
+            {State0, Effects0};
         false when Strategy == reject_publish ->
             %% TODO: optimise as this case gets called for every command
             %% pretty much
@@ -2547,6 +2607,17 @@ evaluate_limit0(Index, BeforeState,
         false ->
             {State0, Effects0}
     end.
+
+block_enqueuers(Index, Enqs0, Effects0) ->
+    maps:fold(
+      fun (P, #enqueuer{blocked = undefined} = E0, {Enqs, Acc}) ->
+              E = E0#enqueuer{blocked = Index},
+              {Enqs#{P => E},
+               [{send_msg, P, {queue_status, reject_publish},
+                 [ra_event]} | Acc]};
+          (_P, _E, Acc) ->
+              Acc
+      end, {Enqs0, Effects0}, Enqs0).
 
 unblock_enqueuers(Enqs0, Effects0) ->
     maps:fold(
@@ -3335,6 +3406,18 @@ is_over_limit(#?STATE{cfg = #cfg{max_length = MaxLength,
     {NumDlx, BytesDlx} = dlx_stat(DlxState),
     (messages_ready_plus_delayed(State) + NumDlx > MaxLength) orelse
     (BytesEnq + BytesDlx > MaxBytes).
+
+%% Checks whether enqueuing a message of the given size would exceed the limits.
+would_overflow(_Size, #?STATE{cfg = #cfg{max_length = undefined,
+                                         max_bytes = undefined}}) ->
+    false;
+would_overflow(Size, #?STATE{cfg = #cfg{max_length = MaxLength,
+                                         max_bytes = MaxBytes},
+                              msg_bytes_enqueue = BytesEnq,
+                              dlx = DlxState} = State) ->
+    {NumDlx, BytesDlx} = dlx_stat(DlxState),
+    (messages_ready_plus_delayed(State) + NumDlx >= MaxLength) orelse
+    (BytesEnq + Size + BytesDlx > MaxBytes).
 
 is_below_soft_limit(#?STATE{cfg = #cfg{max_length = undefined,
                                         max_bytes = undefined}}) ->

@@ -2006,6 +2006,8 @@ dlh(undefined, _, Strategy, _, QName) ->
     undefined;
 dlh(_, _, <<"at-least-once">>, reject_publish, _) ->
     at_least_once;
+dlh(_, _, <<"at-least-once">>, reject_publish_dlx, _) ->
+    at_least_once;
 dlh(Exchange, RoutingKey, <<"at-least-once">>, drop_head, QName) ->
     ?LOG_WARNING("Falling back to dead-letter-strategy at-most-once for ~ts "
                        "because configured dead-letter-strategy at-least-once is incompatible with "
@@ -2436,10 +2438,7 @@ update_type_state(Q, Fun) when ?is_amqqueue(Q) ->
 overflow(undefined, Def, _QName) -> Def;
 overflow(<<"reject-publish">>, _Def, _QName) -> reject_publish;
 overflow(<<"drop-head">>, _Def, _QName) -> drop_head;
-overflow(<<"reject-publish-dlx">> = V, Def, QName) ->
-    ?LOG_WARNING("Invalid overflow strategy ~tp for quorum queue: ~ts",
-                       [V, rabbit_misc:rs(QName)]),
-    Def.
+overflow(<<"reject-publish-dlx">>, _Def, _QName) -> reject_publish_dlx.
 
 -spec notify_decorators(amqqueue:amqqueue()) -> 'ok'.
 notify_decorators(Q) when ?is_amqqueue(Q) ->

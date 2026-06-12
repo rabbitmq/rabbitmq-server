@@ -195,6 +195,7 @@ all_tests() ->
      message_bytes_metrics,
      queue_length_limit_drop_head,
      queue_length_limit_reject_publish,
+     queue_length_limit_reject_publish_dlx,
      queue_length_limit_policy_cleared,
      subscribe_redelivery_limit,
      subscribe_redelivery_limit_disable,
@@ -4623,6 +4624,43 @@ queue_length_limit_reject_publish(Config) ->
     ok = publish_confirm(Ch, QQ),
     ok.
 
+queue_length_limit_reject_publish_dlx(Config) ->
+    check_quorum_queues_v9_compat(Config),
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    DLQ = <<"dead_letter_queue">>,
+    RaName = ra_name(QQ),
+    DLRaName = ra_name(DLQ),
+
+    ?assertEqual({'queue.declare_ok', DLQ, 0, 0},
+                 declare(Ch, DLQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                  {<<"x-max-length">>, long, 3},
+                                  {<<"x-overflow">>, longstr, <<"reject-publish-dlx">>},
+                                  {<<"x-dead-letter-exchange">>, longstr, <<>>},
+                                  {<<"x-dead-letter-routing-key">>, longstr, DLQ}])),
+
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+    %% Fill the queue up to the limit
+    ok = publish_confirm(Ch, QQ),
+    ok = publish_confirm(Ch, QQ),
+    ok = publish_confirm(Ch, QQ),
+    wait_for_messages_ready(Servers, RaName, 3),
+    %% Next publish should be nacked and dead-lettered
+    fail = publish_confirm(Ch, QQ),
+    fail = publish_confirm(Ch, QQ),
+    %% Source queue stays at max-length
+    wait_for_messages_ready(Servers, RaName, 3),
+    %% Rejected messages arrive at the DLX collector
+    wait_for_messages_ready(Servers, DLRaName, 2),
+
+    [?assertMatch(#'queue.delete_ok'{},
+                  amqp_channel:call(Ch, #'queue.delete'{queue = Q}))
+     || Q <- [QQ, DLQ]].
+
 queue_length_limit_policy_cleared(Config) ->
     [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
@@ -6631,13 +6669,21 @@ basic_get(Ch, Q, NoAck, Attempt) ->
     end.
 
 check_quorum_queues_v8_compat(Config) ->
+    check_quorum_queues_compat(Config, 8).
+
+check_quorum_queues_v9_compat(Config) ->
+    check_quorum_queues_compat(Config, 9).
+
+check_quorum_queues_compat(Config, MinVersion) ->
     Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     MacVer = lists:min([V || {ok, V} <- erpc:multicall(Nodes, rabbit_fifo, version, [])]),
-    case MacVer >= 8 of
+    case MacVer >= MinVersion of
         true ->
             ok;
         false ->
-            throw({skip, "test will only work on QQ machine version >= 8"})
+            throw({skip, lists:flatten(
+                           io_lib:format("test will only work on QQ machine version >= ~b",
+                                         [MinVersion]))})
     end.
 
 lists_interleave([], _List) ->

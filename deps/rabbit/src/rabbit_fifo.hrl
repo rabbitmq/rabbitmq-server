@@ -223,7 +223,9 @@
          unused_1 = ?NIL,
          dead_letter_handler :: dead_letter_handler(),
          become_leader_handler :: option(applied_mfa()),
-         overflow_strategy = drop_head :: drop_head | reject_publish,
+         overflow_strategy = drop_head :: drop_head |
+                                          reject_publish |
+                                          reject_publish_dlx,
          max_length :: option(non_neg_integer()),
          max_bytes :: option(non_neg_integer()),
          %% whether single active consumer is on or not for this queue
@@ -311,7 +313,9 @@
                     % checkpoint_max_indexes => non_neg_integer(),
                     max_length => non_neg_integer(),
                     max_bytes => non_neg_integer(),
-                    overflow_strategy => drop_head | reject_publish,
+                    overflow_strategy => drop_head |
+                                         reject_publish |
+                                         reject_publish_dlx,
                     single_active_consumer_on => boolean(),
                     delivery_limit => non_neg_integer() | -1,
                     expires => non_neg_integer(),
