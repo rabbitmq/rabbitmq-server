@@ -386,20 +386,33 @@ handle_info({'DOWN', _Ref, process, Pid, _Reason},
     try
         case lists:sort(pg:get_members(Group)) -- [Pid] of
             [O | _] ->
-                case update_all(O, Pid) of
-                    ChildSpecs when is_list(ChildSpecs) ->
-                        Results = [start(Delegate, ChildSpec)
-                                   || ChildSpec <- restore_child_order(
-                                                     ChildSpecs, ChildOrder)],
-                        case errors(Results) of
-                            []     -> ok;
-                            Errors ->
-                                ?LOG_WARNING("Mirrored supervisor: failover in group ~tp could not start some children, reconciliation will retry: ~tp",
-                                             [Group, Errors])
-                        end;
-                    {error, UpdateError} ->
-                        ?LOG_WARNING("Mirrored supervisor: failover in group ~tp failed (~tp), reconciliation will retry",
-                                     [Group, UpdateError])
+                case partition_status() of
+                    {true, _, _} ->
+                        %% We are in a minority partition. We must not take over
+                        %% the children (the majority side owns them), and we
+                        %% cannot: update_all writes to Khepri, which has no
+                        %% quorum here, so it would block this process until it
+                        %% times out - stalling every other message, including
+                        %% the reconciliation that is supposed to stop our local
+                        %% children. Skip the failover; reconciliation handles
+                        %% the minority case.
+                        ok;
+                    {false, _, _} ->
+                        case update_all(O, Pid) of
+                            ChildSpecs when is_list(ChildSpecs) ->
+                                Results = [start(Delegate, ChildSpec)
+                                           || ChildSpec <- restore_child_order(
+                                                             ChildSpecs, ChildOrder)],
+                                case errors(Results) of
+                                    []     -> ok;
+                                    Errors ->
+                                        ?LOG_WARNING("Mirrored supervisor: failover in group ~tp could not start some children, reconciliation will retry: ~tp",
+                                                     [Group, Errors])
+                                end;
+                            {error, UpdateError} ->
+                                ?LOG_WARNING("Mirrored supervisor: failover in group ~tp failed (~tp), reconciliation will retry",
+                                             [Group, UpdateError])
+                        end
                 end;
             _ ->
                 ok
@@ -446,6 +459,20 @@ handle_info({PgRef, Event, _Group, _Pids},
 handle_info(Info, State) ->
     {stop, {unexpected_info, Info}, State}.
 
+%% Determine whether this node is in a minority partition, along with the
+%% reachable and total cluster member counts (for logging). A strict majority
+%% of cluster members must be reachable; clusters smaller than three members
+%% never qualify, since they cannot establish a majority. On an even split
+%% (for example 2|2 of four nodes) neither side reaches the majority, so both
+%% sides treat themselves as minority and stop their children. These counts
+%% come from Erlang distribution and the locally-known cluster membership, both
+%% of which stay available on a partitioned node (unlike Khepri writes).
+partition_status() ->
+    TotalSize = length(rabbit_nodes:list_members()),
+    ReachableCount = length(rabbit_nodes:list_reachable()),
+    IsMinority = (TotalSize >= 3) andalso (ReachableCount < (TotalSize div 2) + 1),
+    {IsMinority, ReachableCount, TotalSize}.
+
 reconcile_children(Group, Overall, Delegate) ->
     %% This runs periodically on every node, so it must tolerate Khepri being
     %% temporarily unavailable (for example during a leader election or a
@@ -463,22 +490,13 @@ reconcile_children(Group, Overall, Delegate) ->
 do_reconcile_children(Group, Overall, Delegate) ->
     Children = ?SUPERVISOR:which_children(Delegate),
     RunningIds = [Id || {Id, Pid, _, _} <- Children, is_pid(Pid)],
-    Members = rabbit_nodes:list_members(),
-    TotalSize = length(Members),
-    Reachable = rabbit_nodes:list_reachable(),
-    %% A strict majority of cluster members must be reachable to keep children
-    %% running locally. On an even split (for example 2|2 of four nodes) neither
-    %% side reaches the majority, so both sides stop their children; the
-    %% majority side, once one exists again, reclaims them on partition heal.
-    %% Clusters with fewer than three members never stop children this way,
-    %% since they cannot have a majority.
-    IsMinority = (TotalSize >= 3) andalso (length(Reachable) < (TotalSize div 2) + 1),
+    {IsMinority, ReachableCount, TotalSize} = partition_status(),
     case IsMinority of
         true ->
             lists:foreach(
               fun(Id) ->
                       ?LOG_WARNING("Mirrored supervisor: node is in a minority partition (~tp/~tp nodes reachable), stopping local instance of child ~tp in group ~tp",
-                                   [length(Reachable), TotalSize, Id, Group]),
+                                   [ReachableCount, TotalSize, Id, Group]),
                       catch ?SUPERVISOR:terminate_child(Delegate, Id),
                       catch ?SUPERVISOR:delete_child(Delegate, Id)
               end, RunningIds);
