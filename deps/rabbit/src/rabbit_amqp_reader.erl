@@ -434,7 +434,8 @@ handle_connection_frame(
                channel_max = ClientChannelMax,
                idle_time_out = IdleTimeout,
                hostname = Hostname,
-               properties = Properties},
+               properties = Properties,
+               desired_capabilities = DesCapabilities},
   #v1{connection_state = waiting_open,
       connection = Connection = #v1_connection{
                                    name = ConnectionName,
@@ -456,113 +457,150 @@ handle_connection_frame(
     ok = rabbit_access_control:check_vhost_access(User, Vhost, {socket, Sock}, #{}),
     ok = check_vhost_connection_limit(Vhost, Username),
     ok = check_user_connection_limit(Username),
-    Timer = maybe_start_credential_expiry_timer(User),
-    rabbit_core_metrics:auth_attempt_succeeded(<<>>, Username, amqp10),
-    notify_auth(user_authentication_success, Username, State0),
-    ?LOG_INFO(
-       "Connection from AMQP 1.0 container '~ts': user '~ts' authenticated "
-       "using SASL mechanism ~s and granted access to vhost '~ts'",
-       [ContainerId, Username, Mechanism, Vhost]),
 
-    OutgoingMaxFrameSize = case ClientMaxFrame of
-                               undefined ->
-                                   unlimited;
-                               {uint, Bytes}
-                                 when Bytes >= ?MIN_MAX_FRAME_1_0_SIZE ->
-                                   Bytes;
-                               {uint, Bytes} ->
-                                   protocol_error(
-                                     ?V_1_0_AMQP_ERROR_FRAME_SIZE_TOO_SMALL,
-                                     "max_frame_size (~w) < minimum maximum frame size (~w)",
-                                     [Bytes, ?MIN_MAX_FRAME_1_0_SIZE])
-                           end,
-    SendTimeoutSec =
-    case IdleTimeout of
-        undefined ->
-            0;
-        {uint, Interval} ->
-            if Interval =:= 0 ->
-                   0;
-               Interval < 1000 ->
-                   %% "If a peer can not, for any reason support a proposed idle timeout, then it SHOULD
-                   %% close the connection using a close frame with an error explaining why. There is no
-                   %% requirement for peers to support arbitrarily short or long idle timeouts." [2.4.5]
-                   %% rabbit_heartbeat does not want to support sub-second timeouts.
-                   protocol_error(
-                     ?V_1_0_AMQP_ERROR_NOT_ALLOWED,
-                     "idle-time-out (~b ms) < minimum idle-time-out (1000 ms)",
-                     [Interval]);
-               Interval >= 1000 ->
-                   Interval div 1000
-            end
-    end,
-    {ok, ReceiveTimeoutSec} = application:get_env(rabbit, heartbeat),
-    ReceiveTimeoutMillis = ReceiveTimeoutSec * 1000,
-    Reader = self(),
-    ReceiveFun = fun() -> Reader ! heartbeat_timeout end,
-    SendFun = heartbeat_send_fun(Reader, State0),
-    %% TODO: only start heartbeat receive timer at next next frame
-    Heartbeater = rabbit_heartbeat:start(
-                    HelperSupPid, Sock, ConnectionName,
-                    SendTimeoutSec, SendFun,
-                    ReceiveTimeoutSec, ReceiveFun),
-    {ok, IncomingMaxFrameSize} = application:get_env(rabbit, frame_max),
-    {ok, SessionMax} = application:get_env(rabbit, session_max_per_connection),
-    %% "The channel-max value is the highest channel number that can be used on the connection.
-    %% This value plus one is the maximum number of sessions that can be simultaneously active
-    %% on the connection." [2.7.1]
-    ChannelMax = SessionMax - 1,
-    %% Assert config is valid.
-    true = ChannelMax >= 0 andalso ChannelMax =< 16#ff_ff,
-    EffectiveChannelMax = case ClientChannelMax of
-                              undefined ->
-                                  ChannelMax;
-                              {ushort, N} ->
-                                  min(N, ChannelMax)
-                          end,
-    State1 = State0#v1{connection_state = running,
-                       connection = Connection#v1_connection{
-                                      container_id = ContainerId,
-                                      vhost = Vhost,
-                                      incoming_max_frame_size = IncomingMaxFrameSize,
-                                      outgoing_max_frame_size = OutgoingMaxFrameSize,
-                                      channel_max = EffectiveChannelMax,
-                                      properties = Properties,
-                                      timeout = ReceiveTimeoutMillis,
-                                      credential_timer = Timer},
-                       heartbeater = Heartbeater},
-    State = start_writer(State1),
-    HostnameVal = case Hostname of
-                      undefined -> undefined;
-                      null -> undefined;
-                      {utf8, Val} -> Val
+    BaseCaps = [%% https://docs.oasis-open.org/amqp/linkpair/v1.0/cs01/linkpair-v1.0-cs01.html#_Toc51331306
+                <<"LINK_PAIR_V1_0">>,
+                %% https://docs.oasis-open.org/amqp/anonterm/v1.0/cs01/anonterm-v1.0-cs01.html#doc-anonymous-relay
+                <<"ANONYMOUS-RELAY">>],
+
+    HasSoleCap = rabbit_amqp_util:has_capability(<<"sole-connection-for-container">>, DesCapabilities),
+    OfferedCaps = case HasSoleCap of
+                      true  -> [<<"sole-connection-for-container">> | BaseCaps];
+                      false -> BaseCaps
                   end,
-    ?LOG_DEBUG(
-       "AMQP 1.0 connection.open frame: hostname = ~ts, extracted vhost = ~ts, idle-time-out = ~p",
-       [HostnameVal, Vhost, IdleTimeout]),
 
-    Infos = infos(?CONNECTION_EVENT_KEYS, State),
-    ok = rabbit_core_metrics:connection_created(
-           proplists:get_value(pid, Infos),
-           Infos),
-    ok = rabbit_event:notify(connection_created, Infos),
-    ok = maybe_emit_stats(State),
-    ok = register_connection(self()),
+    case {HasSoleCap, rabbit_amqp_sole_conn:acquire(Vhost, ContainerId, self())} of
+        {true, {error, refuse_connection}} ->
+            {map, Props0} = server_properties(),
+            Props1 = [
+                      {{symbol, <<"sole-connection-detection-policy">>}, {uint, 1}},
+                      {{symbol, <<"amqp:connection-establishment-failed">>}, {boolean, true}} 
+                      | Props0
+                     ],
+            Open = #'v1_0.open'{
+                      container_id = {utf8, rabbit_nodes:cluster_name()},
+                      offered_capabilities = rabbit_amqp_util:capabilities(OfferedCaps),
+                      properties = {map, Props1}
+                     },
 
-    Caps = [%% https://docs.oasis-open.org/amqp/linkpair/v1.0/cs01/linkpair-v1.0-cs01.html#_Toc51331306
-            <<"LINK_PAIR_V1_0">>,
-            %% https://docs.oasis-open.org/amqp/anonterm/v1.0/cs01/anonterm-v1.0-cs01.html#doc-anonymous-relay
-            <<"ANONYMOUS-RELAY">>],
-    Open = #'v1_0.open'{
-              channel_max = {ushort, EffectiveChannelMax},
-              max_frame_size = {uint, IncomingMaxFrameSize},
-              %% "the value in idle-time-out SHOULD be half the peer's actual timeout threshold" [2.4.5]
-              idle_time_out = {uint, ReceiveTimeoutMillis div 2},
-              container_id = {utf8, rabbit_nodes:cluster_name()},
-              offered_capabilities = rabbit_amqp_util:capabilities(Caps),
-              properties = server_properties()},
-    ok = send_on_channel0(State, Open, amqp10_framing),
-    State;
+            ok = send_on_channel0(State0, Open, amqp10_framing),
+
+            ErrInfo = {map, [{{symbol, <<"invalid-field">>}, {symbol, <<"container-id">>}}]},
+
+            Error = #'v1_0.error'{
+                       condition = {symbol, <<"amqp:invalid-field">>},
+                       description = {utf8, <<"The container-id is already bound to an active exclusive connection.">>},
+                       info = ErrInfo
+                      },
+
+            State = State0#v1{connection_state = closing},
+            close(Error, State);
+        _ ->
+            Timer = maybe_start_credential_expiry_timer(User),
+            rabbit_core_metrics:auth_attempt_succeeded(<<>>, Username, amqp10),
+            notify_auth(user_authentication_success, Username, State0),
+            ?LOG_INFO(
+               "Connection from AMQP 1.0 container '~ts': user '~ts' authenticated "
+               "using SASL mechanism ~s and granted access to vhost '~ts'",
+               [ContainerId, Username, Mechanism, Vhost]),
+
+            OutgoingMaxFrameSize = case ClientMaxFrame of
+                                       undefined ->
+                                           unlimited;
+                                       {uint, Bytes}
+                                         when Bytes >= ?MIN_MAX_FRAME_1_0_SIZE ->
+                                           Bytes;
+                                       {uint, Bytes} ->
+                                           protocol_error(
+                                             ?V_1_0_AMQP_ERROR_FRAME_SIZE_TOO_SMALL,
+                                             "max_frame_size (~w) < minimum maximum frame size (~w)",
+                                             [Bytes, ?MIN_MAX_FRAME_1_0_SIZE])
+                                   end,
+            SendTimeoutSec =
+            case IdleTimeout of
+                undefined ->
+                    0;
+                {uint, Interval} ->
+                    if Interval =:= 0 ->
+                           0;
+                       Interval < 1000 ->
+                           %% "If a peer can not, for any reason support a proposed idle timeout, then it SHOULD
+                           %% close the connection using a close frame with an error explaining why. There is no
+                           %% requirement for peers to support arbitrarily short or long idle timeouts." [2.4.5]
+                           %% rabbit_heartbeat does not want to support sub-second timeouts.
+                           protocol_error(
+                             ?V_1_0_AMQP_ERROR_NOT_ALLOWED,
+                             "idle-time-out (~b ms) < minimum idle-time-out (1000 ms)",
+                             [Interval]);
+                       Interval >= 1000 ->
+                           Interval div 1000
+                    end
+            end,
+            {ok, ReceiveTimeoutSec} = application:get_env(rabbit, heartbeat),
+            ReceiveTimeoutMillis = ReceiveTimeoutSec * 1000,
+            Reader = self(),
+            ReceiveFun = fun() -> Reader ! heartbeat_timeout end,
+            SendFun = heartbeat_send_fun(Reader, State0),
+            %% TODO: only start heartbeat receive timer at next next frame
+            Heartbeater = rabbit_heartbeat:start(
+                            HelperSupPid, Sock, ConnectionName,
+                            SendTimeoutSec, SendFun,
+                            ReceiveTimeoutSec, ReceiveFun),
+            {ok, IncomingMaxFrameSize} = application:get_env(rabbit, frame_max),
+            {ok, SessionMax} = application:get_env(rabbit, session_max_per_connection),
+            %% "The channel-max value is the highest channel number that can be used on the connection.
+            %% This value plus one is the maximum number of sessions that can be simultaneously active
+            %% on the connection." [2.7.1]
+            ChannelMax = SessionMax - 1,
+            %% Assert config is valid.
+            true = ChannelMax >= 0 andalso ChannelMax =< 16#ff_ff,
+            EffectiveChannelMax = case ClientChannelMax of
+                                      undefined ->
+                                          ChannelMax;
+                                      {ushort, N} ->
+                                          min(N, ChannelMax)
+                                  end,
+            State1 = State0#v1{connection_state = running,
+                               connection = Connection#v1_connection{
+                                              container_id = ContainerId,
+                                              vhost = Vhost,
+                                              incoming_max_frame_size = IncomingMaxFrameSize,
+                                              outgoing_max_frame_size = OutgoingMaxFrameSize,
+                                              channel_max = EffectiveChannelMax,
+                                              properties = Properties,
+                                              timeout = ReceiveTimeoutMillis,
+                                              credential_timer = Timer},
+                               heartbeater = Heartbeater},
+            State = start_writer(State1),
+            HostnameVal = case Hostname of
+                              undefined -> undefined;
+                              null -> undefined;
+                              {utf8, Val} -> Val
+                          end,
+            ?LOG_DEBUG(
+               "AMQP 1.0 connection.open frame: hostname = ~ts, extracted vhost = ~ts, idle-time-out = ~p",
+               [HostnameVal, Vhost, IdleTimeout]),
+
+            Infos = infos(?CONNECTION_EVENT_KEYS, State),
+            ok = rabbit_core_metrics:connection_created(
+                   proplists:get_value(pid, Infos),
+                   Infos),
+            ok = rabbit_event:notify(connection_created, Infos),
+            ok = maybe_emit_stats(State),
+            ok = register_connection(self()),
+
+
+            Open = #'v1_0.open'{
+                      channel_max = {ushort, EffectiveChannelMax},
+                      max_frame_size = {uint, IncomingMaxFrameSize},
+                      %% "the value in idle-time-out SHOULD be half the peer's actual timeout threshold" [2.4.5]
+                      idle_time_out = {uint, ReceiveTimeoutMillis div 2},
+                      container_id = {utf8, rabbit_nodes:cluster_name()},
+                      offered_capabilities = rabbit_amqp_util:capabilities(OfferedCaps),
+                      properties = server_properties()},
+            ok = send_on_channel0(State, Open, amqp10_framing),
+            State
+    end;
 handle_connection_frame(#'v1_0.close'{}, State0) ->
     State = State0#v1{connection_state = closing},
     close(undefined, State).

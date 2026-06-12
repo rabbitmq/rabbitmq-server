@@ -459,11 +459,17 @@ send_open(#state{socket = Socket, config = Config0}) ->
                          properties = Props,
                          max_frame_size = {uint, IncomingMaxFrameSize}
                         },
+    Open1 = case Config of
+                #{hostname := Hostname} ->
+                    Open0#'v1_0.open'{hostname = {utf8, Hostname}};
+                _ ->
+                    Open0
+            end,
     Open = case Config of
-               #{hostname := Hostname} ->
-                   Open0#'v1_0.open'{hostname = {utf8, Hostname}};
+               #{desired_capabilities := DesCaps} when is_list(DesCaps) ->
+                   Open1#'v1_0.open'{desired_capabilities = amqp_utils:capabilities(DesCaps)};
                _ ->
-                   Open0
+                   Open1
            end,
     Encoded = amqp10_framing:encode_bin(Open),
     Frame = amqp10_binary_generator:build_frame(0, Encoded),
