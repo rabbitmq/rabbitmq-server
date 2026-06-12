@@ -452,48 +452,75 @@ do_reconcile_children(Group, Overall, Delegate) ->
                               ok
                       end
               end, RunningIds),
+            %% Restart children we own but are not running, then reclaim those
+            %% owned by dead or unreachable nodes.
+            restart_owned_children(Group, Overall, Delegate, RunningIds),
             reclaim_orphans(Group, Overall, Delegate)
     end.
+
+%% Reads all child spec records for the group from the store, as {Path, Record}
+%% pairs. The #if_data_matches condition restricts the results to this group, so
+%% the key's group element is always Group.
+group_childspecs(Group) ->
+    Pattern = #mirrored_sup_childspec{key = {Group, '_'}, _ = '_'},
+    Conditions = [?KHEPRI_WILDCARD_STAR_STAR, #if_data_matches{pattern = Pattern}],
+    PathPattern = rabbit_db_msup:khepri_mirrored_supervisor_path(
+                    ?KHEPRI_WILDCARD_STAR,
+                    #if_all{conditions = Conditions}),
+    case rabbit_khepri:get_many(PathPattern) of
+        {ok, Map} ->
+            [{Path, S} || {Path, S} <- maps:to_list(Map),
+                          is_record(S, mirrored_sup_childspec)];
+        _ ->
+            []
+    end.
+
+%% Ensure every child this node owns in the store is actually running locally.
+%% A node can own a child without running it after it has left a minority
+%% partition: while in the minority it stopped its children but could not give
+%% up ownership in the store (it has no quorum), and if no majority node
+%% reclaimed them before the partition healed, the owner is alive again so they
+%% are not orphans and would otherwise never be restarted.
+restart_owned_children(Group, Overall, Delegate, RunningIds) ->
+    lists:foreach(
+      fun({_Path, #mirrored_sup_childspec{mirroring_pid = OwnerPid,
+                                          childspec = ChildSpec,
+                                          key = {_, Id}}}) ->
+              case OwnerPid =:= Overall andalso not lists:member(Id, RunningIds) of
+                  true ->
+                      ?LOG_NOTICE("Mirrored supervisor: restarting child ~tp in group ~tp which this node owns but is not running locally",
+                                  [Id, Group]),
+                      catch ?SUPERVISOR:start_child(Delegate, ChildSpec),
+                      ok;
+                  false ->
+                      ok
+              end
+      end, group_childspecs(Group)).
 
 reclaim_orphans(Group, Overall, Delegate) ->
     ActiveMembers = pg:get_members(Group),
     case lists:sort(ActiveMembers) of
         [Overall | _] ->
-            Pattern = #mirrored_sup_childspec{key = {Group, '_'}, _ = '_'},
-            Conditions = [?KHEPRI_WILDCARD_STAR_STAR, #if_data_matches{pattern = Pattern}],
-            PathPattern = rabbit_db_msup:khepri_mirrored_supervisor_path(
-                            ?KHEPRI_WILDCARD_STAR,
-                            #if_all{conditions = Conditions}),
-            case rabbit_khepri:get_many(PathPattern) of
-                {ok, Map} ->
-                    lists:foreach(
-                      %% get_many already restricts results to this group via
-                      %% the #if_data_matches condition, so the key's group
-                      %% element is always Group here.
-                      fun({Path, #mirrored_sup_childspec{mirroring_pid = OwnerPid,
-                                                         childspec = ChildSpec,
-                                                         key = {_, Id}} = S0}) ->
-                              case lists:member(OwnerPid, ActiveMembers) of
-                                  false ->
-                                      ?LOG_NOTICE("Mirrored supervisor: reclaiming orphan child ~tp in group ~tp (previous owner ~tp was dead/unreachable)",
-                                                  [Id, Group, OwnerPid]),
-                                      NewS = S0#mirrored_sup_childspec{mirroring_pid = Overall},
-                                      case rabbit_khepri:put(Path, NewS) of
-                                          ok ->
-                                              catch ?SUPERVISOR:start_child(Delegate, ChildSpec),
-                                              ok;
-                                          _ ->
-                                              ok
-                                      end;
-                                  true ->
+            lists:foreach(
+              fun({Path, #mirrored_sup_childspec{mirroring_pid = OwnerPid,
+                                                 childspec = ChildSpec,
+                                                 key = {_, Id}} = S0}) ->
+                      case lists:member(OwnerPid, ActiveMembers) of
+                          false ->
+                              ?LOG_NOTICE("Mirrored supervisor: reclaiming orphan child ~tp in group ~tp (previous owner ~tp was dead/unreachable)",
+                                          [Id, Group, OwnerPid]),
+                              NewS = S0#mirrored_sup_childspec{mirroring_pid = Overall},
+                              case rabbit_khepri:put(Path, NewS) of
+                                  ok ->
+                                      catch ?SUPERVISOR:start_child(Delegate, ChildSpec),
+                                      ok;
+                                  _ ->
                                       ok
                               end;
-                         (_) ->
+                          true ->
                               ok
-                      end, maps:to_list(Map));
-                _ ->
-                    ok
-            end;
+                      end
+              end, group_childspecs(Group));
         _ ->
             ok
     end.
