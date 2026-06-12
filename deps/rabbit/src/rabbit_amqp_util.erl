@@ -9,7 +9,7 @@
 -include("rabbit_amqp.hrl").
 
 -export([section_field_name_to_atom/1,
-         capabilities/1,
+         has_capability/2,
          atom_to_error_condition/1,
          protocol_error/3]).
 
@@ -57,13 +57,12 @@ properties_field_name_to_atom(<<"group_sequence">>) -> group_sequence;
 properties_field_name_to_atom(<<"reply_to_group_id">>) -> reply_to_group_id;
 properties_field_name_to_atom(_) -> error.
 
--spec capabilities([binary()]) ->
-    undefined | {array, symbol, [{symbol, binary()}]}.
-capabilities([]) ->
-    undefined;
-capabilities(Capabilities) ->
-    Caps = [{symbol, C} || C <- Capabilities],
-    {array, symbol, Caps}.
+-spec has_capability(binary(), {array, symbol, [{symbol, binary()}]}) ->
+    boolean().
+has_capability(_Capability, undefined) ->
+    false;
+has_capability(Capability, {array, symbol, Caps}) ->
+    lists:any(fun({symbol, C}) -> C =:= Capability end, Caps).
 
 -spec atom_to_error_condition(atom()) ->
     {symbol, binary()}.

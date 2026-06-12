@@ -268,7 +268,7 @@ PARALLEL_CT_SET_4_B = per_user_connection_tracking per_vhost_connection_limit ra
 PARALLEL_CT_SET_4_C = msg_size_metrics unit_msg_size_metrics per_vhost_msg_store per_vhost_queue_limit priority_queue upgrade_preparation vhost
 PARALLEL_CT_SET_4_D = consumers_cli_integration per_user_connection_channel_tracking product_info queue_type rabbitmq_queues_cli_integration rabbitmq_streams_cli_integration rabbitmqctl_integration rabbitmqctl_shutdown routing rabbit_amqqueue unix_domain_socket_cli_integration
 
-PARALLEL_CT_SET_5_A = amqp10_connection_max unit_amqp10_connection_max consumer_recheck_prop cuttlefish_datatype_migration pid_codec pid_codec_prop rabbit_direct_reply_to_prop rabbit_quorum_queue_prop prop_stream_arg_validation prop_rabbit_cuttlefish direct_reply_to_amqpl direct_reply_to_amqp classic_queue
+PARALLEL_CT_SET_5_A = amqp10_connection_max unit_amqp10_connection_max consumer_recheck_prop cuttlefish_datatype_migration pid_codec pid_codec_prop rabbit_direct_reply_to_prop rabbit_quorum_queue_prop prop_stream_arg_validation prop_rabbit_cuttlefish direct_reply_to_amqpl direct_reply_to_amqp classic_queue rabbit_amqp_sole_conn rabbit_amqp_sole_conn_cluster
 PARALLEL_CT_SET_5_B = feature_flags_v2 backing_queue transactions
 PARALLEL_CT_SET_5_C = cluster_upgrade maintenance_mode
 PARALLEL_CT_SET_5_D = rabbit_fifo_dlx_integration publisher_confirms_parallel rabbit_exchange_type_modulus_hash
@@ -279,7 +279,7 @@ PARALLEL_CT_SET_3 = $(sort $(PARALLEL_CT_SET_3_A) $(PARALLEL_CT_SET_3_B) $(PARAL
 PARALLEL_CT_SET_4 = $(sort $(PARALLEL_CT_SET_4_A) $(PARALLEL_CT_SET_4_B) $(PARALLEL_CT_SET_4_C) $(PARALLEL_CT_SET_4_D))
 PARALLEL_CT_SET_5 = $(sort $(PARALLEL_CT_SET_5_A) $(PARALLEL_CT_SET_5_B) $(PARALLEL_CT_SET_5_C) $(PARALLEL_CT_SET_5_D))
 
-SEQUENTIAL_CT_SUITES = amqp_client clustering_management clustering_recovery dead_lettering feature_flags metadata_store_clustering quorum_queue rabbit_stream_queue rabbit_fifo_prop peer_discovery_classic_config
+SEQUENTIAL_CT_SUITES = amqp_client clustering_management clustering_recovery dead_lettering feature_flags metadata_store_clustering quorum_queue rabbit_stream_queue rabbit_fifo_prop peer_discovery_classic_config amqp_connection_uniqueness amqp_connection_uniqueness_partitions
 PARALLEL_CT_SUITES = $(PARALLEL_CT_SET_1) $(PARALLEL_CT_SET_2) $(PARALLEL_CT_SET_3) $(PARALLEL_CT_SET_4) $(PARALLEL_CT_SET_5)
 
 ifeq ($(filter-out $(SEQUENTIAL_CT_SUITES) $(PARALLEL_CT_SUITES),$(CT_SUITES)),)
