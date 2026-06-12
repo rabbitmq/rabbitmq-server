@@ -29,7 +29,7 @@
 
 -behaviour(gen_server).
 
--export([start_link/1]).
+-export([start_link/2]).
 %% gen_server callbacks
 -export([init/1, terminate/2, handle_continue/2,
          handle_cast/2, handle_call/3, handle_info/2,
@@ -100,12 +100,16 @@
 
 -type state() :: #state{}.
 
-start_link(QRef) ->
-    gen_server:start_link(?MODULE, QRef, [{hibernate_after, ?HIBERNATE_AFTER}]).
+start_link(QRef, SupPid) ->
+    gen_server:start_link(?MODULE, {QRef, SupPid}, [{hibernate_after, ?HIBERNATE_AFTER}]).
 
--spec init(rabbit_amqqueue:name()) ->
+-spec init({rabbit_amqqueue:name(), pid()}) ->
     {ok, undefined, {continue, rabbit_amqqueue:name()}}.
-init(QRef) ->
+init({QRef, SupPid}) ->
+    %% Stored in the process dictionary so that terminate_dlx_worker/2 can
+    %% retrieve it via process_info(WorkerPid, dictionary) without blocking
+    %% on a gen_server call. Same pattern as rabbit_misc:store_proc_name/1.
+    put(sup_pid, SupPid),
     {ok, undefined, {continue, QRef}}.
 
 -spec handle_continue(rabbit_amqqueue:name(), undefined) ->

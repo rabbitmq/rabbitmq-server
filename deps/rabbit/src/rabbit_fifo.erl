@@ -1113,8 +1113,7 @@ state_enter(leader,
                     enqueuers = Enqs,
                     waiting_consumers = WaitingConsumers,
                     cfg = #cfg{resource = QRes,
-                               dead_letter_handler = DLH},
-                    dlx = DlxState}) ->
+                               dead_letter_handler = DLH}}) ->
     % return effects to monitor all current consumers and enqueuers
     Pids = lists:usort(maps:keys(Enqs)
                        ++ [P || ?CONSUMER_PID(P) <- maps:values(Cons)]
@@ -1124,17 +1123,11 @@ state_enter(leader,
     NodeMons = lists:usort([{monitor, node, node(P)} || P <- Pids]),
     NotifyDecs = notify_decorators_startup(QRes),
     Effects = Mons ++ Nots ++ NodeMons ++ [NotifyDecs],
-
-    case DLH of
-        at_least_once ->
-            ensure_worker_started(QRes, DlxState);
-        _ ->
-            ok
-    end,
-    Effects;
+    maybe_add_dlx_effect(DLH, Effects);
 state_enter(eol, #?STATE{enqueuers = Enqs,
                          consumers = Cons0,
-                         waiting_consumers = WaitingConsumers0}) ->
+                         waiting_consumers = WaitingConsumers0} = State) ->
+    ok = maybe_terminate_worker(State),
     Custs = maps:fold(fun(_K, ?CONSUMER_PID(P) = V, S) ->
                               S#{P => V}
                       end, #{}, Cons0),
@@ -1145,15 +1138,8 @@ state_enter(eol, #?STATE{enqueuers = Enqs,
     [{send_msg, P, eol, ra_event}
      || P <- maps:keys(maps:merge(Enqs, AllConsumers))] ++
     [{aux, eol}];
-state_enter(_, #?STATE{cfg = #cfg{dead_letter_handler = DLH,
-                                  resource = _QRes},
-                       dlx = DlxState}) ->
-    case DLH of
-        at_least_once ->
-            ensure_worker_terminated(DlxState);
-        _ ->
-            ok
-    end,
+state_enter(_, State) ->
+    ok = maybe_terminate_worker(State),
     %% catch all as not handling all states
     [].
 
@@ -1506,15 +1492,7 @@ handle_aux(_RaState, _, force_checkpoint,
                                    ReclaimableBytes, true),
     {no_reply, Aux#?AUX{last_checkpoint = Check}, RaAux, Effects};
 handle_aux(leader, _, {dlx, setup}, Aux, RaAux) ->
-    #?STATE{dlx = DlxState,
-            cfg = #cfg{dead_letter_handler = DLH,
-                       resource = QRes}} = ra_aux:machine_state(RaAux),
-    case DLH of
-        at_least_once ->
-            ensure_worker_started(QRes, DlxState);
-        _ ->
-            ok
-    end,
+    ok = maybe_start_dlx_worker(RaAux),
     {no_reply, Aux, RaAux};
 handle_aux(_, _, {dlx, teardown, Pid}, Aux, RaAux) ->
     terminate_dlx_worker(Pid),
@@ -1524,7 +1502,6 @@ handle_aux(_, _, Unhandled, Aux, RaAux) ->
     ?LOG_DEBUG("~ts: rabbit_fifo: unhandled aux command ~P",
                [rabbit_misc:rs(QR), Unhandled, 10]),
     {no_reply, Aux, RaAux}.
-
 
 eval_gc(RaAux, MacState,
         #?AUX{gc = #aux_gc{last_raft_idx = LastGcIdx} = Gc} = AuxState) ->
@@ -3989,16 +3966,7 @@ dlx_apply(_, {dlx, {checkout, ConsumerPid, Prefetch}},
                 discards = Discards0,
                 msg_bytes = Bytes,
                 msg_bytes_checkout = BytesCheckout} = State0) ->
-    %% Since we allow only a single consumer, the new consumer replaces the old consumer.
-    case ConsumerPid of
-        OldConsumerPid ->
-            ok;
-        _ ->
-            ?LOG_DEBUG("Terminating ~p since ~p becomes active rabbit_fifo_dlx_worker",
-                       [OldConsumerPid, ConsumerPid]),
-            %% turn into aux command
-            ensure_worker_terminated(State0)
-    end,
+    ok = ensure_worker_terminated(ConsumerPid, OldConsumerPid, State0),
     %% All checked out messages to the old consumer need to be returned to the discards queue
     %% such that these messages will be re-delivered to the new consumer.
     %% When inserting back into the discards queue, we respect the original order in which messages
@@ -4024,41 +3992,79 @@ dlx_apply(_, Cmd, DLH, State) ->
 %% down: 90 bytes
 %% enqueue overhead 210
 
-ensure_worker_started(QRef, #?DLX{consumer = undefined}) ->
-    start_worker(QRef);
-ensure_worker_started(QRef, #?DLX{consumer = #dlx_consumer{pid = Pid}}) ->
+maybe_add_dlx_effect(at_least_once, Effects) ->
+    Effects ++ [{aux, {dlx, setup}}];
+maybe_add_dlx_effect(_, Effects) ->
+    Effects.
+
+maybe_start_dlx_worker(RaAux) ->
+    #?STATE{dlx = DlxState,
+            cfg = #cfg{dead_letter_handler = DLH,
+                       resource = QRes}} = ra_aux:machine_state(RaAux),
+maybe_start_dlx_worker(DLH, QRes, DlxState).
+
+maybe_start_dlx_worker(at_least_once, QRes, DlxState) ->
+    ensure_dlx_worker_started(QRes, DlxState);
+maybe_start_dlx_worker(_, _QRes, _DlxState) ->
+    ok.
+
+ensure_dlx_worker_started(QRef, #?DLX{consumer = undefined}) ->
+    start_dlx_worker(QRef);
+ensure_dlx_worker_started(QRef, #?DLX{consumer = #dlx_consumer{pid = Pid}}) ->
     case is_local_and_alive(Pid) of
         true ->
             ?LOG_DEBUG("rabbit_fifo_dlx_worker ~tp already started for ~ts",
                              [Pid, rabbit_misc:rs(QRef)]);
         false ->
-            start_worker(QRef)
+            start_dlx_worker(QRef)
     end.
 
 %% Ensure that starting the rabbit_fifo_dlx_worker succeeds.
 %% Therefore, do not use an effect.
 %% Also therefore, if starting the rabbit_fifo_dlx_worker fails, let the
 %% Ra server process crash in which case another Ra node will become leader.
-start_worker(QRef) ->
-    {ok, Pid} = supervisor:start_child(rabbit_fifo_dlx_sup, [QRef]),
+start_dlx_worker(QRef) ->
+    {ok, SupPid} = supervisor:start_child(rabbit_fifo_dlx_sup_sup, [QRef]),
+    [{_, Pid, worker, _}] = supervisor:which_children(SupPid),
     ?LOG_DEBUG("started rabbit_fifo_dlx_worker ~tp for ~ts",
                      [Pid, rabbit_misc:rs(QRef)]).
+
+%% Since we allow only a single consumer, the new consumer replaces the old consumer.
+ensure_worker_terminated(ConsumerPid, ConsumerPid, _State) ->
+    ok;
+ensure_worker_terminated(ConsumerPid, OldConsumerPid, State) ->
+    ?LOG_DEBUG("Terminating ~p since ~p becomes active rabbit_fifo_dlx_worker",
+                [OldConsumerPid, ConsumerPid]),
+    %% turn into aux command
+    ensure_worker_terminated(State).
 
 ensure_worker_terminated(#?DLX{consumer = undefined}) ->
     ok;
 ensure_worker_terminated(#?DLX{consumer = #dlx_consumer{pid = Pid}}) ->
     terminate_dlx_worker(Pid).
 
+maybe_terminate_worker(#?STATE{cfg = #cfg{dead_letter_handler = at_least_once}, dlx = DlxState}) ->
+    ok = ensure_worker_terminated(DlxState);
+maybe_terminate_worker(_State) ->
+    ok.
+
 terminate_dlx_worker(Pid) ->
-    case is_local_and_alive(Pid) of
-        true ->
-            %% Note that we can't return a mod_call effect here
-            %% because mod_call is executed on the leader only.
-            ok = supervisor:terminate_child(rabbit_fifo_dlx_sup, Pid),
-            ?LOG_DEBUG("terminated rabbit_fifo_dlx_worker ~tp", [Pid]);
-        false ->
-            ok
-    end.
+    terminate_dlx_worker(Pid, is_local_and_alive(Pid)).
+
+terminate_dlx_worker(Pid, true) ->
+    %% Note that we can't return a mod_call effect here
+    %% because mod_call is executed on the leader only.
+    %% Terminate the per-worker supervisor (which also stops the worker).
+    %% The worker stores its supervisor pid in the process dictionary at
+    %% startup (see rabbit_fifo_dlx_worker:init/1). We read it here via
+    %% process_info to avoid a blocking gen_server call.
+    {dictionary, Dict} = erlang:process_info(Pid, dictionary),
+    {sup_pid, SupPid} = lists:keyfind(sup_pid, 1, Dict),
+    ok = supervisor:terminate_child(rabbit_fifo_dlx_sup_sup, SupPid),
+    ?LOG_DEBUG("terminated rabbit_fifo_dlx_worker ~tp", [Pid]),
+    ok;
+terminate_dlx_worker(_Pid, false) ->
+    ok.
 
 local_alive_consumer_pid(#?DLX{consumer = undefined}) ->
     undefined;

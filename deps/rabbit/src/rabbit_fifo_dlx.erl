@@ -245,9 +245,8 @@ delivery_effects(CPid, Msgs0) ->
 
 -spec state_enter(ra_server:ra_state() | eol, rabbit_types:r('queue'), dead_letter_handler(), state()) ->
     ra_machine:effects().
-state_enter(leader, QRes, at_least_once, State) ->
-    ensure_worker_started(QRes, State),
-    [];
+state_enter(leader, _QRes, at_least_once, _State) ->
+    [{aux, {dlx, setup}}];
 state_enter(_, _, at_least_once, State) ->
     ensure_worker_terminated(State),
     [];
@@ -270,22 +269,33 @@ ensure_worker_started(QRef, #?MODULE{consumer = #dlx_consumer{pid = Pid}}) ->
 %% Also therefore, if starting the rabbit_fifo_dlx_worker fails, let the
 %% Ra server process crash in which case another Ra node will become leader.
 start_worker(QRef) ->
-    {ok, Pid} = supervisor:start_child(rabbit_fifo_dlx_sup, [QRef]),
+    {ok, SupPid} = supervisor:start_child(rabbit_fifo_dlx_sup_sup, [QRef]),
+    [{_, Pid, worker, _}] = supervisor:which_children(SupPid),
     ?LOG_DEBUG("started rabbit_fifo_dlx_worker ~tp for ~ts",
                      [Pid, rabbit_misc:rs(QRef)]).
 
 ensure_worker_terminated(#?MODULE{consumer = undefined}) ->
     ok;
 ensure_worker_terminated(#?MODULE{consumer = #dlx_consumer{pid = Pid}}) ->
-    case is_local_and_alive(Pid) of
-        true ->
-            %% Note that we can't return a mod_call effect here
-            %% because mod_call is executed on the leader only.
-            ok = supervisor:terminate_child(rabbit_fifo_dlx_sup, Pid),
-            ?LOG_DEBUG("terminated rabbit_fifo_dlx_worker ~tp", [Pid]);
-        false ->
-            ok
-    end.
+    terminate_dlx_worker(Pid).
+
+terminate_dlx_worker(Pid) ->
+    terminate_dlx_worker(Pid, is_local_and_alive(Pid)).
+
+terminate_dlx_worker(Pid, true) ->
+    %% Note that we can't return a mod_call effect here
+    %% because mod_call is executed on the leader only.
+    %% Terminate the per-worker supervisor (which also stops the worker).
+    %% The worker stores its supervisor pid in the process dictionary at
+    %% startup (see rabbit_fifo_dlx_worker:init/1). We read it here via
+    %% process_info to avoid a blocking gen_server call.
+    {dictionary, Dict} = erlang:process_info(Pid, dictionary),
+    {sup_pid, SupPid} = lists:keyfind(sup_pid, 1, Dict),
+    ok = supervisor:terminate_child(rabbit_fifo_dlx_sup_sup, SupPid),
+    ?LOG_DEBUG("terminated rabbit_fifo_dlx_worker ~tp", [Pid]),
+    ok;
+terminate_dlx_worker(_Pid, false) ->
+    ok.
 
 local_alive_consumer_pid(#?MODULE{consumer = undefined}) ->
     undefined;
