@@ -9,9 +9,8 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
--include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
--include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
+-include_lib("amqp10_common/include/amqp10_sole_conn.hrl").
 
 -compile([nowarn_export_all,
           export_all]).
@@ -62,17 +61,28 @@ sole_conn_no_conflict(Config) ->
     OpnConf0 = connection_config(Config),
     OpnConf1 = OpnConf0#{
                  container_id => <<"my-container-1">>,
-                 desired_capabilities => [<<"sole-connection-for-container">>]
+                 desired_capabilities => [?CAP_SOLE_CONN],
+                 notify_with_performative => true
                 },
     {ok, Connection1} = amqp10_client:open_connection(OpnConf1),
-    receive {amqp10_event, {connection, Connection1, opened}} -> ok
+    receive {amqp10_event, {connection, Connection1,
+                            {opened, #'v1_0.open'{
+                                        offered_capabilities = OffCaps1,
+                                        properties = Props1}}}} ->
+                assert_has_sole_cap(OffCaps1),
+                assert_has_weak_policy(Props1)
     after 30000 -> ct:fail(opened_timeout)
     end,
     OpnConf2 = OpnConf1#{
                  container_id => <<"my-container-2">>
                 },
     {ok, Connection2} = amqp10_client:open_connection(OpnConf2),
-    receive {amqp10_event, {connection, Connection2, opened}} -> ok
+    receive {amqp10_event, {connection, Connection2,
+                            {opened, #'v1_0.open'{
+                                        offered_capabilities = OffCaps2,
+                                        properties = Props2}}}} ->
+                assert_has_sole_cap(OffCaps2),
+                assert_has_weak_policy(Props2)
     after 30000 -> ct:fail(opened_timeout)
     end,
 
@@ -83,23 +93,53 @@ sole_conn_conflict_should_refuse_second_connection(Config) ->
     OpnConf0 = connection_config(Config),
     OpnConf1 = OpnConf0#{
                  container_id => <<"my-container-1">>,
-                 desired_capabilities => [<<"sole-connection-for-container">>]
+                 desired_capabilities => [?CAP_SOLE_CONN],
+                 notify_with_performative => true
                 },
     {ok, Connection1} = amqp10_client:open_connection(OpnConf1),
-    receive {amqp10_event, {connection, Connection1, opened}} -> ok
+   receive {amqp10_event, {connection, Connection1,
+                            {opened, #'v1_0.open'{
+                                        offered_capabilities = OffCaps1,
+                                        properties = Props1}}}} ->
+                assert_has_sole_cap(OffCaps1),
+                assert_has_weak_policy(Props1)
     after 30000 -> ct:fail(opened_timeout)
     end,
     OpnConf2 = OpnConf1#{
                  container_id => <<"my-container-1">>
                 },
     {ok, Connection2} = amqp10_client:open_connection(OpnConf2),
-    receive {amqp10_event, {connection, Connection2, opened}} -> ok
+    receive {amqp10_event, {connection, Connection2,
+                            {opened, #'v1_0.open'{
+                                        offered_capabilities = OffCaps2,
+                                        properties = Props2}}}} ->
+                assert_has_sole_cap(OffCaps2),
+                assert_has_weak_policy(Props2)
     after 30000 -> ct:fail(opened_timeout)
     end,
-    receive {amqp10_event, {connection, Connection2, {closed, Why}}} ->
-                ?assertMatch({invalid_field, _}, Why)
+    receive {amqp10_event, {connection, Connection2,
+                            {closed, #'v1_0.close'{error = Error}}}} ->
+                #'v1_0.error'{condition = Cond,
+                              description = Desc,
+                              info = {map, Info}
+                             } = Error,
+                ?assertEqual(?V_1_0_AMQP_ERROR_INVALID_FIELD, Cond),
+                ?assertEqual({utf8,
+                              <<"The container-id is already bound to an active exclusive connection.">>},
+                             Desc),
+                ?assert(lists:member({?V_1_0_AMQP_ERROR_INVALID_FIELD, {symbol, <<"container-id">>}},
+                                     Info))
     after 30000 -> ct:fail(closed_timeout)
     end,
 
-
     ok = close_connection_sync(Connection1).
+
+%% ------------------------------------------------------------------
+%% Internal Helpers
+%% ------------------------------------------------------------------
+
+assert_has_sole_cap(Caps) ->
+    ?assert(rabbit_amqp_util:has_capability(?CAP_SOLE_CONN, Caps)).
+assert_has_weak_policy({map, Props}) ->
+    ExpectedPair = {?SOLE_CONN_DETECTION_POLICY, ?SOLE_CONN_DETECTION_POLICY_WEAK},
+    ?assert(lists:member(ExpectedPair, Props)).

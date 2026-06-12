@@ -4,7 +4,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
 -record(state, {
-    leases = #{} :: #{ {binary(), binary()} => {pid(), reference(), atom()} },
+    leases = #{} :: #{ {binary(), binary()} => {pid(), reference()} },
     pids   = #{} :: #{ pid() => {binary(), binary()} }
 }).
 

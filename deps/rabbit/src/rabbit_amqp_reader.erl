@@ -10,6 +10,7 @@
 -include_lib("kernel/include/logger.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("amqp10_common/include/amqp10_types.hrl").
+-include_lib("amqp10_common/include/amqp10_sole_conn.hrl").
 -include("rabbit_amqp.hrl").
 -include("rabbit_amqp_metrics.hrl").
 -include("rabbit_amqp_reader.hrl").
@@ -462,20 +463,24 @@ handle_connection_frame(
                 <<"LINK_PAIR_V1_0">>,
                 %% https://docs.oasis-open.org/amqp/anonterm/v1.0/cs01/anonterm-v1.0-cs01.html#doc-anonymous-relay
                 <<"ANONYMOUS-RELAY">>],
+    {map, BaseProps} = server_properties(),
 
-    HasSoleCap = rabbit_amqp_util:has_capability(<<"sole-connection-for-container">>, DesCapabilities),
-    OfferedCaps = case HasSoleCap of
-                      true  -> [<<"sole-connection-for-container">> | BaseCaps];
-                      false -> BaseCaps
-                  end,
+    HasSoleCap = rabbit_amqp_util:has_capability(?CAP_SOLE_CONN, DesCapabilities),
+    {OfferedCaps, Props} =
+        case HasSoleCap of
+            true  ->
+                {[?CAP_SOLE_CONN | BaseCaps],
+                 [{?SOLE_CONN_DETECTION_POLICY, ?SOLE_CONN_DETECTION_POLICY_WEAK}
+                  | BaseProps]};
+            false ->
+                {BaseCaps, BaseProps}
+        end,
 
     case {HasSoleCap, rabbit_amqp_sole_conn:acquire(Vhost, ContainerId, self())} of
         {true, {error, refuse_connection}} ->
-            {map, Props0} = server_properties(),
             Props1 = [
-                      {{symbol, <<"sole-connection-detection-policy">>}, {uint, 1}},
-                      {{symbol, <<"amqp:connection-establishment-failed">>}, {boolean, true}} 
-                      | Props0
+                      {?AMQP_ERROR_CONNECTION_ESTABLISHMENT_FAILED, {boolean, true}}
+                      | Props
                      ],
             Open = #'v1_0.open'{
                       container_id = {utf8, rabbit_nodes:cluster_name()},
@@ -485,10 +490,10 @@ handle_connection_frame(
 
             ok = send_on_channel0(State0, Open, amqp10_framing),
 
-            ErrInfo = {map, [{{symbol, <<"invalid-field">>}, {symbol, <<"container-id">>}}]},
+            ErrInfo = {map, [{?V_1_0_AMQP_ERROR_INVALID_FIELD, {symbol, <<"container-id">>}}]},
 
             Error = #'v1_0.error'{
-                       condition = {symbol, <<"amqp:invalid-field">>},
+                       condition = ?V_1_0_AMQP_ERROR_INVALID_FIELD,
                        description = {utf8, <<"The container-id is already bound to an active exclusive connection.">>},
                        info = ErrInfo
                       },
@@ -597,7 +602,7 @@ handle_connection_frame(
                       idle_time_out = {uint, ReceiveTimeoutMillis div 2},
                       container_id = {utf8, rabbit_nodes:cluster_name()},
                       offered_capabilities = rabbit_amqp_util:capabilities(OfferedCaps),
-                      properties = server_properties()},
+                      properties = {map, Props}},
             ok = send_on_channel0(State, Open, amqp10_framing),
             State
     end;

@@ -279,7 +279,7 @@ PARALLEL_CT_SET_3 = $(sort $(PARALLEL_CT_SET_3_A) $(PARALLEL_CT_SET_3_B) $(PARAL
 PARALLEL_CT_SET_4 = $(sort $(PARALLEL_CT_SET_4_A) $(PARALLEL_CT_SET_4_B) $(PARALLEL_CT_SET_4_C) $(PARALLEL_CT_SET_4_D))
 PARALLEL_CT_SET_5 = $(sort $(PARALLEL_CT_SET_5_A) $(PARALLEL_CT_SET_5_B) $(PARALLEL_CT_SET_5_C) $(PARALLEL_CT_SET_5_D))
 
-SEQUENTIAL_CT_SUITES = amqp_client clustering_management clustering_recovery dead_lettering feature_flags metadata_store_clustering quorum_queue rabbit_stream_queue rabbit_fifo_prop peer_discovery_classic_config
+SEQUENTIAL_CT_SUITES = amqp_client clustering_management clustering_recovery dead_lettering feature_flags metadata_store_clustering quorum_queue rabbit_stream_queue rabbit_fifo_prop peer_discovery_classic_config amqp_connection_uniqueness
 PARALLEL_CT_SUITES = $(PARALLEL_CT_SET_1) $(PARALLEL_CT_SET_2) $(PARALLEL_CT_SET_3) $(PARALLEL_CT_SET_4) $(PARALLEL_CT_SET_5)
 
 ifeq ($(filter-out $(SEQUENTIAL_CT_SUITES) $(PARALLEL_CT_SUITES),$(CT_SUITES)),)

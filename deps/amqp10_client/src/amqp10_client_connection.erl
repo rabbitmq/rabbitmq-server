@@ -74,7 +74,8 @@
       % control by this margin
       transfer_limit_margin => 0 | neg_integer(),
       sasl => sasl(),
-      properties => amqp10_client_types:properties()
+      properties => amqp10_client_types:properties(),
+      desired_capabilities => [binary()]
   }.
 
 -record(state,
