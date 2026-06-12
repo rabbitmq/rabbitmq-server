@@ -468,7 +468,7 @@ send_open(#state{socket = Socket, config = Config0}) ->
             end,
     Open = case Config of
                #{desired_capabilities := DesCaps} when is_list(DesCaps) ->
-                   Open1#'v1_0.open'{desired_capabilities = amqp_utils:capabilities(DesCaps)};
+                   Open1#'v1_0.open'{desired_capabilities = amqp10_util:capabilities(DesCaps)};
                _ ->
                    Open1
            end,

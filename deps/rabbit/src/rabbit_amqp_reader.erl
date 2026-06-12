@@ -484,7 +484,7 @@ handle_connection_frame(
                      ],
             Open = #'v1_0.open'{
                       container_id = {utf8, rabbit_nodes:cluster_name()},
-                      offered_capabilities = rabbit_amqp_util:capabilities(OfferedCaps),
+                      offered_capabilities = amqp10_util:capabilities(OfferedCaps),
                       properties = {map, Props1}
                      },
 
@@ -601,7 +601,7 @@ handle_connection_frame(
                       %% "the value in idle-time-out SHOULD be half the peer's actual timeout threshold" [2.4.5]
                       idle_time_out = {uint, ReceiveTimeoutMillis div 2},
                       container_id = {utf8, rabbit_nodes:cluster_name()},
-                      offered_capabilities = rabbit_amqp_util:capabilities(OfferedCaps),
+                      offered_capabilities = amqp10_util:capabilities(OfferedCaps),
                       properties = {map, Props}},
             ok = send_on_channel0(State, Open, amqp10_framing),
             State

@@ -12,7 +12,6 @@
 -export([init/1, init/2,
          close/1,
          connection_config/1, connection_config/2,
-         capabilities/1,
          web_amqp/1,
          flush/1,
          wait_for_credit/1,
@@ -60,14 +59,6 @@ connection_config(Node, Config) ->
 
 web_amqp(Config) ->
     proplists:get_value(web_amqp, Config, false).
-
--spec capabilities([binary()]) ->
-    undefined | {array, symbol, [{symbol, binary()}]}.
-capabilities([]) ->
-    undefined;
-capabilities(Capabilities) ->
-    Caps = [{symbol, C} || C <- Capabilities],
-    {array, symbol, Caps}.
 
 flush(Prefix) ->
     receive
