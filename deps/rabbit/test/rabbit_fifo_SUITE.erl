@@ -3060,6 +3060,57 @@ reject_publish_applied_after_limit_test(Config) ->
         apply(meta(Config, 1), make_register_enqueuer(Pid2), State5),
     ok.
 
+reject_publish_dlx_test(Config) ->
+    State0 = init(#{name => ?FUNCTION_NAME,
+                    queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+                    max_length => 2,
+                    max_in_memory_length => 0,
+                    overflow_strategy => reject_publish_dlx,
+                    dead_letter_handler =>
+                        {at_most_once, {somemod, somefun, [somearg]}}}),
+    Pid1 = test_util:fake_pid(node()),
+    {State1, ok, [_]} = apply(meta(Config, 1, ?LINE, {notify, 1, Pid1}),
+                              make_register_enqueuer(Pid1), State0),
+    {State2, ok, _} = apply(meta(Config, 2, ?LINE, {notify, 2, Pid1}),
+                            rabbit_fifo:make_enqueue(Pid1, 1, one), State1),
+    {State3, ok, _} = apply(meta(Config, 3, ?LINE, {notify, 3, Pid1}),
+                            rabbit_fifo:make_enqueue(Pid1, 2, two), State2),
+    %% Third enqueue is rejected and dead-lettered (not enqueued).
+    %% Reply is reject_publish so the client can nack the publisher.
+    {State4, reject_publish, Efx4} =
+        apply(meta(Config, 4, ?LINE, {notify, 4, Pid1}),
+              rabbit_fifo:make_enqueue(Pid1, 3, three), State3),
+    %% Dead letter effect for the rejected message (index 4, message three)
+    ?ASSERT_EFF({log, [4], _}, Efx4),
+    %% Queue still has the original 2 messages (one and two)
+    ?assertMatch(#{num_ready_messages := 2}, rabbit_fifo:overview(State4)),
+    ok.
+
+reject_publish_dlx_unblock_test(Config) ->
+    %% Verify that reject_publish_dlx does not block enqueuers.
+    %% Messages always flow to the server for dead-lettering.
+    State0 = init(#{name => ?FUNCTION_NAME,
+                    queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+                    max_length => 2,
+                    max_in_memory_length => 0,
+                    overflow_strategy => reject_publish_dlx,
+                    dead_letter_handler => undefined}),
+    Pid1 = test_util:fake_pid(node()),
+    {State1, ok, [_]} = apply(meta(Config, 1, ?LINE, {notify, 1, Pid1}),
+                              make_register_enqueuer(Pid1), State0),
+    {State2, ok, _} = apply(meta(Config, 2, ?LINE, {notify, 2, Pid1}),
+                            rabbit_fifo:make_enqueue(Pid1, 1, one), State1),
+    %% Second enqueue fills the queue but does NOT block the enqueuer
+    {State3, ok, Efx3} = apply(meta(Config, 3, ?LINE, {notify, 3, Pid1}),
+                               rabbit_fifo:make_enqueue(Pid1, 2, two), State2),
+    ?ASSERT_NO_EFF({send_msg, _P, {queue_status, reject_publish}, [ra_event]}, Efx3),
+    %% Third enqueue is rejected (reply = reject_publish) but no blocking
+    {_State4, reject_publish, Efx4} =
+        apply(meta(Config, 4, ?LINE, {notify, 4, Pid1}),
+              rabbit_fifo:make_enqueue(Pid1, 3, three), State3),
+    ?ASSERT_NO_EFF({send_msg, _P, {queue_status, reject_publish}, [ra_event]}, Efx4),
+    ok.
+
 update_config_delivery_limit_test(Config) ->
     QName = rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
     InitConf = #{name => ?FUNCTION_NAME,

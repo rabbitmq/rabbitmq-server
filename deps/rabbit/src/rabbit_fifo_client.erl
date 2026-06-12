@@ -674,17 +674,24 @@ handle_ra_event(QName, Leader, {applied, Seqs},
              end,
 
     Actions0 = lists:reverse(ActionsRev),
-    Actions = case Corrs of
+    Actions1 = case Corrs of
                   [] ->
                       Actions0;
                   _ ->
-                      %%TODO: consider using lists:foldr/3 above because
-                      %% Corrs is returned in the wrong order here.
-                      %% The wrong order does not matter much because the channel sorts the
-                      %% sequence numbers before confirming to the client. But rabbit_fifo_client
-                      %% is sequence numer agnostic: it handles any correlation terms.
                       [{settled, QName, Corrs} | Actions0]
               end,
+    %% Collect rejected correlations and transform into rejected actions
+    {Actions, RejectedCorrs} =
+        lists:foldl(fun ({reject_publish, Corr}, {As, Rs}) ->
+                            {As, [Corr | Rs]};
+                        (A, {As, Rs}) ->
+                            {[A | As], Rs}
+                    end, {[], []}, Actions1),
+    Actions2 = case RejectedCorrs of
+                   [] -> lists:reverse(Actions);
+                   _ -> [{rejected, QName, maxlen, RejectedCorrs}
+                         | lists:reverse(Actions)]
+               end,
     case map_size(State2#state.pending) < SftLmt of
         true when State2#state.slow == true ->
             % we have exited soft limit state
@@ -710,9 +717,9 @@ handle_ra_event(QName, Leader, {applied, Seqs},
                                         send_command(ServerId, undefined, C,
                                                      normal, S0)
                                 end, State3, Commands),
-            {ok, State, [{unblock, cluster_name(State)} | Actions]};
+            {ok, State, [{unblock, cluster_name(State)} | Actions2]};
         _ ->
-            {ok, State2, Actions}
+            {ok, State2, Actions2}
     end;
 handle_ra_event(QName, From, {machine, Del}, State0)
       when element(1, Del) == delivery ->
@@ -834,6 +841,12 @@ seq_applied({Seq, Response},
           when Response =/= not_enqueued ->
             {Corrs, Actions, State#state{pending = Pending}};
         {{Corr, _}, Pending}
+          when Response == reject_publish ->
+            %% Message was rejected (e.g. reject_publish_dlx overflow).
+            %% Remove from pending but do not confirm; signal rejection.
+            {Corrs, [{reject_publish, Corr} | Actions],
+             State#state{pending = Pending}};
+        {{Corr, _}, Pending}
           when Response =/= not_enqueued ->
             {[Corr | Corrs], Actions, State#state{pending = Pending}};
         _ ->
@@ -845,6 +858,9 @@ seq_applied(_Seq, Acc) ->
 maybe_add_action(ok, Acc, State) ->
     {Acc, State};
 maybe_add_action(not_enqueued, Acc, State) ->
+    {Acc, State};
+maybe_add_action(reject_publish, Acc, State) ->
+    %% Handled separately in seq_applied
     {Acc, State};
 maybe_add_action({multi, Actions}, Acc0, State0) ->
     lists:foldl(fun (Act, {Acc, State}) ->
