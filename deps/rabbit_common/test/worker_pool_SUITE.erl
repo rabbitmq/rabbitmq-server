@@ -227,7 +227,9 @@ unexpected_cast_does_not_terminate_worker(_) ->
         reuse),
     ?assert(is_process_alive(Worker)),
     gen_server2:cast(Worker, {bogus_unknown_cast, make_ref()}),
-    timer:sleep(100),
+    %% `sys:get_state/2` is a synchronous barrier: it returns only after
+    %% all prior messages (including the cast above) have been processed.
+    _ = sys:get_state(Worker, 5000),
     ?assert(is_process_alive(Worker)),
     %% Verify the worker can still execute jobs
     Self = self(),
@@ -246,7 +248,9 @@ unexpected_info_does_not_terminate_worker(_) ->
         reuse),
     ?assert(is_process_alive(Worker)),
     Worker ! {bogus_unknown_message, make_ref()},
-    timer:sleep(100),
+    %% `sys:get_state/2` is a synchronous barrier: it returns only after
+    %% all prior messages (including the info message above) have been processed.
+    _ = sys:get_state(Worker, 5000),
     ?assert(is_process_alive(Worker)),
     %% Verify the worker can still execute jobs
     Self = self(),

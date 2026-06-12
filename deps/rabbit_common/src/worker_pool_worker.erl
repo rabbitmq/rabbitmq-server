@@ -113,7 +113,8 @@ handle_cast({submit_async, Fun, CPid}, {from, CPid, MRef}) ->
     {noreply, undefined, hibernate};
 
 handle_cast(Msg, State) ->
-    rabbit_log:warning("worker_pool_worker received unexpected cast: ~tp", [Msg]),
+    rabbit_log:warning("worker_pool_worker (~ts) received unexpected cast: ~256P",
+                       [get(worker_pool_name), Msg, 7]),
     {noreply, State, hibernate}.
 
 handle_info({'DOWN', MRef, process, CPid, _Reason}, {from, CPid, MRef}) ->
@@ -129,7 +130,8 @@ handle_info({timeout, Key, Fun}, State) ->
     {noreply, State, hibernate};
 
 handle_info(Msg, State) ->
-    rabbit_log:warning("worker_pool_worker received unexpected message: ~tp", [Msg]),
+    rabbit_log:warning("worker_pool_worker (~ts) received unexpected info message: ~256P",
+                       [get(worker_pool_name), Msg, 7]),
     {noreply, State, hibernate}.
 
 code_change(_OldVsn, State, _Extra) ->
