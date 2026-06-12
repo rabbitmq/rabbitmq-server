@@ -103,6 +103,11 @@
 -define(GEN_SERVER, gen_server2).
 -define(SUP_MODULE, mirrored_supervisor_sups).
 
+%% Periodic reconciliation interval, and a short debounce used to coalesce
+%% reconciliations triggered by process group membership changes.
+-define(RECONCILE_INTERVAL, 30000).
+-define(RECONCILE_DEBOUNCE, 2000).
+
 -export([start_link/3, start_link/4,
          start_child/2, restart_child/2,
          delete_child/2, terminate_child/2,
@@ -121,7 +126,12 @@
                 group,
                 tx_fun,
                 initial_childspecs,
-                child_order}).
+                child_order,
+                %% Reference returned by pg:monitor/1 for the group.
+                pg_ref,
+                %% Whether a debounced, membership-triggered reconciliation is
+                %% already scheduled, to coalesce bursts of pg events.
+                reconcile_scheduled = false}).
 
 %%--------------------------------------------------------------------------
 %% Callback behaviour
@@ -255,6 +265,11 @@ handle_call({init, Overall}, _From,
     LockId = mirrored_supervisor_locks:lock(Group),
     maybe_log_lock_acquisition_failure(LockId, Group),
     ok = pg:join(Group, Overall),
+    %% Watch group membership so that partitions and heals trigger a prompt
+    %% reconciliation instead of waiting for the next periodic tick. This
+    %% shrinks the window during which a child runs (and is reported) on more
+    %% than one node after a partition heals.
+    {PgRef, _} = pg:monitor(Group),
     ?LOG_DEBUG("Mirrored supervisor: initializing, overall supervisor ~tp joined group ~tp", [Overall, Group]),
     Rest = pg:get_members(Group) -- [Overall],
     Nodes = [node(M) || M <- Rest],
@@ -278,7 +293,7 @@ handle_call({init, Overall}, _From,
      end || Pid <- Rest],
     Delegate = delegate(Overall),
     erlang:monitor(process, Delegate),
-    State1 = State#state{overall = Overall, delegate = Delegate},
+    State1 = State#state{overall = Overall, delegate = Delegate, pg_ref = PgRef},
     Results = [maybe_start(Group, Overall, Delegate, S) || S <- ChildSpecs],
     mirrored_supervisor_locks:unlock(LockId),
     case errors(Results) of
@@ -397,8 +412,33 @@ handle_info(reconcile, State = #state{overall  = Overall,
                                       delegate = Delegate,
                                       group    = Group}) when Overall =/= undefined ->
     reconcile_children(Group, Overall, Delegate),
-    erlang:send_after(30000, self(), reconcile),
+    erlang:send_after(?RECONCILE_INTERVAL, self(), reconcile),
     {noreply, State};
+
+%% A debounced reconciliation triggered by a group membership change. Unlike
+%% the periodic 'reconcile' it does not reschedule the periodic timer; it just
+%% reconciles once and clears the debounce flag.
+handle_info(reconcile_now, State = #state{overall  = Overall,
+                                          delegate = Delegate,
+                                          group    = Group}) when Overall =/= undefined ->
+    reconcile_children(Group, Overall, Delegate),
+    {noreply, State#state{reconcile_scheduled = false}};
+
+%% Group membership changed (a peer joined on partition heal, or left on
+%% partition). Schedule a single debounced reconciliation so that the minority
+%% side sheds its children promptly and the majority side stops any duplicate
+%% it has taken over, instead of waiting for the next periodic tick.
+handle_info({PgRef, Event, _Group, _Pids},
+            State = #state{pg_ref = PgRef, overall = Overall,
+                           reconcile_scheduled = Scheduled})
+  when (Event =:= join orelse Event =:= leave) ->
+    case Overall =/= undefined andalso not Scheduled of
+        true ->
+            erlang:send_after(?RECONCILE_DEBOUNCE, self(), reconcile_now),
+            {noreply, State#state{reconcile_scheduled = true}};
+        false ->
+            {noreply, State}
+    end;
 
 handle_info(Info, State) ->
     {stop, {unexpected_info, Info}, State}.
