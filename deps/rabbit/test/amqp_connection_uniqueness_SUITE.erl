@@ -18,6 +18,8 @@
 -import(amqp_utils,
         [connection_config/1,
          close_connection_sync/1]).
+-import(rabbit_amqp_util,
+        [has_capability/2]).
 
 all() ->
     [
@@ -28,6 +30,7 @@ groups() ->
     [
      {cluster_size_1, [shuffle],
       [
+       no_sole_conn_capability,
        sole_conn_no_conflict,
        sole_conn_conflict_should_refuse_second_connection
       ]}
@@ -56,6 +59,34 @@ end_per_group(_, Config) ->
       Config,
       rabbit_ct_client_helpers:teardown_steps() ++
       rabbit_ct_broker_helpers:teardown_steps()).
+
+no_sole_conn_capability(Config) ->
+    OpnConf0 = connection_config(Config),
+    OpnConf1 = OpnConf0#{
+                 container_id => <<"my-container-1">>,
+                 notify_with_performative => true
+                },
+    {ok, Connection1} = amqp10_client:open_connection(OpnConf1),
+    receive {amqp10_event, {connection, Connection1,
+                            {opened, #'v1_0.open'{
+                                        offered_capabilities = OffCaps1,
+                                        properties = Props1}}}} ->
+                ?assertNot(has_capability(?CAP_SOLE_CONN, OffCaps1)),
+                ?assertNot(has_field(?SOLE_CONN_DETECTION_POLICY, Props1))
+    after 30000 -> ct:fail(opened_timeout)
+    end,
+    {ok, Connection2} = amqp10_client:open_connection(OpnConf1),
+    receive {amqp10_event, {connection, Connection2,
+                            {opened, #'v1_0.open'{
+                                        offered_capabilities = OffCaps2,
+                                        properties = Props2}}}} ->
+                ?assertNot(has_capability(?CAP_SOLE_CONN, OffCaps2)),
+                ?assertNot(has_field(?SOLE_CONN_DETECTION_POLICY, Props2))
+    after 30000 -> ct:fail(opened_timeout)
+    end,
+
+    ok = close_connection_sync(Connection2),
+    ok = close_connection_sync(Connection1).
 
 sole_conn_no_conflict(Config) ->
     OpnConf0 = connection_config(Config),
@@ -139,7 +170,16 @@ sole_conn_conflict_should_refuse_second_connection(Config) ->
 %% ------------------------------------------------------------------
 
 assert_has_sole_cap(Caps) ->
-    ?assert(rabbit_amqp_util:has_capability(?CAP_SOLE_CONN, Caps)).
+    ?assert(has_capability(?CAP_SOLE_CONN, Caps)).
+
 assert_has_weak_policy({map, Props}) ->
     ExpectedPair = {?SOLE_CONN_DETECTION_POLICY, ?SOLE_CONN_DETECTION_POLICY_WEAK},
     ?assert(lists:member(ExpectedPair, Props)).
+
+has_field(Field, {map, Props}) ->
+    case lists:keyfind(Field, 1, Props) of
+        false ->
+            false;
+        _ ->
+            true
+    end.
