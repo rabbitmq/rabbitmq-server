@@ -564,21 +564,16 @@ reclaim_orphans(Group, Overall, Delegate) ->
               fun({Path, #mirrored_sup_childspec{mirroring_pid = OwnerPid,
                                                  childspec = ChildSpec,
                                                  key = {_, Id}} = S0}) ->
-                      case lists:member(OwnerPid, ActiveMembers) of
-                          false ->
-                              ?LOG_NOTICE("Mirrored supervisor: reclaiming orphan child ~tp in group ~tp (previous owner ~tp was dead/unreachable)",
-                                          [Id, Group, OwnerPid]),
-                              NewS = S0#mirrored_sup_childspec{mirroring_pid = Overall},
-                              case rabbit_khepri:put(Path, NewS) of
-                                  ok ->
-                                      try ?SUPERVISOR:start_child(Delegate, ChildSpec) catch _:_ -> ok end,
-                                      ok;
-                                  _ ->
-                                      ok
-                              end;
-                          true ->
-                              ok
-                      end
+                  maybe
+                      false ?= lists:member(OwnerPid, ActiveMembers),
+                      ?LOG_NOTICE("Mirrored supervisor: reclaiming orphan child ~tp in group ~tp (previous owner ~tp was dead/unreachable)",
+                                  [Id, Group, OwnerPid]),
+                      NewS = S0#mirrored_sup_childspec{mirroring_pid = Overall},
+                      ok ?= rabbit_khepri:put(Path, NewS),
+                      try ?SUPERVISOR:start_child(Delegate, ChildSpec) catch _:_ -> ok end
+                  else
+                      _ -> ok
+                  end
               end, group_childspecs(Group));
         _ ->
             ok
