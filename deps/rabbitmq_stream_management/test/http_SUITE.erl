@@ -28,6 +28,7 @@ groups() ->
                                create_super_stream,
                                create_super_stream_requires_configure_permission,
                                create_super_stream_partition_limits,
+                               create_super_stream_binding_keys_limit,
                                stream_tracking_requires_vhost_access
                               ]}].
 
@@ -180,6 +181,17 @@ create_super_stream_partition_limits(Config) ->
              #{partitions => 500000000}, ?BAD_REQUEST),
     http_put(Config, "/stream/super-streams/%2F/max-parts",
              #{partitions => 1000}, {group, '2xx'}),
+    ok.
+
+create_super_stream_binding_keys_limit(Config) ->
+    %% A binding-keys list exceeding the partition limit (default 1000) is rejected.
+    OverLimit = iolist_to_binary(
+                  lists:join(
+                    <<",">>,
+                    [<<"k", (integer_to_binary(N))/binary>>
+                     || N <- lists:seq(0, 1000)])),
+    http_put(Config, "/stream/super-streams/%2F/too-many-binding-keys",
+             #{'binding-keys' => OverLimit}, ?BAD_REQUEST),
     ok.
 
 stream_tracking_requires_vhost_access(Config) ->
