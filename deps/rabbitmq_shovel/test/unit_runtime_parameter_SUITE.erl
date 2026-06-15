@@ -37,8 +37,10 @@ groups() ->
           validate_amqp10_with_a_map,
           test_src_protocol_defaults,
           test_src_protocol_explicit,
+          test_src_protocol_unknown,
           test_dest_protocol_defaults,
           test_dest_protocol_explicit,
+          test_dest_protocol_unknown,
           test_protocols_defaults,
           test_protocols_explicit,
           test_protocols_mixed,
@@ -281,11 +283,6 @@ parse_amqp10_0() ->
               dest := #{module := rabbit_amqp10_shovel,
                         uris := ["amqp://remotehost:5672"],
                         target_address := <<"a-dest-queue">>,
-                        message_annotations := #{<<"some-message-ann">> :=
-                                                 <<"message-ann-value">>},
-                        application_properties := #{<<"some-app-prop">> :=
-                                                    <<"app-prop-value">>},
-                        properties := #{user_id := <<"some-user">>},
                         add_timestamp_header := true,
                         add_forward_headers := true
                        }
@@ -432,6 +429,13 @@ test_src_protocol_explicit(_Config) ->
     ?assertEqual(local, rabbit_shovel_parameters:src_protocol(DefMapLocal)),
     ok.
 
+test_src_protocol_unknown(_Config) ->
+    ?assertEqual(amqp091, rabbit_shovel_parameters:src_protocol(
+                            [{<<"src-protocol">>, <<"not-a-real-protocol">>}])),
+    ?assertEqual(amqp091, rabbit_shovel_parameters:src_protocol(
+                            #{<<"src-protocol">> => <<"not-a-real-protocol">>})),
+    ok.
+
 test_dest_protocol_defaults(_Config) ->
     DefProplist = [{<<"src-uri">>, <<"amqp://localhost">>},
                    {<<"dest-uri">>, <<"amqp://remote">>}],
@@ -460,6 +464,13 @@ test_dest_protocol_explicit(_Config) ->
 
     DefMapLocal = #{<<"dest-protocol">> => <<"local">>},
     ?assertEqual(local, rabbit_shovel_parameters:dest_protocol(DefMapLocal)),
+    ok.
+
+test_dest_protocol_unknown(_Config) ->
+    ?assertEqual(amqp091, rabbit_shovel_parameters:dest_protocol(
+                            [{<<"dest-protocol">>, <<"not-a-real-protocol">>}])),
+    ?assertEqual(amqp091, rabbit_shovel_parameters:dest_protocol(
+                            #{<<"dest-protocol">> => <<"not-a-real-protocol">>})),
     ok.
 
 test_protocols_defaults(_Config) ->
