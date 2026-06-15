@@ -624,6 +624,7 @@ validate_super_stream_creation(_VirtualHost, _Name, Partitions, BindingKeys)
 validate_super_stream_creation(VirtualHost, Name, Partitions, _BindingKeys) ->
     maybe
         ok ?= validate_super_stream_partitions(Partitions),
+        ok ?= validate_super_stream_max_partitions(Partitions),
         ok ?= case rabbit_vhost_limit:would_exceed_queue_limit(length(Partitions), VirtualHost) of
                   false ->
                       ok;
@@ -668,6 +669,17 @@ validate_super_stream_partitions(Partitions) ->
         _ -> {error, {validation_failed,
                       {rabbit_misc:format("Duplicate partition names found ~ts",
                                           [Partitions])}}}
+    end.
+
+validate_super_stream_max_partitions(Partitions) ->
+    MaxPartitions = rabbit_stream_utils:max_super_stream_partitions(),
+    case erlang:length(Partitions) > MaxPartitions of
+        true ->
+            {error, {validation_failed,
+                     {rabbit_misc:format("The partition number must not exceed ~w",
+                                         [MaxPartitions])}}};
+        false ->
+            ok
     end.
 
 exchange_exists(VirtualHost, Name) ->
