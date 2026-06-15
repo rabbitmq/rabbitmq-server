@@ -76,11 +76,7 @@ channel_statistics1(_Config) ->
 
     %% Set up a channel and queue
     {_Writer, Ch} = test_spawn(),
-<<<<<<< HEAD
-    rabbit_channel:do(Ch, #'queue.declare'{}),
-=======
-    rabbit_channel_common:do(Ch, #'queue.declare'{durable = true}),
->>>>>>> a3f2286c3b (remove unnecessary rabbit_channel:do/{2,3} and rabbit_channel:do_flow/3 - prefer those in rabbit_channel_common)
+    rabbit_channel_common:do(Ch, #'queue.declare'{}),
     QName = receive #'queue.declare_ok'{queue = Q0} -> Q0
             after ?TIMEOUT -> throw(failed_to_receive_queue_declare_ok)
             end,

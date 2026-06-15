@@ -204,7 +204,7 @@ queue_cleanup(Config) ->
 
 queue_cleanup1(_Config, _SecondaryNode) ->
     {_Writer, Ch} = test_spawn(),
-    rabbit_channel:do(Ch, #'queue.declare'{ queue = ?CLEANUP_QUEUE_NAME }),
+    rabbit_channel_common:do(Ch, #'queue.declare'{ queue = ?CLEANUP_QUEUE_NAME }),
     receive #'queue.declare_ok'{queue = ?CLEANUP_QUEUE_NAME} ->
             ok
     after ?TIMEOUT -> throw(failed_to_receive_queue_declare_ok)
@@ -213,8 +213,8 @@ queue_cleanup1(_Config, _SecondaryNode) ->
     rabbit:stop(),
     rabbit:start(),
     {_Writer2, Ch2} = test_spawn(),
-    rabbit_channel:do(Ch2, #'queue.declare'{ passive = true,
-                                             queue   = ?CLEANUP_QUEUE_NAME }),
+    rabbit_channel_common:do(Ch2, #'queue.declare'{ passive = true,
+                                                    queue   = ?CLEANUP_QUEUE_NAME }),
     receive
         #'channel.close'{reply_code = ?NOT_FOUND} ->
             ok
@@ -292,7 +292,7 @@ dead_queue_loop(QueueName, OldPid) ->
 
 test_spawn() ->
     {Writer, _Limiter, Ch} = rabbit_ct_broker_helpers:test_channel(),
-    ok = rabbit_channel:do(Ch, #'channel.open'{}),
+    ok = rabbit_channel_common:do(Ch, #'channel.open'{}),
     receive #'channel.open_ok'{} -> ok
     after ?TIMEOUT -> throw(failed_to_receive_channel_open_ok)
     end,
