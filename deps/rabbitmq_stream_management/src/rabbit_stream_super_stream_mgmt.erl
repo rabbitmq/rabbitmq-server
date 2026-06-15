@@ -23,7 +23,6 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -define(DEFAULT_RPC_TIMEOUT, 30_000).
--define(MAX_PARTITIONS, 1000).
 
 dispatcher() ->
     [{"/stream/super-streams/:vhost/:name", ?MODULE, []}].
@@ -57,52 +56,66 @@ resource_exists(ReqData, Context) ->
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_vhost(ReqData, Context).
 
-accept_content(ReqData0, #context{user = #user{username = ActingUser}} = Context) ->
-    %% TODO validate arguments?
+accept_content(ReqData0, #context{user = User} = Context) ->
     VHost = rabbit_mgmt_util:id(vhost, ReqData0),
     Name = rabbit_mgmt_util:id(name, ReqData0),
+    case rabbit_stream_utils:check_super_stream_permitted(VHost, Name, User) of
+        error ->
+            rabbit_web_dispatch_access_control:not_authorised(
+              <<"Access refused.">>, ReqData0, Context);
+        ok ->
+            maybe_create_super_stream(ReqData0, Context, VHost, Name)
+    end.
+
+maybe_create_super_stream(ReqData0, Context, VHost, Name) ->
     rabbit_mgmt_util:with_decode(
       [], ReqData0, Context,
       fun([], BodyMap, ReqData) ->
               PartitionsBin = maps:get(partitions, BodyMap, undefined),
-              BindingKeysStr = maps:get('binding-keys', BodyMap, undefined),
-              case validate_partitions_or_binding_keys(PartitionsBin, BindingKeysStr, ReqData, Context) of
+              BindingKeysBin = case maps:get('binding-keys', BodyMap, undefined) of
+                                   undefined ->
+                                       undefined;
+                                   B ->
+                                       rabbit_data_coercion:to_binary(B)
+                               end,
+              case validate_partitions_or_binding_keys(PartitionsBin, BindingKeysBin, ReqData, Context) of
                   ok ->
                       Arguments = maps:get(arguments, BodyMap, #{}),
                       case get_node(BodyMap) of
-                      {error, not_member} ->
-                          N = maps:get(<<"node">>, BodyMap, <<>>),
-                          Msg = list_to_binary(
-                                  io_lib:format(
-                                    "Node ~ts is not a cluster member", [N])),
-                          rabbit_mgmt_util:bad_request(Msg, ReqData, Context);
-                      {ok, Node} ->
-                      case PartitionsBin of
-                          undefined ->
-                              BindingKeys = binding_keys(BindingKeysStr),
-                              Streams = streams_from_binding_keys(Name, BindingKeys),
-                              check_and_create_super_stream(
-                                Node, VHost, Name, Streams,
-                                Arguments, BindingKeys, ActingUser,
-                                ReqData, Context);
-                          _ ->
-                              case validate_partitions(PartitionsBin, ReqData, Context) of
-                                  Partitions when is_integer(Partitions) ->
-                                      Streams = streams_from_partitions(Name, Partitions),
-                                      RoutingKeys = routing_keys(Partitions),
+                          {error, not_member} ->
+                              N = maps:get(<<"node">>, BodyMap, <<>>),
+                              Msg = list_to_binary(
+                                      io_lib:format(
+                                        "Node ~ts is not a cluster member", [N])),
+                              rabbit_mgmt_util:bad_request(Msg, ReqData, Context);
+                          {ok, Node} ->
+                              case PartitionsBin of
+                                  undefined ->
+                                      BindingKeys = binding_keys(BindingKeysBin),
+                                      Streams = streams_from_binding_keys(Name, BindingKeys),
                                       check_and_create_super_stream(
                                         Node, VHost, Name, Streams,
-                                        Arguments, RoutingKeys, ActingUser,
+                                        Arguments, BindingKeys,
                                         ReqData, Context);
-                                  Error ->
-                                      Error
+                                  _ ->
+                                      case validate_partitions(PartitionsBin, ReqData, Context) of
+                                          Partitions when is_integer(Partitions) ->
+                                              Streams = streams_from_partitions(Name, Partitions),
+                                              RoutingKeys = routing_keys(Partitions),
+                                              check_and_create_super_stream(
+                                                Node, VHost, Name, Streams,
+                                                Arguments, RoutingKeys,
+                                                ReqData, Context);
+                                          Error ->
+                                              Error
+                                      end
                               end
-                      end
                       end;
                   Error ->
                       Error
               end
       end).
+
 
 %%-------------------------------------------------------------------
 get_node(Props) ->
@@ -111,36 +124,31 @@ get_node(Props) ->
         N         -> rabbit_nodes:resolve_member(binary_to_list(N))
     end.
 
-binding_keys(BindingKeysStr) ->
-    [rabbit_data_coercion:to_binary(
-       string:trim(K))
-     || K
-            <- string:lexemes(
-                 rabbit_data_coercion:to_list(BindingKeysStr), ",")].
+binding_keys(BindingKeysBin) ->
+    Keys = binary:split(BindingKeysBin, <<",">>, [global]),
+    %% Trim first, then verify the token is not an empty binary
+    [Trimmed || K <- Keys,
+                Trimmed <- [string:trim(K)],
+                Trimmed =/= <<>>].
 
 routing_keys(Partitions) ->
     [integer_to_binary(K) || K <- lists:seq(0, Partitions - 1)].
 
 streams_from_binding_keys(Name, BindingKeys) ->
-    [list_to_binary(binary_to_list(Name)
-                    ++ "-"
-                    ++ binary_to_list(K))
-     || K <- BindingKeys].
+    [<<Name/binary, "-", K/binary>> || K <- BindingKeys].
 
 streams_from_partitions(Name, Partitions) ->
-    [list_to_binary(binary_to_list(Name)
-                    ++ "-"
-                    ++ integer_to_list(K))
-     || K <- lists:seq(0, Partitions - 1)].
+    [<<Name/binary, "-", (integer_to_binary(K))/binary>> ||
+     K <- lists:seq(0, Partitions - 1)].
 
 check_and_create_super_stream(NodeName, VHost, SuperStream, Streams,
-                              Arguments, RoutingKeys, ActingUser,
-                              ReqData, #context{user = User} = Context) ->
+                              Arguments, RoutingKeys, ReqData,
+                              #context{user = User} = Context) ->
     case rabbit_stream_utils:check_super_stream_management_permitted(
            VHost, SuperStream, Streams, User) of
         ok ->
             create_super_stream(NodeName, VHost, SuperStream, Streams,
-                                Arguments, RoutingKeys, ActingUser,
+                                Arguments, RoutingKeys,
                                 ReqData, Context);
         error ->
             rabbit_web_dispatch_access_control:not_authorised(
@@ -148,7 +156,8 @@ check_and_create_super_stream(NodeName, VHost, SuperStream, Streams,
     end.
 
 create_super_stream(NodeName, VHost, SuperStream, Streams, Arguments,
-                    RoutingKeys, ActingUser, ReqData, Context) ->
+                    RoutingKeys, ReqData,
+                    #context{user = #user{username = ActingUser}} = Context) ->
     case rabbit_misc:rpc_call(NodeName,
                               rabbit_stream_manager,
                               create_super_stream,
@@ -170,6 +179,30 @@ validate_partitions_or_binding_keys(undefined, undefined, ReqData, Context) ->
     rabbit_mgmt_util:bad_request("Must specify partitions or binding keys", ReqData, Context);
 validate_partitions_or_binding_keys(_, undefined, _, _) ->
     ok;
+validate_partitions_or_binding_keys(undefined, BindingKeysBin, ReqData, Context)
+  when is_binary(BindingKeysBin) ->
+    MaxPartitions = rabbit_stream_utils:max_super_stream_partitions(),
+    %% Fast-fail approximation shield, protect against OOM
+    %% (doesn't account for <<",,,">> or <<"   ,   ,   ">>)
+    ApproxKeys = length(binary:matches(BindingKeysBin, <<",">>)) + 1,
+    case ApproxKeys > MaxPartitions of
+        true ->
+            rabbit_mgmt_util:bad_request(
+              "The number of binding keys must not exceed " ++
+              integer_to_list(MaxPartitions),
+              ReqData, Context);
+        false ->
+            %% Bounded exact validation.
+            %% Safe to split now because ApproxKeys is guaranteed to be <= MaxPartitions.
+            case binding_keys(BindingKeysBin) of
+                [] ->
+                    rabbit_mgmt_util:bad_request(
+                      "The number of binding keys must be greater than 0",
+                      ReqData, Context);
+                _ActualKeys ->
+                    ok
+            end
+    end;
 validate_partitions_or_binding_keys(undefined, _, _, _) ->
     ok;
 validate_partitions_or_binding_keys(_, _, ReqData, Context) ->
@@ -182,13 +215,17 @@ validate_partitions(PartitionsBin, ReqData, Context) ->
                 rabbit_mgmt_util:bad_request(
                   "The partition number must be greater than 0",
                   ReqData, Context);
-            Int when Int > ?MAX_PARTITIONS ->
-                rabbit_mgmt_util:bad_request(
-                  "The partition number must not exceed " ++
-                  integer_to_list(?MAX_PARTITIONS),
-                  ReqData, Context);
             Int ->
-                Int
+                MaxPartitions = rabbit_stream_utils:max_super_stream_partitions(),
+                case Int > MaxPartitions of
+                    true ->
+                        rabbit_mgmt_util:bad_request(
+                          "The partition number must not exceed " ++
+                          integer_to_list(MaxPartitions),
+                          ReqData, Context);
+                    false ->
+                        Int
+                end
         end
     catch
         _:_ ->

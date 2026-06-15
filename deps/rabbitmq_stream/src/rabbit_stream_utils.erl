@@ -16,6 +16,8 @@
 
 -module(rabbit_stream_utils).
 
+-define(MAX_SUPER_STREAM_PARTITIONS, 1000).
+
 %% API
 -export([enforce_correct_name/1,
          write_messages/6,
@@ -33,8 +35,10 @@
          filter_spec/1,
          command_versions/0,
          check_super_stream_management_permitted/4,
+         check_super_stream_permitted/3,
          offset_lag/4,
-         consumer_offset/3]).
+         consumer_offset/3,
+         max_super_stream_partitions/0]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbitmq_stream_common/include/rabbit_stream.hrl").
@@ -192,13 +196,14 @@ check_write_permitted(Resource, User) ->
 check_read_permitted(Resource, User, Context) ->
     check_resource_access(User, Resource, read, Context).
 
--spec check_super_stream_management_permitted(rabbit_types:vhost(), binary(), [binary()], rabbit_types:user()) ->
+-spec check_super_stream_management_permitted(rabbit_types:vhost(), binary(),
+                                              [binary()], rabbit_types:user()) ->
     ok | error.
 check_super_stream_management_permitted(VirtualHost, SuperStream, Partitions, User) ->
     Exchange = e(VirtualHost, SuperStream),
     maybe
         %% exchange creation
-        ok ?= check_configure_permitted(Exchange, User),
+        ok ?= check_super_stream_permitted(VirtualHost, SuperStream, User),
         %% stream creations
         ok ?= check_streams_permissions(fun check_configure_permitted/2,
                                         VirtualHost, Partitions,
@@ -210,6 +215,13 @@ check_super_stream_management_permitted(VirtualHost, SuperStream, Partitions, Us
                                   VirtualHost, Partitions,
                                   User)
     end.
+
+-spec check_super_stream_permitted(rabbit_types:vhost(), binary(),
+                                   rabbit_types:user()) ->
+    ok | error.
+check_super_stream_permitted(Vhost, SuperStream, User) ->
+    Exchange = e(Vhost, SuperStream),
+    check_configure_permitted(Exchange, User).
 
 check_streams_permissions(Fun, VirtualHost, List, User) ->
     case lists:all(fun(S) ->
@@ -346,3 +358,7 @@ offset_lag(_, 0, 0, LastListenerOffset) when LastListenerOffset > 0 ->
     0;
 offset_lag(CommittedOffset, ConsumerOffset, _, _) ->
     CommittedOffset - ConsumerOffset.
+
+max_super_stream_partitions() ->
+    application:get_env(rabbitmq_stream, max_super_stream_partitions,
+                        ?MAX_SUPER_STREAM_PARTITIONS).
