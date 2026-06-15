@@ -176,13 +176,8 @@ run([SuperStream],
       timeout := Timeout,
       partitions := Partitions} =
         Opts) ->
-    Streams =
-        [list_to_binary(binary_to_list(SuperStream)
-                        ++ "-"
-                        ++ integer_to_list(K))
-         || K <- lists:seq(0, Partitions - 1)],
-    RoutingKeys =
-        [integer_to_binary(K) || K <- lists:seq(0, Partitions - 1)],
+    Streams = streams_from_partitions(SuperStream, Partitions),
+    RoutingKeys = routing_keys(Partitions),
     create_super_stream(NodeName,
                         Timeout,
                         VHost,
@@ -196,6 +191,7 @@ run([SuperStream],
       timeout := Timeout,
       binding_keys := BindingKeysStr} =
         Opts) ->
+<<<<<<< HEAD
     BindingKeys =
         [rabbit_data_coercion:to_binary(
              string:strip(K))
@@ -207,6 +203,11 @@ run([SuperStream],
                         ++ "-"
                         ++ binary_to_list(K))
          || K <- BindingKeys],
+=======
+    BindingKeys = binding_keys(BindingKeysStr),
+    Streams = streams_from_binding_keys(SuperStream, BindingKeys),
+
+>>>>>>> ac336f6c3e (Add configuration setting for max super stream partitions)
     create_super_stream(NodeName,
                         Timeout,
                         VHost,
@@ -214,6 +215,24 @@ run([SuperStream],
                         Streams,
                         stream_arguments(Opts),
                         BindingKeys).
+
+streams_from_partitions(Name, Partitions) ->
+    [<<Name/binary, "-", (integer_to_binary(K))/binary>> ||
+     K <- lists:seq(0, Partitions - 1)].
+
+routing_keys(Partitions) ->
+    [integer_to_binary(K) || K <- lists:seq(0, Partitions - 1)].
+
+binding_keys(BindingKeysBin) ->
+    Keys = binary:split(rabbit_data_coercion:to_binary(BindingKeysBin),
+                        <<",">>, [global]),
+    %% Trim first, then verify the token is not an empty binary
+    [Trimmed || K <- Keys,
+                Trimmed <- [string:trim(K)],
+                Trimmed =/= <<>>].
+
+streams_from_binding_keys(Name, BindingKeys) ->
+    [<<Name/binary, "-", K/binary>> || K <- BindingKeys].
 
 stream_arguments(Opts) ->
     stream_arguments(#{}, Opts).
