@@ -1,25 +1,44 @@
 -module(rabbit_amqp_sole_conn).
 
--rabbit_boot_step({?MODULE,
-    [{description, "AMQP 1.0 JMS unique connection enforcement tracker"},
-     {mfa,         {rabbit_sup, start_restartable_child, [?MODULE]}},
-     {requires,    pre_boot},
-     {enables,     external_infrastructure}]}).
+-include_lib("khepri/include/khepri.hrl").
+-include("include/rabbit_khepri.hrl").
 
-%% API
--export([start_link/0, acquire/3, release/2]).
+-export([acquire/4, release/2]).
 
 -type vhost() :: binary().
 -type container_id() :: binary().
 
--spec acquire(vhost(), container_id(), pid()) -> 
+-spec acquire(boolean(), vhost(), container_id(), pid()) ->
     ok | {error, refuse_connection}.
-acquire(VHost, ContainerId, ConnectionPid) ->
-    gen_server:call(?MODULE, {acquire, VHost, ContainerId, ConnectionPid}).
+acquire(true, VHost, ContainerId, ConnectionPid) ->
+    Path = khepri_sole_conn_path(VHost, ContainerId),
+    case rabbit_khepri:adv_create(Path, ConnectionPid) of
+        {ok, _} ->
+            ok;
+        {error, {khepri, mismatching_node, #{node_props := #{data := _ExistingPid}}}} ->
+            %% The container ID is already claimed by another connection
+            {error, refuse_connection};
+        {error, Reason} ->
+            {error, Reason}
+    end;
+acquire(false, _, _, _) ->
+    ok.
 
 -spec release(vhost(), container_id()) -> ok.
 release(VHost, ContainerId) ->
-    gen_server:call(?MODULE, {release, VHost, ContainerId}).
+    Path = khepri_sole_conn_path(VHost, ContainerId),
+    case rabbit_khepri:adv_delete(Path) of
+        {ok, _} ->
+            ok;
+        {error, _} = Error ->
+            Error
+    end.
 
-start_link() ->
-    gen_server:start_link({local, ?MODULE}, rabbit_amqp_sole_conn_local, [], []).
+%% --------------------------------------------------------------
+%% Khepri paths
+%% --------------------------------------------------------------
+
+khepri_sole_conn_path(VHost, ContainerId)
+  when ?IS_KHEPRI_PATH_CONDITION(VHost) andalso
+       ?IS_KHEPRI_PATH_CONDITION(ContainerId) ->
+    ?RABBITMQ_KHEPRI_VHOST_PATH(VHost, [amqp10_sole_conn, ContainerId]).
