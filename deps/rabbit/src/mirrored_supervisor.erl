@@ -7,8 +7,6 @@
 
 -module(mirrored_supervisor).
 
--compile(nowarn_deprecated_catch).
-
 -include_lib("khepri/include/khepri.hrl").
 -include("include/rabbit_khepri.hrl").
 -include_lib("kernel/include/logger.hrl").
@@ -494,8 +492,8 @@ do_reconcile_children(Group, Overall, Delegate) ->
               fun(Id) ->
                       ?LOG_WARNING("Mirrored supervisor: node is in a minority partition (~tp/~tp nodes reachable), stopping local instance of child ~tp in group ~tp",
                                    [ReachableCount, TotalSize, Id, Group]),
-                      catch ?SUPERVISOR:terminate_child(Delegate, Id),
-                      catch ?SUPERVISOR:delete_child(Delegate, Id)
+                      _ = try ?SUPERVISOR:terminate_child(Delegate, Id) catch _:_ -> ok end,
+                      try ?SUPERVISOR:delete_child(Delegate, Id) catch _:_ -> ok end
               end, RunningIds);
         false ->
             lists:foreach(
@@ -504,8 +502,8 @@ do_reconcile_children(Group, Overall, Delegate) ->
                           {ok, Owner} when Owner =/= Overall ->
                               ?LOG_WARNING("Mirrored supervisor: child ~tp in group ~tp is owned by another node ~tp (we are ~tp), stopping local instance",
                                            [Id, Group, node(Owner), node()]),
-                              catch ?SUPERVISOR:terminate_child(Delegate, Id),
-                              catch ?SUPERVISOR:delete_child(Delegate, Id);
+                              _ = try ?SUPERVISOR:terminate_child(Delegate, Id) catch _:_ -> ok end,
+                              try ?SUPERVISOR:delete_child(Delegate, Id) catch _:_ -> ok end;
                           _ ->
                               ok
                       end
@@ -548,7 +546,7 @@ restart_owned_children(Group, Overall, Delegate, RunningIds) ->
                   true ->
                       ?LOG_NOTICE("Mirrored supervisor: restarting child ~tp in group ~tp which this node owns but is not running locally",
                                   [Id, Group]),
-                      catch ?SUPERVISOR:start_child(Delegate, ChildSpec),
+                      _ = try ?SUPERVISOR:start_child(Delegate, ChildSpec) catch _:_ -> ok end,
                       ok;
                   false ->
                       ok
@@ -570,7 +568,7 @@ reclaim_orphans(Group, Overall, Delegate) ->
                               NewS = S0#mirrored_sup_childspec{mirroring_pid = Overall},
                               case rabbit_khepri:put(Path, NewS) of
                                   ok ->
-                                      catch ?SUPERVISOR:start_child(Delegate, ChildSpec),
+                                      try ?SUPERVISOR:start_child(Delegate, ChildSpec) catch _:_ -> ok end,
                                       ok;
                                   _ ->
                                       ok
