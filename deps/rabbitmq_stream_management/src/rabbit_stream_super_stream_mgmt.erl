@@ -124,21 +124,12 @@ get_node(Props) ->
         N         -> rabbit_nodes:resolve_member(binary_to_list(N))
     end.
 
-<<<<<<< HEAD
-binding_keys(BindingKeysStr) ->
-    [rabbit_data_coercion:to_binary(
-       string:strip(K))
-     || K
-            <- string:tokens(
-                 rabbit_data_coercion:to_list(BindingKeysStr), ",")].
-=======
 binding_keys(BindingKeysBin) ->
     Keys = binary:split(BindingKeysBin, <<",">>, [global]),
     %% Trim first, then verify the token is not an empty binary
     [Trimmed || K <- Keys,
                 Trimmed <- [string:trim(K)],
                 Trimmed =/= <<>>].
->>>>>>> ac336f6c3e (Add configuration setting for max super stream partitions)
 
 routing_keys(Partitions) ->
     [integer_to_binary(K) || K <- lists:seq(0, Partitions - 1)].

@@ -16,11 +16,9 @@
 
 -module(rabbit_stream_utils).
 
-<<<<<<< HEAD
 -feature(maybe_expr, enable).
-=======
+
 -define(MAX_SUPER_STREAM_PARTITIONS, 1000).
->>>>>>> ac336f6c3e (Add configuration setting for max super stream partitions)
 
 %% API
 -export([enforce_correct_name/1,
