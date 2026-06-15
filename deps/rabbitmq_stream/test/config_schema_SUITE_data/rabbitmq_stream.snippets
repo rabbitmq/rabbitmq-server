@@ -81,5 +81,9 @@
   {max_super_stream_partitions,
       "stream.max_super_stream_partitions = 100",
       [{rabbitmq_stream,[{max_super_stream_partitions, 100}]}],
+      [rabbitmq_stream]},
+  {max_super_stream_partitions_infinity,
+      "stream.max_super_stream_partitions = infinity",
+      [{rabbitmq_stream,[{max_super_stream_partitions, infinity}]}],
       [rabbitmq_stream]}
 ].
