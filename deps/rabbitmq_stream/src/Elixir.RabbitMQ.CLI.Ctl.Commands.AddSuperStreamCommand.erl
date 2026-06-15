@@ -191,23 +191,9 @@ run([SuperStream],
       timeout := Timeout,
       binding_keys := BindingKeysStr} =
         Opts) ->
-<<<<<<< HEAD
-    BindingKeys =
-        [rabbit_data_coercion:to_binary(
-             string:strip(K))
-         || K
-                <- string:tokens(
-                       rabbit_data_coercion:to_list(BindingKeysStr), ",")],
-    Streams =
-        [list_to_binary(binary_to_list(SuperStream)
-                        ++ "-"
-                        ++ binary_to_list(K))
-         || K <- BindingKeys],
-=======
     BindingKeys = binding_keys(BindingKeysStr),
     Streams = streams_from_binding_keys(SuperStream, BindingKeys),
 
->>>>>>> ac336f6c3e (Add configuration setting for max super stream partitions)
     create_super_stream(NodeName,
                         Timeout,
                         VHost,
