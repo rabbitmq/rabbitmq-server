@@ -276,7 +276,7 @@ start_worker(QRef) ->
 ensure_worker_terminated(#?MODULE{consumer = undefined}) ->
     ok;
 ensure_worker_terminated(#?MODULE{consumer = #dlx_consumer{pid = Pid}}) ->
-    rabbit_fifo_dlx_worker:terminate_worker(Pid).
+    ok = rabbit_fifo_dlx_worker:terminate_worker(Pid).
 
 local_alive_consumer_pid(#?MODULE{consumer = undefined}) ->
     undefined;
