@@ -7,6 +7,8 @@
 
 -module(mirrored_supervisor).
 
+-feature(maybe_expr, enable).
+
 -include_lib("khepri/include/khepri.hrl").
 -include("include/rabbit_khepri.hrl").
 -include_lib("kernel/include/logger.hrl").
