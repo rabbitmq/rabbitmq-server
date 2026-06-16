@@ -4001,7 +4001,7 @@ maybe_start_dlx_worker(RaAux) ->
     #?STATE{dlx = DlxState,
             cfg = #cfg{dead_letter_handler = DLH,
                        resource = QRes}} = ra_aux:machine_state(RaAux),
-maybe_start_dlx_worker(DLH, QRes, DlxState).
+    maybe_start_dlx_worker(DLH, QRes, DlxState).
 
 maybe_start_dlx_worker(at_least_once, QRes, DlxState) ->
     ensure_dlx_worker_started(QRes, DlxState);
