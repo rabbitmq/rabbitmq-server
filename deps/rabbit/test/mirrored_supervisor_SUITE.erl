@@ -36,7 +36,8 @@ groups() ->
                          start_idempotence,
                          unsupported,
                          ignore,
-                         startup_failure
+                         startup_failure,
+                         reclaim_orphan
                         ]}
     ].
 
@@ -304,6 +305,34 @@ test_startup_failure(Fail, Group) ->
     process_flag(trap_exit, false),
     ok.
 
+%% A dynamic child can be left orphaned in Khepri under a dead mirroring
+%% process, for example when a takeover failed because Khepri was briefly
+%% unavailable. The periodic reconciliation on the sorted-first member must
+%% reclaim such a child and start it locally.
+reclaim_orphan(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(
+               Config, 0, ?MODULE, reclaim_orphan1, [?config(sup_prefix, Config)]).
+
+reclaim_orphan1(Group) ->
+    with_sups(
+      fun([A]) ->
+              ChildSpec = childspec(worker),
+              %% Record the child in Khepri as owned by a dead process, without
+              %% starting it anywhere: this is the orphaned state to recover.
+              DeadPid = dead_pid(),
+              start = rabbit_db_msup:create_or_update(
+                        Group, DeadPid, DeadPid, ChildSpec, id(worker)),
+              %% Trigger reconciliation explicitly rather than waiting for the
+              %% periodic timer.
+              Mirroring = ?MS:child(A, mirroring),
+              Mirroring ! reconcile,
+              %% The orphan is reclaimed, started locally, and its ownership in
+              %% Khepri is transferred to the live member.
+              Pid = pid_of(worker),
+              true = is_pid(Pid),
+              {ok, A} = rabbit_db_msup:find_mirror(Group, id(worker))
+      end, [sup(Group, 1)], Group).
+
 %% ---------------------------------------------------------------------------
 
 with_sups(Fun, Sups, Group) ->
@@ -387,3 +416,9 @@ init({Strategy, ChildSpecs}) ->
 
 sup(Prefix, Number) ->
     rabbit_data_coercion:to_atom(lists:flatten(io_lib:format("~p~p", [Prefix, Number]))).
+
+dead_pid() ->
+    Pid = spawn(fun() -> ok end),
+    Ref = erlang:monitor(process, Pid),
+    receive {'DOWN', Ref, process, Pid, _} -> ok end,
+    Pid.

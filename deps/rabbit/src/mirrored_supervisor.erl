@@ -7,7 +7,12 @@
 
 -module(mirrored_supervisor).
 
+-feature(maybe_expr, enable).
+
+-include_lib("khepri/include/khepri.hrl").
+-include("include/rabbit_khepri.hrl").
 -include_lib("kernel/include/logger.hrl").
+-include("mirrored_supervisor.hrl").
 
 %% Mirrored Supervisor
 %% ===================
@@ -98,6 +103,11 @@
 -define(GEN_SERVER, gen_server2).
 -define(SUP_MODULE, mirrored_supervisor_sups).
 
+%% Periodic reconciliation interval, and a short debounce used to coalesce
+%% reconciliations triggered by process group membership changes.
+-define(RECONCILE_INTERVAL, 30000).
+-define(RECONCILE_DEBOUNCE, 2000).
+
 -export([start_link/3, start_link/4,
          start_child/2, restart_child/2,
          delete_child/2, terminate_child/2,
@@ -116,7 +126,12 @@
                 group,
                 tx_fun,
                 initial_childspecs,
-                child_order}).
+                child_order,
+                %% Reference returned by pg:monitor/1 for the group.
+                pg_ref,
+                %% Whether a debounced, membership-triggered reconciliation is
+                %% already scheduled, to coalesce bursts of pg events.
+                reconcile_scheduled = false}).
 
 %%--------------------------------------------------------------------------
 %% Callback behaviour
@@ -250,15 +265,27 @@ handle_call({init, Overall}, _From,
     LockId = mirrored_supervisor_locks:lock(Group),
     maybe_log_lock_acquisition_failure(LockId, Group),
     ok = pg:join(Group, Overall),
+    %% Watch group membership so that partitions and heals trigger a prompt
+    %% reconciliation instead of waiting for the next periodic tick. This
+    %% shrinks the window during which a child runs (and is reported) on more
+    %% than one node after a partition heals.
+    {PgRef, _} = pg:monitor(Group),
     ?LOG_DEBUG("Mirrored supervisor: initializing, overall supervisor ~tp joined group ~tp", [Overall, Group]),
     Rest = pg:get_members(Group) -- [Overall],
     Nodes = [node(M) || M <- Rest],
     ?LOG_DEBUG("Mirrored supervisor: known group ~tp members: ~tp on nodes ~tp", [Group, Rest, Nodes]),
-    case Rest of
-        [] ->
-            ?LOG_DEBUG("Mirrored supervisor: no known peer members in group ~tp, will delete all child records for it", [Group]),
+    %% An empty group is not enough to justify deleting all child records: a
+    %% peer's mirroring process may simply not have (re)joined the group yet,
+    %% and the records (owned by other nodes) may back children that are still
+    %% running cluster-wide. Deleting them here would wipe those children's
+    %% records on every node. Only clear the records when this node is the sole
+    %% reachable cluster member, i.e. a genuine single-node (re)start; otherwise
+    %% leave any genuinely orphaned records to the reconciliation loop.
+    case Rest =:= [] andalso rabbit_nodes:list_reachable() =:= [node()] of
+        true ->
+            ?LOG_DEBUG("Mirrored supervisor: no known peer members in group ~tp and no other reachable cluster members, will delete all child records for it", [Group]),
             delete_all(Group);
-        _  -> ok
+        false -> ok
     end,
     [begin
          ?GEN_SERVER:cast(mirroring(Pid), {ensure_monitoring, Overall}),
@@ -266,11 +293,13 @@ handle_call({init, Overall}, _From,
      end || Pid <- Rest],
     Delegate = delegate(Overall),
     erlang:monitor(process, Delegate),
-    State1 = State#state{overall = Overall, delegate = Delegate},
+    State1 = State#state{overall = Overall, delegate = Delegate, pg_ref = PgRef},
     Results = [maybe_start(Group, Overall, Delegate, S) || S <- ChildSpecs],
     mirrored_supervisor_locks:unlock(LockId),
     case errors(Results) of
-        []     -> {reply, ok, State1};
+        []     ->
+            erlang:send_after(10000, self(), reconcile),
+            {reply, ok, State1};
         Errors -> {stop, {shutdown, Errors}, State1}
     end;
 
@@ -341,27 +370,213 @@ handle_info({'DOWN', _Ref, process, Pid, _Reason},
                            group    = Group,
                            overall  = O,
                            child_order = ChildOrder}) ->
+    %% A peer mirroring process went down. If we sort first in the group, take
+    %% over its children. This touches Khepri, which can be temporarily
+    %% unavailable, for example during the leader election triggered by the
+    %% very partition that caused this 'DOWN'. We must not crash here: crashing
+    %% restarts the mirroring process and, on repeated failures, exhausts the
+    %% supervisor's restart intensity and tears down the whole group. Instead
+    %% we log and let the periodic reconciliation loop take over the orphaned
+    %% children once Khepri is reachable again.
+    %%
     %% No guarantee pg will have received the DOWN before us.
-    R = case lists:sort(pg:get_members(Group)) -- [Pid] of
-            [O | _] -> ChildSpecs = update_all(O, Pid),
-                       case ChildSpecs of
-                           _ when is_list(ChildSpecs) ->
-                               [start(Delegate, ChildSpec)
-                                || ChildSpec <- restore_child_order(
-                                                  ChildSpecs,
-                                                  ChildOrder)];
-                           {error, _} ->
-                               [ChildSpecs]
-                       end;
-            _       -> []
-        end,
-    case errors(R) of
-        []     -> {noreply, State};
-        Errors -> {stop, {shutdown, Errors}, State}
+    try
+        case lists:sort(pg:get_members(Group)) -- [Pid] of
+            [O | _] ->
+                case partition_status() of
+                    {true, _, _} ->
+                        %% We are in a minority partition. We must not take over
+                        %% the children (the majority side owns them), and we
+                        %% cannot: update_all writes to Khepri, which has no
+                        %% quorum here, so it would block this process until it
+                        %% times out - stalling every other message, including
+                        %% the reconciliation that is supposed to stop our local
+                        %% children. Skip the failover; reconciliation handles
+                        %% the minority case.
+                        ok;
+                    {false, _, _} ->
+                        case update_all(O, Pid) of
+                            ChildSpecs when is_list(ChildSpecs) ->
+                                Results = [start(Delegate, ChildSpec)
+                                           || ChildSpec <- restore_child_order(
+                                                             ChildSpecs, ChildOrder)],
+                                case errors(Results) of
+                                    []     -> ok;
+                                    Errors ->
+                                        ?LOG_WARNING("Mirrored supervisor: failover in group ~tp could not start some children, reconciliation will retry: ~tp",
+                                                     [Group, Errors])
+                                end;
+                            {error, UpdateError} ->
+                                ?LOG_WARNING("Mirrored supervisor: failover in group ~tp failed (~tp), reconciliation will retry",
+                                             [Group, UpdateError])
+                        end
+                end;
+            _ ->
+                ok
+        end
+    catch
+        Class:CatchReason:Stacktrace ->
+            ?LOG_WARNING("Mirrored supervisor: failover in group ~tp raised ~tp:~tp, reconciliation will retry~n~tp",
+                         [Group, Class, CatchReason, Stacktrace])
+    end,
+    {noreply, State};
+
+handle_info(reconcile, State = #state{overall  = Overall,
+                                      delegate = Delegate,
+                                      group    = Group}) when Overall =/= undefined ->
+    reconcile_children(Group, Overall, Delegate),
+    erlang:send_after(?RECONCILE_INTERVAL, self(), reconcile),
+    {noreply, State};
+
+%% A debounced reconciliation triggered by a group membership change. Unlike
+%% the periodic 'reconcile' it does not reschedule the periodic timer; it just
+%% reconciles once and clears the debounce flag.
+handle_info(reconcile_now, State = #state{overall  = Overall,
+                                          delegate = Delegate,
+                                          group    = Group}) when Overall =/= undefined ->
+    reconcile_children(Group, Overall, Delegate),
+    {noreply, State#state{reconcile_scheduled = false}};
+
+%% Group membership changed (a peer joined on partition heal, or left on
+%% partition). Schedule a single debounced reconciliation so that the minority
+%% side sheds its children promptly and the majority side stops any duplicate
+%% it has taken over, instead of waiting for the next periodic tick.
+handle_info({PgRef, Event, _Group, _Pids},
+            State = #state{pg_ref = PgRef, overall = Overall,
+                           reconcile_scheduled = Scheduled})
+  when (Event =:= join orelse Event =:= leave) ->
+    case Overall =/= undefined andalso not Scheduled of
+        true ->
+            erlang:send_after(?RECONCILE_DEBOUNCE, self(), reconcile_now),
+            {noreply, State#state{reconcile_scheduled = true}};
+        false ->
+            {noreply, State}
     end;
 
 handle_info(Info, State) ->
     {stop, {unexpected_info, Info}, State}.
+
+%% Determine whether this node is in a minority partition, along with the
+%% reachable and total cluster member counts (for logging). A strict majority
+%% of cluster members must be reachable; clusters smaller than three members
+%% never qualify, since they cannot establish a majority. On an even split
+%% (for example 2|2 of four nodes) neither side reaches the majority, so both
+%% sides treat themselves as minority and stop their children. These counts
+%% come from Erlang distribution and the locally-known cluster membership, both
+%% of which stay available on a partitioned node (unlike Khepri writes).
+partition_status() ->
+    TotalSize = length(rabbit_nodes:list_members()),
+    ReachableCount = length(rabbit_nodes:list_reachable()),
+    IsMinority = (TotalSize >= 3) andalso (ReachableCount < (TotalSize div 2) + 1),
+    {IsMinority, ReachableCount, TotalSize}.
+
+reconcile_children(Group, Overall, Delegate) ->
+    %% This runs periodically on every node, so it must tolerate Khepri being
+    %% temporarily unavailable (for example during a leader election or a
+    %% partition), which is precisely when this code is most needed. Any error
+    %% is logged and swallowed; the next reconcile tick retries.
+    try
+        do_reconcile_children(Group, Overall, Delegate)
+    catch
+        Class:Reason:Stacktrace ->
+            ?LOG_WARNING("Mirrored supervisor: reconciliation of group ~tp failed, will retry on the next tick: ~tp:~tp~n~tp",
+                         [Group, Class, Reason, Stacktrace]),
+            ok
+    end.
+
+do_reconcile_children(Group, Overall, Delegate) ->
+    Children = ?SUPERVISOR:which_children(Delegate),
+    RunningIds = [Id || {Id, Pid, _, _} <- Children, is_pid(Pid)],
+    {IsMinority, ReachableCount, TotalSize} = partition_status(),
+    case IsMinority of
+        true ->
+            lists:foreach(
+              fun(Id) ->
+                      ?LOG_WARNING("Mirrored supervisor: node is in a minority partition (~tp/~tp nodes reachable), stopping local instance of child ~tp in group ~tp",
+                                   [ReachableCount, TotalSize, Id, Group]),
+                      _ = try ?SUPERVISOR:terminate_child(Delegate, Id) catch _:_ -> ok end,
+                      try ?SUPERVISOR:delete_child(Delegate, Id) catch _:_ -> ok end
+              end, RunningIds);
+        false ->
+            lists:foreach(
+              fun(Id) ->
+                      case rabbit_db_msup:find_mirror(Group, Id) of
+                          {ok, Owner} when Owner =/= Overall ->
+                              ?LOG_WARNING("Mirrored supervisor: child ~tp in group ~tp is owned by another node ~tp (we are ~tp), stopping local instance",
+                                           [Id, Group, node(Owner), node()]),
+                              _ = try ?SUPERVISOR:terminate_child(Delegate, Id) catch _:_ -> ok end,
+                              try ?SUPERVISOR:delete_child(Delegate, Id) catch _:_ -> ok end;
+                          _ ->
+                              ok
+                      end
+              end, RunningIds),
+            %% Restart children we own but are not running, then reclaim those
+            %% owned by dead or unreachable nodes.
+            restart_owned_children(Group, Overall, Delegate, RunningIds),
+            reclaim_orphans(Group, Overall, Delegate)
+    end.
+
+%% Reads all child spec records for the group from the store, as {Path, Record}
+%% pairs. The #if_data_matches condition restricts the results to this group, so
+%% the key's group element is always Group.
+group_childspecs(Group) ->
+    Pattern = #mirrored_sup_childspec{key = {Group, '_'}, _ = '_'},
+    Conditions = [?KHEPRI_WILDCARD_STAR_STAR, #if_data_matches{pattern = Pattern}],
+    PathPattern = rabbit_db_msup:khepri_mirrored_supervisor_path(
+                    ?KHEPRI_WILDCARD_STAR,
+                    #if_all{conditions = Conditions}),
+    case rabbit_khepri:get_many(PathPattern) of
+        {ok, Map} ->
+            [{Path, S} || {Path, S} <- maps:to_list(Map),
+                          is_record(S, mirrored_sup_childspec)];
+        _ ->
+            []
+    end.
+
+%% Ensure every child this node owns in the store is actually running locally.
+%% A node can own a child without running it after it has left a minority
+%% partition: while in the minority it stopped its children but could not give
+%% up ownership in the store (it has no quorum), and if no majority node
+%% reclaimed them before the partition healed, the owner is alive again so they
+%% are not orphans and would otherwise never be restarted.
+restart_owned_children(Group, Overall, Delegate, RunningIds) ->
+    lists:foreach(
+      fun({_Path, #mirrored_sup_childspec{mirroring_pid = OwnerPid,
+                                          childspec = ChildSpec,
+                                          key = {_, Id}}}) ->
+              case OwnerPid =:= Overall andalso not lists:member(Id, RunningIds) of
+                  true ->
+                      ?LOG_NOTICE("Mirrored supervisor: restarting child ~tp in group ~tp which this node owns but is not running locally",
+                                  [Id, Group]),
+                      _ = try ?SUPERVISOR:start_child(Delegate, ChildSpec) catch _:_ -> ok end,
+                      ok;
+                  false ->
+                      ok
+              end
+      end, group_childspecs(Group)).
+
+reclaim_orphans(Group, Overall, Delegate) ->
+    ActiveMembers = pg:get_members(Group),
+    case lists:sort(ActiveMembers) of
+        [Overall | _] ->
+            lists:foreach(
+              fun({Path, #mirrored_sup_childspec{mirroring_pid = OwnerPid,
+                                                 childspec = ChildSpec,
+                                                 key = {_, Id}} = S0}) ->
+                  maybe
+                      false ?= lists:member(OwnerPid, ActiveMembers),
+                      ?LOG_NOTICE("Mirrored supervisor: reclaiming orphan child ~tp in group ~tp (previous owner ~tp was dead/unreachable)",
+                                  [Id, Group, OwnerPid]),
+                      NewS = S0#mirrored_sup_childspec{mirroring_pid = Overall},
+                      ok ?= rabbit_khepri:put(Path, NewS),
+                      try ?SUPERVISOR:start_child(Delegate, ChildSpec) catch _:_ -> ok end
+                  else
+                      _ -> ok
+                  end
+              end, group_childspecs(Group));
+        _ ->
+            ok
+    end.
 
 terminate(_Reason, _State) ->
     ok.
