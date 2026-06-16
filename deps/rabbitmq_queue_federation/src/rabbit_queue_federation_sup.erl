@@ -55,7 +55,7 @@ init([]) ->
     QLinkSupSup = #{
         id       => q_links,
         start    => {rabbit_federation_queue_link_sup_sup, start_link, []},
-        restart  => transient,
+        restart  => permanent,
         shutdown => ?SUPERVISOR_WAIT,
         type     => supervisor,
         modules  => [rabbit_federation_queue_link_sup_sup]

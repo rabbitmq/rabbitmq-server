@@ -49,7 +49,7 @@ supervisor_tree_child_specs(standard) ->
         #{
             id => rabbit_shovel_dyn_worker_sup_sup,
             start => {rabbit_shovel_dyn_worker_sup_sup, start_link, []},
-            restart => transient,
+            restart => permanent,
             shutdown => 16#ffffffff,
             type => supervisor,
             modules => [rabbit_shovel_dyn_worker_sup_sup]

@@ -55,7 +55,7 @@ init([]) ->
     XLinkSupSup = #{
         id       => x_links,
         start    => {rabbit_federation_exchange_link_sup_sup, start_link, []},
-        restart  => transient,
+        restart  => permanent,
         shutdown => ?SUPERVISOR_WAIT,
         type     => supervisor,
         modules  =>[rabbit_federation_exchange_link_sup_sup]
