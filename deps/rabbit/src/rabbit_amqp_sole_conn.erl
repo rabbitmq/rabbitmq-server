@@ -1,18 +1,30 @@
+%% This Source Code Form is subject to the terms of the Mozilla Public
+%% License, v. 2.0. If a copy of the MPL was not distributed with this
+%% file, You can obtain one at https://mozilla.org/MPL/2.0/.
+%%
+%% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%%
+
 -module(rabbit_amqp_sole_conn).
 
 -include_lib("khepri/include/khepri.hrl").
 -include("include/rabbit_khepri.hrl").
+-include_lib("amqp10_common/include/amqp10_sole_conn.hrl").
 
 -export([acquire/4, release/2]).
 
 -type vhost() :: binary().
 -type container_id() :: binary().
 
--spec acquire(boolean(), vhost(), container_id(), pid()) ->
+-spec acquire(none | enforcement_policy(), vhost(), container_id(), pid()) ->
     ok | {error, refuse_connection}.
-acquire(true, VHost, ContainerId, ConnectionPid) ->
+acquire(none, _, _, _) ->
+    ok;
+acquire(_, VHost, ContainerId, ConnectionPid) ->
     Path = khepri_sole_conn_path(VHost, ContainerId),
-    case rabbit_khepri:adv_create(Path, ConnectionPid) of
+
+    Opts = #{keep_while => ConnectionPid},
+    case rabbit_khepri:adv_create(Path, ConnectionPid, Opts) of
         {ok, _} ->
             ok;
         {error, {khepri, mismatching_node, #{node_props := #{data := _ExistingPid}}}} ->
@@ -20,9 +32,7 @@ acquire(true, VHost, ContainerId, ConnectionPid) ->
             {error, refuse_connection};
         {error, Reason} ->
             {error, Reason}
-    end;
-acquire(false, _, _, _) ->
-    ok.
+    end.
 
 -spec release(vhost(), container_id()) -> ok.
 release(VHost, ContainerId) ->

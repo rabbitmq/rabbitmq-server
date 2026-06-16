@@ -486,7 +486,14 @@ handle_connection_frame(
                 {BaseCaps, BaseProps}
         end,
 
-    case rabbit_amqp_sole_conn:acquire(HasSoleCap, Vhost, ContainerId, self()) of
+    SoleConnPlcy = case HasSoleCap of
+                       true ->
+                           sole_conn_enforcement_policy(Properties);
+                       false ->
+                           none
+                   end,
+
+    case rabbit_amqp_sole_conn:acquire(SoleConnPlcy, Vhost, ContainerId, self()) of
         {error, refuse_connection} ->
             Props1 = [
                       {?AMQP_ERROR_CONNECTION_ESTABLISHMENT_FAILED, {boolean, true}}
@@ -1196,3 +1203,13 @@ ignore_maintenance({map, Properties}) ->
       Properties);
 ignore_maintenance(_) ->
     false.
+
+sole_conn_enforcement_policy({map, List}) ->
+    case lists:keyfind(?SOLE_CONN_ENFORCEMENT_POLICY, 1, List) of
+        {_, ?SOLE_CONN_ENFORCEMENT_POLICY_REFUSE_CONN} ->
+            refuse_connection;
+        {_, ?SOLE_CONN_ENFORCEMENT_POLICY_CLOSE_EXISTING} ->
+            close_existing;
+        _ ->
+            refuse_connection
+    end.
