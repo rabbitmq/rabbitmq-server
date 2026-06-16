@@ -48,11 +48,11 @@
 
 -behaviour(gen_server2).
 
--export([start_link/11, start_link/12, do/2, do/3, do_flow/3, flush/1, shutdown/1]).
+-export([start_link/11, start_link/12, flush/1, shutdown/1]).
 -export([send_command/2]).
 -export([list/0, info_keys/0, info/1, info/2, info_all/0, info_all/1,
          emit_info_all/4, info_local/1]).
--export([refresh_config_local/0, ready_for_close/1]).
+-export([refresh_config_local/0]).
 -export([refresh_interceptors/0]).
 -export([force_event_refresh/1]).
 -export([update_user_state/2]).
@@ -265,27 +265,6 @@ start_link(Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User,
       ?MODULE, [Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol,
                 User, VHost, Capabilities, CollectorPid, Limiter, AmqpParams], []).
 
--spec do(pid(), rabbit_framing:amqp_method_record()) -> 'ok'.
-
-do(Pid, Method) ->
-    rabbit_channel_common:do(Pid, Method).
-
--spec do
-        (pid(), rabbit_framing:amqp_method_record(),
-         rabbit_types:'maybe'(rabbit_types:content())) ->
-            'ok'.
-
-do(Pid, Method, Content) ->
-    rabbit_channel_common:do(Pid, Method, Content).
-
--spec do_flow
-        (pid(), rabbit_framing:amqp_method_record(),
-         rabbit_types:'maybe'(rabbit_types:content())) ->
-            'ok'.
-
-do_flow(Pid, Method, Content) ->
-    rabbit_channel_common:do_flow(Pid, Method, Content).
-
 -spec flush(pid()) -> 'ok'.
 
 flush(Pid) ->
@@ -407,11 +386,6 @@ refresh_interceptors() ->
       end,
       list_local()),
     ok.
-
--spec ready_for_close(pid()) -> 'ok'.
-
-ready_for_close(Pid) ->
-    rabbit_channel_common:ready_for_close(Pid).
 
 -spec force_event_refresh(reference()) -> 'ok'.
 
@@ -627,7 +601,12 @@ handle_cast({method, Method, Content, Flow},
 handle_cast(ready_for_close,
             State = #ch{cfg = #conf{state = closing,
                                     writer_pid = WriterPid}}) ->
-    ok = rabbit_writer:send_command_sync(WriterPid, #'channel.close_ok'{}),
+    try
+        ok = rabbit_writer:send_command_sync(WriterPid, #'channel.close_ok'{})
+    catch
+        _Class:Reason ->
+            ?LOG_DEBUG("Failed to send 'channel.close_ok' on a terminating connection, reason: ~tp", [Reason])
+    end,
     {stop, normal, State};
 
 handle_cast(terminate, State = #ch{cfg = #conf{writer_pid = WriterPid}}) ->

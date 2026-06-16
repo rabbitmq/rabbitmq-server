@@ -611,7 +611,7 @@ handle_other({conserve_resources, Source, Conserve},
           end,
     control_throttle(State#v1{throttle = Throttle#throttle{blocked_by = Blockers1}});
 handle_other({channel_closing, ChPid}, State) ->
-    ok = rabbit_channel:ready_for_close(ChPid),
+    ok = rabbit_channel_common:ready_for_close(ChPid),
     {_, State1} = channel_cleanup(ChPid, State),
     maybe_close(control_throttle(State1));
 handle_other({'EXIT', Parent, normal}, State = #v1{parent = Parent}) ->
@@ -1105,11 +1105,11 @@ process_frame(Frame, Channel, State) ->
                     put(ChKey, {ChPid, NewAState}),
                     post_process_frame(Frame, ChPid, State1);
                 {ok, Method, NewAState} ->
-                    rabbit_channel:do(ChPid, Method),
+                    rabbit_channel_common:do(ChPid, Method),
                     put(ChKey, {ChPid, NewAState}),
                     post_process_frame(Frame, ChPid, State1);
                 {ok, Method, Content, NewAState} ->
-                    rabbit_channel:do_flow(ChPid, Method, Content),
+                    rabbit_channel_common:do_flow(ChPid, Method, Content),
                     put(ChKey, {ChPid, NewAState}),
                     post_process_frame(Frame, ChPid, control_throttle(State1));
                 {error, Reason} ->
