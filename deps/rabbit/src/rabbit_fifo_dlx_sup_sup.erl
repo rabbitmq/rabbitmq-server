@@ -18,10 +18,16 @@
 %% supervisor callback
 -export([init/1]).
 %% client API
--export([start_link/0]).
+-export([start_link/0, start_worker/1]).
 
 start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
+
+-spec start_worker(rabbit_amqqueue:name()) -> {ok, pid()}.
+start_worker(QRef) ->
+    {ok, SupPid} = supervisor:start_child(?MODULE, [QRef]),
+    [{_, Pid, worker, _}] = supervisor:which_children(SupPid),
+    {ok, Pid}.
 
 init([]) ->
     SupFlags = #{strategy => simple_one_for_one},

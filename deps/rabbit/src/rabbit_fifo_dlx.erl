@@ -269,8 +269,7 @@ ensure_worker_started(QRef, #?MODULE{consumer = #dlx_consumer{pid = Pid}}) ->
 %% Also therefore, if starting the rabbit_fifo_dlx_worker fails, let the
 %% Ra server process crash in which case another Ra node will become leader.
 start_worker(QRef) ->
-    {ok, SupPid} = supervisor:start_child(rabbit_fifo_dlx_sup_sup, [QRef]),
-    [{_, Pid, worker, _}] = supervisor:which_children(SupPid),
+    {ok, Pid} = rabbit_fifo_dlx_sup_sup:start_worker(QRef),
     ?LOG_DEBUG("started rabbit_fifo_dlx_worker ~tp for ~ts",
                      [Pid, rabbit_misc:rs(QRef)]).
 
