@@ -3993,7 +3993,7 @@ dlx_apply(_, Cmd, DLH, State) ->
 %% enqueue overhead 210
 
 maybe_add_dlx_effect(at_least_once, Effects) ->
-    Effects ++ [{aux, {dlx, setup}}];
+    [{aux, {dlx, setup}} | Effects];
 maybe_add_dlx_effect(_, Effects) ->
     Effects.
 
