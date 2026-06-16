@@ -117,7 +117,9 @@ RABBITMQ_STREAM_DIR="$(call node_stream_dir,$(2))" \
 RABBITMQ_FEATURE_FLAGS_FILE="$(call node_feature_flags_file,$(2))" \
 RABBITMQ_PLUGINS_DIR="$(call node_plugins_dir)" \
 RABBITMQ_PLUGINS_EXPAND_DIR="$(call node_plugins_expand_dir,$(2))" \
-RABBITMQ_SERVER_START_ARGS="$(RABBITMQ_SERVER_START_ARGS)"
+RABBITMQ_SERVER_START_ARGS="$(RABBITMQ_SERVER_START_ARGS)" \
+RABBITMQ_CONFIG_FILE="$(RABBITMQ_CONFIG_FILE)" \
+RABBITMQ_CONFIG_FILES="$(RABBITMQ_CONFIG_FILES)"
 endef
 
 # Only set RABBITMQ_ENABLED_PLUGINS if the enabled plugins file doesn't
@@ -389,6 +391,7 @@ stop-node:
 # --------------------------------------------------------------------
 
 NODES ?= 3
+AZ ?= 3
 
 start-brokers start-cluster: $(DIST_TARGET)
 	# nodes start in parallel; if the cookie file doesn't exist
@@ -413,10 +416,14 @@ start-brokers start-cluster: $(DIST_TARGET)
 	fi; \
 	for n in $$(seq $(NODES)); do \
 		nodename="rabbit-$$n@$(HOSTNAME)"; \
+		az_idx=$$(( ($$n - 1) % $(AZ) + 1 )); \
+		mkdir -p "$(TEST_TMPDIR)/$$nodename"; \
+		printf 'node_tags.az = az%d\n' "$$az_idx" > "$(TEST_TMPDIR)/$$nodename/node.conf"; \
 		$(MAKE) start-background-broker \
 		  NOBUILD=1 \
 		  RABBITMQ_NODENAME="$$nodename" \
 		  RABBITMQ_NODE_PORT="$$((5672 + $$n - 1))" \
+		  RABBITMQ_CONFIG_FILES="$(TEST_TMPDIR)/$$nodename/node.conf" \
 		  RABBITMQ_SERVER_START_ARGS=" \
 		  -rabbit loopback_users [] \
 		  -rabbit cluster_name localhost \
