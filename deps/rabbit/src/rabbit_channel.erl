@@ -766,26 +766,32 @@ terminate(_Reason,
           State = #ch{cfg = #conf{user = #user{username = Username}},
                       consumer_mapping = CM,
                       queue_states = QueueCtxs}) ->
-    rabbit_queue_type:close(QueueCtxs),
-    {_Res, _State1} = notify_queues(State),
-    pg_local:leave(rabbit_channels, self()),
-    rabbit_event:if_enabled(State, #ch.stats_timer,
-                            fun() -> emit_stats(State) end),
-    [delete_stats(Tag) || {Tag, _} <- get()],
-    maybe_decrease_global_publishers(State),
-    maps:foreach(
-      fun (_, _) ->
-              rabbit_global_counters:consumer_deleted(amqp091)
-      end, CM),
-    rabbit_core_metrics:channel_closed(self()),
-    rabbit_event:notify(channel_closed, [{pid, self()},
-                                         {user_who_performed_action, Username},
-                                         {consumer_count, maps:size(CM)}]),
-    case rabbit_confirms:size(State#ch.unconfirmed) of
-        0 -> ok;
-        NumConfirms ->
-            ?LOG_WARNING("Channel is stopping with ~b pending publisher confirms",
-                               [NumConfirms])
+    try
+        rabbit_queue_type:close(QueueCtxs),
+        {_Res, _State1} = notify_queues(State),
+        pg_local:leave(rabbit_channels, self()),
+        rabbit_event:if_enabled(State, #ch.stats_timer,
+                                fun() -> emit_stats(State) end),
+        [delete_stats(Tag) || {Tag, _} <- get()],
+        maybe_decrease_global_publishers(State),
+        maps:foreach(
+          fun (_, _) ->
+                  rabbit_global_counters:consumer_deleted(amqp091)
+          end, CM),
+        rabbit_core_metrics:channel_closed(self()),
+        rabbit_event:notify(channel_closed, [{pid, self()},
+                                             {user_who_performed_action, Username},
+                                             {consumer_count, maps:size(CM)}]),
+        case rabbit_confirms:size(State#ch.unconfirmed) of
+            0 -> ok;
+            NumConfirms ->
+                ?LOG_WARNING("Channel is stopping with ~b pending publisher confirms",
+                                   [NumConfirms])
+        end
+    catch
+        _Class:Reason ->
+            ?LOG_WARNING("Channel ~tp termination cleanup failed with reason: ~tp",
+                         [self(), Reason])
     end.
 
 code_change(_OldVsn, State, _Extra) ->
