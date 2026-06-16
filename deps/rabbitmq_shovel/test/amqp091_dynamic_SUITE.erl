@@ -450,7 +450,15 @@ credit_flow(Config) ->
                             Cnt =:= 0
                     end,
                     5000),
-                  #{messages := 1000} = message_count(Config, <<"dest">>),
+                  %% With on-publish ack mode the shovel acks in src when it publishes
+                  %% to dest (no confirms), so src reaching 0 does not guarantee that
+                  %% dest has already received all messages from the broker's perspective.
+                  rabbit_ct_helpers:await_condition(
+                    fun() ->
+                            #{messages := Cnt} = message_count(Config, <<"dest">>),
+                            Cnt =:= 1000
+                    end,
+                    5000),
                   [{_, P, _}] =
                       rabbit_ct_broker_helpers:rpc(
                         Config, 0, recon, proc_count, [message_queue_len, 1]),
