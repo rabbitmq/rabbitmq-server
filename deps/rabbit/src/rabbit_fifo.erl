@@ -1495,7 +1495,7 @@ handle_aux(leader, _, {dlx, setup}, Aux, RaAux) ->
     ok = maybe_start_dlx_worker(RaAux),
     {no_reply, Aux, RaAux};
 handle_aux(_, _, {dlx, teardown, Pid}, Aux, RaAux) ->
-    terminate_dlx_worker(Pid),
+    ok = rabbit_fifo_dlx_worker:terminate_worker(Pid),
     {no_reply, Aux, RaAux};
 handle_aux(_, _, Unhandled, Aux, RaAux) ->
     #?STATE{cfg = #cfg{resource = QR}} = ra_aux:machine_state(RaAux),
@@ -4011,7 +4011,7 @@ maybe_start_dlx_worker(_, _QRes, _DlxState) ->
 ensure_dlx_worker_started(QRef, #?DLX{consumer = undefined}) ->
     start_dlx_worker(QRef);
 ensure_dlx_worker_started(QRef, #?DLX{consumer = #dlx_consumer{pid = Pid}}) ->
-    case is_local_and_alive(Pid) of
+    case rabbit_misc:is_local_process_alive(Pid) of
         true ->
             ?LOG_DEBUG("rabbit_fifo_dlx_worker ~tp already started for ~ts",
                              [Pid, rabbit_misc:rs(QRef)]);
@@ -4040,46 +4040,22 @@ ensure_worker_terminated(ConsumerPid, OldConsumerPid, State) ->
 ensure_worker_terminated(#?DLX{consumer = undefined}) ->
     ok;
 ensure_worker_terminated(#?DLX{consumer = #dlx_consumer{pid = Pid}}) ->
-    terminate_dlx_worker(Pid).
+    ok = rabbit_fifo_dlx_worker:terminate_worker(Pid).
 
 maybe_terminate_worker(#?STATE{cfg = #cfg{dead_letter_handler = at_least_once}, dlx = DlxState}) ->
     ok = ensure_worker_terminated(DlxState);
 maybe_terminate_worker(_State) ->
     ok.
 
-terminate_dlx_worker(Pid) ->
-    terminate_dlx_worker(Pid, is_local_and_alive(Pid)).
-
-terminate_dlx_worker(Pid, true) ->
-    %% Note that we can't return a mod_call effect here
-    %% because mod_call is executed on the leader only.
-    %% Terminate the per-worker supervisor (which also stops the worker).
-    %% The worker stores its supervisor pid in the process dictionary at
-    %% startup (see rabbit_fifo_dlx_worker:init/1). We read it here via
-    %% process_info to avoid a blocking gen_server call.
-    {dictionary, Dict} = erlang:process_info(Pid, dictionary),
-    {sup_pid, SupPid} = lists:keyfind(sup_pid, 1, Dict),
-    ok = supervisor:terminate_child(rabbit_fifo_dlx_sup_sup, SupPid),
-    ?LOG_DEBUG("terminated rabbit_fifo_dlx_worker ~tp", [Pid]),
-    ok;
-terminate_dlx_worker(_Pid, false) ->
-    ok.
-
 local_alive_consumer_pid(#?DLX{consumer = undefined}) ->
     undefined;
 local_alive_consumer_pid(#?DLX{consumer = #dlx_consumer{pid = Pid}}) ->
-    case is_local_and_alive(Pid) of
+    case rabbit_misc:is_local_process_alive(Pid) of
         true ->
             Pid;
         false ->
             undefined
     end.
-
-is_local_and_alive(Pid)
-  when node(Pid) =:= node() ->
-    is_process_alive(Pid);
-is_local_and_alive(_) ->
-    false.
 
 update_config(at_least_once, at_least_once, _, State) ->
     case local_alive_consumer_pid(State) of

@@ -256,7 +256,7 @@ state_enter(_, _, _, _) ->
 ensure_worker_started(QRef, #?MODULE{consumer = undefined}) ->
     start_worker(QRef);
 ensure_worker_started(QRef, #?MODULE{consumer = #dlx_consumer{pid = Pid}}) ->
-    case is_local_and_alive(Pid) of
+    case rabbit_misc:is_local_process_alive(Pid) of
         true ->
             ?LOG_DEBUG("rabbit_fifo_dlx_worker ~tp already started for ~ts",
                              [Pid, rabbit_misc:rs(QRef)]);
@@ -276,41 +276,17 @@ start_worker(QRef) ->
 ensure_worker_terminated(#?MODULE{consumer = undefined}) ->
     ok;
 ensure_worker_terminated(#?MODULE{consumer = #dlx_consumer{pid = Pid}}) ->
-    terminate_dlx_worker(Pid).
-
-terminate_dlx_worker(Pid) ->
-    terminate_dlx_worker(Pid, is_local_and_alive(Pid)).
-
-terminate_dlx_worker(Pid, true) ->
-    %% Note that we can't return a mod_call effect here
-    %% because mod_call is executed on the leader only.
-    %% Terminate the per-worker supervisor (which also stops the worker).
-    %% The worker stores its supervisor pid in the process dictionary at
-    %% startup (see rabbit_fifo_dlx_worker:init/1). We read it here via
-    %% process_info to avoid a blocking gen_server call.
-    {dictionary, Dict} = erlang:process_info(Pid, dictionary),
-    {sup_pid, SupPid} = lists:keyfind(sup_pid, 1, Dict),
-    ok = supervisor:terminate_child(rabbit_fifo_dlx_sup_sup, SupPid),
-    ?LOG_DEBUG("terminated rabbit_fifo_dlx_worker ~tp", [Pid]),
-    ok;
-terminate_dlx_worker(_Pid, false) ->
-    ok.
+    rabbit_fifo_dlx_worker:terminate_worker(Pid).
 
 local_alive_consumer_pid(#?MODULE{consumer = undefined}) ->
     undefined;
 local_alive_consumer_pid(#?MODULE{consumer = #dlx_consumer{pid = Pid}}) ->
-    case is_local_and_alive(Pid) of
+    case rabbit_misc:is_local_process_alive(Pid) of
         true ->
             Pid;
         false ->
             undefined
     end.
-
-is_local_and_alive(Pid)
-  when node(Pid) =:= node() ->
-    is_process_alive(Pid);
-is_local_and_alive(_) ->
-    false.
 
 -spec update_config(Old :: dead_letter_handler(), New :: dead_letter_handler(),
                     rabbit_types:r('queue'), state()) ->

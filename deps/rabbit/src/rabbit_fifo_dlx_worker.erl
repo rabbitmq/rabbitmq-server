@@ -35,7 +35,10 @@
          handle_cast/2, handle_call/3, handle_info/2,
          code_change/3, format_status/1]).
 
+-export([terminate_worker/1]).
+
 -define(HIBERNATE_AFTER, 4*60*1000).
+-define(DLX_WORKER_SUP_PID_KEY, dlx_worker_sup_pid).
 
 -record(pending, {
           %% consumed_msg_id is not to be confused with consumer delivery tag.
@@ -106,11 +109,31 @@ start_link(QRef, SupPid) ->
 -spec init({rabbit_amqqueue:name(), pid()}) ->
     {ok, undefined, {continue, rabbit_amqqueue:name()}}.
 init({QRef, SupPid}) ->
+    ok = put_sup_pid(SupPid),
+    {ok, undefined, {continue, QRef}}.
+
+-spec put_sup_pid(DlxWorkerSupPid :: pid()) -> ok.
+put_sup_pid(DlxWorkerSupPid) ->
     %% Stored in the process dictionary so that terminate_dlx_worker/2 can
     %% retrieve it via process_info(WorkerPid, dictionary) without blocking
     %% on a gen_server call. Same pattern as rabbit_misc:store_proc_name/1.
-    put(sup_pid, SupPid),
-    {ok, undefined, {continue, QRef}}.
+    put(?DLX_WORKER_SUP_PID_KEY, DlxWorkerSupPid),
+    ok.
+
+-spec terminate_worker(DlxWorkerPid :: pid()) -> ok.
+terminate_worker(DlxWorkerPid) ->
+    terminate_worker(DlxWorkerPid, rabbit_misc:is_local_process_alive(DlxWorkerPid)).
+
+-spec terminate_worker(DlxWorkerPid :: pid(), boolean()) -> ok.
+terminate_worker(DlxWorkerPid, true) ->
+    %% Terminate the per-worker supervisor (which also stops the worker).
+    {dictionary, Dict} = erlang:process_info(DlxWorkerPid, dictionary),
+    {?DLX_WORKER_SUP_PID_KEY, SupPid} = lists:keyfind(?DLX_WORKER_SUP_PID_KEY, 1, Dict),
+    ok = supervisor:terminate_child(rabbit_fifo_dlx_sup_sup, SupPid),
+    ?LOG_DEBUG("terminated rabbit_fifo_dlx_worker ~tp", [DlxWorkerPid]),
+    ok;
+terminate_worker(_DlxWorkerPid, _) ->
+    ok.
 
 -spec handle_continue(rabbit_amqqueue:name(), undefined) ->
     {noreply, state()} | {stop, term(), undefined}.
