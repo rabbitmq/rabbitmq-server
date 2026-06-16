@@ -89,10 +89,10 @@ status(Chs, ReqData, Context, Filter) ->
 
 status(Node, Chs, Filter) ->
     case rpc:call(Node, rabbit_federation_status, status, [], infinity) of
-        {badrpc, {'EXIT', {undef, _}}}  -> [];
-        {badrpc, {'EXIT', {noproc, _}}} -> [];
-        Status                          -> [format(Node, I, Chs) || I <- Status,
-                                                                    filter_status(I, Filter)]
+        Status when is_list(Status) ->
+            [format(Node, I, Chs) || I <- Status, filter_status(I, Filter)];
+        _Error ->
+            []
     end.
 
 filter_status(_, all) ->
