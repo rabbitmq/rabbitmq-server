@@ -465,6 +465,13 @@ end}.
 {mapping, "management.disable_basic_auth", "rabbitmq_management.disable_basic_auth",
     [{datatype, boolean}]}.
 
+%% When set, the management UI stores an AES-256-GCM encrypted bearer token
+%% (prefixed "rmqe.") instead of a plaintext base64(username:password).
+%% The value must be identical on every node in the cluster.
+{mapping, "management.credentials_encryption_secret",
+          "rabbitmq_management.credentials_encryption_secret",
+    [{datatype, [tagged_binary, binary]}]}.
+
 %% Management only
 
 {mapping, "management.disable_stats", "rabbitmq_management.disable_management_stats", [

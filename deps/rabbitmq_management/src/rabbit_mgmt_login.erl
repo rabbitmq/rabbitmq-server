@@ -120,10 +120,11 @@ handleAccessToken(Req0, AccessToken, State) ->
             replyWithError(Reason, ReqData1, State)
     end.
 
-redirect_to_home_with_cookie(CookieName, CookieValue, Req=#{scheme := Scheme}, State) ->
+redirect_to_home_with_cookie(CookiePath, CookieName, CookieValue, Req=#{scheme := Scheme}, State) ->
+    FullCookiePath = list_to_binary(rabbit_mgmt_util:get_path_prefix() ++ binary_to_list(CookiePath)),
     CookieSettings0 = #{
         http_only => true,
-        path => rabbit_mgmt_util:get_oauth2_bootstrap_cookie_path(),
+        path => FullCookiePath,
         max_age => 30,
         same_site => strict
     },

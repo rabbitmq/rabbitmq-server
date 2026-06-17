@@ -99,8 +99,7 @@ is_authorized_admin(ReqData, Context, Token) ->
     AuthConfig = auth_config(),
     rabbit_web_dispatch_access_control:is_authorized(
       ReqData, Context,
-      AuthConfig#auth_settings.oauth_client_id,
-      Token, <<"Not administrator user">>,
+      <<"">>, Token, <<"Not administrator user">>,
       fun(#user{tags = Tags}) ->
               rabbit_web_dispatch_access_control:is_admin(Tags)
       end, AuthConfig).
@@ -134,13 +133,22 @@ is_authorized_vhost_visible_for_monitoring(ReqData, Context) ->
 
 auth_config() ->
     BasicAuthEnabled = not get_bool_env(rabbitmq_management, disable_basic_auth, false),
-    OauthEnabled = get_bool_env(rabbitmq_management, oauth_enabled, false),
-    OauthClientId = rabbit_data_coercion:to_binary(
-                        application:get_env(rabbitmq_management, oauth_client_id, "")),
-    #auth_settings{auth_realm = ?AUTH_REALM,
-                   basic_auth_enabled = BasicAuthEnabled,
-                   oauth2_enabled = OauthEnabled,
-                   oauth_client_id = OauthClientId}.
+    BearerTokenParser =
+        case application:get_env(rabbitmq_management, credentials_encryption_secret, undefined) of
+            undefined -> undefined;
+            Secret ->
+                Key = rabbit_mgmt_basic_credentials_token:derive_key(Secret),
+                fun(Token) ->
+                    case rabbit_mgmt_basic_credentials_token:verify(Token, Key) of
+                        {ok, U, P}                      -> {basic, U, P};
+                        {error, not_an_encrypted_token} -> {bearer, Token};
+                        {error, _Reason}                -> {error, <<"Invalid credentials token">>}
+                    end
+                end
+        end,
+    #auth_settings{auth_realm          = ?AUTH_REALM,
+                   basic_auth_enabled  = BasicAuthEnabled,
+                   bearer_token_parser = BearerTokenParser}.
 
 disable_stats() ->
     not rabbit_mgmt_agent_config:is_metrics_collector_enabled() orelse

@@ -11,6 +11,9 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
+  "overrides": {
+    "proxy-agent": "6.5.0"
+  },
   "dependencies": {
     "amqplib": "2.0.1",
     "chromedriver": "^149.0.0",

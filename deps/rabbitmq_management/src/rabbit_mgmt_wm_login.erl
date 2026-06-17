@@ -12,6 +12,7 @@
          content_types_accepted/2]).
 -export([variances/2]).
 
+-include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 %%--------------------------------------------------------------------
 
@@ -46,5 +47,25 @@ is_authorized(ReqData0, Context) ->
 accept_content(ReqData, Context) ->
     rabbit_mgmt_util:post_respond(do_login(ReqData, Context)).
 
-do_login(ReqData, Context) ->
-    rabbit_mgmt_util:reply(ok, ReqData, Context).
+do_login(ReqData, Context = #context{user = User}) ->
+    Username = User#user.username,
+    Password = Context#context.password,
+    Token =
+        case application:get_env(rabbitmq_management, credentials_encryption_secret, undefined) of
+            undefined ->
+                #{type  => <<"basic">>,
+                  value => base64:encode(<<Username/binary, ":", Password/binary>>)};
+            Secret ->
+                Key = rabbit_mgmt_basic_credentials_token:derive_key(Secret),
+                {ok, Encrypted} = rabbit_mgmt_basic_credentials_token:issue(Key, Username, Password),
+                #{type  => <<"bearer">>,
+                  value => Encrypted}
+        end,
+    FormattedUser = rabbit_mgmt_format:user(User),
+    Expiration = case application:get_env(rabbitmq_management, login_session_timeout) of
+        undefined  -> [];
+        {ok, Val}  -> [{login_session_timeout, Val}]
+    end,
+    rabbit_mgmt_util:reply(
+        #{token => Token, user => FormattedUser ++ Expiration},
+        ReqData, Context).
