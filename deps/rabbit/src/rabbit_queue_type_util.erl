@@ -77,7 +77,7 @@ erpc_call(Node, M, F, A, _Timeout)
         Result ->
             Result
     catch
-        error:Err ->
+        _:Err ->
             {error, Err}
     end;
 erpc_call(Node, M, F, A, Timeout) ->
@@ -87,7 +87,7 @@ erpc_call(Node, M, F, A, Timeout) ->
                 Result ->
                     Result
             catch
-                error:Err ->
+                _:Err ->
                     {error, Err}
             end;
         false ->
