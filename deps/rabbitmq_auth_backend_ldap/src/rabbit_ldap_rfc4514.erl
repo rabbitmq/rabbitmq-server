@@ -8,8 +8,8 @@
 %% RFC 4514 — String Representation of Distinguished Names.
 %%
 %% This module escapes values for safe inclusion in DN attribute value
-%% positions, preventing DN injection when untrusted input (usernames,
-%% vhost names, resource names) is substituted into DN templates.
+%% positions when input such as usernames, vhost names, or resource names is
+%% substituted into DN templates.
 -module(rabbit_ldap_rfc4514).
 
 -export([escape_value/1, fill_dn/2]).

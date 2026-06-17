@@ -9,6 +9,9 @@
 
 -export([fill/2, get_active_directory_args/1, parse_query/1]).
 
+%% Raw substitution without escaping. Safe only for non-DN sinks (ACL string
+%% comparisons, eldap:equalityMatch/2 filter values). To build a DN, use
+%% rabbit_ldap_rfc4514:fill_dn/2, which RFC 4514-escapes substituted values.
 fill(Fmt, []) ->
     binary_to_list(iolist_to_binary(Fmt));
 

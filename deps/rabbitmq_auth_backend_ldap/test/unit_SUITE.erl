@@ -19,6 +19,7 @@ all() ->
      ad_fill,
      rfc4514_escape_value,
      rfc4514_fill_dn,
+     dn_lookup_fallback_dn_escaping,
      user_dn_pattern_gh_7161,
      format_different_types_of_ldap_attribute_values,
      ldap_log_domain_routing,
@@ -84,7 +85,7 @@ rfc4514_fill_dn(_Config) ->
     F = fun(Fmt, Args, Res) ->
                 ?assertEqual(Res, rabbit_ldap_rfc4514:fill_dn(Fmt, Args))
         end,
-    %% DN injection prevented
+    %% A comma in the substituted value is escaped
     F("cn=${username},ou=People", [{username, "user,ou=Evil"}],
       "cn=user\\,ou=Evil,ou=People"),
     %% user_dn is NOT escaped (it is already a complete DN)
@@ -96,6 +97,36 @@ rfc4514_fill_dn(_Config) ->
     F("cn=${username},dc=b", [{user_dn, "cn=a,dc=b"}, {username, "x,y"}],
       "cn=x\\,y,dc=b"),
     ok.
+
+dn_lookup_fallback_dn_escaping(_Config) ->
+    PrevPattern = application:get_env(rabbitmq_auth_backend_ldap, user_dn_pattern),
+    PrevLog = application:get_env(rabbitmq_auth_backend_ldap, log),
+    ok = application:set_env(rabbitmq_auth_backend_ldap, log, false),
+    ok = application:set_env(rabbitmq_auth_backend_ldap, user_dn_pattern,
+                             "cn=${username},ou=People,dc=example,dc=com"),
+    try
+        %% No DN-special characters: escaping is a no-op
+        ?assertEqual(rabbit_auth_backend_ldap:fill_user_dn_pattern("alice"),
+                     rabbit_auth_backend_ldap:escaped_user_dn("alice")),
+        ?assertEqual("cn=alice,ou=People,dc=example,dc=com",
+                     rabbit_auth_backend_ldap:escaped_user_dn("alice")),
+        %% A comma in the substituted value is escaped
+        ?assertEqual("cn=evil\\,ou=admins,ou=People,dc=example,dc=com",
+                     rabbit_auth_backend_ldap:escaped_user_dn("evil,ou=admins")),
+        %% A binary username (the form used at runtime) is handled identically
+        ?assertEqual("cn=evil\\,ou=admins,ou=People,dc=example,dc=com",
+                     rabbit_auth_backend_ldap:escaped_user_dn(<<"evil,ou=admins">>)),
+        %% Bare fill leaves the substituted value unescaped
+        ?assertEqual("cn=evil,ou=admins,ou=People,dc=example,dc=com",
+                     rabbit_auth_backend_ldap:fill_user_dn_pattern("evil,ou=admins"))
+    after
+        restore_env(user_dn_pattern, PrevPattern),
+        restore_env(log, PrevLog)
+    end,
+    ok.
+
+restore_env(Key, {ok, V}) -> application:set_env(rabbitmq_auth_backend_ldap, Key, V);
+restore_env(Key, undefined) -> application:unset_env(rabbitmq_auth_backend_ldap, Key).
 
 ad_fill(_Config) ->
     F = fun(Fmt, Args, Res) ->
