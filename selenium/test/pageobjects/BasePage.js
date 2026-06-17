@@ -21,6 +21,7 @@ const FORM_POPUP_INFO_CLOSE_BUTTON = By.css('div.form-popup-info span')
 
 const FORM_POPUP_OPTIONS = By.css('div.form-popup-options')
 const ADD_MINUS_BUTTON = By.css('div#main table.list thead tr th.plus-minus')
+const MAIN_HEADING = By.css('#main h1')
 const TABLE_COLUMNS_POPUP = By.css('div.form-popup-options table.form')
 const FORM_POPUP_OPTIONS_CLOSE_BUTTON = By.css('div.form-popup-options span#close')
 
@@ -247,6 +248,10 @@ module.exports = class BasePage {
     }
     return table_model
   }
+  async getMainHeadingText() {
+    return this.getText(MAIN_HEADING)
+  }
+
   async isPopupWarningDisplayed() {
     try  {      
       let element = await this.driver.findElement(FORM_POPUP_WARNING)
