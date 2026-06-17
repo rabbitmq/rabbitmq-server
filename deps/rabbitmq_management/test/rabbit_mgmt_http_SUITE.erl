@@ -1838,11 +1838,11 @@ permissions_vhost_test(Config) ->
                 http_get(Config, Path1 ++ "/myvhost1/" ++ Path2, "myuser", "myuser",
                          ?OK),
                 http_get(Config, Path1 ++ "/myvhost2/" ++ Path2, "myuser", "myuser",
-                         ?NOT_AUTHORISED),
+                         ?NOT_FOUND),
                 http_get(Config, Path1 ++ "/myvhost1/" ++ Path2, "mymonitor", "mymonitor",
                          ?OK),
                 http_get(Config, Path1 ++ "/myvhost2/" ++ Path2, "mymonitor", "mymonitor",
-                         ?NOT_AUTHORISED)
+                         ?NOT_FOUND)
         end,
     Test3 =
         fun(Path1) ->
@@ -3803,12 +3803,22 @@ policy_permissions_test(Config) ->
                   http_get(Config, "/policies/v/HA",            U, U, ?NOT_AUTHORISED),
                   http_get(Config, "/parameters/test/v/good",   U, U, ?NOT_AUTHORISED)
           end,
+    %% mon and mgmt lack policymaker role entirely, so they get 401.
+    %% policy has policymaker role but no access to the default vhost, so it gets 404
+    %% (the server does not reveal whether the vhost exists to unauthorised users).
     AlwaysNeg =
         fun (U) ->
                 http_put(Config, "/policies/%2F/HA",  Policy, U, U, ?NOT_AUTHORISED),
                 http_put(Config, "/parameters/test/%2F/good", Param, U, U, ?NOT_AUTHORISED),
                 http_get(Config, "/policies/%2F/HA",          U, U, ?NOT_AUTHORISED),
                 http_get(Config, "/parameters/test/%2F/good", U, U, ?NOT_AUTHORISED)
+        end,
+    AlwaysNegPolicymaker =
+        fun (U) ->
+                http_put(Config, "/policies/%2F/HA",  Policy, U, U, ?NOT_FOUND),
+                http_put(Config, "/parameters/test/%2F/good", Param, U, U, ?NOT_FOUND),
+                http_get(Config, "/policies/%2F/HA",          U, U, ?NOT_FOUND),
+                http_get(Config, "/parameters/test/%2F/good", U, U, ?NOT_FOUND)
         end,
     AdminPos =
         fun (U) ->
@@ -3820,7 +3830,8 @@ policy_permissions_test(Config) ->
 
     [Neg(U) || U <- ["mon", "mgmt"]],
     [Pos(U) || U <- ["admin", "policy"]],
-    [AlwaysNeg(U) || U <- ["mon", "mgmt", "policy"]],
+    [AlwaysNeg(U) || U <- ["mon", "mgmt"]],
+    AlwaysNegPolicymaker("policy"),
     [AdminPos(U) || U <- ["admin"]],
 
     %% This one is deliberately different between admin and policymaker.
@@ -3954,8 +3965,8 @@ vhost_limits_list_test(Config) ->
     rabbit_ct_broker_helpers:add_user(Config, NoVhostUser),
     rabbit_ct_broker_helpers:set_user_tags(Config, 0, NoVhostUser, [management]),
     [] = http_get(Config, "/vhost-limits", NoVhostUser, NoVhostUser, ?OK),
-    http_get(Config, "/vhost-limits/limit_test_vhost_1", NoVhostUser, NoVhostUser, ?NOT_AUTHORISED),
-    http_get(Config, "/vhost-limits/limit_test_vhost_2", NoVhostUser, NoVhostUser, ?NOT_AUTHORISED),
+    http_get(Config, "/vhost-limits/limit_test_vhost_1", NoVhostUser, NoVhostUser, ?NOT_FOUND),
+    http_get(Config, "/vhost-limits/limit_test_vhost_2", NoVhostUser, NoVhostUser, ?NOT_FOUND),
 
     Vhost1User = <<"limit_test_vhost_1_user">>,
     rabbit_ct_broker_helpers:add_user(Config, Vhost1User),
@@ -3963,14 +3974,14 @@ vhost_limits_list_test(Config) ->
     rabbit_ct_broker_helpers:set_full_permissions(Config, Vhost1User, <<"limit_test_vhost_1">>),
     Limits1 = http_get(Config, "/vhost-limits", Vhost1User, Vhost1User, ?OK),
     Limits1 = http_get(Config, "/vhost-limits/limit_test_vhost_1", Vhost1User, Vhost1User, ?OK),
-    http_get(Config, "/vhost-limits/limit_test_vhost_2", Vhost1User, Vhost1User, ?NOT_AUTHORISED),
+    http_get(Config, "/vhost-limits/limit_test_vhost_2", Vhost1User, Vhost1User, ?NOT_FOUND),
 
     Vhost2User = <<"limit_test_vhost_2_user">>,
     rabbit_ct_broker_helpers:add_user(Config, Vhost2User),
     rabbit_ct_broker_helpers:set_user_tags(Config, 0, Vhost2User, [management]),
     rabbit_ct_broker_helpers:set_full_permissions(Config, Vhost2User, <<"limit_test_vhost_2">>),
     Limits2 = http_get(Config, "/vhost-limits", Vhost2User, Vhost2User, ?OK),
-    http_get(Config, "/vhost-limits/limit_test_vhost_1", Vhost2User, Vhost2User, ?NOT_AUTHORISED),
+    http_get(Config, "/vhost-limits/limit_test_vhost_1", Vhost2User, Vhost2User, ?NOT_FOUND),
     Limits2 = http_get(Config, "/vhost-limits/limit_test_vhost_2", Vhost2User, Vhost2User, ?OK).
 
 vhost_limit_set_test(Config) ->
@@ -4405,7 +4416,7 @@ qq_status_vhost_authorisation_test(Config) ->
     rabbit_ct_broker_helpers:add_user(Config, User, User),
     rabbit_ct_broker_helpers:set_user_tags(Config, 0, User, [management]),
     http_get(Config, "/queues/quorum/qq-status-vh/qq_status_auth/status",
-             User, User, ?NOT_AUTHORISED),
+             User, User, ?NOT_FOUND),
     %% Permissions granted, must succeed.
     rabbit_ct_broker_helpers:set_full_permissions(Config, User, Vhost),
     http_get(Config, "/queues/quorum/qq-status-vh/qq_status_auth/status",
