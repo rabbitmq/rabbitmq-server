@@ -176,8 +176,8 @@ run([SuperStream],
       timeout := Timeout,
       partitions := Partitions} =
         Opts) ->
-    Streams = streams_from_partitions(SuperStream, Partitions),
-    RoutingKeys = routing_keys(Partitions),
+    Streams = rabbit_stream_utils:streams_from_partitions(SuperStream, Partitions),
+    RoutingKeys = rabbit_stream_utils:routing_keys(Partitions),
     create_super_stream(NodeName,
                         Timeout,
                         VHost,
@@ -191,8 +191,9 @@ run([SuperStream],
       timeout := Timeout,
       binding_keys := BindingKeysStr} =
         Opts) ->
-    BindingKeys = binding_keys(BindingKeysStr),
-    Streams = streams_from_binding_keys(SuperStream, BindingKeys),
+    BindingKeys = rabbit_stream_utils:binding_keys(BindingKeysStr),
+    Streams = rabbit_stream_utils:streams_from_binding_keys(SuperStream,
+                                                            BindingKeys),
 
     create_super_stream(NodeName,
                         Timeout,
@@ -201,24 +202,6 @@ run([SuperStream],
                         Streams,
                         stream_arguments(Opts),
                         BindingKeys).
-
-streams_from_partitions(Name, Partitions) ->
-    [<<Name/binary, "-", (integer_to_binary(K))/binary>> ||
-     K <- lists:seq(0, Partitions - 1)].
-
-routing_keys(Partitions) ->
-    [integer_to_binary(K) || K <- lists:seq(0, Partitions - 1)].
-
-binding_keys(BindingKeysBin) ->
-    Keys = binary:split(rabbit_data_coercion:to_binary(BindingKeysBin),
-                        <<",">>, [global]),
-    %% Trim first, then verify the token is not an empty binary
-    [Trimmed || K <- Keys,
-                Trimmed <- [string:trim(K)],
-                Trimmed =/= <<>>].
-
-streams_from_binding_keys(Name, BindingKeys) ->
-    [<<Name/binary, "-", K/binary>> || K <- BindingKeys].
 
 stream_arguments(Opts) ->
     stream_arguments(#{}, Opts).
