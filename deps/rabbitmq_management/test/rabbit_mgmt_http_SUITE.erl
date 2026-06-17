@@ -215,6 +215,7 @@ all_tests() -> [
     disable_basic_auth_test,
     login_test,
     login_encrypted_test,
+    login_session_cookie_test,
     csp_headers_test,
     auth_attempts_test,
     user_limits_list_test,
@@ -4242,12 +4243,13 @@ version_test(Config) ->
 login_test(Config) ->
     http_put(Config, "/users/myuser", [{password, <<"myuser">>},
                                        {tags,     <<"management">>}], {group, '2xx'}),
-    %% Successful login returns a structured token envelope and user object.
+    %% Successful login returns a structured token envelope and user object,
+    %% and sets a session cookie.
     {ok, {{_, 200, _}, Headers, Body}} =
         req(Config, 0, post, "/login",
             [{"content-type", "application/x-www-form-urlencoded"}],
             <<"username=myuser&password=myuser">>),
-    ?assert(not proplists:is_defined("set-cookie", Headers)),
+    ?assert(proplists:is_defined("set-cookie", Headers)),
     Decoded = rabbit_json:decode(Body),
     Token = maps:get(<<"token">>, Decoded),
     ?assertEqual(<<"basic">>, maps:get(<<"type">>, Token)),
@@ -4255,7 +4257,7 @@ login_test(Config) ->
     User = maps:get(<<"user">>, Decoded),
     ?assertEqual(<<"myuser">>, maps:get(<<"name">>, User)),
 
-    %% Unknown user returns 401.
+    %% Unknown user returns 401 with no session cookie.
     {ok, {{_, 401, _}, Headers2, _}} =
         req(Config, 0, post, "/login",
             [{"content-type", "application/x-www-form-urlencoded"}],
@@ -4295,6 +4297,33 @@ login_encrypted_test(Config) ->
     http_delete(Config, "/users/myuser", {group, '2xx'}),
     rpc(Config, application, unset_env,
         [rabbitmq_management, credentials_encryption_secret]),
+    passed.
+
+login_session_cookie_test(Config) ->
+    http_put(Config, "/users/myuser", [{password, <<"myuser">>},
+                                       {tags,     <<"management">>}], {group, '2xx'}),
+    %% POST /api/login sets a secure session cookie on success.
+    {ok, {{_, 200, _}, LoginHeaders, _}} =
+        req(Config, 0, post, "/login",
+            [{"content-type", "application/x-www-form-urlencoded"}],
+            <<"username=myuser&password=myuser">>),
+    SetCookie = proplists:get_value("set-cookie", LoginHeaders),
+    ?assertMatch({match, _}, re:run(SetCookie, "loggedIn=true")),
+    ?assertMatch({match, _}, re:run(SetCookie, "HttpOnly", [caseless])),
+    ?assertMatch({match, _}, re:run(SetCookie, "SameSite=Strict", [caseless])),
+    ?assertMatch({match, _}, re:run(SetCookie, "Max-Age=")),
+    ?assertMatch({match, _}, re:run(SetCookie, "Path=/")),
+
+    %% DELETE /api/login clears the session cookie (Max-Age=0) without requiring authentication.
+    {ok, {{_, Code, _}, LogoutHeaders, _}} =
+        req(Config, delete, "/login", []),
+    ?assert(Code =:= 200 orelse Code =:= 204),
+    ?assert(proplists:is_defined("set-cookie", LogoutHeaders)),
+    ClearCookie = proplists:get_value("set-cookie", LogoutHeaders),
+    ?assertMatch({match, _}, re:run(ClearCookie, "loggedIn=")),
+    ?assertMatch({match, _}, re:run(ClearCookie, "Max-Age=0")),
+
+    http_delete(Config, "/users/myuser", {group, '2xx'}),
     passed.
 
 csp_headers_test(Config) ->

@@ -46,7 +46,11 @@
 -export([direct_request/6]).
 -export([qs_val/2]).
 -export([get_path_prefix/0]).
+<<<<<<< HEAD
 -export([get_oauth2_bootstrap_cookie_path/0]).
+=======
+-export([set_session_cookie/1, clear_session_cookie/1]).
+>>>>>>> 6397423289 (Consolidate cookies mgt to the server)
 -export([catch_no_such_user_or_vhost/2]).
 -export([method_not_allowed/3]).
 
@@ -475,10 +479,40 @@ fixup_prefix(EnvPrefix) when is_list(EnvPrefix) ->
 fixup_prefix(EnvPrefix) when is_binary(EnvPrefix) ->
     fixup_prefix(rabbit_data_coercion:to_list(EnvPrefix)).
 
-%% Path for the short-lived /login cookies. It must carry the HTTP API path
-%% prefix, or the browser will not send them to the prefixed bootstrap.js.
-get_oauth2_bootstrap_cookie_path() ->
-    iolist_to_binary([get_path_prefix(), ?OAUTH2_BOOTSTRAP_PATH]).
+set_session_cookie(Req = #{scheme := Scheme}) ->
+    Settings0 = #{
+        http_only => true,
+        path      => session_cookie_path(),
+        max_age   => session_cookie_max_age(),
+        same_site => strict
+    },
+    Settings = case Scheme of
+        <<"https">> -> Settings0#{secure => true};
+        _           -> Settings0
+    end,
+    cowboy_req:set_resp_cookie(<<"loggedIn">>, <<"true">>, Req, Settings).
+
+clear_session_cookie(Req = #{scheme := Scheme}) ->
+    Settings0 = #{
+        http_only => true,
+        path      => session_cookie_path(),
+        max_age   => 0,
+        same_site => strict
+    },
+    Settings = case Scheme of
+        <<"https">> -> Settings0#{secure => true};
+        _           -> Settings0
+    end,
+    cowboy_req:set_resp_cookie(<<"loggedIn">>, <<"">>, Req, Settings).
+
+session_cookie_path() ->
+    list_to_binary(get_path_prefix() ++ "/").
+
+session_cookie_max_age() ->
+    case application:get_env(rabbitmq_management, login_session_timeout) of
+        undefined  -> 8 * 3600;
+        {ok, Val}  -> Val * 60
+    end.
 
 %% XXX sort_list_and_paginate/2 is a more proper name for this function, keeping it
 %% with this name for backwards compatibility

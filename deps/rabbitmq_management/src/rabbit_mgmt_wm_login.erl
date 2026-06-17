@@ -9,7 +9,7 @@
 
 -export([init/2, is_authorized/2,
          allowed_methods/2, accept_content/2, content_types_provided/2,
-         content_types_accepted/2]).
+         content_types_accepted/2, delete_resource/2]).
 -export([variances/2]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -23,7 +23,7 @@ variances(Req, Context) ->
     {[<<"accept-encoding">>, <<"origin">>], Req, Context}.
 
 allowed_methods(ReqData, Context) ->
-    {[<<"POST">>, <<"OPTIONS">>], ReqData, Context}.
+    {[<<"POST">>, <<"DELETE">>, <<"OPTIONS">>], ReqData, Context}.
 
 content_types_provided(ReqData, Context) ->
     {rabbit_mgmt_util:responder_map(to_json), ReqData, Context}.
@@ -32,6 +32,8 @@ content_types_accepted(ReqData, Context) ->
     {[{{<<"application">>, <<"x-www-form-urlencoded">>, '*'}, accept_content}], ReqData, Context}.
 
 is_authorized(#{method := <<"OPTIONS">>} = ReqData, Context) ->
+    {true, ReqData, Context};
+is_authorized(#{method := <<"DELETE">>} = ReqData, Context) ->
     {true, ReqData, Context};
 is_authorized(ReqData0, Context) ->
     {ok, Body, ReqData} = cowboy_req:read_urlencoded_body(ReqData0),
@@ -66,6 +68,10 @@ do_login(ReqData, Context = #context{user = User}) ->
         undefined  -> [];
         {ok, Val}  -> [{login_session_timeout, Val}]
     end,
+    ReqData1 = rabbit_mgmt_util:set_session_cookie(ReqData),
     rabbit_mgmt_util:reply(
         #{token => Token, user => FormattedUser ++ Expiration},
-        ReqData, Context).
+        ReqData1, Context).
+
+delete_resource(ReqData, Context) ->
+    {true, rabbit_mgmt_util:clear_session_cookie(ReqData), Context}.
