@@ -672,14 +672,14 @@ validate_super_stream_partitions(Partitions) ->
     end.
 
 validate_super_stream_max_partitions(Partitions) ->
-    MaxPartitions = rabbit_stream_utils:max_super_stream_partitions(),
-    case erlang:length(Partitions) > MaxPartitions of
+    case rabbit_stream_utils:validate_super_stream_max_partitions(Partitions) of
         true ->
+            ok;
+        false ->
+            MaxPartitions = rabbit_stream_utils:max_super_stream_partitions(),
             {error, {validation_failed,
                      {rabbit_misc:format("The partition number must not exceed ~w",
-                                         [MaxPartitions])}}};
-        false ->
-            ok
+                                         [MaxPartitions])}}}
     end.
 
 exchange_exists(VirtualHost, Name) ->
