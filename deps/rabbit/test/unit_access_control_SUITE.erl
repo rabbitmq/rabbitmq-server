@@ -32,6 +32,7 @@ groups() ->
       {sequential_tests, [], [
           login_with_credentials_but_no_password,
           login_of_passwordless_user,
+          login_of_nonexistent_user,
           set_tags_for_passwordless_user,
           change_password,
           auth_backend_internal_expand_topic_permission,
@@ -195,6 +196,26 @@ login_of_passwordless_user1(_Config) ->
 
     ok = rabbit_auth_backend_internal:delete_user(Username, <<"acting-user">>),
 
+    passed.
+
+login_of_nonexistent_user(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, login_of_nonexistent_user1, [Config]).
+
+login_of_nonexistent_user1(_Config) ->
+    Username = <<"login_of_nonexistent_user-user">>,
+    Password = <<"login_of_nonexistent_user-password">>,
+    %% Ensure the user does not exist before the test.
+    case rabbit_auth_backend_internal:lookup_user(Username) of
+        {ok, _} -> rabbit_auth_backend_internal:delete_user(Username, <<"acting-user">>);
+        _       -> ok
+    end,
+    %% Authentication of a non-existent user must return {refused, ...} and
+    %% must not crash or return an error tuple.
+    ?assertMatch(
+       {refused, _Message, [Username]},
+       rabbit_auth_backend_internal:user_login_authentication(
+           Username, [{password, Password}])),
     passed.
 
 
