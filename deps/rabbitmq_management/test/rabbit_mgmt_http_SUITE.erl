@@ -4101,7 +4101,17 @@ user_limits_list_test(Config) ->
     },
     rabbit_ct_broker_helpers:set_user_limits(Config, 0, NoVhostUser, maps:get(value, Limits4)),
 
-    ?assertEqual([Limits4], http_get(Config, "/user-limits/no_vhost_user", ?OK)).
+    ?assertEqual([Limits4], http_get(Config, "/user-limits/no_vhost_user", ?OK)),
+
+    %% A management-only user must not be able to enumerate other users' limits.
+    %% Reading own limits is allowed; reading another user's limits or the full
+    %% list must be refused.
+    http_get(Config, "/user-limits", User1, User1, ?NOT_AUTHORISED),
+    http_get(Config, "/user-limits", User2, User2, ?NOT_AUTHORISED),
+    Limits1 = http_get(Config, "/user-limits/" ++ binary_to_list(User1), User1, User1, ?OK),
+    http_get(Config, "/user-limits/" ++ binary_to_list(User2), User1, User1, ?NOT_AUTHORISED),
+    Limits2 = http_get(Config, "/user-limits/" ++ binary_to_list(User2), User2, User2, ?OK),
+    http_get(Config, "/user-limits/" ++ binary_to_list(User1), User2, User2, ?NOT_AUTHORISED).
 
 user_limit_set_test(Config) ->
     ?assertEqual([], http_get(Config, "/user-limits", ?OK)),
