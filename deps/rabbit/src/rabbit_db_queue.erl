@@ -131,7 +131,7 @@ get_all_in_khepri() ->
       Acc :: term().
 
 %% @doc Folds over all queue records without materialising them into a list,
-%% making it more memory-efficient than get_all/0 followed by a fold over the
+%% making it more memory-efficient than `get_all/0` followed by a fold over the
 %% returned list. Useful when iterating over very large numbers of queues.
 %%
 %% @returns the fold accumulator.

@@ -20,7 +20,8 @@
          get_all/3,
          get_all_for_source/1,
          get_all_for_destination/1,
-         fold/2]).
+         fold/2,
+         fold_projection/2]).
 
 %% Routing. These functions are in the hot code path
 -export([match/2, match_routing_key/3]).
@@ -432,6 +433,28 @@ get_all_in_khepri() ->
     catch
         error:badarg ->
             []
+    end.
+
+-spec fold_projection(Fun, Acc) -> Acc when
+      Fun :: fun((Binding :: rabbit_types:binding(), Acc) -> Acc),
+      Acc :: any().
+%% @doc Folds over all explicit binding records from the local projection,
+%% without building an intermediate list.
+%%
+%% Unlike `fold/2`, this runs in the calling process rather than the Khepri
+%% server process, so the callback may block (e.g. on streaming backpressure)
+%% without stalling the metadata store.
+%%
+%% @private
+
+fold_projection(Fun, Acc) ->
+    try
+        ets:foldl(
+          fun(#route{binding = Binding}, Acc0) -> Fun(Binding, Acc0) end,
+          Acc, ?KHEPRI_BINDINGS_PROJECTION)
+    catch
+        error:badarg ->
+            Acc
     end.
 
 -spec get_all(VHostName) -> [Binding] when
