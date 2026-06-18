@@ -114,16 +114,15 @@ get_all() ->
 %%
 %% @private
 
+%% Not wrapped in list_with_possible_retry/1: the callback may have side effects
+%% and the accumulator is arbitrary, so the fold must never be replayed.
 fold(Fun, Acc) ->
-    list_with_possible_retry(
-      fun() ->
-              try
-                  ets:foldl(Fun, Acc, ?KHEPRI_PROJECTION)
-              catch
-                  error:badarg ->
-                      Acc
-              end
-      end).
+    try
+        ets:foldl(Fun, Acc, ?KHEPRI_PROJECTION)
+    catch
+        error:badarg ->
+            Acc
+    end.
 
 -spec get_all(VHostName) -> [Queue] when
       VHostName :: vhost:name(),
