@@ -35,7 +35,7 @@ jobs:
             https://cdn.jsdelivr.net/hex
 
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: 'v4.2.x'
           fetch-tags: true
@@ -68,7 +68,7 @@ jobs:
             https://cdn.jsdelivr.net/hex
 
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-tags: true
 
