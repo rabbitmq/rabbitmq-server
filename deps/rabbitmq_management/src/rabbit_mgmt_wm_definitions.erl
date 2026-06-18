@@ -58,14 +58,17 @@ to_json(ReqData, Context) ->
 %% materialised in memory.
 export(Scope, ReqData0, Context) ->
     ReqData = maybe_content_disposition(ReqData0),
-    SmallParts = small_parts(Scope),
-    case maps:get(media_type, ReqData, undefined) of
-        {<<"application">>, <<"bert">>, _} ->
-            buffered(Scope, SmallParts, fun erlang:term_to_binary/1, ReqData, Context);
+    case cowboy_req:method(ReqData) of
+        %% A HEAD response carries no body, so skip gathering the definitions.
+        <<"HEAD">> ->
+            {<<>>, cowboy_req:set_resp_header(<<"cache-control">>, <<"no-cache">>, ReqData), Context};
         _ ->
-            case cowboy_req:method(ReqData) of
-                <<"GET">> -> stream_export(Scope, SmallParts, ReqData, Context);
-                _         -> buffered(Scope, SmallParts, fun rabbit_json:encode/1, ReqData, Context)
+            SmallParts = small_parts(Scope),
+            case maps:get(media_type, ReqData, undefined) of
+                {<<"application">>, <<"bert">>, _} ->
+                    buffered(Scope, SmallParts, fun erlang:term_to_binary/1, ReqData, Context);
+                _ ->
+                    stream_export(Scope, SmallParts, ReqData, Context)
             end
     end.
 
@@ -120,9 +123,8 @@ small_parts({vhost, VHostName}) ->
         exchanges                  => Keep(rabbit_definitions:list_exchanges())
     }.
 
-%% Buffered fallback for BERT (cannot be streamed incrementally) and HEAD
-%% (which must not carry a body). Queues and bindings are materialised here;
-%% the common GET+JSON path streams them instead.
+%% Buffered path for BERT, which cannot be streamed incrementally. Queues and
+%% bindings are materialised here; the common GET+JSON path streams them instead.
 buffered(Scope, SmallParts, Encode, ReqData0, Context) ->
     Queues   = lists:reverse(
                  rabbit_definitions:fold_queues(
