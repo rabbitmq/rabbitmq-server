@@ -302,7 +302,7 @@ all_definitions() ->
       Acc :: term().
 %% @doc Folds over exported queues as definition maps, optionally restricted to
 %% a single virtual host, without materialising the full queue list. Exclusive
-%% queues are skipped, as they cannot be restored. See also list_queues/0.
+%% queues are skipped, as they cannot be restored. See also `list_queues/0`.
 fold_queues(Scope, Fun, Acc) ->
     rabbit_db_queue:fold(
       fun(Q, Acc0) ->
@@ -325,10 +325,10 @@ fold_queues(Scope, Fun, Acc) ->
       Acc :: term().
 %% @doc Folds over exported (explicit) bindings as definition maps, optionally
 %% restricted to a single virtual host, without materialising the full binding
-%% list, which matters on data sets with very many bindings. See also
-%% list_bindings/0.
+%% list. Uses the projection-based fold so the streaming callback runs in the
+%% calling process rather than the Khepri server process. See also `list_bindings/0`.
 fold_bindings(Scope, Fun, Acc) ->
-    rabbit_db_binding:fold(
+    rabbit_db_binding:fold_projection(
       fun(#binding{source = #resource{virtual_host = VHost}} = Binding, Acc0) ->
               case Scope of
                   all            -> Fun(binding_definition(Binding), Acc0);
