@@ -33,7 +33,11 @@ jobs:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v6
       with:
-        fetch-tags: true
+        # Full history lets git-describe(1) resolve a tag into a semver-based
+        # version. A shallow clone yields a bare commit SHA, which the broker
+        # advertises as its version and the AMQP 1.0 Java client in
+        # `amqp_jms_SUITE` then rejects as unparseable.
+        fetch-depth: 0
 
     - name: EXTRACT ACTIVEMQ VERSION
       if: inputs.plugin == 'amqp10_client'

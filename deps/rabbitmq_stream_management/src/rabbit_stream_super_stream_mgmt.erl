@@ -91,8 +91,10 @@ maybe_create_super_stream(ReqData0, Context, VHost, Name) ->
                           {ok, Node} ->
                               case PartitionsBin of
                                   undefined ->
-                                      BindingKeys = binding_keys(BindingKeysBin),
-                                      Streams = streams_from_binding_keys(Name, BindingKeys),
+                                      BindingKeys =
+                                          rabbit_stream_utils:binding_keys(BindingKeysBin),
+                                      Streams =
+                                        rabbit_stream_utils:streams_from_binding_keys(Name, BindingKeys),
                                       check_and_create_super_stream(
                                         Node, VHost, Name, Streams,
                                         Arguments, BindingKeys,
@@ -100,8 +102,9 @@ maybe_create_super_stream(ReqData0, Context, VHost, Name) ->
                                   _ ->
                                       case validate_partitions(PartitionsBin, ReqData, Context) of
                                           Partitions when is_integer(Partitions) ->
-                                              Streams = streams_from_partitions(Name, Partitions),
-                                              RoutingKeys = routing_keys(Partitions),
+                                              Streams =
+                                                rabbit_stream_utils:streams_from_partitions(Name, Partitions),
+                                              RoutingKeys = rabbit_stream_utils:routing_keys(Partitions),
                                               check_and_create_super_stream(
                                                 Node, VHost, Name, Streams,
                                                 Arguments, RoutingKeys,
@@ -123,23 +126,6 @@ get_node(Props) ->
         undefined -> {ok, node()};
         N         -> rabbit_nodes:resolve_member(binary_to_list(N))
     end.
-
-binding_keys(BindingKeysBin) ->
-    Keys = binary:split(BindingKeysBin, <<",">>, [global]),
-    %% Trim first, then verify the token is not an empty binary
-    [Trimmed || K <- Keys,
-                Trimmed <- [string:trim(K)],
-                Trimmed =/= <<>>].
-
-routing_keys(Partitions) ->
-    [integer_to_binary(K) || K <- lists:seq(0, Partitions - 1)].
-
-streams_from_binding_keys(Name, BindingKeys) ->
-    [<<Name/binary, "-", K/binary>> || K <- BindingKeys].
-
-streams_from_partitions(Name, Partitions) ->
-    [<<Name/binary, "-", (integer_to_binary(K))/binary>> ||
-     K <- lists:seq(0, Partitions - 1)].
 
 check_and_create_super_stream(NodeName, VHost, SuperStream, Streams,
                               Arguments, RoutingKeys, ReqData,
@@ -181,27 +167,27 @@ validate_partitions_or_binding_keys(_, undefined, _, _) ->
     ok;
 validate_partitions_or_binding_keys(undefined, BindingKeysBin, ReqData, Context)
   when is_binary(BindingKeysBin) ->
-    MaxPartitions = rabbit_stream_utils:max_super_stream_partitions(),
     %% Fast-fail approximation shield, protect against OOM
     %% (doesn't account for <<",,,">> or <<"   ,   ,   ">>)
     ApproxKeys = length(binary:matches(BindingKeysBin, <<",">>)) + 1,
-    case ApproxKeys > MaxPartitions of
+    case rabbit_stream_utils:validate_super_stream_max_partitions(ApproxKeys) of
         true ->
-            rabbit_mgmt_util:bad_request(
-              "The number of binding keys must not exceed " ++
-              integer_to_list(MaxPartitions),
-              ReqData, Context);
-        false ->
             %% Bounded exact validation.
             %% Safe to split now because ApproxKeys is guaranteed to be <= MaxPartitions.
-            case binding_keys(BindingKeysBin) of
+            case rabbit_stream_utils:binding_keys(BindingKeysBin) of
                 [] ->
                     rabbit_mgmt_util:bad_request(
                       "The number of binding keys must be greater than 0",
                       ReqData, Context);
                 _ActualKeys ->
                     ok
-            end
+            end;
+        false ->
+            MaxPartitions = rabbit_stream_utils:max_super_stream_partitions(),
+            rabbit_mgmt_util:bad_request(
+              "The number of binding keys must not exceed " ++
+              integer_to_list(MaxPartitions),
+              ReqData, Context)
     end;
 validate_partitions_or_binding_keys(undefined, _, _, _) ->
     ok;
@@ -216,15 +202,15 @@ validate_partitions(PartitionsBin, ReqData, Context) ->
                   "The partition number must be greater than 0",
                   ReqData, Context);
             Int ->
-                MaxPartitions = rabbit_stream_utils:max_super_stream_partitions(),
-                case Int > MaxPartitions of
+                case rabbit_stream_utils:validate_super_stream_max_partitions(Int) of
                     true ->
+                        Int;
+                    false ->
+                        MaxPartitions = rabbit_stream_utils:max_super_stream_partitions(),
                         rabbit_mgmt_util:bad_request(
                           "The partition number must not exceed " ++
                           integer_to_list(MaxPartitions),
-                          ReqData, Context);
-                    false ->
-                        Int
+                          ReqData, Context)
                 end
         end
     catch
