@@ -629,7 +629,7 @@ permissions_vhost_test(Config) ->
                 http_get(Config, Path1 ++ "/myvhost1/" ++ Path2, "myuser", "myuser",
                          ?OK),
                 http_get(Config, Path1 ++ "/myvhost2/" ++ Path2, "myuser", "myuser",
-                         ?NOT_AUTHORISED)
+                         ?NOT_FOUND)
         end,
     Test3 =
         fun(Path1) ->

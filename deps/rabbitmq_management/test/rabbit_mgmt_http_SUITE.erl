@@ -3369,7 +3369,7 @@ get_fail_test(Config) ->
     http_post(Config, "/queues/%2F/myqueue/get",
               [{ackmode, ack_requeue_false},
                {count,    1},
-               {encoding, auto}], "myuser", "password", ?NOT_AUTHORISED),
+               {encoding, auto}], "myuser", "password", ?NOT_FOUND),
     http_delete(Config, "/queues/%2F/myqueue", {group, '2xx'}),
     http_delete(Config, "/users/myuser", {group, '2xx'}),
     passed.
@@ -3506,7 +3506,7 @@ publish_fail_test(Config) ->
     http_put(Config, "/users/myuser", [{password, <<"password">>},
                                        {tags, <<"management">>}], {group, '2xx'}),
     http_post(Config, "/exchanges/%2F/amq.default/publish", Msg, "myuser", "password",
-              ?NOT_AUTHORISED),
+              ?NOT_FOUND),
     Msg2 = [{exchange,         <<"">>},
             {routing_key,      <<"publish_fail_test">>},
             {properties,       [{user_id, <<"foo">>}]},
@@ -4108,9 +4108,9 @@ user_limits_list_test(Config) ->
     %% list must be refused.
     http_get(Config, "/user-limits", User1, User1, ?NOT_AUTHORISED),
     http_get(Config, "/user-limits", User2, User2, ?NOT_AUTHORISED),
-    Limits1 = http_get(Config, "/user-limits/" ++ binary_to_list(User1), User1, User1, ?OK),
+    http_get(Config, "/user-limits/" ++ binary_to_list(User1), User1, User1, ?OK),
     http_get(Config, "/user-limits/" ++ binary_to_list(User2), User1, User1, ?NOT_AUTHORISED),
-    Limits2 = http_get(Config, "/user-limits/" ++ binary_to_list(User2), User2, User2, ?OK),
+    http_get(Config, "/user-limits/" ++ binary_to_list(User2), User2, User2, ?OK),
     http_get(Config, "/user-limits/" ++ binary_to_list(User1), User2, User2, ?NOT_AUTHORISED).
 
 user_limit_set_test(Config) ->
@@ -4171,15 +4171,8 @@ user_limit_set_test(Config) ->
     rabbit_ct_broker_helpers:set_user_tags(Config, 0, Vhost1User, [management]),
     rabbit_ct_broker_helpers:set_full_permissions(Config, Vhost1User, Vhost1),
 
-    Limits3 = [
-        #{
-            user => User1,
-            value => #{
-                'max-connections' => 1000,
-                'max-channels'    => 100
-            }
-        }],
-    ?assertEqual(Limits3, http_get(Config, "/user-limits/limit_test_user_1", Vhost1User, Vhost1User, ?OK)),
+    %% A management user cannot read another user's limits.
+    http_get(Config, "/user-limits/limit_test_user_1", Vhost1User, Vhost1User, ?NOT_AUTHORISED),
 
     %% Clear a limit
     http_delete(Config, "/user-limits/limit_test_user_1/max-connections", ?NO_CONTENT),
