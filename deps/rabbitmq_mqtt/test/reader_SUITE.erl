@@ -164,6 +164,10 @@ login_timeout(Config) ->
 
 stats(Config) ->
     C = connect(?FUNCTION_NAME, Config),
+    %% A connection from a prior (shuffled) test case may still be deregistering.
+    rabbit_ct_helpers:await_condition(fun() ->
+        length(all_connection_pids(Config)) =:= 1
+    end, 10_000),
     [Pid] = all_connection_pids(Config),
     [{pid, Pid}] = rpc(Config, rabbit_mqtt_reader, info, [Pid, [pid]]),
     rabbit_ct_helpers:await_condition(fun() ->
@@ -276,6 +280,10 @@ rabbit_mqtt_qos0_queue_overflow(Config) ->
                         {buffer, 256}]}],
     Sub = connect(<<"subscriber">>, Config, Opts),
     {ok, _, [0]} = emqtt:subscribe(Sub, Topic, qos0),
+    %% A connection from a prior (shuffled) test case may still be deregistering.
+    rabbit_ct_helpers:await_condition(fun() ->
+        length(all_connection_pids(Config)) =:= 1
+    end, 10_000),
     [ServerConnectionPid] = all_connection_pids(Config),
 
     %% Suspend the receiving client such that it stops reading from its socket
