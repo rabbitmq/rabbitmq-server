@@ -31,7 +31,7 @@ jobs:
     timeout-minutes: 60
     steps:
     - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
       with:
         # Full history lets git-describe(1) resolve a tag into a semver-based
         # version. A shallow clone yields a bare commit SHA, which the broker
