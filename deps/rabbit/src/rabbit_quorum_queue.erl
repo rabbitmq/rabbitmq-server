@@ -1118,6 +1118,16 @@ delete(Q, _IfUnused, _IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
                 {error, timeout} = Err ->
                     Err
             end;
+        {error, {shutdown, delete}} ->
+            %% The Ra cluster is already shutting down due to a concurrent
+            %% delete. Clean up queue data and treat as success.
+            notify_decorators(QName, shutdown),
+            case delete_queue_data(Q, ActingUser) of
+                ok ->
+                    {ok, ReadyMsgs};
+                {error, timeout} = Err ->
+                    Err
+            end;
         {error, {no_more_servers_to_try, Errs}} ->
             case lists:all(fun({{error, noproc}, _}) -> true;
                               (_) -> false
