@@ -40,6 +40,7 @@ all() ->
         test_restricted_vhost_access_with_a_valid_token,
         test_insufficient_permissions_in_a_valid_token,
         test_token_expiration,
+        test_token_expiration_with_float_exp,
         test_invalid_signature,
         test_incorrect_kid,
         normalize_token_scope_using_multiple_scopes_key,
@@ -1175,6 +1176,31 @@ test_insufficient_permissions_in_a_valid_token(_) ->
     assert_resource_access_denied(User, VHost, <<"bar">>, write),
     assert_topic_access_refused(User, VHost, <<"bar">>, read,
         #{routing_key => <<"foo/#">>}).
+
+%% A fractional "exp" (RFC 7519) must still be honoured: an expired float
+%% "exp" is rejected at login, a future one yields a numeric expiry_timestamp.
+test_token_expiration_with_float_exp(_) ->
+    Username = <<"username">>,
+    Jwk = ?UTIL_MOD:fixture_jwk(),
+    UaaEnv = [{signing_keys, #{<<"token-key">> => {map, Jwk}}}],
+    set_env(key_config, UaaEnv),
+    set_env(resource_server_id, <<"rabbitmq">>),
+
+    Now = os:system_time(seconds),
+
+    ExpiredToken = (?UTIL_MOD:token_with_sub(?UTIL_MOD:fixture_token(), Username))#{
+        <<"exp">> => (Now - 10) + 0.5},
+    ExpiredSigned = ?UTIL_MOD:sign_token_hs(ExpiredToken, Jwk),
+    ?assertMatch({refused, _, _},
+                 user_login_authentication(Username, [{password, ExpiredSigned}])),
+
+    FutureExp = Now + 60,
+    ValidToken = (?UTIL_MOD:token_with_sub(?UTIL_MOD:fixture_token(), Username))#{
+        <<"exp">> => FutureExp + 0.5},
+    ValidSigned = ?UTIL_MOD:sign_token_hs(ValidToken, Jwk),
+    {ok, #auth_user{username = Username} = User} =
+        user_login_authentication(Username, [{password, ValidSigned}]),
+    ?assertEqual(FutureExp, rabbit_auth_backend_oauth2:expiry_timestamp(User)).
 
 test_invalid_signature(_) ->
     Username = <<"username">>,
