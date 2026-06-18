@@ -25,8 +25,33 @@ toplist(Key, Info) ->
 sort_by_param(ReqData, Default) ->
     case rabbit_mgmt_util:qs_val(<<"sort">>, ReqData) of
         undefined -> Default;
-        Bin       -> rabbit_data_coercion:to_atom(Bin)
+        Bin       -> known_sort_key(Bin, Default)
     end.
+
+%% Validate the sort key against known column names to prevent atom table
+%% exhaustion from arbitrary user-supplied sort parameters.
+known_sort_key(<<"reduction_delta">>,   _) -> reduction_delta;
+known_sort_key(<<"memory">>,            _) -> memory;
+known_sort_key(<<"message_queue_len">>, _) -> message_queue_len;
+known_sort_key(<<"reductions">>,        _) -> reductions;
+known_sort_key(<<"status">>,            _) -> status;
+known_sort_key(<<"buffer_len">>,        _) -> buffer_len;
+known_sort_key(<<"pid">>,               _) -> pid;
+%% ETS table sort keys
+known_sort_key(<<"size">>,                  _) -> size;
+known_sort_key(<<"name">>,                  _) -> name;
+known_sort_key(<<"owner">>,                 _) -> owner;
+known_sort_key(<<"owner_name">>,            _) -> owner_name;
+known_sort_key(<<"type">>,                  _) -> type;
+known_sort_key(<<"protection">>,            _) -> protection;
+known_sort_key(<<"node">>,                  _) -> node;
+known_sort_key(<<"keypos">>,                _) -> keypos;
+known_sort_key(<<"compressed">>,            _) -> compressed;
+known_sort_key(<<"named_table">>,           _) -> named_table;
+known_sort_key(<<"write_concurrency">>,     _) -> write_concurrency;
+known_sort_key(<<"read_concurrency">>,      _) -> read_concurrency;
+known_sort_key(<<"decentralized_counters">>, _) -> decentralized_counters;
+known_sort_key(<<_/binary>>,            Default) -> Default.
 
 sort_order_param(ReqData) ->
     case rabbit_mgmt_util:qs_val(<<"sort_reverse">>, ReqData) of
