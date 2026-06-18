@@ -204,7 +204,7 @@ stream_tracking_requires_vhost_access(Config) ->
     rabbit_ct_broker_helpers:add_user(Config, User, User),
     rabbit_ct_broker_helpers:set_user_tags(Config, 0, User, [management]),
     http_get(Config, "/stream/tracking-vh/test-stream/tracking",
-             User, User, ?NOT_AUTHORISED),
+             User, User, 404),
     %% Permissions granted, must succeed.
     rabbit_ct_broker_helpers:set_full_permissions(Config, User, Vhost),
     http_get(Config, "/stream/tracking-vh/test-stream/tracking",

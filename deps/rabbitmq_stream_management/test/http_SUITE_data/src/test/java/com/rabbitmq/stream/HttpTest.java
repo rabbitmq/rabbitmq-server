@@ -746,7 +746,7 @@ public class HttpTest {
             assertThatThrownBy(
                     () ->
                         toMaps(get(client, "/stream" + configuration.endpoint + request.endpoint)))
-                .hasMessageContaining("401");
+                .hasMessageContaining("404");
           }
         }
         for (Entry<String, Boolean> request : configuration.vhostConnections.entrySet()) {
