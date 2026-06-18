@@ -1114,11 +1114,7 @@ exchange_definition(#exchange{name = #resource{virtual_host = VHost, name = Name
       <<"arguments">> => rabbit_misc:amqp_table(Args)}.
 
 list_queues() ->
-    %% exclude exclusive queues, they cannot be restored
-    [queue_definition(Q) || Q <- lists:filter(fun(Q0) ->
-                                                amqqueue:get_exclusive_owner(Q0) =:= none
-                                              end,
-                                              rabbit_amqqueue:list())].
+    lists:reverse(fold_queues(all, fun(Q, Acc) -> [Q | Acc] end, [])).
 
 queue_definition(Q) ->
     #resource{virtual_host = VHost, name = Name} = amqqueue:get_name(Q),
@@ -1156,7 +1152,7 @@ vhost_definition(VHost) ->
     Name = vhost:get_name(VHost),
     #{
         <<"name">> => Name,
-        <<"limits">> => vhost:get_limits(VHost),
+        <<"limits">> => maps:from_list(vhost:get_limits(VHost)),
         <<"metadata">> => vhost:get_metadata(VHost)
     }.
 
