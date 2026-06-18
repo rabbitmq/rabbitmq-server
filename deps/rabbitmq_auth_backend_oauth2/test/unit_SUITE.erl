@@ -40,7 +40,8 @@ all() ->
         test_restricted_vhost_access_with_a_valid_token,
         test_insufficient_permissions_in_a_valid_token,
         test_token_expiration,
-        test_token_expiration_with_float_exp,
+        test_token_expiry_with_float_exp,
+        test_token_expiry_with_non_numeric_exp,
         test_invalid_signature,
         test_incorrect_kid,
         normalize_token_scope_using_multiple_scopes_key,
@@ -1241,6 +1242,40 @@ test_token_expiration(_) ->
 
     ?assertMatch({refused, _, _},
                  user_login_authentication(Username, [{password, Token}])).
+
+test_token_expiry_with_float_exp(_) ->
+    Username = <<"username">>,
+    set_env(resource_server_id, <<"rabbitmq">>),
+
+    %% A valid, future float exp must be accepted and expiry_timestamp must
+    %% return the truncated integer — not the atom 'never'.
+    FutureFloatExp = float(os:system_time(seconds) + 600),
+    FutureToken = (?UTIL_MOD:token_with_sub(?UTIL_MOD:expirable_token(), Username))
+                    #{<<"exp">> := FutureFloatExp},
+    {ok, #auth_user{username = Username} = User} =
+        user_login_authentication(Username, [{password, FutureToken}]),
+    ?assertEqual(trunc(FutureFloatExp), rabbit_auth_backend_oauth2:expiry_timestamp(User)),
+
+    %% An already-expired float exp must be refused, not silently accepted.
+    PastFloatExp = float(os:system_time(seconds) - 10),
+    ExpiredToken = (?UTIL_MOD:token_with_sub(?UTIL_MOD:expirable_token(), Username))
+                    #{<<"exp">> := PastFloatExp},
+    ?assertMatch({refused, _, _},
+                 user_login_authentication(Username, [{password, ExpiredToken}])).
+
+test_token_expiry_with_non_numeric_exp(_) ->
+    Username = <<"username">>,
+    set_env(resource_server_id, <<"rabbitmq">>),
+
+    %% A token whose exp claim is not a number (e.g. a string) must be refused,
+    %% not silently accepted because the is_number guard falls through to the
+    %% no-exp-field catch-all clause.
+    lists:foreach(fun(NonNumericExp) ->
+        InvalidToken = (?UTIL_MOD:token_with_sub(?UTIL_MOD:expirable_token(), Username))
+                        #{<<"exp">> := NonNumericExp},
+        ?assertMatch({refused, _, _},
+                     user_login_authentication(Username, [{password, InvalidToken}]))
+    end, [<<"1700000300">>, true, false, null]).
 
 test_incorrect_kid(_) ->
     AltKid   = <<"other-token-key">>,

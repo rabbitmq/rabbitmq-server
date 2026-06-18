@@ -18,5 +18,6 @@ decode(Token) ->
         {error, {invalid_token, Type, Err, Stacktrace}}
     end.
 
-get_expiration_time(#{<<"exp">> := Exp}) when is_integer(Exp) -> {ok, Exp};
+get_expiration_time(#{<<"exp">> := Exp}) when is_number(Exp) -> {ok, trunc(Exp)};
+get_expiration_time(#{<<"exp">> := _}) -> {error, invalid_exp_field};
 get_expiration_time(#{}) -> {error, missing_exp_field}.
