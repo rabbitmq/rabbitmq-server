@@ -37,8 +37,7 @@
          auth_mechanism = sasl_init_unprocessed :: sasl_init_unprocessed | {binary(), module()},
          auth_state = unauthenticated :: term(),
          credential_timer :: undefined | reference(),
-         properties :: undefined | {map, list(tuple())},
-         sole_conn = false :: boolean()
+         properties :: undefined | {map, list(tuple())}
         }).
 
 -record(v1,

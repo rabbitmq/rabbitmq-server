@@ -37,6 +37,7 @@ jobs:
           - parallel-ct-set-5
           - ct-amqp_client
           - ct-amqp_connection_uniqueness
+          - ct-rabbit_amqp_sole_conn
           - ct-clustering_management
           - ct-clustering_recovery
           - eunit ct-dead_lettering
