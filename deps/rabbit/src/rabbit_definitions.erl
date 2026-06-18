@@ -48,7 +48,7 @@
          should_skip_if_unchanged/0
         ]).
 
--export([all_definitions/0]).
+-export([all_definitions/0, fold_queues/3, fold_bindings/3]).
 -export([
   list_users/0, list_vhosts/0, list_permissions/0, list_topic_permissions/0,
   list_runtime_parameters/0, list_global_runtime_parameters/0, list_policies/0,
@@ -295,6 +295,47 @@ all_definitions() ->
         bindings          => Bs,
         exchanges         => Xs
     }.
+
+-spec fold_queues(Scope, Fun, Acc) -> Acc when
+      Scope :: all | {vhost, vhost:name()},
+      Fun :: fun((Queue :: map(), Acc) -> Acc),
+      Acc :: term().
+%% @doc Folds over exported queues as definition maps, optionally restricted to
+%% a single virtual host, without materialising the full queue list. Exclusive
+%% queues are skipped, as they cannot be restored. See also list_queues/0.
+fold_queues(Scope, Fun, Acc) ->
+    rabbit_db_queue:fold(
+      fun(Q, Acc0) ->
+              case amqqueue:get_exclusive_owner(Q) of
+                  none ->
+                      #resource{virtual_host = VHost} = amqqueue:get_name(Q),
+                      case Scope of
+                          all            -> Fun(queue_definition(Q), Acc0);
+                          {vhost, VHost} -> Fun(queue_definition(Q), Acc0);
+                          _              -> Acc0
+                      end;
+                  _ ->
+                      Acc0
+              end
+      end, Acc).
+
+-spec fold_bindings(Scope, Fun, Acc) -> Acc when
+      Scope :: all | {vhost, vhost:name()},
+      Fun :: fun((Binding :: map(), Acc) -> Acc),
+      Acc :: term().
+%% @doc Folds over exported (explicit) bindings as definition maps, optionally
+%% restricted to a single virtual host, without materialising the full binding
+%% list, which matters on data sets with very many bindings. See also
+%% list_bindings/0.
+fold_bindings(Scope, Fun, Acc) ->
+    rabbit_db_binding:fold(
+      fun(#binding{source = #resource{virtual_host = VHost}} = Binding, Acc0) ->
+              case Scope of
+                  all            -> Fun(binding_definition(Binding), Acc0);
+                  {vhost, VHost} -> Fun(binding_definition(Binding), Acc0);
+                  _              -> Acc0
+              end
+      end, Acc).
 
 -spec has_configured_definitions_to_load() -> boolean().
 has_configured_definitions_to_load() ->

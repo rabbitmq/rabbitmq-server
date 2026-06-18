@@ -2303,12 +2303,16 @@ definitions_vhost_metadata_test(Config) ->
     {value, VH} = lists:search(fun(VH) ->
                                     maps:get(name, VH) =:= VHostName
                                 end, VHosts),
-    ?assertEqual(#{
-        name => VHostName,
-        description => Desc,
-        tags => Tags,
-        metadata => Metadata
-    }, VH),
+    %% The definitions export uses the canonical rabbit_definitions format
+    %% (the same one as `rabbitmqctl export_definitions`): a virtual host
+    %% carries `name', `metadata' and `limits'; its description and tags live
+    %% inside `metadata' rather than being duplicated at the top level.
+    ?assertEqual(VHostName, maps:get(name, VH)),
+    ?assert(maps:is_key(limits, VH)),
+    VHMetadata = maps:get(metadata, VH),
+    ?assertEqual(Desc, maps:get(description, VHMetadata)),
+    ?assertEqual(DQT, maps:get(default_queue_type, VHMetadata)),
+    ?assertEqual(Tags, maps:get(tags, VHMetadata)),
 
     %% Post the definitions back
     http_post(Config, "/definitions", Definitions, {group, '2xx'}),
