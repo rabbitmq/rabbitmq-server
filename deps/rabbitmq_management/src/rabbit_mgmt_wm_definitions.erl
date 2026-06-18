@@ -212,11 +212,10 @@ stream_entries([{Key, Value} | Rest], ReqData, First) ->
 encode_key(Key) when is_atom(Key)   -> [$", atom_to_binary(Key, utf8), $"];
 encode_key(Key) when is_binary(Key) -> [$", Key, $"].
 
-%% Category lists (exchanges, users, ...) are lists of maps; they are streamed
-%% element by element, in batches, so a huge category never sits fully encoded
-%% in memory. Any other value -- scalars, maps, and proplists such as a virtual
-%% host's `limits' -- is encoded whole by rabbit_json, which correctly renders
-%% proplists as JSON objects.
+%% Category lists (exchanges, users, ...) are lists of maps streamed element by
+%% element, in batches, so a huge category never sits fully encoded in memory.
+%% Any other value (scalars and maps such as a vhost's metadata) is encoded
+%% whole by rabbit_json.
 stream_value([], ReqData) ->
     ok = cowboy_req:stream_body(<<"[]">>, nofin, ReqData);
 stream_value([H | _] = Value, ReqData) when is_map(H) ->
