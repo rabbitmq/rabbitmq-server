@@ -114,7 +114,7 @@ small_parts({vhost, VHostName}) ->
                                         io_lib:format("Definitions of virtual host '~ts'", [VHostName])),
         metadata                   => vhost:get_metadata(VHost),
         description                => vhost:get_description(VHost),
-        limits                     => vhost:get_limits(VHost),
+        limits                     => maps:from_list(vhost:get_limits(VHost)),
         parameters                 => Keep(rabbit_definitions:list_runtime_parameters()),
         policies                   => Keep(rabbit_definitions:list_policies()),
         exchanges                  => Keep(rabbit_definitions:list_exchanges())
