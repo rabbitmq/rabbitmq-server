@@ -164,7 +164,7 @@ function fmt_features_short(obj) {
 function fmt_activity_status(obj, unknown) {
     if (unknown == undefined) unknown = UNKNOWN_REPR;
     if (obj == undefined) return unknown;
-    return obj.replace('_', ' ');
+    return fmt_escape_html(obj.replace('_', ' '));
 }
 
 function short_conn(name) {
@@ -463,7 +463,7 @@ function fmt_plugins_small(node) {
     for (var i = 0; i < node.applications.length; i++) {
         var application = node.applications[i];
         if (jQuery.inArray(application.name, node.enabled_plugins) != -1 ) {
-            plugins.push(application.name);
+            plugins.push(fmt_escape_html_one_line(application.name));
         }
     }
     return '<abbr title="Enabled plugins: ' + plugins.join(", ") + '">' +
@@ -484,7 +484,7 @@ function get_plugins_list(node) {
 function fmt_rabbit_version(applications) {
     for (var i in applications) {
         if (applications[i].name == 'rabbit') {
-            return applications[i].version;
+            return fmt_escape_html(applications[i].version);
         }
     }
     return 'unknown';
@@ -559,12 +559,12 @@ function fmt_object_state(obj) {
     if (obj.state == undefined) return '';
 
     var colour = 'green';
-    var text = obj.state;
+    var text = fmt_escape_html(obj.state);
     var explanation;
 
     if (obj.idle_since !== undefined) {
         colour = 'grey';
-        explanation = 'Idle since ' + obj.idle_since;
+        explanation = 'Idle since ' + fmt_escape_html_one_line(obj.idle_since);
         text = 'idle';
     }
     // Only connections can be 'blocked' or 'blocking'
@@ -584,7 +584,7 @@ function fmt_object_state(obj) {
         colour = 'yellow';
         var terminated_by = "";
         if (obj.terminated_by) {
-            terminated_by = " by \"" + String(obj.terminated_by) + "\"";
+            terminated_by = " by \"" + fmt_escape_html_one_line(obj.terminated_by) + "\"";
         }
         explanation = 'The queue is being deleted' + terminated_by + ".";
     }
@@ -1074,7 +1074,7 @@ function fmt_vhost_state(vhost){
         var node_state = cluster_state[node];
         if(cluster_state[node] == "stopped" || cluster_state[node] == "nodedown"){
             non_ok_count++;
-            down_nodes.push(node);
+            down_nodes.push(fmt_escape_html_one_line(node));
         } else if(cluster_state[node] == "running"){
             ok_count++;
         }
