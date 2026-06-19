@@ -217,6 +217,7 @@ all_tests() -> [
     login_encrypted_test,
     login_session_cookie_test,
     csp_headers_test,
+    referrer_policy_headers_test,
     auth_attempts_test,
     user_limits_list_test,
     user_limit_set_test,
@@ -4333,6 +4334,19 @@ csp_headers_test(Config) ->
     ?assert(lists:keymember("content-security-policy", 1, HdGetCsp0)),
     {ok, {_, HdGetCsp1, _}} = req(Config, get_static, "/index.html", Headers),
     ?assert(lists:keymember("content-security-policy", 1, HdGetCsp1)).
+
+referrer_policy_headers_test(Config) ->
+    AuthHeader = auth_header("guest", "guest"),
+    rpc(Config, application, set_env,
+        [rabbitmq_management, headers, [{referrer_policy, "no-referrer"}]]),
+    {ok, {_, Hd0, _}} = req(Config, get, "/whoami", [AuthHeader]),
+    ?assertEqual("no-referrer",
+                 proplists:get_value("referrer-policy", Hd0)),
+    rpc(Config, application, set_env,
+        [rabbitmq_management, headers, []]),
+    {ok, {_, Hd1, _}} = req(Config, get, "/whoami", [AuthHeader]),
+    ?assertEqual(undefined,
+                 proplists:get_value("referrer-policy", Hd1)).
 
 disable_basic_auth_test(Config) ->
     rpc(Config, application, set_env, [rabbitmq_management, disable_basic_auth, true]),
