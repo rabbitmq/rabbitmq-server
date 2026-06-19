@@ -104,7 +104,8 @@ definitions_group2_tests() ->
 definitions_group3_tests() ->
     [
         definitions_server_named_queue_test,
-        definitions_with_charset_test
+        definitions_with_charset_test,
+        definitions_large_streamed_test
     ].
 
 definitions_group4_tests() ->
@@ -2294,12 +2295,16 @@ definitions_vhost_metadata_test(Config) ->
     {value, VH} = lists:search(fun(VH) ->
                                     maps:get(name, VH) =:= VHostName
                                 end, VHosts),
-    ?assertEqual(#{
-        name => VHostName,
-        description => Desc,
-        tags => Tags,
-        metadata => Metadata
-    }, VH),
+    %% The definitions export uses the canonical rabbit_definitions format
+    %% (the same one as `rabbitmqctl export_definitions`): a virtual host
+    %% carries `name', `metadata' and `limits'; its description and tags live
+    %% inside `metadata' rather than being duplicated at the top level.
+    ?assertEqual(VHostName, maps:get(name, VH)),
+    ?assert(is_map(maps:get(limits, VH))),
+    VHMetadata = maps:get(metadata, VH),
+    ?assertEqual(Desc, maps:get(description, VHMetadata)),
+    ?assertEqual(DQT, maps:get(default_queue_type, VHMetadata)),
+    ?assertEqual(Tags, maps:get(tags, VHMetadata)),
 
     %% Post the definitions back
     http_post(Config, "/definitions", Definitions, {group, '2xx'}),
@@ -2435,6 +2440,42 @@ definitions_vhost_test(Config) ->
     http_post(Config, "/definitions/othervhost", Upload, ?NOT_FOUND),
 
     unregister_parameters_and_policy_validator(Config),
+    passed.
+
+%% Exercises the streamed export across the STREAM_BATCH_SIZE (2000) boundary:
+%% every queue and binding must be returned exactly once, in the canonical
+%% format (queues carry their type), with the per-item vhost field stripped.
+definitions_large_streamed_test(Config) ->
+    VHost = "definitions-large-streamed",
+    http_put(Config, "/vhosts/" ++ VHost, #{}, {group, '2xx'}),
+    Perms = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
+    http_put(Config, "/permissions/" ++ VHost ++ "/guest", Perms, {group, '2xx'}),
+
+    N = 2200,
+    Names = [<<"lq-", (integer_to_binary(I))/binary>> || I <- lists:seq(1, N)],
+    Queues = [#{name => Name, durable => true} || Name <- Names],
+    Bindings = [#{source => <<"amq.direct">>, destination => Name,
+                  destination_type => <<"queue">>,
+                  routing_key => <<"rk-", (integer_to_binary(I))/binary>>,
+                  arguments => #{}}
+                || {I, Name} <- lists:zip(lists:seq(1, N), Names)],
+    http_post(Config, "/definitions/" ++ VHost,
+              #{queues => Queues, bindings => Bindings}, {group, '2xx'}),
+
+    Defs = http_get(Config, "/definitions/" ++ VHost, ?OK),
+    QS = maps:get(queues, Defs),
+    BS = maps:get(bindings, Defs),
+    %% Every item present exactly once: no drops or duplicates at batch edges.
+    ?assertEqual(N, length(QS)),
+    ?assertEqual(N, length(lists:usort([maps:get(name, Q) || Q <- QS]))),
+    ?assertEqual(N, length(BS)),
+    %% Canonical format: queues carry their type, the scoped export drops vhost.
+    ?assert(lists:all(fun(Q) -> maps:is_key(type, Q) end, QS)),
+    ?assertEqual([], [Q || Q <- QS, maps:is_key(vhost, Q)]),
+    %% Empty limits are exported as a JSON object, not a list.
+    ?assert(is_map(maps:get(limits, Defs))),
+
+    http_delete(Config, "/vhosts/" ++ VHost, {group, '2xx'}),
     passed.
 
 definitions_password_test(Config) ->
