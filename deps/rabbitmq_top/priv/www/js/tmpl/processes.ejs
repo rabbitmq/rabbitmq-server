@@ -1,10 +1,10 @@
-<h1>Top Processes: <b><%= top.node %></b></h1>
+<h1>Top Processes: <b><%= fmt_string(top.node) %></b></h1>
 
 <p>
   Node:
   <select id="top-node">
   <% for (var i = 0; i < nodes.length; i++) { %>
-     <option name="#/top/<%= fmt_string(nodes[i].name) %>"<% if (nodes[i].name == top.node) { %>selected="selected"<% } %>><%= nodes[i].name %></option>
+     <option name="#/top/<%= fmt_string(nodes[i].name) %>"<% if (nodes[i].name == top.node) { %>selected="selected"<% } %>><%= fmt_string(nodes[i].name) %></option>
   <% } %>
   </select>
 
@@ -47,7 +47,7 @@
     <td><%= fmt_reduction_delta(process.reduction_delta) %></td>
     <td><%= process.message_queue_len %></td>
     <td><%= process.buffer_len %></td>
-    <td><%= process.status %></td>
+    <td><%= fmt_string(process.status) %></td>
   </tr>
 <% } %>
  </tbody>
