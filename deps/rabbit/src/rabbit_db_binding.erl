@@ -448,6 +448,12 @@ get_all_in_khepri() ->
 %% @private
 
 fold_projection(Fun, Acc) ->
+    rabbit_khepri:handle_fallback(
+      #{mnesia => fun() -> fold_in_mnesia(Fun, Acc) end,
+        khepri => fun() -> fold_projection_in_khepri(Fun, Acc) end
+       }).
+
+fold_projection_in_khepri(Fun, Acc) ->
     try
         ets:foldl(
           fun(#route{binding = Binding}, Acc0) -> Fun(Binding, Acc0) end,
