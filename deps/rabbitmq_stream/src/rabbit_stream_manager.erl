@@ -186,8 +186,8 @@ delete_super_stream(VirtualHost, SuperStream, Partitions, Username) ->
             ok;
         {error, Error} ->
             ?LOG_WARNING("Error while deleting super stream exchange ~tp, "
-                               "~tp",
-                               [SuperStream, Error]),
+                         "~tp",
+                         [SuperStream, Error]),
             ok
     end,
     [begin
@@ -196,8 +196,8 @@ delete_super_stream(VirtualHost, SuperStream, Partitions, Username) ->
                  ok;
              {error, Err} ->
                  ?LOG_WARNING("Error while delete partition ~tp of super stream "
-                                    "~tp, ~tp",
-                                    [Stream, SuperStream, Err]),
+                              "~tp, ~tp",
+                              [Stream, SuperStream, Err]),
                  ok
          end
      end
