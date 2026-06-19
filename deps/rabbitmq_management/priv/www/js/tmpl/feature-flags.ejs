@@ -281,7 +281,7 @@ function enable_feature_flag(checkbox, feature_flag) {
     %>
        <tr<%= alt_rows(i)%>>
          <td><%= fmt_string(feature_flag.name) %></td>
-         <td class="specificities_icons ff-stability-<%= feature_flag.stability %> ff-state-<%= feature_flag.state %>">
+         <td class="specificities_icons ff-stability-<%= fmt_string(feature_flag.stability) %> ff-state-<%= fmt_string(feature_flag.state) %>">
            <% if (feature_flag.callbacks.includes('enable')) { %>
            <svg width="800px" height="800px" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="has_migration_icon">
                <title>This feature flags has a migration function which might take some time and consume resources.</title>
@@ -301,16 +301,16 @@ function enable_feature_flag(checkbox, feature_flag) {
            </svg>
            <% } %>
          </td>
-         <td class="c ff-stability-<%= feature_flag.stability %> ff-state-<%= feature_flag.state %>">
-           <input id="ff-checkbox-<%= feature_flag.name %>" type="checkbox" class="toggle"
+         <td class="c ff-stability-<%= fmt_string(feature_flag.stability) %> ff-state-<%= fmt_string(feature_flag.state) %>">
+           <input id="ff-checkbox-<%= fmt_string(feature_flag.name) %>" type="checkbox" class="toggle"
                   <% if (feature_flag.state == 'enabled') { %>
                   checked disabled
                   <% } %>
                   <% if (feature_flag.state == 'state_changing') { %>
                   disabled
                   <% } %>
-                  onchange='handle_feature_flag(this, "<%= feature_flag.name %>");'/>
-           <label for="ff-checkbox-<%= feature_flag.name %>" class="toggle"/>
+                  onchange='handle_feature_flag(this, "<%= fmt_string(feature_flag.name) %>");'/>
+           <label for="ff-checkbox-<%= fmt_string(feature_flag.name) %>" class="toggle"/>
          </td>
          <td>
          <p><%= fmt_string(feature_flag.desc) %></p>

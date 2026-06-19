@@ -98,17 +98,17 @@
 <% if (show_column('streamConnections', 'ssl_info')) { %>
     <td>
     <% if (connection.ssl) { %>
-      <%= connection.ssl_protocol %>
+      <%= fmt_string(connection.ssl_protocol) %>
       <sub>
-        <%= connection.ssl_key_exchange %>
-        <%= connection.ssl_cipher %>
-        <%= connection.ssl_hash %>
+        <%= fmt_string(connection.ssl_key_exchange) %>
+        <%= fmt_string(connection.ssl_cipher) %>
+        <%= fmt_string(connection.ssl_hash) %>
       </sub>
     <% } %>
     </td>
 <% } %>
 <% if (show_column('streamConnections', 'protocol')) { %>
-    <td class="c"><%= connection.protocol %></td>
+    <td class="c"><%= fmt_string(connection.protocol) %></td>
 <% } %>
 <% if (show_column('streamConnections', 'frame_max')) { %>
     <td class="r"><%= fmt_string(connection.frame_max, '') %></td>

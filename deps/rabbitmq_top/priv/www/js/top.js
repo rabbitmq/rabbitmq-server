@@ -99,7 +99,7 @@ function fmt_process_name(process) {
         }
     }
     else {
-        return '<b>' + name.name + '</b>';
+        return '<b>' + fmt_escape_html(name.name) + '</b>';
     }
 }
 
@@ -107,10 +107,10 @@ function fmt_remove_rabbit_prefix(name) {
     if (name == 'rabbit_amqqueue_process') return 'queue';
 
     if (name.substring(0, 7) == 'rabbit_') {
-        return name.substring(7);
+        return fmt_escape_html(name.substring(7));
     }
     else {
-        return name;
+        return fmt_escape_html(name);
     }
 }
 
