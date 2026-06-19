@@ -13,7 +13,7 @@
 
 <div class="memory-info">
   Last updated: <b><%= fmt_date(new Date()) %></b>.<br/>
-  Memory calculation strategy: <b><%= memory.strategy %></b>. <span class="help" id="memory-calculation-strategy-breakdown"></span><br/><br/>
+  Memory calculation strategy: <b><%= fmt_string(memory.strategy) %></b>. <span class="help" id="memory-calculation-strategy-breakdown"></span><br/><br/>
   Amount of memory used vs. allocated during last update: <span class="help" id="memory-use"></span><br/>
   <table class="facts">
       <tr>

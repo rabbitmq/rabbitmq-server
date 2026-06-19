@@ -1,4 +1,4 @@
-<h1>Node <b><%= node.name %></b></h1>
+<h1>Node <b><%= fmt_string(node.name) %></b></h1>
 <div class="updatable">
 
 <% if (!node.running) { %>
@@ -49,7 +49,7 @@
     <tr>
       <th>Database directory</th>
       <td>
-        <code><%= node.db_dir %></code>
+        <code><%= fmt_string(node.db_dir) %></code>
       </td>
     </tr>
     <tr>
@@ -296,7 +296,7 @@
     </tr>
     <tr>
       <th>Rates mode</th>
-      <td><%= node.rates_mode %></td>
+      <td><%= fmt_string(node.rates_mode) %></td>
     </tr>
     <tr>
       <th>Net ticktime</th>
@@ -331,11 +331,11 @@
 <div class="box">
   <h3>Management GC queue length</h3>
   <table class="facts">
-    <% for(var k in node.metrics_gc_queue_length) { 
+    <% for(var k in node.metrics_gc_queue_length) {
          if(node.metrics_gc_queue_length.hasOwnProperty(k)) { %>
     <tr>
-      <th><%= k %></th>
-      <td><%= node.metrics_gc_queue_length[k] %></td>
+      <th><%= fmt_string(k) %></th>
+      <td><%= fmt_string(node.metrics_gc_queue_length[k]) %></td>
     </tr>
     <% } } %>
   </table>
@@ -346,8 +346,8 @@
   <table class="facts">
     <% for(var k in node.ra_open_file_metrics) { %>
     <tr>
-      <th><%= k %></th>
-      <td><%= node.ra_open_file_metrics[k] %></td>
+      <th><%= fmt_string(k) %></th>
+      <td><%= fmt_string(node.ra_open_file_metrics[k]) %></td>
     </tr>
     <% } %>
   </table>
@@ -366,9 +366,9 @@
        var application = plugins[j];
   %>
          <tr<%= alt_rows(j)%>>
-           <td><%= application.name %></td>
-           <td><%= application.version %></td>
-           <td><%= application.description %></td>
+           <td><%= fmt_string(application.name) %></td>
+           <td><%= fmt_string(application.version) %></td>
+           <td><%= fmt_string(application.description) %></td>
          </tr>
   <% } %>
 </table>
@@ -385,9 +385,9 @@
         var application = node.applications[j];
     %>
        <tr<%= alt_rows(j)%>>
-         <td><%= application.name %></td>
-         <td><%= application.version %></td>
-         <td><%= application.description %></td>
+         <td><%= fmt_string(application.name) %></td>
+         <td><%= fmt_string(application.version) %></td>
+         <td><%= fmt_string(application.description) %></td>
        </tr>
     <% } %>
 </table>

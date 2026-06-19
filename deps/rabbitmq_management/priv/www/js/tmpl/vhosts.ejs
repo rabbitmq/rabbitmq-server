@@ -74,7 +74,7 @@
          <td><%= fmt_vhost_state(vhost) %></td>
 <% if (show_column('vhosts', 'default-queue-type')) { %>
    <td>
-     <%= vhost.default_queue_type == "undefined" ? "&lt;not set&gt;" :vhost.default_queue_type %>
+     <%= vhost.default_queue_type == "undefined" ? "&lt;not set&gt;" : fmt_string(vhost.default_queue_type) %>
    </td>
 <% } %>
 <% if (show_column('vhosts', 'cluster-state')) { %>
@@ -86,12 +86,12 @@
                 var state = vhost.cluster_state[node];
             %>
             <tr>
-            <td><%= node %></td>
+            <td><%= fmt_string(node) %></td>
             <td>
-            <%= state %>
+            <%= fmt_string(state) %>
             <% if (state == "stopped"){ %>
                 <form action="#/restart_vhost" method="post" class="confirm">
-                    <input type="hidden" name="node" value="<%= node %>"/>
+                    <input type="hidden" name="node" value="<%= fmt_string(node) %>"/>
                     <input type="hidden" name="vhost" value="<%= fmt_string(vhost.name) %>"/>
                     <input type="submit" value="Restart"/>
                 </form>

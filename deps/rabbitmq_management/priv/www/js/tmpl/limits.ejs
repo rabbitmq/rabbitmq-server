@@ -30,7 +30,7 @@
                     <% if(j == 0) { %>
                     <td rowspan="<%= limit_values.length %>"> <%= fmt_string(limit.vhost) %> </td>
                     <% } %>
-                    <td><%= limit_value.name %></td>
+                    <td><%= fmt_string(limit_value.name) %></td>
                     <td><%= limit_value.value %></td>
                     <td class="administrator-only">
                         <form action="#/limits" method="delete" class="confirm">
@@ -118,7 +118,7 @@
                   <% if(j == 0) { %>
                   <td rowspan="<%= user_limit_values.length %>"> <%= fmt_string(user_limit.user) %> </td>
                   <% } %>
-                  <td><%= user_limit_value.name %></td>
+                  <td><%= fmt_string(user_limit_value.name) %></td>
                   <td><%= user_limit_value.value %></td>
                   <td class="administrator-only">
                       <form action="#/user-limits" method="delete" class="confirm">

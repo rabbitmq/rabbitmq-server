@@ -44,11 +44,11 @@
     <td><%= fmt_string(shovel.vhost, '') %></td>
 <% } %>
 <% if (shovel.state == 'terminated') { %>
-    <td><%= fmt_state('red', shovel.state) %></td>
+    <td><%= fmt_state('red', fmt_escape_html(shovel.state)) %></td>
     <td colspan="6">
       <pre><%= fmt_string(shovel.reason) %></pre>
     </td>
-    <td><%= shovel.timestamp %></td>
+    <td><%= fmt_string(shovel.timestamp) %></td>
 <% } else { %>
       <td><%= fmt_object_state(shovel) %></td>
       <td><%= fmt_string(shovel.remaining) %></td>
@@ -61,7 +61,7 @@
       <td><%= fmt_string(shovel.dest_protocol) %></td>
       <td><%= shovel.dest_uri == undefined ? fmt_string(shovel.dest_uri) : fmt_string(fmt_uri_with_credentials(shovel.dest_uri)) %></td>
       <td><%= fmt_shovel_endpoint('dest_', shovel) %></td>
-    <td><%= shovel.timestamp %></td>
+    <td><%= fmt_string(shovel.timestamp) %></td>
 <% } %>
 <% if (shovel.type == 'dynamic') { %>
     <td>

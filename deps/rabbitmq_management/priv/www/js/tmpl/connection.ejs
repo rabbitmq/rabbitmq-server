@@ -38,7 +38,7 @@
 </tr>
 <tr>
  <th>Protocol</th>
- <td><%= connection.protocol %></td>
+ <td><%= fmt_string(connection.protocol) %></td>
 </tr>
 <tr>
   <th>Connected at</th>
@@ -55,7 +55,7 @@
 <% if (connection.auth_mechanism) { %>
 <tr>
  <th>SASL auth mechanism</th>
- <td><%= connection.auth_mechanism %></td>
+ <td><%= fmt_string(connection.auth_mechanism) %></td>
 </tr>
 <% } %>
 </table>
@@ -115,19 +115,19 @@
 <table class="facts">
   <tr>
     <th>Protocol Version</th>
-    <td><%= connection.ssl_protocol %></td>
+    <td><%= fmt_string(connection.ssl_protocol) %></td>
   </tr>
   <tr>
     <th>Key Exchange Algorithm</th>
-    <td><%= connection.ssl_key_exchange %></td>
+    <td><%= fmt_string(connection.ssl_key_exchange) %></td>
   </tr>
   <tr>
     <th>Cipher Algorithm</th>
-    <td><%= connection.ssl_cipher %></td>
+    <td><%= fmt_string(connection.ssl_cipher) %></td>
   </tr>
   <tr>
     <th>Hash Algorithm</th>
-    <td><%= connection.ssl_hash %></td>
+    <td><%= fmt_string(connection.ssl_hash) %></td>
   </tr>
 </table>
 
@@ -135,7 +135,7 @@
 <table class="facts">
   <tr>
     <th>Peer Certificate Serial Number</th>
-    <td><%= connection.peer_cert_serial_number %></td>
+    <td><%= fmt_string(connection.peer_cert_serial_number) %></td>
   </tr>
   <tr>
     <th>Peer Certificate Issuer</th>
