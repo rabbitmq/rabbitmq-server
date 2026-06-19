@@ -70,7 +70,7 @@ login(<<"GET">>, Req, State) ->
                 _ -> {ok, cowboy_req:reply(405, Req), State}
             end;
         {Type, Value} ->
-            redirect_to_home_with_cookie(Type, Value, Req, State)
+            redirect_to_home_with_cookie(?OAUTH2_BOOTSTRAP_PATH, Type, Value, Req, State)
     end;
 
 login(_, Req0, State) ->
@@ -82,7 +82,7 @@ handleStrictOrPreferredAuthMechanism(Req, Body, State) ->
             {ok, cowboy_req:reply(302, #{<<"Location">> => iolist_to_binary(get_home_uri(Req))}, 
                                         <<>>, Req), State};
         {Type, Value} ->
-            redirect_to_home_with_cookie(Type, Value, Req, State)
+            redirect_to_home_with_cookie(?OAUTH2_BOOTSTRAP_PATH, Type, Value, Req, State)
     end.
             
 get_auth_mechanism(Req, Body) ->
@@ -113,17 +113,18 @@ get_param_or_header(ParamName, Req, Body) ->
 handleAccessToken(Req0, AccessToken, State) ->
    case rabbit_mgmt_util:is_authorized_user(Req0, #context{}, <<"">>, AccessToken, false) of
         {true, Req1, _} ->
-            redirect_to_home_with_cookie(?OAUTH2_ACCESS_TOKEN,
+            redirect_to_home_with_cookie(?OAUTH2_BOOTSTRAP_PATH,
+                                         ?OAUTH2_ACCESS_TOKEN,
                                          AccessToken,
                                          Req1, State);
         {false, ReqData1, Reason} ->
             replyWithError(Reason, ReqData1, State)
     end.
 
-redirect_to_home_with_cookie(CookieName, CookieValue, Req=#{scheme := Scheme}, State) ->
+redirect_to_home_with_cookie(CookiePath, CookieName, CookieValue, Req=#{scheme := Scheme}, State) ->
     CookieSettings0 = #{
         http_only => true,
-        path => rabbit_mgmt_util:get_oauth2_bootstrap_cookie_path(),
+        path => rabbit_mgmt_util:prefixed_path(CookiePath),
         max_age => 30,
         same_site => strict
     },

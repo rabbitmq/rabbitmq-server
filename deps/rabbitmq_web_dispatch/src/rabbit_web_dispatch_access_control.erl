@@ -86,32 +86,46 @@ is_authorized(ReqData, Context, ErrorMsg, Fun, AuthConfig) ->
     end.
 
 is_authorized1(ReqData, Context, ErrorMsg, Fun, AuthConfig) ->
+    BasicAuthDisabled = is_basic_auth_disabled(AuthConfig),
+    case parse_credentials(ReqData, AuthConfig) of
+        {basic, Username, Password} when not BasicAuthDisabled ->
+            is_authorized(ReqData, Context, Username, Password,
+                          ErrorMsg, Fun, AuthConfig);
+        {basic, _, _} ->
+            Msg = "HTTP access denied: basic auth disabled",
+            ?LOG_WARNING(Msg),
+            not_authorised(Msg, ReqData, Context);
+        {bearer, OAuthUsername, Token} ->
+            is_authorized(ReqData, Context, OAuthUsername, Token,
+                          ErrorMsg, Fun, AuthConfig);
+        no_credentials when not BasicAuthDisabled ->
+            {{false, AuthConfig#auth_settings.auth_realm}, ReqData, Context};
+        no_credentials ->
+            Msg = "HTTP access denied: basic auth disabled",
+            ?LOG_WARNING(Msg),
+            not_authorised(Msg, ReqData, Context);
+        {error, Reason} ->
+            not_authorised(Reason, ReqData, Context)
+    end.
+
+parse_credentials(ReqData, AuthConfig) ->
     case cowboy_req:parse_header(<<"authorization">>, ReqData) of
         {basic, Username, Password} ->
-            case is_basic_auth_disabled(AuthConfig) of
-                true ->
-                    Msg = "HTTP access denied: basic auth disabled",
-                    ?LOG_WARNING(Msg),
-                    not_authorised(Msg, ReqData, Context);
-                false ->
-                    is_authorized(ReqData, Context,
-                                  Username, Password,
-                                  ErrorMsg, Fun, AuthConfig)
-            end;
+            {basic, Username, Password};
         {bearer, Token} ->
-            % Username is only used in case is_authorized is not able to parse the token
-            % and extact the username from it
-            Username = AuthConfig#auth_settings.oauth_client_id,
-            is_authorized(ReqData, Context, Username, Token, ErrorMsg, Fun, AuthConfig);
+            case AuthConfig#auth_settings.bearer_token_parser of
+                undefined ->
+                    %% Plain OAuth2 token; username is ignored by the OAuth2 backend.
+                    {bearer, <<"">>, Token};
+                Parser ->
+                    case Parser(Token) of
+                        {basic, U, P} -> {basic, U, P};
+                        {bearer, T}   -> {bearer, <<"">>, T};
+                        {error, _}    -> {error, <<"Invalid token">>}
+                    end
+            end;
         _ ->
-            case is_basic_auth_disabled(AuthConfig) of
-                true ->
-                    Msg = "HTTP access denied: basic auth disabled",
-                    ?LOG_WARNING(Msg),
-                    not_authorised(Msg, ReqData, Context);
-                false ->
-                    {{false, AuthConfig#auth_settings.auth_realm}, ReqData, Context}
-            end
+            no_credentials
     end.
 
 is_authorized_user(ReqData, Context, Username, Password, AuthConfig) ->

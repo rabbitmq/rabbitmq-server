@@ -214,7 +214,10 @@ all_tests() -> [
     single_active_consumer_qq_test,
     disable_basic_auth_test,
     login_test,
+    login_encrypted_test,
+    login_session_cookie_test,
     csp_headers_test,
+    referrer_policy_headers_test,
     auth_attempts_test,
     user_limits_list_test,
     user_limit_set_test,
@@ -4241,21 +4244,85 @@ version_test(Config) ->
 login_test(Config) ->
     http_put(Config, "/users/myuser", [{password, <<"myuser">>},
                                        {tags,     <<"management">>}], {group, '2xx'}),
-    %% Let's do a post without any other form of authorization
-    {ok, {{_, CodeAct, _}, Headers, _}} =
+    %% Successful login returns a structured token envelope and user object,
+    %% and sets a session cookie.
+    {ok, {{_, 200, _}, Headers, Body}} =
         req(Config, 0, post, "/login",
             [{"content-type", "application/x-www-form-urlencoded"}],
             <<"username=myuser&password=myuser">>),
-    ?assertEqual(200, CodeAct),
-    ?assert(not proplists:is_defined("set-cookie", Headers)),
+    ?assert(proplists:is_defined("set-cookie", Headers)),
+    Decoded = rabbit_json:decode(Body),
+    Token = maps:get(<<"token">>, Decoded),
+    ?assertEqual(<<"basic">>, maps:get(<<"type">>, Token)),
+    ?assertEqual(base64:encode(<<"myuser:myuser">>), maps:get(<<"value">>, Token)),
+    User = maps:get(<<"user">>, Decoded),
+    ?assertEqual(<<"myuser">>, maps:get(<<"name">>, User)),
 
-    %% Let's request a login with an unknown user
-    {ok, {{_, CodeAct2, _}, Headers2, _}} =
+    %% Unknown user returns 401 with no session cookie.
+    {ok, {{_, 401, _}, Headers2, _}} =
         req(Config, 0, post, "/login",
             [{"content-type", "application/x-www-form-urlencoded"}],
             <<"username=misteryusernumber1&password=myuser">>),
-    ?assertEqual(401, CodeAct2),
     ?assert(not proplists:is_defined("set-cookie", Headers2)),
+
+    http_delete(Config, "/users/myuser", {group, '2xx'}),
+    passed.
+
+login_encrypted_test(Config) ->
+    rpc(Config, application, set_env,
+        [rabbitmq_management, credentials_encryption_secret, <<"test-secret">>]),
+    http_put(Config, "/users/myuser", [{password, <<"myuser">>},
+                                       {tags,     <<"management">>}], {group, '2xx'}),
+    {ok, {{_, 200, _}, _, Body}} =
+        req(Config, 0, post, "/login",
+            [{"content-type", "application/x-www-form-urlencoded"}],
+            <<"username=myuser&password=myuser">>),
+    Decoded = rabbit_json:decode(Body),
+    Token = maps:get(<<"token">>, Decoded),
+    ?assertEqual(<<"bearer">>, maps:get(<<"type">>, Token)),
+    Value = maps:get(<<"value">>, Token),
+    ?assertMatch(<<"rmqe.", _/binary>>, Value),
+
+    %% The encrypted token authenticates a subsequent API call.
+    {ok, {{_, 200, _}, _, _}} =
+        req(Config, get, "/whoami",
+            [{"authorization", "Bearer " ++ binary_to_list(Value)}]),
+
+    %% Standard Basic auth must also be accepted when encryption is enabled,
+    %% because non-UI clients (curl, REST apps, etc.) always use Basic.
+    BasicValue = base64:encode(<<"myuser:myuser">>),
+    {ok, {{_, 200, _}, _, _}} =
+        req(Config, get, "/whoami",
+            [{"authorization", "Basic " ++ binary_to_list(BasicValue)}]),
+
+    http_delete(Config, "/users/myuser", {group, '2xx'}),
+    rpc(Config, application, unset_env,
+        [rabbitmq_management, credentials_encryption_secret]),
+    passed.
+
+login_session_cookie_test(Config) ->
+    http_put(Config, "/users/myuser", [{password, <<"myuser">>},
+                                       {tags,     <<"management">>}], {group, '2xx'}),
+    %% POST /api/login sets a secure session cookie on success.
+    {ok, {{_, 200, _}, LoginHeaders, _}} =
+        req(Config, 0, post, "/login",
+            [{"content-type", "application/x-www-form-urlencoded"}],
+            <<"username=myuser&password=myuser">>),
+    SetCookie = proplists:get_value("set-cookie", LoginHeaders),
+    ?assertMatch({match, _}, re:run(SetCookie, "loggedIn=true")),
+    ?assertMatch({match, _}, re:run(SetCookie, "HttpOnly", [caseless])),
+    ?assertMatch({match, _}, re:run(SetCookie, "SameSite=Strict", [caseless])),
+    ?assertMatch({match, _}, re:run(SetCookie, "Max-Age=")),
+    ?assertMatch({match, _}, re:run(SetCookie, "Path=/")),
+
+    %% DELETE /api/login clears the session cookie (Max-Age=0) without requiring authentication.
+    {ok, {{_, Code, _}, LogoutHeaders, _}} =
+        req(Config, delete, "/login", []),
+    ?assert(Code =:= 200 orelse Code =:= 204),
+    ?assert(proplists:is_defined("set-cookie", LogoutHeaders)),
+    ClearCookie = proplists:get_value("set-cookie", LogoutHeaders),
+    ?assertMatch({match, _}, re:run(ClearCookie, "loggedIn=")),
+    ?assertMatch({match, _}, re:run(ClearCookie, "Max-Age=0")),
 
     http_delete(Config, "/users/myuser", {group, '2xx'}),
     passed.
@@ -4267,6 +4334,19 @@ csp_headers_test(Config) ->
     ?assert(lists:keymember("content-security-policy", 1, HdGetCsp0)),
     {ok, {_, HdGetCsp1, _}} = req(Config, get_static, "/index.html", Headers),
     ?assert(lists:keymember("content-security-policy", 1, HdGetCsp1)).
+
+referrer_policy_headers_test(Config) ->
+    AuthHeader = auth_header("guest", "guest"),
+    rpc(Config, application, set_env,
+        [rabbitmq_management, headers, [{referrer_policy, "no-referrer"}]]),
+    {ok, {_, Hd0, _}} = req(Config, get, "/whoami", [AuthHeader]),
+    ?assertEqual("no-referrer",
+                 proplists:get_value("referrer-policy", Hd0)),
+    rpc(Config, application, set_env,
+        [rabbitmq_management, headers, []]),
+    {ok, {_, Hd1, _}} = req(Config, get, "/whoami", [AuthHeader]),
+    ?assertEqual(undefined,
+                 proplists:get_value("referrer-policy", Hd1)).
 
 disable_basic_auth_test(Config) ->
     rpc(Config, application, set_env, [rabbitmq_management, disable_basic_auth, true]),
