@@ -46,7 +46,7 @@
 -export([direct_request/6]).
 -export([qs_val/2]).
 -export([get_path_prefix/0]).
--export([get_oauth2_bootstrap_cookie_path/0]).
+-export([prefixed_path/1]).
 -export([catch_no_such_user_or_vhost/2]).
 -export([method_not_allowed/3]).
 
@@ -467,10 +467,11 @@ fixup_prefix(EnvPrefix) when is_list(EnvPrefix) ->
 fixup_prefix(EnvPrefix) when is_binary(EnvPrefix) ->
     fixup_prefix(rabbit_data_coercion:to_list(EnvPrefix)).
 
-%% Path for the short-lived /login cookies. It must carry the HTTP API path
-%% prefix, or the browser will not send them to the prefixed bootstrap.js.
-get_oauth2_bootstrap_cookie_path() ->
-    iolist_to_binary([get_path_prefix(), ?OAUTH2_BOOTSTRAP_PATH]).
+%% Prepends the configured path prefix to Path, returning a binary.
+%% Used wherever a cookie or redirect path must reflect the management
+%% plugin's configured path_prefix.
+prefixed_path(Path) ->
+    iolist_to_binary([get_path_prefix(), Path]).
 
 %% XXX sort_list_and_paginate/2 is a more proper name for this function, keeping it
 %% with this name for backwards compatibility
