@@ -2888,19 +2888,20 @@ handle_frame_post_auth(Transport,
                                           user = #user{username = Username} = User} = Connection,
                        State,
                        {request, CorrelationId, {delete_super_stream, SuperStream}}) ->
-    Partitions = case rabbit_stream_manager:partitions(VirtualHost, SuperStream) of
-                     {ok, Ps} ->
-                         Ps;
-                     _ ->
-                         []
-                 end,
-    case rabbit_stream_utils:check_super_stream_management_permitted(VirtualHost,
-                                                                     SuperStream,
-                                                                     Partitions,
-                                                                     User) of
-        ok ->
-            case rabbit_stream_manager:delete_super_stream(VirtualHost, SuperStream, Username) of
+    case rabbit_stream_manager:partitions(VirtualHost, SuperStream) of
+        {ok, Partitions} ->
+            case rabbit_stream_utils:check_super_stream_management_permitted(VirtualHost,
+                                                                             SuperStream,
+                                                                             Partitions,
+                                                                             User) of
                 ok ->
+                    %% Pass the authorization-checked partition snapshot directly to avoid
+                    %% a TOCTOU race where a queue.bind between the authz check and the
+                    %% deletion could allow unauthorized streams to be deleted.
+                    rabbit_stream_manager:delete_super_stream(VirtualHost,
+                                                              SuperStream,
+                                                              Partitions,
+                                                              Username),
                     response_ok(Transport,
                                 Connection,
                                 delete_super_stream,
@@ -2910,22 +2911,22 @@ handle_frame_post_auth(Transport,
                                                                                     State,
                                                                                     Transport, S),
                     {Connection1, State1};
-                {error, stream_not_found} ->
+                error ->
                     response(Transport,
                              Connection,
                              delete_super_stream,
                              CorrelationId,
-                             ?RESPONSE_CODE_STREAM_DOES_NOT_EXIST),
-                    increase_protocol_counter(?STREAM_DOES_NOT_EXIST),
+                             ?RESPONSE_CODE_ACCESS_REFUSED),
+                    increase_protocol_counter(?ACCESS_REFUSED),
                     {Connection, State}
             end;
-        error ->
+        {error, _} ->
             response(Transport,
                      Connection,
                      delete_super_stream,
                      CorrelationId,
-                     ?RESPONSE_CODE_ACCESS_REFUSED),
-            increase_protocol_counter(?ACCESS_REFUSED),
+                     ?RESPONSE_CODE_STREAM_DOES_NOT_EXIST),
+            increase_protocol_counter(?STREAM_DOES_NOT_EXIST),
             {Connection, State}
     end;
 handle_frame_post_auth(Transport,

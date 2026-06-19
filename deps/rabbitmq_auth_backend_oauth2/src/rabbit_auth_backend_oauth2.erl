@@ -160,7 +160,6 @@ update_state(AuthUser, NewToken) ->
 -spec expiry_timestamp(rabbit_types:auth_user()) -> integer() | never.
 expiry_timestamp(#auth_user{impl = DecodedTokenFun}) ->
     case DecodedTokenFun() of
-        %% "exp" may be a fractional NumericDate (RFC 7519); accept floats too.
         #{<<"exp">> := Exp} when is_number(Exp) ->
             trunc(Exp);
         _ ->
@@ -236,14 +235,15 @@ ensure_same_username(PreferredUsernameClaims, CurrentDecodedToken, NewDecodedTok
         _ -> {error, mismatch_username_after_token_refresh}
     end.
 
-%% "exp" may be a fractional NumericDate (RFC 7519); accept floats too.
 validate_token_expiry(#{<<"exp">> := Exp}) when is_number(Exp) ->
-    ExpSeconds = trunc(Exp),
     Now = os:system_time(seconds),
-    case ExpSeconds =< Now of
-        true  -> {error, rabbit_misc:format("Provided JWT token has expired at timestamp ~tp (validated at ~tp)", [ExpSeconds, Now])};
+    ExpTs = trunc(Exp),
+    case ExpTs =< Now of
+        true  -> {error, rabbit_misc:format("Provided JWT token has expired at timestamp ~tp (validated at ~tp)", [ExpTs, Now])};
         false -> ok
     end;
+validate_token_expiry(#{<<"exp">> := _}) ->
+    {error, "Provided JWT token has an invalid exp claim: value is not a number"};
 validate_token_expiry(#{}) -> ok.
 
 -spec check_token(raw_jwt_token(), {resource_server(), internal_oauth_provider()}) ->

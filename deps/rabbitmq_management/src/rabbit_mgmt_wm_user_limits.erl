@@ -24,7 +24,14 @@ allowed_methods(ReqData, Context) ->
     {[<<"GET">>, <<"OPTIONS">>], ReqData, Context}.
 
 is_authorized(ReqData, Context) ->
-    rabbit_mgmt_util:is_authorized_vhost_visible(ReqData, Context).
+    case user(ReqData) of
+        none ->
+            %% listing all users' limits is an administrator-only operation
+            rabbit_mgmt_util:is_authorized_admin(ReqData, Context);
+        Username ->
+            %% reading a specific user's limits: administrator/monitor or own account
+            rabbit_mgmt_util:is_authorized_user(ReqData, Context, [{user, Username}])
+    end.
 
 content_types_provided(ReqData, Context) ->
    {[{<<"application/json">>, to_json}], ReqData, Context}.
