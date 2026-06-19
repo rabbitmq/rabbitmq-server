@@ -2899,9 +2899,9 @@ handle_frame_post_auth(Transport,
                     %% a TOCTOU race where a queue.bind between the authz check and the
                     %% deletion could allow unauthorized streams to be deleted.
                     rabbit_stream_manager:delete_super_stream(VirtualHost,
-                                                             SuperStream,
-                                                             Partitions,
-                                                             Username),
+                                                              SuperStream,
+                                                              Partitions,
+                                                              Username),
                     response_ok(Transport,
                                 Connection,
                                 delete_super_stream,
