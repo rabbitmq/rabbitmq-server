@@ -76,7 +76,7 @@ get_auth_mechanism(Req) ->
                                     <<"">>, Req, #{
                                         max_age => 0,
                                         http_only => true,
-                                        path => ?OAUTH2_BOOTSTRAP_PATH,
+                                        path => rabbit_mgmt_util:get_oauth2_bootstrap_cookie_path(),
                                         same_site => strict
                                 }),
                                 Auth
@@ -128,7 +128,7 @@ set_token_auth(AuthSettings, Req0) ->
                                     ?OAUTH2_ACCESS_TOKEN, <<"">>, Req0, #{
                                         max_age => 0,
                                         http_only => true,
-                                        path => ?OAUTH2_BOOTSTRAP_PATH,
+                                        path => rabbit_mgmt_util:get_oauth2_bootstrap_cookie_path(),
                                         same_site => strict
                                     }),
                                 ["set_token_auth(", rabbit_json:encode(Token), ");"]
