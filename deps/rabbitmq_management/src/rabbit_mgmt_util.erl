@@ -45,7 +45,7 @@
         ]).
 -export([direct_request/6]).
 -export([qs_val/2]).
--export([get_path_prefix/0]).
+-export([get_path_prefix/0, prefixed_path/1]).
 -export([set_session_cookie/1, clear_session_cookie/1]).
 -export([catch_no_such_user_or_vhost/2]).
 -export([method_not_allowed/3]).
@@ -474,6 +474,10 @@ fixup_prefix(EnvPrefix) when is_list(EnvPrefix) ->
     "/" ++ EnvPrefix;
 fixup_prefix(EnvPrefix) when is_binary(EnvPrefix) ->
     fixup_prefix(rabbit_data_coercion:to_list(EnvPrefix)).
+
+%% Prepends the configured path prefix to Path, returning a binary.
+prefixed_path(Path) ->
+    iolist_to_binary([get_path_prefix(), Path]).
 
 set_session_cookie(Req = #{scheme := Scheme}) ->
     Settings0 = #{

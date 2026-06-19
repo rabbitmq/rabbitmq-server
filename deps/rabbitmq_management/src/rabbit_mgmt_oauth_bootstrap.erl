@@ -76,7 +76,7 @@ get_auth_mechanism(Req) ->
                                     <<"">>, Req, #{
                                         max_age => 0,
                                         http_only => true,
-                                        path => bootstrap_cookie_path(),
+                                        path => rabbit_mgmt_util:prefixed_path(?OAUTH2_BOOTSTRAP_PATH),
                                         same_site => strict
                                 }),
                                 Auth
@@ -128,7 +128,7 @@ set_token_auth(AuthSettings, Req0) ->
                                     ?OAUTH2_ACCESS_TOKEN, <<"">>, Req0, #{
                                         max_age => 0,
                                         http_only => true,
-                                        path => bootstrap_cookie_path(),
+                                        path => rabbit_mgmt_util:prefixed_path(?OAUTH2_BOOTSTRAP_PATH),
                                         same_site => strict
                                     }),
                                 ["set_token_auth(", rabbit_json:encode(Token), ");"]
@@ -140,10 +140,6 @@ set_token_auth(AuthSettings, Req0) ->
                 []
             }
     end.
-
-bootstrap_cookie_path() ->
-    list_to_binary(rabbit_mgmt_util:get_path_prefix() ++ 
-        binary_to_list(?OAUTH2_BOOTSTRAP_PATH)).
 
 import_dependencies(Dependencies) ->
     ["import {", string:join(Dependencies, ","), "} from './helper.js';"].
