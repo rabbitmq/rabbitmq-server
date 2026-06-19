@@ -507,7 +507,8 @@ get_all_for_destination(Dst) ->
 %% and folding over the returned binding list.
 %%
 %% Just used by prometheus_rabbitmq_core_metrics_collector to iterate over the
-%% bindings.
+%% bindings. Runs the callback inside the Khepri server process; for callbacks
+%% that may block (e.g. streaming), use `fold_projection/2` instead.
 %%
 %% @returns the fold accumulator.
 %%
