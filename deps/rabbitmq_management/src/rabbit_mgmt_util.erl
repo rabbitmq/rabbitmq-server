@@ -46,11 +46,7 @@
 -export([direct_request/6]).
 -export([qs_val/2]).
 -export([get_path_prefix/0]).
-<<<<<<< HEAD
--export([get_oauth2_bootstrap_cookie_path/0]).
-=======
 -export([set_session_cookie/1, clear_session_cookie/1]).
->>>>>>> 6397423289 (Consolidate cookies mgt to the server)
 -export([catch_no_such_user_or_vhost/2]).
 -export([method_not_allowed/3]).
 
