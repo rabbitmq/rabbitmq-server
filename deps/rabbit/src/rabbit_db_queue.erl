@@ -21,6 +21,7 @@
          get_targets/1,
          get_all/0,
          get_all/1,
+         fold/2,
          get_all_by_type/1,
          get_all_by_type_and_vhost/2,
          get_all_by_type_and_node/3,
@@ -124,6 +125,28 @@ get_all_in_khepri() ->
                       []
               end
       end).
+
+-spec fold(Fun, Acc) -> Acc when
+      Fun :: fun((Queue :: amqqueue:amqqueue(), Acc) -> Acc),
+      Acc :: term().
+
+%% @doc Folds over all queue records without materialising them into a list,
+%% making it more memory-efficient than `get_all/0` followed by a fold over the
+%% returned list. Useful when iterating over very large numbers of queues.
+%%
+%% @returns the fold accumulator.
+%%
+%% @private
+
+%% Not wrapped in list_with_possible_retry/1: the callback may have side effects
+%% and the accumulator is arbitrary, so the fold must never be replayed.
+fold(Fun, Acc) ->
+    try
+        ets:foldl(Fun, Acc, ?KHEPRI_PROJECTION)
+    catch
+        error:badarg ->
+            Acc
+    end.
 
 -spec get_all(VHostName) -> [Queue] when
       VHostName :: vhost:name(),
