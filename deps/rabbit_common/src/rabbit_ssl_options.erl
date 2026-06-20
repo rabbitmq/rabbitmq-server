@@ -13,7 +13,8 @@
 -export([
     fix/1,
     fix_client/1,
-    wrap_password_opt/1
+    wrap_password_opt/1,
+    is_pqc_group/1
 ]).
 
 -define(BAD_SSL_PROTOCOL_VERSIONS, [
@@ -43,7 +44,8 @@ fix(Config) ->
     fix_verify_fun(
       fix_ssl_protocol_versions(
         fix_log_level(
-          hibernate_after(Config)))).
+          log_pqc_status(
+            hibernate_after(Config))))).
 
 -spec fix_client(rabbit_types:infos()) -> rabbit_types:infos().
 fix_client(Config) ->
@@ -149,3 +151,38 @@ fix_log_level(Config) ->
         true  -> Config;
         false -> [{log_level, warning} | Config]
     end.
+
+%% Log the post-quantum cryptography (PQC) status of the TLS configuration.
+%%
+%% When Erlang/OTP 28.1+ is used with OpenSSL 3.5+, hybrid post-quantum
+%% key exchange groups such as x25519mlkem768 (X25519 + ML-KEM-768, FIPS 203)
+%% become available. This function logs whether PQC groups are configured
+%% or available by default, helping operators verify PQC readiness.
+%%
+%% See: https://csrc.nist.gov/pubs/fips/203/final (FIPS 203, ML-KEM)
+%% See: https://github.com/rabbitmq/rabbitmq-server/issues/16748
+-spec log_pqc_status(rabbit_types:infos()) -> rabbit_types:infos().
+log_pqc_status(Config) ->
+    case proplists:get_value(supported_groups, Config, undefined) of
+        undefined ->
+            ok;
+        Groups when is_list(Groups) ->
+            PQCGroups = [G || G <- Groups, is_pqc_group(G)],
+            case PQCGroups of
+                [] ->
+                    ?LOG_INFO("TLS supported_groups configured without post-quantum groups. "
+                              "Consider adding x25519mlkem768 for quantum-safe key exchange. "
+                              "See https://www.rabbitmq.com/docs/ssl");
+                _ ->
+                    ?LOG_INFO("TLS post-quantum key exchange groups enabled: ~tp", [PQCGroups])
+            end
+    end,
+    Config.
+
+%% Returns true if the given group name is a post-quantum or hybrid
+%% post-quantum key exchange group.
+-spec is_pqc_group(atom()) -> boolean().
+is_pqc_group(x25519mlkem768)      -> true;
+is_pqc_group(secp256r1mlkem768)    -> true;
+is_pqc_group(secp384r1mlkem1024)   -> true;
+is_pqc_group(_)                    -> false.

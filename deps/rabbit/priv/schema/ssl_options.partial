@@ -86,3 +86,30 @@
                      ConfPrefix ++ ".ciphers", Conf),
         lists:reverse([V || {_, V} <- Settings])
     end}.
+
+%% TLS key exchange groups (including post-quantum hybrid groups).
+%%
+%% With Erlang/OTP 28.1+ and OpenSSL 3.5+, hybrid post-quantum groups
+%% such as x25519mlkem768 (X25519 + ML-KEM-768, FIPS 203) are available.
+%% These protect TLS key exchange against both classical and quantum attacks.
+%%
+%% Example (rabbitmq.conf):
+%%   ssl_options.groups.1 = x25519mlkem768
+%%   ssl_options.groups.2 = x25519
+%%   ssl_options.groups.3 = prime256v1
+%%   ssl_options.groups.4 = secp384r1
+%%
+%% When this option is not set, the Erlang/OTP ssl application will use
+%% its built-in defaults (which may include post-quantum groups on
+%% OTP 28.1+ with OpenSSL 3.5+).
+%%
+%% See: https://www.erlang.org/docs/28/man/ssl (supported_groups option)
+%% See: https://csrc.nist.gov/pubs/fips/203/final (FIPS 203, ML-KEM)
+{mapping, "groups.$group", "supported_groups", [{datatype, atom}]}.
+
+{partial_translation, "supported_groups",
+    fun(Conf, ConfPrefix, _AppPrefix) ->
+        Settings = cuttlefish_variable:filter_by_prefix(
+                     ConfPrefix ++ ".groups", Conf),
+        [V || {_, V} <- Settings]
+    end}.

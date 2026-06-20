@@ -209,6 +209,35 @@
 
 # ssl_options.bypass_pem_cache = true
 
+## Post-Quantum Cryptography (PQC) Key Exchange Groups
+##
+## With Erlang/OTP 28.1+ and OpenSSL 3.5+, hybrid post-quantum key exchange
+## groups are available. These combine classical algorithms (X25519, ECDH)
+## with post-quantum algorithms (ML-KEM, FIPS 203) to protect against both
+## classical and future quantum computing attacks.
+##
+## France's ANSSI mandates PQC for certified products starting in 2027.
+## The US NSA CNSA 2.0 requires PQC for national security systems by 2027.
+## NIST IR 8547 deprecates classical asymmetric cryptography by 2030.
+##
+## The recommended hybrid group is x25519mlkem768, which combines X25519
+## with ML-KEM-768 (NIST FIPS 203). It is backward-compatible: clients
+## that do not support PQC will automatically fall back to classical
+## key exchange (e.g. X25519).
+##
+## Relevant doc guides:
+##
+##  * https://www.rabbitmq.com/docs/ssl
+##  * https://csrc.nist.gov/pubs/fips/203/final
+##  * https://www.erlang.org/docs/28/man/ssl
+##
+## Requires: Erlang/OTP 28.1+ with OpenSSL 3.5+
+##
+# ssl_options.groups.1 = x25519mlkem768
+# ssl_options.groups.2 = x25519
+# ssl_options.groups.3 = prime256v1
+# ssl_options.groups.4 = secp384r1
+
 ## Select an authentication/authorisation backend to use.
 ##
 ## Alternative backends are provided by plugins, such as rabbitmq-auth-backend-ldap.
