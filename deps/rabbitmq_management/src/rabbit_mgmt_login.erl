@@ -123,7 +123,7 @@ handleAccessToken(Req0, AccessToken, State) ->
 redirect_to_home_with_cookie(CookieName, CookieValue, Req=#{scheme := Scheme}, State) ->
     CookieSettings0 = #{
         http_only => true,
-        path => rabbit_mgmt_util:get_oauth2_bootstrap_cookie_path(),
+        path => rabbit_mgmt_util:prefixed_path(?OAUTH2_BOOTSTRAP_PATH),
         max_age => 30,
         same_site => strict
     },

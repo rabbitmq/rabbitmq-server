@@ -308,11 +308,13 @@ dispatcher_add(function(sammy) {
         });
       let datamodel = {
         'limits': '/vhost-limits',
-        'user_limits': '/user-limits',
         'vhosts': '/vhosts'
       }
       if (ac.isAdministratorUser()) {
+        datamodel['user_limits'] = '/user-limits'
         datamodel['users'] = '/users'
+      } else {
+        datamodel['user_limits'] = '/user-limits/' + esc(user_name)
       }
       path('#/limits', datamodel, 'limits');
 
