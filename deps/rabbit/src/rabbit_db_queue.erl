@@ -141,6 +141,15 @@ get_all_in_khepri() ->
 %% Not wrapped in list_with_possible_retry/1: the callback may have side effects
 %% and the accumulator is arbitrary, so the fold must never be replayed.
 fold(Fun, Acc) ->
+    rabbit_khepri:handle_fallback(
+      #{mnesia => fun() -> fold_in_mnesia(Fun, Acc) end,
+        khepri => fun() -> fold_in_khepri(Fun, Acc) end
+       }).
+
+fold_in_mnesia(Fun, Acc) ->
+    ets:foldl(Fun, Acc, ?MNESIA_TABLE).
+
+fold_in_khepri(Fun, Acc) ->
     try
         ets:foldl(Fun, Acc, ?KHEPRI_PROJECTION)
     catch
