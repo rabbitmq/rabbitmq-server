@@ -26,7 +26,7 @@
     <th>
       Payload
       <sub><%= msg.payload_bytes %> bytes</sub>
-      <sub>Encoding: <%= msg.payload_encoding %></sub>
+      <sub>Encoding: <%= fmt_string(msg.payload_encoding) %></sub>
     </th>
     <td>
       <pre class="msg-payload"><%= fmt_maybe_wrap(msg.payload, msg.payload_encoding) %></pre>

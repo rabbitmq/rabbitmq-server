@@ -24,7 +24,7 @@
       </tr>
       <tr>
         <th>Default queue type:</th>
-        <td><%= vhost.default_queue_type == "undefined" ? "&lt;not set&gt;" :vhost.default_queue_type %></td>
+        <td><%= vhost.default_queue_type == "undefined" ? "&lt;not set&gt;" : fmt_string(vhost.default_queue_type) %></td>
       </tr>
       <tr>
         <th>Deletion protection:</th>
@@ -37,10 +37,10 @@
         <% for (var node in vhost.cluster_state) { %>
             <tr>
             <th><%= fmt_escape_html(node) %> :</th>
-            <td><%= vhost.cluster_state[node] %>
+            <td><%= fmt_string(vhost.cluster_state[node]) %>
             <% if (vhost.cluster_state[node] == "stopped"){ %>
                 <form action="#/restart_vhost" method="post">
-                    <input type="hidden" name="node" value="<%= node %>"/>
+                    <input type="hidden" name="node" value="<%= fmt_string(node) %>"/>
                     <input type="hidden" name="vhost" value="<%= fmt_string(vhost.name) %>"/>
                     <input type="submit" value="Restart"/>
                 </form>

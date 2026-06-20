@@ -733,7 +733,7 @@ function setup_global_vars(overview) {
     user_administrator = jQuery.inArray("administrator", user_tags) != -1;
     is_user_policymaker = jQuery.inArray("policymaker", user_tags) != -1;
     user_monitor = jQuery.inArray("monitoring", user_tags) != -1;
-    exchange_types = overview.exchange_types.map(function(xt) { return xt.name; });
+    exchange_types = overview.exchange_types.map(function(xt) { return fmt_escape_html_one_line(xt.name); });
 
     cluster_name = fmt_escape_html(overview.cluster_name);
     $('#logout').before(
