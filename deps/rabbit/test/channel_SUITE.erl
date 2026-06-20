@@ -22,7 +22,8 @@ all() ->
 groups() ->
     [
       {non_parallel_tests, [], [
-          ready_for_close_with_dead_writer
+          ready_for_close_with_dead_writer,
+          terminate_safely_handles_cleanup_failures
         ]}
     ].
 
@@ -93,6 +94,46 @@ ready_for_close_with_dead_writer1(_Config) ->
         throw(channel_did_not_terminate)
     end,
     passed.
+
+terminate_safely_handles_cleanup_failures(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, terminate_safely_handles_cleanup_failures1, [Config]).
+
+terminate_safely_handles_cleanup_failures1(_Config) ->
+    {Writer, Ch} = start_channel_and_writer(),
+    MRef = erlang:monitor(process, Ch),
+
+    %% Make rabbit_queue_type:close/1 crash to simulate an unexpected
+    %% failure during channel termination cleanup.
+    ok = meck:new(rabbit_queue_type, [passthrough]),
+    meck:expect(rabbit_queue_type, close,
+                fun(_) -> error(fake_cleanup_failure) end),
+
+    rabbit_channel_common:do(Ch, #'channel.close'{reply_code = 200,
+                                                  reply_text = <<"OK">>,
+                                                  class_id = 0,
+                                                  method_id = 0}),
+    receive
+        {channel_closing, Ch} -> ok
+    after ?TIMEOUT ->
+        meck:unload(rabbit_queue_type),
+        throw(failed_to_receive_channel_closing)
+    end,
+
+    exit(Writer, kill),
+
+    rabbit_channel_common:ready_for_close(Ch),
+    receive
+        {'DOWN', MRef, process, Ch, normal} ->
+            meck:unload(rabbit_queue_type),
+            passed;
+        {'DOWN', MRef, process, Ch, Reason} ->
+            meck:unload(rabbit_queue_type),
+            throw({channel_should_terminate_normally, Reason})
+    after ?TIMEOUT ->
+        meck:unload(rabbit_queue_type),
+        throw(channel_did_not_terminate)
+    end.
 
 start_channel_and_writer() ->
     {Writer, _Limiter, Ch} = rabbit_ct_broker_helpers:test_channel(),
