@@ -107,6 +107,14 @@ Example:
 .Sp
 .Dl rabbitmq-streams delete_replica --vhost Qo a-vhost Qc Qo a-queue Qc Qo rabbit@decomissioned-node Qc
 .\" ------------------------------------
+.It Cm transfer_leadership Ar stream Ar node Fl -vhost Ar virtual-host
+.Pp
+Transfers the leadership of a stream to the given node.
+.Pp
+Example:
+.Sp
+.Dl rabbitmq-streams transfer_leadership --vhost Qo a-vhost Qc Qo a-stream Qc Qo rabbit@new-leader-node Qc
+.\" ------------------------------------
 .El
 .Ss Monitoring, observability and health checks
 .Bl -tag -width Ds
