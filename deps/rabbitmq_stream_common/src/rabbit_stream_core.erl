@@ -153,7 +153,7 @@
      {metadata, Endpoints :: [endpoint()],
       Metadata ::
           #{stream_name() =>
-                stream_not_found | stream_not_available |
+                stream_not_found | stream_not_available | stream_not_allowed |
                 {Leader :: endpoint() | undefined, Replicas :: [endpoint()]}}} |
      {peer_properties, response_code(), #{binary() => binary()}} |
      {sasl_handshake, response_code(), Mechanisms :: [binary()]} |
@@ -482,7 +482,9 @@ response_body({metadata = Tag, Endpoints, Metadata}) ->
                                   stream_not_found ->
                                       ?RESPONSE_CODE_STREAM_DOES_NOT_EXIST;
                                   stream_not_available ->
-                                      ?RESPONSE_CODE_STREAM_NOT_AVAILABLE
+                                      ?RESPONSE_CODE_STREAM_NOT_AVAILABLE;
+                                  stream_not_allowed ->
+                                      ?RESPONSE_CODE_ACCESS_REFUSED
                               end,
                           StreamLength = byte_size(Stream),
                           [<<StreamLength:16,
@@ -1110,7 +1112,9 @@ parse_meta(<<?STRING(StreamSize, Stream),
             ?RESPONSE_CODE_STREAM_DOES_NOT_EXIST ->
                 stream_not_found;
             ?RESPONSE_CODE_STREAM_NOT_AVAILABLE ->
-                stream_not_available
+                stream_not_available;
+            ?RESPONSE_CODE_ACCESS_REFUSED ->
+                stream_not_allowed
         end,
     parse_meta(Rem, Nodes, Acc#{Stream => StreamDetail}).
 

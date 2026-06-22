@@ -1184,7 +1184,8 @@ metadata_requires_read_access(Config) ->
     %% metadata request fails because the user has no read access to any stream
     ok = T:send(S, request({metadata, [Stream1, Stream2]})),
     {Cmd2, C6} = receive_commands(T, S, C5),
-    ?assertEqual({response, 1, {metadata, ?RESPONSE_CODE_ACCESS_REFUSED}}, Cmd2),
+    ?assertMatch({response, 1,
+                  {metadata, _, #{Stream1 := stream_not_allowed, Stream2 := stream_not_allowed}}}, Cmd2),
 
     %% give read access to only stream1
     rabbit_ct_broker_helpers:set_permissions(Config, Username, <<"/">>,
@@ -1194,7 +1195,7 @@ metadata_requires_read_access(Config) ->
     {Cmd3, C7} = receive_commands(T, S, C6),
     {response, 1, {metadata, _, MetaMap}} = Cmd3,
     ?assertMatch(#{Stream1 := {_, _}}, MetaMap),
-    ?assertNot(maps:is_key(Stream2, MetaMap)),
+    ?assertMatch(#{Stream2 := stream_not_allowed}, MetaMap),
 
     %% restore full permissions to delete the streams
     rabbit_ct_broker_helpers:set_full_permissions(Config, Username, <<"/">>),
