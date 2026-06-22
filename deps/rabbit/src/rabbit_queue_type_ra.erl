@@ -18,7 +18,8 @@
          all_members_stable/2,
          drain/2,
          revive/1,
-         transfer_leadership/2]).
+         transfer_leadership/2,
+         transfer_leadership/3]).
 
 -export_type([ra_membership/0]).
 
@@ -341,6 +342,12 @@ transfer_leadership(Queue, Destination) ->
         {error, _} = Err ->
             Err
     end.
+
+-spec transfer_leadership(rabbit_types:vhost(), rabbit_misc:resource_name(), node()) ->
+    {ok, node()} | {error, term()}.
+transfer_leadership(VHost, Name, Destination) ->
+    with_ra_queue(VHost, Name,
+                  fun(_Mod, Q) -> transfer_leadership(Q, Destination) end).
 
 get_nodes(Queue) ->
     rabbit_amqqueue:get_quorum_nodes(Queue).
