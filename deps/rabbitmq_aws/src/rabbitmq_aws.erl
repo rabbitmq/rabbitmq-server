@@ -514,7 +514,7 @@ perform_request_with_creds(State, Service, Method, Headers, Path, Body, Options,
 %% @end
 perform_request_with_creds(State, Method, URI, Headers, undefined, "", Options0) ->
     Options1 = ensure_timeout(Options0),
-    Response = httpc:request(Method, {URI, Headers}, Options1, []),
+    Response = httpc:request(Method, {URI, Headers}, Options1, [{headers_as_is, true}]),
     {format_response(Response), State};
 perform_request_with_creds(State, Method, URI, Headers, ContentType, Body, Options0) ->
     Options1 = ensure_timeout(Options0),
