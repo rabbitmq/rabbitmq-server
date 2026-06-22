@@ -2582,21 +2582,43 @@ handle_frame_post_auth(Transport,
     end;
 handle_frame_post_auth(Transport,
                        #stream_connection{socket = S,
-                                          virtual_host = VirtualHost} =
+                                          virtual_host = VirtualHost,
+                                          user = User} =
                            Connection,
                        State,
                        {request, CorrelationId,
                         {route, RoutingKey, SuperStream}}) ->
+    SuperStreamExchange = #resource{name = SuperStream,
+                                    kind = exchange,
+                                    virtual_host = VirtualHost},
     {ResponseCode, Streams} =
-        case rabbit_stream_manager:route(RoutingKey, VirtualHost, SuperStream)
-        of
-            {ok, no_route} ->
-                {?RESPONSE_CODE_OK, []};
-            {ok, Strs} ->
-                {?RESPONSE_CODE_OK, Strs};
-            {error, _} ->
-                increase_protocol_counter(?STREAM_DOES_NOT_EXIST),
-                {?RESPONSE_CODE_STREAM_DOES_NOT_EXIST, []}
+        case rabbit_stream_utils:check_read_permitted(SuperStreamExchange, User, #{}) of
+            error ->
+                increase_protocol_counter(?ACCESS_REFUSED),
+                {?RESPONSE_CODE_ACCESS_REFUSED, []};
+            ok ->
+                case rabbit_stream_manager:route(RoutingKey, VirtualHost, SuperStream) of
+                    {ok, no_route} ->
+                        {?RESPONSE_CODE_OK, []};
+                    {ok, Strs} ->
+                        AllReadable =
+                            lists:all(fun(Stream) ->
+                                         rabbit_stream_utils:check_read_permitted(
+                                             stream_r(Stream, Connection),
+                                             User,
+                                             #{}) =:= ok
+                                      end, Strs),
+                        case AllReadable of
+                            true ->
+                                {?RESPONSE_CODE_OK, Strs};
+                            false ->
+                                increase_protocol_counter(?ACCESS_REFUSED),
+                                {?RESPONSE_CODE_ACCESS_REFUSED, []}
+                        end;
+                    {error, _} ->
+                        increase_protocol_counter(?STREAM_DOES_NOT_EXIST),
+                        {?RESPONSE_CODE_STREAM_DOES_NOT_EXIST, []}
+                end
         end,
 
     Frame =

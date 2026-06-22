@@ -69,6 +69,7 @@ groups() ->
        should_receive_metadata_update_after_update_secret,
        store_offset_requires_read_access,
        metadata_requires_read_access,
+       route_requires_read_access,
        offset_lag_calculation,
        test_super_stream_duplicate_partitions,
        authentication_error_should_close_with_delay,
@@ -221,6 +222,10 @@ init_per_testcase(metadata_requires_read_access = TestCase, Config) ->
   ok = rabbit_ct_broker_helpers:add_user(Config, <<"test">>),
   rabbit_ct_helpers:testcase_started(Config, TestCase);
 
+init_per_testcase(route_requires_read_access = TestCase, Config) ->
+  ok = rabbit_ct_broker_helpers:add_user(Config, <<"test">>),
+  rabbit_ct_helpers:testcase_started(Config, TestCase);
+
 init_per_testcase(unauthorized_vhost_access_should_close_with_delay = TestCase, Config) ->
   ok = rabbit_ct_broker_helpers:add_user(Config, <<"other">>),
   rabbit_ct_helpers:testcase_started(Config, TestCase);
@@ -269,6 +274,10 @@ end_per_testcase(store_offset_requires_read_access = TestCase, Config) ->
     ok = rabbit_ct_broker_helpers:delete_user(Config, <<"test">>),
     rabbit_ct_helpers:testcase_finished(Config, TestCase);
 end_per_testcase(metadata_requires_read_access = TestCase, Config) ->
+    ok = rabbit_ct_broker_helpers:delete_user(Config, <<"test">>),
+    rabbit_ct_helpers:testcase_finished(Config, TestCase);
+
+end_per_testcase(route_requires_read_access = TestCase, Config) ->
     ok = rabbit_ct_broker_helpers:delete_user(Config, <<"test">>),
     rabbit_ct_helpers:testcase_finished(Config, TestCase);
 end_per_testcase(unauthorized_vhost_access_should_close_with_delay = TestCase, Config) ->
@@ -1195,6 +1204,52 @@ metadata_requires_read_access(Config) ->
     C8 = test_delete_stream(T, S, Stream1, C7, false),
     C9 = test_delete_stream(T, S, Stream2, C8, false),
     test_close(T, S, C9),
+    closed = wait_for_socket_close(T, S, 10),
+    ok.
+
+route_requires_read_access(Config) ->
+    Username = <<"test">>,
+    rabbit_ct_broker_helpers:set_full_permissions(Config, Username, <<"/">>),
+
+    T = gen_tcp,
+    Port = get_port(T, Config),
+    Opts = get_opts(T),
+    {ok, S} = T:connect("localhost", Port, Opts),
+    C0 = rabbit_stream_core:init(0),
+    C1 = test_peer_properties(T, S, C0),
+    C2 = test_authenticate(T, S, C1, Username),
+    Ss = atom_to_binary(?FUNCTION_NAME, utf8),
+    Partitions = [unicode:characters_to_binary([Ss, <<"-">>, integer_to_binary(N)])
+                  || N <- lists:seq(0, 2)],
+    Bks = [integer_to_binary(N) || N <- lists:seq(0, 2)],
+
+    %% create the super stream
+    ok = T:send(S, request({create_super_stream, Ss, Partitions, Bks, #{}})),
+    {Cmd1, C3} = receive_commands(T, S, C2),
+    ?assertMatch({response, 1, {create_super_stream, ?RESPONSE_CODE_OK}}, Cmd1),
+
+    %% route should succeed with full permissions
+    RouteFrame = request({route, <<"0">>, Ss}),
+    ok = T:send(S, RouteFrame),
+    {Cmd2, C4} = receive_commands(T, S, C3),
+    ?assertMatch({response, 1, {route, ?RESPONSE_CODE_OK, _}}, Cmd2),
+
+    %% remove read access
+    rabbit_ct_broker_helpers:set_permissions(Config, Username, <<"/">>,
+                                             <<".*">>, <<".*">>, <<"foobar">>),
+
+    %% route should fail with access refused
+    ok = T:send(S, RouteFrame),
+    {Cmd3, C5} = receive_commands(T, S, C4),
+    ?assertEqual({response, 1, {route, ?RESPONSE_CODE_ACCESS_REFUSED, []}}, Cmd3),
+
+    %% restore full permissions to delete the super stream
+    rabbit_ct_broker_helpers:set_full_permissions(Config, Username, <<"/">>),
+    ok = T:send(S, request({delete_super_stream, Ss})),
+    {Cmd4, C6} = receive_commands(T, S, C5),
+    ?assertMatch({response, 1, {delete_super_stream, ?RESPONSE_CODE_OK}}, Cmd4),
+
+    test_close(T, S, C6),
     closed = wait_for_socket_close(T, S, 10),
     ok.
 
