@@ -21,10 +21,12 @@ init([QRef]) ->
     DlxWorkerSupPid = self(),
     SupFlags = #{strategy => one_for_one,
                  intensity => 0,
-                 period => 1},
+                 period => 1,
+                 auto_shutdown => any_significant},
     ChildSpec = #{id => rabbit_fifo_dlx_worker,
                   start => {rabbit_fifo_dlx_worker, start_link, [QRef, DlxWorkerSupPid]},
                   type => worker,
                   restart => transient,
+                  significant => true,
                   shutdown => 5000},
     {ok, {SupFlags, [ChildSpec]}}.
