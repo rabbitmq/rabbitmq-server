@@ -2629,17 +2629,40 @@ handle_frame_post_auth(Transport,
     {Connection, State};
 handle_frame_post_auth(Transport,
                        #stream_connection{socket = S,
-                                          virtual_host = VirtualHost} =
+                                          virtual_host = VirtualHost,
+                                          user = User} =
                            Connection,
                        State,
                        {request, CorrelationId, {partitions, SuperStream}}) ->
+    SuperStreamExchange = #resource{name = SuperStream,
+                                    kind = exchange,
+                                    virtual_host = VirtualHost},
     {ResponseCode, Partitions} =
-        case rabbit_stream_manager:partitions(VirtualHost, SuperStream) of
-            {ok, Streams} ->
-                {?RESPONSE_CODE_OK, Streams};
-            {error, _} ->
-                increase_protocol_counter(?STREAM_DOES_NOT_EXIST),
-                {?RESPONSE_CODE_STREAM_DOES_NOT_EXIST, []}
+        case rabbit_stream_utils:check_read_permitted(SuperStreamExchange, User, #{}) of
+            error ->
+                increase_protocol_counter(?ACCESS_REFUSED),
+                {?RESPONSE_CODE_ACCESS_REFUSED, []};
+            ok ->
+                case rabbit_stream_manager:partitions(VirtualHost, SuperStream) of
+                    {ok, Streams} ->
+                        AllReadable =
+                            lists:all(fun(Stream) ->
+                                         rabbit_stream_utils:check_read_permitted(
+                                             stream_r(Stream, Connection),
+                                             User,
+                                             #{}) =:= ok
+                                      end, Streams),
+                        case AllReadable of
+                            true ->
+                                {?RESPONSE_CODE_OK, Streams};
+                            false ->
+                                increase_protocol_counter(?ACCESS_REFUSED),
+                                {?RESPONSE_CODE_ACCESS_REFUSED, []}
+                        end;
+                    {error, _} ->
+                        increase_protocol_counter(?STREAM_DOES_NOT_EXIST),
+                        {?RESPONSE_CODE_STREAM_DOES_NOT_EXIST, []}
+                end
         end,
 
     Frame =
