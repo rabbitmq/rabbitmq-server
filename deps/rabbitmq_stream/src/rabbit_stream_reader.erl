@@ -2455,110 +2455,131 @@ handle_frame_post_auth(Transport,
 handle_frame_post_auth(Transport,
                        #stream_connection{socket = S,
                                           virtual_host = VirtualHost,
-                                          transport = TransportLayer} =
+                                          transport = TransportLayer,
+                                          user = User} =
                            Connection,
                        State,
                        {request, CorrelationId, {metadata, Streams}}) ->
-    Topology =
-        lists:foldl(fun(Stream, Acc) ->
-                       Acc#{Stream =>
-                                rabbit_stream_manager:topology(VirtualHost,
-                                                               Stream)}
-                    end,
-                    #{}, Streams),
-
-    %% get the nodes involved in the streams
-    NodesMap =
-        lists:foldl(fun(Stream, Acc) ->
-                       case maps:get(Stream, Topology) of
-                           {ok,
-                            #{leader_node := undefined,
-                              replica_nodes := ReplicaNodes}} ->
-                               lists:foldl(fun(ReplicaNode, NodesAcc) ->
-                                              maps:put(ReplicaNode, ok,
-                                                       NodesAcc)
-                                           end,
-                                           Acc, ReplicaNodes);
-                           {ok,
-                            #{leader_node := LeaderNode,
-                              replica_nodes := ReplicaNodes}} ->
-                               Acc1 = maps:put(LeaderNode, ok, Acc),
-                               lists:foldl(fun(ReplicaNode, NodesAcc) ->
-                                              maps:put(ReplicaNode, ok,
-                                                       NodesAcc)
-                                           end,
-                                           Acc1, ReplicaNodes);
-                           {error, _} -> Acc
-                       end
-                    end,
-                    #{}, Streams),
-
-    Nodes0 =
-        lists:sort(
-            maps:keys(NodesMap)),
-    %% filter out nodes in maintenance
-    Nodes =
-        lists:filter(fun(N) ->
-                        rabbit_maintenance:is_being_drained_consistent_read(N)
-                        =:= false
+    AuthorizedStreams =
+        lists:filter(fun(Stream) ->
+                        rabbit_stream_utils:check_read_permitted(stream_r(Stream,
+                                                                           Connection),
+                                                                 User,
+                                                                 #{})
+                        =:= ok
                      end,
-                     Nodes0),
-    HostFun = advertised_host_fun(TransportLayer),
-    PortFun = advertised_port_fun(TransportLayer),
+                     Streams),
+    case AuthorizedStreams of
+        [] when Streams =/= [] ->
+            response(Transport,
+                     Connection,
+                     metadata,
+                     CorrelationId,
+                     ?RESPONSE_CODE_ACCESS_REFUSED),
+            increase_protocol_counter(?ACCESS_REFUSED),
+            {Connection, State};
+        _ ->
+            Topology =
+                lists:foldl(fun(Stream, Acc) ->
+                               Acc#{Stream =>
+                                        rabbit_stream_manager:topology(VirtualHost,
+                                                                       Stream)}
+                            end,
+                            #{}, AuthorizedStreams),
 
-    FetchFun = fun() -> {rabbit_stream:HostFun(), rabbit_stream:PortFun()} end,
-    Results = erpc:multicall(Nodes, FetchFun, ?METADATA_TIMEOUT),
-    NodeEndpoints =
-        lists:foldl(
-          fun({Node, {ok, {Host, Port}}}, Acc) when is_binary(Host), is_integer(Port) ->
-                 %% Happy path: Node responded in time with valid data
-                 Acc#{Node => {Host, Port}};
-             ({Node, {ok, {Host, Port}}}, Acc) ->
-                 %% Node responded, but data was malformed
-                 ?LOG_WARNING("Error when retrieving broker '~tp' metadata: ~tp ~tp",
-                              [Node, Host, Port]),
-                 Acc;
-             ({Node, Error}, Acc) ->
-                 %% Node timed out, was unreachable, or threw an exception
-                 ?LOG_WARNING("Error/Timeout when retrieving broker '~tp' metadata: ~tp",
-                              [Node, Error]),
-                 Acc
-          end,
-          #{}, lists:zip(Nodes, Results)),
+            %% get the nodes involved in the streams
+            NodesMap =
+                lists:foldl(fun(Stream, Acc) ->
+                               case maps:get(Stream, Topology) of
+                                   {ok,
+                                    #{leader_node := undefined,
+                                      replica_nodes := ReplicaNodes}} ->
+                                       lists:foldl(fun(ReplicaNode, NodesAcc) ->
+                                                      maps:put(ReplicaNode, ok,
+                                                               NodesAcc)
+                                                   end,
+                                                   Acc, ReplicaNodes);
+                                   {ok,
+                                    #{leader_node := LeaderNode,
+                                      replica_nodes := ReplicaNodes}} ->
+                                       Acc1 = maps:put(LeaderNode, ok, Acc),
+                                       lists:foldl(fun(ReplicaNode, NodesAcc) ->
+                                                      maps:put(ReplicaNode, ok,
+                                                               NodesAcc)
+                                                   end,
+                                                   Acc1, ReplicaNodes);
+                                   {error, _} -> Acc
+                               end
+                            end,
+                            #{}, AuthorizedStreams),
 
-    Metadata =
-        lists:foldl(fun(Stream, Acc) ->
-                       case maps:get(Stream, Topology) of
-                           {error, Err} -> Acc#{Stream => Err};
-                           {ok,
-                            #{leader_node := LeaderNode,
-                              replica_nodes := Replicas}} ->
-                               LeaderInfo =
-                                   case NodeEndpoints of
-                                       #{LeaderNode := Info} -> Info;
-                                       _ -> undefined
-                                   end,
-                               ReplicaInfos =
-                                   lists:foldr(fun(Replica, A) ->
-                                                  case NodeEndpoints of
-                                                      #{Replica := I} ->
-                                                          [I | A];
-                                                      _ -> A
-                                                  end
-                                               end,
-                                               [], Replicas),
-                               Acc#{Stream => {LeaderInfo, ReplicaInfos}}
-                       end
-                    end,
-                    #{}, Streams),
-    Endpoints =
-        lists:usort(
-            maps:values(NodeEndpoints)),
-    Frame =
-        rabbit_stream_core:frame({response, CorrelationId,
-                                  {metadata, Endpoints, Metadata}}),
-    send(Transport, S, Frame),
-    {Connection, State};
+            Nodes0 =
+                lists:sort(
+                    maps:keys(NodesMap)),
+            %% filter out nodes in maintenance
+            Nodes =
+                lists:filter(fun(N) ->
+                                rabbit_maintenance:is_being_drained_consistent_read(N)
+                                =:= false
+                             end,
+                             Nodes0),
+            HostFun = advertised_host_fun(TransportLayer),
+            PortFun = advertised_port_fun(TransportLayer),
+
+            FetchFun = fun() -> {rabbit_stream:HostFun(), rabbit_stream:PortFun()} end,
+            Results = erpc:multicall(Nodes, FetchFun, ?METADATA_TIMEOUT),
+            NodeEndpoints =
+                lists:foldl(
+                  fun({Node, {ok, {Host, Port}}}, Acc) when is_binary(Host), is_integer(Port) ->
+                         %% Happy path: Node responded in time with valid data
+                         Acc#{Node => {Host, Port}};
+                     ({Node, {ok, {Host, Port}}}, Acc) ->
+                         %% Node responded, but data was malformed
+                         ?LOG_WARNING("Error when retrieving broker '~tp' metadata: ~tp ~tp",
+                                      [Node, Host, Port]),
+                         Acc;
+                     ({Node, Error}, Acc) ->
+                         %% Node timed out, was unreachable, or threw an exception
+                         ?LOG_WARNING("Error/Timeout when retrieving broker '~tp' metadata: ~tp",
+                                      [Node, Error]),
+                         Acc
+                  end,
+                  #{}, lists:zip(Nodes, Results)),
+
+            Metadata =
+                lists:foldl(fun(Stream, Acc) ->
+                               case maps:get(Stream, Topology) of
+                                   {error, Err} -> Acc#{Stream => Err};
+                                   {ok,
+                                    #{leader_node := LeaderNode,
+                                      replica_nodes := Replicas}} ->
+                                       LeaderInfo =
+                                           case NodeEndpoints of
+                                               #{LeaderNode := Info} -> Info;
+                                               _ -> undefined
+                                           end,
+                                       ReplicaInfos =
+                                           lists:foldr(fun(Replica, A) ->
+                                                          case NodeEndpoints of
+                                                              #{Replica := I} ->
+                                                                  [I | A];
+                                                              _ -> A
+                                                          end
+                                                       end,
+                                                       [], Replicas),
+                                       Acc#{Stream => {LeaderInfo, ReplicaInfos}}
+                               end
+                            end,
+                            #{}, AuthorizedStreams),
+            Endpoints =
+                lists:usort(
+                    maps:values(NodeEndpoints)),
+            Frame =
+                rabbit_stream_core:frame({response, CorrelationId,
+                                          {metadata, Endpoints, Metadata}}),
+            send(Transport, S, Frame),
+            {Connection, State}
+    end;
 handle_frame_post_auth(Transport,
                        #stream_connection{socket = S,
                                           virtual_host = VirtualHost} =
