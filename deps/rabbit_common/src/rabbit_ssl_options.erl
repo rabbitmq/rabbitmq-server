@@ -159,10 +159,17 @@ fix_log_level(Config) ->
 %% become available. This function logs whether PQC groups are configured
 %% or available by default, helping operators verify PQC readiness.
 %%
+%% Compatibility notes:
+%%   - This feature requires Erlang/OTP 28.1+ with OpenSSL 3.5+
+%%   - OTP 28 is only partially supported in RabbitMQ 4.3.x (new clusters only)
+%%   - Full OTP 28 support is expected in RabbitMQ 4.4+
+%%   - On RabbitMQ 4.3.x, this configuration is forward-looking
+%%
 %% See: https://csrc.nist.gov/pubs/fips/203/final (FIPS 203, ML-KEM)
 %% See: https://github.com/rabbitmq/rabbitmq-server/issues/16748
 -spec log_pqc_status(rabbit_types:infos()) -> rabbit_types:infos().
 log_pqc_status(Config) ->
+    maybe_warn_otp_version(Config),
     case proplists:get_value(supported_groups, Config, undefined) of
         undefined ->
             ok;
@@ -178,6 +185,38 @@ log_pqc_status(Config) ->
             end
     end,
     Config.
+
+%% Warn if PQC groups are configured but the OTP version is too old to
+%% support them. PQC key exchange groups require OTP 28.1+ with
+%% OpenSSL 3.5+. On earlier OTP versions the groups will be silently
+%% ignored by the ssl application.
+-spec maybe_warn_otp_version(rabbit_types:infos()) -> ok.
+maybe_warn_otp_version(Config) ->
+    case proplists:get_value(supported_groups, Config, undefined) of
+        undefined ->
+            ok;
+        Groups when is_list(Groups) ->
+            HasPQC = lists:any(fun is_pqc_group/1, Groups),
+            case HasPQC of
+                false ->
+                    ok;
+                true ->
+                    OtpRelease = list_to_integer(erlang:system_info(otp_release)),
+                    case OtpRelease < 28 of
+                        true ->
+                            ?LOG_WARNING(
+                                "Post-quantum TLS key exchange groups are configured but "
+                                "the current Erlang/OTP version (~b) does not support them. "
+                                "PQC groups require Erlang/OTP 28.1+ with OpenSSL 3.5+. "
+                                "The configured PQC groups will be ignored. "
+                                "Full OTP 28 support is expected in RabbitMQ 4.4+. "
+                                "See https://github.com/rabbitmq/rabbitmq-server/issues/16748",
+                                [OtpRelease]);
+                        false ->
+                            ok
+                    end
+            end
+    end.
 
 %% Returns true if the given group name is a post-quantum or hybrid
 %% post-quantum key exchange group.

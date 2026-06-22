@@ -233,6 +233,13 @@
 ##
 ## Requires: Erlang/OTP 28.1+ with OpenSSL 3.5+
 ##
+## Compatibility notes:
+##   - OTP 28 is only partially supported in RabbitMQ 4.3.x (new clusters only)
+##   - Full OTP 28 support is expected in RabbitMQ 4.4+
+##   - On RabbitMQ 4.3.x, this configuration is forward-looking and will
+##     be effective once upgraded to RabbitMQ 4.4+ with OTP 28.1+
+##   - A warning will be logged if PQC groups are configured on OTP < 28
+##
 # ssl_options.groups.1 = x25519mlkem768
 # ssl_options.groups.2 = x25519
 # ssl_options.groups.3 = prime256v1

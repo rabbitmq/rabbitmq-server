@@ -93,6 +93,12 @@
 %% such as x25519mlkem768 (X25519 + ML-KEM-768, FIPS 203) are available.
 %% These protect TLS key exchange against both classical and quantum attacks.
 %%
+%% Compatibility notes:
+%%   - This feature requires Erlang/OTP 28.1+ with OpenSSL 3.5+
+%%   - OTP 28 is only partially supported in RabbitMQ 4.3.x (new clusters only)
+%%   - Full OTP 28 support is expected in RabbitMQ 4.4+
+%%   - On RabbitMQ 4.3.x, this configuration is forward-looking
+%%
 %% Example (rabbitmq.conf):
 %%   ssl_options.groups.1 = x25519mlkem768
 %%   ssl_options.groups.2 = x25519
