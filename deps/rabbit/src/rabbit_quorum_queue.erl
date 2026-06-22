@@ -1119,11 +1119,14 @@ delete(Q, _IfUnused, _IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
                     Err
             end;
         {error, {shutdown, delete}} ->
-            %% The Ra cluster is already shutting down due to a concurrent
-            %% delete. Clean up queue data and treat as success.
+            ?LOG_INFO(
+              "Quorum queue '~ts' Ra cluster was already shutting down"
+              " due to a concurrent delete, proceeding with cleanup.",
+              [rabbit_misc:rs(QName)]),
             notify_decorators(QName, shutdown),
             case delete_queue_data(Q, ActingUser) of
                 ok ->
+                    rabbit_core_metrics:queue_deleted(QName),
                     {ok, ReadyMsgs};
                 {error, timeout} = Err ->
                     Err
