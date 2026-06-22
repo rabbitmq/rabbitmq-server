@@ -122,19 +122,25 @@ stop(VHost)
     end.
 
 update_config(Fun) ->
-    VHosts0 = vhosts_with_tracing_enabled(),
-    VHosts = Fun(VHosts0),
-    application:set_env(rabbit, ?TRACE_VHOSTS, VHosts),
-    Sessions = rabbit_amqp_session:list_local(),
-    NonAmqpPids = rabbit_networking:local_non_amqp_connections(),
-    ?LOG_DEBUG("Refreshing state of channels, ~b sessions and ~b non "
-                     "AMQP 0.9.1 connections after virtual host tracing changes...",
-                     [length(Sessions), length(NonAmqpPids)]),
-    Pids = Sessions ++ NonAmqpPids,
-    lists:foreach(fun(Pid) -> gen_server:cast(Pid, refresh_config) end, Pids),
-    {Time, ok} = timer:tc(fun rabbit_channel:refresh_config_local/0),
-    ?LOG_DEBUG("Refreshed channel states in ~fs", [Time / 1_000_000]),
-    ok.
+    %% Serializes the trace_vhosts RMW; self() gives each caller a unique lock requester identity.
+    global:set_lock({rabbit_trace_vhosts, self()}),
+    try
+        VHosts0 = vhosts_with_tracing_enabled(),
+        VHosts = Fun(VHosts0),
+        application:set_env(rabbit, ?TRACE_VHOSTS, VHosts),
+        Sessions = rabbit_amqp_session:list_local(),
+        NonAmqpPids = rabbit_networking:local_non_amqp_connections(),
+        ?LOG_DEBUG("Refreshing state of channels, ~b sessions and ~b non "
+                         "AMQP 0.9.1 connections after virtual host tracing changes...",
+                         [length(Sessions), length(NonAmqpPids)]),
+        Pids = Sessions ++ NonAmqpPids,
+        lists:foreach(fun(Pid) -> gen_server:cast(Pid, refresh_config) end, Pids),
+        {Time, ok} = timer:tc(fun rabbit_channel:refresh_config_local/0),
+        ?LOG_DEBUG("Refreshed channel states in ~fs", [Time / 1_000_000]),
+        ok
+    after
+        global:del_lock({rabbit_trace_vhosts, self()})
+    end.
 
 vhosts_with_tracing_enabled() ->
     {ok, Vhosts} = application:get_env(rabbit, ?TRACE_VHOSTS),
