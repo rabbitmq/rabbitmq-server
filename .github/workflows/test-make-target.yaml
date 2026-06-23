@@ -113,7 +113,7 @@ jobs:
 
     - name: RESTORE ACTIVEMQ FROM CACHE
       if: inputs.plugin == 'amqp10_client'
-      uses: actions/cache/restore@v5
+      uses: actions/cache/restore@v6
       id: cache-activemq-restore
       with:
         path: deps/amqp10_client/test/system_SUITE_data/apache-activemq-${{ env.ACTIVEMQ_VERSION }}-bin.tar.gz
@@ -126,7 +126,7 @@ jobs:
         make -C deps/${{ inputs.plugin }} ${{ inputs.make_target }} RABBITMQ_METADATA_STORE=${{ inputs.metadata_store }}
 
     - name: CACHE ACTIVEMQ
-      uses: actions/cache/save@v5
+      uses: actions/cache/save@v6
       if: inputs.plugin == 'amqp10_client' && steps.cache-activemq-restore.outputs.cache-hit != 'true'
       with:
         path: deps/amqp10_client/test/system_SUITE_data/apache-activemq-${{ env.ACTIVEMQ_VERSION }}-bin.tar.gz
