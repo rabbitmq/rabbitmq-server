@@ -3,7 +3,7 @@ _rabbitmqctl_complete() {
         COMPREPLY=()
         local LANG=en_US.UTF-8
         local word="${COMP_WORDS[COMP_CWORD]}"
-        local completions="$(export LANG=en_US.UTF-8; export LC_CTYPE=en_US.UTF-8; /usr/lib/rabbitmq/bin/rabbitmqctl --auto-complete $COMP_LINE)"
+        local completions="$(export LANG=en_US.UTF-8; export LC_CTYPE=en_US.UTF-8; /usr/lib/rabbitmq/bin/rabbitmqctl autocomplete -- "$word")"
         COMPREPLY=( $(compgen -W "$completions" -- "$word") )
     fi
 }
