@@ -150,6 +150,22 @@ end}.
 
 
 %%
+%% HSTS
+%%
+
+{mapping, "web_stomp.hsts.policy", "rabbitmq_web_stomp.strict_transport_security", [
+    {datatype, string}
+]}.
+
+{translation, "rabbitmq_web_stomp.strict_transport_security",
+fun(Conf) ->
+    case cuttlefish:conf_get("web_stomp.hsts.policy", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+%%
 %% Cowboy options
 %%
 
