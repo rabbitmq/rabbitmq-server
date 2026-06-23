@@ -114,7 +114,7 @@ jobs:
 
     - name: RESTORE ACTIVEMQ FROM CACHE
       if: inputs.plugin == 'amqp10_client'
-      uses: actions/cache/restore@v5
+      uses: actions/cache/restore@v6
       id: cache-activemq-restore
       with:
         path: deps/amqp10_client/test/system_SUITE_data/apache-activemq-${{ env.ACTIVEMQ_VERSION }}-bin.tar.gz
@@ -128,7 +128,7 @@ jobs:
         make -C deps/${{ inputs.plugin }} ${{ inputs.make_target }} NON_DETERMINISTIC=1 2>&1 | sed "s/src\//deps\/${{ inputs.plugin }}\/src\//" | sed "s/test\//deps\/${{ inputs.plugin }}\/test\//" | sed "s/src\/enough\.erl:22:2:/IGNORED src\/enough.erl:22:2:/"
 
     - name: CACHE ACTIVEMQ
-      uses: actions/cache/save@v5
+      uses: actions/cache/save@v6
       if: inputs.plugin == 'amqp10_client' && steps.cache-activemq-restore.outputs.cache-hit != 'true'
       with:
         path: deps/amqp10_client/test/system_SUITE_data/apache-activemq-${{ env.ACTIVEMQ_VERSION }}-bin.tar.gz
