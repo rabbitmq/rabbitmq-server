@@ -87,7 +87,8 @@
 -define(SAC_MOD, rabbit_stream_sac_coordinator).
 
 -import(rabbit_stream_utils, [check_write_permitted/2,
-                              check_read_permitted/3]).
+                              check_read_permitted/3,
+                              check_read_or_write_permitted/2]).
 
 %% client API
 -export([start_link/4,
@@ -2451,127 +2452,162 @@ handle_frame_post_auth(Transport,
 handle_frame_post_auth(Transport,
                        #stream_connection{socket = S,
                                           virtual_host = VirtualHost,
-                                          transport = TransportLayer} =
+                                          transport = TransportLayer,
+                                          user = User} =
                            Connection,
                        State,
                        {request, CorrelationId, {metadata, Streams}}) ->
-    Topology =
-        lists:foldl(fun(Stream, Acc) ->
-                       Acc#{Stream =>
-                                rabbit_stream_manager:topology(VirtualHost,
-                                                               Stream)}
-                    end,
-                    #{}, Streams),
+    {AuthorizedStreams, UnauthorizedStreams} =
+        lists:partition(fun(Stream) ->
+                                check_read_or_write_permitted(
+                                  stream_r(Stream, Connection),
+                                  User
+                                 ) =:= ok
+                        end,
+                        Streams),
+        Topology0 =
+            lists:foldl(fun(Stream, Acc) ->
+                                Acc#{Stream =>
+                                     rabbit_stream_manager:topology(VirtualHost,
+                                                                    Stream)}
+                        end,
+                        #{}, AuthorizedStreams),
 
-    %% get the nodes involved in the streams
-    NodesMap =
-        lists:foldl(fun(Stream, Acc) ->
-                       case maps:get(Stream, Topology) of
-                           {ok,
-                            #{leader_node := undefined,
-                              replica_nodes := ReplicaNodes}} ->
-                               lists:foldl(fun(ReplicaNode, NodesAcc) ->
-                                              maps:put(ReplicaNode, ok,
-                                                       NodesAcc)
-                                           end,
-                                           Acc, ReplicaNodes);
-                           {ok,
-                            #{leader_node := LeaderNode,
-                              replica_nodes := ReplicaNodes}} ->
-                               Acc1 = maps:put(LeaderNode, ok, Acc),
-                               lists:foldl(fun(ReplicaNode, NodesAcc) ->
-                                              maps:put(ReplicaNode, ok,
-                                                       NodesAcc)
-                                           end,
-                                           Acc1, ReplicaNodes);
-                           {error, _} -> Acc
-                       end
-                    end,
-                    #{}, Streams),
 
-    Nodes0 =
+        UnauthzStrms = #{StrName => {error, stream_not_allowed}
+                         || StrName <- UnauthorizedStreams},
+        Topology = maps:merge(Topology0, UnauthzStrms),
+
+        %% get the nodes involved in the streams
+        NodesMap =
+        lists:foldl(fun(Stream, Acc) ->
+                            case maps:get(Stream, Topology) of
+                                {ok,
+                                 #{leader_node := undefined,
+                                   replica_nodes := ReplicaNodes}} ->
+                                    lists:foldl(fun(ReplicaNode, NodesAcc) ->
+                                                        maps:put(ReplicaNode, ok,
+                                                                 NodesAcc)
+                                                end,
+                                                Acc, ReplicaNodes);
+                                {ok,
+                                 #{leader_node := LeaderNode,
+                                   replica_nodes := ReplicaNodes}} ->
+                                    Acc1 = maps:put(LeaderNode, ok, Acc),
+                                    lists:foldl(fun(ReplicaNode, NodesAcc) ->
+                                                        maps:put(ReplicaNode, ok,
+                                                                 NodesAcc)
+                                                end,
+                                                Acc1, ReplicaNodes);
+                                {error, _} -> Acc
+                            end
+                    end,
+                    #{}, AuthorizedStreams),
+
+        Nodes0 =
         lists:sort(
-            maps:keys(NodesMap)),
-    %% filter out nodes in maintenance
-    Nodes =
+          maps:keys(NodesMap)),
+        %% filter out nodes in maintenance
+        Nodes =
         lists:filter(fun(N) ->
-                        rabbit_maintenance:is_being_drained_consistent_read(N)
-                        =:= false
+                             rabbit_maintenance:is_being_drained_consistent_read(N)
+                             =:= false
                      end,
                      Nodes0),
-    HostFun = advertised_host_fun(TransportLayer),
-    PortFun = advertised_port_fun(TransportLayer),
+        HostFun = advertised_host_fun(TransportLayer),
+        PortFun = advertised_port_fun(TransportLayer),
 
-    FetchFun = fun() -> {rabbit_stream:HostFun(), rabbit_stream:PortFun()} end,
-    Results = erpc:multicall(Nodes, FetchFun, ?METADATA_TIMEOUT),
-    NodeEndpoints =
+        FetchFun = fun() -> {rabbit_stream:HostFun(), rabbit_stream:PortFun()} end,
+        Results = erpc:multicall(Nodes, FetchFun, ?METADATA_TIMEOUT),
+        NodeEndpoints =
         lists:foldl(
           fun({Node, {ok, {Host, Port}}}, Acc) when is_binary(Host), is_integer(Port) ->
-                 %% Happy path: Node responded in time with valid data
-                 Acc#{Node => {Host, Port}};
+                  %% Happy path: Node responded in time with valid data
+                  Acc#{Node => {Host, Port}};
              ({Node, {ok, {Host, Port}}}, Acc) ->
-                 %% Node responded, but data was malformed
-                 ?LOG_WARNING("Error when retrieving broker '~tp' metadata: ~tp ~tp",
-                              [Node, Host, Port]),
-                 Acc;
+                  %% Node responded, but data was malformed
+                  ?LOG_WARNING("Error when retrieving broker '~tp' metadata: ~tp ~tp",
+                               [Node, Host, Port]),
+                  Acc;
              ({Node, Error}, Acc) ->
-                 %% Node timed out, was unreachable, or threw an exception
-                 ?LOG_WARNING("Error/Timeout when retrieving broker '~tp' metadata: ~tp",
-                              [Node, Error]),
-                 Acc
+                  %% Node timed out, was unreachable, or threw an exception
+                  ?LOG_WARNING("Error/Timeout when retrieving broker '~tp' metadata: ~tp",
+                               [Node, Error]),
+                  Acc
           end,
           #{}, lists:zip(Nodes, Results)),
 
-    Metadata =
+        Metadata =
         lists:foldl(fun(Stream, Acc) ->
-                       case maps:get(Stream, Topology) of
-                           {error, Err} -> Acc#{Stream => Err};
-                           {ok,
-                            #{leader_node := LeaderNode,
-                              replica_nodes := Replicas}} ->
-                               LeaderInfo =
-                                   case NodeEndpoints of
-                                       #{LeaderNode := Info} -> Info;
-                                       _ -> undefined
-                                   end,
-                               ReplicaInfos =
-                                   lists:foldr(fun(Replica, A) ->
-                                                  case NodeEndpoints of
-                                                      #{Replica := I} ->
-                                                          [I | A];
-                                                      _ -> A
-                                                  end
-                                               end,
-                                               [], Replicas),
-                               Acc#{Stream => {LeaderInfo, ReplicaInfos}}
-                       end
+                            case maps:get(Stream, Topology) of
+                                {error, Err} -> Acc#{Stream => Err};
+                                {ok,
+                                 #{leader_node := LeaderNode,
+                                   replica_nodes := Replicas}} ->
+                                    LeaderInfo =
+                                    case NodeEndpoints of
+                                        #{LeaderNode := Info} -> Info;
+                                        _ -> undefined
+                                    end,
+                                    ReplicaInfos =
+                                    lists:foldr(fun(Replica, A) ->
+                                                        case NodeEndpoints of
+                                                            #{Replica := I} ->
+                                                                [I | A];
+                                                            _ -> A
+                                                        end
+                                                end,
+                                                [], Replicas),
+                                    Acc#{Stream => {LeaderInfo, ReplicaInfos}}
+                            end
                     end,
                     #{}, Streams),
-    Endpoints =
+        Endpoints =
         lists:usort(
-            maps:values(NodeEndpoints)),
-    Frame =
+          maps:values(NodeEndpoints)),
+        Frame =
         rabbit_stream_core:frame({response, CorrelationId,
                                   {metadata, Endpoints, Metadata}}),
-    send(Transport, S, Frame),
-    {Connection, State};
+        send(Transport, S, Frame),
+        {Connection, State};
 handle_frame_post_auth(Transport,
                        #stream_connection{socket = S,
-                                          virtual_host = VirtualHost} =
+                                          virtual_host = VirtualHost,
+                                          user = User} =
                            Connection,
                        State,
                        {request, CorrelationId,
                         {route, RoutingKey, SuperStream}}) ->
+    SuperStreamExchange = #resource{name = SuperStream,
+                                    kind = exchange,
+                                    virtual_host = VirtualHost},
     {ResponseCode, Streams} =
-        case rabbit_stream_manager:route(RoutingKey, VirtualHost, SuperStream)
-        of
-            {ok, no_route} ->
-                {?RESPONSE_CODE_OK, []};
-            {ok, Strs} ->
-                {?RESPONSE_CODE_OK, Strs};
-            {error, _} ->
-                increase_protocol_counter(?STREAM_DOES_NOT_EXIST),
-                {?RESPONSE_CODE_STREAM_DOES_NOT_EXIST, []}
+        case check_write_permitted(SuperStreamExchange, User) of
+            error ->
+                increase_protocol_counter(?ACCESS_REFUSED),
+                {?RESPONSE_CODE_ACCESS_REFUSED, []};
+            ok ->
+                case rabbit_stream_manager:route(RoutingKey, VirtualHost, SuperStream) of
+                    {ok, no_route} ->
+                        {?RESPONSE_CODE_OK, []};
+                    {ok, Strs} ->
+                        AllWritable =
+                            lists:all(fun(Stream) ->
+                                              check_write_permitted(
+                                                stream_r(Stream, Connection),
+                                                User) =:= ok
+                                      end, Strs),
+                        case AllWritable of
+                            true ->
+                                {?RESPONSE_CODE_OK, Strs};
+                            false ->
+                                increase_protocol_counter(?ACCESS_REFUSED),
+                                {?RESPONSE_CODE_ACCESS_REFUSED, []}
+                        end;
+                    {error, _} ->
+                        increase_protocol_counter(?STREAM_DOES_NOT_EXIST),
+                        {?RESPONSE_CODE_STREAM_DOES_NOT_EXIST, []}
+                end
         end,
 
     Frame =
@@ -2582,17 +2618,39 @@ handle_frame_post_auth(Transport,
     {Connection, State};
 handle_frame_post_auth(Transport,
                        #stream_connection{socket = S,
-                                          virtual_host = VirtualHost} =
+                                          virtual_host = VirtualHost,
+                                          user = User} =
                            Connection,
                        State,
                        {request, CorrelationId, {partitions, SuperStream}}) ->
+    SuperStreamExchange = #resource{name = SuperStream,
+                                    kind = exchange,
+                                    virtual_host = VirtualHost},
     {ResponseCode, Partitions} =
-        case rabbit_stream_manager:partitions(VirtualHost, SuperStream) of
-            {ok, Streams} ->
-                {?RESPONSE_CODE_OK, Streams};
-            {error, _} ->
-                increase_protocol_counter(?STREAM_DOES_NOT_EXIST),
-                {?RESPONSE_CODE_STREAM_DOES_NOT_EXIST, []}
+        case check_read_or_write_permitted(SuperStreamExchange, User) of
+            error ->
+                increase_protocol_counter(?ACCESS_REFUSED),
+                {?RESPONSE_CODE_ACCESS_REFUSED, []};
+            ok ->
+                case rabbit_stream_manager:partitions(VirtualHost, SuperStream) of
+                    {ok, Streams} ->
+                        AllAccessible =
+                            lists:all(fun(Stream) ->
+                                              check_read_or_write_permitted(
+                                                stream_r(Stream, Connection),
+                                                User) =:= ok
+                                      end, Streams),
+                        case AllAccessible of
+                            true ->
+                                {?RESPONSE_CODE_OK, Streams};
+                            false ->
+                                increase_protocol_counter(?ACCESS_REFUSED),
+                                {?RESPONSE_CODE_ACCESS_REFUSED, []}
+                        end;
+                    {error, _} ->
+                        increase_protocol_counter(?STREAM_DOES_NOT_EXIST),
+                        {?RESPONSE_CODE_STREAM_DOES_NOT_EXIST, []}
+                end
         end,
 
     Frame =
@@ -2888,45 +2946,56 @@ handle_frame_post_auth(Transport,
                                           user = #user{username = Username} = User} = Connection,
                        State,
                        {request, CorrelationId, {delete_super_stream, SuperStream}}) ->
-    case rabbit_stream_manager:partitions(VirtualHost, SuperStream) of
-        {ok, Partitions} ->
-            case rabbit_stream_utils:check_super_stream_management_permitted(VirtualHost,
-                                                                             SuperStream,
-                                                                             Partitions,
-                                                                             User) of
-                ok ->
-                    %% Pass the authorization-checked partition snapshot directly to avoid
-                    %% a TOCTOU race where a queue.bind between the authz check and the
-                    %% deletion could allow unauthorized streams to be deleted.
-                    rabbit_stream_manager:delete_super_stream(VirtualHost,
-                                                              SuperStream,
-                                                              Partitions,
-                                                              Username),
-                    response_ok(Transport,
-                                Connection,
-                                delete_super_stream,
-                                CorrelationId),
-                    {Connection1, State1} = clean_state_after_super_stream_deletion(Partitions,
-                                                                                    Connection,
-                                                                                    State,
-                                                                                    Transport, S),
-                    {Connection1, State1};
-                error ->
+    case rabbit_stream_utils:check_super_stream_permitted(VirtualHost, SuperStream, User) of
+        ok ->
+            case rabbit_stream_manager:partitions(VirtualHost, SuperStream) of
+                {ok, Partitions} ->
+                    case rabbit_stream_utils:check_super_stream_management_permitted(VirtualHost,
+                                                                                     SuperStream,
+                                                                                     Partitions,
+                                                                                     User) of
+                        ok ->
+                            %% Pass the authorization-checked partition snapshot directly to avoid
+                            %% a TOCTOU race where a queue.bind between the authz check and the
+                            %% deletion could allow unauthorized streams to be deleted.
+                            rabbit_stream_manager:delete_super_stream(VirtualHost,
+                                                                      SuperStream,
+                                                                      Partitions,
+                                                                      Username),
+                            response_ok(Transport,
+                                        Connection,
+                                        delete_super_stream,
+                                        CorrelationId),
+                            {Connection1, State1} = clean_state_after_super_stream_deletion(Partitions,
+                                                                                            Connection,
+                                                                                            State,
+                                                                                            Transport, S),
+                            {Connection1, State1};
+                        error ->
+                            response(Transport,
+                                     Connection,
+                                     delete_super_stream,
+                                     CorrelationId,
+                                     ?RESPONSE_CODE_ACCESS_REFUSED),
+                            increase_protocol_counter(?ACCESS_REFUSED),
+                            {Connection, State}
+                    end;
+                {error, _} ->
                     response(Transport,
                              Connection,
                              delete_super_stream,
                              CorrelationId,
-                             ?RESPONSE_CODE_ACCESS_REFUSED),
-                    increase_protocol_counter(?ACCESS_REFUSED),
+                             ?RESPONSE_CODE_STREAM_DOES_NOT_EXIST),
+                    increase_protocol_counter(?STREAM_DOES_NOT_EXIST),
                     {Connection, State}
             end;
-        {error, _} ->
+        error ->
             response(Transport,
                      Connection,
                      delete_super_stream,
                      CorrelationId,
-                     ?RESPONSE_CODE_STREAM_DOES_NOT_EXIST),
-            increase_protocol_counter(?STREAM_DOES_NOT_EXIST),
+                     ?RESPONSE_CODE_ACCESS_REFUSED),
+            increase_protocol_counter(?ACCESS_REFUSED),
             {Connection, State}
     end;
 handle_frame_post_auth(Transport,

@@ -27,6 +27,7 @@
          check_configure_permitted/2,
          check_write_permitted/2,
          check_read_permitted/3,
+         check_read_or_write_permitted/2,
          extract_stream_list/2,
          sort_partitions/1,
          strip_cr_lf/1,
@@ -205,6 +206,14 @@ check_write_permitted(Resource, User) ->
 
 check_read_permitted(Resource, User, Context) ->
     check_resource_access(User, Resource, read, Context).
+
+check_read_or_write_permitted(Resource, User) ->
+    case check_read_permitted(Resource, User, #{}) of
+        ok ->
+            ok;
+        _ ->
+            check_write_permitted(Resource, User)
+    end.
 
 -spec check_super_stream_management_permitted(rabbit_types:vhost(), binary(),
                                               [binary()], rabbit_types:user()) ->
