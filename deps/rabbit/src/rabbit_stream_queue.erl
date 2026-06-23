@@ -898,8 +898,13 @@ transfer_leadership(Q, Destination) ->
 -spec transfer_leadership(rabbit_types:vhost(), rabbit_misc:resource_name(), node()) ->
     {ok, node()} | {error, term()}.
 transfer_leadership(VHost, Name, Destination) ->
-    case rabbit_amqqueue:lookup(Name, VHost) of
-        {ok, Q} when ?amqqueue_type_is(Q, ?MODULE) ->
+    QName = queue_resource(VHost, Name),
+    case rabbit_amqqueue:lookup(QName) of
+        {ok, Q} when ?amqqueue_is_classic(Q) ->
+            {error, classic_queue_not_supported};
+        {ok, Q} when ?amqqueue_is_quorum(Q) ->
+            {error, quorum_queue_not_supported};
+        {ok, Q} when ?amqqueue_is_stream(Q) ->
             transfer_leadership(Q, Destination);
         {ok, Q} ->
             {error, {not_supported_for_type, amqqueue:get_type(Q)}};
