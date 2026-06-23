@@ -35,7 +35,8 @@ groups() ->
                   start_and_get_a_dynamic_amqp091_shovel_with_empty_publish_properties,
                   start_and_get_a_dynamic_local_shovel,
                   create_and_delete_a_dynamic_shovel_that_successfully_connects,
-                  create_and_delete_a_dynamic_shovel_that_fails_to_connect
+                  create_and_delete_a_dynamic_shovel_that_fails_to_connect,
+                  delete_a_starting_dynamic_shovel_removes_its_status
                  ]},
 
     {static_shovels, [], [
@@ -322,19 +323,19 @@ create_and_delete_a_dynamic_shovel_that_successfully_connects(Config) ->
     ID = {<<"/">>, Name},
     await_shovel_removed(Config, ID),
 
+    declare_queues(Config, [<<"test">>, <<"test2">>]),
     http_put(Config, "/parameters/shovel/%2f/dynamic-amqp10-to-delete-1",
         #{value => #{'src-protocol' => <<"amqp10">>,
             'src-uri' => <<"amqp://localhost:", Port/binary>>,
-            'src-address'  => <<"test">>,
+            'src-address'  => <<"/queues/test">>,
             'dest-protocol' => <<"amqp10">>,
             'dest-uri' => <<"amqp://localhost:", Port/binary>>,
-            'dest-address' => <<"test2">>,
+            'dest-address' => <<"/queues/test2">>,
             'dest-properties' => #{},
             'dest-application-properties' => #{},
             'dest-message-annotations' => #{}}}, ?CREATED),
 
-    await_shovel_startup(Config, ID),
-    timer:sleep(3_000),
+    await_shovel_running(Config, ID),
     delete_shovel(Config, Name),
     await_shovel_removed(Config, ID).
 
@@ -350,17 +351,36 @@ create_and_delete_a_dynamic_shovel_that_fails_to_connect(Config) ->
     http_put(Config, "/parameters/shovel/%2f/dynamic-amqp10-to-delete-2",
         #{value => #{'src-protocol' => <<"amqp10">>,
             'src-uri' => <<"amqp://non-existing-hostname.lolz.wut:", Port/binary>>,
-            'src-address'  => <<"test">>,
+            'src-address'  => <<"/queues/test">>,
             'dest-protocol' => <<"amqp10">>,
             'dest-uri' => <<"amqp://non-existing-hostname.lolz.wut:", Port/binary>>,
-            'dest-address' => <<"test2">>,
+            'dest-address' => <<"/queues/test2">>,
             'dest-properties' => #{},
             'dest-application-properties' => #{},
             'dest-message-annotations' => #{}}}, ?CREATED),
 
+    %% Unreachable endpoints: the shovel never reaches 'running', so
+    %% `await_shovel_running/2` would hang here; wait for 'starting' instead.
     await_shovel_startup(Config, ID),
-    timer:sleep(3_000),
     delete_shovel(Config, Name),
+    await_shovel_removed(Config, ID).
+
+%% A dynamic shovel worker killed before it finishes starting up does not run
+%% `terminate/2`, the only place that removes its status entry. Reproduce that
+%% leaked status and assert that deleting the shovel removes it.
+delete_a_starting_dynamic_shovel_removes_its_status(Config) ->
+    Name = <<"dynamic-amqp10-starting-to-delete">>,
+    ID = {<<"/">>, Name},
+    remove_all_dynamic_shovels(Config, <<"/">>),
+    await_shovel_removed(Config, ID),
+
+    %% This is the status a worker reports before it has connected.
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_shovel_status, report,
+                                      [ID, dynamic, starting]),
+    await_shovel_startup(Config, ID),
+
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+            rabbit_shovel_dyn_worker_sup_sup, stop_child, [ID]),
     await_shovel_removed(Config, ID).
 
 delete_shovel_requires_policymaker(Config) ->
@@ -380,7 +400,7 @@ delete_shovel_requires_policymaker(Config) ->
         http_put(Config, "/permissions/%2F/policy", Perms, {group, '2xx'}),
 
         declare_shovel(Config, Name),
-        await_shovel_startup(Config, ID),
+        await_shovel_running(Config, ID),
 
         ShovelPath = "/shovels/vhost/%2F/auth-test-shovel",
         %% A monitoring user should not be able to delete a shovel
@@ -467,20 +487,28 @@ remove_all_dynamic_shovels(Config, VHost) ->
 declare_shovel(Config, Name) ->
     Port = integer_to_binary(
         rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp)),
+    %% The AMQP 1.0 links attach to these queues, so they must exist for the
+    %% shovel to reach a running state.
+    declare_queues(Config, [<<"test">>, <<"test2">>]),
     http_put(Config, io_lib:format("/parameters/shovel/%2f/~ts", [Name]),
         #{
             value => #{
                 'src-protocol' => <<"amqp10">>,
                 'src-uri' => <<"amqp://localhost:", Port/binary>>,
-                'src-address'  => <<"test">>,
+                'src-address'  => <<"/queues/test">>,
                 'dest-protocol' => <<"amqp10">>,
                 'dest-uri' => <<"amqp://localhost:", Port/binary>>,
-                'dest-address' => <<"test2">>,
+                'dest-address' => <<"/queues/test2">>,
                 'dest-properties' => #{},
                 'dest-application-properties' => #{},
                 'dest-message-annotations' => #{}
             }
         }, ?CREATED).
+
+declare_queues(Config, Queues) ->
+    _ = [http_put(Config, io_lib:format("/queues/%2F/~ts", [Q]),
+                  #{durable => true}, {group, '2xx'}) || Q <- Queues],
+    ok.
 
 declare_amqp091_shovel(Config, Name) ->
     Port = integer_to_binary(
@@ -554,6 +582,21 @@ await_shovel_removed(Config, Name, Timeout) ->
     await_condition(
         fun() ->
             not does_shovel_exist(Config, Name)
+        end, Timeout).
+
+await_shovel_running(Config, Name) ->
+    await_shovel_running(Config, Name, 10_000).
+
+await_shovel_running(Config, Name, Timeout) ->
+    await_condition(
+        fun() ->
+            case lookup_shovel_status(Config, Name) of
+                not_found -> false;
+                Props     -> case proplists:get_value(info, Props) of
+                                 {running, _} -> true;
+                                 _            -> false
+                             end
+            end
         end, Timeout).
 
 lookup_shovel_status(Config, Name) ->

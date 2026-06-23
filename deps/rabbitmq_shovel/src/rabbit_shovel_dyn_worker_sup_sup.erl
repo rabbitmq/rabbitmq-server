@@ -91,7 +91,11 @@ stop_child({VHost, ShovelName} = Name) ->
                     TmpExpId = temp_experimental_id(Name),
                     _ = stop_and_delete_child(TmpExpId),
                     ok
-            end
+            end,
+            %% A worker killed before it finishes starting up does not run
+            %% `terminate/2`, the only place that removes its status entry.
+            %% Remove it here so a deleted Shovel leaves no stale status behind.
+            ok = rabbit_shovel_status:remove(Name)
     end,
     rabbit_shovel_locks:unlock(LockId),
     ok.
