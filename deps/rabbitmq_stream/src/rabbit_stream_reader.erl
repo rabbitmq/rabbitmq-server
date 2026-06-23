@@ -2543,13 +2543,13 @@ handle_frame_post_auth(Transport,
                     {ok, no_route} ->
                         {?RESPONSE_CODE_OK, []};
                     {ok, Strs} ->
-                        AllReadable =
+                        AllWritable =
                             lists:all(fun(Stream) ->
                                               check_write_permitted(
                                                 stream_r(Stream, Connection),
                                                 User) =:= ok
                                       end, Strs),
-                        case AllReadable of
+                        case AllWritable of
                             true ->
                                 {?RESPONSE_CODE_OK, Strs};
                             false ->
@@ -2586,13 +2586,13 @@ handle_frame_post_auth(Transport,
             ok ->
                 case rabbit_stream_manager:partitions(VirtualHost, SuperStream) of
                     {ok, Streams} ->
-                        AllReadable =
+                        AllAccessible =
                             lists:all(fun(Stream) ->
                                               check_read_or_write_permitted(
                                                 stream_r(Stream, Connection),
                                                 User) =:= ok
                                       end, Streams),
-                        case AllReadable of
+                        case AllAccessible of
                             true ->
                                 {?RESPONSE_CODE_OK, Streams};
                             false ->
