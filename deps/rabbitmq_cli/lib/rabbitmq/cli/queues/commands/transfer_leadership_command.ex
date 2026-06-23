@@ -25,6 +25,12 @@ defmodule RabbitMQ.CLI.Queues.Commands.TransferLeadershipCommand do
       {:error, :not_found} ->
         {:error, {:not_found, :queue, vhost, name}}
 
+      {:error, {:unsupported, _}} ->
+        {:error, "Cannot transfer leadership of a non-quorum queue"}
+
+      {:error, :already_leader} ->
+        {:error, "The target node is already the leader of this queue"}
+
       {:ok, new_leader} ->
         {:ok, new_leader}
 
