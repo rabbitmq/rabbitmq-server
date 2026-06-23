@@ -89,7 +89,8 @@
 -define(SAC_MOD, rabbit_stream_sac_coordinator).
 
 -import(rabbit_stream_utils, [check_write_permitted/2,
-                              check_read_permitted/3]).
+                              check_read_permitted/3,
+                              check_read_or_write_permitted/2]).
 
 %% client API
 -export([start_link/4,
@@ -2462,10 +2463,9 @@ handle_frame_post_auth(Transport,
                        {request, CorrelationId, {metadata, Streams}}) ->
     {AuthorizedStreams, UnauthorizedStreams} =
         lists:partition(fun(Stream) ->
-                                rabbit_stream_utils:check_read_permitted(
+                                check_read_or_write_permitted(
                                   stream_r(Stream, Connection),
-                                  User,
-                                  #{}
+                                  User
                                  ) =:= ok
                         end,
                         Streams),
@@ -2586,7 +2586,7 @@ handle_frame_post_auth(Transport,
                                     kind = exchange,
                                     virtual_host = VirtualHost},
     {ResponseCode, Streams} =
-        case rabbit_stream_utils:check_read_permitted(SuperStreamExchange, User, #{}) of
+        case check_write_permitted(SuperStreamExchange, User) of
             error ->
                 increase_protocol_counter(?ACCESS_REFUSED),
                 {?RESPONSE_CODE_ACCESS_REFUSED, []};
@@ -2597,10 +2597,9 @@ handle_frame_post_auth(Transport,
                     {ok, Strs} ->
                         AllReadable =
                             lists:all(fun(Stream) ->
-                                         rabbit_stream_utils:check_read_permitted(
-                                             stream_r(Stream, Connection),
-                                             User,
-                                             #{}) =:= ok
+                                              check_write_permitted(
+                                                stream_r(Stream, Connection),
+                                                User) =:= ok
                                       end, Strs),
                         case AllReadable of
                             true ->
@@ -2632,7 +2631,7 @@ handle_frame_post_auth(Transport,
                                     kind = exchange,
                                     virtual_host = VirtualHost},
     {ResponseCode, Partitions} =
-        case rabbit_stream_utils:check_read_permitted(SuperStreamExchange, User, #{}) of
+        case check_read_or_write_permitted(SuperStreamExchange, User) of
             error ->
                 increase_protocol_counter(?ACCESS_REFUSED),
                 {?RESPONSE_CODE_ACCESS_REFUSED, []};
@@ -2641,10 +2640,9 @@ handle_frame_post_auth(Transport,
                     {ok, Streams} ->
                         AllReadable =
                             lists:all(fun(Stream) ->
-                                         rabbit_stream_utils:check_read_permitted(
-                                             stream_r(Stream, Connection),
-                                             User,
-                                             #{}) =:= ok
+                                              check_read_or_write_permitted(
+                                                stream_r(Stream, Connection),
+                                                User) =:= ok
                                       end, Streams),
                         case AllReadable of
                             true ->
