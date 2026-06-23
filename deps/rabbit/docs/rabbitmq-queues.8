@@ -163,6 +163,14 @@ Example:
 .Sp
 .Dl rabbitmq-queues delete_member --vhost Qo a-vhost Qc Qo a-queue Qc Qo rabbit@decomissioned-node Qc
 .\" ------------------------------------
+.It Cm transfer_leadership Ar queue Ar node Fl -vhost Ar virtual-host
+.Pp
+Transfers the leadership of a quorum queue to the given node.
+.Pp
+Example:
+.Sp
+.Dl rabbitmq-queues transfer_leadership --vhost Qo a-vhost Qc Qo a-queue Qc Qo rabbit@new-leader-node Qc
+.\" ------------------------------------
 .El
 .Ss Queues
 .Bl -tag -width Ds

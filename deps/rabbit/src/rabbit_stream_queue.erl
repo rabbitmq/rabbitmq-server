@@ -33,6 +33,7 @@
          queue_length/1,
          get_replicas/1,
          transfer_leadership/2,
+         transfer_leadership/3,
          init/1,
          close/1,
          state_info/1,
@@ -887,6 +888,28 @@ transfer_leadership(Q, Destination) ->
         {ok, NewNode} -> {migrated, NewNode};
         {error, coordinator_unavailable} -> {not_migrated, timeout};
         {error, Reason} -> {not_migrated, Reason}
+    end.
+
+-spec transfer_leadership(rabbit_types:vhost(), rabbit_misc:resource_name(), node()) ->
+    {ok, node()} | {error, term()}.
+transfer_leadership(VHost, Name, Destination) ->
+    QName = queue_resource(VHost, Name),
+    case rabbit_amqqueue:lookup(QName) of
+        {ok, Q} when ?amqqueue_is_classic(Q) ->
+            {error, classic_queue_not_supported};
+        {ok, Q} when ?amqqueue_is_quorum(Q) ->
+            {error, quorum_queue_not_supported};
+        {ok, Q} when ?amqqueue_is_stream(Q) ->
+            case transfer_leadership(Q, Destination) of
+                {migrated, NewNode} ->
+                    {ok, NewNode};
+                {not_migrated, Reason} ->
+                    {error, Reason}
+            end;
+        {ok, Q} ->
+            {error, {not_supported_for_type, amqqueue:get_type(Q)}};
+        E ->
+            E
     end.
 
 -spec status(rabbit_types:vhost(), Name :: rabbit_misc:resource_name()) ->

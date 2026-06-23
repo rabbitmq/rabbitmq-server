@@ -51,7 +51,7 @@
 -export([shrink_all/1,
          grow/4,
          grow/5]).
--export([transfer_leadership/2, get_replicas/1, queue_length/1]).
+-export([transfer_leadership/2, transfer_leadership/3, get_replicas/1, queue_length/1]).
 -export([list_with_minimum_quorum/0,
          list_with_local_promotable/0,
          list_with_local_promotable_for_cli/0,
@@ -1625,6 +1625,24 @@ transfer_leadership(Q, Destination) ->
         {timeout, _} ->
             %% TODO should we retry once?
             {not_migrated, timeout}
+    end.
+
+-spec transfer_leadership(rabbit_types:vhost(), rabbit_misc:resource_name(), node()) ->
+    {ok, node()} | {error, term()}.
+transfer_leadership(VHost, Name, Destination) ->
+    QName = rabbit_misc:queue_resource(VHost, Name),
+    case rabbit_amqqueue:lookup(QName) of
+        {ok, Q} when ?amqqueue_is_quorum(Q) ->
+            case transfer_leadership(Q, Destination) of
+                {migrated, NewNode} ->
+                    {ok, NewNode};
+                {not_migrated, Reason} ->
+                    {error, Reason}
+            end;
+        {ok, Q} ->
+            {error, {unsupported, amqqueue:get_type(Q)}};
+        {error, not_found} = Err ->
+            Err
     end.
 
 queue_length(Q) ->
