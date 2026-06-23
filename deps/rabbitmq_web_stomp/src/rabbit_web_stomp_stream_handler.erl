@@ -26,7 +26,7 @@ data(StreamID, IsFin, Data, State = #state{next = Next0}) ->
     {Commands, State#state{next = Next}}.
 
 info(StreamID, {switch_protocol, Headers, _, InitialState}, State) ->
-    do_info(StreamID, {switch_protocol, Headers, rabbit_web_stomp_handler, InitialState}, State);
+    do_info(StreamID, {switch_protocol, inject_response_headers(Headers), rabbit_web_stomp_handler, InitialState}, State);
 info(StreamID, Info, State) ->
     do_info(StreamID, Info, State).
 
@@ -39,3 +39,9 @@ terminate(StreamID, Reason, #state{next = Next}) ->
 
 early_error(StreamID, Reason, PartialReq, Resp, Opts) ->
     cowboy_stream:early_error(StreamID, Reason, PartialReq, Resp, Opts).
+
+inject_response_headers(Headers) ->
+    case application:get_env(rabbitmq_web_stomp, strict_transport_security) of
+        undefined   -> Headers;
+        {ok, Value} -> maps:put(<<"strict-transport-security">>, rabbit_data_coercion:to_binary(Value), Headers)
+    end.
