@@ -25,8 +25,7 @@ hash(HashingMod, Cleartext) ->
     <<SaltBin/binary, Hash/binary>>.
 
 generate_salt() ->
-    Salt = rand:uniform(16#ffffffff),
-    <<Salt:32>>.
+    crypto:strong_rand_bytes(4).
 
 salted_hash(Salt, Cleartext) ->
     salted_hash(hashing_mod(), Salt, Cleartext).
