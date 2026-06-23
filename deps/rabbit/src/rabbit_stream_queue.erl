@@ -900,7 +900,12 @@ transfer_leadership(VHost, Name, Destination) ->
         {ok, Q} when ?amqqueue_is_quorum(Q) ->
             {error, quorum_queue_not_supported};
         {ok, Q} when ?amqqueue_is_stream(Q) ->
-            transfer_leadership(Q, Destination);
+            case transfer_leadership(Q, Destination) of
+                {migrated, NewNode} ->
+                    {ok, NewNode};
+                {not_migrated, Reason} ->
+                    {error, Reason}
+            end;
         {ok, Q} ->
             {error, {not_supported_for_type, amqqueue:get_type(Q)}};
         E ->
