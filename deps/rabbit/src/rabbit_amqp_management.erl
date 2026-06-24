@@ -13,10 +13,17 @@
         [queue_resource/2,
          exchange_resource/2]).
 
+-ifdef(TEST).
+-export([check_routing_arg/5,
+         check_alternate_exchange/4,
+         check_dead_letter_exchange/4]).
+-endif.
+
 -type permission_caches() :: {rabbit_amqp_session:permission_cache(),
                               rabbit_amqp_session:topic_permission_cache()}.
 
 -define(DEAD_LETTER_EXCHANGE_KEY, <<"x-dead-letter-exchange">>).
+-define(ALTERNATE_EXCHANGE_KEY, <<"alternate-exchange">>).
 
 -spec handle_request(binary(),
                      rabbit_types:vhost(),
@@ -213,18 +220,20 @@ handle_http_req(<<"PUT">>,
                 end,
     XName = exchange_resource(Vhost, XNameBin),
     ok = prohibit_default_exchange(XName),
-    PermCache = check_resource_access(XName, configure, User, PermCache0),
-    X = case rabbit_exchange:lookup(XName) of
+    PermCache1 = check_resource_access(XName, configure, User, PermCache0),
+    {X, PermCache} =
+        case rabbit_exchange:lookup(XName) of
             {ok, FoundX} ->
-                FoundX;
+                {FoundX, PermCache1};
             {error, not_found} ->
                 ok = prohibit_cr_lf(XNameBin),
                 ok = prohibit_reserved_amq(XName),
+                PermCache2 = check_alternate_exchange(XName, XArgs, User, PermCache1),
                 case rabbit_exchange:declare(
                        XName, XTypeAtom, Durable, AutoDelete,
                        Internal, XArgs, Username) of
                     {ok, DeclaredX} ->
-                        DeclaredX;
+                        {DeclaredX, PermCache2};
                     {error, timeout} ->
                         throw(
                           <<"503">>,
@@ -730,17 +739,24 @@ prohibit_reserved_amq(Res = #resource{name = <<"amq.", _/binary>>}) ->
 prohibit_reserved_amq(#resource{}) ->
     ok.
 
-check_dead_letter_exchange(QName = #resource{virtual_host = Vhost}, QArgs, User, PermCache0) ->
-    case rabbit_misc:r_arg(Vhost, exchange, QArgs, ?DEAD_LETTER_EXCHANGE_KEY) of
+check_dead_letter_exchange(QName, QArgs, User, PermCache) ->
+    check_routing_arg(QName, QArgs, ?DEAD_LETTER_EXCHANGE_KEY, User, PermCache).
+
+check_alternate_exchange(XName, XArgs, User, PermCache) ->
+    check_routing_arg(XName, XArgs, ?ALTERNATE_EXCHANGE_KEY, User, PermCache).
+
+%% Read on the source and write on the target.
+check_routing_arg(Source = #resource{virtual_host = Vhost}, Args, ArgKey, User, PermCache0) ->
+    case rabbit_misc:r_arg(Vhost, exchange, Args, ArgKey) of
         undefined ->
             PermCache0;
         {error, {invalid_type, Type}} ->
             throw(<<"400">>,
                   "invalid type '~ts' for arg '~s'",
-                  [Type, ?DEAD_LETTER_EXCHANGE_KEY]);
-        DLX ->
-            PermCache = check_resource_access(QName, read, User, PermCache0),
-            check_resource_access(DLX, write, User, PermCache)
+                  [Type, ArgKey]);
+        TargetX ->
+            PermCache = check_resource_access(Source, read, User, PermCache0),
+            check_resource_access(TargetX, write, User, PermCache)
     end.
 
 -spec absent(amqqueue:amqqueue(),
