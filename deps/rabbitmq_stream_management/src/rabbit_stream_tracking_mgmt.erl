@@ -53,7 +53,19 @@ resource_exists(ReqData, Context) ->
      end,
      ReqData, Context}.
 
-to_json(ReqData, Context) ->
+to_json(ReqData, #context{user = User} = Context) ->
+    VHost = rabbit_mgmt_util:vhost(ReqData),
+    Stream = rabbit_mgmt_util:id(queue, ReqData),
+    Resource = rabbit_misc:r(VHost, queue, Stream),
+    case rabbit_stream_utils:check_read_permitted(Resource, User, #{}) of
+        ok ->
+            do_to_json(ReqData, Context);
+        _ ->
+            rabbit_web_dispatch_access_control:not_authorised(
+              <<"Access refused.">>, ReqData, Context)
+    end.
+
+do_to_json(ReqData, Context) ->
     case rabbit_mgmt_util:disable_stats(ReqData) of
         false ->
             VHost = rabbit_mgmt_util:vhost(ReqData),
