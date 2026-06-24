@@ -16,7 +16,8 @@
 -ifdef(TEST).
 -export([check_routing_arg/5,
          check_alternate_exchange/4,
-         check_dead_letter_exchange/4]).
+         check_dead_letter_exchange/4,
+         handle_http_req/8]).
 -endif.
 
 -type permission_caches() :: {rabbit_amqp_session:permission_cache(),
@@ -383,9 +384,9 @@ handle_http_req(<<"GET">>,
                              <<"key">> := Key},
                 null,
                 Vhost,
-                _User,
+                User,
                 _ConnPid,
-                PermCaches) ->
+                PermCaches0) ->
     {DstKind,
      DstNameBin} = case QueryMap of
                        #{<<"dste">> := DstX} ->
@@ -395,10 +396,11 @@ handle_http_req(<<"GET">>,
                        _ ->
                            throw(<<"400">>,
                                  "missing 'dste' or 'dstq' in query: ~tp",
-                                 QueryMap)
+                                 [QueryMap])
                    end,
     SrcXName = exchange_resource(Vhost, SrcXNameBin),
     DstName = rabbit_misc:r(Vhost, DstKind, DstNameBin),
+    PermCaches = binding_checks(SrcXName, DstName, Key, User, PermCaches0),
     Bindings0 = rabbit_binding:list_for_source_and_destination(SrcXName, DstName),
     Bindings = [B || B = #binding{key = K} <- Bindings0, K =:= Key],
     RespPayload = encode_bindings(Bindings),
