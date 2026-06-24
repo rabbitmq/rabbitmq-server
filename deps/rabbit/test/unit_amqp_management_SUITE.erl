@@ -4,8 +4,9 @@
 %%
 %% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term "Broadcom" refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 
-%% Unit and property tests for rabbit_amqp_management. rabbit_access_control is
-%% mocked so that argument permission checks can be exercised without a broker.
+%% Unit and property tests for rabbit_amqp_management. rabbit_access_control,
+%% rabbit_exchange and rabbit_binding are mocked so that the request handlers
+%% can be exercised without a broker.
 -module(unit_amqp_management_SUITE).
 
 -compile([export_all, nowarn_export_all]).
@@ -27,14 +28,30 @@ all() ->
      source_read_denied_skips_target_write,
      target_write_denied,
      wrapper_uses_matching_argument_key,
-     prop_read_then_write
+     prop_read_then_write,
+
+     get_bindings_missing_destination_rejected,
+     get_bindings_both_permissions_granted,
+     get_bindings_exchange_destination,
+     get_bindings_destination_write_denied,
+     get_bindings_source_read_denied,
+     get_bindings_destination_write_checked_first
     ].
 
 init_per_testcase(_Testcase, Config) ->
     ok = meck:new(rabbit_access_control, [no_link]),
+    ok = meck:new(rabbit_exchange, [no_link, passthrough]),
+    ok = meck:new(rabbit_binding, [no_link]),
+    %% Defaults for the GET /bindings handler: a non-topic source skips the topic
+    %% check, and no bindings are listed.
+    ok = meck:expect(rabbit_exchange, lookup, fun(_) -> {error, not_found} end),
+    ok = meck:expect(rabbit_binding, list_for_source_and_destination,
+                     fun(_, _) -> [] end),
     Config.
 
 end_per_testcase(_Testcase, _Config) ->
+    ok = meck:unload(rabbit_binding),
+    ok = meck:unload(rabbit_exchange),
     ok = meck:unload(rabbit_access_control).
 
 absent_argument_skips_checks(_Config) ->
@@ -100,6 +117,66 @@ wrapper_uses_matching_argument_key(_Config) ->
     ?assertEqual(
        [], rabbit_amqp_management:check_dead_letter_exchange(Source, AeArg, user(), [])),
     ?assertEqual(0, meck:num_calls(rabbit_access_control, check_resource_access, ['_', '_', '_', '_'])).
+
+get_bindings_missing_destination_rejected(_Config) ->
+    ok = mock_permitted([]),
+    ?assertThrow(
+       {rabbit_amqp_management, <<"400">>, _},
+       get_bindings(<<"src.x">>, undefined, <<"key">>)),
+    ?assertEqual(0, meck:num_calls(rabbit_access_control, check_resource_access, ['_', '_', '_', '_'])).
+
+get_bindings_both_permissions_granted(_Config) ->
+    Source = source(<<"src.x">>),
+    Destination = destination(<<"dst.q">>),
+    ok = mock_permitted([{Destination, write}, {Source, read}]),
+    ok = meck:expect(rabbit_binding, list_for_source_and_destination,
+                     fun(_, _) -> [binding(<<"src.x">>, <<"dst.q">>, <<"key">>)] end),
+    {StatusCode, {list, [{map, _}]}, _Caches} =
+        get_bindings(<<"src.x">>, {queue, <<"dst.q">>}, <<"key">>),
+    ?assertEqual(<<"200">>, StatusCode),
+    ?assertEqual(1, num_calls(Destination, write)),
+    ?assertEqual(1, num_calls(Source, read)).
+
+get_bindings_exchange_destination(_Config) ->
+    Source = source(<<"src.x">>),
+    Destination = destination(exchange, <<"dst.x">>),
+    ok = mock_permitted([{Destination, write}, {Source, read}]),
+    {StatusCode, {list, []}, _Caches} =
+        get_bindings(<<"src.x">>, {exchange, <<"dst.x">>}, <<"key">>),
+    ?assertEqual(<<"200">>, StatusCode),
+    ?assertEqual(1, num_calls(Destination, write)),
+    ?assertEqual(1, num_calls(Source, read)).
+
+get_bindings_destination_write_denied(_Config) ->
+    Source = source(<<"src.x">>),
+    Destination = destination(<<"dst.q">>),
+    ok = mock_permitted([{Source, read}]),
+    ?assertExit(
+       #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS},
+       get_bindings(<<"src.x">>, {queue, <<"dst.q">>}, <<"key">>)),
+    %% The destination write check fails first, so the source is never read.
+    ?assertEqual(1, num_calls(Destination, write)),
+    ?assertEqual(0, num_calls(Source, read)).
+
+get_bindings_source_read_denied(_Config) ->
+    Source = source(<<"src.x">>),
+    Destination = destination(<<"dst.q">>),
+    ok = mock_permitted([{Destination, write}]),
+    ?assertExit(
+       #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS},
+       get_bindings(<<"src.x">>, {queue, <<"dst.q">>}, <<"key">>)),
+    ?assertEqual(1, num_calls(Destination, write)),
+    ?assertEqual(1, num_calls(Source, read)).
+
+get_bindings_destination_write_checked_first(_Config) ->
+    Source = source(<<"src.x">>),
+    Destination = destination(<<"dst.q">>),
+    ok = mock_permitted([]),
+    ?assertExit(
+       #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS},
+       get_bindings(<<"src.x">>, {queue, <<"dst.q">>}, <<"key">>)),
+    ?assertEqual(1, num_calls(Destination, write)),
+    ?assertEqual(0, num_calls(Source, read)).
 
 %%%===================================================================
 %%% Property
@@ -174,11 +251,34 @@ is_unauthorized({'EXIT', #'v1_0.error'{
 is_unauthorized(_) ->
     false.
 
+get_bindings(SrcName, Destination, Key) ->
+    QueryMap0 = #{<<"src">> => SrcName, <<"key">> => Key},
+    QueryMap = case Destination of
+                   {queue, Q} -> QueryMap0#{<<"dstq">> => Q};
+                   {exchange, X} -> QueryMap0#{<<"dste">> => X};
+                   undefined -> QueryMap0
+               end,
+    rabbit_amqp_management:handle_http_req(
+      <<"GET">>, [<<"bindings">>], QueryMap, null,
+      ?VHOST, user(), self(), {[], []}).
+
 source(Name) ->
     #resource{virtual_host = ?VHOST, kind = exchange, name = Name}.
 
 target(Name) ->
     #resource{virtual_host = ?VHOST, kind = exchange, name = Name}.
+
+destination(Name) ->
+    destination(queue, Name).
+
+destination(Kind, Name) ->
+    #resource{virtual_host = ?VHOST, kind = Kind, name = Name}.
+
+binding(SrcName, DstName, Key) ->
+    #binding{source = source(SrcName),
+             key = Key,
+             destination = destination(DstName),
+             args = []}.
 
 user() ->
     #user{username = <<"test user">>}.
