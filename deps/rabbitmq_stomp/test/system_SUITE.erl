@@ -28,6 +28,9 @@ groups() ->
     Tests = [
         publish_no_dest_error,
         publish_unauthorized_error,
+        declare_with_authorised_dlx,
+        declare_with_restricted_dlx,
+        declare_without_dlx,
         subscribe_error,
         subscribe,
         subscribe_with_x_priority,
@@ -109,6 +112,21 @@ init_per_testcase0(publish_unauthorized_error, Config) ->
     StompPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stomp),
     {ok, ClientFoo} = rabbit_stomp_client:connect(Version, "user", "pass", StompPort),
     rabbit_ct_helpers:set_config(Config, [{client_foo, ClientFoo}]);
+init_per_testcase0(TestCase, Config)
+  when TestCase =:= declare_with_authorised_dlx;
+       TestCase =:= declare_with_restricted_dlx;
+       TestCase =:= declare_without_dlx ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_auth_backend_internal, add_user,
+                                 [<<"stompuser">>, <<"pass">>, <<"acting-user">>]),
+    %% configure, write and read confined to the stomp.* namespace
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_auth_backend_internal, set_permissions,
+                                 [<<"stompuser">>, <<"/">>,
+                                  <<"^stomp\\.">>, <<"^stomp\\.">>, <<"^stomp\\.">>,
+                                  <<"acting-user">>]),
+    Version = ?config(version, Config),
+    StompPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stomp),
+    {ok, ClientFoo} = rabbit_stomp_client:connect(Version, "stompuser", "pass", StompPort),
+    rabbit_ct_helpers:set_config(Config, [{client_foo, ClientFoo}]);
 init_per_testcase0(_, Config) ->
     Config.
 
@@ -117,6 +135,15 @@ end_per_testcase0(publish_unauthorized_error, Config) ->
     rabbit_stomp_client:disconnect(ClientFoo),
     rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_auth_backend_internal, delete_user,
                                  [<<"user">>, <<"acting-user">>]),
+    Config;
+end_per_testcase0(TestCase, Config)
+  when TestCase =:= declare_with_authorised_dlx;
+       TestCase =:= declare_with_restricted_dlx;
+       TestCase =:= declare_without_dlx ->
+    ClientFoo = ?config(client_foo, Config),
+    rabbit_stomp_client:disconnect(ClientFoo),
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_auth_backend_internal, delete_user,
+                                 [<<"stompuser">>, <<"acting-user">>]),
     Config;
 end_per_testcase0(_, Config) ->
     Config.
@@ -197,6 +224,37 @@ publish_unauthorized_error(Config) ->
     {ok, _Client1, Hdrs, _} = stomp_receive(ClientFoo, 'ERROR'),
     <<"access_refused">> = maps:get(<<"message">>, Hdrs),
     ok.
+
+declare_with_authorised_dlx(Config) ->
+    ClientFoo = ?config(client_foo, Config),
+    subscribe_with_dlx(ClientFoo, <<"/queue/stomp.authorised">>, <<"stomp.target">>),
+    {ok, _Client1, _Hdrs, _} = stomp_receive(ClientFoo, 'RECEIPT'),
+    ok.
+
+declare_with_restricted_dlx(Config) ->
+    ClientFoo = ?config(client_foo, Config),
+    subscribe_with_dlx(ClientFoo, <<"/queue/stomp.restricted">>, <<"restricted.x">>),
+    {ok, _Client1, Hdrs, _} = stomp_receive(ClientFoo, 'ERROR'),
+    <<"access_refused">> = maps:get(<<"message">>, Hdrs),
+    ok.
+
+declare_without_dlx(Config) ->
+    ClientFoo = ?config(client_foo, Config),
+    rabbit_stomp_client:send(
+      ClientFoo, 'SUBSCRIBE',
+      [{<<"destination">>, <<"/queue/stomp.plain">>},
+       {<<"id">>, <<"s0">>},
+       {<<"receipt">>, <<"r0">>}]),
+    {ok, _Client1, _Hdrs, _} = stomp_receive(ClientFoo, 'RECEIPT'),
+    ok.
+
+subscribe_with_dlx(Client, Destination, DLX) ->
+    rabbit_stomp_client:send(
+      Client, 'SUBSCRIBE',
+      [{<<"destination">>, Destination},
+       {<<"id">>, <<"s0">>},
+       {<<"receipt">>, <<"r0">>},
+       {<<"x-dead-letter-exchange">>, DLX}]).
 
 subscribe_error(Config) ->
     Client = ?config(stomp_client, Config),
