@@ -19,6 +19,10 @@
          handle_down/2,
          handle_queue_event/2]).
 
+-ifdef(TEST).
+-export([check_dead_letter_exchange_access/4]).
+-endif.
+
 -include_lib("kernel/include/logger.hrl").
 -include("rabbit_stomp_frame.hrl").
 -include("rabbit_stomp.hrl").
@@ -1664,6 +1668,21 @@ ensure_binding(QName, {Exchange, RoutingKey}, _State = #state{cfg = #cfg{
             ok
     end.
 
+check_dead_letter_exchange_access(QName = #resource{virtual_host = VHost},
+                                  Args, User, AuthzCtx) ->
+    case rabbit_misc:r_arg(VHost, exchange, Args, ?HEADER_X_DEAD_LETTER_EXCHANGE) of
+        undefined ->
+            ok;
+        {error, {invalid_type, Type}} ->
+            rabbit_misc:protocol_error(
+              precondition_failed,
+              "invalid type '~ts' for arg '~ts'",
+              [Type, ?HEADER_X_DEAD_LETTER_EXCHANGE]);
+        DLX ->
+            ok = check_resource_access(User, QName, read, AuthzCtx),
+            ok = check_resource_access(User, DLX, write, AuthzCtx)
+    end.
+
 check_resource_access(User, Resource, Perm, Context) ->
     V = {Resource, Context, Perm},
     Cache = case get(permission_cache) of
@@ -1939,6 +1958,8 @@ create_queue(Amqqueue, _State = #state{authz_ctx = AuthzCtx,
 
     %% configure access to queue required for queue.declare
     ok = check_resource_access(User, QName, configure, AuthzCtx),
+    ok = check_dead_letter_exchange_access(
+           QName, amqqueue:get_arguments(Amqqueue), User, AuthzCtx),
 
     case rabbit_vhost_limit:is_over_queue_limit(VHost) of
         false ->
