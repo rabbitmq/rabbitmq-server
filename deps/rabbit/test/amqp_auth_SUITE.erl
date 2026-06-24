@@ -82,6 +82,9 @@ groups() ->
 
        %% AMQP Management operations against HTTP API v2
        declare_exchange,
+       declare_exchange_alternate_exchange_allowed,
+       declare_exchange_alternate_exchange_read,
+       declare_exchange_alternate_exchange_write,
        delete_exchange,
        declare_queue,
        declare_queue_dlx_queue,
@@ -897,6 +900,45 @@ declare_exchange(Config) ->
                       "' in vhost 'test vhost' refused for user 'test user'">>),
     ?assertEqual({error, {session_ended, ExpectedErr}},
                  rabbitmq_amqp_client:declare_exchange(LinkPair, XName, #{})),
+    ok = close_connection_sync(Conn).
+
+declare_exchange_alternate_exchange_allowed(Config) ->
+    {Conn, _, LinkPair} = init_pair(Config),
+    XName = <<"x.1">>,
+    AeName = <<"ae.1">>,
+    XProps = #{arguments => #{<<"alternate-exchange">> => {utf8, AeName}}},
+    %% configure and read on the declared exchange, write on the alternate exchange
+    ok = set_permissions(Config, XName, AeName, XName),
+    ok = rabbitmq_amqp_client:declare_exchange(LinkPair, XName, XProps),
+    ok = rabbitmq_amqp_client:delete_exchange(LinkPair, XName),
+    ok = close_connection_sync(Conn).
+
+declare_exchange_alternate_exchange_read(Config) ->
+    {Conn, _, LinkPair} = init_pair(Config),
+    XName = <<"x.1">>,
+    AeName = <<"ae.1">>,
+    XProps = #{arguments => #{<<"alternate-exchange">> => {utf8, AeName}}},
+    %% missing read permission to the declared exchange
+    ok = set_permissions(Config, XName, AeName, <<>>),
+    ExpectedErr = error_unauthorized(
+                    <<"read access to exchange '", XName/binary,
+                      "' in vhost 'test vhost' refused for user 'test user'">>),
+    ?assertEqual({error, {session_ended, ExpectedErr}},
+                 rabbitmq_amqp_client:declare_exchange(LinkPair, XName, XProps)),
+    ok = close_connection_sync(Conn).
+
+declare_exchange_alternate_exchange_write(Config) ->
+    {Conn, _, LinkPair} = init_pair(Config),
+    XName = <<"x.1">>,
+    AeName = <<"ae.1">>,
+    XProps = #{arguments => #{<<"alternate-exchange">> => {utf8, AeName}}},
+    %% missing write permission to the alternate exchange
+    ok = set_permissions(Config, XName, <<>>, XName),
+    ExpectedErr = error_unauthorized(
+                    <<"write access to exchange '", AeName/binary,
+                      "' in vhost 'test vhost' refused for user 'test user'">>),
+    ?assertEqual({error, {session_ended, ExpectedErr}},
+                 rabbitmq_amqp_client:declare_exchange(LinkPair, XName, XProps)),
     ok = close_connection_sync(Conn).
 
 delete_exchange(Config) ->
