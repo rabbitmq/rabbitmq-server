@@ -89,27 +89,33 @@ defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
         {false, false} -> :normal
       end
 
-    plugins =
-      Enum.filter(
-        all,
-        fn plugin ->
-          name = PluginHelpers.plugin_name(plugin)
+    case status do
+      :node_down ->
+        %{status: :node_down, format: format}
 
-          :rabbit_plugins.is_strictly_plugin(plugin) and
-            Regex.match?(re, to_string(name)) and
-            cond do
-              only_enabled -> Enum.member?(enabled, name)
-              all_enabled -> Enum.member?(enabled ++ enabled_implicitly, name)
-              true -> true
+      :running ->
+        plugins =
+          Enum.filter(
+            all,
+            fn plugin ->
+              name = PluginHelpers.plugin_name(plugin)
+
+              :rabbit_plugins.is_strictly_plugin(plugin) and
+                Regex.match?(re, to_string(name)) and
+                cond do
+                  only_enabled -> Enum.member?(enabled, name)
+                  all_enabled -> Enum.member?(enabled ++ enabled_implicitly, name)
+                  true -> true
+                end
             end
-        end
-      )
+          )
 
-    %{
-      status: status,
-      format: format,
-      plugins: format_plugins(plugins, format, enabled, enabled_implicitly, running)
-    }
+        %{
+          status: :running,
+          format: format,
+          plugins: format_plugins(plugins, format, enabled, enabled_implicitly, running)
+        }
+    end
   end
 
   def banner([pattern], _), do: "Listing plugins with pattern \"#{pattern}\" ..."
