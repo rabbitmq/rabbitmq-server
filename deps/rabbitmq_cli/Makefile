@@ -114,18 +114,22 @@ $(LINKED_ESCRIPTS): $(ESCRIPT_FILE)
 	$(verbose) rm -f "$@"
 	$(gen_verbose) $(call link_escript,$<,$@)
 
+# Must match the paths used by start-background-broker and stop-node, otherwise
+# the node cannot be stopped and leaks across runs.
+RABBITMQ_CLI_TEST_TMPDIR = $(PWD)/deps/rabbitmq_cli/logs
+
 tests:: escript test-deps
 	$(verbose) $(MAKE) -C ../../ install-cli
-	$(verbose) rm -rf logs
+	$(verbose) rm -rf $(RABBITMQ_CLI_TEST_TMPDIR)
 	$(verbose) $(MAKE) -C ../../ start-background-broker \
 		ENABLED_PLUGINS="rabbitmq_federation rabbitmq_stomp rabbitmq_stream_management amqp_client" \
-                TMPDIR=$(PWD)/deps/rabbitmq_cli/logs \
+		TMPDIR=$(RABBITMQ_CLI_TEST_TMPDIR) \
 		$(if $(filter khepri,$(RABBITMQ_METADATA_STORE)),,RABBITMQ_FEATURE_FLAGS="-khepri_db"); \
 	$(gen_verbose) $(MIX_TEST) \
 		$(if $(RABBITMQ_METADATA_STORE),--exclude $(filter-out $(RABBITMQ_METADATA_STORE),khepri mnesia),) \
 		$(TEST_FILE); \
 		RES=$$?; \
-		$(MAKE) -C ../../ stop-node; \
+		$(MAKE) -C ../../ stop-node TMPDIR=$(RABBITMQ_CLI_TEST_TMPDIR); \
 		exit $$RES
 
 .PHONY: test
