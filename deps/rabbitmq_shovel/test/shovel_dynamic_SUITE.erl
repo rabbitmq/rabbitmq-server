@@ -323,7 +323,9 @@ simple_stream(Config, AckMode, NMsgs) ->
               amqp10_declare_queue(Sess, Src, #{<<"x-queue-type">> => {utf8, <<"stream">>}}),
               amqp10_declare_queue(Sess, Dest, #{<<"x-queue-type">> => {utf8, <<"stream">>}}),
               set_param(Config, Param,
-                        ?config(shovel_args, Config) ++ [{<<"ack-mode">>, AckMode}]),
+                        ?config(shovel_args, Config) ++
+                        [{<<"ack-mode">>, AckMode},
+                         {<<"src-consumer-args">>, #{<<"x-stream-offset">> => <<"first">>}}]),
               DestAddress = rabbitmq_amqp_address:queue(Dest),
               Receiver = amqp10_subscribe(Sess, DestAddress),
               SrcAddress = rabbitmq_amqp_address:queue(Src),
