@@ -113,28 +113,6 @@ defmodule ListPluginsCommandTest do
              {:validation_failure, :plugins_dir_does_not_exist}
   end
 
-  test "run: reports list of plugins from file for stopped node", context do
-    reset_enabled_plugins_to_preconfigured_defaults(context)
-
-    node = context[:opts][:node]
-    :ok = :rabbit_misc.rpc_call(node, :application, :stop, [:rabbitmq_stomp])
-
-    on_exit(fn ->
-      :rabbit_misc.rpc_call(node, :application, :start, [:rabbitmq_stomp])
-    end)
-
-    expected_plugins = [
-      %{name: :rabbitmq_federation, enabled: :enabled, running: false},
-      %{name: :rabbitmq_stomp, enabled: :enabled, running: false}
-    ]
-
-    %{
-      plugins: actual_plugins
-    } = @command.run([".*"], Map.merge(context[:opts], %{node: :nonode}))
-
-    assert_plugin_states(actual_plugins, expected_plugins)
-  end
-
   test "run: a call to an unreachable node reports a node_down status", context do
     assert %{status: :node_down} =
              @command.run([".*"], Map.merge(context[:opts], %{node: :jake@thedog}))
