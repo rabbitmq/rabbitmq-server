@@ -13,7 +13,8 @@
 -type enforcement_policy() :: refuse_connection | close_existing.
 
 -define(CAP_SOLE_CONN, <<"sole-connection-for-container">>).
--define(SOLE_CONN_ENFORCEMENT_POLICY, {symbol, <<"sole-connection-enforcement-policy">>}).
+-define(SOLE_CONN_ENFORCEMENT_POLICY_KEY, <<"sole-connection-enforcement-policy">>).
+-define(SOLE_CONN_ENFORCEMENT_POLICY, {symbol, ?SOLE_CONN_ENFORCEMENT_POLICY_KEY}).
 -define(SOLE_CONN_ENFORCEMENT_POLICY_REFUSE_CONN, {uint, 0}).
 -define(SOLE_CONN_ENFORCEMENT_POLICY_CLOSE_EXISTING, {uint, 1}).
 -define(SOLE_CONN_DETECTION_POLICY, {symbol, <<"sole-connection-detection-policy">>}).

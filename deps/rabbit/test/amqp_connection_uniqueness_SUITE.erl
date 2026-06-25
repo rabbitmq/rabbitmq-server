@@ -30,9 +30,10 @@ groups() ->
     [
      {cluster_size_1, [shuffle],
       [
-       no_sole_conn_capability,
-       sole_conn_no_conflict,
-       sole_conn_conflict_should_refuse_second_connection
+       no_sole_conn_capability_offered_if_not_desired,
+       refuse_connection_no_conflict,
+       refuse_connection_conflict_should_refuse_new_connection,
+       close_existing_conflict_should_close_existing_connection
       ]}
     ].
 
@@ -60,7 +61,7 @@ end_per_group(_, Config) ->
       rabbit_ct_client_helpers:teardown_steps() ++
       rabbit_ct_broker_helpers:teardown_steps()).
 
-no_sole_conn_capability(Config) ->
+no_sole_conn_capability_offered_if_not_desired(Config) ->
     OpnConf0 = connection_config(Config),
     OpnConf1 = OpnConf0#{
                  container_id => <<"my-container-1">>,
@@ -75,6 +76,7 @@ no_sole_conn_capability(Config) ->
                 ?assertNot(has_field(?SOLE_CONN_DETECTION_POLICY, Props1))
     after 30000 -> ct:fail(opened_timeout)
     end,
+    %% trying to connect with the same container ID
     {ok, Connection2} = amqp10_client:open_connection(OpnConf1),
     receive {amqp10_event, {connection, Connection2,
                             {opened, #'v1_0.open'{
@@ -88,7 +90,7 @@ no_sole_conn_capability(Config) ->
     ok = close_connection_sync(Connection2),
     ok = close_connection_sync(Connection1).
 
-sole_conn_no_conflict(Config) ->
+refuse_connection_no_conflict(Config) ->
     OpnConf0 = connection_config(Config),
     OpnConf1 = OpnConf0#{
                  container_id => <<"my-container-1">>,
@@ -120,7 +122,7 @@ sole_conn_no_conflict(Config) ->
     ok = close_connection_sync(Connection2),
     ok = close_connection_sync(Connection1).
 
-sole_conn_conflict_should_refuse_second_connection(Config) ->
+refuse_connection_conflict_should_refuse_new_connection(Config) ->
     OpnConf0 = connection_config(Config),
     OpnConf1 = OpnConf0#{
                  container_id => <<"my-container-1">>,
@@ -128,7 +130,7 @@ sole_conn_conflict_should_refuse_second_connection(Config) ->
                  notify_with_performative => true
                 },
     {ok, Connection1} = amqp10_client:open_connection(OpnConf1),
-   receive {amqp10_event, {connection, Connection1,
+    receive {amqp10_event, {connection, Connection1,
                             {opened, #'v1_0.open'{
                                         offered_capabilities = OffCaps1,
                                         properties = Props1}}}} ->
@@ -164,6 +166,52 @@ sole_conn_conflict_should_refuse_second_connection(Config) ->
     end,
 
     ok = close_connection_sync(Connection1).
+
+close_existing_conflict_should_close_existing_connection(Config) ->
+    OpnConf0 = connection_config(Config),
+    OpnConf1 = OpnConf0#{
+                 container_id => <<"my-container-1">>,
+                 desired_capabilities => [?CAP_SOLE_CONN],
+                 properties => #{?SOLE_CONN_ENFORCEMENT_POLICY_KEY =>
+                                 ?SOLE_CONN_ENFORCEMENT_POLICY_CLOSE_EXISTING},
+                 notify_with_performative => true
+                },
+    {ok, Connection1} = amqp10_client:open_connection(OpnConf1),
+   receive {amqp10_event, {connection, Connection1,
+                            {opened, #'v1_0.open'{
+                                        offered_capabilities = OffCaps1,
+                                        properties = Props1}}}} ->
+                assert_has_sole_cap(OffCaps1),
+                assert_has_weak_policy(Props1)
+    after 30000 -> ct:fail(opened_timeout)
+    end,
+    OpnConf2 = OpnConf1#{
+                 container_id => <<"my-container-1">>
+                },
+    {ok, Connection2} = amqp10_client:open_connection(OpnConf2),
+    receive {amqp10_event, {connection, Connection1,
+                            {closed, #'v1_0.close'{
+                                        error = #'v1_0.error'{
+                                                   condition = ?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
+                                                   description = {utf8, <<"Connection forced: \"sole conn\"">>}
+                                                  }}}}} ->
+                ok
+    after 10000 -> ct:fail(closed_timeout)
+    end,
+    receive {amqp10_event, {connection, Connection1,
+                            {closed, normal}}} ->
+                ok
+    after 10000 -> ct:fail(closed_timeout)
+    end,
+    receive {amqp10_event, {connection, Connection2,
+                            {opened, #'v1_0.open'{
+                                        offered_capabilities = OffCaps2,
+                                        properties = Props2}}}} ->
+                assert_has_sole_cap(OffCaps2),
+                assert_has_weak_policy(Props2)
+    after 10000 -> ct:fail(opened_timeout)
+    end,
+    ok = close_connection_sync(Connection2).
 
 %% ------------------------------------------------------------------
 %% Internal Helpers

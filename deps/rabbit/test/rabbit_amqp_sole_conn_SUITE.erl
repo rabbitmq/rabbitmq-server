@@ -34,7 +34,7 @@ groups() ->
       [
         refuse_connection_should_refuse_new_connection_if_conflict,
         refuse_connection_let_new_through_if_previous_died,
-        close_existing_policy,
+        close_existing_should_close_existing_connection,
         try_put,
         khepri_put_should_override_keep_while_monitor,
         khepri_triggers,
@@ -67,7 +67,7 @@ end_per_group(_, Config) ->
     ok = ra_system:stop(coordination),
     Config.
 
-end_per_testcase(close_existing_policy, Config) ->
+end_per_testcase(close_existing_should_close_existing_connection, Config) ->
     ok = meck:unload(rabbit_amqp_sole_conn),
     Config;
 end_per_testcase(_, Config) ->
@@ -96,7 +96,7 @@ refuse_connection_let_new_through_if_previous_died(_) ->
     Pid2 ! die,
     ok.
 
-close_existing_policy(_) ->
+close_existing_should_close_existing_connection(_) ->
     ok = meck:new(rabbit_amqp_sole_conn, [passthrough]),
     ok = meck:expect(rabbit_amqp_sole_conn, close_connection,
                      fun({conn, Pid}) ->
