@@ -15,7 +15,10 @@
 -export([acquire/4, release/2]).
 
 %% for testing
--export([conn/1, try_put/3, conn_path/2]).
+-export([conn/1,
+         try_put/3,
+         conn_path/2,
+         close_connection/1]).
 
 -type vhost() :: binary().
 -type container_id() :: binary().
@@ -60,7 +63,8 @@ acquire(close_existing = Plcy, VHost, ContainerId, ConnPid) ->
     Payload = #conn{pid = ConnPid},
     case rabbit_khepri:adv_put(Path, Payload, Opts) of
         {ok, #{Path := #{data := ExistingConn}}} ->
-            close_connection(ExistingConn),
+            %% require fully-qualified call for test suite
+            ?MODULE:close_connection(ExistingConn),
             ok;
         {ok, _} ->
             ok;

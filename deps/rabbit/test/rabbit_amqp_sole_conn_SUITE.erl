@@ -67,6 +67,9 @@ end_per_group(_, Config) ->
     ok = ra_system:stop(coordination),
     Config.
 
+end_per_testcase(close_existing_policy, Config) ->
+    ok = meck:unload(rabbit_amqp_sole_conn),
+    Config;
 end_per_testcase(_, Config) ->
     khepri:delete(rabbit_khepri:get_store_id(), [?KHEPRI_ROOT_NODE]),
     Config.
@@ -90,13 +93,33 @@ refuse_connection_let_new_through_if_previous_died(_) ->
     eventually(?_assertNot(is_process_alive(Pid1))),
     Pid2 = spawn_disposable(),
     ?assertEqual(ok, acquire(refuse_connection, ?VH, ?CID1, Pid2)),
-    Pid1 ! die,
+    Pid2 ! die,
     ok.
 
 close_existing_policy(_) ->
-    acquire(close_existing, ?VH, ?CID1, self()),
-    acquire(close_existing, ?VH, ?CID1, self()),
+    ok = meck:new(rabbit_amqp_sole_conn, [passthrough]),
+    ok = meck:expect(rabbit_amqp_sole_conn, close_connection,
+                     fun({conn, Pid}) ->
+                             Pid ! die,
+                             ok
+                     end),
+    Path = rabbit_amqp_sole_conn:conn_path(?VH, ?CID1),
+    Pid1 = spawn_disposable(),
+    Pid2 = spawn_disposable(),
+    %% 1 takes the lease
+    ?assertEqual(ok, acquire(close_existing, ?VH, ?CID1, Pid1)),
+    ?assertEqual({ok, rabbit_amqp_sole_conn:conn(Pid1)},
+                 rabbit_khepri:get(Path)),
+    %% 2 takes the lease from 1
+    ?assertEqual(ok, acquire(close_existing, ?VH, ?CID1, Pid2)),
+    ?assertEqual({ok, rabbit_amqp_sole_conn:conn(Pid2)},
+                 rabbit_khepri:get(Path)),
+    %% 1 should have stopped
+    eventually(?_assertNot(is_process_alive(Pid1))),
 
+    Pid2 ! die,
+
+    eventually(?_assertMatch({error, _}, rabbit_khepri:get(Path))),
     ok.
 
 try_put(_) ->
