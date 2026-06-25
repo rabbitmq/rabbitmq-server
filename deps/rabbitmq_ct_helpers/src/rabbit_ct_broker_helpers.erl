@@ -245,7 +245,8 @@ teardown_steps_for_vms() ->
 
 run_make_dist(Config) ->
     LockId = {make_dist, self()},
-    global:set_lock(LockId, [node()]),
+    LockNodes = [node() | nodes()],
+    global:set_lock(LockId, LockNodes),
     case os:getenv("SKIP_MAKE_TEST_DIST") of
         false ->
             SrcDir = ?config(current_srcdir, Config),
@@ -260,14 +261,14 @@ run_make_dist(Config) ->
                     %% record the fact we went through it already so we
                     %% save redundant calls.
                     os:putenv("SKIP_MAKE_TEST_DIST", "true"),
-                    global:del_lock(LockId, [node()]),
+                    global:del_lock(LockId, LockNodes),
                     Config;
                 _ ->
-                    global:del_lock(LockId, [node()]),
+                    global:del_lock(LockId, LockNodes),
                     {skip, "Failed to run \"make test-dist\""}
             end;
         _ ->
-            global:del_lock(LockId, [node()]),
+            global:del_lock(LockId, LockNodes),
             ct:log(?LOW_IMPORTANCE, "(skip `$MAKE test-dist`)", []),
             Config
     end.
