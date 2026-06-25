@@ -946,15 +946,24 @@ get_consumer_timeout(#{timeout := Timeout}, _Q)
     Timeout;
 get_consumer_timeout(_, Q) ->
     case rabbit_queue_type_util:args_policy_lookup(<<"consumer-timeout">>,
-                                                   fun (X, Y) ->
-                                                           erlang:min(X, Y)
-                                                   end, Q) of
+                                                   fun erlang:min/2, Q) of
         undefined ->
-            %% strict assertion, it is not valid to unset the consumer_timeout
-            %% environment variable or set it to an invalid value
-            {ok, MS} = application:get_env(rabbit, consumer_timeout),
-            true = is_integer(MS),
-            MS;
+            case application:get_env(rabbit, consumer_timeout) of
+                {ok, MS} when is_integer(MS) ->
+                    MS;
+                {ok, Other} ->
+                    %% Non-integer values (e.g. undefined) are not valid.
+                    %% Default to 24 hours.
+                    ?LOG_WARNING("consumer_timeout is set to an invalid value: ~tp, "
+                                 "defaulting to 86400000ms (24 hours)",
+                                 [Other]),
+                    86_400_000;
+                undefined ->
+                    %% The application default in rabbit.app is 1800000, so this
+                    %% branch is unreachable in practice unless explicity configured.
+                    %% Default to 24hrs
+                    86_400_000
+            end;
         Val when is_integer(Val) ->
             Val
     end.
