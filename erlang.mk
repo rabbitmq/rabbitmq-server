@@ -1439,7 +1439,7 @@ ifneq ($(wildcard $(PROJECT_BEAM_CACHE_DIR)/ebin-app),)
 else
 	$(verbose) $(MAKE) --no-print-directory clean-app
 endif
-	$(verbose) rm $(ERLANG_MK_TMP)/$(PROJECT).test
+	$(verbose) rm -f $(ERLANG_MK_TMP)/$(PROJECT).test
 
 beam-cache-restore-test: | $(PROJECT_BEAM_CACHE_DIR)
 	$(verbose) rm -rf $(PROJECT_BEAM_CACHE_DIR)/ebin-app
