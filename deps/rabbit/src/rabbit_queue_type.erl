@@ -960,8 +960,8 @@ get_consumer_timeout(_, Q) ->
                     86_400_000;
                 undefined ->
                     %% The application default in rabbit.app is 1800000, so this
-                    %% branch is unreachable in practice unless explicity configured.
-                    %% Default to 24hrs
+                    %% branch is unreachable in practice unless explicitly configured.
+                    %% Default to 24 hours
                     86_400_000
             end;
         Val when is_integer(Val) ->
