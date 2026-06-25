@@ -52,11 +52,9 @@ start_conn_ch(Fun, OUpstream, OUParams,
             case open_monitor(UParams#upstream_params.params, ConnName) of
                 {ok, Conn, Ch} ->
                     %% Don't trap exits until we have established
-                    %% connections so that if we try to delete
-                    %% federation upstreams while waiting for a
-                    %% connection to be established then we don't
-                    %% block
-                    process_flag(trap_exit, true),
+                    %% connections and performed initial setup, so
+                    %% that supervisor shutdown can terminate this
+                    %% process immediately if it blocks during setup.
                     try
                         R = Fun(Conn, Ch, DConn, DCh),
                         ?LOG_INFO("Federation ~ts connected to ~ts",
@@ -65,6 +63,7 @@ start_conn_ch(Fun, OUpstream, OUParams,
                         Name = pget(name, amqp_connection:info(DConn, [name])),
                         rabbit_federation_status:report(
                           OUpstream, OUParams, XorQName, {running, Name}),
+                        process_flag(trap_exit, true),
                         R
                     catch exit:E ->
                             %% terminate/2 will not get this, as we
