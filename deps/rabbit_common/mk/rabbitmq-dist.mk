@@ -58,7 +58,7 @@ $$(dist_$(1)_ez): SRC_DIR = $(3)
 $$(dist_$(1)_ez): EZ_DIR  = $$(abspath $$(dist_$(1)_ez_dir))
 $$(dist_$(1)_ez): EZ      = $$(dist_$(1)_ez)
 $$(dist_$(1)_ez): $$(if $$(wildcard $(3)/ebin $(3)/include $(3)/priv),\
-	$$(filter-out %/dep_built %/ebin/test,$$(call core_find,$$(wildcard $(3)/ebin $(3)/include $(3)/priv),*)),)
+	$$(call core_find,$$(wildcard $(3)/ebin $(3)/include $(3)/priv),*),)
 
 # If the application's Makefile defines a `list-dist-deps` target, we
 # use it to populate the dependencies list. This is useful when the
@@ -131,7 +131,6 @@ $(ERLANGMK_DIST_EZS):
 	$(eval SRC_DIR_UNIX := $(call core_unix_path,$(SRC_DIR)))
 	$(eval EZ_DIR_UNIX := $(call core_unix_path,$(EZ_DIR)))
 	$(dist_verbose) cp -a $(SRC_DIR_UNIX)/ebin $(wildcard $(SRC_DIR_UNIX)/include) $(wildcard $(SRC_DIR_UNIX)/priv) $(EZ_DIR_UNIX)/
-	$(verbose) rm -f $(EZ_DIR_UNIX)/ebin/dep_built $(EZ_DIR_UNIX)/ebin/test
 	@# Give a chance to the application to make any modification it
 	@# wants to the tree before we make an archive.
 ifneq ($(RABBITMQ_COMPONENTS),)
