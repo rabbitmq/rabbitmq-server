@@ -135,6 +135,11 @@ defmodule ListPluginsCommandTest do
     assert_plugin_states(actual_plugins, expected_plugins)
   end
 
+  test "run: a call to an unreachable node reports a node_down status", context do
+    assert %{status: :node_down} =
+             @command.run([".*"], Map.merge(context[:opts], %{node: :jake@thedog}))
+  end
+
   test "run: reports list of started plugins for started node", context do
     reset_enabled_plugins_to_preconfigured_defaults(context)
 
