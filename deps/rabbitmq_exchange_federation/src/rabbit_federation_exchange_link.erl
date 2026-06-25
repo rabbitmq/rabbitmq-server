@@ -148,8 +148,8 @@ handle_cast(disconnect_for_shutdown, State = #state{
                 _ ->
                     try
                         {ok, Ch} = amqp_connection:open_channel(Conn),
-                        catch amqp_channel:call(Ch, #'queue.delete'{queue = Queue}),
-                        catch amqp_channel:call(Ch, #'exchange.delete'{exchange = IntExchange})
+                        try amqp_channel:call(Ch, #'queue.delete'{queue = Queue}) catch _:_ -> ok end,
+                        try amqp_channel:call(Ch, #'exchange.delete'{exchange = IntExchange}) catch _:_ -> ok end
                     catch
                         _:_ -> ok
                     end
