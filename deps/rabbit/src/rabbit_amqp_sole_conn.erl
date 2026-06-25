@@ -59,7 +59,7 @@ acquire(close_existing = Plcy, VHost, ContainerId, ConnPid) ->
     Opts = default_options(ConnPid),
     Payload = #conn{pid = ConnPid},
     case rabbit_khepri:adv_put(Path, Payload, Opts) of
-        {ok, #{data := ExistingConn}} ->
+        {ok, #{Path := #{data := ExistingConn}}} ->
             close_connection(ExistingConn),
             ok;
         {ok, _} ->
