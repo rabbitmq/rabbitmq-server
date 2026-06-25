@@ -17,7 +17,7 @@
 ERLANG_MK_FILENAME := $(realpath $(lastword $(MAKEFILE_LIST)))
 export ERLANG_MK_FILENAME
 
-ERLANG_MK_VERSION = 7cef74a
+ERLANG_MK_VERSION = 2022.05.31-155-ga4687a9-dirty
 ERLANG_MK_WITHOUT = 
 
 # Make 3.81 and 3.82 are deprecated.
@@ -341,7 +341,7 @@ pkg_gpb_commit = master
 
 PACKAGES += gun
 pkg_gun_name = gun
-pkg_gun_description = Asynchronous SPDY, HTTP and Websocket client written in Erlang.
+pkg_gun_description = HTTP/1.1, HTTP/2, Websocket client (and more) for Erlang/OTP.
 pkg_gun_homepage = http//ninenines.eu
 pkg_gun_fetch = git
 pkg_gun_repo = https://github.com/ninenines/gun
@@ -441,7 +441,7 @@ export REBAR_DEPS_DIR
 # When testing Erlang.mk and updating these, make sure
 # to delete test/test_rebar_git before running tests again.
 REBAR3_GIT ?= https://github.com/erlang/rebar3
-REBAR3_COMMIT ?= bde4b54248d16280b2c70a244aca3bb7566e2033 # 3.23.0
+REBAR3_COMMIT ?= 619df55d9dab109cbd1b5d9ed1d45c93f5450e24 # 3.27.0
 
 CACHE_DEPS ?= 0
 
@@ -573,14 +573,6 @@ dep_verbose_0 = @echo " DEP    $1 ($(call query_version,$1))";
 dep_verbose_2 = set -x;
 dep_verbose = $(dep_verbose_$(V))
 
-# Optimization: don't recompile deps unless truly necessary.
-
-ifndef IS_DEP
-ifneq ($(MAKELEVEL),0)
-$(shell rm -f ebin/dep_built)
-endif
-endif
-
 # Core targets.
 
 ALL_APPS_DIRS_TO_BUILD = $(if $(LOCAL_DEPS_DIRS)$(IS_APP),$(LOCAL_DEPS_DIRS),$(ALL_APPS_DIRS))
@@ -634,26 +626,29 @@ endef
 endif
 endif
 
+$(ERLANG_MK_TMP)/dep_built:
+	$(verbose) mkdir -p $(ERLANG_MK_TMP)/dep_built
+
 ifneq ($(SKIP_DEPS),)
 deps::
 else
 ALL_DEPS_DIRS_TO_BUILD = $(if $(filter-out $(DEPS_DIR)/elixir,$(ALL_DEPS_DIRS)),$(filter-out $(DEPS_DIR)/elixir,$(ALL_DEPS_DIRS)),$(ALL_DEPS_DIRS))
 
-deps:: $(ALL_DEPS_DIRS_TO_BUILD) apps clean-tmp-deps.log | $(ERLANG_MK_TMP)
+deps:: $(ALL_DEPS_DIRS_TO_BUILD) apps clean-tmp-deps.log | $(ERLANG_MK_TMP)/dep_built
 ifneq ($(ALL_DEPS_DIRS_TO_BUILD),)
 	$(verbose) set -e; for dep in $(ALL_DEPS_DIRS_TO_BUILD); do \
 		if grep -qs ^$$dep$$ $(ERLANG_MK_TMP)/deps.log; then \
 			:; \
 		else \
 			echo $$dep >> $(ERLANG_MK_TMP)/deps.log; \
-			if [ -z "$(strip $(FULL))" ] $(if $(force_rebuild_dep),&& ! ($(call force_rebuild_dep,$$dep)),) && [ ! -L $$dep ] && [ -f $$dep/ebin/dep_built ]; then \
+			if [ -z "$(strip $(FULL))" ] $(if $(force_rebuild_dep),&& ! ($(call force_rebuild_dep,$$dep)),) && [ ! -L $$dep ] && [ -f $(ERLANG_MK_TMP)/dep_built/`basename $$dep` ]; then \
 				:; \
 			elif [ "$$dep" = "$(DEPS_DIR)/hut" -a "$(HUT_PATCH)" ]; then \
 				$(MAKE) -C $$dep app IS_DEP=1; \
-				if [ ! -L $$dep ] && [ -d $$dep/ebin ]; then touch $$dep/ebin/dep_built; fi; \
+				if [ ! -L $$dep ] && [ -d $$dep/ebin ]; then touch $(ERLANG_MK_TMP)/dep_built/`basename $$dep`; fi; \
 			elif [ -f $$dep/GNUmakefile ] || [ -f $$dep/makefile ] || [ -f $$dep/Makefile ]; then \
 				$(MAKE) -C $$dep IS_DEP=1; \
-				if [ ! -L $$dep ] && [ -d $$dep/ebin ]; then touch $$dep/ebin/dep_built; fi; \
+				if [ ! -L $$dep ] && [ -d $$dep/ebin ]; then touch $(ERLANG_MK_TMP)/dep_built/`basename $$dep`; fi; \
 			else \
 				echo "Error: No Makefile to build dependency $$dep." >&2; \
 				exit 2; \
@@ -735,7 +730,7 @@ define maybe_flock
 	if command -v flock >/dev/null; then \
 		flock $1 sh -c "$2"; \
 	elif command -v lockf >/dev/null; then \
-		lockf $1 sh -c "$2"; \
+		lockf -k $1 sh -c "$2"; \
 	else \
 		$2; \
 	fi
@@ -1303,7 +1298,7 @@ define dep_fetch_fail
 endef
 
 define dep_target
-$(DEPS_DIR)/$(call query_name,$1): $(if $(filter elixir,$(BUILD_DEPS) $(DEPS)),$(if $(filter-out elixir,$1),$(DEPS_DIR)/elixir/ebin/dep_built)) $(if $(filter hex,$(call query_fetch_method,$1)),$(if $(wildcard $(DEPS_DIR)/$(call query_name,$1)),,$(DEPS_DIR)/hex_core/ebin/dep_built)) | $(ERLANG_MK_TMP)
+$(DEPS_DIR)/$(call query_name,$1): $(if $(filter elixir,$(BUILD_DEPS) $(DEPS)),$(if $(filter-out elixir,$1),$(ERLANG_MK_TMP)/dep_built/elixir)) $(if $(filter hex,$(call query_fetch_method,$1)),$(if $(wildcard $(DEPS_DIR)/$(call query_name,$1)),,$(ERLANG_MK_TMP)/dep_built/hex_core)) | $(ERLANG_MK_TMP)
 	$(eval DEP_NAME := $(call query_name,$1))
 	$(eval DEP_STR := $(if $(filter $1,$(DEP_NAME)),$1,"$1 ($(DEP_NAME))"))
 	$(verbose) if test -d $(APPS_DIR)/$(DEP_NAME); then \
@@ -1345,20 +1340,22 @@ endef
 $(if $(filter hex_core,$(DEPS) $(BUILD_DEPS) $(DOC_DEPS) $(REL_DEPS) $(TEST_DEPS)),,\
 	$(eval $(call dep_target,hex_core)))
 
-$(DEPS_DIR)/hex_core/ebin/dep_built: | $(ERLANG_MK_TMP)
+$(ERLANG_MK_TMP)/dep_built/hex_core: | $(ERLANG_MK_TMP)
 	$(verbose) $(call maybe_flock,$(ERLANG_MK_TMP)/hex_core.lock,\
-		if [ ! -e $(DEPS_DIR)/hex_core/ebin/dep_built ]; then \
+		if [ ! -e $(ERLANG_MK_TMP)/dep_built/hex_core ]; then \
 			$(MAKE) $(DEPS_DIR)/hex_core; \
 			$(MAKE) -C $(DEPS_DIR)/hex_core IS_DEP=1; \
-			touch $(DEPS_DIR)/hex_core/ebin/dep_built; \
+			mkdir -p $(ERLANG_MK_TMP)/dep_built; \
+			touch $(ERLANG_MK_TMP)/dep_built/hex_core; \
 		fi)
 
-$(DEPS_DIR)/elixir/ebin/dep_built: | $(ERLANG_MK_TMP)
+$(ERLANG_MK_TMP)/dep_built/elixir: | $(ERLANG_MK_TMP)
 	$(verbose) $(call maybe_flock,$(ERLANG_MK_TMP)/elixir.lock,\
-		if [ ! -e $(DEPS_DIR)/elixir/ebin/dep_built ]; then \
+		if [ ! -e $(ERLANG_MK_TMP)/dep_built/elixir ]; then \
 			$(MAKE) $(DEPS_DIR)/elixir; \
 			$(MAKE) -C $(DEPS_DIR)/elixir; \
-			touch $(DEPS_DIR)/elixir/ebin/dep_built; \
+			mkdir -p $(ERLANG_MK_TMP)/dep_built; \
+			touch $(ERLANG_MK_TMP)/dep_built/elixir; \
 		fi)
 
 $(foreach dep,$(BUILD_DEPS) $(DEPS),$(eval $(call dep_target,$(dep))))
@@ -1442,6 +1439,7 @@ ifneq ($(wildcard $(PROJECT_BEAM_CACHE_DIR)/ebin-app),)
 else
 	$(verbose) $(MAKE) --no-print-directory clean-app
 endif
+	$(verbose) rm $(ERLANG_MK_TMP)/$(PROJECT).test
 
 beam-cache-restore-test: | $(PROJECT_BEAM_CACHE_DIR)
 	$(verbose) rm -rf $(PROJECT_BEAM_CACHE_DIR)/ebin-app
@@ -1509,7 +1507,7 @@ ifneq ($(wildcard src/)$(wildcard lib/),)
 
 # Targets.
 
-app:: $(if $(wildcard ebin/test),beam-cache-restore-app) deps
+app:: $(if $(wildcard $(ERLANG_MK_TMP)/$(PROJECT).test),beam-cache-restore-app) deps
 	$(verbose) $(MAKE) --no-print-directory $(PROJECT).d
 	$(verbose) $(MAKE) --no-print-directory app-build
 
@@ -1718,6 +1716,12 @@ endef
 
 ifeq ($(if $(NO_MAKEDEP),$(wildcard $(PROJECT).d),),)
 $(PROJECT).d:: $(ERL_FILES) $(EX_FILES) $(call core_find,include/,*.hrl) $(MAKEFILE_LIST)
+# Rebuild everything when the .d file does not exist.
+# We touch $@ to make sure the command doesn't fail in empty projects.
+# The file will be generated with content immediately after.
+	$(verbose) if ! test -e $@; then \
+		touch $@ $(ERL_FILES) $(CORE_FILES) $(ASN1_FILES) $(MIB_FILES) $(XRL_FILES) $(YRL_FILES); \
+	fi
 	$(makedep_verbose) $(call erlang,$(call makedep.erl,$@))
 endif
 
@@ -1767,7 +1771,7 @@ ebin/$(PROJECT).app:: $(ERL_FILES) $(CORE_FILES) $(wildcard src/$(PROJECT).app.s
 	$(verbose) if $(ELIXIR_COMP_FAILED); then exit 1; fi
 	$(eval GITDESCRIBE := $(shell git describe --dirty --abbrev=7 --tags --always --first-parent 2>/dev/null \
 		|| git describe --dirty --abbrev=7 --tags --always 2>/dev/null || true))
-	$(eval MODULES := $(MODULES) $(patsubst %,'%',$(sort $(notdir $(basename \
+	$(eval MODULES := $(sort $(MODULES) $(patsubst %,'%',$(notdir $(basename \
 		$(filter-out $(ERLC_EXCLUDE_PATHS),$(ERL_FILES) $(CORE_FILES) $(BEAM_FILES)))))))
 ifeq ($(wildcard src/$(PROJECT).app.src),)
 	$(app_verbose) printf '$(subst %,%%,$(subst $(newline),\n,$(subst ','\'',$(call app_file,$(GITDESCRIBE),$(MODULES)))))' \
@@ -1975,7 +1979,7 @@ endef
 define dep_autopatch_mix
 	sed 's|\(defmodule.*do\)|\1\n  try do\n    Code.compiler_options(on_undefined_variable: :warn)\n    rescue _ -> :ok\n  end\n|g' $(DEPS_DIR)/$(1)/mix.exs > $(DEPS_DIR)/$(1)/mix.exs.new; \
 	mv $(DEPS_DIR)/$(1)/mix.exs.new $(DEPS_DIR)/$(1)/mix.exs; \
-	$(MAKE) $(DEPS_DIR)/hex_core/ebin/dep_built; \
+	$(MAKE) $(ERLANG_MK_TMP)/dep_built/hex_core; \
 	MIX_ENV="$(if $(MIX_ENV),$(strip $(MIX_ENV)),prod)" \
 		$(call erlang,$(call dep_autopatch_mix.erl,$1))
 endef
@@ -2066,13 +2070,13 @@ $(foreach dep,$(TEST_DEPS),$(eval $(call dep_target,$(dep))))
 ifneq ($(SKIP_DEPS),)
 test-deps:
 else
-test-deps: $(ALL_TEST_DEPS_DIRS)
+test-deps: $(ALL_TEST_DEPS_DIRS) | $(ERLANG_MK_TMP)/dep_built
 	$(verbose) set -e; for dep in $(ALL_TEST_DEPS_DIRS) ; do \
-		if [ -z "$(strip $(FULL))" ] && [ ! -L $$dep ] && [ -f $$dep/ebin/dep_built ]; then \
+		if [ -z "$(strip $(FULL))" ] && [ ! -L $$dep ] && [ -f $(ERLANG_MK_TMP)/dep_built/`basename $$dep` ]; then \
 			:; \
 		else \
 			$(MAKE) -C $$dep IS_DEP=1; \
-			if [ ! -L $$dep ] && [ -d $$dep/ebin ]; then touch $$dep/ebin/dep_built; fi; \
+			if [ ! -L $$dep ] && [ -d $$dep/ebin ]; then touch $(ERLANG_MK_TMP)/dep_built/`basename $$dep`; fi; \
 		fi \
 	done
 endif
@@ -2102,13 +2106,13 @@ endif
 
 test-build:: IS_TEST=1
 test-build:: ERLC_OPTS=$(TEST_ERLC_OPTS)
-test-build:: $(if $(wildcard src),$(if $(wildcard ebin/test),,beam-cache-restore-test)) $(if $(IS_APP),,deps test-deps)
+test-build:: $(if $(wildcard src),$(if $(wildcard $(ERLANG_MK_TMP)/$(PROJECT).test),,beam-cache-restore-test)) $(if $(IS_APP),,deps test-deps)
 # We already compiled everything when IS_APP=1.
 ifndef IS_APP
 ifneq ($(wildcard src),)
 	$(verbose) $(MAKE) --no-print-directory $(PROJECT).d ERLC_OPTS="$(call escape_dquotes,$(TEST_ERLC_OPTS))"
 	$(verbose) $(MAKE) --no-print-directory app-build ERLC_OPTS="$(call escape_dquotes,$(TEST_ERLC_OPTS))"
-	$(gen_verbose) touch ebin/test
+	$(gen_verbose) touch $(ERLANG_MK_TMP)/$(PROJECT).test
 endif
 ifneq ($(wildcard $(TEST_DIR)),)
 	$(verbose) $(MAKE) --no-print-directory test-dir ERLC_OPTS="$(call escape_dquotes,$(TEST_ERLC_OPTS))"
@@ -2123,7 +2127,7 @@ test-build-app:: deps test-deps
 ifneq ($(wildcard src),)
 	$(verbose) $(MAKE) --no-print-directory $(PROJECT).d ERLC_OPTS="$(call escape_dquotes,$(TEST_ERLC_OPTS))"
 	$(verbose) $(MAKE) --no-print-directory app-build ERLC_OPTS="$(call escape_dquotes,$(TEST_ERLC_OPTS))"
-	$(gen_verbose) touch ebin/test
+	$(gen_verbose) touch $(ERLANG_MK_TMP)/$(PROJECT).test
 endif
 ifneq ($(wildcard $(TEST_DIR)),)
 	$(verbose) $(MAKE) --no-print-directory test-dir ERLC_OPTS="$(call escape_dquotes,$(TEST_ERLC_OPTS))"
@@ -2585,7 +2589,7 @@ else
 
 MAN_INSTALL_PATH ?= /usr/local/share/man
 MAN_SECTIONS ?= 3 7
-MAN_PROJECT ?= $(shell echo $(PROJECT) | sed 's/^./\U&\E/')
+MAN_PROJECT ?= $(shell echo $(PROJECT) | awk '{ print toupper(substr($$0,1,1)) substr($$0,2) }')
 MAN_VERSION ?= $(PROJECT_VERSION)
 
 # Plugin-specific targets.
@@ -3618,7 +3622,7 @@ define hex_user_create.erl
 endef
 
 # The $(info ) call inserts a new line after the password prompt.
-hex-user-create: $(DEPS_DIR)/hex_core/ebin/dep_built
+hex-user-create: $(ERLANG_MK_TMP)/dep_built/hex_core
 	$(if $(HEX_USERNAME),,$(eval HEX_USERNAME := $(shell read -p "Username: " username; echo $$username)))
 	$(if $(HEX_PASSWORD),,$(eval HEX_PASSWORD := $(shell stty -echo; read -p "Password: " password; stty echo; echo $$password) $(info )))
 	$(if $(HEX_EMAIL),,$(eval HEX_EMAIL := $(shell read -p "Email: " email; echo $$email)))
@@ -3648,7 +3652,7 @@ define hex_key_add.erl
 	end
 endef
 
-hex-key-add: $(DEPS_DIR)/hex_core/ebin/dep_built
+hex-key-add: $(ERLANG_MK_TMP)/dep_built/hex_core
 	$(if $(HEX_USERNAME),,$(eval HEX_USERNAME := $(shell read -p "Username: " username; echo $$username)))
 	$(if $(HEX_PASSWORD),,$(eval HEX_PASSWORD := $(shell stty -echo; read -p "Password: " password; stty echo; echo $$password) $(info )))
 	$(gen_verbose) $(call erlang,$(call hex_key_add.erl,$(HEX_USERNAME),$(HEX_PASSWORD),\
@@ -3726,7 +3730,7 @@ hex_tar_verbose_0 = @echo " TAR    $(notdir $(ERLANG_MK_TMP))/$(@F)";
 hex_tar_verbose_2 = set -x;
 hex_tar_verbose = $(hex_tar_verbose_$(V))
 
-$(HEX_TARBALL_OUTPUT_FILE): $(DEPS_DIR)/hex_core/ebin/dep_built app
+$(HEX_TARBALL_OUTPUT_FILE): $(ERLANG_MK_TMP)/dep_built/hex_core app
 	$(hex_tar_verbose) $(call erlang,$(call hex_tarball_create.erl))
 
 hex-tarball-create: $(HEX_TARBALL_OUTPUT_FILE)
@@ -3777,14 +3781,14 @@ define hex_release_publish.erl
 	end
 endef
 
-hex-release-tarball: $(DEPS_DIR)/hex_core/ebin/dep_built $(HEX_TARBALL_OUTPUT_FILE)
+hex-release-tarball: $(ERLANG_MK_TMP)/dep_built/hex_core $(HEX_TARBALL_OUTPUT_FILE)
 	$(verbose) $(call erlang,$(call hex_release_publish_summary.erl))
 
-hex-release-publish: $(DEPS_DIR)/hex_core/ebin/dep_built hex-release-tarball
+hex-release-publish: $(ERLANG_MK_TMP)/dep_built/hex_core hex-release-tarball
 	$(if $(HEX_SECRET),,$(eval HEX_SECRET := $(shell stty -echo; read -p "Secret: " secret; stty echo; echo $$secret) $(info )))
 	$(gen_verbose) $(call erlang,$(call hex_release_publish.erl,$(HEX_SECRET),false))
 
-hex-release-replace: $(DEPS_DIR)/hex_core/ebin/dep_built hex-release-tarball
+hex-release-replace: $(ERLANG_MK_TMP)/dep_built/hex_core hex-release-tarball
 	$(if $(HEX_SECRET),,$(eval HEX_SECRET := $(shell stty -echo; read -p "Secret: " secret; stty echo; echo $$secret) $(info )))
 	$(gen_verbose) $(call erlang,$(call hex_release_publish.erl,$(HEX_SECRET),true))
 
@@ -3803,7 +3807,7 @@ define hex_release_delete.erl
 	end
 endef
 
-hex-release-delete: $(DEPS_DIR)/hex_core/ebin/dep_built
+hex-release-delete: $(ERLANG_MK_TMP)/dep_built/hex_core
 	$(if $(HEX_SECRET),,$(eval HEX_SECRET := $(shell stty -echo; read -p "Secret: " secret; stty echo; echo $$secret) $(info )))
 	$(gen_verbose) $(call erlang,$(call hex_release_delete.erl,$(HEX_SECRET)))
 
@@ -3823,7 +3827,7 @@ define hex_release_retire.erl
 	end
 endef
 
-hex-release-retire: $(DEPS_DIR)/hex_core/ebin/dep_built
+hex-release-retire: $(ERLANG_MK_TMP)/dep_built/hex_core
 	$(if $(HEX_SECRET),,$(eval HEX_SECRET := $(shell stty -echo; read -p "Secret: " secret; stty echo; echo $$secret) $(info )))
 	$(gen_verbose) $(call erlang,$(call hex_release_retire.erl,$(HEX_SECRET),\
 		$(if $(HEX_VERSION),$(HEX_VERSION),$(PROJECT_VERSION)),\
@@ -3845,7 +3849,7 @@ define hex_release_unretire.erl
 	end
 endef
 
-hex-release-unretire: $(DEPS_DIR)/hex_core/ebin/dep_built
+hex-release-unretire: $(ERLANG_MK_TMP)/dep_built/hex_core
 	$(if $(HEX_SECRET),,$(eval HEX_SECRET := $(shell stty -echo; read -p "Secret: " secret; stty echo; echo $$secret) $(info )))
 	$(gen_verbose) $(call erlang,$(call hex_release_unretire.erl,$(HEX_SECRET),\
 		$(if $(HEX_VERSION),$(HEX_VERSION),$(PROJECT_VERSION))))
@@ -3854,7 +3858,7 @@ HEX_DOCS_DOC_DIR ?= doc/
 HEX_DOCS_TARBALL_FILES ?= $(sort $(call core_find,$(HEX_DOCS_DOC_DIR),*))
 HEX_DOCS_TARBALL_OUTPUT_FILE ?= $(ERLANG_MK_TMP)/$(PROJECT)-docs.tar.gz
 
-$(HEX_DOCS_TARBALL_OUTPUT_FILE): $(DEPS_DIR)/hex_core/ebin/dep_built app docs
+$(HEX_DOCS_TARBALL_OUTPUT_FILE): $(ERLANG_MK_TMP)/dep_built/hex_core app docs
 	$(hex_tar_verbose) tar czf $(HEX_DOCS_TARBALL_OUTPUT_FILE) -C $(HEX_DOCS_DOC_DIR) \
 		$(HEX_DOCS_TARBALL_FILES:$(HEX_DOCS_DOC_DIR)%=%)
 
@@ -3878,7 +3882,7 @@ define hex_docs_publish.erl
 	end
 endef
 
-hex-docs-publish: $(DEPS_DIR)/hex_core/ebin/dep_built hex-docs-tarball-create
+hex-docs-publish: $(ERLANG_MK_TMP)/dep_built/hex_core hex-docs-tarball-create
 	$(if $(HEX_SECRET),,$(eval HEX_SECRET := $(shell stty -echo; read -p "Secret: " secret; stty echo; echo $$secret) $(info )))
 	$(gen_verbose) $(call erlang,$(call hex_docs_publish.erl,$(HEX_SECRET)))
 
@@ -3898,7 +3902,7 @@ define hex_docs_delete.erl
 	end
 endef
 
-hex-docs-delete: $(DEPS_DIR)/hex_core/ebin/dep_built
+hex-docs-delete: $(ERLANG_MK_TMP)/dep_built/hex_core
 	$(if $(HEX_SECRET),,$(eval HEX_SECRET := $(shell stty -echo; read -p "Secret: " secret; stty echo; echo $$secret) $(info )))
 	$(gen_verbose) $(call erlang,$(call hex_docs_delete.erl,$(HEX_SECRET),\
 		$(if $(HEX_VERSION),$(HEX_VERSION),$(PROJECT_VERSION))))
@@ -4225,13 +4229,13 @@ $(foreach dep,$(SHELL_DEPS),$(eval $(call dep_target,$(dep))))
 ifneq ($(SKIP_DEPS),)
 build-shell-deps:
 else
-build-shell-deps: $(ALL_SHELL_DEPS_DIRS)
+build-shell-deps: $(ALL_SHELL_DEPS_DIRS) | $(ERLANG_MK_TMP)/dep_built
 	$(verbose) set -e; for dep in $(ALL_SHELL_DEPS_DIRS) ; do \
-		if [ -z "$(strip $(FULL))" ] && [ ! -L $$dep ] && [ -f $$dep/ebin/dep_built ]; then \
+		if [ -z "$(strip $(FULL))" ] && [ ! -L $$dep ] && [ -f $(ERLANG_MK_TMP)/dep_built/`basename $$dep` ]; then \
 			:; \
 		else \
 			$(MAKE) -C $$dep IS_DEP=1; \
-			if [ ! -L $$dep ] && [ -d $$dep/ebin ]; then touch $$dep/ebin/dep_built; fi; \
+			if [ ! -L $$dep ] && [ -d $$dep/ebin ]; then touch $(ERLANG_MK_TMP)/dep_built/$$dep; fi; \
 		fi \
 	done
 endif
