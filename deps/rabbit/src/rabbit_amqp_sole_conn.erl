@@ -47,8 +47,7 @@ acquire(refuse_connection = Plcy, VHost, ContainerId, ConnPid) ->
                         _ ->
                             {error, refuse_connection}
                     end
-            end,
-            {error, refuse_connection};
+            end;
         {error, Reason} ->
             ?LOG_INFO("Unexpected Khepri error for connection '~ts' "
                       "in vhost ~ts (policy ~ts): ~p. Refusing connection.",
