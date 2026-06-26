@@ -123,7 +123,6 @@ refuse_connection_no_conflict(Config) ->
     ok = close_connection_sync(Connection1).
 
 refuse_connection_conflict_should_refuse_new_connection(Config) ->
-    %% TODO test also with explicit refuse-connection policy (it is the default)
     OpnConf0 = connection_config(Config),
     OpnConf1 = OpnConf0#{
                  container_id => <<"my-container-1">>,

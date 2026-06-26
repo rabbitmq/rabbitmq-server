@@ -63,6 +63,7 @@ init_per_group(_, Config) ->
     end,
     ok = application:set_env(rabbit, data_dir, DataDir),
     rabbit_khepri:setup(),
+
     Config.
 
 end_per_group(_, Config) ->
@@ -70,20 +71,14 @@ end_per_group(_, Config) ->
     ok = ra_system:stop(coordination),
     Config.
 
-init_per_testcase(_, Config) ->
-    rabbit_amqp_sole_conn:init(),
-    Config.
-
 end_per_testcase(close_existing_should_close_existing_connection, Config) ->
     ok = meck:unload(rabbit_amqp_sole_conn),
-    ok = khepri:delete(rabbit_khepri:get_store_id(), [?KHEPRI_ROOT_NODE]),
     Config;
 end_per_testcase(close_connection_tolerates_timeout, Config) ->
     ok = meck:unload(rabbit_networking),
-    ok = khepri:delete(rabbit_khepri:get_store_id(), [?KHEPRI_ROOT_NODE]),
     Config;
 end_per_testcase(_, Config) ->
-    clean_store(),
+    khepri:delete(rabbit_khepri:get_store_id(), [?KHEPRI_ROOT_NODE]),
     Config.
 
 refuse_connection_should_refuse_new_connection_if_conflict(_) ->
@@ -109,17 +104,14 @@ refuse_connection_let_new_through_if_previous_died(_) ->
     ok.
 
 close_existing_should_close_existing_connection(_) ->
-    TestPid = self(),
+    ok = meck:new(rabbit_amqp_sole_conn, [passthrough]),
+    ok = meck:expect(rabbit_amqp_sole_conn, close_connection,
+                     fun({conn, Pid}) ->
+                             Pid ! die,
+                             ok
+                     end),
     Path = rabbit_amqp_sole_conn:conn_path(?VH, ?CID1),
-    Pid1 = spawn(fun() ->
-                            receive
-                                {rabbit_call, From, {close, Error}} ->
-                                    TestPid ! {received, Error},
-                                    gen:reply(From, ok)
-                            after 5000 ->
-                                      ok
-                            end
-                    end),
+    Pid1 = spawn_disposable(),
     Pid2 = spawn_disposable(),
     %% 1 takes the lease
     ?assertEqual(ok, acquire(close_existing, ?VH, ?CID1, Pid1)),
@@ -181,8 +173,6 @@ close_connection_tolerates_timeout(_) ->
     ConnPid ! die.
 
 try_put(_) ->
-    %% clean the store, so the stored proc does not interfer
-    clean_store(),
     Path = rabbit_amqp_sole_conn:conn_path(?VH, ?CID1),
     Pid1 = spawn_disposable(),
     Conn1 = rabbit_amqp_sole_conn:conn(Pid1),
@@ -296,13 +286,6 @@ khepri_cas(_) ->
     ?assertMatch({error, _},
                  khepri:compare_and_swap(StoreId, Path, V1, V2)),
     ok.
-
-%% --------------------------------------------------------------
-%% Internal Helpers
-%% --------------------------------------------------------------
-
-clean_store() ->
-    ok = khepri:delete(rabbit_khepri:get_store_id(), [?KHEPRI_ROOT_NODE]).
 
 spawn_disposable() ->
     spawn(fun() -> receive die -> ok end end).

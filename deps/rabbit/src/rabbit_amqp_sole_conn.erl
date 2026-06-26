@@ -18,37 +18,15 @@
 -export([acquire/4, release/2]).
 
 %% for testing
--export([init/0,
-         conn/1,
+-export([conn/1,
          try_put/3,
          conn_path/2,
          close_connection/1]).
-
-%% TODO find a better way to create the trigger/sproc
--rabbit_boot_step({?MODULE,
-    [{description, "AMQP 1.0 unique connection enforcement tracker"},
-     {mfa,         {?MODULE, init, []}},
-     {requires,    pre_boot},
-     {enables,     external_infrastructure}]}).
 
 -type vhost() :: binary().
 -type container_id() :: binary().
 
 -record(conn, {pid :: pid()}).
-
-init() ->
-    rabbit_khepri:adv_put(kill_connection_sproc_path(),
-                          fun kill_connection_sproc/1),
-
-    EventFilter = khepri_evf:tree(kill_connection_sproc_trigger_pattern(),
-                                  #{on_actions => [update]}),
-
-    ok = khepri:register_trigger(
-           rabbit_khepri:get_store_id(),
-           amqp10_sole_conn_kill_connection,
-           EventFilter,
-           kill_connection_sproc_path()),
-    ok.
 
 -spec acquire(none | enforcement_policy(), vhost(), container_id(), pid()) ->
     ok | {error, refuse_connection | close_existing}.
@@ -87,6 +65,10 @@ acquire(close_existing = Plcy, VHost, ContainerId, ConnPid) ->
     Opts = default_options(ConnPid),
     Payload = #conn{pid = ConnPid},
     case rabbit_khepri:adv_put(Path, Payload, Opts) of
+        {ok, #{Path := #{data := ExistingConn}}} ->
+            %% require fully-qualified call for test suite
+            ?MODULE:close_connection(ExistingConn),
+            ok;
         {ok, _} ->
             ok;
         {error, Reason} ->
@@ -150,18 +132,6 @@ close_connection(#conn{pid = Pid}) ->
 store_id() ->
     rabbit_khepri:get_store_id().
 
-
-kill_connection_sproc(#khepri_trigger{type = tree,
-                                      event = #{change := update,
-                                                old_node_props := #{data := Conn}}}) ->
-    %% TODO this is called in the RA server, so it should not be blocking
-    close_connection(Conn);
-kill_connection_sproc(Props) ->
-    ?LOG_WARNING("Unexpected event for sole_conn stored procedure, "
-                 "connection will not be instructed to close. Event: ~p",
-                 Props),
-    ok.
-
 %% for testing
 conn(Pid) ->
     #conn{pid = Pid}.
@@ -174,11 +144,3 @@ conn_path(VHost, ContainerId)
   when ?IS_KHEPRI_PATH_CONDITION(VHost) andalso
        ?IS_KHEPRI_PATH_CONDITION(ContainerId) ->
     ?RABBITMQ_KHEPRI_VHOST_PATH(VHost, [amqp10_sole_conn, ContainerId]).
-
-kill_connection_sproc_path() ->
-    ?RABBITMQ_KHEPRI_ROOT_PATH([amqp10_sole_conn, kill_connection]).
-
-kill_connection_sproc_trigger_pattern() ->
-    ?RABBITMQ_KHEPRI_VHOST_PATH(?KHEPRI_WILDCARD_STAR_STAR,
-                                [amqp10_sole_conn,
-                                 ?KHEPRI_WILDCARD_STAR_STAR]).
