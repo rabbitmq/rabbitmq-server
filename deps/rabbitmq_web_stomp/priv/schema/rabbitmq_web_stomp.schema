@@ -33,7 +33,7 @@
     [{datatype, string}]}.
 
 {mapping, "web_stomp.allow_origins", "rabbitmq_web_stomp.allow_origins", [
-    {datatype, {enum, [none]}}
+    {datatype, {enum, [none, same_origin]}}
 ]}.
 
 {mapping, "web_stomp.allow_origins.$name", "rabbitmq_web_stomp.allow_origins", [
@@ -44,11 +44,16 @@
 fun(Conf) ->
     case cuttlefish:conf_get("web_stomp.allow_origins", Conf, undefined) of
         none -> [];
+        same_origin -> same_origin;
         _ ->
             Settings = cuttlefish_variable:filter_by_prefix("web_stomp.allow_origins", Conf),
             [V || {_, V} <- Settings]
     end
 end}.
+
+{mapping, "web_stomp.strict_origin_validation", "rabbitmq_web_stomp.strict_origin_validation", [
+    {datatype, boolean}
+]}.
 
 {mapping, "web_stomp.use_http_auth", "rabbitmq_web_stomp.use_http_auth",
     [{datatype, boolean}]}.
