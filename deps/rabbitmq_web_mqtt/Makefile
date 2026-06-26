@@ -18,7 +18,7 @@ BUILD_WITHOUT_QUIC=1
 export BUILD_WITHOUT_QUIC
 
 LOCAL_DEPS = ssl
-DEPS = rabbit cowboy rabbitmq_mqtt rabbitmq_web_dispatch
+DEPS = rabbit cowboy rabbitmq_mqtt
 TEST_DEPS = gun emqtt rabbitmq_ct_helpers rabbitmq_ct_client_helpers rabbitmq_management rabbitmq_stomp rabbitmq_consistent_hash_exchange
 
 PLT_APPS += rabbitmq_cli elixir cowlib ssl

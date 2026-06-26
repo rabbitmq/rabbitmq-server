@@ -233,31 +233,6 @@
   [{rabbitmq_web_stomp,[
                         {proxy_protocol, true}
                        ]}],
-  [rabbitmq_web_stomp]},
-
- %%
- %% WebSocket Origin validation
- %%
-
- {allow_origins_none,
-  "web_stomp.allow_origins = none",
-  [{rabbitmq_web_stomp,[{allow_origins, []}]}],
-  [rabbitmq_web_stomp]},
-
- {allow_origins_same_origin,
-  "web_stomp.allow_origins = same_origin",
-  [{rabbitmq_web_stomp,[{allow_origins, same_origin}]}],
-  [rabbitmq_web_stomp]},
-
- {allow_origins_list,
-  "web_stomp.allow_origins.1 = https://a.example.com
-   web_stomp.allow_origins.2 = https://b.example.com",
-  [{rabbitmq_web_stomp,[{allow_origins, ["https://a.example.com", "https://b.example.com"]}]}],
-  [rabbitmq_web_stomp]},
-
- {strict_origin_validation,
-  "web_stomp.strict_origin_validation = true",
-  [{rabbitmq_web_stomp,[{strict_origin_validation, true}]}],
   [rabbitmq_web_stomp]}
 
 ].
