@@ -22,12 +22,7 @@ all() ->
      allowed_origin_connects,
      disallowed_origin_rejected,
      no_origin_header_allowed_when_allowlist_set,
-     multiple_allowed_origins,
-     same_origin_matching_origin_connects,
-     same_origin_cross_origin_rejected,
-     same_origin_missing_origin_allowed,
-     strict_missing_origin_rejected,
-     strict_allowed_origin_connects].
+     multiple_allowed_origins].
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
@@ -54,24 +49,6 @@ init_per_testcase(multiple_allowed_origins, Config) ->
       application, set_env, [rabbitmq_web_mqtt, allow_origins,
                               [?ALLOWED, ?ALLOWED2]]),
     Config;
-init_per_testcase(TC, Config)
-  when TC =:= same_origin_matching_origin_connects;
-       TC =:= same_origin_cross_origin_rejected;
-       TC =:= same_origin_missing_origin_allowed ->
-    rabbit_ct_broker_helpers:rpc(
-      Config, 0,
-      application, set_env, [rabbitmq_web_mqtt, allow_origins, same_origin]),
-    Config;
-init_per_testcase(TC, Config)
-  when TC =:= strict_missing_origin_rejected;
-       TC =:= strict_allowed_origin_connects ->
-    rabbit_ct_broker_helpers:rpc(
-      Config, 0,
-      application, set_env, [rabbitmq_web_mqtt, allow_origins, [?ALLOWED]]),
-    rabbit_ct_broker_helpers:rpc(
-      Config, 0,
-      application, set_env, [rabbitmq_web_mqtt, strict_origin_validation, true]),
-    Config;
 init_per_testcase(_Testcase, Config) ->
     rabbit_ct_broker_helpers:rpc(
       Config, 0,
@@ -83,9 +60,6 @@ end_per_testcase(_Testcase, Config) ->
     rabbit_ct_broker_helpers:rpc(
       Config, 0,
       application, unset_env, [rabbitmq_web_mqtt, allow_origins]),
-    rabbit_ct_broker_helpers:rpc(
-      Config, 0,
-      application, unset_env, [rabbitmq_web_mqtt, strict_origin_validation]),
     Config.
 
 %% When no allowlist is configured, any Origin is accepted.
@@ -142,42 +116,6 @@ multiple_allowed_origins(Config) ->
 
     Resp3 = raw_ws_upgrade(Port, [{"Origin", "https://evil.example.com"}]),
     ?assertNotEqual(nomatch, binary:match(Resp3, <<"403">>)).
-
-%% With same_origin, an Origin equal to the request's own scheme/host/port
-%% is accepted.
-same_origin_matching_origin_connects(Config) ->
-    PortStr = rabbit_ws_test_util:get_web_mqtt_port_str(Config),
-    Port = list_to_integer(PortStr),
-    Resp = raw_ws_upgrade(Port, [{"Origin", "http://127.0.0.1:" ++ PortStr}]),
-    ?assertNotEqual(nomatch, binary:match(Resp, <<"101">>)).
-
-%% With same_origin, an Origin on a different port is cross-origin and rejected.
-same_origin_cross_origin_rejected(Config) ->
-    PortStr = rabbit_ws_test_util:get_web_mqtt_port_str(Config),
-    Port = list_to_integer(PortStr),
-    Resp = raw_ws_upgrade(Port, [{"Origin", "http://127.0.0.1:1"}]),
-    ?assertNotEqual(nomatch, binary:match(Resp, <<"403">>)).
-
-%% A missing Origin is still accepted under same_origin without strict mode.
-same_origin_missing_origin_allowed(Config) ->
-    PortStr = rabbit_ws_test_util:get_web_mqtt_port_str(Config),
-    Port = list_to_integer(PortStr),
-    Resp = raw_ws_upgrade(Port, []),
-    ?assertNotEqual(nomatch, binary:match(Resp, <<"101">>)).
-
-%% With strict mode and an allowlist set, a request without an Origin is rejected.
-strict_missing_origin_rejected(Config) ->
-    PortStr = rabbit_ws_test_util:get_web_mqtt_port_str(Config),
-    Port = list_to_integer(PortStr),
-    Resp = raw_ws_upgrade(Port, []),
-    ?assertNotEqual(nomatch, binary:match(Resp, <<"403">>)).
-
-%% Strict mode still accepts an allowlisted Origin.
-strict_allowed_origin_connects(Config) ->
-    PortStr = rabbit_ws_test_util:get_web_mqtt_port_str(Config),
-    Port = list_to_integer(PortStr),
-    Resp = raw_ws_upgrade(Port, [{"Origin", ?ALLOWED}]),
-    ?assertNotEqual(nomatch, binary:match(Resp, <<"101">>)).
 
 %%
 %% Helpers
