@@ -252,11 +252,16 @@ khepri_triggers(_) ->
                                    ?KHEPRI_WILDCARD_STAR_STAR],
                                   #{on_actions => [update, delete]}),
 
+    %% we want to try closing the connection on all members
+    %% this way a connection on an isolated node will get the message
+    %% when the partition ends.
+    Opts = #{where => all_members},
     ok = khepri:register_trigger(
            rabbit_khepri:get_store_id(),
            sole_conn,
            EventFilter,
-           StoredProcPath),
+           StoredProcPath,
+           Opts),
 
     Path1 = [rmq, vhosts, ?VH, sole_conn, <<"1">>],
     ?assertMatch({ok, _}, rabbit_khepri:adv_create(Path1, <<"1">>)),
