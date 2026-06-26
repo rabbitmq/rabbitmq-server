@@ -21,3 +21,4 @@
 -define(SOLE_CONN_DETECTION_POLICY_WEAK, {uint, 1}).
 -define(AMQP_ERROR_CONNECTION_ESTABLISHMENT_FAILED,
         {symbol, <<"amqp:connection-establishment-failed">>}).
+-define(SOLE_CONN_ENFORCEMENT, {symbol, <<"sole-connection-enforcement">>}).

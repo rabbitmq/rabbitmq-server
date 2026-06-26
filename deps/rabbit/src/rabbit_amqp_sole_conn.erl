@@ -11,6 +11,9 @@
 -include_lib("khepri/include/khepri.hrl").
 -include("include/rabbit_khepri.hrl").
 -include_lib("amqp10_common/include/amqp10_sole_conn.hrl").
+-include_lib("amqp10_common/include/amqp10_framing.hrl").
+
+-define(CLOSE_EXISTING_TIMEOUT, 30_000).
 
 -export([acquire/4, release/2]).
 
@@ -113,10 +116,18 @@ try_put(Path,
     end.
 
 close_connection(#conn{pid = Pid}) ->
-    %% TODO close connection with appropriate error/condition
-    %% see soleconn spec 3.2.1
-    %% should be async or with low timeout (timeout related to the connection?)
-    rabbit_networking:close_connection(Pid, "sole conn").
+    %% "The existing connection MUST be closed with the error field of
+    %% close having the condition field of error being resource-locked.
+    %% Further the info field of error MUST contain the symbol key
+    %% sole-connection-enforcement taking the boolean value true" [sole conn 3.2.1].
+    Error = #'v1_0.error'{
+               condition = ?V_1_0_AMQP_ERROR_RESOURCE_LOCKED,
+               description = {utf8, <<"Connection closed because another "
+                                      "connection with the same container-id "
+                                      "was established (sole connection "
+                                      "enforcement).">>},
+               info = {map, [{?SOLE_CONN_ENFORCEMENT, {boolean, true}}]}},
+    rabbit_networking:close_connection(Pid, Error, ?CLOSE_EXISTING_TIMEOUT).
 
 store_id() ->
     rabbit_khepri:get_store_id().

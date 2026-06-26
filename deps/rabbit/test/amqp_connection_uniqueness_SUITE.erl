@@ -192,10 +192,10 @@ close_existing_conflict_should_close_existing_connection(Config) ->
     receive {amqp10_event, {connection, Connection1,
                             {closed, #'v1_0.close'{
                                         error = #'v1_0.error'{
-                                                   condition = ?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
-                                                   description = {utf8, <<"Connection forced: \"sole conn\"">>}
+                                                   condition = ?V_1_0_AMQP_ERROR_RESOURCE_LOCKED,
+                                                   info = {map, Info}
                                                   }}}}} ->
-                ok
+                ?assert(lists:member({?SOLE_CONN_ENFORCEMENT, true}, Info))
     after 10000 -> ct:fail(closed_timeout)
     end,
     receive {amqp10_event, {connection, Connection1,

@@ -208,6 +208,12 @@ handle_other(heartbeat_timeout, State) ->
     Error = error_frame(?V_1_0_AMQP_ERROR_RESOURCE_LIMIT_EXCEEDED,
                         "no frame received from client within idle timeout threshold", []),
     handle_exception(State, 0, Error);
+handle_other({rabbit_call, From, {close, Error}}, State0) ->
+    gen_server:reply(From, ok),
+    case ?IS_RUNNING(State0) of
+        true  -> close(Error, State0);
+        false -> stop
+    end;
 handle_other({rabbit_call, From, {shutdown, Explanation}},
              State = #v1{connection = #v1_connection{properties = Properties}}) ->
     Ret = case Explanation =:= "Node was put into maintenance mode" andalso
