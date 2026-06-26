@@ -56,8 +56,8 @@ init() ->
     maybe_warn_about_origins(TCPConf, SSLConf),
     ok.
 
-%% Warns once at startup when a listener is configured but accepts WebSocket
-%% upgrades from any Origin.
+%% Warns at startup when a listener is configured but no Origin restriction is
+%% set.
 maybe_warn_about_origins(TCPConf, SSLConf) ->
     case TCPConf =/= [] orelse SSLConf =/= [] of
         false -> ok;
