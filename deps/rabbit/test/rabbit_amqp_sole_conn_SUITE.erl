@@ -10,6 +10,8 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("khepri/include/khepri.hrl").
+-include_lib("amqp10_common/include/amqp10_framing.hrl").
+-include_lib("amqp10_common/include/amqp10_sole_conn.hrl").
 
 -compile([nowarn_export_all,
           export_all]).
@@ -35,6 +37,8 @@ groups() ->
         refuse_connection_should_refuse_new_connection_if_conflict,
         refuse_connection_let_new_through_if_previous_died,
         close_existing_should_close_existing_connection,
+        close_connection_sends_proper_error,
+        close_connection_tolerates_timeout,
         try_put,
         khepri_put_should_override_keep_while_monitor,
         khepri_triggers,
@@ -69,6 +73,9 @@ end_per_group(_, Config) ->
 
 end_per_testcase(close_existing_should_close_existing_connection, Config) ->
     ok = meck:unload(rabbit_amqp_sole_conn),
+    Config;
+end_per_testcase(close_connection_tolerates_timeout, Config) ->
+    ok = meck:unload(rabbit_networking),
     Config;
 end_per_testcase(_, Config) ->
     khepri:delete(rabbit_khepri:get_store_id(), [?KHEPRI_ROOT_NODE]),
@@ -121,6 +128,49 @@ close_existing_should_close_existing_connection(_) ->
 
     eventually(?_assertMatch({error, _}, rabbit_khepri:get(Path))),
     ok.
+
+close_connection_sends_proper_error(_) ->
+    TestPid = self(),
+    ConnPid = spawn(fun() ->
+        receive
+            {rabbit_call, From, {close, Error}} ->
+                TestPid ! {received, Error},
+                gen:reply(From, ok)
+        after 5000 ->
+            ok
+        end
+    end),
+    ok = rabbit_amqp_sole_conn:close_connection(rabbit_amqp_sole_conn:conn(ConnPid)),
+    receive
+        {received, Error} ->
+            ?assertMatch(
+               #'v1_0.error'{
+                   condition = ?V_1_0_AMQP_ERROR_RESOURCE_LOCKED,
+                   info = {map, [{?SOLE_CONN_ENFORCEMENT, {boolean, true}}]}},
+               Error)
+    after 5000 ->
+        error(timeout)
+    end.
+
+close_connection_tolerates_timeout(_) ->
+    ok = meck:new(rabbit_networking, [passthrough]),
+    ok = meck:expect(rabbit_networking, close_connection,
+                     fun(Pid, Error, _Timeout) ->
+                         try rabbit_reader:force_close(Pid, Error, 10)
+                         catch exit:{_Reason, _Location} -> ok
+                         end
+                     end),
+    ConnPid = spawn(fun() ->
+        receive
+            %% Receive the close request but do not reply, simulating a slow connection.
+            {rabbit_call, _From, {close, _Error}} -> receive die -> ok end;
+            die -> ok
+        end
+    end),
+    %% Must return ok even when the target process does not reply within the timeout.
+    ?assertEqual(ok, rabbit_amqp_sole_conn:close_connection(
+                       rabbit_amqp_sole_conn:conn(ConnPid))),
+    ConnPid ! die.
 
 try_put(_) ->
     Path = rabbit_amqp_sole_conn:conn_path(?VH, ?CID1),

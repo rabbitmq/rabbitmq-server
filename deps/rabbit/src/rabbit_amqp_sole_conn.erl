@@ -119,7 +119,7 @@ close_connection(#conn{pid = Pid}) ->
     %% "The existing connection MUST be closed with the error field of
     %% close having the condition field of error being resource-locked.
     %% Further the info field of error MUST contain the symbol key
-    %% sole-connection-enforcement taking the boolean value true" [sole conn 3.2.1].
+    %% sole-connection-enforcement taking the boolean value true" [sole conn 3.2.1]
     Error = #'v1_0.error'{
                condition = ?V_1_0_AMQP_ERROR_RESOURCE_LOCKED,
                description = {utf8, <<"Connection closed because another "
