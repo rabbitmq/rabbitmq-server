@@ -503,6 +503,8 @@ handle_connection_frame(
 
             ok = send_on_channel0(State0, Open, amqp10_framing),
 
+            %% TODO sole_conn: generate the error from the sole_conn module
+            %% (centralize the error generation)
             ErrInfo = {map, [{?V_1_0_AMQP_ERROR_INVALID_FIELD, {symbol, <<"container-id">>}}]},
 
             Error = #'v1_0.error'{
