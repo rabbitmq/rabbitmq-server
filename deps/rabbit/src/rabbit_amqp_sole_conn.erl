@@ -15,10 +15,10 @@
 
 -define(CLOSE_EXISTING_TIMEOUT, 30_000).
 
--export([acquire/4, refuse_connection_error/0]).
+-export([acquire/4, init/0, refuse_connection_error/0]).
 
 %% for testing
--export([init/0,
+-export([do_init/0,
          conn/1,
          try_put/3,
          conn_path/2,
@@ -37,18 +37,12 @@
 -record(conn, {pid :: pid()}).
 
 init() ->
-    rabbit_khepri:adv_put(kill_connection_sproc_path(),
-                          fun kill_connection_sproc/1),
-
-    EventFilter = khepri_evf:tree(kill_connection_sproc_trigger_pattern(),
-                                  #{on_actions => [update]}),
-
-    ok = khepri:register_trigger(
-           rabbit_khepri:get_store_id(),
-           amqp10_sole_conn_kill_connection,
-           EventFilter,
-           kill_connection_sproc_path()),
-    ok.
+    case rabbit_khepri:get_feature_state() of
+        enabled ->
+            do_init();
+        _ ->
+            ok
+    end.
 
 -spec acquire(none | enforcement_policy(), vhost(), container_id(), pid()) ->
     ok | {error, refuse_connection | close_existing}.
@@ -106,6 +100,19 @@ refuse_connection_error() ->
 %% --------------------------------------------------------------
 %% Internals
 %% --------------------------------------------------------------
+%%
+do_init() ->
+    _ = rabbit_khepri:adv_put(kill_connection_sproc_path(),
+                              fun kill_connection_sproc/1),
+
+    EventFilter = khepri_evf:tree(kill_connection_sproc_trigger_pattern(),
+                                  #{on_actions => [update]}),
+
+    ok = khepri:register_trigger(
+           rabbit_khepri:get_store_id(),
+           amqp10_sole_conn_kill_connection,
+           EventFilter,
+           kill_connection_sproc_path()).
 
 default_options(Pid) ->
     #{keep_while => Pid}.
