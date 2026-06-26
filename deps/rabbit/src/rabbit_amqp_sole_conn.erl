@@ -150,6 +150,10 @@ close_connection(#conn{pid = Pid}) ->
                        {?SOLE_CONN_ENFORCEMENT, {boolean, true}}),
     rabbit_networking:close_connection(Pid, Error, ?CLOSE_EXISTING_TIMEOUT).
 
+close_connection_async(Conn) ->
+    _ = spawn(fun() -> close_connection(Conn) end),
+    ok.
+
 store_id() ->
     rabbit_khepri:get_store_id().
 
@@ -157,8 +161,7 @@ store_id() ->
 kill_connection_sproc(#khepri_trigger{type = tree,
                                       event = #{change := update,
                                                 old_node_props := #{data := Conn}}}) ->
-    %% TODO this is called in the RA server, so it should not be blocking
-    close_connection(Conn);
+    close_connection_async(Conn);
 kill_connection_sproc(Props) ->
     ?LOG_WARNING("Unexpected event for sole_conn stored procedure, "
                  "connection will not be instructed to close. Event: ~p",
