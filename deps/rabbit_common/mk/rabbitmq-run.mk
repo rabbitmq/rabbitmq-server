@@ -227,7 +227,7 @@ show-test-tls-certs-dir: $(TEST_TLS_CERTS_DIR)
 ifdef NOBUILD
 DIST_TARGET ?=
 else
-ifeq ($(wildcard ebin/test),)
+ifeq ($(wildcard $(ERLANG_MK_TMP)/$(PROJECT).test),)
 DIST_TARGET ?= dist
 else
 DIST_TARGET ?= test-dist
