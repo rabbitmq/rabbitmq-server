@@ -43,15 +43,27 @@ init() ->
     ],
     Routes = cowboy_router:compile([{'_',  VhostRoutes}]), % any vhost
 
-    case get_env(tcp_config, []) of
-        []       -> ok;
-        TCPConf0 -> start_tcp_listener(TCPConf0, CowboyOpts, Routes)
+    TCPConf = get_env(tcp_config, []),
+    SSLConf = get_env(ssl_config, []),
+    case TCPConf of
+        []      -> ok;
+        _       -> start_tcp_listener(TCPConf, CowboyOpts, Routes)
     end,
-    case get_env(ssl_config, []) of
-        []       -> ok;
-        TLSConf0 -> start_tls_listener(TLSConf0, CowboyOpts, Routes)
+    case SSLConf of
+        []      -> ok;
+        _       -> start_tls_listener(SSLConf, CowboyOpts, Routes)
     end,
+    maybe_warn_about_origins(TCPConf, SSLConf),
     ok.
+
+%% Warns at startup when a listener is configured but no Origin restriction is
+%% set.
+maybe_warn_about_origins(TCPConf, SSLConf) ->
+    case TCPConf =/= [] orelse SSLConf =/= [] of
+        false -> ok;
+        true  -> rabbit_web_dispatch_websocket_origin:warn_if_permissive(
+                   rabbitmq_web_stomp, <<"Web STOMP:">>)
+    end.
 
 stop(State) ->
     rabbit_networking:stop_ranch_listeners_of_protocol(?TCP_PROTOCOL),
