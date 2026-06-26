@@ -345,20 +345,13 @@ no_supported_sub_protocol(Protocol, Req) ->
      #state{}}.
 
 check_origin(Req) ->
-    case application:get_env(?APP, allow_origins, []) of
-        [] ->
-            ok;
-        AllowedOrigins ->
-            case cowboy_req:header(<<"origin">>, Req) of
-                undefined ->
-                    ok;
-                Origin ->
-                    case lists:member(binary_to_list(Origin), AllowedOrigins) of
-                        true -> ok;
-                        false -> {error, origin_not_allowed}
-                    end
-            end
-    end.
+    {AllowOrigins, Strict} = rabbit_web_dispatch_websocket_origin:config(?APP),
+    ServerOrigin = {cowboy_req:scheme(Req),
+                    cowboy_req:host(Req),
+                    cowboy_req:port(Req)},
+    Origin = cowboy_req:header(<<"origin">>, Req),
+    rabbit_web_dispatch_websocket_origin:validate(Origin, ServerOrigin,
+                                                  AllowOrigins, Strict).
 
 handle_data(Data, State0 = #state{}) ->
     case handle_data1(Data, State0) of
