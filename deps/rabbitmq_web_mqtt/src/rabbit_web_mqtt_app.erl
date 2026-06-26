@@ -94,17 +94,7 @@ mqtt_init() ->
                  stream_handlers => [rabbit_web_mqtt_stream_handler, cowboy_stream_h]
                 },
     start_tcp_listener(TcpConfig, CowboyOpts),
-    start_tls_listener(SslConfig, CowboyOpts),
-    maybe_warn_about_origins(TcpConfig, SslConfig).
-
-%% Warns at startup when a listener is configured but no Origin restriction is
-%% set.
-maybe_warn_about_origins(TcpConfig, SslConfig) ->
-    case TcpConfig =/= [] orelse SslConfig =/= [] of
-        false -> ok;
-        true  -> rabbit_web_dispatch_websocket_origin:warn_if_permissive(
-                   rabbitmq_web_mqtt, <<"Web MQTT:">>)
-    end.
+    start_tls_listener(SslConfig, CowboyOpts).
 
 start_tcp_listener([], _) -> ok;
 start_tcp_listener(TCPConf0, CowboyOpts) ->
