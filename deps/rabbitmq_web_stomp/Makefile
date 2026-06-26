@@ -19,7 +19,7 @@ define PROJECT_APP_EXTRA_KEYS
 	{broker_version_requirements, []}
 endef
 
-DEPS = cowboy rabbit_common rabbit rabbitmq_stomp rabbitmq_web_dispatch
+DEPS = cowboy rabbit_common rabbit rabbitmq_stomp
 TEST_DEPS = gun rabbitmq_ct_helpers rabbitmq_ct_client_helpers
 
 PLT_APPS += cowlib
