@@ -228,5 +228,30 @@
 {proxy_protocol_enabled,
   "web_mqtt.proxy_protocol = true",
   [{rabbitmq_web_mqtt,[{proxy_protocol,true}]}],
+  [rabbitmq_web_mqtt]},
+
+ %%
+ %% WebSocket Origin validation
+ %%
+
+ {allow_origins_none,
+  "web_mqtt.allow_origins = none",
+  [{rabbitmq_web_mqtt,[{allow_origins, []}]}],
+  [rabbitmq_web_mqtt]},
+
+ {allow_origins_same_origin,
+  "web_mqtt.allow_origins = same_origin",
+  [{rabbitmq_web_mqtt,[{allow_origins, same_origin}]}],
+  [rabbitmq_web_mqtt]},
+
+ {allow_origins_list,
+  "web_mqtt.allow_origins.1 = https://a.example.com
+   web_mqtt.allow_origins.2 = https://b.example.com",
+  [{rabbitmq_web_mqtt,[{allow_origins, ["https://a.example.com", "https://b.example.com"]}]}],
+  [rabbitmq_web_mqtt]},
+
+ {strict_origin_validation,
+  "web_mqtt.strict_origin_validation = true",
+  [{rabbitmq_web_mqtt,[{strict_origin_validation, true}]}],
   [rabbitmq_web_mqtt]}
 ].

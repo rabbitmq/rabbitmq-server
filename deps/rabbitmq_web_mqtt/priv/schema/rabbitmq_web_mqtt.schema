@@ -27,7 +27,7 @@
     [{datatype, string}]}.
 
 {mapping, "web_mqtt.allow_origins", "rabbitmq_web_mqtt.allow_origins", [
-    {datatype, {enum, [none]}}
+    {datatype, {enum, [none, same_origin]}}
 ]}.
 
 {mapping, "web_mqtt.allow_origins.$name", "rabbitmq_web_mqtt.allow_origins", [
@@ -38,11 +38,16 @@
 fun(Conf) ->
     case cuttlefish:conf_get("web_mqtt.allow_origins", Conf, undefined) of
         none -> [];
+        same_origin -> same_origin;
         _ ->
             Settings = cuttlefish_variable:filter_by_prefix("web_mqtt.allow_origins", Conf),
             [V || {_, V} <- Settings]
     end
 end}.
+
+{mapping, "web_mqtt.strict_origin_validation", "rabbitmq_web_mqtt.strict_origin_validation", [
+    {datatype, boolean}
+]}.
 
 {translation,
     "rabbitmq_web_mqtt.tcp_config",
