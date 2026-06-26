@@ -503,17 +503,8 @@ handle_connection_frame(
 
             ok = send_on_channel0(State0, Open, amqp10_framing),
 
-            %% TODO sole_conn: generate the error from the sole_conn module
-            %% (centralize the error generation)
-            ErrInfo = {map, [{?V_1_0_AMQP_ERROR_INVALID_FIELD, {symbol, <<"container-id">>}}]},
-
-            Error = #'v1_0.error'{
-                       condition = ?V_1_0_AMQP_ERROR_INVALID_FIELD,
-                       description = {utf8, <<"The container-id is already bound to an active exclusive connection.">>},
-                       info = ErrInfo
-                      },
-
             State = State0#v1{connection_state = closing},
+            Error = rabbit_amqp_sole_conn:refuse_connection_error(),
             close(Error, State);
         _ ->
             Timer = maybe_start_credential_expiry_timer(User),

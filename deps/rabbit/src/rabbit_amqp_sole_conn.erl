@@ -15,7 +15,7 @@
 
 -define(CLOSE_EXISTING_TIMEOUT, 30_000).
 
--export([acquire/4, release/2]).
+-export([acquire/4, refuse_connection_error/0]).
 
 %% for testing
 -export([init/0,
@@ -28,7 +28,7 @@
 -rabbit_boot_step({?MODULE,
     [{description, "AMQP 1.0 unique connection enforcement tracker"},
      {mfa,         {?MODULE, init, []}},
-     {requires,    pre_boot},
+     {requires,    database},
      {enables,     external_infrastructure}]}).
 
 -type vhost() :: binary().
@@ -96,15 +96,12 @@ acquire(close_existing = Plcy, VHost, ContainerId, ConnPid) ->
             {error, refuse_connection}
     end.
 
--spec release(vhost(), container_id()) -> ok.
-release(VHost, ContainerId) ->
-    Path = conn_path(VHost, ContainerId),
-    case rabbit_khepri:adv_delete(Path) of
-        {ok, _} ->
-            ok;
-        {error, _} = Error ->
-            Error
-    end.
+refuse_connection_error() ->
+    amqp_error(
+      ?V_1_0_AMQP_ERROR_INVALID_FIELD,
+      <<"The container-id is already bound to an "
+        "active exclusive connection.">>,
+      {?V_1_0_AMQP_ERROR_INVALID_FIELD, {symbol, <<"container-id">>}}).
 
 %% --------------------------------------------------------------
 %% Internals
@@ -138,13 +135,12 @@ close_connection(#conn{pid = Pid}) ->
     %% close having the condition field of error being resource-locked.
     %% Further the info field of error MUST contain the symbol key
     %% sole-connection-enforcement taking the boolean value true" [sole conn 3.2.1]
-    Error = #'v1_0.error'{
-               condition = ?V_1_0_AMQP_ERROR_RESOURCE_LOCKED,
-               description = {utf8, <<"Connection closed because another "
-                                      "connection with the same container-id "
-                                      "was established (sole connection "
-                                      "enforcement).">>},
-               info = {map, [{?SOLE_CONN_ENFORCEMENT, {boolean, true}}]}},
+    Error = amqp_error(?V_1_0_AMQP_ERROR_RESOURCE_LOCKED,
+                       <<"Connection closed because another "
+                         "connection with the same container-id "
+                         "was established (sole connection "
+                         "enforcement).">>,
+                       {?SOLE_CONN_ENFORCEMENT, {boolean, true}}),
     rabbit_networking:close_connection(Pid, Error, ?CLOSE_EXISTING_TIMEOUT).
 
 store_id() ->
@@ -161,6 +157,12 @@ kill_connection_sproc(Props) ->
                  "connection will not be instructed to close. Event: ~p",
                  Props),
     ok.
+
+amqp_error(Cond, Desc, Info) ->
+    #'v1_0.error'{
+       condition = Cond,
+       description = {utf8, Desc},
+       info = {map, [Info]}}.
 
 %% for testing
 conn(Pid) ->
