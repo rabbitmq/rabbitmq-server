@@ -21,6 +21,8 @@
 -import(rabbit_amqp_util,
         [has_capability/2]).
 
+-import(rabbit_ct_broker_helpers, [rpc/5]).
+
 all() ->
     [
       {group, cluster_size_1}
@@ -50,10 +52,12 @@ init_per_group(cluster_size_1, Config) ->
     Config1 = rabbit_ct_helpers:set_config(
                 Config, [{rmq_nodes_count, 1},
                          {rmq_nodename_suffix, Suffix}]),
-    rabbit_ct_helpers:run_setup_steps(
-      Config1,
-      rabbit_ct_broker_helpers:setup_steps() ++
-      rabbit_ct_client_helpers:setup_steps()).
+    Config2 = rabbit_ct_helpers:run_setup_steps(
+                Config1,
+                rabbit_ct_broker_helpers:setup_steps() ++
+                rabbit_ct_client_helpers:setup_steps()),
+    ok = rpc(Config2, 0, rabbit_amqp_sole_conn, init, []),
+    Config2.
 
 end_per_group(_, Config) ->
     rabbit_ct_helpers:run_teardown_steps(

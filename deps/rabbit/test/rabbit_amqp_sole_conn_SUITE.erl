@@ -71,7 +71,7 @@ end_per_group(_, Config) ->
     Config.
 
 init_per_testcase(_, Config) ->
-    rabbit_amqp_sole_conn:do_init(),
+    rabbit_amqp_sole_conn:init(),
     Config.
 
 end_per_testcase(close_existing_should_close_existing_connection, Config) ->
