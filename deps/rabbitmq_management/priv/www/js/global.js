@@ -30,7 +30,8 @@ var KNOWN_ARGS = {'alternate-exchange':        {'short': 'AE',  'type': 'string'
                   'x-consumer-disconnected-timeout': {'short': 'CDT', 'type': 'int'},
                   'x-delayed-retry-type':    {'short': 'DRT', 'type': 'string'},
                   'x-delayed-retry-min':     {'short': 'DRm', 'type': 'int'},
-                  'x-delayed-retry-max':     {'short': 'DRM', 'type': 'int'}};
+                  'x-delayed-retry-max':     {'short': 'DRM', 'type': 'int'},
+                  'x-member-placement-tag':  {'short': 'MPT', 'type': 'string'}};
 
 // Things that are like arguments that we format the same way in listings.
 var IMPLICIT_ARGS = {'durable':         {'short': 'D',    'type': 'boolean'},
@@ -274,6 +275,9 @@ var HELP = {
 
     'queue-leader-locator':
        'Set the rule by which the queue leader is located when declared on a cluster of nodes. Valid values are <code>client-local</code> (default) and <code>balanced</code>.',
+
+    'queue-member-placement-tag':
+       'Node tag key used for AZ-aware quorum queue member placement. When set, replicas are spread across distinct values of this tag (e.g. <code>az</code>). Requires nodes to be tagged with the matching key via the <code>node_tags</code> configuration.',
 
     'queue-initial-cluster-size':
        'Set the queue initial cluster size, i.e. number of queue members/replicas',
