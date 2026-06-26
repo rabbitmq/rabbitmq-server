@@ -97,8 +97,8 @@ mqtt_init() ->
     start_tls_listener(SslConfig, CowboyOpts),
     maybe_warn_about_origins(TcpConfig, SslConfig).
 
-%% Warns once at startup when a listener is configured but accepts WebSocket
-%% upgrades from any Origin.
+%% Warns at startup when a listener is configured but no Origin restriction is
+%% set.
 maybe_warn_about_origins(TcpConfig, SslConfig) ->
     case TcpConfig =/= [] orelse SslConfig =/= [] of
         false -> ok;

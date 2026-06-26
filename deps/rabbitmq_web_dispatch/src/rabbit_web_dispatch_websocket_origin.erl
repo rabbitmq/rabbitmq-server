@@ -5,10 +5,9 @@
 %% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term "Broadcom" refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
-%% WebSocket `Origin` header validation shared by the Web-STOMP and Web-MQTT
-%% plugins. The policy decision (`validate/4`) is pure: the caller passes in the
-%% configuration and the request's own origin, so it can be tested without a
-%% running broker.
+%% WebSocket `Origin` header validation shared by the Web STOMP and Web MQTT
+%% plugins. `validate/4` is pure: configuration and the request origin are
+%% passed in by the caller.
 -module(rabbit_web_dispatch_websocket_origin).
 
 -include_lib("kernel/include/logger.hrl").
@@ -23,14 +22,15 @@
 %%   list of origins - only an Origin present in the list is accepted
 -type allow_origins() :: [] | same_origin | [string()].
 
-%% The request's own origin as seen by the server: scheme, host, and port.
+%% The request's own origin as the server observes it: scheme from the listener
+%% transport, host and port from the Host header. With TLS terminated upstream
+%% these may differ from the values the browser used.
 -type server_origin() :: {Scheme :: binary(),
                           Host :: binary(),
                           Port :: inet:port_number()}.
 
-%% Reads both origin-validation settings from a plugin's application
-%% environment. Centralised here so the two plugins and their listeners share
-%% one definition of the setting names and defaults.
+%% Reads both origin settings from a plugin's environment, so the two plugins
+%% share one definition of the setting names and defaults.
 -spec config(App :: atom()) -> {allow_origins(), Strict :: boolean()}.
 config(App) ->
     {application:get_env(App, allow_origins, []),
@@ -45,9 +45,8 @@ config(App) ->
 %% No restriction configured: accept every Origin, including a missing one.
 validate(_Origin, _ServerOrigin, [], _Strict) ->
     ok;
-%% A policy is in effect but the request carries no Origin header. Such a
-%% request cannot come from a same-origin-bound browser, so it is accepted
-%% to keep non-browser WebSocket clients working unless strict mode is on.
+%% A restriction is set but the request has no Origin header: accept it unless
+%% strict mode is on.
 validate(undefined, _ServerOrigin, _AllowOrigins, Strict) ->
     case Strict of
         true  -> {error, origin_not_allowed};
@@ -65,9 +64,8 @@ validate(Origin, _ServerOrigin, AllowOrigins, _Strict)
         false -> {error, origin_not_allowed}
     end.
 
-%% Returns a warning to log at startup when a listener accepts any Origin, or
-%% `none` when a restriction is in place. Pure so the message text can be
-%% asserted in tests.
+%% Returns the warning text when a listener accepts any Origin, or `none' when a
+%% restriction is configured.
 -spec permissive_warning(PluginLabel :: iodata(), allow_origins()) ->
           iodata() | none.
 permissive_warning(PluginLabel, []) ->
@@ -79,9 +77,8 @@ permissive_warning(PluginLabel, []) ->
 permissive_warning(_PluginLabel, _AllowOrigins) ->
     none.
 
-%% Logs the permissive-default warning for App (labelled PluginLabel) when no
-%% Origin restriction is configured; a no-op otherwise. Called once per plugin
-%% at listener startup.
+%% Logs the warning for App at listener startup when no restriction is
+%% configured.
 -spec warn_if_permissive(App :: atom(), PluginLabel :: iodata()) -> ok.
 warn_if_permissive(App, PluginLabel) ->
     {AllowOrigins, _Strict} = config(App),
@@ -117,8 +114,7 @@ parse_origin(Origin) ->
                 Port      -> {ok, {Scheme, Host, Port}}
             end;
         _ ->
-            %% Opaque Origins such as "null" carry no scheme/host and are
-            %% never treated as same-origin.
+            %% Values without a scheme and host (e.g. "null") do not match.
             error
     catch
         _:_ -> error
