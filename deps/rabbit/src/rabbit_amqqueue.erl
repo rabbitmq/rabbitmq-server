@@ -982,7 +982,8 @@ declare_args() ->
      {<<"x-stream-max-segment-size-bytes">>, fun check_non_neg_int_arg/2},
      {<<"x-stream-filter-size-bytes">>, fun check_non_neg_int_arg/2},
      {<<"x-initial-cluster-size">>, fun check_initial_cluster_size_arg/2},
-     {<<"x-queue-leader-locator">>, fun check_queue_leader_locator_arg/2}].
+     {<<"x-queue-leader-locator">>, fun check_queue_leader_locator_arg/2},
+     {<<"x-member-placement-tag">>, fun check_member_placement_tag_arg/2}].
 
 consume_args() -> [{<<"x-priority">>,              fun check_int_arg/2},
                    {<<"x-consumer-timeout">>,      fun check_non_neg_int_arg/2},
@@ -1181,6 +1182,17 @@ check_queue_leader_locator_arg(Val, _Args) when is_binary(Val) ->
     end;
 check_queue_leader_locator_arg(_Val, _Args) ->
     {error, invalid_queue_locator_arg}.
+
+check_member_placement_tag_arg({longstr, Val}, _Args) when byte_size(Val) > 0 ->
+    ok;
+check_member_placement_tag_arg({longstr, _}, _Args) ->
+    {error, invalid_member_placement_tag_arg};
+check_member_placement_tag_arg({Type, _}, _Args) ->
+    {error, {unacceptable_type, Type}};
+check_member_placement_tag_arg(Val, _Args) when is_binary(Val), byte_size(Val) > 0 ->
+    ok;
+check_member_placement_tag_arg(_Val, _Args) ->
+    {error, invalid_member_placement_tag_arg}.
 
 check_stream_offset_arg(Val, _Args) ->
     case rabbit_stream_queue:parse_offset_arg(Val) of

@@ -2596,6 +2596,10 @@ end}.
   {datatype, {integer, positive}}
 ]}.
 
+{mapping, "quorum_queue.member_placement_tag", "rabbit.quorum_queue_member_placement_tag", [
+  {datatype, binary}
+]}.
+
 {mapping, "quorum_queue.commands_soft_limit", "rabbit.quorum_commands_soft_limit", [
   {datatype, {integer, positive}}
 ]}.
