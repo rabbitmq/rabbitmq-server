@@ -30,6 +30,9 @@
          unbind_exchange/5,
          delete_exchange/2,
 
+         %% binding operations
+         list_bindings/4,
+
          set_token/2
         ]).
 
@@ -60,6 +63,12 @@
                                  arguments => arguments()}.
 
 -type amqp10_prim() :: amqp10_binary_generator:amqp10_prim().
+
+-type binding_info() :: #{source := binary(),
+                          destination := {queue | exchange, binary()},
+                          binding_key := binary(),
+                          arguments := arguments(),
+                          location := binary()}.
 
 -spec attach_management_link_pair_sync(pid(), binary()) ->
     {ok, link_pair()} | {error, term()}.
@@ -284,6 +293,56 @@ search_binding_uri(BindingArguments, [{map, Binding} | Bindings]) ->
         _ ->
             search_binding_uri(BindingArguments, Bindings)
     end.
+
+-spec list_bindings(link_pair(),
+                    binary(),
+                    {queue | exchange, binary()},
+                    binary()) ->
+    {ok, [binding_info()]} | {error, term()}.
+list_bindings(LinkPair, Source, {DstKind, Destination}, BindingKey) ->
+    DstChar = case DstKind of
+                  queue -> $q;
+                  exchange -> $e
+              end,
+    Query = uri_string:compose_query(
+              [{<<"src">>, Source},
+               {<<"dst", DstChar>>, Destination},
+               {<<"key">>, BindingKey}]),
+    Uri = uri_string:recompose(#{path => <<"/bindings">>,
+                                 query => Query}),
+    Props = #{subject => <<"GET">>,
+              to => Uri},
+    case request(LinkPair, Props, null) of
+        {ok, Resp} ->
+            case is_success(Resp) of
+                true ->
+                    #'v1_0.amqp_value'{content = {list, Bindings}} =
+                        amqp10_msg:body(Resp),
+                    {ok, [decode_binding_info(B) || B <- Bindings]};
+                false ->
+                    {error, Resp}
+            end;
+        Err ->
+            Err
+    end.
+
+decode_binding_info({map, KVList}) ->
+    Map = maps:from_list(KVList),
+    Destination = case Map of
+                      #{{utf8, <<"destination_queue">>} := {utf8, Q}} ->
+                          {queue, Q};
+                      #{{utf8, <<"destination_exchange">>} := {utf8, X}} ->
+                          {exchange, X}
+                  end,
+    #{{utf8, <<"source">>} := {utf8, Source},
+      {utf8, <<"binding_key">>} := {utf8, Key},
+      {utf8, <<"arguments">>} := {map, Args},
+      {utf8, <<"location">>} := {utf8, Location}} = Map,
+    #{source => Source,
+      destination => Destination,
+      binding_key => Key,
+      arguments => maps:from_list([{K, V} || {{utf8, K}, V} <- Args]),
+      location => Location}.
 
 -spec delete_binding(link_pair(), binary()) ->
     ok | {error, term()}.
