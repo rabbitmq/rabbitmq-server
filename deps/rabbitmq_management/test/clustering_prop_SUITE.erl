@@ -111,7 +111,9 @@ prop_connection_channel_counts(Config) ->
                 % ensure we begin with no connections
                 ct:pal("Init testcase"),
                 rabbit_ct_helpers:await_condition(
-                  fun () -> validate_counts(Config, []) end,
+                  fun () ->
+                          force_stats(Config),
+                          validate_counts(Config, []) end,
                   60000),
                 Cons = lists:foldl(fun (Op, Agg) ->
                                           execute_op(Config, Op, Agg)
