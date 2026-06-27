@@ -1052,9 +1052,22 @@ tie_binding_to_dest_with_keep_while_cond_enable(
                                        true ->
                                            ok;
                                        false ->
-                                           ok = khepri_tx:put(
-                                                  ExchangePath, Exchange,
-                                                  PutOptions)
+                                           %% An auto-delete exchange's
+                                           %% `keep_while' condition requires at
+                                           %% least one binding where it is the
+                                           %% source. Adding it to an exchange
+                                           %% without such bindings is rejected
+                                           %% by Khepri with
+                                           %% `keep_while_conditions_not_met'.
+                                           case rabbit_db_binding:has_for_source_in_khepri(
+                                                  Exchange#exchange.name) of
+                                               true ->
+                                                   ok = khepri_tx:put(
+                                                          ExchangePath, Exchange,
+                                                          PutOptions);
+                                               false ->
+                                                   ok
+                                           end
                                    end
                            end),
 
