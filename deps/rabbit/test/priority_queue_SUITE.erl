@@ -259,7 +259,8 @@ dropwhile_fetchwhile(Config) ->
     [begin
          declare(Ch, Q, Args ++ arguments(3)),
          publish(Ch, Q, [1, 2, 3, 1, 2, 3, 1, 2, 3]),
-         timer:sleep(10),
+         %% Wait for the messages to expire.
+         wait_for_queue_empty(Config, Q),
          get_empty(Ch, Q),
          delete(Ch, Q)
      end ||
@@ -563,6 +564,16 @@ get_partial(Ch, Q, Ack, Ps) ->
 
 get_empty(Ch, Q) ->
     #'basic.get_empty'{} = amqp_channel:call(Ch, #'basic.get'{queue = Q}).
+
+wait_for_queue_empty(Config, Q) ->
+    rabbit_ct_helpers:await_condition(
+      fun () ->
+              {ok, Q0} = rabbit_ct_broker_helpers:rpc(
+                           Config, 0, rabbit_amqqueue, lookup, [Q, <<"/">>]),
+              Info = rabbit_ct_broker_helpers:rpc(
+                       Config, 0, rabbit_amqqueue, info, [Q0, [messages]]),
+              proplists:get_value(messages, Info) =:= 0
+      end, 30000).
 
 get_ok(Ch, Q, Ack, PBin) ->
     {#'basic.get_ok'{delivery_tag = DTag}, #amqp_msg{payload = PBin2}} =
