@@ -1355,36 +1355,36 @@ single_active_consumer_priority(Config) ->
     %% assert each queue has a different consumer
 
     %% Q1 should have the consumer on Ch1
-    ?assertMatch(#{single_active_consumer_id := {<<"ch1-ctag1">>, _}},
-                 machine_overview({RaNameQ1, Server0})),
+    %% Single active consumer election flows through Ra and is applied
+    %% asynchronously, so poll rather than asserting once.
+    ?awaitMatch(#{single_active_consumer_id := {<<"ch1-ctag1">>, _}},
+                machine_overview({RaNameQ1, Server0}), ?DEFAULT_AWAIT),
 
     %% Q2 Ch2
-    ?assertMatch(#{single_active_consumer_id := {<<"ch2-ctag2">>, _}},
-                 machine_overview({RaNameQ2, Server0})),
+    ?awaitMatch(#{single_active_consumer_id := {<<"ch2-ctag2">>, _}},
+                machine_overview({RaNameQ2, Server0}), ?DEFAULT_AWAIT),
 
     %% Q3 Ch3
-    ?assertMatch(#{single_active_consumer_id := {<<"ch3-ctag3">>, _}},
-                 machine_overview({RaNameQ3, Server0})),
+    ?awaitMatch(#{single_active_consumer_id := {<<"ch3-ctag3">>, _}},
+                machine_overview({RaNameQ3, Server0}), ?DEFAULT_AWAIT),
 
     %% close Ch3
     _ = rabbit_ct_client_helpers:close_channel(Ch3),
-    flush(100),
 
     %% assert Q3 has Ch2 (priority 2) as consumer
-    ?assertMatch(#{single_active_consumer_id := {<<"ch2-ctag3">>, _}},
-                 machine_overview({RaNameQ3, Server0})),
+    ?awaitMatch(#{single_active_consumer_id := {<<"ch2-ctag3">>, _}},
+                machine_overview({RaNameQ3, Server0}), ?DEFAULT_AWAIT),
 
     %% close Ch2
     _ = rabbit_ct_client_helpers:close_channel(Ch2),
-    flush(100),
 
     %% assert all queues as has Ch1 as consumer
-    ?assertMatch(#{single_active_consumer_id := {<<"ch1-ctag1">>, _}},
-                 machine_overview({RaNameQ1, Server0})),
-    ?assertMatch(#{single_active_consumer_id := {<<"ch1-ctag2">>, _}},
-                 machine_overview({RaNameQ2, Server0})),
-    ?assertMatch(#{single_active_consumer_id := {<<"ch1-ctag3">>, _}},
-                 machine_overview({RaNameQ3, Server0})),
+    ?awaitMatch(#{single_active_consumer_id := {<<"ch1-ctag1">>, _}},
+                machine_overview({RaNameQ1, Server0}), ?DEFAULT_AWAIT),
+    ?awaitMatch(#{single_active_consumer_id := {<<"ch1-ctag2">>, _}},
+                machine_overview({RaNameQ2, Server0}), ?DEFAULT_AWAIT),
+    ?awaitMatch(#{single_active_consumer_id := {<<"ch1-ctag3">>, _}},
+                machine_overview({RaNameQ3, Server0}), ?DEFAULT_AWAIT),
     ok.
 
 force_shrink_members_to_local_member(Config) ->
