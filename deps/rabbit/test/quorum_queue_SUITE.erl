@@ -1273,36 +1273,36 @@ single_active_consumer_priority(Config) ->
     QueryFun = fun rabbit_fifo:query_single_active_consumer/1,
 
     %% Q1 should have the consumer on Ch1
-    ?assertMatch({ok, {_, {value, {<<"ch1-ctag1">>, _}}}, _},
-                rpc:call(Server0, ra, local_query, [RaNameQ1, QueryFun])),
+    %% Single active consumer election flows through Ra and is applied
+    %% asynchronously, so poll rather than asserting once.
+    ?awaitMatch({ok, {_, {value, {<<"ch1-ctag1">>, _}}}, _},
+                rpc:call(Server0, ra, local_query, [RaNameQ1, QueryFun]), ?DEFAULT_AWAIT),
 
     %% Q2 Ch2
-    ?assertMatch({ok, {_, {value, {<<"ch2-ctag2">>, _}}}, _},
-                rpc:call(Server1, ra, local_query, [RaNameQ2, QueryFun])),
+    ?awaitMatch({ok, {_, {value, {<<"ch2-ctag2">>, _}}}, _},
+                rpc:call(Server1, ra, local_query, [RaNameQ2, QueryFun]), ?DEFAULT_AWAIT),
 
     %% Q3 Ch3
-    ?assertMatch({ok, {_, {value, {<<"ch3-ctag3">>, _}}}, _},
-                rpc:call(Server2, ra, local_query, [RaNameQ3, QueryFun])),
+    ?awaitMatch({ok, {_, {value, {<<"ch3-ctag3">>, _}}}, _},
+                rpc:call(Server2, ra, local_query, [RaNameQ3, QueryFun]), ?DEFAULT_AWAIT),
 
     %% close Ch3
     _ = rabbit_ct_client_helpers:close_channel(Ch3),
-    flush(100),
 
     %% assert Q3 has Ch2 (priority 2) as consumer
-    ?assertMatch({ok, {_, {value, {<<"ch2-ctag3">>, _}}}, _},
-                rpc:call(Server2, ra, local_query, [RaNameQ3, QueryFun])),
+    ?awaitMatch({ok, {_, {value, {<<"ch2-ctag3">>, _}}}, _},
+                rpc:call(Server2, ra, local_query, [RaNameQ3, QueryFun]), ?DEFAULT_AWAIT),
 
     %% close Ch2
     _ = rabbit_ct_client_helpers:close_channel(Ch2),
-    flush(100),
 
     %% assert all queues as has Ch1 as consumer
-    ?assertMatch({ok, {_, {value, {<<"ch1-ctag1">>, _}}}, _},
-                rpc:call(Server0, ra, local_query, [RaNameQ1, QueryFun])),
-    ?assertMatch({ok, {_, {value, {<<"ch1-ctag2">>, _}}}, _},
-                rpc:call(Server0, ra, local_query, [RaNameQ2, QueryFun])),
-    ?assertMatch({ok, {_, {value, {<<"ch1-ctag3">>, _}}}, _},
-                rpc:call(Server0, ra, local_query, [RaNameQ3, QueryFun])),
+    ?awaitMatch({ok, {_, {value, {<<"ch1-ctag1">>, _}}}, _},
+                rpc:call(Server0, ra, local_query, [RaNameQ1, QueryFun]), ?DEFAULT_AWAIT),
+    ?awaitMatch({ok, {_, {value, {<<"ch1-ctag2">>, _}}}, _},
+                rpc:call(Server0, ra, local_query, [RaNameQ2, QueryFun]), ?DEFAULT_AWAIT),
+    ?awaitMatch({ok, {_, {value, {<<"ch1-ctag3">>, _}}}, _},
+                rpc:call(Server0, ra, local_query, [RaNameQ3, QueryFun]), ?DEFAULT_AWAIT),
     ok.
 
 force_shrink_member_to_current_member(Config) ->
