@@ -967,31 +967,30 @@ open(info, emit_stats,
     Connection1 = emit_stats(Connection, State),
     {keep_state, StatemData#statem_data{connection = Connection1}};
 open(info, check_outstanding_requests,
-     #statem_data{connection = #stream_connection{outstanding_requests = Requests,
+     #statem_data{connection = #stream_connection{name = ConnName,
+                                                  outstanding_requests = Requests,
                                                   request_timeout = Timeout} = Connection0} =
          StatemData) ->
     Time = erlang:monotonic_time(millisecond),
     ?LOG_DEBUG("Checking outstanding requests at ~tp: ~tp", [Time, Requests]),
-    HasTimedOut = maps:fold(fun(_, #request{}, true) ->
-                                    true;
-                               (K, #request{content = Ctnt, start = Start}, false) ->
-                                    case (Time - Start) > Timeout of
-                                        true ->
-                                            ?LOG_DEBUG("Request ~tp with content ~tp has timed out",
-                                                             [K, Ctnt]),
-
-                                            true;
-                                        false ->
-                                            false
-                                    end
-                            end, false, Requests),
-    case HasTimedOut of
-        true ->
-            ?LOG_INFO("Forcing stream connection ~tp closing: request to client timed out",
-                                       [self()]),
+    TimedOut = maps:fold(fun(K, #request{content = Ctnt, start = Start}, Acc) ->
+                                 case (Time - Start) > Timeout of
+                                     true ->
+                                         [{K, Ctnt} | Acc];
+                                     false ->
+                                         Acc
+                                 end
+                         end, [], Requests),
+    case TimedOut of
+        [_ | _] ->
+            %% Stop with a `{shutdown, _}` reason so that gen_statem does not
+            %% emit its verbose crash report (which dumps the full connection
+            %% state) for what is an expected operational condition.
+            ?LOG_INFO("Closing stream connection ~tp (~ts): client did not respond within ~bms to ~b RPC request(s): ~tp",
+                      [self(), ConnName, Timeout, length(TimedOut), TimedOut]),
             _ = demonitor_all_streams(Connection0),
-            {stop, {request_timeout, <<"Request timeout">>}};
-        false ->
+            {stop, {shutdown, {request_timeout, TimedOut}}};
+        [] ->
             Connection1 = ensure_outstanding_requests_timer(
                             Connection0#stream_connection{outstanding_requests_timer = undefined}
                            ),
