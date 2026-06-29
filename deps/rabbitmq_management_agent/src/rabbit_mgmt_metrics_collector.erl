@@ -22,6 +22,7 @@
          code_change/3]).
 -export([index_table/2]).
 -export([reset_all/0]).
+-export([sum_entry/2, difference/2]).
 
 -import(rabbit_mgmt_data, [lookup_element/3]).
 
@@ -625,41 +626,71 @@ get_difference(Id, Stats, #state{old_aggr_stats = OldStats}) ->
             difference(OldStat, Stats)
     end.
 
--dialyzer({no_match, sum_entry/2}).
-sum_entry({A0}, {B0}) ->
+%% Sources publishing into core_metrics ETS tables occasionally race
+%% with table deletion or are initialised with sentinel values (e.g. the
+%% empty atom `''`, which `rabbit_mgmt_format` uses to represent "null").
+%% Doing arithmetic on these sentinels would raise `badarith` inside the
+%% gen_server, taking the collector down (see GH #12815). Coerce
+%% non-integer fields to 0 so the aggregation proceeds; the next
+%% scrape recovers a correct value.
+sum_entry(A, B) when is_tuple(A), is_tuple(B), tuple_size(A) =:= tuple_size(B) ->
+    sum_entry_safe(normalise(A), normalise(B)).
+
+-dialyzer({no_match, sum_entry_safe/2}).
+sum_entry_safe({A0}, {B0}) ->
     {B0 + A0};
-sum_entry({A0, A1}, {B0, B1}) ->
+sum_entry_safe({A0, A1}, {B0, B1}) ->
     {B0 + A0, B1 + A1};
-sum_entry({A0, A1, A2}, {B0, B1, B2}) ->
+sum_entry_safe({A0, A1, A2}, {B0, B1, B2}) ->
     {B0 + A0, B1 + A1, B2 + A2};
-sum_entry({A0, A1, A2, A3}, {B0, B1, B2, B3}) ->
+sum_entry_safe({A0, A1, A2, A3}, {B0, B1, B2, B3}) ->
     {B0 + A0, B1 + A1, B2 + A2, B3 + A3};
-sum_entry({A0, A1, A2, A3, A4}, {B0, B1, B2, B3, B4}) ->
+sum_entry_safe({A0, A1, A2, A3, A4}, {B0, B1, B2, B3, B4}) ->
     {B0 + A0, B1 + A1, B2 + A2, B3 + A3, B4 + A4};
-sum_entry({A0, A1, A2, A3, A4, A5}, {B0, B1, B2, B3, B4, B5}) ->
+sum_entry_safe({A0, A1, A2, A3, A4, A5}, {B0, B1, B2, B3, B4, B5}) ->
     {B0 + A0, B1 + A1, B2 + A2, B3 + A3, B4 + A4, B5 + A5};
-sum_entry({A0, A1, A2, A3, A4, A5, A6}, {B0, B1, B2, B3, B4, B5, B6}) ->
+sum_entry_safe({A0, A1, A2, A3, A4, A5, A6}, {B0, B1, B2, B3, B4, B5, B6}) ->
     {B0 + A0, B1 + A1, B2 + A2, B3 + A3, B4 + A4, B5 + A5, B6 + A6};
-sum_entry({A0, A1, A2, A3, A4, A5, A6, A7}, {B0, B1, B2, B3, B4, B5, B6, B7}) ->
+sum_entry_safe({A0, A1, A2, A3, A4, A5, A6, A7}, {B0, B1, B2, B3, B4, B5, B6, B7}) ->
     {B0 + A0, B1 + A1, B2 + A2, B3 + A3, B4 + A4, B5 + A5, B6 + A6, B7 + A7}.
 
--dialyzer({no_match, difference/2}).
-difference({A0}, {B0}) ->
+difference(A, B) when is_tuple(A), is_tuple(B), tuple_size(A) =:= tuple_size(B) ->
+    difference_safe(normalise(A), normalise(B)).
+
+-dialyzer({no_match, difference_safe/2}).
+difference_safe({A0}, {B0}) ->
     {B0 - A0};
-difference({A0, A1}, {B0, B1}) ->
+difference_safe({A0, A1}, {B0, B1}) ->
     {B0 - A0, B1 - A1};
-difference({A0, A1, A2}, {B0, B1, B2}) ->
+difference_safe({A0, A1, A2}, {B0, B1, B2}) ->
     {B0 - A0, B1 - A1, B2 - A2};
-difference({A0, A1, A2, A3}, {B0, B1, B2, B3}) ->
+difference_safe({A0, A1, A2, A3}, {B0, B1, B2, B3}) ->
     {B0 - A0, B1 - A1, B2 - A2, B3 - A3};
-difference({A0, A1, A2, A3, A4}, {B0, B1, B2, B3, B4}) ->
+difference_safe({A0, A1, A2, A3, A4}, {B0, B1, B2, B3, B4}) ->
     {B0 - A0, B1 - A1, B2 - A2, B3 - A3, B4 - A4};
-difference({A0, A1, A2, A3, A4, A5}, {B0, B1, B2, B3, B4, B5}) ->
+difference_safe({A0, A1, A2, A3, A4, A5}, {B0, B1, B2, B3, B4, B5}) ->
     {B0 - A0, B1 - A1, B2 - A2, B3 - A3, B4 - A4, B5 - A5};
-difference({A0, A1, A2, A3, A4, A5, A6}, {B0, B1, B2, B3, B4, B5, B6}) ->
+difference_safe({A0, A1, A2, A3, A4, A5, A6}, {B0, B1, B2, B3, B4, B5, B6}) ->
     {B0 - A0, B1 - A1, B2 - A2, B3 - A3, B4 - A4, B5 - A5, B6 - A6};
-difference({A0, A1, A2, A3, A4, A5, A6, A7}, {B0, B1, B2, B3, B4, B5, B6, B7}) ->
+difference_safe({A0, A1, A2, A3, A4, A5, A6, A7}, {B0, B1, B2, B3, B4, B5, B6, B7}) ->
     {B0 - A0, B1 - A1, B2 - A2, B3 - A3, B4 - A4, B5 - A5, B6 - A6, B7 - A7}.
+
+normalise(T) when is_tuple(T) ->
+    case has_non_integer(T, tuple_size(T)) of
+        false -> T;
+        true  -> list_to_tuple([to_int(E) || E <- tuple_to_list(T)])
+    end.
+
+has_non_integer(_T, 0) ->
+    false;
+has_non_integer(T, N) ->
+    case element(N, T) of
+        E when is_integer(E) -> has_non_integer(T, N - 1);
+        _                    -> true
+    end.
+
+to_int(N) when is_integer(N) -> N;
+to_int(_)                    -> 0.
 
 vhost(#resource{virtual_host = VHost}) ->
     VHost;
