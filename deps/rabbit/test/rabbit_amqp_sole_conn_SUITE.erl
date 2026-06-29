@@ -111,8 +111,9 @@ close_existing_should_close_existing_connection(_) ->
     TestPid = self(),
     Path = rabbit_amqp_sole_conn:conn_path(?VH, ?CID1),
     Pid1 = spawn(fun() ->
+                         process_flag(trap_exit, true),
                          receive
-                             close_sole_conn_enforcement ->
+                             {'EXIT', _, sole_conn_enforcement} ->
                                  TestPid ! close_sole_conn_enforcement_received
                          after 5000 ->
                                    ok

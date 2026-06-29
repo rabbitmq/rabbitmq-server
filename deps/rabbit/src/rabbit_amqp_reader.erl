@@ -180,6 +180,12 @@ handle_other(emit_stats, State) ->
     emit_stats(State);
 handle_other(ensure_stats_timer, State) ->
     ensure_stats_timer(State);
+handle_other({'EXIT', Pid, sole_conn_enforcement}, State0) ->
+    Error = rabbit_amqp_sole_conn:close_existing_connection_error(),
+    case ?IS_RUNNING(State0) of
+        true  -> close(Error, State0);
+        false -> stop
+    end;
 handle_other({'EXIT', Parent, Reason}, State = #v1{parent = Parent}) ->
     ReasonString = rabbit_misc:format("broker forced connection closure with reason '~w'",
                                       [Reason]),
