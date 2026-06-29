@@ -245,9 +245,8 @@ delivery_effects(CPid, Msgs0) ->
 
 -spec state_enter(ra_server:ra_state() | eol, rabbit_types:r('queue'), dead_letter_handler(), state()) ->
     ra_machine:effects().
-state_enter(leader, QRes, at_least_once, State) ->
-    ensure_worker_started(QRes, State),
-    [];
+state_enter(leader, _QRes, at_least_once, _State) ->
+    [{aux, {dlx, setup}}];
 state_enter(_, _, at_least_once, State) ->
     ensure_worker_terminated(State),
     [];
@@ -257,7 +256,7 @@ state_enter(_, _, _, _) ->
 ensure_worker_started(QRef, #?MODULE{consumer = undefined}) ->
     start_worker(QRef);
 ensure_worker_started(QRef, #?MODULE{consumer = #dlx_consumer{pid = Pid}}) ->
-    case is_local_and_alive(Pid) of
+    case rabbit_misc:is_local_process_alive(Pid) of
         true ->
             ?LOG_DEBUG("rabbit_fifo_dlx_worker ~tp already started for ~ts",
                              [Pid, rabbit_misc:rs(QRef)]);
@@ -270,38 +269,24 @@ ensure_worker_started(QRef, #?MODULE{consumer = #dlx_consumer{pid = Pid}}) ->
 %% Also therefore, if starting the rabbit_fifo_dlx_worker fails, let the
 %% Ra server process crash in which case another Ra node will become leader.
 start_worker(QRef) ->
-    {ok, Pid} = supervisor:start_child(rabbit_fifo_dlx_sup, [QRef]),
+    {ok, Pid} = rabbit_fifo_dlx_sup_sup:start_worker(QRef),
     ?LOG_DEBUG("started rabbit_fifo_dlx_worker ~tp for ~ts",
                      [Pid, rabbit_misc:rs(QRef)]).
 
 ensure_worker_terminated(#?MODULE{consumer = undefined}) ->
     ok;
 ensure_worker_terminated(#?MODULE{consumer = #dlx_consumer{pid = Pid}}) ->
-    case is_local_and_alive(Pid) of
-        true ->
-            %% Note that we can't return a mod_call effect here
-            %% because mod_call is executed on the leader only.
-            ok = supervisor:terminate_child(rabbit_fifo_dlx_sup, Pid),
-            ?LOG_DEBUG("terminated rabbit_fifo_dlx_worker ~tp", [Pid]);
-        false ->
-            ok
-    end.
+    ok = rabbit_fifo_dlx_worker:terminate_worker(Pid).
 
 local_alive_consumer_pid(#?MODULE{consumer = undefined}) ->
     undefined;
 local_alive_consumer_pid(#?MODULE{consumer = #dlx_consumer{pid = Pid}}) ->
-    case is_local_and_alive(Pid) of
+    case rabbit_misc:is_local_process_alive(Pid) of
         true ->
             Pid;
         false ->
             undefined
     end.
-
-is_local_and_alive(Pid)
-  when node(Pid) =:= node() ->
-    is_process_alive(Pid);
-is_local_and_alive(_) ->
-    false.
 
 -spec update_config(Old :: dead_letter_handler(), New :: dead_letter_handler(),
                     rabbit_types:r('queue'), state()) ->
