@@ -20,7 +20,9 @@
          handle_queue_event/2]).
 
 -ifdef(TEST).
--export([check_dead_letter_exchange_access/4]).
+-export([check_dead_letter_exchange_access/4,
+         check_subscription_binding_access/5,
+         ensure_exchange_exists/3]).
 -endif.
 
 -include_lib("kernel/include/logger.hrl").
@@ -1649,10 +1651,14 @@ ensure_binding(#resource{name = QueueBin}, {<<>>, QueueBin}, _State) ->
     %% i.e., we should only be asked to bind to the default exchange a
     %% queue with its own name
     ok;
-ensure_binding(QName, {Exchange, RoutingKey}, _State = #state{cfg = #cfg{
-                                                                       auth_login = Username,
-                                                                       vhost = VHost}}) ->
-    Binding = #binding{source = rabbit_misc:r(VHost, exchange, Exchange),
+ensure_binding(QName, {Exchange, RoutingKey},
+               #state{user = User,
+                      authz_ctx = AuthzCtx,
+                      cfg = #cfg{auth_login = Username, vhost = VHost}}) ->
+    ExchangeName = rabbit_misc:r(VHost, exchange, Exchange),
+    ok = check_subscription_binding_access(QName, ExchangeName, RoutingKey,
+                                           User, AuthzCtx),
+    Binding = #binding{source = ExchangeName,
                        destination = QName,
                        key = RoutingKey},
     case rabbit_binding:add(Binding, Username) of
@@ -1665,6 +1671,23 @@ ensure_binding(QName, {Exchange, RoutingKey}, _State = #state{cfg = #cfg{
         {error, #amqp_error{} = Error} ->
             rabbit_misc:protocol_error(Error);
         ok ->
+            ok
+    end.
+
+%% Binding creation requires the same authorisation as `queue.bind`.
+-spec check_subscription_binding_access(rabbit_amqqueue:name(),
+                                        rabbit_types:exchange_name(),
+                                        rabbit_types:routing_key(),
+                                        rabbit_types:user(),
+                                        rabbit_types:authz_context()) -> ok.
+check_subscription_binding_access(QName, ExchangeName, RoutingKey, User, AuthzCtx) ->
+    ok = check_resource_access(User, QName, write, AuthzCtx),
+    ok = check_resource_access(User, ExchangeName, read, AuthzCtx),
+    case rabbit_exchange:lookup(ExchangeName) of
+        {ok, Exchange} ->
+            _ = check_topic_authorisation(Exchange, User, RoutingKey, AuthzCtx, read),
+            ok;
+        {error, not_found} ->
             ok
     end.
 
@@ -1815,8 +1838,7 @@ parse_endpoint0(Type,     Rest) ->
 %% --------------------------------------------------------------------------
 
 util_ensure_endpoint(source, {exchange, {Name, _}}, Params, State = #state{cfg = #cfg{vhost = VHost}}) ->
-    ExchangeName = rabbit_misc:r(Name, exchange, VHost),
-    check_exchange(ExchangeName, proplists:get_value(check_exchange, Params, false)),
+    ensure_exchange_exists(VHost, Name, Params),
     Amqqueue = new_amqqueue(undefined, exchange, Params, State),
     {ok, Queue} = create_queue(Amqqueue, State),
     {ok, amqqueue:get_name(Queue), State};
@@ -1843,8 +1865,7 @@ util_ensure_endpoint(_, {queue, Name}, Params, State=#state{route_state = Routin
     {ok,  rabbit_misc:r(VHost, queue, QueueNameBin), State#state{route_state = RState1}};
 
 util_ensure_endpoint(dest, {exchange, {Name, _}}, Params, State = #state{cfg = #cfg{vhost = VHost}}) ->
-    ExchangeName = rabbit_misc:r(Name, exchange, VHost),
-    check_exchange(ExchangeName, proplists:get_value(check_exchange, Params, false)),
+    ensure_exchange_exists(VHost, Name, Params),
     {ok, undefined, State};
 
 util_ensure_endpoint(dest, {topic, _}, _Params, State) ->
@@ -1876,6 +1897,10 @@ dest_temp_queue({temp_queue, Name}) -> Name;
 dest_temp_queue(_)                  -> none.
 
 %% --------------------------------------------------------------------------
+
+ensure_exchange_exists(VHost, Name, Params) ->
+    ExchangeName = rabbit_misc:r(VHost, exchange, Name),
+    check_exchange(ExchangeName, proplists:get_value(check_exchange, Params, false)).
 
 check_exchange(_,            false) ->
     ok;
