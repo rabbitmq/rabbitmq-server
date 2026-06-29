@@ -18,7 +18,9 @@ groups() ->
     [
       {non_parallel_tests, [], [
                                 node,
-                                storage_reset
+                                storage_reset,
+                                collector_survives_non_integer_metric,
+                                sum_entry_and_difference_unit_checks
                                ]}
     ].
 
@@ -94,6 +96,61 @@ node(Config) ->
                      lists:keymember({A, B}, 1, Tab)
              end, 10).
 
+
+%% Regression test for GH #12815. A core_metrics ETS row can briefly contain
+%% a sentinel `''` (used by rabbit_mgmt_format to represent "null") when
+%% reads race with writes around connection or queue churn. Before the
+%% defensive normalisation in rabbit_mgmt_metrics_collector, this caused
+%% a `badarith` crash inside difference/2 (`'' - integer`) which took
+%% down the collector gen_server. We force the exact shape by injecting
+%% a synthetic Pid into connection_coarse_metrics and asserting both
+%% scrape calls succeed.
+collector_survives_non_integer_metric(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, ?MODULE, do_collector_survives_non_integer_metric, []).
+
+do_collector_survives_non_integer_metric() ->
+    Collector = rabbit_mgmt_metrics_collector:name(connection_coarse_metrics),
+    CollectorPid = whereis(Collector),
+    true = is_pid(CollectorPid),
+    %% Use a freshly-allocated synthetic Pid so we cannot collide with
+    %% real broker connections being scraped at the same time.
+    SyntheticPid = c:pid(0, 16#7fffff, 0),
+    %% Baseline: a well-formed row populates old_aggr_stats on the next scrape.
+    ets:insert(connection_coarse_metrics,
+               {SyntheticPid, 100, 200, 1000, 0}),
+    ok = gen_server:call(Collector, force_collect),
+    %% Corrupt the row to mimic the observed race (one field becomes '').
+    ets:insert(connection_coarse_metrics,
+               {SyntheticPid, '', 200, 1000, 0}),
+    %% Second scrape: with the defensive arithmetic this returns ok;
+    %% without the fix the gen_server:call exits with a badarith error.
+    ok = gen_server:call(Collector, force_collect),
+    %% Collector pid must not have been restarted in between.
+    CollectorPid = whereis(Collector),
+    true = is_process_alive(CollectorPid),
+    %% Cleanup so the synthetic row does not leak into sibling test cases.
+    true = ets:delete(connection_coarse_metrics, SyntheticPid),
+    ok.
+
+%% Direct unit-style assertions on the helpers themselves to lock in the
+%% "non-integer is coerced to 0" contract that aggregate_entry relies on.
+sum_entry_and_difference_unit_checks(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, ?MODULE, do_sum_entry_and_difference_unit_checks, []).
+
+do_sum_entry_and_difference_unit_checks() ->
+    %% Happy path: integer math is unchanged.
+    {5} = rabbit_mgmt_metrics_collector:sum_entry({2}, {3}),
+    {1} = rabbit_mgmt_metrics_collector:difference({2}, {3}),
+    {5, 7} = rabbit_mgmt_metrics_collector:sum_entry({2, 3}, {3, 4}),
+    {1, 1} = rabbit_mgmt_metrics_collector:difference({2, 3}, {3, 4}),
+    %% Sentinel '' on either side coerces to 0 and avoids badarith.
+    {3, 7} = rabbit_mgmt_metrics_collector:sum_entry({'', 3}, {3, 4}),
+    {5, 0} = rabbit_mgmt_metrics_collector:sum_entry({2, 3}, {3, ''}),
+    {3, 1} = rabbit_mgmt_metrics_collector:difference({'', 3}, {3, 4}),
+    {-2, -3} = rabbit_mgmt_metrics_collector:difference({2, 3}, {'', ''}),
+    ok.
 
 storage_reset(Config) ->
     %% Ensures that core stats are reset, otherwise consume generates negative values
