@@ -146,8 +146,9 @@ do_sum_entry_and_difference_unit_checks() ->
     {5, 7} = rabbit_mgmt_metrics_collector:sum_entry({2, 3}, {3, 4}),
     {1, 1} = rabbit_mgmt_metrics_collector:difference({2, 3}, {3, 4}),
     %% Sentinel '' on either side coerces to 0 and avoids badarith.
+    %% sum_entry/difference compute B (+|-) A, with A the first arg.
     {3, 7} = rabbit_mgmt_metrics_collector:sum_entry({'', 3}, {3, 4}),
-    {5, 0} = rabbit_mgmt_metrics_collector:sum_entry({2, 3}, {3, ''}),
+    {5, 3} = rabbit_mgmt_metrics_collector:sum_entry({2, 3}, {3, ''}),
     {3, 1} = rabbit_mgmt_metrics_collector:difference({'', 3}, {3, 4}),
     {-2, -3} = rabbit_mgmt_metrics_collector:difference({2, 3}, {'', ''}),
     ok.
