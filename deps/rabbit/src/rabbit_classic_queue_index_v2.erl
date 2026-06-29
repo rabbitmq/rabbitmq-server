@@ -182,11 +182,12 @@ ensure_queue_name_stub_file(#resource{virtual_host = VHost, name = QName}, Dir) 
 
 -spec reset_state(State) -> State when State::state().
 
-reset_state(State = #qi{ queue_name     = Name,
-                         dir            = Dir }) ->
+reset_state(State = #qi{ queue_name = #resource{ virtual_host = VHost } = Name }) ->
     ?DEBUG("~0p", [State]),
     _ = delete_and_terminate(State),
-    init1(Name, rabbit_file:binary_to_filename(Dir)).
+    VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
+    Dir = queue_dir(VHostDir, Name),
+    init1(Name, Dir).
 
 -spec recover(rabbit_amqqueue:name(), shutdown_terms(), boolean(),
                     contains_predicate()) ->
