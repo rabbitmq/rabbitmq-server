@@ -75,7 +75,6 @@ init_per_testcase(_, Config) ->
     Config.
 
 end_per_testcase(close_existing_should_close_existing_connection, Config) ->
-    ok = meck:unload(rabbit_amqp_sole_conn),
     ok = khepri:delete(rabbit_khepri:get_store_id(), [?KHEPRI_ROOT_NODE]),
     Config;
 end_per_testcase(close_connection_tolerates_timeout, Config) ->
@@ -112,14 +111,13 @@ close_existing_should_close_existing_connection(_) ->
     TestPid = self(),
     Path = rabbit_amqp_sole_conn:conn_path(?VH, ?CID1),
     Pid1 = spawn(fun() ->
-                            receive
-                                {rabbit_call, From, {close, Error}} ->
-                                    TestPid ! {received, Error},
-                                    gen:reply(From, ok)
-                            after 5000 ->
-                                      ok
-                            end
-                    end),
+                         receive
+                             close_sole_conn_enforcement ->
+                                 TestPid ! close_sole_conn_enforcement_received
+                         after 5000 ->
+                                   ok
+                         end
+                 end),
     Pid2 = spawn_disposable(),
     %% 1 takes the lease
     ?assertEqual(ok, acquire(close_existing, ?VH, ?CID1, Pid1)),
@@ -129,6 +127,9 @@ close_existing_should_close_existing_connection(_) ->
     ?assertEqual(ok, acquire(close_existing, ?VH, ?CID1, Pid2)),
     ?assertEqual({ok, rabbit_amqp_sole_conn:conn(Pid2)},
                  rabbit_khepri:get(Path)),
+    %% 1 must have received the enforcement message
+    ?assertEqual(ok, receive close_sole_conn_enforcement_received -> ok
+                     after 5000 -> timeout end),
     %% 1 should have stopped
     eventually(?_assertNot(is_process_alive(Pid1))),
 

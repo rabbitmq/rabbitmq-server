@@ -214,6 +214,12 @@ handle_other({rabbit_call, From, {close, Error}}, State0) ->
         true  -> close(Error, State0);
         false -> stop
     end;
+handle_other(close_sole_conn_enforcement, State0) ->
+    Error = rabbit_amqp_sole_conn:close_existing_connection_error(),
+    case ?IS_RUNNING(State0) of
+        true  -> close(Error, State0);
+        false -> stop
+    end;
 handle_other({rabbit_call, From, {shutdown, Explanation}},
              State = #v1{connection = #v1_connection{properties = Properties}}) ->
     Ret = case Explanation =:= "Node was put into maintenance mode" andalso
@@ -491,6 +497,10 @@ handle_connection_frame(
 
     case rabbit_amqp_sole_conn:acquire(SoleConnPlcy, Vhost, ContainerId, self()) of
         {error, refuse_connection} ->
+            %% "If the enforcing container has not already sent the open
+            %% for the connection, it MUST add the property
+            %% amqp:connection-establishment-failed to the
+            %% properties field of open having boolean value true." [sole conn 3.2.1]
             Props1 = [
                       {?AMQP_ERROR_CONNECTION_ESTABLISHMENT_FAILED, {boolean, true}}
                       | Props
@@ -503,6 +513,8 @@ handle_connection_frame(
 
             ok = send_on_channel0(State0, Open, amqp10_framing),
 
+            %% The enforcing container MUST then immediately send a close"
+            %% [sole conn 3.2.1]
             State = State0#v1{connection_state = closing},
             Error = rabbit_amqp_sole_conn:refuse_connection_error(),
             close(Error, State);

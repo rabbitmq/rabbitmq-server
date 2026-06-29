@@ -15,7 +15,10 @@
 
 -define(CLOSE_EXISTING_TIMEOUT, 30_000).
 
--export([acquire/4, init/0, refuse_connection_error/0]).
+-export([init/0,
+         acquire/4,
+         refuse_connection_error/0,
+         close_existing_connection_error/0]).
 
 %% for testing
 -export([conn/1,
@@ -88,11 +91,28 @@ acquire(close_existing = Plcy, VHost, ContainerId, ConnPid) ->
     end.
 
 refuse_connection_error() ->
+    %% the error field of close MUST have an error with the condition field
+    %% of error being invalid-field and the info field of error having
+    %% the symbol key invalid-field taking the symbol value container-id.
+    %% [sole conn 3.2.1]
     amqp_error(
       ?V_1_0_AMQP_ERROR_INVALID_FIELD,
       <<"The container-id is already bound to an "
         "active exclusive connection.">>,
       {?V_1_0_AMQP_ERROR_INVALID_FIELD, {symbol, <<"container-id">>}}).
+
+close_existing_connection_error() ->
+    %% "The existing connection MUST be closed with the error field of
+    %% close having the condition field of error being resource-locked.
+    %% Further the info field of error MUST contain the symbol key
+    %% sole-connection-enforcement taking the boolean value true"
+    %% [sole conn 3.2.1]
+    amqp_error(?V_1_0_AMQP_ERROR_RESOURCE_LOCKED,
+               <<"Connection closed because another "
+                 "connection with the same container-id "
+                 "was established (sole connection "
+                 "enforcement).">>,
+               {?SOLE_CONN_ENFORCEMENT, {boolean, true}}).
 
 %% --------------------------------------------------------------
 %% Internals
@@ -122,21 +142,8 @@ try_put(Path,
     end.
 
 close_connection(#conn{pid = Pid}) ->
-    %% "The existing connection MUST be closed with the error field of
-    %% close having the condition field of error being resource-locked.
-    %% Further the info field of error MUST contain the symbol key
-    %% sole-connection-enforcement taking the boolean value true" [sole conn 3.2.1]
-    Error = amqp_error(?V_1_0_AMQP_ERROR_RESOURCE_LOCKED,
-                       <<"Connection closed because another "
-                         "connection with the same container-id "
-                         "was established (sole connection "
-                         "enforcement).">>,
-                       {?SOLE_CONN_ENFORCEMENT, {boolean, true}}),
+    Error = close_existing_connection_error(),
     rabbit_networking:close_connection(Pid, Error, ?CLOSE_EXISTING_TIMEOUT).
-
-close_connection_async(Conn) ->
-    _ = spawn(fun() -> close_connection(Conn) end),
-    ok.
 
 store_id() ->
     rabbit_khepri:get_store_id().
@@ -144,8 +151,9 @@ store_id() ->
 
 kill_connection_sproc(#khepri_trigger{type = tree,
                                       event = #{change := update,
-                                                old_node_props := #{data := Conn}}}) ->
-    close_connection_async(Conn);
+                                                old_node_props := #{data := #conn{pid = Pid}}}}) ->
+    Pid ! close_sole_conn_enforcement,
+    ok;
 kill_connection_sproc(Props) ->
     ?LOG_WARNING("Unexpected event for sole_conn stored procedure, "
                  "connection will not be instructed to close. Event: ~p",

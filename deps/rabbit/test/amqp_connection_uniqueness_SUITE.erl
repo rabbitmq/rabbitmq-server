@@ -182,7 +182,7 @@ close_existing_conflict_should_close_existing_connection(Config) ->
                  notify_with_performative => true
                 },
     {ok, Connection1} = amqp10_client:open_connection(OpnConf1),
-   receive {amqp10_event, {connection, Connection1,
+    receive {amqp10_event, {connection, Connection1,
                             {opened, #'v1_0.open'{
                                         offered_capabilities = OffCaps1,
                                         properties = Props1}}}} ->
