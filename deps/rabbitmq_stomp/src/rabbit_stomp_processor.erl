@@ -15,8 +15,16 @@
          cancel_consumer/2,
          send_delivery/5]).
 
+<<<<<<< HEAD
 -export([adapter_name/1]).
 -export([info/2]).
+=======
+-ifdef(TEST).
+-export([check_dead_letter_exchange_access/4,
+         check_subscription_binding_access/5,
+         ensure_exchange_exists/3]).
+-endif.
+>>>>>>> 6b2d508a36 (Fix two STOMP bugs)
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_stomp_frame.hrl").
@@ -1262,3 +1270,530 @@ maybe_apply_default_topic_exchange(Exchange, _DefaultTopicExchange) ->
     %% amq.topic, so it must have been specified in the
     %% message headers
     Exchange.
+<<<<<<< HEAD
+=======
+
+create_queue(_State = #state{authz_ctx = AuthzCtx,
+                             user = #user{username = Username} = User,
+                             cfg = #cfg{vhost = VHost}}) ->
+    QNameBin = rabbit_guid:binary(rabbit_guid:gen_secure(), "stomp.gen"),
+    QName = rabbit_misc:r(VHost, queue, QNameBin),
+
+    %% configure access to queue required for queue.declare
+    ok = check_resource_access(User, QName, configure, AuthzCtx),
+    case rabbit_vhost_limit:is_over_queue_limit(VHost) of
+        false ->
+            rabbit_core_metrics:queue_declared(QName),
+
+            case rabbit_amqqueue:declare(QName, _Durable = false, _AutoDelete = true,
+                                         [], self(), Username) of
+                {new, Q} when ?is_amqqueue(Q) ->
+                    rabbit_core_metrics:queue_created(QName),
+                    {ok, Q};
+                Other ->
+                    log_error(rabbit_misc:format("Failed to declare ~s: ~p", [rabbit_misc:rs(QName)]), Other, none),
+                    {error, queue_declare}
+            end;
+        {true, Limit} ->
+            log_error(rabbit_misc:format("cannot declare ~s because ", [rabbit_misc:rs(QName)]),
+                      rabbit_misc:format("queue limit ~p in vhost '~s' is reached",  [Limit, VHost]),
+                      none),
+            {error, queue_limit_exceeded}
+    end.
+
+delete_queue(QRes, Username) ->
+    case rabbit_amqqueue:with(
+           QRes,
+           fun (Q) ->
+                   rabbit_queue_type:delete(Q, false, false, Username)
+           end,
+           fun (not_found) ->
+                   ok;
+               ({absent, Q, crashed}) ->
+                   rabbit_classic_queue:delete_crashed(Q, Username);
+               ({absent, Q, stopped}) ->
+                   rabbit_classic_queue:delete_crashed(Q, Username);
+               ({absent, _Q, _Reason}) ->
+                   ok
+           end) of
+        {ok, _N} ->
+            ok;
+        ok ->
+            ok
+    end.
+
+ensure_binding(#resource{name = QueueBin}, {<<>>, QueueBin}, _State) ->
+    %% i.e., we should only be asked to bind to the default exchange a
+    %% queue with its own name
+    ok;
+ensure_binding(QName, {Exchange, RoutingKey},
+               #state{user = User,
+                      authz_ctx = AuthzCtx,
+                      cfg = #cfg{auth_login = Username, vhost = VHost}}) ->
+    ExchangeName = rabbit_misc:r(VHost, exchange, Exchange),
+    ok = check_subscription_binding_access(QName, ExchangeName, RoutingKey,
+                                           User, AuthzCtx),
+    Binding = #binding{source = ExchangeName,
+                       destination = QName,
+                       key = RoutingKey},
+    case rabbit_binding:add(Binding, Username) of
+        {error, {resources_missing, [{not_found, Name} | _]}} ->
+            rabbit_amqqueue:not_found(Name);
+        {error, {resources_missing, [{absent, Q, Reason} | _]}} ->
+            rabbit_amqqueue:absent(Q, Reason);
+        {error, {binding_invalid, Fmt, Args}} ->
+            rabbit_misc:protocol_error(precondition_failed, Fmt, Args);
+        {error, #amqp_error{} = Error} ->
+            rabbit_misc:protocol_error(Error);
+        ok ->
+            ok
+    end.
+
+%% Binding creation requires the same authorisation as `queue.bind`.
+-spec check_subscription_binding_access(rabbit_amqqueue:name(),
+                                        rabbit_types:exchange_name(),
+                                        rabbit_types:routing_key(),
+                                        rabbit_types:user(),
+                                        rabbit_types:authz_context()) -> ok.
+check_subscription_binding_access(QName, ExchangeName, RoutingKey, User, AuthzCtx) ->
+    ok = check_resource_access(User, QName, write, AuthzCtx),
+    ok = check_resource_access(User, ExchangeName, read, AuthzCtx),
+    case rabbit_exchange:lookup(ExchangeName) of
+        {ok, Exchange} ->
+            _ = check_topic_authorisation(Exchange, User, RoutingKey, AuthzCtx, read),
+            ok;
+        {error, not_found} ->
+            ok
+    end.
+
+check_dead_letter_exchange_access(QName = #resource{virtual_host = VHost},
+                                  Args, User, AuthzCtx) ->
+    case rabbit_misc:r_arg(VHost, exchange, Args, ?HEADER_X_DEAD_LETTER_EXCHANGE) of
+        undefined ->
+            ok;
+        {error, {invalid_type, Type}} ->
+            rabbit_misc:protocol_error(
+              precondition_failed,
+              "invalid type '~ts' for arg '~ts'",
+              [Type, ?HEADER_X_DEAD_LETTER_EXCHANGE]);
+        DLX ->
+            ok = check_resource_access(User, QName, read, AuthzCtx),
+            ok = check_resource_access(User, DLX, write, AuthzCtx)
+    end.
+
+check_resource_access(User, Resource, Perm, Context) ->
+    V = {Resource, Context, Perm},
+    Cache = case get(permission_cache) of
+                undefined -> [];
+                Other     -> Other
+            end,
+    case lists:member(V, Cache) of
+        true ->
+            ok;
+        false ->
+            rabbit_access_control:check_resource_access(User, Resource, Perm, Context),
+            CacheTail = lists:sublist(Cache, ?MAX_PERMISSION_CACHE_SIZE-1),
+            put(permission_cache, [V | CacheTail]),
+            ok
+    end.
+
+handle_down({{'DOWN', QName}, _MRef, process, QPid, Reason},
+            State0 =  #state{queue_states  = QStates0} = State) ->
+    case rabbit_queue_type:handle_down(QPid, QName, Reason, QStates0) of
+        {ok, QStates1, Actions} ->
+            State1 = State0#state{queue_states = QStates1},
+            State2 = handle_queue_actions(Actions, State1),
+            {ok, State2};
+        {eol, QStates1, QRef} ->
+            State1 = handle_consuming_queue_down_or_eol(QRef, State#state{queue_states = QStates1}),
+            {ConfirmMXs, UC1} =
+                rabbit_confirms:remove_queue(QRef, State1#state.unconfirmed),
+            State2 = record_confirms(ConfirmMXs,
+                                     State1#state{unconfirmed = UC1}),
+            _ = erase_queue_stats(QRef),
+            {ok, State2#state{queue_states = rabbit_queue_type:remove(QRef, State2#state.queue_states)}}
+    end.
+
+handle_queue_event({queue_event, QRef, Evt}, #state{queue_states  = QStates0} = State) ->
+    case rabbit_queue_type:handle_event(QRef, Evt, QStates0) of
+        {ok, QState1, Actions} ->
+            State1 = State#state{queue_states = QState1},
+            try handle_queue_actions(Actions, State1) of
+                State2 ->
+                    {ok, State2}
+            catch throw:Reason when Reason =:= consumer_timeout ->
+                    {error, Reason, State1}
+            end;
+        {eol, Actions} ->
+            State1 = handle_queue_actions(Actions, State),
+            State2 = handle_consuming_queue_down_or_eol(QRef, State1),
+            {ConfirmMXs, UC1} =
+                rabbit_confirms:remove_queue(QRef, State1#state.unconfirmed),
+            %% Deleted queue is a special case.
+            %% Do not nack the "rejected" messages.
+            State3 = record_confirms(ConfirmMXs,
+                                     State2#state{unconfirmed = UC1}),
+            {ok, State3#state{queue_states = rabbit_queue_type:remove(QRef, QStates0)}};
+        {protocol_error, Type, Reason, ReasonArgs} = Error ->
+            log_error(Type, Reason, ReasonArgs),
+            {error, Error, State}
+    end.
+
+handle_queue_actions(Actions, #state{} = State0) ->
+    lists:foldl(
+      fun ({deliver, ConsumerTag, Ack, Msgs}, S) ->
+              deliver_to_client(ConsumerTag, Ack, Msgs, S);
+          ({settled, QRef, MsgSeqNos}, S0) ->
+              S = confirm(MsgSeqNos, QRef, S0),
+              send_confirms_and_nacks(S);
+          ({rejected, _QRef, MsgSeqNos}, S0) ->
+              {U, Rej} =
+                  lists:foldr(
+                    fun(SeqNo, {U1, Acc}) ->
+                            case rabbit_confirms:reject(SeqNo, U1) of
+                                {ok, MX, U2} ->
+                                    {U2, [MX | Acc]};
+                                {error, not_found} ->
+                                    {U1, Acc}
+                            end
+                    end, {S0#state.unconfirmed, []}, MsgSeqNos),
+              S = S0#state{unconfirmed = U},
+              record_rejects(Rej, S);
+          ({queue_down, QRef}, S0) ->
+              handle_consuming_queue_down_or_eol(QRef, S0);
+          ({released, QName, _CTag, _MsgSeqNos, timeout}, _S) ->
+              ?LOG_INFO("Terminating STOMP connection because consumer "
+                        "on ~ts timed out", [rabbit_misc:rs(QName)]),
+              throw(consumer_timeout);
+          (_, S0) ->
+              S0
+      end, State0, Actions).
+
+
+
+parse_endpoint(undefined) ->
+    parse_endpoint(<<"/queue">>);
+parse_endpoint(Destination) when is_binary(Destination) ->
+    case binary:split(Destination, <<"/">>, [global]) of
+        [Name] ->
+            {ok, {queue, unescape(Name)}};
+        [<<>>, <<"exchange">> | Rest] ->
+            parse_endpoint0(exchange, Rest);
+        [<<>>, <<"queue">> | Rest] ->
+            parse_endpoint0(queue, Rest);
+        [<<>>, <<"topic">> | Rest] ->
+            parse_endpoint0(topic, Rest);
+        [<<>>, <<"temp-queue">> | Rest] ->
+            parse_endpoint0(temp_queue, Rest);
+        [<<>>, <<"amq">>, <<"queue">> | Rest] ->
+            parse_endpoint0(amqqueue, Rest);
+        [<<>>, <<"reply-queue">> | [_|_]] ->
+            %% Reply queue names can have slashes, so take everything
+            %% after "/reply-queue/"
+            PrefixLen = byte_size(<<"/reply-queue/">>),
+            parse_endpoint0(reply_queue,
+                            [binary:part(Destination, PrefixLen, byte_size(Destination) - PrefixLen)]);
+        _ ->
+            {error, {unknown_destination, Destination}}
+    end.
+
+parse_endpoint0(exchange, [<<>> | _] = Rest) ->
+    {error, {invalid_destination, exchange, to_url(Rest)}};
+parse_endpoint0(exchange, [Name]) ->
+    {ok, {exchange, {unescape(Name), undefined}}};
+parse_endpoint0(exchange, [Name, Pattern]) ->
+    {ok, {exchange, {unescape(Name), unescape(Pattern)}}};
+parse_endpoint0(queue,    []) ->
+    {error, {invalid_destination, queue, []}};
+parse_endpoint0(Type,     [Name]) when Name =/= <<>> ->
+    {ok, {Type, unescape(Name)}};
+parse_endpoint0(Type,     Rest) ->
+    {error, {invalid_destination, Type, to_url(Rest)}}.
+
+%% --------------------------------------------------------------------------
+
+util_ensure_endpoint(source, {exchange, {Name, _}}, Params, State = #state{cfg = #cfg{vhost = VHost}}) ->
+    ensure_exchange_exists(VHost, Name, Params),
+    Amqqueue = new_amqqueue(undefined, exchange, Params, State),
+    {ok, Queue} = create_queue(Amqqueue, State),
+    {ok, amqqueue:get_name(Queue), State};
+
+util_ensure_endpoint(source, {topic, _}, Params, State) ->
+    Amqqueue = new_amqqueue(undefined, topic, Params, State),
+    {ok, Queue} = create_queue(Amqqueue, State),
+    {ok, amqqueue:get_name(Queue), State};
+
+util_ensure_endpoint(_Dir, {queue, undefined}, _Params, State) ->
+    {ok, undefined, State};
+
+util_ensure_endpoint(_, {queue, Name}, Params, State=#state{route_state = RoutingState,
+                                                            cfg = #cfg{vhost = VHost}}) ->
+    Params1 = rabbit_misc:pmerge(durable, true, Params),
+    QueueNameBin = Name,
+    RState1 = case sets:is_element(QueueNameBin, RoutingState) of
+                  true -> RoutingState;
+                  _    -> Amqqueue = new_amqqueue(QueueNameBin, queue, Params1, State),
+                          {ok, Queue} = create_queue(Amqqueue, State),
+                          #resource{name = QNameBin} = amqqueue:get_name(Queue),
+                          sets:add_element(QNameBin, RoutingState)
+              end,
+    {ok,  rabbit_misc:r(VHost, queue, QueueNameBin), State#state{route_state = RState1}};
+
+util_ensure_endpoint(dest, {exchange, {Name, _}}, Params, State = #state{cfg = #cfg{vhost = VHost}}) ->
+    ensure_exchange_exists(VHost, Name, Params),
+    {ok, undefined, State};
+
+util_ensure_endpoint(dest, {topic, _}, _Params, State) ->
+    {ok, undefined, State};
+
+util_ensure_endpoint(_, {amqqueue, Name}, _Params, State = #state{cfg = #cfg{vhost = VHost}}) ->
+    {ok, rabbit_misc:r(VHost, queue, Name), State};
+
+util_ensure_endpoint(_, {reply_queue, Name}, _Params, State = #state{cfg = #cfg{vhost = VHost}}) ->
+    {ok, rabbit_misc:r(VHost, queue, Name), State};
+
+util_ensure_endpoint(_Direction, _Endpoint, _Params, _State) ->
+    {error, invalid_endpoint}.
+
+
+%% --------------------------------------------------------------------------
+
+parse_routing({exchange, {Name, undefined}}) ->
+    {Name, <<>>};
+parse_routing({exchange, {Name, Pattern}}) ->
+    {Name, Pattern};
+parse_routing({topic, Name}) ->
+    {<<"amq.topic">>, Name};
+parse_routing({Type, Name})
+  when Type =:= queue orelse Type =:= reply_queue orelse Type =:= amqqueue ->
+    {<<>>, Name}.
+
+dest_temp_queue({temp_queue, Name}) -> Name;
+dest_temp_queue(_)                  -> none.
+
+%% --------------------------------------------------------------------------
+
+ensure_exchange_exists(VHost, Name, Params) ->
+    ExchangeName = rabbit_misc:r(VHost, exchange, Name),
+    check_exchange(ExchangeName, proplists:get_value(check_exchange, Params, false)).
+
+check_exchange(_,            false) ->
+    ok;
+check_exchange(ExchangeName, true) ->
+    _ = rabbit_exchange:lookup_or_die(ExchangeName),
+    ok.
+
+new_amqqueue(QNameBin0, Type, Params0, _State = #state{user = #user{username = Username},
+                                                       cfg = #cfg{vhost = VHost}}) ->
+    QNameBin = case  {Type, proplists:get_value(subscription_queue_name_gen, Params0)} of
+                   {topic, SQNG} when is_function(SQNG) ->
+                       SQNG();
+                   {exchange, SQNG} when is_function(SQNG) ->
+                       SQNG();
+                   _ ->
+                       QNameBin0
+               end,
+    QName = rabbit_misc:r(VHost, queue, QNameBin),
+    %% defaults
+    Params = case proplists:get_value(durable, Params0, false) of
+                 false -> [{auto_delete, true}, {exclusive, true} | Params0];
+                 true  -> Params0
+             end,
+    Args = proplists:get_value(arguments, Params, []),
+
+    amqqueue:new(QName,
+                 none,
+                 proplists:get_value(durable, Params, false),
+                 proplists:get_value(auto_delete, Params, false),
+                 case proplists:get_value(exclusive, Params, false) of
+                     false -> none;
+                     true -> self()
+                 end,
+                 Args,
+                 VHost,
+                 #{user => Username},
+                 rabbit_amqqueue:get_queue_type(Args)).
+
+
+to_url([])  -> <<>>;
+to_url(Lol) -> iolist_to_binary([$/ | lists:join($/, Lol)]).
+
+unescape(Bin) -> unescape(Bin, []).
+
+unescape(<<>>, Acc) -> list_to_binary(lists:reverse(Acc));
+unescape(<<"%2F", Rest/binary>>, Acc) -> unescape(Rest, [$/ | Acc]);
+unescape(<<C, Rest/binary>>, Acc) -> unescape(Rest, [C | Acc]).
+
+
+consume_queue(QRes, Spec0, State = #state{user = #user{username = Username} = User,
+                                               authz_ctx = AuthzCtx,
+                                               queue_states  = QStates0}) ->
+    check_resource_access(User, QRes, read, AuthzCtx),
+    Spec = Spec0#{channel_pid => self(),
+                  limiter_pid => none,
+                  limiter_active => false,
+                  ok_msg => undefined,
+                  acting_user => Username},
+    rabbit_amqqueue:with_or_die(
+      QRes,
+      fun(Q1) ->
+              case rabbit_queue_type:consume(Q1, Spec, QStates0) of
+                  {ok, QStates} ->
+                      rabbit_global_counters:consumer_created(
+                        State#state.cfg#cfg.proto_ver),
+                      State1 = State#state{queue_states = QStates},
+                      {ok, State1};
+                  {error, Type, Fmt, FmtArgs} ->
+                      error("Failed to consume",
+                            "~ts from ~ts: " ++ Fmt,
+                            [Type, rabbit_misc:rs(QRes) | FmtArgs],
+                            State)
+              end
+      end).
+
+create_queue(Amqqueue, _State = #state{authz_ctx = AuthzCtx,
+                                       user = User,
+                                       cfg = #cfg{vhost = VHost}}) ->
+    QName = amqqueue:get_name(Amqqueue),
+
+    %% configure access to queue required for queue.declare
+    ok = check_resource_access(User, QName, configure, AuthzCtx),
+    ok = check_dead_letter_exchange_access(
+           QName, amqqueue:get_arguments(Amqqueue), User, AuthzCtx),
+
+    case rabbit_vhost_limit:is_over_queue_limit(VHost) of
+        false ->
+            rabbit_core_metrics:queue_declared(QName),
+
+            case rabbit_queue_type:declare(Amqqueue, node()) of
+                {new, Q} when ?is_amqqueue(Q) ->
+                    rabbit_core_metrics:queue_created(QName),
+                    {ok, Q};
+                {existing, Q} when ?is_amqqueue(Q) ->
+                    rabbit_core_metrics:queue_created(QName),
+                    {ok, Q};
+                Other ->
+                    log_error(rabbit_misc:format("Failed to declare ~s: ~p", [rabbit_misc:rs(QName)]), Other, none),
+                    {error, queue_declare}
+            end;
+        {true, Limit} ->
+            log_error(rabbit_misc:format("cannot declare ~s because ", [rabbit_misc:rs(QName)]),
+                      rabbit_misc:format("queue limit ~p in vhost '~s' is reached",  [Limit, VHost]),
+                      none),
+            {error, queue_limit_exceeded}
+    end.
+
+routing_init_state() -> sets:new([{version, 2}]).
+
+check_internal_exchange(#exchange{name = Name, internal = true}) ->
+    rabbit_misc:protocol_error(access_refused,
+                               "cannot publish to internal ~ts",
+                               [rabbit_misc:rs(Name)]);
+check_internal_exchange(_) ->
+    ok.
+
+
+check_topic_authorisation(#exchange{name = Name = #resource{virtual_host = VHost}, type = topic},
+                          User = #user{username = Username},
+                          RoutingKey, AuthzContext, Permission) ->
+    Resource = Name#resource{kind = topic},
+    VariableMap = build_topic_variable_map(AuthzContext, VHost, Username),
+    Context = #{routing_key  => RoutingKey,
+                variable_map => VariableMap},
+    Cache = case get(topic_permission_cache) of
+                undefined -> [];
+                Other     -> Other
+            end,
+    case lists:member({Resource, Context, Permission}, Cache) of
+        true  -> ok;
+        false -> ok = rabbit_access_control:check_topic_access(
+                        User, Resource, Permission, Context),
+                 CacheTail = lists:sublist(Cache, ?MAX_PERMISSION_CACHE_SIZE-1),
+                 put(topic_permission_cache, [{Resource, Context, Permission} | CacheTail])
+    end;
+check_topic_authorisation(_, _, _, _, _) ->
+    ok.
+
+
+build_topic_variable_map(AuthzContext, VHost, Username) when is_map(AuthzContext) ->
+    maps:merge(AuthzContext, #{<<"vhost">> => VHost, <<"username">> => Username}).
+
+check_vhost_exists(VHost, Username, PeerIp) ->
+    case rabbit_vhost:exists(VHost) of
+        true ->
+            ok;
+        false ->
+            rabbit_core_metrics:auth_attempt_failed(PeerIp, Username, stomp),
+            ?LOG_ERROR("STOMP connection failed: virtual host '~ts' does not exist",
+                       [VHost]),
+            {error, not_allowed, Username, VHost}
+    end.
+
+check_vhost_access(VHost, User = #user{username = Username}, PeerIp) ->
+    AuthzCtx = #{},
+    try rabbit_access_control:check_vhost_access(
+          User, VHost, {ip, PeerIp}, AuthzCtx) of
+        ok ->
+            {ok, AuthzCtx}
+    catch exit:#amqp_error{name = not_allowed} ->
+            rabbit_core_metrics:auth_attempt_failed(PeerIp, Username, stomp),
+            ?LOG_ERROR("STOMP connection failed: access refused for user '~ts' to vhost '~ts'",
+                       [Username, VHost]),
+            {error, not_allowed, Username, VHost}
+    end.
+
+check_node_connection_limit() ->
+    case application:get_env(?APP_NAME, max_connections, infinity) of
+        infinity ->
+            ok;
+        Limit when is_integer(Limit) andalso Limit >= 0 ->
+            PgScope = persistent_term:get(?PG_SCOPE),
+            %% ETS table size equals the count of live local connections;
+            %% see register_connection/0. Caller has not joined yet, so `>=`.
+            case ets:info(PgScope, size) of
+                N when is_integer(N) andalso N >= Limit ->
+                    ?LOG_ERROR("STOMP connection failed: node connection limit ~b is reached",
+                               [Limit]),
+                    {error, node_connection_limit_exceeded};
+                N when is_integer(N) ->
+                    ok;
+                Other ->
+                    ?LOG_WARNING("STOMP pg scope ETS table '~ts' size is ~tp",
+                                 [PgScope, Other]),
+                    ok
+            end;
+        _ ->
+            ok
+    end.
+
+register_connection() ->
+    ok = pg:join(persistent_term:get(?PG_SCOPE), self(), self()).
+
+check_vhost_connection_limit(VHost) ->
+    case rabbit_vhost_limit:is_over_connection_limit(VHost) of
+        false ->
+            ok;
+        {true, Limit} ->
+            ?LOG_ERROR("STOMP connection failed: connection limit ~p is reached for vhost '~s'",
+                       [Limit, VHost]),
+            {error, quota_exceeded}
+    end.
+
+check_user_loopback(Username, PeerIp) ->
+    case rabbit_access_control:check_user_loopback(Username, PeerIp) of
+        ok ->
+            ok;
+        not_allowed ->
+            rabbit_core_metrics:auth_attempt_failed(PeerIp, Username, stomp),
+            {error, not_loopback, Username}
+    end.
+
+erase_queue_stats(QName) ->
+    rabbit_core_metrics:channel_queue_down({self(), QName}),
+    erase({queue_stats, QName}),
+    [begin
+         rabbit_core_metrics:channel_queue_exchange_down({self(), QX}),
+         erase({queue_exchange_stats, QX})
+     end || {{queue_exchange_stats, QX = {QName0, _}}, _} <- get(),
+            QName0 =:= QName].
+>>>>>>> 6b2d508a36 (Fix two STOMP bugs)
