@@ -15,6 +15,14 @@
 -include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 -include("rabbit_stomp.hrl").
 -include("rabbit_stomp_frame.hrl").
+
+-define(BINDING_EXCHANGE, <<"perm.test.exchange">>).
+-define(BINDING_KEY, <<"private.key">>).
+-define(BINDING_USER, <<"stomp-binding-user">>).
+-define(BINDING_PASS, <<"stomp-binding-pass">>).
+%% Native STOMP subscription queues are named with this prefix.
+-define(SUB_QUEUE_PATTERN, <<"^stomp-subscription.*">>).
+
 all() ->
     [{group, list_to_atom("version_" ++ V)} || V <- ?SUPPORTED_VERSIONS].
 
@@ -23,7 +31,10 @@ groups() ->
         publish_topic_authorisation,
         subscribe_topic_authorisation,
         publish_topic_authorisation_regex_not_injected,
-        change_default_topic_exchange
+        change_default_topic_exchange,
+        subscribe_exchange_authorisation_refused_without_read,
+        subscribe_exchange_authorisation_refused_without_write,
+        subscribe_exchange_authorisation_allowed
     ],
 
     [{list_to_atom("version_" ++ V), [sequence], Tests}
@@ -212,6 +223,80 @@ change_default_topic_exchange(Config) ->
     rabbit_stomp_client:disconnect(ClientFoo),
     ok.
 
+
+%% Subscribing to /exchange/<exchange>/<key> creates a binding, so it must be
+%% authorised like `queue.bind`.
+
+%% The user can configure, write and read its own subscription queues but has no
+%% read on the source exchange.
+subscribe_exchange_authorisation_refused_without_read(Config) ->
+    binding_authorisation_refused(Config, ?SUB_QUEUE_PATTERN, ?SUB_QUEUE_PATTERN,
+                                  ?SUB_QUEUE_PATTERN).
+
+%% The user can read the source exchange but cannot write to its subscription queue.
+subscribe_exchange_authorisation_refused_without_write(Config) ->
+    binding_authorisation_refused(Config, <<".*">>, <<"^$">>, <<".*">>).
+
+subscribe_exchange_authorisation_allowed(Config) ->
+    Channel = ?config(amqp_channel, Config),
+    with_binding_user(
+      Config, <<".*">>, <<".*">>, <<".*">>,
+      fun(Client) ->
+              subscribe_to_binding_exchange(Client),
+              ?awaitMatch([_], binding_exchange_bindings(Config), 30_000),
+              amqp_channel:cast(
+                Channel,
+                #'basic.publish'{exchange = ?BINDING_EXCHANGE, routing_key = ?BINDING_KEY},
+                #amqp_msg{payload = <<"secret-message">>}),
+              {ok, _Client1, _Hdrs, Body} = stomp_receive(Client, 'MESSAGE'),
+              [<<"secret-message">>] = Body
+      end).
+
+binding_authorisation_refused(Config, Configure, Write, Read) ->
+    with_binding_user(
+      Config, Configure, Write, Read,
+      fun(Client) ->
+              subscribe_to_binding_exchange(Client),
+              {ok, _Client1, Hdrs, _Body} = stomp_receive(Client, 'ERROR'),
+              <<"access_refused">> = maps:get(<<"message">>, Hdrs),
+              [] = binding_exchange_bindings(Config)
+      end).
+
+%% Runs Fun with a STOMP client for a restricted user that has the given
+%% configure, write and read permissions, and cleans up afterwards.
+with_binding_user(Config, Configure, Write, Read, Fun) ->
+    Channel = ?config(amqp_channel, Config),
+    Version = ?config(version, Config),
+    StompPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stomp),
+    #'exchange.declare_ok'{} =
+        amqp_channel:call(Channel, #'exchange.declare'{exchange = ?BINDING_EXCHANGE,
+                                                       type = <<"direct">>}),
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_auth_backend_internal, add_user,
+                                 [?BINDING_USER, ?BINDING_PASS, <<"acting-user">>]),
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_auth_backend_internal, set_permissions,
+                                 [?BINDING_USER, <<"/">>, Configure, Write, Read,
+                                  <<"acting-user">>]),
+    {ok, Client} = rabbit_stomp_client:connect(Version, binary_to_list(?BINDING_USER),
+                                               binary_to_list(?BINDING_PASS), StompPort),
+    try
+        Fun(Client)
+    after
+        rabbit_stomp_client:disconnect(Client),
+        rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_auth_backend_internal, delete_user,
+                                     [?BINDING_USER, <<"acting-user">>]),
+        amqp_channel:call(Channel, #'exchange.delete'{exchange = ?BINDING_EXCHANGE})
+    end.
+
+subscribe_to_binding_exchange(Client) ->
+    Destination = <<"/exchange/", ?BINDING_EXCHANGE/binary, "/", ?BINDING_KEY/binary>>,
+    rabbit_stomp_client:send(
+      Client, 'SUBSCRIBE', [{<<"destination">>, Destination},
+                            {<<"id">>, <<"binding-sub">>}]).
+
+binding_exchange_bindings(Config) ->
+    rabbit_ct_broker_helpers:rpc(
+      Config, 0, rabbit_binding, list_for_source,
+      [#resource{virtual_host = <<"/">>, kind = exchange, name = ?BINDING_EXCHANGE}]).
 
 stomp_receive(Client, Command) ->
     {#stomp_frame{command     = Command,
