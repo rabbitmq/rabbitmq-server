@@ -65,6 +65,24 @@ defmodule PluginsFormatterTest do
            ]
   end
 
+  test "format_output with node_down status renders legend without plugin table" do
+    result =
+      @formatter.format_output(
+        %{
+          status: :node_down,
+          format: :normal,
+          plugins: []
+        },
+        %{node: "rabbit@remotehost"}
+      )
+
+    assert result == [
+             " Configured: E = explicitly enabled; e = implicitly enabled",
+             " | Status: [failed to contact rabbit@remotehost - status not shown]",
+             " |/"
+           ]
+  end
+
   test "format_output pending upgrade version message" do
     result =
       @formatter.format_output(

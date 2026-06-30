@@ -37,14 +37,18 @@ defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
   end
 
   def validate_execution_environment(args, opts) do
-    Validators.chain(
-      [
-        &require_rabbit_and_plugins/2,
-        &PluginHelpers.enabled_plugins_file/2,
-        &plugins_dir/2
-      ],
-      [args, opts]
-    )
+    if PluginHelpers.node_is_local?(opts) do
+      Validators.chain(
+        [
+          &require_rabbit_and_plugins/2,
+          &PluginHelpers.enabled_plugins_file/2,
+          &plugins_dir/2
+        ],
+        [args, opts]
+      )
+    else
+      :ok
+    end
   end
 
   def run([pattern], %{node: node_name} = opts) do
