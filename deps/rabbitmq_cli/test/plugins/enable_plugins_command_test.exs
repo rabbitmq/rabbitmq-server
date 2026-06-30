@@ -107,10 +107,13 @@ defmodule EnablePluginsCommandTest do
   test "run: if the local node is inaccessible, writes enabled plugins file and reports implicitly enabled plugin list",
        context do
     # Clears enabled plugins file
-    set_enabled_plugins([], :offline, :nonode, context[:opts])
+    set_enabled_plugins([], :offline, :rabbit, context[:opts])
 
     assert {:stream, test_stream} =
-             @command.run(["rabbitmq_stomp"], Map.merge(context[:opts], %{node: :nonode}))
+             @command.run(
+               ["rabbitmq_stomp"],
+               Map.merge(context[:opts], %{node: :rabbit})
+             )
 
     assert [
              [:rabbitmq_stomp],

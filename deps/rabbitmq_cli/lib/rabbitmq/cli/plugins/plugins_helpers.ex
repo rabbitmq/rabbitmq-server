@@ -72,10 +72,6 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
     )
   end
 
-  # :nonode and :nonode@nohost are Erlang's sentinels for "distribution not started"; treat them as local.
-  defp node_locality(:nonode), do: :local
-  defp node_locality(:"nonode@nohost"), do: :local
-
   defp node_locality(node_name) do
     local_node_str = :rabbit_env.get_context()[:nodename] |> to_string()
     node_str = to_string(node_name)
