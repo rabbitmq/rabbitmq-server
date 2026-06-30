@@ -36,6 +36,8 @@
 added_to_rabbit_registry(_Type, _ModuleName) -> ok.
 removed_from_rabbit_registry(_Type) -> ok.
 
+select(undefined) -> [];
+select(none) -> [];
 select(Modules) ->
     [M || M <- Modules, code:which(M) =/= non_existing].
 
@@ -73,3 +75,21 @@ maybe_recover(Q0) when ?is_amqqueue(Q0) ->
             _ = [M:startup(Q0) || M <- New -- Old],
             rabbit_amqqueue:update_decorators(Name, Decs1)
     end.
+
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+
+%% A queue's decorators field can legitimately be `undefined` or `none` (see
+%% the amqqueue record type). For example, quorum queues migrated from Mnesia
+%% to Khepri retain `decorators = undefined`. select/1 must tolerate those
+%% values rather than crash with a `bad_generator` error.
+select_test() ->
+    [] = select(undefined),
+    [] = select(none),
+    [] = select([]),
+    %% Existing modules are kept, non-existing ones are filtered out.
+    [?MODULE] = select([?MODULE]),
+    [?MODULE] = select([?MODULE, definitely_not_a_real_module]),
+    ok.
+
+-endif.
