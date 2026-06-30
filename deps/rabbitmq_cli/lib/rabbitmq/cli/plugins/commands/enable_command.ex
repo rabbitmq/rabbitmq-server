@@ -39,27 +39,84 @@ defmodule RabbitMQ.CLI.Plugins.Commands.EnableCommand do
   end
 
   def validate_execution_environment(args, opts) do
-    Validators.chain(
-      [
-        &PluginHelpers.can_set_plugins_with_mode/2,
-        &require_rabbit_and_plugins/2,
-        &PluginHelpers.enabled_plugins_file/2,
-        &plugins_dir/2
-      ],
-      [args, opts]
-    )
+    validators =
+      if PluginHelpers.node_is_local?(opts) do
+        [
+          &require_rabbit_and_plugins/2,
+          &PluginHelpers.validate_node_and_mode/2,
+          &PluginHelpers.enabled_plugins_file/2,
+          &plugins_dir/2
+        ]
+      else
+        [
+          &require_rabbit_and_plugins/2,
+          &PluginHelpers.validate_node_and_mode/2
+        ]
+      end
+
+    Validators.chain(validators, [args, opts])
   end
 
-  def run(plugin_names, %{all: all_flag} = opts) do
+  def run(plugin_names, %{all: all_flag, node: node_name} = opts) do
+    all = PluginHelpers.list(opts)
+
     plugins =
       case all_flag do
         false -> for s <- plugin_names, do: String.to_atom(s)
-        true -> PluginHelpers.plugin_names(PluginHelpers.list(opts))
+        true -> PluginHelpers.plugin_names(all)
       end
 
     case PluginHelpers.validate_plugins(plugins, opts) do
-      :ok -> do_run(plugins, opts)
-      other -> other
+      :ok ->
+        enabled = PluginHelpers.read_enabled(opts)
+        implicit = :rabbit_plugins.dependencies(false, enabled, all)
+        enabled_implicitly = MapSet.difference(MapSet.new(implicit), MapSet.new(enabled))
+
+        plugins_to_set =
+          MapSet.union(
+            MapSet.new(enabled),
+            MapSet.difference(MapSet.new(plugins), enabled_implicitly)
+          )
+
+        mode = PluginHelpers.mode(opts)
+
+        case PluginHelpers.set_enabled_plugins(MapSet.to_list(plugins_to_set), opts) do
+          {:ok, enabled_plugins} ->
+            {:stream,
+             Stream.concat([
+               [:rabbit_plugins.strictly_plugins(enabled_plugins, all)],
+               RabbitMQ.CLI.Core.Helpers.defer(fn ->
+                 case PluginHelpers.update_enabled_plugins(
+                        enabled_plugins,
+                        mode,
+                        node_name,
+                        opts
+                      ) do
+                   %{set: new_enabled} = result ->
+                     newly_enabled = new_enabled -- implicit
+
+                     filter_strictly_plugins(
+                       Map.put(
+                         result,
+                         :enabled,
+                         :rabbit_plugins.strictly_plugins(newly_enabled, all)
+                       ),
+                       all,
+                       [:set, :started, :stopped]
+                     )
+
+                   other ->
+                     other
+                 end
+               end)
+             ])}
+
+          {:error, _} = err ->
+            err
+        end
+
+      other ->
+        other
     end
   end
 
@@ -103,50 +160,6 @@ defmodule RabbitMQ.CLI.Plugins.Commands.EnableCommand do
   #
   # Implementation
   #
-
-  def do_run(plugins, %{node: node_name} = opts) do
-    enabled = PluginHelpers.read_enabled(opts)
-    all = PluginHelpers.list(opts)
-    implicit = :rabbit_plugins.dependencies(false, enabled, all)
-    enabled_implicitly = MapSet.difference(MapSet.new(implicit), MapSet.new(enabled))
-
-    plugins_to_set =
-      MapSet.union(
-        MapSet.new(enabled),
-        MapSet.difference(MapSet.new(plugins), enabled_implicitly)
-      )
-
-    mode = PluginHelpers.mode(opts)
-
-    case PluginHelpers.set_enabled_plugins(
-           MapSet.to_list(plugins_to_set),
-           Map.put(opts, :keep_missing_plugins, true)
-         ) do
-      {:ok, enabled_plugins} ->
-        {:stream,
-         Stream.concat([
-           [:rabbit_plugins.strictly_plugins(enabled_plugins, all)],
-           RabbitMQ.CLI.Core.Helpers.defer(fn ->
-             case PluginHelpers.update_enabled_plugins(enabled_plugins, mode, node_name, opts) do
-               %{set: new_enabled} = result ->
-                 enabled = new_enabled -- implicit
-
-                 filter_strictly_plugins(
-                   Map.put(result, :enabled, :rabbit_plugins.strictly_plugins(enabled, all)),
-                   all,
-                   [:set, :started, :stopped]
-                 )
-
-               other ->
-                 other
-             end
-           end)
-         ])}
-
-      {:error, _} = err ->
-        err
-    end
-  end
 
   defp filter_strictly_plugins(map, _all, []) do
     map

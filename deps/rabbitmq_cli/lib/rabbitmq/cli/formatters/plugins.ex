@@ -9,17 +9,10 @@ defmodule RabbitMQ.CLI.Formatters.Plugins do
   @behaviour RabbitMQ.CLI.FormatterBehaviour
 
   def format_output(
-        %{status: :node_down, format: format},
+        %{status: status, format: format, plugins: plugins},
         options
       ) do
-    legend(:node_down, format, options)
-  end
-
-  def format_output(
-        %{status: :running, format: format, plugins: plugins},
-        options
-      ) do
-    legend(:running, format, options) ++ format_plugins(plugins, format)
+    legend(status, format, options) ++ format_plugins(plugins, format)
   end
 
   def format_output(%{enabled: enabled, mode: _} = output, options) do
