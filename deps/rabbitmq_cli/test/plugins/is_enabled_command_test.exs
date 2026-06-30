@@ -85,6 +85,15 @@ defmodule PluginIsEnabledCommandTest do
              {:validation_failure, :plugins_dir_does_not_exist}
   end
 
+  test "validate_execution_environment: --offline with a remote node fails validation", context do
+    opts = context[:opts] |> Map.merge(%{online: false, offline: true, node: :jake@thedog})
+
+    assert match?(
+             {:validation_failure, {:bad_argument, _}},
+             @command.validate_execution_environment(["rabbitmq_stomp"], opts)
+           )
+  end
+
   test "run: when given a single enabled plugin, reports it as such", context do
     opts = context[:opts] |> Map.merge(%{online: true, offline: false})
 
@@ -120,5 +129,58 @@ defmodule PluginIsEnabledCommandTest do
              {:error, _},
              assert(@command.run(["rabbitmq_stomp", "abc_xyz"], opts))
            )
+  end
+
+  test "run: --offline with a plugin that is in the enabled_plugins file reports it as enabled",
+       context do
+    opts = context[:opts] |> Map.merge(%{online: false, offline: true})
+    set_enabled_plugins([:rabbitmq_stomp], :offline, context[:opts][:node], opts)
+
+    on_exit(fn ->
+      set_enabled_plugins(
+        [:rabbitmq_stomp, :rabbitmq_federation],
+        :online,
+        context[:opts][:node],
+        context[:opts]
+      )
+    end)
+
+    assert match?({:ok, _}, @command.run(["rabbitmq_stomp"], opts))
+  end
+
+  test "run: --offline with a plugin that is available but not in the enabled_plugins file reports it as not enabled",
+       context do
+    opts = context[:opts] |> Map.merge(%{online: false, offline: true})
+    set_enabled_plugins([:rabbitmq_stomp], :offline, context[:opts][:node], opts)
+
+    on_exit(fn ->
+      set_enabled_plugins(
+        [:rabbitmq_stomp, :rabbitmq_federation],
+        :online,
+        context[:opts][:node],
+        context[:opts]
+      )
+    end)
+
+    # rabbitmq_management is installed but not enabled; --offline must read the file, not the plugins dir.
+    assert match?({:error, _}, @command.run(["rabbitmq_management"], opts))
+  end
+
+  test "run: --offline with an implicit dependency of an enabled plugin reports it as enabled",
+       context do
+    opts = context[:opts] |> Map.merge(%{online: false, offline: true})
+    set_enabled_plugins([:rabbitmq_management], :offline, context[:opts][:node], opts)
+
+    on_exit(fn ->
+      set_enabled_plugins(
+        [:rabbitmq_stomp, :rabbitmq_federation],
+        :online,
+        context[:opts][:node],
+        context[:opts]
+      )
+    end)
+
+    # rabbitmq_management_agent is implicitly enabled as a dependency of rabbitmq_management.
+    assert match?({:ok, _}, @command.run(["rabbitmq_management_agent"], opts))
   end
 end

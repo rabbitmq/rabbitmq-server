@@ -86,6 +86,15 @@ defmodule DirectoriesCommandTest do
              {:validation_failure, :plugins_dir_does_not_exist}
   end
 
+  test "validate_execution_environment: --offline with a remote node fails validation", context do
+    opts = context[:opts] |> Map.merge(%{offline: true, node: :jake@thedog})
+
+    assert match?(
+             {:validation_failure, {:bad_argument, _}},
+             @command.validate_execution_environment([], opts)
+           )
+  end
+
   test "validate_execution_environment: when --online is used, specifying a non-existent enabled_plugins_file passes validation",
        context do
     opts = context[:opts] |> Map.merge(%{online: true, enabled_plugins_file: "none"})
