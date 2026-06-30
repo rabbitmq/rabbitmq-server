@@ -120,7 +120,7 @@ defmodule DisablePluginsCommandTest do
   test "node is inaccessible, writes out enabled plugins file and returns implicitly enabled plugin list",
        context do
     assert {:stream, test_stream} =
-             @command.run(["rabbitmq_stomp"], Map.merge(context[:opts], %{node: :nonode}))
+             @command.run(["rabbitmq_stomp"], Map.merge(context[:opts], %{node: :rabbit}))
 
     result = Enum.to_list(test_stream)
 

@@ -85,7 +85,7 @@ defmodule SetPluginsCommandTest do
   test "will write enabled plugins file if local node is inaccessible and report implicitly enabled list",
        context do
     assert {:stream, test_stream} =
-             @command.run(["rabbitmq_stomp"], Map.merge(context[:opts], %{node: :nonode}))
+             @command.run(["rabbitmq_stomp"], Map.merge(context[:opts], %{node: :rabbit}))
 
     assert [[:rabbitmq_stomp], %{mode: :offline, set: [:rabbitmq_stomp]}] =
              Enum.to_list(test_stream)

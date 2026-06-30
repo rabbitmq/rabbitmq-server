@@ -130,7 +130,7 @@ defmodule ListPluginsCommandTest do
 
     %{
       plugins: actual_plugins
-    } = @command.run([".*"], Map.merge(context[:opts], %{node: :nonode}))
+    } = @command.run([".*"], Map.merge(context[:opts], %{node: :rabbit}))
 
     assert_plugin_states(actual_plugins, expected_plugins)
   end
