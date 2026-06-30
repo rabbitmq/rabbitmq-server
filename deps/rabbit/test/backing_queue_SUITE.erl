@@ -58,7 +58,8 @@ groups() ->
     V2Only = [
         v2_delete_segment_file_completely_acked,
         v2_delete_segment_file_partially_acked,
-        v2_delete_segment_file_partially_acked_with_holes
+        v2_delete_segment_file_partially_acked_with_holes,
+        v2_reset_state_no_slash_accumulation
     ],
     [
      {backing_queue_tests, [], [
@@ -1221,6 +1222,29 @@ v2_delete_segment_file_partially_acked_with_holes1(_Config) ->
               Qi5
       end),
 
+    passed.
+
+v2_reset_state_no_slash_accumulation(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, v2_reset_state_no_slash_accumulation1, [Config]).
+
+v2_reset_state_no_slash_accumulation1(_Config) ->
+    IndexMod = rabbit_classic_queue_index_v2,
+    with_empty_test_queue(
+      fun (Qi0, _QName) ->
+              %% Each reset_state call used to append an extra "/" to the dir
+              %% path, eventually causing enametoolong after thousands of purges.
+              Qi1 = lists:foldl(fun (_, Qi) -> IndexMod:reset_state(Qi) end,
+                                Qi0, lists:seq(1, 100)),
+              %% segment_file/2 uses the dir binary directly; "//" in the result
+              %% indicates slash accumulation.
+              SegPath = IndexMod:segment_file(0, Qi1),
+              case binary:match(SegPath, <<"//">>) of
+                  nomatch -> ok;
+                  _ -> ct:fail("Slash accumulation in queue index dir: ~tp", [SegPath])
+              end,
+              Qi1
+      end),
     passed.
 
 bq_variable_queue_delete_msg_store_files_callback(Config) ->
