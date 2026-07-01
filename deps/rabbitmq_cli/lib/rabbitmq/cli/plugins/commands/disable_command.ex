@@ -49,7 +49,6 @@ defmodule RabbitMQ.CLI.Plugins.Commands.DisableCommand do
         ]
       else
         [
-          &require_rabbit_and_plugins/2,
           &PluginHelpers.validate_node_and_mode/2
         ]
       end
