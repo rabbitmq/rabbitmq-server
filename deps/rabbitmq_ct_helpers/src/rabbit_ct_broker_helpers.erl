@@ -1540,6 +1540,7 @@ rabbitmqctl(Config, Node, Args, Timeout) ->
     Nodename = ?config(nodename, NodeConfig),
     Env0 = [
       {"RABBITMQ_SCRIPTS_DIR", filename:dirname(Rabbitmqctl)},
+      {"RABBITMQ_NODENAME", atom_to_list(Nodename)},
       {"RABBITMQ_PID_FILE", ?config(pid_file, NodeConfig)},
       {"RABBITMQ_MNESIA_DIR", ?config(data_dir, NodeConfig)},
       {"RABBITMQ_PLUGINS_DIR", ?config(plugins_dir, NodeConfig)},
