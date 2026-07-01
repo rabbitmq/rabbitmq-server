@@ -202,8 +202,11 @@
         {tree = gb_trees:empty() :: gb_trees:tree(delayed_key(), msg()),
          %% Cached smallest entry for O(1) readiness check in take_next_msg
          next = undefined :: option({milliseconds(), ra:index(), msg()}),
-         %% Map from deferral token to tree key for direct message lookup
-         deferred = #{} :: #{deferral_token() => delayed_key()}}).
+         %% Map from deferral token to the tree keys of all messages parked
+         %% under it. A single token may address more than one message,
+         %% e.g. when a ranged DISPOSITION settles several deliveries with
+         %% the same annotations.
+         deferred = #{} :: #{deferral_token() => [delayed_key()]}}).
 
 -record(enqueuer,
         {next_seqno = 1 :: msg_seqno(),
