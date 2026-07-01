@@ -195,6 +195,10 @@ defmodule RabbitMQ.CLI.Formatters.Plugins do
     "[failed to contact #{node} - status not shown]"
   end
 
+  defp status_message(:offline, node) do
+    "#{node} is stopped; * (running) status is not available"
+  end
+
   defp applying(%{mode: :offline, set: set_plugins}, _) do
     set_plugins_message =
       case length(set_plugins) do
