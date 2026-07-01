@@ -2403,24 +2403,20 @@ return_one(#{system_time := Ts} = Meta, MsgId,
     end.
 
 should_delay(DeliveryFailed, DelayedRetry, Ts, Header, Anns) ->
-    %% First check for explicit x-opt-delivery-time annotation.
-    %% This takes precedence over delayed_retry configuration.
-    DeferralToken = case Anns of
-                        #{<<"x-opt-deferral-token">> := Token}
-                          when is_binary(Token) ->
-                            Token;
-                        _ ->
-                            undefined
-                    end,
     case Anns of
         #{<<"x-opt-delivery-time">> := DeliveryTime}
           when is_integer(DeliveryTime),
                DeliveryTime > Ts ->
+            %% Deferral tokens are only honoured when the client explicitly
+            %% sets a delivery time; the delayed-retry path never creates a
+            %% deferred entry so that tokens remain a purely client-driven
+            %% mechanism.
+            DeferralToken = maps:get(<<"x-opt-deferral-token">>, Anns, undefined),
             {true, DeliveryTime, DeferralToken};
         _ ->
             case should_delay0(DeliveryFailed, DelayedRetry, Ts, Header) of
                 {true, ReadyAt} ->
-                    {true, ReadyAt, DeferralToken};
+                    {true, ReadyAt, undefined};
                 false ->
                     false
             end
@@ -2616,8 +2612,7 @@ take_next_delayed(Ts, #delayed{next = {ReadyAt, Idx, Msg},
                    {?TUPLE(NextReadyAt, NextIdx), V} = gb_trees:smallest(Tree),
                    {NextReadyAt, NextIdx, V}
            end,
-    %% Remove any deferral token that maps to this key
-    Deferred = maps:filter(fun(_Token, K) -> K =/= Key end, Deferred0),
+    Deferred = remove_deferred_key(Key, Deferred0),
     Delayed = #delayed{tree = Tree, next = Next, deferred = Deferred},
     {Msg, Delayed};
 take_next_delayed(_Ts, #delayed{}) ->
@@ -2660,11 +2655,21 @@ take_delayed_for_retry(N, Ts, #delayed{tree = Tree0,
                            ?TUPLE(ReadyAt, Idx) = NextKey,
                            {ReadyAt, Idx, NextMsg}
                    end,
-            %% Remove any deferral token that maps to this key
-            Deferred = maps:filter(fun(_Token, K) -> K =/= Key end, Deferred0),
+            Deferred = remove_deferred_key(Key, Deferred0),
             Delayed = #delayed{tree = Tree, next = Next, deferred = Deferred},
             take_delayed_for_retry(N - 1, Ts, Delayed, [Msg | Acc])
     end.
+
+%% Drop a single tree key from every token's key list, dropping the token
+%% entirely once its last key is removed.
+remove_deferred_key(Key, Deferred0) ->
+    maps:filtermap(
+      fun(_Token, Keys) ->
+              case lists:delete(Key, Keys) of
+                  [] -> false;
+                  Remaining -> {true, Remaining}
+              end
+      end, Deferred0).
 
 take_deferred(Tokens, Delayed) ->
     take_deferred(Tokens, Delayed, [], []).
@@ -2675,20 +2680,30 @@ take_deferred([Token | Rest], #delayed{tree = Tree0,
                                        deferred = Deferred0} = Delayed0,
               MsgsAcc, NotFoundAcc) ->
     case maps:take(Token, Deferred0) of
-        {Key, Deferred1} ->
-            case gb_trees:lookup(Key, Tree0) of
-                {value, Msg} ->
-                    Tree = gb_trees:delete(Key, Tree0),
-                    Next = update_delayed_next(Tree),
-                    Delayed = Delayed0#delayed{tree = Tree,
-                                               next = Next,
-                                               deferred = Deferred1},
-                    take_deferred(Rest, Delayed, [Msg | MsgsAcc], NotFoundAcc);
-                none ->
-                    %% Key in deferred map but not in tree - inconsistent,
-                    %% treat as not found and clean up
-                    Delayed = Delayed0#delayed{deferred = Deferred1},
-                    take_deferred(Rest, Delayed, MsgsAcc, [Token | NotFoundAcc])
+        {Keys, Deferred1} ->
+            %% Keys were prepended as they were parked, so reverse to
+            %% resolve them oldest first.
+            {Tree, MsgsAcc1, Found} =
+                lists:foldl(
+                  fun(Key, {TreeAcc, Acc, FoundAcc}) ->
+                          case gb_trees:lookup(Key, TreeAcc) of
+                              {value, Msg} ->
+                                  {gb_trees:delete(Key, TreeAcc), [Msg | Acc], true};
+                              none ->
+                                  %% Key in deferred map but not in tree -
+                                  %% inconsistent, skip and clean up
+                                  {TreeAcc, Acc, FoundAcc}
+                          end
+                  end, {Tree0, MsgsAcc, false}, lists:reverse(Keys)),
+            Next = update_delayed_next(Tree),
+            Delayed = Delayed0#delayed{tree = Tree,
+                                       next = Next,
+                                       deferred = Deferred1},
+            case Found of
+                true ->
+                    take_deferred(Rest, Delayed, MsgsAcc1, NotFoundAcc);
+                false ->
+                    take_deferred(Rest, Delayed, MsgsAcc1, [Token | NotFoundAcc])
             end;
         error ->
             take_deferred(Rest, Delayed0, MsgsAcc, [Token | NotFoundAcc])
@@ -2765,7 +2780,9 @@ delayed_in(ReadyAt, Idx, Msg, DeferralToken, #delayed{tree = Tree0,
                    undefined ->
                        Deferred0;
                    _ ->
-                       Deferred0#{DeferralToken => Key}
+                       maps:update_with(DeferralToken,
+                                        fun(Keys) -> [Key | Keys] end,
+                                        [Key], Deferred0)
                end,
     #delayed{tree = Tree, next = Next, deferred = Deferred}.
 

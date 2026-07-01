@@ -527,26 +527,16 @@ retry_delayed(Server, Mode) when Mode =:= all orelse
 %% @param ConsumerTag the tag uniquely identifying the consumer.
 %% @param Tokens list of deferral tokens (from x-opt-deferral-token).
 %% @param State the {@module} state
-%% @returns `{ok, NumAssigned}' on success,
-%%   `{partial, NumAssigned, NotFoundTokens}' if some tokens not found,
-%%   `{error, Reason}' on failure.
+%% @returns `{state(), actions()}' - matched messages arrive as normal deliveries.
 -spec assign_deferred(rabbit_types:ctag(), [binary()], state()) ->
-    {{ok, non_neg_integer()} |
-     {partial, non_neg_integer(), [binary()]} |
-     {error, term()},
-     state()}.
+    {state(), rabbit_queue_type:actions()}.
 assign_deferred(ConsumerTag, [_|_] = Tokens, State0) ->
     ConsumerKey = consumer_key(ConsumerTag, State0),
     ServerId = pick_server(State0),
     Cmd = rabbit_fifo:make_delayed({assign_deferred, ConsumerKey, Tokens}),
-    case ra:process_command(ServerId, Cmd, ?COMMAND_TIMEOUT) of
-        {ok, Reply, _} ->
-            {Reply, State0};
-        Err ->
-            {Err, State0}
-    end;
+    {send_command(ServerId, undefined, Cmd, normal, State0), []};
 assign_deferred(_ConsumerTag, [], State) ->
-    {{ok, 0}, State}.
+    {State, []}.
 
 -spec pending_size(state()) -> non_neg_integer().
 pending_size(#state{pending = Pend}) ->
