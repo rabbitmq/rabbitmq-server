@@ -74,7 +74,7 @@ defmodule PluginsHelpersTest do
     end
 
     test "returns false for a bare node name that does not match the local name" do
-      refute PluginHelpers.node_is_local?(%{node: :"definitelynotthelocalnodename"})
+      refute PluginHelpers.node_is_local?(%{node: :definitelynotthelocalnodename})
     end
   end
 end
