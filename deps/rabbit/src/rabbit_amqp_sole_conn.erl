@@ -14,6 +14,7 @@
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
 
 -define(CLOSE_EXISTING_TIMEOUT, 30_000).
+-define(ALIVENESS_RPC_TIMEOUT, 1_000).
 
 -export([init/0,
          acquire/4,
@@ -122,9 +123,22 @@ default_options(Pid) ->
     #{keep_while => Pid}.
 
 check_conn(#conn{pid = Pid}) ->
-    %% TODO make aliveness check more robust
-    %% it should work local and non-local PIDs
-    is_process_alive(Pid).
+    Node = node(Pid),
+    case Node =:= node() of
+        true ->
+            is_process_alive(Pid);
+        false ->
+            try erpc:call(Node, erlang, is_process_alive, [Pid],
+                          ?ALIVENESS_RPC_TIMEOUT) of
+                Result ->
+                    Result
+            catch
+                error:{erpc, _Reason} ->
+                    %% If the RPC times out, the node is down, or unreachable,
+                    %% we assume the process is dead to allow the new connection.
+                    false
+            end
+    end.
 
 try_put(Path,
         #conn{pid = ExistingPid} = ExistingConn,

@@ -16,7 +16,7 @@
           export_all]).
 
 -import(amqp_utils,
-        [connection_config/1,
+        [connection_config/2,
          close_connection_sync/1]).
 -import(rabbit_amqp_util,
         [has_capability/2]).
@@ -25,18 +25,22 @@
 
 all() ->
     [
-      {group, cluster_size_1}
+      {group, cluster_size_1},
+      {group, cluster_size_3}
     ].
 
 groups() ->
     [
-     {cluster_size_1, [shuffle],
-      [
-       no_sole_conn_capability_offered_if_not_desired,
-       refuse_connection_no_conflict,
-       refuse_connection_conflict_should_refuse_new_connection,
-       close_existing_conflict_should_close_existing_connection
-      ]}
+     {cluster_size_1, [shuffle], all_tests()},
+     {cluster_size_3, [shuffle], all_tests()}
+    ].
+
+all_tests() ->
+    [
+     no_sole_conn_capability_offered_if_not_desired,
+     refuse_connection_no_conflict,
+     refuse_connection_conflict_should_refuse_new_connection,
+     close_existing_conflict_should_close_existing_connection
     ].
 
 init_per_suite(Config) ->
@@ -47,10 +51,14 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     Config.
 
-init_per_group(cluster_size_1, Config) ->
+init_per_group(Group, Config) ->
+    Nodes = case Group of
+                cluster_size_3 -> 3;
+                _ -> 1
+            end,
     Suffix = rabbit_ct_helpers:testcase_absname(Config, "", "-"),
     Config1 = rabbit_ct_helpers:set_config(
-                Config, [{rmq_nodes_count, 1},
+                Config, [{rmq_nodes_count, Nodes},
                          {rmq_nodename_suffix, Suffix}]),
     Config2 = rabbit_ct_helpers:run_setup_steps(
                 Config1,
@@ -66,9 +74,10 @@ end_per_group(_, Config) ->
       rabbit_ct_broker_helpers:teardown_steps()).
 
 no_sole_conn_capability_offered_if_not_desired(Config) ->
-    OpnConf0 = connection_config(Config),
+    ContainerId = atom_to_binary(?FUNCTION_NAME),
+    OpnConf0 = conn_config(first, Config),
     OpnConf1 = OpnConf0#{
-                 container_id => <<"my-container-1">>,
+                 container_id => ContainerId,
                  notify_with_performative => true
                 },
     {ok, Connection1} = amqp10_client:open_connection(OpnConf1),
@@ -78,26 +87,28 @@ no_sole_conn_capability_offered_if_not_desired(Config) ->
                                         properties = Props1}}}} ->
                 ?assertNot(has_capability(?CAP_SOLE_CONN, OffCaps1)),
                 ?assertNot(has_field(?SOLE_CONN_DETECTION_POLICY, Props1))
-    after 30000 -> ct:fail(opened_timeout)
+    after 10000 -> ct:fail(opened_timeout)
     end,
     %% trying to connect with the same container ID
-    {ok, Connection2} = amqp10_client:open_connection(OpnConf1),
+    OpnConfConn2 = maps:merge(OpnConf1, conn_config(other, Config)),
+    {ok, Connection2} = amqp10_client:open_connection(OpnConfConn2),
     receive {amqp10_event, {connection, Connection2,
                             {opened, #'v1_0.open'{
                                         offered_capabilities = OffCaps2,
                                         properties = Props2}}}} ->
                 ?assertNot(has_capability(?CAP_SOLE_CONN, OffCaps2)),
                 ?assertNot(has_field(?SOLE_CONN_DETECTION_POLICY, Props2))
-    after 30000 -> ct:fail(opened_timeout)
+    after 10000 -> ct:fail(opened_timeout)
     end,
 
     ok = close_connection_sync(Connection2),
     ok = close_connection_sync(Connection1).
 
 refuse_connection_no_conflict(Config) ->
-    OpnConf0 = connection_config(Config),
+    ContainerId = atom_to_binary(?FUNCTION_NAME),
+    OpnConf0 = conn_config(first, Config),
     OpnConf1 = OpnConf0#{
-                 container_id => <<"my-container-1">>,
+                 container_id => ContainerId,
                  desired_capabilities => [?CAP_SOLE_CONN],
                  notify_with_performative => true
                 },
@@ -108,29 +119,31 @@ refuse_connection_no_conflict(Config) ->
                                         properties = Props1}}}} ->
                 assert_has_sole_cap(OffCaps1),
                 assert_has_weak_policy(Props1)
-    after 30000 -> ct:fail(opened_timeout)
+    after 10000 -> ct:fail(opened_timeout)
     end,
     OpnConf2 = OpnConf1#{
-                 container_id => <<"my-container-2">>
+                 container_id => <<ContainerId/binary, "-other">>
                 },
-    {ok, Connection2} = amqp10_client:open_connection(OpnConf2),
+    OpnConfConn2 = maps:merge(OpnConf2, conn_config(other, Config)),
+    {ok, Connection2} = amqp10_client:open_connection(OpnConfConn2),
     receive {amqp10_event, {connection, Connection2,
                             {opened, #'v1_0.open'{
                                         offered_capabilities = OffCaps2,
                                         properties = Props2}}}} ->
                 assert_has_sole_cap(OffCaps2),
                 assert_has_weak_policy(Props2)
-    after 30000 -> ct:fail(opened_timeout)
+    after 10000 -> ct:fail(opened_timeout)
     end,
 
     ok = close_connection_sync(Connection2),
     ok = close_connection_sync(Connection1).
 
 refuse_connection_conflict_should_refuse_new_connection(Config) ->
+    ContainerId = atom_to_binary(?FUNCTION_NAME),
     %% TODO test also with explicit refuse-connection policy (it is the default)
-    OpnConf0 = connection_config(Config),
+    OpnConf0 = conn_config(first, Config),
     OpnConf1 = OpnConf0#{
-                 container_id => <<"my-container-1">>,
+                 container_id => ContainerId,
                  desired_capabilities => [?CAP_SOLE_CONN],
                  notify_with_performative => true
                 },
@@ -141,19 +154,17 @@ refuse_connection_conflict_should_refuse_new_connection(Config) ->
                                         properties = Props1}}}} ->
                 assert_has_sole_cap(OffCaps1),
                 assert_has_weak_policy(Props1)
-    after 30000 -> ct:fail(opened_timeout)
+    after 10000 -> ct:fail(opened_timeout)
     end,
-    OpnConf2 = OpnConf1#{
-                 container_id => <<"my-container-1">>
-                },
-    {ok, Connection2} = amqp10_client:open_connection(OpnConf2),
+    OpnConfConn2 = maps:merge(OpnConf1, conn_config(other, Config)),
+    {ok, Connection2} = amqp10_client:open_connection(OpnConfConn2),
     receive {amqp10_event, {connection, Connection2,
                             {opened, #'v1_0.open'{
                                         offered_capabilities = OffCaps2,
                                         properties = Props2}}}} ->
                 assert_has_sole_cap(OffCaps2),
                 assert_has_weak_policy(Props2)
-    after 30000 -> ct:fail(opened_timeout)
+    after 10000 -> ct:fail(opened_timeout)
     end,
     receive {amqp10_event, {connection, Connection2,
                             {closed, #'v1_0.close'{error = Error}}}} ->
@@ -163,19 +174,22 @@ refuse_connection_conflict_should_refuse_new_connection(Config) ->
                              } = Error,
                 ?assertEqual(?V_1_0_AMQP_ERROR_INVALID_FIELD, Cond),
                 ?assertEqual({utf8,
-                              <<"The container-id is already bound to an active exclusive connection.">>},
+                              <<"The container-id is already bound to "
+                                "an active exclusive connection.">>},
                              Desc),
-                ?assert(lists:member({?V_1_0_AMQP_ERROR_INVALID_FIELD, {symbol, <<"container-id">>}},
+                ?assert(lists:member({?V_1_0_AMQP_ERROR_INVALID_FIELD,
+                                      {symbol, <<"container-id">>}},
                                      Info))
-    after 30000 -> ct:fail(closed_timeout)
+    after 10000 -> ct:fail(closed_timeout)
     end,
 
     ok = close_connection_sync(Connection1).
 
 close_existing_conflict_should_close_existing_connection(Config) ->
-    OpnConf0 = connection_config(Config),
+    ContainerId = atom_to_binary(?FUNCTION_NAME),
+    OpnConf0 = conn_config(first, Config),
     OpnConf1 = OpnConf0#{
-                 container_id => <<"my-container-1">>,
+                 container_id => ContainerId,
                  desired_capabilities => [?CAP_SOLE_CONN],
                  properties => #{?SOLE_CONN_ENFORCEMENT_POLICY_KEY =>
                                  ?SOLE_CONN_ENFORCEMENT_POLICY_CLOSE_EXISTING},
@@ -188,12 +202,10 @@ close_existing_conflict_should_close_existing_connection(Config) ->
                                         properties = Props1}}}} ->
                 assert_has_sole_cap(OffCaps1),
                 assert_has_weak_policy(Props1)
-    after 30000 -> ct:fail(opened_timeout)
+    after 10000 -> ct:fail(opened_timeout)
     end,
-    OpnConf2 = OpnConf1#{
-                 container_id => <<"my-container-1">>
-                },
-    {ok, Connection2} = amqp10_client:open_connection(OpnConf2),
+    OpnConfConn2 = maps:merge(OpnConf1, conn_config(other, Config)),
+    {ok, Connection2} = amqp10_client:open_connection(OpnConfConn2),
     receive {amqp10_event, {connection, Connection1,
                             {closed, #'v1_0.close'{
                                         error = #'v1_0.error'{
@@ -221,6 +233,17 @@ close_existing_conflict_should_close_existing_connection(Config) ->
 %% ------------------------------------------------------------------
 %% Internal Helpers
 %% ------------------------------------------------------------------
+
+conn_config(first, Config) ->
+    OpnCnf = connection_config(0, Config),
+    maps:remove(container_id, OpnCnf);
+conn_config(_, Config) ->
+    NodeIndex = case proplists:get_value(rmq_nodes_count, Config, 1) of
+        1 -> 0;
+        _ -> 1
+    end,
+    OpnCnf = connection_config(NodeIndex, Config),
+    maps:remove(container_id, OpnCnf).
 
 assert_has_sole_cap(Caps) ->
     ?assert(has_capability(?CAP_SOLE_CONN, Caps)).
