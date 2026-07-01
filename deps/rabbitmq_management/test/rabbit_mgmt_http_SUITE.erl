@@ -110,7 +110,8 @@ definitions_group3_tests() ->
 
 definitions_group4_tests() ->
     [
-        definitions_vhost_test
+        definitions_vhost_test,
+        definitions_etag_test
     ].
 
 default_queue_type_group_tests() ->
@@ -2476,6 +2477,61 @@ definitions_large_streamed_test(Config) ->
     ?assert(is_map(maps:get(limits, Defs))),
 
     http_delete(Config, "/vhosts/" ++ VHost, {group, '2xx'}),
+    passed.
+
+definitions_etag_test(Config) ->
+    %% Conditional request support relies on the Khepri metadata store version.
+    case rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_khepri, metadata_store_version, []) of
+        unavailable ->
+            {skip, "metadata store version is unavailable (Khepri not enabled)"};
+        {ok, _} ->
+            definitions_etag_test0(Config)
+    end.
+
+definitions_etag_test0(Config) ->
+    http_put(Config, "/queues/%2F/etag-queue", #{durable => true}, {group, '2xx'}),
+
+    %% A regular request returns 200 with a (strong) ETag.
+    {ok, {{_, 200, _}, JsonHeaders, _}} =
+        req(Config, get, "/definitions", [auth_header("guest", "guest")]),
+    JsonETag = proplists:get_value("etag", JsonHeaders),
+    ?assert(JsonETag =/= undefined),
+
+    %% A different scope (single virtual host) yields a different ETag even
+    %% though the store version is identical.
+    {ok, {{_, 200, _}, VhostHeaders, _}} =
+        req(Config, get, "/definitions/%2F", [auth_header("guest", "guest")]),
+    VhostETag = proplists:get_value("etag", VhostHeaders),
+    ?assert(VhostETag =/= undefined),
+    ?assertNotEqual(JsonETag, VhostETag),
+
+    %% A different representation (BERT) also yields a different ETag.
+    {ok, {{_, 200, _}, BertHeaders, _}} =
+        req(Config, get, "/definitions",
+            [auth_header("guest", "guest"), {"accept", "application/bert"}]),
+    BertETag = proplists:get_value("etag", BertHeaders),
+    ?assert(BertETag =/= undefined),
+    ?assertNotEqual(JsonETag, BertETag),
+
+    %% A conditional request with the current ETag is answered with 304 and an
+    %% empty body, i.e. the definitions are not generated at all.
+    {ok, {{_, 304, _}, _, Body304}} =
+        req(Config, get, "/definitions",
+            [auth_header("guest", "guest"), {"if-none-match", JsonETag}]),
+    ?assertEqual([], Body304),
+
+    %% Changing the topology changes the ETag, so the same conditional request
+    %% now returns the full response with a fresh ETag.
+    http_put(Config, "/queues/%2F/etag-queue-2", #{durable => true}, {group, '2xx'}),
+    {ok, {{_, 200, _}, FreshHeaders, _}} =
+        req(Config, get, "/definitions",
+            [auth_header("guest", "guest"), {"if-none-match", JsonETag}]),
+    FreshETag = proplists:get_value("etag", FreshHeaders),
+    ?assert(FreshETag =/= undefined),
+    ?assertNotEqual(JsonETag, FreshETag),
+
+    http_delete(Config, "/queues/%2F/etag-queue", {group, '2xx'}),
+    http_delete(Config, "/queues/%2F/etag-queue-2", {group, '2xx'}),
     passed.
 
 definitions_password_test(Config) ->

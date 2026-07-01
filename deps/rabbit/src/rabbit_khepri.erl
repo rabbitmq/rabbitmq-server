@@ -131,6 +131,9 @@
          status/0,
          cli_cluster_status/0]).
 
+%% Cheap, monotonic store version used to derive HTTP cache validators.
+-export([metadata_store_version/0]).
+
 %% "Proxy" functions to Khepri query/update API.
 -export([is_empty/0,
 
@@ -1114,6 +1117,33 @@ get_ra_key_metrics(Node) ->
              end,
     Metrics1 = Metrics0#{machine_version => MacVer},
     Metrics1.
+
+-spec metadata_store_version() -> {ok, Version} | unavailable when
+      Version :: {Term :: non_neg_integer(), LastApplied :: non_neg_integer()}.
+%% @doc Returns a cheap version token for the metadata store.
+%%
+%% The token is the local Ra server's `{term, last_applied}' pair. The applied
+%% index advances on every metadata write. The term is included so the token
+%% still changes across a store reset or member re-initialisation, which can
+%% restart the index from a lower value (a plain index could otherwise collide
+%% with an older state at the same index). It is meant to be used as an HTTP
+%% cache validator (ETag): it always changes when definitions change (no false
+%% negatives), but may also change for unrelated metadata writes (false
+%% positives, which only cost an extra full response). `unavailable' is
+%% returned when the local Ra server cannot be queried cheaply, e.g. early
+%% during boot.
+
+metadata_store_version() ->
+    ServerId = {?RA_CLUSTER_NAME, node()},
+    try ra:key_metrics(ServerId) of
+        #{term := Term, last_applied := LastApplied} ->
+            {ok, {Term, LastApplied}};
+        _ ->
+            unavailable
+    catch
+        _:_ ->
+            unavailable
+    end.
 
 -spec cli_cluster_status() -> Status when
       Status :: [{nodes, [{disc, [node()]}]} |
