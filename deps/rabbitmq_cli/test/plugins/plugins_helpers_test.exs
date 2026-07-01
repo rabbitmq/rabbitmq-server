@@ -33,7 +33,10 @@ defmodule PluginsHelpersTest do
 
     test "returns false for a node on a clearly different host", context do
       name = context[:local_name]
-      refute PluginHelpers.node_is_local?(%{node: String.to_atom("#{name}@unknownhost.example.com")})
+
+      refute PluginHelpers.node_is_local?(%{
+               node: String.to_atom("#{name}@unknownhost.example.com")
+             })
     end
 
     test "returns false for a node with a different name on the local host", context do
