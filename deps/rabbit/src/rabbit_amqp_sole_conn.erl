@@ -64,6 +64,7 @@ acquire(refuse_connection = Plcy, VHost, ContainerId, ConnPid) ->
                 true ->
                     {error, refuse_connection};
                 _ ->
+                    %% TODO hijack: check users are the same, if not, refuse connection
                     case try_put(Path, ExistingConn, Payload) of
                         ok ->
                             ok;
@@ -81,6 +82,8 @@ acquire(close_existing = Plcy, VHost, ContainerId, ConnPid) ->
     Path = conn_path(VHost, ContainerId),
     Opts = default_options(ConnPid),
     Payload = #conn{pid = ConnPid},
+    %% TODO hijack: try create, if created OK.
+    %% if existing, check same user, if same, try CAS put, otherwise refuse
     case rabbit_khepri:adv_put(Path, Payload, Opts) of
         {ok, _} ->
             ok;
