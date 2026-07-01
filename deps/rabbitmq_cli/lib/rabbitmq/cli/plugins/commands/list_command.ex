@@ -80,8 +80,15 @@ defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
 
     {status, running} =
       case remote_running_plugins(node_name) do
-        :error -> {:node_down, []}
-        {:ok, active} -> {:running, active}
+        :error ->
+          if PluginHelpers.node_is_local?(opts) do
+            {:offline, []}
+          else
+            {:node_down, []}
+          end
+
+        {:ok, active} ->
+          {:running, active}
       end
 
     {:ok, re} = Regex.compile(pattern)
