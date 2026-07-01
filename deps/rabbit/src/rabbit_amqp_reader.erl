@@ -220,12 +220,6 @@ handle_other({rabbit_call, From, {close, Error}}, State0) ->
         true  -> close(Error, State0);
         false -> stop
     end;
-handle_other(close_sole_conn_enforcement, State0) ->
-    Error = rabbit_amqp_sole_conn:close_existing_connection_error(),
-    case ?IS_RUNNING(State0) of
-        true  -> close(Error, State0);
-        false -> stop
-    end;
 handle_other({rabbit_call, From, {shutdown, Explanation}},
              State = #v1{connection = #v1_connection{properties = Properties}}) ->
     Ret = case Explanation =:= "Node was put into maintenance mode" andalso

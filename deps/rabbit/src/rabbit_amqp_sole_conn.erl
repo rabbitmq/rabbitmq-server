@@ -169,7 +169,6 @@ store_id() ->
 kill_connection_sproc(#khepri_trigger{type = tree,
                                       event = #{change := update,
                                                 old_node_props := #{data := #conn{pid = Pid}}}}) ->
-    % Pid ! close_sole_conn_enforcement,
     exit(Pid, sole_conn_enforcement),
     ok;
 kill_connection_sproc(Props) ->
