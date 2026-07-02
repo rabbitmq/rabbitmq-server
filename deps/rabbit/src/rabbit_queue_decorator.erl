@@ -36,6 +36,8 @@
 added_to_rabbit_registry(_Type, _ModuleName) -> ok.
 removed_from_rabbit_registry(_Type) -> ok.
 
+select(undefined) -> [];
+select(none) -> [];
 select(Modules) ->
     [M || M <- Modules, code:which(M) =/= non_existing].
 
