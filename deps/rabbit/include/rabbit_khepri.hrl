@@ -24,6 +24,9 @@
 -define(RABBITMQ_KHEPRI_MAINTENANCE_PATH(Node),
         ?RABBITMQ_KHEPRI_ROOT_PATH([node_maintenance, Node])).
 
+-define(RABBITMQ_KHEPRI_NODE_METADATA_PATH(Node),
+        ?RABBITMQ_KHEPRI_ROOT_PATH([node_metadata, Node])).
+
 -define(RABBITMQ_KHEPRI_GLOBAL_RUNTIME_PARAM_PATH(Key),
         ?RABBITMQ_KHEPRI_ROOT_PATH([runtime_params, Key])).
 
@@ -62,3 +65,8 @@
 
 -define(RABBITMQ_KHEPRI_QUEUE_PATH(VHost, Name),
         ?RABBITMQ_KHEPRI_VHOST_PATH(VHost, [queues, Name])).
+
+-record(node_metadata, {
+          node,
+          metadata = #{}
+        }).

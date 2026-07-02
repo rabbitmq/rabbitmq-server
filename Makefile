@@ -70,7 +70,7 @@ endif
 # Plugins to enable for `gmake run-broker`, `gmake start-cluster`, etc.
 # To override:
 #     gmake ENABLED_PLUGINS="rabbitmq_management rabbitmq_stream" run-broker
-#     gmake NODES=3 ENABLED_PLUGINS="rabbitmq_management rabbitmq_stream rabbitmq_stream_management" start-cluster
+#     gmake NODES=3 AZ=3 ENABLED_PLUGINS="rabbitmq_management rabbitmq_stream rabbitmq_stream_management" start-cluster
 #
 # Note: ENABLED_PLUGINS only takes effect on first start. On subsequent starts,
 # the enabled_plugins file is preserved. To change plugins on restart, either:
