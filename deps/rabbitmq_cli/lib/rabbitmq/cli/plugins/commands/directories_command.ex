@@ -44,6 +44,7 @@ defmodule RabbitMQ.CLI.Plugins.Commands.DirectoriesCommand do
     Validators.chain(
       [
         &require_rabbit_and_plugins/2,
+        &PluginHelpers.validate_node_and_mode/2,
         &PluginHelpers.enabled_plugins_file/2,
         &plugins_dir/2
       ],
