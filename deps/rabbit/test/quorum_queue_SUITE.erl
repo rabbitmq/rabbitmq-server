@@ -4670,7 +4670,8 @@ purge(Config) ->
 
     {'queue.purge_ok', 2} = amqp_channel:call(Ch, #'queue.purge'{queue = QQ}),
 
-    ?assertEqual([0], dirty_query([Server], RaName, fun rabbit_fifo:query_messages_total/1)).
+    ?assertMatch(#{num_messages := 0},  machine_overview({RaName, Server})),
+    ok.
 
 peek(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),

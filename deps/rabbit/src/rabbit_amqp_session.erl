@@ -2148,7 +2148,14 @@ settle_op_from_outcome(#'v1_0.modified'{delivery_failed = DelFailed,
                {map, KVList} ->
                    Anns1 = lists:map(
                              %% "all symbolic keys except those beginning with "x-" are reserved." [3.2.10]
-                             fun({{symbol, <<"x-", _/binary>> = K}, V}) ->
+                             fun({{symbol, <<"x-opt-deferral-token">> = K}, {utf8, _} = V}) ->
+                                     {K, unwrap_simple_type(V)};
+                                ({{symbol, <<"x-opt-deferral-token">>}, Other}) ->
+                                     protocol_error(
+                                       ?V_1_0_AMQP_ERROR_INVALID_FIELD,
+                                       "x-opt-deferral-token must be of AMQP type utf8, got: ~tp",
+                                       [Other]);
+                                ({{symbol, <<"x-", _/binary>> = K}, V}) ->
                                      {K, unwrap_simple_type(V)}
                              end, KVList),
                    maps:from_list(Anns1)
@@ -3162,7 +3169,8 @@ handle_outgoing_link_flow_control(
                delivery_count = MaybeDeliveryCountRcv,
                link_credit = ?UINT(LinkCreditRcv),
                drain = Drain0,
-               echo = Echo0},
+               echo = Echo0,
+               properties = FlowProps},
   #state{outgoing_links = OutgoingLinks,
          queue_states = QStates0
         } = State0) ->
@@ -3186,14 +3194,21 @@ handle_outgoing_link_flow_control(
                                         credit = CappedCredit,
                                         drain = Drain},
                      at_least_one_credit_req_in_flight = true},
-            {ok, QStates, Actions} = rabbit_queue_type:credit(
-                                       QName, Ctag,
-                                       QFC#queue_flow_ctl.delivery_count,
-                                       CappedCredit, Drain, QStates0),
+            {ok, QStates1, Actions0} = rabbit_queue_type:credit(
+                                         QName, Ctag,
+                                         QFC#queue_flow_ctl.delivery_count,
+                                         CappedCredit, Drain, QStates0),
+            {ok, QStates, Actions1} = case parse_deferred_tokens(FlowProps) of
+                                          [] ->
+                                              {ok, QStates1, []};
+                                          Tokens ->
+                                              rabbit_queue_type:assign_deferred(
+                                                QName, Ctag, Tokens, QStates1)
+                                      end,
             State = State0#state{
                       queue_states = QStates,
                       outgoing_links = OutgoingLinks#{HandleInt := Link}},
-            handle_queue_actions(Actions, State);
+            handle_queue_actions(Actions0 ++ Actions1, State);
         true ->
             %% A credit request is currently in-flight. Let's first process its reply
             %% before sending the next request. This ensures our outgoing_pending
@@ -3203,6 +3218,8 @@ handle_outgoing_link_flow_control(
             %% to reason about. Therefore, we stash the new request. If there is already a
             %% stashed request, we replace it because the latest flow control state from the
             %% client applies.
+            %% Deferral tokens are not stashed; they target the current state of the delayed
+            %% set and must not be replayed when the stashed credit request is processed.
             Link = Link0#outgoing_link{
                      stashed_credit_req = #credit_req{
                                              delivery_count = DeliveryCountRcv,
@@ -3210,6 +3227,21 @@ handle_outgoing_link_flow_control(
                                              drain = Drain,
                                              echo = Echo}},
             State0#state{outgoing_links = OutgoingLinks#{HandleInt := Link}}
+    end.
+
+parse_deferred_tokens(undefined) ->
+    [];
+parse_deferred_tokens({map, KVList}) ->
+    case lists:keyfind({symbol, <<"rabbitmq:deferral-tokens">>}, 1, KVList) of
+        {{symbol, <<"rabbitmq:deferral-tokens">>}, {array, utf8, Elems}} ->
+            [T || {utf8, T} <- Elems];
+        false ->
+            [];
+        {{symbol, <<"rabbitmq:deferral-tokens">>}, Other} ->
+            protocol_error(
+              ?V_1_0_AMQP_ERROR_INVALID_FIELD,
+              "rabbitmq:deferral-tokens must be an array of AMQP type utf8, got: ~tp",
+              [Other])
     end.
 
 delivery_count_rcv(?UINT(DeliveryCount)) ->

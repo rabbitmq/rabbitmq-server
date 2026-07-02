@@ -3692,10 +3692,10 @@ delayed_retry_empty_command_test(Config) ->
     ok.
 
 delayed_assign_deferred_test(Config) ->
-    %% Test assigning deferred messages by token to a specific consumer
+    %% Test assigning deferred messages by token to a specific consumer.
+    %% A deferral token only parks a message when x-opt-delivery-time is also set.
     Conf = #{name => ?FUNCTION_NAME,
-             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
-             delayed_retry => {all, 10000, 10000}},
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B)},
     State0 = init(Conf),
     Cid = {?FUNCTION_NAME_B, self()},
     %% Enqueue a message
@@ -3703,9 +3703,10 @@ delayed_assign_deferred_test(Config) ->
     %% Checkout the message
     {State2, #{key := CKey, next_msg_id := MsgId}, _} =
         checkout_ts(Config, 2, 100, Cid, {auto, {simple_prefetch, 2}}, State1),
-    %% Return with deferral token via modify
+    %% Return with deferral token and explicit delivery time via modify
     Token1 = <<"token-1">>,
-    Anns = #{<<"x-opt-deferral-token">> => Token1},
+    Anns = #{<<"x-opt-deferral-token">> => Token1,
+             <<"x-opt-delivery-time">> => 10000},
     Modify = rabbit_fifo:make_modify(CKey, [MsgId], false, false, Anns),
     {State3, _, _} = apply(meta(Config, 3, 100), Modify, State2),
     ?assertMatch(#{num_delayed_messages := 1,
@@ -3717,11 +3718,44 @@ delayed_assign_deferred_test(Config) ->
                    num_checked_out := 1}, rabbit_fifo:overview(State4)),
     ok.
 
-delayed_assign_deferred_insufficient_credit_test(Config) ->
-    %% Test that assign_deferred fails when consumer has insufficient credit
+delayed_assign_deferred_multiple_messages_test(Config) ->
+    %% A single deferral token may be assigned to more than one message,
+    %% e.g. as a result of a ranged DISPOSITION (first =/= last) settling
+    %% several deliveries with the same MODIFIED annotations.
     Conf = #{name => ?FUNCTION_NAME,
-             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
-             delayed_retry => {all, 10000, 10000}},
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B)},
+    State0 = init(Conf),
+    Cid = {?FUNCTION_NAME_B, self()},
+    %% Enqueue 2 messages.
+    {State1, _} = enq(Config, 1, 1, msg1, State0),
+    {State2, _} = enq(Config, 2, 2, msg2, State1),
+    %% Checkout both messages with prefetch 2.
+    {State3, #{key := CKey, next_msg_id := MsgId}, _} =
+        checkout_ts(Config, 3, 100, Cid, {auto, {simple_prefetch, 2}}, State2),
+    %% Return both in a single modify command under the same token, as a
+    %% ranged DISPOSITION would.
+    Token = <<"token-shared">>,
+    Anns = #{<<"x-opt-deferral-token">> => Token,
+             <<"x-opt-delivery-time">> => 10000},
+    Modify = rabbit_fifo:make_modify(CKey, [MsgId, MsgId + 1], false, false, Anns),
+    {State4, _, _} = apply(meta(Config, 4, 100), Modify, State3),
+    ?assertMatch(#{num_delayed_messages := 2,
+                   num_checked_out := 0}, rabbit_fifo:overview(State4)),
+    %% Assigning the shared token back to the consumer returns both messages.
+    Cmd = rabbit_fifo:make_delayed({assign_deferred, CKey, [Token]}),
+    {State5, {ok, 2}, _} = apply(meta(Config, 5, 100), Cmd, State4),
+    ?assertMatch(#{num_delayed_messages := 0,
+                   num_checked_out := 2}, rabbit_fifo:overview(State5)),
+    %% The token is now fully consumed: requesting it again finds nothing.
+    Cmd2 = rabbit_fifo:make_delayed({assign_deferred, CKey, [Token]}),
+    {_State6, {partial, 0, [Token]}, _} = apply(meta(Config, 6, 100), Cmd2, State5),
+    ok.
+
+delayed_assign_deferred_insufficient_credit_test(Config) ->
+    %% Test that assign_deferred fails when consumer has insufficient credit.
+    %% Both tokens use explicit x-opt-delivery-time so they are parked.
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B)},
     State0 = init(Conf),
     Cid = {?FUNCTION_NAME_B, self()},
     %% Enqueue 2 messages
@@ -3730,11 +3764,13 @@ delayed_assign_deferred_insufficient_credit_test(Config) ->
     %% Checkout both messages with prefetch 2
     {State3, #{key := CKey, next_msg_id := MsgId}, _} =
         checkout_ts(Config, 3, 100, Cid, {auto, {simple_prefetch, 2}}, State2),
-    %% Return both with deferral tokens
+    %% Return both with deferral tokens and explicit delivery times
     Token1 = <<"token-1">>,
     Token2 = <<"token-2">>,
-    Anns1 = #{<<"x-opt-deferral-token">> => Token1},
-    Anns2 = #{<<"x-opt-deferral-token">> => Token2},
+    Anns1 = #{<<"x-opt-deferral-token">> => Token1,
+              <<"x-opt-delivery-time">> => 10000},
+    Anns2 = #{<<"x-opt-deferral-token">> => Token2,
+              <<"x-opt-delivery-time">> => 10000},
     Mod1 = rabbit_fifo:make_modify(CKey, [MsgId], false, false, Anns1),
     {State4, _, _} = apply(meta(Config, 4, 100), Mod1, State3),
     Mod2 = rabbit_fifo:make_modify(CKey, [MsgId+1], false, false, Anns2),
@@ -3750,10 +3786,9 @@ delayed_assign_deferred_insufficient_credit_test(Config) ->
     ok.
 
 delayed_assign_deferred_not_found_test(Config) ->
-    %% Test that assign_deferred returns partial when some tokens not found
+    %% Test that assign_deferred returns partial when some tokens not found.
     Conf = #{name => ?FUNCTION_NAME,
-             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
-             delayed_retry => {all, 10000, 10000}},
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B)},
     State0 = init(Conf),
     Cid = {?FUNCTION_NAME_B, self()},
     %% Enqueue a message
@@ -3761,9 +3796,10 @@ delayed_assign_deferred_not_found_test(Config) ->
     %% Checkout the message
     {State2, #{key := CKey, next_msg_id := MsgId}, _} =
         checkout_ts(Config, 2, 100, Cid, {auto, {simple_prefetch, 2}}, State1),
-    %% Return with deferral token
+    %% Return with deferral token and explicit delivery time
     Token1 = <<"token-1">>,
-    Anns = #{<<"x-opt-deferral-token">> => Token1},
+    Anns = #{<<"x-opt-deferral-token">> => Token1,
+             <<"x-opt-delivery-time">> => 10000},
     Mod = rabbit_fifo:make_modify(CKey, [MsgId], false, false, Anns),
     {State3, _, _} = apply(meta(Config, 3, 100), Mod, State2),
     %% Try to assign with one valid and one invalid token
@@ -3778,8 +3814,7 @@ delayed_assign_deferred_not_found_test(Config) ->
 delayed_assign_deferred_consumer_not_found_test(Config) ->
     %% Test that assign_deferred fails when consumer doesn't exist
     Conf = #{name => ?FUNCTION_NAME,
-             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
-             delayed_retry => {all, 10000, 10000}},
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B)},
     State0 = init(Conf),
     %% Try to assign to non-existent consumer
     {_State, {error, consumer_not_found}, []} =
@@ -4030,7 +4065,7 @@ machine_version_test(Config) ->
                   consumers = #{3 := #consumer{cfg = #consumer_cfg{priority = 0}}},
                   service_queue = S,
                   messages = Msgs}, ok,
-     [_|_]} = apply(meta(Config, Idx), {machine_version, 7, 8}, S1),
+     [_|_]} = apply(meta(Config, Idx), {machine_version, 7, 9}, S1),
 
     ?assertEqual(1, rabbit_fifo_pq:len(Msgs)),
     ?assert(priority_queue:is_queue(S)),
@@ -4058,16 +4093,16 @@ machine_version_waiting_consumer_test(Config) ->
                                                  #consumer_cfg{priority = 0}}},
                   service_queue = S,
                   messages = Msgs}, ok, _} = apply(meta(Config, Idx),
-                                                    {machine_version, 7, 8}, S1),
+                                                    {machine_version, 7, 9}, S1),
     %% validate message conversion to lqueue
     ?assertEqual(0, rabbit_fifo_pq:len(Msgs)),
     ?assert(priority_queue:is_queue(S)),
     ?assertEqual(1, priority_queue:len(S)),
     ok.
 
-convert_v7_to_v8_test(Config) ->
+convert_v7_to_v9_test(Config) ->
     ConfigV7 = [{machine_version, 7} | Config],
-    ConfigV8 = [{machine_version, 8} | Config],
+    ConfigV9 = [{machine_version, 9} | Config],
 
     EPid = test_util:fake_pid(node()),
     Pid1 = test_util:fake_pid(node()),
@@ -4092,7 +4127,7 @@ convert_v7_to_v8_test(Config) ->
     {StateV7, _} = run_log(rabbit_fifo_v7, ConfigV7, Init, Entries,
                            fun (_) -> true end),
     {#rabbit_fifo{consumers = Consumers}, ok, _} =
-        apply(meta(ConfigV8, ?LINE), {machine_version, 7, 8}, StateV7),
+        apply(meta(ConfigV9, ?LINE), {machine_version, 7, 9}, StateV7),
 
     ?assertMatch(#consumer{status = {suspected_down, up}},
                  maps:get(Cid1, Consumers)),
@@ -4925,6 +4960,36 @@ query_single_active_consumer_consumer_info_test(Config) ->
                    consumer_strategy := single_active,
                    num_checked_out := 0}, Info2),
     ok.
+
+
+%% Ingress tracking tests
+
+ingress_bytes_by_node_accumulates_on_enqueue_test(Config) ->
+    S0 = test_init(ingress_accumulates),
+    Msg = mk_mc(<<"hello">>),
+    Pid = self(),
+    Enq = make_enqueue(Pid, 1, Msg),
+    {S1, _, _} = apply(meta(Config, 1, 0, {notify, 1, Pid}), Enq, S0),
+    Ingress = S1#rabbit_fifo.ingress_bytes_by_node,
+    ?assert(maps:get(node(Pid), Ingress, 0) > 0),
+    ok.
+
+ingress_bytes_by_node_survives_snapshot_test(Config) ->
+    S0 = test_init(ingress_snapshot),
+    Msg = mk_mc(<<"test">>),
+    Pid = self(),
+    Enq = make_enqueue(Pid, 1, Msg),
+    {S1, _, _} = apply(meta(Config, 1, 0, {notify, 1, Pid}), Enq, S0),
+    Ingress = S1#rabbit_fifo.ingress_bytes_by_node,
+    ?assert(maps:size(Ingress) > 0),
+    %% Simulate snapshot/restore via serialization round-trip
+    S2 = binary_to_term(term_to_binary(S1)),
+    Ingress2 = S2#rabbit_fifo.ingress_bytes_by_node,
+    ?assertEqual(Ingress, Ingress2),
+    ok.
+
+
+%% Ingress tracking tests end
 
 
 %% Utility

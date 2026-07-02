@@ -628,7 +628,8 @@ capabilities() ->
       rebalance_module => ?MODULE,
       can_redeliver => true,
       is_replicable => true,
-      distribution_modes => [move]
+      distribution_modes => [move],
+      amqp_link_capabilities => [<<"rabbitmq:deferral-tokens">>]
      }.
 
 rpc_delete_metrics(QName) ->
@@ -1393,15 +1394,11 @@ retry_delayed(Q, Mode) when ?is_amqqueue(Q) ->
     Server = amqqueue:get_pid(Q),
     rabbit_fifo_client:retry_delayed(Server, Mode).
 
--spec assign_deferred(rabbit_types:ctag(), [binary()],
-                      rabbit_fifo_client:state(),
-                      amqqueue:amqqueue()) ->
-    {{ok, non_neg_integer()} |
-     {partial, non_neg_integer(), [binary()]} |
-     {error, term()},
-     rabbit_fifo_client:state()}.
-assign_deferred(CTag, Tokens, QState, _Q) ->
-    rabbit_fifo_client:assign_deferred(CTag, Tokens, QState).
+-spec assign_deferred(rabbit_amqqueue:name(), rabbit_types:ctag(), [binary()],
+                      rabbit_fifo_client:state()) ->
+    {rabbit_fifo_client:state(), rabbit_queue_type:actions()}.
+assign_deferred(_QName, CTag, Tokens, QState) ->
+    rabbit_fifo_client:assign_deferred(quorum_ctag(CTag), Tokens, QState).
 
 cleanup_data_dir() ->
     Names = [begin

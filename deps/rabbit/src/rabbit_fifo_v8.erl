@@ -5,18 +5,18 @@
 %% Copyright (c) 2007-2026 Broadcom. All Rights Reserved.
 %% The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.
 %% All rights reserved.
--module(rabbit_fifo).
+-module(rabbit_fifo_v8).
 
 -behaviour(ra_machine).
 
 -compile(inline_list_funcs).
 -compile(inline).
 -compile({no_auto_import, [apply/3]}).
--dialyzer({nowarn_function, convert_v8_to_v9/2}).
+-dialyzer({nowarn_function, convert_v7_to_v8/2}).
 -dialyzer(no_improper_lists).
 
 -include("rabbit_queue_type.hrl").
--include("rabbit_fifo.hrl").
+-include("rabbit_fifo_v8.hrl").
 
 -include_lib("kernel/include/logger.hrl").
 
@@ -105,7 +105,8 @@
          make_garbage_collection/0,
          make_delayed/1,
 
-         exec_read/3
+         exec_read/3,
+         convert_v7_to_v8/2
 
         ]).
 
@@ -203,7 +204,8 @@
               delayed_op/0]).
 
 -spec init(config()) -> state().
-init(#{name := Name, queue_resource := Resource} = Conf) ->
+init(#{name := Name,
+       queue_resource := Resource} = Conf) ->
     update_config(Conf, #?STATE{cfg = #cfg{name = Name,
                                            resource = Resource}}).
 
@@ -695,12 +697,9 @@ apply_(Meta, {nodeup, Node}, #?STATE{consumers = Cons0,
 apply_(_, {nodedown, _Node}, State) ->
     {State, ok};
 apply_(Meta, #purge_nodes{nodes = Nodes}, State0) ->
-    {State1, Effects} = lists:foldl(fun(Node, {S, E}) ->
+    {State, Effects} = lists:foldl(fun(Node, {S, E}) ->
                                            purge_node(Meta, Node, S, E)
                                    end, {State0, []}, Nodes),
-    State = State1#?STATE{
-        ingress_bytes_by_node =
-            maps:without(Nodes, State1#?STATE.ingress_bytes_by_node)},
     {State, ok, Effects};
 apply_(Meta,
        #update_config{config = #{} = Conf},
@@ -968,8 +967,69 @@ credit_reply_resend_effect(#?STATE{waiting_consumers = Waiting,
               Acc
       end, [], maps:merge(Consumers, maps:from_list(Waiting))).
 
-convert_v8_to_v9(#{} = _Meta, StateV8) ->
-    erlang:append_element(StateV8, #{}).
+v7_to_v8_consumer(Con, Timeout) ->
+                     V7Cfg = element(#consumer.cfg, Con),
+                     Status0 = element(#consumer.status, Con),
+                     Ch0 = element(#consumer.checked_out, Con),
+                     Ch = maps:map(fun (_, M) -> ?C_MSG(Timeout, M) end, Ch0),
+                     Cfg = #consumer_cfg{meta = element(#consumer_cfg.meta, V7Cfg),
+                                         pid = element(#consumer_cfg.pid, V7Cfg),
+                                         tag = element(#consumer_cfg.tag, V7Cfg),
+                                         credit_mode = element(#consumer_cfg.credit_mode, V7Cfg),
+                                         lifetime = element(#consumer_cfg.lifetime, V7Cfg),
+                                         priority = element(#consumer_cfg.priority, V7Cfg),
+                                         timeout = ?DEFAULT_CONSUMER_TIMEOUT_MS
+                                        },
+                     Status = case Status0 of
+                                  suspected_down ->
+                                      {suspected_down, up};
+                                  _ ->
+                                      Status0
+                              end,
+                     #consumer{cfg = Cfg,
+                               status = Status,
+                               next_msg_id = element(#consumer.next_msg_id, Con),
+                               checked_out = Ch,
+                               credit = element(#consumer.credit, Con),
+                               delivery_count = element(#consumer.delivery_count, Con)
+                              }.
+
+convert_v7_to_v8(#{system_time := Ts} = _Meta, StateV7) ->
+    %% the structure is intact for now
+    Cons0 = element(#?STATE.consumers, StateV7),
+    Waiting0 = element(#?STATE.waiting_consumers, StateV7),
+    Timeout = Ts + ?DEFAULT_CONSUMER_TIMEOUT_MS,
+    Cons = maps:map(
+             fun (_CKey, Con) ->
+                     v7_to_v8_consumer(Con, Timeout)
+             end, Cons0),
+    Waiting = lists:map(fun({Cid, Con}) ->
+                                {Cid, v7_to_v8_consumer(Con, Timeout)}
+                        end, Waiting0),
+
+    Msgs = element(#?STATE.messages, StateV7),
+    Cfg = element(#?STATE.cfg, StateV7),
+    {Hi, No} = rabbit_fifo_q:to_queues(Msgs),
+    Pq0 = queue:fold(fun (I, Acc) ->
+                             rabbit_fifo_pq:in(9, I, Acc)
+                     end, rabbit_fifo_pq:new(), Hi),
+    Pq = queue:fold(fun (I, Acc) ->
+                            rabbit_fifo_pq:in(?DEFAULT_PRIORITY, I, Acc)
+                    end, Pq0, No),
+    Dlx0 = element(#?STATE.dlx, StateV7),
+    Dlx = Dlx0#?DLX{unused = ?NIL},
+    StateV8 = StateV7,
+    StateV8#?STATE{cfg = Cfg#cfg{consumer_disconnected_timeout = 60_000,
+                                 delayed_retry = disabled},
+                   reclaimable_bytes = 0,
+                   messages = Pq,
+                   consumers = Cons,
+                   waiting_consumers = Waiting,
+                   next_consumer_timeout = Timeout,
+                   last_command_time = Ts,
+                   dlx = Dlx,
+                   delayed = #delayed{}
+                  }.
 
 purge_node(Meta, Node, State, Effects) ->
     lists:foldl(fun(Pid, {S0, E0}) ->
@@ -1172,8 +1232,7 @@ overview(#?STATE{consumers = Cons,
                  reclaimable_bytes_count => ReclaimableBytes,
                  smallest_raft_index => smallest_raft_index(State),
                  num_active_priorities => NumActivePriorities,
-                 messages_by_priority => Detail,
-                 ingress_bytes_by_node => State#?STATE.ingress_bytes_by_node
+                 messages_by_priority => Detail
                  },
     DlxOverview = dlx_overview(DlxState),
     maps:merge(maps:merge(Overview, DlxOverview), SacOverview).
@@ -1194,7 +1253,7 @@ get_checked_out(CKey, From, To, #?STATE{consumers = Consumers}) ->
     end.
 
 -spec version() -> pos_integer().
-version() -> 9.
+version() -> 8.
 
 which_module(0) -> rabbit_fifo_v0;
 which_module(1) -> rabbit_fifo_v1;
@@ -1204,16 +1263,9 @@ which_module(4) -> rabbit_fifo_v7;
 which_module(5) -> rabbit_fifo_v7;
 which_module(6) -> rabbit_fifo_v7;
 which_module(7) -> rabbit_fifo_v7;
-which_module(8) -> rabbit_fifo_v8;
-which_module(9) -> ?MODULE.
+which_module(8) -> ?MODULE.
 
--define(AUX, aux_v5).
--define(DEFAULT_INGRESS_DECAY_MS, 60_000).
-
--record(ingress_aux,
-        {last_totals = #{} :: #{node() | undefined => non_neg_integer()},
-         estimators = #{} :: #{node() | undefined => ra_li:state()},
-         decay_ms = ?DEFAULT_INGRESS_DECAY_MS :: pos_integer()}).
+-define(AUX, aux_v4).
 
 -record(snapshot, {index :: ra:index(),
                    timestamp :: milliseconds(),
@@ -1228,8 +1280,7 @@ which_module(9) -> ?MODULE.
                gc = #aux_gc{} :: #aux_gc{},
                tick_pid :: undefined | pid(),
                cache = #{} :: map(),
-               last_checkpoint :: tuple() | #snapshot{},
-               ingress = #ingress_aux{} :: #ingress_aux{}
+               last_checkpoint :: tuple() | #snapshot{}
               }).
 
 init_aux(Name) when is_atom(Name) ->
@@ -1243,38 +1294,11 @@ init_aux(Name) when is_atom(Name) ->
                              ?SNAP_MIN_RECLAIMABLE_B}),
     Range = max(1, SnapMinReclaimable - ?SNAP_MIN_RECLAIMABLE_LOW_B),
     MinReclaimable = ?SNAP_MIN_RECLAIMABLE_LOW_B + rand:uniform(Range),
-    DecayMs = persistent_term:get(rabbit_fifo_ingress_decay_ms,
-                                  ?DEFAULT_INGRESS_DECAY_MS),
     #?AUX{name = Name,
           last_checkpoint = #snapshot{index = 0,
                                       timestamp = erlang:system_time(millisecond),
                                       messages_total = 0,
-                                      min_reclaimable = MinReclaimable},
-          ingress = #ingress_aux{decay_ms = DecayMs}}.
-
-update_ingress(Overview, Nodes, #ingress_aux{last_totals = LastTotals,
-                                              estimators = Estimators0,
-                                              decay_ms = DecayMs} = Ingress) ->
-    NewTotals = maps:get(ingress_bytes_by_node, Overview, #{}),
-    Ts = erlang:monotonic_time(millisecond),
-    Estimators1 =
-        maps:fold(fun(Node, NewTotal, Est) ->
-                      Delta = NewTotal - maps:get(Node, LastTotals, 0),
-                      Li0 = maps:get(Node, Est, ra_li:new(DecayMs)),
-                      Li1 = ra_li:update(Delta, Ts, Li0),
-                      Est#{Node => Li1}
-                  end, Estimators0, NewTotals),
-    ActiveNodes = sets:from_list(Nodes, [{version, 2}]),
-    Estimators = maps:filter(fun(Node, _) ->
-                                  Node =:= undefined orelse
-                                  sets:is_element(Node, ActiveNodes)
-                             end, Estimators1),
-    Ingress#ingress_aux{last_totals = NewTotals,
-                        estimators = Estimators}.
-
-compute_ingress_rates(#ingress_aux{estimators = Estimators}) ->
-    Ts = erlang:monotonic_time(millisecond),
-    maps:map(fun(_Node, Li) -> ra_li:rate(Ts, Li) end, Estimators).
+                                      min_reclaimable = MinReclaimable}}.
 
 handle_aux(RaftState, Tag, Cmd, AuxV2, RaAux)
   when element(1, AuxV2) == aux_v2 ->
@@ -1292,19 +1316,6 @@ handle_aux(RaftState, Tag, Cmd, AuxV3, RaAux)
                   last_checkpoint = element(8, AuxV3)
                  },
     handle_aux(RaftState, Tag, Cmd, AuxV4, RaAux);
-handle_aux(RaftState, Tag, Cmd, AuxV4, RaAux)
-  when element(1, AuxV4) == aux_v4 ->
-    DecayMs = persistent_term:get(rabbit_fifo_ingress_decay_ms,
-                                  ?DEFAULT_INGRESS_DECAY_MS),
-    AuxV5 = #?AUX{name = element(2, AuxV4),
-                  last_decorators_state = element(3, AuxV4),
-                  last_consumer_timeout = element(4, AuxV4),
-                  gc = element(5, AuxV4),
-                  tick_pid = element(6, AuxV4),
-                  cache = element(7, AuxV4),
-                  last_checkpoint = element(8, AuxV4),
-                  ingress = #ingress_aux{decay_ms = DecayMs}},
-    handle_aux(RaftState, Tag, Cmd, AuxV5, RaAux);
 handle_aux(leader, cast, eval,
            #?AUX{last_decorators_state = LastDec,
                  last_consumer_timeout = LastConTimeout0,
@@ -1397,25 +1408,22 @@ handle_aux(_RaftState, cast, {#return{msg_ids = MsgIds,
             %% for returns with a delivery limit set we can just return as before
             {no_reply, Aux0, RaAux0, [{append, Ret, {notify, Corr, Pid}}]}
     end;
-
-handle_aux(RaftState, _, {handle_tick, [QName, Overview0, Nodes]},
-           #?AUX{tick_pid = Pid, ingress = Ingress0} = Aux, RaAux) ->
+handle_aux(leader, _, {handle_tick, [QName, Overview0, Nodes]},
+           #?AUX{tick_pid = Pid} = Aux, RaAux) ->
     Overview = Overview0#{members_info => ra_aux:members_info(RaAux)},
-    Ingress = update_ingress(Overview0, Nodes, Ingress0),
-    Aux1 = Aux#?AUX{ingress = Ingress},
-    case RaftState of
-        leader ->
-            NewPid =
-                case process_is_alive(Pid) of
-                    false ->
-                        rabbit_quorum_queue:handle_tick(QName, Overview, Nodes);
-                    true ->
-                        Pid
-                end,
-            {no_reply, Aux1#?AUX{tick_pid = NewPid}, RaAux, []};
-        _ ->
-            {no_reply, Aux1, RaAux, []}
-    end;
+    NewPid =
+        case process_is_alive(Pid) of
+            false ->
+                %% No active TICK pid
+                %% this function spawns and returns the tick process pid
+                rabbit_quorum_queue:handle_tick(QName, Overview, Nodes);
+            true ->
+                %% Active TICK pid, do nothing
+                Pid
+        end,
+
+    %% TODO: check consumer timeouts
+    {no_reply, Aux#?AUX{tick_pid = NewPid}, RaAux, []};
 handle_aux(_, _, {get_checked_out, ConsumerKey, MsgIds}, Aux0, RaAux0) ->
     #?STATE{cfg = #cfg{},
             consumers = Consumers} = ra_aux:machine_state(RaAux0),
@@ -1512,10 +1520,6 @@ handle_aux(leader, _, {dlx, setup}, Aux, RaAux) ->
 handle_aux(_, _, {dlx, teardown, Pid}, Aux, RaAux) ->
     terminate_dlx_worker(Pid),
     {no_reply, Aux, RaAux};
-handle_aux(_, {call, _From}, get_ingress_rates,
-           #?AUX{ingress = Ingress} = Aux, RaAux) ->
-    Rates = compute_ingress_rates(Ingress),
-    {reply, {ok, Rates}, Aux, RaAux};
 handle_aux(_, _, Unhandled, Aux, RaAux) ->
     #?STATE{cfg = #cfg{resource = QR}} = ra_aux:machine_state(RaAux),
     ?LOG_DEBUG("~ts: rabbit_fifo: unhandled aux command ~P",
@@ -1726,7 +1730,10 @@ query_notify_decorators_info(#?STATE{consumers = Consumers} = State) ->
 
 -spec usage(atom()) -> float().
 usage(Name) when is_atom(Name) ->
-    ets:lookup_element(rabbit_fifo_usage, Name, 2, 0.0).
+    case ets:lookup(rabbit_fifo_usage, Name) of
+        [] -> 0.0;
+        [{_, Use}] -> Use
+    end.
 
 %%% Internal
 
@@ -1963,24 +1970,12 @@ maybe_return_all(#{system_time := Ts} = Meta, ConsumerKey,
              Effects}
     end.
 
-node_of(undefined) -> undefined;
-node_of(Pid) when is_pid(Pid) -> node(Pid).
-
-bump_ingress(Node, Size, Map) ->
-    maps:update_with(Node, fun(V) -> V + Size end, Size, Map).
-
 apply_enqueue(#{index := RaftIdx,
                 system_time := Ts} = Meta, From,
               Seq, RawMsg, Size, State0) ->
     case maybe_enqueue(RaftIdx, Ts, From, Seq, RawMsg, Size, [], State0) of
         {ok, State1, Effects1} ->
-            {MetaSize, BodySize} = Size,
-            TotalSize = MetaSize + BodySize,
-            IngressByNode = State1#?STATE.ingress_bytes_by_node,
-            State2 = State1#?STATE{
-                ingress_bytes_by_node =
-                    bump_ingress(node_of(From), TotalSize, IngressByNode)},
-            checkout(Meta, State0, State2, Effects1);
+            checkout(Meta, State0, State1, Effects1);
         {out_of_sequence, State, Effects} ->
             {State, not_enqueued, Effects};
         {duplicate, State, Effects} ->
@@ -2403,20 +2398,24 @@ return_one(#{system_time := Ts} = Meta, MsgId,
     end.
 
 should_delay(DeliveryFailed, DelayedRetry, Ts, Header, Anns) ->
+    %% First check for explicit x-opt-delivery-time annotation.
+    %% This takes precedence over delayed_retry configuration.
+    DeferralToken = case Anns of
+                        #{<<"x-opt-deferral-token">> := Token}
+                          when is_binary(Token) ->
+                            Token;
+                        _ ->
+                            undefined
+                    end,
     case Anns of
         #{<<"x-opt-delivery-time">> := DeliveryTime}
           when is_integer(DeliveryTime),
                DeliveryTime > Ts ->
-            %% Deferral tokens are only honoured when the client explicitly
-            %% sets a delivery time; the delayed-retry path never creates a
-            %% deferred entry so that tokens remain a purely client-driven
-            %% mechanism.
-            DeferralToken = maps:get(<<"x-opt-deferral-token">>, Anns, undefined),
             {true, DeliveryTime, DeferralToken};
         _ ->
             case should_delay0(DeliveryFailed, DelayedRetry, Ts, Header) of
                 {true, ReadyAt} ->
-                    {true, ReadyAt, undefined};
+                    {true, ReadyAt, DeferralToken};
                 false ->
                     false
             end
@@ -2612,7 +2611,8 @@ take_next_delayed(Ts, #delayed{next = {ReadyAt, Idx, Msg},
                    {?TUPLE(NextReadyAt, NextIdx), V} = gb_trees:smallest(Tree),
                    {NextReadyAt, NextIdx, V}
            end,
-    Deferred = remove_deferred_key(Key, Deferred0),
+    %% Remove any deferral token that maps to this key
+    Deferred = maps:filter(fun(_Token, K) -> K =/= Key end, Deferred0),
     Delayed = #delayed{tree = Tree, next = Next, deferred = Deferred},
     {Msg, Delayed};
 take_next_delayed(_Ts, #delayed{}) ->
@@ -2655,21 +2655,11 @@ take_delayed_for_retry(N, Ts, #delayed{tree = Tree0,
                            ?TUPLE(ReadyAt, Idx) = NextKey,
                            {ReadyAt, Idx, NextMsg}
                    end,
-            Deferred = remove_deferred_key(Key, Deferred0),
+            %% Remove any deferral token that maps to this key
+            Deferred = maps:filter(fun(_Token, K) -> K =/= Key end, Deferred0),
             Delayed = #delayed{tree = Tree, next = Next, deferred = Deferred},
             take_delayed_for_retry(N - 1, Ts, Delayed, [Msg | Acc])
     end.
-
-%% Drop a single tree key from every token's key list, dropping the token
-%% entirely once its last key is removed.
-remove_deferred_key(Key, Deferred0) ->
-    maps:filtermap(
-      fun(_Token, Keys) ->
-              case lists:delete(Key, Keys) of
-                  [] -> false;
-                  Remaining -> {true, Remaining}
-              end
-      end, Deferred0).
 
 take_deferred(Tokens, Delayed) ->
     take_deferred(Tokens, Delayed, [], []).
@@ -2680,30 +2670,20 @@ take_deferred([Token | Rest], #delayed{tree = Tree0,
                                        deferred = Deferred0} = Delayed0,
               MsgsAcc, NotFoundAcc) ->
     case maps:take(Token, Deferred0) of
-        {Keys, Deferred1} ->
-            %% Keys were prepended as they were parked, so reverse to
-            %% resolve them oldest first.
-            {Tree, MsgsAcc1, Found} =
-                lists:foldl(
-                  fun(Key, {TreeAcc, Acc, FoundAcc}) ->
-                          case gb_trees:lookup(Key, TreeAcc) of
-                              {value, Msg} ->
-                                  {gb_trees:delete(Key, TreeAcc), [Msg | Acc], true};
-                              none ->
-                                  %% Key in deferred map but not in tree -
-                                  %% inconsistent, skip and clean up
-                                  {TreeAcc, Acc, FoundAcc}
-                          end
-                  end, {Tree0, MsgsAcc, false}, lists:reverse(Keys)),
-            Next = update_delayed_next(Tree),
-            Delayed = Delayed0#delayed{tree = Tree,
-                                       next = Next,
-                                       deferred = Deferred1},
-            case Found of
-                true ->
-                    take_deferred(Rest, Delayed, MsgsAcc1, NotFoundAcc);
-                false ->
-                    take_deferred(Rest, Delayed, MsgsAcc1, [Token | NotFoundAcc])
+        {Key, Deferred1} ->
+            case gb_trees:lookup(Key, Tree0) of
+                {value, Msg} ->
+                    Tree = gb_trees:delete(Key, Tree0),
+                    Next = update_delayed_next(Tree),
+                    Delayed = Delayed0#delayed{tree = Tree,
+                                               next = Next,
+                                               deferred = Deferred1},
+                    take_deferred(Rest, Delayed, [Msg | MsgsAcc], NotFoundAcc);
+                none ->
+                    %% Key in deferred map but not in tree - inconsistent,
+                    %% treat as not found and clean up
+                    Delayed = Delayed0#delayed{deferred = Deferred1},
+                    take_deferred(Rest, Delayed, MsgsAcc, [Token | NotFoundAcc])
             end;
         error ->
             take_deferred(Rest, Delayed0, MsgsAcc, [Token | NotFoundAcc])
@@ -2780,9 +2760,7 @@ delayed_in(ReadyAt, Idx, Msg, DeferralToken, #delayed{tree = Tree0,
                    undefined ->
                        Deferred0;
                    _ ->
-                       maps:update_with(DeferralToken,
-                                        fun(Keys) -> [Key | Keys] end,
-                                        [Key], Deferred0)
+                       Deferred0#{DeferralToken => Key}
                end,
     #delayed{tree = Tree, next = Next, deferred = Deferred}.
 
@@ -3605,9 +3583,7 @@ convert(Meta, 6, To, State) ->
     %% no conversion needed, this version only includes a logic change
     convert(Meta, 7, To, State);
 convert(Meta, 7, To, State) ->
-    convert(Meta, 8, To, rabbit_fifo_v8:convert_v7_to_v8(Meta, State));
-convert(Meta, 8, To, State) ->
-    convert(Meta, 9, To, convert_v8_to_v9(Meta, State)).
+    convert(Meta, 8, To, convert_v7_to_v8(Meta, State)).
 
 smallest_raft_index(#?STATE{messages = Messages,
                             returns = Returns,
