@@ -97,14 +97,8 @@ node(Config) ->
              end, 10).
 
 
-%% Regression test for GH #12815. A core_metrics ETS row can briefly contain
-%% a sentinel `''` (used by rabbit_mgmt_format to represent "null") when
-%% reads race with writes around connection or queue churn. Before the
-%% defensive normalisation in rabbit_mgmt_metrics_collector, this caused
-%% a `badarith` crash inside difference/2 (`'' - integer`) which took
-%% down the collector gen_server. We force the exact shape by injecting
-%% a synthetic Pid into connection_coarse_metrics and asserting both
-%% scrape calls succeed.
+%% Regression test for rabbitmq/rabbitmq-server#12815: a non-integer
+%% sentinel in a core_metrics row crashed the collector with `badarith`.
 collector_survives_non_integer_metric(Config) ->
     ok = rabbit_ct_broker_helpers:rpc(
            Config, 0, ?MODULE, do_collector_survives_non_integer_metric, []).
