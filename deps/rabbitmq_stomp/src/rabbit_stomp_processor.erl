@@ -22,7 +22,8 @@
 -ifdef(TEST).
 -export([check_dead_letter_exchange_access/4,
          check_subscription_binding_access/5,
-         ensure_exchange_exists/3]).
+         ensure_exchange_exists/3,
+         check_user_id/2]).
 -endif.
 
 -include_lib("kernel/include/logger.hrl").
@@ -952,6 +953,7 @@ do_send(Destination, _DestHdr,
                          },
 
             {ok, Message0} = mc_amqpl:message(ExchangeName, RoutingKey, Content0),
+            check_user_id(Message0, User),
             MsgIcptCtx = State2#state.cfg#cfg.msg_interceptor_ctx,
             Message = rabbit_msg_interceptor:intercept_incoming(Message0, MsgIcptCtx),
 
@@ -2017,6 +2019,15 @@ check_internal_exchange(#exchange{name = Name, internal = true}) ->
 check_internal_exchange(_) ->
     ok.
 
+%% Applies the same user_id property check that the AMQP 0-9-1 and AMQP 1.0
+%% publish paths already apply.
+check_user_id(Message, User) ->
+    case rabbit_access_control:check_user_id(Message, User) of
+        ok ->
+            ok;
+        {refused, Reason, Args} ->
+            rabbit_misc:protocol_error(access_refused, Reason, Args)
+    end.
 
 check_topic_authorisation(#exchange{name = Name = #resource{virtual_host = VHost}, type = topic},
                           User = #user{username = Username},
