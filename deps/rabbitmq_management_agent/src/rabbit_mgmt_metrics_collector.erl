@@ -626,13 +626,9 @@ get_difference(Id, Stats, #state{old_aggr_stats = OldStats}) ->
             difference(OldStat, Stats)
     end.
 
-%% Sources publishing into core_metrics ETS tables occasionally race
-%% with table deletion or are initialised with sentinel values (e.g. the
-%% empty atom `''`, which `rabbit_mgmt_format` uses to represent "null").
-%% Doing arithmetic on these sentinels would raise `badarith` inside the
-%% gen_server, taking the collector down (see GH #12815). Coerce
-%% non-integer fields to 0 so the aggregation proceeds; the next
-%% scrape recovers a correct value.
+%% Defense in depth against non-integer fields in core_metrics rows,
+%% which previously crashed the collector with `badarith`
+%% (rabbitmq/rabbitmq-server#12815; the known producer is fixed).
 sum_entry(A, B) when is_tuple(A), is_tuple(B), tuple_size(A) =:= tuple_size(B) ->
     sum_entry_safe(normalise(A), normalise(B)).
 
