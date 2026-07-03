@@ -36,10 +36,7 @@ socket_stat_on_live_socket(_Config) ->
     ok = gen_tcp:close(LSock),
     passed.
 
-%% getstat/2 can race with socket teardown (e.g. during connection churn)
-%% and return an error. i/2 must report 0, not the atom '', which callers
-%% (rabbit_mgmt_metrics_collector) feed straight into arithmetic (see
-%% rabbitmq/rabbitmq-server#12815).
+%% `i/2` must report 0, not `''`, when `getstat/2` fails (#12815).
 socket_stat_on_closed_socket(_Config) ->
     {ok, LSock} = gen_tcp:listen(0, []),
     ok = gen_tcp:close(LSock),

@@ -1071,13 +1071,7 @@ i(SockStat, #v1{sock = Sock})
        SockStat =:= send_oct;
        SockStat =:= send_cnt;
        SockStat =:= send_pend ->
-    case rabbit_net:getstat(Sock, [SockStat]) of
-        {ok, [{SockStat, Val}]} ->
-            Val;
-        {error, _} ->
-            %% mirrors rabbit_reader:socket_info/3 (rabbitmq/rabbitmq-server#12815)
-            0
-    end;
+    rabbit_net:getstat_or_zero(Sock, SockStat);
 i(ssl, #v1{sock = Sock}) -> rabbit_net:is_ssl(Sock);
 i(SSL, #v1{sock = Sock, proxy_socket = ProxySock})
   when SSL =:= ssl_protocol;

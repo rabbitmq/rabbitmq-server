@@ -6,6 +6,7 @@
 %%
 -module(rabbit_mgmt_metrics_collector).
 
+-include_lib("kernel/include/logger.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_core_metrics.hrl").
 -include("rabbit_mgmt_metrics.hrl").
@@ -22,7 +23,6 @@
          code_change/3]).
 -export([index_table/2]).
 -export([reset_all/0]).
--export([sum_entry/2, difference/2]).
 
 -import(rabbit_mgmt_data, [lookup_element/3]).
 
@@ -216,7 +216,8 @@ aggregate_entry({Id, Metrics}, NextStats, Ops0,
     {NextStats, Ops, State};
 aggregate_entry({Id, RecvOct, SendOct, Reductions, 0}, NextStats, Ops0,
                 #state{table = connection_coarse_metrics,
-                       policies = {BPolicies, _, GPolicies}} = State) ->
+                       policies = {BPolicies, _, GPolicies}} = State)
+  when is_integer(RecvOct), is_integer(SendOct), is_integer(Reductions) ->
     Stats = ?vhost_stats_coarse_conn_stats(RecvOct, SendOct),
     Diff = get_difference(Id, Stats, State),
 
@@ -230,7 +231,8 @@ aggregate_entry({Id, RecvOct, SendOct, Reductions, 0}, NextStats, Ops0,
     {insert_old_aggr_stats(NextStats, Id, Stats), Ops2, State};
 aggregate_entry({Id, RecvOct, SendOct, _Reductions, 1}, NextStats, Ops0,
                 #state{table = connection_coarse_metrics,
-                       policies = {_BPolicies, _, GPolicies}} = State) ->
+                       policies = {_BPolicies, _, GPolicies}} = State)
+  when is_integer(RecvOct), is_integer(SendOct) ->
     Stats = ?vhost_stats_coarse_conn_stats(RecvOct, SendOct),
     Diff = get_difference(Id, Stats, State),
     Ops1 = insert_entry_ops(vhost_stats_coarse_conn_stats,
@@ -238,6 +240,25 @@ aggregate_entry({Id, RecvOct, SendOct, _Reductions, 1}, NextStats, Ops0,
                             GPolicies),
     rabbit_core_metrics:delete(connection_coarse_metrics, Id),
     {NextStats, Ops1, State};
+%% Skip rows with non-integer fields (#12815); carrying the previous
+%% reading over keeps the next delta correct.
+aggregate_entry({Id, _RecvOct, _SendOct, _Reductions, Flag}, NextStats, Ops0,
+                #state{table = connection_coarse_metrics,
+                       old_aggr_stats = OldStats} = State) ->
+    ?LOG_WARNING("Metrics collector: skipping a connection_coarse_metrics "
+                 "row with a non-integer field (connection: ~tp)", [Id]),
+    case Flag of
+        1 ->
+            rabbit_core_metrics:delete(connection_coarse_metrics, Id),
+            {NextStats, Ops0, State};
+        _ ->
+            case maps:find(Id, OldStats) of
+                {ok, OldStat} ->
+                    {insert_old_aggr_stats(NextStats, Id, OldStat), Ops0, State};
+                error ->
+                    {NextStats, Ops0, State}
+            end
+    end;
 aggregate_entry({Id, Metrics}, NextStats, Ops0,
                 #state{table = channel_created} = State) ->
     case ets:lookup(channel_created_stats, Id) of
@@ -626,67 +647,41 @@ get_difference(Id, Stats, #state{old_aggr_stats = OldStats}) ->
             difference(OldStat, Stats)
     end.
 
-%% Defense in depth against non-integer fields in core_metrics rows,
-%% which previously crashed the collector with `badarith`
-%% (rabbitmq/rabbitmq-server#12815; the known producer is fixed).
-sum_entry(A, B) when is_tuple(A), is_tuple(B), tuple_size(A) =:= tuple_size(B) ->
-    sum_entry_safe(normalise(A), normalise(B)).
-
--dialyzer({no_match, sum_entry_safe/2}).
-sum_entry_safe({A0}, {B0}) ->
+-dialyzer({no_match, sum_entry/2}).
+sum_entry({A0}, {B0}) ->
     {B0 + A0};
-sum_entry_safe({A0, A1}, {B0, B1}) ->
+sum_entry({A0, A1}, {B0, B1}) ->
     {B0 + A0, B1 + A1};
-sum_entry_safe({A0, A1, A2}, {B0, B1, B2}) ->
+sum_entry({A0, A1, A2}, {B0, B1, B2}) ->
     {B0 + A0, B1 + A1, B2 + A2};
-sum_entry_safe({A0, A1, A2, A3}, {B0, B1, B2, B3}) ->
+sum_entry({A0, A1, A2, A3}, {B0, B1, B2, B3}) ->
     {B0 + A0, B1 + A1, B2 + A2, B3 + A3};
-sum_entry_safe({A0, A1, A2, A3, A4}, {B0, B1, B2, B3, B4}) ->
+sum_entry({A0, A1, A2, A3, A4}, {B0, B1, B2, B3, B4}) ->
     {B0 + A0, B1 + A1, B2 + A2, B3 + A3, B4 + A4};
-sum_entry_safe({A0, A1, A2, A3, A4, A5}, {B0, B1, B2, B3, B4, B5}) ->
+sum_entry({A0, A1, A2, A3, A4, A5}, {B0, B1, B2, B3, B4, B5}) ->
     {B0 + A0, B1 + A1, B2 + A2, B3 + A3, B4 + A4, B5 + A5};
-sum_entry_safe({A0, A1, A2, A3, A4, A5, A6}, {B0, B1, B2, B3, B4, B5, B6}) ->
+sum_entry({A0, A1, A2, A3, A4, A5, A6}, {B0, B1, B2, B3, B4, B5, B6}) ->
     {B0 + A0, B1 + A1, B2 + A2, B3 + A3, B4 + A4, B5 + A5, B6 + A6};
-sum_entry_safe({A0, A1, A2, A3, A4, A5, A6, A7}, {B0, B1, B2, B3, B4, B5, B6, B7}) ->
+sum_entry({A0, A1, A2, A3, A4, A5, A6, A7}, {B0, B1, B2, B3, B4, B5, B6, B7}) ->
     {B0 + A0, B1 + A1, B2 + A2, B3 + A3, B4 + A4, B5 + A5, B6 + A6, B7 + A7}.
 
-difference(A, B) when is_tuple(A), is_tuple(B), tuple_size(A) =:= tuple_size(B) ->
-    difference_safe(normalise(A), normalise(B)).
-
--dialyzer({no_match, difference_safe/2}).
-difference_safe({A0}, {B0}) ->
+-dialyzer({no_match, difference/2}).
+difference({A0}, {B0}) ->
     {B0 - A0};
-difference_safe({A0, A1}, {B0, B1}) ->
+difference({A0, A1}, {B0, B1}) ->
     {B0 - A0, B1 - A1};
-difference_safe({A0, A1, A2}, {B0, B1, B2}) ->
+difference({A0, A1, A2}, {B0, B1, B2}) ->
     {B0 - A0, B1 - A1, B2 - A2};
-difference_safe({A0, A1, A2, A3}, {B0, B1, B2, B3}) ->
+difference({A0, A1, A2, A3}, {B0, B1, B2, B3}) ->
     {B0 - A0, B1 - A1, B2 - A2, B3 - A3};
-difference_safe({A0, A1, A2, A3, A4}, {B0, B1, B2, B3, B4}) ->
+difference({A0, A1, A2, A3, A4}, {B0, B1, B2, B3, B4}) ->
     {B0 - A0, B1 - A1, B2 - A2, B3 - A3, B4 - A4};
-difference_safe({A0, A1, A2, A3, A4, A5}, {B0, B1, B2, B3, B4, B5}) ->
+difference({A0, A1, A2, A3, A4, A5}, {B0, B1, B2, B3, B4, B5}) ->
     {B0 - A0, B1 - A1, B2 - A2, B3 - A3, B4 - A4, B5 - A5};
-difference_safe({A0, A1, A2, A3, A4, A5, A6}, {B0, B1, B2, B3, B4, B5, B6}) ->
+difference({A0, A1, A2, A3, A4, A5, A6}, {B0, B1, B2, B3, B4, B5, B6}) ->
     {B0 - A0, B1 - A1, B2 - A2, B3 - A3, B4 - A4, B5 - A5, B6 - A6};
-difference_safe({A0, A1, A2, A3, A4, A5, A6, A7}, {B0, B1, B2, B3, B4, B5, B6, B7}) ->
+difference({A0, A1, A2, A3, A4, A5, A6, A7}, {B0, B1, B2, B3, B4, B5, B6, B7}) ->
     {B0 - A0, B1 - A1, B2 - A2, B3 - A3, B4 - A4, B5 - A5, B6 - A6, B7 - A7}.
-
-normalise(T) when is_tuple(T) ->
-    case has_non_integer(T, tuple_size(T)) of
-        false -> T;
-        true  -> list_to_tuple([to_int(E) || E <- tuple_to_list(T)])
-    end.
-
-has_non_integer(_T, 0) ->
-    false;
-has_non_integer(T, N) ->
-    case element(N, T) of
-        E when is_integer(E) -> has_non_integer(T, N - 1);
-        _                    -> true
-    end.
-
-to_int(N) when is_integer(N) -> N;
-to_int(_)                    -> 0.
 
 vhost(#resource{virtual_host = VHost}) ->
     VHost;
