@@ -79,7 +79,10 @@ defmodule RabbitMQ.CLI.Plugins.Commands.EnableCommand do
 
         mode = PluginHelpers.mode(opts)
 
-        case PluginHelpers.set_enabled_plugins(MapSet.to_list(plugins_to_set), opts) do
+        case PluginHelpers.set_enabled_plugins(
+               MapSet.to_list(plugins_to_set),
+               Map.put(opts, :keep_missing_plugins, true)
+             ) do
           {:ok, enabled_plugins} ->
             {:stream,
              Stream.concat([
