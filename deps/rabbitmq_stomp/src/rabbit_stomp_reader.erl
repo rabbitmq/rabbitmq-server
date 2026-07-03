@@ -497,10 +497,7 @@ info_internal(SockStat, #reader_state{socket = Sock}) when SockStat =:= recv_oct
                                                            SockStat =:= send_oct;
                                                            SockStat =:= send_cnt;
                                                            SockStat =:= send_pend ->
-    case rabbit_net:getstat(Sock, [SockStat]) of
-        {ok, [{_, N}]} when is_number(N) -> N;
-        _ -> 0
-    end;
+    rabbit_net:getstat_or_zero(Sock, SockStat);
 info_internal(state, State) -> info_internal(connection_state, State);
 info_internal(garbage_collection, _State) ->
     rabbit_misc:get_gc_info(self());
