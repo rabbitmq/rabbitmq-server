@@ -19,15 +19,10 @@
          validate_queue_args/2,
          validate_consumer_args/2,
          validate_delete_after/2,
-<<<<<<< HEAD
-         deobfuscated_uris/2
-=======
-         deobfuscate_value/1,
          deobfuscated_uris/2,
          obfuscated_uris/2,
          obfuscate_uris/1,
          deobfuscate_uris/1
->>>>>>> de8b90b4b9 (Shovel bug fixes)
         ]).
 
 -export([

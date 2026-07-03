@@ -242,19 +242,8 @@ validate_dest_funs(_Def, User) ->
 
 connect_source(State = #{source := Src = #{resource_decl := {M, F, MFArgs},
                                            queue := QName0,
-<<<<<<< HEAD
-                                           uris := [Uri | _]}}) ->
-    case rabbit_feature_flags:is_enabled('rabbitmq_4.0.0') of
-        true ->
-            ok;
-        false ->
-            exit({shutdown, feature_flag_rabbitmq_4_0_0_is_disabled})
-    end,
-=======
-                                           uris := ObfuscatedUris},
-                         name := ShovelName}) ->
+                                           uris := ObfuscatedUris}}) ->
     [Uri | _] = deobfuscate_uris(ObfuscatedUris),
->>>>>>> de8b90b4b9 (Shovel bug fixes)
     QState = rabbit_queue_type:init(),
     {User, VHost} = get_user_vhost_from_amqp_param(Uri),
     %% We handle the most recently declared queue to use anonymous functions
@@ -274,21 +263,9 @@ connect_source(State = #{source := Src = #{resource_decl := {M, F, MFArgs},
                           queue_r => Queue}}.
 
 connect_dest(State = #{dest := Dest = #{resource_decl := {M, F, MFArgs},
-<<<<<<< HEAD
-                                        uris := [Uri | _]},
-                       ack_mode := AckMode}) ->
-    case rabbit_feature_flags:is_enabled('rabbitmq_4.0.0') of
-        true ->
-            ok;
-        false ->
-            exit({shutdown, feature_flag_rabbitmq_4_0_0_is_disabled})
-    end,
-=======
                                         uris := ObfuscatedUris},
-                       ack_mode := AckMode,
-                       name := ShovelName}) ->
+                       ack_mode := AckMode}) ->
     [Uri | _] = deobfuscate_uris(ObfuscatedUris),
->>>>>>> de8b90b4b9 (Shovel bug fixes)
     {User, VHost} = get_user_vhost_from_amqp_param(Uri),
     apply(M, F, MFArgs ++ [VHost, User]),
 
