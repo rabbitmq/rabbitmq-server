@@ -30,7 +30,8 @@
          ensure_stats_timer/1]).
 
 -ifdef(TEST).
--export([check_node_connection_limit/1]).
+-export([check_node_connection_limit/1,
+         i/2]).
 -endif.
 
 -import(rabbit_amqp_util, [protocol_error/3]).
@@ -1074,7 +1075,8 @@ i(SockStat, #v1{sock = Sock})
         {ok, [{SockStat, Val}]} ->
             Val;
         {error, _} ->
-            ''
+            %% mirrors rabbit_reader:socket_info/3 (rabbitmq/rabbitmq-server#12815)
+            0
     end;
 i(ssl, #v1{sock = Sock}) -> rabbit_net:is_ssl(Sock);
 i(SSL, #v1{sock = Sock, proxy_socket = ProxySock})
