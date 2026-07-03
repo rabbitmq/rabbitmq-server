@@ -13,7 +13,7 @@
   "license": "ISC",
   "dependencies": {
     "amqplib": "2.0.1",
-    "chromedriver": "^149.0.0",
+    "chromedriver": "^150.0.1",
     "ejs": "^6.0.1",
     "express": "^5.1.0",
     "geckodriver": "^6.0.2",
