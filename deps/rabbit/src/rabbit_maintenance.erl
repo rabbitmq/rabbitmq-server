@@ -70,6 +70,16 @@ is_enabled() ->
 -spec drain() -> ok.
 drain() ->
     ?LOG_WARNING("This node is being put into maintenance (drain) mode"),
+    %% Marking the node as being drained is the single load-bearing step:
+    %% it is what makes the rest of the cluster stop routing new work here.
+    %% It must succeed for the drain to be meaningful, so a failure here
+    %% is intentionally propagated. Every step that follows is
+    %% housekeeping around cleaning up in-flight state; a failure in one
+    %% of them (e.g. a stuck federation link, a plugin drain callback
+    %% that crashes, a channel that refuses to shut down within the
+    %% termination timeout) must not abort the drain and must not
+    %% surface as a non-zero CLI exit code, or automation like
+    %% Kubernetes preStop hooks becomes unreliable. See GH #3369.
     mark_as_being_drained(),
     ?LOG_INFO("Marked this node as undergoing maintenance"),
     %% We intentionally do not rely on the internal event (see below) to stop federation links,
@@ -77,29 +87,42 @@ drain() ->
     %% interference with client connection listeners being stopped
     %% (that will affect all federation links that connect to this node).
     %% See rabbitmq/rabbitmq-server#15271 for details.
-    disconnect_federation_links(),
+    safe_maintenance_step(fun disconnect_federation_links/0,
+                          "disconnect federation links during drain"),
 
     %% Listeners must be stopped after all federation links are disconnected (if any),
     %% otherwise we may end up with a lot of scary log exceptions in case the federation
     %% connections are local.
-    _ = suspend_all_client_listeners(),
+    _ = safe_maintenance_step(fun suspend_all_client_listeners/0,
+                              "suspend client listeners during drain"),
     ?LOG_WARNING("Suspended all listeners and will no longer accept client connections"),
-    {ok, NConnections} = close_all_client_connections(),
-    ?LOG_WARNING("Closed ~b local client connections", [NConnections]),
+    safe_maintenance_step(
+        fun () ->
+            {ok, NConnections} = close_all_client_connections(),
+            ?LOG_WARNING("Closed ~b local client connections", [NConnections])
+        end,
+        "close local client connections during drain"),
     %% allow plugins to react e.g. by closing their protocol connections
     rabbit_event:notify(maintenance_connections_closed, #{
         reason => <<"node is being put into maintenance">>
     }),
 
-    TransferCandidates = primary_replica_transfer_candidate_nodes(),
+    TransferCandidates =
+        safe_maintenance_step(fun primary_replica_transfer_candidate_nodes/0,
+                              "compute primary replica transfer candidates during drain",
+                              []),
 
     %% Transfer metadata store before queues as each queue needs to perform
     %% a metadata update after an election
-    transfer_leadership_of_metadata_store(TransferCandidates),
+    safe_maintenance_step(
+        fun () -> transfer_leadership_of_metadata_store(TransferCandidates) end,
+        "transfer metadata store leadership during drain"),
 
     %% Note: only QQ leadership is transferred because it is a reasonably quick thing to do a lot of queues
     %% in the cluster, unlike with CMQs.
-    rabbit_queue_type:drain(TransferCandidates),
+    safe_maintenance_step(
+        fun () -> rabbit_queue_type:drain(TransferCandidates) end,
+        "drain one or more queue types"),
 
     %% allow plugins to react
     rabbit_event:notify(maintenance_draining, #{
@@ -112,11 +135,19 @@ drain() ->
 -spec revive() -> ok.
 revive() ->
     ?LOG_INFO("This node is being revived from maintenance (drain) mode"),
-    rabbit_queue_type:revive(),
+    %% Symmetric to drain/0: the queue-type and federation callbacks are
+    %% best-effort housekeeping. If either raises, log a warning and
+    %% still unmark the node so that it starts serving traffic again -
+    %% leaving the DRAINING flag set would keep the node effectively
+    %% unusable and force an operator to intervene manually.
+    safe_maintenance_step(fun () -> rabbit_queue_type:revive() end,
+                          "revive one or more queue types"),
     ?LOG_INFO("Resumed all listeners and will accept client connections again"),
-    _ = resume_all_client_listeners(),
+    _ = safe_maintenance_step(fun resume_all_client_listeners/0,
+                              "resume client listeners during revive"),
     ?LOG_INFO("Resumed all listeners and will accept client connections again"),
-    reconnect_federation_links(),
+    safe_maintenance_step(fun reconnect_federation_links/0,
+                          "reconnect federation links during revive"),
     unmark_as_being_drained(),
     ?LOG_INFO("Marked this node as back from maintenance and ready to serve clients"),
 
@@ -124,6 +155,22 @@ revive() ->
     rabbit_event:notify(maintenance_revived, #{}),
 
     ok.
+
+-spec safe_maintenance_step(fun(() -> T), string()) -> T | ok.
+safe_maintenance_step(Fun, StepDescription) ->
+    safe_maintenance_step(Fun, StepDescription, ok).
+
+-spec safe_maintenance_step(fun(() -> T), string(), U) -> T | U.
+safe_maintenance_step(Fun, StepDescription, Default) ->
+    try Fun()
+    catch
+        Class:Reason:Stacktrace ->
+            ?LOG_WARNING(
+               "Non-fatal error while attempting to ~ts: ~tp:~tp~n"
+               "Stacktrace: ~tp",
+               [StepDescription, Class, Reason, Stacktrace]),
+            Default
+    end.
 
 -spec mark_as_being_drained() -> boolean().
 mark_as_being_drained() ->
