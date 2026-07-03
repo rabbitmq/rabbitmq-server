@@ -76,7 +76,8 @@
 
 -import(rabbit_misc, [pget/2, pget/3]).
 -import(rabbit_shovel_util, [pget2count/3,
-                             deobfuscated_uris/2,
+                             obfuscated_uris/2,
+                             deobfuscate_uris/1,
                              validate_uri_fun/1]).
 
 -define(APP, rabbitmq_shovel).
@@ -135,7 +136,7 @@ parse(_Name, {destination, Dest}) ->
 parse_source(Def) ->
     %% TODO add exchange source back
     Mod      = rabbit_local_shovel,
-    SrcURIs  = deobfuscated_uris(<<"src-uri">>, Def),
+    SrcURIs  = obfuscated_uris(<<"src-uri">>, Def),
     SrcX     = pget(<<"src-exchange">>,Def, none),
     SrcXKey  = pget(<<"src-exchange-key">>, Def, <<>>),
     SrcQ     = pget(<<"src-queue">>, Def, none),
@@ -176,7 +177,7 @@ parse_source(Def) ->
 
 parse_dest({_VHost, _Name}, _ClusterName, Def, _SourceHeaders) ->
     Mod       = rabbit_local_shovel,
-    DestURIs  = deobfuscated_uris(<<"dest-uri">>,      Def),
+    DestURIs  = obfuscated_uris(<<"dest-uri">>,      Def),
     DestX     = pget(<<"dest-exchange">>,     Def, none),
     DestXKey  = pget(<<"dest-exchange-key">>, Def, none),
     DestQ     = pget(<<"dest-queue">>,        Def, none),
@@ -249,8 +250,9 @@ validate_dest_funs(_Def, User) ->
 
 connect_source(State = #{source := Src = #{resource_decl := {M, F, MFArgs},
                                            queue := QName0,
-                                           uris := [Uri | _]},
+                                           uris := ObfuscatedUris},
                          name := ShovelName}) ->
+    [Uri | _] = deobfuscate_uris(ObfuscatedUris),
     QState = rabbit_queue_type:init(),
     {User, VHost} = get_user_vhost_from_amqp_param(Uri),
     %% We handle the most recently declared queue to use anonymous functions
@@ -270,9 +272,10 @@ connect_source(State = #{source := Src = #{resource_decl := {M, F, MFArgs},
                           queue_r => Queue}}.
 
 connect_dest(State = #{dest := Dest = #{resource_decl := {M, F, MFArgs},
-                                        uris := [Uri | _]},
+                                        uris := ObfuscatedUris},
                        ack_mode := AckMode,
                        name := ShovelName}) ->
+    [Uri | _] = deobfuscate_uris(ObfuscatedUris),
     {User, VHost} = get_user_vhost_from_amqp_param(Uri),
     apply(M, F, MFArgs ++ [VHost, User, ShovelName]),
 
