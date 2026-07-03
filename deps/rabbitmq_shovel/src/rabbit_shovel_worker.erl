@@ -10,7 +10,7 @@
 
 -export([start_link/3]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
-         code_change/3]).
+         code_change/3, format_status/2, format_state/1]).
 
 %% for testing purposes
 -export([get_connection_name/1,
@@ -249,6 +249,22 @@ terminate(Reason, State = #state{name = Name}) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+%% Used by gen_server2 for sys:get_status/1.
+format_status(_Opt, [_PDict, State]) ->
+    [{data, [{"State", format_state(State)}]}].
+
+%% Used by gen_server2 when logging termination errors.
+format_state(State = #state{config = Config}) ->
+    State#state{config = redact_config(Config)}.
+
+redact_config(Config) when is_map(Config) ->
+    maps:map(fun(Key, Endpoint) when (Key =:= source orelse Key =:= dest),
+                                      is_map(Endpoint) ->
+                     Endpoint#{uris => redacted};
+                (_Key, Value) ->
+                     Value
+             end, Config).
 
 %%---------------------------
 %% Helpers

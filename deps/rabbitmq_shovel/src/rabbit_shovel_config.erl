@@ -125,11 +125,13 @@ validate_uris0([Uri | Uris]) ->
 validate_uris0([]) -> ok.
 
 parse_current(ShovelName, Config) ->
-    {source, Source} = proplists:lookup(source, Config),
-    validate(Source),
+    {source, Source0} = proplists:lookup(source, Config),
+    validate(Source0),
+    Source = obfuscate_uris_in(Source0),
     SrcMod = resolve_module(proplists:get_value(protocol, Source, amqp091)),
-    {destination, Destination} = proplists:lookup(destination, Config),
-    validate(Destination),
+    {destination, Destination0} = proplists:lookup(destination, Config),
+    validate(Destination0),
+    Destination = obfuscate_uris_in(Destination0),
     DstMod = resolve_module(proplists:get_value(protocol, Destination, amqp091)),
     AckMode = proplists:get_value(ack_mode, Config, no_ack),
     validate_ack_mode(AckMode),
@@ -142,6 +144,17 @@ parse_current(ShovelName, Config) ->
                                                    {source, Source}),
            dest => rabbit_shovel_behaviour:parse(DstMod, ShovelName,
                                                  {destination, Destination})}}.
+
+obfuscate_uris_in(Props) ->
+    case proplists:get_value(uris, Props) of
+        URIs when is_list(URIs) ->
+            lists:keystore(uris, 1, Props,
+                           {uris, rabbit_shovel_util:obfuscate_uris(URIs)});
+        %% Leave invalid values as is: they will fail validation or
+        %% at connection time, as they did before obfuscation.
+        _ ->
+            Props
+    end.
 
 %% ensures that any defaults that have been applied to a parsed
 %% shovel, are written back to the original proplist
