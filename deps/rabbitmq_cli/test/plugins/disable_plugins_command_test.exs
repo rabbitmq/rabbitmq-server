@@ -356,18 +356,15 @@ defmodule DisablePluginsCommandTest do
   test "disabling a dependency disables all plugins that depend on it", context do
     assert {:stream, test_stream} = @command.run(["amqp_client"], context[:opts])
     result = Enum.to_list(test_stream)
-<<<<<<< HEAD
-    expected_list = [:rabbitmq_exchange_federation, :rabbitmq_federation, :rabbitmq_federation_common, :rabbitmq_queue_federation, :rabbitmq_stomp]
-=======
 
-    expected_disabled = [
+    expected_list = [
       :rabbitmq_exchange_federation,
       :rabbitmq_federation,
       :rabbitmq_federation_common,
-      :rabbitmq_queue_federation
+      :rabbitmq_queue_federation,
+      :rabbitmq_stomp
     ]
 
->>>>>>> e82fae609b (rabbitmq-plugins fixes)
     expected = [
       [],
       %{
