@@ -104,13 +104,10 @@ validate_dest(Def) ->
 
 obfuscate_uris_in_definition(Def) ->
   SrcURIs  = get_uris(<<"src-uri">>, Def),
-  ObfuscatedSrcURIsDef = pset(<<"src-uri">>, obfuscate_uris(SrcURIs), Def),
+  ObfuscatedSrcURIsDef = pset(<<"src-uri">>, rabbit_shovel_util:obfuscate_uris(SrcURIs), Def),
   DestURIs  = get_uris(<<"dest-uri">>, Def),
-  ObfuscatedDef = pset(<<"dest-uri">>, obfuscate_uris(DestURIs), ObfuscatedSrcURIsDef),
+  ObfuscatedDef = pset(<<"dest-uri">>, rabbit_shovel_util:obfuscate_uris(DestURIs), ObfuscatedSrcURIsDef),
   ObfuscatedDef.
-
-obfuscate_uris(URIs) ->
-  [credentials_obfuscation:encrypt(URI) || URI <- URIs].
 
 shovel_validation() ->
     AllProtocols = list_all_protocols(),

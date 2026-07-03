@@ -37,9 +37,12 @@ groups() ->
 %% -------------------------------------------------------------------
 
 init_per_suite(Config) ->
+    {ok, _} = application:ensure_all_started(credentials_obfuscation),
+    ok = credentials_obfuscation:set_secret(crypto:strong_rand_bytes(128)),
     Config.
 
 end_per_suite(Config) ->
+    ok = application:stop(credentials_obfuscation),
     Config.
 
 init_per_group(_, Config) ->
@@ -75,24 +78,28 @@ parse_amqp091(_Config) ->
           {ack_mode, on_confirm},
           {reconnect_delay, 2}],
 
+    {ok, Parsed} = rabbit_shovel_config:parse(my_shovel, In),
     ?assertMatch(
-       {ok, #{name := my_shovel,
-              ack_mode := on_confirm,
-              reconnect_delay := 2,
-              dest := #{module := rabbit_amqp091_shovel,
-                        uris := ["ampq://myhost:5672"],
-                        fields_fun := _PubFields,
-                        props_fun := _PubProps,
-                        resource_decl := _DDecl,
-                        add_timestamp_header := false,
-                        add_forward_headers := true},
-              source := #{module := rabbit_amqp091_shovel,
-                          uris := ["ampq://myhost:5672/vhost"],
-                          queue := <<"the-queue">>,
-                          prefetch_count := 10,
-                          delete_after := never,
-                          resource_decl := _SDecl}}},
-        rabbit_shovel_config:parse(my_shovel, In)),
+       #{name := my_shovel,
+         ack_mode := on_confirm,
+         reconnect_delay := 2,
+         dest := #{module := rabbit_amqp091_shovel,
+                   uris := [{encrypted, _}],
+                   fields_fun := _PubFields,
+                   props_fun := _PubProps,
+                   resource_decl := _DDecl,
+                   add_timestamp_header := false,
+                   add_forward_headers := true},
+         source := #{module := rabbit_amqp091_shovel,
+                     uris := [{encrypted, _}],
+                     queue := <<"the-queue">>,
+                     prefetch_count := 10,
+                     delete_after := never,
+                     resource_decl := _SDecl}},
+        Parsed),
+    assert_uris_round_trip(Parsed,
+                           ["ampq://myhost:5672/vhost"],
+                           ["ampq://myhost:5672"]),
     ok.
 
 parse_amqp10_mixed(_Config) ->
@@ -113,21 +120,25 @@ parse_amqp10_mixed(_Config) ->
           {ack_mode, on_confirm},
           {reconnect_delay, 2}],
 
+    {ok, Parsed} = rabbit_shovel_config:parse(my_shovel, In),
     ?assertMatch(
-       {ok, #{name := my_shovel,
-              ack_mode := on_confirm,
-              source := #{module := rabbit_amqp10_shovel,
-                          uris := ["ampq://myotherhost:5672"],
-                          source_address := <<"the-queue">>
-                          },
-              dest := #{module := rabbit_amqp10_shovel,
-                        uris := ["ampq://myhost:5672"],
-                        target_address := <<"targe-queue">>,
-                        properties := #{user_id := <<"some-user">>},
-                        application_properties := #{app_prop_key := <<"app_prop_value">>},
-                        message_annotations := #{soma_ann := <<"some-info">>},
-                        add_forward_headers := true}}},
-        rabbit_shovel_config:parse(my_shovel, In)),
+       #{name := my_shovel,
+         ack_mode := on_confirm,
+         source := #{module := rabbit_amqp10_shovel,
+                     uris := [{encrypted, _}],
+                     source_address := <<"the-queue">>
+                     },
+         dest := #{module := rabbit_amqp10_shovel,
+                   uris := [{encrypted, _}],
+                   target_address := <<"targe-queue">>,
+                   properties := #{user_id := <<"some-user">>},
+                   application_properties := #{app_prop_key := <<"app_prop_value">>},
+                   message_annotations := #{soma_ann := <<"some-info">>},
+                   add_forward_headers := true}},
+        Parsed),
+    assert_uris_round_trip(Parsed,
+                           ["ampq://myotherhost:5672"],
+                           ["ampq://myhost:5672"]),
     ok.
 
 parse_local(_Config) ->
@@ -150,14 +161,15 @@ parse_local(_Config) ->
         {ack_mode, on_confirm},
         {reconnect_delay, 2}],
 
+    {ok, Parsed} = rabbit_shovel_config:parse(my_shovel, In),
     ?assertMatch(
-        {ok, #{name := my_shovel,
+        #{name := my_shovel,
             ack_mode := on_confirm,
             reconnect_delay := 2,
             shovel_type := static,
             dest := #{
                 module := rabbit_local_shovel,
-                uris := ["ampq://myhost:5672"],
+                uris := [{encrypted, _}],
                 exchange := none,
                 routing_key := none,
                 resource_decl := _DDecl,
@@ -165,10 +177,19 @@ parse_local(_Config) ->
                 add_forward_headers := true},
             source := #{
                 module := rabbit_local_shovel,
-                uris := ["ampq://myhost:5672/vhost"],
+                uris := [{encrypted, _}],
                 queue := <<"the-queue">>,
                 consumer_args := [],
                 delete_after := never,
-                resource_decl := _SDecl}}},
-        rabbit_shovel_config:parse(my_shovel, In)),
+                resource_decl := _SDecl}},
+        Parsed),
+    assert_uris_round_trip(Parsed,
+                           ["ampq://myhost:5672/vhost"],
+                           ["ampq://myhost:5672"]),
     ok.
+
+assert_uris_round_trip(#{source := #{uris := SrcUris},
+                         dest := #{uris := DestUris}},
+                       ExpectedSrcUris, ExpectedDestUris) ->
+    ?assertEqual(ExpectedSrcUris, rabbit_shovel_util:deobfuscate_uris(SrcUris)),
+    ?assertEqual(ExpectedDestUris, rabbit_shovel_util:deobfuscate_uris(DestUris)).

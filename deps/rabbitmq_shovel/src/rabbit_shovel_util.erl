@@ -19,7 +19,15 @@
          validate_queue_args/2,
          validate_consumer_args/2,
          validate_delete_after/2,
+<<<<<<< HEAD
          deobfuscated_uris/2
+=======
+         deobfuscate_value/1,
+         deobfuscated_uris/2,
+         obfuscated_uris/2,
+         obfuscate_uris/1,
+         deobfuscate_uris/1
+>>>>>>> de8b90b4b9 (Shovel bug fixes)
         ]).
 
 -export([
@@ -250,5 +258,14 @@ validate_delete_after(Name,  Term) ->
 
 deobfuscated_uris(Key, Def) ->
     ObfuscatedURIs = rabbit_misc:pget(Key, Def),
+    deobfuscate_uris(ObfuscatedURIs).
+
+obfuscated_uris(Key, Def) ->
+    rabbit_misc:pget(Key, Def).
+
+obfuscate_uris(URIs) ->
+    [credentials_obfuscation:encrypt(rabbit_data_coercion:to_binary(URI)) || URI <- URIs].
+
+deobfuscate_uris(ObfuscatedURIs) ->
     URIs = [credentials_obfuscation:decrypt(ObfuscatedURI) || ObfuscatedURI <- ObfuscatedURIs],
-    [binary_to_list(URI) || URI <- URIs].
+    [rabbit_data_coercion:to_list(URI) || URI <- URIs].

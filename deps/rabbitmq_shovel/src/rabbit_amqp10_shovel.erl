@@ -54,7 +54,8 @@
 -import(rabbit_misc, [pget/2, pget/3]).
 -import(rabbit_data_coercion, [to_binary/1]).
 -import(rabbit_shovel_util, [validate_uri_fun/1,
-                             deobfuscated_uris/2]).
+                             obfuscated_uris/2,
+                             deobfuscate_uris/1]).
 
 -include_lib("kernel/include/logger.hrl").
 
@@ -92,7 +93,7 @@ parse(_Name, {source, Conf}) ->
       consumer_args => pget(consumer_args, Conf, [])}.
 
 parse_source(Def) ->
-    Uris = deobfuscated_uris(<<"src-uri">>, Def),
+    Uris = obfuscated_uris(<<"src-uri">>, Def),
     Address = pget(<<"src-address">>, Def),
     DeleteAfter = pget(<<"src-delete-after">>, Def, <<"never">>),
     PrefetchCount = pget(<<"src-prefetch-count">>, Def, 1000),
@@ -105,7 +106,7 @@ parse_source(Def) ->
        consumer_args => []}, Headers}.
 
 parse_dest({_VHost, _Name}, _ClusterName, Def, _SourceHeaders) ->
-    Uris = deobfuscated_uris(<<"dest-uri">>, Def),
+    Uris = obfuscated_uris(<<"dest-uri">>, Def),
     Address = pget(<<"dest-address">>, Def),
     #{module => rabbit_amqp10_shovel,
       uris => Uris,
@@ -155,8 +156,17 @@ validate_dest_funs(_Def, User) ->
 -spec connect_source(state()) -> state().
 connect_source(State = #{name := Name,
                          ack_mode := AckMode,
+<<<<<<< HEAD
                          source := #{uris := [Uri | _],
                                      source_address := Addr} = Src}) ->
+=======
+                         source := #{uris := ObfuscatedUris,
+                                     source_address := Addr,
+                                     predeclared := Predeclared,
+                                     consumer_args := CArgs,
+                                     consumer_name := CName} = Src}) ->
+    [Uri | _] = deobfuscate_uris(ObfuscatedUris),
+>>>>>>> de8b90b4b9 (Shovel bug fixes)
     SndSettleMode = case AckMode of
                         no_ack -> settled;
                         on_publish -> unsettled;
@@ -176,8 +186,15 @@ connect_source(State = #{name := Name,
 -spec connect_dest(state()) -> state().
 connect_dest(State = #{name := Name,
                        ack_mode := AckMode,
+<<<<<<< HEAD
                        dest := #{uris := [Uri | _],
                                  target_address := Addr} = Dst}) ->
+=======
+                       dest := #{uris := ObfuscatedUris,
+                                 target_address := Addr,
+                                 predeclared := Predeclared} = Dst}) ->
+    [Uri | _] = deobfuscate_uris(ObfuscatedUris),
+>>>>>>> de8b90b4b9 (Shovel bug fixes)
     SndSettleMode = case AckMode of
                         no_ack -> settled;
                         on_publish -> settled;
