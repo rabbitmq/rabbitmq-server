@@ -10,7 +10,7 @@
 -include_lib("kernel/include/inet.hrl").
 -include_lib("kernel/include/net_address.hrl").
 
--export([is_ssl/1, ssl_info/1, controlling_process/2, getstat/2,
+-export([is_ssl/1, ssl_info/1, controlling_process/2, getstat/2, getstat_or_zero/2,
     recv/1, sync_recv/2, async_recv/3, getopts/2,
     setopts/2, send/2, close/1, fast_close/1, sockname/1, peername/1,
     peercert/1, connection_string/2, socket_ends/2, is_loopback/1,
@@ -40,6 +40,7 @@
 -spec controlling_process(socket(), pid()) -> ok_or_any_error().
 -spec getstat(socket(), [stat_option()]) ->
           ok_val_or_error([{stat_option(), integer()}]).
+-spec getstat_or_zero(socket(), stat_option()) -> integer().
 -spec recv(socket()) ->
           {'data', [char()] | binary()} |
           'closed' |
@@ -118,6 +119,14 @@ getstat({rabbit_proxy_socket, Sock, _}, Stats) when ?IS_SSL(Sock) ->
     ssl:getstat(Sock, Stats);
 getstat({rabbit_proxy_socket, Sock, _}, Stats) when is_port(Sock) ->
     inet:getstat(Sock, Stats).
+
+%% Metrics consumers require integers, so report 0 when
+%% `getstat/2` fails, e.g. during socket teardown (#12815).
+getstat_or_zero(Sock, Stat) ->
+    case getstat(Sock, [Stat]) of
+        {ok, [{Stat, N}]} when is_integer(N) -> N;
+        _ -> 0
+    end.
 
 recv(Sock) when ?IS_SSL(Sock) ->
     recv(Sock, {ssl, ssl_closed, ssl_error});

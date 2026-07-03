@@ -6,6 +6,7 @@
 %%
 -module(rabbit_mgmt_metrics_collector).
 
+-include_lib("kernel/include/logger.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_core_metrics.hrl").
 -include("rabbit_mgmt_metrics.hrl").
@@ -215,7 +216,8 @@ aggregate_entry({Id, Metrics}, NextStats, Ops0,
     {NextStats, Ops, State};
 aggregate_entry({Id, RecvOct, SendOct, Reductions, 0}, NextStats, Ops0,
                 #state{table = connection_coarse_metrics,
-                       policies = {BPolicies, _, GPolicies}} = State) ->
+                       policies = {BPolicies, _, GPolicies}} = State)
+  when is_integer(RecvOct), is_integer(SendOct), is_integer(Reductions) ->
     Stats = ?vhost_stats_coarse_conn_stats(RecvOct, SendOct),
     Diff = get_difference(Id, Stats, State),
 
@@ -229,7 +231,8 @@ aggregate_entry({Id, RecvOct, SendOct, Reductions, 0}, NextStats, Ops0,
     {insert_old_aggr_stats(NextStats, Id, Stats), Ops2, State};
 aggregate_entry({Id, RecvOct, SendOct, _Reductions, 1}, NextStats, Ops0,
                 #state{table = connection_coarse_metrics,
-                       policies = {_BPolicies, _, GPolicies}} = State) ->
+                       policies = {_BPolicies, _, GPolicies}} = State)
+  when is_integer(RecvOct), is_integer(SendOct) ->
     Stats = ?vhost_stats_coarse_conn_stats(RecvOct, SendOct),
     Diff = get_difference(Id, Stats, State),
     Ops1 = insert_entry_ops(vhost_stats_coarse_conn_stats,
@@ -237,6 +240,25 @@ aggregate_entry({Id, RecvOct, SendOct, _Reductions, 1}, NextStats, Ops0,
                             GPolicies),
     rabbit_core_metrics:delete(connection_coarse_metrics, Id),
     {NextStats, Ops1, State};
+%% Skip rows with non-integer fields (#12815); carrying the previous
+%% reading over keeps the next delta correct.
+aggregate_entry({Id, _RecvOct, _SendOct, _Reductions, Flag}, NextStats, Ops0,
+                #state{table = connection_coarse_metrics,
+                       old_aggr_stats = OldStats} = State) ->
+    ?LOG_WARNING("Metrics collector: skipping a connection_coarse_metrics "
+                 "row with a non-integer field (connection: ~tp)", [Id]),
+    case Flag of
+        1 ->
+            rabbit_core_metrics:delete(connection_coarse_metrics, Id),
+            {NextStats, Ops0, State};
+        _ ->
+            case maps:find(Id, OldStats) of
+                {ok, OldStat} ->
+                    {insert_old_aggr_stats(NextStats, Id, OldStat), Ops0, State};
+                error ->
+                    {NextStats, Ops0, State}
+            end
+    end;
 aggregate_entry({Id, Metrics}, NextStats, Ops0,
                 #state{table = channel_created} = State) ->
     case ets:lookup(channel_created_stats, Id) of

@@ -1611,13 +1611,12 @@ infos(Items, State) -> [{Item, i(Item, State)} || Item <- Items].
 
 i(pid,                #v1{}) -> self();
 i(node,               #v1{}) -> node();
-i(SockStat,           S) when SockStat =:= recv_oct;
-                              SockStat =:= recv_cnt;
-                              SockStat =:= send_oct;
-                              SockStat =:= send_cnt;
-                              SockStat =:= send_pend ->
-    socket_info(fun (Sock) -> rabbit_net:getstat(Sock, [SockStat]) end,
-                fun ([{_, I}]) -> I end, S);
+i(SockStat, #v1{sock = Sock}) when SockStat =:= recv_oct;
+                                   SockStat =:= recv_cnt;
+                                   SockStat =:= send_oct;
+                                   SockStat =:= send_cnt;
+                                   SockStat =:= send_pend ->
+    rabbit_net:getstat_or_zero(Sock, SockStat);
 i(ssl, #v1{sock = Sock, proxy_socket = ProxySock}) ->
     rabbit_net:proxy_ssl_info(Sock, ProxySock) /= nossl;
 i(SSL, #v1{sock = Sock, proxy_socket = ProxySock})
@@ -1689,15 +1688,6 @@ ic(auth_mechanism,    #connection{auth_mechanism = {Name, _Mod}}) -> Name;
 ic(connected_at,      #connection{connected_at = T}) -> T;
 ic(container_id, _) -> ''; % AMQP 1.0 specific field
 ic(Item,              #connection{}) -> throw({bad_argument, Item}).
-
-socket_info(Get, Select, #v1{sock = Sock}) ->
-    case Get(Sock) of
-        {ok,    T} -> case Select(T) of
-                          N when is_number(N) -> N;
-                          _ -> 0
-                      end;
-        {error, _} -> 0
-    end.
 
 maybe_emit_stats(State) ->
     rabbit_event:if_enabled(State, #v1.stats_timer,
