@@ -4136,24 +4136,14 @@ i(node, _, _) ->
 i(SockStat,
   #stream_connection{socket = Sock, send_file_oct = Counter}, _)
     when SockStat =:= send_oct -> % Number of bytes sent from the socket.
-    case rabbit_net:getstat(Sock, [SockStat]) of
-        {ok, [{_, N}]} when is_number(N) ->
-            N + atomics:get(Counter, 1);
-        _ ->
-            0 + atomics:get(Counter, 1)
-    end;
+    rabbit_net:getstat_or_zero(Sock, SockStat) + atomics:get(Counter, 1);
 i(SockStat, #stream_connection{socket = Sock}, _)
     when SockStat =:= recv_oct; % Number of bytes received by the socket.
          SockStat =:= recv_cnt; % Number of packets received by the socket.
          SockStat =:= send_cnt; % Number of packets sent from the socket.
          SockStat
          =:= send_pend -> % Number of bytes waiting to be sent by the socket.
-    case rabbit_net:getstat(Sock, [SockStat]) of
-        {ok, [{_, N}]} when is_number(N) ->
-            N;
-        _ ->
-            0
-    end;
+    rabbit_net:getstat_or_zero(Sock, SockStat);
 i(reductions, _, _) ->
     {reductions, Reductions} = erlang:process_info(self(), reductions),
     Reductions;
