@@ -362,10 +362,7 @@ stream_leadership_transfer(Config) ->
          Config, A, rabbit_amqqueue, list_local_stream_leaders, []),
        30000),
 
-    rabbit_ct_broker_helpers:revive_node(Config, A),
-    amqp_channel:call(Ch, #'queue.delete'{queue = QName}),
-    rabbit_ct_client_helpers:close_channel(Ch),
-    rabbit_ct_client_helpers:close_connection(Conn).
+    rabbit_ct_broker_helpers:revive_node(Config, A).
 
 metadata_store_leadership_transfer(Config) ->
     [A | _] = Nodenames = rabbit_ct_broker_helpers:get_node_configs(
