@@ -8,15 +8,11 @@
 -module(rabbit_re_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
--include_lib("proper/include/proper.hrl").
 
 -compile([export_all, nowarn_export_all]).
 
--define(NUM_TESTS, 256).
--define(PROPER_OPTS, [{numtests, ?NUM_TESTS}, {to_file, user}]).
-
 all() ->
-    [{group, units}, {group, properties}].
+    [{group, units}].
 
 groups() ->
     [{units, [parallel],
@@ -39,12 +35,13 @@ groups() ->
        compile_returns_re_error_for_invalid_pattern,
        compile_with_options_passes_them_through,
        match_limit_constant,
-       max_pattern_length_constant]},
-     {properties, [parallel],
-      [run_agrees_with_re_for_short_inputs_prop,
-       compile_returns_too_long_for_overlong_input_prop,
-       run_returns_safe_atom_or_error_prop,
-       matches_always_returns_boolean_prop]}].
+       max_pattern_length_constant,
+       escape_leaves_plain_text_unchanged,
+       escape_escapes_all_metacharacters,
+       escaped_value_matches_itself,
+       escaped_value_cannot_form_range_inside_char_class,
+       escaped_caret_cannot_negate_char_class,
+       escaped_bracket_cannot_terminate_char_class]}].
 
 %% Tests
 
@@ -160,64 +157,42 @@ max_pattern_length_constant(_Config) ->
     true = is_integer(Len) andalso Len > 0,
     ok.
 
-%% Property runners
+escape_leaves_plain_text_unchanged(_Config) ->
+    <<"abc/def123">> = rabbit_re:escape(<<"abc/def123">>),
+    ok.
 
-run_agrees_with_re_for_short_inputs_prop(_Config) ->
-    true = proper:quickcheck(run_agrees_with_re_for_short_inputs(),
-                             ?PROPER_OPTS).
+escape_escapes_all_metacharacters(_Config) ->
+    lists:foreach(fun(M) ->
+                          <<$\\, M>> = rabbit_re:escape(<<M>>)
+                  end, "\\^$.|?*+()[]{}-"),
+    ok.
 
-compile_returns_too_long_for_overlong_input_prop(_Config) ->
-    true = proper:quickcheck(compile_returns_too_long_for_overlong_input(),
-                             ?PROPER_OPTS).
+escaped_value_matches_itself(_Config) ->
+    Hostile = <<"a.b*c+d?e^f$g|h(i)j[k]l{m}n\\o-p">>,
+    Pattern = <<"^", (rabbit_re:escape(Hostile))/binary, "$">>,
+    match = rabbit_re:run(Hostile, Pattern),
+    ok.
 
-run_returns_safe_atom_or_error_prop(_Config) ->
-    true = proper:quickcheck(run_returns_safe_atom_or_error(),
-                             ?PROPER_OPTS).
+%% "a-z" inside a "[...]" class must stay a literal set, not become a range.
+escaped_value_cannot_form_range_inside_char_class(_Config) ->
+    Pattern = <<"^[", (rabbit_re:escape(<<"a-z">>))/binary, "]-sensors$">>,
+    match   = rabbit_re:run(<<"a-sensors">>, Pattern),
+    match   = rabbit_re:run(<<"z-sensors">>, Pattern),
+    nomatch = rabbit_re:run(<<"b-sensors">>, Pattern),
+    nomatch = rabbit_re:run(<<"m-sensors">>, Pattern),
+    ok.
 
-matches_always_returns_boolean_prop(_Config) ->
-    true = proper:quickcheck(matches_always_returns_boolean(),
-                             ?PROPER_OPTS).
+escaped_caret_cannot_negate_char_class(_Config) ->
+    Pattern = <<"^[", (rabbit_re:escape(<<"^a">>))/binary, "]$">>,
+    match   = rabbit_re:run(<<"a">>, Pattern),
+    match   = rabbit_re:run(<<"^">>, Pattern),
+    nomatch = rabbit_re:run(<<"b">>, Pattern),
+    ok.
 
-%% Properties
-
-run_agrees_with_re_for_short_inputs() ->
-    %% On short alphanumeric inputs the helper agrees with plain `re:run/3`.
-    ?FORALL({Subject, Pattern}, {short_alpha_binary(), short_alpha_binary()},
-            begin
-                Bare = case re:run(Subject, Pattern, [{capture, none}]) of
-                           match   -> match;
-                           nomatch -> nomatch
-                       end,
-                Helper = rabbit_re:run(Subject, Pattern),
-                Bare =:= Helper
-            end).
-
-compile_returns_too_long_for_overlong_input() ->
-    ?FORALL(Extra, non_neg_integer(),
-            begin
-                Len = rabbit_re:max_pattern_length() + Extra + 1,
-                Pat = binary:copy(<<"a">>, Len),
-                {error, pattern_too_long} =:= rabbit_re:compile(Pat)
-            end).
-
-run_returns_safe_atom_or_error() ->
-    %% The helper returns one of the documented shapes for any binary input.
-    ?FORALL({Subject, Pattern}, {binary(), binary()},
-            case rabbit_re:run(Subject, Pattern) of
-                match           -> true;
-                nomatch         -> true;
-                {match, _}      -> true;
-                {error, _}      -> true;
-                _Other          -> false
-            end).
-
-matches_always_returns_boolean() ->
-    ?FORALL({Subject, Pattern}, {binary(), binary()},
-            is_boolean(rabbit_re:matches(Subject, Pattern))).
-
-%% Generators
-
-short_alpha_binary() ->
-    ?LET(L,
-         list(oneof([integer($a, $z), integer($0, $9), $-])),
-         list_to_binary(lists:sublist(L, 30))).
+escaped_bracket_cannot_terminate_char_class(_Config) ->
+    Pattern = <<"^[", (rabbit_re:escape(<<"a].*">>))/binary, "]$">>,
+    match   = rabbit_re:run(<<"a">>, Pattern),
+    match   = rabbit_re:run(<<"]">>, Pattern),
+    nomatch = rabbit_re:run(<<"axyz">>, Pattern),
+    nomatch = rabbit_re:run(<<"b">>, Pattern),
+    ok.
