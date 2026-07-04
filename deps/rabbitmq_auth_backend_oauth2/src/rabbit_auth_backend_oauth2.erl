@@ -522,12 +522,7 @@ resolve_scope_var(Elem, Token, Vhost, Syntax) ->
     end.
 
 escape_regex_metacharacters(Str) ->
-    %% Escapes "-" as well: inside a [...] character class it forms a range,
-    %% so a template like "[{var}]" with var="a-z" would otherwise match any
-    %% letter rather than the literal three-character value.
-    binary_to_list(
-        re:replace(Str, <<"[.^$|()\\[\\]{}*+?\\\\-]">>, <<"\\\\&">>,
-                   [global, {return, binary}, unicode])).
+    binary_to_list(rabbit_re:escape(iolist_to_binary(Str))).
 
 -spec tags_from(decoded_jwt_token()) -> list(atom()).
 tags_from(DecodedToken) ->
