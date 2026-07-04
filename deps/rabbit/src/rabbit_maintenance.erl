@@ -70,16 +70,10 @@ is_enabled() ->
 -spec drain() -> ok.
 drain() ->
     ?LOG_WARNING("This node is being put into maintenance (drain) mode"),
-    %% Marking the node as being drained is the single load-bearing step:
-    %% it is what makes the rest of the cluster stop routing new work here.
-    %% It must succeed for the drain to be meaningful, so a failure here
-    %% is intentionally propagated. Every step that follows is
-    %% housekeeping around cleaning up in-flight state; a failure in one
-    %% of them (e.g. a stuck federation link, a plugin drain callback
-    %% that crashes, a channel that refuses to shut down within the
-    %% termination timeout) must not abort the drain and must not
-    %% surface as a non-zero CLI exit code, or automation like
-    %% Kubernetes preStop hooks becomes unreliable. See GH #3369.
+    %% Marking the node as drained stops the cluster routing work here, so
+    %% a failure is propagated. The rest is best-effort cleanup that must
+    %% not abort the drain nor fail the CLI command, or automation such as
+    %% Kubernetes preStop hooks breaks. rabbitmq/rabbitmq-server#3369.
     mark_as_being_drained(),
     ?LOG_INFO("Marked this node as undergoing maintenance"),
     %% We intentionally do not rely on the internal event (see below) to stop federation links,
@@ -135,14 +129,11 @@ drain() ->
 -spec revive() -> ok.
 revive() ->
     ?LOG_INFO("This node is being revived from maintenance (drain) mode"),
-    %% Symmetric to drain/0: the queue-type and federation callbacks are
-    %% best-effort housekeeping. If either raises, log a warning and
-    %% still unmark the node so that it starts serving traffic again -
-    %% leaving the DRAINING flag set would keep the node effectively
-    %% unusable and force an operator to intervene manually.
+    %% As in `drain/0`, these callbacks are best-effort: on failure, still
+    %% unmark the node, or it stays flagged as draining and refuses traffic
+    %% until an operator intervenes.
     safe_maintenance_step(fun () -> rabbit_queue_type:revive() end,
                           "revive one or more queue types"),
-    ?LOG_INFO("Resumed all listeners and will accept client connections again"),
     _ = safe_maintenance_step(fun resume_all_client_listeners/0,
                               "resume client listeners during revive"),
     ?LOG_INFO("Resumed all listeners and will accept client connections again"),
@@ -157,18 +148,18 @@ revive() ->
     ok.
 
 -spec safe_maintenance_step(fun(() -> T), string()) -> T | ok.
-safe_maintenance_step(Fun, StepDescription) ->
-    safe_maintenance_step(Fun, StepDescription, ok).
+safe_maintenance_step(Fun, Description) ->
+    safe_maintenance_step(Fun, Description, ok).
 
--spec safe_maintenance_step(fun(() -> T), string(), U) -> T | U.
-safe_maintenance_step(Fun, StepDescription, Default) ->
-    try Fun()
+-spec safe_maintenance_step(fun(() -> T), string(), Default) -> T | Default.
+safe_maintenance_step(Fun, Description, Default) ->
+    try
+        Fun()
     catch
         Class:Reason:Stacktrace ->
-            ?LOG_WARNING(
-               "Non-fatal error while attempting to ~ts: ~tp:~tp~n"
-               "Stacktrace: ~tp",
-               [StepDescription, Class, Reason, Stacktrace]),
+            ?LOG_WARNING("Non-fatal error while attempting to ~ts: ~tp:~tp~n"
+                         "Stacktrace: ~tp",
+                         [Description, Class, Reason, Stacktrace]),
             Default
     end.
 
