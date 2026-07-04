@@ -408,6 +408,25 @@ topic_permission_checks1(_Config) ->
         }
     ) || Perm <- Permissions],
 
+    %% a variable value is substituted literally: regex metacharacters in the
+    %% value must not widen the pattern, e.g. "-" inside a "[...]" class
+    rabbit_auth_backend_internal:set_topic_permissions(
+        <<"guest">>, <<"other-vhost">>, <<"amq.topic">>,
+        "^[{client_id}]-sensors$", "^[{client_id}]-sensors$", <<"acting-user">>
+    ),
+    Check = fun(ClientId, RoutingKey, Perm) ->
+                    rabbit_auth_backend_internal:check_topic_access(
+                      User, Topic#resource{virtual_host = <<"other-vhost">>}, Perm,
+                      #{routing_key  => RoutingKey,
+                        variable_map => #{<<"client_id">> => ClientId}})
+            end,
+    [begin
+         true  = Check(<<"a-z">>, <<"a-sensors">>, Perm),
+         false = Check(<<"a-z">>, <<"b-sensors">>, Perm),
+         true  = Check(<<"a">>,   <<"a-sensors">>, Perm),
+         false = Check(<<"a">>,   <<"b-sensors">>, Perm)
+     end || Perm <- Permissions],
+
     ok.
 
 %% Topic permission checks must fail closed on metadata store errors.
