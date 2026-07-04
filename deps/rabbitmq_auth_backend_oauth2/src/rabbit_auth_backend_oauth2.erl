@@ -498,12 +498,6 @@ resolve_scope_var(Elem, Token, Vhost) ->
                         end)
     end.
 
-<<<<<<< HEAD
-=======
-escape_regex_metacharacters(Str) ->
-    binary_to_list(rabbit_re:escape(iolist_to_binary(Str))).
-
->>>>>>> f964a14cf9 (Improve `rabbit_re`, adopt it in more places)
 -spec tags_from(decoded_jwt_token()) -> list(atom()).
 tags_from(DecodedToken) ->
     Scopes    = maps:get(?SCOPE_JWT_FIELD, DecodedToken, []),
