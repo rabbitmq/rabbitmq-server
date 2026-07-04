@@ -33,7 +33,7 @@
         <logback.version>1.5.18</logback.version>
         <maven.compiler.plugin.version>3.15.0</maven.compiler.plugin.version>
         <maven-surefire-plugin.version>3.5.6</maven-surefire-plugin.version>
-        <spotless.version>3.7.0</spotless.version>
+        <spotless.version>3.8.0</spotless.version>
         <google-java-format.version>1.35.0</google-java-format.version>
         <okhttp.version>5.4.0</okhttp.version>
         <gson.version>2.14.0</gson.version>
