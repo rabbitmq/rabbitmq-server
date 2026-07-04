@@ -9,6 +9,7 @@
 
 -export([run/2, run/3,
          matches/2, matches/3,
+         escape/1,
          compile/1, compile/2,
          match_limit/0,
          max_pattern_length/0]).
@@ -61,6 +62,26 @@ matches(Subject, Pattern, Opts) ->
         match -> true;
         _     -> false
     end.
+
+%% Escape every regex metacharacter in a binary so it matches literally, for
+%% embedding untrusted values (topic-permission variables, OAuth2 scopes) in a
+%% pattern without letting them alter its meaning.
+-spec escape(binary()) -> binary().
+escape(Bin) when is_binary(Bin) ->
+    << <<(escape_char(C))/binary>> || <<C>> <= Bin >>.
+
+%% "-" is only special inside a "[...]" character class, where it forms a
+%% range, so it must be escaped alongside the metacharacters that are special
+%% outside a class.
+-spec escape_char(byte()) -> binary().
+escape_char(C)
+  when C =:= $\\; C =:= $^; C =:= $$; C =:= $.;
+       C =:= $|; C =:= $?; C =:= $*; C =:= $+;
+       C =:= $(; C =:= $); C =:= $[; C =:= $];
+       C =:= ${; C =:= $}; C =:= $- ->
+    <<$\\, C>>;
+escape_char(C) ->
+    <<C>>.
 
 -spec compile(iodata()) -> {ok, re:mp()} | {error, term()}.
 compile(Pattern) ->

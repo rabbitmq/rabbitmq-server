@@ -208,29 +208,18 @@ check_topic_access(#auth_user{username = Username},
             end
     end.
 
+-spec expand_topic_permission(binary(), #{binary() => binary()} | undefined) ->
+    binary().
 expand_topic_permission(Permission, ToExpand) when is_map(ToExpand) ->
     Opening = <<"{">>,
     Closing = <<"}">>,
     ReplaceFun = fun(K, V, Acc) ->
                     Placeholder = <<Opening/binary, K/binary, Closing/binary>>,
-                    binary:replace(Acc, Placeholder, escape_regex(V), [global])
+                    binary:replace(Acc, Placeholder, rabbit_re:escape(V), [global])
                  end,
     maps:fold(ReplaceFun, Permission, ToExpand);
 expand_topic_permission(Permission, _ToExpand) ->
     Permission.
-
--spec escape_regex(binary()) -> binary().
-escape_regex(Bin) when is_binary(Bin) ->
-    << <<(escape_regex_char(C))/binary>> || <<C>> <= Bin >>.
-
-escape_regex_char(C)
-  when C =:= $\\; C =:= $^; C =:= $$; C =:= $.;
-       C =:= $|; C =:= $?; C =:= $*; C =:= $+;
-       C =:= $(; C =:= $); C =:= $[; C =:= $];
-       C =:= ${; C =:= $} ->
-    <<$\\, C>>;
-escape_regex_char(C) ->
-    <<C>>.
 
 permission_index(configure) -> #permission.configure;
 permission_index(write)     -> #permission.write;
