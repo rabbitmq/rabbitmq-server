@@ -1630,8 +1630,11 @@ stop(_VHost) ->
 
 drain(TransferCandidates) ->
     case whereis(rabbit_stream_coordinator) of
-        undefined -> ok;
-        _Pid -> transfer_leadership_of_stream_coordinator(TransferCandidates)
+        undefined ->
+            ok;
+        _Pid ->
+            transfer_leadership_of_stream_coordinator(TransferCandidates),
+            transfer_leadership_of_local_stream_leaders(TransferCandidates)
     end.
 
 revive() ->
@@ -1655,6 +1658,37 @@ transfer_leadership_of_stream_coordinator(TransferCandidates) ->
         Error ->
             ?LOG_WARNING("Skipping leadership transfer of stream coordinator: ~p", [Error])
     end.
+
+-spec transfer_leadership_of_local_stream_leaders([node()]) -> ok.
+transfer_leadership_of_local_stream_leaders([]) ->
+    ?LOG_WARNING("Skipping stream leadership transfer: no candidate "
+                 "(online, not under maintenance) nodes to transfer to");
+transfer_leadership_of_local_stream_leaders(TransferCandidates) ->
+    LocalLeaders = rabbit_amqqueue:list_local_stream_leaders(),
+    ?LOG_INFO("Will transfer leadership of ~b streams with current leader on this node",
+              [length(LocalLeaders)]),
+    lists:foreach(
+      fun (Q) -> transfer_leadership_of_stream(Q, TransferCandidates) end,
+      LocalLeaders),
+    ?LOG_INFO("Leadership transfer for streams hosted on this node has been initiated").
+
+-spec transfer_leadership_of_stream(amqqueue:amqqueue(), [node()]) -> ok.
+transfer_leadership_of_stream(Q, TransferCandidates) ->
+    %% A stream can only elect a new leader on a node that already hosts a replica.
+    Replicas = get_nodes(Q),
+    Options = case [N || N <- TransferCandidates, lists:member(N, Replicas)] of
+                  [] -> #{};
+                  [Preferred | _] -> #{preferred_leader_node => Preferred}
+              end,
+    QNameStr = rabbit_misc:rs(amqqueue:get_name(Q)),
+    case rabbit_stream_coordinator:restart_stream(Q, Options) of
+        {ok, NewLeader} ->
+            ?LOG_DEBUG("Stream ~ts new leader is on node ~tp", [QNameStr, NewLeader]);
+        Error ->
+            ?LOG_WARNING("Failed to transfer leadership of stream ~ts: ~tp",
+                         [QNameStr, Error])
+    end,
+    ok.
 
 queue_vm_stats_sups() ->
     {[stream_queue_procs,
