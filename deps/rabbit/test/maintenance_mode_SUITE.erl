@@ -24,7 +24,8 @@ all() ->
 groups() ->
     [
       {cluster_size_1, [], [
-          is_serving_works
+          is_serving_works,
+          drain_and_revive_tolerate_failing_callbacks
       ]},
       {cluster_size_3, [], [
           maintenance_mode_status,
@@ -110,6 +111,40 @@ end_per_testcase(Testcase, Config) ->
 %% -------------------------------------------------------------------
 %% Test Cases
 %% -------------------------------------------------------------------
+
+%% Regression test for rabbitmq/rabbitmq-server#3369. A failing cleanup step must not
+%% abort `drain/0` (nor fail the CLI) once the node is marked as draining,
+%% and must not leave `revive/0` with the DRAINING flag stuck.
+drain_and_revive_tolerate_failing_callbacks(Config) ->
+    [Node] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    rabbit_ct_helpers:await_condition(
+        fun () -> not rabbit_ct_broker_helpers:is_being_drained_local_read(Config, Node) end,
+        10000),
+
+    ok = rabbit_ct_broker_helpers:rpc(Config, Node, meck, new,
+                                     [rabbit_queue_type, [no_link, passthrough]]),
+    try
+        _ = rabbit_ct_broker_helpers:rpc(Config, Node, meck, expect,
+                                        [rabbit_queue_type, drain, 1,
+                                         meck:raise(exit, injected_drain_failure)]),
+        _ = rabbit_ct_broker_helpers:rpc(Config, Node, meck, expect,
+                                        [rabbit_queue_type, revive, 0,
+                                         meck:raise(exit, injected_revive_failure)]),
+
+        ok = rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_maintenance, drain, []),
+        rabbit_ct_helpers:await_condition(
+            fun () -> rabbit_ct_broker_helpers:is_being_drained_local_read(Config, Node) end,
+            10000),
+
+        ok = rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_maintenance, revive, []),
+        rabbit_ct_helpers:await_condition(
+            fun () -> not rabbit_ct_broker_helpers:is_being_drained_local_read(Config, Node) end,
+            10000)
+    after
+        _ = rabbit_ct_broker_helpers:rpc(Config, Node, meck, unload, [rabbit_queue_type]),
+        _ = rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_maintenance, revive, [])
+    end.
 
 is_serving_works(Config) ->
     [Node] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
