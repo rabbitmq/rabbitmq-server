@@ -18,7 +18,8 @@ groups() ->
     [
       {non_parallel_tests, [], [
                                 node,
-                                storage_reset
+                                storage_reset,
+                                collector_survives_non_integer_metric
                                ]}
     ].
 
@@ -94,6 +95,48 @@ node(Config) ->
                      lists:keymember({A, B}, 1, Tab)
              end, 10).
 
+
+%% Non-integer fields in a `core_metrics` row crashed the collector (#12815).
+collector_survives_non_integer_metric(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, ?MODULE, do_collector_survives_non_integer_metric, []).
+
+do_collector_survives_non_integer_metric() ->
+    Collector = rabbit_mgmt_metrics_collector:name(connection_coarse_metrics),
+    CollectorPid = whereis(Collector),
+    true = is_pid(CollectorPid),
+    %% Synthetic pids cannot collide with real connections.
+    PidA = c:pid(0, 16#7ffffe, 0),
+    PidB = c:pid(0, 16#7fffff, 0),
+    %% `old_aggr_stats` is the only map-typed field of the collector state.
+    OldAggr = fun() ->
+                      [Map] = [E || E <- tuple_to_list(sys:get_state(Collector)),
+                                    is_map(E)],
+                      Map
+              end,
+    %% A corrupt first sample must be skipped.
+    ets:insert(connection_coarse_metrics, {PidA, '', 200, 1000, 0}),
+    ok = gen_server:call(Collector, force_collect),
+    false = maps:is_key(PidA, OldAggr()),
+    %% A corrupt row after a well-formed one must be skipped
+    %% and the previous reading carried over.
+    ets:insert(connection_coarse_metrics, {PidB, 100, 200, 1000, 0}),
+    ok = gen_server:call(Collector, force_collect),
+    ets:insert(connection_coarse_metrics, {PidB, '', 200, 1000, 0}),
+    ok = gen_server:call(Collector, force_collect),
+    {100, 200} = maps:get(PidB, OldAggr()),
+    ets:insert(connection_coarse_metrics, {PidB, 150, 250, 1100, 0}),
+    ok = gen_server:call(Collector, force_collect),
+    {150, 250} = maps:get(PidB, OldAggr()),
+    %% A corrupt final sample must still delete the row.
+    ets:insert(connection_coarse_metrics, {PidB, '', 250, 1100, 1}),
+    ok = gen_server:call(Collector, force_collect),
+    [] = ets:lookup(connection_coarse_metrics, PidB),
+    %% The collector must not have been restarted.
+    CollectorPid = whereis(Collector),
+    true = is_process_alive(CollectorPid),
+    true = ets:delete(connection_coarse_metrics, PidA),
+    ok.
 
 storage_reset(Config) ->
     %% Ensures that core stats are reset, otherwise consume generates negative values

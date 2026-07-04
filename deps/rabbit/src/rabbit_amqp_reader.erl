@@ -30,7 +30,8 @@
          ensure_stats_timer/1]).
 
 -ifdef(TEST).
--export([check_node_connection_limit/1]).
+-export([check_node_connection_limit/1,
+         i/2]).
 -endif.
 
 -import(rabbit_amqp_util, [protocol_error/3]).
@@ -1075,12 +1076,7 @@ i(SockStat, #v1{sock = Sock})
        SockStat =:= send_oct;
        SockStat =:= send_cnt;
        SockStat =:= send_pend ->
-    case rabbit_net:getstat(Sock, [SockStat]) of
-        {ok, [{SockStat, Val}]} ->
-            Val;
-        {error, _} ->
-            ''
-    end;
+    rabbit_net:getstat_or_zero(Sock, SockStat);
 i(ssl, #v1{sock = Sock}) -> rabbit_net:is_ssl(Sock);
 i(SSL, #v1{sock = Sock, proxy_socket = ProxySock})
   when SSL =:= ssl_protocol;
