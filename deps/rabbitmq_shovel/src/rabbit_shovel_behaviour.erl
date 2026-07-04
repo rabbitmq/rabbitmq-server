@@ -42,13 +42,14 @@
 
 -type tag() :: non_neg_integer().
 -type uri() :: string() | binary().
+-type obfuscated_uri() :: {encrypted, binary()} | {plaintext, binary()} | uri().
 -type ack_mode() :: 'no_ack' | 'on_confirm' | 'on_publish'.
 -type source_config() :: #{module => atom(),
-                           uris => [uri()],
+                           uris => [obfuscated_uri()],
                            atom() => term()
                           }.
 -type dest_config() :: #{module => atom(),
-                         uris => [uri()],
+                         uris => [obfuscated_uri()],
                          atom() => term()
                         }.
 -type state() :: #{source => source_config(),

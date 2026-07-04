@@ -65,7 +65,8 @@
 -import(rabbit_misc, [pget/2, pget/3]).
 -import(rabbit_shovel_util, [
                              pget2count/3,
-                             deobfuscated_uris/2,
+                             obfuscated_uris/2,
+                             deobfuscate_uris/1,
                              validate_uri_fun/1
                             ]).
 
@@ -114,7 +115,7 @@ parse(Name, {destination, Dest}) ->
       add_timestamp_header => ATH}.
 
 parse_source(Def) ->
-    SrcURIs  = deobfuscated_uris(<<"src-uri">>, Def),
+    SrcURIs  = obfuscated_uris(<<"src-uri">>, Def),
     SrcX     = pget(<<"src-exchange">>,Def, none),
     SrcXKey  = pget(<<"src-exchange-key">>, Def, <<>>), %% [1]
     SrcQ     = pget(<<"src-queue">>, Def, none),
@@ -155,7 +156,7 @@ parse_source(Def) ->
                  }, Details), DestHeaders}.
 
 parse_dest({VHost, Name}, ClusterName, Def, SourceHeaders) ->
-    DestURIs  = deobfuscated_uris(<<"dest-uri">>,      Def),
+    DestURIs  = obfuscated_uris(<<"dest-uri">>,      Def),
     DestX     = pget(<<"dest-exchange">>,     Def, none),
     DestXKey  = pget(<<"dest-exchange-key">>, Def, none),
     DestQ     = pget(<<"dest-queue">>,        Def, none),
@@ -256,7 +257,7 @@ validate_dest_funs(_Def, User) ->
 
 connect_source(Conf = #{name := Name,
                         source := #{uris := Uris} = Src}) ->
-    {Conn, Chan, Uri} = make_conn_and_chan(Uris, Name),
+    {Conn, Chan, Uri} = make_conn_and_chan(deobfuscate_uris(Uris), Name),
     Conf#{source => Src#{current => {Conn, Chan, Uri}}}.
 
 init_source(Conf = #{ack_mode := AckMode,
@@ -289,7 +290,7 @@ init_source(Conf = #{ack_mode := AckMode,
                          remaining_unacked => Remaining}}.
 
 connect_dest(Conf = #{name := Name, dest := #{uris := Uris} = Dst}) ->
-    {Conn, Chan, URI} = make_conn_and_chan(Uris, Name),
+    {Conn, Chan, URI} = make_conn_and_chan(deobfuscate_uris(Uris), Name),
     Conf#{dest => Dst#{current => {Conn, Chan, URI}}}.
 
 init_dest(Conf = #{ack_mode := AckMode,
