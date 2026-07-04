@@ -514,12 +514,7 @@ i(SockStat, #state{socket = Sock})
        SockStat =:= send_oct;
        SockStat =:= send_cnt;
        SockStat =:= send_pend ->
-    case rabbit_net:getstat(Sock, [SockStat]) of
-        {ok, [{_, N}]} when is_number(N) ->
-            N;
-        _ ->
-            0
-    end;
+    rabbit_net:getstat_or_zero(Sock, SockStat);
 i(reductions, _) ->
     {reductions, Reductions} = erlang:process_info(self(), reductions),
     Reductions;

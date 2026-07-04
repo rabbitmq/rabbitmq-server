@@ -69,7 +69,9 @@ groups() ->
             amqp_table_conversion,
             name_type,
             get_erl_path,
-            hexify
+            hexify,
+            getstat_or_zero_on_live_socket,
+            getstat_or_zero_on_closed_socket
         ]},
         {sequential_tests, [], [
             data_coercion_to_existing_atom_does_not_create_atoms
@@ -619,6 +621,20 @@ hexify(_) ->
     ?assertEqual(<<"68656C6C6F">>, rabbit_misc:hexify(<<"hello">>)),
     ?assertEqual(<<"68656C6C6F">>, rabbit_misc:hexify("hello")),
     ?assertEqual(<<"68656C6C6F">>, rabbit_misc:hexify(hello)),
+    ok.
+
+getstat_or_zero_on_live_socket(_) ->
+    {ok, LSock} = gen_tcp:listen(0, []),
+    ?assert(is_integer(rabbit_net:getstat_or_zero(LSock, recv_oct))),
+    ok = gen_tcp:close(LSock),
+    ok.
+
+%% A closed socket must yield 0, never a non-integer (#12815).
+getstat_or_zero_on_closed_socket(_) ->
+    {ok, LSock} = gen_tcp:listen(0, []),
+    ok = gen_tcp:close(LSock),
+    ?assertEqual(0, rabbit_net:getstat_or_zero(LSock, recv_oct)),
+    ?assertEqual(0, rabbit_net:getstat_or_zero(LSock, send_oct)),
     ok.
 
 date_time_parse_duration(_) ->
