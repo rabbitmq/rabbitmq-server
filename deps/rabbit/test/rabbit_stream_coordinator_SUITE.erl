@@ -46,6 +46,7 @@ all_tests() ->
      delete_two_replicas,
      delete_replica_2,
      writer_recovery_after_reconfig,
+     restart_stream_with_deleted_writer,
      leader_start_failed,
      overview
     ].
@@ -1618,6 +1619,52 @@ writer_recovery_after_reconfig(_) ->
     ?assertMatch(#stream{members = #{N1 := #member{role = {writer, E2},
                                                    state = {running, E2, _}}}},
                  S6),
+    ok.
+
+restart_stream_with_deleted_writer(_) ->
+    %% restart_stream must not resurrect a member that is being deleted.
+    %% Deleting the writer's node elects a new writer while the old writer
+    %% member lingers with 'target = deleted' until its deletion completes.
+    %% Before machine version 8, restart_stream set every member's target to
+    %% 'stopped', resurrecting the old writer, which left two writers in the
+    %% members map and crashed 'find_leader/1' on the next 'evaluate_stream/3'.
+    E = 1,
+    E2 = 2,
+    StreamId = atom_to_list(?FUNCTION_NAME),
+    OldWriterPid = fake_pid(n1),
+    N1 = node(OldWriterPid),
+    N2 = node(fake_pid(n2)),
+    Conf = #{name => StreamId, nodes => [N2], retention => []},
+    %% State left by delete_replica(N1) + election of N2: the old writer on N1 is
+    %% being deleted, a new writer has been elected on N2.
+    Members = #{N1 => #member{role = {writer, E},
+                              state = {running, E, OldWriterPid},
+                              target = deleted,
+                              current = {stopping, 1},
+                              conf = Conf},
+                N2 => #member{role = {writer, E2},
+                              state = {ready, E2},
+                              target = running,
+                              current = undefined,
+                              conf = Conf}},
+    Stream = #stream{id = StreamId,
+                     epoch = E2,
+                     nodes = [N2],
+                     queue_ref = #resource{kind = queue,
+                                           name = list_to_binary(StreamId),
+                                           virtual_host = <<"/">>},
+                     conf = Conf,
+                     mnesia = {updated, E2},
+                     members = Members,
+                     target = running},
+    S1 = update_stream(meta(?LINE), {restart_stream, StreamId, #{}}, Stream),
+    %% The member being deleted must stay deleted, leaving a single writer.
+    ?assertMatch(#stream{members = #{N1 := #member{target = deleted},
+                                     N2 := #member{role = {writer, E2},
+                                                   target = stopped}}},
+                 S1),
+    %% evaluate_stream/3 must not crash on two writers.
+    {_S2, _Actions} = evaluate_stream(meta(?LINE), S1, []),
     ok.
 
 overview(_Config) ->

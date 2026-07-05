@@ -1466,7 +1466,13 @@ update_stream0(#{machine_version := MacVer} = Meta,
                #stream{members = Members0} = Stream0)
   when MacVer >= 4 ->
     Preferred = maps:get(preferred_leader_node, Options, undefined),
-    Members = maps:map(fun (N, M) when N == Preferred ->
+    Members = maps:map(fun (_N, #member{target = deleted} = M)
+                             when ?V8_OR_MORE(MacVer) ->
+                               %% Avoid updating state for a deleted member.
+                               %% This could lead to two writers if a stream is
+                               %% restarted while a writer is being deleted.
+                               M;
+                           (N, M) when N == Preferred ->
                                M#member{preferred = true,
                                         target = stopped};
                            (_N, M) ->
