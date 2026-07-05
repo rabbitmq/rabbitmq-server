@@ -294,6 +294,7 @@ is_loopback(Sock) when is_port(Sock) ; ?IS_SSL(Sock) ->
 is_loopback({127,_,_,_})             -> true;
 is_loopback({0,0,0,0,0,0,0,1})       -> true;
 is_loopback({0,0,0,0,0,65535,AB,CD}) -> is_loopback(ipv4(AB, CD));
+is_loopback({local, _})              -> true;
 is_loopback(_)                       -> false.
 
 ipv4(AB, CD) -> {AB bsr 8, AB band 255, CD bsr 8, CD band 255}.

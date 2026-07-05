@@ -82,8 +82,9 @@
 -type family() :: atom().
 -type listener_config() :: ip_port() |
                            {hostname(), ip_port()} |
-                           {hostname(), ip_port(), family()}.
--type address() :: {inet:ip_address(), ip_port(), family()}.
+                           {hostname(), ip_port(), family()} |
+                           string().
+-type address() :: {inet:ip_address() | {local, string()}, ip_port(), family()}.
 -type name_prefix() :: atom().
 -type protocol() :: atom().
 -type label() :: string().
@@ -146,6 +147,8 @@ fix_ssl_options(Config) ->
 
 -spec tcp_listener_addresses(listener_config()) -> [address()].
 
+tcp_listener_addresses(Path) when is_list(Path) andalso length(Path) > 0 andalso (hd(Path) =:= $/ orelse hd(Path) =:= $.) ->
+    [{{local, Path}, 0, local}];
 tcp_listener_addresses(Port) when is_integer(Port) ->
     tcp_listener_addresses_auto(Port);
 tcp_listener_addresses({"auto", Port}) ->
@@ -645,6 +648,8 @@ tune_buffer_size_static(Sock) ->
 
 %%--------------------------------------------------------------------
 
+tcp_host({local, Path}) ->
+    rabbit_data_coercion:to_binary(Path);
 tcp_host(IPAddress) ->
     rabbit_net:tcp_host(IPAddress).
 
