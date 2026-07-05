@@ -2156,9 +2156,10 @@ find_leader(Members) ->
 
 %% Elect a new leader if a quorum of members have reached the `stopped` state
 %% in the current epoch.
-elect_leader_if_quorum(Meta, #stream{epoch = Epoch,
-                                     nodes = Nodes,
-                                     members = Members} = Stream) ->
+elect_leader_if_quorum(#{machine_version := Vsn} = Meta,
+                       #stream{epoch = Epoch,
+                               nodes = Nodes,
+                               members = Members} = Stream) ->
     StoppedInCurrent =
         maps:filter(fun (_N, #member{state = {stopped, E, _T},
                                      target = running})
@@ -2186,8 +2187,26 @@ elect_leader_if_quorum(Meta, #stream{epoch = Epoch,
                                                   preferred = false,
                                                   state = {ready, NextEpoch}}
                                  end;
+                             (_N, #member{target = deleted,
+                                          current = {starting, _}} = M)
+                               when ?V8_OR_MORE(Vsn) ->
+                                 %% Drop the stale start latch so the deleted
+                                 %% member can be cleaned up.
+                                 M#member{current = undefined};
                              (_N, #member{target = deleted} = M) ->
                                  M;
+                             (_N, #member{current = {starting, _}} = M)
+                               when ?V8_OR_MORE(Vsn) ->
+                                 %% A start issued in the previous epoch can never
+                                 %% complete: member_started is fenced to the
+                                 %% stream epoch, so its reply is dropped and the
+                                 %% latch would never clear. Drop it so the member
+                                 %% is re-driven in the new epoch. A stopping latch
+                                 %% is kept, as member_stopped still matches on the
+                                 %% new role epoch.
+                                 M#member{role = {replica, NextEpoch},
+                                          preferred = false,
+                                          current = undefined};
                              (_N, M) ->
                                  M#member{role = {replica, NextEpoch},
                                           preferred = false}
