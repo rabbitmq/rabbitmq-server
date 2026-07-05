@@ -45,6 +45,7 @@ all_tests() ->
      delete_replica,
      delete_two_replicas,
      delete_replica_2,
+     writer_recovery_after_reconfig,
      leader_start_failed,
      overview
     ].
@@ -1544,6 +1545,79 @@ delete_replica_leader(_) ->
                                                    state = {ready, E2}}
                                     }},
                  S4),
+    ok.
+
+writer_recovery_after_reconfig(_) ->
+    %% When a stream's writer is on the surviving node of a 2/3 node loss and
+    %% the lost replicas are removed in sequence, the first 'delete_replica'
+    %% stops the writer as a side effect; the second one re-pins its target to
+    %% 'stopped' while membership has shrunk. Before machine version 8, the
+    %% writer was never re-elected and the stream was left permanently without
+    %% a leader.
+    E = 1,
+    StreamId = atom_to_list(?FUNCTION_NAME),
+    LeaderPid = fake_pid(n1),
+    [Replica1, Replica2] = [fake_pid(n2), fake_pid(n3)],
+    N1 = node(LeaderPid),
+    N2 = node(Replica1),
+    N3 = node(Replica2),
+
+    S0 = started_stream(StreamId, LeaderPid, [Replica1, Replica2]),
+
+    %% Remove the first lost replica. This stops all members, including the
+    %% writer, to reconfigure the stream without N2.
+    Idx1 = ?LINE,
+    Meta1 = meta(Idx1),
+    S1 = update_stream(Meta1, {delete_replica, StreamId, #{node => N2}}, S0),
+    {S2, _Actions1} = evaluate_stream(Meta1, S1, []),
+    ?assertMatch(#stream{nodes = [N1, N3],
+                         members = #{N1 := #member{role = {writer, E},
+                                                   current = {stopping, Idx1}},
+                                     N3 := #member{current = {stopping, Idx1}}}},
+                 S2),
+
+    %% Only the surviving writer can actually stop and report its tail; the lost
+    %% replica on N3 never does. With two nodes still in the membership this is
+    %% not a quorum, so no leader is elected yet and the writer is left stopped.
+    S3 = update_stream(meta(?LINE),
+                       {member_stopped, StreamId, #{node => N1,
+                                                    index => Idx1,
+                                                    epoch => E,
+                                                    tail => {E, 100}}},
+                       S2),
+    ?assertMatch(#stream{members = #{N1 := #member{role = {writer, E},
+                                                   state = {stopped, E, _},
+                                                   current = undefined,
+                                                   target = running}}},
+                 S3),
+
+    %% Remove the second lost replica. This shrinks the membership to a single
+    %% node and re-pins the writer's target to `stopped`. Machine version 8
+    %% re-derives a leader from the surviving stopped member instead of leaving
+    %% it stranded.
+    Idx4 = ?LINE,
+    Meta4 = meta(Idx4),
+    S4 = update_stream(Meta4, {delete_replica, StreamId, #{node => N3}}, S3),
+    {S5, Actions4} = evaluate_stream(Meta4, S4, []),
+    E2 = E + 1,
+    ?assertMatch(#stream{nodes = [N1],
+                         members = #{N1 := #member{role = {writer, E2},
+                                                   state = {ready, E2}}}},
+                 S5),
+    ?assertMatch([{aux, {start_writer, StreamId, #{index := Idx4},
+                         #{leader_node := N1}}} | _],
+                 lists:sort(Actions4)),
+
+    %% The re-elected writer starts and the stream is running again.
+    NewLeaderPid = fake_pid(n1),
+    S6 = update_stream(meta(?LINE),
+                       {member_started, StreamId, #{epoch => E2,
+                                                    index => Idx4,
+                                                    pid => NewLeaderPid}},
+                       S5),
+    ?assertMatch(#stream{members = #{N1 := #member{role = {writer, E2},
+                                                   state = {running, E2, _}}}},
+                 S6),
     ok.
 
 overview(_Config) ->
