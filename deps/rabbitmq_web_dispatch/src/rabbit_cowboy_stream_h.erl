@@ -121,7 +121,7 @@ body_length({sendfile, _, Length, _}) -> Length;
 body_length(Body) -> iolist_size(Body).
 
 fmt_ip(IP) when is_tuple(IP) ->
-    inet_parse:ntoa(IP).
+    rabbit_misc:ntoa(IP).
 
 format_time() ->
     {{Year, Month, Date}, {Hour, Min, Sec}} = calendar:local_time(),
