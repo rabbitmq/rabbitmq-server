@@ -181,6 +181,6 @@ truncate_binary(Bin, Size)
   when is_binary(Bin) ->
     binary:part(Bin, 0, Size).
 
--spec ip_address_to_binary(inet:ip_address()) -> binary().
+-spec ip_address_to_binary(inet:ip_address() | {local, string()}) -> binary().
 ip_address_to_binary(IpAddress) ->
-    list_to_binary(inet:ntoa(IpAddress)).
+    list_to_binary(rabbit_misc:ntoa(IpAddress)).

@@ -223,7 +223,7 @@ get_binding_address(Configuration) ->
         undefined ->
             "0.0.0.0";
         IP when is_tuple(IP) ->
-            inet:ntoa(IP);
+            rabbit_misc:ntoa(IP);
         IP when is_list(IP) ->
             IP
     end.
