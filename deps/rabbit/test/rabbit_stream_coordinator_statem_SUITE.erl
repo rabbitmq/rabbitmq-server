@@ -69,21 +69,26 @@ prop_writer_always_recovers_body() ->
     ?FORALL(Commands, commands(?MODULE),
             begin
                 _ = erase(world),
+                _ = erase(prev_epoch),
                 {History, _State, Result} = run_commands(?MODULE, Commands),
+                World = world(),
                 {Converged, Drained} =
-                    case world() of
+                    case World of
                         undefined -> {true, undefined};
-                        World     -> drain(World)
+                        _         -> drain(World)
                     end,
                 Recovered = Converged andalso
                     (Drained =:= undefined orelse writer_running(Drained)),
                 _ = erase(world),
+                %% Result =/= ok signals a safety violation (a postcondition
+                %% failed mid-run); Recovered =:= false signals a liveness one.
                 ?WHENFAIL(
                    begin
-                       ct:pal("Command sequence left the writer unrecoverable.~n"
-                              "Commands:~n~s~n"
-                              "Final (cooperatively drained) state:~n~s",
-                              [format_commands(Commands), format_world(Drained)]),
+                       ct:pal("Commands:~n~s~n"
+                              "State at end of run:~n~s"
+                              "After cooperative drain:~n~s",
+                              [format_commands(Commands),
+                               format_world(World), format_world(Drained)]),
                        io:format("History length: ~p~n", [length(History)])
                    end,
                    Result =:= ok andalso Recovered)
@@ -114,11 +119,43 @@ precondition(#st{setup = Setup}, {call, _, cmd_setup, _}) ->
 precondition(#st{setup = Setup}, {call, _, _, _}) ->
     Setup.
 
-%% The commands are self-correcting no-ops when they do not apply (the
-%% coordinator ignores irrelevant/stale commands), so postconditions only guard
-%% against unexpected crashes; the liveness check runs once at the end.
+%% Safety, checked after every command: invariants that must hold at every
+%% reachable state, not just settled ones. Liveness (eventual convergence to a
+%% running writer) is checked once at the end of the run.
 postcondition(_State, {call, _, _, _}, _Result) ->
-    true.
+    safety_holds(world()).
+
+safety_holds(undefined) ->
+    true;
+safety_holds({_Idx, Coord, _}) ->
+    case stream_of(Coord) of
+        undefined ->
+            true;
+        #stream{epoch = Epoch, mnesia = {_, MnesiaEpoch}, members = Members} ->
+            Vs = maps:values(Members),
+            %% at most one non-deleted writer role (find_leader/1's precondition)
+            WriterRoles =
+                length([1 || #member{role = {writer, _}, target = T} <- Vs,
+                             T =/= deleted]),
+            %% at most one running writer that is not being deleted (a writer torn
+            %% down after an epoch bump may still run transiently, but is fenced)
+            RunningWriters =
+                length([1 || #member{role = {writer, _},
+                                     state = {running, _, _},
+                                     target = T} <- Vs,
+                             T =/= deleted]),
+            WriterRoles =< 1
+                andalso RunningWriters =< 1
+                andalso MnesiaEpoch =< Epoch
+                andalso epoch_monotonic(Epoch)
+    end.
+
+%% The stream epoch never decreases. Tracked across the run in the process
+%% dictionary, reset in the property body.
+epoch_monotonic(Epoch) ->
+    Prev = case get(prev_epoch) of undefined -> Epoch; P -> P end,
+    put(prev_epoch, Epoch),
+    Epoch >= Prev.
 
 next_state(St, _Res, {call, _, cmd_setup, [Nodes]}) ->
     St#st{setup = true, nodes = Nodes};

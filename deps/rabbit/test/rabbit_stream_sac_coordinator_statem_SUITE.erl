@@ -25,8 +25,12 @@
 -define(CONNS, [c1, c2, c3, c4]).
 -define(PARTITION_INDEXES, [-1, 0, 1, 2]).
 
-%% proper_statem model: enough to generate sensible commands.
--record(st, {setup = false :: boolean()}).
+%% proper_statem model: tracks each connection's lifecycle so that only
+%% protocol-realistic transitions are generated (a connection goes
+%% connected -> disconnected -> presumed_down and back via reconnect; it never
+%% receives a second down event, which an Erlang monitor would not produce).
+-record(st, {setup = false :: boolean(),
+             conns = #{}    :: #{atom() => connected | disconnected | presumed_down}}).
 
 all() ->
     [prop_single_active_consumer_converges].
@@ -67,20 +71,24 @@ prop_single_active_consumer_converges_body() ->
             begin
                 _ = erase_state(),
                 {History, _State, Result} = run_commands(?MODULE, Commands),
+                World = world(),
                 {Converged, Drained} =
-                    case world() of
+                    case World of
                         undefined -> {true, undefined};
-                        World     -> drain(World)
+                        _         -> drain(World)
                     end,
                 Ok = Converged andalso
                     (Drained =:= undefined orelse converged(Drained)),
                 _ = erase_state(),
+                %% Result =/= ok signals a safety violation (a postcondition
+                %% failed mid-run); Ok =:= false signals a liveness one.
                 ?WHENFAIL(
                    begin
-                       ct:pal("Group did not converge to a single active consumer.~n"
-                              "Commands:~n~s~n"
-                              "Final (cooperatively drained) group:~n~s",
-                              [format_commands(Commands), format_group(Drained)]),
+                       ct:pal("Commands:~n~s~n"
+                              "Group at end of run:~n~s"
+                              "After cooperative drain:~n~s",
+                              [format_commands(Commands),
+                               format_group(World), format_group(Drained)]),
                        io:format("History length: ~p~n", [length(History)])
                    end,
                    Result =:= ok andalso Ok)
@@ -95,29 +103,73 @@ initial_state() ->
 
 command(#st{setup = false}) ->
     {call, ?MODULE, cmd_setup, [elements(?PARTITION_INDEXES)]};
-command(#st{setup = true}) ->
+command(#st{setup = true, conns = Cs}) ->
+    Status = fun (C) -> maps:get(C, Cs, absent) end,
+    Absent = [C || C <- ?CONNS, Status(C) =:= absent],
+    Connected = [C || C <- ?CONNS, Status(C) =:= connected],
+    Disconnected = [C || C <- ?CONNS, Status(C) =:= disconnected],
+    Down = [C || C <- ?CONNS, lists:member(Status(C), [disconnected, presumed_down])],
+    %% only offer a command when it has an applicable connection; activate and
+    %% evaluate are always available so the frequency list is never empty
     frequency(
-      [{20, {call, ?MODULE, cmd_register, [elements(?CONNS)]}},
-       {10, {call, ?MODULE, cmd_unregister, [elements(?CONNS)]}},
-       {10, {call, ?MODULE, cmd_down, [elements(?CONNS), elements([normal, noconnection])]}},
-       {8,  {call, ?MODULE, cmd_presume, [elements(?CONNS)]}},
-       {8,  {call, ?MODULE, cmd_reconnect, [elements(?CONNS)]}},
-       {8,  {call, ?MODULE, cmd_activate, []}},
+      [{20, {call, ?MODULE, cmd_register, [elements(Absent)]}} || Absent =/= []] ++
+      [{10, {call, ?MODULE, cmd_unregister, [elements(Connected)]}} || Connected =/= []] ++
+      [{10, {call, ?MODULE, cmd_down, [elements(Connected),
+                                       elements([normal, noconnection])]}} || Connected =/= []] ++
+      [{8,  {call, ?MODULE, cmd_presume, [elements(Disconnected)]}} || Disconnected =/= []] ++
+      [{8,  {call, ?MODULE, cmd_reconnect, [elements(Down)]}} || Down =/= []] ++
+      [{8,  {call, ?MODULE, cmd_activate, []}},
        {6,  {call, ?MODULE, cmd_evaluate, []}}]).
 
 precondition(#st{setup = Setup}, {call, _, cmd_setup, _}) ->
     not Setup;
-precondition(#st{setup = Setup}, {call, _, _, _}) ->
-    Setup.
-
-%% Commands are self-correcting no-ops when they do not apply (the coordinator
-%% ignores irrelevant commands), so postconditions only guard against unexpected
-%% crashes; the convergence check runs once at the end.
-postcondition(_State, {call, _, _, _}, _Result) ->
+precondition(#st{setup = false}, _) ->
+    false;
+precondition(#st{conns = Cs}, {call, _, cmd_register, [C]}) ->
+    maps:get(C, Cs, absent) =:= absent;
+precondition(#st{conns = Cs}, {call, _, cmd_unregister, [C]}) ->
+    maps:get(C, Cs, absent) =:= connected;
+precondition(#st{conns = Cs}, {call, _, cmd_down, [C, _]}) ->
+    maps:get(C, Cs, absent) =:= connected;
+precondition(#st{conns = Cs}, {call, _, cmd_presume, [C]}) ->
+    maps:get(C, Cs, absent) =:= disconnected;
+precondition(#st{conns = Cs}, {call, _, cmd_reconnect, [C]}) ->
+    lists:member(maps:get(C, Cs, absent), [disconnected, presumed_down]);
+precondition(#st{setup = true}, _) ->
     true.
+
+%% Safety, checked after every command: at most one active consumer per group at
+%% every reachable state. Liveness (convergence to exactly one active) is checked
+%% once at the end of the run.
+postcondition(_State, {call, _, _, _}, _Result) ->
+    at_most_one_active(world()).
+
+at_most_one_active(undefined) ->
+    true;
+at_most_one_active(World) ->
+    length([C || #consumer{status = St} = C <- consumers(group_of(World)),
+                 is_active(St)]) =< 1.
+
+%% mirrors rabbit_stream_sac_coordinator:is_active/1
+is_active({presumed_down, _}) -> false;
+is_active({_, active}) -> true;
+is_active({_, deactivating}) -> true;
+is_active(_) -> false.
 
 next_state(St, _Res, {call, _, cmd_setup, _}) ->
     St#st{setup = true};
+next_state(#st{conns = Cs} = St, _Res, {call, _, cmd_register, [C]}) ->
+    St#st{conns = Cs#{C => connected}};
+next_state(#st{conns = Cs} = St, _Res, {call, _, cmd_unregister, [C]}) ->
+    St#st{conns = maps:remove(C, Cs)};
+next_state(#st{conns = Cs} = St, _Res, {call, _, cmd_down, [C, normal]}) ->
+    St#st{conns = maps:remove(C, Cs)};
+next_state(#st{conns = Cs} = St, _Res, {call, _, cmd_down, [C, noconnection]}) ->
+    St#st{conns = Cs#{C => disconnected}};
+next_state(#st{conns = Cs} = St, _Res, {call, _, cmd_presume, [C]}) ->
+    St#st{conns = Cs#{C => presumed_down}};
+next_state(#st{conns = Cs} = St, _Res, {call, _, cmd_reconnect, [C]}) ->
+    St#st{conns = Cs#{C => connected}};
 next_state(St, _Res, {call, _, _, _}) ->
     St.
 
