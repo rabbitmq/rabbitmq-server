@@ -21,6 +21,7 @@ new_resource_server(ResourceServerId) ->
         id = ResourceServerId,
         resource_server_type = undefined,
         verify_aud = true,
+        require_exp = true,
         scope_prefix = erlang:iolist_to_binary([ResourceServerId, <<".">>]),
         additional_scopes_key = undefined,
         preferred_username_claims = ?DEFAULT_PREFERRED_USERNAME_CLAIMS,
@@ -78,6 +79,8 @@ get_root_resource_server() ->
         get_env(resource_server_type),
     VerifyAud =
         get_boolean_env(verify_aud, true),
+    RequireExp =
+        get_boolean_env(require_exp, true),
     AdditionalScopesKey =
         get_env(extra_scopes_source),
     DefaultScopePrefix =
@@ -98,7 +101,8 @@ get_root_resource_server() ->
         id = ResourceServerId,
         resource_server_type = ResourceServerType,
         verify_aud = VerifyAud,
-        scope_prefix = ScopePrefix,
+        require_exp = RequireExp,
+        scope_prefix = ScopePrefix,         
         additional_scopes_key = AdditionalScopesKey,
         preferred_username_claims = PreferredUsernameClaims,
         scope_aliases = ScopeAliases,
@@ -137,6 +141,9 @@ get_resource_server(ResourceServerId, RootResourseServer) when
     VerifyAud =
         proplists:get_value(verify_aud, ResourceServerProps,
             RootResourseServer#resource_server.verify_aud),
+    RequireExp =
+        proplists:get_value(require_exp, ResourceServerProps,
+            RootResourseServer#resource_server.require_exp),
     AdditionalScopesKey =
         proplists:get_value(extra_scopes_source, ResourceServerProps,
             RootResourseServer#resource_server.additional_scopes_key),
@@ -162,6 +169,7 @@ get_resource_server(ResourceServerId, RootResourseServer) when
         id = ResourceServerId,
         resource_server_type = ResourceServerType,
         verify_aud = VerifyAud,
+        require_exp = RequireExp,
         scope_prefix = ScopePrefix,
         additional_scopes_key = AdditionalScopesKey,
         preferred_username_claims = PreferredUsernameClaims,

@@ -103,6 +103,19 @@
  "rabbitmq_auth_backend_oauth2.verify_aud",
  [{datatype, boolean}]}.
 
+%% Require the exp (expiration time) claim in JWT tokens. When set to true
+%% (the default), tokens without an exp claim are rejected. RFC 7519 treats
+%% exp as optional, but omitting it is a security risk: stolen or leaked tokens
+%% would remain valid indefinitely. Set to false only when your identity
+%% provider issues tokens without an exp claim and you cannot change that behaviour.
+%%
+%% {require_exp, true},
+
+{mapping,
+ "auth_oauth2.require_exp",
+ "rabbitmq_auth_backend_oauth2.require_exp",
+ [{datatype, boolean}]}.
+
 %% How scope patterns match vhost names, resource names, and topic routing keys.
 %% wildcard uses RabbitMQ's legacy *-segment wildcard rules; regex treats each pattern
 %% as a Perl-compatible regular expression matched against the entire string.
@@ -417,6 +430,16 @@
  "auth_oauth2.resource_servers.$name.scope_aliases.$index.scope",
  "rabbitmq_auth_backend_oauth2.resource_servers",
  [{datatype, string}]}.
+
+{mapping,
+ "auth_oauth2.resource_servers.$name.verify_aud",
+ "rabbitmq_auth_backend_oauth2.verify_aud",
+ [{datatype, boolean}]}.
+
+{mapping,
+ "auth_oauth2.resource_servers.$name.require_exp",
+ "rabbitmq_auth_backend_oauth2.require_exp",
+ [{datatype, boolean}]}.
 
 {mapping,
   "auth_oauth2.resource_servers.$name.oauth_provider_id",
