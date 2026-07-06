@@ -14,8 +14,6 @@
 -export([terminate/3]).
 -export([early_error/5]).
 -export([set_authenticated_username/2]).
--export([unset_authenticated_username/1]).
--export([get_authenticated_username/1]).
 
 -record(state, {
     next :: any(),
@@ -80,7 +78,8 @@ log_stream_response({headers, Status, _Headers}, Req) ->
     webmachine_log:log_access({Status, <<>>, Req}).
 =======
 set_authenticated_username(Username, Req) ->
-    cowboy_req:set_resp_header(?AUTH_USER_HEADER, Username, Req).
+    cowboy_req:set_resp_header(?AUTH_USER_HEADER,
+                               rabbit_data_coercion:to_binary(Username), Req).
 
 unset_authenticated_username(Headers) ->
     maps:remove(?AUTH_USER_HEADER, Headers).
