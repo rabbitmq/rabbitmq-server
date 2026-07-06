@@ -131,9 +131,12 @@ is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun, AuthConfig, R
     ErrFun = fun (ResolvedUserName, Msg) ->
                      ?LOG_WARNING("HTTP access denied: user '~ts' - ~ts",
                                         [ResolvedUserName, Msg]),
+                     %% Include the resolved username in the access log.
+                     ReqData1 = rabbit_cowboy_stream_h:set_authenticated_username(
+                                  ResolvedUserName, ReqData),
                      case ReplyWhenFailed of
-                       true -> not_authorised(Msg, ReqData, Context);
-                       false -> {false, ReqData, "Not_Authorized"}
+                       true -> not_authorised(Msg, ReqData1, Context);
+                       false -> {false, ReqData1, "Not_Authorized"}
                      end
              end,
     {IP, _} = cowboy_req:peer(ReqData),
@@ -156,7 +159,9 @@ is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun, AuthConfig, R
                             case Fun(User) of
                                 true ->
                                     rabbit_core_metrics:auth_attempt_succeeded(IP, ResolvedUsername, http),
-                                    {true, ReqData,
+                                    ReqData1 = rabbit_cowboy_stream_h:set_authenticated_username(
+                                        ResolvedUsername, ReqData),
+                                    {true, ReqData1,
                                      Context#context{user     = User,
                                                      password = Password}};
                                 not_found ->
@@ -178,9 +183,12 @@ is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun, AuthConfig, R
             rabbit_core_metrics:auth_attempt_failed(IP, Username, http),
             ?LOG_WARNING("HTTP access denied: ~ts",
                                [rabbit_misc:format(Msg, Args)]),
+            %% Include the attempted username in the access log.
+            ReqData1 = rabbit_cowboy_stream_h:set_authenticated_username(
+                         Username, ReqData),
             case ReplyWhenFailed of
-              true -> not_authenticated(<<"Not_Authorized">>, ReqData, Context, AuthConfig);
-              false -> {false, ReqData, "Not_Authorized"}
+              true -> not_authenticated(<<"Not_Authorized">>, ReqData1, Context, AuthConfig);
+              false -> {false, ReqData1, "Not_Authorized"}
             end
     end.
 
