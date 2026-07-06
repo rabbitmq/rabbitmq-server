@@ -1672,6 +1672,9 @@ transfer_leadership_of_local_stream_leaders(TransferCandidates) ->
       LocalLeaders),
     ?LOG_INFO("Leadership transfer for streams hosted on this node has been initiated").
 
+-define(STREAM_DRAIN_RESTART_ATTEMPTS, 3).
+-define(STREAM_DRAIN_RESTART_BACKOFF_MS, 500).
+
 -spec transfer_leadership_of_stream(amqqueue:amqqueue(), [node()]) -> ok.
 transfer_leadership_of_stream(Q, TransferCandidates) ->
     %% A stream can only elect a new leader on a node that already hosts a replica.
@@ -1686,17 +1689,34 @@ transfer_leadership_of_stream(Q, TransferCandidates) ->
             ?LOG_INFO("Skipping leadership transfer of stream ~ts: no online, "
                       "non-maintenance replica available", [QNameStr]);
         [Preferred | _] ->
-            Options = #{preferred_leader_node => Preferred},
-            case rabbit_stream_coordinator:restart_stream(Q, Options) of
-                {ok, NewLeader} ->
-                    ?LOG_DEBUG("Stream ~ts new leader is on node ~tp",
-                               [QNameStr, NewLeader]);
-                Error ->
-                    ?LOG_WARNING("Failed to transfer leadership of stream ~ts: ~tp",
-                                 [QNameStr, Error])
-            end
+            restart_stream_off_local(Q, QNameStr, Preferred,
+                                     ?STREAM_DRAIN_RESTART_ATTEMPTS)
     end,
     ok.
+
+restart_stream_off_local(_Q, QNameStr, _Preferred, 0) ->
+    ?LOG_WARNING("Gave up transferring leadership of stream ~ts off ~tp: "
+                 "still local after retries",
+                 [QNameStr, node()]);
+restart_stream_off_local(Q, QNameStr, Preferred, Attempts) ->
+    Options = #{preferred_leader_node => Preferred},
+    case rabbit_stream_coordinator:restart_stream(Q, Options) of
+        {ok, NewLeader} when NewLeader =:= node() ->
+            %% `restart_stream` honours `preferred_leader_node` only when
+            %% the preferred node is tied with the current writer on the
+            %% stopped tail. If the writer just advanced its epoch (as
+            %% happens right after being forced onto this node), the
+            %% replicas need a moment to catch up before another attempt
+            %% can tie them and let the hint win.
+            timer:sleep(?STREAM_DRAIN_RESTART_BACKOFF_MS),
+            restart_stream_off_local(Q, QNameStr, Preferred, Attempts - 1);
+        {ok, NewLeader} ->
+            ?LOG_DEBUG("Stream ~ts new leader is on node ~tp",
+                       [QNameStr, NewLeader]);
+        Error ->
+            ?LOG_WARNING("Failed to transfer leadership of stream ~ts: ~tp",
+                         [QNameStr, Error])
+    end.
 
 queue_vm_stats_sups() ->
     {[stream_queue_procs,
