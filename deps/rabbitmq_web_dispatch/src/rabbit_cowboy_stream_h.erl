@@ -17,10 +17,13 @@
 -export([early_error/5]).
 -export([set_authenticated_username/2]).
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 -export([unset_authenticated_username/1]).
 -export([get_authenticated_username/1]).
 >>>>>>> 1796abb3b7 (Log username determined by the auth-backend)
+=======
+>>>>>>> 1c799afba2 (Fix a very minor logging regression)
 
 -record(state, {
     next :: any(),
@@ -94,11 +97,16 @@ early_error(StreamId, Reason, PartialReq, Resp, Opts) ->
 
 set_authenticated_username(Username, Req) ->
 <<<<<<< HEAD
+<<<<<<< HEAD
     cowboy_req:set_resp_header(?AUTH_USER_HEADER,
                                rabbit_data_coercion:to_binary(Username), Req).
 =======
     cowboy_req:set_resp_header(?AUTH_USER_HEADER, Username, Req).
 >>>>>>> 1796abb3b7 (Log username determined by the auth-backend)
+=======
+    cowboy_req:set_resp_header(?AUTH_USER_HEADER,
+                               rabbit_data_coercion:to_binary(Username), Req).
+>>>>>>> 1c799afba2 (Fix a very minor logging regression)
 
 unset_authenticated_username(Headers) ->
     maps:remove(?AUTH_USER_HEADER, Headers).
