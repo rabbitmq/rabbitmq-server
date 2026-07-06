@@ -42,6 +42,7 @@ all() ->
         test_token_expiration,
         test_token_expiry_with_float_exp,
         test_token_expiry_with_non_numeric_exp,
+        test_token_expiry_with_missing_exp,
         test_invalid_signature,
         test_incorrect_kid,
         normalize_token_scope_using_multiple_scopes_key,
@@ -1276,6 +1277,16 @@ test_token_expiry_with_non_numeric_exp(_) ->
         ?assertMatch({refused, _, _},
                      user_login_authentication(Username, [{password, InvalidToken}]))
     end, [<<"1700000300">>, true, false, null]).
+
+test_token_expiry_with_missing_exp(_) ->
+    Username = <<"username">>,
+    set_env(resource_server_id, <<"rabbitmq">>),
+
+    %% A token with no exp claim at all must be refused.
+    TokenWithoutExp = maps:remove(<<"exp">>,
+        ?UTIL_MOD:token_with_sub(?UTIL_MOD:expirable_token(), Username)),
+    ?assertMatch({refused, _, _},
+                 user_login_authentication(Username, [{password, TokenWithoutExp}])).
 
 test_incorrect_kid(_) ->
     AltKid   = <<"other-token-key">>,
