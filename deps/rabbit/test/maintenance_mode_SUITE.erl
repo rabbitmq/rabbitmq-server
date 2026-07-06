@@ -352,6 +352,29 @@ stream_leadership_transfer(Config) ->
          Config, A, rabbit_amqqueue, list_local_stream_leaders, []),
        30000),
 
+    %% Wait until every replica is running as a member under the current
+    %% epoch. Otherwise drain's `restart_stream` fires while B and C are
+    %% still catching up: A has a higher on-disk state than the replicas and
+    %% `select_leader/2` picks A back, ignoring the `preferred_leader_node`
+    %% hint. `members/1` returns `{Pid, Role}` per node; a live replica has
+    %% a non-undefined pid.
+    {ok, Q} = rabbit_ct_broker_helpers:rpc(Config, A, rabbit_amqqueue,
+                                           lookup, [QRes]),
+    #{name := StreamId} = rabbit_ct_broker_helpers:rpc(
+                            Config, A, amqqueue, get_type_state, [Q]),
+    rabbit_ct_helpers:await_condition(
+        fun () ->
+            case rabbit_ct_broker_helpers:rpc(
+                   Config, A, rabbit_stream_coordinator, members,
+                   [StreamId]) of
+                {ok, Members} when map_size(Members) == 3 ->
+                    lists:all(fun ({Pid, _}) -> is_pid(Pid) end,
+                              maps:values(Members));
+                _ ->
+                    false
+            end
+        end, 30000),
+
     rabbit_ct_broker_helpers:drain_node(Config, A),
     rabbit_ct_helpers:await_condition(
         fun () -> rabbit_ct_broker_helpers:is_being_drained_local_read(Config, A) end, 10000),
