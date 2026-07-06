@@ -185,26 +185,15 @@ authenticate(_, AuthProps0) ->
                 {refused, Err} ->
                     {refused, "Authentication using an OAuth 2/JWT token failed: ~tp", [Err]};
                 {ok, DecodedToken} ->
-                    case with_decoded_token(DecodedToken, ResourceServer, fun(In) -> auth_user_from_token(In, ResourceServer) end) of
+                    DecodedToken1 = DecodedToken#{<<"x-rmq-require-exp">> =>
+                        ResourceServer#resource_server.require_exp},
+                    case with_decoded_token(DecodedToken1, fun(In) -> auth_user_from_token(In, ResourceServer) end) of
                         {error, Err} ->
                             {refused, "Authentication using an OAuth 2/JWT token failed: ~tp", [Err]};
                         Else ->
                             Else
                     end
             end
-    end.
-
--spec with_decoded_token(Token, ResourceServer, Fun) -> Result
-    when Token :: decoded_jwt_token(),
-         ResourceServer :: resource_server(),
-         Fun :: auth_user_extraction_fun(),
-         Result :: {ok, any()} | {'error', any()}.
-with_decoded_token(DecodedToken, ResourceServer, Fun) ->
-    case validate_token_expiry(DecodedToken, ResourceServer) of
-        ok               -> Fun(DecodedToken);
-        {error, Msg} = Err ->
-            ?LOG_ERROR(Msg),
-            Err
     end.
 
 -spec with_decoded_token(Token, Fun) -> Result
@@ -232,10 +221,14 @@ auth_user_from_token(Token0, ResourceServer) ->
 <<<<<<< HEAD
 =======
     Token1   = Token0#{<<"x-rmq-scope-pattern-syntax">> =>
+<<<<<<< HEAD
                           ResourceServer#resource_server.scope_pattern_syntax,
                        <<"x-rmq-require-exp">> =>
                           ResourceServer#resource_server.require_exp},
 >>>>>>> 54fa42c718 (Make exp claim mandatory by default)
+=======
+                          ResourceServer#resource_server.scope_pattern_syntax},
+>>>>>>> a620a8edcb (Fix issues)
     {ok, #auth_user{username = Username,
                     tags = Tags,
                     impl = fun() -> Token0 end}}.
@@ -246,13 +239,6 @@ ensure_same_username(PreferredUsernameClaims, CurrentDecodedToken, NewDecodedTok
         {CurUsername, CurUsername} -> ok;
         _ -> {error, mismatch_username_after_token_refresh}
     end.
-
-validate_token_expiry(Token, ResourceServer) ->
-    case ResourceServer#resource_server.require_exp of
-        true  -> validate_token_expiry(Token);
-        false -> ok
-    end.
-
 validate_token_expiry(#{<<"exp">> := Exp}) when is_number(Exp) ->
     Now = os:system_time(seconds),
     ExpTs = trunc(Exp),
