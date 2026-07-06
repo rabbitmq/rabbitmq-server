@@ -36,10 +36,14 @@ info(StreamId, Response, State = #state{next = Next, req = Req}) ->
     Response1 = case Response of
         {response, 404, Headers0, <<>>} ->
 <<<<<<< HEAD
+<<<<<<< HEAD
             %% TODO: should we log the actual response?
             log_response(Response, Req),
 =======
             log_response({response, 404, Headers0, <<>>}, Req),
+=======
+            log_response(Response, Req),
+>>>>>>> f20f70d67e (Clean up)
             H1 = unset_authenticated_username(Headers0),
 >>>>>>> 7fd2e6be4a (Log username determined by the auth-backend)
             Json = rabbit_json:encode(#{
@@ -49,11 +53,11 @@ info(StreamId, Response, State = #state{next = Next, req = Req}) ->
             H3 = maps:put(<<"content-type">>, <<"application/json">>, H2),
             {response, 404, H3, Json};
         {response, Status, Headers0, Body} ->
-            log_response({response, Status, Headers0, Body}, Req),
+            log_response(Response, Req),
             H1 = unset_authenticated_username(Headers0),
             {response, Status, H1, Body};
         {headers, Status, Headers0} ->
-            log_stream_response({headers, Status, Headers0}, Req),
+            log_stream_response(Response, Req),
             H1 = unset_authenticated_username(Headers0),
             {headers, Status, H1};
         _ ->
