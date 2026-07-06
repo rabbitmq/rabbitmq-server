@@ -103,21 +103,11 @@
  "rabbitmq_auth_backend_oauth2.verify_aud",
  [{datatype, boolean}]}.
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
-%% Require the exp (expiration time) claim in JWT tokens. When set to true
-%% (the default), tokens without an exp claim are rejected. RFC 7519 treats
-%% exp as optional, but omitting it is a security risk: stolen or leaked tokens
-%% would remain valid indefinitely. Set to false only when your identity
-%% provider issues tokens without an exp claim and you cannot change that behaviour.
-=======
 %% Require the exp (expiration time) claim in JWT tokens. When true (the
 %% default), a token without an exp claim is rejected. RFC 7519 makes exp
 %% optional, but a token without it never expires, so a stolen or leaked token
 %% stays valid forever. Set to false only when your identity provider cannot
 %% issue tokens with an exp claim.
->>>>>>> a078943f33 ( Cosmetics [ci skip])
 %%
 %% {require_exp, true},
 
@@ -126,16 +116,6 @@
  "rabbitmq_auth_backend_oauth2.require_exp",
  [{datatype, boolean}]}.
 
-%% How scope patterns match vhost names, resource names, and topic routing keys.
-%% wildcard uses RabbitMQ's legacy *-segment wildcard rules; regex treats each pattern
-%% as a Perl-compatible regular expression matched against the entire string.
-
-{mapping,
- "auth_oauth2.scope_pattern_syntax",
- "rabbitmq_auth_backend_oauth2.scope_pattern_syntax",
- [{datatype, {enum, [wildcard, regex]}}]}.
-
->>>>>>> 54fa42c718 (Make exp claim mandatory by default)
 %% Configure the preferred username's JWT claim(s). These are the JWT claims or attributes
 %% used to determine the user's identity, a.k.a username.
 %% RabbitMQ appends `sub` and `client_id` claims.

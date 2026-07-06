@@ -140,15 +140,10 @@ update_state(AuthUser, NewToken) ->
                             CurToken(), DecodedToken) of
                         ok ->
                             Tags = tags_from(DecodedToken),
-<<<<<<< HEAD
-=======
-                            Token1 = DecodedToken#{<<"x-rmq-scope-pattern-syntax">> =>
-                                                   ResourceServer#resource_server.scope_pattern_syntax,
-                                                   <<"x-rmq-require-exp">> =>
+                            Token1 = DecodedToken#{<<"x-rmq-require-exp">> =>
                                                    ResourceServer#resource_server.require_exp},
->>>>>>> 54fa42c718 (Make exp claim mandatory by default)
                             {ok, AuthUser#auth_user{tags = Tags,
-                                                    impl = fun() -> DecodedToken end}};
+                                                    impl = fun() -> Token1 end}};
                         {error, mismatch_username_after_token_refresh} ->
                             {refused,
                                 "Not allowed to change username on refreshed token", []}
@@ -218,17 +213,6 @@ auth_user_from_token(Token0, ResourceServer) ->
         ResourceServer#resource_server.preferred_username_claims,
         Token0),
     Tags     = tags_from(Token0),
-<<<<<<< HEAD
-=======
-    Token1   = Token0#{<<"x-rmq-scope-pattern-syntax">> =>
-<<<<<<< HEAD
-                          ResourceServer#resource_server.scope_pattern_syntax,
-                       <<"x-rmq-require-exp">> =>
-                          ResourceServer#resource_server.require_exp},
->>>>>>> 54fa42c718 (Make exp claim mandatory by default)
-=======
-                          ResourceServer#resource_server.scope_pattern_syntax},
->>>>>>> a620a8edcb (Fix issues)
     {ok, #auth_user{username = Username,
                     tags = Tags,
                     impl = fun() -> Token0 end}}.
