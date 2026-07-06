@@ -94,6 +94,7 @@ groups() ->
        sync_get_settled_classic_queue,
        sync_get_settled_quorum_queue,
        sync_get_settled_stream,
+       x_opt_index_quorum_queue,
        timed_get_classic_queue,
        timed_get_quorum_queue,
        timed_get_stream,
@@ -2774,6 +2775,31 @@ sync_get_settled(QType, Config) ->
 
 timed_get_classic_queue(Config) ->
     timed_get(<<"classic">>, Config).
+
+%% Every message carries the "x-opt-index" message annotation, the raft
+%% index the message was written at.
+x_opt_index_quorum_queue(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    {_Conn0, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config),
+    #'queue.declare_ok'{} = amqp_channel:call(
+                              Ch, #'queue.declare'{
+                                     queue = QName,
+                                     durable = true,
+                                     arguments = [{<<"x-queue-type">>, longstr, <<"quorum">>}]}),
+    OpnConf = connection_config(Config),
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    {ok, Session} = amqp10_client:begin_session_sync(Connection),
+    Address = rabbitmq_amqp_address:queue(QName),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"test-sender">>, Address),
+    ok = wait_for_credit(Sender),
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"tag1">>, <<"m1">>, true)),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session, <<"test-receiver">>, Address, unsettled),
+    {ok, Msg} = amqp10_client:get_msg(Receiver),
+    ?assertMatch(#{<<"x-opt-index">> := V} when is_integer(V),
+                 amqp10_msg:message_annotations(Msg)),
+    ok = amqp10_client:settle_msg(Receiver, Msg, accepted),
+    ok = amqp10_client:close_connection(Connection).
 
 timed_get_quorum_queue(Config) ->
     timed_get(<<"quorum">>, Config).

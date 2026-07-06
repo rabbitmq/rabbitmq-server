@@ -1431,7 +1431,8 @@ handle_aux(_, _, {get_checked_out, ConsumerKey, MsgIds}, Aux0, RaAux0) ->
                           %% crashed and the message got removed
                           case ra_aux:log_fetch(Idx, S0) of
                               {{_Term, _Meta, Cmd}, S} ->
-                                  {S, [{MsgId, {Header, get_msg_from_cmd(Cmd)}} | Acc]};
+                                  RawMsg = annotate_index(Idx, get_msg_from_cmd(Cmd)),
+                                  {S, [{MsgId, {Header, RawMsg}} | Acc]};
                               {undefined, S} ->
                                   {S, Acc}
                           end
@@ -2332,10 +2333,9 @@ get_header(Key, Header)
 annotate_msg(Header, Msg0) ->
     case mc:is(Msg0) of
         true when is_map(Header) ->
-            Msg1 = maps:fold(fun (K, V, Acc) ->
-                                     mc:set_annotation(K, V, Acc)
-                             end, Msg0, maps:get(anns, Header, #{})),
-            Msg = case Header of
+            Msg1 = maps:fold(fun mc:set_annotation/3, Msg0,
+                             maps:get(anns, Header, #{})),
+            Msg2 = case Header of
                       #{acquired_count := AcqCount} ->
                           mc:set_annotation(acquired_count, AcqCount, Msg1);
                       _ ->
@@ -2343,11 +2343,23 @@ annotate_msg(Header, Msg0) ->
                   end,
             case Header of
                 #{delivery_count := DelCount} ->
-                    mc:set_annotation(delivery_count, DelCount, Msg);
+                    mc:set_annotation(delivery_count, DelCount, Msg2);
                 _ ->
-                    Msg
+                    Msg2
             end;
         _ ->
+            Msg0
+    end.
+
+%% Stamps the raft index a message currently occupies onto the message
+%% itself. Applied server-side (never over the wire) so that clients -
+%% including ones running an older release that predates this annotation -
+%% don't need to understand any new wire format to benefit from it.
+annotate_index(Idx, Msg0) ->
+    case mc:is(Msg0) of
+        true ->
+            mc:set_annotation(<<"x-opt-index">>, Idx, Msg0);
+        false ->
             Msg0
     end.
 
@@ -2799,19 +2811,18 @@ peek_next_msg(#?STATE{returns = Returns0,
 delivery_effect(ConsumerKey, [{MsgId, ?MSG(Idx,  Header)}],
                 #?STATE{msg_cache = {Idx, RawMsg}} = State) ->
     {CTag, CPid} = consumer_id(ConsumerKey, State),
-    {send_msg, CPid, {delivery, CTag, [{MsgId, {Header, RawMsg}}]},
+    {send_msg, CPid, {delivery, CTag, [{MsgId, {Header, annotate_index(Idx, RawMsg)}}]},
      ?DELIVERY_SEND_MSG_OPTS};
 delivery_effect(ConsumerKey, [{MsgId, Msg}],
                 #?STATE{msg_cache = {Idx, RawMsg}} = State)
   when is_integer(Msg) andalso ?PACKED_IDX(Msg) == Idx ->
     Header = get_msg_header(Msg),
     {CTag, CPid} = consumer_id(ConsumerKey, State),
-    {send_msg, CPid, {delivery, CTag, [{MsgId, {Header, RawMsg}}]},
+    {send_msg, CPid, {delivery, CTag, [{MsgId, {Header, annotate_index(Idx, RawMsg)}}]},
      ?DELIVERY_SEND_MSG_OPTS};
 delivery_effect(ConsumerKey, Msgs, #?STATE{} = State) ->
     {CTag, CPid} = consumer_id(ConsumerKey, State),
     {RaftIdxs, _Num} = lists:foldr(fun ({_, Msg}, {Acc, N}) ->
-
                                            {[get_msg_idx(Msg) | Acc], N+1}
                                    end, {[], 0}, Msgs),
     {log_ext, RaftIdxs,
@@ -2838,9 +2849,10 @@ reply_log_effect(RaftIdx, MsgId, Header, Ready, From) ->
      fun ([]) ->
              [];
          ([Cmd]) ->
+             RawMsg = annotate_index(RaftIdx, get_msg_from_cmd(Cmd)),
              [{reply, From,
                {wrap_reply,
-                {dequeue, {MsgId, {Header, get_msg_from_cmd(Cmd)}}, Ready}}}]
+                {dequeue, {MsgId, {Header, RawMsg}}, Ready}}}]
      end}.
 
 checkout_one(#{system_time := Ts} = Meta, ExpiredMsg0, InitState0, Effects0) ->
@@ -3932,7 +3944,8 @@ exec_read(Flru0, ReadPlan, Msgs) ->
                                Idx = get_msg_idx(Msg),
                                Header = get_msg_header(Msg),
                                Cmd = maps:get(Idx, Entries),
-                               {MsgId, {Header, get_msg_from_cmd(Cmd)}}
+                               RawMsg = annotate_index(Idx, get_msg_from_cmd(Cmd)),
+                               {MsgId, {Header, RawMsg}}
                        end, Msgs), Flru}
     catch exit:{missing_key, _}
             when Flru0 =/= undefined ->
@@ -4210,7 +4223,8 @@ discard_or_dead_letter(Msgs0, Reason, {at_most_once, {Mod, Fun, Args}}, State) -
                                   Cmd = maps:get(Idx, Lookup),
                                   %% ensure header delivery count
                                   %% is copied to the message container
-                                  annotate_msg(Hdr, rabbit_fifo:get_msg_from_cmd(Cmd))
+                                  annotate_index(Idx,
+                                                 annotate_msg(Hdr, rabbit_fifo:get_msg_from_cmd(Cmd)))
                               end || Msg <- Msgs0],
                       [{mod_call, Mod, Fun, Args ++ [Reason, Msgs]}]
               end},
@@ -4275,14 +4289,15 @@ dlx_delivery_effects(_CPid, []) ->
     [];
 dlx_delivery_effects(CPid, Msgs0) ->
     Msgs1 = lists:reverse(Msgs0),
-    {RaftIdxs, RsnIds} = lists:unzip(Msgs1),
+    {RaftIdxs, _RsnIds} = lists:unzip(Msgs1),
     [{log, RaftIdxs,
       fun(Log) ->
               Msgs = lists:zipwith(
-                       fun (Cmd, {Reason, H, MsgId}) ->
+                       fun (Cmd, {Idx, {Reason, H, MsgId}}) ->
                                {MsgId, {Reason,
-                                        annotate_msg(H, rabbit_fifo:get_msg_from_cmd(Cmd))}}
-                       end, Log, RsnIds),
+                                        annotate_index(Idx,
+                                                       annotate_msg(H, rabbit_fifo:get_msg_from_cmd(Cmd)))}}
+                       end, Log, Msgs1),
               [{send_msg, CPid, {dlx_event, self(), {dlx_delivery, Msgs}}, [cast]}]
       end}].
 
