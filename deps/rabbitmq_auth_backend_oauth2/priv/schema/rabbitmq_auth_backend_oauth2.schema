@@ -104,12 +104,20 @@
  [{datatype, boolean}]}.
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 %% Require the exp (expiration time) claim in JWT tokens. When set to true
 %% (the default), tokens without an exp claim are rejected. RFC 7519 treats
 %% exp as optional, but omitting it is a security risk: stolen or leaked tokens
 %% would remain valid indefinitely. Set to false only when your identity
 %% provider issues tokens without an exp claim and you cannot change that behaviour.
+=======
+%% Require the exp (expiration time) claim in JWT tokens. When true (the
+%% default), a token without an exp claim is rejected. RFC 7519 makes exp
+%% optional, but a token without it never expires, so a stolen or leaked token
+%% stays valid forever. Set to false only when your identity provider cannot
+%% issue tokens with an exp claim.
+>>>>>>> a078943f33 ( Cosmetics [ci skip])
 %%
 %% {require_exp, true},
 
