@@ -1676,17 +1676,25 @@ transfer_leadership_of_local_stream_leaders(TransferCandidates) ->
 transfer_leadership_of_stream(Q, TransferCandidates) ->
     %% A stream can only elect a new leader on a node that already hosts a replica.
     Replicas = get_nodes(Q),
-    Options = case [N || N <- TransferCandidates, lists:member(N, Replicas)] of
-                  [] -> #{};
-                  [Preferred | _] -> #{preferred_leader_node => Preferred}
-              end,
     QNameStr = rabbit_misc:rs(amqqueue:get_name(Q)),
-    case rabbit_stream_coordinator:restart_stream(Q, Options) of
-        {ok, NewLeader} ->
-            ?LOG_DEBUG("Stream ~ts new leader is on node ~tp", [QNameStr, NewLeader]);
-        Error ->
-            ?LOG_WARNING("Failed to transfer leadership of stream ~ts: ~tp",
-                         [QNameStr, Error])
+    case [N || N <- TransferCandidates, lists:member(N, Replicas)] of
+        [] ->
+            %% No online, non-maintenance replica for this stream: restarting
+            %% now would risk re-electing the leader onto the draining node (or
+            %% another node under maintenance). Skip and let shutdown-time
+            %% re-election handle it.
+            ?LOG_INFO("Skipping leadership transfer of stream ~ts: no online, "
+                      "non-maintenance replica available", [QNameStr]);
+        [Preferred | _] ->
+            Options = #{preferred_leader_node => Preferred},
+            case rabbit_stream_coordinator:restart_stream(Q, Options) of
+                {ok, NewLeader} ->
+                    ?LOG_DEBUG("Stream ~ts new leader is on node ~tp",
+                               [QNameStr, NewLeader]);
+                Error ->
+                    ?LOG_WARNING("Failed to transfer leadership of stream ~ts: ~tp",
+                                 [QNameStr, Error])
+            end
     end,
     ok.
 
