@@ -882,9 +882,9 @@ delete(Q, _IfUnused, _IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
                     Err
             end;
         {error, {shutdown, delete}} ->
-            ?LOG_INFO(
-              "Quorum queue '~ts' Ra cluster was already shutting down"
-              " due to a concurrent delete, proceeding with cleanup.",
+            ?LOG_WARNING(
+              "While deleting ~ts, the ra cluster was already shutting "
+              "down due to a concurrent delete. Proceeding with cleanup.",
               [rabbit_misc:rs(QName)]),
             notify_decorators(QName, shutdown),
             case delete_queue_data(Q, ActingUser) of
