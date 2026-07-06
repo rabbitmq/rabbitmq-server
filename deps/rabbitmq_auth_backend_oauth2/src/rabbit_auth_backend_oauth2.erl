@@ -147,7 +147,9 @@ update_state(AuthUser, NewToken) ->
                         ok ->
                             Tags = tags_from(DecodedToken),
                             Token1 = DecodedToken#{<<"x-rmq-scope-pattern-syntax">> =>
-                                                   ResourceServer#resource_server.scope_pattern_syntax},
+                                                   ResourceServer#resource_server.scope_pattern_syntax,
+                                                   <<"x-rmq-require-exp">> =>
+                                                   ResourceServer#resource_server.require_exp},
                             {ok, AuthUser#auth_user{tags = Tags,
                                                     impl = fun() -> Token1 end}};
                         {error, mismatch_username_after_token_refresh} ->
@@ -186,7 +188,9 @@ authenticate(_, AuthProps0) ->
                 {refused, Err} ->
                     {refused, "Authentication using an OAuth 2/JWT token failed: ~tp", [Err]};
                 {ok, DecodedToken} ->
-                    case with_decoded_token(DecodedToken, fun(In) -> auth_user_from_token(In, ResourceServer) end) of
+                    DecodedToken1 = DecodedToken#{<<"x-rmq-require-exp">> =>
+                        ResourceServer#resource_server.require_exp},
+                    case with_decoded_token(DecodedToken1, fun(In) -> auth_user_from_token(In, ResourceServer) end) of
                         {error, Err} ->
                             {refused, "Authentication using an OAuth 2/JWT token failed: ~tp", [Err]};
                         Else ->
@@ -234,7 +238,6 @@ ensure_same_username(PreferredUsernameClaims, CurrentDecodedToken, NewDecodedTok
         {CurUsername, CurUsername} -> ok;
         _ -> {error, mismatch_username_after_token_refresh}
     end.
-
 validate_token_expiry(#{<<"exp">> := Exp}) when is_number(Exp) ->
     Now = os:system_time(seconds),
     ExpTs = trunc(Exp),
@@ -244,7 +247,11 @@ validate_token_expiry(#{<<"exp">> := Exp}) when is_number(Exp) ->
     end;
 validate_token_expiry(#{<<"exp">> := _}) ->
     {error, "Provided JWT token has an invalid exp claim: value is not a number"};
-validate_token_expiry(#{}) -> ok.
+validate_token_expiry(Token) ->
+    case maps:get(<<"x-rmq-require-exp">>, Token, true) of
+        true  -> {error, "Provided JWT token has no exp claim"};
+        false -> ok
+    end.
 
 -spec check_token(raw_jwt_token(), {resource_server(), internal_oauth_provider()}) ->
           {'ok', decoded_jwt_token()} |
@@ -264,7 +271,6 @@ check_token(Token, {ResourceServer, InternalOAuthProvider}) ->
             end;
         {false, _} -> {refused, signature_invalid}
     end.
-
 extract_scopes_from_scope_claim(Payload) -> 
     case maps:find(?SCOPE_JWT_FIELD, Payload) of
         {ok, Bin} when is_binary(Bin) -> 
