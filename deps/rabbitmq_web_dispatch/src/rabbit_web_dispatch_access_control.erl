@@ -156,7 +156,9 @@ is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun, AuthConfig, R
                             case Fun(User) of
                                 true ->
                                     rabbit_core_metrics:auth_attempt_succeeded(IP, ResolvedUsername, http),
-                                    {true, ReqData,
+                                    ReqData1 = rabbit_cowboy_stream_h:set_authenticated_username(
+                                        ResolvedUsername, ReqData),
+                                    {true, ReqData1,
                                      Context#context{user     = User,
                                                      password = Password}};
                                 not_found ->
