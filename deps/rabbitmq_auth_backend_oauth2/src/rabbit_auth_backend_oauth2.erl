@@ -244,7 +244,8 @@ validate_token_expiry(#{<<"exp">> := Exp}) when is_number(Exp) ->
     end;
 validate_token_expiry(#{<<"exp">> := _}) ->
     {error, "Provided JWT token has an invalid exp claim: value is not a number"};
-validate_token_expiry(#{}) -> ok.
+validate_token_expiry(#{}) ->
+    {error, "Provided JWT token has no exp claim"}.
 
 -spec check_token(raw_jwt_token(), {resource_server(), internal_oauth_provider()}) ->
           {'ok', decoded_jwt_token()} |
