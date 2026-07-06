@@ -37,7 +37,7 @@ data(StreamId, IsFin, Data, State = #state{next = Next}) ->
 info(StreamId, Response, State = #state{next = Next, req = Req}) ->
     Response1 = case Response of
         {response, 404, Headers0, <<>>} ->
-            log_response({response, 404, Headers0, <<>>}, Req),
+            log_response(Response, Req),
             H1 = unset_authenticated_username(Headers0),
             Json = rabbit_json:encode(#{
                 error  => list_to_binary(httpd_util:reason_phrase(404)),
@@ -46,11 +46,11 @@ info(StreamId, Response, State = #state{next = Next, req = Req}) ->
             H3 = maps:put(<<"content-type">>, <<"application/json">>, H2),
             {response, 404, H3, Json};
         {response, Status, Headers0, Body} ->
-            log_response({response, Status, Headers0, Body}, Req),
+            log_response(Response, Req),
             H1 = unset_authenticated_username(Headers0),
             {response, Status, H1, Body};
         {headers, Status, Headers0} ->
-            log_stream_response({headers, Status, Headers0}, Req),
+            log_stream_response(Response, Req),
             H1 = unset_authenticated_username(Headers0),
             {headers, Status, H1};
         _ ->
