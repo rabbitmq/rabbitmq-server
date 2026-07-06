@@ -1339,7 +1339,7 @@ test_missing_not_required_exp_claim(_) ->
 
     unset_env(require_exp).
 
-%% Same scenarios as test_missing_required_exp_claim /
+%% Same scenarios as test_missing_required_exp_claim and
 %% test_missing_not_required_exp_claim, but require_exp is configured via the
 %% resource_servers map (indexed by resource server name) rather than through
 %% the top-level require_exp application environment variable.
@@ -1353,7 +1353,7 @@ test_missing_required_exp_claim_per_resource_server(_) ->
     unset_env(resource_server_id),
     set_env(resource_servers, #{<<"rabbitmq">> => [{id, <<"rabbitmq">>}]}),
 
-    %% require_exp defaults to true — a token without exp must be refused.
+    %% require_exp defaults to true, so a token without exp must be refused.
     TokenData = maps:remove(<<"exp">>,
         ?UTIL_MOD:token_with_sub(?UTIL_MOD:expirable_token(), Username)),
     Token = ?UTIL_MOD:sign_token_hs(TokenData, Jwk),
