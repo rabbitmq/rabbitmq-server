@@ -23,7 +23,9 @@ groups() ->
                                    pack_binding_test,
                                    default_restrictions,
                                    path_prefix_test,
-                                   regex_dos_test
+                                   regex_dos_test,
+                                   referrer_policy_header_set_when_configured,
+                                   referrer_policy_header_absent_when_not_configured
                                   ]}
     ].
 
@@ -112,6 +114,18 @@ regex_dos_test(_) ->
     ?assertEqual(false, rabbit_mgmt_util:maybe_filter_by_keyword(
         name, EvilRegex, [{name, TargetString}], "true")).
 
+referrer_policy_header_set_when_configured(_Config) ->
+    application:set_env(rabbitmq_management, headers,
+                        [{referrer_policy, "no-referrer"}]),
+    Req = rabbit_mgmt_headers:set_common_permission_headers(fake_req(), ?MODULE),
+    RespHeaders = maps:get(resp_headers, Req),
+    ?assertEqual(<<"no-referrer">>, maps:get(<<"referrer-policy">>, RespHeaders)).
+
+referrer_policy_header_absent_when_not_configured(_Config) ->
+    Req = rabbit_mgmt_headers:set_common_permission_headers(fake_req(), ?MODULE),
+    RespHeaders = maps:get(resp_headers, Req),
+    ?assertNot(maps:is_key(<<"referrer-policy">>, RespHeaders)).
+
 %%--------------------------------------------------------------------
 
 assert_binding(Packed, Routing, Args) ->
@@ -121,3 +135,12 @@ assert_binding(Packed, Routing, Args) ->
         Act ->
             throw({pack, Routing, Args, expected, Packed, got, Act})
     end.
+
+fake_req() ->
+    #{
+        resp_headers => #{},
+        headers      => #{},
+        method       => <<"GET">>,
+        scheme       => <<"http">>,
+        port         => 15672
+    }.
