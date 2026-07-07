@@ -307,20 +307,6 @@ module.exports = {
       default: new Error("Unsupported ipd " + preferredIdp)
     }
   },
-  getOAuthBootstrap: (url = baseUrl) => {
-    const target = url.replace(/\/+$/, '') + '/js/oidc-oauth/bootstrap.js'
-    const req = new XMLHttpRequest()
-    try {
-      req.open('GET', target, false)
-      req.send()
-    } catch (e) {
-      module.exports.error("GET " + target + " failed: " + e.message)
-      throw e
-    }
-    if (req.status == 200) return req.responseText
-    module.exports.error("GET " + target + " returned " + req.status)
-    throw new Error("getOAuthBootstrap failed with status " + req.status)
-  },
   openIdConfiguration: (url) => {
     const target = url + "/.well-known/openid-configuration"
     const req = new XMLHttpRequest()
