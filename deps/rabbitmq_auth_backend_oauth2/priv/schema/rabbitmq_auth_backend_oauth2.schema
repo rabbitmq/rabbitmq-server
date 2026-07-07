@@ -103,6 +103,19 @@
  "rabbitmq_auth_backend_oauth2.verify_aud",
  [{datatype, boolean}]}.
 
+%% Require the exp (expiration time) claim in JWT tokens. When true (the
+%% default), a token without an exp claim is rejected. RFC 7519 makes exp
+%% optional, but a token without it never expires, so a stolen or leaked token
+%% stays valid forever. Set to false only when your identity provider cannot
+%% issue tokens with an exp claim.
+%%
+%% {require_exp, true},
+
+{mapping,
+ "auth_oauth2.require_exp",
+ "rabbitmq_auth_backend_oauth2.require_exp",
+ [{datatype, boolean}]}.
+
 %% Configure the preferred username's JWT claim(s). These are the JWT claims or attributes
 %% used to determine the user's identity, a.k.a username.
 %% RabbitMQ appends `sub` and `client_id` claims.
@@ -402,6 +415,16 @@
  "auth_oauth2.resource_servers.$name.scope_aliases.$index.scope",
  "rabbitmq_auth_backend_oauth2.resource_servers",
  [{datatype, string}]}.
+
+{mapping,
+ "auth_oauth2.resource_servers.$name.verify_aud",
+ "rabbitmq_auth_backend_oauth2.verify_aud",
+ [{datatype, boolean}]}.
+
+{mapping,
+ "auth_oauth2.resource_servers.$name.require_exp",
+ "rabbitmq_auth_backend_oauth2.require_exp",
+ [{datatype, boolean}]}.
 
 {mapping,
   "auth_oauth2.resource_servers.$name.oauth_provider_id",
