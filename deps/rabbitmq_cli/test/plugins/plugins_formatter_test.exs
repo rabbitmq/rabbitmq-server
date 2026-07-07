@@ -65,6 +65,59 @@ defmodule PluginsFormatterTest do
            ]
   end
 
+  test "format_output with node_down status renders legend without plugin table" do
+    result =
+      @formatter.format_output(
+        %{
+          status: :node_down,
+          format: :normal,
+          plugins: []
+        },
+        %{node: "rabbit@remotehost"}
+      )
+
+    assert result == [
+             " Configured: E = explicitly enabled; e = implicitly enabled",
+             " | Status: [failed to contact rabbit@remotehost - status not shown]",
+             " |/"
+           ]
+  end
+
+  test "format_output with offline status renders legend and full plugin table" do
+    result =
+      @formatter.format_output(
+        %{
+          status: :offline,
+          format: :normal,
+          plugins: [
+            %{
+              name: :rabbitmq_federation,
+              enabled: :enabled,
+              running: false,
+              version: ~c"4.0.0",
+              running_version: nil
+            },
+            %{
+              name: :rabbitmq_stomp,
+              enabled: :enabled,
+              running: false,
+              version: ~c"4.0.0",
+              running_version: nil
+            }
+          ]
+        },
+        %{node: "rabbit@localhost"}
+      )
+
+    assert result == [
+             " Configured: E = explicitly enabled; e = implicitly enabled",
+             " | Status: rabbit@localhost is stopped; * (running) status is not available",
+             " |/",
+             "[E ] rabbitmq_federation 4.0.0",
+             "[E ] rabbitmq_stomp      4.0.0"
+           ]
+  end
+
   test "format_output pending upgrade version message" do
     result =
       @formatter.format_output(
