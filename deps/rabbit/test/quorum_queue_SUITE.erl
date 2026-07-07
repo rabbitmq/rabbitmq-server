@@ -86,6 +86,8 @@ groups() ->
                                             delete_declare,
                                             delete_member_during_node_down,
                                             delete_while_publishing,
+                                            delete_ra_cluster_already_shutting_down,
+                                            concurrent_vhost_delete_with_quorum_queue,
                                             metrics_cleanup_on_leadership_takeover,
                                             metrics_cleanup_on_leader_crash,
                                             consume_in_minority,
@@ -3412,6 +3414,75 @@ delete_while_publishing(Config) ->
      || N <- lists:seq(1, 50_000)],
     delete_queues(DeleterChan, [QQ]),
     ?assert(amqp_channel:wait_for_confirms_or_die(PublisherChan, ?TIMEOUT)).
+
+delete_ra_cluster_already_shutting_down(Config) ->
+    [Server | _] = Servers0 = rabbit_ct_broker_helpers:get_node_configs(Config,
+                                                                        nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    RaName = ra_name(QQ),
+    publish(Ch, QQ),
+    publish(Ch, QQ),
+    publish(Ch, QQ),
+    wait_for_messages_ready(Servers0, RaName, 3),
+
+    QName = rabbit_misc:r(<<"/">>, queue, QQ),
+    {ok, Q} = rpc:call(Server, rabbit_amqqueue, lookup, [QName]),
+
+    %% Mock ra:delete_cluster/2 to return {error, {shutdown, delete}} simulating
+    %% a cluster that is already shutting down
+    ok = rpc:call(Server, meck, new, [ra, [passthrough, no_link]]),
+    ok = rpc:call(Server, meck, expect,
+                  [ra, delete_cluster, 2,
+                   {error, {shutdown, delete}}]),
+
+    Result = rpc:call(Server, rabbit_quorum_queue, delete,
+                      [Q, false, false, <<"test-user">>]),
+    ?assertMatch({ok, _}, Result),
+
+    ok = rpc:call(Server, meck, unload, [ra]),
+
+    %% Verify the queue metadata was cleaned up
+    ?assertEqual({error, not_found},
+                 rpc:call(Server, rabbit_amqqueue, lookup, [QName])).
+
+concurrent_vhost_delete_with_quorum_queue(Config) ->
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    VHost = <<"concurrent_delete_vhost">>,
+    User = ?config(rmq_username, Config),
+    ok = rabbit_ct_broker_helpers:add_vhost(Config, Server, VHost, User),
+    ok = rabbit_ct_broker_helpers:set_full_permissions(Config, User, VHost),
+
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, Server, VHost),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    [declare(Ch, <<"qq_", (integer_to_binary(N))/binary>>,
+             [{<<"x-queue-type">>, longstr, <<"quorum">>}])
+     || N <- lists:seq(1, 5)],
+    amqp_connection:close(Conn),
+
+    Self = self(),
+    Deleter = fun() ->
+        Res = rpc:call(Server, rabbit_vhost, delete, [VHost, User]),
+        Self ! {delete_result, self(), Res}
+    end,
+    Pid1 = spawn_link(Deleter),
+    Pid2 = spawn_link(Deleter),
+
+    Results = [receive {delete_result, P, R} -> R
+               after ?TIMEOUT -> ct:fail(timeout)
+               end || P <- [Pid1, Pid2]],
+
+    ?assert(lists:member(ok, Results)),
+    [case R of
+         ok -> ok;
+         {error, {no_such_vhost, _}} -> ok;
+         Other -> ct:fail({unexpected_result, Other})
+     end || R <- Results],
+
+    ?assertEqual(false, rpc:call(Server, rabbit_vhost, exists, [VHost])).
 
 sync_queue(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
