@@ -461,6 +461,20 @@ fun(Conf) ->
 end}.
 
 
+%% Referrer-Policy (https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Referrer-Policy)
+
+{mapping, "management.headers.referrer_policy", "rabbitmq_management.headers.referrer_policy", [
+    {datatype, string}
+]}.
+
+{translation, "rabbitmq_management.headers.referrer_policy",
+fun(Conf) ->
+    case cuttlefish:conf_get("management.headers.referrer_policy", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
 
 {mapping, "management.disable_basic_auth", "rabbitmq_management.disable_basic_auth",
     [{datatype, boolean}]}.
