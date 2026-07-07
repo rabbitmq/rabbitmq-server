@@ -1119,6 +1119,19 @@ delete(Q, _IfUnused, _IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
                 {error, timeout} = Err ->
                     Err
             end;
+        {error, {shutdown, delete}} ->
+            ?LOG_WARNING(
+              "While deleting ~ts, the ra cluster was already shutting "
+              "down due to a concurrent delete. Proceeding with cleanup.",
+              [rabbit_misc:rs(QName)]),
+            notify_decorators(QName, shutdown),
+            case delete_queue_data(Q, ActingUser) of
+                ok ->
+                    rabbit_core_metrics:queue_deleted(QName),
+                    {ok, ReadyMsgs};
+                {error, timeout} = Err ->
+                    Err
+            end;
         {error, {no_more_servers_to_try, Errs}} ->
             case lists:all(fun({{error, noproc}, _}) -> true;
                               (_) -> false
