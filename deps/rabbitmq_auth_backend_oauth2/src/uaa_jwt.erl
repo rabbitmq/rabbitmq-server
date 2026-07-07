@@ -10,7 +10,8 @@
          decode_and_verify/3,
          get_jwk/2,
          verify_signing_key/2,
-         resolve_resource_server/1]).
+         resolve_resource_server/1,
+         parse_jwks_response/2]).
 
 -export([client_id/1, sub/1, client_id/2, sub/2, get_scope/1, set_scope/2]).
 
@@ -48,20 +49,45 @@ update_jwks_signing_keys(#oauth_provider{id = Id, jwks_uri = JwksUrl,
     ?LOG_DEBUG("Downloading signing keys from ~tp (TLS options: ~p)",
         [JwksUrl, format_ssl_options(SslOptions)]),
     case uaa_jwks:get(JwksUrl, SslOptions) of
-        {ok, {_, _, JwksBody}} ->
-            KeyList = maps:get(<<"keys">>,
-                jose:decode(erlang:iolist_to_binary(JwksBody)), []),
-            Keys = maps:from_list(lists:map(fun(Key) ->
-                {maps:get(<<"kid">>, Key, undefined), {json, Key}} end, KeyList)),
-            ?LOG_DEBUG("Downloaded ~p signing keys", [maps:size(Keys)]),
-            case replace_signing_keys(Keys, Id) of
-              {error, _} = Err -> Err;
-              _ -> ok
+        {ok, {StatusLine, _Headers, JwksBody}} ->
+            case parse_jwks_response(StatusLine, JwksBody) of
+                {ok, Keys} ->
+                    ?LOG_DEBUG("Downloaded ~p signing keys", [maps:size(Keys)]),
+                    case replace_signing_keys(Keys, Id) of
+                        {error, _} = Err -> Err;
+                        _ -> ok
+                    end;
+                {error, _} = Err ->
+                    ?LOG_ERROR("Failed to download signing keys from ~tp: ~tp",
+                        [JwksUrl, Err]),
+                    Err
             end;
         {error, _} = Err ->
             ?LOG_ERROR("Failed to download signing keys: ~tp", [Err]),
             Err
     end.
+
+%% Only a 200 response with a non-empty, well-formed key list is passed on to
+%% replace_signing_keys/2; anything else is reported as an error instead. A
+%% malformed body must not throw either, since the refresh caller does not
+%% catch it and would otherwise drop the connection.
+-spec parse_jwks_response({term(), integer(), term()}, iodata()) ->
+    {ok, map()} | {error, term()}.
+parse_jwks_response({_, 200, _}, JwksBody) ->
+    try
+        KeyList = maps:get(<<"keys">>,
+            jose:decode(erlang:iolist_to_binary(JwksBody)), []),
+        Keys = maps:from_list(lists:map(fun(Key) ->
+            {maps:get(<<"kid">>, Key, undefined), {json, Key}} end, KeyList)),
+        case maps:size(Keys) of
+            0 -> {error, empty_jwks_response};
+            _ -> {ok, Keys}
+        end
+    catch
+        error:_ -> {error, invalid_jwks_response}
+    end;
+parse_jwks_response({_, StatusCode, _}, _JwksBody) ->
+    {error, {unexpected_status_code, StatusCode}}.
 
 -spec decode_and_verify(binary(), resource_server(), internal_oauth_provider())
         -> {boolean(), map()} | {error, term()}.
