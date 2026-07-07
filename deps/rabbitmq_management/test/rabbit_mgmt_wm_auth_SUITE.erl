@@ -66,7 +66,8 @@ groups() ->
                 should_not_return_oauth_client_secret,
                 {with_mgt_oauth_client_secret_q, [], [
                   should_return_oauth_enabled,
-                  should_return_oauth_client_secret_q
+                  should_not_return_oauth_client_secret,
+                  should_use_token_endpoint_proxy_for_rabbit
                 ]}
               ]}
             ]},
@@ -79,7 +80,8 @@ groups() ->
                   should_return_oauth_resource_server_a_with_client_id_x
                 ]},
                 {with_mgt_resource_server_a_with_client_secret_w, [], [
-                  should_return_oauth_resource_server_a_with_client_secret_w
+                  should_not_return_oauth_resource_server_a_with_client_secret,
+                  should_use_token_endpoint_proxy_for_a
                 ]}
               ]}
             ]}
@@ -640,15 +642,13 @@ end_per_group(_, Config) ->
 should_not_return_oauth_client_secret(_Config) ->
   Actual = authSettings(),
   ?assertEqual(false, proplists:is_defined(oauth_client_secret, Actual)).
-should_return_oauth_client_secret_q(Config) ->
-  Actual = authSettings(),
-  ?assertEqual(?config(q, Config), proplists:get_value(oauth_client_secret, Actual)).
+should_use_token_endpoint_proxy_for_rabbit(Config) ->
+  assert_uses_token_endpoint_proxy(authSettings(), Config, rabbit).
+should_use_token_endpoint_proxy_for_a(Config) ->
+  assert_uses_token_endpoint_proxy(authSettings(), Config, a).
 should_return_oauth_resource_server_a_with_client_id_x(Config) ->
   assertEqual_on_attribute_for_oauth_resource_server(authSettings(),
     Config, a, oauth_client_id, x).
-should_return_oauth_resource_server_a_with_client_secret_w(Config) ->
-  assertEqual_on_attribute_for_oauth_resource_server(authSettings(),
-    Config, a, oauth_client_secret, w).
 should_not_return_oauth_resource_server_a_with_client_secret(Config) ->
   assert_attribute_not_defined_for_oauth_resource_server(authSettings(),
     Config, a, oauth_client_secret).
@@ -881,6 +881,13 @@ assert_attribute_not_defined_for_oauth_resource_server(Actual, Config, ConfigKey
   OAuthResourceServers =  proplists:get_value(oauth_resource_servers, Actual),
   OauthResource = maps:get(?config(ConfigKey, Config), OAuthResourceServers),
   ?assertEqual(false, proplists:is_defined(Attribute, OauthResource)).
+
+assert_uses_token_endpoint_proxy(Actual, Config, ConfigKey) ->
+  log(Actual),
+  OAuthResourceServers = proplists:get_value(oauth_resource_servers, Actual),
+  OauthResource = maps:get(?config(ConfigKey, Config), OAuthResourceServers),
+  ?assertEqual(true, proplists:get_value(use_token_endpoint_proxy, OauthResource)),
+  ?assertEqual(false, proplists:is_defined(oauth_client_secret, OauthResource)).
 
 assert_not_defined_oauth_resource_server(Actual, Config, ConfigKey) ->
   log(Actual),

@@ -7,7 +7,9 @@
 
 -module(rabbit_mgmt_wm_auth).
 
--export([authSettings/0]). %% for testing only
+%% authSettings/0 is also used by rabbit_mgmt_oauth_token_proxy to resolve the
+%% same provider the browser was served.
+-export([authSettings/0]).
 
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("oauth2_client/include/oauth2_client.hrl").
@@ -167,10 +169,17 @@ produce_auth_settings(MgtResourceServers, ManagementProps) ->
             {K1, ensure_oauth_resource_server_properties_are_binaries(K1, V1)}
             || {K1,V1} <- maps:to_list(V)
         ] end,
-    FilteredMgtResourceServers =
+    FilteredMgtResourceServers0 =
         filter_mgt_resource_servers_without_oauth_provider_url(
             filter_out_invalid_mgt_resource_servers(MgtResourceServers,
                 ManagementProps)),
+    %% The OAuth 2 client secret must never reach the browser. Resource servers
+    %% that need one are served through a server-side token endpoint proxy
+    %% instead; see rabbit_mgmt_oauth_token_proxy.
+    FilteredMgtResourceServers =
+        maps:map(fun(_K, V) ->
+            adjust_client_secret(V, ManagementProps)
+        end, FilteredMgtResourceServers0),
 
     case maps:size(FilteredMgtResourceServers) of
         0 ->
@@ -183,7 +192,6 @@ produce_auth_settings(MgtResourceServers, ManagementProps) ->
                 to_tuple(oauth_disable_basic_auth, ManagementProps,
                     fun to_binary/1, true),
                 to_tuple(oauth_client_id, ManagementProps),
-                to_tuple(oauth_client_secret, ManagementProps),
                 to_tuple(oauth_scopes, ManagementProps),
                 case proplists:get_value(oauth_initiated_logon_type,
                     ManagementProps, sp_initiated) of
@@ -198,6 +206,28 @@ produce_auth_settings(MgtResourceServers, ManagementProps) ->
                     undefined, undefined)
             ])
   end.
+
+adjust_client_secret(ResourceServer, ManagementProps) ->
+    Stripped = maps:remove(oauth_client_secret, ResourceServer),
+    case requires_client_secret(ResourceServer, ManagementProps) of
+        true -> maps:put(use_token_endpoint_proxy, true, Stripped);
+        false -> Stripped
+    end.
+
+%% Mirrors how helper.js resolves the effective secret: a resource server's own
+%% secret, or the top-level secret when the resource server has a client id.
+requires_client_secret(ResourceServer, ManagementProps) ->
+    HasOwnSecret =
+        is_valid_value(maps:get(oauth_client_secret, ResourceServer, undefined)),
+    HasTopSecret =
+        is_valid_value(proplists:get_value(oauth_client_secret, ManagementProps)),
+    HasClientId =
+        is_valid_value(maps:get(oauth_client_id, ResourceServer, undefined)) orelse
+        is_valid_value(proplists:get_value(oauth_client_id, ManagementProps)),
+    HasOwnSecret orelse (HasTopSecret andalso HasClientId).
+
+is_valid_value(Value) ->
+    not is_invalid([Value]).
 
 filter_empty_properties(ListOfProperties) ->
     lists:filter(fun(Prop) ->
