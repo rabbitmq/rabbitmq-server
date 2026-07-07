@@ -15,11 +15,14 @@
 -export([info/3]).
 -export([terminate/3]).
 -export([early_error/5]).
+-export([set_authenticated_username/2]).
 
 -record(state, {
     next :: any(),
     req :: cowboy_req:req()
 }).
+
+-define(AUTH_USER_HEADER, <<"x-rabbitmq-authenticated-user">>).
 
 init(StreamId, Req, Opts) ->
     {Commands, Next} = cowboy_stream:init(StreamId, Req, Opts),
@@ -33,18 +36,21 @@ info(StreamId, Response, State = #state{next = Next, req = Req}) ->
     Response1 = case Response of
         {response, 404, Headers0, <<>>} ->
             log_response(Response, Req),
+            H1 = unset_authenticated_username(Headers0),
             Json = rabbit_json:encode(#{
                 error  => list_to_binary(httpd_util:reason_phrase(404)),
                 reason => <<"Not Found">>}),
-            Headers1 = maps:put(<<"content-length">>, integer_to_list(iolist_size(Json)), Headers0),
-            Headers = maps:put(<<"content-type">>, <<"application/json">>, Headers1),
-            {response, 404, Headers, Json};
-        {response, _, _, _} ->
+            H2 = maps:put(<<"content-length">>, integer_to_list(iolist_size(Json)), H1),
+            H3 = maps:put(<<"content-type">>, <<"application/json">>, H2),
+            {response, 404, H3, Json};
+        {response, Status, Headers0, Body} ->
             log_response(Response, Req),
-            Response;
-        {headers, _, _} ->
+            H1 = unset_authenticated_username(Headers0),
+            {response, Status, H1, Body};
+        {headers, Status, Headers0} ->
             log_stream_response(Response, Req),
-            Response;
+            H1 = unset_authenticated_username(Headers0),
+            {headers, Status, H1};
         _ ->
             Response
     end,
@@ -57,16 +63,28 @@ terminate(StreamId, Reason, #state{next = Next}) ->
 early_error(StreamId, Reason, PartialReq, Resp, Opts) ->
     cowboy_stream:early_error(StreamId, Reason, PartialReq, Resp, Opts).
 
-log_response({response, Status, _Headers, Body}, Req) ->
-    logger:log(info, #{formatted => format_access_log(Status, Body, Req)},
+set_authenticated_username(Username, Req) ->
+    cowboy_req:set_resp_header(?AUTH_USER_HEADER,
+                               rabbit_data_coercion:to_binary(Username), Req).
+
+unset_authenticated_username(Headers) ->
+    maps:remove(?AUTH_USER_HEADER, Headers).
+
+get_authenticated_username(Headers) ->
+    maps:get(?AUTH_USER_HEADER, Headers, <<"-">>).
+
+log_response({response, Status, Headers, Body}, Req) ->
+    Username = get_authenticated_username(Headers),
+    logger:log(info, #{formatted => format_access_log(Status, Body, Username, Req)},
                #{domain => ?RMQLOG_DOMAIN_HTTP_ACCESS}).
 
-log_stream_response({headers, Status, _Headers}, Req) ->
-    logger:log(info, #{formatted => format_access_log(Status, <<>>, Req)},
+log_stream_response({headers, Status, Headers}, Req) ->
+    Username = get_authenticated_username(Headers),
+    logger:log(info, #{formatted => format_access_log(Status, <<>>, Username, Req)},
                #{domain => ?RMQLOG_DOMAIN_HTTP_ACCESS}).
 
-format_access_log(Status, Body, Req) ->
-    User = sanitize(user_from_req(Req)),
+format_access_log(Status, Body, Username, Req) ->
+    User = sanitize(Username),
     Time = format_time(),
     StatusStr = integer_to_list(Status),
     Length = integer_to_list(body_length(Body)),
@@ -85,19 +103,6 @@ format_access_log(Status, Body, Req) ->
 
 body_length({sendfile, _, Length, _}) -> Length;
 body_length(Body) -> iolist_size(Body).
-
-user_from_req(Req) ->
-    try cowboy_req:parse_header(<<"authorization">>, Req) of
-        {basic, Username, _} ->
-            Username;
-        {bearer, _} ->
-            rabbit_data_coercion:to_binary(
-              application:get_env(rabbitmq_management, oauth_client_id, ""));
-        _ ->
-            "-"
-    catch _:_ ->
-        "-"
-    end.
 
 fmt_ip(IP) when is_tuple(IP) ->
     inet_parse:ntoa(IP).
