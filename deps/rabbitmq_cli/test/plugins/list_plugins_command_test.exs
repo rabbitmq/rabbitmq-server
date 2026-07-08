@@ -455,7 +455,7 @@ defmodule ListPluginsCommandTest do
     opts =
       context[:opts]
       |> Map.put_new(:silent, true)
-      |> Map.put_new(:hard_write, true)
+      |> Map.put_new(:keep_missing_plugins, true)
 
     context = Map.replace(context, :opts, opts)
 
@@ -474,7 +474,7 @@ defmodule ListPluginsCommandTest do
       opts =
         context[:opts]
         |> Map.delete(:silent)
-        |> Map.delete(:hard_write)
+        |> Map.delete(:keep_missing_plugins)
 
       context = Map.replace(context, :opts, opts)
 
@@ -516,7 +516,7 @@ defmodule ListPluginsCommandTest do
     opts =
       context[:opts]
       |> Map.put_new(:quiet, true)
-      |> Map.put_new(:hard_write, true)
+      |> Map.put_new(:keep_missing_plugins, true)
 
     context = Map.replace(context, :opts, opts)
 
@@ -535,7 +535,7 @@ defmodule ListPluginsCommandTest do
       opts =
         context[:opts]
         |> Map.delete(:quiet)
-        |> Map.delete(:hard_write)
+        |> Map.delete(:keep_missing_plugins)
 
       context = Map.replace(context, :opts, opts)
 

@@ -153,6 +153,22 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
     end
   end
 
+  def missing_plugins(plugins, all) do
+    all_plugin_names = Enum.map(all, &plugin_name/1)
+    MapSet.difference(MapSet.new(plugins), MapSet.new(all_plugin_names))
+  end
+
+  def warn_about_missing_plugins(missing, opts) do
+    case Enum.empty?(missing) or Config.output_less?(opts) do
+      true ->
+        :ok
+
+      false ->
+        names = Enum.join(Enum.to_list(missing), ", ")
+        IO.puts("WARNING - plugins currently enabled but missing: #{names}\n")
+    end
+  end
+
   def plugin_name(plugin) when is_binary(plugin) do
     plugin
   end
@@ -191,14 +207,19 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
   end
 
   defp write_enabled_plugins(plugins, plugins_file, opts) do
+<<<<<<< HEAD
     all = list(opts)
     all_plugin_names = Enum.map(all, &plugin_name/1)
     missing = MapSet.difference(MapSet.new(plugins), MapSet.new(all_plugin_names))
+=======
+    all = list_local(opts)
+    missing = missing_plugins(plugins, all)
+>>>>>>> b7959c503c (rabbitmq-plugins: tolerate plugins enabled but not installed)
 
-    hard_write = Map.get(opts, :hard_write, false)
+    case check_missing_plugins(missing, opts) do
+      :ok ->
+        warn_about_missing_plugins(missing, opts)
 
-    case Enum.empty?(missing) or hard_write do
-      true ->
         case :rabbit_file.write_term_file(to_charlist(plugins_file), [plugins]) do
           :ok ->
             all_enabled = :rabbit_plugins.dependencies(false, plugins, all)
@@ -208,12 +229,75 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
             {:error, {:cannot_write_enabled_plugins_file, plugins_file, reason}}
         end
 
-      false ->
-        {:error, {:plugins_not_found, Enum.to_list(missing)}}
+      {:error, _} = err ->
+        err
     end
   end
 
+<<<<<<< HEAD
   defp update_enabled_plugins(node_name, plugins_file) do
+=======
+  defp write_enabled_plugins_on_remote(node_name, plugins, opts) do
+    with {:ok, all} <- list_remote(node_name),
+         {:ok, remote_file} <- rpc_enabled_plugins_file(node_name) do
+      missing = missing_plugins(plugins, all)
+
+      case check_missing_plugins(missing, opts) do
+        :ok ->
+          warn_about_missing_plugins(missing, opts)
+
+          case :rabbit_misc.rpc_call(node_name, :rabbit_file, :write_term_file, [
+                 remote_file,
+                 [plugins]
+               ]) do
+            :ok ->
+              all_enabled = :rabbit_plugins.dependencies(false, plugins, all)
+              {:ok, Enum.sort(all_enabled)}
+
+            {:badrpc, reason} ->
+              {:error, {:badrpc, reason}}
+
+            {:error, reason} ->
+              {:error, {:cannot_write_enabled_plugins_file, remote_file, reason}}
+          end
+
+        {:error, _} = err ->
+          err
+      end
+    end
+  end
+
+  # `enable`/`disable` set `keep_missing_plugins` to tolerate an enabled but
+  # no longer installed plugin instead of failing; `set` still rejects it.
+  defp check_missing_plugins(missing, opts) do
+    if Enum.empty?(missing) or Map.get(opts, :keep_missing_plugins, false) do
+      :ok
+    else
+      {:error, {:plugins_not_found, Enum.to_list(missing)}}
+    end
+  end
+
+  # File was already written to local disk by set_enabled_plugins;
+  defp update_enabled_plugins(node_name, enabled_plugins, opts) do
+    if node_is_local?(opts) do
+      # Tell the running node to re-read it.
+      {:ok, plugins_file} = enabled_plugins_file(opts)
+      rpc_ensure(node_name, plugins_file, enabled_plugins)
+    else
+      # Tell the remote node to re-read and apply its own enabled plugins file.
+      case rpc_enabled_plugins_file(node_name) do
+        {:error, _} ->
+          # Node went down after the file write; changes will take effect at next restart.
+          {:error, :offline}
+
+        {:ok, remote_file} ->
+          rpc_ensure(node_name, remote_file, enabled_plugins)
+      end
+    end
+  end
+
+  defp rpc_ensure(node_name, plugins_file, enabled_plugins) do
+>>>>>>> b7959c503c (rabbitmq-plugins: tolerate plugins enabled but not installed)
     case :rabbit_misc.rpc_call(node_name, :rabbit_plugins, :ensure, [to_list(plugins_file)]) do
       {:badrpc, _} -> {:error, :offline}
       {:error, :rabbit_not_running} -> {:error, :offline}

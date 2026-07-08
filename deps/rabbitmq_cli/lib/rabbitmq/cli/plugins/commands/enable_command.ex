@@ -58,8 +58,64 @@ defmodule RabbitMQ.CLI.Plugins.Commands.EnableCommand do
       end
 
     case PluginHelpers.validate_plugins(plugins, opts) do
+<<<<<<< HEAD
       :ok -> do_run(plugins, opts)
       other -> other
+=======
+      :ok ->
+        enabled = PluginHelpers.read_enabled(opts)
+        implicit = :rabbit_plugins.dependencies(false, enabled, all)
+        enabled_implicitly = MapSet.difference(MapSet.new(implicit), MapSet.new(enabled))
+
+        plugins_to_set =
+          MapSet.union(
+            MapSet.new(enabled),
+            MapSet.difference(MapSet.new(plugins), enabled_implicitly)
+          )
+
+        mode = PluginHelpers.mode(opts)
+
+        case PluginHelpers.set_enabled_plugins(
+               MapSet.to_list(plugins_to_set),
+               Map.put(opts, :keep_missing_plugins, true)
+             ) do
+          {:ok, enabled_plugins} ->
+            {:stream,
+             Stream.concat([
+               [:rabbit_plugins.strictly_plugins(enabled_plugins, all)],
+               RabbitMQ.CLI.Core.Helpers.defer(fn ->
+                 case PluginHelpers.update_enabled_plugins(
+                        enabled_plugins,
+                        mode,
+                        node_name,
+                        opts
+                      ) do
+                   %{set: new_enabled} = result ->
+                     newly_enabled = new_enabled -- implicit
+
+                     filter_strictly_plugins(
+                       Map.put(
+                         result,
+                         :enabled,
+                         :rabbit_plugins.strictly_plugins(newly_enabled, all)
+                       ),
+                       all,
+                       [:set, :started, :stopped]
+                     )
+
+                   other ->
+                     other
+                 end
+               end)
+             ])}
+
+          {:error, _} = err ->
+            err
+        end
+
+      other ->
+        other
+>>>>>>> b7959c503c (rabbitmq-plugins: tolerate plugins enabled but not installed)
     end
   end
 
