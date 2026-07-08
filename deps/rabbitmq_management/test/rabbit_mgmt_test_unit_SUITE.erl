@@ -13,7 +13,8 @@
 
 all() ->
     [
-     {group, parallel_tests}
+     {group, parallel_tests},
+     {group, sequential_tests}
     ].
 
 groups() ->
@@ -23,10 +24,12 @@ groups() ->
                                    pack_binding_test,
                                    default_restrictions,
                                    path_prefix_test,
-                                   regex_dos_test,
-                                   referrer_policy_header_set_when_configured,
-                                   referrer_policy_header_absent_when_not_configured
-                                  ]}
+                                   regex_dos_test
+                                  ]},
+     {sequential_tests, [], [
+                              referrer_policy_header_set_when_configured,
+                              referrer_policy_header_absent_when_not_configured
+                             ]}
     ].
 
 %% -------------------------------------------------------------------
