@@ -57,6 +57,7 @@ dist:
 		PREFIX= RMQ_ROOTDIR= \
 		RMQ_ERLAPP_DIR=`pwd`/$(TARGET_DIR) \
 		MANDIR=`pwd`/$(TARGET_DIR)/share/man \
+		FULL=1 \
 		manpages web-manpages install install-man
 
 	sed -e 's:^SYS_PREFIX=$$:SYS_PREFIX=\$${RABBITMQ_HOME}:' \
