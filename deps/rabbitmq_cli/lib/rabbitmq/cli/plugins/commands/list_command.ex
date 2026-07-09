@@ -7,7 +7,7 @@
 defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
   import RabbitCommon.Records
 
-  alias RabbitMQ.CLI.Core.{Config, DocGuide, Validators}
+  alias RabbitMQ.CLI.Core.{DocGuide, Validators}
   alias RabbitMQ.CLI.Plugins.Helpers, as: PluginHelpers
   import RabbitMQ.CLI.Core.{CodePath, Paths}
 
@@ -54,22 +54,8 @@ defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
     all = PluginHelpers.list(opts)
     enabled = PluginHelpers.read_enabled(opts)
 
-    missing = MapSet.difference(MapSet.new(enabled), MapSet.new(PluginHelpers.plugin_names(all)))
-
-    case Enum.empty?(missing) do
-      true ->
-        :ok
-
-      false ->
-        case Config.output_less?(opts) do
-          false ->
-            names = Enum.join(Enum.to_list(missing), ", ")
-            IO.puts("WARNING - plugins currently enabled but missing: #{names}\n")
-
-          true ->
-            :ok
-        end
-    end
+    missing = PluginHelpers.missing_plugins(enabled, all)
+    PluginHelpers.warn_about_missing_plugins(missing, opts)
 
     implicit = :rabbit_plugins.dependencies(false, enabled, all)
     enabled_implicitly = implicit -- enabled
