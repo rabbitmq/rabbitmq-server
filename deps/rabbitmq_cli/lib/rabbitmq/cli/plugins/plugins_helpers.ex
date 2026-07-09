@@ -267,7 +267,7 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
     end
   end
 
-  # `enable`/`disable` set `keep_missing_plugins` to tolerate an enabled but
+  # `enable` and `disable` commands set `keep_missing_plugins` to tolerate an enabled but
   # no longer installed plugin instead of failing; `set` still rejects it.
   defp check_missing_plugins(missing, opts) do
     if Enum.empty?(missing) or Map.get(opts, :keep_missing_plugins, false) do
