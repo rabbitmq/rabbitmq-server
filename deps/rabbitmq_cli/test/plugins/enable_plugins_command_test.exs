@@ -7,6 +7,7 @@
 defmodule EnablePluginsCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
+  import ExUnit.CaptureIO
 
   alias RabbitMQ.CLI.Core.ExitCodes
 
@@ -290,6 +291,32 @@ defmodule EnablePluginsCommandTest do
       ],
       currently_active_plugins(context)
     )
+
+    reset_enabled_plugins_to_preconfigured_defaults(context)
+  end
+
+  test "run: keeps a missing enabled plugin in the file and still enables another plugin",
+       context do
+    # rabbitmq_non_existent is enabled but not installed.
+    set_enabled_plugins(
+      [:rabbitmq_federation, :rabbitmq_non_existent],
+      :online,
+      context[:opts][:node],
+      Map.put(context[:opts], :keep_missing_plugins, true)
+    )
+
+    warning =
+      capture_io(fn ->
+        assert {:stream, stream} = @command.run(["rabbitmq_stomp"], context[:opts])
+        Enum.to_list(stream)
+      end)
+
+    assert warning =~ "WARNING - plugins currently enabled but missing: rabbitmq_non_existent"
+
+    {:ok, [enabled]} = :file.consult(context[:opts][:enabled_plugins_file])
+    assert Enum.member?(enabled, :rabbitmq_non_existent)
+    assert Enum.member?(enabled, :rabbitmq_stomp)
+    assert Enum.member?(enabled, :rabbitmq_federation)
 
     reset_enabled_plugins_to_preconfigured_defaults(context)
   end
