@@ -534,6 +534,37 @@
  },
 
  %%
+ %% Referrer-Policy
+ %%
+
+ {headers_referrer_policy_case1,
+  "management.headers.referrer_policy = no-referrer",
+  [
+   {rabbitmq_management, [
+                          {headers, [
+                            {referrer_policy, "no-referrer"}
+                          ]}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+ {csp_and_hsts_and_referrer_policy_combined,
+  "management.csp.policy = default-src 'self' *.mailsite.com; img-src *
+   management.hsts.policy = max-age=31536000; includeSubDomains
+   management.headers.referrer_policy = no-referrer",
+  [
+   {rabbitmq_management, [
+                          {content_security_policy, "default-src 'self' *.mailsite.com; img-src *"},
+                          {strict_transport_security, "max-age=31536000; includeSubDomains"},
+
+                          {headers, [
+                            {referrer_policy, "no-referrer"}
+                          ]}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+ %%
  %% Restrictions
  %%
 
