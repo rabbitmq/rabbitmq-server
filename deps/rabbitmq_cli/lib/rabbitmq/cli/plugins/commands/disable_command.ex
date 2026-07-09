@@ -39,26 +39,33 @@ defmodule RabbitMQ.CLI.Plugins.Commands.DisableCommand do
   end
 
   def validate_execution_environment(args, opts) do
-    Validators.chain(
-      [
-        &PluginHelpers.can_set_plugins_with_mode/2,
-        &require_rabbit_and_plugins/2,
-        &PluginHelpers.enabled_plugins_file/2,
-        &plugins_dir/2
-      ],
-      [args, opts]
-    )
+    validators =
+      if PluginHelpers.node_is_local?(opts) do
+        [
+          &require_rabbit_and_plugins/2,
+          &PluginHelpers.validate_node_and_mode/2,
+          &PluginHelpers.enabled_plugins_file/2,
+          &plugins_dir/2
+        ]
+      else
+        [
+          &PluginHelpers.validate_node_and_mode/2
+        ]
+      end
+
+    Validators.chain(validators, [args, opts])
   end
 
   def run(plugin_names, %{all: all_flag, node: node_name} = opts) do
+    all = PluginHelpers.list(opts)
+
     plugins =
       case all_flag do
         false -> for s <- plugin_names, do: String.to_atom(s)
-        true -> PluginHelpers.plugin_names(PluginHelpers.list(opts))
+        true -> PluginHelpers.plugin_names(all)
       end
 
     enabled = PluginHelpers.read_enabled(opts)
-    all = PluginHelpers.list(opts)
     implicit = :rabbit_plugins.dependencies(false, enabled, all)
     to_disable_deps = :rabbit_plugins.dependencies(true, plugins, all)
     plugins_to_set = MapSet.difference(MapSet.new(enabled), MapSet.new(to_disable_deps))

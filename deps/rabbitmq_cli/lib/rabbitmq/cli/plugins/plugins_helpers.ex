@@ -12,7 +12,8 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
   alias RabbitMQ.CLI.Core.{Config, Validators}
 
   def mode(opts) do
-    %{online: online, offline: offline} = opts
+    online = Map.get(opts, :online, false)
+    offline = Map.get(opts, :offline, false)
 
     case {online, offline} do
       {true, false} -> :online
@@ -21,26 +22,120 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
     end
   end
 
-  def can_set_plugins_with_mode(args, opts) do
+  def validate_node_and_mode(args, opts) do
     case mode(opts) do
-      # can always set offline plugins list
       :offline ->
-        :ok
+        require_offline_node_is_local(args, opts)
 
-      # assume online mode, fall back to offline mode in case of errors
+      # For the local node, assume online and fall back to offline if the node is not running.
+      # For a remote node, a running node is required: offline changes cannot reach a remote node's plugins file.
       :best_effort ->
-        :ok
+        if node_is_local?(opts) do
+          :ok
+        else
+          require_node_running(args, opts)
+        end
 
-      # a running node is required
       :online ->
-        Validators.chain(
-          [&Validators.node_is_running/2, &Validators.rabbit_is_running/2],
-          [args, opts]
-        )
+        require_node_running(args, opts)
     end
   end
 
+  def node_is_local?(%{node: node_name}) do
+    case node_locality(node_name) do
+      :local -> true
+      {:remote, _} -> false
+    end
+  end
+
+  def node_is_local?(_opts), do: true
+
+  defp require_offline_node_is_local(_args, %{offline: true} = opts) do
+    case node_locality(opts.node) do
+      :local ->
+        :ok
+
+      {:remote, reason} ->
+        {:validation_failure,
+         {:bad_argument,
+          "--offline mode operates on the local node's environment and cannot be used with a " <>
+            "remote node. #{reason}. Use --online to target the remote node."}}
+    end
+  end
+
+  defp require_offline_node_is_local(_args, _opts), do: :ok
+
+  defp require_node_running(args, opts) do
+    Validators.chain(
+      [&Validators.node_is_running/2, &Validators.rabbit_is_running/2],
+      [args, opts]
+    )
+  end
+
+  defp node_locality(node_name) do
+    local_node_str = :rabbit_env.get_context()[:nodename] |> to_string()
+    node_str = to_string(node_name)
+
+    if node_str == local_node_str do
+      :local
+    else
+      case String.split(local_node_str, "@", parts: 2) do
+        [local_name, local_host] ->
+          case String.split(node_str, "@", parts: 2) do
+            [name, host] ->
+              name_ok = name == local_name
+              host_ok = hosts_match?(host, local_host)
+
+              if name_ok and host_ok do
+                :local
+              else
+                reason =
+                  cond do
+                    not name_ok and not host_ok ->
+                      "node #{node_name} has a different name and host than the local node #{local_node_str}"
+
+                    not name_ok ->
+                      "node #{node_name} has a different name than the local node #{local_node_str}"
+
+                    true ->
+                      "node #{node_name} is on a different host than the local node"
+                  end
+
+                {:remote, reason}
+              end
+
+            [bare] ->
+              if bare == local_name do
+                :local
+              else
+                {:remote,
+                 "node #{node_name} has a different name than the local node #{local_node_str}"}
+              end
+          end
+
+        _ ->
+          {:remote, "could not determine the local node name"}
+      end
+    end
+  end
+
+  # Treats a short hostname and its fully-qualified form as the same host (e.g. "host" matches "host.example.com").
+  defp hosts_match?(a, b) do
+    a == b or String.starts_with?(a, b <> ".") or String.starts_with?(b, a <> ".")
+  end
+
   def list(opts) do
+    if mode(opts) == :offline or node_is_local?(opts) do
+      list_local(opts)
+    else
+      case list_remote(opts.node) do
+        {:ok, plugins} -> plugins
+        {:error, _} -> []
+      end
+    end
+  end
+
+  defp list_local(opts) do
     case plugins_dir(opts) do
       {:ok, dir} ->
         add_all_to_path(dir)
@@ -51,18 +146,38 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
     end
   end
 
-  def list_names(opts) do
-    list(opts) |> plugin_names
+  defp list_remote(node_name) do
+    case :rabbit_misc.rpc_call(node_name, :rabbit_plugins, :list, []) do
+      {:badrpc, reason} -> {:error, {:badrpc, reason}}
+      plugins when is_list(plugins) -> {:ok, plugins}
+      other -> {:error, {:unexpected_response, other}}
+    end
   end
 
   def read_enabled(opts) do
+    if mode(opts) == :offline or node_is_local?(opts) do
+      read_enabled_local(opts)
+    else
+      read_enabled_remote(opts)
+    end
+  end
+
+  defp read_enabled_local(opts) do
     case enabled_plugins_file(opts) do
-      {:ok, enabled} ->
-        :rabbit_plugins.read_enabled(to_charlist(enabled))
+      {:ok, file} ->
+        :rabbit_plugins.read_enabled(to_charlist(file))
 
       # Existence of enabled_plugins_file should be validated separately
       {:error, :no_plugins_file} ->
         []
+    end
+  end
+
+  defp read_enabled_remote(%{node: node_name}) do
+    case :rabbit_misc.rpc_call(node_name, :rabbit_plugins, :enabled_plugins, []) do
+      {:badrpc, _} -> []
+      plugins when is_list(plugins) -> plugins
+      _ -> []
     end
   end
 
@@ -77,11 +192,23 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
     enabled_plugins_file(opts)
   end
 
+  defp rpc_enabled_plugins_file(node_name) do
+    case :rabbit_misc.rpc_call(node_name, :rabbit_plugins, :enabled_plugins_file, []) do
+      {:badrpc, reason} -> {:error, {:badrpc, reason}}
+      file -> {:ok, file}
+    end
+  end
+
   def set_enabled_plugins(plugins, opts) do
     plugin_atoms = :lists.usort(for plugin <- plugins, do: to_atom(plugin))
     _ = require_rabbit_and_plugins(opts)
-    {:ok, plugins_file} = enabled_plugins_file(opts)
-    write_enabled_plugins(plugin_atoms, plugins_file, opts)
+
+    if mode(opts) == :offline or node_is_local?(opts) do
+      {:ok, plugins_file} = enabled_plugins_file(opts)
+      write_enabled_plugins(plugin_atoms, plugins_file, opts)
+    else
+      write_enabled_plugins_on_remote(opts.node, plugin_atoms, opts)
+    end
   end
 
   @spec update_enabled_plugins(
@@ -91,37 +218,22 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
           map()
         ) :: map() | {:error, any()}
   def update_enabled_plugins(enabled_plugins, mode, node_name, opts) do
-    {:ok, plugins_file} = enabled_plugins_file(opts)
-
     case mode do
       :online ->
-        case update_enabled_plugins(node_name, plugins_file) do
-          {:ok, started, stopped} ->
-            %{
-              mode: :online,
-              started: Enum.sort(started),
-              stopped: Enum.sort(stopped),
-              set: Enum.sort(enabled_plugins)
-            }
-
-          {:error, _} = err ->
-            err
-        end
+        update_enabled_plugins(node_name, enabled_plugins, opts)
 
       :best_effort ->
-        case update_enabled_plugins(node_name, plugins_file) do
-          {:ok, started, stopped} ->
-            %{
-              mode: :online,
-              started: Enum.sort(started),
-              stopped: Enum.sort(stopped),
-              set: Enum.sort(enabled_plugins)
-            }
+        case update_enabled_plugins(node_name, enabled_plugins, opts) do
+          %{} = result ->
+            result
 
           {:error, :offline} ->
             %{mode: :offline, set: Enum.sort(enabled_plugins)}
 
           {:error, {:enabled_plugins_mismatch, _, _}} = err ->
+            err
+
+          {:error, _} = err ->
             err
         end
 
@@ -132,13 +244,14 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
 
   def validate_plugins(requested_plugins, opts) do
     ## Maybe check all plugins
+    all = list(opts)
+
     plugins =
       case opts do
-        %{all: true} -> plugin_names(list(opts))
+        %{all: true} -> plugin_names(all)
         _ -> requested_plugins
       end
 
-    all = list(opts)
     deps = :rabbit_plugins.dependencies(false, plugins, all)
 
     deps_plugins =
@@ -207,7 +320,7 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
   end
 
   defp write_enabled_plugins(plugins, plugins_file, opts) do
-    all = list(opts)
+    all = list_local(opts)
     missing = missing_plugins(plugins, all)
 
     case check_missing_plugins(missing, opts) do
@@ -228,6 +341,36 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
     end
   end
 
+  defp write_enabled_plugins_on_remote(node_name, plugins, opts) do
+    with {:ok, all} <- list_remote(node_name),
+         {:ok, remote_file} <- rpc_enabled_plugins_file(node_name) do
+      missing = missing_plugins(plugins, all)
+
+      case check_missing_plugins(missing, opts) do
+        :ok ->
+          warn_about_missing_plugins(missing, opts)
+
+          case :rabbit_misc.rpc_call(node_name, :rabbit_file, :write_term_file, [
+                 remote_file,
+                 [plugins]
+               ]) do
+            :ok ->
+              all_enabled = :rabbit_plugins.dependencies(false, plugins, all)
+              {:ok, Enum.sort(all_enabled)}
+
+            {:badrpc, reason} ->
+              {:error, {:badrpc, reason}}
+
+            {:error, reason} ->
+              {:error, {:cannot_write_enabled_plugins_file, remote_file, reason}}
+          end
+
+        {:error, _} = err ->
+          err
+      end
+    end
+  end
+
   # `enable` and `disable` commands set `keep_missing_plugins` to tolerate an enabled but
   # no longer installed plugin instead of failing; `set` still rejects it.
   defp check_missing_plugins(missing, opts) do
@@ -238,12 +381,43 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
     end
   end
 
-  defp update_enabled_plugins(node_name, plugins_file) do
+  # File was already written to local disk by set_enabled_plugins;
+  defp update_enabled_plugins(node_name, enabled_plugins, opts) do
+    if node_is_local?(opts) do
+      # Tell the running node to re-read it.
+      {:ok, plugins_file} = enabled_plugins_file(opts)
+      rpc_ensure(node_name, plugins_file, enabled_plugins)
+    else
+      # Tell the remote node to re-read and apply its own enabled plugins file.
+      case rpc_enabled_plugins_file(node_name) do
+        {:error, _} ->
+          # Node went down after the file write; changes will take effect at next restart.
+          {:error, :offline}
+
+        {:ok, remote_file} ->
+          rpc_ensure(node_name, remote_file, enabled_plugins)
+      end
+    end
+  end
+
+  defp rpc_ensure(node_name, plugins_file, enabled_plugins) do
     case :rabbit_misc.rpc_call(node_name, :rabbit_plugins, :ensure, [to_list(plugins_file)]) do
-      {:badrpc, _} -> {:error, :offline}
-      {:error, :rabbit_not_running} -> {:error, :offline}
-      {:ok, start, stop} -> {:ok, start, stop}
-      {:error, _} = err -> err
+      {:badrpc, _} ->
+        {:error, :offline}
+
+      {:error, :rabbit_not_running} ->
+        {:error, :offline}
+
+      {:ok, started, stopped} ->
+        %{
+          mode: :online,
+          started: Enum.sort(started),
+          stopped: Enum.sort(stopped),
+          set: Enum.sort(enabled_plugins)
+        }
+
+      {:error, _} = err ->
+        err
     end
   end
 

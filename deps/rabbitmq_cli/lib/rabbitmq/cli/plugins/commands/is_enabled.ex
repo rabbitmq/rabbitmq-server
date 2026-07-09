@@ -44,6 +44,7 @@ defmodule RabbitMQ.CLI.Plugins.Commands.IsEnabledCommand do
     Validators.chain(
       [
         &require_rabbit_and_plugins/2,
+        &PluginHelpers.validate_node_and_mode/2,
         &PluginHelpers.enabled_plugins_file/2,
         &plugins_dir/2
       ],
@@ -71,7 +72,10 @@ defmodule RabbitMQ.CLI.Plugins.Commands.IsEnabledCommand do
   end
 
   def run(args, %{offline: true} = opts) do
-    plugins = PluginHelpers.list_names(opts) |> Enum.map(&Atom.to_string/1) |> Enum.sort()
+    enabled = PluginHelpers.read_enabled(opts)
+    all = PluginHelpers.list(opts)
+    all_enabled = :rabbit_plugins.dependencies(false, enabled, all)
+    plugins = Enum.map(all_enabled, &Atom.to_string/1) |> Enum.sort()
 
     case Enum.filter(args, fn x -> not Enum.member?(plugins, x) end) do
       [] -> {:ok, positive_result_message(args, opts)}

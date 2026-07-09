@@ -9,17 +9,10 @@ defmodule RabbitMQ.CLI.Formatters.Plugins do
   @behaviour RabbitMQ.CLI.FormatterBehaviour
 
   def format_output(
-        %{status: :node_down, format: format},
+        %{status: status, format: format, plugins: plugins},
         options
       ) do
-    legend(:node_down, format, options)
-  end
-
-  def format_output(
-        %{status: :running, format: format, plugins: plugins},
-        options
-      ) do
-    legend(:running, format, options) ++ format_plugins(plugins, format)
+    legend(status, format, options) ++ format_plugins(plugins, format)
   end
 
   def format_output(%{enabled: enabled, mode: _} = output, options) do
@@ -200,6 +193,10 @@ defmodule RabbitMQ.CLI.Formatters.Plugins do
 
   defp status_message(:node_down, node) do
     "[failed to contact #{node} - status not shown]"
+  end
+
+  defp status_message(:offline, node) do
+    "#{node} is stopped; * (running) status is not available"
   end
 
   defp applying(%{mode: :offline, set: set_plugins}, _) do

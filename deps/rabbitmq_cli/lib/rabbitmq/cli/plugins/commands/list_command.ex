@@ -37,14 +37,18 @@ defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
   end
 
   def validate_execution_environment(args, opts) do
-    Validators.chain(
-      [
-        &require_rabbit_and_plugins/2,
-        &PluginHelpers.enabled_plugins_file/2,
-        &plugins_dir/2
-      ],
-      [args, opts]
-    )
+    if PluginHelpers.node_is_local?(opts) do
+      Validators.chain(
+        [
+          &require_rabbit_and_plugins/2,
+          &PluginHelpers.enabled_plugins_file/2,
+          &plugins_dir/2
+        ],
+        [args, opts]
+      )
+    else
+      :ok
+    end
   end
 
   def run([pattern], %{node: node_name} = opts) do
@@ -62,8 +66,15 @@ defmodule RabbitMQ.CLI.Plugins.Commands.ListCommand do
 
     {status, running} =
       case remote_running_plugins(node_name) do
-        :error -> {:node_down, []}
-        {:ok, active} -> {:running, active}
+        :error ->
+          if PluginHelpers.node_is_local?(opts) do
+            {:offline, []}
+          else
+            {:node_down, []}
+          end
+
+        {:ok, active} ->
+          {:running, active}
       end
 
     {:ok, re} = Regex.compile(pattern)

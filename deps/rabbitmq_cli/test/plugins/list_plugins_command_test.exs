@@ -130,13 +130,14 @@ defmodule ListPluginsCommandTest do
 
     %{
       plugins: actual_plugins
-    } = @command.run([".*"], Map.merge(context[:opts], %{node: :nonode}))
+    } = @command.run([".*"], Map.merge(context[:opts], %{node: :rabbit}))
 
     assert_plugin_states(actual_plugins, expected_plugins)
   end
 
-  test "run: a call to an unreachable node reports a node_down status", context do
-    assert %{status: :node_down} =
+  test "run: a call to an unreachable node returns node_down status with an empty plugin list",
+       context do
+    assert %{status: :node_down, plugins: []} =
              @command.run([".*"], Map.merge(context[:opts], %{node: :jake@thedog}))
   end
 
