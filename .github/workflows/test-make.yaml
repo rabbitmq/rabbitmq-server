@@ -22,7 +22,6 @@ jobs:
       fail-fast: false
       matrix:
         erlang_version:
-        - '26'
         - '27'
         - '28'
         elixir_version:
