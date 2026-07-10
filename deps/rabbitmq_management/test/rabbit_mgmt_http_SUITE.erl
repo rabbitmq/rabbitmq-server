@@ -199,6 +199,7 @@ all_tests() -> [
     publish_fail_test,
     publish_base64_test,
     publish_unrouted_test,
+    publish_confirm_timeout_test,
     if_empty_unused_test,
     parameters_test,
     global_parameters_test,
@@ -3579,6 +3580,25 @@ publish_unrouted_test(Config) ->
     Msg = msg(<<"hmmm">>, #{}, <<"Hello world">>),
     ?assertEqual(#{routed => false},
                  http_post(Config, "/exchanges/%2F/amq.default/publish", Msg, ?OK)).
+
+publish_confirm_timeout_test(Config) ->
+    QName = <<"publish_confirm_timeout_test">>,
+    Path = "/queues/%2F/publish_confirm_timeout_test",
+    http_put(Config, Path, #{durable => true}, {group, '2xx'}),
+    {ok, Q} = rpc(Config, rabbit_amqqueue, lookup, [rabbit_misc:r(<<"/">>, queue, QName)]),
+    QPid = rpc(Config, amqqueue, get_pid, [Q]),
+    try
+        rpc(Config, application, set_env, [rabbitmq_management, publish_timeout, 2000]),
+        %% A suspended queue process never confirms the delivery.
+        ok = rpc(Config, sys, suspend, [QPid]),
+        Msg = msg(QName, #{}, <<"Hello world">>),
+        http_post(Config, "/exchanges/%2F/amq.default/publish", Msg, ?BAD_REQUEST)
+    after
+        rpc(Config, sys, resume, [QPid]),
+        rpc(Config, application, unset_env, [rabbitmq_management, publish_timeout]),
+        http_delete(Config, Path, {group, '2xx'})
+    end,
+    passed.
 
 if_empty_unused_test(Config) ->
     http_put(Config, "/exchanges/%2F/test", #{}, {group, '2xx'}),
