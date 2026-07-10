@@ -22,7 +22,8 @@ dispatcher() ->
     [{"/stream/connections", ?MODULE, []}].
 
 web_ui() ->
-    [{javascript, <<"stream.js">>}].
+    [{javascript, <<"stream_management-ejs.js">>},
+     {javascript, <<"stream.js">>}].
 
 %%--------------------------------------------------------------------
 

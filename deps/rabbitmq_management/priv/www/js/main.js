@@ -372,13 +372,8 @@ function reset_timer() {
         clearInterval(timer);
     }
     if (timer_interval != null) {
-        timer = setInterval(onRefresh, timer_interval);
+        timer = setInterval(partial_update, timer_interval);
     }
-}
-
-function onRefresh() {
-    partial_update();
-    notifyOnRefresh();
 }
 
 function pause_auto_refresh() {
@@ -1376,17 +1371,11 @@ function replace_content(id, html) {
     $("#" + id).html(html);
 }
 
-var ejs_cached = {};
-
 function format(template, json) {
     try {
-        var cache = true;
-        if (!(template in ejs_cached)) {
-            ejs_cached[template] = true;
-            cache = false;
-        }
-        var tmpl = new EJS({url: 'js/tmpl/' + template + '.ejs', cache: cache});
-        return tmpl.render(json);
+        var fn = COMPILED_TEMPLATES[template];
+        if (!fn) throw new Error('Template not found: ' + template);
+        return fn.call(json, json, json);
     } catch (err) {
         clearInterval(timer);
         console.log("Uncaught error: " + err);
