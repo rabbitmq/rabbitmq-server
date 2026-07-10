@@ -15,6 +15,10 @@
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
+%% Kept below the Cowboy request idle timeout so that a response is
+%% returned before the socket is closed.
+-define(DEFAULT_PUBLISH_TIMEOUT, 30_000).
+
 %%--------------------------------------------------------------------
 
 init(Req, _State) ->
@@ -68,19 +72,25 @@ do_it(ReqData0, Context) ->
                                             mandatory   = true},
                                           #amqp_msg{props   = Props,
                                                     payload = Payload}),
+                        Timeout = publish_timeout(),
                         receive
                             {#'basic.return'{}, _} ->
                                 receive
-                                    #'basic.ack'{} -> ok
-                                end,
-                                good(MRef, false, ReqData, Context);
+                                    #'basic.ack'{} ->
+                                        good(MRef, false, ReqData, Context);
+                                    #'basic.nack'{} ->
+                                        bad(rejected, MRef, ReqData, Context)
+                                after Timeout ->
+                                        bad(confirm_timeout, MRef, ReqData, Context)
+                                end;
                             #'basic.ack'{} ->
                                 good(MRef, true, ReqData, Context);
                             #'basic.nack'{} ->
-                                erlang:demonitor(MRef),
-                                bad(rejected, ReqData, Context);
+                                bad(rejected, MRef, ReqData, Context);
                             {'DOWN', _, _, _, Err} ->
                                 bad(Err, ReqData, Context)
+                        after Timeout ->
+                                bad(confirm_timeout, MRef, ReqData, Context)
                         end
                 end);
           ([_RoutingKey, _Props, _Payload, _Enc], _, _ReqData) ->
@@ -90,6 +100,10 @@ do_it(ReqData0, Context) ->
 good(MRef, Routed, ReqData, Context) ->
     erlang:demonitor(MRef),
     rabbit_mgmt_util:reply([{routed, Routed}], ReqData, Context).
+
+bad(Reason, MRef, ReqData, Context) ->
+    erlang:demonitor(MRef),
+    bad(Reason, ReqData, Context).
 
 bad({shutdown, {connection_closing,
                 {server_initiated_close, Code, Reason}}}, ReqData, Context) ->
@@ -102,7 +116,15 @@ bad(rejected, ReqData, Context) ->
     rabbit_mgmt_util:bad_request_exception(rejected, Msg, ReqData, Context);
 bad({{coordinator_unavailable, _}, _}, ReqData, Context) ->
     Msg = "Unable to publish message. Coordinator unavailable.",
-    rabbit_mgmt_util:bad_request_exception(rejected, Msg, ReqData, Context).
+    rabbit_mgmt_util:bad_request_exception(rejected, Msg, ReqData, Context);
+bad(confirm_timeout, ReqData, Context) ->
+    Msg = "Timed out waiting for a publisher confirm. The message may still "
+          "have been enqueued. Check the health of the queues bound to this exchange.",
+    rabbit_mgmt_util:bad_request_exception(confirm_timeout, Msg, ReqData, Context).
+
+publish_timeout() ->
+    application:get_env(rabbitmq_management, publish_timeout,
+                        ?DEFAULT_PUBLISH_TIMEOUT).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_vhost(ReqData, Context).
