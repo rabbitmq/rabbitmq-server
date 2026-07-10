@@ -23,8 +23,7 @@ dispatcher() -> [{"/federation-links", ?MODULE, [all]},
                  {"/federation-links/:vhost/state/down", ?MODULE, [down]},
                  {"/federation-links/vhost/:vhost/:id/:node/restart", ?MODULE, []}].
 
-web_ui()     -> [{javascript, <<"federation_management-ejs.js">>},
-                {javascript, <<"federation.js">>}].
+web_ui()     -> [{javascript, [<<"federation_management-ejs.js">>, <<"federation.js">>]}].
 
 %%--------------------------------------------------------------------
 
