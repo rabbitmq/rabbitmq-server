@@ -284,7 +284,12 @@ handle_call({init, Overall}, _From,
     %% leave any genuinely orphaned records to the reconciliation loop.
     case Rest =:= [] andalso rabbit_nodes:list_reachable() =:= [node()] of
         true ->
-            ?LOG_DEBUG("Mirrored supervisor: no known peer members in group ~tp and no other reachable cluster members, will delete all child records for it", [Group]),
+            %% Logged at info because this wipes the entire child-record roster
+            %% for the group. It is expected on a genuine single-node (re)start,
+            %% but it is the most destructive operation here, so a wrong wipe
+            %% (e.g. a node that transiently sees no peers) should leave a trace
+            %% above debug level.
+            ?LOG_INFO("Mirrored supervisor: this node is the sole reachable member, deleting all child records for group ~tp", [Group]),
             delete_all(Group);
         false -> ok
     end,
@@ -402,6 +407,15 @@ handle_info({'DOWN', _Ref, process, Pid, _Reason},
                                            || ChildSpec <- restore_child_order(
                                                              ChildSpecs, ChildOrder)],
                                 case errors(Results) of
+                                    [] when ChildSpecs =/= [] ->
+                                        %% Log a successful failover: this is a
+                                        %% rare, high-consequence event (a peer
+                                        %% died and this node re-homed and started
+                                        %% its children). The failure branches are
+                                        %% already logged; without this the
+                                        %% success case was silent.
+                                        ?LOG_INFO("Mirrored supervisor: failover in group ~tp re-homed and started ~b child(ren) from dead peer on node ~tp",
+                                                  [Group, length(ChildSpecs), node(Pid)]);
                                     []     -> ok;
                                     Errors ->
                                         ?LOG_WARNING("Mirrored supervisor: failover in group ~tp could not start some children, reconciliation will retry: ~tp",
