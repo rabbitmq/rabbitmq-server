@@ -260,9 +260,27 @@ handle_call({init, Overall}, _From,
     Rest = pg:get_members(Group) -- [Overall],
     Nodes = [node(M) || M <- Rest],
     ?LOG_DEBUG("Mirrored supervisor: known group ~tp members: ~tp on nodes ~tp", [Group, Rest, Nodes]),
+<<<<<<< HEAD
     case Rest of
         [] ->
             ?LOG_DEBUG("Mirrored supervisor: no known peer members in group ~tp, will delete all child records for it", [Group]),
+=======
+    %% An empty group is not enough to justify deleting all child records: a
+    %% peer's mirroring process may simply not have (re)joined the group yet,
+    %% and the records (owned by other nodes) may back children that are still
+    %% running cluster-wide. Deleting them here would wipe those children's
+    %% records on every node. Only clear the records when this node is the sole
+    %% reachable cluster member, i.e. a genuine single-node (re)start; otherwise
+    %% leave any genuinely orphaned records to the reconciliation loop.
+    case Rest =:= [] andalso rabbit_nodes:list_reachable() =:= [node()] of
+        true ->
+            %% Logged at info because this wipes the entire child-record roster
+            %% for the group. It is expected on a genuine single-node (re)start,
+            %% but it is the most destructive operation here, so a wrong wipe
+            %% (e.g. a node that transiently sees no peers) should leave a trace
+            %% above debug level.
+            ?LOG_INFO("Mirrored supervisor: this node is the sole reachable member, deleting all child records for group ~tp", [Group]),
+>>>>>>> a2f4ea9da4 (Log mirrored_supervisor roster wipe and successful failover at info)
             delete_all(Group);
         _  -> ok
     end,
@@ -348,6 +366,7 @@ handle_info({'DOWN', _Ref, process, Pid, _Reason},
                            overall  = O,
                            child_order = ChildOrder}) ->
     %% No guarantee pg will have received the DOWN before us.
+<<<<<<< HEAD
     R = case lists:sort(pg:get_members(Group)) -- [Pid] of
             [O | _] -> ChildSpecs = update_all(O, Pid),
                        case ChildSpecs of
@@ -364,6 +383,88 @@ handle_info({'DOWN', _Ref, process, Pid, _Reason},
     case errors(R) of
         []     -> {noreply, State};
         Errors -> {stop, {shutdown, Errors}, State}
+=======
+    try
+        case lists:sort(pg:get_members(Group)) -- [Pid] of
+            [O | _] ->
+                case partition_status() of
+                    {true, _, _} ->
+                        %% We are in a minority partition. We must not take over
+                        %% the children (the majority side owns them), and we
+                        %% cannot: update_all writes to Khepri, which has no
+                        %% quorum here, so it would block this process until it
+                        %% times out - stalling every other message, including
+                        %% the reconciliation that is supposed to stop our local
+                        %% children. Skip the failover; reconciliation handles
+                        %% the minority case.
+                        ok;
+                    {false, _, _} ->
+                        case update_all(O, Pid) of
+                            ChildSpecs when is_list(ChildSpecs) ->
+                                Results = [start(Delegate, ChildSpec)
+                                           || ChildSpec <- restore_child_order(
+                                                             ChildSpecs, ChildOrder)],
+                                case errors(Results) of
+                                    [] when ChildSpecs =/= [] ->
+                                        %% Log a successful failover: this is a
+                                        %% rare, high-consequence event (a peer
+                                        %% died and this node re-homed and started
+                                        %% its children). The failure branches are
+                                        %% already logged; without this the
+                                        %% success case was silent.
+                                        ?LOG_INFO("Mirrored supervisor: failover in group ~tp re-homed and started ~b child(ren) from dead peer on node ~tp",
+                                                  [Group, length(ChildSpecs), node(Pid)]);
+                                    []     -> ok;
+                                    Errors ->
+                                        ?LOG_WARNING("Mirrored supervisor: failover in group ~tp could not start some children, reconciliation will retry: ~tp",
+                                                     [Group, Errors])
+                                end;
+                            {error, UpdateError} ->
+                                ?LOG_WARNING("Mirrored supervisor: failover in group ~tp failed (~tp), reconciliation will retry",
+                                             [Group, UpdateError])
+                        end
+                end;
+            _ ->
+                ok
+        end
+    catch
+        Class:CatchReason:Stacktrace ->
+            ?LOG_WARNING("Mirrored supervisor: failover in group ~tp raised ~tp:~tp, reconciliation will retry~n~tp",
+                         [Group, Class, CatchReason, Stacktrace])
+    end,
+    {noreply, State};
+
+handle_info(reconcile, State = #state{overall  = Overall,
+                                      delegate = Delegate,
+                                      group    = Group}) when Overall =/= undefined ->
+    reconcile_children(Group, Overall, Delegate),
+    erlang:send_after(?RECONCILE_INTERVAL, self(), reconcile),
+    {noreply, State};
+
+%% A debounced reconciliation triggered by a group membership change. Unlike
+%% the periodic 'reconcile' it does not reschedule the periodic timer; it just
+%% reconciles once and clears the debounce flag.
+handle_info(reconcile_now, State = #state{overall  = Overall,
+                                          delegate = Delegate,
+                                          group    = Group}) when Overall =/= undefined ->
+    reconcile_children(Group, Overall, Delegate),
+    {noreply, State#state{reconcile_scheduled = false}};
+
+%% Group membership changed (a peer joined on partition heal, or left on
+%% partition). Schedule a single debounced reconciliation so that the minority
+%% side sheds its children promptly and the majority side stops any duplicate
+%% it has taken over, instead of waiting for the next periodic tick.
+handle_info({PgRef, Event, _Group, _Pids},
+            State = #state{pg_ref = PgRef, overall = Overall,
+                           reconcile_scheduled = Scheduled})
+  when (Event =:= join orelse Event =:= leave) ->
+    case Overall =/= undefined andalso not Scheduled of
+        true ->
+            erlang:send_after(?RECONCILE_DEBOUNCE, self(), reconcile_now),
+            {noreply, State#state{reconcile_scheduled = true}};
+        false ->
+            {noreply, State}
+>>>>>>> a2f4ea9da4 (Log mirrored_supervisor roster wipe and successful failover at info)
     end;
 
 handle_info(Info, State) ->
