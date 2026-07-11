@@ -19,7 +19,7 @@ on:
       otp_version:
         # a tag of the erlang image, see https://hub.docker.com/_/erlang for available tags
         # also used in the setup-beam step (same tag should work for both)
-        description: OTP version (eg. `26`, `26.2.5.6`)
+        description: OTP version (eg. `27`, `27.3.4.1`)
         default: 28
       build_arm:
         description: Build for ARM64 as well?
