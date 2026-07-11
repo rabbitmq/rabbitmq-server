@@ -49,6 +49,8 @@ function clear_auth() {
     clear_local_pref(AUTH_RESOURCE)
 }
 function set_basic_auth(username, password) {
+    // Clear the stored timeout so a fresh login re-applies the configured value.
+    clear_local_pref(LOGIN_SESSION_TIMEOUT)
     set_auth("Basic", b64_encode_utf8(username + ":" + password), default_hard_session_timeout())
 }
 function set_token_auth(token) {
