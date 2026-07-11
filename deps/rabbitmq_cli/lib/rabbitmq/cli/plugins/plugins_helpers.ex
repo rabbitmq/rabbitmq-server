@@ -125,12 +125,27 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
   end
 
   def list(opts) do
+    list(opts, local_fallback: false)
+  end
+
+  # With `local_fallback: true`, a failed RPC falls back to the local
+  # environment instead of returning an empty list. Command discovery uses
+  # this: it runs before distribution is started, so the RPC can fail even
+  # when the node is running, and an empty list would drop all
+  # plugin-provided commands.
+  def list(opts, local_fallback: local_fallback) do
     if mode(opts) == :offline or node_is_local?(opts) do
       list_local(opts)
     else
       case list_remote(opts.node) do
-        {:ok, plugins} -> plugins
-        {:error, _} -> []
+        {:ok, plugins} ->
+          plugins
+
+        {:error, _} ->
+          case {mode(opts), local_fallback} do
+            {:best_effort, true} -> list_local(opts)
+            _ -> []
+          end
       end
     end
   end
@@ -155,10 +170,24 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
   end
 
   def read_enabled(opts) do
+    read_enabled(opts, local_fallback: false)
+  end
+
+  # Same fallback as in `list/2` above, for the same reason.
+  def read_enabled(opts, local_fallback: local_fallback) do
     if mode(opts) == :offline or node_is_local?(opts) do
       read_enabled_local(opts)
     else
-      read_enabled_remote(opts)
+      case read_enabled_remote(opts) do
+        {:ok, plugins} ->
+          plugins
+
+        {:error, _} ->
+          case {mode(opts), local_fallback} do
+            {:best_effort, true} -> read_enabled_local(opts)
+            _ -> []
+          end
+      end
     end
   end
 
@@ -175,9 +204,9 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
 
   defp read_enabled_remote(%{node: node_name}) do
     case :rabbit_misc.rpc_call(node_name, :rabbit_plugins, :enabled_plugins, []) do
-      {:badrpc, _} -> []
-      plugins when is_list(plugins) -> plugins
-      _ -> []
+      {:badrpc, reason} -> {:error, {:badrpc, reason}}
+      plugins when is_list(plugins) -> {:ok, plugins}
+      other -> {:error, {:unexpected_response, other}}
     end
   end
 
