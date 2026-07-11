@@ -129,8 +129,18 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
       list_local(opts)
     else
       case list_remote(opts.node) do
-        {:ok, plugins} -> plugins
-        {:error, _} -> []
+        {:ok, plugins} ->
+          plugins
+
+        {:error, _} ->
+          # Command discovery runs before distribution is started, so this
+          # RPC can fail even when the node is running. Unless the mode is
+          # `:online`, fall back to the local environment instead of dropping
+          # all plugin-provided commands.
+          case mode(opts) do
+            :online -> []
+            _ -> list_local(opts)
+          end
       end
     end
   end
@@ -158,7 +168,17 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
     if mode(opts) == :offline or node_is_local?(opts) do
       read_enabled_local(opts)
     else
-      read_enabled_remote(opts)
+      case read_enabled_remote(opts) do
+        {:ok, plugins} ->
+          plugins
+
+        {:error, _} ->
+          # Same fallback as in `list/1` above, for the same reason.
+          case mode(opts) do
+            :online -> []
+            _ -> read_enabled_local(opts)
+          end
+      end
     end
   end
 
@@ -175,9 +195,9 @@ defmodule RabbitMQ.CLI.Plugins.Helpers do
 
   defp read_enabled_remote(%{node: node_name}) do
     case :rabbit_misc.rpc_call(node_name, :rabbit_plugins, :enabled_plugins, []) do
-      {:badrpc, _} -> []
-      plugins when is_list(plugins) -> plugins
-      _ -> []
+      {:badrpc, reason} -> {:error, {:badrpc, reason}}
+      plugins when is_list(plugins) -> {:ok, plugins}
+      other -> {:error, {:unexpected_response, other}}
     end
   end
 
