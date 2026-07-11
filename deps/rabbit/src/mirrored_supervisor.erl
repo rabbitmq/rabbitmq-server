@@ -262,7 +262,12 @@ handle_call({init, Overall}, _From,
     ?LOG_DEBUG("Mirrored supervisor: known group ~tp members: ~tp on nodes ~tp", [Group, Rest, Nodes]),
     case Rest of
         [] ->
-            ?LOG_DEBUG("Mirrored supervisor: no known peer members in group ~tp, will delete all child records for it", [Group]),
+            %% Logged at info because this wipes the entire child-record roster
+            %% for the group. It is expected on a genuine single-node (re)start,
+            %% but it is the most destructive operation here, so a wrong wipe
+            %% (e.g. a node that transiently sees no peers) should leave a trace
+            %% above debug level.
+            ?LOG_INFO("Mirrored supervisor: no known peer members in group ~tp, deleting all child records for it", [Group]),
             delete_all(Group);
         _  -> ok
     end,
@@ -349,15 +354,26 @@ handle_info({'DOWN', _Ref, process, Pid, _Reason},
                            child_order = ChildOrder}) ->
     %% No guarantee pg will have received the DOWN before us.
     R = case lists:sort(pg:get_members(Group)) -- [Pid] of
-            [O | _] -> ChildSpecs = update_all(O, Pid),
-                       case ChildSpecs of
-                           _ when is_list(ChildSpecs) ->
-                               [start(Delegate, ChildSpec)
-                                || ChildSpec <- restore_child_order(
-                                                  ChildSpecs,
-                                                  ChildOrder)];
-                           {error, _} ->
-                               [ChildSpecs]
+            [O | _] -> case update_all(O, Pid) of
+                           ChildSpecs when is_list(ChildSpecs) ->
+                               Results = [start(Delegate, ChildSpec)
+                                          || ChildSpec <- restore_child_order(
+                                                            ChildSpecs,
+                                                            ChildOrder)],
+                               case errors(Results) of
+                                   [] when ChildSpecs =/= [] ->
+                                       %% Log a successful failover: this is a
+                                       %% rare, high-consequence event (a peer
+                                       %% died and this node re-homed and started
+                                       %% its children). Without this the
+                                       %% success case was silent.
+                                       ?LOG_INFO("Mirrored supervisor: failover in group ~tp re-homed and started ~b child(ren) from dead peer on node ~tp",
+                                                 [Group, length(ChildSpecs), node(Pid)]);
+                                   _ -> ok
+                               end,
+                               Results;
+                           {error, _} = Error ->
+                               [Error]
                        end;
             _       -> []
         end,
