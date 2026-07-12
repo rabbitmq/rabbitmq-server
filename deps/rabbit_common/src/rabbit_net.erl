@@ -206,6 +206,9 @@ socket_ends(Sock, Direction) when ?IS_SSL(Sock);
                                   is_port(Sock) ->
     {From, To} = sock_funs(Direction),
     case {From(Sock), To(Sock)} of
+        {{ok, {local, FromPath}}, {ok, {local, ToPath}}} ->
+            {ok, {{local, FromPath}, 0,
+                  {local, ToPath},   0}};
         {{ok, {FromAddress, FromPort}}, {ok, {ToAddress, ToPort}}} ->
             {ok, {rdns(FromAddress), FromPort,
                 rdns(ToAddress),   ToPort}};
@@ -275,6 +278,8 @@ getifaddrs() ->
                 lists:map(fun format_nic_attribute/1, Proplist)
              end, Addrs0).
 
+rdns({local, _Path} = Local) ->
+    Local;
 rdns(Addr) ->
     case application:get_env(rabbit, reverse_dns_lookups) of
         {ok, true} -> list_to_binary(tcp_host(Addr));

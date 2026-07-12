@@ -23,7 +23,7 @@
 ]}.
 
 {mapping, "listeners.tcp.$name", "rabbit.tcp_listeners",[
-    {datatype, [integer, ip, string]}
+    {datatype, [integer, ip, string, domain_socket]}
 ]}.
 
 {translation, "rabbit.tcp_listeners",
@@ -46,7 +46,7 @@ end}.
 ]}.
 
 {mapping, "listeners.ssl.$name", "rabbit.ssl_listeners",[
-    {datatype, [integer, ip, string]}
+    {datatype, [integer, ip, string, domain_socket]}
 ]}.
 
 {translation, "rabbit.ssl_listeners",
