@@ -20,11 +20,37 @@ end_per_suite(Config) ->
 
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase),
-    Config.
+    Name = case Testcase of
+               test_unix_domain_socket -> "uds_test.sock";
+               test_uds_publish_consume -> "uds_pubsub.sock";
+               test_uds_connection_failure -> "uds_failure.sock";
+               _ -> atom_to_list(Testcase) ++ ".sock"
+           end,
+    SocketPath = uds_socket_path(Config, Name),
+    [{uds_socket_path, SocketPath} | Config].
 
 end_per_testcase(Testcase, Config) ->
+    case ?config(uds_socket_path, Config) of
+        undefined -> ok;
+        SocketPath ->
+            _ = rabbit_ct_broker_helpers:rpc(Config, rabbit_networking, stop_tcp_listener, [SocketPath]),
+            _ = file:delete(SocketPath)
+    end,
     rabbit_ct_helpers:testcase_finished(Config, Testcase),
     Config.
+
+uds_socket_path(Config, Name) ->
+    PrivDir = ?config(priv_dir, Config),
+    Path = filename:join(PrivDir, Name),
+    case length(Path) > 104 of
+        true ->
+            %% Path exceeds sun_path limits (e.g. deeply nested CI or WSL environments).
+            %% Fall back to /tmp with a unique identifier to avoid collisions.
+            UniqueId = integer_to_list(erlang:unique_integer([positive])),
+            filename:join("/tmp", "rmq-uds-" ++ UniqueId ++ "-" ++ Name);
+        false ->
+            Path
+    end.
 
 %% -------------------------------------------------------------------
 %% Test Cases
@@ -32,7 +58,7 @@ end_per_testcase(Testcase, Config) ->
 
 test_unix_domain_socket(Config) ->
     %% Path for our temporary unix domain socket
-    SocketPath = "/tmp/rabbitmq-test-uds.sock",
+    SocketPath = ?config(uds_socket_path, Config),
 
     %% Ensure it doesn't already exist from a crashed run
     file:delete(SocketPath),
@@ -44,7 +70,6 @@ test_unix_domain_socket(Config) ->
     timer:sleep(500),
 
     %% Connect using the Erlang AMQP Client over the Unix socket
-    rabbit_ct_broker_helpers:rpc(Config, application, set_env, [rabbit, loopback_users, []]),
     ConnParams = #amqp_params_network{host = {local, SocketPath}, port = 0},
     {ok, Conn} = amqp_connection:start(ConnParams),
     {ok, Channel} = amqp_connection:open_channel(Conn),
@@ -64,12 +89,11 @@ test_unix_domain_socket(Config) ->
     ok.
 
 test_uds_publish_consume(Config) ->
-    SocketPath = "/tmp/rabbitmq-test-uds-pubsub.sock",
+    SocketPath = ?config(uds_socket_path, Config),
     file:delete(SocketPath),
     ok = rabbit_ct_broker_helpers:rpc(Config, rabbit_networking, start_tcp_listener, [SocketPath, 10]),
     timer:sleep(500),
 
-    rabbit_ct_broker_helpers:rpc(Config, application, set_env, [rabbit, loopback_users, []]),
     ConnParams = #amqp_params_network{host = {local, SocketPath}, port = 0},
     {ok, Conn} = amqp_connection:start(ConnParams),
     {ok, Channel} = amqp_connection:open_channel(Conn),
@@ -97,8 +121,8 @@ test_uds_publish_consume(Config) ->
     file:delete(SocketPath),
     ok.
 
-test_uds_connection_failure(_Config) ->
-    SocketPath = "/tmp/rabbitmq-nonexistent-socket.sock",
+test_uds_connection_failure(Config) ->
+    SocketPath = ?config(uds_socket_path, Config),
     file:delete(SocketPath),
 
     ConnParams = #amqp_params_network{host = {local, SocketPath}, port = 0},
