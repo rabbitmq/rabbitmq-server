@@ -18,7 +18,7 @@
       of RabbitMQ may not be possible.
       <a href="https://www.rabbitmq.com/docs/feature-flags">[Learn more]</a>
       </p>
-      <button id="ff-enable-all-button" onclick='enable_all_stable_feature_flags(this);'>Enable all stable feature flags</button>
+      <button id="ff-enable-all-button">Enable all stable feature flags</button>
   </div>
 <div class="section" id="feature-flags">
   <h2>Feature Flags</h2>
@@ -303,13 +303,14 @@ function enable_feature_flag(checkbox, feature_flag) {
          </td>
          <td class="c ff-stability-<%= fmt_string(feature_flag.stability) %> ff-state-<%= fmt_string(feature_flag.state) %>">
            <input id="ff-checkbox-<%= fmt_string(feature_flag.name) %>" type="checkbox" class="toggle"
+                  data-flag-name="<%= fmt_string(feature_flag.name) %>"
                   <% if (feature_flag.state == 'enabled') { %>
                   checked disabled
                   <% } %>
                   <% if (feature_flag.state == 'state_changing') { %>
                   disabled
                   <% } %>
-                  onchange='handle_feature_flag(this, "<%= fmt_string(feature_flag.name) %>");'/>
+                  />
            <label for="ff-checkbox-<%= fmt_string(feature_flag.name) %>" class="toggle"/>
          </td>
          <td>

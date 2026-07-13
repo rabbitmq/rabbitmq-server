@@ -15,7 +15,12 @@ function format_error_response(response, reason) {
     });
 }
 
+<<<<<<< HEAD
 $(document).ready(function() {    
+=======
+$(document).ready(function() {
+  setup_oauth_events_if_required();
+>>>>>>> 46865862a6 (Update tests so that they do not use inline event handlers)
   var url_string = window.location.href;
   var url = new URL(url_string);
   var error = url.searchParams.get('error');
@@ -227,6 +232,32 @@ function setup_constant_events() {
     if (!vhosts_interesting) {
         $('#vhost-form').hide();
     }
+    setup_form_events();
+}
+
+function setup_form_events() {
+    $(document).on('click', '#ff-enable-all-button', function() {
+        enable_all_stable_feature_flags(this);
+    });
+    $(document).on('change', '[data-flag-name]', function() {
+        handle_feature_flag(this, $(this).data('flagName'));
+    });
+}
+
+function setup_oauth_events_if_required() {
+    if (!oauth.enabled) {
+        return;
+    }
+    $(document).on('click', '[data-oauth-action="login"]', function() {
+        oauth_initiateLogin($(this).data('resourceId'));
+    });
+    $(document).on('click', '[data-oauth-action="logout"]', function() {
+        oauth_initiateLogout();
+    });
+    $(document).on('submit', '#oauth2-resource-form', function(e) {
+        e.preventDefault();
+        oauth_initiateLogin(document.getElementById('oauth2-resource').value);
+    });
 }
 
 function update_vhosts() {
@@ -881,6 +912,15 @@ function postprocess() {
                 $('#' + param + '-div').slideUp(100);
             }
         }
+    });
+
+    $('select[name="queuetype"]').on('change', function() {
+        select_queue_type(this);
+    });
+
+    $('[name="upload-definitions"]').on('click', function(e) {
+        e.preventDefault();
+        submit_import($(this).closest('form')[0]);
     });
 
     $(document).on('click', '.help', function() {
