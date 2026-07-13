@@ -12,7 +12,7 @@ define PROJECT_ENV
 
 	    {cors_allow_origins, []},
 	    {cors_max_age, 1800},
-	    {content_security_policy, "script-src 'self'; object-src 'self'"},
+	    {content_security_policy, "script-src 'self'; script-src-attr 'unsafe-inline'; object-src 'self'"},
 	    {max_http_body_size, 10000000},
 	    {delegate_count, 5},
 	    {require_auth_for_api_reference, false}
