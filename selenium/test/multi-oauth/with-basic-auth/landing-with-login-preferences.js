@@ -61,12 +61,12 @@ describe('Given two oauth resources and basic auth enabled, an unauthenticated u
 
   it('can force only to authenticate only with rabbit_dev oauth2 resource', async function () {    
     const homePage = await login("strict_auth_mechanism", "oauth2:rabbit_dev");    
-    const value = await homePage.getLoginButtonOnClick();
+    const value = await homePage.getLoginButtonResourceId();
     assert.ok(value.includes("rabbit_dev"));    
   })
   it('can force only to authenticate only with rabbit_prod oauth2 resource', async function () {    
     const homePage = await login("strict_auth_mechanism", "oauth2:rabbit_prod");    
-    const value = await homePage.getLoginButtonOnClick();
+    const value = await homePage.getLoginButtonResourceId();
     assert.ok(value.includes("rabbit_prod"));    
   })
   it('can force only to authenticate only with basic auth', async function () {    
