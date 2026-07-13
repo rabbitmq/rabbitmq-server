@@ -595,6 +595,19 @@
   },
 
  %%
+ %% Hide Allow header
+ %%
+
+  {hide_allow_header,
+   "management.http.hide_allow_header = true",
+   [
+    {rabbitmq_management, [
+                           {hide_http_allow_header, true}
+                          ]}
+   ], [rabbitmq_management]
+  },
+
+ %%
  %% Exotic options
  %%
 
