@@ -16,6 +16,7 @@
 -export([terminate/3]).
 -export([early_error/5]).
 -export([set_authenticated_username/2]).
+-export([maybe_strip_allow_header/2]).
 
 -record(state, {
     next :: any(),
@@ -46,11 +47,13 @@ info(StreamId, Response, State = #state{next = Next, req = Req}) ->
         {response, Status, Headers0, Body} ->
             log_response(Response, Req),
             H1 = unset_authenticated_username(Headers0),
-            {response, Status, H1, Body};
+            H2 = maybe_strip_allow_header(Status, H1),
+            {response, Status, H2, Body};
         {headers, Status, Headers0} ->
             log_stream_response(Response, Req),
             H1 = unset_authenticated_username(Headers0),
-            {headers, Status, H1};
+            H2 = maybe_strip_allow_header(Status, H1),
+            {headers, Status, H2};
         _ ->
             Response
     end,
@@ -69,6 +72,19 @@ set_authenticated_username(Username, Req) ->
 
 unset_authenticated_username(Headers) ->
     maps:remove(?AUTH_USER_HEADER, Headers).
+
+%% Removes the Allow response header from all responses except 405 Method Not Allowed,
+%% when management.http.hide_allow_header is set to true in the management plugin configuration.
+%% This prevents disclosure of supported HTTP methods via responses to normal requests
+%% (including OPTIONS), while still preserving the Allow header on 405 responses as required
+%% by RFC 9110.
+maybe_strip_allow_header(405, Headers) ->
+    Headers;
+maybe_strip_allow_header(_Status, Headers) ->
+    case application:get_env(rabbitmq_management, hide_http_allow_header, false) of
+        true  -> maps:remove(<<"allow">>, Headers);
+        false -> Headers
+    end.
 
 get_authenticated_username(Headers) ->
     maps:get(?AUTH_USER_HEADER, Headers, <<"-">>).
@@ -157,6 +173,31 @@ escape_for_quoted_log(Value) ->
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
+
+maybe_strip_allow_header_preserves_on_405_test() ->
+    Headers = #{<<"allow">> => <<"GET, HEAD, PUT, DELETE, OPTIONS">>},
+    application:set_env(rabbitmq_management, hide_http_allow_header, true),
+    ?assertEqual(Headers, maybe_strip_allow_header(405, Headers)),
+    application:unset_env(rabbitmq_management, hide_http_allow_header).
+
+maybe_strip_allow_header_strips_on_200_when_enabled_test() ->
+    Headers = #{<<"allow">> => <<"GET, HEAD, PUT, DELETE, OPTIONS">>,
+                <<"content-type">> => <<"application/json">>},
+    application:set_env(rabbitmq_management, hide_http_allow_header, true),
+    ?assertEqual(#{<<"content-type">> => <<"application/json">>},
+                 maybe_strip_allow_header(200, Headers)),
+    application:unset_env(rabbitmq_management, hide_http_allow_header).
+
+maybe_strip_allow_header_preserves_on_200_when_disabled_test() ->
+    Headers = #{<<"allow">> => <<"GET, HEAD, PUT, DELETE, OPTIONS">>},
+    application:unset_env(rabbitmq_management, hide_http_allow_header),
+    ?assertEqual(Headers, maybe_strip_allow_header(200, Headers)).
+
+maybe_strip_allow_header_no_allow_header_test() ->
+    Headers = #{<<"content-type">> => <<"application/json">>},
+    application:set_env(rabbitmq_management, hide_http_allow_header, true),
+    ?assertEqual(Headers, maybe_strip_allow_header(200, Headers)),
+    application:unset_env(rabbitmq_management, hide_http_allow_header).
 
 sanitize_test() ->
     ?assertEqual(<<"hello">>, sanitize(<<"hello">>)),
