@@ -476,6 +476,17 @@ fun(Conf) ->
 end}.
 
 
+%% Hide the Allow response header from all HTTP responses except 405 Method Not Allowed.
+%% When set to true, the Allow header is omitted from all responses (including 200 OK
+%% responses to OPTIONS requests) to prevent disclosure of supported HTTP methods.
+%% The Allow header is preserved on 405 responses as required by RFC 9110.
+%% This is a security hardening option that is disabled by default.
+%%
+%% {hide_http_allow_header, false},
+
+{mapping, "management.http.hide_allow_header", "rabbitmq_management.hide_http_allow_header",
+    [{datatype, boolean}]}.
+
 {mapping, "management.disable_basic_auth", "rabbitmq_management.disable_basic_auth",
     [{datatype, boolean}]}.
 

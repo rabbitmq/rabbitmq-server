@@ -28,7 +28,10 @@ groups() ->
                                   ]},
      {sequential_tests, [], [
                               referrer_policy_header_set_when_configured,
-                              referrer_policy_header_absent_when_not_configured
+                              referrer_policy_header_absent_when_not_configured,
+                              allow_header_absent_on_non_405_when_hide_configured,
+                              allow_header_present_on_405_when_hide_configured,
+                              allow_header_present_on_200_when_not_configured
                              ]}
     ].
 
@@ -128,6 +131,26 @@ referrer_policy_header_absent_when_not_configured(_Config) ->
     Req = rabbit_mgmt_headers:set_common_permission_headers(fake_req(), ?MODULE),
     RespHeaders = maps:get(resp_headers, Req),
     ?assertNot(maps:is_key(<<"referrer-policy">>, RespHeaders)).
+
+allow_header_absent_on_non_405_when_hide_configured(_Config) ->
+    application:set_env(rabbitmq_management, hide_http_allow_header, true),
+    Headers = #{<<"allow">> => <<"GET, HEAD, PUT, DELETE, OPTIONS">>,
+                <<"content-type">> => <<"application/json">>},
+    Result = rabbit_cowboy_stream_h:maybe_strip_allow_header(200, Headers),
+    ?assertNot(maps:is_key(<<"allow">>, Result)),
+    ?assert(maps:is_key(<<"content-type">>, Result)).
+
+allow_header_present_on_405_when_hide_configured(_Config) ->
+    application:set_env(rabbitmq_management, hide_http_allow_header, true),
+    Headers = #{<<"allow">> => <<"GET, HEAD, PUT, DELETE, OPTIONS">>},
+    Result = rabbit_cowboy_stream_h:maybe_strip_allow_header(405, Headers),
+    ?assert(maps:is_key(<<"allow">>, Result)).
+
+allow_header_present_on_200_when_not_configured(_Config) ->
+    application:unset_env(rabbitmq_management, hide_http_allow_header),
+    Headers = #{<<"allow">> => <<"GET, HEAD, PUT, DELETE, OPTIONS">>},
+    Result = rabbit_cowboy_stream_h:maybe_strip_allow_header(200, Headers),
+    ?assert(maps:is_key(<<"allow">>, Result)).
 
 %%--------------------------------------------------------------------
 
