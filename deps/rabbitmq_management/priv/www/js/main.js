@@ -1704,12 +1704,15 @@ function collapse_multifields(params0) {
         }
     }
     if (params.hasOwnProperty('queuetype')) {
+        var the_queue_type = params['queuetype'];
         delete params['queuetype'];
-        if (queue_type != 'default') {
-            params['arguments']['x-queue-type'] = queue_type;
+        if (the_queue_type != 'default') {
+            if (params['arguments'] == undefined) {
+                params['arguments'] = {};
+            }
+            params['arguments']['x-queue-type'] = the_queue_type;
         }
-
-        params = Object.assign(params, QUEUE_TYPE[queue_type].params)
+        params = Object.assign(params, QUEUE_TYPE[the_queue_type].params)
     }
     return params;
 }
