@@ -1764,15 +1764,13 @@ restart_stream_off_local(Q, QNameStr, Preferred, Attempts) ->
                        [QNameStr, NewLeader]),
             transferred;
         {error, coordinator_unavailable} = Err ->
-            %% Coordinator is already overloaded (all raft members timed out).
-            %% Hammering it with more restart_stream commands makes things
-            %% worse; bail out and let shutdown-time re-election finish.
+            %% `rabbit_stream_coordinator:process_command/2` collapses raft
+            %% timeouts across all coordinator members into this single
+            %% error. It means the coordinator is already overloaded, so
+            %% hammering it with more restart_stream commands only makes
+            %% things worse; bail out and let shutdown-time re-election
+            %% finish.
             ?LOG_WARNING("Stream coordinator unavailable while transferring "
-                         "leadership of stream ~ts: ~tp",
-                         [QNameStr, Err]),
-            {stop, Err};
-        {timeout, _} = Err ->
-            ?LOG_WARNING("Stream coordinator timed out while transferring "
                          "leadership of stream ~ts: ~tp",
                          [QNameStr, Err]),
             {stop, Err};
