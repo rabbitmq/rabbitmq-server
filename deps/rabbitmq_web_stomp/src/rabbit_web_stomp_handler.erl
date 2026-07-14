@@ -40,7 +40,6 @@
     state,
     conserve_resources,
     socket,
-    peername,
     auth_hd,
     stats_timer,
     connection
@@ -103,7 +102,6 @@ init(Req0, Opts) ->
     case check_origin(Req0) of
         ok ->
             logger:set_process_metadata(#{domain => ?RMQLOG_DOMAIN_CONN}),
-            {PeerAddr, _PeerPort} = maps:get(peer, Req0),
             {_, KeepaliveSup} = lists:keyfind(keepalive_sup, 1, Opts),
             SockInfo = maps:get(proxy_header, Req0, undefined),
             Req = case cowboy_req:parse_header(<<"sec-websocket-protocol">>, Req0) of
@@ -130,7 +128,6 @@ init(Req0, Opts) ->
                 state              = running,
                 conserve_resources = false,
                 socket             = SockInfo,
-                peername           = PeerAddr,
                 auth_hd            = cowboy_req:header(<<"authorization">>, Req)
             }, WsOpts#{data_delivery => relay}};
         {error, origin_not_allowed} ->
@@ -163,7 +160,7 @@ close_connection(Pid, Reason) ->
         exit:{noproc, _} -> ok
     end.
 
-init_processor_state(#state{socket=Sock, peername=PeerAddr, auth_hd=AuthHd}) ->
+init_processor_state(#state{socket=Sock, auth_hd=AuthHd}) ->
     Self = self(),
     SendFun = fun(Data) ->
                       Self ! {send, Data},
@@ -195,6 +192,8 @@ init_processor_state(#state{socket=Sock, peername=PeerAddr, auth_hd=AuthHd}) ->
 
     AdapterInfo = amqp_connection:socket_adapter_info(Sock, {'Web STOMP', 0}),
     RealSocket = rabbit_net:unwrap_socket(Sock),
+    %% Resolve the peer from the proxy-aware socket.
+    {ok, {PeerAddr, _PeerPort, _Host, _Port}} = rabbit_net:socket_ends(Sock, inbound),
     LoginNameFromCertificate = rabbit_stomp_reader:ssl_login_name(RealSocket, StompConfig2),
     ProcessorState = rabbit_stomp_processor:initial_state(
         StompConfig2,
