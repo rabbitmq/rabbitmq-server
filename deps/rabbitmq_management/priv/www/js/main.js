@@ -105,8 +105,7 @@ function start_app_login () {
     this.get('#/', function () {})
     if (!oauth.enabled || !oauth.oauth_disable_basic_auth) {
       this.put('#/login', function() {
-        set_basic_auth(this.params['username'], this.params['password'])
-        check_login()
+        login(this.params['username'], this.params['password']);
       });
     }
   })
@@ -136,34 +135,69 @@ function check_login () {
     }
     return false;
   }
-  check_version()
-  hide_popup_warn()
-  replace_content('outer', format('layout', {}))
-  var user_login_session_timeout = parseInt(user.login_session_timeout)
-  if (!isNaN(user_login_session_timeout)) {
-    update_login_session_timeout(user_login_session_timeout)
+  load_ui();
+  return true;
+}
+
+function do_login(username, password) {
+    var result = null;
+    $.ajax({
+        async: false,
+        type: 'POST',
+        url: 'api/login',
+        data: {username: username, password: password},
+        success: function(resp) { result = resp; },
+        error: function(xhr) {
+            try { result = JSON.parse(xhr.responseText); } catch(e) {}
+            if (!result) result = {error: 'login_failed', reason: 'Login failed'};
+        }
+    });
+    return result;
+}
+
+function login(username, password) {
+  var result = do_login(username, password);
+  if (!result || result.error) {
+    replace_content('login-status', '<p>Login failed</p>');
+    if (result && result.reason && typeof result.reason === 'string') {
+      show_popup('warn', fmt_escape_html(result.reason));
+    }
+    return false;
   }
+  var scheme = result.token.type === 'bearer' ? 'Bearer' : 'Basic';
+  set_auth(scheme, result.token.value, default_hard_session_timeout());
+  user = result.user;
+  var sessionTimeout = parseInt(user.login_session_timeout);
+  if (!isNaN(sessionTimeout)) {
+    update_login_session_timeout(sessionTimeout);
+  }
+  load_ui();
+  return true;
+}
+
+function load_ui() {
+  check_version();
+  hide_popup_warn();
+  replace_content('outer', format('layout', {}));
 
   ui_data_model.vhosts = JSON.parse(sync_get('/vhosts'));
-  ac.update(user, ui_data_model)
+  ac.update(user, ui_data_model);
   if (ac.isMonitoringUser()) {
-    ui_data_model.nodes = JSON.parse(sync_get('/nodes'))
+    ui_data_model.nodes = JSON.parse(sync_get('/nodes'));
   }
-  var overview = JSON.parse(sync_get('/overview'))
+  var overview = JSON.parse(sync_get('/overview'));
 
-  display.update(overview, ui_data_model)
+  display.update(overview, ui_data_model);
 
-  setup_global_vars(overview)
+  setup_global_vars(overview);
 
-  setup_constant_events()
-  update_vhosts()
-  update_interval()
+  setup_constant_events();
+  update_vhosts();
+  update_interval();
   setup_extensions(function onCompleted() {
     console.info("All extensions have been loaded. Starting application ..");
     start_app();
   });
-
-  return true
 }
 
 

@@ -47,6 +47,7 @@
 -export([qs_val/2]).
 -export([get_path_prefix/0]).
 -export([prefixed_path/1]).
+-export([set_session_cookie/1, clear_session_cookie/1]).
 -export([catch_no_such_user_or_vhost/2]).
 -export([method_not_allowed/3]).
 
@@ -99,8 +100,7 @@ is_authorized_admin(ReqData, Context, Token) ->
     AuthConfig = auth_config(),
     rabbit_web_dispatch_access_control:is_authorized(
       ReqData, Context,
-      AuthConfig#auth_settings.oauth_client_id,
-      Token, <<"Not administrator user">>,
+      <<"">>, Token, <<"Not administrator user">>,
       fun(#user{tags = Tags}) ->
               rabbit_web_dispatch_access_control:is_admin(Tags)
       end, AuthConfig).
@@ -134,13 +134,22 @@ is_authorized_vhost_visible_for_monitoring(ReqData, Context) ->
 
 auth_config() ->
     BasicAuthEnabled = not get_bool_env(rabbitmq_management, disable_basic_auth, false),
-    OauthEnabled = get_bool_env(rabbitmq_management, oauth_enabled, false),
-    OauthClientId = rabbit_data_coercion:to_binary(
-                        application:get_env(rabbitmq_management, oauth_client_id, "")),
-    #auth_settings{auth_realm = ?AUTH_REALM,
-                   basic_auth_enabled = BasicAuthEnabled,
-                   oauth2_enabled = OauthEnabled,
-                   oauth_client_id = OauthClientId}.
+    BearerTokenParser =
+        case application:get_env(rabbitmq_management, credentials_encryption_secret, undefined) of
+            undefined -> undefined;
+            Secret ->
+                Key = rabbit_mgmt_basic_credentials_token:derive_key(Secret),
+                fun(Token) ->
+                    case rabbit_mgmt_basic_credentials_token:verify(Token, Key) of
+                        {ok, U, P}                      -> {basic, U, P};
+                        {error, not_an_encrypted_token} -> {bearer, Token};
+                        {error, _Reason}                -> {error, <<"Invalid credentials token">>}
+                    end
+                end
+        end,
+    #auth_settings{auth_realm          = ?AUTH_REALM,
+                   basic_auth_enabled  = BasicAuthEnabled,
+                   bearer_token_parser = BearerTokenParser}.
 
 disable_stats() ->
     not rabbit_mgmt_agent_config:is_metrics_collector_enabled() orelse
@@ -472,6 +481,41 @@ fixup_prefix(EnvPrefix) when is_binary(EnvPrefix) ->
 %% plugin's configured path_prefix.
 prefixed_path(Path) ->
     iolist_to_binary([get_path_prefix(), Path]).
+
+set_session_cookie(Req = #{scheme := Scheme}) ->
+    Settings0 = #{
+        http_only => true,
+        path      => session_cookie_path(),
+        max_age   => session_cookie_max_age(),
+        same_site => strict
+    },
+    Settings = case Scheme of
+        <<"https">> -> Settings0#{secure => true};
+        _           -> Settings0
+    end,
+    cowboy_req:set_resp_cookie(<<"loggedIn">>, <<"true">>, Req, Settings).
+
+clear_session_cookie(Req = #{scheme := Scheme}) ->
+    Settings0 = #{
+        http_only => true,
+        path      => session_cookie_path(),
+        max_age   => 0,
+        same_site => strict
+    },
+    Settings = case Scheme of
+        <<"https">> -> Settings0#{secure => true};
+        _           -> Settings0
+    end,
+    cowboy_req:set_resp_cookie(<<"loggedIn">>, <<"">>, Req, Settings).
+
+session_cookie_path() ->
+    list_to_binary(get_path_prefix() ++ "/").
+
+session_cookie_max_age() ->
+    case application:get_env(rabbitmq_management, login_session_timeout) of
+        undefined  -> 8 * 3600;
+        {ok, Val}  -> Val * 60
+    end.
 
 %% XXX sort_list_and_paginate/2 is a more proper name for this function, keeping it
 %% with this name for backwards compatibility
