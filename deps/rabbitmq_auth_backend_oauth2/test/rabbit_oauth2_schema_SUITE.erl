@@ -41,7 +41,8 @@ all() ->
         test_without_oauth_providers_with_endpoint_params,
         test_scope_aliases_configured_as_list_of_properties,
         test_scope_aliases_configured_as_map,
-        test_scope_aliases_configured_as_list_of_missing_properties
+        test_scope_aliases_configured_as_list_of_missing_properties,
+        test_tokenize_additional_scopes_key
     ].
 
 
@@ -169,7 +170,7 @@ test_resource_servers_attributes(_) ->
         {["auth_oauth2","resource_servers","rabbitmq1","preferred_username_claims","2"],
             "groupid"}
     ],
-    #{<<"rabbitmq1xxx">> := [{extra_scopes_source, <<"roles">>},
+    #{<<"rabbitmq1xxx">> := [{extra_scopes_source, [[<<"roles">>]]},
                           {id, <<"rabbitmq1xxx">>},
                           {preferred_username_claims, [<<"userid">>, <<"groupid">>]},
                           {scope_prefix, <<"somescope.">>}
@@ -186,12 +187,22 @@ test_resource_servers_attributes(_) ->
         {["auth_oauth2","resource_servers","rabbitmq1","preferred_username_claims","2"],
             "groupid"}
     ],
-    #{<<"rabbitmq1">> := [{extra_scopes_source, <<"roles">>},
+    #{<<"rabbitmq1">> := [{extra_scopes_source, [[<<"roles">>]]},
                           {id, <<"rabbitmq1">>},
                           {preferred_username_claims, [<<"userid">>, <<"groupid">>]},
                           {scope_prefix, <<"somescope.">>}
                         ]
-    } = sort_settings(translate_resource_servers(Conf2)).
+    } = sort_settings(translate_resource_servers(Conf2)),
+
+    Conf3 = [
+        {["auth_oauth2","resource_servers","rabbitmq1","additional_scopes_key"],
+            "https://example\\.com/claims.roles"}
+    ],
+    #{<<"rabbitmq1">> := [{extra_scopes_source,
+                            [[<<"https://example.com/claims">>, <<"roles">>]]},
+                          {id, <<"rabbitmq1">>}
+                        ]
+    } = sort_settings(translate_resource_servers(Conf3)).
 
 test_oauth_providers_attributes_with_invalid_uri(_) ->
     Conf = [
@@ -326,6 +337,32 @@ test_scope_aliases_configured_as_map(_) ->
         <<"developer">> := [<<"rabbitmq.tag:management">>, <<"rabbitmq.read:*/*">>]
     } = rabbit_oauth2_schema:translate_scope_aliases(CuttlefishConf).
 
+
+test_tokenize_additional_scopes_key(_) ->
+    %% Simple dotless key.
+    [[<<"roles">>]] =
+        rabbit_oauth2_schema:tokenize_additional_scopes_key("roles"),
+    %% Nested dotted path.
+    [[<<"resource_access">>, <<"account">>, <<"roles">>]] =
+        rabbit_oauth2_schema:tokenize_additional_scopes_key("resource_access.account.roles"),
+    %% Escaped dots in a URI-namespaced claim name followed by a nested path.
+    [[<<"https://example.com/claims">>, <<"request_tags">>, <<"scope">>]] =
+        rabbit_oauth2_schema:tokenize_additional_scopes_key(
+            "https://example\\.com/claims.request_tags.scope"),
+    %% Flat namespaced claim, escaped dots only.
+    [[<<"https://myapp.example.com/roles">>]] =
+        rabbit_oauth2_schema:tokenize_additional_scopes_key(
+            "https://myapp\\.example\\.com/roles"),
+    %% Multiple space-separated paths.
+    [[<<"roles">>], [<<"permissions">>]] =
+        rabbit_oauth2_schema:tokenize_additional_scopes_key("roles permissions"),
+    %% Multiple paths with escaped dots.
+    [[<<"https://example.com/claims">>, <<"scope">>], [<<"roles">>]] =
+        rabbit_oauth2_schema:tokenize_additional_scopes_key(
+            "https://example\\.com/claims.scope roles"),
+    %% Per-resource-server: value arrives as binary from proplists.
+    [[<<"cognito:groups">>]] =
+        rabbit_oauth2_schema:tokenize_additional_scopes_key(<<"cognito:groups">>).
 
 cert_filename(Conf) ->
     string:concat(?config(data_dir, Conf), "certs/server_certificate.pem").

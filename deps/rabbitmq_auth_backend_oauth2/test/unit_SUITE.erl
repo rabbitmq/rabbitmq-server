@@ -48,6 +48,7 @@ all() ->
         test_invalid_signature,
         test_incorrect_kid,
         normalize_token_scope_using_multiple_scopes_key,
+        normalize_token_scope_with_escaped_dot_additional_scopes_key,
         normalize_token_scope_with_requesting_party_token_scopes,
         normalize_token_scope_with_rich_auth_request,
         normalize_token_scope_with_rich_auth_request_using_regular_expression_with_cluster,
@@ -197,6 +198,22 @@ normalize_token_scope_using_multiple_scopes_key(_) ->
         {ok, Token} = normalize_token_scope(ResourceServer, Token0),
         ?assertEqual(lists:sort(ExpectedScope), lists:sort(uaa_jwt:get_scope(Token)), Case)
         end, Pairs).
+
+
+normalize_token_scope_with_escaped_dot_additional_scopes_key(_) ->
+    ResourceServer0 = new_resource_server(<<"rabbitmq-resource">>),
+    ResourceServer = ResourceServer0#resource_server{
+        additional_scopes_key = [[<<"https://example.com/claims">>, <<"request_tags">>, <<"scope">>]]
+    },
+    Token0 = #{
+        <<"https://example.com/claims">> => #{
+            <<"request_tags">> => #{
+                <<"scope">> => <<"rabbitmq-resource.read:all">>
+            }
+        }
+    },
+    {ok, Token} = normalize_token_scope(ResourceServer, Token0),
+    ?assertEqual([<<"read:all">>], uaa_jwt:get_scope(Token)).
 
 normalize_token_scope_with_requesting_party_token_scopes(_) ->
     Pairs = [

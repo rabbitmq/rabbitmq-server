@@ -60,6 +60,9 @@
 
 %% Configure the plugin to also look in other fields using additional_scopes_key (maps to extra_scopes_source in the old format)
 %%
+%% Use \. to address claim keys that contain literal dots, for example:
+%% auth_oauth2.additional_scopes_key = https://example\.com/claims.roles
+%%
 %% {additional_scopes_key, <<"my_custom_scope_key">>},
 
 {mapping,
@@ -70,7 +73,8 @@
 {translation,
  "rabbitmq_auth_backend_oauth2.extra_scopes_source",
  fun(Conf) ->
-    list_to_binary(cuttlefish:conf_get("auth_oauth2.additional_scopes_key", Conf))
+    rabbit_oauth2_schema:tokenize_additional_scopes_key(
+        cuttlefish:conf_get("auth_oauth2.additional_scopes_key", Conf))
  end}.
 
 {mapping,
