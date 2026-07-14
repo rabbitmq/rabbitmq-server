@@ -114,7 +114,9 @@
 -export([ensure_token_expiry_timer/2,
          evaluate_state_after_secret_update/4,
          clean_subscriptions/4,
-         negotiate_frame_max/2]).
+         negotiate_frame_max/2,
+         send_chunks/4,
+         maybe_unblock/4]).
 -endif.
 
 callback_mode() ->
@@ -510,13 +512,20 @@ handle_info(Msg,
                                              Connection,
                                              State,
                                              Data),
-            setopts(Transport, S, [{active, once}]),
-            #stream_connection{connection_step = NewConnectionStep} =
-                Connection1,
-            ?LOG_DEBUG("Transitioned from ~ts to ~ts",
-                                        [PreviousConnectionStep,
-                                         NewConnectionStep]),
-            Transition(NewConnectionStep, StatemData, Connection1, State1);
+            case setopts(Transport, S, [{active, once}]) of
+                ok ->
+                    #stream_connection{connection_step = NewConnectionStep} =
+                        Connection1,
+                    ?LOG_DEBUG("Transitioned from ~ts to ~ts",
+                                                [PreviousConnectionStep,
+                                                 NewConnectionStep]),
+                    Transition(NewConnectionStep,
+                               StatemData,
+                               Connection1,
+                               State1);
+                {error, Reason} ->
+                    setopts_failed_stop(S, Reason)
+            end;
         {Closed, S} ->
             ?LOG_DEBUG("Stream protocol connection socket ~w closed",
                                         [S]),
@@ -722,26 +731,38 @@ open(info, {resource_alarm, IsThereAlarm},
     ?LOG_DEBUG("Connection ~tp had blocked status set to ~tp, "
                                 "new blocked status is now ~tp",
                                 [ConnectionName, Blocked, NewBlockedState]),
-    case {Blocked, NewBlockedState} of
-        {true, false} ->
-            setopts(Transport, S, [{active, once}]),
-            ok = rabbit_heartbeat:resume_monitor(Heartbeater),
-            ?LOG_DEBUG("Unblocking connection ~tp",
-                                        [ConnectionName]);
-        {false, true} ->
-            ok = rabbit_heartbeat:pause_monitor(Heartbeater),
-            ?LOG_DEBUG("Blocking connection ~tp after resource alarm",
-                                        [ConnectionName]);
-        _ ->
-            ok
-    end,
-    {keep_state,
-     StatemData#statem_data{connection =
-                                Connection#stream_connection{resource_alarm =
-                                                                 IsThereAlarm},
-                            connection_state =
-                                State#stream_connection_state{blocked =
-                                                                  NewBlockedState}}};
+    UnblockResult =
+        case {Blocked, NewBlockedState} of
+            {true, false} ->
+                case setopts(Transport, S, [{active, once}]) of
+                    ok ->
+                        ok = rabbit_heartbeat:resume_monitor(Heartbeater),
+                        ?LOG_DEBUG("Unblocking connection ~tp",
+                                                    [ConnectionName]),
+                        ok;
+                    {error, _} = Err ->
+                        Err
+                end;
+            {false, true} ->
+                ok = rabbit_heartbeat:pause_monitor(Heartbeater),
+                ?LOG_DEBUG("Blocking connection ~tp after resource alarm",
+                                            [ConnectionName]),
+                ok;
+            _ ->
+                ok
+        end,
+    case UnblockResult of
+        ok ->
+            {keep_state,
+             StatemData#statem_data{connection =
+                                        Connection#stream_connection{resource_alarm =
+                                                                         IsThereAlarm},
+                                    connection_state =
+                                        State#stream_connection_state{blocked =
+                                                                          NewBlockedState}}};
+        {error, Reason} ->
+            setopts_failed_stop(S, Reason)
+    end;
 open(info, {OK, S, Data},
      #statem_data{transport = Transport,
                   connection =
@@ -762,10 +783,14 @@ open(info, {OK, S, Data},
             stop;
         close_sent ->
             ?LOG_DEBUG("Transitioned to close_sent"),
-            setopts(Transport, S, [{active, once}]),
-            {next_state, close_sent,
-             StatemData#statem_data{connection = Connection1,
-                                    connection_state = State1}};
+            case setopts(Transport, S, [{active, once}]) of
+                ok ->
+                    {next_state, close_sent,
+                     StatemData#statem_data{connection = Connection1,
+                                            connection_state = State1}};
+                {error, Reason} ->
+                    setopts_failed_stop(S, Reason)
+            end;
         failure ->
             _ = demonitor_all_streams(Connection),
             ?LOG_INFO("Force closing stream connection ~tp because of "
@@ -777,29 +802,38 @@ open(info, {OK, S, Data},
              StatemData#statem_data{connection = Connection1,
                                     connection_state = State1}};
         _ ->
-            State2 =
+            UnblockResult =
                 case Blocked of
                     true ->
                         case should_unblock(Connection, Configuration) of
                             true ->
                                 maybe_unblock(Transport, S, Heartbeater, State1);
                             false ->
-                                State1
+                                {ok, State1}
                         end;
                     false ->
                         case has_credits(Credits) of
                             true ->
-                                setopts(Transport, S, [{active, once}]),
-                                State1;
+                                case setopts(Transport, S, [{active, once}]) of
+                                    ok ->
+                                        {ok, State1};
+                                    {error, _} = Err ->
+                                        Err
+                                end;
                             false ->
                                 ok =
                                     rabbit_heartbeat:pause_monitor(Heartbeater),
-                                State1#stream_connection_state{blocked = true}
+                                {ok, State1#stream_connection_state{blocked = true}}
                         end
                 end,
-            {keep_state,
-             StatemData#statem_data{connection = Connection1,
-                                    connection_state = State2}}
+            case UnblockResult of
+                {ok, State2} ->
+                    {keep_state,
+                     StatemData#statem_data{connection = Connection1,
+                                            connection_state = State2}};
+                {error, Reason} ->
+                    setopts_failed_stop(S, Reason)
+            end
     end;
 open(info, {sac, check_connection, _}, State) ->
     _ = sac_connection_reconnected(self()),
@@ -1062,19 +1096,24 @@ open(cast,
                  ByPublisher),
     CorrelationIdCount = length(CorrelationList),
     add_credits(Credits, CorrelationIdCount),
-    State1 =
+    UnblockResult =
         case Blocked of
             true ->
                 case should_unblock(Connection, Configuration) of
                     true ->
                         maybe_unblock(Transport, S, Heartbeater, State);
                     false ->
-                        State
+                        {ok, State}
                 end;
             false ->
-                State
+                {ok, State}
         end,
-    {keep_state, StatemData#statem_data{connection_state = State1}};
+    case UnblockResult of
+        {ok, State1} ->
+            {keep_state, StatemData#statem_data{connection_state = State1}};
+        {error, Reason} ->
+            setopts_failed_stop(S, Reason)
+    end;
 open(cast,
      {queue_event, _QueueResource,
       {osiris_written,
@@ -1107,21 +1146,24 @@ open(cast,
             increase_messages_confirmed(Counters, PublishingIdCount)
     end,
     add_credits(Credits, PublishingIdCount),
-    State1 =
+    UnblockResult =
         case Blocked of
             true ->
                 case should_unblock(Connection, Configuration) of
                     true ->
-                        setopts(Transport, S, [{active, once}]),
-                        ok = rabbit_heartbeat:resume_monitor(Heartbeater),
-                        State#stream_connection_state{blocked = false};
+                        maybe_unblock(Transport, S, Heartbeater, State);
                     false ->
-                        State
+                        {ok, State}
                 end;
             false ->
-                State
+                {ok, State}
         end,
-    {keep_state, StatemData#statem_data{connection_state = State1}};
+    case UnblockResult of
+        {ok, State1} ->
+            {keep_state, StatemData#statem_data{connection_state = State1}};
+        {error, Reason} ->
+            setopts_failed_stop(S, Reason)
+    end;
 open(cast,
      {queue_event, #resource{name = StreamName},
       {osiris_offset, _QueueResource, -1}},
@@ -1242,10 +1284,14 @@ close_sent(info, {tcp, S, Data},
         closing_done ->
             stop;
         _ ->
-            setopts(Transport, S, [{active, once}]),
-            {keep_state,
-             StatemData#statem_data{connection = Connection1,
-                                    connection_state = State1}}
+            case setopts(Transport, S, [{active, once}]) of
+                ok ->
+                    {keep_state,
+                     StatemData#statem_data{connection = Connection1,
+                                            connection_state = State1}};
+                {error, Reason} ->
+                    setopts_failed_stop(S, Reason)
+            end
     end;
 close_sent(info, {tcp_closed, S}, _StatemData) ->
     ?LOG_DEBUG("Stream protocol connection socket ~w closed [~w]",
@@ -3923,15 +3969,19 @@ send_chunks(DeliverVersion,
             Credit,
             LastLstOffset,
             Counter) ->
-    setopts(Transport, Socket, [{nopush, true}]),
-    send_chunks(DeliverVersion,
-                Transport,
-                Consumer,
-                Log,
-                Credit,
-                LastLstOffset,
-                true,
-                Counter).
+    case setopts(Transport, Socket, [{nopush, true}]) of
+        ok ->
+            send_chunks(DeliverVersion,
+                        Transport,
+                        Consumer,
+                        Log,
+                        Credit,
+                        LastLstOffset,
+                        true,
+                        Counter);
+        {error, _} = Err ->
+            Err
+    end.
 
 -spec send_chunks(rabbit_stream_core:command_version(),
                   module(),
@@ -3953,11 +4003,15 @@ send_chunks(_DeliverVersion,
             _Retry,
             _Counter) ->
     %% we have finished sending so need to uncork
-    setopts(Transport, Socket, [{nopush, false}]),
-    {ok,
-     Consumer#consumer{log = Log,
-                       credit = 0,
-                       last_listener_offset = LastLstOffset}};
+    case setopts(Transport, Socket, [{nopush, false}]) of
+        ok ->
+            {ok,
+             Consumer#consumer{log = Log,
+                               credit = 0,
+                               last_listener_offset = LastLstOffset}};
+        {error, _} = Err ->
+            Err
+    end;
 send_chunks(DeliverVersion,
             Transport,
             #consumer{configuration = #consumer_configuration{socket = Socket}} =
@@ -3988,39 +4042,43 @@ send_chunks(DeliverVersion,
         {error, Reason} ->
             {error, Reason};
         {end_of_stream, Log1} ->
-            setopts(Transport, Socket, [{nopush, false}]),
-            case Retry of
-                true ->
-                    send_chunks(DeliverVersion,
-                                Transport,
+            case setopts(Transport, Socket, [{nopush, false}]) of
+                ok ->
+                    case Retry of
+                        true ->
+                            send_chunks(DeliverVersion,
+                                        Transport,
+                                        Consumer,
+                                        Log1,
+                                        Credit,
+                                        LastLstOffset,
+                                        false,
+                                        Counter);
+                        false ->
+                            #consumer{configuration =
+                                          #consumer_configuration{member_pid =
+                                                                      LocalMember}} =
                                 Consumer,
-                                Log1,
-                                Credit,
-                                LastLstOffset,
-                                false,
-                                Counter);
-                false ->
-                    #consumer{configuration =
-                                  #consumer_configuration{member_pid =
-                                                              LocalMember}} =
-                        Consumer,
-                    NextOffset = osiris_log:next_offset(Log1),
-                    LLO = case {LastLstOffset, NextOffset > LastLstOffset} of
-                              {undefined, _} ->
-                                  osiris:register_offset_listener(LocalMember,
-                                                                  NextOffset),
-                                  NextOffset;
-                              {_, true} ->
-                                  osiris:register_offset_listener(LocalMember,
-                                                                  NextOffset),
-                                  NextOffset;
-                              _ ->
-                                  LastLstOffset
-                          end,
-                    {ok,
-                     Consumer#consumer{log = Log1,
-                                       credit = Credit,
-                                       last_listener_offset = LLO}}
+                            NextOffset = osiris_log:next_offset(Log1),
+                            LLO = case {LastLstOffset, NextOffset > LastLstOffset} of
+                                      {undefined, _} ->
+                                          osiris:register_offset_listener(LocalMember,
+                                                                          NextOffset),
+                                          NextOffset;
+                                      {_, true} ->
+                                          osiris:register_offset_listener(LocalMember,
+                                                                          NextOffset),
+                                          NextOffset;
+                                      _ ->
+                                          LastLstOffset
+                                  end,
+                            {ok,
+                             Consumer#consumer{log = Log1,
+                                               credit = Credit,
+                                               last_listener_offset = LLO}}
+                    end;
+                {error, _} = Err ->
+                    Err
             end
     end.
 
@@ -4304,8 +4362,18 @@ close_log(undefined) ->
 close_log(Log) ->
     osiris_log:close(Log).
 
+%% The underlying socket may already be broken (e.g. torn down by a network
+%% partition), so callers must handle {error, _} as a connection-closed
+%% condition instead of assuming setopts/3 always succeeds.
+-spec setopts(module(), rabbit_net:socket(), list()) -> ok | {error, term()}.
 setopts(Transport, Sock, Opts) ->
-    ok = Transport:setopts(Sock, Opts).
+    Transport:setopts(Sock, Opts).
+
+setopts_failed_stop(S, Reason) ->
+    ?LOG_DEBUG("Stream protocol connection socket ~w setopts failed, "
+              "closing connection: ~tp",
+              [S, Reason]),
+    stop.
 
 stream_from_consumers(SubId, Consumers) ->
     case Consumers of
@@ -4444,10 +4512,17 @@ check_vhost_access(User = #user{username = Username}, VHost, S) ->
                                     "to vhost '~ts'", [Username, VHost])}
     end.
 
+-spec maybe_unblock(module(), rabbit_net:socket(), pid(),
+                    #stream_connection_state{}) ->
+    {ok, #stream_connection_state{}} | {error, term()}.
 maybe_unblock(Transport, Socket, Heartbeater, State) ->
-    setopts(Transport, Socket, [{active, once}]),
-    ok = rabbit_heartbeat:resume_monitor(Heartbeater),
-    State#stream_connection_state{blocked = false}.
+    case setopts(Transport, Socket, [{active, once}]) of
+        ok ->
+            ok = rabbit_heartbeat:resume_monitor(Heartbeater),
+            {ok, State#stream_connection_state{blocked = false}};
+        {error, _} = Err ->
+            Err
+    end.
 
 consumer_properties(#consumer{configuration = #consumer_configuration{properties = Properties}}) ->
     Properties.

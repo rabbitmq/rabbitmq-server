@@ -244,6 +244,30 @@ negotiate_frame_max_test(_) ->
     ?assertEqual(0, negotiate_frame_max(0, 0)),
     ok.
 
+%% A setopts/3 failure (from acting on a closed socket for example) should
+%% be propagated instead of causing a crash.
+setopts_error_should_be_propagated_test(_) ->
+    ModTransport = dummy_setopts_error_transport,
+    meck:new(ModTransport, [non_strict]),
+    Error = {error, einval},
+    meck:expect(ModTransport, setopts, fun(_Sock, _Opts) -> Error end),
+
+    Consumer = #consumer{credit = 5,
+                         send_limit = 0,
+                         last_listener_offset = undefined,
+                         configuration =
+                             #consumer_configuration{socket = dummy_socket}},
+    Counter = atomics:new(1, []),
+    ?assertEqual(Error,
+                 rabbit_stream_reader:send_chunks(?VERSION_2, ModTransport,
+                                                  Consumer, Counter)),
+
+    ?assertEqual(Error,
+                 rabbit_stream_reader:maybe_unblock(ModTransport, dummy_socket,
+                                                    self(),
+                                                    #stream_connection_state{})),
+    ok.
+
 consumer(S, Pid) ->
     #consumer{configuration = #consumer_configuration{stream = S,
                                                       member_pid = Pid}}.
