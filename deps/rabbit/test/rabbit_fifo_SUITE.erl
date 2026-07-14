@@ -1231,6 +1231,7 @@ return_auto_checked_out_test(Config) ->
     {State1, #{key := CKey,
                next_msg_id := MsgId},
      [_Monitor,
+      {mod_call, rabbit_quorum_queue, update_consumer_handler, _},
       {log_ext, [1], _Fun1, _} ]} = checkout(Config, ?LINE, Cid, 1, State0),
     % return should include another delivery
     {State2, _, Effects} = apply(meta(Config, 3),
@@ -1246,7 +1247,7 @@ return_auto_checked_out_test(Config) ->
 
     {State4, #{key := CKey2,
                 next_msg_id := MsgId3},
-     [_, {log_ext, [1], _Fun3, _} ]} = checkout(Config, ?LINE, Cid, 1, State3),
+     [_, _, {log_ext, [1], _Fun3, _} ]} = checkout(Config, ?LINE, Cid, 1, State3),
 
     [{_, {_, #{delivery_count := 1,
                acquired_count := 2}}}]
@@ -1262,6 +1263,7 @@ requeue_test(Config) ->
     {State1, #{key := CKey,
                next_msg_id := MsgId},
      [_Monitor,
+      {mod_call, rabbit_quorum_queue, update_consumer_handler, _},
       {log_ext, [1], _Fun, _}]} = checkout(Config, ?LINE, Cid, 1, State0),
 
     [{MsgId, {H1, _}}] = rabbit_fifo:get_checked_out(CKey, MsgId, MsgId, State1),
@@ -2096,8 +2098,9 @@ single_active_consumer_state_enter_leader_include_waiting_consumers_test(Config)
     ct:pal("Efx ~p", [Effects]),
     %% 2 effects for each consumer process (channel process),
     %% 1 effect for the node,
-    %% 1 for decorators
-    ?assertEqual(2 * 3 + 1 + 1, length(Effects)).
+    %% 1 for decorators,
+    %% 1 for the bulk consumer metrics resync
+    ?assertEqual(2 * 3 + 1 + 1 + 1, length(Effects)).
 
 single_active_consumer_state_enter_eol_include_waiting_consumers_test(Config) ->
     Resource = rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
@@ -2480,10 +2483,13 @@ single_active_consumer_priority_test(Config) ->
     assert_update_consumer_handler_state_transition(C2, Resource, true, single_active, lists:nth(2, ModCalls)),
     %% C1 should transition to waiting
     assert_update_consumer_handler_state_transition(C1, Resource, false, waiting, lists:nth(3, ModCalls)),
-    %% C3 is added as single_active
-    assert_update_consumer_handler_state_transition(C3, Resource, true, single_active, lists:nth(4, ModCalls)),
+    %% C3 is added as waiting (the active consumer, C2, still has a message
+    %% checked out so cannot be pre-empted immediately)
+    assert_update_consumer_handler_state_transition(C3, Resource, false, waiting, lists:nth(4, ModCalls)),
+    %% C3 is promoted to single_active once C2's message is settled
+    assert_update_consumer_handler_state_transition(C3, Resource, true, single_active, lists:nth(5, ModCalls)),
     %% C2 should transition as waiting
-    assert_update_consumer_handler_state_transition(C2, Resource, false, waiting, lists:nth(5, ModCalls)),
+    assert_update_consumer_handler_state_transition(C2, Resource, false, waiting, lists:nth(6, ModCalls)),
 
     ok.
 

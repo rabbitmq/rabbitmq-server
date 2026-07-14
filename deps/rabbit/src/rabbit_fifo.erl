@@ -260,7 +260,21 @@ update_config(Conf, State) ->
 apply(Meta, {machine_version, FromVersion, ToVersion}, VXState) ->
     %% machine version upgrades cant be done in apply_
     State = convert(Meta, FromVersion, ToVersion, VXState),
-    {State, ok, [{aux, {dlx, setup}}]};
+    Effects = case ToVersion of
+                 9 ->
+                     %% v9 moved consumer metrics ownership from the
+                     %% consuming channel's node to the current Ra leader;
+                     %% clear out any stale rows earlier versions may have
+                     %% left on other nodes and repopulate authoritatively
+                     #?STATE{cfg = #cfg{resource = QRes}} = State,
+                     [{mod_call, rabbit_quorum_queue,
+                       consumer_metrics_v9_upgrade,
+                       [QRes, consumer_metrics_rows(State)]},
+                      {aux, {dlx, setup}}];
+                 _ ->
+                     [{aux, {dlx, setup}}]
+             end,
+    {State, ok, Effects};
 apply(#{system_time := Ts} = Meta, Cmd,
       #?STATE{reclaimable_bytes = ReclBytes} = State) ->
     %% Add estimated reclaimable bytes.
@@ -492,7 +506,23 @@ apply_(#{index := Idx} = Meta,
     {Consumer, State1} = update_consumer(Meta, ConsumerKey, ConsumerId,
                                          ConsumerMeta, Spec, Priority,
                                          Timeout, State0),
-    {State2, Effs} = activate_next_consumer(State1, []),
+    WasActive = is_active(ConsumerKey, State1),
+    {State2, Effs0} = activate_next_consumer(State1, []),
+    {Active, ActivityStatus} = consumer_activity_status(ConsumerKey, State2),
+    Effs = case {WasActive, Active} of
+               {false, true} ->
+                   %% activate_next_consumer/2 has already emitted the
+                   %% metrics effect as part of promoting this consumer
+                   Effs0;
+               _ ->
+                   %% record (or refresh) the consumer metrics on the
+                   %% leader; needed here as activate_next_consumer/2 does
+                   %% not emit anything for the competing consumer strategy
+                   %% nor for a consumer that stays/becomes non-active
+                   [consumer_metrics_effect(State2, Consumer, Active,
+                                            ActivityStatus)
+                    | Effs0]
+           end,
 
     %% reply with a consumer infos
     Reply = {ok, consumer_info(ConsumerKey, Consumer, State2)},
@@ -1055,7 +1085,7 @@ state_enter(leader,
                     waiting_consumers = WaitingConsumers,
                     cfg = #cfg{resource = QRes,
                                dead_letter_handler = DLH},
-                    dlx = DlxState}) ->
+                    dlx = DlxState} = State) ->
     % return effects to monitor all current consumers and enqueuers
     Pids = lists:usort(maps:keys(Enqs)
                        ++ [P || ?CONSUMER_PID(P) <- maps:values(Cons)]
@@ -1064,7 +1094,12 @@ state_enter(leader,
     Nots = [{send_msg, P, leader_change, ra_event} || P <- Pids],
     NodeMons = lists:usort([{monitor, node, node(P)} || P <- Pids]),
     NotifyDecs = notify_decorators_startup(QRes),
-    Effects = Mons ++ Nots ++ NodeMons ++ [NotifyDecs],
+    %% (re-)populate the local consumer metrics table with the current
+    %% consumers of this queue: this node is now authoritative for them
+    ConsumerMetrics = {mod_call, rabbit_quorum_queue,
+                       bulk_update_consumer_metrics,
+                       [QRes, consumer_metrics_rows(State)]},
+    Effects = Mons ++ Nots ++ NodeMons ++ [NotifyDecs, ConsumerMetrics],
 
     case DLH of
         at_least_once ->
@@ -1073,6 +1108,18 @@ state_enter(leader,
             ok
     end,
     Effects;
+state_enter(follower, #?STATE{cfg = #cfg{resource = QRes,
+                                         dead_letter_handler = DLH},
+                              dlx = DlxState}) ->
+    %% this node is no longer authoritative for this queue's consumer
+    %% metrics, drop the locally cached rows
+    case DLH of
+        at_least_once ->
+            ensure_worker_terminated(DlxState);
+        _ ->
+            ok
+    end,
+    [{mod_call, rabbit_quorum_queue, delete_local_consumer_metrics, [QRes]}];
 state_enter(eol, #?STATE{enqueuers = Enqs,
                          consumers = Cons0,
                          waiting_consumers = WaitingConsumers0}) ->
@@ -1787,21 +1834,56 @@ cancel_consumer(Meta, ConsumerKey,
             end
     end.
 
-consumer_update_active_effects(#?STATE{cfg = #cfg{resource = QName}} = State,
+%% is this consumer currently entitled to receive deliveries and what its
+%% externally-visible activity status is, given the queue's consumer strategy
+consumer_activity_status(_ConsumerKey,
+                         #?STATE{cfg = #cfg{consumer_strategy = competing}}) ->
+    {true, up};
+consumer_activity_status(ConsumerKey,
+                         #?STATE{cfg = #cfg{consumer_strategy = single_active}} = State) ->
+    case is_active(ConsumerKey, State) of
+        true -> {true, single_active};
+        false -> {false, waiting}
+    end.
+
+consumer_metrics_effect(#?STATE{cfg = #cfg{resource = QName}},
+                        #consumer{cfg = #consumer_cfg{meta = Meta,
+                                                      pid = CPid,
+                                                      tag = CTag}},
+                        Active, ActivityStatus) ->
+    Ack = maps:get(ack, Meta, undefined),
+    Prefetch = maps:get(prefetch, Meta, undefined),
+    Args = maps:get(args, Meta, []),
+    {mod_call, rabbit_quorum_queue, update_consumer_handler,
+     [QName, {CTag, CPid}, false, Ack, Prefetch, Active, ActivityStatus, Args]}.
+
+%% metrics rows for every consumer of this queue, active or waiting, used to
+%% (re-)populate the local consumer metrics table when this node becomes leader
+consumer_metrics_rows(#?STATE{consumers = Cons,
+                              waiting_consumers = WaitingConsumers} = State) ->
+    [consumer_metrics_row(ConsumerKey, Consumer, State)
+     || {ConsumerKey, Consumer} <- maps:to_list(Cons) ++ WaitingConsumers].
+
+consumer_metrics_row(ConsumerKey,
+                     #consumer{cfg = #consumer_cfg{pid = Pid,
+                                                   tag = Tag,
+                                                   meta = Meta}},
+                     State) ->
+    {Active, ActivityStatus} = consumer_activity_status(ConsumerKey, State),
+    {Pid, Tag, maps:get(ack, Meta, undefined), maps:get(prefetch, Meta, undefined),
+     Active, ActivityStatus, maps:get(args, Meta, [])}.
+
+consumer_update_active_effects(State,
                                #consumer{cfg = #consumer_cfg{meta = Meta,
                                                              pid = CPid,
                                                              tag = CTag,
                                                              credit_mode = Mode},
                                          delivery_count = DeliveryCount,
                                          credit = Credit,
-                                         drain = Drain},
+                                         drain = Drain} = Consumer,
                                Active, ActivityStatus, Effects0) ->
-    Ack = maps:get(ack, Meta, undefined),
-    Prefetch = maps:get(prefetch, Meta, undefined),
-    Args = maps:get(args, Meta, []),
-    Effects = [{mod_call, rabbit_quorum_queue, update_consumer_handler,
-                [QName, {CTag, CPid}, false, Ack, Prefetch,
-                 Active, ActivityStatus, Args]} | Effects0],
+    Effects = [consumer_metrics_effect(State, Consumer, Active, ActivityStatus)
+               | Effects0],
     case Mode of
         {credited, _} when map_get(link_state_properties, Meta) =:= true ->
             Avail = case Active of
