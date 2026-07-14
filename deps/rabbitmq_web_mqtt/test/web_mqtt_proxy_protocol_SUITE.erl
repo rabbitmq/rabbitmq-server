@@ -27,7 +27,9 @@ all() ->
 groups() ->
     Tests = [
         proxy_protocol_v1,
-        proxy_protocol_v2_local
+        proxy_protocol_v2_local,
+        loopback_user_via_non_loopback_proxy_is_rejected,
+        loopback_user_via_local_proxy_is_accepted
     ],
     [{https_tests, [], Tests},
      {http_tests, [], Tests}].
@@ -54,11 +56,18 @@ init_per_group(Group, Config) ->
         Config1,
         rabbit_ct_broker_helpers:setup_steps() ++ [
             fun configure_proxy_protocol/1,
+            fun configure_loopback_users/1,
             fun configure_ssl/1
         ]).
 
 configure_proxy_protocol(Config) ->
     rabbit_ws_test_util:update_app_env(Config, proxy_protocol, true),
+    Config.
+
+%% Keep guest unrestricted by default so the other tests pass; the
+%% dedicated tests set their own value.
+configure_loopback_users(Config) ->
+    ok = set_loopback_users(Config, []),
     Config.
 
 configure_ssl(Config) ->
@@ -111,6 +120,44 @@ proxy_protocol_v2_local(Config) ->
       Config, <<"^127.0.0.1:\\d+ -> 127.0.0.1:\\d+$">>),
     {close, _} = rfc6455_client:close(WS),
     ok.
+
+%% A loopback-only user must be evaluated against the PROXY source, not the
+%% immediate peer (the proxy connection itself).
+loopback_user_via_non_loopback_proxy_is_rejected(Config) ->
+    ok = set_loopback_users(Config, [<<"guest">>]),
+    try
+        ReturnCode = connect_return_code(
+            Config, "PROXY TCP4 192.168.1.1 192.168.1.2 80 81\r\n"),
+        ?assertEqual(5, ReturnCode)
+    after
+        ok = set_loopback_users(Config, [])
+    end.
+
+%% A LOCAL v2 header keeps the real (loopback) ends, so guest is accepted (rc 0).
+loopback_user_via_local_proxy_is_accepted(Config) ->
+    ok = set_loopback_users(Config, [<<"guest">>]),
+    try
+        Header = ranch_proxy_header:header(#{command => local, version => 2}),
+        ReturnCode = connect_return_code(Config, Header),
+        ?assertEqual(0, ReturnCode)
+    after
+        ok = set_loopback_users(Config, [])
+    end.
+
+connect_return_code(Config, ProxyHeader) ->
+    PortStr = rabbit_ws_test_util:get_web_mqtt_port_str(Config),
+    Protocol = ?config(protocol, Config),
+    WS = rfc6455_client:new(Protocol ++ "://127.0.0.1:" ++ PortStr ++ "/ws", self(),
+        undefined, ["mqtt"], ProxyHeader),
+    {ok, _} = rfc6455_client:open(WS),
+    rfc6455_client:send_binary(WS, rabbit_ws_test_util:mqtt_3_1_1_connect_packet()),
+    {binary, <<16#20, 16#02, _SessionPresent, ReturnCode>>} = rfc6455_client:recv(WS),
+    catch rfc6455_client:close(WS),
+    ReturnCode.
+
+set_loopback_users(Config, Users) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+                                 [rabbit, loopback_users, Users]).
 
 %% The `connection_created' ETS table is populated asynchronously by
 %% the management agent; wait for an entry whose `name' matches the
