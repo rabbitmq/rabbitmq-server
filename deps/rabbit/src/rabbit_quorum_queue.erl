@@ -34,8 +34,10 @@
          deliver/3]).
 -export([dead_letter_publish/5]).
 -export([cluster_state/1, status/1, status/2]).
--export([update_consumer_handler/8, update_consumer/9]).
--export([cancel_consumer_handler/2, cancel_consumer/3]).
+-export([update_consumer_handler/8]).
+-export([cancel_consumer_handler/2]).
+-export([bulk_update_consumer_metrics/2, delete_local_consumer_metrics/1]).
+-export([consumer_metrics_v9_upgrade/2]).
 -export([become_leader/2, handle_tick/3, spawn_deleter/1]).
 -export([rpc_delete_metrics/1,
          key_metrics_rpc/1]).
@@ -465,28 +467,69 @@ single_active_consumer_on(Q) ->
     QArguments = amqqueue:get_arguments(Q),
     table_lookup(QArguments, <<"x-single-active-consumer">>, false).
 
+%% these mod_call effects are always applied on the current Ra leader
+%% (see ra_server_proc:handle_effect/5), which is where quorum queue
+%% consumer metrics are recorded, so no cross-node dispatch is needed
 update_consumer_handler(QName, {ConsumerTag, ChPid}, Exclusive, AckRequired,
                         Prefetch, Active, ActivityStatus, Args) ->
-    catch rabbit_queue_type_util:local_or_remote_handler(ChPid, ?MODULE, update_consumer,
-                                                         [QName, ChPid, ConsumerTag,
-                                                          Exclusive, AckRequired,
-                                                          Prefetch, Active,
-                                                          ActivityStatus, Args]).
-
-update_consumer(QName, ChPid, ConsumerTag, Exclusive, AckRequired, Prefetch,
-                Active, ActivityStatus, Args) ->
     catch rabbit_core_metrics:consumer_updated(ChPid, ConsumerTag, Exclusive,
-                                               AckRequired,
-                                               QName, Prefetch, Active,
-                                               ActivityStatus, Args).
+                                               AckRequired, QName, Prefetch,
+                                               Active, ActivityStatus, Args).
 
 cancel_consumer_handler(QName, {ConsumerTag, ChPid}) ->
-    catch rabbit_queue_type_util:local_or_remote_handler(ChPid, ?MODULE, cancel_consumer,
-                                                         [QName, ChPid, ConsumerTag]).
-
-cancel_consumer(QName, ChPid, ConsumerTag) ->
     catch rabbit_core_metrics:consumer_deleted(ChPid, ConsumerTag, QName),
     rabbit_queue_type_util:notify_consumer_deleted(ChPid, ConsumerTag, QName, ?INTERNAL_USER).
+
+%% called when this node becomes the Ra leader for QName: the previous
+%% leader's local rows (if any) were already dropped when it stepped down
+%% (see delete_local_consumer_metrics/1), but bulk-replace defensively so
+%% this table is never a mix of two leader terms' data
+%%
+%% this mod_call effect (like all mod_call effects) is not protected by
+%% ra_server_proc, so a crash here would take down the whole Ra server;
+%% the consumer_created table may also legitimately not exist, e.g. in
+%% rabbit_fifo_int_SUITE which runs bare ra clusters without core_metrics
+bulk_update_consumer_metrics(QName, ConsumerMetrics) ->
+    catch bulk_update_consumer_metrics0(QName, ConsumerMetrics).
+
+bulk_update_consumer_metrics0(QName, ConsumerMetrics) ->
+    delete_local_consumer_metrics(QName),
+    %% quorum queues don't support exclusive consumers
+    [rabbit_core_metrics:consumer_created(ChPid, ConsumerTag, false,
+                                          AckRequired, QName, Prefetch,
+                                          Active, ActivityStatus, Args)
+     || {ChPid, ConsumerTag, AckRequired, Prefetch, Active,
+         ActivityStatus, Args} <- ConsumerMetrics],
+    ok.
+
+delete_local_consumer_metrics(QName) ->
+    catch ets:match_delete(consumer_created,
+                           {{QName, '_', '_'}, '_', '_', '_', '_', '_', '_'}),
+    ok.
+
+%% one-off cleanup run when a queue's machine version crosses into v9: prior
+%% versions wrote consumer_created from the consuming channel's node instead
+%% of the Ra leader's, so any node in the cluster could be holding a stale
+%% or duplicate row for this queue; wipe them all and let the current
+%% leader (the only node this mod_call effect runs on) repopulate
+%% authoritatively
+%%
+%% see bulk_update_consumer_metrics/2 for why this must never crash
+consumer_metrics_v9_upgrade(QName, ConsumerMetrics) ->
+    catch consumer_metrics_v9_upgrade0(QName, ConsumerMetrics).
+
+consumer_metrics_v9_upgrade0(QName, ConsumerMetrics) ->
+    case rabbit_amqqueue:lookup(QName) of
+        {ok, Q} when ?is_amqqueue(Q) ->
+            Nodes = get_nodes(Q),
+            _ = [_ = erpc_call(Node, ?MODULE, delete_local_consumer_metrics,
+                              [QName], ?RPC_TIMEOUT)
+                 || Node <- Nodes, Node =/= node()],
+            ok;
+        _ ->
+            ok
+    end,
+    bulk_update_consumer_metrics(QName, ConsumerMetrics).
 
 become_leader(_QName, _Name) ->
     %% noop now as we instead rely on the promt tick_timeout + repair to update
@@ -1271,38 +1314,16 @@ consume(Q, Spec, QState0) when ?amqqueue_is_quorum(Q) ->
                      %% in credit_reply
                      link_state_properties => true},
     case rabbit_fifo_client:checkout(ConsumerTag, Mode, ConsumerMeta, QState0) of
-        {ok, Infos, QState} ->
-            %% this info key was added in QQ v8
-            IsSac = maps:get(consumer_strategy, Infos, competing) == single_active,
-            case IsSac orelse single_active_consumer_on(Q) of
-                true ->
-                    ActivityStatus = case Infos of
-                                         #{is_active := true} ->
-                                             single_active;
-                                         _ ->
-                                             waiting
-                                     end,
-                    rabbit_core_metrics:consumer_created(ChPid, ConsumerTag,
-                                                         ExclusiveConsume,
-                                                         AckRequired, QName,
-                                                         Prefetch,
-                                                         ActivityStatus == single_active,
-                                                         ActivityStatus, Args),
-                    rabbit_queue_type_util:notify_consumer_created(
-                      ChPid, ConsumerTag, ExclusiveConsume, AckRequired,
-                      QName, Prefetch, Args, none, ActingUser),
-                    {ok, QState};
-                false ->
-                    rabbit_core_metrics:consumer_created(ChPid, ConsumerTag,
-                                                         ExclusiveConsume,
-                                                         AckRequired, QName,
-                                                         Prefetch, true,
-                                                         up, Args),
-                    rabbit_queue_type_util:notify_consumer_created(
-                      ChPid, ConsumerTag, ExclusiveConsume, AckRequired,
-                      QName, Prefetch, Args, none, ActingUser),
-                    {ok, QState}
-            end;
+        {ok, _Infos, QState} ->
+            %% the consumer_created/updated rabbit_core_metrics rows for this
+            %% consumer are recorded on the Ra leader as part of applying the
+            %% checkout command (see rabbit_fifo:consumer_metrics_effect/4),
+            %% not here, as this code may run on a different node than the
+            %% leader
+            rabbit_queue_type_util:notify_consumer_created(
+              ChPid, ConsumerTag, ExclusiveConsume, AckRequired,
+              QName, Prefetch, Args, none, ActingUser),
+            {ok, QState};
         Err ->
             consume_error(Err, QName)
     end.
