@@ -466,6 +466,7 @@ module.exports = class BasePage {
   async sendKeys (locator, keys) {
     return this.retryOnStale(async () => {
       const element = await this.waitForDisplayed(locator)
+      await this.scrollTo(element)
       await element.click()
       await element.clear()
       return element.sendKeys(keys)
