@@ -28,7 +28,9 @@ all() ->
 groups() ->
     Tests = [
         proxy_protocol_v1,
-        proxy_protocol_v2_local
+        proxy_protocol_v2_local,
+        loopback_user_via_non_loopback_proxy_is_rejected,
+        loopback_user_via_local_proxy_is_accepted
     ],
     [{https_tests, [], Tests},
      {http_tests, [], Tests}].
@@ -119,6 +121,46 @@ proxy_protocol_v2_local(Config) ->
       Config, <<"^127.0.0.1:\\d+ -> 127.0.0.1:\\d+$">>),
     {close, _} = rfc6455_client:close(WS),
     ok.
+
+%% A loopback-only user must be evaluated against the PROXY source, not the
+%% immediate peer (the proxy connection itself).
+loopback_user_via_non_loopback_proxy_is_rejected(Config) ->
+    ok = set_loopback_users(Config, [<<"guest">>]),
+    try
+        Command = connect_response_command(
+            Config, "PROXY TCP4 192.168.1.1 192.168.1.2 80 81\r\n"),
+        ?assertEqual(<<"ERROR">>, Command)
+    after
+        ok = set_loopback_users(Config, [])
+    end.
+
+%% A LOCAL v2 header keeps the real (loopback) ends, so guest is accepted.
+loopback_user_via_local_proxy_is_accepted(Config) ->
+    ok = set_loopback_users(Config, [<<"guest">>]),
+    try
+        Header = ranch_proxy_header:header(#{command => local, version => 2}),
+        Command = connect_response_command(Config, Header),
+        ?assertEqual(<<"CONNECTED">>, Command)
+    after
+        ok = set_loopback_users(Config, [])
+    end.
+
+connect_response_command(Config, ProxyHeader) ->
+    PortStr = rabbit_ws_test_util:get_web_stomp_port_str(Config),
+    Protocol = ?config(protocol, Config),
+    WS = rfc6455_client:new(Protocol ++ "://127.0.0.1:" ++ PortStr ++ "/ws", self(),
+        undefined, [], ProxyHeader),
+    {ok, _} = rfc6455_client:open(WS),
+    Frame = stomp:marshal("CONNECT", [{"login", "guest"}, {"passcode", "guest"}], <<>>),
+    rfc6455_client:send(WS, Frame),
+    {ok, Response} = rfc6455_client:recv(WS),
+    catch rfc6455_client:close(WS),
+    %% The reply is a single STOMP frame; its command is the leading line.
+    hd(binary:split(iolist_to_binary(Response), <<"\n">>)).
+
+set_loopback_users(Config, Users) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+                                 [rabbit, loopback_users, Users]).
 
 %% The `connection_created' ETS table is populated asynchronously by
 %% the management agent; wait for an entry whose `name' matches the
