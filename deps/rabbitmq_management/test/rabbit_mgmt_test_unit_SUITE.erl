@@ -24,7 +24,8 @@ groups() ->
                                    pack_binding_test,
                                    default_restrictions,
                                    path_prefix_test,
-                                   regex_dos_test
+                                   regex_dos_test,
+                                   has_json_extension_test
                                   ]},
      {sequential_tests, [], [
                               referrer_policy_header_set_when_configured,
@@ -119,6 +120,18 @@ regex_dos_test(_) ->
     TargetString = <<"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaac">>,
     ?assertEqual(false, rabbit_mgmt_util:maybe_filter_by_keyword(
         name, EvilRegex, [{name, TargetString}], "true")).
+
+has_json_extension_test(_Config) ->
+    %% Standard .json extension
+    ?assert(rabbit_mgmt_wm_definitions:has_json_extension(<<"definitions.json">>)),
+    %% Case-insensitive
+    ?assert(rabbit_mgmt_wm_definitions:has_json_extension(<<"definitions.JSON">>)),
+    ?assert(rabbit_mgmt_wm_definitions:has_json_extension(<<"definitions.Json">>)),
+    %% Non-json extensions are rejected
+    ?assertNot(rabbit_mgmt_wm_definitions:has_json_extension(<<"definitions.txt">>)),
+    ?assertNot(rabbit_mgmt_wm_definitions:has_json_extension(<<"definitions">>)),
+    %% The atom 'unknown' (no filename provided) is rejected
+    ?assertNot(rabbit_mgmt_wm_definitions:has_json_extension(unknown)).
 
 referrer_policy_header_set_when_configured(_Config) ->
     application:set_env(rabbitmq_management, headers,

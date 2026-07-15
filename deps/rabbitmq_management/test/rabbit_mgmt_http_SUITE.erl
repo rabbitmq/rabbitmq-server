@@ -56,6 +56,7 @@ all() ->
         {group, definitions_group2_without_prefix},
         {group, definitions_group3_without_prefix},
         {group, definitions_group4_without_prefix},
+        {group, definitions_group5_without_prefix},
         {group, default_queue_type_without_prefix}
     ].
 
@@ -71,6 +72,7 @@ groups() ->
         {definitions_group2_without_prefix, [], definitions_group2_tests()},
         {definitions_group3_without_prefix, [], definitions_group3_tests()},
         {definitions_group4_without_prefix, [], definitions_group4_tests()},
+        {definitions_group5_without_prefix, [], definitions_group5_tests()},
         {default_queue_type_without_prefix, [], default_queue_type_group_tests()}
     ].
 
@@ -111,6 +113,14 @@ definitions_group3_tests() ->
 definitions_group4_tests() ->
     [
         definitions_vhost_test
+    ].
+
+definitions_group5_tests() ->
+    [
+        definitions_multipart_non_json_extension_rejected_test,
+        definitions_multipart_non_json_extension_allowed_when_not_enforced_test,
+        require_definition_json_extension_defaults_to_false_in_overview_test,
+        require_definition_json_extension_enabled_in_overview_test
     ].
 
 default_queue_type_group_tests() ->
@@ -2234,7 +2244,7 @@ long_definitions_multipart_test(Config) ->
     Data = binary_to_list(format_for_upload(LongDefs)),
     CodeExp = {group, '2xx'},
     Boundary = "------------long_definitions_multipart_test",
-    Body = format_multipart_filedata(Boundary, [{file, "file", Data}]),
+    Body = format_multipart_filedata(Boundary, [{file, "definitions.json", Data}]),
     ContentType = lists:concat(["multipart/form-data; boundary=", Boundary]),
     MoreHeaders = [{"content-type", ContentType}, {"content-length", integer_to_list(length(Body))}],
     http_upload_raw(Config, post, "/definitions", Body, "guest", "guest", CodeExp, MoreHeaders),
@@ -3492,7 +3502,7 @@ definitions_multipart_body_size_limit_test(Config) ->
         Boundary = "------------definitions_multipart_body_size_limit_test",
         LargeBody = list_to_binary(lists:duplicate(300, $\s)),
         OversizedMultipart = format_multipart_filedata(Boundary,
-            [{file, "file", Data ++ binary_to_list(LargeBody)}]),
+            [{file, "definitions.json", Data ++ binary_to_list(LargeBody)}]),
         ContentType = lists:concat(["multipart/form-data; boundary=", Boundary]),
         MoreHeaders = [{"content-type", ContentType},
                        {"content-length", integer_to_list(length(OversizedMultipart))}],
@@ -3501,6 +3511,64 @@ definitions_multipart_body_size_limit_test(Config) ->
         passed
     after
         rpc(Config, application, unset_env, [rabbitmq_management, max_http_body_size])
+    end.
+
+definitions_multipart_non_json_extension_rejected_test(Config) ->
+    %% When require_definition_json_extension is enabled, uploads whose filename does not
+    %% end in .json must be rejected with HTTP 400. The JSON response body must
+    %% include the reason code and the offending filename.
+    rpc(Config, application, set_env,
+        [rabbitmq_management, require_definition_json_extension, true]),
+    try
+        SmallDefs = #{users => [], vhosts => [#{name => <<"test">>}]},
+        Data = binary_to_list(format_for_upload(SmallDefs)),
+        Boundary = "------------definitions_multipart_non_json_rejected",
+        Body = format_multipart_filedata(Boundary, [{file, "definitions.txt", Data}]),
+        ContentType = lists:concat(["multipart/form-data; boundary=", Boundary]),
+        MoreHeaders = [{"content-type", ContentType},
+                       {"content-length", integer_to_list(length(Body))},
+                       auth_header("guest", "guest")],
+        {ok, {{_, 400, _}, _, ResBody}} =
+            req(Config, 0, post, "/definitions", MoreHeaders, Body),
+        Decoded = decode_body(ResBody),
+        ?assertEqual(<<"unsupported_file_extension">>, maps:get(reason, Decoded)),
+        ?assertEqual(<<"definitions.txt">>, maps:get(filename, Decoded)),
+        passed
+    after
+        rpc(Config, application, unset_env,
+            [rabbitmq_management, require_definition_json_extension])
+    end.
+
+definitions_multipart_non_json_extension_allowed_when_not_enforced_test(Config) ->
+    %% By default (require_definition_json_extension = false), files with any extension are accepted.
+    SmallDefs = #{users => [], vhosts => [#{name => <<"test">>}]},
+    Data = binary_to_list(format_for_upload(SmallDefs)),
+    Boundary = "------------definitions_multipart_non_json_allowed",
+    Body = format_multipart_filedata(Boundary, [{file, "definitions.txt", Data}]),
+    ContentType = lists:concat(["multipart/form-data; boundary=", Boundary]),
+    MoreHeaders = [{"content-type", ContentType},
+                   {"content-length", integer_to_list(length(Body))}],
+    http_upload_raw(Config, post, "/definitions", Body,
+                    "guest", "guest", {group, '2xx'}, MoreHeaders),
+    passed.
+
+require_definition_json_extension_defaults_to_false_in_overview_test(Config) ->
+    %% By default, require_definition_json_extension is false and must be reflected in the overview.
+    Overview = http_get(Config, "/overview"),
+    ?assertEqual(false, maps:get(require_definition_json_extension, Overview)),
+    passed.
+
+require_definition_json_extension_enabled_in_overview_test(Config) ->
+    %% When enabled, the overview endpoint must report require_definition_json_extension as true.
+    rpc(Config, application, set_env,
+        [rabbitmq_management, require_definition_json_extension, true]),
+    try
+        Overview = http_get(Config, "/overview"),
+        ?assertEqual(true, maps:get(require_definition_json_extension, Overview)),
+        passed
+    after
+        rpc(Config, application, unset_env,
+            [rabbitmq_management, require_definition_json_extension])
     end.
 
 publish_accept_json_test(Config) ->

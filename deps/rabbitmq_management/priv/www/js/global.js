@@ -675,6 +675,7 @@ var is_op_policy_updating_enabled;      // ...editing operator policies is enabl
 var queue_type;
 var rabbit_versions_interesting; // ...all cluster nodes run the same version
 var disable_stats;               // ...disable all stats, management only mode
+var require_definition_json_extension; // ...file upload is restricted to .json only
 
 // Extensions write to this, the dispatcher maker reads it
 var dispatcher_modules = [];
@@ -761,6 +762,7 @@ function DisplayControl() {
 function setup_global_vars(overview) {
     rates_mode = overview.rates_mode;
     is_op_policy_updating_enabled = overview.is_op_policy_updating_enabled;
+    require_definition_json_extension = overview.require_definition_json_extension;
     user_tags = expand_user_tags(user.tags);
     user_administrator = jQuery.inArray("administrator", user_tags) != -1;
     is_user_policymaker = jQuery.inArray("policymaker", user_tags) != -1;
