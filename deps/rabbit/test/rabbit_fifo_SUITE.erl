@@ -1316,6 +1316,33 @@ cancelled_checkout_out_test(Config) ->
         apply(meta(Config, 7), make_checkout(Cid, {dequeue, settled}, #{}), State4),
     ok.
 
+cancel_consumer_metrics_deletion_delayed_until_settled_test(Config) ->
+    Cid = {<<"cid">>, self()},
+    {State0, _} = enq(Config, 1, 1, first, test_init(test)),
+    {State1, #{key := CKey, next_msg_id := NextMsgId}, _} =
+        checkout(Config, ?LINE, Cid, 1, State0), %% prefetch of 1, 1 msg out
+    %% cancelling while a message is still checked out must not delete the
+    %% consumer metrics yet
+    {State2, _, Effects1} = apply(meta(Config, 3),
+                                  rabbit_fifo:make_checkout(Cid, cancel, #{}),
+                                  State1),
+    ?assertNot(has_cancel_consumer_handler_effect(Effects1)),
+    ?assertEqual(1, map_size(State2#rabbit_fifo.consumers)),
+    %% settling the last unacked message finally removes the consumer, and
+    %% only then should its metrics be deleted
+    {State3, ok, Effects2} =
+        apply(meta(Config, 4), rabbit_fifo:make_settle(CKey, [NextMsgId]),
+              State2),
+    ?assertEqual(0, map_size(State3#rabbit_fifo.consumers)),
+    ?assert(has_cancel_consumer_handler_effect(Effects2)),
+    ok.
+
+has_cancel_consumer_handler_effect(Effects) ->
+    lists:any(fun ({mod_call, rabbit_quorum_queue,
+                    cancel_consumer_handler, _}) -> true;
+                  (_) -> false
+              end, Effects).
+
 down_with_noproc_consumer_returns_unsettled_test(Config) ->
     Cid = {?FUNCTION_NAME_B, self()},
     {State0, _} = enq(Config, 1, 1, second, test_init(test)),
