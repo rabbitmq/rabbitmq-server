@@ -32,8 +32,6 @@ function removeDuplicates(array){
 
 
 function startWithOAuthLogin (oauth) {
-  store_pref("oauth-return-to", window.location.hash);
-
   if (!oauth.logged_in) {
     hasAnyResourceServerReady(oauth, (oauth, warnings) => {  render_login_oauth(oauth, warnings); start_app_login(); })
   } else {
@@ -176,14 +174,22 @@ function start_app() {
     var url = this.location.toString();
     var hash = this.location.hash;
     var pathname = this.location.pathname;
+
+    var return_to = '#/';
+    if (get_pref("oauth-idp-pending")) {
+        clear_pref("oauth-idp-pending");
+        return_to = get_pref("oauth-return-to") || '#/';
+        clear_pref("oauth-return-to");
+    }
+
     if (url.indexOf('#') == -1) {
-        this.location = url + '#/';
+        this.location = url + return_to;
     } else if (hash.indexOf('#token_type') != - 1 && pathname == '/') {
         // This is equivalent to previous `if` clause when uaa authorisation is used.
         // Tokens are passed in the url hash, so the url always contains a #.
         // We need to check the current path is `/` and token is present,
         // so we can redirect to `/#/`
-        this.location = url.replace(/#token_type.+/gi, '#/');
+        this.location = url.replace(/#token_type.+/gi, return_to);
     }
 
     app = new Sammy.Application(dispatcher);
