@@ -382,7 +382,8 @@ handle_data1(Data, State = #state{socket = Socket,
         {ok, Packet, Rest, ParseState1} ->
             case ProcState of
                 connect_packet_unprocessed ->
-                    case rabbit_mqtt_processor:init(Packet, rabbit_net:unwrap_socket(Socket),
+                    %% Pass the proxy-aware socket so the processor resolves the ends from it
+                    case rabbit_mqtt_processor:init(Packet, Socket,
                                                     ConnName, fun send_reply/1) of
                         {ok, ProcState1} ->
                             ?LOG_INFO("Accepted Web MQTT connection ~ts for client ID ~ts",
