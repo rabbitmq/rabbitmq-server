@@ -294,10 +294,4 @@ join_tags(Tags) ->
 parse_peeraddr(unknown) ->
     rabbit_data_coercion:to_list(unknown);
 parse_peeraddr(PeerAddr) ->
-    handle_inet_ntoa_peeraddr(rabbit_misc:ntoa(PeerAddr), PeerAddr).
-
--spec handle_inet_ntoa_peeraddr({'error', term()} | string(), inet:ip_address() | unknown) -> string().
-handle_inet_ntoa_peeraddr({error, einval}, PeerAddr) ->
-    rabbit_data_coercion:to_list(PeerAddr);
-handle_inet_ntoa_peeraddr(PeerAddrStr, _PeerAddr0) ->
-    PeerAddrStr.
+    rabbit_misc:ntoa(PeerAddr).
