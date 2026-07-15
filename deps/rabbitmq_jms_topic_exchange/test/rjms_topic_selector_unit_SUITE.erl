@@ -36,7 +36,10 @@ groups() ->
                                     validate_test,
                                     validate_binding_test,
                                     validate_binding_rejects_unknown_atoms_test,
-                                    validate_binding_no_selector_test
+                                    validate_binding_no_selector_test,
+                                    validate_binding_accepts_valid_like_pattern_test,
+                                    validate_binding_rejects_oversized_like_pattern_test,
+                                    validate_binding_rejects_invalid_regex_test
                                    ]}
     ].
 
@@ -90,6 +93,34 @@ validate_binding_no_selector_test(_Config) ->
               , destination = #resource{name = <<"DName">>}
               , args = []},
   ?assertEqual(ok, validate_binding(dummy_exchange(), B)).
+
+validate_binding_accepts_valid_like_pattern_test(_Config) ->
+  B = selector_binding(<<"{like, {ident, <<\"prop\">>}, <<\"a%b\">>, no_escape}.">>),
+  ?assertEqual(ok, validate_binding(dummy_exchange(), B)).
+
+%% A LIKE pattern that expands past `rabbit_re`'s pattern length limit must
+%% be rejected when the binding is created, not the first time a message
+%% is evaluated against it.
+validate_binding_rejects_oversized_like_pattern_test(_Config) ->
+  LongPattern = binary:copy(<<"a">>, rabbit_re:max_pattern_length() + 1),
+  Selector = iolist_to_binary(
+               ["{like, {ident, <<\"prop\">>}, <<\"", LongPattern, "\">>, no_escape}."]),
+  B = selector_binding(Selector),
+  ?assertMatch({error, {binding_invalid, _, _}},
+               validate_binding(dummy_exchange(), B)).
+
+%% The `regex` selector form passes its pattern straight to `re:compile/1`,
+%% bypassing LIKE escaping entirely, so a malformed pattern must also be
+%% rejected at bind time.
+validate_binding_rejects_invalid_regex_test(_Config) ->
+  B = selector_binding(<<"{like, {ident, <<\"prop\">>}, regex, <<\"(unclosed\">>}.">>),
+  ?assertMatch({error, {binding_invalid, _, _}},
+               validate_binding(dummy_exchange(), B)).
+
+selector_binding(Selector) ->
+  #binding{ key = <<"BindingKey">>
+          , destination = #resource{name = <<"DName">>}
+          , args = [{?RJMS_COMPILED_SELECTOR_ARG, longstr, Selector}]}.
 
 dummy_exchange() ->
   #exchange{name = <<"XName">>, arguments = []}.

@@ -118,8 +118,14 @@ validate_binding(_X, #binding{args = Args}) ->
       ok;
     Selector ->
       case decode_term(Selector) of
-        {ok, _} ->
-          ok;
+        {ok, Term} ->
+          case sjx_evaluator:validate_patterns(Term) of
+            ok ->
+              ok;
+            {error, Reason} ->
+              {error, {binding_invalid,
+                       "invalid JMS selector pattern: ~tp", [Reason]}}
+          end;
         {error, Reason} ->
           {error, {binding_invalid,
                    "invalid JMS selector: ~tp", [Reason]}}
