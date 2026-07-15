@@ -381,8 +381,9 @@ apply_(#{index := Idx} = Meta,
             State1 = State0#?STATE{messages = rabbit_fifo_pq:in(?DEFAULT_PRIORITY,
                                                                 ?MSG(Idx, Header),
                                                                 Messages)},
-            State2 = update_or_remove_con(Meta, ConsumerKey, Con, State1),
-            {State3, Effects} = activate_next_consumer({State2, []}),
+            {State2, Effects0} = update_or_remove_con(Meta, ConsumerKey, Con,
+                                                       State1, []),
+            {State3, Effects} = activate_next_consumer({State2, Effects0}),
             checkout(Meta, State0, State3, Effects);
         _ ->
             {State00, ok, []}
@@ -423,11 +424,11 @@ apply_(#{index := Index,
             {State0, {dequeue, empty}};
         _ ->
             Timeout = get_consumer_timeout(ConsumerMeta, State00),
-            {_, State1} = update_consumer(Meta, ConsumerId, ConsumerId,
-                                          ConsumerMeta,
-                                          {once, {simple_prefetch, 1}}, 0,
-                                          Timeout, State0),
-            case checkout_one(Meta, false, State1, []) of
+            {_, State1, Effects00} = update_consumer(Meta, ConsumerId, ConsumerId,
+                                                      ConsumerMeta,
+                                                      {once, {simple_prefetch, 1}},
+                                                      0, Timeout, State0, []),
+            case checkout_one(Meta, false, State1, Effects00) of
                 {success, _, MsgId, Msg, _ExpiredMsg, State2, Effects0} ->
                     RaftIdx = get_msg_idx(Msg),
                     Header = get_msg_header(Msg),
@@ -503,11 +504,11 @@ apply_(#{index := Idx} = Meta,
                       error ->
                           ConsumerId
                   end,
-    {Consumer, State1} = update_consumer(Meta, ConsumerKey, ConsumerId,
-                                         ConsumerMeta, Spec, Priority,
-                                         Timeout, State0),
+    {Consumer, State1, Effects00} = update_consumer(Meta, ConsumerKey, ConsumerId,
+                                                    ConsumerMeta, Spec, Priority,
+                                                    Timeout, State0, []),
     WasActive = is_active(ConsumerKey, State1),
-    {State2, Effs0} = activate_next_consumer(State1, []),
+    {State2, Effs0} = activate_next_consumer(State1, Effects00),
     {Active, ActivityStatus} = consumer_activity_status(ConsumerKey, State2),
     Effs = case {WasActive, Active} of
                {false, true} ->
@@ -713,7 +714,7 @@ apply_(Meta, {nodeup, Node}, #?STATE{consumers = Cons0,
                            {consumer_disconnected_timeout, ConsumerKey},
                            infinity} | EAcc1],
 
-                  {update_or_remove_con(Meta, ConsumerKey, C, SAcc), EAcc};
+                  update_or_remove_con(Meta, ConsumerKey, C, SAcc, EAcc);
              (_, _, Acc) ->
                   Acc
           end, {State0, Effects0}, maps:iterator(Cons0, ordered)),
@@ -1905,16 +1906,11 @@ cancel_consumer0(Meta, ConsumerKey,
                  #?STATE{consumers = C0} = S0, Effects0, Reason) ->
     case C0 of
         #{ConsumerKey := Consumer} ->
-            {S, Effects2} = maybe_return_all(Meta, ConsumerKey, Consumer,
-                                             S0, Effects0, Reason),
-
-
-            %% The effects are emitted before the consumer is actually removed
-            %% if the consumer has unacked messages. This is a bit weird but
-            %% in line with what classic queues do (from an external point of
-            %% view)
-            Effects = cancel_consumer_effects(consumer_id(Consumer), S, Effects2),
-            {S, Effects};
+            %% the consumer_created/deleted metrics effect is emitted by
+            %% maybe_return_all/update_or_remove_con, only once the consumer
+            %% is actually removed (immediately, or once any unsettled
+            %% messages have all been settled/discarded/returned)
+            maybe_return_all(Meta, ConsumerKey, Consumer, S0, Effects0, Reason);
         _ ->
             %% already removed: do nothing
             {S0, Effects0}
@@ -2033,18 +2029,23 @@ maybe_return_all(#{system_time := Ts} = Meta, ConsumerKey,
                  Effects0, Reason) ->
     case Reason of
         cancel ->
-            {update_or_remove_con(
-               Meta, ConsumerKey,
-               Consumer#consumer{cfg = CCfg#consumer_cfg{lifetime = once},
-                                 credit = 0,
-                                 status = cancelled},
-               S0), Effects0};
+            %% keep the consumer around, and its metrics untouched, until
+            %% any unsettled messages are settled/discarded/returned; see
+            %% update_or_remove_con/5
+            update_or_remove_con(
+              Meta, ConsumerKey,
+              Consumer#consumer{cfg = CCfg#consumer_cfg{lifetime = once},
+                                credit = 0,
+                                status = cancelled},
+              S0, Effects0);
         _ ->
+            %% down/remove: the consumer is gone immediately regardless of
+            %% any unsettled messages, which are returned to the queue below
             {S1, Effects} = return_all(Meta, S0, Effects0, ConsumerKey,
                                        Consumer, Reason == down),
             {S1#?STATE{consumers = maps:remove(ConsumerKey, S1#?STATE.consumers),
                        last_active = Ts},
-             Effects}
+             cancel_consumer_effects(consumer_id(Consumer), S1, Effects)}
     end.
 
 node_of(undefined) -> undefined;
@@ -2289,11 +2290,12 @@ complete(Meta, ConsumerKey, MsgIds,
     Len = map_size(Checked0) - map_size(Checked),
     Con = Con0#consumer{checked_out = Checked,
                         credit = increase_credit(Con0, Len)},
-    State1 = update_or_remove_con(Meta, ConsumerKey, Con, State0),
+    {State1, Effects1} = update_or_remove_con(Meta, ConsumerKey, Con, State0,
+                                              Effects),
     {State1#?STATE{msg_bytes_checkout = BytesCheckout - SettledSize,
                    reclaimable_bytes = ReclBytes + SettledSize + (Len * ?ENQ_OVERHEAD_B),
                    messages_total = Tot - Len},
-     Effects}.
+     Effects1}.
 
 increase_credit(#consumer{cfg = #consumer_cfg{lifetime = once},
                           credit = Credit}, _) ->
@@ -2493,8 +2495,9 @@ return_one(#{system_time := Ts} = Meta, MsgId,
                          false ->
                              State0#?STATE{returns = lqueue:in(Msg, Returns)}
                      end,
-            State = update_or_remove_con(Meta, ConsumerKey, Con, State1),
-            {add_bytes_return(Header, State), Effects0}
+            {State, Effects1} = update_or_remove_con(Meta, ConsumerKey, Con,
+                                                     State1, Effects0),
+            {add_bytes_return(Header, State), Effects1}
     end.
 
 should_delay(DeliveryFailed, DelayedRetry, Ts, Header, Anns) ->
@@ -2852,10 +2855,11 @@ assign_to_consumer(#{system_time := Ts} = Meta, _Ts, ConsumerKey, Msgs,
     State1 = State0#?STATE{msg_bytes_checkout = BytesCheckout,
                            msg_bytes_enqueue = BytesEnqueue,
                            next_consumer_timeout = NextConTimeout},
-    State = update_or_remove_con(Meta, ConsumerKey, Con, State1),
+    {State, Effects1} = update_or_remove_con(Meta, ConsumerKey, Con, State1,
+                                             Effects0),
     DelMsgs = lists:reverse(DeliveryMsgs),
     DeliveryEffect = delivery_effect(ConsumerKey, DelMsgs, State),
-    Effects = [DeliveryEffect | Effects0],
+    Effects = [DeliveryEffect | Effects1],
     {State, Effects}.
 
 delayed_in(ReadyAt, Idx, Msg, DeferralToken, #delayed{tree = Tree0,
@@ -2990,10 +2994,11 @@ checkout_one(#{system_time := Ts} = Meta, ExpiredMsg0, InitState0, Effects0) ->
                                                   BytesEnqueue - Size,
                                               next_consumer_timeout =
                                                   min(Timeout, NextConTimeout)},
-                            State = update_or_remove_con(Meta, ConsumerKey,
-                                                         Con, State1),
+                            {State, Effects2} = update_or_remove_con(
+                                                  Meta, ConsumerKey, Con,
+                                                  State1, Effects1),
                             {success, ConsumerKey, Next, Msg, ExpiredMsg,
-                             State, Effects1}
+                             State, Effects2}
                     end;
                 empty ->
                     {nochange, ExpiredMsg, InitState, Effects1}
@@ -3185,33 +3190,41 @@ update_or_remove_con(Meta, ConsumerKey,
                      #consumer{cfg = #consumer_cfg{lifetime = once},
                                checked_out = Checked,
                                credit = 0} = Con,
-                     #?STATE{consumers = Cons} = State) ->
+                     #?STATE{consumers = Cons} = State, Effects) ->
     case map_size(Checked) of
         0 ->
             #{system_time := Ts} = Meta,
-            % we're done with this consumer
-            State#?STATE{consumers = maps:remove(ConsumerKey, Cons),
-                         last_active = Ts};
+            % we're done with this consumer: this is the only point a
+            % lifetime=once consumer is actually removed, whether that's
+            % immediately on cancellation or, if it still had unsettled
+            % messages, once the last of them is settled/discarded/returned;
+            % the consumer metrics are cleared to match, not before
+            {State#?STATE{consumers = maps:remove(ConsumerKey, Cons),
+                         last_active = Ts},
+             cancel_consumer_effects(consumer_id(Con), State, Effects)};
         _ ->
-            % there are unsettled items so need to keep around
-            State#?STATE{consumers = maps:put(ConsumerKey, Con, Cons)}
+            % there are unsettled items so need to keep around; the
+            % consumer metrics are left as-is until it is actually removed
+            {State#?STATE{consumers = maps:put(ConsumerKey, Con, Cons)}, Effects}
     end;
 update_or_remove_con(_Meta, ConsumerKey,
                      #consumer{status = quiescing,
                                checked_out = Checked} = Con0,
                      #?STATE{consumers = Cons,
-                             waiting_consumers = Waiting} = State)
+                             waiting_consumers = Waiting} = State, Effects)
   when map_size(Checked) == 0 ->
     Con = Con0#consumer{status = up},
-    State#?STATE{consumers = maps:remove(ConsumerKey, Cons),
-                 waiting_consumers = add_waiting({ConsumerKey, Con}, Waiting)};
+    {State#?STATE{consumers = maps:remove(ConsumerKey, Cons),
+                 waiting_consumers = add_waiting({ConsumerKey, Con}, Waiting)},
+     Effects};
 update_or_remove_con(_Meta, ConsumerKey,
                      #consumer{} = Con,
                      #?STATE{consumers = Cons,
-                             service_queue = ServiceQueue} = State) ->
-    State#?STATE{consumers = maps:put(ConsumerKey, Con, Cons),
+                             service_queue = ServiceQueue} = State, Effects) ->
+    {State#?STATE{consumers = maps:put(ConsumerKey, Con, Cons),
                  service_queue = maybe_queue_consumer(ConsumerKey, Con,
-                                                      ServiceQueue)}.
+                                                      ServiceQueue)},
+     Effects}.
 
 maybe_queue_consumer(Key, #consumer{credit = Credit,
                                     status = up,
@@ -3232,7 +3245,7 @@ maybe_queue_consumer(_Key, _Consumer, ServiceQueue) ->
 update_consumer(Meta, ConsumerKey, {Tag, Pid}, ConsumerMeta,
                 {Life, Mode} = Spec, Priority, Timeout,
                 #?STATE{cfg = #cfg{consumer_strategy = competing},
-                        consumers = Cons0} = State0) ->
+                        consumers = Cons0} = State0, Effects0) ->
     Consumer = case Cons0 of
                    #{ConsumerKey := #consumer{} = Consumer0} ->
                        merge_consumer(Meta, Consumer0, ConsumerMeta,
@@ -3250,13 +3263,15 @@ update_consumer(Meta, ConsumerKey, {Tag, Pid}, ConsumerMeta,
                                  credit = Credit,
                                  delivery_count = DeliveryCount}
                end,
-    {Consumer, update_or_remove_con(Meta, ConsumerKey, Consumer, State0)};
+    {State, Effects} = update_or_remove_con(Meta, ConsumerKey, Consumer,
+                                            State0, Effects0),
+    {Consumer, State, Effects};
 update_consumer(Meta, ConsumerKey, {Tag, Pid}, ConsumerMeta,
                 {Life, Mode} = Spec, Priority, Timeout,
                 #?STATE{cfg = #cfg{consumer_strategy = single_active},
                         consumers = Cons0,
                         waiting_consumers = Waiting0,
-                        service_queue = _ServiceQueue0} = State) ->
+                        service_queue = _ServiceQueue0} = State, Effects0) ->
     %% if it is the current active consumer, just update
     %% if it is a cancelled active consumer, add to waiting unless it is the only
     %% one, then merge
@@ -3264,7 +3279,9 @@ update_consumer(Meta, ConsumerKey, {Tag, Pid}, ConsumerMeta,
         {ConsumerKey, #consumer{status = up} = Consumer0} ->
             Consumer = merge_consumer(Meta, Consumer0, ConsumerMeta,
                                       Spec, Priority),
-            {Consumer, update_or_remove_con(Meta, ConsumerKey, Consumer, State)};
+            {State1, Effects} = update_or_remove_con(Meta, ConsumerKey,
+                                                     Consumer, State, Effects0),
+            {Consumer, State1, Effects};
         undefined when is_map_key(ConsumerKey, Cons0) ->
             %% there is no active consumer and the current consumer is in the
             %% consumers map and thus must be cancelled, in this case we can just
@@ -3272,7 +3289,9 @@ update_consumer(Meta, ConsumerKey, {Tag, Pid}, ConsumerMeta,
             Consumer0 = maps:get(ConsumerKey, Cons0),
             Consumer = merge_consumer(Meta, Consumer0, ConsumerMeta,
                                       Spec, Priority),
-            {Consumer, update_or_remove_con(Meta, ConsumerKey, Consumer, State)};
+            {State1, Effects} = update_or_remove_con(Meta, ConsumerKey,
+                                                     Consumer, State, Effects0),
+            {Consumer, State1, Effects};
         _ ->
             %% add as a new waiting consumer
             Credit = included_credit(Mode),
@@ -3287,7 +3306,7 @@ update_consumer(Meta, ConsumerKey, {Tag, Pid}, ConsumerMeta,
                                  credit = Credit,
                                  delivery_count = DeliveryCount},
             Waiting = add_waiting({ConsumerKey, Consumer}, Waiting0),
-            {Consumer, State#?STATE{waiting_consumers = Waiting}}
+            {Consumer, State#?STATE{waiting_consumers = Waiting}, Effects0}
     end.
 
 add_waiting({Key, _} = New, Waiting) ->
