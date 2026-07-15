@@ -102,7 +102,7 @@ isLike(L, {Patt, Esc}) -> patt_match(L, pattern_of(Patt, Esc)).
 
 patt_match(L, MP) ->
   BS = byte_size(L),
-  case re:run(L, MP, [{capture, first}]) of
+  case rabbit_re:run(L, MP, [{capture, first}]) of
     {match, [{0, BS}]} -> true;
     _                  -> false
   end.
@@ -164,7 +164,7 @@ escape(Ch)  -> Ch.
 
 compile_re(error) -> error;
 compile_re(MatchMany) ->
-    case re:compile(MatchMany)
+    case rabbit_re:compile(MatchMany)
     of  {ok, Rx} -> Rx;
         _        -> error
     end.
