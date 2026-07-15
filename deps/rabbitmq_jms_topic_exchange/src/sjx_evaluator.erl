@@ -97,12 +97,13 @@ do_bin_op('/' , L, R) when L == 0 andalso R == 0 -> nan;
 do_bin_op(_,_,_) -> error.
 
 isLike(undefined, _Patt) -> undefined;
-isLike(L, {regex, MP}) -> patt_match(L, MP);
-isLike(L, {Patt, Esc}) -> patt_match(L, pattern_of(Patt, Esc)).
+isLike(L, {regex, MP}) -> full_regex_match(L, MP);
+isLike(L, {Patt, Esc}) -> full_regex_match(L, pattern_of(Patt, Esc)).
 
-patt_match(L, MP) ->
+%% Bounds match effort, as `rabbit_amqp_filter_sql`'s `like/2` does.
+full_regex_match(L, MP) ->
   BS = byte_size(L),
-  case re:run(L, MP, [{capture, first}]) of
+  case rabbit_re:run(L, MP, [{capture, first}]) of
     {match, [{0, BS}]} -> true;
     _                  -> false
   end.
@@ -163,8 +164,9 @@ escape($\\) -> "\\\\";
 escape(Ch)  -> Ch.
 
 compile_re(error) -> error;
+%% `rabbit_re` also rejects overly long patterns before compiling them.
 compile_re(MatchMany) ->
-    case re:compile(MatchMany)
+    case rabbit_re:compile(MatchMany)
     of  {ok, Rx} -> Rx;
         _        -> error
     end.
