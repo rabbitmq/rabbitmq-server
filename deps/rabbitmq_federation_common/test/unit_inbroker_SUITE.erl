@@ -154,13 +154,13 @@ upstream_set_validation(_Config) ->
                                          <<"a-name">>,
                                           [[{<<"upstream">>, <<"devtest1">>}],
                                            [{<<"upstream">>, <<"devtest2">>}]],
-                                         <<"acting-user">>),
+                                         none),
                  [[ok], [ok]]),
     ?assertEqual(rabbit_federation_parameters:validate(<<"/">>, <<"federation-upstream-set">>,
                                          <<"a-name">>,
                                           [#{<<"upstream">> => <<"devtest3">>},
                                            #{<<"upstream">> => <<"devtest4">>}],
-                                         <<"acting-user">>),
+                                         none),
                  [[ok], [ok]]),
     ok.
 
@@ -168,12 +168,12 @@ upstream_validation(_Config) ->
     ?assertEqual(rabbit_federation_parameters:validate(<<"/">>, <<"federation-upstream">>,
                                          <<"a-name">>,
                                           [{<<"uri">>, <<"amqp://127.0.0.1/%2f">>}],
-                                         <<"acting-user">>),
+                                         none),
                  [ok]),
     ?assertEqual(rabbit_federation_parameters:validate(<<"/">>, <<"federation-upstream">>,
                                          <<"a-name">>,
                                           #{<<"uri">> => <<"amqp://127.0.0.1/%2f">>},
-                                         <<"acting-user">>),
+                                         none),
                  [ok]),
     ok.
 

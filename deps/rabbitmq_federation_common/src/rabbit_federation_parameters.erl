@@ -10,6 +10,7 @@
 -behaviour(rabbit_policy_validator).
 
 -include("rabbit_federation.hrl").
+-include_lib("amqp_client/include/amqp_client.hrl").
 
 -export([validate/5, notify/5, notify_clear/4]).
 -export([register/0, unregister/0, validate_policy/1, adjust/1]).
@@ -47,10 +48,10 @@ validate(_VHost, <<"federation-upstream-set">>, Name, Term0, _User) ->
         shared_validation()], Upstream)
      || Upstream <- Term];
 
-validate(_VHost, <<"federation-upstream">>, Name, Term0, _User) ->
+validate(_VHost, <<"federation-upstream">>, Name, Term0, User) ->
     Term = rabbit_data_coercion:to_proplist(Term0),
     rabbit_parameter_validation:proplist(
-      Name, [{<<"uri">>, fun validate_uri/2, mandatory} |
+      Name, [{<<"uri">>, validate_uri(User), mandatory} |
             shared_validation()], Term);
 
 validate(_VHost, _Component, Name, _Term, _User) ->
@@ -95,24 +96,40 @@ shared_validation() ->
      {<<"channel-use-mode">>, rabbit_parameter_validation:enum(
                               ['multiple', 'single']), optional}].
 
-validate_uri(Name, Term) when is_binary(Term) ->
+validate_uri(User) ->
+    fun (Name, Term) -> validate_uri(Name, Term, User) end.
+
+validate_uri(Name, Term, User) when is_binary(Term) ->
     case rabbit_parameter_validation:binary(Name, Term) of
         ok -> case amqp_uri:parse(binary_to_list(Term)) of
-                  {ok, _}    -> ok;
+                  {ok, Params} -> validate_uri_vhost_access(Params, User);
                   {error, E} -> {error, "\"~ts\" not a valid URI: ~tp", [Term, E]}
               end;
         E  -> E
     end;
-validate_uri(Name, Term) ->
+validate_uri(Name, Term, User) ->
     case rabbit_parameter_validation:list(Name, Term) of
         ok -> case [V || U <- Term,
-                         V <- [validate_uri(Name, U)],
+                         V <- [validate_uri(Name, U, User)],
                          element(1, V) =:= error] of
                   []      -> ok;
                   [E | _] -> E
               end;
         E  -> E
     end.
+
+%% A direct URI carries its own virtual host; check access to it here.
+validate_uri_vhost_access(#amqp_params_direct{}, none) ->
+    ok;
+validate_uri_vhost_access(#amqp_params_direct{virtual_host = VHost}, User = #user{}) ->
+    try rabbit_access_control:check_vhost_access(User, VHost, undefined, #{}) of
+        ok -> ok
+    catch
+        _:_ -> {error, "user \"~ts\" may not connect to vhost \"~ts\"",
+                [User#user.username, VHost]}
+    end;
+validate_uri_vhost_access(_Params, _User) ->
+    ok.
 
 %%----------------------------------------------------------------------------
 
