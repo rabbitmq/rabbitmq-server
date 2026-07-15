@@ -4,8 +4,11 @@ const API_ERROR_REASONS = {
     'unsupported_file_extension': '{filename}Only .json files are accepted for definitions import.',
 };
 
-function format_error_response(response) {
-    var template = API_ERROR_REASONS[response.reason] || response.reason;
+function format_error_response(response, reason) {
+    var template = API_ERROR_REASONS[reason];
+    if (typeof(template) != 'string') {
+        return reason;
+    }
     return template.replace(/\{(\w+)\}/g, function(_, key) {
         var val = response[key];
         return val !== undefined ? val + ': ' : '';
@@ -1573,7 +1576,7 @@ function check_bad_response(req, full_page_404, on404fun) {
             } else if (on404fun && (typeof on404fun === 'function') && req.status == 404) {
                 on404fun(response);
             } else {
-                show_popup('warn', fmt_escape_html(format_error_response(response)));
+                show_popup('warn', fmt_escape_html(format_error_response(response, reason)));
             }
         } else if (error == 'page_out_of_range') {
             var seconds = 60;
