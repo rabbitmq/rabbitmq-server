@@ -25,3 +25,4 @@ mgt/mgt-only-exchanges.sh
 mgt/queuesAndStreams.sh
 mgt/feature-flags.sh
 mgt/hide-allow-header.sh
+mgt/enforce-definition-file-extension.sh

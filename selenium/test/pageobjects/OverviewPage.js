@@ -7,6 +7,7 @@ const UPLOAD_DEFINITIONS_SECTION = By.css('div#upload-definitions-section')
 const CHOOSE_BROKER_UPLOAD_FILE = By.css('input[name="file"]')
 const UPLOAD_BROKER_FILE = By.css('input[type=submit][name="upload-definitions"]')
 const POP_UP = By.css('div.form-popup-info')
+const WARN_POP_UP = By.css('div.form-popup-warn')
 
 const DOWNLOAD_DEFINITIONS_SECTION = By.css('div#download-definitions-section')
 const CHOOSE_BROKER_DOWNLOAD_FILE = By.css('input#download-filename')
@@ -26,6 +27,25 @@ module.exports = class OverviewPage extends BasePage {
     await this.click(POP_UP)
     return popup.getText()
   }
+
+  async uploadBrokerDefinitionsExpectingError(file) {
+    await this.click(UPLOAD_DEFINITIONS_SECTION)
+    await this.chooseFile(CHOOSE_BROKER_UPLOAD_FILE, file)
+    await this.driver.sleep(1000)
+    await this.click(UPLOAD_BROKER_FILE)
+    await this.acceptAlert()
+    let popup = await this.waitForDisplayed(WARN_POP_UP)
+    let text = await popup.getText()
+    await this.click(WARN_POP_UP)
+    return text
+  }
+
+  async getFileInputAcceptAttribute() {
+    await this.click(UPLOAD_DEFINITIONS_SECTION)
+    let input = await this.waitForDisplayed(CHOOSE_BROKER_UPLOAD_FILE)
+    return input.getAttribute('accept')
+  }
+
   async downloadBrokerDefinitions(filename) {
     return this.click(DOWNLOAD_DEFINITIONS_SECTION)
   }

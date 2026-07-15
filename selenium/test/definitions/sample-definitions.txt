@@ -1,0 +1,1 @@
+{"rabbit_version":"4.0.0","rabbitmq_version":"4.0.0","vhosts":[{"name":"/"}],"queues":[],"exchanges":[],"bindings":[]}

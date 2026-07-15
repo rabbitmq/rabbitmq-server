@@ -11,6 +11,7 @@
 -export([content_types_accepted/2, allowed_methods/2, accept_json/2]).
 -export([accept_multipart/2]).
 -export([variances/2]).
+-export([has_json_extension/1]).
 
 -include("rabbit_mgmt.hrl").
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
@@ -256,6 +257,8 @@ accept_json(ReqData0, Context) ->
     end.
 
 accept_multipart(ReqData0, Context) ->
+    EnforceJsonExtension = application:get_env(rabbitmq_management,
+                                               require_definition_json_extension, false),
     BodySizeLimit = application:get_env(rabbitmq_management, max_http_body_size,
                                         ?MANAGEMENT_DEFAULT_HTTP_MAX_BODY_SIZE),
     case get_all_parts(ReqData0, BodySizeLimit) of
@@ -264,14 +267,25 @@ accept_multipart(ReqData0, Context) ->
                              "Use the 'management.http.max_body_size' key in rabbitmq.conf to increase the limit if necessary",
                              [BytesRead, LimitApplied]),
             rabbit_mgmt_util:bad_request("Exceeded HTTP request body size limit", ReqData0, Context);
-        {Parts, ReqData} ->
-            Redirect = get_part(<<"redirect">>, Parts),
-            Payload = get_part(<<"file">>, Parts),
-            Resp = {Res, _, _} = accept(Payload, ReqData, Context),
-            case {Res, Redirect} of
-                {true, unknown} -> {true, ReqData, Context};
-                {true, _}       -> {{true, Redirect}, ReqData, Context};
-                _               -> Resp
+        {Parts, Filename, ReqData} ->
+            case EnforceJsonExtension andalso not has_json_extension(Filename) of
+                true ->
+                    ExtraFields = case Filename of
+                        unknown -> #{};
+                        _       -> #{filename => Filename}
+                    end,
+                    rabbit_mgmt_util:bad_request(<<"unsupported_file_extension">>,
+                                                 ExtraFields,
+                                                 ReqData, Context);
+                false ->
+                    Redirect = get_part(<<"redirect">>, Parts),
+                    Payload = get_part(<<"file">>, Parts),
+                    Resp = {Res, _, _} = accept(Payload, ReqData, Context),
+                    case {Res, Redirect} of
+                        {true, unknown} -> {true, ReqData, Context};
+                        {true, _}       -> {{true, Redirect}, ReqData, Context};
+                        _               -> Resp
+                    end
             end
     end.
 
@@ -355,27 +369,37 @@ get_all_parts(Req, BodySizeLimit) ->
         N when is_integer(N), N > BodySizeLimit ->
             {error, http_body_limit_exceeded, BodySizeLimit, N};
         _ ->
-            get_all_parts(Req, 0, BodySizeLimit, [])
+            get_all_parts(Req, 0, BodySizeLimit, [], unknown)
     end.
 
-get_all_parts(Req0, BodySize0, BodySizeLimit, Acc) ->
+get_all_parts(Req0, BodySize0, BodySizeLimit, Acc, FileFilename) ->
     case cowboy_req:read_part(Req0) of
         {done, Req1} ->
-            {Acc, Req1};
+            {Acc, FileFilename, Req1};
         {ok, Headers, Req1} ->
             %% Approximate maximum size of part headers.
             BodySize1 = BodySize0 + 2048,
-            Name = case cow_multipart:form_data(Headers) of
-                       {data, N} -> N;
-                       {file, N, _, _} -> N
+            {Name, Filename} = case cow_multipart:form_data(Headers) of
+                       {data, N}          -> {N, unknown};
+                       {file, N, FN, _}   -> {N, FN}
                    end,
             case stream_part_body(Req1, BodySize1, BodySizeLimit, <<>>) of
                 {ok, Body, BodySize, Req2} ->
-                    get_all_parts(Req2, BodySize, BodySizeLimit, [{Name, Body}|Acc]);
+                    %% Track the filename of the "file" field specifically.
+                    UpdatedFileFilename = case Name of
+                        <<"file">> -> Filename;
+                        _          -> FileFilename
+                    end,
+                    get_all_parts(Req2, BodySize, BodySizeLimit, [{Name, Body}|Acc], UpdatedFileFilename);
                 {error, http_body_limit_exceeded, _, _} = Error ->
                     Error
             end
     end.
+
+has_json_extension(unknown) ->
+    false;
+has_json_extension(Filename) ->
+    filename:extension(string:lowercase(Filename)) =:= <<".json">>.
 
 stream_part_body(Req0, BodySize, BodySizeLimit, Acc) ->
     %% Pass an explicit length to read_part_body so that Cowboy's internal
