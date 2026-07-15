@@ -257,8 +257,7 @@ accept_json(ReqData0, Context) ->
     end.
 
 accept_multipart(ReqData0, Context) ->
-    EnforceJsonExtension = application:get_env(rabbitmq_management,
-                                               require_definition_json_extension, false),
+    EnforceJsonExtension = rabbit_mgmt_features:is_definition_json_extension_required(),
     BodySizeLimit = application:get_env(rabbitmq_management, max_http_body_size,
                                         ?MANAGEMENT_DEFAULT_HTTP_MAX_BODY_SIZE),
     case get_all_parts(ReqData0, BodySizeLimit) of
