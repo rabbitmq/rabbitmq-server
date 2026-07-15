@@ -256,6 +256,8 @@ export function oauth_initiateLogin(resource_server_id) {
   if (!resource_server) return;
   set_auth_resource(resource_server_id)
 
+  store_pref("oauth-return-to", window.location.hash);
+
   oauth.sp_initiated = resource_server.sp_initiated
   oauth.authority = resource_server.oauth_provider_url
 
@@ -268,6 +270,7 @@ export function oauth_initiateLogin(resource_server_id) {
         _management_logger.error(err)
     })
   } else {
+    store_pref("oauth-idp-pending", "true")
     location.href = resource_server.oauth_provider_url
   }
 }
