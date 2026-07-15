@@ -432,7 +432,8 @@ processor_args(Configuration, Sock) ->
                               exit({send_failed, Reason})
                       end
               end,
-    {ok, {PeerAddr, _PeerPort}} = rabbit_net:peername(RealSocket),
+    %% Resolve the peer from the proxy-aware socket.
+    {ok, {PeerAddr, _PeerPort, _Host, _Port}} = rabbit_net:socket_ends(Sock, inbound),
     {SendFun, adapter_info(Sock),
      ssl_login_name(RealSocket, Configuration), PeerAddr}.
 
