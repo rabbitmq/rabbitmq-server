@@ -106,7 +106,7 @@ token_with_scopes_and_expiration(Scopes, Expiration) ->
 
 token_without_scopes() ->
     %% expiration is a timestamp with precision in seconds
-    #{
+    #{<<"exp">> => default_expiration_moment(),
       <<"iss">> => <<"unit_test">>,
       <<"foo">> => <<"bar">>,
       <<"aud">> => [<<"rabbitmq">>]

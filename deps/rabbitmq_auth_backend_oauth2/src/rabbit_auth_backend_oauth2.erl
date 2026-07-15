@@ -21,7 +21,7 @@
          expiry_timestamp/1]).
 
 %% for testing
--export([normalize_token_scope/2, get_expanded_scopes/2]).
+-export([normalize_token_scope/2, get_expanded_scopes/2, get_expanded_scopes/3]).
 
 -import(rabbit_data_coercion, [to_map/1]).
 -import(uaa_jwt, [
@@ -34,6 +34,8 @@
 -import(rabbit_oauth2_scope, [
     filter_matching_scope_prefix/2,
     filter_matching_scope_prefix_and_drop_it/2]).
+
+-define(MAX_SCOPE_COUNT, 2048).
 
 -ifdef(TEST).
 -compile(export_all).
@@ -93,6 +95,10 @@ check_vhost_access(#auth_user{impl = DecodedTokenFun},
             rabbit_oauth2_scope:vhost_access(VHost, Scopes)
         end).
 
+-spec check_resource_access(rabbit_types:auth_user(), rabbit_types:r(atom()),
+                            rabbit_types:permission_atom(),
+                            rabbit_types:authz_context()) ->
+    boolean() | {'error', any()}.
 check_resource_access(#auth_user{impl = DecodedTokenFun},
                       Resource, Permission, _AuthzContext) ->
     with_decoded_token(DecodedTokenFun(),
@@ -101,6 +107,10 @@ check_resource_access(#auth_user{impl = DecodedTokenFun},
             rabbit_oauth2_scope:resource_access(Resource, Permission, Scopes)
         end).
 
+-spec check_topic_access(rabbit_types:auth_user(), rabbit_types:r(atom()),
+                         rabbit_types:permission_atom(),
+                         rabbit_types:topic_access_context()) ->
+    boolean() | {'error', any()}.
 check_topic_access(#auth_user{impl = DecodedTokenFun},
                    Resource, Permission, Context) ->
     with_decoded_token(DecodedTokenFun(),
@@ -109,6 +119,10 @@ check_topic_access(#auth_user{impl = DecodedTokenFun},
             rabbit_oauth2_scope:topic_access(Resource, Permission, Context, Scopes)
         end).
 
+-spec update_state(rabbit_types:auth_user(), term()) ->
+    {'ok', rabbit_types:auth_user()} |
+    {'refused', string(), [any()]} |
+    {'error', any()}.
 update_state(AuthUser, NewToken) ->
     case resolve_resource_server(NewToken) of
         {error, _} = Err0 -> Err0;
@@ -116,9 +130,9 @@ update_state(AuthUser, NewToken) ->
             case check_token(NewToken, Tuple) of
                 %% avoid logging the token
                 {refused, {error, {invalid_token, error, _Err, _Stacktrace}}} ->
-                    {refused, "Authentication using an OAuth 2/JWT token failed: provided token is invalid"};
+                    {refused, "Authentication using an OAuth 2/JWT token failed: provided token is invalid", []};
                 {refused, Err} ->
-                    {refused, rabbit_misc:format("Authentication using an OAuth 2/JWT token failed: ~tp", [Err])};
+                    {refused, rabbit_misc:format("Authentication using an OAuth 2/JWT token failed: ~tp", [Err]), []};
                 {ok, DecodedToken} ->
                     CurToken = AuthUser#auth_user.impl,
                     case ensure_same_username(
@@ -126,19 +140,22 @@ update_state(AuthUser, NewToken) ->
                             CurToken(), DecodedToken) of
                         ok ->
                             Tags = tags_from(DecodedToken),
+                            Token1 = DecodedToken#{<<"x-rmq-require-exp">> =>
+                                                   ResourceServer#resource_server.require_exp},
                             {ok, AuthUser#auth_user{tags = Tags,
-                                                    impl = fun() -> DecodedToken end}};
+                                                    impl = fun() -> Token1 end}};
                         {error, mismatch_username_after_token_refresh} ->
                             {refused,
-                                "Not allowed to change username on refreshed token"}
+                                "Not allowed to change username on refreshed token", []}
                     end
             end
     end.
 
+-spec expiry_timestamp(rabbit_types:auth_user()) -> integer() | never.
 expiry_timestamp(#auth_user{impl = DecodedTokenFun}) ->
     case DecodedTokenFun() of
-        #{<<"exp">> := Exp} when is_integer(Exp) ->
-            Exp;
+        #{<<"exp">> := Exp} when is_number(Exp) ->
+            trunc(Exp);
         _ ->
             never
     end.
@@ -163,7 +180,9 @@ authenticate(_, AuthProps0) ->
                 {refused, Err} ->
                     {refused, "Authentication using an OAuth 2/JWT token failed: ~tp", [Err]};
                 {ok, DecodedToken} ->
-                    case with_decoded_token(DecodedToken, fun(In) -> auth_user_from_token(In, ResourceServer) end) of
+                    DecodedToken1 = DecodedToken#{<<"x-rmq-require-exp">> =>
+                        ResourceServer#resource_server.require_exp},
+                    case with_decoded_token(DecodedToken1, fun(In) -> auth_user_from_token(In, ResourceServer) end) of
                         {error, Err} ->
                             {refused, "Authentication using an OAuth 2/JWT token failed: ~tp", [Err]};
                         Else ->
@@ -194,9 +213,11 @@ auth_user_from_token(Token0, ResourceServer) ->
         ResourceServer#resource_server.preferred_username_claims,
         Token0),
     Tags     = tags_from(Token0),
+    Token1   = Token0#{<<"x-rmq-require-exp">> =>
+                          ResourceServer#resource_server.require_exp},
     {ok, #auth_user{username = Username,
                     tags = Tags,
-                    impl = fun() -> Token0 end}}.
+                    impl = fun() -> Token1 end}}.
 
 ensure_same_username(PreferredUsernameClaims, CurrentDecodedToken, NewDecodedToken) ->
     CurUsername = username_from(PreferredUsernameClaims, CurrentDecodedToken),
@@ -204,14 +225,20 @@ ensure_same_username(PreferredUsernameClaims, CurrentDecodedToken, NewDecodedTok
         {CurUsername, CurUsername} -> ok;
         _ -> {error, mismatch_username_after_token_refresh}
     end.
-
-validate_token_expiry(#{<<"exp">> := Exp}) when is_integer(Exp) ->
+validate_token_expiry(#{<<"exp">> := Exp}) when is_number(Exp) ->
     Now = os:system_time(seconds),
-    case Exp =< Now of
-        true  -> {error, rabbit_misc:format("Provided JWT token has expired at timestamp ~tp (validated at ~tp)", [Exp, Now])};
+    ExpTs = trunc(Exp),
+    case ExpTs =< Now of
+        true  -> {error, rabbit_misc:format("Provided JWT token has expired at timestamp ~tp (validated at ~tp)", [ExpTs, Now])};
         false -> ok
     end;
-validate_token_expiry(#{}) -> ok.
+validate_token_expiry(#{<<"exp">> := _}) ->
+    {error, "Provided JWT token has an invalid exp claim: value is not a number"};
+validate_token_expiry(Token) ->
+    case maps:get(<<"x-rmq-require-exp">>, Token, true) of
+        true  -> {error, "Provided JWT token has no exp claim"};
+        false -> ok
+    end.
 
 -spec check_token(raw_jwt_token(), {resource_server(), internal_oauth_provider()}) ->
           {'ok', decoded_jwt_token()} |
@@ -224,10 +251,13 @@ check_token(DecodedToken, _) when is_map(DecodedToken) ->
 check_token(Token, {ResourceServer, InternalOAuthProvider}) ->
     case decode_and_verify(Token, ResourceServer, InternalOAuthProvider) of
         {error, Reason} -> {refused, {error, Reason}};
-        {true, Payload} -> {ok, normalize_token_scope(ResourceServer, Payload)};
+        {true, Payload} ->
+            case normalize_token_scope(ResourceServer, Payload) of
+                {ok, NormalizedPayload} -> {ok, NormalizedPayload};
+                {error, Reason} -> {refused, {error, Reason}}
+            end;
         {false, _} -> {refused, signature_invalid}
     end.
-
 extract_scopes_from_scope_claim(Payload) -> 
     case maps:find(?SCOPE_JWT_FIELD, Payload) of
         {ok, Bin} when is_binary(Bin) -> 
@@ -238,16 +268,20 @@ extract_scopes_from_scope_claim(Payload) ->
     end.
 
 -spec normalize_token_scope(
-    ResourceServer :: resource_server(), DecodedToken :: decoded_jwt_token()) -> map().
+    ResourceServer :: resource_server(), DecodedToken :: decoded_jwt_token()) ->
+        {ok, map()} | {error, too_many_scopes}.
 normalize_token_scope(ResourceServer, Payload) ->
-
-    filter_duplicates(   
+    Payload1 = filter_duplicates(
         filter_matching_scope_prefix(ResourceServer,
             extract_scopes_from_rich_auth_request(ResourceServer,
-                extract_scopes_using_scope_aliases(ResourceServer, 
-                    extract_scopes_from_additional_scopes_key(ResourceServer, 
+                extract_scopes_using_scope_aliases(ResourceServer,
+                    extract_scopes_from_additional_scopes_key(ResourceServer,
                         extract_scopes_from_requesting_party_token(ResourceServer,
-                            extract_scopes_from_scope_claim(Payload))))))).
+                            extract_scopes_from_scope_claim(Payload))))))),
+    case length(get_scope(Payload1)) > ?MAX_SCOPE_COUNT of
+        true  -> {error, too_many_scopes};
+        false -> {ok, Payload1}
+    end.
 
 filter_duplicates(#{?SCOPE_JWT_FIELD := Scopes} = Payload) -> 
     set_scope(lists:usort(Scopes), Payload);
@@ -431,8 +465,12 @@ find_claim_in_token(Claim, Token) ->
     end.
 
 -spec get_expanded_scopes(map(), #resource{}) -> [binary()].
-get_expanded_scopes(Token, #resource{virtual_host = VHost}) ->
-    Context = #{ token => Token , vhost => VHost},
+get_expanded_scopes(Token, Resource) ->
+    get_expanded_scopes(Token, Resource, wildcard).
+
+-spec get_expanded_scopes(map(), #resource{}, wildcard | regex) -> [binary()].
+get_expanded_scopes(Token, #resource{virtual_host = VHost}, Syntax) ->
+    Context = #{ token => Token, vhost => VHost, syntax => Syntax },
     case get_scope(Token) of
         [] -> [];
         Scopes -> lists:map(fun(Scope) -> list_to_binary(parse_scope(Scope, Context)) end, Scopes)
@@ -455,25 +493,39 @@ parse_scope_part(Elem, Acc, Stage, Context) ->
         _ -> Stage(Elem, Acc, Context)
     end.
 
-capture_var_name(Elem, Acc, #{ token := Token, vhost := Vhost}) ->
-    { Acc ++ resolve_scope_var(Elem, Token, Vhost), fun expect_closing_var/3}.
+capture_var_name(Elem, Acc, #{ token := Token, vhost := Vhost, syntax := Syntax }) ->
+    { Acc ++ resolve_scope_var(Elem, Token, Vhost, Syntax), fun expect_closing_var/3 }.
 
 expect_closing_var("}" , Acc, _Context) -> { Acc , undefined };
 expect_closing_var(_ , _Acc, _Context) -> {"", error}.
 
-resolve_scope_var(Elem, Token, Vhost) ->
-    case Elem of
-        "vhost" -> binary_to_list(Vhost);
-        _ ->
-            ElemAsBinary = list_to_binary(Elem),
-            binary_to_list(case maps:get(ElemAsBinary, Token, ElemAsBinary) of
-                          Value when is_binary(Value) -> Value;
-                          _ -> ElemAsBinary
-                        end)
+resolve_scope_var(Elem, Token, Vhost, Syntax) ->
+    Raw = case Elem of
+              "vhost" -> binary_to_list(Vhost);
+              _ ->
+                  ElemAsBinary = list_to_binary(Elem),
+                  binary_to_list(case maps:get(ElemAsBinary, Token, ElemAsBinary) of
+                                Value when is_binary(Value) -> Value;
+                                _ -> ElemAsBinary
+                              end)
+          end,
+    case Syntax of
+        regex -> escape_regex_metacharacters(Raw);
+        _       -> Raw
     end.
+
+escape_regex_metacharacters(Str) ->
+    binary_to_list(rabbit_re:escape(iolist_to_binary(Str))).
 
 -spec tags_from(decoded_jwt_token()) -> list(atom()).
 tags_from(DecodedToken) ->
     Scopes    = maps:get(?SCOPE_JWT_FIELD, DecodedToken, []),
     TagScopes = filter_matching_scope_prefix_and_drop_it(Scopes, ?TAG_SCOPE_PREFIX),
-    lists:usort(lists:map(fun rabbit_data_coercion:to_atom/1, TagScopes)).
+    lists:usort(lists:filtermap(fun safe_to_atom/1, TagScopes)).
+
+safe_to_atom(Bin) ->
+    try
+        {true, binary_to_existing_atom(Bin, utf8)}
+    catch
+        error:badarg -> false
+    end.

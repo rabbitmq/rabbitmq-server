@@ -44,6 +44,7 @@
   id :: resource_server_id(),
   resource_server_type :: binary() | undefined,
   verify_aud :: boolean(),
+  require_exp :: boolean(),
   scope_prefix :: binary(),
   additional_scopes_key :: binary() | undefined,
   preferred_username_claims :: list(),

@@ -74,6 +74,10 @@ verify_get_rabbitmq_server_configuration() -> [
     {with_verify_aud_false, [], [
         rabbitmq_verify_aud_is_false
     ]},
+    rabbitmq_require_exp_is_true,
+    {with_require_exp_false, [], [
+        rabbitmq_require_exp_is_false
+    ]},
     rabbitmq_has_default_scope_prefix,
     {with_scope_prefix, [], [
         rabbitmq_has_scope_prefix
@@ -103,6 +107,10 @@ verify_configuration_inheritance_with_rabbitmq2() -> [
     rabbitmq2_verify_aud_is_true,
     {with_verify_aud_false, [], [
         rabbitmq2_verify_aud_is_false
+    ]},
+    rabbitmq2_require_exp_is_true,
+    {with_require_exp_false, [], [
+        rabbitmq2_require_exp_is_false
     ]},
     rabbitmq2_has_default_scope_prefix,
     {with_scope_prefix, [], [
@@ -176,6 +184,10 @@ init_per_group(with_verify_aud_false, Config) ->
     set_env(verify_aud, false),
     Config;
 
+init_per_group(with_require_exp_false, Config) ->
+    set_env(require_exp, false),
+    Config;
+
 init_per_group(with_rabbitmq1_verify_aud_false, Config) ->
     RabbitMQServers = get_env(resource_servers, #{}),
     Resource0 = maps:get(?RABBITMQ_RESOURCE_ONE, RabbitMQServers, []),
@@ -226,6 +238,10 @@ end_per_group(with_empty_scope_prefix, Config) ->
 
 end_per_group(with_verify_aud_false, Config) ->
     unset_env(verify_aud),
+    Config;
+
+end_per_group(with_require_exp_false, Config) ->
+    unset_env(require_exp),
     Config;
 
 end_per_group(with_two_resource_servers, Config) ->
@@ -312,6 +328,18 @@ rabbitmq_verify_aud_is_false(_) ->
 
 rabbitmq2_verify_aud_is_true(_) ->
     assert_verify_aud(true, ?RABBITMQ_RESOURCE_TWO).
+
+rabbitmq_require_exp_is_true(_) ->
+    assert_require_exp(true, ?RABBITMQ).
+
+rabbitmq_require_exp_is_false(_) ->
+    assert_require_exp(false, ?RABBITMQ).
+
+rabbitmq2_require_exp_is_true(_) ->
+    assert_require_exp(true, ?RABBITMQ_RESOURCE_TWO).
+
+rabbitmq2_require_exp_is_false(_) ->
+    assert_require_exp(false, ?RABBITMQ_RESOURCE_TWO).
 
 both_resources_oauth_provider_id_is_root(_) ->
     assert_oauth_provider_id(root, ?RABBITMQ_RESOURCE_ONE),
@@ -420,6 +448,10 @@ assert_resource_server_id(Expected, Audience) ->
 assert_verify_aud(Expected, Audience) ->
     {ok, Actual} = resolve_resource_server_from_audience(Audience),
     ?assertEqual(Expected, Actual#resource_server.verify_aud).
+
+assert_require_exp(Expected, Audience) ->
+    {ok, Actual} = resolve_resource_server_from_audience(Audience),
+    ?assertEqual(Expected, Actual#resource_server.require_exp).
 
 assert_oauth_provider_id(Expected, Audience) ->
     {ok, Actual} = resolve_resource_server_from_audience(Audience),
