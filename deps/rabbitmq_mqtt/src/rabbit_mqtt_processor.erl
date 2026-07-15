@@ -124,7 +124,7 @@
 
 %% NB: If init/4 returns an error, it must clean up itself because terminate/3 will not be called.
 -spec init(ConnectPacket :: mqtt_packet(),
-           RawSocket :: rabbit_net:socket(),
+           Socket :: rabbit_net:socket() | rabbit_net:proxy_socket(),
            ConnectionName :: binary(),
            SendFun :: send_fun()) ->
     {ok, state()} | {error, {socket_ends, any()} | reason_code()}.
@@ -134,9 +134,11 @@ init(#mqtt_packet{fixed = #mqtt_packet_fixed{type = ?CONNECT},
     %% Check whether peer closed the connection.
     %% For example, this can happen when connection was blocked because of resource
     %% alarm and client therefore disconnected due to client side CONNACK timeout.
+    %% Resolve the ends from the (possibly Proxy Protocol-aware) socket, then unwrap it
+    %% for the rest of the connection where the raw socket is expected.
     case rabbit_net:socket_ends(Socket, inbound) of
         {ok, SocketEnds} ->
-            process_connect(ConnectPacket, Socket, ConnName, SendFun, SocketEnds);
+            process_connect(ConnectPacket, rabbit_net:unwrap_socket(Socket), ConnName, SendFun, SocketEnds);
         {error, Reason} ->
             {error, {socket_ends, Reason}}
     end.

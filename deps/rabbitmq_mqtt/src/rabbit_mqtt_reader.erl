@@ -341,7 +341,12 @@ process_received_bytes(Bytes, State = #state{socket = Socket,
                                               throw({send_failed, Reason})
                                       end
                               end,
-                    try rabbit_mqtt_processor:init(Packet, Socket, ConnName, SendFun) of
+                    %% Pass the proxy-aware socket so the processor resolves the ends from it
+                    InitSocket = case State#state.proxy_socket of
+                                     undefined -> Socket;
+                                     ProxySocket -> ProxySocket
+                                 end,
+                    try rabbit_mqtt_processor:init(Packet, InitSocket, ConnName, SendFun) of
                         {ok, ProcState1} ->
                             ?LOG_INFO("Accepted MQTT connection ~ts for client ID ~ts",
                                       [ConnName, rabbit_mqtt_processor:info(client_id, ProcState1)]),

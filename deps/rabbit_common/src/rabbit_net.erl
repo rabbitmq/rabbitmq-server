@@ -20,7 +20,7 @@
 
 %%---------------------------------------------------------------------------
 
--export_type([socket/0, ip_port/0, hostname/0]).
+-export_type([socket/0, proxy_socket/0, ip_port/0, hostname/0]).
 
 -type stat_option() ::
         'recv_cnt' | 'recv_max' | 'recv_avg' | 'recv_oct' | 'recv_dvi' |
