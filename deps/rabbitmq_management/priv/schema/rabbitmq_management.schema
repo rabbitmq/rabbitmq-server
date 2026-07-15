@@ -487,14 +487,18 @@ end}.
 {mapping, "management.http.hide_allow_header", "rabbitmq_management.hide_http_allow_header",
     [{datatype, boolean}]}.
 
-%% When enabled, the management plugin only accepts definition files with a
-%% .json extension when uploaded via the management UI. Files with any other
-%% extension, or with no extension at all, are rejected with HTTP 400.
+%% When enabled, multipart definition uploads to the HTTP API are only accepted
+%% when the uploaded file name has a .json extension.
+%%
+%% Files with any other extension, or with no extension at all, are rejected with HTTP 400.
+%%
+%% This setting applies to any client using the HTTP API, not just the management UI.
+%% Definitions posted with a Content-Type of application/json are not affected.
 %% Disabled by default to preserve backwards compatibility.
 %%
 %% {require_definition_json_extension, false},
 
-{mapping, "management.require_definition_json_extension", "rabbitmq_management.require_definition_json_extension",
+{mapping, "management.definitions.require_json_extension", "rabbitmq_management.require_definition_json_extension",
     [{datatype, boolean}]}.
 
 {mapping, "management.disable_basic_auth", "rabbitmq_management.disable_basic_auth",
