@@ -257,7 +257,6 @@ accept_json(ReqData0, Context) ->
     end.
 
 accept_multipart(ReqData0, Context) ->
-    EnforceJsonExtension = rabbit_mgmt_features:is_definition_json_extension_required(),
     BodySizeLimit = application:get_env(rabbitmq_management, max_http_body_size,
                                         ?MANAGEMENT_DEFAULT_HTTP_MAX_BODY_SIZE),
     case get_all_parts(ReqData0, BodySizeLimit) of
@@ -267,8 +266,8 @@ accept_multipart(ReqData0, Context) ->
                              [BytesRead, LimitApplied]),
             rabbit_mgmt_util:bad_request("Exceeded HTTP request body size limit", ReqData0, Context);
         {Parts, Filename, ReqData} ->
-            case EnforceJsonExtension andalso not has_json_extension(Filename) of
-                true ->
+            case is_acceptable_filename(Filename) of
+                false ->
                     ExtraFields = case Filename of
                         unknown -> #{};
                         _       -> #{filename => Filename}
@@ -276,7 +275,7 @@ accept_multipart(ReqData0, Context) ->
                     rabbit_mgmt_util:bad_request(<<"unsupported_file_extension">>,
                                                  ExtraFields,
                                                  ReqData, Context);
-                false ->
+                true ->
                     Redirect = get_part(<<"redirect">>, Parts),
                     Payload = get_part(<<"file">>, Parts),
                     Resp = {Res, _, _} = accept(Payload, ReqData, Context),
@@ -394,6 +393,10 @@ get_all_parts(Req0, BodySize0, BodySizeLimit, Acc, FileFilename) ->
                     Error
             end
     end.
+
+is_acceptable_filename(Filename) ->
+    not rabbit_mgmt_features:is_definition_json_extension_required()
+        orelse has_json_extension(Filename).
 
 has_json_extension(unknown) ->
     false;
