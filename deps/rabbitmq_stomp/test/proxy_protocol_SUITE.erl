@@ -23,7 +23,9 @@ groups() ->
         {non_parallel_tests, [], [
             proxy_protocol_v1,
             proxy_protocol_v1_tls,
-            proxy_protocol_v2_local
+            proxy_protocol_v2_local,
+            loopback_user_via_non_loopback_proxy_is_rejected,
+            loopback_user_via_local_proxy_is_accepted
         ]}
     ].
 
@@ -119,6 +121,44 @@ connection_name(Retries) ->
             timer:sleep(50),
             connection_name(Retries - 1)
     end.
+
+%% A loopback-only user must be evaluated against the PROXY source, not the
+%% immediate peer (the proxy connection itself).
+loopback_user_via_non_loopback_proxy_is_rejected(Config) ->
+    ok = set_loopback_users(Config, [<<"guest">>]),
+    try
+        Command = connect_response_command(
+            Config, "PROXY TCP4 192.168.1.1 192.168.1.2 80 81\r\n"),
+        ?assertEqual(<<"ERROR">>, Command)
+    after
+        ok = set_loopback_users(Config, [])
+    end.
+
+%% A LOCAL v2 header keeps the real (loopback) ends, so guest is accepted.
+loopback_user_via_local_proxy_is_accepted(Config) ->
+    ok = set_loopback_users(Config, [<<"guest">>]),
+    try
+        Header = ranch_proxy_header:header(#{command => local, version => 2}),
+        Command = connect_response_command(Config, Header),
+        ?assertEqual(<<"CONNECTED">>, Command)
+    after
+        ok = set_loopback_users(Config, [])
+    end.
+
+connect_response_command(Config, ProxyHeader) ->
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stomp),
+    {ok, Socket} = gen_tcp:connect({127,0,0,1}, Port,
+        [binary, {active, false}, {packet, raw}]),
+    ok = inet:send(Socket, ProxyHeader),
+    ok = inet:send(Socket, <<"CONNECT\nlogin:guest\npasscode:guest\n\n", 0>>),
+    {ok, Response} = gen_tcp:recv(Socket, 0, ?TIMEOUT),
+    gen_tcp:close(Socket),
+    %% The reply is a single STOMP frame; its command is the leading line.
+    hd(binary:split(Response, <<"\n">>)).
+
+set_loopback_users(Config, Users) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+                                 [rabbit, loopback_users, Users]).
 
 merge_app_env(StompConfig, Config) ->
     rabbit_ct_helpers:merge_app_env(Config, StompConfig).
