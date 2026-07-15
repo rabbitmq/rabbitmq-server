@@ -607,6 +607,24 @@
    ], [rabbitmq_management]
   },
 
+  {require_definition_json_extension_disabled,
+   "management.definitions.require_json_extension = false",
+   [
+    {rabbitmq_management, [
+                           {require_definition_json_extension, false}
+                          ]}
+   ], [rabbitmq_management]
+  },
+
+  {require_definition_json_extension_enabled,
+   "management.definitions.require_json_extension = true",
+   [
+    {rabbitmq_management, [
+                           {require_definition_json_extension, true}
+                          ]}
+   ], [rabbitmq_management]
+  },
+
  %%
  %% Exotic options
  %%

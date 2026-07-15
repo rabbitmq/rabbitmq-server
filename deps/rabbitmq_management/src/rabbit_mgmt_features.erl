@@ -9,7 +9,8 @@
 
 -export([is_op_policy_updating_disabled/0,
          is_qq_replica_operations_disabled/0,
-         are_stats_enabled/0]).
+         are_stats_enabled/0,
+         is_definition_json_extension_required/0]).
 
 is_qq_replica_operations_disabled() ->
     get_restriction([quorum_queue_replica_operations, disabled]).
@@ -27,6 +28,9 @@ are_stats_enabled() ->
         true -> false;
         _    -> rabbit_mgmt_agent_config:is_metrics_collector_permitted()
     end.
+
+is_definition_json_extension_required() ->
+    application:get_env(rabbitmq_management, require_definition_json_extension, false).
 
 %% Private
 

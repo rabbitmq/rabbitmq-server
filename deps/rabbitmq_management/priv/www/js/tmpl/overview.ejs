@@ -347,7 +347,7 @@
         <td>
           <p>
             <label>Definitions file:</label><br/>
-            <input type="file" name="file"/>
+            <input type="file" name="file"<% if (overview.require_definition_json_extension) { %> accept=".json"<% } %>/>
           </p>
         </td>
         <td>
