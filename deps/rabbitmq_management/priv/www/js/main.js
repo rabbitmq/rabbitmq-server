@@ -1146,6 +1146,8 @@ function postprocess_partial() {
     else {
         $('#filter-truncate').removeClass('filter-warning');
     }
+
+    feature_flags_refresh();
 }
 
 function update_multifields() {
