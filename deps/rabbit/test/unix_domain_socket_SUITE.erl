@@ -27,6 +27,8 @@ groups() ->
       [test_uds_connection_failure,
        test_uds_is_loopback_on_raw_socket,
        test_uds_ntoa_local_path,
+       test_uds_ntoa_non_ascii_path,
+       test_uds_json_encode_local_address,
        test_uds_tcp_listener_addresses]}].
 
 init_per_suite(Config) ->
@@ -215,6 +217,45 @@ test_uds_ntoa_local_path(Config) ->
                                   Config, rabbit_misc, ntoa, [{local, "/tmp/x.sock"}])),
     ?assertEqual(<<"/tmp/x.sock">>, rabbit_ct_broker_helpers:rpc(
                                      Config, rabbit_misc, ntoab, [{local, <<"/tmp/x.sock">>}])).
+
+%% A non-ASCII socket path reaches ntoa/1 in two shapes: a Unicode charlist
+%% (config-defined listener) and a UTF-8 binary (accepted connection's
+%% sockname). Both must normalise identically: ntoa/1 to a codepoint charlist,
+%% ntoab/1 to a UTF-8 binary. This guards against re-encoding the UTF-8 binary
+%% byte-by-byte, which would double-encode the path.
+test_uds_ntoa_non_ascii_path(Config) ->
+    Charlist = "/tmp/caf" ++ [16#E9] ++ ".sock",
+    Binary = <<"/tmp/caf"/utf8, 16#E9/utf8, ".sock"/utf8>>,
+    ?assertEqual(Charlist,
+                 rabbit_ct_broker_helpers:rpc(
+                   Config, rabbit_misc, ntoa, [{local, Charlist}])),
+    ?assertEqual(Charlist,
+                 rabbit_ct_broker_helpers:rpc(
+                   Config, rabbit_misc, ntoa, [{local, Binary}])),
+    ?assertEqual(Binary,
+                 rabbit_ct_broker_helpers:rpc(
+                   Config, rabbit_misc, ntoab, [{local, Charlist}])),
+    ?assertEqual(Binary,
+                 rabbit_ct_broker_helpers:rpc(
+                   Config, rabbit_misc, ntoab, [{local, Binary}])).
+
+%% rabbit_json:encode/1 must handle a {local, Path} address, since it appears as
+%% the peer_host of a UDS connection in management responses. The empty-binary
+%% path is the sockname of an accepted UDS socket; without a dedicated clause it
+%% crashes with {unsupported_type, {local, <<>>}}.
+test_uds_json_encode_local_address(Config) ->
+    ?assertEqual(<<"\"\"">>,
+                 rabbit_ct_broker_helpers:rpc(
+                   Config, rabbit_json, encode, [{local, <<>>}])),
+    Charlist = "/tmp/caf" ++ [16#E9] ++ ".sock",
+    Binary = <<"/tmp/caf"/utf8, 16#E9/utf8, ".sock"/utf8>>,
+    Expected = <<"\"", Binary/binary, "\"">>,
+    ?assertEqual(Expected,
+                 rabbit_ct_broker_helpers:rpc(
+                   Config, rabbit_json, encode, [{local, Charlist}])),
+    ?assertEqual(Expected,
+                 rabbit_ct_broker_helpers:rpc(
+                   Config, rabbit_json, encode, [{local, Binary}])).
 
 %% tcp_listener_addresses/1 must map the {local, Path, Port} tuple produced by
 %% the domain_socket schema datatype to a UDS address, while a bare string
