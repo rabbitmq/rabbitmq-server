@@ -280,8 +280,6 @@ getifaddrs() ->
                 lists:map(fun format_nic_attribute/1, Proplist)
              end, Addrs0).
 
-rdns({local, _Path} = Local) ->
-    Local;
 rdns(Addr) ->
     case application:get_env(rabbit, reverse_dns_lookups) of
         {ok, true} -> list_to_binary(tcp_host(Addr));
