@@ -210,8 +210,8 @@
                  {bad_edge, [digraph:vertex()]}),
                 digraph:vertex(), digraph:vertex()}).
 -spec const(A) -> thunk(A).
--spec ntoa(inet:ip_address()) -> string().
--spec ntoab(inet:ip_address()) -> string().
+-spec ntoa(any()) -> string() | {error, einval}.
+-spec ntoab(any()) -> binary() | {error, einval}.
 -spec is_process_alive(pid()) -> boolean().
 
 -spec pmerge(term(), term(), [term()]) -> [term()].
@@ -800,6 +800,8 @@ const(X) -> fun () -> X end.
 %% when IPv6 is enabled but not used (i.e. 99% of the time).
 ntoa({local, Path}) ->
     rabbit_data_coercion:to_list(Path);
+ntoa(local) ->
+    "local";
 ntoa({0,0,0,0,0,16#ffff,AB,CD}) ->
     inet_parse:ntoa({AB bsr 8, AB rem 256, CD bsr 8, CD rem 256});
 ntoa(IP) ->
@@ -807,6 +809,8 @@ ntoa(IP) ->
 
 ntoab({local, Path}) ->
     rabbit_data_coercion:to_binary(Path);
+ntoab(local) ->
+    <<"local">>;
 ntoab(IP) ->
     Str = ntoa(IP),
     case string:str(Str, ":") of

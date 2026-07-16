@@ -294,4 +294,7 @@ join_tags(Tags) ->
 parse_peeraddr(unknown) ->
     rabbit_data_coercion:to_list(unknown);
 parse_peeraddr(PeerAddr) ->
-    rabbit_misc:ntoa(PeerAddr).
+    case rabbit_misc:ntoa(PeerAddr) of
+        {error, einval} -> rabbit_data_coercion:to_list(PeerAddr);
+        Str             -> Str
+    end.
