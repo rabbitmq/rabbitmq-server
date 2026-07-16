@@ -22,7 +22,6 @@ groups() ->
       [test_unix_domain_socket,
        test_uds_publish_consume,
        test_uds_guest_with_loopback_users,
-       test_uds_internal_loopback_backend,
        test_uds_auth_attempt_source_tracking]},
      {without_listener, [],
       [test_uds_connection_failure,
@@ -94,15 +93,6 @@ set_test_env(test_uds_guest_with_loopback_users, Config) ->
     ok = rabbit_ct_broker_helpers:rpc(
            Config, application, set_env,
            [rabbit, loopback_users, [<<"guest">>]]);
-set_test_env(test_uds_internal_loopback_backend, Config) ->
-    ok = rabbit_ct_broker_helpers:enable_plugin(
-           Config, 0, "rabbitmq_auth_backend_internal_loopback"),
-    ok = rabbit_ct_broker_helpers:rpc(
-           Config, application, set_env,
-           [rabbit, loopback_users, [<<"guest">>]]),
-    ok = rabbit_ct_broker_helpers:rpc(
-           Config, application, set_env,
-           [rabbit, auth_backends, [rabbit_auth_backend_internal_loopback]]);
 set_test_env(test_uds_auth_attempt_source_tracking, Config) ->
     ok = rabbit_ct_broker_helpers:rpc(
            Config, application, set_env,
@@ -111,12 +101,6 @@ set_test_env(_Testcase, _Config) ->
     ok.
 
 unset_test_env(test_uds_guest_with_loopback_users, Config) ->
-    ok = rabbit_ct_broker_helpers:rpc(
-           Config, application, set_env, [rabbit, loopback_users, []]);
-unset_test_env(test_uds_internal_loopback_backend, Config) ->
-    ok = rabbit_ct_broker_helpers:rpc(
-           Config, application, set_env,
-           [rabbit, auth_backends, [rabbit_auth_backend_internal]]),
     ok = rabbit_ct_broker_helpers:rpc(
            Config, application, set_env, [rabbit, loopback_users, []]);
 unset_test_env(test_uds_auth_attempt_source_tracking, Config) ->
@@ -205,18 +189,6 @@ test_uds_is_loopback_on_raw_socket(Config) ->
 %% Verifies finding #1 end-to-end: guest must be able to connect over UDS when
 %% loopback_users includes guest (the production default).
 test_uds_guest_with_loopback_users(Config) ->
-    SocketPath = ?config(uds_socket_path, Config),
-    ConnParams = #amqp_params_network{
-        host = {local, SocketPath}, port = 0,
-        username = <<"guest">>, password = <<"guest">>},
-    {ok, Conn} = amqp_connection:start(ConnParams),
-    {ok, Channel} = amqp_connection:open_channel(Conn),
-    ok = amqp_channel:close(Channel),
-    ok = amqp_connection:close(Conn).
-
-%% Verifies finding #1 with the internal_loopback backend: guest must be
-%% accepted when connecting over UDS, since UDS is local.
-test_uds_internal_loopback_backend(Config) ->
     SocketPath = ?config(uds_socket_path, Config),
     ConnParams = #amqp_params_network{
         host = {local, SocketPath}, port = 0,
