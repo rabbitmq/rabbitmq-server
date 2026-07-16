@@ -149,7 +149,7 @@ fix_ssl_options(Config) ->
 
 tcp_listener_addresses({local, Path, _Port}) ->
     [{{local, Path}, 0, local}];
-tcp_listener_addresses(Path) when is_list(Path) andalso Path =/= [] andalso (hd(Path) =:= $/ orelse hd(Path) =:= $.) ->
+tcp_listener_addresses(Path) when is_list(Path) andalso Path =/= [] ->
     [{{local, Path}, 0, local}];
 tcp_listener_addresses(Port) when is_integer(Port) ->
     tcp_listener_addresses_auto(Port);
