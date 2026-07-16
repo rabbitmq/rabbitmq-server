@@ -15,7 +15,7 @@
 
 -module(sjx_evaluator).
 
--export([evaluate/2]).
+-export([evaluate/2, validate_patterns/1]).
 %% Evaluation function
 %%
 %%   Given Headers (a list of keyed typed values), and a
@@ -102,7 +102,7 @@ isLike(L, {Patt, Esc}) -> patt_match(L, pattern_of(Patt, Esc)).
 
 patt_match(L, MP) ->
   BS = byte_size(L),
-  case re:run(L, MP, [{capture, first}]) of
+  case rabbit_re:run(L, MP, [{capture, first}]) of
     {match, [{0, BS}]} -> true;
     _                  -> false
   end.
@@ -164,7 +164,57 @@ escape(Ch)  -> Ch.
 
 compile_re(error) -> error;
 compile_re(MatchMany) ->
-    case re:compile(MatchMany)
+    case rabbit_re:compile(MatchMany)
     of  {ok, Rx} -> Rx;
         _        -> error
     end.
+
+%% Walk a parsed selector term and try to compile every LIKE/regex pattern
+%% it contains, so that an oversized or otherwise invalid pattern is
+%% rejected when a binding is created rather than the first time a
+%% message is evaluated against it.
+-spec validate_patterns(term()) -> ok | {error, term()}.
+validate_patterns({'like', LHS, Patt, Esc}) ->
+  case validate_pattern(Patt, Esc) of
+    ok    -> validate_patterns(LHS);
+    Error -> Error
+  end;
+validate_patterns({'not_like', LHS, Patt, Esc}) ->
+  case validate_pattern(Patt, Esc) of
+    ok    -> validate_patterns(LHS);
+    Error -> Error
+  end;
+validate_patterns(Tuple) when is_tuple(Tuple) ->
+  validate_patterns_list(tuple_to_list(Tuple));
+validate_patterns(List) when is_list(List) ->
+  validate_patterns_list(List);
+validate_patterns(_) ->
+  ok.
+
+validate_patterns_list([]) -> ok;
+validate_patterns_list([H | T]) ->
+  case validate_patterns(H) of
+    ok    -> validate_patterns_list(T);
+    Error -> Error
+  end.
+
+validate_pattern(regex, MP) ->
+  compile_for_validation(MP, invalid_regex);
+validate_pattern(Patt, Esc) when is_binary(Patt) ->
+  case gen_re(binary_to_list(Patt), Esc) of
+    error -> {error, {invalid_like_pattern, invalid_escape}};
+    Regex -> compile_for_validation(Regex, invalid_like_pattern)
+  end;
+validate_pattern(Patt, _Esc) ->
+  {error, {invalid_like_pattern, {not_a_binary_pattern, Patt}}}.
+
+%% Keeps the underlying `rabbit_re:compile/1` failure reason (e.g. the
+%% compact `pattern_too_long`), rather than the bare `error` atom that
+%% `compile_re/1` collapses it to on the hot match path.
+compile_for_validation(Regex, Tag) ->
+  try rabbit_re:compile(Regex) of
+    {ok, _}         -> ok;
+    {error, Reason} -> {error, {Tag, Reason}}
+  catch
+    error:Reason -> {error, {Tag, Reason}}
+  end.
