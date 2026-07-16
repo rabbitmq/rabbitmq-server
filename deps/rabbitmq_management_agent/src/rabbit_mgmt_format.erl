@@ -194,7 +194,7 @@ print(Val) ->
 %% TODO - can we remove all these "unknown" cases? Coverage never hits them.
 
 ip(unknown) -> unknown;
-ip(IP)      -> list_to_binary(rabbit_misc:ntoa(IP)).
+ip(IP)      -> rabbit_data_coercion:to_utf8_binary(rabbit_misc:ntoa(IP)).
 
 ipb(unknown) -> unknown;
 ipb(IP)      -> iolist_to_binary(rabbit_misc:ntoab(IP)).
