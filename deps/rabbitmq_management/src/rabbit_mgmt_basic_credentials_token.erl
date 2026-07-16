@@ -7,7 +7,7 @@
 
 %% Encrypted credentials token for the management UI.
 %%
-%% When management.credentials_encryption_secret is configured, the
+%% When management.credential_encryption_secret is configured, the
 %% management UI stores an AES-256-GCM encrypted token (prefixed "rmqe.")
 %% instead of a plaintext base64(username:password) credential.
 %%

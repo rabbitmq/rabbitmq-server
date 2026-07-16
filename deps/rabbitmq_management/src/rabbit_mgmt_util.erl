@@ -135,7 +135,7 @@ is_authorized_vhost_visible_for_monitoring(ReqData, Context) ->
 auth_config() ->
     BasicAuthEnabled = not get_bool_env(rabbitmq_management, disable_basic_auth, false),
     BearerTokenParser =
-        case application:get_env(rabbitmq_management, credentials_encryption_secret, undefined) of
+        case application:get_env(rabbitmq_management, credential_encryption_secret, undefined) of
             undefined -> undefined;
             Secret ->
                 Key = rabbit_mgmt_basic_credentials_token:derive_key(Secret),

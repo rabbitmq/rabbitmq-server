@@ -4372,7 +4372,7 @@ login_test(Config) ->
 
 login_encrypted_test(Config) ->
     rpc(Config, application, set_env,
-        [rabbitmq_management, credentials_encryption_secret, <<"test-secret">>]),
+        [rabbitmq_management, credential_encryption_secret, <<"test-secret">>]),
     http_put(Config, "/users/myuser", [{password, <<"myuser">>},
                                        {tags,     <<"management">>}], {group, '2xx'}),
     {ok, {{_, 200, _}, _, Body}} =
@@ -4399,7 +4399,7 @@ login_encrypted_test(Config) ->
 
     http_delete(Config, "/users/myuser", {group, '2xx'}),
     rpc(Config, application, unset_env,
-        [rabbitmq_management, credentials_encryption_secret]),
+        [rabbitmq_management, credential_encryption_secret]),
     passed.
 
 login_session_cookie_test(Config) ->

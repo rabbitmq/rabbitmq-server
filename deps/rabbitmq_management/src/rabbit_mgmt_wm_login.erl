@@ -53,7 +53,7 @@ do_login(ReqData, Context = #context{user = User}) ->
     Username = User#user.username,
     Password = Context#context.password,
     Token =
-        case application:get_env(rabbitmq_management, credentials_encryption_secret, undefined) of
+        case application:get_env(rabbitmq_management, credential_encryption_secret, undefined) of
             undefined ->
                 #{type  => <<"basic">>,
                   value => base64:encode(<<Username/binary, ":", Password/binary>>)};
