@@ -83,7 +83,7 @@
 -type listener_config() :: ip_port() |
                            {hostname(), ip_port()} |
                            {hostname(), ip_port(), family()} |
-                           string().
+                           {local, string(), ip_port()}.
 -type address() :: {inet:ip_address() | {local, string()}, ip_port(), family()}.
 -type name_prefix() :: atom().
 -type protocol() :: atom().
