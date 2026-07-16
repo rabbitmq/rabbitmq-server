@@ -285,7 +285,10 @@ check_user_loopback(Username, SockOrAddr) ->
 get_authz_data_from({ip, Address}) ->
     #{peeraddr => Address};
 get_authz_data_from({socket, Sock}) ->
-    {ok, {Address, _Port}} = rabbit_net:peername(Sock),
+    Address = case rabbit_net:peername(Sock) of
+                  {ok, {local, _} = Local} -> Local;
+                  {ok, {Addr, _Port}}      -> Addr
+              end,
     #{peeraddr => Address};
 get_authz_data_from(undefined) ->
     undefined.
