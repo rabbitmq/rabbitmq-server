@@ -649,7 +649,7 @@ tune_buffer_size_static(Sock) ->
 %%--------------------------------------------------------------------
 
 tcp_host({local, Path}) ->
-    rabbit_data_coercion:to_binary(Path);
+    rabbit_misc:ntoab({local, Path});
 tcp_host(IPAddress) ->
     rabbit_net:tcp_host(IPAddress).
 
