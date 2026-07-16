@@ -80,6 +80,12 @@ defmodule RabbitMQ.CLI.Formatters.FormatterHelpers do
     :rabbit_misc.ntoa(value)
   end
 
+  # Unix domain socket address, e.g. the peer_host/host of a connection over a
+  # Unix domain socket listener. ntoa/1 renders it as the socket path.
+  def format_info_item({:local, _path} = value, _escaped) do
+    :rabbit_misc.ntoa(value)
+  end
+
   def format_info_item(value, _escaped) when is_pid(value) do
     :rabbit_misc.pid_to_string(value)
   end

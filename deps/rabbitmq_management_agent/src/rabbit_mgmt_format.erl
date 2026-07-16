@@ -197,7 +197,7 @@ ip(unknown) -> unknown;
 ip(IP)      -> list_to_binary(rabbit_misc:ntoa(IP)).
 
 ipb(unknown) -> unknown;
-ipb(IP)      -> list_to_binary(rabbit_misc:ntoab(IP)).
+ipb(IP)      -> iolist_to_binary(rabbit_misc:ntoab(IP)).
 
 addr(S)    when is_list(S); is_atom(S); is_binary(S) -> print("~ts", S);
 addr(Addr) when is_tuple(Addr)                       -> ip(Addr).
