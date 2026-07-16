@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term "Broadcom" refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 
 -module(unix_domain_socket_SUITE).
 
@@ -171,11 +171,10 @@ test_uds_connection_failure(Config) ->
     ConnParams = #amqp_params_network{host = {local, SocketPath}, port = 0},
     ?assertMatch({error, enoent}, amqp_connection:start(ConnParams)).
 
-%% Verifies finding #1 at the unit level. is_loopback must return true both for
-%% the {local, _} tuple and for a real accepted UDS socket, whose peername is
-%% {ok, {local, <<>>}}. The socket case is the one that was broken: the
-%% socket-level clause must preserve the {local, _} tuple rather than
-%% destructure it into the bare atom 'local'.
+%% is_loopback/1 must return true both for the {local, _} tuple and for a real
+%% accepted UDS socket, whose peername is {ok, {local, <<>>}}. The socket-level
+%% clause must preserve the {local, _} tuple rather than destructure it into the
+%% bare atom 'local'.
 test_uds_is_loopback_on_raw_socket(Config) ->
     ?assertEqual(true, rabbit_ct_broker_helpers:rpc(
                          Config, rabbit_net, is_loopback, [{local, <<>>}])),
@@ -186,8 +185,8 @@ test_uds_is_loopback_on_raw_socket(Config) ->
     ?assertEqual(true, rabbit_ct_broker_helpers:rpc(
                          Config, ?MODULE, is_loopback_on_accepted_uds, [SocketPath])).
 
-%% Verifies finding #1 end-to-end: guest must be able to connect over UDS when
-%% loopback_users includes guest (the production default).
+%% guest must be able to connect over UDS when loopback_users includes guest
+%% (the production default), since a UDS connection is local.
 test_uds_guest_with_loopback_users(Config) ->
     SocketPath = ?config(uds_socket_path, Config),
     ConnParams = #amqp_params_network{
@@ -198,8 +197,7 @@ test_uds_guest_with_loopback_users(Config) ->
     ok = amqp_channel:close(Channel),
     ok = amqp_connection:close(Conn).
 
-%% Verifies finding #2: a UDS connection must not crash when
-%% track_auth_attempt_source is enabled.
+%% A UDS connection must not crash when track_auth_attempt_source is enabled.
 test_uds_auth_attempt_source_tracking(Config) ->
     SocketPath = ?config(uds_socket_path, Config),
     ConnParams = #amqp_params_network{
@@ -210,19 +208,18 @@ test_uds_auth_attempt_source_tracking(Config) ->
     ok = amqp_channel:close(Channel),
     ok = amqp_connection:close(Conn).
 
-%% Verifies finding #3: rabbit_misc:ntoa and ntoab must format a {local, Path}
-%% address (the peeraddr shape a UDS connection now yields) as the path, since
-%% the HTTP auth backend passes ntoa's result to quote_plus.
+%% rabbit_misc:ntoa/1 and ntoab/1 must format a {local, Path} address (the
+%% peeraddr shape a UDS connection yields) as the socket path.
 test_uds_ntoa_local_path(Config) ->
     ?assertEqual("/tmp/x.sock", rabbit_ct_broker_helpers:rpc(
                                   Config, rabbit_misc, ntoa, [{local, "/tmp/x.sock"}])),
     ?assertEqual(<<"/tmp/x.sock">>, rabbit_ct_broker_helpers:rpc(
                                      Config, rabbit_misc, ntoab, [{local, <<"/tmp/x.sock">>}])).
 
-%% Verifies finding #4: tcp_listener_addresses must map the {local, Path, Port}
-%% tuple produced by the domain_socket schema datatype to a UDS address, while a
-%% bare string (which the schema never produces) must not be silently treated as
-%% a socket path.
+%% tcp_listener_addresses/1 must map the {local, Path, Port} tuple produced by
+%% the domain_socket schema datatype to a UDS address, while a bare string
+%% (which the schema never produces) must not be silently treated as a socket
+%% path.
 test_uds_tcp_listener_addresses(Config) ->
     ?assertMatch([{{local, "/var/run/rmq.sock"}, 0, local}],
                  rabbit_ct_broker_helpers:rpc(
