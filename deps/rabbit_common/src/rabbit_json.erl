@@ -84,6 +84,7 @@ fixup_terms(Items, FixupFun) when is_map(Items) ->
 fixup_terms(Item, FixupFun) ->
     fixup_item(Item, FixupFun).
 
+<<<<<<< HEAD
 fixup_item({Key, Value}, FixupFun) when is_list(Value); is_map(Value) ->
     {Key, fixup_terms(Value, FixupFun)};
 fixup_item({Key, Value}, FixupFun) ->
@@ -92,3 +93,33 @@ fixup_item([{_K, _V} | _T] = L, FixupFun) ->
     fixup_terms(L, FixupFun);
 fixup_item(Value, FixupFun) ->
     FixupFun(Value).
+=======
+encode_value(V, Encode) when is_function(V) ->
+    json:encode_value(rabbit_data_coercion:to_binary(V), Encode);
+encode_value([{_, _} | _] = List, Encode) ->
+    json:encode_key_value_list(List, Encode);
+%% IPv4 address tuple, e.g. {192, 168, 1, 1}
+encode_value({A, B, C, D} = IP, Encode)
+  when is_integer(A), is_integer(B), is_integer(C), is_integer(D) ->
+    json:encode_value(list_to_binary(rabbit_misc:ntoa(IP)), Encode);
+%% IPv6 address tuple, e.g. {0, 0, 0, 0, 0, 0, 0, 1}
+encode_value({A, B, C, D, E, F, G, H} = IP, Encode)
+  when is_integer(A), is_integer(B), is_integer(C), is_integer(D),
+       is_integer(E), is_integer(F), is_integer(G), is_integer(H) ->
+    json:encode_value(list_to_binary(rabbit_misc:ntoa(IP)), Encode);
+%% Unix domain socket address, e.g. the peer_host of a connection over a
+%% Unix domain socket listener.
+encode_value({local, Path} = Addr, Encode)
+  when is_list(Path); is_binary(Path) ->
+    json:encode_value(rabbit_misc:ntoab(Addr), Encode);
+%% OTP 27's json:key/2 does not support string (list) keys.
+%% Convert any list keys to binary to avoid a function_clause error.
+encode_value(Map, Encode) when is_map(Map) ->
+    NormMap = maps:fold(fun
+        (K, V, Acc) when is_list(K) -> maps:put(list_to_binary(K), V, Acc);
+        (K, V, Acc)                 -> maps:put(K, V, Acc)
+    end, #{}, Map),
+    json:encode_map(NormMap, Encode);
+encode_value(Other, Encode) ->
+    json:encode_value(Other, Encode).
+>>>>>>> 57dcacb5eb (Encode Unix domain socket addresses in `rabbit_json`)
