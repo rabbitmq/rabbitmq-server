@@ -63,6 +63,11 @@ encode_value({A, B, C, D, E, F, G, H} = IP, Encode)
   when is_integer(A), is_integer(B), is_integer(C), is_integer(D),
        is_integer(E), is_integer(F), is_integer(G), is_integer(H) ->
     json:encode_value(list_to_binary(rabbit_misc:ntoa(IP)), Encode);
+%% Unix domain socket address, e.g. the peer_host of a connection over a
+%% Unix domain socket listener.
+encode_value({local, Path} = Addr, Encode)
+  when is_list(Path); is_binary(Path) ->
+    json:encode_value(rabbit_misc:ntoab(Addr), Encode);
 %% OTP 27's json:key/2 does not support string (list) keys.
 %% Convert any list keys to binary to avoid a function_clause error.
 encode_value(Map, Encode) when is_map(Map) ->
