@@ -129,7 +129,7 @@ test_uds_connection_failure(Config) ->
     file:delete(SocketPath),
 
     ConnParams = #amqp_params_network{host = {local, SocketPath}, port = 0},
-    ?assertMatch({error, _}, amqp_connection:start(ConnParams)).
+    ?assertMatch({error, enoent}, amqp_connection:start(ConnParams)).
 
 %% Verifies finding #1 at the unit level: is_loopback must return true for the
 %% {local, _} tuple form that peername returns on an accepted UDS socket.

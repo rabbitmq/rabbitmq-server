@@ -422,11 +422,16 @@ update_auth_attempt(RemoteAddress, Username, Protocol, Incr) ->
     %% It's up to the operator to enable them, and reset it required
     _ = case application:get_env(rabbit, track_auth_attempt_source) of
         {ok, true} ->
-            Addr = case inet:is_ip_address(RemoteAddress) of
-                       true ->
+            Addr = case RemoteAddress of
+                       {local, _Path} ->
                            list_to_binary(rabbit_misc:ntoa(RemoteAddress));
-                       false ->
-                           rabbit_data_coercion:to_binary(RemoteAddress)
+                       _ ->
+                           case inet:is_ip_address(RemoteAddress) of
+                               true ->
+                                   list_to_binary(rabbit_misc:ntoa(RemoteAddress));
+                               false ->
+                                   rabbit_data_coercion:to_binary(RemoteAddress)
+                           end
                    end,
             case {Addr, Username} of
                 {<<>>, <<>>} ->
