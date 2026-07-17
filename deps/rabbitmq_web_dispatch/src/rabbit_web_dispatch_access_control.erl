@@ -9,6 +9,7 @@
 
 -include("rabbitmq_web_dispatch_records.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("rabbit_common/include/logging.hrl").
 -include_lib("kernel/include/logger.hrl").
 
 -export([is_authorized/3, is_authorized/5, is_authorized/7, is_authorized_admin/3,
@@ -39,7 +40,7 @@ is_authorized_admin(ReqData, Context, Username, Password, AuthConfig) ->
     case is_basic_auth_disabled(AuthConfig) of
         true ->
             Msg = "HTTP access denied: basic auth disabled",
-            ?LOG_WARNING(Msg),
+            ?LOG_WARNING(Msg, [], #{domain => ?RMQLOG_DOMAIN_USER}),
             not_authorised(Msg, ReqData, Context);
         false ->
             is_authorized(ReqData, Context, Username, Password,
@@ -91,7 +92,7 @@ is_authorized1(ReqData, Context, ErrorMsg, Fun, AuthConfig) ->
             case is_basic_auth_disabled(AuthConfig) of
                 true ->
                     Msg = "HTTP access denied: basic auth disabled",
-                    ?LOG_WARNING(Msg),
+                    ?LOG_WARNING(Msg, [], #{domain => ?RMQLOG_DOMAIN_USER}),
                     not_authorised(Msg, ReqData, Context);
                 false ->
                     is_authorized(ReqData, Context,
@@ -107,7 +108,7 @@ is_authorized1(ReqData, Context, ErrorMsg, Fun, AuthConfig) ->
             case is_basic_auth_disabled(AuthConfig) of
                 true ->
                     Msg = "HTTP access denied: basic auth disabled",
-                    ?LOG_WARNING(Msg),
+                    ?LOG_WARNING(Msg, [], #{domain => ?RMQLOG_DOMAIN_USER}),
                     not_authorised(Msg, ReqData, Context);
                 false ->
                     {{false, AuthConfig#auth_settings.auth_realm}, ReqData, Context}
@@ -130,7 +131,8 @@ is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun, AuthConfig) -
 is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun, AuthConfig, ReplyWhenFailed) ->
     ErrFun = fun (ResolvedUserName, Msg) ->
                      ?LOG_WARNING("HTTP access denied: user '~ts' - ~ts",
-                                        [ResolvedUserName, Msg]),
+                                  [ResolvedUserName, Msg],
+                                  #{domain => ?RMQLOG_DOMAIN_USER}),
                      %% Include the resolved username in the access log.
                      ReqData1 = rabbit_cowboy_stream_h:set_authenticated_username(
                                   ResolvedUserName, ReqData),
@@ -182,7 +184,8 @@ is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun, AuthConfig, R
         {refused, _Username, Msg, Args} ->
             rabbit_core_metrics:auth_attempt_failed(IP, Username, http),
             ?LOG_WARNING("HTTP access denied: ~ts",
-                               [rabbit_misc:format(Msg, Args)]),
+                         [rabbit_misc:format(Msg, Args)],
+                         #{domain => ?RMQLOG_DOMAIN_USER}),
             %% Include the attempted username in the access log.
             ReqData1 = rabbit_cowboy_stream_h:set_authenticated_username(
                          Username, ReqData),

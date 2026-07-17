@@ -2134,6 +2134,27 @@ end}.
     {datatype, integer}
 ]}.
 
+%% User log.
+{mapping, "log.user.level", "rabbit.log.categories.user.level", [
+    {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
+]}.
+{mapping, "log.user.file", "rabbit.log.categories.user.file", [
+    {datatype, string}
+]}.
+{mapping, "log.user.rotation.date", "rabbit.log.categories.user.rotate_on_date", [
+    {datatype, string}
+]}.
+{mapping, "log.user.rotation.compress", "rabbit.log.categories.user.compress_on_rotate", [
+    {default, false},
+    {datatype, boolean}
+]}.
+{mapping, "log.user.rotation.size", "rabbit.log.categories.user.max_no_bytes", [
+    {datatype, integer}
+]}.
+{mapping, "log.user.rotation.count", "rabbit.log.categories.user.max_no_files", [
+    {datatype, integer}
+]}.
+
 %% Ra log.
 {mapping, "log.ra.level", "rabbit.log.categories.ra.level", [
     {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
