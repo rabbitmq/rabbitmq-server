@@ -149,9 +149,26 @@ collect_max_values(Prefix, Callback) ->
                       filter_fun => fun does_belong_to_quorum_queue/1})).
 
 collect_key_component_metrics(Prefix, Callback) ->
-    %% quorum queue metrics
-    WALMetrics = [wal_files, bytes_written, mem_tables],
+    %% The write-ahead log and segment writer are per-node processes shared by
+    %% all Raft servers of a given Ra system. Their counters are labelled by
+    %% ra_system (and module) but carry no `queue` label, so the per-queue
+    %% filter does not match them. Select them by ra_system so that both the
+    %% coordination (Khepri) and quorum_queues rows are exposed. Without the
+    %% quorum_queues rows there is no way to observe quorum-queue WAL write,
+    %% batch (fsync) or bytes-written activity from the Prometheus endpoint.
+    WALMetrics = [batches, writes, bytes_written, wal_files, mem_tables],
     SegmentWriterMetrics = [entries, segments],
+    QQComponentResult =
+        seshat:format(ra,
+                      #{labels => as_binary,
+                        metrics => WALMetrics ++ SegmentWriterMetrics,
+                        filter_fun => fun does_belong_to_quorum_queue_system/1}),
+    %% Khepri and other coordination metrics, including the coordination system's
+    %% own WAL and segment writer counters.
+    CoordinationResult =
+        seshat:format(ra,
+                      #{labels => as_binary,
+                        filter_fun => fun does_belong_to_coordination_system/1}),
     maps:foreach(
       fun(Name, #{type := Type, help := Help, values := Values}) ->
               Callback(
@@ -160,22 +177,7 @@ collect_key_component_metrics(Prefix, Callback) ->
                           Type,
                           Values))
       end,
-      seshat:format(ra,
-                    #{labels => as_binary,
-                      metrics => WALMetrics ++ SegmentWriterMetrics,
-                      filter_fun => fun does_belong_to_quorum_queue/1})),
-    %% Khepri and other coordination metrics
-    maps:foreach(
-      fun(Name, #{type := Type, help := Help, values := Values}) ->
-              Callback(
-                create_mf(<<Prefix/binary, (prometheus_model_helpers:metric_name(Name))/binary>>,
-                          Help,
-                          Type,
-                          Values))
-      end,
-      seshat:format(ra,
-                    #{labels => as_binary,
-                      filter_fun => fun does_belong_to_coordination_system/1})).
+      merge_format_results(CoordinationResult, QQComponentResult)).
 
 %% Merges two `seshat:format/2` results, combining
 %% values under a single metric family entry.
@@ -195,3 +197,6 @@ does_belong_to_coordination_system(_) -> false.
 
 does_belong_to_quorum_queue(#{queue := _}) -> true;
 does_belong_to_quorum_queue(_) -> false.
+
+does_belong_to_quorum_queue_system(#{ra_system := quorum_queues}) -> true;
+does_belong_to_quorum_queue_system(_) -> false.

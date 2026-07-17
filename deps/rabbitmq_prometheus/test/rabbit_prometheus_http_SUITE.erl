@@ -445,7 +445,15 @@ aggregated_metrics_test(Config) ->
     ?assertEqual(match, re:run(Body, "^rabbitmq_raft_entries{", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_raft_mem_tables{", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_raft_segments{", [{capture, none}, multiline])),
-    ?assertEqual(match, re:run(Body, "^rabbitmq_raft_wal_files{", [{capture, none}, multiline])).
+    ?assertEqual(match, re:run(Body, "^rabbitmq_raft_wal_files{", [{capture, none}, multiline])),
+    %% The write-ahead log and segment writer counters must be exposed for the
+    %% quorum_queues Ra system, not only for coordination (Khepri). Without
+    %% these rows there is no way to observe quorum-queue WAL write, batch
+    %% (fsync) or bytes-written activity from the Prometheus endpoint.
+    ?assertEqual(match, re:run(Body, "^rabbitmq_raft_bytes_written.*ra_system=\"quorum_queues\"", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_raft_writes.*ra_system=\"quorum_queues\"", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_raft_batches.*ra_system=\"quorum_queues\"", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_raft_wal_files.*ra_system=\"quorum_queues\"", [{capture, none}, multiline])).
 
 %% Verify that the aggregated endpoint does not emit duplicate TYPE
 %% lines for Raft metrics that belong to different Ra systems.
@@ -458,6 +466,8 @@ aggregated_endpoint_no_duplicate_raft_type_lines(Config) ->
                                     "rabbitmq_raft_max_commit_latency_seconds",
                                     "rabbitmq_raft_max_num_segments",
                                     "rabbitmq_raft_bytes_written",
+                                    "rabbitmq_raft_batches",
+                                    "rabbitmq_raft_writes",
                                     "rabbitmq_raft_entries",
                                     "rabbitmq_raft_mem_tables",
                                     "rabbitmq_raft_segments",

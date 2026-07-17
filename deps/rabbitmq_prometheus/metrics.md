@@ -259,6 +259,8 @@ These metrics are specific to the stream protocol.
 | rabbitmq_raft_mem_tables                 | Number of in-memory tables handled                                                  |
 | rabbitmq_raft_entries                    | Number of entries written                                                           |
 | rabbitmq_raft_bytes_written              | Number of bytes written                                                             |
+| rabbitmq_raft_batches                    | Number of write-ahead log batches flushed. Each batch is one fsync                  |
+| rabbitmq_raft_writes                     | Number of write-ahead log writes. Many writes are batched into a single fsync        |
 
 ### Federation
 
