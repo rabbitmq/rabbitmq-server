@@ -1,9 +1,33 @@
 
+<<<<<<< HEAD
 $(document).ready(function() {    
+=======
+const API_ERROR_REASONS = {
+    'failed_to_parse_json':       'Definitions file could not be parsed. Make sure it is valid JSON.',
+    'unsupported_file_extension': '{filename}Only .json files are accepted for definitions import.',
+};
+
+function format_error_response(response, reason) {
+    var template = API_ERROR_REASONS[reason];
+    if (typeof(template) != 'string') {
+        return reason;
+    }
+    return template.replace(/\{(\w+)\}/g, function(_, key) {
+        var val = response[key];
+        return val !== undefined ? val + ': ' : '';
+    });
+}
+
+$(document).ready(function() {
+>>>>>>> 391c71fd27 (Correct a minor usability issue #16957)
   var url_string = window.location.href;
   var url = new URL(url_string);
   var error = url.searchParams.get('error');
   if (error) {
+    // A failed IDP-initiated login returns here with an error. Drop the
+    // pending state markers to avoid a confusing redirect the next successful login.
+    clear_pref("oauth-idp-pending");
+    clear_pref("oauth-return-to");
     if (oauth.enabled) {
       renderWarningMessageInLoginStatus(oauth, fmt_escape_html(error));
     }
@@ -89,7 +113,7 @@ function start_app_login () {
       });
     }
   })
-  
+
   if (oauth.enabled) {
     if (has_auth_credentials()) {
       check_login();
@@ -351,7 +375,7 @@ function go_to_home() {
     // location.href = rabbit_path_prefix() + "/"
     location.href =  "/"
   }
-  
+
 function set_timer_interval(interval) {
     timer_interval = interval;
     reset_timer();
@@ -1432,7 +1456,7 @@ function with_req(method, path, body, fun, on404fun) {
             if (check_bad_response(req, !on404fun, on404fun)) {
                 last_successful_connect = new Date();
                 fun(req);
-            } 
+            }
         }
     };
     outstanding_reqs.push(req);
@@ -1523,7 +1547,7 @@ function initiate_logout(oauth, error = "") {
 }
 /**
  * Handle bad http response
- * @param {*} req 
+ * @param {*} req
  * @param {*} full_page_404 In case of 404, reload entire html page with the error message
  * @param {*} on404fun In case of 404, call this function or else show a popup error message
  * @returns true if there was no bad response
@@ -1551,10 +1575,10 @@ function check_bad_response(req, full_page_404, on404fun) {
         if (typeof(reason) != 'string') {
             reason = JSON.stringify(reason);
         }
-        if (    error == 'bad_request' || 
-                error == 'not_found'  || 
-                reason == 'Not Found' || 
-                error == 'not_authorised' || 
+        if (    error == 'bad_request' ||
+                error == 'not_found'  ||
+                reason == 'Not Found' ||
+                error == 'not_authorised' ||
                 error == 'not_authorized') {
             if ((req.status == 401 || req.status == 403) && oauth.enabled) {
                 initiate_logout(oauth, reason);
@@ -1871,7 +1895,7 @@ function is_internal(queue) {
     return queue.internal;
 }
 
-function get_queue_type (queue) {    
+function get_queue_type (queue) {
     switch(queue.type) {
         case "classic":
         case "quorum":
