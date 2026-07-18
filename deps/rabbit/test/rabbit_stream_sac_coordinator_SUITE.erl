@@ -226,6 +226,61 @@ super_stream_partition_sac_test(_) ->
 
     ok.
 
+%% Regression test for a stuck-group state. When the arrival of the stepping-down
+%% consumer's consumer_update response triggers command_activate_consumer and
+%% evaluate_active_consumer picks the same consumer that just stepped down,
+%% the coordinator must still notify that consumer so its client learns it is
+%% active again. Without the notification, the coordinator believes the group
+%% has an active member while the client has been told active=false, and the
+%% group is silently stranded.
+super_stream_partition_sac_re_notifies_stepping_down_consumer_re_selected_as_active_test(_) ->
+    Stream = <<"stream">>,
+    ConsumerName = <<"app">>,
+    ConnectionPid = self(),
+    GroupId = {<<"/">>, Stream, ConsumerName},
+    %% Partition index chosen so that evaluate_active_consumer picks the first
+    %% consumer once three have joined (3 rem 3 = 0), which is precisely the
+    %% one deactivated by the two-consumer rebalance below.
+    PartitionIndex = 3,
+
+    Command0 = register_consumer_command(Stream, PartitionIndex, ConsumerName, ConnectionPid, 0),
+    State0 = state(),
+    {State1, {ok, true}, Effects1} = ?MOD:apply(Command0, State0),
+    assertSendMessageActivateEffect(ConnectionPid, 0, Stream, ConsumerName, true, Effects1),
+
+    Command1 = register_consumer_command(Stream, PartitionIndex, ConsumerName, ConnectionPid, 1),
+    {State2, {ok, false}, Effects2} = ?MOD:apply(Command1, State1),
+    %% 3 rem 2 = 1 selects subscription 1, so subscription 0 is asked to step down.
+    assertSendMessageSteppingDownEffect(ConnectionPid, 0, Stream, ConsumerName, Effects2),
+
+    Command2 = register_consumer_command(Stream, PartitionIndex, ConsumerName, ConnectionPid, 2),
+    {#?STATE{groups = #{GroupId := #group{consumers = Consumers3}}} = State3,
+     {ok, false}, Effects3} = ?MOD:apply(Command2, State2),
+    %% 3 rem 3 = 0 selects subscription 0, which is still lookup_active_consumer
+    %% because is_active({_, deactivating}) is true, so no rebalance happens.
+    assertCsrsEqual([csr(ConnectionPid, 0, deactivating),
+                     csr(ConnectionPid, 1, waiting),
+                     csr(ConnectionPid, 2, waiting)],
+                    Consumers3),
+    assertEmpty(Effects3),
+
+    %% Simulate the arrival of subscription 0's consumer_update response, which
+    %% causes the stream reader to fire command_activate_consumer.
+    Command3 = activate_consumer_command(Stream, ConsumerName),
+    {#?STATE{groups = #{GroupId := #group{consumers = Consumers4}}},
+     ok, Effects4} = ?MOD:apply(Command3, State3),
+
+    %% Subscription 0 is selected as active again by 3 rem 3 = 0.
+    assertCsrsEqual([csr(ConnectionPid, 0, active),
+                     csr(ConnectionPid, 1, waiting),
+                     csr(ConnectionPid, 2, waiting)],
+                    Consumers4),
+    %% Subscription 0's client was previously told active=false and must be
+    %% notified it is active again.
+    assertSendMessageActivateEffect(ConnectionPid, 0, Stream, ConsumerName, true, Effects4),
+
+    ok.
+
 ensure_monitors_test(_) ->
     GroupId = {<<"/">>, <<"stream">>, <<"app">>},
     Group = grp([csr(self(), 0, true), csr(self(), 1, false)]),
