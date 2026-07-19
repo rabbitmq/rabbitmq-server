@@ -20,7 +20,8 @@
 -export([
     is_enabled/0,
     load/1,
-    load_with_hashing/3
+    load_with_hashing/3,
+    tls_options_or_default/1
 ]).
 
 
