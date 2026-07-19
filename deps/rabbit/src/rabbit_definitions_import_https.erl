@@ -64,7 +64,8 @@ load_with_hashing(Proplist, PreviousHash, Algo) ->
     ?LOG_DEBUG("Loading definitions with content hashing enabled, HTTPS URL: ~ts, previous hash value: ~ts",
                      [URL, rabbit_misc:hexify(PreviousHash)]),
 
-    TLSOptions = tls_options_or_default(Proplist),
+    TLSOptions0 = tls_options_or_default(Proplist),
+    TLSOptions = rabbit_ssl:wrap_password_opt(TLSOptions0),
     HTTPOptions = http_options(TLSOptions),
 
     case httpc_get(URL, HTTPOptions) of
@@ -130,11 +131,10 @@ http_options(TLSOptions) ->
 
 tls_options_or_default(Proplist) ->
     TLSOptions0 = [
-        %% avoids a peer verification warning emitted by default if no certificate chain and peer verification
-        %% settings are provided: these are not essential in this particular case (client-side downloads that likely
-        %% will happen from a local trusted source)
+        {verify, verify_peer},
+        {cacerts, public_key:cacerts_get()},
+        {depth, 2},
         {log_level, error},
-        %% use TLSv1.2 by default
         {versions, ['tlsv1.2']}
     ],
     TLSOptions = pget(ssl_options, Proplist, TLSOptions0),
