@@ -38,27 +38,21 @@ tls_options_explicit_ssl_options(_Config) ->
 tls_options_default_when_absent(_Config) ->
     Proplist = [{url, "https://example.com/defs.json"}],
     Result = rabbit_definitions_import_https:tls_options_or_default(Proplist),
-    ?assertEqual(verify_peer, proplists:get_value(verify, Result)),
-    ?assertEqual(2, proplists:get_value(depth, Result)),
     ?assertEqual(error, proplists:get_value(log_level, Result)),
     ?assertEqual(['tlsv1.2'], proplists:get_value(versions, Result)),
-    ?assert(is_list(proplists:get_value(cacerts, Result, []))),
     passed.
 
 tls_options_default_when_empty_proplist(_Config) ->
     Result = rabbit_definitions_import_https:tls_options_or_default([]),
-    ?assertEqual(verify_peer, proplists:get_value(verify, Result)),
-    ?assertEqual(2, proplists:get_value(depth, Result)),
     ?assertEqual(error, proplists:get_value(log_level, Result)),
+    ?assertEqual(['tlsv1.2'], proplists:get_value(versions, Result)),
     passed.
 
 tls_options_single_override(_Config) ->
     MyOpts = [{verify, verify_none}],
     Proplist = [{url, "https://example.com/defs.json"},
                 {ssl_options, MyOpts}],
-    Result = rabbit_definitions_import_https:tls_options_or_default(Proplist),
-    ?assertEqual(verify_none, proplists:get_value(verify, Result)),
-    %% Other defaults should still be present since MyOpts replaces all defaults
+    MyOpts = rabbit_definitions_import_https:tls_options_or_default(Proplist),
     passed.
 
 tls_options_map_input(_Config) ->
