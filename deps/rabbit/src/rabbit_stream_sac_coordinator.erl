@@ -386,12 +386,16 @@ apply(#command_activate_consumer{vhost = VH, stream = S, consumer_name = Name},
                         %% do we need effects or not?
                         Effects =
                             case Csr of
-                                Csr when ?SAME_CSR(Csr, ActCsr) ->
+                                Csr when ?SAME_CSR(Csr, ActCsr) andalso
+                                         ActCsr#consumer.status =:= ?CONN_ACT ->
                                     %% it is the same active consumer as before
                                     %% no need to notify it
                                     [];
                                 _ ->
                                     %% new active consumer, need to notify it
+                                    %% (also fires when the previous "active" was
+                                    %% deactivating -- its client has been told to
+                                    %% step down and must be re-notified)
                                     [notify_csr_effect(Csr, S, Name, true)]
                             end,
                         {G2, Effects}
