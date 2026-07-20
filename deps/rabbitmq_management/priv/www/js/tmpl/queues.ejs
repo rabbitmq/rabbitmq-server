@@ -236,7 +236,7 @@
         <tr>
           <th><label>Type:</label></th>
           <td>
-            <select name="queuetype" onchange="select_queue_type(queuetype)">
+            <select name="queuetype">
                 <option value="default">Default for virtual host</option>
                 <% for (const [typename, type_config] of Object.entries(QUEUE_TYPE)) { %>
                   <% if (typename != "default" && type_config.tmpl.arguments) { %>

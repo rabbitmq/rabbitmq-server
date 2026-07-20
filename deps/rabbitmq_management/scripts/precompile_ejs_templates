@@ -1,0 +1,200 @@
+#!/usr/bin/env escript
+%%! -noshell
+
+%% Compiles EJS 1.0 templates in <input-dir> to a single JavaScript file.
+%%
+%% Usage: precompile_ejs_templates <input-dir> <output-file>
+%%
+%% Output format:
+%%   var COMPILED_TEMPLATES = COMPILED_TEMPLATES || {};
+%%
+%%   COMPILED_TEMPLATES["name"] = function(_CONTEXT, _VIEW) { ... };
+%%   ...
+%%
+%% Each template function is semantically equivalent to what EJS 1.0 would
+%% produce at runtime, but generated at build time, removing the need for
+%% eval() and the 'unsafe-eval' CSP directive.
+
+main([InDir, OutFile]) ->
+    Files = lists:sort(filelib:wildcard(filename:join(InDir, "*.ejs"))),
+    case Files of
+        [] ->
+            io:format(standard_error, "warning: no .ejs files found in ~s~n", [InDir]);
+        _ ->
+            ok
+    end,
+    Compiled = [compile_file(F) || F <- Files],
+    IoList = ["var COMPILED_TEMPLATES = COMPILED_TEMPLATES || {};\n",
+              "\n",
+              lists:join("\n", Compiled)],
+    case file:write_file(OutFile, IoList) of
+        ok ->
+            ok;
+        {error, Reason} ->
+            io:format(standard_error, "error: failed to write ~s: ~p~n", [OutFile, Reason]),
+            halt(1)
+    end;
+main(_) ->
+    io:format(standard_error, "usage: precompile_ejs_templates <input-dir> <output-file>~n", []),
+    halt(1).
+
+compile_file(File) ->
+    Name = filename:rootname(filename:basename(File)),
+    case file:read_file(File) of
+        {ok, Bin} ->
+            Source = binary_to_list(Bin),
+            compile_template(Name, Source);
+        {error, Reason} ->
+            io:format(standard_error, "error: failed to read ~s: ~p~n", [File, Reason]),
+            halt(1)
+    end.
+
+compile_template(Name, Source) ->
+    %% Normalise Windows and old Mac line endings to Unix newlines.
+    S1 = re:replace(Source, "\r\n", "\n", [global, {return, list}]),
+    Normalised = re:replace(S1, "\r", "\n", [global, {return, list}]),
+    Stmts0 = ejs_scan(Normalised, text, [], []),
+    %% Merge consecutive string pushes into a single push (reduces call
+    %% overhead and helps gzip compression).
+    Stmts = merge_pushes(Stmts0),
+    Lines = [stmt_to_js(S) || S <- Stmts],
+    ["COMPILED_TEMPLATES[\"", Name, "\"] = function(_CONTEXT, _VIEW) {\n",
+     "  try {\n",
+     "    with(_VIEW) {\n",
+     "      with(_CONTEXT) {\n",
+     "        var ___ViewO = [];\n",
+     Lines,
+     "        return ___ViewO.join('');\n",
+     "      }\n",
+     "    }\n",
+     "  } catch(e) { e.lineNumber = null; throw e; }\n",
+     "};\n"].
+
+%% ---------------------------------------------------------------------------
+%% EJS scanner / compiler
+%%
+%% States:
+%%   text    – reading literal HTML/text
+%%   code    – inside <% ... %>
+%%   expr    – inside <%= ... %>
+%%   comment – inside <%# ... %>
+%%
+%% ContentAcc holds the current token's characters in *reverse* order for
+%% efficient cons-prepend; lists:reverse/1 is called when flushing.
+%%
+%% StmtAcc accumulates compiled statements in *reverse* order; the final
+%% lists:reverse/1 is called at end-of-input.
+%% ---------------------------------------------------------------------------
+
+ejs_scan([], text, Content, StmtAcc) ->
+    Stmts = case Content of
+        [] -> StmtAcc;
+        _  -> [{push_str, lists:reverse(Content)} | StmtAcc]
+    end,
+    lists:reverse(Stmts);
+
+ejs_scan([], _Mode, _Content, StmtAcc) ->
+    %% Unclosed tag: discard partial tag content, return what we have.
+    lists:reverse(StmtAcc);
+
+%% ---- TEXT MODE ----
+
+%% <%%  ->  literal <% in output
+ejs_scan([$<, $%, $% | Rest], text, Content, StmtAcc) ->
+    ejs_scan(Rest, text, [$%, $< | Content], StmtAcc);
+
+%% <%=  ->  start expression
+ejs_scan([$<, $%, $= | Rest], text, Content, StmtAcc) ->
+    NewAcc = flush_content(Content, StmtAcc),
+    ejs_scan(Rest, expr, [], NewAcc);
+
+%% <%#  ->  start comment
+ejs_scan([$<, $%, $# | Rest], text, Content, StmtAcc) ->
+    NewAcc = flush_content(Content, StmtAcc),
+    ejs_scan(Rest, comment, [], NewAcc);
+
+%% <%   ->  start code block
+ejs_scan([$<, $% | Rest], text, Content, StmtAcc) ->
+    NewAcc = flush_content(Content, StmtAcc),
+    ejs_scan(Rest, code, [], NewAcc);
+
+%% newline: flush accumulated content (including the newline) as a push
+ejs_scan([$\n | Rest], text, Content, StmtAcc) ->
+    Str = lists:reverse([$\n | Content]),
+    ejs_scan(Rest, text, [], [{push_str, Str} | StmtAcc]);
+
+%% default: accumulate character
+ejs_scan([C | Rest], text, Content, StmtAcc) ->
+    ejs_scan(Rest, text, [C | Content], StmtAcc);
+
+%% ---- TAG MODES (code / expr / comment) ----
+
+%% %%>  ->  literal %> inside a tag
+ejs_scan([$%, $%, $> | Rest], Mode, Content, StmtAcc)
+  when Mode =:= code; Mode =:= expr; Mode =:= comment ->
+    ejs_scan(Rest, Mode, [$>, $% | Content], StmtAcc);
+
+%% %>  ->  end code block
+ejs_scan([$%, $> | Rest], code, Content, StmtAcc) ->
+    Code = chop_trailing_newline(lists:reverse(Content)),
+    ejs_scan(Rest, text, [], [{code, Code} | StmtAcc]);
+
+%% %>  ->  end expression
+ejs_scan([$%, $> | Rest], expr, Content, StmtAcc) ->
+    Expr = lists:reverse(Content),
+    ejs_scan(Rest, text, [], [{push_expr, Expr} | StmtAcc]);
+
+%% %>  ->  end comment (content discarded)
+ejs_scan([$%, $> | Rest], comment, _Content, StmtAcc) ->
+    ejs_scan(Rest, text, [], StmtAcc);
+
+%% default: accumulate character in tag content
+ejs_scan([C | Rest], Mode, Content, StmtAcc) ->
+    ejs_scan(Rest, Mode, [C | Content], StmtAcc).
+
+%% Flush non-empty content accumulator as a push_str statement.
+flush_content([], StmtAcc) -> StmtAcc;
+flush_content(Content, StmtAcc) ->
+    [{push_str, lists:reverse(Content)} | StmtAcc].
+
+%% The original EJS compiler strips a trailing newline from code-block content
+%% when one is present (this avoids emitting a spurious blank line for every
+%% code block that has its closing %> on its own line).
+chop_trailing_newline([]) -> [];
+chop_trailing_newline(S) ->
+    case lists:last(S) of
+        $\n -> lists:sublist(S, length(S) - 1);
+        _   -> S
+    end.
+
+%% ---------------------------------------------------------------------------
+%% Optimisation: merge consecutive push_str statements into one.
+%% ---------------------------------------------------------------------------
+
+merge_pushes([]) ->
+    [];
+merge_pushes([{push_str, S1}, {push_str, S2} | Rest]) ->
+    merge_pushes([{push_str, S1 ++ S2} | Rest]);
+merge_pushes([H | Rest]) ->
+    [H | merge_pushes(Rest)].
+
+%% ---------------------------------------------------------------------------
+%% Code generation
+%% ---------------------------------------------------------------------------
+
+stmt_to_js({push_str, S}) ->
+    ["        ___ViewO.push(\"", js_escape_string(S), "\");\n"];
+stmt_to_js({push_expr, E}) ->
+    ["        ___ViewO.push((EJS.Scanner.to_text(", E, ")));\n"];
+stmt_to_js({code, ""}) ->
+    [];
+stmt_to_js({code, C}) ->
+    ["        ", C, "\n"].
+
+%% Escape a string for embedding inside a JavaScript double-quoted literal.
+%% Matches the clean() function in EJS.Compiler.
+js_escape_string([]) -> [];
+js_escape_string([$\\ | Rest]) -> [$\\, $\\ | js_escape_string(Rest)];
+js_escape_string([$"  | Rest]) -> [$\\, $"  | js_escape_string(Rest)];
+js_escape_string([$\n | Rest]) -> [$\\, $n  | js_escape_string(Rest)];
+js_escape_string([C   | Rest]) -> [C        | js_escape_string(Rest)].
