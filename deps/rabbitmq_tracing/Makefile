@@ -18,7 +18,8 @@ DEPS = rabbit_common rabbit rabbitmq_management
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers
 
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
-DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
+DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk \
+              rabbitmq_management/mk/rabbitmq-management-plugin.mk
 
 include ../../rabbitmq-components.mk
 include ../../erlang.mk

@@ -25,7 +25,7 @@
 dispatcher() -> [{"/shovels/vhost/:vhost/:name", ?MODULE, []},
                  {"/shovels/vhost/:vhost/:name/restart", ?MODULE, []}].
 
-web_ui()     -> [{javascript, <<"shovel.js">>}].
+web_ui()     -> [{javascript, [<<"shovel_management-ejs.js">>, <<"shovel.js">>]}].
 
 %%--------------------------------------------------------------------
 

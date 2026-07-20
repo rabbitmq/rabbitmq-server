@@ -8,14 +8,14 @@
         <% } %>
     <% } %>
     <% if (notAuthorized) { %>
-        <button id="logout" onclick="oauth_initiateLogout()">Click here to logout</button>
+        <button id="logout" data-oauth-action="logout">Click here to logout</button>
     <% } %>
   </div>
 <% if (!notAuthorized) { %>
     <% if (strict_auth_mechanism != null && strict_auth_mechanism.type === "oauth2") { %>
-        <button id="login" onclick="oauth_initiateLogin('<%=fmt_string(strict_auth_mechanism.resource_id)%>')">Click here to log in</button>
+        <button id="login" data-oauth-action="login" data-resource-id="<%=fmt_string(strict_auth_mechanism.resource_id)%>">Click here to log in</button>
     <% } else if ((typeof resource_servers == 'object' && resource_servers.length == 1) && oauth_disable_basic_auth) { %>
-        <button id="login" onclick="oauth_initiateLogin('<%=fmt_string(resource_servers[0].id)%>')">Click here to log in</button>
+        <button id="login" data-oauth-action="login" data-resource-id="<%=fmt_string(resource_servers[0].id)%>">Click here to log in</button>
     <% } else if (typeof resource_servers == 'object' && resource_servers.length >= 1 && strict_auth_mechanism == null) { %>
 
     <b>Login with :</b>
@@ -32,9 +32,9 @@
       <div class="hider">
         <div class="updatable">
           <% if (resource_servers.length == 1 && declared_resource_servers_count == 1) { %>
-          <button id="login" onclick="oauth_initiateLogin('<%=fmt_string(resource_servers[0].id)%>')">Click here to log in</button>
+          <button id="login" data-oauth-action="login" data-resource-id="<%=fmt_string(resource_servers[0].id)%>">Click here to log in</button>
           <% } else { %>
-          <form onsubmit="oauth_initiateLogin(document.getElementById('oauth2-resource').value)">
+          <form id="oauth2-resource-form">
             <label for="oauth2-resource">Resource: </label>
             <select id="oauth2-resource">
               <% for (var i = 0; i < resource_servers.length; i++) { %>

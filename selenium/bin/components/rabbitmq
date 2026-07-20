@@ -111,7 +111,7 @@ start_docker_cluster_rabbitmq() {
     ${BIN_DIR}/gen-advanced-config "${PROFILES}" ${RABBITMQ_CONFIG_DIR} $ENV_FILE $CONF_DIR/rabbitmq/advanced.config
     RESULT=$?
     if [ $RESULT -eq 0 ]; then
-        if [ -s $RESULT ]; then
+        if [ -s $CONF_DIR/rabbitmq/advanced.config ]; then
             print "> EFFECTIVE ADVANCED_CONFIG_FILE: $CONF_DIR/rabbitmq/advanced.config"
         else
             rm $CONF_DIR/rabbitmq/advanced.config
@@ -163,7 +163,7 @@ start_docker_rabbitmq() {
   ${BIN_DIR}/gen-advanced-config "${PROFILES}" ${RABBITMQ_CONFIG_DIR} $ENV_FILE $CONF_DIR/rabbitmq/advanced.config
   RESULT=$?
   if [ $RESULT -eq 0 ]; then
-      if [ -s $RESULT ]; then
+      if [ -s $CONF_DIR/rabbitmq/advanced.config ]; then
           print "> EFFECTIVE ADVANCED_CONFIG_FILE: $CONF_DIR/rabbitmq/advanced.config"
       else
           rm $CONF_DIR/rabbitmq/advanced.config
