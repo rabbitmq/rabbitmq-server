@@ -15,12 +15,8 @@ function format_error_response(response, reason) {
     });
 }
 
-<<<<<<< HEAD
-$(document).ready(function() {    
-=======
 $(document).ready(function() {
   setup_oauth_events_if_required();
->>>>>>> 46865862a6 (Update tests so that they do not use inline event handlers)
   var url_string = window.location.href;
   var url = new URL(url_string);
   var error = url.searchParams.get('error');
