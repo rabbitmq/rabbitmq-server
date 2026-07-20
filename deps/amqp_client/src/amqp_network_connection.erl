@@ -159,6 +159,8 @@ inet_address_preference() ->
         {ok, false} -> [inet, inet6]
     end.
 
+gethostaddr({local, Path}) ->
+    {{local, Path}, local};
 gethostaddr(Host) ->
     resolve_address(Host, inet_address_preference()).
 
