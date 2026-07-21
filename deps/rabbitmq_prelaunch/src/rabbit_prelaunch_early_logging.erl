@@ -285,6 +285,7 @@ translate_generic_conf(Var, Conf) ->
 -type formatter_plaintext_conf() :: #{time_format := time_format(),
                                       level_format := level_format(),
                                       single_line := boolean(),
+                                      depth := unlimited | pos_integer(),
                                       prefix_format := line_format(),
                                       line_format := line_format(),
                                       use_colors := boolean(),
@@ -414,6 +415,7 @@ translate_colors_conf(_, _) ->
 -type formatter_json_conf() :: #{time_format := time_format(),
                                  level_format := level_format(),
                                  single_line := boolean(),
+                                 depth := unlimited | pos_integer(),
                                  field_map := json_field_map(),
                                  verbosity_map := json_verbosity_map()}.
 
