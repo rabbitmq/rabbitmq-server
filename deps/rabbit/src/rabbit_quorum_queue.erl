@@ -1083,22 +1083,23 @@ restart_server({_, _} = Ref) ->
              rabbit_types:username()) ->
     {ok, QLen :: non_neg_integer()} |
     {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
-delete(Q, true, _IfEmpty, _ActingUser) when ?amqqueue_is_quorum(Q) ->
-    {protocol_error, not_implemented,
-     "cannot delete ~ts. queue.delete operations with if-unused flag set are not supported by quorum queues",
-     [rabbit_misc:rs(amqqueue:get_name(Q))]};
-delete(Q, _IfUnused, true, _ActingUser) when ?amqqueue_is_quorum(Q) ->
-    {protocol_error, not_implemented,
-     "cannot delete ~ts. queue.delete operations with if-empty flag set are not supported by quorum queues",
-     [rabbit_misc:rs(amqqueue:get_name(Q))]};
-delete(Q, _IfUnused, _IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
+delete(Q, IfUnused, IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
+    {ok, ReadyMsgs, Consumers} = stat(Q),
+    if
+        IfEmpty andalso ReadyMsgs > 0 ->
+            {error, not_empty};
+        IfUnused andalso Consumers > 0 ->
+            {error, in_use};
+        true ->
+            do_delete(Q, ReadyMsgs, ActingUser)
+    end.
+
+do_delete(Q, ReadyMsgs, ActingUser) ->
     {Name, _} = amqqueue:get_pid(Q),
     QName = amqqueue:get_name(Q),
     QNodes = get_nodes(Q),
-    %% TODO Quorum queue needs to support consumer tracking for IfUnused
     Timeout = ?DELETE_TIMEOUT,
     rabbit_binding:delete_for_destination(QName, ActingUser),
-    {ok, ReadyMsgs, _} = stat(Q),
     Servers = [{Name, Node} || Node <- QNodes],
     case ra:delete_cluster(Servers, Timeout) of
         {ok, {_, LeaderNode} = Leader} ->
