@@ -195,7 +195,15 @@ format_report(
     try
         case erlang:fun_info(Cb, arity) of
             {arity, 1} -> Cb(Report);
-            {arity, 2} -> {"~ts", [Cb(Report, #{})]}
+            %% Pass the depth-limiting keys through to the callback, the
+            %% same way OTP's `logger_formatter' does. This lets report
+            %% callbacks such as `proc_lib:report_cb/2' truncate large
+            %% crash reports. See `format_msg/3' in:
+            %% https://github.com/erlang/otp/blob/OTP-27.3.4.14/lib/kernel/src/logger_formatter.erl
+            {arity, 2} ->
+                Extra = maps:with(
+                          [depth, chars_limit, single_line], Config),
+                {"~ts", [Cb(Report, Extra)]}
         end
     catch
         _:_:_ ->

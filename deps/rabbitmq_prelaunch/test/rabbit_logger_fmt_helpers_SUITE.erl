@@ -22,7 +22,9 @@ all() ->
 
 all_tests() ->
     [format_args_depth_truncates,
-     format_args_depth_unlimited_is_full].
+     format_args_depth_unlimited_is_full,
+     report_cb_depth_truncates,
+     report_cb_depth_unlimited_is_full].
 
 groups() ->
     [{tests, [], all_tests()}].
@@ -77,3 +79,36 @@ format_args_depth_unlimited_is_full(_Config) ->
     Formatted = format({"~p", [deep_term()]}, Config),
     ?assertNotEqual(nomatch, string:find(Formatted, "secret")),
     ?assertEqual(nomatch, string:find(Formatted, "...")).
+
+%% A `{report, Report}' message whose meta carries an arity-2
+%% `report_cb' must have the configured `depth' passed through to that
+%% callback (in the `Extra' map), so the callback can truncate. This
+%% mirrors how OTP's `logger_formatter' invokes report callbacks and is
+%% what `proc_lib:report_cb/2' relies on to limit crash reports.
+report_cb_depth_truncates(_Config) ->
+    Config = #{single_line => false, depth => 3},
+    Formatted = format_report_with_cb(deep_term(), Config),
+    ?assertNotEqual(nomatch, string:find(Formatted, "...")),
+    ?assertEqual(nomatch, string:find(Formatted, "secret")).
+
+report_cb_depth_unlimited_is_full(_Config) ->
+    Config = #{single_line => false, depth => unlimited},
+    Formatted = format_report_with_cb(deep_term(), Config),
+    ?assertNotEqual(nomatch, string:find(Formatted, "secret")),
+    ?assertEqual(nomatch, string:find(Formatted, "...")).
+
+%% Build a `{report, Report}' message with an arity-2 `report_cb' that
+%% honors the `depth' key from its `Extra' argument, exactly as
+%% `proc_lib:report_cb/2' does.
+format_report_with_cb(Term, Config) ->
+    Report = #{term => Term},
+    Cb = fun(#{term := T}, Extra) ->
+                 Depth = maps:get(depth, Extra, unlimited),
+                 case Depth of
+                     unlimited -> io_lib:format("~p", [T]);
+                     D         -> io_lib:format("~P", [T, D])
+                 end
+         end,
+    Meta = #{report_cb => Cb},
+    lists:flatten(
+      rabbit_logger_fmt_helpers:format_msg({report, Report}, Meta, Config)).
