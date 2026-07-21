@@ -23,6 +23,7 @@ all_tests() ->
      array_with_extra_input,
      array32_count_exceeds_data,
      array_of_zero_width_elements,
+     array_of_described_zero_width_elements_unsupported,
      unsupported_type,
      peek_described_section_total_sizes,
      peek_described_section,
@@ -53,8 +54,10 @@ roundtrip(_Config) ->
               {binary, <<"outer value">>}},
              {array, ubyte, [{ubyte, 1}, {ubyte, 255}]},
              {array, boolean, [true, false, true]},
-             {array, null, [null, null, null]},
-             {array, null, []},
+             %% Zero-width array elements (e.g. null repeated N times) are
+             %% represented opaquely rather than expanded into N terms.
+             {as_is, 16#f0, <<5:32, 3:32, 16#40>>},
+             {as_is, 16#f0, <<5:32, 0:32, 16#40>>},
              true,
              {list, [{utf8, <<"hi">>},
                      {described,
@@ -90,42 +93,72 @@ array_with_extra_input(_Config) ->
     ?assertExit(Expected, amqp10_binary_parser:parse_many(Bin, [])).
 
 array32_count_exceeds_data(_Config) ->
-    Count = 16#FFFFFFFF,
-    Type = 16#45,
-    ArrayPayload = <<Count:32, Type>>,
-    Size = byte_size(ArrayPayload),
-    Bin = <<16#f0, Size:32, ArrayPayload/binary>>,
-    ?assertExit(
-       {failed_to_parse_array_count_exceeds_limit, Type, Count},
-       amqp10_binary_parser:parse(Bin)),
-    %% Also verify smaller mismatches are caught: 10 elements but only 3 data bytes
-    SmallType = 16#50,
-    SmallPayload = <<10:32, SmallType, 1, 2, 3>>,
-    SmallSize = byte_size(SmallPayload),
-    SmallBin = <<16#f0, SmallSize:32, SmallPayload/binary>>,
-    ?assertExit(
-       {failed_to_parse_array_count_exceeds_input, SmallType, 10, 3},
-       amqp10_binary_parser:parse(SmallBin)).
+    TypeArray32 = 16#f0,
+    TypeUByte = 16#50,
+    %% 10 elements declared but only 3 data bytes available.
+    Count = 10,
+    Payload = <<Count:32, TypeUByte, 1, 2, 3>>,
+    Bin = <<TypeArray32, (byte_size(Payload)):32, Payload/binary>>,
+    ?assertExit({failed_to_parse_array_count_exceeds_input, TypeUByte, Count, 3},
+                amqp10_binary_parser:parse(Bin)).
 
+%% Zero-width array elements (null, booleans, uint0, ulong0, list0) cost zero
+%% octets on the wire no matter how large Count is. Rather than materializing
+%% Count terms (CWE-770: a small frame could otherwise amplify into gigabytes
+%% of heap), the parser represents such an array as an opaque, constant-size value.
 array_of_zero_width_elements(_Config) ->
-    %% Array8 (0xe0), Size=2, Count=10, Null Constructor=0x40 (width 0)
-    {Parsed40, 4} = amqp10_binary_parser:parse(<<16#e0, 2, 10, 16#40>>),
-    ?assertEqual({array, null, lists:duplicate(10, null)}, Parsed40),
+    TypeArray32 = 16#f0,
+    TypeArray8 = 16#e0,
 
-    {Parsed41, 4} = amqp10_binary_parser:parse(<<16#e0, 2, 10, 16#41>>),
-    ?assertEqual({array, boolean, lists:duplicate(10, true)}, Parsed41),
+    Check32 = fun(Type, Count) ->
+                      Encoded = <<5:32, Count:32, Type>>,
+                      Bin = <<TypeArray32, Encoded/binary>>,
+                      {Parsed, ParsedSize} = amqp10_binary_parser:parse(Bin),
+                      ?assertEqual({as_is, TypeArray32, Encoded}, Parsed),
+                      ?assertEqual(byte_size(Bin), ParsedSize),
+                      %% Re-encoding reproduces the exact original bytes.
+                      ?assertEqual(Bin, iolist_to_binary(amqp10_binary_generator:generate(Parsed)))
+              end,
+    [Check32(Type, 10) || Type <- [16#40, 16#41, 16#42, 16#43, 16#44, 16#45]],
 
-    {Parsed42, 4} = amqp10_binary_parser:parse(<<16#e0, 2, 10, 16#42>>),
-    ?assertEqual({array, boolean, lists:duplicate(10, false)}, Parsed42),
+    %% No limit on Count: an absurd 32-bit count is represented exactly as cheaply as a small one.
+    Check32(16#40, 16#FFFFFFFF),
 
-    {Parsed43, 4} = amqp10_binary_parser:parse(<<16#e0, 2, 10, 16#43>>),
-    ?assertEqual({array, uint, lists:duplicate(10, {uint, 0})}, Parsed43),
+    %% Array8 form (0xe0) is parsed just as cheaply, and the selector is
+    %% preserved rather than normalized to array32: re-encoding reproduces
+    %% the exact original 4 bytes, not an inflated 10-byte array32 form.
+    Check8 = fun(Type, Count) ->
+                     Encoded = <<2, Count, Type>>,
+                     Bin = <<TypeArray8, Encoded/binary>>,
+                     {Parsed, ParsedSize} = amqp10_binary_parser:parse(Bin),
+                     ?assertEqual({as_is, TypeArray8, Encoded}, Parsed),
+                     ?assertEqual(byte_size(Bin), ParsedSize),
+                     ?assertEqual(Bin, iolist_to_binary(amqp10_binary_generator:generate(Parsed)))
+             end,
+    [Check8(Type, 10) || Type <- [16#40, 16#41, 16#42, 16#43, 16#44, 16#45]],
+    Check8(16#40, 255),
 
-    {Parsed44, 4} = amqp10_binary_parser:parse(<<16#e0, 2, 10, 16#44>>),
-    ?assertEqual({array, ulong, lists:duplicate(10, {ulong, 0})}, Parsed44),
+    %% Nested as an element of an outer array of arrays, the preserved array8
+    %% selector must be upgraded to array32 framing: RabbitMQ's generator
+    %% always uses the large (32-bit) form for nested array elements (see
+    %% constructor/1: "use large array type for all nested arrays").
+    {Inner8, _} = amqp10_binary_parser:parse(<<TypeArray8, 2:8, 10:8, 16#40>>),
+    OuterBin = iolist_to_binary(amqp10_binary_generator:generate({array, array, [Inner8]})),
+    {{array, array, [InnerParsedBack]}, _} = amqp10_binary_parser:parse(OuterBin),
+    ?assertEqual({as_is, TypeArray32, <<5:32, 10:32, 16#40>>}, InnerParsedBack).
 
-    {Parsed45, 4} = amqp10_binary_parser:parse(<<16#e0, 2, 10, 16#45>>),
-    ?assertEqual({array, list, lists:duplicate(10, {list, []})}, Parsed45).
+%% An array of described zero-width elements (e.g. a described null repeated
+%% Count times) carries no information beyond its count and descriptor. This
+%% combination isn't supported: it is rejected cleanly instead of being
+%% expanded (unbounded memory) or given a bespoke opaque representation.
+array_of_described_zero_width_elements_unsupported(_Config) ->
+    %% ?DESCRIBED, utf8 "URL" descriptor, null (zero-width) element type.
+    DescribedNull = <<0, 16#a1, 3, "URL", 16#40>>,
+    Count = 16#FFFFFFFF,
+    CountAndV = <<Count:32, DescribedNull/binary>>,
+    Bin = <<16#f0, (byte_size(CountAndV)):32, CountAndV/binary>>,
+    ?assertExit({array_of_described_zero_width_elements_unsupported, Count},
+                amqp10_binary_parser:parse(Bin)).
 
 unsupported_type(_Config) ->
     UnsupportedType = 16#02,
