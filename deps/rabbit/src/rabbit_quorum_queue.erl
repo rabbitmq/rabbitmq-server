@@ -2859,7 +2859,7 @@ queue_vm_stats_sups() ->
     {[quorum_queue_procs,
       quorum_queue_dlx_procs],
      [[ra_server_sup_sup],
-      [rabbit_fifo_dlx_sup]]}.
+      [rabbit_fifo_dlx_sup_sup]]}.
 
 queue_vm_ets() ->
     {[quorum_ets],
