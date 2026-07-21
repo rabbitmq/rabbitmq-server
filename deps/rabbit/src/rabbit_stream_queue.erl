@@ -1630,8 +1630,11 @@ stop(_VHost) ->
 
 drain(TransferCandidates) ->
     case whereis(rabbit_stream_coordinator) of
-        undefined -> ok;
-        _Pid -> transfer_leadership_of_stream_coordinator(TransferCandidates)
+        undefined ->
+            ok;
+        _Pid ->
+            transfer_leadership_of_stream_coordinator(TransferCandidates),
+            transfer_leadership_of_local_stream_leaders(TransferCandidates)
     end.
 
 revive() ->
@@ -1654,6 +1657,127 @@ transfer_leadership_of_stream_coordinator(TransferCandidates) ->
             ?LOG_INFO("Leadership transfer for stream coordinator completed. The new leader is ~p", [Node]);
         Error ->
             ?LOG_WARNING("Skipping leadership transfer of stream coordinator: ~p", [Error])
+    end.
+
+%% Under a busy coordinator (e.g. many active publishers), each
+%% restart_stream/2 command can take up to the coordinator command timeout
+%% per coordinator member before failing. To avoid dragging drain out for
+%% minutes, cap the total wall-clock spent on per-stream transfers and let
+%% shutdown-time re-election handle any remainder.
+-define(STREAM_DRAIN_BUDGET_MS, 30000).
+%% Small pause between per-stream restart_stream commands to reduce
+%% coordinator command queue pressure when there are many local leaders.
+-define(STREAM_DRAIN_INTER_STREAM_MS, 25).
+-define(STREAM_DRAIN_RESTART_ATTEMPTS, 2).
+-define(STREAM_DRAIN_RESTART_BACKOFF_MS, 500).
+
+-spec transfer_leadership_of_local_stream_leaders([node()]) -> ok.
+transfer_leadership_of_local_stream_leaders([]) ->
+    ?LOG_WARNING("Skipping stream leadership transfer: no candidate "
+                 "(online, not under maintenance) nodes to transfer to");
+transfer_leadership_of_local_stream_leaders(TransferCandidates) ->
+    LocalLeaders = rabbit_amqqueue:list_local_stream_leaders(),
+    ?LOG_INFO("Will transfer leadership of ~b streams with current leader on this node",
+              [length(LocalLeaders)]),
+    Deadline = erlang:monotonic_time(millisecond) + ?STREAM_DRAIN_BUDGET_MS,
+    Outcome = transfer_leaders_until(LocalLeaders, TransferCandidates, Deadline,
+                                     #{transferred => 0, skipped => 0, remaining => 0}),
+    #{transferred := Ok, skipped := Skipped, remaining := Remaining} = Outcome,
+    case Remaining of
+        0 ->
+            ?LOG_INFO("Leadership transfer for streams hosted on this node completed "
+                      "(transferred=~b, skipped=~b)", [Ok, Skipped]);
+        _ ->
+            ?LOG_WARNING("Leadership transfer for streams hosted on this node cut short "
+                         "(transferred=~b, skipped=~b, remaining=~b); shutdown-time "
+                         "re-election will handle the remainder",
+                         [Ok, Skipped, Remaining])
+    end.
+
+transfer_leaders_until([], _Candidates, _Deadline, Acc) ->
+    Acc;
+transfer_leaders_until([Q | Rest] = Queues, Candidates, Deadline, Acc) ->
+    case erlang:monotonic_time(millisecond) >= Deadline of
+        true ->
+            Acc#{remaining := length(Queues)};
+        false ->
+            case transfer_leadership_of_stream(Q, Candidates) of
+                {stop, Reason} ->
+                    ?LOG_WARNING("Stopping stream leadership transfer after ~tp; "
+                                 "remaining ~b streams will re-elect at shutdown",
+                                 [Reason, length(Queues)]),
+                    Acc#{remaining := length(Queues)};
+                transferred ->
+                    timer:sleep(?STREAM_DRAIN_INTER_STREAM_MS),
+                    transfer_leaders_until(Rest, Candidates, Deadline,
+                                           maps:update_with(transferred,
+                                                            fun (V) -> V + 1 end, Acc));
+                skipped ->
+                    transfer_leaders_until(Rest, Candidates, Deadline,
+                                           maps:update_with(skipped,
+                                                            fun (V) -> V + 1 end, Acc))
+            end
+    end.
+
+-spec transfer_leadership_of_stream(amqqueue:amqqueue(), [node()]) ->
+    transferred | skipped | {stop, term()}.
+transfer_leadership_of_stream(Q, TransferCandidates) ->
+    %% A stream can only elect a new leader on a node that already hosts a replica.
+    Replicas = get_nodes(Q),
+    QNameStr = rabbit_misc:rs(amqqueue:get_name(Q)),
+    case [N || N <- TransferCandidates, lists:member(N, Replicas)] of
+        [] ->
+            %% No online, non-maintenance replica for this stream: restarting
+            %% now would risk re-electing the leader onto the draining node (or
+            %% another node under maintenance). Skip and let shutdown-time
+            %% re-election handle it.
+            ?LOG_INFO("Skipping leadership transfer of stream ~ts: no online, "
+                      "non-maintenance replica available", [QNameStr]),
+            skipped;
+        [Preferred | _] ->
+            restart_stream_off_local(Q, QNameStr, Preferred,
+                                     ?STREAM_DRAIN_RESTART_ATTEMPTS)
+    end.
+
+-spec restart_stream_off_local(amqqueue:amqqueue(), string(), node(),
+                               non_neg_integer()) ->
+    transferred | skipped | {stop, term()}.
+restart_stream_off_local(_Q, QNameStr, _Preferred, 0) ->
+    ?LOG_WARNING("Gave up transferring leadership of stream ~ts off ~tp: "
+                 "still local after retries",
+                 [QNameStr, node()]),
+    skipped;
+restart_stream_off_local(Q, QNameStr, Preferred, Attempts) ->
+    Options = #{preferred_leader_node => Preferred},
+    case rabbit_stream_coordinator:restart_stream(Q, Options) of
+        {ok, NewLeader} when NewLeader =:= node() ->
+            %% `restart_stream` honours `preferred_leader_node` only when
+            %% the preferred node is tied with the current writer on the
+            %% stopped tail. If the writer just advanced its epoch (as
+            %% happens right after being forced onto this node), the
+            %% replicas need a moment to catch up before another attempt
+            %% can tie them and let the hint win.
+            timer:sleep(?STREAM_DRAIN_RESTART_BACKOFF_MS),
+            restart_stream_off_local(Q, QNameStr, Preferred, Attempts - 1);
+        {ok, NewLeader} ->
+            ?LOG_DEBUG("Stream ~ts new leader is on node ~tp",
+                       [QNameStr, NewLeader]),
+            transferred;
+        {error, coordinator_unavailable} = Err ->
+            %% `rabbit_stream_coordinator:process_command/2` collapses raft
+            %% timeouts across all coordinator members into this single
+            %% error. It means the coordinator is already overloaded, so
+            %% hammering it with more restart_stream commands only makes
+            %% things worse; bail out and let shutdown-time re-election
+            %% finish.
+            ?LOG_WARNING("Stream coordinator unavailable while transferring "
+                         "leadership of stream ~ts: ~tp",
+                         [QNameStr, Err]),
+            {stop, Err};
+        Error ->
+            ?LOG_WARNING("Failed to transfer leadership of stream ~ts: ~tp",
+                         [QNameStr, Error]),
+            skipped
     end.
 
 queue_vm_stats_sups() ->

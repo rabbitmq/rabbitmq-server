@@ -32,6 +32,7 @@ groups() ->
           listener_suspension_status,
           client_connection_closure,
           quorum_queue_leadership_transfer,
+          stream_leadership_transfer,
           metadata_store_leadership_transfer
       ]}
     ].
@@ -312,6 +313,54 @@ quorum_queue_leadership_transfer(Config) ->
               "Skip leader election check because rabbit_fifo machines "
               "have different versions", [])
     end,
+
+    rabbit_ct_broker_helpers:revive_node(Config, A).
+
+%% Regression test for rabbitmq/rabbitmq-server#16340. Draining a node must
+%% move stream leadership off it, or stopping the node forces a re-election
+%% under load and clients see the stream as down for several minutes.
+stream_leadership_transfer(Config) ->
+    [A | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    ct:pal("Picked node ~ts for maintenance tests...", [A]),
+
+    rabbit_ct_helpers:await_condition(
+        fun () -> not rabbit_ct_broker_helpers:is_being_drained_local_read(Config, A) end, 10000),
+
+    Conn = rabbit_ct_client_helpers:open_connection(Config, A),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    QName = <<"stream.maintenance.1">>,
+    #'queue.declare_ok'{} = amqp_channel:call(
+        Ch, #'queue.declare'{queue = QName, durable = true, arguments = [
+            {<<"x-queue-type">>, longstr, <<"stream">>}
+        ]}),
+
+    QRes = rabbit_misc:r(<<"/">>, queue, QName),
+    %% Force the stream's leader onto A so that draining has work to do.
+    rabbit_ct_helpers:await_condition(
+        fun () ->
+            case rabbit_ct_broker_helpers:rpc(
+                   Config, A, rabbit_stream_coordinator, restart_stream,
+                   [QRes, #{preferred_leader_node => A}]) of
+                {ok, A} -> true;
+                _       -> false
+            end
+        end, 60000),
+
+    ?awaitMatch(
+       Leaders when length(Leaders) == 1,
+       rabbit_ct_broker_helpers:rpc(
+         Config, A, rabbit_amqqueue, list_local_stream_leaders, []),
+       30000),
+
+    rabbit_ct_broker_helpers:drain_node(Config, A),
+    rabbit_ct_helpers:await_condition(
+        fun () -> rabbit_ct_broker_helpers:is_being_drained_local_read(Config, A) end, 10000),
+
+    ?awaitMatch(
+       Leaders when length(Leaders) == 0,
+       rabbit_ct_broker_helpers:rpc(
+         Config, A, rabbit_amqqueue, list_local_stream_leaders, []),
+       30000),
 
     rabbit_ct_broker_helpers:revive_node(Config, A).
 

@@ -40,7 +40,8 @@
 -export([is_replicable/1, is_exclusive/1, is_not_exclusive/1, is_dead_exclusive/1]).
 -export([list_local_quorum_queues/0, list_local_quorum_queue_names/0,
          list_local_stream_queues/0, list_stream_queues_on/1,
-         list_local_leaders/0, list_local_followers/0, get_quorum_nodes/1,
+         list_local_leaders/0, list_local_stream_leaders/0,
+         list_local_followers/0, get_quorum_nodes/1,
          list_local_quorum_queues_with_name_matching/1,
          list_local_quorum_queues_with_name_matching/2]).
 -export([is_local_to_node/2, is_local_to_node_set/2]).
@@ -1329,6 +1330,13 @@ list_local_leaders() ->
     [ Q || Q <- list(),
          amqqueue:is_quorum(Q),
          amqqueue:get_state(Q) =/= crashed, amqqueue:get_leader_node(Q) =:= node()].
+
+-spec list_local_stream_leaders() -> [amqqueue:amqqueue()].
+list_local_stream_leaders() ->
+    ThisNode = node(),
+    [Q || Q <- list_local_stream_queues(),
+          is_pid(amqqueue:get_pid(Q)),
+          node(amqqueue:get_pid(Q)) =:= ThisNode].
 
 -spec list_local_followers() -> [amqqueue:amqqueue()].
 list_local_followers() ->
