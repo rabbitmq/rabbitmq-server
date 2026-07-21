@@ -193,19 +193,33 @@ function login(username, password) {
 }
 
 function load_init_data_and_ui(user) {
+  if (!check_session()) {
+    clear_auth();
+    if (oauth.enabled) {
+      renderWarningMessageInLoginStatus(oauth, 'Concurrent session limit reached');
+    } else {
+      replace_content('login-status', '<p>Concurrent session limit reached</p>');
+    }
+    return false;
+  }
   if (!load_init_data()) {
     return false;
   }
-  load_ui(user);
-  return true;
+  return load_ui(user);
 }
 
 function load_ui(user) {
+  var settings = window.app_settings;
+  if (settings.sessions && settings.sessions.enabled === true) {
+    var id = get_session_id();
+    if (id && start_session_heartbeat(id, settings.sessions.heartbeat_interval) === false) {
+      return false;
+    }
+  }
+
   set_session_expiry_if_required(user.login_session_timeout);
   check_version();
   hide_popup_warn();
-
-  var settings = window.app_settings;
 
   replace_content('outer', format('layout', {}));
 
@@ -227,6 +241,7 @@ function load_ui(user) {
     console.info("All extensions have been loaded. Starting application ..");
     start_app();
   });
+  return true;
 }
 
 
