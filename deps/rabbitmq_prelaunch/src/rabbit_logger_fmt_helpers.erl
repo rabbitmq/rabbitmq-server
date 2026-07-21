@@ -148,8 +148,41 @@ format_msg1({string, Chardata}, Meta, Config) ->
 format_msg1({report, Report}, Meta, Config) ->
     FormattedReport = format_report(Report, Meta, Config),
     format_msg1(FormattedReport, Meta, Config);
-format_msg1({Format, Args}, _, _) ->
-    io_lib:format(Format, Args).
+format_msg1({Format, Args}, _, Config) ->
+    Depth = maps:get(depth, Config, unlimited),
+    SingleLine = maps:get(single_line, Config, false),
+    format_msg_with_depth(Format, Args, Depth, SingleLine).
+
+%% With no configured depth (the default), format exactly as before.
+format_msg_with_depth(Format, Args, unlimited, _SingleLine) ->
+    io_lib:format(Format, Args);
+%% Otherwise apply the configured format depth the same way OTP's
+%% `logger_formatter' does: rewrite the ~p/~w control sequences to
+%% ~P/~W with the depth appended, so deep sub-terms are truncated to
+%% `...'. See `format_msg/4' and `reformat/3' in:
+%% https://github.com/erlang/otp/blob/OTP-27.3.4.14/lib/kernel/src/logger_formatter.erl
+format_msg_with_depth(Format0, Args, Depth, SingleLine) ->
+    Format1 = io_lib:scan_format(Format0, Args),
+    Format2 = reformat(Format1, Depth, SingleLine),
+    io_lib:build_text(Format2).
+
+reformat([#{control_char := C} = M | T], Depth, true) when C =:= $p ->
+    [limit_depth(M#{width => 0}, Depth) | reformat(T, Depth, true)];
+reformat([#{control_char := C} = M | T], Depth, true) when C =:= $P ->
+    [M#{width => 0} | reformat(T, Depth, true)];
+reformat([#{control_char := C} = M | T], Depth, SingleLine)
+  when C =:= $p; C =:= $w ->
+    [limit_depth(M, Depth) | reformat(T, Depth, SingleLine)];
+reformat([H | T], Depth, SingleLine) ->
+    [H | reformat(T, Depth, SingleLine)];
+reformat([], _, _) ->
+    [].
+
+limit_depth(#{control_char := C0, args := Args} = M0, Depth) ->
+    %% Uppercase the control char (~p -> ~P, ~w -> ~W) and append the
+    %% depth to its argument list.
+    C = C0 - ($a - $A),
+    M0#{control_char := C, args := Args ++ [Depth]}.
 
 format_report(
   #{label := {application_controller, _}} = Report, Meta, Config) ->
