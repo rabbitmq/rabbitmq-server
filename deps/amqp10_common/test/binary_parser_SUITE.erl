@@ -95,8 +95,9 @@ array32_count_exceeds_data(_Config) ->
     ArrayPayload = <<Count:32, Type>>,
     Size = byte_size(ArrayPayload),
     Bin = <<16#f0, Size:32, ArrayPayload/binary>>,
+    %% A count beyond the buffer budget is rejected before allocation
     ?assertExit(
-       {failed_to_parse_array_count_exceeds_limit, Type, Count},
+       {failed_to_parse_array_buffer_budget_exceeded, Count, _},
        amqp10_binary_parser:parse(Bin)),
     %% Also verify smaller mismatches are caught: 10 elements but only 3 data bytes
     SmallType = 16#50,

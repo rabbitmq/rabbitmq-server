@@ -789,7 +789,7 @@ auth_phase(
             State1 = State#v1{connection = Conn#v1_connection{auth_state = AuthState1}},
             switch_callback(State1, {frame_header, sasl}, 8);
         {ok, User} ->
-            rabbit_access_control:clear_max_heap_size(),
+            rabbit_access_control:set_max_heap_size_authenticated(rabbit),
             Outcome = #'v1_0.sasl_outcome'{code = ?V_1_0_SASL_CODE_OK},
             ok = send_on_channel0(State, Outcome, rabbit_amqp_sasl),
             State1 = State#v1{connection_state = waiting_amqp0100,

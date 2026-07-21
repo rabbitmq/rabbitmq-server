@@ -17,6 +17,7 @@
 
 -export([permission_cache_can_expire/1, update_state/2, expiry_timestamp/1]).
 -export([set_max_heap_size_unauthenticated/1,
+         set_max_heap_size_authenticated/1,
          clear_max_heap_size/0]).
 
 %%----------------------------------------------------------------------------
@@ -464,6 +465,21 @@ set_max_heap_size_unauthenticated(App) ->
     %% 16 MiB by default
     Default = 16 * 1024 * 1024 div erlang:system_info(wordsize),
     Size = application:get_env(App, max_heap_size_unauthenticated, Default),
+    _ = erlang:process_flag(max_heap_size, #{size => Size,
+                                             kill => true,
+                                             error_logger => true}),
+    ok.
+
+%% Keep a heap size limit on an authenticated connection process instead of
+%% removing it. A protocol reader that decodes one frame at a time (AMQP 1.0)
+%% has a bounded working set, so an allocation far beyond it is abnormal. The
+%% limit is higher than the unauthenticated one to leave room for a large
+%% negotiated frame size.
+-spec set_max_heap_size_authenticated(atom()) -> ok.
+set_max_heap_size_authenticated(App) ->
+    %% 128 MiB by default
+    Default = 128 * 1024 * 1024 div erlang:system_info(wordsize),
+    Size = application:get_env(App, max_heap_size_authenticated, Default),
     _ = erlang:process_flag(max_heap_size, #{size => Size,
                                              kill => true,
                                              error_logger => true}),

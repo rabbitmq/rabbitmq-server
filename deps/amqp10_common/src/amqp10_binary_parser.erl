@@ -35,7 +35,9 @@
 -define(DESCRIPTOR_CODE_DATA, 16#75).
 -define(DESCRIPTOR_CODE_AMQP_SEQUENCE, 16#76).
 -define(DESCRIPTOR_CODE_AMQP_VALUE, 16#77).
--define(MAX_ZERO_WIDTH_ARRAY_COUNT, 10_000).
+%% Bounds elements materialized from zero-width arrays per parse.
+-define(MAX_BUFFER_BUDGET, 100_000).
+-define(BUFFER_BUDGET_KEY, buffer_budget).
 
 
 %% server_mode is a special parsing mode used by RabbitMQ when parsing
@@ -50,12 +52,13 @@
 -spec parse(binary()) ->
     {amqp10_binary_generator:amqp10_type(), BytesParsed :: non_neg_integer()}.
 parse(Binary) ->
+    reset_buffer_budget(),
     parse(Binary, 0).
 
 parse(<<?DESCRIBED, Rest/binary>>, B) ->
-    {Descriptor, B1} = parse(Rest),
+    {Descriptor, B1} = parse(Rest, 0),
     <<_ParsedDescriptorBin:B1/binary, Rest1/binary>> = Rest,
-    {Value, B2} = parse(Rest1),
+    {Value, B2} = parse(Rest1, 0),
     {{described, Descriptor, Value}, B+1+B1+B2};
 parse(<<16#40, _/binary>>, B) -> {null,        B+1};
 parse(<<16#41, _/binary>>, B) -> {true,        B+1};
@@ -93,14 +96,14 @@ parse(<<16#b1, S:32,V:S/binary,_/binary>>, B)-> {{utf8, V},   B+5+S};
 parse(<<16#45, _/binary>>, B) ->
     {{list, []}, B+1};
 parse(<<16#c0, Size, _IgnoreCount, Value:(Size-1)/binary, _/binary>>, B) ->
-    {{list, parse_many(Value, [])}, B+2+Size};
+    {{list, pm(Value, false, 0)}, B+2+Size};
 parse(<<16#c1, Size, _IgnoreCount, Value:(Size-1)/binary, _/binary>>, B) ->
-    List = parse_many(Value, []),
+    List = pm(Value, false, 0),
     {{map, mapify(List)}, B+2+Size};
 parse(<<16#d0, Size:32, _IgnoreCount:32, Value:(Size-4)/binary, _/binary>>, B) ->
-    {{list, parse_many(Value, [])}, B+5+Size};
+    {{list, pm(Value, false, 0)}, B+5+Size};
 parse(<<16#d1, Size:32, _IgnoreCount:32, Value:(Size-4)/binary, _/binary>>, B) ->
-    List = parse_many(Value, []),
+    List = pm(Value, false, 0),
     {{map, mapify(List)}, B+5+Size};
 %% Arrays
 parse(<<16#e0, S:8,CountAndV:S/binary,_/binary>>, B) ->
@@ -127,7 +130,7 @@ parse_array(UnitSize, Bin) ->
     parse_array1(Count, Bin1).
 
 parse_array1(Count, <<?DESCRIBED, Rest/binary>>) ->
-    {Descriptor, B1} = parse(Rest),
+    {Descriptor, B1} = parse(Rest, 0),
     <<_ParsedDescriptorBin:B1/binary, Rest1/binary>> = Rest,
     {array, Type, List} = parse_array1(Count, Rest1),
     Values = lists:map(fun (Value) ->
@@ -140,9 +143,8 @@ parse_array1(Count, <<Type, ArrayBin/binary>>)
     %% This is an array that must have zero octets of data.
     if byte_size(ArrayBin) > 0 ->
            exit({failed_to_parse_array_extra_input_remaining, Type, byte_size(ArrayBin)});
-       Count > ?MAX_ZERO_WIDTH_ARRAY_COUNT ->
-           exit({failed_to_parse_array_count_exceeds_limit, Type, Count});
        true ->
+           consume_buffer_budget(Count),
            {Value, _} = parse_array_primitive(Type, <<>>),
            {array, parse_constructor(Type), lists:duplicate(Count, Value)}
     end;
@@ -162,6 +164,18 @@ parse_array2(Count, Type, Bin, Acc) ->
     {Value, B} = parse_array_primitive(Type, Bin),
     <<_ParsedValue:B/binary, Rest/binary>> = Bin,
     parse_array2(Count - 1, Type, Rest, [Value | Acc]).
+
+reset_buffer_budget() ->
+    put(?BUFFER_BUDGET_KEY, ?MAX_BUFFER_BUDGET).
+
+consume_buffer_budget(Count) ->
+    Budget = get(?BUFFER_BUDGET_KEY),
+    case Budget - Count of
+        Remaining when Remaining >= 0 ->
+            put(?BUFFER_BUDGET_KEY, Remaining);
+        _ ->
+            exit({failed_to_parse_array_buffer_budget_exceeded, Count, Budget})
+    end.
 
 parse_constructor(?CODE_SYM_8) -> symbol;
 parse_constructor(?CODE_SYM_32) -> symbol;
@@ -197,7 +211,7 @@ parse_constructor(X) ->
     exit({failed_to_parse_constructor, X}).
 
 parse_array_primitive(ElementType, Data) ->
-    {Val, B} = parse(<<ElementType, Data/binary>>),
+    {Val, B} = parse(<<ElementType, Data/binary>>, 0),
     {Val, B-1}.
 
 mapify([]) ->
@@ -213,6 +227,7 @@ mapify([Key, Value | Rest]) ->
      {{pos, non_neg_integer()},
       amqp10_binary_generator:amqp10_type() | {body, pos_integer()}}].
 parse_many(Binary, Opts) ->
+    reset_buffer_budget(),
     OptionServerMode = lists:member(server_mode, Opts),
     pm(Binary, OptionServerMode, 0).
 
