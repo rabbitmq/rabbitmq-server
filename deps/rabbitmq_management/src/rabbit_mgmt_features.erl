@@ -10,7 +10,19 @@
 -export([is_op_policy_updating_disabled/0,
          is_qq_replica_operations_disabled/0,
          are_stats_enabled/0,
-         is_definition_json_extension_required/0]).
+         get_definitions_settings/0,
+         is_sessions_enabled/0,
+         get_sessions_settings/0]).
+
+is_sessions_enabled() ->
+    application:get_env(rabbitmq_management, sessions_enabled, false).
+
+get_sessions_settings() ->
+    [
+        {enabled, is_sessions_enabled()},
+        {max_concurrent, application:get_env(rabbitmq_management, sessions_max_concurrent, 1)},
+        {heartbeat_interval, application:get_env(rabbitmq_management, sessions_heartbeat_interval, 30)}
+    ].
 
 is_qq_replica_operations_disabled() ->
     get_restriction([quorum_queue_replica_operations, disabled]).
@@ -29,8 +41,11 @@ are_stats_enabled() ->
         _    -> rabbit_mgmt_agent_config:is_metrics_collector_permitted()
     end.
 
-is_definition_json_extension_required() ->
-    application:get_env(rabbitmq_management, require_definition_json_extension, false).
+get_definitions_settings() ->
+    [
+        {require_definition_json_extension,
+         application:get_env(rabbitmq_management, require_definition_json_extension, false)}
+    ].
 
 %% Private
 

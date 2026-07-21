@@ -27,14 +27,21 @@ build_routes(Ignore) ->
     MgmtRdrRte = {"/mgmt", rabbit_mgmt_wm_redirect, "/"},
     LocalPaths = [{module_app(M), "www"} || M <- modules(Ignore)],
     LocalStaticRte = {"/[...]", rabbit_mgmt_wm_static, LocalPaths},
-    OauthBootstrap = build_oauth_bootstrap_route(Prefix),
-    OauthTokenProxy = build_oauth_token_proxy_routes(Prefix),
+    
+    {OauthBootstrap, OauthTokenProxy} = case application:get_env(rabbitmq_management, oauth_enabled, false) of
+        true  -> {build_oauth_bootstrap_route(Prefix), build_oauth_token_proxy_routes(Prefix)};
+        false -> {[], []}
+    end,
+    
+    BootstrapJs = build_bootstrap_js_route(Prefix),
+    InitJs = build_init_js_route(Prefix),
+    
     % NB: order is significant in the routing list
     Routes0 = build_module_routes(Ignore) ++
         [ApiRdrRte, CliRdrRte, MgmtRdrRte, StatsRdrRte1, StatsRdrRte2, LocalStaticRte],
     Routes1 = maybe_add_path_prefix(Routes0, Prefix),
     % NB: ensure the root routes are first
-    Routes2 = RootIdxRtes ++ OauthBootstrap ++ OauthTokenProxy ++ maybe_add_path_prefix([{"/login", rabbit_mgmt_login, []}], Prefix) ++ Routes1,
+    Routes2 = RootIdxRtes ++ BootstrapJs ++ InitJs ++ OauthBootstrap ++ OauthTokenProxy ++ maybe_add_path_prefix([{"/login", rabbit_mgmt_login, []}], Prefix) ++ Routes1,
     [{'_', Routes2}].
 
 build_root_index_routes("", ManagementApp) ->
@@ -42,6 +49,18 @@ build_root_index_routes("", ManagementApp) ->
 build_root_index_routes(Prefix, ManagementApp) ->
     [{"/", rabbit_mgmt_wm_redirect, Prefix ++ "/"},
      {Prefix, rabbit_mgmt_wm_static, root_idx_file(ManagementApp)}].
+
+build_bootstrap_js_route("") ->
+    [{"/js/bootstrap.js", rabbit_mgmt_bootstrap_js, #{}}];
+build_bootstrap_js_route(Prefix) ->
+    [{"/js/bootstrap.js", rabbit_mgmt_wm_redirect, Prefix ++ "/js/bootstrap.js"},
+     {Prefix ++ "/js/bootstrap.js", rabbit_mgmt_bootstrap_js, #{}}].
+
+build_init_js_route("") ->
+    [{"/js/init.js", rabbit_mgmt_init_js, #{}}];
+build_init_js_route(Prefix) ->
+    [{"/js/init.js", rabbit_mgmt_wm_redirect, Prefix ++ "/js/init.js"},
+     {Prefix ++ "/js/init.js", rabbit_mgmt_init_js, #{}}].
 
 build_oauth_bootstrap_route("") ->
     [{"/js/oidc-oauth/bootstrap.js", rabbit_mgmt_oauth_bootstrap, #{}}];
@@ -104,6 +123,14 @@ module_app(Module) ->
 web_ui()     -> [{javascript, <<"dispatcher.js">>}].
 
 dispatcher() ->
+    SessionRoutes = case rabbit_mgmt_features:is_sessions_enabled() of
+        true  -> [{"/session",           rabbit_mgmt_wm_session,  []},
+                  {"/session/:session",  rabbit_mgmt_wm_session,  []},
+                  {"/sessions",          rabbit_mgmt_wm_sessions, []},
+                  {"/sessions/:session", rabbit_mgmt_wm_sessions, []}];
+        false -> []
+    end,
+    SessionRoutes ++
     [{"/overview",                                             rabbit_mgmt_wm_overview, []},
      {"/cluster-name",                                         rabbit_mgmt_wm_cluster_name, []},
      {"/nodes",                                                rabbit_mgmt_wm_nodes, []},
