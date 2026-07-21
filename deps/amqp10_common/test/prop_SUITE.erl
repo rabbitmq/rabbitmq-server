@@ -336,7 +336,10 @@ fields() ->
               )}.
 
 amqp_array() ->
-    Gens = fixed_and_variable_width_types(),
+    %% Excludes amqp_null(): an array of null is encoded with the zero-width
+    %% null constructor (0x40), which the parser represents opaquely as
+    %% {as_is, ...} rather than as {array, null, List}.
+    Gens = fixed_and_variable_width_types() -- [amqp_null()],
     ?LET(N,
          integer(1, length(Gens)),
          begin

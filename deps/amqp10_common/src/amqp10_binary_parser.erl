@@ -35,8 +35,6 @@
 -define(DESCRIPTOR_CODE_DATA, 16#75).
 -define(DESCRIPTOR_CODE_AMQP_SEQUENCE, 16#76).
 -define(DESCRIPTOR_CODE_AMQP_VALUE, 16#77).
--define(MAX_ZERO_WIDTH_ARRAY_COUNT, 10_000).
-
 
 %% server_mode is a special parsing mode used by RabbitMQ when parsing
 %% AMQP message sections from an AMQP client. This mode:
@@ -124,32 +122,40 @@ parse(<<Type, _/binary>>, B) ->
 
 parse_array(UnitSize, Bin) ->
     <<Count:UnitSize, Bin1/binary>> = Bin,
-    parse_array1(Count, Bin1).
+    parse_array1(UnitSize, Count, Bin1).
 
-parse_array1(Count, <<?DESCRIBED, Rest/binary>>) ->
+parse_array1(UnitSize, Count, <<?DESCRIBED, Rest/binary>>) ->
     {Descriptor, B1} = parse(Rest),
     <<_ParsedDescriptorBin:B1/binary, Rest1/binary>> = Rest,
-    {array, Type, List} = parse_array1(Count, Rest1),
-    Values = lists:map(fun (Value) ->
-                               {described, Descriptor, Value}
-                       end, List),
-    % this format cannot represent an empty array of described types
-    {array, {described, Descriptor, Type}, Values};
-parse_array1(Count, <<Type, ArrayBin/binary>>)
+    case parse_array1(UnitSize, Count, Rest1) of
+        {array, Type, List} ->
+            Values = [{described, Descriptor, Value} || Value <- List],
+            % this format cannot represent an empty array of described types
+            {array, {described, Descriptor, Type}, Values};
+        {as_is, _, _} ->
+            exit({array_of_described_zero_width_elements_unsupported, Count})
+    end;
+parse_array1(UnitSize, Count, <<Type, ArrayBin/binary>>)
   when Type >= 16#40 andalso Type =< 16#45 ->
     %% This is an array that must have zero octets of data.
-    if byte_size(ArrayBin) > 0 ->
-           exit({failed_to_parse_array_extra_input_remaining, Type, byte_size(ArrayBin)});
-       Count > ?MAX_ZERO_WIDTH_ARRAY_COUNT ->
-           exit({failed_to_parse_array_count_exceeds_limit, Type, Count});
-       true ->
-           {Value, _} = parse_array_primitive(Type, <<>>),
-           {array, parse_constructor(Type), lists:duplicate(Count, Value)}
+    case byte_size(ArrayBin) of
+        0 ->
+            %% "Count zero-width elements" costs a handful of bytes on the
+            %% wire no matter how large Count is. Since RabbitMQ has no need to
+            %% interpret this special type of array and to protect against CWE-770,
+            %% instead of materialized as Count terms, keep it as an opaque,
+            %% constant-size value.
+            case UnitSize of
+                8 -> {as_is, 16#e0, <<2:8, Count:8, Type>>};
+                32 -> {as_is, 16#f0, <<5:32, Count:32, Type>>}
+            end;
+        Size ->
+            exit({failed_to_parse_array_extra_input_remaining, Type, Size})
     end;
-parse_array1(Count, <<Type, ArrayBin/binary>>)
+parse_array1(_UnitSize, Count, <<Type, ArrayBin/binary>>)
   when Count > byte_size(ArrayBin) ->
     exit({failed_to_parse_array_count_exceeds_input, Type, Count, byte_size(ArrayBin)});
-parse_array1(Count, <<Type, ArrayBin/binary>>) ->
+parse_array1(_UnitSize, Count, <<Type, ArrayBin/binary>>) ->
     parse_array2(Count, Type, ArrayBin, []).
 
 parse_array2(0, Type, <<>>, Acc) ->
