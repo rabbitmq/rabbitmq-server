@@ -5184,10 +5184,23 @@ delete_if_empty(Config) ->
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
     publish(Ch, QQ),
     wait_for_messages(Config, [[QQ, <<"1">>, <<"1">>, <<"0">>]]),
-    %% Try to delete the quorum queue
-    ?assertExit({{shutdown, {connection_closing, {server_initiated_close, 540, _}}}, _},
+    %% A non-empty quorum queue cannot be deleted with the if-empty flag set.
+    ?assertExit({{shutdown, {server_initiated_close, 406, _}}, _},
                 amqp_channel:call(Ch, #'queue.delete'{queue = QQ,
-                                                      if_empty = true})).
+                                                      if_empty = true})),
+    %% The failed deletion left the queue and its message in place.
+    Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
+    ?assertMatch(#'queue.purge_ok'{message_count = 1},
+                 amqp_channel:call(Ch1, #'queue.purge'{queue = QQ})),
+    wait_for_messages(Config, [[QQ, <<"0">>, <<"0">>, <<"0">>]]),
+    %% Once empty, the queue can be deleted with the if-empty flag set.
+    ?assertMatch(#'queue.delete_ok'{message_count = 0},
+                 amqp_channel:call(Ch1, #'queue.delete'{queue = QQ,
+                                                        if_empty = true})),
+    %% Ensure queue no longer exists in the broker.
+    QName = rabbit_misc:r(<<"/">>, queue, QQ),
+    ?assertEqual({error, not_found},
+                 rpc:call(Server, rabbit_amqqueue, lookup, [QName])).
 
 delete_if_unused(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
@@ -5196,12 +5209,28 @@ delete_if_unused(Config) ->
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
-    publish(Ch, QQ),
-    wait_for_messages(Config, [[QQ, <<"1">>, <<"1">>, <<"0">>]]),
-    %% Try to delete the quorum queue
-    ?assertExit({{shutdown, {connection_closing, {server_initiated_close, 540, _}}}, _},
-                amqp_channel:call(Ch, #'queue.delete'{queue = QQ,
-                                                      if_unused = true})).
+    ok = subscribe(Ch, QQ, false),
+    %% A quorum queue with a consumer cannot be deleted with the if-unused flag
+    %% set. Attempt queue.delete on a separate channel to keep consumer alive.
+    Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
+    ?assertExit({{shutdown, {server_initiated_close, 406, _}}, _},
+                amqp_channel:call(Ch1, #'queue.delete'{queue = QQ,
+                                                       if_unused = true})),
+    %% After the consumer is cancelled, the queue can be deleted with the
+    %% if-unused flag set.
+    ok = cancel(Ch),
+    ?awaitMatch(#'queue.declare_ok'{queue = QQ, message_count = 0,
+                                    consumer_count = 0},
+                amqp_channel:call(Ch, #'queue.declare'{queue = QQ,
+                                                       passive = true}),
+                ?DEFAULT_AWAIT),
+    ?assertMatch(#'queue.delete_ok'{message_count = 0},
+                 amqp_channel:call(Ch, #'queue.delete'{queue = QQ,
+                                                       if_unused = true})),
+    %% Ensure queue no longer exists in the broker.
+    QName = rabbit_misc:r(<<"/">>, queue, QQ),
+    ?assertEqual({error, not_found},
+                 rpc:call(Server, rabbit_amqqueue, lookup, [QName])).
 
 queue_ttl(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
