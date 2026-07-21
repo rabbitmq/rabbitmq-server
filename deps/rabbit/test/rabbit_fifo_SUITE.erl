@@ -4051,6 +4051,29 @@ aux_upgrade_from_v2_test(_) ->
     meck:unload(),
     ok.
 
+aux_upgrade_from_v3_test(_) ->
+    _ = ra_machine_ets:start_link(),
+    Name = ?FUNCTION_NAME,
+    %% shape of the aux state as used by an earlier version of rabbit_fifo
+    AuxV3 = {aux_v3, Name, unused_last_decorators_state, unused_capacity,
+             {aux_gc, 0}, unused_tick_pid, unused_cache, unused_last_checkpoint,
+             unused_bytes_in, unused_bytes_out},
+    LastApplied = 0,
+    State0 = #{machine_state =>
+               init(#{name => Name,
+                      queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+                      single_active_consumer_on => false}),
+               log => mock_log,
+               cfg => #cfg{},
+               last_applied => LastApplied},
+    ok = meck:new(ra_log, []),
+    meck:expect(ra_log, last_index_term, fun (_) -> {0, 0} end),
+    {no_reply, Aux, _, []} = handle_aux(leader, cast, tick, AuxV3, State0),
+    ?assertEqual(aux_v4, element(1, Aux)),
+    ?assertEqual(Name, element(2, Aux)),
+    meck:unload(),
+    ok.
+
 %% machine version conversion test
 
 machine_version_test(Config) ->
