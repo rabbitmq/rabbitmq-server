@@ -276,7 +276,7 @@ queues_per_node(Nodes, GetQueues) ->
 placement_tag_key(Q) ->
     case rabbit_queue_type_util:args_policy_lookup(
            <<"member-placement-tag">>,
-           fun (_PolVal, ArgVal) -> ArgVal end,
+           fun (PolVal, _ArgVal) -> PolVal end,
            Q) of
         undefined ->
             application:get_env(rabbit, quorum_queue_member_placement_tag, undefined);
