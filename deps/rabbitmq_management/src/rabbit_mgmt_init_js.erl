@@ -1,44 +1,39 @@
 -module(rabbit_mgmt_init_js).
 -export([init/2]).
+-export([content_types_provided/2, is_authorized/2, to_js/2]).
 
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
-init(Req0, State) ->
-    case rabbit_mgmt_util:is_authorized(Req0, #context{}) of
-        {true, Req1, Context} ->
-            Req2 = rabbit_mgmt_headers:set_no_cache_headers(
-                       rabbit_mgmt_headers:set_common_permission_headers(Req1, ?MODULE), ?MODULE),
-            
-            SettingsJSON = get_settings_json(Req2, Context),
-            VhostsJSON = get_vhosts_json(Req2, Context),
-            
-            UserTags = (Context#context.user)#user.tags,
-            NodesVar = case rabbit_mgmt_util:is_monitor(UserTags) of
-                true -> ["  window.app_nodes = ", get_nodes_json(Req2, Context), ";\n"];
-                false -> ""
-            end,
-            
-            JSContent = [
-                "export function initialize(user) {\n",
-                "  window.app_settings = ", SettingsJSON, ";\n",
-                "  window.app_vhosts = ", VhostsJSON, ";\n",
-                NodesVar,
-                "}\n"
-            ],
-            
-            Req3 = cowboy_req:reply(200, #{<<"content-type">> => <<"application/javascript; charset=utf-8">>},
-                                    iolist_to_binary(JSContent), Req2),
-            {ok, Req3, State};
-        {{false, AuthHeader}, Req1, _Context} ->
-            Req2 = cowboy_req:reply(401, #{<<"www-authenticate">> => AuthHeader}, <<"Not authorized">>, Req1),
-            {ok, Req2, State};
-        {false, Req1, _Context} ->
-            Req2 = cowboy_req:reply(401, #{}, <<"Not authorized">>, Req1),
-            {ok, Req2, State};
-        {stop, Req1, _Context} ->
-            {ok, Req1, State}
-    end.
+init(Req0, _State) ->
+    Req1 = rabbit_mgmt_headers:set_no_cache_headers(Req0, ?MODULE),
+    Req2 = rabbit_mgmt_headers:set_common_permission_headers(Req1, ?MODULE),
+    {cowboy_rest, Req2, #context{}}.
+
+is_authorized(ReqData, Context) ->
+    rabbit_mgmt_util:is_authorized(ReqData, Context).
+
+content_types_provided(ReqData, Context) ->
+    {[{<<"application/javascript; charset=utf-8">>, to_js}], ReqData, Context}.
+
+to_js(ReqData, Context) ->
+    SettingsJSON = get_settings_json(ReqData, Context),
+    VhostsJSON = get_vhosts_json(ReqData, Context),
+    
+    UserTags = (Context#context.user)#user.tags,
+    NodesVar = case rabbit_mgmt_util:is_monitor(UserTags) of
+        true -> ["  window.app_nodes = ", get_nodes_json(ReqData, Context), ";\n"];
+        false -> ""
+    end,
+    
+    JSContent = [
+        "export function initialize(user) {\n",
+        "  window.app_settings = ", SettingsJSON, ";\n",
+        "  window.app_vhosts = ", VhostsJSON, ";\n",
+        NodesVar,
+        "}\n"
+    ],
+    {iolist_to_binary(JSContent), ReqData, Context}.
 
 get_settings_json(ReqData, Context) ->
     UserTags = (Context#context.user)#user.tags,
