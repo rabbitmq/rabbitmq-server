@@ -1189,7 +1189,7 @@ check_member_placement_tag_arg({longstr, _}, _Args) ->
     {error, invalid_member_placement_tag_arg};
 check_member_placement_tag_arg({Type, _}, _Args) ->
     {error, {unacceptable_type, Type}};
-check_member_placement_tag_arg(Val, _Args) when is_binary(Val), byte_size(Val) > 0 ->
+check_member_placement_tag_arg(Val, _Args) when is_binary(Val) andalso byte_size(Val) > 0 ->
     ok;
 check_member_placement_tag_arg(_Val, _Args) ->
     {error, invalid_member_placement_tag_arg}.

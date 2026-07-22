@@ -54,7 +54,7 @@ select_leader_and_followers(Q, Size)
     QueueType = amqqueue:get_type(Q),
     PlacementTagKey = case QueueType of
         rabbit_quorum_queue -> placement_tag_key(Q);
-        _                   -> undefined
+        _ -> undefined
     end,
     do_select_leader_and_followers(Size, QueueType, LeaderLocator, PlacementTagKey).
 

@@ -88,7 +88,7 @@ az_aware_candidates(CandidateNodes, RunningNodes, NodeToAZ, AZCounts) ->
             CandidateNodes;
         _ ->
             case [N || N <- InMinAZs, lists:member(N, RunningNodes)] of
-                []      -> InMinAZs;
+                [] -> InMinAZs;
                 Running -> Running
             end
     end.
@@ -98,7 +98,7 @@ pick_balanced(Pool, Counters) ->
 
 %% Running nodes first so that AZ-aware selection prefers them within each AZ.
 running_first(Nodes, RunningNodes) ->
-    [N || N <- Nodes,     lists:member(N, RunningNodes)]
+    [N || N <- Nodes, lists:member(N, RunningNodes)]
     ++ [N || N <- Nodes, not lists:member(N, RunningNodes)].
 
 -spec queues_not_fully_az_covered() -> [#{queue        := rabbit_types:r(queue),
@@ -120,11 +120,11 @@ queues_not_fully_az_covered(TagKey) ->
     Nodes = rabbit_nodes:list_members(),
     NodeToAZ = ?MODULE:node_tags_for_nodes(Nodes, TagKey),
     AllAZs = lists:usort([AZ || _ := AZ <- NodeToAZ, AZ =/= undefined]),
-    [#{queue        => amqqueue:get_name(Q),
+    [#{queue => amqqueue:get_name(Q),
        member_nodes => MemberNodes,
-       member_azs   => MemberAZs,
-       missing_azs  => MissingAZs}
-     || Q          <- rabbit_amqqueue:list(),
+       member_azs => MemberAZs,
+       missing_azs => MissingAZs}
+     || Q <- rabbit_amqqueue:list(),
         amqqueue:get_type(Q) =:= rabbit_quorum_queue,
         MemberNodes <- [rabbit_quorum_queue:get_replicas(Q)],
         MemberAZs   <- [lists:usort([maps:get(N, NodeToAZ, undefined)

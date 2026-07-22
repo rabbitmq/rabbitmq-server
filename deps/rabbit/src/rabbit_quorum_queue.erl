@@ -1575,12 +1575,12 @@ status(Q) when ?amqqueue_is_quorum(Q) ->
                    end,
          case TagKey of
              undefined -> BaseRow;
-             _         -> AZ = case maps:get(N, NodeToAZ, undefined) of
-                                   undefined -> <<>>;
-                                   Val       -> Val
-                               end,
-                          [NodeName | Rest] = BaseRow,
-                          [NodeName, {<<"AZ">>, AZ} | Rest]
+             _ -> AZ = case maps:get(N, NodeToAZ, undefined) of
+                           undefined -> <<>>;
+                           Val -> Val
+                       end,
+                  [NodeName | Rest] = BaseRow,
+                  [NodeName, {<<"AZ">>, AZ} | Rest]
          end
      end || N <- Nodes].
 
