@@ -1299,11 +1299,12 @@ init_aux(Name) when is_atom(Name) ->
                                       messages_total = 0,
                                       min_reclaimable = MinReclaimable}}.
 
-handle_aux(RaftState, Tag, Cmd, AuxV2, RaAux)
-  when element(1, AuxV2) == aux_v2 ->
-    Name = element(2, AuxV2),
-    AuxV3 = init_aux(Name),
-    handle_aux(RaftState, Tag, Cmd, AuxV3, RaAux);
+handle_aux(RaftState, Tag, Cmd, AuxPre, RaAux)
+  when element(1, AuxPre) == aux_v2 orelse
+       element(1, AuxPre) == aux ->
+    Name = element(2, AuxPre),
+    Aux = init_aux(Name),
+    handle_aux(RaftState, Tag, Cmd, Aux, RaAux);
 handle_aux(RaftState, Tag, Cmd, AuxV3, RaAux)
   when element(1, AuxV3) == aux_v3 ->
     AuxV4 = #?AUX{name = element(2, AuxV3),
