@@ -266,3 +266,10 @@
                          post_enable =>
                          {rabbit_khepri, topic_binding_projection_v5_post_enable}}
      }}).
+
+-rabbit_feature_flag(
+   {'rabbitmq_4.4.0',
+    #{desc          => "Allows rolling upgrades to 4.4.x",
+      stability     => stable,
+      depends_on    => ['rabbitmq_4.3.0']
+     }}).
