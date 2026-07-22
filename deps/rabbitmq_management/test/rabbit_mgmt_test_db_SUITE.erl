@@ -33,6 +33,7 @@ groups() ->
     [
      {non_parallel_tests, [], [
                                queue_coarse_test,
+                               queue_stats_missing_data_test,
                                connection_coarse_test,
                                fine_stats_aggregation_time_test,
                                fine_stats_aggregation_test,
@@ -133,6 +134,43 @@ queue_coarse_test1(_Config) ->
            simple_details(get_overview_q(R2), messages, 0, R2)
        end),
     [rabbit_mgmt_metrics_collector:reset_lookups(T) || {T, _} <- ?CORE_TABLES],
+    ok.
+
+queue_stats_missing_data_test(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE,
+                                      queue_stats_missing_data_test1, [Config]).
+
+%% A queue deleted before its metrics were collected won't have an entry.
+%% Return it without any stats rather than throwing an exception and aborting
+%% the entire HTTP client request.
+%%
+%% See rabbitmq/rabbitmq-server#16989.
+queue_stats_missing_data_test1(_Config) ->
+    ok = meck:new(rabbit_mgmt_data, [passthrough, no_link]),
+    try
+        Empty = fun(_, _, _) -> #{} end,
+        meck:expect(rabbit_mgmt_data, all_list_basic_queue_data, Empty),
+        meck:expect(rabbit_mgmt_data, all_list_queue_data, Empty),
+        meck:expect(rabbit_mgmt_data, all_detail_queue_data, Empty),
+        Obj = [{name, <<"vanished">>},
+               {vhost, <<"/">>},
+               {pid, self()},
+               {state, live}],
+        Now = exometer_slide:timestamp(),
+        R = #range{first = Now - 5000, last = Now, incr = 5000},
+        Ranges = {R, R, R, R},
+        %% Non-empty ranges bypass the listing cache so each mode runs.
+        [Basic] = rabbit_mgmt_db:augment_queues([Obj], Ranges, basic),
+        <<"vanished">> = pget(name, Basic),
+        [Detailed] = rabbit_mgmt_db:augment_queues([Obj], Ranges, detailed),
+        <<"vanished">> = pget(name, Detailed),
+        [Full] = rabbit_mgmt_db:augment_queues([Obj], Ranges, full),
+        <<"vanished">> = pget(name, Full),
+        %% The detail mode always carries consumer_details.
+        [] = pget(consumer_details, Full)
+    after
+        meck:unload(rabbit_mgmt_data)
+    end,
     ok.
 
 %% Generate a well-formed interval from Start using Interval steps
