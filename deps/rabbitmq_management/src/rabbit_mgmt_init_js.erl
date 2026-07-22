@@ -5,7 +5,7 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 init(Req0, State) ->
-    case rabbit_mgmt_util:is_authorized_management(Req0, State) of
+    case rabbit_mgmt_util:is_authorized(Req0, #context{}) of
         {true, Req1, Context} ->
             Req2 = rabbit_mgmt_headers:set_no_cache_headers(
                        rabbit_mgmt_headers:set_common_permission_headers(Req1, ?MODULE), ?MODULE),
@@ -13,7 +13,8 @@ init(Req0, State) ->
             SettingsJSON = get_settings_json(Req2, Context),
             VhostsJSON = get_vhosts_json(Req2, Context),
             
-            NodesVar = case rabbit_mgmt_util:is_monitor(Context) of
+            UserTags = (Context#context.user)#user.tags,
+            NodesVar = case rabbit_mgmt_util:is_monitor(UserTags) of
                 true -> ["  window.app_nodes = ", get_nodes_json(Req2, Context), ";\n"];
                 false -> ""
             end,
@@ -29,12 +30,18 @@ init(Req0, State) ->
             Req3 = cowboy_req:reply(200, #{<<"content-type">> => <<"application/javascript; charset=utf-8">>},
                                     iolist_to_binary(JSContent), Req2),
             {ok, Req3, State};
+        {{false, AuthHeader}, Req1, _Context} ->
+            Req2 = cowboy_req:reply(401, #{<<"www-authenticate">> => AuthHeader}, <<"Not authorized">>, Req1),
+            {ok, Req2, State};
         {false, Req1, _Context} ->
             Req2 = cowboy_req:reply(401, #{}, <<"Not authorized">>, Req1),
-            {ok, Req2, State}
+            {ok, Req2, State};
+        {stop, Req1, _Context} ->
+            {ok, Req1, State}
     end.
 
 get_settings_json(ReqData, Context) ->
+    UserTags = (Context#context.user)#user.tags,
     Overview0 = [
         {management_version,        version(rabbitmq_management)},
         {rates_mode,                rabbit_mgmt_util:rates_mode(ReqData)},
@@ -63,7 +70,7 @@ get_settings_json(ReqData, Context) ->
     Overview1 = case rabbit_mgmt_util:disable_stats(ReqData) of
         false ->
             Range = rabbit_mgmt_util:range(ReqData),
-            case rabbit_mgmt_util:is_monitor(Context) of
+            case rabbit_mgmt_util:is_monitor(UserTags) of
                 true ->
                     Overview0 ++
                         [{K, maybe_map(V)} || {K,V} <- rabbit_mgmt_db:get_overview(Range)] ++
@@ -76,11 +83,11 @@ get_settings_json(ReqData, Context) ->
             end;
         true ->
             User = Context#context.user,
-            VHosts = case rabbit_mgmt_util:is_monitor(Context) of
+            VHosts = case rabbit_mgmt_util:is_monitor(UserTags) of
                          true -> rabbit_vhost:list_names();
                          _   -> rabbit_mgmt_util:list_visible_vhosts_names(User)
                      end,
-            ObjectTotals = case rabbit_mgmt_util:is_monitor(Context) of
+            ObjectTotals = case rabbit_mgmt_util:is_monitor(UserTags) of
                                true ->
                                    [{queues, rabbit_amqqueue:count()},
                                     {exchanges, rabbit_exchange:count()},
