@@ -359,11 +359,15 @@ opened(_EvtType, Frame, State) ->
 close_sent(_EvtType, heartbeat, _Data) ->
     keep_state_and_data;
 close_sent(_EvtType, {'EXIT', _Pid, shutdown}, _Data) ->
-    %% monitored processes may exit during closure
+    %% our supervisor is shutting us down; let it enforce its own timeout
     keep_state_and_data;
 close_sent(_EvtType, {'EXIT', _Pid, {shutdown, _}}, _Data) ->
-    %% monitored processes may exit during closure
+    %% our supervisor is shutting us down; let it enforce its own timeout
     keep_state_and_data;
+close_sent(_EvtType, {'EXIT', _Pid, _Reason}, _Data) ->
+    %% a linked process exited unexpectedly; we probably won't
+    %% receive a close frame
+    {stop, normal};
 close_sent(_EvtType, {'DOWN', _Ref, process, ReaderPid, _Reason},
            #state{reader = ReaderPid}) ->
     %% if the reader exits we probably won't receive a close frame
