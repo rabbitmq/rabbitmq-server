@@ -41,6 +41,7 @@ az_aware_tests() -> [
                      az_aware_below_threshold_balanced,
                      az_aware_fewer_nodes_than_size,
                      az_aware_running_nodes_preferred,
+                     az_aware_entire_az_down,
                      az_aware_node_tags_for_nodes_offline_nodes
                     ].
 
@@ -390,6 +391,41 @@ az_aware_running_nodes_preferred(_Config) ->
     %% n3 (running, az2) must be chosen over n2 (stopped, az2).
     ?assert(lists:member(n3, Members)),
     ?assertNot(lists:member(n2, Members)),
+    ok = meck:unload([rabbit_member_placement_az, rabbit_queue_type]).
+
+%% An entire AZ can be without any running node (e.g. an outage). Unlike the
+%% non-AZ-aware strategies, which simply prefer whichever nodes are running,
+%% AZ-aware placement must still assign a member to the down AZ (picking one
+%% of its stopped nodes) rather than over-allocating to the AZs that are up.
+%% Balance across AZs is favoured over short-term node availability.
+az_aware_entire_az_down(_Config) ->
+    ok = meck:new(rabbit_member_placement_az, [passthrough]),
+    ok = meck:expect(rabbit_member_placement_az, node_tags_for_nodes,
+                     fun([n1, n2, n3, n4, n5, n6], <<"az">>) ->
+                             #{n1 => <<"az1">>, n2 => <<"az1">>,
+                               n3 => <<"az2">>, n4 => <<"az2">>,
+                               n5 => <<"az3">>, n6 => <<"az3">>}
+                     end),
+    ok = meck:new(rabbit_queue_type, [passthrough]),
+    ok = meck:expect(rabbit_queue_type, get_nodes, fun({fake_queue, N}) -> [N] end),
+    AllNodes = [n1, n2, n3, n4, n5, n6],
+    %% Both az3 nodes are stopped: the whole AZ is unavailable.
+    RunningNodes = [n1, n2, n3, n4],
+    QueueType = rabbit_quorum_queue,
+    GetQueues = fun() -> [] end,
+    QueueCount = 0,
+    QueueCountStartRandom = 1000,
+    {Members, _} = rabbit_queue_location:select_members(3, QueueType, AllNodes, RunningNodes,
+                                                        QueueCount, QueueCountStartRandom,
+                                                        GetQueues, <<"az">>),
+    ?assertEqual(3, length(Members)),
+    AZMap = #{n1 => <<"az1">>, n2 => <<"az1">>,
+              n3 => <<"az2">>, n4 => <<"az2">>,
+              n5 => <<"az3">>, n6 => <<"az3">>},
+    AZsUsed = lists:sort(lists:uniq([maps:get(N, AZMap) || N <- Members])),
+    %% az3 must still be represented even though none of its nodes are running.
+    ?assertEqual([<<"az1">>, <<"az2">>, <<"az3">>], AZsUsed),
+    ?assert(lists:member(n5, Members) orelse lists:member(n6, Members)),
     ok = meck:unload([rabbit_member_placement_az, rabbit_queue_type]).
 
 az_aware_node_tags_for_nodes_offline_nodes(_Config) ->
