@@ -227,7 +227,10 @@ sasl_hdr_rcvds(_EvtType, #'v1_0.sasl_mechanisms'{
 sasl_hdr_rcvds({call, From}, begin_session,
                #state{pending_session_reqs = PendingSessionReqs} = State) ->
     State1 = State#state{pending_session_reqs = [From | PendingSessionReqs]},
-    {keep_state, State1}.
+    {keep_state, State1};
+sasl_hdr_rcvds(info, {'DOWN', MRef, process, _Pid, _},
+               #state{reader_m_ref = MRef}) ->
+    {stop, {shutdown, reader_down}}.
 
 sasl_init_sent(_EvtType, #'v1_0.sasl_outcome'{code = {ubyte, 0}},
                #state{socket = Socket} = State) ->
@@ -239,7 +242,10 @@ sasl_init_sent(_EvtType, #'v1_0.sasl_outcome'{code = {ubyte, C}},
 sasl_init_sent({call, From}, begin_session,
                #state{pending_session_reqs = PendingSessionReqs} = State) ->
     State1 = State#state{pending_session_reqs = [From | PendingSessionReqs]},
-    {keep_state, State1}.
+    {keep_state, State1};
+sasl_init_sent(info, {'DOWN', MRef, process, _Pid, _},
+               #state{reader_m_ref = MRef}) ->
+    {stop, {shutdown, reader_down}}.
 
 hdr_sent(_EvtType, {protocol_header_received, 0, 1, 0, 0}, State) ->
     case send_open(State) of
@@ -254,7 +260,10 @@ hdr_sent(_EvtType, {protocol_header_received, Protocol, Maj, Min,
 hdr_sent({call, From}, begin_session,
          #state{pending_session_reqs = PendingSessionReqs} = State) ->
     State1 = State#state{pending_session_reqs = [From | PendingSessionReqs]},
-    {keep_state, State1}.
+    {keep_state, State1};
+hdr_sent(info, {'DOWN', MRef, process, _Pid, _},
+         #state{reader_m_ref = MRef}) ->
+    {stop, {shutdown, reader_down}}.
 
 open_sent(_EvtType, #'v1_0.open'{max_frame_size = MaybeMaxFrameSize,
                                  idle_time_out = Timeout} = Open,
