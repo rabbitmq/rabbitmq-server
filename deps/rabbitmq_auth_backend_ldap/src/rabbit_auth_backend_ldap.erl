@@ -428,14 +428,9 @@ safe_eval(_F, _,          {error, _}) -> false;
 safe_eval(F,  V1,         V2)         -> F(V1, V2).
 
 do_match(S1, S2) ->
-    case re:run(S1, S2) of
-        {match, _} ->
-            log_match(S1, S2, R = true),
-            R;
-        nomatch ->
-            log_match(S1, S2, R = false),
-            R
-    end.
+    R = rabbit_re:matches(S1, S2),
+    log_match(S1, S2, R),
+    R.
 
 %% In some cases when fetching regular expressions, LDAP evalution()
 %% returns a list of strings, so we need to wrap guards around that.
@@ -444,11 +439,11 @@ do_match_multi(S1, []) ->
     log_match(S1, [], R = false),
     R;
 do_match_multi(S1 = [H1|_], [H2|Tail]) when is_list(H2) and not is_list(H1) ->
-    case re:run(S1, H2) of
-        {match, _} ->
+    case rabbit_re:matches(S1, H2) of
+        true ->
             log_match(S1, H2, R = true),
             R;
-        _ ->
+        false ->
             log_match(S1,H2, false),
             do_match_multi(S1, Tail)
     end;
@@ -456,11 +451,11 @@ do_match_multi([], S2) ->
     log_match([], S2, R = false),
     R;
 do_match_multi([H1|Tail], S2 = [H2|_] ) when is_list(H1) and not is_list(H2) ->
-    case re:run(H1, S2) of
-        {match, _} ->
+    case rabbit_re:matches(H1, S2) of
+        true ->
             log_match(H1, S2, R = true),
             R;
-        _ ->
+        false ->
             log_match(H1, S2, false),
             do_match_multi(Tail, S2)
     end;

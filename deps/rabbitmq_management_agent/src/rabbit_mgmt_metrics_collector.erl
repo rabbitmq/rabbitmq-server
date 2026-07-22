@@ -631,7 +631,7 @@ maybe_insert_entry_ops(Name, Pattern, Table, Id, Incr, Entry, Ops, Policies) ->
 needs_filtering_out(_, undefined) ->
     false;
 needs_filtering_out(#resource{name = Name}, Pattern) ->
-    match == re:run(Name, Pattern, [{capture, none}]).
+    rabbit_re:matches(Name, Pattern).
 
 insert_entry_ops(Table, Id, Incr, Entry, Ops, Policies) ->
     lists:foldl(fun({Size, Interval}, Acc) ->
