@@ -1081,18 +1081,61 @@ restart_server({_, _} = Ref) ->
 -spec delete(amqqueue:amqqueue(),
              boolean(), boolean(),
              rabbit_types:username()) ->
-    {ok, QLen :: non_neg_integer()} |
+    rabbit_types:ok(non_neg_integer()) |
+    rabbit_types:error(in_use | not_empty) |
     {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 delete(Q, IfUnused, IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
-    {ok, ReadyMsgs, Consumers} = stat(Q),
-    if
-        IfEmpty andalso ReadyMsgs > 0 ->
-            {error, not_empty};
-        IfUnused andalso Consumers > 0 ->
-            {error, in_use};
-        true ->
-            do_delete(Q, ReadyMsgs, ActingUser)
+    case delete_precondition(Q, IfUnused, IfEmpty) of
+        {ok, ReadyMsgs} ->
+            do_delete(Q, ReadyMsgs, ActingUser);
+        Error ->
+            Error
     end.
+
+%% The if-unused and if-empty flags gate deletion on the queue's consumer and
+%% message counts, read from the leader via rabbit_fifo_client:stat/1. When a
+%% flag is set, any failure to read the counts is surfaced rather than defaulted
+%% to zero: a queue whose counts cannot be verified must not be deleted, as that
+%% would silently bypass the requested precondition. When no flag is set the read
+%% is best-effort and only supplies the message count reported back to the client.
+delete_precondition(Q, false, false) ->
+    ReadyMsgs = case leader_stat(Q) of
+                    {ok, R, _} ->
+                        R;
+                    _ ->
+                        0
+                end,
+    {ok, ReadyMsgs};
+delete_precondition(Q, IfUnused, IfEmpty) ->
+    QName = amqqueue:get_name(Q),
+    case leader_stat(Q) of
+        {ok, ReadyMsgs, Consumers} ->
+            if
+                IfEmpty andalso ReadyMsgs > 0 ->
+                    {error, not_empty};
+                IfUnused andalso Consumers > 0 ->
+                    {error, in_use};
+                true ->
+                    {ok, ReadyMsgs}
+            end;
+        {_, Reason} ->
+            cannot_verify_delete_flags(QName, Reason)
+    end.
+
+%% Reads the queue's ready message and consumer counts from the leader via
+%% rabbit_fifo_client:stat/1, surfacing any failure to locate or query it.
+leader_stat(Q) ->
+    case find_leader(Q) of
+        {_, _} = Leader ->
+            rabbit_fifo_client:stat(Leader);
+        undefined ->
+            {error, no_leader_available}
+    end.
+
+cannot_verify_delete_flags(QName, Reason) ->
+    {protocol_error, internal_error,
+     "cannot delete ~ts: unable to verify the if-unused/if-empty precondition (~tp)",
+     [rabbit_misc:rs(QName), Reason]}.
 
 do_delete(Q, ReadyMsgs, ActingUser) ->
     {Name, _} = amqqueue:get_pid(Q),
