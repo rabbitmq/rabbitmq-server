@@ -1659,6 +1659,11 @@ end}.
     {default, off},
     {datatype, flag}
 ]}.
+{mapping, "log.console.formatter.depth", "rabbit.log.console.formatter", [
+    {default, unlimited},
+    {datatype, [{atom, unlimited}, integer]},
+    {validators, ["formatter_depth"]}
+]}.
 {mapping, "log.console.formatter.plaintext.format", "rabbit.log.console.formatter", [
     {default, "$time [$level] $pid $msg"},
     {datatype, string}
@@ -1697,6 +1702,11 @@ end}.
 {mapping, "log.exchange.formatter.single_line", "rabbit.log.exchange.formatter", [
     {default, off},
     {datatype, flag}
+]}.
+{mapping, "log.exchange.formatter.depth", "rabbit.log.exchange.formatter", [
+    {default, unlimited},
+    {datatype, [{atom, unlimited}, integer]},
+    {validators, ["formatter_depth"]}
 ]}.
 {mapping, "log.exchange.formatter.plaintext.format", "rabbit.log.exchange.formatter", [
     {default, "$time [$level] $pid $msg"},
@@ -1752,6 +1762,11 @@ end}.
 {mapping, "log.syslog.formatter.single_line", "rabbit.log.syslog.formatter", [
     {default, off},
     {datatype, flag}
+]}.
+{mapping, "log.syslog.formatter.depth", "rabbit.log.syslog.formatter", [
+    {default, unlimited},
+    {datatype, [{atom, unlimited}, integer]},
+    {validators, ["formatter_depth"]}
 ]}.
 {mapping, "log.syslog.formatter.plaintext.format", "rabbit.log.syslog.formatter", [
     {default, "$msg"},
@@ -1990,6 +2005,11 @@ end}.
 {mapping, "log.file.formatter.single_line", "rabbit.log.file.formatter", [
     {default, off},
     {datatype, flag}
+]}.
+{mapping, "log.file.formatter.depth", "rabbit.log.file.formatter", [
+    {default, unlimited},
+    {datatype, [{atom, unlimited}, integer]},
+    {validators, ["formatter_depth"]}
 ]}.
 {mapping, "log.file.formatter.plaintext.format", "rabbit.log.file.formatter", [
     {default, "$time [$level] $pid $msg"},
@@ -3104,6 +3124,12 @@ end}.
 {validator, "non_zero_positive_integer", "number should be greater or equal to one",
 fun(Int) when is_integer(Int) ->
     Int >= 1
+end}.
+
+{validator, "formatter_depth", "should be positive integer or 'unlimited'",
+fun(unlimited) -> true;
+   (Int) when is_integer(Int) -> Int >= 1;
+   (_) -> false
 end}.
 
 {validator, "positive_16_bit_unsigned_integer", "number should be between 1 and 65535",

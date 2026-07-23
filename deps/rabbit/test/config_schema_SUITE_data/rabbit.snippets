@@ -1839,5 +1839,16 @@ credential_validator.regexp = ^abc\\d+",
        {certfile,"test/config_schema_SUITE_data/certs/server_certificate.pem"},
        {keyfile,"test/config_schema_SUITE_data/certs/server_key.pem"},
        {psk_identity, "my_identity"}]}]}],
+  []},
+ %% This snippet only asserts that the schema ACCEPTS
+ %% `log.file.formatter.depth'. The generated `rabbit.log' subtree is
+ %% stripped by `rabbit_ct_config_schema:without_rabbit_log/1' before
+ %% comparison, so the expected config is `[]' and the resulting `depth'
+ %% value cannot be checked here. That the value is carried into the
+ %% formatter config is covered by
+ %% `rabbit_prelaunch_early_logging_SUITE'.
+ {log_file_formatter_depth,
+  "log.file.formatter.depth = 20",
+  [],
   []}
 ].
