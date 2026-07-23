@@ -269,7 +269,8 @@ translate_generic_conf(Var, Conf) ->
     %% sub-terms to `...'. `unlimited' (or an unset key) means "no
     %% explicit depth"; in that case we fall back to the deprecated
     %% `error_logger_format_depth' kernel variable, the same way OTP's
-    %% `logger_formatter:get_depth/1' does.
+    %% `logger_formatter:get_depth/1' does. As in OTP, an explicit depth
+    %% is floored at 5, so configured values below 5 are raised to 5.
     Depth = case cuttlefish:conf_get(Var ++ ".depth", Conf, unlimited) of
                 unlimited -> error_logger:get_format_depth();
                 D         -> max(5, D)
