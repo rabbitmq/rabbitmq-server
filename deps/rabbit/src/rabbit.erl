@@ -1513,7 +1513,8 @@ product_name() ->
 
 -spec product_license_line() -> string().
 product_license_line() ->
-    application:get_env(rabbit, license_line, ?INFORMATION_MESSAGE).
+    {ok, Val} = application:get_env(rabbit, license_line),
+    Val.
 
 -spec product_version() -> string().
 
