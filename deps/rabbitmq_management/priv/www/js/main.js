@@ -16,7 +16,10 @@ function format_error_response(response, reason) {
 }
 
 $(document).ready(function() {
+<<<<<<< HEAD
   setup_oauth_events_if_required();
+=======
+>>>>>>> 8d7333e115 (Correct a minor usability issue #16957)
   var url_string = window.location.href;
   var url = new URL(url_string);
   var error = url.searchParams.get('error');
