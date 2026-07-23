@@ -21,6 +21,13 @@
         "loopback/localhost, which is prohibited by the internal loopback authN "
         "backend.").
 
+-define(BLANK_PASSWORD_REJECTION_MESSAGE,
+        "user '~ts' attempted to log in with a blank password, which is prohibited by the internal authN backend. "
+        "To use TLS/x509 certificate-based authentication, see the rabbitmq_auth_mechanism_ssl plugin and configure the client to use the EXTERNAL authentication mechanism. "
+        "Alternatively change the password for the user to be non-blank.").
+
+-define(INVALID_CREDENTIALS_REJECTION_MESSAGE, "user '~ts' - invalid credentials").
+
 -define(LOOPBACK_USER, #{username => <<"TestLoopbackUser">>,
                         password => <<"TestLoopbackUser">>,
                         expected_credentials => [username, password],
@@ -43,7 +50,11 @@ groups() ->
     [
         {localhost_connection, [], [
             login_from_localhost_with_loopback_user,
-            login_from_localhost_with_nonloopback_user
+            login_from_localhost_with_nonloopback_user,
+            login_from_localhost_with_wrong_password_is_refused,
+            login_from_localhost_with_blank_password_is_refused,
+            login_from_localhost_with_unknown_user_is_refused,
+            login_without_loopback_info_is_refused
         ]},
         {nonlocalhost_connection, [], [
             login_from_nonlocalhost_with_loopback_user,
@@ -84,6 +95,39 @@ login_from_localhost_with_nonloopback_user(Config) ->
     AuthProps = build_auth_props(maps:get(password, ?NONLOOPBACK_USER), ?LOCALHOST_ADDR),
     {ok, _AuthUser} = rpc(Config, rabbit_auth_backend_internal_loopback, user_login_authentication,
         [maps:get(username, ?NONLOOPBACK_USER), AuthProps]).
+
+%% Security canary: a loopback connection presenting the wrong password
+%% must be refused with an invalid-credentials error. Guards the salted-hash
+%% comparison against an accidental fail-open regression.
+login_from_localhost_with_wrong_password_is_refused(Config) ->
+    AuthProps = build_auth_props(<<"not-the-right-password">>, ?LOCALHOST_ADDR),
+    {refused, ?INVALID_CREDENTIALS_REJECTION_MESSAGE, _FailArgs} =
+        rpc(Config, rabbit_auth_backend_internal_loopback, user_login_authentication,
+            [maps:get(username, ?LOOPBACK_USER), AuthProps]).
+
+%% Security canary: a loopback connection with a blank password must be
+%% refused, even though the address is trusted.
+login_from_localhost_with_blank_password_is_refused(Config) ->
+    AuthProps = build_auth_props(<<"">>, ?LOCALHOST_ADDR),
+    {refused, ?BLANK_PASSWORD_REJECTION_MESSAGE, _FailArgs} =
+        rpc(Config, rabbit_auth_backend_internal_loopback, user_login_authentication,
+            [maps:get(username, ?LOOPBACK_USER), AuthProps]).
+
+%% Security canary: a loopback connection for a user that does not exist
+%% must be refused with an invalid-credentials error.
+login_from_localhost_with_unknown_user_is_refused(Config) ->
+    AuthProps = build_auth_props(<<"any-password">>, ?LOCALHOST_ADDR),
+    {refused, ?INVALID_CREDENTIALS_REJECTION_MESSAGE, _FailArgs} =
+        rpc(Config, rabbit_auth_backend_internal_loopback, user_login_authentication,
+            [<<"NoSuchUser">>, AuthProps]).
+
+%% Security canary: when no socket or address is provided, the backend cannot
+%% determine whether the connection is from localhost and must fail closed.
+login_without_loopback_info_is_refused(Config) ->
+    AuthProps = [{password, maps:get(password, ?LOOPBACK_USER)}],
+    {refused, ?NO_SOCKET_OR_ADDRESS_REJECTION_MESSAGE, _FailArgs} =
+        rpc(Config, rabbit_auth_backend_internal_loopback, user_login_authentication,
+            [maps:get(username, ?LOOPBACK_USER), AuthProps]).
 
 % Test cases for non-localhost connections
 login_from_nonlocalhost_with_loopback_user(Config) ->
