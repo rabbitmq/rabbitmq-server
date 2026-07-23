@@ -274,17 +274,17 @@ pm(<<?DESCRIBED, ?CODE_ULONG, ?DESCRIPTOR_CODE_AMQP_SEQUENCE:64, _Rest/binary>>,
     reached_body(B, ?DESCRIPTOR_CODE_AMQP_SEQUENCE);
 pm(<<?DESCRIBED, ?CODE_ULONG, ?DESCRIPTOR_CODE_AMQP_VALUE:64, _Rest/binary>>, true, B) ->
     reached_body(B, ?DESCRIPTOR_CODE_AMQP_VALUE);
-pm(<<?DESCRIBED, ?CODE_SYM_8, _S:8, "amqp:data:binary", _Rest/binary>>, true, B) ->
+pm(<<?DESCRIBED, ?CODE_SYM_8, 16:8, "amqp:data:binary", _Rest/binary>>, true, B) ->
     reached_body(B, ?DESCRIPTOR_CODE_DATA);
-pm(<<?DESCRIBED, ?CODE_SYM_8, _S:8, "amqp:amqp-sequence:list", _Rest/binary>>, true, B) ->
+pm(<<?DESCRIBED, ?CODE_SYM_8, 23:8, "amqp:amqp-sequence:list", _Rest/binary>>, true, B) ->
     reached_body(B, ?DESCRIPTOR_CODE_AMQP_SEQUENCE);
-pm(<<?DESCRIBED, ?CODE_SYM_8, _S:8, "amqp:amqp-value:*", _Rest/binary>>, true, B) ->
+pm(<<?DESCRIBED, ?CODE_SYM_8, 17:8, "amqp:amqp-value:*", _Rest/binary>>, true, B) ->
     reached_body(B, ?DESCRIPTOR_CODE_AMQP_VALUE);
-pm(<<?DESCRIBED, ?CODE_SYM_32, _S:32, "amqp:data:binary", _Rest/binary>>, true, B) ->
+pm(<<?DESCRIBED, ?CODE_SYM_32, 16:32, "amqp:data:binary", _Rest/binary>>, true, B) ->
     reached_body(B, ?DESCRIPTOR_CODE_DATA);
-pm(<<?DESCRIBED, ?CODE_SYM_32, _S:32, "amqp:amqp-sequence:list", _Rest/binary>>, true, B) ->
+pm(<<?DESCRIBED, ?CODE_SYM_32, 23:32, "amqp:amqp-sequence:list", _Rest/binary>>, true, B) ->
     reached_body(B, ?DESCRIPTOR_CODE_AMQP_SEQUENCE);
-pm(<<?DESCRIBED, ?CODE_SYM_32, _S:32, "amqp:amqp-value:*", _Rest/binary>>, true, B) ->
+pm(<<?DESCRIBED, ?CODE_SYM_32, 17:32, "amqp:amqp-value:*", _Rest/binary>>, true, B) ->
     reached_body(B, ?DESCRIPTOR_CODE_AMQP_VALUE);
 pm(<<?DESCRIBED, ?CODE_ULONG, ?DESCRIPTOR_CODE_PROPERTIES:64, Rest0/binary>>, O = true, B) ->
     [Value | Rest] = pm(Rest0, O, B+10),
