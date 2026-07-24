@@ -112,9 +112,20 @@ open(Config0) ->
             {_, Reader, _, _} = lists:keyfind(reader, 1, Children),
             {_, Connection, _, _} = lists:keyfind(connection, 1, Children),
             {_, SessionsSup, _, _} = lists:keyfind(sessions, 1, Children),
-            set_other_procs(Connection, #{sessions_sup => SessionsSup,
-                                          reader => Reader}),
-            {ok, Connection};
+            %% The reader's socket connect (including DNS resolution) is
+            %% deliberately deferred until here, rather than done as part
+            %% of its own init/1: a hostname/connectivity failure is then
+            %% just a normal call reply instead of a supervisor start_error,
+            %% which OTP would otherwise always report.
+            case amqp10_client_frame_reader:connect(Reader) of
+                ok ->
+                    set_other_procs(Connection, #{sessions_sup => SessionsSup,
+                                                  reader => Reader}),
+                    {ok, Connection};
+                {error, _} = Error ->
+                    _ = supervisor:terminate_child(amqp10_client_sup, ConnSup),
+                    Error
+            end;
         Error ->
             Error
     end.
