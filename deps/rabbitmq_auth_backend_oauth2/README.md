@@ -163,7 +163,7 @@ Note: if both are configured, `jwks_uri` takes precedence over `signing_keys`.
 |------------------------------------------|---------------------------------------------------------------------------
 | `auth_oauth2.resource_server_id`         | [The Resource Server ID](#resource-server-id-and-scope-prefixes)
 | `auth_oauth2.resource_server_type`       | [The Resource Server Type](#rich-authorization-request)
-| `auth_oauth2.additional_scopes_key`      | Key to fetch additional scopes from (maps to `additional_rabbitmq_scopes` in the `advanced.config` format)
+| `auth_oauth2.additional_scopes_key`      | Key to fetch additional scopes from (maps to `additional_rabbitmq_scopes` in the `advanced.config` format). Dots separate nested claim keys; use `\.` for a literal dot in a claim name, e.g. `https://example\.com/claims.roles`
 | `auth_oauth2.default_key`                | ID (name) of the default signing key
 | `auth_oauth2.signing_keys`               | Paths to signing key files
 | `auth_oauth2.jwks_uri`                   | The URL of key server. According to the [JWT Specification](https://datatracker.ietf.org/doc/html/rfc7515#section-4.1.2) key server URL must be https

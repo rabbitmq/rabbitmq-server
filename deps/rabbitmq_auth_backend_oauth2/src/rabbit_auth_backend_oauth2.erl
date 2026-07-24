@@ -353,6 +353,9 @@ extract_scopes_using_scope_aliases(_, Payload) -> Payload.
 extract_token_value(R, Payload, Path, ValueMapperFun) 
         when is_map(Payload), is_binary(Path), is_function(ValueMapperFun) ->
     extract_token_value_from_map(R, Payload, [], split_path(Path), ValueMapperFun);
+extract_token_value(R, Payload, Path, ValueMapperFun)
+        when is_map(Payload), is_list(Path), is_function(ValueMapperFun) ->
+    extract_token_value_from_map(R, Payload, [], Path, ValueMapperFun);
 extract_token_value(_, _, _, _) ->
     [].
 
@@ -419,6 +422,17 @@ extract_scopes_from_additional_scopes_key(
     Paths = binary:split(Key, <<" ">>, [global, trim_all]),
     AdditionalScopes = [ extract_token_value(ResourceServer, 
         Payload, Path, fun extract_scope_list_from_token_value/2) || Path <- Paths],    
+    set_scope(lists:flatten(AdditionalScopes) ++ get_scope(Payload), Payload);
+%% Paths is expected to be a list of pre-tokenized paths, each itself a list of
+%% segment binaries, e.g. [[<<"realm">>, <<"roles">>]]. This is the shape produced
+%% by rabbit_oauth2_schema:tokenize_additional_scopes_key/1 from rabbitmq.conf.
+%% A single-level list of binaries is treated as several top-level paths, not one
+%% nested path.
+extract_scopes_from_additional_scopes_key(
+        #resource_server{additional_scopes_key = Paths} = ResourceServer, Payload)
+          when is_list(Paths) ->
+    AdditionalScopes = [ extract_token_value(ResourceServer,
+        Payload, Path, fun extract_scope_list_from_token_value/2) || Path <- Paths],
     set_scope(lists:flatten(AdditionalScopes) ++ get_scope(Payload), Payload);
 extract_scopes_from_additional_scopes_key(_, Payload) -> Payload.
 
