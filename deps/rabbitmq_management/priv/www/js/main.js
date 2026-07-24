@@ -134,15 +134,7 @@ function check_login () {
         }
         return false;
     }
-    if (!check_session()) {
-        clear_auth();
-        if (oauth.enabled) {
-            renderWarningMessageInLoginStatus(oauth, 'Concurrent session limit reached');
-        } else {
-            replace_content('login-status', '<p>Concurrent session limit reached</p>');
-        }
-        return false;
-    }
+ 
 
     // Dynamically load the init.js extension
     import('./init.js')
@@ -159,7 +151,6 @@ function check_login () {
 
     return true;
 }
-
 function do_login(username, password) {
     var result = null;
     $.ajax({
@@ -206,18 +197,23 @@ function login(username, password) {
   return true;
 }
 
-function finish_check_login() {
-    var settings = window.app_settings;
-    if (settings.sessions && settings.sessions.enabled === true) {
-        var id = get_session_id();
-        if (id) {
-            var hb_success = start_session_heartbeat(id, settings.sessions.heartbeat_interval);
-            if (hb_success === false) {
-                return;
-            }
+function prepare_session() {
+    if (!check_session()) {
+        clear_auth();
+        if (oauth.enabled) {
+            renderWarningMessageInLoginStatus(oauth, 'Concurrent session limit reached');
+        } else {
+            replace_content('login-status', '<p>Concurrent session limit reached</p>');
         }
+        return false;
+    }else {
+        start_session_heartbeat(get_session_id(), true);
     }
-
+}
+function finish_check_login() {
+    if (sessions_enabled()) {
+        prepare_session();
+    }
     set_session_expiry_if_required(user.login_session_timeout);
     check_version();
     hide_popup_warn();

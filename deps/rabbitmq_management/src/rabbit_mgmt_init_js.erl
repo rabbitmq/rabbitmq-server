@@ -6,8 +6,8 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 init(Req0, _State) ->
-    Req1 = rabbit_mgmt_headers:set_no_cache_headers(Req0, ?MODULE),
-    Req2 = rabbit_mgmt_headers:set_common_permission_headers(Req1, ?MODULE),
+    Req1 = rabbit_mgmt_headers:set_common_permission_headers(Req0, ?MODULE),
+    Req2 = rabbit_mgmt_headers:set_no_cache_headers(Req1, ?MODULE),
     {cowboy_rest, Req2, #context{}}.
 
 is_authorized(ReqData, Context) ->
@@ -37,7 +37,7 @@ to_js(ReqData, Context) ->
 
 get_settings_json(ReqData, Context) ->
     UserTags = (Context#context.user)#user.tags,
-    Overview0 = [
+    Settings0 = [
         {management_version,        version(rabbitmq_management)},
         {rates_mode,                rabbit_mgmt_util:rates_mode(ReqData)},
         {sample_retention_policies, rabbit_mgmt_wm_overview:get_sample_retention_policies()},
@@ -62,18 +62,18 @@ get_settings_json(ReqData, Context) ->
         {enable_queue_totals,       rabbit_mgmt_util:enable_queue_totals(ReqData)}
     ],
 
-    Overview1 = case rabbit_mgmt_util:disable_stats(ReqData) of
+    Settings1 = case rabbit_mgmt_util:disable_stats(ReqData) of
         false ->
             Range = rabbit_mgmt_util:range(ReqData),
             case rabbit_mgmt_util:is_monitor(UserTags) of
                 true ->
-                    Overview0 ++
+                    Settings0 ++
                         [{K, maybe_map(V)} || {K,V} <- rabbit_mgmt_db:get_overview(Range)] ++
                         [{node, node()},
                          {listeners, rabbit_mgmt_wm_overview:listeners()},
                          {contexts, rabbit_mgmt_wm_overview:web_contexts(ReqData)}];
                 _ ->
-                    Overview0 ++
+                    Settings0 ++
                         [{K, maybe_map(V)} || {K, V} <- rabbit_mgmt_db:get_overview(Context#context.user, Range)]
             end;
         true ->
@@ -91,10 +91,10 @@ get_settings_json(ReqData, Context) ->
                                    [{queues, length([Q || V <- VHosts, Q <- rabbit_amqqueue:list(V)])},
                                     {exchanges, length([X || V <- VHosts, X <- rabbit_exchange:list(V)])}]
                            end,
-            Overview0 ++ [{node, node()}, {object_totals, ObjectTotals}]
+            Settings0 ++ [{node, node()}, {object_totals, ObjectTotals}]
     end,
     
-    rabbit_json:encode(rabbit_mgmt_format:prepare_for_encoding(Overview1)).
+    rabbit_json:encode(rabbit_mgmt_format:prepare_for_encoding(Settings1)).
 
 get_vhosts_json(_ReqData, Context) ->
     VHosts = rabbit_mgmt_util:list_visible_vhosts(Context#context.user),
