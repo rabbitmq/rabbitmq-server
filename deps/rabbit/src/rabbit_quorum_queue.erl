@@ -1050,6 +1050,15 @@ recover(_Vhost, Queues) ->
          %% rabbit_durable_queue
          %% So many code paths are dependent on this.
          ok = rabbit_db_queue:set_dirty(Q),
+         %% A queue left in the blocked state means a delete with an
+         %% if-unused/if-empty precondition was interrupted before it could
+         %% restore the state. The queue still exists, so make it usable again.
+         _ = case amqqueue:get_state(Q) =:= blocked of
+                 true ->
+                     set_queue_state(QName, live);
+                 false ->
+                     ok
+             end,
          case Res of
              ok ->
                  {[Q | R0], F0};
@@ -1085,51 +1094,95 @@ restart_server({_, _} = Ref) ->
     rabbit_types:error(in_use | not_empty) |
     {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 delete(Q, IfUnused, IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
-    case delete_precondition(Q, IfUnused, IfEmpty) of
-        {ok, ReadyMsgs} ->
+    case IfUnused orelse IfEmpty of
+        false ->
+            %% Unconditional delete: there is no precondition to protect, so
+            %% no need to block the queue first.
+            {ok, ReadyMsgs, _} = stat(Q),
             do_delete(Q, ReadyMsgs, ActingUser);
-        Error ->
-            Error
+        true ->
+            %% The block-then-delete path below writes the blocked state to the
+            %% cluster metadata store and relies on rejecting publishes. Both
+            %% are unsafe while any node is under a resource alarm, so refuse
+            %% the conditional delete until the alarm clears.
+            case rabbit_alarm:get_alarms() of
+                [] ->
+                    %% Move the queue to the blocked state before checking the
+                    %% preconditions so that publishes and new consumers are
+                    %% rejected while the check and the delete run, closing the
+                    %% window in which an if-empty/if-unused precondition could
+                    %% be violated.
+                    with_queue_blocked(
+                      Q,
+                      fun () ->
+                              case check_delete_flags(Q, IfUnused, IfEmpty) of
+                                  {ok, ReadyMsgs} ->
+                                      do_delete(Q, ReadyMsgs, ActingUser);
+                                  Error ->
+                                      Error
+                              end
+                      end);
+                _Alarms ->
+                    cannot_delete_under_alarm(amqqueue:get_name(Q))
+            end
     end.
+
+cannot_delete_under_alarm(QName) ->
+    {protocol_error, precondition_failed,
+     "cannot delete ~ts with an if-unused/if-empty precondition while the "
+     "cluster is under a resource alarm",
+     [rabbit_misc:rs(QName)]}.
+
+%% Runs Fun with the queue moved to the blocked state. On success the queue
+%% record has already been removed by the delete, so nothing is restored;
+%% otherwise (a failed precondition, an error return or an exception) the
+%% previous state is restored.
+with_queue_blocked(Q, Fun) ->
+    QName = amqqueue:get_name(Q),
+    PrevState = amqqueue:get_state(Q),
+    _ = set_queue_state(QName, blocked),
+    try Fun() of
+        {ok, _} = Ok ->
+            Ok;
+        Other ->
+            _ = set_queue_state(QName, PrevState),
+            Other
+    catch
+        Class:Reason:Stacktrace ->
+            _ = set_queue_state(QName, PrevState),
+            erlang:raise(Class, Reason, Stacktrace)
+    end.
+
+set_queue_state(QName, State) ->
+    rabbit_amqqueue:update(QName,
+                           fun (Q) -> amqqueue:set_state(Q, State) end).
 
 %% The if-unused and if-empty flags gate deletion on the queue's consumer and
-%% message counts, read from the leader via rabbit_fifo_client:stat/1. When a
-%% flag is set, any failure to read the counts is surfaced rather than defaulted
-%% to zero: a queue whose counts cannot be verified must not be deleted, as that
-%% would silently bypass the requested precondition. When no flag is set the read
-%% is best-effort and only supplies the message count reported back to the client.
-delete_precondition(Q, false, false) ->
-    ReadyMsgs = case leader_stat(Q) of
-                    {ok, R, _} ->
-                        R;
-                    _ ->
-                        0
-                end,
-    {ok, ReadyMsgs};
-delete_precondition(Q, IfUnused, IfEmpty) ->
+%% message counts. Both counts come from a single rabbit_fifo_client:stat/1 call
+%% against the leader with any failure surfaced, rather than via
+%% rabbit_quorum_queue:stat/1 which reports zero counts on failure: a queue whose
+%% counts cannot be verified must not be deleted, as that would silently bypass
+%% the requested precondition. On success the ready message count is returned so
+%% the caller can reuse it as the delete result without a second stat call.
+check_delete_flags(Q, IfUnused, IfEmpty) ->
     QName = amqqueue:get_name(Q),
-    case leader_stat(Q) of
-        {ok, ReadyMsgs, Consumers} ->
-            if
-                IfEmpty andalso ReadyMsgs > 0 ->
-                    {error, not_empty};
-                IfUnused andalso Consumers > 0 ->
-                    {error, in_use};
-                true ->
-                    {ok, ReadyMsgs}
-            end;
-        {_, Reason} ->
-            cannot_verify_delete_flags(QName, Reason)
-    end.
-
-%% Reads the queue's ready message and consumer counts from the leader via
-%% rabbit_fifo_client:stat/1, surfacing any failure to locate or query it.
-leader_stat(Q) ->
     case find_leader(Q) of
         {_, _} = Leader ->
-            rabbit_fifo_client:stat(Leader);
+            case rabbit_fifo_client:stat(Leader) of
+                {ok, ReadyMsgs, Consumers} ->
+                    if
+                        IfEmpty andalso ReadyMsgs > 0 ->
+                            {error, not_empty};
+                        IfUnused andalso Consumers > 0 ->
+                            {error, in_use};
+                        true ->
+                            {ok, ReadyMsgs}
+                    end;
+                {_, Reason} ->
+                    cannot_verify_delete_flags(QName, Reason)
+            end;
         undefined ->
-            {error, no_leader_available}
+            cannot_verify_delete_flags(QName, no_leader_available)
     end.
 
 cannot_verify_delete_flags(QName, Reason) ->
@@ -1381,19 +1434,45 @@ deliver(QSs, Msg0, Options) ->
     Msg = mc:prepare(store, Msg0),
     lists:foldl(
       fun({Q, stateless}, Acc) ->
-              QRef = amqqueue:get_pid(Q),
-              ok = rabbit_fifo_client:untracked_enqueue([QRef], Msg),
-              Acc;
+              QName = amqqueue:get_name(Q),
+              case is_blocked(QName) of
+                  true ->
+                      %% The queue is being deleted; drop the message.
+                      Acc;
+                  false ->
+                      QRef = amqqueue:get_pid(Q),
+                      ok = rabbit_fifo_client:untracked_enqueue([QRef], Msg),
+                      Acc
+              end;
          ({Q, S0}, {Qs, Actions}) ->
               QName = amqqueue:get_name(Q),
-              case deliver0(QName, Correlation, Msg, S0) of
-                  {reject_publish, S} ->
-                      {[{Q, S} | Qs],
-                       [{rejected, QName, maxlen, [Correlation]} | Actions]};
-                  {ok, S, As} ->
-                      {[{Q, S} | Qs], As ++ Actions}
+              case is_blocked(QName) of
+                  true ->
+                      %% The queue is being deleted; reject the message so the
+                      %% publisher is notified rather than silently losing it.
+                      {[{Q, S0} | Qs],
+                       [{rejected, QName, blocked, [Correlation]} | Actions]};
+                  false ->
+                      case deliver0(QName, Correlation, Msg, S0) of
+                          {reject_publish, S} ->
+                              {[{Q, S} | Qs],
+                               [{rejected, QName, maxlen, [Correlation]} | Actions]};
+                          {ok, S, As} ->
+                              {[{Q, S} | Qs], As ++ Actions}
+                      end
               end
       end, {[], []}, QSs).
+
+%% A queue is blocked while it is being deleted with an if-unused/if-empty
+%% precondition. Publishing to such a queue must fail. The state is read from
+%% the cluster-consistent full-record projection via a fast ETS lookup.
+is_blocked(QName) ->
+    case rabbit_amqqueue:lookup(QName) of
+        {ok, Q} ->
+            ?amqqueue_state_is(Q, blocked);
+        _ ->
+            false
+    end.
 
 state_info(S) ->
     #{pending_raft_commands => rabbit_fifo_client:pending_size(S),
