@@ -23,7 +23,8 @@
          deobfuscated_uris/2,
          obfuscated_uris/2,
          obfuscate_uris/1,
-         deobfuscate_uris/1
+         deobfuscate_uris/1,
+         log_connection_failure/3
         ]).
 
 -export([
@@ -281,3 +282,40 @@ obfuscate_uris(URIs) ->
 deobfuscate_uris(ObfuscatedURIs) ->
     URIs = [credentials_obfuscation:decrypt(ObfuscatedURI) || ObfuscatedURI <- ObfuscatedURIs],
     [rabbit_data_coercion:to_list(URI) || URI <- URIs].
+
+%% Logs a single-line, human-readable connection failure instead of a raw
+%% (and potentially deeply nested) error term. Used by both the AMQP 0-9-1
+%% and AMQP 1.0 shovel implementations.
+log_connection_failure(Reason, URI, {VHost, Name} = _ShovelName) ->
+    ?LOG_WARNING(
+       "Shovel '~ts' in vhost '~ts' failed to connect (URI: ~ts): ~ts",
+       [Name, VHost, amqp_uri:remove_credentials(URI), human_readable_connection_error(Reason)]);
+log_connection_failure(Reason, URI, ShovelName) ->
+    ?LOG_WARNING(
+       "Shovel '~ts' failed to connect (URI: ~ts): ~ts",
+       [ShovelName, amqp_uri:remove_credentials(URI), human_readable_connection_error(Reason)]).
+
+human_readable_connection_error({auth_failure, Msg}) ->
+    Msg;
+human_readable_connection_error(sasl_auth_failure) ->
+    "authentication failure (SASL)";
+human_readable_connection_error(not_allowed) ->
+    "access to target virtual host was refused";
+human_readable_connection_error(unknown_host) ->
+    "unknown host (failed to resolve hostname)";
+human_readable_connection_error(econnrefused) ->
+    "connection to target host was refused (ECONNREFUSED)";
+human_readable_connection_error(econnreset) ->
+    "connection to target host was reset by peer (ECONNRESET)";
+human_readable_connection_error(etimedout) ->
+    "connection to target host timed out (ETIMEDOUT)";
+human_readable_connection_error(ehostunreach) ->
+    "target host is unreachable (EHOSTUNREACH)";
+human_readable_connection_error(nxdomain) ->
+    "target hostname cannot be resolved (NXDOMAIN)";
+human_readable_connection_error(eacces) ->
+    "connection to target host failed with EACCES. "
+    "This may be due to insufficient RabbitMQ process permissions or "
+    "a reserved IP address used as destination";
+human_readable_connection_error(Other) ->
+    rabbit_misc:format("~tp", [Other]).
