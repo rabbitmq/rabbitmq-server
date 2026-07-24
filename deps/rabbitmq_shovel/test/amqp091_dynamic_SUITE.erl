@@ -41,7 +41,11 @@ groups() ->
           validation,
           security_validation,
           get_connection_name,
-          credit_flow
+          credit_flow,
+          delete_after_duration_autodeletes,
+          delete_after_duration_runs,
+          delete_after_duration_runs_long,
+          delete_after_duration_expired_handled
         ]},
     {quorum_queue_tests, [], [
           quorum_queues
@@ -300,6 +304,15 @@ validation(Config) ->
     invalid_param(Config,
                   [{<<"src-delete-after">>,    <<"whenever">>} | QURIs]),
 
+    valid_param(Config,
+                [{<<"src-delete-after-duration">>, 60} | QURIs]),
+    invalid_param(Config,
+                  [{<<"src-delete-after-duration">>, 0} | QURIs]),
+    invalid_param(Config,
+                  [{<<"src-delete-after-duration">>, <<"whenever">>} | QURIs]),
+    invalid_param(Config,
+                  [{<<"src-delete-after-duration">>, 100 * 365 * 24 * 60 * 60} | QURIs]),
+
     %% Check properties have to look property-ish
     valid_param(Config,
                 [{<<"src-exchange">>, <<"test">>},
@@ -474,6 +487,52 @@ credit_flow(Config) ->
                   set_default_credit(Config, OrigCredit)
               end
       end).
+
+delete_after_duration_autodeletes(Config) ->
+    Duration = 5,
+    Before = erlang:monotonic_time(millisecond),
+
+    shovel_test_utils:set_param(
+      Config, <<"test">>,
+      [{<<"src-queue">>,                 <<"src">>},
+       {<<"dest-queue">>,                <<"dest">>},
+       {<<"src-delete-after">>,          <<"never">>},
+       {<<"src-delete-after-duration">>, Duration}]),
+
+    await_autodelete(Config, <<"test">>),
+
+    Elapsed = erlang:monotonic_time(millisecond) - Before,
+    ?assert(Elapsed >= Duration * 1000),
+    ok.
+
+delete_after_duration_runs(Config) ->
+    with_amqp091_ch(Config,
+      fun (Ch) ->
+              shovel_test_utils:set_param(
+                Config, <<"test">>,
+                [{<<"src-queue">>,                 <<"src">>},
+                 {<<"dest-queue">>,                <<"dest">>},
+                 {<<"src-delete-after-duration">>, 300}]),
+              amqp091_publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hello">>),
+              ?assertEqual(running,
+                           shovel_test_utils:get_shovel_status(Config, <<"test">>))
+      end).
+
+delete_after_duration_runs_long(Config) ->
+    MaxSeconds = 10 * 365 * 24 * 60 * 60,
+    shovel_test_utils:set_param(
+      Config, <<"test">>,
+      [{<<"src-queue">>,                 <<"src">>},
+       {<<"dest-queue">>,                <<"dest">>},
+       {<<"src-delete-after-duration">>, MaxSeconds}]),
+    ?assertEqual(running,
+                 shovel_test_utils:get_shovel_status(Config, <<"test">>)).
+
+delete_after_duration_expired_handled(_Config) ->
+    ?assertExit({shutdown, autodelete},
+                rabbit_amqp091_shovel:handle_source(
+                  {internal, delete_after_duration_expired}, #{})),
+    ok.
 
 %%----------------------------------------------------------------------------
 publish_count(Ch, X, Key, M, Count) ->

@@ -142,6 +142,7 @@ parse_source(Def) ->
     end,
     DeleteAfter = pget(<<"src-delete-after">>, Def,
                        pget(<<"delete-after">>, Def, <<"never">>)),
+    DeleteAfterDuration = pget(<<"src-delete-after-duration">>, Def, undefined),
     PrefetchCount = pget(<<"src-prefetch-count">>, Def,
                          pget(<<"prefetch-count">>, Def, 1000)),
     %% Details are only used for status report in rabbitmqctl, as vhost is not
@@ -154,6 +155,7 @@ parse_source(Def) ->
                   resource_decl => SrcDeclFun,
                   queue => Queue,
                   delete_after => opt_b2a(DeleteAfter),
+                  delete_after_duration => DeleteAfterDuration,
                   prefetch_count => PrefetchCount,
                   consumer_args => SrcCArgs,
                   consumer_name => SrcCTag
@@ -242,6 +244,7 @@ validate_src_funs(_Def, User) ->
      {<<"delete-after">>, fun rabbit_shovel_util:validate_delete_after/2, optional},
      %% currently used multi-protocol friend name, introduced in 3.7
      {<<"src-delete-after">>, fun rabbit_shovel_util:validate_delete_after/2, optional},
+     {<<"src-delete-after-duration">>, fun rabbit_shovel_util:validate_delete_after_duration/2, optional},
      {<<"src-predeclared">>,  fun rabbit_parameter_validation:boolean/2, optional}
     ].
 
@@ -293,8 +296,9 @@ init_source(Conf = #{ack_mode := AckMode,
                                                       consumer_tag = CTag,
                                                       no_ack = NoAck,
                                                       arguments = Args}, self()),
-    Conf#{source => Src#{remaining => Remaining,
-                         remaining_unacked => Remaining}}.
+    Src1 = Src#{remaining => Remaining,
+                remaining_unacked => Remaining},
+    Conf#{source => sched_expire_after_duration(Src1)}.
 
 connect_dest(Conf = #{name := Name, dest := #{uris := Uris} = Dst}) ->
     {Conn, Chan, URI} = make_conn_and_chan(deobfuscate_uris(Uris), Name),
@@ -423,6 +427,9 @@ handle_source({'EXIT', Conn, Reason},
 handle_source({'EXIT', _Pid, {shutdown, {server_initiated_close, _, Reason}}}, _State) ->
     {stop, {inbound_link_or_channel_closure, Reason}};
 
+handle_source({internal, delete_after_duration_expired}, _State) ->
+    exit({shutdown, autodelete});
+
 handle_source(_Msg, _State) ->
     not_handled.
 
@@ -461,12 +468,18 @@ handle_dest({bump_credit, Msg}, State) ->
 handle_dest(_Msg, _State) ->
     not_handled.
 
-close_source(#{source := #{current := {Conn, Ch, _}}}) ->
+close_source(#{source := #{current := {Conn, Ch, _}} = Src}) ->
+    _ = cancel_expire_after_duration(Src),
     catch amqp_channel:close(Ch),
     catch amqp_connection:close(Conn, ?MAX_CONNECTION_CLOSE_TIMEOUT),
     ok;
 close_source(_) ->
     %% It never connected, connection doesn't exist
+    ok.
+
+cancel_expire_after_duration(#{delete_after_timer := Timer}) ->
+    rabbit_misc:cancel_timer(Timer);
+cancel_expire_after_duration(_) ->
     ok.
 
 close_dest(#{dest := #{current := {Conn, Ch, _}}}) ->
@@ -663,6 +676,16 @@ remaining(Ch, #{source := #{delete_after := 'queue-length',
     N;
 remaining(_Ch, #{source := #{delete_after := Count}}) ->
     Count.
+
+sched_expire_after_duration(Src) ->
+    case maps:get(delete_after_duration, Src, undefined) of
+        Seconds when is_integer(Seconds), Seconds > 0 ->
+            Timer = rabbit_misc:send_after(Seconds * 1000, self(),
+                                           {internal, delete_after_duration_expired}),
+            Src#{delete_after_timer => Timer};
+        _ ->
+            Src
+    end.
 
 %%% PARSING
 

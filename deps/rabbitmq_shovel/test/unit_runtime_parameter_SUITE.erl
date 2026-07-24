@@ -102,6 +102,7 @@ parse_amqp091_maps_0() ->
                                       <<"delivery_mode">> => 2}},
          {<<"ack-mode">>, <<"on-publish">>},
          {<<"src-delete-after">>, <<"queue-length">>},
+         {<<"src-delete-after-duration">>, 1002},
          {<<"prefetch-count">>, 30},
          {<<"reconnect-delay">>, 1001},
          {<<"src-queue">>, <<"a-src-queue">>},
@@ -125,6 +126,7 @@ parse_amqp091_proplists_0() ->
                                           {<<"delivery_mode">>, 2}]},
          {<<"ack-mode">>, <<"on-publish">>},
          {<<"src-delete-after">>, <<"queue-length">>},
+         {<<"src-delete-after-duration">>, 1002},
          {<<"src-prefetch-count">>, 30},
          {<<"reconnect-delay">>, 1001},
          {<<"src-queue">>, <<"a-src-queue">>},
@@ -190,7 +192,8 @@ test_parse_amqp091(Params) ->
                   uris := [{encrypted, _}],
                   prefetch_count := 30,
                   queue := <<"a-src-queue">>,
-                  delete_after := 'queue-length'}
+                  delete_after := 'queue-length',
+                  delete_after_duration := 1002}
      } = Result,
     assert_uris_round_trip(Result,
                            ["amqp://localhost:5672"],
@@ -219,7 +222,8 @@ test_parse_amqp091_with_blank_proprties(Params) ->
                   uris := [{encrypted, _}],
                   prefetch_count := 30,
                   queue := <<"a-src-queue">>,
-                  delete_after := 'queue-length'}
+                  delete_after := 'queue-length',
+                  delete_after_duration := undefined}
      } = Result,
     assert_uris_round_trip(Result,
                            ["amqp://localhost:5672"],
