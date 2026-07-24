@@ -52,6 +52,7 @@
          deliver/4,
          settle/5,
          credit/6,
+         assign_deferred/4,
          dequeue/5,
          fold_state/3,
          is_policy_applicable/2,
@@ -246,6 +247,15 @@
 
 -callback credit(queue_name(), rabbit_types:ctag(), delivery_count(), credit(),
                  Drain :: boolean(), queue_state()) ->
+    {queue_state(), actions()}.
+
+-optional_callbacks([assign_deferred/4]).
+
+%% Assign messages that were deferred (via x-opt-deferral-token) back to a
+%% consumer. Only supported by quorum queues. Matched messages arrive as
+%% normal deliveries; the call is fire-and-forget.
+-callback assign_deferred(queue_name(), rabbit_types:ctag(), Tokens :: [binary()],
+                          queue_state()) ->
     {queue_state(), actions()}.
 
 -callback dequeue(amqqueue:amqqueue(), NoAck :: boolean(), LimiterPid :: pid(),
@@ -763,6 +773,22 @@ credit(QName, CTag, DeliveryCount, Credit, Drain, Ctxs) ->
     {State, Actions} = Mod:credit(QName, CTag, DeliveryCount, Credit,
                                   Drain, State0),
     {ok, set_ctx(QName, Ctx#ctx{state = State}, Ctxs), Actions}.
+
+-spec assign_deferred(queue_name(), rabbit_types:ctag(), [binary()], state()) ->
+    {ok, state(), actions()}.
+assign_deferred(QName, CTag, Tokens, Ctxs) ->
+    case get_ctx(QName, Ctxs, undefined) of
+        undefined ->
+            {ok, Ctxs, []};
+        #ctx{state = State0, module = Mod} = Ctx ->
+            case erlang:function_exported(Mod, assign_deferred, 4) of
+                true ->
+                    {State, Actions} = Mod:assign_deferred(QName, CTag, Tokens, State0),
+                    {ok, set_ctx(QName, Ctx#ctx{state = State}, Ctxs), Actions};
+                false ->
+                    {ok, Ctxs, []}
+            end
+    end.
 
 -spec dequeue(amqqueue:amqqueue(), boolean(),
               pid(), rabbit_types:ctag(), state()) ->

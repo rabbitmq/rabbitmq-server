@@ -93,6 +93,7 @@ groups() ->
                                             consume_in_minority,
                                             get_in_minority,
                                             reject_after_leader_transfer,
+                                            x_opt_index_annotation,
                                             delete_members,
                                             rebalance,
                                             node_removal_is_not_quorum_critical,
@@ -2496,6 +2497,74 @@ reject_after_leader_transfer(Config) ->
                                                 requeue = true}),
     ok.
 
+%% Every message carries the "x-opt-index" annotation, the raft index the
+%% message was written at. Check that it is present for basic.get, for
+%% deliveries to a consumer on a node with a member, and for deliveries to a
+%% consumer on a node without a member (i.e. read remotely via log_ext).
+x_opt_index_annotation(Config) ->
+    check_quorum_queues_v9_compat(Config),
+
+    [Server0, Server1, Server2] =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    QQ = ?config(queue_name, Config),
+    RaName = ra_name(QQ),
+    IndexHeader = <<"x-opt-index">>,
+
+    Ch0 = rabbit_ct_client_helpers:open_channel(Config, Server0),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch0, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    ?awaitMatch(3, count_online_nodes(Server0, <<"/">>, QQ), ?DEFAULT_AWAIT),
+
+    %% basic.get
+    publish(Ch0, QQ),
+    wait_for_messages_ready([Server0, Server1, Server2], RaName, 1),
+    {#'basic.get_ok'{delivery_tag = GetTag},
+     #amqp_msg{props = #'P_basic'{headers = GetHeaders}}} =
+        basic_get(Ch0, QQ, false, 10),
+    ?assertMatch({IndexHeader, long, _},
+                 rabbit_basic:header(IndexHeader, GetHeaders)),
+    ok = amqp_channel:call(Ch0, #'basic.ack'{delivery_tag = GetTag}),
+
+    %% delivery to a consumer on a node that has a member
+    publish(Ch0, QQ),
+    wait_for_messages_ready([Server0, Server1, Server2], RaName, 1),
+    Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    subscribe(Ch1, QQ, false),
+    receive
+        {#'basic.deliver'{delivery_tag = LocalTag},
+         #amqp_msg{props = #'P_basic'{headers = LocalHeaders}}} ->
+            ?assertMatch({IndexHeader, long, _},
+                         rabbit_basic:header(IndexHeader, LocalHeaders)),
+            amqp_channel:cast(Ch1, #'basic.ack'{delivery_tag = LocalTag})
+    after ?TIMEOUT ->
+              flush(10),
+              exit(basic_deliver_timeout)
+    end,
+    amqp_channel:close(Ch1),
+
+    %% remove Server2's member so it no longer holds a copy of the raft log
+    ?assertEqual(ok,
+                 rpc:call(Server0, rabbit_queue_type_ra, delete_member,
+                          [<<"/">>, QQ, Server2])),
+    ?awaitMatch(2, count_online_nodes(Server0, <<"/">>, QQ), ?DEFAULT_AWAIT),
+
+    %% delivery to a consumer on a node that does not have a member
+    publish(Ch0, QQ),
+    wait_for_messages_ready([Server0, Server1], RaName, 1),
+    Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server2),
+    subscribe(Ch2, QQ, false),
+    receive
+        {#'basic.deliver'{delivery_tag = RemoteTag},
+         #amqp_msg{props = #'P_basic'{headers = RemoteHeaders}}} ->
+            ?assertMatch({IndexHeader, long, _},
+                         rabbit_basic:header(IndexHeader, RemoteHeaders)),
+            amqp_channel:cast(Ch2, #'basic.ack'{delivery_tag = RemoteTag})
+    after ?TIMEOUT ->
+              flush(10),
+              exit(basic_deliver_timeout)
+    end,
+    ok.
+
 delete_members(Config) ->
     [Server0, Server1, Server2] =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -4741,7 +4810,8 @@ purge(Config) ->
 
     {'queue.purge_ok', 2} = amqp_channel:call(Ch, #'queue.purge'{queue = QQ}),
 
-    ?assertEqual([0], dirty_query([Server], RaName, fun rabbit_fifo:query_messages_total/1)).
+    ?assertMatch(#{num_messages := 0},  machine_overview({RaName, Server})),
+    ok.
 
 peek(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -5506,8 +5576,15 @@ amqpl_headers(Config) ->
      #amqp_msg{props = #'P_basic'{headers = Headers2Received}}
     } = amqp_channel:call(Ch, #'basic.get'{queue = QQ}),
 
-    ?assertEqual(Headers1Sent, Headers1Received),
-    ?assertEqual(Headers2Sent, Headers2Received),
+    %% every message carries the raft index it was written at as the
+    %% "x-opt-index" header, even when the client didn't set any headers
+    case (min_mac_version(Config) >= 9) of
+        true ->
+            ?assertMatch([{<<"x-opt-index">>, long, _}], Headers1Received),
+            ?assertMatch([{<<"x-opt-index">>, long, _}], Headers2Received);
+        false ->
+            ok
+    end,
 
     ok = amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag,
                                             multiple = true}).
@@ -6701,9 +6778,19 @@ basic_get(Ch, Q, NoAck, Attempt) ->
     end.
 
 check_quorum_queues_v8_compat(Config) ->
+    check_quorum_queues_vn_compat(8, Config).
+
+check_quorum_queues_v9_compat(Config) ->
+    check_quorum_queues_vn_compat(9, Config).
+
+min_mac_version(Config) ->
     Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    MacVer = lists:min([V || {ok, V} <- erpc:multicall(Nodes, rabbit_fifo, version, [])]),
-    case MacVer >= 8 of
+    MacVer = lists:min([V || {ok, V} <-
+                             erpc:multicall(Nodes, rabbit_fifo, version, [])]),
+    MacVer.
+
+check_quorum_queues_vn_compat(Version, Config) ->
+    case min_mac_version(Config) >= Version of
         true ->
             ok;
         false ->
