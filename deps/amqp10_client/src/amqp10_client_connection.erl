@@ -343,6 +343,20 @@ opened(_EvtType, #'v1_0.close'{} = Close, State = #state{config = Config}) ->
         {error, closed} -> {stop, normal, State};
         Error           -> {stop, Error, State}
     end;
+opened(_EvtType, {'EXIT', Pid, Reason}, State) ->
+    %% A linked process (e.g. the application that opened this connection)
+    %% died. Close the connection gracefully instead of lingering silently
+    %% or falling through to the generic "unexpected frame" clause below.
+    ?LOG_WARNING("Connection ~tp closing because dependent process ~tp died: ~tp",
+                 [self(), Pid, Reason]),
+    case send_close(State, Reason) of
+        ok ->
+            {next_state, close_sent, State, {state_timeout, ?TIMEOUT, received_no_close_frame}};
+        {error, closed} ->
+            {stop, normal, State};
+        Error ->
+            {stop, Error, State}
+    end;
 opened({call, From}, begin_session, State) ->
     {Ret, State1} = handle_begin_session(From, State),
     {keep_state, State1, [{reply, From, Ret}]};
