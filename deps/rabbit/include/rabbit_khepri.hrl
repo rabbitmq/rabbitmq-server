@@ -70,8 +70,3 @@
 
 -define(RABBITMQ_KHEPRI_QUEUE_PATH(VHost, Name),
         ?RABBITMQ_KHEPRI_VHOST_PATH(VHost, [queues, Name])).
-
--record(node_metadata, {
-          node,
-          metadata = #{}
-        }).

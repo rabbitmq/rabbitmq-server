@@ -13,6 +13,7 @@
 -include_lib("rabbit_common/include/logging.hrl").
 
 -include("include/rabbit_khepri.hrl").
+-include("include/node_metadata.hrl").
 
 -export([
          set/2,
@@ -30,7 +31,7 @@
 %% set().
 %% -------------------------------------------------------------------
 
--spec set(node(), map()) -> ok | {error, any()}.
+-spec set(node(), node_metadata_map()) -> ok | {error, any()}.
 %% @doc Sets the node metadata map for the given node.
 set(Node, Metadata) when is_map(Metadata) ->
     Path = khepri_node_metadata_path(Node),
@@ -49,7 +50,7 @@ set(Node, Metadata) when is_map(Metadata) ->
 %% get().
 %% -------------------------------------------------------------------
 
--spec get(node()) -> map().
+-spec get(node()) -> node_metadata_map().
 %% @doc Returns the node metadata map for the given node using the local ETS projection.
 get(Node) ->
     try

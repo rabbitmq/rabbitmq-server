@@ -96,6 +96,7 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -include("include/rabbit_khepri.hrl").
+-include("include/node_metadata.hrl").
 
 %% Initialisation.
 -export([setup/0,
