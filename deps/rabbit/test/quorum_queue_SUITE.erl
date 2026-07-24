@@ -210,6 +210,11 @@ all_tests() ->
      pre_existing_invalid_policy,
      delete_if_empty,
      delete_if_unused,
+     delete_blocks_operations,
+     blocked_state_reset_on_recovery,
+     blocked_state_restore_timer_restores_state_if_empty,
+     blocked_state_restore_timer_restores_state_if_unused,
+     delete_conditional_refused_under_alarm,
      queue_ttl,
      peek,
      oldest_entry_timestamp,
@@ -5184,10 +5189,23 @@ delete_if_empty(Config) ->
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
     publish(Ch, QQ),
     wait_for_messages(Config, [[QQ, <<"1">>, <<"1">>, <<"0">>]]),
-    %% Try to delete the quorum queue
-    ?assertExit({{shutdown, {connection_closing, {server_initiated_close, 540, _}}}, _},
+    %% A non-empty quorum queue cannot be deleted with the if-empty flag set.
+    ?assertExit({{shutdown, {server_initiated_close, 406, _}}, _},
                 amqp_channel:call(Ch, #'queue.delete'{queue = QQ,
-                                                      if_empty = true})).
+                                                      if_empty = true})),
+    %% The failed deletion left the queue and its message in place.
+    Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
+    ?assertMatch(#'queue.purge_ok'{message_count = 1},
+                 amqp_channel:call(Ch1, #'queue.purge'{queue = QQ})),
+    wait_for_messages(Config, [[QQ, <<"0">>, <<"0">>, <<"0">>]]),
+    %% Once empty, the queue can be deleted with the if-empty flag set.
+    ?assertMatch(#'queue.delete_ok'{message_count = 0},
+                 amqp_channel:call(Ch1, #'queue.delete'{queue = QQ,
+                                                        if_empty = true})),
+    %% Ensure queue no longer exists in the broker.
+    QName = rabbit_misc:r(<<"/">>, queue, QQ),
+    ?assertEqual({error, not_found},
+                 rpc:call(Server, rabbit_amqqueue, lookup, [QName])).
 
 delete_if_unused(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
@@ -5196,12 +5214,218 @@ delete_if_unused(Config) ->
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
-    publish(Ch, QQ),
-    wait_for_messages(Config, [[QQ, <<"1">>, <<"1">>, <<"0">>]]),
-    %% Try to delete the quorum queue
-    ?assertExit({{shutdown, {connection_closing, {server_initiated_close, 540, _}}}, _},
-                amqp_channel:call(Ch, #'queue.delete'{queue = QQ,
-                                                      if_unused = true})).
+    ok = subscribe(Ch, QQ, false),
+    %% A quorum queue with a consumer cannot be deleted with the if-unused flag
+    %% set. Attempt queue.delete on a separate channel to keep consumer alive.
+    Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
+    ?assertExit({{shutdown, {server_initiated_close, 406, _}}, _},
+                amqp_channel:call(Ch1, #'queue.delete'{queue = QQ,
+                                                       if_unused = true})),
+    %% After the consumer is cancelled, the queue can be deleted with the
+    %% if-unused flag set.
+    ok = cancel(Ch),
+    ?awaitMatch(#'queue.declare_ok'{queue = QQ, message_count = 0,
+                                    consumer_count = 0},
+                amqp_channel:call(Ch, #'queue.declare'{queue = QQ,
+                                                       passive = true}),
+                ?DEFAULT_AWAIT),
+    ?assertMatch(#'queue.delete_ok'{message_count = 0},
+                 amqp_channel:call(Ch, #'queue.delete'{queue = QQ,
+                                                       if_unused = true})),
+    %% Ensure queue no longer exists in the broker.
+    QName = rabbit_misc:r(<<"/">>, queue, QQ),
+    ?assertEqual({error, not_found},
+                 rpc:call(Server, rabbit_amqqueue, lookup, [QName])).
+
+delete_blocks_operations(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    QName = rabbit_misc:r(<<"/">>, queue, QQ),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+
+    %% Block the queue and wait until the change is visible in the projection
+    %% read by the publish and consume paths.
+    ok = set_queue_state(Config, QName, blocked),
+    ?awaitMatch(blocked, get_queue_state(Config, QName), ?DEFAULT_AWAIT),
+
+    %% Publishing to a blocked queue is rejected (nacked).
+    ?assertEqual(fail, publish_confirm(Ch, QQ)),
+
+    %% Consuming from a blocked queue fails and closes the channel.
+    Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
+    ?assertExit({{shutdown, {server_initiated_close, 405, _}}, _},
+                amqp_channel:call(Ch1, #'basic.get'{queue = QQ})),
+    Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server),
+    ?assertExit({{shutdown, {server_initiated_close, 405, _}}, _},
+                amqp_channel:call(Ch2, #'basic.consume'{queue = QQ})),
+    %% Even a passive re-declaration fails while the queue is blocked.
+    Ch3 = rabbit_ct_client_helpers:open_channel(Config, Server),
+    ?assertExit({{shutdown, {server_initiated_close, 405, _}}, _},
+                amqp_channel:call(Ch3, #'queue.declare'{queue = QQ,
+                                                        passive = true})),
+
+    %% Once unblocked, the queue works normally again.
+    ok = set_queue_state(Config, QName, live),
+    ?awaitMatch(live, get_queue_state(Config, QName), ?DEFAULT_AWAIT),
+    Ch4 = rabbit_ct_client_helpers:open_channel(Config, Server),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch4, #'confirm.select'{}),
+    ?assertEqual(ok, publish_confirm(Ch4, QQ)),
+    ?assertMatch({#'basic.get_ok'{}, _},
+                 amqp_channel:call(Ch4, #'basic.get'{queue = QQ, no_ack = true})),
+    ?assertMatch(#'queue.delete_ok'{},
+                 amqp_channel:call(Ch4, #'queue.delete'{queue = QQ})).
+
+blocked_state_reset_on_recovery(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    QName = rabbit_misc:r(<<"/">>, queue, QQ),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    ok = set_queue_state(Config, QName, blocked),
+    ?awaitMatch(blocked, get_queue_state(Config, QName), ?DEFAULT_AWAIT),
+
+    ok = rabbit_ct_broker_helpers:stop_node(Config, Server),
+    ok = rabbit_ct_broker_helpers:start_node(Config, Server),
+
+    %% Recovery has reset the lingering blocked state back to live.
+    ?awaitMatch(live, get_queue_state(Config, QName), ?DEFAULT_AWAIT),
+
+    %% The queue is usable again.
+    Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch1, #'confirm.select'{}),
+    ?assertEqual(ok, publish_confirm(Ch1, QQ)),
+    ?assertMatch(#'queue.delete_ok'{},
+                 amqp_channel:call(Ch1, #'queue.delete'{queue = QQ})).
+
+blocked_state_restore_timer_restores_state_if_empty(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    QName = rabbit_misc:r(<<"/">>, queue, QQ),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    %% if-empty delete (IfUnused = false, IfEmpty = true).
+    assert_restore_timer_recovers_blocked_delete(Config, QName, false, true),
+
+    %% The queue is usable again and can be deleted normally.
+    Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch1, #'confirm.select'{}),
+    ?assertEqual(ok, publish_confirm(Ch1, QQ)),
+    ?assertMatch(#'queue.delete_ok'{},
+                 amqp_channel:call(Ch1, #'queue.delete'{queue = QQ})).
+
+%% As above, but for an interrupted if-unused delete.
+blocked_state_restore_timer_restores_state_if_unused(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    QName = rabbit_misc:r(<<"/">>, queue, QQ),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    %% if-unused delete (IfUnused = true, IfEmpty = false).
+    assert_restore_timer_recovers_blocked_delete(Config, QName, true, false),
+
+    %% The queue is usable again and can be deleted normally.
+    Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch1, #'confirm.select'{}),
+    ?assertEqual(ok, publish_confirm(Ch1, QQ)),
+    ?assertMatch(#'queue.delete_ok'{},
+                 amqp_channel:call(Ch1, #'queue.delete'{queue = QQ})).
+
+assert_restore_timer_recovers_blocked_delete(Config, QName, IfUnused, IfEmpty) ->
+    {ok, Q} = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, lookup,
+                                           [QName]),
+
+    %% Use a short restore timeout so the timer fires quickly once the
+    %% deleting process is gone.
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, application, set_env,
+           [rabbit, quorum_queue_blocked_state_restore_timeout, 500]),
+
+    %% Freeze the delete inside the precondition check, which runs after the
+    %% queue has been moved to the blocked state and the safety-net timer has
+    %% been spawned.
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, meck, new, [rabbit_fifo_client, [passthrough, no_link]]),
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, meck, expect,
+           [rabbit_fifo_client, stat, fun(_) -> timer:sleep(infinity) end]),
+
+    %% Run the delete in its own process so it can be killed while executing.
+    DeleterPid = rabbit_ct_broker_helpers:rpc(
+                   Config, 0, erlang, spawn,
+                   [rabbit_quorum_queue, delete,
+                    [Q, IfUnused, IfEmpty, <<"test-user">>]]),
+
+    %% Once the queue is blocked, the timer has been spawned and the delete is
+    %% parked in the frozen precondition check.
+    ?awaitMatch(blocked, get_queue_state(Config, QName), ?DEFAULT_AWAIT),
+
+    %% Kill the deleting process brutally so its `after` clause never runs: the
+    %% queue is left blocked, exactly as it would be after a crash mid-delete.
+    true = rabbit_ct_broker_helpers:rpc(Config, 0, erlang, exit,
+                                        [DeleterPid, kill]),
+
+    %% The restore timer sets the previous state on its own.
+    ?awaitMatch(live, get_queue_state(Config, QName), ?DEFAULT_AWAIT),
+
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, meck, unload,
+                                      [rabbit_fifo_client]),
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, application, unset_env,
+           [rabbit, quorum_queue_blocked_state_restore_timeout]),
+    ok.
+
+delete_conditional_refused_under_alarm(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    QName = rabbit_misc:r(<<"/">>, queue, QQ),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    ok = rabbit_ct_broker_helpers:set_alarm(Config, Server, memory),
+    ?awaitMatch([_ | _], rabbit_ct_broker_helpers:get_alarms(Config, Server),
+                ?DEFAULT_AWAIT),
+
+    %% Both if-empty and if-unused deletes are refused with a 406 while the
+    %% cluster is under a resource alarm.
+    Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
+    ?assertExit({{shutdown, {server_initiated_close, 406, _}}, _},
+                amqp_channel:call(Ch1, #'queue.delete'{queue = QQ,
+                                                       if_empty = true})),
+    Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server),
+    ?assertExit({{shutdown, {server_initiated_close, 406, _}}, _},
+                amqp_channel:call(Ch2, #'queue.delete'{queue = QQ,
+                                                       if_unused = true})),
+    %% The refused deletes left the queue in place and usable (not stuck in the
+    %% blocked state).
+    ?assertMatch(live, get_queue_state(Config, QName)),
+
+    ok = rabbit_ct_broker_helpers:clear_alarm(Config, Server, memory),
+    ?awaitMatch([], rabbit_ct_broker_helpers:get_alarms(Config, Server),
+                ?DEFAULT_AWAIT),
+
+    %% With the alarm cleared, the conditional delete succeeds.
+    Ch3 = rabbit_ct_client_helpers:open_channel(Config, Server),
+    ?assertMatch(#'queue.delete_ok'{message_count = 0},
+                 amqp_channel:call(Ch3, #'queue.delete'{queue = QQ,
+                                                        if_empty = true})),
+    ?assertEqual({error, not_found},
+                 rpc:call(Server, rabbit_amqqueue, lookup, [QName])).
 
 queue_ttl(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
@@ -6598,6 +6822,24 @@ qos(Ch, Prefetch, Global) ->
 cancel(Ch) ->
     ?assertMatch(#'basic.cancel_ok'{consumer_tag = <<"ctag">>},
                  amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = <<"ctag">>})).
+
+set_queue_state(Config, QName, State) ->
+    Fun = fun(Q) -> amqqueue:set_state(Q, State) end,
+    _ = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, update,
+                                     [QName, Fun]),
+    ok.
+
+%% Runs on a broker node via rpc.
+get_queue_state(QName) ->
+    case rabbit_amqqueue:lookup(QName) of
+        {ok, Q} ->
+            amqqueue:get_state(Q);
+        Err ->
+            Err
+    end.
+
+get_queue_state(Config, QName) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, get_queue_state, [QName]).
 
 receive_basic_deliver(Redelivered) ->
     receive
