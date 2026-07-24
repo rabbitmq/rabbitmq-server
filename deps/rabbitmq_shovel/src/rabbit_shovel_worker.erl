@@ -81,6 +81,7 @@ handle_cast(init, State = #state{config = Config0}) ->
     catch E:R ->
       ?LOG_WARNING("Shovel ~ts could not connect to source: ~p ~p",
                    [human_readable_name(maps:get(name, Config0)), E, R]),
+      report_terminated(State, "failed to connect to source"),
       {stop, {shutdown, restart}, State}
     end;
 handle_cast(connect_dest, State = #state{config = Config0}) ->
@@ -92,6 +93,7 @@ handle_cast(connect_dest, State = #state{config = Config0}) ->
     catch E:R ->
       ?LOG_WARNING("Shovel ~ts could not connect to destination: ~p ~p",
                    [human_readable_name(maps:get(name, Config0)), E, R]),
+      report_terminated(State, "failed to connect to destination"),
       {stop, {shutdown, restart}, State}
     end;
 handle_cast(init_shovel, State = #state{config = Config}) ->
@@ -123,18 +125,22 @@ handle_msg(Msg, State = #state{config = Config, name = Name}) ->
                 {stop, {outbound_conn_died, heartbeat_timeout}} ->
                     ?LOG_WARNING("Shovel ~ts detected missed heartbeats on destination connection",
                                  [human_readable_name(Name)]),
+                    report_terminated(State, "heartbeat timeout"),
                     {stop, {shutdown, restart}, State};
                 {stop, {outbound_conn_died, Reason}} ->
                     ?LOG_WARNING("Shovel ~ts detected destination connection failure: ~tp",
                                  [human_readable_name(Name), Reason]),
+                    report_terminated(State, Reason),
                     {stop, {shutdown, restart}, State};
                 {stop, {outbound_link_or_channel_closure, Reason}} ->
                     ?LOG_WARNING("Shovel ~ts detected destination shovel failure: ~tp",
                                  [human_readable_name(Name), Reason]),
+                    report_terminated(State, Reason),
                     {stop, {shutdown, restart}, State};
                 {stop, Reason} ->
                     ?LOG_DEBUG("Shovel ~ts decided to stop due a message from destination: ~tp",
                                [human_readable_name(Name), Reason]),
+                    report_terminated(State, Reason),
                     {stop, {shutdown, restart}, State};
                 Config1 ->
                     State1 = State#state{config = Config1},
@@ -144,18 +150,22 @@ handle_msg(Msg, State = #state{config = Config, name = Name}) ->
         {stop, {inbound_conn_died, heartbeat_timeout}} ->
             ?LOG_WARNING("Shovel ~ts detected missed heartbeats on source connection",
                          [human_readable_name(Name)]),
+            report_terminated(State, "heartbeat timeout"),
             {stop, {shutdown, restart}, State};
         {stop, {inbound_conn_died, Reason}} ->
             ?LOG_WARNING("Shovel ~ts detected source connection failure: ~tp",
                          [human_readable_name(Name), Reason]),
+            report_terminated(State, Reason),
             {stop, {shutdown, restart}, State};
         {stop, {inbound_link_or_channel_closure, Reason}} ->
             ?LOG_WARNING("Shovel ~ts detected source Shovel (or link,  or channel) failure: ~tp",
                          [human_readable_name(Name), Reason]),
+            report_terminated(State, Reason),
             {stop, {shutdown, restart}, State};
         {stop, Reason} ->
             ?LOG_WARNING("Shovel ~ts decided to stop due a message from source: ~tp",
                          [human_readable_name(Name), Reason]),
+            report_terminated(State, Reason),
             {stop, {shutdown, restart}, State};
         Config1 ->
             State1 = State#state{config = Config1},
@@ -186,9 +196,11 @@ terminate(socket_closed_unexpectedly, State = #state{name = Name}) ->
     close_connections(State),
     ok;
 terminate({shutdown, restart}, State = #state{name = Name}) ->
+    %% The specific reason (e.g. "heartbeat timeout", dest_queue_down, ...)
+    %% was already reported by report_terminated/2 at the point of
+    %% detection, before this uniform {shutdown, restart} reason was used
+    %% to stop - reporting a generic status here would just overwrite it.
     ?LOG_WARNING("Shovel ~ts is stopping to restart", [human_readable_name(Name)]),
-    rabbit_shovel_status:report(State#state.name, State#state.type,
-                                {terminated, "needed a restart"}),
     close_connections(State),
     ok;
 terminate({{shutdown, {server_initiated_close, Code, Reason}}, _}, State = #state{name = Name}) ->
@@ -246,6 +258,15 @@ maybe_report_blocked_status(#state{config = Config,
             rabbit_shovel_status:report_blocked_status(State#state.name, NewStatus),
             State#state{last_reported_status = NewStatus}
     end.
+
+%% Reports the specific reason a shovel is about to stop and (quietly)
+%% restart, since the OTP-level exit reason is always the uniform
+%% {shutdown, restart} - see the terminate/2 clause for that reason.
+report_terminated(State, {shutdown, restart}) ->
+    report_terminated(State, "needed a restart");
+report_terminated(State, Reason) ->
+    rabbit_shovel_status:report(State#state.name, State#state.type,
+                                {terminated, Reason}).
 
 report_running(#state{config = Config} = State) ->
     InUri = rabbit_shovel_behaviour:source_uri(Config),
