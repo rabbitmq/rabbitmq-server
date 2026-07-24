@@ -912,20 +912,22 @@ kill_connection_sproc_trigger_pattern() ->
 %% Configuration parameters for the module
 %% --------------------------------------------------------------
 
-%% TODO: add the parameters to the cuttlefish schema
-
+%% Period between periodic cluster membership resize checks.
 tick_interval() ->
     application:get_env(rabbit, amqp10_sole_conn_tick_interval,
                         ?TICK_INTERVAL).
 
+%% Number of Raft log entries between Khepri store snapshots.
 snapshot_interval() ->
     application:get_env(rabbit, amqp10_sole_conn_snapshot_interval,
                         ?SNAPSHOT_INTERVAL).
 
+%% How long to wait for a Raft leader to be elected when bootstrapping or joining the store.
 leader_wait_retry_timeout() ->
     application:get_env(rabbit, amqp10_sole_conn_leader_wait_retry_timeout,
                         ?LEADER_WAIT_RETRY_TIMEOUT).
 
+%% Timeout applied to Khepri operations against the sole connection store.
 default_timeout() ->
     application:get_env(rabbit, amqp10_sole_conn_default_timeout,
                         ?DEFAULT_KHEPRI_TIMEOUT).

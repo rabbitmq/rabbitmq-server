@@ -1032,6 +1032,34 @@ credential_validator.regexp = ^abc\\d+",
     }],
    []},
 
+  {amqp10_sole_conn_tick_interval,
+   "amqp10_sole_conn.tick_interval = 123456",
+   [{rabbit,
+     [{amqp10_sole_conn_tick_interval, 123456}]
+    }],
+   []},
+
+  {amqp10_sole_conn_snapshot_interval,
+   "amqp10_sole_conn.snapshot_interval = 123456",
+   [{rabbit,
+     [{amqp10_sole_conn_snapshot_interval, 123456}]
+    }],
+   []},
+
+  {amqp10_sole_conn_leader_wait_retry_timeout,
+   "amqp10_sole_conn.leader_wait_retry_timeout = 123456",
+   [{rabbit,
+     [{amqp10_sole_conn_leader_wait_retry_timeout, 123456}]
+    }],
+   []},
+
+  {amqp10_sole_conn_default_timeout,
+   "amqp10_sole_conn.default_timeout = 123456",
+   [{rabbit,
+     [{amqp10_sole_conn_default_timeout, 123456}]
+    }],
+   []},
+
   %%
   %% Definitions
   %%
