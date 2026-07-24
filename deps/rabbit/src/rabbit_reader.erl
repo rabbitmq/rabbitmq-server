@@ -47,7 +47,7 @@
 -include_lib("rabbit_common/include/logging.hrl").
 
 -export([start_link/2, info/2, force_event_refresh/2,
-         shutdown/2]).
+         shutdown/2, force_close/3]).
 
 -export([system_continue/3, system_terminate/4, system_code_change/4]).
 
@@ -158,6 +158,10 @@ start_link(HelperSups, Ref) ->
 -spec shutdown(pid(), string()) -> ok.
 shutdown(Pid, Explanation) ->
     gen_call(Pid, {shutdown, Explanation}, infinity).
+
+-spec force_close(pid(), term(), timeout()) -> ok.
+force_close(Pid, Error, Timeout) ->
+    gen_call(Pid, {close, Error}, Timeout).
 
 -spec init(pid(), {pid(), pid()}, ranch:ref()) ->
     no_return().

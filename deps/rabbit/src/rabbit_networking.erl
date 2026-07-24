@@ -29,7 +29,7 @@
          connection_info/2,
          connection_info_all/1,
          emit_connection_info_all/4, emit_connection_info_local/3,
-         close_connection/2, close_connections/2, close_all_connections/1,
+         close_connection/2, close_connection/3, close_connections/2, close_all_connections/1,
          close_all_user_connections/2,
          force_connection_event_refresh/1, force_non_amqp_connection_event_refresh/1,
          handshake/2, handshake/3, tcp_host/1,
@@ -541,6 +541,14 @@ close_connection(Pid, Explanation) ->
     catch exit:{Reason, _Location} ->
               ?LOG_WARNING("Could not close connection ~tp (reason: ~tp): ~p",
                                  [Pid, Explanation, Reason])
+    end.
+
+-spec close_connection(pid(), term(), timeout()) -> ok.
+close_connection(Pid, Error, Timeout) ->
+    ?LOG_INFO("Closing connection ~tp with error ~tp", [Pid, Error]),
+    try rabbit_reader:force_close(Pid, Error, Timeout)
+    catch exit:{Reason, _Location} ->
+              ?LOG_WARNING("Could not close connection ~tp: ~p", [Pid, Reason])
     end.
 
 -spec close_connections([pid()], string()) -> 'ok'.
