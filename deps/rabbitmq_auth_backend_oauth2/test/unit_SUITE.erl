@@ -78,6 +78,7 @@ groups() ->
           test_successful_access_with_a_token_that_uses_single_scope_alias_with_var_expansion,
           test_successful_access_with_a_token_that_uses_single_scope_alias_in_extra_scope_source_field,
           test_successful_access_with_a_token_that_uses_multiple_scope_aliases_in_extra_scope_source_field,
+          test_successful_access_with_a_token_that_uses_multiple_scope_aliases_in_extra_scope_source_field_list_form,
           normalize_token_scope_with_additional_scopes_complex_claims,
           test_successful_access_with_a_token_that_uses_single_scope_alias_in_scope_field_and_custom_scope_prefix,
           test_missing_required_exp_claim_per_resource_server,
@@ -1080,6 +1081,55 @@ test_successful_access_with_a_token_that_uses_multiple_scope_aliases_in_extra_sc
     Token    = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_sub(
         ?UTIL_MOD:token_with_scope_alias_in_claim_field(Claims, [<<"unrelated">>]),
             Username), Jwk),
+
+    {ok, AuthUser} = user_login_authentication(Username, [{password, Token}]),
+    assert_vhost_access_granted(AuthUser, VHost),
+    assert_vhost_access_denied(AuthUser, <<"some-other-vhost">>),
+
+    assert_resource_access_granted(AuthUser, VHost, <<"one">>, configure),
+    assert_resource_access_granted(AuthUser, VHost, <<"one">>, read),
+    assert_resource_access_granted(AuthUser, VHost, <<"two">>, read),
+    assert_resource_access_granted(AuthUser, VHost, <<"two">>, write),
+    assert_resource_access_denied(AuthUser, VHost, <<"three">>, configure),
+    assert_resource_access_denied(AuthUser, VHost, <<"three">>, read),
+    assert_resource_access_denied(AuthUser, VHost, <<"three">>, write),
+
+    application:unset_env(rabbitmq_auth_backend_oauth2, scope_aliases),
+    application:unset_env(rabbitmq_auth_backend_oauth2, key_config).
+
+test_successful_access_with_a_token_that_uses_multiple_scope_aliases_in_extra_scope_source_field_list_form(_) ->
+    Jwk = ?UTIL_MOD:fixture_jwk(),
+    UaaEnv = [{signing_keys, #{<<"token-key">> => {map, Jwk}}}],
+    set_env(key_config, UaaEnv),
+    set_env(extra_scopes_source, [[<<"https://example.com/claims">>, <<"scope">>],
+                                  [<<"claims">>]]),
+    Role1 = <<"client-aliases-1">>,
+    Role2 = <<"client-aliases-2">>,
+    Role3 = <<"client-aliases-3">>,
+    set_env(scope_aliases, #{
+        Role1 => [
+            <<"rabbitmq.configure:vhost/one">>
+        ],
+        Role2 => [
+            <<"rabbitmq.write:vhost/two">>
+        ],
+        Role3 => [
+            <<"rabbitmq.read:vhost/one">>,
+            <<"rabbitmq.read:vhost/two">>,
+            <<"rabbitmq.read:vhost/two/abc">>
+        ]
+    }),
+
+    VHost = <<"vhost">>,
+    Username = <<"username">>,
+    %% Role1 lives under the URI-namespaced nested claim,
+    %% Role2 and Role3 live under the flat `claims` claim.
+    Token0   = ?UTIL_MOD:token_with_sub(
+        ?UTIL_MOD:token_with_scope_alias_in_claim_field([Role2, Role3], [<<"unrelated">>]),
+        Username),
+    Token1   = maps:put(<<"https://example.com/claims">>,
+                        #{<<"scope">> => [Role1]}, Token0),
+    Token    = ?UTIL_MOD:sign_token_hs(Token1, Jwk),
 
     {ok, AuthUser} = user_login_authentication(Username, [{password, Token}]),
     assert_vhost_access_granted(AuthUser, VHost),
