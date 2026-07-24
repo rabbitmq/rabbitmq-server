@@ -41,17 +41,23 @@ init_per_suite(Config) ->
         {rmq_nodename_suffix, ?MODULE},
         {rmq_nodes_count, 2}
     ]),
-    rabbit_ct_helpers:run_setup_steps(Config1, rabbit_ct_broker_helpers:setup_steps()).
+    rabbit_ct_helpers:run_setup_steps(Config1,
+        rabbit_ct_broker_helpers:setup_steps() ++
+        rabbit_ct_client_helpers:setup_steps()).
 
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config, rabbit_ct_broker_helpers:teardown_steps()).
 
 init_per_testcase(Testcase, Config) ->
-    %% Create some users
-    http_put(Config, "/users/test_admin", [{password, <<"test_admin">>}, {tags, <<"administrator">>}], {group, '2xx'}),
-    http_put(Config, "/users/test_user_a", [{password, <<"test_user_a">>}, {tags, <<"management">>}], {group, '2xx'}),
-    http_put(Config, "/users/test_user_b", [{password, <<"test_user_b">>}, {tags, <<"management">>}], {group, '2xx'}),
-    
+    %% Ensure the management HTTP listener is up
+    rabbit_ct_helpers:await_condition(fun() ->
+        try
+            rabbit_mgmt_test_util:http_get(Config, "/overview"),
+            true
+        catch _:_ ->
+            false
+        end
+    end),
     %% Set default configs via rpc
     %% We set sessions_enabled = true for all tests EXCEPT feature_disabled_test
     Enabled = Testcase =/= feature_disabled_test,
@@ -81,13 +87,18 @@ init_per_testcase(Testcase, Config) ->
             rpc(Config, N1, application, start, [rabbitmq_management]),
             rpc(Config, N2, application, start, [rabbitmq_management])
     end,
-    Config.
 
-end_per_testcase(_Testcase, Config) ->
+    %% Create some users AFTER the server is back up and running
+    http_put(Config, "/users/test_admin", [{password, <<"test_admin">>}, {tags, <<"administrator">>}], {group, '2xx'}),
+    http_put(Config, "/users/test_user_a", [{password, <<"test_user_a">>}, {tags, <<"management">>}], {group, '2xx'}),
+    http_put(Config, "/users/test_user_b", [{password, <<"test_user_b">>}, {tags, <<"management">>}], {group, '2xx'}),
+    rabbit_ct_helpers:testcase_started(Config, Testcase).
+
+end_per_testcase(Testcase, Config) ->
     http_delete(Config, "/users/test_admin", {group, '2xx'}),
     http_delete(Config, "/users/test_user_a", {group, '2xx'}),
     http_delete(Config, "/users/test_user_b", {group, '2xx'}),
-    Config.
+    rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
 feature_disabled_test(Config) ->
     %% POST
