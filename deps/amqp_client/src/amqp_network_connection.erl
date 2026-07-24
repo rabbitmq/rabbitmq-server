@@ -9,6 +9,7 @@
 -module(amqp_network_connection).
 
 -include("amqp_client_internal.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -behaviour(amqp_gen_connection).
 -export([init/0, terminate/2, connect/4, do/2, open_channel_args/1, i/2,
@@ -65,7 +66,9 @@ handle_message(heartbeat_timeout, State) ->
 handle_message(closing_timeout, State = #state{closing_reason = Reason}) ->
     {stop, Reason, State};
 handle_message({'EXIT', Pid, Reason}, State) ->
-    {stop, rabbit_misc:format("stopping because dependent process ~tp died: ~tp", [Pid, Reason]), State};
+    ?LOG_WARNING("Connection (~tp): closing because dependent process ~tp died: ~tp",
+                 [self(), Pid, Reason]),
+    {stop, {shutdown, {dependent_process_died, Pid, Reason}}, State};
 %% see http://erlang.org/pipermail/erlang-bugs/2012-June/002933.html
 handle_message({Ref, {error, Reason}},
                State = #state{waiting_socket_close = Waiting,
