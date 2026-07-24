@@ -127,6 +127,9 @@ rabbitmq-server-*.tar.xz
 rabbitmq-server-*.zip
 secondary_dist/
 
+# RabbitMQ javascript files generated from EJS templates 
+deps/*/priv/www/js/*-ejs.js 
+
 # Trace tools output.
 *-ttb
 *.ti
