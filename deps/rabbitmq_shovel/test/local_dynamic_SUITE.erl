@@ -152,13 +152,24 @@ local_to_local_stream_no_ack(Config) ->
 local_to_local_delete_dest_queue(Config) ->
     Src = ?config(srcq, Config),
     Dest = ?config(destq, Config),
+    %% With the default (non-predeclared) destination, the shovel
+    %% auto-recreates the deleted queue and goes back to `running'
+    %% on its very next (immediate) reconnect attempt, so the
+    %% `{terminated, dest_queue_down}' status below is never reliably
+    %% observable. Predeclare the destination and tell the shovel not
+    %% to create it itself, so that every reconnect attempt keeps
+    %% failing (with a stable `{terminated, "failed to connect to
+    %% destination"}' status) instead of racing the shovel's own
+    %% automatic recovery.
+    declare_queue(Config, <<"/">>, Dest),
     with_amqp10_session(Config,
       fun (Sess) ->
              shovel_test_utils:set_param(Config, ?PARAM,
                                           [{<<"src-protocol">>, <<"local">>},
                                            {<<"src-queue">>, Src},
                                            {<<"dest-protocol">>, <<"local">>},
-                                           {<<"dest-queue">>, Dest}
+                                           {<<"dest-queue">>, Dest},
+                                           {<<"dest-predeclared">>, true}
                                           ]),
               SrcAddress = rabbitmq_amqp_address:queue(Src),
               DestAddress = rabbitmq_amqp_address:queue(Dest),
@@ -169,7 +180,9 @@ local_to_local_delete_dest_queue(Config) ->
                           30000),
               rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_queue,
                                            [Dest, <<"/">>]),
-              ?awaitMatch([{_Name, dynamic, {terminated, dest_queue_down}, _, _}],
+              ?awaitMatch([{_Name, dynamic,
+                            {terminated, "failed to connect to destination"},
+                            _, _}],
                           rabbit_ct_broker_helpers:rpc(Config, 0,
                                                        rabbit_shovel_status, status, []),
                           30000)
