@@ -564,12 +564,12 @@ pop_pending(State = #{dest := Dest}) ->
     end.
 
 make_conn_and_chan([], {VHost, Name} = _ShovelName) ->
-    ?LOG_ERROR(
+    ?LOG_WARNING(
           "Shovel '~ts' in vhost '~ts' has no more URIs to try for connection",
           [Name, VHost]),
     erlang:error(failed_to_connect_using_provided_uris);
 make_conn_and_chan([], ShovelName) ->
-    ?LOG_ERROR(
+    ?LOG_WARNING(
           "Shovel '~ts' has no more URIs to try for connection",
           [ShovelName]),
     erlang:error(failed_to_connect_using_provided_uris);
@@ -577,7 +577,7 @@ make_conn_and_chan(URIs, ShovelName) ->
     try do_make_conn_and_chan(URIs, ShovelName) of
         Val -> Val
     catch throw:{error, Reason, URI} ->
-        log_connection_failure(Reason, URI, ShovelName),
+        rabbit_shovel_util:log_connection_failure(Reason, URI, ShovelName),
         make_conn_and_chan(lists:usort(URIs -- [URI]), ShovelName)
     end.
 
@@ -596,38 +596,6 @@ do_make_conn_and_chan(URIs, ShovelName) ->
         {error, Reason} ->
             throw({error, Reason, URI})
     end.
-
-log_connection_failure(Reason, URI, {VHost, Name} = _ShovelName) ->
-    ?LOG_ERROR(
-          "Shovel '~ts' in vhost '~ts' failed to connect (URI: ~ts): ~ts",
-      [Name, VHost, amqp_uri:remove_credentials(URI), human_readable_connection_error(Reason)]);
-log_connection_failure(Reason, URI, ShovelName) ->
-    ?LOG_ERROR(
-          "Shovel '~ts' failed to connect (URI: ~ts): ~ts",
-          [ShovelName, amqp_uri:remove_credentials(URI), human_readable_connection_error(Reason)]).
-
-human_readable_connection_error({auth_failure, Msg}) ->
-    Msg;
-human_readable_connection_error(not_allowed) ->
-    "access to target virtual host was refused";
-human_readable_connection_error(unknown_host) ->
-    "unknown host (failed to resolve hostname)";
-human_readable_connection_error(econnrefused) ->
-    "connection to target host was refused (ECONNREFUSED)";
-human_readable_connection_error(econnreset) ->
-    "connection to target host was reset by peer (ECONNRESET)";
-human_readable_connection_error(etimedout) ->
-    "connection to target host timed out (ETIMEDOUT)";
-human_readable_connection_error(ehostunreach) ->
-    "target host is unreachable (EHOSTUNREACH)";
-human_readable_connection_error(nxdomain) ->
-    "target hostname cannot be resolved (NXDOMAIN)";
-human_readable_connection_error(eacces) ->
-    "connection to target host failed with EACCES. "
-    "This may be due to insufficient RabbitMQ process permissions or "
-    "a reserved IP address used as destination";
-human_readable_connection_error(Other) ->
-    rabbit_misc:format("~tp", [Other]).
 
 get_connection_name(ShovelName) when is_atom(ShovelName) ->
     Prefix = <<"Shovel ">>,
