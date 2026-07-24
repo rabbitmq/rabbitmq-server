@@ -348,6 +348,19 @@ error_frame(Condition, Fmt, Args) ->
     #'v1_0.error'{condition = Condition,
                   description = {utf8, Description}}.
 
+handle_exception(State = #v1{connection_state = CS}, _Channel,
+                 Error = #'v1_0.error'{description =
+                                       {utf8, <<"Connection forced: ", Explanation/binary>>}})
+  when ?IS_RUNNING(State) orelse CS =:= closing ->
+    %% Only ever raised by terminate/2 when the connection is deliberately
+    %% closed by an operator or by the broker itself (e.g. rabbitmqctl
+    %% close_connection, the management UI, maintenance mode draining, or
+    %% a node-wide shutdown) - never a client protocol violation, so this
+    %% does not warrant `error'-level logging. Mirrors the equivalent
+    %% AMQP 0-9-1 handling for `connection_forced' in
+    %% rabbit_reader:log_hard_error/3.
+    ?LOG_WARNING("Closing AMQP 1.0 connection ~tp: ~ts", [self(), Explanation]),
+    close(Error, State);
 handle_exception(State = #v1{connection_state = closed}, Channel,
                  #'v1_0.error'{description = {utf8, Desc}}) ->
     ?LOG_ERROR("Error on AMQP 1.0 connection ~tp (~tp), channel number ~b:~n~tp",
