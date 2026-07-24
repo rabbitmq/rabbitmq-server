@@ -242,6 +242,9 @@ function setup_constant_events() {
 }
 
 function setup_form_events() {
+    $(document).on('keypress', '.pagination_class_input', function(e) {
+        return isNumberKey(e);
+    });
     $(document).on('click', '#ff-enable-all-button', function() {
         enable_all_stable_feature_flags(this);
     });
