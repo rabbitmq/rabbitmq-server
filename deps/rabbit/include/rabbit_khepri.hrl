@@ -24,6 +24,14 @@
 -define(RABBITMQ_KHEPRI_MAINTENANCE_PATH(Node),
         ?RABBITMQ_KHEPRI_ROOT_PATH([node_maintenance, Node])).
 
+-define(RABBITMQ_KHEPRI_NODE_PATH(Node),
+        ?RABBITMQ_KHEPRI_NODE_PATH(Node, [])).
+-define(RABBITMQ_KHEPRI_NODE_PATH(Node, Rest),
+        ?RABBITMQ_KHEPRI_ROOT_PATH([nodes, Node | Rest])).
+
+-define(RABBITMQ_KHEPRI_NODE_METADATA_PATH(Node),
+        ?RABBITMQ_KHEPRI_NODE_PATH(Node, [node_metadata])).
+
 -define(RABBITMQ_KHEPRI_GLOBAL_RUNTIME_PARAM_PATH(Key),
         ?RABBITMQ_KHEPRI_ROOT_PATH([runtime_params, Key])).
 

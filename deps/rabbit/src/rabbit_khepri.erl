@@ -96,6 +96,7 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -include("include/rabbit_khepri.hrl").
+-include("include/node_metadata.hrl").
 
 %% Initialisation.
 -export([setup/0,
@@ -189,8 +190,10 @@
 -export([topic_binding_projection_v5_enable/1,
          topic_binding_projection_v5_post_enable/1]).
 
+-export([register_projections/0]).
+
 -ifdef(TEST).
--export([register_projections/0,
+-export([
          expand_mnesia_migrations/1,
          mnesia_tables_from_migrations/1]).
 -endif.
@@ -1343,6 +1346,7 @@ register_projections() ->
                fun register_rabbit_bindings_projection/0,
                fun register_rabbit_route_by_source_key_projection/0,
                fun register_rabbit_route_by_source_projection/0,
+               fun register_rabbit_node_metadata_projection/0,
                fun register_rabbit_topic_binding_projection/0],
     rabbit_misc:for_each_while_ok(
       fun(RegisterFun) ->
@@ -1433,6 +1437,13 @@ register_rabbit_user_permissions_projection() ->
                     _VHost = ?KHEPRI_WILDCARD_STAR),
     KeyPos = #user_permission.user_vhost,
     register_simple_projection(Name, PathPattern, KeyPos, false).
+
+register_rabbit_node_metadata_projection() ->
+    Name = rabbit_khepri_node_metadata,
+    PathPattern = rabbit_db_node_metadata:khepri_node_metadata_path(
+                    _NodeName = ?KHEPRI_WILDCARD_STAR),
+    KeyPos = #node_metadata.node,
+    register_simple_projection(Name, PathPattern, KeyPos, true).
 
 register_simple_projection(Name, PathPattern, KeyPos, ReadConcurrency) ->
     Options = #{keypos => KeyPos,
