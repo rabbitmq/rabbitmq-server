@@ -105,9 +105,20 @@ running_first(Nodes, RunningNodes) ->
                                           member_nodes := [node()],
                                           member_azs   := [binary() | undefined],
                                           missing_azs  := [binary()]}].
+%% Uses each queue's own effective tag key (policy, then queue argument, then
+%% cluster-wide configuration), matching the precedence used by the actual
+%% member placement logic in rabbit_queue_location.
 queues_not_fully_az_covered() ->
-    TagKey = application:get_env(rabbit, quorum_queue_member_placement_tag, undefined),
-    queues_not_fully_az_covered(TagKey).
+    Nodes = rabbit_nodes:list_members(),
+    lists:filtermap(
+      fun(Q) ->
+              case amqqueue:get_type(Q) =:= rabbit_quorum_queue andalso
+                   rabbit_queue_location:placement_tag_key(Q) of
+                  undefined -> false;
+                  false -> false;
+                  TagKey -> queue_az_coverage(Q, Nodes, TagKey)
+              end
+      end, rabbit_amqqueue:list()).
 
 -spec queues_not_fully_az_covered(binary() | undefined) ->
     [#{queue        := rabbit_types:r(queue),
@@ -118,24 +129,48 @@ queues_not_fully_az_covered(undefined) ->
     [];
 queues_not_fully_az_covered(TagKey) ->
     Nodes = rabbit_nodes:list_members(),
+    lists:filtermap(
+      fun(Q) ->
+              amqqueue:get_type(Q) =:= rabbit_quorum_queue andalso
+              queue_az_coverage(Q, Nodes, TagKey)
+      end, rabbit_amqqueue:list()).
+
+%% Returns `{true, Coverage}' if Q is missing members in one or more AZs,
+%% `false' otherwise.
+queue_az_coverage(Q, Nodes, TagKey) ->
     NodeToAZ = ?MODULE:node_tags_for_nodes(Nodes, TagKey),
     AllAZs = lists:usort([AZ || _ := AZ <- NodeToAZ, AZ =/= undefined]),
-    [#{queue => amqqueue:get_name(Q),
-       member_nodes => MemberNodes,
-       member_azs => MemberAZs,
-       missing_azs => MissingAZs}
-     || Q <- rabbit_amqqueue:list(),
-        amqqueue:get_type(Q) =:= rabbit_quorum_queue,
-        MemberNodes <- [rabbit_quorum_queue:get_replicas(Q)],
-        MemberAZs   <- [lists:usort([maps:get(N, NodeToAZ, undefined)
-                                     || N <- MemberNodes, maps:is_key(N, NodeToAZ)])],
-        MissingAZs  <- [AllAZs -- MemberAZs],
-        MissingAZs  =/= []].
+    MemberNodes = rabbit_quorum_queue:get_replicas(Q),
+    MemberAZs = lists:usort([maps:get(N, NodeToAZ, undefined)
+                             || N <- MemberNodes, maps:is_key(N, NodeToAZ)]),
+    case AllAZs -- MemberAZs of
+        [] ->
+            false;
+        MissingAZs ->
+            {true, #{queue => amqqueue:get_name(Q),
+                     member_nodes => MemberNodes,
+                     member_azs => MemberAZs,
+                     missing_azs => MissingAZs}}
+    end.
 
+%% Uses each queue's own effective tag key (policy, then queue argument, then
+%% cluster-wide configuration), matching the precedence used by the actual
+%% member placement logic in rabbit_queue_location. Since different queues
+%% may resolve to different tag keys, nodes with no members are not included.
 -spec member_distribution_per_az() -> #{binary() | undefined => #{node() => non_neg_integer()}}.
 member_distribution_per_az() ->
-    TagKey = application:get_env(rabbit, quorum_queue_member_placement_tag, undefined),
-    member_distribution_per_az(TagKey).
+    Nodes = rabbit_nodes:list_running(),
+    lists:foldl(
+      fun(Q, Acc) ->
+              case amqqueue:get_type(Q) =:= rabbit_quorum_queue andalso
+                   rabbit_queue_location:placement_tag_key(Q) of
+                  undefined -> Acc;
+                  false -> Acc;
+                  TagKey ->
+                      NodeToAZ = ?MODULE:node_tags_for_nodes(Nodes, TagKey),
+                      add_replicas_to_az_counts(Q, NodeToAZ, Acc)
+              end
+      end, #{}, rabbit_amqqueue:list()).
 
 -spec member_distribution_per_az(binary() | undefined) ->
     #{binary() | undefined => #{node() => non_neg_integer()}}.
@@ -144,27 +179,28 @@ member_distribution_per_az(undefined) ->
 member_distribution_per_az(TagKey) ->
     Nodes = rabbit_nodes:list_running(),
     NodeToAZ = ?MODULE:node_tags_for_nodes(Nodes, TagKey),
-    NodeCounts = lists:foldl(
-                   fun(Q, Acc) ->
-                           case amqqueue:get_type(Q) of
-                               rabbit_quorum_queue ->
-                                   lists:foldl(fun(N, Acc2) ->
-                                                       maps:update_with(N, fun(C) -> C + 1 end, 1, Acc2)
-                                               end, Acc, rabbit_quorum_queue:get_replicas(Q));
-                               _ ->
-                                   Acc
-                           end
-                   end,
-                   #{N => 0 || N <- Nodes},
-                   rabbit_amqqueue:list()),
-    maps:fold(
-      fun(Node, Count, Acc) ->
-              AZ = maps:get(Node, NodeToAZ, undefined),
-              maps:update_with(AZ, fun(M) -> M#{Node => Count} end,
-                               #{Node => Count}, Acc)
-      end,
-      #{},
-      NodeCounts).
+    Acc0 = maps:fold(
+             fun(Node, AZ, Acc) ->
+                     maps:update_with(AZ, fun(M) -> M#{Node => 0} end, #{Node => 0}, Acc)
+             end, #{}, NodeToAZ),
+    lists:foldl(
+      fun(Q, Acc) ->
+              case amqqueue:get_type(Q) of
+                  rabbit_quorum_queue -> add_replicas_to_az_counts(Q, NodeToAZ, Acc);
+                  _ -> Acc
+              end
+      end, Acc0, rabbit_amqqueue:list()).
+
+add_replicas_to_az_counts(Q, NodeToAZ, Acc) ->
+    lists:foldl(
+      fun(N, Acc2) ->
+              AZ = maps:get(N, NodeToAZ, undefined),
+              maps:update_with(
+                AZ,
+                fun(M) -> maps:update_with(N, fun(C) -> C + 1 end, 1, M) end,
+                #{N => 1},
+                Acc2)
+      end, Acc, rabbit_quorum_queue:get_replicas(Q)).
 
 %% Returns #{Node => TagValue | undefined} for all Nodes.
 %% Uses rabbit_db_node_metadata (stored in Khepri) to retrieve node tags without RPCs.
