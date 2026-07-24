@@ -173,6 +173,11 @@
 -define(START_CLUSTER_RPC_TIMEOUT, 60_000). %% needs to be longer than START_CLUSTER_TIMEOUT
 -define(TICK_INTERVAL, 5000). %% the ra server tick time
 -define(DELETE_TIMEOUT, 5000).
+%% Default period after which the safety-net timer restores a queue that was
+%% blocked for a conditional delete but never had its previous state restored.
+%% Must comfortably exceed ?DELETE_TIMEOUT so a normally-running delete finishes
+%% first. Configurable via the quorum_queue_blocked_state_restore_timeout env.
+-define(BLOCKED_STATE_RESTORE_TIMEOUT, ?DELETE_TIMEOUT + 1_000).
 -define(MEMBER_CHANGE_TIMEOUT, 20_000).
 -define(SNAPSHOT_INTERVAL, 8192). %% the ra default is 4096
 %% setting a low default here to allow quorum queues to better chose themselves
@@ -1141,6 +1146,12 @@ with_queue_blocked(Q, Fun) ->
     QName = amqqueue:get_name(Q),
     PrevState = amqqueue:get_state(Q),
     _ = set_queue_state(QName, blocked),
+    %% Safety net: should this process fail to restore the previous state for
+    %% any reason (for example, it is killed mid-delete), an independent timer
+    %% process restores it after a timeout so the queue is not left blocked,
+    %% and rejecting publishes, indefinitely. It is cancelled on the normal
+    %% paths below where the state is restored (or the queue deleted) directly.
+    TimerPid = spawn_state_restore_timer(QName, PrevState),
     try Fun() of
         {ok, _} = Ok ->
             Ok;
@@ -1151,7 +1162,32 @@ with_queue_blocked(Q, Fun) ->
         Class:Reason:Stacktrace ->
             _ = set_queue_state(QName, PrevState),
             erlang:raise(Class, Reason, Stacktrace)
+    after
+        _ = cancel_state_restore_timer(TimerPid)
     end.
+
+%% Spawns an unlinked process that restores State after a configurable timeout
+%% unless it is cancelled first. It must not be linked to the caller: the whole
+%% point is to restore the state even when the caller dies without doing so.
+spawn_state_restore_timer(QName, State) ->
+    Timeout = blocked_state_restore_timeout(),
+    spawn(fun () ->
+                  receive
+                      cancel ->
+                          ok
+                  after Timeout ->
+                          _ = set_queue_state(QName, State),
+                          ok
+                  end
+          end).
+
+cancel_state_restore_timer(Pid) ->
+    Pid ! cancel,
+    ok.
+
+blocked_state_restore_timeout() ->
+    application:get_env(rabbit, quorum_queue_blocked_state_restore_timeout,
+                        ?BLOCKED_STATE_RESTORE_TIMEOUT).
 
 set_queue_state(QName, State) ->
     rabbit_amqqueue:update(QName,
