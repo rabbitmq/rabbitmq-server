@@ -17,45 +17,57 @@ all() ->
     ].
 
 init_per_suite(Config) ->
+    inets:start(),
     rabbit_ct_helpers:log_environment(),
     Config1 = rabbit_ct_helpers:set_config(Config, [
         {rmq_nodename_suffix, ?MODULE},
         {rmq_nodes_count, 1}
     ]),
-    rabbit_ct_helpers:run_setup_steps(Config1, rabbit_ct_broker_helpers:setup_steps()).
+    rabbit_ct_helpers:run_setup_steps(Config1,
+        rabbit_ct_broker_helpers:setup_steps() ++
+        rabbit_ct_client_helpers:setup_steps()).
 
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config, rabbit_ct_broker_helpers:teardown_steps()).
 
-init_per_testcase(_Testcase, Config) ->
+init_per_testcase(Testcase, Config) ->
     http_put(Config, "/users/test_user", [{password, <<"test_user">>}, {tags, <<"management">>}], {group, '2xx'}),
     http_put(Config, "/users/test_monitor", [{password, <<"test_monitor">>}, {tags, <<"monitoring">>}], {group, '2xx'}),
-    Config.
+    rabbit_ct_helpers:testcase_started(Config, Testcase).
 
-end_per_testcase(_Testcase, Config) ->
+end_per_testcase(Testcase, Config) ->
     http_delete(Config, "/users/test_user", {group, '2xx'}),
     http_delete(Config, "/users/test_monitor", {group, '2xx'}),
-    Config.
+    rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
 unauthorized_test(Config) ->
     %% Call endpoint with an unauthorized user (no management tag)
     %% Guest without valid password or totally unknown user will return 401
-    {ok, {{_Version, 401, _Reason}, _Headers, Body}} = rabbit_mgmt_test_util:req(get, 
-        rabbit_mgmt_test_util:uri_base(Config) ++ "/js/init.js", 
-        [], "unknown_user", "bad_password", []),
+    Headers = [rabbit_mgmt_test_util:auth_header("unknown_user", "bad_password")],
+    {ok, {{_Version, 401, _Reason}, _Headers, Body}} = rabbit_mgmt_test_util:req(Config, 0, get_static, "js/init.js", Headers),
     
     ?assertEqual(<<"Not authorized">>, iolist_to_binary(Body)),
     passed.
 
 init_js_settings_test(Config) ->
     %% Call the raw endpoint as a management user
-    {ok, {{_Version, 200, _Reason}, Headers, Body}} = rabbit_mgmt_test_util:req(get, 
-        rabbit_mgmt_test_util:uri_base(Config) ++ "/js/init.js", 
-        [], "test_user", "test_user", []),
+    Headers = [rabbit_mgmt_test_util:auth_header("test_user", "test_user")],
+    {ok, {{_Version, 200, _Reason}, ResponseHeaders, Body}} = rabbit_mgmt_test_util:req(Config, 0, get_static, "js/init.js", Headers),
         
     %% Check that the content type is javascript
-    ContentType = proplists:get_value("content-type", Headers),
+    ContentType = proplists:get_value("content-type", ResponseHeaders),
     ?assertEqual("application/javascript; charset=utf-8", ContentType),
+    
+    %% Verify headers correctly specify no-cache
+    CacheControl = proplists:get_value("cache-control", ResponseHeaders),
+    ?assertMatch({match, _}, re:run(list_to_binary(CacheControl), <<"no-cache">>)),
+    ?assertMatch({match, _}, re:run(list_to_binary(CacheControl), <<"no-store">>)),
+    
+    Pragma = proplists:get_value("pragma", ResponseHeaders),
+    ?assertEqual("no-cache", Pragma),
+    
+    Expires = proplists:get_value("expires", ResponseHeaders),
+    ?assertEqual("0", Expires),
     
     %% Convert body to binary for easy searching
     BodyBin = iolist_to_binary(Body),
@@ -72,9 +84,8 @@ init_js_settings_test(Config) ->
 
 init_js_monitor_nodes_test(Config) ->
     %% Call the raw endpoint as a monitoring user
-    {ok, {{_Version, 200, _Reason}, _Headers, Body}} = rabbit_mgmt_test_util:req(get, 
-        rabbit_mgmt_test_util:uri_base(Config) ++ "/js/init.js", 
-        [], "test_monitor", "test_monitor", []),
+    Headers = [rabbit_mgmt_test_util:auth_header("test_monitor", "test_monitor")],
+    {ok, {{_Version, 200, _Reason}, _Headers, Body}} = rabbit_mgmt_test_util:req(Config, 0, get_static, "js/init.js", Headers),
         
     BodyBin = iolist_to_binary(Body),
     
@@ -84,9 +95,8 @@ init_js_monitor_nodes_test(Config) ->
 
 init_js_no_monitor_no_nodes_test(Config) ->
     %% Call the raw endpoint as a normal management user
-    {ok, {{_Version, 200, _Reason}, _Headers, Body}} = rabbit_mgmt_test_util:req(get, 
-        rabbit_mgmt_test_util:uri_base(Config) ++ "/js/init.js", 
-        [], "test_user", "test_user", []),
+    Headers = [rabbit_mgmt_test_util:auth_header("test_user", "test_user")],
+    {ok, {{_Version, 200, _Reason}, _Headers, Body}} = rabbit_mgmt_test_util:req(Config, 0, get_static, "js/init.js", Headers),
         
     BodyBin = iolist_to_binary(Body),
     
