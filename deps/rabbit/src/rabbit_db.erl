@@ -75,7 +75,7 @@ init() ->
                #{domain => ?RMQLOG_DOMAIN_DB}),
 
             LocalTags = application:get_env(rabbit, node_tags, []),
-            rabbit_db_node_metadata:set(node(), #{node_tags => LocalTags}),
+            _ = rabbit_db_node_metadata:set(node(), #{node_tags => LocalTags}),
 
             init_finished(),
 

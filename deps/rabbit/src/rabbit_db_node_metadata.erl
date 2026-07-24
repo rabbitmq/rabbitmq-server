@@ -17,7 +17,6 @@
 -export([
          set/2,
          get/1,
-         get_consistent/1,
          delete/1
         ]).
 
@@ -31,19 +30,19 @@
 %% set().
 %% -------------------------------------------------------------------
 
--spec set(node(), map()) -> boolean().
+-spec set(node(), map()) -> ok | {error, any()}.
 %% @doc Sets the node metadata map for the given node.
 set(Node, Metadata) when is_map(Metadata) ->
     Path = khepri_node_metadata_path(Node),
     Record = #node_metadata{node = Node, metadata = Metadata},
     case rabbit_khepri:put(Path, Record) of
-        ok ->
-            true;
-        Error ->
+        ok = Ok ->
+            Ok;
+        {error, _} = Error ->
             ?LOG_WARNING("Failed to store node metadata for ~ts in Khepri: ~tp",
                          [Node, Error],
                          #{domain => ?RMQLOG_DOMAIN_DB}),
-            false
+            Error
     end.
 
 %% -------------------------------------------------------------------
@@ -66,33 +65,14 @@ get(Node) ->
     end.
 
 %% -------------------------------------------------------------------
-%% get_consistent().
-%% -------------------------------------------------------------------
-
--spec get_consistent(node()) -> map().
-%% @doc Returns the node metadata map for the given node using a consistent query.
-get_consistent(Node) ->
-    Path = khepri_node_metadata_path(Node),
-    Options = #{favor => consistency},
-    case rabbit_khepri:get(Path, Options) of
-        {ok, #node_metadata{metadata = Metadata}} ->
-            Metadata;
-        _ ->
-            #{}
-    end.
-
-%% -------------------------------------------------------------------
 %% delete().
 %% -------------------------------------------------------------------
 
--spec delete(node()) -> boolean().
+-spec delete(node()) -> ok | {error, any()}.
 %% @doc Deletes the node metadata for the given node.
 delete(Node) ->
     Path = khepri_node_metadata_path(Node),
-    case rabbit_khepri:delete(Path) of
-        ok -> true;
-        _ -> false
-    end.
+    rabbit_khepri:delete(Path).
 
 %% -------------------------------------------------------------------
 %% Khepri paths

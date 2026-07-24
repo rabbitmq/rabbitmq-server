@@ -1440,14 +1440,9 @@ register_rabbit_user_permissions_projection() ->
 register_rabbit_node_metadata_projection() ->
     Name = rabbit_khepri_node_metadata,
     PathPattern = rabbit_db_node_metadata:khepri_node_metadata_path(
-                    _WildcardNode = ?KHEPRI_WILDCARD_STAR),
-    Fun = fun([rabbitmq, node_metadata, _Node], #node_metadata{} = Record) ->
-                  Record
-          end,
-    Options = #{keypos => #node_metadata.node,
-                read_concurrency => true},
-    Projection = khepri_projection:new(Name, Fun, Options),
-    khepri:register_projection(?STORE_ID, PathPattern, Projection).
+                    _NodeName = ?KHEPRI_WILDCARD_STAR),
+    KeyPos = #node_metadata.node,
+    register_simple_projection(Name, PathPattern, KeyPos, true).
 
 register_simple_projection(Name, PathPattern, KeyPos, ReadConcurrency) ->
     Options = #{keypos => KeyPos,
