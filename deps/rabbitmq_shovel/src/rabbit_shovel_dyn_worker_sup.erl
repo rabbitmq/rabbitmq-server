@@ -43,13 +43,8 @@ init([Name, Config0]) ->
       {VHost, ShovelName} -> ?LOG_DEBUG("Shovel '~ts' in virtual host '~ts' will use reconnection delay of ~tp", [ShovelName, VHost, Delay]);
       ShovelName          -> ?LOG_DEBUG("Shovel '~ts' will use reconnection delay of ~ts", [ShovelName, Delay])
     end,
-    %% `transient` (rather than `permanent`) is used so that the supervisor
-    %% only logs a SUPERVISOR REPORT for genuinely abnormal terminations.
-    %% Expected disconnects (e.g. maintenance mode) are logged by the shovel
-    %% itself via rabbit_shovel_worker, which exits with {shutdown, restart}
-    %% in that case; `transient` still restarts on that reason, quietly.
     Restart = case Delay of
-        N when is_integer(N) andalso N > 0 -> {transient, N};
+        N when is_integer(N) andalso N > 0 -> {permanent, N};
         %% reconnect-delay = 0 means "do not reconnect"
         _                                  -> temporary
     end,
