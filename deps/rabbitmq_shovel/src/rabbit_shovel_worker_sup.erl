@@ -22,7 +22,7 @@ init([Name, Config]) ->
                    {rabbit_shovel_worker, start_link, [static, Name, Config]},
                    case Config of
                        #{reconnect_delay := N}
-                         when is_integer(N) andalso N > 0 -> {permanent, N};
+                         when is_integer(N) andalso N > 0 -> {transient, N};
                        _ -> temporary
                    end,
                    16#ffffffff,
