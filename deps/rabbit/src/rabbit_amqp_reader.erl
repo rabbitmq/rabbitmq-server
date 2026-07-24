@@ -394,6 +394,16 @@ handle_frame(Mode, Channel, Body, State) ->
                                ?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS,
                                "Access for user '~ts' was refused: insufficient permissions",
                                [Username]));
+        _:{inet_error, closed} ->
+            %% Most commonly hit replying to a peer-initiated close: the
+            %% peer's socket is already gone (e.g. it disconnected right
+            %% after sending its own close frame, before we could reply
+            %% with ours). There is nobody left to notify and nothing more
+            %% useful to do, so this does not warrant a full "Reader
+            %% error" stack trace at error level.
+            ?LOG_INFO("AMQP 1.0 connection ~tp: could not reply, "
+                      "peer's socket already closed", [self()]),
+            State#v1{connection_state = closed};
         _:Reason:Trace ->
             handle_exception(State,
                              Channel,
