@@ -936,8 +936,7 @@ function paginate_ui(pages, context, label){
     res += '<p id="filter-truncate"><span class="updatable">';
     res += '<span><label for="'+ context +'-pagesize"> Displaying ' + pages.item_count + '  item'+ ((pages.item_count > 1) ? 's' : '' ) + ' , page size up to: </label> ';
     res +=       ' <input id="'+ context +'-pagesize" data-page-start="1" class="pagination_class shortinput pagination_class_input" type="text" ';
-    res +=   'value = "' +  fmt_page_size_request(context, pages.page_size) +'"';
-    res +=   'onkeypress = "return isNumberKey(event)"> </input></span></p>';
+    res +=   'value = "' +  fmt_page_size_request(context, pages.page_size) +'"> </input></span></p>';
     res += '</tr>';
     res += '</div>';
     res += '</div>';
