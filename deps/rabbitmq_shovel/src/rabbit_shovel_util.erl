@@ -19,6 +19,7 @@
          validate_queue_args/2,
          validate_consumer_args/2,
          validate_delete_after/2,
+         validate_delete_after_duration/2,
          deobfuscate_value/1,
          deobfuscated_uris/2,
          obfuscated_uris/2,
@@ -270,6 +271,18 @@ validate_delete_after(_Name, N) when is_integer(N), N >= 0 -> ok;
 validate_delete_after(Name,  Term) ->
     {error, "~ts should be a number greater than or equal to 0, \"never\" or \"queue-length\", actually was "
      "~tp", [Name, Term]}.
+
+validate_delete_after_duration(Name, N) when is_integer(N), N > 0 ->
+    case rabbit_misc:check_expiry(N * 1000) of
+        ok ->
+            ok;
+        {error, {value_too_large, _}} ->
+            {error, "~ts is ~tp seconds, which exceeds the maximum supported "
+             "duration", [Name, N]}
+    end;
+validate_delete_after_duration(Name,  Term) ->
+    {error, "~ts should be a positive integer (seconds), actually was ~tp",
+     [Name, Term]}.
 
 deobfuscate_value(Value) ->
     credentials_obfuscation:decrypt(Value).
