@@ -112,9 +112,20 @@ open(Config0) ->
             {_, Reader, _, _} = lists:keyfind(reader, 1, Children),
             {_, Connection, _, _} = lists:keyfind(connection, 1, Children),
             {_, SessionsSup, _, _} = lists:keyfind(sessions, 1, Children),
-            set_other_procs(Connection, #{sessions_sup => SessionsSup,
-                                          reader => Reader}),
-            {ok, Connection};
+            %% The reader's socket connect (including DNS resolution) is
+            %% deliberately deferred until here, rather than done as part
+            %% of its own init/1: a hostname/connectivity failure is then
+            %% just a normal call reply instead of a supervisor start_error,
+            %% which OTP would otherwise always report.
+            case amqp10_client_frame_reader:connect(Reader) of
+                ok ->
+                    set_other_procs(Connection, #{sessions_sup => SessionsSup,
+                                                  reader => Reader}),
+                    {ok, Connection};
+                {error, _} = Error ->
+                    _ = supervisor:terminate_child(amqp10_client_sup, ConnSup),
+                    Error
+            end;
         Error ->
             Error
     end.
@@ -250,7 +261,7 @@ sasl_init_sent(info, {'DOWN', MRef, process, _Pid, _},
 hdr_sent(_EvtType, {protocol_header_received, 0, 1, 0, 0}, State) ->
     case send_open(State) of
         ok    -> {next_state, open_sent, State};
-        Error -> {stop, Error, State}
+        Error -> {stop, {shutdown, Error}, State}
     end;
 hdr_sent(_EvtType, {protocol_header_received, Protocol, Maj, Min,
                                 Rev}, State) ->
@@ -306,10 +317,11 @@ open_sent(_EvtType, {close, Reason}, State) ->
             %% timeout to give its partner a reasonable time to receive and process the close
             %% before giving up and simply closing the underlying transport mechanism)." [§2.4.3]
             {next_state, close_sent, State, {state_timeout, ?TIMEOUT, received_no_close_frame}};
-        {error, closed} ->
-            {stop, normal, State};
-        Error ->
-            {stop, Error, State}
+        {error, _} ->
+            %% Best-effort: the socket is already gone, for whatever
+            %% reason. There is nobody left to notify and nothing more
+            %% useful to do.
+            {stop, normal, State}
     end;
 open_sent(info, {'DOWN', MRef, process, _, _},
           #state{reader_m_ref = MRef}) ->
@@ -330,18 +342,33 @@ opened(_EvtType, {close, Reason}, State) ->
             %% timeout to give its partner a reasonable time to receive and process the close
             %% before giving up and simply closing the underlying transport mechanism)." [§2.4.3]
             {next_state, close_sent, State, {state_timeout, ?TIMEOUT, received_no_close_frame}};
-        {error, closed} ->
-            {stop, normal, State};
-        Error ->
-            {stop, Error, State}
+        {error, _} ->
+            %% Best-effort: the socket is already gone, for whatever
+            %% reason. There is nobody left to notify and nothing more
+            %% useful to do.
+            {stop, normal, State}
     end;
 opened(_EvtType, #'v1_0.close'{} = Close, State = #state{config = Config}) ->
     %% We receive the first close frame, reply and terminate.
     ok = notify_closed(Config, Close),
     case send_close(State, none) of
-        ok              -> {stop, normal, State};
-        {error, closed} -> {stop, normal, State};
-        Error           -> {stop, Error, State}
+        ok        -> {stop, normal, State};
+        {error, _} -> {stop, normal, State}
+    end;
+opened(_EvtType, {'EXIT', Pid, Reason}, State) ->
+    %% A linked process (e.g. the application that opened this connection)
+    %% died. Close the connection gracefully instead of lingering silently
+    %% or falling through to the generic "unexpected frame" clause below.
+    ?LOG_WARNING("Connection ~tp closing because dependent process ~tp died: ~tp",
+                 [self(), Pid, Reason]),
+    case send_close(State, Reason) of
+        ok ->
+            {next_state, close_sent, State, {state_timeout, ?TIMEOUT, received_no_close_frame}};
+        {error, _} ->
+            %% Best-effort: the socket is already gone, for whatever
+            %% reason. There is nobody left to notify and nothing more
+            %% useful to do.
+            {stop, normal, State}
     end;
 opened({call, From}, begin_session, State) ->
     {Ret, State1} = handle_begin_session(From, State),
@@ -394,8 +421,21 @@ terminate(Reason, _StateName, #state{connection_sup = Sup,
                                      config = Config}) ->
     ok = notify_closed(Config, Reason),
     case Reason of
-        normal -> sys:terminate(Sup, normal);
-        _      -> ok
+        normal ->
+            %% Tear down the rest of the connection's supervision tree
+            %% (reader, sessions) now that we're done: a quiet (`normal')
+            %% child termination is not cascaded to `one_for_all' siblings.
+            %%
+            %% This must not be a blocking call: `Sup' shutting down this
+            %% very process is part of its own termination, which can
+            %% never complete while we are still executing this callback,
+            %% so calling sys:terminate/2 (or supervisor:terminate_child/2)
+            %% directly here would deadlock both processes until they each
+            %% hit their 5-second timeout.
+            _ = spawn(fun() -> sys:terminate(Sup, normal) end),
+            ok;
+        _ ->
+            ok
     end.
 
 code_change(_OldVsn, StateName, State, _Extra) ->

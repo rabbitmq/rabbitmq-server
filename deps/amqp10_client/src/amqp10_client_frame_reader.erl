@@ -18,6 +18,7 @@
 
 %% API
 -export([start_link/2,
+         connect/1,
          set_connection/2,
          register_session/3,
          unregister_session/4]).
@@ -59,6 +60,18 @@ start_link(Sup, Config) ->
 
 %% @private
 %% @doc
+%% Connects the underlying socket (including DNS resolution).
+%%
+%% This is deliberately not done as part of init/1: failing there would
+%% fail amqp10_client_connection_sup's own child startup sequence, which
+%% makes OTP log an unsuppressible supervisor report for what is usually
+%% just an unreachable or misconfigured peer, rather than a bug.
+-spec connect(pid()) -> ok | {error, any()}.
+connect(Reader) ->
+    gen_statem:call(Reader, connect, infinity).
+
+%% @private
+%% @doc
 %% Passes the connection process PID to the reader process.
 %%
 %% This function is called when a connection supervision tree is
@@ -82,22 +95,10 @@ callback_mode() ->
 
 init([Sup, ConnConfig]) when is_map(ConnConfig) ->
     process_flag(trap_exit, true),
-    Port = maps:get(port, ConnConfig, 5672),
-    %% combined the list of `addresses' with the value of the original `address' option if provided
-    Addresses0 = maps:get(addresses, ConnConfig, []),
-    Addresses  = case maps:get(address, ConnConfig, undefined) of
-                     undefined -> Addresses0;
-                     Address   -> Addresses0 ++ [Address]
-                 end,
-    case connect_any(Addresses, Port, ConnConfig) of
-        {ok, Socket} ->
-            State = #state{connection_sup = Sup,
-                           socket = Socket,
-                           connection_config = ConnConfig},
-            {ok, expecting_connection_pid, State};
-        {error, Reason} ->
-            {stop, Reason}
-    end.
+    State = #state{connection_sup = Sup,
+                   socket = closed,
+                   connection_config = ConnConfig},
+    {ok, awaiting_connect, State}.
 
 connect_any([Address], Port, ConnConfig) ->
     amqp10_client_socket:connect(Address, Port, ConnConfig);
@@ -109,6 +110,27 @@ connect_any([Address | Addresses], Port, ConnConfig) ->
             R
     end.
 
+handle_event({call, From}, connect, awaiting_connect,
+             #state{connection_config = ConnConfig} = State) ->
+    Port = maps:get(port, ConnConfig, 5672),
+    %% combined the list of `addresses' with the value of the original `address' option if provided
+    Addresses0 = maps:get(addresses, ConnConfig, []),
+    Addresses  = case maps:get(address, ConnConfig, undefined) of
+                     undefined -> Addresses0;
+                     Address   -> Addresses0 ++ [Address]
+                 end,
+    case connect_any(Addresses, Port, ConnConfig) of
+        {ok, Socket} ->
+            State1 = State#state{socket = Socket},
+            {next_state, expecting_connection_pid, State1, [{reply, From, ok}]};
+        {error, Reason} ->
+            %% Stop quietly: this reader is a `transient' child and `normal'
+            %% is not reported by the supervisor, unlike a start_error would
+            %% have been. amqp10_client_connection:open/1 tears down the
+            %% rest of the connection's supervision tree once it sees the
+            %% `{error, _}' reply.
+            {stop_and_reply, normal, [{reply, From, {error, Reason}}], State}
+    end;
 handle_event(cast, {set_connection, ConnectionPid}, expecting_connection_pid,
              State=#state{socket = Socket}) ->
     ok = amqp10_client_connection:socket_ready(ConnectionPid, Socket),
