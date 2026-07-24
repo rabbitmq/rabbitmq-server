@@ -261,7 +261,7 @@ sasl_init_sent(info, {'DOWN', MRef, process, _Pid, _},
 hdr_sent(_EvtType, {protocol_header_received, 0, 1, 0, 0}, State) ->
     case send_open(State) of
         ok    -> {next_state, open_sent, State};
-        Error -> {stop, Error, State}
+        Error -> {stop, {shutdown, Error}, State}
     end;
 hdr_sent(_EvtType, {protocol_header_received, Protocol, Maj, Min,
                                 Rev}, State) ->
@@ -317,10 +317,11 @@ open_sent(_EvtType, {close, Reason}, State) ->
             %% timeout to give its partner a reasonable time to receive and process the close
             %% before giving up and simply closing the underlying transport mechanism)." [§2.4.3]
             {next_state, close_sent, State, {state_timeout, ?TIMEOUT, received_no_close_frame}};
-        {error, closed} ->
-            {stop, normal, State};
-        Error ->
-            {stop, Error, State}
+        {error, _} ->
+            %% Best-effort: the socket is already gone, for whatever
+            %% reason. There is nobody left to notify and nothing more
+            %% useful to do.
+            {stop, normal, State}
     end;
 open_sent(info, {'DOWN', MRef, process, _, _},
           #state{reader_m_ref = MRef}) ->
@@ -341,18 +342,18 @@ opened(_EvtType, {close, Reason}, State) ->
             %% timeout to give its partner a reasonable time to receive and process the close
             %% before giving up and simply closing the underlying transport mechanism)." [§2.4.3]
             {next_state, close_sent, State, {state_timeout, ?TIMEOUT, received_no_close_frame}};
-        {error, closed} ->
-            {stop, normal, State};
-        Error ->
-            {stop, Error, State}
+        {error, _} ->
+            %% Best-effort: the socket is already gone, for whatever
+            %% reason. There is nobody left to notify and nothing more
+            %% useful to do.
+            {stop, normal, State}
     end;
 opened(_EvtType, #'v1_0.close'{} = Close, State = #state{config = Config}) ->
     %% We receive the first close frame, reply and terminate.
     ok = notify_closed(Config, Close),
     case send_close(State, none) of
-        ok              -> {stop, normal, State};
-        {error, closed} -> {stop, normal, State};
-        Error           -> {stop, Error, State}
+        ok        -> {stop, normal, State};
+        {error, _} -> {stop, normal, State}
     end;
 opened(_EvtType, {'EXIT', Pid, Reason}, State) ->
     %% A linked process (e.g. the application that opened this connection)
@@ -363,10 +364,11 @@ opened(_EvtType, {'EXIT', Pid, Reason}, State) ->
     case send_close(State, Reason) of
         ok ->
             {next_state, close_sent, State, {state_timeout, ?TIMEOUT, received_no_close_frame}};
-        {error, closed} ->
-            {stop, normal, State};
-        Error ->
-            {stop, Error, State}
+        {error, _} ->
+            %% Best-effort: the socket is already gone, for whatever
+            %% reason. There is nobody left to notify and nothing more
+            %% useful to do.
+            {stop, normal, State}
     end;
 opened({call, From}, begin_session, State) ->
     {Ret, State1} = handle_begin_session(From, State),
