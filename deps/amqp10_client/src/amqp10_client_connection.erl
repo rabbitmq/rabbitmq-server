@@ -327,7 +327,7 @@ open_sent(_EvtType, #'v1_0.close'{} = Close,
           #state{config = Config,
                  pending_session_reqs = PendingSessionReqs} = State) ->
     %% The peer refused the connection, e.g. due to an unknown virtual
-    %% host or a connection limit. An expected failure: no OTP-level noise.
+    %% host or a connection limit.
     ok = notify_closed(Config, Close),
     [gen_statem:reply(From, {error, closed}) || From <- PendingSessionReqs],
     _ = send_close(State, none),
