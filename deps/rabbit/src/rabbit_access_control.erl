@@ -411,25 +411,38 @@ check_user_id0(ClaimedUserName, #user{username = ActualUserName,
 update_state(User = #user{authz_backends = Backends0}, NewState) ->
     %% N.B.: we use foldl/3 and prepending, so the final list of
     %% backends is in reverse order from the original list.
+    %%
+    %% Rebuild `#user.tags` from the refreshed backends. A refresh can revoke a
+    %% tag, for example `impersonator`, which is honoured by `check_user_id/2`,
+    %% so a stale tag set must not survive the refresh.
     Backends = lists:foldl(
-                fun({Module, Impl}, {ok, Acc}) ->
+                fun({Module, Impl}, {ok, Acc, TagsAcc, Refreshed}) ->
                         AuthUser = auth_user(User, Impl),
                         case Module:expiry_timestamp(AuthUser) of
                           never ->
-                            {ok, [{Module, Impl} | Acc]};
+                            {ok, [{Module, Impl} | Acc], TagsAcc, Refreshed};
                           _  ->
                             case Module:update_state(AuthUser, NewState) of
-                              {ok, #auth_user{impl = Impl1}} ->
-                                {ok, [{Module, Impl1} | Acc]};
+                              {ok, #auth_user{impl = Impl1, tags = Tags1}} ->
+                                {ok, [{Module, Impl1} | Acc], TagsAcc ++ Tags1, true};
                               Else -> Else
                             end
                         end;
                    (_, {error, _} = Err)      -> Err;
                    (_, {refused, _, _} = Err) -> Err
-                end, {ok, []}, Backends0),
+                end, {ok, [], [], false}, Backends0),
     case Backends of
-      {ok, Pairs} -> {ok, User#user{authz_backends = lists:reverse(Pairs)}};
-      Else        -> Else
+      {ok, Pairs, RefreshedTags, Refreshed} ->
+        %% This branches on `Refreshed` rather than on the tag list being
+        %% empty, because a refresh to a token with no tags must still clear the
+        %% old tags.
+        Tags = case Refreshed of
+                   true  -> RefreshedTags;
+                   false -> User#user.tags
+               end,
+        {ok, User#user{authz_backends = lists:reverse(Pairs), tags = Tags}};
+      Else ->
+        Else
     end.
 
 -spec permission_cache_can_expire(User :: rabbit_types:user()) -> boolean().
