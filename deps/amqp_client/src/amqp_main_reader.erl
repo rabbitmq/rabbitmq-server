@@ -176,4 +176,6 @@ handle_error({malformed_header, Version},  State = #state{connection = Conn}) ->
     {noreply, State};
 handle_error(Reason, State = #state{connection = Conn}) ->
     Conn ! {socket_error, Reason},
-    {stop, {socket_error, Reason}, State}.
+    %% The connection stops as a consequence; a second, abnormal exit
+    %% reason here would only add redundant crash and supervisor reports.
+    {stop, {shutdown, {socket_error, Reason}}, State}.

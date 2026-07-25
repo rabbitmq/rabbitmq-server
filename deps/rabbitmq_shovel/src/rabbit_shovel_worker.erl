@@ -202,6 +202,8 @@ terminate(shutdown, State = #state{name = Name}) ->
     close_connections(State),
     rabbit_shovel_status:remove(Name),
     ok;
+terminate({shutdown, socket_closed_unexpectedly}, State) ->
+    terminate(socket_closed_unexpectedly, State);
 terminate(socket_closed_unexpectedly, State = #state{name = Name}) ->
     ?LOG_WARNING("Shovel ~ts is stopping because of the socket closed unexpectedly",
                  [human_readable_name(Name)]),
