@@ -101,13 +101,27 @@ handle_cast(init_shovel, State = #state{config = Config}) ->
     %% if we try to shut down while waiting for a connection to be
     %% established then we don't block
     process_flag(trap_exit, true),
-    Config1 = rabbit_shovel_behaviour:init_dest(Config),
-    Config2 = rabbit_shovel_behaviour:init_source(Config1),
-    ?LOG_DEBUG("Shovel ~ts has finished setting up its topology",
-               [human_readable_name(maps:get(name, Config2))]),
-    State1 = State#state{config = Config2},
-    ok = report_running(State1),
-    {noreply, State1};
+    try
+        Config1 = rabbit_shovel_behaviour:init_dest(Config),
+        Config2 = rabbit_shovel_behaviour:init_source(Config1),
+        ?LOG_DEBUG("Shovel ~ts has finished setting up its topology",
+                   [human_readable_name(maps:get(name, Config2))]),
+        State1 = State#state{config = Config2},
+        ok = report_running(State1),
+        {noreply, State1}
+    catch
+        exit:{shutdown, autodelete} ->
+            %% `init_source/1` exits with this reason when a 'delete-after'
+            %% shovel has nothing left to transfer; see `terminate/2`.
+            {stop, {shutdown, autodelete}, State};
+        E:R ->
+            %% Topology setup failed, e.g. a predeclared queue is missing.
+            %% Same handling as the connect phases above.
+            ?LOG_WARNING("Shovel ~ts could not set up its topology: ~p ~p",
+                         [human_readable_name(maps:get(name, Config)), E, R]),
+            report_terminated(State, "failed to set up topology"),
+            {stop, {shutdown, restart}, State}
+    end;
 handle_cast(Msg, State) ->
     handle_msg(Msg, State).
 
