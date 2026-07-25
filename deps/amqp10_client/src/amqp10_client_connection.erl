@@ -323,6 +323,15 @@ open_sent(_EvtType, {close, Reason}, State) ->
             %% useful to do.
             {stop, normal, State}
     end;
+open_sent(_EvtType, #'v1_0.close'{} = Close,
+          #state{config = Config,
+                 pending_session_reqs = PendingSessionReqs} = State) ->
+    %% The peer refused the connection, e.g. due to an unknown virtual
+    %% host or a connection limit. An expected failure: no OTP-level noise.
+    ok = notify_closed(Config, Close),
+    [gen_statem:reply(From, {error, closed}) || From <- PendingSessionReqs],
+    _ = send_close(State, none),
+    {stop, normal, State};
 open_sent(info, {'DOWN', MRef, process, _, _},
           #state{reader_m_ref = MRef}) ->
     {stop, {shutdown, reader_down}}.
