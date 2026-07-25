@@ -22,7 +22,8 @@
 
 -record(state, {name :: binary() | {rabbit_types:vhost(), binary()},
                 type :: static | dynamic,
-                config :: rabbit_shovel_behaviour:state(),
+                %% 'undefined' after a dynamic Shovel's parameters fail to parse
+                config :: rabbit_shovel_behaviour:state() | undefined,
                 last_reported_status = {running, #{}} :: {rabbit_shovel_status:blocked_status(), rabbit_shovel_status:metrics()}}).
 
 start_link(Type, Name, Config) ->
@@ -45,20 +46,8 @@ maybe_start_link(_, Type, Name, Config) ->
 %% Gen Server Implementation
 %%---------------------------
 
-init([Type, Name, Config0]) ->
+init([Type, Name, Config]) ->
     logger:set_process_metadata(#{domain => ?RMQLOG_DOMAIN_SHOVEL}),
-    Config = case Type of
-                static ->
-                     Config0;
-                dynamic ->
-                    ClusterName = rabbit_nodes:cluster_name(),
-                     %% TODO It could handle errors while parsing
-                     %% (i.e. missing predeclared queues) and stop nicely
-                     %% without long stacktraces
-                    {ok, Mod} = rabbit_registry:lookup_module(runtime_parameter, shovel),
-                    {ok, Conf} = Mod:parse(Name, ClusterName, Config0),
-                    Conf
-            end,
     ?LOG_DEBUG("Initialising a Shovel ~ts of type '~ts'", [human_readable_name(Name), Type]),
     gen_server2:cast(self(), init),
     {ok, #state{name = Name, type = Type, config = Config}}.
@@ -66,23 +55,28 @@ init([Type, Name, Config0]) ->
 handle_call(_Msg, _From, State) ->
     {noreply, State}.
 
-handle_cast(init, State = #state{config = Config0}) ->
-    ?LOG_DEBUG("Shovel ~ts is reporting its status", [human_readable_name(State#state.name)]),
-    rabbit_shovel_status:report(State#state.name, State#state.type, starting),
-    ?LOG_INFO("Shovel ~ts will now try to connect...", [human_readable_name(State#state.name)]),
-    try rabbit_shovel_behaviour:connect_source(Config0) of
-      Config ->
-        ?LOG_DEBUG("Shovel ~ts connected to source", [human_readable_name(maps:get(name, Config))]),
-        %% this makes sure that connection pid is updated in case
-        %% any of the subsequent connection/init steps fail. See
-        %% rabbitmq/rabbitmq-shovel#54 for context.
-        gen_server2:cast(self(), connect_dest),
-        {noreply, State#state{config = Config}}
-    catch E:R ->
-      ?LOG_WARNING("Shovel ~ts could not connect to source: ~p ~p",
-                   [human_readable_name(maps:get(name, Config0)), E, R]),
-      report_terminated(State, "failed to connect to source"),
-      {stop, {shutdown, restart}, State}
+handle_cast(init, State0 = #state{name = Name, type = Type}) ->
+    ?LOG_DEBUG("Shovel ~ts is reporting its status", [human_readable_name(Name)]),
+    rabbit_shovel_status:report(Name, Type, starting),
+    case parse_config(State0) of
+        {ok, State = #state{config = Config0}} ->
+            ?LOG_INFO("Shovel ~ts will now try to connect...", [human_readable_name(Name)]),
+            try rabbit_shovel_behaviour:connect_source(Config0) of
+              Config ->
+                ?LOG_DEBUG("Shovel ~ts connected to source", [human_readable_name(maps:get(name, Config))]),
+                %% this makes sure that connection pid is updated in case
+                %% any of the subsequent connection/init steps fail. See
+                %% rabbitmq/rabbitmq-shovel#54 for context.
+                gen_server2:cast(self(), connect_dest),
+                {noreply, State#state{config = Config}}
+            catch E:R ->
+              ?LOG_WARNING("Shovel ~ts could not connect to source: ~p ~p",
+                           [human_readable_name(Name), E, R]),
+              report_terminated(State, "failed to connect to source"),
+              {stop, {shutdown, restart}, State}
+            end;
+        {stop, _, _} = Stop ->
+            Stop
     end;
 handle_cast(connect_dest, State = #state{config = Config0}) ->
     try rabbit_shovel_behaviour:connect_dest(Config0) of
@@ -245,6 +239,8 @@ format_status(_Opt, [_PDict, State]) ->
 format_state(State = #state{config = Config}) ->
     State#state{config = redact_config(Config)}.
 
+redact_config(undefined) ->
+    undefined;
 redact_config(Config) when is_map(Config) ->
     maps:map(fun(Key, Endpoint) when (Key =:= source orelse Key =:= dest),
                                       is_map(Endpoint) ->
@@ -262,6 +258,25 @@ human_readable_name(Name) ->
     {VHost, ShovelName} -> rabbit_misc:format("'~ts' in virtual host '~ts'", [ShovelName, VHost]);
     ShovelName          -> rabbit_misc:format("'~ts'", [ShovelName])
   end.
+
+%% Dynamic Shovel parameters are parsed here rather than in `init/1` so
+%% that a malformed parameter stops the worker with a reported status
+%% instead of failing the supervisor start with a crash report. Static
+%% Shovels arrive already parsed by `rabbit_shovel_config`.
+parse_config(#state{type = static} = State) ->
+    {ok, State};
+parse_config(#state{type = dynamic, name = Name, config = Config0} = State) ->
+    try
+        ClusterName = rabbit_nodes:cluster_name(),
+        {ok, Mod} = rabbit_registry:lookup_module(runtime_parameter, shovel),
+        {ok, Config} = Mod:parse(Name, ClusterName, Config0),
+        {ok, State#state{config = Config}}
+    catch E:R ->
+        ?LOG_WARNING("Shovel ~ts could not parse its configuration: ~tp:~tp",
+                     [human_readable_name(Name), E, R]),
+        report_terminated(State, "failed to parse configuration"),
+        {stop, {shutdown, restart}, State#state{config = undefined}}
+    end.
 
 maybe_report_blocked_status(#state{config = Config,
                                    last_reported_status = LastStatus} = State) ->
@@ -319,6 +334,9 @@ get_connection_name({_, Name}) when is_binary(Name) ->
 get_connection_name(_) ->
     <<"Shovel">>.
 
+close_connections(#state{config = undefined}) ->
+    %% Configuration parsing failed, so no connection was opened.
+    ok;
 close_connections(#state{config = Conf}) ->
     ok = rabbit_shovel_behaviour:close_source(Conf),
     ok = rabbit_shovel_behaviour:close_dest(Conf).

@@ -39,6 +39,7 @@ groups() ->
           headers,
           restart,
           validation,
+          runtime_parse_failure,
           security_validation,
           get_connection_name,
           credit_flow
@@ -330,6 +331,49 @@ validation(Config) ->
                   [{<<"delete-after">>,    1},
                    {<<"ack-mode">>,        <<"no-ack">>} | QURIs]),
     ok.
+
+%% A definition that fails to parse at worker startup, e.g. one that
+%% declaration-time validation could not reject, must stop the worker
+%% with the quiet `{shutdown, restart}` reason and leave an inspectable
+%% status entry rather than crash with a stack trace.
+runtime_parse_failure(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, ?MODULE, runtime_parse_failure1, []).
+
+runtime_parse_failure1() ->
+    Name = {<<"/">>, <<"runtime-parse-failure">>},
+    %% An unknown publish property fails in rabbit_shovel_parameters:parse/3,
+    %% past the declaration-time validation this definition never went through.
+    Def = #{<<"src-uri">>            => <<"amqp://">>,
+            <<"dest-uri">>           => <<"amqp://">>,
+            <<"src-queue">>          => <<"src">>,
+            <<"dest-queue">>         => <<"dest">>,
+            <<"publish-properties">> => #{<<"nonexistent">> => <<>>}},
+    {ok, Pid} = gen_server2:start(rabbit_shovel_worker, [dynamic, Name, Def], []),
+    MRef = erlang:monitor(process, Pid),
+    receive
+        {'DOWN', MRef, process, Pid, Reason} ->
+            {shutdown, restart} = Reason
+    after 30_000 ->
+            exit(shovel_worker_did_not_stop)
+    end,
+    %% rabbit_shovel_status:report/3 is asynchronous, so the worker's exit
+    %% can be observed before the status entry lands.
+    Expected = {terminated, "failed to parse configuration"},
+    ok = await_status(Name, Expected, 50),
+    ok = rabbit_shovel_status:remove(Name).
+
+await_status(Name, _Expected, 0) ->
+    exit({shovel_status_not_reported, Name, rabbit_shovel_status:status()});
+await_status(Name, Expected, Retries) ->
+    case lists:any(fun(Status) ->
+                           element(1, Status) =:= Name andalso
+                               element(3, Status) =:= Expected
+                   end, rabbit_shovel_status:status()) of
+        true  -> ok;
+        false -> timer:sleep(100),
+                 await_status(Name, Expected, Retries - 1)
+    end.
 
 security_validation(Config) ->
     ok = rabbit_ct_broker_helpers:rpc(Config, 0,
