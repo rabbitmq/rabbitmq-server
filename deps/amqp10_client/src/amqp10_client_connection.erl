@@ -221,7 +221,9 @@ sasl_hdr_sent({call, From}, begin_session,
     {keep_state, State1};
 sasl_hdr_sent(info, {'DOWN', MRef, process, _Pid, _},
               #state{reader_m_ref = MRef}) ->
-    {stop, {shutdown, reader_down}}.
+    {stop, {shutdown, reader_down}};
+sasl_hdr_sent(_EvtType, Frame, State) ->
+    unexpected_during_handshake(sasl_hdr_sent, Frame, State).
 
 sasl_hdr_rcvds(_EvtType, #'v1_0.sasl_mechanisms'{
                             sasl_server_mechanisms = {array, symbol, AvailableMechs}},
@@ -233,7 +235,7 @@ sasl_hdr_rcvds(_EvtType, #'v1_0.sasl_mechanisms'{
             ok = send_sasl_init(State, DecryptedSasl),
             {next_state, sasl_init_sent, State};
         false ->
-            {stop, {sasl_not_supported, DecryptedSasl}, State}
+            {stop, {shutdown, {sasl_not_supported, DecryptedSasl}}, State}
     end;
 sasl_hdr_rcvds({call, From}, begin_session,
                #state{pending_session_reqs = PendingSessionReqs} = State) ->
@@ -241,7 +243,9 @@ sasl_hdr_rcvds({call, From}, begin_session,
     {keep_state, State1};
 sasl_hdr_rcvds(info, {'DOWN', MRef, process, _Pid, _},
                #state{reader_m_ref = MRef}) ->
-    {stop, {shutdown, reader_down}}.
+    {stop, {shutdown, reader_down}};
+sasl_hdr_rcvds(_EvtType, Frame, State) ->
+    unexpected_during_handshake(sasl_hdr_rcvds, Frame, State).
 
 sasl_init_sent(_EvtType, #'v1_0.sasl_outcome'{code = {ubyte, 0}},
                #state{socket = Socket} = State) ->
@@ -249,14 +253,16 @@ sasl_init_sent(_EvtType, #'v1_0.sasl_outcome'{code = {ubyte, 0}},
     {next_state, hdr_sent, State};
 sasl_init_sent(_EvtType, #'v1_0.sasl_outcome'{code = {ubyte, C}},
                #state{} = State) when C==1;C==2;C==3;C==4 ->
-    {stop, sasl_auth_failure, State};
+    {stop, {shutdown, sasl_auth_failure}, State};
 sasl_init_sent({call, From}, begin_session,
                #state{pending_session_reqs = PendingSessionReqs} = State) ->
     State1 = State#state{pending_session_reqs = [From | PendingSessionReqs]},
     {keep_state, State1};
 sasl_init_sent(info, {'DOWN', MRef, process, _Pid, _},
                #state{reader_m_ref = MRef}) ->
-    {stop, {shutdown, reader_down}}.
+    {stop, {shutdown, reader_down}};
+sasl_init_sent(_EvtType, Frame, State) ->
+    unexpected_during_handshake(sasl_init_sent, Frame, State).
 
 hdr_sent(_EvtType, {protocol_header_received, 0, 1, 0, 0}, State) ->
     case send_open(State) of
@@ -274,7 +280,9 @@ hdr_sent({call, From}, begin_session,
     {keep_state, State1};
 hdr_sent(info, {'DOWN', MRef, process, _Pid, _},
          #state{reader_m_ref = MRef}) ->
-    {stop, {shutdown, reader_down}}.
+    {stop, {shutdown, reader_down}};
+hdr_sent(_EvtType, Frame, State) ->
+    unexpected_during_handshake(hdr_sent, Frame, State).
 
 open_sent(_EvtType, #'v1_0.open'{max_frame_size = MaybeMaxFrameSize,
                                  idle_time_out = Timeout} = Open,
@@ -417,6 +425,15 @@ close_sent(_EvtType, #'v1_0.open'{}, _Data) ->
     %% Transition from CLOSE_PIPE to CLOSE_SENT in figure 2.23.
     keep_state_and_data.
 
+%% A peer that refuses the connection or misbehaves can send frames out
+%% of the expected handshake sequence. Terminating with a stack trace
+%% would help nobody; log the frame and stop quietly instead.
+unexpected_during_handshake(StateName, Frame, State) ->
+    ?LOG_WARNING("Connection ~tp received an unexpected frame or message "
+                 "~tp during handshake (~ts)",
+                 [self(), Frame, StateName]),
+    {stop, {shutdown, {unexpected_frame, Frame}}, State}.
+
 set_other_procs0(OtherProcs, State) ->
     #{sessions_sup := SessionsSup,
       reader := Reader} = OtherProcs,
@@ -428,7 +445,13 @@ set_other_procs0(OtherProcs, State) ->
 
 terminate(Reason, _StateName, #state{connection_sup = Sup,
                                      config = Config}) ->
-    ok = notify_closed(Config, Reason),
+    %% Expected failures stop this process with a reason wrapped in
+    %% 'shutdown' to avoid massive supervisor reports logged. Notify
+    %% the owner with the specific reason, without the wrapper.
+    ok = notify_closed(Config, case Reason of
+                                   {shutdown, R} -> R;
+                                   _             -> Reason
+                               end),
     case Reason of
         normal ->
             %% Tear down the rest of the connection's supervision tree

@@ -418,13 +418,20 @@ handle_source(#'basic.cancel'{}, #{name := Name}) ->
 
 handle_source({'EXIT', Conn, Reason},
               #{source := #{current := {Conn, _, _}}}) ->
-    {stop, {inbound_conn_died, Reason}};
+    {stop, {inbound_conn_died, unwrap_shutdown(Reason)}};
 
 handle_source({'EXIT', _Pid, {shutdown, {server_initiated_close, _, Reason}}}, _State) ->
     {stop, {inbound_link_or_channel_closure, Reason}};
 
 handle_source(_Msg, _State) ->
     not_handled.
+
+%% The Erlang AMQP 0-9-1 client wraps expected connection failures
+%% (e.g. `heartbeat_timeout`) in 'shutdown' to avoid massive
+%% supervisor reports logged. Unwrap them so that the specific reason is
+%% matched and logged by `rabbit_shovel_worker`.
+unwrap_shutdown({shutdown, Reason}) -> Reason;
+unwrap_shutdown(Reason)             -> Reason.
 
 handle_dest(#'basic.ack'{delivery_tag = Seq, multiple = Multiple},
             State = #{ack_mode := on_confirm}) ->
@@ -439,7 +446,7 @@ handle_dest(#'basic.nack'{delivery_tag = Seq, multiple = Multiple},
                        end, Seq, Multiple, State);
 
 handle_dest({'EXIT', Conn, Reason}, #{dest := #{current := {Conn, _, _}}}) ->
-    {stop, {outbound_conn_died, Reason}};
+    {stop, {outbound_conn_died, unwrap_shutdown(Reason)}};
 
 handle_dest({'EXIT', _Pid, {shutdown, {server_initiated_close, _, Reason}}}, _State) ->
     {stop, {outbound_link_or_channel_closure, Reason}};
