@@ -903,23 +903,25 @@ fetch(AckRequired, State = #q{backing_queue       = BQ,
 
 ack(AckTags, ChPid, State) ->
     subtract_acks(ChPid, AckTags, State,
-                  fun (State1 = #q{backing_queue       = BQ,
-                                   backing_queue_state = BQS}) ->
-                          {_Guids, BQS1} = BQ:ack(AckTags, BQS),
+                  fun (ResolvedAckTags, State1 = #q{backing_queue       = BQ,
+                                                    backing_queue_state = BQS}) ->
+                          {_Guids, BQS1} = BQ:ack(ResolvedAckTags, BQS),
                           State1#q{backing_queue_state = BQS1}
                   end).
 
 requeue(AckTags, DelFailed, ChPid, State) ->
     subtract_acks(ChPid, AckTags, State,
-                  fun (State1) -> requeue_and_run(AckTags, DelFailed, [], State1) end).
+                  fun (ResolvedAckTags, State1) ->
+                          requeue_and_run(ResolvedAckTags, DelFailed, [], State1)
+                  end).
 
 discard(AckTags, DelFailed, ChPid, State) ->
     with_dlx(
       State#q.dlx,
       fun (X) -> subtract_acks(ChPid, AckTags, State,
-                               fun (State1) ->
+                               fun (ResolvedAckTags, State1) ->
                                        dead_letter_rejected_msgs(
-                                         AckTags, DelFailed, X, State1)
+                                         ResolvedAckTags, DelFailed, X, State1)
                                end) end,
       fun () -> rabbit_global_counters:messages_dead_lettered(rejected, rabbit_classic_queue,
                                                               disabled, length(AckTags)),
@@ -1040,10 +1042,13 @@ backing_queue_timeout(State = #q{backing_queue       = BQ,
 
 subtract_acks(ChPid, AckTags, State = #q{consumers = Consumers}, Fun) ->
     case rabbit_queue_consumers:subtract_acks(ChPid, AckTags, Consumers) of
-        not_found                          -> State;
-        unchanged                          -> Fun(State);
-        {unblocked, Unblocked, Consumers1} -> State1 = State#q{consumers = Consumers1},
-                                              run_message_queue(Unblocked, Fun(State1))
+        not_found ->
+            State;
+        {ResolvedAckTags, unchanged} ->
+            Fun(ResolvedAckTags, State);
+        {ResolvedAckTags, unblocked, Unblocked, Consumers1} ->
+            State1 = State#q{consumers = Consumers1},
+            run_message_queue(Unblocked, Fun(ResolvedAckTags, State1))
     end.
 
 message_properties(Message, Confirm, #q{ttl = TTL}) ->
@@ -1334,12 +1339,14 @@ handle_call({basic_get, ChPid, NoAck, LimiterPid}, _From,
             reply(empty, State2);
         {{Message, IsDelivered, AckTag},
          #q{backing_queue = BQ, backing_queue_state = BQS} = State2} ->
-            case AckRequired of
-                true  -> ok = rabbit_queue_consumers:record_ack(
-                                ChPid, LimiterPid, AckTag);
-                false -> ok
-            end,
-            Msg = {QName, self(), AckTag, IsDelivered, Message},
+            DeliveredAckTag =
+                case AckRequired of
+                    true  -> {ok, AckId} = rabbit_queue_consumers:record_ack(
+                                             ChPid, LimiterPid, AckTag),
+                             AckId;
+                    false -> AckTag
+                end,
+            Msg = {QName, self(), DeliveredAckTag, IsDelivered, Message},
             reply({ok, BQ:len(BQS), Msg}, State2)
     end;
 

@@ -20,8 +20,6 @@
 
 %%----------------------------------------------------------------------------
 
--define(QUEUE, lqueue).
-
 -define(KEY_UNSENT_MESSAGE_LIMIT, classic_queue_consumer_unsent_message_limit).
 -define(DEFAULT_UNSENT_MESSAGE_LIMIT, 200).
 
@@ -40,7 +38,9 @@
 %% channel record
 -record(cr, {ch_pid,
              monitor_ref,
-             acktags :: ?QUEUE:?QUEUE({ack(), rabbit_types:ctag() | none}),
+             acktags :: #{ack_id() => {raw_ack_tag(), rabbit_types:ctag() | none}},
+             %% Next ack_id() to hand out. Never reused (unlike raw_ack_tag()).
+             next_ack_id = 0 :: ack_id(),
              consumer_count :: non_neg_integer(),
              %% Queue of {ChPid, #consumer{}} for consumers which have
              %% been blocked (rate/prefetch limited) for any reason
@@ -64,9 +64,13 @@
                               prefetch::non_neg_integer(), args::rabbit_framing:amqp_table(),
                               user::rabbit_types:username()}.
 -type ch() :: pid().
--type ack() :: non_neg_integer().
+%% Identifies one delivery attempt; unlike raw_ack_tag(), never reused.
+-type ack_id() :: non_neg_integer().
+%% The ack tag as returned by the backing queue; may be reused across
+%% delivery attempts of the same message (e.g. after a requeue).
+-type raw_ack_tag() :: any().
 -type cr_fun() :: fun ((#cr{}) -> #cr{}).
--type fetch_result() :: {rabbit_types:basic_message(), boolean(), ack()}.
+-type fetch_result() :: {rabbit_types:basic_message(), boolean(), raw_ack_tag()}.
 
 %%----------------------------------------------------------------------------
 
@@ -138,7 +142,7 @@ count() -> lists:sum([Count || #cr{consumer_count = Count} <- all_ch_record()]).
 -spec unacknowledged_message_count() -> non_neg_integer().
 
 unacknowledged_message_count() ->
-    lists:sum([?QUEUE:len(C#cr.acktags) || C <- all_ch_record()]).
+    lists:sum([maps:size(C#cr.acktags) || C <- all_ch_record()]).
 
 -spec add(ch(), rabbit_types:ctag(), boolean(), pid() | none, boolean(),
           {simple_prefetch, non_neg_integer()} | {credited, rabbit_queue_type:delivery_count()},
@@ -184,7 +188,7 @@ add(ChPid, CTag, NoAck, LimiterPid, LimiterActive, Mode, Args, Username,
                 use       = update_use(CUInfo, active)}.
 
 -spec remove(ch(), rabbit_types:ctag(), rabbit_queue_type:cancel_reason(), state()) ->
-    not_found | {[ack()], state()}.
+    not_found | {[raw_ack_tag()], state()}.
 remove(ChPid, CTag, Reason, State = #state{consumers = Consumers}) ->
     case lookup_ch(ChPid) of
         not_found ->
@@ -196,13 +200,13 @@ remove(ChPid, CTag, Reason, State = #state{consumers = Consumers}) ->
                 link_states = LinkStates} ->
             {Acks, AckTags} = case Reason of
                                   remove ->
-                                      AckTags1 = ?QUEUE:to_list(AckTags0),
-                                      {AckTags2, AckTags3} = lists:partition(
-                                                               fun({_, Tag}) ->
-                                                                       Tag =:= CTag
-                                                               end, AckTags1),
-                                      {lists:map(fun({Ack, _}) -> Ack end, AckTags2),
-                                       ?QUEUE:from_list(AckTags3)};
+                                      maps:fold(
+                                        fun (_AckId, {RawTag, Tag}, {Acc, M})
+                                              when Tag =:= CTag ->
+                                                {[RawTag | Acc], M};
+                                           (AckId, Entry, {Acc, M}) ->
+                                                {Acc, M#{AckId => Entry}}
+                                        end, {[], #{}}, AckTags0);
                                   _ ->
                                       {[], AckTags0}
                               end,
@@ -220,7 +224,7 @@ remove(ChPid, CTag, Reason, State = #state{consumers = Consumers}) ->
     end.
 
 -spec erase_ch(ch(), state()) ->
-                      'not_found' | {[ack()], [rabbit_types:ctag()],
+                      'not_found' | {[raw_ack_tag()], [rabbit_types:ctag()],
                                      state()}.
 
 erase_ch(ChPid, State = #state{consumers = Consumers}) ->
@@ -233,7 +237,7 @@ erase_ch(ChPid, State = #state{consumers = Consumers}) ->
             All = priority_queue:join(Consumers, BlockedQ),
             ok = erase_ch_record(C),
             Filtered = priority_queue:filter(chan_pred(ChPid, true), All),
-            {[AckTag || {AckTag, _CTag} <- ?QUEUE:to_list(ChAckTags)],
+            {[AckTag || {AckTag, _CTag} <- maps:values(ChAckTags)],
              tags(priority_queue:to_list(Filtered)),
              State#state{consumers = remove_consumers(ChPid, Consumers)}}
     end.
@@ -335,17 +339,22 @@ deliver_to_consumer(FetchFun,
                               ack_required = AckRequired},
                     C = #cr{ch_pid               = ChPid,
                             acktags              = ChAckTags,
+                            next_ack_id          = NextAckId,
                             unsent_message_count = Count},
                     QName) ->
     {{Message, IsDelivered, AckTag}, R} = FetchFun(AckRequired),
-    Msg= {QName, self(), AckTag, IsDelivered, Message},
+    {DeliveredAckTag, ChAckTags1, NextAckId1} =
+        case AckRequired of
+            true  -> {NextAckId,
+                      ChAckTags#{NextAckId => {AckTag, CTag}},
+                      NextAckId + 1};
+            false -> {AckTag, ChAckTags, NextAckId}
+        end,
+    Msg = {QName, self(), DeliveredAckTag, IsDelivered, Message},
     rabbit_classic_queue:deliver_to_consumer(ChPid, QName, CTag, AckRequired,
                                               Msg),
-    ChAckTags1 = case AckRequired of
-                     true  -> ?QUEUE:in({AckTag, CTag}, ChAckTags);
-                     false -> ChAckTags
-                 end,
     update_ch_record(C#cr{acktags              = ChAckTags1,
+                          next_ack_id          = NextAckId1,
                           unsent_message_count = Count + 1}),
     R.
 
@@ -357,24 +366,27 @@ is_blocked(Consumer = {ChPid, _C}) ->
             priority_queue:member(Consumer, BlockedConsumers)
     end.
 
--spec record_ack(ch(), pid(), ack()) -> 'ok'.
+-spec record_ack(ch(), pid(), raw_ack_tag()) -> {'ok', ack_id()}.
 
 record_ack(ChPid, LimiterPid, AckTag) ->
-    C = #cr{acktags = ChAckTags} = ch_record(ChPid, LimiterPid),
-    update_ch_record(C#cr{acktags = ?QUEUE:in({AckTag, none}, ChAckTags)}),
-    ok.
+    C = #cr{acktags = ChAckTags, next_ack_id = AckId} = ch_record(ChPid, LimiterPid),
+    update_ch_record(C#cr{acktags = ChAckTags#{AckId => {AckTag, none}},
+                          next_ack_id = AckId + 1}),
+    {ok, AckId}.
 
--spec subtract_acks(ch(), [ack()], state()) ->
-                           'not_found' | 'unchanged' |
-                           {'unblocked', [{ch(), consumer()}], state()}.
+-spec subtract_acks(ch(), [ack_id()], state()) ->
+                           'not_found' |
+                           {[raw_ack_tag()], 'unchanged'} |
+                           {[raw_ack_tag()], 'unblocked', [{ch(), consumer()}], state()}.
 
-subtract_acks(ChPid, AckTags, State) ->
+subtract_acks(ChPid, AckIds, State) ->
     case lookup_ch(ChPid) of
         not_found ->
             not_found;
         C = #cr{acktags = ChAckTags, limiter = Lim} ->
-            {CTagCounts, AckTags2} = subtract_acks(
-                                       AckTags, [], maps:new(), ChAckTags),
+            {ResolvedAccRev, AckTags2, CTagCounts} =
+                lists:foldl(fun resolve_ack_id/2, {[], ChAckTags, maps:new()}, AckIds),
+            ResolvedAckTags = lists:reverse(ResolvedAccRev),
             {Unblocked, Lim2} =
                 maps:fold(
                   fun (CTag, Count, {UnblockedN, LimN}) ->
@@ -384,25 +396,28 @@ subtract_acks(ChPid, AckTags, State) ->
                   end, {false, Lim}, CTagCounts),
             C2 = C#cr{acktags = AckTags2, limiter = Lim2},
             case Unblocked of
-                true  -> unblock(C2, State);
-                false -> update_ch_record(C2),
-                         unchanged
+                true  ->
+                    case unblock(C2, State) of
+                        unchanged ->
+                            {ResolvedAckTags, unchanged};
+                        {unblocked, UnblockedConsumers, State1} ->
+                            {ResolvedAckTags, unblocked, UnblockedConsumers, State1}
+                    end;
+                false ->
+                    update_ch_record(C2),
+                    {ResolvedAckTags, unchanged}
             end
     end.
 
-subtract_acks([], [], CTagCounts, AckQ) ->
-    {CTagCounts, AckQ};
-subtract_acks([], Prefix, CTagCounts, AckQ) ->
-    {CTagCounts, ?QUEUE:join(?QUEUE:from_list(lists:reverse(Prefix)), AckQ)};
-subtract_acks([T | TL] = AckTags, Prefix, CTagCounts, AckQ) ->
-    case ?QUEUE:out(AckQ) of
-        {{value, {T, CTag}}, QTail} ->
-            subtract_acks(TL, Prefix,
-                          maps:update_with(CTag, fun (Old) -> Old + 1 end, 1, CTagCounts), QTail);
-        {{value, V}, QTail} ->
-            subtract_acks(AckTags, [V | Prefix], CTagCounts, QTail);
-        {empty, _} ->
-            subtract_acks([], Prefix, CTagCounts, AckQ)
+%% Resolves each ack_id() independently against acktags, so an unknown id
+%% can never affect whether the rest of the batch resolves correctly.
+resolve_ack_id(AckId, {ResAcc, AckTags, CTagCounts}) ->
+    case maps:take(AckId, AckTags) of
+        {{RawTag, CTag}, AckTags1} ->
+            {[RawTag | ResAcc], AckTags1,
+             maps:update_with(CTag, fun (Old) -> Old + 1 end, 1, CTagCounts)};
+        error ->
+            {ResAcc, AckTags, CTagCounts}
     end.
 
 -spec possibly_unblock(cr_fun(), ch(), state()) ->
@@ -602,7 +617,8 @@ ch_record(ChPid, LimiterPid) ->
                      Limiter = rabbit_limiter:client(LimiterPid),
                      C = #cr{ch_pid               = ChPid,
                              monitor_ref          = MonitorRef,
-                             acktags              = ?QUEUE:new(),
+                             acktags              = #{},
+                             next_ack_id          = 0,
                              consumer_count       = 0,
                              blocked_consumers    = priority_queue:new(),
                              limiter              = Limiter,
@@ -616,9 +632,9 @@ ch_record(ChPid, LimiterPid) ->
 update_ch_record(C = #cr{consumer_count       = ConsumerCount,
                          acktags              = ChAckTags,
                          unsent_message_count = UnsentMessageCount}) ->
-    case {?QUEUE:is_empty(ChAckTags), ConsumerCount, UnsentMessageCount} of
-        {true, 0, 0} -> ok = erase_ch_record(C);
-        _            -> ok = store_ch_record(C)
+    case {maps:size(ChAckTags), ConsumerCount, UnsentMessageCount} of
+        {0, 0, 0} -> ok = erase_ch_record(C);
+        _         -> ok = store_ch_record(C)
     end,
     ok.
 
