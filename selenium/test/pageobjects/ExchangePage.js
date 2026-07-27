@@ -22,6 +22,7 @@ module.exports = class ExchangePage extends BasePage {
     const button = await this.waitForDisplayed(DELETE_BUTTON)
     await this.scrollTo(button)
     await button.click()
-    return this.driver.switchTo().alert().accept()
+    await this.acceptAlert()
+    return this.waitForDisplayed(By.css('div#exchanges-paging-section'))
   }
 }

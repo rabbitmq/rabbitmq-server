@@ -48,7 +48,8 @@ module.exports = class QueuePage extends BasePage {
   }
   async deleteQueue() {
     await this.click(DELETE_BUTTON)
-    return this.acceptAlert()
+    await this.acceptAlert()
+    return this.waitForDisplayed(By.css('div#queues-paging-section'))
   }
 
   async clickOnGetMessages() {
