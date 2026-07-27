@@ -111,6 +111,7 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include("amqqueue.hrl").
+-include("mc.hrl").
 -include_lib("kernel/include/logger.hrl").
 
 -rabbit_boot_step(
@@ -1370,7 +1371,8 @@ deliver0(QName, Correlation, Msg, QState0) ->
 
 deliver(QSs, Msg0, Options) ->
     Correlation = maps:get(correlation, Options, undefined),
-    Msg = mc:prepare(store, Msg0),
+    Msg1 = annotate_delivery_time(Msg0),
+    Msg = mc:prepare(store, Msg1),
     lists:foldl(
       fun({Q, stateless}, Acc) ->
               QRef = amqqueue:get_pid(Q),
@@ -2923,3 +2925,29 @@ table_lookup(Tbl, Key, Default)
         _ ->
             Default
     end.
+
+annotate_delivery_time(Msg) ->
+    case mc:is(Msg) of
+        true ->
+            %% "When a message is being sent with a delivery delay
+            %% configured, a message annotation with symbol key of
+            %% “x-opt-delivery-time” is used to convey the earliest point
+            %% in time at which a message may be delivered to a
+            %% receiver by the peer. If the annotation is present its value
+            %% MUST be a timestamp or an equivalent value using an
+            %% integral numeric type such as long, representing the
+            %% delivery time as a number of milliseconds since the Unix Epoch."
+            %% [schdmsg-v1.0] § 2.1
+            case mc:x_header(<<"x-opt-delivery-time">>, Msg) of
+                {_Type, Ts} when is_integer(Ts) ->
+                    %% The queue will need to delay this message.
+                    %% add the dt annotation for easy access inside
+                    %% the queue
+                    mc:set_annotation(?ANN_DELIVERY_TIME, Ts, Msg);
+                _ ->
+                    Msg
+            end;
+        false ->
+            Msg
+    end.
+
