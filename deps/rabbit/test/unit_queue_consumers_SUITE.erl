@@ -19,7 +19,9 @@ all() ->
         list_consumers,
         list_consumers_reports_blocked,
         list_consumers_sac_active_overrides_blocked,
-        list_consumers_sac_inactive_overrides_blocked
+        list_consumers_sac_inactive_overrides_blocked,
+        ack_id_reused_raw_tag_does_not_leak_across_deliveries,
+        ack_id_never_minted_is_dropped_silently
     ].
 
 is_same(_Config) ->
@@ -148,19 +150,79 @@ list_consumers_sac_inactive_overrides_blocked(_Config) ->
         uninstall_ch_record(ChPid)
     end.
 
-%% #cr field order: ch_pid, monitor_ref, acktags, consumer_count,
-%% blocked_consumers, limiter, unsent_message_count, link_states.
+%% #cr field order: ch_pid, monitor_ref, acktags, next_ack_id,
+%% consumer_count, blocked_consumers, limiter, unsent_message_count,
+%% link_states.
 install_ch_record(ChPid, ConsumerEntries) ->
     BlockedQ = lists:foldl(fun (C, Acc) -> priority_queue:in(C, Acc) end,
                            priority_queue:new(), ConsumerEntries),
-    CR = {cr, ChPid, undefined, queue:new(), length(ConsumerEntries),
-          BlockedQ, undefined, 0, #{}},
+    CR = {cr, ChPid, erlang:make_ref(), #{}, 0, length(ConsumerEntries),
+          BlockedQ, rabbit_limiter:client(ChPid), 0, #{}},
     put({ch, ChPid}, CR),
     ok.
 
 uninstall_ch_record(ChPid) ->
     _ = erase({ch, ChPid}),
     ok.
+
+%% Two deliveries can carry the same raw ack tag (raw_ack_tag()s may be
+%% reused across delivery attempts, e.g. after a requeue). Acking the
+%% ack_id() of one must not affect the other.
+ack_id_reused_raw_tag_does_not_leak_across_deliveries(_Config) ->
+    _ = rabbit_queue_consumers:new(),
+    ChPid = self(),
+    install_ch_record(ChPid, []),
+    try
+        QName = <<"test-queue">>,
+        C1 = consumer(ChPid, <<"c1">>),
+        C2 = consumer(ChPid, <<"c2">>),
+        FetchFun = fun(_AckRequired) -> {{msg, false, 42}, unused} end,
+
+        {delivered, [], unused, _} =
+            rabbit_queue_consumers:deliver(
+              FetchFun, QName, state(consumers([C1])), false, none),
+        {cr, ChPid, _, AckTags1, 1, _, _, _, _, _} = erlang:get({ch, ChPid}),
+        [{AckId0, {42, <<"c1">>}}] = maps:to_list(AckTags1),
+
+        {delivered, [], unused, _} =
+            rabbit_queue_consumers:deliver(
+              FetchFun, QName, state(consumers([C2])), false, none),
+        {cr, ChPid, _, AckTags2, 2, _, _, _, _, _} = erlang:get({ch, ChPid}),
+        AckId1 = 1,
+        ?assertNotEqual(AckId0, AckId1),
+        ?assertEqual(#{AckId0 => {42, <<"c1">>}, AckId1 => {42, <<"c2">>}},
+                     AckTags2),
+
+        {[42], unchanged} =
+            rabbit_queue_consumers:subtract_acks(
+              ChPid, [AckId0], state(consumers([]))),
+        {cr, ChPid, _, AckTags3, _, _, _, _, _, _} = erlang:get({ch, ChPid}),
+        ?assertEqual(#{AckId1 => {42, <<"c2">>}}, AckTags3)
+    after
+        uninstall_ch_record(ChPid)
+    end.
+
+%% An ack_id() that was never minted for this channel resolves to nothing.
+ack_id_never_minted_is_dropped_silently(_Config) ->
+    _ = rabbit_queue_consumers:new(),
+    ChPid = self(),
+    install_ch_record(ChPid, []),
+    try
+        QName = <<"test-queue">>,
+        C1 = consumer(ChPid, <<"c1">>),
+        FetchFun = fun(_AckRequired) -> {{msg, false, 42}, unused} end,
+        {delivered, [], unused, _} =
+            rabbit_queue_consumers:deliver(
+              FetchFun, QName, state(consumers([C1])), false, none),
+
+        {[], unchanged} =
+            rabbit_queue_consumers:subtract_acks(
+              ChPid, [999], state(consumers([]))),
+        {cr, ChPid, _, AckTags, _, _, _, _, _, _} = erlang:get({ch, ChPid}),
+        ?assertMatch([{_, {42, <<"c1">>}}], maps:to_list(AckTags))
+    after
+        uninstall_ch_record(ChPid)
+    end.
 
 consumers([]) ->
     priority_queue:new();
