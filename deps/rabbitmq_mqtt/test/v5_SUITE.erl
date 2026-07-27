@@ -102,6 +102,8 @@ cluster_size_1_tests() ->
      publish_property_payload_format_indicator,
      publish_property_response_topic_correlation_data,
      publish_property_user_property,
+     publish_property_not_applicable,
+     will_property_not_applicable,
      disconnect_with_will,
      will_qos2,
      will_delay_greater_than_session_expiry,
@@ -1367,6 +1369,57 @@ publish_property_user_property(Config) ->
     after ?TIMEOUT -> ct:fail("did not receive message")
     end,
     ok = emqtt:disconnect(C).
+
+%% "A Control Packet which contains an Identifier which is not valid for its packet
+%% type [...] is a Malformed Packet." [v5 2.2.2.2]
+%% A client sending such an invalid property should get disconnected.
+publish_property_not_applicable(Config) ->
+    Topic = atom_to_binary(?FUNCTION_NAME),
+    Sub = connect(<<"subscriber">>, Config),
+    {ok, _, [0]} = emqtt:subscribe(Sub, Topic),
+    Pub = connect(<<"publisher">>, Config),
+    ok = emqtt:publish(Pub, Topic, #{'Content-Type' => <<"text/plain">>},
+                       <<"applicable">>, [{qos, 0}]),
+    ok = expect_publishes(Sub, Topic, [<<"applicable">>]),
+    ok = emqtt:disconnect(Pub),
+
+    process_flag(trap_exit, true),
+    NotApplicable = [{'Request-Problem-Information', 1},
+                     {'Request-Response-Information', 1},
+                     {'Response-Information', <<"response information">>},
+                     {'Server-Reference', <<"other-host">>},
+                     %% "A PUBLISH packet sent from a Client to a Server MUST NOT
+                     %% contain a Subscription Identifier." [MQTT-3.3.4-6]
+                     {'Subscription-Identifier', 1},
+                     {'Session-Expiry-Interval', 60},
+                     {'Will-Delay-Interval', 60}],
+    lists:foreach(
+      fun({Name, Val}) ->
+              C = connect(atom_to_binary(Name), Config),
+              ok = emqtt:publish(C, Topic, #{Name => Val},
+                                 atom_to_binary(Name), [{qos, 0}]),
+              %% The publisher should get disconnected.
+              util:await_exit(C)
+      end, NotApplicable),
+
+    %% The subscriber received none of the messages above and is still usable.
+    Pub1 = connect(<<"publisher 1">>, Config),
+    ok = emqtt:publish(Pub1, Topic, <<"last">>, qos0),
+    ok = expect_publishes(Sub, Topic, [<<"last">>]),
+    ok = emqtt:disconnect(Sub),
+    ok = emqtt:disconnect(Pub1).
+
+will_property_not_applicable(Config) ->
+    Topic = atom_to_binary(?FUNCTION_NAME),
+    %% 'Request-Problem-Information' is applicable to CONNECT,
+    %% but not to the Will Properties. [v5 2.2.2.2]
+    {C, Connect} = start_client(?FUNCTION_NAME, Config, 0,
+                                [{will_props, #{'Request-Problem-Information' => 1}},
+                                 {will_topic, Topic},
+                                 {will_qos, 0},
+                                 {will_payload, <<"will payload">>}]),
+    unlink(C),
+    ?assertMatch({error, _}, Connect(C)).
 
 disconnect_with_will(Config) ->
     Topic = Payload = ClientId = atom_to_binary(?FUNCTION_NAME),
