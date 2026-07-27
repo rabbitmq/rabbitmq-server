@@ -46,6 +46,8 @@ all_tests() ->
      delete_two_replicas,
      delete_replica_2,
      leader_start_failed,
+     member_started_stale_epoch,
+     replica_disconnected_nodeup,
      overview
     ].
 
@@ -1544,6 +1546,93 @@ delete_replica_leader(_) ->
                                                    state = {ready, E2}}
                                     }},
                  S4),
+    ok.
+
+member_started_stale_epoch(_) ->
+    %% A replica start action was issued in an old epoch and, while it was in
+    %% flight, a re-election advanced the stream epoch. The stale member_started
+    %% (carrying the old epoch) must clear the 'starting' marker (v8+) so the
+    %% member becomes actionable again instead of being stuck with
+    %% current = {starting, _} until the next coordinator leader change.
+    E1 = 1,
+    E2 = 2,
+    StreamId = atom_to_list(?FUNCTION_NAME),
+    LeaderPid = fake_pid(n1),
+    Replica = fake_pid(n3),
+    N1 = node(LeaderPid),
+    N3 = node(Replica),
+    OldIdx = 99,
+    S0 = started_stream(StreamId, LeaderPid, [Replica]),
+    %% craft the stranded state: the stream has advanced to epoch 2 with a
+    %% running leader, but N3 still carries an in-flight start issued in epoch 1
+    %% (target = stopped, as it would be after the leader-down that triggered
+    %% the re-election)
+    #stream{members = Members0} = S0,
+    Members = Members0#{N1 => #member{role = {writer, E2},
+                                      state = {running, E2, LeaderPid},
+                                      current = undefined},
+                        N3 => #member{role = {replica, E2},
+                                      state = {ready, E1},
+                                      target = stopped,
+                                      current = {starting, OldIdx}}},
+    S1 = S0#stream{epoch = E2, members = Members},
+    StaleStarted = {member_started, StreamId,
+                    #{epoch => E1, index => OldIdx, pid => Replica}},
+
+    %% v8: the stale 'starting' marker is cleared
+    S2 = update_stream(meta(#{index => ?LINE, machine_version => 8}),
+                       StaleStarted, S1),
+    ?assertMatch(#stream{members = #{N3 := #member{current = undefined,
+                                                   state = {ready, E1}}}},
+                 S2),
+    %% and the member is now driven to stop, so it can later be restarted in
+    %% the current epoch
+    {S2Ev, Actions} = evaluate_stream(meta(?LINE), S2, []),
+    ?assert(lists:any(fun ({aux, {stop, _, #{node := N}, _}}) -> N == N3;
+                          (_) -> false
+                      end, Actions)),
+    ?assertMatch(#stream{members = #{N3 := #member{current = {stopping, _}}}},
+                 S2Ev),
+
+    %% pre-v8: the stale member_started is ignored and the member stays stuck
+    S3 = update_stream(meta(#{index => ?LINE, machine_version => 7}),
+                       StaleStarted, S1),
+    ?assertMatch(#stream{members = #{N3 := #member{current = {starting, OldIdx},
+                                                   state = {ready, E1}}}},
+                 S3),
+    {_, ActionsV7} = evaluate_stream(meta(#{index => ?LINE,
+                                            machine_version => 7}), S3, []),
+    ?assertNot(lists:any(fun ({aux, {stop, _, #{node := N}, _}}) -> N == N3;
+                             (_) -> false
+                         end, ActionsV7)),
+    ok.
+
+replica_disconnected_nodeup(_) ->
+    %% A replica whose node loses its connection (noconnection) is marked
+    %% 'disconnected' rather than 'down'. When the node reconnects (v8+) the
+    %% member is resumed as running instead of remaining 'disconnected' until
+    %% the next stop/restart cycle.
+    E = 1,
+    StreamId = atom_to_list(?FUNCTION_NAME),
+    LeaderPid = fake_pid(n1),
+    Replica = fake_pid(n3),
+    N3 = node(Replica),
+    S0 = started_stream(StreamId, LeaderPid, [Replica]),
+    S1 = update_stream(meta(?LINE), {down, Replica, noconnection}, S0),
+    ?assertMatch(#stream{members = #{N3 := #member{state = {disconnected, E, Replica}}}},
+                 S1),
+
+    %% v8: the reconnected node's replica is resumed as running
+    S2 = update_stream(meta(#{index => ?LINE, machine_version => 8}),
+                       {nodeup, N3}, S1),
+    ?assertMatch(#stream{members = #{N3 := #member{state = {running, E, Replica}}}},
+                 S2),
+
+    %% pre-v8: the replica stays disconnected
+    S3 = update_stream(meta(#{index => ?LINE, machine_version => 7}),
+                       {nodeup, N3}, S1),
+    ?assertMatch(#stream{members = #{N3 := #member{state = {disconnected, E, Replica}}}},
+                 S3),
     ok.
 
 overview(_Config) ->

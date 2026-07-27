@@ -90,6 +90,7 @@
 -define(V2_OR_MORE(Vsn), (Vsn >= 2)).
 -define(V5_OR_MORE(Vsn), (Vsn >= 5)).
 -define(V7_OR_MORE(Vsn), (Vsn >= 7)). %% SAC monitors no longer in monitors map
+-define(V8_OR_MORE(Vsn), (Vsn >= 8)).
 -define(SAC_V4, rabbit_stream_sac_coordinator_v4).
 -define(SAC_CURRENT, rabbit_stream_sac_coordinator).
 
@@ -1550,6 +1551,26 @@ update_stream0(#{system_time := _Ts},
                                [?MODULE, Args, Member]),
             Stream0
     end;
+update_stream0(#{machine_version := MacVer},
+               {member_started, _StreamId,
+                #{index := Idx, pid := Pid}},
+               #stream{members = Members0} = Stream0)
+  when ?V8_OR_MORE(MacVer) ->
+    %% The stream epoch has advanced since this 'start' action was issued: a
+    %% re-election raced the in-flight start (the clause above only matches when
+    %% the command and stream epochs are equal). Clear the stale 'starting'
+    %% marker so the member becomes actionable again and can be stopped and
+    %% restarted in the current epoch. Without this the member would remain
+    %% stuck with current = {starting, _} until the next coordinator leader
+    %% change ran fail_active_actions/2.
+    Node = node(Pid),
+    case Members0 of
+        #{Node := #member{current = {starting, Idx}} = Member0} ->
+            Member = Member0#member{current = undefined},
+            Stream0#stream{members = Members0#{Node => Member}};
+        _ ->
+            Stream0
+    end;
 update_stream0(#{system_time := _Ts},
                {member_deleted, _StreamId, #{node := Node}},
                #stream{nodes = Nodes,
@@ -1745,13 +1766,21 @@ update_stream0(#{system_time := _Ts},
 update_stream0(#{system_time := _Ts},
                {down, _Pid, _Reason}, undefined) ->
     undefined;
-update_stream0(#{system_time := _Ts} = _Meta,
+update_stream0(#{machine_version := MacVer},
                {nodeup, Node},
                #stream{members = Members0} = Stream0) ->
     Members = maps:map(
                 fun (N, #member{current = {sleeping, nodeup}} = M)
                       when N == Node ->
                         M#member{current = undefined};
+                    (N, #member{state = {disconnected, E, Pid}} = M)
+                      when N == Node andalso ?V8_OR_MORE(MacVer) ->
+                        %% the node hosting this disconnected replica is back:
+                        %% resume treating the member as running. The process
+                        %% monitor re-issued in the 'nodeup' apply clause will
+                        %% deliver a DOWN and trigger a restart if the process
+                        %% did not survive the disconnection.
+                        M#member{state = {running, E, Pid}};
                     (_, M) ->
                         M
                 end, Members0),
@@ -1937,7 +1966,8 @@ evaluate_stream(#{index := Idx} = Meta,
                               current = undefined} = Writer0},
          Replicas}
            when LState =/= deleted ->
-             Action = {aux, {delete_member, StreamId, LeaderNode,
+             Args = Meta#{node => LeaderNode, epoch => Epoch},
+             Action = {aux, {delete_member, StreamId, Args,
                              make_writer_conf(LeaderNode, Stream0)}},
              Writer = Writer0#member{current = {deleting, Idx}},
              Effs = [Action | Effs0],
