@@ -37,6 +37,7 @@
 -export([update_consumer_handler/8, update_consumer/9]).
 -export([cancel_consumer_handler/2, cancel_consumer/3]).
 -export([become_leader/2, handle_tick/3, spawn_deleter/1]).
+-export([state_restore_timer/3]).
 -export([rpc_delete_metrics/1,
          key_metrics_rpc/1]).
 -export([format/2]).
@@ -1147,11 +1148,14 @@ with_queue_blocked(Q, Fun) ->
     PrevState = amqqueue:get_state(Q),
     _ = set_queue_state(QName, blocked),
     %% Safety net: should this process fail to restore the previous state for
-    %% any reason (for example, it is killed mid-delete), an independent timer
-    %% process restores it after a timeout so the queue is not left blocked,
-    %% and rejecting publishes, indefinitely. It is cancelled on the normal
-    %% paths below where the state is restored (or the queue deleted) directly.
-    TimerPid = spawn_state_restore_timer(QName, PrevState),
+    %% any reason (for example, it is killed mid-delete, or its whole node
+    %% crashes), independent timer processes restore it after a timeout so the
+    %% queue is not left blocked, and rejecting publishes, indefinitely. One
+    %% timer is spawned on every running cluster node so the state is still
+    %% restored even if the node running this delete goes down entirely. They
+    %% are cancelled on the normal paths below where the state is restored (or
+    %% the queue deleted) directly.
+    TimerPids = spawn_state_restore_timers(QName, PrevState),
     try Fun() of
         {ok, _} = Ok ->
             Ok;
@@ -1163,26 +1167,34 @@ with_queue_blocked(Q, Fun) ->
             _ = set_queue_state(QName, PrevState),
             erlang:raise(Class, Reason, Stacktrace)
     after
-        _ = cancel_state_restore_timer(TimerPid)
+        _ = cancel_state_restore_timers(TimerPids)
     end.
 
-%% Spawns an unlinked process that restores State after a configurable timeout
-%% unless it is cancelled first. It must not be linked to the caller: the whole
-%% point is to restore the state even when the caller dies without doing so.
-spawn_state_restore_timer(QName, State) ->
+%% Spawns one unlinked process per running cluster node, each of which restores
+%% State after a configurable timeout unless it is cancelled first. The timers
+%% must not be linked to the caller: the whole point is to restore the state
+%% even when the caller dies without doing so. Spawning on every node (rather
+%% than only locally) means the state is restored even if the node running the
+%% delete crashes entirely, since the blocked state lives in the cluster-wide
+%% metadata store and any node can restore it.
+spawn_state_restore_timers(QName, State) ->
     Timeout = blocked_state_restore_timeout(),
-    spawn(fun () ->
-                  receive
-                      cancel ->
-                          ok
-                  after Timeout ->
-                          _ = set_queue_state(QName, State),
-                          ok
-                  end
-          end).
+    [spawn(Node, ?MODULE, state_restore_timer, [QName, State, Timeout])
+     || Node <- rabbit_nodes:list_running()].
 
-cancel_state_restore_timer(Pid) ->
-    Pid ! cancel,
+%% Timer body run on each node. Exported so it can be started via spawn/4 on
+%% remote nodes.
+state_restore_timer(QName, State, Timeout) ->
+    receive
+        cancel ->
+            ok
+    after Timeout ->
+            _ = set_queue_state(QName, State),
+            ok
+    end.
+
+cancel_state_restore_timers(Pids) ->
+    _ = [Pid ! cancel || Pid <- Pids],
     ok.
 
 blocked_state_restore_timeout() ->
