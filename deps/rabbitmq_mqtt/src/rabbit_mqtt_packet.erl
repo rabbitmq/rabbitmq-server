@@ -20,7 +20,7 @@
 -define(RESERVED, 0).
 -define(HIGHBIT, 2#10000000).
 -define(LOWBITS, 2#01111111).
--define(MAX_MULTIPLIER, ?HIGHBIT * ?HIGHBIT * ?HIGHBIT).
+-define(MAX_MULTIPLIER, (?HIGHBIT * ?HIGHBIT * ?HIGHBIT)).
 
 -spec init_state() -> state().
 init_state() -> unauthenticated.
