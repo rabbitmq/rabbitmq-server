@@ -72,7 +72,8 @@
 -export([confirm_to_sender/3,
          send_rejection/3,
          deliver_to_consumer/5,
-         send_credit_reply/7]).
+         send_credit_reply/7,
+         send_consumer_timeout/4]).
 
 -export([policy_apply_to_name/0,
          stop/1,
@@ -307,13 +308,19 @@ consume(Q, Spec, State0) when ?amqqueue_is_classic(Q) ->
       exclusive_consume := ExclusiveConsume,
       args := Args,
       ok_msg := OkMsg,
-      acting_user :=  ActingUser} = Spec,
-    case delegate:invoke(QPid,
-                         {gen_server2, call,
-                          [{basic_consume, NoAck, ChPid, LimiterPid,
-                            LimiterActive, Mode, ConsumerTag,
-                            ExclusiveConsume, Args, OkMsg, ActingUser},
-                           infinity]}) of
+      acting_user := ActingUser,
+      timeout := Timeout} = Spec,
+    Req = case rabbit_feature_flags:is_enabled('rabbitmq_4.4.0') of
+              true ->
+                  {basic_consume, NoAck, ChPid, LimiterPid,
+                   LimiterActive, Mode, ConsumerTag,
+                   ExclusiveConsume, Args, OkMsg, ActingUser, Timeout};
+              false ->
+                  {basic_consume, NoAck, ChPid, LimiterPid,
+                   LimiterActive, Mode, ConsumerTag,
+                   ExclusiveConsume, Args, OkMsg, ActingUser}
+          end,
+    case delegate:invoke(QPid, {gen_server2, call, [Req, infinity]}) of
         ok ->
             State = State0#?STATE{pid = QPid},
             {ok, ensure_monitor(QRef, State)};
@@ -482,13 +489,16 @@ deliver(Qs0, Msg0, Options) ->
               state()) ->
     {ok, Count :: non_neg_integer(), rabbit_amqqueue:qmsg(), state()} |
     {empty, state()}.
-dequeue(Q, NoAck, LimiterPid, _CTag, _Timeout, State0) ->
+dequeue(Q, NoAck, LimiterPid, _CTag, Timeout, State0) ->
     QName = amqqueue:get_name(Q),
     QPid = amqqueue:get_pid(Q),
     State1 = State0#?STATE{pid = QPid},
     State = ensure_monitor(QName, State1),
-    case delegate:invoke(QPid, {gen_server2, call,
-                                [{basic_get, self(), NoAck, LimiterPid}, infinity]}) of
+    Req = case rabbit_feature_flags:is_enabled('rabbitmq_4.4.0') of
+              true -> {basic_get, self(), NoAck, LimiterPid, Timeout};
+              false -> {basic_get, self(), NoAck, LimiterPid}
+          end,
+    case delegate:invoke(QPid, {gen_server2, call, [Req, infinity]}) of
         empty ->
             {empty, State};
         {ok, Count, Msg} ->
@@ -653,8 +663,9 @@ capabilities() ->
                           <<"x-max-length-bytes">>, <<"x-max-priority">>,
                           <<"x-overflow">>, <<"x-queue-mode">>, <<"x-queue-version">>,
                           <<"x-single-active-consumer">>, <<"x-queue-type">>,
-                          <<"x-queue-master-locator">>, <<"x-queue-leader-locator">>],
-      consumer_arguments => [<<"x-priority">>],
+                          <<"x-queue-master-locator">>, <<"x-queue-leader-locator">>,
+                          <<"x-consumer-timeout">>],
+      consumer_arguments => [<<"x-priority">>, <<"x-consumer-timeout">>],
       server_named => true,
       rebalance_module => undefined,
       can_redeliver => false,
@@ -729,6 +740,10 @@ send_rejection(Pid, QName, MsgSeqNo) ->
 
 deliver_to_consumer(Pid, QName, CTag, AckRequired, Message) ->
     Evt = {deliver, CTag, AckRequired, [Message]},
+    send_queue_event(Pid, QName, Evt).
+
+send_consumer_timeout(Pid, QName, CTag, AckTags) ->
+    Evt = {released, QName, CTag, AckTags, timeout},
     send_queue_event(Pid, QName, Evt).
 
 send_credit_reply(Pid, QName, Ctag, DeliveryCount, Credit, Avail, Drain) ->
