@@ -129,7 +129,7 @@
 -spec init_from_stream(binary(), mc:annotations()) ->
     mc:state().
 init_from_stream(Payload, #{} = Anns0) ->
-    Sections = amqp10_framing:decode_bin(Payload, [server_mode]),
+    Sections = amqp10_framing:decode_bin(Payload, [{server_mode, false}]),
     Msg = msg_body_encoded(Sections, Payload, #msg_body_encoded{}),
     %% when initalising from stored stream data the recovered
     %% annotations take precendence over the ones provided
@@ -141,7 +141,7 @@ init_from_stream(Payload, #{} = Anns0) ->
 init(#msg_body_encoded{} = Msg) ->
     {Msg, #{}};
 init(Payload) ->
-    Sections = amqp10_framing:decode_bin(Payload, [server_mode]),
+    Sections = amqp10_framing:decode_bin(Payload, [{server_mode, true}]),
     Msg = msg_body_encoded(Sections, Payload, #msg_body_encoded{}),
     Anns = essential_properties(Msg, new),
     {Msg, Anns}.

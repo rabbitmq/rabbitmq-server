@@ -608,7 +608,7 @@ module Test =
         assertNotNull linkError
         assertEqual (Symbol "amqp:decode-error") linkError.Condition
         assertNotNull linkError.Description
-        assertTrue (linkError.Description.Contains("message has no body"))
+        assertTrue (linkError.Description.Contains("missing_amqp_message_body"))
 
 let (|AsLower|) (s: string) =
     match s with

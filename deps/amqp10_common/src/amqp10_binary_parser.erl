@@ -30,17 +30,31 @@
 -define(CODE_SYM_8, 16#a3).
 -define(CODE_SYM_32, 16#b3).
 %% §3.2
+-define(DESCRIPTOR_CODE_HEADER, 16#70).
+-define(DESCRIPTOR_CODE_DELIVERY_ANNOTATIONS, 16#71).
+-define(DESCRIPTOR_CODE_MESSAGE_ANNOTATIONS, 16#72).
 -define(DESCRIPTOR_CODE_PROPERTIES, 16#73).
 -define(DESCRIPTOR_CODE_APPLICATION_PROPERTIES, 16#74).
 -define(DESCRIPTOR_CODE_DATA, 16#75).
 -define(DESCRIPTOR_CODE_AMQP_SEQUENCE, 16#76).
 -define(DESCRIPTOR_CODE_AMQP_VALUE, 16#77).
+-define(DESCRIPTOR_CODE_FOOTER, 16#78).
+
+%% The spec does not limit how many body sections a message may consist of.
+%% Since a message must be validated section by section, an unlimited number of
+%% tiny sections would let a single message consume disproportionate CPU time.
+%% No real world sender should come anywhere near this limit.
+-define(MAX_MSG_SECTIONS, 10_000).
 
 %% server_mode is a special parsing mode used by RabbitMQ when parsing
 %% AMQP message sections from an AMQP client. This mode:
 %% 1. stops parsing when the body starts, and
 %% 2. returns the start byte position of each parsed bare message section.
--type opts() :: [server_mode].
+%%
+%% If Validate is true, the order and cardinality of all message sections is
+%% additionally validated as defined in §3.2.
+-type opt() :: {server_mode, Validate :: boolean()}.
+-type opts() :: [opt()].
 
 -export_type([opts/0]).
 
@@ -209,7 +223,11 @@ parse_array_primitive(ElementType, Data) ->
 mapify([]) ->
     [];
 mapify([Key, Value | Rest]) ->
-    [{Key, Value} | mapify(Rest)].
+    [{Key, Value} | mapify(Rest)];
+mapify([_]) ->
+    %% "Map encodings MUST contain an even number of items
+    %% (i.e. an equal number of keys and values)." [1.6.23]
+    throw(map_with_odd_number_of_elements).
 
 %% Parses all AMQP types (or, in server_mode, stops when the body is reached).
 %% This is an optimisation over calling parse/1 repeatedly.
@@ -219,8 +237,13 @@ mapify([Key, Value | Rest]) ->
      {{pos, non_neg_integer()},
       amqp10_binary_generator:amqp10_type() | {body, pos_integer()}}].
 parse_many(Binary, Opts) ->
-    OptionServerMode = lists:member(server_mode, Opts),
-    pm(Binary, OptionServerMode, 0).
+    case lists:keyfind(server_mode, 1, Opts) of
+        {server_mode, Validate} ->
+            Validate andalso validate_msg_sections(Binary),
+            pm(Binary, true, 0);
+        false ->
+            pm(Binary, false, 0)
+    end.
 
 pm(<<>>, _, _) ->
     [];
@@ -246,9 +269,9 @@ pm(<<?CODE_SYM_8, S:8, V:S/binary,R/binary>>, O, B)      -> [{symbol, V} | pm(R,
 pm(<<16#45, R/binary>>, O, B) ->
     [{list, []} | pm(R, O, B+1)];
 pm(<<16#c0, S:8,CountAndValue:S/binary,R/binary>>, O, B) ->
-    [{list, pm_compound(8, CountAndValue, O, B+2)} | pm(R, O, B+2+S)];
+    [{list, pm_compound(8, CountAndValue, B+2)} | pm(R, O, B+2+S)];
 pm(<<16#c1, S:8,CountAndValue:S/binary,R/binary>>, O, B) ->
-    List = pm_compound(8, CountAndValue, O, B+2),
+    List = pm_compound(8, CountAndValue, B+2),
     [{map, mapify(List)} | pm(R, O, B+2+S)];
 
 %% We avoid guard tests: they improve readability, but result in worse performance.
@@ -333,9 +356,9 @@ pm(<<16#b0, S:32,V:S/binary,R/binary>>, O, B)        -> [{binary, V} | pm(R, O, 
 pm(<<16#b1, S:32,V:S/binary,R/binary>>, O, B)        -> [{utf8, V} | pm(R, O, B+5+S)];
 %% Compounds
 pm(<<16#d0, S:32,CountAndValue:S/binary,R/binary>>, O, B) ->
-    [{list, pm_compound(32, CountAndValue, O, B+5)} | pm(R, O, B+5+S)];
+    [{list, pm_compound(32, CountAndValue, B+5)} | pm(R, O, B+5+S)];
 pm(<<16#d1, S:32,CountAndValue:S/binary,R/binary>>, O, B) ->
-    List = pm_compound(32, CountAndValue, O, B+5),
+    List = pm_compound(32, CountAndValue, B+5),
     [{map, mapify(List)} | pm(R, O, B+5+S)];
 %% Arrays
 pm(<<16#e0, S:8,CountAndV:S/binary,R/binary>>, O, B) ->
@@ -357,12 +380,170 @@ pm(<<16#94, V:16/binary, R/binary>>, O, B) ->
 pm(<<Type, _Bin/binary>>, _O, B) ->
     throw({primitive_type_unsupported, Type, {position, B}}).
 
-pm_compound(UnitSize, Bin, O, B) ->
-    <<_IgnoreCount:UnitSize, Value/binary>> = Bin,
-    pm(Value, O, B + UnitSize div 8).
+pm_compound(UnitSize, Bin, B) ->
+    case Bin of
+        <<_IgnoreCount:UnitSize, Value/binary>> ->
+            pm(Value, false, B + UnitSize div 8);
+        _ ->
+            throw({invalid_compound_size, {position, B}})
+    end.
 
 reached_body(Position, DescriptorCode) ->
     [{{pos, Position}, {body, DescriptorCode}}].
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% "Altogether a message consists of the following sections:
+%%  * Zero or one header sections.
+%%  * Zero or one delivery-annotation sections.
+%%  * Zero or one message-annotation sections.
+%%  * Zero or one properties sections.
+%%  * Zero or one application-properties sections.
+%%  * The body consists of one of the following three choices: one or more data
+%%    sections, one or more amqp-sequence sections, or a single amqp-value
+%%    section.
+%%  * Zero or one footer sections." [§3.2]
+%%
+%% The descriptor codes of these sections are assigned in exactly the order in
+%% which the sections must appear. Therefore, validating the order and the
+%% cardinality of all sections preceding the body reduces to requiring strictly
+%% increasing descriptor codes.
+%%
+%% This validation jumps from one section to the next without building any
+%% Erlang term. erlang:binary_part/2,3 is avoided to avoid creating sub binaries.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+validate_msg_sections(Binary) ->
+    validate(Binary, 0, ?DESCRIPTOR_CODE_HEADER, ?MAX_MSG_SECTIONS).
+
+%% While the sections preceding the body are validated, State is the lowest
+%% descriptor code that is still allowed. From the first body section onwards,
+%% State is the atom 'data', 'sequence' or 'value', and 'eof' after the footer.
+%% Left is the number of sections that may still follow.
+validate(<<>>, _Pos, _State, _Left) ->
+    %% A missing body section will be reported by the caller.
+    ok;
+validate(<<_, _/binary>>, Pos, _State, 0) ->
+    throw({too_many_message_sections, ?MAX_MSG_SECTIONS, {position, Pos}});
+validate(<<?DESCRIBED, ?CODE_SMALL_ULONG, Code:8, R/binary>>, Pos, State, Left) ->
+    State1 = validate_state(Code, State, Pos),
+    validate_value(R, Pos+3, State1, section_value_kind(Code), Left-1);
+validate(<<?DESCRIBED, ?CODE_ULONG, Code:64, R/binary>>, Pos, State, Left) ->
+    State1 = validate_state(Code, State, Pos),
+    validate_value(R, Pos+10, State1, section_value_kind(Code), Left-1);
+validate(<<?DESCRIBED, ?CODE_SYM_8, Size:8, Symbol:Size/binary, R/binary>>, Pos, State, Left) ->
+    Code = descriptor_code(Symbol),
+    State1 = validate_state(Code, State, Pos),
+    validate_value(R, Pos+3+Size, State1, section_value_kind(Code), Left-1);
+validate(<<?DESCRIBED, ?CODE_SYM_32, Size:32, Symbol:Size/binary, R/binary>>, Pos, State, Left) ->
+    Code = descriptor_code(Symbol),
+    State1 = validate_state(Code, State, Pos),
+    validate_value(R, Pos+6+Size, State1, section_value_kind(Code), Left-1);
+validate(_, Pos, _State, _Left) ->
+    throw({not_a_message_section, {position, Pos}}).
+
+%% Rejects an unknown section descriptor as well as a known section that
+%% violates the section order or cardinality.
+validate_state(?DESCRIPTOR_CODE_HEADER, State, _Pos)
+  when State =< ?DESCRIPTOR_CODE_HEADER ->
+    ?DESCRIPTOR_CODE_HEADER + 1;
+validate_state(?DESCRIPTOR_CODE_DELIVERY_ANNOTATIONS, State, _Pos)
+  when State =< ?DESCRIPTOR_CODE_DELIVERY_ANNOTATIONS ->
+    ?DESCRIPTOR_CODE_DELIVERY_ANNOTATIONS + 1;
+validate_state(?DESCRIPTOR_CODE_MESSAGE_ANNOTATIONS, State, _Pos)
+  when State =< ?DESCRIPTOR_CODE_MESSAGE_ANNOTATIONS ->
+    ?DESCRIPTOR_CODE_MESSAGE_ANNOTATIONS + 1;
+validate_state(?DESCRIPTOR_CODE_PROPERTIES, State, _Pos)
+  when State =< ?DESCRIPTOR_CODE_PROPERTIES ->
+    ?DESCRIPTOR_CODE_PROPERTIES + 1;
+validate_state(?DESCRIPTOR_CODE_APPLICATION_PROPERTIES, State, _Pos)
+  when State =< ?DESCRIPTOR_CODE_APPLICATION_PROPERTIES ->
+    ?DESCRIPTOR_CODE_APPLICATION_PROPERTIES + 1;
+validate_state(?DESCRIPTOR_CODE_DATA, State, _Pos)
+  when is_integer(State) orelse State =:= data ->
+    data;
+validate_state(?DESCRIPTOR_CODE_AMQP_SEQUENCE, State, _Pos)
+  when is_integer(State) orelse State =:= sequence ->
+    sequence;
+validate_state(?DESCRIPTOR_CODE_AMQP_VALUE, State, _Pos)
+  when is_integer(State) ->
+    value;
+validate_state(?DESCRIPTOR_CODE_FOOTER, State, _Pos)
+  when State =:= data orelse
+       State =:= sequence orelse
+       State =:= value ->
+    eof;
+validate_state(Descriptor, _State, Pos) ->
+    throw({unexpected_message_section, section_name(Descriptor), {position, Pos}}).
+
+section_value_kind(?DESCRIPTOR_CODE_HEADER) -> list;
+section_value_kind(?DESCRIPTOR_CODE_DELIVERY_ANNOTATIONS) -> map;
+section_value_kind(?DESCRIPTOR_CODE_MESSAGE_ANNOTATIONS) -> map;
+section_value_kind(?DESCRIPTOR_CODE_PROPERTIES) -> list;
+section_value_kind(?DESCRIPTOR_CODE_APPLICATION_PROPERTIES) -> map;
+section_value_kind(?DESCRIPTOR_CODE_DATA) -> binary;
+section_value_kind(?DESCRIPTOR_CODE_AMQP_SEQUENCE) -> list;
+section_value_kind(?DESCRIPTOR_CODE_AMQP_VALUE) -> any;
+section_value_kind(?DESCRIPTOR_CODE_FOOTER) -> map.
+
+%% Jumps over the section value: neither an Erlang term nor a sub binary is created.
+validate_value(<<16#45, R/binary>>, Pos, State, Kind, Left)
+  when Kind =:= list orelse Kind =:= any ->
+    validate(R, Pos+1, State, Left);
+validate_value(<<16#c0, Size:8, _:Size/binary, R/binary>>, Pos, State, Kind, Left)
+  when Kind =:= list orelse Kind =:= any ->
+    validate(R, Pos+2+Size, State, Left);
+validate_value(<<16#d0, Size:32, _:Size/binary, R/binary>>, Pos, State, Kind, Left)
+  when Kind =:= list orelse Kind =:= any ->
+    validate(R, Pos+5+Size, State, Left);
+validate_value(<<16#c1, Size:8, _:Size/binary, R/binary>>, Pos, State, Kind, Left)
+  when Kind =:= map orelse Kind =:= any ->
+    validate(R, Pos+2+Size, State, Left);
+validate_value(<<16#d1, Size:32, _:Size/binary, R/binary>>, Pos, State, Kind, Left)
+  when Kind =:= map orelse Kind =:= any ->
+    validate(R, Pos+5+Size, State, Left);
+validate_value(<<16#a0, Size:8, _:Size/binary, R/binary>>, Pos, State, Kind, Left)
+  when Kind =:= binary orelse Kind =:= any ->
+    validate(R, Pos+2+Size, State, Left);
+validate_value(<<16#b0, Size:32, _:Size/binary, R/binary>>, Pos, State, Kind, Left)
+  when Kind =:= binary orelse Kind =:= any ->
+    validate(R, Pos+5+Size, State, Left);
+%% Any other AMQP type is valid only as the value of an amqp-value section.
+%% Its size is determined without building any Erlang term either.
+validate_value(Bin, Pos, State, any, Left) ->
+    validate_skip(Bin, Pos, State, Left, peek_value_size(Bin));
+validate_value(_, Pos, _State, Kind, _Left) ->
+    throw({invalid_section_value, Kind, {position, Pos}}).
+
+validate_skip(Bin, Pos, State, Left, Size) ->
+    case Bin of
+        <<_:Size/binary, R/binary>> ->
+            validate(R, Pos+Size, State, Left);
+        _ ->
+            throw({invalid_section_value, any, {position, Pos}})
+    end.
+
+descriptor_code(<<"amqp:header:list">>) -> ?DESCRIPTOR_CODE_HEADER;
+descriptor_code(<<"amqp:delivery-annotations:map">>) -> ?DESCRIPTOR_CODE_DELIVERY_ANNOTATIONS;
+descriptor_code(<<"amqp:message-annotations:map">>) -> ?DESCRIPTOR_CODE_MESSAGE_ANNOTATIONS;
+descriptor_code(<<"amqp:properties:list">>) -> ?DESCRIPTOR_CODE_PROPERTIES;
+descriptor_code(<<"amqp:application-properties:map">>) -> ?DESCRIPTOR_CODE_APPLICATION_PROPERTIES;
+descriptor_code(<<"amqp:data:binary">>) -> ?DESCRIPTOR_CODE_DATA;
+descriptor_code(<<"amqp:amqp-sequence:list">>) -> ?DESCRIPTOR_CODE_AMQP_SEQUENCE;
+descriptor_code(<<"amqp:amqp-value:*">>) -> ?DESCRIPTOR_CODE_AMQP_VALUE;
+descriptor_code(<<"amqp:footer:map">>) -> ?DESCRIPTOR_CODE_FOOTER;
+descriptor_code(_UnknownSymbol) -> unknown_section_descriptor.
+
+%% Only used to report an error.
+section_name(?DESCRIPTOR_CODE_HEADER) -> header;
+section_name(?DESCRIPTOR_CODE_DELIVERY_ANNOTATIONS) -> delivery_annotations;
+section_name(?DESCRIPTOR_CODE_MESSAGE_ANNOTATIONS) -> message_annotations;
+section_name(?DESCRIPTOR_CODE_PROPERTIES) -> properties;
+section_name(?DESCRIPTOR_CODE_APPLICATION_PROPERTIES) -> application_properties;
+section_name(?DESCRIPTOR_CODE_DATA) -> data;
+section_name(?DESCRIPTOR_CODE_AMQP_SEQUENCE) -> amqp_sequence;
+section_name(?DESCRIPTOR_CODE_AMQP_VALUE) -> amqp_value;
+section_name(?DESCRIPTOR_CODE_FOOTER) -> footer;
+section_name(UnknownDescriptor) -> UnknownDescriptor.
 
 %% Returns the descriptor and total byte size (1 + B1 + B2) of the described type
 %% at the start of the binary, without parsing the value.
@@ -377,7 +558,17 @@ peek(<<Type, _/binary>>) ->
     throw({not_described_type, Type}).
 
 %% Returns the byte size of the AMQP value at the start of the binary
-%% without parsing it (no term construction). Used by peek/1.
+%% without parsing it (no term construction).
+peek_value_size(<<?DESCRIBED, Rest/binary>>) ->
+    %% "The descriptor portion of a described format code is itself any valid AMQP
+    %% encoded value, including other described values." [§1.2]
+    DescriptorSize = peek_value_size(Rest),
+    case Rest of
+        <<_:DescriptorSize/binary, Value/binary>> ->
+            1 + DescriptorSize + peek_value_size(Value);
+        _ ->
+            throw({insufficient_input, described_type, peek_value_size})
+    end;
 peek_value_size(<<16#40, _/binary>>) -> 1;
 peek_value_size(<<16#41, _/binary>>) -> 1;
 peek_value_size(<<16#42, _/binary>>) -> 1;
