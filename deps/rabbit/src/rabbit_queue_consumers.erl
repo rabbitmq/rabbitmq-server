@@ -8,13 +8,14 @@
 -module(rabbit_queue_consumers).
 
 -export([new/0, max_active_priority/1, inactive/1, all/1, all/3, count/0,
-         unacknowledged_message_count/0, add/9, remove/4, erase_ch/2,
-         deliver/5, record_ack/3, subtract_acks/3,
+         unacknowledged_message_count/0, add/10, remove/4, erase_ch/2,
+         deliver/5, record_ack/5, subtract_acks/3,
          possibly_unblock/3,
          resume_fun/0, notify_sent_fun/1, activate_limit_fun/0,
          drained/3, process_credit/5, get_link_state/2,
          utilisation/1, capacity/1, is_same/3, get_consumer/1, get/3,
-         consumer_tag/1, get_infos/1, parse_prefetch_count/1]).
+         consumer_tag/1, get_infos/1, parse_prefetch_count/1,
+         expire_acks/2, next_deadline/1, holds_acks/2]).
 
 -export([deactivate_limit_fun/0]).
 
@@ -26,9 +27,12 @@
 %% Utilisation average calculations are all in μs.
 -define(USE_AVG_HALF_LIFE, 1000000.0).
 
--record(state, {consumers, use}).
+%% Cached global next_deadline, min/2-tightened on delivery/record_ack,
+%% overwritten with ground truth by expire_acks/2. Mirrors rabbit_fifo's
+%% next_consumer_timeout.
+-record(state, {consumers, use, next_deadline = infinity}).
 
--record(consumer, {tag, ack_required, prefetch, args, user}).
+-record(consumer, {tag, ack_required, prefetch, args, user, timeout}).
 
 %% AMQP 1.0 link flow control state, see §2.6.7
 -record(link_state, {delivery_count :: rabbit_queue_type:delivery_count(),
@@ -38,9 +42,19 @@
 %% channel record
 -record(cr, {ch_pid,
              monitor_ref,
-             acktags :: #{ack_id() => {raw_ack_tag(), rabbit_types:ctag() | none}},
+             acktags :: #{ack_id() => {raw_ack_tag(),
+                                       rabbit_types:ctag() | none,
+                                       deadline()}},
+             %% Reclaimed deliveries awaiting a late ack
+             tombstones :: #{ack_id() => rabbit_types:ctag() | none},
+             %% Outstanding tombstone count per ctag
+             tombstoned_ctags :: #{rabbit_types:ctag() | none => pos_integer()},
              %% Next ack_id() to hand out. Never reused (unlike raw_ack_tag()).
              next_ack_id = 0 :: ack_id(),
+             %% Cached minimum deadline() across this channel's acktags,
+             %% so the queue process doesn't have to rescan every channel's
+             %% acktags to find the next consumer-timeout deadline.
+             next_deadline = infinity :: deadline(),
              consumer_count :: non_neg_integer(),
              %% Queue of {ChPid, #consumer{}} for consumers which have
              %% been blocked (rate/prefetch limited) for any reason
@@ -59,16 +73,21 @@
 -type state() :: #state{consumers ::priority_queue:q(),
                         use       :: {'inactive',
                                       time_micros(), time_micros(), ratio()} |
-                                     {'active', time_micros(), ratio()}}.
+                                     {'active', time_micros(), ratio()},
+                        next_deadline :: deadline()}.
 -type consumer() :: #consumer{tag::rabbit_types:ctag(), ack_required::boolean(),
                               prefetch::non_neg_integer(), args::rabbit_framing:amqp_table(),
-                              user::rabbit_types:username()}.
+                              user::rabbit_types:username(),
+                              timeout::non_neg_integer()}.
 -type ch() :: pid().
 %% Identifies one delivery attempt; unlike raw_ack_tag(), never reused.
 -type ack_id() :: non_neg_integer().
 %% The ack tag as returned by the backing queue; may be reused across
 %% delivery attempts of the same message (e.g. after a requeue).
 -type raw_ack_tag() :: any().
+%% Absolute erlang:monotonic_time(millisecond) at which a delivery's
+%% consumer-timeout expires, infinity when there is none to track.
+-type deadline() :: integer() | infinity.
 -type cr_fun() :: fun ((#cr{}) -> #cr{}).
 -type fetch_result() :: {rabbit_types:basic_message(), boolean(), raw_ack_tag()}.
 
@@ -142,17 +161,18 @@ count() -> lists:sum([Count || #cr{consumer_count = Count} <- all_ch_record()]).
 -spec unacknowledged_message_count() -> non_neg_integer().
 
 unacknowledged_message_count() ->
-    lists:sum([maps:size(C#cr.acktags) || C <- all_ch_record()]).
+    lists:sum([maps:size(C#cr.acktags) + maps:size(C#cr.tombstones)
+               || C <- all_ch_record()]).
 
 -spec add(ch(), rabbit_types:ctag(), boolean(), pid() | none, boolean(),
           {simple_prefetch, non_neg_integer()} | {credited, rabbit_queue_type:delivery_count()},
           rabbit_framing:amqp_table(),
-          rabbit_types:username(), state()) ->
+          rabbit_types:username(), non_neg_integer(), state()) ->
     state().
 
 add(ChPid, CTag, NoAck, LimiterPid, LimiterActive, Mode, Args, Username,
-    #state{consumers = Consumers,
-           use = CUInfo} = State) ->
+    Timeout, #state{consumers = Consumers,
+                    use = CUInfo} = State) ->
     C0 = #cr{consumer_count = Count,
              limiter        = Limiter,
              link_states = LinkStates} = ch_record(ChPid, LimiterPid),
@@ -183,7 +203,8 @@ add(ChPid, CTag, NoAck, LimiterPid, LimiterActive, Mode, Args, Username,
                          ack_required = not NoAck,
                          prefetch     = parse_prefetch_count(Mode),
                          args         = Args,
-                         user         = Username},
+                         user         = Username,
+                         timeout      = Timeout},
     State#state{consumers = add_consumer({ChPid, Consumer}, Consumers),
                 use       = update_use(CUInfo, active)}.
 
@@ -194,28 +215,34 @@ remove(ChPid, CTag, Reason, State = #state{consumers = Consumers}) ->
         not_found ->
             not_found;
         C = #cr{acktags = AckTags0,
+                tombstones = Tombstones0,
+                tombstoned_ctags = TombCTags0,
                 consumer_count = Count,
                 limiter = Limiter,
                 blocked_consumers = Blocked,
                 link_states = LinkStates} ->
-            {Acks, AckTags} = case Reason of
-                                  remove ->
-                                      maps:fold(
-                                        fun (_AckId, {RawTag, Tag}, {Acc, M})
-                                              when Tag =:= CTag ->
-                                                {[RawTag | Acc], M};
-                                           (AckId, Entry, {Acc, M}) ->
-                                                {Acc, M#{AckId => Entry}}
-                                        end, {[], #{}}, AckTags0);
-                                  _ ->
-                                      {[], AckTags0}
-                              end,
+            {Acks, AckTags} =
+                case Reason of
+                    remove ->
+                        maps:fold(
+                          fun (_AckId, {RawTag, Tag, _Deadline}, {Acc, M})
+                                when Tag =:= CTag ->
+                                  {[RawTag | Acc], M};
+                             (AckId, Entry, {Acc, M}) ->
+                                  {Acc, M#{AckId => Entry}}
+                          end, {[], #{}}, AckTags0);
+                    _ ->
+                        {[], AckTags0}
+                end,
+            {Tombstones, TombCTags} = tombstone_remove_ctag(CTag, Tombstones0, TombCTags0),
             Limiter1 = case Count of
                            1 -> rabbit_limiter:deactivate(Limiter);
                            _ -> Limiter
                        end,
             Limiter2 = rabbit_limiter:forget_consumer(Limiter1, CTag),
             update_ch_record(C#cr{acktags = AckTags,
+                                  tombstones = Tombstones,
+                                  tombstoned_ctags = TombCTags,
                                   consumer_count = Count - 1,
                                   limiter = Limiter2,
                                   blocked_consumers = remove_consumer(ChPid, CTag, Blocked),
@@ -237,7 +264,8 @@ erase_ch(ChPid, State = #state{consumers = Consumers}) ->
             All = priority_queue:join(Consumers, BlockedQ),
             ok = erase_ch_record(C),
             Filtered = priority_queue:filter(chan_pred(ChPid, true), All),
-            {[AckTag || {AckTag, _CTag} <- maps:values(ChAckTags)],
+            AckTags = [RawTag || _ := {RawTag, _CTag, _Deadline} <- ChAckTags],
+            {AckTags,
              tags(priority_queue:to_list(Filtered)),
              State#state{consumers = remove_consumers(ChPid, Consumers)}}
     end.
@@ -267,8 +295,9 @@ deliver(FetchFun, QName, Blocked, State = #state{consumers = Consumers}, true,
                 State#state{use = update_use(State#state.use, inactive)}};
         false ->
             case deliver_to_consumer(FetchFun, SingleActiveConsumer, QName) of
-                {delivered, R} ->
-                    {delivered, Blocked, R, State};
+                {delivered, {R, Deadline}} ->
+                    {delivered, Blocked, R,
+                     State#state{next_deadline = min(State#state.next_deadline, Deadline)}};
                 {undelivered, E} ->
                     Consumers1 = remove_consumer(ChPid, Consumer#consumer.tag, Consumers),
                     {undelivered, [E | Blocked],
@@ -283,10 +312,10 @@ deliver(FetchFun, QName, Blocked,
              State#state{use = update_use(State#state.use, inactive)}};
         {{value, QEntry, Priority}, Tail} ->
             case deliver_to_consumer(FetchFun, QEntry, QName) of
-                {delivered, R} ->
+                {delivered, {R, Deadline}} ->
                     {delivered, Blocked, R,
-                     State#state{consumers = priority_queue:in(QEntry, Priority,
-                                                               Tail)}};
+                     State#state{consumers = priority_queue:in(QEntry, Priority, Tail),
+                                 next_deadline = min(State#state.next_deadline, Deadline)}};
                 {undelivered, E} ->
                     deliver(FetchFun, QName, [E | Blocked],
                             State#state{consumers = Tail}, false, _SingleActiveConsumer)
@@ -336,27 +365,34 @@ deliver_to_consumer(FetchFun,
 
 deliver_to_consumer(FetchFun,
                     #consumer{tag          = CTag,
-                              ack_required = AckRequired},
+                              ack_required = AckRequired,
+                              timeout      = Timeout},
                     C = #cr{ch_pid               = ChPid,
                             acktags              = ChAckTags,
                             next_ack_id          = NextAckId,
+                            next_deadline        = NextDeadline,
                             unsent_message_count = Count},
                     QName) ->
     {{Message, IsDelivered, AckTag}, R} = FetchFun(AckRequired),
-    {DeliveredAckTag, ChAckTags1, NextAckId1} =
+    {DeliveredAckTag, ChAckTags1, NextAckId1, NextDeadline1} =
         case AckRequired of
-            true  -> {NextAckId,
-                      ChAckTags#{NextAckId => {AckTag, CTag}},
-                      NextAckId + 1};
-            false -> {AckTag, ChAckTags, NextAckId}
+            true  ->
+                Deadline = erlang:monotonic_time(millisecond) + Timeout,
+                {NextAckId,
+                 ChAckTags#{NextAckId => {AckTag, CTag, Deadline}},
+                 NextAckId + 1,
+                 min(NextDeadline, Deadline)};
+            false ->
+                {AckTag, ChAckTags, NextAckId, NextDeadline}
         end,
     Msg = {QName, self(), DeliveredAckTag, IsDelivered, Message},
     rabbit_classic_queue:deliver_to_consumer(ChPid, QName, CTag, AckRequired,
                                               Msg),
     update_ch_record(C#cr{acktags              = ChAckTags1,
                           next_ack_id          = NextAckId1,
+                          next_deadline        = NextDeadline1,
                           unsent_message_count = Count + 1}),
-    R.
+    {R, NextDeadline1}.
 
 is_blocked(Consumer = {ChPid, _C}) ->
     case lookup_ch(ChPid) of
@@ -366,13 +402,17 @@ is_blocked(Consumer = {ChPid, _C}) ->
             priority_queue:member(Consumer, BlockedConsumers)
     end.
 
--spec record_ack(ch(), pid(), raw_ack_tag()) -> {'ok', ack_id()}.
+-spec record_ack(ch(), pid(), raw_ack_tag(), non_neg_integer(), state()) ->
+    {'ok', ack_id(), state()}.
 
-record_ack(ChPid, LimiterPid, AckTag) ->
-    C = #cr{acktags = ChAckTags, next_ack_id = AckId} = ch_record(ChPid, LimiterPid),
-    update_ch_record(C#cr{acktags = ChAckTags#{AckId => {AckTag, none}},
-                          next_ack_id = AckId + 1}),
-    {ok, AckId}.
+record_ack(ChPid, LimiterPid, AckTag, Timeout, State = #state{next_deadline = GlobalDeadline}) ->
+    C = #cr{acktags = ChAckTags, next_ack_id = AckId,
+            next_deadline = NextDeadline} = ch_record(ChPid, LimiterPid),
+    Deadline = erlang:monotonic_time(millisecond) + Timeout,
+    update_ch_record(C#cr{acktags = ChAckTags#{AckId => {AckTag, none, Deadline}},
+                          next_ack_id = AckId + 1,
+                          next_deadline = min(NextDeadline, Deadline)}),
+    {ok, AckId, State#state{next_deadline = min(GlobalDeadline, Deadline)}}.
 
 -spec subtract_acks(ch(), [ack_id()], state()) ->
                            'not_found' |
@@ -383,41 +423,82 @@ subtract_acks(ChPid, AckIds, State) ->
     case lookup_ch(ChPid) of
         not_found ->
             not_found;
-        C = #cr{acktags = ChAckTags, limiter = Lim} ->
-            {ResolvedAccRev, AckTags2, CTagCounts} =
-                lists:foldl(fun resolve_ack_id/2, {[], ChAckTags, maps:new()}, AckIds),
+        C = #cr{acktags = AckTags, tombstones = Tombstones,
+                tombstoned_ctags = TombCTags, limiter = Lim} ->
+            {ResolvedAccRev, AckTags1, Tombstones1, TombCTags1, CTagCounts} =
+                lists:foldl(fun resolve_ack_id/2,
+                            {[], AckTags, Tombstones, TombCTags, maps:new()},
+                            AckIds),
             ResolvedAckTags = lists:reverse(ResolvedAccRev),
-            {Unblocked, Lim2} =
+            {LimUnblocked, Lim2} =
                 maps:fold(
-                  fun (CTag, Count, {UnblockedN, LimN}) ->
+                  fun (CTag, Count, {UnblockedAcc, LimN}) ->
                           {Unblocked1, LimN1} =
                               rabbit_limiter:ack_from_queue(LimN, CTag, Count),
-                          {UnblockedN orelse Unblocked1, LimN1}
+                          {UnblockedAcc orelse Unblocked1, LimN1}
                   end, {false, Lim}, CTagCounts),
-            C2 = C#cr{acktags = AckTags2, limiter = Lim2},
-            case Unblocked of
-                true  ->
+            C2 = C#cr{acktags = AckTags1, tombstones = Tombstones1,
+                      tombstoned_ctags = TombCTags1, limiter = Lim2},
+            %% Acking the last tombstone under a CTag must un-park it even
+            %% when the limiter has nothing to report, so re-check whenever
+            %% a CTag's tombstone debt just dropped to zero (a key vanishing
+            %% from TombCTags), not only when the limiter reports an unblock.
+            case LimUnblocked orelse maps:size(TombCTags1) < maps:size(TombCTags) of
+                false ->
+                    update_ch_record(C2),
+                    {ResolvedAckTags, unchanged};
+                true ->
                     case unblock(C2, State) of
                         unchanged ->
                             {ResolvedAckTags, unchanged};
                         {unblocked, UnblockedConsumers, State1} ->
                             {ResolvedAckTags, unblocked, UnblockedConsumers, State1}
-                    end;
-                false ->
-                    update_ch_record(C2),
-                    {ResolvedAckTags, unchanged}
+                    end
             end
     end.
 
-%% Resolves each ack_id() independently against acktags, so an unknown id
-%% can never affect whether the rest of the batch resolves correctly.
-resolve_ack_id(AckId, {ResAcc, AckTags, CTagCounts}) ->
+%% Resolves each ack_id() independently, so one miss can't poison a batch.
+resolve_ack_id(AckId, {ResAcc, AckTags, Tombstones, TombCTags, CTagCounts}) ->
     case maps:take(AckId, AckTags) of
-        {{RawTag, CTag}, AckTags1} ->
-            {[RawTag | ResAcc], AckTags1,
+        {{RawTag, CTag, _Deadline}, AckTags1} ->
+            {[RawTag | ResAcc], AckTags1, Tombstones, TombCTags,
              maps:update_with(CTag, fun (Old) -> Old + 1 end, 1, CTagCounts)};
         error ->
-            {ResAcc, AckTags, CTagCounts}
+            case tombstone_remove(AckId, Tombstones, TombCTags) of
+                {_CTag, Tombstones1, TombCTags1} ->
+                    %% Already credited at tombstone time.
+                    {ResAcc, AckTags, Tombstones1, TombCTags1, CTagCounts};
+                not_found ->
+                    {ResAcc, AckTags, Tombstones, TombCTags, CTagCounts}
+            end
+    end.
+
+%% The only three operations that touch tombstones/tombstoned_ctags, so
+%% the two maps (a ledger and its per-ctag debt count) can't drift apart.
+
+tombstone_add(CTag, AckIds, Tombstones, TombCTags) ->
+    Tombstones1 = lists:foldl(fun (AckId, T) -> T#{AckId => CTag} end,
+                              Tombstones, AckIds),
+    TombCTags1 = maps:update_with(CTag, fun (N) -> N + length(AckIds) end,
+                                  length(AckIds), TombCTags),
+    {Tombstones1, TombCTags1}.
+
+tombstone_remove(AckId, Tombstones, TombCTags) ->
+    case maps:take(AckId, Tombstones) of
+        {CTag, Tombstones1} ->
+            {CTag, Tombstones1, dec_tomb_ctag(CTag, TombCTags)};
+        error ->
+            not_found
+    end.
+
+tombstone_remove_ctag(CTag, Tombstones, TombCTags) ->
+    {maps:filter(fun (_AckId, Tag) -> Tag =/= CTag end, Tombstones),
+     maps:remove(CTag, TombCTags)}.
+
+dec_tomb_ctag(CTag, TombCTags) ->
+    case maps:get(CTag, TombCTags) of
+        1 -> maps:remove(CTag, TombCTags);
+        N -> TombCTags#{CTag => N - 1}
     end.
 
 -spec possibly_unblock(cr_fun(), ch(), state()) ->
@@ -437,10 +518,12 @@ possibly_unblock(Update, ChPid, State) ->
 
 unblock(C = #cr{blocked_consumers = BlockedQ,
                 limiter = Limiter,
-                link_states = LinkStates},
+                link_states = LinkStates,
+                tombstoned_ctags = TombCTags},
         State = #state{consumers = Consumers, use = Use}) ->
     case lists:partition(
            fun({_P, {_ChPid, #consumer{tag = CTag}}}) ->
+                   is_map_key(CTag, TombCTags) orelse
                    case maps:find(CTag, LinkStates) of
                        {ok, #link_state{credit = Credits}}
                          when Credits > 0 ->
@@ -462,6 +545,136 @@ unblock(C = #cr{blocked_consumers = BlockedQ,
             {unblocked, UnblockedConsumers,
              State#state{consumers = priority_queue:join(Consumers, UnblockedQ),
                          use       = update_use(Use, active)}}
+    end.
+
+%% Consumer timeout: deliveries past their deadline are moved from acktags
+%% into tombstones and their consumer is parked (moved into
+%% blocked_consumers, same as a rate/credit-limited consumer) until every
+%% tombstone under its tag is cleared by an eventual ack/nack for that ack_id,
+%% at which point subtract_acks's unconditional unblock/2 call un-parks it
+%% automatically.
+
+-spec next_deadline(state()) -> deadline().
+
+next_deadline(#state{next_deadline = D}) -> D.
+
+-spec holds_acks(ch(), rabbit_types:ctag()) -> boolean().
+
+holds_acks(ChPid, CTag) ->
+    case lookup_ch(ChPid) of
+        not_found ->
+            false;
+        #cr{acktags = AckTags} ->
+            maps:fold(fun (_AckId, {_RawTag, CT, _Deadline}, Acc) ->
+                              Acc orelse CT =:= CTag
+                      end, false, AckTags)
+    end.
+
+-spec expire_acks(integer(), state()) ->
+    {[{ch(), rabbit_types:ctag(), [ack_id()], [raw_ack_tag()]}], deadline(), state()}.
+
+expire_acks(Now, State) ->
+    {Expired, NextDeadline, State1} =
+        lists:foldl(fun (C, Acc) -> expire_ch_acks(Now, C, Acc) end,
+                   {[], infinity, State}, all_ch_record()),
+    {Expired, NextDeadline, State1#state{next_deadline = NextDeadline}}.
+
+%% Nothing on this channel is due yet: skip the acktags scan below.
+%% next_deadline is never stale-too-late (deliver_to_consumer/record_ack
+%% always tighten it when adding an entry), so this can never miss an
+%% expiry; it can only be stale-too-early, in which case Now will catch
+%% up to it and the full scan below runs and recomputes it correctly.
+expire_ch_acks(Now, #cr{next_deadline = ChNextDeadline},
+              {ExpAcc, NDAcc, State0})
+  when ChNextDeadline > Now ->
+    {ExpAcc, min(NDAcc, ChNextDeadline), State0};
+expire_ch_acks(Now, C0 = #cr{ch_pid = ChPid, acktags = AckTags0,
+                             tombstones = Tombstones0,
+                             tombstoned_ctags = TombCTags0,
+                             limiter = Limiter0},
+              {ExpAcc, NDAcc, State0 = #state{consumers = Consumers0}}) ->
+    {AckTags1, ExpiredByCTag, ChNextDeadline} = tombstone_expired(Now, AckTags0),
+    case ExpiredByCTag of
+        [] ->
+            update_ch_record(C0#cr{next_deadline = ChNextDeadline}),
+            {ExpAcc, min(NDAcc, ChNextDeadline), State0};
+        _ ->
+            %% The reclaimed deliveries are being handed back to the
+            %% backing queue, same as a nack(requeue=true). Give the
+            %% limiter its credit back the same way subtract_acks would.
+            Limiter1 = lists:foldl(
+                         fun ({CTag, AckIdRawTags}, LimAcc) ->
+                                 {_Unblocked, LimAcc1} =
+                                     rabbit_limiter:ack_from_queue(
+                                       LimAcc, CTag, length(AckIdRawTags)),
+                                 LimAcc1
+                         end, Limiter0, ExpiredByCTag),
+            {Tombstones1, TombCTags1} =
+                lists:foldl(
+                  fun ({CTag, AckIdRawTags}, {TombAcc, TombCAcc}) ->
+                          AckIds = [AckId || {AckId, _RawTag} <- AckIdRawTags],
+                          tombstone_add(CTag, AckIds, TombAcc, TombCAcc)
+                  end, {Tombstones0, TombCTags0}, ExpiredByCTag),
+            {C1, Consumers1} =
+                lists:foldl(
+                  fun ({CTag, _AckIdRawTags}, {CAcc, ConsAcc}) ->
+                          park(ChPid, CTag, CAcc, ConsAcc)
+                  end,
+                  {C0#cr{acktags          = AckTags1,
+                        next_deadline     = ChNextDeadline,
+                        limiter           = Limiter1,
+                        tombstones        = Tombstones1,
+                        tombstoned_ctags  = TombCTags1},
+                   Consumers0},
+                  ExpiredByCTag),
+            update_ch_record(C1),
+            NewExpired = [begin
+                              {AckIds, RawTags} = lists:unzip(AckIdRawTags),
+                              {ChPid, CTag, AckIds, RawTags}
+                          end || {CTag, AckIdRawTags} <- ExpiredByCTag],
+            {NewExpired ++ ExpAcc, min(NDAcc, ChNextDeadline),
+             State0#state{consumers = Consumers1}}
+    end.
+
+%% Splits acktags into still-live entries and newly-expired ones, grouped
+%% by ctag. Returns the earliest still-live deadline.
+tombstone_expired(Now, AckTags0) ->
+    {KeepMap, ExpiredByCTag, NextDeadline} =
+        maps:fold(
+          fun (AckId, {RawTag, CTag, Deadline}, {Keep, ExpAcc, ND})
+                when Deadline =< Now ->
+                  ExpAcc1 = maps:update_with(CTag,
+                                            fun (L) -> [{AckId, RawTag} | L] end,
+                                            [{AckId, RawTag}], ExpAcc),
+                  {Keep, ExpAcc1, ND};
+             (AckId, Entry = {_RawTag, _CTag, Deadline}, {Keep, ExpAcc, ND}) ->
+                  {Keep#{AckId => Entry}, ExpAcc, min(ND, Deadline)}
+          end, {#{}, #{}, infinity}, AckTags0),
+    {KeepMap, maps:to_list(ExpiredByCTag), NextDeadline}.
+
+%% Moves a consumer out of the ready priority_queue and into
+%% blocked_consumers, same as a rate/credit-limited consumer. A no-op if
+%% the consumer isn't currently in the ready queue (already parked, or gone).
+park(ChPid, CTag, C = #cr{blocked_consumers = Blocked}, Consumers) ->
+    case extract_consumer(ChPid, CTag, Consumers) of
+        not_found ->
+            {C, Consumers};
+        {Entry, Consumers1} ->
+            {C#cr{blocked_consumers = add_consumer(Entry, Blocked)}, Consumers1}
+    end.
+
+extract_consumer(ChPid, CTag, Consumers) ->
+    case priority_queue:fold(
+           fun ({CP, #consumer{tag = CT}} = Entry, _P, not_found)
+                 when CP =:= ChPid, CT =:= CTag ->
+                   Entry;
+              (_, _, Acc) ->
+                   Acc
+           end, not_found, Consumers) of
+        not_found ->
+            not_found;
+        Entry ->
+            {Entry, remove_consumer(ChPid, CTag, Consumers)}
     end.
 
 -spec resume_fun()                       -> cr_fun().
@@ -618,7 +831,10 @@ ch_record(ChPid, LimiterPid) ->
                      C = #cr{ch_pid               = ChPid,
                              monitor_ref          = MonitorRef,
                              acktags              = #{},
+                             tombstones           = #{},
+                             tombstoned_ctags     = #{},
                              next_ack_id          = 0,
+                             next_deadline        = infinity,
                              consumer_count       = 0,
                              blocked_consumers    = priority_queue:new(),
                              limiter              = Limiter,
@@ -631,10 +847,11 @@ ch_record(ChPid, LimiterPid) ->
 
 update_ch_record(C = #cr{consumer_count       = ConsumerCount,
                          acktags              = ChAckTags,
+                         tombstones           = ChTombstones,
                          unsent_message_count = UnsentMessageCount}) ->
-    case {maps:size(ChAckTags), ConsumerCount, UnsentMessageCount} of
-        {0, 0, 0} -> ok = erase_ch_record(C);
-        _         -> ok = store_ch_record(C)
+    case {maps:size(ChAckTags), maps:size(ChTombstones), ConsumerCount, UnsentMessageCount} of
+        {0, 0, 0, 0} -> ok = erase_ch_record(C);
+        _            -> ok = store_ch_record(C)
     end,
     ok.
 

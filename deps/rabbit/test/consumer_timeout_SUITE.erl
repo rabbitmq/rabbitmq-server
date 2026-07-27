@@ -39,14 +39,14 @@ all() ->
     ].
 
 groups() ->
-    %% Consumer timeouts are only supported for quorum queues.
-    %% Classic queues and stream queues do not support consumer timeouts.
+    %% Stream queues do not support consumer timeouts.
     AllTests = [consumer_timeout_with_basic_cancel_capability,
                 consumer_timeout_no_basic_cancel_capability,
                 consumer_timeout_basic_get],
 
     AllTestsParallel = [
-       {quorum_queue, [], AllTests}
+       {quorum_queue, [], AllTests},
+       {classic_queue, [], AllTests}
       ],
     [
      {global_consumer_timeout, [], AllTestsParallel},
@@ -94,6 +94,12 @@ init_per_group(quorum_queue, Config) ->
       Config,
       [{policy_type, <<"quorum_queues">>},
        {queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>}]},
+       {queue_durable, true}]);
+init_per_group(classic_queue, Config) ->
+    rabbit_ct_helpers:set_config(
+      Config,
+      [{policy_type, <<"classic_queues">>},
+       {queue_args, [{<<"x-queue-type">>, longstr, <<"classic">>}]},
        {queue_durable, true}]);
 init_per_group(Group, Config) ->
     case lists:member({group, Group}, all()) of
@@ -194,6 +200,12 @@ consumer_timeout_with_basic_cancel_capability(Config) ->
     after 1000 ->
               ok
     end,
+    %% The reclaimed message must be back in the queue.
+    {#'basic.get_ok'{delivery_tag = DTag}, #amqp_msg{payload = <<"msg1">>}} =
+        amqp_channel:call(Ch, #'basic.get'{queue = QName, no_ack = false}),
+    amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DTag}),
+    #'basic.get_empty'{} =
+        amqp_channel:call(Ch, #'basic.get'{queue = QName, no_ack = true}),
     rabbit_ct_client_helpers:close_channel(Ch),
     rabbit_ct_client_helpers:close_connection(Conn),
     ok.
