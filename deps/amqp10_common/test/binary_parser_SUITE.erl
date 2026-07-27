@@ -6,6 +6,7 @@
          ]).
 
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("amqp10_common/include/amqp10_framing.hrl").
 
 %%%===================================================================
 %%% Common Test callbacks
@@ -27,6 +28,18 @@ all_tests() ->
      unsupported_type,
      server_mode_symbolic_body_descriptors,
      server_mode_body_descriptor_prefix_collision,
+     validate_valid_messages,
+     validate_section_after_body,
+     validate_section_out_of_order,
+     validate_duplicate_sections,
+     validate_body_sections,
+     validate_too_many_sections,
+     validate_footer,
+     validate_unknown_section,
+     validate_section_value_type,
+     validate_nested_section_descriptor,
+     validate_malformed_encodings,
+     validate_symbolic_descriptors,
      peek_described_section_total_sizes,
      peek_described_section,
      peek_non_described_throws,
@@ -175,40 +188,411 @@ server_mode_symbolic_body_descriptors(_Config) ->
     Seq8 = <<0, 16#a3, 23, "amqp:amqp-sequence:list", 16#45>>,
     Value8 = <<0, 16#a3, 17, "amqp:amqp-value:*", 16#a1, 1, "x">>,
     ?assertEqual([{{pos, 0}, {body, 16#75}}],
-                 amqp10_binary_parser:parse_many(Data8, [server_mode])),
+                 amqp10_binary_parser:parse_many(Data8, [{server_mode, false}])),
     ?assertEqual([{{pos, 0}, {body, 16#76}}],
-                 amqp10_binary_parser:parse_many(Seq8, [server_mode])),
+                 amqp10_binary_parser:parse_many(Seq8, [{server_mode, false}])),
     ?assertEqual([{{pos, 0}, {body, 16#77}}],
-                 amqp10_binary_parser:parse_many(Value8, [server_mode])),
+                 amqp10_binary_parser:parse_many(Value8, [{server_mode, false}])),
     %% The sym32 forms must be classified identically.
     Data32 = <<0, 16#b3, 16:32, "amqp:data:binary", 16#a0, 1, "x">>,
     Seq32 = <<0, 16#b3, 23:32, "amqp:amqp-sequence:list", 16#45>>,
     Value32 = <<0, 16#b3, 17:32, "amqp:amqp-value:*", 16#a1, 1, "x">>,
     ?assertEqual([{{pos, 0}, {body, 16#75}}],
-                 amqp10_binary_parser:parse_many(Data32, [server_mode])),
+                 amqp10_binary_parser:parse_many(Data32, [{server_mode, false}])),
     ?assertEqual([{{pos, 0}, {body, 16#76}}],
-                 amqp10_binary_parser:parse_many(Seq32, [server_mode])),
+                 amqp10_binary_parser:parse_many(Seq32, [{server_mode, false}])),
     ?assertEqual([{{pos, 0}, {body, 16#77}}],
-                 amqp10_binary_parser:parse_many(Value32, [server_mode])).
+                 amqp10_binary_parser:parse_many(Value32, [{server_mode, false}])).
 
 server_mode_body_descriptor_prefix_collision(_Config) ->
     %% Well-formed but unknown descriptor "amqp:data:binary@" (length 17).
     Collision8 = <<0, 16#a3, 17, "amqp:data:binary", $@, 16#a0, 3, "abc">>,
     ?assertEqual(
        [{described, {symbol, <<"amqp:data:binary@">>}, {binary, <<"abc">>}}],
-       amqp10_binary_parser:parse_many(Collision8, [server_mode])),
+       amqp10_binary_parser:parse_many(Collision8, [{server_mode, false}])),
 
     %% The same collision via the sym32 constructor.
     Collision32 = <<0, 16#b3, 17:32, "amqp:data:binary", $@, 16#a0, 3, "abc">>,
     ?assertEqual(
        [{described, {symbol, <<"amqp:data:binary@">>}, {binary, <<"abc">>}}],
-       amqp10_binary_parser:parse_many(Collision32, [server_mode])),
+       amqp10_binary_parser:parse_many(Collision32, [{server_mode, false}])),
 
     %% A prefix collision on the amqp-value descriptor.
     ValueCollision = <<0, 16#a3, 18, "amqp:amqp-value:*!", 16#a1, 1, "x">>,
     ?assertEqual(
        [{described, {symbol, <<"amqp:amqp-value:*!">>}, {utf8, <<"x">>}}],
-       amqp10_binary_parser:parse_many(ValueCollision, [server_mode])).
+       amqp10_binary_parser:parse_many(ValueCollision, [{server_mode, false}])).
+
+%%%===================================================================
+%%% Strict server mode: message section order and cardinality [§3.2]
+%%%===================================================================
+
+%% Descriptor codes of the message sections [§3.2].
+-define(HEADER, 16#70).
+-define(DELIVERY_ANNOTATIONS, 16#71).
+-define(MESSAGE_ANNOTATIONS, 16#72).
+-define(PROPERTIES, 16#73).
+-define(APPLICATION_PROPERTIES, 16#74).
+-define(DATA, 16#75).
+-define(AMQP_SEQUENCE, 16#76).
+-define(AMQP_VALUE, 16#77).
+-define(FOOTER, 16#78).
+
+validate_valid_messages(_Config) ->
+    Messages = [
+                [data()],
+                [data(), data(), data()],
+                [sequence()],
+                [sequence(), sequence()],
+                [value()],
+                [data(), footer()],
+                [value(), footer()],
+                [sequence(), sequence(), footer()],
+                [header(), data()],
+                [delivery_annotations(), data()],
+                [message_annotations(), data()],
+                [properties(), data()],
+                [application_properties(), data()],
+                [header(), delivery_annotations(), message_annotations(),
+                 properties(), application_properties(), data(), footer()],
+                [header(), message_annotations(), properties(), value()],
+                %% Sections in between may be omitted.
+                [header(), properties(), data()],
+                [delivery_annotations(), application_properties(), sequence()]
+               ],
+    lists:foreach(
+      fun(Sections) ->
+              Bin = iolist_to_binary(Sections),
+              %% Strict mode accepts the message and returns exactly what the
+              %% non-strict server mode returns.
+              ?assertEqual(amqp10_binary_parser:parse_many(Bin, [{server_mode, false}]),
+                           amqp10_binary_parser:parse_many(Bin, [{server_mode, true}]))
+      end, Messages),
+    %% An empty payload is left to the caller to report: no body section is
+    %% returned, but parsing itself does not fail.
+    ?assertEqual([], amqp10_binary_parser:parse_many(<<>>, [{server_mode, true}])).
+
+%% The security relevant case: RabbitMQ stops parsing at the body, so a section
+%% that follows the body would be invisible to the broker while remaining
+%% visible to a consumer whose parser tolerates it. The prime example is a
+%% properties section carrying a forged user-id.
+validate_section_after_body(_Config) ->
+    ForgedProperties = section(?PROPERTIES,
+                               list([<<16#40>>, binary(<<"admin">>)])),
+    lists:foreach(
+      fun({Body, Late}) ->
+              Bin = iolist_to_binary([Body, Late]),
+              %% The non-strict server mode neither sees nor rejects it.
+              ?assertMatch([{{pos, 0}, {body, _}}],
+                           amqp10_binary_parser:parse_many(Bin, [{server_mode, false}])),
+              ?assertThrow({unexpected_message_section, _, _},
+                           amqp10_binary_parser:parse_many(Bin, [{server_mode, true}]))
+      end,
+      [{Body, Late} || Body <- [data(), sequence(), value()],
+                       Late <- [ForgedProperties,
+                                header(),
+                                delivery_annotations(),
+                                message_annotations(),
+                                properties(),
+                                application_properties()]]).
+
+validate_section_out_of_order(_Config) ->
+    OutOfOrder = [
+                  [delivery_annotations(), header(), data()],
+                  [message_annotations(), header(), data()],
+                  [message_annotations(), delivery_annotations(), data()],
+                  [properties(), header(), data()],
+                  [properties(), message_annotations(), data()],
+                  [application_properties(), properties(), data()],
+                  [application_properties(), header(), data()]
+                 ],
+    lists:foreach(
+      fun(Sections) ->
+              Bin = iolist_to_binary(Sections),
+              ?assertThrow({unexpected_message_section, _, _},
+                           amqp10_binary_parser:parse_many(Bin, [{server_mode, true}]))
+      end, OutOfOrder).
+
+validate_duplicate_sections(_Config) ->
+    Duplicated = [header(),
+                  delivery_annotations(),
+                  message_annotations(),
+                  properties(),
+                  application_properties()],
+    lists:foreach(
+      fun(Section) ->
+              Bin = iolist_to_binary([Section, Section, data()]),
+              ?assertThrow({unexpected_message_section, _, _},
+                           amqp10_binary_parser:parse_many(Bin, [{server_mode, true}]))
+      end, Duplicated).
+
+%% "The body consists of one of the following three choices: one or more data
+%% sections, one or more amqp-sequence sections, or a single amqp-value
+%% section." [§3.2]
+validate_body_sections(_Config) ->
+    Invalid = [
+               [data(), sequence()],
+               [data(), value()],
+               [sequence(), data()],
+               [sequence(), value()],
+               [value(), data()],
+               [value(), sequence()],
+               [value(), value()],
+               %% The body is mandatory, so a footer alone is not a message.
+               [footer()],
+               [message_annotations(), footer()]
+              ],
+    lists:foreach(
+      fun(Sections) ->
+              Bin = iolist_to_binary(Sections),
+              ?assertThrow({unexpected_message_section, _, _},
+                           amqp10_binary_parser:parse_many(Bin, [{server_mode, true}]))
+      end, Invalid),
+    %% A message without any body section is left to the caller to report.
+    NoBody = iolist_to_binary([header(), message_annotations()]),
+    ?assertEqual(amqp10_binary_parser:parse_many(NoBody, [{server_mode, false}]),
+                 amqp10_binary_parser:parse_many(NoBody, [{server_mode, true}])).
+
+%% The spec does not limit how many body sections a message may consist of.
+%% Since every section has to be validated, the total number of sections is
+%% capped so that a single message cannot consume disproportionate CPU time.
+validate_too_many_sections(_Config) ->
+    Data = iolist_to_binary(data()),
+    Sections = fun(N) -> binary:copy(Data, N) end,
+    %% The limit is part of the error, so this test does not duplicate it.
+    Max = try amqp10_binary_parser:parse_many(Sections(100_000), [{server_mode, true}]) of
+              _ -> ct:fail(expected_too_many_message_sections)
+          catch throw:{too_many_message_sections, M, {position, _}} ->
+                    M
+          end,
+    ?assertMatch([{{pos, 0}, {body, ?DATA}}],
+                 amqp10_binary_parser:parse_many(Sections(Max), [{server_mode, true}])),
+    ?assertThrow({too_many_message_sections, Max, _},
+                 amqp10_binary_parser:parse_many(Sections(Max + 1), [{server_mode, true}])),
+    %% Every section counts towards the limit, not only the body sections.
+    Prefix = iolist_to_binary([header(), properties()]),
+    ?assertMatch([_Header, {{pos, _}, _Properties}, {{pos, _}, {body, ?DATA}}],
+                 amqp10_binary_parser:parse_many(
+                   <<Prefix/binary, (Sections(Max - 2))/binary>>, [{server_mode, true}])),
+    ?assertThrow({too_many_message_sections, Max, _},
+                 amqp10_binary_parser:parse_many(
+                   <<Prefix/binary, (Sections(Max - 1))/binary>>, [{server_mode, true}])),
+    %% Without strict mode, parsing stops at the body: there is nothing to cap.
+    ?assertMatch([{{pos, 0}, {body, ?DATA}}],
+                 amqp10_binary_parser:parse_many(Sections(100_000), [{server_mode, false}])).
+
+%% "Zero or one footer sections." [§3.2] The footer terminates the message.
+validate_footer(_Config) ->
+    ?assertThrow({unexpected_message_section, footer, _},
+                 amqp10_binary_parser:parse_many(
+                   iolist_to_binary([data(), footer(), footer()]), [{server_mode, true}])),
+    ?assertThrow({unexpected_message_section, data, _},
+                 amqp10_binary_parser:parse_many(
+                   iolist_to_binary([data(), footer(), data()]), [{server_mode, true}])),
+    ?assertThrow({not_a_message_section, _},
+                 amqp10_binary_parser:parse_many(
+                   iolist_to_binary([data(), footer(), <<16#40>>]), [{server_mode, true}])),
+    %% Trailing bytes that are not a section are rejected as well.
+    ?assertThrow({not_a_message_section, _},
+                 amqp10_binary_parser:parse_many(
+                   iolist_to_binary([data(), <<16#40>>]), [{server_mode, true}])).
+
+validate_unknown_section(_Config) ->
+    %% A numeric descriptor that is not a message section descriptor.
+    ?assertThrow({unexpected_message_section, 16#7f, {position, 0}},
+                 amqp10_binary_parser:parse_many(
+                   iolist_to_binary([section(16#7f, <<16#40>>), data()]),
+                   [{server_mode, true}])),
+    %% A symbolic descriptor that is not a message section descriptor.
+    Unknown = <<0, 16#a3, 3, "URL", 16#40>>,
+    ?assertThrow({unexpected_message_section, unknown_section_descriptor,
+                  {position, 0}},
+                 amqp10_binary_parser:parse_many(
+                   iolist_to_binary([Unknown, data()]), [{server_mode, true}])),
+    %% A descriptor that is neither a ulong nor a symbol.
+    ?assertThrow({not_a_message_section, {position, 0}},
+                 amqp10_binary_parser:parse_many(<<0, 16#40, 16#40>>, [{server_mode, true}])).
+
+%% Every section value has a fixed outer type: a list, a map or, for the data
+%% section, a binary. Only the amqp-value section holds any AMQP type [§3.2].
+validate_section_value_type(_Config) ->
+    Map = <<16#c1, 1, 0>>,
+    List = <<16#c0, 1, 0>>,
+    Bin = <<16#a0, 0>>,
+    Null = <<16#40>>,
+    %% A described value would let a section descriptor hide inside a section
+    %% that must hold a list, a map or a binary.
+    Described = iolist_to_binary(section(?PROPERTIES, List)),
+    WrongTypes = [{?HEADER, Map}, {?HEADER, Bin}, {?HEADER, Null},
+                  {?HEADER, Described},
+                  {?DELIVERY_ANNOTATIONS, List}, {?DELIVERY_ANNOTATIONS, Null},
+                  {?MESSAGE_ANNOTATIONS, List}, {?MESSAGE_ANNOTATIONS, Bin},
+                  {?MESSAGE_ANNOTATIONS, Described},
+                  {?PROPERTIES, Map}, {?PROPERTIES, Null},
+                  {?PROPERTIES, Described},
+                  {?APPLICATION_PROPERTIES, List},
+                  {?DATA, List}, {?DATA, Map}, {?DATA, Null},
+                  {?DATA, Described},
+                  {?AMQP_SEQUENCE, Map}, {?AMQP_SEQUENCE, Bin}],
+    lists:foreach(
+      fun({Code, Value}) ->
+              Payload = iolist_to_binary([section(Code, Value), data()]),
+              ?assertThrow({invalid_section_value, _, _},
+                           amqp10_binary_parser:parse_many(Payload, [{server_mode, true}]))
+      end, WrongTypes),
+    %% The footer value must be a map too.
+    ?assertThrow({invalid_section_value, map, _},
+                 amqp10_binary_parser:parse_many(
+                   iolist_to_binary([data(), section(?FOOTER, List)]), [{server_mode, true}])),
+    %% An amqp-value section accepts any AMQP type, including a described one.
+    lists:foreach(
+      fun(Value) ->
+              Payload = iolist_to_binary(section(?AMQP_VALUE, Value)),
+              ?assertEqual([{{pos, 0}, {body, ?AMQP_VALUE}}],
+                           amqp10_binary_parser:parse_many(Payload, [{server_mode, true}]))
+      end, [Null, Bin, List, Map,
+            <<16#45>>,
+            <<16#a1, 2, "hi">>,
+            <<16#83, 0:64>>,
+            <<16#98, 0:128>>,
+            <<16#f0, 5:32, 3:32, 16#40>>,
+            <<0, 16#a1, 3, "URL", 16#a1, 1, $x>>,
+            <<0, 0, 16#a1, 3, "URL", 16#40, 16#a1, 1, $x>>]).
+
+%% "The descriptor portion of a described format code is itself any valid AMQP
+%% encoded value, including other described values." [§1.2] A section
+%% descriptor nested inside a section value must not be taken for a section:
+%% otherwise a properties section hidden inside a message-annotations map could
+%% become the properties of the message.
+validate_nested_section_descriptor(_Config) ->
+    Nested = [iolist_to_binary(data()),
+              iolist_to_binary(properties()),
+              iolist_to_binary(header()),
+              iolist_to_binary(footer())],
+    %% Nested inside a message-annotations map.
+    Key = <<16#a3, 2, "x-">>,
+    lists:foreach(
+      fun(N) ->
+              Bin = iolist_to_binary(
+                      [section(?MESSAGE_ANNOTATIONS, map([Key, N])), data()]),
+              [{described, {ulong, ?MESSAGE_ANNOTATIONS}, {map, Content}},
+               {{pos, _}, {body, ?DATA}}] =
+                  amqp10_binary_parser:parse_many(Bin, [{server_mode, true}]),
+              %% The nested described type stays the annotation value.
+              ?assertMatch([{{symbol, <<"x-">>}, {described, _, _}}], Content)
+      end, Nested),
+    %% Nested inside the properties list, that is as the message-id.
+    lists:foreach(
+      fun(N) ->
+              Bin = iolist_to_binary(
+                      [section(?PROPERTIES, list([N])), data()]),
+              [{{pos, 0}, {described, {ulong, ?PROPERTIES}, {list, Fields}}},
+               {{pos, _}, {body, ?DATA}}] =
+                  amqp10_binary_parser:parse_many(Bin, [{server_mode, true}]),
+              ?assertMatch([{described, _, _}], Fields)
+      end, Nested).
+
+validate_malformed_encodings(_Config) ->
+    %% A compound whose size is too small to hold its count field.
+    ?assertThrow({invalid_compound_size, _},
+                 amqp10_binary_parser:parse_many(
+                   iolist_to_binary([section(?MESSAGE_ANNOTATIONS, <<16#c1, 0>>),
+                                     data()]), [{server_mode, true}])),
+    %% A map with an odd number of elements.
+    ?assertThrow(map_with_odd_number_of_elements,
+                 amqp10_binary_parser:parse_many(
+                   iolist_to_binary(
+                     [section(?MESSAGE_ANNOTATIONS,
+                              <<16#c1, 5, 1, 16#a3, 2, "x-">>),
+                      data()]), [{server_mode, true}])),
+    %% A data section whose declared size exceeds the remaining input.
+    ?assertThrow({invalid_section_value, binary, _},
+                 amqp10_binary_parser:parse_many(
+                   <<0, 16#53, ?DATA, 16#a0, 200, "short">>, [{server_mode, true}])),
+    %% An amqp-value section whose declared size exceeds the remaining input.
+    ?assertThrow({invalid_section_value, any, _},
+                 amqp10_binary_parser:parse_many(
+                   <<0, 16#53, ?AMQP_VALUE, 16#a1, 200, "short">>, [{server_mode, true}])),
+    %% A truncated section descriptor.
+    ?assertThrow({not_a_message_section, _},
+                 amqp10_binary_parser:parse_many(<<0, 16#53>>, [{server_mode, true}])).
+
+%% All four descriptor encodings are validated identically.
+validate_symbolic_descriptors(_Config) ->
+    Symbols = #{?HEADER => <<"amqp:header:list">>,
+                ?DELIVERY_ANNOTATIONS => <<"amqp:delivery-annotations:map">>,
+                ?MESSAGE_ANNOTATIONS => <<"amqp:message-annotations:map">>,
+                ?PROPERTIES => <<"amqp:properties:list">>,
+                ?APPLICATION_PROPERTIES => <<"amqp:application-properties:map">>,
+                ?DATA => <<"amqp:data:binary">>,
+                ?AMQP_SEQUENCE => <<"amqp:amqp-sequence:list">>,
+                ?AMQP_VALUE => <<"amqp:amqp-value:*">>,
+                ?FOOTER => <<"amqp:footer:map">>},
+    Encode = fun(Descriptor, Code, Value) ->
+                     Sym = maps:get(Code, Symbols),
+                     Size = byte_size(Sym),
+                     D = case Descriptor of
+                             small_ulong -> <<16#53, Code>>;
+                             ulong -> <<16#80, Code:64>>;
+                             sym8 -> <<16#a3, Size:8, Sym/binary>>;
+                             sym32 -> <<16#b3, Size:32, Sym/binary>>
+                         end,
+                     <<0, D/binary, Value/binary>>
+             end,
+    lists:foreach(
+      fun(Descriptor) ->
+              E = fun(Code, Value) -> Encode(Descriptor, Code, Value) end,
+              Data = E(?DATA, <<16#a0, 1, "x">>),
+              Props = E(?PROPERTIES, <<16#c0, 1, 0>>),
+              Valid = <<(E(?HEADER, <<16#c0, 1, 0>>))/binary,
+                        (E(?MESSAGE_ANNOTATIONS, <<16#c1, 1, 0>>))/binary,
+                        Props/binary,
+                        Data/binary,
+                        (E(?FOOTER, <<16#c1, 1, 0>>))/binary>>,
+              %% Strict mode validates the sections. Which of the four
+              %% descriptor encodings was used on the wire is preserved by
+              %% the parsed sections, just like in non-strict server mode.
+              Parsed = amqp10_binary_parser:parse_many(Valid, [{server_mode, true}]),
+              ?assertEqual(amqp10_binary_parser:parse_many(Valid, [{server_mode, false}]),
+                           Parsed),
+              ?assertMatch([#'v1_0.header'{},
+                            #'v1_0.message_annotations'{},
+                            {{pos, _}, #'v1_0.properties'{}},
+                            {{pos, _}, {body, ?DATA}}],
+                           amqp10_framing:decode_bin(Valid, [{server_mode, true}])),
+              %% Properties after the body are rejected for every encoding.
+              ?assertThrow({unexpected_message_section, properties, _},
+                           amqp10_binary_parser:parse_many(
+                             <<Data/binary, Props/binary>>, [{server_mode, true}]))
+      end, [small_ulong, ulong, sym8, sym32]).
+
+%%%===================================================================
+%%% Section encoding helpers
+%%%===================================================================
+
+section(Code, Value) ->
+    [<<0, 16#53, Code>>, Value].
+
+list(Elements) ->
+    Bin = iolist_to_binary(Elements),
+    <<16#c0, (byte_size(Bin) + 1), (length(Elements)), Bin/binary>>.
+
+map(Elements) ->
+    Bin = iolist_to_binary(Elements),
+    <<16#c1, (byte_size(Bin) + 1), (length(Elements)), Bin/binary>>.
+
+binary(Bin) ->
+    <<16#a0, (byte_size(Bin)), Bin/binary>>.
+
+header() -> section(?HEADER, list([<<16#41>>])).
+delivery_annotations() -> section(?DELIVERY_ANNOTATIONS, map([])).
+message_annotations() -> section(?MESSAGE_ANNOTATIONS, map([])).
+properties() -> section(?PROPERTIES, list([])).
+application_properties() -> section(?APPLICATION_PROPERTIES, map([])).
+data() -> section(?DATA, binary(<<"body">>)).
+sequence() -> section(?AMQP_SEQUENCE, <<16#45>>).
+value() -> section(?AMQP_VALUE, <<16#a1, 2, "hi">>).
+footer() -> section(?FOOTER, map([])).
 
 %%%===================================================================
 %%% peek/1 (exercises peek_value_size internally via described types)

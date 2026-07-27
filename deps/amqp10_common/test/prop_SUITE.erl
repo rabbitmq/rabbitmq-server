@@ -26,6 +26,7 @@ groups() ->
        prop_annotated_message,
        prop_server_mode_body,
        prop_server_mode_bare_message,
+       prop_strict_server_mode,
        prop_frame,
        prop_array32_terminates
       ]}
@@ -102,7 +103,7 @@ prop_server_mode_body(_Config) ->
                            Bin = iolist_to_binary([amqp10_framing:encode_bin(S) || S <- Sections]),
                            %% Invariant 1: Decoder should us return the correct
                            %% byte position of the first body section.
-                           Decoded = amqp10_framing:decode_bin(Bin, [server_mode]),
+                           Decoded = amqp10_framing:decode_bin(Bin, [{server_mode, false}]),
                            {value,
                             {{pos, Pos},
                              {body, Code}}} = lists:search(fun(({{pos, _Pos}, {body, _Code}})) ->
@@ -137,7 +138,7 @@ prop_server_mode_bare_message(_Config) ->
                            Bin = iolist_to_binary([amqp10_framing:encode_bin(S) || S <- Sections]),
                            %% Invariant: Decoder should us return the correct
                            %% byte position of the first bare message section.
-                           Decoded = amqp10_framing:decode_bin(Bin, [server_mode]),
+                           Decoded = amqp10_framing:decode_bin(Bin, [{server_mode, false}]),
                            {value,
                             {{pos, Pos}, _Sect}} = lists:search(fun(({{pos, _Pos}, _Sect})) ->
                                                                         true;
@@ -149,6 +150,20 @@ prop_server_mode_bare_message(_Config) ->
                            equals(FirstBareMsgSection, amqp10_framing:decode(Section))
                        end)
       end, [], 1000).
+
+%% Strict mode must accept every message whose sections comply with §3.2 and
+%% return exactly what the non-strict server mode returns.
+prop_strict_server_mode(_Config) ->
+    run_proper(
+      fun() -> ?FORALL(Sections,
+                       annotated_message(),
+                       begin
+                           Bin = iolist_to_binary(
+                                   [amqp10_framing:encode_bin(S) || S <- Sections]),
+                           equals(amqp10_binary_parser:parse_many(Bin, [{server_mode, false}]),
+                                  amqp10_binary_parser:parse_many(Bin, [{server_mode, true}]))
+                       end)
+      end, [], 300).
 
 prop_frame(_Config) ->
     run_proper(
