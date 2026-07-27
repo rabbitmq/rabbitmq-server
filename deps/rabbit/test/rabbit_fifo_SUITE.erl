@@ -3560,6 +3560,32 @@ delayed_retry_explicit_overrides_config_test(Config) ->
                    next_delayed_at := 9999}, rabbit_fifo:overview(State3)),
     ok.
 
+delivery_time_on_enqueue_test(Config) ->
+    %% A message enqueued with a `dt` annotation (set by rabbit_quorum_queue
+    %% when a client provides x-opt-delivery-time in the future) should be
+    %% delayed on its very first delivery, not just on redelivery/return.
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B)},
+    State0 = init(Conf),
+    Msg = mc:set_annotation(dt, 5000, mk_mc(<<"m1">>)),
+    {State1, _} = enq_ts(Config, 1, 1, Msg, 100, State0),
+    ?assertMatch(#{num_ready_messages := 0,
+                   num_delayed_messages := 1,
+                   next_delayed_at := 5000}, rabbit_fifo:overview(State1)),
+    ok.
+
+delivery_time_on_enqueue_past_test(Config) ->
+    %% A `dt` annotation that has already elapsed by enqueue time should not
+    %% delay the message - it should be ready for delivery straight away.
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B)},
+    State0 = init(Conf),
+    Msg = mc:set_annotation(dt, 50, mk_mc(<<"m1">>)),
+    {State1, _} = enq_ts(Config, 1, 1, Msg, 100, State0),
+    ?assertMatch(#{num_ready_messages := 1,
+                   num_delayed_messages := 0}, rabbit_fifo:overview(State1)),
+    ok.
+
 delayed_retry_counts_towards_limit_test(Config) ->
     %% Delayed messages should count towards max_length limit.
     %% The limit check uses messages_ready + delayed (not checked_out).
