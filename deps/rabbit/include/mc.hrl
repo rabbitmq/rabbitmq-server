@@ -12,6 +12,7 @@
 -define(ANN_RECEIVED_AT_TIMESTAMP, rts).
 -define(ANN_DURABLE, d).
 -define(ANN_PRIORITY, p).
+-define(ANN_DELIVERY_TIME, dt).
 
 -type death_key() :: {SourceQueue :: rabbit_misc:resource_name(), rabbit_dead_letter:reason()}.
 -type death_anns() :: #{%% timestamp of the first time this message
