@@ -66,16 +66,22 @@ params_to_string(#upstream_params{safe_uri = SafeURI,
 remove_credentials(URI) ->
     list_to_binary(amqp_uri:remove_credentials(binary_to_list(URI))).
 
+%% Returns `{ok, #upstream_params{}}` on success or `{error, {Info, SafeURI}}`
+%% (credentials stripped) when the upstream URI cannot be parsed.
 to_params(Upstream = #upstream{uris = URIs}, XorQ) ->
     URI = lists:nth(rand:uniform(length(URIs)), URIs),
-    {ok, Params} = amqp_uri:parse(binary_to_list(URI), vhost(XorQ)),
-    XorQ1 = with_name(Upstream, vhost(Params), XorQ),
-    SafeURI = remove_credentials(URI),
-    #upstream_params{params   = Params,
-                     uri      = URI,
-                     x_or_q   = XorQ1,
-                     safe_uri = SafeURI,
-                     table    = params_table(SafeURI, XorQ)}.
+    case amqp_uri:parse(binary_to_list(URI), vhost(XorQ)) of
+        {ok, Params} ->
+            XorQ1 = with_name(Upstream, vhost(Params), XorQ),
+            SafeURI = remove_credentials(URI),
+            {ok, #upstream_params{params   = Params,
+                                  uri      = URI,
+                                  x_or_q   = XorQ1,
+                                  safe_uri = SafeURI,
+                                  table    = params_table(SafeURI, XorQ)}};
+        {error, {Info, _UnsafeURI}} ->
+            {error, {Info, remove_credentials(URI)}}
+    end.
 
 print(Fmt, Args) -> iolist_to_binary(io_lib:format(Fmt, Args)).
 
