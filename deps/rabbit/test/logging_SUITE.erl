@@ -31,6 +31,7 @@
          setting_log_levels_in_config_works/1,
          setting_log_rotation_in_config_works/1,
          setting_log_rotation_defaults_in_config_works/1,
+         logging_to_user_log_category_works/1,
          setting_log_levels_in_config_with_output_overridden_in_env_works/1,
          setting_message_format_works/1,
          setting_level_format_works/1,
@@ -77,6 +78,7 @@ groups() ->
        setting_log_levels_in_config_works,
        setting_log_rotation_in_config_works,
        setting_log_rotation_defaults_in_config_works,
+       logging_to_user_log_category_works,
        setting_log_levels_in_config_with_output_overridden_in_env_works,
        setting_message_format_works,
        setting_level_format_works,
@@ -513,6 +515,35 @@ setting_log_rotation_defaults_in_config_works(Config) ->
                     }},
        QueueFileHandler,
       "rotation config present in the queue handler"),
+    ok.
+
+logging_to_user_log_category_works(Config) ->
+    Context = default_context(Config),
+    ok = application:set_env(
+           rabbit, log,
+           [{file, [{level, info}]},
+            {categories, [{user, [{file, "user.log"},
+                                  {level, error}]}]}],
+           [{persistent, true}]),
+    rabbit_prelaunch_logging:clear_config_run_number(),
+    rabbit_prelaunch_logging:setup(Context),
+
+    Handlers = logger:get_handler_config(),
+    UserFile = log_file_in_context(Context, "user.log"),
+
+    %% User category logs go to the user file at its own level, not the main log file.
+    ?assertMatch(
+       #{filters := [_, {rmqlog_filter, {_, #{user := none}}}]},
+       get_handler_by_id(Handlers, rmq_1_file_1)),
+    ?assertMatch(
+       #{filter_default := stop,
+         filters := [{rmqlog_filter, {_, #{user := error}}}],
+         config := #{file := UserFile}},
+       get_handler_by_id(Handlers, rmq_1_file_2)),
+
+    ContainsLogEntry = ping_log(rmq_1_file_2, error,
+                                #{domain => ?RMQLOG_DOMAIN_USER}),
+    rabbit_ct_helpers:await_condition(ContainsLogEntry, 30_000),
     ok.
 
 setting_log_levels_in_config_with_output_overridden_in_env_works(Config) ->

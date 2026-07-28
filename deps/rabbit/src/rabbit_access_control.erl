@@ -8,6 +8,7 @@
 -module(rabbit_access_control).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("rabbit_common/include/logging.hrl").
 -include_lib("kernel/include/logger.hrl").
 
 -export([ensure_auth_backends_are_enabled/0]).
@@ -184,7 +185,7 @@ check_user_login(Username, AuthProps) ->
             {'refused', rabbit_types:username(), string(), [any()]}.
 
 check_user_login(Username, AuthProps, Modules) ->
-    try
+    Result = try
         lists:foldl(
             fun (rabbit_auth_backend_cache=ModN, {refused, _, _, _}) ->
                     %% It is possible to specify authn/authz within the cache module settings,
@@ -202,10 +203,14 @@ check_user_login(Username, AuthProps, Modules) ->
                     %% it gives us
                     case try_authenticate(Mod, Username, AuthProps) of
                         {ok, ModNUser = #auth_user{username = Username2, impl = Impl}} ->
-                            ?LOG_DEBUG("User '~ts' authenticated successfully by backend ~ts", [Username2, Mod]),
+                            ?LOG_DEBUG("User '~ts' authenticated successfully by backend ~ts",
+                                       [Username2, Mod],
+                                       #{domain => ?RMQLOG_DOMAIN_USER}),
                             user(ModNUser, {ok, [{Mod, Impl}], []});
                         Else ->
-                            ?LOG_DEBUG("User '~ts' failed authentication by backend ~ts", [Username, Mod]),
+                            ?LOG_DEBUG("User '~ts' failed authentication by backend ~ts",
+                                       [Username, Mod],
+                                       #{domain => ?RMQLOG_DOMAIN_USER}),
                             Else
                     end;
                 (_, {ok, User}) ->
@@ -215,11 +220,23 @@ check_user_login(Username, AuthProps, Modules) ->
             {refused, Username, "No modules checked '~ts'", [Username]}, Modules)
         catch
             Type:Error:Stacktrace ->
-                ?LOG_DEBUG("User '~ts' authentication failed with ~ts:~tp:~n~tp", [Username, Type, Error, Stacktrace]),
+                ?LOG_DEBUG("User '~ts' authentication failed with ~ts:~tp:~n~tp",
+                           [Username, Type, Error, Stacktrace],
+                           #{domain => ?RMQLOG_DOMAIN_USER}),
                 {refused, Username, "User '~ts' authentication failed with internal error. "
                                     "Enable debug logs to see the real error.", [Username]}
-
-        end.
+        end,
+    case Result of
+        {ok, #user{username = ResolvedUsername}} ->
+            ?LOG_INFO("User '~ts' authenticated successfully",
+                      [ResolvedUsername],
+                      #{domain => ?RMQLOG_DOMAIN_USER});
+        {refused, _, Msg, Args} ->
+            ?LOG_WARNING("User '~ts' failed to authenticate: ~ts",
+                         [Username, rabbit_misc:format(Msg, Args)],
+                         #{domain => ?RMQLOG_DOMAIN_USER})
+    end,
+    Result.
 
 try_authenticate_and_try_authorize(ModN, ModZs0, Username, AuthProps) ->
     ModZs = case ModZs0 of
@@ -228,7 +245,9 @@ try_authenticate_and_try_authorize(ModN, ModZs0, Username, AuthProps) ->
             end,
     case try_authenticate(ModN, Username, AuthProps) of
         {ok, ModNUser = #auth_user{username = Username2}} ->
-            ?LOG_DEBUG("User '~ts' authenticated successfully by backend ~ts", [Username2, ModN]),
+            ?LOG_DEBUG("User '~ts' authenticated successfully by backend ~ts",
+                       [Username2, ModN],
+                       #{domain => ?RMQLOG_DOMAIN_USER}),
             user(ModNUser, try_authorize(ModZs, Username2, AuthProps));
         Else ->
             Else
