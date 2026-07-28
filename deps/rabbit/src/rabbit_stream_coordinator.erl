@@ -1466,7 +1466,14 @@ update_stream0(#{machine_version := MacVer} = Meta,
                #stream{members = Members0} = Stream0)
   when MacVer >= 4 ->
     Preferred = maps:get(preferred_leader_node, Options, undefined),
-    Members = maps:map(fun (N, M) when N == Preferred ->
+    Members = maps:map(fun (_N, #member{target = deleted} = M)
+                             when ?V8_OR_MORE(MacVer) ->
+                               %% never resurrect a member that is being deleted:
+                               %% flipping it back to 'stopped' could leave two
+                               %% writers and crash find_leader/1 with a
+                               %% case_clause
+                               M;
+                           (N, M) when N == Preferred ->
                                M#member{preferred = true,
                                         target = stopped};
                            (_N, M) ->
@@ -1596,7 +1603,6 @@ update_stream0(Meta,
                   tail := Tail}},
                #stream{epoch = Epoch,
                        target = Target,
-                       nodes = Nodes,
                        members = Members0} = Stream0) ->
     IsLeaderInCurrent = case find_leader(Members0) of
                             {{_Node, #member{role = {writer, Epoch},
@@ -1637,46 +1643,13 @@ update_stream0(Meta,
                              Member0#member{state = {stopped, StoppedEpoch, Tail},
                                             current = undefined}
                      end,
-
-            Members1 = Members0#{Node => Member},
-
-            StoppedInCurrent =
-                maps:filter(fun (_N, #member{state = {stopped, E, _T},
-                                             target = running})
-                                  when E == Epoch ->
-                                    true;
-                                (_, _) ->
-                                    false
-                            end, Members1),
-            case is_quorum(length(Nodes), map_size(StoppedInCurrent)) of
+            Stream1 = Stream0#stream{members = Members0#{Node => Member}},
+            Candidates = stopped_in_epoch(Stream1),
+            case is_quorum(length(Stream1#stream.nodes), map_size(Candidates)) of
                 true ->
-                    %% select leader
-                    NewWriterNode = select_leader(Meta, StoppedInCurrent),
-                    NextEpoch = Epoch + 1,
-                    Members = maps:map(
-                                fun (N, #member{state = {stopped, E, _}} = M)
-                                      when E == Epoch ->
-                                        case NewWriterNode of
-                                            N ->
-                                                %% new leader
-                                                M#member{role = {writer, NextEpoch},
-                                                         preferred = false,
-                                                         state = {ready, NextEpoch}};
-                                            _ ->
-                                                M#member{role = {replica, NextEpoch},
-                                                         preferred = false,
-                                                         state = {ready, NextEpoch}}
-                                        end;
-                                    (_N, #member{target = deleted} = M) ->
-                                        M;
-                                    (_N, M) ->
-                                        M#member{role = {replica, NextEpoch},
-                                                 preferred = false}
-                                end, Members1),
-                    Stream0#stream{epoch = NextEpoch,
-                                   members = Members};
+                    promote_writer(Meta, Candidates, Stream1);
                 false ->
-                    Stream0#stream{members = Members1}
+                    Stream1
             end;
         _Member ->
             Stream0
@@ -1951,15 +1924,129 @@ eval_retention(#{index := Idx} = Meta,
     {Stream#stream{members = maps:merge(Members, Updated)}, Effs ++ Effects0}.
 
 
+%% Level-triggered safety net (v8+): a stream that should be running can settle
+%% into a state with no usable writer (for example after members are removed one
+%% by one while a majority of nodes are unavailable). Nothing would then drive
+%% the edge-triggered election in the 'member_stopped' handler, so before
+%% evaluating a stream we give it a chance to elect a writer from a stopped
+%% quorum.
+recover_leaderless_stream(#{machine_version := Vsn} = Meta,
+                          #stream{target = running,
+                                  nodes = Nodes,
+                                  members = Members} = Stream)
+  when ?V8_OR_MORE(Vsn), map_size(Members) > 0 ->
+    case leaderless_and_recoverable(Stream) of
+        true ->
+            %% put the surviving members back to a running target so they
+            %% qualify as election candidates
+            Runnable = maps:map(fun (_, #member{target = deleted} = M) ->
+                                        M;
+                                    (_, M) ->
+                                        M#member{target = running}
+                                end, Members),
+            RunnableStream = Stream#stream{members = Runnable},
+            Candidates = stopped_in_epoch(RunnableStream),
+            case is_quorum(length(Nodes), map_size(Candidates)) of
+                true ->
+                    promote_writer(Meta, Candidates, RunnableStream);
+                false ->
+                    %% not enough stopped members yet, keep the stream as-is
+                    Stream
+            end;
+        false ->
+            Stream
+    end;
+recover_leaderless_stream(_Meta, Stream) ->
+    Stream.
+
+%% True when no writer is making progress, nothing is mid-action, and at least
+%% one member is stopped in the current epoch to elect from.
+leaderless_and_recoverable(#stream{epoch = Epoch, members = Members}) ->
+    Ms = maps:values(Members),
+    NoWriter = not lists:any(fun (#member{target = deleted}) ->
+                                     false;
+                                 (M) ->
+                                     is_active_writer(M)
+                             end, Ms),
+    Settled = not lists:any(fun (#member{target = deleted}) ->
+                                    false;
+                                (#member{current = C}) ->
+                                    C =/= undefined
+                            end, Ms),
+    Electable = lists:any(fun (#member{state = {stopped, E, _}}) ->
+                                  E == Epoch;
+                              (_) ->
+                                  false
+                          end, Ms),
+    NoWriter andalso Settled andalso Electable.
+
+is_active_writer(#member{role = {writer, _}, state = {running, _, _}}) ->
+    true;
+is_active_writer(#member{role = {writer, _}, state = {ready, _}}) ->
+    true;
+is_active_writer(#member{}) ->
+    false.
+
+%% The members eligible to become the next writer: those stopped in the current
+%% epoch that are meant to be running.
+stopped_in_epoch(#stream{epoch = Epoch, members = Members}) ->
+    maps:filter(fun (_, #member{state = {stopped, E, _}, target = running})
+                      when E == Epoch ->
+                        true;
+                    (_, _) ->
+                        false
+                end, Members).
+
+%% Advance to the next epoch, promoting one of the candidates (which must be a
+%% quorum of members stopped in the current epoch) to writer and demoting the
+%% rest to replicas. Start latches left over from the previous epoch are dropped
+%% (v8+) so they cannot wedge the new epoch.
+promote_writer(#{machine_version := Vsn} = Meta, Candidates,
+               #stream{epoch = Epoch, members = Members0} = Stream) ->
+    Winner = select_leader(Meta, Candidates),
+    Next = Epoch + 1,
+    Members = maps:map(
+                fun (N, #member{state = {stopped, E, _}} = M)
+                      when E == Epoch ->
+                        Role = case N of
+                                   Winner -> {writer, Next};
+                                   _ -> {replica, Next}
+                               end,
+                        M#member{role = Role,
+                                 preferred = false,
+                                 state = {ready, Next}};
+                    (_, #member{target = deleted,
+                                current = {starting, _}} = M)
+                      when ?V8_OR_MORE(Vsn) ->
+                        %% clear a stale start latch so the member can be deleted
+                        %% rather than blocking on an action that never completes
+                        M#member{current = undefined};
+                    (_, #member{target = deleted} = M) ->
+                        M;
+                    (_, #member{current = {starting, _}} = M)
+                      when ?V8_OR_MORE(Vsn) ->
+                        %% a start from a previous epoch will never complete
+                        %% against the new epoch: drop the latch and demote so
+                        %% the member is re-driven instead of blocking future
+                        %% re-elections
+                        M#member{role = {replica, Next},
+                                 preferred = false,
+                                 current = undefined};
+                    (_, M) ->
+                        M#member{role = {replica, Next},
+                                 preferred = false}
+                end, Members0),
+    Stream#stream{epoch = Next, members = Members}.
+
 %% this function should be idempotent,
 %% it should modify the state such that it won't issue duplicate
 %% actions when called again
-evaluate_stream(#{index := Idx} = Meta,
-                #stream{id = StreamId,
-                        reply_to = From,
-                        epoch = Epoch,
-                        mnesia = {MnesiaTag, MnesiaEpoch},
-                        members = Members0} = Stream0, Effs0) ->
+evaluate_stream(#{index := Idx} = Meta, #stream{} = Stream00, Effs0) ->
+    #stream{id = StreamId,
+            reply_to = From,
+            epoch = Epoch,
+            mnesia = {MnesiaTag, MnesiaEpoch},
+            members = Members0} = Stream0 = recover_leaderless_stream(Meta, Stream00),
     case find_leader(Members0) of
         {{LeaderNode, #member{state = LState,
                               target = deleted,

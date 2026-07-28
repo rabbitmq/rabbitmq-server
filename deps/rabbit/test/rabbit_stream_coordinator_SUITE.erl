@@ -48,6 +48,8 @@ all_tests() ->
      leader_start_failed,
      member_started_stale_epoch,
      replica_disconnected_nodeup,
+     restart_stream_preserves_deleted,
+     stranded_no_writer_reelection,
      overview
     ].
 
@@ -1633,6 +1635,97 @@ replica_disconnected_nodeup(_) ->
                        {nodeup, N3}, S1),
     ?assertMatch(#stream{members = #{N3 := #member{state = {disconnected, E, Replica}}}},
                  S3),
+    ok.
+
+restart_stream_preserves_deleted(_) ->
+    %% restart_stream must never flip a member that is being deleted back to
+    %% 'stopped': doing so resurrects the old writer, leaving two members with a
+    %% writer role, which crashes find_leader/1 with a case_clause.
+    StreamId = atom_to_list(?FUNCTION_NAME),
+    OldWriter = fake_pid(n1),
+    NewWriter = fake_pid(n2),
+    N1 = node(OldWriter),
+    N2 = node(NewWriter),
+    %% N1 is the old writer lingering with target = deleted, N2 is the freshly
+    %% elected writer in the next epoch
+    S0 = (started_stream(StreamId, NewWriter, []))#stream{
+           epoch = 2,
+           nodes = [N1, N2],
+           members = #{N1 => #member{role = {writer, 1},
+                                     target = deleted,
+                                     state = {running, 1, OldWriter},
+                                     current = undefined},
+                       N2 => #member{role = {writer, 2},
+                                     target = running,
+                                     state = {running, 2, NewWriter},
+                                     current = undefined}}},
+    From = {self(), make_ref()},
+
+    %% v8: the deleted member is preserved, exactly one writer remains
+    S1 = update_stream((meta(#{index => ?LINE, machine_version => 8}))#{from => From},
+                       {restart_stream, StreamId, #{}}, S0),
+    ?assertMatch(#stream{members = #{N1 := #member{target = deleted},
+                                     N2 := #member{target = stopped}}},
+                 S1),
+    %% evaluate_stream (which calls find_leader/1) must not crash
+    ?assertMatch({#stream{}, _}, evaluate_stream(meta(?LINE), S1, [])),
+
+    %% pre-v8: the deleted member is resurrected to 'stopped', producing two
+    %% writers, and evaluate_stream then crashes in find_leader/1
+    S1V7 = update_stream((meta(#{index => ?LINE, machine_version => 7}))#{from => From},
+                         {restart_stream, StreamId, #{}}, S0),
+    ?assertMatch(#stream{members = #{N1 := #member{role = {writer, 1},
+                                                   target = stopped},
+                                     N2 := #member{role = {writer, 2},
+                                                   target = stopped}}},
+                 S1V7),
+    ?assertError({case_clause, _}, evaluate_stream(meta(?LINE), S1V7, [])),
+    ok.
+
+stranded_no_writer_reelection(_) ->
+    %% A stream that has settled with no viable writer (e.g. after sequential
+    %% member removal during a multi-node loss) and no pending action must be
+    %% recovered by the level-triggered backstop re-election (v8+), even though
+    %% no further event triggers the edge-triggered election.
+    E = 1,
+    StreamId = atom_to_list(?FUNCTION_NAME),
+    P1 = fake_pid(n1),
+    P2 = fake_pid(n2),
+    P3 = fake_pid(n3),
+    N1 = node(P1),
+    N2 = node(P2),
+    N3 = node(P3),
+    Stopped = fun (Role, Off) ->
+                      #member{role = Role,
+                              target = stopped,
+                              state = {stopped, E, {E, Off}},
+                              current = undefined}
+              end,
+    S0 = (started_stream(StreamId, P1, [P2, P3]))#stream{
+           epoch = E,
+           nodes = [N1, N2, N3],
+           members = #{N1 => Stopped({writer, E}, 100),
+                       N2 => Stopped({replica, E}, 100),
+                       N3 => Stopped({replica, E}, 90)}},
+
+    %% v8: the backstop elects a new leader in the next epoch and starts it
+    {S1, Actions1} = evaluate_stream(meta(#{index => ?LINE,
+                                            machine_version => 8}), S0, []),
+    ?assertMatch(#stream{epoch = 2}, S1),
+    ?assert(lists:any(fun ({aux, {start_writer, _, _, _}}) -> true;
+                          (_) -> false
+                      end, Actions1)),
+    #stream{members = Mem1} = S1,
+    Writers = maps:filter(fun (_, #member{role = {writer, _}}) -> true;
+                              (_, _) -> false
+                          end, Mem1),
+    ?assertEqual(1, map_size(Writers)),
+
+    %% pre-v8: no backstop, the stream stays stranded with no writer
+    {S2, Actions2} = evaluate_stream(meta(#{index => ?LINE,
+                                            machine_version => 7}), S0, []),
+    ?assertMatch(#stream{epoch = E}, S2),
+    ?assertEqual([], [A || {aux, {start_writer, _, _, _}} = A <- Actions2]),
     ok.
 
 overview(_Config) ->
