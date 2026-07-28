@@ -20,7 +20,7 @@
 -define(RESERVED, 0).
 -define(HIGHBIT, 2#10000000).
 -define(LOWBITS, 2#01111111).
--define(MAX_MULTIPLIER, ?HIGHBIT * ?HIGHBIT * ?HIGHBIT).
+-define(MAX_MULTIPLIER, (?HIGHBIT * ?HIGHBIT * ?HIGHBIT)).
 
 -spec init_state() -> state().
 init_state() -> unauthenticated.
@@ -109,7 +109,7 @@ parse_packet(Bin, #mqtt_packet_fixed{type = Type,
                                         <<Id:16, R/binary>> = PacketBin,
                                         {Id, R}
                                 end,
-            {Props, Payload} = parse_props(Rest1, ProtoVer),
+            {Props, Payload} = parse_props(Rest1, ProtoVer, Type),
             Publish = #mqtt_packet_publish{topic_name = TopicName,
                                            packet_id = PacketId,
                                            props = Props},
@@ -124,7 +124,7 @@ parse_packet(Bin, #mqtt_packet_fixed{type = Type,
                                           %% [v5 3.4.2.2.1]
                                           {Rc, #{}};
                                       <<Rc, PropsBin/binary>> when ProtoVer =:= 5 ->
-                                          {Props0, <<>>} = parse_props(PropsBin, ProtoVer),
+                                          {Props0, <<>>} = parse_props(PropsBin, ProtoVer, Type),
                                           {Rc, Props0}
                                   end,
             PubAck = #mqtt_packet_puback{packet_id = PacketId,
@@ -134,7 +134,7 @@ parse_packet(Bin, #mqtt_packet_fixed{type = Type,
         {?SUBSCRIBE, <<PacketId:16, PacketBin:(Length-2)/binary, Rest/binary>>} ->
             %% "SUBSCRIBE messages use QoS level 1 to acknowledge multiple subscription requests."
             1 = Qos,
-            {Props, Rest1} = parse_props(PacketBin, ProtoVer),
+            {Props, Rest1} = parse_props(PacketBin, ProtoVer, Type),
             Id = maps:get('Subscription-Identifier', Props, undefined),
             Subscriptions = [#mqtt_subscription{
                                 topic_filter = Topic,
@@ -152,7 +152,7 @@ parse_packet(Bin, #mqtt_packet_fixed{type = Type,
         {?UNSUBSCRIBE, <<PacketId:16, PacketBin:(Length-2)/binary, Rest/binary>>} ->
             %% "UNSUBSCRIBE messages use QoS level 1 to acknowledge multiple unsubscribe requests."
             1 = Qos,
-            {Props, Rest1} = parse_props(PacketBin, ProtoVer),
+            {Props, Rest1} = parse_props(PacketBin, ProtoVer, Type),
             Topics = [Topic || <<Len:16, Topic:Len/binary>> <= Rest1],
             Unsubscribe = #mqtt_packet_unsubscribe{packet_id = PacketId,
                                                    props = Props,
@@ -172,7 +172,7 @@ parse_packet(Bin, #mqtt_packet_fixed{type = Type,
             wrap(Fixed, Disconnect, Rest, ProtoVer);
         {?DISCONNECT, <<ReasonCode, PacketBin:(Length-1)/binary, Rest/binary>>}
           when ProtoVer =:= 5 andalso Length > 1 ->
-            {Props, <<>>} = parse_props(PacketBin, ProtoVer),
+            {Props, <<>>} = parse_props(PacketBin, ProtoVer, Type),
             Disconnect = #mqtt_packet_disconnect{reason_code = ReasonCode,
                                                  props = Props},
             wrap(Fixed, Disconnect, Rest, ProtoVer);
@@ -221,14 +221,14 @@ parse_connect(<<Len:16, ProtoName:Len/binary,
                 KeepAlive:16,
                 Rest0/binary>>) ->
     true = protocol_name_approved(ProtoVer, ProtoName),
-    {Props, Rest1} = parse_props(Rest0, ProtoVer),
+    {Props, Rest1} = parse_props(Rest0, ProtoVer, ?CONNECT),
     {ClientId, Rest2} = parse_bin(Rest1),
     {WillProps, WillTopic, WillPayload, Rest3} =
     case WillFlag of
         0 ->
             {#{}, undefined, undefined, Rest2};
         1 ->
-            {WillProps0, R0} = parse_props(Rest2, ProtoVer),
+            {WillProps0, R0} = parse_props(Rest2, ProtoVer, will_props),
             {WillTopic0, R1} = parse_bin(R0),
             {WillPayload0, R2} = parse_bin(R1),
             {WillProps0, WillTopic0, WillPayload0, R2}
@@ -287,76 +287,74 @@ int_to_bool(1) -> true.
 bool_to_int(false) -> 0;
 bool_to_int(true) -> 1.
 
--spec parse_props(binary(), protocol_version()) ->
+-spec parse_props(binary(), protocol_version(), packet_type() | will_props) ->
     {properties(), binary()}.
-parse_props(Bin, Vsn)
+parse_props(Bin, Vsn, _Type)
   when Vsn < 5 ->
     {#{}, Bin};
-parse_props(<<0, Rest/binary>>, 5) ->
+parse_props(<<0, Rest/binary>>, 5, _Type) ->
     %% "If there are no properties, this MUST be indicated by
     %% including a Property Length of zero." [MQTT-2.2.2-1]
     {#{}, Rest};
-parse_props(Bin, 5) ->
+parse_props(Bin, 5, Type) ->
     {Len, Rest0} = parse_variable_byte_integer(Bin),
     <<PropsBin:Len/binary, Rest/binary>> = Rest0,
-    Props = parse_prop(PropsBin, #{}),
+    Props = parse_prop(PropsBin, Type, #{}),
     {Props, Rest}.
 
--spec parse_prop(binary(), properties()) ->
+-spec parse_prop(binary(), packet_type() | will_props, properties()) ->
     properties().
-parse_prop(<<>>, #{'User-Property' := UserProps} = Props) ->
+parse_prop(<<>>, _Type, #{'User-Property' := UserProps} = Props) ->
     %% "The Server MUST maintain the order of User Properties"
     maps:update('User-Property', lists:reverse(UserProps), Props);
-parse_prop(<<>>, Props) ->
+parse_prop(<<>>, _Type, Props) ->
     Props;
-parse_prop(<<16#01, Val, Bin/binary>>, Props) ->
-    parse_prop(Bin, Props#{'Payload-Format-Indicator' => Val});
-parse_prop(<<16#02, Val:32, Bin/binary>>, Props) ->
-    parse_prop(Bin, Props#{'Message-Expiry-Interval' => Val});
-parse_prop(<<16#03, Len:16, Val:Len/binary, Rest/binary>>, Props) ->
-    parse_prop(Rest, Props#{'Content-Type' => Val});
-parse_prop(<<16#08, Len:16, Val:Len/binary, Rest/binary>>, Props) ->
-    parse_prop(Rest, Props#{'Response-Topic' => Val});
-parse_prop(<<16#09, Len:16, Val:Len/binary, Bin/binary>>, Props) ->
-    parse_prop(Bin, Props#{'Correlation-Data' => Val});
-parse_prop(<<16#0B, Bin/binary>>, Props) ->
+parse_prop(<<16#01, Val, Bin/binary>>, Type, Props)
+  when Type =:= ?PUBLISH orelse Type =:= will_props ->
+    parse_prop(Bin, Type, Props#{'Payload-Format-Indicator' => Val});
+parse_prop(<<16#02, Val:32, Bin/binary>>, Type, Props)
+  when Type =:= ?PUBLISH orelse Type =:= will_props ->
+    parse_prop(Bin, Type, Props#{'Message-Expiry-Interval' => Val});
+parse_prop(<<16#03, Len:16, Val:Len/binary, Rest/binary>>, Type, Props)
+  when Type =:= ?PUBLISH orelse Type =:= will_props ->
+    parse_prop(Rest, Type, Props#{'Content-Type' => Val});
+parse_prop(<<16#08, Len:16, Val:Len/binary, Rest/binary>>, Type, Props)
+  when Type =:= ?PUBLISH orelse Type =:= will_props ->
+    parse_prop(Rest, Type, Props#{'Response-Topic' => Val});
+parse_prop(<<16#09, Len:16, Val:Len/binary, Bin/binary>>, Type, Props)
+  when Type =:= ?PUBLISH orelse Type =:= will_props ->
+    parse_prop(Bin, Type, Props#{'Correlation-Data' => Val});
+parse_prop(<<16#0B, Bin/binary>>, ?SUBSCRIBE = Type, Props) ->
     {Val, Rest} = parse_variable_byte_integer(Bin),
     %% Client sends at most one Subscription-Identifier to the server (in SUBSCRIBE packet).
     %% "It is a Protocol Error to include the Subscription Identifier more than once." [v5 3.8.2.1.2]
-    parse_prop(Rest, Props#{'Subscription-Identifier' => Val});
-parse_prop(<<16#11, Val:32, Bin/binary>>, Props) ->
-    parse_prop(Bin, Props#{'Session-Expiry-Interval' => Val});
-parse_prop(<<16#12, Len:16, Val:Len/binary, Rest/binary>>, Props) ->
-    parse_prop(Rest, Props#{'Assigned-Client-Identifier' => Val});
-parse_prop(<<16#13, Val:16, Bin/binary>>, Props) ->
-    parse_prop(Bin, Props#{'Server-Keep-Alive' => Val});
-parse_prop(<<16#15, Len:16, Val:Len/binary, Rest/binary>>, Props) ->
-    parse_prop(Rest, Props#{'Authentication-Method' => Val});
-parse_prop(<<16#16, Len:16, Val:Len/binary, Bin/binary>>, Props) ->
-    parse_prop(Bin, Props#{'Authentication-Data' => Val});
-parse_prop(<<16#17, Val, Bin/binary>>, Props) ->
-    parse_prop(Bin, Props#{'Request-Problem-Information' => Val});
-parse_prop(<<16#18, Val:32, Bin/binary>>, Props) ->
-    parse_prop(Bin, Props#{'Will-Delay-Interval' => Val});
-parse_prop(<<16#19, Val, Bin/binary>>, Props) ->
-    parse_prop(Bin, Props#{'Request-Response-Information' => Val});
-parse_prop(<<16#1A, Len:16, Val:Len/binary, Rest/binary>>, Props) ->
-    parse_prop(Rest, Props#{'Response-Information' => Val});
-parse_prop(<<16#1C, Len:16, Val:Len/binary, Rest/binary>>, Props) ->
-    parse_prop(Rest, Props#{'Server-Reference' => Val});
-parse_prop(<<16#1F, Len:16, Val:Len/binary, Rest/binary>>, Props) ->
-    parse_prop(Rest, Props#{'Reason-String' => Val});
-parse_prop(<<16#21, Val:16, Bin/binary>>, Props) ->
-    parse_prop(Bin, Props#{'Receive-Maximum' => Val});
-parse_prop(<<16#22, Val:16, Bin/binary>>, Props) ->
-    parse_prop(Bin, Props#{'Topic-Alias-Maximum' => Val});
-parse_prop(<<16#23, Val:16, Bin/binary>>, Props) ->
-    parse_prop(Bin, Props#{'Topic-Alias' => Val});
-parse_prop(<<16#24, Val, Bin/binary>>, Props) ->
-    parse_prop(Bin, Props#{'Maximum-QoS' => Val});
-parse_prop(<<16#25, Val, Bin/binary>>, Props) ->
-    parse_prop(Bin, Props#{'Retain-Available' => Val});
-parse_prop(<<16#26, LenName:16, Name:LenName/binary, LenVal:16, Val:LenVal/binary, Rest/binary>>, Props0) ->
+    parse_prop(Rest, Type, Props#{'Subscription-Identifier' => Val});
+parse_prop(<<16#11, Val:32, Bin/binary>>, Type, Props)
+  when Type =:= ?CONNECT orelse Type =:= ?DISCONNECT ->
+    parse_prop(Bin, Type, Props#{'Session-Expiry-Interval' => Val});
+parse_prop(<<16#15, Len:16, Val:Len/binary, Rest/binary>>, ?CONNECT = Type, Props) ->
+    parse_prop(Rest, Type, Props#{'Authentication-Method' => Val});
+parse_prop(<<16#16, Len:16, Val:Len/binary, Bin/binary>>, ?CONNECT = Type, Props) ->
+    parse_prop(Bin, Type, Props#{'Authentication-Data' => Val});
+parse_prop(<<16#17, Val, Bin/binary>>, ?CONNECT = Type, Props) ->
+    parse_prop(Bin, Type, Props#{'Request-Problem-Information' => Val});
+parse_prop(<<16#18, Val:32, Bin/binary>>, will_props = Type, Props) ->
+    parse_prop(Bin, Type, Props#{'Will-Delay-Interval' => Val});
+parse_prop(<<16#19, Val, Bin/binary>>, ?CONNECT = Type, Props) ->
+    parse_prop(Bin, Type, Props#{'Request-Response-Information' => Val});
+parse_prop(<<16#1C, Len:16, Val:Len/binary, Rest/binary>>, ?DISCONNECT = Type, Props) ->
+    parse_prop(Rest, Type, Props#{'Server-Reference' => Val});
+parse_prop(<<16#1F, Len:16, Val:Len/binary, Rest/binary>>, Type, Props)
+  when Type =:= ?PUBACK orelse Type =:= ?DISCONNECT ->
+    parse_prop(Rest, Type, Props#{'Reason-String' => Val});
+parse_prop(<<16#21, Val:16, Bin/binary>>, ?CONNECT = Type, Props) ->
+    parse_prop(Bin, Type, Props#{'Receive-Maximum' => Val});
+parse_prop(<<16#22, Val:16, Bin/binary>>, ?CONNECT = Type, Props) ->
+    parse_prop(Bin, Type, Props#{'Topic-Alias-Maximum' => Val});
+parse_prop(<<16#23, Val:16, Bin/binary>>, ?PUBLISH = Type, Props) ->
+    parse_prop(Bin, Type, Props#{'Topic-Alias' => Val});
+parse_prop(<<16#26, LenName:16, Name:LenName/binary, LenVal:16, Val:LenVal/binary, Rest/binary>>,
+           Type, Props0) ->
     %% "The User Property is allowed to appear multiple times to represent multiple
     %% name, value pairs. The same name is allowed to appear more than once."
     Pair = {Name, Val},
@@ -364,19 +362,13 @@ parse_prop(<<16#26, LenName:16, Name:LenName/binary, LenVal:16, Val:LenVal/binar
                              fun(UserProps) -> [Pair | UserProps] end,
                              [Pair],
                              Props0),
-    parse_prop(Rest, Props);
-parse_prop(<<16#27, Val:32, Bin/binary>>, Props) ->
+    parse_prop(Rest, Type, Props);
+parse_prop(<<16#27, Val:32, Bin/binary>>, ?CONNECT = Type, Props) ->
     %% "It is a Protocol Error [...] for the value to be set to zero." [MQTT 5.0 3.1.2.11.4]
     true = Val > 0,
-    parse_prop(Bin, Props#{'Maximum-Packet-Size' => Val});
-parse_prop(<<16#28, Val, Bin/binary>>, Props) ->
-    parse_prop(Bin, Props#{'Wildcard-Subscription-Available' => Val});
-parse_prop(<<16#29, Val, Bin/binary>>, Props) ->
-    parse_prop(Bin, Props#{'Subscription-Identifier-Available' => Val});
-parse_prop(<<16#2A, Val, Bin/binary>>, Props) ->
-    parse_prop(Bin, Props#{'Shared-Subscription-Available' => Val});
-parse_prop(<<PropId, _Rest/binary>>, _Props) ->
-    throw({invalid_property_id, PropId}).
+    parse_prop(Bin, Type, Props#{'Maximum-Packet-Size' => Val});
+parse_prop(<<PropId, _Rest/binary>>, Type, _Props) ->
+    throw({invalid_property_id, PropId, Type}).
 
 -spec parse_variable_byte_integer(binary()) ->
     {integer(), Rest :: binary()}.
