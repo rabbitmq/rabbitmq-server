@@ -99,17 +99,31 @@ init_link({Upstream, Queue}) when ?is_amqqueue(Queue) ->
     case rabbit_amqqueue:lookup(QName) of
         {ok, Q} ->
             DeobfuscatedUpstream = rabbit_federation_util:deobfuscate_upstream(Upstream),
-            DeobfuscatedUParams = rabbit_federation_upstream:to_params(DeobfuscatedUpstream, Queue),
-            UParams = rabbit_federation_util:obfuscate_upstream_params(DeobfuscatedUParams),
-            rabbit_federation_status:report(Upstream, UParams, QName, starting),
-            join(rabbit_federation_queues),
-            join({rabbit_federation_queue, QName}),
-            gen_server2:cast(self(), maybe_go),
-            rabbit_amqqueue:notify_decorators(Q),
-            {ok, #not_started{queue           = Queue,
-                              run             = false,
-                              upstream        = Upstream,
-                              upstream_params = UParams}};
+            case rabbit_federation_upstream:to_params(DeobfuscatedUpstream, Queue) of
+                {ok, DeobfuscatedUParams} ->
+                    UParams = rabbit_federation_util:obfuscate_upstream_params(DeobfuscatedUParams),
+                    rabbit_federation_status:report(Upstream, UParams, QName, starting),
+                    join(rabbit_federation_queues),
+                    join({rabbit_federation_queue, QName}),
+                    gen_server2:cast(self(), maybe_go),
+                    rabbit_amqqueue:notify_decorators(Q),
+                    {ok, #not_started{queue           = Queue,
+                                      run             = false,
+                                      upstream        = Upstream,
+                                      upstream_params = UParams}};
+                {error, {_Info, SafeURI} = Reason} ->
+                    %% Unable to parse upstream URI. Return `ignore` so this
+                    %% link's supervisor keeps its siblings and does not fail
+                    %% broker startup. Publish an entry to the status table
+                    %% so the link is visible via `federation_status`.
+                    ?LOG_ERROR(
+                       "Skipping federation link for ~ts, upstream ~ts: ~tp",
+                       [rabbit_misc:rs(QName), Upstream#upstream.name, Reason]),
+                    rabbit_federation_status:report(
+                      Upstream, #upstream_params{safe_uri = SafeURI}, QName,
+                      {invalid_upstream_uri, Reason}),
+                    ignore
+            end;
         {error, not_found} ->
             ?LOG_WARNING("not found, stopping link", []),
             {stop, gone}

@@ -26,7 +26,9 @@ all() -> [
     terminate_all_shutdown_kills_non_trapping_processes,
     terminate_all_timeout_force_kill,
     terminate_all_paced_batching,
-    terminate_all_timeout_kills_remaining_batches
+    terminate_all_timeout_kills_remaining_batches,
+    to_params_returns_error_on_unparseable_uri,
+    to_params_error_strips_credentials
 ].
 
 init_per_suite(Config) ->
@@ -174,3 +176,36 @@ await_all_dead(Pids, AttemptsLeft) ->
             timer:sleep(10),
             await_all_dead(Pids, AttemptsLeft - 1)
     end.
+
+%% -------------------------------------------------------------------
+%% rabbit_federation_upstream:to_params/2 error handling
+%% -------------------------------------------------------------------
+
+%% Regression test for the boot-time crash observed when a persisted
+%% federation-upstream URI contains an `auth_mechanism` value that is not an
+%% existing atom (for example, an invisible U+2028 injected by a copy-paste).
+%% Before the fix, `amqp_uri:parse/2` returning `{error, _}` would badmatch
+%% inside `to_params/2` and crash the link's supervisor. It must now return
+%% an error tuple that callers can handle.
+to_params_returns_error_on_unparseable_uri(_Config) ->
+    %% "external" + U+2028 (UTF-8: E2 80 A8) + "connect" is not a SASL mechanism
+    %% atom, matching the value seen in production.
+    BadURI = <<"amqp://guest:guest@localhost/?auth_mechanism=external",
+               16#E2, 16#80, 16#A8, "connect">>,
+    Upstream = #upstream{uris = [BadURI], name = <<"u">>},
+    XorQ = #resource{virtual_host = <<"/">>, kind = exchange, name = <<"x">>},
+    ?assertMatch({error, {{unknown_mechanism, _}, _SafeURI}},
+                 rabbit_federation_upstream:to_params(Upstream, XorQ)),
+    ok.
+
+%% The URI returned inside the error tuple must have credentials removed so
+%% that error logs cannot leak the upstream password.
+to_params_error_strips_credentials(_Config) ->
+    BadURI = <<"amqp://alice:s3cret@localhost/?auth_mechanism=zzz_no_such_mech">>,
+    Upstream = #upstream{uris = [BadURI], name = <<"u">>},
+    XorQ = #resource{virtual_host = <<"/">>, kind = exchange, name = <<"x">>},
+    {error, {_Info, SafeURI}} =
+        rabbit_federation_upstream:to_params(Upstream, XorQ),
+    ?assertEqual(nomatch, binary:match(SafeURI, <<"s3cret">>)),
+    ?assertEqual(nomatch, binary:match(SafeURI, <<"alice">>)),
+    ok.
