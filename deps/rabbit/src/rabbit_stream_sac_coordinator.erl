@@ -42,9 +42,11 @@
          group_consumers/4,
          connection_reconnected/1]).
 -export([apply/2,
+         apply/3,
          init_state/0,
          send_message/2,
          ensure_monitors/4,
+         ensure_monitors/5,
          handle_connection_down/4,
          handle_node_reconnected/3,
          presume_connection_down/3,
@@ -455,6 +457,34 @@ apply(UnkCmd, State) ->
     ?LOG_DEBUG("~ts: unknown SAC command ~W", [?MODULE, UnkCmd, 10]),
     {State, {error, unknown_command}, []}.
 
+%% Version-aware entry point used by the coordinator. Only the
+%% connection_reconnected command has a machine-version-dependent (v8+) fast
+%% path; every other command, and every command below v8, is handled exactly
+%% as apply/2.
+-spec apply(ra_machine:command_meta_data(), command(), state()) ->
+    {state(), term(), ra_machine:effects()}.
+apply(#{machine_version := Vsn},
+      #command_connection_reconnected{pid = Pid},
+      #?MODULE{groups = Groups0,
+               pids_groups = PidsGroups} = State0)
+  when ?V8_OR_MORE(Vsn) ->
+    %% A reconnection cannot change group membership, and only the groups this
+    %% connection belongs to can be affected. Visit just those via the reverse
+    %% index instead of folding over every group (which is O(total groups)):
+    %% groups the connection is not part of are no-ops, so the resulting state
+    %% matches the full scan done by apply/2.
+    Scan = case maps:get(Pid, PidsGroups, undefined) of
+               undefined -> Groups0;
+               PidGroups -> PidGroups
+           end,
+    {State1, Eff} =
+        maps:fold(fun(G, _, {St, E}) ->
+                          handle_group_connection_reconnected(Pid, St, E, G)
+                  end, {State0, []}, Scan),
+    {State1, ok, Eff};
+apply(_Meta, Cmd, State) ->
+    ?MODULE:apply(Cmd, State).
+
 purge_node(Node, #?MODULE{groups = Groups0} = State0) ->
     PidsGroups = compute_node_pid_group_dependencies(Node, Groups0),
     maps:fold(fun(Pid, Groups, {S0, Eff0}) ->
@@ -830,6 +860,29 @@ ensure_monitors(#command_evaluate_group{},
      Effects};
 ensure_monitors(_, #?MODULE{} = State0, Monitors, Effects) ->
     {State0, Monitors, Effects}.
+
+%% Version-aware entry point used by the coordinator. Only the
+%% connection_reconnected command has a machine-version-dependent (v8+) fast
+%% path; every other command, and every command below v8, is handled exactly
+%% as ensure_monitors/4.
+-spec ensure_monitors(ra_machine:command_meta_data(), command(), state(),
+                      map(), ra_machine:effects()) ->
+    {state(), map(), ra_machine:effects()}.
+ensure_monitors(#{machine_version := Vsn},
+                #command_connection_reconnected{pid = Pid},
+                #?MODULE{pids_groups = PidsGroups} = State,
+                Monitors, Effects)
+  when ?V8_OR_MORE(Vsn) andalso is_map_key(Pid, PidsGroups) ->
+    %% A reconnection does not change group membership, so the PID/group reverse
+    %% index is already up to date. Skip the O(total) rebuild that
+    %% ensure_monitors/4 performs via compute_pid_group_dependencies/1 and just
+    %% (re-)issue the (idempotent) monitor. If the connection is not tracked
+    %% (rare, a forgotten connection coming back) we fall through to
+    %% ensure_monitors/4, which rebuilds the index.
+    {State, Monitors#{Pid => sac},
+     [{monitor, process, Pid}, {monitor, node, node(Pid)} | Effects]};
+ensure_monitors(_Meta, Cmd, State, Monitors, Effects) ->
+    ensure_monitors(Cmd, State, Monitors, Effects).
 
 -spec handle_connection_down(ra_machine:command_meta_data(), connection_pid(),
                              term(), state()) ->

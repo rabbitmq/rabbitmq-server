@@ -602,9 +602,9 @@ apply(#{machine_version := Vsn} = Meta, {sac, SacCommand},
       #?MODULE{single_active_consumer = SacState0,
                monitors = Monitors0} = State0) ->
     Mod = sac_module(Meta),
-    {SacState1, Reply, Effects0} = Mod:apply(SacCommand, SacState0),
+    {SacState1, Reply, Effects0} = sac_apply(Mod, Meta, SacCommand, SacState0),
     {SacState2, Monitors1, Effects1} =
-         Mod:ensure_monitors(SacCommand, SacState1, Monitors0, Effects0),
+         sac_ensure_monitors(Mod, Meta, SacCommand, SacState1, Monitors0, Effects0),
     Monitors2 = case ?V7_OR_MORE(Vsn) of
                     true ->
                         Monitors0;
@@ -2604,6 +2604,19 @@ maps_to_list(M) ->
 
 ra_local_query(QueryFun) ->
     ra:local_query({?MODULE, node()}, QueryFun, infinity).
+
+%% The current SAC module has version-aware apply/3 and ensure_monitors/5
+%% entry points; the v4 module only has the arity-2/4 variants. Dispatch
+%% accordingly so the machine version reaches the current module.
+sac_apply(?SAC_CURRENT = Mod, Meta, Cmd, State) ->
+    Mod:apply(Meta, Cmd, State);
+sac_apply(Mod, _Meta, Cmd, State) ->
+    Mod:apply(Cmd, State).
+
+sac_ensure_monitors(?SAC_CURRENT = Mod, Meta, Cmd, State, Monitors, Effects) ->
+    Mod:ensure_monitors(Meta, Cmd, State, Monitors, Effects);
+sac_ensure_monitors(Mod, _Meta, Cmd, State, Monitors, Effects) ->
+    Mod:ensure_monitors(Cmd, State, Monitors, Effects).
 
 sac_handle_connection_down(Meta, SacState, Pid, Reason, Vsn) when ?V5_OR_MORE(Vsn) ->
     ?SAC_CURRENT:handle_connection_down(Meta, Pid, Reason, SacState);

@@ -742,6 +742,56 @@ connection_reconnected_simple_disconnected_becomes_connected_test(_) ->
     assertEmpty(Eff),
     ok.
 
+connection_reconnected_v8_apply_matches_v7_test(_) ->
+    %% The v8 apply/3 fast path visits only the reconnecting connection's
+    %% groups (via the reverse index); it must produce the same state as the
+    %% v7 apply/2 full scan, including leaving unrelated groups untouched.
+    P0 = new_process(),
+    P1 = new_process(),
+    Other = new_process(),
+    GId = group_id(),
+    G2Id = {<<"/">>, <<"other-stream">>, <<"app">>},
+    G1 = grp([csr(P0, 0, {disconnected, active}),
+              csr(P1, 1, {connected, waiting})]),
+    %% an unrelated group the reconnecting connection is not part of
+    G2 = grp([csr(Other, 0, {connected, active})]),
+    State0 = state(#{GId => G1, G2Id => G2}),
+    Cmd = connection_reconnected_command(P0),
+
+    {#?STATE{groups = GroupsV7}, ok, _} = ?MOD:apply(Cmd, State0),
+    {#?STATE{groups = GroupsV8}, ok, _} =
+        ?MOD:apply(#{machine_version => 8}, Cmd, State0),
+
+    Expected = grp([csr(P0, 0, {connected, active}),
+                    csr(P1, 1, {connected, waiting})]),
+    assertHasGroup(GId, Expected, GroupsV7),
+    assertHasGroup(GId, Expected, GroupsV8),
+    assertHasGroup(G2Id, G2, GroupsV7),
+    assertHasGroup(G2Id, G2, GroupsV8),
+    ok.
+
+connection_reconnected_v8_ensure_monitors_skips_rebuild_test(_) ->
+    %% For a tracked connection, the v8 ensure_monitors/5 must skip the
+    %% O(total) reverse-index rebuild and leave pids_groups unchanged, while
+    %% still (re-)issuing the monitor. The result must match the v7 rebuild.
+    P0 = new_process(),
+    GId = group_id(),
+    State0 = state(#{GId => grp([csr(P0, 0, {connected, active})])}),
+    #?STATE{pids_groups = PG0} = State0,
+    Cmd = connection_reconnected_command(P0),
+
+    {#?STATE{pids_groups = PG8}, Mons8, Eff8} =
+        ?MOD:ensure_monitors(#{machine_version => 8}, Cmd, State0, #{}, []),
+    ?assertEqual(PG0, PG8),
+    ?assertEqual(#{P0 => sac}, Mons8),
+    ?assert(lists:member({monitor, process, P0}, Eff8)),
+
+    %% v7 path rebuilds the index but yields the same result
+    {#?STATE{pids_groups = PG7}, _, _} =
+        ?MOD:ensure_monitors(Cmd, State0, #{}, []),
+    ?assertEqual(PG7, PG8),
+    ok.
+
 connection_reconnected_simple_active_should_be_first_test(_) ->
     Pid0 = new_process(),
     Pid1 = new_process(),
