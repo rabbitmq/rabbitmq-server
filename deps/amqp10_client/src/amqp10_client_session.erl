@@ -297,8 +297,8 @@ unmapped({call, From}, {attach, Attach},
 unmapped(_EvtType, Msg, _State) ->
     %% Crashing here would take down `amqp10_client_sessions_sup` with this
     %% session, leaving the connection unable to begin any more sessions.
-    ?LOG_WARNING("amqp10_session: unhandled msg in unmapped state ~W",
-                 [Msg, 10]),
+    ?LOG_DEBUG("amqp10_session: unhandled msg in unmapped state ~W",
+               [Msg, 10]),
     keep_state_and_data.
 
 begin_sent(cast, #'v1_0.begin'{remote_channel = {ushort, RemoteChannel},
@@ -336,8 +336,8 @@ begin_sent({call, From}, {attach, Attach},
 begin_sent(_EvtType, Msg, _State) ->
     %% Crashing here would take down `amqp10_client_sessions_sup` with this
     %% session, leaving the connection unable to begin any more sessions.
-    ?LOG_WARNING("amqp10_session: unhandled msg in begin_sent state ~W",
-                 [Msg, 10]),
+    ?LOG_DEBUG("amqp10_session: unhandled msg in begin_sent state ~W",
+               [Msg, 10]),
     keep_state_and_data.
 
 mapped(cast, 'end', State) ->
