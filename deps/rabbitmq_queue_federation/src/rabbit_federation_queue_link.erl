@@ -116,9 +116,8 @@ init_link({Upstream, Queue}) when ?is_amqqueue(Queue) ->
                     %% link's supervisor keeps its siblings and does not fail
                     %% broker startup. Publish an entry to the status table
                     %% so the link is visible via `federation_status`.
-                    ?LOG_ERROR(
-                       "Skipping federation link for ~ts, upstream ~ts: ~tp",
-                       [rabbit_misc:rs(QName), Upstream#upstream.name, Reason]),
+                    rabbit_federation_util:log_skipped_link(
+                      QName, Upstream#upstream.name, Reason),
                     rabbit_federation_status:report(
                       Upstream, #upstream_params{safe_uri = SafeURI}, QName,
                       {invalid_upstream_uri, Reason}),

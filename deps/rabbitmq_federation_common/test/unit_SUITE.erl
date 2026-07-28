@@ -28,7 +28,10 @@ all() -> [
     terminate_all_paced_batching,
     terminate_all_timeout_kills_remaining_batches,
     to_params_returns_error_on_unparseable_uri,
-    to_params_error_strips_credentials
+    to_params_error_strips_credentials,
+    to_params_error_on_malformed_uri_strips_credentials,
+    to_params_falls_back_to_valid_uri,
+    to_params_error_redacts_query_secrets
 ].
 
 init_per_suite(Config) ->
@@ -208,4 +211,47 @@ to_params_error_strips_credentials(_Config) ->
         rabbit_federation_upstream:to_params(Upstream, XorQ),
     ?assertEqual(nomatch, binary:match(SafeURI, <<"s3cret">>)),
     ?assertEqual(nomatch, binary:match(SafeURI, <<"alice">>)),
+    ok.
+
+%% A structurally malformed URI must not crash `to_params/2`. Such URIs also
+%% crash `amqp_uri:remove_credentials/1`, so the error branch has to strip
+%% credentials without relying on it.
+to_params_error_on_malformed_uri_strips_credentials(_Config) ->
+    BadURI = <<"amqp://alice:s3cret@:::">>,
+    Upstream = #upstream{uris = [BadURI], name = <<"u">>},
+    XorQ = #resource{virtual_host = <<"/">>, kind = exchange, name = <<"x">>},
+    {error, {_Info, SafeURI}} =
+        rabbit_federation_upstream:to_params(Upstream, XorQ),
+    ?assertEqual(nomatch, binary:match(SafeURI, <<"s3cret">>)),
+    ?assertEqual(nomatch, binary:match(SafeURI, <<"alice">>)),
+    ok.
+
+%% The URIs of an upstream are interchangeable failover endpoints, so a single
+%% unparseable URI must not prevent the link from using a valid one.
+to_params_falls_back_to_valid_uri(_Config) ->
+    BadURI = <<"amqp://guest:guest@localhost/?auth_mechanism=zzz_no_such_mech">>,
+    GoodURI = <<"amqp://guest:guest@localhost">>,
+    X = #exchange{name = #resource{virtual_host = <<"/">>,
+                                   kind = exchange, name = <<"x">>}},
+    %% Try both orderings since `to_params/2` shuffles the URIs.
+    lists:foreach(
+      fun(URIs) ->
+              Upstream = #upstream{uris = URIs, name = <<"u">>,
+                                   exchange_name = <<"x">>},
+              ?assertMatch({ok, _},
+                           rabbit_federation_upstream:to_params(Upstream, X))
+      end,
+      [[BadURI, GoodURI], [GoodURI, BadURI]]),
+    ok.
+
+%% Some `amqp_uri:parse/2` error shapes embed the full query string, which can
+%% carry a TLS `password` or other secret. The error tuple must not leak it.
+to_params_error_redacts_query_secrets(_Config) ->
+    BadURI = <<"amqps://guest:guest@localhost/?depth=notanumber&password=s3cret">>,
+    Upstream = #upstream{uris = [BadURI], name = <<"u">>},
+    XorQ = #resource{virtual_host = <<"/">>, kind = exchange, name = <<"x">>},
+    {error, {Info, _SafeURI}} =
+        rabbit_federation_upstream:to_params(Upstream, XorQ),
+    ?assertEqual(nomatch, binary:match(iolist_to_binary(io_lib:format("~tp", [Info])),
+                                       <<"s3cret">>)),
     ok.

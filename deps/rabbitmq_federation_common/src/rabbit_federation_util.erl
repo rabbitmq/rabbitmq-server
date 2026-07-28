@@ -9,11 +9,13 @@
 
 -include_lib("rabbit/include/amqqueue.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("kernel/include/logger.hrl").
 -include("rabbit_federation.hrl").
 
 -export([should_forward/4, find_upstreams/2, already_seen/3]).
 -export([validate_arg/3, fail/2, name/1, vhost/1, r/1, pgname/1]).
 -export([obfuscate_upstream/1, deobfuscate_upstream/1, obfuscate_upstream_params/1, deobfuscate_upstream_params/1]).
+-export([log_skipped_link/3]).
 
 -import(rabbit_misc, [pget_or_die/2, pget/3]).
 
@@ -86,6 +88,14 @@ obfuscate_upstream_params(#upstream_params{uri = Uri, params = #amqp_params_dire
         uri = credentials_obfuscation:encrypt(Uri),
         params = Params#amqp_params_direct{password = credentials_obfuscation:encrypt(rabbit_data_coercion:to_binary(Password))}
     }.
+
+%% Logged when an upstream URI cannot be parsed. The link init returns
+%% `ignore` so the link's supervisor keeps its siblings and node startup
+%% does not fail. `Reason` has already had its credentials stripped by
+%% `rabbit_federation_upstream:to_params/2`.
+log_skipped_link(Resource, UpstreamName, Reason) ->
+    ?LOG_ERROR("Skipping federation link for ~ts, upstream ~ts: ~tp",
+               [rabbit_misc:rs(Resource), UpstreamName, Reason]).
 
 deobfuscate_upstream(#upstream{uris = EncryptedUris} = Upstream) ->
     Upstream#upstream{uris = [credentials_obfuscation:decrypt(EncryptedUri) || EncryptedUri <- EncryptedUris]}.
