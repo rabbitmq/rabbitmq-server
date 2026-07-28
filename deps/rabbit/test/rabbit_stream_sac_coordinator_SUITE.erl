@@ -720,6 +720,47 @@ handle_node_reconnected_test(_) ->
     stop_node(N1Pid),
     ok.
 
+handle_node_reconnected_v8_test(_) ->
+    %% As of v8 a node disconnection keeps the connection in pids_groups, so
+    %% handle_node_reconnected/4 must NOT rebuild the reverse index (state is
+    %% left untouched) while still re-issuing the monitor and check-connection
+    %% effect for the reconnecting node's connections only. On a consistent
+    %% state the effect set must match the v7 /3 full scan.
+    N0 = node(),
+    {N1Pid, N1} = start_node(?FUNCTION_NAME),
+    N0Pid0 = new_process(N0),
+    N1Pid0 = new_process(N1),
+
+    GId0 = group_id(<<"s0">>),
+    GId1 = group_id(<<"s1">>),
+    Group0 = grp(0, [csr(N0Pid0, 0, {connected, active}),
+                     csr(N1Pid0, 1, {disconnected, waiting})]),
+    Group1 = grp(1, [csr(N0Pid0, 0, {connected, active}),
+                     csr(N1Pid0, 1, {disconnected, waiting})]),
+    Groups0 = #{GId0 => Group0, GId1 => Group1},
+    %% consistent index: the disconnected N1 connection is still tracked (v8)
+    State0 = state(Groups0),
+
+    {StateV8, EffV8} =
+        ?MOD:handle_node_reconnected(#{machine_version => 8}, N1, State0, []),
+    {_StateV7, EffV7} =
+        ?MOD:handle_node_reconnected(N1, State0, []),
+
+    %% v8 leaves the state byte-identical (no rebuild, no merge)
+    ?assertEqual(State0, StateV8),
+    %% only the reconnecting node's single connection is affected, and it is
+    %% visited once even though it belongs to two groups
+    assertSize(2, EffV8),
+    assertContainsCheckConnectionEffect(N1Pid0, EffV8),
+    assertContainsMonitorProcessEffect(N1Pid0, EffV8),
+    %% v7 /3 on the same consistent state yields the same effect set
+    assertSize(2, EffV7),
+    assertContainsCheckConnectionEffect(N1Pid0, EffV7),
+    assertContainsMonitorProcessEffect(N1Pid0, EffV7),
+
+    stop_node(N1Pid),
+    ok.
+
 connection_reconnected_simple_disconnected_becomes_connected_test(_) ->
     Pid0 = new_process(),
     Pid1 = new_process(),

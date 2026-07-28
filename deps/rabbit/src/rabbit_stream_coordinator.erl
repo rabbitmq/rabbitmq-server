@@ -746,6 +746,40 @@ apply(#{machine_version := Vsn} = Meta,
         _ ->
             return(Meta, State0, stream_not_found, [])
     end;
+apply(#{machine_version := Vsn} = Meta, {nodeup, Node} = Cmd,
+      #?MODULE{monitors = Monitors0,
+               streams = Streams0,
+               single_active_consumer = Sac0} = State)
+  when ?V8_OR_MORE(Vsn) ->
+    %% Only streams with a member on Node that was parked for this nodeup can
+    %% change: a disconnected replica to resume (and re-monitor), or a member
+    %% whose pending action went to sleep waiting for the node. Every other
+    %% stream is left untouched rather than re-evaluating all of them, which is
+    %% O(total streams) and, in steady state, a no-op.
+    {Streams, Monitors, Effects0} =
+        maps:fold(
+          fun(Id, #stream{members = M} = S0, {Ss, Mon, E0}) ->
+                  case M of
+                      #{Node := #member{state = {disconnected, _, P}}} ->
+                          %% resume the replica and re-issue its process monitor
+                          S1 = update_stream(Meta, Cmd, S0),
+                          {S2, E1} = evaluate_stream(Meta, S1, E0),
+                          {Ss#{Id => S2},
+                           Mon#{P => {Id, member}},
+                           [{monitor, process, P} | E1]};
+                      #{Node := #member{current = {sleeping, nodeup}}} ->
+                          %% wake the member up so its action can be retried
+                          S1 = update_stream(Meta, Cmd, S0),
+                          {S2, E1} = evaluate_stream(Meta, S1, E0),
+                          {Ss#{Id => S2}, Mon, E1};
+                      _ ->
+                          {Ss, Mon, E0}
+                  end
+          end, {Streams0, Monitors0, []}, Streams0),
+    {Sac1, Effects1} = sac_handle_node_reconnected(Meta, Node, Sac0, Effects0),
+    return(Meta, State#?MODULE{monitors = Monitors,
+                               streams = Streams,
+                               single_active_consumer = Sac1}, ok, Effects1);
 apply(Meta, {nodeup, Node} = Cmd,
       #?MODULE{monitors = Monitors0,
                streams = Streams0,
@@ -2636,9 +2670,7 @@ sac_handle_node_reconnected(#{machine_version := Vsn} = Meta, Node,
                             Sac, Effects) ->
     case ?V5_OR_MORE(Vsn) of
         true ->
-            SacMod = sac_module(Meta),
-            SacMod:handle_node_reconnected(Node,
-                                           Sac, Effects);
+            ?SAC_CURRENT:handle_node_reconnected(Meta, Node, Sac, Effects);
         false ->
             {Sac, Effects}
     end.

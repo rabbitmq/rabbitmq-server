@@ -48,6 +48,7 @@ all_tests() ->
      leader_start_failed,
      member_started_stale_epoch,
      replica_disconnected_nodeup,
+     nodeup_resumes_only_affected_streams,
      restart_stream_preserves_deleted,
      stranded_no_writer_reelection,
      overview
@@ -323,13 +324,13 @@ sac_v7_ensure_monitors_should_not_use_monitors_map(_) ->
     SacState0 = fake_sac_state,
     SacState1 = updated_sac_state,
     meck:expect(rabbit_stream_sac_coordinator, apply,
-                fun(Cmd, State) when Cmd =:= SacCmd,
-                                     State =:= SacState0 ->
+                fun(_Meta, Cmd, State) when Cmd =:= SacCmd,
+                                            State =:= SacState0 ->
                         {SacState1, {ok, true}, []}
                 end),
     meck:expect(rabbit_stream_sac_coordinator, ensure_monitors,
-                fun(Cmd, State, Monitors, Effects) when Cmd =:= SacCmd,
-                                                        State =:= SacState1 ->
+                fun(_Meta, Cmd, State, Monitors, Effects) when Cmd =:= SacCmd,
+                                                               State =:= SacState1 ->
                         {State, Monitors#{ConnectionPid => sac}, Effects}
                 end),
 
@@ -374,13 +375,13 @@ sac_pre_v7_ensure_monitors_should_use_monitors_map(_) ->
     SacState0 = fake_sac_state,
     SacState1 = updated_sac_state,
     meck:expect(rabbit_stream_sac_coordinator, apply,
-                fun(Cmd, State) when Cmd =:= SacCmd,
-                                     State =:= SacState0 ->
+                fun(_Meta, Cmd, State) when Cmd =:= SacCmd,
+                                            State =:= SacState0 ->
                         {SacState1, {ok, true}, []}
                 end),
     meck:expect(rabbit_stream_sac_coordinator, ensure_monitors,
-                fun(Cmd, State, Monitors, Effects) when Cmd =:= SacCmd,
-                                                        State =:= SacState1 ->
+                fun(_Meta, Cmd, State, Monitors, Effects) when Cmd =:= SacCmd,
+                                                               State =:= SacState1 ->
                         {State, Monitors#{ConnectionPid => sac}, Effects}
                 end),
 
@@ -1635,6 +1636,52 @@ replica_disconnected_nodeup(_) ->
                        {nodeup, N3}, S1),
     ?assertMatch(#stream{members = #{N3 := #member{state = {disconnected, E, Replica}}}},
                  S3),
+    ok.
+
+nodeup_resumes_only_affected_streams(_) ->
+    %% The v8 apply({nodeup, Node}) clause only re-evaluates streams with a
+    %% member on Node that was parked for the nodeup (a disconnected replica or
+    %% a member sleeping on 'nodeup'). Streams with no member on Node, or whose
+    %% on-Node member is already running, must be left untouched and produce no
+    %% effects.
+    E = 1,
+    Leader = fake_pid(n1),
+    Replica = fake_pid(n3),
+    N3 = node(Replica),
+
+    %% affected stream: replica on N3 disconnected, waiting for the node back
+    Affected = "affected",
+    A0 = started_stream(Affected, Leader, [Replica]),
+    A1 = update_stream(meta(?LINE), {down, Replica, noconnection}, A0),
+    ?assertMatch(#stream{members = #{N3 := #member{state = {disconnected, E, Replica}}}},
+                 A1),
+
+    %% unaffected stream: members only on n1 and n2, nothing on N3
+    Unaffected = "unaffected",
+    U0 = started_stream(Unaffected, fake_pid(n1), [fake_pid(n2)]),
+
+    State0 = (rabbit_stream_coordinator:init(#{machine_version => 8}))#?STATE{
+               streams = #{Affected => A1, Unaffected => U0}},
+
+    {State1, ok, Effects} =
+        apply_cmd(meta(#{index => ?LINE, machine_version => 8}),
+                  {nodeup, N3}, State0),
+
+    #?STATE{streams = Streams1, monitors = Monitors1} = State1,
+
+    %% the disconnected replica is resumed as running
+    ?assertMatch(#{Affected := #stream{members =
+                                       #{N3 := #member{state = {running, E, Replica}}}}},
+                 Streams1),
+    %% its process monitor is (re-)issued and recorded
+    ?assertEqual({Affected, member}, maps:get(Replica, Monitors1)),
+    ?assert(lists:member({monitor, process, Replica}, Effects)),
+
+    %% the unaffected stream is byte-identical to its input
+    ?assertEqual(U0, maps:get(Unaffected, Streams1)),
+
+    %% the only effect is the single monitor re-issue for the resumed replica
+    ?assertEqual([{monitor, process, Replica}], Effects),
     ok.
 
 restart_stream_preserves_deleted(_) ->
