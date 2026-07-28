@@ -25,6 +25,7 @@ all_tests() ->
      array32_count_exceeds_data,
      array_of_zero_width_elements,
      array_of_described_zero_width_elements_unsupported,
+     array_element_widths,
      unsupported_type,
      server_mode_symbolic_body_descriptors,
      server_mode_body_descriptor_prefix_collision,
@@ -174,6 +175,52 @@ array_of_described_zero_width_elements_unsupported(_Config) ->
     Bin = <<16#f0, (byte_size(CountAndV)):32, CountAndV/binary>>,
     ?assertExit({array_of_described_zero_width_elements_unsupported, Count},
                 amqp10_binary_parser:parse(Bin)).
+
+%% Array elements are cut out of the array by the width that their shared
+%% constructor implies [§1.6.1]. Cover one element type per subcategory, that is
+%% per width class, including the ones whose width is a size prefix.
+array_element_widths(_Config) ->
+    Arrays = [
+              %% 0x4X: zero-width elements
+              {array, boolean, [true, false, true]},
+              %% 0x5X: 1 octet
+              {array, ubyte, [{ubyte, 0}, {ubyte, 255}]},
+              {array, byte, [{byte, -128}, {byte, 127}]},
+              %% 0x6X: 2 octets
+              {array, ushort, [{ushort, 0}, {ushort, 16#ff_ff}]},
+              {array, short, [{short, -1}, {short, 1}]},
+              %% 0x7X: 4 octets
+              {array, uint, [{uint, 0}, {uint, 16#ff_ff_ff_ff}]},
+              {array, float, [{float, 1.5}, {float, -1.5}]},
+              {array, char, [{char, $a}]},
+              %% 0x8X: 8 octets
+              {array, ulong, [{ulong, 0}, {ulong, 16#ff_ff_ff_ff_ff}]},
+              {array, double, [{double, 1.25}]},
+              {array, timestamp, [{timestamp, 1}]},
+              %% 0x9X: 16 octets
+              {array, uuid, [{uuid, <<0:128>>}, {uuid, <<1:128>>}]},
+              %% 0xAX: 1 octet of size
+              {array, binary, [{binary, <<>>}, {binary, <<1, 2, 3>>}]},
+              {array, utf8, [{utf8, <<"a">>}, {utf8, <<"bb">>}]},
+              {array, symbol, [{symbol, <<"s">>}]},
+              %% 0xBX: 4 octets of size
+              {array, binary, [{binary, binary:copy(<<7>>, 300)}]},
+              {array, utf8, [{utf8, binary:copy(<<$x>>, 300)}]},
+              %% 0xDX: 4 octets of size and count
+              {array, list, [{list, [{ubyte, 1}]}, {list, []}]},
+              {array, map, [{map, [{{utf8, <<"k">>}, {ubyte, 1}}]}]},
+              %% 0xFX: 4 octets of size and count
+              {array, array, [{array, ubyte, [{ubyte, 9}]}]},
+              %% Described elements share their descriptor as well.
+              {array, {described, {utf8, <<"URL">>}, utf8},
+               [{described, {utf8, <<"URL">>}, {utf8, <<"u">>}}]}
+             ],
+    lists:foreach(
+      fun(Array) ->
+              Bin = iolist_to_binary(amqp10_binary_generator:generate(Array)),
+              ?assertEqual({Array, byte_size(Bin)},
+                           amqp10_binary_parser:parse(Bin))
+      end, Arrays).
 
 unsupported_type(_Config) ->
     UnsupportedType = 16#02,
