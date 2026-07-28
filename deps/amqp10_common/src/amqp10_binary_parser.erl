@@ -179,9 +179,37 @@ parse_array2(0, Type, Bin, Acc) ->
 parse_array2(Count, Type, <<>>, Acc) when Count > 0 ->
     exit({failed_to_parse_array_insufficient_input, Type, Count, Acc});
 parse_array2(Count, Type, Bin, Acc) ->
-    {Value, B} = parse_array_primitive(Type, Bin),
-    <<_ParsedValue:B/binary, Rest/binary>> = Bin,
-    parse_array2(Count - 1, Type, Rest, [Value | Acc]).
+    Size = array_element_size(Type, Bin),
+    case Bin of
+        <<Element:Size/binary, Rest/binary>> ->
+            TotalSize = Size + 1,
+            %% assertion
+            {Value, TotalSize} = parse(<<Type, Element/binary>>),
+            parse_array2(Count - 1, Type, Rest, [Value | Acc]);
+        _ ->
+            exit({failed_to_parse_array_insufficient_input, Type, Count, Acc})
+    end.
+
+%% Returns the byte size of a single array element, excluding the constructor
+%% that all elements of the array share.
+array_element_size(Type, _Bin) when Type >= 16#40 andalso Type =< 16#4f -> 0;
+array_element_size(Type, _Bin) when Type >= 16#50 andalso Type =< 16#5f -> 1;
+array_element_size(Type, _Bin) when Type >= 16#60 andalso Type =< 16#6f -> 2;
+array_element_size(Type, _Bin) when Type >= 16#70 andalso Type =< 16#7f -> 4;
+array_element_size(Type, _Bin) when Type >= 16#80 andalso Type =< 16#8f -> 8;
+array_element_size(Type, _Bin) when Type >= 16#90 andalso Type =< 16#9f -> 16;
+array_element_size(Type, <<Size:8, _/binary>>)
+  when Type >= 16#a0 andalso Type =< 16#af;
+       Type >= 16#c0 andalso Type =< 16#cf;
+       Type >= 16#e0 andalso Type =< 16#ef ->
+    1 + Size;
+array_element_size(Type, <<Size:32, _/binary>>)
+  when Type >= 16#b0 andalso Type =< 16#bf;
+       Type >= 16#d0 andalso Type =< 16#df;
+       Type >= 16#f0 andalso Type =< 16#ff ->
+    4 + Size;
+array_element_size(Type, _Bin) ->
+    exit({failed_to_parse_array_element_size, Type}).
 
 parse_constructor(?CODE_SYM_8) -> symbol;
 parse_constructor(?CODE_SYM_32) -> symbol;
@@ -215,10 +243,6 @@ parse_constructor(16#f0) -> array;
 parse_constructor(0) -> described;
 parse_constructor(X) ->
     exit({failed_to_parse_constructor, X}).
-
-parse_array_primitive(ElementType, Data) ->
-    {Val, B} = parse(<<ElementType, Data/binary>>),
-    {Val, B-1}.
 
 mapify([]) ->
     [];
