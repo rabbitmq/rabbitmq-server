@@ -220,10 +220,16 @@ to_params_error_on_malformed_uri_strips_credentials(_Config) ->
     BadURI = <<"amqp://alice:s3cret@:::">>,
     Upstream = #upstream{uris = [BadURI], name = <<"u">>},
     XorQ = #resource{virtual_host = <<"/">>, kind = exchange, name = <<"x">>},
-    {error, {_Info, SafeURI}} =
+    {error, {Info, SafeURI}} =
         rabbit_federation_upstream:to_params(Upstream, XorQ),
     ?assertEqual(nomatch, binary:match(SafeURI, <<"s3cret">>)),
     ?assertEqual(nomatch, binary:match(SafeURI, <<"alice">>)),
+    %% The parse-error `Info` for a malformed URI embeds the raw URI, so it
+    %% must be sanitized as well or the credentials leak into the logs.
+    ?assertEqual(nomatch, binary:match(iolist_to_binary(io_lib:format("~tp", [Info])),
+                                       <<"s3cret">>)),
+    ?assertEqual(nomatch, binary:match(iolist_to_binary(io_lib:format("~tp", [Info])),
+                                       <<"alice">>)),
     ok.
 
 %% The URIs of an upstream are interchangeable failover endpoints, so a single

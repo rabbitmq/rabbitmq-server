@@ -97,6 +97,10 @@ sanitize_parse_error({invalid_ssl_parameter, Key, _Value, _Query, Reason}) ->
     {invalid_ssl_parameter, Key, redacted, redacted, Reason};
 sanitize_parse_error({invalid_amqp_params_parameter, Field, _Value, _Query, Reason}) ->
     {invalid_amqp_params_parameter, Field, redacted, redacted, Reason};
+sanitize_parse_error({unable_to_parse_uri, _Detail}) ->
+    %% The detail embeds the raw URI (with credentials) and an exit stack
+    %% trace. Neither is safe to log; the sanitized URI is reported separately.
+    unable_to_parse_uri;
 sanitize_parse_error(Info) ->
     Info.
 
