@@ -86,6 +86,7 @@ groups() ->
                                             delete_declare,
                                             delete_member_during_node_down,
                                             delete_while_publishing,
+                                            state_restore_timers_restores_state_on_remote_nodes,
                                             delete_ra_cluster_already_shutting_down,
                                             concurrent_vhost_delete_with_quorum_queue,
                                             metrics_cleanup_on_leadership_takeover,
@@ -5387,6 +5388,84 @@ assert_restore_timer_recovers_blocked_delete(Config, QName, IfUnused, IfEmpty) -
            Config, 0, application, unset_env,
            [rabbit, quorum_queue_blocked_state_restore_timeout]),
     ok.
+
+%% Verifies that spawn_state_restore_timers/2 starts a safety-net timer on every
+%% running cluster node, including the remote nodes, and that a timer on a remote
+%% node restores the previous state on its own (i.e. even when the node that
+%% spawned the timers is not the one that restores the state).
+state_restore_timers_restores_state_on_remote_nodes(Config) ->
+    [Server0 | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
+    QQ = ?config(queue_name, Config),
+    QName = rabbit_misc:r(<<"/">>, queue, QQ),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    %% Move the queue to the blocked state, as the start of a conditional delete
+    %% does, then confirm the change is visible cluster-wide.
+    ok = set_queue_state(Config, QName, blocked),
+    ?awaitMatch(blocked, get_queue_state(Config, QName), ?DEFAULT_AWAIT),
+
+    %% While blocked, the queue is not usable: publishing is rejected and
+    %% consuming or passively re-declaring it fails and closes the channel.
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+    ?assertEqual(fail, publish_confirm(Ch, QQ)),
+    Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server0),
+    ?assertExit({{shutdown, {server_initiated_close, 405, _}}, _},
+                amqp_channel:call(Ch1, #'basic.get'{queue = QQ})),
+    Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server0),
+    ?assertExit({{shutdown, {server_initiated_close, 405, _}}, _},
+                amqp_channel:call(Ch2, #'basic.consume'{queue = QQ})),
+    Ch3 = rabbit_ct_client_helpers:open_channel(Config, Server0),
+    ?assertExit({{shutdown, {server_initiated_close, 405, _}}, _},
+                amqp_channel:call(Ch3, #'queue.declare'{queue = QQ,
+                                                        passive = true})),
+
+    %% Use a short restore timeout so the remote timers fire quickly. The
+    %% timeout is read on the spawning node and passed to each timer, so setting
+    %% it on node 0 is enough.
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, application, set_env,
+           [rabbit, quorum_queue_blocked_state_restore_timeout, 3000]),
+
+    %% Spawn the safety-net timers from node 0, asking them to restore the live
+    %% state.
+    Pids = rabbit_ct_broker_helpers:rpc(
+             Config, 0, rabbit_quorum_queue, spawn_state_restore_timers,
+             [QName, live]),
+
+    %% One timer was started on every running cluster node, including the remote
+    %% ones (not just the node that spawned them).
+    RunningNodes = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_nodes,
+                                                list_running, []),
+    ?assertEqual(lists:sort(RunningNodes),
+                 lists:usort([node(P) || P <- Pids])),
+    RemotePids = [P || P <- Pids, node(P) =/= Server0],
+    ?assert(length(RemotePids) >= 1),
+
+    %% Kill the timer running on the spawning node so that only the timers on the
+    %% remote nodes are left to restore the state. This mimics the spawning node
+    %% going down entirely after it moved the queue to the blocked state.
+    [LocalPid] = [P || P <- Pids, node(P) =:= Server0],
+    true = rabbit_ct_broker_helpers:rpc(Config, 0, erlang, exit,
+                                        [LocalPid, kill]),
+    false = rabbit_ct_broker_helpers:rpc(Config, 0, erlang, is_process_alive,
+                                        [LocalPid]),
+
+    %% A timer on a remote node restores the previous state on its own.
+    ?awaitMatch(live, get_queue_state(Config, QName), ?DEFAULT_AWAIT),
+
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, application, unset_env,
+           [rabbit, quorum_queue_blocked_state_restore_timeout]),
+
+    %% The queue is usable again and can be deleted normally.
+    Ch4 = rabbit_ct_client_helpers:open_channel(Config, Server0),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch4, #'confirm.select'{}),
+    ?assertEqual(ok, publish_confirm(Ch4, QQ)),
+    ?assertMatch(#'queue.delete_ok'{},
+                 amqp_channel:call(Ch4, #'queue.delete'{queue = QQ})).
 
 delete_conditional_refused_under_alarm(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
