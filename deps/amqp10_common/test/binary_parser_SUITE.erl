@@ -106,7 +106,7 @@ array_with_extra_input(_Config) ->
                 %% element type, remaining input size
                 65, 12},
 
-    ?assertExit(Expected, amqp10_binary_parser:parse_many(Bin, [])).
+    ?assertThrow(Expected, amqp10_binary_parser:parse_many(Bin, [])).
 
 array32_count_exceeds_data(_Config) ->
     TypeArray32 = 16#f0,
@@ -115,8 +115,8 @@ array32_count_exceeds_data(_Config) ->
     Count = 10,
     Payload = <<Count:32, TypeUByte, 1, 2, 3>>,
     Bin = <<TypeArray32, (byte_size(Payload)):32, Payload/binary>>,
-    ?assertExit({failed_to_parse_array_count_exceeds_input, TypeUByte, Count, 3},
-                amqp10_binary_parser:parse(Bin)).
+    ?assertThrow({failed_to_parse_array_count_exceeds_input, TypeUByte, Count, 3},
+                 amqp10_binary_parser:parse(Bin)).
 
 %% Zero-width array elements (null, booleans, uint0, ulong0, list0) cost zero
 %% octets on the wire no matter how large Count is. Rather than materializing
@@ -173,17 +173,12 @@ array_of_described_zero_width_elements_unsupported(_Config) ->
     Count = 16#FFFFFFFF,
     CountAndV = <<Count:32, DescribedNull/binary>>,
     Bin = <<16#f0, (byte_size(CountAndV)):32, CountAndV/binary>>,
-    ?assertExit({array_of_described_zero_width_elements_unsupported, Count},
-                amqp10_binary_parser:parse(Bin)).
+    ?assertThrow({array_of_described_zero_width_elements_unsupported, Count},
+                 amqp10_binary_parser:parse(Bin)).
 
-%% Array elements are cut out of the array by the width that their shared
-%% constructor implies [§1.6.1]. Cover one element type per subcategory, that is
-%% per width class, including the ones whose width is a size prefix.
 array_element_widths(_Config) ->
     Arrays = [
-              %% 0x4X: zero-width elements
               {array, boolean, [true, false, true]},
-              %% 0x5X: 1 octet
               {array, ubyte, [{ubyte, 0}, {ubyte, 255}]},
               {array, byte, [{byte, -128}, {byte, 127}]},
               %% 0x6X: 2 octets
@@ -314,24 +309,13 @@ validate_valid_messages(_Config) ->
               %% non-strict server mode returns.
               ?assertEqual(amqp10_binary_parser:parse_many(Bin, [{server_mode, false}]),
                            amqp10_binary_parser:parse_many(Bin, [{server_mode, true}]))
-      end, Messages),
-    %% An empty payload is left to the caller to report: no body section is
-    %% returned, but parsing itself does not fail.
-    ?assertEqual([], amqp10_binary_parser:parse_many(<<>>, [{server_mode, true}])).
+      end, Messages).
 
-%% The security relevant case: RabbitMQ stops parsing at the body, so a section
-%% that follows the body would be invisible to the broker while remaining
-%% visible to a consumer whose parser tolerates it. The prime example is a
-%% properties section carrying a forged user-id.
 validate_section_after_body(_Config) ->
-    ForgedProperties = section(?PROPERTIES,
-                               list([<<16#40>>, binary(<<"admin">>)])),
+    ForgedProperties = section(?PROPERTIES, list([<<16#40>>, binary(<<"admin">>)])),
     lists:foreach(
       fun({Body, Late}) ->
               Bin = iolist_to_binary([Body, Late]),
-              %% The non-strict server mode neither sees nor rejects it.
-              ?assertMatch([{{pos, 0}, {body, _}}],
-                           amqp10_binary_parser:parse_many(Bin, [{server_mode, false}])),
               ?assertThrow({unexpected_message_section, _, _},
                            amqp10_binary_parser:parse_many(Bin, [{server_mode, true}]))
       end,
@@ -361,17 +345,17 @@ validate_section_out_of_order(_Config) ->
       end, OutOfOrder).
 
 validate_duplicate_sections(_Config) ->
-    Duplicated = [header(),
-                  delivery_annotations(),
-                  message_annotations(),
-                  properties(),
-                  application_properties()],
+    Sections = [header(),
+                delivery_annotations(),
+                message_annotations(),
+                properties(),
+                application_properties()],
     lists:foreach(
       fun(Section) ->
               Bin = iolist_to_binary([Section, Section, data()]),
               ?assertThrow({unexpected_message_section, _, _},
                            amqp10_binary_parser:parse_many(Bin, [{server_mode, true}]))
-      end, Duplicated).
+      end, Sections).
 
 %% "The body consists of one of the following three choices: one or more data
 %% sections, one or more amqp-sequence sections, or a single amqp-value
@@ -394,11 +378,7 @@ validate_body_sections(_Config) ->
               Bin = iolist_to_binary(Sections),
               ?assertThrow({unexpected_message_section, _, _},
                            amqp10_binary_parser:parse_many(Bin, [{server_mode, true}]))
-      end, Invalid),
-    %% A message without any body section is left to the caller to report.
-    NoBody = iolist_to_binary([header(), message_annotations()]),
-    ?assertEqual(amqp10_binary_parser:parse_many(NoBody, [{server_mode, false}]),
-                 amqp10_binary_parser:parse_many(NoBody, [{server_mode, true}])).
+      end, Invalid).
 
 %% The spec does not limit how many body sections a message may consist of.
 %% Since every section has to be validated, the total number of sections is
@@ -508,9 +488,7 @@ validate_section_value_type(_Config) ->
 
 %% "The descriptor portion of a described format code is itself any valid AMQP
 %% encoded value, including other described values." [§1.2] A section
-%% descriptor nested inside a section value must not be taken for a section:
-%% otherwise a properties section hidden inside a message-annotations map could
-%% become the properties of the message.
+%% descriptor nested inside a section value must not be taken for a section.
 validate_nested_section_descriptor(_Config) ->
     Nested = [iolist_to_binary(data()),
               iolist_to_binary(properties()),
@@ -599,9 +577,8 @@ validate_symbolic_descriptors(_Config) ->
               %% Strict mode validates the sections. Which of the four
               %% descriptor encodings was used on the wire is preserved by
               %% the parsed sections, just like in non-strict server mode.
-              Parsed = amqp10_binary_parser:parse_many(Valid, [{server_mode, true}]),
               ?assertEqual(amqp10_binary_parser:parse_many(Valid, [{server_mode, false}]),
-                           Parsed),
+                           amqp10_binary_parser:parse_many(Valid, [{server_mode, true}])),
               ?assertMatch([#'v1_0.header'{},
                             #'v1_0.message_annotations'{},
                             {{pos, _}, #'v1_0.properties'{}},

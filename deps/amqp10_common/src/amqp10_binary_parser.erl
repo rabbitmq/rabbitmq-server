@@ -132,11 +132,17 @@ parse(<<16#84, V:8/binary, _/binary>>, B) ->
 parse(<<16#94, V:16/binary, _/binary>>, B) ->
     {{as_is, 16#94, V}, B+17};
 parse(<<Type, _/binary>>, B) ->
-    throw({primitive_type_unsupported, Type, {position, B}}).
+    throw({primitive_type_unsupported, Type, {position, B}});
+parse(<<>>, B) ->
+    throw({insufficient_input, {position, B}}).
 
 parse_array(UnitSize, Bin) ->
-    <<Count:UnitSize, Bin1/binary>> = Bin,
-    parse_array1(UnitSize, Count, Bin1).
+    case Bin of
+        <<Count:UnitSize, Bin1/binary>> ->
+            parse_array1(UnitSize, Count, Bin1);
+        _ ->
+            throw({failed_to_parse_array_count, {size, byte_size(Bin)}})
+    end.
 
 parse_array1(UnitSize, Count, <<?DESCRIBED, Rest/binary>>) ->
     {Descriptor, B1} = parse(Rest),
@@ -147,7 +153,7 @@ parse_array1(UnitSize, Count, <<?DESCRIBED, Rest/binary>>) ->
             % this format cannot represent an empty array of described types
             {array, {described, Descriptor, Type}, Values};
         {as_is, _, _} ->
-            exit({array_of_described_zero_width_elements_unsupported, Count})
+            throw({array_of_described_zero_width_elements_unsupported, Count})
     end;
 parse_array1(UnitSize, Count, <<Type, ArrayBin/binary>>)
   when Type >= 16#40 andalso Type =< 16#45 ->
@@ -164,20 +170,22 @@ parse_array1(UnitSize, Count, <<Type, ArrayBin/binary>>)
                 32 -> {as_is, 16#f0, <<5:32, Count:32, Type>>}
             end;
         Size ->
-            exit({failed_to_parse_array_extra_input_remaining, Type, Size})
+            throw({failed_to_parse_array_extra_input_remaining, Type, Size})
     end;
 parse_array1(_UnitSize, Count, <<Type, ArrayBin/binary>>)
   when Count > byte_size(ArrayBin) ->
-    exit({failed_to_parse_array_count_exceeds_input, Type, Count, byte_size(ArrayBin)});
+    throw({failed_to_parse_array_count_exceeds_input, Type, Count, byte_size(ArrayBin)});
 parse_array1(_UnitSize, Count, <<Type, ArrayBin/binary>>) ->
-    parse_array2(Count, Type, ArrayBin, []).
+    parse_array2(Count, Type, ArrayBin, []);
+parse_array1(_UnitSize, Count, <<>>) ->
+    throw({failed_to_parse_array_element_constructor, Count}).
 
 parse_array2(0, Type, <<>>, Acc) ->
     {array, parse_constructor(Type), lists:reverse(Acc)};
 parse_array2(0, Type, Bin, Acc) ->
-    exit({failed_to_parse_array_extra_input_remaining, Type, Bin, Acc});
+    throw({failed_to_parse_array_extra_input_remaining, Type, Bin, Acc});
 parse_array2(Count, Type, <<>>, Acc) when Count > 0 ->
-    exit({failed_to_parse_array_insufficient_input, Type, Count, Acc});
+    throw({failed_to_parse_array_insufficient_input, Type, Count, Acc});
 parse_array2(Count, Type, Bin, Acc) ->
     Size = array_element_size(Type, Bin),
     case Bin of
@@ -187,7 +195,7 @@ parse_array2(Count, Type, Bin, Acc) ->
             {Value, TotalSize} = parse(<<Type, Element/binary>>),
             parse_array2(Count - 1, Type, Rest, [Value | Acc]);
         _ ->
-            exit({failed_to_parse_array_insufficient_input, Type, Count, Acc})
+            throw({failed_to_parse_array_insufficient_input, Type, Count, Acc})
     end.
 
 %% Returns the byte size of a single array element, excluding the constructor
@@ -209,7 +217,7 @@ array_element_size(Type, <<Size:32, _/binary>>)
        Type >= 16#f0 andalso Type =< 16#ff ->
     4 + Size;
 array_element_size(Type, _Bin) ->
-    exit({failed_to_parse_array_element_size, Type}).
+    throw({failed_to_parse_array_element_size, Type}).
 
 parse_constructor(?CODE_SYM_8) -> symbol;
 parse_constructor(?CODE_SYM_32) -> symbol;
@@ -242,7 +250,7 @@ parse_constructor(16#d1) -> map;
 parse_constructor(16#f0) -> array;
 parse_constructor(0) -> described;
 parse_constructor(X) ->
-    exit({failed_to_parse_constructor, X}).
+    throw({failed_to_parse_constructor, X}).
 
 mapify([]) ->
     [];
@@ -310,11 +318,9 @@ pm(<<?DESCRIBED, ?CODE_SMALL_ULONG, ?DESCRIPTOR_CODE_AMQP_SEQUENCE, _Rest/binary
 pm(<<?DESCRIBED, ?CODE_SMALL_ULONG, ?DESCRIPTOR_CODE_AMQP_VALUE, _Rest/binary>>, true, B) ->
     reached_body(B, ?DESCRIPTOR_CODE_AMQP_VALUE);
 pm(<<?DESCRIBED, ?CODE_SMALL_ULONG, ?DESCRIPTOR_CODE_PROPERTIES, Rest0/binary>>, O = true, B) ->
-    [Value | Rest] = pm(Rest0, O, B+3),
-    [{{pos, B}, {described, {ulong, ?DESCRIPTOR_CODE_PROPERTIES}, Value}} | Rest];
+    pm_bare_section({ulong, ?DESCRIPTOR_CODE_PROPERTIES}, B, pm(Rest0, O, B+3));
 pm(<<?DESCRIBED, ?CODE_SMALL_ULONG, ?DESCRIPTOR_CODE_APPLICATION_PROPERTIES, Rest0/binary>>, O = true, B) ->
-    [Value | Rest] = pm(Rest0, O, B+3),
-    [{{pos, B}, {described, {ulong, ?DESCRIPTOR_CODE_APPLICATION_PROPERTIES}, Value}} | Rest];
+    pm_bare_section({ulong, ?DESCRIPTOR_CODE_APPLICATION_PROPERTIES}, B, pm(Rest0, O, B+3));
 pm(<<?DESCRIBED, ?CODE_ULONG, ?DESCRIPTOR_CODE_DATA:64, _Rest/binary>>, true, B) ->
     reached_body(B, ?DESCRIPTOR_CODE_DATA);
 pm(<<?DESCRIBED, ?CODE_ULONG, ?DESCRIPTOR_CODE_AMQP_SEQUENCE:64, _Rest/binary>>, true, B) ->
@@ -334,28 +340,21 @@ pm(<<?DESCRIBED, ?CODE_SYM_32, 23:32, "amqp:amqp-sequence:list", _Rest/binary>>,
 pm(<<?DESCRIBED, ?CODE_SYM_32, 17:32, "amqp:amqp-value:*", _Rest/binary>>, true, B) ->
     reached_body(B, ?DESCRIPTOR_CODE_AMQP_VALUE);
 pm(<<?DESCRIBED, ?CODE_ULONG, ?DESCRIPTOR_CODE_PROPERTIES:64, Rest0/binary>>, O = true, B) ->
-    [Value | Rest] = pm(Rest0, O, B+10),
-    [{{pos, B}, {described, {ulong, ?DESCRIPTOR_CODE_PROPERTIES}, Value}} | Rest];
+    pm_bare_section({ulong, ?DESCRIPTOR_CODE_PROPERTIES}, B, pm(Rest0, O, B+10));
 pm(<<?DESCRIBED, ?CODE_ULONG, ?DESCRIPTOR_CODE_APPLICATION_PROPERTIES:64, Rest0/binary>>, O = true, B) ->
-    [Value | Rest] = pm(Rest0, O, B+10),
-    [{{pos, B}, {described, {ulong, ?DESCRIPTOR_CODE_APPLICATION_PROPERTIES}, Value}} | Rest];
+    pm_bare_section({ulong, ?DESCRIPTOR_CODE_APPLICATION_PROPERTIES}, B, pm(Rest0, O, B+10));
 pm(<<?DESCRIBED, ?CODE_SYM_8, 20, "amqp:properties:list", Rest0/binary>>, O = true, B) ->
-    [Value | Rest] = pm(Rest0, O, B+23),
-    [{{pos, B}, {described, {symbol, <<"amqp:properties:list">>}, Value}} | Rest];
+    pm_bare_section({symbol, <<"amqp:properties:list">>}, B, pm(Rest0, O, B+23));
 pm(<<?DESCRIBED, ?CODE_SYM_8, 31, "amqp:application-properties:map", Rest0/binary>>, O = true, B) ->
-    [Value | Rest] = pm(Rest0, O, B+34),
-    [{{pos, B}, {described, {symbol, <<"amqp:application-properties:map">>}, Value}} | Rest];
+    pm_bare_section({symbol, <<"amqp:application-properties:map">>}, B, pm(Rest0, O, B+34));
 pm(<<?DESCRIBED, ?CODE_SYM_32, 20:32, "amqp:properties:list", Rest0/binary>>, O = true, B) ->
-    [Value | Rest] = pm(Rest0, O, B+26),
-    [{{pos, B}, {described, {symbol, <<"amqp:properties:list">>}, Value}} | Rest];
+    pm_bare_section({symbol, <<"amqp:properties:list">>}, B, pm(Rest0, O, B+26));
 pm(<<?DESCRIBED, ?CODE_SYM_32, 31:32, "amqp:application-properties:map", Rest0/binary>>, O = true, B) ->
-    [Value | Rest] = pm(Rest0, O, B+37),
-    [{{pos, B}, {described, {symbol, <<"amqp:application-properties:map">>}, Value}} | Rest];
+    pm_bare_section({symbol, <<"amqp:application-properties:map">>}, B, pm(Rest0, O, B+37));
 
 %% Described Types
 pm(<<?DESCRIBED, Rest0/binary>>, O, B) ->
-    [Descriptor, Value | Rest] = pm(Rest0, O, B+1),
-    [{described, Descriptor, Value} | Rest];
+    pm_described(B, pm(Rest0, O, B+1));
 
 %% Primitives Types
 %%
@@ -403,6 +402,16 @@ pm(<<16#94, V:16/binary, R/binary>>, O, B) ->
     [{as_is, 16#94, V} | pm(R, O, B+17)];
 pm(<<Type, _Bin/binary>>, _O, B) ->
     throw({primitive_type_unsupported, Type, {position, B}}).
+
+pm_described(_Pos, [Descriptor, Value | Rest]) ->
+    [{described, Descriptor, Value} | Rest];
+pm_described(Pos, _TooShort) ->
+    throw({described_type_incomplete, {position, Pos}}).
+
+pm_bare_section(Descriptor, Pos, [Value | Rest]) ->
+    [{{pos, Pos}, {described, Descriptor, Value}} | Rest];
+pm_bare_section(_Descriptor, Pos, []) ->
+    throw({described_type_incomplete, {position, Pos}}).
 
 pm_compound(UnitSize, Bin, B) ->
     case Bin of
@@ -579,7 +588,9 @@ peek(<<?DESCRIBED, Rest/binary>>) ->
     B2 = peek_value_size(Rest1),
     {Descriptor, 1 + B1 + B2};
 peek(<<Type, _/binary>>) ->
-    throw({not_described_type, Type}).
+    throw({not_described_type, Type});
+peek(<<>>) ->
+    throw({insufficient_input, peek}).
 
 %% Returns the byte size of the AMQP value at the start of the binary
 %% without parsing it (no term construction).
@@ -633,7 +644,9 @@ peek_value_size(<<16#d1, Size:32, _/binary>>) -> 5 + Size;
 peek_value_size(<<16#e0, S:8, _/binary>>) -> 2 + S;
 peek_value_size(<<16#f0, S:32, _/binary>>) -> 5 + S;
 peek_value_size(<<Type, _/binary>>) ->
-    throw({primitive_type_unsupported, Type, peek_value_size}).
+    throw({primitive_type_unsupported, Type, peek_value_size});
+peek_value_size(<<>>) ->
+    throw({insufficient_input, peek_value_size}).
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
