@@ -43,7 +43,9 @@ match(#resource{virtual_host = VHost, name = XName} = X, RoutingKey, Opts) ->
                        _ -> {root, XSrc}
                    end,
             try
-                trie_match(XSrc, TrieTab, BindingTab, Root, Words, BKeys, [])
+                {_Seen, Acc} = trie_match(XSrc, TrieTab, BindingTab, Root,
+                                          Words, BKeys, 0, {no_memo, []}),
+                Acc
             catch
                 error:badarg ->
                     []
@@ -90,36 +92,57 @@ split_topic_key_binary(RoutingKey) ->
 %% leaf for fanout 0-2, or O(log N + F) per leaf for fanout F > 2.
 %% ==============================================================
 
-trie_match(XSrc, TrieTab, BindTab, Node, [], BKeys, Acc0) ->
-    Acc1 = trie_bindings(BindTab, Node, BKeys, Acc0),
-    trie_match_try(XSrc, TrieTab, BindTab, Node, <<"#">>,
-                   fun trie_match_skip_any/7,
-                   [], BKeys, Acc1);
-trie_match(XSrc, TrieTab, BindTab, Node, [W | RestW] = Words, BKeys, Acc0) ->
-    Acc1 = trie_match_try(XSrc, TrieTab, BindTab, Node, W,
-                          fun trie_match/7,
-                          RestW, BKeys, Acc0),
-    Acc2 = trie_match_try(XSrc, TrieTab, BindTab, Node, <<"*">>,
-                          fun trie_match/7,
-                          RestW, BKeys, Acc1),
-    trie_match_try(XSrc, TrieTab, BindTab, Node, <<"#">>,
-                   fun trie_match_skip_any/7,
-                   Words, BKeys, Acc2).
-
-trie_match_try(XSrc, TrieTab, BindTab, Node, Word, MatchFun, RestW, BKeys, Acc) ->
-    case ets:lookup_element(TrieTab, {XSrc, Node, Word}, 2, undefined) of
-        undefined ->
-            Acc;
-        NextNode ->
-            MatchFun(XSrc, TrieTab, BindTab, NextNode, RestW, BKeys, Acc)
+%% With two or more '#' edges on the path, the walk can reach the same
+%% {node, remaining words} state many times, and the number of such repeats
+%% grows combinatorially with the routing key length. Seen states are
+%% therefore recorded and skipped. Hashes counts the '#' edges taken so far;
+%% with fewer than two, states cannot repeat and no bookkeeping is done.
+trie_match(XSrc, TrieTab, BindTab, Node, Words, BKeys, Hashes, State)
+  when Hashes < 2 ->
+    trie_match1(XSrc, TrieTab, BindTab, Node, Words, BKeys, Hashes, State);
+trie_match(XSrc, TrieTab, BindTab, Node, Words, BKeys, Hashes, {no_memo, Acc}) ->
+    trie_match(XSrc, TrieTab, BindTab, Node, Words, BKeys, Hashes, {#{}, Acc});
+trie_match(XSrc, TrieTab, BindTab, Node, Words, BKeys, Hashes, {Seen, Acc} = State) ->
+    case Seen of
+        #{{Node, Words} := _} ->
+            State;
+        _ ->
+            trie_match1(XSrc, TrieTab, BindTab, Node, Words, BKeys, Hashes,
+                        {Seen#{{Node, Words} => []}, Acc})
     end.
 
-trie_match_skip_any(XSrc, TrieTab, BindTab, Node, [], BKeys, Acc) ->
-    trie_match(XSrc, TrieTab, BindTab, Node, [], BKeys, Acc);
-trie_match_skip_any(XSrc, TrieTab, BindTab, Node, [_ | RestW] = Words, BKeys, Acc) ->
+trie_match1(XSrc, TrieTab, BindTab, Node, [], BKeys, Hashes, {Seen, Acc0}) ->
+    Acc1 = trie_bindings(BindTab, Node, BKeys, Acc0),
+    trie_match_try(XSrc, TrieTab, BindTab, Node, <<"#">>,
+                   fun trie_match_skip_any/8,
+                   [], BKeys, Hashes + 1, {Seen, Acc1});
+trie_match1(XSrc, TrieTab, BindTab, Node, [W | RestW] = Words, BKeys, Hashes, State0) ->
+    State1 = trie_match_try(XSrc, TrieTab, BindTab, Node, W,
+                            fun trie_match/8,
+                            RestW, BKeys, Hashes, State0),
+    State2 = trie_match_try(XSrc, TrieTab, BindTab, Node, <<"*">>,
+                            fun trie_match/8,
+                            RestW, BKeys, Hashes, State1),
+    trie_match_try(XSrc, TrieTab, BindTab, Node, <<"#">>,
+                   fun trie_match_skip_any/8,
+                   Words, BKeys, Hashes + 1, State2).
+
+trie_match_try(XSrc, TrieTab, BindTab, Node, Word, MatchFun, RestW, BKeys, Hashes,
+               State) ->
+    case ets:lookup_element(TrieTab, {XSrc, Node, Word}, 2, undefined) of
+        undefined ->
+            State;
+        NextNode ->
+            MatchFun(XSrc, TrieTab, BindTab, NextNode, RestW, BKeys, Hashes, State)
+    end.
+
+trie_match_skip_any(XSrc, TrieTab, BindTab, Node, [], BKeys, Hashes, State) ->
+    trie_match(XSrc, TrieTab, BindTab, Node, [], BKeys, Hashes, State);
+trie_match_skip_any(XSrc, TrieTab, BindTab, Node, [_ | RestW] = Words, BKeys,
+                    Hashes, State) ->
     trie_match_skip_any(
-      XSrc, TrieTab, BindTab, Node, RestW, BKeys,
-      trie_match(XSrc, TrieTab, BindTab, Node, Words, BKeys, Acc)).
+      XSrc, TrieTab, BindTab, Node, RestW, BKeys, Hashes,
+      trie_match(XSrc, TrieTab, BindTab, Node, Words, BKeys, Hashes, State)).
 
 %% Collect all destinations bound at the given trie node.
 %%
