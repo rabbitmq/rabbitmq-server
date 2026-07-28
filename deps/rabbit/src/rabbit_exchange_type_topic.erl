@@ -24,6 +24,11 @@
                     {requires,    rabbit_registry},
                     {enables,     kernel_ready}]}).
 
+%% More than two '#' segments should not be necessary: MQTTv5, for example,
+%% allows at most one per topic filter. Each additional one multiplies the
+%% work the matcher does per routing key.
+-define(MAX_HASH_WILDCARDS, 2).
+
 %%----------------------------------------------------------------------------
 
 info(_X) -> [].
@@ -46,8 +51,22 @@ route(#exchange{name = XName}, Msg, Opts) ->
 validate(_X) ->
     ok.
 
-validate_binding(_X, _B) ->
-    ok.
+validate_binding(_X, #binding{key = BindingKey}) ->
+    Words = rabbit_db_topic_exchange:split_topic_key_binary(BindingKey),
+    case count_hash_wildcards(Words) of
+        N when N > ?MAX_HASH_WILDCARDS ->
+            {error, {binding_invalid,
+                     "Topic binding key '~ts' uses ~b '#' wildcards, "
+                     "at most ~b are allowed",
+                     [BindingKey, N, ?MAX_HASH_WILDCARDS]}};
+        _ ->
+            ok
+    end.
+
+count_hash_wildcards(Words) ->
+    lists:foldl(fun(<<"#">>, N) -> N + 1;
+                   (_Word, N) -> N
+                end, 0, Words).
 
 create(_Serial, _X) ->
     ok.
