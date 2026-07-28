@@ -295,9 +295,7 @@ function oauth_redirectToLogin(error) {
 }
 export function oauth_completeLogin() {
     mgr.signinRedirectCallback().then(function(user) {
-      // Clear the stored timeout so a fresh login re-applies the configured
-      // value; the silent token renewal path in addUserLoaded must not.
-      clear_local_pref(LOGIN_SESSION_TIMEOUT)
+      clear_local_pref(SESSION_EXPIRY);
       set_token_auth(user.access_token);
       oauth_redirectToHome();
     }).catch(function(err) {

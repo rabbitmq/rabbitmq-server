@@ -9,7 +9,16 @@
                   password = none,
                   impl}). % storage for a context of the resource handler
 
--record(auth_settings, {auth_realm = "Basic realm=\"RabbitMQ undefined\"",
-                        basic_auth_enabled = false,
-                        oauth2_enabled = false,
-                        oauth_client_id = <<"">>}).
+%% Pluggable bearer token parser supplied by the hosting application.
+%% Returns {basic, Username, Password} to route through Basic auth,
+%% {bearer, Token} to route through OAuth2, or {error, Reason} to reject.
+-type bearer_token_parser() ::
+    fun((binary()) -> {basic, binary(), binary()}
+                    | {bearer, binary()}
+                    | {error, binary()}).
+
+-record(auth_settings, {
+    auth_realm          = "Basic realm=\"RabbitMQ undefined\"",
+    basic_auth_enabled  = false,
+    bearer_token_parser = undefined :: undefined | bearer_token_parser()
+}).
