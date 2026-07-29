@@ -43,9 +43,6 @@ function clear_auth() {
     clear_local_pref(AUTH_RESOURCE)
     $.ajax({ async: false, type: 'DELETE', url: 'api/login' })
 }
-function set_basic_auth(username, password) {
-    set_auth("Basic", b64_encode_utf8(username + ":" + password))
-}
 function set_token_auth(token) {
     set_auth("Bearer", token)
 }
@@ -53,10 +50,10 @@ function set_auth(auth_scheme, credentials) {
     clear_local_pref(CREDENTIALS)
     clear_local_pref(AUTH_SCHEME)
     store_local_pref(CREDENTIALS, credentials)
-    store_local_pref(AUTH_SCHEME, auth_scheme)    
+    store_local_pref(AUTH_SCHEME, auth_scheme)
 }
 const DEFAULT_HARD_LOGIN_SESSION_TIMEOUT = 480; // 8 hours
-function set_session_expiry_if_required(login_session_timeout) {    
+function set_session_expiry_if_required(login_session_timeout) {
     if (get_local_pref(SESSION_EXPIRY) != undefined) return;
     var timeout = parseInt(login_session_timeout);
     if (isNaN(timeout)) {
@@ -74,30 +71,7 @@ function authorization_header() {
     }
 }
 
-function print_logging_session_info (user_login_session_timeout) {
-  let authenticated = has_auth_credentials()
-  let session_expiry = get_local_pref(SESSION_EXPIRY)
-  console.log('user_login_session_timeout: ' + user_login_session_timeout)
-  console.log('has_auth_credentials: ' + authenticated)
-  console.log('session_expiry: ' + session_expiry)
-  console.log('isNaN(user_login_session_timeout): ' + isNaN(user_login_session_timeout))
-}
-
-
 /// End Credential Management
-
-// Our base64 library takes a string that is really a byte sequence,
-// and will throw if given a string with chars > 255 (and hence not
-// DTRT for chars > 127). So encode a unicode string as a UTF-8
-// sequence of "bytes".
-function b64_encode_utf8(str) {
-    return base64.encode(encode_utf8(str));
-}
-
-// encodeURIComponent handles utf-8, unescape does not. Neat!
-function encode_utf8(str) {
-  return unescape(encodeURIComponent(str));
-}
 
 // All preferences and credentials are stored in localStorage.
 // The management UI requires localStorage; without it no part of the UI functions.
