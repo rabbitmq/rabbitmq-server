@@ -5,21 +5,29 @@ updates:
     directory: "/"
     schedule:
       interval: "daily"
+    cooldown:
+      default-days: 7
     target-branch: "main"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "daily"
+    cooldown:
+      default-days: 7
     target-branch: "v4.2.x"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "daily"
+    cooldown:
+      default-days: 7
     target-branch: "v4.1.x"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "daily"
+    cooldown:
+      default-days: 7
     target-branch: "v4.0.x"
   # Maintain dependencies for Java test projects
   - package-ecosystem: "maven"
@@ -38,6 +46,8 @@ updates:
         dependency-type: "development"
       prod-deps:
         dependency-type: "production"
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: "[skip ci] "
     target-branch: "main"
@@ -64,6 +74,8 @@ updates:
         dependency-type: "development"
       prod-deps:
         dependency-type: "production"
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: "[skip ci] "
     target-branch: "v4.2.x"
@@ -90,6 +102,8 @@ updates:
         dependency-type: "development"
       prod-deps:
         dependency-type: "production"
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: "[skip ci] "
     target-branch: "v4.1.x"
@@ -116,6 +130,8 @@ updates:
         dependency-type: "development"
       prod-deps:
         dependency-type: "production"
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: "[skip ci] "
     target-branch: "v4.0.x"
@@ -132,6 +148,7 @@ updates:
       interval: "daily"
     target-branch: "main"
     cooldown:
+      default-days: 7
       semver-minor-days: 3
       semver-major-days: 3
     groups:
@@ -146,6 +163,7 @@ updates:
       interval: "daily"
     target-branch: "v4.2.x"
     cooldown:
+      default-days: 7
       semver-minor-days: 3
       semver-major-days: 3
     groups:
