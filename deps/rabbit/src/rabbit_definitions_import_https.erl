@@ -20,7 +20,8 @@
 -export([
     is_enabled/0,
     load/1,
-    load_with_hashing/3
+    load_with_hashing/3,
+    tls_options_or_default/1
 ]).
 
 
@@ -64,7 +65,8 @@ load_with_hashing(Proplist, PreviousHash, Algo) ->
     ?LOG_DEBUG("Loading definitions with content hashing enabled, HTTPS URL: ~ts, previous hash value: ~ts",
                      [URL, rabbit_misc:hexify(PreviousHash)]),
 
-    TLSOptions = tls_options_or_default(Proplist),
+    TLSOptions0 = tls_options_or_default(Proplist),
+    TLSOptions = rabbit_ssl:wrap_password_opt(TLSOptions0),
     HTTPOptions = http_options(TLSOptions),
 
     case httpc_get(URL, HTTPOptions) of
