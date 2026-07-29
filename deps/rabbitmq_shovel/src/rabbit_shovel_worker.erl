@@ -141,6 +141,10 @@ handle_msg(Msg, State = #state{config = Config, name = Name}) ->
                     State2 = maybe_report_blocked_status(State1),
                     {noreply, State2}
             end;
+        {stop, {shutdown, autodelete}} ->
+            ?LOG_DEBUG("Shovel ~ts decided to stop by autodelete",
+                      [human_readable_name(Name)]),
+            {stop, {shutdown, autodelete}, State};
         {stop, {inbound_conn_died, heartbeat_timeout}} ->
             ?LOG_ERROR("Shovel ~ts detected missed heartbeats on source connection",
                        [human_readable_name(Name)]),

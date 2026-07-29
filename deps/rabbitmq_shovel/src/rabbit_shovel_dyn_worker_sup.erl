@@ -46,11 +46,16 @@ init([Name, Config0]) ->
     Restart = case Delay of
         N when is_integer(N) andalso N > 0 ->
           case pget(<<"src-delete-after">>, Config, pget(<<"delete-after">>, Config, <<"never">>)) of
-            %% always try to reconnect
-            <<"never">>                        -> {permanent, N};
-            %% this Shovel is an autodelete one
-              M when is_integer(M) andalso M >= 0 -> {transient, N};
-              <<"queue-length">> -> {transient, N}
+            %% this Shovel is an autodelete one (by message count)
+            M when is_integer(M) andalso M >= 0 -> {transient, N};
+            <<"queue-length">> -> {transient, N};
+            <<"never">> ->
+              case pget(<<"src-delete-after-duration">>, Config, undefined) of
+                %% this Shovel is an autodelete one (by duration)
+                D when is_integer(D) andalso D > 0 -> {transient, N};
+                %% always try to reconnect
+                _ -> {permanent, N}
+              end
           end;
         %% reconnect-delay = 0 means "do not reconnect"
         _                                  -> temporary

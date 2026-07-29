@@ -267,6 +267,7 @@ validate_delete_after(Name,  Term) ->
      "~tp", [Name, Term]}.
 
 validate_delete_after_duration(Name, N) when is_integer(N), N > 0 ->
+    %% the configured floor will still be applied if the value is too low
     case rabbit_misc:check_expiry(N * 1000) of
         ok ->
             ok;
