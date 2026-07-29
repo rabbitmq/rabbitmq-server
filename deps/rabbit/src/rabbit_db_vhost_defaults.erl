@@ -71,7 +71,7 @@ list_limits(VHost) ->
     Match = lists:search(
         fun({_, Ss}) ->
             RE = proplists:get_value(<<"pattern">>, Ss, ".*"),
-            re:run(VHost, RE, [{capture, none}]) =:= match
+            rabbit_re:matches(VHost, RE)
         end,
         VHostLimits
     ),
@@ -91,8 +91,8 @@ list_operator_policies(VHost) ->
     lists:filtermap(
         fun({PolicyName, Ss}) ->
             RE = proplists:get_value(<<"vhost_pattern">>, Ss, ".*"),
-            case re:run(VHost, RE, [{capture, none}]) of
-                match ->
+            case rabbit_re:matches(VHost, RE) of
+                true ->
                     QPattern = proplists:get_value(<<"queue_pattern">>, Ss, <<".*">>),
                     ApplyTo = proplists:get_value(<<"apply_to">>, Ss, <<"all">>),
                     Ss1 = proplists:delete(<<"queue_pattern">>, Ss),
@@ -118,8 +118,8 @@ list_users(VHost) ->
     lists:filtermap(
         fun({Username, Ss}) ->
             RE = proplists:get_value(<<"vhost_pattern">>, Ss, ".*"),
-            case re:run(VHost, RE, [{capture, none}]) of
-                match ->
+            case rabbit_re:matches(VHost, RE) of
+                true ->
                     C = rabbit_data_coercion:to_binary(
                               proplists:get_value(<<"configure">>, Ss, <<".*">>)
                             ),

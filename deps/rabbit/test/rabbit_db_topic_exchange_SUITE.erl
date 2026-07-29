@@ -15,6 +15,7 @@
 -include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 -define(TOPIC_TRIE_PROJECTION, rabbit_khepri_topic_trie_v5).
+-define(MAX_HASH_WILDCARDS, 2).
 -define(TOPIC_BINDING_PROJECTION, rabbit_khepri_topic_binding_v5).
 
 -export([all/0,
@@ -35,6 +36,8 @@
          topic_match_deep_hierarchy/1,
          topic_match_all_wildcards/1,
          topic_match_alternating_wildcards/1,
+         topic_match_many_hashes/1,
+         create_binding/3,
          topic_match_overlapping_filters/1,
          topic_match_empty_segments/1,
          topic_match_large_fanout/1,
@@ -65,6 +68,7 @@ khepri_tests() ->
      topic_match_deep_hierarchy,
      topic_match_all_wildcards,
      topic_match_alternating_wildcards,
+     topic_match_many_hashes,
      topic_match_overlapping_filters,
      topic_match_empty_segments,
      topic_match_large_fanout,
@@ -110,7 +114,14 @@ end_per_group(_Group, Config) ->
       rabbit_ct_client_helpers:teardown_steps() ++
       rabbit_ct_broker_helpers:teardown_steps()).
 
+%% Bounded so that losing memoization fails the run instead of hanging it.
+init_per_testcase(topic_match_many_hashes = Testcase, Config) ->
+    ct:timetrap({minutes, 1}),
+    init_per_testcase1(Testcase, Config);
 init_per_testcase(Testcase, Config) ->
+    init_per_testcase1(Testcase, Config).
+
+init_per_testcase1(Testcase, Config) ->
     XName = rabbit_misc:r(<<"/">>, exchange, <<"amq.topic">>),
     {ok, X} = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_exchange, lookup, [XName]),
     Config1 = rabbit_ct_helpers:set_config(Config, [{exchange_name, XName},
@@ -487,6 +498,33 @@ topic_match_all_wildcards(Config) ->
         ?assertEqual(
            [QWild],
            sort_dests(do_match(Config, XName, T, #{})))
+    after
+        cleanup_vhost(Config, VHost)
+    end,
+
+    passed.
+
+%% Bindings stored before the '#' limit existed must still route. The 15 '#'
+%% against 31 words reach one state along C(46, 15) paths, tractable only with
+%% memoization.
+topic_match_many_hashes(Config) ->
+    VHost = <<"test-vhost-many-hashes">>,
+    setup_vhost(Config, VHost),
+    XName = rabbit_misc:r(VHost, exchange, <<"amq.topic">>),
+
+    T = binary_join(lists:duplicate(31, <<"a">>)),
+    W = binary_join(lists:duplicate(15, <<"#">>)),
+    QMany = rabbit_misc:r(VHost, queue, <<"q-many-hashes">>),
+
+    add_binding_without_validation(Config, XName, W, QMany),
+
+    try
+        ?assertEqual(
+           [QMany],
+           sort_dests(do_match(Config, XName, T, #{}))),
+        ?assertEqual(
+           [{QMany, W}],
+           sort_dests(do_match(Config, XName, T, #{return_binding_keys => true})))
     after
         cleanup_vhost(Config, VHost)
     end,
@@ -945,8 +983,23 @@ mk_filter_binary_amqp(Pat) ->
                     literal -> lists:nth(rand:uniform(4), ["a", "b", "c", "d"]);
                     star -> "*";
                     hash -> "#"
-                end || S <- Pat],
+                end || S <- cap_hash_segments(Pat)],
     list_to_binary(lists:join(".", Segments)).
+
+%% A binding key may hold at most ?MAX_HASH_WILDCARDS '#' segments, so the
+%% generator turns any beyond that into '*'.
+cap_hash_segments(Pat) ->
+    cap_hash_segments(Pat, 0, []).
+
+cap_hash_segments([], _Count, Acc) ->
+    lists:reverse(Acc);
+cap_hash_segments([hash | Rest], Count, Acc)
+  when Count >= ?MAX_HASH_WILDCARDS ->
+    cap_hash_segments(Rest, Count, [star | Acc]);
+cap_hash_segments([hash | Rest], Count, Acc) ->
+    cap_hash_segments(Rest, Count + 1, [hash | Acc]);
+cap_hash_segments([Segment | Rest], Count, Acc) ->
+    cap_hash_segments(Rest, Count, [Segment | Acc]).
 
 %% ---------------------------------------------------------------------------
 %% Helpers
@@ -972,6 +1025,30 @@ add_binding(Config, XName, BindingKey, QName) ->
                        destination = QName,
                        args = []},
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_binding, add, [Binding, <<"test-user">>]).
+
+%% Writes the binding straight to the database, the way one stored before the
+%% '#' limit existed still looks.
+add_binding_without_validation(Config, XName, BindingKey, QName) ->
+    Ret = rabbit_ct_broker_helpers:rpc(
+            Config, 0,
+            rabbit_amqqueue, declare,
+            [QName, true, false, [], self(), <<"test-user">>]),
+    case Ret of
+        {new, _Q} -> ok;
+        {existing, _Q} -> ok
+    end,
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, create_binding,
+                                      [XName, BindingKey, QName]).
+
+create_binding(XName, BindingKey, QName) ->
+    Binding = #binding{source = XName,
+                       key = BindingKey,
+                       destination = QName,
+                       args = []},
+    rabbit_db_binding:create(Binding, fun (_Src, _Dst) -> ok end).
+
+binary_join(Words) ->
+    iolist_to_binary(lists:join(<<".">>, Words)).
 
 add_exchange_binding(Config, XSrc, BindingKey, XDest) ->
     {ok, _} = rabbit_ct_broker_helpers:rpc(

@@ -47,6 +47,9 @@ all_tests() ->
      binding_args_direct_exchange,
      binding_args_fanout_exchange,
      topic_exchange_zero_words,
+     topic_binding_hash_limit,
+     topic_exchange_binding_hash_limit,
+     topic_binding_hash_limit_allows_unbind,
 
      %% Exchange bindings
      bind_and_unbind_direct_exchange,
@@ -797,6 +800,69 @@ topic_exchange_zero_words(Config) ->
     #'exchange.delete_ok'{} = amqp_channel:call(Ch, #'exchange.delete'{exchange = X2}),
     rabbit_ct_client_helpers:close_channel(Ch).
 
+%% A topic binding key may hold at most two '#' wildcards. Two are accepted and
+%% still route; three are refused.
+topic_binding_hash_limit(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    X = ?config(exchange_name, Config),
+    Q = ?config(queue_name, Config),
+    #'exchange.declare_ok'{} =
+        amqp_channel:call(Ch, #'exchange.declare'{exchange = X, type = <<"topic">>}),
+    #'queue.declare_ok'{} = declare(Ch, Q, []),
+
+    #'queue.bind_ok'{} =
+        amqp_channel:call(Ch, #'queue.bind'{exchange = X, queue = Q,
+                                            routing_key = <<"#.b.#">>}),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+    ok = amqp_channel:cast(Ch, #'basic.publish'{exchange = X,
+                                                routing_key = <<"a.b.c">>},
+                           #amqp_msg{payload = <<"m">>}),
+    ?assert(amqp_channel:wait_for_confirms(Ch, 30)),
+    ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"m">>}},
+                 amqp_channel:call(Ch, #'basic.get'{queue = Q, no_ack = true})),
+
+    ?assertExit({{shutdown, {server_initiated_close, 406, _}}, _},
+                amqp_channel:call(Ch, #'queue.bind'{exchange = X, queue = Q,
+                                                    routing_key = <<"#.#.#">>})),
+    ok.
+
+topic_exchange_binding_hash_limit(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    Source = ?config(exchange_name, Config),
+    Destination = <<Source/binary, "_dst">>,
+    #'exchange.declare_ok'{} =
+        amqp_channel:call(Ch, #'exchange.declare'{exchange = Source, type = <<"topic">>}),
+    #'exchange.declare_ok'{} =
+        amqp_channel:call(Ch, #'exchange.declare'{exchange = Destination, type = <<"topic">>}),
+
+    ?assertExit({{shutdown, {server_initiated_close, 406, _}}, _},
+                amqp_channel:call(Ch, #'exchange.bind'{source = Source,
+                                                       destination = Destination,
+                                                       routing_key = <<"#.#.#">>})),
+    Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server),
+    #'exchange.delete_ok'{} = amqp_channel:call(Ch2, #'exchange.delete'{exchange = Destination}),
+    ok.
+
+%% Bindings stored before the limit existed must stay removable. The binding is
+%% written straight to the database because the validated path now refuses it.
+topic_binding_hash_limit_allows_unbind(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    X = ?config(exchange_name, Config),
+    Q = ?config(queue_name, Config),
+    Key = <<"#.#.#">>,
+    #'exchange.declare_ok'{} =
+        amqp_channel:call(Ch, #'exchange.declare'{exchange = X, type = <<"topic">>}),
+    #'queue.declare_ok'{} = declare(Ch, Q, []),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE,
+                                      create_binding_without_validation, [X, Key, Q]),
+    ?assertMatch(#'queue.unbind_ok'{},
+                 amqp_channel:call(Ch, #'queue.unbind'{exchange = X, queue = Q,
+                                                       routing_key = Key})),
+    ok.
+
 bind_and_unbind_direct_exchange(Config) ->
     bind_and_unbind_exchange(<<"direct">>, Config).
 
@@ -957,3 +1023,8 @@ binding_record(Src, Dst, Key, Args) ->
              destination = Dst,
              key = Key,
              args = Args}.
+
+create_binding_without_validation(XName, Key, QName) ->
+    Binding = binding_record(rabbit_misc:r(<<"/">>, exchange, XName),
+                             rabbit_misc:r(<<"/">>, queue, QName), Key, []),
+    rabbit_db_binding:create(Binding, fun (_Src, _Dst) -> ok end).

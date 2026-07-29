@@ -1413,7 +1413,7 @@ handle_frame_pre_auth(Transport,
                      <<"cluster_name">> => rabbit_nodes:cluster_name(),
                      <<"platform">> => rabbit_misc:platform_and_version(),
                      <<"copyright">> => ?COPYRIGHT_MESSAGE,
-                     <<"information">> => ?INFORMATION_MESSAGE}),
+                     <<"information">> => rabbit:product_license_line()}),
     ServerProperties =
         maps:map(fun(_, V) -> rabbit_data_coercion:to_binary(V) end,
                  ServerProperties0),

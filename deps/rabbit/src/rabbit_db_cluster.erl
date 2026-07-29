@@ -249,6 +249,7 @@ forget_member_using_khepri(_Node, true) ->
        #{domain => ?RMQLOG_DOMAIN_DB}),
     {error, not_supported};
 forget_member_using_khepri(Node, false = _RemoveWhenOffline) ->
+    _ = rabbit_db_node_metadata:delete(Node),
     rabbit_khepri:remove_member(Node).
 
 %% -------------------------------------------------------------------

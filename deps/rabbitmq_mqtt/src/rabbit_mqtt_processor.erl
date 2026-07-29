@@ -23,8 +23,7 @@
               send_fun/0]).
 
 -import(rabbit_mqtt_util, [mqtt_to_amqp/1,
-                           amqp_to_mqtt/1,
-                           ip_address_to_binary/1]).
+                           amqp_to_mqtt/1]).
 -import(rabbit_misc, [maps_put_truthy/3]).
 
 -include_lib("kernel/include/logger.hrl").

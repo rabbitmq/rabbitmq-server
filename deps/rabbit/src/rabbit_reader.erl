@@ -234,7 +234,7 @@ server_properties(Protocol) ->
                       {cluster_name, rabbit_nodes:cluster_name()},
                       {platform,     rabbit_misc:platform_and_version()},
                       {copyright,    ?COPYRIGHT_MESSAGE},
-                      {information,  ?INFORMATION_MESSAGE}]]],
+                      {information,  rabbit:product_license_line()}]]],
 
     %% Filter duplicated properties in favour of config file provided values
     lists:usort(fun ({K1,_,_}, {K2,_,_}) -> K1 =< K2 end,

@@ -16,6 +16,7 @@ function format_error_response(response, reason) {
 }
 
 $(document).ready(function() {
+  setup_oauth_events_if_required();
   var url_string = window.location.href;
   var url = new URL(url_string);
   var error = url.searchParams.get('error');
@@ -237,6 +238,32 @@ function setup_constant_events() {
     if (!vhosts_interesting) {
         $('#vhost-form').hide();
     }
+    setup_form_events();
+}
+
+function setup_form_events() {
+    $(document).on('click', '#ff-enable-all-button', function() {
+        enable_all_stable_feature_flags(this);
+    });
+    $(document).on('change', '[data-flag-name]', function() {
+        handle_feature_flag(this, $(this).data('flagName'));
+    });
+}
+
+function setup_oauth_events_if_required() {
+    if (!oauth.enabled) {
+        return;
+    }
+    $(document).on('click', '[data-oauth-action="login"]', function() {
+        oauth_initiateLogin($(this).data('resourceId'));
+    });
+    $(document).on('click', '[data-oauth-action="logout"]', function() {
+        oauth_initiateLogout();
+    });
+    $(document).on('submit', '#oauth2-resource-form', function(e) {
+        e.preventDefault();
+        oauth_initiateLogin(document.getElementById('oauth2-resource').value);
+    });
 }
 
 function update_vhosts() {
@@ -893,6 +920,15 @@ function postprocess() {
         }
     });
 
+    $('select[name="queuetype"]').on('change', function() {
+        select_queue_type(this);
+    });
+
+    $('[name="upload-definitions"]').on('click', function(e) {
+        e.preventDefault();
+        submit_import($(this).closest('form')[0]);
+    });
+
     $(document).on('click', '.help', function() {
       show_popup('help', HELP[$(this).attr('id')]);
     });
@@ -1116,6 +1152,8 @@ function postprocess_partial() {
     else {
         $('#filter-truncate').removeClass('filter-warning');
     }
+
+    feature_flags_refresh();
 }
 
 function update_multifields() {
@@ -1386,17 +1424,11 @@ function replace_content(id, html) {
     $("#" + id).html(html);
 }
 
-var ejs_cached = {};
-
 function format(template, json) {
     try {
-        var cache = true;
-        if (!(template in ejs_cached)) {
-            ejs_cached[template] = true;
-            cache = false;
-        }
-        var tmpl = new EJS({url: 'js/tmpl/' + template + '.ejs', cache: cache});
-        return tmpl.render(json);
+        var fn = COMPILED_TEMPLATES[template];
+        if (!fn) throw new Error('Template not found: ' + template);
+        return fn.call(json, json, json);
     } catch (err) {
         clearInterval(timer);
         console.log("Uncaught error: " + err);
@@ -1710,12 +1742,15 @@ function collapse_multifields(params0) {
         }
     }
     if (params.hasOwnProperty('queuetype')) {
+        var the_queue_type = params['queuetype'];
         delete params['queuetype'];
-        if (queue_type != 'default') {
-            params['arguments']['x-queue-type'] = queue_type;
+        if (the_queue_type != 'default') {
+            if (params['arguments'] == undefined) {
+                params['arguments'] = {};
+            }
+            params['arguments']['x-queue-type'] = the_queue_type;
         }
-
-        params = Object.assign(params, QUEUE_TYPE[queue_type].params)
+        params = Object.assign(params, QUEUE_TYPE[the_queue_type].params)
     }
     return params;
 }

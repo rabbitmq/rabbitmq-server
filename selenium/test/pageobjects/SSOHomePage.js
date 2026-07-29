@@ -37,9 +37,9 @@ module.exports = class SSOHomePage extends BasePage {
   async getLoginButton () {
     return this.getText(OAUTH2_LOGIN_BUTTON)
   }
-  async getLoginButtonOnClick () {
+  async getLoginButtonResourceId () {
     const element = await this.waitForDisplayed(OAUTH2_LOGIN_BUTTON);
-    return element.getAttribute('onClick');    
+    return element.getAttribute('data-resource-id');
   }
   async getLogoutButton () {
     return this.getText(LOGOUT_BUTTON)

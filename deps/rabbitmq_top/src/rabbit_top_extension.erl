@@ -15,4 +15,4 @@ dispatcher() -> [{"/top/:node",    rabbit_top_wm_processes, []},
                  {"/top/ets/:node", rabbit_top_wm_ets_tables, []},
                  {"/process/:pid", rabbit_top_wm_process, []}].
 
-web_ui()     -> [{javascript, <<"top.js">>}].
+web_ui()     -> [{javascript, [<<"top-ejs.js">>, <<"top.js">>]}].

@@ -50,6 +50,14 @@
 # listeners.tcp.other_ip   = 10.10.10.10:5672
 
 
+## To listen on a Unix domain socket, provide the socket path prefixed with
+## unix: (or the equivalent local:) followed by :0 as the port. The two
+## prefixes are interchangeable.
+##
+# listeners.tcp.unix = unix:/var/run/rabbitmq/rabbitmq.sock:0
+# listeners.tcp.unix = local:/var/run/rabbitmq/rabbitmq.sock:0
+
+
 ## TLS listeners are configured in the same fashion as TCP listeners,
 ## including the option to control the choice of interface.
 ##

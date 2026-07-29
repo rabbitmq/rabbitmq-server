@@ -25,6 +25,7 @@
          end_per_testcase/2,
 
          expiry_timestamp/1,
+         update_state_rebuilds_tags/1,
          with_enabled_plugin/1,
          with_enabled_plugin_plus_internal/1,
          with_missing_plugin/1,
@@ -43,7 +44,8 @@ all() ->
      {group, integration_tests}].
 
 groups() ->
-    [{unit_tests, [], [expiry_timestamp]},
+    [{unit_tests, [], [expiry_timestamp,
+                       update_state_rebuilds_tags]},
      {integration_tests, [], [with_enabled_plugin,
                               with_enabled_plugin_plus_internal,
                               with_missing_plugin,
@@ -175,6 +177,47 @@ expiry_timestamp(_) ->
     User7 = #user{authz_backends = [{rabbit_no_expiry_backend, unused},
                                     {rabbit_expiry_backend, unused}]},
     ?assertEqual(Now, rabbit_access_control:expiry_timestamp(User7)),
+    ok.
+
+%% A refresh must rebuild `#user.tags`. Without this a tag that the new
+%% credential revoked, for example `impersonator`, would survive and still be
+%% honoured by `check_user_id/2`.
+update_state_rebuilds_tags(_) ->
+    Mod = rabbit_refresh_backend,
+    ok = meck:new(Mod, [non_strict]),
+    meck:expect(Mod, expiry_timestamp, fun(_) -> os:system_time(seconds) + 60 end),
+    %% This stands in for a refresh-capable backend. It returns a fresh tag set
+    %% from the new credential, as OAuth's `update_state/2` does.
+    meck:expect(Mod, update_state,
+                fun(AuthUser, NewTags) ->
+                        {ok, AuthUser#auth_user{tags = NewTags,
+                                                impl = fun() -> NewTags end}}
+                end),
+
+    User = #user{username = <<"u">>,
+                 tags = [impersonator, management],
+                 authz_backends = [{Mod, unused}]},
+
+    {ok, U1} = rabbit_access_control:update_state(User, [management]),
+    ?assertEqual([management], U1#user.tags),
+    ?assertNot(lists:member(impersonator, U1#user.tags)),
+
+    %% A refresh to a credential with no tags clears them; keeping the old set
+    %% here would leave impersonator behind.
+    {ok, U2} = rabbit_access_control:update_state(User, []),
+    ?assertEqual([], U2#user.tags),
+
+    {ok, U3} = rabbit_access_control:update_state(User, [impersonator, management]),
+    ?assert(lists:member(impersonator, U3#user.tags)),
+
+    %% A backend without expiry is not refreshed and leaves the tags as they are.
+    ok = meck:new(rabbit_static_backend, [non_strict]),
+    meck:expect(rabbit_static_backend, expiry_timestamp, fun(_) -> never end),
+    Static = #user{username = <<"u">>,
+                   tags = [administrator],
+                   authz_backends = [{rabbit_static_backend, unused}]},
+    {ok, U4} = rabbit_access_control:update_state(Static, ignored),
+    ?assertEqual([administrator], U4#user.tags),
     ok.
 
 with_enabled_plugin(Config) ->

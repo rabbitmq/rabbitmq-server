@@ -8,6 +8,7 @@
 -module(rabbit_access_control).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("rabbit_common/include/logging.hrl").
 -include_lib("kernel/include/logger.hrl").
 
 -export([ensure_auth_backends_are_enabled/0]).
@@ -184,7 +185,7 @@ check_user_login(Username, AuthProps) ->
             {'refused', rabbit_types:username(), string(), [any()]}.
 
 check_user_login(Username, AuthProps, Modules) ->
-    try
+    Result = try
         lists:foldl(
             fun (rabbit_auth_backend_cache=ModN, {refused, _, _, _}) ->
                     %% It is possible to specify authn/authz within the cache module settings,
@@ -202,10 +203,14 @@ check_user_login(Username, AuthProps, Modules) ->
                     %% it gives us
                     case try_authenticate(Mod, Username, AuthProps) of
                         {ok, ModNUser = #auth_user{username = Username2, impl = Impl}} ->
-                            ?LOG_DEBUG("User '~ts' authenticated successfully by backend ~ts", [Username2, Mod]),
+                            ?LOG_DEBUG("User '~ts' authenticated successfully by backend ~ts",
+                                       [Username2, Mod],
+                                       #{domain => ?RMQLOG_DOMAIN_USER}),
                             user(ModNUser, {ok, [{Mod, Impl}], []});
                         Else ->
-                            ?LOG_DEBUG("User '~ts' failed authentication by backend ~ts", [Username, Mod]),
+                            ?LOG_DEBUG("User '~ts' failed authentication by backend ~ts",
+                                       [Username, Mod],
+                                       #{domain => ?RMQLOG_DOMAIN_USER}),
                             Else
                     end;
                 (_, {ok, User}) ->
@@ -215,11 +220,23 @@ check_user_login(Username, AuthProps, Modules) ->
             {refused, Username, "No modules checked '~ts'", [Username]}, Modules)
         catch
             Type:Error:Stacktrace ->
-                ?LOG_DEBUG("User '~ts' authentication failed with ~ts:~tp:~n~tp", [Username, Type, Error, Stacktrace]),
+                ?LOG_DEBUG("User '~ts' authentication failed with ~ts:~tp:~n~tp",
+                           [Username, Type, Error, Stacktrace],
+                           #{domain => ?RMQLOG_DOMAIN_USER}),
                 {refused, Username, "User '~ts' authentication failed with internal error. "
                                     "Enable debug logs to see the real error.", [Username]}
-
-        end.
+        end,
+    case Result of
+        {ok, #user{username = ResolvedUsername}} ->
+            ?LOG_INFO("User '~ts' authenticated successfully",
+                      [ResolvedUsername],
+                      #{domain => ?RMQLOG_DOMAIN_USER});
+        {refused, _, Msg, Args} ->
+            ?LOG_WARNING("User '~ts' failed to authenticate: ~ts",
+                         [Username, rabbit_misc:format(Msg, Args)],
+                         #{domain => ?RMQLOG_DOMAIN_USER})
+    end,
+    Result.
 
 try_authenticate_and_try_authorize(ModN, ModZs0, Username, AuthProps) ->
     ModZs = case ModZs0 of
@@ -228,7 +245,9 @@ try_authenticate_and_try_authorize(ModN, ModZs0, Username, AuthProps) ->
             end,
     case try_authenticate(ModN, Username, AuthProps) of
         {ok, ModNUser = #auth_user{username = Username2}} ->
-            ?LOG_DEBUG("User '~ts' authenticated successfully by backend ~ts", [Username2, ModN]),
+            ?LOG_DEBUG("User '~ts' authenticated successfully by backend ~ts",
+                       [Username2, ModN],
+                       #{domain => ?RMQLOG_DOMAIN_USER}),
             user(ModNUser, try_authorize(ModZs, Username2, AuthProps));
         Else ->
             Else
@@ -285,7 +304,10 @@ check_user_loopback(Username, SockOrAddr) ->
 get_authz_data_from({ip, Address}) ->
     #{peeraddr => Address};
 get_authz_data_from({socket, Sock}) ->
-    {ok, {Address, _Port}} = rabbit_net:peername(Sock),
+    Address = case rabbit_net:peername(Sock) of
+                  {ok, {local, _} = Local} -> Local;
+                  {ok, {Addr, _Port}}      -> Addr
+              end,
     #{peeraddr => Address};
 get_authz_data_from(undefined) ->
     undefined.
@@ -411,25 +433,38 @@ check_user_id0(ClaimedUserName, #user{username = ActualUserName,
 update_state(User = #user{authz_backends = Backends0}, NewState) ->
     %% N.B.: we use foldl/3 and prepending, so the final list of
     %% backends is in reverse order from the original list.
+    %%
+    %% Rebuild `#user.tags` from the refreshed backends. A refresh can revoke a
+    %% tag, for example `impersonator`, which is honoured by `check_user_id/2`,
+    %% so a stale tag set must not survive the refresh.
     Backends = lists:foldl(
-                fun({Module, Impl}, {ok, Acc}) ->
+                fun({Module, Impl}, {ok, Acc, TagsAcc, Refreshed}) ->
                         AuthUser = auth_user(User, Impl),
                         case Module:expiry_timestamp(AuthUser) of
                           never ->
-                            {ok, [{Module, Impl} | Acc]};
+                            {ok, [{Module, Impl} | Acc], TagsAcc, Refreshed};
                           _  ->
                             case Module:update_state(AuthUser, NewState) of
-                              {ok, #auth_user{impl = Impl1}} ->
-                                {ok, [{Module, Impl1} | Acc]};
+                              {ok, #auth_user{impl = Impl1, tags = Tags1}} ->
+                                {ok, [{Module, Impl1} | Acc], TagsAcc ++ Tags1, true};
                               Else -> Else
                             end
                         end;
                    (_, {error, _} = Err)      -> Err;
                    (_, {refused, _, _} = Err) -> Err
-                end, {ok, []}, Backends0),
+                end, {ok, [], [], false}, Backends0),
     case Backends of
-      {ok, Pairs} -> {ok, User#user{authz_backends = lists:reverse(Pairs)}};
-      Else        -> Else
+      {ok, Pairs, RefreshedTags, Refreshed} ->
+        %% This branches on `Refreshed` rather than on the tag list being
+        %% empty, because a refresh to a token with no tags must still clear the
+        %% old tags.
+        Tags = case Refreshed of
+                   true  -> RefreshedTags;
+                   false -> User#user.tags
+               end,
+        {ok, User#user{authz_backends = lists:reverse(Pairs), tags = Tags}};
+      Else ->
+        Else
     end.
 
 -spec permission_cache_can_expire(User :: rabbit_types:user()) -> boolean().

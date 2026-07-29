@@ -9,7 +9,8 @@ endef
 DEPS = rabbit_common rabbit amqp_client rabbitmq_management
 
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
-DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
+DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk \
+              rabbitmq_management/mk/rabbitmq-management-plugin.mk
 
 include ../../rabbitmq-components.mk
 include ../../erlang.mk

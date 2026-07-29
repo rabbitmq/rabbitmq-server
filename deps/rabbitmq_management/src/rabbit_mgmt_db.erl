@@ -381,10 +381,17 @@ list_queue_stats(Ranges, Objs, Interval, Fun) ->
       [begin
        Id = id_lookup(queue_stats, Obj),
        Pid = pget(pid, Obj),
-       QueueData = maps:get(Id, DataLookup),
-       Props = maps:get(queue_stats, QueueData),
-       Stats = queue_stats(QueueData, Ranges, Interval),
-       {Pid, combine(Props, Obj) ++ Stats}
+       %% A queue deleted before its metrics were collected won't have an entry.
+       %% Return it without any stats rather than throwing an exception.
+       %% See rabbitmq/rabbitmq-server#16989.
+       case maps:find(Id, DataLookup) of
+           {ok, QueueData} ->
+               Props = maps:get(queue_stats, QueueData),
+               Stats = queue_stats(QueueData, Ranges, Interval),
+               {Pid, combine(Props, Obj) ++ Stats};
+           error ->
+               {Pid, Obj}
+       end
        end || Obj <- Objs]).
 
 detail_queue_stats(Ranges, Objs, Interval) ->
@@ -395,20 +402,27 @@ detail_queue_stats(Ranges, Objs, Interval) ->
       [begin
        Id = id_lookup(queue_stats, Obj),
        Pid = pget(pid, Obj),
-       QueueData = maps:get(Id, DataLookup),
-       Props = maps:get(queue_stats, QueueData),
-       Stats = queue_stats(QueueData, Ranges, Interval),
-       ConsumerStats = rabbit_mgmt_data_compat:fill_consumer_active_fields(
-                         maps:get(consumer_stats, QueueData)),
-       Consumers = [{consumer_details, ConsumerStats}],
-       StatsD = [{deliveries,
-                  detail_stats(QueueData, channel_queue_stats_deliver_stats,
-                               deliver_get, second(Id), Ranges, Interval)},
-                 {incoming,
-                  detail_stats(QueueData, queue_exchange_stats_publish,
-                               fine_stats, first(Id), Ranges, Interval)}],
-       Details = augment_details(Obj, []),
-       {Pid, combine(Props, Obj) ++ Stats ++ StatsD ++ Consumers ++ Details}
+       %% See `list_queue_stats/4` and rabbitmq/rabbitmq-server#16989.
+       case maps:find(Id, DataLookup) of
+           {ok, QueueData} ->
+               Props = maps:get(queue_stats, QueueData),
+               Stats = queue_stats(QueueData, Ranges, Interval),
+               ConsumerStats = rabbit_mgmt_data_compat:fill_consumer_active_fields(
+                                 maps:get(consumer_stats, QueueData)),
+               Consumers = [{consumer_details, ConsumerStats}],
+               StatsD = [{deliveries,
+                          detail_stats(QueueData, channel_queue_stats_deliver_stats,
+                                       deliver_get, second(Id), Ranges, Interval)},
+                         {incoming,
+                          detail_stats(QueueData, queue_exchange_stats_publish,
+                                       fine_stats, first(Id), Ranges, Interval)}],
+               Details = augment_details(Obj, []),
+               {Pid, combine(Props, Obj) ++ Stats ++ StatsD ++ Consumers ++ Details};
+           error ->
+               %% consumer_details must be present: the channel detail
+               %% merge below reads it from every entry.
+               {Pid, [{consumer_details, []} | Obj]}
+       end
        end || Obj <- Objs]),
 
    % patch up missing channel details

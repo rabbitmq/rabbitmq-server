@@ -245,4 +245,9 @@ generate2(array, {array, Type, List}) ->
     Array = [constructor(Type),
              [generate2(Type, I) || I <- List]],
     S = iolist_size(Array),
-    [<<(S + 4):32, Count:32>>, Array].
+    [<<(S + 4):32, Count:32>>, Array];
+generate2(array, {as_is, 16#f0, Bin}) ->
+    Bin;
+generate2(array, {as_is, 16#e0, <<_Size:8, Count:8, Type>>}) ->
+    %% Nested array elements are always framed as array32, see constructor/1
+    <<5:32, Count:32, Type>>.

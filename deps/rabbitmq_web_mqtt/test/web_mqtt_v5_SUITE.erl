@@ -87,6 +87,7 @@ publish_property_content_type(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
 publish_property_payload_format_indicator(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
 publish_property_response_topic_correlation_data(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
 publish_property_user_property(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
+publish_property_not_applicable(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
 disconnect_with_will(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
 will_qos2(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
 will_delay_greater_than_session_expiry(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
@@ -100,6 +101,7 @@ will_delay_message_expiry(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
 will_delay_message_expiry_publish_properties(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
 will_delay_properties(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
 will_properties(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
+will_property_not_applicable(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
 retain_properties(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
 topic_alias_client_to_server(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
 topic_alias_server_to_client(Config) -> v5_SUITE:?FUNCTION_NAME(Config).

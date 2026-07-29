@@ -52,10 +52,16 @@ adjust(Sup, LinkMod, XorQ, {upstream, UpstreamName}) ->
     _ = [stop(Sup, OldUpstream, XorQ) || OldUpstream <- OldUpstreams],
     [start(Sup, LinkMod, NewUpstream, XorQ) || NewUpstream <- NewUpstreams];
 
-adjust(Sup, _LinkMod, XorQ, {clear_upstream, UpstreamName}) ->
+adjust(Sup, _LinkMod, X = #exchange{}, {clear_upstream, UpstreamName}) ->
+    %% The federation scratch only exists for exchanges. Pruning it for a
+    %% queue passes the queue name to `update_scratch/3`, which resolves it to
+    %% a same-named exchange (the Khepri path ignores the resource kind) and
+    %% overwrites that exchange's decorators. See rabbitmq/rabbitmq-server#16991.
     ok = rabbit_federation_db:prune_scratch(
-           name(XorQ), rabbit_federation_upstream:for(XorQ)),
-    [stop(Sup, Upstream, XorQ) || Upstream <- children(Sup, UpstreamName)];
+           name(X), rabbit_federation_upstream:for(X)),
+    [stop(Sup, Upstream, X) || Upstream <- children(Sup, UpstreamName)];
+adjust(Sup, _LinkMod, Q, {clear_upstream, UpstreamName}) when ?is_amqqueue(Q) ->
+    [stop(Sup, Upstream, Q) || Upstream <- children(Sup, UpstreamName)];
 
 adjust(Sup, LinkMod, X = #exchange{name = XName}, {upstream_set, _Set}) ->
     _ = adjust(Sup, LinkMod, X, everything),
