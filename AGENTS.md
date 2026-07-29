@@ -187,3 +187,24 @@ After completing a task, perform up to twenty iterative reviews of your changes.
 In every iteration, look for meaningful improvements that were missed, for gaps in test coverage, and for deviations from the instructions in this file.
 
 If no meaningful improvements are found for three iterations in a row, report it and stop iterating.
+
+## Security
+
+`.github/SECURITY.md` describes the security policy.
+
+For GitHub Security Advisories, make sure to:
+
+ * Provide a complete CVSS 4.0 vector string
+ * Enter the "Ecosystem" and "Package name" correctly
+   * For vulnerabilities in packages published on [Hex.pm](https://hex.pm/users/rabbitmq) (e.g. `amqp10_client`, `amqp10_common`, `amqp_client`, `rabbit_common`, `credentials_obfuscation`):
+     * Set "Ecosystem" to "Erlang"
+     * Set "Package name" to the Hex.pm package name
+     * This ensures they are properly picked up by OSV.dev and Hex.pm
+   * For vulnerabilities not present in a Hex.pm package (e.g. in `deps/rabbit`):
+     * Set "Ecosystem" to "Other: RabbitMQ"
+     * Set "Package name" to "rabbitmq-server"
+     * This helps the GitHub team differentiate them from Hex.pm packages
+ * Enter the "Affected Versions" and "Patch Versions" correctly
+   * Define "Affected Versions" explicitly per minor release line using version ranges (e.g. `>= 4.2.0`, `< 4.2.6`)
+   * For the Patch version, provide the exact release containing the fix (e.g. `4.2.6`)
+   * If a fix is included in the first release of a new minor line (e.g. `4.3.0`), omit that release line entirely as no vulnerable `4.3.x` releases exist
