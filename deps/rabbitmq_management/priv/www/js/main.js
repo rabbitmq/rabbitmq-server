@@ -2092,7 +2092,9 @@ function change_own_password(sammy) {
         if (req.readyState == 4 && !done) {
             clearTimeout(timeout);
             if (req.status >= 200 && req.status < 300) {
-                set_basic_auth(username, new_password);
+                // Re-login via api/login so encrypted-credential mode stores
+                // a fresh token instead of plaintext Basic credentials.
+                login(username, new_password);
                 finish();
                 go_to('#/users');
             } else {
