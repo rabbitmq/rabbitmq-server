@@ -51,6 +51,10 @@ all_tests() ->
      nodeup_resumes_only_affected_streams,
      restart_stream_preserves_deleted,
      stranded_no_writer_reelection,
+     action_failed_short_parks_and_reconciles,
+     action_failed_no_backoff_retries_immediately,
+     reconcile_drops_superseded_parked_entry,
+     state_enter_rearms_retry_timer,
      overview
     ].
 
@@ -1804,6 +1808,163 @@ overview(_Config) ->
                  rabbit_stream_coordinator:overview(S1)),
 
     ok.
+
+%% A failed member action with a backoff class parks the member (v8+) instead
+%% of retrying immediately, and the retry_reconcile timer re-drives it once due.
+action_failed_short_parks_and_reconciles(_) ->
+    E = 1,
+    StreamId = atom_to_list(?FUNCTION_NAME),
+    LeaderPid = fake_pid(n1),
+    [Replica1, Replica2] = ReplicaPids = [fake_pid(n2), fake_pid(n3)],
+    N2 = node(Replica1),
+    S0 = started_stream(StreamId, LeaderPid, ReplicaPids),
+    S1 = update_stream(meta(?LINE), {down, Replica1, boom}, S0),
+    StartIdx = ?LINE,
+    {S2, [{aux, {start_replica, StreamId, #{node := N2}, _}}]} =
+        evaluate_stream(meta(StartIdx), S1, []),
+    ?assertMatch(#stream{members = #{N2 := #member{current = {starting, StartIdx}}}}, S2),
+    State1 = coordinator_state_with(StreamId, S2),
+    %% the replica start fails with a short backoff
+    FailIdx = ?LINE,
+    FailTime = FailIdx * 2,
+    RetryAt = FailTime + ?ACTION_RETRY_SHORT_MS,
+    {State2, ok, Effs} =
+        apply_cmd(meta(FailIdx),
+                  {action_failed, StreamId, #{node => N2,
+                                              index => StartIdx,
+                                              epoch => E,
+                                              action => starting,
+                                              backoff => short}},
+                  State1),
+    ?assertMatch(#{StreamId := #stream{members = #{N2 := #member{current = {sleeping, RetryAt}}}}},
+                 streams(State2)),
+    %% parked, so no immediate re-drive, but a retry timer is armed
+    ?assertEqual(false, has_aux_start_replica(Effs, N2)),
+    ?assertEqual({true, ?ACTION_RETRY_SHORT_MS}, find_retry_timer(Effs)),
+    %% a reconcile before the retry is due changes nothing
+    {State3, ok, EffsEarly} =
+        apply_cmd(meta(#{index => ?LINE, system_time => RetryAt - 1}),
+                  {timeout, retry_reconcile}, State2),
+    ?assertMatch(#{StreamId := #stream{members = #{N2 := #member{current = {sleeping, RetryAt}}}}},
+                 streams(State3)),
+    ?assertEqual(false, has_aux_start_replica(EffsEarly, N2)),
+    ?assertEqual({true, 1}, find_retry_timer(EffsEarly)),
+    %% once due, the member is re-driven and the timer is not re-armed
+    ReconcileIdx = ?LINE,
+    {State4, ok, EffsDue} =
+        apply_cmd(meta(#{index => ReconcileIdx, system_time => RetryAt}),
+                  {timeout, retry_reconcile}, State3),
+    ?assertMatch(#{StreamId := #stream{members = #{N2 := #member{current = {starting, ReconcileIdx}}}}},
+                 streams(State4)),
+    ?assertEqual(true, has_aux_start_replica(EffsDue, N2)),
+    ?assertEqual({false, undefined}, find_retry_timer(EffsDue)),
+    ?assertEqual(0, parked_size(State4)),
+    ok.
+
+%% A 'none' backoff (e.g. writer start failures) must retry immediately without
+%% parking, preserving fast re-election behaviour.
+action_failed_no_backoff_retries_immediately(_) ->
+    E = 1,
+    StreamId = atom_to_list(?FUNCTION_NAME),
+    LeaderPid = fake_pid(n1),
+    [Replica1, Replica2] = ReplicaPids = [fake_pid(n2), fake_pid(n3)],
+    N2 = node(Replica1),
+    S0 = started_stream(StreamId, LeaderPid, ReplicaPids),
+    S1 = update_stream(meta(?LINE), {down, Replica1, boom}, S0),
+    StartIdx = ?LINE,
+    {S2, _} = evaluate_stream(meta(StartIdx), S1, []),
+    State1 = coordinator_state_with(StreamId, S2),
+    {State2, ok, Effs} =
+        apply_cmd(meta(?LINE),
+                  {action_failed, StreamId, #{node => N2,
+                                              index => StartIdx,
+                                              epoch => E,
+                                              action => starting,
+                                              backoff => none}},
+                  State1),
+    ?assertMatch(#{StreamId := #stream{members = #{N2 := #member{current = {starting, _}}}}},
+                 streams(State2)),
+    ?assertEqual(true, has_aux_start_replica(Effs, N2)),
+    ?assertEqual({false, undefined}, find_retry_timer(Effs)),
+    ?assertEqual(0, parked_size(State2)),
+    ok.
+
+%% member.current is authoritative: a parked entry whose member is no longer
+%% sleeping at exactly that retry time is stale and dropped without re-driving.
+reconcile_drops_superseded_parked_entry(_) ->
+    E = 1,
+    StreamId = atom_to_list(?FUNCTION_NAME),
+    LeaderPid = fake_pid(n1),
+    [Replica1, Replica2] = ReplicaPids = [fake_pid(n2), fake_pid(n3)],
+    N2 = node(Replica1),
+    Stream = started_stream(StreamId, LeaderPid, ReplicaPids),
+    RetryAt = 1000,
+    Parked = gb_trees:insert({RetryAt, StreamId, N2}, [], gb_trees:empty()),
+    Base = rabbit_stream_coordinator:init(#{machine_version => 8}),
+    State0 = Base#rabbit_stream_coordinator{streams = #{StreamId => Stream},
+                                            parked = Parked},
+    {State1, ok, Effs} =
+        apply_cmd(meta(#{index => ?LINE, system_time => RetryAt}),
+                  {timeout, retry_reconcile}, State0),
+    ?assertEqual(0, parked_size(State1)),
+    ?assertMatch(#{StreamId := #stream{members = #{N2 := #member{current = undefined,
+                                                                 state = {running, E, Replica1}}}}},
+                 streams(State1)),
+    ?assertEqual(false, has_aux_start_replica(Effs, N2)),
+    ?assertEqual({false, undefined}, find_retry_timer(Effs)),
+    ok.
+
+%% Timers are lost on leader change but the parked actions survive in the
+%% replicated state, so state_enter(leader) re-arms the reconcile.
+state_enter_rearms_retry_timer(_) ->
+    StreamId = atom_to_list(?FUNCTION_NAME),
+    LeaderPid = fake_pid(n1),
+    ReplicaPids = [fake_pid(n2), fake_pid(n3)],
+    Stream = started_stream(StreamId, LeaderPid, ReplicaPids),
+    Base = rabbit_stream_coordinator:init(#{machine_version => 8}),
+    Empty = Base#rabbit_stream_coordinator{streams = #{StreamId => Stream}},
+    ?assertEqual({false, undefined},
+                 find_retry_timer(rabbit_stream_coordinator:state_enter(leader, Empty))),
+    %% a retry due in the past (RetryAt = 0) re-arms with a zero delay so the
+    %% overdue retry fires as soon as this node becomes leader
+    Parked = gb_trees:insert({0, StreamId, node(fake_pid(n2))},
+                             [], gb_trees:empty()),
+    State = Empty#rabbit_stream_coordinator{parked = Parked},
+    ?assertEqual({true, 0},
+                 find_retry_timer(rabbit_stream_coordinator:state_enter(leader, State))),
+    ok.
+
+coordinator_state_with(StreamId, #stream{conf = Conf, members = Members} = Stream) ->
+    %% the full apply pipeline runs eval_retention, which requires a retention
+    %% in the stream conf and map-valued member confs
+    Conf1 = Conf#{retention => []},
+    Members1 = maps:map(fun (_, M) -> M#member{conf = Conf1} end, Members),
+    Stream1 = Stream#stream{conf = Conf1, members = Members1},
+    Base = rabbit_stream_coordinator:init(#{machine_version => 8}),
+    Base#rabbit_stream_coordinator{streams = #{StreamId => Stream1}}.
+
+streams(#rabbit_stream_coordinator{streams = Streams}) ->
+    Streams.
+
+parked_size(#rabbit_stream_coordinator{parked = undefined}) ->
+    0;
+parked_size(#rabbit_stream_coordinator{parked = Parked}) ->
+    gb_trees:size(Parked).
+
+has_aux_start_replica(Effs, Node) ->
+    lists:any(fun ({aux, {start_replica, _, #{node := N}, _}}) ->
+                      N =:= Node;
+                  (_) ->
+                      false
+              end, Effs).
+
+find_retry_timer(Effs) ->
+    case [D || {timer, retry_reconcile, D} <- Effs] of
+        [D | _] ->
+            {true, D};
+        [] ->
+            {false, undefined}
+    end.
 
 meta(N) when is_integer(N) ->
     meta(#{index => N});

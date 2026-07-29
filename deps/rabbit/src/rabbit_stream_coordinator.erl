@@ -587,13 +587,17 @@ apply(#{index := _Idx, machine_version := MachineVersion} = Meta0,
                     return(Meta, State0#?MODULE{streams = maps:remove(StreamId, Streams0)},
                            Reply, inform_listeners_eol(MachineVersion, Stream0));
                 _ ->
-                    {Stream2, Effects0} = evaluate_stream(Meta, Stream1, []),
+                    {Stream1b, Parked, ParkEffs} =
+                        maybe_park_action(Meta, Cmd, Stream0, Stream1,
+                                          parked_tree(State0)),
+                    {Stream2, Effects0} = evaluate_stream(Meta, Stream1b, ParkEffs),
                     {Stream3, Effects1} = eval_listeners(MachineVersion, Stream2, Stream0, Effects0),
                     {Stream, Effects2} = eval_retention(Meta, Stream3, Effects1),
                     {Monitors, Effects} = ensure_monitors(Stream, Monitors0, Effects2),
                     return(Meta,
                            State0#?MODULE{streams = Streams0#{StreamId => Stream},
-                                          monitors = Monitors}, Reply, Effects)
+                                          monitors = Monitors,
+                                          parked = Parked}, Reply, Effects)
             end;
         {reply, Reply} ->
             return(Meta, State0, Reply, [])
@@ -824,6 +828,9 @@ apply(Meta, {timeout, {sac, node_disconnected, #{connection_pid := Pid}}},
     {SacState1, Effects} = sac_presume_connection_down(Meta, Pid, SacState0),
     return(Meta, State0#?MODULE{single_active_consumer = SacState1}, ok,
            Effects);
+apply(#{machine_version := Vsn} = Meta, {timeout, retry_reconcile}, State0)
+  when ?V8_OR_MORE(Vsn) ->
+    reconcile_retries(Meta, State0);
 apply(Meta, UnkCmd, State) ->
     ?LOG_DEBUG("~ts: unknown command ~W",
                      [?MODULE, UnkCmd, 10]),
@@ -843,14 +850,27 @@ state_enter(recover, _) ->
     [];
 state_enter(leader, #?MODULE{streams = Streams,
                              monitors = Monitors,
-                             single_active_consumer = SacState}) ->
+                             single_active_consumer = SacState} = State) ->
     Pids = maps:keys(Monitors),
     %% monitor all the known nodes
     Nodes = all_member_nodes(Streams),
     NodeMons = [{monitor, node, N} || N <- Nodes],
     SacEffects = ?SAC_CURRENT:state_enter(leader, SacState),
-    SacEffects ++ NodeMons ++ [{aux, fail_active_actions} |
-                               [{monitor, process, P} || P <- Pids]];
+    %% timers are lost on leader change but the parked actions survive in the
+    %% (replicated) machine state, so re-arm the retry reconcile if any remain.
+    %% state_enter is a leader-only, non-replicated hook (like tick/2), so
+    %% wall-clock time is fine here and lets us re-arm to the exact next retry
+    Parked = parked_tree(State),
+    RetryEff = case gb_trees:is_empty(Parked) of
+                   true ->
+                       [];
+                   false ->
+                       Now = erlang:system_time(millisecond),
+                       [{timer, retry_reconcile,
+                         retry_reconcile_delay(Parked, Now)}]
+               end,
+    SacEffects ++ NodeMons ++ RetryEff ++ [{aux, fail_active_actions} |
+                                           [{monitor, process, P} || P <- Pids]];
 state_enter(_S, _) ->
     [].
 
@@ -866,9 +886,18 @@ all_member_nodes(Streams) ->
                 maps:merge(Acc, M)
         end, #{}, Streams)).
 
-tick(_Ts, #?MODULE{single_active_consumer = SacState}) ->
-    [{aux, maybe_resize_coordinator_cluster} |
-     maybe_update_sac_configuration(SacState)].
+tick(Ts, #?MODULE{single_active_consumer = SacState} = State) ->
+    %% backstop: re-arm the retry reconcile timer in case it was somehow lost
+    %% (the reconcile itself and state_enter/park already re-arm it precisely)
+    Parked = parked_tree(State),
+    RetryEff = case gb_trees:is_empty(Parked) of
+                   true ->
+                       [];
+                   false ->
+                       [{timer, retry_reconcile, retry_reconcile_delay(Parked, Ts)}]
+               end,
+    RetryEff ++ [{aux, maybe_resize_coordinator_cluster} |
+                 maybe_update_sac_configuration(SacState)].
 
 members() ->
     %% TODO: this can be replaced with a ra_leaderboard
@@ -1063,7 +1092,7 @@ handle_aux(leader, _, {start_replica, StreamId,
     ?LOG_DEBUG("~ts: running action: 'start_replica'"
                      " for ~ts on node ~w in epoch ~b",
                      [?MODULE, StreamId, Node, Epoch]),
-    ActionFun = phase_start_replica(StreamId, Args, Conf),
+    ActionFun = phase_start_replica(StreamId, Args, Conf, worker_backoff(RaAux)),
     run_action(starting, StreamId, Args, ActionFun, Aux, RaAux);
 handle_aux(leader, _, {stop, StreamId, #{node := Node,
                                          epoch := Epoch} = Args, Conf},
@@ -1071,7 +1100,7 @@ handle_aux(leader, _, {stop, StreamId, #{node := Node,
     ?LOG_DEBUG("~ts: running action: 'stop'"
                      " for ~ts on node ~w in epoch ~b",
                      [?MODULE, StreamId, Node, Epoch]),
-    ActionFun = phase_stop_member(StreamId, Args, Conf),
+    ActionFun = phase_stop_member(StreamId, Args, Conf, worker_backoff(RaAux)),
     run_action(stopping, StreamId, Args, ActionFun, Aux, RaAux);
 handle_aux(leader, _, {update_mnesia, StreamId, Args, Conf},
            #aux{actions = _Monitors} = Aux, RaAux) ->
@@ -1089,7 +1118,7 @@ handle_aux(leader, _, {delete_member, StreamId, #{node := Node} = Args, Conf},
            #aux{actions = _Monitors} = Aux, RaAux) ->
     ?LOG_DEBUG("~ts: running action: 'delete_member'"
                      " for ~ts ~ts", [?MODULE, StreamId, Node]),
-    ActionFun = phase_delete_member(StreamId, Args, Conf),
+    ActionFun = phase_delete_member(StreamId, Args, Conf, worker_backoff(RaAux)),
     run_action(delete_member, StreamId, Args, ActionFun, Aux, RaAux);
 handle_aux(leader, _, fail_active_actions,
            #aux{actions = Actions} = Aux, RaAux) ->
@@ -1129,7 +1158,7 @@ handle_aux(_, _, _, AuxState, RaAux) ->
 
 overview(#?MODULE{streams = Streams,
                   monitors = Monitors,
-                  single_active_consumer = Sac}) ->
+                  single_active_consumer = Sac} = State) ->
     StreamsOverview = maps:map(
                         fun (_, Stream) ->
                                 stream_overview0(Stream)
@@ -1137,6 +1166,7 @@ overview(#?MODULE{streams = Streams,
     #{
       num_streams => map_size(Streams),
       num_monitors => map_size(Monitors),
+      num_parked_actions => gb_trees:size(parked_tree(State)),
       single_active_consumer => rabbit_stream_sac_coordinator:overview(Sac),
       streams => StreamsOverview
      }.
@@ -1159,6 +1189,14 @@ stream_overview0(#stream{epoch = Epoch,
       num_listeners => map_size(StreamListeners),
       target => Target}.
 
+%% Whether the action worker should back off (sleep) itself before reporting a
+%% failure. From v8 the state machine owns retry backoff (via the
+%% retry_reconcile timer), so the worker returns immediately and frees its slot.
+%% Below v8 the worker keeps sleeping, as the older state machine re-drives a
+%% failed action immediately.
+worker_backoff(RaAux) ->
+    not ?V8_OR_MORE(ra_aux:effective_machine_version(RaAux)).
+
 run_action(Action, StreamId, #{node := _Node,
                                epoch := _Epoch} = Args,
            ActionFun, #aux{actions = Actions0} = Aux, RaAux) ->
@@ -1175,7 +1213,7 @@ wrap_reply(From, Reply) ->
     [{reply, From, {wrap_reply, Reply}}].
 
 phase_start_replica(StreamId, #{epoch := Epoch,
-                                node := Node} = Args, Conf0) ->
+                                node := Node} = Args, Conf0, Sleep) ->
     fun() ->
             Conf1 = maybe_update_replica_conf(Conf0),
             try osiris_replica:start(Node, Conf1) of
@@ -1198,25 +1236,48 @@ phase_start_replica(StreamId, #{epoch := Epoch,
                 {error, Reason} ->
                     ?LOG_WARNING("~ts: Error while starting replica for ~ts on node ~ts in ~b : ~W",
                                  [?MODULE, maps:get(name, Conf1), Node, Epoch, Reason, 10]),
-                    maybe_sleep(Reason),
-                    send_action_failed(StreamId, starting, Args)
+                    maybe_backoff(Sleep, Reason),
+                    send_action_failed(StreamId, starting, Args, backoff_class(Reason))
             catch _:Error ->
                     ?LOG_WARNING("~ts: Error while starting replica for ~ts on node ~ts in ~b : ~W",
                                  [?MODULE, maps:get(name, Conf1), Node, Epoch, Error, 10]),
-                    maybe_sleep(Error),
-                    send_action_failed(StreamId, starting, Args)
+                    maybe_backoff(Sleep, Error),
+                    send_action_failed(StreamId, starting, Args, backoff_class(Error))
             end
     end.
 
 send_action_failed(StreamId, Action, Arg) ->
-  send_self_command({action_failed, StreamId, Arg#{action => Action}}).
+    send_action_failed(StreamId, Action, Arg, none).
+
+send_action_failed(StreamId, Action, Arg, Backoff) ->
+    send_self_command({action_failed, StreamId,
+                       Arg#{action => Action, backoff => Backoff}}).
+
+%% Classify a failure into the backoff bucket the state machine should apply
+%% before retrying. Mirrors maybe_sleep/1 so the v8+ (state-machine-driven)
+%% and pre-v8 (worker-driven) backoff behave identically.
+backoff_class({{nodedown, _}, _}) ->
+    long;
+backoff_class({noproc, _}) ->
+    short;
+backoff_class({error, nodedown}) ->
+    short;
+backoff_class({error, _}) ->
+    short;
+backoff_class(_) ->
+    none.
+
+maybe_backoff(true, Err) ->
+    maybe_sleep(Err);
+maybe_backoff(false, _Err) ->
+    ok.
 
 send_self_command(Cmd) ->
     ra:pipeline_command({?MODULE, node()}, Cmd, no_correlation, normal),
     ok.
 
 
-phase_delete_member(StreamId, #{node := Node} = Arg, Conf) ->
+phase_delete_member(StreamId, #{node := Node} = Arg, Conf, Sleep) ->
     fun() ->
             case rabbit_nodes:is_member(Node) of
                 true ->
@@ -1226,12 +1287,12 @@ phase_delete_member(StreamId, #{node := Node} = Arg, Conf) ->
                                             [?MODULE, StreamId, Node]),
                             send_self_command({member_deleted, StreamId, Arg});
                         _ ->
-                            send_action_failed(StreamId, deleting, Arg)
+                            send_action_failed(StreamId, deleting, Arg, none)
                     catch _:E ->
                               ?LOG_WARNING("~ts: Error while deleting member for ~ts : on node ~ts ~W",
                                                  [?MODULE, StreamId, Node, E, 10]),
-                              maybe_sleep(E),
-                              send_action_failed(StreamId, deleting, Arg)
+                              maybe_backoff(Sleep, E),
+                              send_action_failed(StreamId, deleting, Arg, backoff_class(E))
                     end;
                 false ->
                     %% node is no longer a cluster member, we return success to avoid
@@ -1242,7 +1303,7 @@ phase_delete_member(StreamId, #{node := Node} = Arg, Conf) ->
             end
     end.
 
-phase_stop_member(StreamId, #{node := Node, epoch := Epoch} = Arg0, Conf) ->
+phase_stop_member(StreamId, #{node := Node, epoch := Epoch} = Arg0, Conf, Sleep) ->
     fun() ->
             try osiris_member:stop(Node, Conf) of
                 ok ->
@@ -1256,19 +1317,19 @@ phase_stop_member(StreamId, #{node := Node, epoch := Epoch} = Arg0, Conf) ->
                         Err ->
                             ?LOG_WARNING("~ts: failed to get tail of member ~ts on ~ts in ~b Error: ~w",
                                                [?MODULE, StreamId, Node, Epoch, Err]),
-                            maybe_sleep(Err),
-                            send_action_failed(StreamId, stopping, Arg0)
+                            maybe_backoff(Sleep, Err),
+                            send_action_failed(StreamId, stopping, Arg0, backoff_class(Err))
                     catch _:Err ->
                             ?LOG_WARNING("~ts: failed to get tail of member ~ts on ~ts in ~b Error: ~w",
                                                [?MODULE, StreamId, Node, Epoch, Err]),
-                            maybe_sleep(Err),
-                            send_action_failed(StreamId, stopping, Arg0)
+                            maybe_backoff(Sleep, Err),
+                            send_action_failed(StreamId, stopping, Arg0, backoff_class(Err))
                     end
             catch _:Err ->
                       ?LOG_WARNING("~ts: failed to stop member ~ts ~w Error: ~w",
                                          [?MODULE, StreamId, Node, Err]),
-                      maybe_sleep(Err),
-                      send_action_failed(StreamId, stopping, Arg0)
+                      maybe_backoff(Sleep, Err),
+                      send_action_failed(StreamId, stopping, Arg0, backoff_class(Err))
             end
     end.
 
@@ -2276,6 +2337,10 @@ fail_active_actions(Streams, Exclude) ->
 
 fail_action(_StreamId, _, #member{current = undefined}) ->
     ok;
+fail_action(_StreamId, _, #member{current = {sleeping, _}}) ->
+    %% parked awaiting a retry: the retry reconcile owns re-driving it, so do
+    %% not fail it here (its action is not actually running)
+    ok;
 fail_action(StreamId, Node, #member{role = {_, E},
                                     current = {Action, Idx}}) ->
     ?LOG_DEBUG("~ts: failing stale action to trigger retry. "
@@ -2287,6 +2352,119 @@ fail_action(StreamId, Node, #member{role = {_, E},
                          index => Idx,
                          node => Node,
                          epoch => E}}).
+
+%% v8+ retry backoff (Option B): instead of the action worker sleeping before
+%% reporting a failure, the state machine parks the failed member until a
+%% deterministic retry time and re-drives it from a single, coalesced timer.
+
+parked_tree(#?MODULE{parked = undefined}) ->
+    %% states written before v8 carry no parked structure
+    gb_trees:empty();
+parked_tree(#?MODULE{parked = Parked}) ->
+    Parked.
+
+backoff_ms(short) ->
+    ?ACTION_RETRY_SHORT_MS;
+backoff_ms(long) ->
+    ?ACTION_RETRY_LONG_MS.
+
+%% Delay (ms) until the earliest parked retry is due. The tree is ordered by
+%% {RetryAtMs, StreamId, Node}, so the smallest key is the next retry.
+retry_reconcile_delay(Parked, Now) ->
+    {{RetryAt, _StreamId, _Node}, _} = gb_trees:smallest(Parked),
+    max(0, RetryAt - Now).
+
+%% Park a member whose action just failed (v8+) so evaluate_stream leaves it
+%% alone until the retry is due. Only parks when this failure actually cleared
+%% the member's current action (matching action and index) and a non-none
+%% backoff was requested; writer starts and immediate retries use 'none'.
+maybe_park_action(#{machine_version := Vsn} = Meta,
+                  {action_failed, StreamId, #{node := Node,
+                                              index := Idx,
+                                              action := Action} = Map},
+                  Stream0, #stream{members = Members} = Stream1, Parked)
+  when ?V8_OR_MORE(Vsn) ->
+    case maps:get(backoff, Map, none) of
+        none ->
+            {Stream1, Parked, []};
+        Class ->
+            case Stream0 of
+                #stream{members = #{Node := #member{current = {A, I}}}}
+                  when A == Action andalso I == Idx ->
+                    #{Node := M} = Members,
+                    RetryAt = maps:get(system_time, Meta) + backoff_ms(Class),
+                    M1 = M#member{current = {sleeping, RetryAt}},
+                    Parked1 = gb_trees:enter({RetryAt, StreamId, Node}, [], Parked),
+                    Effs = [{timer, retry_reconcile,
+                             retry_reconcile_delay(Parked1,
+                                                   maps:get(system_time, Meta))}],
+                    {Stream1#stream{members = Members#{Node => M1}}, Parked1, Effs};
+                _ ->
+                    %% the failure did not clear a matching action (stale or
+                    %% already superseded), so there is nothing to park
+                    {Stream1, Parked, []}
+            end
+    end;
+maybe_park_action(_Meta, _Cmd, _Stream0, Stream1, Parked) ->
+    {Stream1, Parked, []}.
+
+%% Fired by the retry_reconcile timer: wake every parked member whose retry is
+%% due, re-driving each affected stream, then re-arm the timer for the next one.
+reconcile_retries(#{system_time := Now} = Meta,
+                  #?MODULE{streams = Streams0,
+                           monitors = Monitors0} = State0) ->
+    {Parked, Streams1, Dirty} =
+        expire_parked(parked_tree(State0), Now, Streams0, #{}),
+    {Streams, Monitors, Effs0} =
+        maps:fold(
+          fun (StreamId, _, {Ss, Mons, Effs}) ->
+                  case Ss of
+                      #{StreamId := S0} ->
+                          {S1, Effs1} = evaluate_stream(Meta, S0, Effs),
+                          {Mons1, Effs2} = ensure_monitors(S1, Mons, Effs1),
+                          {Ss#{StreamId => S1}, Mons1, Effs2};
+                      _ ->
+                          {Ss, Mons, Effs}
+                  end
+          end, {Streams1, Monitors0, []}, Dirty),
+    Effs = case gb_trees:is_empty(Parked) of
+               true ->
+                   Effs0;
+               false ->
+                   [{timer, retry_reconcile,
+                     retry_reconcile_delay(Parked, Now)} | Effs0]
+           end,
+    return(Meta, State0#?MODULE{streams = Streams,
+                                monitors = Monitors,
+                                parked = Parked}, ok, Effs).
+
+%% Walk the parked tree from the earliest retry, clearing every due member back
+%% to an actionable state. member.current is authoritative: an entry whose
+%% member is no longer parked at exactly this retry time is stale and dropped.
+expire_parked(Parked, Now, Streams, Dirty) ->
+    case gb_trees:is_empty(Parked) of
+        true ->
+            {Parked, Streams, Dirty};
+        false ->
+            case gb_trees:smallest(Parked) of
+                {{RetryAt, _StreamId, _Node}, _} when RetryAt > Now ->
+                    %% earliest retry is not due yet, so neither is any other
+                    {Parked, Streams, Dirty};
+                {{RetryAt, StreamId, Node} = Key, _} ->
+                    Parked1 = gb_trees:delete(Key, Parked),
+                    case Streams of
+                        #{StreamId := #stream{members = #{Node := #member{current = {sleeping, RetryAt}} = M} = Members} = Stream} ->
+                            Members1 = Members#{Node =>
+                                                M#member{current = undefined}},
+                            Streams1 = Streams#{StreamId =>
+                                                Stream#stream{members = Members1}},
+                            expire_parked(Parked1, Now, Streams1,
+                                          Dirty#{StreamId => ok});
+                        _ ->
+                            expire_parked(Parked1, Now, Streams, Dirty)
+                    end
+            end
+    end.
 
 ensure_monitors(#stream{id = StreamId,
                         members = Members}, Monitors, Effects) ->
@@ -2501,7 +2679,7 @@ machine_version(6, 7, #?MODULE{monitors = Monitors0} = State) ->
     Monitors = maps:filter(fun(_Key, Value) -> Value =/= sac end, Monitors0),
     {State#?MODULE{monitors = Monitors}, []};
 machine_version(7, 8, State) ->
-    {State, []};
+    {State#?MODULE{parked = gb_trees:empty()}, []};
 machine_version(From, To, State) ->
     ?LOG_INFO("Stream coordinator machine version changes from ~tp to ~tp, no state changes required.",
                     [From, To]),
