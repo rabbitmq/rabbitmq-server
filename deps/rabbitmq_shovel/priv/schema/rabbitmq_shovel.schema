@@ -13,3 +13,7 @@
 {mapping, "shovel.local.max_credit", "rabbitmq_shovel.max_local_shovel_credit", [
     {datatype, integer}
 ]}.
+
+{mapping, "shovel.delete_after_duration_floor", "rabbitmq_shovel.delete_after_duration_floor", [
+    {datatype, integer}
+]}.

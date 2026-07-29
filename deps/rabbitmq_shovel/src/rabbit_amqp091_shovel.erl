@@ -96,6 +96,7 @@ parse(_Name, {source, Source}) ->
       resource_decl => rabbit_shovel_util:decl_fun(?MODULE, {source, Source}),
       queue => Queue,
       delete_after => proplists:get_value(delete_after, Source, never),
+      delete_after_duration => proplists:get_value(delete_after_duration, Source, undefined),
       prefetch_count => Prefetch,
       consumer_args => CArgs,
       consumer_name => CTag};
@@ -268,7 +269,8 @@ connect_source(Conf = #{name := Name,
     {Conn, Chan, Uri} = make_conn_and_chan(deobfuscate_uris(Uris), Name),
     Conf#{source => Src#{current => {Conn, Chan, Uri}}}.
 
-init_source(Conf = #{ack_mode := AckMode,
+init_source(Conf = #{name := Name,
+                     ack_mode := AckMode,
                      source := #{queue := Queue,
                                  current := {Conn, Chan, _},
                                  prefetch_count := Prefetch,
@@ -298,7 +300,7 @@ init_source(Conf = #{ack_mode := AckMode,
                                                       arguments = Args}, self()),
     Src1 = Src#{remaining => Remaining,
                 remaining_unacked => Remaining},
-    Conf#{source => sched_expire_after_duration(Src1)}.
+    Conf#{source => sched_expire_after_duration(Name, Src1)}.
 
 connect_dest(Conf = #{name := Name, dest := #{uris := Uris} = Dst}) ->
     {Conn, Chan, URI} = make_conn_and_chan(deobfuscate_uris(Uris), Name),
@@ -428,7 +430,7 @@ handle_source({'EXIT', _Pid, {shutdown, {server_initiated_close, _, Reason}}}, _
     {stop, {inbound_link_or_channel_closure, Reason}};
 
 handle_source({internal, delete_after_duration_expired}, _State) ->
-    exit({shutdown, autodelete});
+    {stop, {shutdown, autodelete}};
 
 handle_source(_Msg, _State) ->
     not_handled.
@@ -652,15 +654,39 @@ remaining(Ch, #{source := #{delete_after := 'queue-length',
 remaining(_Ch, #{source := #{delete_after := Count}}) ->
     Count.
 
-sched_expire_after_duration(Src) ->
-    case maps:get(delete_after_duration, Src, undefined) of
+sched_expire_after_duration(Name, Src) ->
+    case maps:get(delete_after_duration, Src) of
         Seconds when is_integer(Seconds), Seconds > 0 ->
-            Timer = rabbit_misc:send_after(Seconds * 1000, self(),
+            EffectSeconds = clamp_expire_after_duration(Seconds),
+            case EffectSeconds =:= Seconds of
+                true ->
+                    ok;
+                false ->
+                    case Name of
+                        {VHost, ShovelName} ->
+                            ?LOG_WARNING("Shovel '~ts' in vhost '~ts' has src-delete-after-duration "
+                                         "of ~tp seconds, adjusting to the minimum allowed ~tp seconds",
+                                         [ShovelName, VHost, Seconds, EffectSeconds]);
+                        ShovelName ->
+                            ?LOG_WARNING("Shovel '~ts' has src-delete-after-duration of ~tp seconds, "
+                                         "adjusting to the minimum allowed ~tp seconds",
+                                         [ShovelName, Seconds, EffectSeconds])
+                    end
+            end,
+
+            Timer = rabbit_misc:send_after(EffectSeconds * 1000, self(),
                                            {internal, delete_after_duration_expired}),
+
             Src#{delete_after_timer => Timer};
         _ ->
             Src
     end.
+
+clamp_expire_after_duration(Seconds) ->
+    ConfigFloor = application:get_env(?APP, delete_after_duration_floor,
+                                      ?SOFT_DELETE_AFTER_DURATION_FLOOR),
+    EffectFloor = max(?HARD_DELETE_AFTER_DURATION_FLOOR, ConfigFloor),
+    max(Seconds, EffectFloor).
 
 %%% PARSING
 
