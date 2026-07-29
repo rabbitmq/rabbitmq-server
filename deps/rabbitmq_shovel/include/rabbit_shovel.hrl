@@ -32,4 +32,7 @@
 -define(DEFAULT_ACK_MODE, on_confirm).
 -define(DEFAULT_RECONNECT_DELAY, 5).
 
+-define(SOFT_DELETE_AFTER_DURATION_FLOOR, 60).
+-define(HARD_DELETE_AFTER_DURATION_FLOOR, 15).
+
 -define(SHOVEL_GUIDE_URL, <<"https://rabbitmq.com/docs/shovel">>).

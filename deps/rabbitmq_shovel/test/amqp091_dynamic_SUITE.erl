@@ -313,6 +313,8 @@ validation(Config) ->
                   [{<<"src-delete-after-duration">>, <<"whenever">>} | QURIs]),
     invalid_param(Config,
                   [{<<"src-delete-after-duration">>, 100 * 365 * 24 * 60 * 60} | QURIs]),
+    valid_param(Config,
+                [{<<"src-delete-after-duration">>, 1} | QURIs]),
 
     %% Check properties have to look property-ish
     valid_param(Config,
@@ -533,20 +535,23 @@ credit_flow(Config) ->
       end).
 
 delete_after_duration_autodeletes(Config) ->
-    Duration = 5,
-    Before = erlang:monotonic_time(millisecond),
+    %% duration to be coerced to the floor
+    Duration = 1,
+    Floor = 15,
+    with_duration_floor(Config, Floor, fun() ->
+        Before = erlang:monotonic_time(millisecond),
+        shovel_test_utils:set_param(
+          Config, <<"test">>,
+          [{<<"src-queue">>,                 <<"src">>},
+           {<<"dest-queue">>,                <<"dest">>},
+           {<<"src-delete-after">>,          <<"never">>},
+           {<<"src-delete-after-duration">>, Duration}]),
 
-    shovel_test_utils:set_param(
-      Config, <<"test">>,
-      [{<<"src-queue">>,                 <<"src">>},
-       {<<"dest-queue">>,                <<"dest">>},
-       {<<"src-delete-after">>,          <<"never">>},
-       {<<"src-delete-after-duration">>, Duration}]),
+        await_autodelete(Config, <<"test">>),
 
-    await_autodelete(Config, <<"test">>),
-
-    Elapsed = erlang:monotonic_time(millisecond) - Before,
-    ?assert(Elapsed >= Duration * 1000),
+        Elapsed = erlang:monotonic_time(millisecond) - Before,
+        ?assert(Elapsed >= Floor * 1000)
+    end),
     ok.
 
 delete_after_duration_runs(Config) ->
@@ -573,9 +578,9 @@ delete_after_duration_runs_long(Config) ->
                  shovel_test_utils:get_shovel_status(Config, <<"test">>)).
 
 delete_after_duration_expired_handled(_Config) ->
-    ?assertExit({shutdown, autodelete},
-                rabbit_amqp091_shovel:handle_source(
-                  {internal, delete_after_duration_expired}, #{})),
+    ?assertEqual({stop, {shutdown, autodelete}},
+                 rabbit_amqp091_shovel:handle_source(
+                   {internal, delete_after_duration_expired}, #{})),
     ok.
 
 %%----------------------------------------------------------------------------
@@ -601,6 +606,25 @@ set_default_credit(Config, Value) ->
     OrigValue = rabbit_ct_broker_helpers:rpc(Config, persistent_term, get, [Key]),
     ok = rabbit_ct_broker_helpers:rpc(Config, persistent_term, put, [Key, Value]),
     OrigValue.
+
+with_duration_floor(Config, Value, Fun) ->
+    Key = delete_after_duration_floor,
+    OrigValue = rabbit_ct_broker_helpers:rpc(Config, application, get_env,
+                                             [rabbitmq_shovel, Key]),
+    ok = rabbit_ct_broker_helpers:rpc(Config, application, set_env,
+                                      [rabbitmq_shovel, Key, Value]),
+    try
+        Fun()
+    after
+        case OrigValue of
+            undefined ->
+                ok = rabbit_ct_broker_helpers:rpc(Config, application, unset_env,
+                                                  [rabbitmq_shovel, Key]);
+            {ok, Orig} ->
+                ok = rabbit_ct_broker_helpers:rpc(Config, application, set_env,
+                                                  [rabbitmq_shovel, Key, Orig])
+        end
+    end.
 
 message_count(Config, QueueName) ->
     Resource = rabbit_misc:r(<<"/">>, queue, QueueName),
