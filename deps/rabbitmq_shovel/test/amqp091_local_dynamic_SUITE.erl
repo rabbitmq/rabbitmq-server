@@ -134,6 +134,7 @@ init_per_group(amqp091, Config) ->
     rabbit_ct_helpers:set_config(
       Config,
       [
+       {outer_group, amqp091},
        {src_protocol, <<"amqp091">>},
        {dest_protocol, <<"amqp091">>}
       ]);
@@ -141,6 +142,7 @@ init_per_group(local, Config) ->
     rabbit_ct_helpers:set_config(
       Config,
       [
+       {outer_group, local},
        {src_protocol, <<"local">>},
        {dest_protocol, <<"local">>}
       ]);
@@ -148,6 +150,7 @@ init_per_group(amqp091_to_local, Config) ->
     rabbit_ct_helpers:set_config(
       Config,
       [
+       {outer_group, amqp091_to_local},
        {src_protocol, <<"amqp091">>},
        {dest_protocol, <<"local">>}
       ]);
@@ -155,6 +158,7 @@ init_per_group(local_to_amqp091, Config) ->
     rabbit_ct_helpers:set_config(
       Config,
       [
+       {outer_group, local_to_amqp091},
        {src_protocol, <<"local">>},
        {dest_protocol, <<"amqp091">>}
       ]);
@@ -172,8 +176,15 @@ end_per_group(_, Config) ->
     Config.
 
 init_per_testcase(Testcase, Config0) ->
+    %% tc_group_properties only reflects the innermost group (`tests' or
+    %% `predeclared_topology'), which is shared by all four outer groups
+    %% (amqp091, local, amqp091_to_local, local_to_amqp091). Since those
+    %% run in parallel, resource names must also include the outer group,
+    %% otherwise same-named test cases across them collide on the same
+    %% shovel parameter, queues and vhost.
+    OuterGroup = ?config(outer_group, Config0),
     Group = proplists:get_value(name, ?config(tc_group_properties, Config0)),
-    Unique = io_lib:format("~s_~s", [Group, Testcase]),
+    Unique = io_lib:format("~s_~s_~s", [OuterGroup, Group, Testcase]),
     SrcQ = list_to_binary(Unique ++ "_src"),
     DestQ = list_to_binary(Unique ++ "_dest"),
     VHost = list_to_binary(Unique ++ "_vhost"),

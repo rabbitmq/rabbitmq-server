@@ -44,14 +44,7 @@ init([Name, Config0]) ->
       ShovelName          -> ?LOG_DEBUG("Shovel '~ts' will use reconnection delay of ~ts", [ShovelName, Delay])
     end,
     Restart = case Delay of
-        N when is_integer(N) andalso N > 0 ->
-          case pget(<<"src-delete-after">>, Config, pget(<<"delete-after">>, Config, <<"never">>)) of
-            %% always try to reconnect
-            <<"never">>                        -> {permanent, N};
-            %% this Shovel is an autodelete one
-              M when is_integer(M) andalso M >= 0 -> {transient, N};
-              <<"queue-length">> -> {transient, N}
-          end;
+        N when is_integer(N) andalso N > 0 -> {permanent, N};
         %% reconnect-delay = 0 means "do not reconnect"
         _                                  -> temporary
     end,

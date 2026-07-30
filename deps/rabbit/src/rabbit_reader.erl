@@ -858,6 +858,19 @@ format_hard_error(Reason) ->
         false -> rabbit_misc:format("~tp", [Reason])
     end.
 
+%% A connection_forced exception is only ever raised when the connection is
+%% deliberately closed by an operator or by the broker itself (e.g.
+%% `rabbitmqctl close_connection`, the management UI, or maintenance mode
+%% draining) - see terminate/2. It is not a client-triggered protocol error,
+%% so it does not warrant `error`-level logging.
+log_hard_error(#v1{connection = #connection{log_name = ConnName,
+                                            user      = User,
+                                            vhost     = VHost}},
+              _Channel, #amqp_error{name = connection_forced,
+                                    explanation = Explanation}) ->
+    ?LOG_WARNING(
+        "Closing AMQP connection ~tp (~ts, vhost: '~ts', user: '~ts'): ~ts",
+        [self(), ConnName, VHost, User#user.username, Explanation]);
 log_hard_error(#v1{connection_state = CS,
                    connection = #connection{
                                    log_name  = ConnName,
