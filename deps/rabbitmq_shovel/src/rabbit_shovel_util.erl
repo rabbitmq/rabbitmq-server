@@ -134,6 +134,9 @@ bin_to_hex(Bin) ->
            true  -> N + $0 end>>
       || <<N:4>> <= Bin>>.
 
+%% The backend completes these args with its connection context before applying.
+-spec decl_fun(module(), {source | destination, proplists:proplist()}) ->
+          {module(), atom(), [term()]}.
 decl_fun(Mod, {source, Endpoint}) ->
     case parse_declaration({proplists:get_value(declarations, Endpoint, []), []}) of
         [] ->
@@ -142,7 +145,9 @@ decl_fun(Mod, {source, Endpoint}) ->
                             <<>> -> fail({invalid_parameter_value, declarations, {require_non_empty}});
                             Queue -> {Mod, check_fun, [Queue]}
                         end;
-                false -> {Mod, decl_fun, []}
+                %% [[]], not []: callers append the connection context, so
+                %% decl_fun still needs its leading declaration argument.
+                false -> {Mod, decl_fun, [[]]}
             end;
         Decl -> {Mod, decl_fun, [Decl]}
     end;
