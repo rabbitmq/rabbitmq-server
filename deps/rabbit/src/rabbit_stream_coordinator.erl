@@ -79,7 +79,12 @@
 %% exported for unit tests only
 -ifdef(TEST).
 -export([update_stream/3,
-         evaluate_stream/3]).
+         evaluate_stream/3,
+         run_action/6,
+         make_aux/1,
+         aux_running_count/1,
+         aux_pending_count/1,
+         aux_running_pids/1]).
 -endif.
 
 -include("rabbit_stream_coordinator.hrl").
@@ -88,6 +93,12 @@
 
 -define(REPLICA_FRESHNESS_LIMIT_MS, (10 * 1000)). %% 10s
 -define(SAC_CURRENT, rabbit_stream_sac_coordinator).
+%% Upper bound on the number of action worker processes the leader runs
+%% concurrently. Excess actions are queued in the aux state and started as
+%% running ones complete, so a mass stream event cannot spawn an unbounded
+%% number of workers (and feedback commands) at once. Overridable via the
+%% 'stream_coordinator_max_concurrent_actions' application environment key.
+-define(DEFAULT_MAX_CONCURRENT_ACTIONS, 64).
 
 -type state() :: #?MODULE{}.
 -type args() :: #{index := ra:index(),
@@ -961,13 +972,41 @@ remove_member(Leader, Members, Node) ->
     end.
 
 -record(aux, {actions = #{} ::
-              #{pid() := {stream_id(), #{node := node(),
-                                         index := non_neg_integer(),
-                                         epoch := osiris:epoch()}}},
-              resizer :: undefined | pid()}).
+              #{pid() := {stream_id(), atom(), #{node := node(),
+                                                 index := non_neg_integer(),
+                                                 epoch := osiris:epoch()}}},
+              resizer :: undefined | pid(),
+              %% actions waiting for a worker slot, started FIFO as running
+              %% actions complete
+              pending = queue:new() :: queue:queue(),
+              %% the maximum number of action workers to run at once
+              max_concurrency = ?DEFAULT_MAX_CONCURRENT_ACTIONS :: pos_integer()}).
 
 init_aux(_Name) ->
-    #aux{}.
+    #aux{max_concurrency = max_concurrent_actions()}.
+
+max_concurrent_actions() ->
+    case application:get_env(rabbit, stream_coordinator_max_concurrent_actions,
+                             ?DEFAULT_MAX_CONCURRENT_ACTIONS) of
+        N when is_integer(N), N > 0 ->
+            N;
+        _ ->
+            ?DEFAULT_MAX_CONCURRENT_ACTIONS
+    end.
+
+-ifdef(TEST).
+make_aux(MaxConcurrency) ->
+    #aux{max_concurrency = MaxConcurrency}.
+
+aux_running_count(#aux{actions = Actions}) ->
+    map_size(Actions).
+
+aux_pending_count(#aux{pending = Pending}) ->
+    queue:len(Pending).
+
+aux_running_pids(#aux{actions = Actions}) ->
+    maps:keys(Actions).
+-endif.
 
 %% TODO ensure the dead writer is restarted as a replica at some point in time, increasing timeout?
 handle_aux(leader, _, maybe_resize_coordinator_cluster,
@@ -1041,8 +1080,9 @@ handle_aux(leader, _, fail_active_actions,
     {no_reply, Aux, RaAux, []};
 handle_aux(leader, _, {down, Pid, normal},
            #aux{actions = Monitors} = Aux, RaAux) ->
-    %% action process finished normally, just remove from actions map
-    {no_reply, Aux#aux{actions = maps:remove(Pid, Monitors)}, RaAux, []};
+    %% action process finished normally: free the slot and start the next
+    %% pending action, if any
+    start_pending(Aux#aux{actions = maps:remove(Pid, Monitors)}, RaAux);
 handle_aux(leader, _, {down, Pid, Reason},
            #aux{actions = Monitors0} = Aux, RaAux) ->
     %% An action has failed - report back to the state machine
@@ -1051,11 +1091,10 @@ handle_aux(leader, _, {down, Pid, Reason},
             ?LOG_WARNING("~ts: error while executing action ~w for stream queue ~ts, "
                                " node ~ts, epoch ~b Err: ~w",
                                [?MODULE, Action, StreamId, Node, Epoch, Reason]),
-            Monitors = maps:remove(Pid, Monitors0),
             Cmd = {action_failed, StreamId, Args#{action => Action}},
             send_self_command(Cmd),
-            {no_reply, Aux#aux{actions = maps:remove(Pid, Monitors)},
-             RaAux, []};
+            %% free the slot and start the next pending action, if any
+            start_pending(Aux#aux{actions = maps:remove(Pid, Monitors0)}, RaAux);
         undefined ->
             %% should this ever happen?
             {no_reply, Aux, RaAux, []}
@@ -1098,7 +1137,20 @@ stream_overview0(#stream{epoch = Epoch,
 
 run_action(Action, StreamId, #{node := _Node,
                                epoch := _Epoch} = Args,
-           ActionFun, #aux{actions = Actions0} = Aux, RaAux) ->
+           ActionFun, #aux{actions = Actions0,
+                           pending = Pending0,
+                           max_concurrency = Max} = Aux, RaAux) ->
+    case map_size(Actions0) < Max of
+        true ->
+            start_action(Action, StreamId, Args, ActionFun, Aux, RaAux);
+        false ->
+            %% at capacity: defer the action until a running one completes
+            Pending = queue:in({Action, StreamId, Args, ActionFun}, Pending0),
+            {no_reply, Aux#aux{pending = Pending}, RaAux, []}
+    end.
+
+start_action(Action, StreamId, Args, ActionFun,
+             #aux{actions = Actions0} = Aux, RaAux) ->
     Coordinator = self(),
     Pid = spawn_link(fun() ->
                              ActionFun(),
@@ -1107,6 +1159,35 @@ run_action(Action, StreamId, #{node := _Node,
     Effects = [{monitor, process, aux, Pid}],
     Actions = Actions0#{Pid => {StreamId, Action, Args}},
     {no_reply, Aux#aux{actions = Actions}, RaAux, Effects}.
+
+%% Start the next queued action, if any and a slot is free. Actions whose
+%% stream has since been deleted are dropped rather than started (running one
+%% would leave an orphaned osiris member behind).
+start_pending(#aux{actions = Actions,
+                   pending = Pending0,
+                   max_concurrency = Max} = Aux, RaAux) ->
+    case map_size(Actions) < Max of
+        false ->
+            {no_reply, Aux, RaAux, []};
+        true ->
+            case queue:out(Pending0) of
+                {empty, _} ->
+                    {no_reply, Aux, RaAux, []};
+                {{value, {Action, StreamId, Args, ActionFun}}, Pending} ->
+                    Aux1 = Aux#aux{pending = Pending},
+                    case stream_exists(StreamId, RaAux) of
+                        true ->
+                            start_action(Action, StreamId, Args, ActionFun,
+                                         Aux1, RaAux);
+                        false ->
+                            start_pending(Aux1, RaAux)
+                    end
+            end
+    end.
+
+stream_exists(StreamId, RaAux) ->
+    #?MODULE{streams = Streams} = ra_aux:machine_state(RaAux),
+    is_map_key(StreamId, Streams).
 
 wrap_reply(From, Reply) ->
     [{reply, From, {wrap_reply, Reply}}].

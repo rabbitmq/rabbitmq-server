@@ -55,6 +55,8 @@ all_tests() ->
      action_failed_no_backoff_retries_immediately,
      reconcile_drops_superseded_parked_entry,
      state_enter_rearms_retry_timer,
+     action_throttling,
+     action_throttling_drops_deleted_stream,
      overview
     ].
 
@@ -82,6 +84,11 @@ init_per_testcase(TestCase, Config)
        TestCase =:= sac_pre_v7_ensure_monitors_should_use_monitors_map ->
     ok = meck:new(rabbit_stream_sac_coordinator, [no_link]),
     Config;
+init_per_testcase(TestCase, Config)
+  when TestCase =:= action_throttling;
+       TestCase =:= action_throttling_drops_deleted_stream ->
+    ok = meck:new(ra_aux, [passthrough, no_link]),
+    Config;
 init_per_testcase(_TestCase, Config) ->
     Config.
 
@@ -91,6 +98,11 @@ end_per_testcase(TestCase, _Config)
        TestCase =:= sac_pre_v7_down_handler_should_use_monitors_map;
        TestCase =:= sac_pre_v7_ensure_monitors_should_use_monitors_map ->
     meck:unload(rabbit_stream_sac_coordinator),
+    ok;
+end_per_testcase(TestCase, _Config)
+  when TestCase =:= action_throttling;
+       TestCase =:= action_throttling_drops_deleted_stream ->
+    meck:unload(ra_aux),
     ok;
 end_per_testcase(_TestCase, _Config) ->
     ok.
@@ -1790,6 +1802,89 @@ stranded_no_writer_reelection(_) ->
                                                machine_version => 7}), S0, []),
     ?assertMatch(#stream{epoch = E}, S2),
     ?assertEqual([], [A || {aux, {start_writer, _, _, _}} = A <- Actions2]),
+    ok.
+
+%% The leader must never run more than max_concurrency action workers at once;
+%% excess actions are queued and started as running ones complete.
+action_throttling(_) ->
+    MachineState = (rabbit_stream_coordinator:init(#{machine_version => 8}))#?STATE{
+                     streams = #{"s" => #stream{}}},
+    meck:expect(ra_aux, machine_state, fun(_) -> MachineState end),
+    RaAux = fake_ra_aux,
+    NoOp = fun() -> ok end,
+    Args = #{node => n1, epoch => 1, index => 1},
+    Run = fun(Aux) ->
+                  rabbit_stream_coordinator:run_action(starting, "s", Args, NoOp,
+                                                       Aux, RaAux)
+          end,
+    Complete = fun(Aux) ->
+                       [Pid | _] = rabbit_stream_coordinator:aux_running_pids(Aux),
+                       rabbit_stream_coordinator:handle_aux(
+                         leader, undefined, {down, Pid, normal}, Aux, RaAux)
+               end,
+
+    %% issue four actions with a limit of two
+    Aux0 = rabbit_stream_coordinator:make_aux(2),
+    {no_reply, Aux1, _, E1} = Run(Aux0),
+    {no_reply, Aux2, _, E2} = Run(Aux1),
+    {no_reply, Aux3, _, E3} = Run(Aux2),
+    {no_reply, Aux4, _, E4} = Run(Aux3),
+
+    %% only two started (each emitting a monitor effect), two are queued
+    ?assertEqual(2, rabbit_stream_coordinator:aux_running_count(Aux4)),
+    ?assertEqual(2, rabbit_stream_coordinator:aux_pending_count(Aux4)),
+    ?assertMatch([{monitor, process, aux, _}], E1),
+    ?assertMatch([{monitor, process, aux, _}], E2),
+    ?assertEqual([], E3),
+    ?assertEqual([], E4),
+
+    %% each completion starts exactly one queued action until the queue drains
+    {no_reply, Aux5, _, E5} = Complete(Aux4),
+    ?assertEqual(2, rabbit_stream_coordinator:aux_running_count(Aux5)),
+    ?assertEqual(1, rabbit_stream_coordinator:aux_pending_count(Aux5)),
+    ?assertMatch([{monitor, process, aux, _}], E5),
+
+    {no_reply, Aux6, _, _} = Complete(Aux5),
+    ?assertEqual(2, rabbit_stream_coordinator:aux_running_count(Aux6)),
+    ?assertEqual(0, rabbit_stream_coordinator:aux_pending_count(Aux6)),
+
+    %% with the queue empty, a completion just frees the slot
+    {no_reply, Aux7, _, E7} = Complete(Aux6),
+    ?assertEqual(1, rabbit_stream_coordinator:aux_running_count(Aux7)),
+    ?assertEqual(0, rabbit_stream_coordinator:aux_pending_count(Aux7)),
+    ?assertEqual([], E7),
+    ok.
+
+%% A queued action whose stream was deleted while it waited is dropped rather
+%% than started (starting it would orphan an osiris member).
+action_throttling_drops_deleted_stream(_) ->
+    MachineState = (rabbit_stream_coordinator:init(#{machine_version => 8}))#?STATE{
+                     streams = #{"live" => #stream{}}},
+    meck:expect(ra_aux, machine_state, fun(_) -> MachineState end),
+    RaAux = fake_ra_aux,
+    NoOp = fun() -> ok end,
+    Args = #{node => n1, epoch => 1, index => 1},
+    Run = fun(Stream, Aux) ->
+                  rabbit_stream_coordinator:run_action(starting, Stream, Args,
+                                                       NoOp, Aux, RaAux)
+          end,
+
+    %% limit of one: fill the slot, then queue one for a deleted stream and one
+    %% for the live stream
+    Aux0 = rabbit_stream_coordinator:make_aux(1),
+    {no_reply, Aux1, _, _} = Run("live", Aux0),
+    {no_reply, Aux2, _, []} = Run("gone", Aux1),
+    {no_reply, Aux3, _, []} = Run("live", Aux2),
+    ?assertEqual(1, rabbit_stream_coordinator:aux_running_count(Aux3)),
+    ?assertEqual(2, rabbit_stream_coordinator:aux_pending_count(Aux3)),
+
+    %% freeing the slot drops the "gone" action and starts the "live" one
+    [Pid | _] = rabbit_stream_coordinator:aux_running_pids(Aux3),
+    {no_reply, Aux4, _, E4} = rabbit_stream_coordinator:handle_aux(
+                                leader, undefined, {down, Pid, normal}, Aux3, RaAux),
+    ?assertEqual(1, rabbit_stream_coordinator:aux_running_count(Aux4)),
+    ?assertEqual(0, rabbit_stream_coordinator:aux_pending_count(Aux4)),
+    ?assertMatch([{monitor, process, aux, _}], E4),
     ok.
 
 overview(_Config) ->
