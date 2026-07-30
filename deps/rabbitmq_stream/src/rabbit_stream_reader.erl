@@ -85,6 +85,11 @@
 -define(SILENT_CLOSE_DELAY, 3_000).
 -define(METADATA_TIMEOUT, 10_000).
 -define(SAC_MOD, rabbit_stream_sac_coordinator).
+%% Ceiling for the wire parser before authentication and authorization
+%% (i.e. before a successful `open`) complete, regardless of the
+%% configured frame_max, so an unauthenticated peer can't make the
+%% server commit to a large per-connection buffer.
+-define(PRE_AUTH_FRAME_MAX, 8192).
 
 -import(rabbit_stream_utils, [check_write_permitted/2,
                               check_read_permitted/3,
@@ -199,7 +204,8 @@ init([KeepaliveSup,
                 #stream_connection_state{consumers = #{},
                                          blocked = false,
                                          data =
-                                             rabbit_stream_core:init(#{frame_max => FrameMax})},
+                                             rabbit_stream_core:init(#{frame_max =>
+                                                                           negotiate_frame_max(?PRE_AUTH_FRAME_MAX, FrameMax)})},
             Transport:setopts(RealSocket, [{active, once}]),
             _ = rabbit_alarm:register(self(), {?MODULE, resource_alarm, []}),
             ConnectionNegotiationStepTimeout =
@@ -1549,15 +1555,14 @@ handle_frame_pre_auth(_Transport,
                                          name = ConnectionName,
                                          frame_max = ConfiguredFrameMax} =
                           Connection,
-                      #stream_connection_state{blocked = Blocked,
-                                               data = CoreState0} = State,
+                      #stream_connection_state{blocked = Blocked} = State,
                       {tune, FrameMax, Heartbeat}) ->
     ?LOG_DEBUG("Tuning response ~tp ~tp ",
                                 [FrameMax, Heartbeat]),
     %% 0 on either side means "no limit" and must not be clamped to 0.
+    %% The parser stays clamped to ?PRE_AUTH_FRAME_MAX until `open`
+    %% succeeds; only Connection.frame_max is updated here.
     NegotiatedFrameMax = negotiate_frame_max(FrameMax, ConfiguredFrameMax),
-    CoreState = rabbit_stream_core:set_frame_max(NegotiatedFrameMax,
-                                                 CoreState0),
     Parent = self(),
     %% sending a message to the main process so the heartbeat frame is sent from this main process
     %% otherwise heartbeat frames can interleave with chunk delivery
@@ -1587,17 +1592,17 @@ handle_frame_pre_auth(_Transport,
                                   frame_max = NegotiatedFrameMax,
                                   heartbeat = Heartbeat,
                                   heartbeater = Heartbeater},
-     State#stream_connection_state{data = CoreState}};
+     State};
 handle_frame_pre_auth(Transport,
                       #stream_connection{user = User = #user{username = Username},
                                          socket = S,
                                          ranch_ref = RanchRef,
                                          transport = TransportLayer} =
                           Connection,
-                      State,
+                      #stream_connection_state{data = CoreState0} = State,
                       {request, CorrelationId, {open, VirtualHost}}) ->
     ?LOG_DEBUG("Open frame received for ~ts", [VirtualHost]),
-    Connection1 =
+    {Connection1, State1} =
         maybe
             ok ?= check_node_connection_limit(RanchRef),
             ok ?= check_vhost_alive(VirtualHost),
@@ -1621,7 +1626,11 @@ handle_frame_pre_auth(Transport,
             {_, Conn} = ensure_token_expiry_timer(User,
                                                   Connection#stream_connection{connection_step = opened,
                                                                                virtual_host = VirtualHost}),
-            Conn
+            %% Authenticated and authorized: switch the parser from the
+            %% pre-auth ceiling to the value negotiated at `tune`.
+            CoreState = rabbit_stream_core:set_frame_max(Conn#stream_connection.frame_max,
+                                                         CoreState0),
+            {Conn, State#stream_connection_state{data = CoreState}}
         else
             {error, Explanation} ->
                   ?LOG_WARNING("Opening connection failed: ~ts", [Explanation]),
@@ -1630,9 +1639,9 @@ handle_frame_pre_auth(Transport,
                                                  ?RESPONSE_VHOST_ACCESS_FAILURE,
                                                  #{}}}),
                   maybe_send_or_delay_frame(Transport, S, F, silent_close),
-                  Connection#stream_connection{connection_step = silent_close}
+                  {Connection#stream_connection{connection_step = silent_close}, State}
         end,
-    {Connection1, State};
+    {Connection1, State1};
 handle_frame_pre_auth(_Transport, Connection, State, heartbeat) ->
     ?LOG_DEBUG("Received heartbeat frame pre auth"),
     {Connection, State};

@@ -880,3 +880,8 @@ The client answers with a `Tune` frame with the settings he agrees on, possibly 
 from the server's suggestions.
 * Open: the client sends an `Open` frame to pick a virtual host to connect to. The server
 answers whether it accepts the access or not.
+
+Until `Open` completes successfully, the server enforces a low, fixed `frame_max` ceiling
+(8192 bytes) on incoming frames, regardless of the value negotiated (or yet to be negotiated)
+with `Tune`. This ceiling is high enough to accommodate realistic
+https://www.rabbitmq.com/docs/oauth2[JWT tokens] carried as the SASL PLAIN password.
