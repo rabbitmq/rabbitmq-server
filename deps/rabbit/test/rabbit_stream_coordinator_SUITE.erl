@@ -57,6 +57,7 @@ all_tests() ->
      state_enter_rearms_retry_timer,
      action_throttling,
      action_throttling_drops_deleted_stream,
+     aux_upgrade_from_prior_version,
      overview
     ].
 
@@ -86,7 +87,8 @@ init_per_testcase(TestCase, Config)
     Config;
 init_per_testcase(TestCase, Config)
   when TestCase =:= action_throttling;
-       TestCase =:= action_throttling_drops_deleted_stream ->
+       TestCase =:= action_throttling_drops_deleted_stream;
+       TestCase =:= aux_upgrade_from_prior_version ->
     ok = meck:new(ra_aux, [passthrough, no_link]),
     Config;
 init_per_testcase(_TestCase, Config) ->
@@ -101,7 +103,8 @@ end_per_testcase(TestCase, _Config)
     ok;
 end_per_testcase(TestCase, _Config)
   when TestCase =:= action_throttling;
-       TestCase =:= action_throttling_drops_deleted_stream ->
+       TestCase =:= action_throttling_drops_deleted_stream;
+       TestCase =:= aux_upgrade_from_prior_version ->
     meck:unload(ra_aux),
     ok;
 end_per_testcase(_TestCase, _Config) ->
@@ -1885,6 +1888,31 @@ action_throttling_drops_deleted_stream(_) ->
     ?assertEqual(1, rabbit_stream_coordinator:aux_running_count(Aux4)),
     ?assertEqual(0, rabbit_stream_coordinator:aux_pending_count(Aux4)),
     ?assertMatch([{monitor, process, aux, _}], E4),
+    ok.
+
+%% The aux state is transient and is not re-initialised by Ra when the machine
+%% version changes in place, so handle_aux must upgrade an aux record built by
+%% a pre-v8 version (record tag 'aux', {aux, Actions, Resizer}) rather than
+%% silently dropping the command.
+aux_upgrade_from_prior_version(_) ->
+    MachineState = (rabbit_stream_coordinator:init(#{machine_version => 8}))#?STATE{
+                     streams = #{"s" => #stream{}}},
+    meck:expect(ra_aux, machine_state, fun(_) -> MachineState end),
+    RaAux = fake_ra_aux,
+    Args = #{node => n1, epoch => 1, index => 1},
+    P1 = spawn(fun() -> ok end),
+    P2 = spawn(fun() -> ok end),
+    %% a pre-v8 aux record with two in-flight actions and no resizer
+    V7Aux = {aux,
+             #{P1 => {"s", starting, Args},
+               P2 => {"s", starting, Args}},
+             undefined},
+    %% a completion for P1 arriving on the old-shaped aux is handled without
+    %% crashing: the record is upgraded, P1 removed and P2 preserved
+    {no_reply, Aux1, _, _} = rabbit_stream_coordinator:handle_aux(
+                               leader, undefined, {down, P1, normal}, V7Aux, RaAux),
+    ?assertEqual(1, rabbit_stream_coordinator:aux_running_count(Aux1)),
+    ?assertEqual(0, rabbit_stream_coordinator:aux_pending_count(Aux1)),
     ok.
 
 overview(_Config) ->
