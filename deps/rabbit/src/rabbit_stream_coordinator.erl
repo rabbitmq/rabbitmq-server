@@ -1250,13 +1250,16 @@ send_action_failed(StreamId, Action, Arg, Backoff) ->
     send_self_command({action_failed, StreamId,
                        Arg#{action => Action, backoff => Backoff}}).
 
-%% Classify a failure into the backoff bucket the state machine should apply
-%% before retrying the action (see the retry_reconcile timer).
+%% Classify a failure so the state machine knows how to retry the action:
+%%   nodeup - the node is unreachable, wait for it to come back ({nodeup, _})
+%%            rather than polling (see maybe_park_action/5)
+%%   short  - a transient failure, retry after a fixed delay via retry_reconcile
+%%   none   - retry immediately (e.g. writer starts, which want a fast election)
 backoff_class({{nodedown, _}, _}) ->
-    long;
-backoff_class({noproc, _}) ->
-    short;
+    nodeup;
 backoff_class({error, nodedown}) ->
+    nodeup;
+backoff_class({noproc, _}) ->
     short;
 backoff_class({error, _}) ->
     short;
@@ -2284,12 +2287,16 @@ fail_active_actions(Streams, Exclude) ->
 
 fail_action(_StreamId, _, #member{current = undefined}) ->
     ok;
-fail_action(_StreamId, _, #member{current = {sleeping, _}}) ->
-    %% parked awaiting a retry: the retry reconcile owns re-driving it, so do
-    %% not fail it here (its action is not actually running)
+fail_action(_StreamId, _, #member{current = {sleeping, RetryAt}})
+  when is_integer(RetryAt) ->
+    %% parked on a timer: the retry_reconcile timer (re-armed on leader change)
+    %% owns re-driving it, so do not fail it here
     ok;
 fail_action(StreamId, Node, #member{role = {_, E},
                                     current = {Action, Idx}}) ->
+    %% this also covers a member parked as {sleeping, nodeup}: re-driving it on
+    %% leader change is the backstop for a {nodeup, Node} that may have been
+    %% delivered during the leadership gap and therefore missed
     ?LOG_DEBUG("~ts: failing stale action to trigger retry. "
                      "Stream ID: ~ts, node: ~w, action: ~w",
                      [?MODULE, StreamId, node(), Action]),
@@ -2311,9 +2318,7 @@ parked_tree(#?MODULE{parked = Parked}) ->
     Parked.
 
 backoff_ms(short) ->
-    ?ACTION_RETRY_SHORT_MS;
-backoff_ms(long) ->
-    ?ACTION_RETRY_LONG_MS.
+    ?ACTION_RETRY_SHORT_MS.
 
 %% Delay (ms) until the earliest parked retry is due. The tree is ordered by
 %% {RetryAtMs, StreamId, Node}, so the smallest key is the next retry.
@@ -2321,10 +2326,16 @@ retry_reconcile_delay(Parked, Now) ->
     {{RetryAt, _StreamId, _Node}, _} = gb_trees:smallest(Parked),
     max(0, RetryAt - Now).
 
-%% Park a member whose action just failed (v8+) so evaluate_stream leaves it
-%% alone until the retry is due. Only parks when this failure actually cleared
-%% the member's current action (matching action and index) and a non-none
-%% backoff was requested; writer starts and immediate retries use 'none'.
+%% Park a member whose action just failed so evaluate_stream leaves it alone
+%% until it should be retried. Only parks when this failure actually cleared the
+%% member's current action (matching action and index); writer starts and other
+%% immediate retries use the 'none' class and are not parked.
+%%
+%% A 'nodeup' failure (the node is down) parks the member as {sleeping, nodeup}
+%% and emits a node monitor so it is re-driven by the {nodeup, Node} command
+%% when the node returns, rather than polling a dead node on a timer. A 'short'
+%% failure parks as {sleeping, RetryAt} and is re-driven by the retry_reconcile
+%% timer.
 maybe_park_action(Meta,
                   {action_failed, StreamId, #{node := Node,
                                               index := Idx,
@@ -2338,13 +2349,8 @@ maybe_park_action(Meta,
                 #stream{members = #{Node := #member{current = {A, I}}}}
                   when A == Action andalso I == Idx ->
                     #{Node := M} = Members,
-                    RetryAt = maps:get(system_time, Meta) + backoff_ms(Class),
-                    M1 = M#member{current = {sleeping, RetryAt}},
-                    Parked1 = gb_trees:enter({RetryAt, StreamId, Node}, [], Parked),
-                    Effs = [{timer, retry_reconcile,
-                             retry_reconcile_delay(Parked1,
-                                                   maps:get(system_time, Meta))}],
-                    {Stream1#stream{members = Members#{Node => M1}}, Parked1, Effs};
+                    park_action(Class, Node, StreamId, M, Members, Meta,
+                                Stream1, Parked);
                 _ ->
                     %% the failure did not clear a matching action (stale or
                     %% already superseded), so there is nothing to park
@@ -2353,6 +2359,20 @@ maybe_park_action(Meta,
     end;
 maybe_park_action(_Meta, _Cmd, _Stream0, Stream1, Parked) ->
     {Stream1, Parked, []}.
+
+park_action(nodeup, Node, _StreamId, M, Members, _Meta, Stream1, Parked) ->
+    %% wait for the node to come back rather than polling; the node monitor
+    %% ensures the {nodeup, Node} command is delivered when it does
+    M1 = M#member{current = {sleeping, nodeup}},
+    {Stream1#stream{members = Members#{Node => M1}}, Parked,
+     [{monitor, node, Node}]};
+park_action(short, Node, StreamId, M, Members, Meta, Stream1, Parked) ->
+    RetryAt = maps:get(system_time, Meta) + backoff_ms(short),
+    M1 = M#member{current = {sleeping, RetryAt}},
+    Parked1 = gb_trees:enter({RetryAt, StreamId, Node}, [], Parked),
+    Effs = [{timer, retry_reconcile,
+             retry_reconcile_delay(Parked1, maps:get(system_time, Meta))}],
+    {Stream1#stream{members = Members#{Node => M1}}, Parked1, Effs}.
 
 %% Fired by the retry_reconcile timer: wake every parked member whose retry is
 %% due, re-driving each affected stream, then re-arm the timer for the next one.
