@@ -108,16 +108,27 @@ evaluate_stream(M, S, A) ->
 apply_cmd(M, C, S) ->
     rabbit_stream_coordinator:apply(M, C, S).
 
+%% Machine versions up to 7 are served by the frozen rabbit_stream_coordinator_v7
+%% module, so pre-v8 behaviour is exercised against it directly.
+apply_cmd_v7(M, C, S) ->
+    rabbit_stream_coordinator_v7:apply(M, C, S).
+
+update_stream_v7(M, C, S) ->
+    rabbit_stream_coordinator_v7:update_stream(M, C, S).
+
+evaluate_stream_v7(M, S, A) ->
+    rabbit_stream_coordinator_v7:evaluate_stream(M, S, A).
+
 register_listener(Args, S) ->
-    apply_cmd(meta(#{index => 42, machine_version => 2}),
-              {register_listener, Args}, S).
+    apply_cmd_v7(meta(#{index => 42, machine_version => 2}),
+                 {register_listener, Args}, S).
 
 eval_listeners(Stream) ->
     rabbit_stream_coordinator:eval_listeners(2, Stream, []).
 
 down(Pid, S) ->
-    apply_cmd(meta(#{index => 42, machine_version => 2}),
-              {down, Pid, reason}, S).
+    apply_cmd_v7(meta(#{index => 42, machine_version => 2}),
+                 {down, Pid, reason}, S).
 
 
 listeners(_) ->
@@ -364,8 +375,8 @@ sac_pre_v7_down_handler_should_use_monitors_map(_) ->
     State0 = #?STATE{single_active_consumer = SacState0,
                      monitors = Monitors0},
 
-    {State1, ok, _Effects} = apply_cmd(meta(#{index => 42, machine_version => 6}),
-                                       {down, ConnectionPid, normal}, State0),
+    {State1, ok, _Effects} = apply_cmd_v7(meta(#{index => 42, machine_version => 6}),
+                                          {down, ConnectionPid, normal}, State0),
 
     ?assert(meck:called(rabbit_stream_sac_coordinator, handle_connection_down,
                         ['_', ConnectionPid, normal, SacState0])),
@@ -378,22 +389,24 @@ sac_pre_v7_ensure_monitors_should_use_monitors_map(_) ->
     SacCmd = fake_sac_cmd,
     SacState0 = fake_sac_state,
     SacState1 = updated_sac_state,
+    %% the frozen v7 module calls the SAC module through its pre-version-aware
+    %% arity-2/4 entry points
     meck:expect(rabbit_stream_sac_coordinator, apply,
-                fun(_Meta, Cmd, State) when Cmd =:= SacCmd,
-                                            State =:= SacState0 ->
+                fun(Cmd, State) when Cmd =:= SacCmd,
+                                     State =:= SacState0 ->
                         {SacState1, {ok, true}, []}
                 end),
     meck:expect(rabbit_stream_sac_coordinator, ensure_monitors,
-                fun(_Meta, Cmd, State, Monitors, Effects) when Cmd =:= SacCmd,
-                                                               State =:= SacState1 ->
+                fun(Cmd, State, Monitors, Effects) when Cmd =:= SacCmd,
+                                                        State =:= SacState1 ->
                         {State, Monitors#{ConnectionPid => sac}, Effects}
                 end),
 
     State0 = #?STATE{single_active_consumer = SacState0,
                      monitors = #{}},
 
-    {State1, {ok, true}, _Effects} = apply_cmd(meta(#{index => 42, machine_version => 6}),
-                                               {sac, SacCmd}, State0),
+    {State1, {ok, true}, _Effects} = apply_cmd_v7(meta(#{index => 42, machine_version => 6}),
+                                                  {sac, SacCmd}, State0),
 
     ?assertEqual(#{ConnectionPid => sac}, State1#?STATE.monitors),
     ?assertEqual(SacState1, State1#?STATE.single_active_consumer),
@@ -1602,13 +1615,13 @@ member_started_stale_epoch(_) ->
                  S2Ev),
 
     %% pre-v8: the stale member_started is ignored and the member stays stuck
-    S3 = update_stream(meta(#{index => ?LINE, machine_version => 7}),
-                       StaleStarted, S1),
+    S3 = update_stream_v7(meta(#{index => ?LINE, machine_version => 7}),
+                          StaleStarted, S1),
     ?assertMatch(#stream{members = #{N3 := #member{current = {starting, OldIdx},
                                                    state = {ready, E1}}}},
                  S3),
-    {_, ActionsV7} = evaluate_stream(meta(#{index => ?LINE,
-                                            machine_version => 7}), S3, []),
+    {_, ActionsV7} = evaluate_stream_v7(meta(#{index => ?LINE,
+                                               machine_version => 7}), S3, []),
     ?assertNot(lists:any(fun ({aux, {stop, _, #{node := N}, _}}) -> N == N3;
                              (_) -> false
                          end, ActionsV7)),
@@ -1636,8 +1649,8 @@ replica_disconnected_nodeup(_) ->
                  S2),
 
     %% pre-v8: the replica stays disconnected
-    S3 = update_stream(meta(#{index => ?LINE, machine_version => 7}),
-                       {nodeup, N3}, S1),
+    S3 = update_stream_v7(meta(#{index => ?LINE, machine_version => 7}),
+                          {nodeup, N3}, S1),
     ?assertMatch(#stream{members = #{N3 := #member{state = {disconnected, E, Replica}}}},
                  S3),
     ok.
@@ -1723,14 +1736,14 @@ restart_stream_preserves_deleted(_) ->
 
     %% pre-v8: the deleted member is resurrected to 'stopped', producing two
     %% writers, and evaluate_stream then crashes in find_leader/1
-    S1V7 = update_stream((meta(#{index => ?LINE, machine_version => 7}))#{from => From},
-                         {restart_stream, StreamId, #{}}, S0),
+    S1V7 = update_stream_v7((meta(#{index => ?LINE, machine_version => 7}))#{from => From},
+                            {restart_stream, StreamId, #{}}, S0),
     ?assertMatch(#stream{members = #{N1 := #member{role = {writer, 1},
                                                    target = stopped},
                                      N2 := #member{role = {writer, 2},
                                                    target = stopped}}},
                  S1V7),
-    ?assertError({case_clause, _}, evaluate_stream(meta(?LINE), S1V7, [])),
+    ?assertError({case_clause, _}, evaluate_stream_v7(meta(?LINE), S1V7, [])),
     ok.
 
 stranded_no_writer_reelection(_) ->
@@ -1773,8 +1786,8 @@ stranded_no_writer_reelection(_) ->
     ?assertEqual(1, map_size(Writers)),
 
     %% pre-v8: no backstop, the stream stays stranded with no writer
-    {S2, Actions2} = evaluate_stream(meta(#{index => ?LINE,
-                                            machine_version => 7}), S0, []),
+    {S2, Actions2} = evaluate_stream_v7(meta(#{index => ?LINE,
+                                               machine_version => 7}), S0, []),
     ?assertMatch(#stream{epoch = E}, S2),
     ?assertEqual([], [A || {aux, {start_writer, _, _, _}} = A <- Actions2]),
     ok.
