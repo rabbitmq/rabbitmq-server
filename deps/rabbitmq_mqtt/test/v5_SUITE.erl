@@ -76,6 +76,7 @@ cluster_size_1_tests() ->
      client_rejects_publish,
      client_receive_maximum_min,
      client_receive_maximum_large,
+     client_receive_maximum_invalid,
      unsubscribe_success,
      unsubscribe_topic_not_found,
      subscription_option_no_local,
@@ -278,8 +279,8 @@ client_set_max_packet_size_connack(Config) ->
     %% We expect the server to drop the CONNACK packet because it's larger than 2 bytes.
     ?assertEqual({error, connack_timeout}, Connect(C)).
 
-%% "It is a Protocol Error to include the Receive Maximum
-%% value more than once or for it to have the value 0."
+%% "It is a Protocol Error to include the Maximum Packet Size
+%% more than once, or for the value to be set to zero." [MQTT 5.0 3.1.2.11.4]
 client_set_max_packet_size_invalid(Config) ->
     {C, Connect} = start_client(?FUNCTION_NAME, Config, 0,
                                 [{properties, #{'Maximum-Packet-Size' => 0}}]),
@@ -624,6 +625,14 @@ client_receive_maximum_large(Config) ->
     %% Receive Maximum value.
     assert_nothing_received(),
     ok = emqtt:disconnect(C).
+
+%% "It is a Protocol Error to include the Receive Maximum
+%% value more than once or for it to have the value 0." [MQTT 5.0 3.1.2.11.3]
+client_receive_maximum_invalid(Config) ->
+    {C, Connect} = start_client(?FUNCTION_NAME, Config, 0,
+                                [{properties, #{'Receive-Maximum' => 0}}]),
+    unlink(C),
+    ?assertMatch({error, _}, Connect(C)).
 
 unsubscribe_success(Config) ->
     C = connect(?FUNCTION_NAME, Config),

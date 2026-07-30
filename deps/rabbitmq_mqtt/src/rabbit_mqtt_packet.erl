@@ -348,7 +348,14 @@ parse_prop(<<16#1F, Len:16, Val:Len/binary, Rest/binary>>, Type, Props)
   when Type =:= ?PUBACK orelse Type =:= ?DISCONNECT ->
     parse_prop(Rest, Type, Props#{'Reason-String' => Val});
 parse_prop(<<16#21, Val:16, Bin/binary>>, ?CONNECT = Type, Props) ->
-    parse_prop(Bin, Type, Props#{'Receive-Maximum' => Val});
+    case Val of
+        0 ->
+            %% "It is a Protocol Error [...] for it to have the value 0."
+            %% [MQTT 5.0 3.1.2.11.3]
+            throw({invalid_receive_maximum, Val});
+        _ ->
+            parse_prop(Bin, Type, Props#{'Receive-Maximum' => Val})
+    end;
 parse_prop(<<16#22, Val:16, Bin/binary>>, ?CONNECT = Type, Props) ->
     parse_prop(Bin, Type, Props#{'Topic-Alias-Maximum' => Val});
 parse_prop(<<16#23, Val:16, Bin/binary>>, ?PUBLISH = Type, Props) ->
