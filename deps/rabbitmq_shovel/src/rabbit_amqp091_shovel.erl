@@ -687,16 +687,9 @@ sched_expire_after_duration(Name, Src) ->
                 true ->
                     ok;
                 false ->
-                    case Name of
-                        {VHost, ShovelName} ->
-                            ?LOG_WARNING("Shovel '~ts' in vhost '~ts' has src-delete-after-duration "
-                                         "of ~tp seconds, adjusting to the minimum allowed ~tp seconds",
-                                         [ShovelName, VHost, Seconds, EffectSeconds]);
-                        ShovelName ->
-                            ?LOG_WARNING("Shovel '~ts' has src-delete-after-duration of ~tp seconds, "
-                                         "adjusting to the minimum allowed ~tp seconds",
-                                         [ShovelName, Seconds, EffectSeconds])
-                    end
+                    ?LOG_WARNING("Shovel '~ts' has src-delete-after-duration of ~tp seconds, "
+                                 "adjusting to the minimum allowed ~tp seconds",
+                                 [Name, Seconds, EffectSeconds])
             end,
 
             Timer = rabbit_misc:send_after(EffectSeconds * 1000, self(),
