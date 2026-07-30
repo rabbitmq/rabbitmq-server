@@ -61,6 +61,7 @@ client_publish_qos2(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
 client_rejects_publish(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
 client_receive_maximum_min(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
 client_receive_maximum_large(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
+client_receive_maximum_invalid(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
 unsubscribe_success(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
 unsubscribe_topic_not_found(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
 subscription_option_no_local(Config) -> v5_SUITE:?FUNCTION_NAME(Config).
