@@ -127,6 +127,7 @@ groups() ->
        trace_classic_queue,
        trace_stream,
        user_id,
+       sections_out_of_order,
        message_ttl,
        plugin,
        idle_time_out_on_server,
@@ -5123,6 +5124,116 @@ user_id(Config) ->
     ok = end_session_sync(Session),
     ok = close_connection_sync(Connection).
 
+%% RabbitMQ should reject any message whose sections violate the order or
+%% cardinality mandated by §3.2.
+sections_out_of_order(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    Address = rabbitmq_amqp_address:queue(QName),
+    OpnConf = connection_config(Config),
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    {ok, Session} = amqp10_client:begin_session_sync(Connection),
+    {ok, LinkPair} = rabbitmq_amqp_client:attach_management_link_pair_sync(
+                       Session, <<"management link pair">>),
+    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, #{}),
+
+    Encode = fun(Section) -> iolist_to_binary(amqp10_framing:encode_bin(Section)) end,
+    Header = Encode(#'v1_0.header'{durable = true}),
+    MessageAnnotations = Encode(#'v1_0.message_annotations'{
+                                   content = [{{symbol, <<"x-forged">>}, {utf8, <<"v">>}}]}),
+    ForgedProperties = Encode(#'v1_0.properties'{user_id = {binary, <<"fake user">>}}),
+    AppProperties = Encode(#'v1_0.application_properties'{
+                              content = [{{utf8, <<"k">>}, {utf8, <<"v">>}}]}),
+    Data = Encode(#'v1_0.data'{content = <<"m1">>}),
+    Sequence = Encode(#'v1_0.amqp_sequence'{content = [{utf8, <<"m1">>}]}),
+    Value = Encode(#'v1_0.amqp_value'{content = {utf8, <<"m1">>}}),
+    Footer = Encode(#'v1_0.footer'{content = [{{symbol, <<"x-f">>}, {utf8, <<"v">>}}]}),
+
+    InvalidPayloads =
+    [
+     %% A section that must precede the body follows it instead.
+     <<Data/binary, Header/binary>>,
+     <<Data/binary, MessageAnnotations/binary>>,
+     <<Data/binary, ForgedProperties/binary>>,
+     <<Data/binary, AppProperties/binary>>,
+     <<Sequence/binary, ForgedProperties/binary>>,
+     <<Value/binary, ForgedProperties/binary>>,
+     %% Sections that precede the body appear more than once or out of order.
+     <<ForgedProperties/binary, ForgedProperties/binary, Data/binary>>,
+     <<MessageAnnotations/binary, Header/binary, Data/binary>>,
+     %% The body mixes section kinds or repeats an amqp-value section.
+     <<Data/binary, Sequence/binary>>,
+     <<Value/binary, Value/binary>>,
+     %% A section follows the footer.
+     <<Data/binary, Footer/binary, Footer/binary>>,
+     <<Data/binary, Footer/binary, Data/binary>>
+    ],
+
+    lists:foreach(
+      fun({N, Payload}) ->
+              LinkName = <<"sender ", (integer_to_binary(N))/binary>>,
+              {ok, Sender} = amqp10_client:attach_sender_link(
+                               Session, LinkName, Address, settled),
+              ok = wait_for_credit(Sender),
+              ok = amqp10_client:send_msg(
+                     Sender, amqp10_raw_msg:new(true, 0, Payload)),
+              receive
+                  {amqp10_event,
+                   {link, Sender,
+                    {detached, #'v1_0.error'{condition = Condition}}}} ->
+                      ?assertEqual(?V_1_0_AMQP_ERROR_DECODE_ERROR, Condition)
+              after 9000 ->
+                        flush(missing_detached),
+                        ct:fail({"expected the link to be detached for payload",
+                                 Payload})
+              end,
+              flush(detached)
+      end, lists:enumerate(InvalidPayloads)),
+
+    %% The very same forged user-id in a legal position is refused as well,
+    %% but by the user-id validation rather than by the parser.
+    {ok, Sender1} = amqp10_client:attach_sender_link(
+                      Session, <<"sender1">>, Address, settled),
+    ok = wait_for_credit(Sender1),
+    ok = amqp10_client:send_msg(
+           Sender1, amqp10_raw_msg:new(true, 0, <<ForgedProperties/binary, Data/binary>>)),
+    receive
+        {amqp10_event,
+         {link, Sender1, {detached, #'v1_0.error'{condition = Cond}}}} ->
+            ?assertEqual(?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS, Cond)
+    after 9000 -> flush(missing_detached),
+                  ct:fail("expected the link to be detached")
+    end,
+    flush(detached),
+
+    %% A message whose sections are in order is accepted, and the user-id the
+    %% consumer sees is the one RabbitMQ validated.
+    Properties = Encode(#'v1_0.properties'{user_id = {binary, <<"guest">>}}),
+    Valid = <<Header/binary, MessageAnnotations/binary, Properties/binary,
+              AppProperties/binary, Data/binary, Footer/binary>>,
+    {ok, Sender2} = amqp10_client:attach_sender_link(
+                      Session, <<"sender2">>, Address, unsettled),
+    ok = wait_for_credit(Sender2),
+    ok = amqp10_client:send_msg(
+           Sender2, amqp10_raw_msg:new(false, 0, Valid)),
+    ok = wait_for_accepts(1),
+    ok = detach_link_sync(Sender2),
+
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session, <<"receiver">>, Address, settled),
+    {ok, Msg} = amqp10_client:get_msg(Receiver),
+    ?assertEqual(<<"m1">>, amqp10_msg:body_bin(Msg)),
+    ?assertMatch(#{user_id := <<"guest">>},
+                 amqp10_msg:properties(Msg)),
+    ok = detach_link_sync(Receiver),
+
+    %% None of the rejected messages was queued.
+    ?assertMatch({ok, #{message_count := 0}},
+                 rabbitmq_amqp_client:delete_queue(LinkPair, QName)),
+    ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
+
+    ok = end_session_sync(Session),
+    ok = close_connection_sync(Connection).
+
 message_ttl(Config) ->
     QName = atom_to_binary(?FUNCTION_NAME),
     Address = rabbitmq_amqp_address:queue(QName),
@@ -6934,13 +7045,16 @@ reserved_annotation(Config) ->
     ok = amqp10_client:send_msg(Sender, Msg),
     receive
         {amqp10_event,
-         {session, Session,
-          {ended,
-           #'v1_0.error'{description = {utf8, Description}}}}} ->
+         {link, Sender,
+          {detached,
+           #'v1_0.error'{condition = Condition,
+                         description = {utf8, Description}}}}} ->
+            ?assertEqual(?V_1_0_AMQP_ERROR_DECODE_ERROR, Condition),
             ?assertMatch(
-               <<"{reserved_annotation_key,{symbol,<<\"reserved-key\">>}}", _/binary>>,
+               <<"failed to parse message: {reserved_annotation_key,",
+                 "{symbol,<<\"reserved-key\">>}}", _/binary>>,
                Description)
-    after 30000 -> flush(missing_ended),
+    after 9000 -> flush(missing_detached),
                   ct:fail({missing_event, ?LINE})
     end,
     ok = close_connection_sync(Connection).

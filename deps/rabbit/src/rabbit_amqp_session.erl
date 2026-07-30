@@ -2545,9 +2545,9 @@ incoming_link_transfer(
     rabbit_msg_size_metrics:observe(?PROTOCOL, PayloadSize),
     messages_received(Settled),
     Mc0 = try mc:init(mc_amqp, PayloadBin, #{})
-          catch missing_amqp_message_body ->
+          catch throw:Reason0 ->
                     link_error(?V_1_0_AMQP_ERROR_DECODE_ERROR,
-                               "message has no body", [])
+                               "failed to parse message: ~tp", [Reason0])
           end,
     case lookup_target(LinkExchange, LinkRKey, Mc0, Vhost, User, PermCache0) of
         {ok, X, RoutingKeys, Mc1, PermCache} ->

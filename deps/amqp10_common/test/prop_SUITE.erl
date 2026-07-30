@@ -26,6 +26,9 @@ groups() ->
        prop_annotated_message,
        prop_server_mode_body,
        prop_server_mode_bare_message,
+       prop_strict_server_mode,
+       prop_strict_server_mode_rejects_malformed,
+       prop_strict_server_mode_never_errors,
        prop_frame,
        prop_array32_terminates
       ]}
@@ -102,7 +105,7 @@ prop_server_mode_body(_Config) ->
                            Bin = iolist_to_binary([amqp10_framing:encode_bin(S) || S <- Sections]),
                            %% Invariant 1: Decoder should us return the correct
                            %% byte position of the first body section.
-                           Decoded = amqp10_framing:decode_bin(Bin, [server_mode]),
+                           Decoded = amqp10_framing:decode_bin(Bin, [{server_mode, false}]),
                            {value,
                             {{pos, Pos},
                              {body, Code}}} = lists:search(fun(({{pos, _Pos}, {body, _Code}})) ->
@@ -137,7 +140,7 @@ prop_server_mode_bare_message(_Config) ->
                            Bin = iolist_to_binary([amqp10_framing:encode_bin(S) || S <- Sections]),
                            %% Invariant: Decoder should us return the correct
                            %% byte position of the first bare message section.
-                           Decoded = amqp10_framing:decode_bin(Bin, [server_mode]),
+                           Decoded = amqp10_framing:decode_bin(Bin, [{server_mode, false}]),
                            {value,
                             {{pos, Pos}, _Sect}} = lists:search(fun(({{pos, _Pos}, _Sect})) ->
                                                                         true;
@@ -149,6 +152,55 @@ prop_server_mode_bare_message(_Config) ->
                            equals(FirstBareMsgSection, amqp10_framing:decode(Section))
                        end)
       end, [], 1000).
+
+%% Strict mode must accept every message whose sections comply with §3.2 and
+%% return exactly what the non-strict server mode returns.
+prop_strict_server_mode(_Config) ->
+    run_proper(
+      fun() -> ?FORALL(Sections,
+                       annotated_message(),
+                       begin
+                           Bin = iolist_to_binary(
+                                   [amqp10_framing:encode_bin(S) || S <- Sections]),
+                           equals(amqp10_binary_parser:parse_many(Bin, [{server_mode, false}]),
+                                  amqp10_binary_parser:parse_many(Bin, [{server_mode, true}]))
+                       end)
+      end, [], 300).
+
+%% Strict mode must reject every message that violates the AMQP 1.0 Core Spec, Part 3 §3.2 section
+%% order and cardinality.
+%%
+%% A valid message is mutated in one of these illegal ways and
+%% must be rejected with `unexpected_message_section`.
+prop_strict_server_mode_rejects_malformed(_Config) ->
+    run_proper(
+      fun() -> ?FORALL(Sections,
+                       annotated_message(),
+                       ?FORALL(Mutated,
+                               mutate(Sections),
+                               begin
+                                   Bin = iolist_to_binary(
+                                           [amqp10_framing:encode_bin(S) || S <- Mutated]),
+                                   try amqp10_binary_parser:parse_many(Bin, [{server_mode, true}]) of
+                                       _ -> false
+                                   catch
+                                       throw:{unexpected_message_section, _, _} -> true
+                                   end
+                               end))
+      end, [], 1000).
+
+%% Strict parsing of any binary must either succeed or throw. It must never let
+%% an error or a process exit escape, since only throws are caught on the ingress path.
+prop_strict_server_mode_never_errors(_Config) ->
+    run_proper(
+      fun() -> ?FORALL(Bin,
+                       binary(),
+                       try amqp10_binary_parser:parse_many(Bin, [{server_mode, true}]) of
+                           L when is_list(L) -> true
+                       catch
+                           throw:_ -> true
+                       end)
+      end, [], 5000).
 
 prop_frame(_Config) ->
     run_proper(
@@ -190,6 +242,48 @@ parse(Bin, Parsed, PosVal)
     BinPart = binary_part(Bin, Parsed, size(Bin) - Parsed),
     {Val, NumBytes} = amqp10_binary_parser:parse(BinPart),
     parse(Bin, Parsed + NumBytes, [{Parsed, Val} | PosVal]).
+
+is_body_section(#'v1_0.data'{}) -> true;
+is_body_section(#'v1_0.amqp_sequence'{}) -> true;
+is_body_section(#'v1_0.amqp_value'{}) -> true;
+is_body_section(_) -> false.
+
+%% Turns a valid annotated message into one that violates the AMQP 1.0 Core Spec, Part 3 §3.2 section
+%% order and cardinality. Every result is illegal and must be rejected with
+%% `unexpected_message_section`.
+%%
+%% More specifically:
+%%
+%%  * a section that must precede the body, or a second body, placed at the end
+%%  * a footer placed before the body
+%%  * the leading pre-body section is duplicated
+%%  * the first two pre-body sections swapped
+mutate(Sections) ->
+    IllegalTrailer = oneof([header_section(),
+                            delivery_annotation_section(),
+                            message_annotation_section(),
+                            properties_section(),
+                            application_properties_section(),
+                            amqp_value_section()]),
+    Duplicate = case Sections of
+                    [First | _] ->
+                        case is_body_section(First) of
+                            false -> [[First | Sections]];
+                            true -> []
+                        end;
+                    _ -> []
+                end,
+    Swap = case Sections of
+               [A, B | Rest] ->
+                   case (not is_body_section(A)) andalso (not is_body_section(B)) of
+                       true -> [[B, A | Rest]];
+                       false -> []
+                   end;
+               _ -> []
+           end,
+    oneof([?LET(S, IllegalTrailer, Sections ++ [S]),
+           ?LET(S, footer_section(), [S | Sections])
+          ] ++ Duplicate ++ Swap).
 
 %%%%%%%%%%%%%%%%%%
 %%% Generators %%%
