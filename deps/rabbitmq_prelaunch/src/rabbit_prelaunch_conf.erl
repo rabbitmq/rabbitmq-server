@@ -122,12 +122,7 @@ set_default_config() ->
                 {schedule_ms_limit, 0},
                 {heap_word_limit, 0},
                 {busy_port, false},
-                {busy_dist_port, true}]},
-              {mnesia,
-               [
-                {dump_log_write_threshold, 5000},
-                {dump_log_time_threshold, 90000}
-               ]}
+                {busy_dist_port, true}]}
               | OsirisConfig
              ],
     %% Don't apply any defaults for values already set in the init flags.
