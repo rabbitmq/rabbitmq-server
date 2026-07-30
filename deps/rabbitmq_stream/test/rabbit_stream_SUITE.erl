@@ -79,6 +79,7 @@ groups() ->
        test_consumer_with_too_long_reference_errors,
        subscribe_unsubscribe_should_create_events,
        oversized_frame_rejected_pre_auth,
+       oversized_frame_rejected_pre_auth_below_configured_ceiling,
        oversized_frame_rejected_post_auth,
        oversized_frame_rejected_after_tune_negotiation,
        frame_max_clamped_when_client_negotiates_higher,
@@ -630,6 +631,25 @@ oversized_frame_rejected_pre_auth(Config) ->
     FrameMax = rpc(Config, 0, application, get_env,
                    [rabbitmq_stream, frame_max, ?DEFAULT_FRAME_MAX]),
     OversizedSize = FrameMax + 1000,
+    Header = <<OversizedSize:32>>,
+    ?assertEqual(ok, gen_tcp:send(S, Header)),
+    ?assertEqual(closed, wait_for_socket_close(gen_tcp, S, 1)).
+
+%% Before a successful `open`, the parser is clamped to a small
+%% constant (8192, see ?PRE_AUTH_FRAME_MAX in rabbit_stream_reader),
+%% not the full configured frame_max, so an unauthenticated peer
+%% can't make the server commit to a large per-connection buffer.
+%% This size sits between the two, so only the tighter ceiling
+%% catches it.
+oversized_frame_rejected_pre_auth_below_configured_ceiling(Config) ->
+    Port = get_stream_port(Config),
+    {ok, S} = gen_tcp:connect("localhost", Port, [{active, false}, {mode, binary}]),
+    FrameMax = rpc(Config, 0, application, get_env,
+                   [rabbitmq_stream, frame_max, ?DEFAULT_FRAME_MAX]),
+    PreAuthFrameMax = 8192,
+    ?assert(PreAuthFrameMax < FrameMax),
+    OversizedSize = PreAuthFrameMax + 1000,
+    ?assert(OversizedSize < FrameMax),
     Header = <<OversizedSize:32>>,
     ?assertEqual(ok, gen_tcp:send(S, Header)),
     ?assertEqual(closed, wait_for_socket_close(gen_tcp, S, 1)).
