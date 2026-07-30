@@ -102,6 +102,15 @@ end}.
     {datatype, integer}
 ]}.
 
+%% Max frame size the server accepts before a connection is
+%% authenticated and authorized (a successful `open`).
+%%
+%% {initial_frame_max, 8192},
+
+{mapping, "stream.initial_frame_max", "rabbitmq_stream.initial_frame_max", [
+    {datatype, integer}
+]}.
+
 {mapping, "stream.heartbeat", "rabbitmq_stream.heartbeat", [
     {datatype, integer}
 ]}.

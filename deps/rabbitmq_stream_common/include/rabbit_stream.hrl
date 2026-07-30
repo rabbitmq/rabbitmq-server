@@ -84,6 +84,10 @@
 -define(DEFAULT_INITIAL_CREDITS, 50000).
 -define(DEFAULT_CREDITS_REQUIRED_FOR_UNBLOCKING, 12500).
 -define(DEFAULT_FRAME_MAX, 1048576). %% 1 MiB
+%% Frame size ceiling until a connection is authenticated and
+%% authorized (a successful `open`), bounding the buffer an
+%% unauthenticated peer can negotiate.
+-define(DEFAULT_INITIAL_FRAME_MAX, 8192). %% 8 KiB
 -define(DEFAULT_HEARTBEAT, 60). %% 60 seconds
 
 -define(STREAM_QUEUE_TYPE, rabbit_stream_queue).

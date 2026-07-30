@@ -34,9 +34,13 @@
 -import(rabbit_ct_helpers, [await_condition/1]).
 
 -define(WAIT, 5000).
+%% Below ?DEFAULT_INITIAL_FRAME_MAX, so a frame the default ceiling
+%% would accept is rejected once this setting is applied.
+-define(CUSTOM_INITIAL_FRAME_MAX, 4096).
 
 all() ->
-    [{group, single_node}, {group, single_node_1}, {group, cluster}].
+    [{group, single_node}, {group, single_node_1},
+     {group, single_node_initial_frame_max}, {group, cluster}].
 
 groups() ->
     [{single_node, [],
@@ -79,6 +83,7 @@ groups() ->
        test_consumer_with_too_long_reference_errors,
        subscribe_unsubscribe_should_create_events,
        oversized_frame_rejected_pre_auth,
+       oversized_frame_rejected_pre_auth_below_configured_ceiling,
        oversized_frame_rejected_post_auth,
        oversized_frame_rejected_after_tune_negotiation,
        frame_max_clamped_when_client_negotiates_higher,
@@ -92,6 +97,8 @@ groups() ->
      %% Run `test_global_counters` on its own so the global metrics are
      %% initialised to 0 for each testcase
      {single_node_1, [], [test_global_counters]},
+     {single_node_initial_frame_max, [],
+      [oversized_frame_rejected_pre_auth_custom_initial_frame_max]},
      {cluster, [], [test_stream, test_stream_tls, test_metadata, java,
                     test_resolve_offset_spec]}].
 
@@ -145,6 +152,21 @@ init_per_group(Group, Config)
                                                   500}]})
        end]
       ++ ExtraSetupSteps
+      ++ rabbit_ct_broker_helpers:setup_steps());
+init_per_group(single_node_initial_frame_max, Config) ->
+    Config1 = rabbit_ct_helpers:set_config(
+                Config, [{rmq_nodes_clustered, false},
+                         {rabbitmq_ct_tls_verify, verify_none},
+                         {rabbitmq_stream, verify_none}
+                        ]),
+    rabbit_ct_helpers:run_setup_steps(
+      Config1,
+      [fun(StepConfig) ->
+               rabbit_ct_helpers:merge_app_env(StepConfig,
+                                               {rabbitmq_stream,
+                                                [{initial_frame_max,
+                                                  ?CUSTOM_INITIAL_FRAME_MAX}]})
+       end]
       ++ rabbit_ct_broker_helpers:setup_steps());
 init_per_group(cluster = Group, Config) ->
     Config1 = rabbit_ct_helpers:set_config(
@@ -630,6 +652,44 @@ oversized_frame_rejected_pre_auth(Config) ->
     FrameMax = rpc(Config, 0, application, get_env,
                    [rabbitmq_stream, frame_max, ?DEFAULT_FRAME_MAX]),
     OversizedSize = FrameMax + 1000,
+    Header = <<OversizedSize:32>>,
+    ?assertEqual(ok, gen_tcp:send(S, Header)),
+    ?assertEqual(closed, wait_for_socket_close(gen_tcp, S, 1)).
+
+%% Before a successful `open`, the pre-auth ceiling governs frames, not
+%% the configured frame_max. This size sits between the two, so only the
+%% tighter ceiling rejects it.
+oversized_frame_rejected_pre_auth_below_configured_ceiling(Config) ->
+    Port = get_stream_port(Config),
+    {ok, S} = gen_tcp:connect("localhost", Port, [{active, false}, {mode, binary}]),
+    FrameMax = rpc(Config, 0, application, get_env,
+                   [rabbitmq_stream, frame_max, ?DEFAULT_FRAME_MAX]),
+    PreAuthFrameMax = rpc(Config, 0, application, get_env,
+                          [rabbitmq_stream, initial_frame_max,
+                           ?DEFAULT_INITIAL_FRAME_MAX]),
+    ?assert(PreAuthFrameMax < FrameMax),
+    OversizedSize = PreAuthFrameMax + 1000,
+    ?assert(OversizedSize < FrameMax),
+    Header = <<OversizedSize:32>>,
+    ?assertEqual(ok, gen_tcp:send(S, Header)),
+    ?assertEqual(closed, wait_for_socket_close(gen_tcp, S, 1)).
+
+%% A frame under the default ceiling but over the configured, lower
+%% `initial_frame_max` is rejected, so the setting is honoured.
+oversized_frame_rejected_pre_auth_custom_initial_frame_max(Config) ->
+    Port = get_stream_port(Config),
+    {ok, S} = gen_tcp:connect("localhost", Port, [{active, false}, {mode, binary}]),
+    FrameMax = rpc(Config, 0, application, get_env,
+                   [rabbitmq_stream, frame_max, ?DEFAULT_FRAME_MAX]),
+    PreAuthFrameMax = rpc(Config, 0, application, get_env,
+                          [rabbitmq_stream, initial_frame_max,
+                           ?DEFAULT_INITIAL_FRAME_MAX]),
+    ?assertEqual(?CUSTOM_INITIAL_FRAME_MAX, PreAuthFrameMax),
+    OversizedSize = PreAuthFrameMax + 1000,
+    %% The default ceiling would accept this size; only the configured,
+    %% lower value rejects it.
+    ?assert(OversizedSize < ?DEFAULT_INITIAL_FRAME_MAX),
+    ?assert(OversizedSize < FrameMax),
     Header = <<OversizedSize:32>>,
     ?assertEqual(ok, gen_tcp:send(S, Header)),
     ?assertEqual(closed, wait_for_socket_close(gen_tcp, S, 1)).
