@@ -53,6 +53,8 @@ all_tests() ->
      stranded_no_writer_reelection,
      action_failed_short_parks_and_reconciles,
      action_failed_no_backoff_retries_immediately,
+     action_failed_nodedown_waits_for_nodeup,
+     sleeping_nodeup_redriven_by_action_failed,
      reconcile_drops_superseded_parked_entry,
      state_enter_rearms_retry_timer,
      action_throttling,
@@ -1995,6 +1997,75 @@ action_failed_short_parks_and_reconciles(_) ->
     ?assertEqual(true, has_aux_start_replica(EffsDue, N2)),
     ?assertEqual({false, undefined}, find_retry_timer(EffsDue)),
     ?assertEqual(0, parked_size(State4)),
+    ok.
+
+%% A node-down failure parks the member as {sleeping, nodeup} and emits a node
+%% monitor (not a timer), so it is re-driven by {nodeup, Node} when the node
+%% returns rather than polling a dead node.
+action_failed_nodedown_waits_for_nodeup(_) ->
+    E = 1,
+    StreamId = atom_to_list(?FUNCTION_NAME),
+    LeaderPid = fake_pid(n1),
+    [Replica1, Replica2] = ReplicaPids = [fake_pid(n2), fake_pid(n3)],
+    N2 = node(Replica1),
+    S0 = started_stream(StreamId, LeaderPid, ReplicaPids),
+    S1 = update_stream(meta(?LINE), {down, Replica1, boom}, S0),
+    StartIdx = ?LINE,
+    {S2, [{aux, {start_replica, StreamId, #{node := N2}, _}}]} =
+        evaluate_stream(meta(StartIdx), S1, []),
+    State1 = coordinator_state_with(StreamId, S2),
+    %% the replica start fails because its node is down
+    {State2, ok, Effs} =
+        apply_cmd(meta(?LINE),
+                  {action_failed, StreamId, #{node => N2,
+                                              index => StartIdx,
+                                              epoch => E,
+                                              action => starting,
+                                              backoff => nodeup}},
+                  State1),
+    %% parked waiting for the node, not on the retry timer
+    ?assertMatch(#{StreamId := #stream{members = #{N2 := #member{current = {sleeping, nodeup}}}}},
+                 streams(State2)),
+    ?assertEqual(0, parked_size(State2)),
+    ?assertEqual({false, undefined}, find_retry_timer(Effs)),
+    ?assertEqual(false, has_aux_start_replica(Effs, N2)),
+    %% a node monitor is emitted so {nodeup, N2} will be delivered
+    ?assert(lists:member({monitor, node, N2}, Effs)),
+    %% when the node comes back the member is re-driven
+    {State3, ok, EffsUp} = apply_cmd(meta(?LINE), {nodeup, N2}, State2),
+    ?assertMatch(#{StreamId := #stream{members = #{N2 := #member{current = {starting, _}}}}},
+                 streams(State3)),
+    ?assertEqual(true, has_aux_start_replica(EffsUp, N2)),
+    ok.
+
+%% Backstop for a missed nodeup: fail_active_actions re-drives a
+%% {sleeping, nodeup} member on leader change by sending an action_failed for
+%% it (action 'sleeping'), which must clear the park and re-evaluate.
+sleeping_nodeup_redriven_by_action_failed(_) ->
+    E = 1,
+    StreamId = atom_to_list(?FUNCTION_NAME),
+    LeaderPid = fake_pid(n1),
+    [Replica1, Replica2] = ReplicaPids = [fake_pid(n2), fake_pid(n3)],
+    N2 = node(Replica1),
+    S0 = started_stream(StreamId, LeaderPid, ReplicaPids),
+    S1 = update_stream(meta(?LINE), {down, Replica1, boom}, S0),
+    {S2, _} = evaluate_stream(meta(?LINE), S1, []),
+    %% force the N2 member into the {sleeping, nodeup} park
+    #stream{members = Members} = S2,
+    M = maps:get(N2, Members),
+    S3 = S2#stream{members = Members#{N2 => M#member{current = {sleeping, nodeup}}}},
+    State0 = coordinator_state_with(StreamId, S3),
+    %% the command fail_active_actions/fail_action sends for such a member
+    {State1, ok, Effs} =
+        apply_cmd(meta(?LINE),
+                  {action_failed, StreamId, #{node => N2,
+                                              index => nodeup,
+                                              epoch => E,
+                                              action => sleeping}},
+                  State0),
+    ?assertMatch(#{StreamId := #stream{members = #{N2 := #member{current = {starting, _}}}}},
+                 streams(State1)),
+    ?assertEqual(true, has_aux_start_replica(Effs, N2)),
     ok.
 
 %% A 'none' backoff (e.g. writer start failures) must retry immediately without

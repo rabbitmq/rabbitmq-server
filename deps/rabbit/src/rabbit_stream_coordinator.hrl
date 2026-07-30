@@ -6,10 +6,10 @@
 -define(CMD_TIMEOUT, 30000).
 -define(RA_SYSTEM, coordination).
 -define(RPC_TIMEOUT, 1000).
-%% v8+: backoff before retrying a failed member action, applied by the state
-%% machine via the retry_reconcile timer rather than by sleeping in the worker.
+%% v8+: delay before retrying a transiently failed member action, applied by
+%% the state machine via the retry_reconcile timer rather than by sleeping in
+%% the worker. Node-down failures wait for {nodeup, _} instead of a timer.
 -define(ACTION_RETRY_SHORT_MS, 5000).
--define(ACTION_RETRY_LONG_MS, 10000).
 
 -type stream_id() :: string().
 -type stream() :: #{conf := osiris:config(),
@@ -29,8 +29,11 @@
          preferred = false :: term(),
          %% the currently running action, if any.
          %% {sleeping, RetryAtMs} (v8+) parks a member whose action failed
-         %% until the system time RetryAtMs, at which point the retry_reconcile
-         %% timer clears it and evaluate_stream re-drives the action.
+         %% transiently until the system time RetryAtMs, at which point the
+         %% retry_reconcile timer clears it and evaluate_stream re-drives it.
+         %% {sleeping, nodeup} (v8+) parks a member whose action failed because
+         %% its node is down; it is re-driven by the {nodeup, Node} command
+         %% (backstopped by fail_active_actions on leader change).
          current :: undefined |
                     {updating |
                      stopping |
