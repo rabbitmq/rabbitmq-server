@@ -971,7 +971,13 @@ remove_member(Leader, Members, Node) ->
             ok
     end.
 
--record(aux, {actions = #{} ::
+%% Tag of the current aux record. The aux state is transient (never
+%% snapshotted) and Ra does not re-initialise it when the effective machine
+%% version changes in place, so handle_aux/5 must recognise and upgrade an aux
+%% record built by an earlier version (see the upgrade clause below). Bump this
+%% tag whenever the aux record shape changes.
+-define(AUX, aux_v2).
+-record(aux_v2, {actions = #{} ::
               #{pid() := {stream_id(), atom(), #{node := node(),
                                                  index := non_neg_integer(),
                                                  epoch := osiris:epoch()}}},
@@ -983,7 +989,7 @@ remove_member(Leader, Members, Node) ->
               max_concurrency = ?DEFAULT_MAX_CONCURRENT_ACTIONS :: pos_integer()}).
 
 init_aux(_Name) ->
-    #aux{max_concurrency = max_concurrent_actions()}.
+    #?AUX{max_concurrency = max_concurrent_actions()}.
 
 max_concurrent_actions() ->
     case application:get_env(rabbit, stream_coordinator_max_concurrent_actions,
@@ -996,34 +1002,47 @@ max_concurrent_actions() ->
 
 -ifdef(TEST).
 make_aux(MaxConcurrency) ->
-    #aux{max_concurrency = MaxConcurrency}.
+    #?AUX{max_concurrency = MaxConcurrency}.
 
-aux_running_count(#aux{actions = Actions}) ->
+aux_running_count(#?AUX{actions = Actions}) ->
     map_size(Actions).
 
-aux_pending_count(#aux{pending = Pending}) ->
+aux_pending_count(#?AUX{pending = Pending}) ->
     queue:len(Pending).
 
-aux_running_pids(#aux{actions = Actions}) ->
+aux_running_pids(#?AUX{actions = Actions}) ->
     maps:keys(Actions).
 -endif.
 
+handle_aux(RaftState, Type, Cmd, Aux, RaAux)
+  when element(1, Aux) == aux ->
+    %% Upgrade an aux record built by a pre-v8 version
+    %% (rabbit_stream_coordinator_v7, record tag 'aux') that survived an
+    %% in-place machine version change. The in-flight action and resizer
+    %% tracking is preserved; the new fields (pending, max_concurrency) take
+    %% their defaults. Any actions in flight at the upgrade are recovered by
+    %% the state machine (fail_active_actions / re-evaluation) if they fail.
+    {aux, Actions, Resizer} = Aux,
+    Upgraded = #?AUX{actions = Actions,
+                     resizer = Resizer,
+                     max_concurrency = max_concurrent_actions()},
+    handle_aux(RaftState, Type, Cmd, Upgraded, RaAux);
 %% TODO ensure the dead writer is restarted as a replica at some point in time, increasing timeout?
 handle_aux(leader, _, maybe_resize_coordinator_cluster,
-           #aux{resizer = undefined} = Aux, RaAux) ->
+           #?AUX{resizer = undefined} = Aux, RaAux) ->
     Leader = ra_aux:leader_id(RaAux),
     MachineVersion = ra_aux:effective_machine_version(RaAux),
     SacNodes = sac_list_nodes(ra_aux:machine_state(RaAux), MachineVersion),
     Pid = maybe_resize_coordinator_cluster(Leader, SacNodes, MachineVersion),
-    {no_reply, Aux#aux{resizer = Pid}, RaAux, [{monitor, process, aux, Pid}]};
+    {no_reply, Aux#?AUX{resizer = Pid}, RaAux, [{monitor, process, aux, Pid}]};
 handle_aux(leader, _, maybe_resize_coordinator_cluster,
            AuxState, RaAux) ->
     %% Coordinator resizing is still happening, let's ignore this tick event
     {no_reply, AuxState, RaAux};
 handle_aux(leader, _, {down, Pid, _},
-           #aux{resizer = Pid} = Aux, RaAux) ->
+           #?AUX{resizer = Pid} = Aux, RaAux) ->
     %% Coordinator resizing has finished
-    {no_reply, Aux#aux{resizer = undefined}, RaAux};
+    {no_reply, Aux#?AUX{resizer = undefined}, RaAux};
 handle_aux(leader, _, {start_writer, StreamId,
                        #{epoch := Epoch, node := Node} = Args, Conf},
            Aux, RaAux) ->
@@ -1049,25 +1068,25 @@ handle_aux(leader, _, {stop, StreamId, #{node := Node,
     ActionFun = phase_stop_member(StreamId, Args, Conf),
     run_action(stopping, StreamId, Args, ActionFun, Aux, RaAux);
 handle_aux(leader, _, {update_mnesia, StreamId, Args, Conf},
-           #aux{actions = _Monitors} = Aux, RaAux) ->
+           #?AUX{actions = _Monitors} = Aux, RaAux) ->
     ?LOG_DEBUG("~ts: running action: 'update_mnesia'"
                      " for ~ts", [?MODULE, StreamId]),
     ActionFun = phase_update_mnesia(StreamId, Args, Conf),
     run_action(updating_mnesia, StreamId, Args, ActionFun, Aux, RaAux);
 handle_aux(leader, _, {update_retention, StreamId, Args, _Conf},
-           #aux{actions = _Monitors} = Aux, RaAux) ->
+           #?AUX{actions = _Monitors} = Aux, RaAux) ->
     ?LOG_DEBUG("~ts: running action: 'update_retention'"
                      " for ~ts", [?MODULE, StreamId]),
     ActionFun = phase_update_retention(StreamId, Args),
     run_action(update_retention, StreamId, Args, ActionFun, Aux, RaAux);
 handle_aux(leader, _, {delete_member, StreamId, #{node := Node} = Args, Conf},
-           #aux{actions = _Monitors} = Aux, RaAux) ->
+           #?AUX{actions = _Monitors} = Aux, RaAux) ->
     ?LOG_DEBUG("~ts: running action: 'delete_member'"
                      " for ~ts ~ts", [?MODULE, StreamId, Node]),
     ActionFun = phase_delete_member(StreamId, Args, Conf),
     run_action(delete_member, StreamId, Args, ActionFun, Aux, RaAux);
 handle_aux(leader, _, fail_active_actions,
-           #aux{actions = Actions} = Aux, RaAux) ->
+           #?AUX{actions = Actions} = Aux, RaAux) ->
     %% this bit of code just creates an exclude map of currently running
     %% tasks to avoid failing them, this could only really happen during
     %% a leader flipflap
@@ -1079,12 +1098,12 @@ handle_aux(leader, _, fail_active_actions,
     fail_active_actions(Streams, Exclude),
     {no_reply, Aux, RaAux, []};
 handle_aux(leader, _, {down, Pid, normal},
-           #aux{actions = Monitors} = Aux, RaAux) ->
+           #?AUX{actions = Monitors} = Aux, RaAux) ->
     %% action process finished normally: free the slot and start the next
     %% pending action, if any
-    start_pending(Aux#aux{actions = maps:remove(Pid, Monitors)}, RaAux);
+    start_pending(Aux#?AUX{actions = maps:remove(Pid, Monitors)}, RaAux);
 handle_aux(leader, _, {down, Pid, Reason},
-           #aux{actions = Monitors0} = Aux, RaAux) ->
+           #?AUX{actions = Monitors0} = Aux, RaAux) ->
     %% An action has failed - report back to the state machine
     case maps:get(Pid, Monitors0, undefined) of
         {StreamId, Action, #{node := Node, epoch := Epoch} = Args} ->
@@ -1094,7 +1113,7 @@ handle_aux(leader, _, {down, Pid, Reason},
             Cmd = {action_failed, StreamId, Args#{action => Action}},
             send_self_command(Cmd),
             %% free the slot and start the next pending action, if any
-            start_pending(Aux#aux{actions = maps:remove(Pid, Monitors0)}, RaAux);
+            start_pending(Aux#?AUX{actions = maps:remove(Pid, Monitors0)}, RaAux);
         undefined ->
             %% should this ever happen?
             {no_reply, Aux, RaAux, []}
@@ -1137,7 +1156,7 @@ stream_overview0(#stream{epoch = Epoch,
 
 run_action(Action, StreamId, #{node := _Node,
                                epoch := _Epoch} = Args,
-           ActionFun, #aux{actions = Actions0,
+           ActionFun, #?AUX{actions = Actions0,
                            pending = Pending0,
                            max_concurrency = Max} = Aux, RaAux) ->
     case map_size(Actions0) < Max of
@@ -1146,11 +1165,11 @@ run_action(Action, StreamId, #{node := _Node,
         false ->
             %% at capacity: defer the action until a running one completes
             Pending = queue:in({Action, StreamId, Args, ActionFun}, Pending0),
-            {no_reply, Aux#aux{pending = Pending}, RaAux, []}
+            {no_reply, Aux#?AUX{pending = Pending}, RaAux, []}
     end.
 
 start_action(Action, StreamId, Args, ActionFun,
-             #aux{actions = Actions0} = Aux, RaAux) ->
+             #?AUX{actions = Actions0} = Aux, RaAux) ->
     Coordinator = self(),
     Pid = spawn_link(fun() ->
                              ActionFun(),
@@ -1158,12 +1177,12 @@ start_action(Action, StreamId, Args, ActionFun,
                      end),
     Effects = [{monitor, process, aux, Pid}],
     Actions = Actions0#{Pid => {StreamId, Action, Args}},
-    {no_reply, Aux#aux{actions = Actions}, RaAux, Effects}.
+    {no_reply, Aux#?AUX{actions = Actions}, RaAux, Effects}.
 
 %% Start the next queued action, if any and a slot is free. Actions whose
 %% stream has since been deleted are dropped rather than started (running one
 %% would leave an orphaned osiris member behind).
-start_pending(#aux{actions = Actions,
+start_pending(#?AUX{actions = Actions,
                    pending = Pending0,
                    max_concurrency = Max} = Aux, RaAux) ->
     case map_size(Actions) < Max of
@@ -1174,7 +1193,7 @@ start_pending(#aux{actions = Actions,
                 {empty, _} ->
                     {no_reply, Aux, RaAux, []};
                 {{value, {Action, StreamId, Args, ActionFun}}, Pending} ->
-                    Aux1 = Aux#aux{pending = Pending},
+                    Aux1 = Aux#?AUX{pending = Pending},
                     case stream_exists(StreamId, RaAux) of
                         true ->
                             start_action(Action, StreamId, Args, ActionFun,
