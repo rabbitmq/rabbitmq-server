@@ -87,11 +87,6 @@
 -define(SILENT_CLOSE_DELAY, 3_000).
 -define(METADATA_TIMEOUT, 10_000).
 -define(SAC_MOD, rabbit_stream_sac_coordinator).
-%% Ceiling for the wire parser before authentication and authorization
-%% (i.e. before a successful `open`) complete, regardless of the
-%% configured frame_max, so an unauthenticated peer can't make the
-%% server commit to a large per-connection buffer.
--define(PRE_AUTH_FRAME_MAX, 8192).
 
 -import(rabbit_stream_utils, [check_write_permitted/2,
                               check_read_permitted/3,
@@ -152,6 +147,7 @@ init([KeepaliveSup,
       #{initial_credits := InitialCredits,
         credits_required_for_unblocking := CreditsRequiredBeforeUnblocking,
         frame_max := FrameMax,
+        initial_frame_max := InitialFrameMax,
         heartbeat := Heartbeat,
         transport := ConnTransport}]) ->
     process_flag(trap_exit, true),
@@ -202,12 +198,15 @@ init([KeepaliveSup,
                                    outstanding_requests = #{},
                                    request_timeout = RequestTimeout,
                                    deliver_version = DeliverVersion},
+            %% Until `open` succeeds, an unauthenticated peer must not be
+            %% able to negotiate a large per-connection buffer.
+            PreAuthFrameMax = negotiate_frame_max(InitialFrameMax, FrameMax),
             State =
                 #stream_connection_state{consumers = #{},
                                          blocked = false,
                                          data =
                                              rabbit_stream_core:init(#{frame_max =>
-                                                                           negotiate_frame_max(?PRE_AUTH_FRAME_MAX, FrameMax)})},
+                                                                           PreAuthFrameMax})},
             Transport:setopts(RealSocket, [{active, once}]),
             _ = rabbit_alarm:register(self(), {?MODULE, resource_alarm, []}),
             ConnectionNegotiationStepTimeout =
@@ -1564,7 +1563,7 @@ handle_frame_pre_auth(_Transport,
     ?LOG_DEBUG("Tuning response ~tp ~tp ",
                                 [FrameMax, Heartbeat]),
     %% 0 on either side means "no limit" and must not be clamped to 0.
-    %% The parser stays clamped to ?PRE_AUTH_FRAME_MAX until `open`
+    %% The parser stays clamped to the pre-auth ceiling until `open`
     %% succeeds; only Connection.frame_max is updated here.
     NegotiatedFrameMax = negotiate_frame_max(FrameMax, ConfiguredFrameMax),
     Parent = self(),
