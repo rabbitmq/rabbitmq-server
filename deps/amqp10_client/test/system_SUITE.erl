@@ -52,6 +52,7 @@ groups() ->
       ]},
      {mock, [], [
                  insufficient_credit,
+                 open_refused,
                  attach_refused,
                  incoming_heartbeat,
                  multi_transfer_without_delivery_id
@@ -823,6 +824,31 @@ insufficient_credit(Config) ->
     ok = amqp10_client:end_session(Session),
     ok = amqp10_client:close_connection(Connection),
     ok.
+
+open_refused(Config) ->
+    Hostname = ?config(mock_host, Config),
+    Port = ?config(mock_port, Config),
+    %% Reply to the client's open frame with a close frame, i.e. refuse
+    %% the connection while the client is still in the open_sent state.
+    OpenStep = fun({0 = Ch, #'v1_0.open'{}, _Pay}) ->
+                       Err = #'v1_0.error'{
+                                condition = ?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS,
+                                description = {utf8, <<"virtual host does not exist">>}},
+                       {Ch, [#'v1_0.close'{error = Err}]}
+               end,
+    Steps = [fun mock_server:recv_amqp_header_step/1,
+             fun mock_server:send_amqp_header_step/1,
+             mock_server:amqp_step(OpenStep)],
+    ok = mock_server:set_steps(?config(mock_server, Config), Steps),
+
+    Cfg = #{address => Hostname, port => Port, sasl => none, notify => self()},
+    {ok, Connection} = amqp10_client:open_connection(Cfg),
+    receive
+        {amqp10_event,
+         {connection, Connection,
+          {closed, {unauthorized_access, <<"virtual host does not exist">>}}}} -> ok
+    after 5000 -> exit(close_timeout)
+    end.
 
 attach_refused(Config) ->
     Hostname = ?config(mock_host, Config),

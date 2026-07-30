@@ -22,7 +22,8 @@
 
 -record(state, {name :: binary() | {rabbit_types:vhost(), binary()},
                 type :: static | dynamic,
-                config :: rabbit_shovel_behaviour:state(),
+                %% 'undefined' after a dynamic Shovel's parameters fail to parse
+                config :: rabbit_shovel_behaviour:state() | undefined,
                 last_reported_status = {running, #{}} :: {rabbit_shovel_status:blocked_status(), rabbit_shovel_status:metrics()}}).
 
 start_link(Type, Name, Config) ->
@@ -45,20 +46,8 @@ maybe_start_link(_, Type, Name, Config) ->
 %% Gen Server Implementation
 %%---------------------------
 
-init([Type, Name, Config0]) ->
+init([Type, Name, Config]) ->
     logger:set_process_metadata(#{domain => ?RMQLOG_DOMAIN_SHOVEL}),
-    Config = case Type of
-                static ->
-                     Config0;
-                dynamic ->
-                    ClusterName = rabbit_nodes:cluster_name(),
-                     %% TODO It could handle errors while parsing
-                     %% (i.e. missing predeclared queues) and stop nicely
-                     %% without long stacktraces
-                    {ok, Mod} = rabbit_registry:lookup_module(runtime_parameter, shovel),
-                    {ok, Conf} = Mod:parse(Name, ClusterName, Config0),
-                    Conf
-            end,
     ?LOG_DEBUG("Initialising a Shovel ~ts of type '~ts'", [human_readable_name(Name), Type]),
     gen_server2:cast(self(), init),
     {ok, #state{name = Name, type = Type, config = Config}}.
@@ -66,22 +55,28 @@ init([Type, Name, Config0]) ->
 handle_call(_Msg, _From, State) ->
     {noreply, State}.
 
-handle_cast(init, State = #state{config = Config0}) ->
-    ?LOG_DEBUG("Shovel ~ts is reporting its status", [human_readable_name(State#state.name)]),
-    rabbit_shovel_status:report(State#state.name, State#state.type, starting),
-    ?LOG_INFO("Shovel ~ts will now try to connect...", [human_readable_name(State#state.name)]),
-    try rabbit_shovel_behaviour:connect_source(Config0) of
-      Config ->
-        ?LOG_DEBUG("Shovel ~ts connected to source", [human_readable_name(maps:get(name, Config))]),
-        %% this makes sure that connection pid is updated in case
-        %% any of the subsequent connection/init steps fail. See
-        %% rabbitmq/rabbitmq-shovel#54 for context.
-        gen_server2:cast(self(), connect_dest),
-        {noreply, State#state{config = Config}}
-    catch E:R ->
-      ?LOG_ERROR("Shovel ~ts could not connect to source: ~p ~p",
-                 [human_readable_name(maps:get(name, Config0)), E, R]),
-      {stop, {shutdown, inbound_conn_failed}, State}
+handle_cast(init, State0 = #state{name = Name, type = Type}) ->
+    ?LOG_DEBUG("Shovel ~ts is reporting its status", [human_readable_name(Name)]),
+    rabbit_shovel_status:report(Name, Type, starting),
+    case parse_config(State0) of
+        {ok, State = #state{config = Config0}} ->
+            ?LOG_INFO("Shovel ~ts will now try to connect...", [human_readable_name(Name)]),
+            try rabbit_shovel_behaviour:connect_source(Config0) of
+              Config ->
+                ?LOG_DEBUG("Shovel ~ts connected to source", [human_readable_name(maps:get(name, Config))]),
+                %% this makes sure that connection pid is updated in case
+                %% any of the subsequent connection/init steps fail. See
+                %% rabbitmq/rabbitmq-shovel#54 for context.
+                gen_server2:cast(self(), connect_dest),
+                {noreply, State#state{config = Config}}
+            catch E:R ->
+              ?LOG_WARNING("Shovel ~ts could not connect to source: ~p ~p",
+                           [human_readable_name(Name), E, R]),
+              report_terminated(State, "failed to connect to source"),
+              {stop, {shutdown, restart}, State}
+            end;
+        {stop, _, _} = Stop ->
+            Stop
     end;
 handle_cast(connect_dest, State = #state{config = Config0}) ->
     try rabbit_shovel_behaviour:connect_dest(Config0) of
@@ -90,22 +85,37 @@ handle_cast(connect_dest, State = #state{config = Config0}) ->
         gen_server2:cast(self(), init_shovel),
         {noreply, State#state{config = Config}}
     catch E:R ->
-      ?LOG_ERROR("Shovel ~ts could not connect to destination: ~p ~p",
-                 [human_readable_name(maps:get(name, Config0)), E, R]),
-      {stop, {shutdown, outbond_conn_failed}, State}
+      ?LOG_WARNING("Shovel ~ts could not connect to destination: ~p ~p",
+                   [human_readable_name(maps:get(name, Config0)), E, R]),
+      report_terminated(State, "failed to connect to destination"),
+      {stop, {shutdown, restart}, State}
     end;
 handle_cast(init_shovel, State = #state{config = Config}) ->
     %% Don't trap exits until we have established connections so that
     %% if we try to shut down while waiting for a connection to be
     %% established then we don't block
     process_flag(trap_exit, true),
-    Config1 = rabbit_shovel_behaviour:init_dest(Config),
-    Config2 = rabbit_shovel_behaviour:init_source(Config1),
-    ?LOG_DEBUG("Shovel ~ts has finished setting up its topology",
-               [human_readable_name(maps:get(name, Config2))]),
-    State1 = State#state{config = Config2},
-    ok = report_running(State1),
-    {noreply, State1};
+    try
+        Config1 = rabbit_shovel_behaviour:init_dest(Config),
+        Config2 = rabbit_shovel_behaviour:init_source(Config1),
+        ?LOG_DEBUG("Shovel ~ts has finished setting up its topology",
+                   [human_readable_name(maps:get(name, Config2))]),
+        State1 = State#state{config = Config2},
+        ok = report_running(State1),
+        {noreply, State1}
+    catch
+        exit:{shutdown, autodelete} ->
+            %% `init_source/1` exits with this reason when a 'delete-after'
+            %% shovel has nothing left to transfer; see `terminate/2`.
+            {stop, {shutdown, autodelete}, State};
+        E:R ->
+            %% Topology setup failed, e.g. a predeclared queue is missing.
+            %% Same handling as the connect phases above.
+            ?LOG_WARNING("Shovel ~ts could not set up its topology: ~p ~p",
+                         [human_readable_name(maps:get(name, Config)), E, R]),
+            report_terminated(State, "failed to set up topology"),
+            {stop, {shutdown, restart}, State}
+    end;
 handle_cast(Msg, State) ->
     handle_msg(Msg, State).
 
@@ -121,42 +131,50 @@ handle_msg(Msg, State = #state{config = Config, name = Name}) ->
                                  [human_readable_name(Name), Msg]),
                     {noreply, State};
                 {stop, {outbound_conn_died, heartbeat_timeout}} ->
-                    ?LOG_ERROR("Shovel ~ts detected missed heartbeats on destination connection",
-                               [human_readable_name(Name)]),
-                    {stop, {shutdown, heartbeat_timeout}, State};
+                    ?LOG_WARNING("Shovel ~ts detected missed heartbeats on destination connection",
+                                 [human_readable_name(Name)]),
+                    report_terminated(State, "heartbeat timeout"),
+                    {stop, {shutdown, restart}, State};
                 {stop, {outbound_conn_died, Reason}} ->
-                    ?LOG_ERROR("Shovel ~ts detected destination connection failure: ~tp",
-                               [human_readable_name(Name), Reason]),
-                    {stop, Reason, State};
-	            {stop, {outbound_link_or_channel_closure, Reason}} ->
-    		        ?LOG_ERROR("Shovel ~ts detected destination shovel failure: ~tp",
-    		                   [human_readable_name(Name), Reason]),
-    		        {stop, Reason, State};
+                    ?LOG_WARNING("Shovel ~ts detected destination connection failure: ~tp",
+                                 [human_readable_name(Name), Reason]),
+                    report_terminated(State, Reason),
+                    {stop, {shutdown, restart}, State};
+                {stop, {outbound_link_or_channel_closure, Reason}} ->
+                    ?LOG_WARNING("Shovel ~ts detected destination shovel failure: ~tp",
+                                 [human_readable_name(Name), Reason]),
+                    report_terminated(State, Reason),
+                    {stop, {shutdown, restart}, State};
                 {stop, Reason} ->
                     ?LOG_DEBUG("Shovel ~ts decided to stop due a message from destination: ~tp",
                                [human_readable_name(Name), Reason]),
-                    {stop, Reason, State};
+                    report_terminated(State, Reason),
+                    {stop, {shutdown, restart}, State};
                 Config1 ->
                     State1 = State#state{config = Config1},
                     State2 = maybe_report_blocked_status(State1),
                     {noreply, State2}
             end;
         {stop, {inbound_conn_died, heartbeat_timeout}} ->
-            ?LOG_ERROR("Shovel ~ts detected missed heartbeats on source connection",
-                       [human_readable_name(Name)]),
-            {stop, {shutdown, heartbeat_timeout}, State};
+            ?LOG_WARNING("Shovel ~ts detected missed heartbeats on source connection",
+                         [human_readable_name(Name)]),
+            report_terminated(State, "heartbeat timeout"),
+            {stop, {shutdown, restart}, State};
         {stop, {inbound_conn_died, Reason}} ->
-            ?LOG_ERROR("Shovel ~ts detected source connection failure: ~tp",
-                       [human_readable_name(Name), Reason]),
-            {stop, Reason, State};
+            ?LOG_WARNING("Shovel ~ts detected source connection failure: ~tp",
+                         [human_readable_name(Name), Reason]),
+            report_terminated(State, Reason),
+            {stop, {shutdown, restart}, State};
         {stop, {inbound_link_or_channel_closure, Reason}} ->
-	        ?LOG_ERROR("Shovel ~ts detected source Shovel (or link,  or channel) failure: ~tp",
-	                   [human_readable_name(Name), Reason]),
-	        {stop, Reason, State};
+            ?LOG_WARNING("Shovel ~ts detected source Shovel (or link,  or channel) failure: ~tp",
+                         [human_readable_name(Name), Reason]),
+            report_terminated(State, Reason),
+            {stop, {shutdown, restart}, State};
         {stop, Reason} ->
-            ?LOG_ERROR("Shovel ~ts decided to stop due a message from source: ~tp",
-                       [human_readable_name(Name), Reason]),
-            {stop, Reason, State};
+            ?LOG_WARNING("Shovel ~ts decided to stop due a message from source: ~tp",
+                         [human_readable_name(Name), Reason]),
+            report_terminated(State, Reason),
+            {stop, {shutdown, restart}, State};
         Config1 ->
             State1 = State#state{config = Config1},
             State2 = maybe_report_blocked_status(State1),
@@ -178,66 +196,29 @@ terminate(shutdown, State = #state{name = Name}) ->
     close_connections(State),
     rabbit_shovel_status:remove(Name),
     ok;
+terminate({shutdown, socket_closed_unexpectedly}, State) ->
+    terminate(socket_closed_unexpectedly, State);
 terminate(socket_closed_unexpectedly, State = #state{name = Name}) ->
-    ?LOG_ERROR("Shovel ~ts is stopping because of the socket closed unexpectedly",
-               [human_readable_name(Name)]),
+    ?LOG_WARNING("Shovel ~ts is stopping because of the socket closed unexpectedly",
+                 [human_readable_name(Name)]),
     rabbit_shovel_status:report(State#state.name, State#state.type,
                                 {terminated, "socket closed"}),
     close_connections(State),
     ok;
-terminate({'EXIT', heartbeat_timeout}, State = #state{name = Name}) ->
-    ?LOG_ERROR("Shovel ~ts is stopping because of a heartbeat timeout",
-               [human_readable_name(Name)]),
-    rabbit_shovel_status:report(State#state.name, State#state.type,
-                                {terminated, "heartbeat timeout"}),
-    close_connections(State),
-    ok;
-terminate({'EXIT', outbound_conn_died}, State = #state{name = Name}) ->
-    ?LOG_ERROR("Shovel ~ts is stopping because destination connection failed",
-               [human_readable_name(Name)]),
-    rabbit_shovel_status:report(State#state.name, State#state.type,
-                                {terminated, "destination connection failed"}),
-    close_connections(State),
-    ok;
-terminate({'EXIT', inbound_conn_died}, State = #state{name = Name}) ->
-    ?LOG_ERROR("Shovel ~ts is stopping because destination connection failed",
-               [human_readable_name(Name)]),
-    rabbit_shovel_status:report(State#state.name, State#state.type,
-                                {terminated, "source connection failed"}),
-    close_connections(State),
-    ok;
-terminate({shutdown, heartbeat_timeout}, State = #state{name = Name}) ->
-    ?LOG_ERROR("Shovel ~ts is stopping because of a heartbeat timeout", [human_readable_name(Name)]),
-    rabbit_shovel_status:report(State#state.name, State#state.type,
-                                {terminated, "heartbeat timeout"}),
-    close_connections(State),
-    ok;
 terminate({shutdown, restart}, State = #state{name = Name}) ->
-    ?LOG_ERROR("Shovel ~ts is stopping to restart", [human_readable_name(Name)]),
-    rabbit_shovel_status:report(State#state.name, State#state.type,
-                                {terminated, "needed a restart"}),
+    %% The specific reason (e.g. "heartbeat timeout", dest_queue_down, ...)
+    %% was already reported by report_terminated/2 at the point of
+    %% detection, before this uniform {shutdown, restart} reason was used
+    %% to stop - reporting a generic status here would just overwrite it.
+    ?LOG_WARNING("Shovel ~ts is stopping to restart", [human_readable_name(Name)]),
     close_connections(State),
     ok;
 terminate({{shutdown, {server_initiated_close, Code, Reason}}, _}, State = #state{name = Name}) ->
-    ?LOG_ERROR("Shovel ~ts is stopping: one of its connections closed "
+    ?LOG_WARNING("Shovel ~ts is stopping: one of its connections closed "
                             "with code ~b, reason: ~ts",
                             [human_readable_name(Name), Code, Reason]),
     rabbit_shovel_status:report(State#state.name, State#state.type,
                                 {terminated, "needed a restart"}),
-    close_connections(State),
-    ok;
-terminate({shutdown, outbond_conn_failed}, State = #state{name = Name}) ->
-    ?LOG_ERROR("Shovel ~ts is stopping because if failed to connect to destination",
-               [human_readable_name(Name)]),
-    rabbit_shovel_status:report(State#state.name, State#state.type,
-                                {terminated, "failed to connect to destination"}),
-    close_connections(State),
-    ok;
-terminate({shutdown, inbound_conn_failed}, State = #state{name = Name}) ->
-    ?LOG_ERROR("Shovel ~ts is stopping because it failed to connect to source",
-               [human_readable_name(Name)]),
-    rabbit_shovel_status:report(State#state.name, State#state.type,
-                                {terminated, "failed to connect to source"}),
     close_connections(State),
     ok;
 terminate(Reason, State = #state{name = Name}) ->
@@ -258,6 +239,8 @@ format_status(_Opt, [_PDict, State]) ->
 format_state(State = #state{config = Config}) ->
     State#state{config = redact_config(Config)}.
 
+redact_config(undefined) ->
+    undefined;
 redact_config(Config) when is_map(Config) ->
     maps:map(fun(Key, Endpoint) when (Key =:= source orelse Key =:= dest),
                                       is_map(Endpoint) ->
@@ -276,6 +259,25 @@ human_readable_name(Name) ->
     ShovelName          -> rabbit_misc:format("'~ts'", [ShovelName])
   end.
 
+%% Dynamic Shovel parameters are parsed here rather than in `init/1` so
+%% that a malformed parameter stops the worker with a reported status
+%% instead of failing the supervisor start with a crash report. Static
+%% Shovels arrive already parsed by `rabbit_shovel_config`.
+parse_config(#state{type = static} = State) ->
+    {ok, State};
+parse_config(#state{type = dynamic, name = Name, config = Config0} = State) ->
+    try
+        ClusterName = rabbit_nodes:cluster_name(),
+        {ok, Mod} = rabbit_registry:lookup_module(runtime_parameter, shovel),
+        {ok, Config} = Mod:parse(Name, ClusterName, Config0),
+        {ok, State#state{config = Config}}
+    catch E:R ->
+        ?LOG_WARNING("Shovel ~ts could not parse its configuration: ~tp:~tp",
+                     [human_readable_name(Name), E, R]),
+        report_terminated(State, "failed to parse configuration"),
+        {stop, {shutdown, restart}, State#state{config = undefined}}
+    end.
+
 maybe_report_blocked_status(#state{config = Config,
                                    last_reported_status = LastStatus} = State) ->
     case rabbit_shovel_behaviour:status(Config) of
@@ -287,6 +289,15 @@ maybe_report_blocked_status(#state{config = Config,
             rabbit_shovel_status:report_blocked_status(State#state.name, NewStatus),
             State#state{last_reported_status = NewStatus}
     end.
+
+%% Reports the specific reason a shovel is about to stop and (quietly)
+%% restart, since the OTP-level exit reason is always the uniform
+%% {shutdown, restart} - see the terminate/2 clause for that reason.
+report_terminated(State, {shutdown, restart}) ->
+    report_terminated(State, "needed a restart");
+report_terminated(State, Reason) ->
+    rabbit_shovel_status:report(State#state.name, State#state.type,
+                                {terminated, Reason}).
 
 report_running(#state{config = Config} = State) ->
     InUri = rabbit_shovel_behaviour:source_uri(Config),
@@ -323,6 +334,9 @@ get_connection_name({_, Name}) when is_binary(Name) ->
 get_connection_name(_) ->
     <<"Shovel">>.
 
+close_connections(#state{config = undefined}) ->
+    %% Configuration parsing failed, so no connection was opened.
+    ok;
 close_connections(#state{config = Conf}) ->
     ok = rabbit_shovel_behaviour:close_source(Conf),
     ok = rabbit_shovel_behaviour:close_dest(Conf).

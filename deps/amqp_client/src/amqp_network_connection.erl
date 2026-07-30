@@ -9,6 +9,7 @@
 -module(amqp_network_connection).
 
 -include("amqp_client_internal.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -behaviour(amqp_gen_connection).
 -export([init/0, terminate/2, connect/4, do/2, open_channel_args/1, i/2,
@@ -48,24 +49,33 @@ do2(Method, #state{writer0 = Writer}) ->
     %% Catching because it expects the {channel_exit, _, _} message on error
     catch rabbit_writer:send_command_sync(Writer, Method).
 
+%% We replied to a peer-initiated close but its socket did not close in
+%% time. This is expected teardown, so wrap it like the failures below.
 handle_message(socket_closing_timeout,
                State = #state{closing_reason = Reason}) ->
-    {stop, {socket_closing_timeout, Reason}, State};
+    {stop, {shutdown, {socket_closing_timeout, Reason}}, State};
 handle_message(socket_closed, State = #state{waiting_socket_close = true,
                                              closing_reason = Reason}) ->
     {stop, {shutdown, Reason}, State};
+%% Expected connection-level failures are wrapped in 'shutdown' so that
+%% neither gen_server nor the supervisor logs them: linked processes and
+%% monitors still observe the specific reason.
 handle_message(socket_closed, State = #state{waiting_socket_close = false}) ->
-    {stop, socket_closed_unexpectedly, State};
+    {stop, {shutdown, socket_closed_unexpectedly}, State};
 handle_message({socket_error, _} = SocketError, State) ->
-    {stop, SocketError, State};
+    {stop, {shutdown, SocketError}, State};
 handle_message({channel_exit, 0, Reason}, State) ->
     {stop, {channel0_died, Reason}, State};
 handle_message(heartbeat_timeout, State) ->
-    {stop, heartbeat_timeout, State};
+    {stop, {shutdown, heartbeat_timeout}, State};
+%% The peer never replied to our close, matching the reason the
+%% 'connection.close_ok' path would have stopped with.
 handle_message(closing_timeout, State = #state{closing_reason = Reason}) ->
-    {stop, Reason, State};
+    {stop, {shutdown, Reason}, State};
 handle_message({'EXIT', Pid, Reason}, State) ->
-    {stop, rabbit_misc:format("stopping because dependent process ~tp died: ~tp", [Pid, Reason]), State};
+    ?LOG_WARNING("Connection (~tp): closing because dependent process ~tp died: ~tp",
+                 [self(), Pid, Reason]),
+    {stop, {shutdown, {dependent_process_died, Pid, Reason}}, State};
 %% see http://erlang.org/pipermail/erlang-bugs/2012-June/002933.html
 handle_message({Ref, {error, Reason}},
                State = #state{waiting_socket_close = Waiting,
@@ -73,8 +83,8 @@ handle_message({Ref, {error, Reason}},
   when is_reference(Ref) ->
     {stop, case {Reason, Waiting} of
                {closed,  true} -> {shutdown, CloseReason};
-               {closed, false} -> socket_closed_unexpectedly;
-               {_,          _} -> {socket_error, Reason}
+               {closed, false} -> {shutdown, socket_closed_unexpectedly};
+               {_,          _} -> {shutdown, {socket_error, Reason}}
            end, State}.
 
 closing(_ChannelCloseType, {server_initiated_close, _, _} = Reason, State) ->

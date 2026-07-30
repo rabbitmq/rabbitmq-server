@@ -119,8 +119,8 @@ validate_uris0([Uri | Uris]) ->
     case amqp_uri:parse(Uri) of
         {ok, _Params} ->
             validate_uris0(Uris);
-        {error, _} = Err ->
-            throw(Err)
+        {error, {Reason, _Uri}} ->
+            throw({error, Reason})
     end;
 validate_uris0([]) -> ok.
 

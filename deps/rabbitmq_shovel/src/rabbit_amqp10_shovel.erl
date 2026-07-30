@@ -240,7 +240,13 @@ connect(Name, SndSettleMode, Uri, Postfix, Addr, Map, AttachFun, LinkNameOverrid
     %% A better solution would be that the shovel plugin subscribes to event
     %% maintenance_connections_closed to gracefully transfer shovels over to other live nodes.
     Config = Config0#{properties => #{<<"ignore-maintenance">> => {boolean, true}}},
-    {ok, Conn} = amqp10_client:open_connection(Config),
+    Conn = case amqp10_client:open_connection(Config) of
+               {ok, C} ->
+                   C;
+               {error, Reason} ->
+                   rabbit_shovel_util:log_connection_failure(Reason, Uri, Name),
+                   exit({shutdown, {connection_failed, Reason}})
+           end,
     {ok, Sess} = amqp10_client:begin_session(Conn),
     link(Conn),
     LinkName = case LinkNameOverride of
