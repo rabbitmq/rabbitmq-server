@@ -275,7 +275,11 @@ function setup_constant_events() {
 }
 
 function setup_form_events() {
-    $(document).on('keypress', '.pagination_class_input', function(e) {
+    // Only the page size input is restricted to digits.
+    // The name filter input, which shares the pagination_class_input class,
+    // should not be affected by this validation, otherwise the filter input
+    // will break with legitimate non-numerical inputs.
+    $(document).on('keypress', '.pagination_class_pagesize_input', function(e) {
         return isNumberKey(e);
     });
     $(document).on('click', '#ff-enable-all-button', function() {
