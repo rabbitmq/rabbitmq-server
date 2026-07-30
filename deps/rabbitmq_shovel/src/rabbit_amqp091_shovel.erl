@@ -655,6 +655,8 @@ remaining(_Ch, #{source := #{delete_after := Count}}) ->
     Count.
 
 sched_expire_after_duration(Name, Src) ->
+    %% Be extra defensive against timer leaks.
+    _ = cancel_expire_after_duration(Src),
     case maps:get(delete_after_duration, Src) of
         Seconds when is_integer(Seconds), Seconds > 0 ->
             EffectSeconds = clamp_expire_after_duration(Seconds),
