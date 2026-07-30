@@ -32,7 +32,8 @@ groups() ->
           zero_shovels,
           invalid_legacy_configuration,
           valid_legacy_configuration,
-          valid_configuration
+          valid_configuration,
+          valid_configuration_without_source_declarations
         ]},
       {with_predefined_topology, [], [
           valid_configuration_with_predefined_resources
@@ -79,6 +80,14 @@ end_per_group(_, Config) ->
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
+%% Clean up even on failure: a leftover queue would break the
+%% predeclared-topology test, which expects it to be absent.
+end_per_testcase(valid_configuration_without_source_declarations = Testcase,
+                 Config) ->
+    _ = rabbit_ct_broker_helpers:rpc(Config, 0,
+      application, stop, [rabbitmq_shovel]),
+    delete_queue(Config),
+    rabbit_ct_helpers:testcase_finished(Config, Testcase);
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
@@ -226,6 +235,13 @@ valid_configuration(Config) ->
     ok = setup_shovels(Config),
     run_valid_test(Config).
 
+%% A source without declarations under the default topology (predeclared unset)
+%% must start and shovel from a pre-existing queue.
+valid_configuration_without_source_declarations(Config) ->
+    declare_queue(Config),
+    ok = setup_shovels_without_source_declarations(Config),
+    run_without_source_declarations_test(Config).
+
 valid_configuration_with_predefined_resources(Config) ->
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, setup_shovels2, [Config]),
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, shovel_test_utils, await_terminated_shovel, [test_shovel]),
@@ -300,6 +316,58 @@ declare_queue(Config) ->
                                              durable = true}),
     rabbit_ct_client_helpers:close_channel(Chan).
 
+delete_queue(Config) ->
+    Chan = rabbit_ct_client_helpers:open_channel(Config, 0),
+    #'queue.delete_ok'{} =
+        amqp_channel:call(Chan, #'queue.delete'{queue = ?QUEUE}),
+    rabbit_ct_client_helpers:close_channel(Chan).
+
+run_without_source_declarations_test(Config) ->
+    Chan = rabbit_ct_client_helpers:open_channel(Config, 0),
+
+    #'queue.declare_ok'{queue = Q} =
+        amqp_channel:call(Chan, #'queue.declare'{exclusive = true}),
+    #'queue.bind_ok'{} =
+        amqp_channel:call(Chan, #'queue.bind'{queue       = Q,
+                                              exchange    = <<"amq.direct">>,
+                                              routing_key = ?FROM_SHOVEL}),
+    #'basic.consume_ok'{consumer_tag = CTag} =
+        amqp_channel:subscribe(Chan,
+                               #'basic.consume'{queue = Q, exclusive = true},
+                               self()),
+    receive
+        #'basic.consume_ok'{consumer_tag = CTag} -> ok
+    after ?TIMEOUT -> throw(timeout_waiting_for_consume_ok)
+    end,
+
+    ok = amqp_channel:call(Chan,
+                           #'basic.publish'{exchange    = <<>>,
+                                            routing_key = ?QUEUE},
+                           #amqp_msg{payload = <<42>>,
+                                     props   = #'P_basic'{
+                                       delivery_mode = 2,
+                                       content_type  = ?UNSHOVELLED}}),
+
+    receive
+        {#'basic.deliver'{consumer_tag = CTag, delivery_tag = AckTag,
+                          routing_key = ?FROM_SHOVEL},
+         #amqp_msg{payload = <<42>>,
+                   props   = #'P_basic'{
+                      delivery_mode = 2,
+                      content_type  = ?SHOVELLED,
+                      headers       = [{<<"x-shovelled">>, _, _},
+                                       {<<"x-shovelled-timestamp">>,
+                                        long, _}]}}} ->
+            ok = amqp_channel:call(Chan, #'basic.ack'{delivery_tag = AckTag})
+    after ?TIMEOUT -> throw(timeout_waiting_for_deliver)
+    end,
+
+    [{test_shovel, static, {running, _Info}, _Metrics, _Time}] =
+        rabbit_ct_broker_helpers:rpc(Config, 0,
+          rabbit_shovel_status, status, []),
+
+    rabbit_ct_client_helpers:close_channel(Chan).
+
 setup_legacy_shovels(Config) ->
     ok = rabbit_ct_broker_helpers:rpc(Config, 0,
       ?MODULE, setup_legacy_shovels1, [Config]).
@@ -307,6 +375,10 @@ setup_legacy_shovels(Config) ->
 setup_shovels(Config) ->
     ok = rabbit_ct_broker_helpers:rpc(Config, 0,
       ?MODULE, setup_shovels1, [Config]).
+
+setup_shovels_without_source_declarations(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, setup_shovels_without_source_declarations1, [Config]).
 
 setup_legacy_shovels1(Config) ->
     _ = application:stop(rabbitmq_shovel),
@@ -369,6 +441,34 @@ setup_shovels1(Config) ->
            {publish_fields, [{exchange, ?EXCHANGE}, {routing_key, ?FROM_SHOVEL}]},
            {publish_properties, [{delivery_mode, 2},
                                  {cluster_id,    <<"my-cluster">>},
+                                 {content_type,  ?SHOVELLED}]},
+           {add_forward_headers, true},
+           {add_timestamp_header, true}]},
+         {ack_mode, on_confirm}]}],
+      infinity),
+
+    ok = application:start(rabbitmq_shovel),
+    shovel_test_utils:await_running_shovel(test_shovel).
+
+setup_shovels_without_source_declarations1(Config) ->
+    _ = application:stop(rabbitmq_shovel),
+    Hostname = ?config(rmq_hostname, Config),
+    TcpPort = rabbit_ct_broker_helpers:get_node_config(Config, 0,
+      tcp_port_amqp),
+    application:set_env(
+      rabbitmq_shovel,
+      shovels,
+      [{test_shovel,
+        [{source,
+          [{uris, [rabbit_misc:format("amqp://~ts:~b/%2f?heartbeat=5",
+                                      [Hostname, TcpPort])]},
+           {queue, ?QUEUE}]},
+         {destination,
+          [{uris, [rabbit_misc:format("amqp://~ts:~b/%2f",
+                                      [Hostname, TcpPort])]},
+           {publish_fields, [{exchange, <<"amq.direct">>},
+                             {routing_key, ?FROM_SHOVEL}]},
+           {publish_properties, [{delivery_mode, 2},
                                  {content_type,  ?SHOVELLED}]},
            {add_forward_headers, true},
            {add_timestamp_header, true}]},

@@ -41,7 +41,8 @@ groups() ->
           local_source_no_ack,
           local_source_on_publish,
           local_source_on_confirm,
-          local_source_anonymous_queue
+          local_source_anonymous_queue,
+          local_source_without_declarations
         ]}
     ].
 
@@ -368,6 +369,37 @@ local_source_anonymous_queue(Config) ->
 
     rabbit_ct_client_helpers:close_channel(Chan).
 
+%% A local source without declarations must start and shovel from a
+%% pre-existing queue under the default topology.
+local_source_without_declarations(Config) ->
+    SourceQ = <<"source-queue">>,
+    DestQ = <<"dest-queue">>,
+    Chan = rabbit_ct_client_helpers:open_channel(Config, 0),
+    #'queue.declare_ok'{} =
+        amqp_channel:call(Chan, #'queue.declare'{queue = SourceQ, durable = true}),
+    ok = setup_local_source_shovel_without_declarations(Config, SourceQ, DestQ,
+                                                        on_confirm),
+    CTag = consume(Chan, DestQ, false),
+    Msg = #amqp_msg{payload = <<42>>,
+                    props = #'P_basic'{delivery_mode = 2,
+                                       content_type = ?UNSHOVELLED}},
+    publish(Chan, Msg, <<>>, SourceQ),
+
+    receive
+        {#'basic.deliver'{consumer_tag = CTag, delivery_tag = AckTag},
+         #amqp_msg{payload = <<42>>,
+                   props = #'P_basic'{headers = [{<<"x-shovelled">>, _, _},
+                                                 {<<"x-shovelled-timestamp">>,
+                                                  long, _}]}}} ->
+            ok = amqp_channel:call(Chan, #'basic.ack'{delivery_tag = AckTag})
+    after ?TIMEOUT -> throw(timeout_waiting_for_deliver1)
+    end,
+
+    [{test_shovel, static, {running, _Info}, _Metrics, _Time}] =
+        rabbit_ct_broker_helpers:rpc(Config, 0,
+          rabbit_shovel_status, status, []),
+    rabbit_ct_client_helpers:close_channel(Chan).
+
 %%
 %% Internal
 %%
@@ -384,6 +416,33 @@ setup_local_source_shovel(Config, SourceQueue, DestQueue, AckMode) ->
                    [{'queue.declare', [{queue, SourceQueue}, durable]}]}
                   ]
                 },
+                {destination,
+                 [{uris, [rabbit_misc:format("amqp://~ts:~b/%2f?heartbeat=5",
+                                             [Hostname, Port])]},
+                  {declarations,
+                   [{'queue.declare', [{queue, DestQueue}, durable]}]},
+                  {publish_fields, [{exchange, <<>>},
+                                    {routing_key, DestQueue}]},
+                  {publish_properties, [{delivery_mode, 2},
+                                        {content_type,  ?SHOVELLED}]},
+                  {add_forward_headers, true},
+                  {add_timestamp_header, true}]},
+                {queue, <<>>},
+                {ack_mode, AckMode}
+               ]}],
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, setup_shovel,
+                                      [Shovel]).
+
+setup_local_source_shovel_without_declarations(Config, SourceQueue, DestQueue,
+                                               AckMode) ->
+    Hostname = ?config(rmq_hostname, Config),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    Shovel = [{test_shovel,
+               [{source,
+                 [{uris, [rabbit_misc:format("amqp://~ts:~b/%2f?heartbeat=5",
+                                             [Hostname, Port])]},
+                  {protocol, local},
+                  {queue, SourceQueue}]},
                 {destination,
                  [{uris, [rabbit_misc:format("amqp://~ts:~b/%2f?heartbeat=5",
                                              [Hostname, Port])]},
