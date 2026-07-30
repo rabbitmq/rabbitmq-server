@@ -58,6 +58,9 @@ init([]) ->
           frame_max =>
               application:get_env(rabbitmq_stream, frame_max,
                                   ?DEFAULT_FRAME_MAX),
+          initial_frame_max =>
+              application:get_env(rabbitmq_stream, initial_frame_max,
+                                  ?DEFAULT_INITIAL_FRAME_MAX),
           heartbeat =>
               application:get_env(rabbitmq_stream, heartbeat,
                                   ?DEFAULT_HEARTBEAT)},
