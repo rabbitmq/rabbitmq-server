@@ -169,18 +169,43 @@ exists(#resource{kind = queue,
 supports_stateful_delivery() ->
     false.
 
+%% A reply carries a single reply-to name; this clause keeps that hot path
+%% free of the dedup bookkeeping below.
+deliver([{Q, stateless}], Msg, #{correlation := Corr})
+  when Corr =/= undefined ->
+    deliver0(Q, Msg),
+    {[], [{settled, amqqueue:get_name(Q), [Corr]}]};
+deliver([{Q, stateless}], Msg, #{}) ->
+    deliver0(Q, Msg),
+    {[], []};
+%% Multiple targets can point to the same target PID. Make sure we cast only one message per PID.
 deliver(Qs, Msg, #{correlation := Corr})
   when Corr =/= undefined ->
     Corrs = [Corr],
-    Actions = lists:map(fun({Q, stateless}) ->
-                                deliver0(Q, Msg),
-                                {settled, amqqueue:get_name(Q), Corrs}
-                        end, Qs),
+    {Actions, _Seen} =
+        lists:mapfoldl(fun({Q, stateless}, Seen) ->
+                               Pid = amqqueue:get_pid(Q),
+                               Seen1 = case Seen of
+                                           #{Pid := _} ->
+                                               Seen;
+                                           _ ->
+                                               deliver0(Q, Msg),
+                                               Seen#{Pid => []}
+                                       end,
+                               {{settled, amqqueue:get_name(Q), Corrs}, Seen1}
+                       end, #{}, Qs),
     {[], Actions};
 deliver(Qs, Msg, #{}) ->
-    lists:foreach(fun({Q, stateless}) ->
-                          deliver0(Q, Msg)
-                  end, Qs),
+    _ = lists:foldl(fun({Q, stateless}, Seen) ->
+                            Pid = amqqueue:get_pid(Q),
+                            case Seen of
+                                #{Pid := _} ->
+                                    Seen;
+                                _ ->
+                                    deliver0(Q, Msg),
+                                    Seen#{Pid => []}
+                            end
+                    end, #{}, Qs),
     {[], []}.
 
 deliver0(Q, Msg) ->
