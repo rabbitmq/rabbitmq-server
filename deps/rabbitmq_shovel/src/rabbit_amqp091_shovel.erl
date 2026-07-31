@@ -300,7 +300,7 @@ init_source(Conf = #{name := Name,
                                                       arguments = Args}, self()),
     Src1 = Src#{remaining => Remaining,
                 remaining_unacked => Remaining},
-    Conf#{source => sched_expire_after_duration(Name, Src1)}.
+    Conf#{source => rabbit_shovel_util:sched_expire_after_duration(Name, Src1)}.
 
 connect_dest(Conf = #{name := Name, dest := #{uris := Uris} = Dst}) ->
     {Conn, Chan, URI} = make_conn_and_chan(deobfuscate_uris(Uris), Name),
@@ -478,17 +478,12 @@ handle_dest(_Msg, _State) ->
     not_handled.
 
 close_source(#{source := #{current := {Conn, Ch, _}} = Src}) ->
-    _ = cancel_expire_after_duration(Src),
+    _ = rabbit_shovel_util:cancel_expire_after_duration(Src),
     catch amqp_channel:close(Ch),
     catch amqp_connection:close(Conn, ?MAX_CONNECTION_CLOSE_TIMEOUT),
     ok;
 close_source(_) ->
     %% It never connected, connection doesn't exist
-    ok.
-
-cancel_expire_after_duration(#{delete_after_timer := Timer}) ->
-    rabbit_misc:cancel_timer(Timer);
-cancel_expire_after_duration(_) ->
     ok.
 
 close_dest(#{dest := #{current := {Conn, Ch, _}}}) ->
@@ -653,35 +648,6 @@ remaining(Ch, #{source := #{delete_after := 'queue-length',
     N;
 remaining(_Ch, #{source := #{delete_after := Count}}) ->
     Count.
-
-sched_expire_after_duration(Name, Src) ->
-    %% Be extra defensive against timer leaks.
-    _ = cancel_expire_after_duration(Src),
-    case maps:get(delete_after_duration, Src) of
-        Seconds when is_integer(Seconds), Seconds > 0 ->
-            EffectSeconds = clamp_expire_after_duration(Seconds),
-            case EffectSeconds =:= Seconds of
-                true ->
-                    ok;
-                false ->
-                    ?LOG_WARNING("Shovel '~ts' has src-delete-after-duration of ~tp seconds, "
-                                 "adjusting to the minimum allowed ~tp seconds",
-                                 [Name, Seconds, EffectSeconds])
-            end,
-
-            Timer = rabbit_misc:send_after(EffectSeconds * 1000, self(),
-                                           {internal, delete_after_duration_expired}),
-
-            Src#{delete_after_timer => Timer};
-        _ ->
-            Src
-    end.
-
-clamp_expire_after_duration(Seconds) ->
-    ConfigFloor = application:get_env(?APP, delete_after_duration_floor,
-                                      ?SOFT_DELETE_AFTER_DURATION_FLOOR),
-    EffectFloor = max(?HARD_DELETE_AFTER_DURATION_FLOOR, ConfigFloor),
-    max(Seconds, EffectFloor).
 
 %%% PARSING
 
