@@ -5280,16 +5280,38 @@ delete_if_empty_while_publishing(Config) ->
          || _ <- lists:seq(1, 5000)],
         Parent ! publish_cast_done
     end),
-    ?assertMatch(#'queue.delete_ok'{},
-                 amqp_channel:call(DeleterChan, #'queue.delete'{queue = QQ,
-                                                                if_empty = true})),
+    %% `if-empty` is best-effort against a concurrent publish race (see
+    %% rabbitmq/rabbitmq-server#17075 review): the settle re-check in
+    %% check_delete_preconditions/3 may catch one of these 5000 racing
+    %% publishes and correctly refuse the deletion instead of proceeding.
+    %% Either outcome (delete succeeds, or is safely refused as not_empty)
+    %% is correct here; what must never happen is a hang or a message lost
+    %% without an explicit nack.
+    DeleteResult =
+        try amqp_channel:call(DeleterChan, #'queue.delete'{queue = QQ,
+                                                           if_empty = true}) of
+            #'queue.delete_ok'{} = Ok -> Ok
+        catch
+            exit:{{shutdown, {server_initiated_close, 406, _}}, _} -> refused
+        end,
     receive publish_cast_done -> ok after 10000 -> ct:fail(publish_stuck) end,
-    %% Every in-flight publish must get an explicit ack or nack, never hang.
+    %% Every in-flight publish must get an explicit ack or nack, never hang,
+    %% regardless of which outcome above happened.
     ?assertEqual(5000, count_confirms(PublisherChan, 5000, 30000)),
     unlink(PubPid),
     QName = rabbit_misc:r(<<"/">>, queue, QQ),
-    ?assertEqual({error, not_found},
-                 rpc:call(Server, rabbit_amqqueue, lookup, [QName])).
+    case DeleteResult of
+        #'queue.delete_ok'{} ->
+            ?assertEqual({error, not_found},
+                         rpc:call(Server, rabbit_amqqueue, lookup, [QName]));
+        refused ->
+            %% A safe refusal must leave the queue intact, not half-deleted.
+            ?assertMatch({ok, _},
+                         rpc:call(Server, rabbit_amqqueue, lookup, [QName])),
+            Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server),
+            ?assertMatch(#'queue.delete_ok'{},
+                         amqp_channel:call(Ch2, #'queue.delete'{queue = QQ}))
+    end.
 
 queue_consumer_count(Config, QQ) ->
     Rows = rabbit_ct_broker_helpers:rabbitmqctl_list(
@@ -6853,8 +6875,12 @@ machine_overview(ServerId) when is_tuple(ServerId) ->
 
 set_queue_state(Config, QName, State) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-    ok = rpc:call(Server, rabbit_amqqueue, update,
-                  [QName, fun (Q) -> amqqueue:set_state(Q, State) end]).
+    %% rabbit_amqqueue:update/2 returns the updated queue record (or
+    %% 'not_found'), never the atom 'ok'; callers rely on ?awaitMatch
+    %% against get_queue_state/2 to confirm the change took effect.
+    _ = rpc:call(Server, rabbit_amqqueue, update,
+                 [QName, fun (Q) -> amqqueue:set_state(Q, State) end]),
+    ok.
 
 get_queue_state(Config, QName) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),

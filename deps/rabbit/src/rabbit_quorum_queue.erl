@@ -177,6 +177,12 @@
 %% Must exceed ?DELETE_TIMEOUT so a normally-running conditional delete
 %% finishes before the safety-net timer restores a blocked queue.
 -define(BLOCKED_STATE_RESTORE_TIMEOUT, ?DELETE_TIMEOUT + 1_000).
+%% Short settle window used by conditional delete: after the queue is
+%% blocked, we re-read the overview once more before actually deleting, so
+%% a publish that was already committing to the leader's log at the first
+%% read has a chance to surface and cause a safe refusal instead of an
+%% accidental delete. See check_delete_preconditions/3.
+-define(DELETE_SETTLE_TIME, 50).
 -define(MEMBER_CHANGE_TIMEOUT, 20_000).
 -define(SNAPSHOT_INTERVAL, 8192). %% the ra default is 4096
 %% setting a low default here to allow quorum queues to better chose themselves
@@ -1199,8 +1205,38 @@ check_delete_preconditions(Q, IfUnused, IfEmpty) ->
     case query_overview(Q) of
         {ok, Msgs, Consumers} ->
             case check_delete_preconditions1(IfUnused, IfEmpty, Consumers, Msgs) of
-                ok -> {ok, Msgs};
-                {error, _} = Err -> Err
+                ok ->
+                    %% The read above is linearizable as of the moment it was
+                    %% issued, but a publish that was already committing to
+                    %% the leader's log at that exact instant may not have
+                    %% been visible yet. Re-read once more after a short,
+                    %% bounded settle window: anything that lands in that
+                    %% window now surfaces here and causes a safe refusal,
+                    %% rather than an accidental delete racing a concurrent
+                    %% publish (see rabbitmq/rabbitmq-server#17075 review).
+                    %% This narrows, but does not eliminate, the remaining
+                    %% race: a publish committing in the gap between this
+                    %% second read and the delete command itself could still
+                    %% slip through. Closing that fully would need the
+                    %% check-and-delete to be a single command applied by
+                    %% the rabbit_fifo state machine itself (like #purge{}),
+                    %% not two separate queries plus a delete from the
+                    %% outside.
+                    timer:sleep(delete_settle_time()),
+                    case query_overview(Q) of
+                        {ok, Msgs1, Consumers1} ->
+                            case check_delete_preconditions1(IfUnused, IfEmpty,
+                                                              Consumers1, Msgs1) of
+                                ok -> {ok, Msgs1};
+                                {error, _} = Err -> Err
+                            end;
+                        error when IfEmpty ->
+                            {error, not_empty};
+                        error ->
+                            {ok, Msgs}
+                    end;
+                {error, _} = Err ->
+                    Err
             end;
         error when IfEmpty ->
             %% Leader unreachable: message count cannot be verified, so
@@ -1222,14 +1258,25 @@ check_delete_preconditions1(true, _IfEmpty, Consumers, _Msgs) when Consumers =/=
 check_delete_preconditions1(_IfUnused, _IfEmpty, _Consumers, _Msgs) ->
     ok.
 
+delete_settle_time() ->
+    application:get_env(rabbit, quorum_queue_delete_settle_time,
+                        ?DELETE_SETTLE_TIME).
+
 -spec query_overview(amqqueue:amqqueue()) ->
     {ok, Msgs :: non_neg_integer(), Consumers :: non_neg_integer()} | error.
 query_overview(Q) ->
     case find_leader(Q) of
         {_, _} = Leader ->
-            case ra:member_overview(Leader, ?DELETE_TIMEOUT) of
-                {ok, #{machine := #{num_messages := Msgs,
-                                    num_consumers := Consumers}}, _} ->
+            %% Consistent (linearizable) query rather than a plain local
+            %% snapshot: guarantees the read reflects every write already
+            %% committed to a majority as of the moment it was issued,
+            %% instead of whatever the leader happened to have applied so
+            %% far. See check_delete_preconditions/3 for the remaining,
+            %% narrower race this still doesn't close.
+            case ra:consistent_query(Leader, {rabbit_fifo, overview, []},
+                                      ?DELETE_TIMEOUT) of
+                {ok, #{num_messages := Msgs,
+                       num_consumers := Consumers}, _} ->
                     {ok, Msgs, Consumers};
                 _ ->
                     error
