@@ -44,8 +44,8 @@ function default_if_blank(value, defaultValue) {
 function access_token(id, secret) {
   const req = new XMLHttpRequest();
   const url = idp_token_endpoint
-  const params = 'client_id=' + id +
-    '&client_secret=' + secret +
+  const params = 'client_id=' + encodeURIComponent(id) +
+    '&client_secret=' + encodeURIComponent(secret) +
     '&grant_type=client_credentials' +
     '&response_type=token';
 
