@@ -366,13 +366,13 @@ module.exports = {
   },
 
   teardown: async (d, test, captureScreen = null) => {    
-    let driver = d.driver
+    let driver = d.driver || d
     driver.manage().logs().get(logging.Type.BROWSER).then(function(entries) {
         entries.forEach(function(entry) {
           module.exports.log('[%s] %s', entry.level.name, entry.message);
         })
      })
-    if (test.currentTest) {
+    if (test && test.currentTest) {
       if (test.currentTest.isPassed()) {
         driver.executeScript('lambda-status=passed')
       } else {        

@@ -42,13 +42,17 @@ module.exports = class QueuePage extends BasePage {
   async getConsumersTable() {
     return this.getPlainTable(CONSUMERS_TABLE)
   }
-  async ensureDeleteQueueSectionIsVisible() {    
-    await this.click(DELETE_SECTION)
-    return this.driver.findElement(DELETE_SECTION).isDisplayed()
+  async ensureDeleteQueueSectionIsVisible() {
+    const button = await this.driver.findElement(DELETE_BUTTON)
+    if (!(await button.isDisplayed())) {
+      await this.click(DELETE_SECTION)
+    }
+    return this.waitForDisplayed(DELETE_BUTTON)
   }
   async deleteQueue() {
     await this.click(DELETE_BUTTON)
-    return this.acceptAlert()
+    await this.acceptAlert()
+    return this.waitForDisplayed(By.css('div#queues-paging-section'))
   }
 
   async clickOnGetMessages() {

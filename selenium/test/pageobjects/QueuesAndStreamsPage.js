@@ -15,6 +15,9 @@ const FORM_QUEUE_NAME = By.css('div#add-new-queue form input[name="name"]')
 const FORM_QUEUE_TYPE = By.css('div#add-new-queue form select[name="queuetype"]')
 const ADD_BUTTON = By.css('div#add-new-queue form input[type=submit]')
 
+const PAGE_SIZE_INPUT = By.css('input#queues-pagesize')
+const PAGE_SELECT = By.css('select#queues-page')
+
 module.exports = class QueuesAndStreamsPage extends BasePage {
   async isLoaded () {
     return this.waitForDisplayed(PAGING_SECTION)
@@ -40,9 +43,12 @@ module.exports = class QueuesAndStreamsPage extends BasePage {
       return element.click()
     })
   }
-  async ensureAddQueueSectionIsVisible() {    
-    await this.click(ADD_NEW_QUEUE_SECTION)
-    return this.driver.findElement(ADD_NEW_QUEUE_SECTION).isDisplayed()
+  async ensureAddQueueSectionIsVisible() {
+    const button = await this.driver.findElement(ADD_BUTTON)
+    if (!(await button.isDisplayed())) {
+      await this.click(ADD_NEW_QUEUE_SECTION)
+    }
+    return this.waitForDisplayed(ADD_BUTTON)
   }
   async ensureAllQueuesSectionIsVisible() {    
     await this.click(PAGING_SECTION)
@@ -57,5 +63,13 @@ module.exports = class QueuesAndStreamsPage extends BasePage {
   async filterQueues(filterValue) {
     await this.waitForDisplayed(FILTER_BY_QUEUE_NAME)
     return this.sendKeys(FILTER_BY_QUEUE_NAME, filterValue + Key.RETURN)    
+  }
+  async setPageSize(size) {
+    const input = await this.waitForDisplayed(PAGE_SIZE_INPUT)
+    await input.clear()
+    await this.sendKeys(PAGE_SIZE_INPUT, size + Key.RETURN)
+  }
+  async selectPage(pageNumber) {
+    await this.selectOptionByValue(PAGE_SELECT, String(pageNumber))
   }
 }

@@ -4,7 +4,8 @@ const BasePage = require('./BasePage')
 
 
 const EXCHANGE_NAME = By.css('div#main h1 b')
-
+const DELETE_EXCHANGE_SECTION_H2 = By.xpath('//h2[text()="Delete this exchange"]')
+const DELETE_BUTTON = By.css('form[action="#/exchanges"][method="delete"] input[type=submit]')
 
 module.exports = class ExchangePage extends BasePage {
   async isLoaded() {
@@ -12,5 +13,19 @@ module.exports = class ExchangePage extends BasePage {
   }
   async getName() {
     return this.getText(EXCHANGE_NAME)
+  }
+  async ensureDeleteExchangeSectionIsVisible() {
+    const button = await this.driver.findElement(DELETE_BUTTON)
+    if (!(await button.isDisplayed())) {
+      await this.click(DELETE_EXCHANGE_SECTION_H2)
+    }
+    return this.waitForDisplayed(DELETE_BUTTON)
+  }
+  async deleteExchange() {
+    const button = await this.waitForDisplayed(DELETE_BUTTON)
+    await this.scrollTo(button)
+    await button.click()
+    await this.acceptAlert()
+    return this.waitForDisplayed(By.css('div#exchanges-paging-section'))
   }
 }
