@@ -226,6 +226,10 @@ assert_args_equivalence(X, Args) ->
 
 jump_consistent_hash(_Key, 1) ->
     0;
+%% An empty AMQP field-array header reaches routing as [], and hd([]) would
+%% raise badarg. Hash it as a fixed term instead of taking its head.
+jump_consistent_hash([], NumberOfBuckets) ->
+    jump_consistent_hash(erlang:phash2([]), NumberOfBuckets);
 jump_consistent_hash(KeyList, NumberOfBuckets) when is_list(KeyList) ->
     jump_consistent_hash(hd(KeyList), NumberOfBuckets);
 jump_consistent_hash(Key, NumberOfBuckets) when is_integer(Key) ->
