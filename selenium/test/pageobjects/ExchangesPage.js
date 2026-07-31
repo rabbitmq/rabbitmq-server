@@ -29,9 +29,12 @@ module.exports = class ExchangesPage extends BasePage {
     return this.click(By.css(
       "div#exchanges-table-section table tbody tr td a[href='#/exchanges/" + vhost + "/" + name + "']"))
   }
-  async ensureAddExchangeSectionIsVisible() {    
-    await this.click(ADD_NEW_EXCHANGE_SECTION)
-    return this.driver.findElement(ADD_NEW_EXCHANGE_SECTION).isDisplayed()
+  async ensureAddExchangeSectionIsVisible() {
+    const button = await this.driver.findElement(ADD_BUTTON)
+    if (!(await button.isDisplayed())) {
+      await this.click(ADD_NEW_EXCHANGE_SECTION)
+    }
+    return this.waitForDisplayed(ADD_BUTTON)
   }
   async fillInAddNewExchange(exchangeDetails) {
     await this.selectOptionByValue(FORM_EXCHANGE_TYPE, exchangeDetails.type)
