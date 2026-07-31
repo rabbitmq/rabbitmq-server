@@ -59,6 +59,9 @@ class TestLifecycle(base.BaseTest):
 
     def unsub_test(self, dest, verbs, numRcts=0):
         def afterfun():
+            # Wait for the auto-delete subscription queue and its binding
+            # to be fully removed before publishing again
+            time.sleep(1)
             self.conn.send(dest, "after-test")
         subverb, unsubverb = verbs
         self.assertListenerAfter(subverb, numMsgs=1,
