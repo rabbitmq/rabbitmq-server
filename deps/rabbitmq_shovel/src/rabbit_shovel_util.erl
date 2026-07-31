@@ -19,6 +19,9 @@
          validate_queue_args/2,
          validate_consumer_args/2,
          validate_delete_after/2,
+         validate_delete_after_duration/2,
+         sched_expire_after_duration/2,
+         cancel_expire_after_duration/1,
          deobfuscate_value/1,
          deobfuscated_uris/2,
          obfuscated_uris/2,
@@ -33,6 +36,7 @@
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("kernel/include/logger.hrl").
+-include("rabbit_shovel.hrl").
 
 -define(APP, rabbitmq_shovel).
 -define(ROUTING_HEADER, <<"x-shovelled">>).
@@ -270,6 +274,53 @@ validate_delete_after(_Name, N) when is_integer(N), N >= 0 -> ok;
 validate_delete_after(Name,  Term) ->
     {error, "~ts should be a number greater than or equal to 0, \"never\" or \"queue-length\", actually was "
      "~tp", [Name, Term]}.
+
+validate_delete_after_duration(Name, N) when is_integer(N), N > 0 ->
+    %% the configured floor will still be applied if the value is too low
+    case rabbit_misc:check_expiry(N * 1000) of
+        ok ->
+            ok;
+        {error, {value_too_large, _}} ->
+            {error, "~ts is ~tp seconds, which exceeds the maximum supported "
+             "duration", [Name, N]}
+    end;
+validate_delete_after_duration(Name,  Term) ->
+    {error, "~ts should be a positive integer (seconds), actually was ~tp",
+     [Name, Term]}.
+
+sched_expire_after_duration(Name, Src) ->
+    %% Be extra defensive against timer leaks.
+    _ = cancel_expire_after_duration(Src),
+    case maps:get(delete_after_duration, Src, undefined) of
+        Seconds when is_integer(Seconds), Seconds > 0 ->
+            EffectSeconds = clamp_expire_after_duration(Seconds),
+            case EffectSeconds =:= Seconds of
+                true ->
+                    ok;
+                false ->
+                    ?LOG_WARNING("Shovel '~ts' has src-delete-after-duration of ~tp seconds, "
+                                 "adjusting to the minimum allowed ~tp seconds",
+                                 [Name, Seconds, EffectSeconds])
+            end,
+
+            Timer = rabbit_misc:send_after(EffectSeconds * 1000, self(),
+                                           {internal, delete_after_duration_expired}),
+
+            Src#{delete_after_timer => Timer};
+        _ ->
+            Src
+    end.
+
+cancel_expire_after_duration(#{delete_after_timer := Timer}) ->
+    rabbit_misc:cancel_timer(Timer);
+cancel_expire_after_duration(_) ->
+    ok.
+
+clamp_expire_after_duration(Seconds) ->
+    ConfigFloor = application:get_env(?APP, delete_after_duration_floor,
+                                      ?SOFT_DELETE_AFTER_DURATION_FLOOR),
+    EffectFloor = max(?HARD_DELETE_AFTER_DURATION_FLOOR, ConfigFloor),
+    max(Seconds, EffectFloor).
 
 deobfuscate_value(Value) ->
     credentials_obfuscation:decrypt(Value).
