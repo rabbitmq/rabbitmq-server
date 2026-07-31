@@ -26,7 +26,12 @@ all() -> [
     terminate_all_shutdown_kills_non_trapping_processes,
     terminate_all_timeout_force_kill,
     terminate_all_paced_batching,
-    terminate_all_timeout_kills_remaining_batches
+    terminate_all_timeout_kills_remaining_batches,
+    to_params_returns_error_on_unparseable_uri,
+    to_params_error_strips_credentials,
+    to_params_error_on_malformed_uri_strips_credentials,
+    to_params_falls_back_to_valid_uri,
+    to_params_error_redacts_query_secrets
 ].
 
 init_per_suite(Config) ->
@@ -174,3 +179,85 @@ await_all_dead(Pids, AttemptsLeft) ->
             timer:sleep(10),
             await_all_dead(Pids, AttemptsLeft - 1)
     end.
+
+%% -------------------------------------------------------------------
+%% rabbit_federation_upstream:to_params/2 error handling
+%% -------------------------------------------------------------------
+
+%% Regression test for the boot-time crash observed when a persisted
+%% federation-upstream URI contains an `auth_mechanism` value that is not an
+%% existing atom (for example, an invisible U+2028 injected by a copy-paste).
+%% Before the fix, `amqp_uri:parse/2` returning `{error, _}` would badmatch
+%% inside `to_params/2` and crash the link's supervisor. It must now return
+%% an error tuple that callers can handle.
+to_params_returns_error_on_unparseable_uri(_Config) ->
+    %% "external" + U+2028 (UTF-8: E2 80 A8) + "connect" is not a SASL mechanism
+    %% atom, matching the value seen in production.
+    BadURI = <<"amqp://guest:guest@localhost/?auth_mechanism=external",
+               16#E2, 16#80, 16#A8, "connect">>,
+    Upstream = #upstream{uris = [BadURI], name = <<"u">>},
+    XorQ = #resource{virtual_host = <<"/">>, kind = exchange, name = <<"x">>},
+    ?assertMatch({error, {{unknown_mechanism, _}, _SafeURI}},
+                 rabbit_federation_upstream:to_params(Upstream, XorQ)),
+    ok.
+
+%% The URI returned inside the error tuple must have credentials removed so
+%% that error logs cannot leak the upstream password.
+to_params_error_strips_credentials(_Config) ->
+    BadURI = <<"amqp://alice:s3cret@localhost/?auth_mechanism=zzz_no_such_mech">>,
+    Upstream = #upstream{uris = [BadURI], name = <<"u">>},
+    XorQ = #resource{virtual_host = <<"/">>, kind = exchange, name = <<"x">>},
+    {error, {_Info, SafeURI}} =
+        rabbit_federation_upstream:to_params(Upstream, XorQ),
+    ?assertEqual(nomatch, binary:match(SafeURI, <<"s3cret">>)),
+    ?assertEqual(nomatch, binary:match(SafeURI, <<"alice">>)),
+    ok.
+
+%% A structurally malformed URI must not crash `to_params/2`. Such URIs also
+%% crash `amqp_uri:remove_credentials/1`, so the error branch has to strip
+%% credentials without relying on it.
+to_params_error_on_malformed_uri_strips_credentials(_Config) ->
+    BadURI = <<"amqp://alice:s3cret@:::">>,
+    Upstream = #upstream{uris = [BadURI], name = <<"u">>},
+    XorQ = #resource{virtual_host = <<"/">>, kind = exchange, name = <<"x">>},
+    {error, {Info, SafeURI}} =
+        rabbit_federation_upstream:to_params(Upstream, XorQ),
+    ?assertEqual(nomatch, binary:match(SafeURI, <<"s3cret">>)),
+    ?assertEqual(nomatch, binary:match(SafeURI, <<"alice">>)),
+    %% The parse-error `Info` for a malformed URI embeds the raw URI, so it
+    %% must be sanitized as well or the credentials leak into the logs.
+    ?assertEqual(nomatch, binary:match(iolist_to_binary(io_lib:format("~tp", [Info])),
+                                       <<"s3cret">>)),
+    ?assertEqual(nomatch, binary:match(iolist_to_binary(io_lib:format("~tp", [Info])),
+                                       <<"alice">>)),
+    ok.
+
+%% The URIs of an upstream are interchangeable failover endpoints, so a single
+%% unparseable URI must not prevent the link from using a valid one.
+to_params_falls_back_to_valid_uri(_Config) ->
+    BadURI = <<"amqp://guest:guest@localhost/?auth_mechanism=zzz_no_such_mech">>,
+    GoodURI = <<"amqp://guest:guest@localhost">>,
+    X = #exchange{name = #resource{virtual_host = <<"/">>,
+                                   kind = exchange, name = <<"x">>}},
+    %% Try both orderings since `to_params/2` shuffles the URIs.
+    lists:foreach(
+      fun(URIs) ->
+              Upstream = #upstream{uris = URIs, name = <<"u">>,
+                                   exchange_name = <<"x">>},
+              ?assertMatch({ok, _},
+                           rabbit_federation_upstream:to_params(Upstream, X))
+      end,
+      [[BadURI, GoodURI], [GoodURI, BadURI]]),
+    ok.
+
+%% Some `amqp_uri:parse/2` error shapes embed the full query string, which can
+%% carry a TLS `password` or other secret. The error tuple must not leak it.
+to_params_error_redacts_query_secrets(_Config) ->
+    BadURI = <<"amqps://guest:guest@localhost/?depth=notanumber&password=s3cret">>,
+    Upstream = #upstream{uris = [BadURI], name = <<"u">>},
+    XorQ = #resource{virtual_host = <<"/">>, kind = exchange, name = <<"x">>},
+    {error, {Info, _SafeURI}} =
+        rabbit_federation_upstream:to_params(Upstream, XorQ),
+    ?assertEqual(nomatch, binary:match(iolist_to_binary(io_lib:format("~tp", [Info])),
+                                       <<"s3cret">>)),
+    ok.
