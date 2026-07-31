@@ -43,9 +43,12 @@ module.exports = class QueuesAndStreamsPage extends BasePage {
       return element.click()
     })
   }
-  async ensureAddQueueSectionIsVisible() {    
-    await this.click(ADD_NEW_QUEUE_SECTION)
-    return this.driver.findElement(ADD_NEW_QUEUE_SECTION).isDisplayed()
+  async ensureAddQueueSectionIsVisible() {
+    const button = await this.driver.findElement(ADD_BUTTON)
+    if (!(await button.isDisplayed())) {
+      await this.click(ADD_NEW_QUEUE_SECTION)
+    }
+    return this.waitForDisplayed(ADD_BUTTON)
   }
   async ensureAllQueuesSectionIsVisible() {    
     await this.click(PAGING_SECTION)
