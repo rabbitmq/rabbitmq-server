@@ -155,6 +155,7 @@ setup_down_federation(Config) ->
     Config.
 
 expect(Ch, Q, Fun) when is_function(Fun) ->
+    ok = amqp_selective_consumer:register_default_consumer(Ch, self()),
     amqp_channel:subscribe(Ch, #'basic.consume'{queue  = Q,
                                                 no_ack = true}, self()),
     CTag = receive
