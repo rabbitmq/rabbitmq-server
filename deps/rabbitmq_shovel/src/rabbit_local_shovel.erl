@@ -118,6 +118,7 @@ parse(_Name, {source, Source}) ->
       resource_decl => rabbit_shovel_util:decl_fun(?MODULE, {source, Source}),
       queue => Queue,
       delete_after => proplists:get_value(delete_after, Source, never),
+      delete_after_duration => proplists:get_value(delete_after_duration, Source, undefined),
       consumer_args => CArgs,
       consumer_name => CTag};
 parse(_Name, {destination, Dest}) ->
@@ -161,6 +162,7 @@ parse_source(Def) ->
     end,
     DeleteAfter = pget(<<"src-delete-after">>, Def,
                        pget(<<"delete-after">>, Def, <<"never">>)),
+    DeleteAfterDuration = pget(<<"src-delete-after-duration">>, Def, undefined),
     %% Details are only used for status report in rabbitmqctl, as vhost is not
     %% available to query the runtime parameters.
     Details = maps:from_list([{K, V} || {K, V} <- [{exchange, SrcX},
@@ -171,6 +173,7 @@ parse_source(Def) ->
                   resource_decl => SrcDeclFun,
                   queue => Queue,
                   delete_after => opt_b2a(DeleteAfter),
+                  delete_after_duration => DeleteAfterDuration,
                   consumer_args => SrcCArgs,
                   consumer_name => SrcCTag
                  }, Details), DestHeaders}.
@@ -234,6 +237,7 @@ validate_src_funs(_Def, User) ->
      {<<"src-consumer-args">>, fun rabbit_shovel_util:validate_consumer_args/2, optional},
      {<<"src-consumer-name">>, fun rabbit_parameter_validation:binary/2, optional},
      {<<"src-delete-after">>, fun rabbit_shovel_util:validate_delete_after/2, optional},
+     {<<"src-delete-after-duration">>, fun rabbit_shovel_util:validate_delete_after_duration/2, optional},
      {<<"src-predeclared">>,  fun rabbit_parameter_validation:boolean/2, optional}
     ].
 
@@ -349,14 +353,17 @@ init_source(State = #{source := #{queue_r := QName,
         {Remaining, {ok, QState1}} ->
             rabbit_global_counters:consumer_created(?PROTOCOL),
             {ok, QState, Actions} = rabbit_queue_type:credit(QName, CTag, ?INITIAL_DELIVERY_COUNT, MaxLinkCredit, false, QState1),
-            State2 = State#{source => Src#{current => Current#{queue_states => QState,
-                                                               consumer_tag => CTag},
-                                           remaining => Remaining,
-                                           remaining_unacked => Remaining,
-                                           delivery_count => ?INITIAL_DELIVERY_COUNT,
-                                           max_link_credit => MaxLinkCredit,
-                                           credit => MaxLinkCredit,
-                                           at_least_one_credit_req_in_flight => true}},
+            Src1 = rabbit_shovel_util:sched_expire_after_duration(
+                     Name,
+                     Src#{current => Current#{queue_states => QState,
+                                              consumer_tag => CTag},
+                          remaining => Remaining,
+                          remaining_unacked => Remaining,
+                          delivery_count => ?INITIAL_DELIVERY_COUNT,
+                          max_link_credit => MaxLinkCredit,
+                          credit => MaxLinkCredit,
+                          at_least_one_credit_req_in_flight => true}),
+            State2 = State#{source => Src1},
             handle_queue_actions(Actions, State2);
         {0, {error, autodelete}} ->
             exit({shutdown, autodelete});
@@ -429,7 +436,8 @@ close_dest(_State) ->
 close_source(#{source := #{current := #{queue_states := QStates0,
                                         consumer_tag := CTag,
                                         user := User},
-                           queue_r := QName}}) ->
+                           queue_r := QName} = Src}) ->
+    _ = rabbit_shovel_util:cancel_expire_after_duration(Src),
     rabbit_global_counters:consumer_deleted(?PROTOCOL),
     case rabbit_amqqueue:with(
            QName,
@@ -475,6 +483,8 @@ handle_source({{'DOWN', #resource{name = Queue,
                                   virtual_host = VHost}}, _, _, _, _}  ,
               #{source := #{queue := Queue, current := #{vhost := VHost}}}) ->
     {stop, {inbound_link_or_channel_closure, source_queue_down}};
+handle_source({internal, delete_after_duration_expired}, _State) ->
+    {stop, {shutdown, autodelete}};
 handle_source(_Msg, _State) ->
     not_handled.
 
