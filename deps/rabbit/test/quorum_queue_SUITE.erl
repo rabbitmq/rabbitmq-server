@@ -5184,10 +5184,24 @@ delete_if_empty(Config) ->
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
     publish(Ch, QQ),
     wait_for_messages(Config, [[QQ, <<"1">>, <<"1">>, <<"0">>]]),
-    %% Try to delete the quorum queue
-    ?assertExit({{shutdown, {connection_closing, {server_initiated_close, 540, _}}}, _},
+    %% A non-empty quorum queue must refuse an `if-empty` deletion. This is
+    %% a channel-level exception (like for classic queues), not a fatal
+    %% protocol error, so only the channel is closed.
+    ?assertExit({{shutdown, {server_initiated_close, 406, _}}, _},
                 amqp_channel:call(Ch, #'queue.delete'{queue = QQ,
-                                                      if_empty = true})).
+                                                      if_empty = true})),
+
+    %% The queue and its message must still be intact.
+    Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server),
+    wait_for_messages(Config, [[QQ, <<"1">>, <<"1">>, <<"0">>]]),
+
+    %% Once the queue is drained, `if-empty` deletion must succeed.
+    DeliveryTag = basic_get_tag(Ch2, QQ, false),
+    amqp_channel:cast(Ch2, #'basic.ack'{delivery_tag = DeliveryTag}),
+    wait_for_messages(Config, [[QQ, <<"0">>, <<"0">>, <<"0">>]]),
+    ?assertMatch(#'queue.delete_ok'{},
+                 amqp_channel:call(Ch2, #'queue.delete'{queue = QQ,
+                                                        if_empty = true})).
 
 delete_if_unused(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
@@ -5196,12 +5210,30 @@ delete_if_unused(Config) ->
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
-    publish(Ch, QQ),
-    wait_for_messages(Config, [[QQ, <<"1">>, <<"1">>, <<"0">>]]),
-    %% Try to delete the quorum queue
-    ?assertExit({{shutdown, {connection_closing, {server_initiated_close, 540, _}}}, _},
+    subscribe(Ch, QQ, false),
+
+    %% A quorum queue with a consumer attached must refuse an `if-unused`
+    %% deletion. This is a channel-level exception (like for classic
+    %% queues), not a fatal protocol error, so only the channel is closed
+    %% (and, as a side effect, the consumer on it).
+    ?assertExit({{shutdown, {server_initiated_close, 406, _}}, _},
                 amqp_channel:call(Ch, #'queue.delete'{queue = QQ,
-                                                      if_unused = true})).
+                                                      if_unused = true})),
+
+    %% Once the consumer is gone, `if-unused` deletion must succeed.
+    Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server),
+    ?awaitMatch(<<"0">>, queue_consumer_count(Config, QQ), 30000),
+    ?assertMatch(#'queue.delete_ok'{},
+                 amqp_channel:call(Ch2, #'queue.delete'{queue = QQ,
+                                                        if_unused = true})).
+
+queue_consumer_count(Config, QQ) ->
+    Rows = rabbit_ct_broker_helpers:rabbitmqctl_list(
+             Config, 0, ["list_queues", "name", "consumers"]),
+    case lists:keyfind(QQ, 1, [list_to_tuple(Row) || Row <- Rows]) of
+        {QQ, Count} -> Count;
+        false -> undefined
+    end.
 
 queue_ttl(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),

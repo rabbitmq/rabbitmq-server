@@ -1096,20 +1096,67 @@ restart_server({_, _} = Ref) ->
              boolean(), boolean(),
              rabbit_types:username()) ->
     {ok, QLen :: non_neg_integer()} |
+    {error, in_use | not_empty} |
     {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
-delete(Q, true, _IfEmpty, _ActingUser) when ?amqqueue_is_quorum(Q) ->
-    {protocol_error, not_implemented,
-     "cannot delete ~ts. queue.delete operations with if-unused flag set are not supported by quorum queues",
-     [rabbit_misc:rs(amqqueue:get_name(Q))]};
-delete(Q, _IfUnused, true, _ActingUser) when ?amqqueue_is_quorum(Q) ->
-    {protocol_error, not_implemented,
-     "cannot delete ~ts. queue.delete operations with if-empty flag set are not supported by quorum queues",
-     [rabbit_misc:rs(amqqueue:get_name(Q))]};
-delete(Q, _IfUnused, _IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
+delete(Q, IfUnused, IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
+    case check_delete_preconditions(Q, IfUnused, IfEmpty) of
+        {error, _} = Err ->
+            Err;
+        ok ->
+            do_delete(Q, ActingUser)
+    end.
+
+%% `if-unused` and `if-empty` are best-effort for quorum queues: unlike
+%% classic queues, the check and the delete are not one atomic operation,
+%% so a message or a consumer may still arrive in between. The intent,
+%% per https://github.com/rabbitmq/rabbitmq-server/issues/10543, is to
+%% prevent *accidental* deletion of a queue with data or consumers, not
+%% to offer atomic check-then-delete semantics across the cluster.
+check_delete_preconditions(_Q, false, false) ->
+    ok;
+check_delete_preconditions(Q, IfUnused, IfEmpty) ->
+    case query_overview(Q) of
+        {ok, Msgs, Consumers} ->
+            check_delete_preconditions1(IfUnused, IfEmpty, Consumers, Msgs);
+        error when IfEmpty ->
+            %% Leader unreachable: message count cannot be verified, so
+            %% fail safe and refuse deletion rather than risk deleting a
+            %% queue that may still hold data.
+            {error, not_empty};
+        error ->
+            %% Only if-unused was requested. A queue with no reachable
+            %% leader cannot have live consumers right now, mirroring the
+            %% down-queue-process behaviour for classic queues.
+            ok
+    end.
+
+check_delete_preconditions1(_IfUnused, true, _Consumers, Msgs) when Msgs =/= 0 ->
+    {error, not_empty};
+check_delete_preconditions1(true, _IfEmpty, Consumers, _Msgs) when Consumers =/= 0 ->
+    {error, in_use};
+check_delete_preconditions1(_IfUnused, _IfEmpty, _Consumers, _Msgs) ->
+    ok.
+
+-spec query_overview(amqqueue:amqqueue()) ->
+    {ok, Msgs :: non_neg_integer(), Consumers :: non_neg_integer()} | error.
+query_overview(Q) ->
+    case find_leader(Q) of
+        {_, _} = Leader ->
+            case ra:member_overview(Leader, ?DELETE_TIMEOUT) of
+                {ok, #{machine := #{num_messages := Msgs,
+                                    num_consumers := Consumers}}, _} ->
+                    {ok, Msgs, Consumers};
+                _ ->
+                    error
+            end;
+        undefined ->
+            error
+    end.
+
+do_delete(Q, ActingUser) ->
     {Name, _} = amqqueue:get_pid(Q),
     QName = amqqueue:get_name(Q),
     QNodes = get_nodes(Q),
-    %% TODO Quorum queue needs to support consumer tracking for IfUnused
     Timeout = ?DELETE_TIMEOUT,
     rabbit_binding:delete_for_destination(QName, ActingUser),
     {ok, ReadyMsgs, _} = stat(Q),
