@@ -212,6 +212,7 @@ all_tests() ->
      delete_if_unused,
      delete_blocks_operations,
      delete_if_empty_while_publishing,
+     delete_if_empty_race_settle_recheck,
      queue_ttl,
      peek,
      oldest_entry_timestamp,
@@ -5312,6 +5313,40 @@ delete_if_empty_while_publishing(Config) ->
             ?assertMatch(#'queue.delete_ok'{},
                          amqp_channel:call(Ch2, #'queue.delete'{queue = QQ}))
     end.
+
+%% delete_if_empty_while_publishing above hits the real race only rarely
+%% (real publish/commit timing has to land inside the 50ms settle window),
+%% so it cannot by itself prove the settle-and-recheck logic in
+%% check_delete_preconditions/3 is correct. This test removes the timing
+%% dependency: it deterministically forces the exact sequence the settle
+%% re-check is meant to catch (first read empty, second read not-empty) by
+%% mocking ra:consistent_query/3's two calls directly, independent of any
+%% real publish ever happening.
+delete_if_empty_race_settle_recheck(Config) ->
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    QName = rabbit_misc:r(<<"/">>, queue, QQ),
+    {ok, Q} = rpc:call(Server, rabbit_amqqueue, lookup, [QName]),
+
+    ok = rpc:call(Server, meck, new, [ra, [passthrough, no_link]]),
+    ok = rpc:call(Server, meck, expect,
+                  [ra, consistent_query, 3,
+                   meck:seq([{ok, #{num_messages => 0, num_consumers => 0},
+                              {ra_name(QQ), Server}},
+                             {ok, #{num_messages => 1, num_consumers => 0},
+                              {ra_name(QQ), Server}}])]),
+
+    Result = rpc:call(Server, rabbit_quorum_queue, delete,
+                      [Q, false, true, <<"test-user">>]),
+    ?assertEqual({error, not_empty}, Result),
+
+    ok = rpc:call(Server, meck, unload, [ra]),
+
+    %% A safe refusal must leave the queue intact, not half-deleted.
+    ?assertMatch({ok, _}, rpc:call(Server, rabbit_amqqueue, lookup, [QName])).
 
 queue_consumer_count(Config, QQ) ->
     Rows = rabbit_ct_broker_helpers:rabbitmqctl_list(
