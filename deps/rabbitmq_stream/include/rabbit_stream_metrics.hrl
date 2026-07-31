@@ -36,6 +36,7 @@
 -define(ACCESS_REFUSED, ?NUM_PROTOCOL_COUNTERS + 15).
 -define(PRECONDITION_FAILED, ?NUM_PROTOCOL_COUNTERS + 16).
 -define(PUBLISHER_DOES_NOT_EXIST, ?NUM_PROTOCOL_COUNTERS + 17).
+-define(DELIVER_FRAME_TOO_LARGE, ?NUM_PROTOCOL_COUNTERS + 18).
 
 -define(PROTOCOL_COUNTERS,
         [
@@ -106,5 +107,9 @@
          {
           stream_error_publisher_does_not_exist_total, ?PUBLISHER_DOES_NOT_EXIST, counter,
           "Total number of commands failed with publisher does not exist"
+         },
+         {
+          stream_error_deliver_frame_too_large_total, ?DELIVER_FRAME_TOO_LARGE, counter,
+          "Total number of Deliver frames rejected for exceeding the negotiated frame_max"
          }
         ]).
