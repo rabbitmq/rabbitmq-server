@@ -12,6 +12,7 @@
 
 -import(rabbit_ct_helpers, [eventually/1]).
 -import(shovel_test_utils, [await_autodelete/2,
+                            with_duration_floor/3,
                             invalid_param/2, invalid_param/3,
                             valid_param/2, valid_param/3,
                             with_amqp091_ch/2, amqp091_publish_expect/5,
@@ -606,25 +607,6 @@ set_default_credit(Config, Value) ->
     OrigValue = rabbit_ct_broker_helpers:rpc(Config, persistent_term, get, [Key]),
     ok = rabbit_ct_broker_helpers:rpc(Config, persistent_term, put, [Key, Value]),
     OrigValue.
-
-with_duration_floor(Config, Value, Fun) ->
-    Key = delete_after_duration_floor,
-    OrigValue = rabbit_ct_broker_helpers:rpc(Config, application, get_env,
-                                             [rabbitmq_shovel, Key]),
-    ok = rabbit_ct_broker_helpers:rpc(Config, application, set_env,
-                                      [rabbitmq_shovel, Key, Value]),
-    try
-        Fun()
-    after
-        case OrigValue of
-            undefined ->
-                ok = rabbit_ct_broker_helpers:rpc(Config, application, unset_env,
-                                                  [rabbitmq_shovel, Key]);
-            {ok, Orig} ->
-                ok = rabbit_ct_broker_helpers:rpc(Config, application, set_env,
-                                                  [rabbitmq_shovel, Key, Orig])
-        end
-    end.
 
 message_count(Config, QueueName) ->
     Resource = rabbit_misc:r(<<"/">>, queue, QueueName),
