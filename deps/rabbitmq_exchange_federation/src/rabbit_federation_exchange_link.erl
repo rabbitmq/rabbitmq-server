@@ -86,13 +86,26 @@ init_link({Upstream, XName}) ->
     case rabbit_exchange:lookup(XName) of
         {ok, X} ->
             DeobfuscatedUpstream = rabbit_federation_util:deobfuscate_upstream(Upstream),
-            DeobfuscatedUParams = rabbit_federation_upstream:to_params(DeobfuscatedUpstream, X),
-            UParams = rabbit_federation_util:obfuscate_upstream_params(DeobfuscatedUParams),
-            rabbit_federation_status:report(Upstream, UParams, XName, starting),
-            join(rabbit_federation_exchanges),
-            join({rabbit_federation_exchange, XName}),
-            gen_server2:cast(self(), maybe_go),
-            {ok, {not_started, {Upstream, UParams, XName}}};
+            case rabbit_federation_upstream:to_params(DeobfuscatedUpstream, X) of
+                {ok, DeobfuscatedUParams} ->
+                    UParams = rabbit_federation_util:obfuscate_upstream_params(DeobfuscatedUParams),
+                    rabbit_federation_status:report(Upstream, UParams, XName, starting),
+                    join(rabbit_federation_exchanges),
+                    join({rabbit_federation_exchange, XName}),
+                    gen_server2:cast(self(), maybe_go),
+                    {ok, {not_started, {Upstream, UParams, XName}}};
+                {error, {_Info, SafeURI} = Reason} ->
+                    %% Unable to parse upstream URI. Return `ignore` so this
+                    %% link's supervisor keeps its siblings and does not fail
+                    %% broker startup. Publish an entry to the status table
+                    %% so the link is visible via `federation_status`.
+                    rabbit_federation_util:log_skipped_link(
+                      XName, Upstream#upstream.name, Reason),
+                    rabbit_federation_status:report(
+                      Upstream, #upstream_params{safe_uri = SafeURI}, XName,
+                      {invalid_upstream_uri, Reason}),
+                    ignore
+            end;
         {error, not_found} ->
             ?LOG_WARNING("not found, stopping link", []),
             {stop, gone}

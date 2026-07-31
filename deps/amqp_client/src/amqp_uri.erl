@@ -20,21 +20,30 @@
 -spec remove_credentials(URI :: string() | binary()) -> string().
 remove_credentials(URI) ->
     UriString = rabbit_data_coercion:to_list(URI),
-    Props = uri_parser:parse(UriString,
-                             [{host, undefined}, {path, undefined},
-                              {port, undefined}, {'query', []}]),
-    PortPart = case proplists:get_value(port, Props) of
-                   undefined -> "";
-                   Port      -> rabbit_misc:format(":~B", [Port])
-               end,
-    PGet = fun(K, P) -> case proplists:get_value(K, P) of
-                            undefined -> "";
-                            R         -> R
-                        end
-           end,
-    rabbit_misc:format(
-      "~ts://~ts~ts~ts", [proplists:get_value(scheme, Props), PGet(host, Props),
-                      PortPart,                           PGet(path, Props)]).
+    case uri_parser:parse(UriString,
+                          [{host, undefined}, {path, undefined},
+                           {port, undefined}, {'query', []}]) of
+        {error, _} ->
+            %% `uri_parser:parse/2` cannot parse a structurally malformed URI.
+            %% Since this function is used to sanitize a URI before logging it,
+            %% and is therefore routinely called on invalid input, fall back to
+            %% a best-effort strip of the `user:password@` userinfo rather than
+            %% crashing.
+            re:replace(UriString, "://[^@/]*@", "://", [{return, list}]);
+        Props ->
+            PortPart = case proplists:get_value(port, Props) of
+                           undefined -> "";
+                           Port      -> rabbit_misc:format(":~B", [Port])
+                       end,
+            PGet = fun(K, P) -> case proplists:get_value(K, P) of
+                                    undefined -> "";
+                                    R         -> R
+                                end
+                   end,
+            rabbit_misc:format(
+              "~ts://~ts~ts~ts", [proplists:get_value(scheme, Props), PGet(host, Props),
+                              PortPart,                           PGet(path, Props)])
+    end.
 
 %% @spec (Uri) -> {ok, #amqp_params_network{} | #amqp_params_direct{}} |
 %%                {error, {Info, Uri}}

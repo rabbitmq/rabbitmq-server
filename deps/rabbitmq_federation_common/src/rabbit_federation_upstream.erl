@@ -66,16 +66,47 @@ params_to_string(#upstream_params{safe_uri = SafeURI,
 remove_credentials(URI) ->
     list_to_binary(amqp_uri:remove_credentials(binary_to_list(URI))).
 
+%% Returns `{ok, #upstream_params{}}` on success or `{error, {Info, SafeURI}}`
+%% (credentials stripped) when none of the upstream URIs can be parsed. The
+%% URIs of an upstream are interchangeable failover endpoints, so each is
+%% tried, in a random order to spread load, until one parses.
 to_params(Upstream = #upstream{uris = URIs}, XorQ) ->
-    URI = lists:nth(rand:uniform(length(URIs)), URIs),
-    {ok, Params} = amqp_uri:parse(binary_to_list(URI), vhost(XorQ)),
-    XorQ1 = with_name(Upstream, vhost(Params), XorQ),
-    SafeURI = remove_credentials(URI),
-    #upstream_params{params   = Params,
-                     uri      = URI,
-                     x_or_q   = XorQ1,
-                     safe_uri = SafeURI,
-                     table    = params_table(SafeURI, XorQ)}.
+    to_params(shuffle(URIs), Upstream, XorQ, undefined).
+
+to_params([], _Upstream, _XorQ, LastError) ->
+    LastError;
+to_params([URI | Rest], Upstream, XorQ, _LastError) ->
+    case amqp_uri:parse(binary_to_list(URI), vhost(XorQ)) of
+        {ok, Params} ->
+            XorQ1 = with_name(Upstream, vhost(Params), XorQ),
+            SafeURI = remove_credentials(URI),
+            {ok, #upstream_params{params   = Params,
+                                  uri      = URI,
+                                  x_or_q   = XorQ1,
+                                  safe_uri = SafeURI,
+                                  table    = params_table(SafeURI, XorQ)}};
+        {error, {Info, _UnsafeURI}} ->
+            Error = {error, {sanitize_parse_error(Info), remove_credentials(URI)}},
+            to_params(Rest, Upstream, XorQ, Error)
+    end.
+
+%% `amqp_uri:parse/2` embeds the full query string in some error `Info`
+%% shapes, and a TLS `password` (or other secret) can appear there. Redact
+%% the offending value and query before the error reaches the logs.
+sanitize_parse_error({invalid_ssl_parameter, Key, _Value, _Query, Reason}) ->
+    {invalid_ssl_parameter, Key, redacted, redacted, Reason};
+sanitize_parse_error({invalid_amqp_params_parameter, Field, _Value, _Query, Reason}) ->
+    {invalid_amqp_params_parameter, Field, redacted, redacted, Reason};
+sanitize_parse_error({unable_to_parse_uri, _Detail}) ->
+    %% The detail embeds the raw URI (with credentials) and an exit stack
+    %% trace. Neither is safe to log; the sanitized URI is reported separately.
+    unable_to_parse_uri;
+sanitize_parse_error(Info) ->
+    Info.
+
+%% Random permutation, used to spread load across an upstream's URIs.
+shuffle(List) ->
+    [X || {_, X} <- lists:sort([{rand:uniform(), X} || X <- List])].
 
 print(Fmt, Args) -> iolist_to_binary(io_lib:format(Fmt, Args)).
 

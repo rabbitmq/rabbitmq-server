@@ -222,6 +222,12 @@ amqp_uri_remove_credentials(_Config) ->
     [?assertMatch("amqp://host:10000/vhost",
                   amqp_uri:remove_credentials(Uri))
         || Uri <- string_binaries_uris()],
+    %% A structurally malformed URI must not crash: `remove_credentials/1`
+    %% sanitizes URIs for logging and is routinely called on invalid input.
+    %% The userinfo must still be stripped so credentials do not leak.
+    Sanitized = amqp_uri:remove_credentials("amqp://alice:s3cret@:::"),
+    ?assertEqual(nomatch, string:find(Sanitized, "s3cret")),
+    ?assertEqual(nomatch, string:find(Sanitized, "alice")),
     ok.
 
 uri_parser_accepts_string_and_binaries(_Config) ->
