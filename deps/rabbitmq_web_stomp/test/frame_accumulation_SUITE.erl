@@ -18,7 +18,8 @@ all() ->
     [unauth_frame_split_within_budget,
      unauth_incomplete_frame_exceeds_budget,
      unauth_completed_frame_exceeds_budget,
-     authenticated_frame_exceeds_unauth_budget].
+     authenticated_frame_exceeds_unauth_budget,
+     authenticated_accumulation_bounded_by_max_frame_size].
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
@@ -104,6 +105,20 @@ authenticated_frame_exceeds_unauth_budget(Config) ->
     ok = send_in_chunks(WS, Frame, ?CHUNK),
     {<<"MESSAGE">>, _, Body} = raw_recv(WS),
     {close, _} = rfc6455_client:close(WS),
+    ok.
+
+authenticated_accumulation_bounded_by_max_frame_size(Config) ->
+    set_env(Config, max_frame_size, 8192),
+    WS = open_ws(Config),
+    ok = raw_send(WS, "CONNECT", [{"login", "guest"}, {"passcode", "guest"}]),
+    {<<"CONNECTED">>, _, <<>>} = raw_recv(WS),
+    %% The declared body never arrives, so the parser keeps accumulating.
+    Header = <<"SEND\ndestination:/queue/poc\ncontent-length:100000000\n\n">>,
+    ok = rfc6455_client:send(WS, Header),
+    Chunk = binary:copy(<<"A">>, ?CHUNK),
+    %% 8192 + 4096 = 12288 is the budget, so 5 chunks must exceed it.
+    [ok = rfc6455_client:send(WS, Chunk) || _ <- lists:seq(1, 5)],
+    {close, {1007, _}} = rfc6455_client:recv(WS, 5000),
     ok.
 
 %%

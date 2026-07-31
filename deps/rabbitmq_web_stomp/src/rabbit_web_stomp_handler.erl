@@ -309,9 +309,7 @@ websocket_info(emit_stats, State) ->
     {ok, emit_stats(State)};
 
 websocket_info(increase_max_frame_size, State) ->
-    MaxFrameSize = application:get_env(
-        rabbitmq_stomp, max_frame_size, ?DEFAULT_MAX_FRAME_SIZE) + 4096,
-    {[{set_options, #{max_frame_size => MaxFrameSize}}], State};
+    {[{set_options, #{max_frame_size => authenticated_frame_size()}}], State};
 
 websocket_info(login_timeout, State = #state{connection = C})
   when C =:= none; C =:= undefined ->
@@ -448,10 +446,16 @@ unauthenticated_frame_size() ->
     application:get_env(rabbitmq_stomp, max_frame_size_unauthenticated,
                         ?DEFAULT_MAX_FRAME_SIZE_UNAUTHENTICATED) + 4096.
 
+-spec authenticated_frame_size() -> pos_integer().
+authenticated_frame_size() ->
+    application:get_env(rabbitmq_stomp, max_frame_size,
+                        ?DEFAULT_MAX_FRAME_SIZE) + 4096.
+
 %% A STOMP frame may span many WebSocket messages that each stay within the
 %% per-message limit while the parser continuation retains their sum, and
 %% permessage-deflate lets small unauthenticated input expand into a large
-%% continuation. Cap that sum until the client authenticates.
+%% continuation. Cap that sum before the client authenticates, then raise the
+%% cap to the configured maximum frame size.
 -spec maybe_lift_frame_size_limit(pid() | none | undefined,
                                   pid() | none | undefined,
                                   pos_integer() | unlimited) ->
@@ -460,7 +464,7 @@ maybe_lift_frame_size_limit(OldConn, ConnPid, _Max)
   when (OldConn =:= none orelse OldConn =:= undefined) andalso
        is_pid(ConnPid) ->
     self() ! increase_max_frame_size,
-    unlimited;
+    authenticated_frame_size();
 maybe_lift_frame_size_limit(_, _, Max) ->
     Max.
 
