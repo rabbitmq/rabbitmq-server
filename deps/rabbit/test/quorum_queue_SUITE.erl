@@ -210,6 +210,8 @@ all_tests() ->
      pre_existing_invalid_policy,
      delete_if_empty,
      delete_if_unused,
+     delete_blocks_operations,
+     delete_if_empty_while_publishing,
      queue_ttl,
      peek,
      oldest_entry_timestamp,
@@ -5191,17 +5193,20 @@ delete_if_empty(Config) ->
                 amqp_channel:call(Ch, #'queue.delete'{queue = QQ,
                                                       if_empty = true})),
 
-    %% The queue and its message must still be intact.
+    %% Failed deletion must leave the queue and its message intact.
     Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server),
     wait_for_messages(Config, [[QQ, <<"1">>, <<"1">>, <<"0">>]]),
 
-    %% Once the queue is drained, `if-empty` deletion must succeed.
+    %% Once drained, if-empty deletion succeeds.
     DeliveryTag = basic_get_tag(Ch2, QQ, false),
     amqp_channel:cast(Ch2, #'basic.ack'{delivery_tag = DeliveryTag}),
     wait_for_messages(Config, [[QQ, <<"0">>, <<"0">>, <<"0">>]]),
-    ?assertMatch(#'queue.delete_ok'{},
+    ?assertMatch(#'queue.delete_ok'{message_count = 0},
                  amqp_channel:call(Ch2, #'queue.delete'{queue = QQ,
-                                                        if_empty = true})).
+                                                        if_empty = true})),
+    QName = rabbit_misc:r(<<"/">>, queue, QQ),
+    ?assertEqual({error, not_found},
+                 rpc:call(Server, rabbit_amqqueue, lookup, [QName])).
 
 delete_if_unused(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
@@ -5223,9 +5228,68 @@ delete_if_unused(Config) ->
     %% Once the consumer is gone, `if-unused` deletion must succeed.
     Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server),
     ?awaitMatch(<<"0">>, queue_consumer_count(Config, QQ), 30000),
-    ?assertMatch(#'queue.delete_ok'{},
+    ?assertMatch(#'queue.delete_ok'{message_count = 0},
                  amqp_channel:call(Ch2, #'queue.delete'{queue = QQ,
-                                                        if_unused = true})).
+                                                        if_unused = true})),
+    QName = rabbit_misc:r(<<"/">>, queue, QQ),
+    ?assertEqual({error, not_found},
+                 rpc:call(Server, rabbit_amqqueue, lookup, [QName])).
+
+%% While a conditional delete runs, the queue is moved to the blocked state so
+%% concurrent publishers are nacked instead of being confirmed and then lost
+%% when the RA cluster is torn down (rabbitmq/rabbitmq-server#17075).
+delete_blocks_operations(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    QName = rabbit_misc:r(<<"/">>, queue, QQ),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+
+    ok = set_queue_state(Config, QName, blocked),
+    ?awaitMatch(blocked, get_queue_state(Config, QName), ?DEFAULT_AWAIT),
+
+    ?assertEqual(fail, publish_confirm(Ch, QQ)),
+
+    ok = set_queue_state(Config, QName, live),
+    ?awaitMatch(live, get_queue_state(Config, QName), ?DEFAULT_AWAIT),
+    Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch1, #'confirm.select'{}),
+    ?assertEqual(ok, publish_confirm(Ch1, QQ)),
+    ?assertMatch(#'queue.delete_ok'{},
+                 amqp_channel:call(Ch1, #'queue.delete'{queue = QQ})).
+
+delete_if_empty_while_publishing(Config) ->
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    PublisherChan = rabbit_ct_client_helpers:open_channel(Config, Server),
+    DeleterChan = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(PublisherChan, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    wait_for_messages(Config, [[QQ, <<"0">>, <<"0">>, <<"0">>]]),
+    #'confirm.select_ok'{} = amqp_channel:call(PublisherChan, #'confirm.select'{}),
+    amqp_channel:register_confirm_handler(PublisherChan, self()),
+    Parent = self(),
+    PubPid = spawn_link(fun() ->
+        [ok = amqp_channel:cast(PublisherChan,
+                                #'basic.publish'{exchange = <<>>,
+                                                 routing_key = QQ},
+                                #amqp_msg{payload = <<"x">>})
+         || _ <- lists:seq(1, 5000)],
+        Parent ! publish_cast_done
+    end),
+    ?assertMatch(#'queue.delete_ok'{},
+                 amqp_channel:call(DeleterChan, #'queue.delete'{queue = QQ,
+                                                                if_empty = true})),
+    receive publish_cast_done -> ok after 10000 -> ct:fail(publish_stuck) end,
+    %% Every in-flight publish must get an explicit ack or nack, never hang.
+    ?assertEqual(5000, count_confirms(PublisherChan, 5000, 30000)),
+    unlink(PubPid),
+    QName = rabbit_misc:r(<<"/">>, queue, QQ),
+    ?assertEqual({error, not_found},
+                 rpc:call(Server, rabbit_amqqueue, lookup, [QName])).
 
 queue_consumer_count(Config, QQ) ->
     Rows = rabbit_ct_broker_helpers:rabbitmqctl_list(
@@ -6785,4 +6849,29 @@ machine_overview(ServerId) when is_tuple(ServerId) ->
             Mac;
         Err ->
             Err
+    end.
+
+set_queue_state(Config, QName, State) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    ok = rpc:call(Server, rabbit_amqqueue, update,
+                  [QName, fun (Q) -> amqqueue:set_state(Q, State) end]).
+
+get_queue_state(Config, QName) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    {ok, Q} = rpc:call(Server, rabbit_amqqueue, lookup, [QName]),
+    amqqueue:get_state(Q).
+
+count_confirms(Ch, Expected, Timeout) ->
+    count_confirms(Ch, Expected, Timeout, 0).
+
+count_confirms(_Ch, 0, _Timeout, Acc) ->
+    Acc;
+count_confirms(Ch, Remaining, Timeout, Acc) ->
+    receive
+        #'basic.ack'{} ->
+            count_confirms(Ch, Remaining - 1, Timeout, Acc + 1);
+        #'basic.nack'{} ->
+            count_confirms(Ch, Remaining - 1, Timeout, Acc + 1)
+    after Timeout ->
+              ct:fail({confirm_timeout, Remaining, Acc})
     end.

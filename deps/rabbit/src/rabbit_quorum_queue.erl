@@ -37,6 +37,7 @@
 -export([update_consumer_handler/8, update_consumer/9]).
 -export([cancel_consumer_handler/2, cancel_consumer/3]).
 -export([become_leader/2, handle_tick/3, spawn_deleter/1]).
+-export([state_restore_timer/3, spawn_state_restore_timers/2]).
 -export([rpc_delete_metrics/1,
          key_metrics_rpc/1]).
 -export([format/2]).
@@ -173,6 +174,9 @@
 -define(START_CLUSTER_RPC_TIMEOUT, 60_000). %% needs to be longer than START_CLUSTER_TIMEOUT
 -define(TICK_INTERVAL, 5000). %% the ra server tick time
 -define(DELETE_TIMEOUT, 5000).
+%% Must exceed ?DELETE_TIMEOUT so a normally-running conditional delete
+%% finishes before the safety-net timer restores a blocked queue.
+-define(BLOCKED_STATE_RESTORE_TIMEOUT, ?DELETE_TIMEOUT + 1_000).
 -define(MEMBER_CHANGE_TIMEOUT, 20_000).
 -define(SNAPSHOT_INTERVAL, 8192). %% the ra default is 4096
 %% setting a low default here to allow quorum queues to better chose themselves
@@ -1064,6 +1068,12 @@ recover(_Vhost, Queues) ->
          %% rabbit_durable_queue
          %% So many code paths are dependent on this.
          ok = rabbit_db_queue:set_dirty(Q),
+         %% A queue left blocked means a conditional delete was interrupted
+         %% before restoring state; make it usable again on recovery.
+         _ = case amqqueue:get_state(Q) =:= blocked of
+                 true -> set_queue_state(QName, live);
+                 false -> ok
+             end,
          case Res of
              ok ->
                  {[Q | R0], F0};
@@ -1099,12 +1109,83 @@ restart_server({_, _} = Ref) ->
     {error, in_use | not_empty} |
     {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 delete(Q, IfUnused, IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
-    case check_delete_preconditions(Q, IfUnused, IfEmpty) of
-        {error, _} = Err ->
-            Err;
-        ok ->
-            do_delete(Q, ActingUser)
+    case IfUnused orelse IfEmpty of
+        false ->
+            {ok, ReadyMsgs, _} = stat(Q),
+            do_delete(Q, ReadyMsgs, ActingUser);
+        true ->
+            case rabbit_alarm:get_alarms() of
+                [] ->
+                    %% Block the queue before checking preconditions so concurrent
+                    %% publishes cannot slip in between the overview read and the
+                    %% actual delete (see rabbitmq/rabbitmq-server#17075 review).
+                    with_queue_blocked(
+                      Q,
+                      fun () ->
+                              case check_delete_preconditions(Q, IfUnused, IfEmpty) of
+                                  {ok, ReadyMsgs} ->
+                                      do_delete(Q, ReadyMsgs, ActingUser);
+                                  {error, _} = Err ->
+                                      Err
+                              end
+                      end);
+                _Alarms ->
+                    cannot_delete_under_alarm(amqqueue:get_name(Q))
+            end
     end.
+
+cannot_delete_under_alarm(QName) ->
+    {protocol_error, precondition_failed,
+     "cannot delete ~ts with an if-unused/if-empty precondition while the "
+     "cluster is under a resource alarm",
+     [rabbit_misc:rs(QName)]}.
+
+%% Runs Fun with the queue moved to the blocked state. On success the queue
+%% record has already been removed by the delete, so nothing is restored;
+%% otherwise the previous state is restored.
+with_queue_blocked(Q, Fun) ->
+    QName = amqqueue:get_name(Q),
+    PrevState = amqqueue:get_state(Q),
+    _ = set_queue_state(QName, blocked),
+    TimerPids = spawn_state_restore_timers(QName, PrevState),
+    try Fun() of
+        {ok, _} = Ok ->
+            Ok;
+        Other ->
+            _ = set_queue_state(QName, PrevState),
+            Other
+    catch
+        Class:Reason:Stacktrace ->
+            _ = set_queue_state(QName, PrevState),
+            erlang:raise(Class, Reason, Stacktrace)
+    after
+        _ = cancel_state_restore_timers(TimerPids)
+    end.
+
+spawn_state_restore_timers(QName, State) ->
+    Timeout = blocked_state_restore_timeout(),
+    [spawn(Node, ?MODULE, state_restore_timer, [QName, State, Timeout])
+     || Node <- rabbit_nodes:list_running()].
+
+state_restore_timer(QName, State, Timeout) ->
+    receive
+        cancel -> ok
+    after Timeout ->
+            _ = set_queue_state(QName, State),
+            ok
+    end.
+
+cancel_state_restore_timers(Pids) ->
+    _ = [Pid ! cancel || Pid <- Pids],
+    ok.
+
+blocked_state_restore_timeout() ->
+    application:get_env(rabbit, quorum_queue_blocked_state_restore_timeout,
+                        ?BLOCKED_STATE_RESTORE_TIMEOUT).
+
+set_queue_state(QName, State) ->
+    rabbit_amqqueue:update(QName,
+                           fun (Q) -> amqqueue:set_state(Q, State) end).
 
 %% `if-unused` and `if-empty` are best-effort for quorum queues: unlike
 %% classic queues, the check and the delete are not one atomic operation,
@@ -1113,21 +1194,25 @@ delete(Q, IfUnused, IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
 %% prevent *accidental* deletion of a queue with data or consumers, not
 %% to offer atomic check-then-delete semantics across the cluster.
 check_delete_preconditions(_Q, false, false) ->
-    ok;
+    {ok, 0};
 check_delete_preconditions(Q, IfUnused, IfEmpty) ->
     case query_overview(Q) of
         {ok, Msgs, Consumers} ->
-            check_delete_preconditions1(IfUnused, IfEmpty, Consumers, Msgs);
+            case check_delete_preconditions1(IfUnused, IfEmpty, Consumers, Msgs) of
+                ok -> {ok, Msgs};
+                {error, _} = Err -> Err
+            end;
         error when IfEmpty ->
             %% Leader unreachable: message count cannot be verified, so
             %% fail safe and refuse deletion rather than risk deleting a
             %% queue that may still hold data.
             {error, not_empty};
         error ->
-            %% Only if-unused was requested. A queue with no reachable
-            %% leader cannot have live consumers right now, mirroring the
-            %% down-queue-process behaviour for classic queues.
-            ok
+            %% Only if-unused was requested. We cannot verify consumer
+            %% counts while the leader is unreachable; proceed anyway to
+            %% mirror classic down-queue-process behaviour, not because
+            %% zero consumers is guaranteed.
+            {ok, 0}
     end.
 
 check_delete_preconditions1(_IfUnused, true, _Consumers, Msgs) when Msgs =/= 0 ->
@@ -1153,13 +1238,12 @@ query_overview(Q) ->
             error
     end.
 
-do_delete(Q, ActingUser) ->
+do_delete(Q, ReadyMsgs, ActingUser) ->
     {Name, _} = amqqueue:get_pid(Q),
     QName = amqqueue:get_name(Q),
     QNodes = get_nodes(Q),
     Timeout = ?DELETE_TIMEOUT,
     rabbit_binding:delete_for_destination(QName, ActingUser),
-    {ok, ReadyMsgs, _} = stat(Q),
     Servers = [{Name, Node} || Node <- QNodes],
     case ra:delete_cluster(Servers, Timeout) of
         {ok, {_, LeaderNode} = Leader} ->
@@ -1398,19 +1482,39 @@ deliver(QSs, Msg0, Options) ->
     Msg = mc:prepare(store, Msg0),
     lists:foldl(
       fun({Q, stateless}, Acc) ->
-              QRef = amqqueue:get_pid(Q),
-              ok = rabbit_fifo_client:untracked_enqueue([QRef], Msg),
-              Acc;
+              QName = amqqueue:get_name(Q),
+              case is_blocked(QName) of
+                  true ->
+                      Acc;
+                  false ->
+                      QRef = amqqueue:get_pid(Q),
+                      ok = rabbit_fifo_client:untracked_enqueue([QRef], Msg),
+                      Acc
+              end;
          ({Q, S0}, {Qs, Actions}) ->
               QName = amqqueue:get_name(Q),
-              case deliver0(QName, Correlation, Msg, S0) of
-                  {reject_publish, S} ->
-                      {[{Q, S} | Qs],
-                       [{rejected, QName, maxlen, [Correlation]} | Actions]};
-                  {ok, S, As} ->
-                      {[{Q, S} | Qs], As ++ Actions}
+              case is_blocked(QName) of
+                  true ->
+                      {[{Q, S0} | Qs],
+                       [{rejected, QName, blocked, [Correlation]} | Actions]};
+                  false ->
+                      case deliver0(QName, Correlation, Msg, S0) of
+                          {reject_publish, S} ->
+                              {[{Q, S} | Qs],
+                               [{rejected, QName, maxlen, [Correlation]} | Actions]};
+                          {ok, S, As} ->
+                              {[{Q, S} | Qs], As ++ Actions}
+                      end
               end
       end, {[], []}, QSs).
+
+is_blocked(QName) ->
+    case rabbit_amqqueue:lookup(QName) of
+        {ok, Q} ->
+            ?amqqueue_state_is(Q, blocked);
+        _ ->
+            false
+    end.
 
 state_info(S) ->
     #{pending_raft_commands => rabbit_fifo_client:pending_size(S),
