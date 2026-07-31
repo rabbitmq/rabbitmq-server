@@ -88,6 +88,10 @@ groups() ->
        oversized_frame_rejected_after_tune_negotiation,
        frame_max_clamped_when_client_negotiates_higher,
        client_tune_response_with_zero_frame_max_is_unlimited,
+       deliver_frame_too_large_closes_connection_on_new_chunk,
+       deliver_frame_too_large_closes_connection_on_subscribe,
+       deliver_frame_too_large_closes_connection_on_consumer_update,
+       deliver_under_frame_max_delivers_normally,
        test_stream_test_utils,
        sac_subscription_with_partition_index_conflict_should_return_error,
        test_metadata_with_advertised_hints,
@@ -331,6 +335,7 @@ test_global_counters(Config) ->
                    messages_unroutable_returned_total => 0,
                    stream_error_access_refused_total => 0,
                    stream_error_authentication_failure_total => 0,
+                   stream_error_deliver_frame_too_large_total => 0,
                    stream_error_frame_too_large_total => 0,
                    stream_error_internal_error_total => 0,
                    stream_error_precondition_failed_total => 0,
@@ -800,6 +805,168 @@ client_tune_response_with_zero_frame_max_is_unlimited(Config) ->
     {Cmd, _C5} = receive_commands(Transport, S, C4),
     ?assertMatch({response, 3, {open, ?RESPONSE_CODE_OK, _}}, Cmd),
     gen_tcp:close(S).
+
+%% A subscriber that negotiates a small frame_max must not receive a
+%% Deliver frame bigger than what it agreed to. Here the subscriber has an
+%% empty stream open when a publisher, on another, normally-tuned
+%% connection, writes a chunk larger than the subscriber's frame_max; the
+%% subscribing connection is closed instead of receiving the oversized
+%% frame. This exercises the reactive (queue offset event) delivery path.
+deliver_frame_too_large_closes_connection_on_new_chunk(Config) ->
+    Transport = gen_tcp,
+    Port = get_stream_port(Config),
+    Opts = [{active, false}, {mode, binary}],
+    Stream = atom_to_binary(?FUNCTION_NAME, utf8),
+
+    {ok, SubS} = Transport:connect("localhost", Port, Opts),
+    SubC0 = rabbit_stream_core:init(0),
+    SubC1 = test_peer_properties(Transport, SubS, SubC0),
+    SubC2 = sasl_handshake(Transport, SubS, SubC1),
+    SubC3 = test_plain_sasl_authenticate(Transport, SubS, SubC2, <<"guest">>),
+    {{tune, ServerFrameMax, _}, SubC4} = receive_commands(Transport, SubS, SubC3),
+    SmallFrameMax = 1024,
+    ?assert(SmallFrameMax < ServerFrameMax),
+    ok = Transport:send(SubS, frame({response, 0, {tune, SmallFrameMax, 0}})),
+    ok = Transport:send(SubS, request(3, {open, <<"/">>})),
+    {{response, 3, {open, ?RESPONSE_CODE_OK, _}}, SubC5} =
+        receive_commands(Transport, SubS, SubC4),
+    SubC6 = test_create_stream(Transport, SubS, Stream, SubC5),
+    SubscriptionId = 1,
+    SubC7 = test_subscribe(Transport, SubS, SubscriptionId, Stream, SubC6),
+
+    {ok, PubS} = Transport:connect("localhost", Port, Opts),
+    PubC0 = rabbit_stream_core:init(0),
+    PubC1 = test_peer_properties(Transport, PubS, PubC0),
+    PubC2 = test_authenticate(Transport, PubS, PubC1),
+    PublisherId = 1,
+    PubC3 = test_declare_publisher(Transport, PubS, PublisherId, Stream, PubC2),
+    Body = binary:copy(<<"a">>, SmallFrameMax + 1000),
+    _PubC4 = test_publish_confirm(Transport, PubS, PublisherId, Body, PubC3),
+
+    {Cmd, _SubC8} = receive_commands(Transport, SubS, SubC7),
+    ?assertMatch({request, _, {close, ?RESPONSE_CODE_FRAME_TOO_LARGE, _}}, Cmd),
+    ?assertEqual(closed, wait_for_socket_close(Transport, SubS, 10)),
+    Transport:close(PubS).
+
+%% Same failure as above, but triggered by the immediate dispatch that
+%% happens when a client subscribes to a stream that already holds a chunk
+%% bigger than the frame_max it just negotiated.
+deliver_frame_too_large_closes_connection_on_subscribe(Config) ->
+    Transport = gen_tcp,
+    Port = get_stream_port(Config),
+    Opts = [{active, false}, {mode, binary}],
+    Stream = atom_to_binary(?FUNCTION_NAME, utf8),
+
+    {ok, PubS} = Transport:connect("localhost", Port, Opts),
+    PubC0 = rabbit_stream_core:init(0),
+    PubC1 = test_peer_properties(Transport, PubS, PubC0),
+    PubC2 = test_authenticate(Transport, PubS, PubC1),
+    PubC3 = test_create_stream(Transport, PubS, Stream, PubC2),
+    PublisherId = 1,
+    PubC4 = test_declare_publisher(Transport, PubS, PublisherId, Stream, PubC3),
+    SmallFrameMax = 1024,
+    Body = binary:copy(<<"a">>, SmallFrameMax + 1000),
+    _PubC5 = test_publish_confirm(Transport, PubS, PublisherId, Body, PubC4),
+
+    {ok, SubS} = Transport:connect("localhost", Port, Opts),
+    SubC0 = rabbit_stream_core:init(0),
+    SubC1 = test_peer_properties(Transport, SubS, SubC0),
+    SubC2 = sasl_handshake(Transport, SubS, SubC1),
+    SubC3 = test_plain_sasl_authenticate(Transport, SubS, SubC2, <<"guest">>),
+    {{tune, ServerFrameMax, _}, SubC4} = receive_commands(Transport, SubS, SubC3),
+    ?assert(SmallFrameMax < ServerFrameMax),
+    ok = Transport:send(SubS, frame({response, 0, {tune, SmallFrameMax, 0}})),
+    ok = Transport:send(SubS, request(3, {open, <<"/">>})),
+    {{response, 3, {open, ?RESPONSE_CODE_OK, _}}, SubC5} =
+        receive_commands(Transport, SubS, SubC4),
+    SubscriptionId = 1,
+    SubC6 = test_subscribe(Transport, SubS, SubscriptionId, Stream, SubC5),
+
+    {Cmd, _SubC7} = receive_commands(Transport, SubS, SubC6),
+    ?assertMatch({request, _, {close, ?RESPONSE_CODE_FRAME_TOO_LARGE, _}}, Cmd),
+    ?assertEqual(closed, wait_for_socket_close(Transport, SubS, 10)),
+    Transport:close(PubS).
+
+%% A chunk that fits comfortably within the negotiated frame_max is
+%% delivered as normal, even when that frame_max is deliberately small
+%% rather than the default multi-megabyte ceiling.
+deliver_under_frame_max_delivers_normally(Config) ->
+    Transport = gen_tcp,
+    Port = get_stream_port(Config),
+    Opts = [{active, false}, {mode, binary}],
+    Stream = atom_to_binary(?FUNCTION_NAME, utf8),
+
+    {ok, S} = Transport:connect("localhost", Port, Opts),
+    C0 = rabbit_stream_core:init(0),
+    C1 = test_peer_properties(Transport, S, C0),
+    C2 = sasl_handshake(Transport, S, C1),
+    C3 = test_plain_sasl_authenticate(Transport, S, C2, <<"guest">>),
+    {{tune, ServerFrameMax, _}, C4} = receive_commands(Transport, S, C3),
+    SmallFrameMax = 1024,
+    ?assert(SmallFrameMax < ServerFrameMax),
+    ok = Transport:send(S, frame({response, 0, {tune, SmallFrameMax, 0}})),
+    ok = Transport:send(S, request(3, {open, <<"/">>})),
+    {{response, 3, {open, ?RESPONSE_CODE_OK, _}}, C5} =
+        receive_commands(Transport, S, C4),
+    C6 = test_create_stream(Transport, S, Stream, C5),
+    PublisherId = 1,
+    C7 = test_declare_publisher(Transport, S, PublisherId, Stream, C6),
+    Body = <<"a small message">>,
+    C8 = test_publish_confirm(Transport, S, PublisherId, Body, C7),
+    SubscriptionId = 1,
+    C9 = test_subscribe(Transport, S, SubscriptionId, Stream, C8),
+    _C10 = test_deliver(Transport, S, SubscriptionId, 0, Body, C9),
+    Transport:close(S).
+
+%% Same failure again, but triggered by the consumer_update response path:
+%% a single-active-consumer subscriber is asked by the server to confirm
+%% activation and, once it does, the server's dispatch of the pre-existing
+%% oversized chunk must close the connection.
+deliver_frame_too_large_closes_connection_on_consumer_update(Config) ->
+    Transport = gen_tcp,
+    Port = get_stream_port(Config),
+    Opts = [{active, false}, {mode, binary}],
+    Stream = atom_to_binary(?FUNCTION_NAME, utf8),
+
+    {ok, PubS} = Transport:connect("localhost", Port, Opts),
+    PubC0 = rabbit_stream_core:init(0),
+    PubC1 = test_peer_properties(Transport, PubS, PubC0),
+    PubC2 = test_authenticate(Transport, PubS, PubC1),
+    PubC3 = test_create_stream(Transport, PubS, Stream, PubC2),
+    PublisherId = 1,
+    PubC4 = test_declare_publisher(Transport, PubS, PublisherId, Stream, PubC3),
+    SmallFrameMax = 1024,
+    Body = binary:copy(<<"a">>, SmallFrameMax + 1000),
+    _PubC5 = test_publish_confirm(Transport, PubS, PublisherId, Body, PubC4),
+
+    {ok, SubS} = Transport:connect("localhost", Port, Opts),
+    SubC0 = rabbit_stream_core:init(0),
+    SubC1 = test_peer_properties(Transport, SubS, SubC0),
+    SubC2 = sasl_handshake(Transport, SubS, SubC1),
+    SubC3 = test_plain_sasl_authenticate(Transport, SubS, SubC2, <<"guest">>),
+    {{tune, ServerFrameMax, _}, SubC4} = receive_commands(Transport, SubS, SubC3),
+    ?assert(SmallFrameMax < ServerFrameMax),
+    ok = Transport:send(SubS, frame({response, 0, {tune, SmallFrameMax, 0}})),
+    ok = Transport:send(SubS, request(3, {open, <<"/">>})),
+    {{response, 3, {open, ?RESPONSE_CODE_OK, _}}, SubC5} =
+        receive_commands(Transport, SubS, SubC4),
+    SubscriptionId = 1,
+    SacProps = #{<<"single-active-consumer">> => <<"true">>,
+                 <<"name">> => <<"sac-1">>},
+    SubC6 = test_subscribe(Transport, SubS, SubscriptionId, Stream,
+                           SacProps, ?RESPONSE_CODE_OK, SubC5),
+
+    {ConsumerUpdateRequest, SubC7} = receive_commands(Transport, SubS, SubC6),
+    {request, CorrelationId, {consumer_update, SubscriptionId, true}} =
+        ConsumerUpdateRequest,
+    ok = Transport:send(SubS,
+                        frame({response, CorrelationId,
+                              {consumer_update, ?RESPONSE_CODE_OK, none}})),
+
+    {Cmd, _SubC8} = receive_commands(Transport, SubS, SubC7),
+    ?assertMatch({request, _, {close, ?RESPONSE_CODE_FRAME_TOO_LARGE, _}}, Cmd),
+    ?assertEqual(closed, wait_for_socket_close(Transport, SubS, 10)),
+    Transport:close(PubS).
 
 timeout_tcp_connected(Config) ->
     Port = get_stream_port(Config),
