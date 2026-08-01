@@ -2800,10 +2800,8 @@ handle_frame_post_auth(Transport,
                                           "peer", []),
                                 throw({stop, normal});
                             {error, {deliver_frame_too_large, Size, Max}} ->
-                                %% nothing was dispatched: keep the freshly
-                                %% opened reader out of the map entirely and
-                                %% close the connection, avoiding a next_offset
-                                %% call on a consumer whose log was never set
+                                %% `Consumer1` holds the reader opened above.
+                                %% It will be closed during the teardown.
                                 ClosedConnection =
                                     handle_deliver_frame_too_large(Transport,
                                                                    Connection,
