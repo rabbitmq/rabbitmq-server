@@ -306,7 +306,12 @@ context_to_app_env_vars1(
       [{kernel, inet_default_connect_options, [{nodelay, true}]},
        {sasl, errlog_type, error},
        {os_mon, start_cpu_sup, false},
-       {os_mon, start_disksup, false},
+       %% Start disksup but configure the threshold high enough that it will
+       %% never alarm. `disksup' must be started to call `get_disk_info/0,1'
+       %% and `get_disk_data/0' but we don't want it polluting the logs with
+       %% its alarms. Alarming is done by `rabbit_disk_monitor' instead.
+       {os_mon, start_disksup, true},
+       {os_mon, disk_almost_full_threshold, 1.0},
        {os_mon, start_memsup, false},
        {mnesia, dir, DataDir},
        {ra, data_dir, QuorumQueueDir},

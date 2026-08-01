@@ -23,6 +23,7 @@
                 channel_sup_sup,
                 map_num_pa      = gb_trees:empty(), %% Number -> {Pid, AState}
                 map_pid_num     = #{},       %% Pid -> Number
+                map_pid_writer  = #{},       %% Pid -> {direct|network, WriterPid}
                 channel_max     = ?MAX_CHANNEL_NUMBER,
                 closing         = false}).
 
@@ -107,8 +108,8 @@ handle_open_channel(ProposedNumber, Consumer, InfraArgs,
         {ok, Number} ->
             case amqp_channel_sup_sup:start_channel_sup(ChSupSup, InfraArgs,
                                                         Number, Consumer) of
-                {ok, _ChSup, {Ch, AState}} ->
-                    NewState = internal_register(Number, Ch, AState, State),
+                {ok, _ChSup, {Ch, TaggedWriter, AState}} ->
+                    NewState = internal_register(Number, Ch, TaggedWriter, AState, State),
                     erlang:monitor(process, Ch),
                     {reply, {ok, Ch}, NewState};
                 {error, _} = Error ->
@@ -158,12 +159,15 @@ handle_down(Pid, Reason, State) ->
         Number    -> handle_channel_down(Pid, Number, Reason, State)
     end.
 
-handle_channel_down(Pid, Number, Reason, State) ->
+handle_channel_down(Pid, Number, Reason, State = #state{connection = Connection,
+                                                        map_pid_writer = MapPW}) ->
     maybe_report_down(Pid, case Reason of {shutdown, R} -> R;
                                           _             -> Reason
                            end,
                       State),
+    TaggedWriter = maps:get(Pid, MapPW),
     NewState = internal_unregister(Number, Pid, State),
+    amqp_gen_connection:channel_closed(Connection, TaggedWriter),
     check_all_channels_terminated(NewState),
     {noreply, NewState}.
 
@@ -214,19 +218,25 @@ internal_pass_frame(Number, Frame, State) ->
             internal_update_npa(Number, ChPid, NewAState, State)
     end.
 
-internal_register(Number, Pid, AState,
-                  State = #state{map_num_pa = MapNPA, map_pid_num = MapPN}) ->
+internal_register(Number, Pid, TaggedWriter, AState,
+                  State = #state{map_num_pa = MapNPA, map_pid_num = MapPN,
+                                 map_pid_writer = MapPW}) ->
     MapNPA1 = gb_trees:enter(Number, {Pid, AState}, MapNPA),
     MapPN1 = maps:put(Pid, Number, MapPN),
-    State#state{map_num_pa  = MapNPA1,
-                map_pid_num = MapPN1}.
+    MapPW1 = maps:put(Pid, TaggedWriter, MapPW),
+    State#state{map_num_pa     = MapNPA1,
+                map_pid_num    = MapPN1,
+                map_pid_writer = MapPW1}.
 
 internal_unregister(Number, Pid,
-                    State = #state{map_num_pa = MapNPA, map_pid_num = MapPN}) ->
+                    State = #state{map_num_pa = MapNPA, map_pid_num = MapPN,
+                                   map_pid_writer = MapPW}) ->
     MapNPA1 = gb_trees:delete(Number, MapNPA),
     MapPN1 = maps:remove(Pid, MapPN),
-    State#state{map_num_pa  = MapNPA1,
-                map_pid_num = MapPN1}.
+    MapPW1 = maps:remove(Pid, MapPW),
+    State#state{map_num_pa     = MapNPA1,
+                map_pid_num    = MapPN1,
+                map_pid_writer = MapPW1}.
 
 internal_is_empty(#state{map_num_pa = MapNPA}) ->
     gb_trees:is_empty(MapNPA).

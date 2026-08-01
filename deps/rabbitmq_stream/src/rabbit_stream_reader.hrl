@@ -25,6 +25,9 @@
                            tuned | opened | failure |
                            silent_close |
                            closing | close_sent | closing_done.
+-define(STREAM_DISK_ALARM, {disk, rabbit_stream_queue}).
+%% subset of rabbit_alarm:resource_alarm_source()
+-type blocked_resource() :: disk | ?STREAM_DISK_ALARM.
 
 -record(publisher,
         {publisher_id :: publisher_id(),
@@ -87,7 +90,7 @@
          client_properties = #{} :: #{binary() => binary()},
          monitors = #{} :: #{reference() => {pid(), stream()}},
          stats_timer :: undefined | rabbit_event:state(),
-         resource_alarm :: boolean(),
+         resource_alarms :: sets:set(blocked_resource()),
          send_file_oct ::
              atomics:atomics_ref(), % number of bytes sent with send_file (for metrics)
          transport :: tcp | ssl,

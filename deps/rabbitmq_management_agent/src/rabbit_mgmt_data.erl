@@ -108,15 +108,28 @@ vhost_data(Ranges, Id) ->
 
 node_data(Ranges, Id) ->
     maps:from_list(
-      [{mgmt_stats, mgmt_queue_length_stats(Id)}] ++
-      [{node_node_metrics, node_node_metrics()}] ++
-      node_raw_detail_stats_data(Ranges, Id) ++
-      [raw_message_data(node_coarse_stats,
+      [{mgmt_stats, mgmt_queue_length_stats(Id)},
+       {node_node_metrics, node_node_metrics()},
+       {node_stats, lookup_element(node_stats, Id)},
+       {mount_stats, mount_stats(Id)},
+       raw_message_data(node_coarse_stats,
                         pick_range(coarse_node_stats, Ranges), Id),
        raw_message_data(node_persister_stats,
-                        pick_range(coarse_node_stats, Ranges), Id),
-       {node_stats, lookup_element(node_stats, Id)}] ++
+                        pick_range(coarse_node_stats, Ranges), Id)] ++
+      node_raw_detail_stats_data(Ranges, Id) ++
       node_connection_churn_rates_data(Ranges, Id)).
+
+%% Mount (per-queue-type disk) stats are read from the local disk monitor.
+%% This function runs on every node for every node Id, so it must only report
+%% stats for the local node. Otherwise the merge across nodes would attribute
+%% one node's mount stats to every node.
+mount_stats(Id) ->
+    case Id =:= node() of
+        true ->
+            [maps:to_list(M) || M <- rabbit_disk_monitor:get_mount_free()];
+        false ->
+            []
+    end.
 
 overview_data(_Pid, User, Ranges, VHosts) ->
     Raw = [raw_all_message_data(vhost_msg_stats, pick_range(queue_msg_counts, Ranges), VHosts),

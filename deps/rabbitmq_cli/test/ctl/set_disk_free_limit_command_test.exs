@@ -222,4 +222,39 @@ defmodule SetDiskFreeLimitCommandTest do
     assert @command.banner(["mem_relative", "sandwich"], context[:opts]) =~
              ~r/Setting disk free limit on #{get_rabbit_hostname()} to sandwich times the total RAM \.\.\./
   end
+
+  ## ------------------------ validate mount command -------------------------------------------
+
+  test "validate: mount requires at least 3 arguments" do
+    assert @command.validate(["mount"], %{}) == {:validation_failure, :not_enough_args}
+    assert @command.validate(["mount", "name"], %{}) == {:validation_failure, :not_enough_args}
+  end
+
+  test "validate: mount rejects too many arguments" do
+    assert @command.validate(["mount", "name", "2MB", "extra"], %{}) ==
+             {:validation_failure, :too_many_args}
+  end
+
+  test "validate: mount rejects an invalid limit" do
+    assert @command.validate(["mount", "name", "2097152bytes"], %{}) ==
+             {:validation_failure, :bad_argument}
+  end
+
+  test "validate: mount accepts a valid absolute limit" do
+    assert @command.validate(["mount", "name", "2097152"], %{}) == :ok
+    assert @command.validate(["mount", "name", "2MB"], %{}) == :ok
+  end
+
+  ## ------------------------ run mount command -------------------------------------------
+
+  test "run: mount subcommand returns ok", context do
+    assert @command.run(["mount", "streams", "2MB"], context[:opts]) == :ok
+  end
+
+  ## ------------------------ banner mount command -------------------------------------------
+
+  test "banner: returns mount message", context do
+    assert @command.banner(["mount", "streams", "2MB"], context[:opts]) =~
+             ~r/Setting disk free limit for mount streams on #{get_rabbit_hostname()} to 2MB \.\.\./
+  end
 end

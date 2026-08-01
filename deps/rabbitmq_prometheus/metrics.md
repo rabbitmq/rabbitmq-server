@@ -136,6 +136,15 @@ These metrics are specific to the stream protocol.
 | rabbitmq_process_resident_memory_bytes    | Memory used in bytes                               |
 | rabbitmq_resident_memory_limit_bytes      | Memory high watermark in bytes                     |
 
+### Per-mount disk space
+
+| Metric                                     | Description                                                     |
+| ---                                        | ---                                                             |
+| rabbitmq_mount_space_available_bytes       | Disk space available in bytes on configured mount               |
+| rabbitmq_mount_space_available_limit_bytes | Disk space available low watermark in bytes on configured mount |
+
+Both metrics have a `disk` label identifying the configured disk name which was measured.
+
 ### Connections
 
 | Metric                                       | Description                                          |
