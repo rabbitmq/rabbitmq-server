@@ -18,6 +18,7 @@ body:
       options:
         - 4.1.x
         - 4.2.x
+        - 4.3.x
     validations:
       required: true
   - type: input
