@@ -1143,6 +1143,7 @@ open(cast,
                       #stream_connection{stream_subscriptions =
                                              StreamSubscriptions,
                                          send_file_oct = SendFileOct,
+                                         frame_max = FrameMax,
                                          deliver_version = DeliverVersion} =
                           Connection,
                   connection_state =
@@ -1166,44 +1167,72 @@ open(cast,
                                                               StreamSubscriptions)},
                  State};
             SubscriptionIds when is_list(SubscriptionIds) ->
-                Consumers1 =
-                    lists:foldl(fun(SubscriptionId, ConsumersAcc) ->
+                {Consumers1, Connection2} =
+                    lists:foldl(fun(_SubscriptionId,
+                                    {_ConsumersAcc,
+                                     #stream_connection{connection_step = close_sent}} =
+                                        Acc) ->
+                                   %% already closing: don't bother dispatching
+                                   %% to (or possibly closing again) other
+                                   %% subscriptions on this connection
+                                   Acc;
+                                (SubscriptionId, {ConsumersAcc, ConnAcc}) ->
                                    #{SubscriptionId := Consumer} = ConsumersAcc,
                                    #consumer{credit = Credit, log = Log} =
                                        Consumer,
-                                   Consumer1 =
-                                       case {Credit, Log} of
-                                           {_, undefined} ->
-                                               Consumer; %% SAC not active
-                                           {0, _} -> Consumer;
-                                           {_, _} ->
-                                               case send_chunks(DeliverVersion,
-                                                                Transport,
-                                                                Consumer,
-                                                                SendFileOct)
-                                               of
-                                                   {error, closed} ->
-                                                       ?LOG_INFO("Stream protocol connection has been closed by "
-                                                                                  "peer",
-                                                                                  []),
-                                                       throw({stop, normal});
-                                                   {error, Reason} ->
-                                                       ?LOG_INFO("Error while sending chunks: ~tp",
-                                                                                  [Reason]),
-                                                       %% likely a connection problem
-                                                       Consumer;
-                                                   {ok, Csmr} -> Csmr
-                                               end
-                                       end,
-                                   ConsumersAcc#{SubscriptionId => Consumer1}
+                                   case {Credit, Log} of
+                                       {_, undefined} ->
+                                           {ConsumersAcc, ConnAcc}; %% SAC not active
+                                       {0, _} ->
+                                           {ConsumersAcc, ConnAcc};
+                                       {_, _} ->
+                                           case send_chunks(DeliverVersion,
+                                                            Transport,
+                                                            Consumer,
+                                                            FrameMax,
+                                                            SendFileOct)
+                                           of
+                                               {error, closed} ->
+                                                   ?LOG_INFO("Stream protocol connection has been closed by "
+                                                                              "peer",
+                                                                              []),
+                                                   throw({stop, normal});
+                                               {error, {deliver_frame_too_large, Size, Max}} ->
+                                                   ConnAcc1 =
+                                                       handle_deliver_frame_too_large(Transport,
+                                                                                      ConnAcc,
+                                                                                      StreamName,
+                                                                                      SubscriptionId,
+                                                                                      Size,
+                                                                                      Max),
+                                                   {ConsumersAcc#{SubscriptionId => Consumer},
+                                                    ConnAcc1};
+                                               {error, Reason} ->
+                                                   ?LOG_INFO("Error while sending chunks: ~tp",
+                                                                              [Reason]),
+                                                   %% likely a connection problem
+                                                   {ConsumersAcc#{SubscriptionId => Consumer},
+                                                    ConnAcc};
+                                               {ok, Csmr} ->
+                                                   {ConsumersAcc#{SubscriptionId => Csmr},
+                                                    ConnAcc}
+                                           end
+                                   end
                                 end,
-                                Consumers, SubscriptionIds),
-                {Connection,
+                                {Consumers, Connection}, SubscriptionIds),
+                {Connection2,
                  State#stream_connection_state{consumers = Consumers1}}
         end,
-    {keep_state,
-     StatemData#statem_data{connection = Connection1,
-                            connection_state = State1}};
+    case Connection1 of
+        #stream_connection{connection_step = close_sent} ->
+            {next_state, close_sent,
+             StatemData#statem_data{connection = Connection1,
+                                    connection_state = State1}};
+        _ ->
+            {keep_state,
+             StatemData#statem_data{connection = Connection1,
+                                    connection_state = State1}}
+    end;
 open(cast, {force_event_refresh, Ref},
      #statem_data{connection = Connection, connection_state = State} =
          StatemData) ->
@@ -2148,6 +2177,7 @@ handle_frame_post_auth(Transport,
 handle_frame_post_auth(Transport,
                        #stream_connection{socket = S,
                                           send_file_oct = SendFileOct,
+                                          frame_max = FrameMax,
                                           deliver_version = DeliverVersion} =
                            Connection,
                        #stream_connection_state{consumers = Consumers} = State,
@@ -2172,13 +2202,15 @@ handle_frame_post_auth(Transport,
              State#stream_connection_state{consumers =
                                            Consumers#{SubscriptionId => Consumer1}}};
         #{SubscriptionId := Consumer} ->
-            #consumer{credit = AvailableCredit, last_listener_offset = LLO} =
+            #consumer{credit = AvailableCredit, last_listener_offset = LLO,
+                      configuration = #consumer_configuration{stream = Stream}} =
                 Consumer,
             case send_chunks(DeliverVersion,
                              Transport,
                              Consumer,
                              AvailableCredit + Credit,
                              LLO,
+                             FrameMax,
                              SendFileOct)
             of
                 {error, closed} ->
@@ -2186,6 +2218,14 @@ handle_frame_post_auth(Transport,
                                                "peer",
                                                []),
                     throw({stop, normal});
+                {error, {deliver_frame_too_large, Size, Max}} ->
+                    Connection1 =
+                        handle_deliver_frame_too_large(Transport, Connection,
+                                                       Stream, SubscriptionId,
+                                                       Size, Max),
+                    Consumers1 = Consumers#{SubscriptionId => Consumer},
+                    {Connection1,
+                     State#stream_connection_state{consumers = Consumers1}};
                 {error, Reason} ->
                     ?LOG_INFO("Error while sending chunks: ~tp",
                                                [Reason]),
@@ -2670,6 +2710,7 @@ handle_frame_post_auth(Transport,
                        #stream_connection{transport = ConnTransport,
                                           outstanding_requests = Requests0,
                                           send_file_oct = SendFileOct,
+                                          frame_max = FrameMax,
                                           virtual_host = VirtualHost,
                                           deliver_version = DeliverVersion} =
                            Connection,
@@ -2689,7 +2730,7 @@ handle_frame_post_auth(Transport,
             ?LOG_DEBUG("Received consumer update response for subscription "
                              "~tp on stream ~tp, correlation ID ~tp",
                              [SubscriptionId, Stream, CorrelationId]),
-            Consumers1 =
+            {Consumers1, Connection1} =
                 case Consumers of
                     #{SubscriptionId :=
                           #consumer{configuration =
@@ -2744,37 +2785,47 @@ handle_frame_post_auth(Transport,
 
                         ConsumedMessagesBefore = messages_consumed(ConsumerCounters),
 
-                        Consumer2 =
-                            case send_chunks(DeliverVersion,
-                                             Transport,
-                                             Consumer1,
-                                             SendFileOct)
-                            of
-                                {error, closed} ->
-                                    ?LOG_INFO("Stream protocol connection has been closed by "
-                                                               "peer",
-                                                               []),
-                                    throw({stop, normal});
-                                {error, Reason} ->
-                                    ?LOG_INFO("Error while sending chunks: ~tp",
-                                                               [Reason]),
-                                    %% likely a connection problem
-                                    Consumer;
-                                {ok, Csmr} ->
-                                    Csmr
-                            end,
-                        #consumer{log = Log2} = Consumer2,
-                        ConsumerOffset = osiris_log:next_offset(Log2),
+                        case send_chunks(DeliverVersion,
+                                        Transport,
+                                        Consumer1,
+                                        FrameMax,
+                                        SendFileOct)
+                        of
+                            {error, closed} ->
+                                ?LOG_INFO("Stream protocol connection has been closed by "
+                                          "peer", []),
+                                throw({stop, normal});
+                            {error, {deliver_frame_too_large, Size, Max}} ->
+                                %% `Consumer1` holds the reader opened above.
+                                %% It will be closed during the teardown.
+                                ClosedConnection =
+                                    handle_deliver_frame_too_large(Transport,
+                                                                   Connection,
+                                                                   Stream,
+                                                                   SubscriptionId,
+                                                                   Size, Max),
+                                {Consumers#{SubscriptionId => Consumer1},
+                                 ClosedConnection};
+                            {error, Reason} ->
+                                ?LOG_INFO("Error while sending chunks: ~tp",
+                                                           [Reason]),
+                                %% likely a connection problem
+                                {Consumers#{SubscriptionId => Consumer},
+                                 Connection};
+                            {ok, Csmr} ->
+                                #consumer{log = Log2} = Csmr,
+                                ConsumerOffset = osiris_log:next_offset(Log2),
 
-                        ConsumedMessagesAfter = messages_consumed(ConsumerCounters),
-                        ?LOG_DEBUG("Subscription ~tp (stream ~tp) is now at offset ~tp with ~tp "
-                                         "message(s) distributed after subscription",
-                                         [SubscriptionId,
-                                          Stream,
-                                          ConsumerOffset,
-                                          ConsumedMessagesAfter - ConsumedMessagesBefore]),
-
-                        Consumers#{SubscriptionId => Consumer2};
+                                ConsumedMessagesAfter = messages_consumed(ConsumerCounters),
+                                ?LOG_DEBUG("Subscription ~tp (stream ~tp) is now at offset ~tp with ~tp "
+                                           "message(s) distributed after subscription",
+                                           [SubscriptionId,
+                                            Stream,
+                                            ConsumerOffset,
+                                            ConsumedMessagesAfter - ConsumedMessagesBefore]),
+                                {Consumers#{SubscriptionId => Csmr},
+                                 Connection}
+                        end;
                     #{SubscriptionId :=
                           #consumer{configuration =
                                         #consumer_configuration{active = false,
@@ -2796,14 +2847,14 @@ handle_frame_post_auth(Transport,
                                 ok
                         end,
 
-                        Consumers;
+                        {Consumers, Connection};
                     _ ->
                         ?LOG_DEBUG("No consumer found for subscription ~tp",
                                          [SubscriptionId]),
-                        Consumers
+                        {Consumers, Connection}
                 end,
 
-            {Connection#stream_connection{outstanding_requests = Rs},
+            {Connection1#stream_connection{outstanding_requests = Rs},
              State#stream_connection_state{consumers = Consumers1}};
         {V, _Rs} ->
             ?LOG_WARNING("Unexpected outstanding requests for correlation "
@@ -3120,6 +3171,7 @@ maybe_dispatch_on_subscription(Transport,
                                State,
                                ConsumerState,
                                #stream_connection{deliver_version = DeliverVersion,
+                                                  frame_max = FrameMax,
                                                   user = #user{username = Username}} = Connection,
                                Consumers,
                                Stream,
@@ -3128,11 +3180,12 @@ maybe_dispatch_on_subscription(Transport,
                                SendFileOct,
                                false = _Sac) ->
     ?LOG_DEBUG("Distributing existing messages to subscription "
-                     "~tp on ~tp",
-                     [SubscriptionId, Stream]),
+               "~tp on ~tp",
+               [SubscriptionId, Stream]),
     case send_chunks(DeliverVersion,
                      Transport,
                      ConsumerState,
+                     FrameMax,
                      SendFileOct)
     of
         {error, closed} ->
@@ -3140,11 +3193,17 @@ maybe_dispatch_on_subscription(Transport,
                                        "peer",
                                        []),
             throw({stop, normal});
+        {error, {deliver_frame_too_large, Size, Max}} ->
+            Connection1 =
+                handle_deliver_frame_too_large(Transport, Connection, Stream,
+                                               SubscriptionId, Size, Max),
+            Consumers1 = Consumers#{SubscriptionId => ConsumerState},
+            {Connection1, State#stream_connection_state{consumers = Consumers1}};
         {error, Reason} ->
             ?LOG_INFO("Error while sending chunks: ~tp",
                                        [Reason]),
             Consumers1 = Consumers#{SubscriptionId => ConsumerState},
-            State#stream_connection_state{consumers = Consumers1};
+            {Connection, State#stream_connection_state{consumers = Consumers1}};
         {ok, #consumer{log = Log1, credit = Credit1} = ConsumerState1} ->
             Consumers1 = Consumers#{SubscriptionId => ConsumerState1},
 
@@ -3171,7 +3230,7 @@ maybe_dispatch_on_subscription(Transport,
                                                    true,
                                                    SubscriptionProperties,
                                                    Username),
-            State#stream_connection_state{consumers = Consumers1}
+            {Connection, State#stream_connection_state{consumers = Consumers1}}
     end;
 maybe_dispatch_on_subscription(_Transport,
                                State,
@@ -3203,7 +3262,7 @@ maybe_dispatch_on_subscription(_Transport,
                                            SubscriptionProperties,
                                            Username),
     Consumers1 = Consumers#{SubscriptionId => ConsumerState},
-    State#stream_connection_state{consumers = Consumers1}.
+    {Connection, State#stream_connection_state{consumers = Consumers1}}.
 
 handle_subscription(Transport,#stream_connection{
                                  name = ConnName,
@@ -3267,16 +3326,16 @@ handle_subscription(Transport,#stream_connection{
                                                Stream,
                                                Connection),
 
-            State1 = maybe_dispatch_on_subscription(Transport,
-                                                    State,
-                                                    ConsumerState,
-                                                    Connection1,
-                                                    Consumers,
-                                                    Stream,
-                                                    SubscriptionId,
-                                                    Properties,
-                                                    SendFileOct,
-                                                    Sac),
+            {Connection2, State1} = maybe_dispatch_on_subscription(Transport,
+                                                                   State,
+                                                                   ConsumerState,
+                                                                   Connection1,
+                                                                   Consumers,
+                                                                   Stream,
+                                                                   SubscriptionId,
+                                                                   Properties,
+                                                                   SendFileOct,
+                                                                   Sac),
             StreamSubscriptions1 =
             case StreamSubscriptions of
                 #{Stream := SubscriptionIds} ->
@@ -3286,7 +3345,7 @@ handle_subscription(Transport,#stream_connection{
                     StreamSubscriptions#{Stream =>
                                          [SubscriptionId]}
             end,
-            {Connection1#stream_connection{stream_subscriptions
+            {Connection2#stream_connection{stream_subscriptions
                                            =
                                            StreamSubscriptions1},
              State1};
@@ -3850,10 +3909,12 @@ send_file_callback(?VERSION_1,
                    #consumer{configuration =
                                  #consumer_configuration{subscription_id = SubId,
                                                          counters = Counters}},
-                   Counter) ->
+                   Counter,
+                   FrameMax) ->
     fun(#{chunk_id := FirstOffsetInChunk, num_entries := NumEntries},
         Size) ->
        FrameSize = 2 + 2 + 1 + Size,
+       assert_frame_max(FrameSize, FrameMax),
        FrameBeginning =
            <<FrameSize:32,
              ?REQUEST:1,
@@ -3870,10 +3931,12 @@ send_file_callback(?VERSION_2,
                    #consumer{configuration =
                                  #consumer_configuration{subscription_id = SubId,
                                                          counters = Counters}},
-                   Counter) ->
+                   Counter,
+                   FrameMax) ->
     fun(#{chunk_id := FirstOffsetInChunk, num_entries := NumEntries},
         Size) ->
        FrameSize = 2 + 2 + 1 + 8 + Size,
+       assert_frame_max(FrameSize, FrameMax),
        CommittedChunkId = osiris_log:committed_chunk_id(Log),
        FrameBeginning =
            <<FrameSize:32,
@@ -3888,21 +3951,32 @@ send_file_callback(?VERSION_2,
        FrameBeginning
     end.
 
+%% 0 means "no limit", mirroring negotiate_frame_max/2.
+assert_frame_max(_FrameSize, 0) ->
+    ok;
+assert_frame_max(FrameSize, FrameMax) when FrameSize > FrameMax ->
+    throw({deliver_frame_too_large, FrameSize, FrameMax});
+assert_frame_max(_FrameSize, _FrameMax) ->
+    ok.
+
 -spec send_chunks(rabbit_stream_core:command_version(),
                   module(),
                   #consumer{},
+                  non_neg_integer(),
                   atomics:atomics_ref()) ->
     {ok, #consumer{}} | {error, term()}.
 send_chunks(DeliverVersion,
             Transport,
             #consumer{credit = Credit, last_listener_offset = LastLstOffset} =
                 Consumer,
+            FrameMax,
             Counter) ->
     send_chunks(DeliverVersion,
                 Transport,
                 Consumer,
                 Credit,
                 LastLstOffset,
+                FrameMax,
                 Counter).
 
 -spec send_chunks(rabbit_stream_core:command_version(),
@@ -3910,6 +3984,7 @@ send_chunks(DeliverVersion,
                   #consumer{},
                   non_neg_integer(),
                   undefined | osiris:offset(),
+                  non_neg_integer(),
                   atomics:atomics_ref()) ->
     {ok, #consumer{}} | {error, term()}.
 send_chunks(_DeliverVersion,
@@ -3917,6 +3992,7 @@ send_chunks(_DeliverVersion,
             #consumer{send_limit = SendLimit} = Consumer,
             Credit,
             LastLstOffset,
+            _FrameMax,
             _Counter) when Credit =< SendLimit ->
     %% there are fewer credits than the credit limit so we won't enter
     %% the send_chunks loop until we have more than the limit available.
@@ -3930,6 +4006,7 @@ send_chunks(DeliverVersion,
                       log = Log} = Consumer,
             Credit,
             LastLstOffset,
+            FrameMax,
             Counter) ->
     setopts(Transport, Socket, [{nopush, true}]),
     send_chunks(DeliverVersion,
@@ -3939,6 +4016,7 @@ send_chunks(DeliverVersion,
                 Credit,
                 LastLstOffset,
                 true,
+                FrameMax,
                 Counter).
 
 -spec send_chunks(rabbit_stream_core:command_version(),
@@ -3948,6 +4026,7 @@ send_chunks(DeliverVersion,
                   non_neg_integer(),
                   undefined | osiris:offset(),
                   boolean(),
+                  non_neg_integer(),
                   atomics:atomics_ref()) ->
     {ok, #consumer{}} | {error, term()}.
 send_chunks(_DeliverVersion,
@@ -3959,6 +4038,7 @@ send_chunks(_DeliverVersion,
             0,
             LastLstOffset,
             _Retry,
+            _FrameMax,
             _Counter) ->
     %% we have finished sending so need to uncork
     setopts(Transport, Socket, [{nopush, false}]),
@@ -3974,11 +4054,18 @@ send_chunks(DeliverVersion,
             Credit,
             LastLstOffset,
             Retry,
+            FrameMax,
             Counter) ->
-    case osiris_log:send_file(Socket, Log,
-                              send_file_callback(DeliverVersion, Log,
-                                                 Consumer,
-                                                 Counter))
+    case try
+             osiris_log:send_file(Socket, Log,
+                                  send_file_callback(DeliverVersion, Log,
+                                                     Consumer,
+                                                     Counter,
+                                                     FrameMax))
+         catch
+             throw:{deliver_frame_too_large, Size, Max} ->
+                 {error, {deliver_frame_too_large, Size, Max}}
+         end
     of
         {ok, Log1} ->
             send_chunks(DeliverVersion,
@@ -3988,6 +4075,7 @@ send_chunks(DeliverVersion,
                         Credit - 1,
                         LastLstOffset,
                         true,
+                        FrameMax,
                         Counter);
         {error, closed} ->
             {error, closed};
@@ -4006,6 +4094,7 @@ send_chunks(DeliverVersion,
                                 Credit,
                                 LastLstOffset,
                                 false,
+                                FrameMax,
                                 Counter);
                 false ->
                     #consumer{configuration =
@@ -4031,6 +4120,29 @@ send_chunks(DeliverVersion,
                                        last_listener_offset = LLO}}
             end
     end.
+
+%% The chunk is fixed size once committed by osiris and cannot be re-encoded
+%% smaller for this one connection, so the only option is to refuse it and
+%% close the whole connection, reusing the same wire pattern as an oversized
+%% inbound frame.
+-spec handle_deliver_frame_too_large(module(), #stream_connection{},
+                                     binary(), integer(),
+                                     non_neg_integer(), non_neg_integer()) ->
+    #stream_connection{}.
+handle_deliver_frame_too_large(Transport,
+                               #stream_connection{socket = S} = Connection,
+                               Stream, SubscriptionId, Size, Max) ->
+    ?LOG_WARNING("Closing connection because a chunk to deliver for "
+                 "subscription ~tp on stream ~tp (~b bytes) exceeds "
+                 "the connection's negotiated frame_max (~b bytes)",
+                 [SubscriptionId, Stream, Size, Max]),
+    increase_protocol_counter(?DELIVER_FRAME_TOO_LARGE),
+    Frame =
+        rabbit_stream_core:frame({request, 1,
+                                  {close, ?RESPONSE_CODE_FRAME_TOO_LARGE,
+                                   <<"frame too large">>}}),
+    send(Transport, S, Frame),
+    Connection#stream_connection{connection_step = close_sent}.
 
 emit_stats(#stream_connection{publishers = Publishers} = Connection,
            #stream_connection_state{consumers = Consumers} = ConnectionState) ->
