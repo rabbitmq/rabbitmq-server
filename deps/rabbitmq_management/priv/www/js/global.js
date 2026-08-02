@@ -523,7 +523,8 @@ var HELP = {
 
     'consumer-owner' :
     '<a href="https://www.rabbitmq.com/consumers.html">AMQP 0-9-1 consumers</a> belong to a channel, \
-    and <a href="https://www.rabbitmq.com/stream.html">stream consumers</a> belong to a stream connection.',
+    <a href="https://www.rabbitmq.com/stream.html">stream consumers</a> belong to a stream connection, \
+    and consumers of channel-less protocols (e.g. MQTT) belong to a connection.',
 
     'plugins' :
     'Note that only plugins which are both explicitly enabled and running are shown here.',
