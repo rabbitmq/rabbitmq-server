@@ -387,6 +387,11 @@ var HELP = {
     'message-publish-headers':
       'Headers can have any name. Only long string headers can be set here.',
 
+    'message-publish-history':
+      'The last 50 string-encoded payloads published from this browser are remembered \
+      in its local storage. Picking one fills in the payload below. The history is \
+      never sent to the server and is shared across all queues and exchanges.',
+
     'message-publish-properties':
       '<p>You can set other message properties here (delivery mode and headers \
       are pulled out as the most common cases).</p>\
