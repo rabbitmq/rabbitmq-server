@@ -964,7 +964,16 @@ function postprocess() {
         select_queue_type(this);
     });
 
-    $('form[name="upload-definitions"]').on('submit', function(e) {
+    $(document).on('change', 'select.publish-history', function() {
+        var payload = get_publish_history()[parseInt($(this).val(), 10)];
+        if (payload == undefined) return;
+        var form = $(this).closest('form');
+        form.find('textarea[name="payload"]').val(payload);
+        // History only holds string-encoded payloads.
+        form.find('select[name="payload_encoding"]').val('string');
+    });
+
+    $('[name="upload-definitions"]').on('click', function(e) {
         e.preventDefault();
         submit_import(this);
     });
@@ -1376,6 +1385,64 @@ function toggle_visibility(item) {
     }
 }
 
+var PUBLISH_MSG_HISTORY_KEY = 'publish-msg-history';
+var PUBLISH_MSG_HISTORY_MAX = 50;
+
+// The history is a plain array of payload strings, most recent first.
+function get_publish_history() {
+    var stored = get_local_pref(PUBLISH_MSG_HISTORY_KEY);
+    if (stored == undefined) return [];
+    try {
+        var history = JSON.parse(stored);
+        if (!Array.isArray(history)) return [];
+        return history.filter(function(e) { return typeof e == 'string'; });
+    } catch (e) {
+        return [];
+    }
+}
+
+function add_to_publish_history(params) {
+    // Only string-encoded payloads are remembered;
+    if (params.payload_encoding != 'string') return;
+    // Republishing an identical payload moves it to the top
+    // rather than duplicating it.
+    var history = get_publish_history().filter(function(e) {
+        return e != params.payload;
+    });
+    history.unshift(params.payload);
+    history = history.slice(0, PUBLISH_MSG_HISTORY_MAX);
+    try {
+        store_local_pref(PUBLISH_MSG_HISTORY_KEY, JSON.stringify(history));
+    } catch (e) {
+        // localStorage quota exceeded; drop the history rather than
+        // interfere with publishing.
+        clear_local_pref(PUBLISH_MSG_HISTORY_KEY);
+    }
+}
+
+function publish_history_options() {
+    var history = get_publish_history();
+    var res = '<option value="" selected>' +
+        (history.length == 0 ? '(no previously published messages)'
+                             : '(pick a previously published message)') +
+        '</option>';
+    for (var i = 0; i < history.length; i++) {
+        // Collapse newlines and indentation for the one-line preview;
+        // the stored payload keeps its original formatting.
+        var preview = history[i].replace(/\s+/g, ' ');
+        if (preview.length > 80) {
+            preview = preview.substring(0, 80) + '…';
+        }
+        res += '<option value="' + i + '">' +
+            fmt_escape_html(preview) + '</option>';
+    }
+    return res;
+}
+
+function refresh_publish_history_selects() {
+    $('select.publish-history').html(publish_history_options());
+}
+
 function publish_msg(params0) {
     try {
         var params = params_magic(params0);
@@ -1415,6 +1482,8 @@ function publish_msg0(params) {
     }
     with_req('POST', path, JSON.stringify(params), function(resp) {
             var result = JSON.parse(resp.responseText);
+            add_to_publish_history(params);
+            refresh_publish_history_selects();
             if (result.routed) {
                 show_popup('info', 'Message published.');
             } else {
