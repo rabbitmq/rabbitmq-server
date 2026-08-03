@@ -97,14 +97,8 @@ define ct_master.erl
 endef
 
 PARALLEL_CT_SET_1_A = auth retainer federation disconnect_on_unauthorized
-<<<<<<< HEAD
-PARALLEL_CT_SET_1_B = cluster command config config_schema mc_mqtt packet_prop \
+PARALLEL_CT_SET_1_B = cluster command config config_schema mc_mqtt packet_fragment packet_prop \
     processor protocol_interop proxy_protocol rabbit_mqtt_confirms reader util
-=======
-PARALLEL_CT_SET_1_B = cluster command config_schema mc_mqtt packet_fragment \
-    packet_prop processor protocol_interop proxy_protocol rabbit_mqtt_confirms \
-    reader util
->>>>>>> 3f1ca3c3e2 (MQTT: parse fragmented packets without quadratic copying)
 PARALLEL_CT_SET_1_C = java v5
 PARALLEL_CT_SET_1_D = mqtt_shared
 
