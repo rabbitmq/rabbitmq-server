@@ -37,7 +37,7 @@
 -export([update_consumer_handler/8, update_consumer/9]).
 -export([cancel_consumer_handler/2, cancel_consumer/3]).
 -export([become_leader/2, handle_tick/3, spawn_deleter/1]).
--export([state_restore_timer/3, spawn_state_restore_timers/2]).
+-export([state_restore_timer/4, spawn_state_restore_timers/2]).
 -export([blocked_delete/5]).
 -export([rpc_delete_metrics/1,
          key_metrics_rpc/1]).
@@ -180,6 +180,13 @@
 %% Must comfortably exceed ?DELETE_TIMEOUT so a normally-running delete finishes
 %% first. Configurable via the quorum_queue_blocked_state_restore_timeout env.
 -define(BLOCKED_STATE_RESTORE_TIMEOUT, ?DELETE_TIMEOUT + 1_000).
+%% Once the safety-net timeout has elapsed, only the queue's current leader
+%% restores the state. If no leader has been elected yet (for example, an
+%% election is still in progress after the delete node crashed), the timer
+%% re-checks leadership on this interval, for at most this many attempts, before
+%% giving up.
+-define(STATE_RESTORE_POLL_INTERVAL, 1_000).
+-define(STATE_RESTORE_POLL_ATTEMPTS, 10).
 -define(MEMBER_CHANGE_TIMEOUT, 20_000).
 -define(SNAPSHOT_INTERVAL, 8192). %% the ra default is 4096
 %% setting a low default here to allow quorum queues to better chose themselves
@@ -1202,10 +1209,11 @@ with_queue_blocked(Q, Fun) ->
     %% crashes), independent timer processes restore it after a timeout so the
     %% queue is not left blocked, and rejecting publishes, indefinitely. One
     %% timer is spawned on every running cluster node so the state is still
-    %% restored even if the node running this delete goes down entirely. They
-    %% are cancelled on the normal paths below where the state is restored (or
-    %% the queue deleted) directly.
-    TimerPids = spawn_state_restore_timers(QName, {PrevState, Uids}),
+    %% restored even if the node running this delete goes down entirely, but only
+    %% the timer on the queue's leader at that point performs the restore (see
+    %% state_restore_timer/4). They are cancelled on the normal paths below where
+    %% the state is restored (or the queue deleted) directly.
+    TimerPids = spawn_state_restore_timers(Q, {PrevState, Uids}),
     try Fun() of
         {ok, _} = Ok ->
             Ok;
@@ -1226,21 +1234,58 @@ with_queue_blocked(Q, Fun) ->
 %% even when the caller dies without doing so. Spawning on every node (rather
 %% than only locally) means the state is restored even if the node running the
 %% delete crashes entirely, since the blocked state lives in the cluster-wide
-%% metadata store and any node can restore it.
-spawn_state_restore_timers(QName, {_State, _Uids} = Restore) ->
+%% metadata store and any node can restore it. Although a timer runs on every
+%% node, only the one on the queue's current leader actually restores the state
+%% (see state_restore_timer/4), so a single node performs the write.
+spawn_state_restore_timers(Q, {_State, _Uids} = Restore) ->
+    QName = amqqueue:get_name(Q),
+    {RaName, _} = amqqueue:get_pid(Q),
     Timeout = blocked_state_restore_timeout(),
-    [spawn(Node, ?MODULE, state_restore_timer, [QName, Restore, Timeout])
+    [spawn(Node, ?MODULE, state_restore_timer, [QName, RaName, Restore, Timeout])
      || Node <- rabbit_nodes:list_running()].
 
 %% Timer body run on each node. Exported so it can be started via spawn/4 on
-%% remote nodes.
-state_restore_timer(QName, {State, Uids}, Timeout) ->
+%% remote nodes. Once the timeout elapses the restore is performed by whichever
+%% node is the queue's leader at that point, so the state is written once rather
+%% than from every node at the same time.
+state_restore_timer(QName, RaName, {_State, _Uids} = Restore, Timeout) ->
     receive
         cancel ->
             ok
     after Timeout ->
-            _ = restore_queue_state(QName, State, Uids),
-            ok
+            restore_on_leader(QName, RaName, Restore,
+                              ?STATE_RESTORE_POLL_ATTEMPTS)
+    end.
+
+%% Restores the state only from the node that is the queue's leader. A node that
+%% is not the leader defers to the one that is. If no leader has been elected yet
+%% (an election may still be in progress after the delete node crashed), it waits
+%% and re-checks, up to Attempts times, so the safety net still fires once a
+%% leader emerges. It stops early if the queue is no longer blocked (the state
+%% has already been restored, or the queue deleted, elsewhere). The wait uses a
+%% selective receive so a late cancel is still honoured.
+restore_on_leader(_QName, _RaName, _Restore, 0) ->
+    ok;
+restore_on_leader(QName, RaName, {State, Uids} = Restore, Attempts) ->
+    case is_blocked(QName) of
+        false ->
+            ok;
+        true ->
+            case ra_leaderboard:lookup_leader(RaName) of
+                {_, Node} when Node =:= node() ->
+                    _ = restore_queue_state(QName, State, Uids),
+                    ok;
+                {_, _OtherNode} ->
+                    ok;
+                undefined ->
+                    receive
+                        cancel ->
+                            ok
+                    after ?STATE_RESTORE_POLL_INTERVAL ->
+                            restore_on_leader(QName, RaName, Restore,
+                                              Attempts - 1)
+                    end
+            end
     end.
 
 cancel_state_restore_timers(Pids) ->
@@ -1251,14 +1296,23 @@ blocked_state_restore_timeout() ->
     application:get_env(rabbit, quorum_queue_blocked_state_restore_timeout,
                         ?BLOCKED_STATE_RESTORE_TIMEOUT).
 
+%% Both this and restore_queue_state/3 go through rabbit_amqqueue:update/2, which
+%% is a read-modify-write guarded by a payload-version compare-and-swap committed
+%% by the metadata store leader (with a retry on conflict). It is therefore
+%% linearizable no matter which node runs it: running on a metadata store
+%% follower only adds a forwarding hop, and a stale local read just triggers a
+%% retry, never a wrong write. So these writes are safe from the delete node and
+%% from any safety-net timer node alike.
 set_queue_state(QName, State) ->
     rabbit_amqqueue:update(QName,
                            fun (Q) -> amqqueue:set_state(Q, State) end).
 
 %% Restores State only if the record is still blocked and still belongs to the
-%% incarnation identified by CapturedUids. The check runs inside the update fun
-%% so it is atomic with the write: if the queue was deleted the update is a
-%% no-op, and if a different incarnation now holds the name it is left untouched.
+%% incarnation identified by CapturedUids. The check runs inside the update fun,
+%% so the version compare-and-swap in rabbit_amqqueue:update/2 makes it atomic
+%% with the write (see set_queue_state/2): if the queue was deleted the update is
+%% a no-op, and if a different incarnation now holds the name it is left
+%% untouched.
 restore_queue_state(QName, State, CapturedUids) ->
     _ = rabbit_amqqueue:update(
           QName,
