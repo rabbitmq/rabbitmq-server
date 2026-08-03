@@ -188,10 +188,10 @@ parse_packet(Bin, #mqtt_packet_fixed{type = Type,
             throw(extended_authentication_unsupported);
         {_, TooShortBin}
           when byte_size(TooShortBin) < Length ->
-            {more, fun(BinMore) ->
-                           parse_packet(<<TooShortBin/binary, BinMore/binary>>,
-                                        Fixed, Length, ProtoVer)
-                   end}
+            more_fragments([TooShortBin], byte_size(TooShortBin), Length,
+                           fun(Joined) ->
+                                   parse_packet(Joined, Fixed, Length, ProtoVer)
+                           end)
     end.
 
 parse_connect(Bin, Fixed, Length) ->
@@ -201,10 +201,10 @@ parse_connect(Bin, Fixed, Length) ->
             wrap(Fixed, Connect, Rest, ProtoVer);
         TooShortBin
           when byte_size(TooShortBin) < Length ->
-            {more, fun(BinMore) ->
-                           parse_connect(<<TooShortBin/binary, BinMore/binary>>,
-                                         Fixed, Length)
-                   end}
+            more_fragments([TooShortBin], byte_size(TooShortBin), Length,
+                           fun(Joined) ->
+                                   parse_connect(Joined, Fixed, Length)
+                           end)
     end.
 
 -spec parse_connect(binary()) ->
@@ -249,6 +249,13 @@ parse_connect(<<Len:16, ProtoName:Len/binary,
        will_payload = WillPayload,
        username = UserName,
        password = PasssWord}.
+
+more_fragments(Acc, Size, Length, Parse) when Size < Length ->
+    {more, fun(Bin) ->
+                   more_fragments([Bin | Acc], Size + byte_size(Bin), Length, Parse)
+           end};
+more_fragments(Acc, _Size, _Length, Parse) ->
+    Parse(iolist_to_binary(lists:reverse(Acc))).
 
 wrap(Fixed, Variable, Payload, Rest, ProtoVer) ->
     {ok, #mqtt_packet { variable = Variable, fixed = Fixed, payload = Payload }, Rest, ProtoVer}.
