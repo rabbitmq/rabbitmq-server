@@ -189,9 +189,27 @@ parse_packet(Bin, #mqtt_packet_fixed{type = Type,
         {_, TooShortBin}
           when byte_size(TooShortBin) < Length ->
             {more, fun(BinMore) ->
-                           parse_packet(<<TooShortBin/binary, BinMore/binary>>,
-                                        Fixed, Length, ProtoVer)
+                           more_packet([BinMore, TooShortBin],
+                                       byte_size(TooShortBin) + byte_size(BinMore),
+                                       Fixed, Length, ProtoVer)
                    end}
+    end.
+
+%% A packet whose body is split across several TCP segments (or WebSocket
+%% messages) must not be re-concatenated on every fragment: that turns
+%% trickled packets into an O(n^2) copy.  Instead, accumulate the fragments
+%% in a list and join them once when the packet is complete.
+more_packet(Acc, Size, Fixed, Length, ProtoVer) ->
+    if
+        Size < Length ->
+            {more, fun(BinMore) ->
+                           more_packet([BinMore | Acc],
+                                       Size + byte_size(BinMore),
+                                       Fixed, Length, ProtoVer)
+                   end};
+        true ->
+            parse_packet(iolist_to_binary(lists:reverse(Acc)),
+                         Fixed, Length, ProtoVer)
     end.
 
 parse_connect(Bin, Fixed, Length) ->
@@ -202,9 +220,23 @@ parse_connect(Bin, Fixed, Length) ->
         TooShortBin
           when byte_size(TooShortBin) < Length ->
             {more, fun(BinMore) ->
-                           parse_connect(<<TooShortBin/binary, BinMore/binary>>,
-                                         Fixed, Length)
+                           more_connect([BinMore, TooShortBin],
+                                        byte_size(TooShortBin) + byte_size(BinMore),
+                                        Fixed, Length)
                    end}
+    end.
+
+more_connect(Acc, Size, Fixed, Length) ->
+    if
+        Size < Length ->
+            {more, fun(BinMore) ->
+                           more_connect([BinMore | Acc],
+                                        Size + byte_size(BinMore),
+                                        Fixed, Length)
+                   end};
+        true ->
+            parse_connect(iolist_to_binary(lists:reverse(Acc)),
+                          Fixed, Length)
     end.
 
 -spec parse_connect(binary()) ->
