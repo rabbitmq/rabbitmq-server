@@ -689,6 +689,15 @@ handle_input(Header = <<Size:32, DOff:8, Type:8, Channel:16>>,
     State = if Size =:= 8 ->
                    %% heartbeat
                    State0;
+               Size < 8 ->
+                   %% the size field covers the 8-byte frame header; anything
+                   %% smaller is malformed and would otherwise make recv_len
+                   %% negative and crash the connection process
+                   Err = error_frame(
+                           ?V_1_0_CONNECTION_ERROR_FRAMING_ERROR,
+                           "frame size (~b bytes) < minimum frame size (8 bytes)",
+                           [Size]),
+                   handle_exception(State0, Channel, Err);
                Size > MaxFrameSize ->
                    Err = error_frame(
                            ?V_1_0_CONNECTION_ERROR_FRAMING_ERROR,
@@ -705,9 +714,20 @@ handle_input(FrameBin, State0 = #v1{callback = {frame_body, Mode, DOff, Channel}
     %% Figure 2.16
     %% DOff = 4-byte words minus 8 bytes we've already read
     ExtendedHeaderSize = (DOff * 32 - 64),
-    <<_IgnoreExtendedHeader:ExtendedHeaderSize, FrameBody/binary>> = FrameBin,
-    State = switch_callback(State0, {frame_header, Mode}, 8),
-    handle_frame(Mode, Channel, FrameBody, State);
+    case FrameBin of
+        <<_IgnoreExtendedHeader:ExtendedHeaderSize, FrameBody/binary>> ->
+            State = switch_callback(State0, {frame_header, Mode}, 8),
+            handle_frame(Mode, Channel, FrameBody, State);
+        _ ->
+            %% DOff claims more extended header bytes than the frame
+            %% contains; report it as a framing error instead of crashing
+            %% on the binary match
+            Err = error_frame(
+                    ?V_1_0_CONNECTION_ERROR_FRAMING_ERROR,
+                    "extended header size (~b bytes) exceeds frame size (~b bytes)",
+                    [ExtendedHeaderSize, byte_size(FrameBin)]),
+            handle_exception(State0, Channel, Err)
+    end;
 handle_input(Data, #v1{callback = Callback}) ->
     throw({bad_input, Callback, Data}).
 
