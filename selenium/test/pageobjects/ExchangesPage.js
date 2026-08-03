@@ -30,7 +30,7 @@ module.exports = class ExchangesPage extends BasePage {
       "div#exchanges-table-section table tbody tr td a[href='#/exchanges/" + vhost + "/" + name + "']"))
   }
   async ensureAddExchangeSectionIsVisible() {
-    const button = await this.driver.findElement(ADD_BUTTON)
+    const button = await this.waitForLocated(ADD_BUTTON)
     if (!(await button.isDisplayed())) {
       await this.click(ADD_NEW_EXCHANGE_SECTION)
     }
