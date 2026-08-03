@@ -86,7 +86,7 @@ groups() ->
                                             delete_declare,
                                             delete_member_during_node_down,
                                             delete_while_publishing,
-                                            state_restore_timers_restores_state_on_remote_nodes,
+                                            state_restore_timer_restores_state_on_leader,
                                             delete_ra_cluster_already_shutting_down,
                                             concurrent_vhost_delete_with_quorum_queue,
                                             metrics_cleanup_on_leadership_takeover,
@@ -215,7 +215,10 @@ all_tests() ->
      blocked_state_reset_on_recovery,
      blocked_state_restore_timer_restores_state_if_empty,
      blocked_state_restore_timer_restores_state_if_unused,
+     guarded_restore_skips_new_queue_incarnation,
      delete_conditional_refused_under_alarm,
+     delete_conditional_refused_without_member_uids,
+     delete_conditional_executed_on_leader,
      queue_ttl,
      peek,
      oldest_entry_timestamp,
@@ -5390,10 +5393,12 @@ assert_restore_timer_recovers_blocked_delete(Config, QName, IfUnused, IfEmpty) -
     ok.
 
 %% Verifies that spawn_state_restore_timers/2 starts a safety-net timer on every
-%% running cluster node, including the remote nodes, and that a timer on a remote
-%% node restores the previous state on its own (i.e. even when the node that
-%% spawned the timers is not the one that restores the state).
-state_restore_timers_restores_state_on_remote_nodes(Config) ->
+%% running cluster node, but that only the timer on the queue's leader restores
+%% the state: non-leader timers defer to the leader, so the state is written from
+%% a single node. Restoring from the leader (rather than every node) still
+%% survives the node that spawned the timers going down, since a surviving or
+%% newly elected leader performs the restore.
+state_restore_timer_restores_state_on_leader(Config) ->
     [Server0 | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
@@ -5401,6 +5406,9 @@ state_restore_timers_restores_state_on_remote_nodes(Config) ->
     QName = rabbit_misc:r(<<"/">>, queue, QQ),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    {ok, Q} = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, lookup,
+                                           [QName]),
+    LeaderNode = leader_node(Config, QName),
 
     %% Move the queue to the blocked state, as the start of a conditional delete
     %% does, then confirm the change is visible cluster-wide.
@@ -5422,18 +5430,20 @@ state_restore_timers_restores_state_on_remote_nodes(Config) ->
                 amqp_channel:call(Ch3, #'queue.declare'{queue = QQ,
                                                         passive = true})),
 
-    %% Use a short restore timeout so the remote timers fire quickly. The
-    %% timeout is read on the spawning node and passed to each timer, so setting
-    %% it on node 0 is enough.
+    %% Use a short restore timeout so the timers fire quickly. The timeout is
+    %% read on the spawning node and passed to each timer, so setting it on
+    %% node 0 is enough.
+    RestoreTimeout = 3000,
     ok = rabbit_ct_broker_helpers:rpc(
            Config, 0, application, set_env,
-           [rabbit, quorum_queue_blocked_state_restore_timeout, 3000]),
+           [rabbit, quorum_queue_blocked_state_restore_timeout, RestoreTimeout]),
 
     %% Spawn the safety-net timers from node 0, asking them to restore the live
-    %% state.
+    %% state. An empty UID set means the restore is guarded on the blocked state
+    %% alone, which is what this test exercises.
     Pids = rabbit_ct_broker_helpers:rpc(
              Config, 0, rabbit_quorum_queue, spawn_state_restore_timers,
-             [QName, live]),
+             [Q, {live, []}]),
 
     %% One timer was started on every running cluster node, including the remote
     %% ones (not just the node that spawned them).
@@ -5441,19 +5451,22 @@ state_restore_timers_restores_state_on_remote_nodes(Config) ->
                                                 list_running, []),
     ?assertEqual(lists:sort(RunningNodes),
                  lists:usort([node(P) || P <- Pids])),
-    RemotePids = [P || P <- Pids, node(P) =/= Server0],
-    ?assert(length(RemotePids) >= 1),
 
-    %% Kill the timer running on the spawning node so that only the timers on the
-    %% remote nodes are left to restore the state. This mimics the spawning node
-    %% going down entirely after it moved the queue to the blocked state.
-    [LocalPid] = [P || P <- Pids, node(P) =:= Server0],
+    %% Kill the timer on the leader node. The non-leader timers must defer to the
+    %% leader rather than restore the state themselves, so the queue stays
+    %% blocked past the timeout.
+    [LeaderPid] = [P || P <- Pids, node(P) =:= LeaderNode],
     true = rabbit_ct_broker_helpers:rpc(Config, 0, erlang, exit,
-                                        [LocalPid, kill]),
-    false = rabbit_ct_broker_helpers:rpc(Config, 0, erlang, is_process_alive,
-                                        [LocalPid]),
+                                        [LeaderPid, kill]),
+    timer:sleep(RestoreTimeout + 1000),
+    ?assertEqual(blocked, get_queue_state(Config, QName)),
 
-    %% A timer on a remote node restores the previous state on its own.
+    %% Spawn the timers afresh and this time leave the leader's timer running:
+    %% the leader is the one that restores the previous state, even though the
+    %% timers were spawned from node 0.
+    _ = rabbit_ct_broker_helpers:rpc(
+          Config, 0, rabbit_quorum_queue, spawn_state_restore_timers,
+          [Q, {live, []}]),
     ?awaitMatch(live, get_queue_state(Config, QName), ?DEFAULT_AWAIT),
 
     ok = rabbit_ct_broker_helpers:rpc(
@@ -5466,6 +5479,97 @@ state_restore_timers_restores_state_on_remote_nodes(Config) ->
     ?assertEqual(ok, publish_confirm(Ch4, QQ)),
     ?assertMatch(#'queue.delete_ok'{},
                  amqp_channel:call(Ch4, #'queue.delete'{queue = QQ})).
+
+%% The node that is the queue's Ra leader, from node 0's leaderboard view.
+leader_node(Config, QName) ->
+    {ok, Q} = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, lookup,
+                                           [QName]),
+    {RaName, _} = amqqueue:get_pid(Q),
+    {_, Node} = rabbit_ct_broker_helpers:rpc(
+                  Config, 0, ra_leaderboard, lookup_leader, [RaName]),
+    Node.
+
+%% A safety-net restore left over from an interrupted conditional delete must
+%% not overwrite the state of a different queue that reuses the name after a
+%% delete and recreate. Telling incarnations apart relies on tracked member
+%% UIDs, so the test is skipped when that feature flag is disabled.
+guarded_restore_skips_new_queue_incarnation(Config) ->
+    case rabbit_ct_broker_helpers:is_feature_flag_enabled(
+           Config, track_qq_members_uids) of
+        false ->
+            {skip, "guarded restore relies on the track_qq_members_uids ff"};
+        true ->
+            guarded_restore_skips_new_queue_incarnation0(Config)
+    end.
+
+guarded_restore_skips_new_queue_incarnation0(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    QName = rabbit_misc:r(<<"/">>, queue, QQ),
+
+    %% Incarnation A.
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    UidsA = incarnation_uids(Config, QName),
+    ?assert(UidsA =/= []),
+
+    %% Delete A and recreate the same name: incarnation B, with fresh UIDs.
+    ?assertMatch(#'queue.delete_ok'{},
+                 amqp_channel:call(Ch, #'queue.delete'{queue = QQ})),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    UidsB = incarnation_uids(Config, QName),
+    ?assert(UidsB =/= []),
+    %% The two incarnations share no member UID.
+    ?assertEqual([], [U || U <- UidsA, lists:member(U, UidsB)]),
+
+    %% Put B into the blocked state so a wrongful restore-to-live is observable.
+    ok = set_queue_state(Config, QName, blocked),
+    ?awaitMatch(blocked, get_queue_state(Config, QName), ?DEFAULT_AWAIT),
+    {ok, QB} = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, lookup,
+                                            [QName]),
+
+    %% Use a short restore timeout so the stray timers fire quickly.
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, application, set_env,
+           [rabbit, quorum_queue_blocked_state_restore_timeout, 500]),
+
+    %% Fire safety-net timers carrying incarnation A's UIDs, as one left behind
+    %% by an interrupted conditional delete of A would. They must not touch B.
+    _ = rabbit_ct_broker_helpers:rpc(
+          Config, 0, rabbit_quorum_queue, spawn_state_restore_timers,
+          [QB, {live, UidsA}]),
+
+    %% Wait past the restore timeout and confirm B is still blocked.
+    timer:sleep(1500),
+    ?assertEqual(blocked, get_queue_state(Config, QName)),
+
+    %% Control: timers carrying B's own UIDs do restore B to live.
+    _ = rabbit_ct_broker_helpers:rpc(
+          Config, 0, rabbit_quorum_queue, spawn_state_restore_timers,
+          [QB, {live, UidsB}]),
+    ?awaitMatch(live, get_queue_state(Config, QName), ?DEFAULT_AWAIT),
+
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, application, unset_env,
+           [rabbit, quorum_queue_blocked_state_restore_timeout]),
+
+    %% The queue is usable again and can be deleted normally.
+    ?assertMatch(#'queue.delete_ok'{},
+                 amqp_channel:call(Ch, #'queue.delete'{queue = QQ})).
+
+%% The Ra member UIDs of the queue's current incarnation, or an empty list when
+%% member UIDs are not tracked.
+incarnation_uids(Config, QName) ->
+    {ok, Q} = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, lookup,
+                                           [QName]),
+    case amqqueue:get_type_state(Q) of
+        #{nodes := Nodes} when is_map(Nodes) ->
+            maps:values(Nodes);
+        _ ->
+            []
+    end.
 
 delete_conditional_refused_under_alarm(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
@@ -5505,6 +5609,142 @@ delete_conditional_refused_under_alarm(Config) ->
                                                         if_empty = true})),
     ?assertEqual({error, not_found},
                  rpc:call(Server, rabbit_amqqueue, lookup, [QName])).
+
+%% Conditional (if-empty/if-unused) deletes rely on the block-then-delete path,
+%% which is only safe when queue incarnations can be told apart by their tracked
+%% member UIDs. When the track_qq_members_uids feature flag is disabled the
+%% conditional delete must be refused rather than silently run unguarded.
+delete_conditional_refused_without_member_uids(Config) ->
+    case rabbit_ct_broker_helpers:is_feature_flag_enabled(
+           Config, track_qq_members_uids) of
+        false ->
+            {skip, "test simulates disabling an otherwise enabled ff"};
+        true ->
+            delete_conditional_refused_without_member_uids0(Config)
+    end.
+
+delete_conditional_refused_without_member_uids0(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    QName = rabbit_misc:r(<<"/">>, queue, QQ),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    %% Simulate a cluster where the feature flag has not been enabled yet, while
+    %% leaving every other feature flag untouched.
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, meck, new,
+           [rabbit_feature_flags, [passthrough, no_link]]),
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, meck, expect,
+           [rabbit_feature_flags, is_enabled,
+            fun (track_qq_members_uids) -> false;
+                (FeatureName) -> meck:passthrough([FeatureName])
+            end]),
+
+    %% Both if-empty and if-unused deletes are refused with a 406.
+    Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
+    ?assertExit({{shutdown, {server_initiated_close, 406, _}}, _},
+                amqp_channel:call(Ch1, #'queue.delete'{queue = QQ,
+                                                       if_empty = true})),
+    Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server),
+    ?assertExit({{shutdown, {server_initiated_close, 406, _}}, _},
+                amqp_channel:call(Ch2, #'queue.delete'{queue = QQ,
+                                                       if_unused = true})),
+    %% The refused deletes left the queue in place and usable (not stuck in the
+    %% blocked state).
+    ?assertMatch(live, get_queue_state(Config, QName)),
+
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, meck, unload,
+                                      [rabbit_feature_flags]),
+
+    %% With the flag enabled again, the conditional delete succeeds.
+    Ch3 = rabbit_ct_client_helpers:open_channel(Config, Server),
+    ?assertMatch(#'queue.delete_ok'{message_count = 0},
+                 amqp_channel:call(Ch3, #'queue.delete'{queue = QQ,
+                                                        if_empty = true})),
+    ?assertEqual({error, not_found},
+                 rpc:call(Server, rabbit_amqqueue, lookup, [QName])).
+
+%% A conditional (if-empty/if-unused) delete resolves the queue's leader and
+%% runs the block-then-delete step (blocked_delete/5) on the leader node itself
+%% (see conditional_delete/4). This drives the delete from a non-leader node
+%% whenever the cluster has more than one node and asserts that blocked_delete/5
+%% executed on the leader node, and nowhere else.
+delete_conditional_executed_on_leader(Config) ->
+    case rabbit_ct_broker_helpers:is_feature_flag_enabled(
+           Config, track_qq_members_uids) of
+        false ->
+            {skip, "conditional delete relies on the track_qq_members_uids ff"};
+        true ->
+            delete_conditional_executed_on_leader0(Config)
+    end.
+
+delete_conditional_executed_on_leader0(Config) ->
+    Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server0 | _] = Nodes,
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
+    QQ = ?config(queue_name, Config),
+    QName = rabbit_misc:r(<<"/">>, queue, QQ),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    %% Resolve the queue's leader node.
+    RaName = ra_name(QQ),
+    {ok, _, {_, LeaderNode}} = ra:members({RaName, Server0}),
+
+    %% Drive the delete from a non-leader node when the cluster has one, so that
+    %% "runs on the leader" is a non-trivial assertion (in a single-node cluster
+    %% the only node is the leader).
+    InitiatorNode = case [N || N <- Nodes, N =/= LeaderNode] of
+                        [NonLeader | _] ->
+                            NonLeader;
+                        [] ->
+                            LeaderNode
+                    end,
+
+    %% Track where blocked_delete/5 actually runs by mecking it on every node
+    %% with passthrough so the real delete still happens. rpc/5 over a list of
+    %% nodes returns one result per node, so we expect a list of oks.
+    ?assertEqual([ok || _ <- Nodes],
+                 rabbit_ct_broker_helpers:rpc(Config, Nodes, meck, new,
+                                              [rabbit_quorum_queue,
+                                               [passthrough, no_link]])),
+    ?assertEqual(
+       [ok || _ <- Nodes],
+       rabbit_ct_broker_helpers:rpc(
+         Config, Nodes, meck, expect,
+         [rabbit_quorum_queue, blocked_delete,
+          fun(Q, IfUnused, IfEmpty, ActingUser, Leader) ->
+                  meck:passthrough([Q, IfUnused, IfEmpty, ActingUser, Leader])
+          end])),
+    try
+        Ch1 = rabbit_ct_client_helpers:open_channel(Config, InitiatorNode),
+        ?assertMatch(#'queue.delete_ok'{message_count = 0},
+                     amqp_channel:call(Ch1, #'queue.delete'{queue = QQ,
+                                                            if_empty = true})),
+
+        %% blocked_delete/5 ran exactly once, on the leader node, and on no
+        %% other node (in particular not on the node that initiated the delete).
+        Calls = [{N, rabbit_ct_broker_helpers:rpc(
+                       Config, N, meck, num_calls,
+                       [rabbit_quorum_queue, blocked_delete,
+                        ['_', '_', '_', '_', '_']])}
+                 || N <- Nodes],
+        ?assertEqual(1, proplists:get_value(LeaderNode, Calls)),
+        ?assertEqual([{N, 0} || N <- Nodes, N =/= LeaderNode],
+                     [{N, C} || {N, C} <- Calls, N =/= LeaderNode])
+    after
+        _ = rabbit_ct_broker_helpers:rpc(Config, Nodes, meck, unload,
+                                         [rabbit_quorum_queue])
+    end,
+
+    %% Ensure the queue no longer exists in the broker.
+    ?assertEqual({error, not_found},
+                 rabbit_ct_broker_helpers:rpc(Config, Server0, rabbit_amqqueue,
+                                              lookup, [QName])).
 
 queue_ttl(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
