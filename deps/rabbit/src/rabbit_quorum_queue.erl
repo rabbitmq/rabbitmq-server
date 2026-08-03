@@ -38,6 +38,7 @@
 -export([cancel_consumer_handler/2, cancel_consumer/3]).
 -export([become_leader/2, handle_tick/3, spawn_deleter/1]).
 -export([state_restore_timer/3, spawn_state_restore_timers/2]).
+-export([blocked_delete/5]).
 -export([rpc_delete_metrics/1,
          key_metrics_rpc/1]).
 -export([format/2]).
@@ -1107,31 +1108,76 @@ delete(Q, IfUnused, IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
             {ok, ReadyMsgs, _} = stat(Q),
             do_delete(Q, ReadyMsgs, ActingUser);
         true ->
-            %% The block-then-delete path below writes the blocked state to the
-            %% cluster metadata store and relies on rejecting publishes. Both
-            %% are unsafe while any node is under a resource alarm, so refuse
-            %% the conditional delete until the alarm clears.
-            case rabbit_alarm:get_alarms() of
-                [] ->
-                    %% Move the queue to the blocked state before checking the
-                    %% preconditions so that publishes and new consumers are
-                    %% rejected while the check and the delete run, closing the
-                    %% window in which an if-empty/if-unused precondition could
-                    %% be violated.
-                    with_queue_blocked(
-                      Q,
-                      fun () ->
-                              case check_delete_flags(Q, IfUnused, IfEmpty) of
-                                  {ok, ReadyMsgs} ->
-                                      do_delete(Q, ReadyMsgs, ActingUser);
-                                  Error ->
-                                      Error
-                              end
-                      end);
-                _Alarms ->
-                    cannot_delete_under_alarm(amqqueue:get_name(Q))
+            %% The block-then-delete path relies on distinguishing queue
+            %% incarnations by their tracked member UIDs when restoring the
+            %% blocked state (see with_queue_blocked/2). Without them a stray
+            %% restore could clobber a different queue that reuses this name, so
+            %% refuse the conditional delete unless the feature flag is enabled.
+            case rabbit_feature_flags:is_enabled(track_qq_members_uids) of
+                false ->
+                    cannot_delete_without_member_uids(amqqueue:get_name(Q));
+                true ->
+                    %% The block-then-delete path below writes the blocked state
+                    %% to the cluster metadata store and relies on rejecting
+                    %% publishes. Both are unsafe while any node is under a
+                    %% resource alarm, so refuse the conditional delete until the
+                    %% alarm clears.
+                    case rabbit_alarm:get_alarms() of
+                        [] ->
+                            conditional_delete(Q, IfUnused, IfEmpty, ActingUser);
+                        _Alarms ->
+                            cannot_delete_under_alarm(amqqueue:get_name(Q))
+                    end
             end
     end.
+
+%% Resolves the queue's leader and runs the block-then-delete on the leader
+%% node. Blocking, checking the preconditions and deleting all happen where the
+%% leader lives; the resolved leader is passed down so check_delete_flags/4
+%% reuses it instead of resolving it again.
+conditional_delete(Q, IfUnused, IfEmpty, ActingUser) ->
+    QName = amqqueue:get_name(Q),
+    case find_leader(Q) of
+        {_, LeaderNode} = Leader ->
+            try
+                erpc:call(LeaderNode, ?MODULE, blocked_delete,
+                          [Q, IfUnused, IfEmpty, ActingUser, Leader])
+            catch
+                error:{erpc, _} = Reason ->
+                    cannot_verify_delete_flags(QName, Reason)
+            end;
+        undefined ->
+            cannot_verify_delete_flags(QName, no_leader_available)
+    end.
+
+%% Executed on the queue's leader node. Moves the queue to the blocked state
+%% before checking the preconditions so that publishes and new consumers are
+%% rejected while the check and the delete run, closing the window in which an
+%% if-empty/if-unused precondition could be violated. On success the queue has
+%% been deleted; otherwise the previous state is restored (see
+%% with_queue_blocked/2).
+-spec blocked_delete(amqqueue:amqqueue(), boolean(), boolean(),
+                     rabbit_types:username(), ra:server_id()) ->
+    rabbit_types:ok(non_neg_integer()) |
+    rabbit_types:error(in_use | not_empty) |
+    {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
+blocked_delete(Q, IfUnused, IfEmpty, ActingUser, Leader) ->
+    with_queue_blocked(
+      Q,
+      fun () ->
+              case check_delete_flags(Q, IfUnused, IfEmpty, Leader) of
+                  {ok, ReadyMsgs} ->
+                      do_delete(Q, ReadyMsgs, ActingUser);
+                  Error ->
+                      Error
+              end
+      end).
+
+cannot_delete_without_member_uids(QName) ->
+    {protocol_error, precondition_failed,
+     "cannot delete ~ts with an if-unused/if-empty precondition until the "
+     "'track_qq_members_uids' feature flag is enabled",
+     [rabbit_misc:rs(QName)]}.
 
 cannot_delete_under_alarm(QName) ->
     {protocol_error, precondition_failed,
@@ -1146,6 +1192,10 @@ cannot_delete_under_alarm(QName) ->
 with_queue_blocked(Q, Fun) ->
     QName = amqqueue:get_name(Q),
     PrevState = amqqueue:get_state(Q),
+    %% Capture the current incarnation's member UIDs so that a restore (below or
+    %% from a safety-net timer) never overwrites the state of a different queue
+    %% that reuses this name after a delete and recreate.
+    Uids = incarnation_uids(Q),
     _ = set_queue_state(QName, blocked),
     %% Safety net: should this process fail to restore the previous state for
     %% any reason (for example, it is killed mid-delete, or its whole node
@@ -1155,16 +1205,16 @@ with_queue_blocked(Q, Fun) ->
     %% restored even if the node running this delete goes down entirely. They
     %% are cancelled on the normal paths below where the state is restored (or
     %% the queue deleted) directly.
-    TimerPids = spawn_state_restore_timers(QName, PrevState),
+    TimerPids = spawn_state_restore_timers(QName, {PrevState, Uids}),
     try Fun() of
         {ok, _} = Ok ->
             Ok;
         Other ->
-            _ = set_queue_state(QName, PrevState),
+            _ = restore_queue_state(QName, PrevState, Uids),
             Other
     catch
         Class:Reason:Stacktrace ->
-            _ = set_queue_state(QName, PrevState),
+            _ = restore_queue_state(QName, PrevState, Uids),
             erlang:raise(Class, Reason, Stacktrace)
     after
         _ = cancel_state_restore_timers(TimerPids)
@@ -1177,19 +1227,19 @@ with_queue_blocked(Q, Fun) ->
 %% than only locally) means the state is restored even if the node running the
 %% delete crashes entirely, since the blocked state lives in the cluster-wide
 %% metadata store and any node can restore it.
-spawn_state_restore_timers(QName, State) ->
+spawn_state_restore_timers(QName, {_State, _Uids} = Restore) ->
     Timeout = blocked_state_restore_timeout(),
-    [spawn(Node, ?MODULE, state_restore_timer, [QName, State, Timeout])
+    [spawn(Node, ?MODULE, state_restore_timer, [QName, Restore, Timeout])
      || Node <- rabbit_nodes:list_running()].
 
 %% Timer body run on each node. Exported so it can be started via spawn/4 on
 %% remote nodes.
-state_restore_timer(QName, State, Timeout) ->
+state_restore_timer(QName, {State, Uids}, Timeout) ->
     receive
         cancel ->
             ok
     after Timeout ->
-            _ = set_queue_state(QName, State),
+            _ = restore_queue_state(QName, State, Uids),
             ok
     end.
 
@@ -1205,32 +1255,74 @@ set_queue_state(QName, State) ->
     rabbit_amqqueue:update(QName,
                            fun (Q) -> amqqueue:set_state(Q, State) end).
 
+%% Restores State only if the record is still blocked and still belongs to the
+%% incarnation identified by CapturedUids. The check runs inside the update fun
+%% so it is atomic with the write: if the queue was deleted the update is a
+%% no-op, and if a different incarnation now holds the name it is left untouched.
+restore_queue_state(QName, State, CapturedUids) ->
+    _ = rabbit_amqqueue:update(
+          QName,
+          fun (Q) ->
+                  case amqqueue:get_state(Q) =:= blocked andalso
+                       same_incarnation(CapturedUids, incarnation_uids(Q)) of
+                      true ->
+                          amqqueue:set_state(Q, State);
+                      false ->
+                          Q
+                  end
+          end),
+    ok.
+
+%% The Ra member UIDs of the queue's current incarnation. Conditional deletes
+%% only reach this code once the track_qq_members_uids feature flag is enabled,
+%% so a freshly declared queue always carries a node => UID map. The empty-list
+%% result is reserved for a legacy record whose type state still holds a plain
+%% nodes list because it has not been repaired to a UID map yet (see
+%% repair_amqqueue_nodes/1). Every UID is regenerated on a delete-and-recreate,
+%% so a change of incarnation replaces the whole set.
+incarnation_uids(Q) ->
+    case amqqueue:get_type_state(Q) of
+        #{nodes := Nodes} when is_map(Nodes) ->
+            maps:values(Nodes);
+        _ ->
+            []
+    end.
+
+%% Records belong to the same incarnation when their tracked member UIDs overlap.
+%% A delete-and-recreate assigns a fresh set of UIDs (the recreated queue is
+%% declared with the feature flag on), so the sets become disjoint, while a mere
+%% membership change within one incarnation still overlaps and a legitimate
+%% restore is never skipped. A legacy record that has not been repaired to a UID
+%% map yet has no UIDs to compare and therefore cannot be told apart; it
+%% conservatively counts as the same incarnation, falling back to the
+%% blocked-state guard alone.
+same_incarnation([], _CurrentUids) ->
+    true;
+same_incarnation(CapturedUids, CurrentUids) ->
+    lists:any(fun (Uid) -> lists:member(Uid, CurrentUids) end, CapturedUids).
+
 %% The if-unused and if-empty flags gate deletion on the queue's consumer and
 %% message counts. Both counts come from a single rabbit_fifo_client:stat/1 call
 %% against the leader with any failure surfaced, rather than via
 %% rabbit_quorum_queue:stat/1 which reports zero counts on failure: a queue whose
 %% counts cannot be verified must not be deleted, as that would silently bypass
 %% the requested precondition. On success the ready message count is returned so
-%% the caller can reuse it as the delete result without a second stat call.
-check_delete_flags(Q, IfUnused, IfEmpty) ->
+%% the caller can reuse it as the delete result without a second stat call. The
+%% leader is resolved once by the caller and passed in so it is reused here.
+check_delete_flags(Q, IfUnused, IfEmpty, Leader) ->
     QName = amqqueue:get_name(Q),
-    case find_leader(Q) of
-        {_, _} = Leader ->
-            case rabbit_fifo_client:stat(Leader) of
-                {ok, ReadyMsgs, Consumers} ->
-                    if
-                        IfEmpty andalso ReadyMsgs > 0 ->
-                            {error, not_empty};
-                        IfUnused andalso Consumers > 0 ->
-                            {error, in_use};
-                        true ->
-                            {ok, ReadyMsgs}
-                    end;
-                {_, Reason} ->
-                    cannot_verify_delete_flags(QName, Reason)
+    case rabbit_fifo_client:stat(Leader) of
+        {ok, ReadyMsgs, Consumers} ->
+            if
+                IfEmpty andalso ReadyMsgs > 0 ->
+                    {error, not_empty};
+                IfUnused andalso Consumers > 0 ->
+                    {error, in_use};
+                true ->
+                    {ok, ReadyMsgs}
             end;
-        undefined ->
-            cannot_verify_delete_flags(QName, no_leader_available)
+        {_, Reason} ->
+            cannot_verify_delete_flags(QName, Reason)
     end.
 
 cannot_verify_delete_flags(QName, Reason) ->
