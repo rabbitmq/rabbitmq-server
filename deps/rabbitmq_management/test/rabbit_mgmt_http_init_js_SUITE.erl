@@ -44,9 +44,12 @@ unauthorized_test(Config) ->
     %% Call endpoint with an unauthorized user (no management tag)
     %% Guest without valid password or totally unknown user will return 401
     Headers = [rabbit_mgmt_test_util:auth_header("unknown_user", "bad_password")],
-    {ok, {{_Version, 401, _Reason}, _Headers, Body}} = rabbit_mgmt_test_util:req(Config, 0, get_static, "js/init.js", Headers),
+    {ok, {{_Version, 401, Reason}, _Headers, Body}} = rabbit_mgmt_test_util:req(Config, 0, get_static, "js/init.js", Headers),
+    ?assertEqual("Unauthorized", Reason),
     
-    ?assertEqual(<<"Not authorized">>, iolist_to_binary(Body)),
+    Decoded = rabbit_json:decode(Body),
+    ?assertEqual(<<"not_authorized">>, maps:get(<<"error">>, Decoded)),
+    ?assertEqual(<<"Not_Authorized">>, maps:get(<<"reason">>, Decoded)),
     passed.
 
 init_js_settings_test(Config) ->
