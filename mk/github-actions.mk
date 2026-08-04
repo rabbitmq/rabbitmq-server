@@ -3,7 +3,6 @@ VENDORED_COMPONENTS = rabbit_common \
 	amqp_client \
 	amqp10_client \
 	amqp10_common \
-	rabbitmq_amqp1_0 \
 	rabbitmq_auth_backend_cache \
 	rabbitmq_auth_backend_http \
 	rabbitmq_auth_backend_ldap \
