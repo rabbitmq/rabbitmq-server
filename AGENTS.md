@@ -139,13 +139,50 @@ Jobs and run results can be inspected via `gh` on the command line.
  * [`rabbitmq/server-packages`](https://github.com/rabbitmq/server-packages) contains workflows for producing open source RabbitMQ releases
  * [`rabbitmq/build-env-images`](https://github.com/rabbitmq/build-env-images) contains OCI build environment images
 
-
+ 
 ## Comments
 
- * Only add very important comments, both in tests and in the implementation
+ * Raise the bar very high for new comments: only add very important comments, both in tests and in the implementation
  * Keep comments concise and to the point
  * Add comments above the line they are referring to, not at the end of the line (an example of what's not to do: `1 + 1. %% equals 2`)
  * Make sure to use proper English grammar, in particular articles, punctuation and full stops at the end of sentences except for Markdown list items
+
+
+## Voice
+
+## Writing Voice
+
+Write like a senior engineer who values clarity and simplicity. This applies
+to all prose: design docs, analyses, notes, and commit messages.
+
+ * Plain and factual: state the why in one line, never narrate the what
+ * Literal mechanism over metaphor: name the actual thing, not an image of it
+ * Prefer the plainest word. No coined verbs, no jargon, no sophisticated synonym use for its own sake
+ * No flourish, no editorializing, no imagery. Use real domain terms
+
+### Writing Style, Markdown Style
+
+ * Never add full stops to Markdown list items
+ * Use "X and Y" in prose, not "X / Y" slash-shorthand. Exceptions: unit
+   fractions (`bytes/edge`), single-concept abbreviations (`I/O`), and paths
+   or code (`tests/unit/`, `m:f/a`, `queue.declare`)
+ * Wrap code identifiers — types, functions, modules, file names, paths — in backticks in prose
+ * Avoid robotic labels such as `**Thing / other:**`; write a plain sentence or a simple label
+ * Match the existing conventions of the file and subdirectory you are
+   editing — bullet character, heading depth, ID schemes, and table shape
+   vary by project, and the local choice wins
+ * Match the existing conventions of the file and subdirectory you are
+   editing — bullet character, heading depth, ID schemes, and table shape
+   vary by project, and the local choice wins
+ * Spell the causation out with a plain connective: "this means that the
+   decisions can be tested without a cluster", not the compressed "keeps
+   the decisions testable"
+ * One idea per paragraph: in multi-line doc strings, separate distinct
+   thoughts with a blank line rather than cramming them into one block
+ * A short orienting connective is fine where it helps the reader ("as the
+   name suggests", "note that"): this is clarity, not flourish
+ * Grammar counts, including the passive where it is the correct voice: "a
+   command has been committed", not "a command has committed"
 
 
 ## Git and GitHub (sans Actions) Instructions
@@ -157,12 +194,10 @@ Jobs and run results can be inspected via `gh` on the command line.
 
 ### Branches
 
-The currently developed branches are:
+The currently developed community-supported branches are:
 
  * `main` (becomes 4.4.0)
  * `v4.3.x`
- * `v4.2.x`
- * `v4.1.x`
 
 ### Backporting
 
@@ -175,9 +210,40 @@ When fetching a GitHub pull request details or diffs, prefer the Web option over
 `gh` can require an explicit operation approval.
 
 
+<<<<<<< HEAD
 ## Writing Style Guide
 
  * Never add full stops to Markdown list items
+=======
+## Security
+
+`.github/SECURITY.md` describes the security policy.
+
+For GitHub Security Advisories, make sure to:
+
+ * Provide a complete CVSS 4.0 vector string
+ * Enter the "Ecosystem" and "Package name" correctly
+   * For vulnerabilities in packages published on [Hex.pm](https://hex.pm/users/rabbitmq) (e.g. `amqp10_client`, `amqp10_common`, `amqp_client`, `rabbit_common`, `credentials_obfuscation`):
+     * Set "Ecosystem" to "Erlang"
+     * Set "Package name" to the Hex.pm package name
+     * This ensures they are properly picked up by OSV.dev and Hex.pm
+   * For vulnerabilities not present in a Hex.pm package (e.g. in `deps/rabbit`):
+     * Set "Ecosystem" to "Other: RabbitMQ"
+     * Set "Package name" to "rabbitmq-server"
+     * This helps the GitHub team differentiate them from Hex.pm packages
+ * Enter the "Affected Versions" and "Patch Versions" correctly
+   * Define "Affected Versions" explicitly per minor release line using version ranges (e.g. `>= 4.2.0`, `< 4.2.10`)
+   * For the Patch version, provide the exact release containing the fix (e.g. `4.2.6`)
+   * If a fix is included in the first release of a new minor line (e.g. `4.3.0`), omit that release line entirely as no vulnerable `4.3.x` releases exist
+
+### Use CVSSv4 Scores
+
+When computing a CVSS score, use the CVSSv4 calculator: it can express certain important nuaces better.
+
+When a potential vulnerability is found in a plugin or a feature not enabled by default,
+set the `Attack Requirements` (`AT`) metric to `Present` (`P`): `AT:P`, to reflect the fact
+that only a subset of deployments are affected.
+>>>>>>> 11e218f77e (Machine instrution updates)
 
 
 ## After Completing a Task
