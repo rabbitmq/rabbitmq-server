@@ -170,9 +170,6 @@ to all prose: design docs, analyses, notes, and commit messages.
  * Match the existing conventions of the file and subdirectory you are
    editing — bullet character, heading depth, ID schemes, and table shape
    vary by project, and the local choice wins
- * Match the existing conventions of the file and subdirectory you are
-   editing — bullet character, heading depth, ID schemes, and table shape
-   vary by project, and the local choice wins
  * Spell the causation out with a plain connective: "this means that the
    decisions can be tested without a cluster", not the compressed "keeps
    the decisions testable"
