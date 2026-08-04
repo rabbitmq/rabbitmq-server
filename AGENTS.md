@@ -171,9 +171,6 @@ to all prose: design docs, analyses, notes, and commit messages.
  * Match the existing conventions of the file and subdirectory you are
    editing — bullet character, heading depth, ID schemes, and table shape
    vary by project, and the local choice wins
- * Match the existing conventions of the file and subdirectory you are
-   editing — bullet character, heading depth, ID schemes, and table shape
-   vary by project, and the local choice wins
  * Spell the causation out with a plain connective: "this means that the
    decisions can be tested without a cluster", not the compressed "keeps
    the decisions testable"
@@ -210,11 +207,6 @@ When fetching a GitHub pull request details or diffs, prefer the Web option over
 `gh` can require an explicit operation approval.
 
 
-<<<<<<< HEAD
-## Writing Style Guide
-
- * Never add full stops to Markdown list items
-=======
 ## Security
 
 `.github/SECURITY.md` describes the security policy.
@@ -243,7 +235,6 @@ When computing a CVSS score, use the CVSSv4 calculator: it can express certain i
 When a potential vulnerability is found in a plugin or a feature not enabled by default,
 set the `Attack Requirements` (`AT`) metric to `Present` (`P`): `AT:P`, to reflect the fact
 that only a subset of deployments are affected.
->>>>>>> 11e218f77e (Machine instrution updates)
 
 
 ## After Completing a Task
