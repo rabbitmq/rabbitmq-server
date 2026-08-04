@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term "Broadcom" refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 [
@@ -339,6 +339,51 @@
     [
      {rabbitmq_prometheus, [
                             {authentication, [{enabled, true}]}
+                           ]}
+    ], [rabbitmq_prometheus]
+   },
+
+   %%
+   %% Endpoint disable options
+   %%
+
+   {disable_memory_breakdown_endpoint,
+    "prometheus.disable_memory_breakdown_endpoint = true",
+    [
+     {rabbitmq_prometheus, [
+                            {disable_memory_breakdown_endpoint, true}
+                           ]}
+    ], [rabbitmq_prometheus]
+   },
+
+   {disable_per_object_endpoint,
+    "prometheus.disable_per_object_endpoint = true",
+    [
+     {rabbitmq_prometheus, [
+                            {disable_per_object_endpoint, true}
+                           ]}
+    ], [rabbitmq_prometheus]
+   },
+
+   {disable_detailed_endpoint,
+    "prometheus.disable_detailed_endpoint = true",
+    [
+     {rabbitmq_prometheus, [
+                            {disable_detailed_endpoint, true}
+                           ]}
+    ], [rabbitmq_prometheus]
+   },
+
+   %%
+   %% Metric blocklist options
+   %%
+
+   {disabled_metrics,
+    "prometheus.disabled_metrics.1 = queue_messages
+     prometheus.disabled_metrics.2 = connection_incoming_bytes_total",
+    [
+     {rabbitmq_prometheus, [
+                            {disabled_metrics, [queue_messages, connection_incoming_bytes_total]}
                            ]}
     ], [rabbitmq_prometheus]
    },
