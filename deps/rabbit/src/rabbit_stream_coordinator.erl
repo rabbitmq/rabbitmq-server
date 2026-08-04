@@ -80,6 +80,7 @@
 -ifdef(TEST).
 -export([update_stream/3,
          evaluate_stream/3,
+         backoff_class/1,
          run_action/6,
          make_aux/1,
          aux_running_count/1,
@@ -1259,6 +1260,11 @@ backoff_class({{nodedown, _}, _}) ->
     nodeup;
 backoff_class({error, nodedown}) ->
     nodeup;
+backoff_class({{shutdown, _}, _}) ->
+    %% e.g. {{shutdown, writer_unavailable}, _} or {{shutdown, noproc}, _}:
+    %% the writer went away mid start_replica. Back off rather than hot-looping;
+    %% the writer-down that follows re-drives this member via a new epoch.
+    short;
 backoff_class({noproc, _}) ->
     short;
 backoff_class({error, _}) ->
@@ -1793,12 +1799,9 @@ update_stream0(#{system_time := _Ts},
         #{DownNode := #member{role = {writer, E},
                               state = {running, E, Pid}} = Member} ->
             Members1 = Members0#{DownNode => Member#member{state = {down, E}}},
-            %% leader is down, set all members that should be running to stopped
-            Members = maps:map(fun (_, #member{target = running} = M) ->
-                                       M#member{target = stopped};
-                                   (_, M) ->
-                                       M
-                               end, Members1),
+            %% leader is down: set all running members to stopped (and wake any
+            %% timed-parked members) so they take part in the re-election
+            Members = set_running_to_stopped(Members1),
             Stream0#stream{members = Members};
         #{DownNode := #member{role = {replica, _},
                               state = {running, _, Pid}} = Member}
@@ -2572,12 +2575,24 @@ maybe_sleep({error, _}) ->
 maybe_sleep(_) ->
     ok.
 
+%% Trigger a re-election: mark running members to be stopped so their tails can
+%% be collected and a new writer elected. A member parked on the retry timer
+%% ({sleeping, RetryAt}) is woken here so it joins this stop phase immediately
+%% rather than waiting for its timer; the stale parked-tree entry is dropped on
+%% the next reconcile. A member parked on {sleeping, nodeup} is left alone: its
+%% node is down, so it cannot be stopped until the node returns.
 set_running_to_stopped(Members) ->
     maps:map(fun (_, #member{target = running} = M) ->
-                     M#member{target = stopped};
+                     wake_timed_sleep(M#member{target = stopped});
                  (_, M) ->
-                     M
+                     wake_timed_sleep(M)
              end, Members).
+
+wake_timed_sleep(#member{current = {sleeping, RetryAt}} = M)
+  when is_integer(RetryAt) ->
+    M#member{current = undefined};
+wake_timed_sleep(M) ->
+    M.
 
 update_target(#member{target = deleted} = Member, _) ->
     %% A deleted member can never transition to another state

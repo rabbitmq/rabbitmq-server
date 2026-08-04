@@ -55,6 +55,8 @@ all_tests() ->
      action_failed_no_backoff_retries_immediately,
      action_failed_nodedown_waits_for_nodeup,
      sleeping_nodeup_redriven_by_action_failed,
+     backoff_class_classification,
+     sleeping_replica_woken_for_reelection,
      reconcile_drops_superseded_parked_entry,
      state_enter_rearms_retry_timer,
      action_throttling,
@@ -2066,6 +2068,51 @@ sleeping_nodeup_redriven_by_action_failed(_) ->
     ?assertMatch(#{StreamId := #stream{members = #{N2 := #member{current = {starting, _}}}}},
                  streams(State1)),
     ?assertEqual(true, has_aux_start_replica(Effs, N2)),
+    ok.
+
+%% A replica start that fails because the writer went away mid-start must back
+%% off (short) rather than hot-loop; the failure shapes are classified as such.
+backoff_class_classification(_) ->
+    C = fun rabbit_stream_coordinator:backoff_class/1,
+    %% node down -> wait for nodeup
+    ?assertEqual(nodeup, C({{nodedown, some_node}, {gen_server, call, [x]}})),
+    ?assertEqual(nodeup, C({error, nodedown})),
+    %% writer went away during start_replica -> short backoff (the fix)
+    ?assertEqual(short, C({{shutdown, writer_unavailable}, {gen_server, call, [p, await, infinity]}})),
+    ?assertEqual(short, C({{shutdown, noproc}, {gen_server, call, [p, await, infinity]}})),
+    %% other transient failures -> short
+    ?assertEqual(short, C({noproc, x})),
+    ?assertEqual(short, C({error, whatever})),
+    %% everything else -> immediate retry
+    ?assertEqual(none, C(some_other_reason)),
+    ok.
+
+%% A replica parked on the retry timer ({sleeping, RetryAt}) must be woken and
+%% stopped when the writer goes down, so it takes part in the re-election stop
+%% phase immediately rather than waiting for its timer.
+sleeping_replica_woken_for_reelection(_) ->
+    E = 1,
+    StreamId = atom_to_list(?FUNCTION_NAME),
+    LeaderPid = fake_pid(n1),
+    [Replica1, Replica2] = ReplicaPids = [fake_pid(n2), fake_pid(n3)],
+    N3 = node(Replica2),
+    S0 = started_stream(StreamId, LeaderPid, ReplicaPids),
+    %% park the N3 replica on a (far-future) retry timer
+    #stream{members = Members} = S0,
+    M3 = maps:get(N3, Members),
+    S1 = S0#stream{members = Members#{N3 => M3#member{current = {sleeping, 99999999}}}},
+    %% the writer goes down: the parked replica must be woken (current cleared,
+    %% target stopped) so the re-election can stop it
+    S2 = update_stream(meta(?LINE), {down, LeaderPid, boom}, S1),
+    ?assertMatch(#stream{members = #{N3 := #member{current = undefined,
+                                                   target = stopped}}},
+                 S2),
+    %% evaluate then issues a stop for it (it participates in the stop phase)
+    {S3, Actions} = evaluate_stream(meta(?LINE), S2, []),
+    ?assert(lists:any(fun ({aux, {stop, _, #{node := N}, _}}) -> N == N3;
+                          (_) -> false
+                      end, Actions)),
+    ?assertMatch(#stream{members = #{N3 := #member{current = {stopping, _}}}}, S3),
     ok.
 
 %% A 'none' backoff (e.g. writer start failures) must retry immediately without
