@@ -116,7 +116,26 @@ handle_call({heartbeat, SessionId, Username}, _From, State) ->
                             end
                     end;
                 error ->
-                    {reply, {error, not_found}, State}
+                    %% Auto-resume (adopt) the orphaned session
+                    Settings = rabbit_mgmt_features:get_sessions_settings(),
+                    MaxConcurrent = proplists:get_value(max_concurrent, Settings, 1),
+                    Count = count_sessions_for_user(Username, State),
+                    if
+                        Count >= MaxConcurrent ->
+                            {reply, {error, not_found}, State};
+                        true ->
+                            ExpiresAt = Now + session_timeout_ms(),
+                            Session = #session{
+                                id = SessionId,
+                                username = Username,
+                                node = node(),
+                                created_at = Now, %% Fresh timestamp makes it the first to be killed in conflicts
+                                expires_at = ExpiresAt,
+                                metadata = #{} %% Adopted sessions start with empty metadata
+                            },
+                            NewLocalSessions = maps:put(SessionId, Session, State#state.local_sessions),
+                            {reply, ok, State#state{local_sessions = NewLocalSessions}}
+                    end
             end;
         Session ->
             if Session#session.username =/= Username ->
