@@ -348,10 +348,15 @@ error_frame(Condition, Fmt, Args) ->
     #'v1_0.error'{condition = Condition,
                   description = {utf8, Description}}.
 
+%% "A valid frame header cannot be formed from the incoming byte stream." [2.8.16]
+framing_error(State, Channel, Fmt, Args) ->
+    Error = error_frame(?V_1_0_CONNECTION_ERROR_FRAMING_ERROR, Fmt, Args),
+    handle_exception(State, Channel, Error).
+
 handle_exception(State = #v1{connection_state = CS}, _Channel,
                  Error = #'v1_0.error'{description =
                                        {utf8, <<"Connection forced: ", Explanation/binary>>}})
-  when ?IS_RUNNING(State) orelse CS =:= closing ->
+  when (?IS_RUNNING(State)) orelse CS =:= closing ->
     %% Only ever raised by terminate/2 when the connection is deliberately
     %% closed by an operator or by the broker itself (e.g. rabbitmqctl
     %% close_connection, the management UI, maintenance mode draining, or
@@ -368,7 +373,7 @@ handle_exception(State = #v1{connection_state = closed}, Channel,
     State;
 handle_exception(State = #v1{connection_state = CS}, Channel,
                  Error = #'v1_0.error'{description = {utf8, Desc}})
-  when ?IS_RUNNING(State) orelse CS =:= closing ->
+  when (?IS_RUNNING(State)) orelse CS =:= closing ->
     ?LOG_ERROR("Error on AMQP 1.0 connection ~tp (~tp), channel number ~b:~n~tp",
                [self(), CS, Channel, Desc]),
     close(Error, State);
@@ -380,6 +385,8 @@ is_connection_frame(#'v1_0.open'{})  -> true;
 is_connection_frame(#'v1_0.close'{}) -> true;
 is_connection_frame(_)               -> false.
 
+handle_frame(_Mode, _Channel, <<>>, State) ->
+    State;
 handle_frame(Mode, Channel, Body, State) ->
     try
         handle_frame0(Mode, Channel, Body, State)
@@ -676,24 +683,40 @@ handle_input(Handshake = <<"AMQP",0,1,0,0>>,
               %% sending any other frames." [2.4.1]
               connection_state = waiting_open},
     switch_callback(State, {frame_header, amqp}, 8);
-handle_input(Header = <<Size:32, DOff:8, Type:8, Channel:16>>,
-             State0 = #v1{callback = {frame_header, Mode}})
-  when DOff >= 2 ->
-    case {Mode, Type} of
-        {amqp, 0} -> ok;
-        {sasl, 1} -> ok;
-        _ -> throw({bad_1_0_header_type, Header, Mode})
-    end,
+handle_input(<<Size:32, DOff:8, Type:8, Channel:16>>,
+             #v1{callback = {frame_header, Mode}} = State0) ->
     MaxFrameSize = State0#v1.connection#v1_connection.incoming_max_frame_size,
-    State = if Size =:= 8 ->
+    ExpectedType = case Mode of
+                       amqp -> 0;
+                       sasl -> 1
+                   end,
+    State = if Size < 8 ->
+                   %% "The frame is malformed if the size is less than the size
+                   %% of the frame header (8 bytes)." [2.3.1]
+                   framing_error(State0, Channel,
+                                 "frame size (~b bytes) < minimum frame size (8 bytes)",
+                                 [Size]);
+               Size > MaxFrameSize ->
+                   framing_error(State0, Channel,
+                                 "frame size (~b bytes) > maximum frame size (~b bytes)",
+                                 [Size, MaxFrameSize]);
+               DOff < 2 ->
+                   %% "Due to the mandatory 8-byte frame header, the frame is
+                   %% malformed if the value is less than 2." [2.3.1]
+                   framing_error(State0, Channel,
+                                 "data offset (~b) < minimum data offset (2)",
+                                 [DOff]);
+               DOff * 4 > Size ->
+                   framing_error(State0, Channel,
+                                 "data offset (~b bytes) > frame size (~b bytes)",
+                                 [DOff * 4, Size]);
+               Type =/= ExpectedType ->
+                   framing_error(State0, Channel,
+                                 "unexpected frame type ~b in ~s mode (expected ~b)",
+                                 [Type, Mode, ExpectedType]);
+               Size =:= 8 ->
                    %% heartbeat
                    State0;
-               Size > MaxFrameSize ->
-                   Err = error_frame(
-                           ?V_1_0_CONNECTION_ERROR_FRAMING_ERROR,
-                           "frame size (~b bytes) > maximum frame size (~b bytes)",
-                           [Size, MaxFrameSize]),
-                   handle_exception(State0, Channel, Err);
                true ->
                    switch_callback(State0, {frame_body, Mode, DOff, Channel}, Size - 8)
             end,
