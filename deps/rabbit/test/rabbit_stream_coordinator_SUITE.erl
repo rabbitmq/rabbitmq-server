@@ -56,6 +56,7 @@ all_tests() ->
      action_failed_nodedown_waits_for_nodeup,
      sleeping_nodeup_redriven_by_action_failed,
      backoff_class_classification,
+     short_backoff_jitter,
      sleeping_replica_woken_for_reelection,
      reconcile_drops_superseded_parked_entry,
      state_enter_rearms_retry_timer,
@@ -1964,10 +1965,12 @@ action_failed_short_parks_and_reconciles(_) ->
         evaluate_stream(meta(StartIdx), S1, []),
     ?assertMatch(#stream{members = #{N2 := #member{current = {starting, StartIdx}}}}, S2),
     State1 = coordinator_state_with(StreamId, S2),
-    %% the replica start fails with a short backoff
+    %% the replica start fails with a short backoff (with deterministic jitter)
     FailIdx = ?LINE,
     FailTime = FailIdx * 2,
-    RetryAt = FailTime + ?ACTION_RETRY_SHORT_MS,
+    Jitter = erlang:phash2({StreamId, N2}, ?ACTION_RETRY_JITTER_MS),
+    Delay = ?ACTION_RETRY_SHORT_MS + Jitter,
+    RetryAt = FailTime + Delay,
     {State2, ok, Effs} =
         apply_cmd(meta(FailIdx),
                   {action_failed, StreamId, #{node => N2,
@@ -1980,7 +1983,7 @@ action_failed_short_parks_and_reconciles(_) ->
                  streams(State2)),
     %% parked, so no immediate re-drive, but a retry timer is armed
     ?assertEqual(false, has_aux_start_replica(Effs, N2)),
-    ?assertEqual({true, ?ACTION_RETRY_SHORT_MS}, find_retry_timer(Effs)),
+    ?assertEqual({true, Delay}, find_retry_timer(Effs)),
     %% a reconcile before the retry is due changes nothing
     {State3, ok, EffsEarly} =
         apply_cmd(meta(#{index => ?LINE, system_time => RetryAt - 1}),
@@ -2080,11 +2083,29 @@ backoff_class_classification(_) ->
     %% writer went away during start_replica -> short backoff (the fix)
     ?assertEqual(short, C({{shutdown, writer_unavailable}, {gen_server, call, [p, await, infinity]}})),
     ?assertEqual(short, C({{shutdown, noproc}, {gen_server, call, [p, await, infinity]}})),
-    %% other transient failures -> short
+    %% other observed transient shapes that used to fall through to 'none' and
+    %% hot-loop must now be paced
+    ?assertEqual(short, C({shutdown, {gen_server, call, [p, await, infinity]}})),
+    ?assertEqual(short, C({{badrpc, {'EXIT', killed}}, {gen_server, call, [p, await, infinity]}})),
     ?assertEqual(short, C({noproc, x})),
     ?assertEqual(short, C({error, whatever})),
-    %% everything else -> immediate retry
-    ?assertEqual(none, C(some_other_reason)),
+    %% the default is now 'short' (paced), not 'none' (immediate): backoff_class
+    %% only classifies replica/stop/delete failures, none of which want a hot loop
+    ?assertEqual(short, C(some_other_reason)),
+    ok.
+
+%% The short retry delay is jittered per-member so simultaneously-parked
+%% members don't all wake on the same reconcile (thundering herd). The jitter
+%% must be deterministic (same on every replica) and bounded.
+short_backoff_jitter(_) ->
+    J = fun rabbit_stream_coordinator:retry_jitter/2,
+    %% deterministic for a given member
+    ?assertEqual(J("s1", n1), J("s1", n1)),
+    %% bounded to [0, JITTER)
+    ?assert(J("s1", n1) >= 0 andalso J("s1", n1) < ?ACTION_RETRY_JITTER_MS),
+    %% different members are spread across the window (mostly distinct offsets)
+    Vals = [J("stream-" ++ integer_to_list(I), n1) || I <- lists:seq(1, 50)],
+    ?assert(length(lists:usort(Vals)) > 40),
     ok.
 
 %% A replica parked on the retry timer ({sleeping, RetryAt}) must be woken and

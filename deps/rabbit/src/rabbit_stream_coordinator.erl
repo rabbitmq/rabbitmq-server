@@ -81,6 +81,7 @@
 -export([update_stream/3,
          evaluate_stream/3,
          backoff_class/1,
+         retry_jitter/2,
          run_action/6,
          make_aux/1,
          aux_running_count/1,
@@ -1251,26 +1252,21 @@ send_action_failed(StreamId, Action, Arg, Backoff) ->
     send_self_command({action_failed, StreamId,
                        Arg#{action => Action, backoff => Backoff}}).
 
-%% Classify a failure so the state machine knows how to retry the action:
-%%   nodeup - the node is unreachable, wait for it to come back ({nodeup, _})
-%%            rather than polling (see maybe_park_action/5)
-%%   short  - a transient failure, retry after a fixed delay via retry_reconcile
-%%   none   - retry immediately (e.g. writer starts, which want a fast election)
+%% Classify a failed replica/stop/delete action so the state machine knows how
+%% to retry it (writer starts never come here - they pass 'none' explicitly to
+%% re-elect immediately):
+%%   nodeup - the node is unreachable, wait for {nodeup, _} rather than polling
+%%   short  - retry after a (jittered) delay via the retry_reconcile timer
+%% The default is 'short': any unrecognised failure (e.g.
+%% {{shutdown, writer_unavailable}, _} mid start_replica, {{badrpc, _}, _},
+%% {shutdown, {gen_server, _}}) is paced rather than re-driven immediately,
+%% which would hot-loop.
 backoff_class({{nodedown, _}, _}) ->
     nodeup;
 backoff_class({error, nodedown}) ->
     nodeup;
-backoff_class({{shutdown, _}, _}) ->
-    %% e.g. {{shutdown, writer_unavailable}, _} or {{shutdown, noproc}, _}:
-    %% the writer went away mid start_replica. Back off rather than hot-looping;
-    %% the writer-down that follows re-drives this member via a new epoch.
-    short;
-backoff_class({noproc, _}) ->
-    short;
-backoff_class({error, _}) ->
-    short;
 backoff_class(_) ->
-    none.
+    short.
 
 send_self_command(Cmd) ->
     ra:pipeline_command({?MODULE, node()}, Cmd, no_correlation, normal),
@@ -2323,6 +2319,12 @@ parked_tree(#?MODULE{parked = Parked}) ->
 backoff_ms(short) ->
     ?ACTION_RETRY_SHORT_MS.
 
+%% Deterministic per-member jitter (same on every replica, so apply/3 stays
+%% deterministic) that spreads simultaneously-parked members across the retry
+%% window instead of waking them all on the same reconcile.
+retry_jitter(StreamId, Node) ->
+    erlang:phash2({StreamId, Node}, ?ACTION_RETRY_JITTER_MS).
+
 %% Delay (ms) until the earliest parked retry is due. The tree is ordered by
 %% {RetryAtMs, StreamId, Node}, so the smallest key is the next retry.
 retry_reconcile_delay(Parked, Now) ->
@@ -2370,7 +2372,8 @@ park_action(nodeup, Node, _StreamId, M, Members, _Meta, Stream1, Parked) ->
     {Stream1#stream{members = Members#{Node => M1}}, Parked,
      [{monitor, node, Node}]};
 park_action(short, Node, StreamId, M, Members, Meta, Stream1, Parked) ->
-    RetryAt = maps:get(system_time, Meta) + backoff_ms(short),
+    RetryAt = maps:get(system_time, Meta) + backoff_ms(short)
+              + retry_jitter(StreamId, Node),
     M1 = M#member{current = {sleeping, RetryAt}},
     Parked1 = gb_trees:enter({RetryAt, StreamId, Node}, [], Parked),
     Effs = [{timer, retry_reconcile,

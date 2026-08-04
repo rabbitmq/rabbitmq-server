@@ -10,6 +10,11 @@
 %% the state machine via the retry_reconcile timer rather than by sleeping in
 %% the worker. Node-down failures wait for {nodeup, _} instead of a timer.
 -define(ACTION_RETRY_SHORT_MS, 5000).
+%% v8+: deterministic jitter added to the short retry delay so members that
+%% failed at the same instant (e.g. all replicas of streams whose writer node
+%% went down) do not all wake and retry on the same reconcile - which produces
+%% a synchronised thundering herd. Spread is [SHORT, SHORT + JITTER).
+-define(ACTION_RETRY_JITTER_MS, 5000).
 
 -type stream_id() :: string().
 -type stream() :: #{conf := osiris:config(),
