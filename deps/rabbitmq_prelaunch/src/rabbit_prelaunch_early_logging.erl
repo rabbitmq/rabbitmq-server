@@ -27,7 +27,8 @@
 
 %% For internal testing purpose only.
 -export([levels/0,
-         determine_prefix/1]).
+         determine_prefix/1,
+         translate_generic_conf/2]).
 
 -define(CONFIGURED_KEY, {?MODULE, configured}).
 
@@ -218,7 +219,8 @@ translate_formatter_conf(Var, Conf) when is_list(Var) ->
 -type level_format() :: lc | uc | lc3 | uc3 | lc4 | uc4.
 -type formatter_generic_conf() :: #{time_format := time_format(),
                                     level_format := level_format(),
-                                    single_line := boolean()}.
+                                    single_line := boolean(),
+                                    depth := unlimited | pos_integer()}.
 
 -spec translate_generic_conf(string(), cuttlefish_conf:conf()) ->
     formatter_generic_conf().
@@ -262,15 +264,29 @@ translate_generic_conf(Var, Conf) ->
     %% stay on a single line.
     SingleLine = cuttlefish:conf_get(Var ++ ".single_line", Conf),
 
+    %% log.*.formatter.depth
+    %% It caps the depth to which terms are printed, truncating deeper
+    %% sub-terms to `...'. `unlimited' (or an unset key) means "no
+    %% explicit depth"; in that case we fall back to the deprecated
+    %% `error_logger_format_depth' kernel variable, the same way OTP's
+    %% `logger_formatter:get_depth/1' does. As in OTP, an explicit depth
+    %% is floored at 5, so configured values below 5 are raised to 5.
+    Depth = case cuttlefish:conf_get(Var ++ ".depth", Conf, unlimited) of
+                unlimited -> error_logger:get_format_depth();
+                D         -> max(5, D)
+            end,
+
     #{time_format => TimeFormat,
       level_format => LevelFormat,
-      single_line => SingleLine}.
+      single_line => SingleLine,
+      depth => Depth}.
 
 -type line_format() :: [atom() | string()].
 -type color_esc_seqs() :: #{logger:level() => string()}.
 -type formatter_plaintext_conf() :: #{time_format := time_format(),
                                       level_format := level_format(),
                                       single_line := boolean(),
+                                      depth := unlimited | pos_integer(),
                                       prefix_format := line_format(),
                                       line_format := line_format(),
                                       use_colors := boolean(),
@@ -400,6 +416,7 @@ translate_colors_conf(_, _) ->
 -type formatter_json_conf() :: #{time_format := time_format(),
                                  level_format := level_format(),
                                  single_line := boolean(),
+                                 depth := unlimited | pos_integer(),
                                  field_map := json_field_map(),
                                  verbosity_map := json_verbosity_map()}.
 
