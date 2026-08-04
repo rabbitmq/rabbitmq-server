@@ -89,5 +89,9 @@
   {initial_frame_max,
       "stream.initial_frame_max = 4096",
       [{rabbitmq_stream,[{initial_frame_max, 4096}]}],
+      [rabbitmq_stream]},
+  {max_uncompressed_sub_entry_batch_size,
+      "stream.max_uncompressed_sub_entry_batch_size = 33554432",
+      [{rabbitmq_stream,[{max_uncompressed_sub_entry_batch_size, 33554432}]}],
       [rabbitmq_stream]}
 ].
