@@ -39,10 +39,7 @@ get_settings_json(ReqData, _Context) ->
     Settings0 = [
         {management_version,        proplists:get_value(management_version, rabbit_mgmt_features:get_product_info())},
         {product_info,              rabbit_mgmt_features:get_product_info()},
-        {sessions,                  rabbit_mgmt_features:get_sessions_settings()},
-        {definitions,               rabbit_mgmt_features:get_definitions_settings()},
-        {cluster_name,              rabbit_nodes:cluster_name()},
-        {message_rates,             rabbit_mgmt_util:message_rates(ReqData)}
+        {cluster_name,              rabbit_nodes:cluster_name()}
     ] ++ rabbit_mgmt_features:get_settings(ReqData),
 
     rabbit_json:encode(rabbit_mgmt_format:prepare_for_encoding(Settings0)).
