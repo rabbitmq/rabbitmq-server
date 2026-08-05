@@ -36,8 +36,7 @@ groups() ->
        write_messages_sub_batch_unknown_compression_type_rejected,
        write_messages_sub_batch_empty_batch_with_compression_rejected,
        write_messages_sub_batch_high_compression_ratio_accepted,
-       write_messages_fail_fast_after_first_invalid_sub_batch,
-       write_messages_returns_written_count]}].
+       write_messages_fail_fast_after_first_invalid_sub_batch]}].
 
 init_per_suite(Config) ->
     Config.
@@ -186,8 +185,8 @@ write_messages_sub_batch_within_limit_accepted(_Config) ->
     Max = 1000,
     Batch = <<"compressed-bytes">>,
     Entry = sub_batch(1, 1, 2, 100, Batch),
-    ?assertEqual({1, []}, write_messages(?VERSION_1, self(), undefined, 7, 3,
-                                         Entry, Max, <<"s1">>)),
+    ?assertEqual([], write_messages(?VERSION_1, self(), undefined, 7, 3,
+                                    Entry, Max, <<"s1">>)),
     ?assertMatch({'$gen_cast', {write, _, undefined, {7, 3, 1},
                                 {batch, 2, 1, 100, Batch}}},
                  flush_one()),
@@ -196,24 +195,24 @@ write_messages_sub_batch_within_limit_accepted(_Config) ->
 write_messages_sub_batch_at_limit_accepted(_Config) ->
     Max = 100,
     Entry = sub_batch(1, 1, 1, Max, <<"x">>),
-    ?assertEqual({1, []}, write_messages(?VERSION_1, self(), undefined, 7, 1,
-                                         Entry, Max, <<"s1">>)),
+    ?assertEqual([], write_messages(?VERSION_1, self(), undefined, 7, 1,
+                                    Entry, Max, <<"s1">>)),
     ?assertMatch({'$gen_cast', _}, flush_one()),
     ok.
 
 write_messages_sub_batch_over_limit_rejected(_Config) ->
     Max = 100,
     Entry = sub_batch(42, 1, 1, Max + 1, <<"x">>),
-    ?assertEqual({0, [42]}, write_messages(?VERSION_1, self(), undefined, 7, 1,
-                                           Entry, Max, <<"s1">>)),
+    ?assertEqual([42], write_messages(?VERSION_1, self(), undefined, 7, 1,
+                                      Entry, Max, <<"s1">>)),
     ?assertEqual(no_message, flush_one()),
     ok.
 
 write_messages_sub_batch_zero_message_count_rejected(_Config) ->
     Max = 1000,
     Entry = sub_batch(42, 1, 0, 40, <<"x">>),
-    ?assertEqual({0, [42]}, write_messages(?VERSION_1, self(), undefined, 7, 1,
-                                           Entry, Max, <<"s1">>)),
+    ?assertEqual([42], write_messages(?VERSION_1, self(), undefined, 7, 1,
+                                      Entry, Max, <<"s1">>)),
     ?assertEqual(no_message, flush_one()),
     ok.
 
@@ -221,8 +220,8 @@ write_messages_sub_batch_message_count_exceeds_uncompressed_size_rejected(_Confi
     Max = 1000,
     %% 100 sub-entries, each at least 4 bytes, cannot fit in 10 uncompressed bytes
     Entry = sub_batch(42, 1, 100, 10, <<"x">>),
-    ?assertEqual({0, [42]}, write_messages(?VERSION_1, self(), undefined, 7, 1,
-                                           Entry, Max, <<"s1">>)),
+    ?assertEqual([42], write_messages(?VERSION_1, self(), undefined, 7, 1,
+                                      Entry, Max, <<"s1">>)),
     ?assertEqual(no_message, flush_one()),
     ok.
 
@@ -230,8 +229,8 @@ write_messages_sub_batch_unknown_compression_type_rejected(_Config) ->
     Max = 1000,
     [begin
          Entry = sub_batch(42, CompressionType, 1, 40, <<"0123456789">>),
-         ?assertEqual({0, [42]}, write_messages(?VERSION_1, self(), undefined, 7, 1,
-                                                Entry, Max, <<"s1">>)),
+         ?assertEqual([42], write_messages(?VERSION_1, self(), undefined, 7, 1,
+                                           Entry, Max, <<"s1">>)),
          ?assertEqual(no_message, flush_one())
      end || CompressionType <- [5, 6, 7]],
     ok.
@@ -239,16 +238,16 @@ write_messages_sub_batch_unknown_compression_type_rejected(_Config) ->
 write_messages_sub_batch_empty_batch_with_compression_rejected(_Config) ->
     Max = 1000,
     Entry = sub_batch(42, 1, 1, 40, <<>>),
-    ?assertEqual({0, [42]}, write_messages(?VERSION_1, self(), undefined, 7, 1,
-                                           Entry, Max, <<"s1">>)),
+    ?assertEqual([42], write_messages(?VERSION_1, self(), undefined, 7, 1,
+                                      Entry, Max, <<"s1">>)),
     ?assertEqual(no_message, flush_one()),
     ok.
 
 write_messages_sub_batch_high_compression_ratio_accepted(_Config) ->
     Max = 67108864,
     Entry = sub_batch(1, 4, 65535, Max, <<"tiny-compressed-payload">>),
-    ?assertEqual({1, []}, write_messages(?VERSION_1, self(), undefined, 7, 1,
-                                         Entry, Max, <<"s1">>)),
+    ?assertEqual([], write_messages(?VERSION_1, self(), undefined, 7, 1,
+                                    Entry, Max, <<"s1">>)),
     ?assertMatch({'$gen_cast', _}, flush_one()),
     ok.
 
@@ -261,24 +260,10 @@ write_messages_fail_fast_after_first_invalid_sub_batch(_Config) ->
     Invalid = sub_batch(2, 1, 1, Max + 1, <<"x">>),
     Valid2 = simple_entry(3, <<"world">>),
     Messages = <<Valid1/binary, Invalid/binary, Valid2/binary>>,
-    ?assertEqual({1, [2, 3]}, write_messages(?VERSION_1, self(), undefined, 9, 1,
-                                             Messages, Max, <<"s1">>)),
+    ?assertEqual([2, 3], write_messages(?VERSION_1, self(), undefined, 9, 1,
+                                        Messages, Max, <<"s1">>)),
     %% only the entry preceding the failure was written
     ?assertMatch({'$gen_cast', {write, _, undefined, {9, 1, 1}, <<"hello">>}},
-                 flush_one()),
-    ?assertEqual(no_message, flush_one()),
-    ok.
-
-write_messages_returns_written_count(_Config) ->
-    Max = 1000,
-    Entry1 = simple_entry(1, <<"hello">>),
-    Entry2 = simple_entry(2, <<"world">>),
-    Messages = <<Entry1/binary, Entry2/binary>>,
-    ?assertEqual({2, []}, write_messages(?VERSION_1, self(), undefined, 7, 1,
-                                         Messages, Max, <<"s1">>)),
-    ?assertMatch({'$gen_cast', {write, _, undefined, {7, 1, 1}, <<"hello">>}},
-                 flush_one()),
-    ?assertMatch({'$gen_cast', {write, _, undefined, {7, 1, 2}, <<"world">>}},
                  flush_one()),
     ?assertEqual(no_message, flush_one()),
     ok.
