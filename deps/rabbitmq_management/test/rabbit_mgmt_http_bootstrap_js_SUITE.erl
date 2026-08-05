@@ -32,6 +32,12 @@ end_per_suite(Config) ->
 init_per_testcase(bootstrap_js_oauth_enabled_test, Config) -> 
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
                                     [rabbitmq_management, oauth_enabled, true]),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+                                    [rabbitmq_management, oauth_provider_url, "http://localhost"]),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+                                    [rabbitmq_management, oauth_client_id, "test_client"]),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+                                    [rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>]),
                                 
     ct:log("init_per_testcase bootstrap_js_oauth_enabled_test", []),
     rabbit_ct_helpers:testcase_started(Config, bootstrap_js_oauth_enabled_test),
@@ -41,6 +47,9 @@ init_per_testcase(Testcase, Config) ->
     %% Reset configurations to defaults
     rpc(Config, 0, application, set_env, [rabbitmq_management, oauth_enabled, false]),
     rpc(Config, 0, application, set_env, [rabbitmq_management, sessions_enabled, false]),
+    rpc(Config, 0, application, unset_env, [rabbitmq_management, oauth_provider_url]),
+    rpc(Config, 0, application, unset_env, [rabbitmq_management, oauth_client_id]),
+    rpc(Config, 0, application, unset_env, [rabbitmq_auth_backend_oauth2, resource_server_id]),
     ct:log("init_per_testcase ", []),
     rabbit_ct_helpers:testcase_started(Config, Testcase),
     Config.
@@ -76,6 +85,12 @@ bootstrap_js_default_test(Config) ->
 bootstrap_js_oauth_enabled_test(Config) ->
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
                                     [rabbitmq_management, oauth_enabled, true]),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+                                    [rabbitmq_management, oauth_provider_url, "http://localhost"]),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+                                    [rabbitmq_management, oauth_client_id, "test_client"]),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+                                    [rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>]),
     
     {ok, {{_Version, 200, _Reason}, _Headers, Body}} = rabbit_mgmt_test_util:req(
         Config, 0, get_static, "js/bootstrap.js", []),
