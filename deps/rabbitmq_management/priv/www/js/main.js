@@ -217,6 +217,9 @@ function finish_check_login() {
     set_session_expiry_if_required(user.login_session_timeout);
     check_version();
     hide_popup_warn();
+
+    var settings = window.app_settings;
+
     replace_content('outer', format('layout', {disable_stats: settings.disable_stats}));
 
     ui_data_model.vhosts = window.app_vhosts;
@@ -225,8 +228,6 @@ function finish_check_login() {
     if (window.app_nodes !== undefined) {
         ui_data_model.nodes = window.app_nodes;
     }
-
-    var settings = window.app_settings;
 
     // Update EJS templates to use settings
     ui_data_model.settings = settings;
