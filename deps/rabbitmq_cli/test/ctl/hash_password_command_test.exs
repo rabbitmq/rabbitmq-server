@@ -27,7 +27,19 @@ defmodule HashPasswordCommandTest do
 
   test "validate: empty string", context do
     assert @command.validate([""], context[:opts]) ==
-             {:bad_argument, "password cannot be an empty string"}
+             {:validation_failure, {:bad_argument, "password cannot be an empty string"}}
+  end
+
+  test "validate: unsupported hashing algorithm", context do
+    opts = Map.put(context[:opts], :hashing_algorithm, "sha1")
+
+    assert @command.validate(["foo"], opts) ==
+             {:validation_failure, {:bad_argument, "unsupported hashing algorithm: sha1"}}
+  end
+
+  test "validate: supported hashing algorithm", context do
+    opts = Map.put(context[:opts], :hashing_algorithm, "sha512")
+    assert @command.validate(["foo"], opts) == :ok
   end
 
   @tag user: "someone", password: "hashed_password"
@@ -35,6 +47,15 @@ defmodule HashPasswordCommandTest do
     hashed_pwd = @command.run([context[:password]], context[:opts])
     add_user_hashed_password(context[:user], hashed_pwd)
     assert {:ok, _} = authenticate_user(context[:user], context[:password])
+  end
+
+  @tag password: "hashed_password"
+  test "run: hashes the password with the requested --hashing-algorithm", context do
+    opts = Map.put(context[:opts], :hashing_algorithm, "sha512")
+    hashed_pwd = @command.run([context[:password]], opts)
+    <<salt::binary-size(4), hash::binary>> = Base.decode64!(hashed_pwd)
+
+    assert hash == :crypto.hash(:sha512, salt <> context[:password])
   end
 
   @tag user: "someone", password: "hashed_password"
