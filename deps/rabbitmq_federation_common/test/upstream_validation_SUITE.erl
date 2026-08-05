@@ -49,14 +49,17 @@ groups() ->
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
     Config1 = rabbit_ct_helpers:set_config(Config, [{rmq_nodename_suffix, ?MODULE}]),
-    Config2 = rabbit_ct_helpers:run_setup_steps(Config1,
+    rabbit_ct_helpers:run_setup_steps(Config1,
       rabbit_ct_broker_helpers:setup_steps() ++
-      rabbit_ct_client_helpers:setup_steps()),
-    ok = rabbit_ct_broker_helpers:add_vhost(Config2, ?ALLOWED_VHOST),
-    ok = rabbit_ct_broker_helpers:add_vhost(Config2, ?DENIED_VHOST),
-    ok = rabbit_ct_broker_helpers:add_user(Config2, ?USER, ?PASSWORD),
-    ok = rabbit_ct_broker_helpers:set_full_permissions(Config2, ?USER, ?ALLOWED_VHOST),
-    Config2.
+      rabbit_ct_client_helpers:setup_steps() ++
+      [fun setup_vhosts_and_user/1]).
+
+setup_vhosts_and_user(Config) ->
+    ok = rabbit_ct_broker_helpers:add_vhost(Config, ?ALLOWED_VHOST),
+    ok = rabbit_ct_broker_helpers:add_vhost(Config, ?DENIED_VHOST),
+    ok = rabbit_ct_broker_helpers:add_user(Config, ?USER, ?PASSWORD),
+    ok = rabbit_ct_broker_helpers:set_full_permissions(Config, ?USER, ?ALLOWED_VHOST),
+    Config.
 
 end_per_suite(Config) ->
     rabbit_ct_broker_helpers:delete_user(Config, ?USER),
