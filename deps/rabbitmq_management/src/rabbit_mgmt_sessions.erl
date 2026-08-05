@@ -72,7 +72,7 @@ handle_call({create_session, Username, Metadata}, _From, State) ->
         Count >= MaxConcurrent ->
             {reply, {error, limit_reached}, State};
         true ->
-            SessionId = rabbit_guid:string(),
+            SessionId = list_to_binary(rabbit_guid:to_string(rabbit_guid:gen())),
             Now = os:system_time(millisecond),
             ExpiresAt = Now + session_timeout_ms(),
             Session = #session{
@@ -250,7 +250,8 @@ handle_info(_Info, State) ->
 
 terminate(_Reason, State) ->
     if State#state.timer =/= undefined ->
-        erlang:cancel_timer(State#state.timer);
+        _ = erlang:cancel_timer(State#state.timer),
+        ok;
        true -> ok
     end,
     ok.
