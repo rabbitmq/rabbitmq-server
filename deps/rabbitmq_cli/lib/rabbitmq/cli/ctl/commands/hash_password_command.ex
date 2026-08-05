@@ -10,8 +10,20 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HashPasswordCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.Core.MergesNoDefaults
 
-  def run([cleartextpassword], _opts) do
-    hash_password(cleartextpassword)
+  @hashing_algorithms %{
+    "sha256" => :rabbit_password_hashing_sha256,
+    "sha-256" => :rabbit_password_hashing_sha256,
+    "sha512" => :rabbit_password_hashing_sha512,
+    "sha-512" => :rabbit_password_hashing_sha512,
+    "md5" => :rabbit_password_hashing_md5
+  }
+
+  def switches() do
+    [hashing_algorithm: :string]
+  end
+
+  def run([cleartextpassword], opts) do
+    hash_password(cleartextpassword, opts)
   end
 
   def run([], opts) do
@@ -20,12 +32,17 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HashPasswordCommand do
         {:error, :not_enough_args}
 
       password ->
-        hash_password(password)
+        hash_password(password, opts)
     end
   end
 
-  def hash_password(password) do
-    hashed_pwd = :rabbit_password.hash(password)
+  def hash_password(password, opts) do
+    hashed_pwd =
+      case Map.get(opts, :hashing_algorithm) do
+        nil -> :rabbit_password.hash(password)
+        alg -> :rabbit_password.hash(hashing_module(alg), password)
+      end
+
     Base.encode64(hashed_pwd)
   end
 
@@ -34,21 +51,34 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HashPasswordCommand do
   end
 
   def validate([""], _options) do
-    {:bad_argument, "password cannot be an empty string"}
+    {:validation_failure, {:bad_argument, "password cannot be an empty string"}}
   end
 
-  def validate([_arg], _options) do
-    :ok
+  def validate(_args, %{hashing_algorithm: alg} = _options) do
+    case hashing_module(alg) do
+      nil ->
+        {:validation_failure, {:bad_argument, "unsupported hashing algorithm: #{alg}"}}
+
+      _mod ->
+        :ok
+    end
   end
 
-  def validate([], _options) do
+  def validate(_args, _options) do
     :ok
   end
 
   ## Use default output for all non-special case outputs
   use RabbitMQ.CLI.DefaultOutput
 
-  def usage, do: "hash_password <cleartext_password>"
+  def usage, do: "hash_password <cleartext_password> [--hashing-algorithm <algorithm>]"
+
+  def usage_additional() do
+    [
+      ["<cleartext_password>", "password to hash"],
+      ["--hashing-algorithm <algorithm>", "hashing algorithm to use: sha256, sha512, md5"]
+    ]
+  end
 
   def banner([arg], _options),
     do: "Will hash password #{arg}"
@@ -57,4 +87,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.HashPasswordCommand do
     do: "Will hash provided password"
 
   def description(), do: "Hashes a plaintext password"
+
+  defp hashing_module(alg) when is_binary(alg) do
+    Map.get(@hashing_algorithms, String.downcase(alg))
+  end
 end

@@ -92,7 +92,7 @@ defmodule AddUserCommandTest do
   @tag user: "someone"
   test "run: pre-hashed happy path completes successfully", context do
     pwd = "guest10"
-    hashed = @hash_password_command.hash_password(pwd)
+    hashed = @hash_password_command.hash_password(pwd, %{})
     opts = Map.merge(%{pre_hashed_password: true}, context[:opts])
 
     assert @command.run([context[:user], hashed], opts) == :ok
