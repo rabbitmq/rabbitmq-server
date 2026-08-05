@@ -80,10 +80,10 @@ check_name(_Name) ->
 -spec write_messages(rabbit_stream_core:command_version(), pid(),
                      undefined | binary(), byte(),
                      integer(), binary(), non_neg_integer(), binary()) ->
-    {non_neg_integer(), [integer()]}.
+    [integer()].
 write_messages(_Version, _ClusterLeader, _PublisherRef, _PublisherId, _InternalId, <<>>,
                _MaxUncompressedSize, _Stream) ->
-    {0, []};
+    [];
 write_messages(?VERSION_1 = V, ClusterLeader,
                PublisherRef,
                PublisherId,
@@ -123,7 +123,7 @@ write_messages(?VERSION_1 = V, ClusterLeader,
                          "frame is rejected as well to avoid a gap in the "
                          "publishing ID sequence.",
                          [Stream, PublisherId, Reason]),
-            {0, [PublishingId | reject_remaining(V, Rest)]}
+            [PublishingId | reject_remaining(V, Rest)]
     end;
 write_messages(?VERSION_2 = V, ClusterLeader,
                PublisherRef,
@@ -164,10 +164,8 @@ write_messages0(Vsn, ClusterLeader, PublisherRef, PublisherId, InternalId, Publi
                    PublishingId
            end,
     ok = osiris:write(ClusterLeader, PublisherRef, Corr, Data),
-    {Written, Rejected} =
-        write_messages(Vsn, ClusterLeader, PublisherRef, PublisherId, InternalId, Rest,
-                       MaxUncompressedSize, Stream),
-    {Written + 1, Rejected}.
+    write_messages(Vsn, ClusterLeader, PublisherRef, PublisherId, InternalId, Rest,
+                   MaxUncompressedSize, Stream).
 
 %% Only the ?VERSION_1 compressed sub-batch shape is validated, so only that shape
 %% (and the plain ?VERSION_1 entry it can be interleaved with) can appear here.

@@ -1992,7 +1992,7 @@ handle_frame_post_auth(Transport,
                        message_counters = Counters} =
                 Publisher,
                 increase_messages_received(Counters, MessageCount),
-                {N, RejectedPublishingIds} =
+                RejectedPublishingIds =
                     rabbit_stream_utils:write_messages(Version, Leader,
                                                        Reference,
                                                        PublisherId,
@@ -2000,20 +2000,25 @@ handle_frame_post_auth(Transport,
                                                        Messages,
                                                        MaxUncompressedSubEntryBatchSize,
                                                        Stream),
-                case RejectedPublishingIds of
-                    [] ->
-                        ok;
-                    _ ->
-                        Command =
-                            {publish_error,
-                             PublisherId,
-                             ?RESPONSE_CODE_PRECONDITION_FAILED,
-                             RejectedPublishingIds},
-                        Frame = rabbit_stream_core:frame(Command),
-                        send(Transport, S, Frame),
-                        increase_protocol_counter(?PRECONDITION_FAILED)
-                end,
-                sub_credits(Credits, N),
+                RejectedCount =
+                    case RejectedPublishingIds of
+                        [] ->
+                            0;
+                        _ ->
+                            Command =
+                                {publish_error,
+                                 PublisherId,
+                                 ?RESPONSE_CODE_PRECONDITION_FAILED,
+                                 RejectedPublishingIds},
+                            Frame = rabbit_stream_core:frame(Command),
+                            send(Transport, S, Frame),
+                            increase_protocol_counter(?PRECONDITION_FAILED),
+                            length(RejectedPublishingIds)
+                    end,
+                %% credits are returned to the connection only when osiris
+                %% confirms a write, so only debit the entries that were
+                %% actually written, not the rejected ones
+                sub_credits(Credits, MessageCount - RejectedCount),
                 {Connection, State};
         _ ->
             PublishingIds = publishing_ids_from_messages(Version, Messages),
