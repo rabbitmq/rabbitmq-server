@@ -48,10 +48,10 @@ accept_content(ReqData, Context) ->
                     Res = #{<<"session_id">> => SessionId},
                     %% Create returns 201 Created by default when accept_xxx returns {true, _, _} if no body is explicitly sent, but we want a body. 
                     %% Actually, Cowboy will return 204 No Content for {true, Req, Ctx} if the path hasn't changed. Let's explicitly reply 201 with body.
-                    ReqData2 = cowboy_req:reply(201, #{<<"content-type">> => <<"application/json">>}, rabbit_mgmt_format:to_json(Res), ReqData),
+                    ReqData2 = cowboy_req:reply(201, #{<<"content-type">> => <<"application/json">>}, rabbit_json:encode(Res), ReqData),
                     {stop, ReqData2, Context};
                 {error, limit_reached} ->
-                    rabbit_mgmt_util:halt_response(403, not_authorized, <<"concurrent_session_limit_reached">>, ReqData, Context)
+                    rabbit_web_dispatch_access_control:halt_response(403, not_authorized, <<"concurrent_session_limit_reached">>, ReqData, Context)
             end;
         SessionId ->
             Username = Context#context.user#auth_user.username,
@@ -59,9 +59,9 @@ accept_content(ReqData, Context) ->
                 ok ->
                     {true, ReqData, Context};
                 {error, not_found} ->
-                    rabbit_mgmt_util:halt_response(401, unauthorized, <<"session_not_found">>, ReqData, Context);
+                    rabbit_web_dispatch_access_control:halt_response(401, unauthorized, <<"session_not_found">>, ReqData, Context);
                 {error, forbidden} ->
-                    rabbit_mgmt_util:halt_response(403, forbidden, <<"forbidden">>, ReqData, Context)
+                    rabbit_web_dispatch_access_control:halt_response(403, forbidden, <<"forbidden">>, ReqData, Context)
             end
     end.
 
@@ -75,7 +75,7 @@ delete_resource(ReqData, Context) ->
         {error, not_found} ->
             {false, ReqData, Context};
         {error, forbidden} ->
-            rabbit_mgmt_util:halt_response(403, forbidden, <<"forbidden">>, ReqData, Context)
+            rabbit_web_dispatch_access_control:halt_response(403, forbidden, <<"forbidden">>, ReqData, Context)
     end.
 
 %% Internal
