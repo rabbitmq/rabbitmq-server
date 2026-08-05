@@ -27,8 +27,11 @@ allowed_methods(ReqData, Context) ->
 resource_exists(ReqData, Context) ->
     try get_node(ReqData) of
         none       -> {true, ReqData, Context};
-        {ok, Node} -> {rabbit:is_running(Node),
-                       ReqData, Context}
+        {ok, Node} ->
+            %% We intentionally ignore nodes that are not cluster members before
+            %% invoking `rabbit:is_running/1'. MK.
+            {rabbit_nodes:is_member(Node) andalso rabbit:is_running(Node),
+             ReqData, Context}
     catch
         error:badarg -> {false, ReqData, Context}
     end.
