@@ -68,7 +68,9 @@ get_settings(ReqData) ->
         {disable_stats,             rabbit_mgmt_util:disable_stats(ReqData)},
         {default_queue_type,        rabbit_queue_type:default_alias()},
         {is_op_policy_updating_enabled, not is_op_policy_updating_disabled()},
-        {enable_queue_totals,       rabbit_mgmt_util:enable_queue_totals(ReqData)}
+        {enable_queue_totals,       rabbit_mgmt_util:enable_queue_totals(ReqData)},
+        {sessions,                  get_sessions_settings()},
+        {definitions,               get_definitions_settings()}
     ].
 
 get_product_info() ->
