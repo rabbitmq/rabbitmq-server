@@ -59,7 +59,7 @@ init_js_settings_test(Config) ->
         
     %% Check that the content type is javascript
     ContentType = proplists:get_value("content-type", ResponseHeaders),
-    ?assertEqual("application/javascript; charset=utf-8", ContentType),
+    ?assertEqual("application/javascript;charset=utf-8", [C || C <- ContentType, C =/= $\s]),
     
     %% Verify headers correctly specify no-cache
     CacheControl = proplists:get_value("cache-control", ResponseHeaders),
