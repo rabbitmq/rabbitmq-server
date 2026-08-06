@@ -34,6 +34,7 @@ groups() ->
                   start_and_get_a_dynamic_amqp091_shovel_with_missing_publish_properties,
                   start_and_get_a_dynamic_amqp091_shovel_with_empty_publish_properties,
                   start_and_get_a_dynamic_local_shovel,
+                  get_shovel_parameters,
                   create_and_delete_a_dynamic_shovel_that_successfully_connects,
                   create_and_delete_a_dynamic_shovel_that_fails_to_connect,
                   delete_a_starting_dynamic_shovel_removes_its_status
@@ -248,6 +249,34 @@ start_and_get_a_dynamic_local_shovel(Config) ->
     delete_shovel(Config, Name),
 
     ok.
+
+get_shovel_parameters(Config) ->
+    remove_all_dynamic_shovels(Config, <<"/">>),
+    Name = rabbit_data_coercion:to_binary(?FUNCTION_NAME),
+    ID = {<<"/">>, Name},
+    await_shovel_removed(Config, ID),
+    try
+        http_put(Config, "/users/mon",
+                 #{password => <<"mon">>, tags => <<"monitoring">>},
+                 {group, '2xx'}),
+        Perms = #{configure => <<".*">>, write => <<".*">>, read => <<".*">>},
+        http_put(Config, "/permissions/%2F/mon", Perms, {group, '2xx'}),
+
+        declare_amqp091_shovel_with_uri_credentials(Config, Name),
+        await_shovel_startup(Config, ID),
+
+        Expected = shovel_uri(Config),
+        AssertURIs = fun(User, Password) ->
+            Value = maps:get(value, get_shovel(Config, "%2F", Name, User, Password)),
+            ?assertEqual(Expected, maps:get('src-uri', Value)),
+            ?assertEqual(Expected, maps:get('dest-uri', Value))
+        end,
+        AssertURIs("guest", "guest"),
+        AssertURIs("mon", "mon")
+    after
+        catch http_delete(Config, "/users/mon", ?NO_CONTENT),
+        remove_all_dynamic_shovels(Config, <<"/">>)
+    end.
 
 start_static_shovels(Config) ->
     http_put(Config, "/users/admin",
@@ -470,8 +499,11 @@ get_shovel(Config, Name) ->
     get_shovel(Config, "%2F", Name).
 
 get_shovel(Config, VirtualHost, Name) ->
+    get_shovel(Config, VirtualHost, Name, "guest", "guest").
+
+get_shovel(Config, VirtualHost, Name, User, Password) ->
     Path = io_lib:format("/shovels/vhost/~s/~s", [VirtualHost, Name]),
-    http_get(Config, Path, ?OK).
+    http_get(Config, Path, User, Password, ?OK).
 
 delete_shovel(Config, Name) ->
     delete_shovel(Config, "%2F", Name).
@@ -522,6 +554,31 @@ declare_amqp091_shovel(Config, Name) ->
                 <<"src-delete-after">> => <<"never">>,
                 <<"dest-protocol">> => <<"amqp091">>,
                 <<"dest-uri">> => <<"amqp://localhost:", Port/binary>>,
+                <<"dest-queue">> => <<"amqp091.dest.test">>
+            }
+        }, ?CREATED).
+
+shovel_uri(Config) ->
+    Port = integer_to_binary(
+        rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp)),
+    <<"amqp://localhost:", Port/binary>>.
+
+shovel_uri_with_credentials(Config) ->
+    Port = integer_to_binary(
+        rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp)),
+    <<"amqp://guest:guest@localhost:", Port/binary>>.
+
+declare_amqp091_shovel_with_uri_credentials(Config, Name) ->
+    URI = shovel_uri_with_credentials(Config),
+    http_put(Config, io_lib:format("/parameters/shovel/%2f/~ts", [Name]),
+        #{
+            value => #{
+                <<"src-protocol">> => <<"amqp091">>,
+                <<"src-uri">> => URI,
+                <<"src-queue">>  => <<"amqp091.src.test">>,
+                <<"src-delete-after">> => <<"never">>,
+                <<"dest-protocol">> => <<"amqp091">>,
+                <<"dest-uri">> => URI,
                 <<"dest-queue">> => <<"amqp091.dest.test">>
             }
         }, ?CREATED).
