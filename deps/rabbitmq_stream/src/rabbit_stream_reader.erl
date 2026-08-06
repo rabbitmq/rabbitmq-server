@@ -85,6 +85,9 @@
 -define(SILENT_CLOSE_DELAY, 3_000).
 -define(METADATA_TIMEOUT, 10_000).
 -define(SAC_MOD, rabbit_stream_sac_coordinator).
+%% publisher_id and subscription_id are encoded as a single byte on the wire.
+-define(MAX_PUBLISHERS_PER_CONNECTION, 256).
+-define(MAX_SUBSCRIPTIONS_PER_CONNECTION, 256).
 
 -import(rabbit_stream_utils, [check_write_permitted/2,
                               check_read_permitted/3,
@@ -1846,6 +1849,20 @@ handle_frame_post_auth(Transport,
       end,
     {Connection1, State1};
 handle_frame_post_auth(Transport,
+                       #stream_connection{publishers = Publishers0,
+                                          resource_alarm = false} = Connection0,
+                       State,
+                       {request, CorrelationId,
+                        {declare_publisher, _PublisherId, _WriterRef, _Stream}})
+                      when map_size(Publishers0) >= ?MAX_PUBLISHERS_PER_CONNECTION ->
+    response(Transport,
+             Connection0,
+             declare_publisher,
+             CorrelationId,
+             ?RESPONSE_CODE_PRECONDITION_FAILED),
+    increase_protocol_counter(?PRECONDITION_FAILED),
+    {Connection0, State};
+handle_frame_post_auth(Transport,
                        #stream_connection{user = User,
                                           resource_alarm = false} = C,
                        State,
@@ -2113,6 +2130,19 @@ handle_frame_post_auth(Transport, #stream_connection{} = Connection, State,
                         {subscribe,
                          _, _, _, _, _}} = Request) ->
     handle_frame_post_auth(Transport, {ok, Connection}, State, Request);
+handle_frame_post_auth(Transport,
+                       {ok, Connection},
+                       #stream_connection_state{consumers = Consumers} = State,
+                       {request, CorrelationId,
+                        {subscribe, _, _, _, _, _}})
+                      when map_size(Consumers) >= ?MAX_SUBSCRIPTIONS_PER_CONNECTION ->
+    response(Transport,
+             Connection,
+             subscribe,
+             CorrelationId,
+             ?RESPONSE_CODE_PRECONDITION_FAILED),
+    increase_protocol_counter(?PRECONDITION_FAILED),
+    {Connection, State};
 handle_frame_post_auth(Transport, {ok, #stream_connection{user = User} = C}, State,
                        {request, CorrelationId,
                         {subscribe, _, S, _, _, #{ <<"name">> := N}}})
@@ -2141,7 +2171,6 @@ handle_frame_post_auth(Transport,
         #resource{name = Stream,
                   kind = queue,
                   virtual_host = VirtualHost},
-    %% FIXME check the max number of subs is not reached already
     case rabbit_stream_utils:check_read_permitted(QueueResource, User,
                                                   #{})
     of

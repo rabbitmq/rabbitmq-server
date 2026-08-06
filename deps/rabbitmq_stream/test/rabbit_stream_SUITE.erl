@@ -86,6 +86,8 @@ groups() ->
        sasl_anonymous,
        test_publisher_with_too_long_reference_errors,
        test_consumer_with_too_long_reference_errors,
+       declare_publisher_max_reached,
+       subscribe_max_reached,
        subscribe_unsubscribe_should_create_events,
        oversized_frame_rejected_pre_auth,
        oversized_frame_rejected_pre_auth_below_configured_ceiling,
@@ -1936,6 +1938,64 @@ test_consumer_with_too_long_reference_errors(Config) ->
 
   C4 = lists:foldl(fun({SubId, Ref, ExpectedResponseCode}, CAcc) ->
      F = request({subscribe, SubId, Stream, first, 1, #{<<"name">> => Ref}}),
+     ok = T:send(S, F),
+     {Cmd, CNext} = receive_commands(T, S, CAcc),
+     ?assertMatch({response, 1, {subscribe, ExpectedResponseCode}}, Cmd),
+     CNext
+   end, C3, Tests),
+
+  C5 = test_delete_stream(T, S, Stream, C4),
+  test_close(T, S, C5),
+  ok.
+
+declare_publisher_max_reached(Config) ->
+  FunctionName = atom_to_binary(?FUNCTION_NAME, utf8),
+  T = gen_tcp,
+  Port = get_port(T, Config),
+  Opts = get_opts(T),
+  {ok, S} = T:connect("localhost", Port, Opts),
+  C0 = rabbit_stream_core:init(0),
+  ConnectionName = FunctionName,
+  C1 = test_peer_properties(T, S, #{<<"connection_name">> => ConnectionName}, C0),
+  C2 = test_authenticate(T, S, C1),
+
+  Stream = FunctionName,
+  C3 = test_create_stream(T, S, Stream, C2),
+
+  Tests = [{Id, ?RESPONSE_CODE_OK} || Id <- lists:seq(0, 255)] ++
+          [{0, ?RESPONSE_CODE_PRECONDITION_FAILED}],
+
+  C4 = lists:foldl(fun({PubId, ExpectedResponseCode}, CAcc) ->
+     F = request({declare_publisher, PubId, <<>>, Stream}),
+     ok = T:send(S, F),
+     {Cmd, CNext} = receive_commands(T, S, CAcc),
+     ?assertMatch({response, 1, {declare_publisher, ExpectedResponseCode}}, Cmd),
+     CNext
+   end, C3, Tests),
+
+  C5 = test_delete_stream(T, S, Stream, C4),
+  test_close(T, S, C5),
+  ok.
+
+subscribe_max_reached(Config) ->
+  FunctionName = atom_to_binary(?FUNCTION_NAME, utf8),
+  T = gen_tcp,
+  Port = get_port(T, Config),
+  Opts = get_opts(T),
+  {ok, S} = T:connect("localhost", Port, Opts),
+  C0 = rabbit_stream_core:init(0),
+  ConnectionName = FunctionName,
+  C1 = test_peer_properties(T, S, #{<<"connection_name">> => ConnectionName}, C0),
+  C2 = test_authenticate(T, S, C1),
+
+  Stream = FunctionName,
+  C3 = test_create_stream(T, S, Stream, C2),
+
+  Tests = [{Id, ?RESPONSE_CODE_OK} || Id <- lists:seq(0, 255)] ++
+          [{0, ?RESPONSE_CODE_PRECONDITION_FAILED}],
+
+  C4 = lists:foldl(fun({SubId, ExpectedResponseCode}, CAcc) ->
+     F = request({subscribe, SubId, Stream, first, 10, #{}}),
      ok = T:send(S, F),
      {Cmd, CNext} = receive_commands(T, S, CAcc),
      ?assertMatch({response, 1, {subscribe, ExpectedResponseCode}}, Cmd),
