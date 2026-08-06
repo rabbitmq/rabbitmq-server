@@ -83,7 +83,7 @@
 
 -define(DEFAULT_INITIAL_CREDITS, 50000).
 -define(DEFAULT_CREDITS_REQUIRED_FOR_UNBLOCKING, 12500).
--define(DEFAULT_FRAME_MAX, 1048576). %% 1 MiB
+-define(DEFAULT_FRAME_MAX, 20971520). %% 20 MiB
 %% Frame size ceiling until a connection is authenticated and
 %% authorized (a successful `open`), bounding the buffer an
 %% unauthenticated peer can negotiate.
