@@ -69,7 +69,7 @@ tie_binding_to_dest_with_keep_while_cond(Config) ->
 
 tie_binding_to_dest_with_keep_while_cond1(_Config) ->
     proper:quickcheck(
-      prop_tie_binding_to_dest_with_keep_while_cond(),
+      tie_binding_to_dest_with_keep_while_cond_prop(),
       [{numtests, ?NUM_TESTS}]).
 
 %% Each exchange is described by whether it is auto-delete and whether it has a
@@ -83,7 +83,7 @@ topology() ->
 %% For any topology, the migration must succeed, keep every exchange, and add a
 %% `keep_while' condition to exactly those auto-delete exchanges that have a
 %% source binding.
-prop_tie_binding_to_dest_with_keep_while_cond() ->
+tie_binding_to_dest_with_keep_while_cond_prop() ->
     ?FORALL(
        Specs, topology(),
        begin
