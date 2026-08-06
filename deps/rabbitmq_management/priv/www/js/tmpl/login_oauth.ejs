@@ -2,9 +2,9 @@
   <p><img src="img/rabbitmqlogo.svg" alt="RabbitMQ logo" width="204" height="37"/></p>
   <!-- begin login status -->
   <div id="login-status">
-    <% if (Array.isArray(warnings)) { %>
-        <% for (var i = 0; i < warnings.length; i++) { %>
-        <p class="warning"><%=fmt_escape_html(warnings[i])%> </p>
+    <% if (Array.isArray(escaped_warnings)) { %>
+        <% for (var i = 0; i < escaped_warnings.length; i++) { %>
+        <p class="warning"><%=escaped_warnings[i]%> </p>
         <% } %>
     <% } %>
     <% if (notAuthorized) { %>

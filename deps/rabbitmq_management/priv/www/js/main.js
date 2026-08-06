@@ -54,14 +54,14 @@ function removeDuplicates(array){
 
 function startWithOAuthLogin (oauth) {
   if (!oauth.logged_in) {
-    hasAnyResourceServerReady(oauth, (oauth, warnings) => {  render_login_oauth(oauth, warnings); start_app_login(); })
+    hasAnyResourceServerReady(oauth, (oauth, escaped_warnings) => {  render_login_oauth(oauth, escaped_warnings); start_app_login(); })
   } else {
     start_app_login()
   }
 }
-function render_login_oauth(oauth, messages) {
+function render_login_oauth(oauth, escaped_messages) {
   let formatData = {};
-  formatData.warnings = [];
+  formatData.escaped_warnings = [];
   formatData.notAuthorized = false;
   formatData.resource_servers = oauth.resource_servers;
   formatData.declared_resource_servers_count = oauth.declared_resource_servers_count;
@@ -69,11 +69,11 @@ function render_login_oauth(oauth, messages) {
   formatData.strict_auth_mechanism = oauth.strict_auth_mechanism || null;
   formatData.preferred_auth_mechanism = oauth.preferred_auth_mechanism || null;
 
-  if (Array.isArray(messages)) {
-    formatData.warnings = messages
-  } else if (typeof messages == "string") {
-    formatData.warnings = [messages]
-    formatData.notAuthorized = messages == "Not authorized"
+  if (Array.isArray(escaped_messages)) {
+    formatData.escaped_warnings = escaped_messages
+  } else if (typeof escaped_messages == "string") {
+    formatData.escaped_warnings = [escaped_messages]
+    formatData.notAuthorized = escaped_messages == "Not authorized"
   }
   replace_content('outer', format('login_oauth', formatData))
 
@@ -964,9 +964,9 @@ function postprocess() {
         select_queue_type(this);
     });
 
-    $('[name="upload-definitions"]').on('click', function(e) {
+    $('form[name="upload-definitions"]').on('submit', function(e) {
         e.preventDefault();
-        submit_import($(this).closest('form')[0]);
+        submit_import(this);
     });
 
     $(document).on('click', '.help', function() {
