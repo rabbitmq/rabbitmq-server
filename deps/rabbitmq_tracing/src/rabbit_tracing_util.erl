@@ -21,15 +21,20 @@ apply_on_node(ReqData, Context, Mod, Fun, Args) ->
     case rabbit_mgmt_util:id(node, ReqData) of
         none ->
             apply(Mod, Fun, Args);
-        Node0 ->
-            Node = binary_to_atom(Node0, utf8),
-            case rpc:call(Node, Mod, Fun, Args) of
-                {badrpc, _} = Error ->
-                    Msg = io_lib:format("Node ~tp could not be contacted: ~tp",
-                                        [Node, Error]),
-                    ?LOG_WARNING(Msg, []),
-                    rabbit_mgmt_util:bad_request(list_to_binary(Msg), ReqData, Context);
-                Any ->
-                    Any
+        NodeBin ->
+            case rabbit_mgmt_nodes:parse_node_name(NodeBin) of
+                {ok, Node} ->
+                    case rpc:call(Node, Mod, Fun, Args) of
+                        {badrpc, _} = Error ->
+                            Msg = io_lib:format("Node ~tp could not be contacted: ~tp",
+                                                [Node, Error]),
+                            ?LOG_WARNING(Msg, []),
+                            rabbit_mgmt_util:bad_request(list_to_binary(Msg), ReqData, Context);
+                        Any ->
+                            Any
+                    end;
+                {error, _} ->
+                    rabbit_mgmt_util:bad_request(
+                      <<"Node is not a cluster member">>, ReqData, Context)
             end
     end.
