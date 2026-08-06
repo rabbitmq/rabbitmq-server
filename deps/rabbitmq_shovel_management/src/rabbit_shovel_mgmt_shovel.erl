@@ -71,7 +71,7 @@ resource_exists(ReqData, Context) ->
     {Reply, ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    Shovel = parameter(ReqData),
+    Shovel = redact_definition(parameter(ReqData)),
     rabbit_mgmt_util:reply(rabbit_mgmt_format:parameter(Shovel),
         ReqData, Context).
 
@@ -154,6 +154,13 @@ parameter(ReqData) ->
         true ->
             not_found
     end.
+
+redact_definition(not_found) ->
+    not_found;
+redact_definition(Param) ->
+    Redacted = rabbit_shovel_parameters:redact_uris_in_definition(
+                 pget(value, Param)),
+    rabbit_misc:pset(value, Redacted, Param).
 
 is_restart(ReqData) ->
     Path = cowboy_req:path(ReqData),
