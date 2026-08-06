@@ -344,6 +344,31 @@ end}.
 ]}.
 
 %%
+%% Concurrent Sessions Limit
+%%
+
+{mapping, "management.sessions.enabled", "rabbitmq_management.sessions_enabled", [
+    {datatype, {enum, [true, false]}}
+]}.
+
+{mapping, "management.sessions.max_concurrent", "rabbitmq_management.sessions_max_concurrent", [
+    {datatype, {integer, non_negative}}
+]}.
+
+{mapping, "management.sessions.heartbeat_interval", "rabbitmq_management.sessions_heartbeat_interval", [
+    {datatype, integer}
+]}.
+
+{translation, "rabbitmq_management.sessions_heartbeat_interval",
+fun(Conf) ->
+    case cuttlefish:conf_get("management.sessions.heartbeat_interval", Conf, undefined) of
+        undefined                -> 30;
+        Val when is_integer(Val) -> erlang:max(30, Val);
+        _                        -> cuttlefish:invalid("management.sessions.heartbeat_interval must be an integer >= 30")
+    end
+end}.
+
+%%
 %% Inter-node query result caching
 %%
 

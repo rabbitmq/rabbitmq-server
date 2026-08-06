@@ -16,75 +16,74 @@ function format_error_response(response, reason) {
 }
 
 $(document).ready(function() {
-  setup_oauth_events_if_required();
-  var url_string = window.location.href;
-  var url = new URL(url_string);
-  var error = url.searchParams.get('error');
-  if (error) {
-    // A failed IDP-initiated login returns here with an error. Drop the
-    // pending state markers to avoid a confusing redirect the next successful login.
-    clear_pref("oauth-idp-pending");
-    clear_pref("oauth-return-to");
-    if (oauth.enabled) {
-      renderWarningMessageInLoginStatus(oauth, fmt_escape_html(error));
-    }
-  } else {
-    if (oauth.enabled) {
-      startWithOAuthLogin(oauth);
+    setup_oauth_events_if_required();
+    var url_string = window.location.href;
+    var url = new URL(url_string);
+    var error = url.searchParams.get('error');
+    if (error) {
+        // A failed IDP-initiated login returns here with an error. Drop the
+        // pending state markers to avoid a confusing redirect the next successful login.
+        clear_pref("oauth-idp-pending");
+        clear_pref("oauth-return-to");
+        if (oauth.enabled) {
+            renderWarningMessageInLoginStatus(oauth, fmt_escape_html(error));
+        }
     } else {
-      startWithLoginPage();
-      }
-  }
+        if (oauth.enabled) {
+            startWithOAuthLogin(oauth);
+        } else {
+            startWithLoginPage();
+        }
+    }
 });
 
 function startWithLoginPage() {
-  replace_content('outer', format('login', {}));
-  start_app_login();
+    replace_content('outer', format('login', {}));
+    start_app_login();
 }
 function removeDuplicates(array){
-  let output = []
-  for(let item of array) {
-    if(!output.includes(item)) {
-      output.push(item)
+    let output = [];
+    for(let item of array) {
+        if(!output.includes(item)) {
+            output.push(item);
+        }
     }
-  }
-  return output
+    return output;
 }
-
 
 function startWithOAuthLogin (oauth) {
-  if (!oauth.logged_in) {
-    hasAnyResourceServerReady(oauth, (oauth, warnings) => {  render_login_oauth(oauth, warnings); start_app_login(); })
-  } else {
-    start_app_login()
-  }
+    if (!oauth.logged_in) {
+        hasAnyResourceServerReady(oauth, (oauth, warnings) => {  render_login_oauth(oauth, warnings); start_app_login(); });
+    } else {
+        start_app_login();
+    }
 }
 function render_login_oauth(oauth, messages) {
-  let formatData = {};
-  formatData.warnings = [];
-  formatData.notAuthorized = false;
-  formatData.resource_servers = oauth.resource_servers;
-  formatData.declared_resource_servers_count = oauth.declared_resource_servers_count;
-  formatData.oauth_disable_basic_auth = oauth.oauth_disable_basic_auth;
-  formatData.strict_auth_mechanism = oauth.strict_auth_mechanism || null;
-  formatData.preferred_auth_mechanism = oauth.preferred_auth_mechanism || null;
+    let formatData = {};
+    formatData.warnings = [];
+    formatData.notAuthorized = false;
+    formatData.resource_servers = oauth.resource_servers;
+    formatData.declared_resource_servers_count = oauth.declared_resource_servers_count;
+    formatData.oauth_disable_basic_auth = oauth.oauth_disable_basic_auth;
+    formatData.strict_auth_mechanism = oauth.strict_auth_mechanism || null;
+    formatData.preferred_auth_mechanism = oauth.preferred_auth_mechanism || null;
 
-  if (Array.isArray(messages)) {
-    formatData.warnings = messages
-  } else if (typeof messages == "string") {
-    formatData.warnings = [messages]
-    formatData.notAuthorized = messages == "Not authorized"
-  }
-  replace_content('outer', format('login_oauth', formatData))
+    if (Array.isArray(messages)) {
+        formatData.warnings = messages;
+    } else if (typeof messages == "string") {
+        formatData.warnings = [messages];
+        formatData.notAuthorized = messages == "Not authorized";
+    }
+    replace_content('outer', format('login_oauth', formatData));
 
-  setup_visibility()
-  $('#login').off('click', 'div.section h2, div.section-hidden h2');
-  $('#login').on('click', 'div.section h2, div.section-hidden h2', function() {
-          toggle_visibility($(this));
-      });
+    setup_visibility();
+    $('#login').off('click', 'div.section h2, div.section-hidden h2');
+    $('#login').on('click', 'div.section h2, div.section-hidden h2', function() {
+        toggle_visibility($(this));
+    });
 }
 function renderWarningMessageInLoginStatus(oauth, message) {
-  render_login_oauth(oauth, message)
+    render_login_oauth(oauth, message);
 }
 
 function dispatcher_add(fun) {
@@ -125,20 +124,33 @@ function start_app_login () {
 
 
 function check_login () {
-  user = JSON.parse(sync_get('/whoami'));
-  if (user == false || user.error) {
-    clear_auth();
-    if (oauth.enabled) {
-      renderWarningMessageInLoginStatus(oauth, 'Not authorized');
-    } else {
-      replace_content('login-status', '<p>Login failed</p>');
+    user = JSON.parse(sync_get('/whoami'));
+    if (user == false || user.error) {
+        clear_auth();
+        if (oauth.enabled) {
+            renderWarningMessageInLoginStatus(oauth, 'Not authorized');
+        } else {
+            replace_content('login-status', '<p>Login failed</p>');
+        }
+        return false;
     }
-    return false;
-  }
-  load_ui(user);
-  return true;
-}
+ 
 
+    // Dynamically load the init.js extension
+    import('./init.js')
+        .then(function(module) {
+            if (typeof module.initialize === 'function') {
+                module.initialize(user);
+            }
+            finish_check_login();
+        })
+        .catch(function(err) {
+            console.error("Failed to load init.js:", err);
+            finish_check_login();
+        });
+
+    return true;
+}
 function do_login(username, password) {
     var result = null;
     $.ajax({
@@ -169,34 +181,68 @@ function login(username, password) {
   var scheme = result.token.type === 'bearer' ? 'Bearer' : 'Basic';
   set_auth(scheme, result.token.value);
   
-  load_ui(user);
+  // Dynamically load the init.js extension
+  import('./init.js')
+      .then(function(module) {
+          if (typeof module.initialize === 'function') {
+              module.initialize(user);
+          }
+          finish_check_login();
+      })
+      .catch(function(err) {
+          console.error("Failed to load init.js:", err);
+          finish_check_login();
+      });
+
   return true;
 }
 
-function load_ui(user) {
-  set_session_expiry_if_required(user.login_session_timeout);
-  check_version();
-  hide_popup_warn();
-  replace_content('outer', format('layout', {}));
+function prepare_session() {
+    if (!check_session()) {
+        clear_auth();
+        if (oauth.enabled) {
+            renderWarningMessageInLoginStatus(oauth, 'Concurrent session limit reached');
+        } else {
+            replace_content('login-status', '<p>Concurrent session limit reached</p>');
+        }
+        return false;
+    }else {
+        start_session_heartbeat(get_session_id(), true);
+    }
+}
+function finish_check_login() {
+    if (sessions_enabled()) {
+        prepare_session();
+    }
+    set_session_expiry_if_required(user.login_session_timeout);
+    check_version();
+    hide_popup_warn();
 
-  ui_data_model.vhosts = JSON.parse(sync_get('/vhosts'));
-  ac.update(user, ui_data_model);
-  if (ac.isMonitoringUser()) {
-    ui_data_model.nodes = JSON.parse(sync_get('/nodes'));
-  }
-  var overview = JSON.parse(sync_get('/overview'));
+    var settings = window.app_settings;
 
-  display.update(overview, ui_data_model);
+    replace_content('outer', format('layout', {disable_stats: settings.disable_stats}));
 
-  setup_global_vars(overview);
+    ui_data_model.vhosts = window.app_vhosts;
+    ac.update(user, ui_data_model);
 
-  setup_constant_events();
-  update_vhosts();
-  update_interval();
-  setup_extensions(function onCompleted() {
-    console.info("All extensions have been loaded. Starting application ..");
-    start_app();
-  });
+    if (window.app_nodes !== undefined) {
+        ui_data_model.nodes = window.app_nodes;
+    }
+
+    // Update EJS templates to use settings
+    ui_data_model.settings = settings;
+
+    display.update(settings, ui_data_model);
+
+    setup_global_vars(settings);
+
+    setup_constant_events();
+    update_vhosts();
+    update_interval();
+    setup_extensions(function onCompleted() {
+        console.info("All extensions have been loaded. Starting application ..");
+        start_app();
+    });
 }
 
 
@@ -1468,6 +1514,8 @@ function format(template, json) {
     try {
         var fn = COMPILED_TEMPLATES[template];
         if (!fn) throw new Error('Template not found: ' + template);
+        // Inject settings object
+        json.settings = window.app_settings;
         return fn.call(json, json, json);
     } catch (err) {
         clearInterval(timer);
@@ -1616,6 +1664,7 @@ function sync_req(type, params0, path_template, options) {
     }
 }
 function initiate_logout(oauth, error = "") {
+    clear_session();
     renderWarningMessageInLoginStatus(oauth, error);
 }
 /**
