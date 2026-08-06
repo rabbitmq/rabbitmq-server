@@ -131,27 +131,28 @@ print(Fmt, Val) ->
     list_to_binary(io_lib:format(Fmt, Val)).
 
 lookup(Id, ReqData) ->
-    try get_node(ReqData) of
-        Node ->
+    case rabbit_mgmt_nodes:node_name_from_req(ReqData) of
+        {ok, Node} ->
             case rpc:call(Node, rabbit_federation_status, lookup, [Id], infinity) of
                 {badrpc, _}  -> false;
                 not_found -> false;
                 _ -> true
-            end
-    catch
-        error:badarg -> false
+            end;
+        {error, _} ->
+            false
     end.
 
 restart(Id, ReqData) ->
-    Node = get_node(ReqData),
-    case rpc:call(Node, rabbit_federation_status, lookup, [Id], infinity) of
-        not_found -> false;
-        Obj ->
-            Upstream = proplists:get_value(upstream, Obj),
-            Supervisor = proplists:get_value(supervisor, Obj),
-            rpc:call(Node, rabbit_federation_link_sup, restart, [Supervisor, Upstream], infinity),
-            true
+    case rabbit_mgmt_nodes:node_name_from_req(ReqData) of
+        {ok, Node} ->
+            case rpc:call(Node, rabbit_federation_status, lookup, [Id], infinity) of
+                not_found -> false;
+                Obj ->
+                    Upstream = proplists:get_value(upstream, Obj),
+                    Supervisor = proplists:get_value(supervisor, Obj),
+                    rpc:call(Node, rabbit_federation_link_sup, restart, [Supervisor, Upstream], infinity),
+                    true
+            end;
+        {error, _} ->
+            false
     end.
-
-get_node(ReqData) ->
-    binary_to_existing_atom(rabbit_mgmt_util:id(node, ReqData), utf8).
