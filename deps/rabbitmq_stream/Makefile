@@ -14,6 +14,7 @@ define PROJECT_ENV
 	{initial_credits, 50000},
 	{credits_required_for_unblocking, 12500},
 	{frame_max, 1048576},
+	{max_uncompressed_sub_entry_batch_size, 67108864},
 	{heartbeat, 60},
 	{advertised_host, undefined},
 	{advertised_port, undefined}

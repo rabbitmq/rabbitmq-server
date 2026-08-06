@@ -18,9 +18,13 @@
 
 -define(MAX_SUPER_STREAM_PARTITIONS, 1000).
 
+%% Sub-entry compression types 0-4 are assigned (none, gzip, snappy, lz4, zstd);
+%% 5-7 are not, and a batch declaring one of them can never be decoded by a consumer.
+-define(MAX_KNOWN_COMPRESSION_TYPE, 4).
+
 %% API
 -export([enforce_correct_name/1,
-         write_messages/6,
+         write_messages/8,
          parse_map/2,
          auth_mechanisms/1,
          auth_mechanism_to_module/2,
@@ -73,8 +77,13 @@ check_name(<<"">>) ->
 check_name(_Name) ->
     ok.
 
-write_messages(_Version, _ClusterLeader, _PublisherRef, _PublisherId, _InternalId, <<>>) ->
-    ok;
+-spec write_messages(rabbit_stream_core:command_version(), pid(),
+                     undefined | binary(), byte(),
+                     integer(), binary(), non_neg_integer(), binary()) ->
+    [integer()].
+write_messages(_Version, _ClusterLeader, _PublisherRef, _PublisherId, _InternalId, <<>>,
+               _MaxUncompressedSize, _Stream) ->
+    [];
 write_messages(?VERSION_1 = V, ClusterLeader,
                PublisherRef,
                PublisherId,
@@ -83,9 +92,10 @@ write_messages(?VERSION_1 = V, ClusterLeader,
                  0:1,
                  MessageSize:31,
                  Message:MessageSize/binary,
-                 Rest/binary>>) ->
+                 Rest/binary>>,
+               MaxUncompressedSize, Stream) ->
     write_messages0(V, ClusterLeader, PublisherRef, PublisherId, InternalId,
-                    PublishingId, Message, Rest);
+                    PublishingId, Message, Rest, MaxUncompressedSize, Stream);
 write_messages(?VERSION_1 = V, ClusterLeader,
                PublisherRef,
                PublisherId,
@@ -98,10 +108,23 @@ write_messages(?VERSION_1 = V, ClusterLeader,
                  UncompressedSize:32,
                  BatchSize:32,
                  Batch:BatchSize/binary,
-                 Rest/binary>>) ->
-    Data = {batch, MessageCount, CompressionType, UncompressedSize, Batch},
-    write_messages0(V, ClusterLeader, PublisherRef, PublisherId, InternalId,
-                    PublishingId, Data, Rest);
+                 Rest/binary>>,
+               MaxUncompressedSize, Stream) ->
+    case validate_compressed_sub_batch(CompressionType, MessageCount,
+                                       UncompressedSize, BatchSize,
+                                       MaxUncompressedSize) of
+        ok ->
+            Data = {batch, MessageCount, CompressionType, UncompressedSize, Batch},
+            write_messages0(V, ClusterLeader, PublisherRef, PublisherId, InternalId,
+                            PublishingId, Data, Rest, MaxUncompressedSize, Stream);
+        {error, Reason} ->
+            ?LOG_WARNING("Rejecting sub-entry batch published to stream '~ts' "
+                         "by publisher ~tp: ~tp. The rest of the publish "
+                         "frame is rejected as well to avoid a gap in the "
+                         "publishing ID sequence.",
+                         [Stream, PublisherId, Reason]),
+            [PublishingId | reject_remaining(V, Rest)]
+    end;
 write_messages(?VERSION_2 = V, ClusterLeader,
                PublisherRef,
                PublisherId,
@@ -111,9 +134,10 @@ write_messages(?VERSION_2 = V, ClusterLeader,
                  0:1,
                  MessageSize:31,
                  Message:MessageSize/binary,
-                 Rest/binary>>) ->
+                 Rest/binary>>,
+               MaxUncompressedSize, Stream) ->
     write_messages0(V, ClusterLeader, PublisherRef, PublisherId, InternalId,
-                    PublishingId, Message, Rest);
+                    PublishingId, Message, Rest, MaxUncompressedSize, Stream);
 write_messages(?VERSION_2 = V, ClusterLeader,
                PublisherRef,
                PublisherId,
@@ -123,11 +147,13 @@ write_messages(?VERSION_2 = V, ClusterLeader,
                  0:1,
                  MessageSize:31,
                  Message:MessageSize/binary,
-                 Rest/binary>>) ->
+                 Rest/binary>>,
+               MaxUncompressedSize, Stream) ->
     write_messages0(V, ClusterLeader, PublisherRef, PublisherId, InternalId,
-                    PublishingId, {FilterValue, Message}, Rest).
+                    PublishingId, {FilterValue, Message}, Rest, MaxUncompressedSize, Stream).
 
-write_messages0(Vsn, ClusterLeader, PublisherRef, PublisherId, InternalId, PublishingId, Data, Rest) ->
+write_messages0(Vsn, ClusterLeader, PublisherRef, PublisherId, InternalId, PublishingId, Data,
+                Rest, MaxUncompressedSize, Stream) ->
     Corr = case PublisherRef of
                undefined ->
                    %% we add the internal ID to detect late confirms from a stale publisher
@@ -138,7 +164,71 @@ write_messages0(Vsn, ClusterLeader, PublisherRef, PublisherId, InternalId, Publi
                    PublishingId
            end,
     ok = osiris:write(ClusterLeader, PublisherRef, Corr, Data),
-    write_messages(Vsn, ClusterLeader, PublisherRef, PublisherId, InternalId, Rest).
+    write_messages(Vsn, ClusterLeader, PublisherRef, PublisherId, InternalId, Rest,
+                   MaxUncompressedSize, Stream).
+
+%% Only the ?VERSION_1 compressed sub-batch shape is validated, so only that shape
+%% (and the plain ?VERSION_1 entry it can be interleaved with) can appear here.
+reject_remaining(_V, <<>>) ->
+    [];
+reject_remaining(?VERSION_1 = V, <<PublishingId:64,
+                                    0:1,
+                                    MessageSize:31,
+                                    _Message:MessageSize/binary,
+                                    Rest/binary>>) ->
+    [PublishingId | reject_remaining(V, Rest)];
+reject_remaining(?VERSION_1 = V, <<PublishingId:64,
+                                    1:1,
+                                    _CompressionType:3,
+                                    _Unused:4,
+                                    _MessageCount:16,
+                                    _UncompressedSize:32,
+                                    BatchSize:32,
+                                    _Batch:BatchSize/binary,
+                                    Rest/binary>>) ->
+    [PublishingId | reject_remaining(V, Rest)].
+
+-spec validate_compressed_sub_batch(non_neg_integer(), non_neg_integer(),
+                                    non_neg_integer(), non_neg_integer(),
+                                    non_neg_integer()) -> ok | {error, term()}.
+validate_compressed_sub_batch(CompressionType, MessageCount, UncompressedSize,
+                              BatchSize, MaxUncompressedSize) ->
+    maybe
+        ok ?= check_uncompressed_size(UncompressedSize, MaxUncompressedSize),
+        ok ?= check_message_count(MessageCount),
+        ok ?= check_message_count_fits_uncompressed_size(MessageCount, UncompressedSize),
+        ok ?= check_compression_type(CompressionType),
+        check_batch_size(BatchSize, CompressionType)
+    end.
+
+check_uncompressed_size(UncompressedSize, MaxUncompressedSize)
+  when UncompressedSize > MaxUncompressedSize ->
+    {error, {uncompressed_size_exceeds_limit, UncompressedSize, MaxUncompressedSize}};
+check_uncompressed_size(_UncompressedSize, _MaxUncompressedSize) ->
+    ok.
+
+check_message_count(0) ->
+    {error, zero_message_count};
+check_message_count(_MessageCount) ->
+    ok.
+
+%% every sub-entry carries at least its own 4-byte length prefix
+check_message_count_fits_uncompressed_size(MessageCount, UncompressedSize)
+  when MessageCount * 4 > UncompressedSize ->
+    {error, {message_count_exceeds_uncompressed_size, MessageCount, UncompressedSize}};
+check_message_count_fits_uncompressed_size(_MessageCount, _UncompressedSize) ->
+    ok.
+
+check_compression_type(CompressionType)
+  when CompressionType > ?MAX_KNOWN_COMPRESSION_TYPE ->
+    {error, {unknown_compression_type, CompressionType}};
+check_compression_type(_CompressionType) ->
+    ok.
+
+check_batch_size(0, CompressionType) when CompressionType =/= 0 ->
+    {error, empty_batch_with_compression};
+check_batch_size(_BatchSize, _CompressionType) ->
+    ok.
 
 parse_map(<<>>, _Count) ->
     {#{}, <<>>};

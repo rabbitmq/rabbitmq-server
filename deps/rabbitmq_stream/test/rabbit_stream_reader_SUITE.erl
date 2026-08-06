@@ -22,7 +22,8 @@
 -include_lib("rabbitmq_stream_common/include/rabbit_stream.hrl").
 
 -import(rabbit_stream_reader, [ensure_token_expiry_timer/2,
-                               negotiate_frame_max/2]).
+                               negotiate_frame_max/2,
+                               publishing_ids_from_messages/2]).
 
 %%%===================================================================
 %%% Common Test callbacks
@@ -242,6 +243,40 @@ negotiate_frame_max_test(_) ->
     ?assertEqual(1024, negotiate_frame_max(1024, 0)),
     %% Both unlimited: stays unlimited (0 on the wire).
     ?assertEqual(0, negotiate_frame_max(0, 0)),
+    ok.
+
+%% A V2 entry with no filter value is sent by the client as
+%% FilterValueLength = -1 (0xFFFF on the wire). Before the fix, the clause
+%% matching FilterValueLength as an unsigned int read that as 65535 and then
+%% demanded 65535 bytes of filter value that are not there, crashing the
+%% reader with a function_clause instead of returning the publishing ID.
+publishing_ids_from_messages_v2_no_filter_value_test(_) ->
+    Body = <<"hello">>,
+    BodySize = byte_size(Body),
+    Messages = <<42:64, -1:16/signed, 0:1, BodySize:31, Body:BodySize/binary>>,
+    ?assertEqual([42], publishing_ids_from_messages(?VERSION_2, Messages)),
+    ok.
+
+publishing_ids_from_messages_v2_with_filter_value_test(_) ->
+    FilterValue = <<"foo">>,
+    FilterValueSize = byte_size(FilterValue),
+    Body = <<"hello">>,
+    BodySize = byte_size(Body),
+    Messages = <<42:64, FilterValueSize:16, FilterValue:FilterValueSize/binary,
+                0:1, BodySize:31, Body:BodySize/binary>>,
+    ?assertEqual([42], publishing_ids_from_messages(?VERSION_2, Messages)),
+    ok.
+
+publishing_ids_from_messages_v1_test(_) ->
+    Body = <<"hello">>,
+    BodySize = byte_size(Body),
+    SimpleEntry = <<1:64, 0:1, BodySize:31, Body:BodySize/binary>>,
+    Batch = <<"compressed-bytes">>,
+    BatchSize = byte_size(Batch),
+    BatchEntry = <<2:64, 1:1, 1:3, 0:4, 10:16, 1000:32, BatchSize:32,
+                  Batch:BatchSize/binary>>,
+    ?assertEqual([1, 2],
+                 publishing_ids_from_messages(?VERSION_1, <<SimpleEntry/binary, BatchEntry/binary>>)),
     ok.
 
 consumer(S, Pid) ->
