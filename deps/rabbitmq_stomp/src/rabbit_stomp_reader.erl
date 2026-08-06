@@ -263,12 +263,17 @@ process_received_bytes(Bytes,
                          current_frame_size = FrameLength,
                          processor_state  = ProcState,
                          parse_state      = ParseState}) ->
+    EffectiveMaxFrameSize =
+        case rabbit_stomp_processor:is_authenticated(ProcState) of
+            true  -> MaxFrameSize;
+            false -> min(MaxFrameSize, ?DEFAULT_MAX_FRAME_SIZE_UNAUTHENTICATED)
+        end,
     case rabbit_stomp_frame:parse(Bytes, ParseState) of
         {more, ParseState1} ->
             FrameLength1 = FrameLength + byte_size(Bytes),
-            case FrameLength1 > MaxFrameSize of
+            case FrameLength1 > EffectiveMaxFrameSize of
                 true ->
-                    log_reason({network_error, {frame_too_big, {FrameLength1, MaxFrameSize}}}, State),
+                    log_reason({network_error, {frame_too_big, {FrameLength1, EffectiveMaxFrameSize}}}, State),
                     {stop, normal, State};
                 false ->
                     {ok, State#reader_state{parse_state = ParseState1,
@@ -276,9 +281,9 @@ process_received_bytes(Bytes,
             end;
         {ok, Frame, Rest} ->
             FrameLength1 = FrameLength + byte_size(Bytes) - byte_size(Rest),
-            case FrameLength1 > MaxFrameSize of
+            case FrameLength1 > EffectiveMaxFrameSize of
                 true ->
-                    log_reason({network_error, {frame_too_big, {FrameLength1, MaxFrameSize}}}, State),
+                    log_reason({network_error, {frame_too_big, {FrameLength1, EffectiveMaxFrameSize}}}, State),
                     {stop, normal, State};
                 false ->
                     try rabbit_stomp_processor:process_frame(Frame, ProcState) of

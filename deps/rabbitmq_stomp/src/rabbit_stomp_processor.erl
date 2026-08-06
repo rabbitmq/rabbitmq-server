@@ -12,7 +12,8 @@
 -export([initial_state/2,
          process_frame/2,
          flush_and_die/1,
-         info/2]).
+         info/2,
+         is_authenticated/1]).
 
 -export([flush_pending_receipts/3,
          cancel_consumer/2,
@@ -227,6 +228,9 @@ info(client_properties, _) ->
     [{<<"product">>, longstr, <<"STOMP client">>}];
 info(user_who_performed_action, S) -> info(user, S);
 info(Other, _) -> throw({bad_argument, Other}).
+
+is_authenticated(#state{user = undefined}) -> false;
+is_authenticated(#state{}) -> true.
 
 
 %%----------------------------------------------------------------------------
