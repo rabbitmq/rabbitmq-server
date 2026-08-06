@@ -178,9 +178,19 @@ restart_link_requires_policymaker(Config) ->
     end.
 
 restart_link_unknown_node(Config) ->
-    http_delete(Config,
-                "/federation-links/vhost/%2f/no-such-link/no-such-node@no-such-host/restart",
-                "guest", "guest", ?NOT_FOUND).
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, meck, new,
+                                      [rabbit_federation_status, [passthrough, no_link]]),
+    try
+        _ = rabbit_ct_broker_helpers:rpc(Config, 0, erlang, binary_to_atom,
+                                         [<<"no-such-node@no-such-host">>, utf8]),
+        http_delete(Config,
+                    "/federation-links/vhost/%2f/no-such-link/no-such-node@no-such-host/restart",
+                    "guest", "guest", ?NOT_FOUND),
+        0 = rabbit_ct_broker_helpers:rpc(Config, 0, meck, num_calls,
+                                         [rabbit_federation_status, lookup, '_'])
+    after
+        rabbit_ct_broker_helpers:rpc(Config, 0, meck, unload, [rabbit_federation_status])
+    end.
 
 %% -------------------------------------------------------------------
 %% Helpers
