@@ -16,7 +16,11 @@ all() ->
     [
      inject_client_secret_when_absent,
      does_not_override_client_secret_when_present,
-     rewrite_replaces_only_token_endpoint
+     rewrite_replaces_only_token_endpoint,
+     authority_uses_connection_when_not_forwarded,
+     authority_honours_forwarded_proto,
+     authority_honours_forwarded_port,
+     authority_takes_first_forwarded_value
     ].
 
 inject_client_secret_when_absent(_Config) ->
@@ -47,3 +51,33 @@ rewrite_replaces_only_token_endpoint(_Config) ->
     ?assertEqual(<<"https://idp/authorize">>,
                  maps:get(<<"authorization_endpoint">>, Rewritten)),
     ?assertEqual(<<"https://idp/keys">>, maps:get(<<"jwks_uri">>, Rewritten)).
+
+authority_uses_connection_when_not_forwarded(_Config) ->
+    ?assertEqual(<<"http://rabbit">>,
+                 authority(<<"http">>, <<"rabbit">>, 80, undefined, undefined)),
+    ?assertEqual(<<"https://rabbit">>,
+                 authority(<<"https">>, <<"rabbit">>, 443, undefined, undefined)),
+    ?assertEqual(<<"http://rabbit:15672">>,
+                 authority(<<"http">>, <<"rabbit">>, 15672, undefined, undefined)).
+
+authority_honours_forwarded_proto(_Config) ->
+    ?assertEqual(<<"https://rabbit">>,
+                 authority(<<"http">>, <<"rabbit">>, 80, <<"https">>, undefined)),
+    ?assertEqual(<<"https://rabbit">>,
+                 authority(<<"http">>, <<"rabbit">>, 15672, <<"https">>, undefined)).
+
+authority_honours_forwarded_port(_Config) ->
+    ?assertEqual(<<"https://rabbit:8443">>,
+                 authority(<<"http">>, <<"rabbit">>, 80, <<"https">>, <<"8443">>)),
+    ?assertEqual(<<"https://rabbit">>,
+                 authority(<<"http">>, <<"rabbit">>, 80, <<"https">>, <<"443">>)).
+
+authority_takes_first_forwarded_value(_Config) ->
+    ?assertEqual(<<"https://rabbit">>,
+                 authority(<<"http">>, <<"rabbit">>, 80,
+                           <<"https, http">>, undefined)).
+
+authority(ConnScheme, Host, ConnPort, ForwardedProto, ForwardedPort) ->
+    iolist_to_binary(
+      rabbit_mgmt_oauth_token_proxy:external_authority(
+        ConnScheme, Host, ConnPort, ForwardedProto, ForwardedPort)).
