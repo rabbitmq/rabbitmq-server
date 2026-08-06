@@ -104,13 +104,9 @@ handle_cast(init_shovel, State = #state{config = Config}) ->
         ok = report_running(State1),
         {noreply, State1}
     catch
-        exit:{shutdown, autodelete} ->
-            %% `init_source/1` exits with this reason when a 'delete-after'
-            %% shovel has nothing left to transfer; see `terminate/2`.
-            {stop, {shutdown, autodelete}, State};
+        exit:{shutdown, _} = Reason ->
+            {stop, Reason, State};
         E:R ->
-            %% Topology setup failed, e.g. a predeclared queue is missing.
-            %% Same handling as the connect phases above.
             ?LOG_WARNING("Shovel ~ts could not set up its topology: ~p ~p",
                          [human_readable_name(maps:get(name, Config)), E, R]),
             report_terminated(State, "failed to set up topology"),
