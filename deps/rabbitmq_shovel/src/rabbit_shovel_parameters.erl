@@ -14,7 +14,7 @@
 
 -export([validate/5, notify/5, notify_clear/4]).
 -export([register/0, unregister/0, parse/3]).
--export([obfuscate_uris_in_definition/1]).
+-export([obfuscate_uris_in_definition/1, redact_uris_in_definition/1]).
 -export([src_protocol/1, dest_protocol/1, protocols/1]).
 -export([is_internal/1, internal_owner/1]).
 
@@ -108,6 +108,27 @@ obfuscate_uris_in_definition(Def) ->
   DestURIs  = get_uris(<<"dest-uri">>, Def),
   ObfuscatedDef = pset(<<"dest-uri">>, rabbit_shovel_util:obfuscate_uris(DestURIs), ObfuscatedSrcURIsDef),
   ObfuscatedDef.
+
+redact_uris_in_definition(Def) when is_map(Def) ->
+    maps:map(fun redact_uri_field/2, Def);
+redact_uris_in_definition(Def) when is_list(Def) ->
+    lists:map(fun ({Key, Value}) -> {Key, redact_uri_field(Key, Value)};
+                  (Other)        -> Other
+              end, Def).
+
+redact_uri_field(Key, Value) when Key =:= <<"src-uri">>;
+                                  Key =:= <<"dest-uri">> ->
+    redact_uris(Value);
+redact_uri_field(_Key, Value) ->
+    Value.
+
+redact_uris(URI) when is_binary(URI) ->
+    redact_uri(URI);
+redact_uris(URIs) when is_list(URIs) ->
+    [redact_uri(URI) || URI <- URIs].
+
+redact_uri(URI) ->
+    rabbit_data_coercion:to_binary(amqp_uri:remove_credentials(URI)).
 
 shovel_validation() ->
     AllProtocols = list_all_protocols(),
