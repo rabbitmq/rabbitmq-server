@@ -34,9 +34,9 @@ serialise_events() -> false.
 route(#exchange{name = Name, type = Type}, Msg) ->
     route(#exchange{name = Name, type = Type}, Msg, #{}).
 
-route(#exchange{name = Name, type = Type}, Msg, _Opts) ->
+route(#exchange{name = Name}, Msg, _Opts) ->
     Routes = mc:routing_keys(Msg),
-    rabbit_db_binding:match_routing_key(Name, Routes, Type =:= direct).
+    rabbit_db_binding:match_routing_key(Name, Routes).
 
 validate(_X) -> ok.
 validate_binding(_X, _B) -> ok.

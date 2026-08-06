@@ -89,11 +89,15 @@
 -define(PROTOCOL, amqp10).
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
 -define(HIBERNATE_AFTER, 6_000).
-%% Capability defined in amqp-bindmap-jms-v1.0-wd10 [5.2] and sent by Qpid JMS client.
--define(CAP_TEMPORARY_QUEUE, <<"temporary-queue">>).
 -define(CAP_VOLATILE_QUEUE, <<"rabbitmq:volatile-queue">>).
 
--export([start_link/9,
+%% The following capabilities are defined in amqp-bindmap-jms-v1.0-wd10 [5.2]
+%% and sent by Qpid JMS client.
+-define(CAP_TOPIC, <<"topic">>).
+-define(CAP_TEMPORARY_TOPIC, <<"temporary-topic">>).
+-define(CAP_TEMPORARY_QUEUE, <<"temporary-queue">>).
+
+-export([start_link/10,
          process_frame/2,
          list_local/0,
          conserve_resources/3,
@@ -101,7 +105,8 @@
          check_read_permitted_on_topic/4,
          reset_authz/2,
          info/1,
-         is_local/1
+         is_local/1,
+         outcomes/1
         ]).
 
 -export([init/1,
@@ -241,7 +246,10 @@
           %% latest credit request from the receiving client.
           stashed_credit_req :: none | #credit_req{},
           %% Consumer timeout log level
-          timeout_log_level :: warning | debug
+          timeout_log_level :: warning | debug,
+          %% Whether this link got established to unsubscribe a JMS durable subscription.
+          %% see amqp-bindmap-jms-v1.0-wd10 8.8
+          is_jms_subscription_lookup = false :: boolean()
          }).
 
 -record(outgoing_unsettled, {
@@ -286,7 +294,9 @@
           max_incoming_window :: pos_integer(),
           max_link_credit :: pos_integer(),
           max_queue_credit :: pos_integer(),
-          msg_interceptor_ctx :: rabbit_msg_interceptor:context()
+          msg_interceptor_ctx :: rabbit_msg_interceptor:context(),
+          %% Whether the peer advertised itself as a JMS client.
+          is_jms :: boolean()
          }).
 
 -record(state, {
@@ -397,16 +407,16 @@
 -type state() :: #state{}.
 
 start_link(ReaderPid, WriterPid, ChannelNum, FrameMax,
-           User, Vhost, ContainerId, ConnName, BeginFrame) ->
+           User, Vhost, ContainerId, ConnName, IsJms, BeginFrame) ->
     Args = {ReaderPid, WriterPid, ChannelNum, FrameMax,
-            User, Vhost, ContainerId, ConnName, BeginFrame},
+            User, Vhost, ContainerId, ConnName, IsJms, BeginFrame},
     Opts = [{hibernate_after, ?HIBERNATE_AFTER}],
     gen_server:start_link(?MODULE, Args, Opts).
 
 process_frame(Pid, FrameBody) ->
     gen_server:cast(Pid, {frame_body, FrameBody}).
 
-init({ReaderPid, WriterPid, ChannelNum, MaxFrameSize, User, Vhost, ContainerId, ConnName,
+init({ReaderPid, WriterPid, ChannelNum, MaxFrameSize, User, Vhost, ContainerId, ConnName, IsJms,
       #'v1_0.begin'{
          %% "If a session is locally initiated, the remote-channel MUST NOT be set." [2.7.2]
          remote_channel = undefined,
@@ -493,6 +503,7 @@ init({ReaderPid, WriterPid, ChannelNum, MaxFrameSize, User, Vhost, ContainerId, 
                            max_incoming_window = MaxIncomingWindow,
                            max_link_credit = MaxLinkCredit,
                            max_queue_credit = MaxQueueCredit,
+                           is_jms = IsJms,
                            msg_interceptor_ctx = #{protocol => ?PROTOCOL,
                                                    vhost => Vhost,
                                                    username => User#user.username,
@@ -1051,14 +1062,14 @@ disposition(DeliveryState, First, Last, Role, Settled) ->
                         first = ?UINT(First),
                         last = Last1}.
 
-handle_frame({Performative = #'v1_0.transfer'{handle = ?UINT(Handle)}, Paylaod},
+handle_frame({Performative = #'v1_0.transfer'{handle = ?UINT(Handle)}, Payload},
              State0 = #state{incoming_links = IncomingLinks}) ->
     {Flows, State1} = session_flow_control_received_transfer(State0),
 
     {Reply, State} =
     case IncomingLinks of
         #{Handle := Link0} ->
-            try incoming_link_transfer(Performative, Paylaod, Link0, State1) of
+            try incoming_link_transfer(Performative, Payload, Link0, State1) of
                 {ok, Reply0, Link, State2} ->
                     {Reply0, State2#state{incoming_links = IncomingLinks#{Handle := Link}}};
                 {error, Reply0} ->
@@ -1071,7 +1082,7 @@ handle_frame({Performative = #'v1_0.transfer'{handle = ?UINT(Handle)}, Paylaod},
                       {[Detach], State1#state{incoming_links = maps:remove(Handle, IncomingLinks)}}
             end;
         _ ->
-            incoming_mgmt_link_transfer(Performative, Paylaod, State1)
+            incoming_mgmt_link_transfer(Performative, Payload, State1)
     end,
     reply_frames(Reply ++ Flows, State);
 
@@ -1253,27 +1264,50 @@ handle_frame(#'v1_0.attach'{name = {utf8, NameBin} = Name,
             {ok, [AttachReply, Detach], State}
     end;
 
-handle_frame(Detach = #'v1_0.detach'{handle = ?UINT(HandleInt)},
-             State0 = #state{incoming_links = IncomingLinks0,
+handle_frame(Detach0 = #'v1_0.detach'{handle = ?UINT(HandleInt),
+                                      closed = Closed},
+             State0 = #state{cfg = Cfg = #cfg{user = User = #user{username = Username}},
+                             permission_cache = PC,
+                             incoming_links = IncomingLinks0,
                              outgoing_links = OutgoingLinks0,
                              outgoing_unsettled_map = Unsettled0,
                              outgoing_pending = Pending0,
-                             queue_states = QStates0,
-                             cfg = Cfg = #cfg{user = #user{username = Username}}}) ->
-    {OutgoingLinks, Unsettled, Pending, QStates} =
+                             queue_states = QStates0}) ->
+    {OutgoingLinks, Unsettled, Pending, QStates, Detach, PermCache} =
     case maps:take(HandleInt, OutgoingLinks0) of
         {#outgoing_link{queue_name = QName,
                         queue_type = QType,
+                        is_jms_subscription_lookup = IsJmsSubscriptionLookup,
                         dynamic = Dynamic}, OutgoingLinks1} ->
             Ctag = handle_to_ctag(HandleInt),
             {Unsettled1, Pending1} = remove_outgoing_link(Ctag, Unsettled0, Pending0),
             case Dynamic of
                 true when QType =:= rabbit_classic_queue ->
                     delete_dynamic_classic_queue(QName, Cfg),
-                    {OutgoingLinks1, Unsettled1, Pending1, QStates0};
+                    {OutgoingLinks1, Unsettled1, Pending1, QStates0, Detach0, PC};
                 true when QType =:= rabbit_volatile_queue ->
                     QStates1 = rabbit_queue_type:remove(QName, QStates0),
-                    {OutgoingLinks1, Unsettled1, Pending1, QStates1};
+                    {OutgoingLinks1, Unsettled1, Pending1, QStates1, Detach0, PC};
+                false when IsJmsSubscriptionLookup ->
+                    case Closed of
+                        true ->
+                            %% "Closing (detach with closed=true) a link ends the
+                            %% subscription, except if in use by other subscribers"
+                            %% [amqp-bindmap-jms-v1.0-wd10 8.8]
+                            case jms_topic(end_subscription, [QName, User, PC]) of
+                                {ok, PC1} ->
+                                    {OutgoingLinks1, Unsettled1, Pending1, QStates0, Detach0, PC1};
+                                {amqp_error, Condition, Description} ->
+                                    Err = #'v1_0.error'{condition = Condition,
+                                                        description = {utf8, Description}},
+                                    Detach1 = Detach0#'v1_0.detach'{error = Err},
+                                    {OutgoingLinks1, Unsettled1, Pending1, QStates0, Detach1, PC};
+                                {error, not_implemented} ->
+                                    {OutgoingLinks1, Unsettled1, Pending1, QStates0, Detach0, PC}
+                            end;
+                        false ->
+                            {OutgoingLinks1, Unsettled1, Pending1, QStates0, Detach0, PC}
+                    end;
                 false ->
                     case rabbit_amqqueue:lookup(QName) of
                         {ok, Q} ->
@@ -1282,7 +1316,7 @@ handle_frame(Detach = #'v1_0.detach'{handle = ?UINT(HandleInt)},
                                      user => Username},
                             case rabbit_queue_type:cancel(Q, Spec, QStates0) of
                                 {ok, QStates1} ->
-                                    {OutgoingLinks1, Unsettled1, Pending1, QStates1};
+                                    {OutgoingLinks1, Unsettled1, Pending1, QStates1, Detach0, PC};
                                 {error, Reason} ->
                                     protocol_error(
                                       ?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
@@ -1290,11 +1324,11 @@ handle_frame(Detach = #'v1_0.detach'{handle = ?UINT(HandleInt)},
                                       [rabbit_misc:rs(amqqueue:get_name(Q)), Reason])
                             end;
                         {error, not_found} ->
-                            {OutgoingLinks1, Unsettled1, Pending1, QStates0}
+                            {OutgoingLinks1, Unsettled1, Pending1, QStates0, Detach0, PC}
                     end
             end;
         error ->
-            {OutgoingLinks0, Unsettled0, Pending0, QStates0}
+            {OutgoingLinks0, Unsettled0, Pending0, QStates0, Detach0, PC}
     end,
     IncomingLinks = case maps:take(HandleInt, IncomingLinks0) of
                         {IncomingLink, IncomingLinks1} ->
@@ -1307,7 +1341,8 @@ handle_frame(Detach = #'v1_0.detach'{handle = ?UINT(HandleInt)},
                           outgoing_links = OutgoingLinks,
                           outgoing_unsettled_map = Unsettled,
                           outgoing_pending = Pending,
-                          queue_states = QStates},
+                          queue_states = QStates,
+                          permission_cache = PermCache},
     State = maybe_detach_mgmt_link(HandleInt, State1),
     Reply = detach_reply(Detach, State, State0),
     publisher_or_consumer_deleted(State, State0),
@@ -1459,13 +1494,9 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_SENDER,
                             },
               State0 = #state{incoming_links = IncomingLinks0,
                               permission_cache = PermCache0,
-                              cfg = #cfg{container_id = ContainerId,
-                                         reader_pid = ReaderPid,
-                                         max_link_credit = MaxLinkCredit,
-                                         vhost = Vhost,
-                                         user = User}}) ->
-    case ensure_target(Target0, LinkNameBin, Vhost, User,
-                       ContainerId, ReaderPid, PermCache0) of
+                              cfg = #cfg{max_link_credit = MaxLinkCredit,
+                                         vhost = Vhost} = Cfg}) ->
+    case ensure_target(Target0, LinkNameBin, Cfg, PermCache0) of
         {ok, Exchange, RoutingKey, QNameBin, Target, PermCache} ->
             SndSettleMode = snd_settle_mode(MaybeSndSettleMode),
             MaxMessageSize = persistent_term:get(max_message_size),
@@ -1532,8 +1563,8 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
                               topic_permission_cache = TopicPermCache0,
                               cfg = #cfg{vhost = Vhost,
                                          user = User = #user{username = Username},
-                                         container_id = ContainerId,
-                                         reader_pid = ReaderPid}}) ->
+                                         reader_pid = ReaderPid,
+                                         is_jms = IsJms} = Cfg}) ->
     {SndSettled, EffectiveSndSettleMode} =
     case SndSettleMode of
         ?V_1_0_SENDER_SETTLE_MODE_SETTLED ->
@@ -1546,14 +1577,16 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
     end,
 
     case ensure_source(Source0, SndSettled, LinkNameBin,
-                       Vhost, User, ContainerId, ReaderPid,
-                       PermCache0, TopicPermCache0) of
+                       Cfg, PermCache0, TopicPermCache0) of
+        {error, {amqp_error, Condition, Description}} ->
+            link_error(Condition, Description, []);
         {error, Reason} ->
             link_error(?V_1_0_AMQP_ERROR_INVALID_FIELD, "Attach refused: ~tp", [Reason]);
         {ok, #resource{name = QNameBin} = QName,
          #'v1_0.source'{address = {utf8, SourceAddress},
                         filter = DesiredFilter,
-                        distribution_mode = DesiredDistMode} = Source,
+                        distribution_mode = DesiredDistMode,
+                        capabilities = SourceCaps} = Source,
          PermCache1, TopicPermCache} ->
             PermCache = check_resource_access(QName, read, User, PermCache1),
             case rabbit_amqqueue:with(
@@ -1568,17 +1601,30 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
                                        [rabbit_misc:rs(QName)])
                            end,
                            ConsumerArgs0 = parse_attach_properties(Properties),
+                           IsJmsTopic = is_jms_topic_terminus(IsJms, Source),
                            QType = amqqueue:get_type(Q),
                            {EffectiveFilter,
                             ConsumerFilter,
-                            ConsumerArgs1} = parse_filter(DesiredFilter, QType),
+                            ConsumerArgs1} =
+                           case IsJmsTopic of
+                               true ->
+                                   %% For a JMS topic subscription, the filter is
+                                   %% applied by routing, not by the queue itself.
+                                   {DesiredFilter, undefined, []};
+                               false ->
+                                   parse_filter(DesiredFilter, QType)
+                           end,
+                           ExclConsume = IsJmsTopic andalso not lists:member(
+                                                                  <<"shared">>,
+                                                                  rabbit_amqp_util:capabilities_to_list(
+                                                                    SourceCaps)),
                            Spec0 = #{no_ack => SndSettled,
                                      channel_pid => self(),
                                      limiter_pid => none,
                                      limiter_active => false,
                                      mode => {credited, ?INITIAL_DELIVERY_COUNT},
                                      consumer_tag => handle_to_ctag(HandleInt),
-                                     exclusive_consume => false,
+                                     exclusive_consume => ExclConsume,
                                      args => ConsumerArgs0 ++ ConsumerArgs1,
                                      filter => ConsumerFilter,
                                      ok_msg => undefined,
@@ -1597,6 +1643,7 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
                                    A = #'v1_0.attach'{
                                           name = LinkName,
                                           handle = Handle,
+                                          role = ?AMQP_ROLE_SENDER,
                                           initial_delivery_count = ?UINT(?INITIAL_DELIVERY_COUNT),
                                           snd_settle_mode = EffectiveSndSettleMode,
                                           rcv_settle_mode = RcvSettleMode,
@@ -1604,8 +1651,7 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
                                           source = Source#'v1_0.source'{
                                                             filter = EffectiveFilter,
                                                             distribution_mode = EffectiveDistMode,
-                                                            capabilities = source_capabilities(QType)},
-                                          role = ?AMQP_ROLE_SENDER,
+                                                            capabilities = source_capabilities(QType, SourceCaps)},
                                           %% Echo back that we will respect the client's requested max-message-size.
                                           max_message_size = MaybeMaxMessageSize,
                                           offered_capabilities = link_capabilities(QType)},
@@ -1648,7 +1694,51 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
                     link_error(?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
                                "Could not operate on ~ts: ~tp",
                                [rabbit_misc:rs(QName), Reason])
-            end
+            end;
+        {ok, jms_subscription_lookup, QName, QType,
+         #'v1_0.source'{address = {utf8, SourceAddress},
+                        filter = Filter} = Source,
+         PermCache, TopicPermCache} ->
+            %% This is a 'null source lookup' used by JMS clients before
+            %% unsubscribing from a durable topic subscription.
+            %% See amqp-bindmap-jms-v1.0-wd10 8.8
+            A = #'v1_0.attach'{
+                   name = LinkName,
+                   handle = Handle,
+                   role = ?AMQP_ROLE_SENDER,
+                   initial_delivery_count = ?UINT(?INITIAL_DELIVERY_COUNT),
+                   snd_settle_mode = EffectiveSndSettleMode,
+                   rcv_settle_mode = RcvSettleMode,
+                   source = Source,
+                   max_message_size = MaybeMaxMessageSize},
+            L = #outgoing_link{
+                   name = LinkNameBin,
+                   source_address = SourceAddress,
+                   queue_name = QName,
+                   queue_type = QType,
+                   dynamic = false,
+                   send_settled = SndSettled,
+                   max_message_size = max_message_size(MaybeMaxMessageSize),
+                   filter = format_filter(Filter),
+                   client_flow_ctl = #client_flow_ctl{
+                                        delivery_count = ?INITIAL_DELIVERY_COUNT,
+                                        credit = 0,
+                                        echo = false,
+                                        properties = #{}},
+                   queue_flow_ctl = #queue_flow_ctl{
+                                       delivery_count = ?INITIAL_DELIVERY_COUNT,
+                                       credit = 0,
+                                       drain = false},
+                   at_least_one_credit_req_in_flight = false,
+                   stashed_credit_req = none,
+                   timeout_log_level = warning,
+                   is_jms_subscription_lookup = true},
+            OutgoingLinks = OutgoingLinks0#{HandleInt => L},
+            State = State0#state{outgoing_links = OutgoingLinks,
+                                 permission_cache = PermCache,
+                                 topic_permission_cache = TopicPermCache},
+            rabbit_global_counters:consumer_created(?PROTOCOL),
+            {ok, [A], State}
     end.
 
 -spec link_error(term(), io:format(), [term()]) ->
@@ -2517,13 +2607,15 @@ incoming_link_transfer(
   State0 = #state{queue_states = QStates0,
                   permission_cache = PermCache0,
                   topic_permission_cache = TopicPermCache0,
-                  cfg = #cfg{user = User = #user{username = Username},
+                  cfg = #cfg{container_id = ContainerId,
+                             user = User = #user{username = Username},
                              vhost = Vhost,
                              trace_state = Trace,
                              conn_name = ConnName,
                              channel_num = ChannelNum,
                              max_link_credit = MaxLinkCredit,
-                             msg_interceptor_ctx = MsgIcptCtx}}) ->
+                             msg_interceptor_ctx = MsgIcptCtx,
+                             is_jms = IsJms}}) ->
 
     {PayloadBin, DeliveryId, Settled} =
     case MultiTransfer of
@@ -2549,13 +2641,14 @@ incoming_link_transfer(
                     link_error(?V_1_0_AMQP_ERROR_DECODE_ERROR,
                                "failed to parse message: ~tp", [Reason0])
           end,
-    case lookup_target(LinkExchange, LinkRKey, Mc0, Vhost, User, PermCache0) of
+    case lookup_target(LinkExchange, LinkRKey, Mc0, Vhost, User, IsJms, PermCache0) of
         {ok, X, RoutingKeys, Mc1, PermCache} ->
             check_user_id(Mc1, User),
             TopicPermCache = check_write_permitted_on_topics(
                                X, User, RoutingKeys, TopicPermCache0),
             Mc = rabbit_msg_interceptor:intercept_incoming(Mc1, MsgIcptCtx),
-            QNames = rabbit_exchange:route(X, Mc, #{return_binding_keys => true}),
+            QNames0 = rabbit_exchange:route(X, Mc, #{return_binding_keys => true}),
+            QNames = drop_jms_local(IsJms, ContainerId, QNames0),
             rabbit_trace:tap_in(Mc, QNames, ConnName, ChannelNum, Username, Trace),
             Opts = #{correlation => {HandleInt, DeliveryId}},
             Qs0 = rabbit_db_queue:get_targets(QNames),
@@ -2619,40 +2712,73 @@ incoming_link_transfer(
             end
     end.
 
-lookup_target(#exchange{} = X, LinkRKey, Mc, _, _, PermCache) ->
+drop_jms_local(false, _, QNames) ->
+    QNames;
+drop_jms_local(true, ContainerId, QNames) ->
+    case jms_topic(drop_local, [QNames, ContainerId]) of
+        {error, not_implemented} -> QNames;
+        QNames1 -> QNames1
+    end.
+
+lookup_target(#exchange{} = X, LinkRKey, Mc, _, _, _, PermCache) ->
     lookup_routing_key(X, LinkRKey, Mc, false, PermCache);
-lookup_target(#resource{} = XName, LinkRKey, Mc, _, _, PermCache) ->
+lookup_target(#resource{} = XName, LinkRKey, Mc, _, _, _, PermCache) ->
     case rabbit_exchange:lookup(XName) of
         {ok, X} ->
             lookup_routing_key(X, LinkRKey, Mc, false, PermCache);
         {error, not_found} ->
             {error, {anonymous_terminus, false}, error_not_found(XName)}
     end;
-lookup_target(to, to, Mc, Vhost, User, PermCache0) ->
+lookup_target(to, to, Mc, Vhost, User, IsJms, PermCache) ->
     case mc:property(to, Mc) of
         {utf8, String} ->
-            case parse_target_v2_string(String) of
-                {ok, XNameBin, RKey, _} ->
-                    XName = exchange_resource(Vhost, XNameBin),
-                    PermCache = check_resource_access(XName, write, User, PermCache0),
-                    case rabbit_exchange:lookup(XName) of
-                        {ok, X} ->
-                            check_internal_exchange(X),
-                            lookup_routing_key(X, RKey, Mc, true, PermCache);
-                        {error, not_found} ->
-                            {error, {anonymous_terminus, true}, error_not_found(XName)}
+            case jms_topic_exchange(IsJms, Mc, Vhost) of
+                false ->
+                    case parse_target_v2_string(String) of
+                        {ok, XNameBin, RKey, _} ->
+                            XName = exchange_resource(Vhost, XNameBin),
+                            lookup_anonymous_target(XName, RKey, Mc, User, PermCache);
+                        {error, bad_address} ->
+                            {error, {anonymous_terminus, true},
+                             #'v1_0.error'{
+                                condition = ?V_1_0_AMQP_ERROR_PRECONDITION_FAILED,
+                                description = {utf8, <<"bad 'to' address string: ", String/binary>>}}}
                     end;
-                {error, bad_address} ->
+                {error, not_implemented} ->
                     {error, {anonymous_terminus, true},
                      #'v1_0.error'{
-                        condition = ?V_1_0_AMQP_ERROR_PRECONDITION_FAILED,
-                        description = {utf8, <<"bad 'to' address string: ", String/binary>>}}}
+                        condition = ?V_1_0_AMQP_ERROR_NOT_IMPLEMENTED,
+                        description = {utf8, <<"unidentified JMS message producer "
+                                               "requires rabbitmq_jms plugin">>}}};
+                XName ->
+                    lookup_anonymous_target(XName, String, Mc, User, PermCache)
             end;
         undefined ->
             {error, {anonymous_terminus, true},
              #'v1_0.error'{
                 condition = ?V_1_0_AMQP_ERROR_PRECONDITION_FAILED,
                 description = {utf8, <<"anonymous terminus requires 'to' address to be set">>}}}
+    end.
+
+jms_topic_exchange(false, _, _) ->
+    false;
+jms_topic_exchange(true, Mc, Vhost) ->
+    case mc:x_header(<<"x-opt-jms-dest">>, Mc) of
+        {byte, Val} when Val =:= 1 orelse %% JMS Topic
+                         Val =:= 3 -> %% JMS TemporaryTopic
+            jms_topic(get_exchange_name, [Vhost]);
+        _ ->
+            false
+    end.
+
+lookup_anonymous_target(XName, RKey, Mc, User, PermCache0) ->
+    PermCache = check_resource_access(XName, write, User, PermCache0),
+    case rabbit_exchange:lookup(XName) of
+        {ok, X} ->
+            check_internal_exchange(X),
+            lookup_routing_key(X, RKey, Mc, true, PermCache);
+        {error, not_found} ->
+            {error, {anonymous_terminus, true}, error_not_found(XName)}
     end.
 
 lookup_routing_key(X = #exchange{name = #resource{name = XNameBin}},
@@ -2783,21 +2909,6 @@ maybe_grant_mgmt_link_credit(Credit, DeliveryCount, Handle)
 maybe_grant_mgmt_link_credit(Credit, _, _) ->
     {Credit, []}.
 
--spec ensure_source(#'v1_0.source'{},
-                    boolean(),
-                    binary(),
-                    rabbit_types:vhost(),
-                    rabbit_types:user(),
-                    binary(),
-                    rabbit_types:connection(),
-                    permission_cache(),
-                    topic_permission_cache()) ->
-    {ok,
-     rabbit_amqqueue:name(),
-     #'v1_0.source'{},
-     permission_cache(),
-     topic_permission_cache()} |
-    {error, term()}.
 ensure_source(#'v1_0.source'{
                  address = undefined,
                  durable = Durable,
@@ -2808,8 +2919,12 @@ ensure_source(#'v1_0.source'{
                  dynamic_node_properties = _IgnoreDesiredProperties,
                  capabilities = {array, symbol, Caps}
                 } = Source0,
-              SndSettled, LinkName, Vhost, User, ContainerId,
-              ConnPid, PermCache0, TopicPermCache) ->
+              SndSettled, LinkName,
+              #cfg{container_id = ContainerId,
+                   reader_pid = ConnPid,
+                   user = User,
+                   vhost = Vhost},
+              PermCache0, TopicPermCache) ->
     case maps:from_keys(Caps, true) of
         #{{symbol, ?CAP_VOLATILE_QUEUE} := true}
           when (Durable =:= undefined orelse Durable =:= ?V_1_0_TERMINUS_DURABILITY_NONE) andalso
@@ -2826,7 +2941,7 @@ ensure_source(#'v1_0.source'{
                         dynamic = true,
                         dynamic_node_properties = dynamic_node_properties(),
                         distribution_mode = ?V_1_0_STD_DIST_MODE_MOVE,
-                        capabilities = rabbit_amqp_util:capabilities([?CAP_VOLATILE_QUEUE])
+                        capabilities = rabbit_amqp_util:capabilities_from_list([?CAP_VOLATILE_QUEUE])
                        },
             QName = rabbit_misc:queue_resource(Vhost, QNameBin),
             {ok, QName, Source, PermCache0, TopicPermCache};
@@ -2846,50 +2961,84 @@ ensure_source(#'v1_0.source'{
                         distribution_mode = ?V_1_0_STD_DIST_MODE_MOVE,
                         default_outcome = ?DEFAULT_OUTCOME,
                         outcomes = outcomes(Source0),
-                        capabilities = rabbit_amqp_util:capabilities([?CAP_TEMPORARY_QUEUE])
+                        capabilities = rabbit_amqp_util:capabilities_from_list([?CAP_TEMPORARY_QUEUE])
                        },
             QName = queue_resource(Vhost, QNameBin),
             {ok, QName, Source, PermCache, TopicPermCache};
         _ ->
             exit_not_implemented("Dynamic source not supported: ~tp", [Source0])
     end;
-ensure_source(Source = #'v1_0.source'{dynamic = true}, _, _, _, _, _, _, _, _) ->
+ensure_source(Source = #'v1_0.source'{dynamic = true}, _, _, _, _, _) ->
     exit_not_implemented("Dynamic source not supported: ~tp", [Source]);
 ensure_source(Source0 = #'v1_0.source'{address = Address,
-                                      durable = Durable},
-              _SndSettle,  _LinkName, Vhost, User, _ContainerId,
-              _ConnPid, PermCache, TopicPermCache) ->
-    Source = Source0#'v1_0.source'{default_outcome = ?DEFAULT_OUTCOME,
-                                   outcomes = outcomes(Source0)},
-    case Address of
-        {utf8, <<"/queues/", QNameBinQuoted/binary>>} ->
-            %% The only possible v2 source address format is:
-            %%  /queues/:queue
-            try cow_uri:urldecode(QNameBinQuoted) of
-                QNameBin ->
-                    QName = queue_resource(Vhost, QNameBin),
-                    ok = error_if_absent(QName),
-                    {ok, QName, Source, PermCache, TopicPermCache}
-            catch error:_ ->
-                      {error, {bad_address, Address}}
+                                       durable = Durable},
+              _SndSettle,  LinkName,
+              #cfg{container_id = ContainerId,
+                   reader_pid = ConnPid,
+                   user = User,
+                   vhost = Vhost,
+                   is_jms = IsJms},
+              PermCache, TopicPermCache) ->
+    case is_jms_topic_terminus(IsJms, Source0) of
+        true ->
+            case jms_topic(ensure_subscription,
+                           [Source0, LinkName, Vhost, User, ContainerId,
+                            ConnPid, PermCache, TopicPermCache]) of
+                {error, not_implemented} ->
+                    {error, {amqp_error, ?V_1_0_AMQP_ERROR_NOT_IMPLEMENTED,
+                             <<"JMS topic subscription requires rabbitmq_jms plugin">>}};
+                Result ->
+                    Result
             end;
-        {utf8, SourceAddr} ->
-            case address_v1_permitted() of
-                true ->
-                    case ensure_source_v1(SourceAddr, Vhost, User, Durable,
-                                          PermCache, TopicPermCache) of
-                        {ok, QName, PermCache1, TopicPermCache1} ->
-                            {ok, QName, Source, PermCache1, TopicPermCache1};
-                        Err ->
-                            Err
+        false ->
+            Source = Source0#'v1_0.source'{default_outcome = ?DEFAULT_OUTCOME,
+                                           outcomes = outcomes(Source0),
+                                           capabilities = undefined},
+            case Address of
+                {utf8, <<"/queues/", QNameBinQuoted/binary>>} ->
+                    %% The only possible v2 source address format is:
+                    %%  /queues/:queue
+                    try cow_uri:urldecode(QNameBinQuoted) of
+                        QNameBin ->
+                            QName = queue_resource(Vhost, QNameBin),
+                            ok = error_if_absent(QName),
+                            {ok, QName, Source, PermCache, TopicPermCache}
+                    catch error:_ ->
+                              {error, {bad_address, Address}}
                     end;
-                false ->
-                    {error, {amqp_address_v1_not_permitted, Address}}
-            end;
-        _ ->
-            {error, {bad_address, Address}}
+                {utf8, SourceAddr} ->
+                    case address_v1_permitted() of
+                        true ->
+                            case ensure_source_v1(SourceAddr, Vhost, User, Durable,
+                                                  PermCache, TopicPermCache) of
+                                {ok, QName, PermCache1, TopicPermCache1} ->
+                                    {ok, QName, Source, PermCache1, TopicPermCache1};
+                                Err ->
+                                    Err
+                            end;
+                        false ->
+                            {error, {amqp_address_v1_not_permitted, Address}}
+                    end;
+                _ ->
+                    {error, {bad_address, Address}}
+            end
     end;
-ensure_source(undefined, _, _, _, _, _, _, _, _) ->
+ensure_source(undefined, _, LinkName,
+              #cfg{container_id = ContainerId,
+                   vhost = Vhost,
+                   is_jms = true},
+              PermCache, TopicPermCache) ->
+    %% "null source lookup" [amqp-bindmap-jms-v1.0-wd10 8.8]
+    case jms_topic(lookup_subscription,
+                   [LinkName, Vhost, ContainerId, PermCache, TopicPermCache]) of
+        {error, not_implemented} ->
+            {error, {amqp_error, ?V_1_0_AMQP_ERROR_NOT_IMPLEMENTED,
+                     <<"JMS topic subscription requires rabbitmq_jms plugin">>}};
+        Result ->
+            Result
+    end;
+ensure_source(undefined, _, _, _, _, _) ->
+    %% We don't support "Figure 2.36: Recovering a Link"
     {error, source_required}.
 
 ensure_source_v1(Address,
@@ -2935,13 +3084,7 @@ ensure_source_v1(Address,
             Err
     end.
 
--spec ensure_target(#'v1_0.target'{},
-                    binary(),
-                    rabbit_types:vhost(),
-                    rabbit_types:user(),
-                    binary(),
-                    rabbit_types:connection(),
-                    permission_cache()) ->
+-spec ensure_target(#'v1_0.target'{}, binary(), #cfg{}, permission_cache()) ->
     {ok,
      rabbit_types:exchange() | rabbit_exchange:name() | to,
      rabbit_types:routing_key() | to | subject,
@@ -2956,9 +3099,15 @@ ensure_target(#'v1_0.target'{
                  dynamic_node_properties = _IgnoreDesiredProperties,
                  capabilities = {array, symbol, Caps}
                 } = Target0,
-              LinkName, Vhost, User, ContainerId, ConnPid, PermCache0) ->
-    case lists:member({symbol, ?CAP_TEMPORARY_QUEUE}, Caps) of
-        true ->
+              LinkName,
+              #cfg{container_id = ContainerId,
+                   reader_pid = ConnPid,
+                   user = User,
+                   vhost = Vhost,
+                   is_jms = IsJms},
+              PermCache0) ->
+    case maps:from_keys(Caps, ok) of
+        #{{symbol, ?CAP_TEMPORARY_QUEUE} := ok} ->
             {ok, Exchange, PermCache1} = check_exchange(?DEFAULT_EXCHANGE_NAME, User, Vhost, PermCache0),
             {QNameBin, Address, PermCache} =
             declare_exclusive_queue(ContainerId, LinkName, Vhost, User, ConnPid, PermCache1),
@@ -2971,40 +3120,66 @@ ensure_target(#'v1_0.target'{
                         timeout = {uint, 0},
                         dynamic = true,
                         dynamic_node_properties = dynamic_node_properties(),
-                        capabilities = rabbit_amqp_util:capabilities([?CAP_TEMPORARY_QUEUE])
+                        capabilities = rabbit_amqp_util:capabilities_from_list([?CAP_TEMPORARY_QUEUE])
                        },
             {ok, Exchange, QNameBin, QNameBin, Target, PermCache};
-        false ->
+        #{{symbol, ?CAP_TEMPORARY_TOPIC} := ok} when IsJms ->
+            case jms_topic(ensure_target_temporary,
+                           [Target0, Vhost, User, ContainerId, PermCache0]) of
+                {error, not_implemented} ->
+                    exit_not_implemented(
+                      "JMS temporary topics require rabbitmq_jms plugin");
+                Result ->
+                    Result
+            end;
+        _ ->
             exit_not_implemented("Dynamic target not supported: ~p", [Target0])
     end;
-ensure_target(Target = #'v1_0.target'{dynamic = true}, _, _, _, _, _, _) ->
+ensure_target(Target = #'v1_0.target'{dynamic = true}, _, _, _) ->
     exit_not_implemented("Dynamic target not supported: ~p", [Target]);
 ensure_target(Target = #'v1_0.target'{address = Address,
                                       durable = Durable},
-              _LinkName, Vhost, User, _ContainerId, _ConnPid, PermCache0) ->
-    case target_address_version(Address) of
-        2 ->
-            case ensure_target_v2(Address, Vhost) of
-                {ok, to, RKey, QNameBin} ->
-                    {ok, to, RKey, QNameBin, Target, PermCache0};
-                {ok, XNameBin, RKey, QNameBin} ->
-                    {ok, Exchange, PermCache} = check_exchange(XNameBin, User, Vhost, PermCache0),
-                    {ok, Exchange, RKey, QNameBin, Target, PermCache};
-                {error, _} = Err ->
-                    Err
+              _LinkName,
+              #cfg{user = User,
+                   vhost = Vhost,
+                   is_jms = IsJms},
+              PermCache0) ->
+    case is_jms_topic_terminus(IsJms, Target) of
+        true ->
+            case jms_topic(ensure_target, [Target, Vhost, User, PermCache0]) of
+                {error, not_implemented} ->
+                    exit_not_implemented(
+                      "JMS topic target requires rabbitmq_jms plugin");
+                Result ->
+                    Result
             end;
-        1 ->
-            case address_v1_permitted() of
-                true ->
-                    case ensure_target_v1(Address, Vhost, User, Durable, PermCache0) of
-                        {ok, XNameBin, RKey, QNameBin, PermCache1} ->
-                            {ok, Exchange, PermCache} = check_exchange(XNameBin, User, Vhost, PermCache1),
+        false ->
+            case target_address_version(Address) of
+                2 ->
+                    case ensure_target_v2(Address, Vhost) of
+                        {ok, to, RKey, QNameBin} ->
+                            {ok, to, RKey, QNameBin, Target, PermCache0};
+                        {ok, XNameBin, RKey, QNameBin} ->
+                            {ok, Exchange, PermCache} = check_exchange(XNameBin, User,
+                                                                       Vhost, PermCache0),
                             {ok, Exchange, RKey, QNameBin, Target, PermCache};
                         {error, _} = Err ->
                             Err
                     end;
-                false ->
-                    {error, {amqp_address_v1_not_permitted, Address}}
+                1 ->
+                    case address_v1_permitted() of
+                        true ->
+                            case ensure_target_v1(Address, Vhost, User, Durable, PermCache0) of
+                                {ok, XNameBin, RKey, QNameBin, PermCache1} ->
+                                    {ok, Exchange, PermCache} = check_exchange(XNameBin, User,
+                                                                               Vhost, PermCache1),
+                                    {ok, Exchange, RKey, QNameBin, Target, PermCache};
+                                {error, _} = Err ->
+                                    Err
+                            end;
+                        false ->
+                            {error, {amqp_address_v1_not_permitted, Address}}
+                    end
             end
     end.
 
@@ -3286,11 +3461,24 @@ effective_dist_mode(DesiredDistMode, QType) ->
 
 link_capabilities(QType) ->
     Caps = rabbit_queue_type:amqp_link_capabilities(QType),
-    rabbit_amqp_util:capabilities(Caps).
+    rabbit_amqp_util:capabilities_from_list(Caps).
 
-source_capabilities(QType) ->
-    Caps = rabbit_queue_type:amqp_source_capabilities(QType),
-    rabbit_amqp_util:capabilities(Caps).
+source_capabilities(QType, ExtendedCaps0) ->
+    QCaps = rabbit_queue_type:amqp_source_capabilities(QType),
+    ExtendedCaps = rabbit_amqp_util:capabilities_to_list(ExtendedCaps0),
+    SupportedCaps = lists:usort(QCaps ++ ExtendedCaps),
+    rabbit_amqp_util:capabilities_from_list(SupportedCaps).
+
+is_jms_topic_terminus(true, #'v1_0.source'{capabilities = {array, symbol, Caps}}) ->
+    has_jms_topic_capability(Caps);
+is_jms_topic_terminus(true, #'v1_0.target'{capabilities = {array, symbol, Caps}}) ->
+    has_jms_topic_capability(Caps);
+is_jms_topic_terminus(_, _) ->
+    false.
+
+has_jms_topic_capability(Caps) ->
+    lists:member({symbol, ?CAP_TOPIC}, Caps) orelse
+    lists:member({symbol, ?CAP_TEMPORARY_TOPIC}, Caps).
 
 parse_filter(undefined, _QType) ->
     {undefined, undefined, []};
@@ -3634,17 +3822,16 @@ dynamic_node_properties() ->
            {{symbol, <<"supported-dist-modes">>},
             {array, symbol, [?V_1_0_STD_DIST_MODE_MOVE]}}]}.
 
-maybe_delete_dynamic_classic_queue(
-  #incoming_link{dynamic = true,
-                 queue_name_bin = QNameBin},
-  Cfg = #cfg{vhost = Vhost}) ->
+maybe_delete_dynamic_classic_queue(#incoming_link{dynamic = true,
+                                                  queue_name_bin = QNameBin},
+                                   Cfg = #cfg{vhost = Vhost})
+  when is_binary(QNameBin) ->
     QName = queue_resource(Vhost, QNameBin),
     delete_dynamic_classic_queue(QName, Cfg);
-maybe_delete_dynamic_classic_queue(
-  #outgoing_link{dynamic = true,
-                 queue_type = rabbit_classic_queue,
-                 queue_name = QName},
-  Cfg) ->
+maybe_delete_dynamic_classic_queue(#outgoing_link{dynamic = true,
+                                                  queue_type = rabbit_classic_queue,
+                                                  queue_name = QName},
+                                   Cfg) ->
     delete_dynamic_classic_queue(QName, Cfg);
 maybe_delete_dynamic_classic_queue(_, _) ->
     ok.
@@ -3774,7 +3961,7 @@ detach_reply(Detach,
        map_size(NewOutgoingLinks) < map_size(OldOutgoingLinks) orelse
        map_size(NewIncomingMgmtLinks) < map_size(OldIncomingMgmtLinks) orelse
        map_size(NewOutgoingMgmtLinks) < map_size(OldOutgoingMgmtLinks) ->
-    [Detach#'v1_0.detach'{error = undefined}];
+    [Detach];
 detach_reply(_, _, _) ->
     [].
 
@@ -4212,3 +4399,9 @@ unwrap_simple_type({_SimpleType, V}) ->
     V;
 unwrap_simple_type(V) ->
     V.
+
+%% rabbit_jms_topic is provided by the commercial rabbitmq_jms plugin
+jms_topic(Function, Args) ->
+    try apply(rabbit_jms_topic, Function, Args)
+    catch error:undef -> {error, not_implemented}
+    end.

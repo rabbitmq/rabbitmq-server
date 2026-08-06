@@ -5605,7 +5605,9 @@ dynamic_source_rpc(Config) ->
                            #'v1_0.attach'{
                               source = #'v1_0.source'{
                                           address = {utf8, Address},
-                                          dynamic = true}} = Attach,
+                                          dynamic = true,
+                                          capabilities = {array, symbol, SupportedCaps}}} = Attach,
+                           ?assert(lists:member({symbol, <<"temporary-queue">>}, SupportedCaps)),
                            Address
                after 30000 -> ct:fail({missing_event, ?LINE})
                end,
