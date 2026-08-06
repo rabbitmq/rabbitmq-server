@@ -351,13 +351,33 @@ function validate_openid_configuration(payload) {
 
 }
 
+/**
+ * Return a warning message for a single OAuth resource already escaped, i.e
+ * safe to append to the DOM.
+ * @param {*} oauthResource 
+ * @param {*} reason 
+ * @returns 
+ */
 function warningMessageOAuthResource(oauthResource, reason) {
-  return "OAuth resource [<b>" + (oauthResource["label"] != null ? oauthResource.label : oauthResource.id) +
-    "</b>] not available. OpenId Discovery endpoint " + readiness_url(oauthResource) + reason
+  return "OAuth resource [<b>" 
+    + fmt_escape_html(oauthResource["label"] != null ? oauthResource.label : oauthResource.id) 
+    + "</b>] not available. OpenId Discovery endpoint " 
+    + fmt_escape_html(readiness_url(oauthResource)) 
+    + fmt_escape_html(reason)
 }
+/**
+ * Return a warning message for multiple OAuth resources already escaped, i.e
+ * safe to append to the DOM.
+ * @param {*} commonProviderURL 
+ * @param {*} oauthResources 
+ * @param {*} reason 
+ * @returns 
+ */
 function warningMessageOAuthResources(commonProviderURL, oauthResources, reason) {
-  return "OAuth resources [ <b>" + oauthResources.map(resource => resource["label"] != null ? resource.label : resource.id).join("</b>,<b>")
-    + "</b>] not available. OpenId Discovery endpoint " + commonProviderURL + reason
+  return "OAuth resources [ <b>" 
+    + fmt_escape_html(oauthResources.map(resource => resource["label"] != null ? resource.label : resource.id)).join("</b>,<b>")
+    + "</b>] not available. OpenId Discovery endpoint " 
+    + fmt_escape_html(commonProviderURL) + fmt_escape_html(reason)
 }
 
 export function hasAnyResourceServerReady(oauth, onReadyCallback) {
