@@ -24,7 +24,8 @@ all() ->
         heartbeat,
         login_timeout,
         frame_size,
-        frame_size_huge
+        frame_size_huge,
+        unauthenticated_frame_size_limited
     ].
 
 merge_app_env(Config) ->
@@ -219,3 +220,15 @@ frame_size_huge(Config) ->
     {S, _} = Client,
     {error, closed} = gen_tcp:recv(S, 0, 500),
     ok.
+
+unauthenticated_frame_size_limited(Config) ->
+    rabbit_ct_broker_helpers:rpc(
+      Config, 0,
+      application, unset_env, [rabbitmq_stomp, max_frame_size]),
+    StompPort = get_stomp_port(Config),
+    {ok, Sock} = gen_tcp:connect(localhost, StompPort, [{active, false}, binary]),
+    Pad = binary:copy(<<"a">>, 70000),
+    Frame = <<"CONNECT\naccept-version:1.2\nx-pad:", Pad/binary, "\n">>,
+    ok = gen_tcp:send(Sock, Frame),
+    {error, closed} = gen_tcp:recv(Sock, 0, 5000),
+    gen_tcp:close(Sock).

@@ -9,7 +9,7 @@
 
 -compile({no_auto_import, [error/3]}).
 
--export([initial_state/2, process_frame/2, flush_and_die/1]).
+-export([initial_state/2, process_frame/2, flush_and_die/1, is_authenticated/1]).
 -export([flush_pending_receipts/3,
          handle_exit/3,
          cancel_consumer/2,
@@ -159,6 +159,9 @@ initial_state(Configuration,
        trailing_lf         = application:get_env(rabbitmq_stomp, trailing_lf, true),
        default_topic_exchange = application:get_env(rabbitmq_stomp, default_topic_exchange, <<"amq.topic">>),
        default_nack_requeue = application:get_env(rabbitmq_stomp, default_nack_requeue, true)}.
+
+is_authenticated(#proc_state{connection = none}) -> false;
+is_authenticated(#proc_state{}) -> true.
 
 
 command({"STOMP", Frame}, State) ->
