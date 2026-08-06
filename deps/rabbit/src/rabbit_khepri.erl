@@ -1138,6 +1138,8 @@ get_ra_key_metrics(Node) ->
 metadata_store_version() ->
     ServerId = {?RA_CLUSTER_NAME, node()},
     try ra:key_metrics(ServerId) of
+        #{state := noproc} ->
+            unavailable;
         #{term := Term, last_applied := LastApplied} ->
             {ok, {Term, LastApplied}};
         _ ->

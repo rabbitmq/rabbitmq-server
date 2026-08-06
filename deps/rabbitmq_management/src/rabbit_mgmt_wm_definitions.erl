@@ -37,16 +37,20 @@ content_types_provided(ReqData, Context) ->
 %% active metadata store.
 generate_etag(ReqData, Context) ->
     case rabbit_khepri:metadata_store_version() of
-        {ok, StoreVersion} ->
+        {ok, {Term, LastApplied}} ->
             Scope = case rabbit_mgmt_util:vhost(ReqData) of
                         none      -> cluster;
-                        not_found -> cluster;
+                        not_found -> {not_found, rabbit_mgmt_util:id(vhost, ReqData)};
                         VHost     -> VHost
                     end,
             MediaType = maps:get(media_type, ReqData, undefined),
             Vsn = rabbit:base_product_version(),
-            Tag = erlang:phash2({Vsn, Scope, MediaType, StoreVersion}),
-            {{strong, integer_to_binary(Tag, 16)}, ReqData, Context};
+            StaticTag = erlang:phash2({Vsn, Scope, MediaType}),
+            Tag = <<(integer_to_binary(Term, 16))/binary, $-,
+                    (integer_to_binary(LastApplied, 16))/binary, $-,
+                    (integer_to_binary(StaticTag, 16))/binary>>,
+            ReqData1 = cowboy_req:set_resp_header(<<"cache-control">>, <<"no-cache">>, ReqData),
+            {{strong, Tag}, ReqData1, Context};
         unavailable ->
             {undefined, ReqData, Context}
     end.

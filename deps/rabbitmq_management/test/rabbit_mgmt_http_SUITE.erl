@@ -2528,10 +2528,19 @@ definitions_etag_test0(Config) ->
 
     %% A conditional request with the current ETag is answered with 304 and an
     %% empty body, i.e. the definitions are not generated at all.
-    {ok, {{_, 304, _}, _, Body304}} =
+    {ok, {{_, 304, _}, Headers304, Body304}} =
         req(Config, get, "/definitions",
             [auth_header("guest", "guest"), {"if-none-match", JsonETag}]),
     ?assertEqual([], Body304),
+    ?assertEqual("no-cache", proplists:get_value("cache-control", Headers304)),
+
+    {ok, {{_, 304, _}, _, _}} =
+        req(Config, get, "/definitions/%2F",
+            [auth_header("guest", "guest"), {"if-none-match", VhostETag}]),
+
+    {ok, {{_, 400, _}, _, _}} =
+        req(Config, get, "/definitions/etag-non-existent-vhost",
+            [auth_header("guest", "guest"), {"if-none-match", JsonETag}]),
 
     %% Changing the topology changes the ETag, so the same conditional request
     %% now returns the full response with a fresh ETag.
