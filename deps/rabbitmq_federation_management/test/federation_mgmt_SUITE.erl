@@ -23,7 +23,8 @@ groups() ->
                                federation_links,
                                federation_down_links,
                                restart_link,
-                               restart_link_requires_policymaker
+                               restart_link_requires_policymaker,
+                               restart_link_unknown_node
                               ]}
     ].
 
@@ -175,6 +176,11 @@ restart_link_requires_policymaker(Config) ->
         http_delete(Config, "/users/mon"),
         http_delete(Config, "/users/policy")
     end.
+
+restart_link_unknown_node(Config) ->
+    http_delete(Config,
+                "/federation-links/vhost/%2f/no-such-link/no-such-node@no-such-host/restart",
+                "guest", "guest", ?NOT_FOUND).
 
 %% -------------------------------------------------------------------
 %% Helpers
