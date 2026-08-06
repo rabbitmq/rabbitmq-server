@@ -9,6 +9,7 @@
 -module(rabbit_amqp_sql_ast).
 
 -export([search/2,
+         fold/3,
          map/2]).
 
 -type ast() :: tuple().
@@ -36,6 +37,26 @@ search(Pred, Node) ->
                 _Other ->
                     false
             end
+    end.
+
+-spec fold(fun((term(), term()) -> term()), term(), ast()) -> term().
+fold(Fun, Acc, Node) ->
+    Acc1 = Fun(Node, Acc),
+    case Node of
+        {Op, Arg} when is_atom(Op) ->
+            fold(Fun, Acc1, Arg);
+        {in, Arg, List} ->
+            Acc2 = fold(Fun, Acc1, Arg),
+            lists:foldl(fun(N, AccX) -> fold(Fun, AccX, N) end, Acc2, List);
+        {Op, Arg1, Arg2} when is_atom(Op) ->
+            Acc2 = fold(Fun, Acc1, Arg1),
+            fold(Fun, Acc2, Arg2);
+        {Op, Arg1, Arg2, Arg3} when is_atom(Op) ->
+            Acc2 = fold(Fun, Acc1, Arg1),
+            Acc3 = fold(Fun, Acc2, Arg2),
+            fold(Fun, Acc3, Arg3);
+        _Other ->
+            Acc1
     end.
 
 -spec map(fun((tuple()) -> tuple()), ast()) ->

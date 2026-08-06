@@ -37,6 +37,7 @@
 -import(rabbit_amqp_util, [protocol_error/3]).
 
 -define(IS_RUNNING(State), State#v1.connection_state =:= running).
+-define(FENCE_TIMEOUT, 30_000).
 
 unpack_from_0_9_1(
   {Sock, PendingRecv, SupPid, Buf, BufLen, ProxySocket,
@@ -487,6 +488,8 @@ handle_connection_frame(
     ok = rabbit_access_control:check_vhost_access(User, Vhost, {socket, Sock}, #{}),
     ok = check_vhost_connection_limit(Vhost, Username),
     ok = check_user_connection_limit(Username),
+    IsJms = is_jms_client(Properties),
+    ok = khepri_fence(IsJms),
     Timer = maybe_start_credential_expiry_timer(User),
     rabbit_core_metrics:auth_attempt_succeeded(<<>>, Username, amqp10),
     notify_auth(user_authentication_success, Username, State0),
@@ -559,6 +562,7 @@ handle_connection_frame(
                                       outgoing_max_frame_size = OutgoingMaxFrameSize,
                                       channel_max = EffectiveChannelMax,
                                       properties = Properties,
+                                      is_jms = IsJms,
                                       timeout = ReceiveTimeoutMillis,
                                       credential_timer = Timer},
                        heartbeater = Heartbeater},
@@ -583,14 +587,16 @@ handle_connection_frame(
     Caps = [%% https://docs.oasis-open.org/amqp/linkpair/v1.0/cs01/linkpair-v1.0-cs01.html#_Toc51331306
             <<"LINK_PAIR_V1_0">>,
             %% https://docs.oasis-open.org/amqp/anonterm/v1.0/cs01/anonterm-v1.0-cs01.html#doc-anonymous-relay
-            <<"ANONYMOUS-RELAY">>],
+            <<"ANONYMOUS-RELAY">>,
+            %% amqp-bindmap-jms-v1.0-wd10 §8
+            <<"SHARED-SUBS">>],
     Open = #'v1_0.open'{
               channel_max = {ushort, EffectiveChannelMax},
               max_frame_size = {uint, IncomingMaxFrameSize},
               %% "the value in idle-time-out SHOULD be half the peer's actual timeout threshold" [2.4.5]
               idle_time_out = {uint, ReceiveTimeoutMillis div 2},
               container_id = {utf8, rabbit_nodes:cluster_name()},
-              offered_capabilities = rabbit_amqp_util:capabilities(Caps),
+              offered_capabilities = rabbit_amqp_util:capabilities_from_list(Caps),
               properties = server_properties()},
     ok = send_on_channel0(State, Open, amqp10_framing),
     State;
@@ -888,7 +894,8 @@ send_to_new_session(
                                   vhost = Vhost,
                                   user = User,
                                   container_id = ContainerId,
-                                  name = ConnName},
+                                  name = ConnName,
+                                  is_jms = IsJms},
       writer = WriterPid} = State) ->
     ChildArgs = [WriterPid,
                  ChannelNum,
@@ -897,6 +904,7 @@ send_to_new_session(
                  Vhost,
                  ContainerId,
                  ConnName,
+                 IsJms,
                  BeginFrame],
     case rabbit_amqp_session_sup:start_session(SessionSup, ChildArgs) of
         {ok, SessionPid} ->
@@ -909,6 +917,38 @@ vhost({utf8, <<"vhost:", VHost/binary>>}) ->
     VHost;
 vhost(_) ->
     application:get_env(rabbit, default_vhost, <<"/">>).
+
+is_jms_client({map, Properties}) ->
+    %% Qpid JMS client advertises `product = QpidJMS`.
+    case proplists:get_value({symbol, <<"product">>}, Properties) of
+        {utf8, Product} ->
+            string:find(string:lowercase(Product), <<"jms">>) =/= nomatch;
+        _ ->
+            false
+    end;
+is_jms_client(_) ->
+    false.
+
+%% A JMS client may resume, reconfigure or unsubscribe a durable or shared
+%% topic subscription that the same client created earlier through a
+%% connection on another node. The rabbitmq_jms plugin reconciles such
+%% subscriptions using local Khepri projection reads, which on a follower
+%% that lags the leader can miss the queue and bindings created elsewhere.
+%% Block once here, at connection open, until this node has caught up with
+%% the metadata store leader, so that every subscription operation on this
+%% connection observes the client's own prior writes.
+khepri_fence(true) ->
+    case rabbit_khepri:fence(?FENCE_TIMEOUT) of
+        ok ->
+            ok;
+        {error, Reason} ->
+            protocol_error(
+              ?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
+              "failed to synchronise with the metadata store: ~tp",
+              [Reason])
+    end;
+khepri_fence(false) ->
+    ok.
 
 check_user_loopback(#v1{connection = #v1_connection{user = #user{username = Username},
                                                     peer_host = PeerHost}} = State) ->

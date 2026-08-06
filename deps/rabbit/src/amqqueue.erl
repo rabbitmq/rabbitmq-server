@@ -236,7 +236,7 @@ new(#resource{kind = queue} = Name,
           rabbit_framing:amqp_table(),
           rabbit_types:vhost() | undefined,
           map(),
-          atom()) -> amqqueue().
+          module()) -> amqqueue().
 
 new(#resource{kind = queue} = Name,
     Pid,

@@ -24,7 +24,7 @@
          fold_projection/2]).
 
 %% Routing. These functions are in the hot code path
--export([match/2, match_routing_key/3]).
+-export([match/2, match_routing_key/2]).
 
 %% Exported to be used by various rabbit_db_* modules
 -export([
@@ -565,11 +565,10 @@ match(SrcName, Match) ->
 %% match_routing_key().
 %% -------------------------------------------------------------------
 
--spec match_routing_key(Src, RoutingKeys, UseIndex) -> [Dst] when
+-spec match_routing_key(Src, RoutingKeys) -> [Dst] when
       Src :: rabbit_types:binding_source(),
       Dst :: rabbit_types:binding_destination(),
-      RoutingKeys :: [binary() | '_'],
-      UseIndex :: boolean().
+      RoutingKeys :: [binary() | '_'].
 %% @doc Matches all binding records that have `Src' as source of the binding
 %% and that match any routing key in `RoutingKeys'.
 %%
@@ -577,7 +576,7 @@ match(SrcName, Match) ->
 %%
 %% @private
 
-match_routing_key(Src, ['_'], _UseIndex) ->
+match_routing_key(Src, ['_']) ->
     try
         ets:lookup_element(?KHEPRI_ROUTE_BY_SOURCE_PROJECTION,
                            Src,
@@ -587,7 +586,7 @@ match_routing_key(Src, ['_'], _UseIndex) ->
         error:badarg ->
             []
     end;
-match_routing_key(Src, RoutingKeys, _UseIndex) ->
+match_routing_key(Src, RoutingKeys) ->
     lists:foldl(
       fun(RK, Acc) ->
               try

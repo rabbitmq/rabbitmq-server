@@ -1522,6 +1522,7 @@ register_rabbit_route_by_source_key_projection() ->
                                  {'=/=', '$1', topic},
                                  {'=/=', '$1', fanout},
                                  {'=/=', '$1', 'x-jms-topic'},
+                                 {'=/=', '$1', 'x-jms-selector'},
                                  {'=/=', '$1', 'x-random'}
                                 }]},
     PathPattern = rabbit_db_binding:khepri_route_path(

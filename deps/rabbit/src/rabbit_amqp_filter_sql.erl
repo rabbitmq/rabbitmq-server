@@ -16,7 +16,8 @@
 
 -export([parse/1,
          eval/2,
-         is_control_char/1]).
+         is_control_char/1,
+         has_binary_identifier/1]).
 
 %% [Filter-Expressions-v1.0 7.1]
 %% https://docs.oasis-open.org/amqp/filtex/v1.0/csd01/filtex-v1.0-csd01.html#_Toc67929316
@@ -350,6 +351,7 @@ transform_ast(Ast0, SQL) ->
               error
     end.
 
+-spec has_binary_identifier(term()) -> boolean().
 has_binary_identifier(Ast) ->
     rabbit_amqp_sql_ast:search(fun({identifier, Val}) ->
                                        is_binary(Val);

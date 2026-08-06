@@ -29,3 +29,11 @@
 -define(CAP_SELECTOR, <<"APACHE.ORG:SELECTOR">>).
 -define(DESCRIPTOR_NAME_SELECTOR_FILTER, <<"apache.org:selector-filter:string">>).
 -define(DESCRIPTOR_CODE_SELECTOR_FILTER, 16#0000468C00000004).
+
+%% The no-local filter is sent by the Qpid JMS client to request the JMS noLocal subscription option.
+%% https://github.com/apache/qpid-jms/blob/2.10.0/qpid-jms-client/src/main/java/org/apache/qpid/jms/provider/amqp/AmqpSupport.java#L74
+-define(FILTER_NAME_NO_LOCAL, <<"no-local">>).
+%% These descriptors are defined in
+%% https://github.com/apache/qpid-broker-j/blob/10.0.1/specs/apache-filters.xml#L128
+-define(DESCRIPTOR_NAME_NO_LOCAL_FILTER, <<"apache.org:no-local-filter:list">>).
+-define(DESCRIPTOR_CODE_NO_LOCAL_FILTER, 16#0000468C00000003).

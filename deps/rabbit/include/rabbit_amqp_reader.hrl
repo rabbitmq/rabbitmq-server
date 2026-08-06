@@ -37,7 +37,9 @@
          auth_mechanism = sasl_init_unprocessed :: sasl_init_unprocessed | {binary(), module()},
          auth_state = unauthenticated :: term(),
          credential_timer :: undefined | reference(),
-         properties :: undefined | {map, list(tuple())}
+         properties :: undefined | {map, list(tuple())},
+         %% Whether the peer advertised itself as a JMS client.
+         is_jms = false :: boolean()
         }).
 
 -record(v1,

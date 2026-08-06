@@ -86,21 +86,12 @@ convert_from(mc_amqp, Sections, Env) ->
           end,
     Props0 = case AmqpProps of
                  #'v1_0.properties'{reply_to = {utf8, Address}} ->
-                     MqttX = maps:get(mqtt_x, Env, ?DEFAULT_MQTT_EXCHANGE),
-                     case Address of
-                         <<"/exchanges/",
-                           MqttX:(byte_size(MqttX))/binary,
-                           "/",
-                           RoutingKeyQuoted/binary>> ->
-                             try cow_uri:urldecode(RoutingKeyQuoted) of
-                                 RoutingKey ->
-                                     MqttTopic = rabbit_mqtt_util:amqp_to_mqtt(RoutingKey),
-                                     #{'Response-Topic' => MqttTopic}
-                             catch error:_ ->
-                                       #{}
-                             end;
-                         _ ->
-                             #{}
+                     case amqp_response_topic(Address, MsgAnns, Env) of
+                         error ->
+                             #{};
+                         AmqpTopic ->
+                             MqttTopic = rabbit_mqtt_util:amqp_to_mqtt(AmqpTopic),
+                             #{'Response-Topic' => MqttTopic}
                      end;
                  _ ->
                      #{}
@@ -198,6 +189,36 @@ convert_from(mc_amqpl, #content{properties = PBasic,
               props = P};
 convert_from(_SourceProto, _, _) ->
     not_implemented.
+
+amqp_response_topic(Address, MsgAnns, Env) ->
+    case is_jms_reply_to_topic(MsgAnns) of
+        true ->
+            Address;
+        false ->
+            MqttX = maps:get(mqtt_x, Env, ?DEFAULT_MQTT_EXCHANGE),
+            case Address of
+                <<"/exchanges/",
+                  MqttX:(byte_size(MqttX))/binary,
+                  "/",
+                  RoutingKeyQuoted/binary>> ->
+                    try cow_uri:urldecode(RoutingKeyQuoted)
+                    catch error:_ -> error
+                    end;
+                _ ->
+                    error
+            end
+    end.
+
+%% A JMS client (e.g. Qpid JMS) declares the JMSReplyTo destination type via the
+%% x-opt-jms-reply-to message annotation [amqp-bindmap-jms-v1.0-wd10].
+is_jms_reply_to_topic(MsgAnns) ->
+    case lists:keyfind({symbol, <<"x-opt-jms-reply-to">>}, 1, MsgAnns) of
+        {_, {byte, Val}} when Val =:= 1 orelse %% JMS Topic
+                              Val =:= 3 -> %% JMS TemporaryTopic
+            true;
+        _ ->
+            false
+    end.
 
 convert_to(?MODULE, Msg, _Env) ->
     Msg;
