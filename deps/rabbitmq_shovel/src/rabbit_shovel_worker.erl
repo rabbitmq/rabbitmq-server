@@ -213,6 +213,15 @@ terminate({shutdown, restart}, State = #state{name = Name}) ->
     ?LOG_WARNING("Shovel ~ts is stopping to restart", [human_readable_name(Name)]),
     close_connections(State),
     ok;
+terminate({shutdown, Reason}, State = #state{name = Name}) ->
+    %% An expected failure with a specific reason, e.g. a topology setup
+    %% failure such as 'missing_source_queue'.
+    %% The `{shutdown, _}` wrapper is only needed to reduce Erlang/OTP supervisor
+    %% logging, in our own logging we should use the underlying reason directly.
+    ?LOG_WARNING("Shovel ~ts is stopping: ~tp", [human_readable_name(Name), Reason]),
+    report_terminated(State, Reason),
+    close_connections(State),
+    ok;
 terminate({{shutdown, {server_initiated_close, Code, Reason}}, _}, State = #state{name = Name}) ->
     ?LOG_WARNING("Shovel ~ts is stopping: one of its connections closed "
                             "with code ~b, reason: ~ts",
