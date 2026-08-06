@@ -19,7 +19,8 @@
 all() ->
     [
      {group, mock},
-     {group, before_mapped}
+     {group, before_mapped},
+     {group, mapped}
     ].
 
 groups() ->
@@ -33,7 +34,11 @@ groups() ->
                           refused_before_begun,
                           unexpected_events_before_socket_ready,
                           unexpected_events_before_begun
-                         ]}
+                         ]},
+     {mapped, [], [
+                   flow_link_after_link_removed,
+                   disposition_after_link_removed
+                  ]}
     ].
 
 %% -------------------------------------------------------------------
@@ -177,6 +182,24 @@ unexpected_events_before_begun(_Config) ->
     ?assert(is_process_alive(Sup)),
     ok = stop_sup(Sup, Sockets).
 
+%% A link can be detached by the peer, and removed from the session state,
+%% while the link owner's credit grant is still in the session's mailbox.
+flow_link_after_link_removed(_Config) ->
+    {Sup, Session, Sockets} = start_session_in(mapped, 0),
+    gen_statem:cast(Session, {flow_link, 0,
+                              #'v1_0.flow'{link_credit = {uint, 10}}, never}),
+    ?assertMatch({mapped, _}, sys:get_state(Session)),
+    ?assert(is_process_alive(Sup)),
+    ok = stop_sup(Sup, Sockets).
+
+%% Same race as above, for a message settlement instead of a credit grant.
+disposition_after_link_removed(_Config) ->
+    {Sup, Session, Sockets} = start_session_in(mapped, 0),
+    gen_statem:cast(Session, {disposition, 0, 1, 1, true, accepted}),
+    ?assertMatch({mapped, _}, sys:get_state(Session)),
+    ?assert(is_process_alive(Sup)),
+    ok = stop_sup(Sup, Sockets).
+
 %% -------------------------------------------------------------------
 %% Helpers.
 %% -------------------------------------------------------------------
@@ -187,7 +210,15 @@ start_session_in(unmapped, Channel) ->
 start_session_in(begin_sent, Channel) ->
     Sup = start_sup(),
     Session = start_session(Sup, Channel),
-    {Sup, Session, park_in_begin_sent(Session)}.
+    {Sup, Session, park_in_begin_sent(Session)};
+start_session_in(mapped, Channel) ->
+    {Sup, Session, Sockets} = start_session_in(begin_sent, Channel),
+    gen_statem:cast(Session, #'v1_0.begin'{remote_channel = {ushort, Channel},
+                                           next_outgoing_id = {uint, 1},
+                                           incoming_window = {uint, 1000},
+                                           outgoing_window = {uint, 1000}}),
+    ?assertMatch({mapped, _}, sys:get_state(Session)),
+    {Sup, Session, Sockets}.
 
 start_sup() ->
     {ok, Sup} = amqp10_client_sessions_sup:start_link(),
