@@ -32,9 +32,8 @@ content_types_accepted(ReqData, Context) ->
 
 accept_content(ReqData, Context) ->
     VHost = id(ReqData),
-    NodeB = rabbit_mgmt_util:id(node, ReqData),
-    try binary_to_existing_atom(NodeB, utf8) of
-        Node ->
+    case rabbit_mgmt_nodes:node_name_from_req(ReqData) of
+        {ok, Node} ->
             case rabbit_vhost_sup_sup:start_vhost(VHost, Node) of
                 {ok, _} ->
                     {true, ReqData, Context};
@@ -44,9 +43,9 @@ accept_content(ReqData, Context) ->
                     Message = io_lib:format("Request to node ~ts failed with ~tp",
                                             [Node, Err]),
                     rabbit_mgmt_util:bad_request(list_to_binary(Message), ReqData, Context)
-            end
-    catch
-        error:badarg ->
+            end;
+        {error, _} ->
+            NodeB = rabbit_mgmt_util:id(node, ReqData),
             rabbit_mgmt_util:bad_request(
               <<"Unknown node: ", NodeB/binary>>, ReqData, Context)
     end.
