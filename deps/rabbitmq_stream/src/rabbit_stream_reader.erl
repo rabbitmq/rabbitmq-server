@@ -116,7 +116,8 @@
 -export([ensure_token_expiry_timer/2,
          evaluate_state_after_secret_update/4,
          clean_subscriptions/4,
-         negotiate_frame_max/2]).
+         negotiate_frame_max/2,
+         publishing_ids_from_messages/2]).
 -endif.
 
 callback_mode() ->
@@ -169,6 +170,11 @@ init([KeepaliveSup,
             DeliverVersion = ?VERSION_1,
             RequestTimeout = application:get_env(rabbitmq_stream,
                                                  request_timeout, 60_000),
+            MaxUncompressedSubEntryBatchSize =
+              application:get_env(rabbitmq_stream,
+                                  max_uncompressed_sub_entry_batch_size,
+                                  ?DEFAULT_MAX_UNCOMPRESSED_SUB_ENTRY_BATCH_SIZE),
+
             Connection =
                 #stream_connection{name =
                                        rabbit_data_coercion:to_binary(ConnStr),
@@ -188,6 +194,8 @@ init([KeepaliveSup,
                                    authentication_state = none,
                                    connection_step = tcp_connected,
                                    frame_max = FrameMax,
+                                   max_uncompressed_sub_entry_batch_size =
+                                       MaxUncompressedSubEntryBatchSize,
                                    resource_alarm = false,
                                    send_file_oct = SendFileOct,
                                    transport = ConnTransport,
@@ -1416,6 +1424,13 @@ publishing_ids_from_messages(?VERSION_1 = V, <<PublishingId:64,
                                Rest/binary>>) ->
     [PublishingId | publishing_ids_from_messages(V, Rest)];
 publishing_ids_from_messages(?VERSION_2 = V, <<PublishingId:64,
+                               -1:16/signed,
+                               0:1,
+                               MessageSize:31,
+                               _Message:MessageSize/binary,
+                               Rest/binary>>) ->
+    [PublishingId | publishing_ids_from_messages(V, Rest)];
+publishing_ids_from_messages(?VERSION_2 = V, <<PublishingId:64,
                                FilterValueLength:16, _FilterValue:FilterValueLength/binary,
                                0:1,
                                MessageSize:31,
@@ -1966,7 +1981,9 @@ handle_frame_post_auth(Transport,
 handle_frame_post_auth(Transport,
                        #stream_connection{socket = S,
                                           credits = Credits,
-                                          publishers = Publishers} =
+                                          publishers = Publishers,
+                                          max_uncompressed_sub_entry_batch_size =
+                                              MaxUncompressedSubEntryBatchSize} =
                            Connection,
                        State,
                        {publish, Version, PublisherId, MessageCount, Messages}) ->
@@ -1975,15 +1992,37 @@ handle_frame_post_auth(Transport,
             #publisher{reference = Reference,
                        internal_id = InternalId,
                        leader = Leader,
+                       stream = Stream,
                        message_counters = Counters} =
                 Publisher,
                 increase_messages_received(Counters, MessageCount),
-                rabbit_stream_utils:write_messages(Version, Leader,
-                                                   Reference,
-                                                   PublisherId,
-                                                   InternalId,
-                                                   Messages),
-                sub_credits(Credits, MessageCount),
+                RejectedPublishingIds =
+                    rabbit_stream_utils:write_messages(Version, Leader,
+                                                       Reference,
+                                                       PublisherId,
+                                                       InternalId,
+                                                       Messages,
+                                                       MaxUncompressedSubEntryBatchSize,
+                                                       Stream),
+                RejectedCount =
+                    case RejectedPublishingIds of
+                        [] ->
+                            0;
+                        _ ->
+                            Command =
+                                {publish_error,
+                                 PublisherId,
+                                 ?RESPONSE_CODE_PRECONDITION_FAILED,
+                                 RejectedPublishingIds},
+                            Frame = rabbit_stream_core:frame(Command),
+                            send(Transport, S, Frame),
+                            increase_protocol_counter(?PRECONDITION_FAILED),
+                            length(RejectedPublishingIds)
+                    end,
+                %% credits are returned to the connection only when osiris
+                %% confirms a write, so only debit the entries that were
+                %% actually written, not the rejected ones
+                sub_credits(Credits, MessageCount - RejectedCount),
                 {Connection, State};
         _ ->
             PublishingIds = publishing_ids_from_messages(Version, Messages),

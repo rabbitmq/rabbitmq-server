@@ -5,9 +5,11 @@
 
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("rabbitmq_stream_common/include/rabbit_stream.hrl").
 
 -import(rabbit_stream_utils,
-        [validate_super_stream_max_partitions/2]).
+        [validate_super_stream_max_partitions/2,
+         write_messages/8]).
 
 %%%===================================================================
 %%% Common Test callbacks
@@ -25,7 +27,16 @@ groups() ->
        filter_spec,
        filter_defined,
        test_validate_max_super_stream_partitions,
-       super_stream_partition_helpers]}].
+       super_stream_partition_helpers,
+       write_messages_sub_batch_within_limit_accepted,
+       write_messages_sub_batch_at_limit_accepted,
+       write_messages_sub_batch_over_limit_rejected,
+       write_messages_sub_batch_zero_message_count_rejected,
+       write_messages_sub_batch_message_count_exceeds_uncompressed_size_rejected,
+       write_messages_sub_batch_unknown_compression_type_rejected,
+       write_messages_sub_batch_empty_batch_with_compression_rejected,
+       write_messages_sub_batch_high_compression_ratio_accepted,
+       write_messages_fail_fast_after_first_invalid_sub_batch]}].
 
 init_per_suite(Config) ->
     Config.
@@ -161,6 +172,117 @@ super_stream_partition_helpers(_) ->
                  rabbit_stream_utils:binding_keys(<<"  ">>)),
 
     ok.
+
+%%%===================================================================
+%%% write_messages/8 - sub-entry batch validation
+%%%===================================================================
+
+%% write_messages/8 casts to osiris via gen_batch_server:cast/2, which is a
+%% plain message send: using self() as the "cluster leader" lets these tests
+%% assert on writes without a real osiris process.
+
+write_messages_sub_batch_within_limit_accepted(_Config) ->
+    Max = 1000,
+    Batch = <<"compressed-bytes">>,
+    Entry = sub_batch(1, 1, 2, 100, Batch),
+    ?assertEqual([], write_messages(?VERSION_1, self(), undefined, 7, 3,
+                                    Entry, Max, <<"s1">>)),
+    ?assertMatch({'$gen_cast', {write, _, undefined, {7, 3, 1},
+                                {batch, 2, 1, 100, Batch}}},
+                 flush_one()),
+    ok.
+
+write_messages_sub_batch_at_limit_accepted(_Config) ->
+    Max = 100,
+    Entry = sub_batch(1, 1, 1, Max, <<"x">>),
+    ?assertEqual([], write_messages(?VERSION_1, self(), undefined, 7, 1,
+                                    Entry, Max, <<"s1">>)),
+    ?assertMatch({'$gen_cast', _}, flush_one()),
+    ok.
+
+write_messages_sub_batch_over_limit_rejected(_Config) ->
+    Max = 100,
+    Entry = sub_batch(42, 1, 1, Max + 1, <<"x">>),
+    ?assertEqual([42], write_messages(?VERSION_1, self(), undefined, 7, 1,
+                                      Entry, Max, <<"s1">>)),
+    ?assertEqual(no_message, flush_one()),
+    ok.
+
+write_messages_sub_batch_zero_message_count_rejected(_Config) ->
+    Max = 1000,
+    Entry = sub_batch(42, 1, 0, 40, <<"x">>),
+    ?assertEqual([42], write_messages(?VERSION_1, self(), undefined, 7, 1,
+                                      Entry, Max, <<"s1">>)),
+    ?assertEqual(no_message, flush_one()),
+    ok.
+
+write_messages_sub_batch_message_count_exceeds_uncompressed_size_rejected(_Config) ->
+    Max = 1000,
+    %% 100 sub-entries, each at least 4 bytes, cannot fit in 10 uncompressed bytes
+    Entry = sub_batch(42, 1, 100, 10, <<"x">>),
+    ?assertEqual([42], write_messages(?VERSION_1, self(), undefined, 7, 1,
+                                      Entry, Max, <<"s1">>)),
+    ?assertEqual(no_message, flush_one()),
+    ok.
+
+write_messages_sub_batch_unknown_compression_type_rejected(_Config) ->
+    Max = 1000,
+    [begin
+         Entry = sub_batch(42, CompressionType, 1, 40, <<"0123456789">>),
+         ?assertEqual([42], write_messages(?VERSION_1, self(), undefined, 7, 1,
+                                           Entry, Max, <<"s1">>)),
+         ?assertEqual(no_message, flush_one())
+     end || CompressionType <- [5, 6, 7]],
+    ok.
+
+write_messages_sub_batch_empty_batch_with_compression_rejected(_Config) ->
+    Max = 1000,
+    Entry = sub_batch(42, 1, 1, 40, <<>>),
+    ?assertEqual([42], write_messages(?VERSION_1, self(), undefined, 7, 1,
+                                      Entry, Max, <<"s1">>)),
+    ?assertEqual(no_message, flush_one()),
+    ok.
+
+write_messages_sub_batch_high_compression_ratio_accepted(_Config) ->
+    Max = 67108864,
+    Entry = sub_batch(1, 4, 65535, Max, <<"tiny-compressed-payload">>),
+    ?assertEqual([], write_messages(?VERSION_1, self(), undefined, 7, 1,
+                                    Entry, Max, <<"s1">>)),
+    ?assertMatch({'$gen_cast', _}, flush_one()),
+    ok.
+
+%% once an entry fails validation, the rest of the frame is rejected too,
+%% instead of being validated and written independently. This avoids leaving
+%% a gap in the publishing ID sequence for publishers that rely on order.
+write_messages_fail_fast_after_first_invalid_sub_batch(_Config) ->
+    Max = 1000,
+    Valid1 = simple_entry(1, <<"hello">>),
+    Invalid = sub_batch(2, 1, 1, Max + 1, <<"x">>),
+    Valid2 = simple_entry(3, <<"world">>),
+    Messages = <<Valid1/binary, Invalid/binary, Valid2/binary>>,
+    ?assertEqual([2, 3], write_messages(?VERSION_1, self(), undefined, 9, 1,
+                                        Messages, Max, <<"s1">>)),
+    %% only the entry preceding the failure was written
+    ?assertMatch({'$gen_cast', {write, _, undefined, {9, 1, 1}, <<"hello">>}},
+                 flush_one()),
+    ?assertEqual(no_message, flush_one()),
+    ok.
+
+simple_entry(PublishingId, Message) ->
+    MessageSize = byte_size(Message),
+    <<PublishingId:64, 0:1, MessageSize:31, Message:MessageSize/binary>>.
+
+sub_batch(PublishingId, CompressionType, MessageCount, UncompressedSize, Batch) ->
+    BatchSize = byte_size(Batch),
+    <<PublishingId:64, 1:1, CompressionType:3, 0:4, MessageCount:16,
+      UncompressedSize:32, BatchSize:32, Batch:BatchSize/binary>>.
+
+flush_one() ->
+    receive
+        Msg -> Msg
+    after 100 ->
+        no_message
+    end.
 
 binding(Destination, Order) ->
     #binding{destination = #resource{name = Destination},

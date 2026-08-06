@@ -166,3 +166,15 @@ fun(Conf) ->
         _         -> cuttlefish:invalid("should be a non-negative integer")
     end
 end}.
+
+%% Maximum uncompressed size, in bytes, of a single sub-entry batch accepted
+%% at publish time. A publish carrying a compressed sub-entry batch that
+%% declares a larger uncompressed size is rejected.
+%%
+%% Defaults to 67108864 (64 MiB). Clients should be configured with the same
+%% value, since the broker's limit governs what can be written and the
+%% client's limit governs what can be read.
+
+{mapping, "stream.max_uncompressed_sub_entry_batch_size", "rabbitmq_stream.max_uncompressed_sub_entry_batch_size", [
+    {datatype, integer}, {validators, ["non_negative_integer"]}
+]}.

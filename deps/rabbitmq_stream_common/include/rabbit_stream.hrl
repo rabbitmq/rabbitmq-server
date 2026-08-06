@@ -88,6 +88,7 @@
 %% authorized (a successful `open`), bounding the buffer an
 %% unauthenticated peer can negotiate.
 -define(DEFAULT_INITIAL_FRAME_MAX, 8192). %% 8 KiB
+-define(DEFAULT_MAX_UNCOMPRESSED_SUB_ENTRY_BATCH_SIZE, 67108864). %% 64 MiB
 -define(DEFAULT_HEARTBEAT, 60). %% 60 seconds
 
 -define(STREAM_QUEUE_TYPE, rabbit_stream_queue).
