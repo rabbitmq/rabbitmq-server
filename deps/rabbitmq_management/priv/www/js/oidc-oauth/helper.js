@@ -374,9 +374,9 @@ function warningMessageOAuthResource(oauthResource, reason) {
  * @returns 
  */
 function warningMessageOAuthResources(commonProviderURL, oauthResources, reason) {
-  return "OAuth resources [ <b>" 
-    + fmt_escape_html(oauthResources.map(resource => resource["label"] != null ? resource.label : resource.id)).join("</b>,<b>")
-    + "</b>] not available. OpenId Discovery endpoint " 
+  return "OAuth resources [ <b>"
+    + oauthResources.map(resource => fmt_escape_html(resource["label"] != null ? resource.label : resource.id)).join("</b>,<b>")
+    + "</b>] not available. OpenId Discovery endpoint "
     + fmt_escape_html(commonProviderURL) + fmt_escape_html(reason)
 }
 
