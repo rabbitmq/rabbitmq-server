@@ -359,18 +359,26 @@ mapped(cast, {flow_session, IncomingWindow, RenewWhenBelow}, State0) ->
 mapped(cast,
        {disposition, OutputHandle, First, Last, Settled0, DeliveryState},
        #state{links = Links} = State0) ->
-    #{OutputHandle := Link0 = #link{incoming_unsettled = Unsettled0}} = Links,
-    Unsettled = serial_number:foldl(fun maps:remove/2, Unsettled0, First, Last),
-    Link = Link0#link{incoming_unsettled = Unsettled},
-    State1 = State0#state{links = Links#{OutputHandle := Link}},
-    State = auto_flow(Link, State1),
-    Disp = #'v1_0.disposition'{role = ?AMQP_ROLE_RECEIVER,
-                               first = {uint, First},
-                               last = {uint, Last},
-                               settled = Settled0,
-                               state = translate_delivery_state(DeliveryState)},
-    ok = send(Disp, State),
-    {keep_state, State};
+    case Links of
+        #{OutputHandle := Link0 = #link{incoming_unsettled = Unsettled0}} ->
+            Unsettled = serial_number:foldl(fun maps:remove/2, Unsettled0, First, Last),
+            Link = Link0#link{incoming_unsettled = Unsettled},
+            State1 = State0#state{links = Links#{OutputHandle := Link}},
+            State = auto_flow(Link, State1),
+            Disp = #'v1_0.disposition'{role = ?AMQP_ROLE_RECEIVER,
+                                       first = {uint, First},
+                                       last = {uint, Last},
+                                       settled = Settled0,
+                                       state = translate_delivery_state(DeliveryState)},
+            ok = send(Disp, State),
+            {keep_state, State};
+        _ ->
+            %% The link is no longer there. The peer has discarded the link's
+            %% delivery state, so there's nothing for us to do.
+            ?LOG_DEBUG("amqp10_session: dropping disposition for unknown link handle ~b",
+                       [OutputHandle]),
+            keep_state_and_data
+    end;
 mapped(cast, #'v1_0.end'{} = End, State) ->
     %% We receive the first end frame, reply and terminate.
     %% `send_end/1` stops this process when the socket is gone, so notify first.
@@ -780,20 +788,18 @@ is_bare_message_section(_Section) ->
 send_flow_link(OutHandle,
                #'v1_0.flow'{link_credit = {uint, Credit}} = Flow0, RenewWhenBelow,
                #state{links = Links} = State) ->
-    AutoFlow = case RenewWhenBelow of
-                   never -> never;
-                   _ -> {RenewWhenBelow, Credit}
-               end,
-    #{OutHandle := #link{state = LinkState,
-                         output_handle = H,
-                         role = receiver,
-                         delivery_count = DeliveryCount,
-                         available = Available} = Link} = Links,
-    case LinkState of
-        attach_refused ->
+    case Links of
+        #{OutHandle := #link{state = attach_refused}} ->
             %% We will receive the DETACH frame shortly.
             State;
-        _ ->
+        #{OutHandle := #link{output_handle = H,
+                             role = receiver,
+                             delivery_count = DeliveryCount,
+                             available = Available} = Link} ->
+            AutoFlow = case RenewWhenBelow of
+                           never -> never;
+                           _ -> {RenewWhenBelow, Credit}
+                       end,
             Flow1 = Flow0#'v1_0.flow'{
                             handle = uint(H),
                             %% "In the event that the receiving link endpoint has not yet seen the
@@ -804,7 +810,14 @@ send_flow_link(OutHandle,
             ok = send(Flow, State),
             State#state{links = Links#{OutHandle =>
                                        Link#link{link_credit = Credit,
-                                                 auto_flow = AutoFlow}}}
+                                                 auto_flow = AutoFlow}}};
+        _ ->
+            %% The link is no longer there, so there is nothing to grant
+            %% credit on. The owner has been or will be notified with a
+            %% detached event.
+            ?LOG_DEBUG("amqp10_session: dropping flow for unknown link handle ~b",
+                       [OutHandle]),
+            State
     end.
 
 send_flow_session(State) ->
