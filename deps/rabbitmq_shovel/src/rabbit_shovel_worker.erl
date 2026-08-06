@@ -104,13 +104,9 @@ handle_cast(init_shovel, State = #state{config = Config}) ->
         ok = report_running(State1),
         {noreply, State1}
     catch
-        exit:{shutdown, autodelete} ->
-            %% `init_source/1` exits with this reason when a 'delete-after'
-            %% shovel has nothing left to transfer; see `terminate/2`.
-            {stop, {shutdown, autodelete}, State};
+        exit:{shutdown, _} = Reason ->
+            {stop, Reason, State};
         E:R ->
-            %% Topology setup failed, e.g. a predeclared queue is missing.
-            %% Same handling as the connect phases above.
             ?LOG_WARNING("Shovel ~ts could not set up its topology: ~p ~p",
                          [human_readable_name(maps:get(name, Config)), E, R]),
             report_terminated(State, "failed to set up topology"),
@@ -215,6 +211,15 @@ terminate({shutdown, restart}, State = #state{name = Name}) ->
     %% detection, before this uniform {shutdown, restart} reason was used
     %% to stop - reporting a generic status here would just overwrite it.
     ?LOG_WARNING("Shovel ~ts is stopping to restart", [human_readable_name(Name)]),
+    close_connections(State),
+    ok;
+terminate({shutdown, Reason}, State = #state{name = Name}) ->
+    %% An expected failure with a specific reason, e.g. a topology setup
+    %% failure such as 'missing_source_queue'.
+    %% The `{shutdown, _}` wrapper is only needed to reduce Erlang/OTP supervisor
+    %% logging, in our own logging we should use the underlying reason directly.
+    ?LOG_WARNING("Shovel ~ts is stopping: ~tp", [human_readable_name(Name), Reason]),
+    report_terminated(State, Reason),
     close_connections(State),
     ok;
 terminate({{shutdown, {server_initiated_close, Code, Reason}}, _}, State = #state{name = Name}) ->
