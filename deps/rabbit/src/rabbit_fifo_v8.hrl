@@ -202,11 +202,8 @@
         {tree = gb_trees:empty() :: gb_trees:tree(delayed_key(), msg()),
          %% Cached smallest entry for O(1) readiness check in take_next_msg
          next = undefined :: option({milliseconds(), ra:index(), msg()}),
-         %% Map from deferral token to the tree keys of all messages parked
-         %% under it. A single token may address more than one message,
-         %% e.g. when a ranged DISPOSITION settles several deliveries with
-         %% the same annotations.
-         deferred = #{} :: #{deferral_token() => [delayed_key()]}}).
+         %% Map from deferral token to tree key for direct message lookup
+         deferred = #{} :: #{deferral_token() => delayed_key()}}).
 
 -record(enqueuer,
         {next_seqno = 1 :: msg_seqno(),
@@ -298,12 +295,7 @@
          last_active :: option(non_neg_integer()),
          msg_cache :: option({ra:index(), raw_msg()}),
          %% delayed retry messages awaiting redelivery
-         delayed = #delayed{} :: #delayed{},
-         %% bytes enqueued, accumulated per originating node since the
-         %% creation of this state machine. Monotonically non-decreasing
-         %% on every node (under leader replication). Used by leader
-         %% migration tooling to estimate per-node ingress.
-         ingress_bytes_by_node = #{} :: #{node() | undefined => non_neg_integer()}
+         delayed = #delayed{} :: #delayed{}
         }).
 
 -type config() :: #{name := atom(),
