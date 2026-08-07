@@ -1314,6 +1314,13 @@ close_sent(info, Msg, _StatemData) ->
     ?LOG_WARNING("Ignored unknown message ~tp in state ~ts",
                                   [Msg, ?FUNCTION_NAME]),
     keep_state_and_data;
+close_sent(cast, {queue_event, _, _}, _StatemData) ->
+    %% Ignore confirmations and offset notifications while closing.
+    keep_state_and_data;
+close_sent(cast, Msg, _StatemData) ->
+    ?LOG_WARNING("Ignored unknown cast ~tp in state ~ts",
+                                  [Msg, ?FUNCTION_NAME]),
+    keep_state_and_data;
 close_sent({call, From}, {info, _Items}, _StateData) ->
     %% must be a CLI call, returning no information
     {keep_state_and_data, {reply, From, []}}.
