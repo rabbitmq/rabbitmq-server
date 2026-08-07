@@ -42,7 +42,9 @@ describe('Virtual Hosts in Admin tab', function () {
     await overview.clickOnAdminTab()
     await adminTab.isLoaded()
     await adminTab.clickOnVhosts()
-    await vhostsTab.clickOnVhost(await vhostsTab.searchForVhosts("/"), "/")
+    log("begin Search for vhosts ...")
+    await vhostsTab.searchForVhosts("/")
+    await vhostsTab.clickOnVhost("/")
     if (!await vhostTab.isLoaded()) {
       throw new Error('Failed to load vhost')
     }
@@ -60,8 +62,11 @@ describe('Virtual Hosts in Admin tab', function () {
       function(table) { 
         return table.length>0
       })
-
-    await vhostsTab.clickOnSelectTableColumns()
+    await doUntil(async function() { return vhostsTab.clickOnSelectTableColumns() },
+      function(button) {
+        return true
+      })
+    
     let table = await vhostsTab.getSelectableTableColumns()
     
     assert.equal(4, table.length)

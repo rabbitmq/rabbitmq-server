@@ -30,8 +30,8 @@ describe('A user which accesses any protected URL without a session where basic 
   })
 
   it('should not have a warning message', async function () {
-    const visible = await homePage.isWarningVisible()
-    assert.ok(!visible)
+    const notVisible = await homePage.isWarningNotVisible()
+    assert.ok(notVisible)
   })
 
 
