@@ -28,15 +28,15 @@ describe('An user without management tag', function () {
   })
 
   it('cannot log in into the management ui', async function () {    
-    const visible = await homePage.isWarningVisible()
-    assert.ok(visible)
+    const notVisible = await homePage.isWarningNotVisible()
+    assert.ok(!notVisible)
   })
 
   it('should get "Not authorized" warning message', async function(){
     assert.equal('Not authorized', await homePage.getWarning())
     assert.equal('Click here to logout', await homePage.getLogoutButton())
-    assert.ok(!await homePage.isBasicAuthSectionVisible())
-    assert.ok(!await homePage.isOAuth2SectionVisible())
+    assert.ok(await homePage.isBasicAuthSectionNotVisible())
+    assert.ok(await homePage.isOAuth2SectionNotVisible())
   })
 
   after(async function () {

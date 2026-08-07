@@ -9,7 +9,7 @@ describe('Once user is logged in', function () {
   let driver
   let overview
   let captureScreen
-  this.timeout(65000) // hard-coded to 25secs because this test requires 35sec to run
+  this.timeout(80000)
 
   before(async function () {
     driver = buildDriver()
@@ -25,6 +25,7 @@ describe('Once user is logged in', function () {
 
   it('it has to login after the session expires', async function () {
     await delay(60000)
+    await login.refresh()
     await login.isLoaded()
     await login.login('guest', 'guest')
     await overview.isLoaded()
