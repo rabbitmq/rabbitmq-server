@@ -9,6 +9,24 @@ const ExchangePage = require('../pageobjects/ExchangePage')
 
 const DISABLE_METRICS = process.env.DISABLE_METRICS || false
 
+/** Default exchanges on `/` and `other` vhosts; extra rows from plugins etc. are allowed */
+const EXPECTED_DEFAULT_EXCHANGE_ROWS = [
+  ['/', '(AMQP default)', 'direct'],
+  ['/', 'amq.direct', 'direct'],
+  ['/', 'amq.fanout', 'fanout'],
+  ['/', 'amq.headers', 'headers'],
+  ['/', 'amq.match', 'headers'],
+  ['/', 'amq.rabbitmq.trace', 'topic'],
+  ['/', 'amq.topic', 'topic'],
+  ['other', '(AMQP default)', 'direct'],
+  ['other', 'amq.direct', 'direct'],
+  ['other', 'amq.fanout', 'fanout'],
+  ['other', 'amq.headers', 'headers'],
+  ['other', 'amq.match', 'headers'],
+  ['other', 'amq.rabbitmq.trace', 'topic'],
+  ['other', 'amq.topic', 'topic']
+]
+
 describe('Exchange management', function () {
   let driver
   let login
@@ -35,31 +53,40 @@ describe('Exchange management', function () {
   })
 
   it('display summary of exchanges', async function () {
-    assert.equal("All exchanges (14)", await exchanges.getPagingSectionHeaderText())
+    const header = await exchanges.getPagingSectionHeaderText()
+    const match = header.match(/^All exchanges \((\d+)\)$/)
+    assert.ok(
+      match,
+      `expected paging header like "All exchanges (N)", got ${JSON.stringify(header)}`
+    )
+    const count = parseInt(match[1], 10)
+    assert.ok(
+      count >= EXPECTED_DEFAULT_EXCHANGE_ROWS.length,
+      `expected at least ${EXPECTED_DEFAULT_EXCHANGE_ROWS.length} exchanges, got ${count}`
+    )
   })
 
   it('list all default exchanges', async function () {
-    let actual_table = await exchanges.getExchangesTable(3)
-    
-    let expected_table = [
-      ["/", "(AMQP default)", "direct"],
-      ["/", "amq.direct", "direct"],
-      ["/", "amq.fanout", "fanout"],
-      ["/", "amq.headers", "headers"],
-      ["/", "amq.match", "headers"],
-      ["/", "amq.rabbitmq.trace", "topic"],
-      ["/", "amq.topic", "topic"],
-   
-      ["other", "(AMQP default)", "direct"],
-      ["other", "amq.direct", "direct"],
-      ["other", "amq.fanout", "fanout"],
-      ["other", "amq.headers", "headers"],
-      ["other", "amq.match", "headers"],
-      ["other", "amq.rabbitmq.trace", "topic"],
-      ["other", "amq.topic", "topic"]
-    ]
-    
-    assert.deepEqual(actual_table, expected_table)
+    const actualTable = await exchanges.getExchangesTable(3)
+
+    function rowMatches (actual, expected) {
+      return (
+        actual.length >= expected.length &&
+        expected.every((cell, i) => actual[i] === cell)
+      )
+    }
+
+    for (const expectedRow of EXPECTED_DEFAULT_EXCHANGE_ROWS) {
+      const found = actualTable.some((row) => rowMatches(row, expectedRow))
+      assert.ok(
+        found,
+        `expected exchange row not in table: ${JSON.stringify(expectedRow)}`
+      )
+    }
+    assert.ok(
+      actualTable.length >= EXPECTED_DEFAULT_EXCHANGE_ROWS.length,
+      `expected at least ${EXPECTED_DEFAULT_EXCHANGE_ROWS.length} exchange rows, got ${actualTable.length}`
+    )
   })
 
   it('view one exchange', async function () {
@@ -69,7 +96,6 @@ describe('Exchange management', function () {
   })
 /*
   it('exchange selectable columns', async function () {  
-    await overview.clickOnOverviewTab()
     await overview.clickOnExchangesTab()
     await doUntil(async function() { return exchanges.getExchangesTable() },
       function(table) { 

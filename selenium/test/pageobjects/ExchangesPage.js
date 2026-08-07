@@ -7,7 +7,7 @@ const PAGING_SECTION = By.css('div#exchanges-paging-section')
 const PAGING_SECTION_HEADER = By.css('div#exchanges-paging-section h2')
 const ADD_NEW_EXCHANGE_SECTION = By.css('div#add-new-exchange')
 const FORM_EXCHANGE_NAME = By.css('div#add-new-exchange form input[name="name"]')
-const FORM_EXCHANGE_TYPE = By.css('div#add-new-exchange form select[name="exchangetype"]')
+const FORM_EXCHANGE_TYPE = By.css('div#add-new-exchange form select[name="type"]')
 const ADD_BUTTON = By.css('div#add-new-exchange form input[type=submit]')
 
 const TABLE_SECTION = By.css('div#exchanges-table-section table')
