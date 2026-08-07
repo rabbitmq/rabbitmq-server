@@ -68,7 +68,7 @@ init_per_group(_, Config) ->
     ok = meck:new(rabbit_feature_flags, [passthrough, no_link]),
     ok = meck:expect(rabbit_feature_flags, is_enabled, fun(_) -> true end),
     ok = meck:new(rabbit_sup, [passthrough, no_link]),
-    ok = meck:expect(rabbit_sup, start_child,
+    ok = meck:expect(rabbit_sup, start_restartable_child,
                      fun(rabbit_amqp_sole_conn) ->
                              %% We use gen_server:start instead of start_link
                              %% so it survives the death of the init_per_group process

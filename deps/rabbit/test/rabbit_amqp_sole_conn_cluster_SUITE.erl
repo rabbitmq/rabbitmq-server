@@ -6,6 +6,7 @@
 -compile([nowarn_export_all, export_all]).
 
 -define(SOLE_CONN_MOD, rabbit_amqp_sole_conn).
+-define(SOLE_CONN_GEN_SERVER_SUP, rabbit_amqp_sole_conn_sup).
 -define(STORE_ID, rabbit_amqp_sole_conn:get_store_id()).
 -define(VH, <<"/">>).
 -define(CID1, <<"id-1">>).
@@ -745,7 +746,7 @@ setup_mocks(Config, Node) ->
     %% Mock rabbit_sup to bypass RabbitMQ boot
     call(Config, Node, meck, new, [rabbit_sup, [passthrough, no_link]]),
     call(Config, Node, meck, expect,
-         [rabbit_sup, start_child,
+         [rabbit_sup, start_restartable_child,
           fun(?SOLE_CONN_MOD) ->
                   %% Mirror supervisor:start_child/2's return values, in
                   %% particular {error, {already_started, Pid}} when a
@@ -758,7 +759,7 @@ setup_mocks(Config, Node) ->
           end]),
     call(Config, Node, meck, expect,
          [rabbit_sup, stop_child,
-          fun(?SOLE_CONN_MOD) ->
+          fun(?SOLE_CONN_GEN_SERVER_SUP) ->
                   gen_server:stop(?SOLE_CONN_MOD),
                   ok
           end]),

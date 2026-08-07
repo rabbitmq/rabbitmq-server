@@ -16,6 +16,7 @@
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
 
 -define(GEN_SERVER_NAME, ?MODULE).
+-define(GEN_SERVER_NAME_SUP, list_to_atom(atom_to_list(?GEN_SERVER_NAME) ++ "_sup")).
 -define(RA_CLUSTER_NAME, rabbitmq_amqp10_sole_conn).
 -define(STORE_ID, ?RA_CLUSTER_NAME).
 -define(RA_FRIENDLY_NAME, "AMQP Sole Conn Enforcement").
@@ -97,6 +98,8 @@ start_link() ->
     gen_server:start_link({local, ?GEN_SERVER_NAME}, ?MODULE, [], []).
 
 init([]) ->
+    %% must trap exits for spawn_link and terminate/2 to work correctly
+    process_flag(trap_exit, true),
     erlang:send_after(tick_interval(), self(), cluster_tick),
     {ok, #state{resizer_pid = undefined}}.
 
@@ -107,7 +110,7 @@ handle_info(cluster_tick, State = #state{resizer_pid = ResizerPid}) ->
         true when ResizerPid =:= undefined ->
             ?LOG_DEBUG("leader, spawning resizing process"),
             %% We are the leader and no resize is currently running. Start one.
-            {Pid, _MonitorRef} = spawn_monitor(fun maybe_resize_cluster/0),
+            Pid = proc_lib:spawn_link(fun maybe_resize_cluster/0),
             {noreply, State#state{resizer_pid = Pid}};
         true ->
             %% We are the leader but a resize is already running. Skip this tick.
@@ -118,8 +121,9 @@ handle_info(cluster_tick, State = #state{resizer_pid = ResizerPid}) ->
             %% We are not the leader. Do nothing.
             {noreply, State}
     end;
-handle_info({'DOWN', _MRef, process, Pid, _Reason}, State = #state{resizer_pid = Pid}) ->
-    %% The resizing process finished or crashed. Clear the tracker so the next tick can run.
+handle_info({'EXIT', Pid, _Reason}, State = #state{resizer_pid = Pid}) ->
+    %% The linked resizing process finished or crashed.
+    %% Clear the tracker so the next tick can run.
     {noreply, State#state{resizer_pid = undefined}};
 handle_info(Message, State) ->
     {stop, {unhandled_info, Message}, State}.
@@ -132,8 +136,15 @@ handle_call(Request, _From, State) ->
 handle_cast(Request, State) ->
     {stop, {unhandled_cast, Request}, State}.
 
-terminate(_Reason, _State) ->
-    ok.
+terminate(_Reason, State) ->
+    case State#state.resizer_pid of
+        undefined ->
+            ok;
+        Pid ->
+            %% Kill the resizer process if it is still running
+            exit(Pid, kill),
+            ok
+    end.
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
@@ -281,8 +292,14 @@ evict_node(Node) ->
 stop() ->
     ?LOG_DEBUG("Stopping sole_conn gen_server and "
                "removing from supervision tree on ~p", [node()]),
-    _ = rabbit_sup:stop_child(?GEN_SERVER_NAME),
+    _ = stop_gen_server(),
     ok.
+
+start_gen_server() ->
+    rabbit_sup:start_restartable_child(?GEN_SERVER_NAME).
+
+stop_gen_server() ->
+    rabbit_sup:stop_child(?GEN_SERVER_NAME_SUP).
 
 -spec is_resizing() -> boolean().
 is_resizing() ->
@@ -545,7 +562,7 @@ recover() ->
             ?LOG_DEBUG("Restarted local sole_conn RA server on ~p", [node()]),
             %% Khepri instance restarted
             %% We can now safely start our gen_server to manage it.
-            rabbit_sup:start_child(?MODULE)
+            start_gen_server()
     end.
 
 ensure_running() ->
@@ -619,7 +636,7 @@ start_local_store() ->
     %% Start the gen_server. This registers the local process
     %% name, which allows subsequent calls to bypass this setup, and
     %% lets other nodes discover us via find_active_peer/1.
-    ok = rabbit_sup:start_child(?GEN_SERVER_NAME),
+    ok = start_gen_server(),
     ok.
 
 make_ra_server_config() ->
