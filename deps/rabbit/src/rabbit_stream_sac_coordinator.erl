@@ -42,11 +42,14 @@
          group_consumers/4,
          connection_reconnected/1]).
 -export([apply/2,
+         apply/3,
          init_state/0,
          send_message/2,
          ensure_monitors/4,
+         ensure_monitors/5,
          handle_connection_down/4,
          handle_node_reconnected/3,
+         handle_node_reconnected/4,
          presume_connection_down/3,
          consumer_groups/3,
          group_consumers/5,
@@ -92,6 +95,7 @@
          C1#consumer.pid =:= C2#consumer.pid andalso
          C1#consumer.subscription_id =:= C2#consumer.subscription_id)).
 -define(V6_OR_MORE(Vsn), (Vsn >= 6)).
+-define(V8_OR_MORE(Vsn), (Vsn >= 8)).
 
 %% Single Active Consumer API
 -spec register_consumer(binary(),
@@ -453,6 +457,34 @@ apply(#command_update_conf{conf = NewConf}, State) ->
 apply(UnkCmd, State) ->
     ?LOG_DEBUG("~ts: unknown SAC command ~W", [?MODULE, UnkCmd, 10]),
     {State, {error, unknown_command}, []}.
+
+%% Version-aware entry point used by the coordinator. Only the
+%% connection_reconnected command has a machine-version-dependent (v8+) fast
+%% path; every other command, and every command below v8, is handled exactly
+%% as apply/2.
+-spec apply(ra_machine:command_meta_data(), command(), state()) ->
+    {state(), term(), ra_machine:effects()}.
+apply(#{machine_version := Vsn},
+      #command_connection_reconnected{pid = Pid},
+      #?MODULE{groups = Groups0,
+               pids_groups = PidsGroups} = State0)
+  when ?V8_OR_MORE(Vsn) ->
+    %% A reconnection cannot change group membership, and only the groups this
+    %% connection belongs to can be affected. Visit just those via the reverse
+    %% index instead of folding over every group (which is O(total groups)):
+    %% groups the connection is not part of are no-ops, so the resulting state
+    %% matches the full scan done by apply/2.
+    Scan = case maps:get(Pid, PidsGroups, undefined) of
+               undefined -> Groups0;
+               PidGroups -> PidGroups
+           end,
+    {State1, Eff} =
+        maps:fold(fun(G, _, {St, E}) ->
+                          handle_group_connection_reconnected(Pid, St, E, G)
+                  end, {State0, []}, Scan),
+    {State1, ok, Eff};
+apply(_Meta, Cmd, State) ->
+    ?MODULE:apply(Cmd, State).
 
 purge_node(Node, #?MODULE{groups = Groups0} = State0) ->
     PidsGroups = compute_node_pid_group_dependencies(Node, Groups0),
@@ -830,6 +862,29 @@ ensure_monitors(#command_evaluate_group{},
 ensure_monitors(_, #?MODULE{} = State0, Monitors, Effects) ->
     {State0, Monitors, Effects}.
 
+%% Version-aware entry point used by the coordinator. Only the
+%% connection_reconnected command has a machine-version-dependent (v8+) fast
+%% path; every other command, and every command below v8, is handled exactly
+%% as ensure_monitors/4.
+-spec ensure_monitors(ra_machine:command_meta_data(), command(), state(),
+                      map(), ra_machine:effects()) ->
+    {state(), map(), ra_machine:effects()}.
+ensure_monitors(#{machine_version := Vsn},
+                #command_connection_reconnected{pid = Pid},
+                #?MODULE{pids_groups = PidsGroups} = State,
+                Monitors, Effects)
+  when ?V8_OR_MORE(Vsn) andalso is_map_key(Pid, PidsGroups) ->
+    %% A reconnection does not change group membership, so the PID/group reverse
+    %% index is already up to date. Skip the O(total) rebuild that
+    %% ensure_monitors/4 performs via compute_pid_group_dependencies/1 and just
+    %% (re-)issue the (idempotent) monitor. If the connection is not tracked
+    %% (rare, a forgotten connection coming back) we fall through to
+    %% ensure_monitors/4, which rebuilds the index.
+    {State, Monitors#{Pid => sac},
+     [{monitor, process, Pid}, {monitor, node, node(Pid)} | Effects]};
+ensure_monitors(_Meta, Cmd, State, Monitors, Effects) ->
+    ensure_monitors(Cmd, State, Monitors, Effects).
+
 -spec handle_connection_down(ra_machine:command_meta_data(), connection_pid(),
                              term(), state()) ->
     {state(), ra_machine:effects()}.
@@ -853,6 +908,21 @@ handle_connection_down0(Pid, State, Groups) ->
 -spec handle_connection_node_disconnected(ra_machine:command_meta_data(),
                                           connection_pid(), state()) ->
     {state(), ra_machine:effects()}.
+handle_connection_node_disconnected(#{machine_version := Vsn} = Meta, ConnPid,
+                                    #?MODULE{pids_groups = PidsGroups0} = State0)
+  when ?V8_OR_MORE(Vsn) ->
+    case maps:get(ConnPid, PidsGroups0, error) of
+        error ->
+            {State0, []};
+        Groups ->
+            {State2, Eff} =
+                maps:fold(fun(G, _, Acc) ->
+                                  handle_group_after_connection_node_disconnected(
+                                    Meta, ConnPid, Acc, G)
+                          end, {State0, []}, Groups),
+            T = disconnected_timeout(State2),
+            {State2, [node_disconnected_timer_effect(ConnPid, T) | Eff]}
+    end;
 handle_connection_node_disconnected(Meta, ConnPid,
                                     #?MODULE{pids_groups = PidsGroups0} = State0) ->
     case maps:take(ConnPid, PidsGroups0) of
@@ -885,16 +955,53 @@ handle_node_reconnected(Node,
 
     {State0#?MODULE{pids_groups = PidsGroups1}, Effects1}.
 
+%% Version-aware entry point used by the coordinator.
+-spec handle_node_reconnected(ra_machine:command_meta_data(), node(), state(),
+                              ra_machine:effects()) ->
+    {state(), ra_machine:effects()}.
+handle_node_reconnected(#{machine_version := Vsn}, Node,
+                        #?MODULE{pids_groups = PidsGroups} = State,
+                        Effects0)
+  when ?V8_OR_MORE(Vsn) ->
+    %% As of v8 a node disconnection keeps the connection's entry in
+    %% pids_groups (see handle_connection_node_disconnected/3), so the reverse
+    %% index is already up to date and needs no rebuild. We only re-issue the
+    %% (idempotent) process monitors and re-notify the connections. Visit the
+    %% connection pids via the index (O(connections on the node)) instead of
+    %% folding over every group (O(total consumers)).
+    Effects = maps:fold(fun(P, _, Acc) when node(P) =:= Node ->
+                                [notify_connection_effect(P),
+                                 {monitor, process, P} | Acc];
+                           (_, _, Acc) ->
+                                Acc
+                        end, Effects0, PidsGroups),
+    {State, Effects};
+handle_node_reconnected(_Meta, Node, State, Effects) ->
+    handle_node_reconnected(Node, State, Effects).
+
 -spec presume_connection_down(ra_machine:command_meta_data(), connection_pid(),
                               state()) ->
     {state(), ra_machine:effects()}.
-presume_connection_down(Meta, Pid, #?MODULE{groups = Groups} = State0) ->
-    {State1, Eff} =
-        maps:fold(fun(G, _, {St, Eff}) ->
-                          handle_group_connection_presumed_down(Meta, Pid, St,
-                                                                Eff, G)
-                  end, {State0, []}, Groups),
-    {State1, Eff}.
+presume_connection_down(#{machine_version := Vsn} = Meta, Pid, #?MODULE{groups = Groups0, pids_groups = PidsGroups0} = State0)
+  when ?V8_OR_MORE(Vsn) ->
+    case maps:take(Pid, PidsGroups0) of
+        error ->
+            maps:fold(fun(G, _, {St, Eff}) ->
+                              handle_group_connection_presumed_down(Meta, Pid, St,
+                                                                    Eff, G)
+                      end, {State0, []}, Groups0);
+        {Groups, PidsGroups1} ->
+            State1 = State0#?MODULE{pids_groups = PidsGroups1},
+            maps:fold(fun(G, _, {St, Eff}) ->
+                              handle_group_connection_presumed_down(Meta, Pid, St,
+                                                                    Eff, G)
+                      end, {State1, []}, Groups)
+    end;
+presume_connection_down(Meta, Pid, #?MODULE{groups = Groups0} = State0) ->
+    maps:fold(fun(G, _, {St, Eff}) ->
+                      handle_group_connection_presumed_down(Meta, Pid, St,
+                                                            Eff, G)
+              end, {State0, []}, Groups0).
 
 handle_group_connection_presumed_down(#{machine_version := Vsn}, Pid,
                                       #?MODULE{groups = Groups0} = S0,
@@ -956,16 +1063,15 @@ handle_group_after_connection_down(Pid,
                                    {VH, St, Name} = K)
   when is_map_key(K, Groups0) ->
     #group{consumers = Consumers0} = G0 = lookup_group(VH, St, Name, Groups0),
-    %% remove the connection consumers from the group state
-    %% keep flags to know what happened
-    {Consumers1, ActiveRemoved, AnyRemoved} =
-        lists:foldl(
-          fun(#consumer{pid = P, status = S}, {L, ActiveFlag, _})
-                when P == Pid ->
-                  {L, is_active(S) or ActiveFlag, true};
-             (C, {L, ActiveFlag, AnyFlag}) ->
-                  {L ++ [C], ActiveFlag, AnyFlag}
-          end, {[], false, false}, Consumers0),
+    %% remove the connection consumers from the group state, keeping the
+    %% surviving consumers in their original order. lists:partition/2 keeps that
+    %% order in both lists and is O(n), unlike the previous fold that rebuilt
+    %% the list with a tail append (O(n^2)).
+    {Removed, Consumers1} =
+        lists:partition(fun(#consumer{pid = P}) -> P == Pid end, Consumers0),
+    AnyRemoved = Removed =/= [],
+    ActiveRemoved = lists:any(fun(#consumer{status = S}) -> is_active(S) end,
+                              Removed),
 
     case AnyRemoved of
         true ->
@@ -981,12 +1087,14 @@ handle_group_after_connection_down(Pid,
 handle_group_after_connection_down(_, {S0, Eff0}, _) ->
     {S0, Eff0}.
 
-handle_group_after_connection_node_disconnected(#{machine_version := Vsn}, ConnPid,
+handle_group_after_connection_node_disconnected(#{machine_version := Vsn} = Meta,
+                                                ConnPid,
                                                 {#?MODULE{groups = Groups0} = S0,
                                                  Eff0},
                                                 {VH, S, Name} = K)
   when is_map_key(K, Groups0) andalso ?V6_OR_MORE(Vsn) ->
     #group{consumers = Cs0} = G0 = lookup_group(VH, S, Name, Groups0),
+    Ts = disconnect_ts(Meta),
     {Cs1, NeedsRebalance} =
         lists:foldr(fun(#consumer{status = {_, ?DEACTIVATING},
                                   pid = Pid} = C0,
@@ -994,12 +1102,12 @@ handle_group_after_connection_node_disconnected(#{machine_version := Vsn}, ConnP
                             %% Deactivating consumer disconnected, the handshake
                             %% cannot complete. Treat as waiting and trigger
                             %% rebalancing.
-                            C1 = csr_status(C0, {?DISCONNECTED, ?WAITING}),
+                            C1 = csr_status(C0, {?DISCONNECTED, ?WAITING}, Ts),
                             {[C1 | Acc], true};
                        (#consumer{status = {_, St},
                                   pid = Pid} = C0,
                         {Acc, Flag}) when Pid =:= ConnPid ->
-                            C1 = csr_status(C0, {?DISCONNECTED, St}),
+                            C1 = csr_status(C0, {?DISCONNECTED, St}, Ts),
                             {[C1 | Acc], Flag};
                        (C, {Acc, Flag}) ->
                             {[C | Acc], Flag}
@@ -1516,7 +1624,22 @@ csr(Pid, Id, Owner, Status) ->
 
 -spec csr_status(consumer(), consumer_status()) -> consumer().
 csr_status(C, Status) ->
-    C#consumer{status = Status, ts = ts()}.
+    csr_status(C, Status, ts()).
+
+-spec csr_status(consumer(), consumer_status(), timestamp()) -> consumer().
+csr_status(C, Status, Ts) ->
+    C#consumer{status = Status, ts = Ts}.
+
+%% The only consumer timestamp ever read back is the one stamped when a
+%% consumer becomes disconnected (state_enter/2 uses it to size the disconnected
+%% timer). Source it from the command metadata at v8+ so it is identical across
+%% replicas and stable on log replay, instead of reading the node wall clock
+%% inside apply (a determinism hazard). Pre-v8 keeps the historical behaviour.
+disconnect_ts(#{system_time := Ts, machine_version := Vsn})
+  when ?V8_OR_MORE(Vsn) ->
+    Ts;
+disconnect_ts(_) ->
+    ts().
 
 node_disconnected_timer_effect(Pid, T) ->
     {timer, {sac, node_disconnected,
