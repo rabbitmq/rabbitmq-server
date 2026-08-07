@@ -417,6 +417,18 @@ end}.
 {mapping, "metadata_store.khepri.snapshot_interval", "rabbit.khepri_snapshot_interval",
     [{datatype, {integer, positive}}]}.
 
+{mapping, "amqp10_sole_conn.tick_interval", "rabbit.amqp10_sole_conn_tick_interval",
+    [{datatype, {integer, positive}}]}.
+
+{mapping, "amqp10_sole_conn.snapshot_interval", "rabbit.amqp10_sole_conn_snapshot_interval",
+    [{datatype, {integer, positive}}]}.
+
+{mapping, "amqp10_sole_conn.leader_wait_retry_timeout", "rabbit.amqp10_sole_conn_leader_wait_retry_timeout",
+    [{datatype, {integer, positive}}]}.
+
+{mapping, "amqp10_sole_conn.default_timeout", "rabbit.amqp10_sole_conn_default_timeout",
+    [{datatype, {integer, positive}}]}.
+
 %% ===========================================================================
 
 %% Choose the available SASL mechanism(s) to expose.

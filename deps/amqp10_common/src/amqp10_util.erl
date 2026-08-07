@@ -11,7 +11,8 @@
 
 -export([link_credit_snd/3,
          dist_mode_to_atom/1,
-         dist_mode_from_atom/1]).
+         dist_mode_from_atom/1,
+         capabilities/1]).
 
 %% AMQP 1.0 §2.6.7
 -spec link_credit_snd(sequence_no(), uint(), sequence_no()) -> uint().
@@ -34,3 +35,11 @@ dist_mode_from_atom(move) ->
     ?V_1_0_STD_DIST_MODE_MOVE;
 dist_mode_from_atom(copy) ->
     ?V_1_0_STD_DIST_MODE_COPY.
+
+-spec capabilities([binary()]) ->
+    undefined | {array, symbol, [{symbol, binary()}]}.
+capabilities([]) ->
+    undefined;
+capabilities(Capabilities) ->
+    Caps = [{symbol, C} || C <- Capabilities],
+    {array, symbol, Caps}.

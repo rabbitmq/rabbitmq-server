@@ -2826,7 +2826,7 @@ ensure_source(#'v1_0.source'{
                         dynamic = true,
                         dynamic_node_properties = dynamic_node_properties(),
                         distribution_mode = ?V_1_0_STD_DIST_MODE_MOVE,
-                        capabilities = rabbit_amqp_util:capabilities([?CAP_VOLATILE_QUEUE])
+                        capabilities = amqp10_util:capabilities([?CAP_VOLATILE_QUEUE])
                        },
             QName = rabbit_misc:queue_resource(Vhost, QNameBin),
             {ok, QName, Source, PermCache0, TopicPermCache};
@@ -2846,7 +2846,7 @@ ensure_source(#'v1_0.source'{
                         distribution_mode = ?V_1_0_STD_DIST_MODE_MOVE,
                         default_outcome = ?DEFAULT_OUTCOME,
                         outcomes = outcomes(Source0),
-                        capabilities = rabbit_amqp_util:capabilities([?CAP_TEMPORARY_QUEUE])
+                        capabilities = amqp10_util:capabilities([?CAP_TEMPORARY_QUEUE])
                        },
             QName = queue_resource(Vhost, QNameBin),
             {ok, QName, Source, PermCache, TopicPermCache};
@@ -2971,7 +2971,7 @@ ensure_target(#'v1_0.target'{
                         timeout = {uint, 0},
                         dynamic = true,
                         dynamic_node_properties = dynamic_node_properties(),
-                        capabilities = rabbit_amqp_util:capabilities([?CAP_TEMPORARY_QUEUE])
+                        capabilities = amqp10_util:capabilities([?CAP_TEMPORARY_QUEUE])
                        },
             {ok, Exchange, QNameBin, QNameBin, Target, PermCache};
         false ->
@@ -3286,11 +3286,11 @@ effective_dist_mode(DesiredDistMode, QType) ->
 
 link_capabilities(QType) ->
     Caps = rabbit_queue_type:amqp_link_capabilities(QType),
-    rabbit_amqp_util:capabilities(Caps).
+    amqp10_util:capabilities(Caps).
 
 source_capabilities(QType) ->
     Caps = rabbit_queue_type:amqp_source_capabilities(QType),
-    rabbit_amqp_util:capabilities(Caps).
+    amqp10_util:capabilities(Caps).
 
 parse_filter(undefined, _QType) ->
     {undefined, undefined, []};
