@@ -85,6 +85,16 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
     stream_coord_result =
       :rabbit_misc.rpc_call(node_name, :rabbit_stream_coordinator, :forget_node, [atom_name])
 
+    sole_conn_result =
+      case :rabbit_misc.rpc_call(node_name, :rabbit_amqp_sole_conn, :forget_node, [atom_name]) do
+        # For backwards compatibility
+        {:badrpc, {:EXIT, {:undef, [{:rabbit_amqp_sole_conn, :forget_node, _, _}]}}} ->
+          :ok
+
+        any ->
+          any
+      end
+
     # Now remove the node from the cluster (resets Khepri on the target)
     ret =
       :rabbit_misc.rpc_call(node_name, :rabbit_db_cluster, :forget_member, [atom_name, false])
@@ -130,6 +140,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ForgetClusterNodeCommand do
 
         errors =
           append_err(stream_coord_result != :ok, "Stream coordinator", [])
+
+        errors =
+          append_err(sole_conn_result != :ok, "AMQP sole connection", errors)
 
         errors =
           append_err(has_qq_error, "Quorum queues", errors)
