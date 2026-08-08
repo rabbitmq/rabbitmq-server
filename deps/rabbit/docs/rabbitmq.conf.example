@@ -1319,9 +1319,11 @@
 # auth_oauth2.preferred_username_claims.1 = user_name
 # auth_oauth2.preferred_username_claims.2 = preferred_username
 
-## Configure additional fields to look for scopes in the token
+## Configure additional fields to look for scopes in the token.
+## Dots separate nested claim keys; use \. for a literal dot in a claim name.
 ##
 # auth_oauth2.additional_scopes_key = extra_scope
+# auth_oauth2.additional_scopes_key = https://example\.com/claims.roles
 
 ## Custom scope prefix instead of resource_server_id
 ##
