@@ -9,7 +9,8 @@
 
 -export([init/2]).
 %% exported for testing
--export([inject_client_secret/2, rewrite_token_endpoint/2]).
+-export([inject_client_secret/2, rewrite_token_endpoint/2,
+         external_authority/5]).
 
 -include_lib("oauth2_client/include/oauth2_client.hrl").
 -include_lib("kernel/include/logger.hrl").
@@ -216,19 +217,43 @@ is_root_resource_server(Id) ->
                             undefined)).
 
 proxy_token_url(Req, Id) ->
-    Scheme = cowboy_req:scheme(Req),
-    Host = cowboy_req:host(Req),
     Prefix = rabbit_mgmt_util:get_path_prefix(),
-    iolist_to_binary([Scheme, "://", Host, port(Req, Scheme), Prefix,
+    Authority = external_authority(
+                  cowboy_req:scheme(Req),
+                  cowboy_req:host(Req),
+                  cowboy_req:port(Req),
+                  cowboy_req:header(<<"x-forwarded-proto">>, Req),
+                  cowboy_req:header(<<"x-forwarded-port">>, Req)),
+    iolist_to_binary([Authority, Prefix,
                       "/js/oidc-oauth/token-endpoint/",
                       cow_uri:urlencode(Id)]).
 
-port(Req, Scheme) ->
-    case {cowboy_req:port(Req), Scheme} of
-        {80, <<"http">>} -> "";
-        {443, <<"https">>} -> "";
-        {Port, _} -> [":", integer_to_binary(Port)]
-    end.
+external_authority(ConnScheme, Host, ConnPort, ForwardedProto, ForwardedPort) ->
+    Scheme = case first_value(ForwardedProto) of
+                 undefined -> ConnScheme;
+                 Value -> Value
+             end,
+    PortSuffix = case first_value(ForwardedPort) of
+                     undefined when ForwardedProto =:= undefined ->
+                         port_suffix(Scheme, integer_to_binary(ConnPort));
+                     %% A forwarded proto without a forwarded port implies the
+                     %% scheme's default port, which is omitted.
+                     undefined ->
+                         "";
+                     Port ->
+                         port_suffix(Scheme, Port)
+                 end,
+    [Scheme, "://", Host, PortSuffix].
+
+first_value(undefined) ->
+    undefined;
+first_value(Value) ->
+    [First | _] = binary:split(Value, <<",">>),
+    string:trim(First).
+
+port_suffix(<<"http">>, <<"80">>) -> "";
+port_suffix(<<"https">>, <<"443">>) -> "";
+port_suffix(_, Port) -> [":", Port].
 
 http_get(URL, HttpOpts) ->
     request(get, {URL, []}, HttpOpts).
