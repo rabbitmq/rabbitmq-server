@@ -1740,8 +1740,15 @@ columns_test(Config) ->
     passed.
 
 if_empty_unused_test(Config) ->
+    ok = if_empty_unused_test0(Config, <<"classic">>),
+    ok = if_empty_unused_test0(Config, <<"quorum">>),
+    passed.
+
+if_empty_unused_test0(Config, QueueType) ->
     http_put(Config, "/exchanges/%2F/test", #{}, {group, '2xx'}),
-    http_put(Config, "/queues/%2F/test", #{durable => true}, {group, '2xx'}),
+    http_put(Config, "/queues/%2F/test",
+             #{durable => true,
+               arguments => #{'x-queue-type' => QueueType}}, {group, '2xx'}),
     http_post(Config, "/bindings/%2F/e/test/q/test", #{}, {group, '2xx'}),
     http_post(Config, "/exchanges/%2F/amq.default/publish",
               msg(<<"test">>, #{}, <<"Hello world">>), ?OK),
@@ -1757,7 +1764,7 @@ if_empty_unused_test(Config) ->
 
     http_delete(Config, "/queues/%2F/test?if-empty=true", {group, '2xx'}),
     http_delete(Config, "/exchanges/%2F/test?if-unused=true", {group, '2xx'}),
-    passed.
+    ok.
 
 invalid_config_test(Config) ->
     {Conn, _Ch} = open_connection_and_channel(Config),
