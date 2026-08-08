@@ -2196,7 +2196,7 @@ i(open_files, Q) when ?is_amqqueue(Q) ->
                             [Name], ?RPC_TIMEOUT)];
 i(single_active_consumer_pid, Q) when ?is_amqqueue(Q) ->
     QPid = amqqueue:get_pid(Q),
-    case ra:local_query(QPid, fun rabbit_fifo:query_single_active_consumer/1) of
+    case rabbit_fifo_client:local_query(QPid, query_single_active_consumer) of
         {ok, {_, {value, {_ConsumerTag, ChPid}}}, _} ->
             ChPid;
         {ok, _, _} ->
@@ -2208,8 +2208,7 @@ i(single_active_consumer_pid, Q) when ?is_amqqueue(Q) ->
     end;
 i(single_active_consumer_tag, Q) when ?is_amqqueue(Q) ->
     QPid = amqqueue:get_pid(Q),
-    case ra:local_query(QPid,
-                        fun rabbit_fifo:query_single_active_consumer/1) of
+    case rabbit_fifo_client:local_query(QPid, query_single_active_consumer) of
         {ok, {_, {value, {ConsumerTag, _ChPid}}}, _} ->
             ConsumerTag;
         {ok, _, _} ->
@@ -2226,8 +2225,7 @@ i(message_bytes_ram, Q) when ?is_amqqueue(Q) ->
     0;
 i(messages_dlx, Q) when ?is_amqqueue(Q) ->
     QPid = amqqueue:get_pid(Q),
-    case ra:local_query(QPid,
-                        fun rabbit_fifo:query_stat_dlx/1) of
+    case rabbit_fifo_client:local_query(QPid, query_stat_dlx) of
         {ok, {_, {Num, _}}, _} ->
             Num;
         {error, _} ->
@@ -2237,8 +2235,7 @@ i(messages_dlx, Q) when ?is_amqqueue(Q) ->
     end;
 i(message_bytes_dlx, Q) when ?is_amqqueue(Q) ->
     QPid = amqqueue:get_pid(Q),
-    case ra:local_query(QPid,
-                        fun rabbit_fifo:query_stat_dlx/1) of
+    case rabbit_fifo_client:local_query(QPid, query_stat_dlx) of
         {ok, {_, {_, Bytes}}, _} ->
             Bytes;
         {error, _} ->
@@ -2491,7 +2488,7 @@ overflow(<<"reject-publish-dlx">> = V, Def, QName) ->
 notify_decorators(Q) when ?is_amqqueue(Q) ->
     QName = amqqueue:get_name(Q),
     QPid = amqqueue:get_pid(Q),
-    case ra:local_query(QPid, fun rabbit_fifo:query_notify_decorators_info/1) of
+    case rabbit_fifo_client:local_query(QPid, query_notify_decorators_info) of
         {ok, {_, {MaxActivePriority, IsEmpty}}, _} ->
             notify_decorators(QName, consumer_state_changed,
                               [MaxActivePriority, IsEmpty]);

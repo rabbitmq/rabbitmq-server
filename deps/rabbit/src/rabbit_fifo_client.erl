@@ -39,6 +39,8 @@
          stat/1,
          stat/2,
          query_single_active_consumer/1,
+         local_query/2,
+         local_query/3,
          cluster_name/1
          ]).
 
@@ -432,12 +434,36 @@ checkout(ConsumerTag, CreditMode, #{} = Meta,
 query_single_active_consumer(#state{leader = undefined}) ->
     {error, leader_not_known};
 query_single_active_consumer(#state{leader = Leader}) ->
-    case ra:local_query(Leader, fun rabbit_fifo:query_single_active_consumer/1,
-                        ?COMMAND_TIMEOUT) of
+    case local_query(Leader, query_single_active_consumer, ?COMMAND_TIMEOUT) of
         {ok, {_, Reply}, _} ->
             {ok, Reply};
         Err ->
             Err
+    end.
+
+%% @doc Runs a read-only query function against the state machine.
+%%
+%% Queries the queue's own (latest) machine module first. In a
+%% mixed-version cluster the queue may still be running on an older
+%% machine version whose state shape doesn't match the latest module,
+%% in which case the query crashes with a (caught) `function_clause'
+%% and we retry against `rabbit_fifo_v7', the last frozen snapshot of
+%% the state shape prior to the current one.
+-spec local_query(ra:server_id(), atom()) ->
+    {ok, {ra:idxterm(), term()}, ra:server_id()} |
+    {error, term()} | {timeout, ra:server_id()}.
+local_query(Server, QueryFun) ->
+    local_query(Server, QueryFun, 5000).
+
+-spec local_query(ra:server_id(), atom(), timeout()) ->
+    {ok, {ra:idxterm(), term()}, ra:server_id()} |
+    {error, term()} | {timeout, ra:server_id()}.
+local_query(Server, QueryFun, Timeout) when is_atom(QueryFun) ->
+    case ra:local_query(Server, fun rabbit_fifo:QueryFun/1, Timeout) of
+        {error, function_clause} ->
+            ra:local_query(Server, fun rabbit_fifo_v7:QueryFun/1, Timeout);
+        Other ->
+            Other
     end.
 
 %% @doc Provide credit to the queue
@@ -575,15 +601,12 @@ stat(Leader) ->
 stat(Leader, Timeout) ->
     %% short timeout as we don't want to spend too long if it is going to
     %% fail anyway
-    %% TODO: the overview is too large to be super efficient
-    %% but we use it for backwards compatibilty
-    case ra:member_overview(Leader, Timeout) of
-      {ok, #{machine := #{num_ready_messages := R,
-                          num_consumers := C}}, _} ->
+    case local_query(Leader, query_stat, Timeout) of
+        {ok, {_, {R, C}}, _} ->
             {ok, R, C};
-      {error, _} = Error ->
+        {error, _} = Error ->
             Error;
-      {timeout, _} = Error ->
+        {timeout, _} = Error ->
             Error
     end.
 
