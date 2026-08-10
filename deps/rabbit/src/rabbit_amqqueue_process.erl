@@ -627,7 +627,9 @@ ensure_consumer_timeout_timer(State = #q{consumers = Consumers}) ->
     ensure_consumer_timeout_timer(rabbit_queue_consumers:next_deadline(Consumers), State).
 
 ensure_consumer_timeout_timer(infinity, State) ->
-    State;
+    %% No deadline is pending, so cancel any armed timer rather than leaving
+    %% it to fire and run an empty expiry pass.
+    stop_consumer_timeout_timer(State);
 ensure_consumer_timeout_timer(Deadline, State) ->
     set_consumer_timeout_timer(Deadline, State).
 
