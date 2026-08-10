@@ -34,7 +34,10 @@ describe('Once an OAuth2 user is logged in', function () {
     // regardless of the fact that the token is actively refreshing.
     await delay(62000)
     
-    // Attempt an action or wait for the auto-logout to redirect us
+    // Refresh the page to force the UI to check the session status immediately
+    // instead of waiting for the background partial_update interval.
+    await homePage.refresh()
+
     await homePage.isLoaded()
     const value = await homePage.getLoginButton()
     assert.equal(value, 'Click here to log in')
