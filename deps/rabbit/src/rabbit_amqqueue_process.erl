@@ -1551,6 +1551,31 @@ new_single_active_consumer_after_basic_cancel(ChPid, ConsumerTag, CurrentSingleA
         _                    -> CurrentSingleActiveConsumer
     end.
 
+%% A consumer timeout parks the consumer rather than removing it: it is
+%% moved into blocked_consumers and resumes once it settles the released
+%% messages. Unlike a basic.cancel, its exclusive/single-active status must
+%% therefore be preserved.
+new_single_active_consumer_after_consumer_timeout(ChPid, ConsumerTag, CurrentSingleActiveConsumer,
+            _SingleActiveConsumerIsOn = true, Consumers) ->
+    case rabbit_queue_consumers:is_same(ChPid, ConsumerTag, CurrentSingleActiveConsumer) of
+        true ->
+            %% The single active consumer timed out. Hand off to another
+            %% ready consumer if one exists, otherwise keep it as the active
+            %% consumer so it becomes eligible again after it un-parks.
+            case rabbit_queue_consumers:get_consumer(Consumers) of
+                undefined -> CurrentSingleActiveConsumer;
+                Consumer  -> Consumer
+            end;
+        false ->
+            CurrentSingleActiveConsumer
+    end;
+new_single_active_consumer_after_consumer_timeout(_ChPid, _ConsumerTag, CurrentSingleActiveConsumer,
+            _SingleActiveConsumerIsOn = false, _Consumers) ->
+    %% With SAC off, CurrentSingleActiveConsumer holds the exclusive
+    %% consumer, which is only parked, not cancelled. It must stay the
+    %% exclusive consumer so the queue remains in exclusive use.
+    CurrentSingleActiveConsumer.
+
 maybe_notify_consumer_updated(#q{single_active_consumer_on = false}, _, _) ->
     ok;
 maybe_notify_consumer_updated(#q{single_active_consumer_on = true}, SingleActiveConsumer, SingleActiveConsumer) ->
@@ -1797,7 +1822,7 @@ handle_info(evaluate_consumer_timeout,
                   fun ({ChPid, CTag, _AckIds, _RawTags}, HolderAcc) ->
                           case rabbit_queue_consumers:holds_acks(ChPid, CTag) of
                               true  -> HolderAcc;
-                              false -> new_single_active_consumer_after_basic_cancel(
+                              false -> new_single_active_consumer_after_consumer_timeout(
                                          ChPid, CTag, HolderAcc,
                                          SingleActiveConsumerOn, Consumers1)
                           end
