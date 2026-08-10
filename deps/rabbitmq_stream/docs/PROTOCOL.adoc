@@ -886,11 +886,3 @@ Until `Open` completes successfully, the server enforces a low `frame_max` ceili
 regardless of the value negotiated (or yet to be negotiated) with `Tune`. This ceiling is
 high enough to accommodate realistic
 https://www.rabbitmq.com/docs/oauth2[JWT tokens] carried as the SASL PLAIN password.
-
-The negotiated `frame_max` also bounds `Deliver` frames sent to a subscribing client.
-A `Deliver` frame carries one whole chunk (a batch of published messages) and the
-protocol has no fragmentation for it, so the server cannot shrink an oversized chunk to
-fit. If a chunk to be delivered to a given connection would exceed that connection's
-`frame_max`, the server closes the connection instead of sending an over-limit frame,
-sending a `close` request with the `Frame too large` code, the same way it does for an
-oversized incoming frame.
