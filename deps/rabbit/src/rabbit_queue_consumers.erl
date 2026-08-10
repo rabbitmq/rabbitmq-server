@@ -14,6 +14,7 @@
          resume_fun/0, notify_sent_fun/1, activate_limit_fun/0,
          drained/3, process_credit/5, get_link_state/2,
          utilisation/1, capacity/1, is_same/3, get_consumer/1, get/3,
+         get_blocked/3,
          consumer_tag/1, get_infos/1, parse_prefetch_count/1,
          expire_acks/2, next_deadline/1, holds_acks/2]).
 
@@ -791,6 +792,23 @@ get(ChPid, ConsumerTag, #state{consumers = Consumers}) ->
     case priority_queue:out_p(Consumers1) of
         {empty, _} -> undefined;
         {{value, Consumer, _Priority}, _Tail} -> Consumer
+    end.
+
+-spec get_blocked(ch(), rabbit_types:ctag(), state()) ->
+    undefined | {ch(), consumer()}.
+
+get_blocked(ChPid, ConsumerTag, _State) ->
+    case lookup_ch(ChPid) of
+        not_found ->
+            undefined;
+        #cr{blocked_consumers = Blocked} ->
+            priority_queue:fold(
+              fun ({CP, #consumer{tag = CT}} = Entry, _P, _Acc)
+                    when CP =:= ChPid, CT =:= ConsumerTag ->
+                      Entry;
+                 (_, _, Acc) ->
+                      Acc
+              end, undefined, Blocked)
     end.
 
 -spec get_infos(consumer()) -> term().

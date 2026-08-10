@@ -1829,6 +1829,17 @@ handle_info(evaluate_consumer_timeout,
                   end, Holder, Expired),
             State2 = State1#q{consumers = Consumers1, active_consumer = Holder1},
             maybe_notify_consumer_updated(State2, Holder, Holder1),
+            %% Parking a consumer is a state change symmetric with the
+            %% `up' transition emitted when it later un-parks, so report it
+            %% too. Without this, a timed-out consumer keeps showing as
+            %% active in the management UI until it acks. `basic.get'
+            %% timeouts carry the ctag `none' and park no consumer, so
+            %% `get_blocked/3' returns `undefined' and they are skipped.
+            ParkedEntries =
+                [Entry || {ChPid, CTag, _AckIds, _RawTags} <- Expired,
+                          (Entry = rabbit_queue_consumers:get_blocked(
+                                     ChPid, CTag, Consumers1)) =/= undefined],
+            notify_consumer_transitions(ParkedEntries, blocked, State2),
             notify_decorators(State2),
             State3 = requeue_and_run(AllAckTags, false, [], State2),
             noreply(ensure_consumer_timeout_timer(NextDeadline, State3))
