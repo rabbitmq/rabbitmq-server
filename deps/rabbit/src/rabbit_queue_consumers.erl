@@ -161,8 +161,11 @@ count() -> lists:sum([Count || #cr{consumer_count = Count} <- all_ch_record()]).
 -spec unacknowledged_message_count() -> non_neg_integer().
 
 unacknowledged_message_count() ->
-    lists:sum([maps:size(C#cr.acktags) + maps:size(C#cr.tombstones)
-               || C <- all_ch_record()]).
+    %% Tombstoned deliveries have already been requeued into the backing
+    %% queue by the consumer timeout, so they are counted in messages_ready.
+    %% They must not be counted here as well, or the same physical message
+    %% would be reported twice in the total message count.
+    lists:sum([maps:size(C#cr.acktags) || C <- all_ch_record()]).
 
 -spec add(ch(), rabbit_types:ctag(), boolean(), pid() | none, boolean(),
           {simple_prefetch, non_neg_integer()} | {credited, rabbit_queue_type:delivery_count()},
