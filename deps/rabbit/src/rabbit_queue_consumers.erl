@@ -46,7 +46,14 @@
              acktags :: #{ack_id() => {raw_ack_tag(),
                                        rabbit_types:ctag() | none,
                                        deadline()}},
-             %% Reclaimed deliveries awaiting a late ack
+             %% Reclaimed deliveries awaiting a late ack. A consumer with an
+             %% outstanding tombstone is parked (removed from the ready set),
+             %% so it receives no further deliveries and cannot accumulate new
+             %% tombstones: the count is bounded by its prefetch at the time it
+             %% timed out. Tombstones are retained until the client settles the
+             %% released delivery (subtract_acks) or the channel closes
+             %% (erase_ch), the same bounded retention quorum queues apply via
+             %% rabbit_fifo's timed_out_msg_ids.
              tombstones :: #{ack_id() => rabbit_types:ctag() | none},
              %% Outstanding tombstone count per ctag
              tombstoned_ctags :: #{rabbit_types:ctag() | none => pos_integer()},
