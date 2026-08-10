@@ -189,6 +189,7 @@ groups() ->
        consumer_timeout_classic_queue_policy,
        consumer_timeout_classic_queue_consumer_arg,
        consumer_timeout_classic_queue_disposition_ack_id,
+       consumer_timeout_classic_queue_single_active_consumer,
        handle_in_use
       ]},
 
@@ -7534,6 +7535,71 @@ consumer_timeout(Config, QName, LinkProperties, QueueType) ->
     receive {amqp10_msg, Receiver, M3} ->
                 ?assertEqual([<<"msg3">>], amqp10_msg:body(M3)),
                 ok = amqp10_client:accept_msg(Receiver, M3)
+    after 9000 -> ct:fail({missing_msg, ?LINE})
+    end,
+
+    ok = detach_link_sync(Receiver),
+    {ok, #{message_count := 0}} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
+    ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
+    ok = end_session_sync(Session),
+    ok = close_connection_sync(Connection).
+
+%% A consumer timeout on a single-active-consumer classic queue must not stall
+%% the queue: once the released delivery is settled the consumer becomes
+%% eligible again and the remaining messages must be delivered.
+consumer_timeout_classic_queue_single_active_consumer(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    Address = rabbitmq_amqp_address:queue(QName),
+
+    OpnConf = connection_config(Config),
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    {ok, Session} = amqp10_client:begin_session_sync(Connection),
+    {ok, LinkPair} = rabbitmq_amqp_client:attach_management_link_pair_sync(
+                       Session, <<"mgmt link pair">>),
+    {ok, #{type := <<"classic">>}} =
+        rabbitmq_amqp_client:declare_queue(
+          LinkPair, QName,
+          #{arguments => #{<<"x-queue-type">> => {utf8, <<"classic">>},
+                           <<"x-single-active-consumer">> => true}}),
+
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address),
+    ok = wait_for_credit(Sender),
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"tag1">>, <<"msg1">>, false)),
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"tag2">>, <<"msg2">>, false)),
+    ok = wait_for_accepts(2),
+    ok = detach_link_sync(Sender),
+
+    %% This is the only consumer, so it is the single active consumer.
+    LinkProperties = #{<<"rabbitmq:consumer-timeout">> => {uint, 1000}},
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session, <<"receiver">>, Address,
+                       unsettled, none, #{}, LinkProperties),
+
+    %% Take the first message and never settle it, to trigger the timeout.
+    ok = amqp10_client:flow_link_credit(Receiver, 1, never),
+    DeliveryId1 = receive {amqp10_msg, Receiver, M1} ->
+                              ?assertEqual([<<"msg1">>], amqp10_msg:body(M1)),
+                              amqp10_msg:delivery_id(M1)
+                  after 9000 -> ct:fail({missing_msg, ?LINE})
+                  end,
+
+    receive {amqp10_event, {link, Receiver, {disposition, released, Id1}}} ->
+                ?assertEqual(DeliveryId1, Id1)
+    after 9000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    %% The client has settled the released delivery, so the consumer's timeout
+    %% state is cleared and it must become the active consumer again. Both the
+    %% requeued msg1 and the untouched msg2 must be delivered.
+    ok = amqp10_client:flow_link_credit(Receiver, 2, never),
+    receive {amqp10_msg, Receiver, M1Redelivered} ->
+                ?assertEqual([<<"msg1">>], amqp10_msg:body(M1Redelivered)),
+                ok = amqp10_client:accept_msg(Receiver, M1Redelivered)
+    after 9000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    receive {amqp10_msg, Receiver, M2} ->
+                ?assertEqual([<<"msg2">>], amqp10_msg:body(M2)),
+                ok = amqp10_client:accept_msg(Receiver, M2)
     after 9000 -> ct:fail({missing_msg, ?LINE})
     end,
 

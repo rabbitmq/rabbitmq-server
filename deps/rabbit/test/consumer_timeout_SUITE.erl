@@ -44,9 +44,13 @@ groups() ->
                 consumer_timeout_no_basic_cancel_capability,
                 consumer_timeout_basic_get],
 
+    %% Quorum queues ignore the exclusive_consume flag, so this only
+    %% applies to classic queues.
+    ClassicOnlyTests = [exclusive_consume_refused_after_consumer_timeout],
+
     AllTestsParallel = [
        {quorum_queue, [], AllTests},
-       {classic_queue, [], AllTests}
+       {classic_queue, [], AllTests ++ ClassicOnlyTests}
       ],
     [
      {global_consumer_timeout, [], AllTestsParallel},
@@ -206,6 +210,57 @@ consumer_timeout_with_basic_cancel_capability(Config) ->
     amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DTag}),
     #'basic.get_empty'{} =
         amqp_channel:call(Ch, #'basic.get'{queue = QName, no_ack = true}),
+    rabbit_ct_client_helpers:close_channel(Ch),
+    rabbit_ct_client_helpers:close_connection(Conn),
+    ok.
+
+%% A consumer timeout parks the consumer but does not cancel it at the queue,
+%% so the queue is still exclusively consumed and a second consumer must be
+%% refused with 403.
+exclusive_consume_refused_after_consumer_timeout(Config) ->
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    QName = ?config(queue_name, Config),
+    declare_queue(Ch, Config, QName),
+    amqp_channel:call(Ch, #'confirm.select'{}),
+    publish(Ch, QName, [<<"msg1">>]),
+    amqp_channel:wait_for_confirms_or_die(Ch, 30),
+    wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
+
+    Ctag = <<"exclusive-ctag">>,
+    amqp_channel:subscribe(Ch, #'basic.consume'{queue = QName,
+                                                no_ack = false,
+                                                exclusive = true,
+                                                consumer_tag = Ctag},
+                           self()),
+    receive #'basic.consume_ok'{consumer_tag = Ctag} -> ok
+    after ?RECEIVE_TIMEOUT -> exit(consume_ok_expected)
+    end,
+
+    %% Receive the delivery but never acknowledge it, to trigger the timeout.
+    receive
+        {#'basic.deliver'{consumer_tag = Ctag}, _} -> ok
+    after ?RECEIVE_TIMEOUT ->
+              flush(1),
+              exit(deliver_timeout)
+    end,
+    receive
+        #'basic.cancel'{consumer_tag = Ctag, nowait = true} -> ok
+    after ?RECEIVE_TIMEOUT ->
+              flush(1),
+              exit(basic_cancel_expected)
+    end,
+
+    %% The exclusive consumer is still registered at the queue: the channel
+    %% only forwarded a basic.cancel to the client, it did not cancel the
+    %% consumer. A plain basic.consume from another connection must still be
+    %% refused.
+    Conn2 = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0),
+    {ok, Ch2} = amqp_connection:open_channel(Conn2),
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 403, _}}, _},
+       amqp_channel:call(Ch2, #'basic.consume'{queue = QName, no_ack = true})),
+
+    catch amqp_connection:close(Conn2),
     rabbit_ct_client_helpers:close_channel(Ch),
     rabbit_ct_client_helpers:close_connection(Conn),
     ok.
