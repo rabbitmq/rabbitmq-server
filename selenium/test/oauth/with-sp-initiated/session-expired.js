@@ -34,10 +34,8 @@ describe('Once an OAuth2 user is logged in', function () {
     // interval.
     await homePage.driver.wait(async () => {
       await homePage.refresh()
-      const buttons = await homePage.driver.findElements(By.css('div#outer div#login button#login'))
-      if (buttons.length === 0) return false
       try {
-        return (await buttons[0].getText()) === 'Click here to log in'
+        return await homePage.isLoginButtonVisible()
       } catch (e) {
         return false
       }

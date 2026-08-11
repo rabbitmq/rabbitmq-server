@@ -23,7 +23,8 @@ all() ->
 groups() ->
     %% The core behaviour is checked under both ways of defining a resource
     %% server: the top-level keys, and an entry in the oauth_resource_servers map.
-    Core = [rewrites_only_the_token_endpoint, injects_client_secret_and_forwards],
+    Core = [rewrites_only_the_token_endpoint, injects_client_secret_and_forwards,
+            honors_x_forwarded_headers],
     [{top_level, [], Core ++ [
         keeps_client_supplied_secret,
         relays_provider_error,
@@ -137,6 +138,16 @@ rewrites_only_the_token_endpoint(Config) ->
         maps:get(<<"authorization_endpoint">>, Map)),
     ?assertEqual(<<Issuer/binary, "/keys">>, maps:get(<<"jwks_uri">>, Map)).
 
+honors_x_forwarded_headers(Config) ->
+    Id = ?config(resource, Config),
+    Headers = [{"x-forwarded-proto", "https"},
+               {"x-forwarded-host", "proxy.example.com"},
+               {"x-forwarded-port", "8443"}],
+    {200, Map} = get_json_with_headers(Config, metadata_path(Id), Headers),
+    
+    ExpectedTokenEndpoint = iolist_to_binary(["https://proxy.example.com:8443", token_path(Id)]),
+    ?assertEqual(ExpectedTokenEndpoint, maps:get(<<"token_endpoint">>, Map)).
+
 injects_client_secret_and_forwards(Config) ->
     Id = ?config(resource, Config),
     Body = <<"grant_type=authorization_code&code=the-code&code_verifier=v">>,
@@ -206,13 +217,19 @@ unset_env(Config, App, Key) ->
         [App, Key]).
 
 get_raw(Config, Path) ->
-    {ok, {{_, Code, _}, _Headers, Body}} =
-        httpc:request(get, {mgmt_base(Config) ++ Path, []}, [],
+    get_raw_with_headers(Config, Path, []).
+
+get_raw_with_headers(Config, Path, Headers) ->
+    {ok, {{_, Code, _}, _RespHeaders, Body}} =
+        httpc:request(get, {mgmt_base(Config) ++ Path, Headers}, [],
                       [{body_format, binary}]),
     {Code, Body}.
 
 get_json(Config, Path) ->
-    {Code, Body} = get_raw(Config, Path),
+    get_json_with_headers(Config, Path, []).
+
+get_json_with_headers(Config, Path, Headers) ->
+    {Code, Body} = get_raw_with_headers(Config, Path, Headers),
     {Code, rabbit_json:decode(Body)}.
 
 post_form(Config, Path, Body) ->

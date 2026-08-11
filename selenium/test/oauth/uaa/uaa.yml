@@ -18,7 +18,7 @@ logout:
     parameter:
       disable: false
       whitelist:
-        ${RABBITMQ_SCHEME}://${RABBITMQ_HOST}/*
+        ${RABBITMQ_SCHEME}://${PUBLIC_RABBITMQ_HOST}/*
 login:
   serviceProviderKey: |
     -----BEGIN RSA PRIVATE KEY-----
@@ -138,7 +138,7 @@ oauth:
       authorized-grant-types: authorization_code,refresh_token
       scope: rabbitmq.*,openid,profile
       authorities: uaa.resource,rabbitmq
-      redirect-uri: ${RABBITMQ_SCHEME}://${RABBITMQ_HOST}${RABBITMQ_PATH}
+      redirect-uri: ${RABBITMQ_SCHEME}://${PUBLIC_RABBITMQ_HOST}${RABBITMQ_PATH}
       autoapprove: true
       allowpublic: true
     rabbit_idp_user:

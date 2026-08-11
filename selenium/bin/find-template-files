@@ -33,7 +33,7 @@ find_template_files_in() {
       matched_entry=true
       for p in ${profiles//./ }
       do
-        if [[ "$PROFILES" != *"$p"* && $matched_entry == true ]]; then
+        if [[ " $PROFILES " != *" $p "* && $matched_entry == true ]]; then
           matched_entry=false
         fi
       done

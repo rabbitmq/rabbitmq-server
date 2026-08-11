@@ -9,7 +9,7 @@
 
 -export([init/2]).
 %% exported for testing
--export([inject_client_secret/2, rewrite_token_endpoint/2]).
+-export([inject_client_secret/2, rewrite_token_endpoint/2, external_authority/6]).
 
 -include_lib("oauth2_client/include/oauth2_client.hrl").
 -include_lib("kernel/include/logger.hrl").
@@ -216,19 +216,83 @@ is_root_resource_server(Id) ->
                             undefined)).
 
 proxy_token_url(Req, Id) ->
-    Scheme = cowboy_req:scheme(Req),
-    Host = cowboy_req:host(Req),
     Prefix = rabbit_mgmt_util:get_path_prefix(),
-    iolist_to_binary([Scheme, "://", Host, port(Req, Scheme), Prefix,
+    Authority = external_authority(
+                  cowboy_req:scheme(Req),
+                  cowboy_req:host(Req),
+                  cowboy_req:port(Req),
+                  header_or_qs(<<"x-forwarded-proto">>, Req),
+                  header_or_qs(<<"x-forwarded-host">>, Req),
+                  header_or_qs(<<"x-forwarded-port">>, Req)),
+    iolist_to_binary([Authority, Prefix,
                       "/js/oidc-oauth/token-endpoint/",
                       cow_uri:urlencode(Id)]).
 
-port(Req, Scheme) ->
-    case {cowboy_req:port(Req), Scheme} of
-        {80, <<"http">>} -> "";
-        {443, <<"https">>} -> "";
-        {Port, _} -> [":", integer_to_binary(Port)]
+header_or_qs(Name, Req) ->
+    case rabbit_mgmt_util:qs_val(Name, Req) of
+        undefined -> cowboy_req:header(Name, Req);
+        Val -> Val
     end.
+
+external_authority(ConnScheme, ConnHost, ConnPort, ForwardedProto, ForwardedHost, ForwardedPort) ->
+    Scheme = case first_value(ForwardedProto) of
+                 undefined -> ConnScheme;
+                 Value -> Value
+             end,
+    
+    DefaultPort = case ForwardedProto of
+                      undefined -> ConnPort;
+                      _ -> default_port(Scheme)
+                  end,
+
+    {Host, Port} = case {ForwardedHost, ForwardedPort} of
+                       {undefined, undefined} ->
+                           {ConnHost, DefaultPort};
+                       {undefined, PortVal} ->
+                           {ConnHost, binary_to_integer(first_value(PortVal))};
+                       {HostVal, undefined} ->
+                           parse_host_header(first_value(HostVal), DefaultPort);
+                       {HostVal, PortVal} ->
+                           {H, _} = parse_host_header(first_value(HostVal), undefined),
+                           {H, binary_to_integer(first_value(PortVal))}
+                   end,
+                   
+    PortSuffix = port_suffix(Scheme, Port),
+    [Scheme, "://", Host, PortSuffix].
+
+parse_host_header(HostVal, DefaultPort) ->
+    case binary:split(HostVal, <<"]">>) of
+        [IPv6, <<":", PortBin/binary>>] ->
+            {<<IPv6/binary, "]">>, binary_to_integer(PortBin)};
+        [<< "[", _/binary >> = IPv6] ->
+            {IPv6, DefaultPort};
+        _ ->
+            case binary:split(HostVal, <<":">>, [global]) of
+                [Host, PortBin] ->
+                    {Host, binary_to_integer(PortBin)};
+                [Host] ->
+                    {Host, DefaultPort};
+                _ ->
+                    {HostVal, DefaultPort}
+            end
+    end.
+
+%% When a request passes through multiple proxies, X-Forwarded-* headers
+%% contain a comma-separated list of values. The first value always
+%% represents the original client's connection details.
+first_value(undefined) ->
+    undefined;
+first_value(HeaderVal) ->
+    [First | _] = binary:split(HeaderVal, <<",">>),
+    string:trim(First).
+
+default_port(<<"https">>) -> 443;
+default_port(<<"http">>) -> 80;
+default_port(_) -> 80.
+
+port_suffix(<<"http">>, 80) -> "";
+port_suffix(<<"https">>, 443) -> "";
+port_suffix(_, Port) -> [":", integer_to_binary(Port)].
 
 http_get(URL, HttpOpts) ->
     request(get, {URL, []}, HttpOpts).

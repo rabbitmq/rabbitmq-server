@@ -13,11 +13,14 @@ ENV_FILE=$3
 FIND_PARENT_PATH="$(dirname "$FIND_PATH")"
 
 generate_env_file() {
+  LOGS="$(cd "${SCRIPT}/.." && pwd)/logs"
   parentdir="$(dirname "$ENV_FILE")"
   mkdir -p $parentdir
+  mkdir -p ${LOGS}
   echo "#!/usr/bin/env bash" > $ENV_FILE
   echo "set -u" >> $ENV_FILE
-  echo "export SELENIUM=${SCRIPT}/.." >> $ENV_FILE
+  echo "export SELENIUM=\"$(cd "${SCRIPT}/.." && pwd)\"" >> $ENV_FILE
+  echo "export SELENIUM_LOGS=${LOGS}" >> $ENV_FILE
   echo "export TEST_CONFIG_PATH=${FIND_PATH}" >> $ENV_FILE
 
   declare -a FILE_ARRAY
