@@ -33,6 +33,9 @@ module.exports = class LoginPage extends BasePage {
       return Promise.resolve(false)
     }
   }
+  async isWarningNotVisible () {
+    return this.isElementNotVisible(WARNING)
+  }
   async getWarnings() {
     try
     {

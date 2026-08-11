@@ -29,14 +29,15 @@ describe('An user without management tag', function () {
     if (!await homePage.isLoaded()) {
       throw new Error('Failed to login')
     }
-    assert.ok(await homePage.isWarningVisible())
+    const notVisible = await homePage.isWarningNotVisible()
+    assert.ok(!notVisible)
   })
 
   it('should get "Not authorized" warning message and logout button but no login button', async function(){
     assert.equal('Not authorized', await homePage.getWarning())
     assert.equal('Click here to logout', await homePage.getLogoutButton())
-    assert.ok(!await homePage.isBasicAuthSectionVisible())
-    assert.ok(!await homePage.isOAuth2SectionVisible())
+    assert.ok(await homePage.isBasicAuthSectionNotVisible())
+    assert.ok(await homePage.isOAuth2SectionNotVisible())
   })
 
   describe("After clicking on logout button", function() {
@@ -46,9 +47,10 @@ describe('An user without management tag', function () {
       })
 
       it('should get redirected to home page again without error message', async function(){
-        await delay(250)
-        const visible = await homePage.isWarningVisible()
-        assert.ok(!visible)
+        await delay(1000)
+        await homePage.isLoaded()
+        const notVisible = await homePage.isWarningNotVisible()
+        assert.ok(notVisible)
       })
 
   })
