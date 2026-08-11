@@ -2543,11 +2543,14 @@ definitions_etag_test0(Config) ->
             [auth_header("guest", "guest"), {"if-none-match", JsonETag}]),
 
     %% Changing the topology changes the ETag, so the same conditional request
-    %% now returns the full response with a fresh ETag.
+    %% now returns the full response with a fresh ETag. The ETag's version token
+    %% advances asynchronously, so poll until the request answers 200.
     http_put(Config, "/queues/%2F/etag-queue-2", #{durable => true}, {group, '2xx'}),
     {ok, {{_, 200, _}, FreshHeaders, _}} =
-        req(Config, get, "/definitions",
-            [auth_header("guest", "guest"), {"if-none-match", JsonETag}]),
+        ?awaitMatch({ok, {{_, 200, _}, _, _}},
+                    req(Config, get, "/definitions",
+                        [auth_header("guest", "guest"), {"if-none-match", JsonETag}]),
+                    30000),
     FreshETag = proplists:get_value("etag", FreshHeaders),
     ?assert(FreshETag =/= undefined),
     ?assertNotEqual(JsonETag, FreshETag),
