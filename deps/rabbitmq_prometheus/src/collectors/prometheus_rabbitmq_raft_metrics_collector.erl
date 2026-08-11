@@ -156,7 +156,11 @@ collect_key_component_metrics(Prefix, Callback) ->
     %% coordination (Khepri) and quorum_queues rows are exposed. Without the
     %% quorum_queues rows there is no way to observe quorum-queue WAL write,
     %% batch (fsync) or bytes-written activity from the Prometheus endpoint.
-    WALMetrics = [batches, writes, bytes_written, wal_files, mem_tables],
+    %% current_file_size and max_file_size make the WAL's fill state visible.
+    %% wal_files only increments after a roll, so on its own it reports the
+    %% fsync spike after the fact rather than the approach to it.
+    WALMetrics = [batches, writes, bytes_written, wal_files, mem_tables,
+                  current_file_size, max_file_size],
     SegmentWriterMetrics = [entries, segments],
     QQComponentResult =
         seshat:format(ra,

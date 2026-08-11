@@ -453,7 +453,11 @@ aggregated_metrics_test(Config) ->
     ?assertEqual(match, re:run(Body, "^rabbitmq_raft_bytes_written.*ra_system=\"quorum_queues\"", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_raft_writes.*ra_system=\"quorum_queues\"", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_raft_batches.*ra_system=\"quorum_queues\"", [{capture, none}, multiline])),
-    ?assertEqual(match, re:run(Body, "^rabbitmq_raft_wal_files.*ra_system=\"quorum_queues\"", [{capture, none}, multiline])).
+    ?assertEqual(match, re:run(Body, "^rabbitmq_raft_wal_files.*ra_system=\"quorum_queues\"", [{capture, none}, multiline])),
+    %% The WAL size gauges make the fill state observable. wal_files above only
+    %% increments after a roll, so it reports the fsync spike after the fact.
+    ?assertEqual(match, re:run(Body, "^rabbitmq_raft_current_file_size.*ra_system=\"quorum_queues\"", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_raft_max_file_size.*ra_system=\"quorum_queues\"", [{capture, none}, multiline])).
 
 %% Verify that the aggregated endpoint does not emit duplicate TYPE
 %% lines for Raft metrics that belong to different Ra systems.
@@ -471,7 +475,9 @@ aggregated_endpoint_no_duplicate_raft_type_lines(Config) ->
                                     "rabbitmq_raft_entries",
                                     "rabbitmq_raft_mem_tables",
                                     "rabbitmq_raft_segments",
-                                    "rabbitmq_raft_wal_files"]).
+                                    "rabbitmq_raft_wal_files",
+                                    "rabbitmq_raft_current_file_size",
+                                    "rabbitmq_raft_max_file_size"]).
 
 endpoint_per_object_metrics(Config) ->
     per_object_metrics_test(Config, "/metrics/per-object").
