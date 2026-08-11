@@ -845,12 +845,15 @@ local_query_resolves_pinned_v7_machine_version(Config) ->
 
 local_query_does_not_retry_on_unrelated_error(_Config) ->
     ok = meck:new(ra, [passthrough]),
-    meck:expect(ra, local_query, fun (_Server, _Fun, _Timeout) -> {error, noproc} end),
-    ?assertEqual({error, noproc},
-                 rabbit_fifo_client:local_query(
-                   some_server, query_notify_decorators_info, 1000)),
-    ?assertEqual(1, meck:num_calls(ra, local_query, '_')),
-    meck:unload(ra),
+    try
+        meck:expect(ra, local_query, fun (_Server, _Fun, _Timeout) -> {error, noproc} end),
+        ?assertEqual({error, noproc},
+                     rabbit_fifo_client:local_query(
+                       some_server, query_notify_decorators_info, 1000)),
+        ?assertEqual(1, meck:num_calls(ra, local_query, '_'))
+    after
+        meck:unload(ra)
+    end,
     ok.
 
 dead_letter_handler(Pid, Reason, Msgs) ->
