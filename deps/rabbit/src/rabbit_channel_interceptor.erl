@@ -9,7 +9,7 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--export([init/1, intercept_in/3, list/0]).
+-export([init/1, intercept_in/3, list/0, set_priorities/1]).
 
 -behaviour(rabbit_registry_class).
 
@@ -40,6 +40,18 @@ removed_from_rabbit_registry(_Type) ->
 list() ->
     Mods = [M || {_, M} <- rabbit_registry:lookup_all(channel_interceptor)],
     [[{name, Mod}, {applies_to, Mod:applies_to()}, {priority, priority(Mod)}] || Mod <- Mods].
+
+-spec set_priorities([{module(), integer()}]) -> ok.
+%% Merge the given interceptor priorities into the current configuration,
+%% keeping priorities of interceptors that are not mentioned, and refresh
+%% all channels so the new ordering takes effect.
+set_priorities(NewPriorities) ->
+    Current = application:get_env(rabbit, channel_interceptor_priorities, []),
+    Merged = lists:foldl(fun({Mod, P}, Acc) ->
+                             lists:keystore(Mod, 1, Acc, {Mod, P})
+                         end, Current, NewPriorities),
+    ok = application:set_env(rabbit, channel_interceptor_priorities, Merged),
+    rabbit_channel:refresh_interceptors().
 
 init(Ch) ->
     Mods = [M || {_, M} <- rabbit_registry:lookup_all(channel_interceptor)],
