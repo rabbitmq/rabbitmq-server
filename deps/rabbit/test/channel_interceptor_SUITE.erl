@@ -26,7 +26,7 @@ groups() ->
           register_interceptor_crashing_with_amqp_error_exception,
           register_failing_interceptors,
           conflicting_interceptors_close_network_connections_gracefully,
-          conflicting_interceptors_close_direct_connections_gracefully
+          conflicting_interceptors_close_direct_connections_gracefully,
           multiple_interceptors_ordered_by_priority,
           reject_interceptors_with_same_priority_for_same_operation,
           priority_overridden_by_config
@@ -304,6 +304,7 @@ conflicting_interceptors_close_direct_connections_gracefully1(Config) ->
     {ok, Ch} = amqp_connection:open_channel(Conn2),
     ?assert(is_pid(Ch)),
     ok = amqp_connection:close(Conn2),
+    passed.
 
 multiple_interceptors_ordered_by_priority(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,
