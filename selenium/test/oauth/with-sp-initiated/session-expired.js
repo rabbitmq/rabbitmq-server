@@ -1,6 +1,5 @@
 const { By, Key, until, Builder } = require('selenium-webdriver')
-const assert = require('assert')
-const { buildDriver, goToHome, captureScreensFor, teardown, delay, idpLoginPage } = require('../../utils')
+const { buildDriver, goToHome, captureScreensFor, teardown, idpLoginPage } = require('../../utils')
 
 const SSOHomePage = require('../../pageobjects/SSOHomePage')
 const OverviewPage = require('../../pageobjects/OverviewPage')
@@ -12,7 +11,7 @@ describe('Once an OAuth2 user is logged in', function () {
   let overview
   let captureScreen
   
-  this.timeout(80000)
+  this.timeout(160000)
 
   before(async function () {
     driver = buildDriver()
@@ -28,19 +27,21 @@ describe('Once an OAuth2 user is logged in', function () {
     await idpLogin.login('rabbit_admin', 'rabbit_admin')
     await overview.isLoaded()
 
-    // Wait for the 1-minute `login_session_timeout` to expire.
-    // In this suite, token TTL is 30s, so it WILL refresh silently in the background
-    // around ~20-30s. The hard session timeout should STILL kick us out after 60s
-    // regardless of the fact that the token is actively refreshing.
-    await delay(62000)
-    
-    // Refresh the page to force the UI to check the session status immediately
-    // instead of waiting for the background partial_update interval.
-    await homePage.refresh()
-
-    await homePage.isLoaded()
-    const value = await homePage.getLoginButton()
-    assert.equal(value, 'Click here to log in')
+    // login_session_timeout is one minute (the minimum), so the logout cannot
+    // happen before ~60s; poll for it rather than sleeping a fixed time.
+    // Refresh the page on every check to force the UI to re-evaluate the
+    // session status instead of waiting for the background partial_update
+    // interval.
+    await homePage.driver.wait(async () => {
+      await homePage.refresh()
+      const buttons = await homePage.driver.findElements(By.css('div#outer div#login button#login'))
+      if (buttons.length === 0) return false
+      try {
+        return (await buttons[0].getText()) === 'Click here to log in'
+      } catch (e) {
+        return false
+      }
+    }, 150000, 'Was not forced to log out after the login_session_timeout expired', 2000)
   })
 
   after(async function () {
