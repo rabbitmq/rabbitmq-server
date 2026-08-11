@@ -16,7 +16,13 @@ all() ->
     [
      inject_client_secret_when_absent,
      does_not_override_client_secret_when_present,
-     rewrite_replaces_only_token_endpoint
+     rewrite_replaces_only_token_endpoint,
+     external_authority_no_headers,
+     external_authority_proto_only,
+     external_authority_host_only,
+     external_authority_host_with_port,
+     external_authority_all_headers,
+     external_authority_multiple_proxies
     ].
 
 inject_client_secret_when_absent(_Config) ->
@@ -47,3 +53,32 @@ rewrite_replaces_only_token_endpoint(_Config) ->
     ?assertEqual(<<"https://idp/authorize">>,
                  maps:get(<<"authorization_endpoint">>, Rewritten)),
     ?assertEqual(<<"https://idp/keys">>, maps:get(<<"jwks_uri">>, Rewritten)).
+
+external_authority_no_headers(_Config) ->
+    ?assertEqual([<<"http">>, "://", <<"backend">>, [":", <<"15672">>]],
+                 rabbit_mgmt_oauth_token_proxy:external_authority(<<"http">>, <<"backend">>, 15672, undefined, undefined, undefined)).
+
+external_authority_proto_only(_Config) ->
+    ?assertEqual([<<"https">>, "://", <<"backend">>, ""],
+                 rabbit_mgmt_oauth_token_proxy:external_authority(<<"http">>, <<"backend">>, 15672, <<"https">>, undefined, undefined)).
+
+external_authority_host_only(_Config) ->
+    ?assertEqual([<<"http">>, "://", <<"proxy.com">>, [":", <<"15672">>]],
+                 rabbit_mgmt_oauth_token_proxy:external_authority(<<"http">>, <<"backend">>, 15672, undefined, <<"proxy.com">>, undefined)).
+
+external_authority_host_with_port(_Config) ->
+    ?assertEqual([<<"https">>, "://", <<"proxy.com">>, [":", <<"8443">>]],
+                 rabbit_mgmt_oauth_token_proxy:external_authority(<<"http">>, <<"backend">>, 15672, <<"https">>, <<"proxy.com:8443">>, undefined)),
+    ?assertEqual([<<"https">>, "://", <<"[::1]">>, [":", <<"8443">>]],
+                 rabbit_mgmt_oauth_token_proxy:external_authority(<<"http">>, <<"backend">>, 15672, <<"https">>, <<"[::1]:8443">>, undefined)).
+
+external_authority_all_headers(_Config) ->
+    ?assertEqual([<<"https">>, "://", <<"proxy.com">>, [":", <<"8443">>]],
+                 rabbit_mgmt_oauth_token_proxy:external_authority(<<"http">>, <<"backend">>, 15672, <<"https">>, <<"proxy.com">>, <<"8443">>)),
+    %% Forwarded port overrides host port
+    ?assertEqual([<<"https">>, "://", <<"proxy.com">>, [":", <<"8443">>]],
+                 rabbit_mgmt_oauth_token_proxy:external_authority(<<"http">>, <<"backend">>, 15672, <<"https">>, <<"proxy.com:443">>, <<"8443">>)).
+
+external_authority_multiple_proxies(_Config) ->
+    ?assertEqual([<<"https">>, "://", <<"proxy.com">>, ""],
+                 rabbit_mgmt_oauth_token_proxy:external_authority(<<"http">>, <<"backend">>, 15672, <<"https, http">>, <<"proxy.com, other.com">>, undefined)).

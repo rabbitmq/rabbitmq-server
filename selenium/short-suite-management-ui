@@ -11,3 +11,4 @@ mgt/amqp10-connections.sh
 mgt/mqtt-connections.sh
 mgt/feature-flags.sh
 authnz-mgt/multi-oauth-with-basic-auth.sh
+authnz-mgt/oauth-with-uaa-and-tls-terminating-proxy.sh
