@@ -23,12 +23,16 @@ all() ->
 groups() ->
     %% The core behaviour is checked under both ways of defining a resource
     %% server: the top-level keys, and an entry in the oauth_resource_servers map.
-    Core = [rewrites_only_the_token_endpoint, injects_client_secret_and_forwards],
+    Core = [rewrites_only_the_token_endpoint, injects_client_secret_and_forwards,
+            honors_forwarded_headers,
+            ignores_forwarding_hints_in_the_query_string],
     [{top_level, [], Core ++ [
         keeps_client_supplied_secret,
         relays_provider_error,
         unknown_resource_server_returns_404,
         token_endpoint_rejects_get,
+        unusable_forwarded_values_fall_back_to_the_connection,
+        malformed_query_string_does_not_fail_the_request,
         bootstrap_does_not_disclose_secret
      ]},
      {per_resource, [], Core ++ [
@@ -137,10 +141,47 @@ rewrites_only_the_token_endpoint(Config) ->
         maps:get(<<"authorization_endpoint">>, Map)),
     ?assertEqual(<<Issuer/binary, "/keys">>, maps:get(<<"jwks_uri">>, Map)).
 
+honors_forwarded_headers(Config) ->
+    Id = ?config(resource, Config),
+    Headers = [{"x-forwarded-proto", "https"},
+               {"x-forwarded-host", "proxy.example.com"},
+               {"x-forwarded-port", "8443"}],
+    {200, Map} = get_json_with_headers(Config, metadata_path(Id), Headers),
+    Expected = iolist_to_binary(["https://proxy.example.com:8443", token_path(Id)]),
+    ?assertEqual(Expected, maps:get(<<"token_endpoint">>, Map)).
+
+ignores_forwarding_hints_in_the_query_string(Config) ->
+    Id = ?config(resource, Config),
+    Query = "?x-forwarded-proto=https&x-forwarded-host=evil.example.com"
+            "&x-forwarded-port=8443",
+    {200, Map} = get_json(Config, metadata_path(Id) ++ Query),
+    ?assertEqual(proxy_token_endpoint(Config, Id),
+        maps:get(<<"token_endpoint">>, Map)).
+
+unusable_forwarded_values_fall_back_to_the_connection(Config) ->
+    Id = ?config(resource, Config),
+    Expected = proxy_token_endpoint(Config, Id),
+    Unusable = [[{"x-forwarded-port", "abc"}],
+                [{"x-forwarded-port", ""}],
+                [{"x-forwarded-host", "a.example:xx"}],
+                [{"x-forwarded-host", "good.example@evil.example"}],
+                [{"x-forwarded-host", ""}]],
+    [begin
+         {200, Map} = get_json_with_headers(Config, metadata_path(Id), Headers),
+         ?assertEqual(Expected, maps:get(<<"token_endpoint">>, Map))
+     end || Headers <- Unusable].
+
+malformed_query_string_does_not_fail_the_request(Config) ->
+    Id = ?config(resource, Config),
+    {Status, _} = raw_get(Config, metadata_path(Id) ++ "?%"),
+    ?assertEqual(200, Status).
+
 injects_client_secret_and_forwards(Config) ->
     Id = ?config(resource, Config),
     Body = <<"grant_type=authorization_code&code=the-code&code_verifier=v">>,
-    {200, Map} = post_form(Config, token_path(Id), Body),
+    {200, Metadata} = get_json(Config, metadata_path(Id)),
+    Advertised = binary_to_list(maps:get(<<"token_endpoint">>, Metadata)),
+    {200, Map} = post_form_url(Advertised, Body),
     ?assertEqual(<<"mock-access-token">>, maps:get(<<"access_token">>, Map)),
     %% The mock echoes what it received; it only sees client_secret if the proxy
     %% injected it server-side.
@@ -206,19 +247,47 @@ unset_env(Config, App, Key) ->
         [App, Key]).
 
 get_raw(Config, Path) ->
-    {ok, {{_, Code, _}, _Headers, Body}} =
-        httpc:request(get, {mgmt_base(Config) ++ Path, []}, [],
+    get_raw_with_headers(Config, Path, []).
+
+get_raw_with_headers(Config, Path, Headers) ->
+    {ok, {{_, Code, _}, _RespHeaders, Body}} =
+        httpc:request(get, {mgmt_base(Config) ++ Path, Headers}, [],
                       [{body_format, binary}]),
     {Code, Body}.
 
+%% httpc rejects a malformed request URI before it reaches the socket, so the
+%% request has to be written out directly.
+raw_get(Config, Path) ->
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mgmt),
+    {ok, Sock} = gen_tcp:connect("localhost", Port,
+                                 [binary, {active, false}, {packet, raw}]),
+    ok = gen_tcp:send(Sock, ["GET ", Path, " HTTP/1.1\r\n",
+                             "Host: localhost\r\n",
+                             "Connection: close\r\n\r\n"]),
+    Response = recv_until_closed(Sock, <<>>),
+    ok = gen_tcp:close(Sock),
+    <<"HTTP/1.1 ", Status:3/binary, _/binary>> = Response,
+    {binary_to_integer(Status), Response}.
+
+recv_until_closed(Sock, Acc) ->
+    case gen_tcp:recv(Sock, 0, 30000) of
+        {ok, Data} -> recv_until_closed(Sock, <<Acc/binary, Data/binary>>);
+        {error, closed} -> Acc
+    end.
+
 get_json(Config, Path) ->
-    {Code, Body} = get_raw(Config, Path),
+    get_json_with_headers(Config, Path, []).
+
+get_json_with_headers(Config, Path, Headers) ->
+    {Code, Body} = get_raw_with_headers(Config, Path, Headers),
     {Code, rabbit_json:decode(Body)}.
 
 post_form(Config, Path, Body) ->
+    post_form_url(mgmt_base(Config) ++ Path, Body).
+
+post_form_url(Url, Body) ->
     {ok, {{_, Code, _}, _Headers, RespBody}} =
         httpc:request(post,
-            {mgmt_base(Config) ++ Path, [],
-             "application/x-www-form-urlencoded", Body},
+            {Url, [], "application/x-www-form-urlencoded", Body},
             [], [{body_format, binary}]),
     {Code, rabbit_json:decode(RespBody)}.

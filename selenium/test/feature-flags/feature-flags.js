@@ -35,6 +35,7 @@ describe('Feature flags in Admin tab', function () {
     await overview.selectRefreshOption("Do not refresh")
     await overview.clickOnAdminTab()
     await adminTab.clickOnFeatureFlags()
+    await ffTab.isLoaded()
   })
 
   it('it has at least one feature flag', async function () {

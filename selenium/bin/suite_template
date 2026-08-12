@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-if [[ ! -z "${DEBUG}" ]]; then
+if [[ ! -z "${DEBUG:-}" ]]; then
   set -x
 fi
 
@@ -144,7 +144,7 @@ init_suite() {
 build_mocha_image() {
   local need_mocha_docker_image="${1:-yes}"
   DOCKER_BUILD_ARGS=""
-  if [[ -n "$MOCHA_DOCKER_FILE" ]]; then 
+  if [[ -n "${MOCHA_DOCKER_FILE:-}" ]]; then
     DOCKER_BUILD_ARGS="-f $MOCHA_DOCKER_FILE "
   fi
   begin "Ensuring mocha-test image ($DOCKER_BUILD_ARGS) ..."
@@ -371,7 +371,7 @@ _test() {
   print "> RABBITMQ_PATH: ${RABBITMQ_PATH}"
   print "> RABBITMQ_URL: ${RMQ_URL}"
   print "> UAA_URL: ${UAA_URL}"
-  print "> FAKEPORTAL_URL: ${FAKEPORTAL_URL}"
+  print "> FAKEPORTAL_URL: ${FAKEPORTAL_URL:-}"
   mocha_test_tag=($(md5sum $SELENIUM_ROOT_FOLDER/package.json))
 
   generate_node_extra_ca_cert
@@ -392,7 +392,7 @@ _test() {
     --env RABBITMQ_URL=${RMQ_URL} \
     --env RABBITMQ_HOSTNAME=${RMQ_HOSTNAME} \
     --env UAA_URL=${UAA_URL} \
-    --env FAKE_PORTAL_URL=${FAKEPORTAL_URL} \
+    --env FAKE_PORTAL_URL=${FAKEPORTAL_URL:-} \
     --env RUN_LOCAL=false \
     --env SELENIUM_TIMEOUT=${SELENIUM_TIMEOUT} \
     --env SELENIUM_POLLING=${SELENIUM_POLLING} \
@@ -487,7 +487,7 @@ do_generate-ca-server-client-kpi() {
   if [ -f "$FOLDER/openssl.cnf.in" ]; then     
     cat $FOLDER/openssl.cnf.in >> openssl.cnf
   fi 
-  if [[ ! -z "${DEBUG}" ]]; then
+  if [[ ! -z "${DEBUG:-}" ]]; then
     print "Used this openssl.conf"
     cat openssl.cnf >> $CERT_LOG 2>&1
   fi
@@ -580,7 +580,7 @@ run_local_with() {
   generate_env_file
   build_mocha_image no
 
-  if [[ "$PROFILES_FOR_OTHER" != "" ]]
+  if [[ "${PROFILES_FOR_OTHER:-}" != "" ]]
   then 
     export PROFILES_FOR_OTHER="local ${PROFILES_FOR_OTHER}"
     generate_other_env_file
@@ -650,7 +650,7 @@ run_on_docker_with() {
   build_mocha_image
   start_selenium
 
-  if [[ "$PROFILES_FOR_OTHER" != "" ]]
+  if [[ "${PROFILES_FOR_OTHER:-}" != "" ]]
   then 
     export PROFILES_FOR_OTHER=`other_profiles_with_local_or_docker`
     generate_other_env_file    
