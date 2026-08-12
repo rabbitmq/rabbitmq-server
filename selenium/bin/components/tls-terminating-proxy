@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+
+HTTPD_DOCKER_IMAGE=${HTTPD_DOCKER_IMAGE:-httpd:2.4.66}
+
+ensure_tls-terminating-proxy() {
+  if docker ps | grep tls-terminating-proxy &> /dev/null; then
+     print "tls-terminating-proxy already running ..."
+ else
+   start_tls-terminating-proxy
+ fi
+}
+init_tls-terminating-proxy() {
+  HTTPD_CONFIG_DIR=${TEST_CONFIG_DIR}/tls-terminating-proxy
+  export PUBLIC_RABBITMQ_HOST=${PUBLIC_RABBITMQ_HOST:-tls-terminating-proxy:8444}
+  export PROXIED_RABBITMQ_URL=$(calculate_rabbitmq_url $PUBLIC_RABBITMQ_HOST)
+  export RABBITMQ_HOST_FOR_PROXY=${RABBITMQ_HOST_FOR_PROXY:-rabbitmq:15672}
+  export RABBITMQ_PATH=${RABBITMQ_PATH:-}
+
+  print "> HTTPD_CONFIG: ${HTTPD_CONFIG_DIR}"
+  print "> PUBLIC_RABBITMQ_HOST: ${PUBLIC_RABBITMQ_HOST}"
+  print "> PROXIED_RABBITMQ_URL: ${PROXIED_RABBITMQ_URL}"
+  print "> RABBITMQ_HOST_FOR_PROXY: ${RABBITMQ_HOST_FOR_PROXY}"
+  print "> HTTPD_DOCKER_IMAGE: ${HTTPD_DOCKER_IMAGE}"
+
+  generate-ca-server-client-kpi tls-terminating-proxy $CONF_DIR/tls-terminating-proxy
+}
+start_tls-terminating-proxy() {
+  begin "Starting tls-terminating-proxy ..."
+
+  init_tls-terminating-proxy
+  kill_container_if_exist tls-terminating-proxy
+
+  MOUNT_HTTPD_CONFIG_DIR=$CONF_DIR/tls-terminating-proxy
+
+  mkdir -p $MOUNT_HTTPD_CONFIG_DIR
+  ${BIN_DIR}/gen-httpd-conf ${HTTPD_CONFIG_DIR} $ENV_FILE $MOUNT_HTTPD_CONFIG_DIR/httpd.conf
+  print "> EFFECTIVE HTTPD_CONFIG_FILE: $MOUNT_HTTPD_CONFIG_DIR/httpd.conf"
+
+  docker run \
+    --detach \
+    --name tls-terminating-proxy \
+    --net ${DOCKER_NETWORK} \
+    --publish 8444:8444 \
+    --add-host=host.docker.internal:host-gateway \
+    --mount "type=bind,source=${MOUNT_HTTPD_CONFIG_DIR},target=/usr/local/apache2/conf" \
+    ${HTTPD_DOCKER_IMAGE}
+
+  wait_for_message tls-terminating-proxy "resuming normal operations" 5 10
+  end "TLS Terminating Proxy is ready"
+}
