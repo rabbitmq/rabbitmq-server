@@ -12,9 +12,7 @@ const idp_token_endpoint = process.env.IDP_TOKEN_ENDPOINT;
 //
 // Create a proxy server with custom application logic
 //
-var proxy = httpProxy.createProxyServer({
-  xfwd: true
-});
+var proxy = httpProxy.createProxyServer({});
 
 proxy.on('proxyReq', function(proxyReq, req, res, options) {
   log("proxing " + req.url)
@@ -24,10 +22,7 @@ proxy.on('proxyReq', function(proxyReq, req, res, options) {
   proxyReq.setHeader('origin', req.url)
   proxyReq.setHeader('Access-Control-Allow-Origin', '*');
   proxyReq.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
-  
-  if (req.headers.host && !proxyReq.getHeader('x-forwarded-host')) {
-    proxyReq.setHeader('x-forwarded-host', req.headers.host);
-  }
+
 });
 var server = http.createServer(function(req, res) {
   // You can define here your custom logic to handle the request

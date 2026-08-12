@@ -40,7 +40,7 @@ module.exports = class BasePage {
   async ensureSectionIsVisible(section) {
     let element = await this.waitForLocated(section)
     let classes = await element.getAttribute("class")
-    if (classes && classes.search('section-visible') < 0) {
+    if (!classes || classes.search('section-visible') < 0) {
       return this.click(section)
     } else {
       return Promise.resolve(true)
