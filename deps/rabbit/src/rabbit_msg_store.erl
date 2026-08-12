@@ -40,7 +40,18 @@
 -define(CLEAN_FILENAME, "clean.dot").
 -define(FILE_SUMMARY_FILENAME, "file_summary.ets").
 
--define(FILE_EXTENSION,        ".rdq").
+-define(FILE_EXTENSION_V1, ".rdq").
+-define(FILE_EXTENSION_V2, ".sqs").
+
+-define(V2_MAGIC, 16#52535153). %% "RSQS"
+-define(V2_HEADER_SIZE, 64). %% bytes
+
+%% Record 0 is reserved forever so that zero-filled regions
+%% never look like valid records.
+-define(REC_RESERVED,   0).
+-define(REC_SMALL_HOLE, 1).
+-define(REC_HOLE,       2).
+-define(REC_MESSAGE,    3).
 
 %% We keep track of flying messages for writes and removes. The idea is that
 %% when a remove comes in before we could process the write, we skip the
@@ -109,7 +120,10 @@
           %% client ref to synced messages mapping
           cref_to_msg_ids,
           %% See CREDIT_DISC_BOUND in rabbit.hrl
-          credit_disc_bound
+          credit_disc_bound,
+          %% Highest-numbered v1 (.rdq) file, or 'none' if the store has
+          %% no v1 files at all.
+          last_v1_file
         }).
 
 -record(client_msstate,
@@ -121,7 +135,8 @@
           file_handles_ets,
           cur_file_cache_ets,
           flying_ets,
-          credit_disc_bound
+          credit_disc_bound,
+          last_v1_file
         }).
 
 -record(file_summary,
@@ -132,7 +147,8 @@
           index_ets,
           file_summary_ets,
           file_handles_ets,
-          msg_store
+          msg_store,
+          last_v1_file
         }).
 
 -record(dying_client,
@@ -149,23 +165,26 @@
                                 index_ets        :: ets:tid(),
                                 file_summary_ets :: ets:tid(),
                                 file_handles_ets :: ets:tid(),
-                                msg_store        :: server()
+                                msg_store        :: server(),
+                                last_v1_file     :: file_num() | 'none'
                               }.
 
 -type server() :: pid() | atom().
 -type client_ref() :: binary().
 -type file_num() :: non_neg_integer().
+-type file_format() :: 'v1' | 'v2'.
 -type client_msstate() :: #client_msstate {
                       server             :: server(),
                       client_ref         :: client_ref(),
-                      reader             :: undefined | {non_neg_integer(), file:fd()},
+                      reader             :: undefined | {file_num(), file:fd(), file_format()},
                       index_ets          :: any(),
                       %% Stored as binary() as opposed to file:filename() to save memory.
                       dir                :: binary(),
                       file_handles_ets   :: ets:tid(),
                       cur_file_cache_ets :: ets:tid(),
                       flying_ets         :: ets:tid(),
-                      credit_disc_bound  :: {pos_integer(), pos_integer()}}.
+                      credit_disc_bound  :: {pos_integer(), pos_integer()},
+                      last_v1_file       :: file_num() | 'none'}.
 -type msg_ref_delta_gen(A) ::
         fun ((A) -> 'finished' |
                     {rabbit_types:msg_id(), non_neg_integer(), A}).
@@ -408,7 +427,7 @@ gc_pid(Server) ->
 -spec client_init(server(), client_ref(), maybe_msg_id_fun()) -> client_msstate().
 
 client_init(Server, Ref, MsgOnDiskFun) when is_pid(Server); is_atom(Server) ->
-    {IndexEts, Dir, FileHandlesEts, CurFileCacheEts, FlyingEts} =
+    {IndexEts, Dir, FileHandlesEts, CurFileCacheEts, FlyingEts, LastV1File} =
         gen_server2:call(
           Server, {new_client_state, Ref, self(), MsgOnDiskFun},
           infinity),
@@ -422,7 +441,8 @@ client_init(Server, Ref, MsgOnDiskFun) when is_pid(Server); is_atom(Server) ->
                       file_handles_ets   = FileHandlesEts,
                       cur_file_cache_ets = CurFileCacheEts,
                       flying_ets         = FlyingEts,
-                      credit_disc_bound  = CreditDiscBound }.
+                      credit_disc_bound  = CreditDiscBound,
+                      last_v1_file       = LastV1File }.
 
 -spec client_terminate(client_msstate()) -> 'ok'.
 
@@ -518,7 +538,8 @@ read_many_file2(MsgIds0, CState = #client_msstate{ dir              = Dir,
                                                    index_ets        = IndexEts,
                                                    file_handles_ets = FileHandlesEts,
                                                    reader           = Reader0,
-                                                   client_ref       = Ref }, Acc0, File) ->
+                                                   client_ref       = Ref,
+                                                   last_v1_file     = LastV1File }, Acc0, File) ->
     %% Mark file handle open.
     mark_handle_open(FileHandlesEts, File, Ref),
     %% Get index for all Msgids in File.
@@ -539,7 +560,7 @@ read_many_file2(MsgIds0, CState = #client_msstate{ dir              = Dir,
             %% Then we can do the consolidation to get the pread LocNums.
             LocNums = consolidate_reads(MsgLocations, []),
             %% Read the data from the file.
-            Reader = reader_open(Reader0, Dir, File),
+            Reader = reader_open(Reader0, Dir, File, LastV1File),
             {ok, Msgs} = reader_pread(Reader, LocNums),
             %% Before we continue the read_many calls we must remove the
             %% MsgIds we have read from the list and add the messages to
@@ -642,8 +663,10 @@ client_read3(#msg_location { msg_id = MsgId, file = File },
     end.
 
 read_from_disk(#msg_location { msg_id = MsgId, file = File, offset = Offset,
-                               total_size = TotalSize }, State = #client_msstate{ reader = Reader0, dir = Dir }) ->
-    Reader = reader_open(Reader0, Dir, File),
+                               total_size = TotalSize },
+               State = #client_msstate{ reader = Reader0, dir = Dir,
+                                        last_v1_file = LastV1File }) ->
+    Reader = reader_open(Reader0, Dir, File, LastV1File),
     Msg = case reader_pread(Reader, [{Offset, TotalSize}]) of
         {ok, [Msg0]} ->
             Msg0;
@@ -659,7 +682,7 @@ read_from_disk(#msg_location { msg_id = MsgId, file = File, offset = Offset,
     {Msg, State#client_msstate{ reader = Reader }}.
 
 %%----------------------------------------------------------------------------
-%% Reader functions. A reader is a file num + fd tuple.
+%% Reader functions. A reader is a file num + fd + format tuple.
 %%----------------------------------------------------------------------------
 
 %% The reader tries to keep the FD open for subsequent reads.
@@ -668,43 +691,89 @@ read_from_disk(#msg_location { msg_id = MsgId, file = File, offset = Offset,
 %%
 %% The FD will be closed when the queue hibernates to save
 %% resources.
-reader_open(Reader, Dir, File) ->
+%%
+%% We compute and cache the file's format here so that reader_pread/2
+%% doesn't need LastV1File (or to recompute file_format/2) on every read:
+%% a reader is only ever used against the file it was just opened for.
+reader_open(Reader, Dir, File, LastV1File) ->
+    Format = file_format(File, LastV1File),
     {ok, Fd} = case Reader of
-        {File, Fd0} ->
+        {File, Fd0, _} ->
             {ok, Fd0};
-        {_AnotherFile, Fd0} ->
+        {_AnotherFile, Fd0, _} ->
             ok = file:close(Fd0),
-            file:open(form_filename(Dir, filenum_to_name(File)),
+            file:open(form_filename(Dir, filenum_to_name(File, Format)),
                       [binary, read, raw]);
         undefined ->
-            file:open(form_filename(Dir, filenum_to_name(File)),
+            file:open(form_filename(Dir, filenum_to_name(File, Format)),
                       [binary, read, raw])
     end,
-    {File, Fd}.
+    {File, Fd, Format}.
 
-reader_pread({_, Fd}, LocNums) ->
+reader_pread({File, Fd, Format}, LocNums) ->
     case file:pread(Fd, LocNums) of
-        {ok, DataL} -> {ok, reader_pread_parse(DataL)};
+        {ok, DataL} -> {ok, reader_pread_parse(DataL, Format, File)};
         KO -> KO
     end.
 
-reader_pread_parse([<<Size:64,
-                      _MsgId:16/binary,
-                      Rest0/bits>>|Tail]) ->
+reader_pread_parse(DataL, v1, File) -> reader_pread_parse_v1(DataL, File);
+reader_pread_parse(DataL, v2, File) -> reader_pread_parse_v2(DataL, File).
+
+%% A message record that fails to parse or decode raises with the file
+%% number attached, rather than crashing with a bare badmatch/badarg or
+%% (if nothing here even matches) a function_clause that says nothing
+%% about which file was being read. The msg_id is attached too when the
+%% record was recognised far enough to read one out, so the specific
+%% message can be located directly instead of having to scan the whole
+%% file to find whatever's at fault.
+reader_pread_parse_v1([<<Size:64,
+                         MsgId:16/binary,
+                         Rest0/bits>>|Tail], File) ->
     BodyBinSize = Size - 16, %% Remove size of MsgId.
-    <<MsgBodyBin:BodyBinSize/binary,
-      255, %% OK marker.
-      Rest/bits>> = Rest0,
-    [binary_to_term(MsgBodyBin)|reader_pread_parse([Rest|Tail])];
-reader_pread_parse([<<>>]) ->
+    case Rest0 of
+        <<MsgBodyBin:BodyBinSize/binary, 255, Rest/bits>> ->
+            try binary_to_term(MsgBodyBin) of
+                Term -> [Term|reader_pread_parse_v1([Rest|Tail], File)]
+            catch
+                error:badarg ->
+                    error({rabbit_msg_store_v1_read, invalid_message_body, File, MsgId})
+            end;
+        _ ->
+            error({rabbit_msg_store_v1_read, invalid_message_size, File, MsgId})
+    end;
+reader_pread_parse_v1([<<>>], _File) ->
     [];
-reader_pread_parse([<<>>|Tail]) ->
-    reader_pread_parse(Tail).
+reader_pread_parse_v1([<<>>|Tail], File) ->
+    reader_pread_parse_v1(Tail, File);
+reader_pread_parse_v1(_Data, File) ->
+    error({rabbit_msg_store_v1_read, unrecognised_data, File}).
+
+reader_pread_parse_v2([<<?REC_MESSAGE:8, Size:32,
+                         MsgId:16/binary,
+                         Rest0/bits>>|Tail], File) ->
+    BodyBinSize = Size - 21,
+    case Rest0 of
+        <<MsgBodyBin:BodyBinSize/binary, Rest/bits>> ->
+            try binary_to_term(MsgBodyBin) of
+                Term -> [Term|reader_pread_parse_v2([Rest|Tail], File)]
+            catch
+                error:badarg ->
+                    error({rabbit_msg_store_v2_read, invalid_message_body, File, MsgId})
+            end;
+        _ ->
+            error({rabbit_msg_store_v2_read, invalid_message_size, File, MsgId})
+    end;
+reader_pread_parse_v2([<<>>], _File) ->
+    [];
+reader_pread_parse_v2([<<>>|Tail], File) ->
+    reader_pread_parse_v2(Tail, File);
+reader_pread_parse_v2(_Data, File) ->
+    error({rabbit_msg_store_v2_read, unrecognised_data, File}).
 
 reader_close(Reader) ->
     case Reader of
         undefined -> ok;
-        {_File, Fd} -> ok = file:close(Fd)
+        {_File, Fd, _Format} -> ok = file:close(Fd)
     end.
 
 %%----------------------------------------------------------------------------
@@ -734,7 +803,7 @@ init([VHost, Type, BaseDir, ClientRefs, StartupFunState]) ->
     %% we start recovering messages from the files on disk.
     {FileSummaryRecovered, FileSummaryEts} =
         recover_file_summary(AttemptFileSummaryRecovery, Dir),
-    {CleanShutdown, IndexEts, ClientRefs1} =
+    {CleanShutdown, IndexEts, ClientRefs1, LastV1File} =
         recover_index_and_client_refs(FileSummaryRecovered,
                                       ClientRefs, Dir, Name),
     Clients = maps:from_list(
@@ -765,7 +834,8 @@ init([VHost, Type, BaseDir, ClientRefs, StartupFunState]) ->
                                 index_ets        = IndexEts,
                                 file_summary_ets = FileSummaryEts,
                                 file_handles_ets = FileHandlesEts,
-                                msg_store        = self()
+                                msg_store        = self(),
+                                last_v1_file     = LastV1File
                               }),
 
     CreditDiscBound = rabbit_misc:get_env(rabbit, msg_store_credit_disc_bound,
@@ -789,7 +859,8 @@ init([VHost, Type, BaseDir, ClientRefs, StartupFunState]) ->
                        successfully_recovered = CleanShutdown,
                        file_size_limit        = FileSizeLimit,
                        cref_to_msg_ids        = #{},
-                       credit_disc_bound      = CreditDiscBound
+                       credit_disc_bound      = CreditDiscBound,
+                       last_v1_file           = LastV1File
                      },
     %% If we didn't recover the msg location index then we need to
     %% rebuild it now.
@@ -799,15 +870,65 @@ init([VHost, Type, BaseDir, ClientRefs, StartupFunState]) ->
                   end,
     ?LOG_DEBUG("Rebuilding message location index after ~ts shutdown...",
                      [Cleanliness]),
-    {CurOffset, State1 = #msstate { current_file = CurFile }} =
+    {CurOffset0, State1 = #msstate { current_file = CurFile0 }} =
         build_index(CleanShutdown, StartupFunState, State),
     ?LOG_DEBUG("Finished rebuilding index", []),
     %% Open the most recent file.
-    {ok, CurHdl} = writer_recover(Dir, CurFile, CurOffset),
-    {ok, State1 #msstate { current_file_handle = CurHdl,
-                           current_file_offset = CurOffset },
+    {CurFile, CurOffset, CurHdl} =
+        open_current_file(Dir, CurFile0, CurOffset0, LastV1File,
+                          State1 #msstate.file_summary_ets),
+    State2 = State1 #msstate { current_file         = CurFile,
+                               current_file_handle  = CurHdl,
+                               current_file_offset  = CurOffset },
+    %% CurFile0 was still current_file (and therefore exempt from
+    %% every delete_file_if_empty/2 check run so far, including the
+    %% one build_index/3 just did for dirty recovery) right up until
+    %% open_current_file/5 above decided to roll away from it because
+    %% it's v1. If it turned out to hold no valid messages, nothing
+    %% else will ever reconsider it once we return here with a
+    %% different file current: check it once, now, while we still
+    %% remember it was just abandoned.
+    State3 = case CurFile of
+        CurFile0 -> State2;
+        _        -> delete_file_if_empty(CurFile0, State2)
+    end,
+    {ok, State3,
      hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
+
+%% The current write file must always be v2. build_index/3 may have left
+%% us pointing at a v1 file, either because the store predates v2 or
+%% because nothing has been written since upgrading: in that case we
+%% force a roll to a fresh v2 file (CurFile0 + 1) before accepting any
+%% writes. Separately, if the recovered v2 "current" file has nothing
+%% but (at most) a partial header in it, we (re)create it fresh via
+%% writer_open/2 rather than let writer_recover/3's truncate conjure up
+%% a correct 64-byte header out of implicit zero-fill.
+open_current_file(Dir, CurFile, CurOffset, LastV1File, FileSummaryEts) ->
+    case file_format(CurFile, LastV1File) of
+        %% v1 files can't take v2 records, so roll over to a brand new file.
+        v1 ->
+            open_new_current_file(Dir, CurFile + 1, FileSummaryEts);
+        %% The v2 file has no valid data yet (e.g. just recovered with
+        %% nothing in it): reopen it fresh rather than roll over.
+        v2 when CurOffset =< ?V2_HEADER_SIZE ->
+            open_new_current_file(Dir, CurFile, FileSummaryEts);
+        v2 ->
+            {ok, Hdl} = writer_recover(Dir, CurFile, CurOffset),
+            {CurFile, CurOffset, Hdl}
+    end.
+
+open_new_current_file(Dir, File, FileSummaryEts) ->
+    true = ets:insert(FileSummaryEts, #file_summary {
+                        file             = File,
+                        valid_total_size = 0,
+                        file_size        = ?V2_HEADER_SIZE,
+                        locked           = false }),
+    {ok, Hdl} = writer_open(Dir, File),
+    %% The file may have data that is stale and not valid
+    %% message data when recovering the current file.
+    ok = writer_truncate(Hdl),
+    {File, ?V2_HEADER_SIZE, Hdl}.
 
 prioritise_call(Msg, _From, _Len, _State) ->
     case Msg of
@@ -842,11 +963,12 @@ handle_call({new_client_state, CRef, CPid, MsgOnDiskFun}, _From,
                                file_handles_ets   = FileHandlesEts,
                                cur_file_cache_ets = CurFileCacheEts,
                                flying_ets         = FlyingEts,
-                               clients            = Clients }) ->
+                               clients            = Clients,
+                               last_v1_file       = LastV1File }) ->
     Clients1 = maps:put(CRef, {CPid, MsgOnDiskFun}, Clients),
     erlang:monitor(process, CPid),
     reply({IndexEts, Dir, FileHandlesEts,
-           CurFileCacheEts, FlyingEts},
+           CurFileCacheEts, FlyingEts, LastV1File},
           State #msstate { clients = Clients1 });
 
 handle_call({client_terminate, CRef}, _From, State) ->
@@ -1005,7 +1127,8 @@ terminate(Reason, State = #msstate { index_ets           = IndexEts,
     [true = ets:delete(T) || T <- [FileSummaryEts, FileHandlesEts,
                                    CurFileCacheEts, FlyingEts]],
     index_terminate(IndexEts, Dir),
-    case store_recovery_terms([{client_refs, maps:keys(Clients)}], Dir) of
+    case store_recovery_terms([{client_refs, maps:keys(Clients)},
+                               {last_v1_file, State #msstate.last_v1_file}], Dir) of
         ok           ->
             ?LOG_INFO("Message store for directory '~ts' is stopped", [Dir]),
             ok;
@@ -1290,13 +1413,13 @@ flush_or_roll_to_new_file(
     true = ets:insert_new(FileSummaryEts, #file_summary {
                             file             = NextFile,
                             valid_total_size = 0,
-                            file_size        = 0,
+                            file_size        = ?V2_HEADER_SIZE,
                             locked           = false }),
     %% Delete messages from the cache that were written to disk.
     true = ets:match_delete(CurFileCacheEts, {'_', '_', 0}),
     State1 #msstate { current_file_handle = NextHdl,
                       current_file        = NextFile,
-                      current_file_offset = 0 };
+                      current_file_offset = ?V2_HEADER_SIZE };
 %% If we need to flush, do so here.
 flush_or_roll_to_new_file(_, flush, State) ->
     internal_sync(State);
@@ -1312,8 +1435,8 @@ write_large_message(MsgId, MsgBodyBin,
                                   file_summary_ets    = FileSummaryEts,
                                   cur_file_cache_ets  = CurFileCacheEts }) ->
     {LargeMsgFile, LargeMsgHdl} = case CurOffset of
-        %% We haven't written in the file yet. Use it.
-        0 ->
+        %% We haven't written anything but the header in the file yet. Use it.
+        ?V2_HEADER_SIZE ->
             {CurFile, CurHdl};
         %% Flush the current file and close it. Open a new file.
         _ ->
@@ -1329,7 +1452,7 @@ write_large_message(MsgId, MsgBodyBin,
     %% Update ets with the new information.
     ok = index_insert(IndexEts,
            #msg_location { msg_id = MsgId, ref_count = 1, file = LargeMsgFile,
-                           offset = 0, total_size = TotalSize }),
+                           offset = ?V2_HEADER_SIZE, total_size = TotalSize }),
     State1 = case CurFile of
         %% We didn't open a new file. We must update the existing value.
         LargeMsgFile ->
@@ -1345,11 +1468,11 @@ write_large_message(MsgId, MsgBodyBin,
             true = ets:insert_new(FileSummaryEts, #file_summary {
                                     file             = LargeMsgFile,
                                     valid_total_size = TotalSize,
-                                    file_size        = TotalSize,
+                                    file_size        = ?V2_HEADER_SIZE + TotalSize,
                                     locked           = false }),
             delete_file_if_empty(CurFile, State0 #msstate { current_file_handle = LargeMsgHdl,
                                                             current_file        = LargeMsgFile,
-                                                            current_file_offset = TotalSize })
+                                                            current_file_offset = ?V2_HEADER_SIZE + TotalSize })
     end,
     %% Roll over to the next file.
     NextFile = LargeMsgFile + 1,
@@ -1357,7 +1480,7 @@ write_large_message(MsgId, MsgBodyBin,
     true = ets:insert_new(FileSummaryEts, #file_summary {
                             file             = NextFile,
                             valid_total_size = 0,
-                            file_size        = 0,
+                            file_size        = ?V2_HEADER_SIZE,
                             locked           = false }),
     %% Delete messages from the cache that were written to disk.
     true = ets:match_delete(CurFileCacheEts, {'_', '_', 0}),
@@ -1365,7 +1488,7 @@ write_large_message(MsgId, MsgBodyBin,
     State = internal_sync(State1),
     State #msstate { current_file_handle = NextHdl,
                      current_file        = NextFile,
-                     current_file_offset = 0 }.
+                     current_file_offset = ?V2_HEADER_SIZE }.
 
 contains_message(MsgId, From, State = #msstate{ index_ets = IndexEts }) ->
     MsgLocation = index_lookup_positive_ref_count(IndexEts, MsgId),
@@ -1452,27 +1575,39 @@ should_mask_action(CRef, MsgId, #msstate{
 
 -define(MAX_BUFFER_SIZE, 1048576). %% 1MB.
 
+%% Writes always produce v2 files.
 writer_open(Dir, Num) ->
-    {ok, Fd} = file:open(form_filename(Dir, filenum_to_name(Num)),
-                         [append, binary, raw]),
+    {ok, Fd} = file:open(form_filename(Dir, filenum_to_name(Num, v2)),
+                         [read, write, binary, raw]),
+    ok = file:write(Fd, v2_file_header()),
     {ok, #writer{fd = Fd, buffer = prim_buffer:new()}}.
 
+%% The magic and version bytes are reserved for future use: nothing
+%% currently reads or validates them (not the scanner, not
+%% writer_recover/3, not open_current_file/5). They exist so a future
+%% format change has somewhere to look without shifting every offset.
+v2_file_header() ->
+    <<?V2_MAGIC:32, 2:8, 0:(8 * (?V2_HEADER_SIZE - 5))>>.
+
 writer_recover(Dir, Num, Offset) ->
-    {ok, Fd} = file:open(form_filename(Dir, filenum_to_name(Num)),
+    {ok, Fd} = file:open(form_filename(Dir, filenum_to_name(Num, v2)),
                          [read, write, binary, raw]),
     {ok, Offset} = file:position(Fd, Offset),
     ok = file:truncate(Fd),
     {ok, #writer{fd = Fd, buffer = prim_buffer:new()}}.
 
+writer_truncate(#writer{fd = Fd}) ->
+    ok = file:truncate(Fd).
+
 writer_append(#writer{buffer = Buffer}, MsgId, MsgBodyBin) ->
     MsgBodyBinSize = byte_size(MsgBodyBin),
-    EntrySize = MsgBodyBinSize + 16, %% Size of MsgId + MsgBodyBin.
+    %% Type:8 + Size:32 + MsgId:128 + Body.
+    TotalSize = MsgBodyBinSize + 21,
     %% We send an iovec to the buffer instead of building a binary.
     prim_buffer:write(Buffer, [
-        <<EntrySize:64>>,
+        <<?REC_MESSAGE:8, TotalSize:32>>,
         MsgId,
-        MsgBodyBin,
-        <<255>> %% OK marker.
+        MsgBodyBin
     ]),
     Res = case prim_buffer:size(Buffer) of
         Size when Size >= ?MAX_BUFFER_SIZE ->
@@ -1480,7 +1615,7 @@ writer_append(#writer{buffer = Buffer}, MsgId, MsgBodyBin) ->
         _ ->
             ok
     end,
-    {Res, EntrySize + 9}. %% EntrySize + size field + OK marker.
+    {Res, TotalSize}.
 
 %% Note: the message store no longer fsyncs; it only flushes data
 %% to disk. This is in line with classic queues v2 behavior.
@@ -1498,14 +1633,13 @@ writer_flush(#writer{fd = Fd, buffer = Buffer}) ->
 %% This is basically the same as writer_append except no buffering.
 writer_direct_write(#writer{fd = Fd}, MsgId, MsgBodyBin) ->
     MsgBodyBinSize = byte_size(MsgBodyBin),
-    EntrySize = MsgBodyBinSize + 16, %% Size of MsgId + MsgBodyBin.
+    TotalSize = MsgBodyBinSize + 21,
     ok = file:write(Fd, [
-        <<EntrySize:64>>,
+        <<?REC_MESSAGE:8, TotalSize:32>>,
         MsgId,
-        MsgBodyBin,
-        <<255>> %% OK marker.
+        MsgBodyBin
     ]),
-    EntrySize + 9.
+    TotalSize.
 
 writer_close(#writer{fd = Fd}) ->
     file:close(Fd).
@@ -1520,13 +1654,28 @@ mark_handle_closed(FileHandlesEts, File, Ref) ->
 
 form_filename(Dir, Name) -> filename:join(Dir, Name).
 
-filenum_to_name(File) -> integer_to_list(File) ++ ?FILE_EXTENSION.
+%% Format is determined solely by the file number relative to the
+%% store's last_v1_file boundary: writes always produce v2 from this
+%% release onward, so any file above the boundary (or every file, when
+%% the store has no v1 files at all) is v2.
+file_format(_File, none)                       -> v2;
+file_format(File,  LastV1) when File =< LastV1 -> v1;
+file_format(_,     _)                          -> v2.
+
+filenum_to_name(File, v1) ->
+    integer_to_list(File) ++ ?FILE_EXTENSION_V1;
+filenum_to_name(File, v2) ->
+    integer_to_list(File) ++ ?FILE_EXTENSION_V2.
 
 filename_to_num(FileName) -> list_to_integer(filename:rootname(FileName)).
 
-list_sorted_filenames(Dir, Ext) ->
-    lists:sort(fun (A, B) -> filename_to_num(A) < filename_to_num(B) end,
-               filelib:wildcard("*" ++ Ext, Dir)).
+%% Combined, numerically sorted file numbers across both formats. A
+%% given file number is only ever one format, so a plain numeric sort
+%% of the union is enough; no need to sort per-extension first.
+list_sorted_file_numbers(Dir) ->
+    lists:sort([filename_to_num(FileName) ||
+                   FileName <- filelib:wildcard("*" ++ ?FILE_EXTENSION_V1, Dir) ++
+                               filelib:wildcard("*" ++ ?FILE_EXTENSION_V2, Dir)]).
 
 %%----------------------------------------------------------------------------
 %% file scanning
@@ -1535,16 +1684,32 @@ list_sorted_filenames(Dir, Ext) ->
 -define(SCAN_BLOCK_SIZE, 4194304). %% 4MB
 
 %% Exported as a salvage tool. Not as accurate as node recovery
-%% because it doesn't have the queue index.
+%% because it doesn't have the queue index. The format is inferred
+%% from the file extension since salvage callers do not have a
+%% last_v1_file boundary to consult.
 scan_file_for_valid_messages(Path) ->
     scan_file_for_valid_messages(Path, fun(Obj) -> {valid, Obj} end).
 
 scan_file_for_valid_messages(Path, Fun) ->
+    scan_file_for_valid_messages(format_from_extension(Path), Path, Fun).
+
+format_from_extension(Path) ->
+    case filename:extension(Path) of
+        ?FILE_EXTENSION_V2 -> v2;
+        _                  -> v1
+    end.
+
+scan_file_for_valid_messages(v1, Path, Fun) ->
+    scan_v1_file_for_valid_messages(Path, Fun);
+scan_file_for_valid_messages(v2, Path, Fun) ->
+    scan_v2_file_for_valid_messages(Path, Fun).
+
+scan_v1_file_for_valid_messages(Path, Fun) ->
     case file:open(Path, [read, binary, raw]) of
         {ok, Fd} ->
             {ok, FileSize} = file:position(Fd, eof),
             {ok, _} = file:position(Fd, bof),
-            Messages = scan(<<>>, Fd, Fun, 0, FileSize, #{}, []),
+            Messages = scan_v1(<<>>, Fd, Fun, 0, FileSize, #{}, []),
             ok = file:close(Fd),
             {ok, Messages};
         {error, enoent} ->
@@ -1555,7 +1720,7 @@ scan_file_for_valid_messages(Path, Fun) ->
                      Reason}}
     end.
 
-scan(Buffer, Fd, Fun, Offset, FileSize, MsgIdsFound, Acc) ->
+scan_v1(Buffer, Fd, Fun, Offset, FileSize, MsgIdsFound, Acc) ->
     case file:read(Fd, ?SCAN_BLOCK_SIZE) of
         eof ->
             Acc;
@@ -1564,11 +1729,11 @@ scan(Buffer, Fd, Fun, Offset, FileSize, MsgIdsFound, Acc) ->
                 <<>> -> Data0;
                 _ -> <<Buffer/binary, Data0/binary>>
             end,
-            scan_data(Data, Fd, Fun, Offset, FileSize, MsgIdsFound, Acc)
+            scan_v1_data(Data, Fd, Fun, Offset, FileSize, MsgIdsFound, Acc)
     end.
 
 %% Message might have been found.
-scan_data(<<Size:64, MsgIdAndMsg:Size/binary, 255, Rest/bits>> = Data,
+scan_v1_data(<<Size:64, MsgIdAndMsg:Size/binary, 255, Rest/bits>> = Data,
           Fd, Fun, Offset, FileSize, MsgIdsFound, Acc)
           when Size >= 16 ->
     <<MsgIdInt:128, _/bits>> = MsgIdAndMsg,
@@ -1577,20 +1742,20 @@ scan_data(<<Size:64, MsgIdAndMsg:Size/binary, 255, Rest/bits>> = Data,
         %% a remnant from a previous compaction, but it might
         %% simply be a coincidence. Try the next byte.
         #{MsgIdInt := true} ->
-            scan_next_byte(Data, Fd, Fun, Offset, FileSize, MsgIdsFound, Acc);
+            scan_v1_next_byte(Data, Fd, Fun, Offset, FileSize, MsgIdsFound, Acc);
         %% Data looks to be a message.
         _ ->
             TotalSize = Size + 9,
             case check_msg(Fun, MsgIdInt, TotalSize, Offset, Acc) of
                 {continue, NewAcc} ->
-                    scan_data(Rest, Fd, Fun, Offset + TotalSize, FileSize,
+                    scan_v1_data(Rest, Fd, Fun, Offset + TotalSize, FileSize,
                               MsgIdsFound#{MsgIdInt => true}, NewAcc);
-                try_next_byte ->
-                    scan_next_byte(Data, Fd, Fun, Offset, FileSize, MsgIdsFound, Acc)
+                try_next ->
+                    scan_v1_next_byte(Data, Fd, Fun, Offset, FileSize, MsgIdsFound, Acc)
             end
     end;
 %% Large message alone in its own file
-scan_data(<<Size:64, MsgIdInt:128, _Rest/bits>> = Data, Fd, Fun, Offset, FileSize, _MsgIdsFound, _Acc)
+scan_v1_data(<<Size:64, MsgIdInt:128, _Rest/bits>> = Data, Fd, Fun, Offset, FileSize, _MsgIdsFound, _Acc)
   when Offset == 0,
        FileSize == Size + 9 ->
     {ok, CurrentPos} = file:position(Fd, cur),
@@ -1600,28 +1765,249 @@ scan_data(<<Size:64, MsgIdInt:128, _Rest/bits>> = Data, Fd, Fun, Offset, FileSiz
             case check_msg(Fun, MsgIdInt, TotalSize, Offset, []) of
                 {continue, NewAcc} ->
                     NewAcc;
-                try_next_byte ->
+                try_next ->
                     {ok, _} = file:position(Fd, CurrentPos),
-                    scan_next_byte(Data, Fd, Fun, Offset, FileSize, #{}, [])
+                    scan_v1_next_byte(Data, Fd, Fun, Offset, FileSize, #{}, [])
             end;
         _ ->
             %% Wrong end marker
             {ok, _} = file:position(Fd, CurrentPos),
-            scan_next_byte(Data, Fd, Fun, Offset, FileSize, #{}, [])
+            scan_v1_next_byte(Data, Fd, Fun, Offset, FileSize, #{}, [])
     end;
 %% This might be the start of a message.
-scan_data(<<Size:64, Rest/bits>> = Data, Fd, Fun, Offset, FileSize, MsgIdsFound, Acc)
+scan_v1_data(<<Size:64, Rest/bits>> = Data, Fd, Fun, Offset, FileSize, MsgIdsFound, Acc)
           when byte_size(Rest) < Size + 1, Size + 9 =< FileSize - Offset ->
-    scan(Data, Fd, Fun, Offset, FileSize, MsgIdsFound, Acc);
-scan_data(Data, Fd, Fun, Offset, FileSize, MsgIdsFound, Acc)
+    scan_v1(Data, Fd, Fun, Offset, FileSize, MsgIdsFound, Acc);
+scan_v1_data(Data, Fd, Fun, Offset, FileSize, MsgIdsFound, Acc)
           when byte_size(Data) < 8 ->
-    scan(Data, Fd, Fun, Offset, FileSize, MsgIdsFound, Acc);
+    scan_v1(Data, Fd, Fun, Offset, FileSize, MsgIdsFound, Acc);
 %% This is definitely not a message. Try the next byte.
-scan_data(Data, Fd, Fun, Offset, FileSize, MsgIdsFound, Acc) ->
-    scan_next_byte(Data, Fd, Fun, Offset, FileSize, MsgIdsFound, Acc).
+scan_v1_data(Data, Fd, Fun, Offset, FileSize, MsgIdsFound, Acc) ->
+    scan_v1_next_byte(Data, Fd, Fun, Offset, FileSize, MsgIdsFound, Acc).
 
-scan_next_byte(<<_, Rest/bits>>, Fd, Fun, Offset, FileSize, MsgIdsFound, Acc) ->
-    scan_data(Rest, Fd, Fun, Offset + 1, FileSize, MsgIdsFound, Acc).
+scan_v1_next_byte(<<_, Rest/bits>>, Fd, Fun, Offset, FileSize, MsgIdsFound, Acc) ->
+    scan_v1_data(Rest, Fd, Fun, Offset + 1, FileSize, MsgIdsFound, Acc).
+
+%%----------------------------------------------------------------------------
+%% file scanning - v2
+%%----------------------------------------------------------------------------
+%%
+%% Unlike v1, records are typed and self-describing, so once Type/Size
+%% validate there is no ambiguity about whether we found real data: we
+%% always advance by the full record size, we never byte-shift. Holes
+%% (both HOLE and the bounded run of at most 4 SMALL_HOLEs that replace
+%% a HOLE below the 5-byte minimum) are skipped without interpreting
+%% their contents. A HOLE larger than what's currently buffered is
+%% skipped via file:position/2 rather than read, so scanning cost does
+%% not scale with the size of the hole.
+%%
+%% Type/Size validating is not, on its own, proof that a record is
+%% real: a torn write can produce a plausible-looking Type and Size by
+%% coincidence. We tighten this with two invariants compaction never
+%% violates, so any violation is treated as corruption rather than
+%% something to recover from: a hole (of either kind) is never
+%% immediately followed by another hole, and a SMALL_HOLE run is never
+%% 5 bytes or longer. A MESSAGE record's body must additionally decode
+%% via binary_to_term/1, which a torn write is astronomically unlikely
+%% to produce by chance.
+%%
+%% A record whose Size does not fit within the file is treated as a
+%% torn last write and the remainder of the file is discarded, exactly
+%% as in v1. We never fall back to scanning the next byte: that is
+%% exactly the kind of guess that could land on something that merely
+%% looks like a record.
+
+%% Any exception raised while scanning (whether one of the deliberate
+%% rabbit_msg_store_v2_scan corruption errors above, or anything else
+%% unexpected) is re-raised with Path attached, so whatever eventually
+%% reports the crash doesn't just say which offset failed but in which
+%% file.
+scan_v2_file_for_valid_messages(Path, Fun) ->
+    try
+        case file:open(Path, [read, binary, raw]) of
+            {ok, Fd} ->
+                %% The fd must close on every exit from the scan below,
+                %% not just success: scan_file_recovering_corruption/2
+                %% retries a failed scan of this same file in a loop,
+                %% and each retry calls back in here, so a leaked fd
+                %% per failed attempt would accumulate for as long as
+                %% the process doing the scanning lives.
+                try
+                    {ok, FileSize} = file:position(Fd, eof),
+                    Messages = case FileSize < ?V2_HEADER_SIZE of
+                        true ->
+                            %% Not even a complete header: nothing recoverable.
+                            [];
+                        false ->
+                            {ok, _} = file:position(Fd, ?V2_HEADER_SIZE),
+                            scan_v2(<<>>, Fd, Fun, ?V2_HEADER_SIZE, FileSize, #{}, [])
+                    end,
+                    {ok, Messages}
+                after
+                    ok = file:close(Fd)
+                end;
+            {error, enoent} ->
+                {ok, []};
+            {error, Reason} ->
+                {error, {unable_to_scan_file,
+                         filename:basename(Path),
+                         Reason}}
+        end
+    catch
+        error:CaughtReason:Stacktrace ->
+            erlang:raise(error, {rabbit_msg_store_v2_scan_error, Path, CaughtReason}, Stacktrace)
+    end.
+
+scan_v2(Buffer, Fd, Fun, Offset, FileSize, MsgIdsFound, Acc) ->
+    case file:read(Fd, ?SCAN_BLOCK_SIZE) of
+        eof ->
+            Acc;
+        {ok, Data0} ->
+            Data = case Buffer of
+                <<>> -> Data0;
+                _ -> <<Buffer/binary, Data0/binary>>
+            end,
+            scan_v2_data(Data, Fd, Fun, Offset, FileSize, MsgIdsFound, Acc)
+    end.
+
+%% Reads fresh data right after skipping a HOLE via file:position/2 (its
+%% payload was too large to have been buffered), and rejects outright if
+%% the very next record is also a hole: two holes never legitimately sit
+%% back to back (see the comment on the HOLE clauses below).
+scan_v2_after_hole(Fd, Fun, Offset, FileSize, MsgIdsFound, Acc) ->
+    case file:read(Fd, ?SCAN_BLOCK_SIZE) of
+        eof ->
+            Acc;
+        {ok, Data} ->
+            case Data of
+                <<?REC_HOLE:8, _/bits>> ->
+                    error({rabbit_msg_store_v2_scan, Offset, hole_after_hole});
+                <<?REC_SMALL_HOLE:8, _/bits>> ->
+                    error({rabbit_msg_store_v2_scan, Offset, hole_after_hole});
+                _ ->
+                    scan_v2_data(Data, Fd, Fun, Offset, FileSize, MsgIdsFound, Acc)
+            end
+    end.
+
+%% Runs of SMALL_HOLE are bounded to at most 4 bytes by construction
+%% (see hole_bytes/1): a 5th in a row can only be corruption.
+scan_v2_data(<<?REC_SMALL_HOLE:8, ?REC_SMALL_HOLE:8, ?REC_SMALL_HOLE:8,
+               ?REC_SMALL_HOLE:8, ?REC_SMALL_HOLE:8, _/bits>>,
+        _Fd, _Fun, Offset, _FileSize, _MsgIdsFound, _Acc) ->
+    error({rabbit_msg_store_v2_scan, Offset, small_hole_run_too_long});
+%% A hole is never immediately followed by another hole: compaction only
+%% ever writes a hole as the trailing remainder of a move, immediately
+%% followed by real message data (either the next moved message, or a
+%% message left in place untouched); it never writes a hole immediately
+%% after another hole. Two adjacent holes can only mean corruption.
+scan_v2_data(<<?REC_SMALL_HOLE:8, ?REC_HOLE:8, _/bits>>,
+        _Fd, _Fun, Offset, _FileSize, _MsgIdsFound, _Acc) ->
+    error({rabbit_msg_store_v2_scan, Offset + 1, hole_after_hole});
+%% Fewer than 5 bytes buffered isn't enough to rule out either of the
+%% two clauses above: a run that is actually 5 or more SMALL_HOLEs
+%% long, or one immediately followed by a HOLE, can start with any
+%% number of SMALL_HOLE bytes up to 4 before the buffer happens to
+%% run out. Read more before consuming anything, the same way an
+%% incomplete HOLE/MESSAGE header below does, unless the file
+%% genuinely ends here (nothing more will ever be read).
+scan_v2_data(<<?REC_SMALL_HOLE:8, _/bits>> = Data, Fd, Fun, Offset, FileSize, MsgIdsFound, Acc)
+        when byte_size(Data) < 5, Offset + byte_size(Data) < FileSize ->
+    scan_v2(Data, Fd, Fun, Offset, FileSize, MsgIdsFound, Acc);
+scan_v2_data(<<?REC_SMALL_HOLE:8, Rest/bits>>, Fd, Fun, Offset, FileSize, MsgIdsFound, Acc) ->
+    scan_v2_data(Rest, Fd, Fun, Offset + 1, FileSize, MsgIdsFound, Acc);
+
+%% A HOLE record with a size that does not fit the type's minimum is
+%% corruption, not a torn write (a torn write cannot fully flush a
+%% valid 5-byte HOLE header with a bogus size field).
+scan_v2_data(<<?REC_HOLE:8, Size:32, _/bits>>, _Fd, _Fun, Offset, _FileSize, _MsgIdsFound, _Acc)
+        when Size < 5 ->
+    error({rabbit_msg_store_v2_scan, Offset, invalid_hole_size, Size});
+scan_v2_data(<<?REC_HOLE:8, Size:32, Rest0/bits>>, Fd, Fun, Offset, FileSize, MsgIdsFound, Acc) ->
+    case Offset + Size > FileSize of
+        true ->
+            Acc;
+        false ->
+            InnerSize = Size - 5,
+            case Rest0 of
+                <<_Inner:InnerSize/binary, Rest/bits>> when Rest =/= <<>> ->
+                    case Rest of
+                        <<NextType:8, _/bits>>
+                                when NextType =:= ?REC_HOLE; NextType =:= ?REC_SMALL_HOLE ->
+                            error({rabbit_msg_store_v2_scan, Offset + Size, hole_after_hole});
+                        _ ->
+                            scan_v2_data(Rest, Fd, Fun, Offset + Size, FileSize, MsgIdsFound, Acc)
+                    end;
+                <<_Inner:InnerSize/binary>> ->
+                    %% Fully buffered, but nothing left yet to check what
+                    %% immediately follows: read more before deciding.
+                    scan_v2_after_hole(Fd, Fun, Offset + Size, FileSize, MsgIdsFound, Acc);
+                _ ->
+                    %% Payload too large to have been buffered: skip over
+                    %% it without reading it, same as before.
+                    {ok, _} = file:position(Fd, Offset + Size),
+                    scan_v2_after_hole(Fd, Fun, Offset + Size, FileSize, MsgIdsFound, Acc)
+            end
+    end;
+scan_v2_data(<<?REC_HOLE:8, _/bits>> = Data, Fd, Fun, Offset, FileSize, MsgIdsFound, Acc) ->
+    %% Type byte seen but the 4-byte size field isn't fully buffered yet.
+    scan_v2(Data, Fd, Fun, Offset, FileSize, MsgIdsFound, Acc);
+
+scan_v2_data(<<?REC_MESSAGE:8, Size:32, _/bits>>, _Fd, _Fun, Offset, _FileSize, _MsgIdsFound, _Acc)
+        when Size < 21 ->
+    error({rabbit_msg_store_v2_scan, Offset, invalid_message_size, Size});
+scan_v2_data(<<?REC_MESSAGE:8, Size:32, Rest0/bits>> = Data, Fd, Fun, Offset, FileSize, MsgIdsFound, Acc) ->
+    case Offset + Size > FileSize of
+        true ->
+            Acc;
+        false ->
+            %% MsgId (16 bytes) is included below; this is the body only.
+            PayloadLen = Size - 21,
+            case Rest0 of
+                <<MsgIdInt:128, Body:PayloadLen/binary, Rest/bits>> ->
+                    %% A torn write reproducing a syntactically valid
+                    %% Erlang external term by chance is astronomically
+                    %% unlikely, so this catches a Type/Size that happened
+                    %% to validate numerically but isn't really a message,
+                    %% regardless of what MsgId lookup would say below.
+                    try binary_to_term(Body) of
+                        _ -> ok
+                    catch
+                        error:badarg ->
+                            error({rabbit_msg_store_v2_scan, Offset, invalid_message_body})
+                    end,
+                    case MsgIdsFound of
+                        %% Remnant of a crash mid-compaction: the same
+                        %% message exists at an earlier (and later, here)
+                        %% offset. Keep the earlier copy, matching v1.
+                        #{MsgIdInt := true} ->
+                            scan_v2_data(Rest, Fd, Fun, Offset + Size, FileSize, MsgIdsFound, Acc);
+                        _ ->
+                            case check_msg(Fun, MsgIdInt, Size, Offset, Acc) of
+                                {continue, NewAcc} ->
+                                    scan_v2_data(Rest, Fd, Fun, Offset + Size, FileSize,
+                                                 MsgIdsFound#{MsgIdInt => true}, NewAcc);
+                                %% Unlike v1, a record that Fun rejects (e.g.
+                                %% superseded elsewhere) is still known-good
+                                %% data once Type/Size validate, not
+                                %% suspected corruption.
+                                try_next ->
+                                    scan_v2_data(Rest, Fd, Fun, Offset + Size, FileSize,
+                                                 MsgIdsFound#{MsgIdInt => true}, Acc)
+                            end
+                    end;
+                _ ->
+                    %% Not enough buffered yet; read more.
+                    scan_v2(Data, Fd, Fun, Offset, FileSize, MsgIdsFound, Acc)
+            end
+    end;
+scan_v2_data(<<?REC_MESSAGE:8, _/bits>> = Data, Fd, Fun, Offset, FileSize, MsgIdsFound, Acc) ->
+    scan_v2(Data, Fd, Fun, Offset, FileSize, MsgIdsFound, Acc);
+
+scan_v2_data(<<>>, Fd, Fun, Offset, FileSize, MsgIdsFound, Acc) ->
+    scan_v2(<<>>, Fd, Fun, Offset, FileSize, MsgIdsFound, Acc);
+
+scan_v2_data(<<Type:8, _/bits>>, _Fd, _Fun, Offset, _FileSize, _MsgIdsFound, _Acc) ->
+    error({rabbit_msg_store_v2_scan, Offset, unrecognised_record_type, Type}).
 
 check_msg(Fun, MsgIdInt, TotalSize, Offset, Acc) ->
     %% Avoid sub-binary construction.
@@ -1635,7 +2021,7 @@ check_msg(Fun, MsgIdInt, TotalSize, Offset, Acc) ->
             {continue, Acc};
         %% Not a message, try the next byte.
         invalid ->
-            try_next_byte
+            try_next
     end.
 
 %%----------------------------------------------------------------------------
@@ -1726,31 +2112,49 @@ index_terminate(IndexEts, Dir) ->
 %%----------------------------------------------------------------------------
 
 recover_index_and_client_refs(_Recover, undefined, Dir, _Name) ->
-    {false, index_new(Dir), []};
+    %% Transient: the directory was just recursively deleted and recreated
+    %% empty, so there cannot be any v1 files.
+    {false, index_new(Dir), [], none};
 recover_index_and_client_refs(false, _ClientRefs, Dir, Name) ->
     ?LOG_WARNING("Message store ~tp: rebuilding indices from scratch", [Name]),
-    {false, index_new(Dir), []};
+    {false, index_new(Dir), [], scan_for_last_v1_file(Dir)};
 recover_index_and_client_refs(true, ClientRefs, Dir, Name) ->
     Fresh = fun (ErrorMsg, ErrorArgs) ->
                     ?LOG_WARNING("Message store ~tp : " ++ ErrorMsg ++ "~n"
                                        "rebuilding indices from scratch",
                                        [Name | ErrorArgs]),
-                    {false, index_new(Dir), []}
+                    {false, index_new(Dir), [], scan_for_last_v1_file(Dir)}
             end,
     case read_recovery_terms(Dir) of
         {false, Error} ->
             Fresh("failed to read recovery terms: ~tp", [Error]);
         {true, Terms} ->
+            %% A pre-v2 clean.dot has no last_v1_file term at all: that must
+            %% fall back to a disk scan, not silently default to 'none',
+            %% otherwise every pre-existing .rdq file would be misread as v2
+            %% immediately after an upgrade.
+            LastV1File = case proplists:lookup(last_v1_file, Terms) of
+                {last_v1_file, V} -> V;
+                none              -> scan_for_last_v1_file(Dir)
+            end,
             RecClientRefs = proplists:get_value(client_refs, Terms, []),
             case lists:sort(ClientRefs) =:= lists:sort(RecClientRefs) of
                 true  -> case index_recover(Dir) of
                              {ok, IndexEts} ->
-                                 {true, IndexEts, ClientRefs};
+                                 {true, IndexEts, ClientRefs, LastV1File};
                              {error, Error} ->
                                  Fresh("failed to recover index: ~tp", [Error])
                          end;
                 false -> Fresh("recovery terms differ from present", [])
             end
+    end.
+
+%% Ground truth for the v1/v2 boundary when it cannot be trusted from
+%% persisted terms (dirty recovery).
+scan_for_last_v1_file(Dir) ->
+    case filelib:wildcard("*" ++ ?FILE_EXTENSION_V1, Dir) of
+        []    -> none;
+        Files -> lists:max([filename_to_num(F) || F <- Files])
     end.
 
 store_recovery_terms(Terms, Dir) ->
@@ -1816,8 +2220,7 @@ build_index(false, {MsgRefDeltaGen, MsgRefDeltaGenInit},
     ok = count_msg_refs(MsgRefDeltaGen, MsgRefDeltaGenInit, State),
     ?LOG_DEBUG("Done rebuilding message refcount", []),
     {ok, Pid} = gatherer:start_link(),
-    case [filename_to_num(FileName) ||
-             FileName <- list_sorted_filenames(Dir, ?FILE_EXTENSION)] of
+    case list_sorted_file_numbers(Dir) of
         []     -> rebuild_index(Pid, [State #msstate.current_file],
                                 State);
         Files  -> {Offset, State1} = rebuild_index(Pid, Files, State),
@@ -1825,34 +2228,60 @@ build_index(false, {MsgRefDeltaGen, MsgRefDeltaGenInit},
                                        State1, Files)}
     end.
 
-build_index_worker(Gatherer, #msstate { index_ets = IndexEts, dir = Dir },
+build_index_worker(Gatherer, #msstate { index_ets = IndexEts, dir = Dir,
+                                        last_v1_file = LastV1File },
                    File, Files) ->
-    Path = form_filename(Dir, filenum_to_name(File)),
+    Format = file_format(File, LastV1File),
+    Path = form_filename(Dir, filenum_to_name(File, Format)),
     ?LOG_DEBUG("Rebuilding message location index from ~ts (~B file(s) remaining)",
                      [Path, length(Files)]),
     %% The scan function already dealt with duplicate messages
     %% within the file, and only returns valid messages (we do
     %% the index lookup in the fun). But we get messages in reverse order.
-    {ok, Messages} = scan_file_for_valid_messages(Path,
-        fun (Obj = {MsgId, TotalSize, Offset}) ->
-            %% Fan-out may result in the same message data in multiple
-            %% files so we have to guard against it.
-            case index_lookup(IndexEts, MsgId) of
-                #msg_location { file = undefined } = StoreEntry ->
-                    ok = index_update(IndexEts, StoreEntry #msg_location {
-                                        file = File, offset = Offset,
-                                        total_size = TotalSize }),
-                    {valid, Obj};
-                _ ->
-                    invalid
-            end
-        end),
+    ScanFun = fun (Obj = {MsgId, TotalSize, Offset}) ->
+        %% Fan-out may result in the same message data in multiple
+        %% files so we have to guard against it.
+        case index_lookup(IndexEts, MsgId) of
+            #msg_location { file = undefined } = StoreEntry ->
+                ok = index_update(IndexEts, StoreEntry #msg_location {
+                                    file = File, offset = Offset,
+                                    total_size = TotalSize }),
+                {valid, Obj};
+            %% Already resolved to this exact file/offset/size: not a
+            %% fan-out duplicate, just scan_file_recovering_corruption
+            %% rescanning this same file from the start after
+            %% truncating a corrupted tail found later in an earlier
+            %% attempt. Confirm it again rather than rejecting it.
+            #msg_location { file = File, offset = Offset,
+                            total_size = TotalSize } ->
+                {valid, Obj};
+            _ ->
+                invalid
+        end
+    end,
+    %% v1 has no corruption-recovery path to speak of (see the comment
+    %% above scan_file_recovering_corruption/2), so it is scanned
+    %% directly, unwrapped: a scan failure there is always unexpected
+    %% and should surface as one, not be quietly turned into data loss.
+    {ok, Messages} = case Format of
+        v1 -> scan_file_for_valid_messages(v1, Path, ScanFun);
+        v2 -> scan_file_recovering_corruption(Path, ScanFun)
+    end,
     ValidTotalSize = lists:foldl(fun({_, TotalSize, _}, Acc) -> Acc + TotalSize end, 0, Messages),
     %% Any file may have rubbish at the end of it that we will want truncated.
     %% Note that the last message in the file is the first in the list.
     FileSize = case Messages of
+        %% A v1 file with no messages genuinely has nothing on disk.
+        %%
+        %% A v2 file always has at least its header even when it holds no
+        %% valid messages. This holds even for a missing/partial header:
+        %% it's either the current file (header will get rewritten and the
+        %% file truncated) or the file gets deleted.
         [] ->
-            0;
+            case Format of
+                v1 -> 0;
+                v2 -> ?V2_HEADER_SIZE
+            end;
         [{_, TotalSize, Offset}|_] ->
             Offset + TotalSize
     end,
@@ -1862,6 +2291,71 @@ build_index_worker(Gatherer, #msstate { index_ets = IndexEts, dir = Dir },
                                   file_size        = FileSize,
                                   locked           = false }),
     ok = gatherer:finish(Gatherer).
+
+%% Dirty recovery cannot let one corrupted v2 file take the whole
+%% store down, and cannot safely resync past a corrupted record
+%% either -- that is exactly the byte-guessing v2 was designed to
+%% avoid. So on a scan failure that is unambiguously one of our own
+%% tagged corruption errors (and only here; compaction and the
+%% salvage tool still crash outright, since they operate on files
+%% that may still be actively referenced, unlike a queue's own dirty
+%% recovery which simply drops a message it can no longer find) we
+%% truncate the file at the offset the error reports and retry.
+%% Scanning proceeds strictly in increasing offset order and stops at
+%% the first bad spot it finds, so the bytes up to the truncation
+%% point already scanned cleanly once: the retry over that same,
+%% now-final, prefix is guaranteed to succeed, and this never needs
+%% more than one retry.
+%%
+%% Anything else -- an error we didn't specifically anticipate, most
+%% plausibly an I/O failure from file:read/2 (scan_v2_file_for_valid_messages/2
+%% wraps *any* error raised while scanning, not just its own) -- is
+%% deliberately let through uncaught instead of being guessed at. The
+%% guess used to be "truncate to the header", but Fun has already
+%% updated the index for every message reached before the error, so
+%% guessing wrong here doesn't just lose the file's own data: it
+%% leaves those index entries pointing at a file this then discards,
+%% turning a later, unrelated read of one of those messages into a
+%% crash instead of a clean "not found". v1 has the exact same
+%% principle already: corruption there is handled entirely by
+%% scan_v1_next_byte/7 silently shifting forward a byte at a time,
+%% never raising, so nothing ever reaches build_index_worker for a v1
+%% file except an equally unanticipated error, and it is scanned
+%% directly, unwrapped, for the same reason.
+scan_file_recovering_corruption(Path, Fun) ->
+    try
+        scan_file_for_valid_messages(v2, Path, Fun)
+    catch
+        error:Reason:Stacktrace ->
+            case corruption_offset(Reason) of
+                {ok, TruncateAt0} ->
+                    TruncateAt = min(TruncateAt0, filelib:file_size(Path)),
+                    ?LOG_ERROR("Message store file ~ts is corrupted (~tp); "
+                               "discarding everything from byte ~b onwards",
+                               [Path, Reason, TruncateAt]),
+                    {ok, Fd} = file:open(Path, [read, write, binary, raw]),
+                    {ok, TruncateAt} = file:position(Fd, TruncateAt),
+                    ok = file:truncate(Fd),
+                    ok = file:close(Fd),
+                    scan_file_recovering_corruption(Path, Fun);
+                error ->
+                    erlang:raise(error, Reason, Stacktrace)
+            end
+    end.
+
+%% Every rabbit_msg_store_v2_scan reason (wrapped by
+%% scan_v2_file_for_valid_messages/2 in rabbit_msg_store_v2_scan_error)
+%% reports the offset of the record it rejected as its second element.
+%% Only that specific, unambiguous shape is trusted: anything else,
+%% including a tuple that merely happens to also have an integer in
+%% the same position, is not our own error and must not be mistaken
+%% for one.
+corruption_offset({rabbit_msg_store_v2_scan_error, _Path, InnerReason})
+        when is_tuple(InnerReason), tuple_size(InnerReason) >= 2,
+             element(1, InnerReason) =:= rabbit_msg_store_v2_scan,
+             is_integer(element(2, InnerReason)) ->
+    {ok, element(2, InnerReason)};
+corruption_offset(_Reason) -> error.
 
 enqueue_build_index_workers(_Gatherer, [], _State) ->
     exit(normal);
@@ -2011,24 +2505,33 @@ compact_file(File, FileSize,
              State = #gc_state { index_ets        = IndexEts,
                                  file_summary_ets = FileSummaryEts,
                                  dir              = Dir,
-                                 msg_store        = Server }) ->
+                                 msg_store        = Server,
+                                 last_v1_file     = LastV1File }) ->
+    Format = file_format(File, LastV1File),
     %% Get metadata about the file. Will be used to calculate
     %% how much data was reclaimed as a result of compaction.
     [#file_summary{file_size = FileSize}] = ets:lookup(FileSummaryEts, File),
     %% Open the file.
-    FileName = filenum_to_name(File),
+    FileName = filenum_to_name(File, Format),
     {ok, Fd} = file:open(form_filename(Dir, FileName), [read, write, binary, raw]),
     %% Load the messages. It's possible to get 0 messages here;
     %% that's OK. That means we have little to do as the file is
     %% about to be deleted.
-    Messages = scan_and_vacuum_message_file(File, State),
-    %% Blank holes. We must do this first otherwise the file is left
-    %% with data that may confuse the code (for example data that looks
-    %% like a message, isn't a message, but spans over a real message).
-    %% We blank more than is likely required but better safe than sorry.
-    blank_holes_in_file(Fd, Messages),
-    %% Compact the file.
-    {ok, TruncateSize, IndexUpdates} = do_compact_file(Fd, 0, Messages, lists:reverse(Messages), []),
+    Messages = scan_and_vacuum_message_file(Format, File, State),
+    StartOffset = case Format of
+        v1 -> 0;
+        v2 -> ?V2_HEADER_SIZE
+    end,
+    {ok, TruncateSize, IndexUpdates} = case Format of
+        v1 ->
+            %% v1 has no typed hole record to fall back on, so leftover
+            %% message bytes are zero-filled up front, before moving
+            %% anything: unchanged from before the v2 format existed.
+            blank_holes_in_file_v1(Fd, Messages),
+            do_compact_file_v1(Fd, StartOffset, Messages, lists:reverse(Messages), []);
+        v2 ->
+            do_compact_file_v2(Fd, StartOffset, Messages)
+    end,
     %% Sync and close the file.
     ok = file:sync(Fd),
     ok = file:close(Fd),
@@ -2056,12 +2559,13 @@ compact_file(File, FileSize,
     %% index data and so truncation is safe to do even if there are new
     %% readers. We do not need to lock the file for truncation.
     %%
-    %% It's possible that after we compact we end up with a TruncateSize of 0.
-    %% In that case we don't schedule a truncation and will let the message
-    %% store ask the GC process to delete the file.
-    case TruncateSize of
-        0 -> ok;
-        _ -> rabbit_msg_store_gc:truncate(self(), File, TruncateSize, ThresholdTimestamp)
+    %% It's possible that after we compact we end up with a TruncateSize that
+    %% still has no valid data (0 for v1, or just the header for v2). In that
+    %% case we don't schedule a truncation and will let the message store ask
+    %% the GC process to delete the file.
+    case TruncateSize =< StartOffset of
+        true  -> ok;
+        false -> rabbit_msg_store_gc:truncate(self(), File, TruncateSize, ThresholdTimestamp)
     end,
     %% Force a GC because we had to read data into memory to move it within
     %% the file and we don't want to keep it around. The GC process will also
@@ -2071,15 +2575,15 @@ compact_file(File, FileSize,
     ok.
 
 %% We must special case the blanking of the beginning of the file.
-blank_holes_in_file(Fd, [#msg_location{ offset = Offset }|Tail])
+blank_holes_in_file_v1(Fd, [#msg_location{ offset = Offset }|Tail])
         when Offset =/= 0 ->
     Bytes = <<0:Offset/unit:8>>,
     ok = file:pwrite(Fd, 0, Bytes),
-    blank_holes_in_file1(Fd, Tail);
-blank_holes_in_file(Fd, Messages) ->
-    blank_holes_in_file1(Fd, Messages).
+    blank_holes_in_file_v1_1(Fd, Tail);
+blank_holes_in_file_v1(Fd, Messages) ->
+    blank_holes_in_file_v1_1(Fd, Messages).
 
-blank_holes_in_file1(Fd, [
+blank_holes_in_file_v1_1(Fd, [
             #msg_location{ offset = OneOffset, total_size = OneSize },
             #msg_location{ offset = TwoOffset } = Two
         |Tail]) when OneOffset + OneSize < TwoOffset ->
@@ -2087,18 +2591,18 @@ blank_holes_in_file1(Fd, [
     Size = TwoOffset - Offset,
     Bytes = <<0:Size/unit:8>>,
     ok = file:pwrite(Fd, Offset, Bytes),
-    blank_holes_in_file1(Fd, [Two|Tail]);
+    blank_holes_in_file_v1_1(Fd, [Two|Tail]);
 %% We either have only one message left, or contiguous messages.
-blank_holes_in_file1(Fd, [_|Tail]) ->
-    blank_holes_in_file1(Fd, Tail);
+blank_holes_in_file_v1_1(Fd, [_|Tail]) ->
+    blank_holes_in_file_v1_1(Fd, Tail);
 %% No need to blank the hole past the last message as we will
 %% not write there (no confusion possible) and truncate afterwards.
-blank_holes_in_file1(_, []) ->
+blank_holes_in_file_v1_1(_, []) ->
     ok.
 
 %% If the message at the end fits into the hole we have found, we copy it there.
 %% We will do the ets:updates after the data is synced to disk.
-do_compact_file(Fd, Offset, Start = [#msg_location{ offset = StartMsgOffset }|_],
+do_compact_file_v1(Fd, Offset, Start = [#msg_location{ offset = StartMsgOffset }|_],
         [#msg_location{ msg_id = EndMsgId, offset = EndMsgOffset, total_size = EndMsgSize }|EndTail],
         IndexAcc)
         when EndMsgSize =< StartMsgOffset - Offset ->
@@ -2111,30 +2615,182 @@ do_compact_file(Fd, Offset, Start = [#msg_location{ offset = StartMsgOffset }|_]
             {ok, Offset + EndMsgSize, [{EndMsgId, Offset}|IndexAcc]};
         _ ->
             %% We may be able to fit another message in the same hole.
-            do_compact_file(Fd, Offset + EndMsgSize, Start, EndTail,
+            do_compact_file_v1(Fd, Offset + EndMsgSize, Start, EndTail,
                 [{EndMsgId, Offset}|IndexAcc])
     end;
 %% If the message didn't fit into the hole and this was the last message
 %% we could move (start and end have the same message), we stop there.
 %% The truncate size is right after this last message.
-do_compact_file(_, _, [#msg_location{ offset = MsgOffset, total_size = MsgSize }|_],
+do_compact_file_v1(_, _, [#msg_location{ offset = MsgOffset, total_size = MsgSize }|_],
         [#msg_location{ offset = MsgOffset }|_], IndexAcc) ->
     {ok, MsgOffset + MsgSize, IndexAcc};
 %% Regardless of where we are in the file, even if there is a small hole, if the last
 %% message can't fit it, we skip to after the hole + the next message to look for
 %% another hole.
-do_compact_file(Fd, _, [#msg_location{ offset = StartMsgOffset, total_size = StartMsgSize }|StartTail],
+do_compact_file_v1(Fd, _, [#msg_location{ offset = StartMsgOffset, total_size = StartMsgSize }|StartTail],
         End, IndexAcc) ->
-    do_compact_file(Fd, StartMsgOffset + StartMsgSize, StartTail, End, IndexAcc);
+    do_compact_file_v1(Fd, StartMsgOffset + StartMsgSize, StartTail, End, IndexAcc);
 %% We have moved all messages in the file. Stop.
 %% The offset is the truncate size of the file.
-do_compact_file(_, Offset, _, [], IndexAcc) ->
+do_compact_file_v1(_, Offset, _, [], IndexAcc) ->
     {ok, Offset, IndexAcc}.
+
+%% gap_size == 0  -> nothing
+%% gap_size <  5  -> 1..4 SMALL_HOLE bytes
+%% gap_size >= 5  -> one HOLE record, inner bytes zeroed
+%%
+%% The scanner only ever looks at the HOLE record's own 5-byte header
+%% to know how much to skip; it never reads the inner bytes. We zero
+%% them anyway so that a completed write leaves no message bytes
+%% behind for a raw scan (a salvage tool, for instance) to recover.
+%%
+%% This doesn't add crash resilience: the zeros are the last bytes in
+%% the pwrite, written after the message and the header, so a write
+%% torn partway through is, if anything, more likely to leave old
+%% bytes behind unzeroed than to leave zeros. What a scanner relies on
+%% after a crash is the header's own type and size landing intact,
+%% which zeroing the payload does nothing for.
+%%
+%% It does have one incidental benefit for a *different* failure mode,
+%% though: REC_RESERVED is 0 and has no matching scan clause, so if a
+%% scan ever gets misaligned (say, from a corrupted Size elsewhere) and
+%% lands inside a hole's zeroed payload, it hits the unrecognised-type
+%% crash instead of silently reading zeros as if they were meaningful.
+hole_bytes(0) ->
+    <<>>;
+hole_bytes(Size) when Size < 5 ->
+    binary:copy(<<?REC_SMALL_HOLE:8>>, Size);
+hole_bytes(Size) ->
+    <<?REC_HOLE:8, Size:32, 0:(Size - 5)/unit:8>>.
+
+%% We decide the whole compaction plan first, as pure data,
+%% then write it. This way nothing is ever written based on
+%% information that a later part of the plan could still
+%% invalidate. write_compact_file_v2/2 writes a hole record for
+%% whatever's left of the space each run of moves lands in, so the
+%% file is always fully valid and scannable at every point during
+%% compaction and before the physical truncation that follows it has
+%% actually happened: a crash never leaves an unmarked, ambiguous gap
+%% for the next scan (this one, recovery, or the salvage tool) to
+%% trip over. Messages we leave in place are untouched, including
+%% whatever follows them: we haven't broken anything there, so there
+%% is nothing for us to mark.
+do_compact_file_v2(Fd, StartOffset, Messages) ->
+    {Plan, TruncateSize} = plan_compact_file_v2(StartOffset, Messages, lists:reverse(Messages), []),
+    IndexUpdates = write_compact_file_v2(Fd, Plan),
+    {ok, TruncateSize, IndexUpdates}.
+
+%% Same decisions as do_compact_file_v1/5: fill the hole between the
+%% write cursor and the next not-yet-decided message with messages
+%% taken from the end of the file, packing as many as fit; a message
+%% that doesn't fit is left where it is. Unlike do_compact_file_v1/5,
+%% this never touches the file: it only decides the final, static
+%% layout, so nothing here can be invalidated by a read or a write
+%% that a later decision hasn't been made yet when it happens.
+%%
+%% A move's own hole size isn't known until we see what ends up right
+%% after it in the finished plan: packing can stop either because this
+%% was the very last message that could possibly move (the terminal
+%% clause below), or because the next candidate from the end of the
+%% file simply doesn't fit and we fall through to leaving a message
+%% where it is instead. Either way leaves a leftover behind this move,
+%% so the hole size is filled in from the finished plan, in
+%% write_compact_file_v2/2, rather than decided here.
+plan_compact_file_v2(Offset, Start = [#msg_location{ offset = StartMsgOffset }|_],
+        [#msg_location{ msg_id = EndMsgId, offset = EndMsgOffset, total_size = EndMsgSize }|EndTail],
+        Acc)
+        when EndMsgSize =< StartMsgOffset - Offset ->
+    NewOffset = Offset + EndMsgSize,
+    Entry = {moved, Offset, EndMsgId, EndMsgOffset, EndMsgSize},
+    case StartMsgOffset of
+        EndMsgOffset ->
+            %% We moved the last message we could.
+            {lists:reverse([Entry|Acc]), NewOffset};
+        _ ->
+            %% We may be able to fit another message in the same hole.
+            plan_compact_file_v2(NewOffset, Start, EndTail, [Entry|Acc])
+    end;
+%% If the message didn't fit into the hole and this was the last message
+%% we could move (start and end have the same message), we leave it where
+%% it is. The truncate size is right after this last message.
+plan_compact_file_v2(_, [#msg_location{ offset = MsgOffset, total_size = MsgSize }|_],
+        [#msg_location{ offset = MsgOffset }|_], Acc) ->
+    {lists:reverse([{kept, MsgOffset}|Acc]), MsgOffset + MsgSize};
+%% Regardless of where we are in the file, even if there is a small hole, if the last
+%% message can't fit it, we skip to after the hole + the next message to look for
+%% another hole, leaving this one where it is.
+plan_compact_file_v2(_, [#msg_location{ offset = StartMsgOffset, total_size = StartMsgSize }|StartTail],
+        End, Acc) ->
+    plan_compact_file_v2(StartMsgOffset + StartMsgSize, StartTail, End, [{kept, StartMsgOffset}|Acc]);
+%% We have moved or accounted for all messages in the file. Stop.
+%% The offset is the truncate size of the file.
+plan_compact_file_v2(Offset, _, [], Acc) ->
+    {lists:reverse(Acc), Offset}.
+
+%% Write out what the plan decided. A run of moved messages packed
+%% back to back, with no gap between them, is written in a single
+%% pwrite, so the whole run either lands or doesn't: until it does,
+%% the space it targets still holds whatever was there before, so a
+%% crash partway through the run must not be able to leave some of
+%% its messages written and others not. What follows the run (after
+%% its own trailing hole, for whatever's left of the space it moved
+%% into) is left unmarked only when it's already a valid record on
+%% disk on its own: a kept message, never touched, so still there and
+%% valid; or, at the end of the plan, the terminal moved message's own
+%% source copy, which the index still points to at the moment of this
+%% write (index_update_fields/3 in compact_file/3 only runs later,
+%% once every write in the plan has landed and the file has been
+%% synced) and so must not be overwritten. The final group's hole is
+%% therefore sized against that source offset, not against the next
+%% plan entry or the file's original size: everything from there to
+%% the true old end of file is left as whatever was physically there
+%% before this compaction, which for every message still holding a
+%% valid record (every source at or beyond the terminal move's own
+%% source offset belongs to a message this pass moved) is itself a
+%% real, if now-superseded, record; scan_v2_data's MsgIdsFound
+%% deduplication resolves the resulting duplicates by keeping the
+%% earlier (moved) copy, and physical truncation removes them for
+%% good once it eventually runs. A kept message is left untouched
+%% entirely: we never overwrote anything around it, so there is
+%% nothing there for us to mark. Both tuple shapes carry their offset
+%% in the same, second position, so the next entry's offset can be
+%% read with element/2 without matching out which shape it is.
+write_compact_file_v2(Fd, Plan) ->
+    write_compact_file_v2(Fd, Plan, []).
+
+write_compact_file_v2(Fd, [{moved, NewOffset, MsgId, OldOffset, Size}|Rest], Group) ->
+    {ok, Bytes} = file:pread(Fd, OldOffset, Size),
+    Group1 = [{MsgId, NewOffset, Bytes}|Group],
+    case Rest of
+        [{moved, NextOffset, _, _, _}|_] when NextOffset =:= NewOffset + Size ->
+            %% The next message packs right after this one with no
+            %% gap: it hasn't been written yet, so we can't treat the
+            %% boundary as safe. Fold it into the same write instead.
+            write_compact_file_v2(Fd, Rest, Group1);
+        [Next|_] ->
+            HoleSize = element(2, Next) - (NewOffset + Size),
+            write_compact_group_v2(Fd, Group1, HoleSize)
+                ++ write_compact_file_v2(Fd, Rest, []);
+        [] ->
+            write_compact_group_v2(Fd, Group1, OldOffset - (NewOffset + Size))
+    end;
+write_compact_file_v2(Fd, [{kept, _}|Rest], []) ->
+    write_compact_file_v2(Fd, Rest, []);
+write_compact_file_v2(_, [], []) ->
+    [].
+
+write_compact_group_v2(Fd, Group0, HoleSize) ->
+    Group = lists:reverse(Group0),
+    [{_, StartOffset, _}|_] = Group,
+    Data = [Bytes || {_, _, Bytes} <- Group],
+    ok = file:pwrite(Fd, StartOffset, [Data, hole_bytes(HoleSize)]),
+    [{MsgId, Offset} || {MsgId, Offset, _} <- Group].
 
 -spec truncate_file(non_neg_integer(), non_neg_integer(), integer(), gc_state()) -> ok | defer.
 
 truncate_file(File, Size, ThresholdTimestamp, #gc_state{ file_summary_ets = FileSummaryEts,
                                                          file_handles_ets = FileHandlesEts,
+                                                         last_v1_file     = LastV1File,
                                                          dir = Dir }) ->
     %% We must first check that the file still exists because the store GC process
     %% may have been asked to delete the file during compaction, before truncate
@@ -2150,7 +2806,8 @@ truncate_file(File, Size, ThresholdTimestamp, #gc_state{ file_summary_ets = File
                                      [File]),
                     defer;
                 _ ->
-                    FileName = filenum_to_name(File),
+                    Format = file_format(File, LastV1File),
+                    FileName = filenum_to_name(File, Format),
                     {ok, Fd} = file:open(form_filename(Dir, FileName), [read, write, binary, raw]),
                     {ok, _} = file:position(Fd, Size),
                     ok = file:truncate(Fd),
@@ -2166,6 +2823,7 @@ truncate_file(File, Size, ThresholdTimestamp, #gc_state{ file_summary_ets = File
 
 delete_file(File, State = #gc_state { file_summary_ets = FileSummaryEts,
                                       file_handles_ets = FileHandlesEts,
+                                      last_v1_file     = LastV1File,
                                       dir              = Dir }) ->
     case ets:match_object(FileHandlesEts, {{'_', File}, '_'}, 1) of
         {[_|_], _Cont} ->
@@ -2175,17 +2833,21 @@ delete_file(File, State = #gc_state { file_summary_ets = FileSummaryEts,
         _ ->
             [#file_summary{ valid_total_size = 0,
                             file_size = FileSize }] = ets:lookup(FileSummaryEts, File),
-            [] = scan_and_vacuum_message_file(File, State),
-            ok = file:delete(form_filename(Dir, filenum_to_name(File))),
+            Format = file_format(File, LastV1File),
+            [] = scan_and_vacuum_message_file(Format, File, State),
+            ok = file:delete(form_filename(Dir, filenum_to_name(File, Format))),
             true = ets:delete(FileSummaryEts, File),
             ?LOG_DEBUG("Deleted empty file number ~tp; reclaimed ~tp bytes", [File, FileSize]),
             ok
     end.
 
-scan_and_vacuum_message_file(File, #gc_state{ index_ets = IndexEts, dir = Dir }) ->
-    %% Messages here will be end-of-file at start-of-list
-    Path = form_filename(Dir, filenum_to_name(File)),
-    {ok, Messages} = scan_file_for_valid_messages(Path,
+scan_and_vacuum_message_file(Format, File, #gc_state{ index_ets = IndexEts,
+                                                       dir       = Dir }) ->
+    %% The scanner itself returns entries end-of-file-first (descending
+    %% offset); the reverse/1 below flips that, so what this function
+    %% returns is ascending offset order (start-of-file first).
+    Path = form_filename(Dir, filenum_to_name(File, Format)),
+    {ok, Messages} = scan_file_for_valid_messages(Format, Path,
         fun ({MsgId, TotalSize, Offset}) ->
             case index_lookup(IndexEts, MsgId) of
                 #msg_location { file = File, total_size = TotalSize,
