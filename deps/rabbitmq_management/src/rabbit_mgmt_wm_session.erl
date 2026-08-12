@@ -41,7 +41,7 @@ to_json(ReqData, Context) ->
 accept_content(ReqData, Context) ->
     case cowboy_req:binding(session, ReqData) of
         undefined ->
-            Username = Context#context.user#auth_user.username,
+            Username = Context#context.user#user.username,
             Metadata = build_metadata(ReqData),
             case rabbit_mgmt_sessions:create_session(Username, Metadata) of
                 {ok, SessionId} ->
@@ -54,7 +54,7 @@ accept_content(ReqData, Context) ->
                     rabbit_web_dispatch_access_control:halt_response(403, not_authorized, <<"concurrent_session_limit_reached">>, ReqData, Context)
             end;
         SessionId ->
-            Username = Context#context.user#auth_user.username,
+            Username = Context#context.user#user.username,
             case rabbit_mgmt_sessions:heartbeat(SessionId, Username) of
                 ok ->
                     {true, ReqData, Context};
@@ -67,7 +67,7 @@ accept_content(ReqData, Context) ->
 
 delete_resource(ReqData, Context) ->
     SessionId = cowboy_req:binding(session, ReqData),
-    Username = Context#context.user#auth_user.username,
+    Username = Context#context.user#user.username,
     case rabbit_mgmt_sessions:heartbeat(SessionId, Username) of
         ok ->
             rabbit_mgmt_sessions:delete_session(SessionId),
