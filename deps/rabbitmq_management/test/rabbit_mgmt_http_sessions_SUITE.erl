@@ -112,7 +112,7 @@ req_node(Config, Node, Type, Path, User, Pass, Body) ->
 req_node(Config, Node, Type, Path, User, Pass, Body, ExtraHeaders) ->
     Headers = [rabbit_mgmt_test_util:auth_header(User, Pass) | ExtraHeaders],
     JsonBody = iolist_to_binary(rabbit_json:encode(Body)),
-    req(Config, Node, Type, Path, Headers, JsonBody).
+    rabbit_mgmt_test_util:req(Config, Node, Type, Path, Headers, JsonBody).
 
 feature_disabled_test(Config) ->
     %% POST
@@ -293,8 +293,10 @@ auto_resume_orphaned_session_test(Config) ->
     
     ?assertEqual(204, Status2),
     
-    %% Verify the session is now owned by N2
-    SessionsRes = http_get(Config, "/sessions", "test_admin", "test_admin", ?OK),
+    %% Verify the session is now owned by N2. Query N2 directly since gossip to N1 might not have happened yet.
+    {ok, {{_Http, 200, _}, _, ResBody}} =
+        rabbit_mgmt_test_util:req(Config, N2, get, "/sessions", [rabbit_mgmt_test_util:auth_header("test_admin", "test_admin")]),
+    SessionsRes = decode_body(ResBody),
     Items = maps:get('items', SessionsRes),
     [Session] = [S || S <- Items, maps:get('id', S) == SessionId1],
     
