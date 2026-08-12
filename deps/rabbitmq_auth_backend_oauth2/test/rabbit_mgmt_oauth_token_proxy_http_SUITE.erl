@@ -98,6 +98,7 @@ configure(top_level, Config) ->
     set_env(Config, rabbitmq_management, oauth_client_secret, ?SECRET),
     set_env(Config, rabbitmq_management, oauth_provider_url, ProviderURL),
     set_env(Config, rabbitmq_management, oauth_scopes, <<"openid">>),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_mgmt_app, reset_dispatcher, [[]]),
     rabbit_ct_helpers:set_config(Config, {resource, <<"rabbitmq">>});
 configure(per_resource, Config) ->
     ProviderURL = mock_base(?config(mock_port, Config)),
@@ -116,6 +117,7 @@ configure(per_resource, Config) ->
               [{id, <<"rabbit_public">>},
                {oauth_client_id, <<"public_client">>},
                {oauth_provider_url, ProviderURL}]}),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_mgmt_app, reset_dispatcher, [[]]),
     rabbit_ct_helpers:set_config(Config, {resource, <<"rabbit_prod">>}).
 
 reset_oauth(Config) ->
@@ -124,6 +126,7 @@ reset_oauth(Config) ->
                 oauth_provider_url, oauth_scopes, oauth_resource_servers]],
     [unset_env(Config, rabbitmq_auth_backend_oauth2, Key)
      || Key <- [resource_server_id, resource_servers]],
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_mgmt_app, reset_dispatcher, [[]]),
     ok.
 
 %%

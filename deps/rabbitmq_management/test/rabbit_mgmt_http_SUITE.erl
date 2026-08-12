@@ -119,9 +119,7 @@ definitions_group4_tests() ->
 definitions_group5_tests() ->
     [
         definitions_multipart_non_json_extension_rejected_test,
-        definitions_multipart_non_json_extension_allowed_when_not_enforced_test,
-        require_definition_json_extension_defaults_to_false_in_overview_test,
-        require_definition_json_extension_enabled_in_overview_test
+        definitions_multipart_non_json_extension_allowed_when_not_enforced_test
     ].
 
 default_queue_type_group_tests() ->
@@ -3622,24 +3620,6 @@ definitions_multipart_non_json_extension_allowed_when_not_enforced_test(Config) 
                     "guest", "guest", {group, '2xx'}, MoreHeaders),
     passed.
 
-require_definition_json_extension_defaults_to_false_in_overview_test(Config) ->
-    %% By default, require_definition_json_extension is false and must be reflected in the overview.
-    Overview = http_get(Config, "/overview"),
-    ?assertEqual(false, maps:get(require_definition_json_extension, Overview)),
-    passed.
-
-require_definition_json_extension_enabled_in_overview_test(Config) ->
-    %% When enabled, the overview endpoint must report require_definition_json_extension as true.
-    rpc(Config, application, set_env,
-        [rabbitmq_management, require_definition_json_extension, true]),
-    try
-        Overview = http_get(Config, "/overview"),
-        ?assertEqual(true, maps:get(require_definition_json_extension, Overview)),
-        passed
-    after
-        rpc(Config, application, unset_env,
-            [rabbitmq_management, require_definition_json_extension])
-    end.
 
 publish_accept_json_test(Config) ->
     Headers = #{'x-forwarding' => [#{uri => <<"amqp://localhost/%2F/upstream">>}]},

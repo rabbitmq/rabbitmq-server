@@ -761,40 +761,49 @@ function DisplayControl() {
 }
 
 
+function update_cluster_name_ui(new_name) {
+    cluster_name = fmt_escape_html(new_name);
+    var nav_link = user_administrator ? '<a href="#/cluster-name">' + cluster_name + '</a>' : cluster_name;
+    
+    // If the element exists, update it, otherwise create it (initial boot)
+    var $li = $('#logout').prev('li');
+    if ($li.length > 0 && $li.text().startsWith('Cluster')) {
+        $li.html('Cluster ' + nav_link);
+    } else {
+        $('#logout').before('<li>Cluster ' + nav_link + '</li>');
+    }
+}
+
 // Set up the above vars
-function setup_global_vars(overview) {
-    rates_mode = overview.rates_mode;
-    is_op_policy_updating_enabled = overview.is_op_policy_updating_enabled;
+function setup_global_vars(settings) {
+    rates_mode = settings.rates_mode;
+    is_op_policy_updating_enabled = settings.is_op_policy_updating_enabled;
     user_tags = expand_user_tags(user.tags);
     user_administrator = jQuery.inArray("administrator", user_tags) != -1;
     is_user_policymaker = jQuery.inArray("policymaker", user_tags) != -1;
     user_monitor = jQuery.inArray("monitoring", user_tags) != -1;
-    exchange_types = overview.exchange_types.map(function(xt) { return fmt_escape_html_one_line(xt.name); });
+    exchange_types = settings.exchange_types.map(function(xt) { return fmt_escape_html_one_line(xt.name); });
 
-    cluster_name = fmt_escape_html(overview.cluster_name);
-    $('#logout').before(
-      '<li>Cluster ' + (user_administrator ?  '<a href="#/cluster-name">' + cluster_name + '</a>' : cluster_name) + '</li>'
-    );
+    update_cluster_name_ui(settings.cluster_name);
 
     user_name = fmt_escape_html(user.name);
     $('#header #logout').prepend(
       'User ' + (user_administrator && user.is_internal_user ?  '<a href="#/users/' + user_name + '">' + user_name + '</a>' : user_name)
     );
 
-    var product = overview.rabbitmq_version;
-    if (overview.product_name && overview.product_version) {
-        product = overview.product_name + ' ' + overview.product_version;
+    var product = settings.product_info.rabbitmq_version;
+    if (settings.product_info.product_name && settings.product_info.product_version) {
+        product = settings.product_info.product_name + ' ' + settings.product_info.product_version;
     }
 
     $('#versions').html(
       '<abbr title="Available exchange types: ' + exchange_types.join(", ") + '">' + fmt_escape_html(product) + '</abbr>' +
-      '<abbr title="' + fmt_escape_html(overview.erlang_full_version) + '">Erlang ' + fmt_escape_html(overview.erlang_version) + '</abbr>'
+      '<abbr title="' + fmt_escape_html(settings.product_info.erlang_full_version) + '">Erlang ' + fmt_escape_html(settings.product_info.erlang_version) + '</abbr>'
     );
     nodes_interesting = false;
     rabbit_versions_interesting = false;
     if (user_monitor) {
-        var nodes = JSON.parse(sync_get('/nodes'));
-        if (nodes.length > 1) {
+        if (ui_data_model.nodes && ui_data_model.nodes.length > 1) {
             nodes_interesting = true;
             var v = '';
             for (var i = 0; i < ui_data_model.nodes.length; i++) {
@@ -810,13 +819,13 @@ function setup_global_vars(overview) {
 
     queue_type = "default";
     current_vhost = get_pref('vhost');
-    exchange_types = overview.exchange_types;
+    exchange_types = settings.exchange_types;
 
-    disable_stats = overview.disable_stats;
-    enable_queue_totals = overview.enable_queue_totals;
+    disable_stats = settings.disable_stats;
+    enable_queue_totals = settings.enable_queue_totals;
     COLUMNS = disable_stats?DISABLED_STATS_COLUMNS:ALL_COLUMNS;
 
-    setup_chart_ranges(overview.sample_retention_policies);
+    setup_chart_ranges(settings.sample_retention_policies);
 }
 
 function setup_chart_ranges(srp) {
