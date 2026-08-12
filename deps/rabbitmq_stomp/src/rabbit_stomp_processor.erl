@@ -673,11 +673,13 @@ tidy_canceled_subscription(ConsumerTag, Subscription,
 
 %% Client-initiated cancelations will pass an actual frame
 
-tidy_canceled_subscription(ConsumerTag, Subscription = #subscription{dest_hdr = DestHdr},
+tidy_canceled_subscription(ConsumerTag,
+                           Subscription = #subscription{dest_hdr = DestHdr,
+                                                        queue_name = QRes},
                            Frame, State0) ->
     {ok, State1} = tidy_canceled_subscription_state(ConsumerTag, Subscription, State0),
     {ok, Dest} = parse_endpoint(DestHdr),
-    maybe_delete_durable_sub_queue(Dest, Frame, State1).
+    maybe_delete_durable_sub_queue(Dest, QRes, Frame, State1).
 
 tidy_canceled_subscription_state(ConsumerTag,
                                  _Subscription = #subscription{queue_name = QName},
@@ -696,20 +698,27 @@ tidy_canceled_subscription_state(ConsumerTag,
     {ok, State#state{subscriptions = Subs1,
                           queue_consumers = QCons1}}.
 
-maybe_delete_durable_sub_queue({topic, Name}, Frame,
-                               State = #state{cfg = #cfg{auth_login = Username,
-                                                         vhost = VHost}}) ->
+%% Take the queue from the subscription, never from the UNSUBSCRIBE frame.
+maybe_delete_durable_sub_queue({topic, _Name}, QRes, Frame, State) ->
     case rabbit_stomp_util:has_durable_header(Frame) of
         true ->
-            {ok, Id} = rabbit_stomp_frame:header(Frame, ?HEADER_ID),
-            QName = rabbit_stomp_util:subscription_queue_name(Name, Id, Frame),
-            QRes = rabbit_misc:r(VHost, queue, QName),
-            delete_queue(QRes, Username),
-            ok(State);
+            delete_durable_sub_queue(QRes, State);
         false ->
             ok(State)
     end;
-maybe_delete_durable_sub_queue(_Destination, _Frame, State) ->
+maybe_delete_durable_sub_queue(_Destination, _QRes, _Frame, State) ->
+    ok(State).
+
+%% Same permission and delete path as queue.delete on a channel. The check
+%% is uncached: this module never invalidates its permission cache.
+-spec delete_durable_sub_queue(rabbit_amqqueue:name(), #state{}) ->
+          {ok, none, #state{}}.
+delete_durable_sub_queue(QRes, State = #state{user = #user{username = Username} = User,
+                                              authz_ctx = AuthzCtx}) ->
+    ok = rabbit_access_control:check_resource_access(
+           User, QRes, configure, AuthzCtx),
+    {ok, _} = rabbit_amqqueue:delete_with(QRes, self(), false, false,
+                                          Username, true),
     ok(State).
 
 with_destination(Command, Frame, State, Fun) ->

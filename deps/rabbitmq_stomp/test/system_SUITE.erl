@@ -12,6 +12,7 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 -include("rabbit_stomp.hrl").
 -include("rabbit_stomp_frame.hrl").
 -include("rabbit_stomp_headers.hrl").
@@ -20,6 +21,16 @@
 -define(QUEUE_QQ, <<"TestQueueQQ">>).
 -define(DESTINATION, <<"/amq/queue/TestQueue">>).
 -define(DESTINATION_QQ, <<"/amq/queue/TestQueueQQ">>).
+-define(AUTHZ_TOPIC, <<"TestUnsubscribeAuthzTopic">>).
+-define(AUTHZ_TOPIC_DESTINATION, <<"/topic/TestUnsubscribeAuthzTopic">>).
+-define(AUTHZ_SUBSCRIPTION_ID, <<"authz-subscription">>).
+%% Stands in for another connection's durable subscription queue: it matches
+%% the same configure pattern, so a configure check alone would not protect it.
+-define(AUTHZ_BYSTANDER_QUEUE, <<"stomp-subscription-bystander">>).
+-define(AUTHZ_USER, <<"stomp-authz-user">>).
+-define(AUTHZ_PASSWORD, <<"pass">>).
+%% Least privilege for a durable topic subscriber: its own subscription queues.
+-define(AUTHZ_CONFIGURE, <<"^stomp-subscription-.*">>).
 
 all() ->
     [{group, version_to_group_name(V)} || V <- ?SUPPORTED_VERSIONS].
@@ -46,8 +57,14 @@ groups() ->
         global_counters
     ],
 
-    [{version_to_group_name(V), [sequence], Tests}
-     || V <- ?SUPPORTED_VERSIONS].
+    %% Not a `sequence` group: one failing case must not auto_skip the other.
+    AuthzTests = [durable_unsubscribe_ignores_frame_queue_name,
+                  durable_unsubscribe_requires_configure_permission],
+
+    [{version_to_group_name(V), [sequence],
+      Tests ++ [{group, unsubscribe_authz}]}
+     || V <- ?SUPPORTED_VERSIONS] ++
+    [{unsubscribe_authz, [], AuthzTests}].
 
 version_to_group_name(V) ->
     list_to_atom(re:replace("version_" ++ V,
@@ -66,6 +83,8 @@ end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config,
       rabbit_ct_broker_helpers:teardown_steps()).
 
+init_per_group(unsubscribe_authz, Config) ->
+    Config;
 init_per_group(Group, Config) ->
     Suffix = string:sub_string(atom_to_list(Group), 9),
     Version = re:replace(Suffix, "_", ".", [global, {return, list}]),
@@ -127,9 +146,48 @@ init_per_testcase0(TestCase, Config)
     StompPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stomp),
     {ok, ClientFoo} = rabbit_stomp_client:connect(Version, "stompuser", "pass", StompPort),
     rabbit_ct_helpers:set_config(Config, [{client_foo, ClientFoo}]);
+init_per_testcase0(TestCase, Config)
+  when TestCase =:= durable_unsubscribe_ignores_frame_queue_name;
+       TestCase =:= durable_unsubscribe_requires_configure_permission ->
+    Channel = ?config(amqp_channel, Config),
+    %% a queue this connection never subscribes to
+    #'queue.declare_ok'{} =
+        amqp_channel:call(Channel,
+                          #'queue.declare'{queue       = ?AUTHZ_BYSTANDER_QUEUE,
+                                           durable     = true,
+                                           auto_delete = false}),
+    rabbit_ct_broker_helpers:rpc(
+      Config, 0, rabbit_auth_backend_internal, add_user,
+      [?AUTHZ_USER, ?AUTHZ_PASSWORD, <<"acting-user">>]),
+    ok = rabbit_ct_broker_helpers:set_permissions(
+           Config, ?AUTHZ_USER, ?config(rmq_vhost, Config),
+           ?AUTHZ_CONFIGURE, <<".*">>, <<".*">>),
+    Version = ?config(version, Config),
+    StompPort = rabbit_ct_broker_helpers:get_node_config(
+                  Config, 0, tcp_port_stomp),
+    {ok, AuthzClient} = rabbit_stomp_client:connect(
+                          Version,
+                          binary_to_list(?AUTHZ_USER),
+                          binary_to_list(?AUTHZ_PASSWORD),
+                          StompPort),
+    rabbit_ct_helpers:set_config(
+      Config, [{authz_client, AuthzClient},
+               {authz_sub_queue, authz_subscription_queue(Config)}]);
 init_per_testcase0(_, Config) ->
     Config.
 
+end_per_testcase0(TestCase, Config)
+  when TestCase =:= durable_unsubscribe_ignores_frame_queue_name;
+       TestCase =:= durable_unsubscribe_requires_configure_permission ->
+    AuthzClient = ?config(authz_client, Config),
+    catch rabbit_stomp_client:disconnect(AuthzClient),
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, rabbit_auth_backend_internal, delete_user,
+           [?AUTHZ_USER, <<"acting-user">>]),
+    _ = [delete_queue_if_present(QRes, Config)
+         || QRes <- [authz_bystander_queue(Config),
+                     ?config(authz_sub_queue, Config)]],
+    Config;
 end_per_testcase0(publish_unauthorized_error, Config) ->
     ClientFoo = ?config(client_foo, Config),
     rabbit_stomp_client:disconnect(ClientFoo),
@@ -363,6 +421,96 @@ unsubscribe_ack(Config) ->
     ?assertEqual(<<"Subscription not found">>,
                  maps:get(<<"message">>, Hdrs2)),
     ok.
+
+%% A durable UNSUBSCRIBE must delete the queue this connection subscribed to,
+%% not the one x-queue-name names on the UNSUBSCRIBE frame.
+durable_unsubscribe_ignores_frame_queue_name(Config) ->
+    Client = ?config(authz_client, Config),
+    Bystander = authz_bystander_queue(Config),
+    SubQueue = ?config(authz_sub_queue, Config),
+    Client1 = authz_subscribe(Client),
+    ?assertMatch({ok, _}, lookup_queue(SubQueue, Config)),
+    ?assertMatch({ok, _}, lookup_queue(Bystander, Config)),
+    %% the id alone resolves the subscription the delete targets
+    rabbit_stomp_client:send(
+      Client1, 'UNSUBSCRIBE',
+      [{<<"destination">>, ?AUTHZ_TOPIC_DESTINATION},
+       {<<"id">>, ?AUTHZ_SUBSCRIPTION_ID},
+       {<<"durable">>, <<"true">>},
+       {<<"x-queue-name">>, ?AUTHZ_BYSTANDER_QUEUE},
+       {<<"receipt">>, <<"rcpt2">>}]),
+    {Frame, _Client2} = rabbit_stomp_client:recv(Client1),
+    ?assertMatch(#stomp_frame{command = 'RECEIPT',
+                              headers = #{<<"receipt-id">> := <<"rcpt2">>}},
+                 Frame),
+    %% a misdirected delete would land before the RECEIPT, so check it first
+    ?assertMatch({ok, _}, lookup_queue(Bystander, Config)),
+    ?awaitMatch({error, not_found}, lookup_queue(SubQueue, Config), 30_000),
+    ok.
+
+%% Deleting the subscription's queue requires configure permission on it, so a
+%% permission revoked after the subscription was created must take effect.
+durable_unsubscribe_requires_configure_permission(Config) ->
+    Client = ?config(authz_client, Config),
+    Bystander = authz_bystander_queue(Config),
+    SubQueue = ?config(authz_sub_queue, Config),
+    Client1 = authz_subscribe(Client),
+    ?assertMatch({ok, _}, lookup_queue(SubQueue, Config)),
+    ok = rabbit_ct_broker_helpers:set_permissions(
+           Config, ?AUTHZ_USER, ?config(rmq_vhost, Config),
+           <<"^$">>, <<".*">>, <<".*">>),
+    rabbit_stomp_client:send(
+      Client1, 'UNSUBSCRIBE',
+      [{<<"destination">>, ?AUTHZ_TOPIC_DESTINATION},
+       {<<"id">>, ?AUTHZ_SUBSCRIPTION_ID},
+       {<<"durable">>, <<"true">>},
+       {<<"x-queue-name">>, ?AUTHZ_BYSTANDER_QUEUE},
+       {<<"receipt">>, <<"rcpt2">>}]),
+    {Frame, _Client2} = rabbit_stomp_client:recv(Client1),
+    ?assertMatch(#stomp_frame{command = 'ERROR',
+                              headers = #{<<"message">> := <<"access_refused">>}},
+                 Frame),
+    ?assertMatch({ok, _}, lookup_queue(SubQueue, Config)),
+    ?assertMatch({ok, _}, lookup_queue(Bystander, Config)),
+    ok.
+
+%% auto-delete:false, so the queue outlives its consumer.
+authz_subscribe(Client) ->
+    rabbit_stomp_client:send(
+      Client, 'SUBSCRIBE',
+      [{<<"destination">>, ?AUTHZ_TOPIC_DESTINATION},
+       {<<"durable">>, <<"true">>},
+       {<<"auto-delete">>, <<"false">>},
+       {<<"id">>, ?AUTHZ_SUBSCRIPTION_ID},
+       {<<"receipt">>, <<"rcpt1">>}]),
+    {ok, Client1, ReceiptHeaders, _} = stomp_receive(Client, 'RECEIPT'),
+    ?assertEqual(<<"rcpt1">>, maps:get(<<"receipt-id">>, ReceiptHeaders)),
+    Client1.
+
+%% The queue name SUBSCRIBE derives, computed the way the processor does.
+authz_subscription_queue(Config) ->
+    QNameBin = rabbit_ct_broker_helpers:rpc(
+                 Config, 0, rabbit_stomp_util, subscription_queue_name,
+                 [?AUTHZ_TOPIC, ?AUTHZ_SUBSCRIPTION_ID,
+                  #stomp_frame{headers = #{}}]),
+    rabbit_misc:r(?config(rmq_vhost, Config), queue, QNameBin).
+
+authz_bystander_queue(Config) ->
+    rabbit_misc:r(?config(rmq_vhost, Config), queue, ?AUTHZ_BYSTANDER_QUEUE).
+
+lookup_queue(QRes, Config) ->
+    rabbit_ct_broker_helpers:rpc(
+      Config, 0, rabbit_amqqueue, lookup, [QRes]).
+
+delete_queue_if_present(QRes, Config) ->
+    case lookup_queue(QRes, Config) of
+        {ok, _} ->
+            rabbit_ct_broker_helpers:rpc(
+              Config, 0, rabbit_amqqueue, delete_with,
+              [QRes, false, false, <<"acting-user">>]);
+        _ ->
+            ok
+    end.
 
 subscribe_ack(Config) ->
     Channel = ?config(amqp_channel, Config),
