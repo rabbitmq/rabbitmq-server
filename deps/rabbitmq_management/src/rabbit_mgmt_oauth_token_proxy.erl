@@ -9,10 +9,17 @@
 
 -export([init/2]).
 %% exported for testing
--export([inject_client_secret/2, rewrite_token_endpoint/2, external_authority/6]).
+-export([inject_client_secret/2, rewrite_token_endpoint/2, external_authority/2]).
 
 -include_lib("oauth2_client/include/oauth2_client.hrl").
 -include_lib("kernel/include/logger.hrl").
+
+-type connection_authority() :: #{scheme := binary(),
+                                  host := binary(),
+                                  port := inet:port_number()}.
+-type forwarded_headers() :: #{proto => binary(),
+                               host => binary(),
+                               port => binary()}.
 
 %%--------------------------------------------------------------------
 %% Server-side proxy for the OAuth 2 token endpoint.
@@ -44,8 +51,7 @@ handle_metadata(Req0, State) ->
         {ok, _Secret, MetadataURL, HttpOpts} ->
             case http_get(MetadataURL, HttpOpts) of
                 {ok, 200, _Headers, Body} ->
-                    ProxyTokenURL = proxy_token_url(Req0, Id),
-                    Rewritten = rewrite_token_endpoint(Body, ProxyTokenURL),
+                    Rewritten = rewrite_token_endpoint(Body, proxy_token_url(Req0, Id)),
                     {ok, reply_json(200, Rewritten, Req0), State};
                 Other ->
                     ?LOG_ERROR("OAuth 2 token proxy could not fetch ~ts: ~tp",
@@ -93,12 +99,15 @@ forward_token_request(Req0, State, Secret, MetadataURL, HttpOpts) ->
 
 %% Only add the secret when the request does not already carry one, so an
 %% explicit client_secret_post from the client is never overwritten.
+-spec inject_client_secret([{binary(), binary() | true}], binary()) ->
+    [{binary(), binary() | true}].
 inject_client_secret(Params, Secret) ->
     case lists:keymember(<<"client_secret">>, 1, Params) of
         true -> Params;
         false -> Params ++ [{<<"client_secret">>, Secret}]
     end.
 
+-spec rewrite_token_endpoint(binary(), binary()) -> binary().
 rewrite_token_endpoint(MetadataJson, ProxyTokenURL) ->
     Map = rabbit_json:decode(MetadataJson),
     rabbit_json:encode(maps:put(<<"token_endpoint">>, ProxyTokenURL, Map)).
@@ -216,79 +225,125 @@ is_root_resource_server(Id) ->
                             undefined)).
 
 proxy_token_url(Req, Id) ->
-    Prefix = rabbit_mgmt_util:get_path_prefix(),
     Authority = external_authority(
-                  cowboy_req:scheme(Req),
-                  cowboy_req:host(Req),
-                  cowboy_req:port(Req),
-                  header_or_qs(<<"x-forwarded-proto">>, Req),
-                  header_or_qs(<<"x-forwarded-host">>, Req),
-                  header_or_qs(<<"x-forwarded-port">>, Req)),
-    iolist_to_binary([Authority, Prefix,
+                  #{scheme => cowboy_req:scheme(Req),
+                    host => cowboy_req:host(Req),
+                    port => cowboy_req:port(Req)},
+                  forwarded_headers(Req)),
+    iolist_to_binary([Authority, rabbit_mgmt_util:get_path_prefix(),
                       "/js/oidc-oauth/token-endpoint/",
                       cow_uri:urlencode(Id)]).
 
-header_or_qs(Name, Req) ->
-    case rabbit_mgmt_util:qs_val(Name, Req) of
-        undefined -> cowboy_req:header(Name, Req);
-        Val -> Val
+%% Only headers are consulted: the same values in the query string would be
+%% settable from a link, which would let a third party choose the token
+%% endpoint a victim's browser posts the authorization code to.
+forwarded_headers(Req) ->
+    maps:filtermap(
+      fun(_, Name) ->
+              case cowboy_req:header(Name, Req) of
+                  undefined -> false;
+                  Value -> {true, Value}
+              end
+      end,
+      #{proto => <<"x-forwarded-proto">>,
+        host => <<"x-forwarded-host">>,
+        port => <<"x-forwarded-port">>}).
+
+-spec external_authority(connection_authority(), forwarded_headers()) -> iodata().
+external_authority(Connection, Forwarded) ->
+    {Scheme, DefaultPort} = scheme_and_default_port(Forwarded, Connection),
+    {Host, Port} = host_and_port(Forwarded, Connection, DefaultPort),
+    [Scheme, "://", Host, port_suffix(Scheme, Port)].
+
+%% An accepted forwarded scheme means the browser reached a proxy rather than
+%% this listener, so that scheme's default port is a better guess than the port
+%% this node listens on.
+scheme_and_default_port(#{proto := Proto}, Connection) ->
+    case ascii_lowercase(last_value(Proto)) of
+        <<"http">> -> {<<"http">>, 80};
+        <<"https">> -> {<<"https">>, 443};
+        _ -> connection_scheme_and_port(Connection)
+    end;
+scheme_and_default_port(_, Connection) ->
+    connection_scheme_and_port(Connection).
+
+connection_scheme_and_port(#{scheme := Scheme, port := Port}) ->
+    {Scheme, Port}.
+
+host_and_port(Forwarded, #{host := ConnHost}, DefaultPort) ->
+    {Host, HostPort} = case forwarded_host(Forwarded) of
+                           undefined -> {ConnHost, undefined};
+                           Accepted -> Accepted
+                       end,
+    case {forwarded_port(Forwarded), HostPort} of
+        {undefined, undefined} -> {Host, DefaultPort};
+        {undefined, Port} -> {Host, Port};
+        {Port, _} -> {Host, Port}
     end.
 
-external_authority(ConnScheme, ConnHost, ConnPort, ForwardedProto, ForwardedHost, ForwardedPort) ->
-    Scheme = case first_value(ForwardedProto) of
-                 undefined -> ConnScheme;
-                 Value -> Value
-             end,
-    
-    DefaultPort = case ForwardedProto of
-                      undefined -> ConnPort;
-                      _ -> default_port(Scheme)
-                  end,
-
-    {Host, Port} = case {ForwardedHost, ForwardedPort} of
-                       {undefined, undefined} ->
-                           {ConnHost, DefaultPort};
-                       {undefined, PortVal} ->
-                           {ConnHost, binary_to_integer(first_value(PortVal))};
-                       {HostVal, undefined} ->
-                           parse_host_header(first_value(HostVal), DefaultPort);
-                       {HostVal, PortVal} ->
-                           {H, _} = parse_host_header(first_value(HostVal), undefined),
-                           {H, binary_to_integer(first_value(PortVal))}
-                   end,
-                   
-    PortSuffix = port_suffix(Scheme, Port),
-    [Scheme, "://", Host, PortSuffix].
-
-parse_host_header(HostVal, DefaultPort) ->
-    case binary:split(HostVal, <<"]">>) of
-        [IPv6, <<":", PortBin/binary>>] ->
-            {<<IPv6/binary, "]">>, binary_to_integer(PortBin)};
-        [<< "[", _/binary >> = IPv6] ->
-            {IPv6, DefaultPort};
+forwarded_host(#{host := Value}) ->
+    %% uri_string:parse/1 raises on bytes that are not valid UTF-8.
+    try uri_string:parse(<<"//", (last_value(Value))/binary>>) of
+        #{host := Host, path := <<>>} = Parsed
+          when Host =/= <<>>,
+               not is_map_key(userinfo, Parsed),
+               not is_map_key(query, Parsed),
+               not is_map_key(fragment, Parsed) ->
+            {brackets(Host), valid_port(maps:get(port, Parsed, undefined))};
         _ ->
-            case binary:split(HostVal, <<":">>, [global]) of
-                [Host, PortBin] ->
-                    {Host, binary_to_integer(PortBin)};
-                [Host] ->
-                    {Host, DefaultPort};
+            undefined
+    catch
+        _:_ ->
+            undefined
+    end;
+forwarded_host(_) ->
+    undefined.
+
+forwarded_port(#{port := Value}) ->
+    try valid_port(binary_to_integer(last_value(Value)))
+    catch
+        _:_ -> undefined
+    end;
+forwarded_port(_) ->
+    undefined.
+
+valid_port(Port) when is_integer(Port), Port > 0, Port < 65536 -> Port;
+valid_port(_) -> undefined.
+
+%% uri_string:parse/1 strips the brackets an IPv6 literal needs in a URL.
+brackets(Host) ->
+    case binary:match(Host, <<":">>) of
+        nomatch -> Host;
+        _ -> <<"[", Host/binary, "]">>
+    end.
+
+%% The rightmost value is the one written by the proxy closest to this node;
+%% anything to its left may have been supplied by the client.
+last_value(Value) ->
+    trim_ows(lists:last(binary:split(Value, <<",">>, [global]))).
+
+%% Hand-rolled because `string:trim/1` raises on header bytes that are not
+%% valid UTF-8.
+trim_ows(<<C, Rest/binary>>) when C =:= $\s; C =:= $\t ->
+    trim_ows(Rest);
+trim_ows(Value) ->
+    case byte_size(Value) - 1 of
+        -1 ->
+            Value;
+        Last ->
+            case binary:at(Value, Last) of
+                C when C =:= $\s; C =:= $\t ->
+                    trim_ows(binary:part(Value, 0, Last));
                 _ ->
-                    {HostVal, DefaultPort}
+                    Value
             end
     end.
 
-%% When a request passes through multiple proxies, X-Forwarded-* headers
-%% contain a comma-separated list of values. The first value always
-%% represents the original client's connection details.
-first_value(undefined) ->
-    undefined;
-first_value(HeaderVal) ->
-    [First | _] = binary:split(HeaderVal, <<",">>),
-    string:trim(First).
+ascii_lowercase(Value) ->
+    << <<(lowercase_byte(C))>> || <<C>> <= Value >>.
 
-default_port(<<"https">>) -> 443;
-default_port(<<"http">>) -> 80;
-default_port(_) -> 80.
+lowercase_byte(C) when C >= $A, C =< $Z -> C + 32;
+lowercase_byte(C) -> C.
 
 port_suffix(<<"http">>, 80) -> "";
 port_suffix(<<"https">>, 443) -> "";
