@@ -10,6 +10,10 @@ ensure_mock-auth-backend-ldap() {
 init_mock-auth-backend-ldap() {
   AUTH_BACKEND_LDAP_DIR=${TEST_CONFIG_DIR}/mock-auth-backend-ldap
   OPENLDAP_DOCKER_IMAGE=${OPENLDAP_DOCKER_IMAGE:-osixia/openldap:1.5.0}
+  # Only published for debugging from the host. Overridable because 389 and 636
+  # are privileged and already taken on a host running its own LDAP server.
+  LDAP_PUBLISHED_PORT=${LDAP_PUBLISHED_PORT:-389}
+  LDAPS_PUBLISHED_PORT=${LDAPS_PUBLISHED_PORT:-636}
 
   print "> AUTH_BACKEND_LDAP_DIR: ${AUTH_BACKEND_LDAP_DIR}"
   print "> OPENLDAP_DOCKER_IMAGE: ${OPENLDAP_DOCKER_IMAGE}"
@@ -27,8 +31,8 @@ start_mock-auth-backend-ldap() {
     --env LDAP_ORGANISATION="Authentication and Tags" \
     --env LDAP_DOMAIN="example.com" \
     --env LDAP_ADMIN_PASSWORD="admin" \
-    --publish 389:389 \
-    --publish 636:636 \
+    --publish ${LDAP_PUBLISHED_PORT}:389 \
+    --publish ${LDAPS_PUBLISHED_PORT}:636 \
     -v ${AUTH_BACKEND_LDAP_DIR}:/config \
     ${OPENLDAP_DOCKER_IMAGE}
 

@@ -44,6 +44,7 @@ start_fakeproxy() {
     --name fakeproxy \
     --net ${DOCKER_NETWORK} \
     --publish 9090:9090 \
+    --add-host=host.docker.internal:host-gateway \
     --env PORT=9090 \
     --env RABBITMQ_URL="${RABBITMQ_URL_FOR_FAKEPROXY}" \
     --env IDP_TOKEN_ENDPOINT="${IDP_TOKEN_ENDPOINT}" \
