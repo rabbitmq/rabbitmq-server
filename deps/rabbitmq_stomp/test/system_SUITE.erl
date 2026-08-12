@@ -31,6 +31,16 @@
 -define(AUTHZ_PASSWORD, <<"pass">>).
 %% Least privilege for a durable topic subscriber: its own subscription queues.
 -define(AUTHZ_CONFIGURE, <<"^stomp-subscription-.*">>).
+-define(UNSUBSCRIBE_QUEUE, <<"TestUnsubscribeQueue">>).
+-define(UNSUBSCRIBE_QUEUE_QQ, <<"TestUnsubscribeQueueQQ">>).
+-define(UNSUBSCRIBE_STREAM, <<"TestUnsubscribeStream">>).
+-define(MULTIACK_QUEUE_A, <<"TestMultiAckQueueA">>).
+-define(MULTIACK_QUEUE_B, <<"TestMultiAckQueueB">>).
+-define(UNSUBSCRIBE_DESTINATION, <<"/amq/queue/TestUnsubscribeQueue">>).
+-define(UNSUBSCRIBE_DESTINATION_QQ, <<"/amq/queue/TestUnsubscribeQueueQQ">>).
+-define(UNSUBSCRIBE_STREAM_DESTINATION, <<"/amq/queue/TestUnsubscribeStream">>).
+-define(MULTIACK_DESTINATION_A, <<"/amq/queue/TestMultiAckQueueA">>).
+-define(MULTIACK_DESTINATION_B, <<"/amq/queue/TestMultiAckQueueB">>).
 
 all() ->
     [{group, version_to_group_name(V)} || V <- ?SUPPORTED_VERSIONS].
@@ -46,7 +56,15 @@ groups() ->
         subscribe,
         subscribe_with_x_priority,
         unsubscribe_ack,
+        unsubscribe_multiack_prune,
+        multiack_prune_is_connection_wide,
+        unsubscribe_transaction_ack,
+        unsubscribe_transaction_multiack_prune,
+        unsubscribe_nack_individual,
+        unsubscribe_ack_stream,
         subscribe_ack,
+        ack_auto_delivery_errors,
+        reused_subscription_id_keeps_ack_mode,
         send,
         delete_queue_subscribe,
         temp_destination_queue,
@@ -108,6 +126,7 @@ init_per_testcase(TestCase, Config) ->
     init_per_testcase0(TestCase, Config1).
 
 end_per_testcase(TestCase, Config) ->
+    cleanup_per_testcase0(TestCase, Config),
     Connection = ?config(amqp_connection, Config),
     Channel = ?config(amqp_channel, Config),
     Client = ?config(stomp_client, Config),
@@ -206,6 +225,49 @@ end_per_testcase0(TestCase, Config)
 end_per_testcase0(_, Config) ->
     Config.
 
+%% Remove test queues before the client and AMQP connection are closed.
+cleanup_per_testcase0(unsubscribe_ack, Config) ->
+    delete_test_queue(?UNSUBSCRIBE_QUEUE, Config);
+cleanup_per_testcase0(unsubscribe_multiack_prune, Config) ->
+    delete_test_queue(?UNSUBSCRIBE_QUEUE, Config);
+cleanup_per_testcase0(unsubscribe_transaction_ack, Config) ->
+    delete_test_queue(?UNSUBSCRIBE_QUEUE_QQ, Config);
+cleanup_per_testcase0(unsubscribe_transaction_multiack_prune, Config) ->
+    delete_test_queue(?UNSUBSCRIBE_QUEUE, Config);
+cleanup_per_testcase0(unsubscribe_nack_individual, Config) ->
+    delete_test_queue(?UNSUBSCRIBE_QUEUE, Config);
+cleanup_per_testcase0(unsubscribe_ack_stream, Config) ->
+    delete_test_queue(?UNSUBSCRIBE_STREAM, Config);
+cleanup_per_testcase0(multiack_prune_is_connection_wide, Config) ->
+    delete_test_queue(?MULTIACK_QUEUE_A, Config),
+    delete_test_queue(?MULTIACK_QUEUE_B, Config);
+cleanup_per_testcase0(reused_subscription_id_keeps_ack_mode, Config) ->
+    delete_test_queue(?MULTIACK_QUEUE_A, Config),
+    delete_test_queue(?MULTIACK_QUEUE_B, Config);
+cleanup_per_testcase0(delete_queue_subscribe, Config) ->
+    delete_test_queue(?UNSUBSCRIBE_QUEUE, Config);
+cleanup_per_testcase0(_, Config) ->
+    Config.
+
+delete_test_queue(Queue, Config) ->
+    VHost = ?config(rmq_vhost, Config),
+    QName = rabbit_misc:r(VHost, queue, Queue),
+    case rabbit_ct_broker_helpers:rpc(
+           Config, 0, rabbit_amqqueue, lookup, [QName]) of
+        {ok, _} ->
+            Connection = ?config(amqp_connection, Config),
+            case amqp_connection:open_channel(Connection) of
+                {ok, Channel} ->
+                    _ = catch amqp_channel:call(
+                                Channel, #'queue.delete'{queue = Queue}),
+                    _ = catch amqp_channel:close(Channel),
+                    Config;
+                _ ->
+                    Config
+            end;
+        _ ->
+            Config
+    end.
 transaction_limit(Config) ->
     Client = ?config(stomp_client, Config),
     %% Open 16 transactions (the limit)
@@ -388,38 +450,373 @@ unsubscribe_ack(Config) ->
     Client = ?config(stomp_client, Config),
     Version = ?config(version, Config),
     #'queue.declare_ok'{} =
-        amqp_channel:call(Channel, #'queue.declare'{queue       = ?QUEUE,
-                                                    durable     = true,
-                                                    auto_delete = true}),
+        amqp_channel:call(
+          Channel, #'queue.declare'{queue   = ?UNSUBSCRIBE_QUEUE,
+                                    durable = true}),
     %% subscribe and wait for receipt
     rabbit_stomp_client:send(
-      Client, 'SUBSCRIBE', [{<<"destination">>, ?DESTINATION},
+      Client, 'SUBSCRIBE', [{<<"destination">>, ?UNSUBSCRIBE_DESTINATION},
                             {<<"receipt">>, <<"rcpt1">>},
                             {<<"ack">>, <<"client">>},
+                            {<<"prefetch-count">>, <<"1">>},
                             {<<"id">>, <<"subscription-id">>}]),
     {ok, Client1, _, _} = stomp_receive(Client, 'RECEIPT'),
 
     %% send from amqp
-    Method = #'basic.publish'{exchange = <<"">>, routing_key = ?QUEUE},
+    Method = #'basic.publish'{exchange = <<"">>,
+                              routing_key = ?UNSUBSCRIBE_QUEUE},
 
     amqp_channel:call(Channel, Method, #amqp_msg{props = #'P_basic'{},
                                                  payload = <<"hello">>}),
 
     {ok, Client2, Hdrs1, [<<"hello">>]} = stomp_receive(Client1, 'MESSAGE'),
 
-    rabbit_stomp_client:send(
-      Client2, 'UNSUBSCRIBE', [{<<"destination">>, ?DESTINATION},
-                               {<<"id">>, <<"subscription-id">>}]),
+    amqp_channel:call(Channel, Method, #amqp_msg{props = #'P_basic'{},
+                                                 payload = <<"goodbye">>}),
 
     rabbit_stomp_client:send(
-      Client2, 'ACK', [{rabbit_stomp_util:ack_header_name(Version),
+      Client2, 'UNSUBSCRIBE', [{<<"destination">>, ?UNSUBSCRIBE_DESTINATION},
+                               {<<"id">>, <<"subscription-id">>},
+                               {<<"receipt">>, <<"rcpt2">>}]),
+
+    {ok, Client3, _, _} = stomp_receive(Client2, 'RECEIPT'),
+
+    rabbit_stomp_client:send(
+      Client3, 'ACK', [{rabbit_stomp_util:ack_header_name(Version),
                         maps:get(
                           rabbit_stomp_util:msg_header_name(Version), Hdrs1)},
-                       {<<"receipt">>, <<"rcpt2">>}]),
+                       {<<"receipt">>, <<"rcpt3">>}]),
 
-    {ok, _Client3, Hdrs2, _Body2} = stomp_receive(Client2, 'ERROR'),
-    ?assertEqual(<<"Subscription not found">>,
-                 maps:get(<<"message">>, Hdrs2)),
+    {ok, _Client4, _, _} = stomp_receive(Client3, 'RECEIPT'),
+    ok = await_queue_state(Config, ?UNSUBSCRIBE_QUEUE, 1, 0, 0),
+    ok.
+
+unsubscribe_multiack_prune(Config) ->
+    Channel = ?config(amqp_channel, Config),
+    Client = ?config(stomp_client, Config),
+    Version = ?config(version, Config),
+    #'queue.declare_ok'{} =
+        amqp_channel:call(
+          Channel, #'queue.declare'{queue   = ?UNSUBSCRIBE_QUEUE,
+                                    durable = true}),
+    rabbit_stomp_client:send(
+      Client, 'SUBSCRIBE', [{<<"destination">>, ?UNSUBSCRIBE_DESTINATION},
+                            {<<"receipt">>, <<"rcpt1">>},
+                            {<<"ack">>, <<"client">>},
+                            {<<"prefetch-count">>, <<"5">>},
+                            {<<"id">>, <<"subscription-id">>}]),
+    {ok, Client1, _, _} = stomp_receive(Client, 'RECEIPT'),
+
+    Method = #'basic.publish'{exchange = <<"">>,
+                              routing_key = ?UNSUBSCRIBE_QUEUE},
+    amqp_channel:call(Channel, Method, #amqp_msg{props = #'P_basic'{},
+                                                 payload = <<"one">>}),
+    amqp_channel:call(Channel, Method, #amqp_msg{props = #'P_basic'{},
+                                                 payload = <<"two">>}),
+    {ok, Client2, Headers1, [<<"one">>]} = stomp_receive(Client1, 'MESSAGE'),
+    {ok, Client3, Headers2, [<<"two">>]} = stomp_receive(Client2, 'MESSAGE'),
+    MessageHeader = rabbit_stomp_util:msg_header_name(Version),
+    AckHeader = rabbit_stomp_util:ack_header_name(Version),
+    Ack1 = {AckHeader, maps:get(MessageHeader, Headers1)},
+    Ack2 = {AckHeader, maps:get(MessageHeader, Headers2)},
+
+    rabbit_stomp_client:send(
+      Client3, 'UNSUBSCRIBE', [{<<"destination">>, ?UNSUBSCRIBE_DESTINATION},
+                               {<<"id">>, <<"subscription-id">>},
+                               {<<"receipt">>, <<"rcpt2">>}]),
+    {ok, Client4, _, _} = stomp_receive(Client3, 'RECEIPT'),
+
+    %% A cumulative ACK of the first delivery leaves the second pending.
+    rabbit_stomp_client:send(Client4, 'ACK', [Ack1, {<<"receipt">>, <<"rcpt3">>}]),
+    {ok, Client5, _, _} = stomp_receive(Client4, 'RECEIPT'),
+    ok = await_queue_state(Config, ?UNSUBSCRIBE_QUEUE, 0, 1, 0),
+    rabbit_stomp_client:send(Client5, 'ACK', [Ack2, {<<"receipt">>, <<"rcpt4">>}]),
+    {ok, Client6, _, _} = stomp_receive(Client5, 'RECEIPT'),
+    ok = await_queue_state(Config, ?UNSUBSCRIBE_QUEUE, 0, 0, 0),
+    rabbit_stomp_client:send(Client6, 'ACK', [Ack2]),
+    {ok, _Client7, ErrorHeaders, _} = stomp_receive(Client6, 'ERROR'),
+    ?assertEqual(<<"Message not found">>,
+                 maps:get(<<"message">>, ErrorHeaders)),
+    ok.
+
+unsubscribe_transaction_ack(Config) ->
+    Channel = ?config(amqp_channel, Config),
+    Client = ?config(stomp_client, Config),
+    Version = ?config(version, Config),
+    %% Exercise the same transition against a quorum queue.
+    #'queue.declare_ok'{} =
+        amqp_channel:call(Channel, #'queue.declare'{queue     = ?UNSUBSCRIBE_QUEUE_QQ,
+                                                    durable   = true,
+                                                    arguments = [{<<"x-queue-type">>, longstr, <<"quorum">>}]}),
+    rabbit_stomp_client:send(
+      Client, 'SUBSCRIBE', [{<<"destination">>, ?UNSUBSCRIBE_DESTINATION_QQ},
+                            {<<"receipt">>, <<"rcpt1">>},
+                            {<<"ack">>, <<"client">>},
+                            {<<"prefetch-count">>, <<"1">>},
+                            {<<"id">>, <<"subscription-id">>}]),
+    {ok, Client1, _, _} = stomp_receive(Client, 'RECEIPT'),
+
+    Method = #'basic.publish'{exchange = <<"">>,
+                              routing_key = ?UNSUBSCRIBE_QUEUE_QQ},
+    amqp_channel:call(Channel, Method, #amqp_msg{props = #'P_basic'{},
+                                                 payload = <<"hello">>}),
+    {ok, Client2, Hdrs1, [<<"hello">>]} = stomp_receive(Client1, 'MESSAGE'),
+    AckHeader = {rabbit_stomp_util:ack_header_name(Version),
+                 maps:get(
+                   rabbit_stomp_util:msg_header_name(Version), Hdrs1)},
+
+    rabbit_stomp_client:send(
+      Client2, 'UNSUBSCRIBE', [{<<"destination">>, ?UNSUBSCRIBE_DESTINATION_QQ},
+                               {<<"id">>, <<"subscription-id">>},
+                               {<<"receipt">>, <<"rcpt2">>}]),
+    Client3 = stomp_receive_receipt(Client2, <<"rcpt2">>),
+
+    rabbit_stomp_client:send(
+      Client3, 'BEGIN', [{<<"transaction">>, <<"abort-me">>}, {<<"receipt">>, <<"rcpt3">>}]),
+    Client4 = stomp_receive_receipt(Client3, <<"rcpt3">>),
+    rabbit_stomp_client:send(
+      Client4, 'ACK', [AckHeader,
+                       {<<"transaction">>, <<"abort-me">>},
+                       {<<"receipt">>, <<"rcpt4">>}]),
+    Client5 = stomp_receive_receipt(Client4, <<"rcpt4">>),
+    rabbit_stomp_client:send(
+      Client5, 'ABORT', [{<<"transaction">>, <<"abort-me">>}, {<<"receipt">>, <<"rcpt5">>}]),
+    Client6 = stomp_receive_receipt(Client5, <<"rcpt5">>),
+
+    %% ABORT leaves the message held by the canceled consumer.
+    ok = await_queue_state(Config, ?UNSUBSCRIBE_QUEUE_QQ, 0, 1, 1, 30_000),
+    rabbit_stomp_client:send(
+      Client6, 'BEGIN', [{<<"transaction">>, <<"commit-me">>}, {<<"receipt">>, <<"rcpt6">>}]),
+    Client7 = stomp_receive_receipt(Client6, <<"rcpt6">>),
+    rabbit_stomp_client:send(
+      Client7, 'ACK', [AckHeader,
+                       {<<"transaction">>, <<"commit-me">>},
+                       {<<"receipt">>, <<"rcpt7">>}]),
+    Client8 = stomp_receive_receipt(Client7, <<"rcpt7">>),
+    rabbit_stomp_client:send(
+      Client8, 'COMMIT', [{<<"transaction">>, <<"commit-me">>}, {<<"receipt">>, <<"rcpt8">>}]),
+    %% the queued ACK's receipt is sent again as the transaction replays it
+    Client9 = stomp_receive_receipt(Client8, <<"rcpt7">>),
+    _Client10 = stomp_receive_receipt(Client9, <<"rcpt8">>),
+
+    ok = await_queue_state(Config, ?UNSUBSCRIBE_QUEUE_QQ, 0, 0, 0, 30_000),
+    ok.
+
+unsubscribe_transaction_multiack_prune(Config) ->
+    Channel = ?config(amqp_channel, Config),
+    Client = ?config(stomp_client, Config),
+    Version = ?config(version, Config),
+    #'queue.declare_ok'{} =
+        amqp_channel:call(
+          Channel, #'queue.declare'{queue   = ?UNSUBSCRIBE_QUEUE,
+                                    durable = true}),
+    rabbit_stomp_client:send(
+      Client, 'SUBSCRIBE', [{<<"destination">>, ?UNSUBSCRIBE_DESTINATION},
+                            {<<"receipt">>, <<"rcpt1">>},
+                            {<<"ack">>, <<"client">>},
+                            {<<"prefetch-count">>, <<"2">>},
+                            {<<"id">>, <<"subscription-id">>}]),
+    {ok, Client1, _, _} = stomp_receive(Client, 'RECEIPT'),
+
+    Method = #'basic.publish'{exchange = <<"">>,
+                              routing_key = ?UNSUBSCRIBE_QUEUE},
+    amqp_channel:call(Channel, Method, #amqp_msg{props = #'P_basic'{},
+                                                 payload = <<"one">>}),
+    amqp_channel:call(Channel, Method, #amqp_msg{props = #'P_basic'{},
+                                                 payload = <<"two">>}),
+    {ok, Client2, Headers1, [<<"one">>]} = stomp_receive(Client1, 'MESSAGE'),
+    {ok, Client3, Headers2, [<<"two">>]} = stomp_receive(Client2, 'MESSAGE'),
+    MessageHeader = rabbit_stomp_util:msg_header_name(Version),
+    AckHeader = rabbit_stomp_util:ack_header_name(Version),
+    Ack1 = {AckHeader, maps:get(MessageHeader, Headers1)},
+    Ack2 = {AckHeader, maps:get(MessageHeader, Headers2)},
+
+    rabbit_stomp_client:send(
+      Client3, 'UNSUBSCRIBE', [{<<"destination">>, ?UNSUBSCRIBE_DESTINATION},
+                               {<<"id">>, <<"subscription-id">>},
+                               {<<"receipt">>, <<"rcpt2">>}]),
+    Client4 = stomp_receive_receipt(Client3, <<"rcpt2">>),
+    rabbit_stomp_client:send(
+      Client4, 'BEGIN', [{<<"transaction">>, <<"tx">>}, {<<"receipt">>, <<"rcpt3">>}]),
+    Client5 = stomp_receive_receipt(Client4, <<"rcpt3">>),
+    rabbit_stomp_client:send(
+      Client5, 'ACK', [Ack2, {<<"transaction">>, <<"tx">>},
+                       {<<"receipt">>, <<"rcpt4">>}]),
+    Client6 = stomp_receive_receipt(Client5, <<"rcpt4">>),
+    rabbit_stomp_client:send(
+      Client6, 'ACK', [Ack1, {<<"transaction">>, <<"tx">>},
+                       {<<"receipt">>, <<"rcpt5">>}]),
+    Client7 = stomp_receive_receipt(Client6, <<"rcpt5">>),
+    rabbit_stomp_client:send(
+      Client7, 'COMMIT', [{<<"transaction">>, <<"tx">>}, {<<"receipt">>, <<"rcpt6">>}]),
+    %% the queued ACKs' receipts are sent again as the transaction replays
+    %% them, in the order they were queued
+    Client8 = stomp_receive_receipt(Client7, <<"rcpt4">>),
+    Client9 = stomp_receive_receipt(Client8, <<"rcpt5">>),
+    Client10 = stomp_receive_receipt(Client9, <<"rcpt6">>),
+    ok = await_queue_state(Config, ?UNSUBSCRIBE_QUEUE, 0, 0, 0),
+
+    %% A broker round trip proves the duplicate settlement did not close the
+    %% shared AMQP channel after the COMMIT receipt was sent.
+    rabbit_stomp_client:send(
+      Client10, 'SUBSCRIBE', [{<<"destination">>, ?UNSUBSCRIBE_DESTINATION},
+                              {<<"receipt">>, <<"rcpt7">>},
+                              {<<"id">>, <<"roundtrip">>}]),
+    Client11 = stomp_receive_receipt(Client10, <<"rcpt7">>),
+
+    %% A settlement is redundant only when an earlier action in the same
+    %% COMMIT removed it.
+    rabbit_stomp_client:send(
+      Client11, 'BEGIN', [{<<"transaction">>, <<"tx2">>},
+                          {<<"receipt">>, <<"rcpt8">>}]),
+    Client12 = stomp_receive_receipt(Client11, <<"rcpt8">>),
+    rabbit_stomp_client:send(
+      Client12, 'ACK', [Ack1, {<<"transaction">>, <<"tx2">>},
+                        {<<"receipt">>, <<"rcpt9">>}]),
+    Client13 = stomp_receive_receipt(Client12, <<"rcpt9">>),
+    rabbit_stomp_client:send(
+      Client13, 'COMMIT', [{<<"transaction">>, <<"tx2">>}]),
+    {ok, _Client14, ErrorHeaders, _} = stomp_receive(Client13, 'ERROR'),
+    ?assertEqual(<<"Message not found">>,
+                 maps:get(<<"message">>, ErrorHeaders)),
+    ok.
+
+unsubscribe_nack_individual(Config) ->
+    Channel = ?config(amqp_channel, Config),
+    Client = ?config(stomp_client, Config),
+    Version = ?config(version, Config),
+    #'queue.declare_ok'{} =
+        amqp_channel:call(
+          Channel, #'queue.declare'{queue   = ?UNSUBSCRIBE_QUEUE,
+                                    durable = true}),
+    rabbit_stomp_client:send(
+      Client, 'SUBSCRIBE', [{<<"destination">>, ?UNSUBSCRIBE_DESTINATION},
+                            {<<"receipt">>, <<"rcpt1">>},
+                            {<<"ack">>, <<"client-individual">>},
+                            {<<"prefetch-count">>, <<"1">>},
+                            {<<"id">>, <<"subscription-id">>}]),
+    {ok, Client1, _, _} = stomp_receive(Client, 'RECEIPT'),
+
+    Method = #'basic.publish'{exchange = <<"">>,
+                              routing_key = ?UNSUBSCRIBE_QUEUE},
+    amqp_channel:call(Channel, Method, #amqp_msg{props = #'P_basic'{},
+                                                 payload = <<"hello">>}),
+    {ok, Client2, Headers, [<<"hello">>]} = stomp_receive(Client1, 'MESSAGE'),
+    NackHeader = {rabbit_stomp_util:ack_header_name(Version),
+                  maps:get(
+                    rabbit_stomp_util:msg_header_name(Version), Headers)},
+
+    rabbit_stomp_client:send(
+      Client2, 'UNSUBSCRIBE', [{<<"destination">>, ?UNSUBSCRIBE_DESTINATION},
+                               {<<"id">>, <<"subscription-id">>},
+                               {<<"receipt">>, <<"rcpt2">>}]),
+    {ok, Client3, _, _} = stomp_receive(Client2, 'RECEIPT'),
+    rabbit_stomp_client:send(
+      Client3, 'NACK', [NackHeader,
+                        {<<"requeue">>, <<"true">>},
+                        {<<"receipt">>, <<"rcpt3">>}]),
+    {ok, Client4, _, _} = stomp_receive(Client3, 'RECEIPT'),
+    ok = await_queue_state(Config, ?UNSUBSCRIBE_QUEUE, 1, 0, 0),
+
+    rabbit_stomp_client:send(Client4, 'NACK', [NackHeader]),
+    {ok, _Client5, ErrorHeaders, _} = stomp_receive(Client4, 'ERROR'),
+    ?assertEqual(<<"Message not found">>,
+                 maps:get(<<"message">>, ErrorHeaders)),
+    ok.
+
+unsubscribe_ack_stream(Config) ->
+    Channel = ?config(amqp_channel, Config),
+    Client = ?config(stomp_client, Config),
+    Version = ?config(version, Config),
+    #'queue.declare_ok'{} =
+        amqp_channel:call(
+          Channel,
+          #'queue.declare'{queue = ?UNSUBSCRIBE_STREAM,
+                           durable = true,
+                           arguments = [{<<"x-queue-type">>, longstr,
+                                         <<"stream">>}]}),
+    Method = #'basic.publish'{exchange = <<"">>,
+                              routing_key = ?UNSUBSCRIBE_STREAM},
+    amqp_channel:call(Channel, Method, #amqp_msg{props = #'P_basic'{},
+                                                 payload = <<"hello">>}),
+    rabbit_stomp_client:send(
+      Client, 'SUBSCRIBE', [{<<"destination">>, ?UNSUBSCRIBE_STREAM_DESTINATION},
+                            {<<"receipt">>, <<"rcpt1">>},
+                            {<<"ack">>, <<"client">>},
+                            {<<"prefetch-count">>, <<"1">>},
+                            {<<"x-stream-offset">>, <<"first">>},
+                            {<<"id">>, <<"subscription-id">>}]),
+    {ok, Client1, _, _} = stomp_receive(Client, 'RECEIPT'),
+    {ok, Client2, Headers, [<<"hello">>]} = stomp_receive(Client1, 'MESSAGE'),
+    AckHeader = {rabbit_stomp_util:ack_header_name(Version),
+                 maps:get(
+                   rabbit_stomp_util:msg_header_name(Version), Headers)},
+
+    rabbit_stomp_client:send(
+      Client2, 'UNSUBSCRIBE', [{<<"destination">>, ?UNSUBSCRIBE_STREAM_DESTINATION},
+                               {<<"id">>, <<"subscription-id">>},
+                               {<<"receipt">>, <<"rcpt2">>}]),
+    {ok, Client3, _, _} = stomp_receive(Client2, 'RECEIPT'),
+    %% A stream ACK is accepted even though no reader remains to credit.
+    rabbit_stomp_client:send(
+      Client3, 'ACK', [AckHeader, {<<"receipt">>, <<"rcpt3">>}]),
+    {ok, _Client4, _, _} = stomp_receive(Client3, 'RECEIPT'),
+    ok.
+
+%% Cumulative ACK prunes across the whole connection, not just the
+%% subscription the acked delivery arrived on: pre-existing AMQP 0-9-1 channel
+%% semantics, and a deliberate deviation from STOMP 1.2, which scopes a
+%% cumulative ack:client to the same subscription. Pinned here so settlement
+%% changes cannot narrow it silently; doing so would be a breaking change.
+%% https://stomp.github.io/stomp-specification-1.2.html#SUBSCRIBE_ack_Header
+multiack_prune_is_connection_wide(Config) ->
+    Channel = ?config(amqp_channel, Config),
+    Client = ?config(stomp_client, Config),
+    Version = ?config(version, Config),
+    #'queue.declare_ok'{} =
+        amqp_channel:call(
+          Channel, #'queue.declare'{queue   = ?MULTIACK_QUEUE_A,
+                                    durable = true}),
+    #'queue.declare_ok'{} =
+        amqp_channel:call(
+          Channel, #'queue.declare'{queue   = ?MULTIACK_QUEUE_B,
+                                    durable = true}),
+    rabbit_stomp_client:send(
+      Client, 'SUBSCRIBE', [{<<"destination">>, ?MULTIACK_DESTINATION_B},
+                            {<<"receipt">>, <<"rcpt1">>},
+                            {<<"ack">>, <<"client-individual">>},
+                            {<<"id">>, <<"sub-b">>}]),
+    {ok, Client1, _, _} = stomp_receive(Client, 'RECEIPT'),
+    rabbit_stomp_client:send(
+      Client1, 'SUBSCRIBE', [{<<"destination">>, ?MULTIACK_DESTINATION_A},
+                             {<<"receipt">>, <<"rcpt2">>},
+                             {<<"ack">>, <<"client">>},
+                             {<<"id">>, <<"sub-a">>}]),
+    {ok, Client2, _, _} = stomp_receive(Client1, 'RECEIPT'),
+
+    PublishB = #'basic.publish'{exchange = <<"">>,
+                                routing_key = ?MULTIACK_QUEUE_B},
+    amqp_channel:call(Channel, PublishB, #amqp_msg{props = #'P_basic'{},
+                                                   payload = <<"one">>}),
+    {ok, Client3, HeadersB, [<<"one">>]} = stomp_receive(Client2, 'MESSAGE'),
+    PublishA = #'basic.publish'{exchange = <<"">>,
+                                routing_key = ?MULTIACK_QUEUE_A},
+    amqp_channel:call(Channel, PublishA, #amqp_msg{props = #'P_basic'{},
+                                                   payload = <<"two">>}),
+    {ok, Client4, HeadersA, [<<"two">>]} = stomp_receive(Client3, 'MESSAGE'),
+    MessageHeader = rabbit_stomp_util:msg_header_name(Version),
+    AckHeader = rabbit_stomp_util:ack_header_name(Version),
+    AckB = {AckHeader, maps:get(MessageHeader, HeadersB)},
+    AckA = {AckHeader, maps:get(MessageHeader, HeadersA)},
+
+    %% Mirror the shared AMQP channel's settlement across consumers.
+    rabbit_stomp_client:send(Client4, 'ACK', [AckA, {<<"receipt">>, <<"rcpt3">>}]),
+    {ok, Client5, _, _} = stomp_receive(Client4, 'RECEIPT'),
+    ok = await_queue_state(Config, ?MULTIACK_QUEUE_B, 0, 0, 1),
+    rabbit_stomp_client:send(Client5, 'ACK', [AckB]),
+    {ok, _Client6, ErrorHeaders, _} = stomp_receive(Client5, 'ERROR'),
+    ?assertEqual(<<"Message not found">>,
+                 maps:get(<<"message">>, ErrorHeaders)),
     ok.
 
 %% A durable UNSUBSCRIBE must delete the queue this connection subscribed to,
@@ -546,6 +943,135 @@ subscribe_ack(Config) ->
         amqp_channel:call(Channel, #'basic.get'{queue = ?QUEUE}),
     ok.
 
+ack_auto_delivery_errors(Config) ->
+    Channel = ?config(amqp_channel, Config),
+    Client = ?config(stomp_client, Config),
+    Version = ?config(version, Config),
+    #'queue.declare_ok'{} =
+        amqp_channel:call(
+          Channel,
+          #'queue.declare'{queue       = ?QUEUE,
+                           durable     = true,
+                           auto_delete = true}),
+    rabbit_stomp_client:send(
+      Client, 'SUBSCRIBE', [{<<"destination">>, ?DESTINATION},
+                            {<<"receipt">>, <<"rcpt1">>},
+                            {<<"ack">>, <<"auto">>},
+                            {<<"id">>, <<"auto">>}]),
+    {ok, Client1, _, _} = stomp_receive(Client, 'RECEIPT'),
+
+    Method = #'basic.publish'{exchange = <<>>, routing_key = ?QUEUE},
+    amqp_channel:call(Channel, Method, #amqp_msg{props = #'P_basic'{},
+                                                 payload = <<"hello">>}),
+    {ok, Client2, Headers, [<<"hello">>]} =
+        stomp_receive(Client1, 'MESSAGE'),
+    MessageId = maps:get(?HEADER_MESSAGE_ID, Headers),
+    rabbit_stomp_client:send(
+      Client2, 'ACK',
+      [{rabbit_stomp_util:ack_header_name(Version), MessageId}]),
+    {ok, Client3, ErrorHeaders, _} = stomp_receive(Client2, 'ERROR'),
+    ?assertEqual(<<"Message not found">>,
+                 maps:get(<<"message">>, ErrorHeaders)),
+
+    rabbit_stomp_client:send(
+      Client3, 'SUBSCRIBE', [{<<"destination">>, ?DESTINATION},
+                              {<<"receipt">>, <<"rcpt2">>},
+                              {<<"id">>, <<"roundtrip">>}]),
+    {ok, _Client4, _, _} = stomp_receive(Client3, 'RECEIPT'),
+    ok.
+
+reused_subscription_id_keeps_ack_mode(Config) ->
+    Channel = ?config(amqp_channel, Config),
+    Client = ?config(stomp_client, Config),
+    Version = ?config(version, Config),
+    #'queue.declare_ok'{} =
+        amqp_channel:call(
+          Channel, #'queue.declare'{queue   = ?MULTIACK_QUEUE_A,
+                                    durable = true}),
+    #'queue.declare_ok'{} =
+        amqp_channel:call(
+          Channel, #'queue.declare'{queue   = ?MULTIACK_QUEUE_B,
+                                    durable = true}),
+    rabbit_stomp_client:send(
+      Client, 'SUBSCRIBE', [{<<"destination">>, ?MULTIACK_DESTINATION_B},
+                            {<<"receipt">>, <<"rcpt1">>},
+                            {<<"ack">>, <<"client-individual">>},
+                            {<<"id">>, <<"sub-b">>}]),
+    {ok, Client1, _, _} = stomp_receive(Client, 'RECEIPT'),
+    rabbit_stomp_client:send(
+      Client1, 'SUBSCRIBE', [{<<"destination">>, ?MULTIACK_DESTINATION_A},
+                             {<<"receipt">>, <<"rcpt2">>},
+                             {<<"ack">>, <<"client-individual">>},
+                             {<<"id">>, <<"reused">>}]),
+    {ok, Client2, _, _} = stomp_receive(Client1, 'RECEIPT'),
+
+    PublishB = #'basic.publish'{exchange = <<>>,
+                                routing_key = ?MULTIACK_QUEUE_B},
+    amqp_channel:call(Channel, PublishB,
+                      #amqp_msg{props = #'P_basic'{}, payload = <<"one">>}),
+    {ok, Client3, HeadersB, [<<"one">>]} =
+        stomp_receive(Client2, 'MESSAGE'),
+    PublishA = #'basic.publish'{exchange = <<>>,
+                                routing_key = ?MULTIACK_QUEUE_A},
+    amqp_channel:call(Channel, PublishA,
+                      #amqp_msg{props = #'P_basic'{}, payload = <<"two">>}),
+    {ok, Client4, HeadersA, [<<"two">>]} =
+        stomp_receive(Client3, 'MESSAGE'),
+    MessageHeader = rabbit_stomp_util:msg_header_name(Version),
+    AckHeader = rabbit_stomp_util:ack_header_name(Version),
+    AckValueB = maps:get(MessageHeader, HeadersB),
+    AckValueA = maps:get(MessageHeader, HeadersA),
+
+    ForgedAckValue = ack_value_with_consumer(AckValueB, AckValueA),
+    rabbit_stomp_client:send(
+      Client4, 'ACK', [{AckHeader, ForgedAckValue}]),
+    {ok, Client5, ErrorHeaders, _} = stomp_receive(Client4, 'ERROR'),
+    ?assertEqual(<<"Message not found">>,
+                 maps:get(<<"message">>, ErrorHeaders)),
+
+    rabbit_stomp_client:send(
+      Client5, 'UNSUBSCRIBE', [{<<"destination">>, ?MULTIACK_DESTINATION_A},
+                                {<<"id">>, <<"reused">>},
+                                {<<"receipt">>, <<"rcpt3">>}]),
+    {ok, Client6, _, _} = stomp_receive(Client5, 'RECEIPT'),
+    rabbit_stomp_client:send(
+      Client6, 'SUBSCRIBE', [{<<"destination">>, ?MULTIACK_DESTINATION_A},
+                              {<<"receipt">>, <<"rcpt4">>},
+                              {<<"ack">>, <<"client">>},
+                              {<<"id">>, <<"reused">>}]),
+    {ok, Client7, _, _} = stomp_receive(Client6, 'RECEIPT'),
+
+    rabbit_stomp_client:send(
+      Client7, 'ACK', [{AckHeader, AckValueA}, {<<"receipt">>, <<"rcpt5">>}]),
+    {ok, Client8, _, _} = stomp_receive(Client7, 'RECEIPT'),
+    ok = await_queue_state(Config, ?MULTIACK_QUEUE_A, 0, 0, 1),
+    ok = await_queue_state(Config, ?MULTIACK_QUEUE_B, 0, 1, 1),
+    rabbit_stomp_client:send(
+      Client8, 'ACK', [{AckHeader, AckValueB}, {<<"receipt">>, <<"rcpt6">>}]),
+    {ok, Client9, _, _} = stomp_receive(Client8, 'RECEIPT'),
+    ok = await_queue_state(Config, ?MULTIACK_QUEUE_B, 0, 0, 1),
+
+    amqp_channel:call(Channel, PublishA,
+                      #amqp_msg{props = #'P_basic'{}, payload = <<"three">>}),
+    {ok, Client10, HeadersA1, [<<"three">>]} =
+        stomp_receive(Client9, 'MESSAGE'),
+    amqp_channel:call(Channel, PublishA,
+                      #amqp_msg{props = #'P_basic'{}, payload = <<"four">>}),
+    {ok, Client11, HeadersA2, [<<"four">>]} =
+        stomp_receive(Client10, 'MESSAGE'),
+    AckValueA1 = maps:get(MessageHeader, HeadersA1),
+    AckValueA2 = maps:get(MessageHeader, HeadersA2),
+    rabbit_stomp_client:send(
+      Client11, 'ACK', [{AckHeader, AckValueA2}, {<<"receipt">>, <<"rcpt7">>}]),
+    {ok, Client12, _, _} = stomp_receive(Client11, 'RECEIPT'),
+    ok = await_queue_state(Config, ?MULTIACK_QUEUE_A, 0, 0, 1),
+    rabbit_stomp_client:send(
+      Client12, 'ACK', [{AckHeader, AckValueA1}]),
+    {ok, _Client13, ErrorHeaders2, _} = stomp_receive(Client12, 'ERROR'),
+    ?assertEqual(<<"Message not found">>,
+                 maps:get(<<"message">>, ErrorHeaders2)),
+    ok.
+
 send(Config) ->
     Channel = ?config(amqp_channel, Config),
     Client = ?config(stomp_client, Config),
@@ -569,30 +1095,60 @@ send(Config) ->
 delete_queue_subscribe(Config) ->
     Channel = ?config(amqp_channel, Config),
     Client = ?config(stomp_client, Config),
+    Version = ?config(version, Config),
     #'queue.declare_ok'{} =
         amqp_channel:call(Channel, #'queue.declare'{queue       = ?QUEUE,
                                                     durable     = true,
                                                     auto_delete = true}),
+    #'queue.declare_ok'{} =
+        amqp_channel:call(
+          Channel, #'queue.declare'{queue   = ?UNSUBSCRIBE_QUEUE,
+                                    durable = true}),
 
     %% subscribe and wait for receipt
     rabbit_stomp_client:send(
-      Client, 'SUBSCRIBE', [{<<"destination">>, ?DESTINATION}, {<<"receipt">>, <<"bah">>}]),
+      Client, 'SUBSCRIBE', [{<<"destination">>, ?DESTINATION},
+                            {<<"receipt">>, <<"bah">>},
+                            {<<"ack">>, <<"client-individual">>}]),
     {ok, Client1, _, _} = stomp_receive(Client, 'RECEIPT'),
+
+    Method = #'basic.publish'{exchange = <<"">>, routing_key = ?QUEUE},
+    amqp_channel:call(Channel, Method, #amqp_msg{props = #'P_basic'{},
+                                                 payload = <<"hello">>}),
+    {ok, Client2, MessageHeaders, [<<"hello">>]} =
+        stomp_receive(Client1, 'MESSAGE'),
+    AckHeader =
+        {rabbit_stomp_util:ack_header_name(Version),
+         maps:get(
+           rabbit_stomp_util:msg_header_name(Version), MessageHeaders)},
 
     %% delete queue while subscribed
     #'queue.delete_ok'{} =
         amqp_channel:call(Channel, #'queue.delete'{queue = ?QUEUE}),
 
-    {ok, _Client2, Headers, _} = stomp_receive(Client1, 'ERROR'),
+    {ok, Client3, Headers, _} = stomp_receive(Client2, 'ERROR'),
 
     ?DESTINATION = maps:get(<<"subscription">>, Headers),
 
-    % server closes connection
+    %% RabbitMQ keeps the session open after this server-cancel ERROR so an
+    %% in-flight delivery can still be settled.
+    rabbit_stomp_client:send(
+      Client3, 'ACK', [AckHeader, {<<"receipt">>, <<"rcpt2">>}]),
+    {ok, Client4, _, _} = stomp_receive(Client3, 'RECEIPT'),
+
+    %% A broker round trip proves the late settlement did not close the shared
+    %% AMQP channel after the ACK receipt was sent.
+    rabbit_stomp_client:send(
+      Client4, 'SUBSCRIBE', [{<<"destination">>, ?UNSUBSCRIBE_DESTINATION},
+                             {<<"receipt">>, <<"rcpt3">>},
+                             {<<"id">>, <<"roundtrip">>}]),
+    {ok, _Client5, _, _} = stomp_receive(Client4, 'RECEIPT'),
     ok.
 
 temp_destination_queue(Config) ->
     Channel = ?config(amqp_channel, Config),
     Client = ?config(stomp_client, Config),
+    Version = ?config(version, Config),
     #'queue.declare_ok'{} =
         amqp_channel:call(Channel, #'queue.declare'{queue       = ?QUEUE,
                                                     durable     = true,
@@ -609,7 +1165,19 @@ temp_destination_queue(Config) ->
     ok = amqp_channel:call(Channel,
                            #'basic.publish'{routing_key = ReplyTo},
                            #amqp_msg{payload = <<"pong">>}),
-    {ok, _Client1, _, [<<"pong">>]} = stomp_receive(Client, 'MESSAGE'),
+    {ok, Client1, Headers, [<<"pong">>]} =
+        stomp_receive(Client, 'MESSAGE'),
+    MessageId = maps:get(?HEADER_MESSAGE_ID, Headers),
+    rabbit_stomp_client:send(
+      Client1, 'ACK',
+      [{rabbit_stomp_util:ack_header_name(Version), MessageId}]),
+    {ok, Client2, ErrorHeaders, _} = stomp_receive(Client1, 'ERROR'),
+    ?assertEqual(<<"Message not found">>,
+                 maps:get(<<"message">>, ErrorHeaders)),
+    rabbit_stomp_client:send(
+      Client2, 'SEND', [{<<"destination">>, ?DESTINATION},
+                         {<<"receipt">>, <<"roundtrip">>}], ["still alive"]),
+    {ok, _Client3, _, _} = stomp_receive(Client2, 'RECEIPT'),
     ok.
 
 temp_destination_in_send(Config) ->
@@ -791,3 +1359,45 @@ stomp_receive(Client, Command) ->
                   body_iolist_rev = Body},   Client1} =
     rabbit_stomp_client:recv(Client),
     {ok, Client1, Hdrs, Body}.
+
+%% Receive the next RECEIPT and assert which frame it acknowledges: a COMMIT
+%% replays its queued frames through the request path, so several receipts can
+%% be in flight and the command alone does not identify them.
+stomp_receive_receipt(Client, ReceiptId) ->
+    {ok, Client1, Hdrs, _} = stomp_receive(Client, 'RECEIPT'),
+    ?assertEqual(ReceiptId, maps:get(<<"receipt-id">>, Hdrs)),
+    Client1.
+
+ack_value_with_consumer(ConsumerAckValue, DeliveryAckValue) ->
+    {ok, {ConsumerTag, _ConsumerSession, _ConsumerDeliveryTag}} =
+        rabbit_stomp_util:parse_message_id(ConsumerAckValue),
+    {ok, {_DeliveryConsumerTag, SessionId, DeliveryTag}} =
+        rabbit_stomp_util:parse_message_id(DeliveryAckValue),
+    iolist_to_binary(
+      [ConsumerTag, ?MESSAGE_ID_SEPARATOR, SessionId,
+       ?MESSAGE_ID_SEPARATOR, integer_to_list(DeliveryTag)]).
+
+await_queue_state(Config, Queue, Ready, Unacknowledged, Consumers) ->
+    await_queue_state(Config, Queue, Ready, Unacknowledged, Consumers, 5_000).
+
+await_queue_state(Config, Queue, Ready, Unacknowledged, Consumers, Timeout) ->
+    VHost = ?config(rmq_vhost, Config),
+    QName = rabbit_misc:r(VHost, queue, Queue),
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+              case rabbit_ct_broker_helpers:rpc(
+                     Config, 0, rabbit_amqqueue, lookup, [QName]) of
+                  {ok, Q} ->
+                      Info = rabbit_ct_broker_helpers:rpc(
+                               Config, 0, rabbit_amqqueue, info,
+                               [Q, [messages_ready,
+                                    messages_unacknowledged,
+                                    consumers]]),
+                      lists:sort(Info) =:=
+                          lists:sort([{messages_ready, Ready},
+                                      {messages_unacknowledged, Unacknowledged},
+                                      {consumers, Consumers}]);
+                  _ ->
+                      false
+              end
+      end, Timeout).
