@@ -53,7 +53,7 @@ generate_env_file() {
     FILE_ARRAY_LENGTH=${#FILE_ARRAY[@]}
   done
   rm -r $TMP_ENV_FILE
-  tail +3 $ENV_FILE > "$ENV_FILE.tmp" && mv "$ENV_FILE.tmp" $ENV_FILE
+  tail -n +3 $ENV_FILE > "$ENV_FILE.tmp" && mv "$ENV_FILE.tmp" $ENV_FILE
 }
 
 generate_env_file

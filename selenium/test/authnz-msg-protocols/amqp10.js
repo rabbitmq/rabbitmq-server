@@ -57,7 +57,7 @@ describe('Having AMQP 1.0 protocol enabled and the following auth_backends: ' + 
   })
 
   it('can open an AMQP 1.0 connection', async function () {     
-    amqp = openAmqp()
+    amqp = openAmqp("/queues/my-queue", { username, password })
     await untilConnectionEstablished
     var untilMessageReceived = new Promise((resolve, reject) => {
       onAmqp('message', function(context) {
