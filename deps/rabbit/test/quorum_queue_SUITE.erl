@@ -124,7 +124,8 @@ groups() ->
                                             replica_states,
                                             restart_after_queue_reincarnation,
                                             no_messages_after_queue_reincarnation,
-                                            consumer_message_is_delevered_after_snapshot
+                                            consumer_message_is_delevered_after_snapshot,
+                                            mixed_version_local_queries
                                            ]
                        ++ all_tests()},
                       {cluster_size_5, [], [start_queue,
@@ -4848,6 +4849,47 @@ status(Config) ->
                         rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_queue_type_ra,
                                                      status, [<<"/">>, QQ])),
     wait_for_messages(Config, [[QQ, <<"2">>, <<"2">>, <<"0">>]]),
+    ok.
+
+%% Only meaningful in a mixed-version cluster test. Since the queue's
+%% group spans all three nodes, its machine version stays pinned to
+%% whatever the oldest member supports, so local queries from the first
+%% node must still succeed instead of crashing with function_clause
+%% against that older state shape.
+mixed_version_local_queries(Config) ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        false ->
+            {skip, "mixed_version_local_queries only relevant in mixed version mode"};
+        true ->
+            mixed_version_local_queries0(Config)
+    end.
+
+mixed_version_local_queries0(Config) ->
+    [Server0 | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
+    QQ = ?config(queue_name, Config),
+    RaName = ra_name(QQ),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                  {<<"x-quorum-initial-group-size">>, long, 3}])),
+    ?awaitMatch({ok, Members, _} when length(Members) == 3,
+                ra:members({RaName, Server0}),
+                ?DEFAULT_AWAIT),
+
+    publish(Ch, QQ),
+    wait_for_messages_ready(Nodes, RaName, 1),
+
+    [begin
+         ServerId = {RaName, Node},
+         [?assertMatch({ok, _, _},
+                       rabbit_ct_broker_helpers:rpc(
+                         Config, 0, rabbit_fifo_client, local_query,
+                         [ServerId, QueryFun, 5000]))
+          || QueryFun <- [query_notify_decorators_info,
+                          query_consumers,
+                          query_stat]]
+     end || Node <- Nodes],
     ok.
 
 status_noproc(Config) ->

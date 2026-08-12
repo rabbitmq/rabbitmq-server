@@ -1594,19 +1594,9 @@ consumers(Q) when ?amqqueue_is_classic(Q) ->
     end;
 consumers(Q) when ?amqqueue_is_quorum(Q) ->
     QPid = amqqueue:get_pid(Q),
-    case ra:local_query(QPid, fun rabbit_fifo:query_consumers/1) of
+    case rabbit_fifo_client:local_query(QPid, query_consumers) of
         {ok, {_, Result}, _} ->
             maps:values(Result);
-        {error, _} ->
-            %% try a prior module in case we're in mixed versions
-            %% TODO: hack, replace this with something that can actually
-            %% resolve the correct module to use
-            case ra:local_query(QPid, fun rabbit_fifo_v7:query_consumers/1) of
-                {ok, {_, Result}, _} ->
-                    maps:values(Result);
-                _  ->
-                    []
-            end;
         _ ->
             []
     end;

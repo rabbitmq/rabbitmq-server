@@ -44,7 +44,9 @@ all_tests() ->
      untracked_enqueue,
      flow,
      test_queries,
-     duplicate_delivery
+     duplicate_delivery,
+     local_query_resolves_pinned_v7_machine_version,
+     local_query_does_not_retry_on_unrelated_error
     ].
 
 groups() ->
@@ -814,6 +816,46 @@ test_queries(Config) ->
     rabbit_quorum_queue:stop_server(ServerId),
     ok.
 
+local_query_resolves_pinned_v7_machine_version(Config) ->
+    ClusterName = ?config(cluster_name, Config),
+    ServerId = ?config(node_id, Config),
+    %% pin this cluster's machine at version 7: it never upgrades to the
+    %% latest (rabbit_fifo/v8) state shape
+    ok = start_cluster(ClusterName, [ServerId],
+                       #{name => some_name, queue_resource => ClusterName},
+                       7),
+
+    F0 = rabbit_fifo_client:init([ServerId]),
+    {ok, F1, []} = rabbit_fifo_client:enqueue(ClusterName, msg1, F0),
+    _ = process_ra_events(receive_ra_events(1, 0), ClusterName, F1),
+
+    %% querying with the latest module hardcoded still crashes against
+    %% this v7-shaped state, confirming the fallback below is load-bearing
+    ?assertEqual({error, function_clause},
+                 ra:local_query(ServerId,
+                                fun rabbit_fifo:query_notify_decorators_info/1)),
+    %% local_query retries against rabbit_fifo_v7 instead of assuming the
+    %% latest module
+    ?assertMatch({ok, {_, {empty, false}}, _},
+                 rabbit_fifo_client:local_query(
+                   ServerId, query_notify_decorators_info, 5000)),
+
+    rabbit_quorum_queue:stop_server(ServerId),
+    ok.
+
+local_query_does_not_retry_on_unrelated_error(_Config) ->
+    ok = meck:new(ra, [passthrough]),
+    try
+        meck:expect(ra, local_query, fun (_Server, _Fun, _Timeout) -> {error, noproc} end),
+        ?assertEqual({error, noproc},
+                     rabbit_fifo_client:local_query(
+                       some_server, query_notify_decorators_info, 1000)),
+        ?assertEqual(1, meck:num_calls(ra, local_query, '_'))
+    after
+        meck:unload(ra)
+    end,
+    ok.
+
 dead_letter_handler(Pid, Reason, Msgs) ->
     Pid ! {dead_letter, Reason, Msgs}.
 
@@ -954,6 +996,12 @@ discard_next_delivery(ClusterName, State0, Wait) ->
     end.
 
 start_cluster(ClusterName, ServerIds, RaFifoConfig) ->
+    start_cluster(ClusterName, ServerIds, RaFifoConfig, rabbit_fifo:version()).
+
+%% pins the cluster's machine at MachineVersion instead of the latest,
+%% e.g. to test how the latest code behaves against an older state shape
+start_cluster(ClusterName, ServerIds, RaFifoConfig, MachineVersion) ->
+    Module = rabbit_fifo:which_module(MachineVersion),
     NameBin = ra_lib:to_binary(ClusterName#resource.name),
     Confs = [begin
                  UId = ra:new_uid(NameBin),
@@ -962,8 +1010,8 @@ start_cluster(ClusterName, ServerIds, RaFifoConfig) ->
                    cluster_name => ClusterName#resource.name,
                    log_init_args => #{uid => UId},
                    initial_members => ServerIds,
-                   initial_machine_version => rabbit_fifo:version(),
-                   machine => {module, rabbit_fifo, RaFifoConfig}}
+                   initial_machine_version => MachineVersion,
+                   machine => {module, Module, RaFifoConfig}}
              end
              || Id <- ServerIds],
     {ok, Started, _} = ra:start_cluster(?RA_SYSTEM, Confs),
