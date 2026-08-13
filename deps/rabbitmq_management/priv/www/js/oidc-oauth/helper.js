@@ -312,6 +312,7 @@ export function oauth_initiateLogout() {
           if (endpoint == undefined) {
             // Logout only from management UI
             mgr.removeUser().then(res => {
+              if (typeof clear_session === 'function') clear_session();
               clear_auth()
               oauth_redirectToLogin()
             })
@@ -321,6 +322,7 @@ export function oauth_initiateLogout() {
           }
         })
       }else {
+        if (typeof clear_session === 'function') clear_session();
         clear_auth()
         go_to_home()
       }
@@ -332,6 +334,7 @@ export function oauth_initiateLogout() {
 }
 
 export function oauth_completeLogout() {
+    if (typeof clear_session === 'function') clear_session();
     clear_auth()
     mgr.signoutRedirectCallback().then(_ => oauth_redirectToLogin())
 }
