@@ -38,14 +38,14 @@ defmodule SetChannelInterceptorPrioritiesCommandTest do
 
   test "validate: rejects an odd number of arguments", context do
     assert match?(
-             {:error, _},
+             {:validation_failure, {:bad_argument, _}},
              @command.validate(["dummy_interceptor"], context[:opts])
            )
   end
 
   test "validate: rejects a non-integer priority", context do
     assert match?(
-             {:error, _},
+             {:validation_failure, {:bad_argument, _}},
              @command.validate(["dummy_interceptor", "high"], context[:opts])
            )
   end
@@ -68,16 +68,8 @@ defmodule SetChannelInterceptorPrioritiesCommandTest do
   test "run: sets the priority of a registered interceptor", context do
     node = get_rabbit_hostname()
 
-    :ok =
-      :rabbit_misc.rpc_call(
-        node,
-        :rabbit_registry,
-        :register,
-        [:channel_interceptor, <<"test interceptor">>, :dummy_interceptor]
-      )
-
     try do
-      assert @command.run(["dummy_interceptor", "7"], context[:opts]) == :ok
+      assert @command.run(["rabbit_sharding_interceptor", "7"], context[:opts]) == :ok
 
       priorities =
         :rabbit_misc.rpc_call(
@@ -87,20 +79,13 @@ defmodule SetChannelInterceptorPrioritiesCommandTest do
           [:rabbit, :channel_interceptor_priorities, []]
         )
 
-      assert {:dummy_interceptor, 7} in priorities
+      assert {:rabbit_sharding_interceptor, 7} in priorities
     after
       :rabbit_misc.rpc_call(
         node,
         :application,
         :unset_env,
         [:rabbit, :channel_interceptor_priorities]
-      )
-
-      :rabbit_misc.rpc_call(
-        node,
-        :rabbit_registry,
-        :unregister,
-        [:channel_interceptor, <<"test interceptor">>]
       )
     end
   end
