@@ -370,9 +370,9 @@ dispatcher_add(function(sammy) {
                                                            options: {sort:true}},
                                    'used_deprecated_features': '/deprecated-features/used'}, 'deprecated-features');
     sammy.put('#/logout', function() {
+        if (typeof clear_session === 'function') clear_session();
         // clear a local storage value used by earlier versions
         clear_auth()
-        if (typeof clear_session === 'function') clear_session();
         if (oauth.logged_in) {
             oauth.logged_in = false;
             oauth_initiateLogout();

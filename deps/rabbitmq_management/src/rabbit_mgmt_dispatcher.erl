@@ -34,14 +34,16 @@ build_routes(Ignore) ->
     end,
     
     BootstrapJs = build_bootstrap_js_route(Prefix),
-    InitJs = build_init_js_route(Prefix),
     
     % NB: order is significant in the routing list
     Routes0 = build_module_routes(Ignore) ++
         [ApiRdrRte, CliRdrRte, MgmtRdrRte, StatsRdrRte1, StatsRdrRte2, LocalStaticRte],
     Routes1 = maybe_add_path_prefix(Routes0, Prefix),
     % NB: ensure the root routes are first
-    Routes2 = RootIdxRtes ++ BootstrapJs ++ InitJs ++ OauthBootstrap ++ OauthTokenProxy ++ maybe_add_path_prefix([{"/login", rabbit_mgmt_login, []}], Prefix) ++ Routes1,
+    Routes2 = RootIdxRtes ++ BootstrapJs ++ OauthBootstrap ++ OauthTokenProxy 
+        ++ maybe_add_path_prefix([
+            {"/login", rabbit_mgmt_login, []}], Prefix) 
+        ++ Routes1,
     [{'_', Routes2}].
 
 build_root_index_routes("", ManagementApp) ->
@@ -55,12 +57,6 @@ build_bootstrap_js_route("") ->
 build_bootstrap_js_route(Prefix) ->
     [{"/js/bootstrap.js", rabbit_mgmt_wm_redirect, Prefix ++ "/js/bootstrap.js"},
      {Prefix ++ "/js/bootstrap.js", rabbit_mgmt_bootstrap_js, #{}}].
-
-build_init_js_route("") ->
-    [{"/js/init.js", rabbit_mgmt_init_js, #{}}];
-build_init_js_route(Prefix) ->
-    [{"/js/init.js", rabbit_mgmt_wm_redirect, Prefix ++ "/js/init.js"},
-     {Prefix ++ "/js/init.js", rabbit_mgmt_init_js, #{}}].
 
 build_oauth_bootstrap_route("") ->
     [{"/js/oidc-oauth/bootstrap.js", rabbit_mgmt_oauth_bootstrap, #{}}];
@@ -251,6 +247,7 @@ dispatcher() ->
      {"/auth/attempts/:node",                                  rabbit_mgmt_wm_auth_attempts, [all]},
      {"/auth/attempts/:node/source",                           rabbit_mgmt_wm_auth_attempts, [by_source]},
      {"/login",                                                rabbit_mgmt_wm_login, []},
+     {"/init",                                                 rabbit_mgmt_wm_init, []},
      {"/config/effective",                                     rabbit_mgmt_wm_environment, []},
      {"/auth/hash_password/:password",                         rabbit_mgmt_wm_hash_password, []},
      {"/version",                                              rabbit_mgmt_wm_version, []}

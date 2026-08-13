@@ -29,7 +29,7 @@ $(document).ready(function() {
             renderWarningMessageInLoginStatus(oauth, fmt_escape_html(error));
         }
     } else {
-        if (oauth.enabled) {
+        if (oauth && oauth.enabled) {
             startWithOAuthLogin(oauth);
         } else {
             startWithLoginPage();
@@ -102,14 +102,14 @@ function start_app_login () {
   app = new Sammy.Application(function () {
     this.get('/', function () {})
     this.get('#/', function () {})
-    if (!oauth.enabled || !oauth.oauth_disable_basic_auth) {
+    if (!oauth || !oauth.enabled || !oauth.oauth_disable_basic_auth) {
       this.put('#/login', function() {
         login(this.params['username'], this.params['password']);
       });
     }
   })
 
-  if (oauth.enabled) {
+  if (oauth && oauth.enabled) {
     if (has_auth_credentials()) {
       check_login();
     } else {
@@ -127,7 +127,7 @@ function check_login () {
     user = JSON.parse(sync_get('/whoami'));
     if (user == false || user.error) {
         clear_auth();
-        if (oauth.enabled) {
+        if (oauth && oauth.enabled) {
             renderWarningMessageInLoginStatus(oauth, 'Not authorized');
         } else {
             replace_content('login-status', '<p>Login failed</p>');
@@ -136,18 +136,20 @@ function check_login () {
     }
  
 
-    // Dynamically load the init.js extension
-    import('./bootstrap.js')
-        .then(function(module) {
-            if (typeof module.initialize === 'function') {
-                module.initialize(user);
-            }
-            finish_check_login();
-        })
-        .catch(function(err) {
-            console.error("Failed to load bootstrap.js:", err);
-            finish_check_login();
-        });
+    // Fetch initialization data synchronously (which sends Authorization header)
+    var rawInitData = sync_get('/init');
+    if (rawInitData) {
+        var initData = JSON.parse(rawInitData);
+        window.app_settings = initData.settings;
+        window.app_vhosts = initData.vhosts;
+        if (initData.nodes) {
+            window.app_nodes = initData.nodes;
+        }
+    } else {
+        console.error("Failed to load /api/init");
+        window.sessions_enabled = function() { return false; };
+    }
+    finish_check_login();
 
     return true;
 }
@@ -181,38 +183,49 @@ function login(username, password) {
   var scheme = result.token.type === 'bearer' ? 'Bearer' : 'Basic';
   set_auth(scheme, result.token.value);
   
-  // Dynamically load the init.js extension
-  import('./bootstrap.js')
-      .then(function(module) {
-          if (typeof module.initialize === 'function') {
-              module.initialize(user);
-          }
-          finish_check_login();
-      })
-      .catch(function(err) {
-          console.error("Failed to load bootstrap.js:", err);
-          finish_check_login();
-      });
+  // Fetch initialization data synchronously
+  var rawInitData = sync_get('/init');
+  if (rawInitData) {
+      var initData = JSON.parse(rawInitData);
+      window.app_settings = initData.settings;
+      window.app_vhosts = initData.vhosts;
+      if (initData.nodes) {
+          window.app_nodes = initData.nodes;
+      }
+  } else {
+      console.error("Failed to load /api/init");
+      window.sessions_enabled = function() { return false; };
+  }
+  finish_check_login();
 
   return true;
 }
 
 function prepare_session() {
+    if (typeof check_session !== 'function') {
+        console.warn("check_session is not defined, session management might be broken");
+        return true;
+    }
     if (!check_session()) {
         clear_auth();
-        if (oauth.enabled) {
+        if (oauth && oauth.enabled) {
             renderWarningMessageInLoginStatus(oauth, 'Concurrent session limit reached');
         } else {
             replace_content('login-status', '<p>Concurrent session limit reached</p>');
         }
         return false;
     }else {
-        start_session_heartbeat(get_session_id(), true);
+        if (typeof start_session_heartbeat === 'function' && typeof get_session_id === 'function') {
+            start_session_heartbeat(get_session_id(), true);
+        }
+        return true;
     }
 }
 function finish_check_login() {
-    if (sessions_enabled()) {
-        prepare_session();
+    if (typeof sessions_enabled === 'function' && sessions_enabled()) {
+        if (prepare_session() === false) {
+            return; // Stop initialization if session preparation fails
+        }
     }
     set_session_expiry_if_required(user.login_session_timeout);
     check_version();
@@ -337,7 +350,7 @@ function setup_form_events() {
 }
 
 function setup_oauth_events_if_required() {
-    if (!oauth.enabled) {
+    if (!oauth || !oauth.enabled) {
         return;
     }
     $(document).on('click', '[data-oauth-action="login"]', function() {
@@ -1664,7 +1677,7 @@ function sync_req(type, params0, path_template, options) {
     }
 }
 function initiate_logout(oauth, error = "") {
-    clear_session();
+    if (typeof clear_session === 'function') clear_session();
     renderWarningMessageInLoginStatus(oauth, error);
 }
 /**

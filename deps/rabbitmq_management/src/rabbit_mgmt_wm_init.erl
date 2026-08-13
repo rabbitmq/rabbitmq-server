@@ -1,6 +1,6 @@
--module(rabbit_mgmt_init_js).
+-module(rabbit_mgmt_wm_init).
 -export([init/2]).
--export([content_types_provided/2, is_authorized/2, to_js/2]).
+-export([content_types_provided/2, is_authorized/2, to_json/2]).
 
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -14,26 +14,25 @@ is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized(ReqData, Context).
 
 content_types_provided(ReqData, Context) ->
-    {[{<<"application/javascript; charset=utf-8">>, to_js}], ReqData, Context}.
+    {rabbit_mgmt_util:responder_map(to_json), ReqData, Context}.
 
-to_js(ReqData, Context) ->
+to_json(ReqData, Context) ->
     SettingsJSON = get_settings_json(ReqData, Context),
     VhostsJSON = get_vhosts_json(ReqData, Context),
     
     UserTags = (Context#context.user)#user.tags,
-    NodesVar = case rabbit_mgmt_util:is_monitor(UserTags) of
-        true -> ["  window.app_nodes = ", get_nodes_json(ReqData, Context), ";\n"];
-        false -> ""
+    NodesJSON = case rabbit_mgmt_util:is_monitor(UserTags) of
+        true -> get_nodes_json(ReqData, Context);
+        false -> <<"null">>
     end,
     
-    JSContent = [
-        "export function initialize(user) {\n",
-        "  window.app_settings = ", SettingsJSON, ";\n",
-        "  window.app_vhosts = ", VhostsJSON, ";\n",
-        NodesVar,
+    JSONContent = [
+        "{\"settings\": ", SettingsJSON, ",\n",
+        " \"vhosts\": ", VhostsJSON, ",\n",
+        " \"nodes\": ", NodesJSON, "\n",
         "}\n"
     ],
-    {iolist_to_binary(JSContent), ReqData, Context}.
+    {iolist_to_binary(JSONContent), ReqData, Context}.
 
 get_settings_json(ReqData, _Context) ->
     Settings0 = [
