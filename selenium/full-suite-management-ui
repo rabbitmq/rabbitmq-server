@@ -15,6 +15,7 @@ authnz-mgt/oauth-with-keycloak-with-verify-none.sh
 authnz-mgt/prometheus-oauth.sh
 authnz-mgt/oauth-with-uaa-down-but-with-basic-auth.sh
 authnz-mgt/oauth-with-uaa-down.sh
+authnz-mgt/sessions-oauth-keycloak.sh
 mgt/amqp10-connections.sh
 mgt/mqtt-connections.sh
 mgt/vhosts.sh
@@ -26,3 +27,4 @@ mgt/queuesAndStreams.sh
 mgt/feature-flags.sh
 mgt/hide-allow-header.sh
 mgt/enforce-definition-file-extension.sh
+mgt/sessions-basic-auth.sh

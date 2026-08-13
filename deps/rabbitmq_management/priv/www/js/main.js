@@ -137,7 +137,7 @@ function check_login () {
  
 
     // Dynamically load the init.js extension
-    import('./init.js')
+    import('./bootstrap.js')
         .then(function(module) {
             if (typeof module.initialize === 'function') {
                 module.initialize(user);
@@ -145,7 +145,7 @@ function check_login () {
             finish_check_login();
         })
         .catch(function(err) {
-            console.error("Failed to load init.js:", err);
+            console.error("Failed to load bootstrap.js:", err);
             finish_check_login();
         });
 
@@ -182,7 +182,7 @@ function login(username, password) {
   set_auth(scheme, result.token.value);
   
   // Dynamically load the init.js extension
-  import('./init.js')
+  import('./bootstrap.js')
       .then(function(module) {
           if (typeof module.initialize === 'function') {
               module.initialize(user);
@@ -190,7 +190,7 @@ function login(username, password) {
           finish_check_login();
       })
       .catch(function(err) {
-          console.error("Failed to load init.js:", err);
+          console.error("Failed to load bootstrap.js:", err);
           finish_check_login();
       });
 

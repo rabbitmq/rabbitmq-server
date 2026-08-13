@@ -3,6 +3,7 @@ authnz-mgt/oauth-with-keycloak.sh
 authnz-mgt/basic-auth-with-mgt-prefix.sh
 authnz-mgt/oauth-with-uaa.sh
 authnz-mgt/oauth-idp-initiated-with-uaa-and-prefix.sh
+authnz-mgt/sessions-oauth-keycloak.sh
 mgt/vhosts.sh
 mgt/exchanges.sh
 mgt/queuesAndStreams.sh
@@ -10,4 +11,5 @@ mgt/limits.sh
 mgt/amqp10-connections.sh
 mgt/mqtt-connections.sh
 mgt/feature-flags.sh
+mgt/sessions-basic-auth.sh
 authnz-mgt/multi-oauth-with-basic-auth.sh
