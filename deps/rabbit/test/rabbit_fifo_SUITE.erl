@@ -4249,6 +4249,41 @@ convert_v7_to_v9_test(Config) ->
                  maps:get(Cid1, Consumers)),
     ok.
 
+convert_v8_to_v9_deferred_test(Config) ->
+    %% v8's #delayed.deferred map stored a single delayed_key() per token
+    %% v9 allows a single token to address multiple messages.
+    ConfigV8 = [{machine_version, 8} | Config],
+    ConfigV9 = [{machine_version, 9} | Config],
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B)},
+    S0 = rabbit_fifo_v8:init(Conf),
+    Cid = {?FUNCTION_NAME_B, self()},
+
+    {S1, _, _} = rabbit_fifo_v8:apply(
+                   meta(ConfigV8, 1, 0, {notify, 1, self()}),
+                   rabbit_fifo_v8:make_enqueue(self(), 1, msg1), S0),
+    {S2, {ok, #{key := CKey, next_msg_id := MsgId}}, _} =
+        rabbit_fifo_v8:apply(
+          meta(ConfigV8, 2, 100),
+          rabbit_fifo_v8:make_checkout(Cid, {auto, {simple_prefetch, 1}}, #{}),
+          S1),
+    Token = <<"v8-token">>,
+    Anns = #{<<"x-opt-deferral-token">> => Token,
+             <<"x-opt-delivery-time">> => 10000},
+    Modify = rabbit_fifo_v8:make_modify(CKey, [MsgId], false, false, Anns),
+    {StateV8, _, _} = rabbit_fifo_v8:apply(meta(ConfigV8, 3, 100), Modify, S2),
+    ?assertMatch(#{num_delayed_messages := 1}, rabbit_fifo_v8:overview(StateV8)),
+
+    %% Upgrade to v9. Before the fix, the deferred entry stayed a bare key.
+    {StateV9, ok, _} = rabbit_fifo:apply(meta(ConfigV9, 4),
+                                         {machine_version, 8, 9}, StateV8),
+    ?assertMatch(#{num_delayed_messages := 1}, rabbit_fifo:overview(StateV9)),
+
+    %% Requesting the v8-deferred token back must not crash, and must find
+    %% the message (this failed with a function_clause before the fix).
+    Cmd = rabbit_fifo:make_delayed({assign_deferred, CKey, [Token]}),
+    {_StateV9b, {ok, 1}, _} = rabbit_fifo:apply(meta(ConfigV9, 5), Cmd, StateV9),
+    ok.
 
 queue_ttl_test(C) ->
     QName = rabbit_misc:r(<<"/">>, queue, <<"test">>),

@@ -986,7 +986,16 @@ credit_reply_resend_effect(#?STATE{waiting_consumers = Waiting,
       end, [], maps:merge(Consumers, maps:from_list(Waiting))).
 
 convert_v8_to_v9(#{} = _Meta, StateV8) ->
-    erlang:append_element(StateV8, #{}).
+    %% v9 added ingress_bytes_by_node field
+    V9State0 = erlang:append_element(StateV8, #{}),
+
+    %% v8's #delayed.deferred map stored a single delayed_key() per token
+    %% v9 allows a single token to address multiple messages.
+    #?STATE{delayed = V8Delayed} = V9State0,
+    #delayed{deferred = DeferredV8} = V8Delayed,
+    V9Deferred = maps:map(fun(_Token, Key) -> [Key] end, DeferredV8),
+    V9Delayed = V8Delayed#delayed{deferred = V9Deferred},
+    V9State0#?STATE{delayed = V9Delayed}.
 
 purge_node(Meta, Node, State, Effects) ->
     lists:foldl(fun(Pid, {S0, E0}) ->
