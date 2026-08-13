@@ -2453,6 +2453,7 @@ make_ra_conf(Q, ServerId, TickTimeout,
 
 make_mutable_config(Q) ->
     QName = amqqueue:get_name(Q),
+    #resource{name = QNameBin} = QName,
     TickTimeout = application:get_env(rabbit, quorum_tick_interval,
                                       ?TICK_INTERVAL),
     MinRecoveryCheckpointInterval =
@@ -2461,7 +2462,9 @@ make_mutable_config(Q) ->
     Formatter = {?MODULE, format_ra_event, [QName]},
     #{tick_timeout => TickTimeout,
       min_recovery_checkpoint_interval => MinRecoveryCheckpointInterval,
-      ra_event_formatter => Formatter}.
+      ra_event_formatter => Formatter,
+      metrics_labels => #{vhost => amqqueue:get_vhost(Q),
+                          queue => QNameBin}}.
 
 get_nodes(Q) when ?is_amqqueue(Q) ->
     #{nodes := Nodes} = amqqueue:get_type_state(Q),
