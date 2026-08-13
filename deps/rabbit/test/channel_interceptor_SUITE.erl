@@ -32,6 +32,8 @@ groups() ->
           conflicting_interceptors_close_direct_connections_gracefully,
           multiple_interceptors_ordered_by_priority,
           reject_interceptors_with_same_priority_for_same_operation,
+          set_priorities_rejects_conflict_without_committing,
+          set_priorities_rejects_unknown_interceptor,
           priority_overridden_by_config
 >>>>>>> d500ce152a (add core tests for handling multiple channel interceptors)
         ]}
@@ -360,12 +362,77 @@ reject_interceptors_with_same_priority_for_same_operation1(_Config) ->
     try
         %% Initialising interceptors must fail: two interceptors with the same
         %% priority handle the same AMQP operation.
-        rabbit_channel_interceptor:init(self())
+        ?assertExit({amqp_error, internal_error, _, _},
+                    rabbit_channel_interceptor:init(self()))
     catch
         exit:{amqp_error, internal_error, _, _} -> ok
     after
         rabbit_registry:unregister(channel_interceptor, <<"dummy interceptor priority 1">>),
         rabbit_registry:unregister(channel_interceptor, <<"dummy interceptor priority 1 conflict">>)
+    end,
+    passed.
+
+set_priorities_rejects_conflict_without_committing(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, set_priorities_rejects_conflict_without_committing1, [Config]).
+
+set_priorities_rejects_conflict_without_committing1(_Config) ->
+    ok = rabbit_registry:register(channel_interceptor,
+                                  <<"dummy interceptor priority 1">>,
+                                  dummy_interceptor_priority_1),
+    ok = rabbit_registry:register(channel_interceptor,
+                                  <<"dummy interceptor priority 1 conflict">>,
+                                  dummy_interceptor_priority_1_conflict),
+    Before = application:get_env(rabbit, channel_interceptor_priorities, []),
+    try
+        %% Placing both interceptors at the same priority makes them handle the
+        %% same operation ambiguously, so the merged configuration is rejected
+        %% and nothing is committed.
+        ?assertMatch(
+            {error, _},
+            rabbit_channel_interceptor:set_priorities(
+                [{dummy_interceptor_priority_1, 5},
+                 {dummy_interceptor_priority_1_conflict, 5}])),
+        ?assertEqual(
+            Before,
+            application:get_env(rabbit, channel_interceptor_priorities, [])),
+
+        %% A non-conflicting configuration is accepted and committed.
+        ?assertEqual(
+            ok,
+            rabbit_channel_interceptor:set_priorities(
+                [{dummy_interceptor_priority_1, 5},
+                 {dummy_interceptor_priority_1_conflict, 6}])),
+        ?assertEqual(
+            {dummy_interceptor_priority_1, 5},
+            lists:keyfind(dummy_interceptor_priority_1, 1,
+                          application:get_env(rabbit, channel_interceptor_priorities, [])))
+    after
+        application:set_env(rabbit, channel_interceptor_priorities, Before),
+        rabbit_registry:unregister(channel_interceptor, <<"dummy interceptor priority 1">>),
+        rabbit_registry:unregister(channel_interceptor, <<"dummy interceptor priority 1 conflict">>)
+    end,
+    passed.
+
+set_priorities_rejects_unknown_interceptor(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, set_priorities_rejects_unknown_interceptor1, [Config]).
+
+set_priorities_rejects_unknown_interceptor1(_Config) ->
+    Before = application:get_env(rabbit, channel_interceptor_priorities, []),
+    try
+        %% A name that matches no registered channel interceptor is rejected
+        %% and nothing is committed, so a typo cannot report success while
+        %% leaving the intended interceptor untouched.
+        ?assertMatch(
+            {error, _},
+            rabbit_channel_interceptor:set_priorities(
+                [{no_such_interceptor, 7}])),
+        ?assertEqual(
+            Before,
+            application:get_env(rabbit, channel_interceptor_priorities, []))
+    after
+        application:set_env(rabbit, channel_interceptor_priorities, Before)
     end,
     passed.
 
