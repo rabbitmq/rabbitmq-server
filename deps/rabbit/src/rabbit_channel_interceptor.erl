@@ -39,53 +39,71 @@ removed_from_rabbit_registry(_Type) ->
 
 list() ->
     Mods = [M || {_, M} <- rabbit_registry:lookup_all(channel_interceptor)],
-    [[{name, Mod}, {applies_to, Mod:applies_to()}, {priority, priority(Mod)}] || Mod <- Mods].
+    Priorities = application:get_env(rabbit, channel_interceptor_priorities, []),
+    [[{name, Mod}, {applies_to, Mod:applies_to()}, {priority, priority(Mod, Priorities)}] || Mod <- Mods].
 
--spec set_priorities([{module(), integer()}]) -> ok.
+-spec set_priorities([{module(), integer()}]) ->
+    ok | {error, string()}.
 %% Merge the given interceptor priorities into the current configuration,
 %% keeping priorities of interceptors that are not mentioned, and refresh
-%% all channels so the new ordering takes effect.
+%% all channels so the new ordering takes effect. The merged configuration
+%% is validated before it is committed: if it would make two interceptors
+%% at the same priority handle the same AMQP operation, an error is returned
+%% and nothing is changed, so channels keep working. The change is not
+%% persisted and does not survive a node restart.
 set_priorities(NewPriorities) ->
     Current = application:get_env(rabbit, channel_interceptor_priorities, []),
     Merged = lists:foldl(fun({Mod, P}, Acc) ->
                              lists:keystore(Mod, 1, Acc, {Mod, P})
                          end, Current, NewPriorities),
-    ok = application:set_env(rabbit, channel_interceptor_priorities, Merged),
-    rabbit_channel:refresh_interceptors().
+    Mods = [M || {_, M} <- rabbit_registry:lookup_all(channel_interceptor)],
+    case overlapping_operations(Mods, Merged) of
+        [] ->
+            ok = application:set_env(rabbit, channel_interceptor_priorities, Merged),
+            rabbit_channel:refresh_interceptors();
+        Operations ->
+            {error, rabbit_misc:format(
+                      "cannot set channel interceptor priorities: more than one "
+                      "interceptor at the same priority would handle ~tp",
+                      [Operations])}
+    end.
 
 init(Ch) ->
     Mods = [M || {_, M} <- rabbit_registry:lookup_all(channel_interceptor)],
-    Sorted = lists:sort(fun(A, B) -> priority(A) =< priority(B) end, Mods),
-    check_no_overlap(Sorted),
+    Priorities = application:get_env(rabbit, channel_interceptor_priorities, []),
+    Sorted = lists:sort(fun(A, B) -> priority(A, Priorities) =< priority(B, Priorities) end, Mods),
+    case overlapping_operations(Sorted, Priorities) of
+        [] -> ok;
+        Operations ->
+            internal_error("Interceptor: more than one module handles ~tp", [Operations])
+    end,
     [{Mod, Mod:init(Ch)} || Mod <- Sorted].
 
-%% Reject any two interceptors that share the same priority and handle the same
-%% AMQP operation. Interceptors with different priorities may overlap freely.
-check_no_overlap(Mods) ->
+%% Return the AMQP operations handled by more than one interceptor at the same
+%% priority. Interceptors with different priorities may overlap freely, since
+%% the order in which they run is then well defined. An empty list means the
+%% given configuration is unambiguous.
+overlapping_operations(Mods, Priorities) ->
     ByPriority = lists:foldl(fun(Mod, Acc) ->
-                                 P = priority(Mod),
+                                 P = priority(Mod, Priorities),
                                  maps:update_with(P, fun(Ms) -> [Mod | Ms] end, [Mod], Acc)
                              end, #{}, Mods),
-    maps:foreach(fun(_Priority, Group) ->
-                     check_no_overlap1([sets:from_list(Mod:applies_to()) || Mod <- Group])
-                 end, ByPriority).
+    maps:fold(fun(_Priority, Group, Acc) ->
+                  overlap_in_group(Group) ++ Acc
+              end, [], ByPriority).
 
-check_no_overlap1(Sets) ->
-    _ = lists:foldl(fun(Set, Union) ->
+overlap_in_group(Mods) ->
+    {_Union, Overlap} =
+        lists:foldl(fun(Mod, {Union, Over}) ->
+                        Set = sets:from_list(Mod:applies_to()),
                         Is = sets:intersection(Set, Union),
-                        case sets:size(Is) of
-                            0 -> ok;
-                            _ ->
-                                internal_error("Interceptor: more than one module handles ~tp", [Is])
-                        end,
-                        sets:union(Set, Union)
+                        {sets:union(Set, Union), sets:union(Is, Over)}
                     end,
-                    sets:new(),
-                    Sets),
-    ok.
+                    {sets:new(), sets:new()},
+                    Mods),
+    sets:to_list(Overlap).
 
-priority(Mod) ->
-    Priorities = application:get_env(rabbit, channel_interceptor_priorities, []),
+priority(Mod, Priorities) ->
     case lists:keyfind(Mod, 1, Priorities) of
         {Mod, P} -> P;
         false     -> 0
