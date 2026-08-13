@@ -15,7 +15,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetChannelInterceptorPrioritiesCommand do
   end
 
   def validate(args, _) when rem(length(args), 2) != 0 do
-    {:error, "Interceptors and priorities must be provided as <interceptor> <priority> pairs"}
+    {:validation_failure,
+     {:bad_argument,
+      "Interceptors and priorities must be provided as <interceptor> <priority> pairs"}}
   end
 
   def validate(args, _) do
@@ -26,7 +28,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetChannelInterceptorPrioritiesCommand do
         :ok
 
       invalid ->
-        {:error, "Priority \"#{invalid}\" is not a valid integer"}
+        {:validation_failure,
+         {:bad_argument, "Priority \"#{invalid}\" is not a valid integer"}}
     end
   end
 
