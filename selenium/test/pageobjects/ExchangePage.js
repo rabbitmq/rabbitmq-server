@@ -15,7 +15,7 @@ module.exports = class ExchangePage extends BasePage {
     return this.getText(EXCHANGE_NAME)
   }
   async ensureDeleteExchangeSectionIsVisible() {
-    const button = await this.driver.findElement(DELETE_BUTTON)
+    const button = await this.waitForLocated(DELETE_BUTTON)
     if (!(await button.isDisplayed())) {
       await this.click(DELETE_EXCHANGE_SECTION_H2)
     }
