@@ -187,7 +187,7 @@ function args_to_features(obj) {
         }
         else {
             if (res.arguments == undefined) res.arguments = {};
-            res.arguments[fmt_escape_html(k)] = fmt_escape_html(obj.arguments[k]);
+            res.arguments[fmt_escape_html(k)] = obj.arguments[k];
         }
     }
     if (obj.exclusive) {
