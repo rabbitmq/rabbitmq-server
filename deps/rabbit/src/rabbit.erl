@@ -226,6 +226,13 @@
                     {mfa,         {rabbit_logger_exchange_h, declare_exchange, []}},
                     {requires,    [core_initialized, recovery]}]}).
 
+-rabbit_boot_step({channel_interceptor_priorities_check,
+                   [{description, "warn about channel interceptor priorities that match no registered interceptor"},
+                    {mfa,         {rabbit_channel_interceptor,
+                                   warn_unknown_priorities, []}},
+                    {requires,    recovery},
+                    {enables,     routing_ready}]}).
+
 -rabbit_boot_step({routing_ready,
                    [{description, "message delivery logic ready"},
                     {requires,    [core_initialized, recovery]}]}).

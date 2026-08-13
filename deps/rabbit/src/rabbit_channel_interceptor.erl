@@ -8,8 +8,10 @@
 -module(rabbit_channel_interceptor).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("kernel/include/logger.hrl").
 
--export([init/1, intercept_in/3, list/0, set_priorities/1]).
+-export([init/1, intercept_in/3, list/0, set_priorities/1,
+         warn_unknown_priorities/0]).
 
 -behaviour(rabbit_registry_class).
 
@@ -84,6 +86,24 @@ set_priorities(NewPriorities) ->
                       "interceptor at the same priority would handle the same "
                       "operations, conflicts (priority, modules, operations): ~tp",
                       [Conflicts])}
+    end.
+
+-spec warn_unknown_priorities() -> ok.
+%% A configured priority whose name matches no registered interceptor is kept
+%% as an atom and never used. Log these as a warning at boot.
+warn_unknown_priorities() ->
+    Mods = [M || {_, M} <- rabbit_registry:lookup_all(channel_interceptor)],
+    Priorities = application:get_env(rabbit, channel_interceptor_priorities, []),
+    case [Name || {Name, _Priority} <- Priorities, not lists:member(Name, Mods)] of
+        [] ->
+            ok;
+        Unknown ->
+            ?LOG_WARNING(
+               "Channel interceptor priorities were configured for modules that "
+               "are not registered as channel interceptors: ~tp. These entries "
+               "have no effect. Check for a misspelled module name or a plugin "
+               "that is not enabled.", [Unknown]),
+            ok
     end.
 
 init(Ch) ->
