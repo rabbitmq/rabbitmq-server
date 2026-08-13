@@ -65,7 +65,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetChannelInterceptorPrioritiesCommand do
   def help_section(), do: :configuration
 
   def description(),
-    do: "Sets the priorities of the given channel interceptors on the running node"
+    do:
+      "Sets the priorities of the given channel interceptors on the running node. " <>
+        "The change applies immediately but is not persisted and does not survive a node restart"
 
   def banner(args, _) do
     pairs =
