@@ -210,7 +210,11 @@ wait_for_oidc_endpoint_local() {
   do
     echo "Failed $?"
     sleep $DELAY_BETWEEN_ATTEMPTS
-    [[ counter -eq $max_retry ]] && print "Failed!" && exit 1
+    if [[ counter -eq $max_retry ]]; then
+      print "Failed!"
+      save_components_logs_on_wait_failure
+      exit 1
+    fi
     print "Trying again. Try #$counter"
     ((counter++))
   done
@@ -233,7 +237,11 @@ wait_for_oidc_endpoint_docker() {
   until (docker run $DOCKER_ARGS curlimages/curl:7.85.0 $CURL_ARGS ${BASE_URL}/.well-known/openid-configuration >/dev/null 2>&1)
   do
     sleep $DELAY_BETWEEN_ATTEMPTS
-    [[ counter -eq $max_retry ]] && print "Failed!" && exit 1
+    if [[ counter -eq $max_retry ]]; then
+      print "Failed!"
+      save_components_logs_on_wait_failure
+      exit 1
+    fi
     print "Trying again. Try #$counter"
     ((counter++))
   done
@@ -279,7 +287,11 @@ wait_for_url_local() {
   do
     print "Waiting for $url to start (local)"
     sleep 5
-    [[ counter -eq $max_retry ]] && print "Failed!" && exit 1
+    if [[ counter -eq $max_retry ]]; then
+      print "Failed!"
+      save_components_logs_on_wait_failure
+      exit 1
+    fi
     print "Trying again. Try #$counter"
     ((counter++))
   done
@@ -302,7 +314,11 @@ wait_for_url_docker() {
   do
     print "Waiting for $url to start (docker)"
     sleep 5
-    [[ counter -eq $max_retry ]] && print "Failed!" && exit 1
+    if [[ counter -eq $max_retry ]]; then
+      print "Failed!"
+      save_components_logs_on_wait_failure
+      exit 1
+    fi
     print "Trying again. Try #$counter"
     ((counter++))
   done
@@ -760,6 +776,13 @@ teardown_components() {
     fi 
   done
   end "Finished teardown"
+}
+# Called before exiting when a component fails to start. The EXIT trap
+# tears the containers down, so this is the last chance to capture their logs.
+save_components_logs_on_wait_failure() {
+  mkdir -p $LOGS
+  save_container_logs selenium
+  save_components_logs
 }
 save_components_logs() {
   local i
