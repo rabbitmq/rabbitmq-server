@@ -259,6 +259,31 @@ module.exports = {
       error("status:" + req.status + " : " + req.responseText)
       throw new Error(req.responseText)
     }
+  },
+  deleteUserSessions: (url, authorization, username) => {
+    return new Promise((resolve, reject) => {
+      log("Deleting all sessions for user " + username)
+      const req = new XMLHttpRequest()
+      const finalUrl = url + "/api/sessions/user/" + encodeURIComponent(username)
+      req.open('DELETE', finalUrl, true)
+      req.setRequestHeader("Authorization", authorization)
+      req.onreadystatechange = function () {
+        if (req.readyState === 4) {
+          if (req.status == 200 || req.status == 204) {
+            log("Successfully deleted sessions for " + username)
+            resolve()
+          } else {
+            error("status:" + req.status + " : " + req.responseText)
+            reject(new Error(req.responseText))
+          }
+        }
+      }
+      req.onerror = function () {
+        error("Network error while deleting sessions for " + username)
+        reject(new Error("Network error"))
+      }
+      req.send()
+    })
   }
 
 }

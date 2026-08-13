@@ -311,6 +311,15 @@ wait_for_url_docker() {
 test_on_cluster() {
     IFS=', ' read -r -a array <<< "$RABBITMQ_CLUSTER_NODES"
     begin "Running against all nodes in cluster $RABBITMQ_CLUSTER_NODES :"
+    
+    local node_idx=1
+    for item in "${array[@]}"; do
+        local tmp_host=$(rewrite_rabbitmq_hostname ${item} ${RABBITMQ_HOST:-rabbitmq:15672})
+        local tmp_pub=$(rewrite_rabbitmq_hostname ${item} ${PUBLIC_RABBITMQ_HOST:-$tmp_host})
+        export RABBITMQ_URL_${node_idx}=$(calculate_rabbitmq_url $tmp_pub)
+        node_idx=$((node_idx+1))
+    done
+
     for item in "${array[@]}"
     do
         RMQ_HOST_0=${RABBITMQ_HOST:-rabbitmq:15672}
@@ -320,22 +329,6 @@ test_on_cluster() {
         RMQ_URL=$(calculate_rabbitmq_url $PUBLIC_RMQ_HOST)
         RMQ_HOSTNAME=${item}
         
-        # Determine OTHER_RABBITMQ_URL by picking the next node in the cluster
-        OTHER_RMQ_HOSTNAME=""
-        for other_item in "${array[@]}"; do
-            if [ "$other_item" != "$item" ]; then
-                OTHER_RMQ_HOSTNAME=$other_item
-                break
-            fi
-        done
-        
-        if [ -n "$OTHER_RMQ_HOSTNAME" ]; then
-            OTHER_PUBLIC_RMQ_HOST=$(rewrite_rabbitmq_hostname ${OTHER_RMQ_HOSTNAME} $PUBLIC_RMQ_HOST_0)
-            export OTHER_RABBITMQ_URL=$(calculate_rabbitmq_url $OTHER_PUBLIC_RMQ_HOST)
-        else
-            export OTHER_RABBITMQ_URL=$RMQ_URL
-        fi
-
         _test $RMQ_HOST \
               $PUBLIC_RMQ_HOST \
               $RMQ_URL \
@@ -407,6 +400,9 @@ _test() {
     --name mocha \
     --net ${DOCKER_NETWORK} \
     --env RABBITMQ_URL=${RMQ_URL} \
+    --env RABBITMQ_URL_1=${RABBITMQ_URL_1} \
+    --env RABBITMQ_URL_2=${RABBITMQ_URL_2} \
+    --env RABBITMQ_URL_3=${RABBITMQ_URL_3} \
     --env OTHER_RABBITMQ_URL=${OTHER_RABBITMQ_URL} \
     --env RABBITMQ_HOSTNAME=${RMQ_HOSTNAME} \
     --env UAA_URL=${UAA_URL} \

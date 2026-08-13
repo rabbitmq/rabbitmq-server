@@ -20,6 +20,7 @@ const profiles = process.env.PROFILES || ''
 const debug = (process.env.SELENIUM_DEBUG === "true") || false
 
 function randomly_pick_baseurl(baseUrl) {
+    if (!baseUrl) return undefined
     urls = baseUrl.split(",")
     return urls[getRandomInt(urls.length)]
 }
@@ -88,7 +89,8 @@ module.exports = {
     return profiles.includes(profile)
   },
 
-  buildDriver: (url = baseUrl) => {
+  buildDriver: (url) => {
+    url = url || baseUrl
     builder = new Builder()
     if (!runLocal) {
       builder = builder.usingServer(seleniumUrl)
@@ -124,6 +126,7 @@ module.exports = {
       },
       args: seleniumArgs
     });
+    chromeCapabilities.setPageLoadStrategy('normal');
     let driver = builder
       .forBrowser('chrome')      
       //.setChromeOptions(options.excludeSwitches("disable-popup-blocking", "enable-automation"))
@@ -149,10 +152,16 @@ module.exports = {
     }
   },
 
-  goToHome: (d) => {
-    console.log('goToHome using baseUrl ' + d.baseUrl)
+  goToHome: async (d) => {
     module.exports.log("goToHome on " + d.baseUrl)
-    return d.driver.get(d.baseUrl)
+    try {
+      await d.driver.get(d.baseUrl)
+      await d.driver.sleep(2000)
+      module.exports.log("goToHome completed for " + d.baseUrl)
+    } catch (e) {
+      module.exports.error("goToHome failed for " + d.baseUrl + ": " + e.message)
+      throw e
+    }
   },
 
   /**
