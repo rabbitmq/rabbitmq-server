@@ -32,7 +32,8 @@ all() ->
         distributed_conflict_resolution_test,
         distributed_session_counting_test,
         session_expiry_test,
-        auto_resume_orphaned_session_test
+        auto_resume_orphaned_session_test,
+        delete_user_sessions_test
     ].
 
 init_per_suite(Config) ->
@@ -245,6 +246,7 @@ session_expiry_test(Config) ->
     
     %% Set very short TTL just for this test (0 minutes = 0 ms)
     rpc(Config, N1, application, set_env, [rabbitmq_management, login_session_timeout, 0]),
+    rpc(Config, N1, application, set_env, [rabbitmq_management, sessions_heartbeat_interval, 0]),
     
     {ok, {{_Http, 201, _}, _, BodyJSON}} = req_node(Config, N1, post, "/session", "test_user_a", "test_user_a", #{}),
     Body = decode_body(BodyJSON),
@@ -303,4 +305,60 @@ auto_resume_orphaned_session_test(Config) ->
     ExpectedNodeBin = atom_to_binary(N2, utf8),
     ?assertEqual(ExpectedNodeBin, maps:get('node', Session)),
     
+    %% Clean up
+    http_delete(Config, "/session/" ++ binary_to_list(SessionId1), "test_user_a", "test_user_a", ?NO_CONTENT),
+    passed.
+
+delete_user_sessions_test(Config) ->
+    N1 = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    N2 = rabbit_ct_broker_helpers:get_node_config(Config, 1, nodename),
+    
+    %% Increase limit so we can create multiple sessions
+    rpc(Config, N1, application, set_env, [rabbitmq_management, sessions_max_concurrent, 5]),
+    rpc(Config, N2, application, set_env, [rabbitmq_management, sessions_max_concurrent, 5]),
+    
+    %% Create 2 sessions for test_user_a (one on N1, one on N2)
+    {ok, {{_, 201, _}, _, BodyJSON1}} = req_node(Config, N1, post, "/session", "test_user_a", "test_user_a", #{}),
+    SessionId1 = maps:get('session_id', decode_body(BodyJSON1)),
+    
+    {ok, {{_, 201, _}, _, BodyJSON2}} = req_node(Config, N2, post, "/session", "test_user_a", "test_user_a", #{}),
+    SessionId2 = maps:get('session_id', decode_body(BodyJSON2)),
+    
+    %% Create 1 session for test_user_b on N1
+    {ok, {{_, 201, _}, _, BodyJSON3}} = req_node(Config, N1, post, "/session", "test_user_b", "test_user_b", #{}),
+    SessionId3 = maps:get('session_id', decode_body(BodyJSON3)),
+    
+    %% Wait for gossip to propagate
+    timer:sleep(6000),
+    
+    %% Delete all sessions for test_user_a (requires admin)
+    http_delete(Config, "/sessions/user/test_user_a", "test_admin", "test_admin", ?NO_CONTENT),
+    
+    %% Wait for broadcast to propagate the deletion
+    timer:sleep(1000),
+    
+    %% Verify test_user_a sessions are gone
+    {ok, {{_, 401, _}, _, _}} = req_node(Config, N1, put, "/session/" ++ binary_to_list(SessionId1), "test_user_a", "test_user_a", #{}),
+    {ok, {{_, 401, _}, _, _}} = req_node(Config, N2, put, "/session/" ++ binary_to_list(SessionId2), "test_user_a", "test_user_a", #{}),
+    
+    %% Verify test_user_b session is still alive
+    {ok, {{_, 204, _}, _, _}} = req_node(Config, N1, put, "/session/" ++ binary_to_list(SessionId3), "test_user_b", "test_user_b", #{}),
+    
+    %% Verify GET /sessions/user/:username works
+    {ok, {{_, 200, _}, _, ResBody1}} = rabbit_mgmt_test_util:req(Config, N1, get, "/sessions/user/test_user_b", [rabbit_mgmt_test_util:auth_header("test_admin", "test_admin")]),
+    SessionsRes1 = decode_body(ResBody1),
+    Items1 = maps:get('items', SessionsRes1),
+    ?assertEqual(1, length(Items1)),
+    [Session1] = Items1,
+    ?assertEqual(SessionId3, maps:get('id', Session1)),
+    ?assertEqual(<<"test_user_b">>, maps:get('username', Session1)),
+    
+    %% Verify GET /sessions/user/:username for user with no sessions
+    {ok, {{_, 200, _}, _, ResBody2}} = rabbit_mgmt_test_util:req(Config, N1, get, "/sessions/user/test_user_a", [rabbit_mgmt_test_util:auth_header("test_admin", "test_admin")]),
+    SessionsRes2 = decode_body(ResBody2),
+    Items2 = maps:get('items', SessionsRes2),
+    ?assertEqual(0, length(Items2)),
+    
+    %% Clean up test_user_b
+    http_delete(Config, "/session/" ++ binary_to_list(SessionId3), "test_user_b", "test_user_b", ?NO_CONTENT),
     passed.
