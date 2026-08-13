@@ -12,9 +12,7 @@ function clear_session() {
     }
     var id = get_session_id();
     if (id) {
-        with_req('DELETE', '/session/' + encodeURIComponent(id), null, function(req) {
-            // success, do nothing
-        });
+        sync_req('DELETE', {}, '/session/' + encodeURIComponent(id));
     }
     clear_local_pref(SESSION_ID);
 }
@@ -87,6 +85,7 @@ function start_session_heartbeat(session_id, interval_sec) {
     return false;
 }
 
+window.get_session_id = get_session_id;
 window.check_session = check_session;
 window.clear_session = clear_session;
 window.start_session_heartbeat = start_session_heartbeat;
