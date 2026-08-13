@@ -8,7 +8,8 @@ const OverviewPage = require('../pageobjects/OverviewPage')
 
 const management_username = process.env.MANAGEMENT_USERNAME || 'guest'
 const management_password = process.env.MANAGEMENT_PASSWORD || 'guest'
-const other_rabbitmq_url = process.env.OTHER_RABBITMQ_URL
+const rabbitmq_url_1 = process.env.RABBITMQ_URL_1 || process.env.RABBITMQ_URL || 'http://localhost:15672/'
+const rabbitmq_url_2 = process.env.RABBITMQ_URL_2 || process.env.RABBITMQ_URL || 'http://localhost:15672/'
 
 describe('Distributed Conflict Resolution', function () {
   let driver1
@@ -19,17 +20,21 @@ describe('Distributed Conflict Resolution', function () {
   let isOAuth
 
   before(async function () { 
-    console.log('Distributed Conflict Resolution before ' + other_rabbitmq_url)
-    
+    this.timeout(120000)
     isOAuth = hasProfile('oauth2')
 
     // Initialize two separate browser instances
-    // driver1 connects to the default RABBITMQ_URL
-    driver1 = buildDriver()
-    // driver2 connects to the OTHER_RABBITMQ_URL (node 2 in cluster)
-    driver2 = buildDriver(other_rabbitmq_url)
-
+    // Initialize two separate browser instances sequentially to avoid overwhelming Selenium Server
+    // driver1 connects to the first node
+    driver1 = buildDriver(rabbitmq_url_1)
+    await driver1.driver.sleep(2000)
+    console.log('Driver 1 connecting to:', driver1.baseUrl)
     await goToHome(driver1)
+    
+    // driver2 connects to the second node
+    driver2 = buildDriver(rabbitmq_url_2)
+    await driver2.driver.sleep(2000)
+    console.log('Driver 2 connecting to:', driver2.baseUrl)
     await goToHome(driver2)
 
     if (isOAuth) {
@@ -45,6 +50,18 @@ describe('Distributed Conflict Resolution', function () {
 
     captureScreen1 = captureScreensFor(driver1, __filename + '_driver1')
     captureScreen2 = captureScreensFor(driver2, __filename + '_driver2')
+  })
+
+  beforeEach(async function () {
+    // Clear sessions for the test user to ensure a clean slate before the test
+    try {
+      const { getManagementUrl, basicAuthorization, deleteUserSessions } = require('../mgt-api')
+      const adminAuth = basicAuthorization('guest', 'guest') // Assuming guest is admin
+      await deleteUserSessions(getManagementUrl(), adminAuth, management_username)
+      await new Promise(r => setTimeout(r, 1000)) // Give cluster gossip time to propagate
+    } catch (e) {
+      console.error("Failed to clean up sessions before test:", e)
+    }
   })
 
   async function performLogin(driver, loginPage, username, password) {
@@ -64,15 +81,22 @@ describe('Distributed Conflict Resolution', function () {
       performLogin(driver2, login2, management_username, management_password)
     ])
 
-    // Wait a moment for UI to settle
-    await driver1.sleep(2000)
+    // Wait until one succeeds and the other fails, up to 30 seconds
+    await driver1.driver.wait(async () => {
+      let isLoaded1 = await overview1.isLoaded(5000, true).catch(() => false)
+      let isLoaded2 = await overview2.isLoaded(5000, true).catch(() => false)
+      let isWarningVisible1 = await login1.isWarningVisible(5000, true).catch(() => false)
+      let isWarningVisible2 = await login2.isWarningVisible(5000, true).catch(() => false)
 
-    // Check which one succeeded and which one failed
-    let isLoaded1 = await overview1.isLoaded().catch(() => false)
-    let isLoaded2 = await overview2.isLoaded().catch(() => false)
+      return (isLoaded1 && isWarningVisible2) || (isLoaded2 && isWarningVisible1)
+    }, 30000, 'One login should succeed and the other should fail with a warning')
 
-    let isWarningVisible1 = await login1.isWarningVisible().catch(() => false)
-    let isWarningVisible2 = await login2.isWarningVisible().catch(() => false)
+    // Double check the state to assert
+    let isLoaded1 = await overview1.isLoaded(5000, true).catch(() => false)
+    let isLoaded2 = await overview2.isLoaded(5000, true).catch(() => false)
+
+    let isWarningVisible1 = await login1.isWarningVisible(5000, true).catch(() => false)
+    let isWarningVisible2 = await login2.isWarningVisible(5000, true).catch(() => false)
 
     // Exactly one should succeed, exactly one should fail
     assert.ok(isLoaded1 || isLoaded2, 'At least one login should succeed')

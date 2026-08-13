@@ -75,6 +75,7 @@ handle_call({create_session, Username, Metadata}, _From, State) ->
     Count = count_sessions_for_user(Username, State),
     if
         Count >= MaxConcurrent ->
+            ?LOG_DEBUG("Failed to create session for user ~s: concurrent session limit reached", [Username]),
             {reply, {error, limit_reached}, State};
         true ->
             SessionId = list_to_binary(rabbit_guid:to_string(rabbit_guid:gen())),
@@ -92,6 +93,7 @@ handle_call({create_session, Username, Metadata}, _From, State) ->
             },
             NewLocalSessions = maps:put(SessionId, Session, State#state.local_sessions),
             NewState = State#state{local_sessions = NewLocalSessions},
+            ?LOG_DEBUG("Created session ~s for user ~s on node ~s", [SessionId, Username, node()]),
             {reply, {ok, SessionId}, NewState}
     end;
 
@@ -201,10 +203,16 @@ handle_call(_Request, _From, State) ->
     {reply, ignored, State}.
 
 handle_cast({terminate_sessions_for_user_admin, Username}, State) ->
+    ?LOG_DEBUG("Admin terminated all sessions for user ~s", [Username]),
     %% Remove local sessions for this user
     NewLocalSessions = maps:filter(fun(_Id, S) ->
         S#session.username =/= Username
     end, State#state.local_sessions),
+    
+    %% Remove remote sessions for this user
+    NewRemoteSessions = maps:map(fun(_Node, Sessions) ->
+        [S || S <- Sessions, S#session.username =/= Username]
+    end, State#state.remote_sessions),
     
     %% Broadcast to other nodes to do the same
     Msg = {terminate_sessions_for_user_admin_local, Username},
@@ -215,19 +223,26 @@ handle_cast({terminate_sessions_for_user_admin, Username}, State) ->
         end
     end, nodes()),
     
-    {noreply, State#state{local_sessions = NewLocalSessions}};
+    {noreply, State#state{local_sessions = NewLocalSessions, remote_sessions = NewRemoteSessions}};
 
 handle_cast({terminate_sessions_for_user_admin_local, Username}, State) ->
     %% Remove local sessions for this user (received from broadcast)
     NewLocalSessions = maps:filter(fun(_Id, S) ->
         S#session.username =/= Username
     end, State#state.local_sessions),
-    {noreply, State#state{local_sessions = NewLocalSessions}};
+    
+    %% Remove remote sessions for this user
+    NewRemoteSessions = maps:map(fun(_Node, Sessions) ->
+        [S || S <- Sessions, S#session.username =/= Username]
+    end, State#state.remote_sessions),
+    
+    {noreply, State#state{local_sessions = NewLocalSessions, remote_sessions = NewRemoteSessions}};
 
 handle_cast({delete_session, SessionId}, State) ->
     %% Attempt to delete local. If not local, forward to remote.
     case maps:is_key(SessionId, State#state.local_sessions) of
         true ->
+            ?LOG_DEBUG("Deleted session ~s", [SessionId]),
             NewLocalSessions = maps:remove(SessionId, State#state.local_sessions),
             {noreply, State#state{local_sessions = NewLocalSessions}};
         false ->
