@@ -71,8 +71,9 @@ module.exports = class BasePage {
   async refresh() {
     return this.driver.navigate().refresh()
   }
-  async isLoaded () {
-    return this.waitForDisplayed(MENU_TABS)
+  async isLoaded (customTimeout, suppressErrors = false) {
+    await this.driver.sleep(500)
+    return this.waitForDisplayed(MENU_TABS, customTimeout, suppressErrors)
   }
 
   async logout () {
@@ -390,20 +391,23 @@ module.exports = class BasePage {
       }
   }
 
-  async waitForLocated (locator) {
+  async waitForLocated (locator, customTimeout, suppressErrors = false) {
     let attempts = 3
     let retry = false
     let rethrowError = null
+    let timeoutToUse = customTimeout || this.timeout
     do {
       try {
-        return await this.driver.wait(until.elementLocated(locator), this.timeout,
-          'Timed out after [timeout=' + this.timeout + ';polling=' + this.polling + '] seconds locating ' + locator,
+        return await this.driver.wait(until.elementLocated(locator), timeoutToUse,
+          'Timed out after [timeout=' + timeoutToUse + ';polling=' + this.polling + '] seconds locating ' + locator,
           this.polling)
       }catch(error) {
         if (error.name.includes("StaleElementReferenceError")) {
           retry = true
         }else if (!error.name.includes("NoSuchSessionError")) {
-          console.error("Failed waitForLocated " + locator + " due to " + error)
+          if (!suppressErrors || process.env.SELENIUM_DEBUG) {
+            console.error("Failed waitForLocated " + locator + " due to " + error)
+          }
           retry = false
         }
         rethrowError = error
@@ -412,20 +416,23 @@ module.exports = class BasePage {
     throw rethrowError
   }
 
-  async waitForVisible (element) {
+  async waitForVisible (element, customTimeout, suppressErrors = false) {
     let attempts = 3
     let retry = false
     let rethrowError = null
+    let timeoutToUse = customTimeout || this.timeout
     do {      
       try {
-        return await this.driver.wait(until.elementIsVisible(element), this.timeout,
-          'Timed out after [timeout=' + this.timeout + ';polling=' + this.polling + '] awaiting till visible ' + element,
+        return await this.driver.wait(until.elementIsVisible(element), timeoutToUse,
+          'Timed out after [timeout=' + timeoutToUse + ';polling=' + this.polling + '] awaiting till visible ' + element,
           this.polling)
       }catch(error) {         
         if (error.name.includes("StaleElementReferenceError")) {
           retry = true
         }else if (!error.name.includes("NoSuchSessionError")) {
-          console.error("Failed to find visible element " + element + " due to " + error)
+          if (!suppressErrors || process.env.SELENIUM_DEBUG) {
+            console.error("Failed to find visible element " + element + " due to " + error)
+          }
           retry = false
         }        
         rethrowError = error
@@ -435,20 +442,23 @@ module.exports = class BasePage {
   }
 
 
-  async waitForDisplayed (locator) {
+  async waitForDisplayed (locator, customTimeout, suppressErrors = false) {
     let attempts = 3
     let retry = false
     let rethrowError = null
+    let timeoutToUse = customTimeout || this.timeout
     do {
       if (this.interactionDelay && this.interactionDelay > 0) await this.driver.sleep(this.interactionDelay)
         try {
-          return await this.waitForVisible(await this.waitForLocated(locator))
+          return await this.waitForVisible(await this.waitForLocated(locator, timeoutToUse, suppressErrors), timeoutToUse, suppressErrors)
         }catch(error) {
           if (error.name.includes("StaleElementReferenceError")) {
             retry = true
           }else if (!error.name.includes("NoSuchSessionError")) {
             retry = false
-            console.error("Failed to waitForDisplayed " + locator + " due to " + error)
+            if (!suppressErrors || process.env.SELENIUM_DEBUG) {
+              console.error("Failed to waitForDisplayed " + locator + " due to " + error)
+            }
           }
           rethrowError = error
         }

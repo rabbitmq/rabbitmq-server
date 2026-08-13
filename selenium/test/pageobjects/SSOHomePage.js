@@ -17,8 +17,9 @@ const BASIC_AUTH_LOGIN_USERNAME = By.css('form#basic-auth-form input#username')
 const BASIC_AUTH_LOGIN_PASSWORD = By.css('form#basic-auth-form input#password')
 
 module.exports = class SSOHomePage extends BasePage {
-  async isLoaded () {
-    return this.waitForDisplayed(LOGIN)
+  async isLoaded (customTimeout, suppressErrors = false) {
+    await this.driver.sleep(500)
+    return this.waitForDisplayed(LOGIN, customTimeout, suppressErrors)
   }
 
   async clickToLogin () {
@@ -109,9 +110,9 @@ module.exports = class SSOHomePage extends BasePage {
   }
 
 
-  async isWarningVisible () {
+  async isWarningVisible (customTimeout, suppressErrors = false) {
     try {
-      await this.waitForDisplayed(WARNING)
+      await this.waitForDisplayed(WARNING, customTimeout, suppressErrors)
       return Promise.resolve(true)
     } catch (e) {
       return Promise.resolve(false)
