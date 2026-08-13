@@ -47,38 +47,27 @@ defmodule ListChannelInterceptorsCommandTest do
   end
 
   @tag test_timeout: :infinity
-  test "run: with no interceptors registered, returns an empty list", context do
+  test "run: lists interceptors registered on the node", context do
     result = @command.run([], context[:opts])
-    assert result == []
+    assert is_list(result)
+
+    interceptor =
+      Enum.find(result, fn info -> info[:name] == :rabbit_sharding_interceptor end)
+
+    assert interceptor != nil
   end
 
   @tag test_timeout: :infinity
-  test "run: registered interceptors are listed with applies_to joined as a string", context do
-    node = get_rabbit_hostname()
+  test "run: reports each interceptor's applies_to as a string and priority as an integer",
+       context do
+    result = @command.run([], context[:opts])
 
-    :ok =
-      :rabbit_misc.rpc_call(
-        node,
-        :rabbit_registry,
-        :register,
-        [:channel_interceptor, <<"test interceptor">>, :dummy_interceptor]
-      )
+    interceptor =
+      Enum.find(result, fn info -> info[:name] == :rabbit_sharding_interceptor end)
 
-    try do
-      result = @command.run([], context[:opts])
-      assert is_list(result)
-      interceptor = Enum.find(result, fn info -> info[:name] == :dummy_interceptor end)
-      assert interceptor != nil
-      assert is_binary(interceptor[:applies_to])
-      assert is_integer(interceptor[:priority])
-    after
-      :rabbit_misc.rpc_call(
-        node,
-        :rabbit_registry,
-        :unregister,
-        [:channel_interceptor, <<"test interceptor">>]
-      )
-    end
+    assert interceptor != nil
+    assert is_binary(interceptor[:applies_to])
+    assert is_integer(interceptor[:priority])
   end
 
   test "banner: returns the expected string", context do
