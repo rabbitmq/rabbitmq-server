@@ -65,17 +65,30 @@ list() ->
     ok | {error, string()}.
 %% Merge the given interceptor priorities into the current configuration,
 %% keeping priorities of interceptors that are not mentioned, and refresh
-%% all channels so the new ordering takes effect. The merged configuration
-%% is validated before it is committed: if it would make two interceptors
-%% at the same priority handle the same AMQP operation, an error is returned
-%% and nothing is changed, so channels keep working. The change is not
-%% persisted and does not survive a node restart.
+%% all channels so the new ordering takes effect. Each given name is first
+%% checked against the registered channel interceptors: a name that matches
+%% none is rejected and nothing is changed, so a misspelled or disabled
+%% interceptor cannot report success while leaving the intended one untouched.
+%% The merged configuration is then validated before it is committed: if it
+%% would make two interceptors at the same priority handle the same AMQP
+%% operation, an error is returned and nothing is changed, so channels keep
+%% working. The change is not persisted and does not survive a node restart.
 set_priorities(NewPriorities) ->
+    Mods = [M || {_, M} <- rabbit_registry:lookup_all(channel_interceptor)],
+    case [Mod || {Mod, _P} <- NewPriorities, not lists:member(Mod, Mods)] of
+        [] ->
+            set_priorities(NewPriorities, Mods);
+        Unknown ->
+            {error, rabbit_misc:format(
+                      "cannot set channel interceptor priorities: the following "
+                      "are not registered as channel interceptors: ~tp", [Unknown])}
+    end.
+
+set_priorities(NewPriorities, Mods) ->
     Current = application:get_env(rabbit, channel_interceptor_priorities, []),
     Merged = lists:foldl(fun({Mod, P}, Acc) ->
                              lists:keystore(Mod, 1, Acc, {Mod, P})
                          end, Current, NewPriorities),
-    Mods = [M || {_, M} <- rabbit_registry:lookup_all(channel_interceptor)],
     case overlapping_operations(Mods, Merged) of
         [] ->
             ok = application:set_env(rabbit, channel_interceptor_priorities, Merged),
