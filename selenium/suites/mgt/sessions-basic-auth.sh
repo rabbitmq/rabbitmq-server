@@ -4,7 +4,7 @@ SCRIPT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 TEST_CASES_PATH=/sessions
 TEST_CONFIG_PATH=/basic-auth
-PROFILES="sessions"
+PROFILES="sessions cluster"
 
 source $SCRIPT/../../bin/suite_template $@
 run

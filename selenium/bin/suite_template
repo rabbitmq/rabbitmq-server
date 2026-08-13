@@ -319,6 +319,23 @@ test_on_cluster() {
         PUBLIC_RMQ_HOST=$(rewrite_rabbitmq_hostname ${item} $PUBLIC_RMQ_HOST_0)
         RMQ_URL=$(calculate_rabbitmq_url $PUBLIC_RMQ_HOST)
         RMQ_HOSTNAME=${item}
+        
+        # Determine OTHER_RABBITMQ_URL by picking the next node in the cluster
+        OTHER_RMQ_HOSTNAME=""
+        for other_item in "${array[@]}"; do
+            if [ "$other_item" != "$item" ]; then
+                OTHER_RMQ_HOSTNAME=$other_item
+                break
+            fi
+        done
+        
+        if [ -n "$OTHER_RMQ_HOSTNAME" ]; then
+            OTHER_PUBLIC_RMQ_HOST=$(rewrite_rabbitmq_hostname ${OTHER_RMQ_HOSTNAME} $PUBLIC_RMQ_HOST_0)
+            export OTHER_RABBITMQ_URL=$(calculate_rabbitmq_url $OTHER_PUBLIC_RMQ_HOST)
+        else
+            export OTHER_RABBITMQ_URL=$RMQ_URL
+        fi
+
         _test $RMQ_HOST \
               $PUBLIC_RMQ_HOST \
               $RMQ_URL \
@@ -390,6 +407,7 @@ _test() {
     --name mocha \
     --net ${DOCKER_NETWORK} \
     --env RABBITMQ_URL=${RMQ_URL} \
+    --env OTHER_RABBITMQ_URL=${OTHER_RABBITMQ_URL} \
     --env RABBITMQ_HOSTNAME=${RMQ_HOSTNAME} \
     --env UAA_URL=${UAA_URL} \
     --env FAKE_PORTAL_URL=${FAKEPORTAL_URL} \

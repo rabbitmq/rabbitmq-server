@@ -150,6 +150,7 @@ module.exports = {
   },
 
   goToHome: (d) => {
+    console.log('goToHome using baseUrl ' + d.baseUrl)
     module.exports.log("goToHome on " + d.baseUrl)
     return d.driver.get(d.baseUrl)
   },

@@ -10,7 +10,8 @@
 
 -export([start_link/0]).
 -export([create_session/2, heartbeat/2, delete_session/1,
-         list_sessions/3, terminate_session_admin/1]).
+         list_sessions/3, terminate_session_admin/1,
+         terminate_sessions_for_user_admin/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -18,12 +19,13 @@
 -include_lib("kernel/include/logger.hrl").
 
 -record(session, {
-    id         :: binary(),
-    username   :: binary(),
-    node       :: atom(),
-    created_at :: integer(),
-    expires_at :: integer(),
-    metadata   :: #{binary() => binary()}
+    id                   :: binary(),
+    username             :: binary(),
+    node                 :: atom(),
+    created_at           :: integer(),
+    expires_at           :: integer(),
+    heartbeat_expires_at :: integer(),
+    metadata             :: #{binary() => binary()}
 }).
 
 -record(state, {
@@ -56,6 +58,9 @@ list_sessions(Page, PageSize, UsernameFilter) ->
 terminate_session_admin(SessionId) ->
     gen_server:call(?MODULE, {terminate_session_admin, SessionId}).
 
+terminate_sessions_for_user_admin(Username) ->
+    gen_server:cast(?MODULE, {terminate_sessions_for_user_admin, Username}).
+
 %%====================================================================
 %% gen_server callbacks
 %%====================================================================
@@ -75,12 +80,14 @@ handle_call({create_session, Username, Metadata}, _From, State) ->
             SessionId = list_to_binary(rabbit_guid:to_string(rabbit_guid:gen())),
             Now = os:system_time(millisecond),
             ExpiresAt = Now + session_timeout_ms(),
+            HeartbeatExpiresAt = Now + heartbeat_timeout_ms(),
             Session = #session{
                 id = SessionId,
                 username = Username,
                 node = node(),
                 created_at = Now,
                 expires_at = ExpiresAt,
+                heartbeat_expires_at = HeartbeatExpiresAt,
                 metadata = Metadata
             },
             NewLocalSessions = maps:put(SessionId, Session, State#state.local_sessions),
@@ -125,12 +132,14 @@ handle_call({heartbeat, SessionId, Username}, _From, State) ->
                             {reply, {error, not_found}, State};
                         true ->
                             ExpiresAt = Now + session_timeout_ms(),
+                            HeartbeatExpiresAt = Now + heartbeat_timeout_ms(),
                             Session = #session{
                                 id = SessionId,
                                 username = Username,
                                 node = node(),
                                 created_at = Now, %% Fresh timestamp makes it the first to be killed in conflicts
                                 expires_at = ExpiresAt,
+                                heartbeat_expires_at = HeartbeatExpiresAt,
                                 metadata = #{} %% Adopted sessions start with empty metadata
                             },
                             NewLocalSessions = maps:put(SessionId, Session, State#state.local_sessions),
@@ -141,8 +150,8 @@ handle_call({heartbeat, SessionId, Username}, _From, State) ->
             if Session#session.username =/= Username ->
                     {reply, {error, forbidden}, State};
                true ->
-                    ExpiresAt = Now + session_timeout_ms(),
-                    NewSession = Session#session{expires_at = ExpiresAt},
+                    HeartbeatExpiresAt = Now + heartbeat_timeout_ms(),
+                    NewSession = Session#session{heartbeat_expires_at = HeartbeatExpiresAt},
                     NewLocalSessions = maps:put(SessionId, NewSession, State#state.local_sessions),
                     {reply, ok, State#state{local_sessions = NewLocalSessions}}
             end
@@ -191,6 +200,30 @@ handle_call({terminate_session_admin, SessionId}, _From, State) ->
 handle_call(_Request, _From, State) ->
     {reply, ignored, State}.
 
+handle_cast({terminate_sessions_for_user_admin, Username}, State) ->
+    %% Remove local sessions for this user
+    NewLocalSessions = maps:filter(fun(_Id, S) ->
+        S#session.username =/= Username
+    end, State#state.local_sessions),
+    
+    %% Broadcast to other nodes to do the same
+    Msg = {terminate_sessions_for_user_admin_local, Username},
+    lists:foreach(fun(N) ->
+        if N =/= node() ->
+            gen_server:cast({?MODULE, N}, Msg);
+        true -> ok
+        end
+    end, nodes()),
+    
+    {noreply, State#state{local_sessions = NewLocalSessions}};
+
+handle_cast({terminate_sessions_for_user_admin_local, Username}, State) ->
+    %% Remove local sessions for this user (received from broadcast)
+    NewLocalSessions = maps:filter(fun(_Id, S) ->
+        S#session.username =/= Username
+    end, State#state.local_sessions),
+    {noreply, State#state{local_sessions = NewLocalSessions}};
+
 handle_cast({delete_session, SessionId}, State) ->
     %% Attempt to delete local. If not local, forward to remote.
     case maps:is_key(SessionId, State#state.local_sessions) of
@@ -221,12 +254,14 @@ handle_info(broadcast_and_cleanup, State) ->
     
     %% Cleanup local
     LocalSessions = State#state.local_sessions,
-    LocalSessions1 = maps:filter(fun(_Id, S) -> S#session.expires_at > Now end, LocalSessions),
+    LocalSessions1 = maps:filter(fun(_Id, S) -> 
+        (S#session.expires_at > Now) andalso (S#session.heartbeat_expires_at > Now) 
+    end, LocalSessions),
     
     %% Cleanup remote
     RemoteSessions = State#state.remote_sessions,
     RemoteSessions1 = maps:map(fun(_Node, SessionsList) ->
-        [S || S <- SessionsList, S#session.expires_at > Now]
+        [S || S <- SessionsList, (S#session.expires_at > Now) andalso (S#session.heartbeat_expires_at > Now)]
     end, RemoteSessions),
     
     %% Also cleanup dead nodes
@@ -267,6 +302,12 @@ session_timeout_ms() ->
     %% configured in minutes, convert to ms
     application:get_env(rabbitmq_management, login_session_timeout, 480) * 60 * 1000.
 
+heartbeat_timeout_ms() ->
+    Settings = rabbit_mgmt_features:get_sessions_settings(),
+    HeartbeatIntervalSec = proplists:get_value(heartbeat_interval, Settings, 30),
+    %% Allow 2 missed heartbeats (so 3 intervals total)
+    HeartbeatIntervalSec * 3 * 1000.
+
 count_sessions_for_user(Username, State) ->
     LocalCount = maps:fold(fun(_Id, S, Acc) ->
         if S#session.username == Username -> Acc + 1; true -> Acc end
@@ -301,6 +342,7 @@ session_to_map(S) ->
         node => S#session.node,
         created_at => S#session.created_at,
         expires_at => S#session.expires_at,
+        heartbeat_expires_at => S#session.heartbeat_expires_at,
         metadata => S#session.metadata
     }.
 
