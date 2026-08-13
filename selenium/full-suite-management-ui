@@ -18,6 +18,7 @@ authnz-mgt/prometheus-oauth.sh
 authnz-mgt/oauth-with-uaa-and-mgt-prefix.sh
 authnz-mgt/oauth-with-uaa-down-but-with-basic-auth.sh
 authnz-mgt/oauth-with-uaa-down.sh
+authnz-mgt/sessions-oauth-keycloak.sh
 mgt/amqp10-connections.sh
 mgt/amqp091-connections.sh
 mgt/mqtt-connections.sh
@@ -38,3 +39,4 @@ mgt/queuesAndStreams-basic-stats-no-stream-management.sh
 mgt/feature-flags.sh
 mgt/hide-allow-header.sh
 mgt/enforce-definition-file-extension.sh
+mgt/sessions-basic-auth.sh
