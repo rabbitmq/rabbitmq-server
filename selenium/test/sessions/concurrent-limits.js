@@ -74,7 +74,7 @@ describe('Concurrent Sessions Limits', function () {
 
   it('should allow login after the first session logs out', async function () {
     // 1. Logout from Browser 1
-    await overview1.clickOnLogout()
+    await overview1.logout()
     
     // Wait for logout to complete
     await login1.isLoaded()

@@ -18,11 +18,9 @@ describe('Distributed Conflict Resolution', function () {
   let captureScreen1, captureScreen2
   let isOAuth
 
-  before(async function () {
-    if (!other_rabbitmq_url) {
-      this.skip() // Skip if not running in a cluster environment
-    }
-
+  before(async function () { 
+    console.log('Distributed Conflict Resolution before ' + other_rabbitmq_url)
+    
     isOAuth = hasProfile('oauth2')
 
     // Initialize two separate browser instances
@@ -32,9 +30,7 @@ describe('Distributed Conflict Resolution', function () {
     driver2 = buildDriver(other_rabbitmq_url)
 
     await goToHome(driver1)
-    
-    // For driver2, we need a custom goToHome equivalent since it targets a different URL
-    await driver2.get(other_rabbitmq_url)
+    await goToHome(driver2)
 
     if (isOAuth) {
       login1 = new SSOHomePage(driver1)
@@ -61,26 +57,37 @@ describe('Distributed Conflict Resolution', function () {
     }
   }
 
-  it('should enforce limits across the cluster', async function () {
-    // 1. Login to Node 1 with Browser 1
-    await performLogin(driver1, login1, management_username, management_password)
-    
-    if (!await overview1.isLoaded()) {
-      throw new Error('Failed to login on Node 1')
-    }
+  it('should enforce limits across the cluster with simultaneous logins', async function () {
+    // Attempt login to Node 1 and Node 2 simultaneously
+    await Promise.all([
+      performLogin(driver1, login1, management_username, management_password),
+      performLogin(driver2, login2, management_username, management_password)
+    ])
 
-    // Wait a moment for gossip to propagate across the cluster
+    // Wait a moment for UI to settle
     await driver1.sleep(2000)
 
-    // 2. Attempt login to Node 2 with Browser 2
-    await performLogin(driver2, login2, management_username, management_password)
+    // Check which one succeeded and which one failed
+    let isLoaded1 = await overview1.isLoaded().catch(() => false)
+    let isLoaded2 = await overview2.isLoaded().catch(() => false)
+
+    let isWarningVisible1 = await login1.isWarningVisible().catch(() => false)
+    let isWarningVisible2 = await login2.isWarningVisible().catch(() => false)
+
+    // Exactly one should succeed, exactly one should fail
+    assert.ok(isLoaded1 || isLoaded2, 'At least one login should succeed')
+    assert.ok(!(isLoaded1 && isLoaded2), 'Both logins should not succeed')
+
+    assert.ok(isWarningVisible1 || isWarningVisible2, 'At least one warning should be visible')
     
-    // Verify Browser 2 is blocked on Node 2
-    let isWarningVisible = await login2.isWarningVisible()
-    assert.ok(isWarningVisible, 'Warning message should be visible on Node 2')
-    
-    let warningText = await login2.getWarning()
-    assert.ok(warningText.includes('Concurrent session limit reached'), 'Should show limit reached message on Node 2')
+    if (isWarningVisible1) {
+      let warningText1 = await login1.getWarning()
+      assert.ok(warningText1.includes('Concurrent session limit reached'), 'Should show limit reached message on Node 1')
+    }
+    if (isWarningVisible2) {
+      let warningText2 = await login2.getWarning()
+      assert.ok(warningText2.includes('Concurrent session limit reached'), 'Should show limit reached message on Node 2')
+    }
   })
 
   after(async function () {
