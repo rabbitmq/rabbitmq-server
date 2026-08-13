@@ -40,7 +40,24 @@ removed_from_rabbit_registry(_Type) ->
 list() ->
     Mods = [M || {_, M} <- rabbit_registry:lookup_all(channel_interceptor)],
     Priorities = application:get_env(rabbit, channel_interceptor_priorities, []),
-    [[{name, Mod}, {applies_to, Mod:applies_to()}, {priority, priority(Mod, Priorities)}] || Mod <- Mods].
+    %% A module looked up above may be unloaded before applies_to/0 is called,
+    %% for example when the plugin that provides it is disabled concurrently.
+    %% Skip such modules instead of failing the whole listing.
+    lists:filtermap(
+      fun(Mod) ->
+              try Mod:applies_to() of
+                  AppliesTo ->
+                      {true, [{name, Mod},
+                              {applies_to, AppliesTo},
+                              {priority, priority(Mod, Priorities)}]}
+              catch
+                  error:undef:Stack ->
+                      case Stack of
+                          [{Mod, applies_to, _, _} | _] -> false;
+                          _ -> erlang:raise(error, undef, Stack)
+                      end
+              end
+      end, Mods).
 
 -spec set_priorities([{module(), integer()}]) ->
     ok | {error, string()}.
@@ -61,11 +78,12 @@ set_priorities(NewPriorities) ->
         [] ->
             ok = application:set_env(rabbit, channel_interceptor_priorities, Merged),
             rabbit_channel:refresh_interceptors();
-        Operations ->
+        Conflicts ->
             {error, rabbit_misc:format(
                       "cannot set channel interceptor priorities: more than one "
-                      "interceptor at the same priority would handle ~tp",
-                      [Operations])}
+                      "interceptor at the same priority would handle the same "
+                      "operations, conflicts (priority, modules, operations): ~tp",
+                      [Conflicts])}
     end.
 
 init(Ch) ->
@@ -74,22 +92,33 @@ init(Ch) ->
     Sorted = lists:sort(fun(A, B) -> priority(A, Priorities) =< priority(B, Priorities) end, Mods),
     case overlapping_operations(Sorted, Priorities) of
         [] -> ok;
-        Operations ->
-            internal_error("Interceptor: more than one module handles ~tp", [Operations])
+        Conflicts ->
+            internal_error("Interceptor: more than one module handles the same "
+                           "operations at the same priority, conflicts "
+                           "(priority, modules, operations): ~tp", [Conflicts])
     end,
     [{Mod, Mod:init(Ch)} || Mod <- Sorted].
 
-%% Return the AMQP operations handled by more than one interceptor at the same
-%% priority. Interceptors with different priorities may overlap freely, since
-%% the order in which they run is then well defined. An empty list means the
-%% given configuration is unambiguous.
+%% Return the conflicts where more than one interceptor at the same priority
+%% handles the same AMQP operations, as a list of {Priority, Modules,
+%% Operations} tuples. Interceptors with different priorities may overlap
+%% freely, since the order in which they run is then well defined. An empty
+%% list means the given configuration is unambiguous.
 overlapping_operations(Mods, Priorities) ->
     ByPriority = lists:foldl(fun(Mod, Acc) ->
                                  P = priority(Mod, Priorities),
                                  maps:update_with(P, fun(Ms) -> [Mod | Ms] end, [Mod], Acc)
                              end, #{}, Mods),
-    maps:fold(fun(_Priority, Group, Acc) ->
-                  overlap_in_group(Group) ++ Acc
+    maps:fold(fun(Priority, Group, Acc) ->
+                  case overlap_in_group(Group) of
+                      [] -> Acc;
+                      Operations ->
+                          Conflicting = [M || M <- Group,
+                                              lists:any(fun(Op) ->
+                                                            lists:member(Op, M:applies_to())
+                                                        end, Operations)],
+                          [{Priority, Conflicting, Operations} | Acc]
+                  end
               end, [], ByPriority).
 
 overlap_in_group(Mods) ->
