@@ -108,6 +108,7 @@
      CommittedChunkId :: osiris:offset(),
      Chunk :: binary()} |
     {credit, subscription_id(), Credit :: non_neg_integer()} |
+    {credit_v2, subscription_id(), CreditBytes :: non_neg_integer()} |
     {metadata_update, stream_name(), response_code()} |
     {store_offset, offset_ref(), stream_name(), osiris:offset()} |
     heartbeat |
@@ -122,6 +123,12 @@
       stream_name(),
       offset_spec(),
       credit(),
+      Properties :: #{binary() => binary()}} |
+     {subscribe_v2,
+      subscription_id(),
+      stream_name(),
+      offset_spec(),
+      CreditBytes :: non_neg_integer(),
       Properties :: #{binary() => binary()}} |
      {query_offset, offset_ref(), stream_name()} |
      {unsubscribe, subscription_id()} |
@@ -366,6 +373,12 @@ frame({credit, SubscriptionId, Credit}) ->
                     ?VERSION_1:16,
                     SubscriptionId:8,
                     Credit:16/signed>>);
+frame({credit_v2, SubscriptionId, Credit}) ->
+    wrap_in_frame(<<?REQUEST:1,
+                    ?COMMAND_CREDIT:15,
+                    ?VERSION_2:16,
+                    SubscriptionId:8,
+                    Credit:32>>);
 frame({tune, FrameMax, Heartbeat}) ->
     %% tune can also be a response, which is weird
     wrap_in_frame(<<?REQUEST:1,
@@ -384,9 +397,10 @@ frame({publish_error, PublisherId, ErrCode, PublishingIds}) ->
 frame({request, CorrelationId, Body}) ->
     {CmdTag, BodyBin} = request_body(Body),
     CmdId = command_id(CmdTag),
+    Version = request_version(CmdTag),
     wrap_in_frame([<<?REQUEST:1,
                      CmdId:15,
-                     ?VERSION_1:16,
+                     Version:16,
                      CorrelationId:32>>,
                    BodyBin]);
 frame({response, _CorrelationId, {credit, Code, SubscriptionId}}) ->
@@ -574,6 +588,12 @@ response_body({stream_stats = Tag, Code, Stats}) ->
                end,
                Init, Stats)}.
 
+%% Requests are version 1 unless listed here.
+request_version(subscribe_v2) ->
+    ?VERSION_2;
+request_version(_) ->
+    ?VERSION_1.
+
 request_body({declare_publisher = Tag,
               PublisherId,
               WriterRef,
@@ -600,29 +620,16 @@ request_body({subscribe = Tag,
               OffsetSpec,
               Credit,
               Properties}) ->
-    Data =
-        case OffsetSpec of
-            first ->
-                <<?OFFSET_TYPE_FIRST:16, Credit:16>>;
-            last ->
-                <<?OFFSET_TYPE_LAST:16, Credit:16>>;
-            next ->
-                <<?OFFSET_TYPE_NEXT:16, Credit:16>>;
-            Offset when is_integer(Offset) ->
-                <<?OFFSET_TYPE_OFFSET:16, Offset:64/unsigned, Credit:16>>;
-            {timestamp, Timestamp} ->
-                <<?OFFSET_TYPE_TIMESTAMP:16, Timestamp:64/signed, Credit:16>>
-        end,
-    PropertiesBin =
-        case map_size(Properties) of
-            0 ->
-                <<>>;
-            _ ->
-                PropsBin = generate_map(Properties),
-                [<<(map_size(Properties)):32>>, PropsBin]
-        end,
-    {Tag,
-     [<<SubscriptionId:8, ?STRING(Stream), Data/binary>> | PropertiesBin]};
+    {Tag, subscribe_body(SubscriptionId, Stream, OffsetSpec, <<Credit:16>>,
+                         Properties)};
+request_body({subscribe_v2 = Tag,
+              SubscriptionId,
+              Stream,
+              OffsetSpec,
+              Credit,
+              Properties}) ->
+    {Tag, subscribe_body(SubscriptionId, Stream, OffsetSpec, <<Credit:32>>,
+                         Properties)};
 request_body({store_offset = Tag, OffsetRef, Stream, Offset}) ->
     {Tag, <<?STRING(OffsetRef), ?STRING(Stream), Offset:64>>};
 request_body({query_offset = Tag, OffsetRef, Stream}) ->
@@ -711,6 +718,32 @@ request_body({resolve_offset_spec = Tag, Stream, OffsetSpec, Properties}) ->
         end,
     {Tag, [<<?STRING(Stream), OffsetSpecBin/binary>> | PropertiesBin]}.
 
+subscribe_body(SubscriptionId, Stream, OffsetSpec, CreditBin, Properties) ->
+    Data =
+        case OffsetSpec of
+            first ->
+                <<?OFFSET_TYPE_FIRST:16, CreditBin/binary>>;
+            last ->
+                <<?OFFSET_TYPE_LAST:16, CreditBin/binary>>;
+            next ->
+                <<?OFFSET_TYPE_NEXT:16, CreditBin/binary>>;
+            Offset when is_integer(Offset) ->
+                <<?OFFSET_TYPE_OFFSET:16, Offset:64/unsigned,
+                  CreditBin/binary>>;
+            {timestamp, Timestamp} ->
+                <<?OFFSET_TYPE_TIMESTAMP:16, Timestamp:64/signed,
+                  CreditBin/binary>>
+        end,
+    PropertiesBin =
+        case map_size(Properties) of
+            0 ->
+                <<>>;
+            _ ->
+                PropsBin = generate_map(Properties),
+                [<<(map_size(Properties)):32>>, PropsBin]
+        end,
+    [<<SubscriptionId:8, ?STRING(Stream), Data/binary>> | PropertiesBin].
+
 append_data(Prev, Data) ->
     [Prev, Data].
 
@@ -772,6 +805,12 @@ parse_request(<<?REQUEST:1,
                 Credit:16/signed>>) ->
     {credit, SubscriptionId, Credit};
 parse_request(<<?REQUEST:1,
+                ?COMMAND_CREDIT:15,
+                ?VERSION_2:16,
+                SubscriptionId:8,
+                Credit:32>>) ->
+    {credit_v2, SubscriptionId, Credit};
+parse_request(<<?REQUEST:1,
                 ?COMMAND_PUBLISH_ERROR:15,
                 ?VERSION_1:16,
                 PublisherId:8,
@@ -828,28 +867,28 @@ parse_request(<<?REQUEST:1,
                 ?STRING(StreamSize, Stream),
                 OffsetType:16/signed,
                 OffsetCreditProperties/binary>>) ->
+    %% version 1 parses credit as signed, kept as is for backwards compatibility.
     {OffsetSpec, Credit, PropsBin} =
-        case OffsetType of
-            ?OFFSET_TYPE_FIRST ->
-                <<Crdt:16, PropertiesBin/binary>> = OffsetCreditProperties,
-                {first, Crdt, PropertiesBin};
-            ?OFFSET_TYPE_LAST ->
-                <<Crdt:16, PropertiesBin/binary>> = OffsetCreditProperties,
-                {last, Crdt, PropertiesBin};
-            ?OFFSET_TYPE_NEXT ->
-                <<Crdt:16, PropertiesBin/binary>> = OffsetCreditProperties,
-                {next, Crdt, PropertiesBin};
-            ?OFFSET_TYPE_OFFSET ->
-                <<Offset:64/unsigned, Crdt:16, PropertiesBin/binary>> =
-                    OffsetCreditProperties,
-                {Offset, Crdt, PropertiesBin};
-            ?OFFSET_TYPE_TIMESTAMP ->
-                <<Timestamp:64/signed, Crdt:16, PropertiesBin/binary>> =
-                    OffsetCreditProperties,
-                {{timestamp, Timestamp}, Crdt, PropertiesBin}
-        end,
+        parse_offset_spec_credit(OffsetType, 16, OffsetCreditProperties),
     request(CorrelationId,
             {subscribe,
+             SubscriptionId,
+             Stream,
+             OffsetSpec,
+             Credit,
+             parse_properties(PropsBin)});
+parse_request(<<?REQUEST:1,
+                ?COMMAND_SUBSCRIBE:15,
+                ?VERSION_2:16,
+                CorrelationId:32,
+                SubscriptionId:8,
+                ?STRING(StreamSize, Stream),
+                OffsetType:16/signed,
+                OffsetCreditProperties/binary>>) ->
+    {OffsetSpec, Credit, PropsBin} =
+        parse_offset_spec_credit(OffsetType, 32, OffsetCreditProperties),
+    request(CorrelationId,
+            {subscribe_v2,
              SubscriptionId,
              Stream,
              OffsetSpec,
@@ -1020,6 +1059,34 @@ parse_request(<<?REQUEST:1,
     request(CorrelationId, {resolve_offset_spec, Stream, OffsetSpec, parse_properties(PropsBin)});
 parse_request(Bin) ->
     {unknown, Bin}.
+
+%% Credit is signed in version 1 and unsigned in version 2, so the size (a
+%% runtime value) cannot carry the sign (a literal binary segment modifier);
+%% hence the two clauses instead of one parameterised by CreditSize.
+parse_offset_spec_credit(OffsetType, 16, Bin) ->
+    {OffsetSpec, Rest} = parse_offset_spec(OffsetType, Bin),
+    <<Credit:16/signed, PropsBin/binary>> = Rest,
+    {OffsetSpec, Credit, PropsBin};
+parse_offset_spec_credit(OffsetType, 32, Bin) ->
+    {OffsetSpec, Rest} = parse_offset_spec(OffsetType, Bin),
+    <<Credit:32/unsigned, PropsBin/binary>> = Rest,
+    {OffsetSpec, Credit, PropsBin}.
+
+parse_offset_spec(OffsetType, Bin) ->
+    case OffsetType of
+        ?OFFSET_TYPE_FIRST ->
+            {first, Bin};
+        ?OFFSET_TYPE_LAST ->
+            {last, Bin};
+        ?OFFSET_TYPE_NEXT ->
+            {next, Bin};
+        ?OFFSET_TYPE_OFFSET ->
+            <<Offset:64/unsigned, Rest/binary>> = Bin,
+            {Offset, Rest};
+        ?OFFSET_TYPE_TIMESTAMP ->
+            <<Timestamp:64/signed, Rest/binary>> = Bin,
+            {{timestamp, Timestamp}, Rest}
+    end.
 
 parse_response(<<?RESPONSE:1,
                  ?COMMAND_OPEN:15,
@@ -1259,11 +1326,15 @@ command_id(delete_publisher) ->
     ?COMMAND_DELETE_PUBLISHER;
 command_id(subscribe) ->
     ?COMMAND_SUBSCRIBE;
+command_id(subscribe_v2) ->
+    ?COMMAND_SUBSCRIBE;
 command_id(deliver) ->
     ?COMMAND_DELIVER;
 command_id(deliver_v2) ->
     ?COMMAND_DELIVER;
 command_id(credit) ->
+    ?COMMAND_CREDIT;
+command_id(credit_v2) ->
     ?COMMAND_CREDIT;
 command_id(store_offset) ->
     ?COMMAND_STORE_OFFSET;
