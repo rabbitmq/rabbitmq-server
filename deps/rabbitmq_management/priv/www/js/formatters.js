@@ -183,11 +183,14 @@ function args_to_features(obj) {
     var res = {};
     for (var k in obj.arguments) {
         if (k in KNOWN_ARGS) {
-            res[k] = fmt_escape_feature(obj.arguments[k]);
+            // Exclude SAC which is the only boolean feature
+            if (obj.arguments[k] !== false) {
+                res[k] = obj.arguments[k];
+            }
         }
         else {
             if (res.arguments == undefined) res.arguments = {};
-            res.arguments[fmt_escape_html(k)] = fmt_escape_html(obj.arguments[k]);
+            res.arguments[fmt_escape_html(k)] = obj.arguments[k];
         }
     }
     if (obj.exclusive) {
@@ -498,15 +501,6 @@ function fmt_strip_tags(txt) {
         return "";
     }
     return ("" + txt).replace(/<(?:.|\n)*?>/gm, '');
-}
-
-function fmt_escape_feature(txt) {
-    // Exclude SAC which is the only boolean feature
-    if(txt === false) {
-        return undefined;
-    } else {
-        return fmt_escape_html0(txt).replace(/\n/g, '<br/>');
-    }
 }
 
 function fmt_escape_html(txt) {
