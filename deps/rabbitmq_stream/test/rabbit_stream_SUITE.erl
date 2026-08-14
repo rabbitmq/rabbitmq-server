@@ -96,6 +96,12 @@ groups() ->
        frame_max_clamped_when_client_negotiates_higher,
        client_tune_response_with_zero_frame_max_is_unlimited,
        test_stream_test_utils,
+       subscribe_v2_byte_credit_spans_chunks,
+       subscribe_v2_overshoot_single_chunk,
+       subscribe_v2_chunk_larger_than_window,
+       subscribe_v2_filtered_chunks_cost_no_credit,
+       credit_unit_mismatch_is_rejected,
+       subscribe_v2_zero_credit,
        sac_subscription_with_partition_index_conflict_should_return_error,
        test_metadata_with_advertised_hints,
        test_connection_properties_with_advertised_hints,
@@ -651,6 +657,249 @@ publish_v2_no_filter_value_to_unknown_publisher(Config) ->
     _C6 = test_close(Transport, S, C5),
     closed = wait_for_socket_close(Transport, S, 10),
     ok.
+
+subscribe_v2_byte_credit_spans_chunks(Config) ->
+    Stream = atom_to_binary(?FUNCTION_NAME, utf8),
+    {ok, S, C0} = stream_test_utils:connect(Config, 0),
+    {ok, C1} = stream_test_utils:create_stream(S, C0, Stream),
+    PubId = 1,
+    {ok, C2} = stream_test_utils:declare_publisher(S, C1, Stream, PubId),
+    Body = <<"hello">>,
+    ChunkCost = chunk_cost(Body),
+    {ok, C3} = publish_one_chunk_per_message(S, C2, PubId, lists:duplicate(10, Body)),
+
+    SubId = 1,
+    Credit = 3 * ChunkCost + 1,
+    {ok, C4} = stream_test_utils:subscribe_v2(S, C3, Stream, SubId, Credit,
+                                              #{}, first),
+
+    C8 = lists:foldl(fun(_, CAcc) ->
+                             {{deliver_v2, SubId, _, _}, CNext} =
+                                 receive_commands(S, CAcc),
+                             CNext
+                     end, C4, lists:seq(1, 4)),
+    C9 = assert_no_deliver(gen_tcp, S, C8, 500),
+
+    {ok, C10} = stream_test_utils:unsubscribe(S, C9, SubId),
+    {ok, C11} = stream_test_utils:delete_publisher(S, C10, PubId),
+    {ok, C12} = stream_test_utils:delete_stream(S, C11, Stream),
+    {ok, _} = stream_test_utils:close(S, C12),
+    ok.
+
+subscribe_v2_overshoot_single_chunk(Config) ->
+    Stream = atom_to_binary(?FUNCTION_NAME, utf8),
+    {ok, S, C0} = stream_test_utils:connect(Config, 0),
+    {ok, C1} = stream_test_utils:create_stream(S, C0, Stream),
+    PubId = 1,
+    {ok, C2} = stream_test_utils:declare_publisher(S, C1, Stream, PubId),
+    Body = <<"hello">>,
+    ChunkCost = chunk_cost(Body),
+    {ok, C3} = publish_one_chunk_per_message(S, C2, PubId, lists:duplicate(3, Body)),
+
+    SubId = 1,
+    {ok, C4} = stream_test_utils:subscribe_v2(S, C3, Stream, SubId, 1, #{}, first),
+
+    {{deliver_v2, SubId, _, _}, C5} = receive_commands(S, C4),
+    C6 = assert_no_deliver(gen_tcp, S, C5, 500),
+
+    ok = stream_test_utils:credit_v2(S, SubId, ChunkCost),
+    {{deliver_v2, SubId, _, _}, C7} = receive_commands(S, C6),
+    C8 = assert_no_deliver(gen_tcp, S, C7, 500),
+
+    {ok, C9} = stream_test_utils:unsubscribe(S, C8, SubId),
+    {ok, C10} = stream_test_utils:delete_publisher(S, C9, PubId),
+    {ok, C11} = stream_test_utils:delete_stream(S, C10, Stream),
+    {ok, _} = stream_test_utils:close(S, C11),
+    ok.
+
+subscribe_v2_chunk_larger_than_window(Config) ->
+    Stream = atom_to_binary(?FUNCTION_NAME, utf8),
+    {ok, S, C0} = stream_test_utils:connect(Config, 0),
+    {ok, C1} = stream_test_utils:create_stream(S, C0, Stream),
+    PubId = 1,
+    {ok, C2} = stream_test_utils:declare_publisher(S, C1, Stream, PubId),
+    Body = binary:copy(<<"a">>, 10240),
+    {ok, C3} = stream_test_utils:publish(S, C2, PubId, 1, [Body]),
+
+    SubId = 1,
+    {ok, C4} = stream_test_utils:subscribe_v2(S, C3, Stream, SubId, 100, #{}, first),
+
+    {{deliver_v2, SubId, _, Chunk}, C5} = receive_commands(S, C4),
+    ?assert(byte_size(Chunk) > 10240),
+
+    {ok, C6} = stream_test_utils:unsubscribe(S, C5, SubId),
+    {ok, C7} = stream_test_utils:delete_publisher(S, C6, PubId),
+    {ok, C8} = stream_test_utils:delete_stream(S, C7, Stream),
+    {ok, _} = stream_test_utils:close(S, C8),
+    ok.
+
+subscribe_v2_filtered_chunks_cost_no_credit(Config) ->
+    FunctionName = atom_to_binary(?FUNCTION_NAME, utf8),
+    Port = get_stream_port(Config),
+    ConnectionName = FunctionName,
+    {ok, S, C0} = stream_test_utils:connect_pp(Port,
+                                               #{<<"connection_name">> => ConnectionName}),
+    Stream = FunctionName,
+    {ok, C1} = stream_test_utils:create_stream(S, C0, Stream),
+    PubId = 1,
+    {ok, C2} = stream_test_utils:declare_publisher(S, C1, Stream, PubId),
+
+    NonMatchingBody = <<"non-matching-payload">>,
+    MatchingBody = <<"hello">>,
+    NonMatchingCount = 5,
+    C3 = lists:foldl(fun(Seq, CAcc) ->
+                             publish_filtered(gen_tcp, S, PubId, Seq, <<"bar">>,
+                                              NonMatchingBody, CAcc)
+                     end, C2, lists:seq(1, NonMatchingCount)),
+    C4 = publish_filtered(gen_tcp, S, PubId, NonMatchingCount + 1, <<"foo">>,
+                          MatchingBody, C3),
+
+    ChunkCost = chunk_cost(MatchingBody),
+    Window = ChunkCost + 10,
+    SubId = 1,
+    {ok, C5} = stream_test_utils:subscribe_v2(S, C4, Stream, SubId, Window,
+                                              #{<<"filter.0">> => <<"foo">>},
+                                              first),
+
+    {{deliver_v2, SubId, _, _}, C6} = receive_commands(S, C5),
+    C7 = assert_no_deliver(gen_tcp, S, C6, 500),
+
+    ?assertEqual(Window - ChunkCost, consumer_credits(Config, ConnectionName)),
+
+    {ok, C8} = stream_test_utils:unsubscribe(S, C7, SubId),
+    {ok, C9} = stream_test_utils:delete_publisher(S, C8, PubId),
+    {ok, C10} = stream_test_utils:delete_stream(S, C9, Stream),
+    {ok, _} = stream_test_utils:close(S, C10),
+    ok.
+
+credit_unit_mismatch_is_rejected(Config) ->
+    FunctionName = atom_to_binary(?FUNCTION_NAME, utf8),
+    Port = get_stream_port(Config),
+    ConnectionName = FunctionName,
+    {ok, S, C0} = stream_test_utils:connect_pp(Port,
+                                               #{<<"connection_name">> => ConnectionName}),
+    Stream = FunctionName,
+    {ok, C1} = stream_test_utils:create_stream(S, C0, Stream),
+
+    SubId = 1,
+    InitialCredit = 1000,
+    {ok, C2} = stream_test_utils:subscribe_v2(S, C1, Stream, SubId,
+                                              InitialCredit, #{}, first),
+    ok = stream_test_utils:credit(S, SubId, 500),
+    {Cmd1, C3} = receive_commands(S, C2),
+    %% the credit response carries no correlation ID on the wire, so it is
+    %% always parsed back with a fake ID of 0
+    ?assertMatch({response, 0,
+                  {credit, ?RESPONSE_CODE_PRECONDITION_FAILED, SubId}}, Cmd1),
+    C4 = assert_no_deliver(gen_tcp, S, C3, 500),
+    ?assertEqual(InitialCredit, consumer_credits(Config, ConnectionName)),
+    {ok, C5} = stream_test_utils:unsubscribe(S, C4, SubId),
+
+    SubId2 = 2,
+    {ok, C6} = stream_test_utils:subscribe(S, C5, Stream, SubId2, InitialCredit),
+    ok = stream_test_utils:credit_v2(S, SubId2, 500),
+    {Cmd2, C7} = receive_commands(S, C6),
+    ?assertMatch({response, 0,
+                  {credit, ?RESPONSE_CODE_PRECONDITION_FAILED, SubId2}}, Cmd2),
+    C8 = assert_no_deliver(gen_tcp, S, C7, 500),
+    ?assertEqual(InitialCredit, consumer_credits(Config, ConnectionName)),
+    {ok, C9} = stream_test_utils:unsubscribe(S, C8, SubId2),
+
+    {ok, C10} = stream_test_utils:delete_stream(S, C9, Stream),
+    {ok, _} = stream_test_utils:close(S, C10),
+    ok.
+
+subscribe_v2_zero_credit(Config) ->
+    Stream = atom_to_binary(?FUNCTION_NAME, utf8),
+    {ok, S, C0} = stream_test_utils:connect(Config, 0),
+    {ok, C1} = stream_test_utils:create_stream(S, C0, Stream),
+    PubId = 1,
+    {ok, C2} = stream_test_utils:declare_publisher(S, C1, Stream, PubId),
+    Body = <<"hello">>,
+    {ok, C3} = stream_test_utils:publish(S, C2, PubId, 1, [Body]),
+
+    SubId = 1,
+    {ok, C4} = stream_test_utils:subscribe_v2(S, C3, Stream, SubId, 0, #{}, first),
+    C5 = assert_no_deliver(gen_tcp, S, C4, 500),
+
+    ChunkCost = chunk_cost(Body),
+    ok = stream_test_utils:credit_v2(S, SubId, ChunkCost),
+    {{deliver_v2, SubId, _, _}, C6} = receive_commands(S, C5),
+
+    {ok, C7} = stream_test_utils:unsubscribe(S, C6, SubId),
+    {ok, C8} = stream_test_utils:delete_publisher(S, C7, PubId),
+    {ok, C9} = stream_test_utils:delete_stream(S, C8, Stream),
+    {ok, _} = stream_test_utils:close(S, C9),
+    ok.
+
+%% --------------------------------------------------------------
+%% helpers
+%% --------------------------------------------------------------
+
+%% The stream protocol and the broker never interpret message bodies, so
+%% these helpers use a raw, unencoded entry rather than an AMQP 1.0 one.
+%%
+%% One chunk holding a single message costs 48 bytes (chunk header) plus the
+%% stored entry size: a 4-byte entry header (1-bit flag, 31-bit body length)
+%% plus the body. The publishing ID sent in a `publish` frame is a
+%% client-assigned correlation ID used only for confirms, it is not part of
+%% the stored entry and does not add to this cost.
+chunk_cost(Body) ->
+    ChunkHeaderSize = 48,
+    ChunkHeaderSize + entry_cost(Body).
+
+entry_cost(Body) ->
+    4 + byte_size(Body).
+
+%% Wire-format message for a `publish` frame: publishing ID (correlation ID
+%% for confirms) followed by the entry that ends up stored in the chunk.
+publish_message(PublishingId, Body) ->
+    BodySize = byte_size(Body),
+    <<PublishingId:64, 0:1, BodySize:31, Body:BodySize/binary>>.
+
+%% Publishing one message per call, waiting for its confirm before the next,
+%% guarantees each message lands in its own chunk.
+publish_one_chunk_per_message(S, C0, PublisherId, Bodies) ->
+    Sequences = lists:seq(1, length(Bodies)),
+    lists:foldl(fun({Seq, Body}, {ok, CAcc}) ->
+                        Message = publish_message(Seq, Body),
+                        {ok, _SeqIds, CNext} =
+                            stream_test_utils:publish_entries(S, CAcc, PublisherId, 1, [Message]),
+                        {ok, CNext}
+                end, {ok, C0}, lists:zip(Sequences, Bodies)).
+
+publish_filtered(Transport, S, PublisherId, Sequence, FilterValue, Body, C0) ->
+    BodySize = byte_size(Body),
+    FilterValueSize = byte_size(FilterValue),
+    Message = <<Sequence:64, FilterValueSize:16, FilterValue:FilterValueSize/binary,
+               0:1, BodySize:31, Body:BodySize/binary>>,
+    PublishFrame = frame({publish_v2, PublisherId, 1, [Message]}),
+    ok = Transport:send(S, PublishFrame),
+    {Cmd, C} = receive_commands(Transport, S, C0),
+    ?assertMatch({publish_confirm, PublisherId, [Sequence]}, Cmd),
+    C.
+
+%% Asserts nothing arrives within Timeout: no pending parsed command and no
+%% new data on the socket.
+assert_no_deliver(Transport, S, C0, Timeout) ->
+    case rabbit_stream_core:next_command(C0) of
+        empty ->
+            case Transport:recv(S, 0, Timeout) of
+                {error, timeout} ->
+                    C0;
+                {ok, Data} ->
+                    C1 = rabbit_stream_core:incoming_data(Data, C0),
+                    {Cmds, _} = rabbit_stream_core:all_commands(C1),
+                    ct:fail("expected no data, got ~tp", [Cmds])
+            end;
+        {Cmd, _} ->
+            ct:fail("expected no command, got ~tp", [Cmd])
+    end.
+
+consumer_credits(Config, ConnectionName) ->
+    [[{credits, Credits}]] = rpc(Config, 0, ?MODULE,
+                                 list_consumer_info, [ConnectionName, [credits]]),
+    Credits.
 
 publish_sub_batch_expect(Transport, S, PublisherId, Sequence, Entry, ExpectedCommand, C0) ->
     PublishFrame = frame({publish, PublisherId, 1, [Entry]}),

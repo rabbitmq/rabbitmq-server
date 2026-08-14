@@ -103,8 +103,21 @@ subscribe(Sock, C0, Stream, SubscriptionId, InitialCredit, Props, OffsetSpec) ->
     {{response, 1, {subscribe, ?RESPONSE_CODE_OK}}, C1} = receive_stream_commands(Sock, C0),
     {ok, C1}.
 
+subscribe_v2(Sock, C0, Stream, SubscriptionId, InitialCredit, Props, OffsetSpec) ->
+    Cmd = {subscribe_v2, SubscriptionId, Stream, OffsetSpec,
+           InitialCredit, Props},
+    SubscribeFrame = rabbit_stream_core:frame({request, 1, Cmd}),
+    ok = gen_tcp:send(Sock, SubscribeFrame),
+    {{response, 1, {subscribe, ?RESPONSE_CODE_OK}}, C1} = receive_stream_commands(Sock, C0),
+    {ok, C1}.
+
 credit(Sock, Subscription, Credit) ->
     CreditFrame = rabbit_stream_core:frame({credit, Subscription, Credit}),
+    ok = gen_tcp:send(Sock, CreditFrame),
+    ok.
+
+credit_v2(Sock, Subscription, Credit) ->
+    CreditFrame = rabbit_stream_core:frame({credit_v2, Subscription, Credit}),
     ok = gen_tcp:send(Sock, CreditFrame),
     ok.
 
