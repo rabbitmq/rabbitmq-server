@@ -23,7 +23,7 @@
         <td class="c"><%= consumer.consumed %></td>
         <td class="c"><%= consumer.offset %></td>
         <td class="c"><%= consumer.offset_lag %></td>
-        <td class="c"><%= consumer.credits %></td>
+        <td class="c"><%= consumer.credits %> <%= consumer.credit_unit %></td>
         <td class="c"><%= fmt_boolean(consumer.active, "&#9679;") %></td>
         <td class="c"><%= fmt_activity_status(consumer.activity_status, "up") %></td>
         <td class="c"><%= fmt_table_short(consumer.properties) %></td>

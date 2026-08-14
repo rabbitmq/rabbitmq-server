@@ -3291,6 +3291,7 @@ maybe_dispatch_on_subscription(Transport,
                                                    stream_r(Stream, Connection),
                                                    SubscriptionId,
                                                    Credit1,
+                                                   consumer_i(credit_unit, ConsumerState1),
                                                    messages_consumed(ConsumerCounters1),
                                                    ConsumerOffset,
                                                    ConsumerOffsetLag,
@@ -3315,13 +3316,15 @@ maybe_dispatch_on_subscription(_Transport,
                      [SubscriptionId]),
     #consumer{credit = Credit,
               configuration =
-                  #consumer_configuration{offset = Offset, active = Active}} =
+                  #consumer_configuration{offset = Offset, active = Active,
+                                          credit_unit = CreditUnit}} =
         ConsumerState,
 
     rabbit_stream_metrics:consumer_created(self(),
                                            stream_r(Stream, Connection),
                                            SubscriptionId,
                                            Credit,
+                                           CreditUnit,
                                            0, %% messages consumed
                                            Offset,
                                            0, %% offset lag
@@ -4186,6 +4189,7 @@ emit_stats(#stream_connection{publishers = Publishers} = Connection,
                                             stream_r(S, Connection),
                                             Id,
                                             Credit,
+                                            CreditUnit,
                                             messages_consumed(Counters),
                                             consumer_offset(Counters),
                                             consumer_i(offset_lag, Consumer),
@@ -4196,7 +4200,8 @@ emit_stats(#stream_connection{publishers = Publishers} = Connection,
                                               subscription_id = Id,
                                               counters = Counters,
                                               active = Active,
-                                              properties = Properties},
+                                              properties = Properties,
+                                              credit_unit = CreditUnit},
                   credit = Credit} =
             Consumer
             <- maps:values(Consumers)],
@@ -4251,6 +4256,10 @@ consumer_i(subscription_id,
     SubId;
 consumer_i(credits, #consumer{credit = Credits}) ->
     Credits;
+consumer_i(credit_unit,
+           #consumer{configuration =
+                         #consumer_configuration{credit_unit = Unit}}) ->
+    Unit;
 consumer_i(messages_consumed,
            #consumer{configuration =
                          #consumer_configuration{counters = Counters}}) ->
