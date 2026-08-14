@@ -2805,6 +2805,9 @@ test_exchange_command_versions(Transport, S, C0) ->
                   {exchange_command_versions, ?RESPONSE_CODE_OK,
                    [{declare_publisher, _, _} | _]}},
                  Cmd),
+    {response, 1, {exchange_command_versions, ?RESPONSE_CODE_OK, Versions}} = Cmd,
+    ?assert(lists:member({subscribe, ?VERSION_1, ?VERSION_2}, Versions)),
+    ?assert(lists:member({credit, ?VERSION_1, ?VERSION_2}, Versions)),
     C.
 
 test_stream_stats(Transport, S, Stream, C0) ->
