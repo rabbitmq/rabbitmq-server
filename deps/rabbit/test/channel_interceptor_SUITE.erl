@@ -419,21 +419,21 @@ list_skips_unloaded_interceptor(Config) ->
       ?MODULE, list_skips_unloaded_interceptor1, [Config]).
 
 list_skips_unloaded_interceptor1(_Config) ->
-    ok = rabbit_registry:register(channel_interceptor,
-                                  <<"dummy interceptor">>,
-                                  dummy_interceptor),
-    %% This module is never loaded, simulating a plugin disabled concurrently
-    %% with the lookup in rabbit_registry.
-    ok = rabbit_registry:register(channel_interceptor,
-                                  <<"unloaded interceptor">>,
-                                  no_such_channel_interceptor_module),
+    %% `register/3` rejects unloaded modules, so `lookup_all/1` is stubbed instead.
+    ok = meck:new(rabbit_registry, [passthrough]),
+    meck:expect(rabbit_registry, lookup_all,
+                fun(channel_interceptor) ->
+                        [{<<"dummy interceptor">>, dummy_interceptor},
+                         {<<"unloaded interceptor">>, no_such_channel_interceptor_module}];
+                   (Class) ->
+                        meck:passthrough([Class])
+                end),
     try
         ?assertEqual(
             [dummy_interceptor],
             [proplists:get_value(name, L) || L <- rabbit_channel_interceptor:list()])
     after
-        rabbit_registry:unregister(channel_interceptor, <<"dummy interceptor">>),
-        rabbit_registry:unregister(channel_interceptor, <<"unloaded interceptor">>)
+        meck:unload(rabbit_registry)
     end,
     passed.
 
