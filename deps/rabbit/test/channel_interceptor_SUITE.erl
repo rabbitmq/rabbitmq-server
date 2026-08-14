@@ -31,7 +31,9 @@ groups() ->
           reject_interceptors_with_same_priority_for_same_operation,
           set_priorities_rejects_conflict_without_committing,
           set_priorities_rejects_unknown_interceptor,
-          priority_overridden_by_config
+          priority_overridden_by_config,
+          list_skips_unloaded_interceptor,
+          warn_unknown_priorities_logs_a_warning
         ]}
     ].
 
@@ -106,66 +108,25 @@ register_interceptor1(Config, Interceptor) ->
 
 register_interceptor_failing_with_amqp_error(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, register_interceptor_failing_with_amqp_error1,
-      [Config, dummy_interceptor]).
-
-register_interceptor_failing_with_amqp_error1(Config, Interceptor) ->
-    PredefinedChannels = rabbit_channel:list(),
-
-    Ch1 = rabbit_ct_client_helpers:open_channel(Config, 0),
-
-    [ChannelProc] = rabbit_channel:list() -- PredefinedChannels,
-
-    [{interceptors, []}] = rabbit_channel:info(ChannelProc, [interceptors]),
-
-    ok = rabbit_registry:register(channel_interceptor,
-                                  <<"dummy interceptor">>,
-                                  Interceptor),
-    [{interceptors, [{Interceptor, undefined}]}] =
-      rabbit_channel:info(ChannelProc, [interceptors]),
-
-    Q1 = <<"succeeding-q">>,
-    #'queue.declare_ok'{} =
-        amqp_channel:call(Ch1, #'queue.declare'{queue = Q1, durable = true}),
-
-    Q2 = <<"failing-with-amqp-error-q">>,
-    try
-        amqp_channel:call(Ch1, #'queue.declare'{queue = Q2, durable = true})
-    catch
-      _:Reason ->
-          ?assertMatch(
-              {{shutdown, {_, _, <<"PRECONDITION_FAILED - operation not allowed">>}}, _},
-              Reason)
-    end,
-
-    Ch2 = rabbit_ct_client_helpers:open_channel(Config, 0),
-    %% After the error, the old channel process will terminate
-    %% asynchronously and may still be on the channel list.
-    %% Wait until there is exactly one live channel.
-    ?awaitMatch(
-      [P] when P =/= ChannelProc,
-      rabbit_channel:list() -- PredefinedChannels,
-      10000),
-    [ChannelProc1] = rabbit_channel:list() -- PredefinedChannels,
-
-    ok = rabbit_registry:unregister(channel_interceptor,
-                                  <<"dummy interceptor">>),
-    [{interceptors, []}] = rabbit_channel:info(ChannelProc1, [interceptors]),
-
-    #'queue.declare_ok'{} =
-        amqp_channel:call(Ch2, #'queue.declare'{queue = Q2, durable = true}),
-
-    #'queue.delete_ok'{} = amqp_channel:call(Ch2, #'queue.delete' {queue = Q1}),
-    #'queue.delete_ok'{} = amqp_channel:call(Ch2, #'queue.delete' {queue = Q2}),
-
-    passed.
+      ?MODULE, register_interceptor_amqp_error1,
+      [Config, dummy_interceptor, <<"failing-with-amqp-error-q">>,
+       fun(Reason) ->
+               ?assertMatch(
+                   {{shutdown, {_, _, <<"PRECONDITION_FAILED - operation not allowed">>}}, _},
+                   Reason)
+       end]).
 
 register_interceptor_crashing_with_amqp_error_exception(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, register_interceptor_crashing_with_amqp_error_exception1,
-      [Config, dummy_interceptor]).
+      ?MODULE, register_interceptor_amqp_error1,
+      [Config, dummy_interceptor, <<"crashing-with-amqp-exception-q">>,
+       fun(Reason) ->
+               ?assertMatch(
+                   {{shutdown, {_, _, <<"PRECONDITION_FAILED - inequivalent arg 'durable' for queue 'crashing-with-amqp-exception-q' in vhost '/': received 'false' but current is 'true'">>}}, _},
+                   Reason)
+       end]).
 
-register_interceptor_crashing_with_amqp_error_exception1(Config, Interceptor) ->
+register_interceptor_amqp_error1(Config, Interceptor, Q2, AssertReason) ->
     PredefinedChannels = rabbit_channel:list(),
 
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, 0),
@@ -184,14 +145,11 @@ register_interceptor_crashing_with_amqp_error_exception1(Config, Interceptor) ->
     #'queue.declare_ok'{} =
         amqp_channel:call(Ch1, #'queue.declare'{queue = Q1, durable = true}),
 
-    Q2 = <<"crashing-with-amqp-exception-q">>,
     try
         amqp_channel:call(Ch1, #'queue.declare'{queue = Q2, durable = true})
     catch
       _:Reason ->
-          ?assertMatch(
-              {{shutdown, {_, _, <<"PRECONDITION_FAILED - inequivalent arg 'durable' for queue 'crashing-with-amqp-exception-q' in vhost '/': received 'false' but current is 'true'">>}}, _},
-              Reason)
+          AssertReason(Reason)
     end,
 
     Ch2 = rabbit_ct_client_helpers:open_channel(Config, 0),
@@ -225,13 +183,7 @@ conflicting_interceptors_close_network_connections_gracefully(Config) ->
       ?MODULE, conflicting_interceptors_close_network_connections_gracefully1, [Config]).
 
 conflicting_interceptors_close_network_connections_gracefully1(Config) ->
-    ok = rabbit_registry:register(channel_interceptor,
-                                  <<"dummy interceptor">>,
-                                  dummy_interceptor),
-    ok = rabbit_registry:register(channel_interceptor,
-                                  <<"conflicting dummy interceptor">>,
-                                  dummy_interceptor_conflicting),
-    try
+    with_conflicting_interceptors(fun() ->
         Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0),
         ?assert(is_pid(Conn)),
         ?assert(is_process_alive(Conn)),
@@ -248,12 +200,7 @@ conflicting_interceptors_close_network_connections_gracefully1(Config) ->
         after 10000 ->
             ct:fail("Connection process did not terminate")
         end
-    after
-        ok = rabbit_registry:unregister(channel_interceptor,
-                                        <<"dummy interceptor">>),
-        ok = rabbit_registry:unregister(channel_interceptor,
-                                        <<"conflicting dummy interceptor">>)
-    end,
+    end),
     %% Verify the server still accepts new connections and channels
     Conn2 = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0),
     ?assert(is_pid(Conn2)),
@@ -267,13 +214,7 @@ conflicting_interceptors_close_direct_connections_gracefully(Config) ->
       ?MODULE, conflicting_interceptors_close_direct_connections_gracefully1, [Config]).
 
 conflicting_interceptors_close_direct_connections_gracefully1(Config) ->
-    ok = rabbit_registry:register(channel_interceptor,
-                                  <<"dummy interceptor">>,
-                                  dummy_interceptor),
-    ok = rabbit_registry:register(channel_interceptor,
-                                  <<"conflicting dummy interceptor">>,
-                                  dummy_interceptor_conflicting),
-    try
+    with_conflicting_interceptors(fun() ->
         Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
         Params = #amqp_params_direct{node = Node,
                                      virtual_host = <<"/">>,
@@ -289,12 +230,7 @@ conflicting_interceptors_close_direct_connections_gracefully1(Config) ->
         ?assertMatch({error, _}, Result),
         ?assert(is_process_alive(Conn)),
         ok = amqp_connection:close(Conn)
-    after
-        ok = rabbit_registry:unregister(channel_interceptor,
-                                        <<"dummy interceptor">>),
-        ok = rabbit_registry:unregister(channel_interceptor,
-                                        <<"conflicting dummy interceptor">>)
-    end,
+    end),
     %% Verify the server still accepts new direct connections and channels
     Node2 = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     Params2 = #amqp_params_direct{node = Node2,
@@ -464,6 +400,77 @@ priority_overridden_by_config1(Config) ->
 
     #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = QName}),
     passed.
+
+list_skips_unloaded_interceptor(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, list_skips_unloaded_interceptor1, [Config]).
+
+list_skips_unloaded_interceptor1(_Config) ->
+    ok = rabbit_registry:register(channel_interceptor,
+                                  <<"dummy interceptor">>,
+                                  dummy_interceptor),
+    %% This module is never loaded, simulating a plugin disabled concurrently
+    %% with the lookup in rabbit_registry.
+    ok = rabbit_registry:register(channel_interceptor,
+                                  <<"unloaded interceptor">>,
+                                  no_such_channel_interceptor_module),
+    try
+        ?assertEqual(
+            [dummy_interceptor],
+            [proplists:get_value(name, L) || L <- rabbit_channel_interceptor:list()])
+    after
+        rabbit_registry:unregister(channel_interceptor, <<"dummy interceptor">>),
+        rabbit_registry:unregister(channel_interceptor, <<"unloaded interceptor">>)
+    end,
+    passed.
+
+warn_unknown_priorities_logs_a_warning(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, warn_unknown_priorities_logs_a_warning1, [Config]).
+
+warn_unknown_priorities_logs_a_warning1(_Config) ->
+    Before = application:get_env(rabbit, channel_interceptor_priorities, []),
+    HandlerId = warn_unknown_priorities_test_handler,
+    ok = logger:add_handler(HandlerId, ?MODULE, #{config => #{pid => self()}}),
+    try
+        ok = application:set_env(rabbit, channel_interceptor_priorities,
+                                 [{no_such_channel_interceptor_module, 1}]),
+        ok = rabbit_channel_interceptor:warn_unknown_priorities(),
+        receive
+            {log_event, #{msg := {Format, Args}}} ->
+                Text = unicode:characters_to_list(io_lib:format(Format, Args)),
+                ?assert(string:find(Text, "no_such_channel_interceptor_module") =/= nomatch)
+        after 5000 ->
+            ct:fail("Expected a warning about an unknown interceptor priority")
+        end
+    after
+        logger:remove_handler(HandlerId),
+        application:set_env(rabbit, channel_interceptor_priorities, Before)
+    end,
+    passed.
+
+%% logger handler callback used by warn_unknown_priorities_logs_a_warning1/1
+log(#{meta := #{mfa := {rabbit_channel_interceptor, warn_unknown_priorities, _}}} = LogEvent,
+    #{config := #{pid := Pid}}) ->
+    Pid ! {log_event, LogEvent};
+log(_LogEvent, _Config) ->
+    ok.
+
+with_conflicting_interceptors(Fun) ->
+    ok = rabbit_registry:register(channel_interceptor,
+                                  <<"dummy interceptor">>,
+                                  dummy_interceptor),
+    ok = rabbit_registry:register(channel_interceptor,
+                                  <<"conflicting dummy interceptor">>,
+                                  dummy_interceptor_conflicting),
+    try
+        Fun()
+    after
+        ok = rabbit_registry:unregister(channel_interceptor,
+                                        <<"dummy interceptor">>),
+        ok = rabbit_registry:unregister(channel_interceptor,
+                                        <<"conflicting dummy interceptor">>)
+    end.
 
 check_send_receive(Ch1, QName, Send, Receive) ->
     amqp_channel:call(Ch1,

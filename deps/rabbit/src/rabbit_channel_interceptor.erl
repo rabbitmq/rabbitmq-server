@@ -42,46 +42,65 @@ removed_from_rabbit_registry(_Type) ->
 list() ->
     Mods = [M || {_, M} <- rabbit_registry:lookup_all(channel_interceptor)],
     Priorities = application:get_env(rabbit, channel_interceptor_priorities, []),
-    %% A module looked up above may be unloaded before applies_to/0 is called,
-    %% for example when the plugin that provides it is disabled concurrently.
-    %% Skip such modules instead of failing the whole listing.
     lists:filtermap(
       fun(Mod) ->
-              try Mod:applies_to() of
+              case safe_applies_to(Mod) of
+                  unloaded -> false;
                   AppliesTo ->
                       {true, [{name, Mod},
                               {applies_to, AppliesTo},
                               {priority, priority(Mod, Priorities)}]}
-              catch
-                  error:undef:Stack ->
-                      case Stack of
-                          [{Mod, applies_to, _, _} | _] -> false;
-                          _ -> erlang:raise(error, undef, Stack)
-                      end
               end
       end, Mods).
 
--spec set_priorities([{module(), integer()}]) ->
+%% A module looked up in the registry may be unloaded before applies_to/0 is
+%% called, for example when the plugin that provides it is disabled
+%% concurrently.
+safe_applies_to(Mod) ->
+    try Mod:applies_to()
+    catch
+        error:undef:Stack ->
+            case Stack of
+                [{Mod, applies_to, _, _} | _] -> unloaded;
+                _ -> erlang:raise(error, undef, Stack)
+            end
+    end.
+
+-spec set_priorities([{module() | unicode:chardata(), integer()}]) ->
     ok | {error, string()}.
-%% Merge the given interceptor priorities into the current configuration,
-%% keeping priorities of interceptors that are not mentioned, and refresh
-%% all channels so the new ordering takes effect. Each given name is first
-%% checked against the registered channel interceptors: a name that matches
-%% none is rejected and nothing is changed, so a misspelled or disabled
-%% interceptor cannot report success while leaving the intended one untouched.
-%% The merged configuration is then validated before it is committed: if it
-%% would make two interceptors at the same priority handle the same AMQP
-%% operation, an error is returned and nothing is changed, so channels keep
-%% working. The change is not persisted and does not survive a node restart.
+%% Merges the given priorities into the current configuration and refreshes
+%% channels so the new ordering takes effect. A name that matches no
+%% registered interceptor, or a merged configuration where two interceptors
+%% at the same priority would handle the same operation, is rejected without
+%% committing anything. Concurrent calls are not synchronized against each
+%% other: the last write wins. The change is not persisted and does not
+%% survive a node restart.
 set_priorities(NewPriorities) ->
     Mods = [M || {_, M} <- rabbit_registry:lookup_all(channel_interceptor)],
-    case [Mod || {Mod, _P} <- NewPriorities, not lists:member(Mod, Mods)] of
+    Resolved = [{Name, resolve_mod(Name, Mods), P} || {Name, P} <- NewPriorities],
+    case [Name || {Name, error, _P} <- Resolved] of
         [] ->
-            set_priorities(NewPriorities, Mods);
+            set_priorities([{Mod, P} || {_Name, {ok, Mod}, P} <- Resolved], Mods);
         Unknown ->
             {error, rabbit_misc:format(
                       "cannot set channel interceptor priorities: the following "
                       "are not registered as channel interceptors: ~tp", [Unknown])}
+    end.
+
+resolve_mod(Mod, Mods) when is_atom(Mod) ->
+    case lists:member(Mod, Mods) of
+        true -> {ok, Mod};
+        false -> error
+    end;
+resolve_mod(Name, Mods) ->
+    try binary_to_existing_atom(iolist_to_binary(Name), utf8) of
+        Mod ->
+            case lists:member(Mod, Mods) of
+                true -> {ok, Mod};
+                false -> error
+            end
+    catch
+        error:badarg -> error
     end.
 
 set_priorities(NewPriorities, Mods) ->
@@ -148,16 +167,22 @@ overlapping_operations(Mods, Priorities) ->
                       Operations ->
                           Conflicting = [M || M <- Group,
                                               lists:any(fun(Op) ->
-                                                            lists:member(Op, M:applies_to())
+                                                            lists:member(Op, applies_to_or_empty(M))
                                                         end, Operations)],
                           [{Priority, Conflicting, Operations} | Acc]
                   end
               end, [], ByPriority).
 
+applies_to_or_empty(Mod) ->
+    case safe_applies_to(Mod) of
+        unloaded -> [];
+        AppliesTo -> AppliesTo
+    end.
+
 overlap_in_group(Mods) ->
     {_Union, Overlap} =
         lists:foldl(fun(Mod, {Union, Over}) ->
-                        Set = sets:from_list(Mod:applies_to()),
+                        Set = sets:from_list(applies_to_or_empty(Mod)),
                         Is = sets:intersection(Set, Union),
                         {sets:union(Set, Union), sets:union(Is, Over)}
                     end,
