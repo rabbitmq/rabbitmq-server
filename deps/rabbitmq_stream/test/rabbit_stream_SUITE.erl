@@ -2139,9 +2139,21 @@ test_stream_test_utils(Config) ->
     Payloads = lists:duplicate(MsgPerBatch, <<"m1">>),
     SequenceFrom1 = 1,
     {ok, C3} = stream_test_utils:publish(S, C2, PublisherId, SequenceFrom1, Payloads),
-    {ok, C4} = stream_test_utils:delete_publisher(S, C3, PublisherId),
-    {ok, C5} = stream_test_utils:delete_stream(S, C4, Stream),
-    {ok, _} = stream_test_utils:close(S, C5),
+
+    %% subscribe past the existing messages, so exactly one chunk is delivered
+    %% below, from the single message published after the subscription
+    SubId = 1,
+    {ok, C4} = stream_test_utils:subscribe_v2(S, C3, Stream, SubId, 1_000_000,
+                                              #{}, next),
+    {ok, C5} = stream_test_utils:publish(S, C4, PublisherId,
+                                         SequenceFrom1 + MsgPerBatch, [<<"m2">>]),
+    {{deliver_v2, SubId, _, _}, C6} = receive_commands(S, C5),
+    ok = stream_test_utils:credit_v2(S, SubId, 1_000_000),
+    {ok, C7} = stream_test_utils:unsubscribe(S, C6, SubId),
+
+    {ok, C8} = stream_test_utils:delete_publisher(S, C7, PublisherId),
+    {ok, C9} = stream_test_utils:delete_stream(S, C8, Stream),
+    {ok, _} = stream_test_utils:close(S, C9),
     ok.
 
 sac_subscription_with_partition_index_conflict_should_return_error(Config) ->
