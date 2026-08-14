@@ -357,6 +357,8 @@ DeletePublisherResponse => Key Version CorrelationId ResponseCode
 
 === Subscribe
 
+Version 1
+
 ```
 Subscribe => Key Version CorrelationId SubscriptionId Stream OffsetSpecification Credit Properties
   Key => uint16 // 0x0007
@@ -367,7 +369,7 @@ Subscribe => Key Version CorrelationId SubscriptionId Stream OffsetSpecification
   OffsetSpecification => OffsetType Offset
   OffsetType => uint16 // 1 (first), 2 (last), 3 (next), 4 (offset), 5 (timestamp)
   Offset => uint64 (for offset) | int64 (for timestamp)
-  Credit => uint16
+  Credit => uint16 // credit in chunks
   Properties => [Property]
   Property => Key Value
   Key => string
@@ -379,6 +381,29 @@ SubscribeResponse => Key Version CorrelationId ResponseCode
   CorrelationId => uint32
   ResponseCode => uint16
 ```
+
+Version 2
+
+```
+Subscribe => Key Version CorrelationId SubscriptionId Stream OffsetSpecification Credit Properties
+  Key => uint16 // 0x0007
+  Version => uint16
+  CorrelationId => uint32 // correlation id to correlate the response
+  SubscriptionId => uint8 // client-supplied id to identify the subscription
+  Stream => string // the name of the stream
+  OffsetSpecification => OffsetType Offset
+  OffsetType => uint16 // 1 (first), 2 (last), 3 (next), 4 (offset), 5 (timestamp)
+  Offset => uint64 (for offset) | int64 (for timestamp)
+  Credit => uint32 // credit in bytes
+  Properties => [Property]
+  Property => Key Value
+  Key => string
+  Value => string
+```
+
+1. Use version 1 for credit in chunks, version 2 for credit in bytes. The unit is
+   fixed for the lifetime of the subscription. The response stays at version 1
+   regardless of the request version.
 
 NB: Timestamp is https://www.erlang.org/doc/apps/erts/time_correction.html#Erlang_System_Time[Erlang system time],
 milliseconds from epoch
@@ -447,7 +472,13 @@ Deliver => Key Version SubscriptionId CommittedOffset OsirisChunk
 NB: See the https://github.com/rabbitmq/osiris/blob/12a430b11be2c2be3f26ce4f2d7268954c7ec02b/src/osiris_log.erl#L126-L195[Osiris project]
 for details on the structure of messages.
 
+A client subscribed with credit in bytes (`Subscribe` version 2) can compute the
+cost of a delivered chunk from the `Deliver` frame size alone, with no extra
+field on the wire: `FrameSize - 5` for version 1, `FrameSize - 13` for version 2.
+
 === Credit
+
+Version 1
 
 ```
 Credit => Key Version SubscriptionId Credit
@@ -463,7 +494,40 @@ CreditResponse => Key Version ResponseCode SubscriptionId
   SubscriptionId => uint8
 ```
 
-NB: the server sent a response only in case of problem, e.g. crediting an unknown subscription.
+Version 2
+
+```
+Credit => Key Version SubscriptionId Credit
+  Key => uint16 // 0x0009
+  Version => uint16
+  SubscriptionId => uint8
+  Credit => uint32 // the number of bytes that can be sent
+
+CreditResponse => Key Version ResponseCode SubscriptionId
+  Key => uint16 // 0x8009
+  Version => uint16
+  ResponseCode => uint16
+  SubscriptionId => uint8
+```
+
+1. Use version 1 for credit in chunks, version 2 for credit in bytes. This must
+   match the unit the subscription was created with: a `Credit` frame whose
+   version disagrees with the subscription is answered with a `CreditResponse`
+   carrying response code "Precondition failed", and the credit it carried is
+   dropped, not applied. The response stays at version 1 regardless of the
+   request version.
+
+NB: the server sent a response only in case of problem, e.g. crediting an unknown
+subscription or a unit mismatch.
+
+For credit in bytes, the server may start sending a chunk as soon as credit is
+positive, and only stops once credit is not positive, rather than waiting for
+enough credit to cover the whole chunk. This overshoot rule means a chunk larger
+than the client's credit window is still delivered instead of stalling the
+subscription, and the amount of data outstanding at any point is bounded by the
+window size plus the largest chunk in the stream. A client subscribing with
+credit in bytes must be prepared to receive a chunk larger than the window it
+granted, and must eventually grant credit for every byte it receives.
 
 === StoreOffset
 
