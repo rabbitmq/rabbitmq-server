@@ -1093,6 +1093,7 @@ test_gc_consumers(Config) ->
                                             kind = queue,
                                             virtual_host = <<"/">>},
                                   0,
+                                  chunks,
                                   10,
                                   0,
                                   0,

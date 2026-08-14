@@ -130,6 +130,7 @@
   offset,
   offset_lag,
   credits,
+  credit_unit,
   active,
   activity_status,
   properties
