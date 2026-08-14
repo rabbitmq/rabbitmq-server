@@ -274,6 +274,9 @@ list_consumers_run(Config) ->
     ?assertEqual([], Keys -- InfoItems),
     ?assertEqual([], InfoItems -- Keys),
 
+    %% version 1 subscriptions count credit in chunks
+    ?assertEqual(chunks, proplists:get_value(credit_unit, First)),
+
     C1_3 = delete_stream(S1, Stream, C1_2),
     % metadata_update_stream_deleted(S1, Stream),
     metadata_update_stream_deleted(S2, Stream, C2_1),
