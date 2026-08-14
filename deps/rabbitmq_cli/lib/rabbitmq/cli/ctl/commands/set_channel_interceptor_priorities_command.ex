@@ -40,7 +40,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetChannelInterceptorPrioritiesCommand do
       args
       |> Enum.chunk_every(2)
       |> Enum.map(fn [interceptor, priority] ->
-        {String.to_atom(interceptor), String.to_integer(priority)}
+        {interceptor, String.to_integer(priority)}
       end)
 
     :rabbit_misc.rpc_call(
