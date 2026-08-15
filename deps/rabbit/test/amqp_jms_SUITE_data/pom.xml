@@ -10,7 +10,7 @@
   <properties>
     <junit.jupiter.version>5.14.4</junit.jupiter.version>
     <assertj.version>3.27.7</assertj.version>
-    <qpid-jms-client.version>2.10.0</qpid-jms-client.version>
+    <qpid-jms-client.version>2.11.0</qpid-jms-client.version>
     <amqp-client.version>[0.6.0-SNAPSHOT,)</amqp-client.version>
     <logback.version>1.5.18</logback.version>
     <spotless.version>3.9.0</spotless.version>
