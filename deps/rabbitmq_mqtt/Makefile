@@ -13,6 +13,10 @@ define PROJECT_ENV
 	    {retained_message_store, rabbit_mqtt_retained_msg_store_dets},
 	    %% only used by DETS store
 	    {retained_message_store_dets_sync_interval, 2000},
+	    %% per virtual host limits, both accept 'infinity'
+	    {retained_message_store_max_messages, 100000},
+	    %% 1 GB
+	    {retained_message_store_max_size_bytes, 1073741824},
 	    {prefetch, 10},
 	    {ssl_listeners, []},
 	    {tcp_listeners, [1883]},

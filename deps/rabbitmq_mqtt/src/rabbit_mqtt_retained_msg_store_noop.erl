@@ -9,7 +9,7 @@
 
 -behaviour(rabbit_mqtt_retained_msg_store).
 
--export([new/2, recover/2, insert/3, lookup/2, delete/2, terminate/1]).
+-export([new/2, recover/2, insert/3, lookup/2, delete/2, info/1, terminate/1]).
 
 new(_Dir, _VHost) ->
   ok.
@@ -25,6 +25,9 @@ lookup(_Topic, _State) ->
 
 delete(_Topic, _State) ->
   ok.
+
+info(_State) ->
+  #{count => 0, size_bytes => 0}.
 
 terminate(_State) ->
   ok.

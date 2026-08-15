@@ -40,7 +40,10 @@ tests() ->
      should_translate_amqp2mqtt_on_retention,
      should_translate_amqp2mqtt_on_retention_search,
      recover,
-     recover_with_message_expiry_interval
+     recover_with_message_expiry_interval,
+     limit_max_messages,
+     limit_max_size_bytes,
+     limit_max_size_bytes_with_properties
     ].
 
 suite() ->
@@ -100,9 +103,22 @@ init_per_testcase(recover_with_message_expiry_interval = T, Config) ->
         v5 ->
             rabbit_ct_helpers:testcase_started(Config, T)
     end;
+init_per_testcase(limit_max_size_bytes_with_properties = T, Config) ->
+    case ?config(mqtt_version, Config) of
+        v4 ->
+            {skip, "Correlation-Data not supported in MQTT v4"};
+        v5 ->
+            rabbit_ct_helpers:testcase_started(Config, T)
+    end;
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
+end_per_testcase(Testcase, Config)
+  when Testcase =:= limit_max_messages;
+       Testcase =:= limit_max_size_bytes;
+       Testcase =:= limit_max_size_bytes_with_properties ->
+    ok = set_limits(Config, 100_000, 1_073_741_824),
+    rabbit_ct_helpers:testcase_finished(Config, Testcase);
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
@@ -162,12 +178,7 @@ does_not_retain(Config) ->
     C = connect(atom_to_binary(?FUNCTION_NAME), Config, [{ack_timeout, 1}]),
     ok = emqtt:publish(C, <<"TopicA/Device.Field">>, #{},  <<"Payload">>, [{retain, true}]),
     {ok, _, _} = emqtt:subscribe(C, <<"TopicA/Device.Field">>, qos1),
-    receive
-        Unexpected ->
-            ct:fail("Unexpected message: ~p", [Unexpected])
-    after 1000 ->
-              ok
-    end,
+    ok = expect_nothing(),
     ok = emqtt:disconnect(C).
 
 recover(Config) ->
@@ -236,3 +247,98 @@ recover_with_message_expiry_interval(Config) ->
     end,
 
     ok = emqtt:disconnect(C2).
+
+%% A topic that is not in the store yet is refused once the store holds
+%% `max_messages` entries, while overwriting a topic already in it is not.
+limit_max_messages(Config) ->
+    ok = set_limits(Config, 2, infinity),
+    ClientId = atom_to_binary(?FUNCTION_NAME),
+    C = connect(ClientId, Config),
+
+    {ok, _} = emqtt:publish(C, <<"limit/1">>, <<"m1">>, [{retain, true}, {qos, 1}]),
+    {ok, _} = emqtt:publish(C, <<"limit/2">>, <<"m2">>, [{retain, true}, {qos, 1}]),
+    {ok, _} = emqtt:publish(C, <<"limit/3">>, <<"m3">>, [{retain, true}, {qos, 1}]),
+    {ok, _} = emqtt:publish(C, <<"limit/1">>, <<"m1b">>, [{retain, true}, {qos, 1}]),
+
+    {ok, _, _} = emqtt:subscribe(C, <<"limit/1">>, qos1),
+    ok = expect_publishes(C, <<"limit/1">>, [<<"m1b">>]),
+    {ok, _, _} = emqtt:subscribe(C, <<"limit/2">>, qos1),
+    ok = expect_publishes(C, <<"limit/2">>, [<<"m2">>]),
+    {ok, _, _} = emqtt:subscribe(C, <<"limit/3">>, qos1),
+    ok = expect_nothing(),
+
+    ok = emqtt:disconnect(C).
+
+%% The limit is checked against the size of the store, which is never zero even
+%% when empty, so a limit of 0 refuses every retained message.
+limit_max_size_bytes(Config) ->
+    ok = set_limits(Config, infinity, 0),
+    ClientId = atom_to_binary(?FUNCTION_NAME),
+    C1 = connect(ClientId, Config),
+    {ok, _} = emqtt:publish(C1, <<"size/1">>, <<"m1">>, [{retain, true}, {qos, 1}]),
+    {ok, _, _} = emqtt:subscribe(C1, <<"size/1">>, qos1),
+    ok = expect_nothing(),
+    ok = emqtt:disconnect(C1),
+
+    ok = set_limits(Config, infinity, infinity),
+    C2 = connect(ClientId, Config),
+    {ok, _} = emqtt:publish(C2, <<"size/1">>, <<"m1">>, [{retain, true}, {qos, 1}]),
+    {ok, _, _} = emqtt:subscribe(C2, <<"size/1">>, qos1),
+    ok = expect_publishes(C2, <<"size/1">>, [<<"m1">>]),
+    ok = emqtt:disconnect(C2).
+
+%% Message properties (e.g. MQTT 5.0 Correlation-Data, User-Property) count
+%% towards `max_size_bytes`, not just the topic and payload.
+limit_max_size_bytes_with_properties(Config) ->
+    ok = set_limits(Config, infinity, 10_000),
+    ClientId = atom_to_binary(?FUNCTION_NAME),
+
+    C1 = connect(<<ClientId/binary, "-1">>, Config),
+    LargeCorrelationData = binary:copy(<<"c">>, 20_000),
+    {ok, _} = emqtt:publish(C1, <<"size/props">>,
+                            #{'Correlation-Data' => LargeCorrelationData},
+                            <<"m1">>, [{retain, true}, {qos, 1}]),
+    {ok, _, _} = emqtt:subscribe(C1, <<"size/props">>, qos1),
+    ok = expect_nothing(),
+    ok = emqtt:disconnect(C1),
+
+    C2 = connect(<<ClientId/binary, "-2">>, Config),
+    {ok, _} = emqtt:publish(C2, <<"size/props">>, <<"m2">>, [{retain, true}, {qos, 1}]),
+    {ok, _, _} = emqtt:subscribe(C2, <<"size/props">>, qos1),
+    ok = expect_publishes(C2, <<"size/props">>, [<<"m2">>]),
+    ok = emqtt:disconnect(C2).
+
+%% -------------------------------------------------------------------
+%% Helpers
+%% -------------------------------------------------------------------
+
+%% The retainer reads its limits when it starts, so it is restarted here.
+%%
+%% The store is emptied as well: the tests in this group run in random order and
+%% the limits are counted against whatever the store already holds.
+set_limits(Config, MaxMessages, MaxSizeBytes) ->
+    VHost = <<"/">>,
+    ok = rpc(Config, application, set_env,
+             [rabbitmq_mqtt, retained_message_store_max_messages, MaxMessages]),
+    ok = rpc(Config, application, set_env,
+             [rabbitmq_mqtt, retained_message_store_max_size_bytes, MaxSizeBytes]),
+    _ = rpc(Config, rabbit_mqtt_retainer_sup, start_child_for_vhost, [VHost]),
+    ok = rpc(Config, rabbit_mqtt_retainer_sup, delete_child_for_vhost, [VHost]),
+    Dir = rpc(Config, rabbit, data_dir, []),
+    DetsPath = rpc(Config, rabbit_mqtt_util, path_for, [Dir, VHost, ".dets"]),
+    EtsPath = rpc(Config, rabbit_mqtt_util, path_for, [Dir, VHost]),
+    _ = rpc(Config, file, delete, [DetsPath]),
+    _ = rpc(Config, file, delete, [EtsPath]),
+    _ = rpc(Config, rabbit_mqtt_retainer_sup, start_child_for_vhost, [VHost]),
+    ok.
+
+rpc(Config, Mod, Fun, Args) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, Mod, Fun, Args).
+
+expect_nothing() ->
+    receive
+        Unexpected ->
+            ct:fail("Unexpected message: ~p", [Unexpected])
+    after 1000 ->
+              ok
+    end.

@@ -21,14 +21,17 @@
 -include("rabbit_mqtt.hrl").
 -include("rabbit_mqtt_packet.hrl").
 -include_lib("kernel/include/logger.hrl").
--export([start/1, insert/3, lookup/2, delete/2, terminate/1]).
+-export([start/1, insert/3, lookup/2, delete/2, info/1, terminate/1]).
 -export([expire/2]).
--export_type([state/0, expire/0]).
+-export_type([state/0, expire/0, store_info/0]).
 
 -define(STATE, ?MODULE).
 -record(?STATE, {store_mod :: module(),
                  store_state :: term()}).
 -opaque state() :: #?STATE{}.
+
+-type store_info() :: #{count := non_neg_integer(),
+                        size_bytes := non_neg_integer()}.
 
 -type expire() :: #{topic() :=
                     {InsertionTimestamp :: integer(),
@@ -49,6 +52,9 @@
 
 -callback delete(topic(), State :: any()) ->
     ok.
+
+-callback info(State :: any()) ->
+    store_info().
 
 -callback terminate(State :: any()) ->
     ok.
@@ -93,6 +99,11 @@ lookup(Topic, #?STATE{store_mod = Mod,
 delete(Topic, #?STATE{store_mod = Mod,
                       store_state = StoreState}) ->
     ok = Mod:delete(Topic, StoreState).
+
+-spec info(state()) -> store_info().
+info(#?STATE{store_mod = Mod,
+             store_state = StoreState}) ->
+    Mod:info(StoreState).
 
 -spec terminate(state()) -> ok.
 terminate(#?STATE{store_mod = Mod,

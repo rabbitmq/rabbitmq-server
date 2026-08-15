@@ -1919,7 +1919,9 @@ retained_message_conversion(Config) ->
     Payload = <<"my retained msg">>,
     OldMqttMsgFormat = {mqtt_msg, _Retain = true, _QoS = 1, Topic, _Dup = false, _PktId = 1, Payload},
     RetainerPid = rpc(Config, rabbit_mqtt_retainer_sup, start_child_for_vhost, [<<"/">>]),
-    {rabbit_mqtt_retainer, StoreState, _} = sys:get_state(RetainerPid),
+    RetainerState = sys:get_state(RetainerPid),
+    rabbit_mqtt_retainer = element(1, RetainerState),
+    StoreState = element(2, RetainerState),
     ok = rpc(Config, rabbit_mqtt_retained_msg_store, insert, [Topic, OldMqttMsgFormat, StoreState]),
 
     C = connect(?FUNCTION_NAME, Config),
