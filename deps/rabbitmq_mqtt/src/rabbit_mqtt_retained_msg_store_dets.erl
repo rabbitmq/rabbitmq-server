@@ -9,10 +9,11 @@
 
 -behaviour(rabbit_mqtt_retained_msg_store).
 
+-include("rabbit_mqtt.hrl").
 -include("rabbit_mqtt_packet.hrl").
 -include_lib("kernel/include/logger.hrl").
 
--export([new/2, recover/2, insert/3, lookup/2, delete/2, terminate/1]).
+-export([new/2, recover/2, insert/3, lookup/2, delete/2, info/1, terminate/1]).
 
 -record(store_state, {table :: dets:tab_name()}).
 
@@ -53,6 +54,13 @@ lookup(Topic, #store_state{table = T}) ->
 delete(Topic, #store_state{table = T}) ->
   ok = dets:delete(T, Topic).
 
+-spec info(store_state()) -> rabbit_mqtt_retained_msg_store:store_info().
+info(#store_state{table = T}) ->
+  %% `dets:info/1` returns both items, `dets:info/2` would take two calls.
+  Info = dets:info(T),
+  #{count => proplists:get_value(size, Info),
+    size_bytes => proplists:get_value(file_size, Info)}.
+
 -spec terminate(store_state()) -> ok.
 terminate(#store_state{table = T}) ->
   ok = dets:close(T).
@@ -60,10 +68,10 @@ terminate(#store_state{table = T}) ->
 open_table(Dir, VHost) ->
     Tab = rabbit_mqtt_util:vhost_name_to_table_name(VHost),
     Path = rabbit_mqtt_util:path_for(Dir, VHost, ".dets"),
-    AutoSave = rabbit_misc:get_env(rabbit_mqtt, retained_message_store_dets_sync_interval, 2000),
+    AutoSave = rabbit_misc:get_env(?APP_NAME, retained_message_store_dets_sync_interval, 2000),
     dets:open_file(Tab, [{type, set},
                          {keypos, #retained_message.topic},
                          {file, Path},
-                         {ram_file, true},
+                         {ram_file, false},
                          {repair, true},
                          {auto_save, AutoSave}]).

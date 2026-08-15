@@ -202,6 +202,22 @@
   {tcp_listen_options_none_disables_via_shortcut,
    "mqtt.tcp_listen_options = none",
    [{rabbitmq_mqtt,[{tcp_listen_options, []}]}],
+   [rabbitmq_mqtt]},
+
+  {retained_message_store_limits,
+   "mqtt.retained_message_store.max_messages = 5000
+    mqtt.retained_message_store.max_size_bytes = 1000000",
+   [{rabbitmq_mqtt,[{retained_message_store_max_messages, 5000},
+                    {retained_message_store_max_size_bytes, 1000000}]}],
+   [rabbitmq_mqtt]},
+
+  {retained_message_store_limits_infinity,
+   "mqtt.retained_message_store = rabbit_mqtt_retained_msg_store_ets
+    mqtt.retained_message_store.max_messages = infinity
+    mqtt.retained_message_store.max_size_bytes = infinity",
+   [{rabbitmq_mqtt,[{retained_message_store, rabbit_mqtt_retained_msg_store_ets},
+                    {retained_message_store_max_messages, infinity},
+                    {retained_message_store_max_size_bytes, infinity}]}],
    [rabbitmq_mqtt]}
 
 ].

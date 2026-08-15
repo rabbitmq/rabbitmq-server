@@ -11,7 +11,7 @@
 
 -include("rabbit_mqtt_packet.hrl").
 
--export([new/2, recover/2, insert/3, lookup/2, delete/2, terminate/1]).
+-export([new/2, recover/2, insert/3, lookup/2, delete/2, info/1, terminate/1]).
 
 -record(store_state, {
           table :: ets:tid(),
@@ -59,6 +59,11 @@ lookup(Topic, #store_state{table = T}) ->
 delete(Topic, #store_state{table = T}) ->
   true = ets:delete(T, Topic),
   ok.
+
+-spec info(store_state()) -> rabbit_mqtt_retained_msg_store:store_info().
+info(#store_state{table = T}) ->
+  #{count => ets:info(T, size),
+    size_bytes => ets:info(T, memory) * erlang:system_info(wordsize)}.
 
 -spec terminate(store_state()) -> ok.
 terminate(#store_state{table = T, filename = Path}) ->
