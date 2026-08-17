@@ -95,6 +95,18 @@ end}.
 {mapping, "mqtt.retained_message_store_dets_sync_interval", "rabbitmq_mqtt.retained_message_store_dets_sync_interval",
     [{datatype, integer}]}.
 
+%% Maximum number of retained messages kept per virtual host, and the maximum
+%% total size of the store.
+%%
+%% {retained_message_store_max_messages, 100000},
+%% {retained_message_store_max_size_bytes, 1073741824},
+
+{mapping, "mqtt.retained_message_store.max_messages", "rabbitmq_mqtt.retained_message_store_max_messages",
+    [{datatype, [{atom, infinity}, integer]}, {validators, ["non_negative_integer"]}]}.
+
+{mapping, "mqtt.retained_message_store.max_size_bytes", "rabbitmq_mqtt.retained_message_store_max_size_bytes",
+    [{datatype, [{atom, infinity}, integer]}, {validators, ["non_negative_integer"]}]}.
+
 %% Whether or not to enable proxy protocol support.
 %%
 %% {proxy_protocol, false}

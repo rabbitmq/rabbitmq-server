@@ -7,7 +7,9 @@
 
 -module(rabbit_mqtt_retainer).
 
+-include("rabbit_mqtt.hrl").
 -include("rabbit_mqtt_packet.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -behaviour(gen_server).
 
@@ -17,10 +19,17 @@
 -export([retain/3, fetch/2, clear/2]).
 
 -define(TIMEOUT, 30_000).
+-define(LIMIT_LOG_INTERVAL_MS, 60_000).
+
+-type limit() :: non_neg_integer() | infinity.
 
 -define(STATE, ?MODULE).
 -record(?STATE, {store_state :: rabbit_mqtt_retained_msg_store:state(),
-                 expire :: #{topic() := TimerRef :: reference()}
+                 expire :: #{topic() := TimerRef :: reference()},
+                 vhost :: rabbit_types:vhost(),
+                 max_messages :: limit(),
+                 max_size_bytes :: limit(),
+                 last_limit_log :: integer() | undefined
                 }).
 -type state() :: #?STATE{}.
 
@@ -53,28 +62,18 @@ init(VHost) ->
                               start_timer(TimerSecs, Topic)
                       end, Expire0),
     {ok, #?STATE{store_state = StoreState,
-                 expire = Expire}}.
+                 expire = Expire,
+                 vhost = VHost,
+                 max_messages = get_limit(retained_message_store_max_messages),
+                 max_size_bytes = get_limit(retained_message_store_max_size_bytes)}}.
 
-handle_cast({retain, Topic, Msg0 = #mqtt_msg{props = Props}},
-            State = #?STATE{store_state = StoreState,
-                            expire = Expire0}) ->
-    Expire2 = case maps:take(Topic, Expire0) of
-                  {OldTimer, Expire1} ->
-                      cancel_timer(OldTimer),
-                      Expire1;
-                  error ->
-                      Expire0
-              end,
-    {Msg, Expire} = case maps:find('Message-Expiry-Interval', Props) of
-                        {ok, ExpirySeconds} ->
-                            Timer = start_timer(ExpirySeconds, Topic),
-                            {Msg0#mqtt_msg{timestamp = os:system_time(second)},
-                             maps:put(Topic, Timer, Expire2)};
-                        error ->
-                            {Msg0, Expire2}
-                    end,
-    ok = rabbit_mqtt_retained_msg_store:insert(Topic, Msg, StoreState),
-    {noreply, State#?STATE{expire = Expire}};
+handle_cast({retain, Topic, Msg}, State) ->
+    case retain_permitted(Topic, Msg, State) of
+        true ->
+            {noreply, do_retain(Topic, Msg, State)};
+        false ->
+            {noreply, log_limit_reached(State)}
+    end;
 handle_cast({clear, Topic}, State = #?STATE{store_state = StoreState,
                                             expire = Expire0}) ->
     Expire = case maps:take(Topic, Expire0) of
@@ -118,6 +117,87 @@ handle_info(Info, State) ->
 
 terminate(_Reason, #?STATE{store_state = StoreState}) ->
     rabbit_mqtt_retained_msg_store:terminate(StoreState).
+
+-spec do_retain(topic(), mqtt_msg(), state()) -> state().
+do_retain(Topic, Msg0 = #mqtt_msg{props = Props},
+          State = #?STATE{store_state = StoreState,
+                          expire = Expire0}) ->
+    Expire2 = case maps:take(Topic, Expire0) of
+                  {OldTimer, Expire1} ->
+                      cancel_timer(OldTimer),
+                      Expire1;
+                  error ->
+                      Expire0
+              end,
+    {Msg, Expire} = case maps:find('Message-Expiry-Interval', Props) of
+                        {ok, ExpirySeconds} ->
+                            Timer = start_timer(ExpirySeconds, Topic),
+                            {Msg0#mqtt_msg{timestamp = os:system_time(second)},
+                             maps:put(Topic, Timer, Expire2)};
+                        error ->
+                            {Msg0, Expire2}
+                    end,
+    ok = rabbit_mqtt_retained_msg_store:insert(Topic, Msg, StoreState),
+    State#?STATE{expire = Expire}.
+
+-spec get_limit(atom()) -> limit().
+get_limit(Key) ->
+    case application:get_env(?APP_NAME, Key, infinity) of
+        infinity -> infinity;
+        Int when is_integer(Int), Int >= 0 -> Int
+    end.
+
+%% Overwriting a topic that is already retained does not add an entry, so it
+%% stays permitted once the store holds `max_messages` entries.
+-spec retain_permitted(topic(), mqtt_msg(), state()) -> boolean().
+retain_permitted(_Topic, _Msg, #?STATE{max_messages = infinity,
+                                       max_size_bytes = infinity}) ->
+    true;
+retain_permitted(Topic, Msg,
+                 #?STATE{store_state = StoreState,
+                         max_messages = MaxMessages,
+                         max_size_bytes = MaxSizeBytes}) ->
+    #{count := Count,
+      size_bytes := SizeBytes} = rabbit_mqtt_retained_msg_store:info(StoreState),
+    Existing = rabbit_mqtt_retained_msg_store:lookup(Topic, StoreState),
+    %% The overwritten entry's size is subtracted so that overwrites are
+    %% not double-counted.
+    PreviousBytesVal = case Existing of
+                           undefined ->
+                               0;
+                           #mqtt_msg{} ->
+                               entry_size(Existing)
+                       end,
+    NewBytesVal = entry_size(Msg),
+    within_limit(SizeBytes - PreviousBytesVal + NewBytesVal, MaxSizeBytes) andalso
+    (Existing =/= undefined orelse within_limit(Count + 1, MaxMessages)).
+
+entry_size(Msg) ->
+    {MetadataSize, PayloadSize} = mc_mqtt:size(Msg),
+    MetadataSize + PayloadSize.
+
+-spec within_limit(non_neg_integer(), limit()) -> boolean().
+within_limit(_Value, infinity) ->
+    true;
+within_limit(Value, Limit) ->
+    Value =< Limit.
+
+-spec log_limit_reached(state()) -> state().
+log_limit_reached(State = #?STATE{vhost = VHost,
+                                  max_messages = MaxMessages,
+                                  max_size_bytes = MaxSizeBytes,
+                                  last_limit_log = LastLog}) ->
+    Now = erlang:monotonic_time(millisecond),
+    case LastLog =:= undefined orelse Now - LastLog >= ?LIMIT_LOG_INTERVAL_MS of
+        true ->
+            ?LOG_WARNING(
+               "MQTT retained message store for virtual host '~ts' reached its limit "
+               "(max_messages: ~p, max_size_bytes: ~p), new retained messages are dropped",
+               [VHost, MaxMessages, MaxSizeBytes]),
+            State#?STATE{last_limit_log = Now};
+        false ->
+            State
+    end.
 
 -spec start_timer(integer(), topic()) -> reference().
 start_timer(Seconds, Topic)
