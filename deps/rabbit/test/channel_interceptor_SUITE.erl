@@ -24,9 +24,6 @@ groups() ->
           register_interceptor,
           register_interceptor_failing_with_amqp_error,
           register_interceptor_crashing_with_amqp_error_exception,
-<<<<<<< HEAD
-          register_failing_interceptors
-=======
           register_failing_interceptors,
           conflicting_interceptors_close_network_connections_gracefully,
           conflicting_interceptors_close_direct_connections_gracefully,
@@ -34,14 +31,9 @@ groups() ->
           reject_interceptors_with_same_priority_for_same_operation,
           set_priorities_rejects_conflict_without_committing,
           set_priorities_rejects_unknown_interceptor,
-<<<<<<< HEAD
-          priority_overridden_by_config
->>>>>>> d500ce152a (add core tests for handling multiple channel interceptors)
-=======
           priority_overridden_by_config,
           list_skips_unloaded_interceptor,
           warn_unknown_priorities_logs_a_warning
->>>>>>> b29b6e6dd2 (Polishing #16046)
         ]}
     ].
 
@@ -186,8 +178,6 @@ register_failing_interceptors(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,
       ?MODULE, register_interceptor1, [Config, failing_dummy_interceptor]).
 
-<<<<<<< HEAD
-=======
 conflicting_interceptors_close_network_connections_gracefully(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,
       ?MODULE, conflicting_interceptors_close_network_connections_gracefully1, [Config]).
@@ -411,9 +401,6 @@ priority_overridden_by_config1(Config) ->
     #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = QName}),
     passed.
 
-<<<<<<< HEAD
->>>>>>> d500ce152a (add core tests for handling multiple channel interceptors)
-=======
 list_skips_unloaded_interceptor(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,
       ?MODULE, list_skips_unloaded_interceptor1, [Config]).
@@ -485,7 +472,6 @@ with_conflicting_interceptors(Fun) ->
                                         <<"conflicting dummy interceptor">>)
     end.
 
->>>>>>> b29b6e6dd2 (Polishing #16046)
 check_send_receive(Ch1, QName, Send, Receive) ->
     amqp_channel:call(Ch1,
                         #'basic.publish'{routing_key = QName},
