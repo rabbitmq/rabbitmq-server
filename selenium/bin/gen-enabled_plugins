@@ -12,19 +12,33 @@ mkdir -p "$parentdir"
 echo "" > "$FINAL_ENABLED_PLUGINS_FILE"
 
 # Convert comma-separated profiles to array
-IFS=',' read -ra PROFILE_ARRAY <<< "$PROFILES"
+# PROFILES could be space-separated or comma-separated depending on how it's passed.
+# Let's handle both by converting spaces to commas first (if any) or just relying on bash splitting.
+# The previous script used IFS=',' but PROFILES might be space-separated in some suites.
+# Actually, looking at suite_template, PROFILES="${PROFILES} ${ADDON_PROFILES}", so it's space-separated.
+# Let's handle space-separated profiles.
+IFS=$' \t\n,' read -ra PROFILE_ARRAY <<< "$PROFILES"
 
 # Temporary file to collect all plugins
 TEMP_PLUGINS_FILE=$(mktemp)
+TEMP_DISABLED_PLUGINS_FILE=$(mktemp)
 
 # Find and process all matching enabled_plugins files
 for profile in "${PROFILE_ARRAY[@]}"; do
+    if [[ -z "$profile" ]]; then continue; fi
     # Look for profile-specific enabled_plugins files (e.g., management.enabled_plugins)
     profile_file="$TEST_PATH/${profile}.enabled_plugins"
     if [[ -f "$profile_file" ]]; then
         echo "> Processing $profile_file"
         # Extract plugins from the erlang list format, removing brackets and whitespace
         grep -o '\w\+' "$profile_file" | grep -v '^$' >> "$TEMP_PLUGINS_FILE"
+    fi
+    
+    # Look for profile-specific disabled_plugins files
+    disabled_profile_file="$TEST_PATH/${profile}.disabled_plugins"
+    if [[ -f "$disabled_profile_file" ]]; then
+        echo "> Processing $disabled_profile_file"
+        grep -o '\w\+' "$disabled_profile_file" | grep -v '^$' >> "$TEMP_DISABLED_PLUGINS_FILE"
     fi
 done
 
@@ -37,9 +51,17 @@ fi
 
 # Remove duplicates and sort plugins
 sort -u "$TEMP_PLUGINS_FILE" > "${TEMP_PLUGINS_FILE}.sorted"
+sort -u "$TEMP_DISABLED_PLUGINS_FILE" > "${TEMP_DISABLED_PLUGINS_FILE}.sorted"
+
+# Remove disabled plugins from enabled plugins
+if [[ -s "${TEMP_DISABLED_PLUGINS_FILE}.sorted" ]]; then
+    comm -23 "${TEMP_PLUGINS_FILE}.sorted" "${TEMP_DISABLED_PLUGINS_FILE}.sorted" > "${TEMP_PLUGINS_FILE}.final"
+else
+    cp "${TEMP_PLUGINS_FILE}.sorted" "${TEMP_PLUGINS_FILE}.final"
+fi
 
 # Generate the final erlang-formatted enabled_plugins file
-if [[ ! -s "${TEMP_PLUGINS_FILE}.sorted" ]]; then
+if [[ ! -s "${TEMP_PLUGINS_FILE}.final" ]]; then
     echo "[]." > "$FINAL_ENABLED_PLUGINS_FILE"
 else
     echo "[" > "$FINAL_ENABLED_PLUGINS_FILE"
@@ -47,7 +69,7 @@ else
         if [[ -n "$plugin" ]]; then
             echo "  $plugin," >> "$FINAL_ENABLED_PLUGINS_FILE"
         fi
-    done < "${TEMP_PLUGINS_FILE}.sorted"
+    done < "${TEMP_PLUGINS_FILE}.final"
 
     # Remove the trailing comma from the last line and close the array.
     # Redirect through a temp file and back to preserve the original file's permissions
@@ -59,6 +81,6 @@ else
 fi
 
 # Clean up temporary files
-rm -f "$TEMP_PLUGINS_FILE" "${TEMP_PLUGINS_FILE}.sorted"
+rm -f "$TEMP_PLUGINS_FILE" "${TEMP_PLUGINS_FILE}.sorted" "${TEMP_PLUGINS_FILE}.final" "$TEMP_DISABLED_PLUGINS_FILE" "${TEMP_DISABLED_PLUGINS_FILE}.sorted"
 
 echo ">Generated $FINAL_ENABLED_PLUGINS_FILE with merged plugins from profiles: $PROFILES"
