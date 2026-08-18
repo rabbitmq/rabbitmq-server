@@ -185,6 +185,12 @@ var DISABLED_STATS_COLUMNS =
                   ['heartbeat',    'Heartbeat',    false],
                   ['connected_at', 'Connected at', false]]},
 
+     'channels':
+     {'Overview': [['user', 'User name', true]],
+      'Details': [],
+      'Transactions': [],
+      'Message rates': []},
+
      'vhosts':
      {'Overview': [['cluster-state',   'Cluster state',  false]]}};
 

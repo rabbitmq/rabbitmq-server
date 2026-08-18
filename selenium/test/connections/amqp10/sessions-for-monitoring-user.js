@@ -56,6 +56,22 @@ describe('Given an amqp10 connection opened, listed and clicked on it', function
   })
 
 
+  it('can list all expected connection details', async function () {
+    const details = await connectionPage.getDetails()
+    const byName = (name) => details.find((fact) => fact.name === name)
+
+    assert.equal('guest', byName('Username').value)
+    assert.equal('AMQP 1-0', byName('Protocol').value)
+    assert.equal('selenium-container-id', byName('Container ID').value)
+    assert.ok(byName('Connected at').value.length > 0)
+    assert.ok(byName('Heartbeat').value.length > 0)
+    assert.ok(byName('Frame max').value.length > 0)
+    assert.ok(byName('Channel limit').value.length > 0)
+
+    assert.ok(await connectionPage.isSectionDisplayed('Sessions'))
+    assert.ok(await connectionPage.isSectionNotDisplayed('Channels'))
+  })
+
   it('can list session information', async function () {
     let sessions = await connectionPage.getSessions()
     assert.equal(1, sessions.sessions.length)
