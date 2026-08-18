@@ -67,6 +67,7 @@ groups() ->
           msg_store_compaction_v2,
           msg_store_compaction_v2_exact_fit,
           msg_store_compaction_v2_scannable_before_truncate,
+          msg_store_compaction_v2_index_update_survives_fanout_rewrite,
           msg_store_compaction_v2_packed_run_atomic,
           msg_store_compaction_v2_packed_run_with_trailing_hole,
           msg_store_v1_compat,
@@ -664,6 +665,124 @@ msg_store_compaction_v2_scannable_before_truncate1(_Config) ->
     ok = file:close(ReadFd),
 
     ok = rabbit_msg_store:client_terminate(MSCState),
+    ok = on_disk_stop(Cap),
+    restart_msg_store_empty(),
+    passed.
+
+%% compact_file/3 applies its planned offset updates keyed only on
+%% msg_id (index_update_offset_if_unchanged/5). If a message's ref_count
+%% reaches 0 and it gets rewritten under the same msg_id into a
+%% different file while a compaction pass on its original file is still
+%% in flight -- after that pass's own scan snapshot but before it
+%% applies its index updates -- a blind update would stamp the *new*
+%% entry (now pointing at the other file) with an offset that only
+%% makes sense in the *old* file, corrupting it. This constructs exactly
+%% that race by injecting the rewrite from inside a mocked file:sync/1,
+%% the single call compact_file/3 makes between finishing its writes
+%% and applying its index updates.
+msg_store_compaction_v2_index_update_survives_fanout_rewrite(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, msg_store_compaction_v2_index_update_survives_fanout_rewrite1, [Config]).
+
+msg_store_compaction_v2_index_update_survives_fanout_rewrite1(_Config) ->
+    {ok, DefaultFileSizeLimit} = application:get_env(rabbit, msg_store_file_size_limit),
+    %% Small enough that the second message's own write rolls file 0
+    %% over to file 1 immediately (64 + 39 + 29 = 132 > 120), so file 0
+    %% is no longer current by the time we compact it below. Restored in
+    %% the `after` clause regardless of outcome, so a failure here can't
+    %% leak this override into every later test in the group.
+    ok = application:set_env(rabbit, msg_store_file_size_limit, 120),
+    try
+        msg_store_compaction_v2_index_update_survives_fanout_rewrite2()
+    after
+        ok = application:set_env(rabbit, msg_store_file_size_limit, DefaultFileSizeLimit)
+    end.
+
+msg_store_compaction_v2_index_update_survives_fanout_rewrite2() ->
+    restart_msg_store_empty(),
+    Ref = rabbit_guid:gen(),
+    {Cap, MSCState} = msg_store_client_init_capture(?PERSISTENT_MSG_STORE, Ref),
+    MsgIdDead = msg_id_bin(fanout_rewrite_dead),
+    MsgIdFanout = msg_id_bin(fanout_rewrite_live),
+    %% 21 bytes of v2 framing plus the term_to_binary/1 envelope (6
+    %% bytes): MsgIdDead is 27 + 12 = 39 bytes (offset 64-103),
+    %% MsgIdFanout is 27 + 2 = 29 bytes (offset 103-132), pushing file 0
+    %% past the 120-byte limit and rolling to file 1 as part of its own
+    %% write.
+    ok = rabbit_msg_store:write(1, MsgIdDead, crypto:strong_rand_bytes(12), MSCState),
+    ok = rabbit_msg_store:write(2, MsgIdFanout, <<"lo">>, MSCState),
+    ok = on_disk_await(Cap, [{1, MsgIdDead}, {2, MsgIdFanout}]),
+
+    StorePid = rabbit_vhost_msg_store:vhost_store_pid(?VHOST, ?PERSISTENT_MSG_STORE),
+    GCPid = rabbit_msg_store:gc_pid(StorePid),
+    Path0 = msg_store_file_path(?VHOST, ?PERSISTENT_MSG_STORE, "0.sqs"),
+    132 = filelib:file_size(Path0),
+
+    %% A filler message written into file 1 (now current) before the
+    %% race below, so the fresh copy of MsgIdFanout that the race writes
+    %% lands at an offset other than 64. Without this, file 0's planned
+    %% offset for MsgIdFanout (also 64, both files' headers being the
+    %% same size and this being the first write into either) would
+    %% coincidentally match the fresh copy's real offset in file 1,
+    %% masking the corruption instead of exposing it.
+    MsgIdFiller = msg_id_bin(fanout_rewrite_filler),
+    ok = rabbit_msg_store:write(4, MsgIdFiller, crypto:strong_rand_bytes(20), MSCState),
+    ok = on_disk_await(Cap, [{4, MsgIdFiller}]),
+
+    %% Removing MsgIdDead leaves a hole compaction will move MsgIdFanout
+    %% into; MsgIdFanout itself stays live (ref_count=1) so compaction's
+    %% scan includes it in the plan.
+    {ok, _} = rabbit_msg_store:remove([{1, MsgIdDead}], MSCState),
+    timer:sleep(200),
+
+    %% Inject the race at the one point compact_file/3 calls
+    %% file:sync/1: after its writes have landed, but before it applies
+    %% its planned index updates. Removing MsgIdFanout's only remaining
+    %% reference here drops file 0's valid_total_size to exactly 0 (file
+    %% 0 is no longer current, so write_action/3's "never increase the
+    %% ref_count for a file about to be deleted" clause fires), and the
+    %% immediately following write of the same msg_id deletes that stale
+    %% entry and inserts a fresh one in file 1 -- exactly the fan-out
+    %% shape from OTHER_ISSUES.md issue #22, without needing a second
+    %% real client.
+    %% Same length as the original body: scan_and_vacuum_message_file/3's
+    %% fan-out clause matches the orphaned copy left in file 0 on
+    %% total_size, so a same-length replacement is what makes that copy
+    %% recognisable as a duplicate to discard rather than corruption
+    %% (always true in production, since a msg_id is never rewritten
+    %% with a different-length body).
+    NewBody = <<"hi">>,
+    ok = meck:new(file, [unstick, passthrough, no_link]),
+    ok = meck:expect(file, sync, fun(Fd) ->
+        Result = meck:passthrough([Fd]),
+        case self() of
+            GCPid ->
+                {ok, _} = rabbit_msg_store:remove([{2, MsgIdFanout}], MSCState),
+                ok = rabbit_msg_store:write(3, MsgIdFanout, NewBody, MSCState),
+                ok = on_disk_await(Cap, [{3, MsgIdFanout}]);
+            _ ->
+                ok
+        end,
+        Result
+    end),
+    ok = rabbit_msg_store_gc:compact(GCPid, 0),
+    %% Let the compaction cast (and the delete cast it triggers once
+    %% file 0's valid_total_size reaches 0 from the injected remove
+    %% above) run to completion before we unload the mock.
+    timer:sleep(500),
+    ok = meck:unload(file),
+
+    %% The index must point at the fresh copy in file 1, not at whatever
+    %% offset compaction planned for the stale copy in file 0.
+    {{ok, NewBody}, MSCState1} = rabbit_msg_store:read(MsgIdFanout, MSCState),
+
+    %% File 0 has nothing left referencing it (the stale copy compaction
+    %% moved there is orphaned, unindexed) and must be cleanly deleted by
+    %% the automatic delete the injected remove triggered -- proving the
+    %% GC process never crashed scanning it.
+    false = filelib:is_file(Path0),
+
+    ok = rabbit_msg_store:client_terminate(MSCState1),
     ok = on_disk_stop(Cap),
     restart_msg_store_empty(),
     passed.

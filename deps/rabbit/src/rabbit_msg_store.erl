@@ -2071,8 +2071,27 @@ index_update(IndexEts, Obj) ->
     true = ets:insert(IndexEts, Obj),
     ok.
 
-index_update_fields(IndexEts, Key, Updates) ->
-    _ = ets:update_element(IndexEts, Key, Updates),
+%% Only updates the offset if the entry still matches File and OldOffset --
+%% i.e. it's still the exact copy this compaction pass moved. A fan-out
+%% write racing this compaction can delete and reinsert the same msg_id
+%% under a different file (or a different offset in the same file) before
+%% this runs; if that happened, the entry no longer belongs to this
+%% compaction pass and must not be touched -- its own physical bytes were
+%% already copied into the new location regardless (write_compact_file_v2
+%% doesn't know or care whether the index update will succeed), so the
+%% only consequence of skipping is an orphaned, harmless duplicate copy
+%% that scan_and_vacuum_message_file/3's existing fan-out clause already
+%% recognises and discards on this file's next scan.
+index_update_offset_if_unchanged(IndexEts, MsgId, File, OldOffset, NewOffset) ->
+    %% The extra {...} around the replacement record is required by
+    %% ets:select_replace/2: without it, a literal tuple appearing in a
+    %% match spec's body is parsed as a function call instead.
+    MatchSpec = [{#msg_location{msg_id = MsgId, ref_count = '$1', file = File,
+                                offset = OldOffset, total_size = '$2'},
+                  [],
+                  [{#msg_location{msg_id = MsgId, ref_count = '$1', file = File,
+                                 offset = NewOffset, total_size = '$2'}}]}],
+    _ = ets:select_replace(IndexEts, MatchSpec),
     ok.
 
 index_update_ref_counter(IndexEts, Key, RefCount) ->
@@ -2538,9 +2557,13 @@ compact_file(File, FileSize,
     %% Update the index. We synced and closed the file so we know the data will
     %% be there for readers. Note that it's OK if we crash at any point before we
     %% update the index because the old data is still there until we truncate.
-    lists:foreach(fun ({UpdateMsgId, UpdateOffset}) ->
-        ok = index_update_fields(IndexEts, UpdateMsgId,
-                                 [{#msg_location.offset, UpdateOffset}])
+    %%
+    %% The update only takes effect if the entry still matches File and its
+    %% original offset: a fan-out write can race this compaction and rewrite
+    %% the same msg_id under a different file (or offset) before we get here,
+    %% and blindly overwriting that live entry's offset would corrupt it.
+    lists:foreach(fun ({UpdateMsgId, OldOffset, NewOffset}) ->
+        ok = index_update_offset_if_unchanged(IndexEts, UpdateMsgId, File, OldOffset, NewOffset)
     end, IndexUpdates),
     %% We can truncate only if there are no files opened before this timestamp.
     ThresholdTimestamp = erlang:monotonic_time(),
@@ -2612,11 +2635,11 @@ do_compact_file_v1(Fd, Offset, Start = [#msg_location{ offset = StartMsgOffset }
     case StartMsgOffset of
         EndMsgOffset ->
             %% We moved the last message we could.
-            {ok, Offset + EndMsgSize, [{EndMsgId, Offset}|IndexAcc]};
+            {ok, Offset + EndMsgSize, [{EndMsgId, EndMsgOffset, Offset}|IndexAcc]};
         _ ->
             %% We may be able to fit another message in the same hole.
             do_compact_file_v1(Fd, Offset + EndMsgSize, Start, EndTail,
-                [{EndMsgId, Offset}|IndexAcc])
+                [{EndMsgId, EndMsgOffset, Offset}|IndexAcc])
     end;
 %% If the message didn't fit into the hole and this was the last message
 %% we could move (start and end have the same message), we stop there.
@@ -2738,7 +2761,7 @@ plan_compact_file_v2(Offset, _, [], Acc) ->
 %% disk on its own: a kept message, never touched, so still there and
 %% valid; or, at the end of the plan, the terminal moved message's own
 %% source copy, which the index still points to at the moment of this
-%% write (index_update_fields/3 in compact_file/3 only runs later,
+%% write (index_update_offset_if_unchanged/5 in compact_file/3 only runs later,
 %% once every write in the plan has landed and the file has been
 %% synced) and so must not be overwritten. The final group's hole is
 %% therefore sized against that source offset, not against the next
@@ -2760,7 +2783,7 @@ write_compact_file_v2(Fd, Plan) ->
 
 write_compact_file_v2(Fd, [{moved, NewOffset, MsgId, OldOffset, Size}|Rest], Group) ->
     {ok, Bytes} = file:pread(Fd, OldOffset, Size),
-    Group1 = [{MsgId, NewOffset, Bytes}|Group],
+    Group1 = [{MsgId, OldOffset, NewOffset, Bytes}|Group],
     case Rest of
         [{moved, NextOffset, _, _, _}|_] when NextOffset =:= NewOffset + Size ->
             %% The next message packs right after this one with no
@@ -2781,10 +2804,10 @@ write_compact_file_v2(_, [], []) ->
 
 write_compact_group_v2(Fd, Group0, HoleSize) ->
     Group = lists:reverse(Group0),
-    [{_, StartOffset, _}|_] = Group,
-    Data = [Bytes || {_, _, Bytes} <- Group],
+    [{_, _, StartOffset, _}|_] = Group,
+    Data = [Bytes || {_, _, _, Bytes} <- Group],
     ok = file:pwrite(Fd, StartOffset, [Data, hole_bytes(HoleSize)]),
-    [{MsgId, Offset} || {MsgId, Offset, _} <- Group].
+    [{MsgId, OldOffset, NewOffset} || {MsgId, OldOffset, NewOffset, _} <- Group].
 
 -spec truncate_file(non_neg_integer(), non_neg_integer(), integer(), gc_state()) -> ok | defer.
 
