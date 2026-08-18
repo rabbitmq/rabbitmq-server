@@ -4093,6 +4093,7 @@ send_chunks(DeliverVersion,
     %% callback adds exactly the chunk bytes written, so the delta is the
     %% cost of the chunk. A skipped chunk never invokes the callback and so
     %% costs nothing.
+    %% FIXME: having Osiris return the number of sent bytes would be more efficient
     Before = atomics:get(Counter, 1),
     case osiris_log:send_file(Socket, Log,
                               send_file_callback(DeliverVersion, Log,
