@@ -8,8 +8,10 @@
 -module(rabbit_channel_interceptor).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("kernel/include/logger.hrl").
 
--export([init/1, intercept_in/3]).
+-export([init/1, intercept_in/3, list/0, set_priorities/1,
+         warn_unknown_priorities/0]).
 
 -behaviour(rabbit_registry_class).
 
@@ -37,28 +39,162 @@ added_to_rabbit_registry(_Type, _ModuleName) ->
 removed_from_rabbit_registry(_Type) ->
     rabbit_channel:refresh_interceptors().
 
+list() ->
+    Mods = [M || {_, M} <- rabbit_registry:lookup_all(channel_interceptor)],
+    Priorities = application:get_env(rabbit, channel_interceptor_priorities, []),
+    lists:filtermap(
+      fun(Mod) ->
+              case safe_applies_to(Mod) of
+                  unloaded -> false;
+                  AppliesTo ->
+                      {true, [{name, Mod},
+                              {applies_to, AppliesTo},
+                              {priority, priority(Mod, Priorities)}]}
+              end
+      end, Mods).
+
+%% A module looked up in the registry may be unloaded before applies_to/0 is
+%% called, for example when the plugin that provides it is disabled
+%% concurrently.
+safe_applies_to(Mod) ->
+    try Mod:applies_to()
+    catch
+        error:undef:Stack ->
+            case Stack of
+                [{Mod, applies_to, _, _} | _] -> unloaded;
+                _ -> erlang:raise(error, undef, Stack)
+            end
+    end.
+
+-spec set_priorities([{module() | unicode:chardata(), integer()}]) ->
+    ok | {error, string()}.
+%% Merges the given priorities into the current configuration and refreshes
+%% channels so the new ordering takes effect. A name that matches no
+%% registered interceptor, or a merged configuration where two interceptors
+%% at the same priority would handle the same operation, is rejected without
+%% committing anything. Concurrent calls are not synchronized against each
+%% other: the last write wins. The change is not persisted and does not
+%% survive a node restart.
+set_priorities(NewPriorities) ->
+    Mods = [M || {_, M} <- rabbit_registry:lookup_all(channel_interceptor)],
+    Resolved = [{Name, resolve_mod(Name, Mods), P} || {Name, P} <- NewPriorities],
+    case [Name || {Name, error, _P} <- Resolved] of
+        [] ->
+            set_priorities([{Mod, P} || {_Name, {ok, Mod}, P} <- Resolved], Mods);
+        Unknown ->
+            {error, rabbit_misc:format(
+                      "cannot set channel interceptor priorities: the following "
+                      "are not registered as channel interceptors: ~tp", [Unknown])}
+    end.
+
+resolve_mod(Mod, Mods) when is_atom(Mod) ->
+    case lists:member(Mod, Mods) of
+        true -> {ok, Mod};
+        false -> error
+    end;
+resolve_mod(Name, Mods) ->
+    try binary_to_existing_atom(iolist_to_binary(Name), utf8) of
+        Mod ->
+            case lists:member(Mod, Mods) of
+                true -> {ok, Mod};
+                false -> error
+            end
+    catch
+        error:badarg -> error
+    end.
+
+set_priorities(NewPriorities, Mods) ->
+    Current = application:get_env(rabbit, channel_interceptor_priorities, []),
+    Merged = lists:foldl(fun({Mod, P}, Acc) ->
+                             lists:keystore(Mod, 1, Acc, {Mod, P})
+                         end, Current, NewPriorities),
+    case overlapping_operations(Mods, Merged) of
+        [] ->
+            ok = application:set_env(rabbit, channel_interceptor_priorities, Merged),
+            rabbit_channel:refresh_interceptors();
+        Conflicts ->
+            {error, rabbit_misc:format(
+                      "cannot set channel interceptor priorities: more than one "
+                      "interceptor at the same priority would handle the same "
+                      "operations, conflicts (priority, modules, operations): ~tp",
+                      [Conflicts])}
+    end.
+
+-spec warn_unknown_priorities() -> ok.
+%% A configured priority whose name matches no registered interceptor is kept
+%% as an atom and never used. Log these as a warning at boot.
+warn_unknown_priorities() ->
+    Mods = [M || {_, M} <- rabbit_registry:lookup_all(channel_interceptor)],
+    Priorities = application:get_env(rabbit, channel_interceptor_priorities, []),
+    case [Name || {Name, _Priority} <- Priorities, not lists:member(Name, Mods)] of
+        [] ->
+            ok;
+        Unknown ->
+            ?LOG_WARNING(
+               "Channel interceptor priorities were configured for modules that "
+               "are not registered as channel interceptors: ~tp. These entries "
+               "have no effect. Check for a misspelled module name or a plugin "
+               "that is not enabled.", [Unknown]),
+            ok
+    end.
+
 init(Ch) ->
     Mods = [M || {_, M} <- rabbit_registry:lookup_all(channel_interceptor)],
-    check_no_overlap(Mods),
-    [{Mod, Mod:init(Ch)} || Mod <- Mods].
+    Priorities = application:get_env(rabbit, channel_interceptor_priorities, []),
+    Sorted = lists:sort(fun(A, B) -> priority(A, Priorities) =< priority(B, Priorities) end, Mods),
+    case overlapping_operations(Sorted, Priorities) of
+        [] -> ok;
+        Conflicts ->
+            internal_error("Interceptor: more than one module handles the same "
+                           "operations at the same priority, conflicts "
+                           "(priority, modules, operations): ~tp", [Conflicts])
+    end,
+    [{Mod, Mod:init(Ch)} || Mod <- Sorted].
 
-check_no_overlap(Mods) ->
-    check_no_overlap1([sets:from_list(Mod:applies_to()) || Mod <- Mods]).
+%% Return the conflicts where more than one interceptor at the same priority
+%% handles the same AMQP operations, as a list of {Priority, Modules,
+%% Operations} tuples. Interceptors with different priorities may overlap
+%% freely, since the order in which they run is then well defined. An empty
+%% list means the given configuration is unambiguous.
+overlapping_operations(Mods, Priorities) ->
+    ByPriority = lists:foldl(fun(Mod, Acc) ->
+                                 P = priority(Mod, Priorities),
+                                 maps:update_with(P, fun(Ms) -> [Mod | Ms] end, [Mod], Acc)
+                             end, #{}, Mods),
+    maps:fold(fun(Priority, Group, Acc) ->
+                  case overlap_in_group(Group) of
+                      [] -> Acc;
+                      Operations ->
+                          Conflicting = [M || M <- Group,
+                                              lists:any(fun(Op) ->
+                                                            lists:member(Op, applies_to_or_empty(M))
+                                                        end, Operations)],
+                          [{Priority, Conflicting, Operations} | Acc]
+                  end
+              end, [], ByPriority).
 
-%% Check no non-empty pairwise intersection in a list of sets
-check_no_overlap1(Sets) ->
-    _ = lists:foldl(fun(Set, Union) ->
-                    Is = sets:intersection(Set, Union),
-                    case sets:size(Is) of
-                        0 -> ok;
-                        _ ->
-                            internal_error("Interceptor: more than one module handles ~tp", [Is])
-                      end,
-                    sets:union(Set, Union)
-                end,
-                sets:new(),
-                Sets),
-    ok.
+applies_to_or_empty(Mod) ->
+    case safe_applies_to(Mod) of
+        unloaded -> [];
+        AppliesTo -> AppliesTo
+    end.
+
+overlap_in_group(Mods) ->
+    {_Union, Overlap} =
+        lists:foldl(fun(Mod, {Union, Over}) ->
+                        Set = sets:from_list(applies_to_or_empty(Mod)),
+                        Is = sets:intersection(Set, Union),
+                        {sets:union(Set, Union), sets:union(Is, Over)}
+                    end,
+                    {sets:new(), sets:new()},
+                    Mods),
+    sets:to_list(Overlap).
+
+priority(Mod, Priorities) ->
+    case lists:keyfind(Mod, 1, Priorities) of
+        {Mod, P} -> P;
+        false     -> 0
+    end.
 
 intercept_in(M, C, Mods) ->
     lists:foldl(fun({Mod, ModState}, {M1, C1}) ->

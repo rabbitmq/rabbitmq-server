@@ -122,7 +122,7 @@ tests:: escript test-deps
 	$(verbose) $(MAKE) -C ../../ install-cli
 	$(verbose) rm -rf $(RABBITMQ_CLI_TEST_TMPDIR)
 	$(verbose) $(MAKE) -C ../../ start-background-broker \
-		ENABLED_PLUGINS="rabbitmq_federation rabbitmq_stomp rabbitmq_stream_management amqp_client" \
+		ENABLED_PLUGINS="rabbitmq_federation rabbitmq_stomp rabbitmq_stream_management rabbitmq_sharding amqp_client" \
 		TMPDIR=$(RABBITMQ_CLI_TEST_TMPDIR) \
 		$(if $(filter khepri,$(RABBITMQ_METADATA_STORE)),,RABBITMQ_FEATURE_FLAGS="-khepri_db"); \
 	$(gen_verbose) $(MIX_TEST) \
