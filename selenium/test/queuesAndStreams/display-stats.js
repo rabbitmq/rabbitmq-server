@@ -39,10 +39,12 @@ describe('Should display stats sections when stats are enabled', function () {
     before (async function () {
       await queuesAndStreams.ensureAddQueueSectionIsVisible()
       await queuesAndStreams.fillInAddNewQueue({"name" : queueName + "_classic", "type" : "classic"})
+      await queuesAndStreams.filterQueues(queueName + "_classic")
       await doUntil(async function () {
-        await queuesAndStreams.filterQueues(queueName + "_classic")
-        return queuesAndStreams.isQueueVisible("%2F", queueName + "_classic")
-      }, (visible) => visible)
+        return queuesAndStreams.getQueuesTable()
+      }, function (table) {
+        return table.some((row) => row.includes(queueName + "_classic"))
+      }, 2000)
     })
     
     it('should display sections that are hidden when stats are disabled', async function () {
@@ -72,10 +74,12 @@ describe('Should display stats sections when stats are enabled', function () {
     before (async function () {
       await queuesAndStreams.ensureAddQueueSectionIsVisible()
       await queuesAndStreams.fillInAddNewQueue({"name" : queueName + "_quorum", "type" : "quorum"})
+      await queuesAndStreams.filterQueues(queueName + "_quorum")
       await doUntil(async function () {
-        await queuesAndStreams.filterQueues(queueName + "_quorum")
-        return queuesAndStreams.isQueueVisible("%2F", queueName + "_quorum")
-      }, (visible) => visible)
+        return queuesAndStreams.getQueuesTable()
+      }, function (table) {
+        return table.some((row) => row.includes(queueName + "_quorum"))
+      }, 2000)
     })
     
     it('should display sections that are hidden when stats are disabled', async function () {
@@ -105,10 +109,12 @@ describe('Should display stats sections when stats are enabled', function () {
     before (async function () {
       await queuesAndStreams.ensureAddQueueSectionIsVisible()
       await queuesAndStreams.fillInAddNewQueue({"name" : queueName + "_stream", "type" : "stream"})
+      await queuesAndStreams.filterQueues(queueName + "_stream")
       await doUntil(async function () {
-        await queuesAndStreams.filterQueues(queueName + "_stream")
-        return queuesAndStreams.isQueueVisible("%2F", queueName + "_stream")
-      }, (visible) => visible)
+        return queuesAndStreams.getQueuesTable()
+      }, function (table) {
+        return table.some((row) => row.includes(queueName + "_stream"))
+      }, 2000)
     })
     
     it('should display sections that are hidden when stats are disabled', async function () {
