@@ -189,6 +189,7 @@ module.exports = class BasePage {
   // sibling table.facts elements with no unique id), using plain getText() so it
   // works whether a td's content is plain text (fmt_string) or a nested element.
   async getFactsTables(locator) {
+    await this.waitForLocated(locator)
     const tables = await this.driver.findElements(locator)
     let facts = []
     for (const table of tables) {
@@ -369,7 +370,7 @@ module.exports = class BasePage {
 
   async isDisplayed(locator) {
       try {
-        let element = await this.driver.findElement(locator)
+        let element = await this.waitForLocated(locator)
 
         return this.driver.wait(until.elementIsVisible(element), this.timeout,
           'Timed out after [timeout=' + this.timeout + ';polling=' + this.polling + '] awaiting till visible ' + element,

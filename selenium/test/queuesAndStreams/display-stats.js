@@ -1,6 +1,6 @@
 const { By, Key, until, Builder } = require('selenium-webdriver')
 const assert = require('assert')
-const { buildDriver, goToHome, captureScreensFor, teardown, delay } = require('../utils')
+const { buildDriver, goToHome, captureScreensFor, teardown, doUntil } = require('../utils')
 
 const LoginPage = require('../pageobjects/LoginPage')
 const OverviewPage = require('../pageobjects/OverviewPage')
@@ -39,9 +39,10 @@ describe('Should display stats sections when stats are enabled', function () {
     before (async function () {
       await queuesAndStreams.ensureAddQueueSectionIsVisible()
       await queuesAndStreams.fillInAddNewQueue({"name" : queueName + "_classic", "type" : "classic"})
-      await delay(5000)
-      await queuesAndStreams.filterQueues(queueName + "_classic")
-      await delay(2000)
+      await doUntil(async function () {
+        await queuesAndStreams.filterQueues(queueName + "_classic")
+        return queuesAndStreams.isQueueVisible("%2F", queueName + "_classic")
+      }, (visible) => visible)
     })
     
     it('should display sections that are hidden when stats are disabled', async function () {
@@ -71,9 +72,10 @@ describe('Should display stats sections when stats are enabled', function () {
     before (async function () {
       await queuesAndStreams.ensureAddQueueSectionIsVisible()
       await queuesAndStreams.fillInAddNewQueue({"name" : queueName + "_quorum", "type" : "quorum"})
-      await delay(5000)
-      await queuesAndStreams.filterQueues(queueName + "_quorum")
-      await delay(2000)
+      await doUntil(async function () {
+        await queuesAndStreams.filterQueues(queueName + "_quorum")
+        return queuesAndStreams.isQueueVisible("%2F", queueName + "_quorum")
+      }, (visible) => visible)
     })
     
     it('should display sections that are hidden when stats are disabled', async function () {
@@ -103,9 +105,10 @@ describe('Should display stats sections when stats are enabled', function () {
     before (async function () {
       await queuesAndStreams.ensureAddQueueSectionIsVisible()
       await queuesAndStreams.fillInAddNewQueue({"name" : queueName + "_stream", "type" : "stream"})
-      await delay(5000)
-      await queuesAndStreams.filterQueues(queueName + "_stream")
-      await delay(2000)
+      await doUntil(async function () {
+        await queuesAndStreams.filterQueues(queueName + "_stream")
+        return queuesAndStreams.isQueueVisible("%2F", queueName + "_stream")
+      }, (visible) => visible)
     })
     
     it('should display sections that are hidden when stats are disabled', async function () {
