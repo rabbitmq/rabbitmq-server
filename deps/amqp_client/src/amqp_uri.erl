@@ -63,7 +63,8 @@ remove_credentials(URI) ->
 %% frame_max, heartbeat and auth_mechanism (the latter can appear more
 %% than once).  The extra parameters that may be specified for an SSL
 %% connection are cacertfile, certfile, keyfile, verify,
-%% fail_if_no_peer_cert, password, and depth.
+%% fail_if_no_peer_cert, password, depth, server_name_indication,
+%% and customize_hostname_check.
 -type parse_result() :: {ok, #amqp_params_network{}} |
                         {ok, #amqp_params_direct{}} |
                         {error, {any(), string()}}.
@@ -189,7 +190,9 @@ build_ssl_broker(ParsedUri, DefaultVHost) ->
                        {fun find_boolean_parameter/1, fail_if_no_peer_cert},
                        {fun find_identity_parameter/1, password},
                        {fun find_sni_parameter/1, server_name_indication},
-                       {fun find_integer_parameter/1, depth}]],
+                       {fun find_integer_parameter/1, depth},
+                       {fun find_customize_hostname_check_parameter/1,
+                        customize_hostname_check}]],
           []),
     Params1 = Params0#amqp_params_network{ssl_options = SSLOptions},
     amqp_ssl:maybe_enhance_ssl_options(Params1).
@@ -248,6 +251,13 @@ find_sni_parameter("disable") ->
     disable;
 find_sni_parameter(Value) ->
     find_identity_parameter(Value).
+
+%% The value is a fun and cannot be expressed in a URI, so only the
+%% OTP-provided HTTPS match fun is exposed.
+find_customize_hostname_check_parameter("https") ->
+    return([{match_fun, public_key:pkix_verify_hostname_match_fun(https)}]);
+find_customize_hostname_check_parameter(Value) ->
+    fail({unsupported_customize_hostname_check, Value}).
 
 find_identity_parameter(Value) -> return(Value).
 
