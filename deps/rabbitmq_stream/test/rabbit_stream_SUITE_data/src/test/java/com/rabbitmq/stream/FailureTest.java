@@ -373,8 +373,10 @@ public class FailureTest {
 
     Client metadataClient = cf.get(new Client.ClientParameters().port(streamPortNode2()));
     // wait until all the replicas are there
+    // the coordinator can back off a failed member action by up to ~10 seconds
+    // before retrying, so give this more headroom than a single retry cycle
     waitAtMost(
-        Duration.ofSeconds(5),
+        Duration.ofSeconds(15),
         () -> {
           Client.StreamMetadata m = metadataClient.metadata(stream).get(stream);
           return m.getReplicas().size() == 2;
