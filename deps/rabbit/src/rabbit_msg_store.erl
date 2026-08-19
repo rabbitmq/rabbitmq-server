@@ -2037,7 +2037,12 @@ index_new(Dir) ->
 
 index_recover(Dir) ->
     Path = filename:join(Dir, ?INDEX_FILE_NAME),
-    case ets:file2tab(Path) of
+    %% {verify, true} rejects a truncated dump (e.g. left behind by a
+    %% shutdown that was killed mid-write) instead of silently loading
+    %% however many objects made it to disk. The caller already falls
+    %% back to a full dirty-recovery rescan on any error here, which is
+    %% what must happen instead of trusting a partial index.
+    case ets:file2tab(Path, [{verify, true}]) of
         {ok, IndexEts}  -> _ = file:delete(Path),
                            {ok, IndexEts};
         Error           -> Error
@@ -2201,7 +2206,14 @@ recover_file_summary(false, _Dir) ->
                     [ordered_set, public, {keypos, #file_summary.file}])};
 recover_file_summary(true, Dir) ->
     Path = filename:join(Dir, ?FILE_SUMMARY_FILENAME),
-    case ets:file2tab(Path) of
+    %% {verify, true} rejects a truncated dump instead of silently
+    %% loading whatever entries made it to disk -- a partial table can
+    %% be missing exactly the highest-numbered (most recently added)
+    %% files, which would otherwise make a stale, lower file look like
+    %% the current one. Falling back to recover_file_summary(false, ...)
+    %% forces the full dirty-recovery rescan, which derives the true
+    %% current file from the real directory listing instead.
+    case ets:file2tab(Path, [{verify, true}]) of
         {ok, Tid}       -> ok = file:delete(Path),
                            {true, Tid};
         {error, _Error} -> recover_file_summary(false, Dir)

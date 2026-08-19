@@ -72,6 +72,8 @@ groups() ->
           msg_store_compaction_v2_packed_run_with_trailing_hole,
           msg_store_v1_compat,
           msg_store_v1_current_file_emptied_before_crash,
+          msg_store_recovers_from_truncated_file_summary_dump,
+          msg_store_recovers_from_truncated_index_dump,
           msg_store_recovers_torn_current_file,
           msg_store_recovers_from_corrupted_file,
           msg_store_recovers_from_corrupted_file_no_fd_leak,
@@ -987,6 +989,42 @@ assert_compacted_file_intact(Path, KeepMsgIds, MSCState) ->
 msg_store_file_path(VHost, MsgStore, FileName) ->
     filename:join([rabbit_vhost:msg_store_dir_path(VHost), atom_to_list(MsgStore), FileName]).
 
+%% Finds a byte length that, when Dump (a dump of a table that holds
+%% ExpectedCount objects) is truncated to it, still round-trips through
+%% ets:file2tab/1 (without {verify, true}) as *fewer* objects than
+%% ExpectedCount -- a real, silent loss of entries, not merely the
+%% trailing checksum/metadata footer with every object still intact.
+%% Scanning downward from just under the full size finds a cut past the
+%% footer first (which drops no objects) before reaching one that drops
+%% real content, exactly what a shutdown-timeout kill landing partway
+%% through the write would leave behind, and exactly the shape
+%% {verify, true} is meant to catch. Also confirms {verify, true}
+%% genuinely rejects the chosen cut, so the two tests using this can't
+%% pass by accident regardless of which code path is under test.
+find_silently_truncatable_cut(Dump, ScratchPath, ExpectedCount) ->
+    Size = byte_size(Dump),
+    Cuts = [round(Size * P / 100) || P <- lists:seq(95, 50, -1)],
+    find_silently_truncatable_cut(Dump, ScratchPath, ExpectedCount, Cuts).
+
+find_silently_truncatable_cut(_Dump, _ScratchPath, _ExpectedCount, []) ->
+    error(no_silently_truncatable_cut_found);
+find_silently_truncatable_cut(Dump, ScratchPath, ExpectedCount, [Cut|Rest]) ->
+    ok = file:write_file(ScratchPath, binary:part(Dump, 0, Cut)),
+    case ets:file2tab(ScratchPath) of
+        {ok, Tab} ->
+            Size1 = ets:info(Tab, size),
+            true = ets:delete(Tab),
+            case Size1 < ExpectedCount of
+                true ->
+                    {error, _} = ets:file2tab(ScratchPath, [{verify, true}]),
+                    Cut;
+                false ->
+                    find_silently_truncatable_cut(Dump, ScratchPath, ExpectedCount, Rest)
+            end;
+        {error, _} ->
+            find_silently_truncatable_cut(Dump, ScratchPath, ExpectedCount, Rest)
+    end.
+
 %% None of the other msg_store_* tests ever produce or touch a v1 (.rdq)
 %% file: restart_msg_store_empty/0 always boots a store with no files at
 %% all, and a store with no v1 files writes v2 from the very first byte.
@@ -1152,6 +1190,151 @@ msg_store_v1_current_file_emptied_before_crash1(_Config) ->
     NewMsg = {payload, <<"written after the empty v1 file was reclaimed">>},
     ok = rabbit_msg_store:write(make_ref(), NewMsgId, NewMsg, MSCState0),
     {{ok, NewMsg}, MSCState1} = rabbit_msg_store:read(NewMsgId, MSCState0),
+
+    ok = rabbit_msg_store:client_terminate(MSCState1),
+    restart_msg_store_empty(),
+    passed.
+
+%% recover_file_summary/2 used to accept a truncated file_summary.ets
+%% dump (e.g. left behind by a shutdown killed mid-write) as if it had
+%% loaded successfully, silently trusting whatever entries survived --
+%% which can be missing exactly the highest-numbered (most recently
+%% added) files, making a stale, lower file look like the current one.
+%% This corrupts only file_summary.ets (clean.dot and the index dump
+%% are untouched and still agree with the client refs below), so its
+%% own truncation is the only thing that can force this boot onto the
+%% dirty path.
+msg_store_recovers_from_truncated_file_summary_dump(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, msg_store_recovers_from_truncated_file_summary_dump1, [Config]).
+
+msg_store_recovers_from_truncated_file_summary_dump1(_Config) ->
+    {ok, DefaultFileSizeLimit} = application:get_env(rabbit, msg_store_file_size_limit),
+    %% file_summary.ets holds one entry per segment file, so a truncation
+    %% that drops some entries but not others needs several files. A tiny
+    %% limit forces a rollover after every message. Restored in the
+    %% `after` clause regardless of outcome, so a failure here can't leak
+    %% this override into every later test in the group.
+    ok = application:set_env(rabbit, msg_store_file_size_limit, 100),
+    try
+        msg_store_recovers_from_truncated_file_summary_dump2()
+    after
+        ok = application:set_env(rabbit, msg_store_file_size_limit, DefaultFileSizeLimit)
+    end.
+
+msg_store_recovers_from_truncated_file_summary_dump2() ->
+    restart_msg_store_empty(),
+    Ref = rabbit_guid:gen(),
+    {Cap, MSCState0} = msg_store_client_init_capture(?PERSISTENT_MSG_STORE, Ref),
+    %% Each of these is 27 + 12 = 39 bytes: 64 + 39 = 103 > 100 rolls the
+    %% file over on every single write, so five messages land in five
+    %% separate segment files (0.sqs-4.sqs), giving file_summary.ets five
+    %% entries -- enough for a truncation to genuinely drop some.
+    MsgIds = [msg_id_bin({truncated_file_summary_dump, N}) || N <- lists:seq(1, 5)],
+    Msg = {payload, <<"still readable after the dump is rejected">>},
+    Writes = lists:zip(lists:seq(1, 5), MsgIds),
+    ok = lists:foreach(fun({N, MsgId}) ->
+        ok = rabbit_msg_store:write(N, MsgId, Msg, MSCState0)
+    end, Writes),
+    ok = on_disk_await(Cap, Writes),
+    ok = rabbit_msg_store:client_terminate(MSCState0),
+    ok = on_disk_stop(Cap),
+
+    %% A clean shutdown: file_summary.ets, msg_store_index.ets, and
+    %% clean.dot are all written correctly.
+    ok = rabbit_variable_queue:stop_msg_store(?VHOST),
+    Path = msg_store_file_path(?VHOST, ?PERSISTENT_MSG_STORE, "file_summary.ets"),
+    {ok, Dump} = file:read_file(Path),
+    true = byte_size(Dump) > 10,
+    %% Simulates a shutdown-timeout kill landing mid-write: syntactically
+    %% still a well-formed (but incomplete) ets dump, genuinely missing
+    %% some of the five file entries -- the same shape a real partial
+    %% write would leave behind, and specifically the shape that can make
+    %% a stale, lower-numbered file look like the current one (issue #25).
+    ScratchPath = Path ++ ".scratch",
+    %% +1 for the current file (6.sqs, still empty, never gets its own
+    %% write above but does get a file_summary entry once it's rolled
+    %% into).
+    Cut = find_silently_truncatable_cut(Dump, ScratchPath, length(MsgIds) + 1),
+    ok = file:delete(ScratchPath),
+    ok = file:write_file(Path, binary:part(Dump, 0, Cut)),
+
+    %% Dirty recovery only keeps a message that count_msg_refs/3
+    %% registers as still needed -- report every MsgId, mirroring a real
+    %% queue's own index still referencing all of them.
+    Gen = fun
+        ([])  -> finished;
+        (Ids) -> {Ids, []}
+    end,
+    ok = rabbit_variable_queue:start_msg_store(?VHOST, [Ref], {Gen, MsgIds}),
+    false = rabbit_vhost_msg_store:successfully_recovered_state(?VHOST, ?PERSISTENT_MSG_STORE),
+
+    %% Dirty recovery's full rescan still finds every message correctly,
+    %% including whichever files the truncated dump would have silently
+    %% dropped.
+    MSCState1 = lists:foldl(fun(MsgId, MSCStateM) ->
+        {{ok, Msg}, MSCStateN} = rabbit_msg_store:read(MsgId, MSCStateM),
+        MSCStateN
+    end, msg_store_client_init(?PERSISTENT_MSG_STORE, Ref), MsgIds),
+
+    ok = rabbit_msg_store:client_terminate(MSCState1),
+    restart_msg_store_empty(),
+    passed.
+
+%% Same as msg_store_recovers_from_truncated_file_summary_dump but for
+%% the index dump instead: index_recover/1 used to accept a truncated
+%% msg_store_index.ets the same way. This also exercises a different
+%% branch of init/1 than the file_summary case does: file_summary.ets
+%% loads successfully here (FileSummaryRecovered = true), so it's the
+%% "recovered file_summary but not the index" path that must clear it
+%% back out (init/1's `{true, false} -> ets:delete_all_objects(...)`)
+%% rather than the path that never trusted it in the first place.
+msg_store_recovers_from_truncated_index_dump(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, msg_store_recovers_from_truncated_index_dump1, [Config]).
+
+msg_store_recovers_from_truncated_index_dump1(_Config) ->
+    restart_msg_store_empty(),
+    Ref = rabbit_guid:gen(),
+    {Cap, MSCState0} = msg_store_client_init_capture(?PERSISTENT_MSG_STORE, Ref),
+    %% Several entries, so a truncation can genuinely drop some while
+    %% leaving others intact -- not just lose the dump's trailing
+    %% checksum/metadata with every entry still there.
+    MsgIds = [msg_id_bin({truncated_index_dump, N}) || N <- lists:seq(1, 5)],
+    Msg = {payload, <<"still readable after the index dump is rejected">>},
+    Writes = lists:zip(lists:seq(1, 5), MsgIds),
+    ok = lists:foreach(fun({N, MsgId}) ->
+        ok = rabbit_msg_store:write(N, MsgId, Msg, MSCState0)
+    end, Writes),
+    ok = on_disk_await(Cap, Writes),
+    ok = rabbit_msg_store:client_terminate(MSCState0),
+    ok = on_disk_stop(Cap),
+
+    ok = rabbit_variable_queue:stop_msg_store(?VHOST),
+    Path = msg_store_file_path(?VHOST, ?PERSISTENT_MSG_STORE, "msg_store_index.ets"),
+    {ok, Dump} = file:read_file(Path),
+    true = byte_size(Dump) > 10,
+    ScratchPath = Path ++ ".scratch",
+    Cut = find_silently_truncatable_cut(Dump, ScratchPath, length(MsgIds)),
+    ok = file:delete(ScratchPath),
+    ok = file:write_file(Path, binary:part(Dump, 0, Cut)),
+
+    %% Dirty recovery only keeps a message that count_msg_refs/3
+    %% registers as still needed -- report every MsgId, mirroring a
+    %% real queue's own index still referencing all of them.
+    Gen = fun
+        ([])  -> finished;
+        (Ids) -> {Ids, []}
+    end,
+    ok = rabbit_variable_queue:start_msg_store(?VHOST, [Ref], {Gen, MsgIds}),
+    false = rabbit_vhost_msg_store:successfully_recovered_state(?VHOST, ?PERSISTENT_MSG_STORE),
+
+    %% Every message is found, including whichever ones the truncated
+    %% dump would have silently dropped.
+    MSCState1 = lists:foldl(fun(MsgId, MSCStateM) ->
+        {{ok, Msg}, MSCStateN} = rabbit_msg_store:read(MsgId, MSCStateM),
+        MSCStateN
+    end, msg_store_client_init(?PERSISTENT_MSG_STORE, Ref), MsgIds),
 
     ok = rabbit_msg_store:client_terminate(MSCState1),
     restart_msg_store_empty(),
