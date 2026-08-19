@@ -39,14 +39,20 @@ all() ->
     ].
 
 groups() ->
-    %% Consumer timeouts are only supported for quorum queues.
-    %% Classic queues and stream queues do not support consumer timeouts.
+    %% Stream queues do not support consumer timeouts.
     AllTests = [consumer_timeout_with_basic_cancel_capability,
                 consumer_timeout_no_basic_cancel_capability,
                 consumer_timeout_basic_get],
 
+    %% Quorum queues ignore the exclusive_consume flag and do not use
+    %% tombstones, so these only apply to classic queues.
+    ClassicOnlyTests = [exclusive_consume_refused_after_consumer_timeout,
+                        message_count_after_consumer_timeout,
+                        consumer_reported_inactive_after_consumer_timeout],
+
     AllTestsParallel = [
-       {quorum_queue, [], AllTests}
+       {quorum_queue, [], AllTests},
+       {classic_queue, [], AllTests ++ ClassicOnlyTests}
       ],
     [
      {global_consumer_timeout, [], AllTestsParallel},
@@ -94,6 +100,12 @@ init_per_group(quorum_queue, Config) ->
       Config,
       [{policy_type, <<"quorum_queues">>},
        {queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>}]},
+       {queue_durable, true}]);
+init_per_group(classic_queue, Config) ->
+    rabbit_ct_helpers:set_config(
+      Config,
+      [{policy_type, <<"classic_queues">>},
+       {queue_args, [{<<"x-queue-type">>, longstr, <<"classic">>}]},
        {queue_durable, true}]);
 init_per_group(Group, Config) ->
     case lists:member({group, Group}, all()) of
@@ -194,9 +206,168 @@ consumer_timeout_with_basic_cancel_capability(Config) ->
     after 1000 ->
               ok
     end,
+    %% The reclaimed message must be back in the queue.
+    {#'basic.get_ok'{delivery_tag = DTag}, #amqp_msg{payload = <<"msg1">>}} =
+        amqp_channel:call(Ch, #'basic.get'{queue = QName, no_ack = false}),
+    amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DTag}),
+    #'basic.get_empty'{} =
+        amqp_channel:call(Ch, #'basic.get'{queue = QName, no_ack = true}),
     rabbit_ct_client_helpers:close_channel(Ch),
     rabbit_ct_client_helpers:close_connection(Conn),
     ok.
+
+%% A consumer timeout parks the consumer but does not cancel it at the queue,
+%% so the queue is still exclusively consumed and a second consumer must be
+%% refused with 403.
+exclusive_consume_refused_after_consumer_timeout(Config) ->
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    QName = ?config(queue_name, Config),
+    declare_queue(Ch, Config, QName),
+    amqp_channel:call(Ch, #'confirm.select'{}),
+    publish(Ch, QName, [<<"msg1">>]),
+    amqp_channel:wait_for_confirms_or_die(Ch, 30),
+    wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
+
+    Ctag = <<"exclusive-ctag">>,
+    amqp_channel:subscribe(Ch, #'basic.consume'{queue = QName,
+                                                no_ack = false,
+                                                exclusive = true,
+                                                consumer_tag = Ctag},
+                           self()),
+    receive #'basic.consume_ok'{consumer_tag = Ctag} -> ok
+    after ?RECEIVE_TIMEOUT -> exit(consume_ok_expected)
+    end,
+
+    %% Receive the delivery but never acknowledge it, to trigger the timeout.
+    receive
+        {#'basic.deliver'{consumer_tag = Ctag}, _} -> ok
+    after ?RECEIVE_TIMEOUT ->
+              flush(1),
+              exit(deliver_timeout)
+    end,
+    receive
+        #'basic.cancel'{consumer_tag = Ctag, nowait = true} -> ok
+    after ?RECEIVE_TIMEOUT ->
+              flush(1),
+              exit(basic_cancel_expected)
+    end,
+
+    %% The exclusive consumer is still registered at the queue: the channel
+    %% only forwarded a basic.cancel to the client, it did not cancel the
+    %% consumer. A plain basic.consume from another connection must still be
+    %% refused.
+    Conn2 = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0),
+    {ok, Ch2} = amqp_connection:open_channel(Conn2),
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 403, _}}, _},
+       amqp_channel:call(Ch2, #'basic.consume'{queue = QName, no_ack = true})),
+
+    catch amqp_connection:close(Conn2),
+    rabbit_ct_client_helpers:close_channel(Ch),
+    rabbit_ct_client_helpers:close_connection(Conn),
+    ok.
+
+%% A consumer timeout requeues the expired delivery into the backing queue
+%% and keeps a tombstone until the late ack arrives. The tombstone must not
+%% also be counted as unacknowledged: the single physical message must be
+%% reported once, not twice.
+message_count_after_consumer_timeout(Config) ->
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    QName = ?config(queue_name, Config),
+    declare_queue(Ch, Config, QName),
+    amqp_channel:call(Ch, #'confirm.select'{}),
+    publish(Ch, QName, [<<"msg1">>]),
+    amqp_channel:wait_for_confirms_or_die(Ch, 30),
+    wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
+
+    Ctag = <<"ctag">>,
+    subscribe(Ch, QName, false, Ctag),
+    %% Receive the delivery but never acknowledge it, to trigger the timeout.
+    receive
+        {#'basic.deliver'{consumer_tag = Ctag}, _} -> ok
+    after ?RECEIVE_TIMEOUT ->
+              flush(1),
+              exit(deliver_timeout)
+    end,
+    receive
+        #'basic.cancel'{consumer_tag = Ctag, nowait = true} -> ok
+    after ?RECEIVE_TIMEOUT ->
+              flush(1),
+              exit(basic_cancel_expected)
+    end,
+
+    %% The message has been requeued and a tombstone is still outstanding.
+    %% It must be reported as a single ready message: messages = 1,
+    %% messages_ready = 1, messages_unacknowledged = 0.
+    wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
+
+    rabbit_ct_client_helpers:close_channel(Ch),
+    rabbit_ct_client_helpers:close_connection(Conn),
+    ok.
+
+%% A consumer timeout parks the consumer, which is a state change symmetric
+%% with the un-park that happens on the eventual ack. The management metrics
+%% (the `consumer_created' table read by the management UI) must reflect the
+%% parked consumer as no longer active, rather than keeping the stale `up'
+%% status it had before the timeout.
+consumer_reported_inactive_after_consumer_timeout(Config) ->
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    QName = ?config(queue_name, Config),
+    declare_queue(Ch, Config, QName),
+    amqp_channel:call(Ch, #'confirm.select'{}),
+    publish(Ch, QName, [<<"msg1">>]),
+    amqp_channel:wait_for_confirms_or_die(Ch, 30),
+    wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
+
+    Ctag = <<"ctag">>,
+    subscribe(Ch, QName, false, Ctag),
+    receive
+        {#'basic.deliver'{consumer_tag = Ctag}, _} -> ok
+    after ?RECEIVE_TIMEOUT ->
+              flush(1),
+              exit(deliver_timeout)
+    end,
+    %% Before the timeout the consumer is reported as active.
+    ?assertEqual({true, up}, consumer_activity(Config, Ctag)),
+
+    receive
+        #'basic.cancel'{consumer_tag = Ctag, nowait = true} -> ok
+    after ?RECEIVE_TIMEOUT ->
+              flush(1),
+              exit(basic_cancel_expected)
+    end,
+
+    %% After the timeout the parked consumer must be reported as blocked.
+    ?assertEqual(blocked, wait_for_consumer_activity_status(Config, Ctag, blocked)),
+
+    rabbit_ct_client_helpers:close_channel(Ch),
+    rabbit_ct_client_helpers:close_connection(Conn),
+    ok.
+
+%% Reads the {Active, ActivityStatus} pair the management metrics report for a
+%% consumer tag from the `consumer_created' table on node 0.
+consumer_activity(Config, Ctag) ->
+    case rabbit_ct_broker_helpers:rpc(
+           Config, 0, ets, match, [consumer_created,
+                                   {{'_', '_', Ctag}, '_', '_', '_', '$1', '$2', '_'}]) of
+        [[Active, ActivityStatus]] -> {Active, ActivityStatus};
+        [] -> not_found
+    end.
+
+wait_for_consumer_activity_status(Config, Ctag, Expected) ->
+    wait_for_consumer_activity_status(Config, Ctag, Expected, 100).
+
+wait_for_consumer_activity_status(Config, Ctag, _Expected, 0) ->
+    {_Active, ActivityStatus} = consumer_activity(Config, Ctag),
+    ActivityStatus;
+wait_for_consumer_activity_status(Config, Ctag, Expected, N) ->
+    case consumer_activity(Config, Ctag) of
+        {_Active, Expected} ->
+            Expected;
+        _ ->
+            timer:sleep(100),
+            wait_for_consumer_activity_status(Config, Ctag, Expected, N - 1)
+    end.
 
 %% Test consumer timeout with basic.get (manual acknowledgement mode).
 %% When a message is fetched via basic.get and not acknowledged within the timeout,
