@@ -880,14 +880,8 @@ init([VHost, Type, BaseDir, ClientRefs, StartupFunState]) ->
     State2 = State1 #msstate { current_file         = CurFile,
                                current_file_handle  = CurHdl,
                                current_file_offset  = CurOffset },
-    %% CurFile0 was still current_file (and therefore exempt from
-    %% every delete_file_if_empty/2 check run so far, including the
-    %% one build_index/3 just did for dirty recovery) right up until
-    %% open_current_file/5 above decided to roll away from it because
-    %% it's v1. If it turned out to hold no valid messages, nothing
-    %% else will ever reconsider it once we return here with a
-    %% different file current: check it once, now, while we still
-    %% remember it was just abandoned.
+    %% After an upgrade the most recent v1 file may be empty,
+    %% we delete it now instead of leaving it forever.
     State3 = case CurFile of
         CurFile0 -> State2;
         _        -> delete_file_if_empty(CurFile0, State2)
@@ -896,14 +890,9 @@ init([VHost, Type, BaseDir, ClientRefs, StartupFunState]) ->
      hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
-%% The current write file must always be v2. build_index/3 may have left
-%% us pointing at a v1 file, either because the store predates v2 or
-%% because nothing has been written since upgrading: in that case we
-%% force a roll to a fresh v2 file (CurFile0 + 1) before accepting any
-%% writes. Separately, if the recovered v2 "current" file has nothing
-%% but (at most) a partial header in it, we (re)create it fresh via
-%% writer_open/2 rather than let writer_recover/3's truncate conjure up
-%% a correct 64-byte header out of implicit zero-fill.
+%% The current write file is always v2. If the current file is v1,
+%% we create a new v2 current file. We also do if the v2 file has
+%% nothing in it (we overwrite the header if any).
 open_current_file(Dir, CurFile, CurOffset, LastV1File, FileSummaryEts) ->
     case file_format(CurFile, LastV1File) of
         %% v1 files can't take v2 records, so roll over to a brand new file.
@@ -1654,10 +1643,6 @@ mark_handle_closed(FileHandlesEts, File, Ref) ->
 
 form_filename(Dir, Name) -> filename:join(Dir, Name).
 
-%% Format is determined solely by the file number relative to the
-%% store's last_v1_file boundary: writes always produce v2 from this
-%% release onward, so any file above the boundary (or every file, when
-%% the store has no v1 files at all) is v2.
 file_format(_File, none)                       -> v2;
 file_format(File,  LastV1) when File =< LastV1 -> v1;
 file_format(_,     _)                          -> v2.
@@ -1816,7 +1801,7 @@ scan_v1_next_byte(<<_, Rest/bits>>, Fd, Fun, Offset, FileSize, MsgIdsFound, Acc)
 %% as in v1. We never fall back to scanning the next byte: that is
 %% exactly the kind of guess that could land on something that merely
 %% looks like a record.
-
+%%
 %% Any exception raised while scanning (whether one of the deliberate
 %% rabbit_msg_store_v2_scan corruption errors above, or anything else
 %% unexpected) is re-raised with Path attached, so whatever eventually
@@ -1826,12 +1811,6 @@ scan_v2_file_for_valid_messages(Path, Fun) ->
     try
         case file:open(Path, [read, binary, raw]) of
             {ok, Fd} ->
-                %% The fd must close on every exit from the scan below,
-                %% not just success: scan_file_recovering_corruption/2
-                %% retries a failed scan of this same file in a loop,
-                %% and each retry calls back in here, so a leaked fd
-                %% per failed attempt would accumulate for as long as
-                %% the process doing the scanning lives.
                 try
                     {ok, FileSize} = file:position(Fd, eof),
                     Messages = case FileSize < ?V2_HEADER_SIZE of
@@ -1964,11 +1943,7 @@ scan_v2_data(<<?REC_MESSAGE:8, Size:32, Rest0/bits>> = Data, Fd, Fun, Offset, Fi
             PayloadLen = Size - 21,
             case Rest0 of
                 <<MsgIdInt:128, Body:PayloadLen/binary, Rest/bits>> ->
-                    %% A torn write reproducing a syntactically valid
-                    %% Erlang external term by chance is astronomically
-                    %% unlikely, so this catches a Type/Size that happened
-                    %% to validate numerically but isn't really a message,
-                    %% regardless of what MsgId lookup would say below.
+                    %% We only need to know this is a valid Erlang term.
                     try binary_to_term(Body) of
                         _ -> ok
                     catch
@@ -2039,9 +2014,7 @@ index_recover(Dir) ->
     Path = filename:join(Dir, ?INDEX_FILE_NAME),
     %% {verify, true} rejects a truncated dump (e.g. left behind by a
     %% shutdown that was killed mid-write) instead of silently loading
-    %% however many objects made it to disk. The caller already falls
-    %% back to a full dirty-recovery rescan on any error here, which is
-    %% what must happen instead of trusting a partial index.
+    %% however many objects made it to disk.
     case ets:file2tab(Path, [{verify, true}]) of
         {ok, IndexEts}  -> _ = file:delete(Path),
                            {ok, IndexEts};
@@ -2081,16 +2054,8 @@ index_update(IndexEts, Obj) ->
 %% write racing this compaction can delete and reinsert the same msg_id
 %% under a different file (or a different offset in the same file) before
 %% this runs; if that happened, the entry no longer belongs to this
-%% compaction pass and must not be touched -- its own physical bytes were
-%% already copied into the new location regardless (write_compact_file_v2
-%% doesn't know or care whether the index update will succeed), so the
-%% only consequence of skipping is an orphaned, harmless duplicate copy
-%% that scan_and_vacuum_message_file/3's existing fan-out clause already
-%% recognises and discards on this file's next scan.
+%% compaction pass and must not be touched.
 index_update_offset_if_unchanged(IndexEts, MsgId, File, OldOffset, NewOffset) ->
-    %% The extra {...} around the replacement record is required by
-    %% ets:select_replace/2: without it, a literal tuple appearing in a
-    %% match spec's body is parsed as a function call instead.
     MatchSpec = [{#msg_location{msg_id = MsgId, ref_count = '$1', file = File,
                                 offset = OldOffset, total_size = '$2'},
                   [],
@@ -2173,8 +2138,6 @@ recover_index_and_client_refs(true, ClientRefs, Dir, Name) ->
             end
     end.
 
-%% Ground truth for the v1/v2 boundary when it cannot be trusted from
-%% persisted terms (dirty recovery).
 scan_for_last_v1_file(Dir) ->
     case filelib:wildcard("*" ++ ?FILE_EXTENSION_V1, Dir) of
         []    -> none;
@@ -2206,13 +2169,9 @@ recover_file_summary(false, _Dir) ->
                     [ordered_set, public, {keypos, #file_summary.file}])};
 recover_file_summary(true, Dir) ->
     Path = filename:join(Dir, ?FILE_SUMMARY_FILENAME),
-    %% {verify, true} rejects a truncated dump instead of silently
-    %% loading whatever entries made it to disk -- a partial table can
-    %% be missing exactly the highest-numbered (most recently added)
-    %% files, which would otherwise make a stale, lower file look like
-    %% the current one. Falling back to recover_file_summary(false, ...)
-    %% forces the full dirty-recovery rescan, which derives the true
-    %% current file from the real directory listing instead.
+    %% {verify, true} rejects a truncated dump (e.g. left behind by a
+    %% shutdown that was killed mid-write) instead of silently loading
+    %% however many objects made it to disk.
     case ets:file2tab(Path, [{verify, true}]) of
         {ok, Tid}       -> ok = file:delete(Path),
                            {true, Tid};
@@ -2374,13 +2333,8 @@ scan_file_recovering_corruption(Path, Fun) ->
             end
     end.
 
-%% Every rabbit_msg_store_v2_scan reason (wrapped by
-%% scan_v2_file_for_valid_messages/2 in rabbit_msg_store_v2_scan_error)
-%% reports the offset of the record it rejected as its second element.
-%% Only that specific, unambiguous shape is trusted: anything else,
-%% including a tuple that merely happens to also have an integer in
-%% the same position, is not our own error and must not be mistaken
-%% for one.
+%% Every rabbit_msg_store_v2_scan reason reports the offset of the
+%% record it rejected as its second element.
 corruption_offset({rabbit_msg_store_v2_scan_error, _Path, InnerReason})
         when is_tuple(InnerReason), tuple_size(InnerReason) >= 2,
              element(1, InnerReason) =:= rabbit_msg_store_v2_scan,
@@ -2388,8 +2342,6 @@ corruption_offset({rabbit_msg_store_v2_scan_error, _Path, InnerReason})
     {ok, element(2, InnerReason)};
 corruption_offset(_Reason) -> error.
 
-%% Runs in the same process as its caller, rebuild_index/3, rather than
-%% a separate spawned process -- see the comment there for why.
 enqueue_build_index_workers(_Gatherer, [], _State) ->
     ok;
 enqueue_build_index_workers(Gatherer, [File|Files], State) ->
@@ -2420,22 +2372,6 @@ reduce_index(Gatherer, LastFile,
             reduce_index(Gatherer, LastFile, State)
     end.
 
-%% Dispatching used to happen in a separate, unlinked, spawned process,
-%% concurrently with reduce_index/3 below draining the gatherer. If
-%% that process died before dispatching every file -- for any reason,
-%% since nothing linked or usefully monitored it -- the gatherer's
-%% per-file fork count (already bumped for every file up front, just
-%% below) would never reach zero, so gatherer:out/1 would never return
-%% empty and reduce_index/3 would block forever; rabbit_msg_store's own
-%% start_link/5 uses {timeout, infinity}, so nothing would ever time
-%% that out either -- the store just never came up, with no crash and
-%% no log. worker_pool:dispatch_sync/1 paces on free-worker availability
-%% either way, identically whether it's called from a separate process
-%% or inline, so doing it inline here doesn't change how long dispatching
-%% every file takes; it just means a failure part-way through (e.g. the
-%% shared worker_pool itself dying while a dispatch call is in flight)
-%% now propagates directly out of this function instead of vanishing
-%% silently.
 rebuild_index(Gatherer, Files, State) ->
     lists:foreach(fun (_File) ->
                           ok = gatherer:fork(Gatherer)
@@ -2683,27 +2619,10 @@ do_compact_file_v1(Fd, _, [#msg_location{ offset = StartMsgOffset, total_size = 
 do_compact_file_v1(_, Offset, _, [], IndexAcc) ->
     {ok, Offset, IndexAcc}.
 
-%% gap_size == 0  -> nothing
-%% gap_size <  5  -> 1..4 SMALL_HOLE bytes
-%% gap_size >= 5  -> one HOLE record, inner bytes zeroed
-%%
 %% The scanner only ever looks at the HOLE record's own 5-byte header
 %% to know how much to skip; it never reads the inner bytes. We zero
 %% them anyway so that a completed write leaves no message bytes
 %% behind for a raw scan (a salvage tool, for instance) to recover.
-%%
-%% This doesn't add crash resilience: the zeros are the last bytes in
-%% the pwrite, written after the message and the header, so a write
-%% torn partway through is, if anything, more likely to leave old
-%% bytes behind unzeroed than to leave zeros. What a scanner relies on
-%% after a crash is the header's own type and size landing intact,
-%% which zeroing the payload does nothing for.
-%%
-%% It does have one incidental benefit for a *different* failure mode,
-%% though: REC_RESERVED is 0 and has no matching scan clause, so if a
-%% scan ever gets misaligned (say, from a corrupted Size elsewhere) and
-%% lands inside a hole's zeroed payload, it hits the unrecognised-type
-%% crash instead of silently reading zeros as if they were meaningful.
 hole_bytes(0) ->
     <<>>;
 hole_bytes(Size) when Size < 5 ->
@@ -2714,15 +2633,7 @@ hole_bytes(Size) ->
 %% We decide the whole compaction plan first, as pure data,
 %% then write it. This way nothing is ever written based on
 %% information that a later part of the plan could still
-%% invalidate. write_compact_file_v2/2 writes a hole record for
-%% whatever's left of the space each run of moves lands in, so the
-%% file is always fully valid and scannable at every point during
-%% compaction and before the physical truncation that follows it has
-%% actually happened: a crash never leaves an unmarked, ambiguous gap
-%% for the next scan (this one, recovery, or the salvage tool) to
-%% trip over. Messages we leave in place are untouched, including
-%% whatever follows them: we haven't broken anything there, so there
-%% is nothing for us to mark.
+%% invalidate.
 do_compact_file_v2(Fd, StartOffset, Messages) ->
     {Plan, TruncateSize} = plan_compact_file_v2(StartOffset, Messages, lists:reverse(Messages), []),
     IndexUpdates = write_compact_file_v2(Fd, Plan),
@@ -2735,15 +2646,6 @@ do_compact_file_v2(Fd, StartOffset, Messages) ->
 %% this never touches the file: it only decides the final, static
 %% layout, so nothing here can be invalidated by a read or a write
 %% that a later decision hasn't been made yet when it happens.
-%%
-%% A move's own hole size isn't known until we see what ends up right
-%% after it in the finished plan: packing can stop either because this
-%% was the very last message that could possibly move (the terminal
-%% clause below), or because the next candidate from the end of the
-%% file simply doesn't fit and we fall through to leaving a message
-%% where it is instead. Either way leaves a leftover behind this move,
-%% so the hole size is filled in from the finished plan, in
-%% write_compact_file_v2/2, rather than decided here.
 plan_compact_file_v2(Offset, Start = [#msg_location{ offset = StartMsgOffset }|_],
         [#msg_location{ msg_id = EndMsgId, offset = EndMsgOffset, total_size = EndMsgSize }|EndTail],
         Acc)
