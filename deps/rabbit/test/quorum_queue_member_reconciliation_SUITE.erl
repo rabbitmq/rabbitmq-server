@@ -14,6 +14,9 @@
 
 -import(rabbit_ct_helpers, [consistently/3]).
 
+-define(RA_SYSTEM, quorum_queues).
+-define(FORCE_DELETE_TABLE, rabbit_qq_force_delete_pending).
+
 %% The reconciler has two modes of triggering itself
 %% - timer based
 %% - event based
@@ -27,7 +30,8 @@
 all() ->
     [
      {group, unclustered},
-     {group, unclustered_triggers}
+     {group, unclustered_triggers},
+     {group, clustered_force_delete}
     ].
 
 groups() ->
@@ -41,6 +45,14 @@ groups() ->
       [
        %% see also `auto_grow_drained_node`
        {quorum_queue_3, [], [auto_grow, auto_shrink]}
+      ]},
+     %% Unlike the groups above, these need a formed cluster: a member is leaked
+     %% by taking one of its nodes down during a force delete.
+     {clustered_force_delete, [],
+      [
+       {quorum_queue_3, [], [leaked_member_is_eventually_force_deleted,
+                             stale_incarnation_is_not_deleted,
+                             unverifiable_member_is_dropped]}
       ]}
     ].
 
@@ -79,6 +91,12 @@ init_per_group(unclustered_triggers, Config0) ->
     rabbit_ct_helpers:set_config(Config1, [{rmq_nodes_clustered, false},
                                            {quorum_membership_reconciliation_interval, 50000},
                                            {shrink_timeout, 2000}]);
+init_per_group(clustered_force_delete, Config0) ->
+    Config1 = rabbit_ct_helpers:merge_app_env(
+                Config0, {rabbit, [{quorum_tick_interval, 1000},
+                                   {quorum_queue_force_delete_retry_interval, 3000}]}),
+    rabbit_ct_helpers:set_config(Config1, [{rmq_nodes_clustered, true},
+                                           {force_delete_group, true}]);
 init_per_group(Group, Config) ->
     ClusterSize = 3,
     Config1 = rabbit_ct_helpers:set_config(Config,
@@ -93,11 +111,23 @@ end_per_group(unclustered, Config) ->
     Config;
 end_per_group(unclustered_triggers, Config) ->
     Config;
+end_per_group(clustered_force_delete, Config) ->
+    Config;
 end_per_group(_, Config) ->
     rabbit_ct_helpers:run_steps(Config,
                                 rabbit_ct_broker_helpers:teardown_steps()).
 
 init_per_testcase(Testcase, Config) ->
+    case is_force_delete_group(Config) andalso
+        not rabbit_ct_broker_helpers:is_feature_flag_enabled(
+              Config, track_qq_members_uids) of
+        true ->
+            {skip, "force delete retry requires track_qq_members_uids ff"};
+        false ->
+            init_per_testcase0(Testcase, Config)
+    end.
+
+init_per_testcase0(Testcase, Config) ->
     Config1 = rabbit_ct_helpers:testcase_started(Config, Testcase),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_queues, []),
     Q = rabbit_data_coercion:to_binary(Testcase),
@@ -109,11 +139,20 @@ init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:run_steps(Config2, rabbit_ct_client_helpers:setup_steps()).
 
 end_per_testcase(Testcase, Config) ->
-    [Server0, Server1, Server2] =
-        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
-    amqp_channel:call(Ch, #'queue.delete'{queue = rabbit_data_coercion:to_binary(Testcase)}),
-    reset_nodes([Server2, Server0], Server1),
+    %% The reconciliation groups start unclustered and join nodes as they go, so
+    %% they have to be put back. The force delete group runs against a cluster
+    %% that must stay formed for the next case.
+    case is_force_delete_group(Config) of
+        true ->
+            ok;
+        false ->
+            [Server0, Server1, Server2] =
+                rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+            Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
+            amqp_channel:call(Ch, #'queue.delete'{
+                                     queue = rabbit_data_coercion:to_binary(Testcase)}),
+            reset_nodes([Server2, Server0], Server1)
+    end,
     Config1 = rabbit_ct_helpers:run_steps(
                 Config,
                 rabbit_ct_client_helpers:teardown_steps()),
@@ -231,9 +270,128 @@ auto_shrink(Config) ->
                        2 =:= length(M)
                end).
 
+%% A quorum queue member left behind on a node that was down during a force
+%% delete is eventually force-deleted once the node returns.
+leaked_member_is_eventually_force_deleted(Config) ->
+    [Server0, _Server1, Server2] =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
+    QQ = ?config(queue_name, Config),
+    RaName = queue_utils:ra_name(QQ),
+
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    wait_until(fun() ->
+                       3 =:= length(element(2, ra:members({RaName, Server0})))
+               end),
+
+    %% Server2's member is present before we take the node down.
+    UId = uid_of(Config, Server2, RaName),
+    ?assert(is_binary(UId)),
+
+    %% Take Server2 down, then delete the queue from Server0. The delete still
+    %% reaches quorum (2 of 3), so the record is removed, but the force delete of
+    %% Server2's member fails because the node is unreachable.
+    ok = rabbit_ct_broker_helpers:stop_node(Config, Server2),
+    #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = QQ}),
+
+    %% The leaked member is recorded for retry on Server0.
+    wait_until(fun() ->
+                       [] =/= pending_lookup(Config, Server0, RaName, Server2)
+               end),
+
+    %% Bring Server2 back and the retry loop must eventually remove the member
+    %% and drop the pending entry.
+    ok = rabbit_ct_broker_helpers:start_node(Config, Server2),
+    wait_until(fun() ->
+                       undefined =:= uid_of(Config, Server2, RaName)
+               end),
+    wait_until(fun() ->
+                       [] =:= pending_lookup(Config, Server0, RaName, Server2)
+               end).
+
+%% A retry must never delete a member that belongs to a newer incarnation of the
+%% same queue name: the UID guard drops the stale entry instead.
+stale_incarnation_is_not_deleted(Config) ->
+    [Server0, _Server1, Server2] =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
+    QQ = ?config(queue_name, Config),
+    RaName = queue_utils:ra_name(QQ),
+    QName = rabbit_misc:r(<<"/">>, queue, QQ),
+
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    wait_until(fun() ->
+                       3 =:= length(element(2, ra:members({RaName, Server0})))
+               end),
+
+    CurrentUId = uid_of(Config, Server2, RaName),
+    ?assert(is_binary(CurrentUId)),
+
+    %% Schedule a retry for Server2's member but tagged with a UID that does not
+    %% match the live incarnation.
+    StaleUId = <<"stale-incarnation-uid">>,
+    ?assertNotEqual(StaleUId, CurrentUId),
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, Server0,
+           rabbit_quorum_queue_periodic_membership_reconciliation, schedule,
+           [QName, [{{RaName, Server2}, StaleUId}]]),
+
+    %% The stale entry is dropped without touching the live member.
+    wait_until(fun() ->
+                       [] =:= pending_lookup(Config, Server0, RaName, Server2)
+               end),
+    ?assertEqual(CurrentUId, uid_of(Config, Server2, RaName)),
+    ?assertEqual(3, length(element(2, ra:members({RaName, Server0})))).
+
+%% A member with no recorded UID cannot be told apart from a newer incarnation,
+%% so it is dropped from the retry set rather than deleted.
+unverifiable_member_is_dropped(Config) ->
+    [Server0, _Server1, Server2] =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
+    QQ = ?config(queue_name, Config),
+    RaName = queue_utils:ra_name(QQ),
+    QName = rabbit_misc:r(<<"/">>, queue, QQ),
+
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    wait_until(fun() ->
+                       3 =:= length(element(2, ra:members({RaName, Server0})))
+               end),
+
+    CurrentUId = uid_of(Config, Server2, RaName),
+    ?assert(is_binary(CurrentUId)),
+
+    %% Schedule a retry for Server2's member with no UID, as a queue record
+    %% predating the feature flag would produce.
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, Server0,
+           rabbit_quorum_queue_periodic_membership_reconciliation, schedule,
+           [QName, [{{RaName, Server2}, undefined}]]),
+
+    %% The entry is dropped and the live member is left alone.
+    wait_until(fun() ->
+                       [] =:= pending_lookup(Config, Server0, RaName, Server2)
+               end),
+    ?assertEqual(CurrentUId, uid_of(Config, Server2, RaName)),
+    ?assertEqual(3, length(element(2, ra:members({RaName, Server0})))).
+
 %% -------------------------------------------------------------------
 %% Helpers.
 %% -------------------------------------------------------------------
+
+is_force_delete_group(Config) ->
+    true =:= rabbit_ct_helpers:get_config(Config, force_delete_group, false).
+
+uid_of(Config, Node, RaName) ->
+    rabbit_ct_broker_helpers:rpc(Config, Node, ra_directory, uid_of,
+                                 [?RA_SYSTEM, RaName]).
+
+pending_lookup(Config, Node, RaName, MemberNode) ->
+    rabbit_ct_broker_helpers:rpc(Config, Node, dets, lookup,
+                                 [?FORCE_DELETE_TABLE, {RaName, MemberNode}]).
 
 merge_app_env(Config) ->
     rabbit_ct_helpers:merge_app_env(
