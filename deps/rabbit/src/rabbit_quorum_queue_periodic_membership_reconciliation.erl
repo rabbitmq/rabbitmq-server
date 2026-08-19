@@ -10,7 +10,7 @@
 -behaviour(gen_server).
 
 -export([on_node_up/1, on_node_down/1, queue_created/1, policy_set/0,
-         schedule/2]).
+         schedule_force_delete/2]).
 
 -export([start_link/0]).
 
@@ -80,10 +80,11 @@ policy_set() ->
 %%
 %% Those UIDs only exist once `track_qq_members_uids' is enabled, so the retry
 %% is not supported without it.
--spec schedule(rabbit_amqqueue:name(), [{server_id(), member_uid()}]) -> ok.
-schedule(_QName, []) ->
+-spec schedule_force_delete(rabbit_amqqueue:name(),
+                            [{server_id(), member_uid()}]) -> ok.
+schedule_force_delete(_QName, []) ->
     ok;
-schedule(QName, PendingMembers) ->
+schedule_force_delete(QName, PendingMembers) ->
     case rabbit_feature_flags:is_enabled(track_qq_members_uids) of
         true ->
             gen_server:cast(?SERVER, {schedule_force_delete, QName, PendingMembers});
@@ -321,7 +322,7 @@ select_node(Nodes) ->
 %% orphans (`{already_started, _}' on every member) and cannot form a cluster, so
 %% the name stays poisoned.
 %%
-%% Leaked members arrive via a `queue_force_deleted' event (see `schedule/2'),
+%% Leaked members arrive via a `queue_force_deleted' event (see `schedule_force_delete/2'),
 %% are persisted in a node-local DETS table, and `ra:force_delete_server/3' is
 %% retried until each member is gone. The pending set survives a broker restart
 %% because it is persisted.
