@@ -1,6 +1,6 @@
 const { By, Key, until, Builder } = require('selenium-webdriver')
 const assert = require('assert')
-const { buildDriver, goToHome, captureScreensFor, teardown, delay } = require('../utils')
+const { buildDriver, goToHome, captureScreensFor, teardown, doUntil } = require('../utils')
 
 const LoginPage = require('../pageobjects/LoginPage')
 const OverviewPage = require('../pageobjects/OverviewPage')
@@ -36,9 +36,12 @@ describe('Streams', function () {
      await queuesAndStreams.ensureAddQueueSectionIsVisible()
      let queueName = "test_" + Math.floor(Math.random() * 1000)
      await queuesAndStreams.fillInAddNewQueue({"name" : queueName, "type" : "stream"})
-     await delay(5000)
      await queuesAndStreams.filterQueues(queueName)
-     await delay(2000)
+     await doUntil(async function () {
+       return queuesAndStreams.getQueuesTable(5)
+     }, function (table) {
+       return table.length > 0
+     }, 2000)
      let table = await queuesAndStreams.getQueuesTable(5)
      assert.equal(1, table.length)
      assert.equal(table[0][0], '/')

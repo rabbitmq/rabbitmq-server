@@ -1,6 +1,6 @@
 const { By, Key, until, Builder } = require('selenium-webdriver')
 const assert = require('assert')
-const { buildDriver, goToHome, captureScreensFor, captureScreenshotIfFailed, teardown, delay } = require('../utils')
+const { buildDriver, goToHome, captureScreensFor, captureScreenshotIfFailed, teardown, doUntil } = require('../utils')
 
 const LoginPage = require('../pageobjects/LoginPage')
 const OverviewPage = require('../pageobjects/OverviewPage')
@@ -36,8 +36,12 @@ describe('Exchange creation', function () {
     await exchanges.ensureAddExchangeSectionIsVisible()
     let exchangeName = "test_exchange_" + Math.floor(Math.random() * 1000)
     await exchanges.fillInAddNewExchange({"name" : exchangeName, "type" : "direct"})
-    await delay(2000)
-    
+    await doUntil(async function () {
+      return exchanges.getExchangesTable(2)
+    }, function (table) {
+      return table.some((row) => row.includes(exchangeName))
+    }, 1000)
+
     await exchanges.clickOnExchange("%2F", exchangeName)
     await exchange.isLoaded()
     assert.equal(exchangeName, await exchange.getName())
