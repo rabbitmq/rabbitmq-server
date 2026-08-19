@@ -2,12 +2,14 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
+%% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%%
 
 %% The durable UNSUBSCRIBE cleanup lives in rabbit_stomp_processor, which this
 %% plugin drives directly: the same authorization must hold over a WebSocket.
 -module(unsubscribe_authz_SUITE).
 
--compile(export_all).
+-compile([export_all, nowarn_export_all]).
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
@@ -121,9 +123,7 @@ durable_unsubscribe_requires_configure_permission(Config) ->
                  proplists:get_value(<<"message">>, ErrorHeaders)),
     ?assertMatch({ok, _}, lookup_queue(SubQueue, Config)),
     ?assertMatch({ok, _}, lookup_queue(Bystander, Config)),
-    %% the receipt for the refused frame still follows the ERROR, because
-    %% process_request/3 runs the success continuation on the stop path
-    {<<"RECEIPT">>, _, <<>>} = raw_recv(WS),
+    %% no RECEIPT for the refused frame: the close follows the ERROR directly
     {close, _} = raw_recv(WS),
     ok.
 
