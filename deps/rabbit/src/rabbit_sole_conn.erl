@@ -62,7 +62,8 @@
          stop/0,
          is_resizing/0,
          get_ra_system/0,
-         get_store_id/0]).
+         get_store_id/0,
+         join_cluster/1]).
 
 %% public API
 -export([acquire/5,
@@ -611,7 +612,8 @@ start_local_store() ->
                     ok = khepri_cluster:wait_for_leader(StoreId, RetryTimeout),
                     ?LOG_DEBUG("Started new cluster, initializing schema"),
                     init_schema(),
-                    ?LOG_DEBUG("Schema initialized");
+                    ?LOG_DEBUG("Schema initialized"),
+                    expand_cluster();
                 PeerNode ->
                     %% Existing Cluster
                     ?LOG_DEBUG("Trying to join active peer: ~p", [PeerNode]),
@@ -638,6 +640,102 @@ start_local_store() ->
     %% lets other nodes discover us via find_active_peer/1.
     ok = start_gen_server(),
     ok.
+
+%% -----------------------------------------
+%% Cluster Expansion
+%% (must be called under the bootstrap lock)
+%% -----------------------------------------
+
+%% Called under ?BOOTSTRAP_LOCK, right after this node has bootstrapped a
+%% virgin Khepri cluster. Brings in every other reachable node right away,
+%% instead of leaving it to the periodic resize tick to add them one at a
+%% time. A node that fails to join here falls back to the tick, or to its
+%% own lazy bootstrap on its next `acquire'.
+expand_cluster() ->
+    try
+        case rabbit_nodes:list_reachable() -- [node()] of
+            [] ->
+                ok;
+            Nodes ->
+                lists:foreach(fun expand_cluster_to_node/1, Nodes)
+        end
+    catch
+        Class:Reason ->
+            ?LOG_WARNING("~ts: Failed to list reachable nodes while expanding "
+                         "the sole_conn Khepri cluster. Error: ~p:~p. Nodes will "
+                         "be added by a later resize tick",
+                         [?MODULE, Class, Reason]),
+            ok
+    end.
+
+expand_cluster_to_node(Node) ->
+    try erpc:call(Node, ?MODULE, join_cluster, [node()], ?RPC_TIMEOUT) of
+        ok ->
+            ok;
+        {error, Reason} ->
+            ?LOG_WARNING("~ts: Node ~w did not join the sole_conn Khepri "
+                         "cluster during eager expansion (~p); it may still "
+                         "join, or be added by a later resize tick",
+                         [?MODULE, Node, Reason])
+    catch
+        Class:Reason ->
+            ?LOG_WARNING("~ts: Failed to RPC node ~w to join the sole_conn "
+                         "Khepri cluster during eager expansion. Error: ~p:~p. "
+                         "It may still join, or be added by a later resize tick",
+                         [?MODULE, Node, Class, Reason])
+    end,
+    ok.
+
+%% Called over RPC by the node that has just bootstrapped the store. That
+%% node holds ?BOOTSTRAP_LOCK for the duration of the expansion, which is
+%% what keeps this exclusive: taking the lock here would deadlock.
+-spec join_cluster(node()) -> ok | {error, term()}.
+join_cluster(SeedNode) ->
+    case whereis(?GEN_SERVER_NAME) of
+        undefined -> join_cluster0(SeedNode);
+        _Pid      -> ok
+    end.
+
+join_cluster0(SeedNode) ->
+    case rabbit:is_running() of
+        false ->
+            %% list_reachable/0 returns cluster members reachable over
+            %% Erlang distribution, including ones whose `rabbit' app is
+            %% stopped. maybe_resize_cluster/0 already deliberately
+            %% restricts itself to running nodes, so mirror that here.
+            ?LOG_DEBUG("~ts: not joining sole_conn Khepri cluster seeded by "
+                       "~w, rabbit is not running", [?MODULE, SeedNode]),
+            {error, rabbit_not_running};
+        true ->
+            join_cluster1(SeedNode)
+    end.
+
+join_cluster1(SeedNode) ->
+    StoreId = get_store_id(),
+    case ra_directory:uid_of(get_ra_system(), StoreId) of
+        undefined ->
+            RaServerConfig = make_ra_server_config(),
+            RetryTimeout = leader_wait_retry_timeout(),
+            try
+                {ok, _} = khepri:start(?RA_SYSTEM, RaServerConfig),
+                ok = join_active_peer(StoreId, SeedNode, RaServerConfig, RetryTimeout),
+                ok = khepri_cluster:wait_for_effective_behaviour(
+                       StoreId, process_based_keep_while, RetryTimeout),
+                %% Only reached when the join succeeded.
+                start_gen_server()
+            catch
+                Class:Reason -> {error, {Class, Reason}}
+            end;
+        _ ->
+            %% A store already exists on disk here. khepri_cluster:join/2
+            %% resets the joining store, which would destroy that data, so
+            %% leave this node to recover/0 or to its own lazy bootstrap.
+            {error, store_already_bootstrapped}
+    end.
+
+%% -----------------------------------------
+%% End of Cluster Expansion
+%% -----------------------------------------
 
 make_ra_server_config() ->
     #{cluster_name => ?RA_CLUSTER_NAME,

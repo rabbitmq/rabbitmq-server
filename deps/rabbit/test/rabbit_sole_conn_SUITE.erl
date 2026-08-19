@@ -64,6 +64,7 @@ end_per_suite(Config) ->
 init_per_group(_, Config) ->
     ok = meck:new(rabbit_nodes, [passthrough, no_link]),
     ok = meck:expect(rabbit_nodes, list_running, fun() -> [node()] end),
+    ok = meck:expect(rabbit_nodes, list_reachable, fun() -> [node()] end),
     %% assume the feature flag is enabled
     ok = meck:new(rabbit_feature_flags, [passthrough, no_link]),
     ok = meck:expect(rabbit_feature_flags, is_enabled, fun(_) -> true end),

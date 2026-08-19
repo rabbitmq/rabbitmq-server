@@ -84,8 +84,9 @@ tear_down_cluster(Config) ->
 refuse_connection_accepts_conflicting_id_on_majority_side_after_partition(Config) ->
     AllNodes = all_nodes(Config),
 
-    %% Eagerly bootstrap the sole_conn Khepri store on all nodes, instead of
-    %% relying on the lazy bootstrap triggered by the first `acquire'
+    %% Eagerly bootstrap the sole_conn Khepri store on all nodes via the
+    %% explicit start/0 operator command, instead of relying on the first
+    %% `acquire' call to trigger bootstrap
     ct:pal("Starting the sole_conn Khepri store on ~p", [AllNodes]),
     StartResult = rpc(Config, 0, ?SOLE_CONN_MOD, start, []),
     ?assertEqual(lists:sort([{N, ok} || N <- AllNodes]), lists:sort(StartResult)),

@@ -24,7 +24,7 @@ all() ->
 
 groups() ->
     [{default_group, [], [
-        lazy_cluster_formation,
+        eager_cluster_formation,
         cluster_should_grow_with_tick,
         cluster_should_shrink_with_tick,
         node_rejoins_cluster_after_graceful_shutdown,
@@ -32,10 +32,11 @@ groups() ->
         forget_node_should_remove_node,
         status_should_return_ra_metrics,
         status_should_not_crash_when_never_bootstrapped,
-        concurrent_acquire_should_not_crash_on_lazy_bootstrap,
+        concurrent_acquire_should_not_crash_on_bootstrap,
         wipe_should_reset_store_on_all_nodes,
         start_should_bootstrap_store_on_all_nodes,
-        conflict_should_resolve_when_existing_conns_node_is_unreachable
+        conflict_should_resolve_when_existing_conns_node_is_unreachable,
+        expand_cluster_should_skip_unreachable_node
     ]}].
 
 init_per_suite(Config) ->
@@ -136,33 +137,30 @@ maybe_set_tick_interval(_, _) ->
 %% Tests
 %% -------------------------------------------------------------------
 
-lazy_cluster_formation(Config) ->
+eager_cluster_formation(Config) ->
     Nodes = ?config(peer_nodes, Config),
     [Node1, Node2, Node3] = [N || {N, _Peer} <- Nodes],
-    
+
     ct:pal("Triggering acquire/4 on Node 1 (~p)", [Node1]),
     Pid1 = spawn_disposable(Config, Node1),
     ok = acq_ref_conn(Config, Node1, ?VH, ?CID1, ?USER, Pid1),
-    
-    %% Verify Node 1 is the sole member
+
+    %% The single acquire on Node1 must have eagerly expanded the cluster to
+    %% all 3 nodes, with a live gen_server on each.
     Members1 = kh_members(Config, Node1),
-    ?assertEqual(1, length(Members1)),
-    
+    ?assertEqual(3, length(Members1)),
+    lists:foreach(
+      fun(Node) ->
+              ?assert(is_pid(call(Config, Node, erlang, whereis, [?SOLE_CONN_MOD])))
+      end, [Node1, Node2, Node3]),
+
     ct:pal("Triggering acquire/4 on Node 2 (~p)", [Node2]),
     Pid2 = spawn_disposable(Config, Node2),
     ok = acq_ref_conn(Config, Node2, ?VH, ?CID2, ?USER, Pid2),
-    
-    %% Verify Node 2 joined the cluster
-    Members2 = kh_members(Config, Node2),
-    ?assertEqual(2, length(Members2)),
-    
+
     ct:pal("Triggering acquire/4 on Node 3 (~p)", [Node3]),
     Pid3 = spawn_disposable(Config, Node3),
     ok = acq_ref_conn(Config, Node3, ?VH, ?CID3, ?USER, Pid3),
-    
-    %% Verify all 3 nodes are in the cluster
-    Members3 = kh_members(Config, Node3),
-    ?assertEqual(3, length(Members3)),
 
     %% Simulate a conflict with a connection on node 1
     Pid4 = spawn_disposable(Config, Node3),
@@ -179,15 +177,24 @@ cluster_should_grow_with_tick(Config) ->
     Nodes = ?config(peer_nodes, Config),
     [Node1, Node2, Node3] = [N || {N, _Peer} <- Nodes],
 
+    %% Restrict eager expansion to Node1 and Node2, so that Node3 is only
+    %% added by the periodic resize tick, which still reads list_running and
+    %% list_members
+    lists:foreach(
+      fun({Node, _Peer}) ->
+              call(Config, Node, meck, expect,
+                   [rabbit_nodes, list_reachable, fun() -> [Node1, Node2] end])
+      end, Nodes),
+
     ct:pal("Triggering acquire/4 on Node 1 (~p)", [Node1]),
     Pid1 = spawn_disposable(Config, Node1),
     ok = acq_ref_conn(Config, Node1, ?VH, ?CID1, ?USER, Pid1),
 
-    %% Verify at least one member
+    %% Verify the eager expansion only reached Node2
     Members1 = kh_members(Config, Node1),
-    ?assert(length(Members1) > 0),
+    ?assertEqual(2, length(Members1)),
 
-    %% Wait until all the nodes join
+    %% Wait until the tick adds Node3
     rabbit_ct_helpers:eventually(?_assert(length(kh_members(Config, Node1)) =:= ?NODE_COUNT),
                                  1000, 10),
 
@@ -212,12 +219,13 @@ cluster_should_shrink_with_tick(Config) ->
     Nodes = ?config(peer_nodes, Config),
     [Node1, Node2, Node3] = [N || {N, _Peer} <- Nodes],
 
-    %% Bootstrap and grow the cluster to 3 nodes
+    %% Bootstrap and grow the cluster to 3 nodes. The single acquire on
+    %% Node1 eagerly expands the cluster to all 3 nodes immediately, so this
+    %% is not waiting for the tick.
     ct:pal("Triggering acquire/4 on Node 1 (~p)", [Node1]),
     Pid1 = spawn_disposable(Config, Node1),
     ok = acq_ref_conn(Config, Node1, ?VH, ?CID1, ?USER, Pid1),
 
-    %% Wait until all nodes join
     rabbit_ct_helpers:eventually(?_assertEqual(?NODE_COUNT, length(kh_members(Config, Node1))),
                                  1000, 10),
 
@@ -424,8 +432,7 @@ status_should_return_ra_metrics(Config) ->
            )
      end || Node <- Nodes],
 
-
-    %% Initialize the store on one node with a request
+    %% The single acquire on Node1 eagerly expands the cluster to all 3 nodes
     Pid1 = spawn_disposable(Config, Node1),
     ok = acq_ref_conn(Config, Node1, ?VH, ?CID1, ?USER, Pid1),
 
@@ -439,47 +446,21 @@ status_should_return_ra_metrics(Config) ->
                            ExtractNodeNames(call(Config, N, ?SOLE_CONN_MOD, status, []))
                    end,
 
-    S1 = GetNodeNames(Node1),
-    ?assertEqual(1, length(S1)),
-    ?assertEqual([Node1], S1),
-    %% Same result from other nodes
-    ?assertEqual(S1, GetNodeNames(Node2)),
-    ?assertEqual(S1, GetNodeNames(Node3)),
-
-    %% Initialize the store on the second node
-    Pid2 = spawn_disposable(Config, Node2),
-    ok = acq_ref_conn(Config, Node2, ?VH, ?CID2, ?USER, Pid2),
-
-    S2 = GetNodeNames(Node1),
-    ?assertEqual(2, length(S2)),
-
-    ?assertEqual(lists:sort(Nodes -- [Node3]), S2),
-    %% Same status even from other nodes
-    ?assertEqual(S2, GetNodeNames(Node2)),
-    ?assertEqual(S2, GetNodeNames(Node3)),
-
-    %% Initialize the store on the third node
-    Pid3 = spawn_disposable(Config, Node3),
-    ok = acq_ref_conn(Config, Node3, ?VH, ?CID3, ?USER, Pid3),
-
-    S3 = GetNodeNames(Node1),
-    ?assertEqual(3, length(S3)),
-
-    ?assertEqual(lists:sort(Nodes), S3),
-    %% Same status even from other nodes
-    ?assertEqual(S3, GetNodeNames(Node2)),
-    ?assertEqual(S3, GetNodeNames(Node3)),
+    S = GetNodeNames(Node1),
+    ?assertEqual(3, length(S)),
+    ?assertEqual(lists:sort(Nodes), S),
+    %% Same status from every node
+    ?assertEqual(S, GetNodeNames(Node2)),
+    ?assertEqual(S, GetNodeNames(Node3)),
 
     FinalStatus = call(Config, Node1, ?SOLE_CONN_MOD, status, []),
     %% Check there is only one leader
     RaftStates = [proplists:get_value(<<"Raft State">>, NodeMetrics) || NodeMetrics <- FinalStatus],
-    LeaderCount = length([S || S <- RaftStates, S =:= leader]),
+    LeaderCount = length([RS || RS <- RaftStates, RS =:= leader]),
     ?assertEqual(1, LeaderCount),
 
-    %% Cleanup the dummy processes
+    %% Cleanup the dummy process
     kill_disposable(Config, Node1, Pid1),
-    kill_disposable(Config, Node2, Pid2),
-    kill_disposable(Config, Node3, Pid3),
 
     ok.
 
@@ -497,7 +478,11 @@ status_should_not_crash_when_never_bootstrapped(Config) ->
        call(Config, Node1, ?SOLE_CONN_MOD, status, [])),
     ok.
 
-concurrent_acquire_should_not_crash_on_lazy_bootstrap(Config) ->
+%% The 30 concurrent workers race to bootstrap the local store. Only one
+%% wins the ?BOOTSTRAP_LOCK and eagerly expands the cluster to the other 2
+%% nodes; the other 29 wait on the lock until that expansion is done, which
+%% only makes them slower, since global:set_lock/1 does not time out.
+concurrent_acquire_should_not_crash_on_bootstrap(Config) ->
     PeerNodes = ?config(peer_nodes, Config),
     [Node1, _Node2, _Node3] = [N || {N, _Peer} <- PeerNodes],
 
@@ -652,6 +637,30 @@ conflict_should_resolve_when_existing_conns_node_is_unreachable(Config) ->
     %% Cleanup the dummy processes
     kill_disposable(Config, Node1, Pid1),
     kill_disposable(Config, Node2, Pid2),
+    ok.
+
+expand_cluster_should_skip_unreachable_node(Config) ->
+    Nodes = ?config(peer_nodes, Config),
+    [Node1, Node2, Node3] = [N || {N, _Peer} <- Nodes],
+
+    %% Node1 believes a node that does not exist is reachable. On the same
+    %% host so the connection attempt fails fast via epmd instead of
+    %% stalling for the full ?RPC_TIMEOUT.
+    [_, Host] = string:split(atom_to_list(Node1), "@"),
+    GhostNode = list_to_atom("sole-conn-ghost@" ++ Host),
+    call(Config, Node1, meck, expect,
+         [rabbit_nodes, list_reachable,
+          fun() -> [Node1, Node2, Node3, GhostNode] end]),
+
+    %% The acquire that triggers the bootstrap must still succeed, logging a
+    %% warning about the ghost node and moving on rather than failing
+    Pid1 = spawn_disposable(Config, Node1),
+    ?assertEqual(ok, acq_ref_conn(Config, Node1, ?VH, ?CID1, ?USER, Pid1)),
+
+    %% The store is functional and the real reachable nodes still joined
+    ?assertEqual(?NODE_COUNT, length(kh_members(Config, Node1))),
+
+    kill_disposable(Config, Node1, Pid1),
     ok.
 
 %% --------------------------------------------------------------

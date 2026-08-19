@@ -34,7 +34,8 @@ all() ->
 groups() ->
     [
      {cluster_size_1, [shuffle], all_tests()},
-     {cluster_size_3, [shuffle], all_tests()}
+     {cluster_size_3, [shuffle],
+      all_tests() ++ [eager_cluster_formation_on_first_sole_conn]}
     ].
 
 all_tests() ->
@@ -520,6 +521,36 @@ open_sole_conn_and_verify_supervised(Config, NodeIndex) ->
                  SoleConnSupChildren),
 
     Connection.
+
+%% End-to-end check that a single sole connection eagerly forms the whole
+%% sole_conn Khepri cluster, instead of only the node it landed on.
+eager_cluster_formation_on_first_sole_conn(Config) ->
+    NodeCount = proplists:get_value(rmq_nodes_count, Config, 1),
+    ContainerId = atom_to_binary(?FUNCTION_NAME),
+    OpnConf0 = connection_config(0, Config),
+    OpnConf1 = OpnConf0#{
+                 container_id => ContainerId,
+                 desired_capabilities => [?CAP_SOLE_CONN],
+                 notify_with_performative => true
+                },
+    {ok, Connection} = amqp10_client:open_connection(OpnConf1),
+    receive {amqp10_event, {connection, Connection, {opened, _}}} ->
+                ok
+    after 10000 -> ct:fail(opened_timeout)
+    end,
+
+    Status = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_sole_conn, status, []),
+    ?assertEqual(NodeCount, length(Status)),
+
+    [begin
+         SoleConnSupChildren = rabbit_ct_broker_helpers:rpc(
+                                 Config, NodeIndex, supervisor, which_children,
+                                 [rabbit_sole_conn_sup]),
+         ?assertMatch([{rabbit_sole_conn, _, worker, [rabbit_sole_conn]}],
+                      SoleConnSupChildren)
+     end || NodeIndex <- lists:seq(0, NodeCount - 1)],
+
+    close_connection_sync(Connection).
 
 %% ------------------------------------------------------------------
 %% Internal Helpers
