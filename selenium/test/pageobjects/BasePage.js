@@ -183,7 +183,35 @@ module.exports = class BasePage {
   }
   async getTableMini(tableLocator) {
     const table = await this.waitForDisplayed(tableLocator)
-    return this.getTableMiniUsingTableElement(table)    
+    return this.getTableMiniUsingTableElement(table)
+  }
+  // Reads every th/td fact row from all tables matched by locator (e.g. several
+  // sibling table.facts elements with no unique id), using plain getText() so it
+  // works whether a td's content is plain text (fmt_string) or a nested element.
+  async getFactsTables(locator) {
+    await this.waitForLocated(locator)
+    const tables = await this.driver.findElements(locator)
+    let facts = []
+    for (const table of tables) {
+      const rows = await table.findElements(By.css('tr'))
+      for (const row of rows) {
+        const th = await row.findElement(By.css('th'))
+        const td = await row.findElement(By.css('td'))
+        facts.push({ name: (await th.getText()).trim(), value: (await td.getText()).trim() })
+      }
+    }
+    return facts
+  }
+  async isSectionDisplayed(sectionName) {
+    return this.isDisplayed(By.xpath('//*[@id="main"]//h2[contains(text(), "' + sectionName + '")]'))
+  }
+
+  async isSubsectionDisplayed(subsectionName) {
+    return this.isDisplayed(By.xpath('//*[@id="main"]//h3[contains(text(), "' + subsectionName + '")]'))
+  }
+
+  async isSectionNotDisplayed(sectionName) {
+    return this.isElementNotVisible(By.xpath('//*[@id="main"]//h2[contains(text(), "' + sectionName + '")]'))
   }
   async getTableMiniUsingTableElement(table) {
     let tbody = await table.findElement(By.css('tbody'))
@@ -342,7 +370,7 @@ module.exports = class BasePage {
 
   async isDisplayed(locator) {
       try {
-        let element = await this.driver.findElement(locator)
+        let element = await this.waitForLocated(locator)
 
         return this.driver.wait(until.elementIsVisible(element), this.timeout,
           'Timed out after [timeout=' + this.timeout + ';polling=' + this.polling + '] awaiting till visible ' + element,
