@@ -47,6 +47,7 @@
          add_member/4,
          add_member/5]).
 -export([delete_member/3, delete_member/2]).
+-export([force_delete_member/1]).
 -export([policy_changed/1]).
 -export([format_ra_event/3]).
 -export([cleanup_data_dir/0]).
@@ -173,6 +174,7 @@
 -define(START_CLUSTER_RPC_TIMEOUT, 60_000). %% needs to be longer than START_CLUSTER_TIMEOUT
 -define(TICK_INTERVAL, 5000). %% the ra server tick time
 -define(DELETE_TIMEOUT, 5000).
+-define(FORCE_DELETE_TIMEOUT, 30_000).
 -define(MEMBER_CHANGE_TIMEOUT, 20_000).
 -define(SNAPSHOT_INTERVAL, 8192). %% the ra default is 4096
 %% setting a low default here to allow quorum queues to better chose themselves
@@ -1121,11 +1123,11 @@ delete(Q, _IfUnused, _IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
                 {'DOWN', MRef, process, _, _} ->
                     %% leader is down,
                     %% force delete remaining members
-                    ok = force_delete_queue(lists:delete(Leader, Servers)),
+                    ok = force_delete_queue(Q, lists:delete(Leader, Servers)),
                     ok
             after Timeout ->
                     erlang:demonitor(MRef, [flush]),
-                    ok = force_delete_queue(Servers)
+                    ok = force_delete_queue(Q, Servers)
             end,
             notify_decorators(QName, shutdown),
             case delete_queue_data(Q, ActingUser) of
@@ -1164,7 +1166,7 @@ delete(Q, _IfUnused, _IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
                        " online to reach a quorum: ~255p."
                        " Attempting force delete.",
                       [rabbit_misc:rs(QName), Errs]),
-                    ok = force_delete_queue(Servers),
+                    ok = force_delete_queue(Q, Servers),
                     notify_decorators(QName, shutdown)
             end,
             case delete_queue_data(Q, ActingUser) of
@@ -1175,21 +1177,82 @@ delete(Q, _IfUnused, _IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
             end
     end.
 
-force_delete_queue(Servers) ->
-    [begin
-         case try ra:force_delete_server(?RA_SYSTEM, S)
-              catch _:E -> {error, E}
-              end of
-             ok -> ok;
+%% Force delete of every member. `ra:force_delete_server/3' is an RPC to each
+%% member's node, so a member on a down or unreachable node is left behind and
+%% the Ra name stays poisoned for the next declare.
+%%
+%% Retrying those leaked members requires the per-member UIDs recorded under the
+%% `track_qq_members_uids' feature flag: without them a retry cannot tell a
+%% leaked member apart from a newer incarnation of the same queue name, so the
+%% force delete stays best-effort until the flag is enabled.
+force_delete_queue(Q, Servers) ->
+    case rabbit_feature_flags:is_enabled(track_qq_members_uids) of
+        true ->
+            force_delete_members_with_retry(Q, Servers);
+        false ->
+            force_delete_members(Servers)
+    end.
+
+force_delete_members(Servers) ->
+    _ = [case force_delete_member(S) of
+             ok ->
+                 ok;
              Err ->
                  ?LOG_WARNING(
                    "Force delete of ~w failed with: ~w"
                    "This may require manual data clean up",
                    [S, Err]),
                  ok
-         end
-     end || S <- Servers],
+         end || S <- Servers],
     ok.
+
+%% The members whose force delete did not complete are emitted as a
+%% `queue_force_deleted' event so that
+%% `rabbit_quorum_queue_periodic_membership_reconciliation' keeps retrying until
+%% they are gone.
+force_delete_members_with_retry(Q, Servers) ->
+    QName = amqqueue:get_name(Q),
+    UIdMap = case amqqueue:get_type_state(Q) of
+                 #{nodes := Nodes} when is_map(Nodes) ->
+                     Nodes;
+                 _ ->
+                     #{}
+             end,
+    %% Each failed member is described as a proplist with atom keys so that the
+    %% event props stay serializable for consumers such as the event exchange
+    %% plugin.
+    Failed = lists:filtermap(
+               fun({RaName, Node} = S) ->
+                       case force_delete_member(S) of
+                           ok ->
+                               false;
+                           Err ->
+                               ?LOG_WARNING(
+                                 "Force delete of ~w failed with: ~w. "
+                                 "Scheduling retry until the member is removed.",
+                                 [S, Err]),
+                               {true, [{ra_name, RaName},
+                                       {node, Node},
+                                       {uid, maps:get(Node, UIdMap, undefined)}]}
+                       end
+               end, Servers),
+    case Failed of
+        [] ->
+            ok;
+        _ ->
+            rabbit_event:notify(queue_force_deleted,
+                                [{name, QName},
+                                 {pending_members, Failed}]),
+            ok
+    end.
+
+%% The timeout is bounded on purpose: callers run this inline, to avoid the `infinity'
+%% default which could block them for as long as the member's node stays unreachable.
+-spec force_delete_member(ra:server_id()) -> ok | {error, term()}.
+force_delete_member(ServerId) ->
+    try ra:force_delete_server(?RA_SYSTEM, ServerId, ?FORCE_DELETE_TIMEOUT)
+    catch _:E -> {error, E}
+    end.
 
 -spec delete_queue_data(Queue, ActingUser) -> Ret when
       Queue :: amqqueue:amqqueue(),
