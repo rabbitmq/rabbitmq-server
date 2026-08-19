@@ -57,4 +57,12 @@ module.exports = class OverviewPage extends BasePage {
   async ensureTotalsSectionIsInvisible() {
     return this.ensureSectionIsInvisible(TOTALS_SECTION)
   }
+
+  async isGlobalCountDisplayed(label) {
+    return this.isDisplayed(By.xpath("//ul[@id='global-counts']//a[contains(., '" + label + ":')]"))
+  }
+
+  async isGlobalCountNotDisplayed(label) {
+    return this.isElementNotVisible(By.xpath("//ul[@id='global-counts']//a[contains(., '" + label + ":')]"))
+  }
 }

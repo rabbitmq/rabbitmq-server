@@ -73,12 +73,14 @@
 </div>
 </div>
 
+<% if(!disable_stats) { %>
 <div class="section">
   <h2 class="updatable" >Consumers (<%=(channel.consumer_details.length)%>) </h2>
   <div class="hider updatable">
 <%= format('consumers', {'mode': 'channel', 'consumers': channel.consumer_details}) %>
   </div>
 </div>
+<% } %>
 
 <% if (rates_mode == 'detailed') { %>
 <div class="section">

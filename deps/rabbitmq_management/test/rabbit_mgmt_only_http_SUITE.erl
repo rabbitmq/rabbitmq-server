@@ -720,7 +720,10 @@ permissions_connection_channel_consumer_test(Config) ->
     AssertLength("/connections", "monitor", 3),
     AssertLength("/connections", "guest", 3),
 
-    AssertDisabled("/channels"),
+    AssertLength("/channels", "user", 1),
+    AssertLength("/channels", "monitor", 3),
+    AssertLength("/channels", "guest", 3),
+
     AssertDisabled("/consumers"),
     AssertDisabled("/consumers/%2F"),
 
@@ -733,9 +736,9 @@ permissions_connection_channel_consumer_test(Config) ->
     AssertRead(UserConn, ?OK),
     AssertRead(MonConn, ?NOT_AUTHORISED),
     AssertRead(AdmConn, ?NOT_AUTHORISED),
-    AssertDisabled(UserCh),
-    AssertDisabled(MonCh),
-    AssertDisabled(AdmCh),
+    AssertRead(UserCh, ?OK),
+    AssertRead(MonCh, ?NOT_AUTHORISED),
+    AssertRead(AdmCh, ?NOT_AUTHORISED),
     AssertRead(UserConnCh, ?OK),
     AssertRead(MonConnCh, ?NOT_AUTHORISED),
     AssertRead(AdmConnCh, ?NOT_AUTHORISED),
@@ -752,7 +755,7 @@ permissions_connection_channel_consumer_test(Config) ->
     http_delete(Config, "/users/user", {group, '2xx'}),
     http_delete(Config, "/users/monitor", {group, '2xx'}),
     http_get(Config, "/connections/foo", ?NOT_FOUND),
-    http_get(Config, "/channels/foo", ?BAD_REQUEST),
+    http_get(Config, "/channels/foo", ?NOT_FOUND),
     http_delete(Config, "/queues/%2F/test", {group, '2xx'}),
     passed.
 
@@ -939,7 +942,19 @@ connections_channels_pagination_test(Config) ->
                       end, maps:get(items, PageOfTwo))
         end),
 
-    http_get(Config, "/channels?page=2&page_size=2", ?BAD_REQUEST),
+    rabbit_ct_helpers:await_condition(
+        fun() ->
+            PageOfChannels = http_get(Config, "/channels?page=2&page_size=2", ?OK),
+            3 == maps:get(total_count, PageOfChannels) andalso
+            3 == maps:get(filtered_count, PageOfChannels) andalso
+            1 == maps:get(item_count, PageOfChannels) andalso
+            2 == maps:get(page, PageOfChannels) andalso
+            2 == maps:get(page_size, PageOfChannels) andalso
+            2 == maps:get(page_count, PageOfChannels) andalso
+            lists:all(fun(C) ->
+                              not maps:is_key(consumer_count, C)
+                      end, maps:get(items, PageOfChannels))
+        end),
 
     amqp_channel:close(Ch),
     amqp_connection:close(Conn),
@@ -1385,9 +1400,23 @@ disable_with_disable_stats_parameter_test(Config) ->
         maps:is_key(recv_oct_details, ConStats)
     end),
     %% Check first that stats are available
-    http_get(Config, "/channels", ?OK),
+    [ChannelStats] = http_get(Config, "/channels", ?OK),
+    ?assert(maps:is_key(consumer_count, ChannelStats)),
     %% Now we can disable them
-    http_get(Config, "/channels?disable_stats=true", ?BAD_REQUEST),
+    [Channel] = http_get(Config, "/channels?disable_stats=true", ?OK),
+    ?assert(maps:is_key(name, Channel)),
+
+    %% The individual channel page must also work with stats disabled.
+    %% Note: quote_plus/1 escapes spaces as "+", which is correct for a query
+    %% string but not for a path segment (cowboy's path decoder treats "+" as
+    %% a literal character, not a space) -- the channel name contains spaces
+    %% (e.g. "127.0.0.1:1234 -> 127.0.0.1:5678 (1)"), so it must be re-escaped.
+    EscapedChannelName = re:replace(rabbit_http_util:quote_plus(maps:get(name, Channel)),
+                                    "\\+", "%20", [global, {return, list}]),
+    ChannelPath = "/channels/" ++ EscapedChannelName ++ "?disable_stats=true",
+    IndividualChannel = http_get(Config, ChannelPath, ?OK),
+    ?assert(maps:is_key(name, IndividualChannel)),
+    ?assert(not maps:is_key(consumer_count, IndividualChannel)),
 
 
     %% Connections.

@@ -8,6 +8,7 @@ const SESSIONS_TABLE = By.css('div.section#connection-sessions-section table.lis
 const INCOMING_LINKS_TABLE = By.css('div.section#connection-sessions-section table.list#incoming-links')
 const OUTCOMING_LINKS_TABLE = By.css('div.section#connection-sessions-section table.list#outgoing-links')
 const CONNECTION_NAME = By.css('div#main h2')
+const DETAILS_TABLES = By.css('div#connection-overview-section table.facts')
 
 
 module.exports = class ConnectionPage extends BasePage {
@@ -16,6 +17,11 @@ module.exports = class ConnectionPage extends BasePage {
   }
   async getName() {
     return this.getText(CONNECTION_NAME)
+  }
+  // Returns [{name, value}] merging every facts table under the Overview section
+  // (Node/Container ID/Username/Protocol/..., State/Heartbeat/Frame max/Channel limit).
+  async getDetails() {
+    return this.getFactsTables(DETAILS_TABLES)
   }
   async getSessions() {
     await this.waitForDisplayed(SESSIONS_SECTION)
