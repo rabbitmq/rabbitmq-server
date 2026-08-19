@@ -175,6 +175,12 @@ init([KeepaliveSup,
               application:get_env(rabbitmq_stream,
                                   max_uncompressed_sub_entry_batch_size,
                                   ?DEFAULT_MAX_UNCOMPRESSED_SUB_ENTRY_BATCH_SIZE),
+            MaxCreditBytes = application:get_env(rabbitmq_stream,
+                                                 max_credit_bytes,
+                                                 ?DEFAULT_MAX_CREDIT_BYTES),
+            MaxCreditChunks = application:get_env(rabbitmq_stream,
+                                                  max_credit_chunks,
+                                                  ?DEFAULT_MAX_CREDIT_CHUNKS),
 
             Connection =
                 #stream_connection{name =
@@ -197,6 +203,8 @@ init([KeepaliveSup,
                                    frame_max = FrameMax,
                                    max_uncompressed_sub_entry_batch_size =
                                        MaxUncompressedSubEntryBatchSize,
+                                   max_credit_bytes = MaxCreditBytes,
+                                   max_credit_chunks = MaxCreditChunks,
                                    resource_alarm = false,
                                    send_file_oct = SendFileOct,
                                    transport = ConnTransport,
@@ -2127,6 +2135,22 @@ handle_frame_post_auth(Transport,
              ?RESPONSE_CODE_PRECONDITION_FAILED),
     increase_protocol_counter(?PRECONDITION_FAILED),
     {Connection, State};
+handle_frame_post_auth(Transport,
+                       {ok, #stream_connection{max_credit_bytes = MaxCreditBytes,
+                                               max_credit_chunks = MaxCreditChunks} =
+                            Connection},
+                       State,
+                       {request, CorrelationId,
+                        {subscribe, _, _, _, {Unit, Credit}, _}})
+                      when (Unit =:= bytes andalso Credit > MaxCreditBytes) orelse
+                           (Unit =:= chunks andalso Credit > MaxCreditChunks) ->
+    response(Transport,
+             Connection,
+             subscribe,
+             CorrelationId,
+             ?RESPONSE_CODE_PRECONDITION_FAILED),
+    increase_protocol_counter(?PRECONDITION_FAILED),
+    {Connection, State};
 handle_frame_post_auth(Transport, {ok, #stream_connection{user = User} = C}, State,
                        {request, CorrelationId,
                         {subscribe, _, S, _, _, #{ <<"name">> := N}}})
@@ -2241,7 +2265,9 @@ handle_frame_post_auth(Transport, Connection, State,
 handle_frame_post_auth(Transport,
                        #stream_connection{socket = S,
                                           send_file_oct = SendFileOct,
-                                          deliver_version = DeliverVersion} =
+                                          deliver_version = DeliverVersion,
+                                          max_credit_bytes = MaxCreditBytes,
+                                          max_credit_chunks = MaxCreditChunks} =
                            Connection,
                        #stream_connection_state{consumers = Consumers} = State,
                        {credit, SubscriptionId, {Unit, Credit}}) ->
@@ -2279,32 +2305,51 @@ handle_frame_post_auth(Transport,
         #{SubscriptionId := Consumer} ->
             #consumer{credit = AvailableCredit, last_listener_offset = LLO} =
                 Consumer,
-            case send_chunks(DeliverVersion,
-                             Transport,
-                             Consumer,
-                             AvailableCredit + Credit,
-                             LLO,
-                             SendFileOct)
-            of
-                {error, closed} ->
-                    ?LOG_INFO("Stream protocol connection has been closed by "
-                                               "peer",
-                                               []),
-                    throw({stop, normal});
-                {error, Reason} ->
-                    ?LOG_INFO("Error while sending chunks: ~tp",
-                                               [Reason]),
-                    {Connection,
-                     State#stream_connection_state{consumers =
-                                                       Consumers#{SubscriptionId
-                                                                      =>
-                                                                      Consumer}}};
-                {ok, Consumer1} ->
-                    {Connection,
-                     State#stream_connection_state{consumers =
-                                                       Consumers#{SubscriptionId
-                                                                      =>
-                                                                      Consumer1}}}
+            TotalCredit = AvailableCredit + Credit,
+            MaxCredit = case Unit of
+                            bytes -> MaxCreditBytes;
+                            chunks -> MaxCreditChunks
+                        end,
+            case TotalCredit > MaxCredit of
+                true ->
+                    ?LOG_WARNING("Requested credit ~tp exceeds the maximum "
+                                 "allowed ~tp (~tp) for subscription ~tp",
+                                 [TotalCredit, MaxCredit, Unit, SubscriptionId]),
+                    Frame = rabbit_stream_core:frame(
+                              {response, 1,
+                               {credit, ?RESPONSE_CODE_PRECONDITION_FAILED,
+                                SubscriptionId}}),
+                    send(Transport, S, Frame),
+                    increase_protocol_counter(?PRECONDITION_FAILED),
+                    {Connection, State};
+                false ->
+                    case send_chunks(DeliverVersion,
+                                     Transport,
+                                     Consumer,
+                                     TotalCredit,
+                                     LLO,
+                                     SendFileOct)
+                    of
+                        {error, closed} ->
+                            ?LOG_INFO("Stream protocol connection has been closed by "
+                                                       "peer",
+                                                       []),
+                            throw({stop, normal});
+                        {error, Reason} ->
+                            ?LOG_INFO("Error while sending chunks: ~tp",
+                                                       [Reason]),
+                            {Connection,
+                             State#stream_connection_state{consumers =
+                                                               Consumers#{SubscriptionId
+                                                                              =>
+                                                                              Consumer}}};
+                        {ok, Consumer1} ->
+                            {Connection,
+                             State#stream_connection_state{consumers =
+                                                               Consumers#{SubscriptionId
+                                                                              =>
+                                                                              Consumer1}}}
+                    end
             end;
         _ ->
             ?LOG_WARNING("Giving credit to unknown subscription: ~tp",

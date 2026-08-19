@@ -101,6 +101,10 @@ groups() ->
        subscribe_v2_chunk_larger_than_window,
        subscribe_v2_filtered_chunks_cost_no_credit,
        credit_unit_mismatch_is_rejected,
+       subscribe_chunk_credit_over_limit_is_rejected,
+       subscribe_byte_credit_over_limit_is_rejected,
+       credit_chunk_command_over_limit_is_rejected,
+       credit_byte_command_over_limit_is_rejected,
        subscribe_v2_zero_credit,
        sac_subscription_with_partition_index_conflict_should_return_error,
        test_metadata_with_advertised_hints,
@@ -782,7 +786,9 @@ credit_unit_mismatch_is_rejected(Config) ->
     {ok, C1} = stream_test_utils:create_stream(S, C0, Stream),
 
     SubId = 1,
-    InitialCredit = 1000,
+    %% Below the default `max_credit_chunks`, since InitialCredit is also
+    %% used for a v1 (chunks) subscription further down.
+    InitialCredit = 100,
     {ok, C2} = stream_test_utils:subscribe_v2(S, C1, Stream, SubId,
                                               InitialCredit, #{}, first),
     ok = stream_test_utils:credit(S, SubId, 500),
@@ -807,6 +813,108 @@ credit_unit_mismatch_is_rejected(Config) ->
 
     {ok, C10} = stream_test_utils:delete_stream(S, C9, Stream),
     {ok, _} = stream_test_utils:close(S, C10),
+    ok.
+
+subscribe_chunk_credit_over_limit_is_rejected(Config) ->
+    T = gen_tcp,
+    Stream = atom_to_binary(?FUNCTION_NAME, utf8),
+    Port = get_stream_port(Config),
+    Opts = get_opts(T),
+    {ok, S} = T:connect("localhost", Port, Opts),
+    C0 = rabbit_stream_core:init(0),
+    C1 = test_peer_properties(T, S, C0),
+    C2 = test_authenticate(T, S, C1),
+    C3 = test_create_stream(T, S, Stream, C2),
+
+    MaxCreditChunks = rpc(Config, 0, application, get_env,
+                         [rabbitmq_stream, max_credit_chunks,
+                          ?DEFAULT_MAX_CREDIT_CHUNKS]),
+    SubId = 0,
+    C4 = test_subscribe(T, S, SubId, Stream, first, MaxCreditChunks + 1, #{},
+                        ?RESPONSE_CODE_PRECONDITION_FAILED, C3),
+    C5 = test_subscribe(T, S, SubId, Stream, first, MaxCreditChunks, #{},
+                        ?RESPONSE_CODE_OK, C4),
+    C6 = test_unsubscribe(T, S, SubId, C5),
+
+    C7 = test_delete_stream(T, S, Stream, C6, false),
+    test_close(T, S, C7),
+    ok.
+
+subscribe_byte_credit_over_limit_is_rejected(Config) ->
+    T = gen_tcp,
+    Stream = atom_to_binary(?FUNCTION_NAME, utf8),
+    {ok, S, C0} = stream_test_utils:connect(Config, 0),
+    {ok, C1} = stream_test_utils:create_stream(S, C0, Stream),
+
+    MaxCreditBytes = rpc(Config, 0, application, get_env,
+                        [rabbitmq_stream, max_credit_bytes,
+                         ?DEFAULT_MAX_CREDIT_BYTES]),
+    SubId = 0,
+    OverLimitFrame = request({subscribe_v2, SubId, Stream, first,
+                              MaxCreditBytes + 1, #{}}),
+    ok = T:send(S, OverLimitFrame),
+    {Cmd, C2} = receive_commands(T, S, C1),
+    ?assertMatch({response, 1, {subscribe, ?RESPONSE_CODE_PRECONDITION_FAILED}}, Cmd),
+
+    {ok, C3} = stream_test_utils:subscribe_v2(S, C2, Stream, SubId,
+                                              MaxCreditBytes, #{}, first),
+    {ok, C4} = stream_test_utils:unsubscribe(S, C3, SubId),
+
+    {ok, C5} = stream_test_utils:delete_stream(S, C4, Stream),
+    {ok, _} = stream_test_utils:close(S, C5),
+    ok.
+
+credit_chunk_command_over_limit_is_rejected(Config) ->
+    FunctionName = atom_to_binary(?FUNCTION_NAME, utf8),
+    Port = get_stream_port(Config),
+    ConnectionName = FunctionName,
+    {ok, S, C0} = stream_test_utils:connect_pp(Port,
+                                               #{<<"connection_name">> => ConnectionName}),
+    Stream = FunctionName,
+    {ok, C1} = stream_test_utils:create_stream(S, C0, Stream),
+
+    MaxCreditChunks = rpc(Config, 0, application, get_env,
+                         [rabbitmq_stream, max_credit_chunks,
+                          ?DEFAULT_MAX_CREDIT_CHUNKS]),
+    SubId = 0,
+    InitialCredit = 10,
+    {ok, C2} = stream_test_utils:subscribe(S, C1, Stream, SubId, InitialCredit),
+    ok = stream_test_utils:credit(S, SubId, MaxCreditChunks),
+    {Cmd, C3} = receive_commands(S, C2),
+    ?assertMatch({response, 0,
+                  {credit, ?RESPONSE_CODE_PRECONDITION_FAILED, SubId}}, Cmd),
+    ?assertEqual(InitialCredit, consumer_credits(Config, ConnectionName)),
+
+    {ok, C4} = stream_test_utils:unsubscribe(S, C3, SubId),
+    {ok, C5} = stream_test_utils:delete_stream(S, C4, Stream),
+    {ok, _} = stream_test_utils:close(S, C5),
+    ok.
+
+credit_byte_command_over_limit_is_rejected(Config) ->
+    FunctionName = atom_to_binary(?FUNCTION_NAME, utf8),
+    Port = get_stream_port(Config),
+    ConnectionName = FunctionName,
+    {ok, S, C0} = stream_test_utils:connect_pp(Port,
+                                               #{<<"connection_name">> => ConnectionName}),
+    Stream = FunctionName,
+    {ok, C1} = stream_test_utils:create_stream(S, C0, Stream),
+
+    MaxCreditBytes = rpc(Config, 0, application, get_env,
+                        [rabbitmq_stream, max_credit_bytes,
+                         ?DEFAULT_MAX_CREDIT_BYTES]),
+    SubId = 0,
+    InitialCredit = 10,
+    {ok, C2} = stream_test_utils:subscribe_v2(S, C1, Stream, SubId,
+                                              InitialCredit, #{}, first),
+    ok = stream_test_utils:credit_v2(S, SubId, MaxCreditBytes),
+    {Cmd, C3} = receive_commands(S, C2),
+    ?assertMatch({response, 0,
+                  {credit, ?RESPONSE_CODE_PRECONDITION_FAILED, SubId}}, Cmd),
+    ?assertEqual(InitialCredit, consumer_credits(Config, ConnectionName)),
+
+    {ok, C4} = stream_test_utils:unsubscribe(S, C3, SubId),
+    {ok, C5} = stream_test_utils:delete_stream(S, C4, Stream),
+    {ok, _} = stream_test_utils:close(S, C5),
     ok.
 
 subscribe_v2_zero_credit(Config) ->

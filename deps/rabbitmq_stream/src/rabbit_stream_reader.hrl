@@ -85,6 +85,8 @@
          connection_step :: connection_step(),
          frame_max :: integer(),
          max_uncompressed_sub_entry_batch_size :: integer(),
+         max_credit_bytes :: integer(),
+         max_credit_chunks :: integer(),
          heartbeat :: undefined | integer(),
          heartbeater :: any(),
          client_properties = #{} :: #{binary() => binary()},
