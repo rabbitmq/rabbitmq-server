@@ -515,11 +515,11 @@ var HELP = {
     When single active consumer is enabled for the queue, only one consumer at a time is active. \
     When single active consumer is disabled for the queue, consumers are active by default. \
     For a quorum queue, a consumer can be inactive because its owning node is suspected down. <br/><br/> \
-    (<a href="https://www.rabbitmq.com/consumers.html#active-consumer" target="_blank">Documentation</a>)',
+    (<a href="https://www.rabbitmq.com/docs/consumers#active-consumer" target="_blank">Documentation</a>)',
 
     'consumer-owner' :
-    '<a href="https://www.rabbitmq.com/consumers.html">AMQP 0-9-1 consumers</a> belong to a channel, \
-    <a href="https://www.rabbitmq.com/stream.html">stream consumers</a> belong to a stream connection, \
+    '<a href="https://www.rabbitmq.com/docs/consumers" target="_blank">AMQP 0-9-1 consumers</a> belong to a channel, \
+    <a href="https://www.rabbitmq.com/docs/stream" target="_blank">stream consumers</a> belong to a stream connection, \
     and consumers of channel-less protocols (e.g. MQTT) belong to a connection.',
 
     'plugins' :
