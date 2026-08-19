@@ -68,8 +68,7 @@
                       queue :: rabbit_amqqueue:name(),
                       %% message ID used by queue and message store implementations
                       msg_id :: rabbit_amqqueue:msg_id(),
-                      %% Ack mode at delivery; it outlives the subscription.
-                      multi_ack :: boolean()
+                                            multi_ack :: boolean()
                      }).
 
 -record(cfg,
@@ -558,9 +557,10 @@ ack_action(Command, Frame,
         {ok, AckValue} ->
             case rabbit_stomp_util:parse_message_id(AckValue) of
                 {ok, {ConsumerTag, _SessionId, DeliveryTag}} ->
-                    %% Settle from the delivery ledger because the delivery
-                    %% may outlive its subscription. The ledger also preserves
-                    %% the original ack mode if the subscription ID is reused.
+                    %% Settle using state's `unacked_message_q` and the `#pending_ack` records.
+                    %% This handles two problematic scenarios: a delivery that outlived its
+                    %% subscription and the original ack mode for the race condition case where
+                    %% a recently cancelled subscription is immediately recreated with the same the subscription ID.
                     Requeue = rabbit_stomp_frame:boolean_header(Frame, <<"requeue">>, DefaultNackRequeue),
                     case Fun({ConsumerTag, DeliveryTag}, Requeue, State) of
                         {error, _, _, _} = Err -> Err;
@@ -707,8 +707,10 @@ maybe_delete_durable_sub_queue({topic, _Name}, QRes, Frame, State) ->
 maybe_delete_durable_sub_queue(_Destination, _QRes, _Frame, State) ->
     ok(State).
 
-%% Same permission and delete path as queue.delete on a channel. The check
-%% is uncached: this module never invalidates its permission cache.
+%% Matches the check performed during a queue deletion.
+%%
+%% This module never invalidates the permission cache, therefore here the cache
+%% is intentionally bypassed.
 -spec delete_durable_sub_queue(rabbit_amqqueue:name(), #state{}) ->
           {ok, none, #state{}}.
 delete_durable_sub_queue(QRes, State = #state{user = #user{username = Username} = User,
@@ -1133,8 +1135,7 @@ record_transaction_settlements(Acks) ->
 %% Records a client-sent acknowledgement. Handles both single delivery acks
 %% and multi-acks.
 %%
-%% The ack mode comes from the settled delivery's own ledger entry; entries
-%% walked past it are all older, so one accumulator serves both modes.
+%% The ack mode comes from the `state.unacked_message_q` entry.
 %%
 %% Returns a tuple of acknowledged pending acks and remaining pending acks.
 %% Sorts each group in the youngest-first order (descending by delivery tag).
@@ -1164,8 +1165,7 @@ collect_acks(OlderAcc, UAMQ, CTag, DeliveryTag) ->
                              end}
                     end;
                CurrentDT == DeliveryTag ->
-                    %% The same tag from another subscription does not name
-                    %% this delivery.
+                    %% Same delivery tag, different subscription.
                     {error, not_found};
                true ->
                     collect_acks([UnackedMsg | OlderAcc], UAMQTail,
@@ -1501,7 +1501,12 @@ commit_transaction(Transaction, State0) ->
     with_transaction(
       Transaction, State0,
       fun (Funs, State) ->
-              %% A cumulative settlement can make a later action redundant.
+              %% A multi-ack settles several deliveries at once, which can make a later
+              %% queued action redundant.
+              %%
+              %% Track settled tags for this commit only.
+              %% This value is erased in the `after` clause below so it can't leak into another
+              %% commit or a non-transactional ack operation.
               put(tx_settled_delivery_tags, sets:new([{version, 2}])),
               FinalState = try
                                lists:foldr(fun perform_transaction_action/2,

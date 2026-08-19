@@ -75,7 +75,7 @@ groups() ->
         global_counters
     ],
 
-    %% Not a `sequence` group: one failing case must not auto_skip the other.
+    %% Even if one case fails, we want to run the other.
     AuthzTests = [durable_unsubscribe_ignores_frame_queue_name,
                   durable_unsubscribe_requires_configure_permission],
 
@@ -225,7 +225,6 @@ end_per_testcase0(TestCase, Config)
 end_per_testcase0(_, Config) ->
     Config.
 
-%% Remove test queues before the client and AMQP connection are closed.
 cleanup_per_testcase0(unsubscribe_ack, Config) ->
     delete_test_queue(?UNSUBSCRIBE_QUEUE, Config);
 cleanup_per_testcase0(unsubscribe_multiack_prune, Config) ->
@@ -526,7 +525,7 @@ unsubscribe_multiack_prune(Config) ->
                                {<<"receipt">>, <<"rcpt2">>}]),
     {ok, Client4, _, _} = stomp_receive(Client3, 'RECEIPT'),
 
-    %% A cumulative ACK of the first delivery leaves the second pending.
+    %% A multiple-at-once ack of the first delivery leaves the second one pending
     rabbit_stomp_client:send(Client4, 'ACK', [Ack1, {<<"receipt">>, <<"rcpt3">>}]),
     {ok, Client5, _, _} = stomp_receive(Client4, 'RECEIPT'),
     ok = await_queue_state(Config, ?UNSUBSCRIBE_QUEUE, 0, 1, 0),
@@ -595,7 +594,7 @@ unsubscribe_transaction_ack(Config) ->
     Client8 = stomp_receive_receipt(Client7, <<"rcpt7">>),
     rabbit_stomp_client:send(
       Client8, 'COMMIT', [{<<"transaction">>, <<"commit-me">>}, {<<"receipt">>, <<"rcpt8">>}]),
-    %% the queued ACK's receipt is sent again as the transaction replays it
+    %% the queued ack's receipt is sent again during a replay
     Client9 = stomp_receive_receipt(Client8, <<"rcpt7">>),
     _Client10 = stomp_receive_receipt(Client9, <<"rcpt8">>),
 
@@ -649,23 +648,21 @@ unsubscribe_transaction_multiack_prune(Config) ->
     Client7 = stomp_receive_receipt(Client6, <<"rcpt5">>),
     rabbit_stomp_client:send(
       Client7, 'COMMIT', [{<<"transaction">>, <<"tx">>}, {<<"receipt">>, <<"rcpt6">>}]),
-    %% the queued ACKs' receipts are sent again as the transaction replays
+    %% the queued ack receipts are sent again as the transaction replays
     %% them, in the order they were queued
     Client8 = stomp_receive_receipt(Client7, <<"rcpt4">>),
     Client9 = stomp_receive_receipt(Client8, <<"rcpt5">>),
     Client10 = stomp_receive_receipt(Client9, <<"rcpt6">>),
     ok = await_queue_state(Config, ?UNSUBSCRIBE_QUEUE, 0, 0, 0),
 
-    %% A broker round trip proves the duplicate settlement did not close the
-    %% shared AMQP channel after the COMMIT receipt was sent.
     rabbit_stomp_client:send(
       Client10, 'SUBSCRIBE', [{<<"destination">>, ?UNSUBSCRIBE_DESTINATION},
                               {<<"receipt">>, <<"rcpt7">>},
                               {<<"id">>, <<"roundtrip">>}]),
     Client11 = stomp_receive_receipt(Client10, <<"rcpt7">>),
 
-    %% A settlement is redundant only when an earlier action in the same
-    %% COMMIT removed it.
+    %% An ack op is redundant only when an earlier action in the same
+    %% commit removed it.
     rabbit_stomp_client:send(
       Client11, 'BEGIN', [{<<"transaction">>, <<"tx2">>},
                           {<<"receipt">>, <<"rcpt8">>}]),
@@ -757,18 +754,18 @@ unsubscribe_ack_stream(Config) ->
                                {<<"id">>, <<"subscription-id">>},
                                {<<"receipt">>, <<"rcpt2">>}]),
     {ok, Client3, _, _} = stomp_receive(Client2, 'RECEIPT'),
-    %% A stream ACK is accepted even though no reader remains to credit.
+    %% A stream ack is accepted even though the consumer is gone.
     rabbit_stomp_client:send(
       Client3, 'ACK', [AckHeader, {<<"receipt">>, <<"rcpt3">>}]),
     {ok, _Client4, _, _} = stomp_receive(Client3, 'RECEIPT'),
     ok.
 
-%% Cumulative ACK prunes across the whole connection, not just the
-%% subscription the acked delivery arrived on: pre-existing AMQP 0-9-1 channel
-%% semantics, and a deliberate deviation from STOMP 1.2, which scopes a
-%% cumulative ack:client to the same subscription. Pinned here so settlement
-%% changes cannot narrow it silently; doing so would be a breaking change.
+%% This multi-ack behavior is a known RabbitMQ deviation from the spec:
 %% https://stomp.github.io/stomp-specification-1.2.html#SUBSCRIBE_ack_Header
+%% introduced in `300dcee219`.
+%%
+%% It won't affect a significant majority of the users but these tests document the behavior for
+%% the core team's own understanding.
 multiack_prune_is_connection_wide(Config) ->
     Channel = ?config(amqp_channel, Config),
     Client = ?config(stomp_client, Config),
@@ -809,7 +806,6 @@ multiack_prune_is_connection_wide(Config) ->
     AckB = {AckHeader, maps:get(MessageHeader, HeadersB)},
     AckA = {AckHeader, maps:get(MessageHeader, HeadersA)},
 
-    %% Mirror the shared AMQP channel's settlement across consumers.
     rabbit_stomp_client:send(Client4, 'ACK', [AckA, {<<"receipt">>, <<"rcpt3">>}]),
     {ok, Client5, _, _} = stomp_receive(Client4, 'RECEIPT'),
     ok = await_queue_state(Config, ?MULTIACK_QUEUE_B, 0, 0, 1),
@@ -819,8 +815,9 @@ multiack_prune_is_connection_wide(Config) ->
                  maps:get(<<"message">>, ErrorHeaders)),
     ok.
 
-%% A durable UNSUBSCRIBE must delete the queue this connection subscribed to,
-%% not the one x-queue-name names on the UNSUBSCRIBE frame.
+%% An UNSUBSCRIBE frame of a topic subscription with a durable header set to `true`
+%% must delete the queue recorded on the subscription,
+%% not the one named in the frame's x-queue-name header.
 durable_unsubscribe_ignores_frame_queue_name(Config) ->
     Client = ?config(authz_client, Config),
     Bystander = authz_bystander_queue(Config),
@@ -828,7 +825,7 @@ durable_unsubscribe_ignores_frame_queue_name(Config) ->
     Client1 = authz_subscribe(Client),
     ?assertMatch({ok, _}, lookup_queue(SubQueue, Config)),
     ?assertMatch({ok, _}, lookup_queue(Bystander, Config)),
-    %% the id alone resolves the subscription the delete targets
+    %% the ID alone identifies the subscription
     rabbit_stomp_client:send(
       Client1, 'UNSUBSCRIBE',
       [{<<"destination">>, ?AUTHZ_TOPIC_DESTINATION},
@@ -840,7 +837,7 @@ durable_unsubscribe_ignores_frame_queue_name(Config) ->
     ?assertMatch(#stomp_frame{command = 'RECEIPT',
                               headers = #{<<"receipt-id">> := <<"rcpt2">>}},
                  Frame),
-    %% a misdirected delete would land before the RECEIPT, so check it first
+
     ?assertMatch({ok, _}, lookup_queue(Bystander, Config)),
     ?awaitMatch({error, not_found}, lookup_queue(SubQueue, Config), 30_000),
     ok.

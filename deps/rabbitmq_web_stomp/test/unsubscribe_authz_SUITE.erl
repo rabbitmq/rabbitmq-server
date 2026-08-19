@@ -75,15 +75,16 @@ end_per_testcase(Testcase, Config) ->
                      queue_resource(?SUB_QUEUE, Config)]],
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
-%% A durable UNSUBSCRIBE must delete the queue this connection subscribed to,
-%% not the one x-queue-name names on the UNSUBSCRIBE frame.
+%% An UNSUBSCRIBE frame of a topic subscription with a durable header set to `true`
+%% must delete the queue recorded on the subscription,
+%% not the one named in the frame's x-queue-name header.
 durable_unsubscribe_ignores_frame_queue_name(Config) ->
     Bystander = queue_resource(?BYSTANDER_QUEUE, Config),
     SubQueue = queue_resource(?SUB_QUEUE, Config),
     WS = authz_subscribe(Config),
     ?assertMatch({ok, _}, lookup_queue(SubQueue, Config)),
     ?assertMatch({ok, _}, lookup_queue(Bystander, Config)),
-    %% the id alone resolves the subscription the delete targets
+    %% the ID alone identifies the subscription
     ok = raw_send(WS, "UNSUBSCRIBE",
                   [{"destination", ?TOPIC_DESTINATION},
                    {"id", ?SUBSCRIPTION_ID},
@@ -93,7 +94,7 @@ durable_unsubscribe_ignores_frame_queue_name(Config) ->
     {<<"RECEIPT">>, ReceiptHeaders, <<>>} = raw_recv(WS),
     ?assertEqual(<<"rcpt2">>,
                  proplists:get_value(<<"receipt-id">>, ReceiptHeaders)),
-    %% a misdirected delete would land before the RECEIPT, so check it first
+
     ?assertMatch({ok, _}, lookup_queue(Bystander, Config)),
     ?awaitMatch({error, not_found}, lookup_queue(SubQueue, Config), 30_000),
     {close, _} = rfc6455_client:close(WS),
