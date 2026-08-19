@@ -24,7 +24,11 @@
 -export([check_dead_letter_exchange_access/4,
          check_subscription_binding_access/5,
          ensure_exchange_exists/3,
-         check_user_id/2]).
+         check_user_id/2,
+         collect_acks/3,
+         pending_ack/3,
+         record_transaction_settlements/1,
+         unknown_delivery_tag/2]).
 -endif.
 
 -include_lib("kernel/include/logger.hrl").
@@ -67,7 +71,8 @@
                       %% queue name
                       queue :: rabbit_amqqueue:name(),
                       %% message ID used by queue and message store implementations
-                      msg_id :: rabbit_amqqueue:msg_id()
+                      msg_id :: rabbit_amqqueue:msg_id(),
+                      multi_ack :: boolean()
                      }).
 
 -record(cfg,
@@ -319,6 +324,8 @@ process_request(ProcessFun, SuccessFun, State) ->
             {ok, SuccessFun(NewState)};
         {error, Message, Detail, NewState} ->
             {ok, send_error(Message, Detail, NewState)};
+        {stop, error_close, NewState} ->
+            {stop, normal, NewState};
         {stop, normal, NewState} ->
             {stop, normal, SuccessFun(NewState)};
         {stop, R, NewState} ->
@@ -516,7 +523,7 @@ handle_frame('ACK', Frame, State) ->
     maybe_with_transaction(
       Frame,
       fun(State0) ->
-              ack_action('ACK', Frame, State0, fun handle_ack/4)
+              ack_action('ACK', Frame, State0, fun handle_ack/3)
       end,
       State);
 
@@ -524,7 +531,7 @@ handle_frame('NACK', Frame, State) ->
     maybe_with_transaction(
       Frame,
       fun(State0) ->
-              ack_action('NACK', Frame, State0, fun handle_nack/4)
+              ack_action('NACK', Frame, State0, fun handle_nack/3)
       end,
       State);
 
@@ -548,8 +555,7 @@ handle_frame(Command, _Frame, State) ->
 %%----------------------------------------------------------------------------
 
 ack_action(Command, Frame,
-           State = #state{subscriptions = Subs,
-                          cfg = #cfg{
+           State = #state{cfg = #cfg{
                                    version              = Version,
                                    default_nack_requeue = DefaultNackRequeue}}, Fun) ->
     AckHeader = rabbit_stomp_util:ack_header_name(Version),
@@ -557,16 +563,14 @@ ack_action(Command, Frame,
         {ok, AckValue} ->
             case rabbit_stomp_util:parse_message_id(AckValue) of
                 {ok, {ConsumerTag, _SessionId, DeliveryTag}} ->
-                    case maps:find(ConsumerTag, Subs) of
-                        {ok, Sub} ->
-                            Requeue = rabbit_stomp_frame:boolean_header(Frame, <<"requeue">>, DefaultNackRequeue),
-                            State1 = Fun(DeliveryTag, Sub, Requeue, State),
-                            ok(State1);
-                        error ->
-                            error("Subscription not found",
-                                  "Message with id ~tp has no subscription",
-                                  [AckValue],
-                                  State)
+                    %% Settle using state's `unacked_message_q` and the `#pending_ack` records.
+                    %% This handles two problematic scenarios: a delivery that outlived its
+                    %% subscription and the original ack mode for the race condition case where
+                    %% a recently cancelled subscription is immediately recreated with the same subscription ID.
+                    Requeue = rabbit_stomp_frame:boolean_header(Frame, <<"requeue">>, DefaultNackRequeue),
+                    case Fun({ConsumerTag, DeliveryTag}, Requeue, State) of
+                        {error, _, _, _} = Err -> Err;
+                        State1 -> ok(State1)
                     end;
                 _ ->
                     error("Invalid header",
@@ -673,11 +677,13 @@ tidy_canceled_subscription(ConsumerTag, Subscription,
 
 %% Client-initiated cancelations will pass an actual frame
 
-tidy_canceled_subscription(ConsumerTag, Subscription = #subscription{dest_hdr = DestHdr},
+tidy_canceled_subscription(ConsumerTag,
+                           Subscription = #subscription{dest_hdr = DestHdr,
+                                                        queue_name = QRes},
                            Frame, State0) ->
     {ok, State1} = tidy_canceled_subscription_state(ConsumerTag, Subscription, State0),
     {ok, Dest} = parse_endpoint(DestHdr),
-    maybe_delete_durable_sub_queue(Dest, Frame, State1).
+    maybe_delete_durable_sub_queue(Dest, QRes, Frame, State1).
 
 tidy_canceled_subscription_state(ConsumerTag,
                                  _Subscription = #subscription{queue_name = QName},
@@ -696,20 +702,29 @@ tidy_canceled_subscription_state(ConsumerTag,
     {ok, State#state{subscriptions = Subs1,
                           queue_consumers = QCons1}}.
 
-maybe_delete_durable_sub_queue({topic, Name}, Frame,
-                               State = #state{cfg = #cfg{auth_login = Username,
-                                                         vhost = VHost}}) ->
+%% Take the queue from the subscription, never from the UNSUBSCRIBE frame.
+maybe_delete_durable_sub_queue({topic, _Name}, QRes, Frame, State) ->
     case rabbit_stomp_util:has_durable_header(Frame) of
         true ->
-            {ok, Id} = rabbit_stomp_frame:header(Frame, ?HEADER_ID),
-            QName = rabbit_stomp_util:subscription_queue_name(Name, Id, Frame),
-            QRes = rabbit_misc:r(VHost, queue, QName),
-            delete_queue(QRes, Username),
-            ok(State);
+            delete_durable_sub_queue(QRes, State);
         false ->
             ok(State)
     end;
-maybe_delete_durable_sub_queue(_Destination, _Frame, State) ->
+maybe_delete_durable_sub_queue(_Destination, _QRes, _Frame, State) ->
+    ok(State).
+
+%% Matches the check performed during a queue deletion.
+%%
+%% This module never invalidates the permission cache, therefore here the cache
+%% is intentionally bypassed.
+-spec delete_durable_sub_queue(rabbit_amqqueue:name(), #state{}) ->
+          {ok, none, #state{}}.
+delete_durable_sub_queue(QRes, State = #state{user = #user{username = Username} = User,
+                                              authz_ctx = AuthzCtx}) ->
+    ok = rabbit_access_control:check_resource_access(
+           User, QRes, configure, AuthzCtx),
+    {ok, _} = rabbit_amqqueue:delete_with(QRes, self(), false, false,
+                                          Username, true),
     ok(State).
 
 with_destination(Command, Frame, State, Fun) ->
@@ -790,7 +805,7 @@ do_subscribe(Destination, DestHdr, Frame,
                     Detail = "A subscription identified by '~ts' already exists.",
                     _ = error(Message, Detail, [ConsumerTag], State),
                     _ = send_error(Message, Detail, [ConsumerTag], State),
-                    {stop, normal, close_connection(State)};
+                    {stop, error_close, close_connection(State)};
                 error ->
                     ExchangeAndKey = parse_routing(Destination, DfltTopicEx),
                     Arguments = subscribe_arguments(Frame),
@@ -1065,49 +1080,117 @@ coalesce_and_send(MsgSeqNos, NegativeMsgSeqNos, MkMsgFun, State = #state{unconfi
                         MkMsgFun(SeqNo, false, StateN)
                 end, State1, Ss).
 
-handle_ack(DeliveryTag, #subscription{multi_ack = IsMulti}, _, State = #state{unacked_message_q = UAMQ}) ->
-    {Acked, Remaining} = collect_acks(UAMQ, DeliveryTag, IsMulti),
-    State1 = State#state{unacked_message_q = Remaining},
-    {State2, Actions} = settle_acks(Acked, State1),
-    handle_queue_actions(Actions, State2).
+handle_ack(Ack = {CTag, DeliveryTag}, _Requeue,
+           State = #state{unacked_message_q = UAMQ}) ->
+    case collect_acks(UAMQ, CTag, DeliveryTag) of
+        {error, not_found} ->
+            unknown_delivery_tag(Ack, State);
+        {Acked, Remaining} ->
+            State1 = State#state{unacked_message_q = Remaining},
+            {State2, Actions} = settle_acks(Acked, State1),
+            State3 = handle_queue_actions(Actions, State2),
+            record_transaction_settlements(Acked),
+            State3
+    end.
 
-handle_nack(DeliveryTag, #subscription{multi_ack = IsMulti}, Requeue, State = #state{unacked_message_q = UAMQ}) ->
-    {Acked, Remaining} = collect_acks(UAMQ, DeliveryTag, IsMulti),
-    State1 = State#state{unacked_message_q = Remaining},
-    {State2, Actions} = internal_reject(Requeue, Acked, State1),
-    handle_queue_actions(Actions, State2).
+handle_nack(Ack = {CTag, DeliveryTag}, Requeue,
+            State = #state{unacked_message_q = UAMQ}) ->
+    case collect_acks(UAMQ, CTag, DeliveryTag) of
+        {error, not_found} ->
+            unknown_delivery_tag(Ack, State);
+        {Acked, Remaining} ->
+            State1 = State#state{unacked_message_q = Remaining},
+            {State2, Actions} = internal_reject(Requeue, Acked, State1),
+            State3 = handle_queue_actions(Actions, State2),
+            record_transaction_settlements(Acked),
+            State3
+    end.
+
+unknown_delivery_tag(Ack, State) ->
+    case get(tx_settled_delivery_tags) of
+        undefined ->
+            unknown_delivery_tag_error(Ack, State);
+        Settled ->
+            case sets:is_element(Ack, Settled) of
+                true ->
+                    State;
+                false ->
+                    unknown_delivery_tag_error(Ack, State)
+            end
+    end.
+
+unknown_delivery_tag_error({_CTag, DeliveryTag}, State) ->
+    error("Message not found", "unknown delivery tag ~w~n", [DeliveryTag], State).
+
+%% Only the older deliveries a multi-ack settled can make a later action in the
+%% same commit redundant. The delivery the client named is not recorded, so
+%% settling it twice remains an error.
+record_transaction_settlements([_Named | Older]) ->
+    case get(tx_settled_delivery_tags) of
+        undefined ->
+            ok;
+        Settled0 ->
+            Settled = lists:foldl(
+                        fun(#pending_ack{tag = CTag,
+                                         delivery_tag = DeliveryTag}, Acc) ->
+                                sets:add_element({CTag, DeliveryTag}, Acc)
+                        end, Settled0, Older),
+            put(tx_settled_delivery_tags, Settled),
+            ok
+    end.
 
 %% Records a client-sent acknowledgement. Handles both single delivery acks
 %% and multi-acks.
 %%
+%% The ack mode comes from the `state.unacked_message_q` entry.
+%%
 %% Returns a tuple of acknowledged pending acks and remaining pending acks.
 %% Sorts each group in the youngest-first order (descending by delivery tag).
-collect_acks(UAMQ, DeliveryTag, Multiple) ->
-    collect_acks([], [], UAMQ, DeliveryTag, Multiple).
+collect_acks(UAMQ, CTag, DeliveryTag) ->
+    collect_acks([], UAMQ, CTag, DeliveryTag).
 
-collect_acks(AcknowledgedAcc, RemainingAcc, UAMQ, DeliveryTag, Multiple) ->
+collect_acks(OlderAcc, UAMQ, CTag, DeliveryTag) ->
     case ?QUEUE:out(UAMQ) of
-        {{value, UnackedMsg = #pending_ack{delivery_tag = CurrentDT}},
+        {{value, UnackedMsg = #pending_ack{delivery_tag = CurrentDT,
+                                           tag = CurrentCTag,
+                                           multi_ack = Multiple}},
          UAMQTail} ->
-            if CurrentDT == DeliveryTag ->
-                    {[UnackedMsg | AcknowledgedAcc],
-                     case RemainingAcc of
-                         [] -> UAMQTail;
-                         _  -> ?QUEUE:join(
-                                  ?QUEUE:from_list(lists:reverse(RemainingAcc)),
-                                  UAMQTail)
-                     end};
-               Multiple ->
-                    collect_acks([UnackedMsg | AcknowledgedAcc], RemainingAcc,
-                                 UAMQTail, DeliveryTag, Multiple);
+            if CurrentDT == DeliveryTag andalso CurrentCTag == CTag ->
+                    case Multiple of
+                        true ->
+                            %% Prune older deliveries across subscriptions, as
+                            %% cumulative basic.ack does on an AMQP channel.
+                            {[UnackedMsg | OlderAcc], UAMQTail};
+                        false ->
+                            {[UnackedMsg],
+                             case OlderAcc of
+                                 [] -> UAMQTail;
+                                 _  -> ?QUEUE:join(
+                                          ?QUEUE:from_list(
+                                            lists:reverse(OlderAcc)),
+                                          UAMQTail)
+                             end}
+                    end;
+               CurrentDT == DeliveryTag ->
+                    %% Same delivery tag, different subscription.
+                    {error, not_found};
                true ->
-                    collect_acks(AcknowledgedAcc, [UnackedMsg | RemainingAcc],
-                                 UAMQTail, DeliveryTag, Multiple)
+                    collect_acks([UnackedMsg | OlderAcc], UAMQTail,
+                                 CTag, DeliveryTag)
             end;
         {empty, _} ->
-            error("Unknown delivery tag",
-                  "unknown delivery tag ~w", [DeliveryTag])
+            {error, not_found}
     end.
+
+-ifdef(TEST).
+pending_ack(ConsumerTag, DeliveryTag, MultiAck) ->
+    #pending_ack{delivery_tag = DeliveryTag,
+                 tag          = ConsumerTag,
+                 delivered_at = 0,
+                 queue        = undefined,
+                 msg_id       = DeliveryTag,
+                 multi_ack    = MultiAck}.
+-endif.
 
 foreach_per_queue(F, [#pending_ack{tag = CTag,
                                    queue = QName,
@@ -1212,7 +1295,8 @@ send_delivery(QName, MsgId,
                          subscriptions = Subs,
                          unacked_message_q = UAMQ}) ->
     case maps:find(ConsumerTag, Subs) of
-        {ok, #subscription{ack_mode = AckMode}} ->
+        {ok, #subscription{ack_mode = AckMode,
+                           multi_ack = IsMulti}} ->
             NewState = send_frame(
                          'MESSAGE',
                          rabbit_stomp_util:headers(
@@ -1230,7 +1314,8 @@ send_delivery(QName, MsgId,
                                                               tag = ConsumerTag,
                                                               delivered_at = DeliveredAt,
                                                               queue = QName,
-                                                              msg_id = MsgId}, UAMQ)};
+                                                              msg_id = MsgId,
+                                                              multi_ack = IsMulti}, UAMQ)};
                 _ -> NewState
             end;
         error ->
@@ -1433,9 +1518,20 @@ commit_transaction(Transaction, State0) ->
     with_transaction(
       Transaction, State0,
       fun (Funs, State) ->
-              FinalState = lists:foldr(fun perform_transaction_action/2,
-                                       {ok, State},
-                                       Funs),
+              %% A multi-ack settles several deliveries at once, which can make a later
+              %% queued action redundant.
+              %%
+              %% Track settled tags for this commit only.
+              %% This value is erased in the `after` clause below so it can't leak into another
+              %% commit or a non-transactional ack operation.
+              put(tx_settled_delivery_tags, sets:new([{version, 2}])),
+              FinalState = try
+                               lists:foldr(fun perform_transaction_action/2,
+                                           {ok, State},
+                                           Funs)
+                           after
+                               erase(tx_settled_delivery_tags)
+                           end,
               erase({transaction, Transaction}),
               FinalState
       end).
@@ -1450,11 +1546,8 @@ abort_transaction(Transaction, State0) ->
 
 perform_transaction_action(_, {stop, _, _} = Res) ->
     Res;
-perform_transaction_action({Frame, Fun}, {ok, State}) ->
-    process_request(
-      Fun,
-      fun(StateM) -> ensure_receipt(Frame, StateM) end,
-      State).
+perform_transaction_action({_Frame, Fun}, {ok, State}) ->
+    process_request(Fun, State).
 
 %%--------------------------------------------------------------------
 %% Heartbeat Management
@@ -1525,12 +1618,12 @@ ok(Command, Headers, BodyFragments, State) ->
 amqp_death(ErrorName, Explanation, State) when is_atom(ErrorName) ->
     ErrorDesc = rabbit_misc:format("~ts", [Explanation]),
     log_error(ErrorName, ErrorDesc, none),
-    {stop, normal, close_connection(send_error(atom_to_list(ErrorName), ErrorDesc, State))};
+    {stop, error_close, close_connection(send_error(atom_to_list(ErrorName), ErrorDesc, State))};
 amqp_death(ReplyCode, Explanation, State) ->
     ErrorName = rabbit_framing_amqp_0_9_1:amqp_exception(ReplyCode),
     ErrorDesc = rabbit_misc:format("~ts", [Explanation]),
     log_error(ErrorName, ErrorDesc, none),
-    {stop, normal, close_connection(send_error(atom_to_list(ErrorName), ErrorDesc, State))}.
+    {stop, error_close, close_connection(send_error(atom_to_list(ErrorName), ErrorDesc, State))}.
 
 error(Message, Detail, State) ->
     priv_error(Message, Detail, none, State).
