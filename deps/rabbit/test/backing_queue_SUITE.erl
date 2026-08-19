@@ -74,6 +74,7 @@ groups() ->
           msg_store_v1_current_file_emptied_before_crash,
           msg_store_recovers_from_truncated_file_summary_dump,
           msg_store_recovers_from_truncated_index_dump,
+          msg_store_dirty_recovery_dispatch_failure_does_not_hang,
           msg_store_recovers_torn_current_file,
           msg_store_recovers_from_corrupted_file,
           msg_store_recovers_from_corrupted_file_no_fd_leak,
@@ -1338,6 +1339,114 @@ msg_store_recovers_from_truncated_index_dump1(_Config) ->
 
     ok = rabbit_msg_store:client_terminate(MSCState1),
     restart_msg_store_empty(),
+    passed.
+
+%% rebuild_index/3 used to spawn a separate, unlinked process just to
+%% dispatch each segment file's scan job to the worker pool, while its
+%% own caller concurrently blocked waiting for gathered results from a
+%% gatherer that process neither owned nor was linked to. If that
+%% dispatcher process died partway through dispatching -- e.g. because
+%% the shared worker_pool itself died while a dispatch call was in
+%% flight -- nothing else ever noticed: the gatherer's per-file fork
+%% count could never reach zero, so the consumer blocked forever, and
+%% since the store's own start_link/5 uses an infinite timeout, nothing
+%% ever timed that out either. This simulates exactly that failure (a
+%% dispatch call raising partway through a dirty recovery forced across
+%% several segment files, so there's a "partway" to speak of) and
+%% asserts that boot fails loudly, well within a bounded wait, instead
+%% of hanging.
+msg_store_dirty_recovery_dispatch_failure_does_not_hang(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, msg_store_dirty_recovery_dispatch_failure_does_not_hang1, [Config]).
+
+msg_store_dirty_recovery_dispatch_failure_does_not_hang1(_Config) ->
+    {ok, DefaultFileSizeLimit} = application:get_env(rabbit, msg_store_file_size_limit),
+    %% Force several segment files, so the dispatch loop genuinely still
+    %% has files left after the one call we make fail.
+    ok = application:set_env(rabbit, msg_store_file_size_limit, 100),
+    try
+        msg_store_dirty_recovery_dispatch_failure_does_not_hang2()
+    after
+        ok = application:set_env(rabbit, msg_store_file_size_limit, DefaultFileSizeLimit)
+    end.
+
+msg_store_dirty_recovery_dispatch_failure_does_not_hang2() ->
+    restart_msg_store_empty(),
+    Ref = rabbit_guid:gen(),
+    {Cap, MSCState0} = msg_store_client_init_capture(?PERSISTENT_MSG_STORE, Ref),
+    %% Each of these is 27 + 12 = 39 bytes: 64 + 39 = 103 > 100 rolls the
+    %% file over on every single write, so five messages land in five
+    %% separate segment files.
+    MsgIds = [msg_id_bin({dispatch_failure, N}) || N <- lists:seq(1, 5)],
+    Msg = {payload, <<"irrelevant to this test">>},
+    Writes = lists:zip(lists:seq(1, 5), MsgIds),
+    ok = lists:foreach(fun({N, MsgId}) ->
+        ok = rabbit_msg_store:write(N, MsgId, Msg, MSCState0)
+    end, Writes),
+    ok = on_disk_await(Cap, Writes),
+    ok = rabbit_msg_store:client_terminate(MSCState0),
+    ok = on_disk_stop(Cap),
+
+    ok = rabbit_variable_queue:stop_msg_store(?VHOST),
+    %% No clean.dot => dirty recovery => rebuild_index/3 dispatches one
+    %% job per segment file.
+    Dir = filename:join([rabbit_vhost:msg_store_dir_path(?VHOST), atom_to_list(?PERSISTENT_MSG_STORE)]),
+    ok = file:delete(filename:join(Dir, "clean.dot")),
+
+    %% Fail the second dispatch_sync call outright, simulating the
+    %% shared worker_pool dying while that call is in flight, with
+    %% files still left to dispatch afterwards. The transient store
+    %% (started first, always empty here) issues one phantom dispatch
+    %% of its own for its single, absent current file, so this is
+    %% actually the persistent store's first file dispatch -- but since
+    %% the persistent store has five segment files, that still leaves
+    %% four genuinely undispatched afterwards, which is the shape that
+    %% matters here.
+    Counter = counters:new(1, []),
+    ok = meck:new(worker_pool, [unstick, passthrough, no_link]),
+    ok = meck:expect(worker_pool, dispatch_sync, fun(Fun) ->
+        N = counters:get(Counter, 1) + 1,
+        counters:add(Counter, 1, 1),
+        case N of
+            2 -> error(simulated_worker_pool_death);
+            _ -> meck:passthrough([Fun])
+        end
+    end),
+
+    Gen = fun
+        ([])  -> finished;
+        (Ids) -> {Ids, []}
+    end,
+    Parent = self(),
+    {Pid, MRef} = spawn_monitor(fun() ->
+        Result = (catch rabbit_variable_queue:start_msg_store(?VHOST, [Ref], {Gen, MsgIds})),
+        Parent ! {self(), Result}
+    end),
+    %% Comfortably above how long even a slow, correct boot takes, but
+    %% far below how long a genuine hang would need to be mistaken for
+    %% one -- this is testing "does it come back at all", not timing.
+    Outcome = receive
+        {'DOWN', MRef, process, Pid, DownReason} -> {'DOWN', DownReason};
+        {Pid, Result} -> Result
+    after 10000 ->
+        timeout
+    end,
+    ok = meck:unload(worker_pool),
+
+    %% The one assertion that matters: boot does not hang forever. The
+    %% exact crash shape isn't the point -- not hanging is.
+    true = Outcome =/= timeout,
+
+    %% The failed start above means the persistent store's supervisor
+    %% child spec was never successfully registered (the transient
+    %% store, which needs no dirty recovery, did start) --
+    %% restart_msg_store_empty/0 would try to stop it again and badmatch
+    %% on {error, not_found}. Stop each independently, tolerating that,
+    %% before starting both fresh for real.
+    catch rabbit_vhost_msg_store:stop(?VHOST, ?TRANSIENT_MSG_STORE),
+    catch rabbit_vhost_msg_store:stop(?VHOST, ?PERSISTENT_MSG_STORE),
+    ok = rabbit_variable_queue:start_msg_store(?VHOST,
+           undefined, {fun (ok) -> finished end, ok}),
     passed.
 
 %% open_current_file/5 has three branches: roll a v1 current file to a

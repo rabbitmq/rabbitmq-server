@@ -2388,8 +2388,10 @@ corruption_offset({rabbit_msg_store_v2_scan_error, _Path, InnerReason})
     {ok, element(2, InnerReason)};
 corruption_offset(_Reason) -> error.
 
+%% Runs in the same process as its caller, rebuild_index/3, rather than
+%% a separate spawned process -- see the comment there for why.
 enqueue_build_index_workers(_Gatherer, [], _State) ->
-    exit(normal);
+    ok;
 enqueue_build_index_workers(Gatherer, [File|Files], State) ->
     ok = worker_pool:dispatch_sync(
            fun () ->
@@ -2418,16 +2420,27 @@ reduce_index(Gatherer, LastFile,
             reduce_index(Gatherer, LastFile, State)
     end.
 
+%% Dispatching used to happen in a separate, unlinked, spawned process,
+%% concurrently with reduce_index/3 below draining the gatherer. If
+%% that process died before dispatching every file -- for any reason,
+%% since nothing linked or usefully monitored it -- the gatherer's
+%% per-file fork count (already bumped for every file up front, just
+%% below) would never reach zero, so gatherer:out/1 would never return
+%% empty and reduce_index/3 would block forever; rabbit_msg_store's own
+%% start_link/5 uses {timeout, infinity}, so nothing would ever time
+%% that out either -- the store just never came up, with no crash and
+%% no log. worker_pool:dispatch_sync/1 paces on free-worker availability
+%% either way, identically whether it's called from a separate process
+%% or inline, so doing it inline here doesn't change how long dispatching
+%% every file takes; it just means a failure part-way through (e.g. the
+%% shared worker_pool itself dying while a dispatch call is in flight)
+%% now propagates directly out of this function instead of vanishing
+%% silently.
 rebuild_index(Gatherer, Files, State) ->
     lists:foreach(fun (_File) ->
                           ok = gatherer:fork(Gatherer)
                   end, Files),
-    Pid = spawn(
-            fun () ->
-                    enqueue_build_index_workers(Gatherer,
-                                                Files, State)
-            end),
-    erlang:monitor(process, Pid),
+    ok = enqueue_build_index_workers(Gatherer, Files, State),
     reduce_index(Gatherer, lists:last(Files), State).
 
 %%----------------------------------------------------------------------------
