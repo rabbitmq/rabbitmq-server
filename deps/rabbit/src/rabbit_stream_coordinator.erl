@@ -979,16 +979,21 @@ remove_member(Leader, Members, Node) ->
 %% record built by an earlier version (see the upgrade clause below). Bump this
 %% tag whenever the aux record shape changes.
 -define(AUX, aux_v2).
--record(aux_v2, {actions = #{} ::
-              #{pid() := {stream_id(), atom(), #{node := node(),
-                                                 index := non_neg_integer(),
-                                                 epoch := osiris:epoch()}}},
-              resizer :: undefined | pid(),
-              %% actions waiting for a worker slot, started FIFO as running
-              %% actions complete
-              pending = queue:new() :: queue:queue(),
-              %% the maximum number of action workers to run at once
-              max_concurrency = ?DEFAULT_MAX_CONCURRENT_ACTIONS :: pos_integer()}).
+-record(aux_v2,
+        {actions = #{} ::
+             #{pid() := {stream_id(), atom(), #{node := node(),
+                                                index := non_neg_integer(),
+                                                epoch := osiris:epoch()}}},
+         resizer :: undefined | pid(),
+         %% actions waiting for a worker slot, started FIFO as running
+         %% actions complete
+         pending = queue:new() :: queue:queue(),
+         %% the maximum number of action workers to run at once
+         max_concurrency = ?DEFAULT_MAX_CONCURRENT_ACTIONS :: pos_integer(),
+         % elp:ignore W0003 (unused_record_field)
+         unused_1,
+         % elp:ignore W0003 (unused_record_field)
+         unused_2}).
 
 init_aux(_Name) ->
     #?AUX{max_concurrency = max_concurrent_actions()}.
