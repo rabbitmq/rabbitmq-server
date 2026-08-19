@@ -1,6 +1,6 @@
 const { By, Key, until, Builder } = require('selenium-webdriver')
 const assert = require('assert')
-const { buildDriver, goToHome, captureScreensFor, teardown, delay } = require('../utils')
+const { buildDriver, goToHome, captureScreensFor, teardown, doUntil } = require('../utils')
 
 const LoginPage = require('../pageobjects/LoginPage')
 const OverviewPage = require('../pageobjects/OverviewPage')
@@ -38,9 +38,10 @@ describe('Move messages section', function () {
       
       await queuesAndStreams.ensureAddQueueSectionIsVisible()
       await queuesAndStreams.fillInAddNewQueue({"name" : queueName, "type" : "classic"})
-      await delay(5000)
-      await queuesAndStreams.filterQueues(queueName)
-      await delay(2000)
+      await doUntil(async function () {
+        await queuesAndStreams.filterQueues(queueName)
+        return queuesAndStreams.isQueueVisible("%2F", queueName)
+      }, (visible) => visible)
       await queuesAndStreams.clickOnQueue("%2F", queueName)
       assert.ok(await queuePage.isLoaded())
     })
@@ -69,9 +70,10 @@ describe('Move messages section', function () {
       
       await queuesAndStreams.ensureAddQueueSectionIsVisible()
       await queuesAndStreams.fillInAddNewQueue({"name" : queueName, "type" : "classic"})
-      await delay(5000)
-      await queuesAndStreams.filterQueues(queueName)
-      await delay(2000)
+      await doUntil(async function () {
+        await queuesAndStreams.filterQueues(queueName)
+        return queuesAndStreams.isQueueVisible("%2F", queueName)
+      }, (visible) => visible)
       await queuesAndStreams.clickOnQueue("%2F", queueName)
       assert.ok(await queuePage.isLoaded())
     })

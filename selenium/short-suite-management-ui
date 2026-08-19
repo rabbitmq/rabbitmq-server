@@ -12,11 +12,11 @@ mgt/queuesAndStreams-basic-stats-no-stream-management.sh
 mgt/limits.sh
 mgt/overview.sh
 mgt/channels.sh
-mgt/channels-basic-stats.sh
+mgt/channels-with-basic-info.sh
 mgt/amqp091-connections.sh
 mgt/amqp10-connections.sh
 mgt/mqtt-connections.sh
-mgt/connections-basic-stats.sh
+mgt/connections-with-basic-stats.sh
 mgt/feature-flags.sh
 authnz-mgt/multi-oauth-with-basic-auth.sh
 authnz-mgt/oauth-with-uaa-and-tls-terminating-proxy.sh
