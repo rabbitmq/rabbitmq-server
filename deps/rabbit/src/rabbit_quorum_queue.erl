@@ -530,7 +530,9 @@ delete_local_consumer_metrics(QName) ->
 %%
 %% see bulk_update_consumer_metrics/2 for why this must never crash
 consumer_metrics_v9_upgrade(QName, ConsumerMetrics) ->
-    catch consumer_metrics_v9_upgrade0(QName, ConsumerMetrics).
+    spawn(fun () ->
+                  consumer_metrics_v9_upgrade0(QName, ConsumerMetrics)
+          end).
 
 consumer_metrics_v9_upgrade0(QName, ConsumerMetrics) ->
     case rabbit_amqqueue:lookup(QName) of
