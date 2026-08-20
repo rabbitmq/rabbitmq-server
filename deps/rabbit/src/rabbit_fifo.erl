@@ -430,6 +430,7 @@ apply_(#{index := Index,
             {_, State1, Effects00} = update_consumer(Meta, ConsumerId,
                                                      ConsumerId, ConsumerMeta,
                                                      {once, {simple_prefetch, 1}},
+                                                     {dequeue, Settlement},
                                                      0, Timeout, State0, []),
             case checkout_one(Meta, false, State1, Effects00) of
                 {success, _, MsgId, Msg, _ExpiredMsg, State2, Effects0} ->
@@ -509,7 +510,7 @@ apply_(#{index := Idx} = Meta,
                   end,
     {Consumer, State1, Effects00} = update_consumer(Meta, ConsumerKey,
                                                     ConsumerId, ConsumerMeta,
-                                                    Spec, Priority,
+                                                    Spec, Spec0, Priority,
                                                     Timeout, State0, []),
     WasActive = is_active(ConsumerKey, State1),
     {State2, Effs0} = activate_next_consumer(State1, Effects00),
@@ -1027,7 +1028,29 @@ convert_v8_to_v9(#{} = _Meta, StateV8) ->
     #delayed{deferred = DeferredV8} = V8Delayed,
     V9Deferred = maps:map(fun(_Token, Key) -> [Key] end, DeferredV8),
     V9Delayed = V8Delayed#delayed{deferred = V9Deferred},
-    V9State0#?STATE{delayed = V9Delayed}.
+    V9State1 = V9State0#?STATE{delayed = V9Delayed},
+
+    %% v9 added #consumer_cfg.initial_spec; back-fill it for any consumer
+    %% already in flight at the upgrade instant, using the {lifetime,
+    %% status} signal that identified a basic.get's once-off consumer
+    %% before this field existed; the resulting value is only ever tested
+    %% for its {dequeue, _} shape (see is_dequeue_consumer/1), so an
+    %% approximate Settlement is good enough here
+    #?STATE{consumers = Cons0, waiting_consumers = Waiting0} = V9State1,
+    Cons = maps:map(fun(_ConsumerKey, C) -> backfill_initial_spec(C) end,
+                    Cons0),
+    Waiting = [{ConsumerKey, backfill_initial_spec(C)}
+               || {ConsumerKey, C} <- Waiting0],
+    V9State1#?STATE{consumers = Cons, waiting_consumers = Waiting}.
+
+backfill_initial_spec(#consumer{cfg = CCfg, status = Status} = Con) ->
+    Spec = case {element(#consumer_cfg.lifetime, CCfg), Status} of
+               {once, up} ->
+                   {dequeue, unsettled};
+               {Life, _} ->
+                   {Life, element(#consumer_cfg.credit_mode, CCfg)}
+           end,
+    Con#consumer{cfg = erlang:append_element(CCfg, Spec)}.
 
 purge_node(Meta, Node, State, Effects) ->
     lists:foldl(fun(Pid, {S0, E0}) ->
@@ -1891,11 +1914,23 @@ consumer_metrics_effect(#?STATE{cfg = #cfg{resource = QName}},
      [QName, {CTag, CPid}, false, Ack, Prefetch, Active, ActivityStatus, Args]}.
 
 %% metrics rows for every consumer of this queue, active or waiting, used to
-%% (re-)populate the local consumer metrics table when this node becomes leader
+%% (re-)populate the local consumer metrics table when this node becomes
+%% leader; a basic.get consumer never had a created effect emitted for it
+%% and thus must not be listed here either
 consumer_metrics_rows(#?STATE{consumers = Cons,
                               waiting_consumers = WaitingConsumers} = State) ->
     [consumer_metrics_row(ConsumerKey, Consumer, State)
-     || {ConsumerKey, Consumer} <- maps:to_list(Cons) ++ WaitingConsumers].
+     || {ConsumerKey, Consumer} <- maps:to_list(Cons) ++ WaitingConsumers,
+        not is_dequeue_consumer(Consumer)].
+
+%% a basic.get's internal once-off consumer, as opposed to a real one
+%% created via a #checkout{} command; the latter always has a created
+%% effect emitted for it, regardless of what lifetime it requested (see
+%% single_active_consumer_test for a real consumer using lifetime=once)
+is_dequeue_consumer(#consumer{cfg = #consumer_cfg{initial_spec = {dequeue, _}}}) ->
+    true;
+is_dequeue_consumer(#consumer{}) ->
+    false.
 
 consumer_metrics_row(ConsumerKey,
                      #consumer{cfg = #consumer_cfg{pid = Pid,
@@ -2075,9 +2110,15 @@ maybe_return_all(#{system_time := Ts} = Meta, ConsumerKey,
             %% any unsettled messages, which are returned to the queue below
             {S1, Effects} = return_all(Meta, S0, Effects0, ConsumerKey,
                                        Consumer, Reason == down),
+            Effects1 = case is_dequeue_consumer(Consumer) of
+                           true -> Effects;
+                           false ->
+                               cancel_consumer_effects(consumer_id(Consumer),
+                                                       S1, Effects)
+                       end,
             {S1#?STATE{consumers = maps:remove(ConsumerKey, S1#?STATE.consumers),
                        last_active = Ts},
-             cancel_consumer_effects(consumer_id(Consumer), S1, Effects)}
+             Effects1}
     end.
 
 node_of(undefined) -> undefined;
@@ -3247,10 +3288,18 @@ update_or_remove_con(Meta, ConsumerKey,
             % lifetime=once consumer is actually removed, whether that's
             % immediately on cancellation or, if it still had unsettled
             % messages, once the last of them is settled/discarded/returned;
-            % the consumer metrics are cleared to match, not before
-            {State#?STATE{consumers = maps:remove(ConsumerKey, Cons),
-                         last_active = Ts},
-             cancel_consumer_effects(consumer_id(Con), State, Effects)};
+            % the consumer metrics are cleared to match, not before, but
+            % only if a created effect was ever emitted for it in the
+            % first place (a basic.get consumer never gets one)
+            State1 = State#?STATE{consumers = maps:remove(ConsumerKey, Cons),
+                                  last_active = Ts},
+            Effects1 = case is_dequeue_consumer(Con) of
+                           true -> Effects;
+                           false ->
+                               cancel_consumer_effects(consumer_id(Con),
+                                                       State1, Effects)
+                       end,
+            {State1, Effects1};
         _ ->
             % there are unsettled items so need to keep around; the
             % consumer metrics are left as-is until it is actually removed
@@ -3292,7 +3341,7 @@ maybe_queue_consumer(_Key, _Consumer, ServiceQueue) ->
     ServiceQueue.
 
 update_consumer(Meta, ConsumerKey, {Tag, Pid}, ConsumerMeta,
-                {Life, Mode} = Spec, Priority, Timeout,
+                {Life, Mode} = Spec, OrigSpec, Priority, Timeout,
                 #?STATE{cfg = #cfg{consumer_strategy = competing},
                         consumers = Cons0} = State0, Effects0) ->
     Consumer = case Cons0 of
@@ -3308,7 +3357,8 @@ update_consumer(Meta, ConsumerKey, {Tag, Pid}, ConsumerMeta,
                                                      meta = ConsumerMeta,
                                                      priority = Priority,
                                                      credit_mode = Mode,
-                                                     timeout = Timeout},
+                                                     timeout = Timeout,
+                                                     initial_spec = OrigSpec},
                                  credit = Credit,
                                  delivery_count = DeliveryCount}
                end,
@@ -3316,7 +3366,7 @@ update_consumer(Meta, ConsumerKey, {Tag, Pid}, ConsumerMeta,
                                             State0, Effects0),
     {Consumer, State, Effects};
 update_consumer(Meta, ConsumerKey, {Tag, Pid}, ConsumerMeta,
-                {Life, Mode} = Spec, Priority, Timeout,
+                {Life, Mode} = Spec, OrigSpec, Priority, Timeout,
                 #?STATE{cfg = #cfg{consumer_strategy = single_active},
                         consumers = Cons0,
                         waiting_consumers = Waiting0,
@@ -3351,7 +3401,8 @@ update_consumer(Meta, ConsumerKey, {Tag, Pid}, ConsumerMeta,
                                                      meta = ConsumerMeta,
                                                      priority = Priority,
                                                      credit_mode = Mode,
-                                                     timeout = Timeout},
+                                                     timeout = Timeout,
+                                                     initial_spec = OrigSpec},
                                  credit = Credit,
                                  delivery_count = DeliveryCount},
             Waiting = add_waiting({ConsumerKey, Consumer}, Waiting0),

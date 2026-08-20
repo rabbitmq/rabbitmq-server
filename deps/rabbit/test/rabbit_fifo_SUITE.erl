@@ -1337,6 +1337,74 @@ cancel_consumer_metrics_deletion_delayed_until_settled_test(Config) ->
     ?assert(has_cancel_consumer_handler_effect(Effects2)),
     ok.
 
+cancel_consumer_metrics_deletion_on_down_before_settled_test(Config) ->
+    %% a consumer cancelled while a message is still checked out is kept
+    %% around, with its metrics untouched, until that message is settled;
+    %% if its channel dies first instead, the consumer is gone immediately
+    %% and its metrics must be deleted there and then, not left dangling
+    Cid = {<<"cid">>, self()},
+    {State0, _} = enq(Config, 1, 1, first, test_init(test)),
+    {State1, _, _} = checkout(Config, ?LINE, Cid, 1, State0), %% 1 msg out
+    {State2, _, Effects1} = apply(meta(Config, 3),
+                                  rabbit_fifo:make_checkout(Cid, cancel, #{}),
+                                  State1),
+    ?assertNot(has_cancel_consumer_handler_effect(Effects1)),
+    %% noproc (unlike noconnection) means the process is definitely gone,
+    %% not just its node being temporarily unreachable
+    {_State3, _, Effects2} = apply(meta(Config, 4), {down, self(), noproc},
+                                   State2),
+    ?assert(has_cancel_consumer_handler_effect(Effects2)),
+    ok.
+
+cancel_real_once_lifetime_consumer_still_emits_consumer_metrics_test(Config) ->
+    %% a real consumer may itself request lifetime=once through the general
+    %% checkout command (see single_active_consumer_test); this must not be
+    %% confused with basic.get's internal once-off consumer, which also has
+    %% lifetime=once but never gets a created effect
+    Cid = {<<"cid">>, self()},
+    {State0, _, _} = checkout(Config, ?LINE, Cid, {once, {simple_prefetch, 1}},
+                              test_init(test)),
+    {_State1, _, Effects} = apply(meta(Config, 2),
+                                  rabbit_fifo:make_checkout(Cid, cancel, #{}),
+                                  State0),
+    ?assert(has_cancel_consumer_handler_effect(Effects)),
+    ok.
+
+basic_get_settled_emits_no_consumer_metrics_test(Config) ->
+    %% basic.get's internal once-off consumer never gets a consumer_created
+    %% row, so completing it (whether settled immediately or, in the tests
+    %% below, later or via a channel death) must not emit a deletion effect
+    Cid = {?FUNCTION_NAME_B, self()},
+    {State1, _} = enq(Config, 1, 1, first, test_init(test)),
+    {_State2, _, Effs} =
+        apply(meta(Config, 2), make_checkout(Cid, {dequeue, settled}, #{}),
+              State1),
+    ?assertNot(has_cancel_consumer_handler_effect(Effs)),
+    ok.
+
+basic_get_unsettled_settled_later_emits_no_consumer_metrics_test(Config) ->
+    Cid = {?FUNCTION_NAME_B, self()},
+    {State1, _} = enq(Config, 1, 1, first, test_init(test)),
+    {State2, '$ra_no_reply', _} =
+        apply(meta(Config, 2), make_checkout(Cid, {dequeue, unsettled}, #{}),
+              State1),
+    {_State3, Effs} = settle(Config, Cid, 3, 0, State2),
+    ?assertNot(has_cancel_consumer_handler_effect(Effs)),
+    ok.
+
+basic_get_unsettled_consumer_down_emits_no_consumer_metrics_test(Config) ->
+    Cid = {?FUNCTION_NAME_B, self()},
+    {State1, _} = enq(Config, 1, 1, first, test_init(test)),
+    {State2, '$ra_no_reply', _} =
+        apply(meta(Config, 2), make_checkout(Cid, {dequeue, unsettled}, #{}),
+              State1),
+    %% noproc (unlike noconnection) means the process is definitely gone,
+    %% not just its node being temporarily unreachable
+    {_State3, _, Effs} = apply(meta(Config, 3), {down, self(), noproc},
+                               State2),
+    ?assertNot(has_cancel_consumer_handler_effect(Effs)),
+    ok.
+
 has_cancel_consumer_handler_effect(Effects) ->
     lists:any(fun ({mod_call, rabbit_quorum_queue,
                     cancel_consumer_handler, _}) -> true;
@@ -2128,6 +2196,31 @@ single_active_consumer_state_enter_leader_include_waiting_consumers_test(Config)
     %% 1 for decorators,
     %% 1 for the bulk consumer metrics resync
     ?assertEqual(2 * 3 + 1 + 1 + 1, length(Effects)).
+
+state_enter_leader_excludes_basic_get_consumer_from_bulk_metrics_test(Config) ->
+    %% a basic.get consumer still holding an unsettled message must not be
+    %% listed in the bulk consumer metrics resync that runs on every leader
+    %% election, or its phantom consumer_created row would never get
+    %% cleaned up (deletion is deliberately skipped for it, see
+    %% cancel_consumer_metrics_deletion_on_down_before_settled_test)
+    RealCid = {<<"real">>, self()},
+    GetCid = {<<"getter">>, self()},
+    Entries = [
+               {?LINE, rabbit_fifo:make_enqueue(self(), 1, one)},
+               {?LINE, rabbit_fifo:make_enqueue(self(), 2, two)},
+               {?LINE, make_checkout(RealCid, {auto, {simple_prefetch, 1}}, #{})},
+               {?LINE, make_checkout(GetCid, {dequeue, unsettled}, #{})}
+              ],
+    {State, _} = run_log(Config, test_init(?FUNCTION_NAME), Entries),
+    Effects = rabbit_fifo:state_enter(leader, State),
+    {value, {mod_call, rabbit_quorum_queue, bulk_update_consumer_metrics,
+             [_QRes, ConsumerMetrics]}} =
+        lists:search(fun ({mod_call, rabbit_quorum_queue,
+                           bulk_update_consumer_metrics, _}) -> true;
+                         (_) -> false
+                     end, Effects),
+    ?assertMatch([{_, <<"real">>, _, _, _, _, _}], ConsumerMetrics),
+    ok.
 
 single_active_consumer_state_enter_eol_include_waiting_consumers_test(Config) ->
     Resource = rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
@@ -4316,6 +4409,47 @@ convert_v8_to_v9_deferred_test(Config) ->
     %% the message (this failed with a function_clause before the fix).
     Cmd = rabbit_fifo:make_delayed({assign_deferred, CKey, [Token]}),
     {_StateV9b, {ok, 1}, _} = rabbit_fifo:apply(meta(ConfigV9, 5), Cmd, StateV9),
+    ok.
+
+convert_v8_to_v9_initial_spec_test(Config) ->
+    %% v9 added #consumer_cfg.initial_spec; a consumer already in flight at
+    %% the upgrade instant must have it back-filled correctly, both for a
+    %% real consumer and for a basic.get consumer still holding an unsettled
+    %% message
+    ConfigV8 = [{machine_version, 8} | Config],
+    ConfigV9 = [{machine_version, 9} | Config],
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B)},
+    S0 = rabbit_fifo_v8:init(Conf),
+    RealCid = {<<"real">>, self()},
+    GetCid = {<<"getter">>, self()},
+
+    {S1, _, _} = rabbit_fifo_v8:apply(
+                   meta(ConfigV8, 1, 0, {notify, 1, self()}),
+                   rabbit_fifo_v8:make_enqueue(self(), 1, msg1), S0),
+    {S2, _, _} = rabbit_fifo_v8:apply(
+                   meta(ConfigV8, 2, 0, {notify, 2, self()}),
+                   rabbit_fifo_v8:make_enqueue(self(), 2, msg2), S1),
+    {S3, {ok, _}, _} =
+        rabbit_fifo_v8:apply(
+          meta(ConfigV8, 3),
+          rabbit_fifo_v8:make_checkout(RealCid, {auto, {simple_prefetch, 1}}, #{}),
+          S2),
+    {StateV8, _, _} =
+        rabbit_fifo_v8:apply(
+          meta(ConfigV8, 4),
+          rabbit_fifo_v8:make_checkout(GetCid, {dequeue, unsettled}, #{}),
+          S3),
+
+    {#rabbit_fifo{consumers = Consumers}, ok, _} =
+        rabbit_fifo:apply(meta(ConfigV9, 5), {machine_version, 8, 9}, StateV8),
+
+    #consumer{cfg = #consumer_cfg{initial_spec = RealSpec}} =
+        maps:get(3, Consumers),
+    ?assertMatch({auto, _}, RealSpec),
+    #consumer{cfg = #consumer_cfg{initial_spec = GetSpec}} =
+        maps:get(GetCid, Consumers),
+    ?assertMatch({dequeue, _}, GetSpec),
     ok.
 
 queue_ttl_test(C) ->
