@@ -22,7 +22,7 @@
 init() ->
     ?DELEGATE:init().
 
--spec list_nodes() -> {ok, {Nodes :: list(), NodeType :: rabbit_types:node_type()}} | {error, Reason :: string()}.
+-spec list_nodes() -> {ok, {Nodes :: [node()] | node(), NodeType :: rabbit_types:node_type()}} | {error, Reason :: string()}.
 list_nodes() ->
     ?DELEGATE:list_nodes().
 
