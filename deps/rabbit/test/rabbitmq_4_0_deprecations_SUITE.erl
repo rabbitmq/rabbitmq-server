@@ -30,6 +30,7 @@
 
          when_transient_nonexcl_is_not_permitted/1,
          when_transient_nonexcl_is_permitted_from_conf/1,
+         existing_transient_nonexcl_does_not_block_restart/1,
 
          when_queue_master_locator_is_permitted_from_conf/1,
          when_queue_master_locator_is_not_permitted_by_default/1
@@ -56,7 +57,8 @@ groups() ->
        set_policy_when_cmq_is_not_permitted_from_conf]},
      {transient_nonexcl_queues, [],
       [when_transient_nonexcl_is_not_permitted,
-       when_transient_nonexcl_is_permitted_from_conf]},
+       when_transient_nonexcl_is_permitted_from_conf,
+       existing_transient_nonexcl_does_not_block_restart]},
      {queue_master_locator, [],
       [when_queue_master_locator_is_permitted_from_conf,
        when_queue_master_locator_is_not_permitted_by_default]}
@@ -273,6 +275,33 @@ when_transient_nonexcl_is_permitted_from_conf(Config) ->
          Config, NodeA,
          ["Deprecated features: `transient_nonexcl_queues`: Feature `transient_nonexcl_queues` is deprecated",
           "Its use is permitted per the configuration"])).
+
+existing_transient_nonexcl_does_not_block_restart(Config) ->
+    [NodeA] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    QName = list_to_binary(atom_to_list(?FUNCTION_NAME)),
+    QResource = rabbit_misc:r(<<"/">>, queue, QName),
+    %% The queue type API is used directly to bypass the declaration check,
+    %% the way a node running an older version would have declared this queue
+    %% before the cluster was upgraded.
+    Q = amqqueue:new(
+          QResource, none, false, false, none, [], <<"/">>, #{},
+          rabbit_classic_queue),
+    ?assertMatch(
+       {new, _},
+       rabbit_ct_broker_helpers:rpc(
+         Config, NodeA, rabbit_queue_type, declare, [Q, NodeA])),
+
+    ok = rabbit_ct_broker_helpers:restart_broker(Config, NodeA),
+
+    ?assertEqual(
+       {error, not_found},
+       rabbit_ct_broker_helpers:rpc(
+         Config, NodeA, rabbit_amqqueue, lookup, [QResource])),
+    ?assertNot(
+       rabbit_ct_broker_helpers:rpc(
+         Config, NodeA, rabbit_deprecated_features, is_permitted,
+         [transient_nonexcl_queues])).
 
 %% -------------------------------------------------------------------
 %% (x-)queue-master-locator
