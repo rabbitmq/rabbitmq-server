@@ -6632,7 +6632,7 @@ delayed_retry_explicit_delivery_time(Config) ->
     ok = close(Init).
 
 delivery_time_on_publish(Config) ->
-    check_quorum_queues_v8_compat(Config),
+    check_quorum_queues_v9_compat(Config),
     %% Test that a message published with an x-opt-delivery-time annotation
     %% is not delivered before that time, even on its very first delivery.
     {_Connection, Session, LinkPair} = Init = init(Config),
@@ -6671,7 +6671,7 @@ delivery_time_on_publish(Config) ->
     ok = close(Init).
 
 delivery_time_on_publish_amqpl(Config) ->
-    check_quorum_queues_v8_compat(Config),
+    check_quorum_queues_v9_compat(Config),
     %% Same as delivery_time_on_publish but for AMQP 0-9-1: a message
     %% published with an x-opt-delivery-time header is not delivered before
     %% that time, even on its very first delivery.
