@@ -20,6 +20,9 @@ all() ->
      rfc4514_escape_value,
      rfc4514_fill_dn,
      dn_lookup_fallback_dn_escaping,
+     user_dn_pattern_escaping_rmq_4282,
+     user_bind_pattern_escaping_rmq_4282,
+     leading_special_char_no_dn_injection_rmq_4282,
      user_dn_pattern_gh_7161,
      format_different_types_of_ldap_attribute_values,
      ldap_log_domain_routing,
@@ -119,6 +122,116 @@ dn_lookup_fallback_dn_escaping(_Config) ->
         %% Bare fill leaves the substituted value unescaped
         ?assertEqual("cn=evil,ou=admins,ou=People,dc=example,dc=com",
                      rabbit_auth_backend_ldap:fill_user_dn_pattern("evil,ou=admins"))
+    after
+        restore_env(user_dn_pattern, PrevPattern),
+        restore_env(log, PrevLog)
+    end,
+    ok.
+
+%% RMQ-4282: a user using the default `user_dn_pattern` ("${username}")
+%% with AD down-level logon names ("DOMAIN\username") got "Access Refused"
+%% after PR #16101 started RFC 4514-escaping DN template substitutions: the
+%% backslash separating domain and user is itself RFC 4514-special, so it
+%% was escaped to a literal double backslash, which no longer matched the
+%% single-backslash down-level logon name AD expects.
+%%
+%% get_active_directory_args/1 only recognises the "DOMAIN\user" split for
+%% binary usernames (a plain list/string always yields no AD args), and a
+%% binary is what every real login supplies (see rabbit_auth_mechanism_plain),
+%% so these tests use binaries throughout.
+user_dn_pattern_escaping_rmq_4282(_Config) ->
+    PrevPattern = application:get_env(rabbitmq_auth_backend_ldap, user_dn_pattern),
+    PrevLog = application:get_env(rabbitmq_auth_backend_ldap, log),
+    ok = application:set_env(rabbitmq_auth_backend_ldap, log, false),
+    ok = application:set_env(rabbitmq_auth_backend_ldap, user_dn_pattern, "${username}"),
+    try
+        Username = <<"foo\\bar">>,
+        %% Bare fill (used for filter values, e.g. dn_lookup) was already
+        %% unescaped, and remains so.
+        ?assertEqual("foo\\bar",
+                     rabbit_auth_backend_ldap:fill_user_dn_pattern(Username)),
+        %% Used as a bind DN, the domain-separator backslash is no longer
+        %% doubled: the down-level logon name reaches AD unchanged.
+        ?assertEqual("foo\\bar",
+                     rabbit_auth_backend_ldap:escaped_user_dn(Username)),
+        %% A comma inside the user part is still RFC 4514-escaped -- only the
+        %% domain-separator backslash is exempted, not DN injection generally.
+        ?assertEqual("foo\\evil\\,ou=admins",
+                     rabbit_auth_backend_ldap:escaped_user_dn(
+                       <<"foo\\evil,ou=admins">>)),
+        %% More than one backslash is not a valid down-level logon name --
+        %% which one is the separator is ambiguous -- so the whole value
+        %% falls back to ordinary (fully escaped) DN-attribute treatment.
+        ?assertEqual("A\\\\B\\\\C",
+                     rabbit_auth_backend_ldap:escaped_user_dn(<<"A\\B\\C">>)),
+        %% A leading or trailing backslash has no domain or user part to
+        %% split on (get_active_directory_args/1 yields no AD args for
+        %% either), so it also falls back to whole-value escaping.
+        ?assertEqual("\\\\user",
+                     rabbit_auth_backend_ldap:escaped_user_dn(<<"\\user">>)),
+        ?assertEqual("DOMAIN\\\\",
+                     rabbit_auth_backend_ldap:escaped_user_dn(<<"DOMAIN\\">>)),
+        %% UPN format (user@domain) has no RFC 4514-special characters, so it
+        %% passes through unchanged.
+        ?assertEqual("foo@example.test",
+                     rabbit_auth_backend_ldap:escaped_user_dn(
+                       <<"foo@example.test">>)),
+        %% A bare username (no backslash) is unaffected.
+        ?assertEqual("alice", rabbit_auth_backend_ldap:escaped_user_dn(<<"alice">>))
+    after
+        restore_env(user_dn_pattern, PrevPattern),
+        restore_env(log, PrevLog)
+    end,
+    ok.
+
+%% The same fix applies to `user_bind_pattern` (used for simple binds when
+%% `dn_lookup_when/0` is not `prebind`), not just `user_dn_pattern`.
+user_bind_pattern_escaping_rmq_4282(_Config) ->
+    PrevBindPattern = application:get_env(rabbitmq_auth_backend_ldap, user_bind_pattern),
+    PrevLog = application:get_env(rabbitmq_auth_backend_ldap, log),
+    ok = application:set_env(rabbitmq_auth_backend_ldap, log, false),
+    ok = application:set_env(rabbitmq_auth_backend_ldap, user_bind_pattern, "${username}"),
+    try
+        ?assertEqual("foo\\bar",
+                     rabbit_auth_backend_ldap:simple_bind_fill_pattern(
+                       <<"foo\\bar">>))
+    after
+        restore_env(user_bind_pattern, PrevBindPattern),
+        restore_env(log, PrevLog)
+    end,
+    ok.
+
+%% RMQ-4282 follow-up: escaped_username_value/2 rejoins the escaped domain
+%% and user components with a literal, unescaped separator backslash. If the
+%% user part's first character is itself RFC 4514-special (comma, plus,
+%% quote, semicolon, or angle bracket), escaping it produces a value that
+%% also starts with a backslash. That backslash pairs up with the separator
+%% backslash under RFC 4514's own parsing rule (a backslash always starts a
+%% two-character escape), leaving the special character right after the
+%% pair completely unescaped -- letting it act as a fresh RDN separator and
+%% splice an attacker-chosen RDN into the bind DN. This must fall back to
+%% whole-value escaping instead, exactly like the "more than one backslash"
+%% and "leading/trailing backslash" cases above.
+leading_special_char_no_dn_injection_rmq_4282(_Config) ->
+    PrevPattern = application:get_env(rabbitmq_auth_backend_ldap, user_dn_pattern),
+    PrevLog = application:get_env(rabbitmq_auth_backend_ldap, log),
+    ok = application:set_env(rabbitmq_auth_backend_ldap, log, false),
+    ok = application:set_env(rabbitmq_auth_backend_ldap, user_dn_pattern, "${username}"),
+    try
+        Injections = [<<"DOMAIN\\,ou=Evil,dc=example,dc=com">>,
+                      <<"DOMAIN\\+ou=Evil">>,
+                      <<"DOMAIN\\\"ou=Evil">>,
+                      <<"DOMAIN\\;ou=Evil">>,
+                      <<"DOMAIN\\<ou=Evil">>,
+                      <<"DOMAIN\\>ou=Evil">>],
+        [?assertEqual(rabbit_ldap_rfc4514:escape_value(binary_to_list(Username)),
+                       rabbit_auth_backend_ldap:escaped_user_dn(Username))
+         || Username <- Injections],
+        %% A user part that does NOT start with an RFC 4514 special still
+        %% takes the (safe) domain/user split path, unaffected by the fix.
+        ?assertEqual("foo\\evil\\,ou=admins",
+                     rabbit_auth_backend_ldap:escaped_user_dn(
+                       <<"foo\\evil,ou=admins">>))
     after
         restore_env(user_dn_pattern, PrevPattern),
         restore_env(log, PrevLog)

@@ -27,14 +27,22 @@ to_repl([$&  | T])           -> [$\\, $&  | to_repl(T)];
 to_repl([H   | T])           -> [H        | to_repl(T)];
 to_repl(_)                   -> []. % fancy variables like peer IP are just ignored
 
-get_active_directory_args([ADDomain, ADUser]) ->
-    [{ad_domain, ADDomain}, {ad_user, ADUser}];
-get_active_directory_args(Parts) when is_list(Parts) ->
-    [];
+%% If Username is in Domain\User format, provide additional fill template
+%% arguments.
+%%
+%% Only binary Usernames are split: a 2-element split/1 result is only
+%% meaningful for a genuine Domain\User binary, and matching on any
+%% 2-element list here would also (mis)fire for an unrelated plain-string
+%% Username of exactly two characters.
 get_active_directory_args(Username) when is_binary(Username) ->
-    % If Username is in Domain\User format, provide additional fill
-    % template arguments
-    get_active_directory_args(binary:split(Username, <<"\\">>, [trim_all])).
+    split_active_directory_args(binary:split(Username, <<"\\">>, [trim_all]));
+get_active_directory_args(_Username) ->
+    [].
+
+split_active_directory_args([ADDomain, ADUser]) ->
+    [{ad_domain, ADDomain}, {ad_user, ADUser}];
+split_active_directory_args(_Parts) ->
+    [].
 
 parse_query(Query) when is_binary(Query) ->
     parse_query(rabbit_data_coercion:to_unicode_charlist(Query));
