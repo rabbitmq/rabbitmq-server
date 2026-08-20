@@ -65,8 +65,10 @@ describe('Should display basic stats even when stats are disabled', function () 
       await queuesAndStreams.fillInAddNewQueue({"name" : queueName, "type" : "classic"})
       await doUntil(async function () {
         await queuesAndStreams.filterQueues(queueName)
-        return queuesAndStreams.isQueueVisible("%2F", queueName)
-      }, (visible) => visible)
+        return queuesAndStreams.getQueuesTable(2)
+      }, function (table) {
+        return table.some((row) => row.includes(queueName))
+      }, 2000)
     })
     it('should display basic stats', async function () {
       await queuesAndStreams.clickOnQueue("%2F", queueName)

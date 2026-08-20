@@ -40,8 +40,10 @@ describe('Move messages section', function () {
       await queuesAndStreams.fillInAddNewQueue({"name" : queueName, "type" : "classic"})
       await doUntil(async function () {
         await queuesAndStreams.filterQueues(queueName)
-        return queuesAndStreams.isQueueVisible("%2F", queueName)
-      }, (visible) => visible)
+        return queuesAndStreams.getQueuesTable(2)
+      }, function (table) {
+        return table.some((row) => row.includes(queueName))
+      }, 2000)
       await queuesAndStreams.clickOnQueue("%2F", queueName)
       assert.ok(await queuePage.isLoaded())
     })
@@ -72,8 +74,10 @@ describe('Move messages section', function () {
       await queuesAndStreams.fillInAddNewQueue({"name" : queueName, "type" : "classic"})
       await doUntil(async function () {
         await queuesAndStreams.filterQueues(queueName)
-        return queuesAndStreams.isQueueVisible("%2F", queueName)
-      }, (visible) => visible)
+        return queuesAndStreams.getQueuesTable(2)
+      }, function (table) {
+        return table.some((row) => row.includes(queueName))
+      }, 2000)
       await queuesAndStreams.clickOnQueue("%2F", queueName)
       assert.ok(await queuePage.isLoaded())
     })
