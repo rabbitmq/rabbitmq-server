@@ -41,44 +41,34 @@ describe('Queues Paging', function () {
     const queue2 = prefix + "2"
 
     await queuesAndStreams.fillInAddNewQueue({"name" : queue1, "type" : "classic"})
-    await doUntil(async function () {
-      return queuesAndStreams.isQueueVisible("%2F", queue1)
-    }, function (visible) {
-      return visible
-    }, 1000)
+    assert.ok(await queuesAndStreams.isQueueVisible("%2F", queue1))
     await queuesAndStreams.fillInAddNewQueue({"name" : queue2, "type" : "classic"})
-    await doUntil(async function () {
-      return queuesAndStreams.isQueueVisible("%2F", queue2)
-    }, function (visible) {
-      return visible
-    }, 1000)
+    assert.ok(await queuesAndStreams.isQueueVisible("%2F", queue2))
 
     // We don't use filtering here, just verify that paging works by checking
     // that page 1 and page 2 show different items when page size is 1.
 
     // Change page size to 1
     await queuesAndStreams.setPageSize(1)
-    await doUntil(async function () {
+    let table = await doUntil(async function () {
       return queuesAndStreams.getQueuesTable(2)
     }, function (table) {
       return table.length === 1
     }, 1000)
 
     // Verify only 1 queue is visible now
-    let table = await queuesAndStreams.getQueuesTable(2)
     assert.equal(1, table.length)
     const firstQueueName = table[0][1]
 
     // Navigate to page 2
     await queuesAndStreams.selectPage(2)
-    await doUntil(async function () {
+    table = await doUntil(async function () {
       return queuesAndStreams.getQueuesTable(2)
     }, function (table) {
       return table.length === 1 && table[0][1] !== firstQueueName
     }, 1000)
 
     // Verify a different queue is visible
-    table = await queuesAndStreams.getQueuesTable(2)
     assert.equal(1, table.length)
     const secondQueueName = table[0][1]
     assert.notEqual(firstQueueName, secondQueueName)

@@ -63,9 +63,9 @@ describe('Should display basic stats even when stats are disabled', function () 
       await overview.clickOnQueuesTab()
       await queuesAndStreams.ensureAddQueueSectionIsVisible()
       await queuesAndStreams.fillInAddNewQueue({"name" : queueName, "type" : "classic"})
-      await queuesAndStreams.filterQueues(queueName)
       await doUntil(async function () {
-        return queuesAndStreams.getQueuesTable()
+        await queuesAndStreams.filterQueues(queueName)
+        return queuesAndStreams.getQueuesTable(2)
       }, function (table) {
         return table.some((row) => row.includes(queueName))
       }, 2000)

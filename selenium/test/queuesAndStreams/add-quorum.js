@@ -36,13 +36,12 @@ describe('Quorum queues', function () {
     await queuesAndStreams.ensureAddQueueSectionIsVisible()
     let queueName = "test_" + Math.floor(Math.random() * 1000)
     await queuesAndStreams.fillInAddNewQueue({"name" : queueName, "type" : "quorum"})
-    await queuesAndStreams.filterQueues(queueName)
-    await doUntil(async function () {
+    let table = await doUntil(async function () {
+      await queuesAndStreams.filterQueues(queueName)
       return queuesAndStreams.getQueuesTable(5)
     }, function (table) {
-      return table.length > 0
+      return table.some((row) => row.includes(queueName))
     }, 2000)
-    let table = await queuesAndStreams.getQueuesTable(5)
     assert.equal(1, table.length)
     assert.equal(table[0][0], '/')
     assert.equal(table[0][1], queueName)
