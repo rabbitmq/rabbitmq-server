@@ -71,7 +71,10 @@ groups() ->
                  health_check_with_all_defaults_test,
                  health_check_without_acl_token_test,
                  health_check_with_acl_token_test,
-                 health_check_error_handling_test
+                 health_check_error_handling_test,
+                 health_check_404_triggers_re_registration_without_crashing_test,
+                 maybe_re_register_ignores_own_node_test,
+                 maybe_re_register_reregisters_when_node_list_is_empty_test
                 ]}
     , {lock_tests, [], [
                         startup_lock_path_with_prefix_test,
@@ -763,6 +766,50 @@ health_check_error_handling_test(_Config) ->
            end),
          ?assertEqual(ok, rabbit_peer_discovery_consul:send_health_check_pass()),
          ?assert(meck:validate(rabbit_peer_discovery_httpc)).
+
+health_check_404_triggers_re_registration_without_crashing_test(_Config) ->
+    application:set_env(rabbit, cluster_formation,
+                        [
+                         {peer_discovery_backend,         rabbit_peer_discovery_consul},
+                         {peer_discovery_consul,          [
+                                                           {consul_host, "localhost"},
+                                                           {consul_port, 8500}
+                                                          ]}
+                        ]),
+    meck:expect(rabbit_peer_discovery_httpc, put,
+             fun
+                 (_, _, _, "v1/agent/check/pass/service:rabbitmq", _, _, _, _) ->
+                     {error, "404"};
+                 (_, _, _, "v1/session/create", _, _, _, _) ->
+                     Body = "{\"ID\":\"some-session-id\"}",
+                     rabbit_json:try_decode(rabbit_data_coercion:to_binary(Body));
+                 (_, _, _, "v1/kv/rabbitmq/default/startup_lock", _, _, _, _) ->
+                     Body = "true",
+                     rabbit_json:try_decode(rabbit_data_coercion:to_binary(Body));
+                 (_, _, _, "v1/agent/service/register", _, _, _, _) ->
+                     {ok, []}
+             end),
+    meck:expect(rabbit_peer_discovery_httpc, get,
+             fun(_, _, _, _, _, _, _) ->
+               Body = "[{\"Node\": {\"Node\": \"peer.internal.domain\", \"Address\": \"10.20.16.160\"}, \"Checks\": [], \"Service\": {\"Address\": \"\", \"Port\": 5672, \"ID\": \"rabbitmq\", \"Service\": \"rabbitmq\", \"Tags\": []}}]",
+               rabbit_json:try_decode(rabbit_data_coercion:to_binary(Body))
+             end),
+    meck:expect(rabbit_nodes, name_type, fun() -> shortnames end),
+    ?assertEqual(ok, rabbit_peer_discovery_consul:send_health_check_pass()),
+    ?assert(meck:validate(rabbit_peer_discovery_httpc)).
+
+maybe_re_register_ignores_own_node_test(_Config) ->
+    ?assertEqual(ok, rabbit_peer_discovery_consul:maybe_re_register({error, "some reason"})),
+    ?assertEqual(ok, rabbit_peer_discovery_consul:maybe_re_register({ok, {node(), disc}})),
+    ?assertEqual(0, meck:num_calls(rabbit_peer_discovery_httpc, put, '_')).
+
+maybe_re_register_reregisters_when_node_list_is_empty_test(_Config) ->
+    meck:expect(rabbit_peer_discovery_httpc, put,
+             fun(_, _, _, "v1/agent/service/register", _, _, _, _) ->
+                     {ok, []}
+             end),
+    ?assertEqual(ok, rabbit_peer_discovery_consul:maybe_re_register({ok, {[], disc}})),
+    ?assert(meck:validate(rabbit_peer_discovery_httpc)).
 
 
 unregistration_with_all_defaults_test(_Config) ->
