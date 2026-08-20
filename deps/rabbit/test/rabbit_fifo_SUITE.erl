@@ -5140,6 +5140,30 @@ ingress_bytes_by_node_survives_snapshot_test(Config) ->
     ok.
 
 
+update_ingress_seeds_baseline_on_first_observation_test(_Config) ->
+    %% ingress_bytes_by_node is cumulative since queue creation; the first
+    %% time a node is observed (fresh aux, restart, or a first-time leader
+    %% promotion) update_ingress/3 must seed a baseline rather than feed
+    %% the whole lifetime total in as a single tick's delta
+    _ = ra_machine_ets:start_link(),
+    Node = node(),
+    Aux0 = rabbit_fifo:init_aux(?FUNCTION_NAME),
+    Ingress0 = element(9, Aux0),
+
+    Overview1 = #{ingress_bytes_by_node => #{Node => 10_000_000}},
+    Ingress1 = rabbit_fifo:update_ingress(Overview1, [Node], Ingress0),
+    ?assertEqual(#{}, rabbit_fifo:compute_ingress_rates(Ingress1)),
+
+    Overview2 = #{ingress_bytes_by_node => #{Node => 10_000_060}},
+    Ingress2 = rabbit_fifo:update_ingress(Overview2, [Node], Ingress1),
+    Rates2 = rabbit_fifo:compute_ingress_rates(Ingress2),
+    Rate2 = maps:get(Node, Rates2),
+    ?assert(Rate2 > 0),
+    %% a spike from the whole ~10M cumulative total leaking through would
+    %% be several orders of magnitude larger than this
+    ?assert(Rate2 < 1000),
+    ok.
+
 %% Ingress tracking tests end
 
 
