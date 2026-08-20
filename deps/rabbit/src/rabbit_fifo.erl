@@ -1544,9 +1544,7 @@ handle_aux(_, _, {get_checked_out, ConsumerKey, MsgIds}, Aux0, RaAux0) ->
                           %% crashed and the message got removed
                           case ra_aux:log_fetch(Idx, S0) of
                               {{_Term, _Meta, Cmd}, S} ->
-                                  RawMsg = annotate_index(Idx,
-                                                          get_msg_from_cmd(Cmd)),
-                                  {S, [{MsgId, {Header, RawMsg}} | Acc]};
+                                  {S, [{MsgId, {Header, get_msg_from_cmd(Cmd)}} | Acc]};
                               {undefined, S} ->
                                   {S, Acc}
                           end
@@ -2522,18 +2520,6 @@ annotate_msg(Header, Msg0) ->
             Msg0
     end.
 
-%% Stamps the raft index a message currently occupies onto the message
-%% itself. Applied server-side (never over the wire) so that clients -
-%% including ones running an older release that predates this annotation -
-%% don't need to understand any new wire format to benefit from it.
-annotate_index(Idx, Msg0) ->
-    case mc:is(Msg0) of
-        true ->
-            mc:set_annotation(<<"x-opt-index">>, Idx, Msg0);
-        false ->
-            Msg0
-    end.
-
 return_one(#{system_time := Ts} = Meta, MsgId,
            ?C_MSG(Msg0), DeliveryFailed, Anns,
            #?STATE{returns = Returns,
@@ -3000,14 +2986,14 @@ peek_next_msg(#?STATE{returns = Returns0,
 delivery_effect(ConsumerKey, [{MsgId, ?MSG(Idx,  Header)}],
                 #?STATE{msg_cache = {Idx, RawMsg}} = State) ->
     {CTag, CPid} = consumer_id(ConsumerKey, State),
-    {send_msg, CPid, {delivery, CTag, [{MsgId, {Header, annotate_index(Idx, RawMsg)}}]},
+    {send_msg, CPid, {delivery, CTag, [{MsgId, {Header, RawMsg}}]},
      ?DELIVERY_SEND_MSG_OPTS};
 delivery_effect(ConsumerKey, [{MsgId, Msg}],
                 #?STATE{msg_cache = {Idx, RawMsg}} = State)
   when is_integer(Msg) andalso ?PACKED_IDX(Msg) == Idx ->
     Header = get_msg_header(Msg),
     {CTag, CPid} = consumer_id(ConsumerKey, State),
-    {send_msg, CPid, {delivery, CTag, [{MsgId, {Header, annotate_index(Idx, RawMsg)}}]},
+    {send_msg, CPid, {delivery, CTag, [{MsgId, {Header, RawMsg}}]},
      ?DELIVERY_SEND_MSG_OPTS};
 delivery_effect(ConsumerKey, Msgs, #?STATE{} = State) ->
     {CTag, CPid} = consumer_id(ConsumerKey, State),
@@ -3038,10 +3024,9 @@ reply_log_effect(RaftIdx, MsgId, Header, Ready, From) ->
      fun ([]) ->
              [];
          ([Cmd]) ->
-             RawMsg = annotate_index(RaftIdx, get_msg_from_cmd(Cmd)),
              [{reply, From,
                {wrap_reply,
-                {dequeue, {MsgId, {Header, RawMsg}}, Ready}}}]
+                {dequeue, {MsgId, {Header, get_msg_from_cmd(Cmd)}}, Ready}}}]
      end}.
 
 checkout_one(#{system_time := Ts} = Meta, ExpiredMsg0, InitState0, Effects0) ->
@@ -4158,8 +4143,7 @@ exec_read(Flru0, ReadPlan, Msgs) ->
                                Idx = get_msg_idx(Msg),
                                Header = get_msg_header(Msg),
                                Cmd = maps:get(Idx, Entries),
-                               RawMsg = annotate_index(Idx, get_msg_from_cmd(Cmd)),
-                               {MsgId, {Header, RawMsg}}
+                               {MsgId, {Header, get_msg_from_cmd(Cmd)}}
                        end, Msgs), Flru}
     catch exit:{missing_key, _}
             when Flru0 =/= undefined ->
@@ -4437,8 +4421,7 @@ discard_or_dead_letter(Msgs0, Reason, {at_most_once, {Mod, Fun, Args}}, State) -
                                   Cmd = maps:get(Idx, Lookup),
                                   %% ensure header delivery count
                                   %% is copied to the message container
-                                  annotate_index(
-                                    Idx, annotate_msg(Hdr, rabbit_fifo:get_msg_from_cmd(Cmd)))
+                                  annotate_msg(Hdr, rabbit_fifo:get_msg_from_cmd(Cmd))
                               end || Msg <- Msgs0],
                       [{mod_call, Mod, Fun, Args ++ [Reason, Msgs]}]
               end},
@@ -4503,15 +4486,14 @@ dlx_delivery_effects(_CPid, []) ->
     [];
 dlx_delivery_effects(CPid, Msgs0) ->
     Msgs1 = lists:reverse(Msgs0),
-    {RaftIdxs, _RsnIds} = lists:unzip(Msgs1),
+    {RaftIdxs, RsnIds} = lists:unzip(Msgs1),
     [{log, RaftIdxs,
       fun(Log) ->
               Msgs = lists:zipwith(
-                       fun (Cmd, {Idx, {Reason, H, MsgId}}) ->
+                       fun (Cmd, {Reason, H, MsgId}) ->
                                {MsgId, {Reason,
-                                        annotate_index(Idx,
-                                                       annotate_msg(H, rabbit_fifo:get_msg_from_cmd(Cmd)))}}
-                       end, Log, Msgs1),
+                                        annotate_msg(H, rabbit_fifo:get_msg_from_cmd(Cmd))}}
+                       end, Log, RsnIds),
               [{send_msg, CPid, {dlx_event, self(), {dlx_delivery, Msgs}}, [cast]}]
       end}].
 
