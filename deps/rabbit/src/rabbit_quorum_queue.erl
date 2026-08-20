@@ -37,6 +37,7 @@
 -export([update_consumer_handler/8]).
 -export([cancel_consumer_handler/2]).
 -export([bulk_update_consumer_metrics/2, delete_local_consumer_metrics/1]).
+-export([async_delete_local_consumer_metrics/1]).
 -export([consumer_metrics_v9_upgrade/2]).
 -export([become_leader/2, handle_tick/3, spawn_deleter/1]).
 -export([rpc_delete_metrics/1,
@@ -500,11 +501,13 @@ cancel_consumer_handler(QName, {ConsumerTag, ChPid}) ->
 %% this table is never a mix of two leader terms' data
 %%
 %% this mod_call effect (like all mod_call effects) is not protected by
-%% ra_server_proc, so a crash here would take down the whole Ra server;
-%% the consumer_created table may also legitimately not exist, e.g. in
-%% rabbit_fifo_int_SUITE which runs bare ra clusters without core_metrics
+%% ra_server_proc, so run it in a separate process: neither a crash nor
+%% the full-table scan in delete_local_consumer_metrics/1 must be able to
+%% block or take down the Ra server; the consumer_created table may also
+%% legitimately not exist, e.g. in rabbit_fifo_int_SUITE which runs bare
+%% ra clusters without core_metrics
 bulk_update_consumer_metrics(QName, ConsumerMetrics) ->
-    catch bulk_update_consumer_metrics0(QName, ConsumerMetrics).
+    spawn(fun () -> catch bulk_update_consumer_metrics0(QName, ConsumerMetrics) end).
 
 bulk_update_consumer_metrics0(QName, ConsumerMetrics) ->
     delete_local_consumer_metrics(QName),
@@ -515,6 +518,11 @@ bulk_update_consumer_metrics0(QName, ConsumerMetrics) ->
      || {ChPid, ConsumerTag, AckRequired, Prefetch, Active,
          ActivityStatus, Args} <- ConsumerMetrics],
     ok.
+
+%% mod_call target for state_enter(follower, ...); spawned for the same
+%% reason as bulk_update_consumer_metrics/2 above
+async_delete_local_consumer_metrics(QName) ->
+    spawn(fun () -> delete_local_consumer_metrics(QName) end).
 
 delete_local_consumer_metrics(QName) ->
     catch ets:match_delete(consumer_created,
