@@ -58,27 +58,25 @@ describe('Exchanges Paging', function () {
 
     // Change page size to 1
     await exchanges.setPageSize(1)
-    await doUntil(async function () {
+    let table = await doUntil(async function () {
       return exchanges.getExchangesTable(2)
     }, function (table) {
       return table.length === 1
     }, 1000)
 
     // Verify only 1 exchange is visible now
-    let table = await exchanges.getExchangesTable(2)
     assert.equal(1, table.length)
     const firstExchangeName = table[0][1]
 
     // Navigate to page 2
     await exchanges.selectPage(2)
-    await doUntil(async function () {
+    table = await doUntil(async function () {
       return exchanges.getExchangesTable(2)
     }, function (table) {
       return table.length === 1 && table[0][1] !== firstExchangeName
     }, 1000)
 
     // Verify a different exchange is visible
-    table = await exchanges.getExchangesTable(2)
     assert.equal(1, table.length)
     const secondExchangeName = table[0][1]
     assert.notEqual(firstExchangeName, secondExchangeName)

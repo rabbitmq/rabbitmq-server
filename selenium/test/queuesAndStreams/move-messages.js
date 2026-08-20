@@ -38,9 +38,9 @@ describe('Move messages section', function () {
       
       await queuesAndStreams.ensureAddQueueSectionIsVisible()
       await queuesAndStreams.fillInAddNewQueue({"name" : queueName, "type" : "classic"})
-      await queuesAndStreams.filterQueues(queueName)
       await doUntil(async function () {
-        return queuesAndStreams.getQueuesTable()
+        await queuesAndStreams.filterQueues(queueName)
+        return queuesAndStreams.getQueuesTable(2)
       }, function (table) {
         return table.some((row) => row.includes(queueName))
       }, 2000)
@@ -72,9 +72,9 @@ describe('Move messages section', function () {
       
       await queuesAndStreams.ensureAddQueueSectionIsVisible()
       await queuesAndStreams.fillInAddNewQueue({"name" : queueName, "type" : "classic"})
-      await queuesAndStreams.filterQueues(queueName)
       await doUntil(async function () {
-        return queuesAndStreams.getQueuesTable()
+        await queuesAndStreams.filterQueues(queueName)
+        return queuesAndStreams.getQueuesTable(2)
       }, function (table) {
         return table.some((row) => row.includes(queueName))
       }, 2000)
