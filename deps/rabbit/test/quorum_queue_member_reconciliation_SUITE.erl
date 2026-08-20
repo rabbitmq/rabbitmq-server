@@ -335,7 +335,7 @@ stale_incarnation_is_not_deleted(Config) ->
     ?assertNotEqual(StaleUId, CurrentUId),
     ok = rabbit_ct_broker_helpers:rpc(
            Config, Server0,
-           rabbit_quorum_queue_periodic_membership_reconciliation, schedule,
+           rabbit_quorum_queue_periodic_membership_reconciliation, schedule_force_delete,
            [QName, [{{RaName, Server2}, StaleUId}]]),
 
     %% The stale entry is dropped without touching the live member.
@@ -368,7 +368,7 @@ unverifiable_member_is_dropped(Config) ->
     %% predating the feature flag would produce.
     ok = rabbit_ct_broker_helpers:rpc(
            Config, Server0,
-           rabbit_quorum_queue_periodic_membership_reconciliation, schedule,
+           rabbit_quorum_queue_periodic_membership_reconciliation, schedule_force_delete,
            [QName, [{{RaName, Server2}, undefined}]]),
 
     %% The entry is dropped and the live member is left alone.
