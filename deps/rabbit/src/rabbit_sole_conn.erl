@@ -34,8 +34,6 @@
 
 %% defaults for configuration parameters
 -define(TICK_INTERVAL, 30_000).
-%% TODO: same default as metadata store, reconsider for this store
--define(SNAPSHOT_INTERVAL, 50_000).
 -define(LEADER_WAIT_RETRY_TIMEOUT, 300_000).
 -define(DEFAULT_KHEPRI_TIMEOUT, 20_000).
 -define(FEATURE_FLAG, 'rabbitmq_4.4.0').
@@ -742,8 +740,7 @@ make_ra_server_config() ->
       friendly_name => ?RA_FRIENDLY_NAME,
       metrics_labels => #{ra_system => ?RA_SYSTEM,
                           module => ?MODULE},
-      min_recovery_checkpoint_interval => 4096,
-      machine_config => #{snapshot_interval => snapshot_interval()}}.
+      min_recovery_checkpoint_interval => 4096}.
 
 join_active_peer(StoreId, PeerNode, RaServerConfig, RetryTimeout) ->
     join_active_peer(StoreId, PeerNode, RaServerConfig, RetryTimeout, ?JOIN_MAX_ATTEMPTS).
@@ -1092,11 +1089,6 @@ kill_connection_sproc_trigger_pattern() ->
 tick_interval() ->
     application:get_env(rabbit, sole_connection_tick_interval,
                         ?TICK_INTERVAL).
-
-%% Number of Raft log entries between Khepri store snapshots.
-snapshot_interval() ->
-    application:get_env(rabbit, sole_connection_snapshot_interval,
-                        ?SNAPSHOT_INTERVAL).
 
 %% How long to wait for a Raft leader to be elected when bootstrapping or joining the store.
 leader_wait_retry_timeout() ->
