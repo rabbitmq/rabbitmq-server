@@ -1,6 +1,6 @@
 const { By, Key, until, Builder } = require('selenium-webdriver')
 const assert = require('assert')
-const { buildDriver, goToHome, captureScreensFor, captureScreenshotIfFailed, teardown, delay } = require('../utils')
+const { buildDriver, goToHome, captureScreensFor, captureScreenshotIfFailed, teardown, doUntil } = require('../utils')
 
 const LoginPage = require('../pageobjects/LoginPage')
 const OverviewPage = require('../pageobjects/OverviewPage')
@@ -41,28 +41,42 @@ describe('Exchanges Paging', function () {
     const exchange2 = prefix + "2"
 
     await exchanges.fillInAddNewExchange({"name" : exchange1, "type" : "direct"})
-    await delay(1000)
+    await doUntil(async function () {
+      return exchanges.getExchangesTable(2)
+    }, function (table) {
+      return table.some((row) => row.includes(exchange1))
+    }, 1000)
     await exchanges.fillInAddNewExchange({"name" : exchange2, "type" : "direct"})
-    await delay(2000)
+    await doUntil(async function () {
+      return exchanges.getExchangesTable(2)
+    }, function (table) {
+      return table.some((row) => row.includes(exchange2))
+    }, 1000)
 
     // We don't use filtering here, just verify that paging works by checking
     // that page 1 and page 2 show different items when page size is 1.
 
     // Change page size to 1
     await exchanges.setPageSize(1)
-    await delay(2000)
+    let table = await doUntil(async function () {
+      return exchanges.getExchangesTable(2)
+    }, function (table) {
+      return table.length === 1
+    }, 1000)
 
     // Verify only 1 exchange is visible now
-    let table = await exchanges.getExchangesTable(2)
     assert.equal(1, table.length)
     const firstExchangeName = table[0][1]
 
     // Navigate to page 2
     await exchanges.selectPage(2)
-    await delay(2000)
+    table = await doUntil(async function () {
+      return exchanges.getExchangesTable(2)
+    }, function (table) {
+      return table.length === 1 && table[0][1] !== firstExchangeName
+    }, 1000)
 
     // Verify a different exchange is visible
-    table = await exchanges.getExchangesTable(2)
     assert.equal(1, table.length)
     const secondExchangeName = table[0][1]
     assert.notEqual(firstExchangeName, secondExchangeName)
@@ -70,7 +84,11 @@ describe('Exchanges Paging', function () {
     // Clean up
     // Set page size to a large number so we can find and click our test exchanges
     await exchanges.setPageSize(100)
-    await delay(2000)
+    await doUntil(async function () {
+      return exchanges.getExchangesTable(2)
+    }, function (table) {
+      return table.length >= 2
+    }, 1000)
 
     await exchanges.clickOnExchange("%2F", exchange1)
     await exchange.isLoaded()
@@ -78,8 +96,8 @@ describe('Exchanges Paging', function () {
     await exchange.deleteExchange()
 
     await overview.clickOnExchangesTab()
-    await delay(1000)
-    
+    await exchanges.isLoaded()
+
     await exchanges.clickOnExchange("%2F", exchange2)
     await exchange.isLoaded()
     await exchange.ensureDeleteExchangeSectionIsVisible()
