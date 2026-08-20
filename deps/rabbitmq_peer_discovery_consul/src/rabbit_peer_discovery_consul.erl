@@ -51,7 +51,7 @@ init() ->
     rabbit_peer_discovery_httpc:maybe_configure_proxy(),
     rabbit_peer_discovery_httpc:maybe_configure_inet6().
 
--spec list_nodes() -> {ok, {Nodes :: list(), NodeType :: rabbit_types:node_type()}} | {error, Reason :: string()}.
+-spec list_nodes() -> {ok, {SelectedNode :: node() | [], NodeType :: rabbit_types:node_type()}} | {error, Reason :: string()}.
 
 list_nodes() ->
     Fun0 = fun() -> {ok, {[], disc}} end,
@@ -290,7 +290,7 @@ sort_nodes(Nodes) ->
         IndexA =< IndexB
     end, Nodes).
 
--spec extract_node(ConsulResult :: [#{binary() => term()}]) -> list().
+-spec extract_node(ConsulResult :: [#{binary() => term()}]) -> node() | [].
 extract_node([]) ->
     [];
 extract_node([H | _]) ->
@@ -608,27 +608,26 @@ send_health_check_pass() ->
       ok
   end.
 
+%% `list_nodes/0' returns the single node Consul selected, not the full
+%% membership list (see `extract_node/1').
 maybe_re_register({error, Reason}) ->
     ?LOG_ERROR(
        "Internal error in Consul while updating health check. "
        "Cannot obtain list of nodes registered in Consul either: ~tp",
        [Reason],
        #{domain => ?RMQLOG_DOMAIN_PEER_DISC});
-maybe_re_register({ok, {Members, _NodeType}}) ->
-    maybe_re_register(Members);
-maybe_re_register(Members) ->
-    case lists:member(node(), Members) of
-        true ->
-            ?LOG_ERROR(
-               "Internal error in Consul while updating health check",
-               #{domain => ?RMQLOG_DOMAIN_PEER_DISC});
-        false ->
-            ?LOG_ERROR(
-               "Internal error in Consul while updating health check, "
-               "node is not registered. Re-registering",
-               #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
-            register()
-    end.
+maybe_re_register({ok, {SelectedNode, _NodeType}}) ->
+    maybe_re_register(SelectedNode);
+maybe_re_register(SelectedNode) when SelectedNode =:= node() ->
+    ?LOG_ERROR(
+       "Internal error in Consul while updating health check",
+       #{domain => ?RMQLOG_DOMAIN_PEER_DISC});
+maybe_re_register(_SelectedNodeOrNone) ->
+    ?LOG_ERROR(
+       "Internal error in Consul while updating health check, "
+       "node is not registered. Re-registering",
+       #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
+    register().
 
 wait_for_list_nodes() ->
     wait_for_list_nodes(60).
