@@ -69,6 +69,9 @@
          %% aux
          init_aux/1,
          handle_aux/5,
+         %% exported for testability, the aux ingress state is otherwise opaque
+         update_ingress/3,
+         compute_ingress_rates/1,
          % queries
          query_messages_ready/1,
          query_messages_checked_out/1,
@@ -1357,10 +1360,20 @@ update_ingress(Overview, Nodes, #ingress_aux{last_totals = LastTotals,
     Ts = erlang:monotonic_time(millisecond),
     Estimators1 =
         maps:fold(fun(Node, NewTotal, Est) ->
-                      Delta = NewTotal - maps:get(Node, LastTotals, 0),
-                      Li0 = maps:get(Node, Est, ra_li:new(DecayMs)),
-                      Li1 = ra_li:update(Delta, Ts, Li0),
-                      Est#{Node => Li1}
+                      case maps:find(Node, LastTotals) of
+                          error ->
+                              %% first observation of this node: totals are
+                              %% cumulative since queue creation, so seed
+                              %% the baseline only, don't feed the whole
+                              %% lifetime total in as if it were this
+                              %% tick's delta
+                              Est;
+                          {ok, LastTotal} ->
+                              Delta = NewTotal - LastTotal,
+                              Li0 = maps:get(Node, Est, ra_li:new(DecayMs)),
+                              Li1 = ra_li:update(Delta, Ts, Li0),
+                              Est#{Node => Li1}
+                      end
                   end, Estimators0, NewTotals),
     ActiveNodes = sets:from_list(Nodes, [{version, 2}]),
     Estimators = maps:filter(fun(Node, _) ->
