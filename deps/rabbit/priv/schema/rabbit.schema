@@ -2688,7 +2688,7 @@ end}.
 ]}.
 
 {mapping, "quorum_queue.force_delete_retry_interval", "rabbit.quorum_queue_force_delete_retry_interval", [
-    {datatype, {integer, non_negative}}
+    {datatype, {integer, positive}}
 ]}.
 
 
