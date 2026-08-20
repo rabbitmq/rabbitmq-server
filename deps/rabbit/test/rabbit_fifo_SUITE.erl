@@ -1709,6 +1709,16 @@ state_enter_monitors_and_notifications_test(Config) ->
     ?ASSERT_EFF({monitor, process, _}, Effects),
     ok.
 
+state_enter_follower_deletes_consumer_metrics_asynchronously_test(Config) ->
+    %% the table scan in delete_local_consumer_metrics/1 must not run
+    %% inline in the Ra process; state_enter(follower, ...) targets a
+    %% spawning wrapper instead
+    {State, _} = enq(Config, 1, 1, first, test_init(test)),
+    Effects = rabbit_fifo:state_enter(follower, State),
+    ?ASSERT_EFF({mod_call, rabbit_quorum_queue,
+                 async_delete_local_consumer_metrics, _}, Effects),
+    ok.
+
 purge_test(Config) ->
     Cid = {<<"purge_test">>, self()},
     {State1, _} = enq(Config, 1, 1, first, test_init(test)),

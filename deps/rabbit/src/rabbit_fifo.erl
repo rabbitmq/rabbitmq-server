@@ -1170,7 +1170,7 @@ state_enter(follower, #?STATE{cfg = #cfg{resource = QRes,
         _ ->
             ok
     end,
-    [{mod_call, rabbit_quorum_queue, delete_local_consumer_metrics, [QRes]}];
+    [{mod_call, rabbit_quorum_queue, async_delete_local_consumer_metrics, [QRes]}];
 state_enter(eol, #?STATE{enqueuers = Enqs,
                          consumers = Cons0,
                          waiting_consumers = WaitingConsumers0}) ->
