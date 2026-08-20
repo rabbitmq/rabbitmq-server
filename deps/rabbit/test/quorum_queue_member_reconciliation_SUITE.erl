@@ -52,7 +52,8 @@ groups() ->
       [
        {quorum_queue_3, [], [leaked_member_is_eventually_force_deleted,
                              stale_incarnation_is_not_deleted,
-                             unverifiable_member_is_dropped]}
+                             unverifiable_member_is_dropped,
+                             force_delete_member_uid_guard]}
       ]}
     ].
 
@@ -378,6 +379,39 @@ unverifiable_member_is_dropped(Config) ->
     ?assertEqual(CurrentUId, uid_of(Config, Server2, RaName)),
     ?assertEqual(3, length(element(2, ra:members({RaName, Server0})))).
 
+%% The UID guard that protects a retry from deleting a newer incarnation is
+%% evaluated on the member's own node, in the same call as the delete.
+force_delete_member_uid_guard(Config) ->
+    [Server0, _Server1, Server2] =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
+    QQ = ?config(queue_name, Config),
+    RaName = queue_utils:ra_name(QQ),
+    ServerId = {RaName, Server2},
+
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    wait_until(fun() ->
+                       3 =:= length(element(2, ra:members({RaName, Server0})))
+               end),
+
+    CurrentUId = uid_of(Config, Server2, RaName),
+    ?assert(is_binary(CurrentUId)),
+
+    %% A UID that does not match the live incarnation leaves the member alone.
+    ?assertEqual({skipped, superseded},
+                 force_delete_member(Config, Server0, ServerId,
+                                     <<"stale-incarnation-uid">>)),
+    ?assertEqual(CurrentUId, uid_of(Config, Server2, RaName)),
+
+    %% The matching UID deletes it.
+    ?assertEqual(ok, force_delete_member(Config, Server0, ServerId, CurrentUId)),
+    ?assertEqual(undefined, uid_of(Config, Server2, RaName)),
+
+    %% A member that is already gone is reported as such rather than deleted again.
+    ?assertEqual({skipped, gone},
+                 force_delete_member(Config, Server0, ServerId, CurrentUId)).
+
 %% -------------------------------------------------------------------
 %% Helpers.
 %% -------------------------------------------------------------------
@@ -388,6 +422,10 @@ is_force_delete_group(Config) ->
 uid_of(Config, Node, RaName) ->
     rabbit_ct_broker_helpers:rpc(Config, Node, ra_directory, uid_of,
                                  [?RA_SYSTEM, RaName]).
+
+force_delete_member(Config, Node, ServerId, ExpectedUId) ->
+    rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_quorum_queue,
+                                 force_delete_member, [ServerId, ExpectedUId]).
 
 pending_lookup(Config, Node, RaName, MemberNode) ->
     rabbit_ct_broker_helpers:rpc(Config, Node, dets, lookup,
