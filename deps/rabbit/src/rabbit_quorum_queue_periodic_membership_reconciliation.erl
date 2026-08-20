@@ -10,7 +10,7 @@
 -behaviour(gen_server).
 
 -export([on_node_up/1, on_node_down/1, queue_created/1, policy_set/0,
-         schedule_force_delete/2]).
+         record_pending_force_deletes/2]).
 
 -export([start_link/0]).
 
@@ -72,23 +72,66 @@ queue_created(Q) ->
 policy_set() ->
     gen_server:cast(?SERVER, {membership_reconciliation_trigger, policy_set}).
 
-%% Schedule leaked members of a force-deleted queue for retry. Each member is
+%% Record leaked members of a force-deleted queue for retry. Each member is
 %% tagged with the UID of the incarnation being deleted so a newer incarnation
 %% of the same queue name is never touched.
 %%
 %% Those UIDs only exist once `track_qq_members_uids' is enabled, so the retry
-%% is not supported without it.
--spec schedule_force_delete(rabbit_amqqueue:name(),
-                            [{server_id(), member_uid()}]) -> ok.
-schedule_force_delete(_QName, []) ->
+%% is not supported without it. A queue record that predates the flag can also
+%% carry no UID for an individual member even when the flag is enabled. Such a
+%% member is not recorded at all: a retry could not tell it apart from a newer
+%% incarnation of the same queue name, so there is nothing the retry loop could
+%% safely do with the entry. It is reported instead, for manual clean up.
+%%
+%% The entries are written and synced in the calling process rather than handed
+%% to the owner of the table. The caller is deleting the queue, and once the
+%% queue record is gone these entries are the only remaining trace of the leaked
+%% members, so they have to reach disk before the delete completes.
+%%
+%% A failure to write them is logged rather than raised: the queue is already
+%% being removed, so the delete has to carry on regardless.
+-spec record_pending_force_deletes(rabbit_amqqueue:name(),
+                                   [{server_id(), member_uid()}]) -> ok.
+record_pending_force_deletes(_QName, []) ->
     ok;
-schedule_force_delete(QName, PendingMembers) ->
+record_pending_force_deletes(QName, PendingMembers) ->
     case rabbit_feature_flags:is_enabled(track_qq_members_uids) of
         true ->
-            gen_server:cast(?SERVER, {schedule_force_delete, QName, PendingMembers});
+            {Verifiable, Unverifiable} =
+                lists:partition(fun({_ServerId, UId}) -> is_binary(UId) end,
+                                PendingMembers),
+            _ = [?LOG_WARNING(
+                   "Leaked member ~w of ~ts has no recorded UID to verify "
+                   "against, so it cannot be force-deleted on retry without "
+                   "risking a newer incarnation of the same queue name. This "
+                   "member may need manual data clean up",
+                   [ServerId, rabbit_misc:rs(QName)])
+                 || {ServerId, _} <- Unverifiable],
+            record_verifiable_force_deletes(QName, Verifiable);
         false ->
             ok
     end.
+
+record_verifiable_force_deletes(_QName, []) ->
+    ok;
+record_verifiable_force_deletes(QName, PendingMembers) ->
+    case persist_pending_force_deletes(QName, PendingMembers) of
+        ok ->
+            ?LOG_INFO("Recorded ~b leaked member(s) of ~ts for force delete "
+                      "retry: ~w",
+                      [length(PendingMembers), rabbit_misc:rs(QName),
+                       [ServerId || {ServerId, _UId} <- PendingMembers]]),
+            %% Arming the retry timer can be asynchronous: the entries are on
+            %% disk, and the owner arms the timer from `init/1' for anything
+            %% still pending after a restart.
+            gen_server:cast(?SERVER, force_delete_recorded);
+        {error, Reason} ->
+            ?LOG_WARNING(
+              "Failed to record ~b leaked member(s) of ~ts for force delete "
+              "retry: ~tp. These members may need manual data clean up",
+              [length(PendingMembers), rabbit_misc:rs(QName), Reason])
+    end,
+    ok.
 
 %%----------------------------------------------------------------------------
 %% gen_server callbacks
@@ -129,10 +172,7 @@ init([]) ->
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
 
-handle_cast({schedule_force_delete, QName, PendingMembers}, State) ->
-    _ = [dets:insert(?FORCE_DELETE_TABLE, {ServerId, {QName, UId}})
-         || {ServerId, UId} <- PendingMembers],
-    _ = dets:sync(?FORCE_DELETE_TABLE),
+handle_cast(force_delete_recorded, State) ->
     {noreply, ensure_force_delete_timer(State)};
 handle_cast(force_delete_retry, State) ->
     {noreply, retry_force_deletes(State)};
@@ -320,10 +360,10 @@ select_node(Nodes) ->
 %% orphans (`{already_started, _}' on every member) and cannot form a cluster, so
 %% the name stays poisoned.
 %%
-%% Leaked members arrive via a `queue_force_deleted' event (see `schedule_force_delete/2'),
-%% are persisted in a node-local DETS table, and `ra:force_delete_server/3' is
-%% retried until each member is gone. The pending set survives a broker restart
-%% because it is persisted.
+%% Leaked members are recorded by the force delete itself (see
+%% `record_pending_force_deletes/2') in a node-local DETS table, and
+%% `ra:force_delete_server/3' is retried until each member is gone. The pending
+%% set survives a broker restart because it is persisted.
 %%
 %% This requires the `track_qq_members_uids' feature flag: each pending member is
 %% tagged with the UID of the incarnation being deleted, and those UIDs are only
@@ -332,9 +372,9 @@ select_node(Nodes) ->
 %% A retry is guarded by that UID: `rabbit_quorum_queue:force_delete_member/2'
 %% compares it against the UID currently registered on the member's node and only
 %% deletes when the two still match, so a member belonging to a newer incarnation
-%% of the same queue name is never deleted. A pending member recorded without a
-%% UID cannot be guarded this way, so it is dropped rather than deleted, and is
-%% reported so that it can be cleaned up manually.
+%% of the same queue name is never deleted. A member with no UID cannot be
+%% guarded this way, so it never enters the table: it is reported at force delete
+%% time so that it can be cleaned up manually.
 %%----------------------------------------------------------------------------
 
 open_force_delete_table() ->
@@ -357,6 +397,18 @@ open_force_delete_table(RetriesLeft) ->
             {error, Error}
     end.
 
+persist_pending_force_deletes(QName, PendingMembers) ->
+    Objects = [{ServerId, {QName, UId}} || {ServerId, UId} <- PendingMembers],
+    try dets:insert(?FORCE_DELETE_TABLE, Objects) of
+        ok ->
+            dets:sync(?FORCE_DELETE_TABLE);
+        {error, _} = Err ->
+            Err
+    catch
+        _:Reason ->
+            {error, Reason}
+    end.
+
 retry_force_deletes(State) ->
     %% Collect first, then mutate: DETS tables must not be modified during a
     %% foldl traversal.
@@ -366,9 +418,11 @@ retry_force_deletes(State) ->
     _ = dets:sync(?FORCE_DELETE_TABLE),
     ensure_force_delete_timer_if_pending(State).
 
-%% A queue record that predates the feature flag can still carry no UID for this
-%% node. Deleting a member that cannot be guarded by a UID risks removing a newer
-%% incarnation of the same queue name, so leave it in place.
+%% Entries without a UID are refused by `record_pending_force_deletes/2', but
+%% the table outlives the code that wrote it, so one can still be read back from
+%% a file written by an earlier version. Deleting a member that cannot be guarded
+%% by a UID risks removing a newer incarnation of the same queue name, so leave
+%% it in place.
 retry_member({ServerId, {QName, undefined}}) ->
     ?LOG_INFO("Member ~w of ~ts has no recorded UID to verify against, "
               "dropping from the force delete retry set. This member may "

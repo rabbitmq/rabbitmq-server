@@ -47,14 +47,6 @@ handle_event(#event{type = policy_set}, State) ->
 handle_event(#event{type = operator_policy_set}, State) ->
     rabbit_quorum_queue_periodic_membership_reconciliation:policy_set(),
     {ok, State};
-handle_event(#event{type = queue_force_deleted, props = Props}, State) ->
-    QName = rabbit_misc:pget(name, Props),
-    PendingMembers =
-        [{{rabbit_misc:pget(ra_name, M), rabbit_misc:pget(node, M)},
-          rabbit_misc:pget(uid, M)}
-         || M <- rabbit_misc:pget(pending_members, Props, [])],
-    rabbit_quorum_queue_periodic_membership_reconciliation:schedule_force_delete(QName, PendingMembers),
-    {ok, State};
 handle_event(_, State) ->
     {ok, State}.
 

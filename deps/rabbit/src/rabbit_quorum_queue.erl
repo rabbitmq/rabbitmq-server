@@ -1203,17 +1203,22 @@ force_delete_members(Servers) ->
                  ok;
              Err ->
                  ?LOG_WARNING(
-                   "Force delete of ~w failed with: ~w"
+                   "Force delete of ~w failed with: ~w. "
                    "This may require manual data clean up",
                    [S, Err]),
                  ok
          end || S <- Servers],
     ok.
 
-%% The members whose force delete did not complete are emitted as a
-%% `queue_force_deleted' event so that
-%% `rabbit_quorum_queue_periodic_membership_reconciliation' keeps retrying until
-%% they are gone.
+%% The members whose force delete did not complete are recorded for retry by
+%% `rabbit_quorum_queue_periodic_membership_reconciliation', which keeps retrying
+%% until they are gone.
+%%
+%% That record is written and synced to disk before this function returns: it is
+%% the only trace of the leaked members left once the queue record is gone, so
+%% losing it to a node crash would leave them behind for good. The
+%% `queue_force_deleted' event is emitted for observers only and carries no part
+%% of the retry mechanism.
 force_delete_members_with_retry(Q, Servers) ->
     QName = amqqueue:get_name(Q),
     UIdMap = case amqqueue:get_type_state(Q) of
@@ -1222,33 +1227,36 @@ force_delete_members_with_retry(Q, Servers) ->
                  _ ->
                      #{}
              end,
-    %% Each failed member is described as a proplist with atom keys so that the
-    %% event props stay serializable for consumers such as the event exchange
-    %% plugin.
     Failed = lists:filtermap(
-               fun({RaName, Node} = S) ->
+               fun({_RaName, Node} = S) ->
                        case force_delete_member(S) of
                            ok ->
                                false;
                            Err ->
-                               ?LOG_WARNING(
-                                 "Force delete of ~w failed with: ~w. "
-                                 "Scheduling retry until the member is removed.",
-                                 [S, Err]),
-                               {true, [{ra_name, RaName},
-                                       {node, Node},
-                                       {uid, maps:get(Node, UIdMap, undefined)}]}
+                               %% Whether this member can be retried, and hence
+                               %% whether it needs manual clean up, is reported
+                               %% by the module that records it.
+                               ?LOG_WARNING("Force delete of ~w failed with: ~w",
+                                            [S, Err]),
+                               {true, {S, maps:get(Node, UIdMap, undefined)}}
                        end
                end, Servers),
     case Failed of
         [] ->
             ok;
         _ ->
+            ok = rabbit_quorum_queue_periodic_membership_reconciliation:record_pending_force_deletes(QName, Failed),
             rabbit_event:notify(queue_force_deleted,
                                 [{name, QName},
-                                 {pending_members, Failed}]),
+                                 {pending_members, pending_member_props(Failed)}]),
             ok
     end.
+
+%% Each pending member is described as a proplist with atom keys so that the
+%% event props stay serializable for consumers such as the event exchange plugin.
+pending_member_props(PendingMembers) ->
+    [[{ra_name, RaName}, {node, Node}, {uid, UId}]
+     || {{RaName, Node}, UId} <- PendingMembers].
 
 %% The timeout is bounded on purpose: callers run this inline, to avoid the `infinity'
 %% default which could block them for as long as the member's node stays unreachable.
