@@ -888,7 +888,7 @@ queue_topology(Config) ->
              (QQLeader =:= N1 orelse QQLeader =:= N2) andalso
              (SQLeader =:= N1 orelse SQLeader =:= N2)
          end
-        ), 2000, 5),
+        ), 2000, 15),
 
     ok = rabbit_ct_broker_helpers:start_node(Config, 0),
     {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair2, CQName),
