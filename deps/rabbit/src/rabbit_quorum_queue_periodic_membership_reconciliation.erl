@@ -29,11 +29,9 @@
 
 %% Force delete retry: retrying force deletes of quorum queue members that were
 %% left behind on unreachable nodes during a force delete.
--define(RA_SYSTEM, quorum_queues).
 -define(FORCE_DELETE_TABLE, rabbit_qq_force_delete_pending).
 -define(DEFAULT_FORCE_DELETE_RETRY_INTERVAL, 30_000).
 -define(FORCE_DELETE_TABLE_OPEN_RETRIES, 10).
--define(UID_QUERY_TIMEOUT, 5_000).
 
 -record(state, {timer_ref :: reference() | undefined,
                 interval :: non_neg_integer(),
@@ -331,10 +329,11 @@ select_node(Nodes) ->
 %% tagged with the UID of the incarnation being deleted, and those UIDs are only
 %% recorded once the flag is enabled.
 %%
-%% Before a retry the member's currently registered UID on the target node is read
-%% and the force delete is only performed when it still matches, so a member
-%% belonging to a newer incarnation of the same queue name is never deleted. A
-%% member that cannot be verified this way is dropped rather than deleted, and is
+%% A retry is guarded by that UID: `rabbit_quorum_queue:force_delete_member/2'
+%% compares it against the UID currently registered on the member's node and only
+%% deletes when the two still match, so a member belonging to a newer incarnation
+%% of the same queue name is never deleted. A pending member recorded without a
+%% UID cannot be guarded this way, so it is dropped rather than deleted, and is
 %% reported so that it can be cleaned up manually.
 %%----------------------------------------------------------------------------
 
@@ -367,67 +366,33 @@ retry_force_deletes(State) ->
     _ = dets:sync(?FORCE_DELETE_TABLE),
     ensure_force_delete_timer_if_pending(State).
 
-retry_member({{RaName, Node} = ServerId, {QName, ExpectedUId}}) ->
-    case member_status(Node, RaName, ExpectedUId) of
-        delete ->
-            case rabbit_quorum_queue:force_delete_member(ServerId) of
-                ok ->
-                    ?LOG_INFO("Force delete of leaked member ~w of ~ts "
-                              "succeeded on retry", [ServerId, rabbit_misc:rs(QName)]),
-                    dets:delete(?FORCE_DELETE_TABLE, ServerId);
-                Err ->
-                    ?LOG_DEBUG("Force delete retry of member ~w of ~ts failed "
-                               "with ~w, will retry", [ServerId, rabbit_misc:rs(QName), Err]),
-                    ok
-            end;
-        gone ->
+%% A queue record that predates the feature flag can still carry no UID for this
+%% node. Deleting a member that cannot be guarded by a UID risks removing a newer
+%% incarnation of the same queue name, so leave it in place.
+retry_member({ServerId, {QName, undefined}}) ->
+    ?LOG_INFO("Member ~w of ~ts has no recorded UID to verify against, "
+              "dropping from the force delete retry set. This member may "
+              "need manual data clean up",
+              [ServerId, rabbit_misc:rs(QName)]),
+    dets:delete(?FORCE_DELETE_TABLE, ServerId);
+retry_member({ServerId, {QName, ExpectedUId}}) ->
+    case rabbit_quorum_queue:force_delete_member(ServerId, ExpectedUId) of
+        ok ->
+            ?LOG_INFO("Force delete of leaked member ~w of ~ts "
+                      "succeeded on retry", [ServerId, rabbit_misc:rs(QName)]),
+            dets:delete(?FORCE_DELETE_TABLE, ServerId);
+        {skipped, gone} ->
             ?LOG_INFO("Leaked member ~w of ~ts is no longer present, dropping "
                       "from the force delete retry set", [ServerId, rabbit_misc:rs(QName)]),
             dets:delete(?FORCE_DELETE_TABLE, ServerId);
-        superseded ->
+        {skipped, superseded} ->
             ?LOG_INFO("Member ~w of ~ts belongs to a newer incarnation, dropping "
                       "from the force delete retry set", [ServerId, rabbit_misc:rs(QName)]),
             dets:delete(?FORCE_DELETE_TABLE, ServerId);
-        unverifiable ->
-            ?LOG_INFO("Member ~w of ~ts has no recorded UID to verify against, "
-                      "dropping from the force delete retry set. This member may "
-                      "need manual data clean up",
-                      [ServerId, rabbit_misc:rs(QName)]),
-            dets:delete(?FORCE_DELETE_TABLE, ServerId);
-        unreachable ->
+        {error, Reason} ->
+            ?LOG_DEBUG("Force delete retry of member ~w of ~ts failed "
+                       "with ~w, will retry", [ServerId, rabbit_misc:rs(QName), Reason]),
             ok
-    end.
-
-%% Decide what to do with a pending member by comparing the UID currently
-%% registered on the target node with the UID of the incarnation we intended to
-%% delete. This mirrors the UID handling in rabbit_quorum_queue:recover/2.
--spec member_status(node(), atom(), member_uid()) ->
-    delete | gone | superseded | unverifiable | unreachable.
-member_status(Node, RaName, ExpectedUId) ->
-    case remote_uid(Node, RaName) of
-        {error, _} ->
-            unreachable;
-        undefined ->
-            gone;
-        _CurrentUId when ExpectedUId =:= undefined ->
-            %% A queue record that predates the feature flag can still carry no
-            %% UID for this node. Deleting a member that cannot be verified risks
-            %% removing a newer incarnation of the same queue name, so leave it.
-            unverifiable;
-        ExpectedUId ->
-            delete;
-        _OtherUId ->
-            superseded
-    end.
-
-remote_uid(Node, RaName) ->
-    try erpc:call(Node, ra_directory, uid_of, [?RA_SYSTEM, RaName],
-                  ?UID_QUERY_TIMEOUT) of
-        UId ->
-            UId
-    catch
-        _:Reason ->
-            {error, Reason}
     end.
 
 ensure_force_delete_timer_if_pending(State) ->

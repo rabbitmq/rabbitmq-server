@@ -47,7 +47,8 @@
          add_member/4,
          add_member/5]).
 -export([delete_member/3, delete_member/2]).
--export([force_delete_member/1]).
+-export([force_delete_member/1, force_delete_member/2,
+         force_delete_local_member/2]).
 -export([policy_changed/1]).
 -export([format_ra_event/3]).
 -export([cleanup_data_dir/0]).
@@ -175,6 +176,9 @@
 -define(TICK_INTERVAL, 5000). %% the ra server tick time
 -define(DELETE_TIMEOUT, 5000).
 -define(FORCE_DELETE_TIMEOUT, 30_000).
+%% Bounds the call that carries out the UID check and the force delete on the
+%% member's node, so it has to outlive the force delete it wraps.
+-define(FORCE_DELETE_RPC_TIMEOUT, ?FORCE_DELETE_TIMEOUT + 5_000).
 -define(MEMBER_CHANGE_TIMEOUT, 20_000).
 -define(SNAPSHOT_INTERVAL, 8192). %% the ra default is 4096
 %% setting a low default here to allow quorum queues to better chose themselves
@@ -1252,6 +1256,35 @@ force_delete_members_with_retry(Q, Servers) ->
 force_delete_member(ServerId) ->
     try ra:force_delete_server(?RA_SYSTEM, ServerId, ?FORCE_DELETE_TIMEOUT)
     catch _:E -> {error, E}
+    end.
+
+%% Force delete a member only when the UID registered for its Ra name still
+%% matches the incarnation the caller means to delete.
+%%
+%% `ra:force_delete_server/3' resolves the Ra name to a UID on the member's own
+%% node, so the guard has to be evaluated there too: performing it in the caller
+%% would leave a window in which the member is replaced by a newer incarnation
+%% of the same queue name, which the delete would then remove. Both steps are
+%% therefore carried out in a single call on the member's node.
+-spec force_delete_member(ra:server_id(), binary()) ->
+    ok | {skipped, gone | superseded} | {error, term()}.
+force_delete_member({RaName, Node}, ExpectedUId) when is_binary(ExpectedUId) ->
+    try erpc:call(Node, ?MODULE, force_delete_local_member,
+                  [RaName, ExpectedUId], ?FORCE_DELETE_RPC_TIMEOUT)
+    catch _:E -> {error, E}
+    end.
+
+%% Runs on the member's own node, called by force_delete_member/2.
+-spec force_delete_local_member(atom(), binary()) ->
+    ok | {skipped, gone | superseded} | {error, term()}.
+force_delete_local_member(RaName, ExpectedUId) ->
+    case ra_directory:uid_of(?RA_SYSTEM, RaName) of
+        undefined ->
+            {skipped, gone};
+        ExpectedUId ->
+            force_delete_member({RaName, node()});
+        _OtherUId ->
+            {skipped, superseded}
     end.
 
 -spec delete_queue_data(Queue, ActingUser) -> Ret when
