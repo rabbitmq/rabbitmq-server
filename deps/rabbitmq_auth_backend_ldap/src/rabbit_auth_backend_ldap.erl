@@ -934,59 +934,53 @@ simple_bind_fill_pattern(none, Username) ->
 simple_bind_fill_pattern(Pattern, Username) ->
     fill_bind_dn(Pattern, Username).
 
-%% Fills a bind-identity DN pattern (`user_dn_pattern'/`user_bind_pattern')
-%% with an RFC 4514-escaped `username', then any remaining `ad_domain'/
-%% `ad_user' substitutions.
-%%
-%% `${username}' is pre-filled separately (rather than via `fill_dn') so
-%% that AD down-level logon names ("DOMAIN\user") can be escaped
-%% component-wise: see escaped_username_value/2.
+%% Fills a bind-identity DN pattern (`user_dn_pattern' or
+%% `user_bind_pattern'). `${username}' is pre-filled via
+%% `escaped_username_value/2' so AD down-level logon names ("DOMAIN\user")
+%% are escaped by component, not as a whole value.
 fill_bind_dn(Pattern, Username) ->
-    ADArgs = rabbit_auth_backend_ldap_util:get_active_directory_args(Username),
+    ADArgs = safe_ad_args(
+               rabbit_auth_backend_ldap_util:get_active_directory_args(Username)),
     Pattern1 = fill(Pattern, [{username, escaped_username_value(Username, ADArgs)}]),
     fill_dn(Pattern1, ADArgs).
 
-%% Fills an authorisation-query DN pattern (`vhost_access_query',
-%% `resource_access_query', `topic_access_query', `tag_queries' --
-%% the `exists', `in_group', `in_group_nested' and `attribute' clauses
-%% of evaluate0/4) the same way fill_bind_dn/2 fills a bind DN: `username'
-%% is pre-filled component-wise so an AD down-level logon name in the
-%% pattern isn't broken by whole-value escaping (RMQ-4282). `Args' also
-%% carries `user_dn', `vhost', and other query variables, which fill_dn/2
-%% still escapes as usual.
+%% Fills an authorisation-query DN pattern (the `evaluate0/4' DN clauses)
+%% the same way `fill_bind_dn/2' fills a bind DN. Other query variables in
+%% `Args' are escaped by `fill_dn/2' as before; the caller's AD args are
+%% replaced with the `safe_ad_args/1'-vetted ones.
 fill_dn_with_username(DNPattern, Args) ->
     Username = pget(username, Args),
-    ADArgs = rabbit_auth_backend_ldap_util:get_active_directory_args(Username),
+    ADArgs = safe_ad_args(
+               rabbit_auth_backend_ldap_util:get_active_directory_args(Username)),
     DNPattern1 = fill(DNPattern, [{username, escaped_username_value(Username, ADArgs)}]),
-    fill_dn(DNPattern1, lists:keydelete(username, 1, Args)).
+    OtherArgs = [KV || {K, _} = KV <- Args,
+                       K =/= username, K =/= ad_domain, K =/= ad_user],
+    fill_dn(DNPattern1, ADArgs ++ OtherArgs).
 
-%% AD down-level logon names ("DOMAIN\user") use backslash as a domain
-%% separator, not DN-attribute data. Escaping it per RFC 4514 would double
-%% it, breaking the bind against AD (RMQ-4282). Escape the domain and user
-%% components independently instead, and rejoin them with a literal
-%% backslash, so any other RFC 4514-special character in either component
-%% is still escaped.
-%%
-%% A username with more than one backslash isn't a valid down-level logon
-%% name -- which one would be the separator is ambiguous -- so it falls
-%% through to whole-value escaping, same as a username with none.
-%%
-%% The same fallback applies when the escaped user part starts with a
-%% backslash (its first character is itself RFC 4514-special): that
-%% backslash would sit right after the domain-separator backslash, and a
-%% DN parser reads the pair as one escaped literal backslash, leaving the
-%% special character that follows unescaped and able to inject a new DN
-%% component.
-escaped_username_value(Username, [{ad_domain, Domain}, {ad_user, User}]) ->
+%% Rejects an unusable "DOMAIN\user" split. A user part containing a
+%% backslash makes the separator ambiguous. A user part whose escaped form
+%% starts with a backslash would pair with a preceding literal backslash
+%% (in the rejoined name or in a "${ad_domain}\${ad_user}" pattern),
+%% un-escaping the special character after it -- a DN injection. With no
+%% AD args, `${username}' falls back to whole-value escaping and AD
+%% variables stay unfilled, so the DN cannot bind.
+safe_ad_args([{ad_domain, _}, {ad_user, User}] = ADArgs) ->
     UserList = rabbit_data_coercion:to_list(User),
     EscapedUser = rabbit_ldap_rfc4514:escape_value(UserList),
     case lists:member($\\, UserList) orelse lists:prefix("\\", EscapedUser) of
-        false ->
-            rabbit_ldap_rfc4514:escape_value(rabbit_data_coercion:to_list(Domain)) ++
-            "\\" ++ EscapedUser;
-        true ->
-            escaped_username_value(Username, [])
+        false -> ADArgs;
+        true  -> []
     end;
+safe_ad_args([]) ->
+    [].
+
+%% RFC 4514-escaping the down-level separator backslash would double it and
+%% break the bind against AD (RMQ-4282), so the domain and user components
+%% are escaped independently and rejoined with a bare backslash. The AD
+%% args have already passed `safe_ad_args/1'.
+escaped_username_value(_Username, [{ad_domain, Domain}, {ad_user, User}]) ->
+    rabbit_ldap_rfc4514:escape_value(rabbit_data_coercion:to_list(Domain)) ++
+        "\\" ++ rabbit_ldap_rfc4514:escape_value(rabbit_data_coercion:to_list(User));
 escaped_username_value(Username, []) ->
     rabbit_ldap_rfc4514:escape_value(Username).
 

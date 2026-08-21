@@ -24,6 +24,7 @@ all() ->
      user_bind_pattern_escaping_rmq_4282,
      leading_special_char_no_dn_injection_rmq_4282,
      authz_query_dn_pattern_escaping_rmq_4282,
+     ad_variable_pattern_escaping_rmq_4282,
      user_dn_pattern_gh_7161,
      format_different_types_of_ldap_attribute_values,
      ldap_log_domain_routing,
@@ -258,6 +259,50 @@ authz_query_dn_pattern_escaping_rmq_4282(_Config) ->
     ?assertEqual("cn=" ++ rabbit_ldap_rfc4514:escape_value("DOMAIN\\,ou=Finance") ++ ",ou=a\\,b",
                  rabbit_auth_backend_ldap:fill_dn_with_username(
                    "cn=${username},ou=${vhost}", Args(<<"DOMAIN\\,ou=Finance">>))),
+    ok.
+
+%% Patterns can use `${ad_domain}' and `${ad_user}' directly. When the AD
+%% split is unsafe (see `safe_ad_args/1'), both variables stay unfilled.
+ad_variable_pattern_escaping_rmq_4282(_Config) ->
+    PrevBindPattern = application:get_env(rabbitmq_auth_backend_ldap, user_bind_pattern),
+    PrevLog = application:get_env(rabbitmq_auth_backend_ldap, log),
+    ok = application:set_env(rabbitmq_auth_backend_ldap, log, false),
+    try
+        SetPattern = fun(P) ->
+            ok = application:set_env(rabbitmq_auth_backend_ldap, user_bind_pattern, P)
+        end,
+        SetPattern("${ad_user}-${ad_domain}"),
+        ?assertEqual("alice-CORP",
+                     rabbit_auth_backend_ldap:simple_bind_fill_pattern(
+                       <<"CORP\\alice">>)),
+        %% A special character inside the user part is escaped as usual.
+        ?assertEqual("a\\,b-CORP",
+                     rabbit_auth_backend_ldap:simple_bind_fill_pattern(
+                       <<"CORP\\a,b">>)),
+        SetPattern("${ad_domain}\\${ad_user}"),
+        ?assertEqual("CORP\\alice",
+                     rabbit_auth_backend_ldap:simple_bind_fill_pattern(
+                       <<"CORP\\alice">>)),
+        %% A leading special character in the user part would pair its
+        %% escape backslash with the pattern's literal one.
+        ?assertEqual("${ad_domain}\\${ad_user}",
+                     rabbit_auth_backend_ldap:simple_bind_fill_pattern(
+                       <<"CORP\\,ou=Evil">>)),
+        %% The authz-query path uses the same vetted AD args.
+        ?assertEqual("cn=alice,ou=CORP",
+                     rabbit_auth_backend_ldap:fill_dn_with_username(
+                       "cn=${ad_user},ou=${ad_domain}",
+                       [{username, <<"CORP\\alice">>},
+                        {ad_domain, <<"CORP">>}, {ad_user, <<"alice">>}])),
+        ?assertEqual("ou=Groups\\${ad_user}",
+                     rabbit_auth_backend_ldap:fill_dn_with_username(
+                       "ou=Groups\\${ad_user}",
+                       [{username, <<"CORP\\,ou=Evil">>},
+                        {ad_domain, <<"CORP">>}, {ad_user, <<",ou=Evil">>}]))
+    after
+        restore_env(user_bind_pattern, PrevBindPattern),
+        restore_env(log, PrevLog)
+    end,
     ok.
 
 restore_env(Key, {ok, V}) -> application:set_env(rabbitmq_auth_backend_ldap, Key, V);
