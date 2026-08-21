@@ -24,12 +24,17 @@ for later retrieval, and then fetch it explicitly when ready.
   in the MODIFIED outcome's `message-annotations` and to each element of the
   `rabbitmq:deferral-tokens` array in a FLOW frame's `properties`. Any other AMQP
   type (e.g. `binary`, `symbol`) is rejected with `amqp:invalid-field`.
-- **Credit must cover the matched messages.** When requesting deferred messages via a
-  FLOW frame, the link credit granted in that same FLOW must be at least as large as
-  the number of messages the submitted tokens resolve to (a single token may resolve
-  to more than one message; see below). If credit is exhausted by normal message
-  delivery before the deferred assignment runs, no deferred messages are delivered
-  for that FLOW.
+- **At most 256 tokens per FLOW.** A `rabbitmq:deferral-tokens` array longer than
+  that is rejected with `amqp:invalid-field`.
+- **Credit does not have to cover the matched messages.** Submitting tokens claims
+  the messages parked under them for the link; the queue then delivers them as the
+  link's credit allows, over as many credit top-ups as it takes. A client that
+  grants less credit than the tokens resolve to receives the rest on subsequent
+  credit grants, without submitting the tokens again.
+- **A token is claimed by one link at a time.** Submitting a token removes it from
+  the queue's set of parked tokens, so a second link submitting the same token
+  receives nothing. The claim is released, and the token becomes available again,
+  when the claiming link detaches with messages still parked under it.
 
 ## Protocol Usage
 
@@ -52,12 +57,14 @@ annotations in the `message-annotations` map of the MODIFIED outcome:
 - `x-opt-deferral-token` (symbol key, utf8 value) — a client-chosen opaque
   identifier for this parked message. The same token may be assigned to more than
   one message, e.g. by settling a range of deliveries (`first =/= last`) with a
-  single MODIFIED outcome. Retrieving such a token returns all messages parked
-  under it, oldest first.
+  single MODIFIED outcome. Retrieving such a token returns every message parked
+  under it, oldest first, spread over as many credit grants as it takes. Reusing
+  a token that still has messages parked under it adds to that set rather than
+  replacing it.
 - `x-opt-delivery-time` (symbol key, timestamp value in milliseconds since the Unix
   epoch) — the earliest time at which the message becomes eligible for normal
-  timer-based redelivery. The message is held until this time unless explicitly
-  retrieved earlier via `assign_deferred`.
+  timer-based redelivery. The message is held until this time unless the client
+  retrieves it earlier by its token.
 
 Example (pseudocode):
 
@@ -80,9 +87,8 @@ DISPOSITION {
 ### 4. Retrieve the message by token
 
 When ready to process the parked message, send a FLOW frame on the same consuming
-link. Grant enough link credit to receive the deferred messages and include the tokens
-in the `properties` map of the FLOW frame under the key `rabbitmq:deferral-tokens` as
-an array of utf8 values.
+link, granting link credit as usual and including the tokens in the `properties` map
+of the FLOW frame under the key `rabbitmq:deferral-tokens` as an array of utf8 values.
 
 Example (pseudocode):
 
@@ -97,11 +103,20 @@ FLOW {
 }
 ```
 
-The broker looks up each token in the parked message set and delivers any matches
-directly to this link as normal TRANSFER frames. Tokens that are not found (because
-the message was already expired by its delivery time and requeued normally, or the
-token was never issued) produce no delivery — the client is responsible for tracking
-which tokens it expects.
+The broker claims each token's parked messages for this link and delivers them as
+normal TRANSFER frames, ahead of any messages already ready in the queue: the credit
+granted in this FLOW reaches the messages the client asked for rather than being
+spent on the backlog first.
+
+Tokens that are not found produce no delivery. That happens when the token was never
+issued, when its messages were already requeued normally after their delivery time
+elapsed, or when another link holds the claim. The client is responsible for tracking
+which tokens it expects; each delivered message carries its own `x-opt-deferral-token`
+in `message-annotations`, so a client can tell which of its tokens have been served.
+
+A claim does not pin a message. If the client never grants the credit to collect a
+claimed message, the message is still requeued normally once its
+`x-opt-delivery-time` elapses, and the claim is dropped.
 
 ## Relationship to `delayed-retry`
 

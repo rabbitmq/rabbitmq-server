@@ -149,9 +149,11 @@ groups() ->
        modified_quorum_queue_delivery_time,
        modified_quorum_queue_deferral_token,
        modified_quorum_queue_deferral_token_ranged_disposition,
+       modified_quorum_queue_deferral_token_precedes_backlog,
        modified_quorum_queue_deferral_token_survives_in_flight_credit_req,
        modified_quorum_queue_deferral_token_invalid_annotation_type,
        modified_quorum_queue_deferral_token_invalid_flow_property_type,
+       modified_quorum_queue_deferral_token_too_many,
        modified_dead_letter_headers_exchange,
        modified_dead_letter_history,
        dead_letter_headers_exchange,
@@ -906,6 +908,10 @@ modified_quorum_queue_deferral_token(Config) ->
           after 5000 -> ct:fail({missing_msg, ?LINE})
           end,
     ?assertEqual([<<"m1">>], amqp10_msg:body(M1b)),
+    %% The message names the token it was parked under, so a client can tell
+    %% which of the tokens it submitted have been served.
+    ?assertMatch(#{<<"x-opt-deferral-token">> := Token1},
+                 amqp10_msg:message_annotations(M1b)),
     ok = amqp10_client:settle_msg(Receiver, M1b, accepted),
 
     %% An unknown token yields no delivery.
@@ -941,8 +947,9 @@ modified_quorum_queue_deferral_token(Config) ->
             #{<<"x-opt-deferral-token">> => Token4,
               <<"x-opt-delivery-time">> => FarFuture}}),
 
-    %% Requesting both tokens with credit for only one is all-or-nothing:
-    %% neither message is delivered.
+    %% Requesting both tokens with credit for only one delivers one message
+    %% now. The other stays parked, claimed for this link, and is delivered
+    %% once more credit arrives, without the tokens being submitted again.
     ok = amqp10_client_session:flow_link(
            Session, OutputHandle,
            #'v1_0.flow'{
@@ -950,26 +957,70 @@ modified_quorum_queue_deferral_token(Config) ->
               properties = {map, [{{symbol, <<"rabbitmq:deferral-tokens">>},
                                    {array, utf8, [{utf8, Token3}, {utf8, Token4}]}}]}},
            never),
-    receive {amqp10_msg, Receiver, _} -> ct:fail(unexpected_message)
-    after 500 -> ok
-    end,
+    [First] = receive_messages(Receiver, 1),
+    ok = amqp10_client:settle_msg(Receiver, First, accepted),
+    ok = amqp10_client:flow_link_credit(Receiver, 1, never, false),
+    [Second] = receive_messages(Receiver, 1),
+    ok = amqp10_client:settle_msg(Receiver, Second, accepted),
+    ?assertEqual([[<<"m3">>], [<<"m4">>]],
+                 lists:sort([amqp10_msg:body(First), amqp10_msg:body(Second)])),
 
-    %% Granting enough credit for both tokens delivers both messages.
+    ok = amqp10_client:detach_link(Receiver),
+    ?assertMatch({ok, #{message_count := 0}},
+                 rabbitmq_amqp_client:delete_queue(LinkPair, QName)),
+    ok = close(Init).
+
+%% Test that a message claimed by deferral token is delivered ahead of the
+%% messages already ready in the queue. The credit granted in the same FLOW
+%% that carries the token must reach the message the client asked for, not
+%% be spent on the backlog first.
+modified_quorum_queue_deferral_token_precedes_backlog(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    {_, Session, LinkPair} = Init = init(Config),
+    {ok, #{type := <<"quorum">>}} = rabbitmq_amqp_client:declare_queue(
+                                      LinkPair, QName,
+                                      #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>}}}),
+    Address = rabbitmq_amqp_address:queue(QName),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address),
+    ok = wait_for_credit(Sender),
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"t1">>, <<"m1">>, true)),
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"t2">>, <<"m2">>, true)),
+    ok = detach_link_sync(Sender),
+
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session, <<"receiver">>, Address, unsettled),
+    OutputHandle = element(4, Receiver),
+    FarFuture = erlang:system_time(millisecond) + 3_600_000,
+
+    %% Take m1 and park it, leaving m2 ready in the queue.
+    ok = amqp10_client:flow_link_credit(Receiver, 1, never, false),
+    [M1] = receive_messages(Receiver, 1),
+    ?assertEqual([<<"m1">>], amqp10_msg:body(M1)),
+    Token = <<"token-1">>,
+    ok = amqp10_client:settle_msg(
+           Receiver, M1,
+           {modified, false, false,
+            #{<<"x-opt-deferral-token">> => Token,
+              <<"x-opt-delivery-time">> => FarFuture}}),
+
+    %% One credit alongside the token: the parked message wins it, even
+    %% though m2 has been ready the whole time.
     ok = amqp10_client_session:flow_link(
            Session, OutputHandle,
            #'v1_0.flow'{
-              link_credit = {uint, 2},
+              link_credit = {uint, 1},
               properties = {map, [{{symbol, <<"rabbitmq:deferral-tokens">>},
-                                   {array, utf8, [{utf8, Token3}, {utf8, Token4}]}}]}},
+                                   {array, utf8, [{utf8, Token}]}}]}},
            never),
-    ReceivedBodies = [begin
-                          M = receive {amqp10_msg, Receiver, Msg} -> Msg
-                              after 5000 -> ct:fail({missing_msg, ?LINE})
-                              end,
-                          ok = amqp10_client:settle_msg(Receiver, M, accepted),
-                          amqp10_msg:body(M)
-                      end || _ <- [1, 2]],
-    ?assertEqual([[<<"m3">>], [<<"m4">>]], lists:sort(ReceivedBodies)),
+    [M1b] = receive_messages(Receiver, 1),
+    ?assertEqual([<<"m1">>], amqp10_msg:body(M1b)),
+    ok = amqp10_client:settle_msg(Receiver, M1b, accepted),
+
+    %% m2 is still there and comes next.
+    ok = amqp10_client:flow_link_credit(Receiver, 1, never, false),
+    [M2] = receive_messages(Receiver, 1),
+    ?assertEqual([<<"m2">>], amqp10_msg:body(M2)),
+    ok = amqp10_client:settle_msg(Receiver, M2, accepted),
 
     ok = amqp10_client:detach_link(Receiver),
     ?assertMatch({ok, #{message_count := 0}},
@@ -1144,6 +1195,35 @@ modified_quorum_queue_deferral_token_invalid_flow_property_type(Config) ->
               link_credit = {uint, 1},
               properties = {map, [{{symbol, <<"rabbitmq:deferral-tokens">>},
                                    {array, binary, [{binary, <<"token-1">>}]}}]}},
+           never),
+    receive
+        {amqp10_event,
+         {session, Session,
+          {ended, #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_INVALID_FIELD}}}} -> ok
+    after 30000 -> flush(missing_ended),
+                   ct:fail("did not receive expected error")
+    end,
+    ok = close_connection_sync(Connection).
+
+%% Test that a rabbitmq:deferral-tokens array longer than the per-FLOW limit
+%% is rejected, rather than committing an unbounded Ra command.
+modified_quorum_queue_deferral_token_too_many(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    {Connection, Session, LinkPair} = init(Config),
+    {ok, #{type := <<"quorum">>}} = rabbitmq_amqp_client:declare_queue(
+                                      LinkPair, QName,
+                                      #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>}}}),
+    Address = rabbitmq_amqp_address:queue(QName),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session, <<"receiver">>, Address, unsettled),
+    OutputHandle = element(4, Receiver),
+    Tokens = [{utf8, integer_to_binary(N)} || N <- lists:seq(1, 257)],
+    ok = amqp10_client_session:flow_link(
+           Session, OutputHandle,
+           #'v1_0.flow'{
+              link_credit = {uint, 1},
+              properties = {map, [{{symbol, <<"rabbitmq:deferral-tokens">>},
+                                   {array, utf8, Tokens}}]}},
            never),
     receive
         {amqp10_event,
