@@ -251,9 +251,11 @@
 
 -optional_callbacks([assign_deferred/4]).
 
-%% Assign messages that were deferred (via x-opt-deferral-token) back to a
-%% consumer. Only supported by quorum queues. Matched messages arrive as
-%% normal deliveries; the call is fire-and-forget.
+%% Claim, for a consumer, the messages that were deferred (via
+%% x-opt-deferral-token) under the given tokens. Only supported by quorum
+%% queues. The call is fire-and-forget and says nothing about link credit:
+%% claimed messages arrive as normal deliveries, ahead of the ready backlog,
+%% as the consumer's credit allows.
 -callback assign_deferred(queue_name(), rabbit_types:ctag(), Tokens :: [binary()],
                           queue_state()) ->
     {queue_state(), actions()}.

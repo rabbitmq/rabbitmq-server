@@ -549,11 +549,18 @@ retry_delayed(Server, Mode) when Mode =:= all orelse
             Err
     end.
 
-%% @doc Assign deferred messages by token to a consumer.
+%% @doc Claim the deferred messages parked under the given tokens for a
+%% consumer.
+%%
+%% This is fire-and-forget and says nothing about link credit. The queue
+%% moves the messages' keys onto the consumer and then delivers them ahead
+%% of the ready backlog as the consumer's credit allows, so the caller does
+%% not have to make the claim and the credit top-up atomic.
+%%
 %% @param ConsumerTag the tag uniquely identifying the consumer.
 %% @param Tokens list of deferral tokens (from x-opt-deferral-token).
 %% @param State the {@module} state
-%% @returns `{state(), actions()}' - matched messages arrive as normal deliveries.
+%% @returns `{state(), actions()}' - claimed messages arrive as normal deliveries.
 -spec assign_deferred(rabbit_types:ctag(), [binary()], state()) ->
     {state(), rabbit_queue_type:actions()}.
 assign_deferred(ConsumerTag, [_|_] = Tokens, State0) ->
