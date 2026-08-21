@@ -856,7 +856,7 @@ do_acquire(refuse_connection = Plcy, VHost, ContainerId, Username, ConnPid) ->
             %% no node yet, accept
             %% node will clean itself when the connection is closed
             ok;
-        {error, {khepri, mismatching_node, #{node_props := #{data := ExistingConn}}}} ->
+        {error, ?khepri_error(mismatching_node, #{node_props := #{data := ExistingConn}})} ->
             #conn{pid = ExistingPid} = ExistingConn,
             %% Only the same user may take over a dead connection's lease;
             %% a different user is refused outright, aliveness notwithstanding.
@@ -900,7 +900,7 @@ do_acquire(close_existing = Plcy, VHost, ContainerId, Username, ConnPid) ->
     case khepri_adv:create(get_store_id(), Path, Payload, Opts) of
         {ok, _} ->
             ok;
-        {error, {khepri, mismatching_node, #{node_props := #{data := ExistingConn}}}} ->
+        {error, ?khepri_error(mismatching_node, #{node_props := #{data := ExistingConn}})} ->
             #conn{pid = ExistingPid} = ExistingConn,
             %% A different user may not close and replace someone else's
             %% connection: that would be a container ID hijack.

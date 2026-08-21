@@ -141,7 +141,7 @@ refuse_connection_let_new_through_if_previous_died(_) ->
     eventually(?_assertNot(is_process_alive(Pid1))),
 
     Path = rabbit_sole_conn:conn_path(?VH, ?CID1),
-    eventually(?_assertMatch({error, {khepri, node_not_found, _}},
+    eventually(?_assertMatch({error, ?khepri_error(node_not_found, _)},
                              khepri:get(get_store_id(), Path))),
 
     Pid2 = spawn_disposable(),
@@ -264,7 +264,7 @@ force_delete_should_remove_existing_lease(_) ->
     ?assertMatch({ok, _}, khepri:get(get_store_id(), Path)),
 
     ?assertEqual(ok, rabbit_sole_conn:force_delete(?VH, ?CID1)),
-    ?assertMatch({error, {khepri, node_not_found, _}},
+    ?assertMatch({error, ?khepri_error(node_not_found, _)},
                  khepri:get(get_store_id(), Path)),
 
     Pid1 ! die,
@@ -272,7 +272,7 @@ force_delete_should_remove_existing_lease(_) ->
 
 force_delete_should_return_not_found_for_missing_lease(_) ->
     Path = rabbit_sole_conn:conn_path(?VH, ?CID1),
-    ?assertMatch({error, {khepri, node_not_found, _}},
+    ?assertMatch({error, ?khepri_error(node_not_found, _)},
                  khepri:get(get_store_id(), Path)),
 
     ?assertEqual({error, not_found}, rabbit_sole_conn:force_delete(?VH, ?CID1)),
@@ -295,7 +295,7 @@ khepri_put_should_override_keep_while_monitor(_) ->
     timer:sleep(500),
     ?assertEqual({ok, Pid2}, khepri:get(get_store_id(), Path1)),
     Pid2 ! die,
-    eventually(?_assertMatch({error, {khepri, node_not_found, _}},
+    eventually(?_assertMatch({error, ?khepri_error(node_not_found, _)},
                              khepri:get(get_store_id(), Path1))),
     ok.
 
@@ -337,7 +337,7 @@ khepri_triggers(_) ->
     ?assertMatch({ok, _}, khepri_adv:delete(get_store_id(), Path1)),
     ?assertEqual(executed, receive_sproc_msg(Key, {delete, Path1})),
     %% the tree nodes created implictly are deleted automatically
-    eventually(?_assertMatch({error, {khepri, node_not_found, _}},
+    eventually(?_assertMatch({error, ?khepri_error(node_not_found, _)},
                              khepri:get(get_store_id(), Path1))),
     ok.
 
