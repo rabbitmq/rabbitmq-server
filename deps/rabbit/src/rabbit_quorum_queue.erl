@@ -175,10 +175,14 @@
 -define(START_CLUSTER_RPC_TIMEOUT, 60_000). %% needs to be longer than START_CLUSTER_TIMEOUT
 -define(TICK_INTERVAL, 5000). %% the ra server tick time
 -define(DELETE_TIMEOUT, 5000).
--define(FORCE_DELETE_TIMEOUT, 30_000).
+%% Applied per member, and members are force deleted one at a time, so this
+%% bounds a fraction of the total and not the whole operation.
+-define(FORCE_DELETE_TIMEOUT, ?DELETE_TIMEOUT).
 %% Bounds the call that carries out the UID check and the force delete on the
 %% member's node, so it has to outlive the force delete it wraps.
--define(FORCE_DELETE_RPC_TIMEOUT, ?FORCE_DELETE_TIMEOUT + 5_000).
+%% `ra:force_delete_server/3' spends the timeout twice, once to stop the member
+%% and once to delete its data, hence the multiplier.
+-define(FORCE_DELETE_RPC_TIMEOUT, (2 * ?FORCE_DELETE_TIMEOUT) + 5_000).
 -define(MEMBER_CHANGE_TIMEOUT, 20_000).
 -define(SNAPSHOT_INTERVAL, 8192). %% the ra default is 4096
 %% setting a low default here to allow quorum queues to better chose themselves
