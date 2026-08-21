@@ -1137,18 +1137,50 @@ ingress_bytes_by_node_accumulation(_Config) ->
                           Indexes = lists:seq(1, length(O)),
                           Entries = lists:zip(Indexes, O),
                           InitState = test_init(InitConf),
-                          {State1, _Effs1} = run_log(InitState, Entries),
-                          IngressByNode = State1#rabbit_fifo.ingress_bytes_by_node,
-                          %% Verify the map is properly populated
-                          IsMap = is_map(IngressByNode),
-                          %% Verify all values are non-negative
-                          ValidValues = maps:fold(
+                          run_log(InitState, Entries,
+                                  ingress_bytes_by_node_invariant()),
+                          true
+                      end)
+      end, [], Size).
+
+%% meta/2 always attributes enqueues to self(), so ingress_bytes_by_node
+%% only ever grows a single node() entry here regardless of the "different
+%% nodes" generator - what we can meaningfully assert without reimplementing
+%% rabbit_fifo's own per-enqueuer dedup/sequencing logic is that the
+%% cumulative total it tracks is internally consistent with the live,
+%% still-enqueued byte count.
+ingress_bytes_by_node_invariant() ->
+    fun(#rabbit_fifo{ingress_bytes_by_node = IngressByNode,
+                     msg_bytes_enqueue = MsgBytesEnqueue}) ->
+            ValidValues = maps:fold(
                             fun(_, V, Acc) ->
                                     Acc andalso is_integer(V) andalso V >= 0
                             end, true, IngressByNode),
-                          IsMap andalso ValidValues
-                      end)
-      end, [], Size).
+            Sum = lists:sum(maps:values(IngressByNode)),
+            %% ingress_bytes_by_node is cumulative and monotonically
+            %% non-decreasing since queue creation; msg_bytes_enqueue only
+            %% counts bytes still live (not yet settled/discarded/returned),
+            %% so the cumulative total can never be smaller than what is
+            %% currently live
+            CumulativeCoversLive = Sum >= MsgBytesEnqueue,
+            %% live bytes cannot exist without having been recorded as
+            %% ingress somewhere
+            NoLiveBytesWithoutIngress = (MsgBytesEnqueue == 0) orelse
+                                        map_size(IngressByNode) > 0,
+            case ValidValues andalso CumulativeCoversLive andalso
+                 NoLiveBytesWithoutIngress of
+                true ->
+                    true;
+                false ->
+                    ct:pal("ingress_bytes_by_node invariant failed: "
+                           "ValidValues ~p CumulativeCoversLive ~p "
+                           "(Sum ~b, msg_bytes_enqueue ~b) "
+                           "NoLiveBytesWithoutIngress ~p",
+                           [ValidValues, CumulativeCoversLive, Sum,
+                            MsgBytesEnqueue, NoLiveBytesWithoutIngress]),
+                    false
+            end
+    end.
 
 two_nodes(Node) ->
     Size = 100,
