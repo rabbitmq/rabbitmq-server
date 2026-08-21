@@ -188,7 +188,16 @@
          %% AMQP 1.0 §2.6.7
          delivery_count :: rabbit_queue_type:delivery_count(),
          drain = false :: boolean(),
-         timed_out_msg_ids = [] :: [msg_id()]
+         timed_out_msg_ids = [] :: [msg_id()],
+         %% Deferral tokens this consumer has claimed, mapped to the keys of
+         %% the messages parked under each. Claiming moves the entry out of
+         %% #delayed.deferred, so a token can only ever be claimed by one
+         %% consumer at a time. The messages themselves stay in
+         %% #delayed.tree, keeping their delivery time, and are drained from
+         %% here ahead of the ready backlog as the consumer's credit allows.
+         %% Surviving keys are merged back into #delayed.deferred when the
+         %% consumer is removed.
+         deferred_claims = #{} :: #{deferral_token() => [delayed_key()]}
         }).
 
 -type consumer() :: #consumer{}.
@@ -210,9 +219,11 @@
          %% Cached smallest entry for O(1) readiness check in take_next_msg
          next = undefined :: option({milliseconds(), ra:index(), msg()}),
          %% Map from deferral token to the tree keys of all messages parked
-         %% under it. A single token may address more than one message,
-         %% e.g. when a ranged DISPOSITION settles several deliveries with
-         %% the same annotations.
+         %% under it and not yet claimed by a consumer. A single token may
+         %% address more than one message, e.g. when a ranged DISPOSITION
+         %% settles several deliveries with the same annotations. Claiming
+         %% moves an entry to #consumer.deferred_claims; releasing a claim
+         %% moves it back.
          deferred = #{} :: #{deferral_token() => [delayed_key()]}}).
 
 -record(enqueuer,
