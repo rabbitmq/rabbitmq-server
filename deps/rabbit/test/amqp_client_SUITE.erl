@@ -149,6 +149,7 @@ groups() ->
        modified_quorum_queue_delivery_time,
        modified_quorum_queue_deferral_token,
        modified_quorum_queue_deferral_token_ranged_disposition,
+       modified_quorum_queue_deferral_token_survives_in_flight_credit_req,
        modified_quorum_queue_deferral_token_invalid_annotation_type,
        modified_quorum_queue_deferral_token_invalid_flow_property_type,
        modified_dead_letter_headers_exchange,
@@ -1037,6 +1038,57 @@ modified_quorum_queue_deferral_token_ranged_disposition(Config) ->
     ok = amqp10_client:detach_link(Receiver),
     ?assertMatch({ok, #{message_count := 0}},
                  rabbitmq_amqp_client:delete_queue(LinkPair, QName)),
+    ok = close(Init).
+
+%% Test that deferral tokens submitted in a FLOW while a previous credit
+%% request from the same link is still in flight are not dropped, but
+%% honoured once that request's reply has been processed.
+modified_quorum_queue_deferral_token_survives_in_flight_credit_req(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    {_, Session, LinkPair} = Init = init(Config),
+    {ok, #{type := <<"quorum">>}} = rabbitmq_amqp_client:declare_queue(
+                                      LinkPair, QName,
+                                      #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>}}}),
+    Address = rabbitmq_amqp_address:queue(QName),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address),
+    ok = wait_for_credit(Sender),
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"t1">>, <<"m1">>, true)),
+    ok = detach_link_sync(Sender),
+
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session, <<"receiver">>, Address, unsettled),
+    OutputHandle = element(4, Receiver),
+
+    %% Park m1 under a token.
+    {ok, M1} = amqp10_client:get_msg(Receiver),
+    ?assertEqual([<<"m1">>], amqp10_msg:body(M1)),
+    Token = <<"in-flight-token">>,
+    FarFuture = erlang:system_time(millisecond) + 3_600_000,
+    ok = amqp10_client:settle_msg(
+           Receiver, M1,
+           {modified, false, false,
+            #{<<"x-opt-deferral-token">> => Token,
+              <<"x-opt-delivery-time">> => FarFuture}}),
+
+    %% Fire two FLOW frames back-to-back with no wait in between, so the
+    %% second one (carrying the token) is very likely to be processed
+    %% while the first credit request is still in flight, landing it in
+    %% the stashed_credit_req path instead of being sent immediately.
+    ok = amqp10_client_session:flow_link(
+           Session, OutputHandle,
+           #'v1_0.flow'{link_credit = {uint, 1}},
+           never),
+    ok = amqp10_client_session:flow_link(
+           Session, OutputHandle,
+           #'v1_0.flow'{
+              link_credit = {uint, 1},
+              properties = {map, [{{symbol, <<"rabbitmq:deferral-tokens">>},
+                                   {array, utf8, [{utf8, Token}]}}]}},
+           never),
+
+    [M1b] = receive_messages(Receiver, 1),
+    ?assertEqual([<<"m1">>], amqp10_msg:body(M1b)),
+    ok = amqp10_client:settle_msg(Receiver, M1b, accepted),
     ok = close(Init).
 
 %% Test that a x-opt-deferral-token of any AMQP type other than utf8 is

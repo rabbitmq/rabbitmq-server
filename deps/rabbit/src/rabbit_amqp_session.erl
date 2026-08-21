@@ -188,7 +188,10 @@
           delivery_count :: sequence_no(),
           credit :: rabbit_queue_type:credit(),
           drain :: boolean(),
-          echo :: boolean()
+          echo :: boolean(),
+          %% deferral tokens requested alongside this credit top-up, see
+          %% handle_outgoing_link_flow_control/3 and pop_credit_req/4
+          tokens = [] :: [binary()]
          }).
 
 %% Link flow control state for link between client (receiver) and us (sender).
@@ -1899,7 +1902,8 @@ pop_credit_req(
                                      delivery_count = DeliveryCountRcv,
                                      credit = LinkCreditRcv,
                                      drain = Drain,
-                                     echo = Echo
+                                     echo = Echo,
+                                     tokens = Tokens
                                     }},
   S0 = #state{cfg = #cfg{max_queue_credit = MaxQueueCredit},
               outgoing_links = OutgoingLinks,
@@ -1907,9 +1911,16 @@ pop_credit_req(
     LinkCreditSnd = amqp10_util:link_credit_snd(
                       DeliveryCountRcv, LinkCreditRcv, CDeliveryCount),
     CappedCredit = cap_credit(LinkCreditSnd, MaxQueueCredit),
-    {ok, QStates, Actions} = rabbit_queue_type:credit(
+    {ok, QStates1, Actions0} = rabbit_queue_type:credit(
                                QName, Ctag, QDeliveryCount,
                                CappedCredit, Drain, QStates0),
+    {ok, QStates, Actions1} = case Tokens of
+                                  [] ->
+                                      {ok, QStates1, []};
+                                  _ ->
+                                      rabbit_queue_type:assign_deferred(
+                                        QName, Ctag, Tokens, QStates1)
+                              end,
     Link = Link0#outgoing_link{
              client_flow_ctl = CFC#client_flow_ctl{
                                  credit = LinkCreditSnd,
@@ -1922,7 +1933,7 @@ pop_credit_req(
             },
     S = S0#state{queue_states = QStates,
                  outgoing_links = OutgoingLinks#{Handle := Link}},
-    handle_queue_actions(Actions, S).
+    handle_queue_actions(Actions0 ++ Actions1, S).
 
 send_pending_delivery(#pending_delivery{
                          frames = Frames,
@@ -3217,15 +3228,15 @@ handle_outgoing_link_flow_control(
             %% Processing one credit top up at a time between us and the queue is also easier
             %% to reason about. Therefore, we stash the new request. If there is already a
             %% stashed request, we replace it because the latest flow control state from the
-            %% client applies.
-            %% Deferral tokens are not stashed; they target the current state of the delayed
-            %% set and must not be replayed when the stashed credit request is processed.
+            %% client applies. Any requested deferral tokens are stashed alongside it and
+            %% submitted once the stashed request is processed, see pop_credit_req/4.
             Link = Link0#outgoing_link{
                      stashed_credit_req = #credit_req{
                                              delivery_count = DeliveryCountRcv,
                                              credit = LinkCreditRcv,
                                              drain = Drain,
-                                             echo = Echo}},
+                                             echo = Echo,
+                                             tokens = parse_deferred_tokens(FlowProps)}},
             State0#state{outgoing_links = OutgoingLinks#{HandleInt := Link}}
     end.
 
