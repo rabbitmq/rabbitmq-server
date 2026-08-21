@@ -191,6 +191,18 @@ amqp_uri_parsing(_Config) ->
              {verify, verify_none}],
     ?assertEqual(lists:usort(Exp10), lists:usort(TLSOpts10)),
 
+    {ok, #amqp_params_network{host = "host11", ssl_options = TLSOpts11}} =
+        amqp_uri:parse("amqps://host11/%2f?cacertfile=/path/to/cacertfile.pem"
+                       "&verify=verify_peer"
+                       "&customize_hostname_check=https"),
+    ?assertEqual({cacertfile, "/path/to/cacertfile.pem"},
+                 lists:keyfind(cacertfile, 1, TLSOpts11)),
+    ?assertEqual({verify, verify_peer}, lists:keyfind(verify, 1, TLSOpts11)),
+    {customize_hostname_check, HostnameCheckOpts11} =
+        lists:keyfind(customize_hostname_check, 1, TLSOpts11),
+    {match_fun, MatchFun11} = lists:keyfind(match_fun, 1, HostnameCheckOpts11),
+    ?assert(is_function(MatchFun11, 2)),
+
     %% Various failure cases
     ?assertMatch({error, _}, amqp_uri:parse("https://www.rabbitmq.com")),
     ?assertMatch({error, _}, amqp_uri:parse("amqp://foo:bar:baz")),
@@ -204,6 +216,10 @@ amqp_uri_parsing(_Config) ->
     ?assertMatch({error, _}, amqp_uri:parse("amqp://foo%1")),
     ?assertMatch({error, _}, amqp_uri:parse("amqp://foo%1x")),
     ?assertMatch({error, _}, amqp_uri:parse("amqp://foo%xy")),
+
+    ?assertMatch({error, _},
+                 amqp_uri:parse(
+                   "amqps://host/%2f?customize_hostname_check=bogus")),
 
     ok.
 
