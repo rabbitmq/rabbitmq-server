@@ -26,7 +26,8 @@
 
 %% for tests
 -export([purge_connections/0,
-         fill_user_dn_pattern/1, escaped_user_dn/1]).
+         fill_user_dn_pattern/1, escaped_user_dn/1, simple_bind_fill_pattern/1,
+         fill_dn_with_username/2]).
 
 -define(L(F, A),  log("LDAP "         ++ F, A)).
 -define(L1(F, A), log("    LDAP "     ++ F, A)).
@@ -247,7 +248,7 @@ evaluate0({for, []}, _Args, _User, _LDAP) ->
 evaluate0({exists, DNPattern}, Args, _User, LDAP) ->
     %% eldap forces us to have a filter. objectClass should always be there.
     Filter = eldap:present("objectClass"),
-    DN = fill_dn(DNPattern, Args),
+    DN = fill_dn_with_username(DNPattern, Args),
     R = object_exists(DN, Filter, LDAP),
     ?L1("evaluated exists for \"~ts\": ~tp", [DN, R]),
     R;
@@ -259,7 +260,7 @@ evaluate0({in_group, DNPattern, Desc}, Args,
           #auth_user{impl = ImplFun}, LDAP) ->
     UserDN = (ImplFun())#impl.user_dn,
     Filter = eldap:equalityMatch(Desc, UserDN),
-    DN = fill_dn(DNPattern, Args),
+    DN = fill_dn_with_username(DNPattern, Args),
     R = object_exists(DN, Filter, LDAP),
     ?L1("evaluated in_group for \"~ts\": ~tp", [DN, R]),
     R;
@@ -278,7 +279,7 @@ evaluate0({in_group_nested, DNPattern, Desc, Scope}, Args,
                      B ->
                          B
                  end,
-    GroupDN = fill_dn(DNPattern, Args),
+    GroupDN = fill_dn_with_username(DNPattern, Args),
     EldapScope =
         case Scope of
             subtree      -> eldap:wholeSubtree();
@@ -369,7 +370,7 @@ evaluate0({string, StringPattern}, Args, _User, _LDAP) ->
     R;
 
 evaluate0({attribute, DNPattern, AttributeName}, Args, _User, LDAP) ->
-    DN = fill_dn(DNPattern, Args),
+    DN = fill_dn_with_username(DNPattern, Args),
     R = attribute(DN, AttributeName, LDAP),
     ?L1("evaluated attribute \"~ts\" for \"~ts\": ~tp",
         [AttributeName, DN, format_multi_attr(R)]),
@@ -923,8 +924,7 @@ fill_user_dn_pattern(Username) ->
 %% The user DN built from `user_dn_pattern' with RFC 4514-escaped
 %% substitutions. A no-op for usernames without DN-special characters.
 escaped_user_dn(Username) ->
-    ADArgs = rabbit_auth_backend_ldap_util:get_active_directory_args(Username),
-    fill_dn(env(user_dn_pattern), [{username, Username}] ++ ADArgs).
+    fill_bind_dn(env(user_dn_pattern), Username).
 
 simple_bind_fill_pattern(Username) ->
     simple_bind_fill_pattern(env(user_bind_pattern), Username).
@@ -932,8 +932,53 @@ simple_bind_fill_pattern(Username) ->
 simple_bind_fill_pattern(none, Username) ->
     escaped_user_dn(Username);
 simple_bind_fill_pattern(Pattern, Username) ->
-    ADArgs = rabbit_auth_backend_ldap_util:get_active_directory_args(Username),
-    fill_dn(Pattern, [{username, Username}] ++ ADArgs).
+    fill_bind_dn(Pattern, Username).
+
+%% Fills `user_dn_pattern' or `user_bind_pattern'. `${username}' is
+%% pre-filled so AD down-level logon names ("DOMAIN\user") are escaped by
+%% component, not as a whole value.
+fill_bind_dn(Pattern, Username) ->
+    ADArgs = safe_ad_args(
+               rabbit_auth_backend_ldap_util:get_active_directory_args(Username)),
+    Pattern1 = fill(Pattern, [{username, escaped_username_value(Username, ADArgs)}]),
+    fill_dn(Pattern1, ADArgs).
+
+%% Same as `fill_bind_dn/2', for the `evaluate0/4' DN patterns. Other
+%% query variables in `Args' are escaped as before; the caller's AD args
+%% are replaced with the vetted ones.
+fill_dn_with_username(DNPattern, Args) ->
+    Username = pget(username, Args),
+    ADArgs = safe_ad_args(
+               rabbit_auth_backend_ldap_util:get_active_directory_args(Username)),
+    DNPattern1 = fill(DNPattern, [{username, escaped_username_value(Username, ADArgs)}]),
+    OtherArgs = [KV || {K, _} = KV <- Args,
+                       K =/= username, K =/= ad_domain, K =/= ad_user],
+    fill_dn(DNPattern1, ADArgs ++ OtherArgs).
+
+%% Rejects an unusable "DOMAIN\user" split: a backslash in the user part
+%% makes the separator ambiguous, and an escaped user part starting with a
+%% backslash would pair with a preceding literal one, un-escaping the
+%% character after it (a DN injection). With no AD args, `${username}'
+%% falls back to whole-value escaping and AD variables stay unfilled.
+safe_ad_args([{ad_domain, _}, {ad_user, User}] = ADArgs) ->
+    UserList = rabbit_data_coercion:to_list(User),
+    EscapedUser = rabbit_ldap_rfc4514:escape_value(UserList),
+    case lists:member($\\, UserList) orelse lists:prefix("\\", EscapedUser) of
+        false -> ADArgs;
+        true  -> []
+    end;
+safe_ad_args([]) ->
+    [].
+
+%% Escaping the down-level separator backslash would break the bind
+%% against AD (RMQ-4282), so the two components are escaped independently
+%% and rejoined with a bare backslash. The split has already passed
+%% `safe_ad_args/1'.
+escaped_username_value(_Username, [{ad_domain, Domain}, {ad_user, User}]) ->
+    rabbit_ldap_rfc4514:escape_value(rabbit_data_coercion:to_list(Domain)) ++
+        "\\" ++ rabbit_ldap_rfc4514:escape_value(rabbit_data_coercion:to_list(User));
+escaped_username_value(Username, []) ->
+    rabbit_ldap_rfc4514:escape_value(Username).
 
 creds(User) -> creds(User, env(other_bind)).
 
