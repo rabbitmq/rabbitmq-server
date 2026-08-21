@@ -18,6 +18,8 @@ const ADD_BUTTON = By.css('div#add-new-queue form input[type=submit]')
 const PAGE_SIZE_INPUT = By.css('input#queues-pagesize')
 const PAGE_SELECT = By.css('select#queues-page')
 
+const ARGUMENT_LINKS = By.css('div#add-new-queue table.argument-links')
+
 module.exports = class QueuesAndStreamsPage extends BasePage {
   async isLoaded () {
     return this.waitForDisplayed(PAGING_SECTION)
@@ -58,7 +60,14 @@ module.exports = class QueuesAndStreamsPage extends BasePage {
     await this.selectOptionByValue(FORM_QUEUE_TYPE, queueDetails.type)
     await delay(1000)
     await this.sendKeys(FORM_QUEUE_NAME, queueDetails.name)
-    return this.click(ADD_BUTTON)    
+    return this.click(ADD_BUTTON)
+  }
+  async selectQueueType(type) {
+    await this.selectOptionByValue(FORM_QUEUE_TYPE, type)
+    return delay(1000)
+  }
+  async getArgumentLinksText() {
+    return this.getText(ARGUMENT_LINKS)
   }
   async filterQueues(filterValue) {
     await this.waitForDisplayed(FILTER_BY_QUEUE_NAME)
