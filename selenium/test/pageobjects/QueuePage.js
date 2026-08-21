@@ -8,6 +8,7 @@ const QUEUE_NAME = By.css('div#main h1 b')
 const DELETE_SECTION = By.css('div#main div#delete')
 const DELETE_BUTTON = By.css('div#main div#delete input[type=submit]')
 const FEATURES_TABLE = By.css('table#details-queue-table td#details-queue-features table.mini')
+const STATS_TABLE = By.css('table#details-queue-stats-table')
 const STATS_CONSUMER_COUNT = By.css('table#details-queue-stats-table td#consumers')
 
 const CONSUMERS_SECTION = By.css('div#queue-consumers-section')
@@ -18,6 +19,8 @@ const GET_MESSAGES_SECTION = By.css('div#main div#get-messages')
 
 const PUBLISH_SECTION_H2 = By.xpath('//*[@id="main"]//h2[text()="Publish message"]')
 const PUBLISH_SUBMIT_BUTTON = By.css('div#main form[action="#/exchanges/publish"] input[type=submit]')
+
+const sectionH2 = (title) => By.xpath('//*[@id="main"]//h2[text()="' + title + '"]')
 
 module.exports = class QueuePage extends BasePage {
   async isLoaded() {
@@ -32,6 +35,12 @@ module.exports = class QueuePage extends BasePage {
   }
   async getFeatures() {
     return this.getTableMini(FEATURES_TABLE)
+  }
+  async getStatsTableText() {
+    return this.getText(STATS_TABLE)
+  }
+  async isSectionDisplayed(title) {
+    return this.isDisplayed(sectionH2(title))
   }
   async getConsumersSectionTitle() {
     return this.getText(CONSUMERS_SECTION_TITLE)
