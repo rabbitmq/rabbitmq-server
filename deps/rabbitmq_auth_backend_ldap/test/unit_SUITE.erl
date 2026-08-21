@@ -23,6 +23,7 @@ all() ->
      user_dn_pattern_escaping_rmq_4282,
      user_bind_pattern_escaping_rmq_4282,
      leading_special_char_no_dn_injection_rmq_4282,
+     authz_query_dn_pattern_escaping_rmq_4282,
      user_dn_pattern_gh_7161,
      format_different_types_of_ldap_attribute_values,
      ldap_log_domain_routing,
@@ -201,15 +202,17 @@ user_bind_pattern_escaping_rmq_4282(_Config) ->
     end,
     ok.
 
-%% RMQ-4282 follow-up: escaped_username_value/2 rejoins the escaped domain
-%% and user components with a literal, unescaped separator backslash. If the
-%% user part's first character is itself RFC 4514-special (comma, plus,
-%% quote, semicolon, or angle bracket), escaping it produces a value that
+%% `escaped_username_value/2` (re)joins the escaped domain
+%% and user components with a literal, unescaped separator backslash.
+%%
+%% If the user part's first character is itself RFC 4514-special (a comma, a plus,
+%% a quote, a semicolon, or an angle bracket), escaping it produces a value that
 %% also starts with a backslash. That backslash pairs up with the separator
 %% backslash under RFC 4514's own parsing rule (a backslash always starts a
 %% two-character escape), leaving the special character right after the
-%% pair completely unescaped -- letting it act as a fresh RDN separator and
-%% splice an attacker-chosen RDN into the bind DN. This must fall back to
+%% pair completely unescaped and letting it act as a fresh RDN separator.
+%%
+%% In this case we must fall back to
 %% whole-value escaping instead, exactly like the "more than one backslash"
 %% and "leading/trailing backslash" cases above.
 leading_special_char_no_dn_injection_rmq_4282(_Config) ->
@@ -236,6 +239,25 @@ leading_special_char_no_dn_injection_rmq_4282(_Config) ->
         restore_env(user_dn_pattern, PrevPattern),
         restore_env(log, PrevLog)
     end,
+    ok.
+
+%% RMQ-4282 follow-up: `check_vhost_access', `check_resource_access',
+%% `check_topic_access' and `do_tag_queries' build the same `${username}'
+%% substitution for `exists', `in_group', `in_group_nested' and `attribute'
+%% DN patterns (evaluate0/4) as the bind-DN path, so an AD down-level logon
+%% name must round-trip there too, and the other query variables (e.g.
+%% `${vhost}') must still be RFC 4514-escaped as before.
+authz_query_dn_pattern_escaping_rmq_4282(_Config) ->
+    Args = fun(Username) -> [{username, Username}, {vhost, <<"a,b">>}] end,
+    ?assertEqual("cn=foo\\bar,ou=a\\,b",
+                 rabbit_auth_backend_ldap:fill_dn_with_username(
+                   "cn=${username},ou=${vhost}", Args(<<"foo\\bar">>))),
+    ?assertEqual("cn=" ++ rabbit_ldap_rfc4514:escape_value("A\\B\\C") ++ ",ou=a\\,b",
+                 rabbit_auth_backend_ldap:fill_dn_with_username(
+                   "cn=${username},ou=${vhost}", Args(<<"A\\B\\C">>))),
+    ?assertEqual("cn=" ++ rabbit_ldap_rfc4514:escape_value("DOMAIN\\,ou=Finance") ++ ",ou=a\\,b",
+                 rabbit_auth_backend_ldap:fill_dn_with_username(
+                   "cn=${username},ou=${vhost}", Args(<<"DOMAIN\\,ou=Finance">>))),
     ok.
 
 restore_env(Key, {ok, V}) -> application:set_env(rabbitmq_auth_backend_ldap, Key, V);

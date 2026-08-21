@@ -26,7 +26,8 @@
 
 %% for tests
 -export([purge_connections/0,
-         fill_user_dn_pattern/1, escaped_user_dn/1, simple_bind_fill_pattern/1]).
+         fill_user_dn_pattern/1, escaped_user_dn/1, simple_bind_fill_pattern/1,
+         fill_dn_with_username/2]).
 
 -define(L(F, A),  log("LDAP "         ++ F, A)).
 -define(L1(F, A), log("    LDAP "     ++ F, A)).
@@ -247,7 +248,7 @@ evaluate0({for, []}, _Args, _User, _LDAP) ->
 evaluate0({exists, DNPattern}, Args, _User, LDAP) ->
     %% eldap forces us to have a filter. objectClass should always be there.
     Filter = eldap:present("objectClass"),
-    DN = fill_dn(DNPattern, Args),
+    DN = fill_dn_with_username(DNPattern, Args),
     R = object_exists(DN, Filter, LDAP),
     ?L1("evaluated exists for \"~ts\": ~tp", [DN, R]),
     R;
@@ -259,7 +260,7 @@ evaluate0({in_group, DNPattern, Desc}, Args,
           #auth_user{impl = ImplFun}, LDAP) ->
     UserDN = (ImplFun())#impl.user_dn,
     Filter = eldap:equalityMatch(Desc, UserDN),
-    DN = fill_dn(DNPattern, Args),
+    DN = fill_dn_with_username(DNPattern, Args),
     R = object_exists(DN, Filter, LDAP),
     ?L1("evaluated in_group for \"~ts\": ~tp", [DN, R]),
     R;
@@ -278,7 +279,7 @@ evaluate0({in_group_nested, DNPattern, Desc, Scope}, Args,
                      B ->
                          B
                  end,
-    GroupDN = fill_dn(DNPattern, Args),
+    GroupDN = fill_dn_with_username(DNPattern, Args),
     EldapScope =
         case Scope of
             subtree      -> eldap:wholeSubtree();
@@ -369,7 +370,7 @@ evaluate0({string, StringPattern}, Args, _User, _LDAP) ->
     R;
 
 evaluate0({attribute, DNPattern, AttributeName}, Args, _User, LDAP) ->
-    DN = fill_dn(DNPattern, Args),
+    DN = fill_dn_with_username(DNPattern, Args),
     R = attribute(DN, AttributeName, LDAP),
     ?L1("evaluated attribute \"~ts\" for \"~ts\": ~tp",
         [AttributeName, DN, format_multi_attr(R)]),
@@ -944,6 +945,20 @@ fill_bind_dn(Pattern, Username) ->
     ADArgs = rabbit_auth_backend_ldap_util:get_active_directory_args(Username),
     Pattern1 = fill(Pattern, [{username, escaped_username_value(Username, ADArgs)}]),
     fill_dn(Pattern1, ADArgs).
+
+%% Fills an authorisation-query DN pattern (`vhost_access_query',
+%% `resource_access_query', `topic_access_query', `tag_queries' --
+%% the `exists', `in_group', `in_group_nested' and `attribute' clauses
+%% of evaluate0/4) the same way fill_bind_dn/2 fills a bind DN: `username'
+%% is pre-filled component-wise so an AD down-level logon name in the
+%% pattern isn't broken by whole-value escaping (RMQ-4282). `Args' also
+%% carries `user_dn', `vhost', and other query variables, which fill_dn/2
+%% still escapes as usual.
+fill_dn_with_username(DNPattern, Args) ->
+    Username = pget(username, Args),
+    ADArgs = rabbit_auth_backend_ldap_util:get_active_directory_args(Username),
+    DNPattern1 = fill(DNPattern, [{username, escaped_username_value(Username, ADArgs)}]),
+    fill_dn(DNPattern1, lists:keydelete(username, 1, Args)).
 
 %% AD down-level logon names ("DOMAIN\user") use backslash as a domain
 %% separator, not DN-attribute data. Escaping it per RFC 4514 would double
