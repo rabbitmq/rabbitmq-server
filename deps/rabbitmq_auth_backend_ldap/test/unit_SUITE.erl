@@ -20,6 +20,11 @@ all() ->
      rfc4514_escape_value,
      rfc4514_fill_dn,
      dn_lookup_fallback_dn_escaping,
+     user_dn_pattern_escaping_rmq_4282,
+     user_bind_pattern_escaping_rmq_4282,
+     leading_special_char_no_dn_injection_rmq_4282,
+     authz_query_dn_pattern_escaping_rmq_4282,
+     ad_variable_pattern_escaping_rmq_4282,
      user_dn_pattern_gh_7161,
      format_different_types_of_ldap_attribute_values,
      ldap_log_domain_routing,
@@ -121,6 +126,154 @@ dn_lookup_fallback_dn_escaping(_Config) ->
                      rabbit_auth_backend_ldap:fill_user_dn_pattern("evil,ou=admins"))
     after
         restore_env(user_dn_pattern, PrevPattern),
+        restore_env(log, PrevLog)
+    end,
+    ok.
+
+%% RMQ-4282: AD down-level logon names ("DOMAIN\user") failed to bind
+%% after PR #16101 escaped the separator backslash into a double one.
+%%
+%% Real logins supply binary usernames (only binaries are split into AD
+%% args), so these tests use binaries throughout.
+user_dn_pattern_escaping_rmq_4282(_Config) ->
+    PrevPattern = application:get_env(rabbitmq_auth_backend_ldap, user_dn_pattern),
+    PrevLog = application:get_env(rabbitmq_auth_backend_ldap, log),
+    ok = application:set_env(rabbitmq_auth_backend_ldap, log, false),
+    ok = application:set_env(rabbitmq_auth_backend_ldap, user_dn_pattern, "${username}"),
+    try
+        Username = <<"foo\\bar">>,
+        %% Bare fill (filter values, e.g. dn_lookup) remains unescaped.
+        ?assertEqual("foo\\bar",
+                     rabbit_auth_backend_ldap:fill_user_dn_pattern(Username)),
+        %% As a bind DN, the separator backslash is no longer doubled.
+        ?assertEqual("foo\\bar",
+                     rabbit_auth_backend_ldap:escaped_user_dn(Username)),
+        %% Only the separator backslash is exempted; a comma inside the
+        %% user part is still escaped.
+        ?assertEqual("foo\\evil\\,ou=admins",
+                     rabbit_auth_backend_ldap:escaped_user_dn(
+                       <<"foo\\evil,ou=admins">>)),
+        %% More than one backslash: the separator is ambiguous, so the
+        %% whole value is escaped.
+        ?assertEqual("A\\\\B\\\\C",
+                     rabbit_auth_backend_ldap:escaped_user_dn(<<"A\\B\\C">>)),
+        %% A leading or trailing backslash leaves no split: the whole value
+        %% is escaped.
+        ?assertEqual("\\\\user",
+                     rabbit_auth_backend_ldap:escaped_user_dn(<<"\\user">>)),
+        ?assertEqual("DOMAIN\\\\",
+                     rabbit_auth_backend_ldap:escaped_user_dn(<<"DOMAIN\\">>)),
+        %% UPN format (user@domain) has no special characters: unchanged.
+        ?assertEqual("foo@example.test",
+                     rabbit_auth_backend_ldap:escaped_user_dn(
+                       <<"foo@example.test">>)),
+        %% A bare username (no backslash) is unaffected.
+        ?assertEqual("alice", rabbit_auth_backend_ldap:escaped_user_dn(<<"alice">>))
+    after
+        restore_env(user_dn_pattern, PrevPattern),
+        restore_env(log, PrevLog)
+    end,
+    ok.
+
+%% The same fix applies to `user_bind_pattern', not just `user_dn_pattern'.
+user_bind_pattern_escaping_rmq_4282(_Config) ->
+    PrevBindPattern = application:get_env(rabbitmq_auth_backend_ldap, user_bind_pattern),
+    PrevLog = application:get_env(rabbitmq_auth_backend_ldap, log),
+    ok = application:set_env(rabbitmq_auth_backend_ldap, log, false),
+    ok = application:set_env(rabbitmq_auth_backend_ldap, user_bind_pattern, "${username}"),
+    try
+        ?assertEqual("foo\\bar",
+                     rabbit_auth_backend_ldap:simple_bind_fill_pattern(
+                       <<"foo\\bar">>))
+    after
+        restore_env(user_bind_pattern, PrevBindPattern),
+        restore_env(log, PrevLog)
+    end,
+    ok.
+
+%% An escaped user part starting with a backslash would pair with the
+%% separator backslash, un-escaping the special character after it. Such
+%% usernames fall back to whole-value escaping.
+leading_special_char_no_dn_injection_rmq_4282(_Config) ->
+    PrevPattern = application:get_env(rabbitmq_auth_backend_ldap, user_dn_pattern),
+    PrevLog = application:get_env(rabbitmq_auth_backend_ldap, log),
+    ok = application:set_env(rabbitmq_auth_backend_ldap, log, false),
+    ok = application:set_env(rabbitmq_auth_backend_ldap, user_dn_pattern, "${username}"),
+    try
+        Injections = [<<"DOMAIN\\,ou=Evil,dc=example,dc=com">>,
+                      <<"DOMAIN\\+ou=Evil">>,
+                      <<"DOMAIN\\\"ou=Evil">>,
+                      <<"DOMAIN\\;ou=Evil">>,
+                      <<"DOMAIN\\<ou=Evil">>,
+                      <<"DOMAIN\\>ou=Evil">>],
+        [?assertEqual(rabbit_ldap_rfc4514:escape_value(binary_to_list(Username)),
+                       rabbit_auth_backend_ldap:escaped_user_dn(Username))
+         || Username <- Injections],
+        %% A user part not starting with a special character still takes
+        %% the split path.
+        ?assertEqual("foo\\evil\\,ou=admins",
+                     rabbit_auth_backend_ldap:escaped_user_dn(
+                       <<"foo\\evil,ou=admins">>))
+    after
+        restore_env(user_dn_pattern, PrevPattern),
+        restore_env(log, PrevLog)
+    end,
+    ok.
+
+%% The `evaluate0/4' DN patterns fill `${username}' like the bind-DN path,
+%% while other query variables stay escaped.
+authz_query_dn_pattern_escaping_rmq_4282(_Config) ->
+    Args = fun(Username) -> [{username, Username}, {vhost, <<"a,b">>}] end,
+    ?assertEqual("cn=foo\\bar,ou=a\\,b",
+                 rabbit_auth_backend_ldap:fill_dn_with_username(
+                   "cn=${username},ou=${vhost}", Args(<<"foo\\bar">>))),
+    ?assertEqual("cn=" ++ rabbit_ldap_rfc4514:escape_value("A\\B\\C") ++ ",ou=a\\,b",
+                 rabbit_auth_backend_ldap:fill_dn_with_username(
+                   "cn=${username},ou=${vhost}", Args(<<"A\\B\\C">>))),
+    ?assertEqual("cn=" ++ rabbit_ldap_rfc4514:escape_value("DOMAIN\\,ou=Finance") ++ ",ou=a\\,b",
+                 rabbit_auth_backend_ldap:fill_dn_with_username(
+                   "cn=${username},ou=${vhost}", Args(<<"DOMAIN\\,ou=Finance">>))),
+    ok.
+
+%% Patterns can use `${ad_domain}' and `${ad_user}' directly. When the AD
+%% split is unsafe (see `safe_ad_args/1'), both variables stay unfilled.
+ad_variable_pattern_escaping_rmq_4282(_Config) ->
+    PrevBindPattern = application:get_env(rabbitmq_auth_backend_ldap, user_bind_pattern),
+    PrevLog = application:get_env(rabbitmq_auth_backend_ldap, log),
+    ok = application:set_env(rabbitmq_auth_backend_ldap, log, false),
+    try
+        SetPattern = fun(P) ->
+            ok = application:set_env(rabbitmq_auth_backend_ldap, user_bind_pattern, P)
+        end,
+        SetPattern("${ad_user}-${ad_domain}"),
+        ?assertEqual("alice-CORP",
+                     rabbit_auth_backend_ldap:simple_bind_fill_pattern(
+                       <<"CORP\\alice">>)),
+        %% A special character inside the user part is escaped as usual.
+        ?assertEqual("a\\,b-CORP",
+                     rabbit_auth_backend_ldap:simple_bind_fill_pattern(
+                       <<"CORP\\a,b">>)),
+        SetPattern("${ad_domain}\\${ad_user}"),
+        ?assertEqual("CORP\\alice",
+                     rabbit_auth_backend_ldap:simple_bind_fill_pattern(
+                       <<"CORP\\alice">>)),
+        %% An unsafe user part leaves the variables unfilled.
+        ?assertEqual("${ad_domain}\\${ad_user}",
+                     rabbit_auth_backend_ldap:simple_bind_fill_pattern(
+                       <<"CORP\\,ou=Evil">>)),
+        %% The authz-query path uses the same vetted AD args.
+        ?assertEqual("cn=alice,ou=CORP",
+                     rabbit_auth_backend_ldap:fill_dn_with_username(
+                       "cn=${ad_user},ou=${ad_domain}",
+                       [{username, <<"CORP\\alice">>},
+                        {ad_domain, <<"CORP">>}, {ad_user, <<"alice">>}])),
+        ?assertEqual("ou=Groups\\${ad_user}",
+                     rabbit_auth_backend_ldap:fill_dn_with_username(
+                       "ou=Groups\\${ad_user}",
+                       [{username, <<"CORP\\,ou=Evil">>},
+                        {ad_domain, <<"CORP">>}, {ad_user, <<",ou=Evil">>}]))
+    after
+        restore_env(user_bind_pattern, PrevBindPattern),
         restore_env(log, PrevLog)
     end,
     ok.
