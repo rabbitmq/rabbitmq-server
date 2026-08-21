@@ -3718,7 +3718,7 @@ delayed_retry_empty_command_test(Config) ->
     ok.
 
 delayed_assign_deferred_test(Config) ->
-    %% Test assigning deferred messages by token to a specific consumer.
+    %% Test claiming a deferred message by token for a specific consumer.
     %% A deferral token only parks a message when x-opt-delivery-time is also set.
     Conf = #{name => ?FUNCTION_NAME,
              queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B)},
@@ -3737,15 +3737,19 @@ delayed_assign_deferred_test(Config) ->
     {State3, _, _} = apply(meta(Config, 3, 100), Modify, State2),
     ?assertMatch(#{num_delayed_messages := 1,
                    num_checked_out := 0}, rabbit_fifo:overview(State3)),
-    %% Assign the deferred message back to the consumer
+    %% Claim the deferred message. The consumer has credit, so the claim is
+    %% drained straight away.
     Cmd = rabbit_fifo:make_delayed({assign_deferred, CKey, [Token1]}),
-    {State4, {ok, 1}, _} = apply(meta(Config, 4, 100), Cmd, State3),
+    {State4, ok, _} = apply(meta(Config, 4, 100), Cmd, State3),
     ?assertMatch(#{num_delayed_messages := 0,
                    num_checked_out := 1}, rabbit_fifo:overview(State4)),
+    ?assertMatch(#rabbit_fifo{consumers = #{CKey := #consumer{
+                                                      deferred_claims = #{}}}},
+                 State4),
     ok.
 
 delayed_assign_deferred_multiple_messages_test(Config) ->
-    %% A single deferral token may be assigned to more than one message,
+    %% A single deferral token may address more than one message,
     %% e.g. as a result of a ranged DISPOSITION (first =/= last) settling
     %% several deliveries with the same MODIFIED annotations.
     Conf = #{name => ?FUNCTION_NAME,
@@ -3767,52 +3771,225 @@ delayed_assign_deferred_multiple_messages_test(Config) ->
     {State4, _, _} = apply(meta(Config, 4, 100), Modify, State3),
     ?assertMatch(#{num_delayed_messages := 2,
                    num_checked_out := 0}, rabbit_fifo:overview(State4)),
-    %% Assigning the shared token back to the consumer returns both messages.
+    %% Claiming the shared token returns both messages.
     Cmd = rabbit_fifo:make_delayed({assign_deferred, CKey, [Token]}),
-    {State5, {ok, 2}, _} = apply(meta(Config, 5, 100), Cmd, State4),
+    {State5, ok, _} = apply(meta(Config, 5, 100), Cmd, State4),
     ?assertMatch(#{num_delayed_messages := 0,
                    num_checked_out := 2}, rabbit_fifo:overview(State5)),
-    %% The token is now fully consumed: requesting it again finds nothing.
+    %% The token is now fully consumed: claiming it again finds nothing.
     Cmd2 = rabbit_fifo:make_delayed({assign_deferred, CKey, [Token]}),
-    {_State6, {partial, 0, [Token]}, _} = apply(meta(Config, 6, 100), Cmd2, State5),
-    ok.
-
-delayed_assign_deferred_insufficient_credit_test(Config) ->
-    %% Test that assign_deferred fails when consumer has insufficient credit.
-    %% Both tokens use explicit x-opt-delivery-time so they are parked.
-    Conf = #{name => ?FUNCTION_NAME,
-             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B)},
-    State0 = init(Conf),
-    Cid = {?FUNCTION_NAME_B, self()},
-    %% Enqueue 2 messages
-    {State1, _} = enq(Config, 1, 1, msg1, State0),
-    {State2, _} = enq(Config, 2, 2, msg2, State1),
-    %% Checkout both messages with prefetch 2
-    {State3, #{key := CKey, next_msg_id := MsgId}, _} =
-        checkout_ts(Config, 3, 100, Cid, {auto, {simple_prefetch, 2}}, State2),
-    %% Return both with deferral tokens and explicit delivery times
-    Token1 = <<"token-1">>,
-    Token2 = <<"token-2">>,
-    Anns1 = #{<<"x-opt-deferral-token">> => Token1,
-              <<"x-opt-delivery-time">> => 10000},
-    Anns2 = #{<<"x-opt-deferral-token">> => Token2,
-              <<"x-opt-delivery-time">> => 10000},
-    Mod1 = rabbit_fifo:make_modify(CKey, [MsgId], false, false, Anns1),
-    {State4, _, _} = apply(meta(Config, 4, 100), Mod1, State3),
-    Mod2 = rabbit_fifo:make_modify(CKey, [MsgId+1], false, false, Anns2),
-    {State5, _, _} = apply(meta(Config, 5, 100), Mod2, State4),
-    ?assertMatch(#{num_delayed_messages := 2,
-                   num_checked_out := 0}, rabbit_fifo:overview(State5)),
-    %% Consumer has credit 2 (returned), try to assign both - should succeed
-    Tokens = [Token1, Token2],
-    Cmd = rabbit_fifo:make_delayed({assign_deferred, CKey, Tokens}),
-    {State6, {ok, 2}, _} = apply(meta(Config, 6, 100), Cmd, State5),
+    {State6, ok, _} = apply(meta(Config, 6, 100), Cmd2, State5),
     ?assertMatch(#{num_delayed_messages := 0,
                    num_checked_out := 2}, rabbit_fifo:overview(State6)),
     ok.
 
+delayed_assign_deferred_insufficient_credit_test(Config) ->
+    %% Claiming does not depend on link credit: the messages stay parked and
+    %% claimed until enough credit arrives, over as many credit top-ups as it
+    %% takes, and the client does not have to submit the token again.
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B)},
+    State0 = init(Conf),
+    Cid = {?FUNCTION_NAME_B, self()},
+    {State1, _} = enq(Config, 1, 1, msg1, State0),
+    {State2, _} = enq(Config, 2, 2, msg2, State1),
+    %% A credited consumer never replenishes its own credit, so the test
+    %% controls exactly how much is available.
+    {State3, #{key := CKey}, _} =
+        checkout_ts(Config, 3, 100, Cid, {auto, {credited, 0}}, State2),
+    {State4, _} = credit(Config, CKey, 4, 2, 0, false, State3),
+    ?assertMatch(#{num_checked_out := 2}, rabbit_fifo:overview(State4)),
+    %% Park both under one token.
+    Token = <<"token-shared">>,
+    Anns = #{<<"x-opt-deferral-token">> => Token,
+             <<"x-opt-delivery-time">> => 10000},
+    Modify = rabbit_fifo:make_modify(CKey, [0, 1], false, false, Anns),
+    {State5, _, _} = apply(meta(Config, 5, 100), Modify, State4),
+    ?assertMatch(#{num_delayed_messages := 2,
+                   num_checked_out := 0}, rabbit_fifo:overview(State5)),
+    %% Claim with no credit at all: nothing is delivered, both stay parked.
+    Cmd = rabbit_fifo:make_delayed({assign_deferred, CKey, [Token]}),
+    {State6, ok, _} = apply(meta(Config, 6, 100), Cmd, State5),
+    ?assertMatch(#{num_delayed_messages := 2,
+                   num_checked_out := 0}, rabbit_fifo:overview(State6)),
+    ?assertMatch(#rabbit_fifo{consumers =
+                              #{CKey := #consumer{
+                                           deferred_claims = #{Token := [_, _]}}}},
+                 State6),
+    %% One credit delivers one of them, the other stays parked and claimed.
+    {State7, _} = credit(Config, CKey, 7, 1, 2, false, State6),
+    ?assertMatch(#{num_delayed_messages := 1,
+                   num_checked_out := 1}, rabbit_fifo:overview(State7)),
+    ?assertMatch(#rabbit_fifo{consumers =
+                              #{CKey := #consumer{
+                                           deferred_claims = #{Token := [_]}}}},
+                 State7),
+    %% More credit drains the rest without the token being submitted again.
+    {State8, _} = credit(Config, CKey, 8, 1, 3, false, State7),
+    ?assertMatch(#{num_delayed_messages := 0,
+                   num_checked_out := 2}, rabbit_fifo:overview(State8)),
+    ?assertMatch(#rabbit_fifo{consumers = #{CKey := #consumer{
+                                                      deferred_claims = #{}}}},
+                 State8),
+    ok.
+
+delayed_assign_deferred_precedence_test(Config) ->
+    %% A claimed message is delivered ahead of the ready backlog: the credit
+    %% granted alongside a claim must reach the messages the client asked for,
+    %% not whatever else happens to be queued.
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B)},
+    State0 = init(Conf),
+    Cid = {?FUNCTION_NAME_B, self()},
+    {State1, _} = enq(Config, 1, 1, msg1, State0),
+    {State2, _} = enq(Config, 2, 2, msg2, State1),
+    {State3, #{key := CKey}, _} =
+        checkout_ts(Config, 3, 100, Cid, {auto, {credited, 0}}, State2),
+    %% Take msg1 only, leaving msg2 ready.
+    {State4, _} = credit(Config, CKey, 4, 1, 0, false, State3),
+    ?assertMatch(#{num_checked_out := 1,
+                   num_ready_messages := 1}, rabbit_fifo:overview(State4)),
+    %% Park msg1 under a token.
+    Token = <<"token-1">>,
+    Anns = #{<<"x-opt-deferral-token">> => Token,
+             <<"x-opt-delivery-time">> => 10000},
+    Modify = rabbit_fifo:make_modify(CKey, [0], false, false, Anns),
+    {State5, _, _} = apply(meta(Config, 5, 100), Modify, State4),
+    ?assertMatch(#{num_delayed_messages := 1,
+                   num_ready_messages := 1}, rabbit_fifo:overview(State5)),
+    %% Claim it while there is no credit, then grant exactly one credit.
+    Cmd = rabbit_fifo:make_delayed({assign_deferred, CKey, [Token]}),
+    {State6, ok, _} = apply(meta(Config, 6, 100), Cmd, State5),
+    {State7, _} = credit(Config, CKey, 7, 1, 1, false, State6),
+    %% The parked message went out and msg2 is still waiting its turn.
+    ?assertMatch(#{num_delayed_messages := 0,
+                   num_ready_messages := 1,
+                   num_checked_out := 1}, rabbit_fifo:overview(State7)),
+    ok.
+
+delayed_assign_deferred_exclusive_test(Config) ->
+    %% Claiming takes the token out of the shared deferred map, so two
+    %% consumers can never be assigned the same parked message.
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B)},
+    State0 = init(Conf),
+    C1 = {<<"ctag-1">>, self()},
+    C2 = {<<"ctag-2">>, self()},
+    {State1, _} = enq(Config, 1, 1, msg1, State0),
+    {State2, #{key := CKey1}, _} =
+        checkout_ts(Config, 2, 100, C1, {auto, {credited, 0}}, State1),
+    {State3, _} = credit(Config, CKey1, 3, 1, 0, false, State2),
+    Token = <<"token-1">>,
+    Anns = #{<<"x-opt-deferral-token">> => Token,
+             <<"x-opt-delivery-time">> => 10000},
+    {State4, _, _} = apply(meta(Config, 4, 100),
+                           rabbit_fifo:make_modify(CKey1, [0], false, false, Anns),
+                           State3),
+    %% The first consumer claims the token while it has no credit.
+    {State5, ok, _} = apply(meta(Config, 5, 100),
+                            rabbit_fifo:make_delayed(
+                              {assign_deferred, CKey1, [Token]}),
+                            State4),
+    %% A second, credited consumer claims the very same token.
+    {State6, #{key := CKey2}, _} =
+        checkout_ts(Config, 6, 100, C2, {auto, {credited, 0}}, State5),
+    {State7, _} = credit(Config, CKey2, 7, 1, 0, false, State6),
+    {State8, ok, _} = apply(meta(Config, 8, 100),
+                            rabbit_fifo:make_delayed(
+                              {assign_deferred, CKey2, [Token]}),
+                            State7),
+    %% It gets nothing: the message is still parked, still the first
+    %% consumer's, even though the second one is the one with credit.
+    ?assertMatch(#{num_delayed_messages := 1,
+                   num_checked_out := 0}, rabbit_fifo:overview(State8)),
+    ?assertMatch(#rabbit_fifo{consumers =
+                              #{CKey1 := #consumer{
+                                            deferred_claims = #{Token := [_]}},
+                                CKey2 := #consumer{deferred_claims = #{}}}},
+                 State8),
+    %% Crediting the first consumer delivers it.
+    {State9, _} = credit(Config, CKey1, 9, 1, 1, false, State8),
+    ?assertMatch(#{num_delayed_messages := 0,
+                   num_checked_out := 1}, rabbit_fifo:overview(State9)),
+    ok.
+
+delayed_assign_deferred_released_on_cancel_test(Config) ->
+    %% A claim is a lease, not a destructive take: when the consumer holding
+    %% it goes away the still-parked messages become claimable again instead
+    %% of being reachable only by their delivery time.
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B)},
+    State0 = init(Conf),
+    C1 = {<<"ctag-1">>, self()},
+    C2 = {<<"ctag-2">>, self()},
+    {State1, _} = enq(Config, 1, 1, msg1, State0),
+    {State2, #{key := CKey1}, _} =
+        checkout_ts(Config, 2, 100, C1, {auto, {credited, 0}}, State1),
+    {State3, _} = credit(Config, CKey1, 3, 1, 0, false, State2),
+    Token = <<"token-1">>,
+    Anns = #{<<"x-opt-deferral-token">> => Token,
+             <<"x-opt-delivery-time">> => 10000},
+    {State4, _, _} = apply(meta(Config, 4, 100),
+                           rabbit_fifo:make_modify(CKey1, [0], false, false, Anns),
+                           State3),
+    {State5, ok, _} = apply(meta(Config, 5, 100),
+                            rabbit_fifo:make_delayed(
+                              {assign_deferred, CKey1, [Token]}),
+                            State4),
+    %% Cancel the claiming consumer while the message is still parked.
+    {State6, _, _} = apply(meta(Config, 6, 100),
+                           rabbit_fifo:make_checkout(C1, cancel, #{}), State5),
+    ?assertMatch(#{num_delayed_messages := 1}, rabbit_fifo:overview(State6)),
+    %% Another consumer can now claim the same token and receive the message.
+    {State7, #{key := CKey2}, _} =
+        checkout_ts(Config, 7, 100, C2, {auto, {credited, 0}}, State6),
+    {State8, _} = credit(Config, CKey2, 8, 1, 0, false, State7),
+    {State9, ok, _} = apply(meta(Config, 9, 100),
+                            rabbit_fifo:make_delayed(
+                              {assign_deferred, CKey2, [Token]}),
+                            State8),
+    ?assertMatch(#{num_delayed_messages := 0,
+                   num_checked_out := 1}, rabbit_fifo:overview(State9)),
+    ok.
+
+delayed_assign_deferred_delivery_time_still_fires_test(Config) ->
+    %% A claim does not pin a message: if the client never grants the credit
+    %% to collect it, the delivery time still promotes it into normal
+    %% circulation and the stale claim is dropped.
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B)},
+    State0 = init(Conf),
+    Cid = {?FUNCTION_NAME_B, self()},
+    {State1, _} = enq(Config, 1, 1, msg1, State0),
+    {State2, #{key := CKey}, _} =
+        checkout_ts(Config, 2, 100, Cid, {auto, {credited, 0}}, State1),
+    {State3, _} = credit(Config, CKey, 3, 1, 0, false, State2),
+    Token = <<"token-1">>,
+    Anns = #{<<"x-opt-deferral-token">> => Token,
+             <<"x-opt-delivery-time">> => 5000},
+    {State4, _, _} = apply(meta(Config, 4, 100),
+                           rabbit_fifo:make_modify(CKey, [0], false, false, Anns),
+                           State3),
+    {State5, ok, _} = apply(meta(Config, 5, 100),
+                            rabbit_fifo:make_delayed(
+                              {assign_deferred, CKey, [Token]}),
+                            State4),
+    ?assertMatch(#{num_delayed_messages := 1}, rabbit_fifo:overview(State5)),
+    %% The delivery time passes with the consumer still out of credit.
+    {State6, _, _} = apply(meta(Config, 6, 5000),
+                           {timeout, {expire_msgs, shallow}}, State5),
+    ?assertMatch(#{num_delayed_messages := 0,
+                   num_ready_messages := 1}, rabbit_fifo:overview(State6)),
+    %% The message is delivered by the ordinary path. The claim now points at
+    %% nothing; it is dropped the next time it is consulted.
+    {State7, _} = credit(Config, CKey, 7, 1, 1, false, State6),
+    ?assertMatch(#{num_ready_messages := 0,
+                   num_checked_out := 1}, rabbit_fifo:overview(State7)),
+    ok.
+
 delayed_assign_deferred_not_found_test(Config) ->
-    %% Test that assign_deferred returns partial when some tokens not found.
+    %% A token that was never issued is silently skipped, alongside one that
+    %% resolves.
     Conf = #{name => ?FUNCTION_NAME,
              queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B)},
     State0 = init(Conf),
@@ -3828,25 +4005,29 @@ delayed_assign_deferred_not_found_test(Config) ->
              <<"x-opt-delivery-time">> => 10000},
     Mod = rabbit_fifo:make_modify(CKey, [MsgId], false, false, Anns),
     {State3, _, _} = apply(meta(Config, 3, 100), Mod, State2),
-    %% Try to assign with one valid and one invalid token
+    %% Claim one valid and one unknown token
     Tokens = [Token1, <<"invalid-token">>],
     Cmd = rabbit_fifo:make_delayed({assign_deferred, CKey, Tokens}),
-    {State4, {partial, 1, [<<"invalid-token">>]}, _} =
-        apply(meta(Config, 4, 100), Cmd, State3),
+    {State4, ok, _} = apply(meta(Config, 4, 100), Cmd, State3),
     ?assertMatch(#{num_delayed_messages := 0,
                    num_checked_out := 1}, rabbit_fifo:overview(State4)),
+    ?assertMatch(#rabbit_fifo{consumers = #{CKey := #consumer{
+                                                      deferred_claims = #{}}}},
+                 State4),
     ok.
 
 delayed_assign_deferred_consumer_not_found_test(Config) ->
-    %% Test that assign_deferred fails when consumer doesn't exist
+    %% A claim for a consumer that does not exist is ignored
     Conf = #{name => ?FUNCTION_NAME,
              queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B)},
     State0 = init(Conf),
-    %% Try to assign to non-existent consumer
-    {_State, {error, consumer_not_found}, []} =
+    {State, ok, []} =
         apply(meta(Config, 1, 100),
               rabbit_fifo:make_delayed({assign_deferred, 999, [<<"token">>]}),
               State0),
+    ?assertMatch(#{num_consumers := 0,
+                   num_delayed_messages := 0,
+                   num_checked_out := 0}, rabbit_fifo:overview(State)),
     ok.
 
 delayed_retry_monotonic_timestamp_test(Config) ->
@@ -4279,10 +4460,12 @@ convert_v8_to_v9_deferred_test(Config) ->
                                          {machine_version, 8, 9}, StateV8),
     ?assertMatch(#{num_delayed_messages := 1}, rabbit_fifo:overview(StateV9)),
 
-    %% Requesting the v8-deferred token back must not crash, and must find
-    %% the message (this failed with a function_clause before the fix).
+    %% Claiming the v8-deferred token must not crash, and must find the
+    %% message (this failed with a function_clause before the fix).
     Cmd = rabbit_fifo:make_delayed({assign_deferred, CKey, [Token]}),
-    {_StateV9b, {ok, 1}, _} = rabbit_fifo:apply(meta(ConfigV9, 5), Cmd, StateV9),
+    {StateV9b, ok, _} = rabbit_fifo:apply(meta(ConfigV9, 5), Cmd, StateV9),
+    ?assertMatch(#{num_delayed_messages := 0,
+                   num_checked_out := 1}, rabbit_fifo:overview(StateV9b)),
     ok.
 
 queue_ttl_test(C) ->
