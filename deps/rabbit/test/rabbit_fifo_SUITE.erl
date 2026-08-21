@@ -5128,15 +5128,19 @@ ingress_bytes_by_node_accumulates_on_enqueue_test(Config) ->
 ingress_bytes_by_node_survives_snapshot_test(Config) ->
     S0 = test_init(ingress_snapshot),
     Msg = mk_mc(<<"test">>),
+    {MetaSize, BodySize} = mc:size(Msg),
+    ExpectedBytes = MetaSize + BodySize,
     Pid = self(),
     Enq = make_enqueue(Pid, 1, Msg),
     {S1, _, _} = apply(meta(Config, 1, 0, {notify, 1, Pid}), Enq, S0),
     Ingress = S1#rabbit_fifo.ingress_bytes_by_node,
-    ?assert(maps:size(Ingress) > 0),
-    %% Simulate snapshot/restore via serialization round-trip
+    ?assertEqual(#{node(Pid) => ExpectedBytes}, Ingress),
+    %% Simulate the generic term serialization Ra's default snapshot
+    %% mechanism performs; the exact recorded byte count, not just the
+    %% map's shape, must come through unchanged
     S2 = binary_to_term(term_to_binary(S1)),
     Ingress2 = S2#rabbit_fifo.ingress_bytes_by_node,
-    ?assertEqual(Ingress, Ingress2),
+    ?assertEqual(#{node(Pid) => ExpectedBytes}, Ingress2),
     ok.
 
 
