@@ -25,6 +25,7 @@
                            tuned | opened | failure |
                            silent_close |
                            closing | close_sent | closing_done.
+-type credit_unit() :: chunks | bytes.
 
 -record(publisher,
         {publisher_id :: publisher_id(),
@@ -45,10 +46,11 @@
          offset :: osiris:offset(),
          counters :: atomics:atomics_ref(),
          properties :: map(),
-         active :: boolean()}).
+         active :: boolean(),
+         credit_unit = chunks :: credit_unit()}).
 -record(consumer,
         {configuration :: #consumer_configuration{},
-         credit :: non_neg_integer(),
+         credit :: integer(),
          send_limit :: non_neg_integer(),
          log = undefined :: undefined | osiris_log:state(),
          last_listener_offset = undefined :: undefined | osiris:offset()}).
@@ -83,6 +85,8 @@
          connection_step :: connection_step(),
          frame_max :: integer(),
          max_uncompressed_sub_entry_batch_size :: integer(),
+         max_credit_bytes :: integer(),
+         max_credit_chunks :: integer(),
          heartbeat :: undefined | integer(),
          heartbeater :: any(),
          client_properties = #{} :: #{binary() => binary()},

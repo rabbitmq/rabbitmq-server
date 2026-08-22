@@ -90,6 +90,12 @@
 -define(DEFAULT_INITIAL_FRAME_MAX, 8192). %% 8 KiB
 -define(DEFAULT_MAX_UNCOMPRESSED_SUB_ENTRY_BATCH_SIZE, 67108864). %% 64 MiB
 -define(DEFAULT_HEARTBEAT, 60). %% 60 seconds
+%% Bounds on the credit a consumer can hold, to stop a connection from
+%% making the server buffer unbounded amounts of undelivered chunks.
+%% `subscribe` and `credit` (v1) count chunks, `subscribe_v2` and
+%% `credit_v2` count bytes.
+-define(DEFAULT_MAX_CREDIT_CHUNKS, 200).
+-define(DEFAULT_MAX_CREDIT_BYTES, 67108864). %% 64 MiB
 
 -define(STREAM_QUEUE_TYPE, rabbit_stream_queue).
 
@@ -130,6 +136,7 @@
   offset,
   offset_lag,
   credits,
+  credit_unit,
   active,
   activity_status,
   properties

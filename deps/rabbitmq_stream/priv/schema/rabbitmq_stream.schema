@@ -178,3 +178,23 @@ end}.
 {mapping, "stream.max_uncompressed_sub_entry_batch_size", "rabbitmq_stream.max_uncompressed_sub_entry_batch_size", [
     {datatype, integer}, {validators, ["non_negative_integer"]}
 ]}.
+
+%% Maximum credit, in chunks, a `subscribe` (v1) consumer can hold at once.
+%% A `subscribe` or `credit` command that would push the consumer's credit
+%% past this limit is rejected with a precondition failed error.
+%%
+%% Defaults to 200.
+
+{mapping, "stream.max_credit_chunks", "rabbitmq_stream.max_credit_chunks", [
+    {datatype, integer}, {validators, ["non_negative_integer"]}
+]}.
+
+%% Maximum credit, in bytes, a `subscribe_v2` consumer can hold at once.
+%% A `subscribe_v2` or `credit_v2` command that would push the consumer's
+%% credit past this limit is rejected with a precondition failed error.
+%%
+%% Defaults to 67108864 (64 MiB).
+
+{mapping, "stream.max_credit_bytes", "rabbitmq_stream.max_credit_bytes", [
+    {datatype, integer}, {validators, ["non_negative_integer"]}
+]}.
