@@ -27,7 +27,8 @@
 
 -record(not_started, {queue, run, upstream, upstream_params}).
 -record(state, {queue, run, conn, ch, dconn, dch, upstream, upstream_params,
-                unacked, link_state = starting}).
+                unacked, link_state = starting,
+                blocked = false, blocked_buffer = queue:new()}).
 
 start_link(Args) ->
     gen_server2:start_link(?MODULE, Args, [{timeout, infinity}]).
@@ -199,25 +200,34 @@ handle_info(#'basic.nack'{} = Nack, State = #state{ch      = Ch,
     Unacked1 = rabbit_federation_link_util:nack(Nack, Ch, Unacked),
     {noreply, State#state{unacked = Unacked1}};
 
-handle_info({#'basic.deliver'{redelivered = Redelivered,
-                              exchange    = X,
-                              routing_key = K} = DeliverMethod, Msg},
-            State = #state{queue           = Q,
-                           upstream        = Upstream,
-                           upstream_params = UParams,
-                           ch              = Ch,
-                           dch             = DCh,
-                           unacked         = Unacked}) when ?is_amqqueue(Q) ->
-    QName = amqqueue:get_name(Q),
-    PublishMethod = #'basic.publish'{exchange    = <<"">>,
-                                     routing_key = QName#resource.name},
-    HeadersFun = fun (H) -> update_headers(UParams, Redelivered, X, K, H) end,
-    ForwardFun = fun (_H) -> true end,
-    Unacked1 = rabbit_federation_link_util:forward(
-                 Upstream, DeliverMethod, Ch, DCh, PublishMethod,
-                 HeadersFun, ForwardFun, Msg, Unacked),
-    %% TODO actually we could reject when 'stopped'
-    {noreply, State#state{unacked = Unacked1}};
+handle_info(#'connection.blocked'{}, State) ->
+    {noreply, State#state{blocked = true}};
+
+handle_info(#'connection.unblocked'{}, State = #state{blocked_buffer = QBuffer}) ->
+    State1 = State#state{blocked = false, blocked_buffer = queue:new()},
+    %% Drain the buffer
+    State2 = drain_buffer(queue:out(QBuffer), State1),
+    {noreply, State2};
+
+handle_info({bump_credit, Msg}, State = #state{blocked_buffer = QBuffer}) ->
+    credit_flow:handle_bump_msg(Msg),
+    case credit_flow:blocked() of
+        false ->
+            State1 = State#state{blocked_buffer = queue:new()},
+            State2 = drain_buffer(queue:out(QBuffer), State1),
+            {noreply, State2};
+        true ->
+            {noreply, State}
+    end;
+
+handle_info({#'basic.deliver'{} = DeliverMethod, Msg},
+            State = #state{blocked = Blocked, blocked_buffer = QBuffer, queue = Q}) when ?is_amqqueue(Q) ->
+    case Blocked orelse credit_flow:blocked() of
+        true ->
+            {noreply, State#state{blocked_buffer = queue:in({DeliverMethod, Msg}, QBuffer)}};
+        false ->
+            {noreply, do_deliver(DeliverMethod, Msg, State)}
+    end;
 
 handle_info(#'basic.cancel'{},
             State = #state{queue           = Q,
@@ -425,3 +435,35 @@ connection_close_timeout() ->
                                      connection_close_timeout,
                                      Default),
     erlang:min(Configured, Default).
+
+drain_buffer({empty, _QBuffer}, State) ->
+    State;
+drain_buffer({{value, {DeliverMethod, Msg}}, QBuffer}, State) ->
+    State1 = do_deliver(DeliverMethod, Msg, State),
+    %% Re-check block status since do_deliver might have triggered credit_flow:blocked()
+    case State1#state.blocked orelse credit_flow:blocked() of
+        true ->
+            State1#state{blocked_buffer = QBuffer};
+        false ->
+            drain_buffer(queue:out(QBuffer), State1)
+    end.
+
+do_deliver(#'basic.deliver'{redelivered = Redelivered,
+                            exchange    = X,
+                            routing_key = K} = DeliverMethod, Msg,
+           State = #state{queue           = Q,
+                          upstream        = Upstream,
+                          upstream_params = UParams,
+                          ch              = Ch,
+                          dch             = DCh,
+                          unacked         = Unacked}) when ?is_amqqueue(Q) ->
+    QName = amqqueue:get_name(Q),
+    PublishMethod = #'basic.publish'{exchange    = <<"">>,
+                                     routing_key = QName#resource.name},
+    HeadersFun = fun (H) -> update_headers(UParams, Redelivered, X, K, H) end,
+    ForwardFun = fun (_H) -> true end,
+    Unacked1 = rabbit_federation_link_util:forward(
+                 Upstream, DeliverMethod, Ch, DCh, PublishMethod,
+                 HeadersFun, ForwardFun, Msg, Unacked),
+    %% TODO actually we could reject when 'stopped'
+    State#state{unacked = Unacked1}.
