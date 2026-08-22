@@ -37,11 +37,21 @@ module.exports = class BasePage {
     this.polling = parseInt(process.env.SELENIUM_POLLING) || 500 // how frequent selenium searches for an element
     this.interactionDelay = parseInt(process.env.SELENIUM_INTERACTION_DELAY) || 0 // slow down interactions (when rabbit is behind a http proxy)
   }
+  // The management UI toggles a section from a click handler bound to its h2,
+  // not to the section itself.
+  async toggleSection(section) {
+    if (this.interactionDelay) await this.driver.sleep(this.interactionDelay)
+    return this.retryOnStale(async () => {
+      const element = await this.waitForDisplayed(section)
+      const heading = await element.findElement(By.xpath('./h2'))
+      return heading.click()
+    })
+  }
   async ensureSectionIsVisible(section) {
     let element = await this.waitForLocated(section)
     let classes = await element.getAttribute("class")
     if (!classes || classes.search('section-visible') < 0) {
-      return this.click(section)
+      return this.toggleSection(section)
     } else {
       return Promise.resolve(true)
     }
@@ -50,7 +60,7 @@ module.exports = class BasePage {
     let element = await this.waitForLocated(section)
     let classes = await element.getAttribute("class")
     if (classes && classes.search('section-visible') >= 0) {
-      return this.click(section)
+      return this.toggleSection(section)
     } else {
       return Promise.resolve(true)
     }
