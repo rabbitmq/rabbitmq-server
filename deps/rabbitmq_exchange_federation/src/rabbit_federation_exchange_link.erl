@@ -45,7 +45,9 @@
                 unacked,
                 internal_exchange_timer,
                 internal_exchange_interval,
-                link_state = starting}).
+                link_state = starting,
+                blocked = false,
+                blocked_buffer = queue:new()}).
 
 %%----------------------------------------------------------------------------
 
@@ -201,30 +203,34 @@ handle_info(#'basic.nack'{} = Nack, State = #state{channel = Ch,
     Unacked1 = rabbit_federation_link_util:nack(Nack, Ch, Unacked),
     {noreply, State#state{unacked = Unacked1}};
 
-handle_info({#'basic.deliver'{routing_key  = Key,
-                              redelivered  = Redelivered} = DeliverMethod, Msg},
-            State = #state{
-              upstream            = Upstream = #upstream{max_hops = MaxH},
-              upstream_params     = UParams = #upstream_params{x_or_q = UpstreamX},
-              upstream_name       = UName,
-              downstream_exchange = #resource{name = XNameBin, virtual_host = DVhost},
-              downstream_channel  = DCh,
-              channel             = Ch,
-              unacked             = Unacked}) ->
-    UVhost = vhost(UpstreamX),
-    PublishMethod = #'basic.publish'{exchange    = XNameBin,
-                                     routing_key = Key},
-    HeadersFun = fun (H) -> update_routing_headers(UParams, UName, UVhost, Redelivered, H) end,
-    %% We need to check should_forward/2 here in case the upstream
-    %% does not have federation and thus is using a fanout exchange.
-    ForwardFun = fun (H) ->
-                         DName = rabbit_nodes:cluster_name(),
-                         rabbit_federation_util:should_forward(H, MaxH, DName, DVhost)
-                 end,
-    Unacked1 = rabbit_federation_link_util:forward(
-                 Upstream, DeliverMethod, Ch, DCh, PublishMethod,
-                 HeadersFun, ForwardFun, Msg, Unacked),
-    {noreply, State#state{unacked = Unacked1}};
+handle_info(#'connection.blocked'{}, State) ->
+    {noreply, State#state{blocked = true}};
+
+handle_info(#'connection.unblocked'{}, State = #state{blocked_buffer = Q}) ->
+    State1 = State#state{blocked = false, blocked_buffer = queue:new()},
+    %% Drain the buffer
+    State2 = drain_buffer(queue:out(Q), State1),
+    {noreply, State2};
+
+handle_info({bump_credit, Msg}, State = #state{blocked_buffer = Q}) ->
+    credit_flow:handle_bump_msg(Msg),
+    case credit_flow:blocked() of
+        false ->
+            State1 = State#state{blocked_buffer = queue:new()},
+            State2 = drain_buffer(queue:out(Q), State1),
+            {noreply, State2};
+        true ->
+            {noreply, State}
+    end;
+
+handle_info({#'basic.deliver'{} = DeliverMethod, Msg},
+            State = #state{blocked = Blocked, blocked_buffer = Q}) ->
+    case Blocked orelse credit_flow:blocked() of
+        true ->
+            {noreply, State#state{blocked_buffer = queue:in({DeliverMethod, Msg}, Q)}};
+        false ->
+            {noreply, do_deliver(DeliverMethod, Msg, State)}
+    end;
 
 handle_info(#'basic.cancel'{}, State = #state{upstream            = Upstream,
                                               upstream_params     = UParams,
@@ -824,3 +830,38 @@ connection_close_timeout() ->
                                      connection_close_timeout,
                                      Default),
     erlang:min(Configured, Default).
+
+drain_buffer({empty, _Q}, State) ->
+    State;
+drain_buffer({{value, {DeliverMethod, Msg}}, Q}, State) ->
+    State1 = do_deliver(DeliverMethod, Msg, State),
+    %% Re-check block status since do_deliver might have triggered credit_flow:blocked()
+    case State1#state.blocked orelse credit_flow:blocked() of
+        true ->
+            State1#state{blocked_buffer = Q};
+        false ->
+            drain_buffer(queue:out(Q), State1)
+    end.
+
+do_deliver(#'basic.deliver'{routing_key = Key,
+                            redelivered = Redelivered} = DeliverMethod, Msg,
+           State = #state{
+             upstream            = Upstream = #upstream{max_hops = MaxH},
+             upstream_params     = UParams = #upstream_params{x_or_q = UpstreamX},
+             upstream_name       = UName,
+             downstream_exchange = #resource{name = XNameBin, virtual_host = DVhost},
+             downstream_channel  = DCh,
+             channel             = Ch,
+             unacked             = Unacked}) ->
+    UVhost = vhost(UpstreamX),
+    PublishMethod = #'basic.publish'{exchange    = XNameBin,
+                                     routing_key = Key},
+    HeadersFun = fun (H) -> update_routing_headers(UParams, UName, UVhost, Redelivered, H) end,
+    ForwardFun = fun (H) ->
+                         DName = rabbit_nodes:cluster_name(),
+                         rabbit_federation_util:should_forward(H, MaxH, DName, DVhost)
+                 end,
+    Unacked1 = rabbit_federation_link_util:forward(
+                 Upstream, DeliverMethod, Ch, DCh, PublishMethod,
+                 HeadersFun, ForwardFun, Msg, Unacked),
+    State#state{unacked = Unacked1}.
