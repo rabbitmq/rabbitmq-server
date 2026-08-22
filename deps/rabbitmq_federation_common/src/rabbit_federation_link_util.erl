@@ -41,6 +41,7 @@ start_conn_ch(Fun, OUpstream, OUParams,
     ConnName = get_connection_name(Upstream, UParams),
     case open_monitor(#amqp_params_direct{virtual_host = DownVHost}, ConnName) of
         {ok, DConn, DCh} ->
+            amqp_connection:register_blocked_handler(DConn, self()),
             case Upstream#upstream.ack_mode of
                 'on-confirm' ->
                     #'confirm.select_ok'{} =
@@ -262,7 +263,7 @@ forward(#upstream{ack_mode      = AckMode,
                            'on-confirm' -> amqp_channel:next_publish_seqno(DCh);
                            _            -> ignore
                        end,
-                 amqp_channel:cast(DCh, PublishMethod, Msg1),
+                 amqp_channel:cast_flow(DCh, PublishMethod, Msg1),
                  case AckMode of
                      'on-confirm' ->
                          gb_trees:insert(Seq, DT, Unacked);
