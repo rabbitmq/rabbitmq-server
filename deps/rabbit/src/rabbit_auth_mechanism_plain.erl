@@ -40,14 +40,6 @@ handle_response(Response, #state{socket = Socket}) ->
             rabbit_access_control:check_user_login(User, AuthProps);
         error ->
             {protocol_error, "response ~tp invalid", [Response]}
-    end;
-
-handle_response(Response, _State) ->
-    case extract_user_pass(Response) of
-        {ok, User, Pass} ->
-            rabbit_access_control:check_user_pass_login(User, Pass);
-        error ->
-            {protocol_error, "response ~tp invalid", [Response]}
     end.
 
 
