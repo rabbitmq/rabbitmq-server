@@ -34,8 +34,11 @@
          deliver/3]).
 -export([dead_letter_publish/5]).
 -export([cluster_state/1, status/1, status/2]).
--export([update_consumer_handler/8, update_consumer/9]).
--export([cancel_consumer_handler/2, cancel_consumer/3]).
+-export([update_consumer_handler/8]).
+-export([cancel_consumer_handler/2]).
+-export([bulk_update_consumer_metrics/2, delete_local_consumer_metrics/1]).
+-export([async_delete_local_consumer_metrics/1]).
+-export([consumer_metrics_v9_upgrade/2]).
 -export([become_leader/2, handle_tick/3, spawn_deleter/1]).
 -export([rpc_delete_metrics/1,
          key_metrics_rpc/1]).
@@ -109,6 +112,7 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include("amqqueue.hrl").
+-include("mc.hrl").
 -include_lib("kernel/include/logger.hrl").
 
 -rabbit_boot_step(
@@ -478,28 +482,78 @@ single_active_consumer_on(Q) ->
     QArguments = amqqueue:get_arguments(Q),
     table_lookup(QArguments, <<"x-single-active-consumer">>, false).
 
+%% these mod_call effects are always applied on the current Ra leader
+%% (see ra_server_proc:handle_effect/5), which is where quorum queue
+%% consumer metrics are recorded, so no cross-node dispatch is needed
 update_consumer_handler(QName, {ConsumerTag, ChPid}, Exclusive, AckRequired,
                         Prefetch, Active, ActivityStatus, Args) ->
-    catch rabbit_queue_type_util:local_or_remote_handler(ChPid, ?MODULE, update_consumer,
-                                                         [QName, ChPid, ConsumerTag,
-                                                          Exclusive, AckRequired,
-                                                          Prefetch, Active,
-                                                          ActivityStatus, Args]).
-
-update_consumer(QName, ChPid, ConsumerTag, Exclusive, AckRequired, Prefetch,
-                Active, ActivityStatus, Args) ->
     catch rabbit_core_metrics:consumer_updated(ChPid, ConsumerTag, Exclusive,
-                                               AckRequired,
-                                               QName, Prefetch, Active,
-                                               ActivityStatus, Args).
+                                               AckRequired, QName, Prefetch,
+                                               Active, ActivityStatus, Args).
 
 cancel_consumer_handler(QName, {ConsumerTag, ChPid}) ->
-    catch rabbit_queue_type_util:local_or_remote_handler(ChPid, ?MODULE, cancel_consumer,
-                                                         [QName, ChPid, ConsumerTag]).
-
-cancel_consumer(QName, ChPid, ConsumerTag) ->
     catch rabbit_core_metrics:consumer_deleted(ChPid, ConsumerTag, QName),
     rabbit_queue_type_util:notify_consumer_deleted(ChPid, ConsumerTag, QName, ?INTERNAL_USER).
+
+%% called when this node becomes the Ra leader for QName: the previous
+%% leader's local rows (if any) were already dropped when it stepped down
+%% (see delete_local_consumer_metrics/1), but bulk-replace defensively so
+%% this table is never a mix of two leader terms' data
+%%
+%% this mod_call effect (like all mod_call effects) is not protected by
+%% ra_server_proc, so run it in a separate process: neither a crash nor
+%% the full-table scan in delete_local_consumer_metrics/1 must be able to
+%% block or take down the Ra server; the consumer_created table may also
+%% legitimately not exist, e.g. in rabbit_fifo_int_SUITE which runs bare
+%% ra clusters without core_metrics
+bulk_update_consumer_metrics(QName, ConsumerMetrics) ->
+    spawn(fun () -> catch bulk_update_consumer_metrics0(QName, ConsumerMetrics) end).
+
+bulk_update_consumer_metrics0(QName, ConsumerMetrics) ->
+    delete_local_consumer_metrics(QName),
+    %% quorum queues don't support exclusive consumers
+    [rabbit_core_metrics:consumer_created(ChPid, ConsumerTag, false,
+                                          AckRequired, QName, Prefetch,
+                                          Active, ActivityStatus, Args)
+     || {ChPid, ConsumerTag, AckRequired, Prefetch, Active,
+         ActivityStatus, Args} <- ConsumerMetrics],
+    ok.
+
+%% mod_call target for state_enter(follower, ...); spawned for the same
+%% reason as bulk_update_consumer_metrics/2 above
+async_delete_local_consumer_metrics(QName) ->
+    spawn(fun () -> delete_local_consumer_metrics(QName) end).
+
+delete_local_consumer_metrics(QName) ->
+    catch ets:match_delete(consumer_created,
+                           {{QName, '_', '_'}, '_', '_', '_', '_', '_', '_'}),
+    ok.
+
+%% one-off cleanup run when a queue's machine version crosses into v9: prior
+%% versions wrote consumer_created from the consuming channel's node instead
+%% of the Ra leader's, so any node in the cluster could be holding a stale
+%% or duplicate row for this queue; wipe them all and let the current
+%% leader (the only node this mod_call effect runs on) repopulate
+%% authoritatively
+%%
+%% see bulk_update_consumer_metrics/2 for why this must never crash
+consumer_metrics_v9_upgrade(QName, ConsumerMetrics) ->
+    spawn(fun () ->
+                  consumer_metrics_v9_upgrade0(QName, ConsumerMetrics)
+          end).
+
+consumer_metrics_v9_upgrade0(QName, ConsumerMetrics) ->
+    case rabbit_amqqueue:lookup(QName) of
+        {ok, Q} when ?is_amqqueue(Q) ->
+            Nodes = get_nodes(Q),
+            _ = [_ = erpc_call(Node, ?MODULE, delete_local_consumer_metrics,
+                              [QName], ?RPC_TIMEOUT)
+                 || Node <- Nodes, Node =/= node()],
+            ok;
+        _ ->
+            ok
+    end,
+    bulk_update_consumer_metrics(QName, ConsumerMetrics).
 
 become_leader(_QName, _Name) ->
     %% noop now as we instead rely on the promt tick_timeout + repair to update
@@ -646,7 +700,8 @@ capabilities() ->
       rebalance_module => ?MODULE,
       can_redeliver => true,
       is_replicable => true,
-      distribution_modes => [move]
+      distribution_modes => [move],
+      amqp_link_capabilities => [<<"rabbitmq:deferral-tokens">>]
      }.
 
 rpc_delete_metrics(QName) ->
@@ -1284,38 +1339,16 @@ consume(Q, Spec, QState0) when ?amqqueue_is_quorum(Q) ->
                      %% in credit_reply
                      link_state_properties => true},
     case rabbit_fifo_client:checkout(ConsumerTag, Mode, ConsumerMeta, QState0) of
-        {ok, Infos, QState} ->
-            %% this info key was added in QQ v8
-            IsSac = maps:get(consumer_strategy, Infos, competing) == single_active,
-            case IsSac orelse single_active_consumer_on(Q) of
-                true ->
-                    ActivityStatus = case Infos of
-                                         #{is_active := true} ->
-                                             single_active;
-                                         _ ->
-                                             waiting
-                                     end,
-                    rabbit_core_metrics:consumer_created(ChPid, ConsumerTag,
-                                                         ExclusiveConsume,
-                                                         AckRequired, QName,
-                                                         Prefetch,
-                                                         ActivityStatus == single_active,
-                                                         ActivityStatus, Args),
-                    rabbit_queue_type_util:notify_consumer_created(
-                      ChPid, ConsumerTag, ExclusiveConsume, AckRequired,
-                      QName, Prefetch, Args, none, ActingUser),
-                    {ok, QState};
-                false ->
-                    rabbit_core_metrics:consumer_created(ChPid, ConsumerTag,
-                                                         ExclusiveConsume,
-                                                         AckRequired, QName,
-                                                         Prefetch, true,
-                                                         up, Args),
-                    rabbit_queue_type_util:notify_consumer_created(
-                      ChPid, ConsumerTag, ExclusiveConsume, AckRequired,
-                      QName, Prefetch, Args, none, ActingUser),
-                    {ok, QState}
-            end;
+        {ok, _Infos, QState} ->
+            %% the consumer_created/updated rabbit_core_metrics rows for this
+            %% consumer are recorded on the Ra leader as part of applying the
+            %% checkout command (see rabbit_fifo:consumer_metrics_effect/4),
+            %% not here, as this code may run on a different node than the
+            %% leader
+            rabbit_queue_type_util:notify_consumer_created(
+              ChPid, ConsumerTag, ExclusiveConsume, AckRequired,
+              QName, Prefetch, Args, none, ActingUser),
+            {ok, QState};
         Err ->
             consume_error(Err, QName)
     end.
@@ -1348,7 +1381,8 @@ deliver0(QName, Correlation, Msg, QState0) ->
 
 deliver(QSs, Msg0, Options) ->
     Correlation = maps:get(correlation, Options, undefined),
-    Msg = mc:prepare(store, Msg0),
+    Msg1 = annotate_delivery_time(Msg0),
+    Msg = mc:prepare(store, Msg1),
     lists:foldl(
       fun({Q, stateless}, Acc) ->
               QRef = amqqueue:get_pid(Q),
@@ -1424,15 +1458,11 @@ retry_delayed(Q, Mode) when ?is_amqqueue(Q) ->
     Server = amqqueue:get_pid(Q),
     rabbit_fifo_client:retry_delayed(Server, Mode).
 
--spec assign_deferred(rabbit_types:ctag(), [binary()],
-                      rabbit_fifo_client:state(),
-                      amqqueue:amqqueue()) ->
-    {{ok, non_neg_integer()} |
-     {partial, non_neg_integer(), [binary()]} |
-     {error, term()},
-     rabbit_fifo_client:state()}.
-assign_deferred(CTag, Tokens, QState, _Q) ->
-    rabbit_fifo_client:assign_deferred(CTag, Tokens, QState).
+-spec assign_deferred(rabbit_amqqueue:name(), rabbit_types:ctag(), [binary()],
+                      rabbit_fifo_client:state()) ->
+    {rabbit_fifo_client:state(), rabbit_queue_type:actions()}.
+assign_deferred(_QName, CTag, Tokens, QState) ->
+    rabbit_fifo_client:assign_deferred(quorum_ctag(CTag), Tokens, QState).
 
 cleanup_data_dir() ->
     Names = [begin
@@ -2902,3 +2932,29 @@ table_lookup(Tbl, Key, Default)
         _ ->
             Default
     end.
+
+annotate_delivery_time(Msg) ->
+    case mc:is(Msg) of
+        true ->
+            %% "When a message is being sent with a delivery delay
+            %% configured, a message annotation with symbol key of
+            %% “x-opt-delivery-time” is used to convey the earliest point
+            %% in time at which a message may be delivered to a
+            %% receiver by the peer. If the annotation is present its value
+            %% MUST be a timestamp or an equivalent value using an
+            %% integral numeric type such as long, representing the
+            %% delivery time as a number of milliseconds since the Unix Epoch."
+            %% [schdmsg-v1.0] § 2.1
+            case mc:x_header(<<"x-opt-delivery-time">>, Msg) of
+                {_Type, Ts} when is_integer(Ts) ->
+                    %% The queue will need to delay this message.
+                    %% add the dt annotation for easy access inside
+                    %% the queue
+                    mc:set_annotation(?ANN_DELIVERY_TIME, Ts, Msg);
+                _ ->
+                    Msg
+            end;
+        false ->
+            Msg
+    end.
+

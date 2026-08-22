@@ -193,7 +193,10 @@
           delivery_count :: sequence_no(),
           credit :: rabbit_queue_type:credit(),
           drain :: boolean(),
-          echo :: boolean()
+          echo :: boolean(),
+          %% deferral tokens requested alongside this credit top-up, see
+          %% handle_outgoing_link_flow_control/3 and pop_credit_req/4
+          tokens = [] :: [binary()]
          }).
 
 %% Link flow control state for link between client (receiver) and us (sender).
@@ -1989,7 +1992,8 @@ pop_credit_req(
                                      delivery_count = DeliveryCountRcv,
                                      credit = LinkCreditRcv,
                                      drain = Drain,
-                                     echo = Echo
+                                     echo = Echo,
+                                     tokens = Tokens
                                     }},
   S0 = #state{cfg = #cfg{max_queue_credit = MaxQueueCredit},
               outgoing_links = OutgoingLinks,
@@ -1997,9 +2001,16 @@ pop_credit_req(
     LinkCreditSnd = amqp10_util:link_credit_snd(
                       DeliveryCountRcv, LinkCreditRcv, CDeliveryCount),
     CappedCredit = cap_credit(LinkCreditSnd, MaxQueueCredit),
-    {ok, QStates, Actions} = rabbit_queue_type:credit(
+    {ok, QStates1, Actions0} = rabbit_queue_type:credit(
                                QName, Ctag, QDeliveryCount,
                                CappedCredit, Drain, QStates0),
+    {ok, QStates, Actions1} = case Tokens of
+                                  [] ->
+                                      {ok, QStates1, []};
+                                  _ ->
+                                      rabbit_queue_type:assign_deferred(
+                                        QName, Ctag, Tokens, QStates1)
+                              end,
     Link = Link0#outgoing_link{
              client_flow_ctl = CFC#client_flow_ctl{
                                  credit = LinkCreditSnd,
@@ -2012,7 +2023,7 @@ pop_credit_req(
             },
     S = S0#state{queue_states = QStates,
                  outgoing_links = OutgoingLinks#{Handle := Link}},
-    handle_queue_actions(Actions, S).
+    handle_queue_actions(Actions0 ++ Actions1, S).
 
 send_pending_delivery(#pending_delivery{
                          frames = Frames,
@@ -2238,7 +2249,14 @@ settle_op_from_outcome(#'v1_0.modified'{delivery_failed = DelFailed,
                {map, KVList} ->
                    Anns1 = lists:map(
                              %% "all symbolic keys except those beginning with "x-" are reserved." [3.2.10]
-                             fun({{symbol, <<"x-", _/binary>> = K}, V}) ->
+                             fun({{symbol, <<"x-opt-deferral-token">> = K}, {utf8, _} = V}) ->
+                                     {K, unwrap_simple_type(V)};
+                                ({{symbol, <<"x-opt-deferral-token">>}, Other}) ->
+                                     protocol_error(
+                                       ?V_1_0_AMQP_ERROR_INVALID_FIELD,
+                                       "x-opt-deferral-token must be of AMQP type utf8, got: ~tp",
+                                       [Other]);
+                                ({{symbol, <<"x-", _/binary>> = K}, V}) ->
                                      {K, unwrap_simple_type(V)}
                              end, KVList),
                    maps:from_list(Anns1)
@@ -3337,7 +3355,8 @@ handle_outgoing_link_flow_control(
                delivery_count = MaybeDeliveryCountRcv,
                link_credit = ?UINT(LinkCreditRcv),
                drain = Drain0,
-               echo = Echo0},
+               echo = Echo0,
+               properties = FlowProps},
   #state{outgoing_links = OutgoingLinks,
          queue_states = QStates0
         } = State0) ->
@@ -3361,14 +3380,21 @@ handle_outgoing_link_flow_control(
                                         credit = CappedCredit,
                                         drain = Drain},
                      at_least_one_credit_req_in_flight = true},
-            {ok, QStates, Actions} = rabbit_queue_type:credit(
-                                       QName, Ctag,
-                                       QFC#queue_flow_ctl.delivery_count,
-                                       CappedCredit, Drain, QStates0),
+            {ok, QStates1, Actions0} = rabbit_queue_type:credit(
+                                         QName, Ctag,
+                                         QFC#queue_flow_ctl.delivery_count,
+                                         CappedCredit, Drain, QStates0),
+            {ok, QStates, Actions1} = case parse_deferred_tokens(FlowProps) of
+                                          [] ->
+                                              {ok, QStates1, []};
+                                          Tokens ->
+                                              rabbit_queue_type:assign_deferred(
+                                                QName, Ctag, Tokens, QStates1)
+                                      end,
             State = State0#state{
                       queue_states = QStates,
                       outgoing_links = OutgoingLinks#{HandleInt := Link}},
-            handle_queue_actions(Actions, State);
+            handle_queue_actions(Actions0 ++ Actions1, State);
         true ->
             %% A credit request is currently in-flight. Let's first process its reply
             %% before sending the next request. This ensures our outgoing_pending
@@ -3377,14 +3403,31 @@ handle_outgoing_link_flow_control(
             %% Processing one credit top up at a time between us and the queue is also easier
             %% to reason about. Therefore, we stash the new request. If there is already a
             %% stashed request, we replace it because the latest flow control state from the
-            %% client applies.
+            %% client applies. Any requested deferral tokens are stashed alongside it and
+            %% submitted once the stashed request is processed, see pop_credit_req/4.
             Link = Link0#outgoing_link{
                      stashed_credit_req = #credit_req{
                                              delivery_count = DeliveryCountRcv,
                                              credit = LinkCreditRcv,
                                              drain = Drain,
-                                             echo = Echo}},
+                                             echo = Echo,
+                                             tokens = parse_deferred_tokens(FlowProps)}},
             State0#state{outgoing_links = OutgoingLinks#{HandleInt := Link}}
+    end.
+
+parse_deferred_tokens(undefined) ->
+    [];
+parse_deferred_tokens({map, KVList}) ->
+    case lists:keyfind({symbol, <<"rabbitmq:deferral-tokens">>}, 1, KVList) of
+        {{symbol, <<"rabbitmq:deferral-tokens">>}, {array, utf8, Elems}} ->
+            [T || {utf8, T} <- Elems];
+        false ->
+            [];
+        {{symbol, <<"rabbitmq:deferral-tokens">>}, Other} ->
+            protocol_error(
+              ?V_1_0_AMQP_ERROR_INVALID_FIELD,
+              "rabbitmq:deferral-tokens must be an array of AMQP type utf8, got: ~tp",
+              [Other])
     end.
 
 delivery_count_rcv(?UINT(DeliveryCount)) ->

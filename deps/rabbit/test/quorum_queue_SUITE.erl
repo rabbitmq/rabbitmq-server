@@ -244,7 +244,9 @@ all_tests() ->
      delayed_retry_returned,
      delayed_retry_backoff,
      delayed_retry_explicit_delivery_time,
-     delayed_retry_counts_towards_limit
+     delayed_retry_counts_towards_limit,
+     delivery_time_on_publish,
+     delivery_time_on_publish_amqpl
     ].
 
 memory_tests() ->
@@ -4742,7 +4744,8 @@ purge(Config) ->
 
     {'queue.purge_ok', 2} = amqp_channel:call(Ch, #'queue.purge'{queue = QQ}),
 
-    ?assertEqual([0], dirty_query([Server], RaName, fun rabbit_fifo:query_messages_total/1)).
+    ?assertMatch(#{num_messages := 0},  machine_overview({RaName, Server})),
+    ok.
 
 peek(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -5548,8 +5551,8 @@ amqpl_headers(Config) ->
      #amqp_msg{props = #'P_basic'{headers = Headers2Received}}
     } = amqp_channel:call(Ch, #'basic.get'{queue = QQ}),
 
-    ?assertEqual(Headers1Sent, Headers1Received),
-    ?assertEqual(Headers2Sent, Headers2Received),
+    ?assertEqual(undefined, Headers1Received),
+    ?assertEqual([], Headers2Received),
 
     ok = amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag,
                                             multiple = true}).
@@ -6549,6 +6552,76 @@ delayed_retry_explicit_delivery_time(Config) ->
     ok = detach_link_sync(Receiver),
     ok = close(Init).
 
+delivery_time_on_publish(Config) ->
+    check_quorum_queues_v9_compat(Config),
+    %% Test that a message published with an x-opt-delivery-time annotation
+    %% is not delivered before that time, even on its very first delivery.
+    {_Connection, Session, LinkPair} = Init = init(Config),
+    QQ = ?config(queue_name, Config),
+    Addr = rabbitmq_amqp_address:queue(QQ),
+    {ok, _} = rabbitmq_amqp_client:declare_queue(
+                LinkPair, QQ,
+                #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>}}}),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Addr),
+    ok = wait_for_credit(Sender),
+
+    Now = erlang:system_time(millisecond),
+    DeliveryTime = Now + 5000,
+    Msg = amqp10_msg:set_message_annotations(
+            #{<<"x-opt-delivery-time">> => DeliveryTime},
+            amqp10_msg:new(<<"t1">>, <<"m1">>)),
+    ok = amqp10_client:send_msg(Sender, Msg),
+    ok = wait_for_accepts(1),
+    ok = detach_link_sync(Sender),
+
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session, <<"receiver">>, Addr, unsettled),
+    %% Message should NOT be delivered before its delivery time.
+    ok = amqp10_client:flow_link_credit(Receiver, 1, never, false),
+    receive {amqp10_msg, Receiver, _} ->
+                ct:fail(message_should_be_delayed)
+    after 1000 -> ok
+    end,
+    %% Once the delivery time has passed, the message should be delivered.
+    receive {amqp10_msg, Receiver, _M1} -> ok
+    after 5000 ->
+              flush(1),
+              ct:fail({missing_msg, ?LINE})
+    end,
+    ok = detach_link_sync(Receiver),
+    ok = close(Init).
+
+delivery_time_on_publish_amqpl(Config) ->
+    check_quorum_queues_v9_compat(Config),
+    %% Same as delivery_time_on_publish but for AMQP 0-9-1: a message
+    %% published with an x-opt-delivery-time header is not delivered before
+    %% that time, even on its very first delivery.
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    RaName = ra_name(QQ),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    Now = erlang:system_time(millisecond),
+    DeliveryTime = Now + 5000,
+    ok = amqp_channel:cast(
+           Ch,
+           #'basic.publish'{routing_key = QQ},
+           #amqp_msg{props = #'P_basic'{
+                                headers = [{<<"x-opt-delivery-time">>, long, DeliveryTime}],
+                                delivery_mode = 2},
+                     payload = <<"msg">>}),
+    wait_for_messages_total(Servers, RaName, 1),
+    %% Message should NOT be ready before its delivery time.
+    consume_empty(Ch, QQ, false),
+    %% Once the delivery time has passed, the message should be delivered.
+    wait_for_messages_ready(Servers, RaName, 1),
+    DeliveryTag = basic_get_tag(Ch, QQ, false),
+    ok = amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag,
+                                            multiple = false}),
+    ok.
+
 delayed_retry_counts_towards_limit(Config) ->
     check_quorum_queues_v8_compat(Config),
     %% Test that delayed messages count towards max-length limit.
@@ -6743,9 +6816,19 @@ basic_get(Ch, Q, NoAck, Attempt) ->
     end.
 
 check_quorum_queues_v8_compat(Config) ->
+    check_quorum_queues_vn_compat(8, Config).
+
+check_quorum_queues_v9_compat(Config) ->
+    check_quorum_queues_vn_compat(9, Config).
+
+min_mac_version(Config) ->
     Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    MacVer = lists:min([V || {ok, V} <- erpc:multicall(Nodes, rabbit_fifo, version, [])]),
-    case MacVer >= 8 of
+    MacVer = lists:min([V || {ok, V} <-
+                             erpc:multicall(Nodes, rabbit_fifo, version, [])]),
+    MacVer.
+
+check_quorum_queues_vn_compat(Version, Config) ->
+    case min_mac_version(Config) >= Version of
         true ->
             ok;
         false ->

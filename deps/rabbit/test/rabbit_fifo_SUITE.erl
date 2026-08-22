@@ -1231,6 +1231,7 @@ return_auto_checked_out_test(Config) ->
     {State1, #{key := CKey,
                next_msg_id := MsgId},
      [_Monitor,
+      {mod_call, rabbit_quorum_queue, update_consumer_handler, _},
       {log_ext, [1], _Fun1, _} ]} = checkout(Config, ?LINE, Cid, 1, State0),
     % return should include another delivery
     {State2, _, Effects} = apply(meta(Config, 3),
@@ -1246,7 +1247,7 @@ return_auto_checked_out_test(Config) ->
 
     {State4, #{key := CKey2,
                 next_msg_id := MsgId3},
-     [_, {log_ext, [1], _Fun3, _} ]} = checkout(Config, ?LINE, Cid, 1, State3),
+     [_, _, {log_ext, [1], _Fun3, _} ]} = checkout(Config, ?LINE, Cid, 1, State3),
 
     [{_, {_, #{delivery_count := 1,
                acquired_count := 2}}}]
@@ -1262,6 +1263,7 @@ requeue_test(Config) ->
     {State1, #{key := CKey,
                next_msg_id := MsgId},
      [_Monitor,
+      {mod_call, rabbit_quorum_queue, update_consumer_handler, _},
       {log_ext, [1], _Fun, _}]} = checkout(Config, ?LINE, Cid, 1, State0),
 
     [{MsgId, {H1, _}}] = rabbit_fifo:get_checked_out(CKey, MsgId, MsgId, State1),
@@ -1313,6 +1315,101 @@ cancelled_checkout_out_test(Config) ->
     {_State, _, [{log, [2], _Fun} | _]} =
         apply(meta(Config, 7), make_checkout(Cid, {dequeue, settled}, #{}), State4),
     ok.
+
+cancel_consumer_metrics_deletion_delayed_until_settled_test(Config) ->
+    Cid = {<<"cid">>, self()},
+    {State0, _} = enq(Config, 1, 1, first, test_init(test)),
+    {State1, #{key := CKey, next_msg_id := NextMsgId}, _} =
+        checkout(Config, ?LINE, Cid, 1, State0), %% prefetch of 1, 1 msg out
+    %% cancelling while a message is still checked out must not delete the
+    %% consumer metrics yet
+    {State2, _, Effects1} = apply(meta(Config, 3),
+                                  rabbit_fifo:make_checkout(Cid, cancel, #{}),
+                                  State1),
+    ?assertNot(has_cancel_consumer_handler_effect(Effects1)),
+    ?assertEqual(1, map_size(State2#rabbit_fifo.consumers)),
+    %% settling the last unacked message finally removes the consumer, and
+    %% only then should its metrics be deleted
+    {State3, ok, Effects2} =
+        apply(meta(Config, 4), rabbit_fifo:make_settle(CKey, [NextMsgId]),
+              State2),
+    ?assertEqual(0, map_size(State3#rabbit_fifo.consumers)),
+    ?assert(has_cancel_consumer_handler_effect(Effects2)),
+    ok.
+
+cancel_consumer_metrics_deletion_on_down_before_settled_test(Config) ->
+    %% a consumer cancelled while a message is still checked out is kept
+    %% around, with its metrics untouched, until that message is settled;
+    %% if its channel dies first instead, the consumer is gone immediately
+    %% and its metrics must be deleted there and then, not left dangling
+    Cid = {<<"cid">>, self()},
+    {State0, _} = enq(Config, 1, 1, first, test_init(test)),
+    {State1, _, _} = checkout(Config, ?LINE, Cid, 1, State0), %% 1 msg out
+    {State2, _, Effects1} = apply(meta(Config, 3),
+                                  rabbit_fifo:make_checkout(Cid, cancel, #{}),
+                                  State1),
+    ?assertNot(has_cancel_consumer_handler_effect(Effects1)),
+    %% noproc (unlike noconnection) means the process is definitely gone,
+    %% not just its node being temporarily unreachable
+    {_State3, _, Effects2} = apply(meta(Config, 4), {down, self(), noproc},
+                                   State2),
+    ?assert(has_cancel_consumer_handler_effect(Effects2)),
+    ok.
+
+cancel_real_once_lifetime_consumer_still_emits_consumer_metrics_test(Config) ->
+    %% a real consumer may itself request lifetime=once through the general
+    %% checkout command (see single_active_consumer_test); this must not be
+    %% confused with basic.get's internal once-off consumer, which also has
+    %% lifetime=once but never gets a created effect
+    Cid = {<<"cid">>, self()},
+    {State0, _, _} = checkout(Config, ?LINE, Cid, {once, {simple_prefetch, 1}},
+                              test_init(test)),
+    {_State1, _, Effects} = apply(meta(Config, 2),
+                                  rabbit_fifo:make_checkout(Cid, cancel, #{}),
+                                  State0),
+    ?assert(has_cancel_consumer_handler_effect(Effects)),
+    ok.
+
+basic_get_settled_emits_no_consumer_metrics_test(Config) ->
+    %% basic.get's internal once-off consumer never gets a consumer_created
+    %% row, so completing it (whether settled immediately or, in the tests
+    %% below, later or via a channel death) must not emit a deletion effect
+    Cid = {?FUNCTION_NAME_B, self()},
+    {State1, _} = enq(Config, 1, 1, first, test_init(test)),
+    {_State2, _, Effs} =
+        apply(meta(Config, 2), make_checkout(Cid, {dequeue, settled}, #{}),
+              State1),
+    ?assertNot(has_cancel_consumer_handler_effect(Effs)),
+    ok.
+
+basic_get_unsettled_settled_later_emits_no_consumer_metrics_test(Config) ->
+    Cid = {?FUNCTION_NAME_B, self()},
+    {State1, _} = enq(Config, 1, 1, first, test_init(test)),
+    {State2, '$ra_no_reply', _} =
+        apply(meta(Config, 2), make_checkout(Cid, {dequeue, unsettled}, #{}),
+              State1),
+    {_State3, Effs} = settle(Config, Cid, 3, 0, State2),
+    ?assertNot(has_cancel_consumer_handler_effect(Effs)),
+    ok.
+
+basic_get_unsettled_consumer_down_emits_no_consumer_metrics_test(Config) ->
+    Cid = {?FUNCTION_NAME_B, self()},
+    {State1, _} = enq(Config, 1, 1, first, test_init(test)),
+    {State2, '$ra_no_reply', _} =
+        apply(meta(Config, 2), make_checkout(Cid, {dequeue, unsettled}, #{}),
+              State1),
+    %% noproc (unlike noconnection) means the process is definitely gone,
+    %% not just its node being temporarily unreachable
+    {_State3, _, Effs} = apply(meta(Config, 3), {down, self(), noproc},
+                               State2),
+    ?assertNot(has_cancel_consumer_handler_effect(Effs)),
+    ok.
+
+has_cancel_consumer_handler_effect(Effects) ->
+    lists:any(fun ({mod_call, rabbit_quorum_queue,
+                    cancel_consumer_handler, _}) -> true;
+                  (_) -> false
+              end, Effects).
 
 down_with_noproc_consumer_returns_unsettled_test(Config) ->
     Cid = {?FUNCTION_NAME_B, self()},
@@ -1610,6 +1707,16 @@ state_enter_monitors_and_notifications_test(Config) ->
                          (_) -> false
                      end, Effects),
     ?ASSERT_EFF({monitor, process, _}, Effects),
+    ok.
+
+state_enter_follower_deletes_consumer_metrics_asynchronously_test(Config) ->
+    %% the table scan in delete_local_consumer_metrics/1 must not run
+    %% inline in the Ra process; state_enter(follower, ...) targets a
+    %% spawning wrapper instead
+    {State, _} = enq(Config, 1, 1, first, test_init(test)),
+    Effects = rabbit_fifo:state_enter(follower, State),
+    ?ASSERT_EFF({mod_call, rabbit_quorum_queue,
+                 async_delete_local_consumer_metrics, _}, Effects),
     ok.
 
 purge_test(Config) ->
@@ -2096,8 +2203,34 @@ single_active_consumer_state_enter_leader_include_waiting_consumers_test(Config)
     ct:pal("Efx ~p", [Effects]),
     %% 2 effects for each consumer process (channel process),
     %% 1 effect for the node,
-    %% 1 for decorators
-    ?assertEqual(2 * 3 + 1 + 1, length(Effects)).
+    %% 1 for decorators,
+    %% 1 for the bulk consumer metrics resync
+    ?assertEqual(2 * 3 + 1 + 1 + 1, length(Effects)).
+
+state_enter_leader_excludes_basic_get_consumer_from_bulk_metrics_test(Config) ->
+    %% a basic.get consumer still holding an unsettled message must not be
+    %% listed in the bulk consumer metrics resync that runs on every leader
+    %% election, or its phantom consumer_created row would never get
+    %% cleaned up (deletion is deliberately skipped for it, see
+    %% cancel_consumer_metrics_deletion_on_down_before_settled_test)
+    RealCid = {<<"real">>, self()},
+    GetCid = {<<"getter">>, self()},
+    Entries = [
+               {?LINE, rabbit_fifo:make_enqueue(self(), 1, one)},
+               {?LINE, rabbit_fifo:make_enqueue(self(), 2, two)},
+               {?LINE, make_checkout(RealCid, {auto, {simple_prefetch, 1}}, #{})},
+               {?LINE, make_checkout(GetCid, {dequeue, unsettled}, #{})}
+              ],
+    {State, _} = run_log(Config, test_init(?FUNCTION_NAME), Entries),
+    Effects = rabbit_fifo:state_enter(leader, State),
+    {value, {mod_call, rabbit_quorum_queue, bulk_update_consumer_metrics,
+             [_QRes, ConsumerMetrics]}} =
+        lists:search(fun ({mod_call, rabbit_quorum_queue,
+                           bulk_update_consumer_metrics, _}) -> true;
+                         (_) -> false
+                     end, Effects),
+    ?assertMatch([{_, <<"real">>, _, _, _, _, _}], ConsumerMetrics),
+    ok.
 
 single_active_consumer_state_enter_eol_include_waiting_consumers_test(Config) ->
     Resource = rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
@@ -2480,10 +2613,13 @@ single_active_consumer_priority_test(Config) ->
     assert_update_consumer_handler_state_transition(C2, Resource, true, single_active, lists:nth(2, ModCalls)),
     %% C1 should transition to waiting
     assert_update_consumer_handler_state_transition(C1, Resource, false, waiting, lists:nth(3, ModCalls)),
-    %% C3 is added as single_active
-    assert_update_consumer_handler_state_transition(C3, Resource, true, single_active, lists:nth(4, ModCalls)),
+    %% C3 is added as waiting (the active consumer, C2, still has a message
+    %% checked out so cannot be pre-empted immediately)
+    assert_update_consumer_handler_state_transition(C3, Resource, false, waiting, lists:nth(4, ModCalls)),
+    %% C3 is promoted to single_active once C2's message is settled
+    assert_update_consumer_handler_state_transition(C3, Resource, true, single_active, lists:nth(5, ModCalls)),
     %% C2 should transition as waiting
-    assert_update_consumer_handler_state_transition(C2, Resource, false, waiting, lists:nth(5, ModCalls)),
+    assert_update_consumer_handler_state_transition(C2, Resource, false, waiting, lists:nth(6, ModCalls)),
 
     ok.
 
@@ -3560,6 +3696,32 @@ delayed_retry_explicit_overrides_config_test(Config) ->
                    next_delayed_at := 9999}, rabbit_fifo:overview(State3)),
     ok.
 
+delivery_time_on_enqueue_test(Config) ->
+    %% A message enqueued with a `dt` annotation (set by rabbit_quorum_queue
+    %% when a client provides x-opt-delivery-time in the future) should be
+    %% delayed on its very first delivery, not just on redelivery/return.
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B)},
+    State0 = init(Conf),
+    Msg = mc:set_annotation(dt, 5000, mk_mc(<<"m1">>)),
+    {State1, _} = enq_ts(Config, 1, 1, Msg, 100, State0),
+    ?assertMatch(#{num_ready_messages := 0,
+                   num_delayed_messages := 1,
+                   next_delayed_at := 5000}, rabbit_fifo:overview(State1)),
+    ok.
+
+delivery_time_on_enqueue_past_test(Config) ->
+    %% A `dt` annotation that has already elapsed by enqueue time should not
+    %% delay the message - it should be ready for delivery straight away.
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B)},
+    State0 = init(Conf),
+    Msg = mc:set_annotation(dt, 50, mk_mc(<<"m1">>)),
+    {State1, _} = enq_ts(Config, 1, 1, Msg, 100, State0),
+    ?assertMatch(#{num_ready_messages := 1,
+                   num_delayed_messages := 0}, rabbit_fifo:overview(State1)),
+    ok.
+
 delayed_retry_counts_towards_limit_test(Config) ->
     %% Delayed messages should count towards max_length limit.
     %% The limit check uses messages_ready + delayed (not checked_out).
@@ -3692,10 +3854,10 @@ delayed_retry_empty_command_test(Config) ->
     ok.
 
 delayed_assign_deferred_test(Config) ->
-    %% Test assigning deferred messages by token to a specific consumer
+    %% Test assigning deferred messages by token to a specific consumer.
+    %% A deferral token only parks a message when x-opt-delivery-time is also set.
     Conf = #{name => ?FUNCTION_NAME,
-             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
-             delayed_retry => {all, 10000, 10000}},
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B)},
     State0 = init(Conf),
     Cid = {?FUNCTION_NAME_B, self()},
     %% Enqueue a message
@@ -3703,9 +3865,10 @@ delayed_assign_deferred_test(Config) ->
     %% Checkout the message
     {State2, #{key := CKey, next_msg_id := MsgId}, _} =
         checkout_ts(Config, 2, 100, Cid, {auto, {simple_prefetch, 2}}, State1),
-    %% Return with deferral token via modify
+    %% Return with deferral token and explicit delivery time via modify
     Token1 = <<"token-1">>,
-    Anns = #{<<"x-opt-deferral-token">> => Token1},
+    Anns = #{<<"x-opt-deferral-token">> => Token1,
+             <<"x-opt-delivery-time">> => 10000},
     Modify = rabbit_fifo:make_modify(CKey, [MsgId], false, false, Anns),
     {State3, _, _} = apply(meta(Config, 3, 100), Modify, State2),
     ?assertMatch(#{num_delayed_messages := 1,
@@ -3717,11 +3880,44 @@ delayed_assign_deferred_test(Config) ->
                    num_checked_out := 1}, rabbit_fifo:overview(State4)),
     ok.
 
-delayed_assign_deferred_insufficient_credit_test(Config) ->
-    %% Test that assign_deferred fails when consumer has insufficient credit
+delayed_assign_deferred_multiple_messages_test(Config) ->
+    %% A single deferral token may be assigned to more than one message,
+    %% e.g. as a result of a ranged DISPOSITION (first =/= last) settling
+    %% several deliveries with the same MODIFIED annotations.
     Conf = #{name => ?FUNCTION_NAME,
-             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
-             delayed_retry => {all, 10000, 10000}},
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B)},
+    State0 = init(Conf),
+    Cid = {?FUNCTION_NAME_B, self()},
+    %% Enqueue 2 messages.
+    {State1, _} = enq(Config, 1, 1, msg1, State0),
+    {State2, _} = enq(Config, 2, 2, msg2, State1),
+    %% Checkout both messages with prefetch 2.
+    {State3, #{key := CKey, next_msg_id := MsgId}, _} =
+        checkout_ts(Config, 3, 100, Cid, {auto, {simple_prefetch, 2}}, State2),
+    %% Return both in a single modify command under the same token, as a
+    %% ranged DISPOSITION would.
+    Token = <<"token-shared">>,
+    Anns = #{<<"x-opt-deferral-token">> => Token,
+             <<"x-opt-delivery-time">> => 10000},
+    Modify = rabbit_fifo:make_modify(CKey, [MsgId, MsgId + 1], false, false, Anns),
+    {State4, _, _} = apply(meta(Config, 4, 100), Modify, State3),
+    ?assertMatch(#{num_delayed_messages := 2,
+                   num_checked_out := 0}, rabbit_fifo:overview(State4)),
+    %% Assigning the shared token back to the consumer returns both messages.
+    Cmd = rabbit_fifo:make_delayed({assign_deferred, CKey, [Token]}),
+    {State5, {ok, 2}, _} = apply(meta(Config, 5, 100), Cmd, State4),
+    ?assertMatch(#{num_delayed_messages := 0,
+                   num_checked_out := 2}, rabbit_fifo:overview(State5)),
+    %% The token is now fully consumed: requesting it again finds nothing.
+    Cmd2 = rabbit_fifo:make_delayed({assign_deferred, CKey, [Token]}),
+    {_State6, {partial, 0, [Token]}, _} = apply(meta(Config, 6, 100), Cmd2, State5),
+    ok.
+
+delayed_assign_deferred_insufficient_credit_test(Config) ->
+    %% Test that assign_deferred fails when consumer has insufficient credit.
+    %% Both tokens use explicit x-opt-delivery-time so they are parked.
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B)},
     State0 = init(Conf),
     Cid = {?FUNCTION_NAME_B, self()},
     %% Enqueue 2 messages
@@ -3730,11 +3926,13 @@ delayed_assign_deferred_insufficient_credit_test(Config) ->
     %% Checkout both messages with prefetch 2
     {State3, #{key := CKey, next_msg_id := MsgId}, _} =
         checkout_ts(Config, 3, 100, Cid, {auto, {simple_prefetch, 2}}, State2),
-    %% Return both with deferral tokens
+    %% Return both with deferral tokens and explicit delivery times
     Token1 = <<"token-1">>,
     Token2 = <<"token-2">>,
-    Anns1 = #{<<"x-opt-deferral-token">> => Token1},
-    Anns2 = #{<<"x-opt-deferral-token">> => Token2},
+    Anns1 = #{<<"x-opt-deferral-token">> => Token1,
+              <<"x-opt-delivery-time">> => 10000},
+    Anns2 = #{<<"x-opt-deferral-token">> => Token2,
+              <<"x-opt-delivery-time">> => 10000},
     Mod1 = rabbit_fifo:make_modify(CKey, [MsgId], false, false, Anns1),
     {State4, _, _} = apply(meta(Config, 4, 100), Mod1, State3),
     Mod2 = rabbit_fifo:make_modify(CKey, [MsgId+1], false, false, Anns2),
@@ -3750,10 +3948,9 @@ delayed_assign_deferred_insufficient_credit_test(Config) ->
     ok.
 
 delayed_assign_deferred_not_found_test(Config) ->
-    %% Test that assign_deferred returns partial when some tokens not found
+    %% Test that assign_deferred returns partial when some tokens not found.
     Conf = #{name => ?FUNCTION_NAME,
-             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
-             delayed_retry => {all, 10000, 10000}},
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B)},
     State0 = init(Conf),
     Cid = {?FUNCTION_NAME_B, self()},
     %% Enqueue a message
@@ -3761,9 +3958,10 @@ delayed_assign_deferred_not_found_test(Config) ->
     %% Checkout the message
     {State2, #{key := CKey, next_msg_id := MsgId}, _} =
         checkout_ts(Config, 2, 100, Cid, {auto, {simple_prefetch, 2}}, State1),
-    %% Return with deferral token
+    %% Return with deferral token and explicit delivery time
     Token1 = <<"token-1">>,
-    Anns = #{<<"x-opt-deferral-token">> => Token1},
+    Anns = #{<<"x-opt-deferral-token">> => Token1,
+             <<"x-opt-delivery-time">> => 10000},
     Mod = rabbit_fifo:make_modify(CKey, [MsgId], false, false, Anns),
     {State3, _, _} = apply(meta(Config, 3, 100), Mod, State2),
     %% Try to assign with one valid and one invalid token
@@ -3778,8 +3976,7 @@ delayed_assign_deferred_not_found_test(Config) ->
 delayed_assign_deferred_consumer_not_found_test(Config) ->
     %% Test that assign_deferred fails when consumer doesn't exist
     Conf = #{name => ?FUNCTION_NAME,
-             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
-             delayed_retry => {all, 10000, 10000}},
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B)},
     State0 = init(Conf),
     %% Try to assign to non-existent consumer
     {_State, {error, consumer_not_found}, []} =
@@ -4024,7 +4221,7 @@ aux_upgrade_from_v1_test(_) ->
     ok = meck:new(ra_log, []),
     meck:expect(ra_log, last_index_term, fun (_) -> {0, 0} end),
     {no_reply, Aux, _, []} = handle_aux(leader, cast, tick, AuxV1, State0),
-    ?assertEqual(aux_v4, element(1, Aux)),
+    ?assertEqual(aux_v5, element(1, Aux)),
     ?assertEqual(Name, element(2, Aux)),
     meck:unload(),
     ok.
@@ -4046,7 +4243,7 @@ aux_upgrade_from_v2_test(_) ->
     ok = meck:new(ra_log, []),
     meck:expect(ra_log, last_index_term, fun (_) -> {0, 0} end),
     {no_reply, Aux, _, []} = handle_aux(leader, cast, tick, AuxV2, State0),
-    ?assertEqual(aux_v4, element(1, Aux)),
+    ?assertEqual(aux_v5, element(1, Aux)),
     ?assertEqual(Name, element(2, Aux)),
     meck:unload(),
     ok.
@@ -4069,7 +4266,30 @@ aux_upgrade_from_v3_test(_) ->
     ok = meck:new(ra_log, []),
     meck:expect(ra_log, last_index_term, fun (_) -> {0, 0} end),
     {no_reply, Aux, _, []} = handle_aux(leader, cast, tick, AuxV3, State0),
-    ?assertEqual(aux_v4, element(1, Aux)),
+    ?assertEqual(aux_v5, element(1, Aux)),
+    ?assertEqual(Name, element(2, Aux)),
+    meck:unload(),
+    ok.
+
+aux_upgrade_from_v4_test(_) ->
+    _ = ra_machine_ets:start_link(),
+    Name = ?FUNCTION_NAME,
+    %% shape of the aux state as used by an earlier version of rabbit_fifo,
+    %% before per-node ingress tracking was added
+    AuxV4 = {aux_v4, Name, unused_last_decorators_state, unused_consumer_timeout,
+             {aux_gc, 0}, unused_tick_pid, unused_cache, unused_last_checkpoint},
+    LastApplied = 0,
+    State0 = #{machine_state =>
+               init(#{name => Name,
+                      queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+                      single_active_consumer_on => false}),
+               log => mock_log,
+               cfg => #cfg{},
+               last_applied => LastApplied},
+    ok = meck:new(ra_log, []),
+    meck:expect(ra_log, last_index_term, fun (_) -> {0, 0} end),
+    {no_reply, Aux, _, []} = handle_aux(leader, cast, tick, AuxV4, State0),
+    ?assertEqual(aux_v5, element(1, Aux)),
     ?assertEqual(Name, element(2, Aux)),
     meck:unload(),
     ok.
@@ -4097,7 +4317,7 @@ machine_version_test(Config) ->
                   consumers = #{3 := #consumer{cfg = #consumer_cfg{priority = 0}}},
                   service_queue = S,
                   messages = Msgs}, ok,
-     [_|_]} = apply(meta(Config, Idx), {machine_version, 7, 8}, S1),
+     [_|_]} = apply(meta(Config, Idx), {machine_version, 7, 9}, S1),
 
     ?assertEqual(1, rabbit_fifo_pq:len(Msgs)),
     ?assert(priority_queue:is_queue(S)),
@@ -4125,16 +4345,16 @@ machine_version_waiting_consumer_test(Config) ->
                                                  #consumer_cfg{priority = 0}}},
                   service_queue = S,
                   messages = Msgs}, ok, _} = apply(meta(Config, Idx),
-                                                    {machine_version, 7, 8}, S1),
+                                                    {machine_version, 7, 9}, S1),
     %% validate message conversion to lqueue
     ?assertEqual(0, rabbit_fifo_pq:len(Msgs)),
     ?assert(priority_queue:is_queue(S)),
     ?assertEqual(1, priority_queue:len(S)),
     ok.
 
-convert_v7_to_v8_test(Config) ->
+convert_v7_to_v9_test(Config) ->
     ConfigV7 = [{machine_version, 7} | Config],
-    ConfigV8 = [{machine_version, 8} | Config],
+    ConfigV9 = [{machine_version, 9} | Config],
 
     EPid = test_util:fake_pid(node()),
     Pid1 = test_util:fake_pid(node()),
@@ -4159,12 +4379,88 @@ convert_v7_to_v8_test(Config) ->
     {StateV7, _} = run_log(rabbit_fifo_v7, ConfigV7, Init, Entries,
                            fun (_) -> true end),
     {#rabbit_fifo{consumers = Consumers}, ok, _} =
-        apply(meta(ConfigV8, ?LINE), {machine_version, 7, 8}, StateV7),
+        apply(meta(ConfigV9, ?LINE), {machine_version, 7, 9}, StateV7),
 
     ?assertMatch(#consumer{status = {suspected_down, up}},
                  maps:get(Cid1, Consumers)),
     ok.
 
+convert_v8_to_v9_deferred_test(Config) ->
+    %% v8's #delayed.deferred map stored a single delayed_key() per token
+    %% v9 allows a single token to address multiple messages.
+    ConfigV8 = [{machine_version, 8} | Config],
+    ConfigV9 = [{machine_version, 9} | Config],
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B)},
+    S0 = rabbit_fifo_v8:init(Conf),
+    Cid = {?FUNCTION_NAME_B, self()},
+
+    {S1, _, _} = rabbit_fifo_v8:apply(
+                   meta(ConfigV8, 1, 0, {notify, 1, self()}),
+                   rabbit_fifo_v8:make_enqueue(self(), 1, msg1), S0),
+    {S2, {ok, #{key := CKey, next_msg_id := MsgId}}, _} =
+        rabbit_fifo_v8:apply(
+          meta(ConfigV8, 2, 100),
+          rabbit_fifo_v8:make_checkout(Cid, {auto, {simple_prefetch, 1}}, #{}),
+          S1),
+    Token = <<"v8-token">>,
+    Anns = #{<<"x-opt-deferral-token">> => Token,
+             <<"x-opt-delivery-time">> => 10000},
+    Modify = rabbit_fifo_v8:make_modify(CKey, [MsgId], false, false, Anns),
+    {StateV8, _, _} = rabbit_fifo_v8:apply(meta(ConfigV8, 3, 100), Modify, S2),
+    ?assertMatch(#{num_delayed_messages := 1}, rabbit_fifo_v8:overview(StateV8)),
+
+    %% Upgrade to v9. Before the fix, the deferred entry stayed a bare key.
+    {StateV9, ok, _} = rabbit_fifo:apply(meta(ConfigV9, 4),
+                                         {machine_version, 8, 9}, StateV8),
+    ?assertMatch(#{num_delayed_messages := 1}, rabbit_fifo:overview(StateV9)),
+
+    %% Requesting the v8-deferred token back must not crash, and must find
+    %% the message (this failed with a function_clause before the fix).
+    Cmd = rabbit_fifo:make_delayed({assign_deferred, CKey, [Token]}),
+    {_StateV9b, {ok, 1}, _} = rabbit_fifo:apply(meta(ConfigV9, 5), Cmd, StateV9),
+    ok.
+
+convert_v8_to_v9_initial_spec_test(Config) ->
+    %% v9 added #consumer_cfg.initial_spec; a consumer already in flight at
+    %% the upgrade instant must have it back-filled correctly, both for a
+    %% real consumer and for a basic.get consumer still holding an unsettled
+    %% message
+    ConfigV8 = [{machine_version, 8} | Config],
+    ConfigV9 = [{machine_version, 9} | Config],
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B)},
+    S0 = rabbit_fifo_v8:init(Conf),
+    RealCid = {<<"real">>, self()},
+    GetCid = {<<"getter">>, self()},
+
+    {S1, _, _} = rabbit_fifo_v8:apply(
+                   meta(ConfigV8, 1, 0, {notify, 1, self()}),
+                   rabbit_fifo_v8:make_enqueue(self(), 1, msg1), S0),
+    {S2, _, _} = rabbit_fifo_v8:apply(
+                   meta(ConfigV8, 2, 0, {notify, 2, self()}),
+                   rabbit_fifo_v8:make_enqueue(self(), 2, msg2), S1),
+    {S3, {ok, _}, _} =
+        rabbit_fifo_v8:apply(
+          meta(ConfigV8, 3),
+          rabbit_fifo_v8:make_checkout(RealCid, {auto, {simple_prefetch, 1}}, #{}),
+          S2),
+    {StateV8, _, _} =
+        rabbit_fifo_v8:apply(
+          meta(ConfigV8, 4),
+          rabbit_fifo_v8:make_checkout(GetCid, {dequeue, unsettled}, #{}),
+          S3),
+
+    {#rabbit_fifo{consumers = Consumers}, ok, _} =
+        rabbit_fifo:apply(meta(ConfigV9, 5), {machine_version, 8, 9}, StateV8),
+
+    #consumer{cfg = #consumer_cfg{initial_spec = RealSpec}} =
+        maps:get(3, Consumers),
+    ?assertMatch({auto, _}, RealSpec),
+    #consumer{cfg = #consumer_cfg{initial_spec = GetSpec}} =
+        maps:get(GetCid, Consumers),
+    ?assertMatch({dequeue, _}, GetSpec),
+    ok.
 
 queue_ttl_test(C) ->
     QName = rabbit_misc:r(<<"/">>, queue, <<"test">>),
@@ -4992,6 +5288,64 @@ query_single_active_consumer_consumer_info_test(Config) ->
                    consumer_strategy := single_active,
                    num_checked_out := 0}, Info2),
     ok.
+
+
+%% Ingress tracking tests
+
+ingress_bytes_by_node_accumulates_on_enqueue_test(Config) ->
+    S0 = test_init(ingress_accumulates),
+    Msg = mk_mc(<<"hello">>),
+    Pid = self(),
+    Enq = make_enqueue(Pid, 1, Msg),
+    {S1, _, _} = apply(meta(Config, 1, 0, {notify, 1, Pid}), Enq, S0),
+    Ingress = S1#rabbit_fifo.ingress_bytes_by_node,
+    ?assert(maps:get(node(Pid), Ingress, 0) > 0),
+    ok.
+
+ingress_bytes_by_node_survives_snapshot_test(Config) ->
+    S0 = test_init(ingress_snapshot),
+    Msg = mk_mc(<<"test">>),
+    {MetaSize, BodySize} = mc:size(Msg),
+    ExpectedBytes = MetaSize + BodySize,
+    Pid = self(),
+    Enq = make_enqueue(Pid, 1, Msg),
+    {S1, _, _} = apply(meta(Config, 1, 0, {notify, 1, Pid}), Enq, S0),
+    Ingress = S1#rabbit_fifo.ingress_bytes_by_node,
+    ?assertEqual(#{node(Pid) => ExpectedBytes}, Ingress),
+    %% Simulate the generic term serialization Ra's default snapshot
+    %% mechanism performs; the exact recorded byte count, not just the
+    %% map's shape, must come through unchanged
+    S2 = binary_to_term(term_to_binary(S1)),
+    Ingress2 = S2#rabbit_fifo.ingress_bytes_by_node,
+    ?assertEqual(#{node(Pid) => ExpectedBytes}, Ingress2),
+    ok.
+
+
+update_ingress_seeds_baseline_on_first_observation_test(_Config) ->
+    %% ingress_bytes_by_node is cumulative since queue creation; the first
+    %% time a node is observed (fresh aux, restart, or a first-time leader
+    %% promotion) update_ingress/3 must seed a baseline rather than feed
+    %% the whole lifetime total in as a single tick's delta
+    _ = ra_machine_ets:start_link(),
+    Node = node(),
+    Aux0 = rabbit_fifo:init_aux(?FUNCTION_NAME),
+    Ingress0 = element(9, Aux0),
+
+    Overview1 = #{ingress_bytes_by_node => #{Node => 10_000_000}},
+    Ingress1 = rabbit_fifo:update_ingress(Overview1, [Node], Ingress0),
+    ?assertEqual(#{}, rabbit_fifo:compute_ingress_rates(Ingress1)),
+
+    Overview2 = #{ingress_bytes_by_node => #{Node => 10_000_060}},
+    Ingress2 = rabbit_fifo:update_ingress(Overview2, [Node], Ingress1),
+    Rates2 = rabbit_fifo:compute_ingress_rates(Ingress2),
+    Rate2 = maps:get(Node, Rates2),
+    ?assert(Rate2 > 0),
+    %% a spike from the whole ~10M cumulative total leaking through would
+    %% be several orders of magnitude larger than this
+    ?assert(Rate2 < 1000),
+    ok.
+
+%% Ingress tracking tests end
 
 
 %% Utility
