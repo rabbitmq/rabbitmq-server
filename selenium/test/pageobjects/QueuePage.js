@@ -8,6 +8,7 @@ const QUEUE_NAME = By.css('div#main h1 b')
 const DELETE_SECTION = By.css('div#main div#delete')
 const DELETE_BUTTON = By.css('div#main div#delete input[type=submit]')
 const FEATURES_TABLE = By.css('table#details-queue-table td#details-queue-features table.mini')
+const STATS_TABLE = By.css('table#details-queue-stats-table')
 const STATS_CONSUMER_COUNT = By.css('table#details-queue-stats-table td#consumers')
 
 const CONSUMERS_SECTION = By.css('div#queue-consumers-section')
@@ -32,6 +33,9 @@ module.exports = class QueuePage extends BasePage {
   }
   async getFeatures() {
     return this.getTableMini(FEATURES_TABLE)
+  }
+  async getStatsTableText() {
+    return this.getText(STATS_TABLE)
   }
   async getConsumersSectionTitle() {
     return this.getText(CONSUMERS_SECTION_TITLE)
