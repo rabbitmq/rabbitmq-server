@@ -40,6 +40,19 @@ handle_response(Response, #state{socket = Socket}) ->
             rabbit_access_control:check_user_login(User, AuthProps);
         error ->
             {protocol_error, "response ~tp invalid", [Response]}
+    end;
+
+%% This clause is reached during the RabbitMQ Stream Protocol's
+%% update-secret feature. In `rabbit_stream_reader:handle_frame_post_auth/4`,
+%% a new `sasl_authenticate` frame is received. At this point, the
+%% `authentication_state` has been set to `done`, so this fallback clause
+%% matches and performs the credentials check.
+handle_response(Response, _State) ->
+    case extract_user_pass(Response) of
+        {ok, User, Pass} ->
+            rabbit_access_control:check_user_pass_login(User, Pass);
+        error ->
+            {protocol_error, "response ~tp invalid", [Response]}
     end.
 
 
