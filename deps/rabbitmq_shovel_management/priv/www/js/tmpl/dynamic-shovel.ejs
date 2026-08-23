@@ -33,6 +33,10 @@
         <td><%= fmt_boolean(fallback_value(shovel, 'dest-add-forward-headers', 'add-forward-headers')) %></td>
       </tr>
       <tr>
+        <th>Max bytes/sec</th>
+        <td><%= fmt_string(shovel.value['dest-max-bytes-per-second'], 'unlimited') %></td>
+      </tr>
+      <tr>
         <th>Ack mode</th>
         <td><%= fmt_string(shovel.value['ack-mode']) %></td>
       </tr>

@@ -126,13 +126,17 @@ parse(_Name, {destination, Dest}) ->
                                proplists:get_value(dest_exchange, Dest, none)),
     RK = parse_parameter(dest_exchange_key, fun parse_binary/1,
                          proplists:get_value(dest_routing_key, Dest, none)),
+    MaxBytesPerSecond = parse_parameter(max_bytes_per_second,
+                                        fun parse_positive_integer_or_undefined/1,
+                                        proplists:get_value(max_bytes_per_second, Dest, undefined)),
     #{module => ?MODULE,
       uris => proplists:get_value(uris, Dest),
       resource_decl  => rabbit_shovel_util:decl_fun(?MODULE, {destination, Dest}),
       exchange => Exchange,
       routing_key => RK,
       add_forward_headers => proplists:get_value(add_forward_headers, Dest, false),
-      add_timestamp_header => proplists:get_value(add_timestamp_header, Dest, false)}.
+      add_timestamp_header => proplists:get_value(add_timestamp_header, Dest, false),
+      max_bytes_per_second => MaxBytesPerSecond}.
 
 parse_source(Def) ->
     %% TODO add exchange source back
@@ -194,6 +198,7 @@ parse_dest({_VHost, _Name}, _ClusterName, Def, _SourceHeaders) ->
 
     AddHeaders = pget(<<"dest-add-forward-headers">>, Def, false),
     AddTimestampHeader = pget(<<"dest-add-timestamp-header">>, Def, false),
+    MaxBytesPerSecond = pget(<<"dest-max-bytes-per-second">>, Def, undefined),
     %% Details are only used for status report in rabbitmqctl, as vhost is not
     %% available to query the runtime parameters.
     Details = maps:from_list([{K, V} || {K, V} <- [{exchange, DestX},
@@ -204,7 +209,8 @@ parse_dest({_VHost, _Name}, _ClusterName, Def, _SourceHeaders) ->
                  uris => DestURIs,
                  resource_decl => DestDeclFun,
                  add_forward_headers => AddHeaders,
-                 add_timestamp_header => AddTimestampHeader
+                 add_timestamp_header => AddTimestampHeader,
+                 max_bytes_per_second => MaxBytesPerSecond
                 }, Details).
 
 validate_src(Def) ->
@@ -249,7 +255,8 @@ validate_dest_funs(_Def, User) ->
      {<<"dest-queue-args">>, fun rabbit_shovel_util:validate_queue_args/2, optional},
      {<<"dest-add-forward-headers">>, fun rabbit_parameter_validation:boolean/2,optional},
      {<<"dest-add-timestamp-header">>, fun rabbit_parameter_validation:boolean/2,optional},
-     {<<"dest-predeclared">>,  fun rabbit_parameter_validation:boolean/2, optional}
+     {<<"dest-predeclared">>,  fun rabbit_parameter_validation:boolean/2, optional},
+     {<<"dest-max-bytes-per-second">>, fun validate_positive_integer/2, optional}
     ].
 
 connect_source(State = #{source := Src = #{resource_decl := {M, F, MFArgs},
@@ -388,15 +395,25 @@ init_dest(#{name := Name,
     _TRef = erlang:send_after(1000, self(), send_confirms_and_nacks),
     Alarms0 = rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
     Alarms = sets:from_list(Alarms0),
+    MaxBytesPerSecond = normalized_max_bytes_per_second(Dst),
+    RateLimiter = rabbit_shovel_rate_limit:init(MaxBytesPerSecond),
     case AFH of
         true ->
             Props = #{<<"x-opt-shovelled-by">> => rabbit_nodes:cluster_name(),
                       <<"x-opt-shovel-type">> => rabbit_data_coercion:to_binary(Type),
                       <<"x-opt-shovel-name">> => rabbit_data_coercion:to_binary(Name)},
             State#{dest => Dst#{cached_forward_headers => Props,
-                                alarms => Alarms}};
+                                alarms => Alarms,
+                                rate_limiter => RateLimiter}};
         false ->
-            State#{dest => Dst#{alarms => Alarms}}
+            State#{dest => Dst#{alarms => Alarms,
+                                rate_limiter => RateLimiter}}
+    end.
+
+normalized_max_bytes_per_second(Dst) ->
+    case maps:get(max_bytes_per_second, Dst, undefined) of
+        N when is_integer(N), N > 0 -> N;
+        _ -> undefined
     end.
 
 source_uri(_State) ->
@@ -525,13 +542,45 @@ handle_dest({conserve_resources, Alarm, Conserve}, #{dest := #{alarms := Alarms0
     State = State0#{dest => Dest#{alarms => Alarms}},
     case {sets:is_empty(Alarms0), sets:is_empty(Alarms)} of
         {false, true} ->
-            %% All alarms cleared
-            forward_pending_delivery(State);
+            %% All alarms cleared, but we may still be pacing ourselves
+            %% under our own rate limit -- only resume once nothing is
+            %% blocking us.
+            resume_if_unblocked(State);
         {_, _} ->
             State
     end;
+handle_dest({shovel, rate_limit_check}, #{dest := Dst} = State) ->
+    %% The delivery at the front of the pending queue (if any) already
+    %% had its bytes debited from the rate limiter's bucket at the point
+    %% it was throttled (see try_send/3), reserving its place in the
+    %% schedule. Send it unconditionally now that its delay has elapsed
+    %% -- without checking the limiter again -- then resume normal
+    %% (checked) draining of anything queued behind it.
+    State1 = State#{dest => Dst#{rate_limited => false}},
+    case is_blocked(State1) of
+        true ->
+            State1;
+        false ->
+            case pop_pending_delivery(State1) of
+                empty ->
+                    State1;
+                {{Tag, Mc}, State2} ->
+                    State2a = clear_rate_limited_head(State2),
+                    State3 = do_forward(Tag, Mc, State2a),
+                    resume_if_unblocked(State3)
+            end
+    end;
 handle_dest(_Msg, State) ->
     State.
+
+resume_if_unblocked(State) ->
+    case is_blocked(State) of
+        true  -> State;
+        false -> forward_pending_delivery(State)
+    end.
+
+clear_rate_limited_head(State = #{dest := Dst}) ->
+    State#{dest => maps:remove(rate_limited_head, Dst)}.
 
 ack(DeliveryTag, Multiple, State) ->
     maybe_grant_credit(settle(complete, DeliveryTag, Multiple, State)).
@@ -545,7 +594,31 @@ forward(Tag, Msg, State) ->
             PendingEntry = {Tag, Msg},
             add_pending_delivery(PendingEntry, State);
         false ->
-            do_forward(Tag, Msg, State)
+            try_send(Tag, Msg, State)
+    end.
+
+%% Called when a delivery is otherwise free to go out right now (i.e. we
+%% already know we're not blocked by a resource alarm). Applies the
+%% configured rate limit, if any -- see try_send/3 in
+%% rabbit_amqp091_shovel.erl for the full rationale, which this mirrors.
+try_send(Tag, Msg, State = #{dest := #{rate_limited_head := true} = Dst}) ->
+    %% This pending head was already debited when it first hit the
+    %% limiter. Send it once without charging it again.
+    State1 = State#{dest => maps:remove(rate_limited_head, Dst)},
+    do_forward(Tag, Msg, State1);
+try_send(Tag, Msg, State = #{dest := Dst}) ->
+    Limiter = maps:get(rate_limiter, Dst, rabbit_shovel_rate_limit:init(undefined)),
+    {MetadataSize, PayloadSize} = mc:size(Msg),
+    case rabbit_shovel_rate_limit:record(MetadataSize + PayloadSize, Limiter) of
+        {ok, Limiter1} ->
+            State1 = State#{dest => Dst#{rate_limiter => Limiter1}},
+            do_forward(Tag, Msg, State1);
+        {throttle, DelayMs, Limiter1} ->
+            State1 = State#{dest => Dst#{rate_limiter => Limiter1,
+                                         rate_limited => true,
+                                         rate_limited_head => true}},
+            _ = erlang:send_after(DelayMs, self(), {shovel, rate_limit_check}),
+            add_pending_delivery_front({Tag, Msg}, State1)
     end.
 
 do_forward(_, _, #{source := #{remaining_unacked := 0}} = State) ->
@@ -646,6 +719,18 @@ parse_binary(Binary) when is_binary(Binary) ->
     Binary;
 parse_binary(NotABinary) ->
     fail({require_binary, NotABinary}).
+
+parse_positive_integer_or_undefined(undefined) ->
+    undefined;
+parse_positive_integer_or_undefined(N) when is_integer(N) andalso N > 0 ->
+    N;
+parse_positive_integer_or_undefined(N) ->
+    fail({require_positive_integer_or_undefined, N}).
+
+validate_positive_integer(_Name, Term) when is_integer(Term) andalso Term > 0 ->
+    ok;
+validate_positive_integer(Name, Term) ->
+    {error, "~ts should be a positive integer, actually was ~tp", [Name, Term]}.
 
 consumer_tag(Name) ->
     CTag0 = rabbit_shovel_util:gen_unique_name(Name, "receiver"),
@@ -1117,14 +1202,23 @@ messages_delivered(QName, S0) ->
             ok
     end.
 
-is_blocked(#{dest := #{alarms := Alarms}}) ->
-    not sets:is_empty(Alarms);
+is_blocked(#{dest := #{alarms := Alarms} = Dest}) ->
+    not sets:is_empty(Alarms) orelse maps:get(rate_limited, Dest, false);
 is_blocked(_) ->
     false.
 
 add_pending_delivery(Elem, State = #{dest := Dest}) ->
     Pending = maps:get(pending_delivery, Dest, lqueue:new()),
     State#{dest => Dest#{pending_delivery => lqueue:in(Elem, Pending)}}.
+
+%% Like add_pending_delivery/2, but pushes to the front of the queue.
+%% Used to put a delivery back where it came from when it fails a
+%% rate-limit check after having been popped off the front by
+%% forward_pending_delivery/1, so that delivery order towards the
+%% destination isn't disturbed.
+add_pending_delivery_front(Elem, State = #{dest := Dest}) ->
+    Pending = maps:get(pending_delivery, Dest, lqueue:new()),
+    State#{dest => Dest#{pending_delivery => lqueue:in_r(Elem, Pending)}}.
 
 pop_pending_delivery(State = #{dest := Dest}) ->
     Pending = maps:get(pending_delivery, Dest, lqueue:new()),
@@ -1140,7 +1234,7 @@ forward_pending_delivery(State) ->
         empty ->
             State;
         {{Tag, Mc}, S} ->
-            S2 = do_forward(Tag, Mc, S),
+            S2 = try_send(Tag, Mc, S),
             case is_blocked(S2) of
                 true ->
                     S2;

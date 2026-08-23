@@ -109,13 +109,17 @@ parse(Name, {destination, Dest}) ->
     ATH = proplists:get_value(add_timestamp_header, Dest, false),
     PropsFun1 = add_forward_headers_fun(Name, AFH, PropsFun),
     PropsFun2 = add_timestamp_header_fun(ATH, PropsFun1),
+    MaxBytesPerSecond = parse_parameter(max_bytes_per_second,
+                                        fun parse_positive_integer_or_undefined/1,
+                                        proplists:get_value(max_bytes_per_second, Dest, undefined)),
     #{module => ?MODULE,
       uris => proplists:get_value(uris, Dest),
       resource_decl  => rabbit_shovel_util:decl_fun(?MODULE, {destination, Dest}),
       props_fun => PropsFun2,
       fields_fun => PubFieldsFun,
       add_forward_headers => AFH,
-      add_timestamp_header => ATH}.
+      add_timestamp_header => ATH,
+      max_bytes_per_second => MaxBytesPerSecond}.
 
 parse_source(Def) ->
     SrcURIs  = obfuscated_uris(<<"src-uri">>, Def),
@@ -185,6 +189,7 @@ parse_dest({VHost, Name}, ClusterName, Def, SourceHeaders) ->
                         V =/= none],
     AddHeadersLegacy = pget(<<"add-forward-headers">>, Def, false),
     AddHeaders = pget(<<"dest-add-forward-headers">>, Def, AddHeadersLegacy),
+    MaxBytesPerSecond = pget(<<"dest-max-bytes-per-second">>, Def, undefined),
     Table0 = [{<<"shovelled-by">>, ClusterName},
               {<<"shovel-type">>,  <<"dynamic">>},
               {<<"shovel-name">>,  Name},
@@ -207,7 +212,8 @@ parse_dest({VHost, Name}, ClusterName, Def, SourceHeaders) ->
                  fields_fun => {?MODULE, fields_fun, [X, Key]},
                  props_fun => {?MODULE, props_fun, [Table0, Table2, SetProps,
                                                     AddHeaders, SourceHeaders,
-                                                    AddTimestampHeader]}
+                                                    AddTimestampHeader]},
+                 max_bytes_per_second => MaxBytesPerSecond
                 }, Details).
 
 validate_src(Def) ->
@@ -261,7 +267,8 @@ validate_dest_funs(_Def, User) ->
      {<<"dest-add-timestamp-header">>, fun rabbit_parameter_validation:boolean/2,optional},
      {<<"publish-properties">>, fun validate_properties/2,  optional},
      {<<"dest-publish-properties">>, fun validate_properties/2,  optional},
-     {<<"dest-predeclared">>,  fun rabbit_parameter_validation:boolean/2, optional}
+     {<<"dest-predeclared">>,  fun rabbit_parameter_validation:boolean/2, optional},
+     {<<"dest-max-bytes-per-second">>, fun validate_positive_integer/2, optional}
     ].
 
 connect_source(Conf = #{name := Name,
@@ -321,7 +328,15 @@ init_dest(Conf = #{ack_mode := AckMode,
             ok
     end,
     amqp_connection:register_blocked_handler(Conn, self()),
-    Conf#{dest => Dst#{unacked => #{}}}.
+    MaxBytesPerSecond = normalized_max_bytes_per_second(Dst),
+    Conf#{dest => Dst#{unacked => #{},
+                       rate_limiter => rabbit_shovel_rate_limit:init(MaxBytesPerSecond)}}.
+
+normalized_max_bytes_per_second(Dst) ->
+    case maps:get(max_bytes_per_second, Dst, undefined) of
+        N when is_integer(N), N > 0 -> N;
+        _ -> undefined
+    end.
 
 ack(Tag, Multi, State = #{source := #{current := {_, Chan, _}}}) ->
     ok = amqp_channel:cast(Chan, #'basic.ack'{delivery_tag = Tag,
@@ -360,31 +375,67 @@ forward_pending(State) ->
         empty ->
             State;
         {{Tag, Mc}, S} ->
-            S2 = do_forward(Tag, Mc, S),
-            S3 = control_throttle(S2),
-            case is_blocked(S3) of
+            S2 = try_send(Tag, Mc, S),
+            case is_blocked(S2) of
                 true ->
-                    %% We are blocked by client-side flow-control and/or
+                    %% We are blocked by client-side flow-control, a
                     %% `connection.blocked` message from the destination
-                    %% broker. Stop forwarding pending messages.
-                    S3;
+                    %% broker, and/or our own rate limit. Stop forwarding
+                    %% pending messages.
+                    S2;
                 false ->
-                    forward_pending(S3)
+                    forward_pending(S2)
             end
     end.
 
 forward(IncomingTag, Mc, State) ->
     case is_blocked(State) of
         true ->
-            %% We are blocked by client-side flow-control and/or
+            %% We are blocked by client-side flow-control, a
             %% `connection.blocked` message from the destination
-            %% broker. Simply cache the forward.
+            %% broker, and/or our own rate limit. Simply cache the
+            %% forward.
             PendingEntry = {IncomingTag, Mc},
             add_pending(PendingEntry, State);
         false ->
-            State1 = do_forward(IncomingTag, Mc, State),
-            control_throttle(State1)
+            try_send(IncomingTag, Mc, State)
     end.
+
+%% Called when a message is otherwise free to go out right now (i.e. we
+%% already know we're not blocked by flow control or a
+%% `connection.blocked`). Applies the configured rate limit, if any:
+%%   * within budget: forward the message immediately.
+%%   * over budget: the message's bytes are debited from the rate
+%%     limiter's bucket as a reservation (see rabbit_shovel_rate_limit),
+%%     and the message is put back at the *front* of the pending queue
+%%     -- preserving delivery order towards the destination -- to be
+%%     sent, unconditionally and without being charged again, once a
+%%     timer confirms its reserved delay has elapsed. See the
+%%     `{shovel, rate_limit_check}` clause of handle_dest/2.
+try_send(Tag, Mc, State = #{dest := #{rate_limited_head := true} = Dst}) ->
+    %% This pending head was already debited when it first hit the
+    %% limiter. Send it once without charging it again.
+    State1 = State#{dest => maps:remove(rate_limited_head, Dst)},
+    State2 = do_forward(Tag, Mc, State1),
+    control_throttle(State2);
+try_send(Tag, Mc, State = #{dest := Dst}) ->
+    Limiter = maps:get(rate_limiter, Dst, rabbit_shovel_rate_limit:init(undefined)),
+    {MetadataSize, PayloadSize} = mc:size(Mc),
+    case rabbit_shovel_rate_limit:record(MetadataSize + PayloadSize, Limiter) of
+        {ok, Limiter1} ->
+            State1 = set_rate_limiter(Limiter1, State),
+            State2 = do_forward(Tag, Mc, State1),
+            control_throttle(State2);
+        {throttle, DelayMs, Limiter1} ->
+            State1 = State#{dest => Dst#{rate_limiter => Limiter1,
+                                         rate_limited_head => true}},
+            _ = erlang:send_after(DelayMs, self(), {shovel, rate_limit_check}),
+            State2 = update_blocked_by(rate_limit, true, State1),
+            add_pending_front({Tag, Mc}, State2)
+    end.
+
+set_rate_limiter(Limiter, State = #{dest := Dst}) ->
+    State#{dest => Dst#{rate_limiter => Limiter}}.
 
 do_forward(IncomingTag, Mc0,
            State0 = #{dest := #{props_fun := {M, F, Args},
@@ -465,17 +516,53 @@ handle_dest(#'connection.blocked'{}, State) ->
 
 handle_dest(#'connection.unblocked'{}, State) ->
     State1 = update_blocked_by(connection_blocked, false, State),
-    %% we are unblocked so can begin to forward
-    forward_pending(State1);
+    %% we may be unblocked, but could still be blocked for another
+    %% reason (e.g. an outstanding rate-limit delay) -- only resume
+    %% draining the pending queue once nothing is blocking us
+    resume_if_unblocked(State1);
 
 handle_dest({bump_credit, Msg}, State) ->
     credit_flow:handle_bump_msg(Msg),
     State1 = control_throttle(State),
-    %% we have credit so can begin to forward
-    forward_pending(State1);
+    %% we may have credit, but could still be blocked for another
+    %% reason -- only resume draining the pending queue once nothing
+    %% is blocking us
+    resume_if_unblocked(State1);
+
+handle_dest({shovel, rate_limit_check}, State) ->
+    %% The message at the front of the pending queue (if any) already
+    %% had its bytes debited from the rate limiter's bucket at the
+    %% point it was throttled (see try_send/3), reserving its place in
+    %% the schedule. Send it unconditionally now that its delay has
+    %% elapsed -- without checking the limiter again -- then resume
+    %% normal (checked) draining of anything queued behind it.
+    State1 = update_blocked_by(rate_limit, false, State),
+    case is_blocked(State1) of
+        true ->
+            State1;
+        false ->
+            case pop_pending(State1) of
+                empty ->
+                    State1;
+                {{Tag, Mc}, State2} ->
+                    State2a = clear_rate_limited_head(State2),
+                    State3 = do_forward(Tag, Mc, State2a),
+                    State4 = control_throttle(State3),
+                    resume_if_unblocked(State4)
+            end
+    end;
 
 handle_dest(_Msg, _State) ->
     not_handled.
+
+resume_if_unblocked(State) ->
+    case is_blocked(State) of
+        true  -> State;
+        false -> forward_pending(State)
+    end.
+
+clear_rate_limited_head(State = #{dest := Dst}) ->
+    State#{dest => maps:remove(rate_limited_head, Dst)}.
 
 close_source(#{source := #{current := {Conn, Ch, _}} = Src}) ->
     _ = rabbit_shovel_util:cancel_expire_after_duration(Src),
@@ -570,6 +657,14 @@ pending_count(#{dest := Dest}) ->
 add_pending(Elem, State = #{dest := Dest}) ->
     Pending = maps:get(pending, Dest, lqueue:new()),
     State#{dest => Dest#{pending => lqueue:in(Elem, Pending)}}.
+
+%% Like add_pending/2, but pushes to the front of the queue. Used to put
+%% a message back where it came from when it fails a rate-limit check
+%% after having been popped off the front by forward_pending/1, so that
+%% delivery order towards the destination isn't disturbed.
+add_pending_front(Elem, State = #{dest := Dest}) ->
+    Pending = maps:get(pending, Dest, lqueue:new()),
+    State#{dest => Dest#{pending => lqueue:in_r(Elem, Pending)}}.
 
 pop_pending(State = #{dest := Dest}) ->
     Pending = maps:get(pending, Dest, lqueue:new()),
@@ -738,6 +833,13 @@ parse_non_negative_integer(N) when is_integer(N) andalso N >= 0 ->
 parse_non_negative_integer(N) ->
     fail({require_non_negative_integer, N}).
 
+parse_positive_integer_or_undefined(undefined) ->
+    undefined;
+parse_positive_integer_or_undefined(N) when is_integer(N) andalso N > 0 ->
+    N;
+parse_positive_integer_or_undefined(N) ->
+    fail({require_positive_integer_or_undefined, N}).
+
 parse_binary(Binary) when is_binary(Binary) ->
     Binary;
 parse_binary(NotABinary) ->
@@ -835,6 +937,11 @@ set_properties(Props, [{Ix, V} | Rest]) ->
     set_properties(setelement(Ix, Props, V), Rest).
 
 %% TODO headers?
+validate_positive_integer(_Name, Term) when is_integer(Term) andalso Term > 0 ->
+    ok;
+validate_positive_integer(Name, Term) ->
+    {error, "~ts should be a positive integer, actually was ~tp", [Name, Term]}.
+
 validate_properties(Name, Term0) ->
     Term = case Term0 of
                T when is_map(T)  ->

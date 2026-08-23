@@ -70,7 +70,7 @@ dispatcher_add(function(sammy) {
 
             rekey_params(this, trimProtoPrefix);
 
-            var num_keys = ['src-prefetch-count', 'reconnect-delay'];
+            var num_keys = ['src-prefetch-count', 'reconnect-delay', 'dest-max-bytes-per-second'];
 
             //copy the correct delete-after value
             if (this.params['src-delete-after-selector'] == 'never') {
@@ -133,6 +133,9 @@ HELP['shovel-reconnect'] =
 
 HELP['shovel-forward-headers'] =
     'Whether to add headers to the shovelled messages indicating where they have been shovelled from and to. Defaults to false if not set.';
+
+HELP['shovel-max-bytes-per-second'] =
+    'Caps how fast this shovel forwards messages to its destination, in bytes per second (e.g. enter 6500 for roughly 52 Kbps). Leave blank for no limit, which is the default.';
 
 HELP['shovel-ack-mode'] =
     '<dl>\

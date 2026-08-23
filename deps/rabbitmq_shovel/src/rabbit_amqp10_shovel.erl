@@ -91,7 +91,8 @@ parse(_Name, {destination, Conf}) ->
       delivery_annotations => maps:from_list(pget(delivery_annotations, Conf, [])),
       message_annotations => maps:from_list(pget(message_annotations, Conf, [])),
       add_forward_headers => pget(add_forward_headers, Conf, false),
-      add_timestamp_header => pget(add_timestamp_header, Conf, false)
+      add_timestamp_header => pget(add_timestamp_header, Conf, false),
+      max_bytes_per_second => pget(max_bytes_per_second, Conf, undefined)
      };
 parse(_Name, {source, Conf}) ->
     Uris = pget(uris, Conf),
@@ -137,6 +138,7 @@ parse_dest({_VHost, _Name}, _ClusterName, Def, _SourceHeaders) ->
       predeclared => Predeclared,
       add_timestamp_header => pget(<<"dest-add-timestamp-header">>, Def, false),
       add_forward_headers => pget(<<"dest-add-forward-headers">>, Def, false),
+      max_bytes_per_second => pget(<<"dest-max-bytes-per-second">>, Def, undefined),
       unacked => #{}
      }.
 
@@ -179,7 +181,8 @@ validate_dest_funs(_Def, User) ->
      {<<"dest-application-properties">>, fun validate_amqp10_map/2, optional},
      {<<"dest-message-annotations">>, fun validate_amqp10_map/2, optional},
      {<<"dest-properties">>, fun validate_amqp10_map/2, optional},
-     {<<"dest-predeclared">>,  fun rabbit_parameter_validation:boolean/2, optional}
+     {<<"dest-predeclared">>,  fun rabbit_parameter_validation:boolean/2, optional},
+     {<<"dest-max-bytes-per-second">>, fun validate_positive_integer/2, optional}
     ].
 
 -spec connect_source(state()) -> state().
@@ -297,9 +300,23 @@ init_dest(#{name := Name,
     Props = #{<<"x-opt-shovelled-by">> => rabbit_nodes:cluster_name(),
               <<"x-opt-shovel-type">> => rabbit_data_coercion:to_binary(Type),
               <<"x-opt-shovel-name">> => rabbit_data_coercion:to_binary(Name)},
-    State#{dest => Dst#{cached_forward_headers => Props}};
+    init_dest_rate_limiter(State#{dest => Dst#{cached_forward_headers => Props}});
 init_dest(State) ->
-    State.
+    init_dest_rate_limiter(State).
+
+%% Accepts any positive integer configured via either the static
+%% (`max_bytes_per_second`) or dynamic (`dest-max-bytes-per-second`,
+%% already resolved to `max_bytes_per_second` by parse/2 and
+%% parse_dest/4) shovel config, and treats anything else -- missing,
+%% `undefined`, or a value that somehow bypassed validate_dest_funs/2
+%% (e.g. hand-edited advanced.config) -- as "no limit", rather than
+%% crashing shovel startup over a malformed rate limit.
+init_dest_rate_limiter(State = #{dest := Dst}) ->
+    MaxBytesPerSecond = case maps:get(max_bytes_per_second, Dst, undefined) of
+                             N when is_integer(N), N > 0 -> N;
+                             _ -> undefined
+                         end,
+    State#{dest => Dst#{rate_limiter => rabbit_shovel_rate_limit:init(MaxBytesPerSecond)}}.
 
 -spec source_uri(state()) -> uri().
 source_uri(#{source := #{current := #{uri := Uri}}}) -> Uri.
@@ -489,8 +506,24 @@ forward(Tag, Mc,
     State#{dest => Dst#{pending => {Pend}}};
 forward(Tag, Msg0,
         #{dest := #{current := #{link := Link},
-                    unacked := Unacked},
-          ack_mode := AckMode} = State) ->
+                    unacked := Unacked,
+                    rate_limiter := Limiter0} = Dst,
+          ack_mode := AckMode} = State0) ->
+    {MetadataSize, PayloadSize} = mc:size(Msg0),
+    Limiter1 = case rabbit_shovel_rate_limit:record(MetadataSize + PayloadSize, Limiter0) of
+                   {ok, L} ->
+                       L;
+                   {throttle, DelayMs, L} ->
+                       %% This clause already blocks synchronously below --
+                       %% send_msg/2 sleeps while waiting for credit or for
+                       %% `remote_incoming_window_exceeded` to clear -- so we
+                       %% pause here too rather than building a separate,
+                       %% asynchronous retry path the way the AMQP 0.9.1
+                       %% Shovel's rate limiter does.
+                       timer:sleep(DelayMs),
+                       L
+               end,
+    State = State0#{dest => Dst#{rate_limiter => Limiter1}},
     OutTag = rabbit_data_coercion:to_binary(Tag),
     Msg1 = add_timestamp_header(State, add_forward_headers(State, Msg0)),
     Msg2 = mc:protocol_state(mc:convert(mc_amqp, Msg1)),
@@ -551,6 +584,11 @@ validate_amqp10_map(Name, Terms0) ->
     Str = fun rabbit_parameter_validation:binary/2,
     Validation = [{K, Str, optional} || {K, _} <- Terms],
     rabbit_parameter_validation:proplist(Name, Validation, Terms).
+
+validate_positive_integer(_Name, Term) when is_integer(Term) andalso Term > 0 ->
+    ok;
+validate_positive_integer(Name, Term) ->
+    {error, "~ts should be a positive integer, actually was ~tp", [Name, Term]}.
 
 opt_b2a(B) when is_binary(B) -> list_to_atom(binary_to_list(B));
 opt_b2a(N)                   -> N.
