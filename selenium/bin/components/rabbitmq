@@ -61,6 +61,12 @@ start_local_rabbitmq() {
 
   RABBITMQ_SERVER_ROOT=$(realpath ../)
   
+  if [[ ! -f "${RABBITMQ_SERVER_ROOT}/deps/rabbit/ebin/rabbit.app" ]]; then
+    echo "> ERROR: RabbitMQ has not been built yet in ${RABBITMQ_SERVER_ROOT}."
+    echo "> Run 'gmake' from the repo root first, then retry."
+    exit 1
+  fi
+
   MOUNT_RABBITMQ_CONF="/etc/rabbitmq/rabbitmq.conf"
   MOUNT_ADVANCED_CONFIG="/etc/rabbitmq/advanced.config"
 
