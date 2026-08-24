@@ -526,7 +526,13 @@ module.exports = class BasePage {
     await this.driver.sleep(250)
     return alert.accept();
   }
-
+  async dismissAlert () {
+    await this.driver.wait(until.alertIsPresent(), this.timeout);
+    await this.driver.sleep(250)
+    const alert = await this.driver.switchTo().alert();
+    await this.driver.sleep(250)
+    return alert.dismiss();
+  }
   capture () {
     this.driver.takeScreenshot().then(
       function (image) {
