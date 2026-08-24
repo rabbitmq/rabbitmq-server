@@ -94,7 +94,8 @@ to_json(ReqData, Context = #context{user = User}) ->
     end.
 
 is_authorized(ReqData, Context) ->
-    rabbit_mgmt_util:is_authorized(ReqData, Context).
+    rabbit_mgmt_util:is_authorized_vhost_visible_for_monitoring(ReqData,
+                                                               Context).
 
 filter_user(List, #user{username = Username, tags = Tags}) ->
     case rabbit_mgmt_util:is_monitor(Tags) of
