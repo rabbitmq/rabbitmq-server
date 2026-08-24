@@ -30,7 +30,8 @@ groups() ->
                                create_super_stream_partition_limits,
                                create_super_stream_binding_keys_limit,
                                stream_tracking_requires_vhost_access,
-                               stream_tracking_requires_read_permission
+                               stream_tracking_requires_read_permission,
+                               stream_publishers_require_vhost_access
                               ]}].
 
 %% -------------------------------------------------------------------
@@ -235,6 +236,30 @@ stream_tracking_requires_read_permission(Config) ->
     http_get(Config, "/stream/tracking-read-perm-vh/test-stream/tracking",
              User, User, ?OK),
     http_delete(Config, "/queues/tracking-read-perm-vh/test-stream", {group, '2xx'}),
+    rabbit_ct_broker_helpers:delete_user(Config, User),
+    rabbit_ct_broker_helpers:delete_vhost(Config, Vhost),
+    ok.
+
+stream_publishers_require_vhost_access(Config) ->
+    Vhost = <<"publishers-vh">>,
+    User = <<"publishers-user">>,
+    rabbit_ct_broker_helpers:add_vhost(Config, Vhost),
+    rabbit_ct_broker_helpers:set_full_permissions(Config, <<"guest">>, Vhost),
+    StreamArgs = [{durable, true}, {arguments, [{'x-queue-type', 'stream'}]}],
+    http_put(Config, "/queues/publishers-vh/test-stream", StreamArgs, {group, '2xx'}),
+    rabbit_ct_broker_helpers:add_user(Config, User, User),
+    rabbit_ct_broker_helpers:set_user_tags(Config, 0, User, [management]),
+    http_get(Config, "/stream/publishers/publishers-vh", User, User, 404),
+    http_get(Config, "/stream/publishers/no-such-vhost", User, User, 404),
+    http_get(Config, "/stream/publishers/publishers-vh/test-stream",
+             User, User, 404),
+    http_get(Config, "/stream/publishers/publishers-vh/no-such-stream",
+             User, User, 404),
+    rabbit_ct_broker_helpers:set_full_permissions(Config, User, Vhost),
+    http_get(Config, "/stream/publishers/publishers-vh", User, User, ?OK),
+    http_get(Config, "/stream/publishers/publishers-vh/test-stream",
+             User, User, ?OK),
+    http_delete(Config, "/queues/publishers-vh/test-stream", {group, '2xx'}),
     rabbit_ct_broker_helpers:delete_user(Config, User),
     rabbit_ct_broker_helpers:delete_vhost(Config, Vhost),
     ok.
