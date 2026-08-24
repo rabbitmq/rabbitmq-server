@@ -1092,12 +1092,17 @@ handle_waiting_consumer_down(Pid,
                                   cancel_consumer_effects(ConsumerId, State0,
                                                           Effects)
                           end, [], Down),
+    %% a down waiting consumer's outstanding deferral claims go back to the
+    %% shared deferred map, same as an explicitly cancelled one
+    State1 = lists:foldl(fun ({_ConsumerKey, Consumer}, S) ->
+                                  release_deferred_claims(Consumer, S)
+                          end, State0, Down),
     % update state to have only up waiting consumers
     StillUp = lists:filter(fun({_CKey, ?CONSUMER_PID(P)}) ->
                                    P =/= Pid
                            end,
                            WaitingConsumers0),
-    State = State0#?STATE{waiting_consumers = StillUp},
+    State = State1#?STATE{waiting_consumers = StillUp},
     {Effects, State}.
 
 update_waiting_consumer_status(DownPidOrNode,
