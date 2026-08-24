@@ -13,7 +13,8 @@
          process_frame/2,
          flush_and_die/1,
          info/2,
-         is_authenticated/1]).
+         is_authenticated/1,
+         send_credential_expired_error/1]).
 
 -export([flush_pending_receipts/3,
          cancel_consumer/2,
@@ -237,10 +238,26 @@ info(Other, _) -> throw({bad_argument, Other}).
 is_authenticated(#state{user = undefined}) -> false;
 is_authenticated(#state{}) -> true.
 
+-spec send_credential_expired_error(#state{}) -> #state{}.
+send_credential_expired_error(State) ->
+    send_error("Credential expired",
+               "The credential used to authenticate this connection has expired",
+               State).
+
 
 %%----------------------------------------------------------------------------
 %% Private Parts (Including callbacks)
 %%----------------------------------------------------------------------------
+
+maybe_start_credential_expiry_timer(User) ->
+    case rabbit_access_control:expiry_timestamp(User) of
+        never ->
+            ok;
+        Ts when is_integer(Ts) ->
+            Time = (Ts - os:system_time(second)) * 1000,
+            _ = erlang:send_after(max(Time, 0), self(), credential_expired),
+            ok
+    end.
 
 command({'STOMP', Frame}, State) ->
     process_connect(no_implicit, Frame, State);
@@ -370,6 +387,7 @@ process_connect(Implicit, Frame,
                                  connection_name => ConnInfo#conn_info.conn_name},
                   SessionId = rabbit_guid:string(rabbit_guid:gen_secure(), "session"),
                   {SendTimeout, ReceiveTimeout} = ensure_heartbeats(Heartbeat),
+                  ok = maybe_start_credential_expiry_timer(User),
 
                   Headers0 = #{?HEADER_SESSION => list_to_binary(SessionId),
                                ?HEADER_HEART_BEAT =>
