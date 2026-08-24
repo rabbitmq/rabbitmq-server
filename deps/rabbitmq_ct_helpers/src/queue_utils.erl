@@ -158,10 +158,22 @@ wait_for_max_messages(Config, Queue, Msgs, N) ->
             wait_for_max_messages(Config, Queue, Msgs, N - 1)
     end.
 
+%% Fun is expected to be a `fun Mod:Function/1' reference for a machine that,
+%% like rabbit_fifo, versions its state via which_module/1: an older
+%% effective machine version is served by a different, frozen module with
+%% its own state record shapes, so calling Fun's own module against it would
+%% crash with function_clause. Use the query context Ra passes to a 2-arity
+%% query fun to resolve the module actually in effect and call the same
+%% function name on it instead.
 dirty_query(Servers, QName, Fun) ->
+    {module, Mod0} = erlang:fun_info(Fun, module),
+    {name, FunName} = erlang:fun_info(Fun, name),
+    QueryFun = fun(#{machine_version := Vsn}, State) ->
+                       erlang:apply(Mod0:which_module(Vsn), FunName, [State])
+               end,
     lists:map(
       fun(N) ->
-              case rpc:call(N, ra, local_query, [{QName, N}, Fun]) of
+              case rpc:call(N, ra, local_query, [{QName, N}, QueryFun]) of
                   {ok, {_, Msgs}, _} ->
                       Msgs;
                   E ->
