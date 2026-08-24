@@ -3952,6 +3952,56 @@ delayed_assign_deferred_released_on_cancel_test(Config) ->
                    num_checked_out := 1}, rabbit_fifo:overview(State9)),
     ok.
 
+delayed_assign_deferred_released_on_waiting_consumer_down_test(Config) ->
+    %% A claim held by a waiting (non-active) single-active-consumer backup
+    %% must also be released back to the shared deferred map when that
+    %% consumer's channel goes down, the same as when it's cancelled
+    %% explicitly.
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+             single_active_consumer_on => true},
+    State0 = init(Conf),
+    Pid2 = spawn(fun() -> ok end),
+    C1 = {<<"ctag-1">>, self()},
+    C2 = {<<"ctag-2">>, Pid2},
+    CK1 = ?LINE,
+    CK2 = ?LINE,
+    {State1, _} = enq(Config, 1, 1, msg1, State0),
+    Entries = [
+               {CK1, make_checkout(C1, {auto, {credited, 0}}, #{})},
+               {CK2, make_checkout(C2, {auto, {credited, 0}}, #{})}
+              ],
+    {State2, _} = run_log(Config, State1, Entries),
+    ?assertMatch(#{single_active_consumer_id := C1,
+                   single_active_num_waiting_consumers := 1},
+                 rabbit_fifo:overview(State2)),
+    %% The active consumer parks the message under a token.
+    {State3, _} = credit(Config, CK1, 3, 1, 0, false, State2),
+    Token = <<"token-1">>,
+    Anns = #{<<"x-opt-deferral-token">> => Token,
+             <<"x-opt-delivery-time">> => 10000},
+    {State4, _, _} = apply(meta(Config, 4, 100),
+                           rabbit_fifo:make_modify(CK1, [0], false, false, Anns),
+                           State3),
+    %% The waiting backup consumer claims it while it's still inactive.
+    {State5, ok, _} = apply(meta(Config, 5, 100),
+                            rabbit_fifo:make_delayed(
+                              {assign_deferred, CK2, [Token]}),
+                            State4),
+    ?assertMatch(#rabbit_fifo{waiting_consumers =
+                              [{CK2, #consumer{
+                                        deferred_claims = #{Token := [_]}}}]},
+                 State5),
+    %% Its channel goes down while it's still waiting, without ever having
+    %% been credited enough to collect the claim.
+    {State6, _, _} = apply(meta(Config, 6, 100), {down, Pid2, noproc}, State5),
+    ?assertMatch(#{single_active_num_waiting_consumers := 0}, rabbit_fifo:overview(State6)),
+    %% The token was released, not lost: it is claimable again.
+    ?assertMatch(#rabbit_fifo{waiting_consumers = [],
+                              delayed = #delayed{deferred = #{Token := [_]}}},
+                 State6),
+    ok.
+
 delayed_assign_deferred_delivery_time_still_fires_test(Config) ->
     %% A claim does not pin a message: if the client never grants the credit
     %% to collect it, the delivery time still promotes it into normal
