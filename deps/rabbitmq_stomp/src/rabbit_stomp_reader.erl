@@ -215,6 +215,11 @@ handle_info({'DOWN', _MRef, process, QPid, _Reason}, State) ->
 handle_info(client_timeout, State) ->
     {stop, {shutdown, client_heartbeat_timeout}, State};
 
+handle_info(credential_expired, State) ->
+    ProcState = processor_state(State),
+    NewProcState = rabbit_stomp_processor:send_credential_expired_error(ProcState),
+    {stop, {shutdown, credential_expired}, processor_state(NewProcState, State)};
+
 handle_info(login_timeout, State) ->
     ProcState = processor_state(State),
     case rabbit_stomp_processor:info(user, ProcState) of
@@ -408,6 +413,13 @@ log_reason({shutdown, client_heartbeat_timeout},
     AdapterName = rabbit_stomp_processor:adapter_name(ProcState),
     ?LOG_WARNING("STOMP detected missed client heartbeat(s) "
                                   "on connection ~ts, closing it", [AdapterName]);
+
+log_reason({shutdown, credential_expired},
+           #reader_state{conn_name = ConnName, processor_state = ProcState}) ->
+    ?LOG_WARNING("closing STOMP connection ~tp (~ts) of user '~ts': "
+                 "credential has expired",
+                 [self(), ConnName,
+                  rabbit_stomp_processor:info(user, ProcState)]);
 
 log_reason({shutdown, {server_initiated_close, Reason}},
            #reader_state{conn_name = ConnName}) ->

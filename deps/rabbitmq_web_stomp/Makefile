@@ -20,7 +20,7 @@ define PROJECT_APP_EXTRA_KEYS
 endef
 
 DEPS = cowboy rabbit_common rabbit rabbitmq_stomp
-TEST_DEPS = gun rabbitmq_ct_helpers rabbitmq_ct_client_helpers
+TEST_DEPS = gun rabbitmq_ct_helpers rabbitmq_ct_client_helpers meck
 
 PLT_APPS += cowlib
 

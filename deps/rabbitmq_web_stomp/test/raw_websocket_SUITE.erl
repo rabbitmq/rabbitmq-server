@@ -30,6 +30,7 @@ groups() ->
         connection_with_protocols,
         pubsub,
         disconnect,
+        credential_expires,
         http_auth
     ],
     [{https_tests, [], Tests},
@@ -156,6 +157,30 @@ disconnect(Config) ->
     {close, {1000, _}} = rfc6455_client:recv(WS),
 
     ok.
+
+credential_expires(Config) ->
+    Mod = rabbit_auth_backend_internal,
+    ExpiryTimestamp = os:system_time(second) + 5,
+    rabbit_ct_broker_helpers:setup_meck(Config),
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, meck, new, [Mod, [no_link, passthrough]]),
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, meck, expect, [Mod, expiry_timestamp, 1, ExpiryTimestamp]),
+    PortStr = rabbit_ws_test_util:get_web_stomp_port_str(Config),
+    Protocol = ?config(protocol, Config),
+    WS = rfc6455_client:new(Protocol ++ "://127.0.0.1:" ++ PortStr ++ "/ws", self()),
+    try
+        {ok, _} = rfc6455_client:open(WS),
+        ok = raw_send(WS, "CONNECT", [{"login", "guest"}, {"passcode", "guest"}]),
+        {<<"CONNECTED">>, _, <<>>} = raw_recv(WS),
+        {error, timeout} = rfc6455_client:recv(WS, 2000),
+        {ok, Payload} = rfc6455_client:recv(WS, 30000),
+        {<<"ERROR">>, Headers, _} = stomp:unmarshal(Payload),
+        <<"Credential expired">> = proplists:get_value(<<"message">>, Headers),
+        {close, _} = rfc6455_client:recv(WS, 30000)
+    after
+        ok = rabbit_ct_broker_helpers:rpc(Config, 0, meck, unload, [Mod])
+    end.
 
 http_auth(Config) ->
     %% Intentionally put bad credentials in the CONNECT frame,
