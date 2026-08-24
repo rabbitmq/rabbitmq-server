@@ -732,8 +732,8 @@ public class HttpTest {
                     r("/publishers", entitiesPerConnection * 2), // only their connections
                     r("/consumers/vh1", entitiesPerConnection * 2),
                     r("/publishers/vh1", entitiesPerConnection * 2),
-                    r("/consumers/vh2", 0),
-                    r("/consumers/vh2", 0)))
+                    r("/consumers/vh2", -1),
+                    r("/publishers/vh2", -1)))
           };
 
       for (PermissionsTestConfiguration configuration : testConfigurations) {
