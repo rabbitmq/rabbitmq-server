@@ -31,7 +31,9 @@ groups() ->
                                create_super_stream_binding_keys_limit,
                                stream_tracking_requires_vhost_access,
                                stream_tracking_requires_read_permission,
-                               stream_publishers_require_vhost_access
+                               stream_publishers_require_vhost_access,
+                               stream_consumers_require_vhost_access,
+                               stream_consumers_visible_to_monitoring
                               ]}].
 
 %% -------------------------------------------------------------------
@@ -255,14 +257,54 @@ stream_publishers_require_vhost_access(Config) ->
              User, User, 404),
     http_get(Config, "/stream/publishers/publishers-vh/no-such-stream",
              User, User, 404),
+    404 = get_with_vhost_header(Config, "/stream/publishers", "publishers-vh", User),
+    404 = get_with_vhost_header(Config, "/stream/publishers", "no-such-vhost", User),
     rabbit_ct_broker_helpers:set_full_permissions(Config, User, Vhost),
     http_get(Config, "/stream/publishers/publishers-vh", User, User, ?OK),
     http_get(Config, "/stream/publishers/publishers-vh/test-stream",
              User, User, ?OK),
+    ?OK = get_with_vhost_header(Config, "/stream/publishers", "publishers-vh", User),
     http_delete(Config, "/queues/publishers-vh/test-stream", {group, '2xx'}),
     rabbit_ct_broker_helpers:delete_user(Config, User),
     rabbit_ct_broker_helpers:delete_vhost(Config, Vhost),
     ok.
+
+stream_consumers_require_vhost_access(Config) ->
+    Vhost = <<"consumers-vh">>,
+    User = <<"consumers-user">>,
+    rabbit_ct_broker_helpers:add_vhost(Config, Vhost),
+    rabbit_ct_broker_helpers:add_user(Config, User, User),
+    rabbit_ct_broker_helpers:set_user_tags(Config, 0, User, [management]),
+    http_get(Config, "/stream/consumers/consumers-vh", User, User, 404),
+    http_get(Config, "/stream/consumers/no-such-vhost", User, User, 404),
+    404 = get_with_vhost_header(Config, "/stream/consumers", "consumers-vh", User),
+    404 = get_with_vhost_header(Config, "/stream/consumers", "no-such-vhost", User),
+    rabbit_ct_broker_helpers:set_full_permissions(Config, User, Vhost),
+    http_get(Config, "/stream/consumers/consumers-vh", User, User, ?OK),
+    ?OK = get_with_vhost_header(Config, "/stream/consumers", "consumers-vh", User),
+    rabbit_ct_broker_helpers:delete_user(Config, User),
+    rabbit_ct_broker_helpers:delete_vhost(Config, Vhost),
+    ok.
+
+stream_consumers_visible_to_monitoring(Config) ->
+    Vhost = <<"consumers-monitoring-vh">>,
+    User = <<"consumers-monitoring-user">>,
+    rabbit_ct_broker_helpers:add_vhost(Config, Vhost),
+    rabbit_ct_broker_helpers:add_user(Config, User, User),
+    rabbit_ct_broker_helpers:set_user_tags(Config, 0, User, [monitoring]),
+    http_get(Config, "/stream/consumers/consumers-monitoring-vh",
+             User, User, ?OK),
+    http_get(Config, "/stream/consumers/no-such-vhost", User, User, 404),
+    rabbit_ct_broker_helpers:delete_user(Config, User),
+    rabbit_ct_broker_helpers:delete_vhost(Config, Vhost),
+    ok.
+
+get_with_vhost_header(Config, Path, Vhost, User) ->
+    {ok, {{_, Code, _}, _, _}} =
+        rabbit_mgmt_test_util:req(Config, 0, get, Path,
+                                  [rabbit_mgmt_test_util:auth_header(User, User),
+                                   {"x-vhost", Vhost}]),
+    Code.
 
 get_stream_port(Config) ->
     rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stream).
