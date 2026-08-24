@@ -1712,11 +1712,12 @@ state_enter_monitors_and_notifications_test(Config) ->
 state_enter_follower_deletes_consumer_metrics_asynchronously_test(Config) ->
     %% the table scan in delete_local_consumer_metrics/1 must not run
     %% inline in the Ra process; state_enter(follower, ...) targets a
-    %% spawning wrapper instead
+    %% spawning wrapper instead. This must be an aux effect rather than a
+    %% mod_call: mod_call effects only run while the node is the current
+    %% leader, which this node has just stopped being.
     {State, _} = enq(Config, 1, 1, first, test_init(test)),
     Effects = rabbit_fifo:state_enter(follower, State),
-    ?ASSERT_EFF({mod_call, rabbit_quorum_queue,
-                 async_delete_local_consumer_metrics, _}, Effects),
+    ?ASSERT_EFF({aux, {delete_local_consumer_metrics, _}}, Effects),
     ok.
 
 purge_test(Config) ->
