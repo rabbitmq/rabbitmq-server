@@ -51,10 +51,15 @@ resource_exists(ReqData, Context) ->
      end, ReqData, Context}.
 
 to_json(ReqData, {Filter, Context}) ->
-    Chs = rabbit_mgmt_db:get_all_channels(
-            rabbit_mgmt_util:range(ReqData)),
-    rabbit_mgmt_util:reply_list(
-      filter_vhost(status(Chs, ReqData, Context, Filter), ReqData), ReqData, Context);
+    try
+        Chs = rabbit_mgmt_db:get_all_channels(
+                rabbit_mgmt_util:range(ReqData)),
+        rabbit_mgmt_util:reply_list(
+          filter_vhost(status(Chs, ReqData, Context, Filter), ReqData), ReqData, Context)
+    catch
+        {error, invalid_range_parameters, Reason} ->
+            rabbit_mgmt_util:bad_request(iolist_to_binary(Reason), ReqData, Context)
+    end;
 to_json(ReqData, Context) ->
     to_json(ReqData, {all, Context}).
 
