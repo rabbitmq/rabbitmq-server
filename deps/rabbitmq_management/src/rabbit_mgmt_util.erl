@@ -20,7 +20,7 @@
 -export([user/1]).
 -export([bad_request/3, bad_request/4, service_unavailable/3, bad_request_exception/4,
          internal_server_error/3, internal_server_error/4, precondition_failed/3,
-         id/2, parse_bool/1, parse_int/1, redirect_to_home/3]).
+         id/2, parse_bool/1, parse_int/1, redirect_to_home/3, timeout/2]).
 -export([with_decode/4, with_ids/4, not_found/3]).
 -export([with_channel/4, with_channel/5]).
 -export([props_to_method/2, props_to_method/4]).
@@ -69,6 +69,9 @@
 
 -define(MAX_RANGE, 500).
 -define(MAX_FILTER_LENGTH, 1024).
+
+%% Erlang's own ceiling for a receive/gen_server/gen_event/rpc timeout value.
+-define(MAX_HTTP_TIMEOUT, 4294967295).
 
 -record(pagination, {page = undefined, page_size = undefined,
                      name = undefined, use_regex = undefined}).
@@ -1315,6 +1318,22 @@ int(Name, ReqData) ->
                      catch
                          _:_ -> undefined
                      end
+    end.
+
+%% Parses the "timeout" request header, used by the various health check
+%% endpoints. Throws {error, {not_integer, Val}} for a value that isn't a
+%% valid receive/gen_server/gen_event/rpc timeout, same as parse_int/1 does
+%% for a non-numeric one, so callers only need a single catch clause.
+timeout(ReqData, Default) ->
+    case cowboy_req:header(<<"timeout">>, ReqData) of
+        undefined -> Default;
+        Val ->
+            case parse_int(Val) of
+                Timeout when Timeout >= 0, Timeout =< ?MAX_HTTP_TIMEOUT ->
+                    Timeout;
+                _ ->
+                    throw({error, {not_integer, Val}})
+            end
     end.
 
 -spec qs_val(binary(), cowboy_req:req()) -> any() | undefined.

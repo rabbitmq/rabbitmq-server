@@ -27,7 +27,12 @@ resource_exists(ReqData, Context) ->
     {rabbit_mgmt_nodes:node_exists(ReqData), ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    rabbit_mgmt_util:reply(node0(ReqData), ReqData, Context).
+    try
+        rabbit_mgmt_util:reply(node0(ReqData), ReqData, Context)
+    catch
+        {error, invalid_range_parameters, Reason} ->
+            rabbit_mgmt_util:bad_request(iolist_to_binary(Reason), ReqData, Context)
+    end.
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_monitor(ReqData, Context).

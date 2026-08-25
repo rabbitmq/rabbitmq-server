@@ -28,28 +28,35 @@ content_types_provided(ReqData, Context) ->
    {rabbit_mgmt_util:responder_map(to_json), ReqData, Context}.
 
 resource_exists(ReqData, Context) ->
-    {case node0(ReqData) of
-         not_found -> false;
-         _         -> true
-     end, ReqData, Context}.
+    try
+        {case node0(ReqData) of
+             not_found -> false;
+             _         -> true
+         end, ReqData, Context}
+    catch
+        {error, invalid_range_parameters, Reason} ->
+            rabbit_mgmt_util:bad_request(iolist_to_binary(Reason), ReqData, Context)
+    end.
 
 to_json(ReqData, Context) ->
-    Node = node0(ReqData),
-    Timeout = case cowboy_req:header(<<"timeout">>, ReqData) of
-                  undefined -> 70000;
-                  Val       -> list_to_integer(binary_to_list(Val))
-              end,
-    case rabbit_health_check:node(Node, Timeout) of
-        ok ->
-            rabbit_mgmt_util:reply(#{status => ok}, ReqData, Context);
-        {badrpc, timeout} ->
-            ErrMsg = rabbit_mgmt_format:print("node ~tp health check timed out", [Node]),
-            failure(ErrMsg, ReqData, Context);
-        {badrpc, Err} ->
-            failure(rabbit_mgmt_format:print("~tp", Err), ReqData, Context);
-        {error_string, Err} ->
-            S = rabbit_mgmt_format:print(Err),
-            failure(S, ReqData, Context)
+    try
+        Node = node0(ReqData),
+        Timeout = rabbit_mgmt_util:timeout(ReqData, 70000),
+        case rabbit_health_check:node(Node, Timeout) of
+            ok ->
+                rabbit_mgmt_util:reply(#{status => ok}, ReqData, Context);
+            {badrpc, timeout} ->
+                ErrMsg = rabbit_mgmt_format:print("node ~tp health check timed out", [Node]),
+                failure(ErrMsg, ReqData, Context);
+            {badrpc, Err} ->
+                failure(rabbit_mgmt_format:print("~tp", Err), ReqData, Context);
+            {error_string, Err} ->
+                S = rabbit_mgmt_format:print(Err),
+                failure(S, ReqData, Context)
+        end
+    catch
+        {error, {not_integer, _}} ->
+            rabbit_mgmt_util:bad_request(<<"Invalid timeout parameter">>, ReqData, Context)
     end.
 
 failure(Message, ReqData, Context) ->
