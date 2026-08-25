@@ -282,7 +282,8 @@ format_policy_fields(Q, Ctx) ->
         true ->
             [{policy, i(policy, Q)},
              {operator_policy, i(operator_policy, Q)},
-             {effective_policy_definition, i(effective_policy_definition, Q)}];
+             {effective_policy_definition, i(effective_policy_definition, Q)},
+             {delivery_limit, i(delivery_limit, Q)}];
         false ->
             []
     end.
@@ -566,6 +567,16 @@ i(effective_policy_definition, Q) ->
     case rabbit_policy:effective_definition(Q) of
         undefined -> #{};
         Def       -> Def
+    end;
+i(delivery_limit, Q) ->
+    %% Mirrors rabbit_quorum_queue's own delivery_limit info item, using
+    %% the same -1-means-unlimited convention as the queue argument and
+    %% policy key, since unlike quorum queues, classic queues have no
+    %% non-negative default to fall back to.
+    case rabbit_queue_type_util:args_policy_lookup(
+           <<"delivery-limit">>, fun rabbit_queue_type_util:resolve_delivery_limit/2, Q) of
+        undefined -> -1;
+        Limit     -> Limit
     end;
 i(type, _) ->
     classic.
