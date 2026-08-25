@@ -50,10 +50,12 @@ LOCAL_DEPS = ssl
 DEPS = ranch rabbit amqp10_common
 TEST_DEPS = cowlib emqtt ct_helper rabbitmq_ct_helpers rabbitmq_ct_client_helpers rabbitmq_management amqp_client rabbitmq_consistent_hash_exchange rabbitmq_amqp_client rabbitmq_stomp rabbitmq_stream rabbitmq_federation
 
-PLT_APPS += rabbitmq_cli elixir
+PLT_APPS += rabbitmq_cli $(ELIXIR_ERL_EBIN)
 
 dep_ct_helper = git https://github.com/extend/ct_helper.git master
 dep_emqtt = git https://github.com/emqx/emqtt.git 1.14.6
+
+ELIXIR = system
 
 CT_HOOKS = rabbit_ct_hook
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
@@ -61,6 +63,10 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
 include ../../rabbitmq-components.mk
 include ../../erlang.mk
+
+ELIXIR_ERL_EBIN := $(shell dirname $$(elixir -e 'IO.puts(:code.which(:elixir_erl))' 2>/dev/null))
+DIALYZER_PLT_OPTS += -pa $(ELIXIR_ERL_EBIN)
+DIALYZER_OPTS += -pa $(ELIXIR_ERL_EBIN)
 
 
 clean::

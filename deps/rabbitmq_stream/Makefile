@@ -26,10 +26,16 @@ LOCAL_DEPS = ssl
 DEPS = rabbit rabbitmq_stream_common osiris ranch
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client amqp10_client
 
-PLT_APPS += rabbitmq_cli elixir ssl
+PLT_APPS += rabbitmq_cli $(ELIXIR_ERL_EBIN) ssl
 
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
+ELIXIR = system
+
 include ../../rabbitmq-components.mk
 include ../../erlang.mk
+
+ELIXIR_ERL_EBIN := $(shell dirname $$(elixir -e 'IO.puts(:code.which(:elixir_erl))' 2>/dev/null))
+DIALYZER_PLT_OPTS += -pa $(ELIXIR_ERL_EBIN)
+DIALYZER_OPTS += -pa $(ELIXIR_ERL_EBIN)

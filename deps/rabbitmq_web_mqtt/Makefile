@@ -21,7 +21,7 @@ LOCAL_DEPS = ssl
 DEPS = rabbit cowboy rabbitmq_mqtt
 TEST_DEPS = gun emqtt rabbitmq_ct_helpers rabbitmq_ct_client_helpers rabbitmq_management rabbitmq_stomp rabbitmq_consistent_hash_exchange
 
-PLT_APPS += rabbitmq_cli elixir cowlib ssl
+PLT_APPS += rabbitmq_cli $(ELIXIR_ERL_EBIN) cowlib ssl
 
 # FIXME: Add Ranch as a BUILD_DEPS to be sure the correct version is picked.
 # See rabbitmq-components.mk.
@@ -32,8 +32,14 @@ dep_emqtt = git https://github.com/emqx/emqtt.git 1.14.6
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
+ELIXIR = system
+
 include ../../rabbitmq-components.mk
 include ../../erlang.mk
+
+ELIXIR_ERL_EBIN := $(shell dirname $$(elixir -e 'IO.puts(:code.which(:elixir_erl))' 2>/dev/null))
+DIALYZER_PLT_OPTS += -pa $(ELIXIR_ERL_EBIN)
+DIALYZER_OPTS += -pa $(ELIXIR_ERL_EBIN)
 
 CT_HOOKS = rabbit_ct_hook
 
