@@ -594,12 +594,12 @@ msg_store_compaction_v2_exact_fit1(_Config) ->
 %%
 %% The leftover space is deliberately *not* the last moved message's
 %% own source copy: at the point this write happens the index still
-%% points there (index_update_fields/3 only runs later, once every
-%% write has landed and the file has been synced), so overwriting it
-%% would make a concurrent read, or a crash before the index update
-%% lands, see a hole where it still expects that message. Only the
-%% torn remainder of whatever the move partially overwrote -- here,
-%% the tail of MsgIdDead's removed record -- gets marked; the last
+%% points there (index_update_offset_if_unchanged/5) only runs later,
+%% once every write has landed and the file has been synced), so
+%% overwriting it would make a concurrent read, or a crash before the
+%% index update lands, see a hole where it still expects that message.
+%% Only the torn remainder of whatever the move partially overwrote --
+%% here, the tail of MsgIdDead's removed record -- gets marked; the last
 %% moved message's own now-redundant source copy is left as a plain,
 %% untouched, still-valid (if stale) record instead, exactly like
 %% every earlier moved message's source copy already is. This checks

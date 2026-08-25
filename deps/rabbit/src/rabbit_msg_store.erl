@@ -1797,8 +1797,8 @@ scan_v1_next_byte(<<_, Rest/bits>>, Fd, Fun, Offset, FileSize, MsgIdsFound, Acc)
 %% to produce by chance.
 %%
 %% A record whose Size does not fit within the file is treated as a
-%% torn last write and the remainder of the file is discarded, exactly
-%% as in v1. We never fall back to scanning the next byte: that is
+%% torn last write and the remainder of the file is discarded.
+%% We never fall back to scanning the next byte: that is
 %% exactly the kind of guess that could land on something that merely
 %% looks like a record.
 %%
