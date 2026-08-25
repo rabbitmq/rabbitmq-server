@@ -18,6 +18,7 @@
          ensure_connection_closed/1, ensure_connection_closed/2,
          ensure_connection_closed_async/1, ensure_connection_closed_async/2,
          log_terminate/4, unacked_new/0, ack/3, nack/3, forward/9,
+         drain_buffer/4,
          handle_downstream_down/3, handle_upstream_down/3,
          get_connection_name/2,
          connection_close_timeout/0]).
@@ -282,6 +283,36 @@ maybe_clear_user_id(false, Msg = #amqp_msg{props = Props}) ->
     Msg#amqp_msg{props = Props#'P_basic'{user_id = undefined}};
 maybe_clear_user_id(true, Msg) ->
     Msg.
+
+%% Drain a link's blocked_buffer, delivering messages until it is empty
+%% or the link becomes blocked again: either by the downstream connection
+%% raising a resource alarm or by credit_flow entering flow state after a
+%% delivery. Returns the remaining queue and the updated state; the caller
+%% stashes the queue back into its own state record.
+%%
+%% The pre-check ensures that if the alarm is still active or credit_flow
+%% is still blocked when a bump_credit or connection.unblocked event
+%% arrives, no message is forwarded until both conditions clear.
+-spec drain_buffer(queue:queue(), State, DeliverFun, IsBlockedFun) ->
+          {queue:queue(), State} when
+      State :: term(),
+      DeliverFun :: fun((#'basic.deliver'{}, term(), State) -> State),
+      IsBlockedFun :: fun((State) -> boolean()).
+drain_buffer(Q, State, DeliverFun, IsBlockedFun) ->
+    case IsBlockedFun(State) orelse credit_flow:blocked() of
+        true  -> {Q, State};
+        false -> drain_buffer1(queue:out(Q), State, DeliverFun, IsBlockedFun)
+    end.
+
+drain_buffer1({empty, _Q}, State, _DeliverFun, _IsBlockedFun) ->
+    {queue:new(), State};
+drain_buffer1({{value, {DeliverMethod, Msg}}, Q}, State,
+              DeliverFun, IsBlockedFun) ->
+    State1 = DeliverFun(DeliverMethod, Msg, State),
+    case IsBlockedFun(State1) orelse credit_flow:blocked() of
+        true  -> {Q, State1};
+        false -> drain_buffer1(queue:out(Q), State1, DeliverFun, IsBlockedFun)
+    end.
 
 extract_headers(#amqp_msg{props = #'P_basic'{headers = Headers}}) ->
     Headers.
