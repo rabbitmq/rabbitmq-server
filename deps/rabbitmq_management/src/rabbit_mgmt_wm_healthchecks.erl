@@ -28,10 +28,15 @@ content_types_provided(ReqData, Context) ->
    {rabbit_mgmt_util:responder_map(to_json), ReqData, Context}.
 
 resource_exists(ReqData, Context) ->
-    {case node0(ReqData) of
-         not_found -> false;
-         _         -> true
-     end, ReqData, Context}.
+    try
+        {case node0(ReqData) of
+             not_found -> false;
+             _         -> true
+         end, ReqData, Context}
+    catch
+        {error, invalid_range_parameters, Reason} ->
+            rabbit_mgmt_util:bad_request(iolist_to_binary(Reason), ReqData, Context)
+    end.
 
 to_json(ReqData, Context) ->
     Node = node0(ReqData),

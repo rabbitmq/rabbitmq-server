@@ -3276,6 +3276,12 @@ samples_range_test(Config) ->
     http_get(Config, "/nodes/" ++ SamplesRangeNodeName ++ "?lengths_age=60&lengths_incr=1", ?OK),
     http_get(Config, "/nodes/" ++ SamplesRangeNodeName ++ "?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
 
+    %% Healthchecks
+    http_get(Config, "/healthchecks/node?lengths_age=60&lengths_incr=1", ?OK),
+    http_get(Config, "/healthchecks/node?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
+    http_get(Config, "/healthchecks/node/" ++ SamplesRangeNodeName ++ "?lengths_age=60&lengths_incr=1", ?OK),
+    http_get(Config, "/healthchecks/node/" ++ SamplesRangeNodeName ++ "?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
+
     %% Overview
     http_get(Config, "/overview?lengths_age=60&lengths_incr=1", ?OK),
     http_get(Config, "/overview?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST),
