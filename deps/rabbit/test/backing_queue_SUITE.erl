@@ -35,7 +35,9 @@
     variable_queue_requeue,
     variable_queue_requeue_ram_beta,
     variable_queue_delivery_failures,
-    variable_queue_delivery_failures_recovery
+    variable_queue_delivery_failures_recovery,
+    variable_queue_delivery_failures_forgotten_on_drop,
+    variable_queue_delivery_failures_forgotten_on_purge
   ]).
 
 -define(BACKING_QUEUE_TESTCASES, [
@@ -1739,6 +1741,54 @@ variable_queue_delivery_failures_recovery2(VQ0, QName) ->
 
     {_Guids, VQ12} = rabbit_variable_queue:ack([AckTag], VQ11),
     VQ12.
+
+%% A message dropped without ever being acked (as maybe_drop_head/2 does
+%% for max-length overflow with no DLX configured) must still have its
+%% delivery_failures (and delivery_count) entry forgotten, otherwise the
+%% map leaks one entry per such message for the life of the queue process.
+variable_queue_delivery_failures_forgotten_on_drop(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, variable_queue_delivery_failures_forgotten_on_drop1, []).
+
+variable_queue_delivery_failures_forgotten_on_drop1() ->
+    with_fresh_variable_queue(fun variable_queue_delivery_failures_forgotten_on_drop2/2).
+
+variable_queue_delivery_failures_forgotten_on_drop2(VQ0, QName) ->
+    VQ1 = variable_queue_publish(true, 1, VQ0),
+    {{_Msg0, _, AckTag}, VQ2} = rabbit_variable_queue:fetch(true, VQ1),
+    {#{AckTag := 1}, VQ3} = rabbit_variable_queue:record_delivery_failure([AckTag], VQ2),
+    {_MsgIds, VQ4} = rabbit_variable_queue:requeue([AckTag], true, VQ3),
+
+    {{_MsgId, undefined}, VQ5} = rabbit_variable_queue:drop(false, VQ4),
+
+    _VQ6 = rabbit_variable_queue:terminate(shutdown, VQ5),
+    Terms = variable_queue_read_terms(QName),
+    #{} = proplists:get_value(delivery_failures, Terms),
+    #{} = proplists:get_value(delivery_count, Terms),
+    variable_queue_init(test_amqqueue(QName, true), Terms).
+
+%% Same as above, but for messages removed by an explicit queue.purge
+%% instead of a drop.
+variable_queue_delivery_failures_forgotten_on_purge(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, variable_queue_delivery_failures_forgotten_on_purge1, []).
+
+variable_queue_delivery_failures_forgotten_on_purge1() ->
+    with_fresh_variable_queue(fun variable_queue_delivery_failures_forgotten_on_purge2/2).
+
+variable_queue_delivery_failures_forgotten_on_purge2(VQ0, QName) ->
+    VQ1 = variable_queue_publish(true, 1, VQ0),
+    {{_Msg0, _, AckTag}, VQ2} = rabbit_variable_queue:fetch(true, VQ1),
+    {#{AckTag := 1}, VQ3} = rabbit_variable_queue:record_delivery_failure([AckTag], VQ2),
+    {_MsgIds, VQ4} = rabbit_variable_queue:requeue([AckTag], true, VQ3),
+
+    {1, VQ5} = rabbit_variable_queue:purge(VQ4),
+
+    _VQ6 = rabbit_variable_queue:terminate(shutdown, VQ5),
+    Terms = variable_queue_read_terms(QName),
+    #{} = proplists:get_value(delivery_failures, Terms),
+    #{} = proplists:get_value(delivery_count, Terms),
+    variable_queue_init(test_amqqueue(QName, true), Terms).
 
 %% requeue from ram_pending_ack into q_head, move to q_tail and then empty queue
 variable_queue_requeue_ram_beta(Config) ->
