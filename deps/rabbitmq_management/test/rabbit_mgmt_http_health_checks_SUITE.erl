@@ -13,6 +13,7 @@
 -include_lib("rabbitmq_ct_helpers/include/rabbit_mgmt_test.hrl").
 
 -import(rabbit_mgmt_test_util, [http_get/3,
+                                http_get/5,
                                 req/4,
                                 auth_header/2]).
 
@@ -39,7 +40,8 @@ groups() ->
                         metadata_store_initialized_with_data_test,
                         is_quorum_critical_single_node_test,
                         quorum_queues_without_elected_leader_single_node_test,
-                        quorum_queues_without_elected_leader_across_all_virtual_hosts_single_node_test
+                        quorum_queues_without_elected_leader_across_all_virtual_hosts_single_node_test,
+                        quorum_queues_without_elected_leader_requires_virtual_host_access_single_node_test
      ]}
     ].
 
@@ -344,6 +346,29 @@ quorum_queues_without_elected_leader_across_all_virtual_hosts_single_node_test(C
         end),
 
     rabbit_ct_broker_helpers:delete_vhost(Config, VH2),
+
+    passed.
+
+quorum_queues_without_elected_leader_requires_virtual_host_access_single_node_test(Config) ->
+    VHost = <<"health-check-vh">>,
+    User = <<"health-check-user">>,
+    rabbit_ct_broker_helpers:add_vhost(Config, VHost),
+    rabbit_ct_broker_helpers:add_user(Config, User, User),
+    rabbit_ct_broker_helpers:set_user_tags(Config, 0, User, [management]),
+
+    http_get(Config, "/health/checks/quorum-queues-without-elected-leaders/vhost/health-check-vh/",
+             User, User, ?NOT_FOUND),
+    Check0 = http_get(Config, "/health/checks/quorum-queues-without-elected-leaders/vhost/no-such-vhost/",
+                      User, User, ?OK),
+    ?assertEqual(<<"ok">>, maps:get(status, Check0)),
+
+    rabbit_ct_broker_helpers:set_full_permissions(Config, User, VHost),
+    Check1 = http_get(Config, "/health/checks/quorum-queues-without-elected-leaders/vhost/health-check-vh/",
+                      User, User, ?OK),
+    ?assertEqual(<<"ok">>, maps:get(status, Check1)),
+
+    rabbit_ct_broker_helpers:delete_user(Config, User),
+    rabbit_ct_broker_helpers:delete_vhost(Config, VHost),
 
     passed.
 

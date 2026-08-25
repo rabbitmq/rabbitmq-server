@@ -179,6 +179,7 @@ all_tests() -> [
     permissions_connection_channel_consumer_test,
     consumers_cq_test,
     consumers_qq_test,
+    consumers_require_virtual_host_access_test,
     arguments_test,
     arguments_table_test,
     queue_purge_test,
@@ -2007,6 +2008,23 @@ consumers_cq_test(Config) ->
 
 consumers_qq_test(Config) ->
     consumers_test(Config, [{'x-queue-type', <<"quorum">>}]).
+
+consumers_require_virtual_host_access_test(Config) ->
+    VHost = <<"consumers-vh">>,
+    User = <<"consumers-user">>,
+    rabbit_ct_broker_helpers:add_vhost(Config, VHost),
+    rabbit_ct_broker_helpers:add_user(Config, User, User),
+    rabbit_ct_broker_helpers:set_user_tags(Config, 0, User, [management]),
+
+    http_get(Config, "/consumers/consumers-vh", User, User, ?NOT_FOUND),
+    http_get(Config, "/consumers/no-such-vhost", User, User, ?NOT_FOUND),
+
+    rabbit_ct_broker_helpers:set_full_permissions(Config, User, VHost),
+    [] = http_get(Config, "/consumers/consumers-vh", User, User, ?OK),
+
+    rabbit_ct_broker_helpers:delete_user(Config, User),
+    rabbit_ct_broker_helpers:delete_vhost(Config, VHost),
+    passed.
 
 consumers_test(Config, Args) ->
     QArgs = [{auto_delete, false}, {durable, true},
