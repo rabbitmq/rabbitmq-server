@@ -37,7 +37,8 @@
     variable_queue_delivery_failures,
     variable_queue_delivery_failures_recovery,
     variable_queue_delivery_failures_forgotten_on_drop,
-    variable_queue_delivery_failures_forgotten_on_purge
+    variable_queue_delivery_failures_forgotten_on_purge,
+    variable_queue_delivery_failures_forgotten_on_transient_pending_ack
   ]).
 
 -define(BACKING_QUEUE_TESTCASES, [
@@ -1785,6 +1786,30 @@ variable_queue_delivery_failures_forgotten_on_purge2(VQ0, QName) ->
     {1, VQ5} = rabbit_variable_queue:purge(VQ4),
 
     _VQ6 = rabbit_variable_queue:terminate(shutdown, VQ5),
+    Terms = variable_queue_read_terms(QName),
+    #{} = proplists:get_value(delivery_failures, Terms),
+    #{} = proplists:get_value(delivery_count, Terms),
+    variable_queue_init(test_amqqueue(QName, true), Terms).
+
+%% A transient message still pending-ack (delivered, never acked, requeued,
+%% or dropped) at a clean shutdown has its content removed by
+%% purge_pending_ack/2, since transient content never survives a restart.
+%% Its delivery_count/delivery_failures entry must be forgotten too, or it
+%% is orphaned forever: that seq-id will never be visited again.
+variable_queue_delivery_failures_forgotten_on_transient_pending_ack(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, variable_queue_delivery_failures_forgotten_on_transient_pending_ack1, []).
+
+variable_queue_delivery_failures_forgotten_on_transient_pending_ack1() ->
+    with_fresh_variable_queue(
+      fun variable_queue_delivery_failures_forgotten_on_transient_pending_ack2/2).
+
+variable_queue_delivery_failures_forgotten_on_transient_pending_ack2(VQ0, QName) ->
+    VQ1 = variable_queue_publish(false, 1, VQ0),
+    {{_Msg0, _, AckTag}, VQ2} = rabbit_variable_queue:fetch(true, VQ1),
+    {#{AckTag := 1}, VQ3} = rabbit_variable_queue:record_delivery_failure([AckTag], VQ2),
+
+    _VQ4 = rabbit_variable_queue:terminate(shutdown, VQ3),
     Terms = variable_queue_read_terms(QName),
     #{} = proplists:get_value(delivery_failures, Terms),
     #{} = proplists:get_value(delivery_count, Terms),

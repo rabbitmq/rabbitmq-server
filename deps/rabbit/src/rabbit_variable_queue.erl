@@ -695,6 +695,9 @@ forget_delivery_failure(SeqId, State = #vqstate{delivery_count    = DeliveryCoun
     State#vqstate{delivery_count    = maps:remove(SeqId, DeliveryCount),
                   delivery_failures = maps:remove(SeqId, DeliveryFailures)}.
 
+forget_delivery_failures(SeqIds, State) ->
+    lists:foldl(fun forget_delivery_failure/2, State, SeqIds).
+
 %% This function is called when messages get discarded (rejected AMQP 1.0 outcome)
 %% and delivered to a dead letter queue. We must therefore increase the delivery_count
 %% for these messages the same as if they were requeued.
@@ -1763,15 +1766,27 @@ remove_pending_ack(false, SeqId, State = #vqstate{ram_pending_ack  = RPA,
 
 purge_pending_ack(KeepPersistent,
                   State = #vqstate { index_state       = IndexState,
-                                     store_state       = StoreState0 }) ->
+                                     store_state       = StoreState0,
+                                     ram_pending_ack   = RPA,
+                                     disk_pending_ack  = DPA }) ->
     {IndexOnDiskSeqIds, MsgIdsByStore, SeqIdsInStore, State1} = purge_pending_ack1(State),
     case KeepPersistent of
-        true  -> remove_transient_msgs_by_id(MsgIdsByStore, State1);
+        true  ->
+            %% Only transient messages are actually removed here (their
+            %% content is gone for good and they won't reappear at the
+            %% same SeqId after a restart); persistent ones stay pending
+            %% and must keep their delivery_count/delivery_failures entries.
+            TransientSeqIds = [SeqId || {SeqId, MsgStatus} <- maps:to_list(RPA) ++ maps:to_list(DPA),
+                                        not MsgStatus#msg_status.is_persistent],
+            State2 = forget_delivery_failures(TransientSeqIds, State1),
+            remove_transient_msgs_by_id(MsgIdsByStore, State2);
         false -> {DeletedSegments, IndexState1} =
                      rabbit_classic_queue_index_v2:ack(IndexOnDiskSeqIds, IndexState),
                  StoreState1 = lists:foldl(fun rabbit_classic_queue_store_v2:remove/2, StoreState0, SeqIdsInStore),
                  StoreState = rabbit_classic_queue_store_v2:delete_segments(DeletedSegments, StoreState1),
-                 State2 = remove_vhost_msgs_by_id(MsgIdsByStore, State1),
+                 AllSeqIds = maps:keys(RPA) ++ maps:keys(DPA),
+                 State2 = remove_vhost_msgs_by_id(MsgIdsByStore,
+                                                  forget_delivery_failures(AllSeqIds, State1)),
                  State2 #vqstate { index_state = IndexState1,
                                    store_state = StoreState }
     end.
