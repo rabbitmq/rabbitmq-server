@@ -101,7 +101,10 @@ federation_links(Config) ->
                                   maps:get(upstream, Link),
                                   maps:get(status, Link)} || Link <- AllLinks],
                        Verify(Result)
-               end).
+               end),
+
+    http_get(Config, "/federation-links?lengths_age=60&lengths_incr=1", ?OK),
+    http_get(Config, "/federation-links?lengths_age=6000&lengths_incr=1", ?BAD_REQUEST).
 
 federation_down_links(Config) ->
     DefaultExchanges = [<<"amq.direct">>, <<"amq.fanout">>, <<"amq.headers">>,
