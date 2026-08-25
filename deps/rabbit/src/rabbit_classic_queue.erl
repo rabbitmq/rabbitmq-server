@@ -639,7 +639,18 @@ recover_durable_queues(QueuesAndRecoveryTerms) ->
     [Q || {_, {new, Q}} <- Results].
 
 capabilities() ->
-    #{unsupported_policies => [%% Stream policies
+    #{%% rabbit_queue_type:is_policy_applicable/2 rejects a whole policy
+      %% document if any key in it is in this list, even keys that are
+      %% supported. This means a document combining a key here with e.g.
+      %% max-length, applied to both classic and quorum queues, silently
+      %% activates the max-length part for classic queues too the moment
+      %% a key is removed from this list, on any node running this code
+      %% mid-upgrade. This is intentional: the newly-applied keys behave
+      %% the same way an operator declaring them for the first time would
+      %% expect, and no wire-incompatible state is introduced, so no
+      %% feature flag is needed. It is a real, silent behaviour change
+      %% for affected policies, worth calling out in release notes.
+      unsupported_policies => [%% Stream policies
                                <<"max-age">>, <<"stream-max-segment-size-bytes">>,
                                <<"initial-cluster-size">>,
                                %% Quorum policies

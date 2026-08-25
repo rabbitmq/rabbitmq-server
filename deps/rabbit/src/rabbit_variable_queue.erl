@@ -684,6 +684,17 @@ record_delivery_failure(AckTags, State = #vqstate{delivery_failures = DeliveryFa
           end, {#{}, DeliveryFailures0}, AckTags),
     {Counts, State#vqstate{delivery_failures = DeliveryFailures}}.
 
+%% A message can leave the queue without ever going through ack/2, e.g.
+%% dropped for max-length or expired for TTL with no DLX configured, or
+%% purged outright. delivery_count and delivery_failures must be forgotten
+%% here too, otherwise they leak one entry per such message for the
+%% lifetime of the queue process (delivery_failures is also written to
+%% the recovery-terms blob, so the leak would even survive clean restarts).
+forget_delivery_failure(SeqId, State = #vqstate{delivery_count    = DeliveryCount,
+                                                delivery_failures = DeliveryFailures}) ->
+    State#vqstate{delivery_count    = maps:remove(SeqId, DeliveryCount),
+                  delivery_failures = maps:remove(SeqId, DeliveryFailures)}.
+
 %% This function is called when messages get discarded (rejected AMQP 1.0 outcome)
 %% and delivered to a dead letter queue. We must therefore increase the delivery_count
 %% for these messages the same as if they were requeued.
@@ -1312,8 +1323,9 @@ remove(true, MsgStatus = #msg_status {
 %% This function body has the same behaviour as remove_queue_entries/3
 %% but instead of removing messages based on a ?QUEUE, this removes
 %% just one message, the one referenced by the MsgStatus provided.
-remove(false, MsgStatus,
-              State = #vqstate{ out_counter = OutCount }) ->
+remove(false, MsgStatus = #msg_status{ seq_id = SeqId },
+              State0 = #vqstate{ out_counter = OutCount }) ->
+    State = forget_delivery_failure(SeqId, State0),
     State1 = remove_from_disk(MsgStatus, State),
 
     State2 = stats_removed(MsgStatus, State1),
@@ -1527,7 +1539,7 @@ remove_queue_entries1(
      end,
      cons_if(IndexOnDisk, SeqId, Acks),
      %% @todo Probably don't do this on a per-message basis...
-     stats_removed(MsgStatus, State)}.
+     stats_removed(MsgStatus, forget_delivery_failure(SeqId, State))}.
 
 process_delivers_and_acks_fun(deliver_and_ack) ->
     %% @todo Make a clause for empty Acks list?
