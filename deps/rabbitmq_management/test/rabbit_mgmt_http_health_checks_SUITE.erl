@@ -15,7 +15,8 @@
 -import(rabbit_mgmt_test_util, [http_get/3,
                                 http_get/5,
                                 req/4,
-                                auth_header/2]).
+                                auth_header/2,
+                                assert_code/5]).
 
 -define(PATH_PREFIX, "/custom-prefix").
 
@@ -36,6 +37,11 @@ groups() ->
      {single_node, [], [
                         alarms_test,
                         local_alarms_test,
+                        alarms_invalid_timeout_test,
+                        local_alarms_invalid_timeout_test,
+                        healthchecks_node_invalid_timeout_test,
+                        alarms_expired_timeout_test,
+                        local_alarms_expired_timeout_test,
                         metadata_store_initialized_test,
                         metadata_store_initialized_with_data_test,
                         is_quorum_critical_single_node_test,
@@ -174,6 +180,60 @@ local_alarms_test(Config) ->
     ),
 
     passed.
+
+-define(INVALID_TIMEOUTS, ["not-a-number", "-1", "99999999999999999999",
+                           %% one past the maximum receive/gen_server/gen_event/rpc timeout
+                           "4294967296"]).
+
+alarms_invalid_timeout_test(Config) ->
+    assert_invalid_timeouts_rejected(Config, "/health/checks/alarms"),
+    %% the maximum timeout itself is valid
+    http_get_with_header(Config, "/health/checks/alarms",
+                         {"timeout", "4294967295"}, ?OK),
+    passed.
+
+local_alarms_invalid_timeout_test(Config) ->
+    assert_invalid_timeouts_rejected(Config, "/health/checks/local-alarms"),
+    http_get_with_header(Config, "/health/checks/local-alarms",
+                         {"timeout", "4294967295"}, ?OK),
+    passed.
+
+healthchecks_node_invalid_timeout_test(Config) ->
+    assert_invalid_timeouts_rejected(Config, "/healthchecks/node"),
+    passed.
+
+assert_invalid_timeouts_rejected(Config, EndpointPath) ->
+    [http_get_with_header(Config, EndpointPath, {"timeout", Timeout}, ?BAD_REQUEST)
+     || Timeout <- ?INVALID_TIMEOUTS].
+
+http_get_with_header(Config, EndpointPath, Header, CodeExp) ->
+    {ok, {{_, Code, _}, _Headers, Body}} =
+        req(Config, get, EndpointPath, [auth_header("guest", "guest"), Header]),
+    assert_code(CodeExp, Code, "GET", EndpointPath, Body).
+
+%% A timeout of 0 is a valid value, but whether the gen_event:call to
+%% the rabbit_alarm handler actually expires before getting a reply is
+%% a race. Suspend the rabbit_alarm process so it can't reply at all,
+%% making the timeout deterministic and exercising the gen_event:call
+%% timeout path rather than the invalid-parameter path above.
+alarms_expired_timeout_test(Config) ->
+    assert_expired_timeout_rejected(Config, "/health/checks/alarms"),
+    passed.
+
+local_alarms_expired_timeout_test(Config) ->
+    assert_expired_timeout_rejected(Config, "/health/checks/local-alarms"),
+    passed.
+
+assert_expired_timeout_rejected(Config, EndpointPath) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, sys, suspend, [rabbit_alarm]),
+    try
+        {ok, {{_, Code, _}, _Headers, Body}} =
+            req(Config, get, EndpointPath,
+                [auth_header("guest", "guest"), {"timeout", "0"}]),
+        assert_code(?HEALTH_CHECK_FAILURE_STATUS, Code, "GET", EndpointPath, Body)
+    after
+        ok = rabbit_ct_broker_helpers:rpc(Config, 0, sys, resume, [rabbit_alarm])
+    end.
 
 is_quorum_critical_single_node_test(Config) ->
     EndpointPath = "/health/checks/node-is-quorum-critical",

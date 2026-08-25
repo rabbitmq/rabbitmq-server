@@ -30,16 +30,20 @@ resource_exists(ReqData, Context) ->
     {true, ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    Timeout = case cowboy_req:header(<<"timeout">>, ReqData) of
-                  undefined -> 70000;
-                  Val       -> list_to_integer(binary_to_list(Val))
-              end,
-    case rabbit_alarm:get_local_alarms(Timeout) of
-        [] ->
-            rabbit_mgmt_util:reply(#{status => ok}, ReqData, Context);
-        Xs when length(Xs) > 0 ->
-            Msg = "There are alarms in effect on the node",
-            failure(Msg, Xs, ReqData, Context)
+    try
+        Timeout = rabbit_mgmt_util:timeout(ReqData, 70000),
+        case rabbit_alarm:get_local_alarms(Timeout) of
+            [] ->
+                rabbit_mgmt_util:reply(#{status => ok}, ReqData, Context);
+            Xs when length(Xs) > 0 ->
+                Msg = "There are alarms in effect on the node",
+                failure(Msg, Xs, ReqData, Context)
+        end
+    catch
+        {error, {not_integer, _}} ->
+            rabbit_mgmt_util:bad_request(<<"Invalid timeout parameter">>, ReqData, Context);
+        exit:{timeout, {gen_event, call, _}} ->
+            failure("Local alarms check timed out", [], ReqData, Context)
     end.
 
 failure(Message, Alarms0, ReqData, Context) ->
