@@ -39,22 +39,24 @@ resource_exists(ReqData, Context) ->
     end.
 
 to_json(ReqData, Context) ->
-    Node = node0(ReqData),
-    Timeout = case cowboy_req:header(<<"timeout">>, ReqData) of
-                  undefined -> 70000;
-                  Val       -> list_to_integer(binary_to_list(Val))
-              end,
-    case rabbit_health_check:node(Node, Timeout) of
-        ok ->
-            rabbit_mgmt_util:reply(#{status => ok}, ReqData, Context);
-        {badrpc, timeout} ->
-            ErrMsg = rabbit_mgmt_format:print("node ~tp health check timed out", [Node]),
-            failure(ErrMsg, ReqData, Context);
-        {badrpc, Err} ->
-            failure(rabbit_mgmt_format:print("~tp", Err), ReqData, Context);
-        {error_string, Err} ->
-            S = rabbit_mgmt_format:print(Err),
-            failure(S, ReqData, Context)
+    try
+        Node = node0(ReqData),
+        Timeout = rabbit_mgmt_util:timeout(ReqData, 70000),
+        case rabbit_health_check:node(Node, Timeout) of
+            ok ->
+                rabbit_mgmt_util:reply(#{status => ok}, ReqData, Context);
+            {badrpc, timeout} ->
+                ErrMsg = rabbit_mgmt_format:print("node ~tp health check timed out", [Node]),
+                failure(ErrMsg, ReqData, Context);
+            {badrpc, Err} ->
+                failure(rabbit_mgmt_format:print("~tp", Err), ReqData, Context);
+            {error_string, Err} ->
+                S = rabbit_mgmt_format:print(Err),
+                failure(S, ReqData, Context)
+        end
+    catch
+        {error, {not_integer, _}} ->
+            rabbit_mgmt_util:bad_request(<<"Invalid timeout parameter">>, ReqData, Context)
     end.
 
 failure(Message, ReqData, Context) ->
