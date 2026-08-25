@@ -23,6 +23,7 @@ all() ->
         stats,
         heartbeat,
         login_timeout,
+        credential_expires,
         frame_size,
         frame_size_huge,
         unauthenticated_frame_size_limited
@@ -186,6 +187,29 @@ login_timeout(Config) ->
         rabbit_ct_broker_helpers:rpc(
           Config, 0,
           application, unset_env, [rabbitmq_stomp, login_timeout])
+    end.
+
+credential_expires(Config) ->
+    Mod = rabbit_auth_backend_internal,
+    ExpiryTimestamp = os:system_time(second) + 5,
+    rabbit_ct_broker_helpers:setup_meck(Config),
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, meck, new, [Mod, [no_link, passthrough]]),
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, meck, expect, [Mod, expiry_timestamp, 1, ExpiryTimestamp]),
+    StompPort = get_stomp_port(Config),
+    try
+        {ok, {Socket, _}} = rabbit_stomp_client:connect("1.2", "guest", "guest",
+                                                        StompPort, []),
+        {error, timeout} = gen_tcp:recv(Socket, 0, 2000),
+        {ok, Data} = gen_tcp:recv(Socket, 0, 30000),
+        {ok, Frame, _} = rabbit_stomp_frame:parse(
+                           Data, rabbit_stomp_frame:initial_state()),
+        "ERROR" = Frame#stomp_frame.command,
+        {ok, "Credential expired"} = rabbit_stomp_frame:header(Frame, "message"),
+        {error, closed} = gen_tcp:recv(Socket, 0, 30000)
+    after
+        ok = rabbit_ct_broker_helpers:rpc(Config, 0, meck, unload, [Mod])
     end.
 
 frame_size(Config) ->

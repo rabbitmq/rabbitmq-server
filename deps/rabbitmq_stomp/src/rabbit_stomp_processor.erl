@@ -9,7 +9,8 @@
 
 -compile({no_auto_import, [error/3]}).
 
--export([initial_state/2, process_frame/2, flush_and_die/1, is_authenticated/1]).
+-export([initial_state/2, process_frame/2, flush_and_die/1, is_authenticated/1,
+         send_credential_expired_error/1]).
 -export([flush_pending_receipts/3,
          handle_exit/3,
          cancel_consumer/2,
@@ -162,6 +163,12 @@ initial_state(Configuration,
 
 is_authenticated(#proc_state{connection = none}) -> false;
 is_authenticated(#proc_state{}) -> true.
+
+-spec send_credential_expired_error(#proc_state{}) -> #proc_state{}.
+send_credential_expired_error(State) ->
+    send_error("Credential expired",
+               "The credential used to authenticate this connection has expired",
+               State).
 
 
 command({"STOMP", Frame}, State) ->
@@ -583,6 +590,17 @@ without_headers([Hdr | Hdrs], Command, Frame, State, Fun) ->
 without_headers([], Command, Frame, State, Fun) ->
     Fun(Command, Frame, State).
 
+maybe_start_credential_expiry_timer(Connection) ->
+    [{internal_user, User}] = amqp_connection:info(Connection, [internal_user]),
+    case rabbit_access_control:expiry_timestamp(User) of
+        never ->
+            ok;
+        Ts when is_integer(Ts) ->
+            Time = (Ts - os:system_time(second)) * 1000,
+            _ = erlang:send_after(max(Time, 0), self(), credential_expired),
+            ok
+    end.
+
 do_login(undefined, _, _, _, _, _, State) ->
     error("Bad CONNECT", "Missing login or passcode header(s)", State);
 do_login(Username, Passwd, VirtualHost, Heartbeat, AdapterInfo, Version,
@@ -600,6 +618,7 @@ do_login(Username, Passwd, VirtualHost, Heartbeat, AdapterInfo, Version,
             amqp_channel:enable_delivery_flow_control(Channel),
             SessionId = rabbit_guid:string(rabbit_guid:gen_secure(), "session"),
             {SendTimeout, ReceiveTimeout} = ensure_heartbeats(Heartbeat),
+            ok = maybe_start_credential_expiry_timer(Connection),
 
           Headers = [{?HEADER_SESSION, SessionId},
                      {?HEADER_HEART_BEAT,

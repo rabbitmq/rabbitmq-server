@@ -289,6 +289,13 @@ websocket_info({start_heartbeats, {SendTimeout, ReceiveTimeout}},
 websocket_info(client_timeout, State) ->
     stop(State);
 
+websocket_info(credential_expired, State = #state{proc_state = ProcState}) ->
+    ?LOG_WARNING("Web STOMP: closing connection ~ts: credential has expired",
+                 [rabbit_stomp_processor:adapter_name(ProcState)]),
+    ProcState1 = rabbit_stomp_processor:send_credential_expired_error(ProcState),
+    self() ! close_websocket,
+    {[], State#state{proc_state = ProcState1}};
+
 %%----------------------------------------------------------------------------
 websocket_info({'EXIT', From, Reason},
                State=#state{ proc_state = ProcState0 }) ->
