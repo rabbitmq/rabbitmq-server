@@ -2087,17 +2087,12 @@ find_quorum_queues(VHost) ->
     Node = node(),
     rabbit_db_queue:get_all_by_type_and_node(VHost, ?MODULE, Node).
 
-resolve_delivery_limit(PolVal, ArgVal)
-  when PolVal < 0 orelse ArgVal < 0 ->
-    max(PolVal, ArgVal);
-resolve_delivery_limit(PolVal, ArgVal) ->
-    min(PolVal, ArgVal).
-
 get_delivery_limit(Q) ->
     get_delivery_limit(Q, false).
 
 get_delivery_limit(Q, ShouldLog) ->
-    PolicyValue = args_policy_lookup(<<"delivery-limit">>, fun resolve_delivery_limit/2, Q),
+    PolicyValue = args_policy_lookup(<<"delivery-limit">>,
+                                     fun rabbit_queue_type_util:resolve_delivery_limit/2, Q),
     get_delivery_limit({handle_policy_value, PolicyValue}, Q, ShouldLog).
 
 get_delivery_limit({handle_policy_value, undefined}, Q, true) ->

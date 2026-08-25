@@ -643,7 +643,7 @@ capabilities() ->
                                <<"max-age">>, <<"stream-max-segment-size-bytes">>,
                                <<"initial-cluster-size">>,
                                %% Quorum policies
-                               <<"delivery-limit">>, <<"dead-letter-strategy">>,
+                               <<"dead-letter-strategy">>,
                                <<"max-in-memory-length">>, <<"max-in-memory-bytes">>, <<"target-group-size">>,
                                %% JMS policies
                                <<"selector-fields">>,
@@ -653,7 +653,8 @@ capabilities() ->
                           <<"x-max-length-bytes">>, <<"x-max-priority">>,
                           <<"x-overflow">>, <<"x-queue-mode">>, <<"x-queue-version">>,
                           <<"x-single-active-consumer">>, <<"x-queue-type">>,
-                          <<"x-queue-master-locator">>, <<"x-queue-leader-locator">>],
+                          <<"x-queue-master-locator">>, <<"x-queue-leader-locator">>,
+                          <<"x-delivery-limit">>],
       consumer_arguments => [<<"x-priority">>],
       server_named => true,
       rebalance_module => undefined,

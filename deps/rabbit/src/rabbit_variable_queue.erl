@@ -12,6 +12,7 @@
          publish/5, publish_delivered/4,
          discard/3, drain_confirmed/1,
          dropwhile/2, fetchwhile/4, fetch/2, drop/2, ack/2, requeue/3,
+         record_delivery_failure/2,
          ackfold/5, len/1, is_empty/1, depth/1,
          update_rates/1, needs_timeout/1, timeout/1,
          handle_pre_hibernate/1, resume/1, msg_rates/1,
@@ -147,6 +148,14 @@
     %% the reason for requeueing. Used to produce the AMQP 1.0
     %% delivery-count header.
     delivery_count,
+
+    %% Map of SeqId to the number of failed deliveries for each
+    %% message, incremented unconditionally by record_delivery_failure/2
+    %% on every failed delivery (nack, reject, channel/connection death,
+    %% consumer cancellation alike). This is deliberately independent
+    %% from delivery_count above: the latter skips plain nack/recover,
+    %% which would defeat a delivery-limit built on top of it.
+    delivery_failures,
 
     %% Messages pending acks. These messages have been delivered to the channel
     %% and we are expecting an ack (or requeue) back. Messages are in ram or disk
@@ -304,6 +313,7 @@
              next_seq_id           :: seq_id(),
              redeliver_seq_id      :: seq_id(),
              delivery_count        :: #{seq_id() => pos_integer()},
+             delivery_failures     :: #{seq_id() => pos_integer()},
              ram_pending_ack       :: map(),
              disk_pending_ack      :: map(),
              index_state           :: any(),
@@ -468,6 +478,7 @@ terminate(_Reason, State) ->
                         next_seq_id         = NextSeqId,
                         redeliver_seq_id    = ReDeliverSeqId,
                         delivery_count      = DeliveryCount,
+                        delivery_failures   = DeliveryFailures,
                         persistent_count    = PCount,
                         persistent_bytes    = PBytes,
                         index_state         = IndexState,
@@ -483,6 +494,7 @@ terminate(_Reason, State) ->
     Terms = [{next_seq_id,         NextSeqId},
              {redeliver_seq_id,    ReDeliverSeqId},
              {delivery_count,      DeliveryCount},
+             {delivery_failures,   DeliveryFailures},
              {persistent_ref,      PRef},
              {persistent_count,    PCount},
              {persistent_bytes,    PBytes}],
@@ -606,10 +618,14 @@ ack([SeqId], State) ->
             {[], State};
         {MsgStatus = #msg_status{ msg_id = MsgId }, State1} ->
             State2 = remove_from_disk(MsgStatus, State1),
-            #vqstate{ delivery_count=DeliveryCount0, ack_out_counter = AckOutCount } = State2,
+            #vqstate{ delivery_count=DeliveryCount0, delivery_failures=DeliveryFailures0,
+                     ack_out_counter = AckOutCount } = State2,
             DeliveryCount = maps:remove(SeqId, DeliveryCount0),
+            DeliveryFailures = maps:remove(SeqId, DeliveryFailures0),
             {[MsgId],
-             a(State2 #vqstate { delivery_count = DeliveryCount, ack_out_counter  = AckOutCount + 1 })}
+             a(State2 #vqstate { delivery_count = DeliveryCount,
+                                 delivery_failures = DeliveryFailures,
+                                 ack_out_counter  = AckOutCount + 1 })}
     end;
 ack(AckTags, State) ->
     {{IndexOnDiskSeqIds, MsgIdsByStore, SeqIdsInStore, AllMsgIds},
@@ -623,9 +639,13 @@ ack(AckTags, State) ->
                   case remove_pending_ack(true, SeqId, State2) of
                       {none, _} ->
                           {Acc, State2};
-                      {MsgStatus, State3=#vqstate{delivery_count=DeliveryCount0}} ->
+                      {MsgStatus, State3=#vqstate{delivery_count=DeliveryCount0,
+                                                  delivery_failures=DeliveryFailures0}} ->
                           DeliveryCount = maps:remove(SeqId, DeliveryCount0),
-                          {accumulate_ack(MsgStatus, Acc), State3#vqstate{delivery_count=DeliveryCount}}
+                          DeliveryFailures = maps:remove(SeqId, DeliveryFailures0),
+                          {accumulate_ack(MsgStatus, Acc),
+                           State3#vqstate{delivery_count = DeliveryCount,
+                                          delivery_failures = DeliveryFailures}}
                   end
           end, {accumulate_ack_init(), State}, AckTags),
     {DeletedSegments, IndexState1} = rabbit_classic_queue_index_v2:ack(IndexOnDiskSeqIds, IndexState),
@@ -647,6 +667,22 @@ requeue(AckTags, DelFailed, #vqstate { q_head     = QHead0,
         q_head     = QHead,
         in_counter = InCounter + MsgCount
     }))}.
+
+%% Unlike maybe_inc_delivery_count/3 (used for the AMQP 1.0 delivery-count
+%% annotation), this increments unconditionally for every AckTag given,
+%% regardless of the reason the caller is treating the delivery as failed.
+%% This is what lets a delivery-limit built on top of this counter catch
+%% the plain basic.nack(requeue=true) redelivery loop, which does not
+%% bump delivery_count.
+record_delivery_failure(AckTags, State = #vqstate{delivery_failures = DeliveryFailures0}) ->
+    {Counts, DeliveryFailures} =
+        lists:foldl(
+          fun (SeqId, {CountsN, DeliveryFailuresN}) ->
+                  Count = maps:get(SeqId, DeliveryFailuresN, 0) + 1,
+                  {maps:put(SeqId, Count, CountsN),
+                   maps:put(SeqId, Count, DeliveryFailuresN)}
+          end, {#{}, DeliveryFailures0}, AckTags),
+    {Counts, State#vqstate{delivery_failures = DeliveryFailures}}.
 
 %% This function is called when messages get discarded (rejected AMQP 1.0 outcome)
 %% and delivered to a dead letter queue. We must therefore increase the delivery_count
@@ -1053,9 +1089,9 @@ init(IsDurable, IndexState, StoreState, DiskCount, DiskBytes, Terms,
 
     {LowSeqId, HiSeqId, IndexState1} = rabbit_classic_queue_index_v2:bounds(IndexState, NextSeqIdHint),
 
-    {NextSeqId, ReDeliverSeqId, DeliveryCount, DiskCount1, DiskBytes1} =
+    {NextSeqId, ReDeliverSeqId, DeliveryCount, DeliveryFailures, DiskCount1, DiskBytes1} =
         case Terms of
-            non_clean_shutdown -> {HiSeqId, HiSeqId, #{}, DiskCount, DiskBytes};
+            non_clean_shutdown -> {HiSeqId, HiSeqId, #{}, #{}, DiskCount, DiskBytes};
             _                  -> NextSeqId0 = proplists:get_value(next_seq_id,
                                                                    Terms, HiSeqId),
                                   {NextSeqId0,
@@ -1064,6 +1100,7 @@ init(IsDurable, IndexState, StoreState, DiskCount, DiskBytes, Terms,
                                    proplists:get_value(next_deliver_seq_id, Terms,
                                        proplists:get_value(redeliver_seq_id, Terms, NextSeqId0)),
                                    proplists:get_value(delivery_count, Terms, #{}),
+                                   proplists:get_value(delivery_failures, Terms, #{}),
                                    proplists:get_value(persistent_count,
                                                        Terms, DiskCount),
                                    proplists:get_value(persistent_bytes,
@@ -1085,6 +1122,7 @@ init(IsDurable, IndexState, StoreState, DiskCount, DiskBytes, Terms,
       next_seq_id         = NextSeqId,
       redeliver_seq_id    = ReDeliverSeqId,
       delivery_count      = DeliveryCount,
+      delivery_failures   = DeliveryFailures,
       ram_pending_ack     = #{},
       disk_pending_ack    = #{},
       index_state         = IndexState1,

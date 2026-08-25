@@ -33,7 +33,9 @@
     variable_queue_ack_limiting,
     variable_queue_purge,
     variable_queue_requeue,
-    variable_queue_requeue_ram_beta
+    variable_queue_requeue_ram_beta,
+    variable_queue_delivery_failures,
+    variable_queue_delivery_failures_recovery
   ]).
 
 -define(BACKING_QUEUE_TESTCASES, [
@@ -1677,6 +1679,66 @@ variable_queue_requeue2(VQ0, _Config) ->
                       end, VQ1, Msgs),
     {empty, VQ3} = rabbit_variable_queue:fetch(true, VQ2),
     VQ3.
+
+%% record_delivery_failure/2 increments unconditionally, regardless of
+%% DelFailed, unlike the delivery_count map that only backs the AMQP 1.0
+%% delivery-count annotation and skips plain nack/recover.
+variable_queue_delivery_failures(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, variable_queue_delivery_failures1, []).
+
+variable_queue_delivery_failures1() ->
+    with_fresh_variable_queue(fun variable_queue_delivery_failures2/2).
+
+variable_queue_delivery_failures2(VQ0, _Config) ->
+    VQ1 = variable_queue_publish(false, 1, VQ0),
+    {{_Msg0, _, AckTag}, VQ2} = rabbit_variable_queue:fetch(true, VQ1),
+
+    {#{AckTag := 1}, VQ3} = rabbit_variable_queue:record_delivery_failure([AckTag], VQ2),
+    {#{AckTag := 2}, VQ4} = rabbit_variable_queue:record_delivery_failure([AckTag], VQ3),
+
+    %% A plain nack-style requeue (DelFailed=false) does not bump the
+    %% AMQP 1.0 delivery_count annotation, but our independent counter
+    %% keeps counting regardless.
+    {_MsgIds, VQ5} = rabbit_variable_queue:requeue([AckTag], false, VQ4),
+    {{Msg1, _, AckTag}, VQ6} = rabbit_variable_queue:fetch(true, VQ5),
+    undefined = mc:get_annotation(delivery_count, Msg1),
+
+    {#{AckTag := 3}, VQ7} = rabbit_variable_queue:record_delivery_failure([AckTag], VQ6),
+
+    %% Acking clears the counter for good.
+    {_Guids, VQ8} = rabbit_variable_queue:ack([AckTag], VQ7),
+    VQ8.
+
+%% delivery_failures follows the exact durability class of delivery_count:
+%% preserved across a clean restart, reset to zero after a dirty one.
+variable_queue_delivery_failures_recovery(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, variable_queue_delivery_failures_recovery1, []).
+
+variable_queue_delivery_failures_recovery1() ->
+    with_fresh_variable_queue(fun variable_queue_delivery_failures_recovery2/2).
+
+variable_queue_delivery_failures_recovery2(VQ0, QName) ->
+    VQ1 = variable_queue_publish(true, 1, VQ0),
+    {{_Msg0, _, AckTag}, VQ2} = rabbit_variable_queue:fetch(true, VQ1),
+    {#{AckTag := 1}, VQ3} = rabbit_variable_queue:record_delivery_failure([AckTag], VQ2),
+
+    %% Clean shutdown: the count survives, keyed by the same seq-id.
+    _VQ4 = rabbit_variable_queue:terminate(shutdown, VQ3),
+    Terms = variable_queue_read_terms(QName),
+    VQ5 = variable_queue_init(test_amqqueue(QName, true), Terms),
+    {{_Msg1, _, AckTag}, VQ6} = rabbit_variable_queue:fetch(true, VQ5),
+    {#{AckTag := 2}, VQ7} = rabbit_variable_queue:record_delivery_failure([AckTag], VQ6),
+
+    %% Dirty shutdown: the count resets to zero.
+    _VQ8 = rabbit_variable_queue:terminate(shutdown, VQ7),
+    VQ9 = variable_queue_init(test_amqqueue(QName, true), true),
+    {{_Msg2, _, AckTag}, VQ10} = rabbit_variable_queue:fetch(true, VQ9),
+    {#{AckTag := 1}, VQ11} = rabbit_variable_queue:record_delivery_failure([AckTag], VQ10),
+
+    {_Guids, VQ12} = rabbit_variable_queue:ack([AckTag], VQ11),
+    VQ12.
 
 %% requeue from ram_pending_ack into q_head, move to q_tail and then empty queue
 variable_queue_requeue_ram_beta(Config) ->

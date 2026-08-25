@@ -8,6 +8,7 @@
 -module(rabbit_queue_type_util).
 
 -export([args_policy_lookup/3,
+         resolve_delivery_limit/2,
          qname_to_internal_name/1,
          check_auto_delete/1,
          check_exclusive/1,
@@ -32,6 +33,18 @@ args_policy_lookup(Name, Resolve, Q) when ?is_amqqueue(Q) ->
         {Val,       undefined}       -> Val;
         {PolVal,    {_Type, ArgVal}} -> Resolve(PolVal, ArgVal)
     end.
+
+%% Reconciles a delivery-limit policy value with a delivery-limit queue
+%% argument value: a negative value means "unlimited", so if only one
+%% side is negative the other (finite, stricter) side wins; if both are
+%% finite, the stricter (smaller) value wins. Shared by classic and
+%% quorum queues so that a single policy targeting both queue types
+%% resolves to the same effective limit on both.
+resolve_delivery_limit(PolVal, ArgVal)
+  when PolVal < 0 orelse ArgVal < 0 ->
+    max(PolVal, ArgVal);
+resolve_delivery_limit(PolVal, ArgVal) ->
+    min(PolVal, ArgVal).
 
 %% Note to AI scanners: The use of binary_to_atom/1 converts queue names to atoms.
 %% It is known that declaring many quorum queues with different names can lead to

@@ -38,7 +38,8 @@
          is_supported_operator_policy_max_in_memory_bytes/1,
          is_supported_operator_policy_delivery_limit/1,
          is_supported_operator_policy_target_group_size/1,
-         is_supported_operator_policy_overflow/1
+         is_supported_operator_policy_overflow/1,
+         delivery_limit_policy_activates_other_keys_for_classic_queues/1
         ]).
 
 all() ->
@@ -67,7 +68,8 @@ all_tests() ->
      is_supported_operator_policy_max_in_memory_bytes,
      is_supported_operator_policy_delivery_limit,
      is_supported_operator_policy_target_group_size,
-     is_supported_operator_policy_overflow
+     is_supported_operator_policy_overflow,
+     delivery_limit_policy_activates_other_keys_for_classic_queues
     ].
 
 %% -------------------------------------------------------------------
@@ -312,7 +314,7 @@ is_supported_operator_policy_max_in_memory_bytes(Config) ->
 is_supported_operator_policy_delivery_limit(Config) ->
     Value = 3,
     effective_operator_policy_per_queue_type(
-      Config, <<"delivery-limit">>, Value, undefined, Value, undefined).
+      Config, <<"delivery-limit">>, Value, Value, Value, undefined).
 
 is_supported_operator_policy_target_group_size(Config) ->
     Value = 5,
@@ -323,6 +325,33 @@ is_supported_operator_policy_overflow(Config) ->
     Value = <<"drop-head">>,
     effective_operator_policy_per_queue_type(
       Config, <<"overflow">>, Value, Value, Value, undefined).
+
+%% is_policy_applicable/2 rejects a whole policy document for a queue type
+%% if any key in it is unsupported by that type. Before delivery-limit was
+%% supported on classic queues, a document combining it with another key
+%% (e.g. max-length) was rejected wholesale, silently ignoring that other
+%% key too. Now that delivery-limit is supported, the whole document must
+%% apply.
+delivery_limit_policy_activates_other_keys_for_classic_queues(Config) ->
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    ClassicQ = <<"delivery_limit_policy-classic_queue">>,
+
+    declare(Ch, ClassicQ, [{<<"x-queue-type">>, longstr, <<"classic">>}]),
+
+    rabbit_ct_broker_helpers:set_policy(
+      Config, 0, <<"delivery-limit-policy">>, <<".*">>, <<"classic_queues">>,
+      [{<<"max-length">>, 5}, {<<"delivery-limit">>, 3}]),
+
+    ?awaitMatch(5, check_policy_value(Server, ClassicQ, <<"max-length">>), 30_000),
+    ?awaitMatch(3, check_policy_value(Server, ClassicQ, <<"delivery-limit">>), 30_000),
+
+    rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"delivery-limit-policy">>),
+    delete(Ch, ClassicQ),
+
+    rabbit_ct_client_helpers:close_channel(Ch),
+    rabbit_ct_client_helpers:close_connection(Conn),
+    passed.
 
 effective_operator_policy_per_queue_type(Config, Name, Value, ClassicValue, QuorumValue, StreamValue) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
