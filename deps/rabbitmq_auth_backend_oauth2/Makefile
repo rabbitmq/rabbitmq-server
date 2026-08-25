@@ -19,5 +19,11 @@ dep_base64url = hex 1.0.1
 
 dep_emqtt = git https://github.com/emqx/emqtt.git 1.14.6
 
+ELIXIR = system
+
 include ../../rabbitmq-components.mk
 include ../../erlang.mk
+
+ELIXIR_ERL_EBIN := $(shell dirname $$(elixir -e 'IO.puts(:code.which(:elixir_erl))' 2>/dev/null))
+DIALYZER_PLT_OPTS += -pa $(ELIXIR_ERL_EBIN)
+DIALYZER_OPTS += -pa $(ELIXIR_ERL_EBIN)
