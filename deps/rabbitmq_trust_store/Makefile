@@ -19,5 +19,13 @@ dep_ct_helper = git https://github.com/extend/ct_helper.git master
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
+PLT_APPS += rabbitmq_cli $(ELIXIR_ERL_EBIN)
+
+ELIXIR = system
+
 include ../../rabbitmq-components.mk
 include ../../erlang.mk
+
+ELIXIR_ERL_EBIN := $(shell dirname $$(elixir -e 'IO.puts(:code.which(:elixir_erl))' 2>/dev/null))
+DIALYZER_PLT_OPTS += -pa $(ELIXIR_ERL_EBIN)
+DIALYZER_OPTS += -pa $(ELIXIR_ERL_EBIN)
