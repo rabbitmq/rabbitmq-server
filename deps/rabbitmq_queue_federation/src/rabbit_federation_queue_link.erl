@@ -200,25 +200,23 @@ handle_info(#'basic.nack'{} = Nack, State = #state{ch      = Ch,
     Unacked1 = rabbit_federation_link_util:nack(Nack, Ch, Unacked),
     {noreply, State#state{unacked = Unacked1}};
 
-handle_info(#'connection.blocked'{}, State) ->
+handle_info(#'connection.blocked'{},
+            State = #state{queue = Q}) when ?is_amqqueue(Q) ->
     {noreply, State#state{blocked = true}};
 
-handle_info(#'connection.unblocked'{}, State = #state{blocked_buffer = QBuffer}) ->
-    State1 = State#state{blocked = false, blocked_buffer = queue:new()},
-    %% Drain the buffer
-    State2 = drain_buffer(queue:out(QBuffer), State1),
-    {noreply, State2};
+handle_info(#'connection.unblocked'{},
+            State = #state{blocked_buffer = QBuffer,
+                           queue = Q}) when ?is_amqqueue(Q) ->
+    State1 = State#state{blocked = false},
+    {QBuffer1, State2} = drain(QBuffer, State1),
+    {noreply, State2#state{blocked_buffer = QBuffer1}};
 
-handle_info({bump_credit, Msg}, State = #state{blocked_buffer = QBuffer}) ->
+handle_info({bump_credit, Msg},
+            State = #state{blocked_buffer = QBuffer,
+                           queue = Q}) when ?is_amqqueue(Q) ->
     credit_flow:handle_bump_msg(Msg),
-    case credit_flow:blocked() of
-        false ->
-            State1 = State#state{blocked_buffer = queue:new()},
-            State2 = drain_buffer(queue:out(QBuffer), State1),
-            {noreply, State2};
-        true ->
-            {noreply, State}
-    end;
+    {QBuffer1, State1} = drain(QBuffer, State),
+    {noreply, State1#state{blocked_buffer = QBuffer1}};
 
 handle_info({#'basic.deliver'{} = DeliverMethod, Msg},
             State = #state{blocked = Blocked, blocked_buffer = QBuffer, queue = Q}) when ?is_amqqueue(Q) ->
@@ -315,11 +313,16 @@ go(S0 = #not_started{run             = Run,
                 fun(?NOT_FOUND, _Text) ->
                         amqp_channel:call(Ch, Declare)
                 end),
-              case Upstream#upstream.ack_mode of
-                  'no-ack' -> ok;
-                  _        -> amqp_channel:call(
-                                Ch, #'basic.qos'{prefetch_count = Prefetch})
-              end,
+              %% The prefetch is applied even in no-ack mode so that a link
+              %% that has buffered messages behind a downstream resource
+              %% alarm cannot grow without bound. Quorum queues and streams
+              %% honour prefetch on no-ack consumers via credit-based flow;
+              %% classic queues do not track Volume for no-ack deliveries
+              %% and will effectively ignore the ceiling, so federation
+              %% with no-ack and a classic upstream remains best-effort
+              %% under alarm pressure.
+              amqp_channel:call(
+                Ch, #'basic.qos'{prefetch_count = Prefetch}),
               amqp_selective_consumer:register_default_consumer(Ch, self()),
               case Run of
                   true  -> consume(Ch, Upstream, UQueue);
@@ -425,6 +428,11 @@ cancel(Ch, Upstream) ->
                                           consumer_tag = ConsumerTag}).
 
 handle_down(DCh, Reason, _Ch, DCh, Args, State) ->
+    %% The downstream channel is the credit_flow peer for this link. Tell
+    %% credit_flow it is gone, otherwise a link that survives a clean DCh
+    %% death (Reason =:= normal | shutdown) stays credit_flow:blocked/0
+    %% forever and its blocked_buffer never drains.
+    credit_flow:peer_down(DCh),
     rabbit_federation_link_util:handle_downstream_down(Reason, Args, State);
 handle_down(Ch, Reason, Ch, _DCh, Args, State) ->
     rabbit_federation_link_util:handle_upstream_down(Reason, Args, State).
@@ -436,17 +444,11 @@ connection_close_timeout() ->
                                      Default),
     erlang:min(Configured, Default).
 
-drain_buffer({empty, _QBuffer}, State) ->
-    State;
-drain_buffer({{value, {DeliverMethod, Msg}}, QBuffer}, State) ->
-    State1 = do_deliver(DeliverMethod, Msg, State),
-    %% Re-check block status since do_deliver might have triggered credit_flow:blocked()
-    case State1#state.blocked orelse credit_flow:blocked() of
-        true ->
-            State1#state{blocked_buffer = QBuffer};
-        false ->
-            drain_buffer(queue:out(QBuffer), State1)
-    end.
+drain(QBuffer, State) ->
+    rabbit_federation_link_util:drain_buffer(
+      QBuffer, State, fun do_deliver/3, fun is_blocked/1).
+
+is_blocked(#state{blocked = B}) -> B.
 
 do_deliver(#'basic.deliver'{redelivered = Redelivered,
                             exchange    = X,
