@@ -505,6 +505,12 @@ handle_connection_frame(
                     <<"LINK_PAIR_V1_0">>,
                     %% https://docs.oasis-open.org/amqp/anonterm/v1.0/cs01/anonterm-v1.0-cs01.html#doc-anonymous-relay
                     <<"ANONYMOUS-RELAY">>,
+                    %% [schdmsg-v1.0-wd02] §2.1, [amqp-bindmap-jms-v1.0-wd10] §9
+                    %% Offered for the whole connection instead of per link: a sending link often targets an exchange
+                    %% or the anonymous relay, so which queues a message reaches, and therefore whether they support
+                    %% a delivery delay, is only known per message at routing time. Queue types that do not support
+                    %% delivery delays enqueue the message immediately.
+                    <<"DELAYED_DELIVERY">>,
                     %% amqp-bindmap-jms-v1.0-wd10 §8
                     <<"SHARED-SUBS">>],
     {map, Props0} = server_properties(),
