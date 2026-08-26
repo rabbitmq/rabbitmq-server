@@ -4,3 +4,7 @@ test/config_schema_SUITE_data/schema/
 
 test/js/node_modules
 test/js/package-lock.json
+
+ui/node_modules
+ui/package-lock.json
+priv/www/vue/
