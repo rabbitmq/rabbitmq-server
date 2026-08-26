@@ -21,6 +21,8 @@ jobs:
       matrix:
         otp_version:
           - '27'
+          - '28'
+          - '29'
         branch:
           - main
           - v4.3.x
@@ -80,6 +82,8 @@ jobs:
       matrix:
         otp_version:
           - '27'
+          - '28'
+          - '29'
         branch:
           - main
           - v4.3.x

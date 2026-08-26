@@ -11,6 +11,7 @@ on:
     - rabbitmq-components.mk
     - .github/workflows/test-make.yaml
   pull_request:
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -23,6 +24,7 @@ jobs:
         erlang_version:
         - '27'
         - '28'
+        - '29'
         elixir_version:
         - '1.19'
     # @todo Add macOS and Windows.
@@ -62,6 +64,7 @@ jobs:
       matrix:
         erlang_version:
         - '28'
+        - '29'
         elixir_version:
         - '1.19'
     uses: ./.github/workflows/test-make-tests.yaml
@@ -77,6 +80,7 @@ jobs:
       matrix:
         erlang_version:
         - '28'
+        - '29'
         elixir_version:
         - '1.19'
     uses: ./.github/workflows/test-make-tests.yaml
@@ -92,6 +96,7 @@ jobs:
       matrix:
         erlang_version: # Latest OTP
         - '28'
+        - '29'
         elixir_version: # Latest Elixir
         - '1.19'
     uses: ./.github/workflows/test-make-type-check.yaml
