@@ -33,7 +33,8 @@
          delete_all_for_exchange_in_khepri/3,
          has_for_source_in_khepri/1,
          match_source_and_destination_in_khepri_tx/2,
-         khepri_ret_to_deletions/2,
+         node_props_to_deletions/2,
+         node_props_to_deletions_in_khepri_tx/2,
          put_options/1
         ]).
 
@@ -302,7 +303,7 @@ delete_v2(#binding{source = SrcName,
         {error, _} = Err ->
             Err;
         {ok, Deleted} ->
-            Deletions = khepri_ret_to_deletions(Deleted, false),
+            Deletions = node_props_to_deletions(Deleted, false),
             ok = rabbit_binding:process_deletions(Deletions),
             {ok, Deletions}
     end.
@@ -683,7 +684,14 @@ delete_for_destination_in_khepri(#resource{virtual_host = VHost, kind = Kind, na
     rabbit_binding:group_bindings_fold(fun maybe_auto_delete_exchange_in_khepri/4,
                                        lists:keysort(#binding.source, Bindings), OnlyDurable).
 
-khepri_ret_to_deletions(Deleted, OnlyDurable) ->
+node_props_to_deletions(NodeProps, OnlyDurable) ->
+    node_props_to_deletions(NodeProps, OnlyDurable, fun lookup_resource/1).
+
+node_props_to_deletions_in_khepri_tx(NodeProps, OnlyDurable) ->
+    node_props_to_deletions(
+      NodeProps, OnlyDurable, fun lookup_resource_in_khepri_tx/1).
+
+node_props_to_deletions(NodeProps, OnlyDurable, LookupFun) ->
     Bindings0 = maps:fold(
                   fun(Path, Props, Acc) ->
                           case {Path, Props} of
@@ -694,21 +702,21 @@ khepri_ret_to_deletions(Deleted, OnlyDurable) ->
                               {_, _} ->
                                   Acc
                           end
-                  end, [], Deleted),
+                  end, [], NodeProps),
     Bindings1 = lists:keysort(#binding.source, Bindings0),
     rabbit_binding:group_bindings_fold(
       fun(XName, Bindings, Deletions, _OnlyDurable) ->
               ExchangePath = rabbit_db_exchange:khepri_exchange_path(XName),
-              case Deleted of
+              case NodeProps of
                   #{ExchangePath := #{data := X}} ->
                       rabbit_binding:add_deletion(
                         XName, X, deleted, Bindings, Deletions);
                   _ ->
-                      case rabbit_db_exchange:get(XName) of
-                          {ok, X} ->
+                      case LookupFun(XName) of
+                          [X] ->
                               rabbit_binding:add_deletion(
                                 XName, X, not_deleted, Bindings, Deletions);
-                          _ ->
+                          [] ->
                               Deletions
                       end
               end

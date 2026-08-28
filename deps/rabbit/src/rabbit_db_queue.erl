@@ -322,7 +322,7 @@ delete_if(QueueName, Conditions, OnlyDurable) ->
         true ->
             case rabbit_khepri:adv_delete(Pattern) of
                 {ok, #{Path := #{data := _}} = Deleted} ->
-                    rabbit_db_binding:khepri_ret_to_deletions(
+                    rabbit_db_binding:node_props_to_deletions(
                       Deleted, OnlyDurable);
                 {ok, _} ->
                     ok;
@@ -870,9 +870,13 @@ do_delete_transient_queues_in_khepri_tx([{Path, Vsn, QName} | Rest], Acc) ->
                                   false
                           end,
     case khepri_tx_adv:delete(VersionedPath) of
-        {ok, #{Path := #{data := _}}} when UsesUniformWriteRet ->
-            Deletions = rabbit_db_binding:delete_for_destination_in_khepri(
-                          QName, false),
+        {ok, #{Path := #{data := _}} = Deleted} when UsesUniformWriteRet ->
+            %% See rabbitmq/rabbitmq-server#17255
+            Deletions = rabbit_binding:combine_deletions(
+                          rabbit_db_binding:node_props_to_deletions_in_khepri_tx(
+                            Deleted, false),
+                          rabbit_db_binding:delete_for_destination_in_khepri(
+                            QName, false)),
             Acc1 = [{QName, Deletions} | Acc],
             do_delete_transient_queues_in_khepri_tx(Rest, Acc1);
         {ok, #{data := _}} when not UsesUniformWriteRet ->
