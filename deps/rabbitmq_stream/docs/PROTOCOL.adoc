@@ -81,6 +81,8 @@ used to make the difference between a request (0) and a response (1). Example fo
 |Precondition failed|0x11
 |Publisher does not exist|0x12
 |No offset|0x13
+|SASL cannot change mechanism|0x14
+|SASL cannot change username|0x15
 
 |===
 
@@ -288,9 +290,9 @@ Publish => Key Version PublisherId PublishedMessages
   Version => uint16
   PublisherId => uint8
   PublishedMessages => [PublishedMessage]
-  PublishedMessage => PublishingId Message
+  PublishedMessage => PublishingId FilterValue Message
   PublishingId => uint64
-  FilterValue => string
+  FilterValue => string // null if the message has no filter value
   Message => bytes
 ```
 
@@ -370,6 +372,12 @@ Subscribe => Key Version CorrelationId SubscriptionId Stream OffsetSpecification
   Property => Key Value
   Key => string
   Value => string
+
+SubscribeResponse => Key Version CorrelationId ResponseCode
+  Key => uint16 // 0x8007
+  Version => uint16
+  CorrelationId => uint32
+  ResponseCode => uint16
 ```
 
 NB: Timestamp is https://www.erlang.org/doc/apps/erts/time_correction.html#Erlang_System_Time[Erlang system time],
@@ -514,6 +522,12 @@ Create => Key Version CorrelationId Stream Arguments
   Argument => Key Value
   Key => string
   Value => string
+
+CreateResponse => Key Version CorrelationId ResponseCode
+  Key => uint16 // 0x800d
+  Version => uint16
+  CorrelationId => uint32
+  ResponseCode => uint16
 ```
 
 === Delete
@@ -524,6 +538,12 @@ Delete => Key Version CorrelationId Stream
   Version => uint16
   CorrelationId => uint32
   Stream => string
+
+DeleteResponse => Key Version CorrelationId ResponseCode
+  Key => uint16 // 0x800e
+  Version => uint16
+  CorrelationId => uint32
+  ResponseCode => uint16
 ```
 
 === Metadata
@@ -587,12 +607,12 @@ PeerPropertiesResponse => Key Version CorrelationId ResponseCode PeerProperties
 === SaslHandshake
 
 ```
-SaslHandshakeRequest => Key Version CorrelationId Mechanism
+SaslHandshakeRequest => Key Version CorrelationId
   Key => uint16 // 0x0012
   Version => uint16
   CorrelationId => uint32
 
-SaslHandshakeResponse => Key Version CorrelationId ResponseCode [Mechanisms]
+SaslHandshakeResponse => Key Version CorrelationId ResponseCode Mechanisms
   Key => uint16 // 0x8012
   Version => uint16
   CorrelationId => uint32
@@ -628,7 +648,11 @@ TuneRequest => Key Version FrameMax Heartbeat
   FrameMax => uint32 // in bytes, 0 means no limit
   Heartbeat => uint32 // in seconds, 0 means no heartbeat
 
-TuneResponse => TuneRequest
+TuneResponse => Key Version FrameMax Heartbeat
+  Key => uint16 // 0x8014
+  Version => uint16
+  FrameMax => uint32 // in bytes, 0 means no limit
+  Heartbeat => uint32 // in seconds, 0 means no heartbeat
 ```
 
 === Open
@@ -788,16 +812,28 @@ CreateSuperStream => Key Version CorrelationId Name [Partition] [BindingKey] Arg
   Argument => Key Value
   Key => string
   Value => string
+
+CreateSuperStreamResponse => Key Version CorrelationId ResponseCode
+  Key => uint16 // 0x801d
+  Version => uint16
+  CorrelationId => uint32
+  ResponseCode => uint16
 ```
 
 === DeleteSuperStream
 
 ```
-Delete => Key Version CorrelationId Name
+DeleteSuperStream => Key Version CorrelationId Name
   Key => uint16 // 0x001e
   Version => uint16
   CorrelationId => uint32
   Name => string
+
+DeleteSuperStreamResponse => Key Version CorrelationId ResponseCode
+  Key => uint16 // 0x801e
+  Version => uint16
+  CorrelationId => uint32
+  ResponseCode => uint16
 ```
 
 === ResolveOffsetSpec
