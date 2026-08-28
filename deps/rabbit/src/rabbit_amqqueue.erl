@@ -881,12 +881,28 @@ with_exclusive_access_or_die(Name, ReaderPid, F) ->
                         F(Q)
                 end).
 
-assert_args_equivalence(Q, NewArgs) ->
-    ExistingArgs = amqqueue:get_arguments(Q),
+assert_args_equivalence(Q, NewArgs0) ->
+    ExistingArgs = normalize_max_age(amqqueue:get_arguments(Q)),
+    NewArgs = normalize_max_age(NewArgs0),
     QueueName = amqqueue:get_name(Q),
     Type = amqqueue:get_type(Q),
     QueueTypeArgs = rabbit_queue_type:arguments(queue_arguments, Type),
     rabbit_misc:assert_args_equivalence(ExistingArgs, NewArgs, QueueName, QueueTypeArgs).
+
+%% Stream 'x-max-age' values can be equivalent in ms but different strings (e.g. "1D" vs "24h").
+%% Equivalence checks really should be performed on millisecond values, not the client-provided
+%% strings.
+normalize_max_age(Args) ->
+    case rabbit_misc:table_lookup(Args, <<"x-max-age">>) of
+        {longstr, Val} ->
+            case check_max_age(Val) of
+                {error, _} -> Args;
+                Ms when is_integer(Ms) ->
+                    rabbit_misc:set_table_value(Args, <<"x-max-age">>, longstr, integer_to_binary(Ms))
+            end;
+        _ ->
+            Args
+    end.
 
 -spec maybe_inject_default_queue_type_shortcut_into_args(
     rabbit_framing:amqp_table(), rabbit_queue_type:queue_type()) -> rabbit_framing:amqp_table().
