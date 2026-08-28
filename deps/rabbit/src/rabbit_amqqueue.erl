@@ -889,9 +889,9 @@ assert_args_equivalence(Q, NewArgs0) ->
     QueueTypeArgs = rabbit_queue_type:arguments(queue_arguments, Type),
     rabbit_misc:assert_args_equivalence(ExistingArgs, NewArgs, QueueName, QueueTypeArgs).
 
-%% Stream 'x-max-age' values can be equivalent but syntactically different (e.g. "1D" vs "24h").
-%% This normalizes valid max-age strings into their exact millisecond string representations
-%% so that the generic equivalence check can safely compare them.
+%% Stream 'x-max-age' values can be equivalent in ms but different strings (e.g. "1D" vs "24h").
+%% Equivalence checks really should be performed on millisecond values, not the client-provided
+%% strings.
 normalize_max_age(Args) ->
     case rabbit_misc:table_lookup(Args, <<"x-max-age">>) of
         {longstr, Val} ->

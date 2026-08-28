@@ -108,6 +108,7 @@ all_tests_1() ->
     [
      declare_args,
      declare_max_age,
+     declare_max_age_equivalence,
      declare_invalid_properties,
      declare_server_named,
      declare_invalid_arg,
@@ -354,6 +355,39 @@ declare_max_age(Config) ->
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
                                              {<<"x-max-age">>, longstr, <<"1Y">>}])),
+    assert_queue_type(Server, Q, rabbit_stream_queue),
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
+
+declare_max_age_equivalence(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Q = ?config(queue_name, Config),
+
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                             {<<"x-max-age">>, longstr, <<"1D">>}])),
+
+    %% "24h" is the same duration as "1D"; see rabbitmq/rabbitmq-server#8509
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                             {<<"x-max-age">>, longstr, <<"24h">>}])),
+
+    %% a genuinely different duration should still be rejected
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 406, _}}, _},
+       declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                   {<<"x-max-age">>, longstr, <<"2D">>}])),
+
+    assert_queue_type(Server, Q, rabbit_stream_queue),
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]),
+
+    %% cover "1Y" and "365D" to introduce some assertion variation
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                             {<<"x-max-age">>, longstr, <<"1Y">>}])),
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                             {<<"x-max-age">>, longstr, <<"365D">>}])),
+
     assert_queue_type(Server, Q, rabbit_stream_queue),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
