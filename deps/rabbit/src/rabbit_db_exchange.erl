@@ -448,8 +448,11 @@ unconditional_delete_in_khepri(X, OnlyDurable) ->
     delete_in_khepri(X, OnlyDurable, true).
 
 delete_in_khepri(X = #exchange{name = XName}, OnlyDurable, RemoveBindingsForSource) ->
+    Ret = rabbit_db_binding:delete_all_for_exchange_in_khepri(
+            X, OnlyDurable, RemoveBindingsForSource),
+    %% See rabbitmq/rabbitmq-server#17255
     ok = khepri_tx:delete(khepri_exchange_path(XName)),
-    rabbit_db_binding:delete_all_for_exchange_in_khepri(X, OnlyDurable, RemoveBindingsForSource).
+    Ret.
 
 %% -------------------------------------------------------------------
 %% delete_all().
