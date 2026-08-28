@@ -616,19 +616,23 @@ match_routing_key(Src, RoutingKeys, _UseIndex) ->
 
 delete_all_for_exchange_in_khepri(X = #exchange{name = XName}, OnlyDurable, RemoveBindingsForSource) ->
     Bindings = case RemoveBindingsForSource of
-                   true  -> delete_for_source_in_khepri(XName);
+                   true  -> get_for_source_in_khepri(XName);
                    false -> []
                end,
     {deleted, X, Bindings, delete_for_destination_in_khepri(XName, OnlyDurable)}.
 
-delete_for_source_in_khepri(#resource{virtual_host = VHost, name = SrcName}) ->
+%% A read, not a delete: the exchange record's own deletion, right after
+%% this in the same transaction, recursively removes these routes already.
+%% Deleting them here first leaves the `rabbit_khepri_exchange' projection
+%% stale for the exchange. See rabbitmq/rabbitmq-server#17255.
+get_for_source_in_khepri(#resource{virtual_host = VHost, name = SrcName}) ->
     Pattern = khepri_route_path(
                 VHost,
                 SrcName,
                 ?KHEPRI_WILDCARD_STAR, %% Kind
                 ?KHEPRI_WILDCARD_STAR, %% DstName
                 #if_has_data{}), %% RoutingKey
-    {ok, Bindings} = khepri_tx_adv:delete_many(Pattern),
+    {ok, Bindings} = khepri_tx_adv:get_many(Pattern),
     maps:fold(
       fun(Path, Props, Acc) ->
               case {Path, Props} of

@@ -479,6 +479,9 @@ delete_all(VHostName) ->
 delete_all_in_khepri_tx(VHostName) ->
     Pattern = khepri_exchange_path(VHostName, ?KHEPRI_WILDCARD_STAR),
     {ok, NodeProps} = khepri_tx_adv:delete_many(Pattern),
+    %% See rabbitmq/rabbitmq-server#17255
+    Deletions0 = rabbit_db_binding:node_props_to_deletions_in_khepri_tx(
+                   NodeProps, false),
     Deletions =
     maps:fold(
       fun(Path, Props, Deletions) ->
@@ -495,7 +498,7 @@ delete_all_in_khepri_tx(VHostName) ->
                   {_, _} ->
                       Deletions
               end
-      end, rabbit_binding:new_deletions(), NodeProps),
+      end, Deletions0, NodeProps),
     {ok, Deletions}.
 
 %% -------------------------------------------------------------------
