@@ -109,7 +109,8 @@ dispatcher() ->
                   {"/session/:session",  rabbit_mgmt_wm_session,  []},
                   {"/sessions",          rabbit_mgmt_wm_sessions, []},
                   {"/sessions/:session", rabbit_mgmt_wm_sessions, []},
-                  {"/sessions/user/:username", rabbit_mgmt_wm_sessions_user, []}];
+                  {"/sessions/user/:username", rabbit_mgmt_wm_sessions_user, []},
+                  {"/sessions/user/:username/:session", rabbit_mgmt_wm_sessions_user, []}];
         false -> []
     end,
     SessionRoutes ++
