@@ -227,6 +227,22 @@ module.exports = {
       throw new Error(req.responseText)
     }
   },
+  getQueueInfo: (url, authorization, vhost, name) => {
+    log("Getting queue info for " + name + " on vhost " + vhost)
+    const req = new XMLHttpRequest()
+    let finalUrl = url + "/api/queues/" + encodeURIComponent(vhost) + "/"
+      + encodeURIComponent(name)
+    req.open('GET', finalUrl, false)
+    req.setRequestHeader("Authorization", authorization)
+    req.send()
+    if (req.status == 200 || req.status == 204 || req.status == 201) {
+      log("Succesfully got queue info for " + name)
+      return JSON.parse(req.responseText)
+    } else {
+      error("status:" + req.status + " : " + req.responseText)
+      throw new Error(req.responseText)
+    }
+  },
   createSuperStream: (url, authorization, vhost, name, partitions) => {
     log("Creating super stream " + name + " with " + partitions + " partitions in vhost " + vhost)
     const req = new XMLHttpRequest()
@@ -244,20 +260,20 @@ module.exports = {
       throw new Error(req.responseText)
     }
   },
-  deleteSuperStream: (url, authorization, vhost, name) => {
-    log("Deleting super stream " + name + " in vhost " + vhost)
-    const req = new XMLHttpRequest()
-    const finalUrl = url + "/api/stream/super-streams/" + encodeURIComponent(vhost) + "/"
-      + encodeURIComponent(name)
-    req.open('DELETE', finalUrl, false)
-    req.setRequestHeader("Authorization", authorization)
-    req.send()
-    if (req.status == 200 || req.status == 204) {
-      log("Successfully deleted super stream " + name)
-      return
-    } else {
-      error("status:" + req.status + " : " + req.responseText)
-      throw new Error(req.responseText)
+  deleteSuperStream: (url, authorization, vhost, name, partitionCount = 5) => {
+    log("Deleting super stream queues for " + name + " in vhost " + vhost)
+    const deleteQueue = module.exports.deleteQueue || exports.deleteQueue
+    for (let p = 0; p < partitionCount; p++) {
+      try {
+        const queueName = `${name}-${p}`
+        const req = new XMLHttpRequest()
+        const finalUrl = url + "/api/queues/" + encodeURIComponent(vhost) + "/" + encodeURIComponent(queueName)
+        req.open('DELETE', finalUrl, false)
+        req.setRequestHeader("Authorization", authorization)
+        req.send()
+      } catch (_e) {
+        // queue may not exist
+      }
     }
   }
 

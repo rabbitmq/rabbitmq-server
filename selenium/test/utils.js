@@ -227,9 +227,8 @@ module.exports = {
     captureScreen._suppressTeardownFailureShot = true
   },
 
-  doUntil: async (doCallback, booleanCallback, delayMs = 1000, message = "doUntil failed") => {
+  doUntil: async (doCallback, booleanCallback, delayMs = 1000, message = "doUntil failed", attempts = 10) => {
     let done = false 
-    let attempts = 10
     let ret
     let lastError
     do {

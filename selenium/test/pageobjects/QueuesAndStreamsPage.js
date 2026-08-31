@@ -1,6 +1,6 @@
 const { By, Key, until, Builder } = require('selenium-webdriver')
 
-const { delay } = require('../utils')
+const { doUntil } = require('../utils')
 
 const BasePage = require('./BasePage')
 
@@ -57,14 +57,21 @@ module.exports = class QueuesAndStreamsPage extends BasePage {
     return this.driver.findElement(PAGING_SECTION).isDisplayed()
   }  
   async fillInAddNewQueue(queueDetails) {
-    await this.selectOptionByValue(FORM_QUEUE_TYPE, queueDetails.type)
-    await delay(1000)
+    await this.selectQueueType(queueDetails.type)
     await this.sendKeys(FORM_QUEUE_NAME, queueDetails.name)
     return this.click(ADD_BUTTON)
   }
   async selectQueueType(type) {
     await this.selectOptionByValue(FORM_QUEUE_TYPE, type)
-    return delay(1000)
+    return doUntil(
+      async () => {
+        const sel = await this.driver.findElement(FORM_QUEUE_TYPE)
+        return sel.getAttribute('value')
+      },
+      val => val === type,
+      200,
+      `Failed to select queue type ${type}`
+    )
   }
   async getArgumentLinksText() {
     return this.getText(ARGUMENT_LINKS)
