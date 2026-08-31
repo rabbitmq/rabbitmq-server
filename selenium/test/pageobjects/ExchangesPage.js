@@ -1,6 +1,6 @@
 const { By, Key, until, Builder } = require('selenium-webdriver')
 
-const { delay } = require('../utils')
+const { doUntil } = require('../utils')
 
 const BasePage = require('./BasePage')
 
@@ -9,7 +9,7 @@ const PAGING_SECTION = By.css('div#exchanges-paging-section')
 const PAGING_SECTION_HEADER = By.css('div#exchanges-paging-section h2')
 const ADD_NEW_EXCHANGE_SECTION = By.css('div#add-new-exchange')
 const FORM_EXCHANGE_NAME = By.css('div#add-new-exchange form input[name="name"]')
-const FORM_EXCHANGE_TYPE = By.css('div#add-new-exchange form select[name="type"]')
+const FORM_EXCHANGE_TYPE = By.css('div#add-new-exchange form select[name="exchangetype"]')
 const ADD_BUTTON = By.css('div#add-new-exchange form input[type=submit]')
 
 const TABLE_SECTION = By.css('div#exchanges-table-section table')
@@ -54,7 +54,15 @@ module.exports = class ExchangesPage extends BasePage {
     await this.driver.executeScript(function(selector) {
       select_exchange_type(document.querySelector(selector))
     }, FORM_EXCHANGE_TYPE.value)
-    return delay(1000)
+    return doUntil(
+      async () => {
+        const sel = await this.driver.findElement(FORM_EXCHANGE_TYPE)
+        return sel.getAttribute('value')
+      },
+      val => val === type,
+      200,
+      `Failed to select exchange type ${type}`
+    )
   }
   async getArgumentLinksText() {
     return this.getText(ARGUMENT_LINKS)

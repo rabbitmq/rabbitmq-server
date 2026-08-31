@@ -1,6 +1,6 @@
 const { By, Key, until, Builder } = require('selenium-webdriver')
 const assert = require('assert')
-const { buildDriver, goToHome, captureScreensFor, teardown, doUntil, goToQueue,delay } = require('../utils')
+const { buildDriver, goToHome, captureScreensFor, teardown, doUntil, goToQueue } = require('../utils')
 const { createQueue, deleteQueue, getManagementUrl, basicAuthorization } = require('../mgt-api')
 const { getAmqpUrl : getAmqpUrl } = require('../amqp')
 const amqplib = require('amqplib');
@@ -132,7 +132,6 @@ describe('Given a quorum queue configured with SAC', function () {
         assert.equal("one", consumerTable[nonActiveConsumer][1])
         assert.equal("single active", consumerTable[activeConsumer][6])
         assert.equal("two", consumerTable[activeConsumer][1])
-        await delay(5000) 
       })
     })
 
@@ -226,7 +225,6 @@ describe('Given a quorum queue configured with SAC', function () {
         assert.equal("two", consumerTable[nonActiveConsumer][1])
         assert.equal("single active", consumerTable[activeConsumer][6])
         assert.equal("one", consumerTable[activeConsumer][1])
-        await delay(5000) 
       })
     })
 
