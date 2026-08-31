@@ -41,6 +41,7 @@
          query_single_active_consumer/1,
          local_query/2,
          local_query/3,
+         versioned_query/3,
          cluster_name/1
          ]).
 
@@ -443,12 +444,11 @@ query_single_active_consumer(#state{leader = Leader}) ->
 
 %% @doc Runs a read-only query function against the state machine.
 %%
-%% Queries the queue's own (latest) machine module first. In a
-%% mixed-version cluster the queue may still be running on an older
-%% machine version whose state shape doesn't match the latest module,
-%% in which case the query crashes with a (caught) `function_clause'
-%% and we retry against `rabbit_fifo_v7', the last frozen snapshot of
-%% the state shape prior to the current one.
+%% Queries the queue's own (latest) machine module first. In a mixed-version
+%% cluster the queue may still be running at an older machine version whose
+%% state shape does not match the latest module, in which case the query
+%% crashes with a (caught) `function_clause' and we retry against whichever
+%% frozen module that version is served by, resolved on the queried server.
 -spec local_query(ra:server_id(), atom()) ->
     {ok, {ra:idxterm(), term()}, ra:server_id()} |
     {error, term()} | {timeout, ra:server_id()}.
@@ -461,10 +461,30 @@ local_query(Server, QueryFun) ->
 local_query(Server, QueryFun, Timeout) when is_atom(QueryFun) ->
     case ra:local_query(Server, fun rabbit_fifo:QueryFun/1, Timeout) of
         {error, function_clause} ->
-            ra:local_query(Server, fun rabbit_fifo_v7:QueryFun/1, Timeout);
+            %% The queried server's effective machine version is older than
+            %% this module, so its machine state has the shape of one of the
+            %% frozen rabbit_fifo_vN modules and the pattern above did not
+            %% match it. Resolve the module the state actually belongs to.
+            ra:local_query(Server,
+                           {?MODULE, versioned_query, [QueryFun],
+                            [with_context]},
+                           Timeout);
         Other ->
             Other
     end.
+
+%% @doc Apply a query function using whichever rabbit_fifo module serves the
+%% queried server's effective machine version.
+%%
+%% Passed to ra as an MFA rather than a closure on purpose: an MFA is
+%% resolved by name on the queried server, whereas a closure carries a hash
+%% of the defining module and fails to load where that module differs. That
+%% difference is the norm during a rolling upgrade, which is exactly when
+%% this fallback is reached.
+-spec versioned_query(atom(), ra:query_ctx(), term()) -> term().
+versioned_query(QueryFun, #{machine_version := Vsn}, State) ->
+    Mod = rabbit_fifo:which_module(Vsn),
+    Mod:QueryFun(State).
 
 %% @doc Provide credit to the queue
 %%
