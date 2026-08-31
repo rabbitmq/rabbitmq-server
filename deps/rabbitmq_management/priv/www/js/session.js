@@ -22,10 +22,9 @@ function check_session() {
     if (existing_id) {
         var res = sync_req('PUT', {}, '/session/' + encodeURIComponent(existing_id));
         if (res && (res.http_status === 200 || res.http_status === 204)) {
-            return true;
+            return 'ok';
         } else {
-            clear_session();
-            return false;
+            clear_local_pref(SESSION_ID);
         }
     }
 
@@ -36,16 +35,16 @@ function check_session() {
             if (data.session_id) {
                 store_session_id(data.session_id);
             }
-            return true;
+            return 'ok';
         } else if (resPost.http_status === 404) {
             // Feature disabled
-            return true;
+            return 'ok';
         } else if (resPost.http_status === 403) {
             // Limit reached
-            return false;
+            return 'limit_reached';
         }
     }
-    return false;
+    return 'error';
 }
 
 function _send_heartbeat(session_id, is_initial) {
@@ -76,7 +75,7 @@ function _send_heartbeat(session_id, is_initial) {
 function start_session_heartbeat(session_id, interval_sec) {
     if (_session_heartbeat_timer) clearInterval(_session_heartbeat_timer);
     
-    var interval_ms = (interval_sec && interval_sec >= 30) ? interval_sec * 1000 : 30000;
+    var interval_ms = (typeof interval_sec === 'number' && interval_sec > 0) ? interval_sec * 1000 : 30000;
     
     if (_send_heartbeat(session_id, true)) {
         _session_heartbeat_timer = setInterval(function() { _send_heartbeat(session_id, false); }, interval_ms);
@@ -89,4 +88,36 @@ window.get_session_id = get_session_id;
 window.check_session = check_session;
 window.clear_session = clear_session;
 window.start_session_heartbeat = start_session_heartbeat;
+
+if (typeof registerLoginProcessor === 'function') {
+    registerLoginProcessor('session', function(context) {
+        if (typeof sessions_enabled === 'function' && !sessions_enabled()) {
+            return { ok: true };
+        }
+        var status = check_session();
+        if (status === 'ok' || status === true) {
+            var heartbeat_interval = (context.settings && context.settings.sessions)
+                ? context.settings.sessions.heartbeat_interval
+                : 30;
+            start_session_heartbeat(get_session_id(), heartbeat_interval);
+            return { ok: true };
+        } else if (status === 'limit_reached') {
+            return { ok: false, error: 'Concurrent session limit reached' };
+        } else {
+            return { ok: false, error: 'Failed to establish session with server' };
+        }
+    });
+}
+
+if (typeof registerInitFailedProcessor === 'function') {
+    registerInitFailedProcessor('session', function(error) {
+        clear_session();
+    });
+}
+
+if (typeof registerLogoutProcessor === 'function') {
+    registerLogoutProcessor('session', function() {
+        clear_session();
+    });
+}
 
