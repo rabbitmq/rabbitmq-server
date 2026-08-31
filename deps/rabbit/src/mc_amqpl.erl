@@ -37,10 +37,6 @@
 
 -define(HEADER_GUESS_SIZE, 100). %% see determine_persist_to/2
 -define(AMQP10_TYPE, <<"amqp-1.0">>).
--define(AMQP10_PROPERTIES_HEADER, <<"x-amqp-1.0-properties">>).
--define(AMQP10_APP_PROPERTIES_HEADER, <<"x-amqp-1.0-app-properties">>).
--define(AMQP10_MESSAGE_ANNOTATIONS_HEADER, <<"x-amqp-1.0-message-annotations">>).
--define(AMQP10_FOOTER, <<"x-amqp-1.0-footer">>).
 -define(CLASS_ID, 60).
 -define(IS_BODY_SECTION(S),
         is_record(S, 'v1_0.data') orelse
@@ -133,18 +129,17 @@ convert_from(mc_amqp, Sections, _Env) ->
     DelMode = case H of
                   #'v1_0.header'{durable = true} -> 2;
                   #'v1_0.header'{durable = false} -> 1;
-                  _ -> amqp10_map_get(symbol(<<"x-basic-delivery-mode">>), MA)
+                  _ -> undefined
               end,
     Priority = case H of
                    #'v1_0.header'{priority = {_, P}} -> P;
-                   _ -> amqp10_map_get(symbol(<<"x-basic-priority">>), MA)
+                   _ -> undefined
                end,
-    %% check amqp header first for priority, ttl
     Expiration = case H of
                      #'v1_0.header'{ttl = {_, T}} ->
                          integer_to_binary(T);
                      _ ->
-                         amqp10_map_get(symbol(<<"x-basic-expiration">>), MA)
+                         undefined
                  end,
     Type = case Type0 of
                undefined ->
@@ -374,73 +369,53 @@ convert_to(mc_amqp, #content{payload_fragments_rev = PFR} = Content, Env) ->
                 _ ->
                     wrap(utf8, MsgId0)
             end,
-    P = case amqp10_section_header(?AMQP10_PROPERTIES_HEADER, Headers) of
-            undefined ->
-                #'v1_0.properties'{message_id = MsgId,
-                                   user_id = wrap(binary, UserId),
-                                   to = undefined,
-                                   % subject = wrap(utf8, RKey),
-                                   reply_to = ReplyTo,
-                                   correlation_id = CorrId,
-                                   content_type = wrap(symbol, ContentType),
-                                   content_encoding = wrap(symbol, ContentEncoding),
-                                   creation_time = wrap(timestamp, ConvertedTs),
-                                   %% this is semantically not the best idea but you
-                                   %% could imagine these having similar behaviour
-                                   group_id = wrap(utf8, AppId)
-                                  };
-            V10Prop ->
-                V10Prop
-        end,
+    P = #'v1_0.properties'{message_id = MsgId,
+                           user_id = wrap(binary, UserId),
+                           to = undefined,
+                           % subject = wrap(utf8, RKey),
+                           reply_to = ReplyTo,
+                           correlation_id = CorrId,
+                           content_type = wrap(symbol, ContentType),
+                           content_encoding = wrap(symbol, ContentEncoding),
+                           creation_time = wrap(timestamp, ConvertedTs),
+                           %% this is semantically not the best idea but you
+                           %% could imagine these having similar behaviour
+                           group_id = wrap(utf8, AppId)
+                          },
 
-    AP = case amqp10_section_header(?AMQP10_APP_PROPERTIES_HEADER, Headers) of
-             undefined ->
-                 %% non x- headers are stored as application properties when the type allows
-                 APC = [{wrap(utf8, K), from_091(T, V)}
-                        || {K, T, V} <- Headers,
-                           supported_header_value_type(T),
-                           not mc_util:is_x_header(K)],
-                 #'v1_0.application_properties'{content = APC};
-             A ->
-                 A
-         end,
+    %% non x- headers are stored as application properties when the type allows
+    APC = [{wrap(utf8, K), from_091(T, V)}
+           || {K, T, V} <- Headers,
+              supported_header_value_type(T),
+              not mc_util:is_x_header(K)],
+    AP = #'v1_0.application_properties'{content = APC},
 
     %% x- headers are stored as message annotations
-    MA = case amqp10_section_header(?AMQP10_MESSAGE_ANNOTATIONS_HEADER, Headers) of
-             undefined ->
-                 MAC0 = lists:filtermap(
-                          fun({<<"x-", _/binary>> = K, T, V}) ->
-                                  %% All message annotation keys need to be either a symbol or ulong
-                                  %% but 0.9.1 field-table names are always strings.
-                                  {true, {{symbol, K}, from_091(T, V)}};
-                             ({<<"CC">>, T = array, V}) ->
-                                  %% Special case the 0.9.1 CC header into 1.0 message annotations because
-                                  %% 1.0 application properties must not contain list or array values.
-                                  {true, {{symbol, <<"x-cc">>}, from_091(T, V)}};
-                             (_) ->
-                                  false
-                          end, Headers),
-                 %% `type' doesn't have a direct equivalent so adding as
-                 %% a message annotation here
-                 MAC = map_add(symbol, <<"x-basic-type">>, utf8, Type, MAC0),
-                 #'v1_0.message_annotations'{content = MAC};
-             Section ->
-                 Section
-         end,
+    MAC0 = lists:filtermap(
+             fun({<<"x-", _/binary>> = K, T, V}) ->
+                     %% All message annotation keys need to be either a symbol or ulong
+                     %% but 0.9.1 field-table names are always strings.
+                     {true, {{symbol, K}, from_091(T, V)}};
+                ({<<"CC">>, T = array, V}) ->
+                     %% Special case the 0.9.1 CC header into 1.0 message annotations because
+                     %% 1.0 application properties must not contain list or array values.
+                     {true, {{symbol, <<"x-cc">>}, from_091(T, V)}};
+                (_) ->
+                     false
+             end, Headers),
+    %% `type' doesn't have a direct equivalent so adding as
+    %% a message annotation here
+    MAC = map_add(symbol, <<"x-basic-type">>, utf8, Type, MAC0),
+    MA = #'v1_0.message_annotations'{content = MAC},
+
     BodySections = case Type of
                        ?AMQP10_TYPE ->
                            amqp10_body_sections(lists:reverse(PFR));
                        _ ->
                            [#'v1_0.data'{content = lists:reverse(PFR)}]
                    end,
-    Tail = case amqp10_section_header(?AMQP10_FOOTER, Headers) of
-               undefined ->
-                   BodySections;
-               #'v1_0.footer'{} = Footer ->
-                   BodySections ++ [Footer]
-           end,
 
-    Sections = [H, MA, P, AP | Tail],
+    Sections = [H, MA, P, AP | BodySections],
     mc_amqp:convert_from(mc_amqp, Sections, Env);
 convert_to(_TargetProto, _Content, _Env) ->
     not_implemented.
@@ -891,15 +866,6 @@ is_body_sections_tail([#'v1_0.footer'{}]) ->
     true;
 is_body_sections_tail(Sections) ->
     is_body_sections(Sections).
-
-amqp10_section_header(Header, Headers) ->
-    case lists:keyfind(Header, 1, Headers) of
-        {_, _, Data} when is_binary(Data) ->
-            [Section] = amqp10_framing:decode_bin(Data),
-            Section ;
-        _ ->
-            undefined
-    end.
 
 amqp_encoded_binary(Section) ->
     iolist_to_binary(amqp10_framing:encode_bin(Section)).
