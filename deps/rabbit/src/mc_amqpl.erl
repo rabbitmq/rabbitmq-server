@@ -42,6 +42,10 @@
 -define(AMQP10_MESSAGE_ANNOTATIONS_HEADER, <<"x-amqp-1.0-message-annotations">>).
 -define(AMQP10_FOOTER, <<"x-amqp-1.0-footer">>).
 -define(CLASS_ID, 60).
+-define(IS_BODY_SECTION(S),
+        is_record(S, 'v1_0.data') orelse
+        is_record(S, 'v1_0.amqp_sequence') orelse
+        is_record(S, 'v1_0.amqp_value')).
 
 -opaque state() :: #content{}.
 
@@ -71,9 +75,7 @@ convert_from(mc_amqp, Sections, _Env) ->
          (#'v1_0.application_properties'{} = S, Acc) ->
               setelement(4, Acc, S);
          (BodySect, Acc)
-           when is_record(BodySect, 'v1_0.data') orelse
-                is_record(BodySect, 'v1_0.amqp_sequence') orelse
-                is_record(BodySect, 'v1_0.amqp_value') ->
+           when ?IS_BODY_SECTION(BodySect) ->
               Body = element(5, Acc),
               setelement(5, Acc, [BodySect | Body]);
          (Body = {amqp_encoded_body_and_footer, _}, Acc) ->
@@ -427,8 +429,7 @@ convert_to(mc_amqp, #content{payload_fragments_rev = PFR} = Content, Env) ->
          end,
     BodySections = case Type of
                        ?AMQP10_TYPE ->
-                           amqp10_framing:decode_bin(
-                             iolist_to_binary(lists:reverse(PFR)));
+                           amqp10_body_sections(lists:reverse(PFR));
                        _ ->
                            [#'v1_0.data'{content = lists:reverse(PFR)}]
                    end,
@@ -852,6 +853,44 @@ is_internal_header(<<"x-death">>) ->
     true;
 is_internal_header(_) ->
     false.
+
+%% `type' is an ordinary AMQP 0.9.1 property that any publisher can set, so a
+%% payload claiming to be AMQP 1.0 encoded may be neither well formed nor a
+%% message body. Treat the type as a hint and fall back to an opaque data
+%% section, which is what the payload would have become had the type not
+%% claimed otherwise.
+amqp10_body_sections(Payload) ->
+    Fallback = [#'v1_0.data'{content = Payload}],
+    try amqp10_framing:decode_bin(iolist_to_binary(Payload)) of
+        Sections ->
+            case is_body_sections(Sections) of
+                true ->
+                    Sections;
+                false ->
+                    Fallback
+            end
+    catch throw:_ ->
+              Fallback;
+          error:_ ->
+              Fallback
+    end.
+
+%% A body consists of one or more data, one or more amqp-sequence, or a single
+%% amqp-value section, optionally followed by a footer [§3.2]. RabbitMQ 3.13 and
+%% earlier allowed any number of each kind in any permutation, so the order and
+%% cardinality within the body itself are not validated here.
+is_body_sections([Section | Rest])
+  when ?IS_BODY_SECTION(Section) ->
+    is_body_sections_tail(Rest);
+is_body_sections(_) ->
+    false.
+
+is_body_sections_tail([]) ->
+    true;
+is_body_sections_tail([#'v1_0.footer'{}]) ->
+    true;
+is_body_sections_tail(Sections) ->
+    is_body_sections(Sections).
 
 amqp10_section_header(Header, Headers) ->
     case lists:keyfind(Header, 1, Headers) of

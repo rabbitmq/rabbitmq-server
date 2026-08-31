@@ -42,6 +42,8 @@ all_tests() ->
      amqp_amqpl_unsupported_values_not_converted,
      amqp_to_amqpl_data_body,
      amqp_amqpl_amqp_bodies,
+     amqpl_amqp10_type_body_shapes,
+     amqpl_amqp10_type_invalid_payload,
      amqp_x_headers,
      amqpl_x_headers
     ].
@@ -770,6 +772,60 @@ amqp_amqpl_amqp_bodies(_Config) ->
      end || Body <- Bodies],
     ok.
 
+%% A body is one or more data, one or more amqp-sequence, or a single amqp-value
+%% section, optionally followed by a footer.
+amqpl_amqp10_type_body_shapes(_Config) ->
+    Data = #'v1_0.data'{content = <<"hello">>},
+    Seq = #'v1_0.amqp_sequence'{content = [{utf8, <<"one">>}]},
+    Value = #'v1_0.amqp_value'{content = {utf8, <<"hello">>}},
+    Footer = #'v1_0.footer'{content = [{{symbol, <<"x-crc">>}, {uint, 1}}]},
+    Bodies = [[Value],
+              [Value, Footer],
+              [Seq, Seq],
+              [Seq, Footer],
+              [Data, Data],
+              [Data, Footer]],
+    [?assertEqual(Body, amqp10_type_body_sections(serialize_sections(Body)))
+     || Body <- Bodies],
+
+    %% RabbitMQ 3.13 and earlier allowed any number of each kind in any
+    %% permutation. Such a body is still parsed as a body rather than delivered
+    %% as opaque data, even though mc_amqp keeps a single body section for it.
+    ?assertEqual([Value],
+                 amqp10_type_body_sections(serialize_sections([Data, Seq, Value]))),
+    ok.
+
+%% `type' is an ordinary AMQP 0.9.1 property that any publisher can set, so a
+%% payload claiming to be AMQP 1.0 encoded may be neither well formed nor a
+%% message body. Such a payload must be delivered as an opaque data section
+%% rather than crash the conversion.
+amqpl_amqp10_type_invalid_payload(_Config) ->
+    Payloads = [
+                %% not AMQP 1.0 encoded at all
+                <<>>,
+                <<"hello world">>,
+                <<0, 0>>,
+                %% a data section header without its content
+                <<0, 16#53, 16#75>>,
+                %% well formed sections that do not belong in a body
+                serialize_sections([#'v1_0.header'{durable = true}]),
+                serialize_sections([#'v1_0.properties'{subject = {utf8, <<"s">>}}]),
+                serialize_sections([#'v1_0.application_properties'{content = []}]),
+                serialize_sections(
+                  [#'v1_0.message_annotations'{
+                      content = [{{symbol, <<"x-a">>}, {utf8, <<"v">>}}]}]),
+                %% a footer without a body
+                serialize_sections([#'v1_0.footer'{content = []}]),
+                %% a footer that is not the last section
+                serialize_sections([#'v1_0.amqp_value'{content = {utf8, <<"a">>}},
+                                    #'v1_0.footer'{content = []},
+                                    #'v1_0.amqp_value'{content = {utf8, <<"b">>}}])
+               ],
+    [?assertEqual([#'v1_0.data'{content = Payload}],
+                  amqp10_type_body_sections(Payload))
+     || Payload <- Payloads],
+    ok.
+
 amqp_x_headers(_Config) ->
     MAC = [
            {{symbol, <<"x-stream-filter">>}, {utf8, <<"apple">>}},
@@ -817,6 +873,18 @@ amqpl_x_headers(_Config) ->
                  mc:x_headers(BasicMsg)).
 
 %% Utility
+
+%% Converts an AMQP 0.9.1 message whose `type' is <<"amqp-1.0">> and returns the
+%% body sections the conversion produced.
+amqp10_type_body_sections(Payload) ->
+    Content = #content{class_id = 60,
+                       properties = #'P_basic'{type = <<"amqp-1.0">>},
+                       properties_bin = none,
+                       payload_fragments_rev = [Payload]},
+    Msg = mc:init(mc_amqpl, Content, annotations()),
+    [_Header, _MessageAnnotations | BodySections] =
+        mc:protocol_state(mc:convert(mc_amqp, Msg)),
+    amqp10_framing:decode_bin(iolist_to_binary(BodySections)).
 
 amqp10_encode_bin(L) when is_list(L) ->
     [iolist_to_binary(amqp10_framing:encode_bin(X)) || X <- L];
