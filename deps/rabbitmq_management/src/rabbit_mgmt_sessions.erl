@@ -176,7 +176,7 @@ list_sessions(Page, PageSize, UsernameFilter) ->
         _         -> ?KHEPRI_USER_SESSIONS_PATTERN(UsernameFilter)
     end,
     Now = os:system_time(millisecond),
-    AllSessions = case rabbit_khepri:get_many(PathPattern) of
+    FilteredSessions = case rabbit_khepri:get_many(PathPattern) of
         {ok, Map} ->
             maps:fold(fun(Path, S, Acc) ->
                 if is_record(S, session) andalso S#session.expires_at > Now ->
@@ -189,18 +189,38 @@ list_sessions(Page, PageSize, UsernameFilter) ->
         _ ->
             []
     end,
-    Sorted = lists:sort(fun({_U1, _Id1, S1}, {_U2, _Id2, S2}) -> S1#session.created_at >= S2#session.created_at end, AllSessions),
-    TotalCount = length(Sorted),
+    Sorted = lists:sort(fun({_U1, _Id1, S1}, {_U2, _Id2, S2}) -> S1#session.created_at >= S2#session.created_at end, FilteredSessions),
+    FilteredCount = length(Sorted),
+    TotalCount = case UsernameFilter of
+        undefined -> FilteredCount;
+        _ ->
+            case rabbit_khepri:get_many(?KHEPRI_ALL_SESSIONS_PATTERN) of
+                {ok, AllMap} ->
+                    maps:fold(fun(_P, S, Acc) ->
+                        if is_record(S, session) andalso S#session.expires_at > Now ->
+                               Acc + 1;
+                           true ->
+                               Acc
+                        end
+                    end, 0, AllMap);
+                _ -> FilteredCount
+            end
+    end,
     Start = (Page - 1) * PageSize + 1,
     Items = if
-        Start > TotalCount -> [];
+        Start > FilteredCount -> [];
         true -> lists:sublist(Sorted, Start, PageSize)
     end,
+    PageCount = if FilteredCount == 0 -> 0; true -> (FilteredCount + PageSize - 1) div PageSize end,
+    ItemCount = length(Items),
     #{
         items => [session_to_map(Username, SessionId, S) || {Username, SessionId, S} <- Items],
         total_count => TotalCount,
+        filtered_count => FilteredCount,
+        item_count => ItemCount,
         page => Page,
-        page_size => PageSize
+        page_size => PageSize,
+        page_count => PageCount
     }.
 
 terminate_sessions(undefined) ->
