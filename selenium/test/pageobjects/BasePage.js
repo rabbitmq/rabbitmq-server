@@ -294,19 +294,18 @@ module.exports = class BasePage {
 
   async isPopupWarningDisplayed() {
     try  {      
-      let element = await this.driver.findElement(FORM_POPUP_WARNING)
-      return element.isDisplayed()
+      let element = await this.waitForDisplayed(FORM_POPUP_WARNING)
+      return await element.isDisplayed()
     } catch(e) {
-      return Promise.resolve(false)
+      return false
     }  
   }
-   async isPopupInfoDisplayed() {
+  async isPopupInfoDisplayed() {
     try  {      
-      let element = await this.driver.findElement(FORM_POPUP_INFO)
-      return element.isDisplayed()
+      let element = await this.waitForDisplayed(FORM_POPUP_INFO)
+      return await element.isDisplayed()
     } catch(e) {
-      console.error("isPopupInfoDisplayed failed due to " + e)
-      return Promise.resolve(false)
+      return false
     }  
   }
   async isPopupWarningNotDisplayed() {
@@ -330,16 +329,16 @@ module.exports = class BasePage {
     }
   }
   async getPopupWarning() {
-    let element = await this.driver.findElement(FORM_POPUP_WARNING)
-    return this.driver.wait(until.elementIsVisible(element), this.timeout,
-      'Timed out after [timeout=' + this.timeout + ';polling=' + this.polling + '] awaiting till visible ' + element,
-      this.polling).getText().then((value) => value.substring(0, value.search('\n\nClose')))
+    let element = await this.waitForDisplayed(FORM_POPUP_WARNING)
+    let value = await element.getText()
+    const closeIdx = value.search('\n\nClose')
+    return closeIdx >= 0 ? value.substring(0, closeIdx) : value
   }
   async getPopupInfo() {
-    let element = await this.driver.findElement(FORM_POPUP_INFO)
-    return this.driver.wait(until.elementIsVisible(element), this.timeout,
-      'Timed out after [timeout=' + this.timeout + ';polling=' + this.polling + '] awaiting till visible ' + element,
-      this.polling).getText().then((value) => value.substring(0, value.search('\n\nClose')))
+    let element = await this.waitForDisplayed(FORM_POPUP_INFO)
+    let value = await element.getText()
+    const closeIdx = value.search('\n\nClose')
+    return closeIdx >= 0 ? value.substring(0, closeIdx) : value
   }
   async closePopupWarning() {
     return this.click(FORM_POPUP_WARNING_CLOSE_BUTTON)
@@ -533,6 +532,7 @@ module.exports = class BasePage {
     await this.driver.sleep(250)
     return alert.dismiss();
   }
+
   capture () {
     this.driver.takeScreenshot().then(
       function (image) {

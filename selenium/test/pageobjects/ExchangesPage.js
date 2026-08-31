@@ -1,6 +1,6 @@
 const { By, Key, until, Builder } = require('selenium-webdriver')
 
-const { delay } = require('../utils')
+const { doUntil } = require('../utils')
 
 const BasePage = require('./BasePage')
 
@@ -47,14 +47,15 @@ module.exports = class ExchangesPage extends BasePage {
   }
   async selectExchangeType(type) {
     await this.selectOptionByValue(FORM_EXCHANGE_TYPE, type)
-    // Selenium's native <option> click does not reliably fire the exchange
-    // type select's inline onchange="select_exchange_type(exchangetype)" in
-    // headless Chrome, so the argument-links table can be left showing the
-    // previous type. Call the handler directly to force the update.
-    await this.driver.executeScript(function(selector) {
-      select_exchange_type(document.querySelector(selector))
-    }, FORM_EXCHANGE_TYPE.value)
-    return delay(1000)
+    return doUntil(
+      async () => {
+        const sel = await this.driver.findElement(FORM_EXCHANGE_TYPE)
+        return sel.getAttribute('value')
+      },
+      val => val === type,
+      200,
+      `Failed to select exchange type ${type}`
+    )
   }
   async getArgumentLinksText() {
     return this.getText(ARGUMENT_LINKS)

@@ -40,7 +40,11 @@ function getConnectionOptions() {
   }  
 }
 module.exports = {  
+  generate_uuid: () => {
+    return container.generate_uuid()
+  },
   getAmqpConnectionOptions: () => { return connectionOptions },
+  setAmqpConnectionOptions: (options) => { connectionOptions = options },
   getAmqpUrl: () => {
     return connectionOptions.scheme + '://' +
         connectionOptions.username + ":" + connectionOptions.password + "@" +
@@ -48,7 +52,7 @@ module.exports = {
   },
   open: (queueName = "/queues/my-queue", credentials = {}) => {
     let promise = new Promise((resolve, reject) => {
-      container.on('connection_open', function(context) {
+      container.once('connection_open', function(context) {
         resolve()
       })
     })
@@ -95,5 +99,20 @@ module.exports = {
   },
   on: (event, callback) => {
     container.on(event, callback)
+  },
+  data_section: (data) => {
+    return container.message.data_section(data)
+  },
+  data_sections: (array) => {
+    return container.message.data_sections(array)
+  },
+  sequence_section: (array) => {
+    return container.message.sequence_section(array)
+  },
+  sequence_sections: (array) => {
+    return container.message.sequence_sections(array)
+  },
+  send: (handler, msg) => {
+    handler.sender.send(msg)
   }
 }
