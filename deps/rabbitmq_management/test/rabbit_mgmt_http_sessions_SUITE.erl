@@ -138,6 +138,12 @@ authorization_and_metadata_test(Config) ->
     
     %% Admin GET
     SessionsRes = http_get(Config, "/sessions", "test_admin", "test_admin", ?OK),
+    ?assertEqual(1, maps:get('total_count', SessionsRes)),
+    ?assertEqual(1, maps:get('filtered_count', SessionsRes)),
+    ?assertEqual(1, maps:get('item_count', SessionsRes)),
+    ?assertEqual(1, maps:get('page', SessionsRes)),
+    ?assertEqual(100, maps:get('page_size', SessionsRes)),
+    ?assertEqual(1, maps:get('page_count', SessionsRes)),
     Items = maps:get('items', SessionsRes),
     [Session] = [S || S <- Items, maps:get('id', S) == SessionId],
     
@@ -149,8 +155,10 @@ authorization_and_metadata_test(Config) ->
     http_get(Config, "/sessions", "test_user_a", "test_user_a", ?NOT_AUTHORISED),
     
     %% Pagination parameter validation tests
+    http_get(Config, "/sessions?page=0", "test_admin", "test_admin", ?BAD_REQUEST),
     http_get(Config, "/sessions?page=not_an_integer", "test_admin", "test_admin", ?BAD_REQUEST),
     http_get(Config, "/sessions?page=-1", "test_admin", "test_admin", ?BAD_REQUEST),
+    http_get(Config, "/sessions?page=1&page_size=0", "test_admin", "test_admin", ?BAD_REQUEST),
     http_get(Config, "/sessions?page=1&page_size=501", "test_admin", "test_admin", ?BAD_REQUEST),
     http_get(Config, "/sessions/user/test_user_a?page=invalid", "test_admin", "test_admin", ?BAD_REQUEST),
 
@@ -317,6 +325,9 @@ delete_user_sessions_test(Config) ->
     SessionsRes1 = decode_body(ResBody1),
     Items1 = maps:get('items', SessionsRes1),
     ?assertEqual(1, length(Items1)),
+    ?assertEqual(1, maps:get('filtered_count', SessionsRes1)),
+    ?assertEqual(1, maps:get('item_count', SessionsRes1)),
+    ?assertEqual(1, maps:get('page_count', SessionsRes1)),
     [Session1] = Items1,
     ?assertEqual(SessionId3, maps:get('id', Session1)),
     ?assertEqual(<<"test_user_b">>, maps:get('username', Session1)),
@@ -326,6 +337,9 @@ delete_user_sessions_test(Config) ->
     SessionsRes2 = decode_body(ResBody2),
     Items2 = maps:get('items', SessionsRes2),
     ?assertEqual(0, length(Items2)),
+    ?assertEqual(0, maps:get('filtered_count', SessionsRes2)),
+    ?assertEqual(0, maps:get('item_count', SessionsRes2)),
+    ?assertEqual(0, maps:get('page_count', SessionsRes2)),
 
     %% Admin DELETE single session via /sessions/user/:username/:session
     http_delete(Config, "/sessions/user/test_user_b/" ++ binary_to_list(SessionId3), "test_admin", "test_admin", ?NO_CONTENT),
