@@ -154,6 +154,10 @@ groups() ->
        modified_quorum_queue_deferral_token_invalid_annotation_type,
        modified_quorum_queue_deferral_token_invalid_flow_property_type,
        modified_quorum_queue_deferral_token_too_many,
+       modified_quorum_queue_deferral_token_at_limit,
+       modified_quorum_queue_deferral_token_requires_delivery_time,
+       modified_quorum_queue_deferral_token_reused_adds_to_set,
+       deferral_token_capability_advertised_on_consume_attach_only,
        modified_dead_letter_headers_exchange,
        modified_dead_letter_history,
        dead_letter_headers_exchange,
@@ -1232,6 +1236,189 @@ modified_quorum_queue_deferral_token_too_many(Config) ->
     after 30000 -> flush(missing_ended),
                    ct:fail("did not receive expected error")
     end,
+    ok = close_connection_sync(Connection).
+
+%% Test that a rabbitmq:deferral-tokens array of exactly the per-FLOW limit
+%% is accepted, unlike one token over the limit (see the _too_many test).
+modified_quorum_queue_deferral_token_at_limit(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    {_, Session, LinkPair} = Init = init(Config),
+    {ok, #{type := <<"quorum">>}} = rabbitmq_amqp_client:declare_queue(
+                                      LinkPair, QName,
+                                      #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>}}}),
+    Address = rabbitmq_amqp_address:queue(QName),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session, <<"receiver">>, Address, unsettled),
+    OutputHandle = element(4, Receiver),
+    Tokens = [{utf8, integer_to_binary(N)} || N <- lists:seq(1, 256)],
+    %% None of these tokens have anything parked under them, so this must
+    %% not error and must simply yield no delivery.
+    ok = amqp10_client_session:flow_link(
+           Session, OutputHandle,
+           #'v1_0.flow'{
+              link_credit = {uint, 1},
+              properties = {map, [{{symbol, <<"rabbitmq:deferral-tokens">>},
+                                   {array, utf8, Tokens}}]}},
+           never),
+    receive {amqp10_msg, Receiver, _} -> ct:fail(unexpected_message)
+    after 500 -> ok
+    end,
+    ok = amqp10_client:detach_link(Receiver),
+    ?assertMatch({ok, #{message_count := 0}},
+                 rabbitmq_amqp_client:delete_queue(LinkPair, QName)),
+    ok = close(Init).
+
+%% Test that x-opt-deferral-token alone, without x-opt-delivery-time, does
+%% not park the message: DEFERRED.md requires both annotations together.
+modified_quorum_queue_deferral_token_requires_delivery_time(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    {_, Session, LinkPair} = Init = init(Config),
+    {ok, #{type := <<"quorum">>}} = rabbitmq_amqp_client:declare_queue(
+                                      LinkPair, QName,
+                                      #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>}}}),
+    Address = rabbitmq_amqp_address:queue(QName),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address),
+    ok = wait_for_credit(Sender),
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"t1">>, <<"m1">>, true)),
+    ok = amqp10_client:detach_link(Sender),
+
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session, <<"receiver">>, Address, unsettled),
+    OutputHandle = element(4, Receiver),
+    {ok, M1} = amqp10_client:get_msg(Receiver),
+    ?assertEqual([<<"m1">>], amqp10_msg:body(M1)),
+    Token = <<"token-without-delivery-time">>,
+    ok = amqp10_client:settle_msg(
+           Receiver, M1,
+           {modified, false, false,
+            #{<<"x-opt-deferral-token">> => Token}}),
+
+    %% Without a delivery time, the message is redelivered normally instead
+    %% of being parked, so it comes straight back on the next credit grant.
+    ok = amqp10_client:flow_link_credit(Receiver, 1, never, false),
+    [M1b] = receive_messages(Receiver, 1),
+    ?assertEqual([<<"m1">>], amqp10_msg:body(M1b)),
+    ok = amqp10_client:settle_msg(Receiver, M1b, accepted),
+
+    %% The token was never parked, so requesting it explicitly yields nothing.
+    ok = amqp10_client_session:flow_link(
+           Session, OutputHandle,
+           #'v1_0.flow'{
+              link_credit = {uint, 1},
+              properties = {map, [{{symbol, <<"rabbitmq:deferral-tokens">>},
+                                   {array, utf8, [{utf8, Token}]}}]}},
+           never),
+    receive {amqp10_msg, Receiver, _} -> ct:fail(unexpected_message)
+    after 500 -> ok
+    end,
+
+    ok = amqp10_client:detach_link(Receiver),
+    ?assertMatch({ok, #{message_count := 0}},
+                 rabbitmq_amqp_client:delete_queue(LinkPair, QName)),
+    ok = close(Init).
+
+%% Test that settling two separate deliveries under the same deferral token,
+%% one after the other, adds to the set parked under that token rather than
+%% replacing it, and that both are returned oldest first.
+modified_quorum_queue_deferral_token_reused_adds_to_set(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    {_, Session, LinkPair} = Init = init(Config),
+    {ok, #{type := <<"quorum">>}} = rabbitmq_amqp_client:declare_queue(
+                                      LinkPair, QName,
+                                      #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>}}}),
+    Address = rabbitmq_amqp_address:queue(QName),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address),
+    ok = wait_for_credit(Sender),
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"t1">>, <<"m1">>, true)),
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"t2">>, <<"m2">>, true)),
+    ok = amqp10_client:detach_link(Sender),
+
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session, <<"receiver">>, Address, unsettled),
+    OutputHandle = element(4, Receiver),
+    FarFuture = erlang:system_time(millisecond) + 3_600_000,
+    Token = <<"reused-token">>,
+
+    %% Park m1 under Token with its own, separate MODIFIED settlement.
+    {ok, M1} = amqp10_client:get_msg(Receiver),
+    ?assertEqual([<<"m1">>], amqp10_msg:body(M1)),
+    ok = amqp10_client:settle_msg(
+           Receiver, M1,
+           {modified, false, false,
+            #{<<"x-opt-deferral-token">> => Token,
+              <<"x-opt-delivery-time">> => FarFuture}}),
+
+    %% Park m2 under the very same token with a second, later settlement.
+    {ok, M2} = amqp10_client:get_msg(Receiver),
+    ?assertEqual([<<"m2">>], amqp10_msg:body(M2)),
+    ok = amqp10_client:settle_msg(
+           Receiver, M2,
+           {modified, false, false,
+            #{<<"x-opt-deferral-token">> => Token,
+              <<"x-opt-delivery-time">> => FarFuture}}),
+
+    %% Requesting the token once returns both messages, oldest (m1) first.
+    ok = amqp10_client_session:flow_link(
+           Session, OutputHandle,
+           #'v1_0.flow'{
+              link_credit = {uint, 2},
+              properties = {map, [{{symbol, <<"rabbitmq:deferral-tokens">>},
+                                   {array, utf8, [{utf8, Token}]}}]}},
+           never),
+    [M1b, M2b] = receive_messages(Receiver, 2),
+    ?assertEqual([<<"m1">>], amqp10_msg:body(M1b)),
+    ?assertEqual([<<"m2">>], amqp10_msg:body(M2b)),
+    ok = amqp10_client:settle_msg(Receiver, M1b, accepted),
+    ok = amqp10_client:settle_msg(Receiver, M2b, accepted),
+
+    ok = amqp10_client:detach_link(Receiver),
+    ?assertMatch({ok, #{message_count := 0}},
+                 rabbitmq_amqp_client:delete_queue(LinkPair, QName)),
+    ok = close(Init).
+
+%% Test that the rabbitmq:deferral-tokens capability is offered on a
+%% consuming (receiver) attach to a quorum queue, but not on a publishing
+%% (sender) attach: deferral is a consuming-link-only feature.
+deferral_token_capability_advertised_on_consume_attach_only(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    OpnConf = maps:merge(connection_config(Config),
+                         #{notify_with_performative => true}),
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    {ok, Session} = amqp10_client:begin_session_sync(Connection),
+    {ok, LinkPair} = rabbitmq_amqp_client:attach_management_link_pair_sync(
+                       Session, <<"my link pair">>),
+    {ok, #{type := <<"quorum">>}} = rabbitmq_amqp_client:declare_queue(
+                                      LinkPair, QName,
+                                      #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>}}}),
+    Address = rabbitmq_amqp_address:queue(QName),
+
+    SenderArgs = #{name => <<"sender">>,
+                   role => {sender, #{address => Address}},
+                   snd_settle_mode => unsettled,
+                   rcv_settle_mode => first},
+    {ok, Sender} = amqp10_client:attach_link(Session, SenderArgs),
+    receive {amqp10_event, {link, Sender, {attached, SenderAttach}}} ->
+                ?assertMatch(#'v1_0.attach'{offered_capabilities = undefined},
+                             SenderAttach)
+    after 30000 -> ct:fail({missing_event, ?LINE})
+    end,
+    ok = amqp10_client:detach_link(Sender),
+
+    ReceiverArgs = #{name => <<"receiver">>,
+                     role => {receiver, #{address => Address}, self()},
+                     snd_settle_mode => unsettled,
+                     rcv_settle_mode => first},
+    {ok, Receiver} = amqp10_client:attach_link(Session, ReceiverArgs),
+    receive {amqp10_event, {link, Receiver, {attached, ReceiverAttach}}} ->
+                #'v1_0.attach'{offered_capabilities =
+                                 {array, symbol, Caps}} = ReceiverAttach,
+                ?assert(lists:member({symbol, <<"rabbitmq:deferral-tokens">>},
+                                     Caps))
+    after 30000 -> ct:fail({missing_event, ?LINE})
+    end,
+    ok = amqp10_client:detach_link(Receiver),
+
+    ?assertMatch({ok, _}, rabbitmq_amqp_client:delete_queue(LinkPair, QName)),
     ok = close_connection_sync(Connection).
 
 %% Test that a message can be routed based on the message-annotations

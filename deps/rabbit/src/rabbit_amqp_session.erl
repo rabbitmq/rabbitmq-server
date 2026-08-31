@@ -1499,8 +1499,7 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_SENDER,
                             },
               State0 = #state{incoming_links = IncomingLinks0,
                               permission_cache = PermCache0,
-                              cfg = #cfg{max_link_credit = MaxLinkCredit,
-                                         vhost = Vhost} = Cfg}) ->
+                              cfg = #cfg{max_link_credit = MaxLinkCredit} = Cfg}) ->
     case ensure_target(Target0, LinkNameBin, Cfg, PermCache0) of
         {ok, Exchange, RoutingKey, QNameBin, Target, PermCache} ->
             SndSettleMode = snd_settle_mode(MaybeSndSettleMode),
@@ -1517,18 +1516,9 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_SENDER,
                               delivery_count = DeliveryCountInt,
                               credit = MaxLinkCredit},
             _Outcomes = outcomes(Source),
-            Caps = case QNameBin of
-                       undefined ->
-                           undefined;
-                       _ ->
-                           QName = rabbit_misc:r(Vhost, queue, QNameBin),
-                           case rabbit_amqqueue:lookup(QName) of
-                               {ok, Q} ->
-                                   link_capabilities(amqqueue:get_type(Q));
-                               _ ->
-                                   undefined
-                           end
-                   end,
+            %% amqp_link_capabilities (e.g. quorum queues' deferral tokens,
+            %% streams' filter expressions) are all consuming-link concepts,
+            %% so a publish (incoming) link has no offered capabilities.
             Reply = #'v1_0.attach'{
                        name = LinkName,
                        handle = Handle,
@@ -1539,7 +1529,7 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_SENDER,
                        %% We are the receiver.
                        role = ?AMQP_ROLE_RECEIVER,
                        max_message_size = {ulong, MaxMessageSize},
-                       offered_capabilities = Caps},
+                       offered_capabilities = undefined},
             Flow = #'v1_0.flow'{handle = Handle,
                                 delivery_count = DeliveryCount,
                                 link_credit = ?UINT(MaxLinkCredit)},
@@ -3409,16 +3399,25 @@ handle_outgoing_link_flow_control(
             %% when the client floods us with credit requests, but closed its incoming-window.
             %% Processing one credit top up at a time between us and the queue is also easier
             %% to reason about. Therefore, we stash the new request. If there is already a
-            %% stashed request, we replace it because the latest flow control state from the
-            %% client applies. Any requested deferral tokens are stashed alongside it and
-            %% submitted once the stashed request is processed, see pop_credit_req/4.
+            %% stashed request, we replace its flow control fields because the latest
+            %% flow control state from the client applies. Deferral tokens are not flow
+            %% control state though, but one-shot claim requests: any tokens from an
+            %% already-stashed request are carried over rather than dropped, so a FLOW
+            %% that itself gets stashed before it is popped never loses its tokens.
+            %% Submitted once the stashed request is processed, see pop_credit_req/4.
+            PrevTokens = case Link0#outgoing_link.stashed_credit_req of
+                              none ->
+                                  [];
+                              #credit_req{tokens = T} ->
+                                  T
+                          end,
             Link = Link0#outgoing_link{
                      stashed_credit_req = #credit_req{
                                              delivery_count = DeliveryCountRcv,
                                              credit = LinkCreditRcv,
                                              drain = Drain,
                                              echo = Echo,
-                                             tokens = parse_deferred_tokens(FlowProps)}},
+                                             tokens = PrevTokens ++ parse_deferred_tokens(FlowProps)}},
             State0#state{outgoing_links = OutgoingLinks#{HandleInt := Link}}
     end.
 

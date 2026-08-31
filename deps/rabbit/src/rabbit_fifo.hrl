@@ -314,7 +314,13 @@
          %% creation of this state machine. Monotonically non-decreasing
          %% on every node (under leader replication). Used by leader
          %% migration tooling to estimate per-node ingress.
-         ingress_bytes_by_node = #{} :: #{node() | undefined => non_neg_integer()}
+         ingress_bytes_by_node = #{} :: #{node() | undefined => non_neg_integer()},
+         %% Conservative flag: true whenever some consumer may hold a
+         %% deferred claim, used by deliver_claimed/3 to skip its consumer
+         %% scan on checkout for queues that never use deferral. Only ever
+         %% set to false right after a scan has confirmed no consumer holds
+         %% a claim, so it can go stale as "true" but never as "false".
+         has_deferred_claims = false :: boolean()
         }).
 
 -type config() :: #{name := atom(),

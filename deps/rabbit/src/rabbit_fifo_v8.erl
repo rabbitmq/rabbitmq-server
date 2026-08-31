@@ -1300,9 +1300,10 @@ init_aux(Name) when is_atom(Name) ->
                                       messages_total = 0,
                                       min_reclaimable = MinReclaimable}}.
 
-handle_aux(RaftState, Tag, Cmd, AuxV2, RaAux)
-  when element(1, AuxV2) == aux_v2 ->
-    Name = element(2, AuxV2),
+handle_aux(RaftState, Tag, Cmd, AuxPre, RaAux)
+  when element(1, AuxPre) == aux_v2 orelse
+       element(1, AuxPre) == aux ->
+    Name = element(2, AuxPre),
     AuxV3 = init_aux(Name),
     handle_aux(RaftState, Tag, Cmd, AuxV3, RaAux);
 handle_aux(RaftState, Tag, Cmd, AuxV3, RaAux)
