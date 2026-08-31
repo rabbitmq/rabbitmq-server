@@ -193,29 +193,38 @@ function login(username, password) {
 }
 
 function load_init_data_and_ui(user) {
-  if (!check_session()) {
-    clear_auth();
-    if (oauth.enabled) {
-      renderWarningMessageInLoginStatus(oauth, 'Concurrent session limit reached');
-    } else {
-      replace_content('login-status', '<p>Concurrent session limit reached</p>');
-    }
-    return false;
-  }
   if (!load_init_data()) {
     return false;
   }
-  return load_ui(user);
+
+  var res = invokeLoginProcessors({user: user, settings: window.app_settings});
+  if (res.ok === false) {
+    clear_auth();
+    var errMsg = res.error || 'Failed to establish session with server';
+    invokeInitFailedProcessors(errMsg);
+    if (oauth.enabled) {
+      renderWarningMessageInLoginStatus(oauth, errMsg);
+    } else {
+      replace_content('login-status', '<p>' + fmt_escape_html(errMsg) + '</p>');
+    }
+    return false;
+  }
+
+  try {
+    load_ui(user);
+  } catch (err) {
+    console.error("Application initialization failed:", err);
+    clear_auth();
+    invokeInitFailedProcessors(err);
+    replace_content('login-status', '<p>Application initialization failed</p>');
+    return false;
+  }
+  invokeInitProcessors({user: user, settings: window.app_settings});
+  return true;
 }
 
 function load_ui(user) {
   var settings = window.app_settings;
-  if (settings.sessions && settings.sessions.enabled === true) {
-    var id = get_session_id();
-    if (id && start_session_heartbeat(id, settings.sessions.heartbeat_interval) === false) {
-      return false;
-    }
-  }
 
   set_session_expiry_if_required(user.login_session_timeout);
   check_version();
@@ -241,7 +250,6 @@ function load_ui(user) {
     console.info("All extensions have been loaded. Starting application ..");
     start_app();
   });
-  return true;
 }
 
 
@@ -1550,7 +1558,7 @@ function update_status(status) {
 
 
 
-function with_req(method, path, body, fun, on404fun) {
+function with_req(method, path, body, fun, error_fun) {
     if (password_change_in_progress) {
         return;
     }
@@ -1572,7 +1580,7 @@ function with_req(method, path, body, fun, on404fun) {
             if (ix != -1) {
                 outstanding_reqs.splice(ix, 1);
             }
-            if (check_bad_response(req, !on404fun, on404fun)) {
+            if (check_bad_response(req, !error_fun, error_fun)) {
                 last_successful_connect = new Date();
                 fun(req);
             }
@@ -1662,22 +1670,27 @@ function sync_req(type, params0, path_template, options) {
     }
 }
 function initiate_logout(oauth, error = "") {
+    invokeLogoutProcessors();
     renderWarningMessageInLoginStatus(oauth, error);
 }
 /**
  * Handle bad http response
  * @param {*} req
  * @param {*} full_page_404 In case of 404, reload entire html page with the error message
- * @param {*} on404fun In case of 404, call this function or else show a popup error message
+ * @param {*} error_fun Custom error handler function (receives req)
  * @returns true if there was no bad response
  */
-function check_bad_response(req, full_page_404, on404fun) {
+function check_bad_response(req, full_page_404, error_fun) {
     // 1223 == 204 - see https://www.enhanceie.com/ie/bugs.asp
     // MSIE7 and 8 appear to do this in response to HTTP 204.
     if ((req.status >= 200 && req.status < 300) || req.status == 1223) {
         return true;
     }
     else if (password_change_in_progress) {
+        return false;
+    }
+    else if (error_fun && (typeof error_fun === 'function')) {
+        error_fun(req);
         return false;
     }
     else if (req.status == 404 && full_page_404) {

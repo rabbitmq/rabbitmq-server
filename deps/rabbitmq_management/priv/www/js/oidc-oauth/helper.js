@@ -312,17 +312,18 @@ export function oauth_initiateLogout() {
           if (endpoint == undefined) {
             // Logout only from management UI
             mgr.removeUser().then(res => {
-              if (typeof clear_session === 'function') clear_session();
+              if (typeof invokeLogoutProcessors === 'function') invokeLogoutProcessors();
               clear_auth()
               oauth_redirectToLogin()
             })
           }else {
             // OpenId Connect RP-Initiated Logout
+            if (typeof invokeLogoutProcessors === 'function') invokeLogoutProcessors();
             mgr.signoutRedirect()
           }
         })
       }else {
-        if (typeof clear_session === 'function') clear_session();
+        if (typeof invokeLogoutProcessors === 'function') invokeLogoutProcessors();
         clear_auth()
         go_to_home()
       }
@@ -334,7 +335,7 @@ export function oauth_initiateLogout() {
 }
 
 export function oauth_completeLogout() {
-    if (typeof clear_session === 'function') clear_session();
+    if (typeof invokeLogoutProcessors === 'function') invokeLogoutProcessors();
     clear_auth()
     mgr.signoutRedirectCallback().then(_ => oauth_redirectToLogin())
 }
