@@ -85,7 +85,8 @@ all_tests() ->
      single_active_ordering_02,
      two_nodes_same_otp_version,
      two_nodes_different_otp_version,
-     ingress_bytes_by_node_accumulation
+     ingress_bytes_by_node_accumulation,
+     deferral_claims
     ].
 
 groups() ->
@@ -1189,6 +1190,60 @@ ingress_bytes_by_node_invariant() ->
             end
     end.
 
+deferral_claims(_Config) ->
+    Size = 300,
+    run_proper(
+      fun () ->
+              InitConf = config(?FUNCTION_NAME, undefined, undefined, false, undefined),
+              ?FORALL(O, ?LET(Ops, log_gen_deferral(Size), expand(Ops, InitConf)),
+                      begin
+                          Indexes = lists:seq(1, length(O)),
+                          Entries = lists:zip(Indexes, O),
+                          InitState = test_init(InitConf),
+                          run_log(InitState, Entries, deferral_invariant()),
+                          true
+                      end)
+      end, [], Size).
+
+%% Two safety properties for deferral tokens and claims:
+%%
+%% 1. a message's delayed_key() never appears in more than one place at
+%%    once (the shared "parked, unclaimed" pool and every consumer's
+%%    claims): a claim really does remove the message from the pool, so
+%%    two links can never both be told they hold the same message.
+%% 2. has_deferred_claims (see deliver_claimed/3 in rabbit_fifo.erl) is
+%%    never false while some consumer actually holds a claim: it is only
+%%    an optimisation to skip a scan, so a false negative there would
+%%    silently stop claimed messages from ever being delivered.
+deferral_invariant() ->
+    fun(#rabbit_fifo{delayed = #delayed{deferred = Deferred},
+                     consumers = Consumers,
+                     has_deferred_claims = HasClaims}) ->
+            SharedKeys = lists:append(maps:values(Deferred)),
+            ClaimedKeys = lists:append(
+                            [Keys || #consumer{deferred_claims = C}
+                                         <- maps:values(Consumers),
+                                     Keys <- maps:values(C)]),
+            AllKeys = SharedKeys ++ ClaimedKeys,
+            NoDuplicateKeys = length(AllKeys) == length(lists:usort(AllKeys)),
+            AnyConsumerHasClaims =
+                lists:any(fun(#consumer{deferred_claims = C}) ->
+                                  map_size(C) > 0
+                          end, maps:values(Consumers)),
+            FlagConsistent = HasClaims orelse not AnyConsumerHasClaims,
+            case NoDuplicateKeys andalso FlagConsistent of
+                true ->
+                    true;
+                false ->
+                    ct:pal("deferral invariant failed: NoDuplicateKeys ~p "
+                           "FlagConsistent ~p (HasClaims ~p, "
+                           "AnyConsumerHasClaims ~p)",
+                           [NoDuplicateKeys, FlagConsistent, HasClaims,
+                            AnyConsumerHasClaims]),
+                    false
+            end
+    end.
+
 two_nodes(Node) ->
     Size = 100,
     run_proper(
@@ -1913,6 +1968,33 @@ log_gen_different_nodes(Size) ->
                           {1, purge}
                          ]))))).
 
+%% Reuses a small, fixed token pool so that tokens are claimed, reused
+%% (parked again while still claimed) and contended between consumers
+%% within a single run, rather than every park inventing an unclaimed token.
+log_gen_deferral(Size) ->
+    Nodes = [node()],
+    Tokens = [<<"tok-a">>, <<"tok-b">>, <<"tok-c">>],
+    ?LET(EPids, vector(1, pid_gen(Nodes)),
+         ?LET(CPids, vector(2, pid_gen(Nodes)),
+              resize(Size,
+                     list(
+                       frequency(
+                         [{20, enqueue_gen(oneof(EPids))},
+                          {10, {input_event,
+                                frequency([{5, settle},
+                                           %% delivery time 0 does not delay:
+                                           %% Ts is always 0 in this harness
+                                           {3, {park, oneof(Tokens), 0}},
+                                           {3, {park, oneof(Tokens),
+                                                1_000_000_000}}])}},
+                          {4, checkout_gen(oneof(CPids))},
+                          {1, checkout_cancel_gen(oneof(CPids))},
+                          {3, ?LET(Pid, oneof(CPids),
+                                   {claim, Pid, oneof(Tokens)})},
+                          {1, down_gen(oneof(EPids ++ CPids))},
+                          {1, purge}
+                         ]))))).
+
 monotonic_gen() ->
     ?LET(_, integer(), erlang:unique_integer([positive, monotonic])).
 
@@ -2076,11 +2158,36 @@ handle_op({down, Pid, Reason} = Cmd, #t{down = Down} = T) ->
     end;
 handle_op({nodeup, _} = Cmd, T) ->
     do_apply(Cmd, T);
+handle_op({claim, Pid, Token}, #t{consumers = Cons} = T) ->
+    case maps:keys(
+           maps:filter(fun ({_, P}, _) when P == Pid -> true;
+                           (_, _) -> false
+                       end, Cons)) of
+        [CId | _] ->
+            Cmd = rabbit_fifo:make_delayed({assign_deferred, CId, [Token]}),
+            do_apply(Cmd, T);
+        _ ->
+            T
+    end;
 handle_op({input_event, requeue}, #t{effects = Effs} = T) ->
     %% this simulates certain settlements arriving out of order
     case queue:out(Effs) of
         {{value, Cmd}, Q} ->
             T#t{effects = queue:in(Cmd, Q)};
+        _ ->
+            T
+    end;
+handle_op({input_event, {park, Token, DeliveryTime}},
+          #t{effects = Effs} = T) ->
+    %% simulates a MODIFIED outcome carrying x-opt-deferral-token and
+    %% x-opt-delivery-time, in place of a plain settle/return/discard
+    case queue:out(Effs) of
+        {{value, {settle, CId, MsgIds}}, Q} ->
+            Cmd = rabbit_fifo:make_modify(
+                    CId, MsgIds, false, false,
+                    #{<<"x-opt-deferral-token">> => Token,
+                      <<"x-opt-delivery-time">> => DeliveryTime}),
+            do_apply(Cmd, T#t{effects = Q});
         _ ->
             T
     end;
