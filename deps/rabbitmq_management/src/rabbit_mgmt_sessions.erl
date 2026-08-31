@@ -9,9 +9,8 @@
 -behaviour(gen_server).
 
 -export([start_link/0]).
--export([create_session/2, heartbeat/2, delete_session/1,
-         list_sessions/3, terminate_session_admin/1,
-         terminate_sessions_for_user_admin/1]).
+-export([create_session/2, touch/2, delete_session/1, delete_session/2,
+         list_sessions/3, terminate_sessions/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -19,22 +18,21 @@
 -include_lib("kernel/include/logger.hrl").
 
 -record(session, {
-    id                   :: binary(),
-    username             :: binary(),
-    node                 :: atom(),
-    created_at           :: integer(),
-    expires_at           :: integer(),
-    heartbeat_expires_at :: integer(),
-    metadata             :: #{binary() => binary()}
+    created_at :: integer(),
+    expires_at :: integer(),
+    metadata   :: #{binary() => binary()}
 }).
 
 -record(state, {
-    local_sessions  :: #{binary() => #session{}},
-    remote_sessions :: #{atom() => [#session{}]},
-    timer            :: reference()
+    timer :: reference() | undefined
 }).
 
--define(BROADCAST_INTERVAL, 5000).
+-define(SWEEP_INTERVAL, 5000).
+
+-define(KHEPRI_USER_SESSIONS_PATTERN(Username), [rabbitmq, users, Username, sessions, '?']).
+-define(KHEPRI_SESSION_PATH(Username, SessionId), [rabbitmq, users, Username, sessions, SessionId]).
+-define(KHEPRI_ALL_SESSIONS_PATTERN, [rabbitmq, users, '?', sessions, '?']).
+-define(KHEPRI_SESSION_ID_PATTERN(SessionId), [rabbitmq, users, '?', sessions, SessionId]).
 
 %%====================================================================
 %% API
@@ -44,256 +42,201 @@ start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 create_session(Username, Metadata) ->
-    gen_server:call(?MODULE, {create_session, Username, Metadata}).
-
-heartbeat(SessionId, Username) ->
-    gen_server:call(?MODULE, {heartbeat, SessionId, Username}).
-
-delete_session(SessionId) ->
-    gen_server:cast(?MODULE, {delete_session, SessionId}).
-
-list_sessions(Page, PageSize, UsernameFilter) ->
-    gen_server:call(?MODULE, {list_sessions, Page, PageSize, UsernameFilter}).
-
-terminate_session_admin(SessionId) ->
-    gen_server:call(?MODULE, {terminate_session_admin, SessionId}).
-
-terminate_sessions_for_user_admin(Username) ->
-    gen_server:cast(?MODULE, {terminate_sessions_for_user_admin, Username}).
-
-%%====================================================================
-%% gen_server callbacks
-%%====================================================================
-
-init([]) ->
-    Timer = erlang:send_after(?BROADCAST_INTERVAL, self(), broadcast_and_cleanup),
-    {ok, #state{local_sessions = #{}, remote_sessions = #{}, timer = Timer}}.
-
-handle_call({create_session, Username, Metadata}, _From, State) ->
+    SessionId = list_to_binary(rabbit_guid:to_string(rabbit_guid:gen())),
+    Now = os:system_time(millisecond),
+    ExpiresAt = calculate_expires_at(Now),
+    Session = #session{
+        created_at = Now,
+        expires_at = ExpiresAt,
+        metadata = Metadata
+    },
     Settings = rabbit_mgmt_features:get_sessions_settings(),
     MaxConcurrent = proplists:get_value(max_concurrent, Settings, 1),
-    Count = count_sessions_for_user(Username, State),
-    if
-        Count >= MaxConcurrent ->
-            ?LOG_DEBUG("Failed to create session for user ~s: concurrent session limit reached", [Username]),
-            {reply, {error, limit_reached}, State};
-        true ->
-            SessionId = list_to_binary(rabbit_guid:to_string(rabbit_guid:gen())),
-            Now = os:system_time(millisecond),
-            ExpiresAt = Now + session_timeout_ms(),
-            HeartbeatExpiresAt = Now + heartbeat_timeout_ms(),
-            Session = #session{
-                id = SessionId,
-                username = Username,
-                node = node(),
-                created_at = Now,
-                expires_at = ExpiresAt,
-                heartbeat_expires_at = HeartbeatExpiresAt,
-                metadata = Metadata
-            },
-            NewLocalSessions = maps:put(SessionId, Session, State#state.local_sessions),
-            NewState = State#state{local_sessions = NewLocalSessions},
-            ?LOG_DEBUG("Created session ~s for user ~s on node ~s", [SessionId, Username, node()]),
-            {reply, {ok, SessionId}, NewState}
-    end;
+    UserSessionsPath = ?KHEPRI_USER_SESSIONS_PATTERN(Username),
+    SessionPath = ?KHEPRI_SESSION_PATH(Username, SessionId),
 
-handle_call({heartbeat, SessionId, Username}, _From, State) ->
-    Now = os:system_time(millisecond),
-    case maps:get(SessionId, State#state.local_sessions, undefined) of
-        undefined ->
-            %% Session might be remote, or terminated, or expired
-            %% If it's a remote session, it shouldn't be heartbeating to this node usually, 
-            %% but maybe a load balancer routed it here. We only accept heartbeats for local sessions?
-            %% Wait, the plan says "terminate local session". 
-            %% A heartbeat could hit any node. If it hits a node that didn't create the session,
-            %% it might be a remote session. But the design implies sessions are sticky or local?
-            %% Usually, the session is created on a node, and the heartbeat comes to the same node,
-            %% or if it hits another node, we need to forward it? Let's check.
-            %% "Heartbeat (ownership enforced) -> 200 or 401 / 403"
-            %% Let's search remote sessions just in case. If we find it on a remote node, we could forward the heartbeat or reject.
-            %% Let's just reject if it's not local? Actually if it's remote we might forward it. 
-            %% Let's check if it exists in remote.
-            case find_remote_session(SessionId, State#state.remote_sessions) of
-                {ok, RemoteNode, RemoteSession} ->
-                    if RemoteSession#session.username =/= Username ->
-                            {reply, {error, forbidden}, State};
-                       true ->
-                            case rpc:call(RemoteNode, ?MODULE, heartbeat, [SessionId, Username]) of
-                                ok -> {reply, ok, State};
-                                {error, _} = Err -> {reply, Err, State};
-                                _ -> {reply, {error, not_found}, State}
-                            end
-                    end;
-                error ->
-                    %% Auto-resume (adopt) the orphaned session
-                    Settings = rabbit_mgmt_features:get_sessions_settings(),
-                    MaxConcurrent = proplists:get_value(max_concurrent, Settings, 1),
-                    Count = count_sessions_for_user(Username, State),
-                    if
-                        Count >= MaxConcurrent ->
-                            {reply, {error, not_found}, State};
-                        true ->
-                            ExpiresAt = Now + session_timeout_ms(),
-                            HeartbeatExpiresAt = Now + heartbeat_timeout_ms(),
-                            Session = #session{
-                                id = SessionId,
-                                username = Username,
-                                node = node(),
-                                created_at = Now, %% Fresh timestamp makes it the first to be killed in conflicts
-                                expires_at = ExpiresAt,
-                                heartbeat_expires_at = HeartbeatExpiresAt,
-                                metadata = #{} %% Adopted sessions start with empty metadata
-                            },
-                            NewLocalSessions = maps:put(SessionId, Session, State#state.local_sessions),
-                            {reply, ok, State#state{local_sessions = NewLocalSessions}}
-                    end
-            end;
-        Session ->
-            if Session#session.username =/= Username ->
-                    {reply, {error, forbidden}, State};
+    TxRes = rabbit_khepri:transaction(fun() ->
+        Map = case khepri_tx:get_many(UserSessionsPath) of
+            {ok, M} -> M;
+            _       -> #{}
+        end,
+        ActiveSessions = maps:fold(fun(_P, S, Acc) ->
+            if is_record(S, session) andalso S#session.expires_at > Now ->
+                   [S | Acc];
                true ->
-                    HeartbeatExpiresAt = Now + heartbeat_timeout_ms(),
-                    NewSession = Session#session{heartbeat_expires_at = HeartbeatExpiresAt},
-                    NewLocalSessions = maps:put(SessionId, NewSession, State#state.local_sessions),
-                    {reply, ok, State#state{local_sessions = NewLocalSessions}}
+                   Acc
             end
-    end;
+        end, [], Map),
+        if length(ActiveSessions) >= MaxConcurrent ->
+            khepri_tx:abort(limit_reached);
+           true ->
+            case khepri_tx:put(SessionPath, Session) of
+                ok -> SessionId;
+                Err -> khepri_tx:abort(Err)
+            end
+        end
+    end),
+    case TxRes of
+        {ok, SessionId} ->
+            ?LOG_DEBUG("Created session ~s for user ~s", [SessionId, Username]),
+            {ok, SessionId};
+        {error, limit_reached} ->
+            ?LOG_DEBUG("Failed to create session for user ~s: concurrent session limit reached", [Username]),
+            {error, limit_reached};
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
-handle_call({list_sessions, Page, PageSize, UsernameFilter}, _From, State) ->
-    AllSessions = all_sessions(State),
-    Filtered = case UsernameFilter of
-        undefined -> AllSessions;
-        _ -> [S || S <- AllSessions, S#session.username == UsernameFilter]
+touch(undefined, _Username) ->
+    {error, not_found};
+touch(_SessionId, undefined) ->
+    {error, not_found};
+touch(SessionId, Username) ->
+    Now = os:system_time(millisecond),
+    SessionPath = ?KHEPRI_SESSION_PATH(Username, SessionId),
+
+    TxRes = rabbit_khepri:transaction(fun() ->
+        case khepri_tx:get(SessionPath) of
+            {ok, Session} when is_record(Session, session) ->
+                if Session#session.expires_at > Now ->
+                    NewExpiresAt = calculate_expires_at(Session#session.created_at, Now),
+                    NewSession = Session#session{expires_at = NewExpiresAt},
+                    case khepri_tx:put(SessionPath, NewSession) of
+                        ok -> ok;
+                        Err -> khepri_tx:abort(Err)
+                    end;
+                   true ->
+                    khepri_tx:abort(not_found)
+                end;
+            _ ->
+                PathPattern = ?KHEPRI_SESSION_ID_PATTERN(SessionId),
+                case khepri_tx:get_many(PathPattern) of
+                    {ok, Map} when map_size(Map) > 0 ->
+                        ActiveOther = maps:fold(fun(_P, S, Acc) ->
+                            if is_record(S, session) andalso S#session.expires_at > Now ->
+                                   true;
+                               true ->
+                                   Acc
+                            end
+                        end, false, Map),
+                        if ActiveOther ->
+                            khepri_tx:abort(forbidden);
+                           true ->
+                            khepri_tx:abort(not_found)
+                        end;
+                    _ ->
+                        khepri_tx:abort(not_found)
+                end
+        end
+    end),
+    case TxRes of
+        {ok, ok} -> ok;
+        {error, forbidden} -> {error, forbidden};
+        {error, not_found} -> {error, not_found};
+        {error, Reason} -> {error, Reason}
+    end.
+
+delete_session(undefined) ->
+    {error, not_found};
+delete_session(SessionId) ->
+    delete_session(SessionId, undefined).
+
+delete_session(undefined, _Username) ->
+    {error, not_found};
+delete_session(SessionId, undefined) ->
+    PathPattern = ?KHEPRI_SESSION_ID_PATTERN(SessionId),
+    case rabbit_khepri:get_many(PathPattern) of
+        {ok, Map} when map_size(Map) > 0 ->
+            lists:foreach(fun(Path) ->
+                _ = rabbit_khepri:delete(Path)
+            end, maps:keys(Map)),
+            ok;
+        _ ->
+            {error, not_found}
+    end;
+delete_session(SessionId, Username) ->
+    SessionPath = ?KHEPRI_SESSION_PATH(Username, SessionId),
+    case rabbit_khepri:get(SessionPath) of
+        {ok, Session} when is_record(Session, session) ->
+            _ = rabbit_khepri:delete(SessionPath),
+            ok;
+        _ ->
+            PathPattern = ?KHEPRI_SESSION_ID_PATTERN(SessionId),
+            case rabbit_khepri:get_many(PathPattern) of
+                {ok, Map} when map_size(Map) > 0 ->
+                    {error, forbidden};
+                _ ->
+                    {error, not_found}
+            end
+    end.
+
+list_sessions(Page, PageSize, UsernameFilter) ->
+    PathPattern = case UsernameFilter of
+        undefined -> ?KHEPRI_ALL_SESSIONS_PATTERN;
+        _         -> ?KHEPRI_USER_SESSIONS_PATTERN(UsernameFilter)
     end,
-    %% Sort by created_at desc
-    Sorted = lists:sort(fun(S1, S2) -> S1#session.created_at >= S2#session.created_at end, Filtered),
+    Now = os:system_time(millisecond),
+    AllSessions = case rabbit_khepri:get_many(PathPattern) of
+        {ok, Map} ->
+            maps:fold(fun(Path, S, Acc) ->
+                if is_record(S, session) andalso S#session.expires_at > Now ->
+                       [rabbitmq, users, Username, sessions, SessionId] = Path,
+                       [{Username, SessionId, S} | Acc];
+                   true ->
+                       Acc
+                end
+            end, [], Map);
+        _ ->
+            []
+    end,
+    Sorted = lists:sort(fun({_U1, _Id1, S1}, {_U2, _Id2, S2}) -> S1#session.created_at >= S2#session.created_at end, AllSessions),
     TotalCount = length(Sorted),
     Start = (Page - 1) * PageSize + 1,
     Items = if
         Start > TotalCount -> [];
         true -> lists:sublist(Sorted, Start, PageSize)
     end,
-    Result = #{
-        items => [session_to_map(S) || S <- Items],
+    #{
+        items => [session_to_map(Username, SessionId, S) || {Username, SessionId, S} <- Items],
         total_count => TotalCount,
         page => Page,
         page_size => PageSize
-    },
-    {reply, Result, State};
+    }.
 
-handle_call({terminate_session_admin, SessionId}, _From, State) ->
-    case maps:get(SessionId, State#state.local_sessions, undefined) of
-        undefined ->
-            case find_remote_session(SessionId, State#state.remote_sessions) of
-                {ok, RemoteNode, _RemoteSession} ->
-                    case rpc:call(RemoteNode, ?MODULE, terminate_session_admin, [SessionId]) of
-                        ok -> {reply, ok, State};
-                        {error, _} = Err -> {reply, Err, State};
-                        _ -> {reply, {error, not_found}, State}
-                    end;
-                error ->
-                    {reply, {error, not_found}, State}
-            end;
-        _Session ->
-            NewLocalSessions = maps:remove(SessionId, State#state.local_sessions),
-            {reply, ok, State#state{local_sessions = NewLocalSessions}}
-    end;
+terminate_sessions(undefined) ->
+    ok;
+terminate_sessions(Username) ->
+    _ = rabbit_khepri:delete_many(?KHEPRI_USER_SESSIONS_PATTERN(Username)),
+    _ = rabbit_khepri:delete([rabbitmq, users, Username, sessions]),
+    ?LOG_DEBUG("Terminated all sessions for user ~s", [Username]),
+    ok.
+
+%%====================================================================
+%% gen_server callbacks
+%%====================================================================
+
+init([]) ->
+    Timer = erlang:send_after(?SWEEP_INTERVAL, self(), sweep_expired_sessions),
+    {ok, #state{timer = Timer}}.
 
 handle_call(_Request, _From, State) ->
     {reply, ignored, State}.
 
-handle_cast({terminate_sessions_for_user_admin, Username}, State) ->
-    ?LOG_DEBUG("Admin terminated all sessions for user ~s", [Username]),
-    %% Remove local sessions for this user
-    NewLocalSessions = maps:filter(fun(_Id, S) ->
-        S#session.username =/= Username
-    end, State#state.local_sessions),
-    
-    %% Remove remote sessions for this user
-    NewRemoteSessions = maps:map(fun(_Node, Sessions) ->
-        [S || S <- Sessions, S#session.username =/= Username]
-    end, State#state.remote_sessions),
-    
-    %% Broadcast to other nodes to do the same
-    Msg = {terminate_sessions_for_user_admin_local, Username},
-    lists:foreach(fun(N) ->
-        if N =/= node() ->
-            gen_server:cast({?MODULE, N}, Msg);
-        true -> ok
-        end
-    end, nodes()),
-    
-    {noreply, State#state{local_sessions = NewLocalSessions, remote_sessions = NewRemoteSessions}};
-
-handle_cast({terminate_sessions_for_user_admin_local, Username}, State) ->
-    %% Remove local sessions for this user (received from broadcast)
-    NewLocalSessions = maps:filter(fun(_Id, S) ->
-        S#session.username =/= Username
-    end, State#state.local_sessions),
-    
-    %% Remove remote sessions for this user
-    NewRemoteSessions = maps:map(fun(_Node, Sessions) ->
-        [S || S <- Sessions, S#session.username =/= Username]
-    end, State#state.remote_sessions),
-    
-    {noreply, State#state{local_sessions = NewLocalSessions, remote_sessions = NewRemoteSessions}};
-
-handle_cast({delete_session, SessionId}, State) ->
-    %% Attempt to delete local. If not local, forward to remote.
-    case maps:is_key(SessionId, State#state.local_sessions) of
-        true ->
-            ?LOG_DEBUG("Deleted session ~s", [SessionId]),
-            NewLocalSessions = maps:remove(SessionId, State#state.local_sessions),
-            {noreply, State#state{local_sessions = NewLocalSessions}};
-        false ->
-            case find_remote_session(SessionId, State#state.remote_sessions) of
-                {ok, RemoteNode, _} ->
-                    gen_server:cast({?MODULE, RemoteNode}, {delete_session, SessionId}),
-                    {noreply, State};
-                error ->
-                    {noreply, State}
-            end
-    end;
-
-handle_cast({session_summary, RemoteNode, RemoteSessionsList}, State) ->
-    NewRemoteSessions = maps:put(RemoteNode, RemoteSessionsList, State#state.remote_sessions),
-    State1 = State#state{remote_sessions = NewRemoteSessions},
-    State2 = resolve_conflicts(State1),
-    {noreply, State2};
-
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
-handle_info(broadcast_and_cleanup, State) ->
-    Now = os:system_time(millisecond),
-    
-    %% Cleanup local
-    LocalSessions = State#state.local_sessions,
-    LocalSessions1 = maps:filter(fun(_Id, S) -> 
-        (S#session.expires_at > Now) andalso (S#session.heartbeat_expires_at > Now) 
-    end, LocalSessions),
-    
-    %% Cleanup remote
-    RemoteSessions = State#state.remote_sessions,
-    RemoteSessions1 = maps:map(fun(_Node, SessionsList) ->
-        [S || S <- SessionsList, (S#session.expires_at > Now) andalso (S#session.heartbeat_expires_at > Now)]
-    end, RemoteSessions),
-    
-    %% Also cleanup dead nodes
-    ActiveNodes = nodes(),
-    RemoteSessions2 = maps:filter(fun(Node, _List) -> lists:member(Node, ActiveNodes) end, RemoteSessions1),
-    
-    State1 = State#state{local_sessions = LocalSessions1, remote_sessions = RemoteSessions2},
-    
-    %% Broadcast
-    LocalSessionsList = maps:values(LocalSessions1),
-    Msg = {session_summary, node(), LocalSessionsList},
-    lists:foreach(fun(N) ->
-        gen_server:cast({?MODULE, N}, Msg)
-    end, ActiveNodes),
-    
-    Timer = erlang:send_after(?BROADCAST_INTERVAL, self(), broadcast_and_cleanup),
-    {noreply, State1#state{timer = Timer}};
+handle_info(sweep_expired_sessions, State) ->
+    case ra_leaderboard:lookup_leader(rabbit_khepri:get_store_id()) of
+        {_, Node} when Node == node() ->
+            case sweep_expired_sessions_in_khepri() of
+                0 -> ok;
+                Count -> ?LOG_INFO("Swept ~b expired Management UI session(s)", [Count])
+            end;
+        _ ->
+            ok
+    end,
+    Timer = erlang:send_after(?SWEEP_INTERVAL, self(), sweep_expired_sessions),
+    {noreply, State#state{timer = Timer}};
 
 handle_info(_Info, State) ->
     {noreply, State}.
@@ -313,93 +256,50 @@ code_change(_OldVsn, State, _Extra) ->
 %% Internal Functions
 %%====================================================================
 
+sweep_expired_sessions_in_khepri() ->
+    Now = os:system_time(millisecond),
+    PathPattern = ?KHEPRI_ALL_SESSIONS_PATTERN,
+    case rabbit_khepri:get_many(PathPattern) of
+        {ok, Map} when map_size(Map) > 0 ->
+            ExpiredPaths = maps:fold(fun(Path, S, Acc) ->
+                if is_record(S, session) andalso Now > S#session.expires_at ->
+                       [Path | Acc];
+                   true ->
+                       Acc
+                end
+            end, [], Map),
+            case ExpiredPaths of
+                [] ->
+                    0;
+                _ ->
+                    lists:foreach(fun(Path) ->
+                        _ = rabbit_khepri:delete(Path)
+                    end, ExpiredPaths),
+                    length(ExpiredPaths)
+            end;
+        _ ->
+            0
+    end.
+
+calculate_expires_at(Now) ->
+    calculate_expires_at(Now, Now).
+
+calculate_expires_at(CreatedAt, Now) ->
+    min(CreatedAt + session_timeout_ms(), Now + heartbeat_timeout_ms()).
+
 session_timeout_ms() ->
-    %% configured in minutes, convert to ms
     application:get_env(rabbitmq_management, login_session_timeout, 480) * 60 * 1000.
 
 heartbeat_timeout_ms() ->
     Settings = rabbit_mgmt_features:get_sessions_settings(),
     HeartbeatIntervalSec = proplists:get_value(heartbeat_interval, Settings, 30),
-    %% Allow 2 missed heartbeats (so 3 intervals total)
-    HeartbeatIntervalSec * 3 * 1000.
+    HeartbeatIntervalSec * 2 * 1000.
 
-count_sessions_for_user(Username, State) ->
-    LocalCount = maps:fold(fun(_Id, S, Acc) ->
-        if S#session.username == Username -> Acc + 1; true -> Acc end
-    end, 0, State#state.local_sessions),
-    RemoteCount = maps:fold(fun(_Node, Sessions, Acc) ->
-        Acc + length([S || S <- Sessions, S#session.username == Username])
-    end, 0, State#state.remote_sessions),
-    LocalCount + RemoteCount.
-
-all_sessions(State) ->
-    Local = maps:values(State#state.local_sessions),
-    Remote = lists:flatmap(fun(S) -> S end, maps:values(State#state.remote_sessions)),
-    Local ++ Remote.
-
-find_remote_session(SessionId, RemoteSessions) ->
-    Res = maps:fold(fun(Node, Sessions, Acc) ->
-        case Acc of
-            error ->
-                case lists:keyfind(SessionId, #session.id, Sessions) of
-                    false -> error;
-                    Session -> {ok, Node, Session}
-                end;
-            _ -> Acc
-        end
-    end, error, RemoteSessions),
-    Res.
-
-session_to_map(S) ->
+session_to_map(Username, SessionId, S) ->
     #{
-        id => S#session.id,
-        username => S#session.username,
-        node => S#session.node,
+        id => SessionId,
+        username => Username,
         created_at => S#session.created_at,
         expires_at => S#session.expires_at,
-        heartbeat_expires_at => S#session.heartbeat_expires_at,
         metadata => S#session.metadata
     }.
-
-resolve_conflicts(State) ->
-    Settings = rabbit_mgmt_features:get_sessions_settings(),
-    MaxConcurrent = proplists:get_value(max_concurrent, Settings, 1),
-    AllSessions = all_sessions(State),
-    
-    %% Group by username
-    UserMap = lists:foldl(fun(S, Acc) ->
-        U = S#session.username,
-        List = maps:get(U, Acc, []),
-        maps:put(U, [S | List], Acc)
-    end, #{}, AllSessions),
-    
-    %% Find which local sessions need to be killed
-    KillIds = maps:fold(fun(_User, Sessions, AccKill) ->
-        if
-            length(Sessions) > MaxConcurrent ->
-                %% Sort to find which ones to kill. We keep the oldest (smallest created_at).
-                %% If created_at ties, node name resolves it.
-                %% We want to kill the *newest* sessions to get down to MaxConcurrent.
-                %% So sort descending by created_at (newest first). 
-                %% If tie, larger node name first (it gets killed).
-                Sorted = lists:sort(fun(S1, S2) ->
-                    if S1#session.created_at == S2#session.created_at ->
-                        S1#session.node >= S2#session.node;
-                    true ->
-                        S1#session.created_at > S2#session.created_at
-                    end
-                end, Sessions),
-                
-                %% The first (length(Sessions) - MaxConcurrent) elements are the ones to kill
-                ToKill = lists:sublist(Sorted, length(Sessions) - MaxConcurrent),
-                %% We only kill our own local sessions
-                MyNode = node(),
-                LocalToKill = [S#session.id || S <- ToKill, S#session.node == MyNode],
-                AccKill ++ LocalToKill;
-            true ->
-                AccKill
-        end
-    end, [], UserMap),
-    
-    NewLocalSessions = lists:foldl(fun(Id, Acc) -> maps:remove(Id, Acc) end, State#state.local_sessions, KillIds),
-    State#state{local_sessions = NewLocalSessions}.
