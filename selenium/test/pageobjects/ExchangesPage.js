@@ -9,7 +9,7 @@ const PAGING_SECTION = By.css('div#exchanges-paging-section')
 const PAGING_SECTION_HEADER = By.css('div#exchanges-paging-section h2')
 const ADD_NEW_EXCHANGE_SECTION = By.css('div#add-new-exchange')
 const FORM_EXCHANGE_NAME = By.css('div#add-new-exchange form input[name="name"]')
-const FORM_EXCHANGE_TYPE = By.css('div#add-new-exchange form select[name="exchangetype"]')
+const FORM_EXCHANGE_TYPE = By.css('div#add-new-exchange form select[name="type"]')
 const ADD_BUTTON = By.css('div#add-new-exchange form input[type=submit]')
 
 const TABLE_SECTION = By.css('div#exchanges-table-section table')
@@ -47,13 +47,6 @@ module.exports = class ExchangesPage extends BasePage {
   }
   async selectExchangeType(type) {
     await this.selectOptionByValue(FORM_EXCHANGE_TYPE, type)
-    // Selenium's native <option> click does not reliably fire the exchange
-    // type select's inline onchange="select_exchange_type(exchangetype)" in
-    // headless Chrome, so the argument-links table can be left showing the
-    // previous type. Call the handler directly to force the update.
-    await this.driver.executeScript(function(selector) {
-      select_exchange_type(document.querySelector(selector))
-    }, FORM_EXCHANGE_TYPE.value)
     return doUntil(
       async () => {
         const sel = await this.driver.findElement(FORM_EXCHANGE_TYPE)
