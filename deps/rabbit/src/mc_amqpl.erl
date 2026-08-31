@@ -790,7 +790,14 @@ essential_properties(#content{} = C) ->
                priority = Priority,
                timestamp = TimestampRaw,
                headers = Headers} = Props = C#content.properties,
-    {ok, MsgTTL} = rabbit_basic:parse_expiration(Props),
+    %% Not every publisher goes through the AMQP 0.9.1 channel, which rejects an
+    %% invalid expiration at publish time.
+    MsgTTL = case rabbit_basic:parse_expiration(Props) of
+                 {ok, Ttl} ->
+                     Ttl;
+                 {error, _} ->
+                     undefined
+             end,
     Timestamp = case TimestampRaw of
                     undefined ->
                         undefined;

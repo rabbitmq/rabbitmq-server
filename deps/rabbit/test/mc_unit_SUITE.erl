@@ -44,6 +44,7 @@ all_tests() ->
      amqp_amqpl_amqp_bodies,
      amqpl_amqp10_type_body_shapes,
      amqpl_amqp10_type_invalid_payload,
+     amqpl_invalid_expiration,
      amqp_x_headers,
      amqpl_x_headers
     ].
@@ -824,6 +825,24 @@ amqpl_amqp10_type_invalid_payload(_Config) ->
     [?assertEqual([#'v1_0.data'{content = Payload}],
                   amqp10_type_body_sections(Payload))
      || Payload <- Payloads],
+    ok.
+
+%% The AMQP 0.9.1 channel rejects an invalid expiration at publish time, but
+%% other protocols build a #content{} and initialise it directly.
+amqpl_invalid_expiration(_Config) ->
+    Ex = #resource{virtual_host = <<"/">>, kind = exchange, name = <<"ex">>},
+    Init = fun(Expiration) ->
+                   Content = #content{class_id = 60,
+                                      properties = #'P_basic'{expiration = Expiration},
+                                      properties_bin = none,
+                                      payload_fragments_rev = [<<"data">>]},
+                   {ok, Msg} = mc_amqpl:message(Ex, <<"rkey">>, Content, #{}),
+                   mc:ttl(Msg)
+           end,
+    ?assertEqual(60000, Init(<<"60000">>)),
+    [?assertEqual(undefined, Init(Expiration))
+     || Expiration <- [<<"abc">>, <<"10x">>, <<"-1">>, <<>>,
+                       <<"99999999999999999999999">>]],
     ok.
 
 amqp_x_headers(_Config) ->
