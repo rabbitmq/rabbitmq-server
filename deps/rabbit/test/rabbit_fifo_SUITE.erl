@@ -4480,6 +4480,36 @@ convert_v7_to_v9_test(Config) ->
                  maps:get(Cid1, Consumers)),
     ok.
 
+versioned_query_resolves_frozen_module_test(Config) ->
+    %% A queue whose effective machine version is still 8 holds a v8-shaped
+    %% state, which the v9 query functions cannot match. local_query/3
+    %% catches that and retries via versioned_query/3, which must resolve
+    %% the frozen module from the version reported in the query context.
+    ConfigV8 = [{machine_version, 8} | Config],
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B)},
+    S0 = rabbit_fifo_v8:init(Conf),
+    Cid = {?FUNCTION_NAME_B, self()},
+    {S1, _, _} = rabbit_fifo_v8:apply(
+                   meta(ConfigV8, 1, 0, {notify, 1, self()}),
+                   rabbit_fifo_v8:make_enqueue(self(), 1, msg1), S0),
+    {S2, {ok, _}, _} =
+        rabbit_fifo_v8:apply(
+          meta(ConfigV8, 2, 100),
+          rabbit_fifo_v8:make_checkout(Cid, {auto, {simple_prefetch, 1}}, #{}),
+          S1),
+
+    %% the v9 module cannot read a v8 state, and neither can v7, which is
+    %% what local_query/3 used to fall back to unconditionally
+    ?assertError(function_clause, rabbit_fifo:query_consumers(S2)),
+    ?assertError(function_clause, rabbit_fifo_v7:query_consumers(S2)),
+
+    %% resolving the module from the context does read it
+    Ctx = #{index => 2, term => 1, machine_version => 8},
+    Consumers = rabbit_fifo_client:versioned_query(query_consumers, Ctx, S2),
+    ?assertEqual(1, map_size(Consumers)),
+    ok.
+
 convert_v8_to_v9_deferred_test(Config) ->
     %% v8's #delayed.deferred map stored a single delayed_key() per token
     %% v9 allows a single token to address multiple messages.
