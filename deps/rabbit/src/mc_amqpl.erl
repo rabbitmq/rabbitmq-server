@@ -350,6 +350,25 @@ convert_to(mc_amqp, #content{payload_fragments_rev = PFR} = Content, Env) ->
                        ttl = wrap(uint, Ttl),
                        %% TODO: check Priority is a ubyte?
                        priority = wrap(ubyte, Priority)},
+
+    %% x- headers are stored as message annotations
+    MAC0 = lists:filtermap(
+             fun({<<"x-", _/binary>> = K, T, V}) ->
+                     %% All message annotation keys need to be either a symbol or ulong
+                     %% but 0.9.1 field-table names are always strings.
+                     {true, {{symbol, K}, from_091(T, V)}};
+                ({<<"CC">>, T = array, V}) ->
+                     %% Special case the 0.9.1 CC header into 1.0 message annotations because
+                     %% 1.0 application properties must not contain list or array values.
+                     {true, {{symbol, <<"x-cc">>}, from_091(T, V)}};
+                (_) ->
+                     false
+             end, Headers),
+    %% `type' doesn't have a direct equivalent so adding as
+    %% a message annotation here
+    MAC = map_add(symbol, <<"x-basic-type">>, utf8, Type, MAC0),
+    MA = #'v1_0.message_annotations'{content = MAC},
+
     ReplyTo = case ReplyTo0 of
                   undefined ->
                       undefined;
@@ -372,7 +391,6 @@ convert_to(mc_amqp, #content{payload_fragments_rev = PFR} = Content, Env) ->
     P = #'v1_0.properties'{message_id = MsgId,
                            user_id = wrap(binary, UserId),
                            to = undefined,
-                           % subject = wrap(utf8, RKey),
                            reply_to = ReplyTo,
                            correlation_id = CorrId,
                            content_type = wrap(symbol, ContentType),
@@ -380,39 +398,20 @@ convert_to(mc_amqp, #content{payload_fragments_rev = PFR} = Content, Env) ->
                            creation_time = wrap(timestamp, ConvertedTs),
                            %% this is semantically not the best idea but you
                            %% could imagine these having similar behaviour
-                           group_id = wrap(utf8, AppId)
-                          },
+                           group_id = wrap(utf8, AppId)},
 
     %% non x- headers are stored as application properties when the type allows
-    APC = [{wrap(utf8, K), from_091(T, V)}
-           || {K, T, V} <- Headers,
-              supported_header_value_type(T),
-              not mc_util:is_x_header(K)],
+    APC = [{wrap(utf8, K), from_091(T, V)} || {K, T, V} <- Headers,
+                                              supported_header_value_type(T),
+                                              not mc_util:is_x_header(K)],
     AP = #'v1_0.application_properties'{content = APC},
 
-    %% x- headers are stored as message annotations
-    MAC0 = lists:filtermap(
-             fun({<<"x-", _/binary>> = K, T, V}) ->
-                     %% All message annotation keys need to be either a symbol or ulong
-                     %% but 0.9.1 field-table names are always strings.
-                     {true, {{symbol, K}, from_091(T, V)}};
-                ({<<"CC">>, T = array, V}) ->
-                     %% Special case the 0.9.1 CC header into 1.0 message annotations because
-                     %% 1.0 application properties must not contain list or array values.
-                     {true, {{symbol, <<"x-cc">>}, from_091(T, V)}};
-                (_) ->
-                     false
-             end, Headers),
-    %% `type' doesn't have a direct equivalent so adding as
-    %% a message annotation here
-    MAC = map_add(symbol, <<"x-basic-type">>, utf8, Type, MAC0),
-    MA = #'v1_0.message_annotations'{content = MAC},
-
+    PayloadFragments = lists:reverse(PFR),
     BodySections = case Type of
                        ?AMQP10_TYPE ->
-                           amqp10_body_sections(lists:reverse(PFR));
+                           amqp10_body_sections(PayloadFragments);
                        _ ->
-                           [#'v1_0.data'{content = lists:reverse(PFR)}]
+                           [#'v1_0.data'{content = PayloadFragments}]
                    end,
 
     Sections = [H, MA, P, AP | BodySections],
@@ -790,14 +789,12 @@ essential_properties(#content{} = C) ->
                priority = Priority,
                timestamp = TimestampRaw,
                headers = Headers} = Props = C#content.properties,
-    %% Not every publisher goes through the AMQP 0.9.1 channel, which rejects an
-    %% invalid expiration at publish time.
-    MsgTTL = case rabbit_basic:parse_expiration(Props) of
-                 {ok, Ttl} ->
-                     Ttl;
-                 {error, _} ->
-                     undefined
-             end,
+    TTL = case rabbit_basic:parse_expiration(Props) of
+              {ok, Exp} ->
+                  Exp;
+              {error, _} ->
+                  undefined
+          end,
     Timestamp = case TimestampRaw of
                     undefined ->
                         undefined;
@@ -815,7 +812,7 @@ essential_properties(#content{} = C) ->
     maps_put_truthy(
       ?ANN_PRIORITY, Priority,
       maps_put_truthy(
-        ttl, MsgTTL,
+        ttl, TTL,
         maps_put_truthy(
           ?ANN_TIMESTAMP, Timestamp,
           maps_put_falsy(
@@ -836,33 +833,20 @@ is_internal_header(<<"x-death">>) ->
 is_internal_header(_) ->
     false.
 
-%% `type' is an ordinary AMQP 0.9.1 property that any publisher can set, so a
-%% payload claiming to be AMQP 1.0 encoded may be neither well formed nor a
-%% message body. Treat the type as a hint and fall back to an opaque data
-%% section, which is what the payload would have become had the type not
-%% claimed otherwise.
 amqp10_body_sections(Payload) ->
-    Fallback = [#'v1_0.data'{content = Payload}],
     try amqp10_framing:decode_bin(iolist_to_binary(Payload)) of
         Sections ->
             case is_body_sections(Sections) of
                 true ->
                     Sections;
                 false ->
-                    Fallback
+                    [#'v1_0.data'{content = Payload}]
             end
-    catch throw:_ ->
-              Fallback;
-          error:_ ->
-              Fallback
+    catch _:_ ->
+              [#'v1_0.data'{content = Payload}]
     end.
 
-%% A body consists of one or more data, one or more amqp-sequence, or a single
-%% amqp-value section, optionally followed by a footer [§3.2]. RabbitMQ 3.13 and
-%% earlier allowed any number of each kind in any permutation, so the order and
-%% cardinality within the body itself are not validated here.
-is_body_sections([Section | Rest])
-  when ?IS_BODY_SECTION(Section) ->
+is_body_sections([Section | Rest]) when ?IS_BODY_SECTION(Section) ->
     is_body_sections_tail(Rest);
 is_body_sections(_) ->
     false.
