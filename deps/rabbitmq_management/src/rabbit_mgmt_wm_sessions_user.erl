@@ -26,18 +26,43 @@ is_authorized(ReqData, Context) ->
 
 to_json(ReqData, Context) ->
     Username = cowboy_req:binding(username, ReqData),
-    
-    PageStr = cowboy_req:match_qs([{page, [], <<"1">>}], ReqData),
-    PageSizeStr = cowboy_req:match_qs([{page_size, [], <<"100">>}], ReqData),
-    
-    Page = binary_to_integer(maps:get(page, PageStr)),
-    PageSize = binary_to_integer(maps:get(page_size, PageSizeStr)),
-
-    Result = rabbit_mgmt_sessions:list_sessions(Page, PageSize, Username),
-    
-    rabbit_mgmt_util:reply(Result, ReqData, Context).
+    case parse_pagination_params(ReqData) of
+        {ok, Page, PageSize} ->
+            Result = rabbit_mgmt_sessions:list_sessions(Page, PageSize, Username),
+            rabbit_mgmt_util:reply(Result, ReqData, Context);
+        {error, Reason} ->
+            rabbit_mgmt_util:bad_request(Reason, ReqData, Context)
+    end.
 
 delete_resource(ReqData, Context) ->
     Username = cowboy_req:binding(username, ReqData),
-    rabbit_mgmt_sessions:terminate_sessions_for_user_admin(Username),
-    {true, ReqData, Context}.
+    case cowboy_req:binding(session, ReqData) of
+        undefined ->
+            rabbit_mgmt_sessions:terminate_sessions(Username),
+            {true, ReqData, Context};
+        SessionId ->
+            case rabbit_mgmt_sessions:delete_session(SessionId, Username) of
+                ok ->
+                    {true, ReqData, Context};
+                {error, not_found} ->
+                    {false, ReqData, Context};
+                {error, forbidden} ->
+                    rabbit_web_dispatch_access_control:halt_response(403, forbidden, <<"session_belongs_to_another_user">>, ReqData, Context)
+            end
+    end.
+
+%% Internal
+
+parse_pagination_params(ReqData) ->
+    QS = cowboy_req:match_qs([{page, [], <<"1">>}, {page_size, [], <<"100">>}], ReqData),
+    try
+        Page = binary_to_integer(maps:get(page, QS)),
+        PageSize = binary_to_integer(maps:get(page_size, QS)),
+        if Page >= 1 andalso PageSize >= 1 andalso PageSize =< 500 ->
+                {ok, Page, PageSize};
+           true ->
+                {error, <<"Invalid page or page_size parameter: page and page_size must be positive integers with page_size <= 500">>}
+        end
+    catch error:badarg ->
+        {error, <<"Invalid page or page_size parameter: non-integer value provided">>}
+    end.
