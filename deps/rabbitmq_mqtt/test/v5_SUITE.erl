@@ -361,6 +361,8 @@ message_expiry_retained_message(Config) ->
                             <<"m2">>, [{retain, true}, {qos, 1}]),
     {ok, _} = emqtt:publish(Pub, <<"topic3">>, #{'Message-Expiry-Interval' => 100},
                             <<"m3.1">>, [{retain, true}, {qos, 1}]),
+    %% A value close to the timestamp the retainer records for the next publish.
+    Start = os:system_time(second),
     {ok, _} = emqtt:publish(Pub, <<"topic4">>, #{'Message-Expiry-Interval' => 100},
                             <<"m4">>, [{retain, true}, {qos, 1}]),
 
@@ -370,9 +372,11 @@ message_expiry_retained_message(Config) ->
                             <<>>, [{retain, true}, {qos, 1}]),
     {ok, _} = emqtt:publish(Pub, <<"topic3">>, #{},
                             <<"m3.2">>, [{retain, true}, {qos, 1}]),
-    timer:sleep(2001),
+    %% The retainer starts the expiry timer when it processes the retain cast,
+    %% which lands after the PUBACK the publisher waits for.
+    timer:sleep(timer:seconds(4)),
     %% Expectations:
-    %% topic1 expired because 2 seconds elapsed
+    %% topic1 expired because more than 2 seconds elapsed
     %% topic2 is not retained because it got deleted
     %% topic3 is retained because its new message does not have an Expiry-Interval set
     %% topic4 is retained because 100 seconds have not elapsed
@@ -395,7 +399,8 @@ message_expiry_retained_message(Config) ->
                         topic := <<"topic4">>,
                         payload := <<"m4">>,
                         properties := #{'Message-Expiry-Interval' := MEI}}} ->
-                assert_message_expiry_interval(100 - 2, MEI)
+                ElapsedSeconds = os:system_time(second) - Start,
+                assert_message_expiry_interval(100 - ElapsedSeconds, MEI)
     after ?TIMEOUT -> ct:fail("did not receive topic4")
     end,
     assert_nothing_received(),

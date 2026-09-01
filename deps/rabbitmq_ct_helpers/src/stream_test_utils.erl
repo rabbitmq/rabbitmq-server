@@ -15,6 +15,9 @@
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
 
 -define(RESPONSE_CODE_OK, 1).
+%% The first command against a freshly booted cluster waits for the stream
+%% coordinator to elect a leader.
+-define(RECV_TIMEOUT, 30_000).
 
 connect(Config, Node) ->
     StreamPort = rabbit_ct_broker_helpers:get_node_config(Config, Node, tcp_port_stream),
@@ -190,7 +193,7 @@ receive_stream_commands(_Transport, _Sock, C0, 0) ->
 receive_stream_commands(Transport, Sock, C0, N) ->
     case rabbit_stream_core:next_command(C0) of
         empty ->
-            case Transport:recv(Sock, 0, 5000) of
+            case Transport:recv(Sock, 0, ?RECV_TIMEOUT) of
                 {ok, Data} ->
                     C1 = rabbit_stream_core:incoming_data(Data, C0),
                     receive_stream_commands(Transport, Sock, C1, N - 1);
