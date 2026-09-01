@@ -2273,6 +2273,10 @@ maybe_enqueue(RaftIdx, Ts, From, MsgSeqNo, RawMsg,
                                          },
                     {ok, State, Effects0};
                 DeliveryTime ->
+                    %% A deferral token is never registered on first enqueue:
+                    %% tokens are established only by a consumer parking a
+                    %% message via the MODIFIED outcome, so an
+                    %% x-opt-deferral-token set at publish time is ignored here.
                     Delayed = delayed_in(DeliveryTime, RaftIdx,
                                          Msg, undefined,
                                          State0#?STATE.delayed),
