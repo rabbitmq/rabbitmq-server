@@ -19,8 +19,9 @@
 %%                  {"[::1]",     5672}]},
 
 %% Delay in seconds before client connection listeners are started.
-%% This can be useful in environments where starting listeners immediately
-%% results in connection errors if the metadata store has not fully synced.
+%% This can be useful in environments where applications may begin connecting
+%% to the node immediately when the port is enabled, even if some parts of
+%% the node are still booting concurrently.
 {mapping, "listeners.startup_delay", "rabbit.listeners_startup_delay", [
     {validators, ["non_negative_integer"]},
     {datatype, integer}

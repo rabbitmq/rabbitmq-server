@@ -1082,9 +1082,6 @@ do_run_postlaunch_phase(Plugins) ->
 
         %% Start listeners after all plugins have been enabled,
         %% see rabbitmq/rabbitmq-server#2405.
-
-        %% Delay listener startup if configured. This is useful in certain environments
-        %% to allow the metadata store to fully sync before accepting client connections.
         case application:get_env(rabbit, listeners_startup_delay, 0) of
             Delay when is_integer(Delay), Delay > 0 ->
                 ?LOG_INFO("Delaying startup of client connection listeners by ~b seconds", [Delay]),
