@@ -5,6 +5,8 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
+-define(AWAIT_EVENTS_TIMEOUT, 30_000).
+
 -export([all_connection_pids/1,
          publish_qos1_timeout/4,
          sync_publish_result/3,
@@ -19,6 +21,8 @@
          start_client/4,
          get_events/1,
          get_events/2,
+         await_events/2,
+         await_events/3,
          assert_event_type/2,
          assert_event_prop/2,
          assert_message_expiry_interval/2,
@@ -91,14 +95,40 @@ get_global_counters(Config, Proto, Node, Labels) ->
 
 get_events(Node) ->
     timer:sleep(500), %% events are sent and processed asynchronously
+    take_events(Node).
+
+get_events(Node, Type) ->
+    filter_events(Type, get_events(Node)).
+
+await_events(Node, N) ->
+    await_events(Node, N, ?AWAIT_EVENTS_TIMEOUT, [], fun(Events) -> Events end).
+
+await_events(Node, Type, N) ->
+    await_events(Node, N, ?AWAIT_EVENTS_TIMEOUT, [],
+                 fun(Events) -> filter_events(Type, Events) end).
+
+%% `take_state/1` drains the recorder, therefore we need to accumulate
+%% the values across ticks/calls
+await_events(Node, N, Timeout, Acc0, Filter) ->
+    case Acc0 ++ Filter(take_events(Node)) of
+        Acc when length(Acc) >= N ->
+            Acc;
+        Acc when Timeout =< 0 ->
+            ct:fail({not_enough_events, Node, N, Acc});
+        Acc ->
+            timer:sleep(100),
+            await_events(Node, N, Timeout - 100, Acc, Filter)
+    end.
+
+take_events(Node) ->
     Result = gen_event:call({rabbit_event, Node}, event_recorder, take_state),
     ?assert(is_list(Result)),
     Result.
 
-get_events(Node, Type) ->
+filter_events(Type, Events) ->
     lists:filter(fun(#event{type = T}) ->
-                         T == Type
-                 end, get_events(Node)).
+                         T =:= Type
+                 end, Events).
 
 assert_event_type(ExpectedType, #event{type = ActualType}) ->
     ?assertEqual(ExpectedType, ActualType).
