@@ -198,7 +198,7 @@
           credit :: rabbit_queue_type:credit(),
           drain :: boolean(),
           echo :: boolean(),
-          tokens :: [binary()]
+          tokens = [] :: [binary()]
          }).
 
 %% Link flow control state for link between client (receiver) and us (sender).
