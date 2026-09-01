@@ -1293,18 +1293,21 @@ vhost_connection_limit(Config) ->
     %% tracking removes registered connections asynchronously.
     ?awaitMatch(0, count_connections_per_vhost(Config), 30000),
     ok = rabbit_ct_broker_helpers:set_vhost_limit(Config, 0, <<"/">>, max_connections, 2),
-    {ok, C1} = connect_anonymous(Config, <<"client1">>),
-    {ok, _} = emqtt:connect(C1),
-    {ok, C2} = connect_anonymous(Config, <<"client2">>),
-    {ok, _} = emqtt:connect(C2),
-    ?awaitMatch(2, count_connections_per_vhost(Config), 30000),
-    {ok, C3} = connect_anonymous(Config, <<"client3">>),
-    ExpectedError = expected_connection_limit_error(Config),
-    unlink(C3),
-    ?assertMatch({error, {ExpectedError, _}}, emqtt:connect(C3)),
-    ok = emqtt:disconnect(C1),
-    ok = emqtt:disconnect(C2),
-    ok = rabbit_ct_broker_helpers:clear_vhost_limit(Config, 0, <<"/">>).
+    try
+        {ok, C1} = connect_anonymous(Config, <<"client1">>),
+        {ok, _} = emqtt:connect(C1),
+        {ok, C2} = connect_anonymous(Config, <<"client2">>),
+        {ok, _} = emqtt:connect(C2),
+        ?awaitMatch(2, count_connections_per_vhost(Config), 30000),
+        {ok, C3} = connect_anonymous(Config, <<"client3">>),
+        ExpectedError = expected_connection_limit_error(Config),
+        unlink(C3),
+        ?assertMatch({error, {ExpectedError, _}}, emqtt:connect(C3)),
+        ok = emqtt:disconnect(C1),
+        ok = emqtt:disconnect(C2)
+    after
+        ok = rabbit_ct_broker_helpers:clear_vhost_limit(Config, 0, <<"/">>)
+    end.
 
 count_connections_per_vhost(Config)  ->
     rabbit_ct_broker_helpers:rpc(

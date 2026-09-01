@@ -361,6 +361,8 @@ message_expiry_retained_message(Config) ->
                             <<"m2">>, [{retain, true}, {qos, 1}]),
     {ok, _} = emqtt:publish(Pub, <<"topic3">>, #{'Message-Expiry-Interval' => 100},
                             <<"m3.1">>, [{retain, true}, {qos, 1}]),
+    %% A value close to the timestamp the retainer records for the next publish.
+    Start = os:system_time(second),
     {ok, _} = emqtt:publish(Pub, <<"topic4">>, #{'Message-Expiry-Interval' => 100},
                             <<"m4">>, [{retain, true}, {qos, 1}]),
     %% A value close to the timestamp the retainer records for the publish
