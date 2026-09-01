@@ -245,6 +245,7 @@ all_tests() ->
      delayed_retry_backoff,
      delayed_retry_explicit_delivery_time,
      delayed_retry_counts_towards_limit,
+     delivery_time_counts_towards_limit,
      delivery_time_on_publish,
      delivery_time_on_publish_amqpl
     ].
@@ -6661,6 +6662,43 @@ delayed_retry_counts_towards_limit(Config) ->
     wait_for_messages_total(Servers, RaName, 3),
     %% Fourth message should be rejected (limit exceeded + overshoot exhausted)
     fail = publish_confirm(Ch, QQ),
+    ok.
+
+delivery_time_counts_towards_limit(Config) ->
+    check_quorum_queues_v9_compat(Config),
+    %% Messages parked by x-opt-delivery-time count towards max-length, and
+    %% drop-head can reach them. Before it could not, so an overshoot made up
+    %% entirely of parked messages left apply/3 spinning and every member of
+    %% the queue hung on the same command.
+    [Server | _] = Servers =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    RaName = ra_name(QQ),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                  {<<"x-max-length">>, long, 1},
+                                  {<<"x-overflow">>, longstr, <<"drop-head">>}])),
+
+    DeliveryTime = erlang:system_time(millisecond) + 3_600_000,
+    Publish = fun() ->
+                      ok = amqp_channel:cast(
+                             Ch,
+                             #'basic.publish'{routing_key = QQ},
+                             #amqp_msg{props = #'P_basic'{
+                                                  headers =
+                                                      [{<<"x-opt-delivery-time">>,
+                                                        long, DeliveryTime}],
+                                                  delivery_mode = 2},
+                                       payload = <<"msg">>})
+              end,
+    [Publish() || _ <- lists:seq(1, 3)],
+    %% The queue settles at the limit rather than hanging. This query goes
+    %% through the Ra server process, so it also proves the machine is still
+    %% applying commands.
+    wait_for_messages_total(Servers, RaName, 1),
+    %% None of them are ready, they are all parked until their delivery time
+    consume_empty(Ch, QQ, false),
     ok.
 
 %% Helper functions
