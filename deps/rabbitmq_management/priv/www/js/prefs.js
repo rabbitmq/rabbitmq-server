@@ -18,6 +18,9 @@ function has_auth_resource() {
 function get_auth_resource() {
   return get_local_pref(AUTH_RESOURCE)
 }
+function clear_auth_resource() {
+  clear_local_pref(AUTH_RESOURCE)
+}
 
 // When auth_scheme is undefined, matches any scheme for backwards compatibility.
 function has_auth_credentials(auth_scheme) {

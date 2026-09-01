@@ -179,7 +179,13 @@ function login(username, password) {
   clear_local_pref(SESSION_EXPIRY);
   var scheme = result.token.type === 'bearer' ? 'Bearer' : 'Basic';
   set_auth(scheme, result.token.value);
-  set_active_auth_provider(providerForToken(result.token));
+  // This is the basic-auth flow, whatever scheme the token uses on the
+  // wire: /login issues a bearer token for basic credentials when
+  // credential encryption is enabled. Drop any oauth resource left over
+  // from an earlier session, so that a later reload does not read this
+  // session as an oauth one.
+  clear_auth_resource();
+  set_active_auth_provider_by_name('basic');
 
   // Fetch initialization data synchronously
   var rawInitData = sync_get('/init');

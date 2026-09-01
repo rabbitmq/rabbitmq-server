@@ -16,14 +16,19 @@ const authProvidersSrc = fs.readFileSync(AUTH_PROVIDERS_JS_PATH, 'utf8');
 // what it calls, not about what those functions themselves do.
 let sandbox;
 let calls;
+let authResourcePresent;
 
-function loadAuthProviders(oauthState) {
+function loadAuthProviders(oauthState, options) {
   calls = [];
+  // set_auth_resource() is called only by the oauth login flow, so its
+  // presence is how a reloaded page tells the two mechanisms apart.
+  authResourcePresent = (options || {}).authResourcePresent === true;
   const record = (name) => (...args) => calls.push([name, ...args]);
 
   sandbox = {
     console,
     oauth: oauthState,
+    has_auth_resource: () => authResourcePresent,
     replace_content: record('replace_content'),
     fmt_escape_html: (s) => s,
     format_error_response: (response, reason) => `formatted:${reason}`,
@@ -70,34 +75,30 @@ describe('registry', () => {
   });
 });
 
-describe('providerForToken', () => {
-  beforeEach(() => { loadAuthProviders({ enabled: true }); });
-
-  it('resolves a bearer token to oauth2', () => {
-    assert.equal(sandbox.providerForToken({ type: 'bearer' }), sandbox.getAuthProvider('oauth2'));
-  });
-
-  it('resolves any other token to basic', () => {
-    assert.equal(sandbox.providerForToken({ type: 'basic' }), sandbox.getAuthProvider('basic'));
-    assert.equal(sandbox.providerForToken(null), sandbox.getAuthProvider('basic'));
-    assert.equal(sandbox.providerForToken(undefined), sandbox.getAuthProvider('basic'));
-  });
-});
-
 describe('active_auth_provider', () => {
-  it('falls back to oauth2 when oauth is configured and no login has happened', () => {
+  it('is the provider the login flow declared, whatever the token looked like', () => {
+    // /login returns a bearer token for a basic login when credential
+    // encryption is on, so the token type must not decide this.
     loadAuthProviders({ enabled: true });
-    assert.equal(sandbox.active_auth_provider(), sandbox.getAuthProvider('oauth2'));
-  });
-
-  it('falls back to basic when oauth is not configured', () => {
-    loadAuthProviders({ enabled: false });
+    sandbox.set_active_auth_provider_by_name('basic');
     assert.equal(sandbox.active_auth_provider(), sandbox.getAuthProvider('basic'));
   });
 
-  it('prefers the provider resolved from the token once one is set', () => {
-    loadAuthProviders({ enabled: true });
-    sandbox.set_active_auth_provider(sandbox.providerForToken({ type: 'basic' }));
+  it('resolves oauth2 after a reload when an oauth resource was stored', () => {
+    loadAuthProviders({ enabled: true }, { authResourcePresent: true });
+    assert.equal(sandbox.active_auth_provider(), sandbox.getAuthProvider('oauth2'));
+  });
+
+  it('resolves basic after a reload when no oauth resource was stored', () => {
+    // A deployment can offer both mechanisms, so configuration cannot say
+    // how this particular user authenticated.
+    loadAuthProviders({ enabled: true }, { authResourcePresent: false });
+    assert.equal(sandbox.active_auth_provider(), sandbox.getAuthProvider('basic'));
+  });
+
+  it('prefers an explicitly declared provider over the stored marker', () => {
+    loadAuthProviders({ enabled: true }, { authResourcePresent: true });
+    sandbox.set_active_auth_provider_by_name('basic');
     assert.equal(sandbox.active_auth_provider(), sandbox.getAuthProvider('basic'));
   });
 });

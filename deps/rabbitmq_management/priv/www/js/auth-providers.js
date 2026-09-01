@@ -28,23 +28,29 @@ function getAuthProvider(name) {
     return authProviderRegistry.get(name);
 }
 
-// A bearer token can only have come from the oauth2 flow; anything else is
-// basic. Mirrors the scheme choice made when the token is stored.
-function providerForToken(token) {
-    var name = (token != null && token.type === 'bearer') ? 'oauth2' : 'basic';
-    return getAuthProvider(name);
-}
-
 function set_active_auth_provider(provider) {
     activeAuthProvider = provider;
 }
 
-// The provider resolved from the current token, or - before any login - the
-// one the deployment is configured for.
+// Declared by whichever login flow ran: only that flow knows which
+// mechanism it is. The token cannot be used to work this out - /login
+// issues a "bearer" token for an ordinary basic-auth login whenever
+// management.credential_encryption_secret is configured, so the token type
+// describes the Authorization scheme to send, not who authenticated.
+function set_active_auth_provider_by_name(name) {
+    set_active_auth_provider(getAuthProvider(name));
+}
+
+// After a page reload there is no fresh login to declare the mechanism, so
+// fall back to the marker the oauth flow persists: set_auth_resource() is
+// called only when an oauth login is initiated, and clear_auth() removes
+// it. Deployment configuration cannot answer this, because a deployment
+// offering both mechanisms says nothing about how THIS user logged in.
 function active_auth_provider() {
     if (activeAuthProvider != null) return activeAuthProvider;
-    var configured = (typeof oauth !== 'undefined' && oauth && oauth.enabled) ? 'oauth2' : 'basic';
-    return getAuthProvider(configured);
+    var authenticatedWithOauth =
+        typeof has_auth_resource === 'function' && has_auth_resource();
+    return getAuthProvider(authenticatedWithOauth ? 'oauth2' : 'basic');
 }
 
 registerAuthProvider('basic', {
