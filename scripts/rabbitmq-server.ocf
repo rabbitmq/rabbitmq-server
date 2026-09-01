@@ -290,7 +290,9 @@ rabbit_start() {
     # RabbitMQ requires high soft and hard limits for NOFILE
     set_limits
 
-    setsid sh -c "$RABBITMQ_SERVER > ${RABBITMQ_LOG_BASE}/startup_log 2> ${RABBITMQ_LOG_BASE}/startup_err" &
+    # Start the broker as the `rabbitmq`
+    # `rabbitmq-script-wrapper` does the same thing.
+    setsid su rabbitmq -s /bin/sh -c "$RABBITMQ_SERVER > ${RABBITMQ_LOG_BASE}/startup_log 2> ${RABBITMQ_LOG_BASE}/startup_err" &
 
     # Wait for the server to come up.
     # Let the CRM/LRM time us out if required
