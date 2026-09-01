@@ -63,11 +63,9 @@ function render_login_oauth(oauth, escaped_messages) {
   let formatData = {};
   formatData.escaped_warnings = [];
   formatData.notAuthorized = false;
-  formatData.resource_servers = oauth.resource_servers;
-  formatData.declared_resource_servers_count = oauth.declared_resource_servers_count;
-  formatData.oauth_disable_basic_auth = oauth.oauth_disable_basic_auth;
-  formatData.strict_auth_mechanism = oauth.strict_auth_mechanism || null;
-  formatData.preferred_auth_mechanism = oauth.preferred_auth_mechanism || null;
+  // What to offer and what to preselect is decided by auth-options.js;
+  // the template only renders that decision.
+  formatData.auth = authOptions(oauth);
 
   if (Array.isArray(escaped_messages)) {
     formatData.escaped_warnings = escaped_messages
@@ -148,7 +146,7 @@ function check_login () {
   } else {
       console.error("Failed to load /api/init");
   }
-  load_ui(user);
+  finish_check_login();
   return true;
 }
 
@@ -181,6 +179,7 @@ function login(username, password) {
   clear_local_pref(SESSION_EXPIRY);
   var scheme = result.token.type === 'bearer' ? 'Bearer' : 'Basic';
   set_auth(scheme, result.token.value);
+  set_active_auth_provider(providerForToken(result.token));
 
   // Fetch initialization data synchronously
   var rawInitData = sync_get('/init');
@@ -194,41 +193,67 @@ function login(username, password) {
   } else {
       console.error("Failed to load /api/init");
   }
-  load_ui(user);
+  finish_check_login();
 
   return true;
 }
 
-function load_ui(user) {
-  set_session_expiry_if_required(user.login_session_timeout);
-  check_version();
-  hide_popup_warn();
-
-  var settings = window.app_settings;
-
-  replace_content('outer', format('layout', {disable_stats: settings.disable_stats}));
-
-  ui_data_model.vhosts = window.app_vhosts;
-  ac.update(user, ui_data_model);
-
-  if (window.app_nodes !== undefined) {
-      ui_data_model.nodes = window.app_nodes;
+// The application-initialisation half of the login sequence, registered as
+// pipeline steps so that a plugin can add to it without editing this file,
+// and so that a failure part-way through unwinds whatever already ran.
+registerInitStep('layout', {
+  run: function(ctx) {
+    set_session_expiry_if_required(ctx.user.login_session_timeout);
+    check_version();
+    hide_popup_warn();
+    replace_content('outer', format('layout', {disable_stats: ctx.settings.disable_stats}));
   }
+});
 
-  // Update EJS templates to use settings
-  ui_data_model.settings = settings;
+registerInitStep('data-model', {
+  run: function(ctx) {
+    ui_data_model.vhosts = window.app_vhosts;
+    ac.update(ctx.user, ui_data_model);
 
-  display.update(settings, ui_data_model);
+    if (window.app_nodes !== undefined) {
+        ui_data_model.nodes = window.app_nodes;
+    }
 
-  setup_global_vars(settings);
+    // Update EJS templates to use settings
+    ui_data_model.settings = ctx.settings;
 
-  setup_constant_events();
-  update_vhosts();
-  update_interval();
-  setup_extensions(function onCompleted() {
-    console.info("All extensions have been loaded. Starting application ..");
-    start_app();
-  });
+    display.update(ctx.settings, ui_data_model);
+    setup_global_vars(ctx.settings);
+  }
+});
+
+registerInitStep('events-and-refresh', {
+  run: function(ctx) {
+    setup_constant_events();
+    update_vhosts();
+    update_interval();
+  }
+});
+
+registerInitStep('extensions', {
+  run: function(ctx) {
+    setup_extensions(function onCompleted() {
+      console.info("All extensions have been loaded. Starting application ..");
+      start_app();
+    });
+  }
+});
+
+// Runs the login gates, then the initialisation steps above. A gate that
+// vetoes - or any step that throws - leaves the user back at the login
+// page with a reason, and anything that already ran is rolled back.
+function finish_check_login() {
+  var res = bootstrap({user: user, settings: window.app_settings},
+                      'Failed to establish session with server');
+  if (res.ok === false) {
+    active_auth_provider().signOut();
+    active_auth_provider().presentError(res.error);
+  }
 }
 
 
@@ -1687,8 +1712,8 @@ function check_bad_response(req, full_page_404, on404fun) {
                 reason == 'Not Found' ||
                 error == 'not_authorised' ||
                 error == 'not_authorized') {
-            if ((req.status == 401 || req.status == 403) && oauth.enabled) {
-                initiate_logout(oauth, reason);
+            if (req.status == 401 || req.status == 403) {
+                active_auth_provider().onUnauthorized(response, reason);
             } else if (on404fun && (typeof on404fun === 'function') && req.status == 404) {
                 on404fun(response);
             } else {
