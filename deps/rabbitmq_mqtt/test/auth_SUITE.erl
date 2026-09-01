@@ -501,6 +501,20 @@ end_per_testcase(T, Config)
     SetupProcess ! stop,
     close_all_connections(Config);
 
+end_per_testcase(T, Config)
+  when T =:= vhost_connection_limit;
+       T =:= vhost_queue_limit ->
+    %% A refused connection kills the linked test case process with an exit
+    %% signal, which runs no cleanup in the test case itself.
+    _ = rabbit_ct_broker_helpers:clear_vhost_limit(Config, 0, <<"/">>),
+    close_all_connections(Config),
+    rabbit_ct_helpers:testcase_finished(Config, T);
+
+end_per_testcase(T = user_connection_limit, Config) ->
+    _ = rabbit_ct_broker_helpers:clear_user_limits(Config, <<"guest">>, max_connections),
+    close_all_connections(Config),
+    rabbit_ct_helpers:testcase_finished(Config, T);
+
 end_per_testcase(Testcase, Config) ->
     close_all_connections(Config),
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
@@ -1279,21 +1293,18 @@ vhost_connection_limit(Config) ->
     %% tracking removes registered connections asynchronously.
     ?awaitMatch(0, count_connections_per_vhost(Config), 30000),
     ok = rabbit_ct_broker_helpers:set_vhost_limit(Config, 0, <<"/">>, max_connections, 2),
-    try
-        {ok, C1} = connect_anonymous(Config, <<"client1">>),
-        {ok, _} = emqtt:connect(C1),
-        {ok, C2} = connect_anonymous(Config, <<"client2">>),
-        {ok, _} = emqtt:connect(C2),
-        ?awaitMatch(2, count_connections_per_vhost(Config), 30000),
-        {ok, C3} = connect_anonymous(Config, <<"client3">>),
-        ExpectedError = expected_connection_limit_error(Config),
-        unlink(C3),
-        ?assertMatch({error, {ExpectedError, _}}, emqtt:connect(C3)),
-        ok = emqtt:disconnect(C1),
-        ok = emqtt:disconnect(C2)
-    after
-        ok = rabbit_ct_broker_helpers:clear_vhost_limit(Config, 0, <<"/">>)
-    end.
+    {ok, C1} = connect_anonymous(Config, <<"client1">>),
+    {ok, _} = emqtt:connect(C1),
+    {ok, C2} = connect_anonymous(Config, <<"client2">>),
+    {ok, _} = emqtt:connect(C2),
+    ?awaitMatch(2, count_connections_per_vhost(Config), 30000),
+    {ok, C3} = connect_anonymous(Config, <<"client3">>),
+    ExpectedError = expected_connection_limit_error(Config),
+    unlink(C3),
+    ?assertMatch({error, {ExpectedError, _}}, emqtt:connect(C3)),
+    ok = emqtt:disconnect(C1),
+    ok = emqtt:disconnect(C2),
+    ok = rabbit_ct_broker_helpers:clear_vhost_limit(Config, 0, <<"/">>).
 
 count_connections_per_vhost(Config)  ->
     rabbit_ct_broker_helpers:rpc(
@@ -1317,6 +1328,9 @@ vhost_queue_limit(Config) ->
     ok = rabbit_ct_broker_helpers:clear_vhost_limit(Config, 0, <<"/">>).
 
 user_connection_limit(Config) ->
+    %% Every client in this suite authenticates as guest, and tracking removes
+    %% registered connections asynchronously.
+    ?awaitMatch(0, count_connections_per_vhost(Config), 30000),
     DefaultUser = <<"guest">>,
     ok = rabbit_ct_broker_helpers:set_user_limits(Config, DefaultUser, #{max_connections => 1}),
     {ok, C1} = connect_anonymous(Config, <<"client1">>),

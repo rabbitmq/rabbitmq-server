@@ -199,10 +199,12 @@ recover_with_message_expiry_interval(Config) ->
     C1 = connect(ClientId, Config),
     {ok, _} = emqtt:publish(C1, <<"topic/1">>,
                             <<"m1">>, [{retain, true}, {qos, 1}]),
-    %% Stay close to the timestamp the retainer records for the next publish.
-    Start = os:system_time(second),
     {ok, _} = emqtt:publish(C1, <<"topic/2">>, #{'Message-Expiry-Interval' => 100},
                             <<"m2">>, [{retain, true}, {qos, 1}]),
+    %% A value close to the timestamp the retainer records for the publish
+    %% above. The retainer handles the retain cast after the PUBACK, so a
+    %% reading taken before the publish can be a full round trip too early.
+    Start = os:system_time(second),
     {ok, _} = emqtt:publish(C1, <<"topic/3">>, #{'Message-Expiry-Interval' => 3},
                             <<"m3">>, [{retain, true}, {qos, 1}]),
     {ok, _} = emqtt:publish(C1, <<"topic/4">>, #{'Message-Expiry-Interval' => 15},

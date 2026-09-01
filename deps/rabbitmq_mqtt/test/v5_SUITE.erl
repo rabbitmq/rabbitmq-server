@@ -361,10 +361,12 @@ message_expiry_retained_message(Config) ->
                             <<"m2">>, [{retain, true}, {qos, 1}]),
     {ok, _} = emqtt:publish(Pub, <<"topic3">>, #{'Message-Expiry-Interval' => 100},
                             <<"m3.1">>, [{retain, true}, {qos, 1}]),
-    %% A value close to the timestamp the retainer records for the next publish.
-    Start = os:system_time(second),
     {ok, _} = emqtt:publish(Pub, <<"topic4">>, #{'Message-Expiry-Interval' => 100},
                             <<"m4">>, [{retain, true}, {qos, 1}]),
+    %% A value close to the timestamp the retainer records for the publish
+    %% above. The retainer handles the retain cast after the PUBACK, so a
+    %% reading taken before the publish can be a full round trip too early.
+    Start = os:system_time(second),
 
     {ok, _} = emqtt:publish(Pub, <<"topic1">>, #{'Message-Expiry-Interval' => 2},
                             <<"m1.2">>, [{retain, true}, {qos, 1}]),
