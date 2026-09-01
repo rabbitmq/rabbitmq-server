@@ -22,6 +22,7 @@
 %% This can be useful in environments where starting listeners immediately
 %% results in connection errors if the metadata store has not fully synced.
 {mapping, "listeners.startup_delay", "rabbit.listeners_startup_delay", [
+    {validators, ["non_negative_integer"]},
     {datatype, integer}
 ]}.
 
