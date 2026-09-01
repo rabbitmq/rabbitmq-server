@@ -1,24 +1,21 @@
 
-$(document).ready(function() {
-  var url_string = window.location.href;
-  var url = new URL(url_string);
-  var error = url.searchParams.get('error');
-  if (error) {
-    // A failed IDP-initiated login returns here with an error. Drop the
-    // pending state markers to avoid a confusing redirect the next successful login.
-    clear_pref("oauth-idp-pending");
-    clear_pref("oauth-return-to");
-    if (oauth.enabled) {
-      renderWarningMessageInLoginStatus(oauth, fmt_escape_html(error));
-    }
-  } else {
-    if (oauth.enabled) {
-      startWithOAuthLogin(oauth);
-    } else {
-      startWithLoginPage();
-      }
+// What happens on page load, as a named function rather than an anonymous
+// callback so that it can be exercised without going through jQuery's
+// ready queue.
+function on_page_load() {
+  // Which login page to show is a question about configuration, not about
+  // who is logged in - nobody is yet.
+  var provider = login_flow_provider();
+
+  // A provider may claim the URL first: the oauth2 one handles the
+  // ?error= it redirects back to itself after a failed IdP-initiated login.
+  if (provider.consumeRedirect(new URL(window.location.href))) {
+    return;
   }
-});
+  provider.startLoginFlow();
+}
+
+$(document).ready(on_page_load);
 
 function startWithLoginPage() {
   replace_content('outer', format('login', {}));

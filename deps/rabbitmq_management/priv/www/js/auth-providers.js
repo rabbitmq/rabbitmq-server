@@ -41,6 +41,16 @@ function set_active_auth_provider_by_name(name) {
     set_active_auth_provider(getAuthProvider(name));
 }
 
+// Which mechanism's login flow to start, and so which login page to show.
+// That is a question about how the deployment is configured, unlike
+// active_auth_provider() below, which asks how the current user
+// authenticated - a distinction that matters for a visitor who has not
+// logged in yet and therefore has no session to be identified by.
+function login_flow_provider() {
+    var oauthConfigured = typeof oauth !== 'undefined' && oauth && oauth.enabled;
+    return getAuthProvider(oauthConfigured ? 'oauth2' : 'basic');
+}
+
 // After a page reload there is no fresh login to declare the mechanism, so
 // fall back to the marker the oauth flow persists: set_auth_resource() is
 // called only when an oauth login is initiated, and clear_auth() removes
@@ -54,6 +64,13 @@ function active_auth_provider() {
 }
 
 registerAuthProvider('basic', {
+    // Nothing in the URL belongs to basic auth.
+    consumeRedirect: function(url) {
+        return false;
+    },
+    startLoginFlow: function() {
+        startWithLoginPage();
+    },
     presentError: function(message) {
         replace_content('login-status', '<p>' + fmt_escape_html(message) + '</p>');
     },
@@ -67,6 +84,21 @@ registerAuthProvider('basic', {
 });
 
 registerAuthProvider('oauth2', {
+    // A failed IDP-initiated login redirects back here with ?error=, which
+    // this module set itself on the way out, along with the pending-state
+    // markers. Drop those so the next successful login is not redirected
+    // somewhere confusing.
+    consumeRedirect: function(url) {
+        var error = url.searchParams.get('error');
+        if (!error) return false;
+        clear_pref("oauth-idp-pending");
+        clear_pref("oauth-return-to");
+        renderWarningMessageInLoginStatus(oauth, fmt_escape_html(error));
+        return true;
+    },
+    startLoginFlow: function() {
+        startWithOAuthLogin(oauth);
+    },
     presentError: function(message) {
         renderWarningMessageInLoginStatus(oauth, message);
     },
