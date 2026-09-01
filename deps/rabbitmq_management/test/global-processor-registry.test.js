@@ -121,6 +121,10 @@ describe('ProcessorRegistry.invoke (non-blocking)', () => {
 
     assert.deepEqual(calls, ['b']);
   });
+
+  it('does nothing and does not throw when no processor is registered', () => {
+    assert.doesNotThrow(() => registry.invoke('payload'));
+  });
 });
 
 describe('ProcessorRegistry.invokeUntilFailure (short-circuiting)', () => {
@@ -168,6 +172,20 @@ describe('ProcessorRegistry.invokeUntilFailure (short-circuiting)', () => {
 
     assertResult(registry.invokeUntilFailure(), { ok: true });
     assert.deepEqual(calls, ['a', 'b']);
+  });
+
+  it('returns ok:true immediately when no processor is registered', () => {
+    assertResult(registry.invokeUntilFailure(), { ok: true });
+  });
+
+  it('passes the given data through to every processor', () => {
+    const calls = [];
+    registry.register('a', (data) => calls.push(data));
+    registry.register('b', (data) => calls.push(data));
+
+    registry.invokeUntilFailure('context-payload');
+
+    assert.deepEqual(calls, ['context-payload', 'context-payload']);
   });
 });
 
