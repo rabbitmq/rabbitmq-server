@@ -199,8 +199,6 @@ recover_with_message_expiry_interval(Config) ->
     C1 = connect(ClientId, Config),
     {ok, _} = emqtt:publish(C1, <<"topic/1">>,
                             <<"m1">>, [{retain, true}, {qos, 1}]),
-    %% Stay close to the timestamp the retainer records for the next publish.
-    Start = os:system_time(second),
     {ok, _} = emqtt:publish(C1, <<"topic/2">>, #{'Message-Expiry-Interval' => 100},
                             <<"m2">>, [{retain, true}, {qos, 1}]),
     %% A value close to the timestamp the retainer records for the publish
