@@ -1,0 +1,8 @@
+{
+  "name": "rabbitmq_management",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test"
+  }
+}
