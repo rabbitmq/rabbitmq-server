@@ -1,20 +1,4 @@
 
-const API_ERROR_REASONS = {
-    'failed_to_parse_json':       'Definitions file could not be parsed. Make sure it is valid JSON.',
-    'unsupported_file_extension': '{filename}Only .json files are accepted for definitions import.',
-};
-
-function format_error_response(response, reason) {
-    var template = API_ERROR_REASONS[reason];
-    if (typeof(template) != 'string') {
-        return reason;
-    }
-    return template.replace(/\{(\w+)\}/g, function(_, key) {
-        var val = response[key];
-        return val !== undefined ? val + ': ' : '';
-    });
-}
-
 $(document).ready(function() {
   setup_oauth_events_if_required();
   var url_string = window.location.href;
