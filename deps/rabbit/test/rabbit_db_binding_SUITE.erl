@@ -46,7 +46,9 @@
          tie_binding_to_dest_with_keep_while_cond_auto_delete_alternate_exchange/1,
          tie_binding_to_dest_with_keep_while_cond_auto_delete_alternate_exchange1/1,
          tie_binding_to_dest_with_keep_while_cond_auto_delete_with_bindings/1,
-         tie_binding_to_dest_with_keep_while_cond_auto_delete_with_bindings1/1
+         tie_binding_to_dest_with_keep_while_cond_auto_delete_with_bindings1/1,
+         tie_binding_to_dest_with_keep_while_cond_auto_delete_late_binding/1,
+         tie_binding_to_dest_with_keep_while_cond_auto_delete_late_binding1/1
         ]).
 
 -define(VHOST, <<"/">>).
@@ -70,7 +72,8 @@ groups() ->
        tie_binding_to_dest_with_keep_while_cond_orphan_topic_permission,
        tie_binding_to_dest_with_keep_while_cond_auto_delete_without_bindings,
        tie_binding_to_dest_with_keep_while_cond_auto_delete_alternate_exchange,
-       tie_binding_to_dest_with_keep_while_cond_auto_delete_with_bindings]}
+       tie_binding_to_dest_with_keep_while_cond_auto_delete_with_bindings,
+       tie_binding_to_dest_with_keep_while_cond_auto_delete_late_binding]}
     ].
 
 all_tests() ->
@@ -757,6 +760,45 @@ tie_binding_to_dest_with_keep_while_cond_auto_delete_with_bindings1(_Config) ->
                            ?VHOST, WithoutBindingName#resource.name),
     ?assertMatch(#{WithBindingPath := _}, KWCS),
     ?assertNotMatch(#{WithoutBindingPath := _}, KWCS),
+    passed.
+
+tie_binding_to_dest_with_keep_while_cond_auto_delete_late_binding(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(
+               Config, 0, ?MODULE,
+               tie_binding_to_dest_with_keep_while_cond_auto_delete_late_binding1,
+               [Config]).
+
+tie_binding_to_dest_with_keep_while_cond_auto_delete_late_binding1(_Config) ->
+    %% An auto-delete exchange without source bindings is skipped by the
+    %% migration, so its record carries no `keep_while' condition. Creating
+    %% a binding must attach the condition, otherwise the exchange is never
+    %% auto-deleted once its last binding goes away.
+    ?assertNot(
+       rabbit_feature_flags:is_enabled(
+         tie_binding_to_dest_with_keep_while_cond)),
+
+    XName = rabbit_misc:r(?VHOST, exchange, <<"auto-delete-x">>),
+    Exchange = #exchange{name = XName, type = direct,
+                         durable = true, auto_delete = true,
+                         decorators = {[], []}},
+    ?assertMatch({new, #exchange{}}, rabbit_db_exchange:create_or_get(Exchange)),
+
+    ?assertEqual(
+       ok,
+       rabbit_feature_flags:enable(
+         tie_binding_to_dest_with_keep_while_cond)),
+
+    QName = rabbit_misc:r(?VHOST, queue, <<"test-queue">>),
+    Queue = amqqueue:new(QName, none, true, false, none, [], ?VHOST, #{}),
+    ?assertMatch({created, Queue}, rabbit_db_queue:create_or_get(Queue)),
+    Binding = #binding{source = XName, key = <<"key">>,
+                       destination = QName, args = #{}},
+    ?assertEqual(ok, rabbit_db_binding:create(Binding, fun(_, _) -> ok end)),
+
+    _ = rabbit_db_queue:delete(QName, false),
+    ?assertNot(rabbit_khepri:exists(
+                 rabbit_db_exchange:khepri_exchange_path(
+                   ?VHOST, XName#resource.name))),
     passed.
 
 tie_binding_to_dest_with_keep_while_cond_orphan_topic_permission(Config) ->
