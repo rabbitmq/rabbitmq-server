@@ -224,6 +224,7 @@ dispatcher() ->
      {"/auth/attempts/:node",                                  rabbit_mgmt_wm_auth_attempts, [all]},
      {"/auth/attempts/:node/source",                           rabbit_mgmt_wm_auth_attempts, [by_source]},
      {"/login",                                                rabbit_mgmt_wm_login, []},
+     {"/init",                                                 rabbit_mgmt_wm_init, []},
      {"/config/effective",                                     rabbit_mgmt_wm_environment, []},
      {"/auth/hash_password/:password",                         rabbit_mgmt_wm_hash_password, []},
      {"/version",                                              rabbit_mgmt_wm_version, []}
