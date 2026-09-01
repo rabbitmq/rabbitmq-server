@@ -3618,6 +3618,140 @@ delayed_retry_counts_towards_limit_test(Config) ->
     ?assertEqual(2, rabbit_fifo:query_messages_total(State6)),
     ok.
 
+max_length_drops_delayed_when_nothing_ready_test(Config) ->
+    %% Delayed messages count towards max_length but cannot be reached by
+    %% take_next_msg, so an overshoot made up entirely of delayed messages
+    %% used to leave drop_head with nothing to drop and evaluate_limit0
+    %% looping forever inside apply/3.
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+             max_length => 1,
+             overflow_strategy => drop_head},
+    State0 = init(Conf),
+    Msg1 = mc:set_annotation(dt, 5000, mk_mc(<<"m1">>)),
+    Msg2 = mc:set_annotation(dt, 6000, mk_mc(<<"m2">>)),
+    {State1, _} = enq_ts(Config, 1, 1, Msg1, 100, State0),
+    ?assertMatch(#{num_ready_messages := 0,
+                   num_delayed_messages := 1}, rabbit_fifo:overview(State1)),
+    %% 2 delayed > max_length 1, and there is nothing ready to drop
+    {State2, _} = enq_ts(Config, 2, 2, Msg2, 100, State1),
+    ?assertMatch(#{num_ready_messages := 0,
+                   num_delayed_messages := 1}, rabbit_fifo:overview(State2)),
+    ?assertEqual(1, rabbit_fifo:query_messages_total(State2)),
+    ok.
+
+max_length_prefers_ready_over_delayed_test(Config) ->
+    %% Ready messages remain the preferred drop_head victims: the delayed
+    %% tree is only touched once there is nothing ready or returned left.
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+             max_length => 3,
+             overflow_strategy => drop_head},
+    State0 = init(Conf),
+    Delayed = mc:set_annotation(dt, 5000, mk_mc(<<"delayed">>)),
+    {State1, _} = enq_ts(Config, 1, 1, Delayed, 100, State0),
+    {State2, _} = enq_ts(Config, 2, 2, mk_mc(<<"r1">>), 100, State1),
+    {State3, _} = enq_ts(Config, 3, 3, mk_mc(<<"r2">>), 100, State2),
+    %% at the limit, nothing dropped yet
+    ?assertMatch(#{num_ready_messages := 2,
+                   num_delayed_messages := 1}, rabbit_fifo:overview(State3)),
+    %% over the limit: a ready message goes, the delayed one stays
+    {State4, _} = enq_ts(Config, 4, 4, mk_mc(<<"r3">>), 100, State3),
+    ?assertMatch(#{num_ready_messages := 2,
+                   num_delayed_messages := 1}, rabbit_fifo:overview(State4)),
+    ?assertEqual(3, rabbit_fifo:query_messages_total(State4)),
+    ok.
+
+max_length_drops_soonest_delayed_first_test(Config) ->
+    %% Among delayed messages the one with the soonest delivery time is
+    %% dropped first.
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+             max_length => 2,
+             overflow_strategy => drop_head},
+    State0 = init(Conf),
+    {State1, _} = enq_ts(Config, 1, 1,
+                         mc:set_annotation(dt, 1000, mk_mc(<<"soon">>)),
+                         100, State0),
+    {State2, _} = enq_ts(Config, 2, 2,
+                         mc:set_annotation(dt, 10000, mk_mc(<<"later">>)),
+                         100, State1),
+    ?assertMatch(#{num_delayed_messages := 2,
+                   next_delayed_at := 1000}, rabbit_fifo:overview(State2)),
+    {State3, _} = enq_ts(Config, 3, 3,
+                         mc:set_annotation(dt, 3600000, mk_mc(<<"far">>)),
+                         100, State2),
+    ?assertMatch(#{num_ready_messages := 0,
+                   num_delayed_messages := 2,
+                   next_delayed_at := 10000}, rabbit_fifo:overview(State3)),
+    ok.
+
+max_length_delayed_drop_accounting_test(Config) ->
+    %% A delayed message dropped for max_length is accounted for exactly as
+    %% a ready one: it leaves messages_total and the enqueue byte count, and
+    %% it is dead lettered with reason maxlen.
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+             max_length => 1,
+             overflow_strategy => drop_head,
+             dead_letter_handler => undefined},
+    State0 = init(Conf),
+    {State1, _} = enq_ts(Config, 1, 1,
+                         mc:set_annotation(dt, 5000, mk_mc(<<"m1">>)),
+                         100, State0),
+    #{enqueue_message_bytes := Bytes1} = rabbit_fifo:overview(State1),
+    {State2, _, Effects} =
+        apply(meta(Config, 2, 100, {notify, 2, self()}),
+              rabbit_fifo:make_enqueue(
+                self(), 2, mc:set_annotation(dt, 6000, mk_mc(<<"m2">>))),
+              State1),
+    ?assertEqual(1, rabbit_fifo:query_messages_total(State2)),
+    #{enqueue_message_bytes := Bytes2} = rabbit_fifo:overview(State2),
+    ?assertEqual(Bytes1, Bytes2),
+    ?ASSERT_EFF({mod_call, rabbit_global_counters, messages_dead_lettered,
+                 [maxlen, rabbit_quorum_queue, disabled, 1]}, Effects),
+    ok.
+
+max_length_delayed_drop_removes_deferral_token_test(Config) ->
+    %% Dropping a parked message for max_length must take its deferral token
+    %% with it, otherwise a later claim resolves a token whose message is
+    %% gone.
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+             max_length => 1,
+             overflow_strategy => drop_head},
+    State0 = init(Conf),
+    Cid = {?FUNCTION_NAME_B, self()},
+    {State1, _} = enq_ts(Config, 1, 1, mk_mc(<<"m1">>), 100, State0),
+    {State2, #{key := CKey, next_msg_id := MsgId}, _} =
+        checkout_ts(Config, 2, 100, Cid, {auto, {simple_prefetch, 2}}, State1),
+    Token = <<"token-1">>,
+    Anns = #{<<"x-opt-deferral-token">> => Token,
+             <<"x-opt-delivery-time">> => 10000},
+    {State3, _, _} = apply(meta(Config, 3, 100),
+                           rabbit_fifo:make_modify(CKey, [MsgId], false, false,
+                                                   Anns),
+                           State2),
+    ?assertMatch(#{num_delayed_messages := 1}, rabbit_fifo:overview(State3)),
+    %% push over the limit with a second delayed message so the parked one
+    %% is dropped
+    {State4, _} = enq_ts(Config, 4, 2,
+                         mc:set_annotation(dt, 20000, mk_mc(<<"m2">>)),
+                         100, State3),
+    ?assertMatch(#{num_delayed_messages := 1,
+                   next_delayed_at := 20000}, rabbit_fifo:overview(State4)),
+    %% the token no longer resolves to anything
+    {State5, ok, _} = apply(meta(Config, 5, 100),
+                            rabbit_fifo:make_delayed(
+                              {assign_deferred, CKey, [Token]}),
+                            State4),
+    ?assertMatch(#{num_checked_out := 0,
+                   num_delayed_messages := 1}, rabbit_fifo:overview(State5)),
+    ?assertMatch(#rabbit_fifo{consumers = #{CKey := #consumer{
+                                                      deferred_claims = #{}}}},
+                 State5),
+    ok.
+
 delayed_retry_all_command_test(Config) ->
     %% Test that #delayed{op = {retry, all}} moves all delayed messages to returns
     Conf = #{name => ?FUNCTION_NAME,

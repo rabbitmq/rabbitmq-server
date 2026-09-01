@@ -2105,22 +2105,40 @@ apply_enqueue(#{index := RaftIdx,
 decr_total(#?STATE{messages_total = Tot} = State) ->
     State#?STATE{messages_total = Tot - 1}.
 
-drop_head(#?STATE{reclaimable_bytes = ReclaimableBytes0} = State0, Effects) ->
+%% Delayed messages count towards max_length (see is_over_limit/1) but are
+%% not reachable via take_next_msg/1. This means that a queue whose
+%% overshoot consists entirely of delayed messages would leave drop_head
+%% with nothing to drop, and evaluate_limit0/4 would never terminate.
+%%
+%% Ready and returned messages stay the preferred victims. Among delayed
+%% messages the one with the soonest delivery time goes first, which means
+%% that a client parking many far-future messages can hold a queue at its
+%% limit and have every newly eligible message dropped ahead of them.
+drop_head(State0, Effects) ->
     case take_next_msg(State0) of
-        {Msg, State1} ->
-            Header = get_msg_header(Msg),
-            State = decr_total(add_bytes_drop(Header, State1)),
-            #?STATE{cfg = #cfg{dead_letter_handler = DLH},
-                    dlx = DlxState} = State,
-            {_, _RetainedBytes, DlxEffects} =
-                discard_or_dead_letter([Msg], maxlen, DLH, DlxState),
-            Size = get_header(size, Header),
-            {State#?STATE{reclaimable_bytes =
-                              ReclaimableBytes0 + Size + ?ENQ_OVERHEAD_B},
-             add_drop_head_effects(DlxEffects, Effects)};
+        {Msg, State} ->
+            drop_msg(Msg, State, Effects);
         empty ->
-            {State0, Effects}
+            case take_smallest_delayed(State0#?STATE.delayed) of
+                {Msg, Delayed} ->
+                    drop_msg(Msg, State0#?STATE{delayed = Delayed}, Effects);
+                empty ->
+                    {State0, Effects}
+            end
     end.
+
+drop_msg(Msg, #?STATE{reclaimable_bytes = ReclaimableBytes0} = State0,
+         Effects) ->
+    Header = get_msg_header(Msg),
+    State = decr_total(add_bytes_drop(Header, State0)),
+    #?STATE{cfg = #cfg{dead_letter_handler = DLH},
+            dlx = DlxState} = State,
+    {_, _RetainedBytes, DlxEffects} =
+        discard_or_dead_letter([Msg], maxlen, DLH, DlxState),
+    Size = get_header(size, Header),
+    {State#?STATE{reclaimable_bytes =
+                      ReclaimableBytes0 + Size + ?ENQ_OVERHEAD_B},
+     add_drop_head_effects(DlxEffects, Effects)}.
 
 add_drop_head_effects([{mod_call,
                         rabbit_global_counters,
@@ -2646,8 +2664,16 @@ evaluate_limit0(Index, BeforeState,
                 Effects0) ->
     case is_over_limit(State0) of
         true when Strategy == drop_head ->
-            {State, Effects} = drop_head(State0, Effects0),
-            evaluate_limit0(Index, BeforeState, State, Effects);
+            case drop_head(State0, Effects0) of
+                {State0, Effects} ->
+                    %% there is nothing left that drop_head can drop, so
+                    %% stop here rather than spin. Exceeding the limit is
+                    %% recoverable, an apply/3 that never returns is not:
+                    %% it would hang every member on the same command.
+                    {State0, Effects};
+                {State, Effects} ->
+                    evaluate_limit0(Index, BeforeState, State, Effects)
+            end;
         true when Strategy == reject_publish ->
             %% generate send_msg effect for each enqueuer to let them know
             %% they need to block
@@ -2734,22 +2760,25 @@ take_next_msg(#?STATE{returns = Returns0,
 
 take_next_delayed(_Ts, #delayed{next = undefined}) ->
     empty;
-take_next_delayed(Ts, #delayed{next = {ReadyAt, Idx, Msg},
+take_next_delayed(Ts, #delayed{next = {ReadyAt, _, _}} = Delayed)
+  when Ts >= ReadyAt ->
+    take_smallest_delayed(Delayed);
+take_next_delayed(_Ts, #delayed{}) ->
+    empty.
+
+%% Take the delayed message with the soonest delivery time, whether or not
+%% that time has arrived. Callers that must respect the delivery time go
+%% through take_next_delayed/2.
+take_smallest_delayed(#delayed{next = {ReadyAt, Idx, Msg},
                                tree = Tree0,
-                               deferred = Deferred0}) when Ts >= ReadyAt ->
+                               deferred = Deferred0}) ->
     Key = ?TUPLE(ReadyAt, Idx),
     Tree = gb_trees:delete(Key, Tree0),
-    Next = case gb_trees:is_empty(Tree) of
-               true ->
-                   undefined;
-               false ->
-                   {?TUPLE(NextReadyAt, NextIdx), V} = gb_trees:smallest(Tree),
-                   {NextReadyAt, NextIdx, V}
-           end,
-    Deferred = remove_deferred_key(Key, Deferred0),
-    Delayed = #delayed{tree = Tree, next = Next, deferred = Deferred},
+    Delayed = #delayed{tree = Tree,
+                       next = update_delayed_next(Tree),
+                       deferred = remove_deferred_key(Key, Deferred0)},
     {Msg, Delayed};
-take_next_delayed(_Ts, #delayed{}) ->
+take_smallest_delayed(#delayed{}) ->
     empty.
 
 %% Take all ready delayed messages (for promoting to returns queue)
