@@ -1,0 +1,8 @@
+{
+  "name": "rabbitmq_federation_management",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test"
+  }
+}
