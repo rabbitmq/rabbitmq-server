@@ -146,6 +146,8 @@ create(#binding{source = SrcName,
                                                               RoutePath,
                                                               sets:add_element(Binding, Set),
                                                               PutOptions),
+                                                       ok = maybe_tie_source_in_khepri_tx(
+                                                              FeatureFlag, Src),
                                                        serial_in_khepri(MaybeSerial, Src)
                                                end;
                                            _ ->
@@ -153,6 +155,8 @@ create(#binding{source = SrcName,
                                                       RoutePath,
                                                       sets:add_element(Binding, sets:new([{version, 2}])),
                                                       PutOptions),
+                                               ok = maybe_tie_source_in_khepri_tx(
+                                                      FeatureFlag, Src),
                                                serial_in_khepri(MaybeSerial, Src)
                                        end
                                end, rw),
@@ -170,6 +174,23 @@ create(#binding{source = SrcName,
         Errs ->
             not_found_errs_in_khepri(not_found(Errs, SrcName, DstName))
     end.
+
+%% An auto-delete exchange skipped by the feature flag migration for
+%% having no source bindings (#16823) carries no `keep_while' condition,
+%% so it would never be auto-deleted. Attach the condition now that a
+%% source binding exists.
+maybe_tie_source_in_khepri_tx(true, #exchange{name = XName,
+                                              auto_delete = true}) ->
+    XPath = rabbit_db_exchange:khepri_exchange_path(XName),
+    case khepri_tx:get(XPath) of
+        {ok, X} ->
+            PutOptions = rabbit_db_exchange:put_options(X),
+            ok = khepri_tx:put(XPath, X, PutOptions);
+        _ ->
+            ok
+    end;
+maybe_tie_source_in_khepri_tx(_FeatureFlag, _Src) ->
+    ok.
 
 lookup_resource(#resource{kind = queue} = Name) ->
     case rabbit_db_queue:get(Name) of
