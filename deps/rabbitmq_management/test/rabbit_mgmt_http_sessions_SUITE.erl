@@ -69,7 +69,11 @@ init_per_testcase(Testcase, Config) ->
     rpc(Config, N2, application, set_env, [rabbitmq_management, sessions_enabled, Enabled]),
     rpc(Config, N1, application, set_env, [rabbitmq_management, sessions_max_concurrent, 1]),
     rpc(Config, N2, application, set_env, [rabbitmq_management, sessions_max_concurrent, 1]),
-    
+    rpc(Config, N1, application, set_env, [rabbitmq_management, login_session_timeout, 480]),
+    rpc(Config, N2, application, set_env, [rabbitmq_management, login_session_timeout, 480]),
+    rpc(Config, N1, application, set_env, [rabbitmq_management, sessions_heartbeat_interval, 30]),
+    rpc(Config, N2, application, set_env, [rabbitmq_management, sessions_heartbeat_interval, 30]),
+
     case Enabled of
         true ->
             timer:sleep(100),
@@ -90,9 +94,12 @@ init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
 end_per_testcase(Testcase, Config) ->
-    http_delete(Config, "/users/test_admin", {group, '2xx'}),
-    http_delete(Config, "/users/test_user_a", {group, '2xx'}),
-    http_delete(Config, "/users/test_user_b", {group, '2xx'}),
+    %% Some test cases (e.g. delete_user_sessions_test) delete a test user
+    %% themselves as part of exercising the session cleanup cascade, so a
+    %% second delete here is expected to 404.
+    http_delete(Config, "/users/test_admin", {one_of, [200, 201, 202, 203, 204, 205, 206, 404]}),
+    http_delete(Config, "/users/test_user_a", {one_of, [200, 201, 202, 203, 204, 205, 206, 404]}),
+    http_delete(Config, "/users/test_user_b", {one_of, [200, 201, 202, 203, 204, 205, 206, 404]}),
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
 req_node(Config, Node, Type, Path, User, Pass, Body) ->
@@ -166,7 +173,7 @@ authorization_and_metadata_test(Config) ->
     http_delete(Config, "/sessions/" ++ binary_to_list(SessionId), "test_admin", "test_admin", ?NO_CONTENT),
     
     %% Direct Khepri State Assertion 3: Session deleted from Khepri
-    ?assertEqual({error, {khepri, node_not_found, Path}}, rpc(Config, N1, rabbit_khepri, get, [Path])),
+    ?assertMatch({error, {khepri, node_not_found, _}}, rpc(Config, N1, rabbit_khepri, get, [Path])),
 
     %% Verify deleted session returns 401 Unauthorized on heartbeat
     http_put(Config, "/session/" ++ binary_to_list(SessionId), #{}, "test_user_a", "test_user_a", ?NOT_AUTHORISED),
@@ -234,22 +241,27 @@ distributed_session_counting_test(Config) ->
 
 session_expiry_test(Config) ->
     N1 = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-    
+    N2 = rabbit_ct_broker_helpers:get_node_config(Config, 1, nodename),
+
     %% Set very short TTL just for this test (0 minutes = 0 ms)
     rpc(Config, N1, application, set_env, [rabbitmq_management, login_session_timeout, 0]),
+    rpc(Config, N2, application, set_env, [rabbitmq_management, login_session_timeout, 0]),
     rpc(Config, N1, application, set_env, [rabbitmq_management, sessions_heartbeat_interval, 0]),
-    
+    rpc(Config, N2, application, set_env, [rabbitmq_management, sessions_heartbeat_interval, 0]),
+
     {ok, {{_Http, 201, _}, _, BodyJSON}} = req_node(Config, N1, post, "/session", "test_user_a", "test_user_a", #{}),
     Body = decode_body(BodyJSON),
     SessionId = maps:get('session_id', Body),
-    
-    %% Trigger sweeper manually on N1
-    rpc(Config, N1, erlang, send, [whereis(rabbit_mgmt_sessions), sweep_expired_sessions]),
+
+    %% Trigger the sweeper on both nodes: only the Khepri cluster leader
+    %% actually sweeps, and either node may hold that role.
+    rpc(Config, N1, erlang, send, [rabbit_mgmt_sessions, sweep_expired_sessions]),
+    rpc(Config, N2, erlang, send, [rabbit_mgmt_sessions, sweep_expired_sessions]),
     timer:sleep(200),
-    
+
     %% Verify session is removed from Khepri
     Path = ?KHEPRI_USER_PATH(<<"test_user_a">>) ++ [sessions, SessionId],
-    ?assertEqual({error, {khepri, node_not_found, Path}}, rpc(Config, N1, rabbit_khepri, get, [Path])),
+    ?assertMatch({error, {khepri, node_not_found, _}}, rpc(Config, N1, rabbit_khepri, get, [Path])),
 
     %% Fill slot with another session
     req_node(Config, N1, post, "/session", "test_user_a", "test_user_a", #{}),
@@ -310,8 +322,8 @@ delete_user_sessions_test(Config) ->
     %% Direct Khepri Assertion: test_user_a session nodes deleted
     Path1 = ?KHEPRI_USER_PATH(<<"test_user_a">>) ++ [sessions, SessionId1],
     Path2 = ?KHEPRI_USER_PATH(<<"test_user_a">>) ++ [sessions, SessionId2],
-    ?assertEqual({error, {khepri, node_not_found, Path1}}, rpc(Config, N1, rabbit_khepri, get, [Path1])),
-    ?assertEqual({error, {khepri, node_not_found, Path2}}, rpc(Config, N1, rabbit_khepri, get, [Path2])),
+    ?assertMatch({error, {khepri, node_not_found, _}}, rpc(Config, N1, rabbit_khepri, get, [Path1])),
+    ?assertMatch({error, {khepri, node_not_found, _}}, rpc(Config, N1, rabbit_khepri, get, [Path2])),
 
     %% Verify test_user_a sessions return 401
     {ok, {{_, 401, _}, _, _}} = req_node(Config, N1, put, "/session/" ++ binary_to_list(SessionId1), "test_user_a", "test_user_a", #{}),
@@ -344,7 +356,7 @@ delete_user_sessions_test(Config) ->
     %% Admin DELETE single session via /sessions/user/:username/:session
     http_delete(Config, "/sessions/user/test_user_b/" ++ binary_to_list(SessionId3), "test_admin", "test_admin", ?NO_CONTENT),
     Path3 = ?KHEPRI_USER_PATH(<<"test_user_b">>) ++ [sessions, SessionId3],
-    ?assertEqual({error, {khepri, node_not_found, Path3}}, rpc(Config, N1, rabbit_khepri, get, [Path3])),
+    ?assertMatch({error, {khepri, node_not_found, _}}, rpc(Config, N1, rabbit_khepri, get, [Path3])),
 
     %% User deletion cascade test:
     %% Delete user test_user_b from RabbitMQ

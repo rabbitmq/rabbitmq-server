@@ -16,6 +16,7 @@
          terminate/2, code_change/3]).
 
 -include_lib("kernel/include/logger.hrl").
+-include_lib("khepri/include/khepri.hrl").
 
 -record(session, {
     created_at :: integer(),
@@ -29,10 +30,10 @@
 
 -define(SWEEP_INTERVAL, 5000).
 
--define(KHEPRI_USER_SESSIONS_PATTERN(Username), [rabbitmq, users, Username, sessions, '?']).
+-define(KHEPRI_USER_SESSIONS_PATTERN(Username), [rabbitmq, users, Username, sessions, ?KHEPRI_WILDCARD_STAR]).
 -define(KHEPRI_SESSION_PATH(Username, SessionId), [rabbitmq, users, Username, sessions, SessionId]).
--define(KHEPRI_ALL_SESSIONS_PATTERN, [rabbitmq, users, '?', sessions, '?']).
--define(KHEPRI_SESSION_ID_PATTERN(SessionId), [rabbitmq, users, '?', sessions, SessionId]).
+-define(KHEPRI_ALL_SESSIONS_PATTERN, [rabbitmq, users, ?KHEPRI_WILDCARD_STAR, sessions, ?KHEPRI_WILDCARD_STAR]).
+-define(KHEPRI_SESSION_ID_PATTERN(SessionId), [rabbitmq, users, ?KHEPRI_WILDCARD_STAR, sessions, SessionId]).
 
 %%====================================================================
 %% API
@@ -44,7 +45,9 @@ start_link() ->
 create_session(Username, Metadata) ->
     SessionId = list_to_binary(rabbit_guid:to_string(rabbit_guid:gen())),
     Now = os:system_time(millisecond),
-    ExpiresAt = calculate_expires_at(Now),
+    SessionTimeoutMs = session_timeout_ms(),
+    HeartbeatTimeoutMs = heartbeat_timeout_ms(),
+    ExpiresAt = calculate_expires_at(Now, Now, SessionTimeoutMs, HeartbeatTimeoutMs),
     Session = #session{
         created_at = Now,
         expires_at = ExpiresAt,
@@ -68,11 +71,11 @@ create_session(Username, Metadata) ->
             end
         end, [], Map),
         if length(ActiveSessions) >= MaxConcurrent ->
-            khepri_tx:abort(limit_reached);
+            {error, limit_reached};
            true ->
             case khepri_tx:put(SessionPath, Session) of
-                ok -> SessionId;
-                Err -> khepri_tx:abort(Err)
+                ok               -> {ok, SessionId};
+                {error, _} = Err -> Err
             end
         end
     end),
@@ -93,20 +96,20 @@ touch(_SessionId, undefined) ->
     {error, not_found};
 touch(SessionId, Username) ->
     Now = os:system_time(millisecond),
+    SessionTimeoutMs = session_timeout_ms(),
+    HeartbeatTimeoutMs = heartbeat_timeout_ms(),
     SessionPath = ?KHEPRI_SESSION_PATH(Username, SessionId),
 
-    TxRes = rabbit_khepri:transaction(fun() ->
+    rabbit_khepri:transaction(fun() ->
         case khepri_tx:get(SessionPath) of
             {ok, Session} when is_record(Session, session) ->
                 if Session#session.expires_at > Now ->
-                    NewExpiresAt = calculate_expires_at(Session#session.created_at, Now),
+                    NewExpiresAt = calculate_expires_at(
+                        Session#session.created_at, Now, SessionTimeoutMs, HeartbeatTimeoutMs),
                     NewSession = Session#session{expires_at = NewExpiresAt},
-                    case khepri_tx:put(SessionPath, NewSession) of
-                        ok -> ok;
-                        Err -> khepri_tx:abort(Err)
-                    end;
+                    khepri_tx:put(SessionPath, NewSession);
                    true ->
-                    khepri_tx:abort(not_found)
+                    {error, not_found}
                 end;
             _ ->
                 PathPattern = ?KHEPRI_SESSION_ID_PATTERN(SessionId),
@@ -120,21 +123,15 @@ touch(SessionId, Username) ->
                             end
                         end, false, Map),
                         if ActiveOther ->
-                            khepri_tx:abort(forbidden);
+                            {error, forbidden};
                            true ->
-                            khepri_tx:abort(not_found)
+                            {error, not_found}
                         end;
                     _ ->
-                        khepri_tx:abort(not_found)
+                        {error, not_found}
                 end
         end
-    end),
-    case TxRes of
-        {ok, ok} -> ok;
-        {error, forbidden} -> {error, forbidden};
-        {error, not_found} -> {error, not_found};
-        {error, Reason} -> {error, Reason}
-    end.
+    end).
 
 delete_session(undefined) ->
     {error, not_found};
@@ -301,11 +298,8 @@ sweep_expired_sessions_in_khepri() ->
             0
     end.
 
-calculate_expires_at(Now) ->
-    calculate_expires_at(Now, Now).
-
-calculate_expires_at(CreatedAt, Now) ->
-    min(CreatedAt + session_timeout_ms(), Now + heartbeat_timeout_ms()).
+calculate_expires_at(CreatedAt, Now, SessionTimeoutMs, HeartbeatTimeoutMs) ->
+    min(CreatedAt + SessionTimeoutMs, Now + HeartbeatTimeoutMs).
 
 session_timeout_ms() ->
     application:get_env(rabbitmq_management, login_session_timeout, 480) * 60 * 1000.
