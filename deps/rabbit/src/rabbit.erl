@@ -1061,10 +1061,12 @@ do_run_postlaunch_phase(Plugins) ->
         %% to allow the metadata store to fully sync before accepting client connections.
         case application:get_env(rabbit, listeners_startup_delay, 0) of
             Delay when is_integer(Delay), Delay > 0 ->
-                ?LOG_INFO("Delaying client connection listeners startup by ~b seconds", [Delay]),
+                ?LOG_INFO("Delaying startup of client connection listeners by ~b seconds", [Delay]),
                 timer:sleep(Delay * 1000);
-            _ ->
-                ok
+            0 ->
+                ok;
+            Delay ->
+                ?LOG_WARNING("Ignoring invalid listeners.startup_delay value ~tp", [Delay])
         end,
         ?LOG_INFO("Ready to start client connection listeners"),
         ok = rabbit_networking:boot(),
