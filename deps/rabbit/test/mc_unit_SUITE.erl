@@ -45,6 +45,7 @@ all_tests() ->
      amqpl_amqp_type_body_shapes,
      amqpl_amqp_type_invalid_payload,
      amqpl_invalid_expiration,
+     amqpl_to_amqp_invalid_expiration,
      amqp_x_headers,
      amqpl_x_headers
     ].
@@ -828,6 +829,26 @@ amqpl_invalid_expiration(_Config) ->
            end,
     ?assertEqual(60_000, Init(<<"60000">>)),
     [?assertEqual(undefined, Init(Expiration))
+     || Expiration <- [<<"abc">>, <<"10x">>, <<"-1">>, <<>>,
+                       <<"99999999999999999999999">>]],
+    ok.
+
+%% mc_amqpl:convert_to/3 must not assume that expiration was already
+%% validated either, for the same reason as amqpl_invalid_expiration.
+amqpl_to_amqp_invalid_expiration(_Config) ->
+    Ttl = fun(Expiration) ->
+                  Content = #content{class_id = 60,
+                                     properties = #'P_basic'{expiration = Expiration},
+                                     properties_bin = none,
+                                     payload_fragments_rev = [<<"data">>]},
+                  Msg = mc:init(mc_amqpl, Content, annotations()),
+                  [HeaderBin | _] = mc:protocol_state(mc:convert(mc_amqp, Msg)),
+                  [#'v1_0.header'{ttl = Wrapped}] =
+                      amqp10_framing:decode_bin(iolist_to_binary(HeaderBin)),
+                  Wrapped
+          end,
+    ?assertEqual({uint, 60_000}, Ttl(<<"60000">>)),
+    [?assertEqual(undefined, Ttl(Expiration))
      || Expiration <- [<<"abc">>, <<"10x">>, <<"-1">>, <<>>,
                        <<"99999999999999999999999">>]],
     ok.

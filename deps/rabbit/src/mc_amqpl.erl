@@ -313,7 +313,6 @@ convert_to(?MODULE, Content, _Env) ->
 convert_to(mc_amqp, #content{payload_fragments_rev = PFR} = Content, Env) ->
     #content{properties = Props} = prepare(read, Content),
     #'P_basic'{message_id = MsgId0,
-               expiration = Expiration,
                delivery_mode = DelMode,
                headers = Headers0,
                user_id = UserId,
@@ -331,21 +330,19 @@ convert_to(mc_amqp, #content{payload_fragments_rev = PFR} = Content, Env) ->
                       _ ->
                           Timestamp * 1000
                   end,
-
     Headers = case Headers0 of
                   undefined -> [];
                   _ -> Headers0
               end,
+
+    Ttl = case rabbit_basic:parse_expiration(Props) of
+              {ok, Val} ->
+                  Val;
+              {error, _} ->
+                  undefined
+          end,
     %% TODO: only add header section if at least one of the fields
     %% needs to be set
-    Ttl = case Expiration of
-              undefined ->
-                  undefined;
-              _ ->
-                  %% Channel already checked for valid integer.
-                  binary_to_integer(Expiration)
-          end,
-
     H = #'v1_0.header'{durable = DelMode =:= 2,
                        ttl = wrap(uint, Ttl),
                        %% TODO: check Priority is a ubyte?
