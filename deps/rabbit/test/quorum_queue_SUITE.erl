@@ -3149,6 +3149,9 @@ recover_from_multiple_failures(Config) ->
     publish(Ch, QQ),
     publish(Ch, QQ),
     publish(Ch, QQ),
+    %% The publishes above are not yet confirmed. They cannot be committed once the
+    %% second node is stopped below.
+    wait_for_messages_ready([Server], RaName, 3),
 
     ok = rabbit_ct_broker_helpers:stop_node(Config, Server2),
     assert_cluster_status({Servers, Servers, [Server]}, [Server]),

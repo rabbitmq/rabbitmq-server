@@ -501,6 +501,20 @@ end_per_testcase(T, Config)
     SetupProcess ! stop,
     close_all_connections(Config);
 
+end_per_testcase(T, Config)
+  when T =:= vhost_connection_limit;
+       T =:= vhost_queue_limit ->
+    %% A refused connection kills the linked test case process with an exit
+    %% signal, which runs no cleanup in the test case itself.
+    _ = rabbit_ct_broker_helpers:clear_vhost_limit(Config, 0, <<"/">>),
+    close_all_connections(Config),
+    rabbit_ct_helpers:testcase_finished(Config, T);
+
+end_per_testcase(T = user_connection_limit, Config) ->
+    _ = rabbit_ct_broker_helpers:clear_user_limits(Config, <<"guest">>, max_connections),
+    close_all_connections(Config),
+    rabbit_ct_helpers:testcase_finished(Config, T);
+
 end_per_testcase(Testcase, Config) ->
     close_all_connections(Config),
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
@@ -1275,6 +1289,9 @@ expect_authentication_failure(ConnectFun, Config) ->
     ok.
 
 vhost_connection_limit(Config) ->
+    %% The limit counts connections across all protocols in the virtual host, and
+    %% tracking removes registered connections asynchronously.
+    ?awaitMatch(0, count_connections_per_vhost(Config), 30000),
     ok = rabbit_ct_broker_helpers:set_vhost_limit(Config, 0, <<"/">>, max_connections, 2),
     {ok, C1} = connect_anonymous(Config, <<"client1">>),
     {ok, _} = emqtt:connect(C1),
@@ -1311,6 +1328,9 @@ vhost_queue_limit(Config) ->
     ok = rabbit_ct_broker_helpers:clear_vhost_limit(Config, 0, <<"/">>).
 
 user_connection_limit(Config) ->
+    %% Every client in this suite authenticates as guest, and tracking removes
+    %% registered connections asynchronously.
+    ?awaitMatch(0, count_connections_per_vhost(Config), 30000),
     DefaultUser = <<"guest">>,
     ok = rabbit_ct_broker_helpers:set_user_limits(Config, DefaultUser, #{max_connections => 1}),
     {ok, C1} = connect_anonymous(Config, <<"client1">>),

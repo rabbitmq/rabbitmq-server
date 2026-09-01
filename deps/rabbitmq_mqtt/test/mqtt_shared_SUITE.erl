@@ -42,7 +42,7 @@
          get_global_counters/3, get_global_counters/4,
          expect_publishes/3,
          connect/2, connect/3, connect/4,
-         get_events/1, assert_event_type/2, assert_event_prop/2,
+         get_events/1, await_events/2, assert_event_type/2, assert_event_prop/2,
          await_exit/1, await_exit/2,
          publish_qos1_timeout/4,
          non_clean_sess_opts/0]).
@@ -606,7 +606,7 @@ events(Config) ->
     ClientId = atom_to_binary(?FUNCTION_NAME),
     C = connect(ClientId, Config),
 
-    [E0, E1] = get_events(Server),
+    [E0, E1] = await_events(Server, 2),
     assert_event_type(user_authentication_success, E0),
     assert_event_prop([{name, <<"guest">>},
                        {connection_type, network}],
@@ -637,7 +637,7 @@ events(Config) ->
 
     QueueNameBin = <<"mqtt-subscription-", ClientId/binary, "qos0">>,
     QueueName = {resource, <<"/">>, queue, QueueNameBin},
-    [E2, E3] = get_events(Server),
+    [E2, E3] = await_events(Server, 2),
     assert_event_type(queue_created, E2),
     assert_event_prop([{name, QueueName},
                        {durable, true},
@@ -666,12 +666,12 @@ events(Config) ->
 
     {ok, _, _} = emqtt:unsubscribe(C, MqttTopic),
 
-    [E4] = get_events(Server),
+    [E4] = await_events(Server, 1),
     assert_event_type(binding_deleted, E4),
 
     ok = emqtt:disconnect(C),
 
-    [E5, E6] = get_events(Server),
+    [E5, E6] = await_events(Server, 2),
     assert_event_type(connection_closed, E5),
     ?assertEqual(E1#event.props, E5#event.props,
                  "connection_closed event props should match connection_created event props. "
