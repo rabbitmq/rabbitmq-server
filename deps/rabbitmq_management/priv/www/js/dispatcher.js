@@ -370,14 +370,10 @@ dispatcher_add(function(sammy) {
                                                            options: {sort:true}},
                                    'used_deprecated_features': '/deprecated-features/used'}, 'deprecated-features');
     sammy.put('#/logout', function() {
-        // clear a local storage value used by earlier versions
-        clear_auth()
-        if (oauth.logged_in) {
-            oauth.logged_in = false;
-            oauth_initiateLogout();
-        }else {
-          go_to_home()
-        }
+        // Roll back whatever the login pipeline set up, in reverse order,
+        // then let the active mechanism do its own sign-out.
+        unwind_active_steps({user: user, settings: window.app_settings});
+        active_auth_provider().signOut();
     });
 
     sammy.put('#/rate-options', function() {
