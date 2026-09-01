@@ -155,6 +155,10 @@ groups() ->
        modified_quorum_queue_deferral_token_invalid_flow_property_type,
        modified_quorum_queue_deferral_token_too_many,
        modified_quorum_queue_deferral_token_at_limit,
+       modified_quorum_queue_deferral_token_too_large,
+       modified_quorum_queue_deferral_token_at_size_limit,
+       modified_quorum_queue_deferral_token_flow_property_too_large,
+       modified_quorum_queue_deferral_token_flow_property_at_size_limit,
        modified_quorum_queue_deferral_token_requires_delivery_time,
        modified_quorum_queue_deferral_token_reused_adds_to_set,
        deferral_token_capability_advertised_on_consume_attach_only,
@@ -1259,6 +1263,141 @@ modified_quorum_queue_deferral_token_at_limit(Config) ->
               link_credit = {uint, 1},
               properties = {map, [{{symbol, <<"rabbitmq:deferral-tokens">>},
                                    {array, utf8, Tokens}}]}},
+           never),
+    receive {amqp10_msg, Receiver, _} -> ct:fail(unexpected_message)
+    after 500 -> ok
+    end,
+    ok = amqp10_client:detach_link(Receiver),
+    ?assertMatch({ok, #{message_count := 0}},
+                 rabbitmq_amqp_client:delete_queue(LinkPair, QName)),
+    ok = close(Init).
+
+%% Test that a x-opt-deferral-token annotation larger than the per-token byte
+%% limit is rejected, rather than being stored as an unbounded queue-state key.
+modified_quorum_queue_deferral_token_too_large(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    {Connection, Session, LinkPair} = init(Config),
+    {ok, #{type := <<"quorum">>}} = rabbitmq_amqp_client:declare_queue(
+                                      LinkPair, QName,
+                                      #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>}}}),
+    Address = rabbitmq_amqp_address:queue(QName),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address),
+    ok = wait_for_credit(Sender),
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"t1">>, <<"m1">>, true)),
+    ok = amqp10_client:detach_link(Sender),
+
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session, <<"receiver">>, Address, unsettled),
+    {ok, M1} = amqp10_client:get_msg(Receiver),
+    FarFuture = erlang:system_time(millisecond) + 3_600_000,
+    Token = binary:copy(<<"a">>, 257),
+    ok = amqp10_client:settle_msg(
+           Receiver, M1,
+           {modified, false, false,
+            #{<<"x-opt-deferral-token">> => Token,
+              <<"x-opt-delivery-time">> => FarFuture}}),
+    receive
+        {amqp10_event,
+         {session, Session,
+          {ended, #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_INVALID_FIELD}}}} -> ok
+    after 30000 -> flush(missing_ended),
+                   ct:fail("did not receive expected error")
+    end,
+    ok = close_connection_sync(Connection).
+
+%% Test that a x-opt-deferral-token annotation of exactly the per-token byte
+%% limit is accepted, unlike one byte over the limit (see the _too_large test).
+modified_quorum_queue_deferral_token_at_size_limit(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    {_, Session, LinkPair} = Init = init(Config),
+    {ok, #{type := <<"quorum">>}} = rabbitmq_amqp_client:declare_queue(
+                                      LinkPair, QName,
+                                      #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>}}}),
+    Address = rabbitmq_amqp_address:queue(QName),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address),
+    ok = wait_for_credit(Sender),
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"t1">>, <<"m1">>, true)),
+    ok = amqp10_client:detach_link(Sender),
+
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session, <<"receiver">>, Address, unsettled),
+    OutputHandle = element(4, Receiver),
+    {ok, M1} = amqp10_client:get_msg(Receiver),
+    FarFuture = erlang:system_time(millisecond) + 3_600_000,
+    Token = binary:copy(<<"a">>, 256),
+    %% This must not error; the message is parked and reclaimable by token.
+    ok = amqp10_client:settle_msg(
+           Receiver, M1,
+           {modified, false, false,
+            #{<<"x-opt-deferral-token">> => Token,
+              <<"x-opt-delivery-time">> => FarFuture}}),
+    ok = amqp10_client_session:flow_link(
+           Session, OutputHandle,
+           #'v1_0.flow'{
+              link_credit = {uint, 1},
+              properties = {map, [{{symbol, <<"rabbitmq:deferral-tokens">>},
+                                   {array, utf8, [{utf8, Token}]}}]}},
+           never),
+    [M1b] = receive_messages(Receiver, 1),
+    ?assertEqual([<<"m1">>], amqp10_msg:body(M1b)),
+    ok = amqp10_client:settle_msg(Receiver, M1b, accepted),
+    ok = amqp10_client:detach_link(Receiver),
+    ?assertMatch({ok, #{message_count := 0}},
+                 rabbitmq_amqp_client:delete_queue(LinkPair, QName)),
+    ok = close(Init).
+
+%% Test that a rabbitmq:deferral-tokens array element larger than the
+%% per-token byte limit is rejected, rather than being stored as an
+%% unbounded queue-state key.
+modified_quorum_queue_deferral_token_flow_property_too_large(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    {Connection, Session, LinkPair} = init(Config),
+    {ok, #{type := <<"quorum">>}} = rabbitmq_amqp_client:declare_queue(
+                                      LinkPair, QName,
+                                      #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>}}}),
+    Address = rabbitmq_amqp_address:queue(QName),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session, <<"receiver">>, Address, unsettled),
+    OutputHandle = element(4, Receiver),
+    Token = binary:copy(<<"a">>, 257),
+    ok = amqp10_client_session:flow_link(
+           Session, OutputHandle,
+           #'v1_0.flow'{
+              link_credit = {uint, 1},
+              properties = {map, [{{symbol, <<"rabbitmq:deferral-tokens">>},
+                                   {array, utf8, [{utf8, Token}]}}]}},
+           never),
+    receive
+        {amqp10_event,
+         {session, Session,
+          {ended, #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_INVALID_FIELD}}}} -> ok
+    after 30000 -> flush(missing_ended),
+                   ct:fail("did not receive expected error")
+    end,
+    ok = close_connection_sync(Connection).
+
+%% Test that a rabbitmq:deferral-tokens array element of exactly the
+%% per-token byte limit is accepted, unlike one byte over the limit (see the
+%% _flow_property_too_large test).
+modified_quorum_queue_deferral_token_flow_property_at_size_limit(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    {_, Session, LinkPair} = Init = init(Config),
+    {ok, #{type := <<"quorum">>}} = rabbitmq_amqp_client:declare_queue(
+                                      LinkPair, QName,
+                                      #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>}}}),
+    Address = rabbitmq_amqp_address:queue(QName),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session, <<"receiver">>, Address, unsettled),
+    OutputHandle = element(4, Receiver),
+    Token = binary:copy(<<"a">>, 256),
+    %% This token has nothing parked under it, so this must not error and
+    %% must simply yield no delivery.
+    ok = amqp10_client_session:flow_link(
+           Session, OutputHandle,
+           #'v1_0.flow'{
+              link_credit = {uint, 1},
+              properties = {map, [{{symbol, <<"rabbitmq:deferral-tokens">>},
+                                   {array, utf8, [{utf8, Token}]}}]}},
            never),
     receive {amqp10_msg, Receiver, _} -> ct:fail(unexpected_message)
     after 500 -> ok

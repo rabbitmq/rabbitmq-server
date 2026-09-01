@@ -70,6 +70,10 @@
 %% token is resolved within one Ra command, so this bounds both the size of
 %% that command and the work it does.
 -define(MAX_DEFERRAL_TOKENS, 256).
+%% Maximum byte length of a single deferral token. Tokens are stored as Ra
+%% command/queue-state map keys, so an unbounded client-chosen string would
+%% inflate both.
+-define(MAX_DEFERRAL_TOKEN_SIZE, 256).
 -define(MAX_MANAGEMENT_LINK_CREDIT, 8).
 -define(MANAGEMENT_NODE_ADDRESS, <<"/management">>).
 -define(UINT_OUTGOING_WINDOW, {uint, ?UINT_MAX}).
@@ -2242,7 +2246,8 @@ settle_op_from_outcome(#'v1_0.modified'{delivery_failed = DelFailed,
                {map, KVList} ->
                    Anns1 = lists:map(
                              %% "all symbolic keys except those beginning with "x-" are reserved." [3.2.10]
-                             fun({{symbol, <<"x-opt-deferral-token">> = K}, {utf8, _} = V}) ->
+                             fun({{symbol, <<"x-opt-deferral-token">> = K}, {utf8, Bin} = V}) ->
+                                     _ = validate_deferral_token_size(Bin),
                                      {K, unwrap_simple_type(V)};
                                 ({{symbol, <<"x-opt-deferral-token">>}, Other}) ->
                                      protocol_error(
@@ -3434,7 +3439,7 @@ parse_deferred_tokens({map, KVList}) ->
                       "rabbitmq:deferral-tokens must contain at most ~b tokens, got: ~b",
                       [?MAX_DEFERRAL_TOKENS, Len]);
                 _ ->
-                    [T || {utf8, T} <- Elems]
+                    [validate_deferral_token_size(T) || {utf8, T} <- Elems]
             end;
         false ->
             [];
@@ -3757,6 +3762,15 @@ validate_message_size(MsgSize, MaxMsgSize)
     end;
 validate_message_size(Msg, MaxMsgSize) ->
     validate_message_size(iolist_size(Msg), MaxMsgSize).
+
+validate_deferral_token_size(Token)
+  when byte_size(Token) =< ?MAX_DEFERRAL_TOKEN_SIZE ->
+    Token;
+validate_deferral_token_size(Token) ->
+    protocol_error(
+      ?V_1_0_AMQP_ERROR_INVALID_FIELD,
+      "deferral token must be at most ~b bytes, got: ~b",
+      [?MAX_DEFERRAL_TOKEN_SIZE, byte_size(Token)]).
 
 -spec ensure_terminus(source | target,
                       term(),
