@@ -157,3 +157,34 @@ describe('fmt_boolean', () => {
     assert.equal(sandbox.fmt_boolean(false), '&#9675;');
   });
 });
+
+describe('format_error_response', () => {
+  it('passes an unrecognised reason through unchanged', () => {
+    assert.equal(sandbox.format_error_response({}, 'some_unmapped_reason'), 'some_unmapped_reason');
+  });
+
+  it('replaces a known reason with friendlier text', () => {
+    assert.equal(
+      sandbox.format_error_response({}, 'failed_to_parse_json'),
+      'Definitions file could not be parsed. Make sure it is valid JSON.'
+    );
+  });
+
+  it('interpolates a field of the response into the template', () => {
+    assert.equal(
+      sandbox.format_error_response({ filename: 'defs.txt' }, 'unsupported_file_extension'),
+      'defs.txt: Only .json files are accepted for definitions import.'
+    );
+  });
+
+  it('drops the placeholder when the response lacks that field', () => {
+    assert.equal(
+      sandbox.format_error_response({}, 'unsupported_file_extension'),
+      'Only .json files are accepted for definitions import.'
+    );
+  });
+
+  it('passes a non-string reason through, rather than trying to look it up', () => {
+    assert.equal(sandbox.format_error_response({}, undefined), undefined);
+  });
+});
