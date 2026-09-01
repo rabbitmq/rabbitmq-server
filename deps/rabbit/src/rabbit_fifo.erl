@@ -2209,16 +2209,25 @@ maybe_enqueue(RaftIdx, Ts, undefined, undefined, RawMsg,
               Effects, #?STATE{msg_bytes_enqueue = Enqueue,
                                messages = Messages,
                                messages_total = Total} = State0) ->
-    % direct enqueue without tracking
+    %% Direct enqueue without tracking.
     Size = MetaSize + BodySize,
     Header0 = maybe_set_msg_ttl(RawMsg, Ts, Size, State0),
     Header = maybe_set_msg_delivery_count(RawMsg, Header0),
     Msg = make_msg(RaftIdx, Header),
-    Priority = msg_priority(RawMsg),
-    State = State0#?STATE{msg_bytes_enqueue = Enqueue + Size,
-                          messages_total = Total + 1,
-                          messages = rabbit_fifo_pq:in(Priority, Msg, Messages)
-                         },
+    State = case get_delivery_time(Ts, RawMsg) of
+                undefined ->
+                    Priority = msg_priority(RawMsg),
+                    State0#?STATE{msg_bytes_enqueue = Enqueue + Size,
+                                  messages_total = Total + 1,
+                                  messages = rabbit_fifo_pq:in(Priority, Msg,
+                                                               Messages)};
+                DeliveryTime ->
+                    Delayed = delayed_in(DeliveryTime, RaftIdx, Msg, undefined,
+                                         State0#?STATE.delayed),
+                    State0#?STATE{msg_bytes_enqueue = Enqueue + Size,
+                                  messages_total = Total + 1,
+                                  delayed = Delayed}
+            end,
     {ok, State, Effects};
 maybe_enqueue(RaftIdx, Ts, From, MsgSeqNo, RawMsg,
               {MetaSize, BodySize} = MsgSize,
