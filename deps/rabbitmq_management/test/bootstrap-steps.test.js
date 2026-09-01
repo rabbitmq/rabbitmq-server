@@ -259,3 +259,107 @@ describe('unwind_active_steps', () => {
     assert.deepEqual(calls, ['rollback-a']);
   });
 });
+
+// A pipeline shaped like the real one: gates first, then the four init
+// steps main.js registers. Every step records when it runs and when it is
+// rolled back, so a failure injected at any position can be checked for
+// exactly which steps ran and which were undone.
+const PIPELINE = [
+  ['gate', 'session'],
+  ['gate', 'quota'],
+  ['init', 'layout'],
+  ['init', 'data-model'],
+  ['init', 'events-and-refresh'],
+  ['init', 'extensions']
+];
+
+// failAt: index into PIPELINE, or -1 for a pipeline that fully succeeds.
+// mode: 'veto' (returns {ok:false}) or 'throw'.
+function buildPipeline(failAt, mode) {
+  const ran = [];
+  const rolledBack = [];
+
+  PIPELINE.forEach(([phase, name], index) => {
+    const step = {
+      run: () => {
+        ran.push(name);
+        if (index !== failAt) return;
+        if (mode === 'throw') throw new Error(`${name} exploded`);
+        return { ok: false, error: `${name} said no` };
+      },
+      rollback: () => rolledBack.push(name)
+    };
+    if (phase === 'gate') {
+      sandbox.registerLoginGate(name, step);
+    } else {
+      sandbox.registerInitStep(name, step);
+    }
+  });
+
+  return { ran, rolledBack };
+}
+
+const names = PIPELINE.map(([, name]) => name);
+
+describe('bootstrap: a failure at each stage of a realistic pipeline', () => {
+  beforeEach(() => { loadBootstrapSteps(); });
+
+  it('runs every step and rolls nothing back when all succeed', () => {
+    const { ran, rolledBack } = buildPipeline(-1);
+
+    assertResult(sandbox.bootstrap({}), { ok: true, error: undefined });
+    assert.deepEqual(ran, names);
+    assert.deepEqual(rolledBack, []);
+  });
+
+  for (const mode of ['veto', 'throw']) {
+    for (let failAt = 0; failAt < PIPELINE.length; failAt++) {
+      const [phase, failing] = PIPELINE[failAt];
+      const expectedRan = names.slice(0, failAt + 1);
+      // Everything before the failure, undone in reverse. The failing step
+      // is never rolled back.
+      const expectedRolledBack = names.slice(0, failAt).reverse();
+      const expectedError = mode === 'throw'
+        ? `${phase === 'gate' ? 'LoginGate' : 'InitStep'} ${failing} failed due to exception`
+        : `${failing} said no`;
+
+      it(`${phase} "${failing}" ${mode}s: runs ${expectedRan.length}, unwinds ${expectedRolledBack.length}`, () => {
+        const { ran, rolledBack } = buildPipeline(failAt, mode);
+
+        assertResult(sandbox.bootstrap({}), { ok: false, error: expectedError });
+        assert.deepEqual(ran, expectedRan);
+        assert.deepEqual(rolledBack, expectedRolledBack);
+      });
+    }
+  }
+
+  it('unwinds the login gates when the last init step fails', () => {
+    // The case the shared completed stack exists for: extension loading
+    // blows up, and the session created by the first gate is still undone.
+    const { rolledBack } = buildPipeline(PIPELINE.length - 1, 'throw');
+
+    sandbox.bootstrap({});
+
+    assert.ok(rolledBack.includes('session'));
+    assert.equal(rolledBack[rolledBack.length - 1], 'session');
+  });
+
+  it('leaves nothing for logout to unwind after a failed bootstrap', () => {
+    const { rolledBack } = buildPipeline(3, 'throw');
+
+    sandbox.bootstrap({});
+    const afterBootstrap = rolledBack.slice();
+    sandbox.unwind_active_steps({});
+
+    assert.deepEqual(rolledBack, afterBootstrap);
+  });
+
+  it('leaves the whole pipeline for logout to unwind after a successful bootstrap', () => {
+    const { rolledBack } = buildPipeline(-1);
+
+    sandbox.bootstrap({});
+    sandbox.unwind_active_steps({});
+
+    assert.deepEqual(rolledBack, names.slice().reverse());
+  });
+});
