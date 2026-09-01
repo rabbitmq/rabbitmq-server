@@ -1,6 +1,5 @@
 
 $(document).ready(function() {
-  setup_oauth_events_if_required();
   var url_string = window.location.href;
   var url = new URL(url_string);
   var error = url.searchParams.get('error');
@@ -64,6 +63,22 @@ function render_login_oauth(oauth, escaped_messages) {
   $('#login').on('click', 'div.section h2, div.section-hidden h2', function() {
           toggle_visibility($(this));
       });
+
+  // Bound here, next to the markup they act on, rather than once at
+  // startup. replace_content() above builds a fresh #login every time this
+  // renders, so handlers scoped to it are discarded with the old element
+  // instead of accumulating - which is why these cannot be delegated to
+  // document.
+  $('#login').on('click', '[data-oauth-action="login"]', function() {
+      oauth_initiateLogin($(this).data('resourceId'));
+  });
+  $('#login').on('click', '[data-oauth-action="logout"]', function() {
+      oauth_initiateLogout();
+  });
+  $('#login').on('submit', '#oauth2-resource-form', function(e) {
+      e.preventDefault();
+      oauth_initiateLogin(document.getElementById('oauth2-resource').value);
+  });
 }
 function renderWarningMessageInLoginStatus(oauth, message) {
   render_login_oauth(oauth, message)
@@ -337,21 +352,6 @@ function setup_form_events() {
     });
 }
 
-function setup_oauth_events_if_required() {
-    if (!oauth.enabled) {
-        return;
-    }
-    $(document).on('click', '[data-oauth-action="login"]', function() {
-        oauth_initiateLogin($(this).data('resourceId'));
-    });
-    $(document).on('click', '[data-oauth-action="logout"]', function() {
-        oauth_initiateLogout();
-    });
-    $(document).on('submit', '#oauth2-resource-form', function(e) {
-        e.preventDefault();
-        oauth_initiateLogin(document.getElementById('oauth2-resource').value);
-    });
-}
 
 function update_vhosts() {
     if (display.vhosts) {
