@@ -1997,17 +1997,9 @@ pop_credit_req(
     LinkCreditSnd = amqp10_util:link_credit_snd(
                       DeliveryCountRcv, LinkCreditRcv, CDeliveryCount),
     CappedCredit = cap_credit(LinkCreditSnd, MaxQueueCredit),
-    %% see handle_outgoing_link_flow_control/2 for why the claim goes first
-    {ok, QStates1, Actions0} = case Tokens of
-                                   [] ->
-                                       {ok, QStates0, []};
-                                   _ ->
-                                       rabbit_queue_type:assign_deferred(
-                                         QName, Ctag, Tokens, QStates0)
-                               end,
-    {ok, QStates, Actions1} = rabbit_queue_type:credit(
-                                QName, Ctag, QDeliveryCount,
-                                CappedCredit, Drain, QStates1),
+    {ok, QStates, Actions} = claim_deferred_then_credit(
+                               QName, Ctag, Tokens, QDeliveryCount,
+                               CappedCredit, Drain, QStates0),
     Link = Link0#outgoing_link{
              client_flow_ctl = CFC#client_flow_ctl{
                                  credit = LinkCreditSnd,
@@ -2020,7 +2012,7 @@ pop_credit_req(
             },
     S = S0#state{queue_states = QStates,
                  outgoing_links = OutgoingLinks#{Handle := Link}},
-    handle_queue_actions(Actions0 ++ Actions1, S).
+    handle_queue_actions(Actions, S).
 
 send_pending_delivery(#pending_delivery{
                          frames = Frames,
@@ -3378,25 +3370,15 @@ handle_outgoing_link_flow_control(
                                         credit = CappedCredit,
                                         drain = Drain},
                      at_least_one_credit_req_in_flight = true},
-            %% Claim any requested deferred messages before topping up the
-            %% credit: the queue delivers claimed messages ahead of the
-            %% ready backlog, so this credit reaches them rather than being
-            %% spent on the backlog first.
-            {ok, QStates1, Actions0} = case parse_deferred_tokens(FlowProps) of
-                                           [] ->
-                                               {ok, QStates0, []};
-                                           Tokens ->
-                                               rabbit_queue_type:assign_deferred(
-                                                 QName, Ctag, Tokens, QStates0)
-                                       end,
-            {ok, QStates, Actions1} = rabbit_queue_type:credit(
-                                        QName, Ctag,
-                                        QFC#queue_flow_ctl.delivery_count,
-                                        CappedCredit, Drain, QStates1),
+            {ok, QStates, Actions} = claim_deferred_then_credit(
+                                       QName, Ctag,
+                                       parse_deferred_tokens(FlowProps),
+                                       QFC#queue_flow_ctl.delivery_count,
+                                       CappedCredit, Drain, QStates0),
             State = State0#state{
                       queue_states = QStates,
                       outgoing_links = OutgoingLinks#{HandleInt := Link}},
-            handle_queue_actions(Actions0 ++ Actions1, State);
+            handle_queue_actions(Actions, State);
         true ->
             %% A credit request is currently in-flight. Let's first process its reply
             %% before sending the next request. This ensures our outgoing_pending
@@ -3425,6 +3407,23 @@ handle_outgoing_link_flow_control(
                                              tokens = PrevTokens ++ parse_deferred_tokens(FlowProps)}},
             State0#state{outgoing_links = OutgoingLinks#{HandleInt := Link}}
     end.
+
+%% Claim any requested deferred messages before topping up the credit: the
+%% queue delivers claimed messages ahead of the ready backlog, so this
+%% credit reaches them rather than being spent on the backlog first.
+claim_deferred_then_credit(QName, Ctag, Tokens, DeliveryCount, CappedCredit,
+                           Drain, QStates0) ->
+    {ok, QStates1, Actions0} = case Tokens of
+                                   [] ->
+                                       {ok, QStates0, []};
+                                   _ ->
+                                       rabbit_queue_type:assign_deferred(
+                                         QName, Ctag, Tokens, QStates0)
+                               end,
+    {ok, QStates, Actions1} = rabbit_queue_type:credit(
+                                QName, Ctag, DeliveryCount,
+                                CappedCredit, Drain, QStates1),
+    {ok, QStates, Actions0 ++ Actions1}.
 
 parse_deferred_tokens(undefined) ->
     [];
