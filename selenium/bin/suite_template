@@ -389,8 +389,6 @@ _test() {
   print "> PUBLIC_RABBITMQ_HOST: ${PUBLIC_RMQ_HOST}"
   print "> RABBITMQ_PATH: ${RABBITMQ_PATH}"
   print "> RABBITMQ_URL: ${RMQ_URL}"
-  print "> UAA_URL: ${UAA_URL}"
-  print "> FAKEPORTAL_URL: ${FAKEPORTAL_URL:-}"
   mocha_test_tag=($(md5sum $SELENIUM_ROOT_FOLDER/package.json))
 
   generate_node_extra_ca_cert
@@ -734,8 +732,6 @@ test_local() {
   print "> PUBLIC_RABBITMQ_HOST: ${PUBLIC_RABBITMQ_HOST}"
   print "> RABBITMQ_PATH: ${RABBITMQ_PATH}"
   print "> RABBITMQ_URL: ${RABBITMQ_URL}"
-  print "> UAA_URL: ${UAA_URL}"
-  print "> FAKE_PORTAL_URL: ${FAKE_PORTAL_URL}"
   print "> MOUNT_NODE_EXTRA_CA_CERTS: ${MOUNT_NODE_EXTRA_CA_CERTS}"
 
   export RUN_LOCAL=true
