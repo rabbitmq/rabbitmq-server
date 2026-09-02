@@ -1530,8 +1530,8 @@ activate_next_consumer(#?STATE{consumers = Cons0,
                                                      true, single_active,
                                                      Effects0),
             {State, Effects};
-        {{ActiveCKey, ?CONSUMER_PRIORITY(ActivePriority) =
-                      #consumer{checked_out = ActiveChecked} = Active},
+        {{ActiveCKey, #consumer{cfg = #consumer_cfg{priority = ActivePriority},
+                                checked_out = ActiveChecked} = Active},
          {NextCKey, ?CONSUMER_PRIORITY(WaitingPriority) = Consumer}}
           when WaitingPriority > ActivePriority andalso
                map_size(ActiveChecked) == 0 ->
@@ -2400,8 +2400,8 @@ add_waiting({Key, _} = New, Waiting) ->
 
 sort_waiting(Waiting) ->
     lists:sort(fun
-                   ({_, ?CONSUMER_PRIORITY(P1) = #consumer{status = up}},
-                    {_, ?CONSUMER_PRIORITY(P2) = #consumer{status = up}})
+                   ({_, #consumer{cfg = #consumer_cfg{priority = P1}, status = up}},
+                    {_, #consumer{cfg = #consumer_cfg{priority = P2}, status = up}})
                      when P1 =/= P2 ->
                        P2 =< P1;
                    ({C1, #consumer{status = up,

@@ -783,7 +783,7 @@ heartbeat_send_fun(_, #v1{websocket = false,
                           sock = Sock}) ->
     fun() ->
             Frame = amqp10_binary_generator:build_heartbeat_frame(),
-            catch rabbit_net:send(Sock, Frame)
+            try rabbit_net:send(Sock, Frame) catch _:_ -> ok end
     end.
 
 auth_mechanism_to_module(TypeBin, Sock) ->

@@ -101,7 +101,7 @@ handle_call(out, From, State = #gstate { forks   = Forks,
             {noreply, State #gstate { blocked = queue:in(From, Blocked) },
              hibernate};
         {{value, {PendingIn, Value}}, NewValues} ->
-            reply(PendingIn, ok),
+            _ = reply(PendingIn, ok),
             {reply, {value, Value}, State #gstate { values = NewValues },
              hibernate}
     end;
@@ -142,8 +142,8 @@ in(Value, From,  State = #gstate { values = Values, blocked = Blocked }) ->
         {empty, _} ->
             State #gstate { values = queue:in({From, Value}, Values) };
         {{value, PendingOut}, NewBlocked} ->
-            reply(From, ok),
-            gen_server2:reply(PendingOut, {value, Value}),
+            _ = reply(From, ok),
+            _ = gen_server2:reply(PendingOut, {value, Value}),
             State #gstate { blocked = NewBlocked }
     end.
 
