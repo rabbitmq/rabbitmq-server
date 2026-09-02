@@ -4002,6 +4002,56 @@ delayed_assign_deferred_insufficient_credit_test(Config) ->
                  State8),
     ok.
 
+delayed_assign_deferred_released_on_consumer_disconnect_timeout_test(Config) ->
+    %% A competing consumer that claims a token and then never comes back
+    %% (its node partitions and the client reconnects as a different
+    %% consumer instead) must not strand the token on the dead entry: once
+    %% its disconnected timeout returns its other messages, the claim must
+    %% go back to the shared map so another consumer can claim it.
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B)},
+    State0 = init(Conf),
+    CPid1 = test_util:fake_pid(n1@banana),
+    Cid1 = {?FUNCTION_NAME_B, CPid1},
+    {State1, _} = enq(Config, 1, 1, msg1, State0),
+    {State2, #{key := CKey1, next_msg_id := MsgId}, _} =
+        checkout_ts(Config, 2, 100, Cid1, {auto, {credited, 0}}, State1),
+    {State3, _} = credit(Config, CKey1, 3, 1, 0, false, State2),
+    Token = <<"token-1">>,
+    Anns = #{<<"x-opt-deferral-token">> => Token,
+             <<"x-opt-delivery-time">> => 10000},
+    Modify = rabbit_fifo:make_modify(CKey1, [MsgId], false, false, Anns),
+    {State4, _, _} = apply(meta(Config, 4, 100), Modify, State3),
+    %% consumer 1 has no credit, so the claim just parks on it
+    Cmd1 = rabbit_fifo:make_delayed({assign_deferred, CKey1, [Token]}),
+    {State5, ok, _} = apply(meta(Config, 5, 100), Cmd1, State4),
+    ?assertMatch(#rabbit_fifo{consumers =
+                              #{CKey1 := #consumer{
+                                           deferred_claims = #{Token := [_]}}}},
+                 State5),
+    %% consumer 1's node disconnects, and the disconnected timeout fires
+    {State6, _, _} = apply(meta(Config, 6, 100),
+                           {down, CPid1, noconnection}, State5),
+    {State7, _, _} = apply(meta(Config, 7, 200),
+                           {timeout, {consumer_disconnected_timeout, CKey1}},
+                           State6),
+    ?assertMatch(#rabbit_fifo{consumers = #{CKey1 := #consumer{
+                                                      deferred_claims = #{}}}},
+                 State7),
+    %% a different consumer can now claim the same token
+    CPid2 = test_util:fake_pid(n2@banana),
+    Cid2 = {?FUNCTION_NAME_B, CPid2},
+    {State8, #{key := CKey2}, _} =
+        checkout_ts(Config, 8, 300, Cid2, {auto, {simple_prefetch, 1}}, State7),
+    Cmd2 = rabbit_fifo:make_delayed({assign_deferred, CKey2, [Token]}),
+    {State9, ok, _} = apply(meta(Config, 9, 300), Cmd2, State8),
+    ?assertMatch(#{num_delayed_messages := 0,
+                   num_checked_out := 1}, rabbit_fifo:overview(State9)),
+    ?assertMatch(#rabbit_fifo{consumers = #{CKey2 := #consumer{
+                                                      deferred_claims = #{}}}},
+                 State9),
+    ok.
+
 delayed_assign_deferred_precedence_test(Config) ->
     %% A claimed message is delivered ahead of the ready backlog: the credit
     %% granted alongside a claim must reach the messages the client asked for,

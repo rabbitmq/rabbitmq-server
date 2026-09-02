@@ -640,8 +640,14 @@ apply_(Meta, {timeout, {consumer_disconnected_timeout, CKey}},
             %% return all messages
             {State1, Effects0} = return_all(Meta, State0, [], CKey,
                                             Consumer, false),
+            %% also release any deferred claims this consumer is holding:
+            %% otherwise a token stays stuck on this entry until a genuine
+            %% down arrives, which may never happen if the client
+            %% reconnects as a new consumer instead
+            #{CKey := Con1} = State1#?STATE.consumers,
+            State2 = release_deferred_claims(CKey, Con1, State1),
 
-            checkout(Meta, State0, State1, Effects0);
+            checkout(Meta, State0, State2, Effects0);
         _ ->
             {State0, []}
     end;
