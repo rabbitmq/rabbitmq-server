@@ -3828,17 +3828,25 @@ message_size(Msg) ->
 
 all_nodes(#?STATE{consumers = Cons0,
                   enqueuers = Enqs0,
-                  waiting_consumers = WaitingConsumers0}) ->
+                  waiting_consumers = WaitingConsumers0,
+                  ingress_bytes_by_node = IngressByNode}) ->
     Nodes0 = maps:fold(fun(_, ?CONSUMER_PID(P), Acc) ->
                                Acc#{node(P) => ok}
                        end, #{}, Cons0),
     Nodes1 = maps:fold(fun(P, _, Acc) ->
                                Acc#{node(P) => ok}
                        end, Nodes0, Enqs0),
-    maps:keys(
-      lists:foldl(fun({_, ?CONSUMER_PID(P)}, Acc) ->
-                          Acc#{node(P) => ok}
-                  end, Nodes1, WaitingConsumers0)).
+    Nodes2 = lists:foldl(fun({_, ?CONSUMER_PID(P)}, Acc) ->
+                                  Acc#{node(P) => ok}
+                          end, Nodes1, WaitingConsumers0),
+    %% Also seed with ingress_bytes_by_node's keys: a node that only ever
+    %% published can lose its enqueuer entry (process exit) while its
+    %% ingress tally remains, and only appearing here lets the tick-driven
+    %% stale node check purge it once the node itself has left the cluster.
+    Nodes = maps:fold(fun(undefined, _, Acc) -> Acc;
+                         (Node, _, Acc) -> Acc#{Node => ok}
+                      end, Nodes2, IngressByNode),
+    maps:keys(Nodes).
 
 all_pids_for(Node, #?STATE{consumers = Cons0,
                            enqueuers = Enqs0,

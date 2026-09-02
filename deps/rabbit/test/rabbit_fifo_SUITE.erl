@@ -3152,6 +3152,41 @@ purge_nodes_test(Config) ->
                  rabbit_fifo:tick(1, State)),
     ok.
 
+ingress_only_node_purge_test(Config) ->
+    %% A node that only ever published, and whose enqueuer has since gone
+    %% down for good (as opposed to merely being disconnected), no longer
+    %% appears in consumers/enqueuers/waiting_consumers. all_nodes/1 must
+    %% still surface it via ingress_bytes_by_node, otherwise it can never
+    %% be detected as stale and its entry there leaks forever.
+    Node = ingress_only@node,
+    EnqPid = test_util:fake_pid(Node),
+
+    State0 = init(#{name => ?FUNCTION_NAME,
+                    queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+                    single_active_consumer_on => false}),
+    {State1, _, _} = apply(meta(Config, 1, ?LINE, {notify, 1, EnqPid}),
+                           rabbit_fifo:make_enqueue(EnqPid, 1, msg1),
+                           State0),
+    %% the enqueuer's process is gone for good, not just network-partitioned
+    {State2, _, _} = apply(meta(Config, ?LINE), {down, EnqPid, noproc},
+                           State1),
+    ?assertMatch(#rabbit_fifo{enqueuers = Enqs} when map_size(Enqs) == 0,
+                 State2),
+    ?assertMatch(#{Node := _}, State2#rabbit_fifo.ingress_bytes_by_node),
+
+    %% no live consumer/enqueuer/waiting entry is left anywhere in the
+    %% state, yet the node must still surface via ingress_bytes_by_node
+    ?assertMatch([{aux, {handle_tick, [#resource{}, _Metrics, [Node]]}}],
+                 rabbit_fifo:tick(1, State2)),
+
+    {State, _, _} = apply(meta(Config, ?LINE),
+                          rabbit_fifo:make_purge_nodes([Node]),
+                          State2),
+    ?assertNot(maps:is_key(Node, State#rabbit_fifo.ingress_bytes_by_node)),
+    ?assertMatch([{aux, {handle_tick, [#resource{}, _Metrics, []]}}],
+                 rabbit_fifo:tick(1, State)),
+    ok.
+
 meta(Config, Idx) ->
     meta(Config, Idx, 0).
 
