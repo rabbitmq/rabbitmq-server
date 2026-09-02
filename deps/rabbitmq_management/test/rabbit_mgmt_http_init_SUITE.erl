@@ -13,6 +13,7 @@ all() ->
         unauthorized_test,
         init_settings_test,
         init_monitor_nodes_test,
+        init_monitor_vhosts_test,
         init_no_monitor_no_nodes_test
     ].
 
@@ -83,7 +84,10 @@ init_settings_test(Config) ->
     ?assertMatch(#{<<"product_info">> := _}, Settings),
     ?assertMatch(#{<<"definitions">> := _}, Settings),
     
-    %% Check that the vhosts are present
+    %% test_user has the management tag and no permissions on any virtual
+    %% host, so it is expected to see none. The shape of the entries is
+    %% asserted by init_monitor_vhosts_test, which uses a user that does
+    %% see them.
     Vhosts = maps:get(<<"vhosts">>, JsonBody),
     ?assert(is_list(Vhosts)),
     
@@ -102,6 +106,23 @@ init_monitor_nodes_test(Config) ->
     %% Verify the json contains the nodes variable since user has monitoring tag
     Nodes = maps:get(<<"nodes">>, JsonBody),
     ?assert(is_list(Nodes)),
+    passed.
+
+init_monitor_vhosts_test(Config) ->
+    %% A user with the monitoring tag can see every virtual host even
+    %% without permissions on any of them, and the UI's virtual host
+    %% selector reads .name off each entry - so asserting that the payload
+    %% is a list is not enough. A list of bare names satisfies that and
+    %% still leaves the selector empty.
+    Headers = [rabbit_mgmt_test_util:auth_header("test_monitor", "test_monitor")],
+    {ok, {{_Version, 200, _Reason}, _Headers, Body}} = rabbit_mgmt_test_util:req(Config, 0, get, "/init", Headers),
+
+    JsonBody = rabbit_json:decode(Body),
+    Vhosts = maps:get(<<"vhosts">>, JsonBody),
+
+    ?assertNotEqual([], Vhosts),
+    [?assertMatch(#{<<"name">> := _}, V) || V <- Vhosts],
+    ?assert(lists:any(fun(V) -> maps:get(<<"name">>, V) =:= <<"/">> end, Vhosts)),
     passed.
 
 init_no_monitor_no_nodes_test(Config) ->

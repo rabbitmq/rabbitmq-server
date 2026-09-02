@@ -43,9 +43,18 @@ get_settings_json(ReqData, _Context) ->
 
     rabbit_json:encode(rabbit_mgmt_format:prepare_for_encoding(Settings0)).
 
-get_vhosts_json(_ReqData, Context) ->
-    VHosts = rabbit_mgmt_util:list_visible_vhosts(Context#context.user),
-    rabbit_json:encode(rabbit_mgmt_format:prepare_for_encoding(VHosts)).
+get_vhosts_json(ReqData, Context) ->
+    %% Must be the same shape /vhosts returns, which is what the UI used to
+    %% fetch: the virtual host selector reads .name off each entry. Note
+    %% that rabbit_mgmt_util:list_visible_vhosts/1 returns names, not vhost
+    %% records, so it is not enough on its own.
+    VHosts = rabbit_queue_type:vhosts_with_dqt(
+               rabbit_mgmt_wm_vhosts:augmented(ReqData, Context)),
+    %% list_names/0 does an unordered ets:select, and /vhosts sorts by name.
+    Sorted = lists:sort(
+               fun(A, B) -> maps:get(name, A, <<>>) =< maps:get(name, B, <<>>) end,
+               VHosts),
+    rabbit_json:encode(rabbit_mgmt_format:prepare_for_encoding(Sorted)).
 
 get_nodes_json(ReqData, _Context) ->
     Nodes = rabbit_mgmt_wm_nodes:all_nodes(ReqData),
