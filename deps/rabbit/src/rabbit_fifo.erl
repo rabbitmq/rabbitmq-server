@@ -528,7 +528,7 @@ apply_(#{index := Index}, #purge{},
                                 || {K, C} <- Waiting],
                            dlx = dlx_purge(DlxState),
                            msg_bytes_enqueue = 0,
-                           has_deferred_claims = false
+                           claimed_consumers = #{}
                           },
     Effects0 = [{aux, force_checkpoint}, garbage_collection],
     Reply = {purge, NumPurged},
@@ -551,7 +551,6 @@ apply_(Meta, #delayed_cmd{op = {assign_deferred, ConsumerKey, Tokens}},
     %% and onto the consumer. The messages stay parked in #delayed.tree and
     %% are delivered from the claim by checkout/4 as credit allows, which is
     %% why this command does not need to know anything about link credit.
-    #?STATE{has_deferred_claims = HadClaims} = State0,
     case Consumers0 of
         #{ConsumerKey := Con0} ->
             {Claims, Delayed} = claim_deferred(Tokens, Delayed0),
@@ -559,8 +558,8 @@ apply_(Meta, #delayed_cmd{op = {assign_deferred, ConsumerKey, Tokens}},
             State1 = State0#?STATE{delayed = Delayed,
                                    consumers = maps:update(ConsumerKey, Con,
                                                            Consumers0),
-                                   has_deferred_claims =
-                                     HadClaims orelse map_size(Claims) > 0},
+                                   claimed_consumers =
+                                     note_claimed(ConsumerKey, Con, State0)},
             checkout(Meta, State0, State1, []);
         _ ->
             case lists:keytake(ConsumerKey, 1, Waiting0) of
@@ -572,8 +571,8 @@ apply_(Meta, #delayed_cmd{op = {assign_deferred, ConsumerKey, Tokens}},
                     Waiting = add_waiting({ConsumerKey, Con}, Waiting1),
                     {State0#?STATE{delayed = Delayed,
                                    waiting_consumers = Waiting,
-                                   has_deferred_claims =
-                                     HadClaims orelse map_size(Claims) > 0},
+                                   claimed_consumers =
+                                     note_claimed(ConsumerKey, Con, State0)},
                      ok, []};
                 false ->
                     %% Claim for an unknown consumer, just ignore.
@@ -666,7 +665,7 @@ apply_(#{system_time := Ts} = Meta, {timeout, {consumer_disconnected_timeout, CK
                         %% the consumer is dropped rather than moved to
                         %% waiting, so any deferral claims it still holds
                         %% must go back to the shared deferred map
-                        {Waiting0, release_deferred_claims(C, State1)};
+                        {Waiting0, release_deferred_claims(CKey, C, State1)};
                     _ ->
                         {Waiting0, State1}
                 end,
@@ -1019,11 +1018,11 @@ credit_reply_resend_effect(#?STATE{waiting_consumers = Waiting,
       end, [], maps:merge(Consumers, maps:from_list(Waiting))).
 
 convert_v8_to_v9(#{} = _Meta, StateV8) ->
-    %% v9 added the ingress_bytes_by_node and has_deferred_claims fields;
+    %% v9 added the ingress_bytes_by_node and claimed_consumers fields;
     %% no v8 consumer can hold a deferred claim, as claiming is new in v9
     V9State0 = erlang:append_element(
                  erlang:append_element(StateV8, #{}),
-                 false),
+                 #{}),
 
     %% v8's #delayed.deferred map stored a single delayed_key() per token
     %% v9 allows a single token to address multiple messages.
@@ -1104,8 +1103,8 @@ handle_waiting_consumer_down(Pid,
                           end, [], Down),
     %% a down waiting consumer's outstanding deferral claims go back to the
     %% shared deferred map, same as an explicitly cancelled one
-    State1 = lists:foldl(fun ({_ConsumerKey, Consumer}, S) ->
-                                  release_deferred_claims(Consumer, S)
+    State1 = lists:foldl(fun ({ConsumerKey, Consumer}, S) ->
+                                  release_deferred_claims(ConsumerKey, Consumer, S)
                           end, State0, Down),
     % update state to have only up waiting consumers
     StillUp = lists:filter(fun({_CKey, ?CONSUMER_PID(P)}) ->
@@ -1875,7 +1874,7 @@ cancel_consumer(Meta, ConsumerKey,
                     Effects = cancel_consumer_effects({T, P}, State0, Effects0),
                     % A waiting consumer isn't supposed to have any checked out messages,
                     % so nothing special to do here
-                    State = release_deferred_claims(Con, State0),
+                    State = release_deferred_claims(ConsumerKey, Con, State0),
                     {State#?STATE{waiting_consumers = Waiting}, Effects};
                 _ ->
                     {State0, Effects0}
@@ -2061,7 +2060,7 @@ maybe_return_all(#{system_time := Ts} = Meta, ConsumerKey,
                                        Consumer, Reason == down),
             case S1#?STATE.consumers of
                 #{ConsumerKey := _} ->
-                    S2 = release_deferred_claims(Consumer, S1),
+                    S2 = release_deferred_claims(ConsumerKey, Consumer, S1),
                     {S2#?STATE{consumers = maps:remove(ConsumerKey,
                                                        S2#?STATE.consumers),
                                last_active = Ts},
@@ -2868,16 +2867,29 @@ add_deferred_claims(Claims, #consumer{deferred_claims = Claims0} = Con) ->
                 end, Claims0, Claims),
     Con#consumer{deferred_claims = Claims1}.
 
+%% Record that ConsumerKey now holds a non-empty claim, going by Con's
+%% deferred_claims (i.e. after add_deferred_claims/2 merged in this claim),
+%% rather than re-deriving it from the claim just added: add_deferred_claims
+%% only ever adds keys, so this is never wrong, and it stays correct even if
+%% Con already held claims before this particular claim call.
+note_claimed(_ConsumerKey, #consumer{deferred_claims = Claims},
+             #?STATE{claimed_consumers = Claimed})
+  when map_size(Claims) =:= 0 ->
+    Claimed;
+note_claimed(ConsumerKey, _Con, #?STATE{claimed_consumers = Claimed}) ->
+    maps:put(ConsumerKey, true, Claimed).
+
 %% Return a departing consumer's outstanding claims to the shared deferred
 %% map. The messages are still parked, so this keeps them reachable by their
 %% tokens instead of only by their delivery time.
-release_deferred_claims(#consumer{deferred_claims = Claims}, State)
+release_deferred_claims(_ConsumerKey, #consumer{deferred_claims = Claims}, State)
   when map_size(Claims) =:= 0 ->
     State;
-release_deferred_claims(#consumer{deferred_claims = Claims},
+release_deferred_claims(ConsumerKey, #consumer{deferred_claims = Claims},
                         #?STATE{delayed = #delayed{tree = Tree,
                                                    deferred = Deferred0}
-                                = Delayed} = State) ->
+                                = Delayed,
+                                claimed_consumers = Claimed} = State) ->
     Deferred = maps:fold(
                  fun(Token, Keys0, Acc) ->
                          case [K || K <- Keys0, gb_trees:is_defined(K, Tree)] of
@@ -2893,45 +2905,71 @@ release_deferred_claims(#consumer{deferred_claims = Claims},
                                    Rev, Acc)
                          end
                  end, Deferred0, Claims),
-    State#?STATE{delayed = Delayed#delayed{deferred = Deferred}}.
+    State#?STATE{delayed = Delayed#delayed{deferred = Deferred},
+                claimed_consumers = maps:remove(ConsumerKey, Claimed)}.
 
 %% Deliver, ahead of the ready backlog, the messages each consumer has
 %% claimed by deferral token, as far as its credit allows.
 %%
-%% An empty delayed tree, or has_deferred_claims =:= false, means no claim
-%% can resolve to a message, which is the case for every queue not using
-%% deferral, so the scan over consumers is skipped entirely there.
-%% has_deferred_claims is conservative: it is only ever cleared right after
-%% a scan directly observes no consumer (active or waiting) holds a claim,
-%% so it may lag "true" for a checkout or two after the last claim drains,
-%% but it can never wrongly read "false" while a claim is still outstanding.
+%% An empty delayed tree, or an empty claimed_consumers, means no claim can
+%% resolve to a message, which is the case for every queue not using
+%% deferral, so the scan is skipped entirely there. Otherwise, only the
+%% consumers named in claimed_consumers are visited, so the cost of this
+%% scan is bounded by the number of outstanding claims, not by the total
+%% number of consumers on the queue.
+%%
+%% claimed_consumers is conservative: a key is only ever dropped once this
+%% scan, or a claim release, directly observes that key holds no claim, so
+%% it may lag a checkout or two after the last of a consumer's claims
+%% drains, but it can never be missing a key that still holds a claim.
 %% A claimed key whose message has left the tree is dropped when the claim
 %% is next consulted, so a consumer that claims tokens and then never grants
 %% the credit to collect them can hold on to stale keys until it detaches.
 deliver_claimed(_Meta, #?STATE{delayed = #delayed{next = undefined}} = State,
                 Effects) ->
     {State, Effects};
-deliver_claimed(_Meta, #?STATE{has_deferred_claims = false} = State, Effects) ->
+deliver_claimed(_Meta, #?STATE{claimed_consumers = Claimed} = State, Effects)
+  when map_size(Claimed) =:= 0 ->
     {State, Effects};
-deliver_claimed(Meta, #?STATE{consumers = Cons} = State, Effects) ->
-    {#?STATE{consumers = Cons1,
-             waiting_consumers = Waiting1} = State1, Effects1} =
+deliver_claimed(Meta, #?STATE{claimed_consumers = Claimed} = State, Effects) ->
+    {State1, Effects1, Claimed1} =
         maps:fold(
-          fun(ConsumerKey, #consumer{deferred_claims = Claims,
-                                     credit = Credit,
-                                     status = up}, {S, E})
-                when map_size(Claims) > 0 andalso Credit > 0 ->
-                  deliver_claimed_to(Meta, ConsumerKey, S, E);
-             (_, _, Acc) ->
-                  Acc
-          end, {State, Effects}, maps:iterator(Cons, ordered)),
-    HasClaims = lists:any(fun(#consumer{deferred_claims = C}) ->
-                                  map_size(C) > 0
-                          end, maps:values(Cons1))
-        orelse lists:any(fun({_, #consumer{deferred_claims = C}}) ->
-                                  map_size(C) > 0
-                          end, Waiting1),
-    {State1#?STATE{has_deferred_claims = HasClaims}, Effects1}.
+          fun(ConsumerKey, true, {S, E, ClaimedAcc}) ->
+                  case S#?STATE.consumers of
+                      #{ConsumerKey := #consumer{deferred_claims = C,
+                                                 credit = Credit,
+                                                 status = up}}
+                        when map_size(C) > 0 andalso Credit > 0 ->
+                          {S1, E1} = deliver_claimed_to(Meta, ConsumerKey, S, E),
+                          #{ConsumerKey := #consumer{deferred_claims = C1}} =
+                              S1#?STATE.consumers,
+                          case map_size(C1) > 0 of
+                              true -> {S1, E1, ClaimedAcc};
+                              false -> {S1, E1, maps:remove(ConsumerKey, ClaimedAcc)}
+                          end;
+                      #{ConsumerKey := #consumer{deferred_claims = C}} ->
+                          %% present but not eligible for delivery right now
+                          %% (not up, no credit, or nothing actually claimed)
+                          case map_size(C) > 0 of
+                              true -> {S, E, ClaimedAcc};
+                              false -> {S, E, maps:remove(ConsumerKey, ClaimedAcc)}
+                          end;
+                      _ ->
+                          %% not an active consumer: a claim's owner key is
+                          %% stable across single-active-consumer promotion
+                          %% (activate_next_consumer/2 never re-keys a
+                          %% waiting consumer), so check waiting_consumers
+                          case lists:keyfind(ConsumerKey, 1,
+                                            S#?STATE.waiting_consumers) of
+                              {_, #consumer{deferred_claims = C}}
+                                when map_size(C) > 0 ->
+                                  {S, E, ClaimedAcc};
+                              _ ->
+                                  {S, E, maps:remove(ConsumerKey, ClaimedAcc)}
+                          end
+                  end
+          end, {State, Effects, Claimed}, maps:iterator(Claimed, ordered)),
+    {State1#?STATE{claimed_consumers = Claimed1}, Effects1}.
 
 deliver_claimed_to(Meta, ConsumerKey,
                    #?STATE{consumers = Consumers} = State0, Effects0) ->
@@ -3382,7 +3420,7 @@ update_or_remove_con(Meta, ConsumerKey,
         0 ->
             #{system_time := Ts} = Meta,
             % we're done with this consumer
-            State1 = release_deferred_claims(Con, State),
+            State1 = release_deferred_claims(ConsumerKey, Con, State),
             State1#?STATE{consumers = maps:remove(ConsumerKey, Cons),
                           last_active = Ts};
         _ ->

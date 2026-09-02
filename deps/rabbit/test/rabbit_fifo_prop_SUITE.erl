@@ -1211,35 +1211,37 @@ deferral_claims(_Config) ->
 %%    once (the shared "parked, unclaimed" pool and every consumer's
 %%    claims): a claim really does remove the message from the pool, so
 %%    two links can never both be told they hold the same message.
-%% 2. has_deferred_claims (see deliver_claimed/3 in rabbit_fifo.erl) is
-%%    never false while some consumer actually holds a claim: it is only
-%%    an optimisation to skip a scan, so a false negative there would
-%%    silently stop claimed messages from ever being delivered.
+%% 2. claimed_consumers (see deliver_claimed/3 in rabbit_fifo.erl) is never
+%%    missing a consumer_key() that actually holds a claim: it is only an
+%%    optimisation to skip a scan, so a false negative there would silently
+%%    stop claimed messages from ever being delivered.
 deferral_invariant() ->
     fun(#rabbit_fifo{delayed = #delayed{deferred = Deferred},
                      consumers = Consumers,
-                     has_deferred_claims = HasClaims}) ->
+                     waiting_consumers = Waiting,
+                     claimed_consumers = Claimed}) ->
             SharedKeys = lists:append(maps:values(Deferred)),
+            AllConsumers = maps:to_list(Consumers) ++ Waiting,
             ClaimedKeys = lists:append(
-                            [Keys || #consumer{deferred_claims = C}
-                                         <- maps:values(Consumers),
+                            [Keys || {_, #consumer{deferred_claims = C}}
+                                         <- AllConsumers,
                                      Keys <- maps:values(C)]),
             AllKeys = SharedKeys ++ ClaimedKeys,
             NoDuplicateKeys = length(AllKeys) == length(lists:usort(AllKeys)),
-            AnyConsumerHasClaims =
-                lists:any(fun(#consumer{deferred_claims = C}) ->
-                                  map_size(C) > 0
-                          end, maps:values(Consumers)),
-            FlagConsistent = HasClaims orelse not AnyConsumerHasClaims,
+            ActuallyClaiming =
+                [K || {K, #consumer{deferred_claims = C}} <- AllConsumers,
+                      map_size(C) > 0],
+            FlagConsistent = lists:all(fun(K) -> maps:is_key(K, Claimed) end,
+                                       ActuallyClaiming),
             case NoDuplicateKeys andalso FlagConsistent of
                 true ->
                     true;
                 false ->
                     ct:pal("deferral invariant failed: NoDuplicateKeys ~p "
-                           "FlagConsistent ~p (HasClaims ~p, "
-                           "AnyConsumerHasClaims ~p)",
-                           [NoDuplicateKeys, FlagConsistent, HasClaims,
-                            AnyConsumerHasClaims]),
+                           "FlagConsistent ~p (Claimed ~p, "
+                           "ActuallyClaiming ~p)",
+                           [NoDuplicateKeys, FlagConsistent, Claimed,
+                            ActuallyClaiming]),
                     false
             end
     end.
