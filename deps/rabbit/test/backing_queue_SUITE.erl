@@ -64,6 +64,7 @@ groups() ->
      {backing_queue_tests, [], [
           msg_store,
           msg_store_read_many_fanout,
+          msg_store_dirty_recovery_counts_each_reference_once,
           msg_store_file_scan,
           msg_store_gc_stuck_suspended,
           msg_store_gc_stuck_mid_callback,
@@ -376,6 +377,54 @@ msg_store_read_many_fanout1(_Config) ->
                                           QueueOnlyMsgIds, MSCStateM),
                    MSCStateN
            end),
+    passed.
+
+%% Dirty recovery rebuilds ref_count from the queue indexes. A message
+%% referenced by N queues must come back with exactly N references, so
+%% that N removes bring it to zero and its file can be reclaimed; one
+%% reference too many leaks the message on disk for good.
+msg_store_dirty_recovery_counts_each_reference_once(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, msg_store_dirty_recovery_counts_each_reference_once1, [Config]).
+
+msg_store_dirty_recovery_counts_each_reference_once1(_Config) ->
+    restart_msg_store_empty(),
+    Ref0 = rabbit_guid:gen(),
+    {Cap0, MSCState0} = msg_store_client_init_capture(?PERSISTENT_MSG_STORE, Ref0),
+    MsgIdOnce = msg_id_bin(refcount_once),
+    MsgIdTwice = msg_id_bin(refcount_twice),
+    ok = rabbit_msg_store:write(1, MsgIdOnce, {payload, <<"referenced by one queue">>}, MSCState0),
+    ok = rabbit_msg_store:write(2, MsgIdTwice, {payload, <<"referenced by two queues">>}, MSCState0),
+    ok = on_disk_await(Cap0, [{1, MsgIdOnce}, {2, MsgIdTwice}]),
+    ok = rabbit_msg_store:client_terminate(MSCState0),
+    ok = on_disk_stop(Cap0),
+
+    ok = rabbit_variable_queue:stop_msg_store(?VHOST),
+    Dir = filename:join([rabbit_vhost:msg_store_dir_path(?VHOST), atom_to_list(?PERSISTENT_MSG_STORE)]),
+    ok = file:delete(filename:join(Dir, "clean.dot")),
+
+    %% The generator yields one msg_id per queue index entry, the way
+    %% rabbit_classic_queue_index_v2:queue_index_walker/1 does.
+    Ref = rabbit_guid:gen(),
+    Gen = fun
+        ([])  -> finished;
+        (Ids) -> {Ids, []}
+    end,
+    ok = rabbit_variable_queue:start_msg_store(?VHOST, [Ref],
+           {Gen, [MsgIdOnce, MsgIdTwice, MsgIdTwice]}),
+    false = rabbit_vhost_msg_store:successfully_recovered_state(?VHOST, ?PERSISTENT_MSG_STORE),
+
+    MSCState1 = msg_store_client_init(?PERSISTENT_MSG_STORE, Ref),
+    true = rabbit_msg_store:contains(MsgIdOnce, MSCState1),
+    true = rabbit_msg_store:contains(MsgIdTwice, MSCState1),
+    {ok, []} = rabbit_msg_store:remove([{1, MsgIdOnce}, {2, MsgIdTwice}], MSCState1),
+    false = rabbit_msg_store:contains(MsgIdOnce, MSCState1),
+    true = rabbit_msg_store:contains(MsgIdTwice, MSCState1),
+    {ok, []} = rabbit_msg_store:remove([{3, MsgIdTwice}], MSCState1),
+    false = rabbit_msg_store:contains(MsgIdTwice, MSCState1),
+    ok = rabbit_msg_store:client_terminate(MSCState1),
+
+    restart_msg_store_empty(),
     passed.
 
 restart_msg_store_empty() ->
