@@ -705,8 +705,19 @@ delete_for_destination_in_khepri(#resource{virtual_host = VHost, kind = Kind, na
                                  Acc
                          end
                  end, [], BindingsMap),
-    rabbit_binding:group_bindings_fold(fun maybe_auto_delete_exchange_in_khepri/4,
-                                       lists:keysort(#binding.source, Bindings), OnlyDurable).
+    %% Deleting a source exchange's last route here can leave its
+    %% `keep_while' condition unmet, so Khepri auto-deletes the exchange as
+    %% a side effect of this same delete.
+    %% `maybe_auto_delete_exchange_in_khepri/4' cannot detect that: by the
+    %% time it re-reads the source exchange, the record is already gone.
+    %% `BindingsMap' still has it, since indirect deletes are reported back.
+    IndirectDeletions = node_props_to_deletions_in_khepri_tx(
+                          BindingsMap, OnlyDurable),
+    rabbit_binding:combine_deletions(
+      IndirectDeletions,
+      rabbit_binding:group_bindings_fold(
+        fun maybe_auto_delete_exchange_in_khepri/4,
+        lists:keysort(#binding.source, Bindings), OnlyDurable)).
 
 node_props_to_deletions(NodeProps, OnlyDurable) ->
     node_props_to_deletions(NodeProps, OnlyDurable, fun lookup_resource/1).
