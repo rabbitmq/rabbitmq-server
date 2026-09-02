@@ -77,7 +77,7 @@ stop() ->
 			       "Reason = ~tp\n"
 			       "Terminating now!\n",[Reason]),
 	    %% communication with event manager fails, kill it
-	    catch exit(whereis(?CT_MEVMGR_REF), kill);
+	    try exit(whereis(?CT_MEVMGR_REF), kill) catch _:_ -> ok end;
 	_ ->
 	    gen_event:stop(?CT_MEVMGR_REF)
     end.

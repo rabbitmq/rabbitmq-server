@@ -237,7 +237,7 @@ handle_info({start_heartbeats, {0, 0}}, State) ->
 handle_info({start_heartbeats, {SendTimeout, ReceiveTimeout}},
             State = #reader_state{heartbeat_sup = SupPid, socket = Sock}) ->
 
-    SendFun = fun() -> catch rabbit_net:send(Sock, <<$\n>>) end,
+    SendFun = fun() -> try rabbit_net:send(Sock, <<$\n>>) catch _:_ -> ok end end,
     Pid = self(),
     ReceiveFun = fun() -> gen_server2:cast(Pid, client_timeout) end,
     Heartbeat = rabbit_heartbeat:start(SupPid, Sock, SendTimeout,

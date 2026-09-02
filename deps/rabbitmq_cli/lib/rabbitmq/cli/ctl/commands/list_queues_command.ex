@@ -5,9 +5,6 @@
 ## Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
-  require RabbitMQ.CLI.Ctl.InfoKeys
-  require RabbitMQ.CLI.Ctl.RpcStream
-
   alias RabbitMQ.CLI.Ctl.{InfoKeys, RpcStream}
   alias RabbitMQ.CLI.Core.{DocGuide, Helpers}
 

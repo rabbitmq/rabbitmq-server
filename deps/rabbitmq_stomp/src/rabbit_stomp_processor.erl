@@ -929,7 +929,7 @@ check_subscription_access(_, _) ->
     authorized.
 
 maybe_clean_up_queue(Queue, #state{cfg = #cfg{auth_login = Username}}) ->
-    catch delete_queue(Queue, Username),
+    try delete_queue(Queue, Username) catch _:_ -> ok end,
     ok.
 
 do_send(Destination, _DestHdr,

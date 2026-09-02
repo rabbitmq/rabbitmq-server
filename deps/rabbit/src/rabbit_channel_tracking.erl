@@ -246,7 +246,8 @@ delete_tracked_channel_user_entry(Username) ->
       Username).
 
 tracked_channel_from_channel_created_event(ChannelDetails) ->
-    Node = node(ChPid = pget(pid, ChannelDetails)),
+    ChPid = pget(pid, ChannelDetails),
+    Node = node(ChPid),
     Name = pget(name, ChannelDetails),
     #tracked_channel{
         id    = rabbit_tracking:id(Node, Name),

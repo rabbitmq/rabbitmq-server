@@ -6,7 +6,6 @@
 
 defmodule RabbitMQ.CLI.Core.Helpers do
   alias RabbitMQ.CLI.Core.{Config, DataCoercion, NodeName}
-  require Record
 
   def get_rabbit_hostname(node_name_type \\ :shortnames) do
     normalise_node(Config.get_option(:node), node_name_type)

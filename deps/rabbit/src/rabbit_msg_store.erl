@@ -1481,7 +1481,7 @@ write_large_message(MsgId, MsgBodyBin,
 
 contains_message(MsgId, From, State = #msstate{ index_ets = IndexEts }) ->
     MsgLocation = index_lookup_positive_ref_count(IndexEts, MsgId),
-    gen_server2:reply(From, MsgLocation =/= not_found),
+    _ = gen_server2:reply(From, MsgLocation =/= not_found),
     State.
 
 update_msg_cache(CacheEts, MsgId, Msg) ->

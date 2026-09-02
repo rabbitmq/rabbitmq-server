@@ -221,7 +221,7 @@ init_it2(Recover, From, State = #q{q                   = Q,
                 true ->
                     BQ = backing_queue_module(),
                     BQS = bq_init(BQ, Q, TermsOrNew),
-                    send_reply(From, {new, Q}),
+                    _ = send_reply(From, {new, Q}),
                     recovery_barrier(Barrier),
                     State1 = process_args_policy(
                                State#q{backing_queue       = BQ,
@@ -307,7 +307,7 @@ terminate(shutdown = R, State = #q{backing_queue = BQ, q = Q0}) ->
 terminate({shutdown, missing_owner = Reason}, {{reply_to, From}, #q{q = Q} = State}) ->
     %% if the owner was missing then there will be no queue, so don't emit stats
     State1 = terminate_shutdown(terminate_delete(false, Reason, none, State), State),
-    send_reply(From, {owner_died, Q}),
+    _ = send_reply(From, {owner_died, Q}),
     State1;
 terminate({shutdown, _} = R, State = #q{backing_queue = BQ}) ->
     rabbit_core_metrics:queue_deleted(qname(State)),
@@ -350,7 +350,7 @@ terminate_delete(EmitStats, Reason0, ReplyTo,
                                                 fun() -> emit_stats(State) end);
            true      -> ok
         end,
-        case ReplyTo of
+        _ = case ReplyTo of
             _ when ReplyTo =/= none ->
                 Reply = case delete_queue_record(Q, ActingUser, Reason0) of
                             ok ->

@@ -1453,7 +1453,13 @@ check_startspec([], Ids, Db) ->
     {ok, {lists:reverse(Ids),Db}}.
 
 check_childspec(ChildSpec) when is_map(ChildSpec) ->
-    catch do_check_childspec(maps:merge(?default_child_spec,ChildSpec));
+    try
+        do_check_childspec(maps:merge(?default_child_spec,ChildSpec))
+    catch
+        throw:Thrown -> Thrown;
+        exit:Reason -> {'EXIT', Reason};
+        error:Reason:Stacktrace -> {'EXIT', {Reason, Stacktrace}}
+    end;
 check_childspec({Id, Func, RestartType, Shutdown, ChildType, Mods}) ->
     check_childspec(#{id => Id,
                       start => Func,

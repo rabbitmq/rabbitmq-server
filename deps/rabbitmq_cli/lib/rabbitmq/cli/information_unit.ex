@@ -5,8 +5,6 @@
 ## Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule RabbitMQ.CLI.InformationUnit do
-  require MapSet
-
   @kilobyte_bytes 1000
   @megabyte_bytes @kilobyte_bytes * 1000
   @gigabyte_bytes @megabyte_bytes * 1000

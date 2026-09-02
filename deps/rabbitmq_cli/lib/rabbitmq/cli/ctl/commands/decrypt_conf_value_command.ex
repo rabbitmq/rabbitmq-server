@@ -169,8 +169,4 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DecryptConfValueCommand do
 
     {:encrypted, untagged_val}
   end
-
-  defp tag_input_value_with_encrypted(value) do
-    {:encrypted, value}
-  end
 end

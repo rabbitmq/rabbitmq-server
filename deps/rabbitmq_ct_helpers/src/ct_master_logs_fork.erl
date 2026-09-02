@@ -173,7 +173,13 @@ loop(State) ->
 	    Fd = State#state.log_fd,
 	    Fun = 
 		fun({Str,Args}) ->
-			case catch io:format(Fd,Str++"\n",Args) of
+			case try
+			         io:format(Fd,Str++"\n",Args)
+			     catch
+			         throw:Thrown -> Thrown;
+			         exit:ExitReason -> {'EXIT', ExitReason};
+			         error:ErrorReason:Stacktrace -> {'EXIT', {ErrorReason, Stacktrace}}
+			     end of
 			    {'EXIT',Reason} ->
 				io:format(Fd, 
 					  "Logging fails! Str: ~tp, Args: ~tp~n",
@@ -296,7 +302,13 @@ make_all_runs_index(LogDir) ->
     FullName = filename:join(LogDir,?all_runs_name),
     Match = filename:join(LogDir,logdir_prefix()++"*.*"),
     Dirs = filelib:wildcard(Match),
-    DirsSorted = (catch sort_all_runs(Dirs)),
+    DirsSorted = (try
+                      sort_all_runs(Dirs)
+                  catch
+                      throw:Thrown -> Thrown;
+                      exit:Reason -> {'EXIT', Reason};
+                      error:Reason:Stacktrace -> {'EXIT', {Reason, Stacktrace}}
+                  end),
     Header = all_runs_header(),
     Index = [runentry(Dir) || Dir <- DirsSorted],
     Result = file:write_file(FullName,
