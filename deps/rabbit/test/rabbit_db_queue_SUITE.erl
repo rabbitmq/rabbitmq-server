@@ -9,6 +9,7 @@
 
 -include_lib("khepri/include/khepri.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include("amqqueue.hrl").
 
@@ -47,19 +48,27 @@
          mark_local_durable_queues_stopped/1,
          mark_local_durable_queues_stopped1/1,
          foreach_durable/1, foreach_durable1/1,
-         internal_delete/1, internal_delete1/1
+         internal_delete/1, internal_delete1/1,
+         delete_transient/1, delete_transient1/1,
+         delete_transient_auto_delete_source_v1/1,
+         delete_transient_auto_delete_source_v2/1,
+         delete_transient_auto_delete_source1/2
         ]).
 
 -define(VHOST, <<"/">>).
 
 all() ->
     [
-     {group, all_tests}
+     {group, all_tests},
+     {group, feature_flags}
     ].
 
 groups() ->
     [
-     {all_tests, [], all_tests()}
+     {all_tests, [], all_tests()},
+     {feature_flags, [],
+      [delete_transient_auto_delete_source_v1,
+       delete_transient_auto_delete_source_v2]}
     ].
 
 all_tests() ->
@@ -89,7 +98,8 @@ all_tests() ->
      update_durable,
      mark_local_durable_queues_stopped,
      foreach_durable,
-     internal_delete
+     internal_delete,
+     delete_transient
     ].
 
 %% -------------------------------------------------------------------
@@ -108,7 +118,15 @@ init_per_group(Group, Config) ->
         {rmq_nodename_suffix, Group},
         {rmq_nodes_count, 1}
       ]),
-    rabbit_ct_helpers:run_steps(Config1,
+    Config2 = case Group of
+                  feature_flags ->
+                      rabbit_ct_helpers:merge_app_env(
+                        Config1,
+                        {rabbit, [{forced_feature_flags_on_init, []}]});
+                  _ ->
+                      Config1
+              end,
+    rabbit_ct_helpers:run_steps(Config2,
       rabbit_ct_broker_helpers:setup_steps() ++
       rabbit_ct_client_helpers:setup_steps()).
 
@@ -118,10 +136,21 @@ end_per_group(_Group, Config) ->
       rabbit_ct_broker_helpers:teardown_steps()).
 
 init_per_testcase(Testcase, Config) ->
-    rabbit_ct_helpers:testcase_started(Config, Testcase).
+    rabbit_ct_helpers:testcase_started(Config, Testcase),
+    case lists:member({name, feature_flags}, ?config(tc_group_properties, Config)) of
+        true ->
+            ok = rabbit_ct_broker_helpers:stop_broker(Config, 0),
+            ok = rabbit_ct_broker_helpers:reset_node(Config, 0),
+            ok = rabbit_ct_broker_helpers:start_broker(Config, 0);
+        false ->
+            ok
+    end,
+    Config.
 
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_db_queue, clear, []),
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_db_exchange, clear, []),
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_db_binding, clear, []),
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
 %% ---------------------------------------------------------------------------
@@ -573,6 +602,87 @@ internal_delete1(_Config) ->
     ?assertEqual({error, not_found}, rabbit_db_queue:get_durable(QName)),
     passed.
 
+delete_transient(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_transient1, [Config]).
+
+delete_transient1(_Config) ->
+    QName = rabbit_misc:r(?VHOST, queue, <<"test-transient-queue">>),
+    Q = new_transient_queue(QName, rabbit_classic_queue),
+    XName = rabbit_misc:r(?VHOST, exchange, <<"test-exchange">>),
+    X = rabbit_exchange_decorator:set(
+          #exchange{name = XName, durable = true, auto_delete = false}),
+    Binding = #binding{source = XName, key = <<"transient">>,
+                       destination = QName, args = #{}},
+    ?assertEqual(ok, rabbit_db_queue:set(Q)),
+    ?assertMatch({new, #exchange{}}, rabbit_db_exchange:create_or_get(X)),
+    ?assertEqual(ok, rabbit_db_binding:create(Binding, fun(_, _) -> ok end)),
+    {QNames, DeletionsList} = rabbit_db_queue:delete_transient(fun(_) -> true end),
+    ?assertEqual([QName], QNames),
+    Deletions = lists:foldl(
+                  fun rabbit_binding:combine_deletions/2,
+                  rabbit_binding:new_deletions(), DeletionsList),
+    ?assertMatch({#exchange{name = XName}, not_deleted, [#binding{destination = QName}]},
+                 rabbit_binding:fetch_deletion(XName, Deletions)),
+    ?assertEqual({error, not_found}, rabbit_db_queue:get(QName)),
+    ?assertEqual([], rabbit_db_binding:get_all_for_source(XName)),
+    passed.
+
+delete_transient_auto_delete_source_v1(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(
+               Config, 0, ?MODULE,
+               delete_transient_auto_delete_source1, [Config, v1]).
+
+delete_transient_auto_delete_source_v2(Config) ->
+    Ret = rabbit_ct_broker_helpers:enable_feature_flag(
+            Config, tie_binding_to_dest_with_keep_while_cond),
+    case Ret of
+        ok ->
+            passed = rabbit_ct_broker_helpers:rpc(
+                       Config, 0, ?MODULE,
+                       delete_transient_auto_delete_source1,
+                       [Config, v2]);
+        {skip, _} = Skip ->
+            Skip
+    end.
+
+delete_transient_auto_delete_source1(_Config, Version) ->
+    case Version of
+        v1 ->
+            ?assertNot(
+               rabbit_feature_flags:is_enabled(
+                 tie_binding_to_dest_with_keep_while_cond));
+        v2 ->
+            ?assert(
+               rabbit_feature_flags:is_enabled(
+                 tie_binding_to_dest_with_keep_while_cond))
+    end,
+    %% `XName' is an auto-delete exchange whose only source binding routes
+    %% to the transient queue. Deleting the queue must cascade into
+    %% auto-deleting `XName' and report it, whether or not the `keep_while'
+    %% condition drove the cascade.
+    QName = rabbit_misc:r(?VHOST, queue, <<"test-transient-queue">>),
+    Q = new_transient_queue(QName, rabbit_classic_queue),
+    XName = rabbit_misc:r(?VHOST, exchange, <<"test-exchange">>),
+    X = rabbit_exchange_decorator:set(
+          #exchange{name = XName, durable = true, auto_delete = true}),
+    Binding = #binding{source = XName, key = <<"transient">>,
+                       destination = QName, args = #{}},
+    ?assertEqual(ok, rabbit_db_queue:set(Q)),
+    ?assertMatch({new, #exchange{}}, rabbit_db_exchange:create_or_get(X)),
+    ?assertEqual(ok, rabbit_db_binding:create(Binding, fun(_, _) -> ok end)),
+    {QNames, DeletionsList} = rabbit_db_queue:delete_transient(fun(_) -> true end),
+    ?assertEqual([QName], QNames),
+    Deletions = lists:foldl(
+                  fun rabbit_binding:combine_deletions/2,
+                  rabbit_binding:new_deletions(), DeletionsList),
+    ?assertMatch({#exchange{name = XName}, deleted, [#binding{destination = QName}]},
+                 rabbit_binding:fetch_deletion(XName, Deletions)),
+    ?assertNot(rabbit_khepri:exists(
+                 rabbit_db_queue:khepri_queue_path(QName))),
+    ?assertNot(rabbit_khepri:exists(
+                 rabbit_db_exchange:khepri_exchange_path(XName))),
+    passed.
+
 set_list(Qs) ->
     [?assertEqual(ok, rabbit_db_queue:set(Q)) || Q <- Qs].
 
@@ -584,3 +694,6 @@ new_queue(#resource{virtual_host = VHost} = QName, Type, Pid) ->
 
 new_exclusive_queue(#resource{virtual_host = VHost} = QName, Type, Owner) ->
     amqqueue:new(QName, none, true, false, Owner, [], VHost, #{}, Type).
+
+new_transient_queue(#resource{virtual_host = VHost} = QName, Type) ->
+    amqqueue:new(QName, none, false, false, none, [], VHost, #{}, Type).

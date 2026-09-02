@@ -39,7 +39,10 @@ all_tests() ->
      next_serial,
      delete_serial,
      delete,
+     delete_destination_exchange,
+     delete_source_exchange,
      delete_if_unused,
+     delete_all,
      exists,
      match,
      recover
@@ -266,6 +269,53 @@ delete1(_Config) ->
     ?assertEqual([], rabbit_db_exchange:get_all_durable()),
     passed.
 
+delete_destination_exchange(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_destination_exchange1, [Config]).
+
+delete_destination_exchange1(_Config) ->
+    XName1 = rabbit_misc:r(?VHOST, exchange, <<"test-exchange1">>),
+    XName2 = rabbit_misc:r(?VHOST, exchange, <<"test-exchange2">>),
+    Exchange1 = rabbit_exchange_decorator:set(
+                  #exchange{name = XName1, durable = true, auto_delete = false}),
+    Exchange2 = rabbit_exchange_decorator:set(
+                  #exchange{name = XName2, durable = true, auto_delete = false}),
+    Binding = #binding{source = XName1, key = <<"">>, destination = XName2, args = #{}},
+    create([Exchange1, Exchange2]),
+    ?assertEqual(ok, rabbit_db_binding:create(Binding, fun(_, _) -> ok end)),
+    {deleted, #exchange{name = XName2}, [], Deletions} =
+        rabbit_db_exchange:delete(XName2, false),
+    ?assertMatch({#exchange{name = XName1}, not_deleted, [#binding{destination = XName2}]},
+                 rabbit_binding:fetch_deletion(XName1, Deletions)),
+    ?assertEqual([], rabbit_db_binding:get_all_for_destination(XName2)),
+    passed.
+
+delete_source_exchange(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_source_exchange1, [Config]).
+
+delete_source_exchange1(_Config) ->
+    XName1 = rabbit_misc:r(?VHOST, exchange, <<"test-exchange1">>),
+    XName2 = rabbit_misc:r(?VHOST, exchange, <<"test-exchange2">>),
+    Exchange1 = rabbit_exchange_decorator:set(
+                  #exchange{name = XName1, durable = true, auto_delete = false}),
+    Exchange2 = rabbit_exchange_decorator:set(
+                  #exchange{name = XName2, durable = true, auto_delete = false}),
+    Binding = #binding{source = XName1, key = <<"">>, destination = XName2, args = #{}},
+    create([Exchange1, Exchange2]),
+    ?assertEqual(ok, rabbit_db_binding:create(Binding, fun(_, _) -> ok end)),
+    {deleted, #exchange{name = XName1} = X, Bindings, Deletions0} =
+        rabbit_db_exchange:delete(XName1, false),
+    %% Merge the returned bindings the way `rabbit_exchange:delete/3' does
+    %% before it emits notifications.
+    Deletions = rabbit_binding:add_deletion(
+                  XName1, X, deleted, Bindings, Deletions0),
+    ?assertMatch({#exchange{name = XName1}, deleted,
+                  [#binding{source = XName1, destination = XName2}]},
+                 rabbit_binding:fetch_deletion(XName1, Deletions)),
+    ?assertNot(rabbit_khepri:exists(
+                 rabbit_db_exchange:khepri_exchange_path(XName1))),
+    ?assertEqual([], rabbit_db_binding:get_all_for_destination(XName2)),
+    passed.
+
 delete_if_unused(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_if_unused1, [Config]).
 
@@ -283,6 +333,28 @@ delete_if_unused1(_Config) ->
     ?assertMatch({error, in_use}, rabbit_db_exchange:delete(XName1, true)),
     ?assertMatch({ok, #exchange{name = XName1}}, rabbit_db_exchange:get(XName1)),
     ?assertMatch([#exchange{}, #exchange{}], rabbit_db_exchange:get_all_durable()),
+    passed.
+
+delete_all(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_all1, [Config]).
+
+delete_all1(_Config) ->
+    XName1 = rabbit_misc:r(?VHOST, exchange, <<"test-exchange1">>),
+    XName2 = rabbit_misc:r(?VHOST, exchange, <<"test-exchange2">>),
+    Exchange1 = rabbit_exchange_decorator:set(
+                  #exchange{name = XName1, durable = true, auto_delete = false}),
+    Exchange2 = rabbit_exchange_decorator:set(
+                  #exchange{name = XName2, durable = true, auto_delete = false}),
+    Binding = #binding{source = XName1, key = <<"">>, destination = XName2, args = #{}},
+    create([Exchange1, Exchange2]),
+    ?assertEqual(ok, rabbit_db_binding:create(Binding, fun(_, _) -> ok end)),
+    {ok, Deletions} = rabbit_db_exchange:delete_all(?VHOST),
+    ?assertMatch({#exchange{name = XName1}, deleted, [#binding{destination = XName2}]},
+                 rabbit_binding:fetch_deletion(XName1, Deletions)),
+    ?assertMatch({#exchange{name = XName2}, deleted, []},
+                 rabbit_binding:fetch_deletion(XName2, Deletions)),
+    ?assertEqual([], rabbit_db_exchange:get_all(?VHOST)),
+    ?assertEqual([], rabbit_db_binding:get_all_for_source(XName1)),
     passed.
 
 exists(Config) ->
