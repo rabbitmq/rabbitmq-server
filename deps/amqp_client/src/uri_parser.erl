@@ -48,7 +48,13 @@ parse(AbsURI, Defaults) ->
 	{error, Reason} ->
 	    {error, Reason};
 	{Scheme, Rest} ->
-            case (catch parse_uri_rest(Rest, true)) of
+            case (try
+                      parse_uri_rest(Rest, true)
+                  catch
+                      throw:Thrown -> Thrown;
+                      exit:Reason -> {'EXIT', Reason};
+                      error:Reason:Stacktrace -> {'EXIT', {Reason, Stacktrace}}
+                  end) of
                 [_|_] = List ->
                     merge_keylists([{scheme, Scheme} | List], Defaults);
                 E ->
