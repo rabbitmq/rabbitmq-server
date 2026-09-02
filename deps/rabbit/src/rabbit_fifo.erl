@@ -431,8 +431,9 @@ apply_(#{index := Index,
                             settled ->
                                 %% immediately settle the checkout
                                 {State3, _, SettleEffects} =
-                                apply(Meta, make_settle(ConsumerId, [MsgId]),
-                                      State2),
+                                    apply(Meta,
+                                          make_settle(ConsumerId, [MsgId]),
+                                          State2),
                                 {State3, SettleEffects ++ Effects0}
                         end,
                     Effects2 = [reply_log_effect(RaftIdx, MsgId, Header,
@@ -644,7 +645,8 @@ apply_(Meta, {timeout, {consumer_disconnected_timeout, CKey}},
         _ ->
             {State0, []}
     end;
-apply_(#{system_time := Ts} = Meta, {timeout, {consumer_disconnected_timeout, CKey}},
+apply_(#{system_time := Ts} = Meta,
+       {timeout, {consumer_disconnected_timeout, CKey}},
        #?STATE{cfg = #cfg{consumer_strategy = single_active},
                waiting_consumers = Waiting0,
                consumers = Consumers} = State0) ->
@@ -3014,9 +3016,9 @@ take_claimed_up_to(Credit, #consumer{deferred_claims = Claims0} = Con,
             {[], Con1, State};
         _ ->
             {Msgs, Con1,
-             State#?STATE{delayed = Delayed#delayed{
-                                      tree = Tree,
-                                      next = update_delayed_next(Tree)}}}
+             State#?STATE{delayed =
+                          Delayed#delayed{tree = Tree,
+                                          next = update_delayed_next(Tree)}}}
     end.
 
 drain_claims(_Iter, 0, Claims, Tree, Acc) ->
@@ -3034,7 +3036,7 @@ drain_claims(Iter, N, Claims, Tree0, Acc) ->
                               Claims#{Token := Rem}
                       end,
             drain_claims(Iter1, N - length(Msgs), Claims1, Tree,
-                         lists:reverse(Msgs) ++ Acc)
+                         lists:reverse(Msgs, Acc))
     end.
 
 drain_claimed_keys(Keys, 0, Tree, Acc) ->
