@@ -570,28 +570,41 @@ deaths_to_headers(Deaths, Headers0) ->
     rabbit_misc:set_table_value(Headers0, <<"x-death">>, array, Infos).
 
 convert_from_amqp_deaths({array, map, Maps}) ->
-    L = lists:map(
-          fun({map, KvList}) ->
-                  {Ttl, KvList1} = case KvList of
-                                       [{{symbol, <<"ttl">>}, {uint, Ttl0}} | Tail] ->
-                                           {Ttl0, Tail};
-                                       _ ->
-                                           {undefined, KvList}
-                                   end,
-                  [
-                   {{symbol, <<"queue">>}, {utf8, Queue}},
-                   {{symbol, <<"reason">>}, {symbol, Reason}},
-                   {{symbol, <<"count">>}, {ulong, Count}},
-                   {{symbol, <<"first-time">>}, {timestamp, FirstTime}},
-                   {{symbol, <<"last-time">>}, {timestamp, _LastTime}},
-                   {{symbol, <<"exchange">>}, {utf8, Exchange}},
-                   {{symbol, <<"routing-keys">>}, {array, utf8, RKeys0}}
-                  ] = KvList1,
-                  RKeys = [Key || {utf8, Key} <- RKeys0],
-                  death_table(Queue, Reason, Exchange, RKeys, Count, FirstTime, Ttl)
-          end, Maps),
+    L = lists:filtermap(fun convert_death_entry/1, Maps),
     {true, {<<"x-death">>, array, L}};
 convert_from_amqp_deaths(_IgnoreUnknownValue) ->
+    false.
+
+%% A death entry comes from a client-supplied `x-opt-deaths' message
+%% annotation (for a message that was never actually dead-lettered by this
+%% broker), so its shape can't be trusted. Drop an entry that doesn't have
+%% all the fields we need instead of crashing the conversion for every
+%% other entry and message on the connection.
+convert_death_entry({map, KvList0}) ->
+    {Ttl, KvList} = case KvList0 of
+                        [{{symbol, <<"ttl">>}, {uint, Ttl0}} | Tail] ->
+                            {Ttl0, Tail};
+                        _ ->
+                            {undefined, KvList0}
+                    end,
+    case {lists:keyfind({symbol, <<"queue">>}, 1, KvList),
+          lists:keyfind({symbol, <<"reason">>}, 1, KvList),
+          lists:keyfind({symbol, <<"count">>}, 1, KvList),
+          lists:keyfind({symbol, <<"first-time">>}, 1, KvList),
+          lists:keyfind({symbol, <<"exchange">>}, 1, KvList),
+          lists:keyfind({symbol, <<"routing-keys">>}, 1, KvList)} of
+        {{_, {utf8, Queue}},
+         {_, {symbol, Reason}},
+         {_, {ulong, Count}},
+         {_, {timestamp, FirstTime}},
+         {_, {utf8, Exchange}},
+         {_, {array, utf8, RKeys0}}} ->
+            RKeys = [Key || {utf8, Key} <- RKeys0],
+            {true, death_table(Queue, Reason, Exchange, RKeys, Count, FirstTime, Ttl)};
+        _ ->
+            false
+    end;
+convert_death_entry(_NotAMap) ->
     false.
 
 death_table({{QName, Reason},
