@@ -64,6 +64,7 @@ groups() ->
      {backing_queue_tests, [], [
           msg_store,
           msg_store_read_many_fanout,
+          msg_store_read_after_concurrent_remove_returns_not_found,
           msg_store_compaction_v2,
           msg_store_compaction_v2_exact_fit,
           msg_store_compaction_v2_scannable_before_truncate,
@@ -403,6 +404,78 @@ msg_store_read_many_fanout1(_Config) ->
                    MSCStateN
            end),
     passed.
+
+%% A message fanned out to two queues has ref_count = 2. If one queue's
+%% consumer acks the message (dropping the reference to 0) between another
+%% reader's snapshot lookup and client_read3/2's own, second, confirming
+%% lookup, the second lookup used to have no fallback clause and crashed
+%% with case_clause -- and left the file handle it had just marked open
+%% stuck open forever, which blocks that file's reclamation. The fix
+%% turns that crash into a clean not_found and closes the handle; it does
+%% not change what the sole production caller, rabbit_variable_queue,
+%% does with a not_found result, which already hard-matches {ok, _} on
+%% the pre-existing first-lookup not_found path.
+msg_store_read_after_concurrent_remove_returns_not_found(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, msg_store_read_after_concurrent_remove_returns_not_found1, [Config]).
+
+msg_store_read_after_concurrent_remove_returns_not_found1(_Config) ->
+    restart_msg_store_empty(),
+    Ref = rabbit_guid:gen(),
+    CState0 = msg_store_client_init(?PERSISTENT_MSG_STORE, Ref),
+    MsgRef = rabbit_guid:gen(),
+    MsgId = msg_id_bin(MsgRef),
+    ok = rabbit_msg_store:write(MsgRef, MsgId, MsgId, CState0),
+    %% ensure the write above has been processed by the server: same-priority
+    %% casts and calls are handled in FIFO order by this gen_server2
+    true = rabbit_msg_store:contains(MsgId, CState0),
+
+    %% capture the location the way read/2's own snapshot check would,
+    %% while the message still has a positive ref count
+    StaleLocation = stale_location(MsgId, CState0),
+    true = StaleLocation =/= not_found,
+    File = location_file(StaleLocation),
+
+    %% remove the only reference -- simulating a different queue's consumer
+    %% acking the same fanned-out message concurrently -- and sync again
+    {ok, []} = rabbit_msg_store:remove([{MsgRef, MsgId}], CState0),
+    false = rabbit_msg_store:contains(MsgId, CState0),
+
+    %% call the function under test directly with the now-stale location:
+    %% its own second, index-based lookup will find ref_count = 0, which
+    %% must return not_found instead of crashing with case_clause
+    {Result, CState1} = rabbit_msg_store:client_read3(StaleLocation, CState0),
+    not_found = Result,
+
+    %% the handle marked open for File just before the second lookup must
+    %% not be left open, or File's reclamation is blocked forever
+    false = handle_open(File, CState1),
+
+    ok = rabbit_msg_store:client_terminate(CState1),
+    passed.
+
+%% Exposes the same snapshot lookup read/2 does before calling
+%% client_read3/2, so a test can hold onto it and call client_read3/2
+%% with it after the index has since changed underneath it.
+stale_location(MsgId, CState) ->
+    IndexEts = element(5, CState),
+    case ets:lookup(IndexEts, MsgId) of
+        [MsgLocation] when element(3, MsgLocation) > 0 ->
+            MsgLocation;
+        _ ->
+            not_found
+    end.
+
+location_file(MsgLocation) ->
+    element(4, MsgLocation).
+
+%% Whether a handle is still marked open for File, so a test can
+%% confirm client_read3/2's not_found fallback actually closes the
+%% handle it just opened rather than leaking it.
+handle_open(File, CState) ->
+    FileHandlesEts = element(7, CState),
+    ClientRef = element(3, CState),
+    ets:member(FileHandlesEts, {ClientRef, File}).
 
 %% Compaction of a v2 (.sqs) segment file is the one path that isn't
 %% adequately covered by scanning hand-built files (msg_store_file_scan_v2):
