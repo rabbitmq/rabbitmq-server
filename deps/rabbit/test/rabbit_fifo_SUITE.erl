@@ -5072,6 +5072,65 @@ modify_test(Config) ->
 
     ok.
 
+%% delivery_failed=false does not count towards delivery_limit (it is the
+%% same as a requeue), so a client can keep this cycle going indefinitely.
+%% incr_msg_headers/3 must cap how many distinct annotation keys it
+%% accumulates on the message's header regardless, or repeating this with a
+%% fresh key every time would grow the header (replicated in the Raft log
+%% and snapshots) without bound.
+modify_caps_annotation_growth_test(Config) ->
+    S0 = init(#{name => ?FUNCTION_NAME,
+                queue_resource =>
+                    rabbit_misc:r("/", queue, ?FUNCTION_NAME_B)}),
+    {S1, _} = enq(Config, 1, 1, msg1, S0),
+    Cid = {?FUNCTION_NAME_B, self()},
+    {S2, #{key := CKey, next_msg_id := MsgId}, _} =
+        checkout(Config, 2, Cid, 1, S1),
+    %% A `modify` with delivery_failed=false is the same as a requeue: the
+    %% message is redelivered to the (only, still-credited) consumer under a
+    %% new msg_id each cycle, so the next `modify` has to target that new id.
+    MaxAnns = ?MAX_MSG_ANNS,
+    {SFinal, _} =
+        lists:foldl(
+          fun (N, {StateAcc, CurrentMsgId}) ->
+                  Anns = #{<<"x-opt-cycle-", (integer_to_binary(N))/binary>> => N},
+                  Modify = rabbit_fifo:make_modify(CKey, [CurrentMsgId], false,
+                                                   false, Anns),
+                  {StateAcc1, _, _} = apply(meta(Config, N + 2), Modify,
+                                            StateAcc),
+                  #rabbit_fifo{consumers =
+                               #{CKey := #consumer{checked_out = Checked1}}} =
+                      StateAcc1,
+                  [NewMsgId] = maps:keys(Checked1),
+                  {StateAcc1, NewMsgId}
+          end, {S2, MsgId}, lists:seq(1, MaxAnns + 20)),
+    #rabbit_fifo{consumers = #{CKey := #consumer{checked_out = Checked}}} = SFinal,
+    [FinalMsgId] = maps:keys(Checked),
+    ?C_MSG(?MSG(_, #{anns := Anns})) = maps:get(FinalMsgId, Checked),
+    ?assertEqual(MaxAnns, map_size(Anns)).
+
+%% The cap must also hold for a single `modify` carrying far more
+%% annotations than the limit in one batch, not just for many small cycles.
+modify_with_oversized_annotation_batch_is_capped_test(Config) ->
+    S0 = init(#{name => ?FUNCTION_NAME,
+                queue_resource =>
+                    rabbit_misc:r("/", queue, ?FUNCTION_NAME_B)}),
+    {S1, _} = enq(Config, 1, 1, msg1, S0),
+    Cid = {?FUNCTION_NAME_B, self()},
+    {S2, #{key := CKey, next_msg_id := MsgId}, _} =
+        checkout(Config, 2, Cid, 1, S1),
+    HugeAnns = maps:from_list(
+                 [{<<"x-opt-cycle-", (integer_to_binary(N))/binary>>, N}
+                  || N <- lists:seq(1, ?MAX_MSG_ANNS * 10)]),
+    Modify = rabbit_fifo:make_modify(CKey, [MsgId], false, false, HugeAnns),
+    {S3, _, _} = apply(meta(Config, 3), Modify, S2),
+    #rabbit_fifo{consumers = #{CKey := #consumer{checked_out = Checked}}} = S3,
+    [FinalMsgId] = maps:keys(Checked),
+    %% A batch that alone exceeds the cap is dropped in full (rather than
+    %% truncated to fit), so no `anns` header is ever set for this message.
+    ?C_MSG(?MSG(_, Header)) = maps:get(FinalMsgId, Checked),
+    ?assertNot(is_map_key(anns, Header)).
+
 priorities_expire_test(Config) ->
     State0 = init(#{name => ?FUNCTION_NAME,
                     queue_resource => rabbit_misc:r("/", queue,

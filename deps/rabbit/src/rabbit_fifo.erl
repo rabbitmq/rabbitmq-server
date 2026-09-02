@@ -4279,10 +4279,21 @@ incr_msg_headers(Msg0, DeliveryFailed, Anns) ->
     Msg1 = update_msg_header(acquired_count, fun incr/1, 1, Msg0),
     Msg2 = case map_size(Anns) > 0 of
                true ->
-                   update_msg_header(anns, fun(A) ->
-                                                   maps:merge(A, Anns)
-                                           end, Anns,
-                                     Msg1);
+                   ExistingAnns = case get_header(anns, get_msg_header(Msg1)) of
+                                       undefined -> #{};
+                                       A0 -> A0
+                                   end,
+                   MergedAnns = maps:merge(ExistingAnns, Anns),
+                   case map_size(MergedAnns) > ?MAX_MSG_ANNS of
+                       true ->
+                           %% Merging would exceed the cap: drop the new
+                           %% annotations for this cycle instead of growing
+                           %% further.
+                           Msg1;
+                       false ->
+                           update_msg_header(anns, fun(_) -> MergedAnns end,
+                                             MergedAnns, Msg1)
+                   end;
                false ->
                    Msg1
            end,

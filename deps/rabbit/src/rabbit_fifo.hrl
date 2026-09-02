@@ -23,6 +23,14 @@
 
 -define(DELIVERY_SEND_MSG_OPTS, [local, ra_event]).
 
+%% A client can attach message annotations to a message on every MODIFIED
+%% disposition, and delivery_failed=false (a legitimate "not a failure,
+%% please redeliver" signal) does not count towards delivery_limit. Without
+%% a cap, a client repeating that with a distinct annotation each time
+%% would grow this message's header, replicated in the Raft log and
+%% snapshots, without bound.
+-define(MAX_MSG_ANNS, 50).
+
 %% constants for packed msg references where both the raft index and the size
 %% is packed into a single immidate term
 %%
