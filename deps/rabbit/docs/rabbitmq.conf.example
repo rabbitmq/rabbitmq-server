@@ -443,6 +443,11 @@
 ##
 # consumer_max_per_channel = 100
 
+## Set the max number of publishes a channel will buffer for an open
+## AMQP 0-9-1 transaction before rejecting further ones.
+##
+# channel_tx_message_max = 10000
+
 ## Set the max permissible number of client connections on the node.
 ## The previous name, `connection_max`, is still accepted as an alias.
 ##
