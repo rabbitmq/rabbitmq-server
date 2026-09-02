@@ -11,7 +11,9 @@
 
 -export([link_credit_snd/3,
          dist_mode_to_atom/1,
-         dist_mode_from_atom/1]).
+         dist_mode_from_atom/1,
+         capabilities_from_list/1,
+         capabilities_to_list/1]).
 
 %% AMQP 1.0 §2.6.7
 -spec link_credit_snd(sequence_no(), uint(), sequence_no()) -> uint().
@@ -34,3 +36,26 @@ dist_mode_from_atom(move) ->
     ?V_1_0_STD_DIST_MODE_MOVE;
 dist_mode_from_atom(copy) ->
     ?V_1_0_STD_DIST_MODE_COPY.
+
+-spec capabilities_from_list([binary()]) ->
+    undefined | {array, symbol, [{symbol, binary()}]}.
+capabilities_from_list([]) ->
+    undefined;
+capabilities_from_list(Capabilities) ->
+    Caps = [{symbol, C} || C <- Capabilities],
+    {array, symbol, Caps}.
+
+%% "The multiple attribute of a field description controls whether multiple
+%% element values are permitted in the representation. A single element of the
+%% type specified in the field description is always permitted. Multiple values
+%% are represented by the use of an array where the type of the elements in the
+%% array is the type defined in the field definition. Note that a null value and
+%% a zero-length array (with a correct type for its elements) both describe an
+%% absence of a value and MUST be treated as semantically identical."
+-spec capabilities_to_list(term()) -> [binary()].
+capabilities_to_list({array, symbol, L}) ->
+    [C || {symbol, C} <- L];
+capabilities_to_list({symbol, C}) ->
+    [C];
+capabilities_to_list(_) ->
+    [].
