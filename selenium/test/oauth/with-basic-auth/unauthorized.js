@@ -27,9 +27,8 @@ describe('An user without management tag', function () {
     }
   })
 
-  it('cannot log in into the management ui', async function () {    
-    const notVisible = await homePage.isWarningNotVisible()
-    assert.ok(!notVisible)
+  it('cannot log in into the management ui', async function () {
+    assert.ok(await homePage.isWarningVisible())
   })
 
   it('should get "Not authorized" warning message', async function(){
