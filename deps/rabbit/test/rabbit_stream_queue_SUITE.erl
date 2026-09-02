@@ -361,6 +361,11 @@ declare_max_age(Config) ->
 declare_max_age_equivalence(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     Q = ?config(queue_name, Config),
+    %% Use a distinct name for the second scenario instead of deleting and
+    %% recreating Q: queue_coarse_metrics is keyed by queue name and refreshed
+    %% periodically (stream_tick_interval), so reusing a just-deleted name can
+    %% observe stale message counts from the previous incarnation.
+    Q2 = <<Q/binary, "_2">>,
 
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
@@ -381,15 +386,15 @@ declare_max_age_equivalence(Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]),
 
     %% cover "1Y" and "365D" to introduce some assertion variation
-    ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
-                                             {<<"x-max-age">>, longstr, <<"1Y">>}])),
-    ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
-                                             {<<"x-max-age">>, longstr, <<"365D">>}])),
+    ?assertEqual({'queue.declare_ok', Q2, 0, 0},
+                 declare(Config, Server, Q2, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                              {<<"x-max-age">>, longstr, <<"1Y">>}])),
+    ?assertEqual({'queue.declare_ok', Q2, 0, 0},
+                 declare(Config, Server, Q2, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                              {<<"x-max-age">>, longstr, <<"365D">>}])),
 
-    assert_queue_type(Server, Q, rabbit_stream_queue),
-    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
+    assert_queue_type(Server, Q2, rabbit_stream_queue),
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q2]).
 
 declare_invalid_properties(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
