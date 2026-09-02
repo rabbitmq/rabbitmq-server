@@ -805,8 +805,8 @@ check_subscription_access(_, _) ->
 
 maybe_clean_up_queue(Queue, #proc_state{connection = Connection}) ->
     {ok, Channel} = amqp_connection:open_channel(Connection),
-    catch amqp_channel:call(Channel, #'queue.delete'{queue = Queue}),
-    catch amqp_channel:close(Channel),
+    try amqp_channel:call(Channel, #'queue.delete'{queue = Queue}) catch _:_ -> ok end,
+    try amqp_channel:close(Channel) catch _:_ -> ok end,
     ok.
 
 do_send(Destination, _DestHdr,
@@ -919,7 +919,7 @@ close_connection(State = #proc_state{connection = none}) ->
 %% Closing the connection will close the channel and subchannels
 close_connection(State = #proc_state{connection = Connection}) ->
     %% ignore noproc or other exceptions to avoid debris
-    catch amqp_connection:close(Connection),
+    try amqp_connection:close(Connection) catch _:_ -> ok end,
     State#proc_state{channel = none, connection = none, subscriptions = none};
 close_connection(undefined) ->
     ?LOG_DEBUG("~ts:close_connection: undefined state", [?MODULE]),
