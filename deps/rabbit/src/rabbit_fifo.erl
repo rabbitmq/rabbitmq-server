@@ -2773,9 +2773,10 @@ take_smallest_delayed(#delayed{next = {ReadyAt, Idx, Msg},
                                deferred = Deferred0}) ->
     Key = ?TUPLE(ReadyAt, Idx),
     Tree = gb_trees:delete(Key, Tree0),
+    Deferred = remove_deferred_key(Key, get_deferral_token(Msg), Deferred0),
     Delayed = #delayed{tree = Tree,
                        next = update_delayed_next(Tree),
-                       deferred = remove_deferred_key(Key, Deferred0)},
+                       deferred = Deferred},
     {Msg, Delayed};
 take_smallest_delayed(#delayed{}) ->
     empty.
@@ -2817,21 +2818,35 @@ take_delayed_for_retry(N, Ts, #delayed{tree = Tree0,
                            ?TUPLE(ReadyAt, Idx) = NextKey,
                            {ReadyAt, Idx, NextMsg}
                    end,
-            Deferred = remove_deferred_key(Key, Deferred0),
+            Deferred = remove_deferred_key(Key, get_deferral_token(Msg), Deferred0),
             Delayed = #delayed{tree = Tree, next = Next, deferred = Deferred},
             take_delayed_for_retry(N - 1, Ts, Delayed, [Msg | Acc])
     end.
 
-%% Drop a single tree key from every token's key list, dropping the token
-%% entirely once its last key is removed.
-remove_deferred_key(Key, Deferred0) ->
-    maps:filtermap(
-      fun(_Token, Keys) ->
-              case lists:delete(Key, Keys) of
-                  [] -> false;
-                  Remaining -> {true, Remaining}
-              end
-      end, Deferred0).
+%% The deferral token, if any, was merged into the message header's anns by
+%% incr_msg_headers/3 when the message was parked, so it can be read back
+%% without a Raft log read.
+get_deferral_token(Msg) ->
+    case get_header(anns, get_msg_header(Msg)) of
+        undefined -> undefined;
+        Anns -> maps:get(<<"x-opt-deferral-token">>, Anns, undefined)
+    end.
+
+%% Drop a single tree key from its token's key list, dropping the token
+%% entirely once its last key is removed. A message without a token was
+%% never added to Deferred, so there is nothing to look up.
+remove_deferred_key(_Key, undefined, Deferred) ->
+    Deferred;
+remove_deferred_key(Key, Token, Deferred) ->
+    case maps:find(Token, Deferred) of
+        {ok, Keys} ->
+            case lists:delete(Key, Keys) of
+                [] -> maps:remove(Token, Deferred);
+                Remaining -> Deferred#{Token => Remaining}
+            end;
+        error ->
+            Deferred
+    end.
 
 %% Move the given tokens' keys out of the shared deferred map. A token that
 %% is not there is silently skipped: it may never have been issued, it may
