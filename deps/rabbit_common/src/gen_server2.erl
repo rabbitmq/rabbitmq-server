@@ -352,20 +352,20 @@ call(Name, Request, Timeout) ->
 %% Make a cast to a generic server.
 %% -----------------------------------------------------------------
 cast({global,Name}, Request) ->
-    catch global:send(Name, {'$gen_cast', Request}),
+    _ = try global:send(Name, {'$gen_cast', Request}) catch _:_ -> ok end,
     ok;
 cast({Name,Node}=Dest, Request) when is_atom(Name), is_atom(Node) ->
-    catch (Dest ! {'$gen_cast', Request}),
+    _ = try Dest ! {'$gen_cast', Request} catch _:_ -> ok end,
     ok;
 cast(Dest, Request) when is_atom(Dest); is_pid(Dest) ->
-    catch (Dest ! {'$gen_cast', Request}),
+    _ = try Dest ! {'$gen_cast', Request} catch _:_ -> ok end,
     ok.
 
 %% -----------------------------------------------------------------
 %% Send a reply to the client.
 %% -----------------------------------------------------------------
 reply({To, Tag}, Reply) ->
-    catch To ! {Tag, Reply}.
+    try To ! {Tag, Reply} catch _:_ -> ok end.
 
 %% -----------------------------------------------------------------
 %% Asynchronous broadcast, returns nothing, it's just send'n pray
@@ -377,7 +377,7 @@ abcast(Nodes, Name, Request) when is_list(Nodes), is_atom(Name) ->
     do_abcast(Nodes, Name, {'$gen_cast', Request}).
 
 do_abcast([Node|Nodes], Name, Msg) when is_atom(Node) ->
-    catch ({Name, Node} ! Msg),
+    _ = try {Name, Node} ! Msg catch _:_ -> ok end,
     do_abcast(Nodes, Name, Msg);
 do_abcast([], _,_) -> abcast.
 
@@ -438,7 +438,7 @@ do_mcall({{global,Name}=Dest, Request}) ->
     case global:whereis_name(Name) of
         Pid when is_pid(Pid) ->
             MRef = erlang:monitor(process, Pid),
-            catch msend(Pid, MRef, Request),
+            try msend(Pid, MRef, Request) catch _:_ -> ok end,
             MRef;
         undefined ->
             Ref = make_ref(),
@@ -447,11 +447,11 @@ do_mcall({{global,Name}=Dest, Request}) ->
     end;
 do_mcall({{Name,Node}=Dest, Request}) when is_atom(Name), is_atom(Node) ->
     {_Node, MRef} = start_monitor(Node, Name), %% NB: we don't handle R6
-    catch msend(Dest, MRef, Request),
+    try msend(Dest, MRef, Request) catch _:_ -> ok end,
     MRef;
 do_mcall({Dest, Request}) when is_atom(Dest); is_pid(Dest) ->
     MRef = erlang:monitor(process, Dest),
-    catch msend(Dest, MRef, Request),
+    try msend(Dest, MRef, Request) catch _:_ -> ok end,
     MRef.
 
 msend(Dest, MRef, Request) ->
@@ -827,7 +827,14 @@ process_msg({system, From, Req},
     sys:handle_system_msg(Req, From, Parent, ?MODULE, Debug, GS2State);
 process_msg({'$with_state', From, Fun},
            GS2State = #gs2_state{state = State}) ->
-    reply(From, catch Fun(State)),
+    Result = try
+                 Fun(State)
+             catch
+                 throw:Thrown -> Thrown;
+                 exit:Reason -> {'EXIT', Reason};
+                 error:Reason:Stacktrace -> {'EXIT', {Reason, Stacktrace}}
+             end,
+    _ = reply(From, Result),
     loop(GS2State);
 process_msg({'EXIT', Parent, Reason} = Msg,
             GS2State = #gs2_state { parent = Parent }) ->
@@ -888,7 +895,7 @@ send_nodes([Node|Tail], Name, Tag, Req, Monitors)
   when is_atom(Node) ->
     Monitor = start_monitor(Node, Name),
     %% Handle non-existing names in rec_nodes.
-    catch {Name, Node} ! {'$gen_call', {self(), {Tag, Node}}, Req},
+    _ = try {Name, Node} ! {'$gen_call', {self(), {Tag, Node}}, Req} catch _:_ -> ok end,
     send_nodes(Tail, Name, Tag, Req, [Monitor | Monitors]);
 send_nodes([_Node|Tail], Name, Tag, Req, Monitors) ->
     %% Skip non-atom Node
@@ -982,10 +989,10 @@ dispatch(Info, Mod, State) ->
     Mod:handle_info(Info, State).
 
 common_reply(_Name, From, Reply, _NState, [] = _Debug) ->
-    reply(From, Reply),
+    _ = reply(From, Reply),
     [];
 common_reply(Name, {To, _Tag} = From, Reply, NState, Debug) ->
-    reply(From, Reply),
+    _ = reply(From, Reply),
     sys:handle_debug(Debug, fun print_event/3, Name, {out, Reply, To, NState}).
 
 common_noreply(_Name, _NState, [] = _Debug) ->

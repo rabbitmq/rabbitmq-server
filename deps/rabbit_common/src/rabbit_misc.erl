@@ -1535,7 +1535,7 @@ win32_cmd_receive(Port, MonRef, Acc0) ->
     end.
 
 win32_cmd_receive_finish(Port, MonRef) ->
-    catch erlang:port_close(Port),
+    try erlang:port_close(Port) catch _:_ -> ok end,
     flush_until_down(Port, MonRef).
 
 flush_until_down(Port, MonRef) ->

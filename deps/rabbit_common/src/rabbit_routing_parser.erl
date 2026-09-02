@@ -51,7 +51,7 @@ parse_endpoint0(queue,    [],                 false) ->
     {error, {invalid_destination, queue, []}};
 parse_endpoint0(queue,    [],                 true) ->
     {ok, {queue, undefined}};
-parse_endpoint0(Type,     [[_|_]] = [Name],   _) ->
+parse_endpoint0(Type,     [Name = [_|_]],     _) ->
     {ok, {Type, unescape(Name)}};
 parse_endpoint0(Type,     Rest,               _) ->
     {error, {invalid_destination, Type, to_url(Rest)}}.
