@@ -156,7 +156,7 @@ clone_consul(Config) ->
         {ok, _} ->
             rabbit_ct_helpers:set_config(
               Config, {consul_srcdir, ConsulSrcdir});
-        {error, _} ->
+        {error, _, _} ->
             {skip, "Failed to clone Consul"}
     end.
 
@@ -179,7 +179,7 @@ compile_consul(Config) ->
             ConsulBin = filename:join([GOPATH, "bin", ConsulExe]),
             ?assert(filelib:is_regular(ConsulBin)),
             rabbit_ct_helpers:set_config(Config, {consul_bin, ConsulBin});
-        {error, _} ->
+        {error, _, _} ->
             {skip, "Failed to compile Consul"}
     end.
 
