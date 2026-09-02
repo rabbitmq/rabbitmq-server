@@ -479,16 +479,16 @@ handle_dest(_Msg, _State) ->
 
 close_source(#{source := #{current := {Conn, Ch, _}} = Src}) ->
     _ = rabbit_shovel_util:cancel_expire_after_duration(Src),
-    catch amqp_channel:close(Ch),
-    catch amqp_connection:close(Conn, ?MAX_CONNECTION_CLOSE_TIMEOUT),
+    _ = try amqp_channel:close(Ch) catch _:_ -> ok end,
+    _ = try amqp_connection:close(Conn, ?MAX_CONNECTION_CLOSE_TIMEOUT) catch _:_ -> ok end,
     ok;
 close_source(_) ->
     %% It never connected, connection doesn't exist
     ok.
 
 close_dest(#{dest := #{current := {Conn, Ch, _}}}) ->
-    catch amqp_channel:close(Ch),
-    catch amqp_connection:close(Conn, ?MAX_CONNECTION_CLOSE_TIMEOUT),
+    _ = try amqp_channel:close(Ch) catch _:_ -> ok end,
+    _ = try amqp_connection:close(Conn, ?MAX_CONNECTION_CLOSE_TIMEOUT) catch _:_ -> ok end,
     ok;
 close_dest(_) ->
     %% It never connected, connection doesn't exist
@@ -790,10 +790,10 @@ ensure_queue(Conn, Queue, XArgs) ->
             amqp_channel:call(Ch2, #'queue.declare'{queue     = Queue,
                                                     durable   = true,
                                                     arguments = XArgs}),
-            catch amqp_channel:close(Ch2)
+            try amqp_channel:close(Ch2) catch _:_ -> ok end
 
     after
-        catch amqp_channel:close(Ch)
+        _ = try amqp_channel:close(Ch) catch _:_ -> ok end
     end.
 
 check_queue(Conn, Queue, _XArgs) ->
@@ -802,7 +802,7 @@ check_queue(Conn, Queue, _XArgs) ->
         amqp_channel:call(Ch, #'queue.declare'{queue   = Queue,
                                                passive = true})
     after
-        catch amqp_channel:close(Ch)
+        _ = try amqp_channel:close(Ch) catch _:_ -> ok end
     end.
 
 fields_fun(X, Key, _SrcURI, _DestURI, P0) ->
