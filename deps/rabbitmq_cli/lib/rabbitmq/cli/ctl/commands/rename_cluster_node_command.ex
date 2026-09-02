@@ -5,7 +5,6 @@
 ## Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.RenameClusterNodeCommand do
-  require Integer
   alias RabbitMQ.CLI.Core.DocGuide
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
