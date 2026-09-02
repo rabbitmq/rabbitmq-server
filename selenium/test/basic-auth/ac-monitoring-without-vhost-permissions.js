@@ -35,10 +35,10 @@ describe('monitoring user without any vhosts permissions', function () {
     await admin.waitForLimitsMenuOption()
     await admin.waitForPoliciesMenuOption()
 
-    assert.rejects(admin.waitForUsersMenuOption())
-    assert.rejects(admin.waitForVhostsMenuOption())
-    assert.rejects(admin.waitForFeatureFlagsMenuOption())
-    assert.rejects(admin.waitForClusterMenuOption())
+    assert.ok(await admin.isUsersMenuOptionNotDisplayed())
+    assert.ok(await admin.isVhostsMenuOptionNotDisplayed())
+    assert.ok(await admin.isFeatureFlagsMenuOptionNotDisplayed())
+    assert.ok(await admin.isClusterMenuOptionNotDisplayed())
   })
 
   it('can choose from any available vhost', async function () {

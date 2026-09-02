@@ -33,6 +33,9 @@ module.exports = class AdminTab extends OverviewPage {
   async waitForUsersMenuOption() {
     return this.waitForDisplayed(USERS_ON_RHM)
   }
+  async isUsersMenuOptionNotDisplayed() {
+    return this.isElementNotVisible(USERS_ON_RHM)
+  }
   async clickOnUsers() {
     await this.click(USERS_ON_RHM)
   }
@@ -48,6 +51,9 @@ module.exports = class AdminTab extends OverviewPage {
   async waitForVhostsMenuOption() {
     return this.waitForDisplayed(VHOSTS_ON_RHM)
   }
+  async isVhostsMenuOptionNotDisplayed() {
+    return this.isElementNotVisible(VHOSTS_ON_RHM)
+  }
   async clickOnPolicies() {
     await this.click(POLICIES_ON_RHM)
   }
@@ -60,11 +66,17 @@ module.exports = class AdminTab extends OverviewPage {
   async waitForFeatureFlagsMenuOption() {
     return this.waitForDisplayed(FEATURE_FLAGS_ON_RHM)
   }
+  async isFeatureFlagsMenuOptionNotDisplayed() {
+    return this.isElementNotVisible(FEATURE_FLAGS_ON_RHM)
+  }
   async clickOnCluster() {
     await this.click(CLUSTER_ON_RHM)
   }
   async waitForClusterMenuOption(option) {
     return this.waitForDisplayed(CLUSTER_ON_RHM)
+  }
+  async isClusterMenuOptionNotDisplayed() {
+    return this.isElementNotVisible(CLUSTER_ON_RHM)
   }
   async clickOnFederationStatus() {
     await this.click(FEDERATION_STATUS_ON_RHM)

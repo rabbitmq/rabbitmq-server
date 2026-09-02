@@ -106,6 +106,16 @@ module.exports = class BasePage {
     await this.driver.sleep(250)
     return this.waitForDisplayed(CONNECTIONS_TAB)
   }
+  // Proving a tab is absent doesn't need waitForDisplayed's retry-until-
+  // timeout loop (built for the opposite case, waiting for something to
+  // appear) and its unconditional error logging on timeout - it only logs
+  // noise for what is, here, the expected outcome. isElementNotVisible
+  // (used elsewhere for isPopupWarningNotDisplayed/isSectionNotDisplayed)
+  // resolves as soon as the element is confirmed missing, with no logging.
+  async isConnectionsTabNotDisplayed() {
+    await this.driver.sleep(250)
+    return this.isElementNotVisible(CONNECTIONS_TAB)
+  }
 
   async clickOnAdminTab () {
     return this.click(ADMIN_TAB)
@@ -113,6 +123,10 @@ module.exports = class BasePage {
   async waitForAdminTab() {
     await this.driver.sleep(250)
     return this.waitForDisplayed(ADMIN_TAB)
+  }
+  async isAdminTabNotDisplayed() {
+    await this.driver.sleep(250)
+    return this.isElementNotVisible(ADMIN_TAB)
   }
 
   async clickOnChannelsTab () {
@@ -122,6 +136,10 @@ module.exports = class BasePage {
     await this.driver.sleep(250)
     return this.waitForDisplayed(CHANNELS_TAB)
   }
+  async isChannelsTabNotDisplayed() {
+    await this.driver.sleep(250)
+    return this.isElementNotVisible(CHANNELS_TAB)
+  }
 
   async clickOnExchangesTab () {
     return this.click(EXCHANGES_TAB)
@@ -129,6 +147,10 @@ module.exports = class BasePage {
   async waitForExchangesTab() {
     await this.driver.sleep(250)
     return this.waitForDisplayed(EXCHANGES_TAB)
+  }
+  async isExchangesTabNotDisplayed() {
+    await this.driver.sleep(250)
+    return this.isElementNotVisible(EXCHANGES_TAB)
   }
 
   async clickOnQueuesTab () {
@@ -138,12 +160,19 @@ module.exports = class BasePage {
     await this.driver.sleep(250)
     return this.waitForDisplayed(QUEUES_AND_STREAMS_TAB)
   }
+  async isQueuesTabNotDisplayed() {
+    await this.driver.sleep(250)
+    return this.isElementNotVisible(QUEUES_AND_STREAMS_TAB)
+  }
 
   async clickOnStreamConnectionsTab () {
     return this.click(STREAM_CONNECTIONS_TAB)
   }
   async waitForStreamConnectionsTab() {
     return this.waitForDisplayed(STREAM_CONNECTIONS_TAB)
+  }
+  async isStreamConnectionsTabNotDisplayed() {
+    return this.isElementNotVisible(STREAM_CONNECTIONS_TAB)
   }
 
   async clickOnTab (tabLocator) {
@@ -185,6 +214,9 @@ module.exports = class BasePage {
       new_table_model.push(await table_model[i].text)
     }
     return new_table_model
+  }
+  async isSelectableVhostsNotDisplayed() {
+    return this.isElementNotVisible(SELECT_VHOSTS)
   }
   async selectVhost(vhost) {
     let selectable = await this.waitForDisplayed(SELECT_VHOSTS)
