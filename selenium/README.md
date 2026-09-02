@@ -233,7 +233,7 @@ you need to be in VPN via a gateway and have .npmrc file in the selenium folder
 with a api key downloaded from Artifactory. There is an internal confluence page 
 that explains how do it.
 
-Without this docker file and .npmrc file, it is impossible to build mocha-test image.
+Without this docker file and .npmrc file in your $HOME, it is impossible to build mocha-test image.
 
 ## Issues deploying UAA 
 

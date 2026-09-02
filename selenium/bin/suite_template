@@ -147,6 +147,9 @@ build_mocha_image() {
   if [[ -n "${MOCHA_DOCKER_FILE:-}" ]]; then
     DOCKER_BUILD_ARGS="-f $MOCHA_DOCKER_FILE "
   fi
+  if [[ -f "$HOME/.npmrc" ]]; then
+    DOCKER_BUILD_ARGS+="--secret id=npmrc,src=$HOME/.npmrc "
+  fi
   begin "Ensuring mocha-test image ($DOCKER_BUILD_ARGS) ..."
   if [[ "$need_mocha_docker_image" != "yes" ]]; then
     print "Skipped. Not required"
