@@ -50,7 +50,8 @@ defmodule HelpCommandTest do
     Enum.each(
       ctl_commands,
       fn command ->
-        assert @command.run([command], %{}) =~ ~r/#{command}/
+        {:ok, output} = @command.run([command], %{})
+        assert output =~ ~r/#{command}/
       end
     )
   end
