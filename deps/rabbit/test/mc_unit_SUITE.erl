@@ -25,6 +25,7 @@ groups() ->
 all_tests() ->
     [
      mc_util_uuid_to_urn_roundtrip,
+     mc_util_urn_string_to_uuid_rejects_non_hex_body,
      amqpl_defaults,
      amqpl_compat,
      amqpl_table_x_header,
@@ -497,6 +498,23 @@ mc_util_uuid_to_urn_roundtrip(_Config) ->
     S = mc_util:uuid_to_urn_string(UUID),
     ?assertEqual(<<"urn:uuid:58b867b0-8151-1f56-1bd4-73229807fd60">>, S),
     ?assertEqual({ok, UUID}, mc_util:urn_string_to_uuid(S)),
+    ok.
+
+%% Only the "urn:uuid:" prefix and the 36-byte body length were checked;
+%% the body was never validated as actual hex-and-dashes before being
+%% passed to binary:decode_hex/1, which raises badarg on non-hex input.
+mc_util_urn_string_to_uuid_rejects_non_hex_body(_Config) ->
+    %% right length (36 bytes total, dashes in the right places), body not hex
+    NotHexBody = <<"zzzzzzzz-zzzz-zzzz-zzzz-zzzzzzzzzzzz">>,
+    ?assertEqual(36, byte_size(NotHexBody)),
+    ?assertEqual({error, not_urn_string},
+                 mc_util:urn_string_to_uuid(<<"urn:uuid:", NotHexBody/binary>>)),
+    %% right total length, but one segment has an odd number of hex
+    %% characters, which decode_hex/1 also rejects with badarg
+    OddSegmentBody = <<"abcdefg-1234-5678-9abc-def0123456789">>,
+    ?assertEqual(36, byte_size(OddSegmentBody)),
+    ?assertEqual({error, not_urn_string},
+                 mc_util:urn_string_to_uuid(<<"urn:uuid:", OddSegmentBody/binary>>)),
     ok.
 
 do_n(0, _) ->

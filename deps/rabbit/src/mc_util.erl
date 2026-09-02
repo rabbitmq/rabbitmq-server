@@ -51,8 +51,12 @@ uuid_to_urn_string(<<TL:4/binary, TM:2/binary, THV:2/binary,
 -spec urn_string_to_uuid(binary()) ->
     {ok, binary()} | {error, not_urn_string}.
 urn_string_to_uuid(<<"urn:uuid:", UuidStr:36/binary>>) ->
-    Parts = binary:split(UuidStr, <<"-">>, [global]),
-    {ok, iolist_to_binary([binary:decode_hex(Part) || Part <- Parts])};
+    try
+        Parts = binary:split(UuidStr, <<"-">>, [global]),
+        {ok, iolist_to_binary([binary:decode_hex(Part) || Part <- Parts])}
+    catch error:badarg ->
+        {error, not_urn_string}
+    end;
 urn_string_to_uuid(_) ->
     {error, not_urn_string}.
 
