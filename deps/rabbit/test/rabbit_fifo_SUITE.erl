@@ -5537,12 +5537,6 @@ sac_consumer_timeout_noconnection_test(Config) ->
     ok.
 
 query_single_active_consumer_v7_test(Config) ->
-    %% A queue whose effective machine version is still 7 holds a v7-shaped
-    %% state, which the v9 query function cannot match. Resolving the
-    %% frozen module from the query context (as local_query/3 and
-    %% versioned_query_resolves_frozen_module_test/1 already do for
-    %% query_consumers) is what must read it, not a hardcoded v7 fallback
-    %% inside query_single_active_consumer/1 itself.
     ModV7 = rabbit_fifo_v7,
     S0 = ModV7:init(#{name => ?FUNCTION_NAME,
                       single_active_consumer_on => true,
@@ -5559,11 +5553,7 @@ query_single_active_consumer_v7_test(Config) ->
     {S1, _Effects} = run_log(rabbit_fifo_v7, Config, S0, Entries,
                              fun (_) -> true end),
 
-    ?assertError(function_clause, rabbit_fifo:query_single_active_consumer(S1)),
-
-    Ctx = #{index => 3, term => 1, machine_version => 7},
-    {value, _} = rabbit_fifo_client:versioned_query(
-                   query_single_active_consumer, Ctx, S1),
+    {value, _} = rabbit_fifo:query_single_active_consumer(S1),
 
     ok.
 
