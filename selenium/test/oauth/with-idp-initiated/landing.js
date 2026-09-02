@@ -33,7 +33,6 @@ describe('A user which accesses any protected URL without a session', function (
 
   it('login button should redirect to the configured oauth_provider_url', async function () {
     await homePage.clickToLogin()
-    await captureScreen.shot('fakeportal')
     await fakePortal.isLoaded()
 
   })
