@@ -116,6 +116,11 @@ export function oauth_initiate(oauth) {
   if (oauth.enabled) {
     if (!oauth.sp_initiated) {
         oauth.logged_in = has_auth_credentials();
+        // An idp-initiated session never goes through oauth_initiateLogin(),
+        // the only other place that declares the active provider, so
+        // active_auth_provider()'s has_auth_resource() fallback would
+        // otherwise misidentify this session as basic auth.
+        if (oauth.logged_in) set_active_auth_provider_by_name('oauth2');
     } else {
       oauth_is_logged_in().then( status => {
         if (status.loggedIn && !has_auth_credentials()) {
