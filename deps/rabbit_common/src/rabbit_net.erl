@@ -180,7 +180,8 @@ fast_close(Sock) when ?IS_SSL(Sock) ->
     _ = ssl:close(Sock, ?SSL_CLOSE_TIMEOUT),
     ok;
 fast_close(Sock) when is_port(Sock) ->
-    catch port_close(Sock), ok.
+    try port_close(Sock) catch _:_ -> ok end,
+    ok.
 
 sockname(Sock)   when ?IS_SSL(Sock) -> ssl:sockname(Sock);
 sockname(Sock)   when is_port(Sock) -> inet:sockname(Sock).
