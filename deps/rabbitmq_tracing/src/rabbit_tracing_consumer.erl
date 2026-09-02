@@ -130,9 +130,9 @@ handle_info(_I, State) ->
 terminate(shutdown, State = #state{conn = Conn, ch = Ch,
                                    file = F, filename = Filename}) ->
     _ = flush(State),
-    catch amqp_channel:close(Ch),
-    catch amqp_connection:close(Conn),
-    catch prim_file:close(F),
+    _ = try amqp_channel:close(Ch) catch _:_ -> ok end,
+    _ = try amqp_connection:close(Conn) catch _:_ -> ok end,
+    _ = try prim_file:close(F) catch _:_ -> ok end,
     ?LOG_INFO("Tracer closed log file ~tp", [Filename]),
     ok;
 
