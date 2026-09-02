@@ -18,6 +18,10 @@
     hostname/0, getifaddrs/0, proxy_ssl_info/2,
     dist_info/0]).
 
+-ifdef(TEST).
+-export([fast_close/2]).
+-endif.
+
 %%---------------------------------------------------------------------------
 
 -export_type([socket/0, proxy_socket/0, ip_port/0, hostname/0]).
@@ -61,6 +65,7 @@
 -spec send(socket(), iodata()) -> ok_or_any_error().
 -spec close(socket()) -> ok_or_any_error().
 -spec fast_close(socket()) -> ok_or_any_error().
+-spec fast_close(socket(), timeout()) -> ok_or_any_error().
 -spec sockname(socket()) ->
           ok_val_or_error({inet:ip_address(), ip_port()} |
                           inet:returned_non_ip_address()).
@@ -178,11 +183,76 @@ send(Sock, Data) when is_port(Sock) -> gen_tcp:send(Sock, Data).
 close(Sock)      when ?IS_SSL(Sock) -> ssl:close(Sock);
 close(Sock)      when is_port(Sock) -> gen_tcp:close(Sock).
 
-fast_close(Sock) when ?IS_SSL(Sock) ->
-    _ = ssl:close(Sock, ?SSL_CLOSE_TIMEOUT),
-    ok;
-fast_close(Sock) when is_port(Sock) ->
+fast_close(Sock) ->
+    fast_close(Sock, ?SSL_CLOSE_TIMEOUT).
+
+%% ssl:close/2 does not bound the caller: internally it is a gen_statem:call/2
+%% with an infinite timeout, so a stuck TLS connection process (for example
+%% stuck in prim_inet:recv0/3 inside tls_gen_connection:close/4 when the peer
+%% never closes the transport) makes it hang forever. Run it in a separate
+%% process and, if it does not finish within Timeout, close the stuck TLS
+%% connection process's transport port, which makes the stuck operation return
+%% and unblocks the close.
+fast_close(Sock, Timeout) when ?IS_SSL(Sock) ->
+    {Pid, MRef} = spawn_monitor(fun () -> _ = ssl:close(Sock, Timeout) end),
+    receive
+        {'DOWN', MRef, process, Pid, _} ->
+            ok
+    after Timeout ->
+        force_close_stuck_ssl_connections(Pid, MRef, Timeout)
+    end;
+fast_close(Sock, _Timeout) when is_port(Sock) ->
     catch port_close(Sock), ok.
+
+force_close_stuck_ssl_connections(Pid, MRef, Timeout) ->
+    ConnPid = get_ssl_connection_pid(Pid),
+    _ = close_linked_ports(ConnPid),
+    receive
+        {'DOWN', MRef, process, Pid, _} ->
+            ok
+    after Timeout ->
+        %% Last resort if closing the port did not unblock the ssl:close call.
+        _ = case ConnPid of
+                undefined -> ok;
+                _         -> exit(ConnPid, kill)
+            end,
+        erlang:demonitor(MRef, [flush]),
+        exit(Pid, kill),
+        ok
+    end.
+
+%% The spawned ssl:close/2 above blocks in a single gen_statem:call to the TLS
+%% connection process, so its caller monitors exactly that one process, which
+%% owns the transport socket port. This function avoids retrieving the
+%% connection PID and port from the version-specific sslsocket record.
+get_ssl_connection_pid(Pid) ->
+    case erlang:process_info(Pid, monitors) of
+        {monitors, Monitors} ->
+            case [ConnPid || {process, ConnPid} <- Monitors,
+                             has_linked_port(ConnPid)] of
+                [ConnPid] -> ConnPid;
+                []        -> undefined
+            end;
+        _ ->
+            undefined
+    end.
+
+has_linked_port(Pid) ->
+    case erlang:process_info(Pid, links) of
+        {links, Links} -> lists:any(fun erlang:is_port/1, Links);
+        _              -> false
+    end.
+
+close_linked_ports(undefined) ->
+    ok;
+close_linked_ports(Pid) ->
+    case erlang:process_info(Pid, links) of
+        {links, Links} ->
+            _ = [catch erlang:port_close(P) || P <- Links, is_port(P)],
+            ok;
+        _ ->
+            ok
+    end.
 
 sockname(Sock)   when ?IS_SSL(Sock) -> ssl:sockname(Sock);
 sockname(Sock)   when is_port(Sock) -> inet:sockname(Sock).

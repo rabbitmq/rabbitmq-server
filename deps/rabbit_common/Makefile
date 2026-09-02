@@ -38,6 +38,9 @@ DEPS = ranch recon credentials_obfuscation
 
 -include development.pre.mk
 
+# Appended after the include because development.pre.mk resets TEST_DEPS.
+TEST_DEPS += meck
+
 DEP_EARLY_PLUGINS = $(PROJECT)/mk/rabbitmq-early-plugin.mk
 # We do not depend on rabbit therefore can't run the broker.
 DEP_PLUGINS = $(PROJECT)/mk/rabbitmq-build.mk \
