@@ -261,9 +261,7 @@ process_request(ProcessFun, SuccessFun, State) ->
         {error, Message, Detail, NewState = #proc_state{connection = Conn}} ->
             {ok, send_error(Message, Detail, NewState), Conn};
         {stop, normal, NewState} ->
-            {stop, normal, SuccessFun(NewState)};
-        {stop, R, NewState} ->
-            {stop, R, NewState}
+            {stop, normal, SuccessFun(NewState)}
     end.
 
 process_connect(Implicit, Frame,
