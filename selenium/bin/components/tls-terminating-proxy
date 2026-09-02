@@ -41,7 +41,6 @@ start_tls-terminating-proxy() {
     --name tls-terminating-proxy \
     --net ${DOCKER_NETWORK} \
     --publish 8444:8444 \
-    --add-host=host.docker.internal:host-gateway \
     --mount "type=bind,source=${MOUNT_HTTPD_CONFIG_DIR},target=/usr/local/apache2/conf" \
     ${HTTPD_DOCKER_IMAGE}
 

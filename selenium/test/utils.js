@@ -178,7 +178,7 @@ module.exports = {
     const queryString = params.join('&');
     
     const url = d.baseUrl + '/login?' + queryString;
-    console.log("Navigating to " + url);
+    module.exports.log("Navigating to " + url);
     return d.driver.get(url);
   },
 
