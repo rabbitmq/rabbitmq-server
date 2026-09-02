@@ -1,7 +1,6 @@
 defmodule RpcStreamTest do
   use ExUnit.Case, async: false
 
-  require RabbitMQ.CLI.Ctl.RpcStream
   alias RabbitMQ.CLI.Ctl.RpcStream
 
   setup_all do
