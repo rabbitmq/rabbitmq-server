@@ -1070,8 +1070,8 @@ with_channel(VHost, ReqData,
                     bad_request_exception(Code, Reason, ReqData, Context)
             after
             erlang:unlink(Conn),
-            catch amqp_channel:close(Ch),
-            catch amqp_connection:close(Conn)
+            _ = try amqp_channel:close(Ch) catch _:_ -> ok end,
+            _ = try amqp_connection:close(Conn) catch _:_ -> ok end
             end;
         {error, {auth_failure, Msg}} ->
             not_authorised(Msg, ReqData, Context);
