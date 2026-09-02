@@ -47,7 +47,7 @@ do(Method, State) ->
 
 do2(Method, #state{writer0 = Writer}) ->
     %% Catching because it expects the {channel_exit, _, _} message on error
-    catch rabbit_writer:send_command_sync(Writer, Method).
+    try rabbit_writer:send_command_sync(Writer, Method) catch _:_ -> ok end.
 
 %% We replied to a peer-initiated close but its socket did not close in
 %% time. This is expected teardown, so wrap it like the failures below.
@@ -279,7 +279,7 @@ start_heartbeat(#state{sock      = Sock,
                        heartbeat = Heartbeat,
                        type_sup  = Sup}) ->
     Frame = rabbit_binary_generator:build_heartbeat_frame(),
-    SendFun = fun () -> catch rabbit_net:send(Sock, Frame) end,
+    SendFun = fun () -> try rabbit_net:send(Sock, Frame) catch _:_ -> ok end end,
     Connection = self(),
     ReceiveFun = fun () -> Connection ! heartbeat_timeout end,
     rabbit_heartbeat:start(
