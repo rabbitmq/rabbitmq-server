@@ -454,7 +454,7 @@ Credit => Key Version SubscriptionId Credit
   Key => uint16 // 0x0009
   Version => uint16
   SubscriptionId => uint8
-  Credit => uint16 // the number of chunks that can be sent
+  Credit => int16 // the number of chunks that can be sent
 
 CreditResponse => Key Version ResponseCode SubscriptionId
   Key => uint16 // 0x8009
