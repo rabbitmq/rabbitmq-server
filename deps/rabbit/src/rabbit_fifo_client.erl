@@ -315,10 +315,16 @@ return(ConsumerTag, [_|_] = MsgIds,
     ConsumerKey = consumer_key(ConsumerTag, State0),
     %% we've reached the soft limit so will stash the command to be
     %% sent once we have seen enough notifications
+    %% MsgIds has fewer elements than Returns, so put it on the left side
+    %% of the ++ operator: Returns accumulates in reverse-chronological
+    %% batch order (most recent first), unreversed once in add_command/4,
+    %% since rabbit_fifo relies on this list's order to redeliver and
+    %% dead-letter messages in the order they were returned.
+    RevMsgIds = lists:reverse(MsgIds),
     Unsent = maps:update_with(ConsumerKey,
                               fun ({Settles, Returns, Discards}) ->
-                                      {Settles, Returns ++ MsgIds, Discards}
-                              end, {[], MsgIds, []}, Unsent0),
+                                      {Settles, RevMsgIds ++ Returns, Discards}
+                              end, {[], RevMsgIds, []}, Unsent0),
     State1 = State0#state{unsent_commands = Unsent},
     {State1, []}.
 
@@ -340,10 +346,16 @@ discard(ConsumerTag, [_|_] = MsgIds,
     ConsumerKey = consumer_key(ConsumerTag, State0),
     %% we've reached the soft limit so will stash the command to be
     %% sent once we have seen enough notifications
+    %% MsgIds has fewer elements than Discards, so put it on the left side
+    %% of the ++ operator: Discards accumulates in reverse-chronological
+    %% batch order (most recent first), unreversed once in add_command/4,
+    %% since rabbit_fifo dead-letters messages in the order they were
+    %% discarded (see discard_or_dead_letter/4).
+    RevMsgIds = lists:reverse(MsgIds),
     Unsent = maps:update_with(ConsumerKey,
                               fun ({Settles, Returns, Discards}) ->
-                                      {Settles, Returns, Discards ++ MsgIds}
-                              end, {[], [], MsgIds}, Unsent0),
+                                      {Settles, Returns, RevMsgIds ++ Discards}
+                              end, {[], [], RevMsgIds}, Unsent0),
     {State0#state{unsent_commands = Unsent}, []}.
 
 -spec modify(rabbit_types:ctag(), [rabbit_fifo:msg_id()],
@@ -1083,9 +1095,11 @@ add_command(_, _, [], Acc) ->
 add_command(Cid, settle, MsgIds, Acc) ->
     [rabbit_fifo:make_settle(Cid, MsgIds) | Acc];
 add_command(Cid, return, MsgIds, Acc) ->
-    [rabbit_fifo:make_return(Cid, MsgIds) | Acc];
+    %% MsgIds was accumulated in reverse-chronological order; see return/3.
+    [rabbit_fifo:make_return(Cid, lists:reverse(MsgIds)) | Acc];
 add_command(Cid, discard, MsgIds, Acc) ->
-    [rabbit_fifo:make_discard(Cid, MsgIds) | Acc].
+    %% MsgIds was accumulated in reverse-chronological order; see discard/3.
+    [rabbit_fifo:make_discard(Cid, lists:reverse(MsgIds)) | Acc].
 
 find_local_or_leader(#state{leader = Leader,
                             cfg = #cfg{servers = Servers}}) ->
