@@ -7,6 +7,7 @@
 
 -module(rabbit_db_policy).
 
+-include_lib("khepri/include/khepri.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include("amqqueue.hrl").
 
@@ -26,30 +27,81 @@
                                      update_function => fun((Queue) -> Queue)}),
       Ret :: {[{Exchange, Exchange}], [{Queue, Queue}]}.
 
+%% `UpdateXFun'/`UpdateQFun' decide the new policy to apply from a
+%% snapshot of the vhost's exchanges/queues read here, outside of the
+%% transaction below. If a *different* concurrent policy update commits
+%% first, that snapshot is stale by the time this transaction runs: the
+%% payload_version guard on each write (see rabbit_db_exchange/queue's
+%% update_in_khepri_tx/3) detects that and aborts the whole transaction
+%% -- discarding any puts already made during this attempt, since
+%% khepri_tx:abort/1 unwinds via an exception rather than returning an
+%% ordinary value the transaction would otherwise still commit -- and
+%% retrying from scratch re-reads the now-current state instead of
+%% blindly overwriting the concurrent update's effect.
 update(VHost, GetUpdatedExchangeFun, GetUpdatedQueueFun) ->
-    Exchanges0 = rabbit_db_exchange:get_all(VHost),
-    Queues0 = rabbit_db_queue:get_all(VHost),
-    Exchanges = [GetUpdatedExchangeFun(X) || X <- Exchanges0],
-    Queues = [GetUpdatedQueueFun(Q) || Q <- Queues0],
-    rabbit_khepri:transaction(
-      fun() ->
-              {[update_exchange_policies(Map, fun rabbit_db_exchange:update_in_khepri_tx/2)
-                || Map <- Exchanges, is_map(Map)],
-               [update_queue_policies(Map, fun rabbit_db_queue:update_in_khepri_tx/2)
-                || Map <- Queues, is_map(Map)]}
-      end, rw).
+    case rabbit_khepri:adv_get_many(
+           rabbit_db_exchange:khepri_exchange_path(VHost, #if_has_data{})) of
+        {ok, ExchangeProps} ->
+            case rabbit_khepri:adv_get_many(
+                   rabbit_db_queue:khepri_queue_path(VHost, #if_has_data{})) of
+                {ok, QueueProps} ->
+                    update1(VHost, GetUpdatedExchangeFun, GetUpdatedQueueFun,
+                            ExchangeProps, QueueProps);
+                {error, _} = Error ->
+                    error(Error)
+            end;
+        {error, _} = Error ->
+            error(Error)
+    end.
+
+update1(VHost, GetUpdatedExchangeFun, GetUpdatedQueueFun,
+        ExchangeProps, QueueProps) ->
+    ExchangeVsns = maps:from_list(
+                     [{XName, Vsn}
+                      || #{data := #exchange{name = XName},
+                           payload_version := Vsn} <- maps:values(ExchangeProps)]),
+    QueueVsns = maps:from_list(
+                  [{amqqueue:get_name(Q), Vsn}
+                   || #{data := Q, payload_version := Vsn} <- maps:values(QueueProps),
+                      ?is_amqqueue(Q)]),
+    Exchanges = [GetUpdatedExchangeFun(X)
+                 || #{data := X} <- maps:values(ExchangeProps)],
+    Queues = [GetUpdatedQueueFun(Q)
+              || #{data := Q} <- maps:values(QueueProps), ?is_amqqueue(Q)],
+    %% rabbit_khepri:transaction/2 throws {error, Reason} (it doesn't
+    %% return it as a value) whenever the transaction fun aborts via
+    %% khepri_tx:abort/1, which is how update_in_khepri_tx/3 signals a
+    %% payload_version mismatch.
+    try
+        rabbit_khepri:transaction(
+          fun() ->
+                  {[update_exchange_policies(
+                      Map, ExchangeVsns,
+                      fun rabbit_db_exchange:update_in_khepri_tx/3)
+                    || Map <- Exchanges, is_map(Map)],
+                   [update_queue_policies(
+                      Map, QueueVsns,
+                      fun rabbit_db_queue:update_in_khepri_tx/3)
+                    || Map <- Queues, is_map(Map)]}
+          end, rw)
+    catch
+        throw:{error, {khepri, mismatching_node, _}} ->
+            update(VHost, GetUpdatedExchangeFun, GetUpdatedQueueFun)
+    end.
 
 update_exchange_policies(#{exchange := X = #exchange{name = XName},
-                           update_function := UpdateFun}, StoreFun) ->
-    NewExchange = StoreFun(XName, UpdateFun),
+                           update_function := UpdateFun}, Vsns, StoreFun) ->
+    Vsn = maps:get(XName, Vsns),
+    NewExchange = StoreFun(XName, Vsn, UpdateFun),
     case NewExchange of
         #exchange{} = X1 -> {X, X1};
         not_found        -> {X, X }
     end.
 
-update_queue_policies(#{queue := Q0, update_function := UpdateFun}, StoreFun) ->
+update_queue_policies(#{queue := Q0, update_function := UpdateFun}, Vsns, StoreFun) ->
     QName = amqqueue:get_name(Q0),
-    NewQueue = StoreFun(QName, UpdateFun),
+    Vsn = maps:get(QName, Vsns),
+    NewQueue = StoreFun(QName, Vsn, UpdateFun),
     case NewQueue of
         Q1 when ?is_amqqueue(Q1) ->
             {Q0, Q1};

@@ -62,6 +62,7 @@
 %% Used by other rabbit_db_* modules
 -export([
          update_in_khepri_tx/2,
+         update_in_khepri_tx/3,
          get_in_khepri_tx/1
         ]).
 
@@ -977,6 +978,45 @@ update_in_khepri_tx(Name, Fun) ->
             Q1 = Fun(Q),
             ok = khepri_tx:put(Path, Q1),
             Q1;
+        _  ->
+            not_found
+    end.
+
+%% -------------------------------------------------------------------
+%% update_in_khepri_tx().
+%% -------------------------------------------------------------------
+
+-spec update_in_khepri_tx(QName, Vsn, UpdateFun) -> Ret when
+      QName :: rabbit_amqqueue:name(),
+      Vsn :: khepri:payload_version(),
+      Queue :: amqqueue:amqqueue(),
+      UpdateFun :: fun((Queue) -> Queue),
+      Ret :: Queue | not_found.
+%% @doc Same as `update_in_khepri_tx/2', but only applies `UpdateFun' if
+%% the record hasn't changed since the version `Vsn' was read, aborting
+%% the enclosing transaction with `mismatching_node' otherwise. Use this
+%% when `Vsn' was read outside of the transaction, e.g. to decide
+%% `UpdateFun' itself from data that could since have gone stale.
+%%
+%% @private
+
+update_in_khepri_tx(Name, Vsn, Fun) ->
+    Path = khepri_queue_path(Name),
+    case khepri_tx:get(Path) of
+        {ok, Q} ->
+            Q1 = Fun(Q),
+            UpdatePath = khepri_path:combine_with_conditions(
+                           Path, [#if_payload_version{version = Vsn}]),
+            %% A mismatching_node condition failure must abort the whole
+            %% enclosing transaction, discarding any puts already made
+            %% during this attempt: khepri_tx:abort/1 does this via an
+            %% exception, unlike returning the failure as an ordinary
+            %% {error, _} value, which khepri would otherwise still
+            %% commit up to this point.
+            case khepri_tx:put(UpdatePath, Q1) of
+                ok -> Q1;
+                {error, Reason} -> khepri_tx:abort(Reason)
+            end;
         _  ->
             not_found
     end.
