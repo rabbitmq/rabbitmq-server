@@ -1561,10 +1561,10 @@ add_vhost(Config, Node, VHost) ->
     add_vhost(Config, Node, VHost, <<"acting-user">>).
 
 add_vhost(Config, Node, VHost, Username) ->
-    catch rpc(Config, Node, rabbit_vhost, add, [VHost, Username]).
+    rpc_catch(Config, Node, rabbit_vhost, add, [VHost, Username]).
 
 update_vhost_metadata(Config, VHost, Meta) ->
-    catch rpc(Config, 0, rabbit_vhost, update_metadata, [VHost, Meta, <<"acting-user">>]).
+    rpc_catch(Config, 0, rabbit_vhost, update_metadata, [VHost, Meta, <<"acting-user">>]).
 
 enable_vhost_protection_from_deletion(Config, VHost) ->
     MetadataPatch = #{
@@ -1585,7 +1585,7 @@ delete_vhost(Config, Node, VHost) ->
     delete_vhost(Config, Node, VHost, <<"acting-user">>).
 
 delete_vhost(Config, Node, VHost, Username) ->
-    catch rpc(Config, Node, rabbit_vhost, delete, [VHost, Username]).
+    rpc_catch(Config, Node, rabbit_vhost, delete, [VHost, Username]).
 
 -define(FORCE_VHOST_FAILURE_REASON, force_vhost_failure).
 
@@ -1674,7 +1674,7 @@ add_user(Config, Node, Username, Password) ->
     add_user(Config, Node, Username, Password, <<"acting-user">>).
 
 add_user(Config, Node, Username, Password, AuditUsername) ->
-    catch rpc(Config, Node, rabbit_auth_backend_internal, add_user,
+    rpc_catch(Config, Node, rabbit_auth_backend_internal, add_user,
               [rabbit_data_coercion:to_binary(Username),
                rabbit_data_coercion:to_binary(Password),
                AuditUsername]).
@@ -1683,7 +1683,7 @@ set_user_tags(Config, Node, Username, Tags) ->
     set_user_tags(Config, Node, Username, Tags, <<"acting-user">>).
 
 set_user_tags(Config, Node, Username, Tags, AuditUsername) ->
-    catch rpc(Config, Node, rabbit_auth_backend_internal, set_tags,
+    rpc_catch(Config, Node, rabbit_auth_backend_internal, set_tags,
               [Username, Tags, AuditUsername]).
 
 delete_user(Config, Username) ->
@@ -1693,7 +1693,7 @@ delete_user(Config, Node, Username) ->
     delete_user(Config, Node, Username, <<"acting-user">>).
 
 delete_user(Config, Node, Username, AuditUsername) ->
-    catch rpc(Config, Node, rabbit_auth_backend_internal, delete_user,
+    rpc_catch(Config, Node, rabbit_auth_backend_internal, delete_user,
               [Username, AuditUsername]).
 
 change_password(Config, Username, Password) ->
@@ -1907,6 +1907,17 @@ when is_integer(I) andalso I >= 0 ->
 rpc(Config, Nodes, Module, Function, Args, Timeout)
 when is_list(Nodes) ->
     [rpc(Config, Node, Module, Function, Args, Timeout) || Node <- Nodes].
+
+%% Like rpc/5, but catches any exception raised by the RPC and returns it in
+%% the same shape as the classic `catch Expr' would have.
+rpc_catch(Config, Node, Module, Function, Args) ->
+    try
+        rpc(Config, Node, Module, Function, Args)
+    catch
+        throw:Thrown -> Thrown;
+        exit:Reason -> {'EXIT', Reason};
+        error:Reason:Stacktrace -> {'EXIT', {Reason, Stacktrace}}
+    end.
 
 rpc_all(Config, Module, Function, Args) ->
     Nodes = get_node_configs(Config, nodename),
