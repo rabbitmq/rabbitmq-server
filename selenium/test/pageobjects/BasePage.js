@@ -360,6 +360,27 @@ module.exports = class BasePage {
       return false
     }
   }
+  // Same wait-and-poll behaviour as waitForDisplayed, but quiet: no
+  // console logging on timeout. For callers that already run their own
+  // polling loop with its own timeout/interval (e.g. session-expired.js) -
+  // waitForDisplayed would still work there, but its unconditional
+  // console.error on every timeout turns each expected "not yet" into log
+  // noise, one line per outer iteration.
+  async isElementVisible(locator) {
+    try {
+      await this.driver.wait(async () => {
+        try {
+          const element = await this.driver.findElement(locator)
+          return await element.isDisplayed()
+        } catch (error) {
+          return false
+        }
+      }, this.timeout)
+      return true
+    } catch (error) {
+      return false
+    }
+  }
   async getPopupWarning() {
     let element = await this.waitForDisplayed(FORM_POPUP_WARNING)
     let value = await element.getText()

@@ -66,6 +66,10 @@ module.exports = class SSOHomePage extends BasePage {
       return Promise.resolve(false)
     }
   }
+  // For use inside an already-polling loop; see isElementVisible.
+  async isLoginButtonVisibleNow() {
+    return this.isElementVisible(OAUTH2_LOGIN_BUTTON)
+  }
   async isLogoutButtonVisible() {
     try {
       await this.waitForDisplayed(LOGOUT_BUTTON)

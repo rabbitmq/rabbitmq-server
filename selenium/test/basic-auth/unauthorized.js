@@ -20,9 +20,8 @@ describe('An user without management tag', function () {
     await login.login('rabbit_no_management', 'guest')    
   })
 
-  it('cannot log in into the management ui', async function () {    
-    const notVisible = await login.isWarningNotVisible()
-    assert.ok(!notVisible)
+  it('cannot log in into the management ui', async function () {
+    assert.ok(await login.isWarningVisible())
   })
 
   it('should get "Login failed" warning message', async function(){
@@ -30,7 +29,7 @@ describe('An user without management tag', function () {
   })
 
   it('should get popup warning dialog', async function(){
-    assert.ok(login.isPopupWarningDisplayed())
+    assert.ok(await login.isPopupWarningDisplayed())
     assert.equal('Not management user', await login.getPopupWarning())
   })
 
