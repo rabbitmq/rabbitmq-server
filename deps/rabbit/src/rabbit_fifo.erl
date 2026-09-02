@@ -3005,7 +3005,9 @@ deliver_claimed_to(Meta, ConsumerKey,
 
 %% Take up to Credit of the messages this consumer has claimed, oldest first
 %% within each token, dropping any claimed key whose message has since left
-%% the delayed tree.
+%% the delayed tree. Across tokens, order is unspecified: maps:iterator/2
+%% below walks Claims0 in term order of the token binaries, not the order
+%% the tokens were claimed in.
 take_claimed_up_to(Credit, #consumer{deferred_claims = Claims0} = Con,
                    #?STATE{delayed = #delayed{tree = Tree0} = Delayed} = State) ->
     {Msgs, Claims, Tree} = drain_claims(maps:iterator(Claims0, ordered),
