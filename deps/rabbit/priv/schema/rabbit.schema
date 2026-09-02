@@ -18,15 +18,6 @@
 %% {tcp_listeners, [{"127.0.0.1", 5672},
 %%                  {"[::1]",     5672}]},
 
-%% Delay in seconds before client connection listeners are started.
-%% This can be useful in environments where applications may begin connecting
-%% to the node immediately when the port is enabled, even if some parts of
-%% the node are still booting concurrently.
-{mapping, "listeners.startup_delay", "rabbit.listeners_startup_delay", [
-    {validators, ["non_negative_integer"]},
-    {datatype, integer}
-]}.
-
 {mapping, "listeners.tcp", "rabbit.tcp_listeners",[
     {datatype, {enum, [none]}}
 ]}.
@@ -120,6 +111,19 @@ end}.
 {mapping, "reverse_dns_lookups", "rabbit.reverse_dns_lookups", [
     {datatype, boolean}
 ]}.
+
+%% Delay in seconds before client connection listeners are started.
+%% This can be useful in environments where applications may begin connecting
+%% to the node immediately when the port is enabled, even if some parts of
+%% the node are still booting concurrently.
+{mapping, "listeners.startup_delay", "rabbit.listeners_startup_delay", [
+    {validators, ["non_negative_integer"]},
+    {datatype, integer}
+]}.
+
+%%
+%% VM args
+%%
 
 {mapping, "erlang.K", "vm_args.+K", [
   {default, "true"},
