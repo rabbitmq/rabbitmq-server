@@ -67,9 +67,9 @@ init(_Args) ->
     maps:foreach(
       fun
           (Signal, _) when ?SIGNAL_HANDLED_BY_ERLANG(Signal) -> ok;
-          (Signal, default) -> catch os:set_signal(Signal, default);
-          (Signal, ignore)  -> catch os:set_signal(Signal, ignore);
-          (Signal, _)       -> catch os:set_signal(Signal, handle)
+          (Signal, default) -> try os:set_signal(Signal, default) catch _:_ -> ok end;
+          (Signal, ignore)  -> try os:set_signal(Signal, ignore) catch _:_ -> ok end;
+          (Signal, _)       -> try os:set_signal(Signal, handle) catch _:_ -> ok end
       end, ?SIGNALS_HANDLED_BY_US),
     {ok, #{}}.
 
