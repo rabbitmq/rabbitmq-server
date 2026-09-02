@@ -8,6 +8,7 @@ PROJECT_REGISTERED = rabbit_amqqueue_sup \
 
 define PROJECT_ENV
 [
+	    {listeners_startup_delay, 0},
 	    {tcp_listeners, [5672]},
 	    {num_tcp_acceptors, 10},
 	    {ssl_listeners, []},
