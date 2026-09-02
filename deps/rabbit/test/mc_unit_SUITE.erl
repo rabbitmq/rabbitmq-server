@@ -42,6 +42,10 @@ all_tests() ->
      amqp_amqpl_unsupported_values_not_converted,
      amqp_to_amqpl_data_body,
      amqp_amqpl_amqp_bodies,
+     amqpl_amqp_type_body_shapes,
+     amqpl_amqp_type_invalid_payload,
+     amqpl_invalid_expiration,
+     amqpl_to_amqp_invalid_expiration,
      amqp_x_headers,
      amqpl_x_headers
     ].
@@ -770,6 +774,85 @@ amqp_amqpl_amqp_bodies(_Config) ->
      end || Body <- Bodies],
     ok.
 
+amqpl_amqp_type_body_shapes(_Config) ->
+    Data = #'v1_0.data'{content = <<"hello">>},
+    Seq = #'v1_0.amqp_sequence'{content = [{utf8, <<"one">>}]},
+    Value = #'v1_0.amqp_value'{content = {utf8, <<"hello">>}},
+    Footer = #'v1_0.footer'{content = [{{symbol, <<"x-crc">>}, {uint, 1}}]},
+    Bodies = [[Value],
+              [Value, Footer],
+              [Seq, Seq],
+              [Seq, Footer],
+              [Data, Data],
+              [Data, Footer]],
+    [?assertEqual(Body, amqp_type_body_sections(serialize_sections(Body)))
+     || Body <- Bodies].
+
+%% `type' is an ordinary AMQP 0.9.1 property that any publisher can set, so a
+%% payload claiming to be AMQP 1.0 encoded may be neither well formed nor a
+%% message body. Such a payload is delivered as an opaque data section.
+amqpl_amqp_type_invalid_payload(_Config) ->
+    Payloads = [
+                <<>>,
+                <<"hello world">>,
+                <<0, 0>>,
+                %% a data section descriptor without its value
+                <<0, 16#53, 16#75>>,
+                serialize_sections([#'v1_0.header'{durable = true}]),
+                serialize_sections([#'v1_0.properties'{subject = {utf8, <<"s">>}}]),
+                serialize_sections([#'v1_0.application_properties'{content = []}]),
+                serialize_sections(
+                  [#'v1_0.message_annotations'{
+                      content = [{{symbol, <<"x-a">>}, {utf8, <<"v">>}}]}]),
+                serialize_sections([#'v1_0.footer'{content = []}]),
+                serialize_sections([#'v1_0.amqp_value'{content = {utf8, <<"a">>}},
+                                    #'v1_0.footer'{content = []},
+                                    #'v1_0.amqp_value'{content = {utf8, <<"b">>}}])
+               ],
+    [?assertEqual([#'v1_0.data'{content = Payload}],
+                  amqp_type_body_sections(Payload))
+     || Payload <- Payloads].
+
+%% The AMQP 0.9.1 channel rejects an invalid expiration at publish time, but
+%% other protocols build a #content{} and initialise it directly.
+amqpl_invalid_expiration(_Config) ->
+    Ex = #resource{virtual_host = <<"/">>,
+                   kind = exchange,
+                   name = <<"ex">>},
+    Init = fun(Expiration) ->
+                   Content = #content{class_id = 60,
+                                      properties = #'P_basic'{expiration = Expiration},
+                                      properties_bin = none,
+                                      payload_fragments_rev = [<<"data">>]},
+                   {ok, Msg} = mc_amqpl:message(Ex, <<"rkey">>, Content, #{}),
+                   mc:ttl(Msg)
+           end,
+    ?assertEqual(60_000, Init(<<"60000">>)),
+    [?assertEqual(undefined, Init(Expiration))
+     || Expiration <- [<<"abc">>, <<"10x">>, <<"-1">>, <<>>,
+                       <<"99999999999999999999999">>]],
+    ok.
+
+%% mc_amqpl:convert_to/3 must not assume that expiration was already
+%% validated either, for the same reason as amqpl_invalid_expiration.
+amqpl_to_amqp_invalid_expiration(_Config) ->
+    Ttl = fun(Expiration) ->
+                  Content = #content{class_id = 60,
+                                     properties = #'P_basic'{expiration = Expiration},
+                                     properties_bin = none,
+                                     payload_fragments_rev = [<<"data">>]},
+                  Msg = mc:init(mc_amqpl, Content, annotations()),
+                  [HeaderBin | _] = mc:protocol_state(mc:convert(mc_amqp, Msg)),
+                  [#'v1_0.header'{ttl = Wrapped}] =
+                      amqp10_framing:decode_bin(iolist_to_binary(HeaderBin)),
+                  Wrapped
+          end,
+    ?assertEqual({uint, 60_000}, Ttl(<<"60000">>)),
+    [?assertEqual(undefined, Ttl(Expiration))
+     || Expiration <- [<<"abc">>, <<"10x">>, <<"-1">>, <<>>,
+                       <<"99999999999999999999999">>]],
+    ok.
+
 amqp_x_headers(_Config) ->
     MAC = [
            {{symbol, <<"x-stream-filter">>}, {utf8, <<"apple">>}},
@@ -817,6 +900,18 @@ amqpl_x_headers(_Config) ->
                  mc:x_headers(BasicMsg)).
 
 %% Utility
+
+%% Converts an AMQP 0.9.1 message whose `type' is <<"amqp-1.0">> and returns the
+%% body sections the conversion produced.
+amqp_type_body_sections(Payload) ->
+    Content = #content{class_id = 60,
+                       properties = #'P_basic'{type = <<"amqp-1.0">>},
+                       properties_bin = none,
+                       payload_fragments_rev = [Payload]},
+    Msg = mc:init(mc_amqpl, Content, annotations()),
+    [_Header, _MessageAnnotations | BodySections] =
+        mc:protocol_state(mc:convert(mc_amqp, Msg)),
+    amqp10_framing:decode_bin(iolist_to_binary(BodySections)).
 
 amqp10_encode_bin(L) when is_list(L) ->
     [iolist_to_binary(amqp10_framing:encode_bin(X)) || X <- L];

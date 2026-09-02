@@ -251,18 +251,12 @@ routing_headers(Msg, Opts) ->
     List = application_properties_as_simple_map(Msg, X),
     maps:from_list(List).
 
-get_property(durable, #msg_body_encoded{header = Header} = Msg) ->
+get_property(durable, #msg_body_encoded{header = Header}) ->
     case Header of
         #'v1_0.header'{durable = D} when is_boolean(D) ->
             D;
         _ ->
-            %% fallback in case the source protocol was old AMQP 0.9.1
-            case message_annotation(<<"x-basic-delivery-mode">>, Msg, undefined) of
-                {ubyte, 2} ->
-                    true;
-                _ ->
-                    false
-            end
+            false
     end;
 get_property(timestamp, #msg_body_encoded{properties = Properties}) ->
     case Properties of
@@ -271,32 +265,19 @@ get_property(timestamp, #msg_body_encoded{properties = Properties}) ->
         _ ->
             undefined
     end;
-get_property(ttl, #msg_body_encoded{header = Header} = Msg) ->
+get_property(ttl, #msg_body_encoded{header = Header}) ->
     case Header of
         #'v1_0.header'{ttl = {uint, Ttl}} ->
             Ttl;
         _ ->
-            %% fallback in case the source protocol was AMQP 0.9.1
-            case message_annotation(<<"x-basic-expiration">>, Msg, undefined) of
-                {utf8, Expiration}  ->
-                    {ok, Ttl} = rabbit_basic:parse_expiration(Expiration),
-                    Ttl;
-                _ ->
-                    undefined
-            end
+            undefined
     end;
-get_property(priority, #msg_body_encoded{header = Header} = Msg) ->
+get_property(priority, #msg_body_encoded{header = Header}) ->
     case Header of
         #'v1_0.header'{priority = {ubyte, Priority}} ->
             Priority;
         _ ->
-            %% fallback in case the source protocol was AMQP 0.9.1
-            case message_annotation(<<"x-basic-priority">>, Msg, undefined) of
-                {_, Priority}  ->
-                    Priority;
-                _ ->
-                    undefined
-            end
+            undefined
     end.
 
 %% protocol_state/2 serialises the protocol state outputting an AMQP encoded message.
