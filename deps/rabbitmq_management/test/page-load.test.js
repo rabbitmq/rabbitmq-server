@@ -4,11 +4,19 @@ import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
+import {
+  registerAuthProvider,
+  unregisterAuthProvider,
+  getAuthProvider,
+  set_active_auth_provider,
+  set_active_auth_provider_by_name,
+  login_flow_provider,
+  active_auth_provider
+} from '../priv/www/js/auth-providers.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WWW_JS = path.join(__dirname, '../priv/www/js');
 const mainSrc = fs.readFileSync(path.join(WWW_JS, 'main.js'), 'utf8');
-const authProvidersSrc = fs.readFileSync(path.join(WWW_JS, 'auth-providers.js'), 'utf8');
 
 // on_page_load() is what $(document).ready runs. It is a named function
 // precisely so a test can call it: an anonymous callback handed to jQuery
@@ -38,11 +46,16 @@ function loadPage(oauthState, href) {
     oauth: oauthState,
     registerInitStep: () => true,
     clear_pref: record('clear_pref'),
-    fmt_escape_html: (s) => s
+    fmt_escape_html: (s) => s,
+    registerAuthProvider,
+    unregisterAuthProvider,
+    getAuthProvider,
+    set_active_auth_provider,
+    set_active_auth_provider_by_name,
+    login_flow_provider,
+    active_auth_provider
   };
   vm.createContext(sandbox);
-  // Providers first: main.js calls login_flow_provider() at page load.
-  vm.runInContext(authProvidersSrc, sandbox, { filename: 'auth-providers.js' });
   vm.runInContext(mainSrc, sandbox, { filename: 'main.js' });
 
   // Recorded after loading, not before: main.js declares these itself, and
@@ -51,6 +64,13 @@ function loadPage(oauthState, href) {
   sandbox.startWithLoginPage = record('startWithLoginPage');
   sandbox.startWithOAuthLogin = record('startWithOAuthLogin');
   sandbox.renderWarningMessageInLoginStatus = (o, message) => calls.push('warn ' + message);
+
+  globalThis.startWithLoginPage = sandbox.startWithLoginPage;
+  globalThis.startWithOAuthLogin = sandbox.startWithOAuthLogin;
+  globalThis.renderWarningMessageInLoginStatus = sandbox.renderWarningMessageInLoginStatus;
+  globalThis.clear_pref = sandbox.clear_pref;
+  globalThis.fmt_escape_html = sandbox.fmt_escape_html;
+  globalThis.oauth = oauthState;
   return sandbox;
 }
 
