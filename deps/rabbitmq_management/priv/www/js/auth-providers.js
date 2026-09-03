@@ -115,3 +115,25 @@ registerAuthProvider('oauth2', {
         initiate_logout(oauth, reason);
     }
 });
+
+export {
+    registerAuthProvider,
+    unregisterAuthProvider,
+    getAuthProvider,
+    set_active_auth_provider,
+    set_active_auth_provider_by_name,
+    login_flow_provider,
+    active_auth_provider
+};
+
+if (typeof window !== 'undefined') {
+    Object.assign(window, {
+        registerAuthProvider,
+        unregisterAuthProvider,
+        getAuthProvider,
+        set_active_auth_provider,
+        set_active_auth_provider_by_name,
+        login_flow_provider,
+        active_auth_provider
+    });
+}
