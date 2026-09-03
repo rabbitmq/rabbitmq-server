@@ -827,11 +827,13 @@ function _link_to(name, url, highlight, args) {
 }
 
 function fmt_highlight_filter(text) {
-    if (current_filter == '') return fmt_escape_html(text);
+    var filter = (typeof current_filter !== 'undefined' ? current_filter : (typeof window !== 'undefined' ? window.current_filter : '')) || '';
+    if (filter === '') return fmt_escape_html(text);
 
-    var text_to_match = current_filter.toLowerCase();
-    if (current_filter_regex) {
-        var potential_match = current_filter_regex.exec(text.toLowerCase());
+    var filter_regex = typeof current_filter_regex !== 'undefined' ? current_filter_regex : (typeof window !== 'undefined' ? window.current_filter_regex : null);
+    var text_to_match = filter.toLowerCase();
+    if (filter_regex) {
+        var potential_match = filter_regex.exec(text.toLowerCase());
         if (potential_match) {
             text_to_match = potential_match[0];
         }
