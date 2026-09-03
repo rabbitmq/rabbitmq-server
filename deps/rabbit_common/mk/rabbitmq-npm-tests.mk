@@ -6,7 +6,9 @@ ifneq ($(wildcard $(CURDIR)/package.json),)
 .PHONY: npm-test
 npm-test:
 	@if command -v npm > /dev/null 2>&1; then \
-		cd $(CURDIR) && npm install && npm test -- 'test/**/*.test.js'; \
+		cd $(CURDIR) && \
+		{ [ package-lock.json -nt package.json ] || npm install; } && \
+		npm test -- 'test/**/*.test.js'; \
 	else \
 		echo "Skipped JavaScript tests for $(PROJECT): npm is not installed locally"; \
 	fi
