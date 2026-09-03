@@ -732,35 +732,36 @@ nowait_exchange_declare(Config) ->
 channel_repeat_open_close(Config) ->
     {ok, Connection} = new_connection(Config),
     lists:foreach(
-        fun(_) ->
-            {ok, Ch} = amqp_connection:open_channel(Connection),
-            ok = amqp_channel:close(Ch)
-        end, lists:seq(1, 50)),
+        fun(_) -> open_and_close_channel(Connection) end, lists:seq(1, 50)),
     amqp_connection:close(Connection),
     wait_for_death(Connection).
+
+%% Opening and closing a channel can race with the channel process exiting
+%% on its own (e.g. the connection closing concurrently), which is not a
+%% failure worth reporting.
+open_and_close_channel(Connection) ->
+    try amqp_connection:open_channel(Connection) of
+        {ok, Ch}           -> try amqp_channel:close(Ch) of
+                                  ok                 -> ok;
+                                  closing            -> ok
+                              catch
+                                  exit:{noproc, _}       -> ok;
+                                  exit:{normal, _}       -> ok;
+                                  exit:{{shutdown, _}, _} -> ok
+                              end;
+        closing            -> ok
+    catch
+        exit:{noproc, _}       -> ok;
+        exit:{normal, _}       -> ok;
+        exit:{{shutdown, _}, _} -> ok
+    end.
 
 %% -------------------------------------------------------------------
 
 channel_multi_open_close(Config) ->
     {ok, Connection} = new_connection(Config),
-    [spawn_link(
-        fun() ->
-            try amqp_connection:open_channel(Connection) of
-                {ok, Ch}           -> try amqp_channel:close(Ch) of
-                                          ok                 -> ok;
-                                          closing            -> ok
-                                      catch
-                                          exit:{noproc, _}       -> ok;
-                                          exit:{normal, _}       -> ok;
-                                          exit:{{shutdown, _}, _} -> ok
-                                      end;
-                closing            -> ok
-            catch
-                exit:{noproc, _}       -> ok;
-                exit:{normal, _}       -> ok;
-                exit:{{shutdown, _}, _} -> ok
-            end
-        end) || _ <- lists:seq(1, 50)],
+    [spawn_link(fun() -> open_and_close_channel(Connection) end)
+     || _ <- lists:seq(1, 50)],
     erlang:yield(),
     try amqp_connection:close(Connection)
     catch
