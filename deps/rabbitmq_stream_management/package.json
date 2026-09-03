@@ -1,0 +1,11 @@
+{
+  "name": "rabbitmq_stream_management",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=21"
+  },
+  "scripts": {
+    "test": "node --test"
+  }
+}
