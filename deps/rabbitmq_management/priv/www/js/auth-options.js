@@ -84,3 +84,22 @@ function auth_section_is_expanded(auth, mechanism) {
     var basicPreselected = auth.preselected === BASIC_AUTH_OPTION_ID;
     return mechanism === 'basic' ? basicPreselected : !basicPreselected;
 }
+
+export {
+    BASIC_AUTH_OPTION_ID,
+    auth_mechanism_matches,
+    authOptions,
+    auth_options_for_mechanism,
+    auth_section_is_expanded
+};
+
+if (typeof window !== 'undefined') {
+    Object.assign(window, {
+        BASIC_AUTH_OPTION_ID,
+        auth_mechanism_matches,
+        authOptions,
+        auth_options_for_mechanism,
+        auth_section_is_expanded
+    });
+}
+

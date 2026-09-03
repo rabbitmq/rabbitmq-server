@@ -4,6 +4,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
+import {
+  authOptions,
+  auth_options_for_mechanism,
+  auth_section_is_expanded
+} from '../priv/www/js/auth-options.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WWW_JS = path.join(__dirname, '../priv/www/js');
@@ -19,7 +24,11 @@ vm.createContext(ejsSandbox);
 vm.runInContext(fs.readFileSync(path.join(WWW_JS, 'ejs-1.0.min.js'), 'utf8'), ejsSandbox);
 // The template calls these as globals, so they must live in the realm the
 // template is compiled in.
-vm.runInContext(fs.readFileSync(path.join(WWW_JS, 'auth-options.js'), 'utf8'), ejsSandbox);
+Object.assign(ejsSandbox, {
+  authOptions,
+  auth_options_for_mechanism,
+  auth_section_is_expanded
+});
 ejsSandbox.fmt_string = (s) => String(s);
 
 const templateSrc = fs.readFileSync(path.join(WWW_JS, 'tmpl/login_oauth.ejs'), 'utf8');
