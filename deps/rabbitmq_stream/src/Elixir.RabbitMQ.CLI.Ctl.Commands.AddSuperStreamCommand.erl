@@ -45,6 +45,7 @@ switches() ->
      {max_length_bytes, string},
      {max_age, string},
      {stream_max_segment_size_bytes, string},
+     {stream_initial_offset, integer},
      {leader_locator, string},
      {initial_cluster_size, integer}].
 
@@ -98,6 +99,23 @@ validate_stream_arguments(#{stream_max_segment_size_bytes := Value} =
         _ ->
             validate_stream_arguments(maps:remove(stream_max_segment_size_bytes,
                                                   Opts))
+    end;
+validate_stream_arguments(#{stream_initial_offset := Value} = Opts) ->
+    try
+        case rabbit_data_coercion:to_integer(Value) of
+            O when O >= 0 ->
+                validate_stream_arguments(maps:remove(stream_initial_offset,
+                                                      Opts));
+            _ ->
+                {validation_failure,
+                 "Invalid value for --stream-initial-offset, the "
+                 "value must not be negative."}
+        end
+    catch
+        error:_ ->
+            {validation_failure,
+             "Invalid value for --stream-initial-offset, the "
+             "value must be a non-negative integer."}
     end;
 validate_stream_arguments(#{leader_locator := <<"client-local">>} =
                               Opts) ->
@@ -162,6 +180,8 @@ usage_additional() ->
       <<"The maximum age of partition stream segments, using the ISO 8601 duration format, e.g. PT10M30S for 10 minutes 30 seconds, P5DT8H for 5 days 8 hours.">>],
      [<<"--stream-max-segment-size-bytes <stream-max-segment-size-bytes>">>,
       <<"The maximum size of partition stream segments, example values: 500mb, 1gb.">>],
+     [<<"--stream-initial-offset <stream-initial-offset>">>,
+      <<"The offset of the first message published to each partition stream, default is 0.">>],
      [<<"--leader-locator <leader-locator>">>,
       <<"Leader locator strategy for partition streams, possible values are client-local, balanced.">>],
      [<<"--initial-cluster-size <initial-cluster-size>">>,
@@ -227,6 +247,10 @@ stream_arguments(Acc,
     stream_arguments(maps:put(<<"stream-max-segment-size-bytes">>,
                               parse_information_unit(Value), Acc),
                      maps:remove(stream_max_segment_size_bytes, Arguments));
+stream_arguments(Acc, #{stream_initial_offset := Value} = Arguments) ->
+    stream_arguments(maps:put(<<"stream-initial-offset">>,
+                              rabbit_data_coercion:to_binary(Value), Acc),
+                     maps:remove(stream_initial_offset, Arguments));
 stream_arguments(Acc, #{initial_cluster_size := Value} = Arguments) ->
     stream_arguments(maps:put(<<"initial-cluster-size">>,
                               rabbit_data_coercion:to_binary(Value), Acc),
