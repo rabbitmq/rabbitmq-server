@@ -45,7 +45,7 @@
  * If the input length is not a multiple of 4, or contains invalid characters
  *   then an exception is thrown.
  */
-base64 = {};
+var base64 = {};
 base64.PADCHAR = '=';
 base64.ALPHA = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 base64.getbyte64 = function(s,i) {
@@ -151,4 +151,10 @@ base64.encode = function(s) {
         break;
     }
     return x.join('');
+}
+
+export { base64 };
+
+if (typeof window !== 'undefined') {
+    window.base64 = base64;
 }

@@ -10,6 +10,7 @@
 // set_oauth_settings() to populate the OAuth configuration.
 
 import { oauth_initialize_if_required } from './oidc-oauth/helper.js';
+import { check_version } from './main.js';
 
 check_version();
 window.oauth = oauth_initialize_if_required();
