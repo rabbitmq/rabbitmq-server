@@ -80,6 +80,12 @@ defaults to `full-suite-management-ui`.
 ./run-suites.sh full-suite-management-ui
 ```
 
+To run all suites under a folder, e.g. all authentication/authorization tests in 
+the management ui.
+```
+./run-suites.sh suites/authnz-mgt
+```
+
 Other suites files available are:
 
 - `short-suite-management-ui` which only runs a short set of suites
