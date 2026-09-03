@@ -1,5 +1,5 @@
 {
-  "name": "rabbitmq_stream_management",
+  "name": "rabbitmq_top",
   "private": true,
   "type": "module",
   "engines": {

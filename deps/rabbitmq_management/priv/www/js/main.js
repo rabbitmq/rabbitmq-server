@@ -5,7 +5,8 @@ import {
   set_current_vhost,
   get_current_vhost,
   setup_global_vars,
-  expand_user_tags
+  expand_user_tags,
+  dispatcher_modules
 } from './global.js';
 import { login_flow_provider, set_active_auth_provider_by_name, active_auth_provider } from './auth-providers.js';
 import { authOptions } from './auth-options.js';
@@ -439,7 +440,7 @@ function dynamic_javascript_load(arrayOrString) {
 }
 function dynamic_javascript_file_load(filename, callback) {
     var element = document.createElement('script');
-    element.setAttribute('type', 'text/javascript');
+    element.setAttribute('type', 'module');
     element.setAttribute('src', 'js/' + filename);
 
     // Set up callback to fire when script has loaded

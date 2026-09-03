@@ -1,5 +1,5 @@
 {
-  "name": "rabbitmq_stream_management",
+  "name": "rabbitmq_tracing",
   "private": true,
   "type": "module",
   "engines": {

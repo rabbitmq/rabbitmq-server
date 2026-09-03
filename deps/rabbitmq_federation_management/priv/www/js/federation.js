@@ -1,3 +1,7 @@
+import { dispatcher_add, put_parameter, sync_delete, go_to, update, render } from './main.js';
+import { NAVIGATION, HELP } from './global.js';
+import { _link_to, esc } from './formatters.js';
+
 dispatcher_add(function(sammy) {
     sammy.get('#/federation', function() {
             render({'links':     {path:   '/federation-links',
@@ -45,10 +49,8 @@ HELP['federation-uri'] =
 HELP['federation-prefetch'] =
     'Maximum number of unacknowledged messages that may be in flight over a federation link at one time. Defaults to 1000 if not set.';
 
-
 HELP['federation-reconnect'] =
     'Time in seconds to wait after a network link goes down before attempting reconnection. Defaults to 5 if not set.';
-
 
 HELP['federation-ack-mode'] =
     '<dl>\
@@ -86,4 +88,14 @@ HELP['consumer-tag'] =
 
 function link_fed_conn(vhost, name) {
     return _link_to(name, '#/federation-upstreams/' + esc(vhost) + '/' + esc(name));
+}
+
+export {
+    link_fed_conn
+};
+
+if (typeof window !== 'undefined') {
+    Object.assign(window, {
+        link_fed_conn
+    });
 }
