@@ -1,24 +1,11 @@
-import { describe, it, before } from 'node:test';
+import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import path from 'node:path';
-import vm from 'node:vm';
-import { fileURLToPath } from 'node:url';
+import {
+  authOptions,
+  auth_section_is_expanded,
+  auth_options_for_mechanism
+} from '../priv/www/js/auth-options.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const AUTH_OPTIONS_JS_PATH = path.join(__dirname, '../priv/www/js/auth-options.js');
-const authOptionsSrc = fs.readFileSync(AUTH_OPTIONS_JS_PATH, 'utf8');
-
-// auth-options.js is pure policy: no DOM, no dependencies, no state, so it
-// is loaded once and shared by every test.
-const sandbox = { console };
-vm.createContext(sandbox);
-vm.runInContext(authOptionsSrc, sandbox, { filename: AUTH_OPTIONS_JS_PATH });
-const { authOptions, auth_section_is_expanded, auth_options_for_mechanism } = sandbox;
-
-// authOptions builds its arrays inside the vm, so they belong to another
-// realm and are never reference-equal under assert's strict deepEqual.
-// Comparing a flattened string sidesteps that entirely.
 function optionSummary(options) {
   return options.map((o) => `${o.mechanism}:${o.id}`).join(',');
 }
@@ -144,9 +131,6 @@ describe('auth_section_is_expanded', () => {
       resource_servers: [DEV, PROD],
       preferred_auth_mechanism: { type: 'basic' }
     }));
-    // The old template emitted section-visible AND section-invisible on the
-    // oauth2 div here, because its "visible" test compared the preference
-    // object against the string "oauth2". Exactly one must apply.
     assert.equal(auth_section_is_expanded(auth, 'oauth2'), false);
     assert.equal(auth_section_is_expanded(auth, 'basic'), true);
   });
