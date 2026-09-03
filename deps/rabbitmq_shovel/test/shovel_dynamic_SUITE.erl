@@ -714,10 +714,11 @@ list_queue_messages(Config, QName) ->
     List = rabbit_ct_broker_helpers:rabbitmqctl_list(
              Config, 0,
              ["list_queues", "name", "messages", "--no-table-headers"]),
-    [[_, Messages]] = lists:filter(fun([Q, _]) ->
-                                           Q == QName
-                                   end, List),
-    binary_to_integer(Messages).
+    case lists:filter(fun([Q, _]) -> Q == QName end, List) of
+        [[_, Messages]] -> binary_to_integer(Messages);
+        %% the queue may have been deleted between the delete call and this check
+        [] -> 0
+    end.
 
 delete_queue(Name, VHost) ->
     QName = rabbit_misc:r(VHost, queue, Name),
