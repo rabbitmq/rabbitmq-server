@@ -297,7 +297,7 @@ function fmt_num_thousands_unfixed(num) {
      if (num == undefined) return UNKNOWN_REPR;
      num = '' + num;
      if (num.length < 4) return num;
-     res= fmt_num_thousands_unfixed(num.slice(0, -3)) + ',' + num.slice(-3);
+     var res = fmt_num_thousands_unfixed(num.slice(0, -3)) + ',' + num.slice(-3);
      return res;
 }
 
@@ -420,7 +420,7 @@ function fmt_table_long(table) {
 
 function fmt_table_body(table, x) {
     var res = '';
-    for (k in table) {
+    for (var k in table) {
         res += '<tr><th>' + fmt_escape_html(k) + x + '</th>' +
             '<td>' + fmt_amqp_value(table[k]) + '</td>';
     }
@@ -449,7 +449,7 @@ function fmt_amqp_value(val) {
 
 function fmt_table_flat(table) {
     var res = [];
-    for (k in table) {
+    for (var k in table) {
         res.push(fmt_escape_html(k) + ': ' + fmt_amqp_value_flat(table[k]));
     }
     return res.join(', ');
@@ -651,7 +651,7 @@ function fmt_state(colour, text, explanation) {
 function fmt_shortened_uri(uri) {
     if (typeof uri == 'object') {
         var res = '';
-        for (i in uri) {
+        for (var i in uri) {
             res += fmt_shortened_uri(uri[i]) + '<br/>';
         }
         return res;
@@ -669,7 +669,7 @@ function fmt_shortened_uri(uri) {
 function fmt_uri_with_credentials(uri) {
     if (typeof uri == 'object') {
         var res = [];
-        for (i in uri) {
+        for (var i in uri) {
             res.push(fmt_uri_with_credentials(uri[i]));
         }
         return res;
@@ -1045,7 +1045,7 @@ function fmt_checkbox(name, text, current) {
 
 function properties_size(obj) {
     var count = 0;
-    for (k in obj) {
+    for (var k in obj) {
         if (obj.hasOwnProperty(k)) count++;
     }
     return count;
@@ -1139,3 +1139,245 @@ function fmt_resource_link(res) {
         return `${res.kind} '${link_exchange(res.virtual_host, res.name, {})}' in vhost '${link_vhost(res.virtual_host)}'`;
     }
 }
+
+export {
+    UNKNOWN_REPR,
+    FD_THRESHOLDS,
+    SOCKETS_THRESHOLDS,
+    API_ERROR_REASONS,
+    PROCESS_THRESHOLDS,
+    TAB_HIGHLIGHTER,
+    WHITESPACE_HIGHLIGHTER,
+    CONSUMER_OWNER_FORMATTERS,
+    CONSUMER_OWNER_FORMATTERS_COMPARATOR,
+    DEPRECATION_PHASES,
+    format_error_response,
+    fmt_string,
+    fmt_si_prefix,
+    fmt_boolean,
+    fmt_date,
+    fmt_date_mini,
+    fmt_date0,
+    fmt_timestamp,
+    fmt_timestamp_mini,
+    fmt_time,
+    fmt_millis,
+    fmt_features,
+    fmt_policy_short,
+    fmt_op_policy_short,
+    fmt_features_short,
+    fmt_activity_status,
+    short_conn,
+    short_chan,
+    args_to_features,
+    fmt_members,
+    fmt_channel_mode,
+    fmt_color,
+    fmt_rate_num,
+    fmt_num_thousands,
+    fmt_num_thousands_unfixed,
+    fmt_percent,
+    pick_rate,
+    pick_abs,
+    fmt_detail_rate,
+    fmt_detail_rate_bytes,
+    fmt_plain,
+    fmt_plain_axis,
+    fmt_rate,
+    fmt_rate_axis,
+    fmt_bytes,
+    fmt_bytes_axis,
+    fmt_rate_bytes,
+    fmt_rate_bytes_axis,
+    fmt_ms,
+    fmt_maybe_vhost,
+    fmt_exchange,
+    fmt_exchange0,
+    fmt_exchange_type,
+    fmt_exchange_url,
+    fmt_download_filename,
+    fmt_table_short,
+    fmt_table_long,
+    fmt_table_body,
+    fmt_amqp_value,
+    fmt_table_flat,
+    fmt_amqp_value_flat,
+    fmt_uptime,
+    fmt_plugins_small,
+    get_plugins_list,
+    fmt_rabbit_version,
+    fmt_strip_tags,
+    fmt_escape_html,
+    fmt_escape_html_one_line,
+    fmt_escape_html0,
+    fmt_maybe_wrap,
+    fmt_node,
+    fmt_object_state,
+    fmt_state,
+    fmt_shortened_uri,
+    fmt_uri_with_credentials,
+    fmt_client_name,
+    fmt_trunc,
+    alt_rows,
+    esc,
+    replace_char_sequence_individually,
+    replace_leading_chars,
+    replace_trailing_chars,
+    highlight_extra_whitespace,
+    link_consumer_owner,
+    link_conn,
+    link_channel,
+    link_exchange,
+    link_queue,
+    link_vhost,
+    link_user,
+    link_node,
+    link_policy,
+    _link_to,
+    fmt_highlight_filter,
+    filter_ui_pg,
+    filter_ui,
+    paginate_header_ui,
+    paginate_ui,
+    maybe_truncate,
+    fmt_sort,
+    group_count,
+    group_heading,
+    fmt_permissions,
+    fmt_radio,
+    fmt_checkbox,
+    properties_size,
+    stored_value_or_default,
+    fmt_page_number_request,
+    fmt_page_size_request,
+    fmt_filter_name_request,
+    fmt_regex_request,
+    fmt_vhost_state,
+    isNumberKey,
+    fmt_deprecation_phase,
+    fmt_resource,
+    fmt_resource_link
+};
+
+// TODO Remove once the callers of this module are migrated to using ES modules.
+if (typeof window !== 'undefined') {
+    Object.assign(window, {
+        UNKNOWN_REPR,
+        FD_THRESHOLDS,
+        SOCKETS_THRESHOLDS,
+        API_ERROR_REASONS,
+        PROCESS_THRESHOLDS,
+        TAB_HIGHLIGHTER,
+        WHITESPACE_HIGHLIGHTER,
+        CONSUMER_OWNER_FORMATTERS,
+        CONSUMER_OWNER_FORMATTERS_COMPARATOR,
+        DEPRECATION_PHASES,
+        format_error_response,
+        fmt_string,
+        fmt_si_prefix,
+        fmt_boolean,
+        fmt_date,
+        fmt_date_mini,
+        fmt_date0,
+        fmt_timestamp,
+        fmt_timestamp_mini,
+        fmt_time,
+        fmt_millis,
+        fmt_features,
+        fmt_policy_short,
+        fmt_op_policy_short,
+        fmt_features_short,
+        fmt_activity_status,
+        short_conn,
+        short_chan,
+        args_to_features,
+        fmt_members,
+        fmt_channel_mode,
+        fmt_color,
+        fmt_rate_num,
+        fmt_num_thousands,
+        fmt_num_thousands_unfixed,
+        fmt_percent,
+        pick_rate,
+        pick_abs,
+        fmt_detail_rate,
+        fmt_detail_rate_bytes,
+        fmt_plain,
+        fmt_plain_axis,
+        fmt_rate,
+        fmt_rate_axis,
+        fmt_bytes,
+        fmt_bytes_axis,
+        fmt_rate_bytes,
+        fmt_rate_bytes_axis,
+        fmt_ms,
+        fmt_maybe_vhost,
+        fmt_exchange,
+        fmt_exchange0,
+        fmt_exchange_type,
+        fmt_exchange_url,
+        fmt_download_filename,
+        fmt_table_short,
+        fmt_table_long,
+        fmt_table_body,
+        fmt_amqp_value,
+        fmt_table_flat,
+        fmt_amqp_value_flat,
+        fmt_uptime,
+        fmt_plugins_small,
+        get_plugins_list,
+        fmt_rabbit_version,
+        fmt_strip_tags,
+        fmt_escape_html,
+        fmt_escape_html_one_line,
+        fmt_escape_html0,
+        fmt_maybe_wrap,
+        fmt_node,
+        fmt_object_state,
+        fmt_state,
+        fmt_shortened_uri,
+        fmt_uri_with_credentials,
+        fmt_client_name,
+        fmt_trunc,
+        alt_rows,
+        esc,
+        replace_char_sequence_individually,
+        replace_leading_chars,
+        replace_trailing_chars,
+        highlight_extra_whitespace,
+        link_consumer_owner,
+        link_conn,
+        link_channel,
+        link_exchange,
+        link_queue,
+        link_vhost,
+        link_user,
+        link_node,
+        link_policy,
+        _link_to,
+        fmt_highlight_filter,
+        filter_ui_pg,
+        filter_ui,
+        paginate_header_ui,
+        paginate_ui,
+        maybe_truncate,
+        fmt_sort,
+        group_count,
+        group_heading,
+        fmt_permissions,
+        fmt_radio,
+        fmt_checkbox,
+        properties_size,
+        stored_value_or_default,
+        fmt_page_number_request,
+        fmt_page_size_request,
+        fmt_filter_name_request,
+        fmt_regex_request,
+        fmt_vhost_state,
+        isNumberKey,
+        fmt_deprecation_phase,
+        fmt_resource,
+        fmt_resource_link
+    });
+}
+
