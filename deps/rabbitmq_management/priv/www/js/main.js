@@ -591,7 +591,7 @@ function update() {
 }
 
 function partial_update() {
-    if (!$(".pagination_class").is(":focus")) {
+    if (typeof $ !== 'undefined' && !$(".pagination_class").is(":focus")) {
         if ($('.updatable').length > 0) {
             if (update_counter >= 200) {
                 update_counter = 0;

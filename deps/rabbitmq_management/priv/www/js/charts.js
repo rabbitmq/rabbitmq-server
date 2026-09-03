@@ -1,3 +1,19 @@
+import {
+    fmt_rate,
+    fmt_rate_axis,
+    fmt_num_thousands,
+    fmt_plain_axis,
+    fmt_rate_bytes,
+    fmt_rate_bytes_axis,
+    fmt_plain,
+    fmt_color,
+    pick_rate,
+    pick_abs
+} from './formatters.js';
+import { get_pref, store_pref } from './prefs.js';
+import { ALL_CHART_RANGES, chart_data } from './global.js';
+import { keys, partial_update } from './main.js';
+
 //
 // Formatting side
 //
@@ -77,7 +93,7 @@ function chart_h3(id, heading, heading_help) {
 }
 
 function prefix_title(mode, range) {
-    var desc = ALL_CHART_RANGES[range];
+    var desc = ALL_CHART_RANGES[range] || '';
     if (mode == 'chart') {
         return desc.toLowerCase();
     }
@@ -145,6 +161,7 @@ function node_stat_bar(used_key, limit_key, suffix, stats, fmt, colour,
     var res = '';
     var other_colour = colour;
     var ratio = invert ? (limit / used) : (used / limit);
+    var inverted = false;
     if (ratio > 1) {
         ratio = 1 / ratio;
         inverted = true;
@@ -245,9 +262,11 @@ function rates_text(items, stats, mode, fmt, chart_rates) {
 //
 
 function render_charts() {
-    $('.chart').map(function() {
-        render_chart($(this));
-    });
+    if (typeof $ !== 'undefined') {
+        $('.chart').map(function() {
+            render_chart($(this));
+        });
+    }
 }
 
 var chart_colors = {full: ['#edc240', '#afd8f8', '#cb4b4b', '#4da74d', '#9440ed', '#666666', '#aaaaaa',
@@ -304,7 +323,9 @@ function render_chart(div) {
     chart_data[id] = {};
 
     chart_chrome.yaxis.tickFormatter = fmt_y_axis(fmt);
-    $.plot(div, out_data, chart_chrome);
+    if (typeof $ !== 'undefined' && $.plot) {
+        $.plot(div, out_data, chart_chrome);
+    }
 }
 
 function fmt_y_axis(fmt) {
@@ -324,4 +345,58 @@ function update_rate_options(sammy) {
     store_pref('chart-size-' + id, sammy.params['size']);
     store_pref('chart-range', sammy.params['range']);
     partial_update();
+}
+
+export {
+    message_rates,
+    queue_lengths,
+    data_rates,
+    data_reductions,
+    rates_chart_or_text,
+    rates_chart_or_text_no_heading,
+    chart_h3,
+    prefix_title,
+    node_stat_count,
+    node_stat_count_bar,
+    node_stat,
+    add_fake_limit_details,
+    node_stat_bar,
+    node_stats_prefs,
+    rates_chart,
+    rates_text,
+    render_charts,
+    chart_colors,
+    chart_chrome,
+    chart_fill,
+    render_chart,
+    fmt_y_axis,
+    update_rate_options
+};
+
+if (typeof window !== 'undefined') {
+    Object.assign(window, {
+        message_rates,
+        queue_lengths,
+        data_rates,
+        data_reductions,
+        rates_chart_or_text,
+        rates_chart_or_text_no_heading,
+        chart_h3,
+        prefix_title,
+        node_stat_count,
+        node_stat_count_bar,
+        node_stat,
+        add_fake_limit_details,
+        node_stat_bar,
+        node_stats_prefs,
+        rates_chart,
+        rates_text,
+        render_charts,
+        chart_colors,
+        chart_chrome,
+        chart_fill,
+        render_chart,
+        fmt_y_axis,
+        update_rate_options
+    });
 }
