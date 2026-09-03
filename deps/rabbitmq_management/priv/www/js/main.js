@@ -440,7 +440,11 @@ function dynamic_javascript_load(arrayOrString) {
 }
 function dynamic_javascript_file_load(filename, callback) {
     var element = document.createElement('script');
-    element.setAttribute('type', 'module');
+    if (filename.endsWith('-ejs.js') || filename.endsWith('.ejs.js')) {
+        element.setAttribute('type', 'text/javascript');
+    } else {
+        element.setAttribute('type', 'module');
+    }
     element.setAttribute('src', 'js/' + filename);
 
     // Set up callback to fire when script has loaded
@@ -1705,7 +1709,12 @@ function check_bad_response(req, full_page_404, on404fun) {
         replace_content('main', html);
     }
     else if (req.status >= 400 && req.status <= 404) {
-        let response = JSON.parse(req.responseText);
+        let response = {};
+        try {
+            response = req.responseText ? JSON.parse(req.responseText) : {};
+        } catch (e) {
+            response = {};
+        }
         var error = response.error;
         if (typeof(error) != 'string') {
             error = JSON.stringify(error);

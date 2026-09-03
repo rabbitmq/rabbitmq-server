@@ -9,7 +9,6 @@ import {
 import {
   dispatcher_modules,
   NAVIGATION,
-  HELP,
   ALL_COLUMNS,
   RENDER_CALLBACKS,
   QUEUE_EXTRA_CONTENT_REQUESTS,
@@ -41,28 +40,30 @@ describe('stream.js route registration and helper functions', () => {
     assert.deepEqual(
       sammy.routes.map(({ method, path }) => [method, path]),
       [
-        ['GET', '#/stream-connections'],
-        ['GET', '#/stream-connections/:name']
+        ['GET', '#/stream/connections'],
+        ['GET', '#/stream/connections/:vhost/:name'],
+        ['GET', '#/stream/super-streams'],
+        ['PUT', '#/stream/super-streams']
       ]
     );
   });
 
-  it('populates HELP and NAVIGATION registries upon ESM import', () => {
-    assert.ok(HELP['stream-publisher-count']);
-    assert.ok(NAVIGATION['Explore'][0]['Stream Connections']);
+  it('populates NAVIGATION registries upon ESM import', () => {
+    assert.deepEqual(NAVIGATION['Stream Connections'], ['#/stream/connections', 'monitoring']);
+    assert.deepEqual(NAVIGATION['Super Streams'], ['#/stream/super-streams', 'management']);
   });
 
   it('formats stream connection link correctly', () => {
-    const html = link_stream_conn('127.0.0.1:5552 -> 127.0.0.1:54321');
+    const html = link_stream_conn('/', '127.0.0.1:5552 -> 127.0.0.1:54321');
     assert.equal(
       html,
-      '<a href="#/stream-connections/127.0.0.1%3A5552%20-%3E%20127.0.0.1%3A54321">127.0.0.1:5552 -&gt; 127.0.0.1:54321</a>'
+      '<a href="#/stream/connections/%2F/127.0.0.1%3A5552%20-%3E%20127.0.0.1%3A54321">127.0.0.1:5552 </a>'
     );
   });
 
   it('exports column definitions and registers in COLUMNS', () => {
-    assert.ok(ALL_STREAM_CONNECTION_COLUMNS.overview);
-    assert.ok(DISABLED_STATS_STREAM_CONNECTION_COLUMNS.overview);
+    assert.ok(ALL_STREAM_CONNECTION_COLUMNS.Overview);
+    assert.ok(DISABLED_STATS_STREAM_CONNECTION_COLUMNS.Overview);
     assert.equal(ALL_COLUMNS['streamConnections'], ALL_STREAM_CONNECTION_COLUMNS);
   });
 
@@ -76,21 +77,20 @@ describe('stream.js route registration and helper functions', () => {
 
     const reqFn = QUEUE_EXTRA_CONTENT_REQUESTS[QUEUE_EXTRA_CONTENT_REQUESTS.length - 1];
     const reqs = reqFn('/', 'q1');
-    assert.equal(reqs.stream_publishers, '/queues/%2F/q1/stream-publishers');
-    assert.equal(reqs.stream_consumers, '/queues/%2F/q1/stream-consumers');
+    assert.equal(reqs.extra_stream_publishers, '/stream/publishers/%2F/q1');
   });
 
-  it('formats consumer owners when connection name starts with stream: ', () => {
+  it('formats consumer owners when tag starts with stream.subid-', () => {
     const streamConsumer = {
-      channel_details: { name: 'stream: 127.0.0.1:5552 -> 127.0.0.1:54321' },
-      subscription_id: 42
+      consumer_tag: 'stream.subid-123',
+      queue: { vhost: '/' },
+      channel_details: { connection_name: '127.0.0.1:5552 -> 127.0.0.1:54321' }
     };
 
-    const streamFormatterEntry = CONSUMER_OWNER_FORMATTERS.find(entry => entry.order === 20);
-    assert.ok(streamFormatterEntry, 'Expected stream formatter entry with order 20');
+    const streamFormatterEntry = CONSUMER_OWNER_FORMATTERS.find(entry => entry.order === 0);
+    assert.ok(streamFormatterEntry, 'Expected stream formatter entry with order 0');
 
     const formatted = streamFormatterEntry.formatter(streamConsumer);
-    assert.ok(formatted.includes('href="#/stream-connections/127.0.0.1%3A5552%20-%3E%20127.0.0.1%3A54321"'));
-    assert.ok(formatted.includes('(sub id: 42)'));
+    assert.ok(formatted.includes('href="#/stream/connections/%2F/127.0.0.1%3A5552%20-%3E%20127.0.0.1%3A54321"'));
   });
 });
