@@ -430,6 +430,15 @@ end}.
 {mapping, "metadata_store.khepri.snapshot_interval", "rabbit.khepri_snapshot_interval",
     [{datatype, {integer, positive}}]}.
 
+{mapping, "sole_connection.tick_interval", "rabbit.sole_connection_tick_interval",
+    [{datatype, {integer, positive}}]}.
+
+{mapping, "sole_connection.leader_wait_retry_timeout", "rabbit.sole_connection_leader_wait_retry_timeout",
+    [{datatype, {integer, positive}}]}.
+
+{mapping, "sole_connection.default_timeout", "rabbit.sole_connection_default_timeout",
+    [{datatype, {integer, positive}}]}.
+
 %% ===========================================================================
 
 %% Choose the available SASL mechanism(s) to expose.

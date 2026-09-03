@@ -1616,7 +1616,7 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
                            end,
                            ExclConsume = IsJmsTopic andalso not lists:member(
                                                                   <<"shared">>,
-                                                                  rabbit_amqp_util:capabilities_to_list(
+                                                                  amqp10_util:capabilities_to_list(
                                                                     SourceCaps)),
                            Spec0 = #{no_ack => SndSettled,
                                      channel_pid => self(),
@@ -2941,7 +2941,7 @@ ensure_source(#'v1_0.source'{
                         dynamic = true,
                         dynamic_node_properties = dynamic_node_properties(),
                         distribution_mode = ?V_1_0_STD_DIST_MODE_MOVE,
-                        capabilities = rabbit_amqp_util:capabilities_from_list([?CAP_VOLATILE_QUEUE])
+                        capabilities = amqp10_util:capabilities_from_list([?CAP_VOLATILE_QUEUE])
                        },
             QName = rabbit_misc:queue_resource(Vhost, QNameBin),
             {ok, QName, Source, PermCache0, TopicPermCache};
@@ -2961,7 +2961,7 @@ ensure_source(#'v1_0.source'{
                         distribution_mode = ?V_1_0_STD_DIST_MODE_MOVE,
                         default_outcome = ?DEFAULT_OUTCOME,
                         outcomes = outcomes(Source0),
-                        capabilities = rabbit_amqp_util:capabilities_from_list([?CAP_TEMPORARY_QUEUE])
+                        capabilities = amqp10_util:capabilities_from_list([?CAP_TEMPORARY_QUEUE])
                        },
             QName = queue_resource(Vhost, QNameBin),
             {ok, QName, Source, PermCache, TopicPermCache};
@@ -3120,7 +3120,7 @@ ensure_target(#'v1_0.target'{
                         timeout = {uint, 0},
                         dynamic = true,
                         dynamic_node_properties = dynamic_node_properties(),
-                        capabilities = rabbit_amqp_util:capabilities_from_list([?CAP_TEMPORARY_QUEUE])
+                        capabilities = amqp10_util:capabilities_from_list([?CAP_TEMPORARY_QUEUE])
                        },
             {ok, Exchange, QNameBin, QNameBin, Target, PermCache};
         #{{symbol, ?CAP_TEMPORARY_TOPIC} := ok} when IsJms ->
@@ -3461,13 +3461,13 @@ effective_dist_mode(DesiredDistMode, QType) ->
 
 link_capabilities(QType) ->
     Caps = rabbit_queue_type:amqp_link_capabilities(QType),
-    rabbit_amqp_util:capabilities_from_list(Caps).
+    amqp10_util:capabilities_from_list(Caps).
 
 source_capabilities(QType, ExtendedCaps0) ->
     QCaps = rabbit_queue_type:amqp_source_capabilities(QType),
-    ExtendedCaps = rabbit_amqp_util:capabilities_to_list(ExtendedCaps0),
+    ExtendedCaps = amqp10_util:capabilities_to_list(ExtendedCaps0),
     SupportedCaps = lists:usort(QCaps ++ ExtendedCaps),
-    rabbit_amqp_util:capabilities_from_list(SupportedCaps).
+    amqp10_util:capabilities_from_list(SupportedCaps).
 
 is_jms_topic_terminus(true, #'v1_0.source'{capabilities = {array, symbol, Caps}}) ->
     has_jms_topic_capability(Caps);
