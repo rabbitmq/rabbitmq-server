@@ -116,3 +116,25 @@ function unwind_active_steps(ctx) {
     activeCompletedSteps = [];
     unwind(completed, ctx);
 }
+
+export {
+    registerLoginGate,
+    unregisterLoginGate,
+    registerInitStep,
+    unregisterInitStep,
+    clear_bootstrap_steps,
+    bootstrap,
+    unwind_active_steps
+};
+
+if (typeof window !== 'undefined') {
+    Object.assign(window, {
+        registerLoginGate,
+        unregisterLoginGate,
+        registerInitStep,
+        unregisterInitStep,
+        clear_bootstrap_steps,
+        bootstrap,
+        unwind_active_steps
+    });
+}
