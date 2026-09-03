@@ -206,12 +206,3 @@ export {
     enable_feature_flag
 };
 
-if (typeof window !== 'undefined') {
-    Object.assign(window, {
-        feature_flags_refresh,
-        enable_all_stable_feature_flags,
-        lookup_feature_flag,
-        handle_feature_flag,
-        enable_feature_flag
-    });
-}

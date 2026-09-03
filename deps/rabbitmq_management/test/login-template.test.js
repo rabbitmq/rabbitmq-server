@@ -48,7 +48,9 @@ function render(oauthOverrides, renderOverrides) {
   const context = Object.assign({
     escaped_warnings: [],
     notAuthorized: false,
-    auth: ejsSandbox.authOptions(oauth)
+    auth: ejsSandbox.authOptions(oauth),
+    auth_options_for_mechanism: ejsSandbox.auth_options_for_mechanism,
+    auth_section_is_expanded: ejsSandbox.auth_section_is_expanded
   }, renderOverrides);
 
   return new ejsSandbox.EJS({ text: templateSrc, name: 'login_oauth' }).render(context);

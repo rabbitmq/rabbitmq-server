@@ -373,6 +373,9 @@ export {
     update_rate_options
 };
 
+// Functions called as bare globals inside .ejs templates (e.g. queue.ejs,
+// node.ejs, overview.ejs). Since EJS templates render dynamically in browser
+// context and are not ES modules, they resolve helper functions from window.
 if (typeof window !== 'undefined') {
     Object.assign(window, {
         message_rates,
@@ -382,21 +385,10 @@ if (typeof window !== 'undefined') {
         rates_chart_or_text,
         rates_chart_or_text_no_heading,
         chart_h3,
-        prefix_title,
         node_stat_count,
         node_stat_count_bar,
         node_stat,
-        add_fake_limit_details,
         node_stat_bar,
-        node_stats_prefs,
-        rates_chart,
-        rates_text,
-        render_charts,
-        chart_colors,
-        chart_chrome,
-        chart_fill,
-        render_chart,
-        fmt_y_axis,
-        update_rate_options
+        node_stats_prefs
     });
 }

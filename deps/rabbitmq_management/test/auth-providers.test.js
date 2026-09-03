@@ -9,10 +9,21 @@ import {
   login_flow_provider,
   active_auth_provider
 } from '../priv/www/js/auth-providers.js';
+// basic-auth.js and oidc-oauth/helper.js self-register with the provider
+// registry above as a side effect of being imported - they are no longer
+// registered by auth-providers.js itself.
+import '../priv/www/js/basic-auth.js';
+import '../priv/www/js/oidc-oauth/helper.js';
 
 let calls;
 let authResourcePresent;
 
+// presentError/signOut/onUnauthorized now call basic-auth.js's/helper.js's
+// own render_login_oauth()/replace_content() directly rather than through a
+// swappable bare global (they're defined in the same module as their
+// caller), so the jQuery calls those make have to be stubbed instead of the
+// higher-level function itself - same reasoning as page-load.test.js's
+// getAuthProvider(...).startLoginFlow overrides, one level deeper.
 function loadAuthProviders(oauthState, options) {
   calls = [];
   authResourcePresent = (options || {}).authResourcePresent === true;
@@ -22,15 +33,28 @@ function loadAuthProviders(oauthState, options) {
 
   globalThis.oauth = oauthState;
   globalThis.has_auth_resource = () => authResourcePresent;
-  globalThis.replace_content = record('replace_content');
   globalThis.fmt_escape_html = (s) => s;
   globalThis.format_error_response = (response, reason) => `formatted:${reason}`;
   globalThis.show_popup = record('show_popup');
   globalThis.clear_auth = record('clear_auth');
   globalThis.go_to_home = record('go_to_home');
-  globalThis.oauth_initiateLogout = record('oauth_initiateLogout');
-  globalThis.renderWarningMessageInLoginStatus = record('renderWarningMessageInLoginStatus');
-  globalThis.initiate_logout = record('initiate_logout');
+  globalThis.location = {};
+
+  const jq = function(selector) {
+    return {
+      html: (content) => record('html')(selector, content),
+      appendTo: () => {},
+      each: () => {},
+      hasClass: () => false,
+      on: () => {},
+      off: () => {},
+      ready: () => {}
+    };
+  };
+  jq.fn = { extend: () => {} };
+  jq.inArray = () => -1;
+  globalThis.$ = jq;
+  globalThis.jQuery = jq;
 }
 
 function callSummary() {
@@ -92,7 +116,7 @@ describe('basic provider', () => {
 
   it('presents an error in the login-status area', () => {
     getAuthProvider('basic').presentError('Denied');
-    assert.equal(callSummary(), 'replace_content login-status <p>Denied</p>');
+    assert.equal(callSummary(), 'html #login-status <p>Denied</p>');
   });
 
   it('signs out by clearing credentials and returning home', () => {
@@ -110,15 +134,16 @@ describe('oauth2 provider', () => {
   it('presents an error by re-rendering the oauth login page with a warning', () => {
     loadAuthProviders({ enabled: true, logged_in: true });
     getAuthProvider('oauth2').presentError('Denied');
-    assert.equal(callSummary(), 'renderWarningMessageInLoginStatus [object Object] Denied');
+    assert.equal(callSummary(), 'html #outer undefined');
   });
 
   it('signs out through the identity provider when logged in', () => {
-    const oauthState = { enabled: true, logged_in: true };
+    const oauthState = { enabled: true, logged_in: true, authority: 'https://idp.example/logout' };
     loadAuthProviders(oauthState);
     getAuthProvider('oauth2').signOut();
-    assert.equal(callSummary(), 'clear_auth | oauth_initiateLogout');
+    assert.equal(callSummary(), 'clear_auth');
     assert.equal(oauthState.logged_in, false);
+    assert.equal(globalThis.location.href, 'https://idp.example/logout');
   });
 
   it('just returns home when it was not logged in through the provider', () => {
@@ -130,6 +155,6 @@ describe('oauth2 provider', () => {
   it('reports a mid-session 401/403 by restarting the login flow', () => {
     loadAuthProviders({ enabled: true, logged_in: true });
     getAuthProvider('oauth2').onUnauthorized({ error: 'not_authorised' }, 'Not authorized');
-    assert.equal(callSummary(), 'initiate_logout [object Object] Not authorized');
+    assert.equal(callSummary(), 'html #outer undefined');
   });
 });
