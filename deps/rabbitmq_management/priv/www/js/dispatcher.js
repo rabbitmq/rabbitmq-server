@@ -132,7 +132,7 @@ dispatcher_add(function(sammy) {
             // we add extra requests that can be added by code plugged on the extension point
             for (var i = 0; i < QUEUE_EXTRA_CONTENT_REQUESTS.length; i++) {
                 var extra = QUEUE_EXTRA_CONTENT_REQUESTS[i](vhost, queue);
-                for (key in extra) {
+                for (var key in extra) {
                     if(extra.hasOwnProperty(key)){
                         requests[key] = extra[key];
                     }
@@ -230,10 +230,10 @@ dispatcher_add(function(sammy) {
            'user','#/users');
       });
       sammy.put('#/users-add', function() {
-            res = sync_put(this, '/users/:username');
+            var res = sync_put(this, '/users/:username');
             if (res) {
                 if (res.http_status === 204) {
-                    username = fmt_escape_html(res.req_params.username);
+                    var username = fmt_escape_html(res.req_params.username);
                     show_popup('warn', "Updated an existing user: '" + username + "'");
                 }
                 update();
