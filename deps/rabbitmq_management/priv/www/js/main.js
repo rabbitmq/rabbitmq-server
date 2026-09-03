@@ -8,12 +8,29 @@ import {
   expand_user_tags,
   dispatcher_modules
 } from './global.js';
-import { login_flow_provider, set_active_auth_provider_by_name, active_auth_provider } from './auth-providers.js';
-import { authOptions } from './auth-options.js';
+import {
+    login_flow_provider,
+    active_auth_provider,
+    forEachAuthProvider
+} from './auth-providers.js';
 import { registerInitStep, bootstrap } from './bootstrap-steps.js';
-import { clear_local_pref, set_auth, clear_auth_resource, SESSION_EXPIRY, authorization_header, has_auth_credentials, clear_auth } from './prefs.js';
+import { render_charts } from './charts.js';
+import { clear_local_pref,
+    authorization_header,
+    has_auth_credentials,
+    clear_auth
+} from './prefs.js';
 import { fmt_escape_html } from './formatters.js';
-import { hasAnyResourceServerReady } from './oidc-oauth/helper.js';
+import { replace_content,
+    format,
+    setup_visibility,
+    toggle_visibility,
+    debug } from './render.js';
+import {
+    feature_flags_refresh,
+    enable_all_stable_feature_flags,
+    handle_feature_flag
+} from './feature-flags.js';
 
 // What happens on page load, as a named function rather than an anonymous
 // callback so that it can be exercised without going through jQuery's
@@ -35,10 +52,6 @@ if (typeof $ !== 'undefined') {
   $(document).ready(on_page_load);
 }
 
-function startWithLoginPage() {
-  replace_content('outer', format('login', {}));
-  start_app_login();
-}
 function removeDuplicates(array){
   let output = []
   for(let item of array) {
@@ -49,55 +62,6 @@ function removeDuplicates(array){
   return output
 }
 
-
-function startWithOAuthLogin (oauth) {
-  if (!oauth.logged_in) {
-    hasAnyResourceServerReady(oauth, (oauth, escaped_warnings) => {  render_login_oauth(oauth, escaped_warnings); start_app_login(); })
-  } else {
-    start_app_login()
-  }
-}
-function render_login_oauth(oauth, escaped_messages) {
-  let formatData = {};
-  formatData.escaped_warnings = [];
-  formatData.notAuthorized = false;
-  // What to offer and what to preselect is decided by auth-options.js;
-  // the template only renders that decision.
-  formatData.auth = authOptions(oauth);
-
-  if (Array.isArray(escaped_messages)) {
-    formatData.escaped_warnings = escaped_messages
-  } else if (typeof escaped_messages == "string") {
-    formatData.escaped_warnings = [escaped_messages]
-    formatData.notAuthorized = escaped_messages == "Not authorized"
-  }
-  replace_content('outer', format('login_oauth', formatData))
-
-  setup_visibility()
-  $('#login').off('click', 'div.section h2, div.section-hidden h2');
-  $('#login').on('click', 'div.section h2, div.section-hidden h2', function() {
-          toggle_visibility($(this));
-      });
-
-  // Bound here, next to the markup they act on, rather than once at
-  // startup. replace_content() above builds a fresh #login every time this
-  // renders, so handlers scoped to it are discarded with the old element
-  // instead of accumulating - which is why these cannot be delegated to
-  // document.
-  $('#login').on('click', '[data-oauth-action="login"]', function() {
-      oauth_initiateLogin($(this).data('resourceId'));
-  });
-  $('#login').on('click', '[data-oauth-action="logout"]', function() {
-      oauth_initiateLogout();
-  });
-  $('#login').on('submit', '#oauth2-resource-form', function(e) {
-      e.preventDefault();
-      oauth_initiateLogin(document.getElementById('oauth2-resource').value);
-  });
-}
-function renderWarningMessageInLoginStatus(oauth, message) {
-  render_login_oauth(oauth, message)
-}
 
 function dispatcher_add(fun) {
     dispatcher_modules.push(fun);
@@ -111,28 +75,33 @@ function dispatcher() {
     }
 }
 
+// Pulled out of start_app_login() so the decision itself - not the
+// Sammy/XHR machinery around it - can be unit tested directly. A
+// successful check hands off to finish_check_login() (which replaces the
+// login app entirely via start_app()), so the router only needs restarting
+// after a failure, and only if the active mechanism's own login UI needs
+// it (basic's retry form does; oauth2's "not authorized" button doesn't).
+function shouldRunLoginAppAfterCheck(checkLoginSucceeded, needsRouterAfterSessionExpired) {
+  return !checkLoginSucceeded && !!needsRouterAfterSessionExpired;
+}
+
 function start_app_login () {
   app = new Sammy.Application(function () {
     this.get('/', function () {})
     this.get('#/', function () {})
-    if (!oauth.enabled || !oauth.oauth_disable_basic_auth) {
-      this.put('#/login', function() {
-        login(this.params['username'], this.params['password']);
-      });
-    }
+    var sammy = this;
+    forEachAuthProvider(function(provider) {
+      if (provider.registerRoutes) provider.registerRoutes(sammy);
+    });
   })
 
-  if (oauth.enabled) {
-    if (has_auth_credentials()) {
-      check_login();
-    } else {
-      app.run();
-    }
-  } else
-    if (!has_auth_credentials() || !check_login()) {
-      app.run();
-    }
-
+  // With no credentials there's nothing to check - always start the login
+  // app so its login form/route is reachable.
+  if (!has_auth_credentials()) {
+    app.run();
+  } else if (shouldRunLoginAppAfterCheck(check_login(), active_auth_provider().needsRouterAfterSessionExpired)) {
+    app.run();
+  }
 }
 
 
@@ -141,15 +110,12 @@ function check_login () {
   set_current_user(u);
   if (u == false || u.error) {
     clear_auth();
-    if (oauth.enabled) {
-      renderWarningMessageInLoginStatus(oauth, 'Not authorized');
-    } else {
-      replace_content('login-status', '<p>Login failed</p>');
-    }
+    active_auth_provider().presentSessionExpired();
     return false;
   }
 
-  // Fetch initialization data synchronously (which sends Authorization header)
+  // Fetch initialization data synchronously 
+  // (which sends Authorization header)
   var rawInitData = sync_get('/init');
   if (rawInitData) {
       var initData = JSON.parse(rawInitData);
@@ -165,59 +131,6 @@ function check_login () {
   return true;
 }
 
-function do_login(username, password) {
-    var result = null;
-    $.ajax({
-        async: false,
-        type: 'POST',
-        url: 'api/login',
-        data: {username: username, password: password},
-        success: function(resp) { result = resp; },
-        error: function(xhr) {
-            try { result = JSON.parse(xhr.responseText); } catch(e) {}
-            if (!result) result = {error: 'login_failed', reason: 'Login failed'};
-        }
-    });
-    return result;
-}
-
-function login(username, password) {
-  var result = do_login(username, password);
-  if (!result || result.error) {
-    replace_content('login-status', '<p>Login failed</p>');
-    if (result && result.reason && typeof result.reason === 'string') {
-      show_popup('warn', fmt_escape_html(result.reason));
-    }
-    return false;
-  }
-  set_current_user(result.user);
-  clear_local_pref(SESSION_EXPIRY);
-  var scheme = result.token.type === 'bearer' ? 'Bearer' : 'Basic';
-  set_auth(scheme, result.token.value);
-  // This is the basic-auth flow, whatever scheme the token uses on the
-  // wire: /login issues a bearer token for basic credentials when
-  // credential encryption is enabled. Drop any oauth resource left over
-  // from an earlier session, so that a later reload does not read this
-  // session as an oauth one.
-  clear_auth_resource();
-  set_active_auth_provider_by_name('basic');
-
-  // Fetch initialization data synchronously
-  var rawInitData = sync_get('/init');
-  if (rawInitData) {
-      var initData = JSON.parse(rawInitData);
-      window.app_settings = initData.settings;
-      window.app_vhosts = initData.vhosts;
-      if (initData.nodes) {
-          window.app_nodes = initData.nodes;
-      }
-  } else {
-      console.error("Failed to load /api/init");
-  }
-  finish_check_login();
-
-  return true;
-}
 
 // The application-initialisation half of the login sequence, registered as
 // pipeline steps so that a plugin can add to it without editing this file,
@@ -1392,58 +1305,6 @@ function update_truncate() {
     partial_update();
 }
 
-function setup_visibility() {
-    $('div.section,div.section-hidden').each(function(_index) {
-        if ($(this).hasClass("disable-pref")) {
-            return;
-        }
-        var pref = section_pref(current_template,
-                                $(this).children('h2').text());
-        var show = get_pref(pref);
-        if (show == null) {
-            show = $(this).hasClass('section');
-        }
-        else {
-            show = show == 't';
-        }
-        if (show) {
-            $(this).addClass('section-visible');
-            // Workaround for... something. Although div.hider is
-            // display:block anyway, not explicitly setting this
-            // prevents the first slideToggle() from animating
-            // successfully; instead the element just vanishes.
-            $(this).find('.hider').attr('style', 'display:block;');
-        }
-        else {
-            $(this).addClass('section-invisible');
-        }
-    });
-}
-
-function toggle_visibility(item) {
-    var hider = item.next();
-    var all = item.parent();
-    var pref = section_pref(current_template, item.text());
-    item.next().slideToggle(100);
-    if (all.hasClass('section-visible')) {
-        if (all.hasClass('section'))
-            store_pref(pref, 'f');
-        else
-            clear_pref(pref);
-        all.removeClass('section-visible');
-        all.addClass('section-invisible');
-    }
-    else {
-        if (all.hasClass('section-hidden')) {
-            store_pref(pref, 't');
-        } else {
-            clear_pref(pref);
-        }
-        all.removeClass('section-invisible');
-        all.addClass('section-visible');
-    }
-}
-
 function publish_msg(params0) {
     try {
         var params = params_magic(params0);
@@ -1525,25 +1386,6 @@ function with_reqs(reqs, acc, fun) {
     }
     else {
         fun(acc);
-    }
-}
-
-function replace_content(id, html) {
-    $("#" + id).html(html);
-}
-
-function format(template, json) {
-    try {
-        var fn = COMPILED_TEMPLATES[template];
-        if (!fn) throw new Error('Template not found: ' + template);
-        // Inject settings object
-        json.settings = window.app_settings;
-        return fn.call(json, json, json);
-    } catch (err) {
-        clearInterval(timer);
-        console.log("Uncaught error: " + err);
-        console.log("Stack: " + err['stack']);
-        debug(err['name'] + ": " + err['message'] + "\n" + err['stack'] + "\n");
     }
 }
 
@@ -1684,9 +1526,6 @@ function sync_req(type, params0, path_template, options) {
     else {
         return false;
     }
-}
-function initiate_logout(oauth, error = "") {
-    renderWarningMessageInLoginStatus(oauth, error);
 }
 /**
  * Handle bad http response
@@ -1961,10 +1800,6 @@ function update_column_options(sammy) {
     partial_update();
 }
 
-function debug(str) {
-    $('<p>' + str + '</p>').appendTo('#debug');
-}
-
 function keys(obj) {
     var ks = [];
     for (var k in obj) {
@@ -2176,9 +2011,12 @@ function change_own_password(sammy) {
         if (req.readyState == 4 && !done) {
             clearTimeout(timeout);
             if (req.status >= 200 && req.status < 300) {
-                // Re-login via api/login so encrypted-credential mode stores
-                // a fresh token instead of plaintext Basic credentials.
-                login(username, new_password);
+                // Only meaningful for a mechanism whose session validity
+                // actually depends on this password (basic) - for anything
+                // else, the active session has nothing to do with this
+                // internal record even if the username happens to match.
+                var provider = active_auth_provider();
+                if (provider.reauthenticate) provider.reauthenticate(username, new_password);
                 finish();
                 go_to('#/users');
             } else {
@@ -2192,242 +2030,23 @@ function change_own_password(sammy) {
 
 export {
     on_page_load,
-    startWithLoginPage,
-    startWithOAuthLogin,
-    render_login_oauth,
-    renderWarningMessageInLoginStatus,
     dispatcher_add,
-    dispatcher,
-    start_app_login,
-    check_login,
-    do_login,
-    login,
-    finish_check_login,
-    start_app,
-    setup_constant_events,
-    setup_form_events,
-    update_vhosts,
-    setup_extensions,
-    load_javascript_files_sequentially,
-    dynamic_javascript_load,
-    dynamic_javascript_file_load,
-    dynamic_css_load,
-    dynamic_css_file_load,
-    update_interval,
+    shouldRunLoginAppAfterCheck,
     go_to,
-    go_to_home,
-    set_timer_interval,
-    reset_timer,
-    onRefresh,
-    pause_auto_refresh,
-    resume_auto_refresh,
-    update_manual,
     render,
-    reset_current_reqs,
     update,
     partial_update,
-    update_navigation,
-    update_warnings,
-    navigation_tab_id,
-    nav,
-    show,
-    leaf,
-    first_showable_child,
-    contains_current_highlight,
-    obj_to_ul,
-    full_refresh,
-    maybe_scroll,
-    x_position,
-    y_position,
-    with_update,
-    apply_state,
     show_popup,
-    hide_popup_warn,
-    submit_import,
-    postprocess,
-    is_valid_regexp,
-    is_valid_token,
-    url_pagination_template_context,
-    url_pagination_template,
-    stored_page_info,
-    update_pages,
-    renderQueues,
-    renderUsers,
-    renderExchanges,
-    renderConnections,
-    renderChannels,
-    update_pages_from_ui,
-    postprocess_partial,
-    update_multifields,
-    update_multifield,
-    multifield_input,
-    update_filter_regex,
-    update_filter_regex_mode,
-    update_filter,
-    update_truncate,
-    setup_visibility,
-    toggle_visibility,
-    publish_msg,
-    publish_msg0,
-    get_msgs,
-    with_reqs,
-    replace_content,
-    format,
-    maybe_format_extra_queue_content,
-    update_status,
-    with_req,
-    get,
     sync_get,
     sync_put,
     sync_delete,
-    sync_post,
-    sync_req,
-    initiate_logout,
-    check_bad_response,
-    fill_path_template,
-    params_magic,
-    collapse_multifields,
-    check_password,
-    maybe_remove_fields,
+    url_pagination_template_context,
     put_parameter,
-    removeDuplicates,
     put_cast_params,
-    update_column_options,
-    debug,
     keys,
-    xmlHttpRequest,
-    debounce,
-    rename_multifield,
-    select_queue_type,
-    is_internal,
-    get_queue_type,
-    is_quorum,
     is_stream,
-    is_classic,
-    ensure_queues_chart_range,
-    get_chart_range_type,
-    check_version,
-    change_own_password
+    check_version
 };
 
-if (typeof window !== 'undefined') {
-    Object.assign(window, {
-        on_page_load,
-        startWithLoginPage,
-        startWithOAuthLogin,
-        render_login_oauth,
-        renderWarningMessageInLoginStatus,
-        dispatcher_add,
-        dispatcher,
-        start_app_login,
-        check_login,
-        do_login,
-        login,
-        finish_check_login,
-        start_app,
-        setup_constant_events,
-        setup_form_events,
-        update_vhosts,
-        setup_extensions,
-        load_javascript_files_sequentially,
-        dynamic_javascript_load,
-        dynamic_javascript_file_load,
-        dynamic_css_load,
-        dynamic_css_file_load,
-        update_interval,
-        go_to,
-        go_to_home,
-        set_timer_interval,
-        reset_timer,
-        onRefresh,
-        pause_auto_refresh,
-        resume_auto_refresh,
-        update_manual,
-        render,
-        reset_current_reqs,
-        update,
-        partial_update,
-        update_navigation,
-        update_warnings,
-        navigation_tab_id,
-        nav,
-        show,
-        leaf,
-        first_showable_child,
-        contains_current_highlight,
-        obj_to_ul,
-        full_refresh,
-        maybe_scroll,
-        x_position,
-        y_position,
-        with_update,
-        apply_state,
-        show_popup,
-        hide_popup_warn,
-        submit_import,
-        postprocess,
-        is_valid_regexp,
-        is_valid_token,
-        url_pagination_template_context,
-        url_pagination_template,
-        stored_page_info,
-        update_pages,
-        renderQueues,
-        renderUsers,
-        renderExchanges,
-        renderConnections,
-        renderChannels,
-        update_pages_from_ui,
-        postprocess_partial,
-        update_multifields,
-        update_multifield,
-        multifield_input,
-        update_filter_regex,
-        update_filter_regex_mode,
-        update_filter,
-        update_truncate,
-        setup_visibility,
-        toggle_visibility,
-        publish_msg,
-        publish_msg0,
-        get_msgs,
-        with_reqs,
-        replace_content,
-        format,
-        maybe_format_extra_queue_content,
-        update_status,
-        with_req,
-        get,
-        sync_get,
-        sync_put,
-        sync_delete,
-        sync_post,
-        sync_req,
-        initiate_logout,
-        check_bad_response,
-        fill_path_template,
-        params_magic,
-        collapse_multifields,
-        check_password,
-        maybe_remove_fields,
-        put_parameter,
-        removeDuplicates,
-        put_cast_params,
-        update_column_options,
-        debug,
-        keys,
-        xmlHttpRequest,
-        debounce,
-        rename_multifield,
-        select_queue_type,
-        is_internal,
-        get_queue_type,
-        is_quorum,
-        is_stream,
-        is_classic,
-        ensure_queues_chart_range,
-        get_chart_range_type,
-        check_version,
-        change_own_password
-    });
-}
+// Main application module exports. Functions are imported directly by other
+// ES modules (e.g. dispatcher.js, auth-providers.js, and plugin scripts).

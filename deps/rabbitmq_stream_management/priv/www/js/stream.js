@@ -2,10 +2,10 @@ import {
     dispatcher_add,
     render,
     put_cast_params,
-    format,
     is_stream,
     url_pagination_template_context
 } from './main.js';
+import { format } from './render.js';
 import {
     NAVIGATION,
     COLUMNS,

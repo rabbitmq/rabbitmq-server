@@ -155,6 +155,3 @@ base64.encode = function(s) {
 
 export { base64 };
 
-if (typeof window !== 'undefined') {
-    window.base64 = base64;
-}

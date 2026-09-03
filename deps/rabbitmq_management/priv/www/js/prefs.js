@@ -179,37 +179,17 @@ export {
     default_column_pref
 };
 
+// Functions called as bare globals inside .ejs templates (e.g. connections.ejs,
+// channels-list.ejs, vhosts.ejs, rate-options.ejs, columns-options.ejs).
+// Since EJS templates render dynamically in browser context and are not ES modules,
+// they resolve helper functions from window.
 if (typeof window !== 'undefined') {
     Object.assign(window, {
-        CREDENTIALS,
-        AUTH_SCHEME,
-        SESSION_EXPIRY,
-        AUTH_RESOURCE,
-        BASIC_AUTH_SCHEME,
-        BEARER_AUTH_SCHEME,
-        DEFAULT_HARD_LOGIN_SESSION_TIMEOUT,
-        set_auth_resource,
-        has_auth_resource,
-        get_auth_resource,
-        clear_auth_resource,
-        has_auth_credentials,
-        get_auth_credentials,
-        get_auth_scheme,
-        clear_auth,
-        set_token_auth,
-        set_auth,
-        set_session_expiry_if_required,
-        authorization_header,
-        store_local_pref,
-        clear_local_pref,
-        get_local_pref,
         store_pref,
         clear_pref,
         get_pref,
         section_pref,
-        show_column,
-        default_pref,
-        default_column_pref
+        show_column
     });
 }
 

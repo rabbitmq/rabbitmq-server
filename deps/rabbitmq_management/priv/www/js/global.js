@@ -1371,7 +1371,6 @@ export {
 
 if (typeof window !== 'undefined') {
     Object.assign(window, {
-        map,
         KNOWN_ARGS,
         IMPLICIT_ARGS,
         ALL_ARGS,

@@ -1,3 +1,7 @@
+import { active_auth_provider } from './auth-providers.js';
+import { unwind_active_steps } from './bootstrap-steps.js';
+import { update_rate_options } from './charts.js';
+
 dispatcher_add(function(sammy) {
     function path(p, r, t) {
         sammy.get(p, function() {

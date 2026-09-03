@@ -9,6 +9,13 @@
 // token yet, so the default falls back to configuration - which is exactly
 // what the call sites used to test for themselves.
 
+// This module is deliberately mechanism-agnostic: it knows nothing about
+// basic auth or oauth2. Each mechanism registers itself as a side effect of
+// its own module being imported (see basic-auth.js and oidc-oauth/helper.js),
+// so that never importing a mechanism's module is enough to guarantee its
+// code never runs - in particular, so that the oauth2 client library is
+// never fetched when oauth2 is not configured.
+
 var authProviderRegistry = new Map();
 var activeAuthProvider = null;
 
@@ -26,6 +33,14 @@ function unregisterAuthProvider(name) {
 
 function getAuthProvider(name) {
     return authProviderRegistry.get(name);
+}
+
+// Lets a caller (start_app_login(), building the Sammy app) ask every
+// registered mechanism whether it wants to wire up anything, without
+// needing to know any mechanism's name - each provider decides for itself,
+// from its own registerRoutes(), whether it's actually configured/enabled.
+function forEachAuthProvider(fn) {
+    authProviderRegistry.forEach(fn);
 }
 
 function set_active_auth_provider(provider) {
@@ -63,77 +78,26 @@ function active_auth_provider() {
     return getAuthProvider(authenticatedWithOauth ? 'oauth2' : 'basic');
 }
 
-registerAuthProvider('basic', {
-    // Nothing in the URL belongs to basic auth.
-    consumeRedirect: function(url) {
-        return false;
-    },
-    startLoginFlow: function() {
-        startWithLoginPage();
-    },
-    presentError: function(message) {
-        replace_content('login-status', '<p>' + fmt_escape_html(message) + '</p>');
-    },
-    signOut: function() {
-        clear_auth();
-        go_to_home();
-    },
-    onUnauthorized: function(response, reason) {
-        show_popup('warn', fmt_escape_html(format_error_response(response, reason)));
-    }
-});
-
-registerAuthProvider('oauth2', {
-    // A failed IDP-initiated login redirects back here with ?error=, which
-    // this module set itself on the way out, along with the pending-state
-    // markers. Drop those so the next successful login is not redirected
-    // somewhere confusing.
-    consumeRedirect: function(url) {
-        var error = url.searchParams.get('error');
-        if (!error) return false;
-        clear_pref("oauth-idp-pending");
-        clear_pref("oauth-return-to");
-        renderWarningMessageInLoginStatus(oauth, fmt_escape_html(error));
-        return true;
-    },
-    startLoginFlow: function() {
-        startWithOAuthLogin(oauth);
-    },
-    presentError: function(message) {
-        renderWarningMessageInLoginStatus(oauth, message);
-    },
-    signOut: function() {
-        clear_auth();
-        if (oauth.logged_in) {
-            oauth.logged_in = false;
-            oauth_initiateLogout();
-        } else {
-            go_to_home();
-        }
-    },
-    onUnauthorized: function(response, reason) {
-        initiate_logout(oauth, reason);
-    }
-});
+// Bootstraps whichever registered mechanisms need state set up before
+// login_flow_provider() can pick between them - e.g. oauth2's initialize()
+// populates the global oauth object that login_flow_provider() reads. Only
+// mechanisms that were actually imported (and so self-registered) run
+// anything here. Called once at page load, from init.js.
+function initializeAuthProviders() {
+    forEachAuthProvider(function(provider) {
+        if (typeof provider.initialize === 'function') provider.initialize();
+    });
+}
 
 export {
     registerAuthProvider,
     unregisterAuthProvider,
     getAuthProvider,
+    forEachAuthProvider,
     set_active_auth_provider,
     set_active_auth_provider_by_name,
     login_flow_provider,
-    active_auth_provider
+    active_auth_provider,
+    initializeAuthProviders
 };
 
-if (typeof window !== 'undefined') {
-    Object.assign(window, {
-        registerAuthProvider,
-        unregisterAuthProvider,
-        getAuthProvider,
-        set_active_auth_provider,
-        set_active_auth_provider_by_name,
-        login_flow_provider,
-        active_auth_provider
-    });
-}

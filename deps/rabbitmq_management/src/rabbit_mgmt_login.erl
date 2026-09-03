@@ -21,8 +21,8 @@
 %% Only for POST method.
 %%
 %% The endpoint redirects the user to the home page of the management UI with a
-%% short-lived cookie with the name <<"access_token">> and targed to the resource/path 
-%% <<"js/oidc-oauth/bootstrap.js">> if the token is valid and the user is authorized
+%% short-lived cookie with the name <<"access_token">> and targed to the resource/path
+%% <<"js/bootstrap.js">> if the token is valid and the user is authorized
 %% to access the management UI.
 %%
 %% Scenario 2: Users come to RabbitMQ management UI with one of these fields 
@@ -33,14 +33,14 @@
 %% - As request header with the prefix <<"x-">>
 %%
 %% The endpoint redirects the user to the home page of the management UI with a
-%% short-lived cookie with the name matching either <<"strict_auth_mechanism">> 
-%% or <<"preferred_auth_mechanism">> (regardless if the value was set as form 
-%% field, or request parameter or header) and targeted to the resource/path 
-%% <<"js/oidc-oauth/bootstrap.js">>. 
-%% 
+%% short-lived cookie with the name matching either <<"strict_auth_mechanism">>
+%% or <<"preferred_auth_mechanism">> (regardless if the value was set as form
+%% field, or request parameter or header) and targeted to the resource/path
+%% <<"js/bootstrap.js">>.
+%%
 %% NOTE: The short-lived token is removed once it is read by the module
-%% rabbit_mgmt_oauth_bootstrap.erl which attends the resource/path 
-%% <<"js/oidc-oauth/bootstrap.js">>.  
+%% rabbit_mgmt_wm_bootstrap.erl which attends the resource/path
+%% <<"js/bootstrap.js">>.
 
 init(Req0, State) ->
   login(cowboy_req:method(Req0), Req0, State).

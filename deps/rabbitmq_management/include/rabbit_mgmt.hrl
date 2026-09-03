@@ -15,6 +15,12 @@
 -define(MANAGEMENT_DEFAULT_HTTP_MAX_BODY_SIZE, 20000000).
 
 -define(OAUTH2_ACCESS_TOKEN,                        <<"access_token">>).
--define(OAUTH2_BOOTSTRAP_PATH,                      <<"/js/oidc-oauth/bootstrap.js">>).
+%% Where rabbit_mgmt_wm_bootstrap.erl (js/bootstrap.js) reads and clears the
+%% short-lived cookies rabbit_mgmt_login.erl sets on the way here. Not
+%% js/oidc-oauth/bootstrap.js: that endpoint is only ever loaded as an
+%% embedded sub-resource (from index.html's generated js/bootstrap.js, or
+%% from the oidc login/logout callback pages), never as the page the browser
+%% is redirected to, so it would never actually receive these cookies.
+-define(OAUTH2_BOOTSTRAP_PATH,                      <<"/js/bootstrap.js">>).
 -define(MANAGEMENT_LOGIN_STRICT_AUTH_MECHANISM,     <<"strict_auth_mechanism">>).
 -define(MANAGEMENT_LOGIN_PREFERRED_AUTH_MECHANISM,  <<"preferred_auth_mechanism">>).
