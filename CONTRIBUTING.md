@@ -181,7 +181,7 @@ To enable JavaScript tests for a plugin:
  * Place a `package.json` at the root of the plugin directory (see `deps/rabbitmq_management/package.json` as a reference)
  * Add JavaScript test files under the `test/` directory
 
-When `gmake test` runs, all Erlang tests execute first. If `npm` is installed in the environment and `package.json` exists in the plugin, `gmake test` automatically runs the `npm-test` target to execute all JavaScript tests under `test/` recursively.
+When `gmake tests` runs, all Erlang tests execute first. If `npm` is installed in the environment and `package.json` exists in the plugin, `gmake tests` automatically runs the `npm-test` target to execute all JavaScript tests under `test/` recursively.
 
 
 ## Working on Management UI with BrowserSync
