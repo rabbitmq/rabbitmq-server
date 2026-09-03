@@ -85,7 +85,7 @@ handle_call({submit, Fun, CPid, ProcessModel}, From, undefined) ->
 
 handle_call({submit, Fun, CPid, ProcessModel}, From, {from, CPid, MRef}) ->
     erlang:demonitor(MRef),
-    gen_server2:reply(From, run(Fun, ProcessModel)),
+    _ = gen_server2:reply(From, run(Fun, ProcessModel)),
     ok = worker_pool:idle(get(worker_pool_name), self()),
     {noreply, undefined, hibernate};
 
@@ -97,7 +97,7 @@ handle_cast({next_job_from, CPid}, undefined) ->
     {noreply, {from, CPid, MRef}, hibernate};
 
 handle_cast({next_job_from, CPid}, {job, CPid, From, Fun, ProcessModel}) ->
-    gen_server2:reply(From, run(Fun, ProcessModel)),
+    _ = gen_server2:reply(From, run(Fun, ProcessModel)),
     ok = worker_pool:idle(get(worker_pool_name), self()),
     {noreply, undefined, hibernate};
 

@@ -1075,54 +1075,61 @@ two_nodes_same_otp_version(Config0) ->
 
 %% Run the log on two Erlang nodes with different OTP versions.
 two_nodes_different_otp_version(_Config) ->
-    case erlang:system_info(otp_release) of
-        "28" ->
-            %% Compiling a BEAM file on OTP 28 and loading it on OTP 26 or 27
-            %% causes a "corrupt atom table" error.
-            %% https://github.com/erlang/otp/pull/8913#issue-2572291638
-            {skip, "loading BEAM file compiled on OTP 28 on a lower OTP version is unsupported"};
-        _ ->
-            Node = 'rabbit_fifo_prop@localhost',
-            case net_adm:ping(Node) of
-                pong ->
-                    case is_same_otp_version(Node) of
-                        true ->
-                            {skip, "expected CT node and 'rabbit_fifo_prop@localhost' "
-                                    "to have different OTP versions"};
-                        false ->
-                            Prefixes = ["rabbit_fifo", "rabbit_misc", "mc",
-                                        "lqueue", "priority_queue", "ra_", "serial_number"],
-                            [begin
-                                 Mod = list_to_atom(ModStr),
-                                 {Mod, Bin, _File} = code:get_object_code(Mod),
-                                 {module, Mod} = erpc:call(Node, code, load_binary,
-                                                           [Mod, ModStr, Bin])
-                             end
-                             || {ModStr, _FileName, _Loaded} <- code:all_available(),
-                                lists:any(fun(Prefix) ->
-                                                  lists:prefix(Prefix, ModStr)
-                                          end, Prefixes)],
-                            two_nodes(Node)
-                    end;
-                pang ->
-                    Reason = {node_down, Node},
-                    case rabbit_ct_helpers:is_ci() of
-                        true ->
-                            ct:fail(Reason);
-                        false ->
-                            {skip, Reason}
-                    end
+    Node = 'rabbit_fifo_prop@localhost',
+    case net_adm:ping(Node) of
+        pong ->
+            OurOTP = otp_major(erlang:system_info(otp_release)),
+            OtherOTP = otp_major(erpc:call(Node, erlang, system_info, [otp_release])),
+            ct:pal("Our CT node runs OTP ~b, other node runs OTP ~b", [OurOTP, OtherOTP]),
+            case {OurOTP =:= OtherOTP, straddles_atom_table_change(OurOTP, OtherOTP)} of
+                {true, _} ->
+                    {skip, "expected CT node and 'rabbit_fifo_prop@localhost' "
+                            "to have different OTP versions"};
+                {false, true} ->
+                    %% Compiling a BEAM file on OTP 28 (or later) and loading
+                    %% it on an OTP 27 (or earlier) node causes a
+                    %% "corrupt atom table" error.
+                    %% https://github.com/erlang/otp/pull/8913#issue-2572291638
+                    {skip, "loading a BEAM file across the OTP 28 atom table "
+                            "format change is unsupported"};
+                {false, false} ->
+                    Prefixes = ["rabbit_fifo", "rabbit_misc", "mc",
+                                "lqueue", "priority_queue", "ra_", "serial_number"],
+                    [begin
+                         Mod = list_to_atom(ModStr),
+                         {Mod, Bin, _File} = code:get_object_code(Mod),
+                         {module, Mod} = erpc:call(Node, code, load_binary,
+                                                   [Mod, ModStr, Bin])
+                     end
+                     || {ModStr, _FileName, _Loaded} <- code:all_available(),
+                        lists:any(fun(Prefix) ->
+                                          lists:prefix(Prefix, ModStr)
+                                  end, Prefixes)],
+                    two_nodes(Node)
+            end;
+        pang ->
+            Reason = {node_down, Node},
+            case rabbit_ct_helpers:is_ci() of
+                true ->
+                    ct:fail(Reason);
+                false ->
+                    {skip, Reason}
             end
     end.
 
-is_same_otp_version(ConfigOrNode) ->
+otp_major(OtpRelease) ->
+    list_to_integer(OtpRelease).
+
+%% OTP 28 changed the on-disk atom table format in a way that a BEAM file
+%% compiled on OTP 28+ cannot be loaded on an OTP 27 or earlier node.
+%% BEAM files compiled on either side of that change remain loadable on any
+%% newer-or-equal OTP release.
+straddles_atom_table_change(OtpA, OtpB) ->
+    (OtpA >= 28) =/= (OtpB >= 28).
+
+is_same_otp_version(Config) ->
     OurOTP = erlang:system_info(otp_release),
-    OtherOTP = case ConfigOrNode of
-                   Cfg when is_list(Cfg) ->
-                       rabbit_ct_broker_helpers:rpc(Cfg, erlang, system_info, [otp_release]);
-                   Node when is_atom(Node) ->
-                       erpc:call(Node, erlang, system_info, [otp_release])
-               end,
+    OtherOTP = rabbit_ct_broker_helpers:rpc(Config, erlang, system_info, [otp_release]),
     ct:pal("Our CT node runs OTP ~s, other node runs OTP ~s", [OurOTP, OtherOTP]),
     OurOTP =:= OtherOTP.
 

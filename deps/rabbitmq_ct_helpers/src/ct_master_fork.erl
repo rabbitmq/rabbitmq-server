@@ -170,8 +170,14 @@ run([TS|TestSpecs],AllowUserTerms,InclNodes,ExclNodes) when is_list(TS),
     %% Note: [Spec] means run one test with Spec
     %%       [Spec1,Spec2] means run two tests separately
     %%       [[Spec1,Spec2]] means run one test, with the two specs merged
-    case catch ct_testspec:collect_tests_from_file([TS],InclNodes,
-						   AllowUserTerms) of
+    case try
+             ct_testspec:collect_tests_from_file([TS],InclNodes,
+                                                  AllowUserTerms)
+         catch
+             throw:Thrown -> Thrown;
+             exit:Reason0 -> {'EXIT', Reason0};
+             error:Reason0:Stacktrace -> {'EXIT', {Reason0, Stacktrace}}
+         end of
 	{error,Reason} ->
 	    [{error,Reason} | run(TestSpecs,AllowUserTerms,InclNodes,ExclNodes)];
 	Tests ->
@@ -242,8 +248,14 @@ exclude_nodes([],RunSkipPerNode) ->
                    Specs :: [file:filename_all()],
                    Reason :: term().
 run_on_node([TS|TestSpecs],AllowUserTerms,Node) when is_list(TS),is_atom(Node) ->
-    case catch ct_testspec:collect_tests_from_file([TS],[Node],
-						   AllowUserTerms) of
+    case try
+             ct_testspec:collect_tests_from_file([TS],[Node],
+                                                  AllowUserTerms)
+         catch
+             throw:Thrown -> Thrown;
+             exit:Reason0 -> {'EXIT', Reason0};
+             error:Reason0:Stacktrace -> {'EXIT', {Reason0, Stacktrace}}
+         end of
 	{error,Reason} ->
 	    [{error,Reason} | run_on_node(TestSpecs,AllowUserTerms,Node)];
 	Tests ->
@@ -852,7 +864,13 @@ init_node_ctrl(MasterPid,Cookie,Opts) ->
     ct_event:add_handler([{master,MasterPid}]),
 
     %% log("Running test with options: ~tp~n", [Opts]),
-    Result = case (catch ct:run_test(Opts)) of
+    Result = case (try
+                       ct:run_test(Opts)
+                   catch
+                       throw:Thrown -> Thrown;
+                       exit:Reason -> {'EXIT', Reason};
+                       error:Reason:Stacktrace -> {'EXIT', {Reason, Stacktrace}}
+                   end) of
 		 ok -> finished_ok;
 		 Other -> Other
 	     end,

@@ -123,13 +123,14 @@ open(Params, Name) ->
         _:E -> E
     end.
 
-ensure_channel_closed(Ch) -> catch amqp_channel:close(Ch).
+ensure_channel_closed(Ch) ->
+    try amqp_channel:close(Ch) catch _:_ -> ok end.
 
 ensure_connection_closed(Conn) ->
     ensure_connection_closed(Conn, ?CONNECTION_OPEN_TIMEOUT).
 
 ensure_connection_closed(Conn, Timeout) ->
-    catch amqp_connection:close(Conn, Timeout).
+    try amqp_connection:close(Conn, Timeout) catch _:_ -> ok end.
 
 -spec ensure_connection_closed_async(pid() | undefined) -> ok.
 ensure_connection_closed_async(Conn) ->

@@ -151,10 +151,6 @@ defmodule RabbitMQ.CLI.Core.CommandModules do
     Code.ensure_loaded?(mod)
   end
 
-  defp implements_command_behaviour?(nil) do
-    false
-  end
-
   defp implements_command_behaviour?(module) do
     Enum.member?(
       module.module_info(:attributes)[:behaviour] || [],

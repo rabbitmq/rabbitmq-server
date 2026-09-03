@@ -765,9 +765,9 @@ check_routing_arg(Source = #resource{virtual_host = Vhost}, Args, ArgKey, User, 
              rabbit_amqqueue:absent_reason()) ->
     no_return().
 absent(Queue, Reason) ->
-    {'EXIT',
-     #amqp_error{explanation = Explanation}
-    } = catch rabbit_amqqueue:absent(Queue, Reason),
+    Explanation = try rabbit_amqqueue:absent(Queue, Reason)
+                  catch exit:#amqp_error{explanation = E} -> E
+                  end,
     throw(<<"400">>, Explanation, []).
 
 -spec throw(binary(), io:format(), [term()]) -> no_return().

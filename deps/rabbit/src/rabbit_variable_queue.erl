@@ -363,10 +363,8 @@ start(VHost, DurableQueues) ->
     %% Group recovery terms by vhost.
     ClientRefs = [Ref || Terms <- AllTerms,
                       Terms /= non_clean_shutdown,
-                      begin
-                          Ref = proplists:get_value(persistent_ref, Terms),
-                          Ref =/= undefined
-                      end],
+                      Ref <- [proplists:get_value(persistent_ref, Terms)],
+                      Ref =/= undefined],
     start_msg_store(VHost, ClientRefs, StartFunState),
     {ok, AllTerms}.
 

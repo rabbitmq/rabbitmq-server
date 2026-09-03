@@ -139,7 +139,7 @@ handle_cast({idle, WPid}, State = #state { available = Avail,
              State #state { available = ordsets:add_element(WPid, Avail) };
          {{value, {next_free, From, CPid}}, Pending1} ->
              worker_pool_worker:next_job_from(WPid, CPid),
-             gen_server2:reply(From, WPid),
+             _ = gen_server2:reply(From, WPid),
              State #state { pending = Pending1 };
          {{value, {run_async, Fun}}, Pending1} ->
              worker_pool_worker:submit_async(WPid, Fun),

@@ -202,7 +202,7 @@ pick_random(List) ->
 
 do_event(_Sys, Name, {kill_named_proc, ProcName, ExitReason}) ->
     ?LOG_INFO("~s: doing event ~s...", [?MODULE, Name]),
-    catch exit(whereis(ProcName), ExitReason),
+    try exit(whereis(ProcName), ExitReason) catch _:_ -> ok end,
     ok;
 do_event(_Sys, Name, flood_node) ->
     Nodes = nodes(),
@@ -242,7 +242,7 @@ do_event(Sys, Name, {kill_ra_member, ExitReason}) ->
             {Selected, _UId} = pick_random(Registered),
             {ok, _, _} = ra:local_query({Selected, node()},
                                         fun (_) -> process_flag(trap_exit, false) end),
-            catch exit(whereis(Selected), ExitReason),
+            try exit(whereis(Selected), ExitReason) catch _:_ -> ok end,
             ok
     end;
 do_event(Sys, Name, restart_ra_member = Type) ->
@@ -264,10 +264,12 @@ do_event(Sys, Name, restart_ra_member = Type) ->
 do_event(Sys, Name, {multi, Num, Interval, Event}) ->
     ?LOG_INFO("~s: doing multi event ~s...",
               [?MODULE, Name]),
-    catch [begin
-               do_event(Sys, Name, Event),
-               timer:sleep(Interval)
-           end || _ <- lists:seq(1, Num)],
+    _ = try
+            [begin
+                 do_event(Sys, Name, Event),
+                 timer:sleep(Interval)
+             end || _ <- lists:seq(1, Num)]
+        catch _:_ -> ok end,
     ok.
 
 list_registered_safe(Sys) ->

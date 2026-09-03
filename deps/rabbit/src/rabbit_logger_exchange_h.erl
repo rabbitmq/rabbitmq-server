@@ -171,7 +171,7 @@ setup_proc(#{id := Id} = Config) ->
     %% We register this process using the logger handler ID. It makes
     %% debugging convenient but it's not critical. That's why we catch any
     %% exceptions and ignore the return value.
-    _ = catch erlang:register(Id, self()),
+    try erlang:register(Id, self()) catch _:_ -> ok end,
     loop(Config).
 
 loop(#{config := #{exchange := Exchange}} = Config) ->

@@ -865,23 +865,35 @@ handle_shutdown(Reason, State) ->
 
 do(Method, Content, Flow, #state{driver = network, writer = W}) ->
     %% Catching because it expects the {channel_exit, _, _} message on error
-    catch case {Content, Flow} of
-              {none, _}      -> rabbit_writer:send_command(W, Method);
-              {_,    flow}   -> rabbit_writer:send_command_flow(W, Method,
+    try
+        case {Content, Flow} of
+            {none, _}      -> rabbit_writer:send_command(W, Method);
+            {_,    flow}   -> rabbit_writer:send_command_flow(W, Method,
                                                                 Content);
-              {_,    noflow} -> rabbit_writer:send_command(W, Method, Content)
-          end;
+            {_,    noflow} -> rabbit_writer:send_command(W, Method, Content)
+        end
+    catch
+        throw:Thrown -> Thrown;
+        exit:Reason -> {'EXIT', Reason};
+        error:Reason:Stacktrace -> {'EXIT', {Reason, Stacktrace}}
+    end;
 do(Method, Content, Flow, #state{driver = direct, writer = W}) ->
     %% ditto catching because...
-    catch case {Content, Flow} of
-              {none, _}      -> rabbit_channel_common:do(W, Method);
-              {_,    flow}   -> rabbit_channel_common:do_flow(W, Method, Content);
-              {_,    noflow} -> rabbit_channel_common:do(W, Method, Content)
-          end.
+    try
+        case {Content, Flow} of
+            {none, _}      -> rabbit_channel_common:do(W, Method);
+            {_,    flow}   -> rabbit_channel_common:do_flow(W, Method, Content);
+            {_,    noflow} -> rabbit_channel_common:do(W, Method, Content)
+        end
+    catch
+        throw:Thrown -> Thrown;
+        exit:Reason -> {'EXIT', Reason};
+        error:Reason:Stacktrace -> {'EXIT', {Reason, Stacktrace}}
+    end.
 
 
 flush_writer(#state{driver = network, writer = Writer}) ->
-    _ = catch rabbit_writer:flush(Writer),
+    _ = try rabbit_writer:flush(Writer) catch _:_ -> ok end,
     ok;
 flush_writer(#state{driver = direct}) ->
     ok.

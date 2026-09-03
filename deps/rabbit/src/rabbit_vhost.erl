@@ -178,7 +178,16 @@ add(Name, Metadata, ActingUser) ->
     case exists(Name) of
         true  -> ok;
         false ->
-            catch(do_add(Name, Metadata, ActingUser))
+            try do_add(Name, Metadata, ActingUser) of
+                ok -> ok
+            catch
+                throw:Err ->
+                    Err;
+                exit:Err ->
+                    {'EXIT', Err};
+                error:Err:Stacktrace ->
+                    {'EXIT', {Err, Stacktrace}}
+            end
     end.
 
 do_add(Name, Metadata0, ActingUser) ->
@@ -453,19 +462,26 @@ put_vhost(Name, Description, Tags0, DefaultQueueType, Trace, Username) ->
                      update(Name, Description, ParsedTags, DefaultQueueType, Username);
                  false ->
                      Metadata = vhost:new_metadata(Description, ParsedTags, DefaultQueueType),
-                     case catch do_add(Name, Metadata, Username) of
-                         ok ->
-                             %% wait for up to 45 seconds for the vhost to initialise
-                             %% on all nodes
-                             case await_running_on_all_nodes(Name, 45000) of
-                                 ok               ->
-                                     maybe_grant_full_permissions(Name, Username);
-                                 {error, timeout} ->
-                                     {error, timeout}
-                             end;
-                         Err ->
-                             Err
-                     end
+                    try do_add(Name, Metadata, Username) of
+                        ok ->
+                            %% wait for up to 45 seconds for the vhost to initialise
+                            %% on all nodes
+                            case await_running_on_all_nodes(Name, 45000) of
+                                ok               ->
+                                    maybe_grant_full_permissions(Name, Username);
+                                {error, timeout} ->
+                                    {error, timeout}
+                            end;
+                        Err ->
+                            Err
+                    catch
+                        throw:Err ->
+                            Err;
+                        exit:Err ->
+                            {'EXIT', Err};
+                        error:Err:Stacktrace ->
+                            {'EXIT', {Err, Stacktrace}}
+                    end
              end,
     case Trace of
         true      -> rabbit_trace:start(Name);

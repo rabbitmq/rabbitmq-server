@@ -5,8 +5,6 @@
 ## Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule RabbitMQ.CLI.TimeUnit do
-  require MapSet
-
   @days_seconds 86400
   @weeks_seconds @days_seconds * 7
   @months_seconds @days_seconds * (365 / 12)

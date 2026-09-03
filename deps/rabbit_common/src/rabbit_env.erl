@@ -1351,11 +1351,13 @@ product_name_from_env(Context) ->
     end.
 
 product_name_from_node(#{from_remote_node := Remote} = Context) ->
-    Ret = (catch query_remote(Remote, rabbit, product_name, [])),
+    Ret = try query_remote(Remote, rabbit, product_name, [])
+          catch _:_ -> {error, failed}
+          end,
     case Ret of
         {badrpc, nodedown} ->
             update_context(Context, product_name, undefined, default);
-        {query, _, _} ->
+        {error, _} ->
             update_context(Context, product_name, undefined, default);
         Value  ->
             update_context(Context, product_name, Value, remote_node)
@@ -1382,11 +1384,13 @@ product_version_from_env(Context) ->
     end.
 
 product_version_from_node(#{from_remote_node := Remote} = Context) ->
-    Ret = (catch query_remote(Remote, rabbit, product_version, [])),
+    Ret = try query_remote(Remote, rabbit, product_version, [])
+          catch _:_ -> {error, failed}
+          end,
     case Ret of
         {badrpc, _} ->
             update_context(Context, product_version, undefined, default);
-        {query, _, _} ->
+        {error, _} ->
             update_context(Context, product_version, undefined, default);
         Value ->
             update_context(Context, product_version, Value, remote_node)
@@ -1423,11 +1427,13 @@ get_default_motd_file(#{os_type := {win32, _},
     normalize_path(ConfigBaseDir, "motd.txt").
 
 motd_file_from_node(#{from_remote_node := Remote} = Context) ->
-    Ret = (catch query_remote(Remote, rabbit, motd_file, [])),
+    Ret = try query_remote(Remote, rabbit, motd_file, [])
+          catch _:_ -> {error, failed}
+          end,
     case Ret of
         {badrpc, _} ->
             update_context(Context, motd_file, undefined, default);
-        {query, _, _} ->
+        {error, _} ->
             update_context(Context, motd_file, undefined, default);
         File ->
             update_context(Context, motd_file, File, remote_node)

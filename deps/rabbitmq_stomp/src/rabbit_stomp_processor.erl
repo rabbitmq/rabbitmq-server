@@ -240,18 +240,16 @@ process_request(ProcessFun, State) ->
 
 
 process_request(ProcessFun, SuccessFun, State) ->
-    Res = case catch ProcessFun(State) of
-              {'EXIT',
-               {{shutdown,
-                 {server_initiated_close, ReplyCode, Explanation}}, _}} ->
+    Res = try ProcessFun(State) of
+              Result -> Result
+          catch
+              exit:{{shutdown, {server_initiated_close, ReplyCode, Explanation}}, _} ->
                   amqp_death(ReplyCode, Explanation, State);
-              {'EXIT', {amqp_error, access_refused, Msg, _}} ->
+              exit:{amqp_error, access_refused, Msg, _} ->
                   amqp_death(access_refused, Msg, State);
-              {'EXIT', Reason} ->
+              Class:Reason ->
                   priv_error("Processing error", "Processing error",
-                              Reason, State);
-              Result ->
-                  Result
+                             {Class, Reason}, State)
           end,
     case Res of
         {ok, Frame, NewState = #proc_state{connection = Conn}} ->
@@ -263,9 +261,7 @@ process_request(ProcessFun, SuccessFun, State) ->
         {error, Message, Detail, NewState = #proc_state{connection = Conn}} ->
             {ok, send_error(Message, Detail, NewState), Conn};
         {stop, normal, NewState} ->
-            {stop, normal, SuccessFun(NewState)};
-        {stop, R, NewState} ->
-            {stop, R, NewState}
+            {stop, normal, SuccessFun(NewState)}
     end.
 
 process_connect(Implicit, Frame,
@@ -805,8 +801,8 @@ check_subscription_access(_, _) ->
 
 maybe_clean_up_queue(Queue, #proc_state{connection = Connection}) ->
     {ok, Channel} = amqp_connection:open_channel(Connection),
-    catch amqp_channel:call(Channel, #'queue.delete'{queue = Queue}),
-    catch amqp_channel:close(Channel),
+    try amqp_channel:call(Channel, #'queue.delete'{queue = Queue}) catch _:_ -> ok end,
+    try amqp_channel:close(Channel) catch _:_ -> ok end,
     ok.
 
 do_send(Destination, _DestHdr,
@@ -919,7 +915,7 @@ close_connection(State = #proc_state{connection = none}) ->
 %% Closing the connection will close the channel and subchannels
 close_connection(State = #proc_state{connection = Connection}) ->
     %% ignore noproc or other exceptions to avoid debris
-    catch amqp_connection:close(Connection),
+    try amqp_connection:close(Connection) catch _:_ -> ok end,
     State#proc_state{channel = none, connection = none, subscriptions = none};
 close_connection(undefined) ->
     ?LOG_DEBUG("~ts:close_connection: undefined state", [?MODULE]),

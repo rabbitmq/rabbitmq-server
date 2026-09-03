@@ -112,8 +112,6 @@ defmodule RabbitMQ.CLI.Core.JSON do
     end)
   end
 
-  defp proplist?(_), do: false
-
   defp convert_binary(data) when is_binary(data) do
     try do
       case :unicode.characters_to_binary(data, :utf8) do
