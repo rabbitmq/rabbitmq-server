@@ -1,4 +1,11 @@
 import {oidc} from './oidc-client-ts.3.0.1.min.js';
+import { replace_content, format, setup_visibility, toggle_visibility } from '../render.js';
+import {
+  authOptions,
+  auth_options_for_mechanism,
+  auth_section_is_expanded
+} from '../auth-options.js';
+import { registerAuthProvider } from '../auth-providers.js';
 
 var mgr;
 var _management_logger;
@@ -116,6 +123,11 @@ export function oauth_initiate(oauth) {
   if (oauth.enabled) {
     if (!oauth.sp_initiated) {
         oauth.logged_in = has_auth_credentials();
+        // An idp-initiated session never goes through oauth_initiateLogin(),
+        // the only other place that declares the active provider, so
+        // active_auth_provider()'s has_auth_resource() fallback would
+        // otherwise misidentify this session as basic auth.
+        if (oauth.logged_in) set_active_auth_provider_by_name('oauth2');
     } else {
       oauth_is_logged_in().then( status => {
         if (status.loggedIn && !has_auth_credentials()) {
@@ -335,6 +347,70 @@ export function oauth_completeLogout() {
     clear_auth()
     mgr.signoutRedirectCallback().then(_ => oauth_redirectToLogin())
 }
+
+// oauth2's own login-page renderer and error/logout presentation - the
+// implementation behind this module's own oauth2 provider's
+// startLoginFlow/presentError/onUnauthorized (registered below).
+// start_app_login() (main.js) is called as a bare global rather than
+// imported: main.js already imports from auth-providers.js, and this
+// module imports from auth-providers.js too, so an explicit import back to
+// main.js risks a cycle.
+export function startWithOAuthLogin(oauth) {
+  if (!oauth.logged_in) {
+    hasAnyResourceServerReady(oauth, (oauth, escaped_warnings) => { render_login_oauth(oauth, escaped_warnings); start_app_login(); })
+  } else {
+    start_app_login()
+  }
+}
+
+export function render_login_oauth(oauth, escaped_messages) {
+  let formatData = {};
+  formatData.escaped_warnings = [];
+  formatData.notAuthorized = false;
+  // What to offer and what to preselect is decided by auth-options.js;
+  // the template only renders that decision.
+  formatData.auth = authOptions(oauth);
+  formatData.auth_options_for_mechanism = auth_options_for_mechanism;
+  formatData.auth_section_is_expanded = auth_section_is_expanded;
+
+  if (Array.isArray(escaped_messages)) {
+    formatData.escaped_warnings = escaped_messages
+  } else if (typeof escaped_messages == "string") {
+    formatData.escaped_warnings = [escaped_messages]
+    formatData.notAuthorized = escaped_messages == "Not authorized"
+  }
+  replace_content('outer', format('login_oauth', formatData))
+
+  setup_visibility()
+  $('#login').off('click', 'div.section h2, div.section-hidden h2');
+  $('#login').on('click', 'div.section h2, div.section-hidden h2', function() {
+          toggle_visibility($(this));
+      });
+
+  // Bound here, next to the markup they act on, rather than once at
+  // startup. replace_content() above builds a fresh #login every time this
+  // renders, so handlers scoped to it are discarded with the old element
+  // instead of accumulating - which is why these cannot be delegated to
+  // document.
+  $('#login').on('click', '[data-oauth-action="login"]', function() {
+      oauth_initiateLogin($(this).data('resourceId'));
+  });
+  $('#login').on('click', '[data-oauth-action="logout"]', function() {
+      oauth_initiateLogout();
+  });
+  $('#login').on('submit', '#oauth2-resource-form', function(e) {
+      e.preventDefault();
+      oauth_initiateLogin(document.getElementById('oauth2-resource').value);
+  });
+}
+
+export function renderWarningMessageInLoginStatus(oauth, message) {
+  render_login_oauth(oauth, message)
+}
+
+export function initiate_logout(oauth, error = "") {
+    renderWarningMessageInLoginStatus(oauth, error);
+}
 function validate_openid_configuration(payload) {
   if (payload == null) {
     throw new Error("Payload does not contain openid configuration")
@@ -440,3 +516,59 @@ export function hasAnyResourceServerReady(oauth, onReadyCallback) {
     onReadyCallback(oauth, [])
   }
 }
+
+registerAuthProvider('oauth2', {
+    // Populates the global oauth object that login_flow_provider() and
+    // authOptions() read - called once at page load, from
+    // initializeAuthProviders(), only when this module was actually
+    // imported (i.e. oauth2 is configured server-side).
+    initialize: function() {
+        window.oauth = oauth_initialize_if_required();
+    },
+    // A failed IDP-initiated login redirects back here with ?error=, which
+    // this module set itself on the way out, along with the pending-state
+    // markers. Drop those so the next successful login is not redirected
+    // somewhere confusing.
+    consumeRedirect: function(url) {
+        var error = url.searchParams.get('error');
+        if (!error) return false;
+        clear_pref("oauth-idp-pending");
+        clear_pref("oauth-return-to");
+        renderWarningMessageInLoginStatus(oauth, fmt_escape_html(error));
+        return true;
+    },
+    startLoginFlow: function() {
+        startWithOAuthLogin(oauth);
+    },
+    // oauth2 has no Sammy route of its own - login is a direct jQuery
+    // click/submit handler bound in render_login_oauth(), not a form
+    // posted through the app's router.
+    registerRoutes: function(sammy) {},
+    presentError: function(message) {
+        renderWarningMessageInLoginStatus(oauth, message);
+    },
+    presentSessionExpired: function() {
+        this.presentError('Not authorized');
+    },
+    // presentSessionExpired() re-renders as just a logout button (see
+    // login_oauth.ejs's notAuthorized branch) - self-contained via a plain
+    // jQuery click handler, no route needed.
+    needsRouterAfterSessionExpired: false,
+    // No reauthenticate(): logging in again with a raw username/password
+    // isn't an operation oauth2 has - its session validity has nothing to
+    // do with an internal user record's password field, even if the
+    // username happens to coincide. The caller checks for the method's
+    // presence rather than calling a no-op, same as registerRoutes().
+    signOut: function() {
+        clear_auth();
+        if (oauth.logged_in) {
+            oauth.logged_in = false;
+            oauth_initiateLogout();
+        } else {
+            go_to_home();
+        }
+    },
+    onUnauthorized: function(response, reason) {
+        initiate_logout(oauth, reason);
+    }
+});

@@ -29,12 +29,13 @@ build_routes(Ignore) ->
     LocalStaticRte = {"/[...]", rabbit_mgmt_wm_static, LocalPaths},
     OauthBootstrap = build_oauth_bootstrap_route(Prefix),
     OauthTokenProxy = build_oauth_token_proxy_routes(Prefix),
+    Bootstrap = build_bootstrap_route(Prefix),
     % NB: order is significant in the routing list
     Routes0 = build_module_routes(Ignore) ++
         [ApiRdrRte, CliRdrRte, MgmtRdrRte, StatsRdrRte1, StatsRdrRte2, LocalStaticRte],
     Routes1 = maybe_add_path_prefix(Routes0, Prefix),
     % NB: ensure the root routes are first
-    Routes2 = RootIdxRtes ++ OauthBootstrap ++ OauthTokenProxy ++ maybe_add_path_prefix([{"/login", rabbit_mgmt_login, []}], Prefix) ++ Routes1,
+    Routes2 = RootIdxRtes ++ OauthBootstrap ++ OauthTokenProxy ++ Bootstrap ++ maybe_add_path_prefix([{"/login", rabbit_mgmt_login, []}], Prefix) ++ Routes1,
     [{'_', Routes2}].
 
 build_root_index_routes("", ManagementApp) ->
@@ -48,6 +49,12 @@ build_oauth_bootstrap_route("") ->
 build_oauth_bootstrap_route(Prefix) ->
     [{"/js/oidc-oauth/bootstrap.js", rabbit_mgmt_wm_redirect, Prefix ++ "/js/oidc-oauth/bootstrap.js"},
      {Prefix ++ "/js/oidc-oauth/bootstrap.js", rabbit_mgmt_oauth_bootstrap, #{}}].
+
+build_bootstrap_route("") ->
+    [{"/js/bootstrap.js", rabbit_mgmt_wm_bootstrap, #{}}];
+build_bootstrap_route(Prefix) ->
+    [{"/js/bootstrap.js", rabbit_mgmt_wm_redirect, Prefix ++ "/js/bootstrap.js"},
+     {Prefix ++ "/js/bootstrap.js", rabbit_mgmt_wm_bootstrap, #{}}].
 
 build_oauth_token_proxy_routes(Prefix) ->
     Base = Prefix ++ "/js/oidc-oauth/token-endpoint/",

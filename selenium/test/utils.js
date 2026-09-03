@@ -178,7 +178,7 @@ module.exports = {
     const queryString = params.join('&');
     
     const url = d.baseUrl + '/login?' + queryString;
-    console.log("Navigating to " + url);
+    module.exports.log("Navigating to " + url);
     return d.driver.get(url);
   },
 
@@ -378,7 +378,7 @@ module.exports = {
     if (test && test.currentTest) {
       if (test.currentTest.isPassed()) {
         driver.executeScript('lambda-status=passed')
-      } else {        
+      } else if (test.currentTest.isFailed()) {
         if (captureScreen != null) {
           if (captureScreen._suppressTeardownFailureShot) {
             captureScreen._suppressTeardownFailureShot = false
@@ -389,6 +389,9 @@ module.exports = {
         }
         driver.executeScript('lambda-status=failed')
       }
+      // A test that called this.skip() is neither passed nor failed - it
+      // opted out of asserting anything for this run, so there's nothing
+      // to screenshot or report.
     }
     module.exports.log(`Terminating browser ...`)
     await driver.quit()

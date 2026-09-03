@@ -1,46 +1,57 @@
 
-const API_ERROR_REASONS = {
-    'failed_to_parse_json':       'Definitions file could not be parsed. Make sure it is valid JSON.',
-    'unsupported_file_extension': '{filename}Only .json files are accepted for definitions import.',
-};
+import {
+  set_current_user,
+  get_current_user,
+  set_current_vhost,
+  get_current_vhost,
+  setup_global_vars,
+  expand_user_tags,
+  dispatcher_modules
+} from './global.js';
+import {
+    login_flow_provider,
+    active_auth_provider,
+    forEachAuthProvider
+} from './auth-providers.js';
+import { registerInitStep, bootstrap } from './bootstrap-steps.js';
+import { render_charts } from './charts.js';
+import { clear_local_pref,
+    authorization_header,
+    has_auth_credentials,
+    clear_auth
+} from './prefs.js';
+import { fmt_escape_html } from './formatters.js';
+import { replace_content,
+    format,
+    setup_visibility,
+    toggle_visibility,
+    debug } from './render.js';
+import {
+    feature_flags_refresh,
+    enable_all_stable_feature_flags,
+    handle_feature_flag
+} from './feature-flags.js';
 
-function format_error_response(response, reason) {
-    var template = API_ERROR_REASONS[reason];
-    if (typeof(template) != 'string') {
-        return reason;
-    }
-    return template.replace(/\{(\w+)\}/g, function(_, key) {
-        var val = response[key];
-        return val !== undefined ? val + ': ' : '';
-    });
-}
+// What happens on page load, as a named function rather than an anonymous
+// callback so that it can be exercised without going through jQuery's
+// ready queue.
+function on_page_load() {
+  // Which login page to show is a question about configuration, not about
+  // who is logged in - nobody is yet.
+  var provider = login_flow_provider();
 
-$(document).ready(function() {
-  setup_oauth_events_if_required();
-  var url_string = window.location.href;
-  var url = new URL(url_string);
-  var error = url.searchParams.get('error');
-  if (error) {
-    // A failed IDP-initiated login returns here with an error. Drop the
-    // pending state markers to avoid a confusing redirect the next successful login.
-    clear_pref("oauth-idp-pending");
-    clear_pref("oauth-return-to");
-    if (oauth.enabled) {
-      renderWarningMessageInLoginStatus(oauth, fmt_escape_html(error));
-    }
-  } else {
-    if (oauth.enabled) {
-      startWithOAuthLogin(oauth);
-    } else {
-      startWithLoginPage();
-      }
+  // A provider may claim the URL first: the oauth2 one handles the
+  // ?error= it redirects back to itself after a failed IdP-initiated login.
+  if (provider.consumeRedirect(new URL(window.location.href))) {
+    return;
   }
-});
-
-function startWithLoginPage() {
-  replace_content('outer', format('login', {}));
-  start_app_login();
+  provider.startLoginFlow();
 }
+
+if (typeof $ !== 'undefined') {
+  $(document).ready(on_page_load);
+}
+
 function removeDuplicates(array){
   let output = []
   for(let item of array) {
@@ -51,41 +62,6 @@ function removeDuplicates(array){
   return output
 }
 
-
-function startWithOAuthLogin (oauth) {
-  if (!oauth.logged_in) {
-    hasAnyResourceServerReady(oauth, (oauth, escaped_warnings) => {  render_login_oauth(oauth, escaped_warnings); start_app_login(); })
-  } else {
-    start_app_login()
-  }
-}
-function render_login_oauth(oauth, escaped_messages) {
-  let formatData = {};
-  formatData.escaped_warnings = [];
-  formatData.notAuthorized = false;
-  formatData.resource_servers = oauth.resource_servers;
-  formatData.declared_resource_servers_count = oauth.declared_resource_servers_count;
-  formatData.oauth_disable_basic_auth = oauth.oauth_disable_basic_auth;
-  formatData.strict_auth_mechanism = oauth.strict_auth_mechanism || null;
-  formatData.preferred_auth_mechanism = oauth.preferred_auth_mechanism || null;
-
-  if (Array.isArray(escaped_messages)) {
-    formatData.escaped_warnings = escaped_messages
-  } else if (typeof escaped_messages == "string") {
-    formatData.escaped_warnings = [escaped_messages]
-    formatData.notAuthorized = escaped_messages == "Not authorized"
-  }
-  replace_content('outer', format('login_oauth', formatData))
-
-  setup_visibility()
-  $('#login').off('click', 'div.section h2, div.section-hidden h2');
-  $('#login').on('click', 'div.section h2, div.section-hidden h2', function() {
-          toggle_visibility($(this));
-      });
-}
-function renderWarningMessageInLoginStatus(oauth, message) {
-  render_login_oauth(oauth, message)
-}
 
 function dispatcher_add(fun) {
     dispatcher_modules.push(fun);
@@ -99,44 +75,47 @@ function dispatcher() {
     }
 }
 
+// Pulled out of start_app_login() so the decision itself - not the
+// Sammy/XHR machinery around it - can be unit tested directly. A
+// successful check hands off to finish_check_login() (which replaces the
+// login app entirely via start_app()), so the router only needs restarting
+// after a failure, and only if the active mechanism's own login UI needs
+// it (basic's retry form does; oauth2's "not authorized" button doesn't).
+function shouldRunLoginAppAfterCheck(checkLoginSucceeded, needsRouterAfterSessionExpired) {
+  return !checkLoginSucceeded && !!needsRouterAfterSessionExpired;
+}
+
 function start_app_login () {
   app = new Sammy.Application(function () {
     this.get('/', function () {})
     this.get('#/', function () {})
-    if (!oauth.enabled || !oauth.oauth_disable_basic_auth) {
-      this.put('#/login', function() {
-        login(this.params['username'], this.params['password']);
-      });
-    }
+    var sammy = this;
+    forEachAuthProvider(function(provider) {
+      if (provider.registerRoutes) provider.registerRoutes(sammy);
+    });
   })
 
-  if (oauth.enabled) {
-    if (has_auth_credentials()) {
-      check_login();
-    } else {
-      app.run();
-    }
-  } else
-    if (!has_auth_credentials() || !check_login()) {
-      app.run();
-    }
-
+  // With no credentials there's nothing to check - always start the login
+  // app so its login form/route is reachable.
+  if (!has_auth_credentials()) {
+    app.run();
+  } else if (shouldRunLoginAppAfterCheck(check_login(), active_auth_provider().needsRouterAfterSessionExpired)) {
+    app.run();
+  }
 }
 
 
 function check_login () {
-  user = JSON.parse(sync_get('/whoami'));
-  if (user == false || user.error) {
+  var u = JSON.parse(sync_get('/whoami'));
+  set_current_user(u);
+  if (u == false || u.error) {
     clear_auth();
-    if (oauth.enabled) {
-      renderWarningMessageInLoginStatus(oauth, 'Not authorized');
-    } else {
-      replace_content('login-status', '<p>Login failed</p>');
-    }
+    active_auth_provider().presentSessionExpired();
     return false;
   }
 
-  // Fetch initialization data synchronously (which sends Authorization header)
+  // Fetch initialization data synchronously 
+  // (which sends Authorization header)
   var rawInitData = sync_get('/init');
   if (rawInitData) {
       var initData = JSON.parse(rawInitData);
@@ -148,87 +127,67 @@ function check_login () {
   } else {
       console.error("Failed to load /api/init");
   }
-  load_ui(user);
+  finish_check_login();
   return true;
 }
 
-function do_login(username, password) {
-    var result = null;
-    $.ajax({
-        async: false,
-        type: 'POST',
-        url: 'api/login',
-        data: {username: username, password: password},
-        success: function(resp) { result = resp; },
-        error: function(xhr) {
-            try { result = JSON.parse(xhr.responseText); } catch(e) {}
-            if (!result) result = {error: 'login_failed', reason: 'Login failed'};
-        }
+
+// The application-initialisation half of the login sequence, registered as
+// pipeline steps so that a plugin can add to it without editing this file,
+// and so that a failure part-way through unwinds whatever already ran.
+registerInitStep('layout', {
+  run: function(ctx) {
+    set_session_expiry_if_required(ctx.user.login_session_timeout);
+    check_version();
+    hide_popup_warn();
+    replace_content('outer', format('layout', {disable_stats: ctx.settings.disable_stats}));
+  }
+});
+
+registerInitStep('data-model', {
+  run: function(ctx) {
+    ui_data_model.vhosts = window.app_vhosts;
+    ac.update(ctx.user, ui_data_model);
+
+    if (window.app_nodes !== undefined) {
+        ui_data_model.nodes = window.app_nodes;
+    }
+
+    // Update EJS templates to use settings
+    ui_data_model.settings = ctx.settings;
+
+    display.update(ctx.settings, ui_data_model);
+    setup_global_vars(ctx.settings);
+  }
+});
+
+registerInitStep('events-and-refresh', {
+  run: function(ctx) {
+    setup_constant_events();
+    update_vhosts();
+    update_interval();
+  }
+});
+
+registerInitStep('extensions', {
+  run: function(ctx) {
+    setup_extensions(function onCompleted() {
+      console.info("All extensions have been loaded. Starting application ..");
+      start_app();
     });
-    return result;
-}
-
-function login(username, password) {
-  var result = do_login(username, password);
-  if (!result || result.error) {
-    replace_content('login-status', '<p>Login failed</p>');
-    if (result && result.reason && typeof result.reason === 'string') {
-      show_popup('warn', fmt_escape_html(result.reason));
-    }
-    return false;
   }
-  user = result.user;
-  clear_local_pref(SESSION_EXPIRY);
-  var scheme = result.token.type === 'bearer' ? 'Bearer' : 'Basic';
-  set_auth(scheme, result.token.value);
+});
 
-  // Fetch initialization data synchronously
-  var rawInitData = sync_get('/init');
-  if (rawInitData) {
-      var initData = JSON.parse(rawInitData);
-      window.app_settings = initData.settings;
-      window.app_vhosts = initData.vhosts;
-      if (initData.nodes) {
-          window.app_nodes = initData.nodes;
-      }
-  } else {
-      console.error("Failed to load /api/init");
+// Runs the login gates, then the initialisation steps above. A gate that
+// vetoes - or any step that throws - leaves the user back at the login
+// page with a reason, and anything that already ran is rolled back.
+function finish_check_login() {
+  var res = bootstrap({user: get_current_user(), settings: window.app_settings},
+                      'Failed to establish session with server');
+  if (res.ok === false) {
+    active_auth_provider().signOut();
+    active_auth_provider().presentError(res.error);
   }
-  load_ui(user);
-
-  return true;
-}
-
-function load_ui(user) {
-  set_session_expiry_if_required(user.login_session_timeout);
-  check_version();
-  hide_popup_warn();
-
-  var settings = window.app_settings;
-
-  replace_content('outer', format('layout', {disable_stats: settings.disable_stats}));
-
-  ui_data_model.vhosts = window.app_vhosts;
-  ac.update(user, ui_data_model);
-
-  if (window.app_nodes !== undefined) {
-      ui_data_model.nodes = window.app_nodes;
-  }
-
-  // Update EJS templates to use settings
-  ui_data_model.settings = settings;
-
-  display.update(settings, ui_data_model);
-
-  setup_global_vars(settings);
-
-  setup_constant_events();
-  update_vhosts();
-  update_interval();
-  setup_extensions(function onCompleted() {
-    console.info("All extensions have been loaded. Starting application ..");
-    start_app();
-  });
 }
 
 
@@ -257,9 +216,9 @@ function start_app() {
 
 
 
-    var url = this.location.toString();
-    var hash = this.location.hash;
-    var pathname = this.location.pathname;
+    var url = window.location.toString();
+    var hash = window.location.hash;
+    var pathname = window.location.pathname;
 
     var return_to = '#/';
     if (get_pref("oauth-idp-pending")) {
@@ -269,13 +228,13 @@ function start_app() {
     }
 
     if (url.indexOf('#') == -1) {
-        this.location = url + return_to;
+        window.location = url + return_to;
     } else if (hash.indexOf('#token_type') != - 1 && pathname == '/') {
         // This is equivalent to previous `if` clause when uaa authorisation is used.
         // Tokens are passed in the url hash, so the url always contains a #.
         // We need to check the current path is `/` and token is present,
         // so we can redirect to `/#/`
-        this.location = url.replace(/#token_type.+/gi, return_to);
+        window.location = url.replace(/#token_type.+/gi, return_to);
     }
 
     app = new Sammy.Application(dispatcher);
@@ -322,21 +281,6 @@ function setup_form_events() {
     });
 }
 
-function setup_oauth_events_if_required() {
-    if (!oauth.enabled) {
-        return;
-    }
-    $(document).on('click', '[data-oauth-action="login"]', function() {
-        oauth_initiateLogin($(this).data('resourceId'));
-    });
-    $(document).on('click', '[data-oauth-action="logout"]', function() {
-        oauth_initiateLogout();
-    });
-    $(document).on('submit', '#oauth2-resource-form', function(e) {
-        e.preventDefault();
-        oauth_initiateLogin(document.getElementById('oauth2-resource').value);
-    });
-}
 
 function update_vhosts() {
     if (display.vhosts) {
@@ -347,6 +291,7 @@ function update_vhosts() {
         $('li#vhost').hide();
     }
     var select = $('#show-vhost').get(0);
+    if (!select) return;
     select.options.length = ui_data_model.vhosts.length + 1;
     var index = 0;
     for (var i = 0; i < ui_data_model.vhosts.length; i++) {
@@ -408,7 +353,11 @@ function dynamic_javascript_load(arrayOrString) {
 }
 function dynamic_javascript_file_load(filename, callback) {
     var element = document.createElement('script');
-    element.setAttribute('type', 'text/javascript');
+    if (filename.endsWith('-ejs.js') || filename.endsWith('.ejs.js')) {
+        element.setAttribute('type', 'text/javascript');
+    } else {
+        element.setAttribute('type', 'module');
+    }
     element.setAttribute('src', 'js/' + filename);
 
     // Set up callback to fire when script has loaded
@@ -464,7 +413,7 @@ function update_interval() {
 }
 
 function go_to(url) {
-    this.location = url;
+    window.location = url;
 }
 function go_to_home() {
     // location.href = rabbit_path_prefix() + "/"
@@ -558,7 +507,7 @@ function update() {
 }
 
 function partial_update() {
-    if (!$(".pagination_class").is(":focus")) {
+    if (typeof $ !== 'undefined' && !$(".pagination_class").is(":focus")) {
         if ($('.updatable').length > 0) {
             if (update_counter >= 200) {
                 update_counter = 0;
@@ -624,7 +573,7 @@ function update_navigation() {
 }
 
 function update_warnings() {
-    feature_flags = JSON.parse(sync_get('/feature-flags'));
+    var feature_flags = JSON.parse(sync_get('/feature-flags'));
     var needs_enabling = false;
     for (var i = 0; i < feature_flags.length; i++) {
          var feature_flag = feature_flags[i];
@@ -632,7 +581,7 @@ function update_warnings() {
              needs_enabling = true;
          }
     }
-    deprecated_features = JSON.parse(sync_get('/deprecated-features/used'));
+    var deprecated_features = JSON.parse(sync_get('/deprecated-features/used'));
     var needs_deprecating = false;
     if (deprecated_features.length > 0) {
         needs_deprecating = true;
@@ -768,7 +717,7 @@ function with_update(fun) {
 
 function apply_state(reqs) {
     var reqs2 = {};
-    for (k in reqs) {
+    for (var k in reqs) {
         var req = reqs[k];
         var options = {};
         if (typeof(req) == "object") {
@@ -779,7 +728,7 @@ function apply_state(reqs) {
         if (options['vhost'] != undefined && current_vhost != '') {
             var indexPage = req.indexOf("?page=");
             if (indexPage >- 1) {
-				pageUrl = req.substr(indexPage);
+				var pageUrl = req.substr(indexPage);
 				req2 = req.substr(0,indexPage) + '/' + esc(current_vhost) + pageUrl;
             } else
 
@@ -794,7 +743,7 @@ function apply_state(reqs) {
             qs.push('sort_reverse=' + current_sort_reverse);
         }
         if (options['ranges'] != undefined) {
-            for (i in options['ranges']) {
+            for (var i in options['ranges']) {
                 var type = options['ranges'][i];
                 var range = get_pref('chart-range').split('|');
                 var prefix;
@@ -982,7 +931,7 @@ function postprocess() {
         var params = $(this).get(0).options;
         var selected = $(this).val();
 
-        for (i = 0; i < params.length; i++) {
+        for (var i = 0; i < params.length; i++) {
             var param = params[i].value;
             if (param == selected) {
                 $('#' + param + '-div').slideDown(100);
@@ -1356,58 +1305,6 @@ function update_truncate() {
     partial_update();
 }
 
-function setup_visibility() {
-    $('div.section,div.section-hidden').each(function(_index) {
-        if ($(this).hasClass("disable-pref")) {
-            return;
-        }
-        var pref = section_pref(current_template,
-                                $(this).children('h2').text());
-        var show = get_pref(pref);
-        if (show == null) {
-            show = $(this).hasClass('section');
-        }
-        else {
-            show = show == 't';
-        }
-        if (show) {
-            $(this).addClass('section-visible');
-            // Workaround for... something. Although div.hider is
-            // display:block anyway, not explicitly setting this
-            // prevents the first slideToggle() from animating
-            // successfully; instead the element just vanishes.
-            $(this).find('.hider').attr('style', 'display:block;');
-        }
-        else {
-            $(this).addClass('section-invisible');
-        }
-    });
-}
-
-function toggle_visibility(item) {
-    var hider = item.next();
-    var all = item.parent();
-    var pref = section_pref(current_template, item.text());
-    item.next().slideToggle(100);
-    if (all.hasClass('section-visible')) {
-        if (all.hasClass('section'))
-            store_pref(pref, 'f');
-        else
-            clear_pref(pref);
-        all.removeClass('section-visible');
-        all.addClass('section-invisible');
-    }
-    else {
-        if (all.hasClass('section-hidden')) {
-            store_pref(pref, 't');
-        } else {
-            clear_pref(pref);
-        }
-        all.removeClass('section-invisible');
-        all.addClass('section-visible');
-    }
-}
-
 function publish_msg(params0) {
     try {
         var params = params_magic(params0);
@@ -1489,25 +1386,6 @@ function with_reqs(reqs, acc, fun) {
     }
     else {
         fun(acc);
-    }
-}
-
-function replace_content(id, html) {
-    $("#" + id).html(html);
-}
-
-function format(template, json) {
-    try {
-        var fn = COMPILED_TEMPLATES[template];
-        if (!fn) throw new Error('Template not found: ' + template);
-        // Inject settings object
-        json.settings = window.app_settings;
-        return fn.call(json, json, json);
-    } catch (err) {
-        clearInterval(timer);
-        console.log("Uncaught error: " + err);
-        console.log("Stack: " + err['stack']);
-        debug(err['name'] + ": " + err['message'] + "\n" + err['stack'] + "\n");
     }
 }
 
@@ -1649,9 +1527,6 @@ function sync_req(type, params0, path_template, options) {
         return false;
     }
 }
-function initiate_logout(oauth, error = "") {
-    renderWarningMessageInLoginStatus(oauth, error);
-}
 /**
  * Handle bad http response
  * @param {*} req
@@ -1673,7 +1548,12 @@ function check_bad_response(req, full_page_404, on404fun) {
         replace_content('main', html);
     }
     else if (req.status >= 400 && req.status <= 404) {
-        let response = JSON.parse(req.responseText);
+        let response = {};
+        try {
+            response = req.responseText ? JSON.parse(req.responseText) : {};
+        } catch (e) {
+            response = {};
+        }
         var error = response.error;
         if (typeof(error) != 'string') {
             error = JSON.stringify(error);
@@ -1687,8 +1567,8 @@ function check_bad_response(req, full_page_404, on404fun) {
                 reason == 'Not Found' ||
                 error == 'not_authorised' ||
                 error == 'not_authorized') {
-            if ((req.status == 401 || req.status == 403) && oauth.enabled) {
-                initiate_logout(oauth, reason);
+            if (req.status == 401 || req.status == 403) {
+                active_auth_provider().onUnauthorized(response, reason);
             } else if (on404fun && (typeof on404fun === 'function') && req.status == 404) {
                 on404fun(response);
             } else {
@@ -1753,7 +1633,7 @@ function collapse_multifields(params0) {
     var params = {};
     var ks = keys(params0);
     var ids = [];
-    for (i in ks) {
+    for (var i in ks) {
         var key = ks[i];
         var match = key.match(/([a-z]*)_([0-9_]*)_mftype/);
         var match2 = key.match(/[a-z]*_[0-9_]*_mfkey/);
@@ -1772,7 +1652,7 @@ function collapse_multifields(params0) {
     }
     ids.sort();
     var id_map = {};
-    for (i in ids) {
+    for (var i in ids) {
         var name = ids[i][0];
         var id = ids[i][1];
         if (params[name] == undefined) {
@@ -1848,7 +1728,7 @@ function maybe_remove_fields(params) {
         var options = $(this).get(0).options;
         var selected = $(this).val();
 
-        for (i = 0; i < options.length; i++) {
+        for (var i = 0; i < options.length; i++) {
             var option = options[i].value;
             if (option != selected) {
                 delete params[option];
@@ -1920,10 +1800,6 @@ function update_column_options(sammy) {
     partial_update();
 }
 
-function debug(str) {
-    $('<p>' + str + '</p>').appendTo('#debug');
-}
-
 function keys(obj) {
     var ks = [];
     for (var k in obj) {
@@ -1946,6 +1822,7 @@ function xmlHttpRequest() {
 }
 
 
+if (typeof jQuery !== 'undefined') {
 (function($){
     $.fn.extend({
         center: function () {
@@ -1957,6 +1834,7 @@ function xmlHttpRequest() {
         }
     });
 })(jQuery);
+}
 
 function debounce(f, delay) {
     var timeout = null;
@@ -2133,9 +2011,12 @@ function change_own_password(sammy) {
         if (req.readyState == 4 && !done) {
             clearTimeout(timeout);
             if (req.status >= 200 && req.status < 300) {
-                // Re-login via api/login so encrypted-credential mode stores
-                // a fresh token instead of plaintext Basic credentials.
-                login(username, new_password);
+                // Only meaningful for a mechanism whose session validity
+                // actually depends on this password (basic) - for anything
+                // else, the active session has nothing to do with this
+                // internal record even if the username happens to match.
+                var provider = active_auth_provider();
+                if (provider.reauthenticate) provider.reauthenticate(username, new_password);
                 finish();
                 go_to('#/users');
             } else {
@@ -2146,3 +2027,26 @@ function change_own_password(sammy) {
     };
     req.send(JSON.stringify(params));
 }
+
+export {
+    on_page_load,
+    dispatcher_add,
+    shouldRunLoginAppAfterCheck,
+    go_to,
+    render,
+    update,
+    partial_update,
+    show_popup,
+    sync_get,
+    sync_put,
+    sync_delete,
+    url_pagination_template_context,
+    put_parameter,
+    put_cast_params,
+    keys,
+    is_stream,
+    check_version
+};
+
+// Main application module exports. Functions are imported directly by other
+// ES modules (e.g. dispatcher.js, auth-providers.js, and plugin scripts).

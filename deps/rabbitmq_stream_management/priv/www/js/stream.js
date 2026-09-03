@@ -1,23 +1,48 @@
+import {
+    dispatcher_add,
+    render,
+    put_cast_params,
+    is_stream,
+    url_pagination_template_context
+} from './main.js';
+import { format } from './render.js';
+import {
+    NAVIGATION,
+    COLUMNS,
+    ALL_COLUMNS,
+    RENDER_CALLBACKS,
+    QUEUE_EXTRA_CONTENT_REQUESTS,
+    QUEUE_EXTRA_CONTENT,
+    disable_stats
+} from './global.js';
+import {
+    _link_to,
+    esc,
+    short_conn,
+    CONSUMER_OWNER_FORMATTERS,
+    CONSUMER_OWNER_FORMATTERS_COMPARATOR
+} from './formatters.js';
+
 dispatcher_add(function(sammy) {
     sammy.get('#/stream/connections', function() {
-            renderStreamConnections();
-        });
+        renderStreamConnections();
+    });
     sammy.get('#/stream/connections/:vhost/:name', function() {
-                var vhost = esc(this.params['vhost']);
-                var name = esc(this.params['name']);
-                render({'connection': {path:    '/stream/connections/'+ vhost + '/' + name,
-                                       options: {ranges: ['data-rates-conn']}},
-                        'consumers': '/stream/connections/' + vhost + '/' + name + '/consumers',
-                        'publishers': '/stream/connections/' + vhost + '/' + name + '/publishers'},
-                        'streamConnection', '#/stream/connections');
+        var vhost = esc(this.params['vhost']);
+        var name = esc(this.params['name']);
+        render({'connection': {path:    '/stream/connections/'+ vhost + '/' + name,
+                               options: {ranges: ['data-rates-conn']}},
+                'consumers': '/stream/connections/' + vhost + '/' + name + '/consumers',
+                'publishers': '/stream/connections/' + vhost + '/' + name + '/publishers'},
+                'streamConnection', '#/stream/connections');
     });
     sammy.get('#/stream/super-streams', function() {
-        render({'vhosts': '/vhosts'}, 'superStreams', '#/stream/super-streams')
+        render({'vhosts': '/vhosts'}, 'superStreams', '#/stream/super-streams');
     });
     sammy.put('#/stream/super-streams', function() {
-            put_cast_params(this, '/stream/super-streams/:vhost/:name',
-                            ['name', 'pattern', 'policy'], ['priority'], []);
-            location.href = "/#/queues";
+        put_cast_params(this, '/stream/super-streams/:vhost/:name',
+                        ['name', 'pattern', 'policy'], ['priority'], []);
+        location.href = "/#/queues";
     });
     // not exactly dispatcher stuff, but we have to make sure this is called before
     // HTTP requests are made in case of refresh of the queue page
@@ -25,7 +50,7 @@ dispatcher_add(function(sammy) {
         return {'extra_stream_publishers' : '/stream/publishers/' + esc(vhost) + '/' + esc(queue)};
     });
     QUEUE_EXTRA_CONTENT.push(function(queue, extraContent) {
-        if (is_stream(queue)) {
+        if (typeof is_stream === 'function' && is_stream(queue)) {
             var publishers = extraContent['extra_stream_publishers'];
             if (publishers !== undefined) {
                 return '<div class="section-hidden"><h2 class="updatable">Stream publishers (' + Object.keys(publishers).length +')</h2><div class="hider updatable">' +
@@ -61,7 +86,11 @@ var DISABLED_STATS_STREAM_CONNECTION_COLUMNS =
      {'Overview': [['user',   'User name', true],
                    ['state',  'State',     true]]};
 
-COLUMNS['streamConnections'] = disable_stats?DISABLED_STATS_STREAM_CONNECTION_COLUMNS:ALL_STREAM_CONNECTION_COLUMNS;
+if (typeof COLUMNS !== 'undefined' && COLUMNS) {
+    COLUMNS['streamConnections'] = disable_stats ? DISABLED_STATS_STREAM_CONNECTION_COLUMNS : ALL_STREAM_CONNECTION_COLUMNS;
+} else {
+    ALL_COLUMNS['streamConnections'] = disable_stats ? DISABLED_STATS_STREAM_CONNECTION_COLUMNS : ALL_STREAM_CONNECTION_COLUMNS;
+}
 
 function renderStreamConnections() {
   render({'connections': {path: url_pagination_template_context('stream/connections', 'streamConnections', 1, 100),
@@ -73,11 +102,11 @@ function link_stream_conn(vhost, name) {
   return _link_to(short_conn(name), '#/stream/connections/' + esc(vhost) + '/' + esc(name));
 }
 
-RENDER_CALLBACKS['streamConnections'] = function() { renderStreamConnections() };
+RENDER_CALLBACKS['streamConnections'] = function() { renderStreamConnections(); };
 
 CONSUMER_OWNER_FORMATTERS.push({
     order: 0, formatter: function(consumer) {
-        if (consumer.consumer_tag.startsWith('stream.subid-')) {
+        if (consumer.consumer_tag && consumer.consumer_tag.startsWith('stream.subid-')) {
             return link_stream_conn(
                 consumer.queue.vhost,
                 consumer.channel_details.connection_name
@@ -90,3 +119,18 @@ CONSUMER_OWNER_FORMATTERS.push({
 
 CONSUMER_OWNER_FORMATTERS.sort(CONSUMER_OWNER_FORMATTERS_COMPARATOR);
 
+export {
+    renderStreamConnections,
+    link_stream_conn,
+    ALL_STREAM_CONNECTION_COLUMNS,
+    DISABLED_STATS_STREAM_CONNECTION_COLUMNS
+};
+
+if (typeof window !== 'undefined') {
+    Object.assign(window, {
+        renderStreamConnections,
+        link_stream_conn,
+        ALL_STREAM_CONNECTION_COLUMNS,
+        DISABLED_STATS_STREAM_CONNECTION_COLUMNS
+    });
+}

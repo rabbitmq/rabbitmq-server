@@ -6,6 +6,6 @@
     "node": ">=21"
   },
   "scripts": {
-    "test": "node --test"
+    "test": "node --import ../rabbitmq_management/test/esm-loader.js --test"
   }
 }

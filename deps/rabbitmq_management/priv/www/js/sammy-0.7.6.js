@@ -1000,8 +1000,8 @@ $.extend(Sammy.DefaultLocationProxy.prototype , {
         return (returned === false) ? e.preventDefault() : false;
       });
 
-      // bind unload to body unload
-      $(window).bind('unload', function() {
+      // bind pagehide to body unload
+      $(window).bind('pagehide', function() {
         app.unload();
       });
 

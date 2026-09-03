@@ -9,7 +9,7 @@
 // Everything else (EJS.Compiler, EJS.Buffer, EJS.Scanner regex machinery,
 // EJS.Helpers, etc.) is no longer needed and has been removed.
 
-var EJS = EJS || {};
+var EJS = (typeof window !== 'undefined' && window.EJS) || {};
 EJS.Scanner = EJS.Scanner || {};
 
 EJS.Scanner.to_text = function(input) {
@@ -18,3 +18,9 @@ EJS.Scanner.to_text = function(input) {
     if (input.toString) { return input.toString(); }
     return '';
 };
+
+export { EJS };
+
+if (typeof window !== 'undefined') {
+    window.EJS = EJS;
+}

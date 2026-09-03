@@ -18,6 +18,9 @@ function has_auth_resource() {
 function get_auth_resource() {
   return get_local_pref(AUTH_RESOURCE)
 }
+function clear_auth_resource() {
+  clear_local_pref(AUTH_RESOURCE)
+}
 
 // When auth_scheme is undefined, matches any scheme for backwards compatibility.
 function has_auth_credentials(auth_scheme) {
@@ -37,11 +40,13 @@ function get_auth_scheme() {
     return get_local_pref(AUTH_SCHEME)
 }
 function clear_auth() {
-    clear_local_pref(CREDENTIALS)
-    clear_local_pref(AUTH_SCHEME)
-    clear_local_pref(SESSION_EXPIRY)
-    clear_local_pref(AUTH_RESOURCE)
-    $.ajax({ async: false, type: 'DELETE', url: 'api/login' })
+    clear_local_pref(CREDENTIALS);
+    clear_local_pref(AUTH_SCHEME);
+    clear_local_pref(SESSION_EXPIRY);
+    clear_local_pref(AUTH_RESOURCE);
+    if (typeof $ !== 'undefined' && $.ajax) {
+        $.ajax({ async: false, type: 'DELETE', url: 'api/login' });
+    }
 }
 function set_token_auth(token) {
     set_auth("Bearer", token)
@@ -128,14 +133,64 @@ function default_column_pref(key0) {
     var ix = key0.indexOf('-');
     var mode = key0.substring(0, ix);
     var key = key0.substring(ix + 1);
-    for (var group in COLUMNS[mode]) {
-        var options = COLUMNS[mode][group];
-        for (var i = 0; i < options.length; i++) {
-            if (options[i][0] == key) {
-                return '' + options[i][2];
+    var columns = typeof COLUMNS !== 'undefined' ? COLUMNS : (typeof window !== 'undefined' ? window.COLUMNS : undefined);
+    if (columns && columns[mode]) {
+        for (var group in columns[mode]) {
+            var options = columns[mode][group];
+            for (var i = 0; i < options.length; i++) {
+                if (options[i][0] == key) {
+                    return '' + options[i][2];
+                }
             }
         }
     }
     return 'false';
 }
+
+export {
+    CREDENTIALS,
+    AUTH_SCHEME,
+    SESSION_EXPIRY,
+    AUTH_RESOURCE,
+    BASIC_AUTH_SCHEME,
+    BEARER_AUTH_SCHEME,
+    DEFAULT_HARD_LOGIN_SESSION_TIMEOUT,
+    set_auth_resource,
+    has_auth_resource,
+    get_auth_resource,
+    clear_auth_resource,
+    has_auth_credentials,
+    get_auth_credentials,
+    get_auth_scheme,
+    clear_auth,
+    set_token_auth,
+    set_auth,
+    set_session_expiry_if_required,
+    authorization_header,
+    store_local_pref,
+    clear_local_pref,
+    get_local_pref,
+    store_pref,
+    clear_pref,
+    get_pref,
+    section_pref,
+    show_column,
+    default_pref,
+    default_column_pref
+};
+
+// Functions called as bare globals inside .ejs templates (e.g. connections.ejs,
+// channels-list.ejs, vhosts.ejs, rate-options.ejs, columns-options.ejs).
+// Since EJS templates render dynamically in browser context and are not ES modules,
+// they resolve helper functions from window.
+if (typeof window !== 'undefined') {
+    Object.assign(window, {
+        store_pref,
+        clear_pref,
+        get_pref,
+        section_pref,
+        show_column
+    });
+}
+
 
