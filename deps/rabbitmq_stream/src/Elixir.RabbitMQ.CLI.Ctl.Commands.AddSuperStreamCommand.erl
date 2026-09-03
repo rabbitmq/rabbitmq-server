@@ -16,6 +16,7 @@
 -module('Elixir.RabbitMQ.CLI.Ctl.Commands.AddSuperStreamCommand').
 
 -include_lib("rabbitmq_stream_common/include/rabbit_stream.hrl").
+-include_lib("rabbit/include/rabbit_stream_queue.hrl").
 
 -behaviour('Elixir.RabbitMQ.CLI.CommandBehaviour').
 
@@ -103,13 +104,14 @@ validate_stream_arguments(#{stream_max_segment_size_bytes := Value} =
 validate_stream_arguments(#{stream_initial_offset := Value} = Opts) ->
     try
         case rabbit_data_coercion:to_integer(Value) of
-            O when O >= 0 ->
+            O when O >= 0 andalso O =< ?MAX_STREAM_INITIAL_OFFSET ->
                 validate_stream_arguments(maps:remove(stream_initial_offset,
                                                       Opts));
             _ ->
                 {validation_failure,
                  "Invalid value for --stream-initial-offset, the "
-                 "value must not be negative."}
+                 "value must be between 0 and " ++
+                 integer_to_list(?MAX_STREAM_INITIAL_OFFSET) ++ "."}
         end
     catch
         error:_ ->
