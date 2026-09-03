@@ -1,4 +1,19 @@
 
+import {
+  set_current_user,
+  get_current_user,
+  set_current_vhost,
+  get_current_vhost,
+  setup_global_vars,
+  expand_user_tags
+} from './global.js';
+import { login_flow_provider, set_active_auth_provider_by_name, active_auth_provider } from './auth-providers.js';
+import { authOptions } from './auth-options.js';
+import { registerInitStep, bootstrap } from './bootstrap-steps.js';
+import { clear_local_pref, set_auth, clear_auth_resource, SESSION_EXPIRY, authorization_header, has_auth_credentials, clear_auth } from './prefs.js';
+import { fmt_escape_html } from './formatters.js';
+import { hasAnyResourceServerReady } from './oidc-oauth/helper.js';
+
 // What happens on page load, as a named function rather than an anonymous
 // callback so that it can be exercised without going through jQuery's
 // ready queue.
@@ -15,7 +30,9 @@ function on_page_load() {
   provider.startLoginFlow();
 }
 
-$(document).ready(on_page_load);
+if (typeof $ !== 'undefined') {
+  $(document).ready(on_page_load);
+}
 
 function startWithLoginPage() {
   replace_content('outer', format('login', {}));
@@ -119,8 +136,9 @@ function start_app_login () {
 
 
 function check_login () {
-  user = JSON.parse(sync_get('/whoami'));
-  if (user == false || user.error) {
+  var u = JSON.parse(sync_get('/whoami'));
+  set_current_user(u);
+  if (u == false || u.error) {
     clear_auth();
     if (oauth.enabled) {
       renderWarningMessageInLoginStatus(oauth, 'Not authorized');
@@ -171,7 +189,7 @@ function login(username, password) {
     }
     return false;
   }
-  user = result.user;
+  set_current_user(result.user);
   clear_local_pref(SESSION_EXPIRY);
   var scheme = result.token.type === 'bearer' ? 'Bearer' : 'Basic';
   set_auth(scheme, result.token.value);
@@ -250,7 +268,7 @@ registerInitStep('extensions', {
 // vetoes - or any step that throws - leaves the user back at the login
 // page with a reason, and anything that already ran is rolled back.
 function finish_check_login() {
-  var res = bootstrap({user: user, settings: window.app_settings},
+  var res = bootstrap({user: get_current_user(), settings: window.app_settings},
                       'Failed to establish session with server');
   if (res.ok === false) {
     active_auth_provider().signOut();
@@ -284,9 +302,9 @@ function start_app() {
 
 
 
-    var url = this.location.toString();
-    var hash = this.location.hash;
-    var pathname = this.location.pathname;
+    var url = window.location.toString();
+    var hash = window.location.hash;
+    var pathname = window.location.pathname;
 
     var return_to = '#/';
     if (get_pref("oauth-idp-pending")) {
@@ -296,13 +314,13 @@ function start_app() {
     }
 
     if (url.indexOf('#') == -1) {
-        this.location = url + return_to;
+        window.location = url + return_to;
     } else if (hash.indexOf('#token_type') != - 1 && pathname == '/') {
         // This is equivalent to previous `if` clause when uaa authorisation is used.
         // Tokens are passed in the url hash, so the url always contains a #.
         // We need to check the current path is `/` and token is present,
         // so we can redirect to `/#/`
-        this.location = url.replace(/#token_type.+/gi, return_to);
+        window.location = url.replace(/#token_type.+/gi, return_to);
     }
 
     app = new Sammy.Application(dispatcher);
@@ -359,6 +377,7 @@ function update_vhosts() {
         $('li#vhost').hide();
     }
     var select = $('#show-vhost').get(0);
+    if (!select) return;
     select.options.length = ui_data_model.vhosts.length + 1;
     var index = 0;
     for (var i = 0; i < ui_data_model.vhosts.length; i++) {
@@ -476,7 +495,7 @@ function update_interval() {
 }
 
 function go_to(url) {
-    this.location = url;
+    window.location = url;
 }
 function go_to_home() {
     // location.href = rabbit_path_prefix() + "/"
@@ -636,7 +655,7 @@ function update_navigation() {
 }
 
 function update_warnings() {
-    feature_flags = JSON.parse(sync_get('/feature-flags'));
+    var feature_flags = JSON.parse(sync_get('/feature-flags'));
     var needs_enabling = false;
     for (var i = 0; i < feature_flags.length; i++) {
          var feature_flag = feature_flags[i];
@@ -644,7 +663,7 @@ function update_warnings() {
              needs_enabling = true;
          }
     }
-    deprecated_features = JSON.parse(sync_get('/deprecated-features/used'));
+    var deprecated_features = JSON.parse(sync_get('/deprecated-features/used'));
     var needs_deprecating = false;
     if (deprecated_features.length > 0) {
         needs_deprecating = true;
@@ -780,7 +799,7 @@ function with_update(fun) {
 
 function apply_state(reqs) {
     var reqs2 = {};
-    for (k in reqs) {
+    for (var k in reqs) {
         var req = reqs[k];
         var options = {};
         if (typeof(req) == "object") {
@@ -791,7 +810,7 @@ function apply_state(reqs) {
         if (options['vhost'] != undefined && current_vhost != '') {
             var indexPage = req.indexOf("?page=");
             if (indexPage >- 1) {
-				pageUrl = req.substr(indexPage);
+				var pageUrl = req.substr(indexPage);
 				req2 = req.substr(0,indexPage) + '/' + esc(current_vhost) + pageUrl;
             } else
 
@@ -806,7 +825,7 @@ function apply_state(reqs) {
             qs.push('sort_reverse=' + current_sort_reverse);
         }
         if (options['ranges'] != undefined) {
-            for (i in options['ranges']) {
+            for (var i in options['ranges']) {
                 var type = options['ranges'][i];
                 var range = get_pref('chart-range').split('|');
                 var prefix;
@@ -994,7 +1013,7 @@ function postprocess() {
         var params = $(this).get(0).options;
         var selected = $(this).val();
 
-        for (i = 0; i < params.length; i++) {
+        for (var i = 0; i < params.length; i++) {
             var param = params[i].value;
             if (param == selected) {
                 $('#' + param + '-div').slideDown(100);
@@ -1765,7 +1784,7 @@ function collapse_multifields(params0) {
     var params = {};
     var ks = keys(params0);
     var ids = [];
-    for (i in ks) {
+    for (var i in ks) {
         var key = ks[i];
         var match = key.match(/([a-z]*)_([0-9_]*)_mftype/);
         var match2 = key.match(/[a-z]*_[0-9_]*_mfkey/);
@@ -1784,7 +1803,7 @@ function collapse_multifields(params0) {
     }
     ids.sort();
     var id_map = {};
-    for (i in ids) {
+    for (var i in ids) {
         var name = ids[i][0];
         var id = ids[i][1];
         if (params[name] == undefined) {
@@ -1860,7 +1879,7 @@ function maybe_remove_fields(params) {
         var options = $(this).get(0).options;
         var selected = $(this).val();
 
-        for (i = 0; i < options.length; i++) {
+        for (var i = 0; i < options.length; i++) {
             var option = options[i].value;
             if (option != selected) {
                 delete params[option];
@@ -1958,6 +1977,7 @@ function xmlHttpRequest() {
 }
 
 
+if (typeof jQuery !== 'undefined') {
 (function($){
     $.fn.extend({
         center: function () {
@@ -1969,6 +1989,7 @@ function xmlHttpRequest() {
         }
     });
 })(jQuery);
+}
 
 function debounce(f, delay) {
     var timeout = null;
@@ -2157,4 +2178,246 @@ function change_own_password(sammy) {
         }
     };
     req.send(JSON.stringify(params));
+}
+
+export {
+    on_page_load,
+    startWithLoginPage,
+    startWithOAuthLogin,
+    render_login_oauth,
+    renderWarningMessageInLoginStatus,
+    dispatcher_add,
+    dispatcher,
+    start_app_login,
+    check_login,
+    do_login,
+    login,
+    finish_check_login,
+    start_app,
+    setup_constant_events,
+    setup_form_events,
+    update_vhosts,
+    setup_extensions,
+    load_javascript_files_sequentially,
+    dynamic_javascript_load,
+    dynamic_javascript_file_load,
+    dynamic_css_load,
+    dynamic_css_file_load,
+    update_interval,
+    go_to,
+    go_to_home,
+    set_timer_interval,
+    reset_timer,
+    onRefresh,
+    pause_auto_refresh,
+    resume_auto_refresh,
+    update_manual,
+    render,
+    reset_current_reqs,
+    update,
+    partial_update,
+    update_navigation,
+    update_warnings,
+    navigation_tab_id,
+    nav,
+    show,
+    leaf,
+    first_showable_child,
+    contains_current_highlight,
+    obj_to_ul,
+    full_refresh,
+    maybe_scroll,
+    x_position,
+    y_position,
+    with_update,
+    apply_state,
+    show_popup,
+    hide_popup_warn,
+    submit_import,
+    postprocess,
+    is_valid_regexp,
+    is_valid_token,
+    url_pagination_template_context,
+    url_pagination_template,
+    stored_page_info,
+    update_pages,
+    renderQueues,
+    renderUsers,
+    renderExchanges,
+    renderConnections,
+    renderChannels,
+    update_pages_from_ui,
+    postprocess_partial,
+    update_multifields,
+    update_multifield,
+    multifield_input,
+    update_filter_regex,
+    update_filter_regex_mode,
+    update_filter,
+    update_truncate,
+    setup_visibility,
+    toggle_visibility,
+    publish_msg,
+    publish_msg0,
+    get_msgs,
+    with_reqs,
+    replace_content,
+    format,
+    maybe_format_extra_queue_content,
+    update_status,
+    with_req,
+    get,
+    sync_get,
+    sync_put,
+    sync_delete,
+    sync_post,
+    sync_req,
+    initiate_logout,
+    check_bad_response,
+    fill_path_template,
+    params_magic,
+    collapse_multifields,
+    check_password,
+    maybe_remove_fields,
+    put_parameter,
+    removeDuplicates,
+    put_cast_params,
+    update_column_options,
+    debug,
+    keys,
+    xmlHttpRequest,
+    debounce,
+    rename_multifield,
+    select_queue_type,
+    is_internal,
+    get_queue_type,
+    is_quorum,
+    is_stream,
+    is_classic,
+    ensure_queues_chart_range,
+    get_chart_range_type,
+    check_version,
+    change_own_password
+};
+
+if (typeof window !== 'undefined') {
+    Object.assign(window, {
+        on_page_load,
+        startWithLoginPage,
+        startWithOAuthLogin,
+        render_login_oauth,
+        renderWarningMessageInLoginStatus,
+        dispatcher_add,
+        dispatcher,
+        start_app_login,
+        check_login,
+        do_login,
+        login,
+        finish_check_login,
+        start_app,
+        setup_constant_events,
+        setup_form_events,
+        update_vhosts,
+        setup_extensions,
+        load_javascript_files_sequentially,
+        dynamic_javascript_load,
+        dynamic_javascript_file_load,
+        dynamic_css_load,
+        dynamic_css_file_load,
+        update_interval,
+        go_to,
+        go_to_home,
+        set_timer_interval,
+        reset_timer,
+        onRefresh,
+        pause_auto_refresh,
+        resume_auto_refresh,
+        update_manual,
+        render,
+        reset_current_reqs,
+        update,
+        partial_update,
+        update_navigation,
+        update_warnings,
+        navigation_tab_id,
+        nav,
+        show,
+        leaf,
+        first_showable_child,
+        contains_current_highlight,
+        obj_to_ul,
+        full_refresh,
+        maybe_scroll,
+        x_position,
+        y_position,
+        with_update,
+        apply_state,
+        show_popup,
+        hide_popup_warn,
+        submit_import,
+        postprocess,
+        is_valid_regexp,
+        is_valid_token,
+        url_pagination_template_context,
+        url_pagination_template,
+        stored_page_info,
+        update_pages,
+        renderQueues,
+        renderUsers,
+        renderExchanges,
+        renderConnections,
+        renderChannels,
+        update_pages_from_ui,
+        postprocess_partial,
+        update_multifields,
+        update_multifield,
+        multifield_input,
+        update_filter_regex,
+        update_filter_regex_mode,
+        update_filter,
+        update_truncate,
+        setup_visibility,
+        toggle_visibility,
+        publish_msg,
+        publish_msg0,
+        get_msgs,
+        with_reqs,
+        replace_content,
+        format,
+        maybe_format_extra_queue_content,
+        update_status,
+        with_req,
+        get,
+        sync_get,
+        sync_put,
+        sync_delete,
+        sync_post,
+        sync_req,
+        initiate_logout,
+        check_bad_response,
+        fill_path_template,
+        params_magic,
+        collapse_multifields,
+        check_password,
+        maybe_remove_fields,
+        put_parameter,
+        removeDuplicates,
+        put_cast_params,
+        update_column_options,
+        debug,
+        keys,
+        xmlHttpRequest,
+        debounce,
+        rename_multifield,
+        select_queue_type,
+        is_internal,
+        get_queue_type,
+        is_quorum,
+        is_stream,
+        is_classic,
+        ensure_queues_chart_range,
+        get_chart_range_type,
+        check_version,
+        change_own_password
+    });
 }

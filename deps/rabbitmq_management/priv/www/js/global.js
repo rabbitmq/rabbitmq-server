@@ -7,7 +7,7 @@
 // Just used below
 function map(list) {
     var res = {};
-    for (i in list) {
+    for (var i in list) {
         res[list[i]] = '';
     }
     return res;
@@ -686,6 +686,9 @@ var is_op_policy_updating_enabled;      // ...editing operator policies is enabl
 var queue_type;
 var rabbit_versions_interesting; // ...all cluster nodes run the same version
 var disable_stats;               // ...disable all stats, management only mode
+var enable_queue_totals;
+var cluster_name;
+var user_name;
 
 // Extensions write to this, the dispatcher maker reads it
 var dispatcher_modules = [];
@@ -1266,4 +1269,196 @@ function notifyActivatedTab(tab) {
       }
     }
   }
+}
+
+function set_current_user(u) {
+    user = u;
+}
+
+function get_current_user() {
+    return user;
+}
+
+function set_current_vhost(v) {
+    current_vhost = v;
+}
+
+function get_current_vhost() {
+    return current_vhost;
+}
+
+export {
+    map,
+    KNOWN_ARGS,
+    IMPLICIT_ARGS,
+    ALL_ARGS,
+    NAVIGATION,
+    CHART_RANGES,
+    ALL_CHART_RANGES,
+    ALL_COLUMNS,
+    DISABLED_STATS_COLUMNS,
+    COLUMNS,
+    RENDER_CALLBACKS,
+    QUEUE_EXTRA_CONTENT,
+    QUEUE_EXTRA_CONTENT_REQUESTS,
+    HELP,
+    rates_mode,
+    user_administrator,
+    is_user_policymaker,
+    user_monitor,
+    nodes_interesting,
+    vhosts_interesting,
+    is_op_policy_updating_enabled,
+    queue_type,
+    rabbit_versions_interesting,
+    disable_stats,
+    enable_queue_totals,
+    cluster_name,
+    user_name,
+    dispatcher_modules,
+    app,
+    exchange_types,
+    user_tags,
+    user,
+    ac,
+    display,
+    ui_data_model,
+    AccessControl,
+    DisplayControl,
+    update_cluster_name_ui,
+    setup_global_vars,
+    setup_chart_ranges,
+    expand_user_tags,
+    current_template,
+    current_reqs,
+    outstanding_reqs,
+    current_highlight,
+    current_vhost,
+    current_sort,
+    current_sort_reverse,
+    current_filter,
+    current_filter_regex_on,
+    current_filter_regex,
+    current_truncate,
+    timer,
+    timer_interval,
+    last_successful_connect,
+    update_counter,
+    chart_data,
+    last_page_out_of_range_error,
+    oauth,
+    QUEUE_TYPE,
+    MEMORY_STATISTICS,
+    BINARY_STATISTICS,
+    current_postprocessors,
+    registerPostProcessor,
+    clear_postprocessors,
+    is_postprocessor_registered,
+    unregisterPostProcessor,
+    invokeRegisteredPostProcessors,
+    ApplicationListener,
+    applicationListeners,
+    registerApplicationListener,
+    unregisterApplicationListener,
+    notifyOnRefresh,
+    notifyOnVhostChange,
+    notifyActivatedTab,
+    set_current_user,
+    get_current_user,
+    set_current_vhost,
+    get_current_vhost
+};
+
+if (typeof window !== 'undefined') {
+    Object.assign(window, {
+        map,
+        KNOWN_ARGS,
+        IMPLICIT_ARGS,
+        ALL_ARGS,
+        NAVIGATION,
+        CHART_RANGES,
+        ALL_CHART_RANGES,
+        ALL_COLUMNS,
+        DISABLED_STATS_COLUMNS,
+        RENDER_CALLBACKS,
+        QUEUE_EXTRA_CONTENT,
+        QUEUE_EXTRA_CONTENT_REQUESTS,
+        HELP,
+        ac,
+        display,
+        ui_data_model,
+        AccessControl,
+        DisplayControl,
+        update_cluster_name_ui,
+        setup_global_vars,
+        setup_chart_ranges,
+        expand_user_tags,
+        QUEUE_TYPE,
+        MEMORY_STATISTICS,
+        BINARY_STATISTICS,
+        current_postprocessors,
+        registerPostProcessor,
+        clear_postprocessors,
+        is_postprocessor_registered,
+        unregisterPostProcessor,
+        invokeRegisteredPostProcessors,
+        ApplicationListener,
+        applicationListeners,
+        registerApplicationListener,
+        unregisterApplicationListener,
+        notifyOnRefresh,
+        notifyOnVhostChange,
+        notifyActivatedTab,
+        set_current_user,
+        get_current_user,
+        set_current_vhost,
+        get_current_vhost
+    });
+
+    const defineWindowProp = (name, getter, setter) => {
+        Object.defineProperty(window, name, {
+            get: getter,
+            set: setter,
+            configurable: true,
+            enumerable: true
+        });
+    };
+
+    defineWindowProp('user', () => user, (v) => { user = v; });
+    defineWindowProp('user_tags', () => user_tags, (v) => { user_tags = v; });
+    defineWindowProp('user_administrator', () => user_administrator, (v) => { user_administrator = v; });
+    defineWindowProp('is_user_policymaker', () => is_user_policymaker, (v) => { is_user_policymaker = v; });
+    defineWindowProp('user_monitor', () => user_monitor, (v) => { user_monitor = v; });
+    defineWindowProp('rates_mode', () => rates_mode, (v) => { rates_mode = v; });
+    defineWindowProp('nodes_interesting', () => nodes_interesting, (v) => { nodes_interesting = v; });
+    defineWindowProp('vhosts_interesting', () => vhosts_interesting, (v) => { vhosts_interesting = v; });
+    defineWindowProp('is_op_policy_updating_enabled', () => is_op_policy_updating_enabled, (v) => { is_op_policy_updating_enabled = v; });
+    defineWindowProp('queue_type', () => queue_type, (v) => { queue_type = v; });
+    defineWindowProp('rabbit_versions_interesting', () => rabbit_versions_interesting, (v) => { rabbit_versions_interesting = v; });
+    defineWindowProp('disable_stats', () => disable_stats, (v) => { disable_stats = v; });
+    defineWindowProp('enable_queue_totals', () => enable_queue_totals, (v) => { enable_queue_totals = v; });
+    defineWindowProp('cluster_name', () => cluster_name, (v) => { cluster_name = v; });
+    defineWindowProp('user_name', () => user_name, (v) => { user_name = v; });
+    defineWindowProp('COLUMNS', () => COLUMNS, (v) => { COLUMNS = v; });
+    defineWindowProp('exchange_types', () => exchange_types, (v) => { exchange_types = v; });
+    defineWindowProp('app', () => app, (v) => { app = v; });
+    defineWindowProp('dispatcher_modules', () => dispatcher_modules, (v) => { dispatcher_modules = v; });
+    defineWindowProp('current_template', () => current_template, (v) => { current_template = v; });
+    defineWindowProp('current_reqs', () => current_reqs, (v) => { current_reqs = v; });
+    defineWindowProp('outstanding_reqs', () => outstanding_reqs, (v) => { outstanding_reqs = v; });
+    defineWindowProp('current_highlight', () => current_highlight, (v) => { current_highlight = v; });
+    defineWindowProp('current_vhost', () => current_vhost, (v) => { current_vhost = v; });
+    defineWindowProp('current_sort', () => current_sort, (v) => { current_sort = v; });
+    defineWindowProp('current_sort_reverse', () => current_sort_reverse, (v) => { current_sort_reverse = v; });
+    defineWindowProp('current_filter', () => current_filter, (v) => { current_filter = v; });
+    defineWindowProp('current_filter_regex_on', () => current_filter_regex_on, (v) => { current_filter_regex_on = v; });
+    defineWindowProp('current_filter_regex', () => current_filter_regex, (v) => { current_filter_regex = v; });
+    defineWindowProp('current_truncate', () => current_truncate, (v) => { current_truncate = v; });
+    defineWindowProp('timer', () => timer, (v) => { timer = v; });
+    defineWindowProp('timer_interval', () => timer_interval, (v) => { timer_interval = v; });
+    defineWindowProp('last_successful_connect', () => last_successful_connect, (v) => { last_successful_connect = v; });
+    defineWindowProp('update_counter', () => update_counter, (v) => { update_counter = v; });
+    defineWindowProp('chart_data', () => chart_data, (v) => { chart_data = v; });
+    defineWindowProp('last_page_out_of_range_error', () => last_page_out_of_range_error, (v) => { last_page_out_of_range_error = v; });
+    defineWindowProp('oauth', () => oauth, (v) => { oauth = v; });
 }
