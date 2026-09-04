@@ -146,8 +146,8 @@ ensure_ssl() ->
 %% Some plugins do not rely on the core `ssl_options`: management UI/HTTP API, Web MQTT, Web STOMP.
 %%
 %% The `ssl_options_overrides` option lets a plugin such as `rabbitmq_trust_store`
-%% "reach" to those plugins' listeners just like , and do so without this core module depending on
-%% the plugin.
+%% "reach" to those plugins' listeners just like it can reach the core one,
+%% and do so without this core module depending on the plugin.
 fix_ssl_options(Config) ->
     Overrides = application:get_env(rabbit, ssl_options_overrides, []),
     rabbit_ssl_options:fix(
