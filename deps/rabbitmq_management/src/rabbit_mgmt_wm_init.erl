@@ -50,7 +50,6 @@ to_json(ReqData, Context) ->
 
 settings(ReqData) ->
     [
-        {management_version,        proplists:get_value(management_version, rabbit_mgmt_features:get_product_info())},
         {product_info,              rabbit_mgmt_features:get_product_info()},
         {cluster_name,              rabbit_nodes:cluster_name()}
     ] ++ rabbit_mgmt_features:get_settings(ReqData).

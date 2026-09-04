@@ -31,7 +31,7 @@ to_json(ReqData, Context = #context{user = User = #user{tags = Tags}}) ->
     Overview0 = [
                  {cluster_name,              rabbit_nodes:cluster_name()},
                  {crypto_lib_version,        rabbit_runtime:crypto_lib_version()}
-                 ] ++ rabbit_mgmt_features:get_product_info() 
+                 ] ++ rabbit_mgmt_features:get_product_info()
                    ++ rabbit_mgmt_features:get_settings(ReqData),
     try
         case rabbit_mgmt_util:disable_stats(ReqData) of

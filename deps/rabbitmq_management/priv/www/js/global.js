@@ -772,7 +772,7 @@ function DisplayControl() {
 function update_cluster_name_ui(new_name) {
     cluster_name = fmt_escape_html(new_name);
     var nav_link = user_administrator ? '<a href="#/cluster-name">' + cluster_name + '</a>' : cluster_name;
-    
+
     // If the element exists, update it, otherwise create it (initial boot)
     var $li = $('#logout').prev('li');
     if ($li.length > 0 && $li.text().startsWith('Cluster')) {

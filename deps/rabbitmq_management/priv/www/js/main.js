@@ -136,19 +136,25 @@ function check_login () {
     return false;
   }
 
-  // Fetch initialization data synchronously (which sends Authorization header)
-  var rawInitData = sync_get('/init');
-  if (rawInitData) {
-      var initData = JSON.parse(rawInitData);
-      window.app_settings = initData.settings;
-      window.app_vhosts = initData.vhosts;
-      if (initData.nodes) {
-          window.app_nodes = initData.nodes;
-      }
-  } else {
-      console.error("Failed to load /api/init");
-  }
+  load_init_data();
   load_ui(user);
+  return true;
+}
+
+// Sent with the Authorization header, so it must run after the credentials
+// have been set.
+function load_init_data() {
+  var raw = sync_get('/init');
+  if (!raw) {
+      console.error("Failed to load /api/init");
+      return false;
+  }
+  var data = JSON.parse(raw);
+  window.app_settings = data.settings;
+  window.app_vhosts = data.vhosts;
+  if (data.nodes) {
+      window.app_nodes = data.nodes;
+  }
   return true;
 }
 
@@ -182,18 +188,7 @@ function login(username, password) {
   var scheme = result.token.type === 'bearer' ? 'Bearer' : 'Basic';
   set_auth(scheme, result.token.value);
 
-  // Fetch initialization data synchronously
-  var rawInitData = sync_get('/init');
-  if (rawInitData) {
-      var initData = JSON.parse(rawInitData);
-      window.app_settings = initData.settings;
-      window.app_vhosts = initData.vhosts;
-      if (initData.nodes) {
-          window.app_nodes = initData.nodes;
-      }
-  } else {
-      console.error("Failed to load /api/init");
-  }
+  load_init_data();
   load_ui(user);
 
   return true;
