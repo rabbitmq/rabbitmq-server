@@ -2221,12 +2221,23 @@ maybe_enqueue(RaftIdx, Ts, undefined, undefined, RawMsg,
     Header0 = maybe_set_msg_ttl(RawMsg, Ts, Size, State0),
     Header = maybe_set_msg_delivery_count(RawMsg, Header0),
     Msg = make_msg(RaftIdx, Header),
-    Priority = msg_priority(RawMsg),
-    State = State0#?STATE{msg_bytes_enqueue = Enqueue + Size,
-                          messages_total = Total + 1,
-                          messages = rabbit_fifo_pq:in(Priority, Msg, Messages)
-                         },
-    {ok, State, Effects};
+    case get_delivery_time(Ts, RawMsg) of
+        undefined ->
+            Priority = msg_priority(RawMsg),
+            State = State0#?STATE{msg_bytes_enqueue = Enqueue + Size,
+                                  messages_total = Total + 1,
+                                  messages = rabbit_fifo_pq:in(Priority, Msg,
+                                                               Messages)
+                                 },
+            {ok, State, Effects};
+        DeliveryTime ->
+            Delayed = delayed_in(DeliveryTime, RaftIdx, Msg, undefined,
+                                 State0#?STATE.delayed),
+            State = State0#?STATE{msg_bytes_enqueue = Enqueue + Size,
+                                  messages_total = Total + 1,
+                                  delayed = Delayed},
+            {ok, State, Effects}
+    end;
 maybe_enqueue(RaftIdx, Ts, From, MsgSeqNo, RawMsg,
               {MetaSize, BodySize} = MsgSize,
               Effects0, #?STATE{msg_bytes_enqueue = BytesEnqueued,

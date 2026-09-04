@@ -3621,6 +3621,22 @@ delivery_time_on_enqueue_past_test(Config) ->
                    num_delayed_messages := 0}, rabbit_fifo:overview(State1)),
     ok.
 
+delivery_time_on_untracked_enqueue_test(Config) ->
+    %% Untracked enqueues (used for stateless deliveries such as
+    %% at-most-once dead-lettering) must also honour a future `dt`
+    %% annotation instead of enqueueing straight into the ready queue.
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B)},
+    State0 = init(Conf),
+    Msg = mc:set_annotation(dt, 5000, mk_mc(<<"m1">>)),
+    {State1, _, _} = apply(meta(Config, 1, 100),
+                           rabbit_fifo:make_enqueue(undefined, undefined, Msg),
+                           State0),
+    ?assertMatch(#{num_ready_messages := 0,
+                   num_delayed_messages := 1,
+                   next_delayed_at := 5000}, rabbit_fifo:overview(State1)),
+    ok.
+
 delayed_retry_counts_towards_limit_test(Config) ->
     %% Delayed messages should count towards max_length limit.
     %% The limit check uses messages_ready + delayed (not checked_out).
