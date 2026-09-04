@@ -139,7 +139,11 @@ init_per_group(required_options, Config) ->
 
 modify_ssl_options(Config) ->
     SslOptions = [{verify, verify_none}, {fail_if_no_peer_cert, false}],
-    rabbit_ct_helpers:merge_app_env(Config, {rabbit, [{ssl_options, SslOptions}]}).
+    %% This group runs without a server certificate, so the MQTT TLS listener,
+    %% which builds its options from the core `ssl_options`, cannot be started.
+    rabbit_ct_helpers:merge_app_env(Config,
+                                    [{rabbit, [{ssl_options, SslOptions}]},
+                                     {rabbitmq_mqtt, [{ssl_listeners, []}]}]).
 
 init_provider_server(Config, WhitelistDir) ->
     %% Assume we don't have more than 100 ports allocated for tests
