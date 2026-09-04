@@ -10,7 +10,8 @@ all() ->
      all_replica_states_includes_alive_nonvoters,
      filter_nonvoters,
      filter_quorum_critical_accounts_nonvoters,
-     ra_machine_conf_delivery_limit
+     ra_machine_conf_delivery_limit,
+     periodic_membership_reconciliation_target_group_size
     ].
 
 ra_machine_conf_delivery_limit(_Config) ->
@@ -120,6 +121,17 @@ all_replica_states_includes_alive_nonvoters(_Config) ->
 
     true = ets:delete(ra_state),
     _ = stop_qprocs(QPids),
+    ok.
+
+periodic_membership_reconciliation_target_group_size(_Config) ->
+    Q0 = amqqueue:new(rabbit_misc:r(<<"/">>, queue, <<"q1">>),
+                      {q1, test@leader},
+                      false, false, none, [], undefined, #{}),
+    Q = amqqueue:set_arguments(
+          Q0, [{<<"x-quorum-target-group-size">>, long, 3}]),
+    ?assertEqual(
+       3, rabbit_quorum_queue_periodic_membership_reconciliation:get_target_size(
+            Q, undefined)),
     ok.
 
 make_ra_machine_conf(Q0, Arg, Pol, OpPol) ->
