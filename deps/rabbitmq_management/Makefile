@@ -40,7 +40,7 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk \
 # directory rather than the default $(DEPS_DIR)/rabbitmq_management/... which
 # would be a self-referential path when building this plugin standalone.
 EJS_COMPILE = scripts/precompile_ejs_templates
-EJS_VERIFY  = scripts/verify_ejs_templates.js
+EJS_VERIFY  = scripts/verify_ejs_templates.cjs
 
 include ../../rabbitmq-components.mk
 include ../../erlang.mk

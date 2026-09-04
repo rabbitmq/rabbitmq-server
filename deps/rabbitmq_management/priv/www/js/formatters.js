@@ -51,8 +51,6 @@ function fmt_string(str, unknown) {
 }
 
 function fmt_si_prefix(num0, max0, binary, allow_fractions) {
-    if (num == 0) return 0;
-
     var thousand = binary ? 1024 : 1000;
     function f(n, m, p) {
         if (m > thousand) return f(n / thousand, m / thousand, p + 1);

@@ -9,3 +9,7 @@ endif
 ifeq ($(filter rabbitmq-run.mk,$(notdir $(MAKEFILE_LIST))),)
 include $(dir $(lastword $(MAKEFILE_LIST)))rabbitmq-run.mk
 endif
+
+ifeq ($(filter rabbitmq-npm-tests.mk,$(notdir $(MAKEFILE_LIST))),)
+include $(dir $(lastword $(MAKEFILE_LIST)))rabbitmq-npm-tests.mk
+endif

@@ -29,7 +29,7 @@
 # Node.js sanity check (optional but recommended for UI developers):
 #
 #   If the `node` binary is available the target also runs
-#   scripts/verify_ejs_templates.js, which compiles every template with the
+#   scripts/verify_ejs_templates.cjs, which compiles every template with the
 #   original ejs-1.0.min.js library inside a vm sandbox, renders both the
 #   EJS-compiled and the Erlang-precompiled versions against a stub context,
 #   and fails the build if any rendered output differs.
@@ -67,7 +67,7 @@
 # with relative paths before including erlang.mk, avoiding a circular
 # self-reference through $(DEPS_DIR)/rabbitmq_management.
 EJS_COMPILE ?= $(DEPS_DIR)/rabbitmq_management/scripts/precompile_ejs_templates
-EJS_VERIFY  ?= $(DEPS_DIR)/rabbitmq_management/scripts/verify_ejs_templates.js
+EJS_VERIFY  ?= $(DEPS_DIR)/rabbitmq_management/scripts/verify_ejs_templates.cjs
 EJS_TMPL_DIR ?= priv/www/js/tmpl
 
 # The output file name is derived from the plugin PROJECT name by stripping the
