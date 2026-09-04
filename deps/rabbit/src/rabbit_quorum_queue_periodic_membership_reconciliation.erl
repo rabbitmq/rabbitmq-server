@@ -15,6 +15,10 @@
 
 -export([start_link/0]).
 
+-ifdef(TEST).
+-export([get_target_size/2]).
+-endif.
+
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
@@ -224,10 +228,10 @@ get_target_size(Q) ->
                   end,
     Arguments = amqqueue:get_arguments(Q),
     case rabbit_misc:table_lookup(Arguments, <<"x-quorum-target-group-size">>) of
-        undefined ->
-            PolicyValue;
-        ArgN ->
-            max(ArgN, PolicyValue)
+        {_Type, ArgN} when is_integer(ArgN) ->
+            max(ArgN, PolicyValue);
+        _ ->
+            PolicyValue
     end.
 
 remove_members(_Q, []) ->
