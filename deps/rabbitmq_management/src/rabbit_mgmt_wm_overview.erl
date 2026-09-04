@@ -32,7 +32,9 @@ to_json(ReqData, Context = #context{user = User = #user{tags = Tags}}) ->
                  {cluster_name,              rabbit_nodes:cluster_name()},
                  {crypto_lib_version,        rabbit_runtime:crypto_lib_version()}
                  ] ++ rabbit_mgmt_features:get_product_info()
-                   ++ rabbit_mgmt_features:get_settings(ReqData),
+                   ++ rabbit_mgmt_features:get_settings(ReqData)
+                   %% The top level key is added for backwards compatibility with earlier `4.3.x` releases.
+                   ++ rabbit_mgmt_features:get_definitions_settings(),
     try
         case rabbit_mgmt_util:disable_stats(ReqData) of
             false ->
