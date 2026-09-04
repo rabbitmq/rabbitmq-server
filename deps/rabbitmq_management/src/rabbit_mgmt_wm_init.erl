@@ -17,22 +17,27 @@ content_types_provided(ReqData, Context) ->
     {rabbit_mgmt_util:responder_map(to_json), ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    SettingsJSON = get_settings_json(ReqData, Context),
-    VhostsJSON = get_vhosts_json(ReqData, Context),
-    
-    UserTags = (Context#context.user)#user.tags,
-    NodesJSON = case rabbit_mgmt_util:is_monitor(UserTags) of
-        true -> get_nodes_json(ReqData, Context);
-        false -> <<"null">>
-    end,
-    
-    JSONContent = [
-        "{\"settings\": ", SettingsJSON, ",\n",
-        " \"vhosts\": ", VhostsJSON, ",\n",
-        " \"nodes\": ", NodesJSON, "\n",
-        "}\n"
-    ],
-    {iolist_to_binary(JSONContent), ReqData, Context}.
+    try
+        SettingsJSON = get_settings_json(ReqData, Context),
+        VhostsJSON = get_vhosts_json(ReqData, Context),
+
+        UserTags = (Context#context.user)#user.tags,
+        NodesJSON = case rabbit_mgmt_util:is_monitor(UserTags) of
+            true -> get_nodes_json(ReqData, Context);
+            false -> <<"null">>
+        end,
+
+        JSONContent = [
+            "{\"settings\": ", SettingsJSON, ",\n",
+            " \"vhosts\": ", VhostsJSON, ",\n",
+            " \"nodes\": ", NodesJSON, "\n",
+            "}\n"
+        ],
+        {iolist_to_binary(JSONContent), ReqData, Context}
+    catch
+        {error, invalid_range_parameters, Reason} ->
+            rabbit_mgmt_util:bad_request(iolist_to_binary(Reason), ReqData, Context)
+    end.
 
 get_settings_json(ReqData, _Context) ->
     Settings0 = [
