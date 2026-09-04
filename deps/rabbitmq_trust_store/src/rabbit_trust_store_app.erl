@@ -31,10 +31,13 @@ change_SSL_options() ->
             ok = application:set_env(rabbit, initial_SSL_options, Before),
             edit(Before)
     end,
-    ok = application:set_env(rabbit,
-        ssl_options, After).
+    ok = application:set_env(rabbit, ssl_options, After),
+    %% A core/plugin convention: used by `rabbit_networking:fix_ssl_options/1`, for listeners
+    %% that build their own TLS options instead of reading the core's `ssl_options`.
+    ok = application:set_env(rabbit, ssl_options_overrides, listener_overrides()).
 
 revert_SSL_options() ->
+    ok = application:unset_env(rabbit, ssl_options_overrides),
     {ok, Cfg} = application:get_env(rabbit, initial_SSL_options),
     ok = application:set_env(rabbit, ssl_options, Cfg).
 
@@ -80,10 +83,13 @@ merge_tls_options(Options) ->
     lists:ukeymerge(
       1,
       lists:sort(CaCerts ++ FailIfNoPeerCert ++
-                     [{verify_fun, {delegate(), continue}},
-                      {partial_chain, fun partial_chain/1}
-                     |required_options()]),
+                     listener_overrides() ++ required_options()),
       lists:sort(Options)).
+
+%% The TLS options this plugin injects.
+listener_overrides() ->
+    [{verify_fun, {delegate(), continue}},
+     {partial_chain, fun partial_chain/1}].
 
 delegate() -> fun rabbit_trust_store:whitelisted/3.
 
