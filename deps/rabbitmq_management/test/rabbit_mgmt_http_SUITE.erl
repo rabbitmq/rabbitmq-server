@@ -677,18 +677,30 @@ users_test(Config) ->
     http_put(Config, "/users/users_test", [{password_hash,
                                         <<"IECV6PZI/Invh0DL187KFpkO5Jc=">>},
                                         {tags, <<"management">>}], {group, '2xx'}),
+    UserGet1 = http_get(Config, "/users/users_test"),
     assert_item(#{name => <<"users_test">>, tags => [<<"management">>],
-                    password_hash => <<"IECV6PZI/Invh0DL187KFpkO5Jc=">>,
+                    has_password => true,
                     hashing_algorithm => <<"rabbit_password_hashing_sha256">>},
-                http_get(Config, "/users/users_test")),
+                UserGet1),
+    %% GET /api/users/:name must not expose the raw salt-and-hash.
+    ?assertNot(maps:is_key(password_hash, UserGet1)),
 
     http_put(Config, "/users/users_test", [{password_hash,
                                         <<"IECV6PZI/Invh0DL187KFpkO5Jc=">>},
                                         {hashing_algorithm, <<"rabbit_password_hashing_md5">>},
                                         {tags, [<<"management">>]}], {group, '2xx'}),
+    UserGet2 = http_get(Config, "/users/users_test"),
     assert_item(#{name => <<"users_test">>, tags => [<<"management">>],
-                    password_hash => <<"IECV6PZI/Invh0DL187KFpkO5Jc=">>,
+                    has_password => true,
                     hashing_algorithm => <<"rabbit_password_hashing_md5">>},
+                UserGet2),
+    ?assertNot(maps:is_key(password_hash, UserGet2)),
+
+    %% has_password lets the UI show "can log in with password" without
+    %% needing the hash itself.
+    http_put(Config, "/users/users_test", [{password_hash, <<"">>},
+                                        {tags, [<<"management">>]}], {group, '2xx'}),
+    assert_item(#{name => <<"users_test">>, has_password => false},
                 http_get(Config, "/users/users_test")),
     http_put(Config, "/users/users_test", [{password, <<"password">>},
                                         {tags, [<<"administrator">>, <<"foo">>]}], {group, '2xx'}),
@@ -696,6 +708,8 @@ users_test(Config) ->
                 http_get(Config, "/users/users_test")),
     Listed = lists:sort(http_get(Config, "/users")),
     ct:pal("Listed users: ~tp", [Listed]),
+    %% GET /api/users must not expose any user's raw salt-and-hash.
+    ?assertNot(lists:any(fun(U) -> maps:is_key(password_hash, U) end, Listed)),
     User1 = #{name => <<"users_test">>, tags => [<<"administrator">>, <<"foo">>]},
     User2 = #{name => <<"guest">>, tags => [<<"administrator">>]},
     ?assert(lists:any(fun(U) ->
@@ -826,7 +840,7 @@ adding_a_user_with_generated_password_hash_test(Config) ->
              [?CREATED, ?NO_CONTENT]),
     % If the get succeeded, the hashed password generation is correct
     User = http_get(Config, "/users/user12", "user12", "some_password", ?OK),
-    ?assertEqual(maps:get(password_hash, User), HashedPassword),
+    ?assert(maps:get(has_password, User)),
     http_delete(Config, "/users/user12", ?NO_CONTENT).
 
 adding_a_user_with_permissions_in_single_operation_test(Config) ->
@@ -914,13 +928,13 @@ adding_a_user_without_password_or_hash_test(Config) ->
     http_put(Config, "/users/no-pwd", [{tags, <<"management">>}], [?CREATED, ?NO_CONTENT]),
     assert_item(#{name              => <<"no-pwd">>,
                   tags              => [<<"management">>],
-                  password_hash     => <<>>,
+                  has_password      => false,
                   hashing_algorithm => <<"rabbit_password_hashing_sha256">>},
                 http_get(Config, "/users/no-pwd")),
     http_put(Config, "/users/no-pwd", [{tags, <<"management">>}], [?CREATED, ?NO_CONTENT]),
     assert_item(#{name              => <<"no-pwd">>,
                   tags              => [<<"management">>],
-                  password_hash     => <<>>,
+                  has_password      => false,
                   hashing_algorithm => <<"rabbit_password_hashing_sha256">>},
                 http_get(Config, "/users/no-pwd")),
     http_delete(Config, "/users/no-pwd", ?NO_CONTENT).
@@ -941,7 +955,7 @@ updating_a_user_without_password_or_hash_clears_password_test(Config) ->
     http_put(Config, "/users/myuser", [{tags,     <<"management">>}], [?CREATED, ?NO_CONTENT]),
     assert_item(#{name => <<"myuser">>,
                   tags => [<<"management">>],
-                  password_hash => <<>>,
+                  has_password => false,
                   hashing_algorithm => <<"rabbit_password_hashing_sha256">>},
                 http_get(Config, "/users/myuser")),
     http_delete(Config, "/users/myuser", ?NO_CONTENT).
@@ -979,21 +993,21 @@ updating_tags_of_a_passwordless_user_test(Config) ->
     http_put(Config, "/users/abc", [{tags,     <<"management">>}], [?CREATED, ?NO_CONTENT]),
     assert_item(#{name => ?NON_GUEST_USERNAME,
                   tags => [<<"management">>],
-                  password_hash => <<>>,
+                  has_password => false,
                   hashing_algorithm => <<"rabbit_password_hashing_sha256">>},
                 http_get(Config, "/users/abc")),
 
     http_put(Config, "/users/abc", [{tags,     <<"impersonator">>}], [?CREATED, ?NO_CONTENT]),
     assert_item(#{name => ?NON_GUEST_USERNAME,
                   tags => [<<"impersonator">>],
-                  password_hash => <<>>,
+                  has_password => false,
                   hashing_algorithm => <<"rabbit_password_hashing_sha256">>},
                 http_get(Config, "/users/abc")),
 
     http_put(Config, "/users/abc", [{tags,     <<"">>}], [?CREATED, ?NO_CONTENT]),
     assert_item(#{name => ?NON_GUEST_USERNAME,
                   tags => [],
-                  password_hash => <<>>,
+                  has_password => false,
                   hashing_algorithm => <<"rabbit_password_hashing_sha256">>},
                 http_get(Config, "/users/abc")),
 
@@ -2145,6 +2159,13 @@ defs(Config, Key, URI, CreateMethod, Args, DeleteFun) ->
     defs(Config, Key, URI, CreateMethod, Args, DeleteFun, DeleteFun).
 
 defs(Config, Key, URI, CreateMethod, Args, DeleteFun0, DeleteFun1) ->
+    defs(Config, Key, URI, CreateMethod, Args, Args, DeleteFun0, DeleteFun1).
+
+%% ExpectedAfterRecreate is separate from Args since GET doesn't
+%% necessarily echo back everything PUT accepted -- e.g. GET /users/:name
+%% doesn't return password_hash even though PUT accepts it.
+defs(Config, Key, URI, CreateMethod, Args, ExpectedAfterRecreate,
+     DeleteFun0, DeleteFun1) ->
     %% Create the item
     URI2 = create(Config, CreateMethod, URI, Args),
     %% Make sure it ends up in definitions
@@ -2156,7 +2177,7 @@ defs(Config, Key, URI, CreateMethod, Args, DeleteFun0, DeleteFun1) ->
 
     %% Post the definitions back, it should get recreated in correct form
     http_post(Config, "/definitions", Definitions, {group, '2xx'}),
-    assert_item(Args, http_get(Config, URI2, ?OK)),
+    assert_item(ExpectedAfterRecreate, http_get(Config, URI2, ?OK)),
 
     %% And delete it again
     DeleteFun1(URI2),
@@ -2200,7 +2221,13 @@ definitions_test(Config) ->
          #{name              => <<"myuser">>,
            password_hash     => <<"WAbU0ZIcvjTpxM3Q3SbJhEAM2tQ=">>,
            hashing_algorithm => <<"rabbit_password_hashing_sha256">>,
-           tags              => [<<"management">>]}),
+           tags              => [<<"management">>]},
+         %% GET /users/:name doesn't return password_hash.
+         #{name              => <<"myuser">>,
+           hashing_algorithm => <<"rabbit_password_hashing_sha256">>,
+           tags              => [<<"management">>]},
+         fun(URI2) -> http_delete(Config, URI2, {group, '2xx'}) end,
+         fun(URI2) -> http_delete(Config, URI2, {group, '2xx'}) end),
     defs(Config, vhosts, "/vhosts/myvhost", put,
          #{name => <<"myvhost">>}),
     defs(Config, permissions, "/permissions/%2F/guest", put,
