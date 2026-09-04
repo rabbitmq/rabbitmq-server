@@ -58,13 +58,9 @@ settings(ReqData) ->
     ] ++ rabbit_mgmt_features:get_settings(ReqData).
 
 vhosts(ReqData, Context) ->
-    %% Must be the same shape /vhosts returns, which is what the UI used to
-    %% fetch: the virtual host selector reads .name off each entry. Note
-    %% that rabbit_mgmt_util:list_visible_vhosts/1 returns names, not vhost
-    %% records, so it is not enough on its own.
+    %% Same shape and order as `GET /vhosts`, which the UI used to fetch.
     VHosts = rabbit_queue_type:vhosts_with_dqt(
                rabbit_mgmt_wm_vhosts:augmented(ReqData, Context)),
-    %% list_names/0 does an unordered ets:select, and /vhosts sorts by name.
     lists:sort(
       fun(A, B) -> maps:get(name, A, <<>>) =< maps:get(name, B, <<>>) end,
       VHosts).
