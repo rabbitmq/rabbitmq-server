@@ -9,7 +9,9 @@
 
 -compile(export_all).
 
-all() -> [password_hashing].
+-include_lib("eunit/include/eunit.hrl").
+
+all() -> [password_hashing, pbkdf2_sha256_hash_and_verify].
 
 %% -------------------------------------------------------------------
 %% Testsuite setup/teardown
@@ -44,4 +46,19 @@ password_hashing(_Config) ->
     rabbit_password_hashing_md5    =
         rabbit_password:hashing_mod(undefined),
 
+    passed.
+
+%% New accounts must hash with PBKDF2-HMAC-SHA256 by default, and a
+%% verification attempt must only succeed for the exact password that
+%% was hashed.
+pbkdf2_sha256_hash_and_verify(_Config) ->
+    application:set_env(rabbit, password_hashing_module,
+                        rabbit_password_hashing_pbkdf2_sha256),
+    Password = <<"correct horse battery staple">>,
+    <<Salt:4/binary, Hash/binary>> = rabbit_password:hash(Password),
+    ?assertEqual(Hash, rabbit_password:salted_hash(
+                          rabbit_password_hashing_pbkdf2_sha256, Salt, Password)),
+    ?assertNotEqual(Hash, rabbit_password:salted_hash(
+                             rabbit_password_hashing_pbkdf2_sha256, Salt,
+                             <<"wrong password">>)),
     passed.
