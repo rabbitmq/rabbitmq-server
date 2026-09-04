@@ -12,6 +12,8 @@
 -compile(inline_list_funcs).
 -compile(inline).
 -compile({no_auto_import, [apply/3]}).
+% elp:ignore W0054 (no_nowarn_suppressions)
+-compile(nowarn_match_alias_pats).
 -dialyzer({nowarn_function, convert_v7_to_v8/2}).
 -dialyzer(no_improper_lists).
 
