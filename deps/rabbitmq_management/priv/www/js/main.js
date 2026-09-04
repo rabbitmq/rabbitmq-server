@@ -1499,7 +1499,6 @@ function format(template, json) {
     try {
         var fn = COMPILED_TEMPLATES[template];
         if (!fn) throw new Error('Template not found: ' + template);
-        // Inject settings object
         json.settings = window.app_settings;
         return fn.call(json, json, json);
     } catch (err) {

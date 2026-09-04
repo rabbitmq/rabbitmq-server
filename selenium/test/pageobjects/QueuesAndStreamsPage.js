@@ -59,16 +59,9 @@ module.exports = class QueuesAndStreamsPage extends BasePage {
   async fillInAddNewQueue(queueDetails) {
     await this.selectQueueType(queueDetails.type)
 
-    // Changing the queue type fires select_queue_type(), which calls the
-    // full-page update(). That re-renders and replaces this form, and the
-    // name input is rendered without a value attribute, so anything typed
-    // into it is lost. update() is asynchronous, so the re-render can land
-    // between typing the name and clicking submit, in which case the form
-    // is submitted with an empty name and no queue is created - which then
-    // shows up as the queue never appearing in the table.
-    //
-    // So: type the name, confirm it survived, and only then submit,
-    // retrying the whole fill if the form was replaced underneath us.
+    // Changing the queue type triggers an asynchronous page update that
+    // re-renders this form and drops the typed name. Type, verify, then
+    // submit, and retry if the form was replaced in between.
     return doUntil(
       async () => {
         const input = await this.waitForDisplayed(FORM_QUEUE_NAME)
