@@ -3656,6 +3656,7 @@ require_definition_json_extension_defaults_to_false_in_overview_test(Config) ->
     Overview = http_get(Config, "/overview"),
     Definitions = maps:get(definitions, Overview),
     ?assertEqual(false, maps:get(require_definition_json_extension, Definitions)),
+    ?assertEqual(false, maps:get(require_definition_json_extension, Overview)),
     passed.
 
 require_definition_json_extension_enabled_in_overview_test(Config) ->
@@ -3666,6 +3667,7 @@ require_definition_json_extension_enabled_in_overview_test(Config) ->
         Overview = http_get(Config, "/overview"),
         Definitions = maps:get(definitions, Overview),
         ?assertEqual(true, maps:get(require_definition_json_extension, Definitions)),
+        ?assertEqual(true, maps:get(require_definition_json_extension, Overview)),
         passed
     after
         rpc(Config, application, unset_env,
