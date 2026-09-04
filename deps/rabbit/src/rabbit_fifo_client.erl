@@ -41,6 +41,7 @@
          query_single_active_consumer/1,
          local_query/2,
          local_query/3,
+         versioned_query/3,
          cluster_name/1
          ]).
 
@@ -443,12 +444,11 @@ query_single_active_consumer(#state{leader = Leader}) ->
 
 %% @doc Runs a read-only query function against the state machine.
 %%
-%% Queries the queue's own (latest) machine module first. In a
-%% mixed-version cluster the queue may still be running on an older
-%% machine version whose state shape doesn't match the latest module,
-%% in which case the query crashes with a (caught) `function_clause'
-%% and we retry against `rabbit_fifo_v7', the last frozen snapshot of
-%% the state shape prior to the current one.
+%% Queries the queue's own (latest) machine module first. In a mixed-version
+%% cluster the queue may still be running at an older machine version whose
+%% state shape does not match the latest module, in which case the query
+%% crashes with a (caught) `function_clause' and we retry against whichever
+%% frozen module that version is served by, resolved on the queried server.
 -spec local_query(ra:server_id(), atom()) ->
     {ok, {ra:idxterm(), term()}, ra:server_id()} |
     {error, term()} | {timeout, ra:server_id()}.
@@ -461,10 +461,30 @@ local_query(Server, QueryFun) ->
 local_query(Server, QueryFun, Timeout) when is_atom(QueryFun) ->
     case ra:local_query(Server, fun rabbit_fifo:QueryFun/1, Timeout) of
         {error, function_clause} ->
-            ra:local_query(Server, fun rabbit_fifo_v7:QueryFun/1, Timeout);
+            %% The queried server's effective machine version is older than
+            %% this module, so its machine state has the shape of one of the
+            %% frozen rabbit_fifo_vN modules and the pattern above did not
+            %% match it. Resolve the module the state actually belongs to.
+            ra:local_query(Server,
+                           {?MODULE, versioned_query, [QueryFun],
+                            [with_context]},
+                           Timeout);
         Other ->
             Other
     end.
+
+%% @doc Apply a query function using whichever rabbit_fifo module serves the
+%% queried server's effective machine version.
+%%
+%% Passed to ra as an MFA rather than a closure on purpose: an MFA is
+%% resolved by name on the queried server, whereas a closure carries a hash
+%% of the defining module and fails to load where that module differs. That
+%% difference is the norm during a rolling upgrade, which is exactly when
+%% this fallback is reached.
+-spec versioned_query(atom(), ra:query_ctx(), term()) -> term().
+versioned_query(QueryFun, #{machine_version := Vsn}, State) ->
+    Mod = rabbit_fifo:which_module(Vsn),
+    Mod:QueryFun(State).
 
 %% @doc Provide credit to the queue
 %%
@@ -549,30 +569,27 @@ retry_delayed(Server, Mode) when Mode =:= all orelse
             Err
     end.
 
-%% @doc Assign deferred messages by token to a consumer.
+%% @doc Claim the deferred messages parked under the given tokens for a
+%% consumer.
+%%
+%% This is fire-and-forget and says nothing about link credit. The queue
+%% moves the messages' keys onto the consumer and then delivers them ahead
+%% of the ready backlog as the consumer's credit allows, so the caller does
+%% not have to make the claim and the credit top-up atomic.
+%%
 %% @param ConsumerTag the tag uniquely identifying the consumer.
 %% @param Tokens list of deferral tokens (from x-opt-deferral-token).
 %% @param State the {@module} state
-%% @returns `{ok, NumAssigned}' on success,
-%%   `{partial, NumAssigned, NotFoundTokens}' if some tokens not found,
-%%   `{error, Reason}' on failure.
+%% @returns `{state(), actions()}' - claimed messages arrive as normal deliveries.
 -spec assign_deferred(rabbit_types:ctag(), [binary()], state()) ->
-    {{ok, non_neg_integer()} |
-     {partial, non_neg_integer(), [binary()]} |
-     {error, term()},
-     state()}.
+    {state(), rabbit_queue_type:actions()}.
 assign_deferred(ConsumerTag, [_|_] = Tokens, State0) ->
     ConsumerKey = consumer_key(ConsumerTag, State0),
     ServerId = pick_server(State0),
     Cmd = rabbit_fifo:make_delayed({assign_deferred, ConsumerKey, Tokens}),
-    case ra:process_command(ServerId, Cmd, ?COMMAND_TIMEOUT) of
-        {ok, Reply, _} ->
-            {Reply, State0};
-        Err ->
-            {Err, State0}
-    end;
+    {send_command(ServerId, undefined, Cmd, normal, State0), []};
 assign_deferred(_ConsumerTag, [], State) ->
-    {{ok, 0}, State}.
+    {State, []}.
 
 -spec pending_size(state()) -> non_neg_integer().
 pending_size(#state{pending = Pend}) ->

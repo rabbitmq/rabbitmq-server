@@ -46,6 +46,7 @@ all_tests() ->
      test_queries,
      duplicate_delivery,
      local_query_resolves_pinned_v7_machine_version,
+     local_query_resolves_pinned_v8_machine_version,
      local_query_does_not_retry_on_unrelated_error
     ].
 
@@ -817,25 +818,31 @@ test_queries(Config) ->
     ok.
 
 local_query_resolves_pinned_v7_machine_version(Config) ->
+    local_query_resolves_pinned_machine_version(7, Config).
+
+local_query_resolves_pinned_v8_machine_version(Config) ->
+    local_query_resolves_pinned_machine_version(8, Config).
+
+local_query_resolves_pinned_machine_version(MacVer, Config) ->
     ClusterName = ?config(cluster_name, Config),
     ServerId = ?config(node_id, Config),
-    %% pin this cluster's machine at version 7: it never upgrades to the
-    %% latest (rabbit_fifo/v8) state shape
+    %% pin this cluster's machine at MacVer: it never upgrades to the state
+    %% shape of the latest module
     ok = start_cluster(ClusterName, [ServerId],
                        #{name => some_name, queue_resource => ClusterName},
-                       7),
+                       MacVer),
 
     F0 = rabbit_fifo_client:init([ServerId]),
     {ok, F1, []} = rabbit_fifo_client:enqueue(ClusterName, msg1, F0),
     _ = process_ra_events(receive_ra_events(1, 0), ClusterName, F1),
 
-    %% querying with the latest module hardcoded still crashes against
-    %% this v7-shaped state, confirming the fallback below is load-bearing
+    %% querying with the latest module hardcoded still crashes against this
+    %% older state shape, confirming the fallback below is load-bearing
     ?assertEqual({error, function_clause},
                  ra:local_query(ServerId,
                                 fun rabbit_fifo:query_notify_decorators_info/1)),
-    %% local_query retries against rabbit_fifo_v7 instead of assuming the
-    %% latest module
+    %% local_query resolves the module the pinned version is served by
+    %% rather than assuming any particular one
     ?assertMatch({ok, {_, {empty, false}}, _},
                  rabbit_fifo_client:local_query(
                    ServerId, query_notify_decorators_info, 5000)),

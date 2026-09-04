@@ -181,16 +181,7 @@
          %% AMQP 1.0 §2.6.7
          delivery_count :: rabbit_queue_type:delivery_count(),
          drain = false :: boolean(),
-         timed_out_msg_ids = [] :: [msg_id()],
-         %% Deferral tokens this consumer has claimed, mapped to the keys of
-         %% the messages parked under each. Claiming moves the entry out of
-         %% #delayed.deferred, so a token can only ever be claimed by one
-         %% consumer at a time. The messages themselves stay in
-         %% #delayed.tree, keeping their delivery time, and are drained from
-         %% here ahead of the ready backlog as the consumer's credit allows.
-         %% Surviving keys are merged back into #delayed.deferred when the
-         %% consumer is removed.
-         deferred_claims = #{} :: #{deferral_token() => [delayed_key()]}
+         timed_out_msg_ids = [] :: [msg_id()]
         }).
 
 -type consumer() :: #consumer{}.
@@ -211,13 +202,8 @@
         {tree = gb_trees:empty() :: gb_trees:tree(delayed_key(), msg()),
          %% Cached smallest entry for O(1) readiness check in take_next_msg
          next = undefined :: option({milliseconds(), ra:index(), msg()}),
-         %% Map from deferral token to the tree keys of all messages parked
-         %% under it and not yet claimed by a consumer. A single token may
-         %% address more than one message, e.g. when a ranged DISPOSITION
-         %% settles several deliveries with the same annotations. Claiming
-         %% moves an entry to #consumer.deferred_claims; releasing a claim
-         %% moves it back.
-         deferred = #{} :: #{deferral_token() => [delayed_key()]}}).
+         %% Map from deferral token to tree key for direct message lookup
+         deferred = #{} :: #{deferral_token() => delayed_key()}}).
 
 -record(enqueuer,
         {next_seqno = 1 :: msg_seqno(),
@@ -309,19 +295,7 @@
          last_active :: option(non_neg_integer()),
          msg_cache :: option({ra:index(), raw_msg()}),
          %% delayed retry messages awaiting redelivery
-         delayed = #delayed{} :: #delayed{},
-         %% bytes enqueued, accumulated per originating node since the
-         %% creation of this state machine. Monotonically non-decreasing
-         %% on every node (under leader replication). Used by leader
-         %% migration tooling to estimate per-node ingress.
-         ingress_bytes_by_node = #{} :: #{node() | undefined => non_neg_integer()},
-         %% consumer_key()s currently believed to hold a non-empty deferred
-         %% claim, checked by deliver_claimed/3 on every checkout so it can
-         %% skip consumers it knows have nothing claimed. Conservative: only
-         %% ever cleared for a key once a scan or release directly confirms
-         %% that key holds no claim, so a stale entry can outlive its claim
-         %% briefly but a real claim is never missing from it.
-         claimed_consumers = #{} :: #{consumer_key() => true}
+         delayed = #delayed{} :: #delayed{}
         }).
 
 -type config() :: #{name := atom(),

@@ -66,6 +66,14 @@
 %% or by remote-incoming window (i.e. session flow control).
 -define(DEFAULT_MAX_QUEUE_CREDIT, 256).
 -define(DEFAULT_MAX_INCOMING_WINDOW, 400).
+%% Maximum number of deferral tokens a single FLOW frame may request. Each
+%% token is resolved within one Ra command, so this bounds both the size of
+%% that command and the work it does.
+-define(MAX_DEFERRAL_TOKENS, 256).
+%% Maximum byte length of a single deferral token. Tokens are stored as Ra
+%% command/queue-state map keys, so an unbounded client-chosen string would
+%% inflate both.
+-define(MAX_DEFERRAL_TOKEN_SIZE, 256).
 -define(MAX_MANAGEMENT_LINK_CREDIT, 8).
 -define(MANAGEMENT_NODE_ADDRESS, <<"/management">>).
 -define(UINT_OUTGOING_WINDOW, {uint, ?UINT_MAX}).
@@ -193,7 +201,8 @@
           delivery_count :: sequence_no(),
           credit :: rabbit_queue_type:credit(),
           drain :: boolean(),
-          echo :: boolean()
+          echo :: boolean(),
+          tokens = [] :: [binary()]
          }).
 
 %% Link flow control state for link between client (receiver) and us (sender).
@@ -1494,8 +1503,7 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_SENDER,
                             },
               State0 = #state{incoming_links = IncomingLinks0,
                               permission_cache = PermCache0,
-                              cfg = #cfg{max_link_credit = MaxLinkCredit,
-                                         vhost = Vhost} = Cfg}) ->
+                              cfg = #cfg{max_link_credit = MaxLinkCredit} = Cfg}) ->
     case ensure_target(Target0, LinkNameBin, Cfg, PermCache0) of
         {ok, Exchange, RoutingKey, QNameBin, Target, PermCache} ->
             SndSettleMode = snd_settle_mode(MaybeSndSettleMode),
@@ -1512,18 +1520,9 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_SENDER,
                               delivery_count = DeliveryCountInt,
                               credit = MaxLinkCredit},
             _Outcomes = outcomes(Source),
-            Caps = case QNameBin of
-                       undefined ->
-                           undefined;
-                       _ ->
-                           QName = rabbit_misc:r(Vhost, queue, QNameBin),
-                           case rabbit_amqqueue:lookup(QName) of
-                               {ok, Q} ->
-                                   link_capabilities(amqqueue:get_type(Q));
-                               _ ->
-                                   undefined
-                           end
-                   end,
+            %% amqp_link_capabilities (e.g. quorum queues' deferral tokens,
+            %% streams' filter expressions) are all consuming-link concepts,
+            %% so a publish (incoming) link has no offered capabilities.
             Reply = #'v1_0.attach'{
                        name = LinkName,
                        handle = Handle,
@@ -1534,7 +1533,7 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_SENDER,
                        %% We are the receiver.
                        role = ?AMQP_ROLE_RECEIVER,
                        max_message_size = {ulong, MaxMessageSize},
-                       offered_capabilities = Caps},
+                       offered_capabilities = undefined},
             Flow = #'v1_0.flow'{handle = Handle,
                                 delivery_count = DeliveryCount,
                                 link_credit = ?UINT(MaxLinkCredit)},
@@ -1989,7 +1988,8 @@ pop_credit_req(
                                      delivery_count = DeliveryCountRcv,
                                      credit = LinkCreditRcv,
                                      drain = Drain,
-                                     echo = Echo
+                                     echo = Echo,
+                                     tokens = Tokens
                                     }},
   S0 = #state{cfg = #cfg{max_queue_credit = MaxQueueCredit},
               outgoing_links = OutgoingLinks,
@@ -1997,8 +1997,8 @@ pop_credit_req(
     LinkCreditSnd = amqp10_util:link_credit_snd(
                       DeliveryCountRcv, LinkCreditRcv, CDeliveryCount),
     CappedCredit = cap_credit(LinkCreditSnd, MaxQueueCredit),
-    {ok, QStates, Actions} = rabbit_queue_type:credit(
-                               QName, Ctag, QDeliveryCount,
+    {ok, QStates, Actions} = claim_deferred_then_credit(
+                               QName, Ctag, Tokens, QDeliveryCount,
                                CappedCredit, Drain, QStates0),
     Link = Link0#outgoing_link{
              client_flow_ctl = CFC#client_flow_ctl{
@@ -2238,7 +2238,15 @@ settle_op_from_outcome(#'v1_0.modified'{delivery_failed = DelFailed,
                {map, KVList} ->
                    Anns1 = lists:map(
                              %% "all symbolic keys except those beginning with "x-" are reserved." [3.2.10]
-                             fun({{symbol, <<"x-", _/binary>> = K}, V}) ->
+                             fun({{symbol, <<"x-opt-deferral-token">> = K}, {utf8, Bin} = V}) ->
+                                     _ = validate_deferral_token_size(Bin),
+                                     {K, unwrap_simple_type(V)};
+                                ({{symbol, <<"x-opt-deferral-token">>}, Other}) ->
+                                     protocol_error(
+                                       ?V_1_0_AMQP_ERROR_INVALID_FIELD,
+                                       "x-opt-deferral-token must be of AMQP type utf8, got: ~tp",
+                                       [Other]);
+                                ({{symbol, <<"x-", _/binary>> = K}, V}) ->
                                      {K, unwrap_simple_type(V)}
                              end, KVList),
                    maps:from_list(Anns1)
@@ -3337,7 +3345,8 @@ handle_outgoing_link_flow_control(
                delivery_count = MaybeDeliveryCountRcv,
                link_credit = ?UINT(LinkCreditRcv),
                drain = Drain0,
-               echo = Echo0},
+               echo = Echo0,
+               properties = FlowProps},
   #state{outgoing_links = OutgoingLinks,
          queue_states = QStates0
         } = State0) ->
@@ -3361,8 +3370,9 @@ handle_outgoing_link_flow_control(
                                         credit = CappedCredit,
                                         drain = Drain},
                      at_least_one_credit_req_in_flight = true},
-            {ok, QStates, Actions} = rabbit_queue_type:credit(
+            {ok, QStates, Actions} = claim_deferred_then_credit(
                                        QName, Ctag,
+                                       parse_deferred_tokens(FlowProps),
                                        QFC#queue_flow_ctl.delivery_count,
                                        CappedCredit, Drain, QStates0),
             State = State0#state{
@@ -3376,15 +3386,67 @@ handle_outgoing_link_flow_control(
             %% when the client floods us with credit requests, but closed its incoming-window.
             %% Processing one credit top up at a time between us and the queue is also easier
             %% to reason about. Therefore, we stash the new request. If there is already a
-            %% stashed request, we replace it because the latest flow control state from the
-            %% client applies.
+            %% stashed request, we replace its flow control fields because the latest
+            %% flow control state from the client applies. Deferral tokens are not flow
+            %% control state though, but one-shot claim requests: any tokens from an
+            %% already-stashed request are carried over rather than dropped, so a FLOW
+            %% that itself gets stashed before it is popped never loses its tokens.
+            %% Submitted once the stashed request is processed, see pop_credit_req/4.
+            PrevTokens = case Link0#outgoing_link.stashed_credit_req of
+                              none ->
+                                  [];
+                              #credit_req{tokens = T} ->
+                                  T
+                          end,
             Link = Link0#outgoing_link{
                      stashed_credit_req = #credit_req{
                                              delivery_count = DeliveryCountRcv,
                                              credit = LinkCreditRcv,
                                              drain = Drain,
-                                             echo = Echo}},
+                                             echo = Echo,
+                                             tokens = PrevTokens ++ parse_deferred_tokens(FlowProps)}},
             State0#state{outgoing_links = OutgoingLinks#{HandleInt := Link}}
+    end.
+
+%% Claim any requested deferred messages before topping up the credit: the
+%% queue delivers claimed messages ahead of the ready backlog, so this
+%% credit reaches them rather than being spent on the backlog first.
+claim_deferred_then_credit(QName, Ctag, Tokens, DeliveryCount, CappedCredit,
+                           Drain, QStates0) ->
+    {ok, QStates1, Actions0} = case Tokens of
+                                   [] ->
+                                       {ok, QStates0, []};
+                                   _ ->
+                                       rabbit_queue_type:assign_deferred(
+                                         QName, Ctag, Tokens, QStates0)
+                               end,
+    {ok, QStates, Actions1} = rabbit_queue_type:credit(
+                                QName, Ctag, DeliveryCount,
+                                CappedCredit, Drain, QStates1),
+    {ok, QStates, Actions0 ++ Actions1}.
+
+parse_deferred_tokens(undefined) ->
+    [];
+parse_deferred_tokens({map, KVList}) ->
+    Key = {symbol, <<"rabbitmq:deferral-tokens">>},
+    case lists:keyfind(Key, 1, KVList) of
+        {Key, {array, utf8, Elems}} ->
+            case length(Elems) of
+                Len when Len > ?MAX_DEFERRAL_TOKENS ->
+                    protocol_error(
+                      ?V_1_0_AMQP_ERROR_INVALID_FIELD,
+                      "rabbitmq:deferral-tokens must contain at most ~b tokens, got: ~b",
+                      [?MAX_DEFERRAL_TOKENS, Len]);
+                _ ->
+                    [validate_deferral_token_size(T) || {utf8, T} <- Elems]
+            end;
+        false ->
+            [];
+        {Key, Other} ->
+            protocol_error(
+              ?V_1_0_AMQP_ERROR_INVALID_FIELD,
+              "rabbitmq:deferral-tokens must be an array of AMQP type utf8, got: ~tp",
+              [Other])
     end.
 
 delivery_count_rcv(?UINT(DeliveryCount)) ->
@@ -3699,6 +3761,15 @@ validate_message_size(MsgSize, MaxMsgSize)
     end;
 validate_message_size(Msg, MaxMsgSize) ->
     validate_message_size(iolist_size(Msg), MaxMsgSize).
+
+validate_deferral_token_size(Token)
+  when byte_size(Token) =< ?MAX_DEFERRAL_TOKEN_SIZE ->
+    Token;
+validate_deferral_token_size(Token) ->
+    protocol_error(
+      ?V_1_0_AMQP_ERROR_INVALID_FIELD,
+      "deferral token must be at most ~b bytes, got: ~b",
+      [?MAX_DEFERRAL_TOKEN_SIZE, byte_size(Token)]).
 
 -spec ensure_terminus(source | target,
                       term(),

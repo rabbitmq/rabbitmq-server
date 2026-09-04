@@ -10,7 +10,7 @@
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--define(MACHINE_VERSION, 8).
+-define(MACHINE_VERSION, 9).
 
 %%%===================================================================
 %%% Common Test callbacks
@@ -84,7 +84,9 @@ all_tests() ->
      dlx_09,
      single_active_ordering_02,
      two_nodes_same_otp_version,
-     two_nodes_different_otp_version
+     two_nodes_different_otp_version,
+     ingress_bytes_by_node_accumulation,
+     deferral_claims
     ].
 
 groups() ->
@@ -1133,6 +1135,117 @@ is_same_otp_version(Config) ->
     ct:pal("Our CT node runs OTP ~s, other node runs OTP ~s", [OurOTP, OtherOTP]),
     OurOTP =:= OtherOTP.
 
+ingress_bytes_by_node_accumulation(_Config) ->
+    Size = 500,
+    run_proper(
+      fun () ->
+              InitConf = config(?FUNCTION_NAME, undefined, undefined, false, undefined),
+              ?FORALL(O, ?LET(Ops, log_gen_different_nodes(Size), expand(Ops, InitConf)),
+                      begin
+                          Indexes = lists:seq(1, length(O)),
+                          Entries = lists:zip(Indexes, O),
+                          InitState = test_init(InitConf),
+                          run_log(InitState, Entries,
+                                  ingress_bytes_by_node_invariant()),
+                          true
+                      end)
+      end, [], Size).
+
+%% meta/2 always attributes enqueues to self(), so ingress_bytes_by_node
+%% only ever grows a single node() entry here regardless of the "different
+%% nodes" generator - what we can meaningfully assert without reimplementing
+%% rabbit_fifo's own per-enqueuer dedup/sequencing logic is that the
+%% cumulative total it tracks is internally consistent with the live,
+%% still-enqueued byte count.
+ingress_bytes_by_node_invariant() ->
+    fun(#rabbit_fifo{ingress_bytes_by_node = IngressByNode,
+                     msg_bytes_enqueue = MsgBytesEnqueue}) ->
+            ValidValues = maps:fold(
+                            fun(_, V, Acc) ->
+                                    Acc andalso is_integer(V) andalso V >= 0
+                            end, true, IngressByNode),
+            Sum = lists:sum(maps:values(IngressByNode)),
+            %% ingress_bytes_by_node is cumulative and monotonically
+            %% non-decreasing since queue creation; msg_bytes_enqueue only
+            %% counts bytes still live (not yet settled/discarded/returned),
+            %% so the cumulative total can never be smaller than what is
+            %% currently live
+            CumulativeCoversLive = Sum >= MsgBytesEnqueue,
+            %% live bytes cannot exist without having been recorded as
+            %% ingress somewhere
+            NoLiveBytesWithoutIngress = (MsgBytesEnqueue == 0) orelse
+                                        map_size(IngressByNode) > 0,
+            case ValidValues andalso CumulativeCoversLive andalso
+                 NoLiveBytesWithoutIngress of
+                true ->
+                    true;
+                false ->
+                    ct:pal("ingress_bytes_by_node invariant failed: "
+                           "ValidValues ~p CumulativeCoversLive ~p "
+                           "(Sum ~b, msg_bytes_enqueue ~b) "
+                           "NoLiveBytesWithoutIngress ~p",
+                           [ValidValues, CumulativeCoversLive, Sum,
+                            MsgBytesEnqueue, NoLiveBytesWithoutIngress]),
+                    false
+            end
+    end.
+
+deferral_claims(_Config) ->
+    Size = 300,
+    run_proper(
+      fun () ->
+              InitConf = config(?FUNCTION_NAME, undefined, undefined, false, undefined),
+              ?FORALL(O, ?LET(Ops, log_gen_deferral(Size), expand(Ops, InitConf)),
+                      begin
+                          Indexes = lists:seq(1, length(O)),
+                          Entries = lists:zip(Indexes, O),
+                          InitState = test_init(InitConf),
+                          run_log(InitState, Entries, deferral_invariant()),
+                          true
+                      end)
+      end, [], Size).
+
+%% Two safety properties for deferral tokens and claims:
+%%
+%% 1. a message's delayed_key() never appears in more than one place at
+%%    once (the shared "parked, unclaimed" pool and every consumer's
+%%    claims): a claim really does remove the message from the pool, so
+%%    two links can never both be told they hold the same message.
+%% 2. claimed_consumers (see deliver_claimed/3 in rabbit_fifo.erl) is never
+%%    missing a consumer_key() that actually holds a claim: it is only an
+%%    optimisation to skip a scan, so a false negative there would silently
+%%    stop claimed messages from ever being delivered.
+deferral_invariant() ->
+    fun(#rabbit_fifo{delayed = #delayed{deferred = Deferred},
+                     consumers = Consumers,
+                     waiting_consumers = Waiting,
+                     claimed_consumers = Claimed}) ->
+            SharedKeys = lists:append(maps:values(Deferred)),
+            AllConsumers = maps:to_list(Consumers) ++ Waiting,
+            ClaimedKeys = lists:append(
+                            [Keys || {_, #consumer{deferred_claims = C}}
+                                         <- AllConsumers,
+                                     Keys <- maps:values(C)]),
+            AllKeys = SharedKeys ++ ClaimedKeys,
+            NoDuplicateKeys = length(AllKeys) == length(lists:usort(AllKeys)),
+            ActuallyClaiming =
+                [K || {K, #consumer{deferred_claims = C}} <- AllConsumers,
+                      map_size(C) > 0],
+            FlagConsistent = lists:all(fun(K) -> maps:is_key(K, Claimed) end,
+                                       ActuallyClaiming),
+            case NoDuplicateKeys andalso FlagConsistent of
+                true ->
+                    true;
+                false ->
+                    ct:pal("deferral invariant failed: NoDuplicateKeys ~p "
+                           "FlagConsistent ~p (Claimed ~p, "
+                           "ActuallyClaiming ~p)",
+                           [NoDuplicateKeys, FlagConsistent, Claimed,
+                            ActuallyClaiming]),
+                    false
+            end
+    end.
+
 two_nodes(Node) ->
     Size = 100,
     run_proper(
@@ -1518,7 +1631,7 @@ different_nodes_prop(Node, Conf, Commands) ->
     Entries = lists:zip(Indexes, Commands),
     InitState = test_init(Conf),
     Fun = fun(_) -> true end,
-    MachineVersion = 8,
+    MachineVersion = rabbit_fifo:version(),
 
     {State1, _Effs1} = run_log(InitState, Entries, Fun, MachineVersion),
     {State2, _Effs2} = erpc:call(Node, ?MODULE, run_log,
@@ -1605,8 +1718,8 @@ valid_simple_prefetch(_, _, _, _, _) ->
     true.
 
 upgrade_prop(Conf, Commands) ->
-    FromVersion = 7,
-    ToVersion = 8,
+    FromVersion = 8,
+    ToVersion = 9,
     FromMod = rabbit_fifo:which_module(FromVersion),
     ToMod = rabbit_fifo:which_module(ToVersion),
     Indexes = lists:seq(1, length(Commands)),
@@ -1857,6 +1970,33 @@ log_gen_different_nodes(Size) ->
                           {1, purge}
                          ]))))).
 
+%% Reuses a small, fixed token pool so that tokens are claimed, reused
+%% (parked again while still claimed) and contended between consumers
+%% within a single run, rather than every park inventing an unclaimed token.
+log_gen_deferral(Size) ->
+    Nodes = [node()],
+    Tokens = [<<"tok-a">>, <<"tok-b">>, <<"tok-c">>],
+    ?LET(EPids, vector(1, pid_gen(Nodes)),
+         ?LET(CPids, vector(2, pid_gen(Nodes)),
+              resize(Size,
+                     list(
+                       frequency(
+                         [{20, enqueue_gen(oneof(EPids))},
+                          {10, {input_event,
+                                frequency([{5, settle},
+                                           %% delivery time 0 does not delay:
+                                           %% Ts is always 0 in this harness
+                                           {3, {park, oneof(Tokens), 0}},
+                                           {3, {park, oneof(Tokens),
+                                                1_000_000_000}}])}},
+                          {4, checkout_gen(oneof(CPids))},
+                          {1, checkout_cancel_gen(oneof(CPids))},
+                          {3, ?LET(Pid, oneof(CPids),
+                                   {claim, Pid, oneof(Tokens)})},
+                          {1, down_gen(oneof(EPids ++ CPids))},
+                          {1, purge}
+                         ]))))).
+
 monotonic_gen() ->
     ?LET(_, integer(), erlang:unique_integer([positive, monotonic])).
 
@@ -2020,11 +2160,36 @@ handle_op({down, Pid, Reason} = Cmd, #t{down = Down} = T) ->
     end;
 handle_op({nodeup, _} = Cmd, T) ->
     do_apply(Cmd, T);
+handle_op({claim, Pid, Token}, #t{consumers = Cons} = T) ->
+    case maps:keys(
+           maps:filter(fun ({_, P}, _) when P == Pid -> true;
+                           (_, _) -> false
+                       end, Cons)) of
+        [CId | _] ->
+            Cmd = rabbit_fifo:make_delayed({assign_deferred, CId, [Token]}),
+            do_apply(Cmd, T);
+        _ ->
+            T
+    end;
 handle_op({input_event, requeue}, #t{effects = Effs} = T) ->
     %% this simulates certain settlements arriving out of order
     case queue:out(Effs) of
         {{value, Cmd}, Q} ->
             T#t{effects = queue:in(Cmd, Q)};
+        _ ->
+            T
+    end;
+handle_op({input_event, {park, Token, DeliveryTime}},
+          #t{effects = Effs} = T) ->
+    %% simulates a MODIFIED outcome carrying x-opt-deferral-token and
+    %% x-opt-delivery-time, in place of a plain settle/return/discard
+    case queue:out(Effs) of
+        {{value, {settle, CId, MsgIds}}, Q} ->
+            Cmd = rabbit_fifo:make_modify(
+                    CId, MsgIds, false, false,
+                    #{<<"x-opt-deferral-token">> => Token,
+                      <<"x-opt-delivery-time">> => DeliveryTime}),
+            do_apply(Cmd, T#t{effects = Q});
         _ ->
             T
     end;

@@ -109,6 +109,7 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include("amqqueue.hrl").
+-include("mc.hrl").
 -include_lib("kernel/include/logger.hrl").
 
 -rabbit_boot_step(
@@ -652,7 +653,8 @@ capabilities() ->
       rebalance_module => ?MODULE,
       can_redeliver => true,
       is_replicable => true,
-      distribution_modes => [move]
+      distribution_modes => [move],
+      amqp_link_capabilities => [<<"rabbitmq:deferral-tokens">>]
      }.
 
 rpc_delete_metrics(QName) ->
@@ -1354,7 +1356,8 @@ deliver0(QName, Correlation, Msg, QState0) ->
 
 deliver(QSs, Msg0, Options) ->
     Correlation = maps:get(correlation, Options, undefined),
-    Msg = mc:prepare(store, Msg0),
+    Msg1 = annotate_delivery_time(Msg0),
+    Msg = mc:prepare(store, Msg1),
     lists:foldl(
       fun({Q, stateless}, Acc) ->
               QRef = amqqueue:get_pid(Q),
@@ -1430,15 +1433,11 @@ retry_delayed(Q, Mode) when ?is_amqqueue(Q) ->
     Server = amqqueue:get_pid(Q),
     rabbit_fifo_client:retry_delayed(Server, Mode).
 
--spec assign_deferred(rabbit_types:ctag(), [binary()],
-                      rabbit_fifo_client:state(),
-                      amqqueue:amqqueue()) ->
-    {{ok, non_neg_integer()} |
-     {partial, non_neg_integer(), [binary()]} |
-     {error, term()},
-     rabbit_fifo_client:state()}.
-assign_deferred(CTag, Tokens, QState, _Q) ->
-    rabbit_fifo_client:assign_deferred(CTag, Tokens, QState).
+-spec assign_deferred(rabbit_amqqueue:name(), rabbit_types:ctag(), [binary()],
+                      rabbit_fifo_client:state()) ->
+    {rabbit_fifo_client:state(), rabbit_queue_type:actions()}.
+assign_deferred(_QName, CTag, Tokens, QState) ->
+    rabbit_fifo_client:assign_deferred(quorum_ctag(CTag), Tokens, QState).
 
 cleanup_data_dir() ->
     Names = [begin
@@ -2919,3 +2918,29 @@ table_lookup(Tbl, Key, Default)
         _ ->
             Default
     end.
+
+annotate_delivery_time(Msg) ->
+    case mc:is(Msg) of
+        true ->
+            %% "When a message is being sent with a delivery delay
+            %% configured, a message annotation with symbol key of
+            %% “x-opt-delivery-time” is used to convey the earliest point
+            %% in time at which a message may be delivered to a
+            %% receiver by the peer. If the annotation is present its value
+            %% MUST be a timestamp or an equivalent value using an
+            %% integral numeric type such as long, representing the
+            %% delivery time as a number of milliseconds since the Unix Epoch."
+            %% [schdmsg-v1.0] § 2.1
+            case mc:x_header(<<"x-opt-delivery-time">>, Msg) of
+                {_Type, Ts} when is_integer(Ts) ->
+                    %% The queue will need to delay this message.
+                    %% add the dt annotation for easy access inside
+                    %% the queue
+                    mc:set_annotation(?ANN_DELIVERY_TIME, Ts, Msg);
+                _ ->
+                    Msg
+            end;
+        false ->
+            Msg
+    end.
+

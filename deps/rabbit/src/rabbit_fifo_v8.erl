@@ -5,21 +5,20 @@
 %% Copyright (c) 2007-2026 Broadcom. All Rights Reserved.
 %% The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.
 %% All rights reserved.
--module(rabbit_fifo).
+-module(rabbit_fifo_v8).
 
 -behaviour(ra_machine).
 
 -compile(inline_list_funcs).
 -compile(inline).
 -compile({no_auto_import, [apply/3]}).
-% elp:ignore W0048 (no_dialyzer_attribute)
--dialyzer({nowarn_function, convert_v8_to_v9/2}).
-% elp:ignore W0048 (no_dialyzer_attribute)
+% elp:ignore W0054 (no_nowarn_suppressions)
+-compile(nowarn_match_alias_pats).
+-dialyzer({nowarn_function, convert_v7_to_v8/2}).
 -dialyzer(no_improper_lists).
 
 -include("rabbit_queue_type.hrl").
--include("rabbit_fifo.hrl").
--include("mc.hrl").
+-include("rabbit_fifo_v8.hrl").
 
 -include_lib("kernel/include/logger.hrl").
 
@@ -69,9 +68,6 @@
          %% aux
          init_aux/1,
          handle_aux/5,
-         %% exported for testability, the aux ingress state is otherwise opaque
-         update_ingress/3,
-         compute_ingress_rates/1,
          % queries
          query_messages_ready/1,
          query_messages_checked_out/1,
@@ -111,7 +107,8 @@
          make_garbage_collection/0,
          make_delayed/1,
 
-         exec_read/3
+         exec_read/3,
+         convert_v7_to_v8/2
 
         ]).
 
@@ -209,7 +206,8 @@
               delayed_op/0]).
 
 -spec init(config()) -> state().
-init(#{name := Name, queue_resource := Resource} = Conf) ->
+init(#{name := Name,
+       queue_resource := Resource} = Conf) ->
     update_config(Conf, #?STATE{cfg = #cfg{name = Name,
                                            resource = Resource}}).
 
@@ -431,9 +429,8 @@ apply_(#{index := Index,
                             settled ->
                                 %% immediately settle the checkout
                                 {State3, _, SettleEffects} =
-                                    apply(Meta,
-                                          make_settle(ConsumerId, [MsgId]),
-                                          State2),
+                                apply(Meta, make_settle(ConsumerId, [MsgId]),
+                                      State2),
                                 {State3, SettleEffects ++ Effects0}
                         end,
                     Effects2 = [reply_log_effect(RaftIdx, MsgId, Header,
@@ -459,8 +456,8 @@ apply_(Meta, #checkout{spec = Spec,
     case consumer_key_from_id(ConsumerId, State0) of
         {ok, ConsumerKey} ->
             {State1, Effects1} = activate_next_consumer(
-                                   cancel_consumer(Meta, ConsumerKey,
-                                                   State0, [], Spec)),
+                                   cancel_consumer(Meta, ConsumerKey, State0, [],
+                                                   Spec)),
             Reply = {ok, consumer_cancel_info(ConsumerKey, State1)},
             {State, _, Effects} = checkout(Meta, State0, State1, Effects1),
 
@@ -507,8 +504,6 @@ apply_(#{index := Idx} = Meta,
 apply_(#{index := Index}, #purge{},
        #?STATE{messages_total = Total,
                delayed = #delayed{tree = Tree},
-               consumers = Consumers,
-               waiting_consumers = Waiting,
                dlx = DlxState} = State0) ->
     NumReady = messages_ready(State0),
     {NumDlx, _} = dlx_stat(DlxState),
@@ -518,18 +513,8 @@ apply_(#{index := Index}, #purge{},
                            messages_total = Total - NumReady - DelayedLen,
                            returns = lqueue:new(),
                            delayed = #delayed{},
-                           %% the parked messages the claims pointed at are
-                           %% gone, so drop the claims with them
-                           consumers = maps:map(
-                                         fun(_, C) ->
-                                                 C#consumer{deferred_claims = #{}}
-                                         end, Consumers),
-                           waiting_consumers =
-                               [{K, C#consumer{deferred_claims = #{}}}
-                                || {K, C} <- Waiting],
                            dlx = dlx_purge(DlxState),
-                           msg_bytes_enqueue = 0,
-                           claimed_consumers = #{}
+                           msg_bytes_enqueue = 0
                           },
     Effects0 = [{aux, force_checkpoint}, garbage_collection],
     Reply = {purge, NumPurged},
@@ -541,43 +526,35 @@ apply_(#{system_time := Ts} = Meta, #delayed_cmd{op = {retry, Mode}},
        #?STATE{delayed = Delayed0, returns = Returns0} = State0) ->
     {Msgs, Delayed} = take_delayed_for_retry(Mode, Ts, Delayed0),
     NumRetried = length(Msgs),
-    Returns = lists:foldl(fun lqueue:in/2, Returns0, Msgs),
+    Returns = lists:foldl(fun (Msg, Acc) -> lqueue:in(Msg, Acc) end,
+                          Returns0, Msgs),
     State1 = State0#?STATE{delayed = Delayed, returns = Returns},
     checkout(Meta, State0, State1, [], {ok, NumRetried});
-apply_(Meta, #delayed_cmd{op = {assign_deferred, ConsumerKey, Tokens}},
-       #?STATE{delayed = Delayed0,
-               consumers = Consumers0,
-               waiting_consumers = Waiting0} = State0) ->
-    %% Claiming only moves the tokens' keys out of the shared deferred map
-    %% and onto the consumer. The messages stay parked in #delayed.tree and
-    %% are delivered from the claim by checkout/4 as credit allows, which is
-    %% why this command does not need to know anything about link credit.
-    case Consumers0 of
-        #{ConsumerKey := Con0} ->
-            {Claims, Delayed} = claim_deferred(Tokens, Delayed0),
-            Con = add_deferred_claims(Claims, Con0),
-            State1 = State0#?STATE{delayed = Delayed,
-                                   consumers = maps:update(ConsumerKey, Con,
-                                                           Consumers0),
-                                   claimed_consumers =
-                                     note_claimed(ConsumerKey, Con, State0)},
-            checkout(Meta, State0, State1, []);
-        _ ->
-            case lists:keytake(ConsumerKey, 1, Waiting0) of
-                {value, {_, Con0}, Waiting1} ->
-                    %% An inactive single active consumer keeps its claims
-                    %% until it is activated.
-                    {Claims, Delayed} = claim_deferred(Tokens, Delayed0),
-                    Con = add_deferred_claims(Claims, Con0),
-                    Waiting = add_waiting({ConsumerKey, Con}, Waiting1),
-                    {State0#?STATE{delayed = Delayed,
-                                   waiting_consumers = Waiting,
-                                   claimed_consumers =
-                                     note_claimed(ConsumerKey, Con, State0)},
-                     ok, []};
+apply_(#{system_time := Ts} = Meta,
+       #delayed_cmd{op = {assign_deferred, ConsumerKey, Tokens}},
+       #?STATE{delayed = Delayed0, consumers = Consumers0} = State0) ->
+    case maps:get(ConsumerKey, Consumers0, undefined) of
+        undefined ->
+            {State0, {error, consumer_not_found}, []};
+        #consumer{status = Status} when Status =/= up ->
+            {State0, {error, consumer_not_active}, []};
+        #consumer{credit = Credit} ->
+            {Msgs, NotFound, Delayed} = take_deferred(Tokens, Delayed0),
+            NumMsgs = length(Msgs),
+            case NumMsgs > Credit of
+                true ->
+                    Err = {insufficient_credit, Credit, NumMsgs},
+                    {State0, {error, Err}, []};
                 false ->
-                    %% Claim for an unknown consumer, just ignore.
-                    {State0, ok, []}
+                    State1 = State0#?STATE{delayed = Delayed},
+                    {State2, Effects} =
+                        assign_to_consumer(Meta, Ts, ConsumerKey,
+                                           Msgs, State1, []),
+                    Reply = case NotFound of
+                                [] -> {ok, NumMsgs};
+                                _ -> {partial, NumMsgs, NotFound}
+                            end,
+                    {State2, Reply, Effects}
             end
     end;
 apply_(Meta, {timeout, expire_msgs}, State) ->
@@ -640,19 +617,12 @@ apply_(Meta, {timeout, {consumer_disconnected_timeout, CKey}},
             %% return all messages
             {State1, Effects0} = return_all(Meta, State0, [], CKey,
                                             Consumer, false),
-            %% also release any deferred claims this consumer is holding:
-            %% otherwise a token stays stuck on this entry until a genuine
-            %% down arrives, which may never happen if the client
-            %% reconnects as a new consumer instead
-            #{CKey := Con1} = State1#?STATE.consumers,
-            State2 = release_deferred_claims(CKey, Con1, State1),
 
-            checkout(Meta, State0, State2, Effects0);
+            checkout(Meta, State0, State1, Effects0);
         _ ->
             {State0, []}
     end;
-apply_(#{system_time := Ts} = Meta,
-       {timeout, {consumer_disconnected_timeout, CKey}},
+apply_(#{system_time := Ts} = Meta, {timeout, {consumer_disconnected_timeout, CKey}},
        #?STATE{cfg = #cfg{consumer_strategy = single_active},
                waiting_consumers = Waiting0,
                consumers = Consumers} = State0) ->
@@ -663,25 +633,16 @@ apply_(#{system_time := Ts} = Meta,
             %% return all messages
             {State1, Effects0} = return_all(Meta, State0, [], CKey,
                                             Consumer, false),
-            {Waiting, State1b} =
-                case State1#?STATE.consumers of
-                    #{CKey := C} when Status =/= cancelled ->
-                        {Waiting0 ++
-                         [{CKey, C#consumer{status = {suspected_down, up}}}],
-                         State1};
-                    #{CKey := C} ->
-                        %% the consumer is dropped rather than moved to
-                        %% waiting, so any deferral claims it still holds
-                        %% must go back to the shared deferred map
-                        {Waiting0, release_deferred_claims(CKey, C, State1)};
-                    _ ->
-                        {Waiting0, State1}
-                end,
-            State2 = State1b#?STATE{consumers =
-                                        maps:remove(CKey,
-                                                    State1b#?STATE.consumers),
-                                    waiting_consumers = Waiting,
-                                    last_active = Ts},
+            Waiting = case State1#?STATE.consumers of
+                          #{CKey := C} when Status =/= cancelled ->
+                              Waiting0 ++
+                              [{CKey, C#consumer{status = {suspected_down, up}}}];
+                          _ ->
+                              Waiting0
+                      end,
+            State2 = State1#?STATE{consumers = maps:remove(CKey, State1#?STATE.consumers),
+                                   waiting_consumers = Waiting,
+                                   last_active = Ts},
             {State, Effects1} = activate_next_consumer(State2, Effects0),
             checkout(Meta, State0, State, Effects1);
         _ ->
@@ -713,8 +674,8 @@ apply_(Meta, {nodeup, Node}, #?STATE{consumers = Cons0,
     {State1, Effects1} =
         maps:fold(
           fun(ConsumerKey,
-              #consumer{cfg = #consumer_cfg{pid = P},
-                        status = {suspected_down, _}} = C0,
+              ?CONSUMER_PID(P) =
+              #consumer{status = {suspected_down, _}} = C0,
               {SAcc, EAcc0})
                 when node(P) =:= Node ->
                   #consumer{status = NextStatus} = C =
@@ -738,12 +699,9 @@ apply_(Meta, {nodeup, Node}, #?STATE{consumers = Cons0,
 apply_(_, {nodedown, _Node}, State) ->
     {State, ok};
 apply_(Meta, #purge_nodes{nodes = Nodes}, State0) ->
-    {State1, Effects} = lists:foldl(fun(Node, {S, E}) ->
+    {State, Effects} = lists:foldl(fun(Node, {S, E}) ->
                                            purge_node(Meta, Node, S, E)
                                    end, {State0, []}, Nodes),
-    State = State1#?STATE{
-        ingress_bytes_by_node =
-            maps:without(Nodes, State1#?STATE.ingress_bytes_by_node)},
     {State, ok, Effects};
 apply_(Meta,
        #update_config{config = #{} = Conf},
@@ -759,11 +717,9 @@ apply_(Meta, {dlx, _} = Cmd,
        #?STATE{cfg = #cfg{dead_letter_handler = DLH},
                reclaimable_bytes = ReclaimableBytes0,
                dlx = DlxState0} = State0) ->
-    {DlxState, ReclaimableBytes, Effects0} =
-        dlx_apply(Meta, Cmd, DLH, DlxState0),
+    {DlxState, ReclaimableBytes, Effects0} = dlx_apply(Meta, Cmd, DLH, DlxState0),
     State1 = State0#?STATE{dlx = DlxState,
-                           reclaimable_bytes =
-                               ReclaimableBytes0 + ReclaimableBytes},
+                           reclaimable_bytes = ReclaimableBytes0 + ReclaimableBytes},
     checkout(Meta, State0, State1, Effects0);
 apply_(#{system_time := Ts} = Meta,
        {timeout, evaluate_consumer_timeout},
@@ -791,12 +747,10 @@ apply_(#{system_time := Ts} = Meta,
                           %% TODO if SAC move to quiescing??
                           TimedOutMsgIds = lists:sort(TimedOutMsgIds0 ++ MsgIds),
                           Con = update_consumer_status(
-                                  timeout,
-                                  Con0#consumer{timed_out_msg_ids = TimedOutMsgIds}),
+                                  timeout, Con0#consumer{timed_out_msg_ids = TimedOutMsgIds}),
                           ?CONSUMER_TAG_PID(Tag, Pid) = Con,
                           E = [{send_msg, Pid,
-                                {released, QName, Tag, MsgIdsSorted, timeout},
-                                ra_event} | E0],
+                                {released, QName, Tag, MsgIdsSorted, timeout}, ra_event} | E0],
                           return_multiple(Meta, CKey, Con, MsgIdsSorted, false,
                                           #{}, E, S0)
                   end
@@ -901,41 +855,32 @@ prepare_extra_buckets(Returns, Consumers, #delayed{tree = Tree},
             B3#{36 => delayed_to_sorted_queue(Tree)}
     end.
 
-msg_idx_less_than(A, B) ->
-    get_msg_idx(A) =< get_msg_idx(B).
-
 lqueue_to_sorted_queue(LQ) ->
     Msgs = lqueue:to_list(LQ),
-    Sorted = lists:sort(fun msg_idx_less_than/2, Msgs),
+    Sorted = lists:sort(fun(A, B) -> get_msg_idx(A) =< get_msg_idx(B) end, Msgs),
     {length(Sorted), [], Sorted}.
 
 consumers_to_sorted_queue(Consumers) ->
     Msgs = maps:fold(
              fun (_Cid, #consumer{checked_out = Ch}, Acc) ->
-                     maps:fold(fun (_MsgId, ?C_MSG(Msg), A) ->
-                                       [Msg | A]
-                               end, Acc, Ch)
+                     maps:fold(fun (_MsgId, ?C_MSG(Msg), A) -> [Msg | A] end, Acc, Ch)
              end, [], Consumers),
-    Sorted = lists:sort(fun msg_idx_less_than/2, Msgs),
+    Sorted = lists:sort(fun(A, B) -> get_msg_idx(A) =< get_msg_idx(B) end, Msgs),
     {length(Sorted), [], Sorted}.
 
 dlx_discards_to_sorted_queue(Discards) ->
-    Msgs = lqueue:fold(fun (?TUPLE(_, Msg), Acc) ->
-                               [Msg | Acc]
-                       end, [], Discards),
-    Sorted = lists:sort(fun msg_idx_less_than/2, Msgs),
+    Msgs = lqueue:fold(fun (?TUPLE(_, Msg), Acc) -> [Msg | Acc] end, [], Discards),
+    Sorted = lists:sort(fun(A, B) -> get_msg_idx(A) =< get_msg_idx(B) end, Msgs),
     {length(Sorted), [], Sorted}.
 
 dlx_consumer_to_sorted_queue(DlxCheckedOut) ->
-    Msgs = maps:fold(fun (_MsgId, ?TUPLE(_, Msg), Acc) ->
-                             [Msg | Acc]
-                     end, [], DlxCheckedOut),
-    Sorted = lists:sort(fun msg_idx_less_than/2, Msgs),
+    Msgs = maps:fold(fun (_MsgId, ?TUPLE(_, Msg), Acc) -> [Msg | Acc] end, [], DlxCheckedOut),
+    Sorted = lists:sort(fun(A, B) -> get_msg_idx(A) =< get_msg_idx(B) end, Msgs),
     {length(Sorted), [], Sorted}.
 
 delayed_to_sorted_queue(Tree) ->
     Msgs = gb_trees:values(Tree),
-    Sorted = lists:sort(fun msg_idx_less_than/2, Msgs),
+    Sorted = lists:sort(fun(A, B) -> get_msg_idx(A) =< get_msg_idx(B) end, Msgs),
     {length(Sorted), [], Sorted}.
 
 %% Build ra_seq with Start/End as separate tuple elements to avoid allocations
@@ -1017,42 +962,76 @@ credit_reply_resend_effect(#?STATE{waiting_consumers = Waiting,
                                             drain = Drain,
                                             properties = Props};
                           false ->
-                              {credit_reply, CTag, DeliveryCount,
-                               Credit, Avail, Drain}
+                              {credit_reply, CTag, DeliveryCount, Credit, Avail, Drain}
                       end,
               [{send_msg, CPid, Reply, ?DELIVERY_SEND_MSG_OPTS} | Acc];
          (_, _, Acc) ->
               Acc
       end, [], maps:merge(Consumers, maps:from_list(Waiting))).
 
-convert_v8_to_v9(#{} = _Meta, StateV8) ->
-    %% v9 added the ingress_bytes_by_node and claimed_consumers fields;
-    %% no v8 consumer can hold a deferred claim, as claiming is new in v9
-    V9State0 = erlang:append_element(
-                 erlang:append_element(StateV8, #{}),
-                 #{}),
+v7_to_v8_consumer(Con, Timeout) ->
+                     V7Cfg = element(#consumer.cfg, Con),
+                     Status0 = element(#consumer.status, Con),
+                     Ch0 = element(#consumer.checked_out, Con),
+                     Ch = maps:map(fun (_, M) -> ?C_MSG(Timeout, M) end, Ch0),
+                     Cfg = #consumer_cfg{meta = element(#consumer_cfg.meta, V7Cfg),
+                                         pid = element(#consumer_cfg.pid, V7Cfg),
+                                         tag = element(#consumer_cfg.tag, V7Cfg),
+                                         credit_mode = element(#consumer_cfg.credit_mode, V7Cfg),
+                                         lifetime = element(#consumer_cfg.lifetime, V7Cfg),
+                                         priority = element(#consumer_cfg.priority, V7Cfg),
+                                         timeout = ?DEFAULT_CONSUMER_TIMEOUT_MS
+                                        },
+                     Status = case Status0 of
+                                  suspected_down ->
+                                      {suspected_down, up};
+                                  _ ->
+                                      Status0
+                              end,
+                     #consumer{cfg = Cfg,
+                               status = Status,
+                               next_msg_id = element(#consumer.next_msg_id, Con),
+                               checked_out = Ch,
+                               credit = element(#consumer.credit, Con),
+                               delivery_count = element(#consumer.delivery_count, Con)
+                              }.
 
-    %% v8's #delayed.deferred map stored a single delayed_key() per token
-    %% v9 allows a single token to address multiple messages.
-    #?STATE{delayed = V8Delayed} = V9State0,
-    #delayed{deferred = DeferredV8} = V8Delayed,
-    V9Deferred = maps:map(fun(_Token, Key) -> [Key] end, DeferredV8),
-    V9Delayed = V8Delayed#delayed{deferred = V9Deferred},
-    V9State1 = V9State0#?STATE{delayed = V9Delayed},
+convert_v7_to_v8(#{system_time := Ts} = _Meta, StateV7) ->
+    %% the structure is intact for now
+    Cons0 = element(#?STATE.consumers, StateV7),
+    Waiting0 = element(#?STATE.waiting_consumers, StateV7),
+    Timeout = Ts + ?DEFAULT_CONSUMER_TIMEOUT_MS,
+    Cons = maps:map(
+             fun (_CKey, Con) ->
+                     v7_to_v8_consumer(Con, Timeout)
+             end, Cons0),
+    Waiting = lists:map(fun({Cid, Con}) ->
+                                {Cid, v7_to_v8_consumer(Con, Timeout)}
+                        end, Waiting0),
 
-    %% v9 added #consumer.deferred_claims, so every consumer record carried
-    %% over needs widening
-    #?STATE{consumers = Cons0, waiting_consumers = Waiting0} = V9State1,
-    Cons = maps:map(fun(_ConsumerKey, C) -> convert_v8_consumer(C) end, Cons0),
-    Waiting = [{ConsumerKey, convert_v8_consumer(C)}
-               || {ConsumerKey, C} <- Waiting0],
-    V9State1#?STATE{consumers = Cons, waiting_consumers = Waiting}.
-
-%% Widen a v8 #consumer{} tuple in place: the field v9 adds is at the end of
-%% the record, so every pre-existing field keeps its index. No v8 consumer
-%% can hold deferral claims, as claiming is new in v9.
-convert_v8_consumer(ConV8) ->
-    erlang:append_element(ConV8, #{}).
+    Msgs = element(#?STATE.messages, StateV7),
+    Cfg = element(#?STATE.cfg, StateV7),
+    {Hi, No} = rabbit_fifo_q:to_queues(Msgs),
+    Pq0 = queue:fold(fun (I, Acc) ->
+                             rabbit_fifo_pq:in(9, I, Acc)
+                     end, rabbit_fifo_pq:new(), Hi),
+    Pq = queue:fold(fun (I, Acc) ->
+                            rabbit_fifo_pq:in(?DEFAULT_PRIORITY, I, Acc)
+                    end, Pq0, No),
+    Dlx0 = element(#?STATE.dlx, StateV7),
+    Dlx = Dlx0#?DLX{unused = ?NIL},
+    StateV8 = StateV7,
+    StateV8#?STATE{cfg = Cfg#cfg{consumer_disconnected_timeout = 60_000,
+                                 delayed_retry = disabled},
+                   reclaimable_bytes = 0,
+                   messages = Pq,
+                   consumers = Cons,
+                   waiting_consumers = Waiting,
+                   next_consumer_timeout = Timeout,
+                   last_command_time = Ts,
+                   dlx = Dlx,
+                   delayed = #delayed{}
+                  }.
 
 purge_node(Meta, Node, State, Effects) ->
     lists:foldl(fun(Pid, {S0, E0}) ->
@@ -1109,17 +1088,12 @@ handle_waiting_consumer_down(Pid,
                                   cancel_consumer_effects(ConsumerId, State0,
                                                           Effects)
                           end, [], Down),
-    %% a down waiting consumer's outstanding deferral claims go back to the
-    %% shared deferred map, same as an explicitly cancelled one
-    State1 = lists:foldl(fun ({ConsumerKey, Consumer}, S) ->
-                                  release_deferred_claims(ConsumerKey, Consumer, S)
-                          end, State0, Down),
     % update state to have only up waiting consumers
     StillUp = lists:filter(fun({_CKey, ?CONSUMER_PID(P)}) ->
                                    P =/= Pid
                            end,
                            WaitingConsumers0),
-    State = State1#?STATE{waiting_consumers = StillUp},
+    State = State0#?STATE{waiting_consumers = StillUp},
     {Effects, State}.
 
 update_waiting_consumer_status(DownPidOrNode,
@@ -1260,8 +1234,7 @@ overview(#?STATE{consumers = Cons,
                  reclaimable_bytes_count => ReclaimableBytes,
                  smallest_raft_index => smallest_raft_index(State),
                  num_active_priorities => NumActivePriorities,
-                 messages_by_priority => Detail,
-                 ingress_bytes_by_node => State#?STATE.ingress_bytes_by_node
+                 messages_by_priority => Detail
                  },
     DlxOverview = dlx_overview(DlxState),
     maps:merge(maps:merge(Overview, DlxOverview), SacOverview).
@@ -1282,7 +1255,7 @@ get_checked_out(CKey, From, To, #?STATE{consumers = Consumers}) ->
     end.
 
 -spec version() -> pos_integer().
-version() -> 9.
+version() -> 8.
 
 which_module(0) -> rabbit_fifo_v0;
 which_module(1) -> rabbit_fifo_v1;
@@ -1292,16 +1265,9 @@ which_module(4) -> rabbit_fifo_v7;
 which_module(5) -> rabbit_fifo_v7;
 which_module(6) -> rabbit_fifo_v7;
 which_module(7) -> rabbit_fifo_v7;
-which_module(8) -> rabbit_fifo_v8;
-which_module(9) -> ?MODULE.
+which_module(8) -> ?MODULE.
 
--define(AUX, aux_v5).
--define(DEFAULT_INGRESS_DECAY_MS, 60_000).
-
--record(ingress_aux,
-        {last_totals = #{} :: #{node() | undefined => non_neg_integer()},
-         estimators = #{} :: #{node() | undefined => ra_li:state()},
-         decay_ms = ?DEFAULT_INGRESS_DECAY_MS :: pos_integer()}).
+-define(AUX, aux_v4).
 
 -record(snapshot, {index :: ra:index(),
                    timestamp :: milliseconds(),
@@ -1316,8 +1282,7 @@ which_module(9) -> ?MODULE.
                gc = #aux_gc{} :: #aux_gc{},
                tick_pid :: undefined | pid(),
                cache = #{} :: map(),
-               last_checkpoint :: tuple() | #snapshot{},
-               ingress = #ingress_aux{} :: #ingress_aux{}
+               last_checkpoint :: tuple() | #snapshot{}
               }).
 
 init_aux(Name) when is_atom(Name) ->
@@ -1331,55 +1296,18 @@ init_aux(Name) when is_atom(Name) ->
                              ?SNAP_MIN_RECLAIMABLE_B}),
     Range = max(1, SnapMinReclaimable - ?SNAP_MIN_RECLAIMABLE_LOW_B),
     MinReclaimable = ?SNAP_MIN_RECLAIMABLE_LOW_B + rand:uniform(Range),
-    DecayMs = persistent_term:get(rabbit_fifo_ingress_decay_ms,
-                                  ?DEFAULT_INGRESS_DECAY_MS),
     #?AUX{name = Name,
           last_checkpoint = #snapshot{index = 0,
                                       timestamp = erlang:system_time(millisecond),
                                       messages_total = 0,
-                                      min_reclaimable = MinReclaimable},
-          ingress = #ingress_aux{decay_ms = DecayMs}}.
-
-update_ingress(Overview, Nodes, #ingress_aux{last_totals = LastTotals,
-                                              estimators = Estimators0,
-                                              decay_ms = DecayMs} = Ingress) ->
-    NewTotals = maps:get(ingress_bytes_by_node, Overview, #{}),
-    Ts = erlang:monotonic_time(millisecond),
-    Estimators1 =
-        maps:fold(fun(Node, NewTotal, Est) ->
-                      case maps:find(Node, LastTotals) of
-                          error ->
-                              %% first observation of this node: totals are
-                              %% cumulative since queue creation, so seed
-                              %% the baseline only, don't feed the whole
-                              %% lifetime total in as if it were this
-                              %% tick's delta
-                              Est;
-                          {ok, LastTotal} ->
-                              Delta = NewTotal - LastTotal,
-                              Li0 = maps:get(Node, Est, ra_li:new(DecayMs)),
-                              Li1 = ra_li:update(Delta, Ts, Li0),
-                              Est#{Node => Li1}
-                      end
-                  end, Estimators0, NewTotals),
-    ActiveNodes = sets:from_list(Nodes, [{version, 2}]),
-    Estimators = maps:filter(fun(Node, _) ->
-                                  Node =:= undefined orelse
-                                  sets:is_element(Node, ActiveNodes)
-                             end, Estimators1),
-    Ingress#ingress_aux{last_totals = NewTotals,
-                        estimators = Estimators}.
-
-compute_ingress_rates(#ingress_aux{estimators = Estimators}) ->
-    Ts = erlang:monotonic_time(millisecond),
-    maps:map(fun(_Node, Li) -> ra_li:rate(Ts, Li) end, Estimators).
+                                      min_reclaimable = MinReclaimable}}.
 
 handle_aux(RaftState, Tag, Cmd, AuxPre, RaAux)
   when element(1, AuxPre) == aux_v2 orelse
        element(1, AuxPre) == aux ->
     Name = element(2, AuxPre),
-    Aux = init_aux(Name),
-    handle_aux(RaftState, Tag, Cmd, Aux, RaAux);
+    AuxV3 = init_aux(Name),
+    handle_aux(RaftState, Tag, Cmd, AuxV3, RaAux);
 handle_aux(RaftState, Tag, Cmd, AuxV3, RaAux)
   when element(1, AuxV3) == aux_v3 ->
     AuxV4 = #?AUX{name = element(2, AuxV3),
@@ -1391,19 +1319,6 @@ handle_aux(RaftState, Tag, Cmd, AuxV3, RaAux)
                   last_checkpoint = element(8, AuxV3)
                  },
     handle_aux(RaftState, Tag, Cmd, AuxV4, RaAux);
-handle_aux(RaftState, Tag, Cmd, AuxV4, RaAux)
-  when element(1, AuxV4) == aux_v4 ->
-    DecayMs = persistent_term:get(rabbit_fifo_ingress_decay_ms,
-                                  ?DEFAULT_INGRESS_DECAY_MS),
-    AuxV5 = #?AUX{name = element(2, AuxV4),
-                  last_decorators_state = element(3, AuxV4),
-                  last_consumer_timeout = element(4, AuxV4),
-                  gc = element(5, AuxV4),
-                  tick_pid = element(6, AuxV4),
-                  cache = element(7, AuxV4),
-                  last_checkpoint = element(8, AuxV4),
-                  ingress = #ingress_aux{decay_ms = DecayMs}},
-    handle_aux(RaftState, Tag, Cmd, AuxV5, RaAux);
 handle_aux(leader, cast, eval,
            #?AUX{last_decorators_state = LastDec,
                  last_consumer_timeout = LastConTimeout0,
@@ -1443,11 +1358,9 @@ handle_aux(leader, cast, eval,
     case query_notify_decorators_info(MacState) of
         LastDec ->
             {no_reply, Aux0#?AUX{last_checkpoint = Check,
-                                 last_consumer_timeout = NextConTimeout},
-             RaAux, Effects2};
+                                 last_consumer_timeout = NextConTimeout}, RaAux, Effects2};
         {MaxActivePriority, IsEmpty} = NewLast ->
-            Effects = [notify_decorators_effect(QName, MaxActivePriority,
-                                                IsEmpty)
+            Effects = [notify_decorators_effect(QName, MaxActivePriority, IsEmpty)
                        | Effects2],
             {no_reply, Aux0#?AUX{last_checkpoint = Check,
                                  last_consumer_timeout = NextConTimeout,
@@ -1498,25 +1411,22 @@ handle_aux(_RaftState, cast, {#return{msg_ids = MsgIds,
             %% for returns with a delivery limit set we can just return as before
             {no_reply, Aux0, RaAux0, [{append, Ret, {notify, Corr, Pid}}]}
     end;
-
-handle_aux(RaftState, _, {handle_tick, [QName, Overview0, Nodes]},
-           #?AUX{tick_pid = Pid, ingress = Ingress0} = Aux, RaAux) ->
+handle_aux(leader, _, {handle_tick, [QName, Overview0, Nodes]},
+           #?AUX{tick_pid = Pid} = Aux, RaAux) ->
     Overview = Overview0#{members_info => ra_aux:members_info(RaAux)},
-    Ingress = update_ingress(Overview0, Nodes, Ingress0),
-    Aux1 = Aux#?AUX{ingress = Ingress},
-    case RaftState of
-        leader ->
-            NewPid =
-                case process_is_alive(Pid) of
-                    false ->
-                        rabbit_quorum_queue:handle_tick(QName, Overview, Nodes);
-                    true ->
-                        Pid
-                end,
-            {no_reply, Aux1#?AUX{tick_pid = NewPid}, RaAux, []};
-        _ ->
-            {no_reply, Aux1, RaAux, []}
-    end;
+    NewPid =
+        case process_is_alive(Pid) of
+            false ->
+                %% No active TICK pid
+                %% this function spawns and returns the tick process pid
+                rabbit_quorum_queue:handle_tick(QName, Overview, Nodes);
+            true ->
+                %% Active TICK pid, do nothing
+                Pid
+        end,
+
+    %% TODO: check consumer timeouts
+    {no_reply, Aux#?AUX{tick_pid = NewPid}, RaAux, []};
 handle_aux(_, _, {get_checked_out, ConsumerKey, MsgIds}, Aux0, RaAux0) ->
     #?STATE{cfg = #cfg{},
             consumers = Consumers} = ra_aux:machine_state(RaAux0),
@@ -1613,10 +1523,6 @@ handle_aux(leader, _, {dlx, setup}, Aux, RaAux) ->
 handle_aux(_, _, {dlx, teardown, Pid}, Aux, RaAux) ->
     terminate_dlx_worker(Pid),
     {no_reply, Aux, RaAux};
-handle_aux(_, {call, _From}, get_ingress_rates,
-           #?AUX{ingress = Ingress} = Aux, RaAux) ->
-    Rates = compute_ingress_rates(Ingress),
-    {reply, {ok, Rates}, Aux, RaAux};
 handle_aux(_, _, Unhandled, Aux, RaAux) ->
     #?STATE{cfg = #cfg{resource = QR}} = ra_aux:machine_state(RaAux),
     ?LOG_DEBUG("~ts: rabbit_fifo: unhandled aux command ~P",
@@ -1632,7 +1538,6 @@ eval_gc(RaAux, MacState,
     case messages_total(MacState) of
         0 when Idx > LastGcIdx andalso
                Mem > ?GC_MEM_LIMIT_B ->
-            % elp:ignore W0047 (no_garbage_collect)
             garbage_collect(),
             {memory, MemAfter} = erlang:process_info(self(), memory),
             ?LOG_DEBUG("~ts: full GC sweep complete. "
@@ -1650,7 +1555,6 @@ force_eval_gc(RaAux,
     {memory, Mem} = erlang:process_info(self(), memory),
     case Idx > LastGcIdx of
         true ->
-            % elp:ignore W0047 (no_garbage_collect)
             garbage_collect(),
             {memory, MemAfter} = erlang:process_info(self(), memory),
             ?LOG_DEBUG("~ts: full GC sweep complete. "
@@ -1829,7 +1733,10 @@ query_notify_decorators_info(#?STATE{consumers = Consumers} = State) ->
 
 -spec usage(atom()) -> float().
 usage(Name) when is_atom(Name) ->
-    ets:lookup_element(rabbit_fifo_usage, Name, 2, 0.0).
+    case ets:lookup(rabbit_fifo_usage, Name) of
+        [] -> 0.0;
+        [{_, Use}] -> Use
+    end.
 
 %%% Internal
 
@@ -1877,13 +1784,12 @@ cancel_consumer(Meta, ConsumerKey,
             % The cancelled consumer is not active or cancelled
             % Just remove it from idle_consumers
             case lists:keyfind(ConsumerKey, 1, Waiting0) of
-                {_, ?CONSUMER_TAG_PID(T, P) = Con} ->
+                {_, ?CONSUMER_TAG_PID(T, P)} ->
                     Waiting = lists:keydelete(ConsumerKey, 1, Waiting0),
                     Effects = cancel_consumer_effects({T, P}, State0, Effects0),
                     % A waiting consumer isn't supposed to have any checked out messages,
                     % so nothing special to do here
-                    State = release_deferred_claims(ConsumerKey, Con, State0),
-                    {State#?STATE{waiting_consumers = Waiting}, Effects};
+                    {State0#?STATE{waiting_consumers = Waiting}, Effects};
                 _ ->
                     {State0, Effects0}
             end
@@ -1969,12 +1875,8 @@ activate_next_consumer(#?STATE{consumers = Cons0,
                            Existing ->
                                %% there was an exisiting non-active consumer
                                %% just update the existing cancelled consumer
-                               %% with the new config, keeping any claims
-                               %% held by the waiting entry
-                               #consumer{deferred_claims = NextClaims} = NextC,
-                               add_deferred_claims(
-                                 NextClaims,
-                                 Existing#consumer{cfg = NextCCfg})
+                               %% with the new config
+                               Existing#consumer{cfg =  NextCCfg}
                        end,
             #?STATE{service_queue = ServiceQueue} = State0,
             ServiceQueue1 = maybe_queue_consumer(NextCKey,
@@ -1987,8 +1889,8 @@ activate_next_consumer(#?STATE{consumers = Cons0,
                                                      true, single_active,
                                                      Effects0),
             {State, Effects};
-        {{ActiveCKey, #consumer{cfg = #consumer_cfg{priority = ActivePriority},
-                                checked_out = ActiveChecked} = Active},
+        {{ActiveCKey, ?CONSUMER_PRIORITY(ActivePriority) =
+                      #consumer{checked_out = ActiveChecked} = Active},
          {NextCKey, ?CONSUMER_PRIORITY(WaitingPriority) = Consumer}}
           when WaitingPriority > ActivePriority andalso
                map_size(ActiveChecked) == 0 ->
@@ -2066,86 +1968,41 @@ maybe_return_all(#{system_time := Ts} = Meta, ConsumerKey,
         _ ->
             {S1, Effects} = return_all(Meta, S0, Effects0, ConsumerKey,
                                        Consumer, Reason == down),
-            case S1#?STATE.consumers of
-                #{ConsumerKey := _} ->
-                    S2 = release_deferred_claims(ConsumerKey, Consumer, S1),
-                    {S2#?STATE{consumers = maps:remove(ConsumerKey,
-                                                       S2#?STATE.consumers),
-                               last_active = Ts},
-                     Effects};
-                _ ->
-                    %% a lifetime=once consumer (e.g. a previously soft-cancelled
-                    %% one, see the `cancel` branch above) can already have been
-                    %% torn down by return_all/return_one's own call to
-                    %% update_or_remove_con once its last checked-out message
-                    %% was returned above. Its deferred claims were already
-                    %% released there; doing so again here would duplicate them.
-                    {S1#?STATE{last_active = Ts}, Effects}
-            end
+            {S1#?STATE{consumers = maps:remove(ConsumerKey, S1#?STATE.consumers),
+                       last_active = Ts},
+             Effects}
     end.
-
-node_of(undefined) -> undefined;
-node_of(Pid) when is_pid(Pid) -> node(Pid).
-
-bump_ingress(Node, Size, Map) ->
-    maps:update_with(Node, fun(V) -> V + Size end, Size, Map).
 
 apply_enqueue(#{index := RaftIdx,
                 system_time := Ts} = Meta, From,
               Seq, RawMsg, Size, State0) ->
     case maybe_enqueue(RaftIdx, Ts, From, Seq, RawMsg, Size, [], State0) of
         {ok, State1, Effects1} ->
-            {MetaSize, BodySize} = Size,
-            TotalSize = MetaSize + BodySize,
-            IngressByNode = State1#?STATE.ingress_bytes_by_node,
-            State2 = State1#?STATE{ingress_bytes_by_node =
-                                   bump_ingress(node_of(From), TotalSize,
-                                                IngressByNode)},
-            checkout(Meta, State0, State2, Effects1);
+            checkout(Meta, State0, State1, Effects1);
         {out_of_sequence, State, Effects} ->
             {State, not_enqueued, Effects};
         {duplicate, State, Effects} ->
             {State, ok, Effects}
     end.
 
-
 decr_total(#?STATE{messages_total = Tot} = State) ->
     State#?STATE{messages_total = Tot - 1}.
 
-%% Delayed messages count towards max_length (see is_over_limit/1) but are
-%% not reachable via take_next_msg/1. This means that a queue whose
-%% overshoot consists entirely of delayed messages would leave drop_head
-%% with nothing to drop, and evaluate_limit0/4 would never terminate.
-%%
-%% Ready and returned messages stay the preferred victims. Among delayed
-%% messages the one with the soonest delivery time goes first, which means
-%% that a client parking many far-future messages can hold a queue at its
-%% limit and have every newly eligible message dropped ahead of them.
-drop_head(State0, Effects) ->
+drop_head(#?STATE{reclaimable_bytes = ReclaimableBytes0} = State0, Effects) ->
     case take_next_msg(State0) of
-        {Msg, State} ->
-            drop_msg(Msg, State, Effects);
+        {Msg, State1} ->
+            Header = get_msg_header(Msg),
+            State = decr_total(add_bytes_drop(Header, State1)),
+            #?STATE{cfg = #cfg{dead_letter_handler = DLH},
+                    dlx = DlxState} = State,
+            {_, _RetainedBytes, DlxEffects} =
+                discard_or_dead_letter([Msg], maxlen, DLH, DlxState),
+            Size = get_header(size, Header),
+            {State#?STATE{reclaimable_bytes = ReclaimableBytes0 + Size + ?ENQ_OVERHEAD_B},
+             add_drop_head_effects(DlxEffects, Effects)};
         empty ->
-            case take_smallest_delayed(State0#?STATE.delayed) of
-                {Msg, Delayed} ->
-                    drop_msg(Msg, State0#?STATE{delayed = Delayed}, Effects);
-                empty ->
-                    {State0, Effects}
-            end
+            {State0, Effects}
     end.
-
-drop_msg(Msg, #?STATE{reclaimable_bytes = ReclaimableBytes0} = State0,
-         Effects) ->
-    Header = get_msg_header(Msg),
-    State = decr_total(add_bytes_drop(Header, State0)),
-    #?STATE{cfg = #cfg{dead_letter_handler = DLH},
-            dlx = DlxState} = State,
-    {_, _RetainedBytes, DlxEffects} =
-        discard_or_dead_letter([Msg], maxlen, DLH, DlxState),
-    Size = get_header(size, Header),
-    {State#?STATE{reclaimable_bytes =
-                      ReclaimableBytes0 + Size + ?ENQ_OVERHEAD_B},
-     add_drop_head_effects(DlxEffects, Effects)}.
 
 add_drop_head_effects([{mod_call,
                         rabbit_global_counters,
@@ -2221,23 +2078,12 @@ maybe_enqueue(RaftIdx, Ts, undefined, undefined, RawMsg,
     Header0 = maybe_set_msg_ttl(RawMsg, Ts, Size, State0),
     Header = maybe_set_msg_delivery_count(RawMsg, Header0),
     Msg = make_msg(RaftIdx, Header),
-    case get_delivery_time(Ts, RawMsg) of
-        undefined ->
-            Priority = msg_priority(RawMsg),
-            State = State0#?STATE{msg_bytes_enqueue = Enqueue + Size,
-                                  messages_total = Total + 1,
-                                  messages = rabbit_fifo_pq:in(Priority, Msg,
-                                                               Messages)
-                                 },
-            {ok, State, Effects};
-        DeliveryTime ->
-            Delayed = delayed_in(DeliveryTime, RaftIdx, Msg, undefined,
-                                 State0#?STATE.delayed),
-            State = State0#?STATE{msg_bytes_enqueue = Enqueue + Size,
-                                  messages_total = Total + 1,
-                                  delayed = Delayed},
-            {ok, State, Effects}
-    end;
+    Priority = msg_priority(RawMsg),
+    State = State0#?STATE{msg_bytes_enqueue = Enqueue + Size,
+                          messages_total = Total + 1,
+                          messages = rabbit_fifo_pq:in(Priority, Msg, Messages)
+                         },
+    {ok, State, Effects};
 maybe_enqueue(RaftIdx, Ts, From, MsgSeqNo, RawMsg,
               {MetaSize, BodySize} = MsgSize,
               Effects0, #?STATE{msg_bytes_enqueue = BytesEnqueued,
@@ -2262,37 +2108,20 @@ maybe_enqueue(RaftIdx, Ts, From, MsgSeqNo, RawMsg,
             Header = maybe_set_msg_delivery_count(RawMsg, Header0),
             Msg = make_msg(RaftIdx, Header),
             Enq = Enq0#enqueuer{next_seqno = MsgSeqNo + 1},
-            case get_delivery_time(Ts, RawMsg) of
-                undefined ->
-                    MsgCache = case can_immediately_deliver(State0) of
-                                   true ->
-                                       {RaftIdx, RawMsg};
-                                   false ->
-                                       undefined
-                               end,
-                    Priority = msg_priority(RawMsg),
-                    State = State0#?STATE{msg_bytes_enqueue =
-                                              BytesEnqueued + Size,
-                                          messages_total = Total + 1,
-                                          messages = rabbit_fifo_pq:in(Priority,
-                                                                       Msg,
-                                                                       Messages),
-                                          enqueuers = Enqueuers0#{From => Enq},
-                                          msg_cache = MsgCache
-                                         },
-                    {ok, State, Effects0};
-                DeliveryTime ->
-                    Delayed = delayed_in(DeliveryTime, RaftIdx,
-                                         Msg, undefined,
-                                         State0#?STATE.delayed),
-                    State = State0#?STATE{msg_bytes_enqueue =
-                                              BytesEnqueued + Size,
-                                          messages_total = Total + 1,
-                                          enqueuers = Enqueuers0#{From => Enq},
-                                          msg_cache = undefined,
-                                          delayed = Delayed},
-                    {ok, State, Effects0}
-            end;
+            MsgCache = case can_immediately_deliver(State0) of
+                           true ->
+                               {RaftIdx, RawMsg};
+                           false ->
+                               undefined
+                       end,
+            Priority = msg_priority(RawMsg),
+            State = State0#?STATE{msg_bytes_enqueue = BytesEnqueued + Size,
+                                  messages_total = Total + 1,
+                                  messages = rabbit_fifo_pq:in(Priority, Msg, Messages),
+                                  enqueuers = Enqueuers0#{From => Enq},
+                                  msg_cache = MsgCache
+                                 },
+            {ok, State, Effects0};
         #enqueuer{next_seqno = Next}
           when MsgSeqNo > Next ->
             %% TODO: when can this happen?
@@ -2334,6 +2163,26 @@ return_multiple(Meta, ConsumerKey, #consumer{checked_out = Checked} = Consumer,
     {State, Effects}.
 
 % used to process messages that are finished
+% complete(Meta, ConsumerKey, [MsgId],
+%          #consumer{checked_out = Checked0} = Con0,
+%          #?STATE{msg_bytes_checkout = BytesCheckout,
+%                  reclaimable_bytes = DiscBytes,
+%                  messages_total = Tot} = State0,
+%         Effects) ->
+%     case maps:take(MsgId, Checked0) of
+%         {?C_MSG(Msg), Checked} ->
+%             Hdr = get_msg_header(Msg),
+%             SettledSize = get_header(size, Hdr),
+%             Con = Con0#consumer{checked_out = Checked,
+%                                 credit = increase_credit(Con0, 1)},
+%             State1 = update_or_remove_con(Meta, ConsumerKey, Con, State0),
+%             {State1#?STATE{msg_bytes_checkout = BytesCheckout - SettledSize,
+%                            reclaimable_bytes = DiscBytes + SettledSize + ?ENQ_OVERHEAD,
+%                            messages_total = Tot - 1},
+%              Effects};
+%         error ->
+%             {State0, Effects}
+%     end;
 complete(Meta, ConsumerKey, MsgIds,
          #consumer{checked_out = Checked0} = Con0,
          #?STATE{msg_bytes_checkout = BytesCheckout,
@@ -2356,8 +2205,7 @@ complete(Meta, ConsumerKey, MsgIds,
                         credit = increase_credit(Con0, Len)},
     State1 = update_or_remove_con(Meta, ConsumerKey, Con, State0),
     {State1#?STATE{msg_bytes_checkout = BytesCheckout - SettledSize,
-                   reclaimable_bytes =
-                       ReclBytes + SettledSize + (Len * ?ENQ_OVERHEAD_B),
+                   reclaimable_bytes = ReclBytes + SettledSize + (Len * ?ENQ_OVERHEAD_B),
                    messages_total = Tot - Len},
      Effects}.
 
@@ -2413,8 +2261,7 @@ add_active_effect(#consumer{status = quiescing} = Consumer,
                   Effects) ->
     case active_consumer(Consumers) of
         undefined ->
-            consumer_update_active_effects(State, Consumer, false,
-                                           waiting, Effects);
+            consumer_update_active_effects(State, Consumer, false, waiting, Effects);
         _ ->
             Effects
     end;
@@ -2482,9 +2329,10 @@ get_header(Key, Header)
 annotate_msg(Header, Msg0) ->
     case mc:is(Msg0) of
         true when is_map(Header) ->
-            Msg1 = maps:fold(fun mc:set_annotation/3, Msg0,
-                             maps:get(anns, Header, #{})),
-            Msg2 = case Header of
+            Msg1 = maps:fold(fun (K, V, Acc) ->
+                                     mc:set_annotation(K, V, Acc)
+                             end, Msg0, maps:get(anns, Header, #{})),
+            Msg = case Header of
                       #{acquired_count := AcqCount} ->
                           mc:set_annotation(acquired_count, AcqCount, Msg1);
                       _ ->
@@ -2492,9 +2340,9 @@ annotate_msg(Header, Msg0) ->
                   end,
             case Header of
                 #{delivery_count := DelCount} ->
-                    mc:set_annotation(delivery_count, DelCount, Msg2);
+                    mc:set_annotation(delivery_count, DelCount, Msg);
                 _ ->
-                    Msg2
+                    Msg
             end;
         _ ->
             Msg0
@@ -2552,37 +2400,25 @@ return_one(#{system_time := Ts} = Meta, MsgId,
             {add_bytes_return(Header, State), Effects0}
     end.
 
-get_delivery_time(Ts, Msg) ->
-    case mc:is(Msg) of
-        true ->
-            case mc:get_annotation(?ANN_DELIVERY_TIME, Msg) of
-                undefined ->
-                    undefined;
-                DelTime when DelTime =< Ts ->
-                    undefined;
-                DelTime ->
-                    DelTime
-            end;
-        false ->
-            undefined
-    end.
-
-
 should_delay(DeliveryFailed, DelayedRetry, Ts, Header, Anns) ->
+    %% First check for explicit x-opt-delivery-time annotation.
+    %% This takes precedence over delayed_retry configuration.
+    DeferralToken = case Anns of
+                        #{<<"x-opt-deferral-token">> := Token}
+                          when is_binary(Token) ->
+                            Token;
+                        _ ->
+                            undefined
+                    end,
     case Anns of
         #{<<"x-opt-delivery-time">> := DeliveryTime}
           when is_integer(DeliveryTime),
                DeliveryTime > Ts ->
-            %% Deferral tokens are only honoured when the client explicitly
-            %% sets a delivery time; the delayed-retry path never creates a
-            %% deferred entry so that tokens remain a purely client-driven
-            %% mechanism.
-            DeferralToken = maps:get(<<"x-opt-deferral-token">>, Anns, undefined),
             {true, DeliveryTime, DeferralToken};
         _ ->
             case should_delay0(DeliveryFailed, DelayedRetry, Ts, Header) of
                 {true, ReadyAt} ->
-                    {true, ReadyAt, undefined};
+                    {true, ReadyAt, DeferralToken};
                 false ->
                     false
             end
@@ -2622,11 +2458,7 @@ checkout(Meta, OldState, State, Effects) ->
 
 checkout(#{index := Index} = Meta,
          #?STATE{} = OldState,
-         State00, Effects00, Reply) ->
-    %% Claimed deferred messages go out before the ready backlog is serviced:
-    %% the client asked for these specific messages, so the credit it granted
-    %% must reach them rather than being spent on whatever else is queued.
-    {State0, Effects0} = deliver_claimed(Meta, State00, Effects00),
+         State0, Effects0, Reply) ->
     {#?STATE{cfg = #cfg{dead_letter_handler = DLH},
              dlx = DlxState0} = State1, _ExpiredMsg, Effects1} =
         checkout0(Meta, checkout_one(Meta, false, State0, Effects0), #{}),
@@ -2682,16 +2514,8 @@ evaluate_limit0(Index, BeforeState,
                 Effects0) ->
     case is_over_limit(State0) of
         true when Strategy == drop_head ->
-            case drop_head(State0, Effects0) of
-                {State0, Effects} ->
-                    %% there is nothing left that drop_head can drop, so
-                    %% stop here rather than spin. Exceeding the limit is
-                    %% recoverable, an apply/3 that never returns is not:
-                    %% it would hang every member on the same command.
-                    {State0, Effects};
-                {State, Effects} ->
-                    evaluate_limit0(Index, BeforeState, State, Effects)
-            end;
+            {State, Effects} = drop_head(State0, Effects0),
+            evaluate_limit0(Index, BeforeState, State, Effects);
         true when Strategy == reject_publish ->
             %% generate send_msg effect for each enqueuer to let them know
             %% they need to block
@@ -2778,26 +2602,23 @@ take_next_msg(#?STATE{returns = Returns0,
 
 take_next_delayed(_Ts, #delayed{next = undefined}) ->
     empty;
-take_next_delayed(Ts, #delayed{next = {ReadyAt, _, _}} = Delayed)
-  when Ts >= ReadyAt ->
-    take_smallest_delayed(Delayed);
-take_next_delayed(_Ts, #delayed{}) ->
-    empty.
-
-%% Take the delayed message with the soonest delivery time, whether or not
-%% that time has arrived. Callers that must respect the delivery time go
-%% through take_next_delayed/2.
-take_smallest_delayed(#delayed{next = {ReadyAt, Idx, Msg},
+take_next_delayed(Ts, #delayed{next = {ReadyAt, Idx, Msg},
                                tree = Tree0,
-                               deferred = Deferred0}) ->
+                               deferred = Deferred0}) when Ts >= ReadyAt ->
     Key = ?TUPLE(ReadyAt, Idx),
     Tree = gb_trees:delete(Key, Tree0),
-    Deferred = remove_deferred_key(Key, get_deferral_token(Msg), Deferred0),
-    Delayed = #delayed{tree = Tree,
-                       next = update_delayed_next(Tree),
-                       deferred = Deferred},
+    Next = case gb_trees:is_empty(Tree) of
+               true ->
+                   undefined;
+               false ->
+                   {?TUPLE(NextReadyAt, NextIdx), V} = gb_trees:smallest(Tree),
+                   {NextReadyAt, NextIdx, V}
+           end,
+    %% Remove any deferral token that maps to this key
+    Deferred = maps:filter(fun(_Token, K) -> K =/= Key end, Deferred0),
+    Delayed = #delayed{tree = Tree, next = Next, deferred = Deferred},
     {Msg, Delayed};
-take_smallest_delayed(#delayed{}) ->
+take_next_delayed(_Ts, #delayed{}) ->
     empty.
 
 %% Take all ready delayed messages (for promoting to returns queue)
@@ -2837,283 +2658,39 @@ take_delayed_for_retry(N, Ts, #delayed{tree = Tree0,
                            ?TUPLE(ReadyAt, Idx) = NextKey,
                            {ReadyAt, Idx, NextMsg}
                    end,
-            Deferred = remove_deferred_key(Key, get_deferral_token(Msg), Deferred0),
+            %% Remove any deferral token that maps to this key
+            Deferred = maps:filter(fun(_Token, K) -> K =/= Key end, Deferred0),
             Delayed = #delayed{tree = Tree, next = Next, deferred = Deferred},
             take_delayed_for_retry(N - 1, Ts, Delayed, [Msg | Acc])
     end.
 
-%% The deferral token, if any, was merged into the message header's anns by
-%% incr_msg_headers/3 when the message was parked, so it can be read back
-%% without a Raft log read.
-get_deferral_token(Msg) ->
-    case get_header(anns, get_msg_header(Msg)) of
-        undefined -> undefined;
-        Anns -> maps:get(<<"x-opt-deferral-token">>, Anns, undefined)
-    end.
+take_deferred(Tokens, Delayed) ->
+    take_deferred(Tokens, Delayed, [], []).
 
-%% Drop a single tree key from its token's key list, dropping the token
-%% entirely once its last key is removed. A message without a token was
-%% never added to Deferred, so there is nothing to look up.
-remove_deferred_key(_Key, undefined, Deferred) ->
-    Deferred;
-remove_deferred_key(Key, Token, Deferred) ->
-    case maps:find(Token, Deferred) of
-        {ok, Keys} ->
-            case lists:delete(Key, Keys) of
-                [] -> maps:remove(Token, Deferred);
-                Remaining -> Deferred#{Token => Remaining}
+take_deferred([], Delayed, MsgsAcc, NotFoundAcc) ->
+    {lists:reverse(MsgsAcc), lists:reverse(NotFoundAcc), Delayed};
+take_deferred([Token | Rest], #delayed{tree = Tree0,
+                                       deferred = Deferred0} = Delayed0,
+              MsgsAcc, NotFoundAcc) ->
+    case maps:take(Token, Deferred0) of
+        {Key, Deferred1} ->
+            case gb_trees:lookup(Key, Tree0) of
+                {value, Msg} ->
+                    Tree = gb_trees:delete(Key, Tree0),
+                    Next = update_delayed_next(Tree),
+                    Delayed = Delayed0#delayed{tree = Tree,
+                                               next = Next,
+                                               deferred = Deferred1},
+                    take_deferred(Rest, Delayed, [Msg | MsgsAcc], NotFoundAcc);
+                none ->
+                    %% Key in deferred map but not in tree - inconsistent,
+                    %% treat as not found and clean up
+                    Delayed = Delayed0#delayed{deferred = Deferred1},
+                    take_deferred(Rest, Delayed, MsgsAcc, [Token | NotFoundAcc])
             end;
         error ->
-            Deferred
+            take_deferred(Rest, Delayed0, MsgsAcc, [Token | NotFoundAcc])
     end.
-
-%% Move the given tokens' keys out of the shared deferred map. A token that
-%% is not there is silently skipped: it may never have been issued, it may
-%% already be claimed by another consumer, or its last parked message may
-%% have been promoted by its delivery time in the meantime.
-claim_deferred(Tokens, Delayed) ->
-    claim_deferred(Tokens, Delayed, #{}).
-
-claim_deferred([], Delayed, Claims) ->
-    {Claims, Delayed};
-claim_deferred([Token | Rem], #delayed{deferred = Deferred0} = Delayed0,
-               Claims0) ->
-    case maps:take(Token, Deferred0) of
-        {Keys, Deferred} ->
-            %% Keys are prepended as messages are parked, so reverse them
-            %% here to drain the claim oldest first.
-            Claims = Claims0#{Token => lists:reverse(Keys)},
-            claim_deferred(Rem, Delayed0#delayed{deferred = Deferred}, Claims);
-        error ->
-            claim_deferred(Rem, Delayed0, Claims0)
-    end.
-
-add_deferred_claims(Claims, Con) when map_size(Claims) =:= 0 ->
-    Con;
-add_deferred_claims(Claims, #consumer{deferred_claims = Claims0} = Con) ->
-    %% Merge the key lists rather than the maps: a token can be claimed
-    %% again while an earlier claim of it still has keys left to deliver.
-    Claims1 = maps:fold(
-                fun(Token, Keys, Acc) ->
-                        maps:update_with(Token,
-                                         fun(Existing) -> Existing ++ Keys end,
-                                         Keys, Acc)
-                end, Claims0, Claims),
-    Con#consumer{deferred_claims = Claims1}.
-
-%% Record that ConsumerKey now holds a non-empty claim, going by Con's
-%% deferred_claims (i.e. after add_deferred_claims/2 merged in this claim),
-%% rather than re-deriving it from the claim just added: add_deferred_claims
-%% only ever adds keys, so this is never wrong, and it stays correct even if
-%% Con already held claims before this particular claim call.
-note_claimed(_ConsumerKey, #consumer{deferred_claims = Claims},
-             #?STATE{claimed_consumers = Claimed})
-  when map_size(Claims) =:= 0 ->
-    Claimed;
-note_claimed(ConsumerKey, _Con, #?STATE{claimed_consumers = Claimed}) ->
-    maps:put(ConsumerKey, true, Claimed).
-
-%% Return a departing consumer's outstanding claims to the shared deferred
-%% map. The messages are still parked, so this keeps them reachable by their
-%% tokens instead of only by their delivery time.
-release_deferred_claims(_ConsumerKey, #consumer{deferred_claims = Claims}, State)
-  when map_size(Claims) =:= 0 ->
-    State;
-release_deferred_claims(ConsumerKey, #consumer{deferred_claims = Claims},
-                        #?STATE{delayed = #delayed{tree = Tree,
-                                                   deferred = Deferred0}
-                                = Delayed,
-                                claimed_consumers = Claimed} = State) ->
-    Deferred = maps:fold(
-                 fun(Token, Keys0, Acc) ->
-                         case [K || K <- Keys0, gb_trees:is_defined(K, Tree)] of
-                             [] ->
-                                 Acc;
-                             Keys ->
-                                 %% the deferred map holds keys newest first,
-                                 %% a claim holds them oldest first
-                                 Rev = lists:reverse(Keys),
-                                 maps:update_with(
-                                   Token,
-                                   fun(Existing) -> Existing ++ Rev end,
-                                   Rev, Acc)
-                         end
-                 end, Deferred0, Claims),
-    State#?STATE{delayed = Delayed#delayed{deferred = Deferred},
-                claimed_consumers = maps:remove(ConsumerKey, Claimed)}.
-
-%% Deliver, ahead of the ready backlog, the messages each consumer has
-%% claimed by deferral token, as far as its credit allows.
-%%
-%% An empty delayed tree, or an empty claimed_consumers, means no claim can
-%% resolve to a message, which is the case for every queue not using
-%% deferral, so the scan is skipped entirely there. Otherwise, only the
-%% consumers named in claimed_consumers are visited, so the cost of this
-%% scan is bounded by the number of outstanding claims, not by the total
-%% number of consumers on the queue.
-%%
-%% claimed_consumers is conservative: a key is only ever dropped once this
-%% scan, or a claim release, directly observes that key holds no claim, so
-%% it may lag a checkout or two after the last of a consumer's claims
-%% drains, but it can never be missing a key that still holds a claim.
-%% A claimed key whose message has left the tree is dropped when the claim
-%% is next consulted, so a consumer that claims tokens and then never grants
-%% the credit to collect them can hold on to stale keys until it detaches.
-deliver_claimed(_Meta, #?STATE{delayed = #delayed{next = undefined}} = State,
-                Effects) ->
-    {State, Effects};
-deliver_claimed(_Meta, #?STATE{claimed_consumers = Claimed} = State, Effects)
-  when map_size(Claimed) =:= 0 ->
-    {State, Effects};
-deliver_claimed(Meta, #?STATE{claimed_consumers = Claimed} = State, Effects) ->
-    {State1, Effects1, Claimed1} =
-        maps:fold(
-          fun(ConsumerKey, true, {S, E, ClaimedAcc}) ->
-                  case S#?STATE.consumers of
-                      #{ConsumerKey := #consumer{deferred_claims = C,
-                                                 credit = Credit,
-                                                 status = up}}
-                        when map_size(C) > 0 andalso Credit > 0 ->
-                          {S1, E1} = deliver_claimed_to(Meta, ConsumerKey, S, E),
-                          #{ConsumerKey := #consumer{deferred_claims = C1}} =
-                              S1#?STATE.consumers,
-                          case map_size(C1) > 0 of
-                              true -> {S1, E1, ClaimedAcc};
-                              false -> {S1, E1, maps:remove(ConsumerKey, ClaimedAcc)}
-                          end;
-                      #{ConsumerKey := #consumer{deferred_claims = C}} ->
-                          %% present but not eligible for delivery right now
-                          %% (not up, no credit, or nothing actually claimed)
-                          case map_size(C) > 0 of
-                              true -> {S, E, ClaimedAcc};
-                              false -> {S, E, maps:remove(ConsumerKey, ClaimedAcc)}
-                          end;
-                      _ ->
-                          %% not an active consumer: a claim's owner key is
-                          %% stable across single-active-consumer promotion
-                          %% (activate_next_consumer/2 never re-keys a
-                          %% waiting consumer), so check waiting_consumers
-                          case lists:keyfind(ConsumerKey, 1,
-                                            S#?STATE.waiting_consumers) of
-                              {_, #consumer{deferred_claims = C}}
-                                when map_size(C) > 0 ->
-                                  {S, E, ClaimedAcc};
-                              _ ->
-                                  {S, E, maps:remove(ConsumerKey, ClaimedAcc)}
-                          end
-                  end
-          end, {State, Effects, Claimed}, maps:iterator(Claimed, ordered)),
-    {State1#?STATE{claimed_consumers = Claimed1}, Effects1}.
-
-deliver_claimed_to(Meta, ConsumerKey,
-                   #?STATE{consumers = Consumers} = State0, Effects0) ->
-    #{ConsumerKey := #consumer{credit = Credit} = Con0} = Consumers,
-    {Msgs, Con, State1} = take_claimed_up_to(Credit, Con0, State0),
-    case Msgs of
-        [] ->
-            %% the claim held nothing but stale keys, which have now been
-            %% pruned off the consumer
-            {State1#?STATE{consumers = maps:update(ConsumerKey, Con,
-                                                   State1#?STATE.consumers)},
-             Effects0};
-        _ ->
-            assign_claimed(Meta, ConsumerKey, Con, Msgs, State1, Effects0)
-    end.
-
-%% Take up to Credit of the messages this consumer has claimed, oldest first
-%% within each token, dropping any claimed key whose message has since left
-%% the delayed tree. Across tokens, order is unspecified: maps:iterator/2
-%% below walks Claims0 in term order of the token binaries, not the order
-%% the tokens were claimed in.
-take_claimed_up_to(Credit, #consumer{deferred_claims = Claims0} = Con,
-                   #?STATE{delayed = #delayed{tree = Tree0} = Delayed} = State) ->
-    {Msgs, Claims, Tree} = drain_claims(maps:iterator(Claims0, ordered),
-                                        Credit, Claims0, Tree0, []),
-    Con1 = Con#consumer{deferred_claims = Claims},
-    case Msgs of
-        [] ->
-            {[], Con1, State};
-        _ ->
-            {Msgs, Con1,
-             State#?STATE{delayed =
-                          Delayed#delayed{tree = Tree,
-                                          next = update_delayed_next(Tree)}}}
-    end.
-
-drain_claims(_Iter, 0, Claims, Tree, Acc) ->
-    {lists:reverse(Acc), Claims, Tree};
-drain_claims(Iter, N, Claims, Tree0, Acc) ->
-    case maps:next(Iter) of
-        none ->
-            {lists:reverse(Acc), Claims, Tree0};
-        {Token, Keys, Iter1} ->
-            {Msgs, Rem, Tree} = drain_claimed_keys(Keys, N, Tree0, []),
-            Claims1 = case Rem of
-                          [] ->
-                              maps:remove(Token, Claims);
-                          _ ->
-                              Claims#{Token := Rem}
-                      end,
-            drain_claims(Iter1, N - length(Msgs), Claims1, Tree,
-                         lists:reverse(Msgs, Acc))
-    end.
-
-drain_claimed_keys(Keys, 0, Tree, Acc) ->
-    {lists:reverse(Acc), Keys, Tree};
-drain_claimed_keys([], _N, Tree, Acc) ->
-    {lists:reverse(Acc), [], Tree};
-drain_claimed_keys([Key | Rem], N, Tree0, Acc) ->
-    case gb_trees:lookup(Key, Tree0) of
-        {value, Msg} ->
-            drain_claimed_keys(Rem, N - 1, gb_trees:delete(Key, Tree0),
-                               [Msg | Acc]);
-        none ->
-            %% the message was promoted by its delivery time, retried or
-            %% purged, so drop the stale key
-            drain_claimed_keys(Rem, N, Tree0, Acc)
-    end.
-
-%% Check a batch of claimed messages out to their consumer.
-assign_claimed(#{system_time := Ts} = Meta, ConsumerKey,
-               #consumer{checked_out = Checked0,
-                         next_msg_id = NextMsgId0,
-                         credit = Credit0,
-                         delivery_count = DelCnt0,
-                         cfg = Cfg} = Con0,
-               Msgs,
-               #?STATE{msg_bytes_checkout = BytesCheckout0,
-                       msg_bytes_enqueue = BytesEnqueue0,
-                       next_consumer_timeout = NextConTimeout0} = State0,
-               Effects0) ->
-    {Checked, NextMsgId, Credit, DelCnt, BytesCheckout, BytesEnqueue,
-     NextConTimeout, DelMsgsRev} =
-        lists:foldl(
-          fun(Msg, {CheckedAcc, MsgIdAcc, CreditAcc, DelCntAcc,
-                    BytesCheckoutAcc, BytesEnqueueAcc, TimeoutAcc,
-                    DelMsgsAcc}) ->
-                  Timeout = Ts + Cfg#consumer_cfg.timeout,
-                  Size = get_header(size, get_msg_header(Msg)),
-                  {maps:put(MsgIdAcc, ?C_MSG(Timeout, Msg), CheckedAcc),
-                   MsgIdAcc + 1, CreditAcc - 1, add(DelCntAcc, 1),
-                   BytesCheckoutAcc + Size, BytesEnqueueAcc - Size,
-                   min(Timeout, TimeoutAcc), [{MsgIdAcc, Msg} | DelMsgsAcc]}
-          end,
-          {Checked0, NextMsgId0, Credit0, DelCnt0, BytesCheckout0,
-           BytesEnqueue0, NextConTimeout0, []}, Msgs),
-    Con = Con0#consumer{checked_out = Checked,
-                        next_msg_id = NextMsgId,
-                        credit = Credit,
-                        delivery_count = DelCnt},
-    State1 = State0#?STATE{msg_bytes_checkout = BytesCheckout,
-                           msg_bytes_enqueue = BytesEnqueue,
-                           next_consumer_timeout = NextConTimeout},
-    State = update_or_remove_con(Meta, ConsumerKey, Con, State1),
-    DeliveryEffect = delivery_effect(ConsumerKey, lists:reverse(DelMsgsRev),
-                                     State),
-    %% appended, not prepended: claimed deliveries must reach the client
-    %% ahead of anything checkout/5 subsequently services from the ready
-    %% backlog, and this preserves their relative order across consumers
-    {State, Effects0 ++ [DeliveryEffect]}.
 
 update_delayed_next(Tree) ->
     case gb_trees:is_empty(Tree) of
@@ -3124,6 +2701,50 @@ update_delayed_next(Tree) ->
             ?TUPLE(ReadyAt, Idx) = Key,
             {ReadyAt, Idx, Msg}
     end.
+
+assign_to_consumer(_Meta, _Ts, _ConsumerKey, [], State, Effects) ->
+    {State, Effects};
+assign_to_consumer(#{system_time := Ts} = Meta, _Ts, ConsumerKey, Msgs,
+                   #?STATE{consumers = Consumers0,
+                           msg_bytes_checkout = BytesCheckout0,
+                           msg_bytes_enqueue = BytesEnqueue0,
+                           next_consumer_timeout = NextConTimeout0} = State0,
+                   Effects0) ->
+    #consumer{checked_out = Checked0,
+              next_msg_id = NextMsgId0,
+              credit = Credit0,
+              delivery_count = DelCnt0,
+              cfg = Cfg} = Con0 = maps:get(ConsumerKey, Consumers0),
+    {Checked, NextMsgId, Credit, DelCnt, BytesCheckout, BytesEnqueue,
+     NextConTimeout, DeliveryMsgs} =
+        lists:foldl(
+          fun(Msg, {CheckedAcc, MsgIdAcc, CreditAcc, DelCntAcc,
+                    BytesCheckoutAcc, BytesEnqueueAcc, TimeoutAcc,
+                    DelMsgsAcc}) ->
+                  Timeout = Ts + Cfg#consumer_cfg.timeout,
+                  CMsg = ?C_MSG(Timeout, Msg),
+                  CheckedAcc1 = maps:put(MsgIdAcc, CMsg, CheckedAcc),
+                  Size = get_header(size, get_msg_header(Msg)),
+                  {CheckedAcc1, MsgIdAcc + 1, CreditAcc - 1,
+                   add(DelCntAcc, 1), BytesCheckoutAcc + Size,
+                   BytesEnqueueAcc - Size, min(Timeout, TimeoutAcc),
+                   [{MsgIdAcc, Msg} | DelMsgsAcc]}
+          end,
+          {Checked0, NextMsgId0, Credit0, DelCnt0,
+           BytesCheckout0, BytesEnqueue0, NextConTimeout0, []},
+          Msgs),
+    Con = Con0#consumer{checked_out = Checked,
+                        next_msg_id = NextMsgId,
+                        credit = Credit,
+                        delivery_count = DelCnt},
+    State1 = State0#?STATE{msg_bytes_checkout = BytesCheckout,
+                           msg_bytes_enqueue = BytesEnqueue,
+                           next_consumer_timeout = NextConTimeout},
+    State = update_or_remove_con(Meta, ConsumerKey, Con, State1),
+    DelMsgs = lists:reverse(DeliveryMsgs),
+    DeliveryEffect = delivery_effect(ConsumerKey, DelMsgs, State),
+    Effects = [DeliveryEffect | Effects0],
+    {State, Effects}.
 
 delayed_in(ReadyAt, Idx, Msg, DeferralToken, #delayed{tree = Tree0,
                                                       next = Next0,
@@ -3142,9 +2763,7 @@ delayed_in(ReadyAt, Idx, Msg, DeferralToken, #delayed{tree = Tree0,
                    undefined ->
                        Deferred0;
                    _ ->
-                       maps:update_with(DeferralToken,
-                                        fun(Keys) -> [Key | Keys] end,
-                                        [Key], Deferred0)
+                       Deferred0#{DeferralToken => Key}
                end,
     #delayed{tree = Tree, next = Next, deferred = Deferred}.
 
@@ -3172,6 +2791,7 @@ delivery_effect(ConsumerKey, [{MsgId, Msg}],
 delivery_effect(ConsumerKey, Msgs, #?STATE{} = State) ->
     {CTag, CPid} = consumer_id(ConsumerKey, State),
     {RaftIdxs, _Num} = lists:foldr(fun ({_, Msg}, {Acc, N}) ->
+
                                            {[get_msg_idx(Msg) | Acc], N+1}
                                    end, {[], 0}, Msgs),
     {log_ext, RaftIdxs,
@@ -3318,7 +2938,7 @@ expire_shallow(Ts, #?STATE{returns = Returns0,
                            delayed = Delayed0} = State0) ->
     %% Promote ready delayed messages to returns queue
     {ReadyMsgs, Delayed} = take_ready_delayed(Ts, Delayed0),
-    Returns = lists:foldl(fun lqueue:in/2,
+    Returns = lists:foldl(fun (Msg, Acc) -> lqueue:in(Msg, Acc) end,
                           Returns0, ReadyMsgs),
     State = State0#?STATE{returns = Returns, delayed = Delayed},
     {_, State1, DlxEffects} = expire_batch(Ts, State, []),
@@ -3456,9 +3076,8 @@ update_or_remove_con(Meta, ConsumerKey,
         0 ->
             #{system_time := Ts} = Meta,
             % we're done with this consumer
-            State1 = release_deferred_claims(ConsumerKey, Con, State),
-            State1#?STATE{consumers = maps:remove(ConsumerKey, Cons),
-                          last_active = Ts};
+            State#?STATE{consumers = maps:remove(ConsumerKey, Cons),
+                         last_active = Ts};
         _ ->
             % there are unsettled items so need to keep around
             State#?STATE{consumers = maps:put(ConsumerKey, Con, Cons)}
@@ -3562,8 +3181,8 @@ add_waiting({Key, _} = New, Waiting) ->
 
 sort_waiting(Waiting) ->
     lists:sort(fun
-                   ({_, #consumer{cfg = #consumer_cfg{priority = P1}, status = up}},
-                    {_, #consumer{cfg = #consumer_cfg{priority = P2}, status = up}})
+                   ({_, ?CONSUMER_PRIORITY(P1) = #consumer{status = up}},
+                    {_, ?CONSUMER_PRIORITY(P2) = #consumer{status = up}})
                      when P1 =/= P2 ->
                        P2 =< P1;
                    ({C1, #consumer{status = up,
@@ -3845,25 +3464,17 @@ message_size(Msg) ->
 
 all_nodes(#?STATE{consumers = Cons0,
                   enqueuers = Enqs0,
-                  waiting_consumers = WaitingConsumers0,
-                  ingress_bytes_by_node = IngressByNode}) ->
+                  waiting_consumers = WaitingConsumers0}) ->
     Nodes0 = maps:fold(fun(_, ?CONSUMER_PID(P), Acc) ->
                                Acc#{node(P) => ok}
                        end, #{}, Cons0),
     Nodes1 = maps:fold(fun(P, _, Acc) ->
                                Acc#{node(P) => ok}
                        end, Nodes0, Enqs0),
-    Nodes2 = lists:foldl(fun({_, ?CONSUMER_PID(P)}, Acc) ->
-                                  Acc#{node(P) => ok}
-                          end, Nodes1, WaitingConsumers0),
-    %% Also seed with ingress_bytes_by_node's keys: a node that only ever
-    %% published can lose its enqueuer entry (process exit) while its
-    %% ingress tally remains, and only appearing here lets the tick-driven
-    %% stale node check purge it once the node itself has left the cluster.
-    Nodes = maps:fold(fun(undefined, _, Acc) -> Acc;
-                         (Node, _, Acc) -> Acc#{Node => ok}
-                      end, Nodes2, IngressByNode),
-    maps:keys(Nodes).
+    maps:keys(
+      lists:foldl(fun({_, ?CONSUMER_PID(P)}, Acc) ->
+                          Acc#{node(P) => ok}
+                  end, Nodes1, WaitingConsumers0)).
 
 all_pids_for(Node, #?STATE{consumers = Cons0,
                            enqueuers = Enqs0,
@@ -3975,9 +3586,7 @@ convert(Meta, 6, To, State) ->
     %% no conversion needed, this version only includes a logic change
     convert(Meta, 7, To, State);
 convert(Meta, 7, To, State) ->
-    convert(Meta, 8, To, rabbit_fifo_v8:convert_v7_to_v8(Meta, State));
-convert(Meta, 8, To, State) ->
-    convert(Meta, 9, To, convert_v8_to_v9(Meta, State)).
+    convert(Meta, 8, To, convert_v7_to_v8(Meta, State)).
 
 smallest_raft_index(#?STATE{messages = Messages,
                             returns = Returns,
@@ -4567,7 +4176,7 @@ discard_or_dead_letter(Msgs, Reason, undefined, State) ->
      [{mod_call, rabbit_global_counters, messages_dead_lettered,
        [Reason, rabbit_quorum_queue, disabled, length(Msgs)]}]};
 discard_or_dead_letter(Msgs0, Reason, {at_most_once, {Mod, Fun, Args}}, State) ->
-    Idxs = [get_msg_idx(Elem) || Elem <- Msgs0],
+    Idxs = lists:map(fun get_msg_idx/1, Msgs0),
     %% TODO: this could be turned into a log_ext effect instead to avoid
     %% reading from disk inside the qq process
     Effect = {log, Idxs,
