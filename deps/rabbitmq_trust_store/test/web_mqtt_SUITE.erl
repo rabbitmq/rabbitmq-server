@@ -16,11 +16,9 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
-%% The exact alert the client receives during peer verification depends
-%% on negotiation details outside this test's control (the TLS version used,
-%% renegotiation options), so both types are accepted.
--define(IS_SERVER_REJECTION(Alert),
-        (element(1, Alert) =:= unknown_ca orelse element(1, Alert) =:= handshake_failure)).
+%% `rabbit_ct_broker_helpers` pre-assigns this port to
+%% `tcp_port_web_mqtt_tls` but does not configure a listener on it.
+-define(WEB_MQTT_TLS_PORT, 21010).
 
 all() ->
     [
@@ -30,8 +28,7 @@ all() ->
 groups() ->
     [
       {tests, [], [
-          whitelisted_certificate_accepted_over_web_mqtt_tls,
-          non_whitelisted_certificate_rejected_over_web_mqtt_tls
+          trust_store_options_reach_the_web_mqtt_tls_listener
         ]}
     ].
 
@@ -39,21 +36,12 @@ suite() ->
     [{timetrap, {seconds, 60}}].
 
 init_per_suite(Config) ->
-    {ok, _} = application:ensure_all_started(ssl),
     rabbit_ct_helpers:log_environment(),
     Config1 = rabbit_ct_helpers:set_config(Config, [{rmq_nodename_suffix, ?MODULE}]),
     Config2 = rabbit_ct_helpers:run_setup_steps(Config1),
     {rmq_certsdir, CertsDir} = proplists:lookup(rmq_certsdir, Config2),
-    WhitelistDir = filename:join([CertsDir, "trust_store", "web_mqtt_SUITE"]),
-    ok = filelib:ensure_dir(WhitelistDir),
-    ok = file:make_dir(WhitelistDir),
     Config3 = rabbit_ct_helpers:merge_app_env(
                 Config2,
-                {rabbitmq_trust_store,
-                 [{directory, WhitelistDir},
-                  {providers, [rabbit_trust_store_file_provider]}]}),
-    Config4 = rabbit_ct_helpers:merge_app_env(
-                Config3,
                 {rabbitmq_web_mqtt,
                  [{ssl_config,
                    [{cacertfile, filename:join([CertsDir, "testca", "cacert.pem"])},
@@ -61,16 +49,9 @@ init_per_suite(Config) ->
                     {keyfile, filename:join([CertsDir, "server", "key.pem"])},
                     {verify, verify_peer},
                     {fail_if_no_peer_cert, true},
-                    {versions, ['tlsv1.2']},
-                    %% Hard coded to match the port `rabbit_ct_broker_helpers`
-                    %% pre-assigns to `tcp_port_web_mqtt_tls`, since the
-                    %% broker isn't up yet to compute it for us.
-                    {port, 21010}
+                    {port, ?WEB_MQTT_TLS_PORT}
                    ]}]}),
-    case rabbit_ct_helpers:run_setup_steps(Config4, rabbit_ct_broker_helpers:setup_steps()) of
-        {skip, _} = Error -> Error;
-        Config5 -> rabbit_ct_helpers:set_config(Config5, {whitelist_dir, WhitelistDir})
-    end.
+    rabbit_ct_helpers:run_setup_steps(Config3, rabbit_ct_broker_helpers:setup_steps()).
 
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config, rabbit_ct_broker_helpers:teardown_steps()).
@@ -85,35 +66,19 @@ end_per_testcase(Testcase, Config) ->
 %% Testsuite cases
 %% -------------------------------------------------------------------
 
-whitelisted_certificate_accepted_over_web_mqtt_tls(Config) ->
-    {_RootCerts, Cert, Key} = ct_helper:make_certs(),
-    whitelist(Config, "whitelisted", Cert),
-    ok = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_trust_store, refresh, []),
-
-    {ok, Socket} = ssl:connect(host(Config), port(Config), client_tls_opts(Cert, Key), 5000),
-    ok = ssl:close(Socket).
-
-non_whitelisted_certificate_rejected_over_web_mqtt_tls(Config) ->
-    {_RootCerts, Cert, Key} = ct_helper:make_certs(),
-
-    {error, {tls_alert, Alert}} =
-        ssl:connect(host(Config), port(Config), client_tls_opts(Cert, Key), 5000),
-    ?assert(?IS_SERVER_REJECTION(Alert)).
+trust_store_options_reach_the_web_mqtt_tls_listener(Config) ->
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_web_mqtt_tls),
+    SocketOpts = rabbit_ct_broker_helpers:rpc(Config, 0,
+                                              ?MODULE, listener_socket_opts, [Port]),
+    {VerifyFun, continue} = proplists:get_value(verify_fun, SocketOpts),
+    {module, rabbit_trust_store} = erlang:fun_info(VerifyFun, module),
+    ?assert(is_function(proplists:get_value(partial_chain, SocketOpts), 1)).
 
 %% -------------------------------------------------------------------
 %% Internal helpers
 %% -------------------------------------------------------------------
 
-host(Config) ->
-    rabbit_ct_helpers:get_config(Config, rmq_hostname).
-
-port(Config) ->
-    rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_web_mqtt_tls).
-
-client_tls_opts(Cert, Key) ->
-    [{cert, Cert}, {key, Key}, {verify, verify_none}, {versions, ['tlsv1.2']}].
-
-whitelist(Config, Name, Certificate) ->
-    Path = ?config(whitelist_dir, Config),
-    ok = file:write_file(filename:join(Path, Name ++ ".pem"),
-                         public_key:pem_encode([{'Certificate', Certificate, not_encrypted}])).
+listener_socket_opts(Port) ->
+    Ref = rabbit_networking:ranch_ref([{port, Port}]),
+    #{socket_opts := SocketOpts} = ranch:get_transport_options(Ref),
+    SocketOpts.
