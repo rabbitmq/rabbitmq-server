@@ -40,7 +40,7 @@ to_json(ReqData, Context) ->
             {nodes,    Nodes}
         ],
         %% `reply/3` replaces the `cache-control` header set in `init/2`, so
-        %% we have re-inject the value we want
+        %% we have to re-inject the value we want
         case rabbit_mgmt_util:reply(Payload, ReqData, Context) of
             {stop, _, _} = Stop ->
                 Stop;
