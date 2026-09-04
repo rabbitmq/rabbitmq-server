@@ -13,12 +13,14 @@
 
 all() ->
     [
-      {group, parallel_tests}
+      {group, tests}
     ].
 
+%% Every case sets and clears the same `rabbit` app env key, so they
+%% cannot run in parallel.
 groups() ->
     [
-      {parallel_tests, [parallel], [
+      {tests, [], [
           no_overrides_is_a_no_op,
           override_is_added_when_absent,
           override_replaces_listener_value,
@@ -28,9 +30,9 @@ groups() ->
         ]}
     ].
 
-init_per_testcase(Testcase, Config) ->
+init_per_testcase(_Testcase, Config) ->
     ok = application:unset_env(rabbit, ssl_options_overrides),
-    [{testcase, Testcase} | Config].
+    Config.
 
 end_per_testcase(_Testcase, _Config) ->
     ok = application:unset_env(rabbit, ssl_options_overrides).
@@ -70,4 +72,4 @@ bare_atom_socket_option_is_preserved(_Config) ->
 override_replaces_every_duplicate_listener_value(_Config) ->
     ok = application:set_env(rabbit, ssl_options_overrides, [{verify, verify_peer}]),
     Fixed = rabbit_networking:fix_ssl_options([{verify, verify_none}, {verify, verify_none}]),
-    ?assertEqual(1, length([V || {verify, V} <- Fixed])).
+    ?assertEqual([verify_peer], [V || {verify, V} <- Fixed]).
