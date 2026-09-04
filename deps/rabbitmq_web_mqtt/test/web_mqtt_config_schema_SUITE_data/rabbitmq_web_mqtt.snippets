@@ -114,6 +114,93 @@
             ]}]}],
   [rabbitmq_web_mqtt]},
 
+ {ssl_peer_verification,
+  "web_mqtt.ssl.port                 = 15671
+   web_mqtt.ssl.certfile             = test/web_mqtt_config_schema_SUITE_data/certs/server_certificate.pem
+   web_mqtt.ssl.keyfile              = test/web_mqtt_config_schema_SUITE_data/certs/server_key.pem
+   web_mqtt.ssl.cacertfile           = test/web_mqtt_config_schema_SUITE_data/certs/ca_certificate.pem
+   web_mqtt.ssl.verify               = verify_peer
+   web_mqtt.ssl.fail_if_no_peer_cert = true
+   web_mqtt.ssl.depth                = 3",
+  [{rabbitmq_web_mqtt,
+       [{ssl_config,
+            [{port,15671},
+             {certfile,"test/web_mqtt_config_schema_SUITE_data/certs/server_certificate.pem"},
+             {keyfile,"test/web_mqtt_config_schema_SUITE_data/certs/server_key.pem"},
+             {cacertfile,"test/web_mqtt_config_schema_SUITE_data/certs/ca_certificate.pem"},
+             {verify,verify_peer},
+             {fail_if_no_peer_cert,true},
+             {depth,3}]}]}],
+  [rabbitmq_web_mqtt]},
+
+ {ssl_peer_verification_with_listener,
+  "web_mqtt.ssl.listener             = 127.0.0.2:15671
+   web_mqtt.ssl.certfile             = test/web_mqtt_config_schema_SUITE_data/certs/server_certificate.pem
+   web_mqtt.ssl.keyfile              = test/web_mqtt_config_schema_SUITE_data/certs/server_key.pem
+   web_mqtt.ssl.cacertfile           = test/web_mqtt_config_schema_SUITE_data/certs/ca_certificate.pem
+   web_mqtt.ssl.verify               = verify_peer
+   web_mqtt.ssl.fail_if_no_peer_cert = false
+   web_mqtt.ssl.password             = changeme",
+  [{rabbitmq_web_mqtt,
+       [{ssl_config,
+            [{ip,"127.0.0.2"},
+             {port,15671},
+             {certfile,"test/web_mqtt_config_schema_SUITE_data/certs/server_certificate.pem"},
+             {keyfile,"test/web_mqtt_config_schema_SUITE_data/certs/server_key.pem"},
+             {cacertfile,"test/web_mqtt_config_schema_SUITE_data/certs/ca_certificate.pem"},
+             {verify,verify_peer},
+             {fail_if_no_peer_cert,false},
+             {password,<<"changeme">>}]}]}],
+  [rabbitmq_web_mqtt]},
+
+ {ssl_listener_with_versions_and_ciphers,
+  "web_mqtt.ssl.listener   = 127.0.0.2:15671
+   web_mqtt.ssl.certfile   = test/web_mqtt_config_schema_SUITE_data/certs/server_certificate.pem
+   web_mqtt.ssl.versions.1 = tlsv1.3
+   web_mqtt.ssl.versions.2 = tlsv1.2
+   web_mqtt.ssl.ciphers.1  = ECDHE-ECDSA-AES256-GCM-SHA384
+   web_mqtt.ssl.ciphers.2  = ECDHE-RSA-AES256-GCM-SHA384",
+  [{rabbitmq_web_mqtt,
+       [{ssl_config,
+            [{ip,"127.0.0.2"},
+             {port,15671},
+             {certfile,"test/web_mqtt_config_schema_SUITE_data/certs/server_certificate.pem"},
+             {versions,['tlsv1.3','tlsv1.2']},
+             {ciphers,["ECDHE-ECDSA-AES256-GCM-SHA384",
+                       "ECDHE-RSA-AES256-GCM-SHA384"]}]}]}],
+  [rabbitmq_web_mqtt]},
+
+ {ssl_listener_with_inline_cert_and_dh,
+  "web_mqtt.ssl.listener = 127.0.0.2:15671
+   web_mqtt.ssl.cert     = MIIBinline-certificate
+   web_mqtt.ssl.dh       = MIIBinline-dh-parameters",
+  [{rabbitmq_web_mqtt,
+       [{ssl_config,
+            [{ip,"127.0.0.2"},
+             {port,15671},
+             {cert,<<"MIIBinline-certificate">>},
+             {dh,<<"MIIBinline-dh-parameters">>}]}]}],
+  [rabbitmq_web_mqtt]},
+
+ {ssl_shared_partial_options,
+  "web_mqtt.ssl.port               = 15671
+   web_mqtt.ssl.certfile           = test/web_mqtt_config_schema_SUITE_data/certs/server_certificate.pem
+   web_mqtt.ssl.crl_check          = peer
+   web_mqtt.ssl.log_alert          = true
+   web_mqtt.ssl.psk_identity       = psk-identity
+   web_mqtt.ssl.reuse_sessions     = false
+   web_mqtt.ssl.secure_renegotiate = true",
+  [{rabbitmq_web_mqtt,
+       [{ssl_config,
+            [{port,15671},
+             {certfile,"test/web_mqtt_config_schema_SUITE_data/certs/server_certificate.pem"},
+             {crl_check,peer},
+             {log_alert,true},
+             {psk_identity,"psk-identity"},
+             {reuse_sessions,false},
+             {secure_renegotiate,true}]}]}],
+  [rabbitmq_web_mqtt]},
+
  {ssl_ciphers,
   "web_mqtt.ssl.port       = 15671
    web_mqtt.ssl.backlog    = 1024
