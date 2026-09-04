@@ -135,7 +135,7 @@ start_tls_listener(TLSConf0, CowboyOpts0, Routes) ->
       {ok, NumSsl}  -> NumSsl
   end,
   TLSPort = proplists:get_value(port, TLSConf0),
-  TLSConf = maybe_parse_ip(TLSConf0),
+  TLSConf = rabbit_networking:fix_ssl_options(maybe_parse_ip(TLSConf0)),
   RanchTransportOpts = #{
     socket_opts     => [{alpn_preferred_protocols, [<<"h2">>, <<"http/1.1">>]}|TLSConf],
     connection_type => supervisor,
