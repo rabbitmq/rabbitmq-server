@@ -152,9 +152,8 @@ ensure_ssl() ->
 fix_ssl_options(Config) ->
     Overrides = application:get_env(rabbit, ssl_options_overrides, []),
     rabbit_ssl_options:fix(
-      lists:foldl(fun({Key, _} = Override, Acc) ->
-                           lists:keystore(Key, 1, Acc, Override)
-                   end, Config, Overrides)).
+      lists:foldl(fun({Key, Value}, Acc) -> rabbit_misc:pset(Key, Value, Acc) end,
+                  Config, Overrides)).
 
 -spec tcp_listener_addresses(listener_config()) -> [address()].
 

@@ -23,7 +23,8 @@ groups() ->
           override_is_added_when_absent,
           override_replaces_listener_value,
           listener_value_is_preserved_when_not_overridden,
-          bare_atom_socket_option_is_preserved
+          bare_atom_socket_option_is_preserved,
+          override_replaces_every_duplicate_listener_value
         ]}
     ].
 
@@ -65,3 +66,8 @@ bare_atom_socket_option_is_preserved(_Config) ->
     Fixed = rabbit_networking:fix_ssl_options([inet6, {port, 15676}]),
     ?assert(lists:member(inet6, Fixed)),
     ?assertEqual(verify_peer, proplists:get_value(verify, Fixed)).
+
+override_replaces_every_duplicate_listener_value(_Config) ->
+    ok = application:set_env(rabbit, ssl_options_overrides, [{verify, verify_peer}]),
+    Fixed = rabbit_networking:fix_ssl_options([{verify, verify_none}, {verify, verify_none}]),
+    ?assertEqual(1, length([V || {verify, V} <- Fixed])).
