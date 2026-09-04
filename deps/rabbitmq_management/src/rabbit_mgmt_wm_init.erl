@@ -39,16 +39,13 @@ to_json(ReqData, Context) ->
             {vhosts,   vhosts(ReqData, Context)},
             {nodes,    Nodes}
         ],
-        %% content_types_provided/2 advertises application/bert alongside
-        %% application/json, the same way rabbit_mgmt_util:reply/3 does for
-        %% every other endpoint.
-        case maps:get(media_type, ReqData, undefined) of
-            {<<"application">>, <<"bert">>, _} ->
-                {term_to_binary(Payload), ReqData, Context};
-            _ ->
-                {rabbit_json:encode(
-                   rabbit_mgmt_format:prepare_for_encoding(Payload)),
-                 ReqData, Context}
+        %% `reply/3` replaces the `cache-control` header set in `init/2`, so
+        %% we have re-inject the value we want
+        case rabbit_mgmt_util:reply(Payload, ReqData, Context) of
+            {stop, _, _} = Stop ->
+                Stop;
+            {Body, ReqData1, Context1} ->
+                {Body, rabbit_mgmt_headers:set_no_cache_headers(ReqData1, ?MODULE), Context1}
         end
     catch
         {error, invalid_range_parameters, Reason} ->
@@ -57,8 +54,7 @@ to_json(ReqData, Context) ->
 
 settings(ReqData) ->
     [
-        {product_info,              rabbit_mgmt_features:get_product_info()},
-        {cluster_name,              rabbit_nodes:cluster_name()}
+        {product_info, rabbit_mgmt_features:get_product_info()}
     ] ++ rabbit_mgmt_features:get_settings(ReqData).
 
 vhosts(ReqData, Context) ->
