@@ -136,7 +136,9 @@ function check_login () {
     return false;
   }
 
-  load_init_data();
+  if (!load_init_data()) {
+    return false;
+  }
   load_ui(user);
   return true;
 }
@@ -147,14 +149,17 @@ function load_init_data() {
   var raw = sync_get('/init');
   if (!raw) {
       console.error("Failed to load /api/init");
+      if (oauth.enabled) {
+          renderWarningMessageInLoginStatus(oauth, 'Could not load the management UI');
+      } else {
+          replace_content('login-status', '<p>Could not load the management UI</p>');
+      }
       return false;
   }
   var data = JSON.parse(raw);
   window.app_settings = data.settings;
   window.app_vhosts = data.vhosts;
-  if (data.nodes) {
-      window.app_nodes = data.nodes;
-  }
+  window.app_nodes = data.nodes || undefined;
   return true;
 }
 
@@ -188,7 +193,9 @@ function login(username, password) {
   var scheme = result.token.type === 'bearer' ? 'Bearer' : 'Basic';
   set_auth(scheme, result.token.value);
 
-  load_init_data();
+  if (!load_init_data()) {
+    return false;
+  }
   load_ui(user);
 
   return true;
@@ -209,9 +216,6 @@ function load_ui(user) {
   if (window.app_nodes !== undefined) {
       ui_data_model.nodes = window.app_nodes;
   }
-
-  // Update EJS templates to use settings
-  ui_data_model.settings = settings;
 
   display.update(settings, ui_data_model);
 
