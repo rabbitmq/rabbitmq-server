@@ -11,7 +11,7 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -import(rabbit_ct_broker_helpers, [rpc/4]).
--import(rabbit_mgmt_test_util, [http_get/2, http_put/4, http_delete/3]).
+-import(rabbit_mgmt_test_util, [http_get/2, http_get/5, http_put/4, http_delete/3]).
 
 -compile([export_all, nowarn_export_all]).
 
@@ -20,7 +20,8 @@ all() ->
         unauthorized_test,
         init_settings_test,
         init_monitor_nodes_test,
-        init_monitor_vhosts_test
+        init_monitor_vhosts_test,
+        invalid_range_test
     ].
 
 init_per_suite(Config) ->
@@ -112,4 +113,8 @@ init_monitor_vhosts_test(Config) ->
     ?assertNotEqual([], Vhosts),
     [?assertMatch(#{<<"name">> := _}, V) || V <- Vhosts],
     ?assert(lists:any(fun(V) -> maps:get(<<"name">>, V) =:= <<"/">> end, Vhosts)),
+    passed.
+
+invalid_range_test(Config) ->
+    http_get(Config, "/init?msg_rates_age=60&msg_rates_incr=0", "test_user", "test_user", 400),
     passed.
