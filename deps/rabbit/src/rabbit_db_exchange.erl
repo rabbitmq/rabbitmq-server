@@ -40,6 +40,7 @@
          delete_in_khepri/3,
          get_in_khepri_tx/1,
          update_in_khepri_tx/2,
+         update_in_khepri_tx/3,
          clear_exchanges_in_khepri/0,
          clear_exchange_serials_in_khepri/0,
          put_options/1
@@ -259,6 +260,42 @@ update_in_khepri_tx(Name, Fun) ->
             X1 = Fun(X),
             ok = khepri_tx:put(Path, X1),
             X1;
+        _ -> not_found
+    end.
+
+%% -------------------------------------------------------------------
+%% update_in_khepri_tx().
+%% -------------------------------------------------------------------
+
+-spec update_in_khepri_tx(ExchangeName, Vsn, UpdateFun) -> Ret when
+      ExchangeName :: rabbit_exchange:name(),
+      Vsn :: khepri:payload_version(),
+      Exchange :: rabbit_types:exchange(),
+      UpdateFun :: fun((Exchange) -> Exchange),
+      Ret :: not_found | Exchange.
+%% @doc Same as `update_in_khepri_tx/2', but only applies `UpdateFun' if
+%% the record hasn't changed since the version `Vsn' was read, aborting
+%% the enclosing transaction with `mismatching_node' otherwise. Use this
+%% when `Vsn' was read outside of the transaction, e.g. to decide
+%% `UpdateFun' itself from data that could since have gone stale.
+
+update_in_khepri_tx(Name, Vsn, Fun) ->
+    Path = khepri_exchange_path(Name),
+    case khepri_tx:get(Path) of
+        {ok, X} ->
+            X1 = Fun(X),
+            UpdatePath = khepri_path:combine_with_conditions(
+                           Path, [#if_payload_version{version = Vsn}]),
+            %% A mismatching_node condition failure must abort the whole
+            %% enclosing transaction, discarding any puts already made
+            %% during this attempt: khepri_tx:abort/1 does this via an
+            %% exception, unlike returning the failure as an ordinary
+            %% {error, _} value, which khepri would otherwise still
+            %% commit up to this point.
+            case khepri_tx:put(UpdatePath, X1) of
+                ok -> X1;
+                {error, Reason} -> khepri_tx:abort(Reason)
+            end;
         _ -> not_found
     end.
 

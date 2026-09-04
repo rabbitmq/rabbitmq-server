@@ -16,6 +16,7 @@
          write/4, write_flow/4, read/2, read_many/2, contains/2, remove/2]).
 
 -export([compact_file/2, truncate_file/4, delete_file/2]). %% internal
+-export([client_read3/2]). %% internal, exposed for tests
 
 -export([scan_file_for_valid_messages/1, scan_file_for_valid_messages/2]). %% salvage tool
 
@@ -659,7 +660,18 @@ client_read3(#msg_location { msg_id = MsgId, file = File },
         #msg_location { file = File, ref_count = RefCount } = MsgLocation when RefCount > 0 ->
             {Msg, CState1} = read_from_disk(MsgLocation, CState),
             mark_handle_closed(FileHandlesEts, File, Ref),
-            {{ok, Msg}, CState1}
+            {{ok, Msg}, CState1};
+        _ ->
+            %% The message is no longer readable from the file we just
+            %% pinned: either it was removed entirely (e.g. a different
+            %% queue acking the same fanned-out message) or its index entry
+            %% was deleted and later rewritten under a different file, both
+            %% racing between our caller's snapshot read and this second
+            %% lookup. Close the handle we just opened instead of leaving
+            %% it stuck in FileHandlesEts, which would otherwise defer this
+            %% file's truncation/deletion forever.
+            mark_handle_closed(FileHandlesEts, File, Ref),
+            {not_found, CState}
     end.
 
 read_from_disk(#msg_location { msg_id = MsgId, file = File, offset = Offset,

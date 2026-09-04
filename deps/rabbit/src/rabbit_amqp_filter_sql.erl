@@ -26,6 +26,17 @@
 
 -define(DEFAULT_MSG_PRIORITY, 4).
 
+%% A LIKE pattern with several %-wildcards compiles to a regex.
+%% rabbit_re:run/2 already bounds backtracking via match_limit and
+%% match_limit_recursion (surfacing as a plain nomatch, not an error, so
+%% it doesn't by itself risk a wrong answer becoming a crash) -- but the
+%% residual cost of scanning the subject at all is still roughly linear
+%% in its length, and this filter runs once per candidate message inside
+%% the target queue's own process. Bound the subject independently of
+%% the overall message-size cap, which allows it to be far larger than
+%% reasonable for a single filtered field.
+-define(MAX_LIKE_SUBJECT_LENGTH, 4096).
+
 -spec parse(tuple()) ->
     {ok, parsed_expression()} | error.
 parse({described, Descriptor, {utf8, SQL}}) ->
@@ -255,12 +266,20 @@ like(Subject,{{prefix, PrefixSize, _} = Prefix,
     like(Subject, Suffix);
 like(Subject, CompiledRe)
   when element(1, CompiledRe) =:= re_pattern ->
-    case rabbit_re:run(Subject, CompiledRe) of
-        match           -> true;
-        nomatch         -> false;
-        %% Subject is not a UTF-8 string.
-        {error, badarg} -> undefined;
-        {error, _}      -> false
+    case byte_size(Subject) > ?MAX_LIKE_SUBJECT_LENGTH of
+        true ->
+            %% "Comparison or arithmetic with an unknown value always
+            %% yields an unknown value" -- treat an oversized subject the
+            %% same as the is_binary(Subject) =:= false case above.
+            undefined;
+        false ->
+            case rabbit_re:run(Subject, CompiledRe) of
+                match           -> true;
+                nomatch         -> false;
+                %% Subject is not a UTF-8 string.
+                {error, badarg} -> undefined;
+                {error, _}      -> false
+            end
     end.
 
 get_field_value(priority, Msg) ->
