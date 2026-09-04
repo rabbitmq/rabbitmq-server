@@ -48,6 +48,7 @@ get_settings(ReqData) ->
         end,
         rabbit_mgmt_external_stats:list_registry_plugins(exchange)),
     [
+        {cluster_name,              rabbit_nodes:cluster_name()},
         {rates_mode,                RatesMode},
         {sample_retention_policies, SRP},
         {exchange_types,            ExchangeTypes},
