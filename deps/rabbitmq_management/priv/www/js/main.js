@@ -136,11 +136,7 @@ function check_login () {
     return false;
   }
 
-  if (!load_init_data()) {
-    return false;
-  }
-  load_ui(user);
-  return true;
+  return load_init_data_and_ui(user);
 }
 
 // Sent with the Authorization header, so it must run after the credentials
@@ -193,11 +189,14 @@ function login(username, password) {
   var scheme = result.token.type === 'bearer' ? 'Bearer' : 'Basic';
   set_auth(scheme, result.token.value);
 
+  return load_init_data_and_ui(user);
+}
+
+function load_init_data_and_ui(user) {
   if (!load_init_data()) {
     return false;
   }
   load_ui(user);
-
   return true;
 }
 
@@ -208,7 +207,7 @@ function load_ui(user) {
 
   var settings = window.app_settings;
 
-  replace_content('outer', format('layout', {disable_stats: settings.disable_stats}));
+  replace_content('outer', format('layout', {}));
 
   ui_data_model.vhosts = window.app_vhosts;
   ac.update(user, ui_data_model);
