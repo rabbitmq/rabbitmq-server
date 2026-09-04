@@ -174,7 +174,7 @@ gmake stop-cluster NODES=3
 
 ### Running JavaScript Tests
 
-Plugins with a JavaScript-based Web UI can run JavaScript tests alongside Erlang tests when executing `gmake test`.
+Plugins with a JavaScript-based Web UI can run JavaScript tests alongside Erlang tests when executing `gmake tests`.
 
 To enable JavaScript tests for a plugin:
 
