@@ -137,8 +137,18 @@ init_per_group(required_options, Config) ->
     end.
 
 
+%% This group leaves the node without a CA bundle, so that the trust store
+%% has to supply the options peer verification requires. The server key pair
+%% is kept: plugin TLS listeners are configured from the same `ssl_options`
+%% and cannot start without it.
 modify_ssl_options(Config) ->
-    SslOptions = [{verify, verify_none}, {fail_if_no_peer_cert, false}],
+    ErlangConfig = rabbit_ct_helpers:get_config(Config, erlang_node_config, []),
+    RabbitConfig = proplists:get_value(rabbit, ErlangConfig, []),
+    SslOptions0 = proplists:get_value(ssl_options, RabbitConfig, []),
+    SslOptions1 = proplists:delete(cacertfile, SslOptions0),
+    SslOptions2 = lists:keystore(verify, 1, SslOptions1, {verify, verify_none}),
+    SslOptions = lists:keystore(fail_if_no_peer_cert, 1, SslOptions2,
+                                {fail_if_no_peer_cert, false}),
     rabbit_ct_helpers:merge_app_env(Config, {rabbit, [{ssl_options, SslOptions}]}).
 
 init_provider_server(Config, WhitelistDir) ->
@@ -544,7 +554,7 @@ whitelisted_certificate_accepted_from_AMQP_client(Config, ServerCA) ->
 
     ServerSslOpts0 = [{cert, Cert},
                       {key, Key}
-                     |lists:keydelete(cacertfile, 1, cfg())],
+                     |without_file_based_certs(cfg())],
     ServerSslOpts =
         case ServerCA of
             true ->
@@ -1019,6 +1029,10 @@ wait_for_trust_store_refresh() ->
 cfg() ->
     {ok, Cfg} = application:get_env(rabbit, ssl_options),
     Cfg.
+
+without_file_based_certs(Options) ->
+    lists:foldl(fun(Key, Acc) -> proplists:delete(Key, Acc) end,
+                Options, [cacertfile, certfile, keyfile]).
 
 %% Ancillary
 
