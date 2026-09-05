@@ -27,7 +27,8 @@
 
 -record(not_started, {queue, run, upstream, upstream_params}).
 -record(state, {queue, run, conn, ch, dconn, dch, upstream, upstream_params,
-                unacked, link_state = starting}).
+                unacked, link_state = starting,
+                blocked = false, blocked_buffer = queue:new()}).
 
 start_link(Args) ->
     gen_server2:start_link(?MODULE, Args, [{timeout, infinity}]).
@@ -199,25 +200,32 @@ handle_info(#'basic.nack'{} = Nack, State = #state{ch      = Ch,
     Unacked1 = rabbit_federation_link_util:nack(Nack, Ch, Unacked),
     {noreply, State#state{unacked = Unacked1}};
 
-handle_info({#'basic.deliver'{redelivered = Redelivered,
-                              exchange    = X,
-                              routing_key = K} = DeliverMethod, Msg},
-            State = #state{queue           = Q,
-                           upstream        = Upstream,
-                           upstream_params = UParams,
-                           ch              = Ch,
-                           dch             = DCh,
-                           unacked         = Unacked}) when ?is_amqqueue(Q) ->
-    QName = amqqueue:get_name(Q),
-    PublishMethod = #'basic.publish'{exchange    = <<"">>,
-                                     routing_key = QName#resource.name},
-    HeadersFun = fun (H) -> update_headers(UParams, Redelivered, X, K, H) end,
-    ForwardFun = fun (_H) -> true end,
-    Unacked1 = rabbit_federation_link_util:forward(
-                 Upstream, DeliverMethod, Ch, DCh, PublishMethod,
-                 HeadersFun, ForwardFun, Msg, Unacked),
-    %% TODO actually we could reject when 'stopped'
-    {noreply, State#state{unacked = Unacked1}};
+handle_info(#'connection.blocked'{},
+            State = #state{queue = Q}) when ?is_amqqueue(Q) ->
+    {noreply, State#state{blocked = true}};
+
+handle_info(#'connection.unblocked'{},
+            State = #state{blocked_buffer = QBuffer,
+                           queue = Q}) when ?is_amqqueue(Q) ->
+    State1 = State#state{blocked = false},
+    {QBuffer1, State2} = drain(QBuffer, State1),
+    {noreply, State2#state{blocked_buffer = QBuffer1}};
+
+handle_info({bump_credit, Msg},
+            State = #state{blocked_buffer = QBuffer,
+                           queue = Q}) when ?is_amqqueue(Q) ->
+    credit_flow:handle_bump_msg(Msg),
+    {QBuffer1, State1} = drain(QBuffer, State),
+    {noreply, State1#state{blocked_buffer = QBuffer1}};
+
+handle_info({#'basic.deliver'{} = DeliverMethod, Msg},
+            State = #state{blocked = Blocked, blocked_buffer = QBuffer, queue = Q}) when ?is_amqqueue(Q) ->
+    case Blocked orelse credit_flow:blocked() of
+        true ->
+            {noreply, State#state{blocked_buffer = queue:in({DeliverMethod, Msg}, QBuffer)}};
+        false ->
+            {noreply, do_deliver(DeliverMethod, Msg, State)}
+    end;
 
 handle_info(#'basic.cancel'{},
             State = #state{queue           = Q,
@@ -305,11 +313,16 @@ go(S0 = #not_started{run             = Run,
                 fun(?NOT_FOUND, _Text) ->
                         amqp_channel:call(Ch, Declare)
                 end),
-              case Upstream#upstream.ack_mode of
-                  'no-ack' -> ok;
-                  _        -> amqp_channel:call(
-                                Ch, #'basic.qos'{prefetch_count = Prefetch})
-              end,
+              %% The prefetch is applied even in no-ack mode so that a link
+              %% that has buffered messages behind a downstream resource
+              %% alarm cannot grow without bound. Quorum queues and streams
+              %% honour prefetch on no-ack consumers via credit-based flow;
+              %% classic queues do not track Volume for no-ack deliveries
+              %% and will effectively ignore the ceiling, so federation
+              %% with no-ack and a classic upstream remains best-effort
+              %% under alarm pressure.
+              amqp_channel:call(
+                Ch, #'basic.qos'{prefetch_count = Prefetch}),
               amqp_selective_consumer:register_default_consumer(Ch, self()),
               case Run of
                   true  -> consume(Ch, Upstream, UQueue);
@@ -415,6 +428,11 @@ cancel(Ch, Upstream) ->
                                           consumer_tag = ConsumerTag}).
 
 handle_down(DCh, Reason, _Ch, DCh, Args, State) ->
+    %% The downstream channel is the credit_flow peer for this link. Tell
+    %% credit_flow it is gone, otherwise a link that survives a clean DCh
+    %% death (Reason =:= normal | shutdown) stays credit_flow:blocked/0
+    %% forever and its blocked_buffer never drains.
+    credit_flow:peer_down(DCh),
     rabbit_federation_link_util:handle_downstream_down(Reason, Args, State);
 handle_down(Ch, Reason, Ch, _DCh, Args, State) ->
     rabbit_federation_link_util:handle_upstream_down(Reason, Args, State).
@@ -425,3 +443,29 @@ connection_close_timeout() ->
                                      connection_close_timeout,
                                      Default),
     erlang:min(Configured, Default).
+
+drain(QBuffer, State) ->
+    rabbit_federation_link_util:drain_buffer(
+      QBuffer, State, fun do_deliver/3, fun is_blocked/1).
+
+is_blocked(#state{blocked = B}) -> B.
+
+do_deliver(#'basic.deliver'{redelivered = Redelivered,
+                            exchange    = X,
+                            routing_key = K} = DeliverMethod, Msg,
+           State = #state{queue           = Q,
+                          upstream        = Upstream,
+                          upstream_params = UParams,
+                          ch              = Ch,
+                          dch             = DCh,
+                          unacked         = Unacked}) when ?is_amqqueue(Q) ->
+    QName = amqqueue:get_name(Q),
+    PublishMethod = #'basic.publish'{exchange    = <<"">>,
+                                     routing_key = QName#resource.name},
+    HeadersFun = fun (H) -> update_headers(UParams, Redelivered, X, K, H) end,
+    ForwardFun = fun (_H) -> true end,
+    Unacked1 = rabbit_federation_link_util:forward(
+                 Upstream, DeliverMethod, Ch, DCh, PublishMethod,
+                 HeadersFun, ForwardFun, Msg, Unacked),
+    %% TODO actually we could reject when 'stopped'
+    State#state{unacked = Unacked1}.

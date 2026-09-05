@@ -45,7 +45,9 @@
                 unacked,
                 internal_exchange_timer,
                 internal_exchange_interval,
-                link_state = starting}).
+                link_state = starting,
+                blocked = false,
+                blocked_buffer = queue:new()}).
 
 %%----------------------------------------------------------------------------
 
@@ -201,30 +203,27 @@ handle_info(#'basic.nack'{} = Nack, State = #state{channel = Ch,
     Unacked1 = rabbit_federation_link_util:nack(Nack, Ch, Unacked),
     {noreply, State#state{unacked = Unacked1}};
 
-handle_info({#'basic.deliver'{routing_key  = Key,
-                              redelivered  = Redelivered} = DeliverMethod, Msg},
-            State = #state{
-              upstream            = Upstream = #upstream{max_hops = MaxH},
-              upstream_params     = UParams = #upstream_params{x_or_q = UpstreamX},
-              upstream_name       = UName,
-              downstream_exchange = #resource{name = XNameBin, virtual_host = DVhost},
-              downstream_channel  = DCh,
-              channel             = Ch,
-              unacked             = Unacked}) ->
-    UVhost = vhost(UpstreamX),
-    PublishMethod = #'basic.publish'{exchange    = XNameBin,
-                                     routing_key = Key},
-    HeadersFun = fun (H) -> update_routing_headers(UParams, UName, UVhost, Redelivered, H) end,
-    %% We need to check should_forward/2 here in case the upstream
-    %% does not have federation and thus is using a fanout exchange.
-    ForwardFun = fun (H) ->
-                         DName = rabbit_nodes:cluster_name(),
-                         rabbit_federation_util:should_forward(H, MaxH, DName, DVhost)
-                 end,
-    Unacked1 = rabbit_federation_link_util:forward(
-                 Upstream, DeliverMethod, Ch, DCh, PublishMethod,
-                 HeadersFun, ForwardFun, Msg, Unacked),
-    {noreply, State#state{unacked = Unacked1}};
+handle_info(#'connection.blocked'{}, State = #state{}) ->
+    {noreply, State#state{blocked = true}};
+
+handle_info(#'connection.unblocked'{}, State = #state{blocked_buffer = Q}) ->
+    State1 = State#state{blocked = false},
+    {Q1, State2} = drain(Q, State1),
+    {noreply, State2#state{blocked_buffer = Q1}};
+
+handle_info({bump_credit, Msg}, State = #state{blocked_buffer = Q}) ->
+    credit_flow:handle_bump_msg(Msg),
+    {Q1, State1} = drain(Q, State),
+    {noreply, State1#state{blocked_buffer = Q1}};
+
+handle_info({#'basic.deliver'{} = DeliverMethod, Msg},
+            State = #state{blocked = Blocked, blocked_buffer = Q}) ->
+    case Blocked orelse credit_flow:blocked() of
+        true ->
+            {noreply, State#state{blocked_buffer = queue:in({DeliverMethod, Msg}, Q)}};
+        false ->
+            {noreply, do_deliver(DeliverMethod, Msg, State)}
+    end;
 
 handle_info(#'basic.cancel'{}, State = #state{upstream            = Upstream,
                                               upstream_params     = UParams,
@@ -645,10 +644,14 @@ consume_from_upstream_queue(
                                            durable   = true,
                                            arguments = Args}),
     NoAck = Upstream#upstream.ack_mode =:= 'no-ack',
-    case NoAck of
-        false -> amqp_channel:call(Ch, #'basic.qos'{prefetch_count = Prefetch});
-        true  -> ok
-    end,
+    %% The prefetch is applied even in no-ack mode so that a link that has
+    %% buffered messages behind a downstream resource alarm cannot grow
+    %% without bound. Quorum queues and streams honour prefetch on no-ack
+    %% consumers via credit-based flow; classic queues do not track Volume
+    %% for no-ack deliveries and will effectively ignore the ceiling, so
+    %% federation with no-ack and a classic upstream remains best-effort
+    %% under alarm pressure.
+    amqp_channel:call(Ch, #'basic.qos'{prefetch_count = Prefetch}),
     #'basic.consume_ok'{consumer_tag = CTag} =
         amqp_channel:subscribe(Ch, #'basic.consume'{queue  = Q,
                                                     no_ack = NoAck}, self()),
@@ -813,6 +816,11 @@ get_hops(Table) ->
   end.
 
 handle_down(DCh, Reason, _Ch, _CmdCh, DCh, Args, State) ->
+    %% The downstream channel is the credit_flow peer for this link. Tell
+    %% credit_flow it is gone, otherwise a link that survives a clean DCh
+    %% death (Reason =:= normal | shutdown) stays credit_flow:blocked/0
+    %% forever and its blocked_buffer never drains.
+    credit_flow:peer_down(DCh),
     rabbit_federation_link_util:handle_downstream_down(Reason, Args, State);
 handle_down(ChPid, Reason, Ch, CmdCh, _DCh, Args, State)
   when ChPid =:= Ch; ChPid =:= CmdCh ->
@@ -824,3 +832,34 @@ connection_close_timeout() ->
                                      connection_close_timeout,
                                      Default),
     erlang:min(Configured, Default).
+
+drain(Q, State) ->
+    rabbit_federation_link_util:drain_buffer(
+      Q, State, fun do_deliver/3, fun is_blocked/1).
+
+is_blocked(#state{blocked = B}) -> B.
+
+do_deliver(#'basic.deliver'{routing_key = Key,
+                            redelivered = Redelivered} = DeliverMethod, Msg,
+           State = #state{
+             upstream            = Upstream = #upstream{max_hops = MaxH},
+             upstream_params     = UParams = #upstream_params{x_or_q = UpstreamX},
+             upstream_name       = UName,
+             downstream_exchange = #resource{name = XNameBin, virtual_host = DVhost},
+             downstream_channel  = DCh,
+             channel             = Ch,
+             unacked             = Unacked}) ->
+    UVhost = vhost(UpstreamX),
+    PublishMethod = #'basic.publish'{exchange    = XNameBin,
+                                     routing_key = Key},
+    HeadersFun = fun (H) -> update_routing_headers(UParams, UName, UVhost, Redelivered, H) end,
+    %% We need to check should_forward/2 here in case the upstream
+    %% does not have federation and thus is using a fanout exchange.
+    ForwardFun = fun (H) ->
+                         DName = rabbit_nodes:cluster_name(),
+                         rabbit_federation_util:should_forward(H, MaxH, DName, DVhost)
+                 end,
+    Unacked1 = rabbit_federation_link_util:forward(
+                 Upstream, DeliverMethod, Ch, DCh, PublishMethod,
+                 HeadersFun, ForwardFun, Msg, Unacked),
+    State#state{unacked = Unacked1}.
