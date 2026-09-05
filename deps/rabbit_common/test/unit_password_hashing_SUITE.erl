@@ -23,8 +23,18 @@ end_per_suite(Config) -> Config.
 init_per_group(_Group, Config) -> Config.
 end_per_group(_Group, Config) -> Config.
 
-init_per_testcase(_Testcase, Config) -> Config.
-end_per_testcase(_Testcase, Config) -> Config.
+init_per_testcase(_Testcase, Config) ->
+    [{previous_hashing_module,
+      application:get_env(rabbit, password_hashing_module)} | Config].
+
+end_per_testcase(_Testcase, Config) ->
+    case proplists:get_value(previous_hashing_module, Config) of
+        {ok, Mod} ->
+            application:set_env(rabbit, password_hashing_module, Mod);
+        undefined ->
+            application:unset_env(rabbit, password_hashing_module)
+    end,
+    Config.
 
 %% ---------------------------------------------------------------------------
 %% Test Cases
@@ -48,9 +58,6 @@ password_hashing(_Config) ->
 
     passed.
 
-%% New accounts must hash with PBKDF2-HMAC-SHA256 by default, and a
-%% verification attempt must only succeed for the exact password that
-%% was hashed.
 pbkdf2_sha256_hash_and_verify(_Config) ->
     application:set_env(rabbit, password_hashing_module,
                         rabbit_password_hashing_pbkdf2_sha256),
