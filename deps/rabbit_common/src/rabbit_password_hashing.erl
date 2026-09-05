@@ -7,3 +7,5 @@
 
 -module(rabbit_password_hashing).
 -callback hash(rabbit_types:password()) -> rabbit_types:password_hash().
+-callback salt_length() -> pos_integer().
+-optional_callbacks([salt_length/0]).

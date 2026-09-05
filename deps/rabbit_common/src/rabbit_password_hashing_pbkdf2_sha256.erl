@@ -9,14 +9,15 @@
 
 -behaviour(rabbit_password_hashing).
 
--export([hash/1]).
+-export([hash/1, salt_length/0]).
 
 %% OWASP's 2023 minimum recommendation for PBKDF2-HMAC-SHA256.
 -define(ITERATIONS, 210_000).
 -define(KEY_LENGTH, 32).
+-define(SALT_LENGTH, 16).
 
-%% rabbit_password:salted_hash/3 always calls this with
-%% <<Salt:4/binary, Cleartext/binary>>; split it back apart since
-%% PBKDF2 takes the salt as its own argument, not a data prefix.
-hash(<<Salt:4/binary, Cleartext/binary>>) ->
+hash(<<Salt:?SALT_LENGTH/binary, Cleartext/binary>>) ->
     crypto:pbkdf2_hmac(sha256, Cleartext, Salt, ?ITERATIONS, ?KEY_LENGTH).
+
+salt_length() ->
+    ?SALT_LENGTH.

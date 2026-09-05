@@ -46,7 +46,7 @@
 
 -export([expiry_timestamp/1]).
 
--export([hashing_module_for_user/1, expand_topic_permission/2]).
+-export([hashing_module_for_user/1, password_matches/2, expand_topic_permission/2]).
 
 -export([max_user_tags/0, count_user_tags/1]).
 
@@ -71,6 +71,16 @@
 hashing_module_for_user(User) ->
     ModOrUndefined = internal_user:get_hashing_algorithm(User),
     rabbit_password:hashing_mod(ModOrUndefined).
+
+password_matches(User, Cleartext) ->
+    Mod = hashing_module_for_user(User),
+    SaltLength = rabbit_password:salt_length(Mod),
+    case internal_user:get_password_hash(User) of
+        <<Salt:SaltLength/binary, Hash/binary>> ->
+            Hash =:= rabbit_password:salted_hash(Mod, Salt, Cleartext);
+        _ ->
+            false
+    end.
 
 %% Limit the number of tags a user can have.
 -define(MAX_USER_TAGS, 32).
@@ -101,15 +111,7 @@ user_login_authentication(Username, AuthProps) ->
         {password, Cleartext} ->
             internal_check_user_login(
               Username,
-              fun(User) ->
-                  case internal_user:get_password_hash(User) of
-                      <<Salt:4/binary, Hash/binary>> ->
-                          Hash =:= rabbit_password:salted_hash(
-                              hashing_module_for_user(User), Salt, Cleartext);
-                      _ ->
-                          false
-                  end
-              end);
+              fun(User) -> password_matches(User, Cleartext) end);
         false ->
             case proplists:get_value(rabbit_auth_backend_internal, AuthProps, undefined) of
                 undefined -> {refused, ?BLANK_PASSWORD_REJECTION_MESSAGE, [Username]};

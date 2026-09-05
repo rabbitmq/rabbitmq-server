@@ -8,24 +8,35 @@
 -module(rabbit_password).
 
 -define(DEFAULT_HASHING_MODULE, rabbit_password_hashing_sha256).
+-define(DEFAULT_SALT_LENGTH, 4).
 
 %%
 %% API
 %%
 
--export([hash/1, hash/2, generate_salt/0, salted_hash/2, salted_hash/3,
-         hashing_mod/0, hashing_mod/1]).
+-export([hash/1, hash/2, generate_salt/0, generate_salt/1, salt_length/1,
+         salted_hash/2, salted_hash/3, hashing_mod/0, hashing_mod/1]).
 
 hash(Cleartext) ->
     hash(hashing_mod(), Cleartext).
 
 hash(HashingMod, Cleartext) ->
-    SaltBin = generate_salt(),
+    SaltBin = generate_salt(HashingMod),
     Hash = salted_hash(HashingMod, SaltBin, Cleartext),
     <<SaltBin/binary, Hash/binary>>.
 
 generate_salt() ->
-    crypto:strong_rand_bytes(4).
+    generate_salt(hashing_mod()).
+
+generate_salt(HashingMod) ->
+    crypto:strong_rand_bytes(salt_length(HashingMod)).
+
+salt_length(Mod) ->
+    _ = code:ensure_loaded(Mod),
+    case erlang:function_exported(Mod, salt_length, 0) of
+        true  -> Mod:salt_length();
+        false -> ?DEFAULT_SALT_LENGTH
+    end.
 
 salted_hash(Salt, Cleartext) ->
     salted_hash(hashing_mod(), Salt, Cleartext).
