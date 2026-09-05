@@ -70,6 +70,7 @@
 
 -include("amqqueue.hrl").
 -include("rabbit_queue_type.hrl").
+-include("rabbit_stream_queue.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("kernel/include/logger.hrl").
 -include_lib("amqp10_common/include/amqp10_filter.hrl").
@@ -157,6 +158,7 @@ declare(Q, _Node) when ?amqqueue_is_stream(Q) ->
         ok ?= rabbit_queue_type_util:check_non_durable(Q),
         ok ?= check_max_segment_size_bytes(Q),
         ok ?= check_filter_size(Q),
+        ok ?= check_initial_offset(Q),
         create_stream(Q)
     end.
 
@@ -187,6 +189,29 @@ check_filter_size(Q) ->
              "Invalid value for x-stream-filter-size-bytes", []};
         _ ->
             ok
+    end.
+
+check_initial_offset(Q) ->
+    Args = amqqueue:get_arguments(Q),
+    case rabbit_misc:table_lookup(Args, <<"x-stream-initial-offset">>) of
+        undefined ->
+            ok;
+        {_Type, 0} ->
+            ok;
+        {_Type, Offset} when Offset > ?MAX_STREAM_INITIAL_OFFSET ->
+            {protocol_error, precondition_failed,
+             "Exceeded max value for x-stream-initial-offset", []};
+        {_Type, _Offset} ->
+            %% A replica on an older node would start its log at offset 0 and
+            %% then reject the writer's first chunk as out of order.
+            case rabbit_feature_flags:is_enabled('rabbitmq_4.4.0') of
+                true ->
+                    ok;
+                false ->
+                    {protocol_error, precondition_failed,
+                     "Feature flag 'rabbitmq_4.4.0' is required to declare a "
+                     "stream with a non-zero x-stream-initial-offset", []}
+            end
     end.
 
 create_stream(Q0) ->
@@ -1254,14 +1279,27 @@ update_stream_conf(Q, #{} = Conf) when ?is_amqqueue(Q) ->
                                              fun policy_precedence/2, Q),
     FilterSizeBytes = args_policy_lookup(<<"stream-filter-size-bytes">>,
                                          fun policy_precedence/2, Q),
+    %% Fixed at creation time, so it is never taken from a policy.
+    InitialOffset = initial_offset(Q),
     Retention = lists:filter(fun({_, R}) ->
                                      R =/= undefined
                              end, [{max_bytes, MaxBytes},
                                    {max_age, MaxAge}]),
     add_if_defined(
-      filter_size, FilterSizeBytes,
-      add_if_defined(max_segment_size_bytes, MaxSegmentSizeBytes,
-                     Conf#{retention => Retention})).
+      initial_offset, InitialOffset,
+      add_if_defined(
+        filter_size, FilterSizeBytes,
+        add_if_defined(max_segment_size_bytes, MaxSegmentSizeBytes,
+                       Conf#{retention => Retention}))).
+
+initial_offset(Q) ->
+    case rabbit_misc:table_lookup(amqqueue:get_arguments(Q),
+                                  <<"x-stream-initial-offset">>) of
+        {_Type, Offset} ->
+            Offset;
+        undefined ->
+            undefined
+    end.
 
 add_if_defined(_, undefined, Map) ->
     Map;
@@ -1497,6 +1535,7 @@ capabilities() ->
       queue_arguments => [<<"x-max-length-bytes">>, <<"x-queue-type">>,
                           <<"x-max-age">>, <<"x-stream-max-segment-size-bytes">>,
                           <<"x-stream-filter-size-bytes">>,
+                          <<"x-stream-initial-offset">>,
                           <<"x-initial-cluster-size">>, <<"x-queue-leader-locator">>],
       consumer_arguments => [<<"x-stream-offset">>,
                              <<"x-stream-filter">>,

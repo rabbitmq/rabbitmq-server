@@ -997,6 +997,7 @@ declare_args() ->
      {<<"x-max-age">>, fun check_max_age_arg/2},
      {<<"x-stream-max-segment-size-bytes">>, fun check_non_neg_int_arg/2},
      {<<"x-stream-filter-size-bytes">>, fun check_non_neg_int_arg/2},
+     {<<"x-stream-initial-offset">>, fun check_non_neg_int_arg/2},
      {<<"x-initial-cluster-size">>, fun check_initial_cluster_size_arg/2},
      {<<"x-queue-leader-locator">>, fun check_queue_leader_locator_arg/2},
      {<<"x-member-placement-tag">>, fun check_member_placement_tag_arg/2}].
