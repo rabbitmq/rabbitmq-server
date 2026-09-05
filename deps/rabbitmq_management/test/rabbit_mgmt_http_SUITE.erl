@@ -710,6 +710,9 @@ users_test(Config) ->
     ct:pal("Listed users: ~tp", [Listed]),
     %% GET /api/users must not expose any user's raw salt-and-hash.
     ?assertNot(lists:any(fun(U) -> maps:is_key(password_hash, U) end, Listed)),
+    ListedColumns = http_get(Config, "/users?columns=name,has_password", ?OK),
+    ?assert(lists:all(fun(U) -> lists:sort(maps:keys(U)) =:= [has_password, name] end,
+                      ListedColumns)),
     User1 = #{name => <<"users_test">>, tags => [<<"administrator">>, <<"foo">>]},
     User2 = #{name => <<"guest">>, tags => [<<"administrator">>]},
     ?assert(lists:any(fun(U) ->
