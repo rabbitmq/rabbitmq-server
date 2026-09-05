@@ -17,10 +17,9 @@
 
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -define(BASIC_COLUMNS, ["hashing_algorithm",
-			"rabbit_password_hashing_sha256",
+			"has_password",
 			"limits",
 			"name",
-			"password_hash",
 			"tags"]).
 
 -define(DEFAULT_SORT, ["name"]).
