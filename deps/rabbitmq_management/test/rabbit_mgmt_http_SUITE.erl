@@ -3654,6 +3654,8 @@ definitions_multipart_non_json_extension_allowed_when_not_enforced_test(Config) 
 require_definition_json_extension_defaults_to_false_in_overview_test(Config) ->
     %% By default, require_definition_json_extension is false and must be reflected in the overview.
     Overview = http_get(Config, "/overview"),
+    Definitions = maps:get(definitions, Overview),
+    ?assertEqual(false, maps:get(require_definition_json_extension, Definitions)),
     ?assertEqual(false, maps:get(require_definition_json_extension, Overview)),
     passed.
 
@@ -3663,6 +3665,8 @@ require_definition_json_extension_enabled_in_overview_test(Config) ->
         [rabbitmq_management, require_definition_json_extension, true]),
     try
         Overview = http_get(Config, "/overview"),
+        Definitions = maps:get(definitions, Overview),
+        ?assertEqual(true, maps:get(require_definition_json_extension, Definitions)),
         ?assertEqual(true, maps:get(require_definition_json_extension, Overview)),
         passed
     after
