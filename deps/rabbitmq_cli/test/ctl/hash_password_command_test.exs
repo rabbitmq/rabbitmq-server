@@ -69,8 +69,10 @@ defmodule HashPasswordCommandTest do
   test "run: hashes the password with PBKDF2-HMAC-SHA256 when requested", context do
     opts = Map.put(context[:opts], :hashing_algorithm, "pbkdf2_sha256")
     hashed_pwd = @command.run([context[:password]], opts)
-    <<salt::binary-size(4), hash::binary>> = Base.decode64!(hashed_pwd)
+    salt_length = :rabbit_password.salt_length(:rabbit_password_hashing_pbkdf2_sha256)
+    <<salt::binary-size(^salt_length), hash::binary>> = Base.decode64!(hashed_pwd)
 
+    assert salt_length == 16
     assert hash == :crypto.pbkdf2_hmac(:sha256, context[:password], salt, 210_000, 32)
   end
 

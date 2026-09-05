@@ -96,15 +96,7 @@ user_login_authentication(Username, AuthProps) ->
                 {password, Cleartext} ->
                     internal_check_user_login(
                       Username,
-                      fun(User) ->
-                          case internal_user:get_password_hash(User) of
-                              <<Salt:4/binary, Hash/binary>> ->
-                                  Hash =:= rabbit_password:salted_hash(
-                                      hashing_module_for_user(User), Salt, Cleartext);
-                              _ ->
-                                  false
-                          end
-                      end);
+                      fun(User) -> rabbit_auth_backend_internal:password_matches(User, Cleartext) end);
                 false ->
                     case proplists:get_value(rabbit_auth_backend_internal, AuthProps, undefined) of
                         undefined -> {refused, ?BLANK_PASSWORD_REJECTION_MESSAGE, [Username]};
