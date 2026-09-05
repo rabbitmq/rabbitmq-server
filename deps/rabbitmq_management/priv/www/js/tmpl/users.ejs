@@ -23,7 +23,7 @@
          <td class="c"><%= fmt_string(user.tags) %></td>
          <td class="c"><%= fmt_permissions(user, permissions, 'user', 'vhost',
                            '<p class="warning">No access</p>') %></td>
-         <td class="c"><%= fmt_boolean(user.password_hash.length > 0) %></td>
+         <td class="c"><%= fmt_boolean(user.has_password) %></td>
        </tr>
     <% } %>
   </tbody>
