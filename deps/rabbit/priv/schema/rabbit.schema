@@ -2709,6 +2709,10 @@ end}.
     {datatype, {integer, non_negative}}
 ]}.
 
+{mapping, "quorum_queue.force_delete_retry_interval", "rabbit.quorum_queue_force_delete_retry_interval", [
+    {datatype, {integer, positive}}
+]}.
+
 
 %%
 %% Runtime parameters

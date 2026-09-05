@@ -9,7 +9,8 @@
 
 -behaviour(gen_server).
 
--export([on_node_up/1, on_node_down/1, queue_created/1, policy_set/0]).
+-export([on_node_up/1, on_node_down/1, queue_created/1, policy_set/0,
+         record_pending_force_deletes/2]).
 
 -export([start_link/0]).
 
@@ -30,12 +31,23 @@
 
 -define(EVAL_MSG, membership_reconciliation).
 
+%% Force delete retry: retrying force deletes of quorum queue members that were
+%% left behind on unreachable nodes during a force delete.
+-define(FORCE_DELETE_TABLE, rabbit_qq_force_delete_pending).
+-define(DEFAULT_FORCE_DELETE_RETRY_INTERVAL, 30_000).
+-define(FORCE_DELETE_TABLE_OPEN_RETRIES, 10).
+
 -record(state, {timer_ref :: reference() | undefined,
                 interval :: non_neg_integer(),
                 trigger_interval :: non_neg_integer(),
                 target_group_size :: non_neg_integer() | undefined,
                 enabled :: boolean(),
-                auto_remove :: boolean()}).
+                auto_remove :: boolean(),
+                force_delete_timer_ref :: reference() | undefined,
+                force_delete_interval :: non_neg_integer()}).
+
+-type server_id() :: {atom(), node()}.
+-type member_uid() :: binary() | undefined.
 
 %%----------------------------------------------------------------------------
 %% Start
@@ -49,7 +61,11 @@ start_link() -> gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 %%----------------------------------------------------------------------------
 
 on_node_up(Node) ->
-    gen_server:cast(?SERVER, {membership_reconciliation_trigger, {node_up, Node}}).
+    gen_server:cast(?SERVER, {membership_reconciliation_trigger, {node_up, Node}}),
+    %% A returning node may host members left behind by an earlier force delete;
+    %% retry now instead of waiting for the next tick. This runs regardless of
+    %% whether reconciliation is enabled.
+    gen_server:cast(?SERVER, force_delete_retry).
 
 on_node_down(Node) ->
     gen_server:cast(?SERVER, {membership_reconciliation_trigger, {node_down, Node}}).
@@ -59,6 +75,67 @@ queue_created(Q) ->
 
 policy_set() ->
     gen_server:cast(?SERVER, {membership_reconciliation_trigger, policy_set}).
+
+%% Record leaked members of a force-deleted queue for retry. Each member is
+%% tagged with the UID of the incarnation being deleted so a newer incarnation
+%% of the same queue name is never touched.
+%%
+%% Those UIDs only exist once `track_qq_members_uids' is enabled, so the retry
+%% is not supported without it. A queue record that predates the flag can also
+%% carry no UID for an individual member even when the flag is enabled. Such a
+%% member is not recorded at all: a retry could not tell it apart from a newer
+%% incarnation of the same queue name, so there is nothing the retry loop could
+%% safely do with the entry. It is reported instead, for manual clean up.
+%%
+%% The entries are written and synced in the calling process rather than handed
+%% to the owner of the table. The caller is deleting the queue, and once the
+%% queue record is gone these entries are the only remaining trace of the leaked
+%% members, so they have to reach disk before the delete completes.
+%%
+%% A failure to write them is logged rather than raised: the queue is already
+%% being removed, so the delete has to carry on regardless.
+-spec record_pending_force_deletes(rabbit_amqqueue:name(),
+                                   [{server_id(), member_uid()}]) -> ok.
+record_pending_force_deletes(_QName, []) ->
+    ok;
+record_pending_force_deletes(QName, PendingMembers) ->
+    case rabbit_feature_flags:is_enabled(track_qq_members_uids) of
+        true ->
+            {Verifiable, Unverifiable} =
+                lists:partition(fun({_ServerId, UId}) -> is_binary(UId) end,
+                                PendingMembers),
+            _ = [?LOG_WARNING(
+                   "Leaked member ~w of ~ts has no recorded UID to verify "
+                   "against, so it cannot be force-deleted on retry without "
+                   "risking a newer incarnation of the same queue name. This "
+                   "member may need manual data clean up",
+                   [ServerId, rabbit_misc:rs(QName)])
+                 || {ServerId, _} <- Unverifiable],
+            record_verifiable_force_deletes(QName, Verifiable);
+        false ->
+            ok
+    end.
+
+record_verifiable_force_deletes(_QName, []) ->
+    ok;
+record_verifiable_force_deletes(QName, PendingMembers) ->
+    case persist_pending_force_deletes(QName, PendingMembers) of
+        ok ->
+            ?LOG_INFO("Recorded ~b leaked member(s) of ~ts for force delete "
+                      "retry: ~w",
+                      [length(PendingMembers), rabbit_misc:rs(QName),
+                       [ServerId || {ServerId, _UId} <- PendingMembers]]),
+            %% Arming the retry timer can be asynchronous: the entries are on
+            %% disk, and the owner arms the timer from `init/1' for anything
+            %% still pending after a restart.
+            gen_server:cast(?SERVER, force_delete_recorded);
+        {error, Reason} ->
+            ?LOG_WARNING(
+              "Failed to record ~b leaked member(s) of ~ts for force delete "
+              "retry: ~tp. These members may need manual data clean up",
+              [length(PendingMembers), rabbit_misc:rs(QName), Reason])
+    end,
+    ok.
 
 %%----------------------------------------------------------------------------
 %% gen_server callbacks
@@ -75,11 +152,19 @@ init([]) ->
                                         ?DEFAULT_TRIGGER_INTERVAL),
     TargetGroupSize = rabbit_misc:get_env(rabbit, quorum_membership_reconciliation_target_group_size,
                                           undefined),
-    State = #state{interval = Interval,
-                   trigger_interval = TriggerInterval,
-                   target_group_size = TargetGroupSize,
-                   enabled = Enabled,
-                   auto_remove = AutoRemove},
+    ForceDeleteInterval = rabbit_misc:get_env(rabbit,
+                                              quorum_queue_force_delete_retry_interval,
+                                              ?DEFAULT_FORCE_DELETE_RETRY_INTERVAL),
+    ok = open_force_delete_table(),
+    State0 = #state{interval = Interval,
+                    trigger_interval = TriggerInterval,
+                    target_group_size = TargetGroupSize,
+                    enabled = Enabled,
+                    auto_remove = AutoRemove,
+                    force_delete_interval = ForceDeleteInterval},
+    %% The force delete retry path runs regardless of the reconciliation toggle;
+    %% resume any pending force deletes that did not complete before a restart.
+    State = ensure_force_delete_timer_if_pending(State0),
     case Enabled of
         true ->
             Ref = erlang:send_after(Interval, self(), ?EVAL_MSG),
@@ -91,6 +176,10 @@ init([]) ->
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
 
+handle_cast(force_delete_recorded, State) ->
+    {noreply, ensure_force_delete_timer(State)};
+handle_cast(force_delete_retry, State) ->
+    {noreply, retry_force_deletes(State)};
 handle_cast({membership_reconciliation_trigger, _Reason}, #state{enabled = false} = State) ->
     {noreply, State, hibernate};
 handle_cast({membership_reconciliation_trigger, Reason}, #state{timer_ref = OldRef,
@@ -113,12 +202,15 @@ handle_info(?EVAL_MSG, #state{interval = Interval,
                  end,
     Ref = erlang:send_after(NewTimeout, self(), ?EVAL_MSG),
     {noreply, State#state{timer_ref = Ref}};
+handle_info(force_delete_retry, State) ->
+    {noreply, retry_force_deletes(State#state{force_delete_timer_ref = undefined})};
 handle_info(_Info, #state{enabled = false} = State) ->
     {noreply, State, hibernate};
 handle_info(_Info, State) ->
     {noreply, State}.
 
 terminate(_Reason, _State) ->
+    _ = dets:close(?FORCE_DELETE_TABLE),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
@@ -262,3 +354,114 @@ select_node([Node]) ->
     Node;
 select_node(Nodes) ->
     lists:nth(rand:uniform(length(Nodes)), Nodes).
+
+%%----------------------------------------------------------------------------
+%% Force delete retry
+%%
+%% When a quorum queue is force-deleted while one or more of its member nodes are
+%% unreachable, `ra:force_delete_server/3' fails on those nodes and the Ra members
+%% are left behind. The next declare under the same Ra name then collides with the
+%% orphans (`{already_started, _}' on every member) and cannot form a cluster, so
+%% the name stays poisoned.
+%%
+%% Leaked members are recorded by the force delete itself (see
+%% `record_pending_force_deletes/2') in a node-local DETS table, and
+%% `ra:force_delete_server/3' is retried until each member is gone. The pending
+%% set survives a broker restart because it is persisted.
+%%
+%% This requires the `track_qq_members_uids' feature flag: each pending member is
+%% tagged with the UID of the incarnation being deleted, and those UIDs are only
+%% recorded once the flag is enabled.
+%%
+%% A retry is guarded by that UID: `rabbit_quorum_queue:force_delete_member/2'
+%% compares it against the UID currently registered on the member's node and only
+%% deletes when the two still match, so a member belonging to a newer incarnation
+%% of the same queue name is never deleted. A member with no UID cannot be
+%% guarded this way, so it never enters the table: it is reported at force delete
+%% time so that it can be cleaned up manually.
+%%----------------------------------------------------------------------------
+
+open_force_delete_table() ->
+    open_force_delete_table(?FORCE_DELETE_TABLE_OPEN_RETRIES).
+
+open_force_delete_table(RetriesLeft) ->
+    File = filename:join(rabbit:data_dir(), "qq_force_delete_retry.dets"),
+    Opts = [{file, File}, {auto_save, infinity}],
+    case dets:open_file(?FORCE_DELETE_TABLE, Opts) of
+        {ok, _} ->
+            ok;
+        {error, Error} when RetriesLeft > 0 ->
+            _ = file:delete(File),
+            ?LOG_WARNING("Failed to open the quorum queue force delete retry DETS "
+                         "file at ~tp: ~tp. Deleting it and retrying (~b retries "
+                         "left)", [File, Error, RetriesLeft]),
+            timer:sleep(1000),
+            open_force_delete_table(RetriesLeft - 1);
+        {error, Error} ->
+            {error, Error}
+    end.
+
+persist_pending_force_deletes(QName, PendingMembers) ->
+    Objects = [{ServerId, {QName, UId}} || {ServerId, UId} <- PendingMembers],
+    try dets:insert(?FORCE_DELETE_TABLE, Objects) of
+        ok ->
+            dets:sync(?FORCE_DELETE_TABLE);
+        {error, _} = Err ->
+            Err
+    catch
+        _:Reason ->
+            {error, Reason}
+    end.
+
+retry_force_deletes(State) ->
+    %% Collect first, then mutate: DETS tables must not be modified during a
+    %% foldl traversal.
+    Entries = dets:foldl(fun(Entry, Acc) -> [Entry | Acc] end, [],
+                         ?FORCE_DELETE_TABLE),
+    _ = [retry_member(Entry) || Entry <- Entries],
+    _ = dets:sync(?FORCE_DELETE_TABLE),
+    ensure_force_delete_timer_if_pending(State).
+
+%% Entries without a UID are refused by `record_pending_force_deletes/2', but
+%% the table outlives the code that wrote it, so one can still be read back from
+%% a file written by an earlier version. Deleting a member that cannot be guarded
+%% by a UID risks removing a newer incarnation of the same queue name, so leave
+%% it in place.
+retry_member({ServerId, {QName, undefined}}) ->
+    ?LOG_INFO("Member ~w of ~ts has no recorded UID to verify against, "
+              "dropping from the force delete retry set. This member may "
+              "need manual data clean up",
+              [ServerId, rabbit_misc:rs(QName)]),
+    dets:delete(?FORCE_DELETE_TABLE, ServerId);
+retry_member({ServerId, {QName, ExpectedUId}}) ->
+    case rabbit_quorum_queue:force_delete_member(ServerId, ExpectedUId) of
+        ok ->
+            ?LOG_INFO("Force delete of leaked member ~w of ~ts "
+                      "succeeded on retry", [ServerId, rabbit_misc:rs(QName)]),
+            dets:delete(?FORCE_DELETE_TABLE, ServerId);
+        {skipped, gone} ->
+            ?LOG_INFO("Leaked member ~w of ~ts is no longer present, dropping "
+                      "from the force delete retry set", [ServerId, rabbit_misc:rs(QName)]),
+            dets:delete(?FORCE_DELETE_TABLE, ServerId);
+        {skipped, superseded} ->
+            ?LOG_INFO("Member ~w of ~ts belongs to a newer incarnation, dropping "
+                      "from the force delete retry set", [ServerId, rabbit_misc:rs(QName)]),
+            dets:delete(?FORCE_DELETE_TABLE, ServerId);
+        {error, Reason} ->
+            ?LOG_DEBUG("Force delete retry of member ~w of ~ts failed "
+                       "with ~w, will retry", [ServerId, rabbit_misc:rs(QName), Reason]),
+            ok
+    end.
+
+ensure_force_delete_timer_if_pending(State) ->
+    case dets:info(?FORCE_DELETE_TABLE, size) of
+        0 -> State;
+        _ -> ensure_force_delete_timer(State)
+    end.
+
+ensure_force_delete_timer(#state{force_delete_timer_ref = Ref} = State)
+  when is_reference(Ref) ->
+    State;
+ensure_force_delete_timer(#state{force_delete_interval = Interval} = State) ->
+    Ref = erlang:send_after(Interval, self(), force_delete_retry),
+    State#state{force_delete_timer_ref = Ref}.
