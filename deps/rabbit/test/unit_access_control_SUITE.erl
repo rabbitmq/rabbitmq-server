@@ -167,6 +167,11 @@ login_with_pbkdf2_sha256_hashed_password1(_Config) ->
     {ok, User} = rabbit_auth_backend_internal:lookup_user(UserName),
     ?assertEqual(48, byte_size(internal_user:get_password_hash(User))),
 
+    %% The sentinel salt has to track the configured module's salt width.
+    Sentinel = rabbit_auth_backend_internal:dummy_sentinel_user(),
+    ?assertEqual(16, byte_size(internal_user:get_password_hash(Sentinel))),
+    ?assertNot(rabbit_auth_backend_internal:password_matches(Sentinel, Password)),
+
     {ok, #auth_user{username = UserName}} =
         rabbit_auth_backend_internal:user_login_authentication(
             UserName, [{password, Password}]),
