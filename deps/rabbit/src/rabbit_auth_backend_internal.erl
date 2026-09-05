@@ -52,7 +52,8 @@
 
 -ifdef(TEST).
 -export([extract_user_permission_params/2,
-         extract_topic_permission_params/2]).
+         extract_topic_permission_params/2,
+         dummy_sentinel_user/0]).
 -endif.
 
 -import(rabbit_data_coercion, [to_atom/1, to_list/1, to_binary/1]).
@@ -146,17 +147,18 @@ internal_check_user_login(Username, Fun) ->
             Refused
     end.
 
-%% A sentinel internal_user whose password hash will never match any real
-%% cleartext. Used solely to perform a dummy hash computation on the
-%% not-found path, equalising timing with the found-but-wrong-password path.
-%% Layout: 4 bytes zeroed salt + 32 bytes zeroed SHA-256 payload.
--define(DUMMY_PASSWORD_HASH, <<0:32, 0:256>>).
-
+%% The salt must be as wide as the configured module expects, otherwise
+%% `password_matches/2` performs no hashing at all. Nothing follows it because
+%% no digest equals <<>>.
+%%
+%% Users still hashed with a cheaper module verify faster and remain
+%% distinguishable by timing.
 dummy_sentinel_user() ->
     HashingMod = rabbit_password:hashing_mod(),
+    SaltLength = rabbit_password:salt_length(HashingMod),
     internal_user:set_password_hash(
         internal_user:new({hashing_algorithm, HashingMod}),
-        ?DUMMY_PASSWORD_HASH,
+        <<0:(SaltLength * 8)>>,
         HashingMod).
 
 check_vhost_access(#auth_user{username = Username}, VHostPath, _AuthzData) ->
