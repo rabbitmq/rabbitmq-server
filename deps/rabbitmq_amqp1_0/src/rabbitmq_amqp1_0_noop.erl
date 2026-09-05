@@ -1,1 +1,0 @@
--module(rabbitmq_amqp1_0_noop).

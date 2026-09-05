@@ -34,7 +34,6 @@ from individual `deps/` component directories (see below).
 
  * `deps/rabbit`: the core RabbitMQ server, the most important part of the codebase
  * `deps/rabbit_common`: internal library for common modules
- * `deps/rabbitmq_amqp1_0`: a no-op plugin that exists for backwards compatibility since AMQP 1.0 is a core protocol as of RabbitMQ 4.0
  * `deps/rabbitmq_amqp_client`: Erlang AMQP 1.0 client with RabbitMQ-specific management operations
  * `deps/rabbitmq_auth_backend_http`: external HTTP server-based authentication (authN), authorization (authZ) backend
  * `deps/rabbitmq_auth_backend_internal_loopback`: a `localhost`-only version of the internal authN, authZ backend

@@ -129,7 +129,6 @@ groups() ->
        user_id,
        sections_out_of_order,
        message_ttl,
-       plugin,
        idle_time_out_on_server,
        idle_time_out_on_client,
        idle_time_out_too_short,
@@ -5985,16 +5984,6 @@ message_ttl(Config) ->
     ok = amqp10_client:detach_link(Receiver),
     ok = delete_queue(Session, QName),
     ok = close_connection_sync(Connection).
-
-%% For backward compatibility, deployment tools should be able to
-%% enable and disable the deprecated no-op AMQP 1.0 plugin.
-plugin(Config) ->
-    Node = 0,
-    Plugin = rabbitmq_amqp1_0,
-    %% rabbit/Makefile declares a test dependency on the rabbitmq_amqp1_0 plugin.
-    %% Therefore, we first disable, and then enable.
-    ?assertEqual(ok, rabbit_ct_broker_helpers:disable_plugin(Config, Node, Plugin)),
-    ?assertEqual(ok, rabbit_ct_broker_helpers:enable_plugin(Config, Node, Plugin)).
 
 %% Test that the idle timeout threshold is exceeded on the server
 %% when no frames are sent from client to server.
