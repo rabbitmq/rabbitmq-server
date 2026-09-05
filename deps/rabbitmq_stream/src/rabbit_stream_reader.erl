@@ -1186,7 +1186,8 @@ open(cast,
                                        case {Credit, Log} of
                                            {_, undefined} ->
                                                Consumer; %% SAC not active
-                                           {0, _} -> Consumer;
+                                           {C, _} when C =< 0 ->
+                                               Consumer;
                                            {_, _} ->
                                                case send_chunks(DeliverVersion,
                                                                 Transport,
@@ -2097,10 +2098,22 @@ handle_frame_post_auth(Transport,
             {Connection0, State}
     end;
 handle_frame_post_auth(Transport, #stream_connection{} = Connection, State,
-                       {request, _,
-                        {subscribe,
-                         _, _, _, _, _}} = Request) ->
-    handle_frame_post_auth(Transport, {ok, Connection}, State, Request);
+                       {request, CorrelationId,
+                        {subscribe, SubscriptionId, Stream, OffsetSpec, Credit,
+                         Properties}})
+  when is_integer(Credit) ->
+    handle_frame_post_auth(Transport, {ok, Connection}, State,
+                           {request, CorrelationId,
+                            {subscribe, SubscriptionId, Stream, OffsetSpec,
+                             {chunks, Credit}, Properties}});
+handle_frame_post_auth(Transport, #stream_connection{} = Connection, State,
+                       {request, CorrelationId,
+                        {subscribe_v2, SubscriptionId, Stream, OffsetSpec, Credit,
+                         Properties}}) ->
+    handle_frame_post_auth(Transport, {ok, Connection}, State,
+                           {request, CorrelationId,
+                            {subscribe, SubscriptionId, Stream, OffsetSpec,
+                             {bytes, Credit}, Properties}});
 handle_frame_post_auth(Transport,
                        {ok, Connection},
                        #stream_connection_state{consumers = Consumers} = State,
@@ -2213,14 +2226,38 @@ handle_frame_post_auth(Transport,
             increase_protocol_counter(?ACCESS_REFUSED),
             {Connection, State}
     end;
+%% Credit version 1 counts chunks, version 2 counts bytes. Both are
+%% normalised here so the clause below does not have to know about command
+%% versions.
+handle_frame_post_auth(Transport, Connection, State,
+                       {credit, SubscriptionId, Credit})
+  when is_integer(Credit) ->
+    handle_frame_post_auth(Transport, Connection, State,
+                           {credit, SubscriptionId, {chunks, Credit}});
+handle_frame_post_auth(Transport, Connection, State,
+                       {credit_v2, SubscriptionId, Credit}) ->
+    handle_frame_post_auth(Transport, Connection, State,
+                           {credit, SubscriptionId, {bytes, Credit}});
 handle_frame_post_auth(Transport,
                        #stream_connection{socket = S,
                                           send_file_oct = SendFileOct,
                                           deliver_version = DeliverVersion} =
                            Connection,
                        #stream_connection_state{consumers = Consumers} = State,
-                       {credit, SubscriptionId, Credit}) ->
+                       {credit, SubscriptionId, {Unit, Credit}}) ->
     case Consumers of
+        #{SubscriptionId := #consumer{configuration =
+                                      #consumer_configuration{credit_unit = U}}}
+          when U =/= Unit ->
+            ?LOG_WARNING("Credit unit mismatch for subscription ~tp: "
+                         "subscription uses ~tp, frame uses ~tp",
+                         [SubscriptionId, U, Unit]),
+            Frame = rabbit_stream_core:frame(
+                      {response, 1, {credit, ?RESPONSE_CODE_PRECONDITION_FAILED,
+                                     SubscriptionId}}),
+            send(Transport, S, Frame),
+            increase_protocol_counter(?PRECONDITION_FAILED),
+            {Connection, State};
         #{SubscriptionId := #consumer{log = undefined} = Consumer} ->
             %% the consumer is not active, it's likely to be credit leftovers
             %% from a formerly active consumer. Taking the credits,
@@ -2801,13 +2838,16 @@ handle_frame_post_auth(Transport,
                         Consumer1 = Consumer#consumer{log = Segment},
                         #consumer{credit = Crdt,
                                   send_limit = SndLmt,
-                                  configuration = #consumer_configuration{counters = ConsumerCounters}} = Consumer1,
+                                  configuration =
+                                      #consumer_configuration{counters = ConsumerCounters,
+                                                              credit_unit = CreditUnit}} = Consumer1,
 
                         ?LOG_DEBUG("Dispatching to subscription ~tp (stream ~tp), "
-                                         "credit(s) ~tp, send limit ~tp",
+                                         "credit(s) ~tp ~tp, send limit ~tp",
                                          [SubscriptionId,
                                           Stream,
                                           Crdt,
+                                          CreditUnit,
                                           SndLmt]),
 
                         ConsumedMessagesBefore = messages_consumed(ConsumerCounters),
@@ -3233,6 +3273,7 @@ maybe_dispatch_on_subscription(Transport,
                                                    stream_r(Stream, Connection),
                                                    SubscriptionId,
                                                    Credit1,
+                                                   consumer_i(credit_unit, ConsumerState1),
                                                    messages_consumed(ConsumerCounters1),
                                                    ConsumerOffset,
                                                    ConsumerOffsetLag,
@@ -3257,13 +3298,15 @@ maybe_dispatch_on_subscription(_Transport,
                      [SubscriptionId]),
     #consumer{credit = Credit,
               configuration =
-                  #consumer_configuration{offset = Offset, active = Active}} =
+                  #consumer_configuration{offset = Offset, active = Active,
+                                          credit_unit = CreditUnit}} =
         ConsumerState,
 
     rabbit_stream_metrics:consumer_created(self(),
                                            stream_r(Stream, Connection),
                                            SubscriptionId,
                                            Credit,
+                                           CreditUnit,
                                            0, %% messages consumed
                                            Offset,
                                            0, %% offset lag
@@ -3285,7 +3328,7 @@ handle_subscription(Transport,#stream_connection{
                                               SubscriptionId,
                                               Stream,
                                               OffsetSpec,
-                                              Credit,
+                                              {CreditUnit, Credit},
                                               Properties}},
                     LocalMemberPid) ->
     Sac = single_active_consumer(Properties),
@@ -3323,7 +3366,8 @@ handle_subscription(Transport,#stream_connection{
                                        offset = OffsetSpec,
                                        counters = ConsumerCounters,
                                        properties = Properties,
-                                       active = Active},
+                                       active = Active,
+                                       credit_unit = CreditUnit},
             SendLimit = Credit div 2,
             ConsumerState =
             #consumer{configuration = ConsumerConfiguration,
@@ -3976,7 +4020,7 @@ send_chunks(DeliverVersion,
 -spec send_chunks(rabbit_stream_core:command_version(),
                   module(),
                   #consumer{},
-                  non_neg_integer(),
+                  integer(),
                   undefined | osiris:offset(),
                   atomics:atomics_ref()) ->
     {ok, #consumer{}} | {error, term()}.
@@ -4013,7 +4057,7 @@ send_chunks(DeliverVersion,
                   module(),
                   #consumer{},
                   osiris_log:state(),
-                  non_neg_integer(),
+                  integer(),
                   undefined | osiris:offset(),
                   boolean(),
                   atomics:atomics_ref()) ->
@@ -4024,36 +4068,45 @@ send_chunks(_DeliverVersion,
                       configuration = #consumer_configuration{socket = Socket}} =
                 Consumer,
             Log,
-            0,
+            Credit,
             LastLstOffset,
             _Retry,
-            _Counter) ->
+            _Counter) when Credit =< 0 ->
     %% we have finished sending so need to uncork
     setopts(Transport, Socket, [{nopush, false}]),
     {ok,
      Consumer#consumer{log = Log,
-                       credit = 0,
+                       credit = Credit,
                        last_listener_offset = LastLstOffset}};
 send_chunks(DeliverVersion,
             Transport,
-            #consumer{configuration = #consumer_configuration{socket = Socket}} =
+            #consumer{configuration =
+                          #consumer_configuration{socket = Socket,
+                                                  credit_unit = Unit}} =
                 Consumer,
             Log,
             Credit,
             LastLstOffset,
             Retry,
             Counter) ->
+    %% The reader process is the only writer of this counter and the
+    %% callback adds exactly the chunk bytes written, so the delta is the
+    %% cost of the chunk. A skipped chunk never invokes the callback and so
+    %% costs nothing.
+    %% FIXME: having Osiris return the number of sent bytes would be more efficient
+    Before = atomics:get(Counter, 1),
     case osiris_log:send_file(Socket, Log,
                               send_file_callback(DeliverVersion, Log,
                                                  Consumer,
                                                  Counter))
     of
         {ok, Log1} ->
+            Cost = credit_cost(Unit, atomics:get(Counter, 1) - Before),
             send_chunks(DeliverVersion,
                         Transport,
                         Consumer,
                         Log1,
-                        Credit - 1,
+                        Credit - Cost,
                         LastLstOffset,
                         true,
                         Counter);
@@ -4100,6 +4153,11 @@ send_chunks(DeliverVersion,
             end
     end.
 
+credit_cost(chunks, _Bytes) ->
+    1;
+credit_cost(bytes, Bytes) ->
+    Bytes.
+
 emit_stats(#stream_connection{publishers = Publishers} = Connection,
            #stream_connection_state{consumers = Consumers} = ConnectionState) ->
     [{_, Pid}, {_, Recv_oct}, {_, Send_oct}, {_, Reductions}] =
@@ -4114,6 +4172,7 @@ emit_stats(#stream_connection{publishers = Publishers} = Connection,
                                             stream_r(S, Connection),
                                             Id,
                                             Credit,
+                                            CreditUnit,
                                             messages_consumed(Counters),
                                             consumer_offset(Counters),
                                             consumer_i(offset_lag, Consumer),
@@ -4124,7 +4183,8 @@ emit_stats(#stream_connection{publishers = Publishers} = Connection,
                                               subscription_id = Id,
                                               counters = Counters,
                                               active = Active,
-                                              properties = Properties},
+                                              properties = Properties,
+                                              credit_unit = CreditUnit},
                   credit = Credit} =
             Consumer
             <- maps:values(Consumers)],
@@ -4179,6 +4239,10 @@ consumer_i(subscription_id,
     SubId;
 consumer_i(credits, #consumer{credit = Credits}) ->
     Credits;
+consumer_i(credit_unit,
+           #consumer{configuration =
+                         #consumer_configuration{credit_unit = Unit}}) ->
+    Unit;
 consumer_i(messages_consumed,
            #consumer{configuration =
                          #consumer_configuration{counters = Counters}}) ->

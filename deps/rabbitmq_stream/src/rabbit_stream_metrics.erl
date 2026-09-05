@@ -20,8 +20,8 @@
 
 %% API
 -export([init/0]).
--export([consumer_created/10,
-         consumer_updated/9,
+-export([consumer_created/11,
+         consumer_updated/10,
          consumer_cancelled/4]).
 -export([publisher_created/4,
          publisher_updated/7,
@@ -38,6 +38,7 @@ consumer_created(Connection,
                  StreamResource,
                  SubscriptionId,
                  Credits,
+                 CreditUnit,
                  MessageCount,
                  Offset,
                  OffsetLag,
@@ -46,6 +47,7 @@ consumer_created(Connection,
                  ActingUser) ->
     Values =
         [{credits, Credits},
+         {credit_unit, CreditUnit},
          {consumed, MessageCount},
          {offset, Offset},
          {offset_lag, OffsetLag},
@@ -92,6 +94,7 @@ consumer_updated(Connection,
                  StreamResource,
                  SubscriptionId,
                  Credits,
+                 CreditUnit,
                  MessageCount,
                  Offset,
                  OffsetLag,
@@ -99,6 +102,7 @@ consumer_updated(Connection,
                  Properties) ->
     Values =
         [{credits, Credits},
+         {credit_unit, CreditUnit},
          {consumed, MessageCount},
          {offset, Offset},
          {offset_lag, OffsetLag},
