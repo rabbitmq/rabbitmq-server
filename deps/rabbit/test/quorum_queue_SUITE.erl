@@ -2138,18 +2138,18 @@ dont_leak_file_handles(Config) ->
      end || _ <- Servers],
     flush(1),
     [{_, MonBy2}] = rpc:call(Server0, erlang, process_info, [NCh1, [monitored_by]]),
-    NumMonRefsBefore = length([M || M <- MonBy2, is_reference(M)]),
+    RefsBefore = sets:from_list([M || M <- MonBy2, is_reference(M)]),
     %% delete queue
     ?assertMatch(#'queue.delete_ok'{},
                  amqp_channel:call(Ch, #'queue.delete'{queue = QQ})),
     %% File handle monitors are cleaned up asynchronously after queue
-    %% deletion. Poll until the reference monitor count decreases.
+    %% deletion. Poll until none of the monitors seen above are left.
     ?awaitMatch(
        true,
        begin
            [{_, MonBy3}] = rpc:call(Server0, erlang, process_info, [NCh1, [monitored_by]]),
-           NumMonRefsAfter = length([M || M <- MonBy3, is_reference(M)]),
-           NumMonRefsAfter < NumMonRefsBefore
+           RefsAfter = sets:from_list([M || M <- MonBy3, is_reference(M)]),
+           sets:is_empty(sets:intersection(RefsBefore, RefsAfter))
        end,
        30_000),
 
