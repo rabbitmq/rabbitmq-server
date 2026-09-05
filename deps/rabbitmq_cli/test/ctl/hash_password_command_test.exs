@@ -42,6 +42,13 @@ defmodule HashPasswordCommandTest do
     assert @command.validate(["foo"], opts) == :ok
   end
 
+  test "validate: PBKDF2-HMAC-SHA256 is a supported hashing algorithm", context do
+    for alg <- ["pbkdf2_sha256", "pbkdf2-sha256", "PBKDF2_SHA256"] do
+      opts = Map.put(context[:opts], :hashing_algorithm, alg)
+      assert @command.validate(["foo"], opts) == :ok
+    end
+  end
+
   @tag user: "someone", password: "hashed_password"
   test "run: successfully create user with a hashed password from cli cmd", context do
     hashed_pwd = @command.run([context[:password]], context[:opts])
@@ -56,6 +63,15 @@ defmodule HashPasswordCommandTest do
     <<salt::binary-size(4), hash::binary>> = Base.decode64!(hashed_pwd)
 
     assert hash == :crypto.hash(:sha512, salt <> context[:password])
+  end
+
+  @tag password: "hashed_password"
+  test "run: hashes the password with PBKDF2-HMAC-SHA256 when requested", context do
+    opts = Map.put(context[:opts], :hashing_algorithm, "pbkdf2_sha256")
+    hashed_pwd = @command.run([context[:password]], opts)
+    <<salt::binary-size(4), hash::binary>> = Base.decode64!(hashed_pwd)
+
+    assert hash == :crypto.pbkdf2_hmac(:sha256, context[:password], salt, 210_000, 32)
   end
 
   @tag user: "someone", password: "hashed_password"
