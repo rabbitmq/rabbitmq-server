@@ -12,6 +12,10 @@
 -export([hash/1, salt_length/0]).
 
 %% OWASP's 2023 minimum recommendation for PBKDF2-HMAC-SHA256.
+%%
+%% Do not change this value in place. The iteration count is not stored
+%% with the hash, so every existing PBKDF2 user would be locked out.
+%% Introduce a new module with the new value instead.
 -define(ITERATIONS, 210_000).
 -define(KEY_LENGTH, 32).
 -define(SALT_LENGTH, 16).
