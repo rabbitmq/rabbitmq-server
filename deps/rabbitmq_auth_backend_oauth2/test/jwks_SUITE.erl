@@ -319,7 +319,7 @@ end_per_group(without_kid, Config) ->
 
 end_per_group(no_peer_verification, Config) ->
     KeyConfig = set_config(?config(key_config, Config), [
-        {jwks_uri, ?config(strict_jwks_uri, Config)},
+        {jwks_url, ?config(strict_jwks_uri, Config)},
         {peer_verification, verify_peer}]),
     ok = rpc_set_env(Config, key_config, KeyConfig),
     set_config(Config, {key_config, KeyConfig});
