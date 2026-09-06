@@ -1140,6 +1140,16 @@ temporary_queue_after_node_loss(Config, QueueDeclare) ->
 %% report that state for as long as it lasts, and stop reporting it once Mnesia
 %% has merged again.
 mnesia_split_is_reported_and_cleared(Config) ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            %% The assertions call rabbit_node_monitor:mnesia_split/0, which
+            %% the older nodes of a mixed-version cluster do not export.
+            {skip, "Requires rabbit_node_monitor:mnesia_split/0 on all nodes"};
+        false ->
+            mnesia_split_is_reported_and_cleared1(Config)
+    end.
+
+mnesia_split_is_reported_and_cleared1(Config) ->
     [Node1, Node2, Node3] = rabbit_ct_broker_helpers:get_node_configs(
                               Config, nodename),
     Peers = lists:sort([Node1, Node3]),
