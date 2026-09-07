@@ -55,7 +55,7 @@ start(_Type, _Args) ->
 %% function, so they have to stay as they are.
 -spec advertised_endpoint(tcp | ssl) -> {Host, Port} when
       Host :: binary(),
-      Port :: integer() | {error, term()}.
+      Port :: integer() | undefined | {error, term()}.
 advertised_endpoint(Transport) ->
     {advertised_host(Transport), advertised_port(Transport)}.
 
