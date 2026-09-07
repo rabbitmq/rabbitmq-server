@@ -48,18 +48,12 @@ end_per_testcase(Testcase, Config) ->
 %% Test cases
 %% -------------------------------------------------------------------
 
-%% `discover/1` must turn an unknown type into a protocol error, not let a
-%% `{error, not_found}` result badmatch the caller. `rabbit_ct_broker_helpers`
-%% RPCs via `erpc`, which re-raises a remote `exit/1` locally as
-%% `exit({exception, Reason})`.
+%% `erpc` re-raises a remote `exit/1` locally as `exit({exception, Reason})`.
 discover_raises_protocol_error_for_unknown_type(Config) ->
     ?assertExit(
        {exception, #amqp_error{name = precondition_failed}},
        rpc(Config, 0, rabbit_queue_type, discover, [<<"totally-bogus-type">>])).
 
-%% End-to-end: declaring a queue with an unknown `x-queue-type` must close
-%% only that channel with a clean 406 precondition_failed, and must not take
-%% down the connection or crash anything else reachable from it.
 declare_with_unknown_queue_type_closes_channel_cleanly(Config) ->
     {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config),
     expect_shutdown_due_to_precondition_failed(
@@ -70,7 +64,6 @@ declare_with_unknown_queue_type_closes_channel_cleanly(Config) ->
                        arguments = [{<<"x-queue-type">>, longstr,
                                      <<"totally-bogus-type">>}]})
       end),
-    %% The connection, and a fresh channel on it, must still be usable.
     {ok, Ch2} = amqp_connection:open_channel(Conn),
     #'queue.declare_ok'{queue = Q} =
         amqp_channel:call(Ch2, #'queue.declare'{queue = <<>>, exclusive = true}),
