@@ -25,6 +25,8 @@ groups() ->
 all_tests() ->
     [
      mc_util_uuid_to_urn_roundtrip,
+     mc_util_urn_string_to_uuid_rejects_non_hex_body,
+     mc_util_urn_string_to_uuid_rejects_wrong_dash_placement,
      amqpl_defaults,
      amqpl_compat,
      amqpl_table_x_header,
@@ -492,6 +494,43 @@ mc_util_uuid_to_urn_roundtrip(_Config) ->
     S = mc_util:uuid_to_urn_string(UUID),
     ?assertEqual(<<"urn:uuid:58b867b0-8151-1f56-1bd4-73229807fd60">>, S),
     ?assertEqual({ok, UUID}, mc_util:urn_string_to_uuid(S)),
+    %% RFC 4122 requires readers to accept upper case hex
+    ?assertEqual({ok, UUID},
+                 mc_util:urn_string_to_uuid(
+                   <<"urn:uuid:58B867B0-8151-1F56-1BD4-73229807FD60">>)),
+    ok.
+
+%% Only the `urn:uuid:` prefix and the 36-byte body length were checked, so
+%% a non-hex body reached `binary:decode_hex/1`, which raises badarg.
+mc_util_urn_string_to_uuid_rejects_non_hex_body(_Config) ->
+    NotHexBody = <<"zzzzzzzz-zzzz-zzzz-zzzz-zzzzzzzzzzzz">>,
+    ?assertEqual(36, byte_size(NotHexBody)),
+    ?assertEqual({error, not_urn_string},
+                 mc_util:urn_string_to_uuid(<<"urn:uuid:", NotHexBody/binary>>)),
+    %% dashes in the wrong places, leaving segments `binary:decode_hex/1` rejects
+    OddSegmentBody = <<"abcdefg-1234-5678-9abc-def0123456789">>,
+    ?assertEqual(36, byte_size(OddSegmentBody)),
+    ?assertEqual({error, not_urn_string},
+                 mc_util:urn_string_to_uuid(<<"urn:uuid:", OddSegmentBody/binary>>)),
+    ok.
+
+%% `binary:decode_hex/1` doesn't care where the dashes are, so a 36-byte body
+%% with misplaced dashes used to decode to a wrong-sized binary and reach the
+%% AMQP 1.0 encoder, which requires a uuid to be exactly 16 bytes.
+mc_util_urn_string_to_uuid_rejects_wrong_dash_placement(_Config) ->
+    %% no dashes at all: decodes to 18 bytes
+    NoDashes = binary:copy(<<"a">>, 36),
+    ?assertEqual({error, not_urn_string},
+                 mc_util:urn_string_to_uuid(<<"urn:uuid:", NoDashes/binary>>)),
+    AllDashes = binary:copy(<<"-">>, 36),
+    ?assertEqual({error, not_urn_string},
+                 mc_util:urn_string_to_uuid(<<"urn:uuid:", AllDashes/binary>>)),
+    %% 32 hex characters and 4 dashes, but grouped 16-4-16
+    HexHalf = binary:copy(<<"a">>, 16),
+    ClusteredDashes = <<HexHalf/binary, "----", HexHalf/binary>>,
+    ?assertEqual(36, byte_size(ClusteredDashes)),
+    ?assertEqual({error, not_urn_string},
+                 mc_util:urn_string_to_uuid(<<"urn:uuid:", ClusteredDashes/binary>>)),
     ok.
 
 do_n(0, _) ->
