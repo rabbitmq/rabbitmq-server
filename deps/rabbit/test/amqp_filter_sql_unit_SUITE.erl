@@ -507,21 +507,15 @@ like_operator(_Config) ->
     true  = match("k LIKE '%%a%%b%%'", [{{utf8, <<"k">>}, {utf8, <<"xaxbx">>}}]),
     false = match("k LIKE '%%a%%b%%'", [{{utf8, <<"k">>}, {utf8, <<"xbxax">>}}]),
 
-    %% A LIKE pattern with several %-wildcards compiles to a regex; its
-    %% subject is bounded independently of the message-size limit since
-    %% matching runs inside the target queue's own process. A subject
-    %% that would otherwise match must stop matching once it exceeds the
-    %% cap, and one within the cap must still match normally.
+    %% A LIKE pattern with several %-wildcards compiles to a regex whose
+    %% subject is bounded independently of the message-size limit.
     AtCap = binary:copy(<<"a">>, 4096),
     true = match("k LIKE '%a%a%'", [{{utf8, <<"k">>}, {utf8, AtCap}}]),
     Oversized = binary:copy(<<"a">>, 4097),
     false = match("k LIKE '%a%a%'", [{{utf8, <<"k">>}, {utf8, Oversized}}]),
 
-    %% An oversized subject evaluates to unknown, not false, matching the
-    %% "identifier is NULL" convention already used for LIKE elsewhere in
-    %% this suite -- this is only observable through NOT LIKE: unknown
-    %% still doesn't match (unlike a hard false, which NOT would flip to
-    %% a match).
+    %% An oversized subject evaluates to unknown rather than false, so
+    %% NOT LIKE does not match either.
     false = match("k NOT LIKE '%a%a%'", [{{utf8, <<"k">>}, {utf8, Oversized}}]).
 
 in_operator(_Config) ->
