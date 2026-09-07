@@ -22,7 +22,10 @@
          host/0,
          tls_host/0,
          port/0,
-         tls_port/0]).
+         tls_port/0,
+         advertised_endpoint/1,
+         advertised_host/1,
+         advertised_port/1]).
 -export([stop/1]).
 -export([emit_connection_info_local/3,
          emit_connection_info_all/4,
@@ -46,6 +49,21 @@ start(_Type, _Args) ->
     rabbit_global_counters:init(#{protocol => stream,
                                   queue_type => ?STREAM_QUEUE_TYPE}),
     rabbit_stream_sup:start_link().
+
+%% Called on peer nodes to assemble metadata responses. host/0, tls_host/0,
+%% port/0 and tls_port/0 are called the same way by peers that predate this
+%% function, so they have to stay as they are.
+-spec advertised_endpoint(tcp | ssl) -> {Host, Port} when
+      Host :: binary(),
+      Port :: integer() | {error, term()}.
+advertised_endpoint(Transport) ->
+    {advertised_host(Transport), advertised_port(Transport)}.
+
+advertised_host(tcp) -> host();
+advertised_host(ssl) -> tls_host().
+
+advertised_port(tcp) -> port();
+advertised_port(ssl) -> tls_port().
 
 tls_host() ->
     case application:get_env(rabbitmq_stream, ?K_AD_TLS_HOST,
