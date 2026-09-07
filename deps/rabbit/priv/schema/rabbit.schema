@@ -948,6 +948,25 @@ end}.
  end
 }.
 
+%% Set the max number of publishes a channel will buffer for an open
+%% AMQP 0-9-1 transaction before rejecting further ones.
+%%
+%% {channel_tx_message_max, 10000},
+
+{mapping, "channel_tx_message_max", "rabbit.channel_tx_message_max",
+  [{datatype, [{atom, infinity}, integer]}]}.
+
+{translation, "rabbit.channel_tx_message_max",
+ fun(Conf) ->
+  case cuttlefish:conf_get("channel_tx_message_max", Conf, undefined) of
+      undefined -> cuttlefish:unset();
+      infinity  -> infinity;
+      Val when is_integer(Val) andalso Val > 0 -> Val;
+      _         -> cuttlefish:invalid("should be positive integer or 'infinity'")
+  end
+ end
+}.
+
 %% Sets the maximum number of AMQP 1.0 sessions that can be simultaneously
 %% active on an AMQP 1.0 connection.
 %%
