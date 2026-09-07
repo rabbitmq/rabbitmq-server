@@ -264,11 +264,11 @@ like(Subject, CompiledRe)
             undefined;
         false ->
             case rabbit_re:run(Subject, CompiledRe) of
-                match           -> true;
-                nomatch         -> false;
-                %% Subject is not a UTF-8 string.
-                {error, badarg} -> undefined;
-                {error, _}      -> false
+                match      -> true;
+                nomatch    -> false;
+                %% The subject is not a UTF-8 string, or the match limit
+                %% was exhausted before a verdict was reached.
+                {error, _} -> undefined
             end
     end.
 
