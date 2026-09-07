@@ -405,16 +405,9 @@ msg_store_read_many_fanout1(_Config) ->
            end),
     passed.
 
-%% A message fanned out to two queues has ref_count = 2. If one queue's
-%% consumer acks the message (dropping the reference to 0) between another
-%% reader's snapshot lookup and client_read3/2's own, second, confirming
-%% lookup, the second lookup used to have no fallback clause and crashed
-%% with case_clause -- and left the file handle it had just marked open
-%% stuck open forever, which blocks that file's reclamation. The fix
-%% turns that crash into a clean not_found and closes the handle; it does
-%% not change what the sole production caller, rabbit_variable_queue,
-%% does with a not_found result, which already hard-matches {ok, _} on
-%% the pre-existing first-lookup not_found path.
+%% A reader can retain a positive-ref-count snapshot while another operation
+%% removes the message's final reference before client_read3/2 performs its
+%% own confirming lookup.
 msg_store_read_after_concurrent_remove_returns_not_found(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,
       ?MODULE, msg_store_read_after_concurrent_remove_returns_not_found1, [Config]).
