@@ -11,6 +11,8 @@
 -export([init/2, to_json/2, content_types_provided/2, is_authorized/2]).
 -export([resource_exists/2]).
 -export([variances/2]).
+-export([cert_validity/1, expires_on_list/1, format_error_reason/1,
+         parse_time/1, time_str_2_gregorian_sec/1]).
 
 -include_lib("public_key/include/public_key.hrl").
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
@@ -112,17 +114,29 @@ listener_expiring_within(#listener{node = Node, protocol = Protocol, ip_address 
               protocol => Protocol,
               interface => rabbit_data_coercion:to_utf8_binary(rabbit_misc:ntoa(Interface)),
               port => Port,
-              certfile => list_to_binary(Certfile),
-              cacertfile => list_to_binary(Cacertfile),
+              certfile => rabbit_data_coercion:to_binary(Certfile),
+              cacertfile => rabbit_data_coercion:to_binary(Cacertfile),
               certfile_expires_on => expires_on_list(CertfileExpiresOn),
               cacertfile_expires_on => expires_on_list(CacertfileExpiresOn)
              }
     end.
 
 expires_on_list({error, Reason}) ->
-    {error, list_to_binary(Reason)};
-expires_on_list(ExpiresOn) ->
-    [seconds_to_bin(S) || S <- ExpiresOn].
+    [#{error => format_error_reason(Reason)}];
+expires_on_list(ExpiresOn) when is_list(ExpiresOn) ->
+    [case S of
+         {error, Reason} ->
+             #{error => format_error_reason(Reason)};
+         Seconds when is_integer(Seconds) ->
+             seconds_to_bin(Seconds)
+     end || S <- ExpiresOn].
+
+format_error_reason(Reason) when is_atom(Reason) ->
+    atom_to_binary(Reason, utf8);
+format_error_reason(Reason) when is_binary(Reason) ->
+    Reason;
+format_error_reason(Reason) ->
+    iolist_to_binary(Reason).
 
 read_cert(undefined) ->
     undefined;
@@ -138,6 +152,8 @@ read_cert(Path) ->
 
 cert_validity(undefined) ->
     undefined;
+cert_validity({error, _} = Err) ->
+    Err;
 cert_validity(Cert) ->
     DsaEntries = public_key:pem_decode(Cert),
     case DsaEntries of
@@ -147,21 +163,53 @@ cert_validity(Cert) ->
             Now = calendar:datetime_to_gregorian_seconds(calendar:universal_time()),
             lists:map(
               fun({'Certificate', _, _} = DsaEntry) ->
-                      #'Certificate'{tbsCertificate = TBSCertificate} = public_key:pem_entry_decode(DsaEntry),
-                      #'TBSCertificate'{validity = Validity} = TBSCertificate,
-                      #'Validity'{notAfter = NotAfter, notBefore = NotBefore} = Validity,
-                      Start = pubkey_cert:time_str_2_gregorian_sec(NotBefore),
-                      case Start > Now of
-                          true ->
-                              {error, "Certificate is not yet valid"};
-                          false ->
-                              pubkey_cert:time_str_2_gregorian_sec(NotAfter)
+                      try
+                          #'Certificate'{tbsCertificate = TBSCertificate} =
+                              public_key:pem_entry_decode(DsaEntry),
+                          #'TBSCertificate'{validity = Validity} = TBSCertificate,
+                          #'Validity'{notAfter = NotAfter, notBefore = NotBefore} = Validity,
+                          case parse_time(NotBefore) of
+                              {error, _} = Err ->
+                                  Err;
+                              Start when Start > Now ->
+                                  {error, "Certificate is not yet valid"};
+                              _Start ->
+                                  parse_time(NotAfter)
+                          end
+                      catch
+                          _:_ ->
+                              {error, "Malformed certificate entry"}
                       end;
                  ({Type, _, _}) ->
                       {error, io_lib:format("The certificate file provided contains a ~tp entry",
                                             [Type])}
               end, DsaEntries)
     end.
+
+parse_time(Time) ->
+    try
+        time_str_2_gregorian_sec(Time)
+    catch
+        _:_ ->
+            {error, "Invalid date format in certificate"}
+    end.
+
+%% RFC 5280 Section 4.1.2.5.1: YY >= 50 is interpreted as 19YY, YY < 50 as 20YY.
+time_str_2_gregorian_sec({utcTime, [Y1, Y2, M1, M2, D1, D2, H1, H2, M3, M4, S1, S2, $Z]}) ->
+    YY = list_to_integer([Y1, Y2]),
+    Year = if YY >= 50 -> 1900 + YY;
+              true     -> 2000 + YY
+           end,
+    Month = list_to_integer([M1, M2]),
+    Day = list_to_integer([D1, D2]),
+    Hour = list_to_integer([H1, H2]),
+    Min = list_to_integer([M3, M4]),
+    Sec = list_to_integer([S1, S2]),
+    calendar:datetime_to_gregorian_seconds({{Year, Month, Day}, {Hour, Min, Sec}});
+time_str_2_gregorian_sec({utcTime, [Y1, Y2, M1, M2, D1, D2, H1, H2, M3, M4, $Z]}) ->
+    time_str_2_gregorian_sec({utcTime, [Y1, Y2, M1, M2, D1, D2, H1, H2, M3, M4, $0, $0, $Z]});
+time_str_2_gregorian_sec(Time) ->
+    pubkey_cert:time_str_2_gregorian_sec(Time).
 
 expired(undefined, _ExpiryDate) ->
     [];
@@ -178,3 +226,4 @@ seconds_to_bin(Seconds) ->
     {{Y, M, D}, {H, Min, S}} = calendar:gregorian_seconds_to_datetime(Seconds),
     list_to_binary(lists:flatten(io_lib:format("~w-~2.2.0w-~2.2.0w ~w:~2.2.0w:~2.2.0w",
                                                [Y, M, D, H, Min, S]))).
+
