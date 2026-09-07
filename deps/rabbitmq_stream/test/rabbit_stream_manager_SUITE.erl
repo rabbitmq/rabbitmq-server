@@ -9,6 +9,7 @@
 
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("rabbit/include/rabbit_stream_queue.hrl").
 
 -import(rabbit_ct_helpers,
         [set_config/2,
@@ -31,7 +32,10 @@ groups() ->
        lookup_leader,
        lookup_member,
        partition_index,
-       reset_offset]}].
+       reset_offset,
+       create_stream_with_initial_offset,
+       create_stream_with_negative_initial_offset,
+       create_stream_with_too_large_initial_offset]}].
 
 %% -------------------------------------------------------------------
 %% Testsuite setup/teardown.
@@ -269,6 +273,33 @@ reset_offset(Config) ->
 
     ?assertEqual({ok, deleted}, delete_stream(Config, S)).
 
+create_stream_with_initial_offset(Config) ->
+    S = atom_to_binary(?FUNCTION_NAME, utf8),
+    ?assertMatch({ok, _},
+                 create_stream(Config, S,
+                               #{<<"stream-initial-offset">> => <<"1000">>})),
+    {ok, Pid} = lookup_leader(Config, S),
+    ?assertEqual({ok, 1000}, resolve_offset_spec(Config, Pid, first)),
+    ?assertEqual({ok, 1000}, resolve_offset_spec(Config, Pid, next)),
+    ?assertEqual({ok, deleted}, delete_stream(Config, S)).
+
+create_stream_with_negative_initial_offset(Config) ->
+    S = atom_to_binary(?FUNCTION_NAME, utf8),
+    ?assertEqual({error, validation_failed},
+                 create_stream(Config, S,
+                               #{<<"stream-initial-offset">> => <<"-1">>})).
+
+create_stream_with_too_large_initial_offset(Config) ->
+    S = atom_to_binary(?FUNCTION_NAME, utf8),
+    %% unlike an AMQP 0-9-1 'long', the protocol has no type ceiling of its own
+    TooLarge = integer_to_binary(?MAX_STREAM_INITIAL_OFFSET + 1),
+    ?assertEqual({error, validation_failed},
+                 create_stream(Config, S,
+                               #{<<"stream-initial-offset">> => TooLarge})).
+
+resolve_offset_spec(Config, Pid, OffsetSpec) ->
+    rpc(Config, osiris, resolve_offset_spec, [Pid, OffsetSpec, #{}]).
+
 query_offset(Config, Pid, Ref) ->
     rpc(Config, osiris, read_tracking, [Pid, Ref]).
 
@@ -287,7 +318,11 @@ delete_super_stream(Config, Name) ->
         [<<"/">>, Name, <<"guest">>]).
 
 create_stream(Config, Name) ->
-    rpc(Config, rabbit_stream_manager, create, [<<"/">>, Name, [], <<"guest">>]).
+    create_stream(Config, Name, #{}).
+
+create_stream(Config, Name, Arguments) ->
+    rpc(Config, rabbit_stream_manager, create,
+        [<<"/">>, Name, Arguments, <<"guest">>]).
 
 delete_stream(Config, Name) ->
     rpc(Config, rabbit_stream_manager, delete, [<<"/">>, Name, <<"guest">>]).

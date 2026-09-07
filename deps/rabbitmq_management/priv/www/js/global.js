@@ -249,6 +249,9 @@ var HELP = {
     'queue-stream-filter-size-bytes':
       'Size of the filter data attached to each stream chunk.<br/>(Sets the x-stream-filter-size-bytes argument.)',
 
+    'queue-stream-initial-offset':
+      'Offset of the first message published to a new stream. Defaults to 0 and cannot be changed after the stream has been created.<br/>(Sets the x-stream-initial-offset argument.)',
+
     'queue-auto-delete':
       'If yes, the queue will delete itself after at least one consumer has connected, and then all consumers have disconnected.',
 

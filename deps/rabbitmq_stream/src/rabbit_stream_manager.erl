@@ -19,6 +19,7 @@
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit/include/amqqueue.hrl").
+-include_lib("rabbit/include/rabbit_stream_queue.hrl").
 -include_lib("rabbitmq_stream/src/rabbit_stream_utils.hrl").
 -include_lib("kernel/include/logger.hrl").
 
@@ -472,6 +473,12 @@ stream_queue_arguments(ArgumentsAcc,
                              rabbit_data_coercion:to_integer(Value)}]
                            ++ ArgumentsAcc,
                            maps:remove(<<"stream-filter-size-bytes">>, Arguments));
+stream_queue_arguments(ArgumentsAcc,
+                       #{<<"stream-initial-offset">> := Value} = Arguments) ->
+    stream_queue_arguments([{<<"x-stream-initial-offset">>, long,
+                             rabbit_data_coercion:to_integer(Value)}]
+                           ++ ArgumentsAcc,
+                           maps:remove(<<"stream-initial-offset">>, Arguments));
 stream_queue_arguments(ArgumentsAcc, _Arguments) ->
     ArgumentsAcc.
 
@@ -497,6 +504,12 @@ validate_stream_queue_arguments([{<<"x-stream-filter-size-bytes">>, long,
                                   FilterSize}
                                  | _])
   when FilterSize < 16 orelse FilterSize > 255 ->
+    error;
+validate_stream_queue_arguments([{<<"x-stream-initial-offset">>, long,
+                                  InitialOffset}
+                                 | _])
+  when InitialOffset < 0
+       orelse InitialOffset > ?MAX_STREAM_INITIAL_OFFSET ->
     error;
 validate_stream_queue_arguments([_ | T]) ->
     validate_stream_queue_arguments(T).

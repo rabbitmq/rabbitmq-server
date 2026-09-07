@@ -12,6 +12,7 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("rabbit/include/rabbit_stream_queue.hrl").
 
 suite() ->
     [{timetrap, {minutes, 5}}].
@@ -36,7 +37,14 @@ groups() ->
        filter_size_below_lower_bound,
        filter_size_zero,
        filter_size_float,
-       filter_size_on_classic_queue]}
+       filter_size_on_classic_queue,
+       initial_offset,
+       initial_offset_zero,
+       initial_offset_negative,
+       initial_offset_above_upper_bound,
+       initial_offset_float,
+       initial_offset_on_classic_queue,
+       initial_offset_redeclared_with_other_value]}
     ].
 
 %% -------------------------------------------------------------------
@@ -173,6 +181,83 @@ filter_size_on_classic_queue(Config) ->
        {{shutdown, {server_initiated_close, 406, _}}, _},
        declare_classic(Config, Server, Q,
                        [{<<"x-stream-filter-size-bytes">>, long, 32}])).
+
+%% -------------------------------------------------------------------
+%% Integration tests: x-stream-initial-offset validation.
+%% These tests require a running broker.
+%% -------------------------------------------------------------------
+
+initial_offset(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Q = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare_stream(Config, Server, Q,
+                                [{<<"x-stream-initial-offset">>, long, 1000}])),
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare_stream(Config, Server, Q,
+                                [{<<"x-stream-initial-offset">>, long, 1000}])),
+    delete_queue(Config, Q).
+
+initial_offset_zero(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Q = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare_stream(Config, Server, Q,
+                                [{<<"x-stream-initial-offset">>, long, 0}])),
+    delete_queue(Config, Q).
+
+initial_offset_negative(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Q = ?config(queue_name, Config),
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 406, _}}, _},
+       declare_stream(Config, Server, Q,
+                      [{<<"x-stream-initial-offset">>, long, -1}])).
+
+initial_offset_above_upper_bound(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Q = ?config(queue_name, Config),
+    ExpectedError = <<"PRECONDITION_FAILED - Exceeded max value for x-stream-initial-offset">>,
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 406, ExpectedError}}, _},
+       declare_stream(Config, Server, Q,
+                      [{<<"x-stream-initial-offset">>, long,
+                        ?MAX_STREAM_INITIAL_OFFSET + 1}])),
+    %% the bound itself is accepted
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare_stream(Config, Server, Q,
+                                [{<<"x-stream-initial-offset">>, long,
+                                  ?MAX_STREAM_INITIAL_OFFSET}])),
+    delete_queue(Config, Q).
+
+initial_offset_float(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Q = ?config(queue_name, Config),
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 406, _}}, _},
+       declare_stream(Config, Server, Q,
+                      [{<<"x-stream-initial-offset">>, float, 100.0}])).
+
+initial_offset_on_classic_queue(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Q = ?config(queue_name, Config),
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 406, _}}, _},
+       declare_classic(Config, Server, Q,
+                       [{<<"x-stream-initial-offset">>, long, 100}])).
+
+initial_offset_redeclared_with_other_value(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Q = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare_stream(Config, Server, Q,
+                                [{<<"x-stream-initial-offset">>, long, 1000}])),
+    %% the offset cannot be changed after creation
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 406, _}}, _},
+       declare_stream(Config, Server, Q,
+                      [{<<"x-stream-initial-offset">>, long, 2000}])),
+    delete_queue(Config, Q).
 
 %% -------------------------------------------------------------------
 %% Helpers.
