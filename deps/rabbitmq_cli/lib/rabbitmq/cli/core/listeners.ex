@@ -205,6 +205,10 @@ defmodule RabbitMQ.CLI.Core.Listeners do
     nil
   end
 
+  def cert_validity({:error, _} = err) do
+    err
+  end
+
   def cert_validity(cert) do
     dsa_entries = :public_key.pem_decode(cert)
 
