@@ -25,6 +25,7 @@
 -define(DEFAULT_COMMAND_OPTIONS, #{reply_from => local}).
 -define(RPC_TIMEOUT, 30_000).
 -define(ALIVENESS_RPC_TIMEOUT, 1_000).
+-define(MAC_VER_RPC_TIMEOUT, 1_000).
 -define(JOIN_MAX_ATTEMPTS, 5).
 -define(JOIN_RETRY_BACKOFF, 1_000).
 -define(RESIZE_POLL_INTERVAL, 500).
@@ -71,6 +72,7 @@
 
 %% CLI
 -export([status/0,
+         local_key_metrics/0,
          force_delete/2,
          start/0,
          wipe/0]).
@@ -334,17 +336,25 @@ status() ->
             {error, {feature_flag_disabled, ?FEATURE_FLAG}}
     end.
 
+%% Called on peer nodes by status0/0. ra:key_metrics/1 takes a server id, whose
+%% node differs per node, hence a remote function rather than the arguments of
+%% a multicall.
+-spec local_key_metrics() -> map().
+local_key_metrics() ->
+    ra:key_metrics({get_store_id(), node()}).
+
 status0() ->
     case members() of
         {ok, Members} ->
-            StoreId = get_store_id(),
             Nodes = [N || {_, N} <- Members],
-            %% Securely call ra:key_metrics/1 and khepri_machine:version/0 on
-            %% every remote node in a single round trip per function.
-            KeyMetricsFun = fun() -> ra:key_metrics({StoreId, node()}) end,
-            MacVerFun = fun khepri_machine:version/0,
-            MetricsResults = erpc:multicall(Nodes, KeyMetricsFun, ?RPC_TIMEOUT),
-            MacVerResults = erpc:multicall(Nodes, MacVerFun, 1000),
+            %% Both calls travel as module, function and arguments. A local
+            %% closure would travel as a reference into this module's fun
+            %% table and raise badfun on any peer running a different
+            %% version of this module.
+            MetricsResults = erpc:multicall(Nodes, ?MODULE, local_key_metrics, [],
+                                            ?RPC_TIMEOUT),
+            MacVerResults = erpc:multicall(Nodes, khepri_machine, version, [],
+                                           ?MAC_VER_RPC_TIMEOUT),
             lists:zipwith3(
               fun(N, MetricsRes, MacVerRes) ->
                       MetricsResult = case MetricsRes of
