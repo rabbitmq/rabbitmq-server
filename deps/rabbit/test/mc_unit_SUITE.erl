@@ -26,6 +26,7 @@ all_tests() ->
     [
      mc_util_uuid_to_urn_roundtrip,
      mc_util_urn_string_to_uuid_rejects_non_hex_body,
+     mc_util_urn_string_to_uuid_rejects_wrong_dash_placement,
      amqpl_defaults,
      amqpl_compat,
      amqpl_table_x_header,
@@ -514,6 +515,29 @@ mc_util_urn_string_to_uuid_rejects_non_hex_body(_Config) ->
     ?assertEqual(36, byte_size(OddSegmentBody)),
     ?assertEqual({error, not_urn_string},
                  mc_util:urn_string_to_uuid(<<"urn:uuid:", OddSegmentBody/binary>>)),
+    ok.
+
+%% binary:decode_hex/1 only rejects non-hex characters or an odd count of
+%% them; it doesn't care where the dashes are. A 36-byte body with dashes
+%% misplaced (or missing) decodes to a wrong-sized binary that is still
+%% tagged {ok, _} and later handed to the AMQP 1.0 encoder as a uuid,
+%% which requires exactly 16 bytes and crashes on anything else.
+mc_util_urn_string_to_uuid_rejects_wrong_dash_placement(_Config) ->
+    %% 36 hex characters, no dashes: decodes to 18 bytes, not 16
+    NoDashes = binary:copy(<<"a">>, 36),
+    ?assertEqual({error, not_urn_string},
+                 mc_util:urn_string_to_uuid(<<"urn:uuid:", NoDashes/binary>>)),
+    %% 36 dashes: matches the shape, but "-" isn't hex
+    AllDashes = binary:copy(<<"-">>, 36),
+    ?assertEqual({error, not_urn_string},
+                 mc_util:urn_string_to_uuid(<<"urn:uuid:", AllDashes/binary>>)),
+    %% right character counts (32 hex, 4 dashes), wrong grouping: dashes
+    %% clustered in the middle instead of at the canonical 8-4-4-4-12 spots
+    HexHalf = binary:copy(<<"a">>, 16),
+    ClusteredDashes = <<HexHalf/binary, "----", HexHalf/binary>>,
+    ?assertEqual(36, byte_size(ClusteredDashes)),
+    ?assertEqual({error, not_urn_string},
+                 mc_util:urn_string_to_uuid(<<"urn:uuid:", ClusteredDashes/binary>>)),
     ok.
 
 do_n(0, _) ->
