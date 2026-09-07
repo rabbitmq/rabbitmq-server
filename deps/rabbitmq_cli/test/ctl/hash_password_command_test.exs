@@ -73,7 +73,7 @@ defmodule HashPasswordCommandTest do
     <<salt::binary-size(^salt_length), hash::binary>> = Base.decode64!(hashed_pwd)
 
     assert salt_length == 16
-    assert hash == :crypto.pbkdf2_hmac(:sha256, context[:password], salt, 210_000, 32)
+    assert hash == :crypto.pbkdf2_hmac(:sha256, context[:password], salt, 600_000, 32)
   end
 
   @tag user: "someone", password: "hashed_password"

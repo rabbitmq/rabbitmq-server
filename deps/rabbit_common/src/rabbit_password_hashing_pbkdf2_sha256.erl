@@ -16,7 +16,7 @@
 %% Do not change this value in place. The iteration count is not stored
 %% with the hash, so every existing PBKDF2 user would be locked out.
 %% Introduce a new module with the new value instead.
--define(ITERATIONS, 210_000).
+-define(ITERATIONS, 600_000).
 -define(KEY_LENGTH, 32).
 -define(SALT_LENGTH, 16).
 

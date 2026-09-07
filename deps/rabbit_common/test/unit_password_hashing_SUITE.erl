@@ -93,7 +93,7 @@ pbkdf2_sha256_hash_and_verify(_Config) ->
     ?assertNotEqual(Hash, rabbit_password:salted_hash(
                              rabbit_password_hashing_pbkdf2_sha256, Salt,
                              <<"wrong password">>)),
-    ?assertEqual(Hash, crypto:pbkdf2_hmac(sha256, Password, Salt, 210000, 32)),
+    ?assertEqual(Hash, crypto:pbkdf2_hmac(sha256, Password, Salt, 600000, 32)),
     passed.
 
 generate_salt_honours_configured_module(_Config) ->
