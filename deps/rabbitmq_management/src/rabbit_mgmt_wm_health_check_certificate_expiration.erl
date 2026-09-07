@@ -120,9 +120,19 @@ listener_expiring_within(#listener{node = Node, protocol = Protocol, ip_address 
     end.
 
 expires_on_list({error, Reason}) ->
-    {error, list_to_binary(Reason)};
-expires_on_list(ExpiresOn) ->
-    [seconds_to_bin(S) || S <- ExpiresOn].
+    #{error => format_error_reason(Reason)};
+expires_on_list(ExpiresOn) when is_list(ExpiresOn) ->
+    [case S of
+         {error, Reason} ->
+             #{error => format_error_reason(Reason)};
+         Seconds when is_integer(Seconds) ->
+             seconds_to_bin(Seconds)
+     end || S <- ExpiresOn].
+
+format_error_reason(Reason) when is_binary(Reason) ->
+    Reason;
+format_error_reason(Reason) ->
+    iolist_to_binary(Reason).
 
 read_cert(undefined) ->
     undefined;
@@ -138,6 +148,8 @@ read_cert(Path) ->
 
 cert_validity(undefined) ->
     undefined;
+cert_validity({error, _} = Err) ->
+    Err;
 cert_validity(Cert) ->
     DsaEntries = public_key:pem_decode(Cert),
     case DsaEntries of
@@ -150,18 +162,49 @@ cert_validity(Cert) ->
                       #'Certificate'{tbsCertificate = TBSCertificate} = public_key:pem_entry_decode(DsaEntry),
                       #'TBSCertificate'{validity = Validity} = TBSCertificate,
                       #'Validity'{notAfter = NotAfter, notBefore = NotBefore} = Validity,
-                      Start = pubkey_cert:time_str_2_gregorian_sec(NotBefore),
-                      case Start > Now of
-                          true ->
+                      case parse_time(NotBefore) of
+                          {error, _} = Err ->
+                              Err;
+                          Start when Start > Now ->
                               {error, "Certificate is not yet valid"};
-                          false ->
-                              pubkey_cert:time_str_2_gregorian_sec(NotAfter)
+                          _Start ->
+                              case parse_time(NotAfter) of
+                                  {error, _} = Err ->
+                                      Err;
+                                  End ->
+                                      End
+                              end
                       end;
                  ({Type, _, _}) ->
                       {error, io_lib:format("The certificate file provided contains a ~tp entry",
                                             [Type])}
               end, DsaEntries)
     end.
+
+parse_time(Time) ->
+    try
+        time_str_2_gregorian_sec(Time)
+    catch
+        _:_ ->
+            {error, "Invalid date format in certificate"}
+    end.
+
+%% RFC 5280 Section 4.1.2.5.1: YY >= 50 is interpreted as 19YY, YY < 50 as 20YY.
+time_str_2_gregorian_sec({utcTime, [Y1, Y2, M1, M2, D1, D2, H1, H2, M3, M4, S1, S2, $Z]}) ->
+    YY = list_to_integer([Y1, Y2]),
+    Year = if YY >= 50 -> 1900 + YY;
+              true     -> 2000 + YY
+           end,
+    Month = list_to_integer([M1, M2]),
+    Day = list_to_integer([D1, D2]),
+    Hour = list_to_integer([H1, H2]),
+    Min = list_to_integer([M3, M4]),
+    Sec = list_to_integer([S1, S2]),
+    calendar:datetime_to_gregorian_seconds({{Year, Month, Day}, {Hour, Min, Sec}});
+time_str_2_gregorian_sec({utcTime, [Y1, Y2, M1, M2, D1, D2, H1, H2, M3, M4, $Z]}) ->
+    time_str_2_gregorian_sec({utcTime, [Y1, Y2, M1, M2, D1, D2, H1, H2, M3, M4, $0, $0, $Z]});
+time_str_2_gregorian_sec(Time) ->
+    pubkey_cert:time_str_2_gregorian_sec(Time).
 
 expired(undefined, _ExpiryDate) ->
     [];
@@ -178,3 +221,18 @@ seconds_to_bin(Seconds) ->
     {{Y, M, D}, {H, Min, S}} = calendar:gregorian_seconds_to_datetime(Seconds),
     list_to_binary(lists:flatten(io_lib:format("~w-~2.2.0w-~2.2.0w ~w:~2.2.0w:~2.2.0w",
                                                [Y, M, D, H, Min, S]))).
+
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+
+rfc5280_utctime_test() ->
+    Sec1970 = time_str_2_gregorian_sec({utcTime, "700101000000Z"}),
+    ?assertEqual({{1970, 1, 1}, {0, 0, 0}}, calendar:gregorian_seconds_to_datetime(Sec1970)),
+    Sec2049 = time_str_2_gregorian_sec({utcTime, "491231235959Z"}),
+    ?assertEqual({{2049, 12, 31}, {23, 59, 59}}, calendar:gregorian_seconds_to_datetime(Sec2049)).
+
+expires_on_list_error_tuple_test() ->
+    Error = {error, "Certificate is not yet valid"},
+    ?assertEqual([#{error => <<"Certificate is not yet valid">>}], expires_on_list([Error])).
+
+-endif.
