@@ -99,6 +99,7 @@ groups() ->
        sac_subscription_with_partition_index_conflict_should_return_error,
        test_metadata_with_advertised_hints,
        test_connection_properties_with_advertised_hints,
+       test_advertised_endpoint,
        test_resolve_offset_spec
       ]},
      %% Run `test_global_counters` on its own so the global metrics are
@@ -107,7 +108,7 @@ groups() ->
      {single_node_initial_frame_max, [],
       [oversized_frame_rejected_pre_auth_custom_initial_frame_max]},
      {cluster, [], [test_stream, test_stream_tls, test_metadata, java,
-                    test_resolve_offset_spec]}].
+                    test_resolve_offset_spec, node_endpoints_fallback]}].
 
 init_per_suite(Config) ->
     case rabbit_ct_helpers:is_mixed_versions() of
@@ -323,7 +324,8 @@ end_per_testcase(unauthorized_vhost_access_should_close_with_delay = TestCase, C
     rabbit_ct_helpers:testcase_finished(Config, TestCase);
 end_per_testcase(TestCase, Config)
   when TestCase =:= test_metadata_with_advertised_hints orelse
-       TestCase =:= test_connection_properties_with_advertised_hints ->
+       TestCase =:= test_connection_properties_with_advertised_hints orelse
+       TestCase =:= test_advertised_endpoint ->
     lists:foreach(fun(K) ->
                           ok = rpc(Config, 0,
                                    application,
@@ -831,6 +833,30 @@ test_metadata(Config) ->
               closed = wait_for_socket_close(Transport, S, 10)
       end, Transports),
 
+    ok.
+
+%% Forces the fallback path of rabbit_stream_utils:node_endpoints/3 by
+%% passing a function name no peer exports, so every node answers `undef`
+%% and is resolved through host/0, tls_host/0, port/0 and tls_port/0. This
+%% stands in for talking to a peer that predates advertised_endpoint/1,
+%% without needing a mixed-version cluster.
+node_endpoints_fallback(Config) ->
+    Nodes = [get_node_name(Config, N) || N <- lists:seq(0, 2)],
+    lists:foreach(
+      fun(Transport) ->
+              Endpoints = rpc(Config, 0, rabbit_stream_utils, node_endpoints,
+                              [Nodes, Transport]),
+              FallbackEndpoints = rpc(Config, 0, rabbit_stream_utils,
+                                      node_endpoints,
+                                      [Nodes, Transport,
+                                       no_such_endpoint_function]),
+              ?assertEqual(Endpoints, FallbackEndpoints),
+              ?assertEqual(lists:sort(Nodes), lists:sort(maps:keys(Endpoints))),
+              maps:foreach(fun(_Node, {Host, Port}) ->
+                                   ?assert(is_binary(Host)),
+                                   ?assert(is_integer(Port))
+                           end, Endpoints)
+      end, [tcp, ssl]),
     ok.
 
 test_gc_consumers(Config) ->
@@ -1986,6 +2012,38 @@ test_metadata_with_advertised_hints(Config) ->
               _ = test_close(Transport, S, C5),
               closed = wait_for_socket_close(Transport, S, 10)
       end, Transports),
+    ok.
+
+test_advertised_endpoint(Config) ->
+    lists:foreach(
+      fun(Transport) ->
+              {ExpectedHostFun, ExpectedPortFun, KH, KP} =
+                  case Transport of
+                      tcp -> {host, port, ?K_AD_HOST, ?K_AD_PORT};
+                      ssl -> {tls_host, tls_port, ?K_AD_TLS_HOST, ?K_AD_TLS_PORT}
+                  end,
+              AssertAgreement =
+                  fun() ->
+                          ExpectedHost = rpc(Config, 0, rabbit_stream,
+                                             ExpectedHostFun, []),
+                          ExpectedPort = rpc(Config, 0, rabbit_stream,
+                                             ExpectedPortFun, []),
+                          ?assertEqual({ExpectedHost, ExpectedPort},
+                                       rpc(Config, 0, rabbit_stream,
+                                          advertised_endpoint, [Transport]))
+                  end,
+
+              AssertAgreement(),
+
+              AdHost = rand:bytes(20),
+              AdPort = rand:uniform(65535),
+              rpc(Config, 0, application, set_env, [rabbitmq_stream, KH, AdHost]),
+              rpc(Config, 0, application, set_env, [rabbitmq_stream, KP, AdPort]),
+              AssertAgreement(),
+
+              rpc(Config, 0, application, set_env, [rabbitmq_stream, KH, undefined]),
+              rpc(Config, 0, application, set_env, [rabbitmq_stream, KP, undefined])
+      end, [tcp, ssl]),
     ok.
 
 test_connection_properties_with_advertised_hints(Config) ->
