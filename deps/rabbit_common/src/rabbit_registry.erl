@@ -112,7 +112,11 @@ lookup_type(Class, TypeDescriptor)
     %% when we register a type we convert
     %% typename to atom so we can lookup
     %% only existing atoms.
-    lookup_type(Class, binary_to_existing_atom(TypeDescriptor)).
+    try binary_to_existing_atom(TypeDescriptor) of
+        Atom -> lookup_type(Class, Atom)
+    catch
+        error:badarg -> {error, not_found}
+    end.
 
 
 lookup_all(Class) ->
