@@ -23,26 +23,26 @@ all() ->
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
-    rabbit_ct_helpers:run_setup_steps(Config).
-
-end_per_suite(Config) ->
-    rabbit_ct_helpers:run_teardown_steps(Config).
-
-init_per_testcase(Testcase, Config) ->
-    Config1 = rabbit_ct_helpers:set_config(Config, [
-        {rmq_nodename_suffix, Testcase},
+    Config1 = rabbit_ct_helpers:run_setup_steps(Config),
+    Config2 = rabbit_ct_helpers:set_config(Config1, [
+        {rmq_nodename_suffix, ?MODULE},
         {rmq_nodes_count, 1}
     ]),
-    Config2 = rabbit_ct_helpers:run_steps(Config1,
+    rabbit_ct_helpers:run_steps(Config2,
         rabbit_ct_broker_helpers:setup_steps() ++
-        rabbit_ct_client_helpers:setup_steps()),
-    rabbit_ct_helpers:testcase_started(Config2, Testcase).
+        rabbit_ct_client_helpers:setup_steps()).
 
-end_per_testcase(Testcase, Config) ->
+end_per_suite(Config) ->
     Config1 = rabbit_ct_helpers:run_steps(Config,
         rabbit_ct_client_helpers:teardown_steps() ++
         rabbit_ct_broker_helpers:teardown_steps()),
-    rabbit_ct_helpers:testcase_finished(Config1, Testcase).
+    rabbit_ct_helpers:run_teardown_steps(Config1).
+
+init_per_testcase(Testcase, Config) ->
+    rabbit_ct_helpers:testcase_started(Config, Testcase).
+
+end_per_testcase(Testcase, Config) ->
+    rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
 %% -------------------------------------------------------------------
 %% Test cases
