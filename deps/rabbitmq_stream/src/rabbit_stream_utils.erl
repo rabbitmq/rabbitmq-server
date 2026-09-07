@@ -18,6 +18,8 @@
 
 -define(MAX_SUPER_STREAM_PARTITIONS, 1000).
 
+-define(ENDPOINT_TIMEOUT, 10_000).
+
 %% Sub-entry compression types 0-4 are assigned (none, gzip, snappy, lz4, zstd);
 %% 5-7 are not, and a batch declaring one of them can never be decoded by a consumer.
 -define(MAX_KNOWN_COMPRESSION_TYPE, 4).
@@ -44,7 +46,8 @@
          offset_lag/4,
          consumer_offset/3,
          validate_super_stream_max_partitions/1,
-         max_super_stream_partitions/0]).
+         max_super_stream_partitions/0,
+         node_endpoints/2]).
 
 %% super stream partition helpers
 -export([streams_from_partitions/2,
@@ -53,7 +56,10 @@
          routing_keys/1]).
 
 %% for tests
--export([validate_super_stream_max_partitions/2]).
+-export([validate_super_stream_max_partitions/2,
+         node_endpoints/3,
+         classify_endpoint/3,
+         transient_endpoint_error/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbitmq_stream_common/include/rabbit_stream.hrl").
@@ -509,3 +515,125 @@ binding_keys(BindingKeysBin) ->
     [Trimmed || K <- Keys,
                 Trimmed <- [string:trim(K)],
                 Trimmed =/= <<>>].
+
+-spec node_endpoints([node()], tcp | ssl) -> #{node() => {binary(), integer()}}.
+node_endpoints(Nodes, Transport) ->
+    node_endpoints(Nodes, Transport, advertised_endpoint).
+
+node_endpoints([], _Transport, _Fun) ->
+    #{};
+node_endpoints(Nodes, Transport, Fun) ->
+    %% Absolute deadline, so that both phases and the receive loop of the
+    %% fallback share one budget.
+    Deadline = {abs, erlang:monotonic_time(millisecond) + ?ENDPOINT_TIMEOUT},
+    Results = erpc:multicall(Nodes, rabbit_stream, Fun, [Transport], Deadline),
+    Classify = fun(NodeResult, Acc) ->
+                       classify_endpoint(Fun, NodeResult, Acc)
+               end,
+    {Endpoints, Legacy} = lists:foldl(Classify, {#{}, []},
+                                      lists:zip(Nodes, Results)),
+    case Legacy of
+        [] ->
+            Endpoints;
+        _ ->
+            ?LOG_DEBUG("Nodes ~tp do not export rabbit_stream:~ts/1, "
+                       "retrieving host and port separately", [Legacy, Fun]),
+            Fallback = legacy_node_endpoints(Legacy, Transport, Deadline),
+            maps:merge(Endpoints, Fallback)
+    end.
+
+classify_endpoint(_Fun, {Node, {ok, {Host, Port}}}, {Endpoints, Legacy})
+  when is_binary(Host), is_integer(Port) ->
+    {Endpoints#{Node => {Host, Port}}, Legacy};
+%% The peer predates advertised_endpoint/1, or the stream plugin is not
+%% running there.
+classify_endpoint(Fun,
+                  {Node,
+                   {error, {exception, undef, [{rabbit_stream, Fun, _, _} | _]}}},
+                  {Endpoints, Legacy}) ->
+    {Endpoints, [Node | Legacy]};
+classify_endpoint(_Fun, {Node, Result}, {Endpoints, Legacy}) ->
+    log_unusable_endpoint(Node, Result),
+    {Endpoints, Legacy}.
+
+log_unusable_endpoint(Node, {ok, {Host, Port}}) ->
+    ?LOG_WARNING("Invalid stream endpoint reported by node '~ts': ~tp ~tp",
+                 [Node, Host, Port]);
+log_unusable_endpoint(Node, Result) ->
+    Level = case transient_endpoint_error(Result) of
+                true -> debug;
+                false -> warning
+            end,
+    ?LOG(Level, "Could not retrieve the endpoint of node '~ts': ~tp",
+         [Node, Result]).
+
+transient_endpoint_error({error, {erpc, timeout}}) ->
+    true;
+transient_endpoint_error({error, {erpc, noconnection}}) ->
+    true;
+%% The stream plugin is not running on that node.
+transient_endpoint_error({error, {exception, undef,
+                                  [{rabbit_stream, _, _, _} | _]}}) ->
+    true;
+transient_endpoint_error(_) ->
+    false.
+
+%% For peers that do not export rabbit_stream:advertised_endpoint/1. It can go
+%% away once every version an upgrade can start from exports it.
+%%
+%% Both requests of a node are sent before any of them is collected, so that a
+%% slow node does not use up the budget of the others.
+legacy_node_endpoints(Nodes, Transport, Deadline) ->
+    HostFun = legacy_host_fun(Transport),
+    PortFun = legacy_port_fun(Transport),
+    ReqIds = lists:foldl(
+               fun(Node, Acc0) ->
+                       Acc1 = erpc:send_request(Node, rabbit_stream, HostFun,
+                                                [], {Node, host}, Acc0),
+                       erpc:send_request(Node, rabbit_stream, PortFun,
+                                         [], {Node, port}, Acc1)
+               end, erpc:reqids_new(), Nodes),
+    Parts = receive_endpoint_parts(ReqIds, Deadline, #{}),
+    Endpoints = maps:filtermap(
+                  fun(_Node, #{host := H, port := P})
+                        when is_binary(H), is_integer(P) ->
+                          {true, {H, P}};
+                     (_Node, _Part) ->
+                          false
+                  end, Parts),
+    case Nodes -- maps:keys(Endpoints) of
+        [] ->
+            ok;
+        Missing ->
+            ?LOG_DEBUG("Could not retrieve the endpoint of nodes ~tp: ~tp",
+                       [Missing, maps:with(Missing, Parts)])
+    end,
+    Endpoints.
+
+receive_endpoint_parts(ReqIds, Deadline, Acc) ->
+    try erpc:receive_response(ReqIds, Deadline, true) of
+        no_request ->
+            Acc;
+        {Value, {Node, Key}, ReqIds1} ->
+            Acc1 = add_endpoint_part(Node, Key, Value, Acc),
+            receive_endpoint_parts(ReqIds1, Deadline, Acc1)
+    catch
+        error:{erpc, timeout} ->
+            %% receive_response/3 abandons the outstanding requests.
+            Acc;
+        _Class:{Reason, {Node, Key}, ReqIds1} ->
+            Acc1 = add_endpoint_part(Node, Key, {error, Reason}, Acc),
+            receive_endpoint_parts(ReqIds1, Deadline, Acc1)
+    end.
+
+add_endpoint_part(Node, Key, Value, Acc) ->
+    Part = maps:get(Node, Acc, #{}),
+    Acc#{Node => Part#{Key => Value}}.
+
+%% Only functions old peers export, hence not advertised_host/1 and
+%% advertised_port/1.
+legacy_host_fun(tcp) -> host;
+legacy_host_fun(ssl) -> tls_host.
+
+legacy_port_fun(tcp) -> port;
+legacy_port_fun(ssl) -> tls_port.
