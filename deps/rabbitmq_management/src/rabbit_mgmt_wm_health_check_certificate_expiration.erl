@@ -120,7 +120,7 @@ listener_expiring_within(#listener{node = Node, protocol = Protocol, ip_address 
     end.
 
 expires_on_list({error, Reason}) ->
-    #{error => format_error_reason(Reason)};
+    [#{error => format_error_reason(Reason)}];
 expires_on_list(ExpiresOn) when is_list(ExpiresOn) ->
     [case S of
          {error, Reason} ->
@@ -129,6 +129,8 @@ expires_on_list(ExpiresOn) when is_list(ExpiresOn) ->
              seconds_to_bin(Seconds)
      end || S <- ExpiresOn].
 
+format_error_reason(Reason) when is_atom(Reason) ->
+    atom_to_binary(Reason, utf8);
 format_error_reason(Reason) when is_binary(Reason) ->
     Reason;
 format_error_reason(Reason) ->
@@ -159,21 +161,26 @@ cert_validity(Cert) ->
             Now = calendar:datetime_to_gregorian_seconds(calendar:universal_time()),
             lists:map(
               fun({'Certificate', _, _} = DsaEntry) ->
-                      #'Certificate'{tbsCertificate = TBSCertificate} = public_key:pem_entry_decode(DsaEntry),
-                      #'TBSCertificate'{validity = Validity} = TBSCertificate,
-                      #'Validity'{notAfter = NotAfter, notBefore = NotBefore} = Validity,
-                      case parse_time(NotBefore) of
-                          {error, _} = Err ->
-                              Err;
-                          Start when Start > Now ->
-                              {error, "Certificate is not yet valid"};
-                          _Start ->
-                              case parse_time(NotAfter) of
+                      try public_key:pem_entry_decode(DsaEntry) of
+                          #'Certificate'{tbsCertificate = TBSCertificate} ->
+                              #'TBSCertificate'{validity = Validity} = TBSCertificate,
+                              #'Validity'{notAfter = NotAfter, notBefore = NotBefore} = Validity,
+                              case parse_time(NotBefore) of
                                   {error, _} = Err ->
                                       Err;
-                                  End ->
-                                      End
+                                  Start when Start > Now ->
+                                      {error, "Certificate is not yet valid"};
+                                  _Start ->
+                                      case parse_time(NotAfter) of
+                                          {error, _} = Err ->
+                                              Err;
+                                          End ->
+                                              End
+                                      end
                               end
+                      catch
+                          _:_ ->
+                              {error, "Malformed certificate entry"}
                       end;
                  ({Type, _, _}) ->
                       {error, io_lib:format("The certificate file provided contains a ~tp entry",
@@ -226,13 +233,30 @@ seconds_to_bin(Seconds) ->
 -include_lib("eunit/include/eunit.hrl").
 
 rfc5280_utctime_test() ->
+    Sec1950 = time_str_2_gregorian_sec({utcTime, "500101000000Z"}),
+    ?assertEqual({{1950, 1, 1}, {0, 0, 0}}, calendar:gregorian_seconds_to_datetime(Sec1950)),
     Sec1970 = time_str_2_gregorian_sec({utcTime, "700101000000Z"}),
     ?assertEqual({{1970, 1, 1}, {0, 0, 0}}, calendar:gregorian_seconds_to_datetime(Sec1970)),
+    Sec1970NoSec = time_str_2_gregorian_sec({utcTime, "7001010000Z"}),
+    ?assertEqual({{1970, 1, 1}, {0, 0, 0}}, calendar:gregorian_seconds_to_datetime(Sec1970NoSec)),
+    Sec2000 = time_str_2_gregorian_sec({utcTime, "000101000000Z"}),
+    ?assertEqual({{2000, 1, 1}, {0, 0, 0}}, calendar:gregorian_seconds_to_datetime(Sec2000)),
     Sec2049 = time_str_2_gregorian_sec({utcTime, "491231235959Z"}),
     ?assertEqual({{2049, 12, 31}, {23, 59, 59}}, calendar:gregorian_seconds_to_datetime(Sec2049)).
 
-expires_on_list_error_tuple_test() ->
-    Error = {error, "Certificate is not yet valid"},
-    ?assertEqual([#{error => <<"Certificate is not yet valid">>}], expires_on_list([Error])).
+format_error_reason_test() ->
+    ?assertEqual(<<"enoent">>, format_error_reason(enoent)),
+    ?assertEqual(<<"custom error">>, format_error_reason("custom error")),
+    ?assertEqual(<<"binary error">>, format_error_reason(<<"binary error">>)).
+
+expires_on_list_error_test() ->
+    ErrorStr = {error, "Certificate is not yet valid"},
+    ?assertEqual([#{error => <<"Certificate is not yet valid">>}], expires_on_list([ErrorStr])),
+    ErrorAtom = {error, enoent},
+    ?assertEqual([#{error => <<"enoent">>}], expires_on_list(ErrorAtom)),
+    ?assertEqual([#{error => <<"enoent">>}], expires_on_list([ErrorAtom])).
+
+parse_time_error_test() ->
+    ?assertEqual({error, "Invalid date format in certificate"}, parse_time({utcTime, "bad-date"})).
 
 -endif.
