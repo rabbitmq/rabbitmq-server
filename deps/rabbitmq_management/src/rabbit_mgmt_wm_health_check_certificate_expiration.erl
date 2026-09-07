@@ -11,8 +11,8 @@
 -export([init/2, to_json/2, content_types_provided/2, is_authorized/2]).
 -export([resource_exists/2]).
 -export([variances/2]).
--export([expires_on_list/1, format_error_reason/1, parse_time/1,
-         time_str_2_gregorian_sec/1]).
+-export([cert_validity/1, expires_on_list/1, format_error_reason/1,
+         parse_time/1, time_str_2_gregorian_sec/1]).
 
 -include_lib("public_key/include/public_key.hrl").
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
@@ -163,23 +163,19 @@ cert_validity(Cert) ->
             Now = calendar:datetime_to_gregorian_seconds(calendar:universal_time()),
             lists:map(
               fun({'Certificate', _, _} = DsaEntry) ->
-                      try public_key:pem_entry_decode(DsaEntry) of
-                          #'Certificate'{tbsCertificate = TBSCertificate} ->
-                              #'TBSCertificate'{validity = Validity} = TBSCertificate,
-                              #'Validity'{notAfter = NotAfter, notBefore = NotBefore} = Validity,
-                              case parse_time(NotBefore) of
-                                  {error, _} = Err ->
-                                      Err;
-                                  Start when Start > Now ->
-                                      {error, "Certificate is not yet valid"};
-                                  _Start ->
-                                      case parse_time(NotAfter) of
-                                          {error, _} = Err ->
-                                              Err;
-                                          End ->
-                                              End
-                                      end
-                              end
+                      try
+                          #'Certificate'{tbsCertificate = TBSCertificate} =
+                              public_key:pem_entry_decode(DsaEntry),
+                          #'TBSCertificate'{validity = Validity} = TBSCertificate,
+                          #'Validity'{notAfter = NotAfter, notBefore = NotBefore} = Validity,
+                          case parse_time(NotBefore) of
+                              {error, _} = Err ->
+                                  Err;
+                              Start when Start > Now ->
+                                  {error, "Certificate is not yet valid"};
+                              _Start ->
+                                  parse_time(NotAfter)
+                          end
                       catch
                           _:_ ->
                               {error, "Malformed certificate entry"}

@@ -24,7 +24,9 @@ groups() ->
          rfc5280_utctime,
          format_error_reason,
          expires_on_list_error,
-         parse_time_error
+         parse_time_error,
+         cert_validity_malformed_entry,
+         cert_validity_no_pem_entry
      ]}
     ].
 
@@ -77,3 +79,15 @@ expires_on_list_error(_Config) ->
     ErrorAtom = {error, enoent},
     ?assertEqual([#{error => <<"enoent">>}], ?MOD:expires_on_list(ErrorAtom)),
     ?assertEqual([#{error => <<"enoent">>}], ?MOD:expires_on_list([ErrorAtom])).
+
+%%
+%% cert_validity/1
+%%
+
+cert_validity_malformed_entry(_Config) ->
+    Pem = <<"-----BEGIN CERTIFICATE-----\nAAAAAA==\n-----END CERTIFICATE-----\n">>,
+    ?assertEqual([{error, "Malformed certificate entry"}], ?MOD:cert_validity(Pem)).
+
+cert_validity_no_pem_entry(_Config) ->
+    ?assertEqual({error, "The certificate file provided does not contain any PEM entry."},
+                 ?MOD:cert_validity(<<"not a pem file">>)).
