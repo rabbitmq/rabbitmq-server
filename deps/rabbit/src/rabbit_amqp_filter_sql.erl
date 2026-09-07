@@ -22,20 +22,10 @@
 %% [Filter-Expressions-v1.0 7.1]
 %% https://docs.oasis-open.org/amqp/filtex/v1.0/csd01/filtex-v1.0-csd01.html#_Toc67929316
 -define(MAX_EXPRESSION_LENGTH, 4096).
+-define(MAX_LIKE_SUBJECT_LENGTH, 4096).
 -define(MAX_TOKENS, 200).
 
 -define(DEFAULT_MSG_PRIORITY, 4).
-
-%% A LIKE pattern with several %-wildcards compiles to a regex.
-%% rabbit_re:run/2 already bounds backtracking via match_limit and
-%% match_limit_recursion (surfacing as a plain nomatch, not an error, so
-%% it doesn't by itself risk a wrong answer becoming a crash) -- but the
-%% residual cost of scanning the subject at all is still roughly linear
-%% in its length, and this filter runs once per candidate message inside
-%% the target queue's own process. Bound the subject independently of
-%% the overall message-size cap, which allows it to be far larger than
-%% reasonable for a single filtered field.
--define(MAX_LIKE_SUBJECT_LENGTH, 4096).
 
 -spec parse(tuple()) ->
     {ok, parsed_expression()} | error.
