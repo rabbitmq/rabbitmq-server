@@ -65,6 +65,8 @@ groups() ->
           msg_store,
           msg_store_read_many_fanout,
           msg_store_read_after_concurrent_remove_returns_not_found,
+          msg_store_read_after_relocation_retries,
+          msg_store_read_after_relocation_finds_unflushed_current_file,
           msg_store_compaction_v2,
           msg_store_compaction_v2_exact_fit,
           msg_store_compaction_v2_scannable_before_truncate,
@@ -447,6 +449,111 @@ msg_store_read_after_concurrent_remove_returns_not_found1(_Config) ->
     ok = rabbit_msg_store:client_terminate(CState1),
     passed.
 
+%% If a message is fully removed and then rewritten under the same MsgId
+%% (e.g. republishing identical content) between a reader's snapshot and
+%% client_read3/2's confirming lookup, the message is still alive, just
+%% under a different file than the snapshot said. client_read3/2 must
+%% retry against the fresh location instead of reporting not_found.
+msg_store_read_after_relocation_retries(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, msg_store_read_after_relocation_retries1, [Config]).
+
+msg_store_read_after_relocation_retries1(_Config) ->
+    {ok, DefaultFileSizeLimit} = application:get_env(rabbit, msg_store_file_size_limit),
+    %% Small enough that the padding write below rolls file 0 over to
+    %% file 1, so MsgId and OtherContent end up in different files.
+    %% Restored in the `after` clause regardless of outcome.
+    ok = application:set_env(rabbit, msg_store_file_size_limit, 100),
+    try
+        msg_store_read_after_relocation_retries2()
+    after
+        ok = application:set_env(rabbit, msg_store_file_size_limit, DefaultFileSizeLimit)
+    end.
+
+msg_store_read_after_relocation_retries2() ->
+    restart_msg_store_empty(),
+    Ref = rabbit_guid:gen(),
+    {Cap, CState0} = msg_store_client_init_capture(?PERSISTENT_MSG_STORE, Ref),
+
+    MsgRef = rabbit_guid:gen(),
+    MsgId = msg_id_bin(MsgRef),
+    ok = rabbit_msg_store:write(MsgRef, MsgId, MsgId, CState0),
+    %% pushes file 0 past the 100-byte limit, rolling to file 1 as part
+    %% of its own write -- so it lands in file 0 too, but the next write
+    %% won't
+    PaddingRef = rabbit_guid:gen(),
+    PaddingId = msg_id_bin(PaddingRef),
+    ok = rabbit_msg_store:write(PaddingRef, PaddingId,
+                                crypto:strong_rand_bytes(200), CState0),
+    ok = on_disk_await(Cap, [{MsgRef, MsgId}, {PaddingRef, PaddingId}]),
+    StaleLocation = stale_location(MsgId, CState0),
+    true = StaleLocation =/= not_found,
+
+    %% write a second, unrelated message -- now into file 1 -- then
+    %% splice the index so that MsgId resolves to its (real, readable)
+    %% location instead, simulating MsgId having been fully removed and
+    %% rewritten into file 1, while StaleLocation still points at file 0
+    OtherRef = rabbit_guid:gen(),
+    OtherContent = msg_id_bin(rabbit_guid:gen()),
+    ok = rabbit_msg_store:write(OtherRef, OtherContent, OtherContent, CState0),
+    ok = on_disk_await(Cap, [{OtherRef, OtherContent}]),
+    OtherLocation = stale_location(OtherContent, CState0),
+    true = OtherLocation =/= not_found,
+    true = location_file(OtherLocation) =/= location_file(StaleLocation),
+    true = ets:insert(element(5, CState0), set_msg_id(OtherLocation, MsgId)),
+
+    {Result, CState1} = rabbit_msg_store:client_read3(StaleLocation, CState0),
+    {ok, OtherContent} = Result,
+
+    ok = on_disk_stop(Cap),
+    ok = rabbit_msg_store:client_terminate(CState1),
+    passed.
+
+%% Same rewritten-under-the-same-MsgId race, but the fresh copy lands in
+%% the store's *current* file, still sitting in the write buffer rather
+%% than on disk. client_read3/2 must find it via cur_file_cache_ets
+%% instead of reading the file directly, which would misread it.
+msg_store_read_after_relocation_finds_unflushed_current_file(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, msg_store_read_after_relocation_finds_unflushed_current_file1,
+      [Config]).
+
+msg_store_read_after_relocation_finds_unflushed_current_file1(_Config) ->
+    restart_msg_store_empty(),
+    Ref = rabbit_guid:gen(),
+    %% Plain client (no on-disk confirmation callback): the store only
+    %% ever schedules its periodic flush timer once a client has pending
+    %% confirmations to fulfil (record_pending_confirm/3), so this keeps
+    %% both writes below in the write buffer indefinitely, deterministically,
+    %% rather than racing a 200ms timer that a capture client would arm.
+    CState0 = msg_store_client_init(?PERSISTENT_MSG_STORE, Ref),
+
+    MsgRef = rabbit_guid:gen(),
+    MsgId = msg_id_bin(MsgRef),
+    ok = rabbit_msg_store:write(MsgRef, MsgId, MsgId, CState0),
+    true = rabbit_msg_store:contains(MsgId, CState0),
+    StaleLocation = stale_location(MsgId, CState0),
+    true = StaleLocation =/= not_found,
+
+    {ok, []} = rabbit_msg_store:remove([{MsgRef, MsgId}], CState0),
+    false = rabbit_msg_store:contains(MsgId, CState0),
+
+    %% Rewrite MsgId (content must be identical: MsgIds are
+    %% content-addressed, so a reused MsgId is always the same bytes --
+    %% update_msg_cache/3 relies on this and only bumps a pending-write
+    %% counter on a cache hit, it never overwrites the cached content).
+    %% Still in the write buffer, not yet flushed, when client_read3/2
+    %% is called below.
+    NewRef = rabbit_guid:gen(),
+    ok = rabbit_msg_store:write(NewRef, MsgId, MsgId, CState0),
+    true = rabbit_msg_store:contains(MsgId, CState0),
+
+    {Result, CState1} = rabbit_msg_store:client_read3(StaleLocation, CState0),
+    {ok, MsgId} = Result,
+
+    ok = rabbit_msg_store:client_terminate(CState1),
+    passed.
+
 %% Exposes the same snapshot lookup read/2 does before calling
 %% client_read3/2, so a test can hold onto it and call client_read3/2
 %% with it after the index has since changed underneath it.
@@ -461,6 +568,9 @@ stale_location(MsgId, CState) ->
 
 location_file(MsgLocation) ->
     element(4, MsgLocation).
+
+set_msg_id(MsgLocation, MsgId) ->
+    setelement(2, MsgLocation, MsgId).
 
 %% Whether a handle is still marked open for File, so a test can
 %% confirm client_read3/2's not_found fallback actually closes the

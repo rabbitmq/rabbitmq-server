@@ -647,10 +647,36 @@ client_write(MsgRef, MsgId, Msg, Flow,
 %% index information points to the file we are expecting we are good.
 %% And the file only gets deleted after all data was copied, index
 %% was updated and file handles got closed.
+%% Compaction only ever rewrites a live message's offset, never its file
+%% (index_update_offset_if_unchanged/5 always keeps the same File). So the
+%% only way the confirming lookup below can see a different file for a
+%% still-positive ref count is a full removal followed by a brand new
+%% write/4 that reuses the same MsgId (e.g. republishing identical
+%% content). That fresh copy can land in the store's current file, whose
+%% bytes may still be sitting in the write buffer rather than on disk
+%% (writer_append/3, flushed later by writer_flush/1) -- reading it
+%% straight from disk before that flush would misread garbage. Once a
+%% lookup below confirms the message is still alive, check the cache
+%% before the disk, exactly like client_read2/2 does before ever calling
+%% here, since it's kept live for anything still in the current file.
+%% The cache is not consulted ahead of that liveness check: a removed
+%% message's cache row is deliberately not cleared (in case a write for
+%% the same MsgId is still in flight), so checking it first would return
+%% stale content instead of not_found for a message that is really gone.
+%%
+%% Bounds retries for a MsgId that keeps getting rewritten across every
+%% attempt -- vanishingly unlikely, but a loop must still be bounded.
+-define(CLIENT_READ3_MAX_RETRIES, 3).
+
+client_read3(Location, CState) ->
+    client_read3(Location, CState, ?CLIENT_READ3_MAX_RETRIES).
+
 client_read3(#msg_location { msg_id = MsgId, file = File },
-             CState = #client_msstate { index_ets        = IndexEts,
-                                        file_handles_ets = FileHandlesEts,
-                                        client_ref       = Ref }) ->
+             CState = #client_msstate { index_ets          = IndexEts,
+                                        file_handles_ets   = FileHandlesEts,
+                                        cur_file_cache_ets = CurFileCacheEts,
+                                        client_ref         = Ref },
+             RetriesLeft) ->
     %% We immediately mark the handle open so that we don't get the
     %% file truncated while we are reading from it. The file may still
     %% be truncated past that point but that's OK because we do a second
@@ -658,20 +684,32 @@ client_read3(#msg_location { msg_id = MsgId, file = File },
     mark_handle_open(FileHandlesEts, File, Ref),
     case index_lookup(IndexEts, MsgId) of
         #msg_location { file = File, ref_count = RefCount } = MsgLocation when RefCount > 0 ->
-            {Msg, CState1} = read_from_disk(MsgLocation, CState),
+            {Msg, CState1} = read_from_cache_or_disk(MsgId, MsgLocation, CState, CurFileCacheEts),
             mark_handle_closed(FileHandlesEts, File, Ref),
             {{ok, Msg}, CState1};
+        #msg_location { ref_count = RefCount } = Fresh
+          when RefCount > 0, RetriesLeft > 0 ->
+            %% Still alive, but under a different file than the one our
+            %% caller's snapshot saw and this handle was just opened for.
+            %% Retry against the fresh location, which opens and confirms
+            %% that file in turn.
+            mark_handle_closed(FileHandlesEts, File, Ref),
+            client_read3(Fresh, CState, RetriesLeft - 1);
         _ ->
-            %% The message is no longer readable from the file we just
-            %% pinned: either it was removed entirely (e.g. a different
-            %% queue acking the same fanned-out message) or its index entry
-            %% was deleted and later rewritten under a different file, both
-            %% racing between our caller's snapshot read and this second
-            %% lookup. Close the handle we just opened instead of leaving
-            %% it stuck in FileHandlesEts, which would otherwise defer this
-            %% file's truncation/deletion forever.
+            %% Either genuinely gone (e.g. a different queue acking the
+            %% last reference to a fanned-out message) or still being
+            %% rewritten after every retry. Close the handle we just
+            %% opened instead of leaving it stuck in FileHandlesEts, which
+            %% would otherwise defer this file's truncation/deletion
+            %% forever.
             mark_handle_closed(FileHandlesEts, File, Ref),
             {not_found, CState}
+    end.
+
+read_from_cache_or_disk(MsgId, MsgLocation, CState, CurFileCacheEts) ->
+    case ets:lookup(CurFileCacheEts, MsgId) of
+        [{MsgId, Msg, _CacheRefCount}] -> {Msg, CState};
+        [] -> read_from_disk(MsgLocation, CState)
     end.
 
 read_from_disk(#msg_location { msg_id = MsgId, file = File, offset = Offset,
