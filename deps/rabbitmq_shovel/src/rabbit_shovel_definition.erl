@@ -55,7 +55,7 @@ extract_source_info(Def0, ShovelVHost) ->
 -spec extract_source_info_for_index(Definition :: list() | map(), ShovelVHost :: vhost:name()) -> source_info().
 extract_source_info_for_index(Def0, ShovelVHost) ->
     Def = rabbit_data_coercion:to_proplist(Def0),
-    Protocol = rabbit_shovel_parameters:src_protocol(Def),
+    Protocol = builtin_src_protocol(Def),
     BaseInfo = #{protocol => Protocol, vhost => ShovelVHost},
     case Protocol of
         amqp10 ->
@@ -69,6 +69,16 @@ extract_source_info_for_index(Def0, ShovelVHost) ->
             end;
         _ ->
             extract_amqp091_local_source(Def, BaseInfo)
+    end.
+
+-spec builtin_src_protocol(list()) -> protocol().
+builtin_src_protocol(Def) ->
+    case pget(<<"src-protocol">>, Def) of
+        <<"amqp10">> -> amqp10;
+        amqp10       -> amqp10;
+        <<"local">>  -> local;
+        local        -> local;
+        _            -> amqp091
     end.
 
 %% Parse AMQP 1.0 address using RabbitMQ address scheme v2.
