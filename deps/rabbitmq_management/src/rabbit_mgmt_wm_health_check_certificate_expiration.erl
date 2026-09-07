@@ -11,6 +11,8 @@
 -export([init/2, to_json/2, content_types_provided/2, is_authorized/2]).
 -export([resource_exists/2]).
 -export([variances/2]).
+-export([expires_on_list/1, format_error_reason/1, parse_time/1,
+         time_str_2_gregorian_sec/1]).
 
 -include_lib("public_key/include/public_key.hrl").
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
@@ -112,8 +114,8 @@ listener_expiring_within(#listener{node = Node, protocol = Protocol, ip_address 
               protocol => Protocol,
               interface => list_to_binary(inet:ntoa(Interface)),
               port => Port,
-              certfile => list_to_binary(Certfile),
-              cacertfile => list_to_binary(Cacertfile),
+              certfile => rabbit_data_coercion:to_binary(Certfile),
+              cacertfile => rabbit_data_coercion:to_binary(Cacertfile),
               certfile_expires_on => expires_on_list(CertfileExpiresOn),
               cacertfile_expires_on => expires_on_list(CacertfileExpiresOn)
              }
@@ -229,34 +231,3 @@ seconds_to_bin(Seconds) ->
     list_to_binary(lists:flatten(io_lib:format("~w-~2.2.0w-~2.2.0w ~w:~2.2.0w:~2.2.0w",
                                                [Y, M, D, H, Min, S]))).
 
--ifdef(TEST).
--include_lib("eunit/include/eunit.hrl").
-
-rfc5280_utctime_test() ->
-    Sec1950 = time_str_2_gregorian_sec({utcTime, "500101000000Z"}),
-    ?assertEqual({{1950, 1, 1}, {0, 0, 0}}, calendar:gregorian_seconds_to_datetime(Sec1950)),
-    Sec1970 = time_str_2_gregorian_sec({utcTime, "700101000000Z"}),
-    ?assertEqual({{1970, 1, 1}, {0, 0, 0}}, calendar:gregorian_seconds_to_datetime(Sec1970)),
-    Sec1970NoSec = time_str_2_gregorian_sec({utcTime, "7001010000Z"}),
-    ?assertEqual({{1970, 1, 1}, {0, 0, 0}}, calendar:gregorian_seconds_to_datetime(Sec1970NoSec)),
-    Sec2000 = time_str_2_gregorian_sec({utcTime, "000101000000Z"}),
-    ?assertEqual({{2000, 1, 1}, {0, 0, 0}}, calendar:gregorian_seconds_to_datetime(Sec2000)),
-    Sec2049 = time_str_2_gregorian_sec({utcTime, "491231235959Z"}),
-    ?assertEqual({{2049, 12, 31}, {23, 59, 59}}, calendar:gregorian_seconds_to_datetime(Sec2049)).
-
-format_error_reason_test() ->
-    ?assertEqual(<<"enoent">>, format_error_reason(enoent)),
-    ?assertEqual(<<"custom error">>, format_error_reason("custom error")),
-    ?assertEqual(<<"binary error">>, format_error_reason(<<"binary error">>)).
-
-expires_on_list_error_test() ->
-    ErrorStr = {error, "Certificate is not yet valid"},
-    ?assertEqual([#{error => <<"Certificate is not yet valid">>}], expires_on_list([ErrorStr])),
-    ErrorAtom = {error, enoent},
-    ?assertEqual([#{error => <<"enoent">>}], expires_on_list(ErrorAtom)),
-    ?assertEqual([#{error => <<"enoent">>}], expires_on_list([ErrorAtom])).
-
-parse_time_error_test() ->
-    ?assertEqual({error, "Invalid date format in certificate"}, parse_time({utcTime, "bad-date"})).
-
--endif.
