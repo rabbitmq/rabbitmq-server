@@ -196,22 +196,23 @@ check_initial_offset(Q) ->
     case rabbit_misc:table_lookup(Args, <<"x-stream-initial-offset">>) of
         undefined ->
             ok;
-        {_Type, 0} ->
-            ok;
-        {_Type, Offset} when Offset > ?MAX_STREAM_INITIAL_OFFSET ->
+        {_Type, Offset} when is_integer(Offset) andalso Offset > ?MAX_STREAM_INITIAL_OFFSET ->
             {protocol_error, precondition_failed,
              "Exceeded max value for x-stream-initial-offset", []};
-        {_Type, _Offset} ->
-            %% A replica on an older node would start its log at offset 0 and
-            %% then reject the writer's first chunk as out of order.
+        {_Type, Offset} when is_integer(Offset) andalso Offset >= 0 ->
             case rabbit_feature_flags:is_enabled('rabbitmq_4.4.0') of
                 true ->
                     ok;
                 false ->
+                    %% A replica on an older node would start its log at offset 0 and
+                    %% then reject the writer's first chunk as out of order.
                     {protocol_error, precondition_failed,
                      "Feature flag 'rabbitmq_4.4.0' is required to declare a "
-                     "stream with a non-zero x-stream-initial-offset", []}
-            end
+                     "stream with x-stream-initial-offset", []}
+            end;
+        {_Type, _Offset} ->
+            {protocol_error, precondition_failed,
+             "x-stream-initial-offset value must be a non-negative integer", []}
     end.
 
 create_stream(Q0) ->

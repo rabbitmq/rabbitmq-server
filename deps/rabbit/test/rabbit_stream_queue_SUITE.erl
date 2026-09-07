@@ -2064,11 +2064,11 @@ initial_offset_requires_feature_flag(Config) ->
        declare(Config, Server, Q,
                [{<<"x-queue-type">>, longstr, <<"stream">>},
                 {<<"x-stream-initial-offset">>, long, 1000}])),
-    %% zero is always allowed
-    ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Config, Server, Q,
-                         [{<<"x-queue-type">>, longstr, <<"stream">>},
-                          {<<"x-stream-initial-offset">>, long, 0}])),
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 406, _}}, _},
+       declare(Config, Server, Q,
+               [{<<"x-queue-type">>, longstr, <<"stream">>},
+                {<<"x-stream-initial-offset">>, long, 0}])),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
 initial_offset(Config) ->
