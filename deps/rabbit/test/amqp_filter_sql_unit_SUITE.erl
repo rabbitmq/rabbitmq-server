@@ -512,9 +512,9 @@ like_operator(_Config) ->
     %% matching runs inside the target queue's own process. A subject
     %% that would otherwise match must stop matching once it exceeds the
     %% cap, and one within the cap must still match normally.
-    WithinCap = binary:copy(<<"a">>, 10),
-    true = match("k LIKE '%a%a%'", [{{utf8, <<"k">>}, {utf8, WithinCap}}]),
-    Oversized = binary:copy(<<"a">>, 5000),
+    AtCap = binary:copy(<<"a">>, 4096),
+    true = match("k LIKE '%a%a%'", [{{utf8, <<"k">>}, {utf8, AtCap}}]),
+    Oversized = binary:copy(<<"a">>, 4097),
     false = match("k LIKE '%a%a%'", [{{utf8, <<"k">>}, {utf8, Oversized}}]),
 
     %% An oversized subject evaluates to unknown, not false, matching the
