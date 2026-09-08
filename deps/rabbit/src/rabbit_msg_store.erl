@@ -28,10 +28,9 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("kernel/include/logger.hrl").
+-include("rabbit_msg_store.hrl").
 
 -type(msg() :: any()).
-
--record(msg_location, {msg_id, ref_count, file, offset, total_size}).
 
 %% We flush to disk at an interval to make sure we don't keep
 %% the data in memory too long. Confirms are sent after the
@@ -124,19 +123,6 @@
           credit_disc_bound,
           %% Highest-numbered v1 (.rdq) file, or 'none' if the store has
           %% no v1 files at all.
-          last_v1_file
-        }).
-
--record(client_msstate,
-        { server,
-          client_ref,
-          reader,
-          index_ets,
-          dir,
-          file_handles_ets,
-          cur_file_cache_ets,
-          flying_ets,
-          credit_disc_bound,
           last_v1_file
         }).
 
@@ -650,14 +636,15 @@ client_write(MsgRef, MsgId, Msg, Flow,
 %% Compaction only ever rewrites a live message's offset, never its file
 %% (index_update_offset_if_unchanged/5 always keeps the same File). So the
 %% only way the confirming lookup below can see a different file for a
-%% still-positive ref count is a full removal followed by a brand new
-%% write/4 that reuses the same MsgId (e.g. republishing identical
-%% content). That fresh copy can land in the store's current file, whose
+%% still-positive ref count is a full removal followed by another write of
+%% the same MsgId: with fan-out, one queue can drop its last reference
+%% before another queue's write of the same message is processed.
+%% That fresh copy can land in the store's current file, whose
 %% bytes may still be sitting in the write buffer rather than on disk
 %% (writer_append/3, flushed later by writer_flush/1) -- reading it
 %% straight from disk before that flush would misread garbage. Once a
 %% lookup below confirms the message is still alive, check the cache
-%% before the disk, exactly like client_read2/2 does before ever calling
+%% before the disk, exactly like read/2 does before ever calling
 %% here, since it's kept live for anything still in the current file.
 %% The cache is not consulted ahead of that liveness check: a removed
 %% message's cache row is deliberately not cleared (in case a write for
