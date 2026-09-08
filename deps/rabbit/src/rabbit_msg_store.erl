@@ -665,7 +665,9 @@ client_write(MsgRef, MsgId, Msg, Flow,
 %% stale content instead of not_found for a message that is really gone.
 %%
 %% Bounds retries for a MsgId that keeps getting rewritten across every
-%% attempt -- vanishingly unlikely, but a loop must still be bounded.
+%% attempt. Exhausting them means the message is alive in a file we never
+%% managed to confirm, which is raised rather than reported as not_found
+%% because the latter would silently drop a readable message.
 -define(CLIENT_READ3_MAX_RETRIES, 3).
 
 client_read3(Location, CState) ->
@@ -687,18 +689,26 @@ client_read3(#msg_location { msg_id = MsgId, file = File },
             {Msg, CState1} = read_from_cache_or_disk(MsgId, MsgLocation, CState, CurFileCacheEts),
             mark_handle_closed(FileHandlesEts, File, Ref),
             {{ok, Msg}, CState1};
-        #msg_location { ref_count = RefCount } = Fresh
-          when RefCount > 0, RetriesLeft > 0 ->
+        #msg_location { ref_count = RefCount } = Fresh when RefCount > 0 ->
             %% Still alive, but under a different file than the one our
             %% caller's snapshot saw and this handle was just opened for.
             %% Retry against the fresh location, which opens and confirms
-            %% that file in turn.
+            %% that file in turn. Reading it here instead would risk a
+            %% stale offset: only a handle opened before the confirming
+            %% lookup defers truncation.
             mark_handle_closed(FileHandlesEts, File, Ref),
-            client_read3(Fresh, CState, RetriesLeft - 1);
+            case read_from_cache(CurFileCacheEts, MsgId) of
+                {ok, Msg} ->
+                    {{ok, Msg}, CState};
+                not_found when RetriesLeft > 0 ->
+                    client_read3(Fresh, CState, RetriesLeft - 1);
+                not_found ->
+                    error({rabbit_msg_store_read, relocation_retries_exhausted,
+                           Fresh#msg_location.file, MsgId})
+            end;
         _ ->
-            %% Either genuinely gone (e.g. a different queue acking the
-            %% last reference to a fanned-out message) or still being
-            %% rewritten after every retry. Close the handle we just
+            %% Genuinely gone, e.g. a different queue acking the last
+            %% reference to a fanned-out message. Close the handle we just
             %% opened instead of leaving it stuck in FileHandlesEts, which
             %% would otherwise defer this file's truncation/deletion
             %% forever.
@@ -707,9 +717,15 @@ client_read3(#msg_location { msg_id = MsgId, file = File },
     end.
 
 read_from_cache_or_disk(MsgId, MsgLocation, CState, CurFileCacheEts) ->
+    case read_from_cache(CurFileCacheEts, MsgId) of
+        {ok, Msg} -> {Msg, CState};
+        not_found -> read_from_disk(MsgLocation, CState)
+    end.
+
+read_from_cache(CurFileCacheEts, MsgId) ->
     case ets:lookup(CurFileCacheEts, MsgId) of
-        [{MsgId, Msg, _CacheRefCount}] -> {Msg, CState};
-        [] -> read_from_disk(MsgLocation, CState)
+        [{MsgId, Msg, _CacheRefCount}] -> {ok, Msg};
+        [] -> not_found
     end.
 
 read_from_disk(#msg_location { msg_id = MsgId, file = File, offset = Offset,
