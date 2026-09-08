@@ -10,6 +10,7 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("amqqueue.hrl").
+-include("rabbit_msg_store.hrl").
 
 -compile(nowarn_export_all).
 -compile(export_all).
@@ -429,7 +430,7 @@ msg_store_read_after_concurrent_remove_returns_not_found1(_Config) ->
     %% while the message still has a positive ref count
     StaleLocation = stale_location(MsgId, CState0),
     true = StaleLocation =/= not_found,
-    File = location_file(StaleLocation),
+    File = StaleLocation#msg_location.file,
 
     %% remove the only reference -- simulating a different queue's consumer
     %% acking the same fanned-out message concurrently -- and sync again
@@ -499,8 +500,9 @@ msg_store_read_after_relocation_retries2() ->
     ok = on_disk_await(Cap, [{OtherRef, OtherContent}]),
     OtherLocation = stale_location(OtherContent, CState0),
     true = OtherLocation =/= not_found,
-    true = location_file(OtherLocation) =/= location_file(StaleLocation),
-    true = ets:insert(element(5, CState0), set_msg_id(OtherLocation, MsgId)),
+    true = OtherLocation#msg_location.file =/= StaleLocation#msg_location.file,
+    true = ets:insert(CState0#client_msstate.index_ets,
+                      OtherLocation#msg_location{ msg_id = MsgId }),
 
     {Result, CState1} = rabbit_msg_store:client_read3(StaleLocation, CState0),
     {ok, OtherContent} = Result,
@@ -558,27 +560,19 @@ msg_store_read_after_relocation_finds_unflushed_current_file1(_Config) ->
 %% client_read3/2, so a test can hold onto it and call client_read3/2
 %% with it after the index has since changed underneath it.
 stale_location(MsgId, CState) ->
-    IndexEts = element(5, CState),
-    case ets:lookup(IndexEts, MsgId) of
-        [MsgLocation] when element(3, MsgLocation) > 0 ->
+    case ets:lookup(CState#client_msstate.index_ets, MsgId) of
+        [MsgLocation = #msg_location{ ref_count = RefCount }] when RefCount > 0 ->
             MsgLocation;
         _ ->
             not_found
     end.
 
-location_file(MsgLocation) ->
-    element(4, MsgLocation).
-
-set_msg_id(MsgLocation, MsgId) ->
-    setelement(2, MsgLocation, MsgId).
-
 %% Whether a handle is still marked open for File, so a test can
 %% confirm client_read3/2's not_found fallback actually closes the
 %% handle it just opened rather than leaking it.
 handle_open(File, CState) ->
-    FileHandlesEts = element(7, CState),
-    ClientRef = element(3, CState),
-    ets:member(FileHandlesEts, {ClientRef, File}).
+    ets:member(CState#client_msstate.file_handles_ets,
+               {CState#client_msstate.client_ref, File}).
 
 %% Compaction of a v2 (.sqs) segment file is the one path that isn't
 %% adequately covered by scanning hand-built files (msg_store_file_scan_v2):
