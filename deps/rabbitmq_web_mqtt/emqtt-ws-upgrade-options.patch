@@ -1,0 +1,46 @@
+diff --git a/src/emqtt.erl b/src/emqtt.erl
+index 78543e8..1dd6170 100644
+--- a/src/emqtt.erl
++++ b/src/emqtt.erl
+@@ -152,6 +152,7 @@
+                 | {ssl_opts, [ssl:tls_client_option()]}
+                 | {quic_opts, {_, _}}
+                 | {ws_path, string()}
++                | {ws_upgrade_options, [{atom(), term()}]}
+                 | {connect_timeout, pos_integer()}
+                 | {bridge_mode, boolean()}
+                 | {clientid, iodata()}
+@@ -831,6 +832,8 @@ init([{ws_transport_options, TransportOptions} | Opts], State = #state{sock_opts
+     init(Opts, State#state{sock_opts = [{ws_transport_options, TransportOptions}|SockOpts]});
+ init([{ws_headers, Headers} | Opts], State = #state{sock_opts = SockOpts}) ->
+     init(Opts, State#state{sock_opts = [{ws_headers, Headers}|SockOpts]});
++init([{ws_upgrade_options, WsUpgradeOptions} | Opts], State = #state{sock_opts = SockOpts}) ->
++    init(Opts, State#state{sock_opts = [{ws_upgrade_options, WsUpgradeOptions}|SockOpts]});
+ init([{clientid, ClientId} | Opts], State) ->
+     init(Opts, State#state{clientid = iolist_to_binary(ClientId)});
+ init([{clean_start, CleanStart} | Opts], State) when is_boolean(CleanStart) ->
+diff --git a/src/emqtt_ws.erl b/src/emqtt_ws.erl
+index bce74d1..8e4c186 100644
+--- a/src/emqtt_ws.erl
++++ b/src/emqtt_ws.erl
+@@ -25,7 +25,8 @@
+         , getstat/2
+         ]).
+ 
+--type option() :: {ws_path, string()}.
++-type option() :: {ws_path, string()}
++                 | {ws_upgrade_options, [{atom(), term()}]}.
+ -type connection() :: {_Conn :: pid(), gun:stream_ref()}.
+ 
+ -export_type([option/0, connection/0]).
+@@ -68,7 +69,9 @@ upgrade(ConnPid, Opts, Timeout) ->
+     %% 2. websocket upgrade
+     Path = proplists:get_value(ws_path, Opts, "/mqtt"),
+     CustomHeaders = proplists:get_value(ws_headers, Opts, []),
+-    StreamRef = gun:ws_upgrade(ConnPid, Path, ?WS_HEADERS ++ CustomHeaders, ?WS_OPTS),
++    UpgradeOptions = proplists:get_value(ws_upgrade_options, Opts, []),
++    WsOpts = maps:merge(?WS_OPTS, maps:from_list(UpgradeOptions)),
++    StreamRef = gun:ws_upgrade(ConnPid, Path, ?WS_HEADERS ++ CustomHeaders, WsOpts),
+     receive
+         {gun_upgrade, ConnPid, StreamRef, [<<"websocket">>], _Headers} ->
+             {ok, StreamRef};
