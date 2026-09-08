@@ -41,6 +41,15 @@ ELIXIR_ERL_EBIN := $(shell dirname $$(elixir -e 'IO.puts(:code.which(:elixir_erl
 DIALYZER_PLT_OPTS += -pa $(ELIXIR_ERL_EBIN)
 DIALYZER_OPTS += -pa $(ELIXIR_ERL_EBIN)
 
+# emqtt hardcodes the Gun Websocket upgrade options (including max_frame_size),
+# which prevents raising Gun's 1MB default incoming frame size limit for tests
+# that send larger messages. Add a ws_upgrade_options client option until this
+# is fixed upstream.
+autopatch-emqtt::
+	$(verbose) grep -q ws_upgrade_options $(DEPS_DIR)/emqtt/src/emqtt_ws.erl || ( \
+		patch -p1 -d $(DEPS_DIR)/emqtt < $(CURDIR)/emqtt-ws-upgrade-options.patch && \
+		rm -f $(ERLANG_MK_TMP)/dep_built/emqtt )
+
 CT_HOOKS = rabbit_ct_hook
 
 # We are using mqtt_shared_SUITE from rabbitmq_mqtt.

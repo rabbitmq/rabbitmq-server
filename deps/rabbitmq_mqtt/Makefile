@@ -68,6 +68,13 @@ ELIXIR_ERL_EBIN := $(shell dirname $$(elixir -e 'IO.puts(:code.which(:elixir_erl
 DIALYZER_PLT_OPTS += -pa $(ELIXIR_ERL_EBIN)
 DIALYZER_OPTS += -pa $(ELIXIR_ERL_EBIN)
 
+# emqtt is a dependency shared with rabbitmq_web_mqtt, which patches it to
+# support ws_upgrade_options; apply the same patch here too since whichever
+# plugin builds first is the one that fetches the shared deps/emqtt checkout.
+autopatch-emqtt::
+	$(verbose) grep -q ws_upgrade_options $(DEPS_DIR)/emqtt/src/emqtt_ws.erl || ( \
+		patch -p1 -d $(DEPS_DIR)/emqtt < $(CURDIR)/../rabbitmq_web_mqtt/emqtt-ws-upgrade-options.patch && \
+		rm -f $(ERLANG_MK_TMP)/dep_built/emqtt )
 
 clean::
 	if test -d test/java_SUITE_data; then cd test/java_SUITE_data && $(MAKE) clean; fi

@@ -23,7 +23,10 @@ start_client(ClientId, Config, Node, AdditionalOpts) ->
              fun emqtt:connect/1};
         true ->
             {rabbit_ct_broker_helpers:get_node_config(Config, Node, tcp_port_web_mqtt),
-             [{ws_path, "/ws"}],
+             [{ws_path, "/ws"},
+              %% Gun defaults to a 1MB limit on incoming WebSocket frames,
+              %% which is smaller than messages some test cases send.
+              {ws_upgrade_options, [{max_frame_size, infinity}]}],
              fun emqtt:ws_connect/1}
     end,
     ProtoVer = proplists:get_value(
