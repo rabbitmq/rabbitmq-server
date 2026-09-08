@@ -1808,12 +1808,14 @@ count_msg_refs(Gen, Seed, State = #msstate{ index_ets = IndexEts }) ->
         %% It can be removed once we no longer support converting from v1 data.
         {MsgId, 1, Next} ->
             index_update_ref_counter(IndexEts, MsgId, +1,
-                #msg_location{msg_id=MsgId, file=undefined, ref_count=1}),
+                #msg_location{msg_id=MsgId, file=undefined, ref_count=0}),
             count_msg_refs(Gen, Next, State);
         {MsgIds, Next} ->
+            %% ets:update_counter/4 applies the increment to a freshly
+            %% inserted default, so the default must start at 0.
             lists:foreach(fun(MsgId) ->
                 index_update_ref_counter(IndexEts, MsgId, +1,
-                    #msg_location{msg_id=MsgId, file=undefined, ref_count=1})
+                    #msg_location{msg_id=MsgId, file=undefined, ref_count=0})
             end, MsgIds),
             count_msg_refs(Gen, Next, State)
     end.
