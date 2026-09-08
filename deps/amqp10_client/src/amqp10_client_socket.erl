@@ -71,7 +71,8 @@ ws_upgrade(Pid, Path) ->
     StreamRef = gun:ws_upgrade(Pid,
                                Path,
                                [{<<"cache-control">>, <<"no-cache">>}],
-                               #{protocols => [{<<"amqp">>, gun_ws_h}]}),
+                               #{protocols => [{<<"amqp">>, gun_ws_h}],
+                                 max_frame_size => 16_000_000}),
     receive
         {gun_upgrade, Pid, StreamRef, [<<"websocket">>], _Headers} ->
             {ok, StreamRef};
