@@ -505,7 +505,18 @@ like_operator(_Config) ->
     false = match("k LIKE '%%X'",      [{{utf8, <<"k">>}, {utf8, <<"abc">>}}]),
     true  = match("k LIKE '%%X'",      [{{utf8, <<"k">>}, {utf8, <<"abcX">>}}]),
     true  = match("k LIKE '%%a%%b%%'", [{{utf8, <<"k">>}, {utf8, <<"xaxbx">>}}]),
-    false = match("k LIKE '%%a%%b%%'", [{{utf8, <<"k">>}, {utf8, <<"xbxax">>}}]).
+    false = match("k LIKE '%%a%%b%%'", [{{utf8, <<"k">>}, {utf8, <<"xbxax">>}}]),
+
+    %% A LIKE pattern with several %-wildcards compiles to a regex whose
+    %% subject is bounded independently of the message-size limit.
+    AtCap = binary:copy(<<"a">>, 4096),
+    true = match("k LIKE '%a%a%'", [{{utf8, <<"k">>}, {utf8, AtCap}}]),
+    Oversized = binary:copy(<<"a">>, 4097),
+    false = match("k LIKE '%a%a%'", [{{utf8, <<"k">>}, {utf8, Oversized}}]),
+
+    %% An oversized subject evaluates to unknown rather than false, so
+    %% NOT LIKE does not match either.
+    false = match("k NOT LIKE '%a%a%'", [{{utf8, <<"k">>}, {utf8, Oversized}}]).
 
 in_operator(_Config) ->
     AppPropsUtf8 = [{{utf8, <<"country">>}, {utf8, <<"🇬🇧"/utf8>>}}],
