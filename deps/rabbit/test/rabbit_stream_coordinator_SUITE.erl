@@ -38,6 +38,7 @@ all_tests() ->
      leader_down_scenario_1,
      replica_down,
      add_replica,
+     add_replica_ignores_non_numeric_replica_timestamp,
      restart_stream,
      delete_stream,
      delete_stream_idempotent,
@@ -96,6 +97,10 @@ init_per_testcase(TestCase, Config)
        TestCase =:= aux_upgrade_from_prior_version ->
     ok = meck:new(ra_aux, [passthrough, no_link]),
     Config;
+init_per_testcase(TestCase, Config)
+  when TestCase =:= add_replica_ignores_non_numeric_replica_timestamp ->
+    ok = meck:new(osiris_writer, [passthrough, no_link]),
+    Config;
 init_per_testcase(_TestCase, Config) ->
     Config.
 
@@ -111,6 +116,10 @@ end_per_testcase(TestCase, _Config)
        TestCase =:= action_throttling_drops_deleted_stream;
        TestCase =:= aux_upgrade_from_prior_version ->
     meck:unload(ra_aux),
+    ok;
+end_per_testcase(TestCase, _Config)
+  when TestCase =:= add_replica_ignores_non_numeric_replica_timestamp ->
+    meck:unload(osiris_writer),
     ok;
 end_per_testcase(_TestCase, _Config) ->
     ok.
@@ -1288,6 +1297,31 @@ add_replica(_) ->
                                                    current = undefined,
                                                    state = {ready, E2}}
                                     }}, S6),
+    ok.
+
+add_replica_ignores_non_numeric_replica_timestamp(_) ->
+    LeaderPid = fake_pid(n1),
+    N1 = node(LeaderPid),
+    N2 = n2,
+    N3 = n3,
+    N4 = n4,
+    Q = amqqueue:set_pid(
+          new_q(<<"add_replica_ignores_non_numeric_replica_timestamp">>, #{}),
+          LeaderPid),
+    meck:expect(osiris_writer, query_replication_state,
+                fun (Pid) when Pid =:= LeaderPid ->
+                        #{N1 => {10, 0},
+                          %% a replica with an empty log reports a
+                          %% non-integer timestamp instead of an integer one
+                          N2 => {10, empty},
+                          %% a genuinely stale replica, well outside the
+                          %% freshness window
+                          N3 => {10, 20000}}
+                end),
+    %% this used to crash with badarith when folding over the non-integer
+    %% timestamp; the genuinely stale replica must still be detected
+    ?assertEqual({error, {disallowed, out_of_sync_replica}},
+                 rabbit_stream_coordinator:add_replica(Q, N4)),
     ok.
 
 delete_replica(_) ->
