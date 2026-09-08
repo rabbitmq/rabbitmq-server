@@ -22,6 +22,7 @@
 %% [Filter-Expressions-v1.0 7.1]
 %% https://docs.oasis-open.org/amqp/filtex/v1.0/csd01/filtex-v1.0-csd01.html#_Toc67929316
 -define(MAX_EXPRESSION_LENGTH, 4096).
+-define(MAX_LIKE_SUBJECT_LENGTH, 4096).
 -define(MAX_TOKENS, 200).
 
 -define(DEFAULT_MSG_PRIORITY, 4).
@@ -255,12 +256,20 @@ like(Subject,{{prefix, PrefixSize, _} = Prefix,
     like(Subject, Suffix);
 like(Subject, CompiledRe)
   when element(1, CompiledRe) =:= re_pattern ->
-    case rabbit_re:run(Subject, CompiledRe) of
-        match           -> true;
-        nomatch         -> false;
-        %% Subject is not a UTF-8 string.
-        {error, badarg} -> undefined;
-        {error, _}      -> false
+    case byte_size(Subject) > ?MAX_LIKE_SUBJECT_LENGTH of
+        true ->
+            %% "Comparison or arithmetic with an unknown value always
+            %% yields an unknown value" -- treat an oversized subject the
+            %% same as the is_binary(Subject) =:= false case above.
+            undefined;
+        false ->
+            case rabbit_re:run(Subject, CompiledRe) of
+                match      -> true;
+                nomatch    -> false;
+                %% The subject is not a UTF-8 string, or the match limit
+                %% was exhausted before a verdict was reached.
+                {error, _} -> undefined
+            end
     end.
 
 get_field_value(priority, Msg) ->
