@@ -1158,10 +1158,13 @@ read_msg(SeqId, _, _, MsgLocation, State = #vqstate{ store_state = StoreState0 }
     {Msg, State#vqstate{ store_state = StoreState }};
 read_msg(_, MsgId, IsPersistent, rabbit_msg_store, State = #vqstate{msg_store_clients = MSCState,
                                                                     disk_read_count   = Count}) ->
-    {{ok, Msg}, MSCState1} =
-        msg_store_read(MSCState, IsPersistent, MsgId),
-    {Msg, State #vqstate {msg_store_clients = MSCState1,
-                          disk_read_count   = Count + 1}}.
+    case msg_store_read(MSCState, IsPersistent, MsgId) of
+        {{ok, Msg}, MSCState1} ->
+            {Msg, State #vqstate {msg_store_clients = MSCState1,
+                                  disk_read_count   = Count + 1}};
+        {not_found, _MSCState1} ->
+            error({msg_store_read_not_found, MsgId})
+    end.
 
 %% Helper macros to make the code as obvious as possible.
 %% It's OK to call msg_size/1 for Inc because it gets inlined.
