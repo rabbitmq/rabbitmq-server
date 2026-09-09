@@ -348,13 +348,6 @@ export function oauth_completeLogout() {
     mgr.signoutRedirectCallback().then(_ => oauth_redirectToLogin())
 }
 
-// oauth2's own login-page renderer and error/logout presentation - the
-// implementation behind this module's own oauth2 provider's
-// startLoginFlow/presentError/onUnauthorized (registered below).
-// start_app_login() (main.js) is called as a bare global rather than
-// imported: main.js already imports from auth-providers.js, and this
-// module imports from auth-providers.js too, so an explicit import back to
-// main.js risks a cycle.
 export function startWithOAuthLogin(oauth) {
   if (!oauth.logged_in) {
     hasAnyResourceServerReady(oauth, (oauth, escaped_warnings) => { render_login_oauth(oauth, escaped_warnings); start_app_login(); })
@@ -387,11 +380,7 @@ export function render_login_oauth(oauth, escaped_messages) {
           toggle_visibility($(this));
       });
 
-  // Bound here, next to the markup they act on, rather than once at
-  // startup. replace_content() above builds a fresh #login every time this
-  // renders, so handlers scoped to it are discarded with the old element
-  // instead of accumulating - which is why these cannot be delegated to
-  // document.
+
   $('#login').on('click', '[data-oauth-action="login"]', function() {
       oauth_initiateLogin($(this).data('resourceId'));
   });
