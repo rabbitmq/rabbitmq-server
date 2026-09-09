@@ -35,6 +35,8 @@ groups() ->
           login_of_nonexistent_user,
           set_tags_for_passwordless_user,
           change_password,
+          login_with_pbkdf2_sha256_hashed_password,
+          login_with_legacy_4_byte_salt_hashed_password,
           auth_backend_internal_expand_topic_permission
       ]}
     ].
@@ -145,6 +147,67 @@ change_password1(_Config) ->
             UserName, [{password, Password}]),
     passed.
 
+
+login_with_pbkdf2_sha256_hashed_password(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, login_with_pbkdf2_sha256_hashed_password1, [Config]).
+
+login_with_pbkdf2_sha256_hashed_password1(_Config) ->
+    UserName = <<"login_with_pbkdf2_sha256_hashed_password-user">>,
+    Password = <<"login_with_pbkdf2_sha256_hashed_password-password">>,
+    case rabbit_auth_backend_internal:lookup_user(UserName) of
+        {ok, _} -> rabbit_auth_backend_internal:delete_user(UserName, <<"acting-user">>);
+        _       -> ok
+    end,
+    PreviousMod = application:get_env(rabbit, password_hashing_module),
+    ok = application:set_env(rabbit, password_hashing_module,
+                             rabbit_password_hashing_pbkdf2_sha256),
+    ok = rabbit_auth_backend_internal:add_user(UserName, Password, <<"acting-user">>),
+
+    {ok, User} = rabbit_auth_backend_internal:lookup_user(UserName),
+    ?assertEqual(48, byte_size(internal_user:get_password_hash(User))),
+
+    %% The sentinel salt has to track the configured module's salt width.
+    Sentinel = rabbit_auth_backend_internal:dummy_sentinel_user(),
+    ?assertEqual(16, byte_size(internal_user:get_password_hash(Sentinel))),
+    ?assertNot(rabbit_auth_backend_internal:password_matches(Sentinel, Password)),
+
+    {ok, #auth_user{username = UserName}} =
+        rabbit_auth_backend_internal:user_login_authentication(
+            UserName, [{password, Password}]),
+    {refused, _, [UserName]} =
+        rabbit_auth_backend_internal:user_login_authentication(
+            UserName, [{password, <<"wrong password">>}]),
+
+    ok = rabbit_auth_backend_internal:delete_user(UserName, <<"acting-user">>),
+    ok = case PreviousMod of
+             {ok, Mod} -> application:set_env(rabbit, password_hashing_module, Mod);
+             undefined -> application:unset_env(rabbit, password_hashing_module)
+         end,
+    passed.
+
+login_with_legacy_4_byte_salt_hashed_password(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, login_with_legacy_4_byte_salt_hashed_password1, [Config]).
+
+login_with_legacy_4_byte_salt_hashed_password1(_Config) ->
+    UserName = <<"login_with_legacy_4_byte_salt_hashed_password-user">>,
+    Password = <<"login_with_legacy_4_byte_salt_hashed_password-password">>,
+    case rabbit_auth_backend_internal:lookup_user(UserName) of
+        {ok, _} -> rabbit_auth_backend_internal:delete_user(UserName, <<"acting-user">>);
+        _       -> ok
+    end,
+    ok = rabbit_auth_backend_internal:add_user(UserName, Password, <<"acting-user">>),
+    Hash = rabbit_password:hash(rabbit_password_hashing_sha256, Password),
+    ok = rabbit_auth_backend_internal:change_password_hash(
+           UserName, Hash, rabbit_password_hashing_sha256),
+
+    {ok, #auth_user{username = UserName}} =
+        rabbit_auth_backend_internal:user_login_authentication(
+            UserName, [{password, Password}]),
+
+    ok = rabbit_auth_backend_internal:delete_user(UserName, <<"acting-user">>),
+    passed.
 
 login_with_credentials_but_no_password(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,

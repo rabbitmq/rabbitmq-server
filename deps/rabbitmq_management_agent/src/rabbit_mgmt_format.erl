@@ -260,9 +260,9 @@ policy(Policy) -> [{policy, Policy}].
 
 internal_user(User) ->
     [{name,              internal_user:get_username(User)},
-     {password_hash,     base64:encode(internal_user:get_password_hash(User))},
      {hashing_algorithm, rabbit_auth_backend_internal:hashing_module_for_user(
                              User)},
+     {has_password,      byte_size(internal_user:get_password_hash(User)) > 0},
      {tags,              tags_as_binaries(internal_user:get_tags(User))},
      {limits,            internal_user:get_limits(User)}].
 

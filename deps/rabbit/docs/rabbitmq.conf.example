@@ -316,6 +316,7 @@
 ## it's necessary to update her password.
 ##
 ## To use SHA-512, set to rabbit_password_hashing_sha512.
+## To use PBKDF2-HMAC-SHA256, set to rabbit_password_hashing_pbkdf2_sha256.
 ##
 # password_hashing_module = rabbit_password_hashing_sha256
 

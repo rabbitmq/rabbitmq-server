@@ -17,7 +17,7 @@
   </tr>
   <tr>
     <th>Can log in with password</th>
-    <td><%= fmt_boolean(user.password_hash.length > 0) %></td>
+    <td><%= fmt_boolean(user.has_password) %></td>
   </tr>
 </table>
   </div>
@@ -37,7 +37,7 @@
           <th>
             <label>
               <select name="has-password" class="narrow controls-appearance">
-                <% if (user.password_hash.length > 0) { %>
+                <% if (user.has_password) { %>
                 <option value="password" selected="selected">Password:</option>
                 <option value="no-password">No password</option>
                 <% } else { %>
@@ -48,7 +48,7 @@
             </label>
           </th>
           <td>
-            <% if (user.password_hash.length > 0) { %>
+            <% if (user.has_password) { %>
             <div id="password-div">
             <% } else { %>
             <div id="password-div" style="display: none;">
@@ -59,7 +59,7 @@
               <span class="mand">*</span>
               (confirm)
             </div>
-            <% if (user.password_hash.length > 0) { %>
+            <% if (user.has_password) { %>
             <div id="no-password-div" style="display: none;">
             <% } else { %>
             <div id="no-password-div">
