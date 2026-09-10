@@ -67,7 +67,14 @@ init_per_testcase(Testcase, Config) ->
 end_per_testcase(Testcase, Config)
   when Testcase == proxy_protocol_v1 orelse Testcase == proxy_protocol_v1_tls ->
     %% Restore default loopback restrictions
-    ok = set_loopback_users(Config, [<<"guest">>]);
+    ok = set_loopback_users(Config, [<<"guest">>]),
+    rabbit_ct_helpers:testcase_finished(Config, Testcase);
+end_per_testcase(Testcase, Config)
+  when Testcase == loopback_user_via_non_loopback_proxy_is_rejected
+       orelse Testcase == loopback_user_via_local_proxy_is_accepted ->
+    %% Survives a linked exit, which would skip a `try ... after` in the test.
+    ok = set_loopback_users(Config, []),
+    rabbit_ct_helpers:testcase_finished(Config, Testcase);
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
@@ -132,39 +139,54 @@ connection_name(Retries) ->
             connection_name(Retries - 1)
     end.
 
+connection_names() ->
+    [Name || {_Key, Values} <- ets:tab2list(connection_created),
+             {conn_name, Name} <- [lists:keyfind(conn_name, 1, Values)]].
+
+%% Regression guard: a rejected login must never register a
+%% `connection_created` entry.
+assert_no_connection_created(Config, Pattern) ->
+    rabbit_ct_helpers:consistently(
+      ?_assertNot(
+         lists:any(
+           fun(Name) -> match =:= re:run(Name, Pattern, [{capture, none}]) end,
+           rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, connection_names, []))),
+      200, 5).
+
 %% A loopback-only user must be evaluated against the PROXY source, not the
 %% immediate peer (the proxy connection itself).
 loopback_user_via_non_loopback_proxy_is_rejected(Config) ->
     ok = set_loopback_users(Config, [<<"guest">>]),
-    try
-        Command = connect_response_command(
-            Config, "PROXY TCP4 192.168.1.1 192.168.1.2 80 81\r\n"),
-        ?assertEqual(<<"ERROR">>, Command)
-    after
-        ok = set_loopback_users(Config, [])
-    end.
+    {Socket, Command} = connect_response(
+        Config, "PROXY TCP4 10.10.10.10 10.10.10.11 8080 8081\r\n"),
+    ?assertEqual(<<"ERROR">>, Command),
+    %% The socket stays open: closing it deletes any `connection_created`
+    %% entry, hiding the event this asserts the absence of.
+    ok = assert_no_connection_created(
+           Config, <<"^10.10.10.10:8080 -> 10.10.10.11:8081$">>),
+    gen_tcp:close(Socket).
 
 %% A LOCAL v2 header keeps the real (loopback) ends, so guest is accepted.
 loopback_user_via_local_proxy_is_accepted(Config) ->
     ok = set_loopback_users(Config, [<<"guest">>]),
-    try
-        Header = ranch_proxy_header:header(#{command => local, version => 2}),
-        Command = connect_response_command(Config, Header),
-        ?assertEqual(<<"CONNECTED">>, Command)
-    after
-        ok = set_loopback_users(Config, [])
-    end.
+    Header = ranch_proxy_header:header(#{command => local, version => 2}),
+    Command = connect_response_command(Config, Header),
+    ?assertEqual(<<"CONNECTED">>, Command).
 
 connect_response_command(Config, ProxyHeader) ->
+    {Socket, Command} = connect_response(Config, ProxyHeader),
+    gen_tcp:close(Socket),
+    Command.
+
+connect_response(Config, ProxyHeader) ->
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stomp),
     {ok, Socket} = gen_tcp:connect({127,0,0,1}, Port,
         [binary, {active, false}, {packet, raw}]),
     ok = inet:send(Socket, ProxyHeader),
     ok = inet:send(Socket, <<"CONNECT\nlogin:guest\npasscode:guest\n\n", 0>>),
     {ok, Response} = gen_tcp:recv(Socket, 0, ?TIMEOUT),
-    gen_tcp:close(Socket),
     %% The reply is a single STOMP frame; its command is the leading line.
-    hd(binary:split(Response, <<"\n">>)).
+    {Socket, hd(binary:split(Response, <<"\n">>))}.
 
 set_loopback_users(Config, Users) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
