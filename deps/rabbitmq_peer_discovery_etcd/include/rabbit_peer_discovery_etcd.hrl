@@ -21,6 +21,10 @@
     %% which refreshes this node's key lease
     node_lease_keepalive_pid,
     lock_ttl_in_seconds,
+    lock_lease_id,
+    %% the pid of the process returned by eetcd_lease:keep_alive/2
+    %% which refreshes the registration lock's lease
+    lock_lease_keepalive_pid,
     username,
     obfuscated_password
 }).

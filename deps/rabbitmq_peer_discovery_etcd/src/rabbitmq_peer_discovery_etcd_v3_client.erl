@@ -119,7 +119,11 @@ lock(Node) ->
     lock(?MODULE, Node).
 
 lock(ServerRef, Node) ->
-    gen_statem:call(ServerRef, {lock, Node}, ?CALL_TIMEOUT).
+    %% the underlying etcd lock request can block for as long as the lock's TTL
+    %% (lock_ttl_in_seconds), which can exceed ?CALL_TIMEOUT, so a fixed short
+    %% timeout here would make this call fail before etcd has had a chance to
+    %% grant the lock
+    gen_statem:call(ServerRef, {lock, Node}, infinity).
 
 unlock() ->
     unlock(?MODULE, node()).
@@ -128,7 +132,7 @@ unlock(LockKey) ->
     unlock(?MODULE, LockKey).
 
 unlock(ServerRef, LockKey) ->
-    gen_statem:call(ServerRef, {unlock, LockKey}, ?CALL_TIMEOUT).
+    gen_statem:call(ServerRef, {unlock, LockKey}, infinity).
 
 %%
 %% States
@@ -186,7 +190,15 @@ connected({call, From}, {lock, _Node}, Data = #statem_data{connection_name = Con
             case eetcd_lock:lock(lock_context(Conn, Data), Key, LeaseID) of
                 {ok, #{key := GeneratedKey}} ->
                     ?LOG_DEBUG("etcd peer discovery: successfully acquired a lock, lock owner key: ~ts", [GeneratedKey]),
-                    reply_and_retain_state(From, {ok, GeneratedKey});
+                    %% the lock is only held for as long as its lease is valid; without a
+                    %% keep-alive, the lease (and thus the lock) can expire and be granted
+                    %% to another waiter while this node still believes it holds it
+                    {ok, KeepalivePid} = eetcd_lease:keep_alive(Conn, LeaseID),
+                    gen_statem:reply(From, {ok, GeneratedKey}),
+                    {keep_state, Data#statem_data{
+                        lock_lease_id = LeaseID,
+                        lock_lease_keepalive_pid = KeepalivePid
+                    }};
                 {error, _} = Error ->
                     ?LOG_DEBUG("etcd peer discovery: failed to acquire a lock using key ~ts: ~tp", [Key, Error]),
                     reply_and_retain_state(From, Error)
@@ -195,12 +207,18 @@ connected({call, From}, {lock, _Node}, Data = #statem_data{connection_name = Con
             ?LOG_DEBUG("etcd peer discovery: failed to get a lease for registration lock: ~tp", [Error]),
             reply_and_retain_state(From, Error)
     end;
-connected({call, From}, {unlock, GeneratedKey}, Data = #statem_data{connection_name = Conn}) ->
+connected({call, From}, {unlock, GeneratedKey}, Data = #statem_data{connection_name = Conn, lock_lease_id = LockLeaseID, lock_lease_keepalive_pid = KAPid}) ->
     Ctx = unlock_context(Conn, Data),
     case eetcd_lock:unlock(Ctx, GeneratedKey) of
         {ok, _} ->
             ?LOG_DEBUG("etcd peer discovery: successfully released lock, lock owner key: ~ts", [GeneratedKey]),
-            reply_and_retain_state(From, ok);
+            _ = eetcd_lease:revoke(eetcd_kv:new(Conn), LockLeaseID),
+            maybe_stop_lock_lease_keepalive(KAPid),
+            gen_statem:reply(From, ok),
+            {keep_state, Data#statem_data{
+                lock_lease_id = undefined,
+                lock_lease_keepalive_pid = undefined
+            }};
         {error, _} = Error ->
             ?LOG_DEBUG("etcd peer discovery: failed to release registration lock, lock owner key: ~ts, error ~tp",
                              [GeneratedKey, Error]),
@@ -380,6 +398,11 @@ unregister(Conn, Data = #statem_data{node_key_lease_id = LeaseID, node_lease_kee
 reply_and_retain_state(From, Value) ->
     gen_statem:reply(From, Value),
     keep_state_and_data.
+
+maybe_stop_lock_lease_keepalive(undefined) ->
+    ok;
+maybe_stop_lock_lease_keepalive(KeepalivePid) ->
+    exit(KeepalivePid, normal).
 
 maybe_demonitor(undefined) ->
     true;
