@@ -141,7 +141,7 @@ port_shutdown_loop(Port) ->
     end.
 
 cookie_hash() ->
-    base64:encode_to_string(erlang:md5(atom_to_list(erlang:get_cookie()))).
+    base64:encode_to_string(erlang:md5(atom_to_binary(erlang:get_cookie()))).
 
 diagnostics(Nodes) ->
     verbose_erlang_distribution(true),
