@@ -30,7 +30,9 @@ groups() ->
       {non_parallel_tests, [], [
                                 two_interfaces_on_one_port_serve_separately,
                                 unregistering_one_interface_leaves_the_other,
-                                one_address_spelled_two_ways_is_rejected
+                                one_address_spelled_two_ways_is_rejected,
+                                wildcard_over_an_explicit_address_is_rejected,
+                                mixed_result_is_rolled_back
                                ]}
     ].
 
@@ -43,7 +45,8 @@ init_per_suite(Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, [
         {rmq_nodename_suffix, ?MODULE},
         {rmq_extra_tcp_ports, [tcp_port_http_shared, tcp_port_http_shared_alt,
-                               tcp_port_http_conflict]}
+                               tcp_port_http_conflict, tcp_port_http_wildcard,
+                               tcp_port_http_mixed]}
       ]),
     rabbit_ct_helpers:run_setup_steps(Config1,
       rabbit_ct_broker_helpers:setup_steps()).
@@ -68,6 +71,9 @@ init_per_testcase(Testcase, Config) ->
 
 end_per_testcase(Testcase, Config) ->
     _ = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, unregister_both, []),
+    _ = rabbit_ct_broker_helpers:rpc(
+          Config, 0, rabbit_web_dispatch_sup, stop_listener,
+          [[{port, port(Config, tcp_port_http_mixed)}, {ip, ?V6_ADDRESS}]]),
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
 %% -------------------------------------------------------------------
@@ -106,6 +112,34 @@ one_address_spelled_two_ways_is_rejected(Config) ->
     ?assertEqual([?V4_PREFIX], registered_prefixes(Config)),
     ?assertEqual({ok, 200}, http_status(?V4_ADDRESS, Port, ?V4_PREFIX)).
 
+wildcard_over_an_explicit_address_is_rejected(Config) ->
+    Port = port(Config, tcp_port_http_wildcard),
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, ?MODULE, register_v6_wildcard, [Port]),
+    ?assertMatch({exit, {listener_address_in_use, _}},
+                 rabbit_ct_broker_helpers:rpc(
+                   Config, 0, ?MODULE, register_any_address, [Port])),
+    ?assertNot(child_exists(Config, {0, 0, 0, 0}, Port)),
+    ?assertMatch({exit, {listener_address_in_use, _}},
+                 rabbit_ct_broker_helpers:rpc(
+                   Config, 0, ?MODULE, register_any_address, [Port])),
+    ?assertNot(child_exists(Config, {0, 0, 0, 0}, Port)),
+    ?assertEqual([?V6_PREFIX], registered_prefixes(Config)),
+    ?assertEqual({ok, 200}, http_status(?V6_ADDRESS, Port, ?V6_PREFIX)).
+
+mixed_result_is_rolled_back(Config) ->
+    Port = port(Config, tcp_port_http_mixed),
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, ?MODULE, register_v4_as_string, [Port]),
+    ?assertEqual({error, {listener_address_in_use, [{port, Port}, {ip, "127.0.0.1"}]}},
+                 rabbit_ct_broker_helpers:rpc(
+                   Config, 0, ?MODULE, ensure_v4_and_v6, [Port])),
+    ?assertNot(child_exists(Config, ?V6_ADDRESS, Port)),
+    ?assertEqual({error, econnrefused}, http_status(?V6_ADDRESS, Port, ?V4_PREFIX)),
+    ?assert(child_exists(Config, ?V4_ADDRESS, Port)),
+    ?assertEqual([?V4_PREFIX], registered_prefixes(Config)),
+    ?assertEqual({ok, 200}, http_status(?V4_ADDRESS, Port, ?V4_PREFIX)).
+
 %% -------------------------------------------------------------------
 %% Helpers running on the broker node.
 %% -------------------------------------------------------------------
@@ -125,6 +159,25 @@ register_both(Port) ->
 
 register_v4_as_string(Port) ->
     register(?V4_CONTEXT, ?V4_PREFIX, [{port, Port}, {ip, "127.0.0.1"}]).
+
+register_v6_wildcard(Port) ->
+    register(?V6_CONTEXT, ?V6_PREFIX, [{port, Port}, {ip, "::"}]).
+
+register_any_address(Port) ->
+    try
+        register(?CONFLICT_CONTEXT, ?CONFLICT_PREFIX, [{port, Port}])
+    catch
+        exit:Reason -> {exit, Reason}
+    end.
+
+ensure_v4_and_v6(Port) ->
+    rabbit_web_dispatch_sup:ensure_listener(
+      [{port, Port}, {ip, "127.0.0.1"}],
+      [[{ip, ?V4_ADDRESS}, {port, Port}], [{ip, ?V6_ADDRESS}, {port, Port}]]).
+
+has_child(IPAddress, Port) ->
+    Id = {ranch_embedded_sup, rabbit_networking:ranch_ref(IPAddress, Port)},
+    lists:keymember(Id, 1, supervisor:which_children(rabbit_web_dispatch_sup)).
 
 register_v4_as_tuple(Port) ->
     try
@@ -157,6 +210,9 @@ port(Config, Key) ->
 
 registered_prefixes(Config) ->
     lists:sort(rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, own_prefixes, [])).
+
+child_exists(Config, IPAddress, Port) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, has_child, [IPAddress, Port]).
 
 %% `httpc` resolves a bracketed IPv6 URL through the resolver instead of taking
 %% it as a literal address, so the request is made directly.

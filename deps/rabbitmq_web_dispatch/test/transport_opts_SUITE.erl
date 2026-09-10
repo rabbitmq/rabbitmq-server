@@ -38,7 +38,8 @@ groups() ->
        configured_ip_is_the_only_ip,
        certificate_forms_are_recognised,
        missing_certificate_is_detected,
-       new_wins_over_existing,
+       only_new_is_new,
+       new_with_anything_else_is_mixed,
        existing_wins_over_ignore,
        all_ignored_is_ignore]},
      {property_tests, [],
@@ -136,9 +137,16 @@ missing_certificate_is_detected(_) ->
     ?assertNot(rabbit_web_dispatch_sup:has_certificate(
                  [{keyfile, "k"}, {cacertfile, "ca"}, {verify, verify_peer}])).
 
-new_wins_over_existing(_) ->
-    ?assertEqual(new, ?COMBINE([existing, new])),
-    ?assertEqual(new, ?COMBINE([new, ignore])).
+only_new_is_new(_) ->
+    ?assertEqual(new, ?COMBINE([new])),
+    ?assertEqual(new, ?COMBINE([new, new])).
+
+new_with_anything_else_is_mixed(_) ->
+    ?assertEqual(mixed, ?COMBINE([existing, new])),
+    ?assertEqual(mixed, ?COMBINE([new, existing])),
+    ?assertEqual(mixed, ?COMBINE([new, ignore])),
+    ?assertEqual(mixed, ?COMBINE([ignore, new])),
+    ?assertEqual(mixed, ?COMBINE([ignore, new, existing])).
 
 existing_wins_over_ignore(_) ->
     ?assertEqual(existing, ?COMBINE([ignore, existing])).

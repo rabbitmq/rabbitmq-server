@@ -139,7 +139,11 @@ add_context(Name, Listener, Selector, Handler, Link = {_, Desc}) ->
                                listener_started(Listener),
                                true;
                    existing -> true;
-                   ignore   -> false
+                   ignore   -> false;
+                   {error, {listener_address_in_use, _}} ->
+                       exit({listener_address_in_use, {Desc, Listener}});
+                   {error, {no_port_given, _}} ->
+                       exit({no_port_given, {Desc, Listener}})
                end,
     case Continue of
         true  -> case lookup_dispatch(Listener) of

@@ -22,7 +22,7 @@
 
 -ifdef(TEST).
 -export([build_ranch_transport_opts/1, combine_ensure_results/1,
-         transport_config/1, has_certificate/1]).
+         ensure_listener/2, transport_config/1, has_certificate/1]).
 -endif.
 
 %% supervisor callbacks
@@ -34,15 +34,32 @@ start_link() ->
     supervisor:start_link({local, ?SUP}, ?MODULE, []).
 
 -spec ensure_listener([{atom(), any()}]) ->
-    new | existing | ignore | {error, {no_port_given, [{atom(), any()}]}}.
+    new | existing | ignore |
+    {error, {no_port_given | listener_address_in_use, [{atom(), any()}]}}.
 ensure_listener(Listener) ->
     case proplists:get_value(port, Listener) of
         undefined ->
             {error, {no_port_given, Listener}};
         _ ->
-            combine_ensure_results(
-              [ensure_listener_on(Listener, Bound)
-               || Bound <- rabbit_networking:listener_per_ip_address(Listener)])
+            ensure_listener(Listener,
+                            rabbit_networking:listener_per_ip_address(Listener))
+    end.
+
+-spec ensure_listener([{atom(), any()}], [[{atom(), any()}], ...]) ->
+    new | existing | ignore |
+    {error, {listener_address_in_use, [{atom(), any()}]}}.
+ensure_listener(Listener, PerAddress) ->
+    Results = [ensure_listener_on(Listener, Bound) || Bound <- PerAddress],
+    case combine_ensure_results(Results) of
+        mixed ->
+            _ = [stop_listener_on(Bound)
+                 || {new, Bound} <- lists:zip(Results, PerAddress)],
+            case combine_ensure_results([R || R <- Results, R =/= new]) of
+                existing -> {error, {listener_address_in_use, Listener}};
+                ignore   -> ignore
+            end;
+        Result ->
+            Result
     end.
 
 %% `Listener` is passed to Cowboy unchanged because the registry's
@@ -73,13 +90,15 @@ ensure_listener_on(Listener, Bound) ->
         {error, {E, _}}               -> check_error(Bound, E)
     end.
 
-%% The caller only sets up the dispatch table on `new`, so it has to win.
--spec combine_ensure_results([new | existing | ignore]) -> new | existing | ignore.
+-spec combine_ensure_results([new | existing | ignore]) ->
+    new | existing | ignore | mixed.
 combine_ensure_results(Results) ->
-    case {lists:member(new, Results), lists:member(existing, Results)} of
-        {true,  _}     -> new;
-        {false, true}  -> existing;
-        {false, false} -> ignore
+    case {lists:member(new, Results), lists:member(existing, Results),
+          lists:member(ignore, Results)} of
+        {true,  false, false} -> new;
+        {true,  _,     _}     -> mixed;
+        {false, true,  _}     -> existing;
+        {false, false, _}     -> ignore
     end.
 
 -spec stop_listener([{atom(), any()}]) -> ok.
