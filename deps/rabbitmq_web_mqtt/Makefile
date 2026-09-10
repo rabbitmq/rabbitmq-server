@@ -27,12 +27,7 @@ PLT_APPS += rabbitmq_cli $(ELIXIR_ERL_EBIN) cowlib ssl
 # See rabbitmq-components.mk.
 BUILD_DEPS += ranch
 
-<<<<<<< HEAD
-dep_emqtt = git https://github.com/emqx/emqtt.git 1.14.6
-=======
-dep_gun = hex 2.3.0
 dep_emqtt = git https://github.com/emqx/emqtt.git 1.16.1
->>>>>>> 1029e8c (Update emqtt test dep to 1.16.1)
 
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
