@@ -25,7 +25,8 @@ groups() ->
                                    default_restrictions,
                                    path_prefix_test,
                                    regex_dos_test,
-                                   has_json_extension_test
+                                   has_json_extension_test,
+                                   sort_list_test
                                   ]},
      {sequential_tests, [], [
                               referrer_policy_header_set_when_configured,
@@ -183,3 +184,19 @@ fake_req() ->
         scheme       => <<"http">>,
         port         => 15672
     }.
+
+sort_list_test(_Config) ->
+    %% Duplicate keys in proplists (issue #11886)
+    Item1 = [{name, <<"b">>}, {consumers, 1}, {consumers, 10}],
+    Item2 = [{name, <<"a">>}, {consumers, 2}, {consumers, 20}],
+    ?assertEqual([Item1, Item2], rabbit_mgmt_util:sort_list([Item1, Item2], ["consumers"])),
+    %% First occurrence precedence matches JSON serialization
+    Item3 = [{name, <<"c">>}, {consumers, 0}, {consumers, 99}],
+    ?assertEqual([Item3, Item1, Item2], rabbit_mgmt_util:sort_list([Item1, Item2, Item3], ["consumers"])),
+    %% Dotted traversal into scalar values
+    ItemScalar = [{name, <<"d">>}, {messages, 10}],
+    ?assertEqual([ItemScalar], rabbit_mgmt_util:sort_list([ItemScalar], ["messages.rate"])),
+    %% Dotted traversal into lists of non-2-tuples
+    ItemList = [{name, <<"e">>}, {tags, [<<"tag1">>, <<"tag2">>]}],
+    ?assertEqual([ItemList], rabbit_mgmt_util:sort_list([ItemList], ["tags.foo"])),
+    ok.
