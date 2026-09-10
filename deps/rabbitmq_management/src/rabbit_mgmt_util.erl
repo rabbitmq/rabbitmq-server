@@ -663,10 +663,14 @@ get_dotted_value0([Key | Keys], Item) ->
 pget_bin(Key, Map, Default) when is_map(Map) ->
     maps:get(Key, Map, Default);
 pget_bin(Key, List, Default) when is_list(List) ->
-    case lists:partition(fun ({K, _V}) -> a2b(K) =:= Key end, List) of
-        {[{_K, V}], _} -> V;
-        {[],        _} -> Default
-    end.
+    case lists:search(fun ({K, _V}) -> a2b(K) =:= Key;
+                          (_)       -> false
+                      end, List) of
+        {value, {_K, V}} -> V;
+        false            -> Default
+    end;
+pget_bin(_Key, _Other, Default) ->
+    Default.
 maybe_pagination(Item, false, ReqData) ->
     extract_column_items(Item, columns(ReqData));
 maybe_pagination([{items, Item} | T], true, ReqData) ->
