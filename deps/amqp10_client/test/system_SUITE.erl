@@ -55,7 +55,9 @@ groups() ->
                  open_refused,
                  attach_refused,
                  incoming_heartbeat,
-                 multi_transfer_without_delivery_id
+                 multi_transfer_without_delivery_id,
+                 frame_size_too_small_rejected,
+                 max_frame_size_exceeded_rejected
                 ]}
     ].
 
@@ -554,13 +556,13 @@ split_transfer(Config) ->
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
     Conf = #{address => Hostname,
              port => Port,
-             max_frame_size => 512,
+             max_frame_size => 1024,
              sasl => ?config(sasl, Config)},
     {ok, Connection} = amqp10_client:open_connection(Conf),
     {ok, Session} = amqp10_client:begin_session(Connection),
     QName = <<"test">>,
     Address = declare_queue(Config, QName),
-    Data = list_to_binary(string:chars(64, 1000)),
+    Data = list_to_binary(string:chars(64, 2000)),
     {ok, Sender} = amqp10_client:attach_sender_link_sync(Session,
                                                          <<"data-sender">>,
                                                          Address),
@@ -960,6 +962,61 @@ multi_transfer_without_delivery_id(Config) ->
     ok = amqp10_client:end_session(Session),
     ok = amqp10_client:close_connection(Connection),
     ok.
+
+frame_size_too_small_rejected(Config) ->
+    Hostname = ?config(mock_host, Config),
+    Port = ?config(mock_port, Config),
+
+    %% Create a malformed frame where Length (8) is less than DOff * 4 (12)
+    MalformedStep = fun(Sock) ->
+        ct:pal("Sending malformed frame: Length=8, DOff=3"),
+        gen_tcp:send(Sock, <<8:32/unsigned, 3:8/unsigned, 0:8/unsigned, 0:16/unsigned>>)
+    end,
+
+    Steps = [fun mock_server:recv_amqp_header_step/1,
+             fun mock_server:send_amqp_header_step/1,
+             MalformedStep],
+
+    ok = mock_server:set_steps(?config(mock_server, Config), Steps),
+
+    Cfg = #{address => Hostname, port => Port, sasl => none, notify => self()},
+    {ok, Connection} = amqp10_client:open_connection(Cfg),
+
+    %% The reader catches the bad offset math, crashes, and causes the connection to tear down
+    receive
+        {amqp10_event, {connection, Connection, {closed, reader_down}}} ->
+            ok
+    after ?TIMEOUT ->
+        exit(frame_size_too_small_assert_failed)
+    end.
+
+
+max_frame_size_exceeded_rejected(Config) ->
+    Hostname = ?config(mock_host, Config),
+    Port = ?config(mock_port, Config),
+
+    %% Create a malformed frame where Length (4 GiB) exceeds the 1MB default max_frame_size
+    MalformedStep = fun(Sock) ->
+        ct:pal("Sending malformed frame: Length=0xFFFFFFFF, DOff=2"),
+        gen_tcp:send(Sock, <<16#FFFFFFFF:32/unsigned, 2:8/unsigned, 0:8/unsigned, 0:16/unsigned>>)
+    end,
+
+    Steps = [fun mock_server:recv_amqp_header_step/1,
+             fun mock_server:send_amqp_header_step/1,
+             MalformedStep],
+
+    ok = mock_server:set_steps(?config(mock_server, Config), Steps),
+
+    Cfg = #{address => Hostname, port => Port, sasl => none, notify => self()},
+    {ok, Connection} = amqp10_client:open_connection(Cfg),
+
+    %% The reader catches the massive frame size and fails
+    receive
+        {amqp10_event, {connection, Connection, {closed, reader_down}}} ->
+            ok
+    after ?TIMEOUT ->
+        exit(max_frame_size_exceeded_assert_failed)
+    end.
 
 outgoing_heartbeat(Config) ->
     Hostname = ?config(rmq_hostname, Config),

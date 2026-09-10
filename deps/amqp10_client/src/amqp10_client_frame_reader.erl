@@ -242,12 +242,28 @@ handle_input(expecting_frame_header,
 
 handle_input(expecting_frame_header,
              <<Length:32/unsigned, DOff:8/unsigned, Type/unsigned,
-               Channel:16/unsigned, Rest/binary>>, State)
+               Channel:16/unsigned, Rest/binary>>,
+             #state{connection_config = ConnConfig} = State)
   when DOff >= 2 andalso (Type =:= 0 orelse Type =:= 1) ->
-    AFS = #frame_state{frame_length = Length, channel = Channel,
-                       type = frame_type(Type), data_offset = DOff},
-    handle_input(expecting_extended_frame_header, Rest,
-                 State#state{frame_state = AFS});
+    %% Extract max_frame_size, falling back to the safe 1 MB default
+    MaxFrameSize = maps:get(max_frame_size, ConnConfig, 1_048_576),
+    case Length of
+        L when L > MaxFrameSize ->
+            ?LOG_WARNING("AMQP 1.0 framing error: frame length (~p) "
+                         "exceeds max_frame_size (~p)",
+                         [Length, MaxFrameSize]),
+            {error, {shutdown, framing_error}, State};
+        L when L < (DOff * 4) ->
+            ?LOG_WARNING("AMQP 1.0 framing error: frame length (~p) is "
+                         "smaller than header size (~p)",
+                         [Length, DOff * 4]),
+            {error, {shutdown, frame_size_too_small}, State};
+        _ValidLength ->
+            AFS = #frame_state{frame_length = Length, channel = Channel,
+                               type = frame_type(Type), data_offset = DOff},
+            handle_input(expecting_extended_frame_header, Rest,
+                         State#state{frame_state = AFS})
+    end;
 
 handle_input(expecting_frame_header, <<_:8/binary, _/binary>>, State) ->
     {error, invalid_protocol_header, State};
