@@ -28,9 +28,16 @@
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
+%% A failed registration exits the caller, not the registry: the registry
+%% owns the dispatch table for every plugin on the node, and losing it would
+%% break contexts that have nothing to do with the failed one.
+-spec add(atom(), [{atom(), any()}], fun(), any(), {string(), string()}) -> ok.
 add(Name, Listener, Selector, Handler, Link) ->
-    gen_server:call(?MODULE, {add, Name, Listener, Selector, Handler, Link},
-                    ?GEN_SERVER_CALL_TIMEOUT).
+    case gen_server:call(?MODULE, {add, Name, Listener, Selector, Handler, Link},
+                         ?GEN_SERVER_CALL_TIMEOUT) of
+        ok              -> ok;
+        {error, Reason} -> exit(Reason)
+    end.
 
 remove(Name) ->
     gen_server:call(?MODULE, {remove, Name}, ?GEN_SERVER_CALL_TIMEOUT).
@@ -65,38 +72,13 @@ init([]) ->
     ?ETS = ets:new(?ETS, [named_table, public]),
     {ok, undefined}.
 
-handle_call({add, Name, Listener, Selector, Handler, Link = {_, Desc}}, _From,
-            undefined) ->
-    Continue = case rabbit_web_dispatch_sup:ensure_listener(Listener) of
-                   new      -> set_dispatch(
-                                 Listener, [],
-                                 listing_fallback_handler(Listener)),
-                               listener_started(Listener),
-                               true;
-                   existing -> true;
-                   ignore   -> false
-               end,
-    case Continue of
-        true  -> case lookup_dispatch(Listener) of
-                     {ok, {Selectors, Fallback}} ->
-                         Selector2 = lists:keystore(
-                                       Name, 1, Selectors,
-                                       {Name, Selector, Handler, Link}),
-                         set_dispatch(Listener, Selector2, Fallback);
-                     {error, {different, Desc2, Listener2}} ->
-                         exit({incompatible_listeners,
-                               {Desc, Listener}, {Desc2, Listener2}});
-                     %% The socket is already open under a different registry
-                     %% key. Two listeners reach this by spelling one address
-                     %% differently, for example as a string and as a tuple, or
-                     %% by one of them using the wildcard address the other one
-                     %% resolved to.
-                     {error, {no_record_for_listener, _}} ->
-                         exit({listener_address_in_use, {Desc, Listener}})
-                 end;
-        false -> ok
-    end,
-    {reply, ok, undefined};
+handle_call({add, Name, Listener, Selector, Handler, Link}, _From, undefined) ->
+    Reply = try
+                add_context(Name, Listener, Selector, Handler, Link)
+            catch
+                exit:Reason -> {error, Reason}
+            end,
+    {reply, Reply, undefined};
 
 handle_call({remove, Name}, _From,
             undefined) ->
@@ -146,6 +128,38 @@ code_change(_, State, _) ->
 %%---------------------------------------------------------------------------
 
 %% Internal Methods
+
+add_context(Name, Listener, Selector, Handler, Link = {_, Desc}) ->
+    Continue = case rabbit_web_dispatch_sup:ensure_listener(Listener) of
+                   new      -> set_dispatch(
+                                 Listener, [],
+                                 listing_fallback_handler(Listener)),
+                               listener_started(Listener),
+                               true;
+                   existing -> true;
+                   ignore   -> false
+               end,
+    case Continue of
+        true  -> case lookup_dispatch(Listener) of
+                     {ok, {Selectors, Fallback}} ->
+                         Selector2 = lists:keystore(
+                                       Name, 1, Selectors,
+                                       {Name, Selector, Handler, Link}),
+                         set_dispatch(Listener, Selector2, Fallback);
+                     {error, {different, Desc2, Listener2}} ->
+                         exit({incompatible_listeners,
+                               {Desc, Listener}, {Desc2, Listener2}});
+                     %% The socket is already open under a different registry
+                     %% key. Two listeners reach this by spelling one address
+                     %% differently, for example as a string and as a tuple, or
+                     %% by one of them using the wildcard address the other one
+                     %% resolved to.
+                     {error, {no_record_for_listener, _}} ->
+                         exit({listener_address_in_use, {Desc, Listener}})
+                 end;
+        false -> ok
+    end,
+    ok.
 
 listener_started(Listener) ->
     [rabbit_networking:tcp_listener_started(Protocol, Listener, IPAddress, Port)

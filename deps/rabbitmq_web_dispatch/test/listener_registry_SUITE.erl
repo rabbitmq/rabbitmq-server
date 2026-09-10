@@ -30,9 +30,6 @@ groups() ->
       {non_parallel_tests, [], [
                                 two_interfaces_on_one_port_serve_separately,
                                 unregistering_one_interface_leaves_the_other,
-                                %% Runs last: it stops the registry, which
-                                %% empties the dispatch table for the whole
-                                %% node.
                                 one_address_spelled_two_ways_is_rejected
                                ]}
     ].
@@ -101,9 +98,13 @@ one_address_spelled_two_ways_is_rejected(Config) ->
     Port = port(Config, tcp_port_http_conflict),
     ok = rabbit_ct_broker_helpers:rpc(
            Config, 0, ?MODULE, register_v4_as_string, [Port]),
-    ?assertMatch({exit, {{listener_address_in_use, _}, {gen_server, call, _}}},
+    ?assertMatch({exit, {listener_address_in_use, _}},
                  rabbit_ct_broker_helpers:rpc(
-                   Config, 0, ?MODULE, register_v4_as_tuple, [Port])).
+                   Config, 0, ?MODULE, register_v4_as_tuple, [Port])),
+    %% The registry survives a rejected registration, so the context that
+    %% claimed the address first keeps serving.
+    ?assertEqual([?V4_PREFIX], registered_prefixes(Config)),
+    ?assertEqual({ok, 200}, http_status(?V4_ADDRESS, Port, ?V4_PREFIX)).
 
 %% -------------------------------------------------------------------
 %% Helpers running on the broker node.
