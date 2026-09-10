@@ -24,7 +24,8 @@ groups() ->
                                 add_idempotence_test,
                                 log_source_address_test,
                                 log_authenticated_username_test,
-                                parse_ip_test
+                                parse_ip_test,
+                                remove_frees_the_port_test
                                ]}
     ].
 
@@ -87,6 +88,24 @@ add_idempotence_test1(Port) ->
     ?assertEqual(
        1, length([ok || {"/foo", _, _} <-
                             rabbit_web_dispatch_registry:list_all()])),
+    passed.
+
+remove_frees_the_port_test(Config) ->
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_http_extra),
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, remove_frees_the_port_test1, [Port + 2]).
+remove_frees_the_port_test1(Port) ->
+    F = fun(_Req) -> ok end,
+    L = {"/remove_me", "RemoveMe"},
+    Listener = [{port, Port}],
+    rabbit_web_dispatch_registry:add(remove_me, Listener, F, F, L),
+    rabbit_web_dispatch_registry:remove(remove_me),
+    ?assertEqual(
+       0, length([ok || {"/remove_me", _, _} <-
+                            rabbit_web_dispatch_registry:list_all()])),
+    %% Claiming the same port again only succeeds if every socket the first
+    %% registration opened was closed, however many addresses it bound.
+    rabbit_web_dispatch_registry:add(remove_me, Listener, F, F, L),
+    rabbit_web_dispatch_registry:remove(remove_me),
     passed.
 
 parse_ip_test(Config) ->

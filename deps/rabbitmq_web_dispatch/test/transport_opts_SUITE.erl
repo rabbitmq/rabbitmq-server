@@ -15,6 +15,8 @@
 
 -define(BUILD(Opts),
         rabbit_web_dispatch_sup:build_ranch_transport_opts(Opts)).
+-define(COMBINE(Results),
+        rabbit_web_dispatch_sup:combine_ensure_results(Results)).
 -define(PROP_ITERATIONS, 500).
 
 all() ->
@@ -32,7 +34,10 @@ groups() ->
        infinity_value_is_preserved,
        socket_opts_preserved_alongside_ranch_opt,
        bare_atoms_stay_in_socket_opts,
-       ranch_opt_value_passed_through_verbatim]},
+       ranch_opt_value_passed_through_verbatim,
+       new_wins_over_existing,
+       existing_wins_over_ignore,
+       all_ignored_is_ignore]},
      {property_tests, [],
       [prop_legacy_form_is_passthrough,
        prop_map_form_when_any_ranch_opt,
@@ -112,6 +117,16 @@ ranch_opt_value_passed_through_verbatim(_) ->
     Sentinel = {tagged, 42},
     Result = ?BUILD([{max_connections, Sentinel}]),
     ?assertMatch(#{max_connections := Sentinel}, Result).
+
+new_wins_over_existing(_) ->
+    ?assertEqual(new, ?COMBINE([existing, new])),
+    ?assertEqual(new, ?COMBINE([new, ignore])).
+
+existing_wins_over_ignore(_) ->
+    ?assertEqual(existing, ?COMBINE([ignore, existing])).
+
+all_ignored_is_ignore(_) ->
+    ?assertEqual(ignore, ?COMBINE([ignore, ignore])).
 
 %%--------------------------------------------------------------------
 %% Property cases
