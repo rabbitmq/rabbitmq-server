@@ -78,8 +78,7 @@ run([Name], #{node := Node, vhost := VHost, force := Force}) ->
                                         [Node, VHost]),
             case rabbit_shovel_status:find_matching_shovel(VHost, Name, Xs) of
                 undefined ->
-                    try_force_removing(Node, VHost, Name, ActingUser),
-                    {error, rabbit_data_coercion:to_binary(ErrMsg)};
+                    delete_shovel(ErrMsg, VHost, Name, ActingUser, Node, Node);
                 {{_Name, _VHost}, _Type, {_State, Opts}, _Metrics, _Timestamp} ->
                     HostingNode = proplists:get_value(node, Opts, Node),
                     delete_shovel(ErrMsg, VHost, Name, ActingUser, HostingNode, Node);
