@@ -962,12 +962,6 @@
 #
 # management.tcp.port = 15672
 # management.tcp.ip   = 0.0.0.0
-
-## Additional HTTP listeners. They share the settings below
-## with the one configured above.
-##
-# management.listeners.tcp.1 = 127.0.0.1:15680
-# management.listeners.tcp.2 = 15681
 #
 # management.tcp.shutdown_timeout   = 7000
 # management.tcp.max_keepalive      = 120
@@ -975,6 +969,16 @@
 # management.tcp.inactivity_timeout = 120
 # management.tcp.request_timeout    = 120
 # management.tcp.compress           = true
+
+## Additional HTTP listeners. Each one uses the same `management.tcp.*`
+## settings as the primary HTTP listener, except for the port and the
+## interface, which is what these configure.
+##
+## If only a port is provided, the listener will
+## listen on all interfaces.
+##
+# management.listeners.tcp.1 = 127.0.0.1:15680
+# management.listeners.tcp.2 = 15681
 
 ## HTTPS listener settings
 ##
@@ -984,16 +988,16 @@
 ## * https://www.rabbitmq.com/docs/ssl
 ##
 # management.ssl.port       = 15671
-
-## Additional HTTPS listeners. They share the TLS settings below
-## with the one configured above.
-##
-# management.listeners.ssl.1 = 127.0.0.1:15682
-# management.listeners.ssl.2 = 15683
-#
 # management.ssl.cacertfile = /path/to/ca_certificate.pem
 # management.ssl.certfile   = /path/to/server_certificate.pem
 # management.ssl.keyfile    = /path/to/server_key.pem
+
+## Additional HTTPS listeners. Each one uses the same `management.ssl.*`
+## settings as the primary HTTP listener, except for the port and the
+## interface, which is what these configure.
+##
+# management.listeners.ssl.1 = 127.0.0.1:15682
+# management.listeners.ssl.2 = 15683
 
 ## More TLS options
 # management.ssl.honor_cipher_order   = true
@@ -1054,6 +1058,15 @@
 
 ## Displays or hides an HTTP header in HTTP API responses.
 # management.http.hide_allow_header = false
+
+#
+# Prometheus
+#
+
+# prometheus.listeners.tcp.1 = 127.0.0.1:15693
+# prometheus.listeners.tcp.2 = 15694
+# prometheus.listeners.ssl.1 = 127.0.0.1:15695
+# prometheus.listeners.ssl.2 = 15696
 
 #
 # Shovel
