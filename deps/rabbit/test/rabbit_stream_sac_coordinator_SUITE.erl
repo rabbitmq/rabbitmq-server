@@ -1939,6 +1939,28 @@ state_enter_test(_) ->
     stop_node(N2Pid),
     ok.
 
+%% a disconnected consumer that has been disconnected for longer than 10s
+%% but less than the disconnected timeout used to crash the case
+%% expression in state_enter/2 with a case_clause error
+state_enter_disconnected_timer_between_bounds_test(_) ->
+    N0 = node(),
+    P0 = new_process(N0),
+    P1 = new_process(N0),
+
+    Id0 = group_id(<<"sO">>),
+
+    Elapsed = 30_000,
+    DisconnectedTs = erlang:system_time(millisecond) - Elapsed,
+    DisconnectedCsr = (csr(P1, {disconnected, waiting}))#consumer{ts = DisconnectedTs},
+
+    [MonNode, MonP0, MonP1, {timer, {sac, node_disconnected, #{connection_pid := P1}}, Time}] =
+        state_enter_leader(#{Id0 => grp([csr(P0), DisconnectedCsr])}),
+
+    ?assertEqual(mon_node_eff(N0), MonNode),
+    ?assertEqual(mon_proc_eff([P0, P1]), [MonP0, MonP1]),
+    ?assert(Time >= 10_000 andalso Time =< 60_000),
+    ok.
+
 mon_node_eff(Nodes) when is_list(Nodes) ->
     lists:sort([mon_node_eff(N) || N <- Nodes]);
 mon_node_eff(N) ->
