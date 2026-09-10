@@ -16,7 +16,8 @@ suite() ->
 
 all() ->
     [unauthenticated_connection_is_closed,
-     authenticated_connection_survives_timeout].
+     authenticated_connection_survives_timeout,
+     failed_login_connection_is_closed_by_timeout].
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
@@ -64,6 +65,17 @@ authenticated_connection_survives_timeout(Config) ->
     timer:sleep(600),
     ok = raw_send(WS, "DISCONNECT", []),
     {close, {1000, _}} = rfc6455_client:recv(WS),
+    ok.
+
+%% Bad credentials must not count as authenticated: the timeout still fires.
+failed_login_connection_is_closed_by_timeout(Config) ->
+    PortStr = rabbit_ws_test_util:get_web_stomp_port_str(Config),
+    WS = rfc6455_client:new("ws://127.0.0.1:" ++ PortStr ++ "/ws", self()),
+    {ok, _} = rfc6455_client:open(WS),
+    ok = raw_send(WS, "CONNECT",
+                  [{"login", "guest"}, {"passcode", "wrong-passcode"}]),
+    {ok, _ErrorFrame} = rfc6455_client:recv(WS),
+    {close, _} = rfc6455_client:recv(WS, 5000),
     ok.
 
 raw_send(WS, Command, Headers) ->

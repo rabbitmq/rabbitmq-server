@@ -333,12 +333,14 @@ websocket_info(increase_max_frame_size, State) ->
         rabbitmq_stomp, max_frame_size, ?DEFAULT_MAX_FRAME_SIZE) + 4096,
     {[{set_options, #{max_frame_size => MaxFrameSize}}], State};
 
-websocket_info(login_timeout, State = #state{connection = C})
-  when C =:= none; C =:= undefined ->
-    ?LOG_ERROR("Web STOMP: closing connection (login timeout)"),
-    stop(State);
-websocket_info(login_timeout, State) ->
-    {ok, State};
+websocket_info(login_timeout, State = #state{proc_state = ProcState}) ->
+    case rabbit_stomp_processor:info(user, ProcState) of
+        undefined ->
+            ?LOG_ERROR("Web STOMP: closing connection (login timeout)"),
+            stop(State);
+        _ ->
+            {ok, State}
+    end;
 
 websocket_info(Msg, State) ->
     ?LOG_INFO("Web STOMP: unexpected message ~tp",
