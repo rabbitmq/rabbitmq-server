@@ -38,6 +38,10 @@
 
 
 -define(CONFIG_MODULE, rabbit_peer_discovery_config).
+
+%% HTTP header names that carry credentials (e.g. Consul's ACL token)
+%% must never appear in logs, even at debug level.
+-define(SENSITIVE_HEADERS, ["authorization", "x-consul-token"]).
 -define(CONFIG_KEY, proxy).
 
 -define(CONFIG_MAPPING,
@@ -262,7 +266,7 @@ put(Scheme, Host, Port, Path, Args, Headers, Body) ->
   Body :: string() | binary() | tuple().
 put(Scheme, Host, Port, Path, Args, Headers, HttpOpts, Body) ->
   URL = build_uri(Scheme, Host, Port, Path, Args),
-  ?LOG_DEBUG("PUT ~ts [~tp] [~tp]", [URL, Headers, Body], #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
+  ?LOG_DEBUG("PUT ~ts [~tp] [~tp]", [URL, redact_headers(Headers), Body], #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
   HttpOpts1 = ensure_timeout(HttpOpts),
   Response = httpc:request(put, {URL, Headers, ?CONTENT_URLENCODED, Body}, HttpOpts1, []),
   ?LOG_DEBUG("Response: [~tp]", [Response], #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
@@ -370,6 +374,23 @@ maybe_set_proxy(Option, ProxyUrl, ProxyExclusions) ->
         [Option, {Host, Port}, ProxyExclusions],
         #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
       httpc:set_option(Option, {{Host, Port}, ProxyExclusions})
+  end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc Redact the values of any sensitive headers (e.g. X-Consul-Token)
+%% before they are logged.
+%% @end
+%%--------------------------------------------------------------------
+-spec redact_headers(Headers :: list()) -> list().
+redact_headers(Headers) ->
+  [{Name, redact_header_value(Name, Value)} || {Name, Value} <- Headers].
+
+-spec redact_header_value(Name :: string(), Value :: term()) -> term().
+redact_header_value(Name, Value) ->
+  case lists:member(string:lowercase(Name), ?SENSITIVE_HEADERS) of
+    true  -> "...";
+    false -> Value
   end.
 
 %%--------------------------------------------------------------------

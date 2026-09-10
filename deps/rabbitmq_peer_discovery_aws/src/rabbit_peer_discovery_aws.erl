@@ -99,7 +99,6 @@ init() ->
 list_nodes() ->
     M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
     {ok, _} = application:ensure_all_started(rabbitmq_aws),
-    ?LOG_DEBUG("Will use AWS access key of '~ts'", [get_config_key(aws_access_key, M)]),
     ok = maybe_set_region(get_config_key(aws_ec2_region, M)),
     ok = maybe_set_credentials(get_config_key(aws_access_key, M),
                                get_config_key(aws_secret_key, M)),
@@ -179,9 +178,7 @@ get_config_key(Key, Map) ->
 maybe_set_credentials("undefined", _) -> ok;
 maybe_set_credentials(_, "undefined") -> ok;
 maybe_set_credentials(AccessKey, SecretKey) ->
-    ?LOG_DEBUG("Setting AWS credentials, access key: '~ts'", [AccessKey]),
     rabbitmq_aws:set_credentials(AccessKey, SecretKey).
-
 
 -spec maybe_set_region(Region :: string()) -> ok.
 %% @private
