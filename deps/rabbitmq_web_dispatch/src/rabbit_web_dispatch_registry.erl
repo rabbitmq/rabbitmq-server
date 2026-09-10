@@ -35,8 +35,10 @@ start_link() ->
 add(Name, Listener, Selector, Handler, Link) ->
     case gen_server:call(?MODULE, {add, Name, Listener, Selector, Handler, Link},
                          ?GEN_SERVER_CALL_TIMEOUT) of
-        ok              -> ok;
-        {error, Reason} -> exit(Reason)
+        ok ->
+            ok;
+        {error, Class, Reason, Stacktrace} ->
+            erlang:raise(Class, Reason, Stacktrace)
     end.
 
 remove(Name) ->
@@ -76,7 +78,7 @@ handle_call({add, Name, Listener, Selector, Handler, Link}, _From, undefined) ->
     Reply = try
                 add_context(Name, Listener, Selector, Handler, Link)
             catch
-                exit:Reason -> {error, Reason}
+                Class:Reason:Stacktrace -> {error, Class, Reason, Stacktrace}
             end,
     {reply, Reply, undefined};
 
