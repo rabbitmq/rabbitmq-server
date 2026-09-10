@@ -962,6 +962,12 @@
 #
 # management.tcp.port = 15672
 # management.tcp.ip   = 0.0.0.0
+
+## Additional HTTP listeners. They share the settings below
+## with the one configured above.
+##
+# management.listeners.tcp.1 = 127.0.0.1:15680
+# management.listeners.tcp.2 = 15681
 #
 # management.tcp.shutdown_timeout   = 7000
 # management.tcp.max_keepalive      = 120
@@ -978,6 +984,13 @@
 ## * https://www.rabbitmq.com/docs/ssl
 ##
 # management.ssl.port       = 15671
+
+## Additional HTTPS listeners. They share the TLS settings below
+## with the one configured above.
+##
+# management.listeners.ssl.1 = 127.0.0.1:15682
+# management.listeners.ssl.2 = 15683
+#
 # management.ssl.cacertfile = /path/to/ca_certificate.pem
 # management.ssl.certfile   = /path/to/server_certificate.pem
 # management.ssl.keyfile    = /path/to/server_key.pem

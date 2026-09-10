@@ -11,7 +11,7 @@
 -export([start/2, stop/1, reset_dispatcher/1]).
 
 -ifdef(TEST).
--export([get_listeners_config/0]).
+-export([get_listeners_config/0, listeners_with_contexts/0]).
 -endif.
 
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -19,6 +19,7 @@
 
 -define(TCP_CONTEXT, rabbitmq_management_tcp).
 -define(TLS_CONTEXT, rabbitmq_management_tls).
+-define(CONTEXTS_KEY, {?MODULE, contexts}).
 -define(DEFAULT_PORT, 15672).
 -define(DEFAULT_TLS_PORT, 15671).
 
@@ -58,9 +59,29 @@ reset_dispatcher(IgnoreApps) ->
 
 -spec start_configured_listeners([atom()], boolean()) -> ok.
 start_configured_listeners(IgnoreApps, NeedLogStartup) ->
-    [start_listener(Listener, IgnoreApps, NeedLogStartup)
-      || Listener <- get_listeners_config()],
+    Listeners = listeners_with_contexts(),
+    persistent_term:put(?CONTEXTS_KEY, [Context || {Context, _} <- Listeners]),
+    [start_listener(Context, Listener, IgnoreApps, NeedLogStartup)
+      || {Context, Listener} <- Listeners],
     ok.
+
+-spec listeners_with_contexts() -> [{atom(), [{atom(), any()}]}].
+listeners_with_contexts() ->
+    {Named, _} = lists:mapfoldl(
+        fun(Listener, Seen) ->
+            Base = case is_tls(Listener) of
+                       true  -> ?TLS_CONTEXT;
+                       false -> ?TCP_CONTEXT
+                   end,
+            case lists:member(Base, Seen) of
+                false -> {{Base, Listener}, [Base | Seen]};
+                true  -> {{suffixed_context(Base, Listener), Listener}, Seen}
+            end
+        end, [], get_listeners_config()),
+    Named.
+
+suffixed_context(Base, Listener) ->
+    list_to_atom(atom_to_list(Base) ++ "_" ++ integer_to_list(port(Listener))).
 
 get_listeners_config() ->
     Listeners = case {has_configured_legacy_listener(),
@@ -94,7 +115,25 @@ get_listeners_config() ->
             [get_tcp_listener(),
              get_tls_listener()]
     end,
-    maybe_disable_sendfile(Listeners).
+    maybe_disable_sendfile(Listeners ++ extra_listeners()).
+
+extra_listeners() ->
+    TcpConfig = application:get_env(rabbitmq_management, tcp_config, []),
+    [tcp_listener(with_address(Address, TcpConfig))
+     || Address <- application:get_env(rabbitmq_management, tcp_listeners, [])] ++
+    [extra_tls_listener(Address)
+     || Address <- application:get_env(rabbitmq_management, ssl_listeners, [])].
+
+extra_tls_listener(Address) ->
+    case application:get_env(rabbitmq_management, ssl_config) of
+        {ok, SslConfig} -> tls_listener(with_address(Address, SslConfig));
+        undefined       -> [{ssl, true} | with_address(Address, [])]
+    end.
+
+with_address(Port, Config) when is_integer(Port) ->
+    lists:keystore(port, 1, lists:keydelete(ip, 1, Config), {port, Port});
+with_address({IP, Port}, Config) ->
+    lists:keystore(ip, 1, with_address(Port, Config), {ip, IP}).
 
 maybe_disable_sendfile(Listeners) ->
     DisableSendfile = [{sendfile, false}],
@@ -128,6 +167,9 @@ get_legacy_listener() ->
 
 get_tls_listener() ->
     {ok, Listener0} = application:get_env(rabbitmq_management, ssl_config),
+    tls_listener(Listener0).
+
+tls_listener(Listener0) ->
     {ok, Listener1} = ensure_port(tls, Listener0),
     Listener2 = rabbit_ssl:wrap_password_opt(Listener1),
     Port = proplists:get_value(port, Listener1),
@@ -149,14 +191,16 @@ get_tls_listener() ->
      end.
 
 get_tcp_listener() ->
-    Listener0 = application:get_env(rabbitmq_management, tcp_config, []),
+    tcp_listener(application:get_env(rabbitmq_management, tcp_config, [])).
+
+tcp_listener(Listener0) ->
     {ok, Listener1} = ensure_port(tcp, Listener0),
     Listener1.
 
-start_listener(Listener, IgnoreApps, NeedLogStartup) ->
-    {Type, ContextName} = case is_tls(Listener) of
-        true  -> {tls, ?TLS_CONTEXT};
-        false -> {tcp, ?TCP_CONTEXT}
+start_listener(ContextName, Listener, IgnoreApps, NeedLogStartup) ->
+    Type = case is_tls(Listener) of
+        true  -> tls;
+        false -> tcp
     end,
     {ok, _} = register_context(ContextName, Listener, IgnoreApps),
     case NeedLogStartup of
@@ -172,8 +216,9 @@ register_context(ContextName, Listener, IgnoreApps) ->
       Dispatcher, "RabbitMQ Management").
 
 unregister_all_contexts() ->
-    rabbit_web_dispatch:unregister_context(?TCP_CONTEXT),
-    rabbit_web_dispatch:unregister_context(?TLS_CONTEXT).
+    Contexts = persistent_term:get(?CONTEXTS_KEY, [?TCP_CONTEXT, ?TLS_CONTEXT]),
+    _ = [rabbit_web_dispatch:unregister_context(Context) || Context <- Contexts],
+    ok.
 
 ensure_port(tls, Listener) ->
     do_ensure_port(?DEFAULT_TLS_PORT, Listener);
