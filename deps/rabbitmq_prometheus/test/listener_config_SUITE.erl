@@ -27,7 +27,8 @@ groups() ->
         extra_tcp_listeners_without_tcp_config,
         extra_tls_listeners,
         extra_tls_listeners_without_ssl_config,
-        first_listener_of_each_family_keeps_its_context
+        first_listener_of_each_family_keeps_its_context,
+        same_port_on_two_interfaces_gets_distinct_contexts
         ]}].
 
 init_per_suite(Config) ->
@@ -160,8 +161,16 @@ first_listener_of_each_family_keeps_its_context(_Config) ->
     application:set_env(rabbitmq_prometheus, ssl_listeners, [15671]),
     ?assertEqual([rabbitmq_prometheus_tcp,
                   rabbitmq_prometheus_tls,
-                  rabbitmq_prometheus_tcp_15680,
-                  rabbitmq_prometheus_tls_15671],
+                  rabbitmq_prometheus_tcp_1,
+                  rabbitmq_prometheus_tls_1],
+                 [Context || {Context, _} <- rabbit_prometheus_app:listeners_with_contexts()]).
+
+same_port_on_two_interfaces_gets_distinct_contexts(_Config) ->
+    application:set_env(rabbitmq_prometheus, tcp_listeners,
+                        [{"127.0.0.1", 15680}, {"::1", 15680}]),
+    ?assertEqual([rabbitmq_prometheus_tcp,
+                  rabbitmq_prometheus_tcp_1,
+                  rabbitmq_prometheus_tcp_2],
                  [Context || {Context, _} <- rabbit_prometheus_app:listeners_with_contexts()]).
 
 get_single_listener_config() ->

@@ -36,6 +36,8 @@ groups() ->
        bare_atoms_stay_in_socket_opts,
        ranch_opt_value_passed_through_verbatim,
        configured_ip_is_the_only_ip,
+       certificate_forms_are_recognised,
+       missing_certificate_is_detected,
        new_wins_over_existing,
        existing_wins_over_ignore,
        all_ignored_is_ignore]},
@@ -124,6 +126,15 @@ configured_ip_is_the_only_ip(_) ->
                 [{port, 15671}, {ip, {127, 0, 0, 1}}, {certfile, "c"}, {ip, {0, 0, 0, 0, 0, 0, 0, 0}}]),
     ?assertEqual([{ip, {127, 0, 0, 1}}], proplists:lookup_all(ip, Options)),
     ?assertEqual("c", proplists:get_value(certfile, Options)).
+
+certificate_forms_are_recognised(_) ->
+    [?assert(rabbit_web_dispatch_sup:has_certificate([{Key, ignored}]))
+     || Key <- [cert, certfile, certs_keys, sni_fun, sni_hosts]].
+
+missing_certificate_is_detected(_) ->
+    ?assertNot(rabbit_web_dispatch_sup:has_certificate([])),
+    ?assertNot(rabbit_web_dispatch_sup:has_certificate(
+                 [{keyfile, "k"}, {cacertfile, "ca"}, {verify, verify_peer}])).
 
 new_wins_over_existing(_) ->
     ?assertEqual(new, ?COMBINE([existing, new])),

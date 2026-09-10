@@ -85,7 +85,14 @@ handle_call({add, Name, Listener, Selector, Handler, Link = {_, Desc}}, _From,
                          set_dispatch(Listener, Selector2, Fallback);
                      {error, {different, Desc2, Listener2}} ->
                          exit({incompatible_listeners,
-                               {Desc, Listener}, {Desc2, Listener2}})
+                               {Desc, Listener}, {Desc2, Listener2}});
+                     %% The socket is already open under a different registry
+                     %% key. Two listeners reach this by spelling one address
+                     %% differently, for example as a string and as a tuple, or
+                     %% by one of them using the wildcard address the other one
+                     %% resolved to.
+                     {error, {no_record_for_listener, _}} ->
+                         exit({listener_address_in_use, {Desc, Listener}})
                  end;
         false -> ok
     end,
@@ -164,8 +171,15 @@ listener_info(Listener) ->
     [{Protocol, IPAddress, Port}
      || IPAddress <- rabbit_networking:listener_ip_addresses(Listener)].
 
+%% A listener is identified by the address it was configured with, not by its
+%% port alone: two listeners can share a port on different interfaces.
+-spec listener_key([{atom(), any()}]) ->
+    {any(), rabbit_networking:ip_port() | undefined}.
+listener_key(Listener) ->
+    {pget(ip, Listener), pget(port, Listener)}.
+
 lookup_dispatch(Lsnr) ->
-    case ets:lookup(?ETS, pget(port, Lsnr)) of
+    case ets:lookup(?ETS, listener_key(Lsnr)) of
         [{_, Lsnr, S, F}]   -> {ok, {S, F}};
         [{_, Lsnr2, S, _F}] -> {error, {different, first_desc(S), Lsnr2}};
         []                  -> {error, {no_record_for_listener, Lsnr}}
@@ -174,7 +188,7 @@ lookup_dispatch(Lsnr) ->
 first_desc([{_N, _S, _H, {_, Desc}} | _]) -> Desc.
 
 set_dispatch(Listener, Selectors, Fallback) ->
-    ets:insert(?ETS, {pget(port, Listener), Listener, Selectors, Fallback}).
+    ets:insert(?ETS, {listener_key(Listener), Listener, Selectors, Fallback}).
 
 match_request([], _) ->
     not_found;

@@ -29,7 +29,8 @@ groups() ->
         extra_tls_listeners,
         extra_tls_listeners_without_ssl_config,
         first_listener_of_each_family_keeps_its_context,
-        legacy_and_tcp_listeners_get_distinct_contexts
+        legacy_and_tcp_listeners_get_distinct_contexts,
+        same_port_on_two_interfaces_gets_distinct_contexts
         ]}].
 
 init_per_suite(Config) ->
@@ -207,14 +208,22 @@ first_listener_of_each_family_keeps_its_context(_Config) ->
     application:set_env(rabbitmq_management, ssl_listeners, [15671]),
     ?assertEqual([rabbitmq_management_tcp,
                   rabbitmq_management_tls,
-                  rabbitmq_management_tcp_15680,
-                  rabbitmq_management_tls_15671],
+                  rabbitmq_management_tcp_1,
+                  rabbitmq_management_tls_1],
                  [Context || {Context, _} <- rabbit_mgmt_app:listeners_with_contexts()]).
 
 legacy_and_tcp_listeners_get_distinct_contexts(_Config) ->
     application:set_env(rabbitmq_management, listener, [{port, 997}]),
     application:set_env(rabbitmq_management, tcp_config, [{port, 998}]),
-    ?assertEqual([rabbitmq_management_tcp, rabbitmq_management_tcp_998],
+    ?assertEqual([rabbitmq_management_tcp, rabbitmq_management_tcp_1],
+                 [Context || {Context, _} <- rabbit_mgmt_app:listeners_with_contexts()]).
+
+same_port_on_two_interfaces_gets_distinct_contexts(_Config) ->
+    application:set_env(rabbitmq_management, tcp_listeners,
+                        [{"127.0.0.1", 15680}, {"::1", 15680}]),
+    ?assertEqual([rabbitmq_management_tcp,
+                  rabbitmq_management_tcp_1,
+                  rabbitmq_management_tcp_2],
                  [Context || {Context, _} <- rabbit_mgmt_app:listeners_with_contexts()]).
 
 get_single_listener_config() ->

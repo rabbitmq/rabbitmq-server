@@ -19,7 +19,7 @@
 
 -define(TCP_CONTEXT, rabbitmq_management_tcp).
 -define(TLS_CONTEXT, rabbitmq_management_tls).
--define(CONTEXTS_KEY, {?MODULE, contexts}).
+-define(CONTEXTS_KEY, active_listener_contexts).
 -define(DEFAULT_PORT, 15672).
 -define(DEFAULT_TLS_PORT, 15671).
 
@@ -60,7 +60,8 @@ reset_dispatcher(IgnoreApps) ->
 -spec start_configured_listeners([atom()], boolean()) -> ok.
 start_configured_listeners(IgnoreApps, NeedLogStartup) ->
     Listeners = listeners_with_contexts(),
-    persistent_term:put(?CONTEXTS_KEY, [Context || {Context, _} <- Listeners]),
+    ok = application:set_env(rabbitmq_management, ?CONTEXTS_KEY,
+                             [Context || {Context, _} <- Listeners]),
     [start_listener(Context, Listener, IgnoreApps, NeedLogStartup)
       || {Context, Listener} <- Listeners],
     ok.
@@ -73,15 +74,18 @@ listeners_with_contexts() ->
                        true  -> ?TLS_CONTEXT;
                        false -> ?TCP_CONTEXT
                    end,
-            case lists:member(Base, Seen) of
-                false -> {{Base, Listener}, [Base | Seen]};
-                true  -> {{suffixed_context(Base, Listener), Listener}, Seen}
-            end
-        end, [], get_listeners_config()),
+            N = maps:get(Base, Seen, 0),
+            {{context_name(Base, N), Listener}, Seen#{Base => N + 1}}
+        end, #{}, get_listeners_config()),
     Named.
 
-suffixed_context(Base, Listener) ->
-    list_to_atom(atom_to_list(Base) ++ "_" ++ integer_to_list(port(Listener))).
+%% Numbered rather than named after the port, because two listeners can share
+%% one port on different interfaces.
+-spec context_name(atom(), non_neg_integer()) -> atom().
+context_name(Base, 0) ->
+    Base;
+context_name(Base, N) ->
+    list_to_atom(atom_to_list(Base) ++ "_" ++ integer_to_list(N)).
 
 get_listeners_config() ->
     Listeners = case {has_configured_legacy_listener(),
@@ -210,7 +214,8 @@ register_context(ContextName, Listener, IgnoreApps) ->
       Dispatcher, "RabbitMQ Management").
 
 unregister_all_contexts() ->
-    Contexts = persistent_term:get(?CONTEXTS_KEY, [?TCP_CONTEXT, ?TLS_CONTEXT]),
+    Contexts = application:get_env(rabbitmq_management, ?CONTEXTS_KEY,
+                                   [?TCP_CONTEXT, ?TLS_CONTEXT]),
     _ = [rabbit_web_dispatch:unregister_context(Context) || Context <- Contexts],
     ok.
 

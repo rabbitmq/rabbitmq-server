@@ -22,7 +22,7 @@
 
 -ifdef(TEST).
 -export([build_ranch_transport_opts/1, combine_ensure_results/1,
-         transport_config/1]).
+         transport_config/1, has_certificate/1]).
 -endif.
 
 %% supervisor callbacks
@@ -88,11 +88,15 @@ stop_listener(Listener) ->
          || Bound <- rabbit_networking:listener_per_ip_address(Listener)],
     ok.
 
+%% An address that `ensure_listener_on/2` skipped with `ignore` has no child to
+%% terminate, and that is not a failure.
 -spec stop_listener_on([{atom(), any()}]) -> ok.
 stop_listener_on(Listener) ->
-    Name = rabbit_networking:ranch_ref(Listener),
-    ok = supervisor:terminate_child(?SUP, {ranch_embedded_sup, Name}),
-    ok = supervisor:delete_child(?SUP, {ranch_embedded_sup, Name}).
+    Id = {ranch_embedded_sup, rabbit_networking:ranch_ref(Listener)},
+    case supervisor:terminate_child(?SUP, Id) of
+        ok                 -> ok = supervisor:delete_child(?SUP, Id);
+        {error, not_found} -> ok
+    end.
 
 %% @spec init([[instance()]]) -> SupervisorTree
 %% @doc supervisor callback.
@@ -121,7 +125,22 @@ auto_ssl(Options) ->
     Remove = [verify, fail_if_no_peer_cert],
     SSLOpts = [{K, V} || {K, V} <- ServerOpts,
                          not lists:member(K, Remove)],
+    %% Make the problem more visible to operators.
+    case has_certificate(SSLOpts) of
+        true ->
+            ok;
+        false ->
+            ?LOG_WARNING("TLS listener on port ~tp falls back to the node's "
+                         "ssl_options, which carry no certificate. Handshakes "
+                         "on this listener will fail.",
+                         [proplists:get_value(port, Options)])
+    end,
     fix_ssl([{ssl_opts, SSLOpts} | Options]).
+
+-spec has_certificate([{atom(), any()}]) -> boolean().
+has_certificate(SSLOpts) ->
+    lists:any(fun(Key) -> proplists:is_defined(Key, SSLOpts) end,
+              [cert, certfile, certs_keys, sni_fun, sni_hosts]).
 
 fix_ssl(Options) ->
     TLSOpts0 = proplists:get_value(ssl_opts, Options),

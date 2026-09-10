@@ -19,8 +19,9 @@ all() ->
 groups() ->
     [
       {parallel_tests, [], [
-          unset_ip_resolves_to_every_listener_address,
+          unset_ip_resolves_to_wildcard_addresses,
           unset_ip_yields_one_listener_per_address,
+          explicit_ip_yields_a_single_listener,
           expanded_listeners_keep_the_other_options,
           expanded_listeners_have_distinct_ranch_refs,
           ranch_ref_names_the_first_address,
@@ -30,17 +31,23 @@ groups() ->
         ]}
     ].
 
-unset_ip_resolves_to_every_listener_address(_Config) ->
-    Expected = [IPAddress || {IPAddress, _Port, _Family}
-                                 <- rabbit_networking:tcp_listener_addresses(15672)],
-    ?assertEqual(Expected,
-                 rabbit_networking:listener_ip_addresses([{port, 15672}])).
+unset_ip_resolves_to_wildcard_addresses(_Config) ->
+    Addresses = rabbit_networking:listener_ip_addresses([{port, 15672}]),
+    ?assertNotEqual([], Addresses),
+    ?assertEqual([], Addresses -- [{0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0}]),
+    ?assertEqual(length(Addresses), length(lists:usort(Addresses))).
 
 unset_ip_yields_one_listener_per_address(_Config) ->
     Listener = [{port, 15672}],
     ?assertEqual(rabbit_networking:listener_ip_addresses(Listener),
                  [proplists:get_value(ip, L)
                   || L <- rabbit_networking:listener_per_ip_address(Listener)]).
+
+explicit_ip_yields_a_single_listener(_Config) ->
+    [Expanded] = rabbit_networking:listener_per_ip_address(
+                   [{port, 15672}, {ip, "127.0.0.1"}]),
+    ?assertEqual([{ip, {127, 0, 0, 1}}], proplists:lookup_all(ip, Expanded)),
+    ?assertEqual(15672, proplists:get_value(port, Expanded)).
 
 expanded_listeners_keep_the_other_options(_Config) ->
     [L | _] = rabbit_networking:listener_per_ip_address(
