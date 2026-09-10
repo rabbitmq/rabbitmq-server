@@ -280,13 +280,19 @@ listeners_of_protocol(Protocol) ->
 
 -spec stop_ranch_listeners_of_protocol(atom()) -> ok.
 stop_ranch_listeners_of_protocol(Protocol) ->
-    case ranch_refs_of_protocol(Protocol) of
+    case listeners_of_protocol(Protocol) of
         [] ->
             ok;
-        Refs ->
+        Listeners ->
             ?LOG_DEBUG("Stopping Ranch listeners for protocol ~ts", [Protocol]),
-            lists:foreach(fun ranch:stop_listener/1, Refs)
+            lists:foreach(fun stop_ranch_listener/1, Listeners)
     end.
+
+-spec stop_ranch_listener(#listener{}) -> ok.
+stop_ranch_listener(Listener) ->
+    _ = ranch:stop_listener(ranch_ref(Listener)),
+    true = ets:delete_object(?ETS_TABLE, Listener),
+    ok.
 
 -spec list_local_connections_of_protocol(atom()) -> [pid()].
 list_local_connections_of_protocol(Protocol) ->

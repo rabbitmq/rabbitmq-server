@@ -15,7 +15,8 @@
 all() ->
     [
       every_configured_address_is_bound,
-      every_configured_address_is_reported
+      every_configured_address_is_reported,
+      no_address_is_reported_after_the_plugin_stops
     ].
 
 init_per_suite(Config0) ->
@@ -53,6 +54,17 @@ every_configured_address_is_bound(Config) ->
 
 every_configured_address_is_reported(Config) ->
     Port = listener_port(Config),
+    ?assertEqual(configured_addresses(Config, Port),
+                 reported_addresses(Config, Port)).
+
+%% Ranch has no shutdown callback for these listeners.
+%% When a plugin is stopped, its listeners should be removed.
+no_address_is_reported_after_the_plugin_stops(Config) ->
+    Port = listener_port(Config),
+    ?assertNotEqual([], reported_addresses(Config, Port)),
+    ok = rabbit_ct_broker_helpers:disable_plugin(Config, 0, "rabbitmq_web_mqtt"),
+    ?assertEqual([], reported_addresses(Config, Port)),
+    ok = rabbit_ct_broker_helpers:enable_plugin(Config, 0, "rabbitmq_web_mqtt"),
     ?assertEqual(configured_addresses(Config, Port),
                  reported_addresses(Config, Port)).
 
