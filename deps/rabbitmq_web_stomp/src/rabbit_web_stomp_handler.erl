@@ -341,8 +341,6 @@ websocket_info(login_timeout, State = #state{proc_state = ProcState}) ->
         _ ->
             {ok, State}
     end;
-websocket_info(login_timeout, State) ->
-    {ok, State};
 
 websocket_info(Msg, State) ->
     ?LOG_INFO("Web STOMP: unexpected message ~tp",
