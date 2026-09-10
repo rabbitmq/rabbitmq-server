@@ -21,6 +21,7 @@ groups() ->
         no_config_defaults,
         tcp_config_only,
         ssl_config_only,
+        tls_config_only_does_not_start_a_plain_listener,
 
         extra_tcp_listeners,
         extra_tcp_listeners_without_tcp_config,
@@ -90,6 +91,12 @@ ssl_config_only(_Config) ->
         {certfile, "/path/to/cert.pem"}
     ],
     ?assertEqual(sort_nested(Expected), sort_nested(get_single_listener_config())).
+
+tls_config_only_does_not_start_a_plain_listener(_Config) ->
+    application:set_env(rabbitmq_prometheus, ssl_config, [{port, 15691}]),
+    ?assertEqual([{port, 15691}],
+                 [{port, proplists:get_value(port, L)}
+                  || L <- rabbit_prometheus_app:get_listeners_config()]).
 
 extra_tcp_listeners(_Config) ->
     application:set_env(rabbitmq_prometheus, tcp_config, [

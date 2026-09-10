@@ -68,7 +68,6 @@ query_static_resource_test(Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, query_static_resource_test1, [Host, Port]).
 query_static_resource_test1(Host, Port) ->
     inets:start(),
-    %% TODO this is a fairly rubbish test, but not as bad as it was
     rabbit_web_dispatch:register_static_context(test, [{port, Port}],
                                                 "rabbit_web_dispatch_test",
                                                 ?MODULE, "test/priv/www", "Test"),
@@ -102,8 +101,8 @@ remove_frees_the_port_test1(Port) ->
     ?assertEqual(
        0, length([ok || {"/remove_me", _, _} <-
                             rabbit_web_dispatch_registry:list_all()])),
-    %% Claiming the same port again only succeeds if every socket the first
-    %% registration opened was closed, however many addresses it bound.
+    %% N.B. claiming the same port again only succeeds if every socket the first
+    %% registration opened was closed.
     rabbit_web_dispatch_registry:add(remove_me, Listener, F, F, L),
     rabbit_web_dispatch_registry:remove(remove_me),
     passed.
