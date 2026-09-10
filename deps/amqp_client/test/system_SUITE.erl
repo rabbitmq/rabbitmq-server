@@ -990,8 +990,15 @@ rpc_client(Config) ->
     [<<_/binary>> = DecodedId
      || DecodedId <- [unicode:characters_to_binary(Id, utf8)
                       || Id <- CorrelationIds]],
-    %% Cleanup.
+    %% Safer cleanup.
+    ServerRef = erlang:monitor(process, Server),
     Server ! stop,
+    receive
+        {'DOWN', ServerRef, process, Server, normal} ->
+            ok
+    after 30000 ->
+            exit(rpc_correlation_server_did_not_stop)
+    end,
     amqp_rpc_client:stop(Client),
     amqp_channel:call(Channel, #'queue.delete'{queue = Q}),
     teardown(Connection, Channel).
