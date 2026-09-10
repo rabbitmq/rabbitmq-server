@@ -10,6 +10,11 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
+%% Independently hashed, so a broken `hash_secret/1` can't pass by
+%% accident.
+-define(FIXED_COOKIE_SECRET, "known-fixed-cookie-value").
+-define(FIXED_COOKIE_HASH, "4zUzJ7bNnKtIoHjCjz6xww==").
+
 -export([all/0,
          suite/0,
          groups/0,
@@ -57,9 +62,18 @@
          check_value_is_yes/1,
          check_log_process_env/1,
          check_log_context/1,
+         check_log_context_with_default_values/1,
          check_get_used_env_vars/1,
+         check_get_used_env_vars_redacts_secrets/1,
+         check_redact_sensitive_name_beats_cookie_name/1,
+         check_redact_cookie_non_latin1/1,
          check_parse_conf_env_file_output/1,
-         check_parse_conf_env_file_output_win32/1
+         check_post_port_cmd_output_redacts_secrets/1,
+         check_parse_conf_env_file_output_unparseable_line_is_not_logged/1,
+         check_parse_conf_env_file_output_win32_unparseable_line_is_not_logged/1,
+         check_unicode_characters_to_list_error_is_not_logged/1,
+         check_parse_conf_env_file_output_win32/1,
+         log/2
         ]).
 
 all() ->
@@ -101,8 +115,16 @@ all() ->
      check_value_is_yes,
      check_log_process_env,
      check_log_context,
+     check_log_context_with_default_values,
      check_get_used_env_vars,
+     check_get_used_env_vars_redacts_secrets,
+     check_redact_sensitive_name_beats_cookie_name,
+     check_redact_cookie_non_latin1,
      check_parse_conf_env_file_output,
+     check_post_port_cmd_output_redacts_secrets,
+     check_parse_conf_env_file_output_unparseable_line_is_not_logged,
+     check_parse_conf_env_file_output_win32_unparseable_line_is_not_logged,
+     check_unicode_characters_to_list_error_is_not_logged,
      check_parse_conf_env_file_output_win32
     ].
 
@@ -1048,11 +1070,96 @@ check_value_is_yes(_) ->
     ?assertNot(rabbit_env:value_is_yes(random_string() ++ ".")).
 
 check_log_process_env(_) ->
-    ok = rabbit_env:log_process_env().
+    CookieVar = "RABBIT_ENV_SUITE_TEST_COOKIE",
+    PassVar = "RABBIT_ENV_SUITE_TEST_PASSWORD",
+    PlainVar = "RABBIT_ENV_SUITE_TEST_PLAIN",
+    PassSecret = "pass-secret-" ++ random_string(),
+    PlainValue = "plain-value-" ++ random_string(),
+    os:putenv(CookieVar, ?FIXED_COOKIE_SECRET),
+    os:putenv(PassVar, PassSecret),
+    os:putenv(PlainVar, PlainValue),
+    try
+        Lines = capture_debug_log(fun rabbit_env:log_process_env/0),
+        ?assertNot(log_contains(Lines, ?FIXED_COOKIE_SECRET)),
+        ?assertNot(log_contains(Lines, PassSecret)),
+        ?assert(log_contains(Lines, "******")),
+        ?assert(log_contains(Lines, ?FIXED_COOKIE_HASH)),
+        %% Non-sensitive names must pass through.
+        ?assert(log_contains(Lines, PlainValue))
+    after
+        os:unsetenv(CookieVar),
+        os:unsetenv(PassVar),
+        os:unsetenv(PlainVar)
+    end.
 
 check_log_context(_) ->
+    CookieSecret = list_to_atom(?FIXED_COOKIE_SECRET),
+    PassSecret = list_to_binary("pass-secret-" ++ random_string()),
+    PlainValue = list_to_binary("plain-value-" ++ random_string()),
+    Context = maps:merge(
+                rabbit_env:get_context(),
+                #{erlang_cookie => CookieSecret,
+                  default_pass => PassSecret,
+                  default_vhost => PlainValue}),
+    Lines = capture_debug_log(fun() -> rabbit_env:log_context(Context) end),
+    ?assertNot(log_contains(Lines, ?FIXED_COOKIE_SECRET)),
+    ?assertNot(log_contains(Lines, binary_to_list(PassSecret))),
+    ?assert(log_contains(Lines, "******")),
+    ?assert(log_contains(Lines, ?FIXED_COOKIE_HASH)),
+    ?assert(log_contains(Lines, binary_to_list(PlainValue))).
+
+%% Must not crash when unset.
+check_log_context_with_default_values(_) ->
+    %% `get_prefixed_env_var/1` falls back to the unprefixed name.
+    os:unsetenv("RABBITMQ_ERLANG_COOKIE"),
+    os:unsetenv("ERLANG_COOKIE"),
+    os:unsetenv("RABBITMQ_DEFAULT_PASS"),
+    os:unsetenv("DEFAULT_PASS"),
     Context = rabbit_env:get_context(),
-    ok = rabbit_env:log_context(Context).
+    ?assertMatch(#{erlang_cookie := undefined, default_pass := undefined},
+                 Context),
+    Lines = capture_debug_log(fun() -> rabbit_env:log_context(Context) end),
+    ?assert(log_contains(Lines, "erlang_cookie: undefined")),
+    ?assert(log_contains(Lines, "default_pass: undefined")).
+
+%% Captures `?LOG_DEBUG` output via a temporary logger handler.
+capture_debug_log(Fun) ->
+    Ref = make_ref(),
+    HandlerId = list_to_atom(
+                  "rabbit_env_SUITE_log_capture_" ++
+                  integer_to_list(erlang:unique_integer([positive]))),
+    #{level := PrevLevel} = logger:get_primary_config(),
+    ok = logger:set_primary_config(level, debug),
+    ok = logger:add_handler(
+           HandlerId, ?MODULE,
+           #{config => #{pid => self(), ref => Ref}, level => debug}),
+    try
+        Fun()
+    after
+        _ = logger:remove_handler(HandlerId),
+        ok = logger:set_primary_config(level, PrevLevel)
+    end,
+    [format_event(Event) || Event <- drain_log_events(Ref, [])].
+
+drain_log_events(Ref, Acc) ->
+    receive
+        {Ref, Event} -> drain_log_events(Ref, [Event | Acc])
+    after 500 ->
+        lists:reverse(Acc)
+    end.
+
+format_event(#{msg := {Fmt, Args}}) when is_list(Fmt) ->
+    lists:flatten(io_lib:format(Fmt, Args));
+format_event(_) ->
+    "".
+
+log_contains(Lines, Needle) ->
+    lists:any(fun(Line) -> string:find(Line, Needle) =/= nomatch end, Lines).
+
+%% Used by `capture_debug_log/1`.
+log(LogEvent, #{config := #{pid := Pid, ref := Ref}}) ->
+    Pid ! {Ref, LogEvent},
+    ok.
 
 check_get_used_env_vars(_) ->
     os:putenv("RABBITMQ_LOGS", "-"),
@@ -1064,6 +1171,37 @@ check_get_used_env_vars(_) ->
     ?assertNot(lists:keymember("PATH", 1, Vars)),
     os:unsetenv("RABBITMQ_LOGS"),
     os:unsetenv("CONFIG_FILE").
+
+%% Mask must win over hash for a name like `SECRET_COOKIE`.
+check_redact_sensitive_name_beats_cookie_name(_) ->
+    ?assertEqual("******", rabbit_env:redact("SECRET_COOKIE", "any-value")),
+    ?assertEqual("******", rabbit_env:redact(default_pass, <<"any-value">>)),
+    ?assertEqual(?FIXED_COOKIE_HASH,
+                 rabbit_env:redact("RABBITMQ_ERLANG_COOKIE",
+                                   ?FIXED_COOKIE_SECRET)).
+
+%% Must not crash on a non-Latin-1 cookie.
+check_redact_cookie_non_latin1(_) ->
+    NonLatin1 = [26085, 26412],
+    ?assertEqual(
+       base64:encode_to_string(erlang:md5(unicode:characters_to_binary(NonLatin1))),
+       rabbit_env:redact("HTTP_COOKIE", NonLatin1)).
+
+%% `os_env` is reachable without debug logging enabled.
+check_get_used_env_vars_redacts_secrets(_) ->
+    PassSecret = "pass-secret-" ++ random_string(),
+    os:putenv("RABBITMQ_ERLANG_COOKIE", ?FIXED_COOKIE_SECRET),
+    os:putenv("RABBITMQ_DEFAULT_PASS", PassSecret),
+    try
+        Vars = rabbit_env:get_used_env_vars(),
+        ?assertEqual("******",
+                     proplists:get_value("RABBITMQ_DEFAULT_PASS", Vars)),
+        ?assertEqual(?FIXED_COOKIE_HASH,
+                     proplists:get_value("RABBITMQ_ERLANG_COOKIE", Vars))
+    after
+        os:unsetenv("RABBITMQ_ERLANG_COOKIE"),
+        os:unsetenv("RABBITMQ_DEFAULT_PASS")
+    end.
 
 check_variable(Variable, Key, ValueToSet, Comparison) ->
     os:putenv(Variable, ValueToSet),
@@ -1194,3 +1332,62 @@ check_parse_conf_env_file_output(_) ->
           "'"],
          #{}
         )).
+
+%% Only the log line is redacted; the parser still gets the real
+%% values.
+check_post_port_cmd_output_redacts_secrets(_) ->
+    CookieSecret = "cookie-secret-" ++ random_string(),
+    PassSecret = "pass-secret-" ++ random_string(),
+    Output = string:join(
+               ["RABBITMQ_ERLANG_COOKIE=" ++ CookieSecret,
+                "RABBITMQ_DEFAULT_PASS=" ++ PassSecret,
+                "RABBITMQ_DEFAULT_USER=guest"],
+               "\n"),
+    Context = #{os_type => os:type()},
+    {Lines, LogLines} =
+    capture_and_return(
+      fun() -> rabbit_env:post_port_cmd_output(Context, Output, 0) end),
+    ?assert(lists:member("RABBITMQ_ERLANG_COOKIE=" ++ CookieSecret, Lines)),
+    ?assert(lists:member("RABBITMQ_DEFAULT_PASS=" ++ PassSecret, Lines)),
+    ?assertNot(log_contains(LogLines, CookieSecret)),
+    ?assertNot(log_contains(LogLines, PassSecret)),
+    ?assert(log_contains(LogLines, "******")),
+    ?assert(log_contains(LogLines, "RABBITMQ_DEFAULT_USER=guest")).
+
+%% Can't redact by name; must not log content.
+check_parse_conf_env_file_output_unparseable_line_is_not_logged(_) ->
+    SecretFragment = "pass-secret-" ++ random_string(),
+    LogLines = capture_debug_log(
+                 fun() ->
+                         rabbit_env:parse_conf_env_file_output2(
+                           [SecretFragment], #{})
+                 end),
+    ?assertNot(log_contains(LogLines, SecretFragment)).
+
+check_parse_conf_env_file_output_win32_unparseable_line_is_not_logged(_) ->
+    SecretFragment = "pass-secret-" ++ random_string(),
+    LogLines = capture_debug_log(
+                 fun() ->
+                         rabbit_env:parse_conf_env_file_output_win32(
+                           [SecretFragment], #{})
+                 end),
+    ?assertNot(log_contains(LogLines, SecretFragment)).
+
+%% Decoding errors on secret-bearing input must not log content.
+check_unicode_characters_to_list_error_is_not_logged(_) ->
+    SecretFragment = "pass-secret-" ++ random_string(),
+    Input = <<(list_to_binary("RABBITMQ_DEFAULT_PASS=" ++ SecretFragment))/binary,
+              255>>,
+    LogLines = capture_debug_log(
+                 fun() -> rabbit_env:unicode_characters_to_list(Input) end),
+    ?assertNot(log_contains(LogLines, SecretFragment)).
+
+%% Like `capture_debug_log/1`, but also returns `Fun`'s return value.
+capture_and_return(Fun) ->
+    RetRef = make_ref(),
+    Lines = capture_debug_log(fun() -> self() ! {RetRef, Fun()} end),
+    receive
+        {RetRef, Ret} -> {Ret, Lines}
+    after 0 ->
+        error(no_return_value)
+    end.

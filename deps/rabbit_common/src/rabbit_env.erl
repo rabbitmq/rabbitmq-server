@@ -32,7 +32,10 @@
 -ifdef(TEST).
 -export([parse_conf_env_file_output2/2,
          value_is_yes/1,
-         parse_conf_env_file_output_win32/2]).
+         parse_conf_env_file_output_win32/2,
+         post_port_cmd_output/3,
+         redact/2,
+         unicode_characters_to_list/1]).
 -endif.
 
 %% Vary from OTP version to version.
@@ -249,15 +252,14 @@ has_var_been_overridden(#{var_origins := Origins}, Var) ->
     end.
 
 get_used_env_vars() ->
-    lists:filter(
-      fun({Var, _}) -> var_is_used(Var) end,
-      lists:sort(env_vars())).
+    [{Var, redact(Var, Value)}
+     || {Var, Value} <- lists:sort(env_vars()), var_is_used(Var)].
 
 log_process_env() ->
     ?LOG_DEBUG("Process environment:"),
     lists:foreach(
       fun({Var, Value}) ->
-              ?LOG_DEBUG("  - ~ts = ~ts", [Var, Value])
+              ?LOG_DEBUG("  - ~ts = ~ts", [Var, redact(Var, Value)])
       end, lists:sort(env_vars())).
 
 log_context(Context) ->
@@ -265,9 +267,41 @@ log_context(Context) ->
     lists:foreach(
       fun(Key) ->
               Value = maps:get(Key, Context),
-              ?LOG_DEBUG("  - ~ts: ~tp", [Key, Value])
+              ?LOG_DEBUG("  - ~ts: ~tp", [Key, redact(Key, Value)])
       end,
       lists:sort(maps:keys(Context))).
+
+%% Cookie-named values are hashed, not masked: the hash is already
+%% exposed via `rabbitmq-diagnostics erlang_cookie_hash`.
+redact(_NameOrKey, undefined) ->
+    %% Keep unset distinguishable from a redacted value.
+    undefined;
+redact(NameOrKey, Value) ->
+    %% Mask wins over hash, e.g. `SECRET_COOKIE` must mask.
+    case is_sensitive_name(NameOrKey) of
+        true  -> "******";
+        false -> case is_name(NameOrKey, "cookie") of
+                     true  -> hash_secret(Value);
+                     false -> Value
+                 end
+    end.
+
+is_sensitive_name(NameOrKey) ->
+    lists:any(
+      fun(Part) -> is_name(NameOrKey, Part) end,
+      ["pass", "secret", "token"]).
+
+is_name(Name, Part) when is_atom(Name) ->
+    is_name(atom_to_list(Name), Part);
+is_name(Name, Part) when is_list(Name) ->
+    string:find(string:lowercase(Name), Part) =/= nomatch.
+
+hash_secret(Value) when is_atom(Value) ->
+    hash_secret(atom_to_list(Value));
+hash_secret(Value) when is_list(Value) ->
+    %% md5/1 needs Latin-1 bytes; UTF-8-encode first.
+    base64:encode_to_string(
+      erlang:md5(unicode:characters_to_binary(Value))).
 
 context_to_app_env_vars(Context) ->
     ?LOG_DEBUG(
@@ -1746,9 +1780,27 @@ post_port_cmd_output(#{os_type := {OSType, _}}, UnicodeOutput, ExitStatus) ->
     Lines = string:split(string:trim(UnicodeOutput), LineSep, all),
     ?LOG_DEBUG(
        "$RABBITMQ_CONF_ENV_FILE output:~n~ts",
-       [string:join([io_lib:format("  ~ts", [Line]) || Line <- Lines], "\n")],
+       [string:join(
+          [io_lib:format("  ~ts", [redact_sh_assignment(Line)])
+           || Line <- Lines],
+          "\n")],
        #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
+    %% The real parser needs the unredacted lines.
     Lines.
+
+%% Raw shell output, not a parsed value: only bare `VAR=value` lines
+%% are masked. Misses multi-line values and secrets used inline in a
+%% traced (`sh -x`) command.
+redact_sh_assignment(Line) ->
+    case string:split(Line, "=") of
+        [Var, _Value] ->
+            case is_name(Var, "cookie") orelse is_sensitive_name(Var) of
+                true  -> Var ++ "=******";
+                false -> Line
+            end;
+        _ ->
+            Line
+    end.
 
 parse_conf_env_file_output(Context, _, []) ->
     Context;
@@ -1793,10 +1845,12 @@ parse_conf_env_file_output_win32([Line | Lines], Vars) ->
             Vars1 = Vars#{Var => Val2},
             parse_conf_env_file_output_win32(Lines, Vars1);
         _ ->
-            %% Parsing failed somehow.
+            %% No `=`: could be a continuation line of a secret; log
+            %% length only.
             ?LOG_WARNING(
-               "Failed to parse $RABBITMQ_CONF_ENV_FILE output line: ~tp",
-               [Line],
+               "Failed to parse $RABBITMQ_CONF_ENV_FILE output line "
+               "(~b characters)",
+               [string:length(Line)],
                #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
             parse_conf_env_file_output_win32(Lines, Vars)
     end.
@@ -1818,10 +1872,12 @@ parse_conf_env_file_output2([Line | Lines], Vars) ->
                     Vars1 = Vars#{Var => Value},
                     parse_conf_env_file_output2(Lines1, Vars1);
                 _ ->
-                    %% Parsing failed somehow.
+                    %% No `=`: could be a continuation line of a
+                    %% secret; log length only.
                     ?LOG_WARNING(
-                       "Failed to parse $RABBITMQ_CONF_ENV_FILE output: ~tp",
-                       [Line],
+                       "Failed to parse $RABBITMQ_CONF_ENV_FILE output "
+                       "(~b characters)",
+                       [string:length(Line)],
                        #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
                     #{}
             end
@@ -2162,6 +2218,6 @@ unicode_characters_to_list(Input) ->
             String
     end.
 
-log_characters_to_list_error(Input, Partial, Rest) ->
-    ?LOG_ERROR("error converting '~tp' to unicode string "
-                     "(partial '~tp', rest '~tp')", [Input, Partial, Rest]).
+log_characters_to_list_error(_Input, _Partial, _Rest) ->
+    %% A caller's input can be a secret; never log it.
+    ?LOG_ERROR("error converting input to unicode string", []).
