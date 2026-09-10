@@ -7,6 +7,10 @@
 
 -export([setup/1]).
 
+-ifdef(TEST).
+-export([set_credentials_obfuscation_secret/0]).
+-endif.
+
 setup(#{nodename := Node, nodename_type := NameType} = Context) ->
     ?LOG_DEBUG(
        "~n== Erlang distribution ==", [],
@@ -141,8 +145,10 @@ set_credentials_obfuscation_secret() ->
         #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
     ok = credentials_obfuscation:refresh_config(),
     CookieBin = rabbit_data_coercion:to_binary(erlang:get_cookie()),
+    %% Never log the raw cookie.
     ?LOG_DEBUG(
-        "Setting credentials obfuscation secret to '~ts'", [CookieBin],
+        "Setting credentials obfuscation secret (cookie hash: '~ts')",
+        [rabbit_nodes_common:cookie_hash()],
         #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
     ok = credentials_obfuscation:set_secret(CookieBin),
     Fallback = application:get_env(rabbit, 

@@ -141,7 +141,9 @@ port_shutdown_loop(Port) ->
     end.
 
 cookie_hash() ->
-    base64:encode_to_string(erlang:md5(atom_to_list(erlang:get_cookie()))).
+    %% UTF-8-encode first: md5/1 needs Latin-1 bytes.
+    base64:encode_to_string(
+      erlang:md5(unicode:characters_to_binary(atom_to_list(erlang:get_cookie())))).
 
 diagnostics(Nodes) ->
     verbose_erlang_distribution(true),
