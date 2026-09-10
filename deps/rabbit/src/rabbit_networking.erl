@@ -34,8 +34,10 @@
          force_connection_event_refresh/1, force_non_amqp_connection_event_refresh/1,
          handshake/2, handshake/3, tcp_host/1,
          ranch_ref/1, ranch_ref/2, ranch_refs_of_protocol/1, ranch_ref_to_protocol/1,
+         listener_ip_addresses/1, listener_per_ip_address/1,
          listeners_of_protocol/1, stop_ranch_listeners_of_protocol/1,
-         list_local_connections_of_protocol/1]).
+         list_local_connections_of_protocol/1,
+         ensure_listeners/3]).
 
 %% Used by TCP-based transports, e.g. STOMP adapter
 -export([tcp_listener_addresses/1,
@@ -215,28 +217,60 @@ tcp_listener_spec(NamePrefix, {IPAddress, Port, Family}, SocketOpts,
 ranch_ref(#listener{ip_address = IPAddress, port = Port}) ->
     {acceptor, IPAddress, Port};
 ranch_ref(Listener) when is_list(Listener) ->
-    Port = rabbit_misc:pget(port, Listener),
-    IPAddress = case rabbit_misc:pget(ip, Listener) of
+    [IPAddress | _] = listener_ip_addresses(Listener),
+    {acceptor, IPAddress, rabbit_misc:pget(port, Listener)};
+ranch_ref(undefined) ->
+    undefined.
+
+%% Every address for a listener, computed in a dual-stack aware way.
+-spec listener_ip_addresses([{atom(), any()}]) -> [inet:ip_address(), ...].
+listener_ip_addresses(Listener) ->
+    case rabbit_misc:pget(ip, Listener) of
         undefined ->
-            [{Value, _Port, _Family} | _] = tcp_listener_addresses(Port),
-            Value;
+            Port = rabbit_misc:pget(port, Listener),
+            [IPAddress || {IPAddress, _Port, _Family} <- tcp_listener_addresses(Port)];
         Value when is_list(Value) ->
             %% since we only use this function to parse the address, only one result should
             %% be returned
             [{Parsed, _Family} | _] = gethostaddr(Value, auto),
-            Parsed;
+            [Parsed];
         Value when is_binary(Value) ->
-            Str = rabbit_data_coercion:to_list(Value),
-            %% since we only use this function to parse the address, only one result should
-            %% be returned
-            [{Parsed, _Family} | _] = gethostaddr(Str, auto),
-            Parsed;
+            [{Parsed, _Family} | _] = gethostaddr(rabbit_data_coercion:to_list(Value), auto),
+            [Parsed];
         Value when is_tuple(Value) ->
-            Value
-    end,
-    {acceptor, IPAddress, Port};
-ranch_ref(undefined) ->
-    undefined.
+            [Value]
+    end.
+
+-spec listener_per_ip_address([{atom(), any()}]) -> [[{atom(), any()}], ...].
+listener_per_ip_address(Listener) ->
+    [[{ip, IPAddress} | proplists:delete(ip, Listener)]
+     || IPAddress <- listener_ip_addresses(Listener)].
+
+%% A later address failing to bind must not leave an earlier address's
+%% listener running and unrecorded: `Stop` undoes every address this call
+%% has started with `Start` before the failure is re-raised.
+-spec ensure_listeners([[{atom(), any()}], ...],
+                       fun(([{atom(), any()}]) -> new | existing | ignore),
+                       fun(([{atom(), any()}]) -> any())) ->
+    [new | existing | ignore].
+ensure_listeners(PerAddress, Start, Stop) ->
+    ensure_listeners(PerAddress, Start, Stop, [], []).
+
+ensure_listeners([], _Start, _Stop, _Started, Results) ->
+    lists:reverse(Results);
+ensure_listeners([Bound | Rest], Start, Stop, Started, Results) ->
+    try Start(Bound) of
+        Result ->
+            Started1 = case Result of
+                           new -> [Bound | Started];
+                           _   -> Started
+                       end,
+            ensure_listeners(Rest, Start, Stop, Started1, [Result | Results])
+    catch
+        Class:Reason:Stacktrace ->
+            _ = [Stop(B) || B <- Started],
+            erlang:raise(Class, Reason, Stacktrace)
+    end.
 
 -spec ranch_ref(inet:ip_address(), ip_port()) -> ranch:ref().
 
@@ -273,13 +307,19 @@ listeners_of_protocol(Protocol) ->
 
 -spec stop_ranch_listeners_of_protocol(atom()) -> ok.
 stop_ranch_listeners_of_protocol(Protocol) ->
-    case ranch_refs_of_protocol(Protocol) of
+    case listeners_of_protocol(Protocol) of
         [] ->
             ok;
-        Refs ->
+        Listeners ->
             ?LOG_DEBUG("Stopping Ranch listeners for protocol ~ts", [Protocol]),
-            lists:foreach(fun ranch:stop_listener/1, Refs)
+            lists:foreach(fun stop_ranch_listener/1, Listeners)
     end.
+
+-spec stop_ranch_listener(#listener{}) -> ok.
+stop_ranch_listener(Listener) ->
+    _ = ranch:stop_listener(ranch_ref(Listener)),
+    true = ets:delete_object(?ETS_TABLE, Listener),
+    ok.
 
 -spec list_local_connections_of_protocol(atom()) -> [pid()].
 list_local_connections_of_protocol(Protocol) ->

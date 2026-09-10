@@ -16,8 +16,13 @@
 -behaviour(supervisor).
 -export([init/1]).
 
+-ifdef(TEST).
+-export([get_listeners_config/0, listeners_with_contexts/0]).
+-endif.
+
 -define(TCP_CONTEXT, rabbitmq_prometheus_tcp).
 -define(TLS_CONTEXT, rabbitmq_prometheus_tls).
+-define(CONTEXTS_KEY, active_listener_contexts).
 -define(DEFAULT_PORT, 15692).
 -define(DEFAULT_TLS_PORT, 15691).
 
@@ -36,6 +41,47 @@ init(_) ->
 
 -spec start_configured_listener() -> ok.
 start_configured_listener() ->
+    Listeners = listeners_with_contexts(),
+    ok = application:set_env(rabbitmq_prometheus, ?CONTEXTS_KEY,
+                             [Context || {Context, _} <- Listeners]),
+    start_listeners(Listeners, []).
+
+%% A later listener's registration failure must not leave an earlier
+%% context registered with nothing owning it; contexts already started in
+%% this call are unregistered before the failure is re-raised.
+start_listeners([], _Started) ->
+    ok;
+start_listeners([{Context, Listener} | Rest], Started) ->
+    try start_listener(Context, Listener) of
+        ok -> start_listeners(Rest, [Context | Started])
+    catch
+        Class:Reason:Stacktrace ->
+            _ = [rabbit_web_dispatch:unregister_context(C) || C <- Started],
+            erlang:raise(Class, Reason, Stacktrace)
+    end.
+
+-spec listeners_with_contexts() -> [{atom(), [{atom(), any()}]}].
+listeners_with_contexts() ->
+    {Named, _} = lists:mapfoldl(
+        fun(Listener, Seen) ->
+            Base = case is_tls(Listener) of
+                       true  -> ?TLS_CONTEXT;
+                       false -> ?TCP_CONTEXT
+                   end,
+            N = maps:get(Base, Seen, 0),
+            {{context_name(Base, N), Listener}, Seen#{Base => N + 1}}
+        end, #{}, get_listeners_config()),
+    Named.
+
+%% Numbered rather than named after the port, because two listeners can share
+%% one port on different interfaces.
+-spec context_name(atom(), non_neg_integer()) -> atom().
+context_name(Base, 0) ->
+    Base;
+context_name(Base, N) ->
+    list_to_atom(atom_to_list(Base) ++ "_" ++ integer_to_list(N)).
+
+get_listeners_config() ->
     TCPListenerConf = get_env(tcp_config, []),
     TLSListenerConf0 = get_env(ssl_config, []),
     TLSListenerConf =
@@ -47,41 +93,34 @@ start_configured_listener() ->
                 Tmp = proplists:delete(ssl_opts, TLSListenerConf0),
                 [{ssl_opts, Opts} | Tmp]
         end,
-
-    case {TCPListenerConf, TLSListenerConf} of
+    Primary = case {TCPListenerConf, TLSListenerConf} of
         %% nothing is configured
-        {[], []}  -> start_default_tcp_listener();
+        {[], []}     -> [tcp_listener([{port, ?DEFAULT_PORT}])];
         %% TLS only
-        {[], Val} -> start_configured_tls_listener(Val);
+        {[], Val}    -> [tls_listener(Val)];
         %% plain TCP only
-        {Val, []} -> start_configured_tcp_listener(Val);
+        {Val, []}    -> [tcp_listener(Val)];
         %% both
-        {Val0, Val1} ->
-            start_configured_tcp_listener(Val0),
-            start_configured_tls_listener(Val1)
+        {Val0, Val1} -> [tcp_listener(Val0), tls_listener(Val1)]
     end,
-    ok.
+    Primary ++ extra_listeners(TCPListenerConf, TLSListenerConf).
 
-start_default_tcp_listener() ->
-    start_configured_tcp_listener([{port, ?DEFAULT_PORT}]).
+extra_listeners(TCPListenerConf, TLSListenerConf) ->
+    [tcp_listener(with_address(Address, TCPListenerConf))
+     || Address <- get_env(tcp_listeners, [])] ++
+    [tls_listener(with_address(Address, TLSListenerConf))
+     || Address <- get_env(ssl_listeners, [])].
 
-start_configured_tcp_listener(Conf) ->
-    case Conf of
-        [] -> ok;
-        TCPCon ->
-            TCPListener = maybe_disable_sendfile(TCPCon),
-            start_listener(TCPListener)
-    end.
+with_address(Port, Config) when is_integer(Port) ->
+    lists:keystore(port, 1, lists:keydelete(ip, 1, Config), {port, Port});
+with_address({IP, Port}, Config) ->
+    lists:keystore(ip, 1, with_address(Port, Config), {ip, IP}).
 
-start_configured_tls_listener(Conf) ->
-    case Conf of
-        [] -> ok;
-        TLSConf ->
-            TLSListener0 = [{ssl, true} | TLSConf],
-            TLSListener1 = maybe_disable_sendfile(TLSListener0),
-            TLSListener2 = rabbit_ssl:wrap_password_opt(TLSListener1),
-            start_listener(TLSListener2)
-    end.
+tcp_listener(Conf) ->
+    maybe_disable_sendfile(Conf).
+
+tls_listener(Conf) ->
+    rabbit_ssl:wrap_password_opt(maybe_disable_sendfile([{ssl, true} | Conf])).
 
 maybe_disable_sendfile(Listener) ->
     DisableSendfile = #{sendfile => false},
@@ -95,10 +134,10 @@ maybe_disable_sendfile(Listener) ->
 get_env(Key, Default) ->
     rabbit_misc:get_env(rabbitmq_prometheus, Key, Default).
 
-start_listener(Listener0) ->
-    {Type, ContextName, Protocol} = case is_tls(Listener0) of
-        true  -> {tls, ?TLS_CONTEXT, 'https/prometheus'};
-        false -> {tcp, ?TCP_CONTEXT, 'http/prometheus'}
+start_listener(ContextName, Listener0) ->
+    {Type, Protocol} = case is_tls(Listener0) of
+        true  -> {tls, 'https/prometheus'};
+        false -> {tcp, 'http/prometheus'}
     end,
     {ok, Listener1} = ensure_port_and_protocol(Type, Protocol, Listener0),
     {ok, _} = register_context(ContextName, Listener1),
@@ -111,8 +150,10 @@ register_context(ContextName, Listener) ->
       Dispatcher, "RabbitMQ Prometheus").
 
 unregister_all_contexts() ->
-    rabbit_web_dispatch:unregister_context(?TCP_CONTEXT),
-    rabbit_web_dispatch:unregister_context(?TLS_CONTEXT).
+    Contexts = application:get_env(rabbitmq_prometheus, ?CONTEXTS_KEY,
+                                   [?TCP_CONTEXT, ?TLS_CONTEXT]),
+    _ = [rabbit_web_dispatch:unregister_context(Context) || Context <- Contexts],
+    ok.
 
 ensure_port_and_protocol(tls, Protocol, Listener) ->
     do_ensure_port_and_protocol(?DEFAULT_TLS_PORT, Protocol, Listener);

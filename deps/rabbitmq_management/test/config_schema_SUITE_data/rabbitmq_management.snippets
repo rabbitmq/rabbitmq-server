@@ -10,6 +10,85 @@
   [rabbitmq_management]},
 
  %%
+ %% Additional listeners
+ %%
+
+ {additional_tcp_listeners,
+  "management.listeners.tcp.1 = 15680
+   management.listeners.tcp.2 = 192.168.1.2:15681",
+  [{rabbitmq_management,[
+                         {tcp_listeners, [15680, {"192.168.1.2", 15681}]}
+                        ]}],
+  [rabbitmq_management]},
+
+ {additional_ipv6_listener,
+  "management.listeners.tcp.1 = 127.0.0.1:15680
+   management.listeners.tcp.2 = ::1:15681",
+  [{rabbitmq_management,[
+                         {tcp_listeners, [{"127.0.0.1", 15680}, {"::1", 15681}]}
+                        ]}],
+  [rabbitmq_management]},
+
+ {additional_ssl_listeners,
+  "management.ssl.port = 15671
+   management.ssl.cacertfile = test/config_schema_SUITE_data/certs/ca_certificate.pem
+   management.ssl.certfile = test/config_schema_SUITE_data/certs/server_certificate.pem
+   management.ssl.keyfile = test/config_schema_SUITE_data/certs/server_key.pem
+   management.ssl.verify   = verify_none
+   management.ssl.fail_if_no_peer_cert = false
+   management.listeners.ssl.1 = 127.0.0.1:15682
+   management.listeners.ssl.2 = 15683",
+  [{rabbitmq_management,[
+                         {ssl_config, [{port, 15671},
+                                       {cacertfile, "test/config_schema_SUITE_data/certs/ca_certificate.pem"},
+                                       {certfile, "test/config_schema_SUITE_data/certs/server_certificate.pem"},
+                                       {keyfile, "test/config_schema_SUITE_data/certs/server_key.pem"},
+                                       {verify, verify_none},
+                                       {fail_if_no_peer_cert, false}]},
+                         {ssl_listeners, [{"127.0.0.1", 15682}, 15683]}
+                        ]}],
+  [rabbitmq_management]},
+
+ {tcp_listener_with_additional_listeners,
+  "management.tcp.port = 15672
+   management.listeners.tcp.1 = 127.0.0.1:15680",
+  [{rabbitmq_management,[
+                         {tcp_config, [{port, 15672}]},
+                         {tcp_listeners, [{"127.0.0.1", 15680}]}
+                        ]}],
+  [rabbitmq_management]},
+
+ {tcp_options_with_additional_listeners,
+  "management.tcp.compress = true
+   management.tcp.idle_timeout = 120
+   management.listeners.tcp.1 = 15680",
+  [{rabbitmq_management,[
+                         {tcp_config, [{cowboy_opts, [{compress, true}, {idle_timeout, 120}]}]},
+                         {tcp_listeners, [15680]}
+                        ]}],
+  [rabbitmq_management]},
+
+ {ssl_options_with_additional_listeners,
+  "management.ssl.port = 15671
+   management.ssl.versions.1 = tlsv1.3
+   management.ssl.versions.2 = tlsv1.2
+   management.listeners.ssl.1 = 127.0.0.1:15682",
+  [{rabbitmq_management,[
+                         {ssl_config, [{port, 15671}, {versions, ['tlsv1.3', 'tlsv1.2']}]},
+                         {ssl_listeners, [{"127.0.0.1", 15682}]}
+                        ]}],
+  [rabbitmq_management]},
+
+ {legacy_listener_with_additional_listeners,
+  "management.listener.port = 12345
+   management.listeners.tcp.1 = 15680",
+  [{rabbitmq_management,[
+                         {listener, [{port, 12345}]},
+                         {tcp_listeners, [15680]}
+                        ]}],
+  [rabbitmq_management]},
+
+ %%
  %% TCP listener
  %%
 

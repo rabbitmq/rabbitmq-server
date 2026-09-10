@@ -28,9 +28,18 @@
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
+%% A failed registration exits the caller, not the registry: the registry
+%% owns the dispatch table for every plugin on the node, and losing it would
+%% break contexts that have nothing to do with the failed one.
+-spec add(atom(), [{atom(), any()}], fun(), any(), {string(), string()}) -> ok.
 add(Name, Listener, Selector, Handler, Link) ->
-    gen_server:call(?MODULE, {add, Name, Listener, Selector, Handler, Link},
-                    ?GEN_SERVER_CALL_TIMEOUT).
+    case gen_server:call(?MODULE, {add, Name, Listener, Selector, Handler, Link},
+                         ?GEN_SERVER_CALL_TIMEOUT) of
+        ok ->
+            ok;
+        {error, Class, Reason, Stacktrace} ->
+            erlang:raise(Class, Reason, Stacktrace)
+    end.
 
 remove(Name) ->
     gen_server:call(?MODULE, {remove, Name}, ?GEN_SERVER_CALL_TIMEOUT).
@@ -65,31 +74,13 @@ init([]) ->
     ?ETS = ets:new(?ETS, [named_table, public]),
     {ok, undefined}.
 
-handle_call({add, Name, Listener, Selector, Handler, Link = {_, Desc}}, _From,
-            undefined) ->
-    Continue = case rabbit_web_dispatch_sup:ensure_listener(Listener) of
-                   new      -> set_dispatch(
-                                 Listener, [],
-                                 listing_fallback_handler(Listener)),
-                               listener_started(Listener),
-                               true;
-                   existing -> true;
-                   ignore   -> false
-               end,
-    case Continue of
-        true  -> case lookup_dispatch(Listener) of
-                     {ok, {Selectors, Fallback}} ->
-                         Selector2 = lists:keystore(
-                                       Name, 1, Selectors,
-                                       {Name, Selector, Handler, Link}),
-                         set_dispatch(Listener, Selector2, Fallback);
-                     {error, {different, Desc2, Listener2}} ->
-                         exit({incompatible_listeners,
-                               {Desc, Listener}, {Desc2, Listener2}})
-                 end;
-        false -> ok
-    end,
-    {reply, ok, undefined};
+handle_call({add, Name, Listener, Selector, Handler, Link}, _From, undefined) ->
+    Reply = try
+                add_context(Name, Listener, Selector, Handler, Link)
+            catch
+                Class:Reason:Stacktrace -> {error, Class, Reason, Stacktrace}
+            end,
+    {reply, Reply, undefined};
 
 handle_call({remove, Name}, _From,
             undefined) ->
@@ -140,6 +131,42 @@ code_change(_, State, _) ->
 
 %% Internal Methods
 
+add_context(Name, Listener, Selector, Handler, Link = {_, Desc}) ->
+    Continue = case rabbit_web_dispatch_sup:ensure_listener(Listener) of
+                   new      -> set_dispatch(
+                                 Listener, [],
+                                 listing_fallback_handler(Listener)),
+                               listener_started(Listener),
+                               true;
+                   existing -> true;
+                   ignore   -> false;
+                   {error, {listener_address_in_use, _}} ->
+                       exit({listener_address_in_use, {Desc, Listener}});
+                   {error, {no_port_given, _}} ->
+                       exit({no_port_given, {Desc, Listener}})
+               end,
+    case Continue of
+        true  -> case lookup_dispatch(Listener) of
+                     {ok, {Selectors, Fallback}} ->
+                         Selector2 = lists:keystore(
+                                       Name, 1, Selectors,
+                                       {Name, Selector, Handler, Link}),
+                         set_dispatch(Listener, Selector2, Fallback);
+                     {error, {different, Desc2, Listener2}} ->
+                         exit({incompatible_listeners,
+                               {Desc, Listener}, {Desc2, Listener2}});
+                     %% The socket is already open under a different registry
+                     %% key. Two listeners reach this by spelling one address
+                     %% differently, for example as a string and as a tuple, or
+                     %% by one of them using the wildcard address the other one
+                     %% resolved to.
+                     {error, {no_record_for_listener, _}} ->
+                         exit({listener_address_in_use, {Desc, Listener}})
+                 end;
+        false -> ok
+    end,
+    ok.
+
 listener_started(Listener) ->
     [rabbit_networking:tcp_listener_started(Protocol, Listener, IPAddress, Port)
      || {Protocol, IPAddress, Port} <- listener_info(Listener)],
@@ -161,21 +188,18 @@ listener_info(Listener) ->
                        P
                end,
     Port = pget(port, Listener),
-    IPAddress = case rabbit_misc:pget(ip, Listener) of
-                    undefined ->
-                        [{AutoIPAddress, _Port, _Family} | _]
-                            = rabbit_networking:tcp_listener_addresses(Port),
-                        AutoIPAddress;
-                    IP when is_tuple(IP) ->
-                        IP;
-                    IP when is_list(IP) ->
-                        {ok, ParsedIP} = inet_parse:address(IP),
-                        ParsedIP
-                end,
-    [{Protocol, IPAddress, Port}].
+    [{Protocol, IPAddress, Port}
+     || IPAddress <- rabbit_networking:listener_ip_addresses(Listener)].
+
+%% A listener is identified by the address it was configured with, not by its
+%% port alone: two listeners can share a port on different interfaces.
+-spec listener_key([{atom(), any()}]) ->
+    {any(), rabbit_networking:ip_port() | undefined}.
+listener_key(Listener) ->
+    {pget(ip, Listener), pget(port, Listener)}.
 
 lookup_dispatch(Lsnr) ->
-    case ets:lookup(?ETS, pget(port, Lsnr)) of
+    case ets:lookup(?ETS, listener_key(Lsnr)) of
         [{_, Lsnr, S, F}]   -> {ok, {S, F}};
         [{_, Lsnr2, S, _F}] -> {error, {different, first_desc(S), Lsnr2}};
         []                  -> {error, {no_record_for_listener, Lsnr}}
@@ -184,7 +208,7 @@ lookup_dispatch(Lsnr) ->
 first_desc([{_N, _S, _H, {_, Desc}} | _]) -> Desc.
 
 set_dispatch(Listener, Selectors, Fallback) ->
-    ets:insert(?ETS, {pget(port, Listener), Listener, Selectors, Fallback}).
+    ets:insert(?ETS, {listener_key(Listener), Listener, Selectors, Fallback}).
 
 match_request([], _) ->
     not_found;

@@ -24,7 +24,8 @@ groups() ->
                                 add_idempotence_test,
                                 log_source_address_test,
                                 log_authenticated_username_test,
-                                parse_ip_test
+                                parse_ip_test,
+                                remove_frees_the_port_test
                                ]}
     ].
 
@@ -36,7 +37,7 @@ init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
     Config1 = rabbit_ct_helpers:set_config(Config, [
         {rmq_nodename_suffix, ?MODULE},
-        {rmq_extra_tcp_ports, [tcp_port_http_extra]}
+        {rmq_extra_tcp_ports, [tcp_port_http_extra, tcp_port_http_extra2]}
       ]),
     rabbit_ct_helpers:run_setup_steps(Config1,
       rabbit_ct_broker_helpers:setup_steps()).
@@ -67,7 +68,6 @@ query_static_resource_test(Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, query_static_resource_test1, [Host, Port]).
 query_static_resource_test1(Host, Port) ->
     inets:start(),
-    %% TODO this is a fairly rubbish test, but not as bad as it was
     rabbit_web_dispatch:register_static_context(test, [{port, Port}],
                                                 "rabbit_web_dispatch_test",
                                                 ?MODULE, "test/priv/www", "Test"),
@@ -87,6 +87,24 @@ add_idempotence_test1(Port) ->
     ?assertEqual(
        1, length([ok || {"/foo", _, _} <-
                             rabbit_web_dispatch_registry:list_all()])),
+    passed.
+
+remove_frees_the_port_test(Config) ->
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_http_extra2),
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, remove_frees_the_port_test1, [Port]).
+remove_frees_the_port_test1(Port) ->
+    F = fun(_Req) -> ok end,
+    L = {"/remove_me", "RemoveMe"},
+    Listener = [{port, Port}],
+    rabbit_web_dispatch_registry:add(remove_me, Listener, F, F, L),
+    rabbit_web_dispatch_registry:remove(remove_me),
+    ?assertEqual(
+       0, length([ok || {"/remove_me", _, _} <-
+                            rabbit_web_dispatch_registry:list_all()])),
+    %% N.B. claiming the same port again only succeeds if every socket the first
+    %% registration opened was closed.
+    rabbit_web_dispatch_registry:add(remove_me, Listener, F, F, L),
+    rabbit_web_dispatch_registry:remove(remove_me),
     passed.
 
 parse_ip_test(Config) ->

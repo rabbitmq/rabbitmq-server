@@ -96,7 +96,17 @@ start_tcp_listener(TCPConf0, CowboyOpts0, Routes) ->
       {ok, NumTcp}  -> NumTcp
   end,
   Port = get_tcp_port(application:get_all_env(rabbitmq_web_stomp)),
-  TCPConf = get_tcp_conf(TCPConf0, Port),
+  TCPConf1 = get_tcp_conf(TCPConf0, Port),
+  _ = rabbit_networking:ensure_listeners(
+        rabbit_networking:listener_per_ip_address(TCPConf1),
+        fun(Bound) -> start_tcp_listener_on(Bound, CowboyOpts0, Routes, NumTcpAcceptors) end,
+        fun stop_listener_on/1),
+  listener_started(?TCP_PROTOCOL, TCPConf1).
+
+-spec start_tcp_listener_on([{atom(), any()}], map(), cowboy_router:dispatch_rules(),
+                            non_neg_integer()) -> new | existing.
+start_tcp_listener_on(TCPConf, CowboyOpts0, Routes, NumTcpAcceptors) ->
+  Port = rabbit_misc:pget(port, TCPConf),
   RanchTransportOpts = #{
     socket_opts     => TCPConf,
     connection_type => supervisor,
@@ -108,13 +118,13 @@ start_tcp_listener(TCPConf0, CowboyOpts0, Routes) ->
                             middlewares => [cowboy_router,
                                             rabbit_web_stomp_middleware,
                                             cowboy_handler]},
-  case ranch:start_listener(rabbit_networking:ranch_ref(TCPConf),
+  Result = case ranch:start_listener(rabbit_networking:ranch_ref(TCPConf),
                             ranch_tcp,
                             RanchTransportOpts,
                             rabbit_web_stomp_connection_sup,
                             CowboyOpts) of
-      {ok, _}                       -> ok;
-      {error, {already_started, _}} -> ok;
+      {ok, _}                       -> new;
+      {error, {already_started, _}} -> existing;
       {error, ErrTCP}                  ->
           ?LOG_ERROR(
               "Failed to start a WebSocket (HTTP) listener. Error: ~tp,"
@@ -122,10 +132,10 @@ start_tcp_listener(TCPConf0, CowboyOpts0, Routes) ->
               [ErrTCP, TCPConf]),
           throw(ErrTCP)
   end,
-  listener_started(?TCP_PROTOCOL, TCPConf),
   ?LOG_INFO(
       "rabbit_web_stomp: listening for HTTP connections on ~ts:~w",
-      [get_binding_address(TCPConf), Port]).
+      [get_binding_address(TCPConf), Port]),
+  Result.
 
 
 start_tls_listener(TLSConf0, CowboyOpts0, Routes) ->
@@ -134,8 +144,17 @@ start_tls_listener(TLSConf0, CowboyOpts0, Routes) ->
       undefined     -> get_env(num_acceptors, 10);
       {ok, NumSsl}  -> NumSsl
   end,
-  TLSPort = proplists:get_value(port, TLSConf0),
-  TLSConf = rabbit_networking:fix_ssl_options(maybe_parse_ip(TLSConf0)),
+  TLSConf1 = rabbit_networking:fix_ssl_options(maybe_parse_ip(TLSConf0)),
+  _ = rabbit_networking:ensure_listeners(
+        rabbit_networking:listener_per_ip_address(TLSConf1),
+        fun(Bound) -> start_tls_listener_on(Bound, CowboyOpts0, Routes, NumSslAcceptors) end,
+        fun stop_listener_on/1),
+  listener_started(?TLS_PROTOCOL, TLSConf1).
+
+-spec start_tls_listener_on([{atom(), any()}], map(), cowboy_router:dispatch_rules(),
+                            non_neg_integer()) -> new | existing.
+start_tls_listener_on(TLSConf, CowboyOpts0, Routes, NumSslAcceptors) ->
+  TLSPort = proplists:get_value(port, TLSConf),
   RanchTransportOpts = #{
     socket_opts     => [{alpn_preferred_protocols, [<<"h2">>, <<"http/1.1">>]}|TLSConf],
     connection_type => supervisor,
@@ -151,13 +170,13 @@ start_tls_listener(TLSConf0, CowboyOpts0, Routes) ->
         %% Enable HTTP/2 Websocket if not explicitly disabled.
         enable_connect_protocol => maps:get(enable_connect_protocol, CowboyOpts0, true)
   },
-  case ranch:start_listener(rabbit_networking:ranch_ref(TLSConf),
+  Result = case ranch:start_listener(rabbit_networking:ranch_ref(TLSConf),
                             ranch_ssl,
                             RanchTransportOpts,
                             rabbit_web_stomp_connection_sup,
                             CowboyOpts) of
-      {ok, _}                       -> ok;
-      {error, {already_started, _}} -> ok;
+      {ok, _}                       -> new;
+      {error, {already_started, _}} -> existing;
       {error, ErrTLS}                  ->
           ?LOG_ERROR(
               "Failed to start a TLS WebSocket (HTTPS) listener. Error: ~tp,"
@@ -165,27 +184,20 @@ start_tls_listener(TLSConf0, CowboyOpts0, Routes) ->
               [ErrTLS, TLSConf]),
           throw(ErrTLS)
   end,
-  listener_started(?TLS_PROTOCOL, TLSConf),
   ?LOG_INFO(
       "rabbit_web_stomp: listening for HTTPS connections on ~ts:~w",
-      [get_binding_address(TLSConf), TLSPort]).
+      [get_binding_address(TLSConf), TLSPort]),
+  Result.
+
+-spec stop_listener_on([{atom(), any()}]) -> ok.
+stop_listener_on(Bound) ->
+    _ = ranch:stop_listener(rabbit_networking:ranch_ref(Bound)),
+    ok.
 
 listener_started(Protocol, Listener) ->
     Port = rabbit_misc:pget(port, Listener),
-    _ = case rabbit_misc:pget(ip, Listener) of
-            undefined ->
-                [rabbit_networking:tcp_listener_started(Protocol, Listener,
-                                                        IPAddress, Port)
-                 || {IPAddress, _Port, _Family}
-                        <- rabbit_networking:tcp_listener_addresses(Port)];
-            IP when is_tuple(IP) ->
-                rabbit_networking:tcp_listener_started(Protocol, Listener,
-                                                       IP, Port);
-            IP when is_list(IP) ->
-                {ok, ParsedIP} = inet_parse:address(IP),
-                rabbit_networking:tcp_listener_started(Protocol, Listener,
-                                                       ParsedIP, Port)
-        end,
+    _ = [rabbit_networking:tcp_listener_started(Protocol, Listener, IPAddress, Port)
+         || IPAddress <- rabbit_networking:listener_ip_addresses(Listener)],
     ok.
 
 get_env(Key, Default) ->
