@@ -379,7 +379,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
            node,
            :rabbit_runtime_parameters,
            :value_global,
-           [:cluster_tags],
+           ["cluster_tags"],
            timeout
          ) do
       :not_found -> []

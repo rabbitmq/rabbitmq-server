@@ -41,7 +41,7 @@
 -define(SAMPLING_INTERVAL, 1000).
 -define(FILTER_RPC_TIMEOUT, 10000).
 
--define(INTERNAL_CLUSTER_ID_PARAM_NAME, internal_cluster_id).
+-define(INTERNAL_CLUSTER_ID_PARAM_NAME, <<"internal_cluster_id">>).
 
 % Retries as passed to https://erlang.org/doc/man/global.html#set_lock-3
 % To understand how retries map to the timeout, read
@@ -101,7 +101,7 @@ is_process_running(Node, Process) ->
 -spec cluster_name() -> binary().
 
 cluster_name() ->
-    case rabbit_runtime_parameters:value_global(cluster_name) of
+    case rabbit_runtime_parameters:value_global(<<"cluster_name">>) of
         not_found -> cluster_name_default();
         Name -> Name
     end.
@@ -153,7 +153,7 @@ set_cluster_name(Name) ->
 set_cluster_name(Name, Username) ->
     %% Cluster name should be binary
     BinaryName = rabbit_data_coercion:to_binary(Name),
-    rabbit_runtime_parameters:set_global(cluster_name, BinaryName, Username).
+    rabbit_runtime_parameters:set_global(<<"cluster_name">>, BinaryName, Username).
 
 ensure_epmd() ->
     rabbit_nodes_common:ensure_epmd().

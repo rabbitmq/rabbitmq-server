@@ -214,7 +214,7 @@ import_case5(Config) ->
     import_file_case(Config, "case5"),
     ?assertEqual(rabbit_ct_broker_helpers:rpc(Config, 0,
                                               rabbit_runtime_parameters, value_global,
-                                              [mqtt_port_to_vhost_mapping]),
+                                              [<<"mqtt_port_to_vhost_mapping">>]),
                  %% expect a proplist, see rabbitmq/rabbitmq-management#528
                  [{<<"1883">>,<<"/">>},
                   {<<"1884">>,<<"vhost2">>}]).

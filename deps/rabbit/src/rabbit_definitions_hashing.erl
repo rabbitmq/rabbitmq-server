@@ -41,7 +41,7 @@
 ]).
 
 -define(DEFAULT_HASHING_ALGORITHM, sha256).
--define(GLOBAL_RUNTIME_PARAMETER_KEY, imported_definition_hash_value).
+-define(GLOBAL_RUNTIME_PARAMETER_KEY, <<"imported_definition_hash_value">>).
 -define(PARAMETER_NAME, <<"content_hash_value">>).
 
 %%

@@ -40,7 +40,9 @@ all() -> [
     validate_max_hops_rejects_out_of_range,
     validate_max_hops_rejects_non_integers,
     max_hops_keeps_valid_values,
-    max_hops_normalizes_legacy_values
+    max_hops_normalizes_legacy_values,
+    cluster_name_parameter_set_triggers_federation_adjust,
+    unrelated_global_parameter_set_does_not_trigger_federation_adjust
 ].
 
 init_per_suite(Config) ->
@@ -350,3 +352,32 @@ validation_errors(MaxHops) ->
                 <<"a-name">>, [[{<<"upstream">>, <<"an-upstream">>},
                                 {<<"max-hops">>, MaxHops}]], none),
     [R || Rs <- Results, R <- Rs, R =/= ok].
+
+%% -------------------------------------------------------------------
+%% rabbit_federation_event: cluster name change detection
+%% -------------------------------------------------------------------
+
+%% Regression test: cluster_name used to be an atom, it's now a binary
+cluster_name_parameter_set_triggers_federation_adjust(_Config) ->
+    ok = meck:new(rabbit_federation_parameters, [passthrough]),
+    ok = meck:expect(rabbit_federation_parameters, adjust, fun(_) -> ok end),
+    try
+        Event = #event{type  = parameter_set,
+                       props = [{component, global}, {name, <<"cluster_name">>}]},
+        {ok, []} = rabbit_federation_event:handle_event(Event, []),
+        ?assert(meck:called(rabbit_federation_parameters, adjust, [everything]))
+    after
+        meck:unload(rabbit_federation_parameters)
+    end.
+
+unrelated_global_parameter_set_does_not_trigger_federation_adjust(_Config) ->
+    ok = meck:new(rabbit_federation_parameters, [passthrough]),
+    ok = meck:expect(rabbit_federation_parameters, adjust, fun(_) -> ok end),
+    try
+        Event = #event{type  = parameter_set,
+                       props = [{component, global}, {name, <<"cluster_tags">>}]},
+        {ok, []} = rabbit_federation_event:handle_event(Event, []),
+        ?assertNot(meck:called(rabbit_federation_parameters, adjust, '_'))
+    after
+        meck:unload(rabbit_federation_parameters)
+    end.
