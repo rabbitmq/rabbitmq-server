@@ -20,7 +20,15 @@
     %% the pid of the process returned by eetcd_lease:keep_alive/2
     %% which refreshes this node's key lease
     node_lease_keepalive_pid,
+    %% true once register/0,1 has successfully put this node's key at
+    %% least once; node_key_lease_id can't tell that apart from a lapsed
+    %% lease, since it is undefined in both cases
+    node_key_registered = false,
     lock_ttl_in_seconds,
+    lock_lease_id,
+    %% the pid of the process returned by eetcd_lease:keep_alive/2
+    %% which refreshes the registration lock's lease
+    lock_lease_keepalive_pid,
     username,
     obfuscated_password
 }).
