@@ -21,7 +21,7 @@
 -export([start_link/0, ensure_listener/1, stop_listener/1]).
 
 -ifdef(TEST).
--export([build_ranch_transport_opts/1]).
+-export([build_ranch_transport_opts/1, combine_ensure_results/1]).
 -endif.
 
 %% supervisor callbacks
@@ -32,35 +32,63 @@
 start_link() ->
     supervisor:start_link({local, ?SUP}, ?MODULE, []).
 
+-spec ensure_listener([{atom(), any()}]) ->
+    new | existing | ignore | {error, {no_port_given, [{atom(), any()}]}}.
 ensure_listener(Listener) ->
     case proplists:get_value(port, Listener) of
         undefined ->
             {error, {no_port_given, Listener}};
         _ ->
-            {Transport, TransportOpts0, ProtoOpts} = preprocess_config(Listener),
-            TransportOpts1 = rabbit_ssl_options:wrap_password_opt(TransportOpts0),
-            TransportOpts = build_ranch_transport_opts(TransportOpts1),
-            ProtoOptsMap = maps:from_list(ProtoOpts),
-            StreamHandlers = stream_handlers_config(ProtoOpts),
-            ?LOG_DEBUG("Starting HTTP[S] listener with transport ~ts", [Transport]),
-            CowboyOptsMap =
-                maps:merge(#{env =>
-                                #{rabbit_listener => Listener},
-                             middlewares =>
-                                [rabbit_cowboy_middleware, cowboy_router, cowboy_handler],
-                             stream_handlers => StreamHandlers},
-                           ProtoOptsMap),
-            Child = ranch:child_spec(rabbit_networking:ranch_ref(Listener),
-                Transport, TransportOpts,
-                cowboy_clear, CowboyOptsMap),
-            case supervisor:start_child(?SUP, Child) of
-                {ok,                      _}  -> new;
-                {error, {already_started, _}} -> existing;
-                {error, {E, _}}               -> check_error(Listener, E)
-            end
+            combine_ensure_results(
+              [ensure_listener_on(Listener, Bound)
+               || Bound <- rabbit_networking:listener_per_ip_address(Listener)])
     end.
 
+%% `Listener` is passed to Cowboy unchanged because the registry's
+%% `lookup_dispatch/1` matches the stored term exactly.
+%%
+%% `Bound` is the same configuration narrowed to the address this socket binds to.
+-spec ensure_listener_on([{atom(), any()}], [{atom(), any()}]) -> new | existing | ignore.
+ensure_listener_on(Listener, Bound) ->
+    {Transport, TransportOpts0, ProtoOpts} = preprocess_config(Bound),
+    TransportOpts1 = rabbit_ssl_options:wrap_password_opt(TransportOpts0),
+    TransportOpts = build_ranch_transport_opts(TransportOpts1),
+    ProtoOptsMap = maps:from_list(ProtoOpts),
+    StreamHandlers = stream_handlers_config(ProtoOpts),
+    ?LOG_DEBUG("Starting HTTP[S] listener with transport ~ts", [Transport]),
+    CowboyOptsMap =
+        maps:merge(#{env =>
+                        #{rabbit_listener => Listener},
+                     middlewares =>
+                        [rabbit_cowboy_middleware, cowboy_router, cowboy_handler],
+                     stream_handlers => StreamHandlers},
+                   ProtoOptsMap),
+    Child = ranch:child_spec(rabbit_networking:ranch_ref(Bound),
+        Transport, TransportOpts,
+        cowboy_clear, CowboyOptsMap),
+    case supervisor:start_child(?SUP, Child) of
+        {ok,                      _}  -> new;
+        {error, {already_started, _}} -> existing;
+        {error, {E, _}}               -> check_error(Bound, E)
+    end.
+
+%% The caller only sets up the dispatch table on `new`, so it has to win.
+-spec combine_ensure_results([new | existing | ignore]) -> new | existing | ignore.
+combine_ensure_results(Results) ->
+    case {lists:member(new, Results), lists:member(existing, Results)} of
+        {true,  _}     -> new;
+        {false, true}  -> existing;
+        {false, false} -> ignore
+    end.
+
+-spec stop_listener([{atom(), any()}]) -> ok.
 stop_listener(Listener) ->
+    _ = [stop_listener_on(Bound)
+         || Bound <- rabbit_networking:listener_per_ip_address(Listener)],
+    ok.
+
+-spec stop_listener_on([{atom(), any()}]) -> ok.
+stop_listener_on(Listener) ->
     Name = rabbit_networking:ranch_ref(Listener),
     ok = supervisor:terminate_child(?SUP, {ranch_embedded_sup, Name}),
     ok = supervisor:delete_child(?SUP, {ranch_embedded_sup, Name}).

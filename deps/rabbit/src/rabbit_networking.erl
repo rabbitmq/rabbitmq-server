@@ -34,6 +34,7 @@
          force_connection_event_refresh/1, force_non_amqp_connection_event_refresh/1,
          handshake/2, handshake/3, tcp_host/1,
          ranch_ref/1, ranch_ref/2, ranch_refs_of_protocol/1, ranch_ref_to_protocol/1,
+         listener_ip_addresses/1, listener_per_ip_address/1,
          listeners_of_protocol/1, stop_ranch_listeners_of_protocol/1,
          list_local_connections_of_protocol/1]).
 
@@ -215,28 +216,34 @@ tcp_listener_spec(NamePrefix, {IPAddress, Port, Family}, SocketOpts,
 ranch_ref(#listener{ip_address = IPAddress, port = Port}) ->
     {acceptor, IPAddress, Port};
 ranch_ref(Listener) when is_list(Listener) ->
-    Port = rabbit_misc:pget(port, Listener),
-    IPAddress = case rabbit_misc:pget(ip, Listener) of
+    [IPAddress | _] = listener_ip_addresses(Listener),
+    {acceptor, IPAddress, rabbit_misc:pget(port, Listener)};
+ranch_ref(undefined) ->
+    undefined.
+
+%% Every address for a listener, computed in a dual-stack aware way.
+-spec listener_ip_addresses([{atom(), any()}]) -> [inet:ip_address(), ...].
+listener_ip_addresses(Listener) ->
+    case rabbit_misc:pget(ip, Listener) of
         undefined ->
-            [{Value, _Port, _Family} | _] = tcp_listener_addresses(Port),
-            Value;
+            Port = rabbit_misc:pget(port, Listener),
+            [IPAddress || {IPAddress, _Port, _Family} <- tcp_listener_addresses(Port)];
         Value when is_list(Value) ->
             %% since we only use this function to parse the address, only one result should
             %% be returned
             [{Parsed, _Family} | _] = gethostaddr(Value, auto),
-            Parsed;
+            [Parsed];
         Value when is_binary(Value) ->
-            Str = rabbit_data_coercion:to_list(Value),
-            %% since we only use this function to parse the address, only one result should
-            %% be returned
-            [{Parsed, _Family} | _] = gethostaddr(Str, auto),
-            Parsed;
+            [{Parsed, _Family} | _] = gethostaddr(rabbit_data_coercion:to_list(Value), auto),
+            [Parsed];
         Value when is_tuple(Value) ->
-            Value
-    end,
-    {acceptor, IPAddress, Port};
-ranch_ref(undefined) ->
-    undefined.
+            [Value]
+    end.
+
+-spec listener_per_ip_address([{atom(), any()}]) -> [[{atom(), any()}], ...].
+listener_per_ip_address(Listener) ->
+    [[{ip, IPAddress} | proplists:delete(ip, Listener)]
+     || IPAddress <- listener_ip_addresses(Listener)].
 
 -spec ranch_ref(inet:ip_address(), ip_port()) -> ranch:ref().
 

@@ -161,18 +161,8 @@ listener_info(Listener) ->
                        P
                end,
     Port = pget(port, Listener),
-    IPAddress = case rabbit_misc:pget(ip, Listener) of
-                    undefined ->
-                        [{AutoIPAddress, _Port, _Family} | _]
-                            = rabbit_networking:tcp_listener_addresses(Port),
-                        AutoIPAddress;
-                    IP when is_tuple(IP) ->
-                        IP;
-                    IP when is_list(IP) ->
-                        {ok, ParsedIP} = inet_parse:address(IP),
-                        ParsedIP
-                end,
-    [{Protocol, IPAddress, Port}].
+    [{Protocol, IPAddress, Port}
+     || IPAddress <- rabbit_networking:listener_ip_addresses(Listener)].
 
 lookup_dispatch(Lsnr) ->
     case ets:lookup(?ETS, pget(port, Lsnr)) of
