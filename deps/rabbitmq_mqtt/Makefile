@@ -53,7 +53,7 @@ TEST_DEPS = cowlib emqtt ct_helper rabbitmq_ct_helpers rabbitmq_ct_client_helper
 PLT_APPS += rabbitmq_cli $(ELIXIR_ERL_EBIN)
 
 dep_ct_helper = git https://github.com/extend/ct_helper.git master
-dep_emqtt = git https://github.com/emqx/emqtt.git 1.14.6
+dep_emqtt = git https://github.com/emqx/emqtt.git 1.16.1
 
 ELIXIR = system
 
@@ -67,14 +67,6 @@ include ../../erlang.mk
 ELIXIR_ERL_EBIN := $(shell dirname $$(elixir -e 'IO.puts(:code.which(:elixir_erl))' 2>/dev/null))
 DIALYZER_PLT_OPTS += -pa $(ELIXIR_ERL_EBIN)
 DIALYZER_OPTS += -pa $(ELIXIR_ERL_EBIN)
-
-# emqtt is a dependency shared with rabbitmq_web_mqtt, which patches it to
-# support ws_upgrade_options; apply the same patch here too since whichever
-# plugin builds first is the one that fetches the shared deps/emqtt checkout.
-autopatch-emqtt::
-	$(verbose) grep -q ws_upgrade_options $(DEPS_DIR)/emqtt/src/emqtt_ws.erl || ( \
-		patch -p1 -d $(DEPS_DIR)/emqtt < $(CURDIR)/../rabbitmq_web_mqtt/emqtt-ws-upgrade-options.patch && \
-		rm -f $(ERLANG_MK_TMP)/dep_built/emqtt )
 
 clean::
 	if test -d test/java_SUITE_data; then cd test/java_SUITE_data && $(MAKE) clean; fi
