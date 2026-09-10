@@ -444,10 +444,20 @@ process_connect(Implicit, Frame,
                             State)
               end,
               case {Res1, Implicit} of
+                  %% Success (Implicit)
+                  %% Update state without sending a CONNECTED frame
                   {{ok, _, StateN2}, implicit} ->
-                      self() ! connection_created, ok(StateN2);
-                  _ ->
-                      self() ! connection_created, Res1
+                      self() ! connection_created,
+                      ok(StateN2);
+                  %% Success (Explicit)
+                  %% Return the CONNECTED frame and update state
+                  {{ok, _, _}, _} ->
+                      self() ! connection_created,
+                      Res1;
+                  %% Failure (Authentication, quotas, etc.)
+                  %% Do NOT emit connection_created
+                  {ErrorRes, _} ->
+                      ErrorRes
               end
       end,
       State).

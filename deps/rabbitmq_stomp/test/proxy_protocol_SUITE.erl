@@ -56,22 +56,32 @@ end_per_suite(Config) ->
 init_per_group(_, Config) -> Config.
 end_per_group(_, Config) -> Config.
 
+init_per_testcase(Testcase, Config)
+  when Testcase == proxy_protocol_v1 orelse Testcase == proxy_protocol_v1_tls ->
+    %% Allow guest from the spoofed 192.168.1.1 IP
+    ok = set_loopback_users(Config, []),
+    rabbit_ct_helpers:testcase_started(Config, Testcase);
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
+end_per_testcase(Testcase, Config)
+  when Testcase == proxy_protocol_v1 orelse Testcase == proxy_protocol_v1_tls ->
+    %% Restore default loopback restrictions
+    ok = set_loopback_users(Config, [<<"guest">>]);
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
 proxy_protocol_v1(Config) ->
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stomp),
     {ok, Socket} = gen_tcp:connect({127,0,0,1}, Port,
-        [binary, {active, false}, {packet, raw}]),
+                                   [binary, {active, false}, {packet, raw}]),
     ok = inet:send(Socket, "PROXY TCP4 192.168.1.1 192.168.1.2 80 81\r\n"),
     ok = inet:send(Socket, stomp_connect_frame()),
     {ok, _Packet} = gen_tcp:recv(Socket, 0, ?TIMEOUT),
     ConnectionName = rabbit_ct_broker_helpers:rpc(Config, 0,
-        ?MODULE, connection_name, []),
-    match = re:run(ConnectionName, <<"^192.168.1.1:80 -> 192.168.1.2:81$">>, [{capture, none}]),
+                                                  ?MODULE, connection_name, []),
+    match = re:run(ConnectionName, <<"^192.168.1.1:80 -> 192.168.1.2:81$">>,
+                   [{capture, none}]),
     gen_tcp:close(Socket),
     ok.
 
