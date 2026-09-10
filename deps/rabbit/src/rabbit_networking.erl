@@ -36,7 +36,8 @@
          ranch_ref/1, ranch_ref/2, ranch_refs_of_protocol/1, ranch_ref_to_protocol/1,
          listener_ip_addresses/1, listener_per_ip_address/1,
          listeners_of_protocol/1, stop_ranch_listeners_of_protocol/1,
-         list_local_connections_of_protocol/1]).
+         list_local_connections_of_protocol/1,
+         ensure_listeners/3]).
 
 %% Used by TCP-based transports, e.g. STOMP adapter
 -export([tcp_listener_addresses/1,
@@ -244,6 +245,32 @@ listener_ip_addresses(Listener) ->
 listener_per_ip_address(Listener) ->
     [[{ip, IPAddress} | proplists:delete(ip, Listener)]
      || IPAddress <- listener_ip_addresses(Listener)].
+
+%% A later address failing to bind must not leave an earlier address's
+%% listener running and unrecorded: `Stop` undoes every address this call
+%% has started with `Start` before the failure is re-raised.
+-spec ensure_listeners([[{atom(), any()}], ...],
+                       fun(([{atom(), any()}]) -> new | existing | ignore),
+                       fun(([{atom(), any()}]) -> any())) ->
+    [new | existing | ignore].
+ensure_listeners(PerAddress, Start, Stop) ->
+    ensure_listeners(PerAddress, Start, Stop, [], []).
+
+ensure_listeners([], _Start, _Stop, _Started, Results) ->
+    lists:reverse(Results);
+ensure_listeners([Bound | Rest], Start, Stop, Started, Results) ->
+    try Start(Bound) of
+        Result ->
+            Started1 = case Result of
+                           new -> [Bound | Started];
+                           _   -> Started
+                       end,
+            ensure_listeners(Rest, Start, Stop, Started1, [Result | Results])
+    catch
+        Class:Reason:Stacktrace ->
+            _ = [Stop(B) || B <- Started],
+            erlang:raise(Class, Reason, Stacktrace)
+    end.
 
 -spec ranch_ref(inet:ip_address(), ip_port()) -> ranch:ref().
 

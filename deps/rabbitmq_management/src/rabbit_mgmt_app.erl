@@ -62,9 +62,21 @@ start_configured_listeners(IgnoreApps, NeedLogStartup) ->
     Listeners = listeners_with_contexts(),
     ok = application:set_env(rabbitmq_management, ?CONTEXTS_KEY,
                              [Context || {Context, _} <- Listeners]),
-    [start_listener(Context, Listener, IgnoreApps, NeedLogStartup)
-      || {Context, Listener} <- Listeners],
-    ok.
+    start_listeners(Listeners, IgnoreApps, NeedLogStartup, []).
+
+%% A later listener's registration failure must not leave an earlier
+%% context registered with nothing owning it; contexts already started in
+%% this call are unregistered before the failure is re-raised.
+start_listeners([], _IgnoreApps, _NeedLogStartup, _Started) ->
+    ok;
+start_listeners([{Context, Listener} | Rest], IgnoreApps, NeedLogStartup, Started) ->
+    try start_listener(Context, Listener, IgnoreApps, NeedLogStartup) of
+        ok -> start_listeners(Rest, IgnoreApps, NeedLogStartup, [Context | Started])
+    catch
+        Class:Reason:Stacktrace ->
+            _ = [rabbit_web_dispatch:unregister_context(C) || C <- Started],
+            erlang:raise(Class, Reason, Stacktrace)
+    end.
 
 -spec listeners_with_contexts() -> [{atom(), [{atom(), any()}]}].
 listeners_with_contexts() ->

@@ -37,7 +37,7 @@ init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
     Config1 = rabbit_ct_helpers:set_config(Config, [
         {rmq_nodename_suffix, ?MODULE},
-        {rmq_extra_tcp_ports, [tcp_port_http_extra]}
+        {rmq_extra_tcp_ports, [tcp_port_http_extra, tcp_port_http_extra2]}
       ]),
     rabbit_ct_helpers:run_setup_steps(Config1,
       rabbit_ct_broker_helpers:setup_steps()).
@@ -90,8 +90,8 @@ add_idempotence_test1(Port) ->
     passed.
 
 remove_frees_the_port_test(Config) ->
-    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_http_extra),
-    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, remove_frees_the_port_test1, [Port + 2]).
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_http_extra2),
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, remove_frees_the_port_test1, [Port]).
 remove_frees_the_port_test1(Port) ->
     F = fun(_Req) -> ok end,
     L = {"/remove_me", "RemoveMe"},

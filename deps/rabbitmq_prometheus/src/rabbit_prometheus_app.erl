@@ -44,8 +44,21 @@ start_configured_listener() ->
     Listeners = listeners_with_contexts(),
     ok = application:set_env(rabbitmq_prometheus, ?CONTEXTS_KEY,
                              [Context || {Context, _} <- Listeners]),
-    _ = [start_listener(Context, Listener) || {Context, Listener} <- Listeners],
-    ok.
+    start_listeners(Listeners, []).
+
+%% A later listener's registration failure must not leave an earlier
+%% context registered with nothing owning it; contexts already started in
+%% this call are unregistered before the failure is re-raised.
+start_listeners([], _Started) ->
+    ok;
+start_listeners([{Context, Listener} | Rest], Started) ->
+    try start_listener(Context, Listener) of
+        ok -> start_listeners(Rest, [Context | Started])
+    catch
+        Class:Reason:Stacktrace ->
+            _ = [rabbit_web_dispatch:unregister_context(C) || C <- Started],
+            erlang:raise(Class, Reason, Stacktrace)
+    end.
 
 -spec listeners_with_contexts() -> [{atom(), [{atom(), any()}]}].
 listeners_with_contexts() ->

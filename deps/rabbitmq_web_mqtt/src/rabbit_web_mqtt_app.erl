@@ -99,11 +99,13 @@ mqtt_init() ->
 start_tcp_listener([], _) -> ok;
 start_tcp_listener(TCPConf0, CowboyOpts) ->
     TCPConf = get_tcp_conf(TCPConf0),
-    _ = [start_tcp_listener_on(Bound, CowboyOpts)
-         || Bound <- rabbit_networking:listener_per_ip_address(TCPConf)],
+    _ = rabbit_networking:ensure_listeners(
+          rabbit_networking:listener_per_ip_address(TCPConf),
+          fun(Bound) -> start_tcp_listener_on(Bound, CowboyOpts) end,
+          fun stop_listener_on/1),
     listener_started(?TCP_PROTOCOL, TCPConf).
 
--spec start_tcp_listener_on([{atom(), any()}], map()) -> ok.
+-spec start_tcp_listener_on([{atom(), any()}], map()) -> new | existing.
 start_tcp_listener_on(TCPConf, CowboyOpts) ->
     Port = rabbit_misc:pget(port, TCPConf),
     RanchRef = rabbit_networking:ranch_ref(TCPConf),
@@ -114,11 +116,11 @@ start_tcp_listener_on(TCPConf, CowboyOpts) ->
       num_acceptors => get_env(num_tcp_acceptors, 10),
       num_conns_sups => get_env(num_conns_sup, 1)
      },
-    case cowboy:start_clear(RanchRef, RanchTransportOpts, CowboyOpts) of
+    Result = case cowboy:start_clear(RanchRef, RanchTransportOpts, CowboyOpts) of
         {ok, _} ->
-            ok;
+            new;
         {error, {already_started, _}} ->
-            ok;
+            existing;
         {error, ErrTCP} ->
             ?LOG_ERROR(
               "Failed to start a WebSocket (HTTP) listener. Error: ~p, listener settings: ~p",
@@ -126,18 +128,21 @@ start_tcp_listener_on(TCPConf, CowboyOpts) ->
             throw(ErrTCP)
     end,
     ?LOG_INFO("rabbit_web_mqtt: listening for HTTP connections on ~s:~w",
-                    [binding_address(TCPConf), Port]).
+                    [binding_address(TCPConf), Port]),
+    Result.
 
 
 start_tls_listener([], _) -> ok;
 start_tls_listener(TLSConf0, CowboyOpts0) ->
     _ = rabbit_networking:ensure_ssl(),
     TLSConf = rabbit_networking:fix_ssl_options(get_tls_conf(TLSConf0)),
-    _ = [start_tls_listener_on(Bound, CowboyOpts0)
-         || Bound <- rabbit_networking:listener_per_ip_address(TLSConf)],
+    _ = rabbit_networking:ensure_listeners(
+          rabbit_networking:listener_per_ip_address(TLSConf),
+          fun(Bound) -> start_tls_listener_on(Bound, CowboyOpts0) end,
+          fun stop_listener_on/1),
     listener_started(?TLS_PROTOCOL, TLSConf).
 
--spec start_tls_listener_on([{atom(), any()}], map()) -> ok.
+-spec start_tls_listener_on([{atom(), any()}], map()) -> new | existing.
 start_tls_listener_on(TLSConf, CowboyOpts0) ->
     TLSPort = rabbit_misc:pget(port, TLSConf),
     RanchRef = rabbit_networking:ranch_ref(TLSConf),
@@ -152,11 +157,11 @@ start_tls_listener_on(TLSConf, CowboyOpts0) ->
         %% Enable HTTP/2 Websocket if not explicitly disabled.
         enable_connect_protocol => maps:get(enable_connect_protocol, CowboyOpts0, true)
     },
-    case cowboy:start_tls(RanchRef, RanchTransportOpts, CowboyOpts) of
+    Result = case cowboy:start_tls(RanchRef, RanchTransportOpts, CowboyOpts) of
         {ok, _} ->
-            ok;
+            new;
         {error, {already_started, _}} ->
-            ok;
+            existing;
         {error, ErrTLS} ->
             ?LOG_ERROR(
               "Failed to start a TLS WebSocket (HTTPS) listener. Error: ~p, listener settings: ~p",
@@ -164,7 +169,13 @@ start_tls_listener_on(TLSConf, CowboyOpts0) ->
             throw(ErrTLS)
     end,
     ?LOG_INFO("rabbit_web_mqtt: listening for HTTPS connections on ~s:~w",
-                    [binding_address(TLSConf), TLSPort]).
+                    [binding_address(TLSConf), TLSPort]),
+    Result.
+
+-spec stop_listener_on([{atom(), any()}]) -> ok.
+stop_listener_on(Bound) ->
+    _ = cowboy:stop_listener(rabbit_networking:ranch_ref(Bound)),
+    ok.
 
 listener_started(Protocol, Listener) ->
     Port = rabbit_misc:pget(port, Listener),

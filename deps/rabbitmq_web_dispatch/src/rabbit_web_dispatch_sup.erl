@@ -49,7 +49,10 @@ ensure_listener(Listener) ->
     new | existing | ignore |
     {error, {listener_address_in_use, [{atom(), any()}]}}.
 ensure_listener(Listener, PerAddress) ->
-    Results = [ensure_listener_on(Listener, Bound) || Bound <- PerAddress],
+    Results = rabbit_networking:ensure_listeners(
+                PerAddress,
+                fun(Bound) -> ensure_listener_on(Listener, Bound) end,
+                fun stop_listener_on/1),
     case combine_ensure_results(Results) of
         mixed ->
             _ = [stop_listener_on(Bound)
