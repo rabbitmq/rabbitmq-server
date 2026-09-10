@@ -13,7 +13,9 @@
          decrypt_config/1]).
 
 %% Only used in tests.
--export([decrypt_config/2]).
+-export([decrypt_config/2,
+         log_app_env_var/2,
+         is_sensitive_var/1]).
 
 
 setup(Context) ->
@@ -448,30 +450,72 @@ apply_app_env_vars(App, [{Var, Value} | Rest]) ->
 apply_app_env_vars(_, []) ->
     ok.
 
-log_app_env_var(password = Var, _) ->
-    ?LOG_DEBUG("    - ~ts = ********", [Var],
-               #{domain => ?RMQLOG_DOMAIN_PRELAUNCH});
-log_app_env_var(Var, Value) when is_list(Value) ->
-    %% To redact sensitive entries,
-    %% e.g. {password,"********"} for stream replication over TLS
-    Redacted = redact_env_var(Value),
-    ?LOG_DEBUG("    - ~ts = ~tp", [Var, Redacted],
-               #{domain => ?RMQLOG_DOMAIN_PRELAUNCH});
 log_app_env_var(Var, Value) ->
-    ?LOG_DEBUG("    - ~ts = ~tp", [Var, Value],
-               #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}).
+    case is_sensitive_var(Var) of
+        true ->
+            ?LOG_DEBUG("    - ~ts = ********", [Var],
+                       #{domain => ?RMQLOG_DOMAIN_PRELAUNCH});
+        false when is_list(Value); is_map(Value) ->
+            %% To redact sensitive entries,
+            %% e.g. {password,"********"} for stream replication over TLS
+            Redacted = redact_env_var(Value),
+            ?LOG_DEBUG("    - ~ts = ~tp", [Var, Redacted],
+                       #{domain => ?RMQLOG_DOMAIN_PRELAUNCH});
+        false ->
+            ?LOG_DEBUG("    - ~ts = ~tp", [Var, Value],
+                       #{domain => ?RMQLOG_DOMAIN_PRELAUNCH})
+    end.
 
+%% Matches `default_pass`, `anonymous_login_pass`,
+%% `config_entry_decoder.passphrase`, etc, not just the atom
+%% `password`.
+is_sensitive_var(Var) when is_atom(Var) ->
+    is_sensitive_var(atom_to_list(Var));
+is_sensitive_var(Var) when is_binary(Var) ->
+    is_sensitive_var(binary_to_list(Var));
+is_sensitive_var(Var) when is_list(Var) ->
+    %% Match the last word, not a bare substring: catches
+    %% `default_pass`/`client_secret`/`auth_token` without flagging
+    %% `password_hashing_module`/`token_endpoint`. Non-chardata keys
+    %% (e.g. a proplist keyed by port numbers) are not sensitive.
+    try
+        Lower = string:lowercase(Var),
+        Words = re:split(Lower, "[^a-z0-9]+", [{return, list}]),
+        lists:member(lists:last(Words),
+                      ["pass", "password", "passphrase", "secret", "token"])
+    catch
+        _:_ -> false
+    end;
+is_sensitive_var(_Var) ->
+    false.
+
+%% Recurses into nested lists/maps, not just the top level.
 redact_env_var(Value) when is_list(Value) ->
-    redact_env_var(Value, []);
+    [redact_env_var_item(Item) || Item <- Value];
+redact_env_var(Value) when is_map(Value) ->
+    maps:map(fun redact_env_var_value/2, Value);
 redact_env_var(Value) ->
     Value.
 
-redact_env_var([], Acc) ->
-    lists:reverse(Acc);
-redact_env_var([{password, _Value} | Rest], Acc) ->
-    redact_env_var(Rest, Acc ++ [{password, "********"}]);
-redact_env_var([AppVar | Rest], Acc) ->
-    redact_env_var(Rest, [AppVar | Acc]).
+redact_env_var_item(Item) when is_tuple(Item), tuple_size(Item) >= 2 ->
+    [Key | Rest] = tuple_to_list(Item),
+    case is_sensitive_var(Key) of
+        true ->
+            %% Collapse to {Key, "********"} regardless of arity:
+            %% don't guess which element held the secret.
+            {Key, "********"};
+        false ->
+            list_to_tuple([Key | [redact_env_var(E) || E <- Rest]])
+    end;
+redact_env_var_item(Item) ->
+    %% Not a {Key, ...} tuple; still recurse in case it's nested.
+    redact_env_var(Item).
+
+redact_env_var_value(Key, Value) ->
+    case is_sensitive_var(Key) of
+        true  -> "********";
+        false -> redact_env_var(Value)
+    end.
 
 %% -------------------------------------------------------------------
 %% Config decryption.
