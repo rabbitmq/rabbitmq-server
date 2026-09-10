@@ -343,14 +343,60 @@ format_mochiweb_option_list(C) ->
     [{K, format_mochiweb_option(K, V)} || {K, V} <- C].
 
 format_mochiweb_option(ssl_opts, V) ->
-    format_mochiweb_option_list(V);
+    format_mochiweb_option_list(redact_ssl_opts(V));
+format_mochiweb_option(_K, '...') ->
+    <<"...">>;
 format_mochiweb_option(_K, V) ->
     case io_lib:printable_unicode_list(V) of
         true  -> rabbit_data_coercion:to_utf8_binary(V);
         false -> rabbit_data_coercion:to_utf8_binary(rabbit_misc:format("~w", [V]))
     end.
 
+redact_ssl_opts([{K, _V} | Rest]) when K =:= cert;
+                                       K =:= certs_keys;
+                                       K =:= cacerts;
+                                       K =:= key;
+                                       K =:= password;
+                                       K =:= sni_hosts;
+                                       K =:= stateless_tickets_seed;
+                                       K =:= verify_fun;
+                                       K =:= user_lookup_fun ->
+    [{K, '...'} | redact_ssl_opts(Rest)];
+redact_ssl_opts([Opt | Rest]) ->
+    [Opt | redact_ssl_opts(Rest)];
+redact_ssl_opts([]) ->
+    [].
+
 %%--------------------------------------------------------------------
+
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+
+format_context_redacts_ssl_opts_secrets_test() ->
+    Context = {"/some/path", "some description",
+               [{port, 15671},
+                {ssl_opts, [{verify, verify_peer},
+                            {password, "hunter2"},
+                            {key, {'RSAPrivateKey', <<1, 2, 3>>}},
+                            {cert, <<4, 5, 6>>},
+                            {cacerts, [<<7, 8, 9>>]},
+                            {certs_keys, [#{}]},
+                            {sni_hosts, [{"other.example.com",
+                                          [{key, {'RSAPrivateKey', <<1, 2, 3>>}},
+                                           {cert, <<4, 5, 6>>}]}]},
+                            {stateless_tickets_seed, <<10, 11, 12>>},
+                            {verify_fun, {fun(_,_,_) -> {valid, ok} end,
+                                          <<"secretstate">>}},
+                            {user_lookup_fun, {fun(_,_,_) -> ok end,
+                                              #{<<"client1">> => <<"supersecretpsk">>}}}]}]},
+    Formatted = format_context(Context),
+    {ssl_opts, SslOpts} = lists:keyfind(ssl_opts, 1, Formatted),
+    ?assertEqual(<<"verify_peer">>, proplists:get_value(verify, SslOpts)),
+    [?assertEqual(<<"...">>, proplists:get_value(K, SslOpts))
+     || K <- [password, key, cert, cacerts, certs_keys, sni_hosts,
+              stateless_tickets_seed, verify_fun, user_lookup_fun]].
+
+-endif.
 
 init([]) ->
     {ok, Interval}   = application:get_env(rabbit, collect_statistics_interval),

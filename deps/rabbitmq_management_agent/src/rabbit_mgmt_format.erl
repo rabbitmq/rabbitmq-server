@@ -341,6 +341,15 @@ format_socket_opts([{certs_keys, CertsKeys} | Tail], Acc) when is_list(CertsKeys
     CertsKeysMsg = rabbit_data_coercion:to_utf8_binary(
         io_lib:format("(~b certs_keys entries)", [length(CertsKeys)])),
     format_socket_opts(Tail, [{certs_keys, CertsKeysMsg} | Acc]);
+%% hide sensitive information
+format_socket_opts([{cert, _Value} | Tail], Acc) ->
+    format_socket_opts(Tail, [{cert, '...'} | Acc]);
+format_socket_opts([{key, _Value} | Tail], Acc) ->
+    format_socket_opts(Tail, [{key, '...'} | Acc]);
+format_socket_opts([{password, _Value} | Tail], Acc) ->
+    format_socket_opts(Tail, [{password, '...'} | Acc]);
+format_socket_opts([{stateless_tickets_seed, _Value} | Tail], Acc) ->
+    format_socket_opts(Tail, [{stateless_tickets_seed, '...'} | Acc]);
 %% we do not report SNI host details in the UI,
 %% so skip this option and avoid some recursive formatting
 %% complexity
@@ -663,3 +672,31 @@ parse_bool(V)           -> throw({error, {not_boolean, V}}).
 
 args_hash(Args) ->
     list_to_binary(rabbit_misc:base64url(<<(erlang:phash2(Args, 1 bsl 32)):32>>)).
+
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+
+listener_redacts_ssl_opts_secrets_test() ->
+    Listener = #listener{node = node(), protocol = 'https',
+                         ip_address = {0,0,0,0}, port = 15671,
+                         opts = [{ssl_opts, [{verify, verify_peer},
+                                             {password, "hunter2"},
+                                             {key, {'RSAPrivateKey', <<1, 2, 3>>}},
+                                             {cert, <<4, 5, 6>>},
+                                             {sni_hosts, [{"other.example.com",
+                                                           [{key, {'RSAPrivateKey', <<1, 2, 3>>}}]}]},
+                                             {stateless_tickets_seed, <<10, 11, 12>>},
+                                             {verify_fun, {fun(_,_,_) -> {valid, ok} end,
+                                                           <<"secretstate">>}},
+                                             {user_lookup_fun, {fun(_,_,_) -> ok end,
+                                                               #{<<"client1">> => <<"supersecretpsk">>}}}]}]},
+    Formatted = listener(Listener),
+    {socket_opts, SocketOpts} = lists:keyfind(socket_opts, 1, Formatted),
+    {ssl_opts, SslOpts} = lists:keyfind(ssl_opts, 1, SocketOpts),
+    ?assertEqual(verify_peer, proplists:get_value(verify, SslOpts)),
+    [?assertEqual('...', proplists:get_value(K, SslOpts))
+     || K <- [password, key, cert, stateless_tickets_seed]],
+    [?assertEqual(undefined, proplists:get_value(K, SslOpts))
+     || K <- [sni_hosts, verify_fun, user_lookup_fun]].
+
+-endif.
