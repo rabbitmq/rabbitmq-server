@@ -30,9 +30,14 @@
          context_to_code_path/1]).
 
 -ifdef(TEST).
--export([parse_conf_env_file_output2/2,
+-export([parse_conf_env_file_output1/2,
+         parse_conf_env_file_output2/2,
          value_is_yes/1,
-         parse_conf_env_file_output_win32/2]).
+         parse_conf_env_file_output_win32/2,
+         post_port_cmd_output/3,
+         redact/2,
+         unicode_characters_to_list/1,
+         used_env_vars/0]).
 -endif.
 
 %% Vary from OTP version to version.
@@ -80,7 +85,14 @@
          "RABBITMQ_QUORUM_DIR",
          "RABBITMQ_STREAM_DIR",
          "RABBITMQ_USE_LONGNAME",
-         "SYS_PREFIX"
+         "SYS_PREFIX",
+         "ERL_CRASH_DUMP",
+         "ERL_INETRC",
+         "ERL_LIBS",
+         "ERL_EPMD_PORT",
+         "ERL_EPMD_ADDRESS",
+         "ERL_MAX_ETS_TABLES",
+         "ERL_MAX_PORTS"
         ]).
 
 -export_type([context/0]).
@@ -249,15 +261,19 @@ has_var_been_overridden(#{var_origins := Origins}, Var) ->
     end.
 
 get_used_env_vars() ->
-    lists:filter(
-      fun({Var, _}) -> var_is_used(Var) end,
-      lists:sort(env_vars())).
+    [{Var, redact(Var, Value)}
+     || {Var, Value} <- lists:sort(env_vars()), var_is_used(Var)].
 
 log_process_env() ->
     ?LOG_DEBUG("Process environment:"),
     lists:foreach(
       fun({Var, Value}) ->
-              ?LOG_DEBUG("  - ~ts = ~ts", [Var, Value])
+              case var_is_used(Var) of
+                  true ->
+                      ?LOG_DEBUG("  - ~ts = ~ts", [Var, redact(Var, Value)]);
+                  false ->
+                      ?LOG_DEBUG("  - ~ts (unused)", [Var])
+              end
       end, lists:sort(env_vars())).
 
 log_context(Context) ->
@@ -265,9 +281,34 @@ log_context(Context) ->
     lists:foreach(
       fun(Key) ->
               Value = maps:get(Key, Context),
-              ?LOG_DEBUG("  - ~ts: ~tp", [Key, Value])
+              ?LOG_DEBUG("  - ~ts: ~tp", [Key, redact(Key, Value)])
       end,
       lists:sort(maps:keys(Context))).
+
+%% Known secrets in used variables. Cookie is hashed consistent
+%% with the rest of the code, other values are masked.
+-define(REDACTED_VARS,
+        #{default_pass              => mask,
+          "RABBITMQ_DEFAULT_PASS"   => mask,
+          "DEFAULT_PASS"            => mask,
+          erlang_cookie             => hash,
+          "RABBITMQ_ERLANG_COOKIE"  => hash,
+          "ERLANG_COOKIE"           => hash}).
+
+redact(_NameOrKey, undefined) ->
+    undefined;
+redact(NameOrKey, Value) ->
+    case maps:find(NameOrKey, ?REDACTED_VARS) of
+        {ok, mask} -> "******";
+        {ok, hash} -> hash_secret(Value);
+        error      -> Value
+    end.
+
+hash_secret(Value) when is_atom(Value) ->
+    hash_secret(atom_to_list(Value));
+hash_secret(Value) when is_list(Value) ->
+    base64:encode_to_string(
+      erlang:md5(unicode:characters_to_binary(Value))).
 
 context_to_app_env_vars(Context) ->
     ?LOG_DEBUG(
@@ -1746,9 +1787,43 @@ post_port_cmd_output(#{os_type := {OSType, _}}, UnicodeOutput, ExitStatus) ->
     Lines = string:split(string:trim(UnicodeOutput), LineSep, all),
     ?LOG_DEBUG(
        "$RABBITMQ_CONF_ENV_FILE output:~n~ts",
-       [string:join([io_lib:format("  ~ts", [Line]) || Line <- Lines], "\n")],
+       [string:join(
+          [io_lib:format("  ~ts", [redact_sh_assignment(Line)])
+           || Line <- Lines],
+          "\n")],
        #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
+    %% The real parser needs the unredacted lines.
     Lines.
+
+%% Raw shell output, not a parsed value: only bare `VAR=value`
+%% assignments are masked. The variable name is always the last
+%% whitespace-separated token before `=`. Multi-line values are
+%% not supported but secrets are single line anyway.
+redact_sh_assignment(Line) ->
+    case string:split(Line, "=") of
+        [VarPart, _Value] ->
+            case lists:reverse(string:lexemes(VarPart, "\s\t")) of
+                [Var | _] ->
+                    case is_sensitive_sh_var(Var) of
+                        true  -> VarPart ++ "=******";
+                        false -> Line
+                    end;
+                [] ->
+                    Line
+            end;
+        _ ->
+            Line
+    end.
+
+%% Exact list of masked environment variables. We may include both
+%% variables used by RabbitMQ and other known secret variables here
+%% as any inherited environment variables may end up in debug logs.
+-define(SH_MASKED_VARS,
+        ["RABBITMQ_DEFAULT_PASS", "DEFAULT_PASS",
+         "RABBITMQ_ERLANG_COOKIE", "ERLANG_COOKIE"]).
+
+is_sensitive_sh_var(Var) ->
+    lists:member(Var, ?SH_MASKED_VARS).
 
 parse_conf_env_file_output(Context, _, []) ->
     Context;
@@ -1793,10 +1868,11 @@ parse_conf_env_file_output_win32([Line | Lines], Vars) ->
             Vars1 = Vars#{Var => Val2},
             parse_conf_env_file_output_win32(Lines, Vars1);
         _ ->
-            %% Parsing failed somehow.
+            %% Only log length in case input line contained secrets.
             ?LOG_WARNING(
-               "Failed to parse $RABBITMQ_CONF_ENV_FILE output line: ~tp",
-               [Line],
+               "Failed to parse $RABBITMQ_CONF_ENV_FILE output line "
+               "(~b characters)",
+               [string:length(Line)],
                #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
             parse_conf_env_file_output_win32(Lines, Vars)
     end.
@@ -1818,10 +1894,11 @@ parse_conf_env_file_output2([Line | Lines], Vars) ->
                     Vars1 = Vars#{Var => Value},
                     parse_conf_env_file_output2(Lines1, Vars1);
                 _ ->
-                    %% Parsing failed somehow.
+                    %% Only log length in case input line contained secrets.
                     ?LOG_WARNING(
-                       "Failed to parse $RABBITMQ_CONF_ENV_FILE output: ~tp",
-                       [Line],
+                       "Failed to parse $RABBITMQ_CONF_ENV_FILE output "
+                       "(~b characters)",
+                       [string:length(Line)],
                        #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
                     #{}
             end
@@ -2023,12 +2100,23 @@ get_prefixed_env_var("RABBITMQ_" ++ Suffix = VarName,
         Value -> Value
     end.
 
-var_is_used("RABBITMQ_" ++ _ = PrefixedVar) ->
-    lists:member(PrefixedVar, ?USED_ENV_VARS);
+var_is_used("RABBITMQ_" ++ _) ->
+    %% We control this whole namespace: scripts, the CLI, and
+    %% rabbit_env itself. Something in it always deserves to be
+    %% shown, whether or not rabbit_env reads it directly.
+    true;
 var_is_used("HOME") ->
     false;
 var_is_used(Var) ->
+    %% Most entries in `?USED_ENV_VARS` are the "RABBITMQ_"-prefixed
+    %% form, but a few (e.g. `SYS_PREFIX`) are listed bare.
+    lists:member(Var, ?USED_ENV_VARS) orelse
     lists:member("RABBITMQ_" ++ Var, ?USED_ENV_VARS).
+
+-ifdef(TEST).
+used_env_vars() ->
+    ?USED_ENV_VARS.
+-endif.
 
 %% The $RABBITMQ_* variables have precedence over their un-prefixed equivalent.
 %% Therefore, when we check if $RABBITMQ_* is set, we only look at this
@@ -2152,16 +2240,10 @@ query_remote({RemoteNode, Timeout}, Mod, Func, Args)
 
 unicode_characters_to_list(Input) ->
     case unicode:characters_to_list(Input) of
-        {error, Partial, Rest} ->
-            log_characters_to_list_error(Input, Partial, Rest),
-            Partial;
-        {incomplete, Partial, Rest} ->
-            log_characters_to_list_error(Input, Partial, Rest),
+        {Tag, Partial, _Rest} when Tag =:= error; Tag =:= incomplete ->
+            %% A caller's input can be a secret; never log it.
+            ?LOG_ERROR("error converting input to unicode string", []),
             Partial;
         String when is_list(String) ->
             String
     end.
-
-log_characters_to_list_error(Input, Partial, Rest) ->
-    ?LOG_ERROR("error converting '~tp' to unicode string "
-                     "(partial '~tp', rest '~tp')", [Input, Partial, Rest]).
