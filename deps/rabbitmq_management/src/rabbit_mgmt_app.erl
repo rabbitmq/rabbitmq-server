@@ -172,23 +172,17 @@ get_tls_listener() ->
 tls_listener(Listener0) ->
     {ok, Listener1} = ensure_port(tls, Listener0),
     Listener2 = rabbit_ssl:wrap_password_opt(Listener1),
-    Port = proplists:get_value(port, Listener1),
-     case proplists:get_value(cowboy_opts, Listener0) of
+    Address = [{port, proplists:get_value(port, Listener1)} |
+               [{ip, IP} || {ip, IP} <- Listener1]],
+    case proplists:get_value(cowboy_opts, Listener0) of
         undefined ->
-             [
-                 {port, Port},
-                 {ssl, true},
-                 {ssl_opts, Listener2}
-             ];
+            Address ++ [{ssl, true},
+                        {ssl_opts, Listener2}];
         CowboyOpts ->
-            WithoutCowboyOpts = lists:keydelete(cowboy_opts, 1, Listener2),
-            [
-                {port, Port},
-                {ssl, true},
-                {ssl_opts, WithoutCowboyOpts},
-                {cowboy_opts, CowboyOpts}
-            ]
-     end.
+            Address ++ [{ssl, true},
+                        {ssl_opts, lists:keydelete(cowboy_opts, 1, Listener2)},
+                        {cowboy_opts, CowboyOpts}]
+    end.
 
 get_tcp_listener() ->
     tcp_listener(application:get_env(rabbitmq_management, tcp_config, [])).

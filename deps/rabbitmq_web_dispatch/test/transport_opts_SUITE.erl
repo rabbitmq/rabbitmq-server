@@ -35,6 +35,7 @@ groups() ->
        socket_opts_preserved_alongside_ranch_opt,
        bare_atoms_stay_in_socket_opts,
        ranch_opt_value_passed_through_verbatim,
+       configured_ip_is_the_only_ip,
        new_wins_over_existing,
        existing_wins_over_ignore,
        all_ignored_is_ignore]},
@@ -117,6 +118,12 @@ ranch_opt_value_passed_through_verbatim(_) ->
     Sentinel = {tagged, 42},
     Result = ?BUILD([{max_connections, Sentinel}]),
     ?assertMatch(#{max_connections := Sentinel}, Result).
+
+configured_ip_is_the_only_ip(_) ->
+    Options = rabbit_web_dispatch_sup:transport_config(
+                [{port, 15671}, {ip, {127, 0, 0, 1}}, {certfile, "c"}, {ip, {0, 0, 0, 0, 0, 0, 0, 0}}]),
+    ?assertEqual([{ip, {127, 0, 0, 1}}], proplists:lookup_all(ip, Options)),
+    ?assertEqual("c", proplists:get_value(certfile, Options)).
 
 new_wins_over_existing(_) ->
     ?assertEqual(new, ?COMBINE([existing, new])),

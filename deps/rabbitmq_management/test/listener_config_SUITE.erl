@@ -23,6 +23,7 @@ groups() ->
         ssl_config_only,
 
         multiple_listeners,
+        tls_listener_ip_is_bound_and_reported,
         extra_tcp_listeners,
         extra_tcp_listeners_without_tcp_config,
         extra_tls_listeners,
@@ -135,6 +136,15 @@ multiple_listeners(_Config) ->
     ?assertEqual(sort_nested(Expected), sort_nested(rabbit_mgmt_app:get_listeners_config())).
 
 
+tls_listener_ip_is_bound_and_reported(_Config) ->
+    application:set_env(rabbitmq_management, ssl_config, [
+        {port, 999},
+        {ip, "127.0.0.1"}
+    ]),
+    [Listener] = rabbit_mgmt_app:get_listeners_config(),
+    ?assertEqual("127.0.0.1", proplists:get_value(ip, Listener)),
+    ?assertEqual([{127, 0, 0, 1}], rabbit_networking:listener_ip_addresses(Listener)).
+
 extra_tcp_listeners(_Config) ->
     application:set_env(rabbitmq_management, tcp_config, [
         {port, 998},
@@ -175,6 +185,7 @@ extra_tls_listeners(_Config) ->
          {ssl, true},
          {ssl_opts, [{port, 999}, {certfile, "/path/to/cert.pem"}]}],
         [{cowboy_opts, [{sendfile, false}]},
+         {ip, "127.0.0.1"},
          {port, 15671},
          {ssl, true},
          {ssl_opts, [{ip, "127.0.0.1"}, {port, 15671}, {certfile, "/path/to/cert.pem"}]}]

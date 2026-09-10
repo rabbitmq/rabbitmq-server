@@ -18,7 +18,7 @@ all() ->
 
 groups() ->
     [
-      {parallel_tests, [parallel], [
+      {parallel_tests, [], [
           unset_ip_resolves_to_every_listener_address,
           unset_ip_yields_one_listener_per_address,
           expanded_listeners_keep_the_other_options,
