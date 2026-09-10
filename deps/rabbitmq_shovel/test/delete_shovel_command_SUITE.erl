@@ -27,6 +27,7 @@ groups() ->
                                delete_not_found,
                                delete,
                                delete_internal,
+                               delete_internal_not_running,
                                delete_internal_owner,
                                delete_invalid_uri,
                                delete_non_existent_dest_address
@@ -120,6 +121,29 @@ delete_internal(Config) ->
     ok  = ?CMD:run([<<"myshovel">>], ForceOpts),
     [] = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_shovel_status,
                                        status, []).
+
+delete_internal_not_running(Config) ->
+    Param = <<"myshovel">>,
+    Uri = shovel_test_utils:make_uri(
+            Config, 0, <<"guest">>, <<"forgotmypassword">>, <<"%2F">>),
+    ShovelArgs = [{<<"src-uri">>,  Uri},
+                  {<<"dest-uri">>, [Uri]},
+                  {<<"src-queue">>, <<"src">>},
+                  {<<"internal">>, true},
+                  {<<"dest-queue">>, <<"dest">>}],
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, rabbit_runtime_parameters, set,
+           [<<"/">>, <<"shovel">>, Param, ShovelArgs, none]),
+    shovel_test_utils:await_no_shovel(Config, Param),
+    [A] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Opts = #{node => A, vhost => <<"/">>, force => false},
+    {badrpc,
+     {'EXIT',
+      {amqp_error, resource_locked, _, none}}} = ?CMD:run([Param], Opts),
+        ForceOpts = #{node => A, vhost => <<"/">>, force => true},
+    ok  = ?CMD:run([Param], ForceOpts),
+    [] = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_shovel_status,
+                                      status, []).
 
 delete_internal_owner(Config) ->
     shovel_test_utils:set_param(
