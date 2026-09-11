@@ -31,7 +31,20 @@ all() -> [
     to_params_error_strips_credentials,
     to_params_error_on_malformed_uri_strips_credentials,
     to_params_falls_back_to_valid_uri,
+<<<<<<< HEAD
     to_params_error_redacts_query_secrets
+=======
+    to_params_error_redacts_query_secrets,
+    redact_params_network,
+    redact_params_direct,
+    redact_params_ssl_options_password,
+    redact_params_ssl_options_none,
+    validate_max_hops_accepts_bounds,
+    validate_max_hops_rejects_out_of_range,
+    validate_max_hops_rejects_non_integers,
+    max_hops_keeps_valid_values,
+    max_hops_normalizes_legacy_values
+>>>>>>> 9f56f50 (Harden exchange federation binding propagation against malformed input)
 ].
 
 init_per_suite(Config) ->
@@ -261,3 +274,86 @@ to_params_error_redacts_query_secrets(_Config) ->
     ?assertEqual(nomatch, binary:match(iolist_to_binary(io_lib:format("~tp", [Info])),
                                        <<"s3cret">>)),
     ok.
+<<<<<<< HEAD
+=======
+
+%% -------------------------------------------------------------------
+%% rabbit_federation_util:redact_params/1
+%% -------------------------------------------------------------------
+
+redact_params_network(_Config) ->
+    Params = #amqp_params_network{username = <<"fed">>, password = <<"s3cret">>,
+                                  host = "localhost"},
+    Redacted = rabbit_federation_util:redact_params(Params),
+    Formatted = iolist_to_binary(io_lib:format("~tp", [Redacted])),
+    ?assertEqual(nomatch, binary:match(Formatted, <<"s3cret">>)),
+    ?assertNotEqual(nomatch, binary:match(Formatted, <<"fed">>)),
+    ?assertNotEqual(nomatch, binary:match(Formatted, <<"localhost">>)),
+    ok.
+
+redact_params_direct(_Config) ->
+    Params = #amqp_params_direct{username = <<"fed">>, password = <<"s3cret">>},
+    Redacted = rabbit_federation_util:redact_params(Params),
+    Formatted = iolist_to_binary(io_lib:format("~tp", [Redacted])),
+    ?assertEqual(nomatch, binary:match(Formatted, <<"s3cret">>)),
+    ?assertNotEqual(nomatch, binary:match(Formatted, <<"fed">>)),
+    ok.
+
+redact_params_ssl_options_password(_Config) ->
+    Params = #amqp_params_network{ssl_options = [{password, "kp"}, {verify, verify_peer}]},
+    Redacted = rabbit_federation_util:redact_params(Params),
+    Formatted = iolist_to_binary(io_lib:format("~tp", [Redacted])),
+    ?assertEqual(nomatch, binary:match(Formatted, <<"kp">>)),
+    ?assertNotEqual(nomatch, binary:match(Formatted, <<"verify_peer">>)),
+    ok.
+
+redact_params_ssl_options_none(_Config) ->
+    Params = #amqp_params_network{ssl_options = none},
+    ?assertMatch(#amqp_params_network{ssl_options = none},
+                 rabbit_federation_util:redact_params(Params)),
+    ok.
+
+%% -------------------------------------------------------------------
+%% max-hops validation and normalization
+%% -------------------------------------------------------------------
+
+validate_max_hops_accepts_bounds(_Config) ->
+    [?assertEqual([], validation_errors(V)) || V <- [1, 2, 32766, 32767]],
+    ok.
+
+validate_max_hops_rejects_out_of_range(_Config) ->
+    [?assertMatch([{error, _, _}], validation_errors(V)) ||
+        V <- [0, -1, -32768, 32768, 100000]],
+    ok.
+
+validate_max_hops_rejects_non_integers(_Config) ->
+    [?assertMatch([{error, _, _}], validation_errors(V)) ||
+        V <- [1.5, 1.0, <<"1">>, "1", true, undefined, [1], {1}]],
+    ok.
+
+max_hops_keeps_valid_values(_Config) ->
+    [?assertEqual(V, rabbit_federation_upstream:max_hops(V)) ||
+        V <- [1, 2, 32766, 32767]],
+    ok.
+
+%% Values persisted before `max-hops` was validated as a bounded integer are
+%% read back as is, so they have to be brought back into range here.
+max_hops_normalizes_legacy_values(_Config) ->
+    ?assertEqual(32767, rabbit_federation_upstream:max_hops(40000)),
+    ?assertEqual(32767, rabbit_federation_upstream:max_hops(40000.5)),
+    ?assertEqual(2, rabbit_federation_upstream:max_hops(2.7)),
+    ?assertEqual(1, rabbit_federation_upstream:max_hops(0)),
+    ?assertEqual(1, rabbit_federation_upstream:max_hops(0.5)),
+    ?assertEqual(1, rabbit_federation_upstream:max_hops(-100)),
+    ?assertEqual(1, rabbit_federation_upstream:max_hops(<<"many">>)),
+    ok.
+
+%% Validated through the upstream set component: unlike the upstream one, it
+%% has no mandatory URI to validate, which keeps this a pure function call.
+validation_errors(MaxHops) ->
+    Results = rabbit_federation_parameters:validate(
+                <<"/">>, <<"federation-upstream-set">>,
+                <<"a-name">>, [[{<<"upstream">>, <<"an-upstream">>},
+                                {<<"max-hops">>, MaxHops}]], none),
+    [R || Rs <- Results, R <- Rs, R =/= ok].
+>>>>>>> 9f56f50 (Harden exchange federation binding propagation against malformed input)

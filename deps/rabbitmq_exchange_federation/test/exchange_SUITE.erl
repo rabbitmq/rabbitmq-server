@@ -12,6 +12,7 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 -include("rabbit_exchange_federation.hrl").
+-include_lib("rabbitmq_federation_common/include/rabbit_federation.hrl").
 
 -compile(export_all).
 
@@ -30,7 +31,7 @@ all() ->
 groups() ->
     [
      {essential, [], essential()},
-     {cluster_size_3, [], [max_hops]},
+     {cluster_size_3, [], [max_hops, forged_hops_does_not_bypass_max_hops]},
      {rolling_upgrade, [], [child_id_format]},
      {cycle_protection, [], [
                              %% TBD: port from v3.10.x in an Erlang 25-compatible way
@@ -56,7 +57,9 @@ essential() ->
       unbind_on_client_unbind,
       exchange_federation_link_status,
       lookup_exchange_status,
-      supervisor_shutdown_concurrency_safety
+      supervisor_shutdown_concurrency_safety,
+      forged_binding_header_does_not_crash_link,
+      invalid_persisted_max_hops_does_not_crash_link
     ].
 
 suite() ->
@@ -526,6 +529,79 @@ max_hops(Config) ->
       {skip, "Should not run in mixed version environments"}
   end.
 
+%% A chain rather than a ring, so that cycle detection cannot mask the
+%% result: A is the original source, B consumes from A, C consumes from B.
+%% A forged x-bound-from header used to make the hop counter negative,
+%% which never reaches 0 through ordinary arithmetic, so a binding kept
+%% propagating through the whole chain regardless of max-hops. With the
+%% fix, a header carrying a non-positive hop count means "do not
+%% propagate any further", so the forged binding never leaves the node it
+%% was declared on.
+forged_hops_does_not_bypass_max_hops(Config) ->
+  case rabbit_ct_helpers:is_mixed_versions() of
+    false ->
+      [NodeA, NodeB, NodeC] = rabbit_ct_broker_helpers:get_node_configs(
+        Config, nodename),
+      await_credentials_obfuscation_seeding_on_two_nodes(Config),
+
+      UpX = <<"chain">>,
+
+      %% B consumes from A
+      rabbit_ct_broker_helpers:set_parameter(
+        Config, NodeB, <<"federation-upstream">>, <<"upstream">>,
+        [
+          {<<"uri">>,      rabbit_ct_broker_helpers:node_uri(Config, NodeA)},
+          {<<"exchange">>, UpX},
+          {<<"max-hops">>, 1}
+        ]),
+      %% C consumes from B
+      rabbit_ct_broker_helpers:set_parameter(
+        Config, NodeC, <<"federation-upstream">>, <<"upstream">>,
+        [
+          {<<"uri">>,      rabbit_ct_broker_helpers:node_uri(Config, NodeB)},
+          {<<"exchange">>, UpX},
+          {<<"max-hops">>, 1}
+        ]),
+
+      [begin
+        rabbit_ct_broker_helpers:set_policy(
+          Config, Node,
+          <<"fed.x">>, <<"^chain">>, <<"exchanges">>,
+          [
+            {<<"federation-upstream">>, <<"upstream">>}
+          ])
+       end || Node <- [NodeB, NodeC]],
+
+      NodeACh = rabbit_ct_client_helpers:open_channel(Config, NodeA),
+      NodeBCh = rabbit_ct_client_helpers:open_channel(Config, NodeB),
+      NodeCCh = rabbit_ct_client_helpers:open_channel(Config, NodeC),
+
+      X = exchange_declare_method(UpX),
+      declare_exchange(NodeACh, X),
+      declare_exchange(NodeBCh, X),
+      declare_exchange(NodeCCh, X),
+
+      %% Baseline: an ordinary binding created on C reaches B, one hop
+      %% away, confirming the chain and the propagation path both work.
+      _ = declare_and_bind_queue(NodeCCh, UpX, <<"baseline">>),
+      await_binding(Config, NodeB, UpX, <<"baseline">>),
+
+      ForgedArgs = [{?BINDING_HEADER, array,
+                     [{table, [{<<"hops">>, short, -100},
+                               {<<"cluster-name">>, longstr, <<"nonexistent">>},
+                               {<<"vhost">>, longstr, <<"x">>}]}]}],
+      _ = declare_and_bind_queue(NodeCCh, UpX, <<"forged">>, ForgedArgs),
+
+      %% Give propagation a chance to happen before asserting its absence.
+      timer:sleep(5000),
+      [] = bound_keys_from(Config, NodeB, <<"/">>, UpX, <<"forged">>),
+      [] = bound_keys_from(Config, NodeA, <<"/">>, UpX, <<"forged">>),
+
+      clean_up_federation_related_bits(Config);
+    true ->
+      {skip, "Should not run in mixed version environments"}
+  end.
+
 exchange_federation_link_status(Config) ->
   FedX = <<"single_upstream.federated">>,
   UpX = <<"single_upstream.upstream.x">>,
@@ -662,6 +738,87 @@ supervisor_shutdown_concurrency_safety(Config) ->
   %% Verify federation still works after recovery
   await_binding(Config, 0, UpX, RK),
   publish_expect(Ch, UpX, RK, Q, <<"after_recovery">>),
+
+  clean_up_federation_related_bits(Config).
+
+%% A forged x-bound-from binding argument used to crash the link, and the
+%% crash repeated indefinitely because the poisoned binding is replayed on
+%% every restart.
+forged_binding_header_does_not_crash_link(Config) ->
+  FedX = <<"forged_binding_header.federated">>,
+  UpX = <<"forged_binding_header.upstream.x">>,
+  rabbit_ct_broker_helpers:set_parameter(
+    Config, 0, <<"federation-upstream">>, <<"localhost">>,
+    [
+      {<<"uri">>,      rabbit_ct_broker_helpers:node_uri(Config, 0)},
+      {<<"exchange">>, UpX}
+    ]),
+  rabbit_ct_broker_helpers:set_policy(
+    Config, 0,
+    <<"fed.x">>, <<"^forged_binding_header.federated">>, <<"exchanges">>,
+    [
+      {<<"federation-upstream">>, <<"localhost">>}
+    ]),
+
+  Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
+
+  Xs = [
+    exchange_declare_method(FedX)
+  ],
+  declare_exchanges(Ch, Xs),
+
+  _ = declare_and_bind_queue(Ch, FedX, <<"not-an-array">>,
+                             [{?BINDING_HEADER, longstr, <<"nope">>}]),
+  _ = declare_and_bind_queue(Ch, FedX, <<"no-hops">>,
+                             [{?BINDING_HEADER, array,
+                               [{table, [{<<"cluster-name">>, longstr, <<"x">>}]}]}]),
+
+  RK = <<"key">>,
+  Q = declare_and_bind_queue(Ch, FedX, RK),
+  await_binding(Config, 0, UpX, RK),
+  publish_expect(Ch, UpX, RK, Q, <<"forged_binding_header payload">>),
+
+  [Link] = rabbit_ct_broker_helpers:rpc(Config, 0,
+                                        rabbit_federation_status, status,
+                                        []),
+  running = proplists:get_value(status, Link),
+
+  clean_up_federation_related_bits(Config).
+
+%% `max-hops` is only checked when the parameter is set, so a value persisted
+%% by an earlier version, which accepted any number, is read back as is. A
+%% fractional value used to crash the link, since it cannot be encoded into
+%% the integer fields that carry the hop count.
+invalid_persisted_max_hops_does_not_crash_link(Config) ->
+  FedX = <<"invalid_persisted_max_hops.federated">>,
+  UpX = <<"invalid_persisted_max_hops.upstream.x">>,
+  Definition = [
+    {<<"uri">>,      rabbit_ct_broker_helpers:node_uri(Config, 0)},
+    {<<"exchange">>, UpX},
+    {<<"max-hops">>, 2.5}
+  ],
+  ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE,
+                                    set_upstream_without_validation,
+                                    [<<"legacy">>, Definition]),
+  rabbit_ct_broker_helpers:set_policy(
+    Config, 0,
+    <<"fed.x">>, <<"^invalid_persisted_max_hops.federated">>, <<"exchanges">>,
+    [
+      {<<"federation-upstream">>, <<"legacy">>}
+    ]),
+
+  Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
+  declare_exchange(Ch, exchange_declare_method(FedX)),
+
+  RK = <<"key">>,
+  Q = declare_and_bind_queue(Ch, FedX, RK),
+  await_binding(Config, 0, UpX, RK),
+  publish_expect(Ch, UpX, RK, Q, <<"invalid_persisted_max_hops payload">>),
+
+  [Link] = rabbit_ct_broker_helpers:rpc(Config, 0,
+                                        rabbit_federation_status, status,
+                                        []),
+  running = proplists:get_value(status, Link),
 
   clean_up_federation_related_bits(Config).
 
@@ -862,6 +1019,13 @@ clean_up_federation_related_bits(Config) ->
     [delete_all_exchanges_on(Config, N) || N <- NodeIndices],
     ok.
 
+%% Writes the parameter straight to the store, the way a definition persisted
+%% before `max-hops` was validated as a bounded integer would be read back.
+set_upstream_without_validation(Name, Definition) ->
+  _ = rabbit_db_rtparams:set(<<"/">>, <<"federation-upstream">>, Name, Definition),
+  rabbit_federation_parameters:notify(<<"/">>, <<"federation-upstream">>, Name,
+                                      Definition, <<"acting-user">>).
+
 set_up_upstream(Config) ->
   rabbit_ct_broker_helpers:set_parameter(
     Config, 0, <<"federation-upstream">>, <<"localhost">>,
@@ -915,9 +1079,13 @@ declare_queue(Ch, Q) ->
   amqp_channel:call(Ch, Q).
 
 bind_queue(Ch, Q, X, Key) ->
+    bind_queue(Ch, Q, X, Key, []).
+
+bind_queue(Ch, Q, X, Key, Args) ->
     amqp_channel:call(Ch, #'queue.bind'{queue       = Q,
                                         exchange    = X,
-                                        routing_key = Key}).
+                                        routing_key = Key,
+                                        arguments   = Args}).
 
 unbind_queue(Ch, Q, X, Key) ->
     amqp_channel:call(Ch, #'queue.unbind'{queue       = Q,
@@ -932,6 +1100,11 @@ bind_exchange(Ch, D, S, Key) ->
 declare_and_bind_queue(Ch, X, Key) ->
     Q = declare_queue(Ch),
     bind_queue(Ch, Q, X, Key),
+    Q.
+
+declare_and_bind_queue(Ch, X, Key, Args) ->
+    Q = declare_queue(Ch),
+    bind_queue(Ch, Q, X, Key, Args),
     Q.
 
 
