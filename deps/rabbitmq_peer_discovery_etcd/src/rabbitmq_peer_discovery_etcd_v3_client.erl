@@ -86,10 +86,11 @@ init(Args) ->
 
 callback_mode() -> [state_functions, state_enter].
 
-terminate(Reason, State, Data) ->
+terminate(Reason, State, #statem_data{connection_monitor = Ref}) ->
     ?LOG_DEBUG("etcd v3 API client will terminate in state ~tp, reason: ~tp",
                      [State, Reason]),
-    _ = disconnect(?ETCD_CONN_NAME, Data),
+    maybe_demonitor(Ref),
+    _ = do_disconnect(?ETCD_CONN_NAME),
     ?LOG_DEBUG("etcd v3 API client has disconnected"),
     ?LOG_DEBUG("etcd v3 API client: total number of connections to etcd is ~tp", [length(eetcd_conn_sup:info())]),
     ok.
