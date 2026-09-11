@@ -184,9 +184,15 @@ aggregate_metrics(Timestamp, #state{table = Table,
 
 %% A connection or channel that terminates between the fold over the core
 %% table and the insert below deletes its core entry before it emits the
+<<<<<<< HEAD
 %% closed event, so rabbit_mgmt_metrics_gc can run before the stats entry
 %% exists and the insert would then leave a stale entry behind for good.
 %% Re-checking the core table after the insert closes that window.
+=======
+%% closed event, so `rabbit_mgmt_metrics_gc` skip over a stale entry.
+%%
+%% Re-checking the core table after the insert solves the problem.
+>>>>>>> 850bfcb (More robust connection cleanup)
 remove_closed_created_stats(Table, Ops)
   when Table =:= connection_created; Table =:= channel_created ->
     StatsTable = created_stats_table(Table),
