@@ -85,7 +85,7 @@ update1(VHost, GetUpdatedExchangeFun, GetUpdatedQueueFun,
                     || Map <- Queues, is_map(Map)]}
           end, rw)
     catch
-        throw:{error, {khepri, mismatching_node, _}} ->
+        throw:{error, ?khepri_error(mismatching_node, _)} ->
             update(VHost, GetUpdatedExchangeFun, GetUpdatedQueueFun)
     end.
 
