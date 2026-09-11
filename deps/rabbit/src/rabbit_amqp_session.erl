@@ -115,8 +115,8 @@
         [protocol_error/3]).
 -import(serial_number,
         [add/2,
-         diff/2,
-         compare/2]).
+         compare/2,
+         range_size/2]).
 -import(rabbit_misc,
         [queue_resource/2,
          exchange_resource/2]).
@@ -577,11 +577,10 @@ handle_cast({frame_body, FrameBody},
           exit:#'v1_0.error'{} = Error ->
               log_error_and_close_session(Error, State0);
           _:Reason:Stacktrace ->
-              Description = unicode:characters_to_binary(
-                              lists:flatten(io_lib:format("~tp~n~tp", [Reason, Stacktrace]))),
               Err = #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
-                                  description = {utf8, Description}},
-              log_error_and_close_session(Err, State0)
+                                  description = {utf8, <<"internal error">>}},
+              log_error_and_close_session(
+                Err, rabbit_misc:format("~tp~n~tp", [Reason, Stacktrace]), State0)
     end;
 handle_cast({queue_event, _, _} = QEvent, State0) ->
     try handle_queue_event(QEvent, State0) of
@@ -646,12 +645,15 @@ handle_cast({reset_authz, User}, #state{cfg = Cfg} = State0) ->
 handle_cast(shutdown, State) ->
     {stop, normal, State}.
 
+log_error_and_close_session(Error = #'v1_0.error'{description = {utf8, Desc}}, State) ->
+    log_error_and_close_session(Error, Desc, State).
+
 log_error_and_close_session(
-  Error, State = #state{cfg = #cfg{reader_pid = ReaderPid,
-                                   writer_pid = WriterPid,
-                                   channel_num = Ch}}) ->
-    ?LOG_WARNING("Closing session for connection ~p: ~tp",
-                 [ReaderPid, Error]),
+  Error, Detail, State = #state{cfg = #cfg{reader_pid = ReaderPid,
+                                           writer_pid = WriterPid,
+                                           channel_num = Ch}}) ->
+    ?LOG_WARNING("Closing session for connection ~p: ~ts",
+                 [ReaderPid, Detail]),
     rabbit_amqp_reader:notify_session_ending(ReaderPid, self(), Ch),
     ok = rabbit_amqp_writer:send_command_sync(
            WriterPid, Ch, #'v1_0.end'{error = Error}),
@@ -1138,12 +1140,20 @@ handle_frame(#'v1_0.disposition'{role = ?AMQP_ROLE_RECEIVER,
                    %% "If not set, this is taken to be the same as first." [2.7.6]
                    First
            end,
+    DispositionRangeSize = case range_size(First, Last) of
+                               undefined ->
+                                   protocol_error(
+                                     ?V_1_0_AMQP_ERROR_INVALID_FIELD,
+                                     "invalid disposition delivery ID range "
+                                     "(first ~b, last ~b)", [First, Last]);
+                               Size ->
+                                   Size
+                           end,
     UnsettledMapSize = map_size(UnsettledMap0),
     case UnsettledMapSize of
         0 ->
             reply_frames([], State0);
         _ ->
-            DispositionRangeSize = diff(Last, First) + 1,
             {Settled, UnsettledMap} =
             case DispositionRangeSize =< UnsettledMapSize of
                 true ->
@@ -1162,15 +1172,15 @@ handle_frame(#'v1_0.disposition'{role = ?AMQP_ROLE_RECEIVER,
                                                consumer_tag = Ctag,
                                                msg_id = MsgId} = Unsettled,
                            {SettledAcc, UnsettledAcc}) ->
-                              case serial_number:in_range(DeliveryId, First, Last) of
-                                  true ->
+                              case range_size(First, DeliveryId) of
+                                  IdRangeSize when IdRangeSize =< DispositionRangeSize ->
                                       SettledAcc1 = maps_update_with(
                                                       {QName, Ctag},
                                                       fun(MsgIds) -> [MsgId | MsgIds] end,
                                                       [MsgId],
                                                       SettledAcc),
                                       {SettledAcc1, UnsettledAcc};
-                                  false ->
+                                  _ ->
                                       {SettledAcc, [{DeliveryId, Unsettled} | UnsettledAcc]}
                               end
                       end,
@@ -2197,29 +2207,19 @@ session_flow_control_received_flow(
   #state{next_outgoing_id = NextOutgoingId} = State) ->
 
     Seq = case FlowNextIncomingId of
-              ?UINT(Id) ->
-                  case compare(Id, NextOutgoingId) of
-                      greater ->
-                          protocol_error(
-                            ?V_1_0_SESSION_ERROR_WINDOW_VIOLATION,
-                            "next-incoming-id from FLOW (~b) leads next-outgoing-id (~b)",
-                            [Id, NextOutgoingId]);
-                      _ ->
-                          Id
-                  end;
-              undefined ->
-                  %% The AMQP client might not have yet received our #begin.next_outgoing_id
-                  ?INITIAL_OUTGOING_TRANSFER_ID
+              ?UINT(Id) -> Id;
+              undefined -> ?INITIAL_OUTGOING_TRANSFER_ID
           end,
-
-    RemoteIncomingWindow0 = diff(add(Seq, FlowIncomingWindow), NextOutgoingId),
-    %% RemoteIncomingWindow0 can be negative, for example if we sent a TRANSFER to the
-    %% client between the point in time the client sent us a FLOW with updated
-    %% incoming_window=0 and we received that FLOW. Whether 0 or negative doesn't matter:
-    %% In both cases we're blocked sending more TRANSFERs to the client until it sends us
-    %% a new FLOW with a positive incoming_window. For better understandibility
-    %% across the code base, we ensure a floor of 0 here.
-    RemoteIncomingWindow = max(0, RemoteIncomingWindow0),
+    InFlight = case range_size(Seq, NextOutgoingId) of
+                   undefined ->
+                       protocol_error(
+                         ?V_1_0_SESSION_ERROR_WINDOW_VIOLATION,
+                         "next-incoming-id from FLOW (~b) leads next-outgoing-id (~b)",
+                         [Seq, NextOutgoingId]);
+                   Size ->
+                       Size - 1
+               end,
+    RemoteIncomingWindow = max(0, FlowIncomingWindow - InFlight),
 
     State#state{next_incoming_id = FlowNextOutgoingId,
                 remote_outgoing_window = FlowOutgoingWindow,
