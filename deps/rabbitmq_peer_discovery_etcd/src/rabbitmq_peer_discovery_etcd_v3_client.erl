@@ -26,6 +26,11 @@
 
 -compile(nowarn_unused_function).
 
+%% Export all for unit tests
+-ifdef(TEST).
+-compile(export_all).
+-endif.
+
 -include("rabbit_peer_discovery_etcd.hrl").
 -include_lib("kernel/include/logger.hrl").
 
@@ -87,9 +92,10 @@ init(Args) ->
 callback_mode() -> [state_functions, state_enter].
 
 terminate(Reason, State, Data) ->
+    SanitizedData = sanitize_statem_data(Data),
     ?LOG_DEBUG("etcd v3 API client will terminate in state ~tp, reason: ~tp",
                      [State, Reason]),
-    _ = disconnect(?ETCD_CONN_NAME, Data),
+    _ = disconnect(?ETCD_CONN_NAME, SanitizedData),
     ?LOG_DEBUG("etcd v3 API client has disconnected"),
     ?LOG_DEBUG("etcd v3 API client: total number of connections to etcd is ~tp", [length(eetcd_conn_sup:info())]),
     ok.
@@ -366,6 +372,11 @@ deobfuscate(Password) ->
 disconnect(ConnName, #statem_data{connection_monitor = Ref}) ->
     maybe_demonitor(Ref),
     do_disconnect(ConnName).
+
+sanitize_statem_data(Data = #statem_data{tls_options = []}) ->
+    Data;
+sanitize_statem_data(Data = #statem_data{}) ->
+    Data#statem_data{tls_options = "..."}.
 
 unregister(Conn, Data = #statem_data{node_key_lease_id = LeaseID, node_lease_keepalive_pid = KAPid}) ->
     Ctx = unregistration_context(Conn, Data),

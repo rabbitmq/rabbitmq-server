@@ -32,7 +32,8 @@ groups() ->
                     filter_nodes_test,
                     node_key_base_test,
                     node_key_test,
-                    lock_key_base_test
+                    lock_key_base_test,
+                    sanitize_statem_data_redacts_tls_options_test
                 ]}
     ].
 
@@ -93,6 +94,19 @@ lock_key_base_test(_Config) ->
         key_prefix = "prefffix"
     },
     ?assertEqual(Expected, rabbitmq_peer_discovery_etcd_v3_client:lock_key_base(Input)).
+
+sanitize_statem_data_redacts_tls_options_test(_Config) ->
+    Ref = make_ref(),
+    Input = #statem_data{
+        tls_options = [{key, "private-key"},
+                       {password, "letmein"}],
+        connection_monitor = Ref,
+        cluster_name = "cluster-b"
+    },
+    Sanitized = rabbitmq_peer_discovery_etcd_v3_client:sanitize_statem_data(Input),
+    ?assertEqual("...", Sanitized#statem_data.tls_options),
+    ?assertEqual(Ref, Sanitized#statem_data.connection_monitor),
+    ?assertEqual("cluster-b", Sanitized#statem_data.cluster_name).
 
 %%
 %% Helpers
