@@ -21,7 +21,8 @@
          as_proplist/1,
          as_map/1,
          stringify_error/1,
-         maybe_backend_configured/4
+         maybe_backend_configured/4,
+         redact_secrets/1
         ]).
 
 -include_lib("kernel/include/logger.hrl").
@@ -37,6 +38,12 @@
                  {dstaddr,inet:ip_address()} | {hwaddr,[byte()]}.
 
 -type stringifyable() :: atom() | binary() | string() | integer().
+
+%% Config keys across all peer discovery backends whose values are
+%% credentials and must never appear in logs, even at debug level.
+-define(SECRET_CONFIG_KEYS, [aws_access_key, aws_secret_key,
+                              consul_acl_token, etcd_password,
+                              ssl_options]).
 
 
 -spec getenv(Key :: string() | undefined) -> string() | false.
@@ -386,7 +393,7 @@ maybe_backend_configured(BackendConfigKey,
         {ok, ClusterFormation} ->
             ?LOG_DEBUG(
                "Peer discovery: translated cluster formation configuration: ~tp",
-               [ClusterFormation],
+               [redact_secrets(ClusterFormation)],
                #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
             case proplists:get_value(BackendConfigKey, ClusterFormation) of
                 undefined ->
@@ -394,11 +401,45 @@ maybe_backend_configured(BackendConfigKey,
                 Proplist  ->
                     ?LOG_DEBUG(
                        "Peer discovery: cluster formation backend configuration: ~tp",
-                       [Proplist],
+                       [redact_secrets(Proplist)],
                        #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
                     ConfiguredFun(Proplist)
             end
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Return a copy of a peer discovery config map or proplist with the
+%% values of any known credential keys replaced with "...".
+%% @end
+%%--------------------------------------------------------------------
+-spec redact_secrets(map() | proplists:proplist()) -> map() | proplists:proplist().
+redact_secrets(Map) when is_map(Map) ->
+    maps:map(fun redact_secret_map_value/2, Map);
+redact_secrets(Proplist) when is_list(Proplist) ->
+    lists:map(fun redact_secret_entry/1, Proplist).
+
+-spec redact_secret_map_value(Key :: atom(), Value :: term()) -> term().
+redact_secret_map_value(Key, Value) ->
+    case lists:member(Key, ?SECRET_CONFIG_KEYS) of
+        true  -> "...";
+        false -> Value
+    end.
+
+-spec redact_secret_entry(Entry :: term()) -> term().
+redact_secret_entry({Key, Value}) ->
+    case lists:member(Key, ?SECRET_CONFIG_KEYS) of
+        true  -> {Key, "..."};
+        false -> {Key, redact_nested_proplist(Value)}
+    end;
+redact_secret_entry(Other) ->
+    Other.
+
+-spec redact_nested_proplist(Value :: term()) -> term().
+redact_nested_proplist([{Key, _} | _] = Proplist) when is_atom(Key) ->
+    redact_secrets(Proplist);
+redact_nested_proplist(Other) ->
+    Other.
 
 %%--------------------------------------------------------------------
 %% @doc

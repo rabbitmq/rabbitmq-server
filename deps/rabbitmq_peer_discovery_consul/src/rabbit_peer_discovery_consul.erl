@@ -189,7 +189,7 @@ unlock(_Data) ->
 internal_lock() ->
     M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
     ?LOG_DEBUG(
-       "Effective Consul peer discovery configuration: ~tp", [M],
+       "Effective Consul peer discovery configuration: ~tp", [?UTIL_MODULE:redact_secrets(M)],
        #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
     Node = node(),
     case create_session(Node, get_config_key(consul_svc_ttl, M)) of
