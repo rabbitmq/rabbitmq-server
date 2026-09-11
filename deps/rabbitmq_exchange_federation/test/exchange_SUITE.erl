@@ -12,6 +12,7 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 -include("rabbit_exchange_federation.hrl").
+-include_lib("rabbitmq_federation_common/include/rabbit_federation.hrl").
 
 -compile(export_all).
 
@@ -969,9 +970,13 @@ declare_queue(Ch, Q) ->
   amqp_channel:call(Ch, Q).
 
 bind_queue(Ch, Q, X, Key) ->
+    bind_queue(Ch, Q, X, Key, []).
+
+bind_queue(Ch, Q, X, Key, Args) ->
     amqp_channel:call(Ch, #'queue.bind'{queue       = Q,
                                         exchange    = X,
-                                        routing_key = Key}).
+                                        routing_key = Key,
+                                        arguments   = Args}).
 
 unbind_queue(Ch, Q, X, Key) ->
     amqp_channel:call(Ch, #'queue.unbind'{queue       = Q,
