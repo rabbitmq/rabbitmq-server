@@ -10,6 +10,7 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
+-include_lib("amqp10_common/include/amqp10_types.hrl").
 -include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 -compile([export_all, nowarn_export_all]).
@@ -37,7 +38,9 @@ groups() ->
                          ]},
      {mapped, [], [
                    flow_link_after_link_removed,
-                   disposition_after_link_removed
+                   disposition_after_link_removed,
+                   disposition_large_range,
+                   disposition_reversed_range
                   ]}
     ].
 
@@ -197,6 +200,33 @@ disposition_after_link_removed(_Config) ->
     {Sup, Session, Sockets} = start_session_in(mapped, 0),
     gen_statem:cast(Session, {disposition, 0, 1, 1, true, accepted}),
     ?assertMatch({mapped, _}, sys:get_state(Session)),
+    ?assert(is_process_alive(Sup)),
+    ok = stop_sup(Sup, Sockets).
+
+%% A peer-controlled disposition range must not turn the session into a
+%% multi-billion-iteration loop against an empty unsettled map.
+disposition_large_range(_Config) ->
+    {Sup, Session, Sockets} = start_session_in(mapped, 0),
+    gen_statem:cast(Session,
+                    #'v1_0.disposition'{role = ?AMQP_ROLE_RECEIVER,
+                                        settled = true,
+                                        first = {uint, 0},
+                                        last = {uint, 16#7fffffff},
+                                        state = #'v1_0.accepted'{}}),
+    ?assertMatch({mapped, _}, sys:get_state(Session, 1000)),
+    ?assert(is_process_alive(Sup)),
+    ok = stop_sup(Sup, Sockets).
+
+%% A reversed delivery ID range must not crash the session.
+disposition_reversed_range(_Config) ->
+    {Sup, Session, Sockets} = start_session_in(mapped, 0),
+    gen_statem:cast(Session,
+                    #'v1_0.disposition'{role = ?AMQP_ROLE_RECEIVER,
+                                        settled = true,
+                                        first = {uint, 100},
+                                        last = {uint, 5},
+                                        state = #'v1_0.accepted'{}}),
+    ?assertMatch({mapped, _}, sys:get_state(Session, 1000)),
     ?assert(is_process_alive(Sup)),
     ok = stop_sup(Sup, Sockets).
 

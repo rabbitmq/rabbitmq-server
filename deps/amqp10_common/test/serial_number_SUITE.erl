@@ -17,6 +17,7 @@
                         ranges/1,
                         in_range/3,
                         diff/2,
+                        range_size/2,
                         foldl/4]).
 
 all() -> [test_add,
@@ -25,6 +26,7 @@ all() -> [test_add,
           test_ranges,
           test_in_range,
           test_diff,
+          test_range_size,
           test_foldl].
 
 -dialyzer({nowarn_function, test_add/1}).
@@ -137,6 +139,32 @@ test_diff(_Config) ->
                 diff(0, 16#80000000)),
     ?assertExit({undefined_serial_diff, _, _},
                 diff(16#ffffffff, 16#7fffffff)).
+
+test_range_size(_Config) ->
+    ?assertEqual(1, range_size(5, 5)),
+    ?assertEqual(5, range_size(5, 9)),
+    %% Wraparound.
+    ?assertEqual(2, range_size(16#ffffffff, 0)),
+    ?assertEqual(4, range_size(16#fffffffe, 1)),
+    %% Largest accepted range.
+    ?assertEqual(16#80000000, range_size(0, 16#7fffffff)),
+    %% The difference RFC 1982 leaves undefined.
+    ?assertEqual(undefined, range_size(0, 16#80000000)),
+    ?assertEqual(undefined, range_size(100, 5)),
+    ?assertEqual(undefined, range_size(0, 16#ffffffff)),
+
+    %% Every accepted range must be safe to pass to compare/2.
+    lists:foreach(
+      fun({First, Last}) ->
+              case range_size(First, Last) of
+                  undefined ->
+                      ok;
+                  _Size ->
+                      ?assert(lists:member(compare(First, Last), [less, equal]))
+              end
+      end,
+      [{0, 0}, {0, 1}, {0, 16#7fffffff}, {0, 16#80000000},
+       {16#ffffffff, 0}, {5, 100}, {100, 5}, {0, 16#ffffffff}]).
 
 test_foldl(_Config) ->
     ?assertEqual(
