@@ -66,8 +66,6 @@ pattern(ReqData) ->
         Other -> Other
     end.
 
-%% Qs are #{binary() => any()} maps keyed by <<"virtual_host">>, not the
-%% atom-keyed proplists filter_vhost/3 expects, so tag and untag around it.
 filter_vhost(Qs, ReqData, Context) ->
     Tagged = [maps:put(vhost, maps:get(<<"virtual_host">>, Q), Q) || Q <- Qs],
     Filtered = rabbit_mgmt_util:filter_vhost(Tagged, ReqData, Context),
