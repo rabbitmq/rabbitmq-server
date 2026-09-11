@@ -30,7 +30,9 @@ all() ->
      different_passwords_still_miss_the_cache,
      non_password_authprops_pass_through_unchanged,
      identical_passwords_still_hit_the_authorization_cache,
-     different_passwords_still_miss_the_authorization_cache
+     different_passwords_still_miss_the_authorization_cache,
+     non_password_authprops_pass_through_unchanged_for_authorization,
+     check_user_login_stores_redacted_authorization_key
     ].
 
 init_per_suite(Config) ->
@@ -89,9 +91,8 @@ password_is_not_present_in_authorization_cache_key_for_map_authprops(Config) ->
     Key = cache_key(Config, user_login_authorization, [<<"u">>, Props]),
     false = contains_binary(Key, Password).
 
-%% Only calls carrying `[Username, AuthProps]' need redaction; other
-%% call sites must be pass-through to avoid changing established cache
-%% semantics.
+%% Other call sites must stay pass-through so established cache
+%% semantics do not change.
 non_authn_calls_are_not_redacted(Config) ->
     Args = [a, b, c],
     {check_vhost_access, Args} =
@@ -131,6 +132,25 @@ different_passwords_still_miss_the_authorization_cache(Config) ->
     {ok, _, _} = authorize(Config, <<"u">>, [{password, <<"p2">>}]),
     2 = authz_call_count(Config).
 
+non_password_authprops_pass_through_unchanged_for_authorization(Config) ->
+    {ok, _, _} = authorize(Config, <<"u">>,
+                           [{password, <<"p">>}, {is_loopback, true}]),
+    {ok, _, _} = authorize(Config, <<"u">>,
+                           [{password, <<"p">>}, {is_loopback, false}]),
+    2 = authz_call_count(Config).
+
+%% With the cache as the only configured backend,
+%% `rabbit_access_control:check_user_login/2' runs both steps through it
+%% with the same AuthProps.
+check_user_login_stores_redacted_authorization_key(Config) ->
+    Password = <<"e2e-secret-marker-c4a1">>,
+    Args = [<<"u">>, [{password, Password}]],
+    {ok, _} = rpc(Config, rabbit_access_control, check_user_login, Args),
+    1 = authz_call_count(Config),
+    {ok, _} = cache_get(Config, cache_key(Config, user_login_authorization, Args)),
+    {error, not_found} = cache_get(Config, {user_login_authorization, Args}),
+    {error, not_found} = cache_get(Config, {user_login_authentication, Args}).
+
 login(Config, Username, AuthProps) ->
     rpc(Config, rabbit_auth_backend_cache, user_login_authentication,
         [Username, AuthProps]).
@@ -149,6 +169,11 @@ authz_call_count(Config) ->
 
 cache_key(Config, F, A) ->
     rpc(Config, rabbit_auth_backend_cache, cache_key, [F, A]).
+
+cache_get(Config, Key) ->
+    {ok, Mod} = rpc(Config, application, get_env,
+                    [rabbitmq_auth_backend_cache, cache_module]),
+    rpc(Config, Mod, get, [Key]).
 
 contains_binary(Term, Needle) when is_binary(Needle) ->
     binary:match(term_to_binary(Term), Needle) =/= nomatch.
