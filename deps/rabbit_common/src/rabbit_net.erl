@@ -184,13 +184,10 @@ close(Sock)      when is_port(Sock) -> gen_tcp:close(Sock).
 fast_close(Sock) ->
     fast_close(Sock, ?SSL_CLOSE_TIMEOUT).
 
-%% ssl:close/2 does not bound the caller: internally it is a gen_statem:call/2
-%% with an infinite timeout, so a stuck TLS connection process (for example
-%% stuck in prim_inet:recv0/3 inside tls_gen_connection:close/4 when the peer
-%% never closes the transport) makes it hang forever. Run it in a separate
-%% process and, if it does not finish within Timeout, close the stuck TLS
-%% connection process's transport port, which makes the stuck operation return
-%% and unblocks the close.
+%% `ssl:close/2` calls the TLS connection process with an infinite timeout, so
+%% a connection stuck in `tls_gen_connection:close/4` hangs the caller forever.
+%% Run it in a separate process; if it does not finish within `Timeout`, close
+%% the transport port, which makes the stuck `recv` return.
 fast_close(Sock, Timeout) when ?IS_SSL(Sock) ->
     {Pid, MRef} = spawn_monitor(fun () -> _ = ssl:close(Sock, Timeout) end),
     receive
@@ -210,7 +207,7 @@ force_close_stuck_ssl_connections(Pid, MRef, Timeout) ->
         {'DOWN', MRef, process, Pid, _} ->
             ok
     after Timeout ->
-        %% Last resort if closing the port did not unblock the ssl:close call.
+        %% Last resort if closing the port did not unblock `ssl:close/2`.
         _ = case ConnPid of
                 undefined -> ok;
                 _         -> exit(ConnPid, kill)
@@ -220,10 +217,9 @@ force_close_stuck_ssl_connections(Pid, MRef, Timeout) ->
         ok
     end.
 
-%% The spawned ssl:close/2 above blocks in a single gen_statem:call to the TLS
-%% connection process, so its caller monitors exactly that one process, which
-%% owns the transport socket port. This function avoids retrieving the
-%% connection PID and port from the version-specific sslsocket record.
+%% The closer process blocks in one `gen_statem:call`, so it monitors exactly
+%% the TLS connection process, which owns the transport port. This avoids
+%% reading the version-specific `#sslsocket{}` record.
 get_ssl_connection_pid(Pid) ->
     case erlang:process_info(Pid, monitors) of
         {monitors, Monitors} ->
