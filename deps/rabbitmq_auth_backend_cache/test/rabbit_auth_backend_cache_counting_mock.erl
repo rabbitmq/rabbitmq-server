@@ -6,8 +6,8 @@
 %%
 
 %% Counting auth backend used by the cache plugin's tests. Tracks how
-%% many authentication requests reached the backend so tests can pin
-%% down cache hit/miss behaviour.
+%% many authentication and authorization requests reached the backend
+%% so tests can pin down cache hit/miss behaviour.
 %%
 %% Response modes:
 %%
@@ -27,9 +27,10 @@
          expiry_timestamp/1]).
 
 -export([init/0, reset/0, set_mode/1,
-         authentication_call_count/0]).
+         authentication_call_count/0, authorization_call_count/0]).
 
 -define(COUNTER_KEY, {?MODULE, authentication_calls}).
+-define(AUTHZ_COUNTER_KEY, {?MODULE, authorization_calls}).
 -define(MODE_KEY,    {?MODULE, response_mode}).
 
 init() ->
@@ -37,6 +38,7 @@ init() ->
 
 reset() ->
     persistent_term:put(?COUNTER_KEY, counters:new(1, [])),
+    persistent_term:put(?AUTHZ_COUNTER_KEY, counters:new(1, [])),
     persistent_term:put(?MODE_KEY, always_ok),
     ok.
 
@@ -47,6 +49,9 @@ set_mode(Mode) when Mode =:= always_ok;
 
 authentication_call_count() ->
     counters:get(persistent_term:get(?COUNTER_KEY), 1).
+
+authorization_call_count() ->
+    counters:get(persistent_term:get(?AUTHZ_COUNTER_KEY), 1).
 
 user_login_authentication(Username, AuthProps) ->
     counters:add(persistent_term:get(?COUNTER_KEY), 1, 1),
@@ -61,6 +66,7 @@ user_login_authentication(Username, AuthProps) ->
     end.
 
 user_login_authorization(_Username, _AuthProps) ->
+    counters:add(persistent_term:get(?AUTHZ_COUNTER_KEY), 1, 1),
     {ok, fun() -> none end, []}.
 
 check_vhost_access(#auth_user{}, _VHostPath, _AuthzData) ->
