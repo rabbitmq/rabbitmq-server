@@ -178,7 +178,7 @@ from_upstream_or_set(US, Name, U, XorQ) ->
 %% number. A fractional value used to crash the exchange federation link when
 %% the hop counter was encoded as a `short`, and a value above the `short`
 %% range wrapped around to a negative one.
--spec max_hops(term()) -> pos_integer().
+-spec max_hops(term()) -> non_neg_integer().
 max_hops(N) when is_integer(N) andalso
                  N >= ?MIN_MAX_HOPS andalso
                  N =< ?MAX_MAX_HOPS ->

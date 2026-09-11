@@ -43,7 +43,7 @@
 -define(DOWNSTREAM_VHOST_ARG, <<"x-downstream-vhost">>).
 -define(DEF_PREFETCH, 1000).
 -define(DEF_MAX_HOPS, 1).
--define(MIN_MAX_HOPS, 1).
+-define(MIN_MAX_HOPS, 0).
 %% Exchange federation encodes the hop counter as a `short` table field.
 -define(MAX_MAX_HOPS, 32767).
 
