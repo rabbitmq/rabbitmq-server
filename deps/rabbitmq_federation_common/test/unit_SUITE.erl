@@ -35,7 +35,12 @@ all() -> [
     redact_params_network,
     redact_params_direct,
     redact_params_ssl_options_password,
-    redact_params_ssl_options_none
+    redact_params_ssl_options_none,
+    validate_max_hops_accepts_bounds,
+    validate_max_hops_rejects_out_of_range,
+    validate_max_hops_rejects_non_integers,
+    max_hops_keeps_valid_values,
+    max_hops_normalizes_legacy_values
 ].
 
 init_per_suite(Config) ->
@@ -301,3 +306,47 @@ redact_params_ssl_options_none(_Config) ->
     ?assertMatch(#amqp_params_network{ssl_options = none},
                  rabbit_federation_util:redact_params(Params)),
     ok.
+
+%% -------------------------------------------------------------------
+%% max-hops validation and normalization
+%% -------------------------------------------------------------------
+
+validate_max_hops_accepts_bounds(_Config) ->
+    [?assertEqual([], validation_errors(V)) || V <- [1, 2, 32766, 32767]],
+    ok.
+
+validate_max_hops_rejects_out_of_range(_Config) ->
+    [?assertMatch([{error, _, _}], validation_errors(V)) ||
+        V <- [0, -1, -32768, 32768, 100000]],
+    ok.
+
+validate_max_hops_rejects_non_integers(_Config) ->
+    [?assertMatch([{error, _, _}], validation_errors(V)) ||
+        V <- [1.5, 1.0, <<"1">>, "1", true, undefined, [1], {1}]],
+    ok.
+
+max_hops_keeps_valid_values(_Config) ->
+    [?assertEqual(V, rabbit_federation_upstream:max_hops(V)) ||
+        V <- [1, 2, 32766, 32767]],
+    ok.
+
+%% Values persisted by versions that did not validate `max-hops` are read
+%% back as is.
+max_hops_normalizes_legacy_values(_Config) ->
+    ?assertEqual(32767, rabbit_federation_upstream:max_hops(40000)),
+    ?assertEqual(32767, rabbit_federation_upstream:max_hops(40000.5)),
+    ?assertEqual(2, rabbit_federation_upstream:max_hops(2.7)),
+    ?assertEqual(1, rabbit_federation_upstream:max_hops(0)),
+    ?assertEqual(1, rabbit_federation_upstream:max_hops(0.5)),
+    ?assertEqual(1, rabbit_federation_upstream:max_hops(-100)),
+    ?assertEqual(1, rabbit_federation_upstream:max_hops(<<"many">>)),
+    ok.
+
+%% Goes through the upstream set component because, unlike the upstream one,
+%% it has no mandatory URI to validate.
+validation_errors(MaxHops) ->
+    Results = rabbit_federation_parameters:validate(
+                <<"/">>, <<"federation-upstream-set">>,
+                <<"a-name">>, [[{<<"upstream">>, <<"an-upstream">>},
+                                {<<"max-hops">>, MaxHops}]], none),
+    [R || Rs <- Results, R <- Rs, R =/= ok].
