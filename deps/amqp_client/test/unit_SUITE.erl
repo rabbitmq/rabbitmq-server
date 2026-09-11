@@ -24,6 +24,7 @@ all() ->
       route_destination_parsing,
       rabbit_channel_build_topic_variable_map,
       main_reader_rejects_oversized_frame,
+      main_reader_rejects_oversized_frame_with_split_header,
       main_reader_enforces_negotiated_frame_max,
       main_reader_accepts_frame_at_frame_max,
       main_reader_rejects_invalid_frame_end_marker,
@@ -416,6 +417,19 @@ main_reader_rejects_oversized_frame(_Config) ->
     wait_for_death(Reader),
     ok.
 
+main_reader_rejects_oversized_frame_with_split_header(_Config) ->
+    {Reader, ServerSock} = start_reader(),
+    <<Part1:3/binary, Part2/binary>> = <<?FRAME_METHOD:8, 0:16, 16#FFFFFFFF:32>>,
+    ok = gen_tcp:send(ServerSock, Part1),
+    %% we cannot observe socket state, so yeah, a good ol' `timer:sleep/1` to
+    %% give the original chunk some time to be consumed and processed.
+    timer:sleep(100),
+    ok = gen_tcp:send(ServerSock, Part2),
+    ?assertEqual({socket_error, {frame_too_large, 4294967295, ?HANDSHAKE_FRAME_MAX}},
+                 receive_reader_message()),
+    wait_for_death(Reader),
+    ok.
+
 main_reader_enforces_negotiated_frame_max(_Config) ->
     {Reader, ServerSock} = start_reader(),
     ok = amqp_main_reader:set_frame_max(Reader, 4096),
@@ -434,16 +448,14 @@ main_reader_accepts_frame_at_frame_max(_Config) ->
     <<Part1:100/binary, Part2/binary>> = Frame,
     ok = gen_tcp:send(ServerSock, Part1),
     timer:sleep(100),
-    ?assert(is_process_alive(Reader)),
     ok = gen_tcp:send(ServerSock, Part2),
-    timer:sleep(100),
-    ?assert(is_process_alive(Reader)),
+    ?assertMatch({channel_exit, 0, _}, receive_reader_message()),
     ok.
 
 main_reader_rejects_invalid_frame_end_marker(_Config) ->
     {Reader, ServerSock} = start_reader(),
     ok = gen_tcp:send(ServerSock, <<?FRAME_BODY:8, 0:16, 4:32>>),
-    timer:sleep(50),
+    timer:sleep(100),
     ok = gen_tcp:send(ServerSock, <<0:32, 0:8>>),
     ?assertEqual({socket_error, {invalid_frame_end_marker, 0}},
                  receive_reader_message()),
@@ -466,7 +478,7 @@ main_reader_rejects_buffered_frame_above_negotiated_frame_max(_Config) ->
     {Reader, ServerSock} = start_reader(),
     Length = ?HANDSHAKE_FRAME_MAX - 1,
     ok = gen_tcp:send(ServerSock, <<?FRAME_BODY:8, 0:16, Length:32>>),
-    timer:sleep(50),
+    timer:sleep(100),
     ok = amqp_main_reader:set_frame_max(Reader, 4096),
     ?assertEqual({socket_error, {frame_too_large, Length, 4096}},
                  receive_reader_message()),
@@ -480,13 +492,11 @@ main_reader_assembles_frame_split_across_packets(_Config) ->
               ?FRAME_END>>,
     [Part1, Part2, Part3] = split_into_3(Frame),
     ok = gen_tcp:send(ServerSock, Part1),
-    timer:sleep(50),
+    timer:sleep(100),
     ok = gen_tcp:send(ServerSock, Part2),
-    timer:sleep(50),
-    ?assert(is_process_alive(Reader)),
+    timer:sleep(100),
     ok = gen_tcp:send(ServerSock, Part3),
-    timer:sleep(50),
-    ?assert(is_process_alive(Reader)),
+    ?assertMatch({channel_exit, 0, _}, receive_reader_message()),
     ok.
 
 %% End-to-end: drives a real amqp_connection against a peer that completes
