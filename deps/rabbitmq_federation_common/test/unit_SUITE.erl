@@ -330,8 +330,8 @@ max_hops_keeps_valid_values(_Config) ->
         V <- [1, 2, 32766, 32767]],
     ok.
 
-%% Values persisted before `max-hops` was validated as a bounded integer are
-%% read back as is, so they have to be brought back into range here.
+%% Values persisted by versions that did not validate `max-hops` are read
+%% back as is.
 max_hops_normalizes_legacy_values(_Config) ->
     ?assertEqual(32767, rabbit_federation_upstream:max_hops(40000)),
     ?assertEqual(32767, rabbit_federation_upstream:max_hops(40000.5)),
@@ -342,8 +342,8 @@ max_hops_normalizes_legacy_values(_Config) ->
     ?assertEqual(1, rabbit_federation_upstream:max_hops(<<"many">>)),
     ok.
 
-%% Validated through the upstream set component: unlike the upstream one, it
-%% has no mandatory URI to validate, which keeps this a pure function call.
+%% Goes through the upstream set component because, unlike the upstream one,
+%% it has no mandatory URI to validate.
 validation_errors(MaxHops) ->
     Results = rabbit_federation_parameters:validate(
                 <<"/">>, <<"federation-upstream-set">>,
