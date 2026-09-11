@@ -63,11 +63,14 @@ is_authorized(ReqData, Context) ->
 %% Qs are #{binary() => any()} maps keyed by <<"virtual_host">>, not the
 %% atom-keyed proplists filter_vhost/3 expects, so tag and untag around it.
 %% Critical components (rabbit_stream_coordinator, rabbitmq_metadata) are
-%% cluster-wide, not vhost-scoped: their virtual_host is "(not applicable)"
-%% and they must pass through unfiltered rather than be dropped for everyone.
+%% cluster-wide, not vhost-scoped, and must pass through unfiltered rather
+%% than be dropped for everyone. They are marked with `type => process`
+%% (rabbit_upgrade_preparation:list_with_minimum_quorum_for_cli/0); vhost
+%% names are arbitrary binaries, so matching on the display-only
+%% virtual_host value of "(not applicable)" could be spoofed by a real
+%% vhost of that name.
 filter_vhost(Qs, ReqData, Context) ->
-    IsVhostScoped =
-        fun(Q) -> maps:get(<<"virtual_host">>, Q) =/= <<"(not applicable)">> end,
+    IsVhostScoped = fun(Q) -> maps:get(<<"type">>, Q) =/= process end,
     {VhostScoped, NotVhostScoped} = lists:partition(IsVhostScoped, Qs),
     Tagged = [maps:put(vhost, maps:get(<<"virtual_host">>, Q), Q)
               || Q <- VhostScoped],
