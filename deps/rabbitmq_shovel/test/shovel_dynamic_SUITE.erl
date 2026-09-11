@@ -131,7 +131,8 @@ local_src_tests() ->
 %% enforces write access when the publisher is set up, so the shovel never
 %% reaches the running state.
 local_dest_tests() ->
-    [no_write_access_on_dest_queue].
+    [no_write_access_on_dest_queue,
+     write_access_on_default_exchange_only].
 
 %% -------------------------------------------------------------------
 %% Testsuite setup/teardown.
@@ -621,6 +622,34 @@ no_write_access_on_dest_queue(Config) ->
                   DestAddress = rabbitmq_amqp_address:queue(Dest),
                   amqp10_publish(Sess, SrcAddress, <<"leak-attempt">>, 1),
                   amqp10_expect_empty(Sess, DestAddress)
+          end)
+    after
+        rabbit_ct_broker_helpers:delete_user(Config, RestrictedUser)
+    end.
+
+write_access_on_default_exchange_only(Config) ->
+    Src = ?config(srcq, Config),
+    Dest = ?config(destq, Config),
+    Param = ?config(param, Config),
+    RestrictedUser = <<"restricted_", Param/binary>>,
+    rabbit_ct_broker_helpers:add_user(Config, RestrictedUser, RestrictedUser),
+    rabbit_ct_broker_helpers:set_permissions(
+      Config, RestrictedUser, <<"/">>, <<".*">>, <<"^amq\\.default$">>, <<".*">>),
+    Uri = make_uri(Config, 0, RestrictedUser, RestrictedUser),
+    ExtraArgs = [{<<"src-uri">>, Uri}, {<<"dest-uri">>, [Uri]}],
+    ShovelArgs = ?config(shovel_args, Config) ++ ExtraArgs,
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, rabbit_runtime_parameters, set,
+           [<<"/">>, <<"shovel">>, Param, ShovelArgs, none]),
+    try
+        shovel_test_utils:await_shovel(Config, 0, Param),
+        with_amqp10_session(
+          Config,
+          fun (Sess) ->
+                  SrcAddress = rabbitmq_amqp_address:queue(Src),
+                  DestAddress = rabbitmq_amqp_address:queue(Dest),
+                  amqp10_publish(Sess, SrcAddress, <<"hello">>, 1),
+                  _ = amqp10_expect_one(Sess, DestAddress)
           end)
     after
         rabbit_ct_broker_helpers:delete_user(Config, RestrictedUser)
