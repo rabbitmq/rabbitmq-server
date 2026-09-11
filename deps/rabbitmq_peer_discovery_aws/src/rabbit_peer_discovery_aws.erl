@@ -14,7 +14,7 @@
 -include_lib("kernel/include/logger.hrl").
 
 -export([init/0, list_nodes/0, supports_registration/0, register/0, unregister/0,
-         post_registration/0, lock/1, unlock/1]).
+         post_registration/0, lock/1, unlock/1, reports_all_nodes/0]).
 
 -type tags() :: map().
 -type filters() :: [{string(), string()}].
@@ -113,6 +113,11 @@ list_nodes() ->
         false ->
             get_node_list_from_tags(get_tags())
     end.
+
+-spec reports_all_nodes() -> boolean().
+
+reports_all_nodes() ->
+    true.
 
 -spec supports_registration() -> boolean().
 

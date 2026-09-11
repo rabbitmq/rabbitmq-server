@@ -12,7 +12,8 @@
 -behaviour(rabbit_peer_discovery_backend).
 
 -export([init/0, list_nodes/0, supports_registration/0, register/0, unregister/0,
-         post_registration/0, lock/1, unlock/1, retry_strategy/0]).
+         post_registration/0, lock/1, unlock/1, retry_strategy/0,
+         reports_all_nodes/0]).
 
 -define(DELEGATE, rabbit_peer_discovery_k8s).
 
@@ -56,4 +57,8 @@ unlock(Data) ->
 -spec retry_strategy() -> limited | unlimited.
 retry_strategy() ->
     ?DELEGATE:retry_strategy().
+
+-spec reports_all_nodes() -> boolean().
+reports_all_nodes() ->
+    ?DELEGATE:reports_all_nodes().
 
