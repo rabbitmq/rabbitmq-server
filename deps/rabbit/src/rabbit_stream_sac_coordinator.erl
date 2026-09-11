@@ -1202,7 +1202,7 @@ state_enter(leader, #?MODULE{groups = Groups,
     [{monitor, node, N} || N <- lists:sort(maps:keys(Nodes))] ++
     [begin
          %% 10 seconds is arbitrary, nothing specific about the value
-         Time = max(10_000, DisTimeout - (ts() - Ts)),
+         Time = max(10_000, min(DisTimeout, DisTimeout - (ts() - Ts))),
          node_disconnected_timer_effect(P, Time)
      end || P := Ts <- maps:iterator(DisConns, ordered)];
 state_enter(_, _) ->
