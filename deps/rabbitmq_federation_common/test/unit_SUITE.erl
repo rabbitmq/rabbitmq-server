@@ -31,7 +31,11 @@ all() -> [
     to_params_error_strips_credentials,
     to_params_error_on_malformed_uri_strips_credentials,
     to_params_falls_back_to_valid_uri,
-    to_params_error_redacts_query_secrets
+    to_params_error_redacts_query_secrets,
+    redact_params_network,
+    redact_params_direct,
+    redact_params_ssl_options_password,
+    redact_params_ssl_options_none
 ].
 
 init_per_suite(Config) ->
@@ -260,4 +264,40 @@ to_params_error_redacts_query_secrets(_Config) ->
         rabbit_federation_upstream:to_params(Upstream, XorQ),
     ?assertEqual(nomatch, binary:match(iolist_to_binary(io_lib:format("~tp", [Info])),
                                        <<"s3cret">>)),
+    ok.
+
+%% -------------------------------------------------------------------
+%% rabbit_federation_util:redact_params/1
+%% -------------------------------------------------------------------
+
+redact_params_network(_Config) ->
+    Params = #amqp_params_network{username = <<"fed">>, password = <<"s3cret">>,
+                                  host = "localhost"},
+    Redacted = rabbit_federation_util:redact_params(Params),
+    Formatted = iolist_to_binary(io_lib:format("~tp", [Redacted])),
+    ?assertEqual(nomatch, binary:match(Formatted, <<"s3cret">>)),
+    ?assertNotEqual(nomatch, binary:match(Formatted, <<"fed">>)),
+    ?assertNotEqual(nomatch, binary:match(Formatted, <<"localhost">>)),
+    ok.
+
+redact_params_direct(_Config) ->
+    Params = #amqp_params_direct{username = <<"fed">>, password = <<"s3cret">>},
+    Redacted = rabbit_federation_util:redact_params(Params),
+    Formatted = iolist_to_binary(io_lib:format("~tp", [Redacted])),
+    ?assertEqual(nomatch, binary:match(Formatted, <<"s3cret">>)),
+    ?assertNotEqual(nomatch, binary:match(Formatted, <<"fed">>)),
+    ok.
+
+redact_params_ssl_options_password(_Config) ->
+    Params = #amqp_params_network{ssl_options = [{password, "kp"}, {verify, verify_peer}]},
+    Redacted = rabbit_federation_util:redact_params(Params),
+    Formatted = iolist_to_binary(io_lib:format("~tp", [Redacted])),
+    ?assertEqual(nomatch, binary:match(Formatted, <<"kp">>)),
+    ?assertNotEqual(nomatch, binary:match(Formatted, <<"verify_peer">>)),
+    ok.
+
+redact_params_ssl_options_none(_Config) ->
+    Params = #amqp_params_network{ssl_options = none},
+    ?assertMatch(#amqp_params_network{ssl_options = none},
+                 rabbit_federation_util:redact_params(Params)),
     ok.
