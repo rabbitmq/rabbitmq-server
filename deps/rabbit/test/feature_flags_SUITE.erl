@@ -738,7 +738,11 @@ enable_feature_flag_with_a_network_partition(Config) ->
     unblock(NodePairs),
     [?assertEqual(ok, rabbit_ct_broker_helpers:stop_node(Config, N))
      || N <- [A, C, D]],
-    [?assertEqual(ok, rabbit_ct_broker_helpers:start_node(Config, N))
+    %% Khepri leader election needs an online majority, so start nodes in
+    %% parallel.
+    [?assertEqual(ok, rabbit_ct_broker_helpers:async_start_node(Config, N))
+     || N <- [A, C, D]],
+    [?assertEqual(ok, rabbit_ct_broker_helpers:wait_for_async_start_node(N))
      || N <- [A, C, D]],
     clustering_utils:assert_cluster_status({All, All}, All),
     declare_arbitrary_feature_flag(Config),
