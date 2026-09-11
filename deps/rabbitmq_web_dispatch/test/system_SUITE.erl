@@ -118,6 +118,7 @@ parse_ip_test1(Port) ->
     ?assertEqual(
        1, length([ok || {"/parse_ip", _, _} <-
                             rabbit_web_dispatch_registry:list_all()])),
+    rabbit_web_dispatch_registry:remove(parse_ip),
     passed.
 
 
