@@ -14,7 +14,8 @@
 all() ->
     [
      redact_headers_redacts_sensitive_headers_case_insensitively,
-     redact_headers_preserves_non_tuple_entries
+     redact_headers_preserves_non_tuple_entries,
+     redact_headers_redacts_binary_and_atom_header_names
     ].
 
 redact_headers_redacts_sensitive_headers_case_insensitively(_Config) ->
@@ -33,3 +34,10 @@ redact_headers_preserves_non_tuple_entries(_Config) ->
     ?assertEqual([nodelay,
                   {"Authorization", "..."}],
                  Redacted).
+
+redact_headers_redacts_binary_and_atom_header_names(_Config) ->
+    Headers = [{<<"authorization">>, "******"},
+               {'X-Consul-Token', "token-value"}],
+    ?assertEqual([{<<"authorization">>, "..."},
+                  {'X-Consul-Token', "..."}],
+                 rabbit_peer_discovery_httpc:redact_headers(Headers)).
