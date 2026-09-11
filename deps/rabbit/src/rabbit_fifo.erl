@@ -51,6 +51,11 @@
 -define(DEFAULT_PRIORITY, 4).
 -define(MAX_PRIORITY, 31).
 -define(DEFAULT_CONSUMER_TIMEOUT_MS, 1_800_000).
+%% Maximum number of distinct annotation keys accepted into a message
+%% header's `anns' from client-supplied `modified' disposition annotations.
+%% Anns are merged into the replicated Ra machine state, so an unbounded
+%% number of keys would let a consumer grow that state without limit.
+-define(MAX_MSG_ANNS_SIZE, 32).
 
 -export([
          %% ra_machine callbacks
@@ -4279,10 +4284,10 @@ incr_msg_headers(Msg0, DeliveryFailed, Anns) ->
     Msg1 = update_msg_header(acquired_count, fun incr/1, 1, Msg0),
     Msg2 = case map_size(Anns) > 0 of
                true ->
-                   update_msg_header(anns, fun(A) ->
-                                                   maps:merge(A, Anns)
-                                           end, Anns,
-                                     Msg1);
+                   update_msg_header(anns,
+                                      fun(A) -> merge_msg_anns(A, Anns) end,
+                                      merge_msg_anns(#{}, Anns),
+                                      Msg1);
                false ->
                    Msg1
            end,
@@ -4292,6 +4297,22 @@ incr_msg_headers(Msg0, DeliveryFailed, Anns) ->
         false ->
             Msg2
     end.
+
+%% Merges client-supplied annotations into the existing `anns' map, capping
+%% the result at ?MAX_MSG_ANNS_SIZE distinct keys. Existing keys can still
+%% be updated once the cap is reached, but new keys beyond the cap are
+%% dropped.
+merge_msg_anns(Existing, New) ->
+    maps:fold(
+      fun(Key, Value, Acc) ->
+              case maps:is_key(Key, Acc) orelse
+                   map_size(Acc) < ?MAX_MSG_ANNS_SIZE of
+                  true ->
+                      maps:put(Key, Value, Acc);
+                  false ->
+                      Acc
+              end
+      end, Existing, New).
 
 exec_read(Flru0, ReadPlan, Msgs) ->
     try ra_log_read_plan:execute(ReadPlan, Flru0) of

@@ -5072,6 +5072,51 @@ modify_test(Config) ->
 
     ok.
 
+%% A consumer settling the same message repeatedly with `modified' and
+%% fresh annotation keys must not grow the message header's `anns' map
+%% without bound, since that map is part of the replicated Ra machine state.
+modify_anns_capped_test(Config) ->
+    MaxAnnsSize = 32,
+    S0 = init(#{name => ?FUNCTION_NAME,
+                dead_letter_handler => at_least_once,
+                queue_resource =>
+                    rabbit_misc:r("/", queue, ?FUNCTION_NAME_B)}),
+    Cid = {?FUNCTION_NAME_B, self()},
+    {S1, _} = enq(Config, 1, 1, msg1, S0),
+    {S2, #{key := CK1}, _} = checkout(Config, 2, Cid, 1, S1),
+    NumModifies = MaxAnnsSize * 2,
+    {SFinal0, LastMsgId} =
+        lists:foldl(
+          fun (I, {StateIn, PrevMsgId}) ->
+                  Key = integer_to_binary(I),
+                  {StateOut, _, _} =
+                      apply(meta(Config, 100 + I),
+                            rabbit_fifo:make_modify(CK1, [PrevMsgId], false,
+                                                    false, #{Key => <<"v">>}),
+                            StateIn),
+                  {StateOut, PrevMsgId + 1}
+          end, {S2, 0}, lists:seq(1, NumModifies)),
+    #consumer{checked_out = Checked0} = maps:get(CK1, SFinal0#rabbit_fifo.consumers),
+    [?C_MSG(?MSG(_, #{anns := Anns0}))] = maps:values(Checked0),
+    ?assertEqual(MaxAnnsSize, map_size(Anns0)),
+    %% the first keys, sent before the cap was reached, were kept
+    ?assert(maps:is_key(integer_to_binary(1), Anns0)),
+    ?assert(maps:is_key(integer_to_binary(MaxAnnsSize), Anns0)),
+    %% new keys sent after the cap was reached were dropped
+    ?assertNot(maps:is_key(integer_to_binary(MaxAnnsSize + 1), Anns0)),
+    ?assertNot(maps:is_key(integer_to_binary(NumModifies), Anns0)),
+    %% an already-present key can still be updated once the cap is reached
+    {SFinal, _, _} =
+        apply(meta(Config, 100 + NumModifies + 1),
+              rabbit_fifo:make_modify(CK1, [LastMsgId], false, false,
+                                      #{integer_to_binary(1) => <<"updated">>}),
+              SFinal0),
+    #consumer{checked_out = Checked} = maps:get(CK1, SFinal#rabbit_fifo.consumers),
+    [?C_MSG(?MSG(_, #{anns := Anns}))] = maps:values(Checked),
+    ?assertEqual(MaxAnnsSize, map_size(Anns)),
+    ?assertEqual(<<"updated">>, maps:get(integer_to_binary(1), Anns)),
+    ok.
+
 priorities_expire_test(Config) ->
     State0 = init(#{name => ?FUNCTION_NAME,
                     queue_resource => rabbit_misc:r("/", queue,
