@@ -47,7 +47,8 @@ groups() ->
                         is_quorum_critical_single_node_test,
                         quorum_queues_without_elected_leader_single_node_test,
                         quorum_queues_without_elected_leader_across_all_virtual_hosts_single_node_test,
-                        quorum_queues_without_elected_leader_requires_virtual_host_access_single_node_test
+                        quorum_queues_without_elected_leader_requires_virtual_host_access_single_node_test,
+                        quorum_queues_without_elected_leader_across_all_vhosts_requires_virtual_host_access_single_node_test
      ]}
     ].
 
@@ -289,6 +290,32 @@ is_quorum_critical_test(Config) ->
             QName =:= maps:get(<<"name">>, Item)
         end, Queues)),
 
+    %% A management-tagged user without access to the default vhost must not
+    %% learn that it has a quorum-critical queue. Cluster-wide critical
+    %% components (e.g. rabbitmq_metadata) aren't vhost-scoped, so they may
+    %% still legitimately show up for this user; only the per-vhost queue
+    %% must be hidden.
+    VHost = <<"is_quorum_critical_test-vh">>,
+    User = <<"is_quorum_critical_test-user">>,
+    rabbit_ct_broker_helpers:add_vhost(Config, VHost),
+    rabbit_ct_broker_helpers:add_user(Config, User, User),
+    rabbit_ct_broker_helpers:set_user_tags(Config, 0, User, [management]),
+    rabbit_ct_broker_helpers:set_full_permissions(Config, User, VHost),
+
+    {ok, {{_, RestrictedCode, _}, _, RestrictedResBody}} =
+        req(Config, get, EndpointPath,
+            [auth_header(binary_to_list(User), binary_to_list(User))]),
+    ?assert(lists:member(RestrictedCode, [?OK, ?HEALTH_CHECK_FAILURE_STATUS])),
+    RestrictedBody = rabbit_json:decode(rabbit_data_coercion:to_binary(RestrictedResBody)),
+    RestrictedQueues = maps:get(<<"queues">>, RestrictedBody, []),
+    ?assertEqual(false, lists:any(
+        fun(Item) ->
+            QName =:= maps:get(<<"name">>, Item)
+        end, RestrictedQueues)),
+
+    rabbit_ct_broker_helpers:delete_user(Config, User),
+    rabbit_ct_broker_helpers:delete_vhost(Config, VHost),
+
     passed.
 
 quorum_queues_without_elected_leader_single_node_test(Config) ->
@@ -429,6 +456,60 @@ quorum_queues_without_elected_leader_requires_virtual_host_access_single_node_te
 
     rabbit_ct_broker_helpers:delete_user(Config, User),
     rabbit_ct_broker_helpers:delete_vhost(Config, VHost),
+
+    passed.
+
+quorum_queues_without_elected_leader_across_all_vhosts_requires_virtual_host_access_single_node_test(Config) ->
+    EndpointPath = "/health/checks/quorum-queues-without-elected-leaders/all-vhosts/",
+
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    Args = [{<<"x-queue-type">>, longstr, <<"quorum">>},
+            {<<"x-quorum-initial-group-size">>, long, 3}],
+    QName = <<"quorum_queues_without_elected_leader_across_all_vhosts_requires_virtual_host_access">>,
+    ?assertEqual({'queue.declare_ok', QName, 0, 0},
+        amqp_channel:call(Ch, #'queue.declare'{
+            queue       = QName,
+            durable     = true,
+            auto_delete = false,
+            arguments   = Args
+        })),
+
+    RaSystem = quorum_queues,
+    QResource = rabbit_misc:r(<<"/">>, queue, QName),
+    {ok, Q1} = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_db_queue, get, [QResource]),
+    _ = rabbit_ct_broker_helpers:rpc(Config, 0, ra, stop_server, [RaSystem, amqqueue:get_pid(Q1)]),
+
+    %% guest is an administrator and sees the leaderless queue across all vhosts.
+    AdminBody = http_get_failed(Config, EndpointPath),
+    AdminQueues = maps:get(<<"queues">>, AdminBody),
+    ?assert(lists:any(fun(Item) -> QName =:= maps:get(<<"name">>, Item) end, AdminQueues)),
+
+    %% A management-tagged user without access to the default vhost must not
+    %% learn that another vhost has a leaderless queue.
+    VHost = <<"quorum_queues_without_elected_leader_across_all_vhosts-vh">>,
+    User = <<"quorum_queues_without_elected_leader_across_all_vhosts-user">>,
+    rabbit_ct_broker_helpers:add_vhost(Config, VHost),
+    rabbit_ct_broker_helpers:add_user(Config, User, User),
+    rabbit_ct_broker_helpers:set_user_tags(Config, 0, User, [management]),
+    rabbit_ct_broker_helpers:set_full_permissions(Config, User, VHost),
+
+    RestrictedCheck = http_get(Config, EndpointPath, User, User, ?OK),
+    ?assertEqual(<<"ok">>, maps:get(status, RestrictedCheck)),
+
+    rabbit_ct_broker_helpers:delete_user(Config, User),
+    rabbit_ct_broker_helpers:delete_vhost(Config, VHost),
+
+    _ = rabbit_ct_broker_helpers:rpc(Config, 0, ra, restart_server, [RaSystem, amqqueue:get_pid(Q1)]),
+    rabbit_ct_helpers:await_condition(
+        fun() ->
+            try
+                Check = http_get(Config, EndpointPath, ?OK),
+                false =:= maps:is_key(reason, Check)
+            catch _:_ ->
+                false
+            end
+        end),
 
     passed.
 
