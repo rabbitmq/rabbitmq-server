@@ -115,7 +115,6 @@
         [protocol_error/3]).
 -import(serial_number,
         [add/2,
-         diff/2,
          compare/2,
          range_size/2]).
 -import(rabbit_misc,
@@ -2206,29 +2205,19 @@ session_flow_control_received_flow(
   #state{next_outgoing_id = NextOutgoingId} = State) ->
 
     Seq = case FlowNextIncomingId of
-              ?UINT(Id) ->
-                  case compare(Id, NextOutgoingId) of
-                      greater ->
-                          protocol_error(
-                            ?V_1_0_SESSION_ERROR_WINDOW_VIOLATION,
-                            "next-incoming-id from FLOW (~b) leads next-outgoing-id (~b)",
-                            [Id, NextOutgoingId]);
-                      _ ->
-                          Id
-                  end;
-              undefined ->
-                  %% The AMQP client might not have yet received our #begin.next_outgoing_id
-                  ?INITIAL_OUTGOING_TRANSFER_ID
+              ?UINT(Id) -> Id;
+              undefined -> ?INITIAL_OUTGOING_TRANSFER_ID
           end,
-
-    RemoteIncomingWindow0 = diff(add(Seq, FlowIncomingWindow), NextOutgoingId),
-    %% RemoteIncomingWindow0 can be negative, for example if we sent a TRANSFER to the
-    %% client between the point in time the client sent us a FLOW with updated
-    %% incoming_window=0 and we received that FLOW. Whether 0 or negative doesn't matter:
-    %% In both cases we're blocked sending more TRANSFERs to the client until it sends us
-    %% a new FLOW with a positive incoming_window. For better understandibility
-    %% across the code base, we ensure a floor of 0 here.
-    RemoteIncomingWindow = max(0, RemoteIncomingWindow0),
+    InFlight = case range_size(Seq, NextOutgoingId) of
+                   undefined ->
+                       protocol_error(
+                         ?V_1_0_SESSION_ERROR_WINDOW_VIOLATION,
+                         "next-incoming-id from FLOW (~b) leads next-outgoing-id (~b)",
+                         [Seq, NextOutgoingId]);
+                   Size ->
+                       Size - 1
+               end,
+    RemoteIncomingWindow = max(0, FlowIncomingWindow - InFlight),
 
     State#state{next_incoming_id = FlowNextOutgoingId,
                 remote_outgoing_window = FlowOutgoingWindow,
