@@ -10,6 +10,7 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
+-include_lib("amqp10_common/include/amqp10_types.hrl").
 -include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 -compile([export_all, nowarn_export_all]).
@@ -37,7 +38,11 @@ groups() ->
                          ]},
      {mapped, [], [
                    flow_link_after_link_removed,
-                   disposition_after_link_removed
+                   disposition_after_link_removed,
+                   disposition_large_range,
+                   disposition_reversed_range,
+                   flow_max_incoming_window,
+                   flow_next_incoming_id_leads
                   ]}
     ].
 
@@ -200,9 +205,69 @@ disposition_after_link_removed(_Config) ->
     ?assert(is_process_alive(Sup)),
     ok = stop_sup(Sup, Sockets).
 
+%% A huge disposition range must not be walked when nothing is unsettled.
+disposition_large_range(_Config) ->
+    {Sup, Session, Sockets} = start_session_in(mapped, 0),
+    gen_statem:cast(Session,
+                    #'v1_0.disposition'{role = ?AMQP_ROLE_RECEIVER,
+                                        settled = true,
+                                        first = {uint, 0},
+                                        last = {uint, 16#7fffffff},
+                                        state = #'v1_0.accepted'{}}),
+    ?assertMatch({mapped, _}, sys:get_state(Session, 1000)),
+    ?assert(is_process_alive(Sup)),
+    ok = stop_sup(Sup, Sockets).
+
+%% A reversed delivery ID range must not crash the session.
+disposition_reversed_range(_Config) ->
+    {Sup, Session, Sockets} = start_session_in(mapped, 0),
+    gen_statem:cast(Session,
+                    #'v1_0.disposition'{role = ?AMQP_ROLE_RECEIVER,
+                                        settled = true,
+                                        first = {uint, 100},
+                                        last = {uint, 5},
+                                        state = #'v1_0.accepted'{}}),
+    ?assertMatch({mapped, _}, sys:get_state(Session, 1000)),
+    ?assert(is_process_alive(Sup)),
+    ok = stop_sup(Sup, Sockets).
+
+%% A peer may advertise the largest uint as its incoming window.
+flow_max_incoming_window(_Config) ->
+    {Sup, Session, Sockets} = start_session_in(mapped, 0),
+    gen_statem:cast(Session,
+                    #'v1_0.flow'{next_incoming_id = {uint, 16#fffffffe},
+                                 incoming_window = {uint, 16#ffffffff},
+                                 next_outgoing_id = {uint, 1},
+                                 outgoing_window = {uint, 1000}}),
+    ?assertMatch({mapped, #{remote_incoming_window := 16#ffffffff}},
+                 session_state(Session)),
+    ?assert(is_process_alive(Sup)),
+    ok = stop_sup(Sup, Sockets).
+
+%% A next-incoming-id ahead of ours must not crash the session.
+flow_next_incoming_id_leads(_Config) ->
+    {Sup, Session, Sockets} = start_session_in(mapped, 0),
+    {mapped, #{remote_incoming_window := Window}} = session_state(Session),
+    gen_statem:cast(Session,
+                    #'v1_0.flow'{next_incoming_id = {uint, 16#7ffffffe},
+                                 incoming_window = {uint, 0},
+                                 next_outgoing_id = {uint, 1},
+                                 outgoing_window = {uint, 1000}}),
+    ?assertMatch({mapped, #{remote_incoming_window := Window,
+                            next_incoming_id := 1,
+                            remote_outgoing_window := 1000}},
+                 session_state(Session)),
+    ?assert(is_process_alive(Sup)),
+    ok = stop_sup(Sup, Sockets).
+
 %% -------------------------------------------------------------------
 %% Helpers.
 %% -------------------------------------------------------------------
+
+session_state(Session) ->
+    {StateName, Data0} = sys:get_state(Session, 1000),
+    #{data := Data} = amqp10_client_session:format_status(#{data => Data0}),
+    {StateName, Data}.
 
 start_session_in(unmapped, Channel) ->
     Sup = start_sup(),

@@ -13,6 +13,7 @@
          ranges/1,
          in_range/3,
          diff/2,
+         range_size/2,
          foldl/4]).
 
 %% For tests.
@@ -111,6 +112,18 @@ diff(A, B) ->
            Diff;
        true ->
            exit({undefined_serial_diff, A, B})
+    end.
+
+%% Size of the inclusive range First..Last, or `undefined' if Last does not
+%% follow First. Unlike diff/2, never exits.
+-spec range_size(serial_number(), serial_number()) ->
+    pos_integer() | undefined.
+range_size(First, Last) ->
+    case (Last - First) band (?SERIAL_SPACE - 1) of
+        N when N < ?SERIAL_DIFF_BOUND ->
+            N + 1;
+        _ ->
+            undefined
     end.
 
 -spec foldl(Fun, Acc0, First, Last) -> Acc1 when
