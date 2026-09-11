@@ -110,8 +110,8 @@ start_child_handles_already_present(_Config) ->
         ok = meck:unload(mirrored_supervisor)
     end.
 
-%% hops/4 is pure: no header, cluster name and vhost are just used for
-%% cycle detection and are otherwise arbitrary here.
+%% `hops/4` only uses the cluster name and vhost for cycle detection, so any
+%% values will do.
 -define(UNAME, <<"upstream-cluster">>).
 -define(UVHOST, <<"/">>).
 

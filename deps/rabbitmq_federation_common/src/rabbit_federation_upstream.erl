@@ -174,11 +174,10 @@ from_upstream_or_set(US, Name, U, XorQ) ->
               channel_use_mode      = to_atom(bget('channel-use-mode', US, U, multiple))
     }.
 
-%% `max-hops` is validated when the parameter is set, but parameters persisted
-%% by earlier versions were only checked for being a number, so they are read
-%% back as is. A fractional value used to crash the exchange federation link
-%% when it encoded the hop counter, and a value too large for that encoding was
-%% silently truncated to a negative one, hence the normalization here.
+%% Parameters persisted by earlier versions were only checked for being a
+%% number. A fractional value used to crash the exchange federation link when
+%% the hop counter was encoded as a `short`, and a value above the `short`
+%% range wrapped around to a negative one.
 -spec max_hops(term()) -> pos_integer().
 max_hops(N) when is_integer(N) andalso
                  N >= ?MIN_MAX_HOPS andalso

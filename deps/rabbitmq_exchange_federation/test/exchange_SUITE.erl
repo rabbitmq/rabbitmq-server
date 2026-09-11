@@ -529,14 +529,12 @@ max_hops(Config) ->
       {skip, "Should not run in mixed version environments"}
   end.
 
-%% A chain rather than a ring, so that cycle detection cannot mask the
-%% result: A is the original source, B consumes from A, C consumes from B.
-%% A forged x-bound-from header used to make the hop counter negative,
-%% which never reaches 0 through ordinary arithmetic, so a binding kept
-%% propagating through the whole chain regardless of max-hops. With the
-%% fix, a header carrying a non-positive hop count means "do not
-%% propagate any further", so the forged binding never leaves the node it
-%% was declared on.
+%% Uses a chain (B consumes from A, C consumes from B) rather than a ring so
+%% that cycle detection cannot mask the result.
+%%
+%% A forged `x-bound-from` header with a negative hop count never reached 0
+%% by decrementing, so the binding propagated through the whole chain
+%% regardless of `max-hops`.
 forged_hops_does_not_bypass_max_hops(Config) ->
   case rabbit_ct_helpers:is_mixed_versions() of
     false ->
@@ -581,8 +579,8 @@ forged_hops_does_not_bypass_max_hops(Config) ->
       declare_exchange(NodeBCh, X),
       declare_exchange(NodeCCh, X),
 
-      %% Baseline: an ordinary binding created on C reaches B, one hop
-      %% away, confirming the chain and the propagation path both work.
+      %% An ordinary binding must reach B first, otherwise the absence of the
+      %% forged one below proves nothing.
       _ = declare_and_bind_queue(NodeCCh, UpX, <<"baseline">>),
       await_binding(Config, NodeB, UpX, <<"baseline">>),
 
@@ -592,7 +590,7 @@ forged_hops_does_not_bypass_max_hops(Config) ->
                                {<<"vhost">>, longstr, <<"x">>}]}]}],
       _ = declare_and_bind_queue(NodeCCh, UpX, <<"forged">>, ForgedArgs),
 
-      %% Give propagation a chance to happen before asserting its absence.
+      %% Propagation is asynchronous, so allow it time before asserting its absence.
       timer:sleep(5000),
       [] = bound_keys_from(Config, NodeB, <<"/">>, UpX, <<"forged">>),
       [] = bound_keys_from(Config, NodeA, <<"/">>, UpX, <<"forged">>),
@@ -741,9 +739,8 @@ supervisor_shutdown_concurrency_safety(Config) ->
 
   clean_up_federation_related_bits(Config).
 
-%% A forged x-bound-from binding argument used to crash the link, and the
-%% crash repeated indefinitely because the poisoned binding is replayed on
-%% every restart.
+%% A malformed `x-bound-from` binding argument used to crash the link on
+%% every restart, since the binding is replayed each time.
 forged_binding_header_does_not_crash_link(Config) ->
   FedX = <<"forged_binding_header.federated">>,
   UpX = <<"forged_binding_header.upstream.x">>,
@@ -785,10 +782,9 @@ forged_binding_header_does_not_crash_link(Config) ->
 
   clean_up_federation_related_bits(Config).
 
-%% `max-hops` is only checked when the parameter is set, so a value persisted
-%% by an earlier version, which accepted any number, is read back as is. A
-%% fractional value used to crash the link, since it cannot be encoded into
-%% the integer fields that carry the hop count.
+%% Earlier versions accepted any number for `max-hops`, and a persisted
+%% fractional value used to crash the link when the hop count was encoded
+%% into an integer field.
 invalid_persisted_max_hops_does_not_crash_link(Config) ->
   FedX = <<"invalid_persisted_max_hops.federated">>,
   UpX = <<"invalid_persisted_max_hops.upstream.x">>,
@@ -1019,8 +1015,8 @@ clean_up_federation_related_bits(Config) ->
     [delete_all_exchanges_on(Config, N) || N <- NodeIndices],
     ok.
 
-%% Writes the parameter straight to the store, the way a definition persisted
-%% before `max-hops` was validated as a bounded integer would be read back.
+%% Bypasses validation to reproduce a definition persisted by a version that
+%% did not validate `max-hops`.
 set_upstream_without_validation(Name, Definition) ->
   _ = rabbit_db_rtparams:set(<<"/">>, <<"federation-upstream">>, Name, Definition),
   rabbit_federation_parameters:notify(<<"/">>, <<"federation-upstream">>, Name,
