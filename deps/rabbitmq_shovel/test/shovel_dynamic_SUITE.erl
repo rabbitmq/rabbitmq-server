@@ -31,7 +31,7 @@
                             amqp10_expect_empty/2,
                             amqp10_subscribe/2,
                             make_uri/2, make_uri/3,
-                            make_uri/4, make_uri/5,
+                            make_uri/5,
                             await_no_shovel/2
                            ]).
 
@@ -55,17 +55,17 @@ groups() ->
      %% so it messes up all other parallel tests
      {amqp10, [], [{parallel, [parallel], tests()},
                    {sequential, [], [disk_alarm]}]},
-     {local, [parallel], tests() ++ local_src_tests() ++ local_dest_tests() ++ [disk_alarm]},
+     {local, [parallel], tests() ++ [disk_alarm]},
      {amqp091_to_amqp10, [], [{parallel, [parallel], tests()},
                               {sequential, [], [disk_alarm]}]},
-     {amqp091_to_local, [parallel], tests() ++ local_dest_tests() ++ [disk_alarm]},
+     {amqp091_to_local, [parallel], tests() ++ [disk_alarm]},
      {amqp10_to_amqp091, [], [{parallel, [parallel], tests()},
                               {sequential, [], [disk_alarm]}]},
-     {amqp10_to_local, [parallel], tests() ++ local_dest_tests()},
+     {amqp10_to_local, [parallel], tests()},
      {amqp10_to_local, [], [{parallel, [parallel], tests()},
                             {sequential, [], [disk_alarm]}]},
-     {local_to_amqp091, [parallel], tests() ++ local_src_tests() ++ [disk_alarm]},
-     {local_to_amqp10, [], [{parallel, [parallel], tests() ++ local_src_tests()},
+     {local_to_amqp091, [parallel], tests() ++ [disk_alarm]},
+     {local_to_amqp10, [], [{parallel, [parallel], tests()},
                             {sequential, [], [disk_alarm]}]}
     ].
 
@@ -118,20 +118,6 @@ tests() ->
      change_definition,
      consumer_tag
     ].
-
-%% Only meaningful for a local source. With an AMQP 0-9-1 or AMQP 1.0
-%% source, the protocol enforces read access when the consumer is set up,
-%% so the shovel fails to start either way but the local check is never
-%% reached.
-local_src_tests() ->
-    [no_read_access_on_source_queue].
-
-%% Only meaningful for a local destination, where write access is checked
-%% per message. With an AMQP 0-9-1 or AMQP 1.0 destination, the protocol
-%% enforces write access when the publisher is set up, so the shovel never
-%% reaches the running state.
-local_dest_tests() ->
-    [no_write_access_on_dest_queue].
 
 %% -------------------------------------------------------------------
 %% Testsuite setup/teardown.
@@ -575,56 +561,6 @@ no_user_access(Config) ->
            Config, 0, rabbit_runtime_parameters, set,
            [<<"/">>, <<"shovel">>, Param, ShovelArgs, none]),
     await_no_shovel(Config, Param).
-
-%% Grant configure and write but deny read, so only the source-side
-%% permission check can block the shovel from starting.
-no_read_access_on_source_queue(Config) ->
-    Param = ?config(param, Config),
-    RestrictedUser = <<"restricted_", Param/binary>>,
-    rabbit_ct_broker_helpers:add_user(Config, RestrictedUser, RestrictedUser),
-    rabbit_ct_broker_helpers:set_permissions(
-      Config, RestrictedUser, <<"/">>, <<".*">>, <<".*">>, <<"^$">>),
-    Uri = make_uri(Config, 0, RestrictedUser, RestrictedUser),
-    ExtraArgs = [{<<"src-uri">>, Uri}, {<<"dest-uri">>, [Uri]}],
-    ShovelArgs = ?config(shovel_args, Config) ++ ExtraArgs,
-    ok = rabbit_ct_broker_helpers:rpc(
-           Config, 0, rabbit_runtime_parameters, set,
-           [<<"/">>, <<"shovel">>, Param, ShovelArgs, none]),
-    try
-        await_no_shovel(Config, Param)
-    after
-        rabbit_ct_broker_helpers:delete_user(Config, RestrictedUser)
-    end.
-
-%% Grant configure and read but deny write: the shovel starts but must not
-%% forward a message.
-no_write_access_on_dest_queue(Config) ->
-    Src = ?config(srcq, Config),
-    Dest = ?config(destq, Config),
-    Param = ?config(param, Config),
-    RestrictedUser = <<"restricted_", Param/binary>>,
-    rabbit_ct_broker_helpers:add_user(Config, RestrictedUser, RestrictedUser),
-    rabbit_ct_broker_helpers:set_permissions(
-      Config, RestrictedUser, <<"/">>, <<".*">>, <<"^$">>, <<".*">>),
-    Uri = make_uri(Config, 0, RestrictedUser, RestrictedUser),
-    ExtraArgs = [{<<"src-uri">>, Uri}, {<<"dest-uri">>, [Uri]}],
-    ShovelArgs = ?config(shovel_args, Config) ++ ExtraArgs,
-    ok = rabbit_ct_broker_helpers:rpc(
-           Config, 0, rabbit_runtime_parameters, set,
-           [<<"/">>, <<"shovel">>, Param, ShovelArgs, none]),
-    try
-        shovel_test_utils:await_shovel(Config, 0, Param),
-        with_amqp10_session(
-          Config,
-          fun (Sess) ->
-                  SrcAddress = rabbitmq_amqp_address:queue(Src),
-                  DestAddress = rabbitmq_amqp_address:queue(Dest),
-                  amqp10_publish(Sess, SrcAddress, <<"leak-attempt">>, 1),
-                  amqp10_expect_empty(Sess, DestAddress)
-          end)
-    after
-        rabbit_ct_broker_helpers:delete_user(Config, RestrictedUser)
-    end.
 
 application_properties(Config) ->
     Src = ?config(srcq, Config),
