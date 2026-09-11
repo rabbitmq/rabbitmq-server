@@ -42,7 +42,8 @@
 %% Config keys across all peer discovery backends whose values are
 %% credentials and must never appear in logs, even at debug level.
 -define(SECRET_CONFIG_KEYS, [aws_access_key, aws_secret_key,
-                              consul_acl_token, etcd_password]).
+                              consul_acl_token, etcd_password,
+                              ssl_options]).
 
 
 -spec getenv(Key :: string() | undefined) -> string() | false.
