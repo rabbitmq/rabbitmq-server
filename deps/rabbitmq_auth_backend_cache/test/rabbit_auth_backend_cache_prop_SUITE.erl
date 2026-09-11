@@ -99,13 +99,14 @@ prop_different_usernames_yield_different_keys(Config) ->
       end, [], ?NUMTESTS).
 
 %% Security invariant: the plaintext password must not be a substring of
-%% the cache key, regardless of username and loopback flag.
+%% the cache key, regardless of username, loopback flag and login step.
 prop_password_is_absent_from_cache_key(Config) ->
     run_proper(
       fun() ->
-              ?FORALL({U, P, L},
-                      {username(), non_trivial_password(), boolean()},
-                      password_absent_from_key(Config, U, P, L))
+              ?FORALL({F, U, P, L},
+                      {login_function(), username(), non_trivial_password(),
+                       boolean()},
+                      password_absent_from_key(Config, F, U, P, L))
       end, [], ?NUMTESTS).
 
 %% Equality invariant: redacting the same AuthProps twice must produce
@@ -113,8 +114,9 @@ prop_password_is_absent_from_cache_key(Config) ->
 prop_redaction_is_deterministic(Config) ->
     run_proper(
       fun() ->
-              ?FORALL({U, P, L}, {username(), password(), boolean()},
-                      redaction_deterministic(Config, U, P, L))
+              ?FORALL({F, U, P, L},
+                      {login_function(), username(), password(), boolean()},
+                      redaction_deterministic(Config, F, U, P, L))
       end, [], ?NUMTESTS).
 
 %%%=========================================================================
@@ -146,15 +148,13 @@ distinct_username_count_two(Config, U1, U2, P) ->
     {ok, _} = login(Config, U2, [{password, P}]),
     2 =:= call_count(Config).
 
-password_absent_from_key(Config, U, P, L) ->
-    Key = cache_key(Config, user_login_authentication,
-                    [U, [{password, P}, {is_loopback, L}]]),
+password_absent_from_key(Config, F, U, P, L) ->
+    Key = cache_key(Config, F, [U, [{password, P}, {is_loopback, L}]]),
     binary:match(term_to_binary(Key), P) =:= nomatch.
 
-redaction_deterministic(Config, U, P, L) ->
+redaction_deterministic(Config, F, U, P, L) ->
     Args = [U, [{password, P}, {is_loopback, L}]],
-    cache_key(Config, user_login_authentication, Args)
-        =:= cache_key(Config, user_login_authentication, Args).
+    cache_key(Config, F, Args) =:= cache_key(Config, F, Args).
 
 %%%=========================================================================
 %%% Helpers
@@ -181,6 +181,9 @@ rpc(Config, M, F, A) ->
 %%%=========================================================================
 %%% Generators
 %%%=========================================================================
+
+login_function() ->
+    oneof([user_login_authentication, user_login_authorization]).
 
 username() ->
     non_empty(binary()).
