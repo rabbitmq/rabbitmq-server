@@ -577,11 +577,10 @@ handle_cast({frame_body, FrameBody},
           exit:#'v1_0.error'{} = Error ->
               log_error_and_close_session(Error, State0);
           _:Reason:Stacktrace ->
-              Description = unicode:characters_to_binary(
-                              lists:flatten(io_lib:format("~tp~n~tp", [Reason, Stacktrace]))),
               Err = #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
-                                  description = {utf8, Description}},
-              log_error_and_close_session(Err, State0)
+                                  description = {utf8, <<"internal error">>}},
+              log_error_and_close_session(
+                Err, rabbit_misc:format("~tp~n~tp", [Reason, Stacktrace]), State0)
     end;
 handle_cast({queue_event, _, _} = QEvent, State0) ->
     try handle_queue_event(QEvent, State0) of
@@ -646,12 +645,15 @@ handle_cast({reset_authz, User}, #state{cfg = Cfg} = State0) ->
 handle_cast(shutdown, State) ->
     {stop, normal, State}.
 
+log_error_and_close_session(Error = #'v1_0.error'{description = {utf8, Desc}}, State) ->
+    log_error_and_close_session(Error, Desc, State).
+
 log_error_and_close_session(
-  Error, State = #state{cfg = #cfg{reader_pid = ReaderPid,
-                                   writer_pid = WriterPid,
-                                   channel_num = Ch}}) ->
-    ?LOG_WARNING("Closing session for connection ~p: ~tp",
-                 [ReaderPid, Error]),
+  Error, Detail, State = #state{cfg = #cfg{reader_pid = ReaderPid,
+                                           writer_pid = WriterPid,
+                                           channel_num = Ch}}) ->
+    ?LOG_WARNING("Closing session for connection ~p: ~ts",
+                 [ReaderPid, Detail]),
     rabbit_amqp_reader:notify_session_ending(ReaderPid, self(), Ch),
     ok = rabbit_amqp_writer:send_command_sync(
            WriterPid, Ch, #'v1_0.end'{error = Error}),
