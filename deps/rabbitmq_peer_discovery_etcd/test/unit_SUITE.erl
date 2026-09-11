@@ -169,20 +169,27 @@ node_key_lease_is_healthy_test(_Config) ->
 
 %% counterpart of connected_enter_keeps_existing_node_lease_test/1: a
 %% node_key_lease_id left over from a dead keep-alive must not be treated
-%% as still held, so connected(enter) must attempt a fresh grant; against
-%% ?MODULE, which is not a registered gRPC connection, that raises rather
-%% than returning {error, term()}, hence assertError rather than a match
-%% on the graceful failure connected(enter) would otherwise produce.
+%% as still held, so connected(enter) must attempt, and apply, a fresh grant
 connected_enter_regrants_when_keepalive_dead_test(_Config) ->
     DeadPid = spawn(fun() -> ok end),
     ct:sleep(10),
+    ?assertNot(is_process_alive(DeadPid)),
+
+    FreshKeepalivePid = spawn(fun keep_alive_stub/0),
+    meck:new(eetcd_lease, [passthrough]),
+    meck:expect(eetcd_lease, grant, fun(_Name, _TTL) -> {ok, #{'ID' => 999}} end),
+    meck:expect(eetcd_lease, keep_alive, fun(_Name, _LeaseID) -> {ok, FreshKeepalivePid} end),
+
     Data = #statem_data{
         node_key_lease_id = 1,
         node_lease_keepalive_pid = DeadPid,
         connection_name = ?MODULE,
         node_key_ttl_in_seconds = 60
     },
-    ?assertError(_, rabbitmq_peer_discovery_etcd_v3_client:connected(enter, recover, Data)).
+    {keep_state, FinalData} = rabbitmq_peer_discovery_etcd_v3_client:connected(enter, recover, Data),
+    ?assertEqual(999, FinalData#statem_data.node_key_lease_id),
+    ?assertEqual(FreshKeepalivePid, FinalData#statem_data.node_lease_keepalive_pid),
+    exit(FreshKeepalivePid, kill).
 
 %% the connection can drop between a successful {lock, Node} and the
 %% matching unlock/2 call; recover/3 must stop the lock lease's
