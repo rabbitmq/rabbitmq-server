@@ -315,17 +315,14 @@ handle_session_exit(ChannelNum, SessionPid, Reason, State0) ->
             true ->
                 State;
             false ->
-                R = case Reason of
-                        {RealReason, Trace} ->
-                            error_frame(?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
-                                        "Session error: ~tp~n~tp",
-                                        [RealReason, Trace]);
-                        _ ->
-                            error_frame(?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
-                                        "Session error: ~tp",
-                                        [Reason])
-                    end,
-                handle_exception(State, ChannelNum, R)
+                Detail = case Reason of
+                             {RealReason, Trace} ->
+                                 rabbit_misc:format("Session error: ~tp~n~tp",
+                                                     [RealReason, Trace]);
+                             _ ->
+                                 rabbit_misc:format("Session error: ~tp", [Reason])
+                         end,
+                handle_exception(State, ChannelNum, internal_error_frame(), Detail)
         end,
     maybe_close(S).
 
@@ -348,14 +345,27 @@ error_frame(Condition, Fmt, Args) ->
     #'v1_0.error'{condition = Condition,
                   description = {utf8, Description}}.
 
+%% An error whose description is safe to send to the peer: it carries no
+%% internal reason or stacktrace. Callers that catch an internal error log
+%% the caught detail themselves via handle_exception/4.
+internal_error_frame() ->
+    #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
+                  description = {utf8, <<"internal error">>}}.
+
 %% "A valid frame header cannot be formed from the incoming byte stream." [2.8.16]
 framing_error(State, Channel, Fmt, Args) ->
     Error = error_frame(?V_1_0_CONNECTION_ERROR_FRAMING_ERROR, Fmt, Args),
     handle_exception(State, Channel, Error).
 
+handle_exception(State, Channel, Error = #'v1_0.error'{description = {utf8, Desc}}) ->
+    handle_exception(State, Channel, Error, Desc);
+handle_exception(State, Channel, Error) ->
+    handle_exception(State, Channel, Error, "").
+
 handle_exception(State = #v1{connection_state = CS}, _Channel,
                  Error = #'v1_0.error'{description =
-                                       {utf8, <<"Connection forced: ", Explanation/binary>>}})
+                                       {utf8, <<"Connection forced: ", Explanation/binary>>}},
+                 _Detail)
   when (?IS_RUNNING(State)) orelse CS =:= closing ->
     %% Only ever raised by terminate/2 when the connection is deliberately
     %% closed by an operator or by the broker itself (e.g. rabbitmqctl
@@ -366,18 +376,23 @@ handle_exception(State = #v1{connection_state = CS}, _Channel,
     %% rabbit_reader:log_hard_error/3.
     ?LOG_WARNING("Closing AMQP 1.0 connection ~tp: ~ts", [self(), Explanation]),
     close(Error, State);
-handle_exception(State = #v1{connection_state = closed}, Channel,
-                 #'v1_0.error'{description = {utf8, Desc}}) ->
-    ?LOG_ERROR("Error on AMQP 1.0 connection ~tp (~tp), channel number ~b:~n~tp",
-               [self(), closed, Channel, Desc]),
+handle_exception(State = #v1{connection_state = closed}, Channel, _Error, Detail) ->
+    ?LOG_ERROR("Error on AMQP 1.0 connection ~tp (~tp), channel number ~b:~n~ts",
+               [self(), closed, Channel, Detail]),
     State;
-handle_exception(State = #v1{connection_state = CS}, Channel,
-                 Error = #'v1_0.error'{description = {utf8, Desc}})
+handle_exception(State = #v1{connection_state = CS}, Channel, Error, Detail)
   when (?IS_RUNNING(State)) orelse CS =:= closing ->
-    ?LOG_ERROR("Error on AMQP 1.0 connection ~tp (~tp), channel number ~b:~n~tp",
-               [self(), CS, Channel, Desc]),
+    ?LOG_ERROR("Error on AMQP 1.0 connection ~tp (~tp), channel number ~b:~n~ts",
+               [self(), CS, Channel, Detail]),
     close(Error, State);
-handle_exception(State, _Channel, Error) ->
+handle_exception(State, Channel, Error = #'v1_0.error'{description = Desc}, Detail) ->
+    case Desc =:= {utf8, Detail} of
+        true ->
+            ok;
+        false ->
+            ?LOG_ERROR("Error on AMQP 1.0 connection ~tp (~tp), channel number ~b:~n~ts",
+                       [self(), State#v1.connection_state, Channel, Detail])
+    end,
     silent_close_delay(),
     throw({handshake_error, State#v1.connection_state, Error}).
 
@@ -414,10 +429,8 @@ handle_frame(Mode, Channel, Body, State) ->
         _:Reason:Trace ->
             handle_exception(State,
                              Channel,
-                             error_frame(
-                               ?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
-                               "Reader error: ~tp~n~tp",
-                               [Reason, Trace]))
+                             internal_error_frame(),
+                             rabbit_misc:format("Reader error: ~tp~n~tp", [Reason, Trace]))
     end.
 
 handle_frame0(amqp, Channel, _Body,
@@ -1011,15 +1024,15 @@ set_credential0(Cred,
                                             credential_timer = NewTimer}}
             catch _:Reason ->
                       Error = error_frame(?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS,
-                                          "access to vhost ~s failed for new credential: ~p",
-                                          [Vhost, Reason]),
-                      handle_exception(State, 0, Error)
+                                          "access to vhost '~ts' failed for new credential",
+                                          [Vhost]),
+                      handle_exception(State, 0, Error,
+                                        rabbit_misc:format("~tp", [Reason]))
             end;
         Err ->
             Error = error_frame(?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS,
-                                "credential update failed: ~p",
-                                [Err]),
-            handle_exception(State, 0, Error)
+                                "credential update failed", []),
+            handle_exception(State, 0, Error, rabbit_misc:format("~tp", [Err]))
     end.
 
 maybe_start_credential_expiry_timer(User) ->
