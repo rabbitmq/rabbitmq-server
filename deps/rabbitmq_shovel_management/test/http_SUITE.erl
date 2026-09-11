@@ -415,10 +415,8 @@ delete_a_starting_dynamic_shovel_removes_its_status(Config) ->
             rabbit_shovel_dyn_worker_sup_sup, stop_child, [ID]),
     await_shovel_removed(Config, ID).
 
-%% The /shovels/vhost/:vhost/:name and /shovels/vhost/:vhost/:name/restart
-%% routes must be distinguished by which route actually matched, not by a
-%% substring search over the request path: a shovel name starting with
-%% "restart" must still be deletable.
+%% The delete and restart routes must be told apart by which route matched,
+%% not by searching the request path for "/restart".
 delete_a_dynamic_shovel_whose_name_starts_with_restart(Config) ->
     remove_all_dynamic_shovels(Config, <<"/">>),
     Name = <<"restart-orders">>,
@@ -431,8 +429,7 @@ delete_a_dynamic_shovel_whose_name_starts_with_restart(Config) ->
     delete_shovel(Config, Name),
     await_shovel_removed(Config, ID).
 
-%% Same trap as above, this time via the vhost segment of the path:
-%% "/shovels/vhost/restart/orders" must still be a delete, not a restart.
+%% Same as above, with "restart" in the vhost segment of the path.
 delete_a_dynamic_shovel_in_a_vhost_named_restart(Config) ->
     VHost = <<"restart">>,
     Name = <<"orders">>,
@@ -443,7 +440,7 @@ delete_a_dynamic_shovel_in_a_vhost_named_restart(Config) ->
     try
         await_shovel_removed(Config, ID),
         declare_local_shovel(Config, "restart", Name),
-        await_shovel_startup(Config, ID),
+        await_shovel_running(Config, ID),
 
         delete_shovel(Config, "restart", Name),
         await_shovel_removed(Config, ID)
@@ -452,8 +449,7 @@ delete_a_dynamic_shovel_in_a_vhost_named_restart(Config) ->
         catch http_delete(Config, "/vhosts/restart", ?NO_CONTENT)
     end.
 
-%% The genuine /restart route must keep working: it restarts the shovel
-%% rather than deleting it.
+%% The real /restart route must still restart, not delete.
 restart_a_dynamic_shovel_via_the_restart_route(Config) ->
     remove_all_dynamic_shovels(Config, <<"/">>),
     Name = <<"shovel-to-restart">>,
@@ -668,18 +664,21 @@ declare_amqp091_shovel_with_publish_properties(Config, Name, Props) ->
 declare_local_shovel(Config, Name) ->
     declare_local_shovel(Config, "%2f", Name).
 
+%% Important: callers must make sure that the shovel is created
+%% in the correct the virtual host.
 declare_local_shovel(Config, VHost, Name) ->
     Port = integer_to_binary(
         rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp)),
+    Uri = iolist_to_binary(io_lib:format("amqp://localhost:~s/~s", [Port, VHost])),
     http_put(Config, io_lib:format("/parameters/shovel/~ts/~ts", [VHost, Name]),
         #{
             value => #{
                 <<"src-protocol">> => <<"local">>,
-                <<"src-uri">> => <<"amqp://localhost:", Port/binary>>,
+                <<"src-uri">> => Uri,
                 <<"src-queue">>  => <<"local.src.test">>,
                 <<"src-delete-after">> => <<"never">>,
                 <<"dest-protocol">> => <<"local">>,
-                <<"dest-uri">> => <<"amqp://localhost:", Port/binary>>,
+                <<"dest-uri">> => Uri,
                 <<"dest-queue">> => <<"local.dest.test">>
             }
         }, ?CREATED).
