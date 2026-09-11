@@ -644,14 +644,15 @@ consume_from_upstream_queue(
                                            durable   = true,
                                            arguments = Args}),
     NoAck = Upstream#upstream.ack_mode =:= 'no-ack',
-    %% The prefetch is applied even in no-ack mode so that a link that has
-    %% buffered messages behind a downstream resource alarm cannot grow
-    %% without bound. Quorum queues and streams honour prefetch on no-ack
-    %% consumers via credit-based flow; classic queues do not track Volume
-    %% for no-ack deliveries and will effectively ignore the ceiling, so
-    %% federation with no-ack and a classic upstream remains best-effort
-    %% under alarm pressure.
-    amqp_channel:call(Ch, #'basic.qos'{prefetch_count = Prefetch}),
+    %% Deferring the downstream publish also defers the upstream
+    %% basic.ack, which bounds blocked_buffer by prefetch-count in
+    %% on-confirm and on-publish. In no-ack mode there is no ack to
+    %% withhold and prefetch does not bound the buffer for any queue
+    %% type, so the buffer is unbounded there.
+    case NoAck of
+        false -> amqp_channel:call(Ch, #'basic.qos'{prefetch_count = Prefetch});
+        true  -> ok
+    end,
     #'basic.consume_ok'{consumer_tag = CTag} =
         amqp_channel:subscribe(Ch, #'basic.consume'{queue  = Q,
                                                     no_ack = NoAck}, self()),
