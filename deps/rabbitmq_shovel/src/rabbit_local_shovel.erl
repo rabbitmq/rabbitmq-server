@@ -953,8 +953,8 @@ collect_acks(AcknowledgedAcc, RemainingAcc, UAMQ, DeliveryTag, Multiple) ->
 %% so the write check happens here rather than at connect time.
 route(_Msg, #{queue_r := QueueR,
               queue := Queue,
-              current := #{user := User}}) when Queue =/= none ->
-    ok = check_resource_access(User, QueueR, write),
+              current := #{vhost := VHost, user := User}}) when Queue =/= none ->
+    ok = check_resource_access(User, rabbit_misc:r(VHost, exchange, <<>>), write),
     [QueueR];
 route(Msg, #{current := #{vhost := VHost, user := User}}) ->
     ExchangeName = rabbit_misc:r(VHost, exchange, mc:exchange(Msg)),
