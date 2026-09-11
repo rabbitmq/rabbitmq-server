@@ -56,6 +56,13 @@
 %% Anns are merged into the replicated Ra machine state, so an unbounded
 %% number of keys would let a consumer grow that state without limit.
 -define(MAX_MSG_ANNS_SIZE, 32).
+%% The deferral token is exempt from ?MAX_MSG_ANNS_SIZE: should_delay/5
+%% records it in #delayed.deferred from the raw, client-supplied Anns
+%% regardless of the cap, and that entry can only be cleaned up by reading
+%% the same token back from the stored header via get_deferral_token/1. If
+%% the cap dropped the token, the #delayed.deferred entry it created would
+%% never be found and removed, leaking without bound.
+-define(DEFERRAL_TOKEN_ANN_KEY, <<"x-opt-deferral-token">>).
 
 -export([
          %% ra_machine callbacks
@@ -2582,7 +2589,7 @@ should_delay(DeliveryFailed, DelayedRetry, Ts, Header, Anns) ->
             %% sets a delivery time; the delayed-retry path never creates a
             %% deferred entry so that tokens remain a purely client-driven
             %% mechanism.
-            DeferralToken = maps:get(<<"x-opt-deferral-token">>, Anns, undefined),
+            DeferralToken = maps:get(?DEFERRAL_TOKEN_ANN_KEY, Anns, undefined),
             {true, DeliveryTime, DeferralToken};
         _ ->
             case should_delay0(DeliveryFailed, DelayedRetry, Ts, Header) of
@@ -2853,7 +2860,7 @@ take_delayed_for_retry(N, Ts, #delayed{tree = Tree0,
 get_deferral_token(Msg) ->
     case get_header(anns, get_msg_header(Msg)) of
         undefined -> undefined;
-        Anns -> maps:get(<<"x-opt-deferral-token">>, Anns, undefined)
+        Anns -> maps:get(?DEFERRAL_TOKEN_ANN_KEY, Anns, undefined)
     end.
 
 %% Drop a single tree key from its token's key list, dropping the token
@@ -4301,11 +4308,12 @@ incr_msg_headers(Msg0, DeliveryFailed, Anns) ->
 %% Merges client-supplied annotations into the existing `anns' map, capping
 %% the result at ?MAX_MSG_ANNS_SIZE distinct keys. Existing keys can still
 %% be updated once the cap is reached, but new keys beyond the cap are
-%% dropped.
+%% dropped. ?DEFERRAL_TOKEN_ANN_KEY is exempt from the cap: see its comment.
 merge_msg_anns(Existing, New) ->
     maps:fold(
       fun(Key, Value, Acc) ->
-              case maps:is_key(Key, Acc) orelse
+              case Key =:= ?DEFERRAL_TOKEN_ANN_KEY orelse
+                   maps:is_key(Key, Acc) orelse
                    map_size(Acc) < ?MAX_MSG_ANNS_SIZE of
                   true ->
                       maps:put(Key, Value, Acc);

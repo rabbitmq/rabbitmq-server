@@ -5117,6 +5117,54 @@ modify_anns_capped_test(Config) ->
     ?assertEqual(<<"updated">>, maps:get(integer_to_binary(1), Anns)),
     ok.
 
+%% The deferral token must survive the ?MAX_MSG_ANNS_SIZE cap even when
+%% `anns' is already full of unrelated keys. should_delay/5 records the
+%% token in #delayed.deferred straight from the client-supplied Anns,
+%% regardless of the cap; if the cap then dropped the token from the
+%% stored header, get_deferral_token/1 could never find it again to clean
+%% the #delayed.deferred entry up, leaking it forever.
+modify_anns_capped_preserves_deferral_token_test(Config) ->
+    MaxAnnsSize = 32,
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B)},
+    State0 = init(Conf),
+    Cid = {?FUNCTION_NAME_B, self()},
+    {State1, _} = enq(Config, 1, 1, msg1, State0),
+    {State2, #{key := CKey}, _} =
+        checkout_ts(Config, 2, 100, Cid, {auto, {simple_prefetch, 1}}, State1),
+    %% Fill anns to the cap with unrelated keys before any deferral token
+    %% is ever sent, so the token below is a "new" key to merge_msg_anns.
+    {SFilled, LastMsgId} =
+        lists:foldl(
+          fun (I, {StateIn, PrevMsgId}) ->
+                  Key = integer_to_binary(I),
+                  Modify = rabbit_fifo:make_modify(CKey, [PrevMsgId], false,
+                                                   false, #{Key => <<"v">>}),
+                  {StateOut, _, _} = apply(meta(Config, 100 + I, 100),
+                                           Modify, StateIn),
+                  {StateOut, PrevMsgId + 1}
+          end, {State2, 0}, lists:seq(1, MaxAnnsSize)),
+    Token = <<"token-1">>,
+    Anns = #{<<"x-opt-deferral-token">> => Token,
+             <<"x-opt-delivery-time">> => 10000},
+    Modify = rabbit_fifo:make_modify(CKey, [LastMsgId], false, false, Anns),
+    {SFinal, _, _} = apply(meta(Config, 200, 100), Modify, SFilled),
+    ?assertMatch(#{num_delayed_messages := 1,
+                   num_checked_out := 0}, rabbit_fifo:overview(SFinal)),
+    #rabbit_fifo{delayed = #delayed{deferred = Deferred, tree = Tree}} = SFinal,
+    ?assertMatch(#{Token := [_Key]}, Deferred),
+    ?assertEqual(1, map_size(Deferred)),
+    [Msg] = gb_trees:values(Tree),
+    ?MSG(_, ParkedHeader) = Msg,
+    #{anns := ParkedAnns} = ParkedHeader,
+    %% 32 filler keys plus the reserved deferral-token key
+    ?assertEqual(MaxAnnsSize + 1, map_size(ParkedAnns)),
+    ?assertEqual(Token, maps:get(<<"x-opt-deferral-token">>, ParkedAnns)),
+    %% x-opt-delivery-time is not the reserved key, so it was dropped by
+    %% the cap like any other new key -- it is not needed for cleanup
+    ?assertNot(maps:is_key(<<"x-opt-delivery-time">>, ParkedAnns)),
+    ok.
+
 priorities_expire_test(Config) ->
     State0 = init(#{name => ?FUNCTION_NAME,
                     queue_resource => rabbit_misc:r("/", queue,
