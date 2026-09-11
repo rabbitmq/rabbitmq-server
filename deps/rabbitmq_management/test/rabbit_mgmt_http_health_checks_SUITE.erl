@@ -33,7 +33,8 @@ all() ->
 groups() ->
     [
      {cluster_size_3, [], all_tests()},
-     {cluster_size_5, [], [is_quorum_critical_test]},
+     {cluster_size_5, [], [is_quorum_critical_test,
+                           is_quorum_critical_vhost_named_not_applicable_test]},
      {single_node, [], [
                         alarms_test,
                         local_alarms_test,
@@ -99,7 +100,9 @@ end_per_group(_, Config) ->
     Steps = Teardown0 ++ Teardown1,
     rabbit_ct_helpers:run_teardown_steps(Config, Steps).
 
-init_per_testcase(Testcase, Config) when Testcase == is_quorum_critical_test ->
+init_per_testcase(Testcase, Config)
+  when Testcase == is_quorum_critical_test;
+       Testcase == is_quorum_critical_vhost_named_not_applicable_test ->
     case rabbit_ct_helpers:is_mixed_versions() of
         true ->
             {skip, "not mixed versions compatible"};
@@ -315,6 +318,70 @@ is_quorum_critical_test(Config) ->
         end, RestrictedQueues)),
 
     rabbit_ct_broker_helpers:delete_user(Config, User),
+    rabbit_ct_broker_helpers:delete_vhost(Config, VHost),
+
+    ok = rabbit_ct_broker_helpers:start_broker(Config, Server2),
+    ok = rabbit_ct_broker_helpers:start_broker(Config, Server3),
+
+    passed.
+
+is_quorum_critical_vhost_named_not_applicable_test(Config) ->
+    %% A vhost literally named "(not applicable)" must not be mistaken for
+    %% the cluster-wide critical-component placeholder value used by
+    %% rabbit_upgrade_preparation:list_with_minimum_quorum_for_cli/0.
+    EndpointPath = "/health/checks/node-is-quorum-critical",
+    VHost = <<"(not applicable)">>,
+    User = <<"is_quorum_critical_vhost_named_not_applicable_test-user">>,
+    add_vhost(Config, VHost),
+    rabbit_ct_broker_helpers:add_user(Config, User, User),
+    rabbit_ct_broker_helpers:set_user_tags(Config, 0, User, [management]),
+    rabbit_ct_broker_helpers:set_full_permissions(Config, User, <<"/">>),
+
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, Server,
+                                                               VHost),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    Args = [{<<"x-queue-type">>, longstr, <<"quorum">>},
+            {<<"x-quorum-initial-group-size">>, long, 3}],
+    QName = <<"is_quorum_critical_vhost_named_not_applicable_test">>,
+    ?assertEqual({'queue.declare_ok', QName, 0, 0},
+                 amqp_channel:call(Ch, #'queue.declare'{queue     = QName,
+                                                        durable   = true,
+                                                        auto_delete = false,
+                                                        arguments = Args})),
+
+    QResource = rabbit_misc:r(VHost, queue, QName),
+    {ok, Q1} = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_db_queue, get,
+                                             [QResource]),
+    {ok, [_, {_, Server2}, {_, Server3}], _} = ra:members(amqqueue:get_pid(Q1)),
+
+    ok = rabbit_ct_broker_helpers:stop_broker(Config, Server2),
+    ok = rabbit_ct_broker_helpers:stop_broker(Config, Server3),
+
+    Body = http_get_failed(Config, EndpointPath),
+    Queues = maps:get(<<"queues">>, Body),
+    ?assert(lists:any(
+        fun(Item) -> QName =:= maps:get(<<"name">>, Item) end, Queues)),
+
+    %% The restricted user only has access to "/", not the vhost named
+    %% "(not applicable)", and must not see this queue just because its
+    %% vhost name matches the critical-component placeholder string.
+    {ok, {{_, RestrictedCode, _}, _, RestrictedResBody}} =
+        req(Config, get, EndpointPath,
+            [auth_header(binary_to_list(User), binary_to_list(User))]),
+    ?assert(lists:member(RestrictedCode, [?OK, ?HEALTH_CHECK_FAILURE_STATUS])),
+    RestrictedBody = rabbit_json:decode(
+                        rabbit_data_coercion:to_binary(RestrictedResBody)),
+    RestrictedQueues = maps:get(<<"queues">>, RestrictedBody, []),
+    ?assertEqual(false, lists:any(
+        fun(Item) -> QName =:= maps:get(<<"name">>, Item) end,
+        RestrictedQueues)),
+
+    rabbit_ct_client_helpers:close_connection(Conn),
+    rabbit_ct_broker_helpers:delete_user(Config, User),
+
+    ok = rabbit_ct_broker_helpers:start_broker(Config, Server2),
+    ok = rabbit_ct_broker_helpers:start_broker(Config, Server3),
     rabbit_ct_broker_helpers:delete_vhost(Config, VHost),
 
     passed.
