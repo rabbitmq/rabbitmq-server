@@ -364,10 +364,6 @@ deobfuscate(undefined) -> undefined;
 deobfuscate(Password) ->
     credentials_obfuscation:decrypt(Password).
 
-disconnect(ConnName, #statem_data{connection_monitor = Ref}) ->
-    maybe_demonitor(Ref),
-    do_disconnect(ConnName).
-
 unregister(Conn, Data = #statem_data{node_key_lease_id = LeaseID, node_lease_keepalive_pid = KAPid}) ->
     Ctx = unregistration_context(Conn, Data),
     Key = node_key(Data),
