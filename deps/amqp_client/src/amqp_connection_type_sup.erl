@@ -78,7 +78,7 @@ start_infrastructure_fun(Sup, Conn, network) ->
                 ok ->
                     case amqp_main_reader:post_init(Reader) of
                         ok ->
-                            {ok, ChMgr, Writer};
+                            {ok, ChMgr, Writer, Reader};
                         {error, Reason} ->
                             {error, Reason}
                     end;
