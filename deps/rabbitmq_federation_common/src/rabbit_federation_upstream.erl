@@ -11,7 +11,7 @@
 -include_lib("rabbit/include/amqqueue.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
--export([federate/1, for/1, for/2, params_to_string/1, to_params/2]).
+-export([federate/1, for/1, for/2, params_to_string/1, to_params/2, max_hops/1]).
 %% For testing
 -export([from_set/2, from_pattern/2, remove_credentials/1]).
 
@@ -162,7 +162,7 @@ from_upstream_or_set(US, Name, U, XorQ) ->
               consumer_tag    = bget('consumer-tag',    US, U, <<"federation-link-", Name/binary>>),
               prefetch_count  = bget('prefetch-count',  US, U, ?DEF_PREFETCH),
               reconnect_delay = bget('reconnect-delay', US, U, 5),
-              max_hops        = bget('max-hops',        US, U, 1),
+              max_hops        = max_hops(bget('max-hops', US, U, ?DEF_MAX_HOPS)),
               expires         = bget(expires,           US, U, none),
               message_ttl     = bget('message-ttl',     US, U, none),
               trust_user_id   = bget('trust-user-id',   US, U, false),
@@ -173,6 +173,22 @@ from_upstream_or_set(US, Name, U, XorQ) ->
               resource_cleanup_mode = to_atom(bget('resource-cleanup-mode', US, U, <<"default">>)),
               channel_use_mode      = to_atom(bget('channel-use-mode', US, U, multiple))
     }.
+
+%% Parameters persisted by earlier versions were only checked for being a
+%% number. A fractional value used to crash the exchange federation link when
+%% the hop counter was encoded as a `short`, and a value above the `short`
+%% range wrapped around to a negative one.
+-spec max_hops(term()) -> pos_integer().
+max_hops(N) when is_integer(N) andalso
+                 N >= ?MIN_MAX_HOPS andalso
+                 N =< ?MAX_MAX_HOPS ->
+    N;
+max_hops(N) when is_number(N) andalso N > ?MAX_MAX_HOPS ->
+    ?MAX_MAX_HOPS;
+max_hops(N) when is_number(N) andalso N > ?MIN_MAX_HOPS ->
+    trunc(N);
+max_hops(_N) ->
+    ?MIN_MAX_HOPS.
 
 %%----------------------------------------------------------------------------
 
