@@ -77,6 +77,10 @@
             %% an action to perform if queue is to be over a limit,
             %% can be either drop-head (default), reject-publish or reject-publish-dlx
             overflow,
+            %% maximum number of failed delivery attempts before a message
+            %% is dead-lettered instead of requeued, or undefined for
+            %% unlimited (the default)
+            delivery_limit,
             %% when policies change, this version helps queue
             %% determine what previously scheduled/set up state to ignore,
             %% e.g. message expiration messages from previously set up timers
@@ -491,7 +495,9 @@ process_args_policy(State = #q{q                   = Q,
          {<<"message-ttl">>,             fun res_min/2, fun init_ttl/2},
          {<<"max-length">>,              fun res_min/2, fun init_max_length/2},
          {<<"max-length-bytes">>,        fun res_min/2, fun init_max_bytes/2},
-         {<<"overflow">>,                fun res_arg/2, fun init_overflow/2}],
+         {<<"overflow">>,                fun res_arg/2, fun init_overflow/2},
+         {<<"delivery-limit">>,          fun rabbit_queue_type_util:resolve_delivery_limit/2,
+                                         fun init_delivery_limit/2}],
       drop_expired_msgs(
          lists:foldl(fun({Name, Resolve, Fun}, StateN) ->
                              Fun(rabbit_queue_type_util:args_policy_lookup(Name, Resolve, Q), StateN)
@@ -541,6 +547,12 @@ init_overflow(Overflow, State) ->
         _ ->
             State#q{overflow = OverflowVal}
     end.
+
+%% A negative value means "unlimited", same convention as quorum queues.
+init_delivery_limit(Limit, State) when is_integer(Limit), Limit < 0 ->
+    State#q{delivery_limit = undefined};
+init_delivery_limit(Limit, State) ->
+    State#q{delivery_limit = Limit}.
 
 reply(Reply, NewState) ->
     {NewState1, Timeout} = next_state(NewState),
@@ -934,12 +946,54 @@ requeue_and_run(AckTags,
                 #q{backing_queue = BQ,
                    backing_queue_state = BQS0} = State0) ->
     WasEmpty = BQ:is_empty(BQS0),
-    {_MsgIds, BQS} = BQ:requeue(AckTags, DelFailed, BQS0),
-    State1 = State0#q{backing_queue_state = BQS},
-    {_Dropped, State2} = maybe_drop_head(State1),
-    State3 = drop_expired_msgs(State2),
-    State = notify_decorators_if_became_empty(WasEmpty, State3),
+    {ToRequeue, ToDeadLetter, State1} = split_over_delivery_limit(AckTags, State0),
+    {_MsgIds, BQS} = BQ:requeue(ToRequeue, DelFailed, State1#q.backing_queue_state),
+    State2 = dead_letter_delivery_limit_msgs(
+               ToDeadLetter, DelFailed, State1#q{backing_queue_state = BQS}),
+    {_Dropped, State3} = maybe_drop_head(State2),
+    State4 = drop_expired_msgs(State3),
+    State = notify_decorators_if_became_empty(WasEmpty, State4),
     run_message_queue(Unblocked, State).
+
+%% Partition AckTags being requeued into those that stay under the
+%% configured delivery-limit and those that have now exceeded it and
+%% must be dead-lettered (reason delivery_limit) instead. The failure
+%% count is bumped unconditionally for every AckTag, covering plain
+%% nack/recover as well as reject, channel/connection death, and
+%% consumer cancellation, since all four converge here.
+split_over_delivery_limit(AckTags, State = #q{delivery_limit = undefined}) ->
+    {AckTags, [], State};
+split_over_delivery_limit([], State) ->
+    {[], [], State};
+split_over_delivery_limit(AckTags, State = #q{delivery_limit      = Limit,
+                                              backing_queue       = BQ,
+                                              backing_queue_state = BQS}) ->
+    {Counts, BQS1} = BQ:record_delivery_failure(AckTags, BQS),
+    {ToRequeue, ToDeadLetter} =
+        lists:partition(fun (AckTag) -> maps:get(AckTag, Counts) =< Limit end,
+                        AckTags),
+    {ToRequeue, ToDeadLetter, State#q{backing_queue_state = BQS1}}.
+
+dead_letter_delivery_limit_msgs([], _DelFailed, State) ->
+    State;
+dead_letter_delivery_limit_msgs(AckTags, DelFailed, State = #q{backing_queue = BQ}) ->
+    with_dlx(
+      State#q.dlx,
+      fun (X) ->
+              {ok, State1} =
+                  dead_letter_msgs(
+                    fun (DLFun, Acc, BQS) ->
+                            {Acc1, BQS1} = BQ:ackfold(DLFun, Acc, BQS, AckTags, DelFailed),
+                            {ok, Acc1, BQS1}
+                    end, delivery_limit, X, State),
+              State1
+      end,
+      fun () ->
+              rabbit_global_counters:messages_dead_lettered(delivery_limit, rabbit_classic_queue,
+                                                             disabled, length(AckTags)),
+              {_Guids, BQS1} = BQ:ack(AckTags, State#q.backing_queue_state),
+              State#q{backing_queue_state = BQS1}
+      end).
 
 possibly_unblock(Update, ChPid, State = #q{consumers = Consumers}) ->
     case rabbit_queue_consumers:possibly_unblock(Update, ChPid, Consumers) of

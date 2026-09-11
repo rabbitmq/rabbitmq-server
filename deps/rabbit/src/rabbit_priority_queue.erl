@@ -29,6 +29,7 @@
          purge/1, purge_acks/1,
          publish/5, publish_delivered/4, discard/3, drain_confirmed/1,
          dropwhile/2, fetchwhile/4, fetch/2, drop/2, ack/2, requeue/3,
+         record_delivery_failure/2,
          ackfold/5, len/1, is_empty/1, depth/1,
          update_rates/1, needs_timeout/1, timeout/1,
          handle_pre_hibernate/1, resume/1, msg_rates/1,
@@ -285,6 +286,28 @@ requeue(AckTags, DelFailed, State = #state{bq = BQ}) ->
                      end, AckTags, State);
 requeue(AckTags, DelFailed, State = #passthrough{bq = BQ, bqs = BQS}) ->
     ?passthrough2(requeue(AckTags, DelFailed, BQS)).
+
+%% Similar problem to fetchwhile/4 and ackfold/5: the accumulator here
+%% is a map keyed by (per-priority) ack tag, so we merge per-priority
+%% results into it rather than appending, and re-tag each key with its
+%% priority on the way out.
+record_delivery_failure(AckTags, State = #state{bq = BQ}) ->
+    AckTagsByPriority = partition_acktags(AckTags),
+    fold2(
+      fun (P, BQSN, Acc) ->
+              case maps:find(P, AckTagsByPriority) of
+                  {ok, AckTagsN} ->
+                      {CountsN, BQSN1} = BQ:record_delivery_failure(AckTagsN, BQSN),
+                      Counts = maps:fold(fun (AckTag, Count, Acc0) ->
+                                                  maps:put({P, AckTag}, Count, Acc0)
+                                          end, Acc, CountsN),
+                      {Counts, BQSN1};
+                  error ->
+                      {Acc, BQSN}
+              end
+      end, #{}, State);
+record_delivery_failure(AckTags, State = #passthrough{bq = BQ, bqs = BQS}) ->
+    ?passthrough2(record_delivery_failure(AckTags, BQS)).
 
 %% Similar problem to fetchwhile/4
 ackfold(MsgFun, Acc, State = #state{bq = BQ}, AckTags, DelFailed) ->

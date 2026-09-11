@@ -33,6 +33,7 @@ groups() ->
                        dead_letter_reject_expire_expire,
                        dead_letter_reject_many,
                        dead_letter_reject_requeue,
+                       dead_letter_delivery_limit,
                        dead_letter_max_length_drop_head,
                        dead_letter_reject_requeue_reject_norequeue,
                        dead_letter_nack_requeue_nack_norequeue_basic_get,
@@ -69,7 +70,12 @@ groups() ->
     [
      {tests, Opts,
       [
-       {classic_queue, Opts, [{at_most_once, Opts, [dead_letter_max_length_reject_publish_dlx | DeadLetterTests]},
+       {classic_queue, Opts, [{at_most_once, Opts, [dead_letter_max_length_reject_publish_dlx,
+                                                    dead_letter_delivery_limit_nack_requeue,
+                                                    dead_letter_delivery_limit_channel_death,
+                                                    dead_letter_delivery_limit_policy,
+                                                    dead_letter_delivery_limit_priority_queue
+                                                    | DeadLetterTests]},
                               {disabled, Opts, DisabledMetricTests}]},
        {quorum_queue, Opts, [{at_most_once, Opts, DeadLetterTests},
                              {disabled, Opts, DisabledMetricTests},
@@ -717,6 +723,186 @@ dead_letter_max_length_reject_publish_dlx(Config) ->
     _ = consume(Ch, DLXQName, [P2, P3]),
     consume_empty(Ch, DLXQName),
     ?assertEqual(2, counted(messages_dead_lettered_maxlen_total, Config)).
+
+%% A message that keeps failing delivery beyond x-delivery-limit is
+%% dead-lettered with reason 'delivery_limit' instead of requeued forever.
+%% basic.reject(requeue=true) counts as a failed delivery on both classic
+%% and quorum queues, so this test runs for both (see groups/0) using the
+%% same trigger and assertions.
+dead_letter_delivery_limit(Config) ->
+    {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    QName = ?config(queue_name, Config),
+    DLXQName = ?config(queue_name_dlx, Config),
+    declare_dead_letter_queues(Ch, Config, QName, DLXQName,
+                              [{<<"x-delivery-limit">>, long, 1}]),
+
+    P1 = <<"msg1">>,
+    publish(Ch, QName, [P1]),
+    wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
+
+    %% First failed delivery: count becomes 1, still within the limit,
+    %% requeued rather than dead-lettered.
+    [DTag1] = consume(Ch, QName, [P1]),
+    amqp_channel:cast(Ch, #'basic.reject'{delivery_tag = DTag1, requeue = true}),
+    wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
+    consume_empty(Ch, DLXQName),
+
+    %% Second failed delivery: count becomes 2, exceeds the limit of 1,
+    %% dead-lettered instead of requeued.
+    [DTag2] = consume(Ch, QName, [P1]),
+    amqp_channel:cast(Ch, #'basic.reject'{delivery_tag = DTag2, requeue = true}),
+    wait_for_messages(Config, [[QName, <<"0">>, <<"0">>, <<"0">>]]),
+    consume_empty(Ch, QName),
+
+    wait_for_messages(Config, [[DLXQName, <<"1">>, <<"1">>, <<"0">>]]),
+    {#'basic.get_ok'{}, #amqp_msg{payload = P1,
+                                 props = #'P_basic'{headers = Headers}}} =
+        amqp_channel:call(Ch, #'basic.get'{queue = DLXQName}),
+    {array, [{table, Death}]} = rabbit_misc:table_lookup(Headers, <<"x-death">>),
+    ?assertEqual({longstr, <<"delivery_limit">>}, rabbit_misc:table_lookup(Death, <<"reason">>)),
+    ?assertEqual(1, counted(messages_dead_lettered_delivery_limit_total, Config)).
+
+%% Classic-queue-specific: unlike quorum queues, a plain
+%% basic.nack(requeue=true) counts as a failed delivery here too, since
+%% that is the poison-message pattern this feature exists to catch (a
+%% consumer that catches an exception and nacks in a loop). On quorum
+%% queues a plain nack maps to rabbit_fifo's #return{} record, which
+%% rabbit_fifo:apply_/3 always applies with delivery_failed hardcoded to
+%% false (rabbit_fifo.erl), so it never counts towards delivery-limit
+%% there — only basic.reject, AMQP 1.0 modified{delivery-failed=true},
+%% or a lost consumer do. This test only runs for classic queues; see
+%% dead_letter_delivery_limit above for the trigger shared by both types.
+dead_letter_delivery_limit_nack_requeue(Config) ->
+    {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    QName = ?config(queue_name, Config),
+    DLXQName = ?config(queue_name_dlx, Config),
+    declare_dead_letter_queues(Ch, Config, QName, DLXQName,
+                              [{<<"x-delivery-limit">>, long, 1}]),
+
+    P1 = <<"msg1">>,
+    publish(Ch, QName, [P1]),
+    wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
+
+    [DTag1] = consume(Ch, QName, [P1]),
+    amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DTag1, requeue = true}),
+    wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
+    consume_empty(Ch, DLXQName),
+
+    [DTag2] = consume(Ch, QName, [P1]),
+    amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DTag2, requeue = true}),
+    wait_for_messages(Config, [[QName, <<"0">>, <<"0">>, <<"0">>]]),
+    consume_empty(Ch, QName),
+
+    wait_for_messages(Config, [[DLXQName, <<"1">>, <<"1">>, <<"0">>]]),
+    {#'basic.get_ok'{}, #amqp_msg{payload = P1,
+                                 props = #'P_basic'{headers = Headers}}} =
+        amqp_channel:call(Ch, #'basic.get'{queue = DLXQName}),
+    {array, [{table, Death}]} = rabbit_misc:table_lookup(Headers, <<"x-death">>),
+    ?assertEqual({longstr, <<"delivery_limit">>}, rabbit_misc:table_lookup(Death, <<"reason">>)),
+    ?assertEqual(1, counted(messages_dead_lettered_delivery_limit_total, Config)).
+
+%% Classic-queue-specific choke-point verification: a channel dying with
+%% an unacked message counts as a failed delivery too, since it funnels
+%% into the same requeue_and_run/4 as reject/nack (rabbit_amqqueue_process's
+%% handle_ch_down/2).
+dead_letter_delivery_limit_channel_death(Config) ->
+    {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    QName = ?config(queue_name, Config),
+    DLXQName = ?config(queue_name_dlx, Config),
+    declare_dead_letter_queues(Ch, Config, QName, DLXQName,
+                              [{<<"x-delivery-limit">>, long, 1}]),
+
+    P1 = <<"msg1">>,
+    publish(Ch, QName, [P1]),
+    wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
+
+    Ch1 = rabbit_ct_client_helpers:open_channel(Config),
+    [_DTag1] = consume(Ch1, QName, [P1]),
+    rabbit_ct_client_helpers:close_channel(Ch1),
+    wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
+    consume_empty(Ch, DLXQName),
+
+    Ch2 = rabbit_ct_client_helpers:open_channel(Config),
+    [_DTag2] = consume(Ch2, QName, [P1]),
+    rabbit_ct_client_helpers:close_channel(Ch2),
+    wait_for_messages(Config, [[QName, <<"0">>, <<"0">>, <<"0">>]]),
+    consume_empty(Ch, QName),
+
+    wait_for_messages(Config, [[DLXQName, <<"1">>, <<"1">>, <<"0">>]]),
+    {#'basic.get_ok'{}, #amqp_msg{payload = P1,
+                                 props = #'P_basic'{headers = Headers}}} =
+        amqp_channel:call(Ch, #'basic.get'{queue = DLXQName}),
+    {array, [{table, Death}]} = rabbit_misc:table_lookup(Headers, <<"x-death">>),
+    ?assertEqual({longstr, <<"delivery_limit">>}, rabbit_misc:table_lookup(Death, <<"reason">>)),
+    ?assertEqual(1, counted(messages_dead_lettered_delivery_limit_total, Config)).
+
+%% Same trigger as dead_letter_delivery_limit above, but the limit is set
+%% via a policy instead of a queue argument, exercising
+%% rabbit_amqqueue_process:process_args_policy/1 end to end.
+dead_letter_delivery_limit_policy(Config) ->
+    {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    QName = ?config(queue_name, Config),
+    DLXQName = ?config(queue_name_dlx, Config),
+    declare_dead_letter_queues(Ch, Config, QName, DLXQName),
+    ok = rabbit_ct_broker_helpers:set_policy(Config, 0, ?config(policy, Config), QName,
+                                             <<"queues">>, [{<<"delivery-limit">>, 1}]),
+
+    P1 = <<"msg1">>,
+    publish(Ch, QName, [P1]),
+    wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
+
+    [DTag1] = consume(Ch, QName, [P1]),
+    amqp_channel:cast(Ch, #'basic.reject'{delivery_tag = DTag1, requeue = true}),
+    wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
+    consume_empty(Ch, DLXQName),
+
+    [DTag2] = consume(Ch, QName, [P1]),
+    amqp_channel:cast(Ch, #'basic.reject'{delivery_tag = DTag2, requeue = true}),
+    wait_for_messages(Config, [[QName, <<"0">>, <<"0">>, <<"0">>]]),
+    consume_empty(Ch, QName),
+
+    wait_for_messages(Config, [[DLXQName, <<"1">>, <<"1">>, <<"0">>]]),
+    {#'basic.get_ok'{}, #amqp_msg{payload = P1,
+                                 props = #'P_basic'{headers = Headers}}} =
+        amqp_channel:call(Ch, #'basic.get'{queue = DLXQName}),
+    {array, [{table, Death}]} = rabbit_misc:table_lookup(Headers, <<"x-death">>),
+    ?assertEqual({longstr, <<"delivery_limit">>}, rabbit_misc:table_lookup(Death, <<"reason">>)),
+    ?assertEqual(1, counted(messages_dead_lettered_delivery_limit_total, Config)).
+
+%% Classic-queue-specific: x-max-priority routes everything through
+%% rabbit_priority_queue's per-priority record_delivery_failure/2
+%% passthrough instead of rabbit_variable_queue directly; make sure the
+%% delivery-limit choke point still works with priorities in play.
+dead_letter_delivery_limit_priority_queue(Config) ->
+    {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    QName = ?config(queue_name, Config),
+    DLXQName = ?config(queue_name_dlx, Config),
+    declare_dead_letter_queues(Ch, Config, QName, DLXQName,
+                              [{<<"x-delivery-limit">>, long, 1},
+                               {<<"x-max-priority">>, byte, 5}]),
+
+    P1 = <<"msg1">>,
+    amqp_channel:call(Ch, #'basic.publish'{routing_key = QName},
+                      #amqp_msg{payload = P1, props = #'P_basic'{priority = 3}}),
+    wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
+
+    [DTag1] = consume(Ch, QName, [P1]),
+    amqp_channel:cast(Ch, #'basic.reject'{delivery_tag = DTag1, requeue = true}),
+    wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
+    consume_empty(Ch, DLXQName),
+
+    [DTag2] = consume(Ch, QName, [P1]),
+    amqp_channel:cast(Ch, #'basic.reject'{delivery_tag = DTag2, requeue = true}),
+    wait_for_messages(Config, [[QName, <<"0">>, <<"0">>, <<"0">>]]),
+    consume_empty(Ch, QName),
+
+    wait_for_messages(Config, [[DLXQName, <<"1">>, <<"1">>, <<"0">>]]),
+    {#'basic.get_ok'{}, #amqp_msg{payload = P1,
+                                 props = #'P_basic'{headers = Headers}}} =
+        amqp_channel:call(Ch, #'basic.get'{queue = DLXQName}),
+    {array, [{table, Death}]} = rabbit_misc:table_lookup(Headers, <<"x-death">>),
+    ?assertEqual({longstr, <<"delivery_limit">>}, rabbit_misc:table_lookup(Death, <<"reason">>)),
+    ?assertEqual(1, counted(messages_dead_lettered_delivery_limit_total, Config)).
 
 %% Dead letter exchange does not have to be declared when the queue is declared, but it should
 %% exist by the time messages need to be dead-lettered; if it is missing then, the messages will
