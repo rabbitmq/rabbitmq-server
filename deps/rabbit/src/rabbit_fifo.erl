@@ -4318,6 +4318,11 @@ incr_msg_headers(Msg0, DeliveryFailed, Anns) ->
 %% resulting state, so New is traversed in a defined order: unlike plain
 %% maps:fold/3, iteration order is unspecified and can differ between
 %% replicas, which would otherwise let them diverge on the same command.
+%% When both maps together can never exceed the cap, no key can possibly
+%% be dropped, so maps:merge/2 is equivalent and avoids the fold.
+merge_msg_anns(Existing, New)
+  when map_size(Existing) + map_size(New) =< ?MAX_MSG_ANNS_SIZE ->
+    maps:merge(Existing, New);
 merge_msg_anns(Existing, New) ->
     maps:fold(
       fun(Key, Value, Acc) ->
