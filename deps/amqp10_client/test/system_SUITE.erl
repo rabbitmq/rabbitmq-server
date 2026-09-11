@@ -961,64 +961,6 @@ multi_transfer_without_delivery_id(Config) ->
     ok = amqp10_client:close_connection(Connection),
     ok.
 
-<<<<<<< HEAD
-=======
-frame_size_too_small_rejected(Config) ->
-    Hostname = ?config(mock_host, Config),
-    Port = ?config(mock_port, Config),
-
-    %% Create a malformed frame where Length (8) is less than DOff * 4 (12)
-    MalformedStep = fun(Sock) ->
-        ct:pal("Sending malformed frame: Length=8, DOff=3"),
-        gen_tcp:send(Sock, <<8:32/unsigned, 3:8/unsigned, 0:8/unsigned, 0:16/unsigned>>)
-    end,
-
-    Steps = [fun mock_server:recv_amqp_header_step/1,
-             fun mock_server:send_amqp_header_step/1,
-             MalformedStep],
-
-    ok = mock_server:set_steps(?config(mock_server, Config), Steps),
-
-    Cfg = #{address => Hostname, port => Port, sasl => none, notify => self()},
-    {ok, Connection} = amqp10_client:open_connection(Cfg),
-
-    %% The reader catches the bad offset math, crashes, and causes the connection to tear down
-    receive
-        {amqp10_event, {connection, Connection, {closed, _}}} ->
-            ok
-    after ?TIMEOUT ->
-        exit(frame_size_too_small_assert_failed)
-    end.
-
-
-max_frame_size_exceeded_rejected(Config) ->
-    Hostname = ?config(mock_host, Config),
-    Port = ?config(mock_port, Config),
-
-    %% Create a malformed frame where Length (4 GiB) exceeds the 1MB default max_frame_size
-    MalformedStep = fun(Sock) ->
-        ct:pal("Sending malformed frame: Length=0xFFFFFFFF, DOff=2"),
-        gen_tcp:send(Sock, <<16#FFFFFFFF:32/unsigned, 2:8/unsigned, 0:8/unsigned, 0:16/unsigned>>)
-    end,
-
-    Steps = [fun mock_server:recv_amqp_header_step/1,
-             fun mock_server:send_amqp_header_step/1,
-             MalformedStep],
-
-    ok = mock_server:set_steps(?config(mock_server, Config), Steps),
-
-    Cfg = #{address => Hostname, port => Port, sasl => none, notify => self()},
-    {ok, Connection} = amqp10_client:open_connection(Cfg),
-
-    %% The reader catches the massive frame size and fails
-    receive
-        {amqp10_event, {connection, Connection, {closed, _}}} ->
-            ok
-    after ?TIMEOUT ->
-        exit(max_frame_size_exceeded_assert_failed)
-    end.
-
->>>>>>> 2c325a2 (AMQP 1.0 client: accept any close reason in two tests)
 outgoing_heartbeat(Config) ->
     Hostname = ?config(rmq_hostname, Config),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
