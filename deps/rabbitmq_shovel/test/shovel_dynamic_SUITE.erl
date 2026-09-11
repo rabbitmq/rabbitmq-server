@@ -119,17 +119,17 @@ tests() ->
      consumer_tag
     ].
 
-%% Only meaningful when src-protocol is local: for amqp091/amqp10 sources,
-%% the protocol's own consumer setup already enforces read access before
-%% the shovel can start, same net effect but not exercising this fix.
+%% Only meaningful for a local source. With an AMQP 0-9-1 or AMQP 1.0
+%% source, the protocol enforces read access when the consumer is set up,
+%% so the shovel fails to start either way but the local check is never
+%% reached.
 local_src_tests() ->
     [no_read_access_on_source_queue].
 
-%% Only meaningful when dest-protocol is local: rabbit_local_shovel checks
-%% write access lazily, per message. For amqp091/amqp10 destinations, the
-%% protocol's own publisher/link setup enforces write access up front, so
-%% denying it there prevents the shovel from ever reaching "running"
-%% rather than letting it start and refuse delivery.
+%% Only meaningful for a local destination, where write access is checked
+%% per message. With an AMQP 0-9-1 or AMQP 1.0 destination, the protocol
+%% enforces write access when the publisher is set up, so the shovel never
+%% reaches the running state.
 local_dest_tests() ->
     [no_write_access_on_dest_queue].
 
@@ -596,8 +596,8 @@ no_read_access_on_source_queue(Config) ->
         rabbit_ct_broker_helpers:delete_user(Config, RestrictedUser)
     end.
 
-%% Grant configure and read but deny write, so the shovel starts but must
-%% never forward a message.
+%% Grant configure and read but deny write: the shovel starts but must not
+%% forward a message.
 no_write_access_on_dest_queue(Config) ->
     Src = ?config(srcq, Config),
     Dest = ?config(destq, Config),
