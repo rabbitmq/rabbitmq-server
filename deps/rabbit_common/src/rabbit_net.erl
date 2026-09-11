@@ -230,8 +230,8 @@ get_ssl_connection_pid(Pid) ->
         {monitors, Monitors} ->
             case [ConnPid || {process, ConnPid} <- Monitors,
                              has_linked_port(ConnPid)] of
-                [ConnPid] -> ConnPid;
-                []        -> undefined
+                [ConnPid | _] -> ConnPid;
+                []            -> undefined
             end;
         _ ->
             undefined
