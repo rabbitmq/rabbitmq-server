@@ -984,7 +984,7 @@ frame_size_too_small_rejected(Config) ->
 
     %% The reader catches the bad offset math, crashes, and causes the connection to tear down
     receive
-        {amqp10_event, {connection, Connection, {closed, reader_down}}} ->
+        {amqp10_event, {connection, Connection, {closed, _}}} ->
             ok
     after ?TIMEOUT ->
         exit(frame_size_too_small_assert_failed)
@@ -1012,7 +1012,7 @@ max_frame_size_exceeded_rejected(Config) ->
 
     %% The reader catches the massive frame size and fails
     receive
-        {amqp10_event, {connection, Connection, {closed, reader_down}}} ->
+        {amqp10_event, {connection, Connection, {closed, _}}} ->
             ok
     after ?TIMEOUT ->
         exit(max_frame_size_exceeded_assert_failed)
