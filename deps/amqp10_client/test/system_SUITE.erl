@@ -56,20 +56,10 @@ groups() ->
                  open_refused,
                  attach_refused,
                  incoming_heartbeat,
-<<<<<<< HEAD
-                 multi_transfer_without_delivery_id
-=======
                  multi_transfer_without_delivery_id,
-                 frame_size_too_small_rejected,
-                 max_frame_size_exceeded_rejected,
-<<<<<<< HEAD
-                 disposition_large_range_settles_outgoing
->>>>>>> 3f67436 (Bound peer-controlled disposition delivery ID ranges)
-=======
                  disposition_large_range_settles_outgoing,
                  link_credit_max,
                  drain_with_nothing_available
->>>>>>> 4024a28 (AMQP 1.0, AMQP 1.0 client: more robust handling of peer-provided values in a few frame types)
                 ]}
     ].
 
