@@ -5,8 +5,8 @@
 %% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
-%% Tests that the plaintext password never reaches the auth cache key.
-%% Two angles are covered:
+%% Tests that the plaintext password never reaches the auth cache key,
+%% for both authentication and authorization. Two angles are covered:
 %%
 %%  * direct inspection of the key produced by `cache_key/2', confirming
 %%    the password is absent in proplist and map shapes
@@ -23,7 +23,8 @@ all() ->
     [
      password_is_not_present_in_cache_key_for_proplist_authprops,
      password_is_not_present_in_cache_key_for_map_authprops,
-     password_is_not_present_in_authorization_cache_key,
+     password_is_not_present_in_authorization_cache_key_for_proplist_authprops,
+     password_is_not_present_in_authorization_cache_key_for_map_authprops,
      non_authn_calls_are_not_redacted,
      identical_passwords_still_hit_the_cache,
      different_passwords_still_miss_the_cache,
@@ -76,11 +77,15 @@ password_is_not_present_in_cache_key_for_map_authprops(Config) ->
     Key = cache_key(Config, user_login_authentication, [<<"u">>, Props]),
     false = contains_binary(Key, Password).
 
-%% Security invariant: the plaintext password must not appear in the key
-%% produced by `cache_key/2' for authorization either.
-password_is_not_present_in_authorization_cache_key(Config) ->
+password_is_not_present_in_authorization_cache_key_for_proplist_authprops(Config) ->
     Password = <<"authz-secret-marker-5e2d">>,
     Props = [{password, Password}, {is_loopback, false}],
+    Key = cache_key(Config, user_login_authorization, [<<"u">>, Props]),
+    false = contains_binary(Key, Password).
+
+password_is_not_present_in_authorization_cache_key_for_map_authprops(Config) ->
+    Password = <<"authz-secret-marker-2b6f">>,
+    Props = #{password => Password, is_loopback => true},
     Key = cache_key(Config, user_login_authorization, [<<"u">>, Props]),
     false = contains_binary(Key, Password).
 
@@ -115,9 +120,6 @@ non_password_authprops_pass_through_unchanged(Config) ->
                     [{password, <<"p">>}, {is_loopback, false}]),
     2 = call_count(Config).
 
-%% Equality and distinguishability invariants must hold for authorization
-%% too: the redaction fix must not turn every login into a cache miss,
-%% nor collapse distinct passwords into the same key.
 identical_passwords_still_hit_the_authorization_cache(Config) ->
     Props = [{password, <<"p">>}, {is_loopback, false}],
     {ok, _, _} = authorize(Config, <<"u">>, Props),
