@@ -46,6 +46,7 @@ groups() ->
 essential() ->
     [
       single_upstream,
+      malformed_bound_from_does_not_crash_link,
       single_upstream_quorum,
       multiple_upstreams,
       multiple_upstreams_pattern,
@@ -176,6 +177,65 @@ single_upstream(Config) ->
 
   Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
   assert_federation_internal_queue_type(Config, Server, rabbit_classic_queue),
+
+  rabbit_ct_client_helpers:close_channel(Ch),
+  clean_up_federation_related_bits(Config).
+
+%% x-bound-from is normally only ever set by federation itself on a previous
+%% hop, but a client can set it to an arbitrary value via ordinary bind
+%% arguments; the link must ignore it.
+malformed_bound_from_does_not_crash_link(Config) ->
+  FedX = <<"malformed_bound_from.federated">>,
+  UpX = <<"malformed_bound_from.upstream.x">>,
+  rabbit_ct_broker_helpers:set_parameter(
+    Config, 0, <<"federation-upstream">>, <<"localhost">>,
+    [
+      {<<"uri">>,      rabbit_ct_broker_helpers:node_uri(Config, 0)},
+      {<<"exchange">>, UpX}
+    ]),
+  rabbit_ct_broker_helpers:set_policy(
+    Config, 0,
+    <<"fed.x">>, <<"^malformed_bound_from.federated">>, <<"exchanges">>,
+    [
+      {<<"federation-upstream">>, <<"localhost">>}
+    ]),
+
+  Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
+  declare_exchanges(Ch, [exchange_declare_method(FedX)]),
+
+  %% Get the link up and running before poking at it.
+  _ = declare_and_bind_queue(Ch, FedX, <<"warmup">>),
+  await_binding(Config, 0, UpX, <<"warmup">>),
+
+  MalformedBoundFrom = [
+    {longstr, <<"not-an-array">>},
+    {array,   []},
+    {array,   [{longstr, <<"not-a-table">>}]},
+    {array,   [{table, []}]},
+    {array,   [{table, [{<<"hops">>, longstr, <<"not-an-integer">>}]}]}
+  ],
+  MalformedRKs =
+    [begin
+       Q = declare_queue(Ch),
+       RK = <<"malformed-", (integer_to_binary(N))/binary>>,
+       bind_queue_with_args(Ch, Q, FedX, RK,
+                            [{<<"x-bound-from">>, Type, Value}]),
+       RK
+     end || {N, {Type, Value}} <- lists:enumerate(MalformedBoundFrom)],
+
+  %% The link must still be alive and functioning normally afterwards. Since
+  %% the federation link processes binding commands in order, this also
+  %% acts as a synchronization point for the asserts below: by the time
+  %% "after-malformed" is visible upstream, every malformed binding above
+  %% has already been handled.
+  Q = declare_and_bind_queue(Ch, FedX, <<"after-malformed">>),
+  await_binding(Config, 0, UpX, <<"after-malformed">>),
+  publish_expect(Ch, UpX, <<"after-malformed">>, Q,
+                <<"malformed_bound_from payload">>),
+
+  %% None of the malformed bindings should have been propagated upstream.
+  [?assertEqual([], bound_keys_from(Config, 0, <<"/">>, UpX, RK))
+   || RK <- MalformedRKs],
 
   rabbit_ct_client_helpers:close_channel(Ch),
   clean_up_federation_related_bits(Config).
@@ -918,6 +978,12 @@ bind_queue(Ch, Q, X, Key) ->
     amqp_channel:call(Ch, #'queue.bind'{queue       = Q,
                                         exchange    = X,
                                         routing_key = Key}).
+
+bind_queue_with_args(Ch, Q, X, Key, Args) ->
+    amqp_channel:call(Ch, #'queue.bind'{queue       = Q,
+                                        exchange    = X,
+                                        routing_key = Key,
+                                        arguments   = Args}).
 
 unbind_queue(Ch, Q, X, Key) ->
     amqp_channel:call(Ch, #'queue.unbind'{queue       = Q,
