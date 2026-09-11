@@ -365,7 +365,8 @@ disposable_connection_call(Params, Method, ErrFun) ->
 
 disposable_connection_call(Params, Method, ErrFun, Timeout) ->
     try
-        ?LOG_DEBUG("Disposable connection parameters: ~tp", [Params]),
+        ?LOG_DEBUG("Disposable connection parameters: ~tp",
+                   [rabbit_federation_util:redact_params(Params)]),
         case open(Params, <<"Disposable exchange federation link connection">>) of
             {ok, Conn, Ch} ->
                 try
