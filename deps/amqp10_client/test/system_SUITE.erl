@@ -11,6 +11,7 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
+-include_lib("amqp10_common/include/amqp10_types.hrl").
 
 -compile([export_all, nowarn_export_all]).
 
@@ -57,7 +58,8 @@ groups() ->
                  incoming_heartbeat,
                  multi_transfer_without_delivery_id,
                  frame_size_too_small_rejected,
-                 max_frame_size_exceeded_rejected
+                 max_frame_size_exceeded_rejected,
+                 disposition_large_range_settles_outgoing
                 ]}
     ].
 
@@ -897,6 +899,89 @@ attach_refused(Config) ->
 
     ok = amqp10_client:end_session(Session),
     ok = amqp10_client:close_connection(Connection).
+
+%% A disposition covering a huge, peer-chosen delivery ID range must settle
+%% every message actually outstanding, using the outgoing-unsettled-map
+%% iteration branch (the range is far bigger than the map).
+disposition_large_range_settles_outgoing(Config) ->
+    Hostname = ?config(mock_host, Config),
+    Port = ?config(mock_port, Config),
+    OpenStep = fun({0 = Ch, #'v1_0.open'{}, _Pay}) ->
+                       {Ch, [#'v1_0.open'{container_id = {utf8, <<"mock">>}}]}
+               end,
+    BeginStep = fun({0 = Ch, #'v1_0.begin'{}, _Pay}) ->
+                         {Ch, [#'v1_0.begin'{remote_channel = {ushort, Ch},
+                                             next_outgoing_id = {uint, 1},
+                                             incoming_window = {uint, 1000},
+                                             outgoing_window = {uint, 1000}}
+                                             ]}
+                end,
+    AttachStep = fun({0 = Ch, #'v1_0.attach'{name = Name,
+                                             role = false,
+                                             target = Target}, <<>>}) ->
+                         Attach = #'v1_0.attach'{name = Name,
+                                                 handle = {uint, 99},
+                                                 role = true,
+                                                 target = Target},
+                         Flow = #'v1_0.flow'{handle = {uint, 99},
+                                             next_incoming_id = {uint, 1},
+                                             incoming_window = {uint, 1000},
+                                             next_outgoing_id = {uint, 1},
+                                             outgoing_window = {uint, 1000},
+                                             link_credit = {uint, 2}},
+                         {Ch, {multi, [[Attach], [Flow]]}}
+                 end,
+    %% The two transfers get delivery IDs 4294967295 and 0: the client's
+    %% outgoing delivery ID counter starts at 2^32 - 1 and wraps. The
+    %% transfer's handle is the client's own (locally-assigned) handle, 0.
+    Transfer1Step = fun({0 = Ch, #'v1_0.transfer'{handle = {uint, 0}}, _Pay}) ->
+                             {Ch, []}
+                     end,
+    Transfer2Step = fun({0 = Ch, #'v1_0.transfer'{handle = {uint, 0}}, _Pay}) ->
+                             Disposition = #'v1_0.disposition'{
+                                              role = ?AMQP_ROLE_RECEIVER,
+                                              settled = true,
+                                              first = {uint, 4294967295},
+                                              last = {uint, 2147483645},
+                                              state = #'v1_0.accepted'{}},
+                             {Ch, [Disposition]}
+                     end,
+    Steps = [fun mock_server:recv_amqp_header_step/1,
+             fun mock_server:send_amqp_header_step/1,
+             mock_server:amqp_step(OpenStep),
+             mock_server:amqp_step(BeginStep),
+             mock_server:amqp_step(AttachStep),
+             mock_server:amqp_step(Transfer1Step),
+             mock_server:amqp_step(Transfer2Step)
+            ],
+    ok = mock_server:set_steps(?config(mock_server, Config), Steps),
+
+    Cfg = #{address => Hostname, port => Port, sasl => none, notify => self()},
+    {ok, Connection} = amqp10_client:open_connection(Cfg),
+    {ok, Session} = amqp10_client:begin_session_sync(Connection),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"mock1-sender">>,
+                                                    <<"test">>),
+    await_link(Sender, credited, link_credit_timeout),
+
+    Msg1 = amqp10_msg:new(<<"tag-1">>, <<"one">>, false),
+    Msg2 = amqp10_msg:new(<<"tag-2">>, <<"two">>, false),
+    ok = amqp10_client:send_msg(Sender, Msg1),
+    ok = amqp10_client:send_msg(Sender, Msg2),
+
+    ?assertEqual({accepted, <<"tag-1">>}, await_disposition()),
+    ?assertEqual({accepted, <<"tag-2">>}, await_disposition()),
+
+    ok = amqp10_client:end_session(Session),
+    ok = amqp10_client:close_connection(Connection),
+    ok.
+
+await_disposition() ->
+    receive
+        {amqp10_disposition, {DeliveryState, DeliveryTag}} ->
+            {DeliveryState, DeliveryTag}
+    after ?TIMEOUT ->
+              ct:fail(missing_disposition)
+    end.
 
 multi_transfer_without_delivery_id(Config) ->
     Hostname = ?config(mock_host, Config),

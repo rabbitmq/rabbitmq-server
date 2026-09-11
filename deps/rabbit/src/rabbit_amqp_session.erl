@@ -129,7 +129,8 @@
 -import(serial_number,
         [add/2,
          diff/2,
-         compare/2]).
+         compare/2,
+         range_size/2]).
 -import(rabbit_misc,
         [queue_resource/2,
          exchange_resource/2]).
@@ -1158,12 +1159,20 @@ handle_frame(#'v1_0.disposition'{role = ?AMQP_ROLE_RECEIVER,
                    %% "If not set, this is taken to be the same as first." [2.7.6]
                    First
            end,
+    DispositionRangeSize = case range_size(First, Last) of
+                               undefined ->
+                                   protocol_error(
+                                     ?V_1_0_AMQP_ERROR_INVALID_FIELD,
+                                     "invalid disposition delivery ID range "
+                                     "(first ~b, last ~b)", [First, Last]);
+                               Size ->
+                                   Size
+                           end,
     UnsettledMapSize = map_size(UnsettledMap0),
     case UnsettledMapSize of
         0 ->
             reply_frames([], State0);
         _ ->
-            DispositionRangeSize = diff(Last, First) + 1,
             {Settled, UnsettledMap} =
             case DispositionRangeSize =< UnsettledMapSize of
                 true ->

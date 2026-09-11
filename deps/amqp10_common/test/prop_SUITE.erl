@@ -30,7 +30,8 @@ groups() ->
        prop_strict_server_mode_rejects_malformed,
        prop_strict_server_mode_never_errors,
        prop_frame,
-       prop_array32_terminates
+       prop_array32_terminates,
+       prop_range_size
       ]}
     ].
 
@@ -229,6 +230,21 @@ prop_array32_terminates(_Config) ->
                  end
              end)
       end, [], 1000).
+
+%% range_size/2 must never exit, and whenever it returns a size, that size
+%% must equal diff(Last, First) + 1.
+prop_range_size(_Config) ->
+    run_proper(
+      fun() -> ?FORALL(
+                  {First, Last},
+                  {integer(0, 16#ffffffff), integer(0, 16#ffffffff)},
+                  case serial_number:range_size(First, Last) of
+                      undefined ->
+                          true;
+                      Size ->
+                          equals(Size, serial_number:diff(Last, First) + 1)
+                  end)
+      end, [], 10_000).
 
 %%%%%%%%%%%%%%%
 %%% Helpers %%%

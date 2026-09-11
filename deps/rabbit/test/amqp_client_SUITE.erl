@@ -149,6 +149,7 @@ groups() ->
        modified_quorum_queue_delivery_time,
        modified_quorum_queue_deferral_token,
        modified_quorum_queue_deferral_token_ranged_disposition,
+       disposition_reversed_range_rejected,
        modified_quorum_queue_deferral_token_precedes_backlog,
        modified_quorum_queue_deferral_token_survives_in_flight_credit_req,
        modified_quorum_queue_deferral_token_invalid_annotation_type,
@@ -1098,6 +1099,38 @@ modified_quorum_queue_deferral_token_ranged_disposition(Config) ->
     ?assertMatch({ok, #{message_count := 0}},
                  rabbitmq_amqp_client:delete_queue(LinkPair, QName)),
     ok = close(Init).
+
+%% A DISPOSITION whose delivery ID range is reversed (first after last) is
+%% malformed. The session must end with amqp:invalid-field instead of
+%% crashing with an internal error.
+disposition_reversed_range_rejected(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    {Connection, Session, LinkPair} = init(Config),
+    {ok, #{type := <<"quorum">>}} = rabbitmq_amqp_client:declare_queue(
+                                      LinkPair, QName,
+                                      #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>}}}),
+    Address = rabbitmq_amqp_address:queue(QName),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address),
+    ok = wait_for_credit(Sender),
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"t1">>, <<"m1">>, true)),
+    ok = amqp10_client:detach_link(Sender),
+
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session, <<"receiver">>, Address, unsettled),
+    {ok, M1} = amqp10_client:get_msg(Receiver),
+    DeliveryId = amqp10_msg:delivery_id(M1),
+
+    %% first is after last: a malformed range.
+    ok = amqp10_client_session:disposition(
+           Receiver, DeliveryId + 1, DeliveryId, true, accepted),
+    receive
+        {amqp10_event,
+         {session, Session,
+          {ended, #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_INVALID_FIELD}}}} -> ok
+    after 30000 -> flush(missing_ended),
+                   ct:fail("did not receive expected error")
+    end,
+    ok = close_connection_sync(Connection).
 
 %% Test that deferral tokens submitted in a FLOW while a previous credit
 %% request from the same link is still in flight are not dropped, but
