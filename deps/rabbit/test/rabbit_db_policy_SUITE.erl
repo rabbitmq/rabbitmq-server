@@ -27,7 +27,9 @@ all_tests() ->
     [
      update,
      update_retries_on_concurrent_change,
-     update_retries_on_concurrent_change_exchange
+     update_retries_on_concurrent_change_exchange,
+     update_skips_concurrently_deleted_queue,
+     update_skips_concurrently_deleted_exchange
     ].
 
 %% -------------------------------------------------------------------
@@ -204,4 +206,65 @@ update_retries_on_concurrent_change_exchange1(_Config) ->
     ?assertEqual(new_policy, NewX#exchange.policy),
     ?assertEqual([{<<"x-concurrent">>, long, 1}], NewX#exchange.arguments),
     ?assert(counters:get(Invocations, 1) >= 2),
+    passed.
+
+%% If the queue is deleted in the window between update/3's own
+%% snapshot read and its transaction, the payload_version guard must
+%% not abort the whole update: a deletion isn't a concurrent policy
+%% change to retry against, there is simply nothing left to update.
+update_skips_concurrently_deleted_queue(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(
+               Config, 0, ?MODULE, update_skips_concurrently_deleted_queue1,
+               [Config]).
+
+update_skips_concurrently_deleted_queue1(_Config) ->
+    QName = rabbit_misc:r(?VHOST, queue, <<"test-queue-deleted">>),
+    Queue = amqqueue:new(QName, none, true, false, none, [], ?VHOST, #{},
+                         rabbit_classic_queue),
+    ?assertEqual({created, Queue}, rabbit_db_queue:create_or_get(Queue)),
+
+    Invocations = counters:new(1, []),
+    GetUpdatedQueueFun =
+        fun(Q0) ->
+                counters:add(Invocations, 1, 1),
+                _ = rabbit_db_queue:delete(QName, false),
+                #{queue => Q0,
+                  update_function =>
+                      fun(Q) -> amqqueue:set_policy(Q, new_policy) end}
+        end,
+    {[], [{_, NewQ}]} = rabbit_db_policy:update(
+                           ?VHOST, fun(_X) -> no_change end, GetUpdatedQueueFun),
+
+    %% The queue was dropped before the transaction could apply the
+    %% policy, so it comes back unchanged and there was no retry.
+    ?assertEqual(undefined, amqqueue:get_policy(NewQ)),
+    ?assertEqual(1, counters:get(Invocations, 1)),
+    passed.
+
+%% Same race as update_skips_concurrently_deleted_queue/1, on the
+%% exchange side of update/3 instead of the queue side.
+update_skips_concurrently_deleted_exchange(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(
+               Config, 0, ?MODULE, update_skips_concurrently_deleted_exchange1,
+               [Config]).
+
+update_skips_concurrently_deleted_exchange1(_Config) ->
+    XName = rabbit_misc:r(?VHOST, exchange, <<"test-exchange-deleted">>),
+    Exchange = #exchange{name = XName, durable = true},
+    ?assertMatch({new, #exchange{}}, rabbit_db_exchange:create_or_get(Exchange)),
+
+    Invocations = counters:new(1, []),
+    GetUpdatedExchangeFun =
+        fun(X0) ->
+                counters:add(Invocations, 1, 1),
+                _ = rabbit_db_exchange:delete(XName, false),
+                #{exchange => X0,
+                  update_function =>
+                      fun(X) -> X#exchange{policy = new_policy} end}
+        end,
+    {[{_, NewX}], []} = rabbit_db_policy:update(
+                           ?VHOST, GetUpdatedExchangeFun, fun(_Q) -> no_change end),
+
+    ?assertEqual(undefined, NewX#exchange.policy),
+    ?assertEqual(1, counters:get(Invocations, 1)),
     passed.
