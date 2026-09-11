@@ -22,6 +22,7 @@ suite() ->
 groups() ->
     [{tests, [],
       [roundtrip, roundtrip_metadata, roundtrip_metadata_no_leader,
+       subscribe_v2_and_credit_v2_wire_format,
        zero_size_frame_does_not_crash,
        frame_size_enforcement,
        frame_size_enforcement_partial,
@@ -81,6 +82,7 @@ roundtrip(_Config) ->
     test_roundtrip({deliver, 53, <<"chunk">>}),
     test_roundtrip({deliver_v2, 53, 10, <<"chunk">>}),
     test_roundtrip({credit, 53, 12}),
+    test_roundtrip({credit_v2, 53, 1048576}),
     test_roundtrip({metadata_update, <<"stream1">>,
                     ?RESPONSE_VHOST_ACCESS_FAILURE}),
     test_roundtrip({store_offset, <<"offset_ref">>, <<"stream">>, 12}),
@@ -98,6 +100,14 @@ roundtrip(_Config) ->
     test_roundtrip({request, 99, {delete_publisher, 42}}),
     [test_roundtrip({request, 99,
                      {subscribe, 53, <<"stream_name">>, Spec, 12, #{}}})
+     || Spec
+            <- [last,
+                next,
+                first,
+                65432,
+                {timestamp, erlang:system_time(millisecond)}]],
+    [test_roundtrip({request, 99,
+                     {subscribe_v2, 53, <<"stream_name">>, Spec, 1048576, #{}}})
      || Spec
             <- [last,
                 next,
@@ -215,6 +225,36 @@ roundtrip_metadata_no_leader(_Config) ->
           <<"stream3">> => stream_not_available},
     Cmd = {response, 1, {metadata, Endpoints, Metadata}},
     test_roundtrip(Cmd),
+    ok.
+
+%% A round trip alone would not catch a version 1/2 mismatch if both sides
+%% agreed on the same wrong version, so assert the wire bytes directly,
+%% including a credit above 65535 (which does not fit the version 1 field).
+subscribe_v2_and_credit_v2_wire_format(_Config) ->
+    CreditFrame =
+        iolist_to_binary(rabbit_stream_core:frame({credit_v2, 53, 1048576})),
+    <<_Size:32,
+      ?REQUEST:1, ?COMMAND_CREDIT:15, CreditVersion:16,
+      53:8,
+      Credit:32>> = CreditFrame,
+    ?VERSION_2 = CreditVersion,
+    1048576 = Credit,
+
+    SubscribeFrame =
+        iolist_to_binary(
+          rabbit_stream_core:frame(
+            {request, 99,
+             {subscribe_v2, 53, <<"stream_name">>, next, 1048576, #{}}})),
+    <<_Size2:32,
+      ?REQUEST:1, ?COMMAND_SUBSCRIBE:15, SubscribeVersion:16,
+      99:32,
+      53:8,
+      StreamLen:16, Stream:StreamLen/binary,
+      ?OFFSET_TYPE_NEXT:16,
+      SubscribeCredit:32>> = SubscribeFrame,
+    ?VERSION_2 = SubscribeVersion,
+    <<"stream_name">> = Stream,
+    1048576 = SubscribeCredit,
     ok.
 
 %% A zero-size frame (e.g. sent by a port scanner) must not crash the parser.
