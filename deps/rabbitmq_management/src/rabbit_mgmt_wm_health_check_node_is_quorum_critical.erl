@@ -38,10 +38,17 @@ to_json(ReqData, Context) ->
                 [] ->
                     rabbit_mgmt_util:reply(#{status => ok}, ReqData, Context);
                 Qs when length(Qs) > 0 ->
-                    Msg = <<"There are quorum queues that would lose their quorum if the target node is shut down">>,
-                    failure(Msg, Qs, ReqData, Context)
+                    reply_for_quorum_critical_queues(
+                      filter_vhost(Qs, ReqData, Context), ReqData, Context)
             end
     end.
+
+reply_for_quorum_critical_queues([], ReqData, Context) ->
+    rabbit_mgmt_util:reply(#{status => ok}, ReqData, Context);
+reply_for_quorum_critical_queues(Qs, ReqData, Context) ->
+    Msg = <<"There are quorum queues that would lose their "
+            "quorum if the target node is shut down">>,
+    failure(Msg, Qs, ReqData, Context).
 
 failure(Message, Qs, ReqData, Context) ->
     Body = #{status => failed,
@@ -52,3 +59,12 @@ failure(Message, Qs, ReqData, Context) ->
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized(ReqData, Context).
+
+%% Critical components of type `process` are never filtered.
+filter_vhost(Qs, ReqData, Context) ->
+    IsVhostScoped = fun(Q) -> maps:get(<<"type">>, Q) =/= process end,
+    {VhostScoped, NotVhostScoped} = lists:partition(IsVhostScoped, Qs),
+    Tagged = [maps:put(vhost, maps:get(<<"virtual_host">>, Q), Q)
+              || Q <- VhostScoped],
+    Filtered = rabbit_mgmt_util:filter_vhost(Tagged, ReqData, Context),
+    NotVhostScoped ++ [maps:remove(vhost, Q) || Q <- Filtered].
