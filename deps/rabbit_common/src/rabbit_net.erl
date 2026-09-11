@@ -191,7 +191,10 @@ fast_close(Sock) ->
 %% Run it in a separate process; if it does not finish within `Timeout`, close
 %% the transport port, which makes the stuck `recv` return.
 fast_close(Sock, Timeout) when ?IS_SSL(Sock) ->
-    {Pid, MRef} = spawn_monitor(fun () -> _ = ssl:close(Sock, Timeout) end),
+    {Pid, MRef} = spawn_monitor(
+                    fun () ->
+                            try ssl:close(Sock, Timeout) catch exit:_ -> ok end
+                    end),
     receive
         {'DOWN', MRef, process, Pid, _} ->
             ok
