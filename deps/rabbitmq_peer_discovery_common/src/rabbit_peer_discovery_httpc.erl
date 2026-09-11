@@ -392,12 +392,15 @@ redact_header({Name, Value}) ->
 redact_header(Other) ->
   Other.
 
--spec redact_header_value(Name :: string(), Value :: term()) -> term().
-redact_header_value(Name, Value) ->
-  case lists:member(string:lowercase(Name), ?SENSITIVE_HEADERS) of
+-spec redact_header_value(Name :: term(), Value :: term()) -> term().
+redact_header_value(Name, Value) when is_list(Name); is_binary(Name); is_atom(Name) ->
+  case lists:member(string:lowercase(rabbit_data_coercion:to_list(Name)),
+                    ?SENSITIVE_HEADERS) of
     true  -> "...";
     false -> Value
-  end.
+  end;
+redact_header_value(_Name, Value) ->
+  Value.
 
 %%--------------------------------------------------------------------
 %% @private
