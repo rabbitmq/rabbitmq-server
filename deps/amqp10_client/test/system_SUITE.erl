@@ -1195,19 +1195,22 @@ frame_size_too_small_rejected(Config) ->
     Cfg = #{address => Hostname, port => Port, sasl => none, notify => self()},
     {ok, Connection} = amqp10_client:open_connection(Cfg),
 
-    receive
-        {amqp10_event, {connection, Connection, {closed, _}}} ->
-            ok
-    after ?TIMEOUT ->
-        exit(frame_size_too_small_assert_failed)
-    end,
-    receive
-        {log, "AMQP 1.0 framing error: frame length (8) is smaller than header size (12)"} ->
-            ok
-    after ?TIMEOUT ->
-        exit(frame_size_too_small_not_logged)
-    end,
-    ok = logger:remove_handler(?FUNCTION_NAME).
+    try
+        receive
+            {amqp10_event, {connection, Connection, {closed, _}}} ->
+                ok
+        after ?TIMEOUT ->
+            exit(frame_size_too_small_assert_failed)
+        end,
+        receive
+            {log, "AMQP 1.0 framing error: frame length (8) is smaller than header size (12)"} ->
+                ok
+        after ?TIMEOUT ->
+            exit(frame_size_too_small_not_logged)
+        end
+    after
+        ok = logger:remove_handler(?FUNCTION_NAME)
+    end.
 
 log(#{msg := {Fmt, Args}}, #{config := Pid}) ->
     Pid ! {log, lists:flatten(io_lib:format(Fmt, Args))};
