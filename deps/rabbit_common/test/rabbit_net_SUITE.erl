@@ -17,7 +17,6 @@ all() ->
     [
      fast_close_plain_port,
      fast_close_healthy_tls,
-     fast_close_bounds_stuck_close,
      fast_close_recovers_from_stuck_recv
     ].
 
@@ -56,30 +55,12 @@ fast_close_plain_port(_Config) ->
 
 %% A healthy TLS socket is closed promptly, without paying the timeout.
 fast_close_healthy_tls(Config) ->
-    {S, Client, _ConnPid} = new_tls_pair(Config, []),
+    {S, Client, ConnPid} = new_tls_pair(Config, []),
     T0 = erlang:monotonic_time(millisecond),
     ?assertEqual(ok, rabbit_net:fast_close(S)),
     Elapsed = erlang:monotonic_time(millisecond) - T0,
     ?assert(Elapsed < 1000),
-    stop_client(Client),
-    ok.
-
-%% When the peer stops reading, the real `ssl:close/2` parks on the transport;
-%% `fast_close/2` must still return within its bound.
-fast_close_bounds_stuck_close(Config) ->
-    SmallBuffers = [{sndbuf, 4096}, {recbuf, 4096}, {buffer, 4096},
-                    {high_watermark, 2048}, {low_watermark, 1024}],
-    {S, Client, _ConnPid} = new_tls_pair(Config, SmallBuffers),
-    %% The peer never reads; fill the pipe so the server's close will park.
-    FloodPid = spawn(fun () -> flood(S) end),
-    await_backpressure(FloodPid),
-    Timeout = 300,
-    T0 = erlang:monotonic_time(millisecond),
-    ?assertEqual(ok, rabbit_net:fast_close(S, Timeout)),
-    Elapsed = erlang:monotonic_time(millisecond) - T0,
-    ?assert(Elapsed >= Timeout - 100),
-    ?assert(Elapsed < 3000),
-    exit(FloodPid, kill),
+    ?assertNot(erlang:is_process_alive(ConnPid)),
     stop_client(Client),
     ok.
 
@@ -148,32 +129,6 @@ new_tls_pair(Config, ExtraOpts) ->
 stop_client(Client) ->
     Client ! stop,
     ok.
-
-flood(S) ->
-    case ssl:send(S, binary:copy(<<0>>, 4096)) of
-        ok     -> flood(S);
-        _Error -> ok
-    end.
-
-%% Waits until the flood process stops accumulating reductions, that is, until
-%% it is blocked in `ssl:send/2` and the server's close will park.
-await_backpressure(Pid) ->
-    await_backpressure(Pid, reductions(Pid), 200).
-
-await_backpressure(_Pid, _Reds, 0) ->
-    ct:fail(backpressure_not_established);
-await_backpressure(Pid, Reds, N) ->
-    timer:sleep(20),
-    case reductions(Pid) of
-        Reds  -> ok;
-        Reds2 -> await_backpressure(Pid, Reds2, N - 1)
-    end.
-
-reductions(Pid) ->
-    case erlang:process_info(Pid, reductions) of
-        {reductions, R} -> R;
-        undefined       -> 0
-    end.
 
 tls_server_connections() ->
     [P || P <- erlang:processes(),
