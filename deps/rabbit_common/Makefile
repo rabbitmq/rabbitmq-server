@@ -38,7 +38,7 @@ DEPS = ranch recon credentials_obfuscation
 
 -include development.pre.mk
 
-# Appended after the include because development.pre.mk resets TEST_DEPS.
+# Appended after the include because `development.pre.mk` resets `TEST_DEPS`.
 TEST_DEPS += meck
 
 DEP_EARLY_PLUGINS = $(PROJECT)/mk/rabbitmq-early-plugin.mk

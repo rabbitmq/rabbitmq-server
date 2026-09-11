@@ -64,10 +64,8 @@ fast_close_healthy_tls(Config) ->
     stop_client(Client),
     ok.
 
-%% When the peer stops reading, ssl:close/2 parks (waiting on the stuck
-%% transport). This exercises the real ssl:close/2 path, without mocks:
-%% fast_close/2 must force the transport port closed and return within its bound,
-%% well under the several seconds ssl:close/2 would otherwise take.
+%% When the peer stops reading, the real `ssl:close/2` parks on the transport;
+%% `fast_close/2` must still return within its bound.
 fast_close_bounds_stuck_close(Config) ->
     SmallBuffers = [{sndbuf, 4096}, {recbuf, 4096}, {buffer, 4096},
                     {high_watermark, 2048}, {low_watermark, 1024}],
@@ -81,23 +79,19 @@ fast_close_bounds_stuck_close(Config) ->
     Elapsed = erlang:monotonic_time(millisecond) - T0,
     ?assert(Elapsed >= Timeout - 100),
     ?assert(Elapsed < 3000),
-    %% Kill the flood process in case it is still blocked in ssl:send, so it does
-    %% not leak into later test cases.
     exit(FloodPid, kill),
     stop_client(Client),
     ok.
 
-%% Reproduce the "stuck port" Erlang VM bug: the recv in
-%% tls_gen_connection:close/4 never returns on its own (its timeout does not
-%% fire), and only returns once the transport port is closed. fast_close/2 must
-%% detect the stuck connection process, close its port, and return.
+%% Reproduces the stuck port VM bug: the `recv` in `tls_gen_connection:close/4`
+%% ignores its timeout and only returns once the transport port is closed.
 fast_close_recovers_from_stuck_recv(Config) ->
     {S, Client, ConnPid} = new_tls_pair(Config, []),
     TransportPort = transport_port(ConnPid),
     ok = meck:new(gen_tcp, [unstick, passthrough]),
     try
-        %% close/4 calls Transport:recv(Socket, 0, Timeout); make that recv hang
-        %% until the port terminates (mimicking the stuck transport port).
+        %% Hang the length 0 `recv` from `tls_gen_connection:close/4` until the
+        %% port terminates.
         ok = meck:expect(
                gen_tcp, recv,
                fun (Sock, 0, _Timeout) when Sock =:= TransportPort ->
@@ -110,11 +104,10 @@ fast_close_recovers_from_stuck_recv(Config) ->
         T0 = erlang:monotonic_time(millisecond),
         ?assertEqual(ok, rabbit_net:fast_close(S, Timeout)),
         Elapsed = erlang:monotonic_time(millisecond) - T0,
-        %% The recv genuinely hung, so the forced path was taken (>= Timeout) and
-        %% it was bounded (< several seconds).
+        %% The forced path was taken, and it stayed bounded.
         ?assert(Elapsed >= Timeout - 100),
         ?assert(Elapsed < 3000),
-        %% The stuck recv was actually reached and intercepted.
+        %% The stuck `recv` was actually reached and intercepted.
         ?assert(meck:num_calls(gen_tcp, recv, [TransportPort, 0, '_']) >= 1),
         ?assertNot(erlang:is_process_alive(ConnPid))
     after
@@ -162,9 +155,8 @@ flood(S) ->
         _Error -> ok
     end.
 
-%% Wait until the flooding process stops making progress, i.e. it is blocked in
-%% ssl:send because the peer is not reading. Only then is the send actually
-%% stuck and the server's close will park.
+%% Waits until the flood process stops accumulating reductions, that is, until
+%% it is blocked in `ssl:send/2` and the server's close will park.
 await_backpressure(Pid) ->
     await_backpressure(Pid, reductions(Pid), 200).
 
