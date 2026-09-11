@@ -384,7 +384,13 @@ maybe_set_proxy(Option, ProxyUrl, ProxyExclusions) ->
 %%--------------------------------------------------------------------
 -spec redact_headers(Headers :: list()) -> list().
 redact_headers(Headers) ->
-  [{Name, redact_header_value(Name, Value)} || {Name, Value} <- Headers].
+  [redact_header(Header) || Header <- Headers].
+
+-spec redact_header(Header :: term()) -> term().
+redact_header({Name, Value}) ->
+  {Name, redact_header_value(Name, Value)};
+redact_header(Other) ->
+  Other.
 
 -spec redact_header_value(Name :: string(), Value :: term()) -> term().
 redact_header_value(Name, Value) ->
