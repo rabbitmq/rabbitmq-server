@@ -2052,7 +2052,9 @@ state_enter_disconnected_timer_between_bounds_test(_) ->
     ?assert(Time >= 10_000 andalso Time =< 60_000),
     ok.
 
-state_enter_disconnected_timer_over_timeout_test(_) ->
+%% a consumer disconnected for longer than the disconnected timeout gets
+%% the 10s floor, not a full fresh interval
+state_enter_disconnected_timer_past_timeout_test(_) ->
     N0 = node(),
     P0 = new_process(N0),
     P1 = new_process(N0),
@@ -2067,7 +2069,7 @@ state_enter_disconnected_timer_over_timeout_test(_) ->
 
     ?assertEqual(mon_node_eff(N0), MonNode),
     ?assertEqual(mon_proc_eff([P0, P1]), [MonP0, MonP1]),
-    ?assertEqual(60_000, Time),
+    ?assertEqual(10_000, Time),
     ok.
 
 mon_node_eff(Nodes) when is_list(Nodes) ->
