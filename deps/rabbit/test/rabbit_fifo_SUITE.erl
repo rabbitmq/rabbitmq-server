@@ -5117,12 +5117,13 @@ modify_anns_capped_test(Config) ->
     ?assertEqual(<<"updated">>, maps:get(integer_to_binary(1), Anns)),
     ok.
 
-%% The deferral token must survive the ?MAX_MSG_ANNS_SIZE cap even when
-%% `anns' is already full of unrelated keys. should_delay/5 records the
-%% token in #delayed.deferred straight from the client-supplied Anns,
-%% regardless of the cap; if the cap then dropped the token from the
-%% stored header, get_deferral_token/1 could never find it again to clean
-%% the #delayed.deferred entry up, leaking it forever.
+%% The deferral token and its accompanying delivery time must survive the
+%% ?MAX_MSG_ANNS_SIZE cap even when `anns' is already full of unrelated
+%% keys. should_delay/5 records the token in #delayed.deferred straight
+%% from the client-supplied Anns, regardless of the cap; if the cap then
+%% dropped the token from the stored header, get_deferral_token/1 could
+%% never find it again to clean the #delayed.deferred entry up, leaking it
+%% forever.
 modify_anns_capped_preserves_deferral_token_test(Config) ->
     MaxAnnsSize = 32,
     Conf = #{name => ?FUNCTION_NAME,
@@ -5157,12 +5158,10 @@ modify_anns_capped_preserves_deferral_token_test(Config) ->
     [Msg] = gb_trees:values(Tree),
     ?MSG(_, ParkedHeader) = Msg,
     #{anns := ParkedAnns} = ParkedHeader,
-    %% 32 filler keys plus the reserved deferral-token key
-    ?assertEqual(MaxAnnsSize + 1, map_size(ParkedAnns)),
+    %% 32 filler keys plus the two reserved keys
+    ?assertEqual(MaxAnnsSize + 2, map_size(ParkedAnns)),
     ?assertEqual(Token, maps:get(<<"x-opt-deferral-token">>, ParkedAnns)),
-    %% x-opt-delivery-time is not the reserved key, so it was dropped by
-    %% the cap like any other new key -- it is not needed for cleanup
-    ?assertNot(maps:is_key(<<"x-opt-delivery-time">>, ParkedAnns)),
+    ?assertEqual(10000, maps:get(<<"x-opt-delivery-time">>, ParkedAnns)),
     ok.
 
 priorities_expire_test(Config) ->

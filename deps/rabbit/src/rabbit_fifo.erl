@@ -63,6 +63,11 @@
 %% the cap dropped the token, the #delayed.deferred entry it created would
 %% never be found and removed, leaking without bound.
 -define(DEFERRAL_TOKEN_ANN_KEY, <<"x-opt-deferral-token">>).
+%% x-opt-delivery-time is the standard AMQP 1.0 annotation used alongside
+%% the deferral token in the `modified' outcome, so it is also exempt from
+%% the cap to keep being echoed back to the consumer on redelivery.
+-define(DELIVERY_TIME_ANN_KEY, <<"x-opt-delivery-time">>).
+-define(RESERVED_ANN_KEYS, [?DEFERRAL_TOKEN_ANN_KEY, ?DELIVERY_TIME_ANN_KEY]).
 
 -export([
          %% ra_machine callbacks
@@ -2582,7 +2587,7 @@ get_delivery_time(Ts, Msg) ->
 
 should_delay(DeliveryFailed, DelayedRetry, Ts, Header, Anns) ->
     case Anns of
-        #{<<"x-opt-delivery-time">> := DeliveryTime}
+        #{?DELIVERY_TIME_ANN_KEY := DeliveryTime}
           when is_integer(DeliveryTime),
                DeliveryTime > Ts ->
             %% Deferral tokens are only honoured when the client explicitly
@@ -4308,11 +4313,11 @@ incr_msg_headers(Msg0, DeliveryFailed, Anns) ->
 %% Merges client-supplied annotations into the existing `anns' map, capping
 %% the result at ?MAX_MSG_ANNS_SIZE distinct keys. Existing keys can still
 %% be updated once the cap is reached, but new keys beyond the cap are
-%% dropped. ?DEFERRAL_TOKEN_ANN_KEY is exempt from the cap: see its comment.
+%% dropped. ?RESERVED_ANN_KEYS are exempt from the cap: see their comments.
 merge_msg_anns(Existing, New) ->
     maps:fold(
       fun(Key, Value, Acc) ->
-              case Key =:= ?DEFERRAL_TOKEN_ANN_KEY orelse
+              case lists:member(Key, ?RESERVED_ANN_KEYS) orelse
                    maps:is_key(Key, Acc) orelse
                    map_size(Acc) < ?MAX_MSG_ANNS_SIZE of
                   true ->
