@@ -385,9 +385,14 @@ handle_exception(State = #v1{connection_state = CS}, Channel, Error, Detail)
     ?LOG_ERROR("Error on AMQP 1.0 connection ~tp (~tp), channel number ~b:~n~ts",
                [self(), CS, Channel, Detail]),
     close(Error, State);
-handle_exception(State, Channel, Error, Detail) ->
-    ?LOG_ERROR("Error on AMQP 1.0 connection ~tp (~tp), channel number ~b:~n~ts",
-               [self(), State#v1.connection_state, Channel, Detail]),
+handle_exception(State, Channel, Error = #'v1_0.error'{description = Desc}, Detail) ->
+    case Desc =:= {utf8, Detail} of
+        true ->
+            ok;
+        false ->
+            ?LOG_ERROR("Error on AMQP 1.0 connection ~tp (~tp), channel number ~b:~n~ts",
+                       [self(), State#v1.connection_state, Channel, Detail])
+    end,
     silent_close_delay(),
     throw({handshake_error, State#v1.connection_state, Error}).
 
