@@ -181,9 +181,8 @@ single_upstream(Config) ->
   rabbit_ct_client_helpers:close_channel(Ch),
   clean_up_federation_related_bits(Config).
 
-%% x-bound-from is normally only ever set by federation itself on a previous
-%% hop, but a client can set it to an arbitrary value via ordinary bind
-%% arguments; the link must ignore it.
+%% Federation sets `x-bound-from` on the previous hop, but any client can set it
+%% in `queue.bind` arguments. The link must ignore malformed values.
 malformed_bound_from_does_not_crash_link(Config) ->
   FedX = <<"malformed_bound_from.federated">>,
   UpX = <<"malformed_bound_from.upstream.x">>,
@@ -203,7 +202,7 @@ malformed_bound_from_does_not_crash_link(Config) ->
   Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
   declare_exchanges(Ch, [exchange_declare_method(FedX)]),
 
-  %% Get the link up and running before poking at it.
+  %% Wait for the link to come up first.
   _ = declare_and_bind_queue(Ch, FedX, <<"warmup">>),
   await_binding(Config, 0, UpX, <<"warmup">>),
 
@@ -218,22 +217,17 @@ malformed_bound_from_does_not_crash_link(Config) ->
     [begin
        Q = declare_queue(Ch),
        RK = <<"malformed-", (integer_to_binary(N))/binary>>,
-       bind_queue_with_args(Ch, Q, FedX, RK,
-                            [{<<"x-bound-from">>, Type, Value}]),
+       bind_queue(Ch, Q, FedX, RK, [{?BINDING_HEADER, Type, Value}]),
        RK
      end || {N, {Type, Value}} <- lists:enumerate(MalformedBoundFrom)],
 
-  %% The link must still be alive and functioning normally afterwards. Since
-  %% the federation link processes binding commands in order, this also
-  %% acts as a synchronization point for the asserts below: by the time
-  %% "after-malformed" is visible upstream, every malformed binding above
-  %% has already been handled.
+  %% The link handles bindings in order, so once this one is visible upstream
+  %% every malformed binding above has been processed.
   Q = declare_and_bind_queue(Ch, FedX, <<"after-malformed">>),
   await_binding(Config, 0, UpX, <<"after-malformed">>),
   publish_expect(Ch, UpX, <<"after-malformed">>, Q,
                 <<"malformed_bound_from payload">>),
 
-  %% None of the malformed bindings should have been propagated upstream.
   [?assertEqual([], bound_keys_from(Config, 0, <<"/">>, UpX, RK))
    || RK <- MalformedRKs],
 
@@ -978,12 +972,6 @@ bind_queue(Ch, Q, X, Key) ->
     amqp_channel:call(Ch, #'queue.bind'{queue       = Q,
                                         exchange    = X,
                                         routing_key = Key}).
-
-bind_queue_with_args(Ch, Q, X, Key, Args) ->
-    amqp_channel:call(Ch, #'queue.bind'{queue       = Q,
-                                        exchange    = X,
-                                        routing_key = Key,
-                                        arguments   = Args}).
 
 unbind_queue(Ch, Q, X, Key) ->
     amqp_channel:call(Ch, #'queue.unbind'{queue       = Q,
