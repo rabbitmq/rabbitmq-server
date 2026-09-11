@@ -102,6 +102,7 @@ groups() ->
               basic_get_ipv6_ssl,
               pub_and_close,
               channel_tune_negotiation,
+              frame_max_negotiation,
               shortstr_overflow_property,
               shortstr_overflow_field,
               command_invalid_over_channel0
@@ -661,6 +662,26 @@ large_content(Config) ->
         = amqp_channel:call(Channel, #'queue.declare'{durable = true}),
     F = list_to_binary([rand:uniform(256)-1 || _ <- lists:seq(1, 1000)]),
     Payload = list_to_binary([F || _ <- lists:seq(1, 1000)]),
+    Publish = #'basic.publish'{exchange = <<>>, routing_key = Q},
+    amqp_channel:call(Channel, Publish, #amqp_msg{payload = Payload}),
+    get_and_assert_equals(Channel, Q, Payload),
+    teardown(Connection, Channel).
+
+%% -------------------------------------------------------------------
+
+%% Checks that content larger than the negotiated frame_max still round
+%% trips, that is that the reader's frame_max enforcement does not reject
+%% the frames a real broker sends for it. Enforcement itself is covered by
+%% unit_SUITE.
+frame_max_negotiation(Config) ->
+    Params = ?config(amqp_client_conn_params, Config),
+    FrameMax = 8192,
+    {ok, Connection} = amqp_connection:start(
+                          Params#amqp_params_network{frame_max = FrameMax}),
+    {ok, Channel} = amqp_connection:open_channel(Connection),
+    #'queue.declare_ok'{queue = Q}
+        = amqp_channel:call(Channel, #'queue.declare'{exclusive = true}),
+    Payload = list_to_binary(lists:duplicate(FrameMax * 2, $a)),
     Publish = #'basic.publish'{exchange = <<>>, routing_key = Q},
     amqp_channel:call(Channel, Publish, #amqp_msg{payload = Payload}),
     get_and_assert_equals(Channel, Q, Payload),
