@@ -293,11 +293,9 @@ is_quorum_critical_test(Config) ->
             QName =:= maps:get(<<"name">>, Item)
         end, Queues)),
 
-    %% A management-tagged user without access to the default vhost must not
-    %% learn that it has a quorum-critical queue. Cluster-wide critical
-    %% components (e.g. rabbitmq_metadata) aren't vhost-scoped, so they may
-    %% still legitimately show up for this user; only the per-vhost queue
-    %% must be hidden.
+    %% Cluster-wide components such as `rabbitmq_metadata` are not vhost-scoped
+    %% and can still be listed for a user without access to "/"; only the
+    %% queue must be hidden.
     VHost = <<"is_quorum_critical_test-vh">>,
     User = <<"is_quorum_critical_test-user">>,
     rabbit_ct_broker_helpers:add_vhost(Config, VHost),
@@ -305,18 +303,21 @@ is_quorum_critical_test(Config) ->
     rabbit_ct_broker_helpers:set_user_tags(Config, 0, User, [management]),
     rabbit_ct_broker_helpers:set_full_permissions(Config, User, VHost),
 
-    {ok, {{_, RestrictedCode, _}, _, RestrictedResBody}} =
-        req(Config, get, EndpointPath,
-            [auth_header(binary_to_list(User), binary_to_list(User))]),
-    ?assert(lists:member(RestrictedCode, [?OK, ?HEALTH_CHECK_FAILURE_STATUS])),
-    RestrictedBody = rabbit_json:decode(
-                        rabbit_data_coercion:to_binary(RestrictedResBody)),
-    RestrictedQueues = maps:get(<<"queues">>, RestrictedBody, []),
-    ?assertEqual(false, lists:any(
-        fun(Item) ->
-            QName =:= maps:get(<<"name">>, Item)
-        end, RestrictedQueues)),
+    ?assertNot(queue_visible(Config, EndpointPath, User, QName)),
 
+    rabbit_ct_broker_helpers:set_full_permissions(Config, User, <<"/">>),
+    ?assert(queue_visible(Config, EndpointPath, User, QName)),
+
+    %% Monitoring users are filtered by vhost permissions like
+    %% `GET /api/queues` does.
+    Monitor = <<"is_quorum_critical_test-monitor">>,
+    rabbit_ct_broker_helpers:add_user(Config, Monitor, Monitor),
+    rabbit_ct_broker_helpers:set_user_tags(Config, 0, Monitor, [monitoring]),
+    ?assertNot(queue_visible(Config, EndpointPath, Monitor, QName)),
+    rabbit_ct_broker_helpers:set_full_permissions(Config, Monitor, <<"/">>),
+    ?assert(queue_visible(Config, EndpointPath, Monitor, QName)),
+
+    rabbit_ct_broker_helpers:delete_user(Config, Monitor),
     rabbit_ct_broker_helpers:delete_user(Config, User),
     rabbit_ct_broker_helpers:delete_vhost(Config, VHost),
 
@@ -326,9 +327,10 @@ is_quorum_critical_test(Config) ->
     passed.
 
 is_quorum_critical_vhost_named_not_applicable_test(Config) ->
-    %% A vhost literally named "(not applicable)" must not be mistaken for
-    %% the cluster-wide critical-component placeholder value used by
-    %% rabbit_upgrade_preparation:list_with_minimum_quorum_for_cli/0.
+    %% "(not applicable)" is the placeholder vhost name that
+    %% `rabbit_upgrade_preparation:list_with_minimum_quorum_for_cli/0` gives
+    %% cluster-wide components; a real vhost with that name must still be
+    %% filtered.
     EndpointPath = "/health/checks/node-is-quorum-critical",
     VHost = <<"(not applicable)">>,
     User = <<"is_quorum_critical_vhost_named_not_applicable_test-user">>,
@@ -363,19 +365,7 @@ is_quorum_critical_vhost_named_not_applicable_test(Config) ->
     ?assert(lists:any(
         fun(Item) -> QName =:= maps:get(<<"name">>, Item) end, Queues)),
 
-    %% The restricted user only has access to "/", not the vhost named
-    %% "(not applicable)", and must not see this queue just because its
-    %% vhost name matches the critical-component placeholder string.
-    {ok, {{_, RestrictedCode, _}, _, RestrictedResBody}} =
-        req(Config, get, EndpointPath,
-            [auth_header(binary_to_list(User), binary_to_list(User))]),
-    ?assert(lists:member(RestrictedCode, [?OK, ?HEALTH_CHECK_FAILURE_STATUS])),
-    RestrictedBody = rabbit_json:decode(
-                        rabbit_data_coercion:to_binary(RestrictedResBody)),
-    RestrictedQueues = maps:get(<<"queues">>, RestrictedBody, []),
-    ?assertEqual(false, lists:any(
-        fun(Item) -> QName =:= maps:get(<<"name">>, Item) end,
-        RestrictedQueues)),
+    ?assertNot(queue_visible(Config, EndpointPath, User, QName)),
 
     rabbit_ct_client_helpers:close_connection(Conn),
     rabbit_ct_broker_helpers:delete_user(Config, User),
@@ -551,15 +541,12 @@ quorum_queues_leaderless_all_vhosts_vhost_access_single_node_test(Config) ->
     _ = rabbit_ct_broker_helpers:rpc(Config, 0, ra, stop_server,
                                       [RaSystem, amqqueue:get_pid(Q1)]),
 
-    %% guest is an administrator and sees the leaderless queue across
-    %% all vhosts.
+    %% guest is an administrator, so it sees queues in every vhost.
     AdminBody = http_get_failed(Config, EndpointPath),
     AdminQueues = maps:get(<<"queues">>, AdminBody),
     ?assert(lists:any(
         fun(Item) -> QName =:= maps:get(<<"name">>, Item) end, AdminQueues)),
 
-    %% A management-tagged user without access to the default vhost must not
-    %% learn that another vhost has a leaderless queue.
     VHost = <<"quorum_queues_leaderless_all_vhosts_vhost_access-vh">>,
     User = <<"quorum_queues_leaderless_all_vhosts_vhost_access-user">>,
     rabbit_ct_broker_helpers:add_vhost(Config, VHost),
@@ -570,6 +557,20 @@ quorum_queues_leaderless_all_vhosts_vhost_access_single_node_test(Config) ->
     RestrictedCheck = http_get(Config, EndpointPath, User, User, ?OK),
     ?assertEqual(<<"ok">>, maps:get(status, RestrictedCheck)),
 
+    rabbit_ct_broker_helpers:set_full_permissions(Config, User, <<"/">>),
+    ?assert(queue_visible(Config, EndpointPath, User, QName)),
+
+    %% Monitoring users are filtered by vhost permissions like
+    %% `GET /api/queues` does.
+    Monitor = <<"quorum_queues_leaderless_all_vhosts_vhost_access-monitor">>,
+    rabbit_ct_broker_helpers:add_user(Config, Monitor, Monitor),
+    rabbit_ct_broker_helpers:set_user_tags(Config, 0, Monitor, [monitoring]),
+    MonitorCheck = http_get(Config, EndpointPath, Monitor, Monitor, ?OK),
+    ?assertEqual(<<"ok">>, maps:get(status, MonitorCheck)),
+    rabbit_ct_broker_helpers:set_full_permissions(Config, Monitor, <<"/">>),
+    ?assert(queue_visible(Config, EndpointPath, Monitor, QName)),
+
+    rabbit_ct_broker_helpers:delete_user(Config, Monitor),
     rabbit_ct_broker_helpers:delete_user(Config, User),
     rabbit_ct_broker_helpers:delete_vhost(Config, VHost),
 
@@ -805,6 +806,17 @@ http_get_failed(Config, Path) ->
     ct:pal("GET ~s: ~w ~w", [Path, Code, ResBody]),
     ?assertEqual(Code, ?HEALTH_CHECK_FAILURE_STATUS),
     rabbit_json:decode(rabbit_data_coercion:to_binary(ResBody)).
+
+%% The user's password is its name. The status is not asserted because
+%% cluster-wide components can make `GET /health/checks/node-is-quorum-critical`
+%% fail regardless of vhost access.
+queue_visible(Config, Path, User, QName) ->
+    Auth = auth_header(binary_to_list(User), binary_to_list(User)),
+    {ok, {{_, Code, _}, _, ResBody}} = req(Config, get, Path, [Auth]),
+    ?assert(lists:member(Code, [?OK, ?HEALTH_CHECK_FAILURE_STATUS])),
+    Body = rabbit_json:decode(rabbit_data_coercion:to_binary(ResBody)),
+    lists:any(fun(Q) -> QName =:= maps:get(<<"name">>, Q) end,
+              maps:get(<<"queues">>, Body, [])).
 
 delete_queues() ->
     [rabbit_amqqueue:delete(Q, false, false, <<"dummy">>)
