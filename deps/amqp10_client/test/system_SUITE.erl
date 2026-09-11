@@ -902,9 +902,7 @@ attach_refused(Config) ->
     ok = amqp10_client:end_session(Session),
     ok = amqp10_client:close_connection(Connection).
 
-%% A disposition covering a huge, peer-chosen delivery ID range must settle
-%% every message actually outstanding, using the outgoing-unsettled-map
-%% iteration branch (the range is far bigger than the map).
+%% A huge disposition range must settle every outstanding message.
 disposition_large_range_settles_outgoing(Config) ->
     Hostname = ?config(mock_host, Config),
     Port = ?config(mock_port, Config),
@@ -933,9 +931,7 @@ disposition_large_range_settles_outgoing(Config) ->
                                              link_credit = {uint, 2}},
                          {Ch, {multi, [[Attach], [Flow]]}}
                  end,
-    %% The two transfers get delivery IDs 4294967295 and 0: the client's
-    %% outgoing delivery ID counter starts at 2^32 - 1 and wraps. The
-    %% transfer's handle is the client's own (locally-assigned) handle, 0.
+    %% Delivery IDs start at 2^32 - 1 and wrap, so the two transfers get 4294967295 and 0.
     Transfer1Step = fun({0 = Ch, #'v1_0.transfer'{handle = {uint, 0}}, _Pay}) ->
                              {Ch, []}
                      end,
@@ -1036,8 +1032,7 @@ link_credit_max(Config) ->
     ok = amqp10_client:close_connection(Connection),
     ok.
 
-%% A DRAIN on a sender link with nothing to send is answered with a FLOW
-%% that consumes the credit.
+%% Drain on a sender link with nothing to send is answered with a FLOW.
 drain_with_nothing_available(Config) ->
     Hostname = ?config(mock_host, Config),
     Port = ?config(mock_port, Config),

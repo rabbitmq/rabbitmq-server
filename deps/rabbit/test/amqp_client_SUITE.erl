@@ -1101,9 +1101,7 @@ modified_quorum_queue_deferral_token_ranged_disposition(Config) ->
                  rabbitmq_amqp_client:delete_queue(LinkPair, QName)),
     ok = close(Init).
 
-%% A DISPOSITION whose delivery ID range is reversed (first after last) is
-%% malformed. The session must end with amqp:invalid-field instead of
-%% crashing with an internal error.
+%% A reversed disposition range ends the session with amqp:invalid-field.
 disposition_reversed_range_rejected(Config) ->
     QName = atom_to_binary(?FUNCTION_NAME),
     {Connection, Session, LinkPair} = init(Config),
@@ -1121,7 +1119,7 @@ disposition_reversed_range_rejected(Config) ->
     {ok, M1} = amqp10_client:get_msg(Receiver),
     DeliveryId = amqp10_msg:delivery_id(M1),
 
-    %% first is after last: a malformed range.
+    %% first is after last.
     ok = amqp10_client_session:disposition(
            Receiver, DeliveryId + 1, DeliveryId, true, accepted),
     receive

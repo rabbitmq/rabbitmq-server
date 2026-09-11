@@ -205,8 +205,7 @@ disposition_after_link_removed(_Config) ->
     ?assert(is_process_alive(Sup)),
     ok = stop_sup(Sup, Sockets).
 
-%% A peer-controlled disposition range must not turn the session into a
-%% multi-billion-iteration loop against an empty unsettled map.
+%% A huge disposition range must not be walked when nothing is unsettled.
 disposition_large_range(_Config) ->
     {Sup, Session, Sockets} = start_session_in(mapped, 0),
     gen_statem:cast(Session,
@@ -245,7 +244,7 @@ flow_max_incoming_window(_Config) ->
     ?assert(is_process_alive(Sup)),
     ok = stop_sup(Sup, Sockets).
 
-%% A next-incoming-id ahead of our next-outgoing-id must not crash the session.
+%% A next-incoming-id ahead of ours must not crash the session.
 flow_next_incoming_id_leads(_Config) ->
     {Sup, Session, Sockets} = start_session_in(mapped, 0),
     {mapped, #{remote_incoming_window := Window}} = session_state(Session),

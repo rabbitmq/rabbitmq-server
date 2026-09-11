@@ -114,9 +114,8 @@ diff(A, B) ->
            exit({undefined_serial_diff, A, B})
     end.
 
-%% Number of serial numbers in the inclusive range First..Last, or `undefined'
-%% if Last does not follow First. Unlike diff/2, this function does not exit for
-%% the difference RFC 1982 leaves undefined.
+%% Size of the inclusive range First..Last, or `undefined' if Last does not
+%% follow First. Unlike diff/2, never exits.
 -spec range_size(serial_number(), serial_number()) ->
     pos_integer() | undefined.
 range_size(First, Last) ->

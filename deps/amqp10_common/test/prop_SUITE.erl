@@ -231,8 +231,7 @@ prop_array32_terminates(_Config) ->
              end)
       end, [], 1000).
 
-%% range_size/2 must never exit, and whenever it returns a size, that size
-%% must equal diff(Last, First) + 1.
+%% range_size/2 never exits and agrees with diff/2 where both are defined.
 prop_range_size(_Config) ->
     run_proper(
       fun() -> ?FORALL(
