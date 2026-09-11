@@ -27,7 +27,8 @@ groups() ->
 all_tests() ->
     [
      cleanup_queues,
-     backend_errors_do_not_trigger_cleanup
+     backend_errors_do_not_trigger_cleanup,
+     backend_not_reporting_all_nodes_does_not_trigger_cleanup
     ].
 
 %% -------------------------------------------------------------------
@@ -167,6 +168,54 @@ backend_errors_do_not_trigger_cleanup(Config) ->
       end),
 
     %% Cleanup.
+    ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch).
+
+backend_not_reporting_all_nodes_does_not_trigger_cleanup(Config) ->
+    %% A backend whose list_nodes/0 doesn't report the cluster's full
+    %% membership (declared via reports_all_nodes/0) can't be trusted to
+    %% say that other nodes are gone; cleanup must not act on it. The
+    %% Kubernetes backend is a real-world example: list_nodes/0 only ever
+    %% returns a single bootstrap seed node. It isn't used directly here
+    %% since it's a separate plugin, not a dependency of this one; DNS is
+    %% mocked to behave the same way instead.
+    [A, B, C] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config),
+
+    QQ = <<"quorum-queue">>,
+    declare_queue(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}]),
+
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, A, meck, expect,
+           [rabbit_peer_discovery_dns, reports_all_nodes, 0, false]),
+    %% Remove node C from peer discovery responses.
+    mock_list_nodes(Config, {ok, [A, B]}),
+    %% Make node C unreachable.
+    rabbit_ct_broker_helpers:block_traffic_between(A, C),
+    rabbit_ct_broker_helpers:block_traffic_between(B, C),
+    Ts1 = erlang:system_time(millisecond),
+    ?awaitMatch([C],
+                rabbit_ct_broker_helpers:rpc(Config, A,
+                                             rabbit_nodes,
+                                             list_unreachable, []),
+                30_000, 1_000),
+    ct:log(?LOW_IMPORTANCE, "Node C became unreachable in ~bms",
+           [erlang:system_time(millisecond) - Ts1]),
+
+    ok = rabbit_ct_broker_helpers:rpc(Config, A,
+                                      rabbit_peer_discovery_cleanup,
+                                      check_cluster, []),
+
+    %% Node C should remain in the quorum queue members: a backend that
+    %% doesn't report all nodes never triggers automatic removal,
+    %% regardless of configuration.
+    ?assertEqual(
+      lists:sort([A, B, C]),
+      begin
+          Info = rpc:call(A, rabbit_quorum_queue, infos,
+                          [rabbit_misc:r(<<"/">>, queue, QQ)]),
+          lists:sort(proplists:get_value(members, Info))
+      end),
+
     ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch).
 
 %%%
