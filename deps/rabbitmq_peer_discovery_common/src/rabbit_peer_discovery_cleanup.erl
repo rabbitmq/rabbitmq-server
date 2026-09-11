@@ -235,7 +235,6 @@ maybe_cleanup(State) ->
 maybe_cleanup(_, []) ->
     ?LOG_DEBUG(
        "Peer discovery: all known cluster nodes are up.");
-       
 maybe_cleanup(State, UnreachableNodes) ->
     ?LOG_DEBUG(
        "Peer discovery: cleanup discovered unreachable nodes: ~tp",
@@ -249,20 +248,50 @@ maybe_cleanup(State, UnreachableNodes) ->
                     ?LOG_DEBUG(
                        "Peer discovery: all unreachable nodes are still "
                        "registered with the discovery backend ~tp",
-                       [rabbit_peer_discovery:backend()],
+                       [Module],
                        #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
                     ok;
                 Nodes ->
                     ?LOG_DEBUG(
                        "Peer discovery: unreachable nodes are not registered "
                        "with the discovery backend ~tp", [Nodes]),
-                    maybe_remove_nodes(Nodes, State#state.warn_only)
+                    maybe_remove_nodes(
+                      Nodes, effective_warn_only(Module, State#state.warn_only))
             end;
         {error, Reason} ->
             ?LOG_INFO(
                "Peer discovery cleanup: ~tp returned error ~tp",
                [Module, Reason]),
             ok
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc A backend whose list_nodes/0 doesn't report the cluster's full
+%%      current membership (e.g. only a bootstrap seed node) can't be
+%%      used to decide that other nodes are permanently gone. Automatic
+%%      removal is therefore disabled for such backends regardless of
+%%      the `cleanup_only_log_warning' setting. A backend that doesn't
+%%      implement `reports_all_nodes/0' is treated the same way, as the
+%%      safe default.
+%% @spec effective_warn_only(Module :: module(), WarnOnly :: boolean()) ->
+%%           boolean()
+%% @end
+%%--------------------------------------------------------------------
+-spec effective_warn_only(Module :: module(), WarnOnly :: boolean()) ->
+          boolean().
+effective_warn_only(_Module, true) ->
+    true;
+effective_warn_only(Module, false) ->
+    case try Module:reports_all_nodes() catch _:_ -> false end of
+        true ->
+            false;
+        false ->
+            ?LOG_WARNING(
+               "Peer discovery: backend ~tp does not report the cluster's "
+               "full membership; skipping automatic node removal and only "
+               "logging a warning instead", [Module]),
+            true
     end.
 
 %%--------------------------------------------------------------------
